@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+# dockpipe — Run, isolate, and act. Pipe commands into disposable containers and act on the result.
+set -euo pipefail
+
+DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+export DOCKPIPE_REPO_ROOT
+
+usage() {
+  cat <<EOF
+dockpipe — Run, isolate, and act. Pipe commands into disposable containers and act on the result.
+
+Usage:
+  dockpipe [options] -- <command> [args...]
+  <stdin> | dockpipe [options] -- <command> [args...]
+
+Options:
+  --image <name>       Use this Docker image (default: dockpipe-base-dev, built if missing)
+  --template <name>    Use a preset (base-dev | dev | claude). Builds image if needed.
+  --action <script>   Run this script inside the container after the command (e.g. commit-worktree)
+  --workdir <path>    Host path to mount at /work (default: current directory)
+  --mount <v>         Extra volume (e.g. /host/path:/container/path). Can be repeated.
+  --env <KEY=VAL>     Pass env var into container. Can be repeated.
+  --build <path>      Build image from path (relative to repo or absolute) and use as --image
+  --help, -h           Show this help
+
+Examples:
+  dockpipe -- ls -la
+  dockpipe --image alpine -- sh -c "echo hello"
+  echo "fix the bug" | dockpipe --template claude -- claude -p "\$(cat)"
+  dockpipe --action examples/actions/commit-worktree.sh -- ./script.sh
+  dockpipe --workdir /path/to/repo -- bash -c "npm test"
+
+Templates (--template):
+  base-dev   Light image: git, curl, bash, ripgrep, jq, ca-certificates
+  dev       Heavier dev image: base-dev + common tooling
+  claude    Claude Code image for AI-assisted workflows (see examples/claude-worktree)
+EOF
+  exit 0
+}
+
+# Resolve template name to image name and optional build path.
+resolve_template() {
+  local name="${1:-}"
+  case "$name" in
+    base-dev)  echo "dockpipe-base-dev ${DOCKPIPE_REPO_ROOT}/images/base-dev" ;;
+    dev)       echo "dockpipe-dev ${DOCKPIPE_REPO_ROOT}/images/dev" ;;
+    claude)    echo "dockpipe-claude ${DOCKPIPE_REPO_ROOT}/images/claude" ;;
+    *)         echo "" ;;
+  esac
+}
+
+# Parse arguments
+DOCKPIPE_IMAGE=""
+DOCKPIPE_ACTION=""
+DOCKPIPE_WORKDIR=""
+DOCKPIPE_BUILD=""
+DOCKPIPE_BUILD_CONTEXT=""
+DOCKPIPE_EXTRA_MOUNTS=""
+DOCKPIPE_EXTRA_ENV=""
+TEMPLATE=""
+SEEN_DASH=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --help|-h) usage ;;
+    --image)
+      [[ $# -lt 2 ]] && { echo "Error: --image requires an argument" >&2; exit 1; }
+      DOCKPIPE_IMAGE="$2"
+      shift 2
+      ;;
+    --template)
+      [[ $# -lt 2 ]] && { echo "Error: --template requires an argument" >&2; exit 1; }
+      TEMPLATE="$2"
+      shift 2
+      ;;
+    --action)
+      [[ $# -lt 2 ]] && { echo "Error: --action requires an argument" >&2; exit 1; }
+      DOCKPIPE_ACTION="$2"
+      shift 2
+      ;;
+    --workdir)
+      [[ $# -lt 2 ]] && { echo "Error: --workdir requires an argument" >&2; exit 1; }
+      DOCKPIPE_WORKDIR="$2"
+      shift 2
+      ;;
+    --mount)
+      [[ $# -lt 2 ]] && { echo "Error: --mount requires an argument" >&2; exit 1; }
+      DOCKPIPE_EXTRA_MOUNTS="${DOCKPIPE_EXTRA_MOUNTS:+$DOCKPIPE_EXTRA_MOUNTS }$2"
+      shift 2
+      ;;
+    --env)
+      [[ $# -lt 2 ]] && { echo "Error: --env requires an argument" >&2; exit 1; }
+      DOCKPIPE_EXTRA_ENV="${DOCKPIPE_EXTRA_ENV:+$DOCKPIPE_EXTRA_ENV }$2"
+      shift 2
+      ;;
+    --build)
+      [[ $# -lt 2 ]] && { echo "Error: --build requires an argument" >&2; exit 1; }
+      if [[ "$2" == /* ]]; then
+        DOCKPIPE_BUILD="$2"
+        DOCKPIPE_BUILD_CONTEXT="$2"
+      else
+        DOCKPIPE_BUILD="${DOCKPIPE_REPO_ROOT}/${2}"
+        DOCKPIPE_BUILD_CONTEXT="${DOCKPIPE_REPO_ROOT}"
+      fi
+      shift 2
+      ;;
+    --)
+      SEEN_DASH=1
+      shift
+      break
+      ;;
+    *)
+      echo "Error: unknown option $1" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Template overrides image and sets build
+if [[ -n "${TEMPLATE}" ]]; then
+  resolved=$(resolve_template "$TEMPLATE")
+  if [[ -z "$resolved" ]]; then
+    echo "Error: unknown template '${TEMPLATE}'" >&2
+    exit 1
+  fi
+  DOCKPIPE_IMAGE="${resolved%% *}"
+  build_path="${resolved#* }"
+  if [[ -d "$build_path" ]]; then
+    DOCKPIPE_BUILD="$build_path"
+    DOCKPIPE_BUILD_CONTEXT="${DOCKPIPE_REPO_ROOT}"
+  fi
+fi
+
+# Default image if none set
+if [[ -z "${DOCKPIPE_IMAGE}" ]]; then
+  DOCKPIPE_IMAGE="dockpipe-base-dev"
+  DOCKPIPE_BUILD="${DOCKPIPE_REPO_ROOT}/images/base-dev"
+  DOCKPIPE_BUILD_CONTEXT="${DOCKPIPE_REPO_ROOT}"
+fi
+
+# Resolve action path if relative
+if [[ -n "${DOCKPIPE_ACTION}" ]] && [[ "${DOCKPIPE_ACTION}" != /* ]]; then
+  if [[ -f "${DOCKPIPE_REPO_ROOT}/${DOCKPIPE_ACTION}" ]]; then
+    DOCKPIPE_ACTION="${DOCKPIPE_REPO_ROOT}/${DOCKPIPE_ACTION}"
+  elif [[ ! -f "${DOCKPIPE_ACTION}" ]]; then
+    DOCKPIPE_ACTION="$(pwd)/${DOCKPIPE_ACTION}"
+  fi
+fi
+
+export DOCKPIPE_IMAGE DOCKPIPE_ACTION DOCKPIPE_WORKDIR DOCKPIPE_EXTRA_MOUNTS DOCKPIPE_EXTRA_ENV
+
+# Build if we have a build path
+if [[ -n "${DOCKPIPE_BUILD}" ]] && [[ -d "${DOCKPIPE_BUILD}" ]]; then
+  export DOCKPIPE_BUILD
+  # Runner expects: build from context with -f build/Dockerfile
+  export DOCKPIPE_BUILD_CONTEXT
+fi
+
+# Load runner and execute
+source "${DOCKPIPE_REPO_ROOT}/lib/runner.sh"
+
+if [[ "$SEEN_DASH" != "1" ]]; then
+  echo "Error: expected -- before command (e.g. dockpipe -- ls -la)" >&2
+  exit 1
+fi
+
+if [[ $# -eq 0 ]]; then
+  echo "Error: no command given after --" >&2
+  exit 1
+fi
+
+# Build image when DOCKPIPE_BUILD and DOCKPIPE_BUILD_CONTEXT are set
+if [[ -n "${DOCKPIPE_BUILD:-}" ]] && [[ -n "${DOCKPIPE_BUILD_CONTEXT:-}" ]]; then
+  # Dev template depends on base-dev; build it first if missing
+  if [[ "${DOCKPIPE_IMAGE}" == "dockpipe-dev" ]]; then
+    if ! docker image inspect dockpipe-base-dev:latest &>/dev/null; then
+      docker build -q -t dockpipe-base-dev -f "${DOCKPIPE_REPO_ROOT}/images/base-dev/Dockerfile" "${DOCKPIPE_BUILD_CONTEXT}"
+    fi
+  fi
+  docker build -q -t "${DOCKPIPE_IMAGE}" -f "${DOCKPIPE_BUILD}/Dockerfile" "${DOCKPIPE_BUILD_CONTEXT}"
+  unset DOCKPIPE_BUILD DOCKPIPE_BUILD_CONTEXT
+fi
+
+dockpipe_run "$@"
