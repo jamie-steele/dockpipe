@@ -2,7 +2,7 @@
 
 ## Install the .deb (recommended)
 
-1. Download the latest `.deb` from [Releases](https://github.com/your-org/dockpipe/releases).
+1. Download the latest `.deb` from [Releases](https://github.com/jamie-steele/dockpipe/releases).
 2. Install:
 
    ```bash
@@ -28,7 +28,7 @@ sudo apt-get install docker.io
 ## Or run from source (no root)
 
 ```bash
-git clone https://github.com/your-org/dockpipe.git
+git clone https://github.com/jamie-steele/dockpipe.git
 export PATH="$PATH:$(pwd)/dockpipe/bin"
 dockpipe -- ls -la
 ```

@@ -1,0 +1,17 @@
+# Build output
+packaging/build/
+*.deb
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor / temp
+*~
+*.swp
+*.swo
+.*.sw?
+
+# Optional local overrides (do not commit)
+.env
+.env.local
