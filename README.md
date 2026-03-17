@@ -2,27 +2,43 @@
 
 **Run, isolate, and act — pipe commands into disposable containers and act on the results.**
 
-dockpipe is a primitive: **spawn container → run command/script inside it → perform action on the result.** It is agent-agnostic and command-agnostic. Use it for one-off commands, CI-like runs, AI tools, or any workflow that benefits from isolation and a clear “run then act” pattern.
+---
+
+## The model
+
+dockpipe is one primitive:
+
+**spawn → run → act**
+
+1. **Spawn** — Start a container from an image.
+2. **Run** — Execute your command or script inside it (your directory is mounted at `/work`).
+3. **Act** — Optionally run an action script on the result (e.g. commit, export patch, print summary).
+
+- **Spawn** gives you an isolated environment. **Run** is whatever you pass in — a one-liner, a script, or an AI tool. **Act** is pluggable: you choose the script that runs after the command (or none). Commands can themselves be scripts; chaining and composition are the point.
+
+dockpipe is **not** an AI framework, a Claude wrapper, or a workflow engine. It is a **primitive** for running commands in disposable containers, a **pipe-friendly execution boundary**, and something you **compose** into larger workflows. AI is one use case; the core is command-agnostic. Images use a single entrypoint: run your command, then the action (if any). No vendor-specific logic in the core.
+
+---
+
+## One example
+
+Pipe in a task, run it in a container, act on the result:
+
+```bash
+echo "refactor the auth module" \
+  | dockpipe --template claude --action examples/actions/commit-worktree.sh \
+  -- claude --dangerously-skip-permissions -p "$(cat)"
+```
+
+Stdin → spawn container → run Claude with that prompt → action commits the changes. Same primitive works for any command (e.g. `npm test`, `make build`, your own script).
 
 ---
 
 ## What problem it solves
 
 - **Isolation** — Run arbitrary commands in a clean container without polluting your host.
-- **Composition** — Same flow for any command: run something, then run an optional *action* (e.g. commit, export patch, print summary).
+- **Composition** — Same flow for any command; the action is optional and pluggable.
 - **Reusability** — Base images and templates give you a consistent environment; actions and scripts are separate so you can mix and match.
-
-AI assistants (Claude, Codex, etc.) are one use case; the core is just “run in container, then act.”
-
----
-
-## How it works
-
-1. **Spawn** — Start a container from an image (default: `dockpipe-base-dev`, built from `images/base-dev` if missing).
-2. **Run** — Execute the command you pass after `--`. Your current directory is mounted at `/work` by default.
-3. **Act** — If you passed `--action <script>`, that script runs inside the container after your command, with env such as `DOCKPIPE_EXIT_CODE` and `DOCKPIPE_CONTAINER_WORKDIR`.
-
-Images use a generic entrypoint that runs your command and then the action. No vendor-specific logic in the core.
 
 ---
 
