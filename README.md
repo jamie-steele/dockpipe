@@ -44,20 +44,20 @@ Stdin → spawn container → run Claude with that prompt → action commits the
 
 ## Install
 
-- Clone the repo and add `bin` to your `PATH`:
+**Package** — Download the latest [.deb from Releases](https://github.com/your-org/dockpipe/releases) and run:
 
-  ```bash
-  git clone https://github.com/your-org/dockpipe.git
-  export PATH="$PATH:$(pwd)/dockpipe/bin"
-  ```
+```bash
+sudo dpkg -i dockpipe_*_all.deb
+```
 
-- Or symlink the script:
+**From source** — Clone and add `bin` to your `PATH`:
 
-  ```bash
-  ln -s /path/to/dockpipe/bin/dockpipe /usr/local/bin/dockpipe
-  ```
+```bash
+git clone https://github.com/your-org/dockpipe.git
+export PATH="$PATH:$(pwd)/dockpipe/bin"
+```
 
-**Requirements:** Bash, Docker.
+**Requirements:** Bash, Docker. See [docs/install.md](docs/install.md) for more.
 
 ---
 
