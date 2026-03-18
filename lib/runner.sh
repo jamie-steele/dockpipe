@@ -1,14 +1,44 @@
-# Core dockpipe runner: spawn container → run command → run action (if any).
-# Sourced by the CLI. Uses: DOCKPIPE_IMAGE, DOCKPIPE_CMD (array), DOCKPIPE_ACTION,
-# DOCKPIPE_WORKDIR, DOCKPIPE_DATA_VOLUME, DOCKPIPE_DATA_DIR, DOCKPIPE_EXTRA_MOUNTS, DOCKPIPE_EXTRA_ENV, DOCKPIPE_BUILD, DOCKPIPE_DETACH.
+# dockpipe runner: build docker run args, then run the container (attach or detach).
+# Sourced by bin/dockpipe. Expects env: DOCKPIPE_IMAGE, DOCKPIPE_ACTION, DOCKPIPE_WORKDIR,
+# DOCKPIPE_DATA_VOLUME / DOCKPIPE_DATA_DIR / DOCKPIPE_NO_DATA, DOCKPIPE_REINIT, DOCKPIPE_FORCE,
+# DOCKPIPE_EXTRA_MOUNTS, DOCKPIPE_EXTRA_ENV, DOCKPIPE_DETACH. Image must already exist.
 
 set -euo pipefail
 
-# Default work directory inside the container (mount point for host cwd or repo).
 export DOCKPIPE_CONTAINER_WORKDIR="${DOCKPIPE_CONTAINER_WORKDIR:-/work}"
 
-# Run docker with the configured image, command, and optional action.
-# Expects: DOCKPIPE_IMAGE, optional DOCKPIPE_ACTION path. Image must already exist or be built by CLI.
+# ------------------------------------------------------------------------------
+# Banner and spinner (stderr only; used when attached and stdout is a TTY).
+# ------------------------------------------------------------------------------
+dockpipe_banner() {
+  cat << 'BANNER' >&2
+
+    ██████╗  ██████╗ ██████╗██╗  ██╗██████╗ ██╗██████╗ ███████╗
+    ██╔══██╗██╔═══██╗██╔═══╝██║ ██╔╝██╔══██╗██║██╔══██╗██╔════╝
+    ██║  ██║██║   ██║██║    █████╔╝ ██████╔╝██║██████╔╝█████╗
+    ██║  ██║██║   ██║██║    ██╔═██╗ ██╔═══╝ ██║██╔═══╝ ██╔══╝
+    ██████╔╝╚██████╔╝██████╗██║  ██╗██║     ██║██║     ███████╗
+    ╚═════╝  ╚═════╝ ╚═════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝     ╚══════╝
+                      Run  →  Isolate  →  Act
+
+BANNER
+}
+
+# Spinner: show "Launching container..." with rotating chars for ~0.6s, then clear line and return.
+dockpipe_launch_spinner() {
+  local chars='|/-\'
+  local i=0
+  while [[ $i -lt 8 ]]; do
+    printf '\r  Launching container... %s  ' "${chars:i%4:1}" >&2
+    sleep 0.08
+    ((i++)) || true
+  done
+  printf '\r  %*s\r' 40 ' ' >&2
+}
+
+# ------------------------------------------------------------------------------
+# dockpipe_run [command argv...] — run the container with the current env config.
+# ------------------------------------------------------------------------------
 dockpipe_run() {
   local img="${DOCKPIPE_IMAGE:?DOCKPIPE_IMAGE is required}"
   local workdir_host="${DOCKPIPE_WORKDIR:-$(pwd)}"
@@ -16,16 +46,20 @@ dockpipe_run() {
   local extra_mounts="${DOCKPIPE_EXTRA_MOUNTS:-}"
   local extra_env="${DOCKPIPE_EXTRA_ENV:-}"
 
+  if [[ -z "${DOCKPIPE_DETACH:-}" ]] && [[ -t 1 ]]; then
+    dockpipe_banner
+    dockpipe_launch_spinner
+  fi
+
   local -a run_args=(
-    --rm
     --init
+    --hostname dockpipe
     -u "$(id -u):$(id -g)"
     -v "${workdir_host}:${DOCKPIPE_CONTAINER_WORKDIR}"
     -w "${DOCKPIPE_CONTAINER_WORKDIR}"
     -e "DOCKPIPE_CONTAINER_WORKDIR=${DOCKPIPE_CONTAINER_WORKDIR}"
   )
 
-  # Mount and set action script if provided
   if [[ -n "${action_path}" ]] && [[ -f "${action_path}" ]]; then
     local action_name
     action_name="$(basename "${action_path}" .sh)"
@@ -35,32 +69,53 @@ dockpipe_run() {
     )
   fi
 
-  # Data volume: persistent state (repos, tool config, first-time login). Either a bind mount (--data-dir) or a named volume (--data-vol, default dockpipe-data).
-  # We set DOCKPIPE_DATA and HOME=/dockpipe-data so tool state (e.g. Claude login) persists in the volume. Override with --env HOME=... if needed.
+  # --reinit: remove the named data volume (prompt unless -f).
+  if [[ -n "${DOCKPIPE_REINIT:-}" ]] && [[ -n "${DOCKPIPE_DATA_VOLUME:-}" ]]; then
+    cat << WARN >&2
+  ⚠  REINIT: This will permanently delete all data in volume '${DOCKPIPE_DATA_VOLUME}' (login, cache, repos).
+WARN
+    if [[ -z "${DOCKPIPE_FORCE:-}" ]]; then
+      if [[ ! -t 0 ]]; then
+        echo "  No TTY. Use -f to reinit non-interactively." >&2
+        exit 1
+      fi
+      printf '  Continue? [y/N] ' >&2
+      read -r resp
+      case "${resp:-n}" in
+        [yY]|[yY][eE][sS]) ;;
+        *) echo "Aborted." >&2; exit 1 ;;
+      esac
+    fi
+    echo "  Removing volume '${DOCKPIPE_DATA_VOLUME}'..." >&2
+    docker volume rm "${DOCKPIPE_DATA_VOLUME}" 2>/dev/null || true
+    echo "  Done. Starting with a fresh volume." >&2
+  fi
+
+  # Data volume: bind mount (--data-dir) or named volume (--data-vol). HOME=/dockpipe-data so tool state persists.
+  # One-off chown so the mounted dir is writable by the container user (id -u / id -g).
   if [[ -n "${DOCKPIPE_DATA_DIR:-}" ]]; then
     mkdir -p "${DOCKPIPE_DATA_DIR}"
     run_args+=(-v "${DOCKPIPE_DATA_DIR}:/dockpipe-data")
     run_args+=(-e "DOCKPIPE_DATA=/dockpipe-data" -e "HOME=/dockpipe-data")
+    docker run --rm -v "${DOCKPIPE_DATA_DIR}:/dockpipe-data" -u 0 "${img}" sh -c "chown -R $(id -u):$(id -g) /dockpipe-data 2>/dev/null || true"
   elif [[ -n "${DOCKPIPE_DATA_VOLUME:-}" ]]; then
     run_args+=(-v "${DOCKPIPE_DATA_VOLUME}:/dockpipe-data")
     run_args+=(-e "DOCKPIPE_DATA=/dockpipe-data" -e "HOME=/dockpipe-data")
+    docker run --rm -v "${DOCKPIPE_DATA_VOLUME}:/dockpipe-data" -u 0 "${img}" sh -c "chown -R $(id -u):$(id -g) /dockpipe-data 2>/dev/null || true"
   fi
 
-  # Extra mounts: "host_path:container_path[:ro]" space-separated
   local m
   for m in ${extra_mounts}; do
     [[ -z "$m" ]] && continue
     run_args+=(-v "$m")
   done
 
-  # Extra env: "KEY=VAL" per line (values may contain spaces)
   local e
   while IFS= read -r e; do
     [[ -z "$e" ]] && continue
     run_args+=(-e "$e")
   done <<< "${extra_env}"
 
-  # Attach vs detach: -d runs in background (container stays up until command exits)
   if [[ -n "${DOCKPIPE_DETACH:-}" ]]; then
     run_args+=(-d)
   else
@@ -71,6 +126,29 @@ dockpipe_run() {
     fi
   fi
 
-  # Run: image + command as arguments (exec form)
+  if [[ -z "${DOCKPIPE_DETACH:-}" ]]; then
+    local cid="dockpipe-$$-${RANDOM}"
+    run_args+=(--name "$cid")
+    local start_sec
+    start_sec=$(date +%s)
+    docker run "${run_args[@]}" "${img}" "$@" || true
+    local rc=$?
+    local elapsed=$(($(date +%s) - start_sec))
+    if [[ $rc -ne 0 ]] || [[ $elapsed -lt 3 ]]; then
+      echo "" >&2
+      if [[ $rc -ne 0 ]]; then
+        echo "  Container exited with code ${rc}. Full container output:" >&2
+      else
+        echo "  Container exited quickly (${elapsed}s). Full container output:" >&2
+      fi
+      echo "  ---" >&2
+      docker logs "$cid" 2>&1 | sed 's/^/  /' >&2
+      echo "  ---" >&2
+    fi
+    docker rm "$cid" 2>/dev/null || true
+    return "$rc"
+  fi
+
+  run_args+=(--rm)
   exec docker run "${run_args[@]}" "${img}" "$@"
 }

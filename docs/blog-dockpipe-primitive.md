@@ -66,11 +66,12 @@ dockpipe -- ls -la
 dockpipe -- bash -c "npm test"
 ```
 
-**Scaffold an action, then use it:**
+**Scaffold an action, or clone a bundled one to customize:**
 
 ```bash
 dockpipe action init my-action.sh
-# Edit my-action.sh (it has DOCKPIPE_EXIT_CODE and DOCKPIPE_CONTAINER_WORKDIR), then:
+# Or copy a bundled action: init my-commit.sh --from commit-worktree (or export-patch, print-summary)
+# Edit the script (DOCKPIPE_EXIT_CODE and DOCKPIPE_CONTAINER_WORKDIR are available), then:
 dockpipe --action my-action.sh -- ./my-script.sh
 ```
 
@@ -89,6 +90,12 @@ echo "refactor the auth module" \
 ```bash
 dockpipe -d --template agent-dev -- claude -p "review this code"
 # Prints container ID; use docker logs <id> or docker attach <id>
+```
+
+**Resume a previous Claude session** (state lives in the default data volume):
+
+```bash
+dockpipe --template agent-dev -- claude --resume <session-id> --dangerously-skip-permissions
 ```
 
 **Custom image and workdir:**

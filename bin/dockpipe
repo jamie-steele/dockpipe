@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
 # dockpipe — Run, isolate, and act. Pipe commands into disposable containers and act on the result.
+#
+# Layout: resolve repo root → usage/helpers → action subcommand (early exit) → option loop →
+#         resolve template/image, action path, data volume → source runner → build image → dockpipe_run.
 set -euo pipefail
 
-# When installed via .deb, /usr/bin/dockpipe is a symlink so dirname/.. would be /usr; use fixed path.
+# ------------------------------------------------------------------------------
+# Repo root (install path). When installed via .deb, /usr/bin/dockpipe is a symlink
+# so dirname would be /usr; we use a fixed path. From source, we use script dir/..
+# ------------------------------------------------------------------------------
 _script_dir="$(dirname "${BASH_SOURCE[0]}")"
 if [[ "${_script_dir}" == "/usr/bin" ]]; then
   DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-/usr/lib/dockpipe}"
@@ -17,17 +23,19 @@ dockpipe — Run, isolate, and act. Pipe commands into disposable containers and
 
 Usage:
   dockpipe [options] -- <command> [args...]
-  dockpipe action init <filename>   Scaffold a new action script (e.g. my-action.sh)
+  dockpipe action init [--from <bundled>] <filename>   New action script; --from copies a bundled one (commit-worktree, export-patch, print-summary)
   <stdin> | dockpipe [options] -- <command> [args...]
 
 Options:
   --image <name>       Use this Docker image (default: dockpipe-base-dev, built if missing)
-  --template <name>    Use a preset (base-dev | dev | agent-dev | claude). Builds image if needed.
+  --template <name>    Use a preset (base-dev | dev | agent-dev | claude | codex). Builds image if needed.
   --action <script>   Run this script inside the container after the command (e.g. commit-worktree)
   --workdir <path>    Host path to mount at /work (default: current directory)
   --data-vol <name>   Named volume for persistent data (default: dockpipe-data). Same volume each run = reusable agent environment.
   --data-dir <path>   Bind mount host path for persistent data (e.g. \$HOME/.dockpipe). Mounted at /dockpipe-data; HOME set there.
   --no-data           Do not mount the data volume (minimal run; no persistence)
+  --reinit            Remove the named data volume before running (fresh volume). Prompts to confirm unless -f. Use if a tool exits immediately due to bad/corrupt state.
+  -f, --force         With --reinit, skip confirmation (still show warning).
   --mount <v>         Extra volume or bind mount (e.g. /host/path:/container/path). Can be repeated.
   --env <KEY=VAL>     Pass env var into container. Can be repeated.
   --build <path>      Build image from path (relative to repo or absolute) and use as --image
@@ -47,32 +55,54 @@ Templates (--template):
   dev        Heavier dev image: base-dev + common tooling
   agent-dev  Node + Claude Code for AI/agent workflows (same as claude; use this for generic appeal)
   claude     Alias for agent-dev (backward compatible)
+  codex      Node + OpenAI Codex CLI; use with examples/codex-worktree for clone/worktree/commit flow
 EOF
   exit 0
 }
 
-# Resolve template name to image name and optional build path.
-# agent-dev = same image as claude (generic name for AI/agent workflows); claude kept for backward compat.
+# ------------------------------------------------------------------------------
+# resolve_template <name> — output "IMAGE BUILD_PATH" for the given template.
+# agent-dev and claude both use the same image (dockpipe-claude).
+# ------------------------------------------------------------------------------
 resolve_template() {
   local name="${1:-}"
   case "$name" in
     base-dev)   echo "dockpipe-base-dev ${DOCKPIPE_REPO_ROOT}/images/base-dev" ;;
     dev)        echo "dockpipe-dev ${DOCKPIPE_REPO_ROOT}/images/dev" ;;
     agent-dev|claude) echo "dockpipe-claude ${DOCKPIPE_REPO_ROOT}/images/claude" ;;
+    codex)      echo "dockpipe-codex ${DOCKPIPE_REPO_ROOT}/images/codex" ;;
     *)          echo "" ;;
   esac
 }
 
-# Subcommand: dockpipe action init <name> — scaffold an action script so users can "Act" without digging examples.
+# ------------------------------------------------------------------------------
+# action_subcommand — "dockpipe action init [--from <bundled>] <filename>"
+# Creates a new action script: either boilerplate or a copy of a bundled action.
+# ------------------------------------------------------------------------------
 action_subcommand() {
   local sub="${1:-}"
-  local name="${2:-my-action.sh}"
   if [[ "$sub" != "init" && "$sub" != "create" ]]; then
-    echo "Usage: dockpipe action init <filename>" >&2
-    echo "       dockpipe action create <filename>" >&2
-    echo "Creates a boilerplate action script with DOCKPIPE_EXIT_CODE and DOCKPIPE_CONTAINER_WORKDIR." >&2
+    echo "Usage: dockpipe action init [--from <bundled>] <filename>" >&2
+    echo "       dockpipe action create [--from <bundled>] <filename>" >&2
+    echo "Creates a new action script. Use --from to copy a bundled action (commit-worktree, export-patch, print-summary)." >&2
     exit 1
   fi
+  shift
+  local name=""
+  local from=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --from)
+        [[ $# -lt 2 ]] && { echo "Error: --from requires an argument" >&2; exit 1; }
+        from="$2"
+        shift 2
+        ;;
+      *)
+        [[ -z "$name" ]] && name="$1"
+        shift
+        ;;
+    esac
+  done
   [[ -z "$name" ]] && name="my-action.sh"
   [[ "$name" != *.sh ]] && name="${name}.sh"
   local dest="$name"
@@ -82,7 +112,18 @@ action_subcommand() {
     echo "Error: $dest already exists" >&2
     exit 1
   fi
-  cat > "$dest" << 'ACTIONEOF'
+  if [[ -n "$from" ]]; then
+    local base="${from%.sh}"
+    local src="${DOCKPIPE_REPO_ROOT}/examples/actions/${base}.sh"
+    if [[ ! -f "$src" ]]; then
+      echo "Error: unknown bundled action '$from'. Available: commit-worktree, export-patch, print-summary" >&2
+      exit 1
+    fi
+    cp "$src" "$dest"
+    chmod +x "$dest"
+    echo "Created: $dest (from bundled ${base}.sh)"
+  else
+    cat > "$dest" << 'ACTIONEOF'
 #!/usr/bin/env bash
 # dockpipe action — runs inside the container after your command.
 # Available env:
@@ -100,19 +141,24 @@ else
 fi
 exit "${DOCKPIPE_EXIT_CODE:-1}"
 ACTIONEOF
-  chmod +x "$dest"
-  echo "Created: $dest"
+    chmod +x "$dest"
+    echo "Created: $dest"
+  fi
   echo "Use: dockpipe --action $name -- <your-command>"
 }
 
-# Handle "dockpipe action init ..." before main option parsing
+# ------------------------------------------------------------------------------
+# Early exit: "dockpipe action init ..." is handled here; no -- or command required.
+# ------------------------------------------------------------------------------
 if [[ "${1:-}" == "action" ]]; then
   shift
   action_subcommand "$@"
   exit 0
 fi
 
-# Parse arguments
+# ------------------------------------------------------------------------------
+# Main option parsing. All options must appear before "--"; command follows "--".
+# ------------------------------------------------------------------------------
 DOCKPIPE_IMAGE=""
 DOCKPIPE_ACTION=""
 DOCKPIPE_WORKDIR=""
@@ -124,6 +170,8 @@ DOCKPIPE_DETACH=""
 DOCKPIPE_DATA_VOLUME=""
 DOCKPIPE_DATA_DIR=""
 DOCKPIPE_NO_DATA=""
+DOCKPIPE_REINIT=""
+DOCKPIPE_FORCE=""
 TEMPLATE=""
 SEEN_DASH=""
 
@@ -131,6 +179,8 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --help|-h) usage ;;
     -d|--detach) DOCKPIPE_DETACH=1; shift ;;
+    -f|--force) DOCKPIPE_FORCE=1; shift ;;
+    --reinit) DOCKPIPE_REINIT=1; shift ;;
     --data-vol|--data-volume)
       [[ $# -lt 2 ]] && { echo "Error: $1 requires an argument" >&2; exit 1; }
       DOCKPIPE_DATA_VOLUME="$2"
@@ -195,7 +245,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Template overrides image and sets build
+# ------------------------------------------------------------------------------
+# Resolve image and build path from template (if --template was used).
+# ------------------------------------------------------------------------------
 if [[ -n "${TEMPLATE}" ]]; then
   resolved=$(resolve_template "$TEMPLATE")
   if [[ -z "$resolved" ]]; then
@@ -210,23 +262,36 @@ if [[ -n "${TEMPLATE}" ]]; then
   fi
 fi
 
-# Default image if none set
+# Default image when neither --image nor --template was given.
 if [[ -z "${DOCKPIPE_IMAGE}" ]]; then
   DOCKPIPE_IMAGE="dockpipe-base-dev"
   DOCKPIPE_BUILD="${DOCKPIPE_REPO_ROOT}/images/base-dev"
   DOCKPIPE_BUILD_CONTEXT="${DOCKPIPE_REPO_ROOT}"
 fi
 
-# Resolve action path if relative
+# Versioned image tag when installed via .deb (version file present). Ensures upgrades get a new image.
+if [[ "${DOCKPIPE_IMAGE}" != *:* ]] && [[ -f "${DOCKPIPE_REPO_ROOT}/version" ]]; then
+  DOCKPIPE_IMAGE="${DOCKPIPE_IMAGE}:$(cat "${DOCKPIPE_REPO_ROOT}/version")"
+fi
+
+# Resolve relative action path: repo root, then repo/examples/<path> (bundled), then cwd.
 if [[ -n "${DOCKPIPE_ACTION}" ]] && [[ "${DOCKPIPE_ACTION}" != /* ]]; then
   if [[ -f "${DOCKPIPE_REPO_ROOT}/${DOCKPIPE_ACTION}" ]]; then
     DOCKPIPE_ACTION="${DOCKPIPE_REPO_ROOT}/${DOCKPIPE_ACTION}"
-  elif [[ ! -f "${DOCKPIPE_ACTION}" ]]; then
+  elif [[ -f "${DOCKPIPE_REPO_ROOT}/examples/${DOCKPIPE_ACTION}" ]]; then
+    DOCKPIPE_ACTION="${DOCKPIPE_REPO_ROOT}/examples/${DOCKPIPE_ACTION}"
+  elif [[ -f "${DOCKPIPE_ACTION}" ]]; then
+    DOCKPIPE_ACTION="$(cd "$(dirname "${DOCKPIPE_ACTION}")" && pwd)/$(basename "${DOCKPIPE_ACTION}")"
+  else
     DOCKPIPE_ACTION="$(pwd)/${DOCKPIPE_ACTION}"
   fi
 fi
+if [[ -n "${DOCKPIPE_ACTION}" ]] && [[ ! -f "${DOCKPIPE_ACTION}" ]]; then
+  echo "Error: action script not found: ${DOCKPIPE_ACTION}" >&2
+  exit 1
+fi
 
-# Data volume: default named volume "dockpipe-data". Use --data-vol <name> for another volume, or --data-dir <path> for a bind mount. --no-data = no mount.
+# Data volume: default named volume "dockpipe-data". --data-dir = bind mount; --no-data = no volume.
 if [[ -n "${DOCKPIPE_NO_DATA}" ]]; then
   DOCKPIPE_DATA_VOLUME=""
   DOCKPIPE_DATA_DIR=""
@@ -237,31 +302,27 @@ else
     DOCKPIPE_DATA_VOLUME="${DOCKPIPE_DATA_VOLUME:-dockpipe-data}"
   fi
 fi
-export DOCKPIPE_IMAGE DOCKPIPE_ACTION DOCKPIPE_WORKDIR DOCKPIPE_EXTRA_MOUNTS DOCKPIPE_EXTRA_ENV DOCKPIPE_DETACH DOCKPIPE_DATA_VOLUME DOCKPIPE_DATA_DIR
+export DOCKPIPE_IMAGE DOCKPIPE_ACTION DOCKPIPE_WORKDIR DOCKPIPE_EXTRA_MOUNTS DOCKPIPE_EXTRA_ENV DOCKPIPE_DETACH DOCKPIPE_DATA_VOLUME DOCKPIPE_DATA_DIR DOCKPIPE_REINIT DOCKPIPE_FORCE
 
-# Build if we have a build path
+# Pass build path to runner (runner does not build; we build below before calling dockpipe_run).
 if [[ -n "${DOCKPIPE_BUILD}" ]] && [[ -d "${DOCKPIPE_BUILD}" ]]; then
-  export DOCKPIPE_BUILD
-  # Runner expects: build from context with -f build/Dockerfile
-  export DOCKPIPE_BUILD_CONTEXT
+  export DOCKPIPE_BUILD DOCKPIPE_BUILD_CONTEXT
 fi
 
-# Load runner and execute
 source "${DOCKPIPE_REPO_ROOT}/lib/runner.sh"
 
 if [[ "$SEEN_DASH" != "1" ]]; then
   echo "Error: expected -- before command (e.g. dockpipe -- ls -la)" >&2
   exit 1
 fi
-
 if [[ $# -eq 0 ]]; then
   echo "Error: no command given after --" >&2
   exit 1
 fi
 
-# Build image when DOCKPIPE_BUILD and DOCKPIPE_BUILD_CONTEXT are set
+# Build image if a build path was set (from --template or --build or default).
 if [[ -n "${DOCKPIPE_BUILD:-}" ]] && [[ -n "${DOCKPIPE_BUILD_CONTEXT:-}" ]]; then
-  # Dev template depends on base-dev; build it first if missing
+  # dev image Dockerfile FROMs dockpipe-base-dev; ensure base exists first.
   if [[ "${DOCKPIPE_IMAGE}" == "dockpipe-dev" ]]; then
     if ! docker image inspect dockpipe-base-dev:latest &>/dev/null; then
       docker build -q -t dockpipe-base-dev -f "${DOCKPIPE_REPO_ROOT}/images/base-dev/Dockerfile" "${DOCKPIPE_BUILD_CONTEXT}"

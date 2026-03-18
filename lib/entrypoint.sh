@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
-# Generic container entrypoint for dockpipe images.
-# 1. Run the command passed as argv (or from DOCKPIPE_CMD).
-# 2. If DOCKPIPE_ACTION is set, run that script with DOCKPIPE_EXIT_CODE and DOCKPIPE_CONTAINER_WORKDIR.
-# When the terminal closes or the client disconnects, Docker sends SIGTERM; we kill the command and exit
-# so the container comes down instead of lingering.
+# dockpipe container entrypoint.
+# Runs the user command; if DOCKPIPE_ACTION is set, runs that script after the command exits
+# with DOCKPIPE_EXIT_CODE and DOCKPIPE_CONTAINER_WORKDIR set. On SIGTERM/SIGHUP/SIGINT we
+# terminate the command and exit so the container does not linger.
 set -euo pipefail
 
 WORKDIR="${DOCKPIPE_CONTAINER_WORKDIR:-/work}"
 cd "${WORKDIR}"
+
+# Diagnostic lines shown when runner dumps logs (e.g. "Container exited quickly").
+echo "dockpipe entrypoint: argc=$# argv=($*)" >&2
+echo "dockpipe entrypoint: stdin is TTY=$([ -t 0 ] && echo yes || echo no)" >&2
 
 CMD_PID=""
 cleanup() {
@@ -19,28 +22,37 @@ cleanup() {
 }
 trap cleanup SIGTERM SIGHUP SIGINT
 
-# Run the user's command in background so we can forward signals (e.g. on terminal close)
+# No action: run command in foreground so it keeps the TTY (required for interactive CLIs).
+# With action: run command in background, wait, then run the action script.
+if [[ -z "${DOCKPIPE_ACTION:-}" ]] || [[ ! -f "${DOCKPIPE_ACTION:-}" ]]; then
+  if [[ $# -gt 0 ]]; then
+    bash -i -c 'exec "$@"' _ "$@" || true
+    _rc=$?
+    echo "dockpipe entrypoint: command exited with code $_rc" >&2
+    exit "$_rc"
+  else
+    if [[ -n "${DOCKPIPE_CMD:-}" ]]; then
+      exec bash -c "${DOCKPIPE_CMD}"
+    else
+      echo "dockpipe: no command given" >&2
+      exit 1
+    fi
+  fi
+fi
+
 if [[ $# -gt 0 ]]; then
   "$@" &
 else
-  if [[ -n "${DOCKPIPE_CMD:-}" ]]; then
-    eval "${DOCKPIPE_CMD}" &
-  else
-    echo "dockpipe: no command given" >&2
-    exit 1
-  fi
+  eval "${DOCKPIPE_CMD}" &
 fi
 CMD_PID=$!
 wait "${CMD_PID}"
 trap - SIGTERM SIGHUP SIGINT
 DOCKPIPE_EXIT_CODE=$?
 
-# Run action script if present (e.g. commit-worktree, export-patch)
-if [[ -n "${DOCKPIPE_ACTION:-}" ]] && [[ -f "${DOCKPIPE_ACTION}" ]]; then
-  export DOCKPIPE_EXIT_CODE DOCKPIPE_CONTAINER_WORKDIR
-  set +e
-  bash "${DOCKPIPE_ACTION}"
-  set -e
-fi
+export DOCKPIPE_EXIT_CODE DOCKPIPE_CONTAINER_WORKDIR
+set +e
+bash "${DOCKPIPE_ACTION}"
+set -e
 
 exit "$DOCKPIPE_EXIT_CODE"

@@ -30,7 +30,7 @@ Runs `make test` in a clean container. Your current directory is at `/work`. Whe
 | **Pipe stdin** | `echo "input" \| dockpipe -- cmd` |
 | **AI + commit** | `dockpipe --template agent-dev --action examples/actions/commit-worktree.sh -- claude -p "Your prompt"` |
 
-Scaffold your own action: `dockpipe action init my-action.sh` → then `--action my-action.sh`.
+Scaffold your own action: `dockpipe action init my-action.sh` (or `init my-commit.sh --from commit-worktree` to copy a bundled one) → then `--action my-action.sh`.
 
 ---
 
@@ -42,7 +42,7 @@ Scaffold your own action: `dockpipe action init my-action.sh` → then `--action
 
 You pick the image, the command, and the action. No workflow engine—just one primitive you compose.
 
-**Persistent data:** By default dockpipe mounts a named volume `dockpipe-data` at `/dockpipe-data` and sets `HOME` there so tool state (e.g. first-time Claude login) persists. Use `--data-vol <name>` or `--data-dir /path` to change where; `--no-data` to disable. Override `HOME` with `--env HOME=...` if a tool needs a different home.
+**Persistent data:** By default dockpipe mounts a named volume `dockpipe-data` at `/dockpipe-data` and sets `HOME` there so tool state (e.g. first-time Claude login) persists. Use `--data-vol <name>` or `--data-dir /path` to change where; `--no-data` to disable. Override `HOME` with `--env HOME=...` if a tool needs a different home. If a tool (e.g. Claude) exits immediately with the default volume, try `--no-data` or `--reinit` (removes the named volume so the next run gets a fresh one).
 
 ---
 
@@ -74,7 +74,7 @@ Requirements: **Bash**, **Docker**. [More in docs/install.md](docs/install.md).
 
 ```text
 dockpipe [options] -- <command> [args...]
-dockpipe action init <filename>
+dockpipe action init [--from <bundled>] <filename>
 ```
 
 | Option | Description |
@@ -86,6 +86,8 @@ dockpipe action init <filename>
 | `--data-vol <name>` | Named volume for persistent data (default: `dockpipe-data`). Same volume each run = reusable agent environment. |
 | `--data-dir <path>` | Bind mount host path for persistent data (e.g. `$HOME/.dockpipe`). Mounted at `/dockpipe-data`; HOME set there. |
 | `--no-data` | Do not mount the data volume (minimal run). |
+| `--reinit` | Remove the named data volume before running (fresh volume). Prompts to confirm; use `-f` to skip. |
+| `-f`, `--force` | With `--reinit`, skip confirmation (warning still shown). |
 | `--mount`, `--env` | Extra volumes or env vars. |
 | `-d`, `--detach` | Run container in background; don't attach. Container stays up until command exits. |
 | `--help` | Help. |
@@ -123,13 +125,19 @@ dockpipe --template agent-dev --action examples/actions/commit-worktree.sh \
 dockpipe -d --template agent-dev -- claude -p "review this"
 ```
 
+**Resume a previous Claude session** (state lives in the default data volume):
+
+```bash
+dockpipe --template agent-dev -- claude --resume <session-id> --dangerously-skip-permissions
+```
+
 **Chained (each step in a fresh container):**
 
 ```bash
 dockpipe -- make lint && dockpipe -- make test && dockpipe -- make build
 ```
 
-**Full runnable examples:** [chained non-AI](examples/chained-non-ai/README.md) · [chained multi-AI](examples/chained-multi-ai/README.md) · [Claude worktree](examples/claude-worktree/README.md)
+**Full runnable examples:** [chained non-AI](examples/chained-non-ai/README.md) · [chained multi-AI](examples/chained-multi-ai/README.md) · [Claude worktree](examples/claude-worktree/README.md) · [Codex worktree](examples/codex-worktree/README.md)
 
 ---
 
@@ -145,7 +153,7 @@ dockpipe -- make lint && dockpipe -- make test && dockpipe -- make build
 
 ## Actions
 
-Scripts that run **inside** the container after your command. They get `DOCKPIPE_EXIT_CODE` and `DOCKPIPE_CONTAINER_WORKDIR`. Create one: `dockpipe action init my-action.sh`. Bundled: [commit-worktree](examples/actions/commit-worktree.sh), [export-patch](examples/actions/export-patch.sh), [print-summary](examples/actions/print-summary.sh).
+Scripts that run **inside** the container after your command. They get `DOCKPIPE_EXIT_CODE` and `DOCKPIPE_CONTAINER_WORKDIR`. Create one: `dockpipe action init my-action.sh`, or clone a bundled one to customize: `dockpipe action init my-commit.sh --from commit-worktree`. Bundled: [commit-worktree](examples/actions/commit-worktree.sh), [export-patch](examples/actions/export-patch.sh), [print-summary](examples/actions/print-summary.sh).
 
 ---
 

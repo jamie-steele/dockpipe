@@ -64,7 +64,7 @@ Environment variables that cross the boundary:
 ## Extension points
 
 1. **Images** — Add a Dockerfile under `images/<name>/`, use the shared entrypoint, and (optionally) register a template in `bin/dockpipe` so `--template <name>` builds and uses it.
-2. **Actions** — Any script that can run in the container and read `DOCKPIPE_EXIT_CODE` / `DOCKPIPE_CONTAINER_WORKDIR`. Place under `examples/actions/` and reference with `--action`.
+2. **Actions** — Any script that can run in the container and read `DOCKPIPE_EXIT_CODE` / `DOCKPIPE_CONTAINER_WORKDIR`. Place under `examples/actions/` and reference with `--action`. Users can copy a bundled action to customize: `dockpipe action init my-commit.sh --from commit-worktree` (or `export-patch`, `print-summary`).
 3. **Scripts / workflows** — Arbitrary scripts (e.g. clone + worktree + run tool + commit) live in `examples/` and are invoked as the “command” (e.g. `dockpipe ... -- ./examples/claude-worktree/setup-and-claude.sh`). No change to core required.
 
 The core does not parse command content or assume any particular tool (Claude, git, etc.). It only runs the given argv and the optional action script.

@@ -51,7 +51,7 @@ Data flow: **Host CLI → Docker → container entrypoint → user command → a
 ### New action
 
 1. Add a script under `examples/actions/` (e.g. `examples/actions/my-action.sh`). It will run inside the container; use `DOCKPIPE_EXIT_CODE` and `DOCKPIPE_CONTAINER_WORKDIR` as needed.
-2. Document in README and in `examples/actions/` (e.g. a one-line comment in the script and a mention in README).
+2. Document in README and in `examples/actions/` (e.g. a one-line comment in the script and a mention in README). Users can copy it with `dockpipe action init my-copy.sh --from my-action`.
 
 ### New example workflow
 
@@ -65,6 +65,45 @@ Data flow: **Host CLI → Docker → container entrypoint → user command → a
 - **Core = primitive only:** Spawn → run → act. No hardcoded commit behavior, no hardcoded AI tool.
 - **Templates and actions are the extension points:** Simple, obvious names and file locations.
 - **Documentation is first-class:** README, AGENTS.md, and docs should make the primitive and extension model clear so users and contributors can add their own images and actions without reading the whole codebase.
+
+---
+
+## Contributing: keep it primitive
+
+Contributions should extend the primitive (templates, actions, examples) or fix bugs in the core—not turn the core into a workflow engine or add first-class support for specific tools.
+
+**Do:**
+- Add or improve templates, actions, and example scripts.
+- Fix bugs in CLI/runner/entrypoint; improve docs and tests.
+- Use env vars and `--mount` / `--env` for one-off needs; document patterns in examples or docs.
+
+**Don’t (examples of what we don’t want):**
+- **Branch or workflow flags in the core** — e.g. `--branch`, `--worktree`, “create branch for me.” The user’s repo state (current branch, workdir) is the contract; orchestration belongs in scripts or the caller.
+- **Vendor- or AI-specific behavior in `bin/` or `lib/`** — e.g. “if command is claude then …”. Keep that in templates and examples.
+- **Built-in worktree/clone/commit logic** — Those are actions or example scripts that use the primitive, not core features.
+- **Plugin/registry system** — Templates and actions are the extension points; no dynamic loading or plugin API unless the current model clearly can’t scale.
+- **Orchestration in the core** — Retries, fan-out, multi-step state machines: script around dockpipe (Makefile, shell, CI), don’t build them into the CLI.
+
+When in doubt: if it can be done by a script that runs `dockpipe` and passes `--mount` / `--env`, prefer that over adding new flags or core behavior.
+
+---
+
+## Running Docker (or dockpipe) from inside a container
+
+You can run `docker` or dockpipe **from inside** a container by mounting the host’s Docker socket. The inner run creates **sibling** containers on the same host daemon (no nested daemon).
+
+**How:** Pass the socket as an extra mount:
+
+```bash
+dockpipe --mount /var/run/docker.sock:/var/run/docker.sock --template agent-dev -- your-command
+```
+
+**Use cases:**
+- **Contributors:** Test a newer or patched dockpipe inside a container while the host runs a stable install. Clone your fork in the container (or mount it), mount the socket, run your version’s `dockpipe` from inside; it will create sibling containers via the host’s Docker.
+- **CI or automation:** A job runs in a container but needs to start other containers (e.g. sidecar, one-off build). Same pattern: socket mount + Docker CLI in the image.
+- **Any “docker from inside” need:** Build images, run sibling services, or chain containerized steps without leaving the first container.
+
+**Caveat:** The image must have the Docker CLI installed for the inner `docker` (or dockpipe) to work. The default agent-dev image does not ship it; use a custom image or add it to a template if you need this pattern.
 
 ---
 
@@ -85,6 +124,8 @@ Data flow: **Host CLI → Docker → container entrypoint → user command → a
 ---
 
 ## What to avoid
+
+See **Contributing: keep it primitive** for best practices and examples of features we don’t want. In addition:
 
 - Do not add Claude- or vendor-specific logic to `lib/runner.sh` or `lib/entrypoint.sh`.
 - Do not make commit/cherry-pick/export a required or default behavior of the core.

@@ -64,7 +64,7 @@ dockpipe --template claude \
   -- claude --dangerously-skip-permissions -p "Your prompt"
 ```
 
-The commit-worktree action will commit all changes in `/work` (your repo) after Claude exits.
+The commit-worktree action will commit all changes in `/work` (your repo) after Claude exits. To customize it, copy first: `dockpipe action init my-commit.sh --from commit-worktree`, then use `--action my-commit.sh`.
 
 ## Files
 

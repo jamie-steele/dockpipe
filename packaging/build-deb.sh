@@ -5,7 +5,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-VERSION="${1:-0.5.0}"
+VERSION="${1:-0.5.8}"
 PACKAGE="dockpipe_${VERSION}_all"
 BUILD_DIR="${REPO_ROOT}/packaging/build/${PACKAGE}"
 DEST="${BUILD_DIR}/usr/lib/dockpipe"
@@ -15,10 +15,12 @@ mkdir -p "${DEST}"
 
 # Copy core files (same layout as repo so DOCKPIPE_REPO_ROOT works)
 cp -r bin lib images examples "${DEST}/"
+echo "${VERSION}" > "${DEST}/version"
 chmod 755 "${DEST}/bin/dockpipe"
 chmod 755 "${DEST}/lib/"*.sh
 chmod 755 "${DEST}/examples/actions/"*.sh
 chmod 755 "${DEST}/examples/claude-worktree/"*.sh 2>/dev/null || true
+chmod 755 "${DEST}/examples/codex-worktree/"*.sh 2>/dev/null || true
 
 # Symlink from PATH
 mkdir -p "${BUILD_DIR}/usr/bin"
