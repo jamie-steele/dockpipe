@@ -45,15 +45,14 @@ test_unknown_template() {
 }
 
 test_template_resolution() {
-  # Just ensure valid templates don't error out before docker (we might not have docker)
-  # So we check that --template base-dev -- true triggers build or run; we can't easily
-  # test without docker. Instead test that parsing works: --template base-dev -- true
-  # should not say "unknown template"
-  out=$("$CLI" --template base-dev -- true 2>&1) || true
-  if echo "$out" | grep -q "unknown template"; then
-    echo "test_template_resolution FAIL: base-dev should be valid"
-    return 1
-  fi
+  # Ensure valid templates don't error with "unknown template"
+  for t in base-dev dev agent-dev claude; do
+    out=$("$CLI" --template "$t" -- true 2>&1) || true
+    if echo "$out" | grep -q "unknown template"; then
+      echo "test_template_resolution FAIL: $t should be valid"
+      return 1
+    fi
+  done
   echo "test_template_resolution OK"
 }
 

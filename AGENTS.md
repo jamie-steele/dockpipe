@@ -22,7 +22,7 @@ The core is **agent-agnostic** and **command-agnostic**. AI tools (Claude, Codex
 - **Runner** (`lib/runner.sh`) — Builds the `docker run` invocation: mounts, env, optional action script mount, then `exec docker run ... <image> "$@"`.
 - **Entrypoint** (`lib/entrypoint.sh`) — Runs inside every image. Executes the command (argv or `DOCKPIPE_CMD`), then runs `DOCKPIPE_ACTION` if set, then exits with the command’s exit code.
 - **Images** — Dockerfiles in `images/`; they `COPY lib/entrypoint.sh` from the **repo root** build context. Build with `-f images/<name>/Dockerfile .` from repo root.
-- **Templates** — Named presets (e.g. `base-dev`, `dev`, `claude`) that map to an image name and a build path. Resolved in the CLI; no plugin system.
+- **Templates** — Named presets (e.g. `base-dev`, `dev`, `agent-dev`, `claude`) that map to an image name and a build path. Resolved in the CLI; no plugin system. Prefer `agent-dev` over `claude` in docs for command-agnostic appeal.
 - **Actions** — Shell scripts that run inside the container after the user command. They receive `DOCKPIPE_EXIT_CODE` and `DOCKPIPE_CONTAINER_WORKDIR`. Shipped as examples under `examples/actions/`.
 
 Data flow: **Host CLI → Docker → container entrypoint → user command → action (if any) → exit.**
@@ -73,6 +73,14 @@ Data flow: **Host CLI → Docker → container entrypoint → user command → a
 - `tests/` contains CLI and runner tests (argument parsing, template/action resolution, basic smoke tests).
 - Run from repo root. Prefer practical assertions (exit codes, expected output) over heavy mocking.
 - Adding a new template or flag should be accompanied by a small test where appropriate.
+
+---
+
+## Limitations and escape hatches
+
+- **UID/GID:** The runner passes `-u "$(id -u):$(id -g)"` so container-created files in the workdir are owned by the host user. Custom images or root-written volumes can still cause permission issues.
+- **State between chained runs:** No env var bridge; use the shared workdir (files) or stdout/stdin. Documented in [docs/architecture.md](docs/architecture.md).
+- **When the primitive isn’t enough:** Orchestration (retries, fan-out), rich multi-step state, or heavy tooling may require scripting around dockpipe (Makefile, shell, or an orchestrator). See “When the primitive isn’t enough” in architecture.md. Maintainers can note “most complex workflow” or escape-hatch experiences here as they come up.
 
 ---
 

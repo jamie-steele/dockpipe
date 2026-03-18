@@ -15,7 +15,7 @@ Usage:
 
 Options:
   --image <name>       Use this Docker image (default: dockpipe-base-dev, built if missing)
-  --template <name>    Use a preset (base-dev | dev | claude). Builds image if needed.
+  --template <name>    Use a preset (base-dev | dev | agent-dev | claude). Builds image if needed.
   --action <script>   Run this script inside the container after the command (e.g. commit-worktree)
   --workdir <path>    Host path to mount at /work (default: current directory)
   --mount <v>         Extra volume (e.g. /host/path:/container/path). Can be repeated.
@@ -32,20 +32,22 @@ Examples:
 
 Templates (--template):
   base-dev   Light image: git, curl, bash, ripgrep, jq, ca-certificates
-  dev       Heavier dev image: base-dev + common tooling
-  claude    Claude Code image for AI-assisted workflows (see examples/claude-worktree)
+  dev        Heavier dev image: base-dev + common tooling
+  agent-dev  Node + Claude Code for AI/agent workflows (same as claude; use this for generic appeal)
+  claude     Alias for agent-dev (backward compatible)
 EOF
   exit 0
 }
 
 # Resolve template name to image name and optional build path.
+# agent-dev = same image as claude (generic name for AI/agent workflows); claude kept for backward compat.
 resolve_template() {
   local name="${1:-}"
   case "$name" in
-    base-dev)  echo "dockpipe-base-dev ${DOCKPIPE_REPO_ROOT}/images/base-dev" ;;
-    dev)       echo "dockpipe-dev ${DOCKPIPE_REPO_ROOT}/images/dev" ;;
-    claude)    echo "dockpipe-claude ${DOCKPIPE_REPO_ROOT}/images/claude" ;;
-    *)         echo "" ;;
+    base-dev)   echo "dockpipe-base-dev ${DOCKPIPE_REPO_ROOT}/images/base-dev" ;;
+    dev)        echo "dockpipe-dev ${DOCKPIPE_REPO_ROOT}/images/dev" ;;
+    agent-dev|claude) echo "dockpipe-claude ${DOCKPIPE_REPO_ROOT}/images/claude" ;;
+    *)          echo "" ;;
   esac
 }
 

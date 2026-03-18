@@ -57,7 +57,7 @@ git clone https://github.com/jamie-steele/dockpipe.git
 export PATH="$PATH:$(pwd)/dockpipe/bin"
 ```
 
-**Requirements:** Bash, Docker. See [docs/install.md](docs/install.md) for more.
+**Requirements:** Bash, Docker. The runner uses your host UID/GID so files created in the container are owned by you. See [docs/install.md](docs/install.md) and [docs/architecture.md](docs/architecture.md) for more.
 
 ---
 
@@ -172,7 +172,8 @@ dockpipe --workdir "$REPO" -- bash -c "npm test"
 |----------|--------|-------------|
 | `base-dev` | `dockpipe-base-dev` | Light: git, curl, bash, ripgrep, jq, ca-certificates. |
 | `dev` | `dockpipe-dev` | Heavier: base-dev + build-essential, ssh, less, man, zip, etc. |
-| `claude` | `dockpipe-claude` | Node 20 + Claude Code; for AI-assisted workflows. |
+| `agent-dev` | `dockpipe-claude` | Node 20 + Claude Code; for AI/agent workflows (command-agnostic name). |
+| `claude` | `dockpipe-claude` | Alias for `agent-dev` (backward compatible). |
 
 Images are built from the repo when you use `--template` (or default) and the image is missing. Build from repo root so `COPY lib/entrypoint.sh` works:
 
