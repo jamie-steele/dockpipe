@@ -1,5 +1,3 @@
-# Run, Isolate, and Act: A Minimal Primitive for Container Workflows
-
 **dockpipe** is a general-purpose CLI: run any command in a disposable container, then optionally run an action on the result (e.g. commit, export patch). Same flow for tests, one-off scripts, codegen, or AI tools—not an AI framework; AI is one use case.
 
 This post is a short intro to what it is, why it's useful, and how you can use it for automation and chained workflows (including AI).
