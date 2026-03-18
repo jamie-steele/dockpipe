@@ -2,7 +2,13 @@
 # dockpipe — Run, isolate, and act. Pipe commands into disposable containers and act on the result.
 set -euo pipefail
 
-DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+# When installed via .deb, /usr/bin/dockpipe is a symlink so dirname/.. would be /usr; use fixed path.
+_script_dir="$(dirname "${BASH_SOURCE[0]}")"
+if [[ "${_script_dir}" == "/usr/bin" ]]; then
+  DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-/usr/lib/dockpipe}"
+else
+  DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$(cd "${_script_dir}/.." && pwd)}"
+fi
 export DOCKPIPE_REPO_ROOT
 
 usage() {
@@ -27,7 +33,7 @@ Options:
 Examples:
   dockpipe -- ls -la
   dockpipe --image alpine -- sh -c "echo hello"
-  echo "fix the bug" | dockpipe --template claude -- claude -p "\$(cat)"
+  echo "fix the bug" | dockpipe --template agent-dev -- claude -p "\$(cat)"
   dockpipe --action examples/actions/commit-worktree.sh -- ./script.sh
   dockpipe --workdir /path/to/repo -- bash -c "npm test"
 

@@ -5,7 +5,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-VERSION="${1:-0.4.0}"
+VERSION="${1:-0.4.1}"
 PACKAGE="dockpipe_${VERSION}_all"
 BUILD_DIR="${REPO_ROOT}/packaging/build/${PACKAGE}"
 DEST="${BUILD_DIR}/usr/lib/dockpipe"
