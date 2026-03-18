@@ -125,9 +125,44 @@ dockpipe --template claude --action examples/actions/commit-worktree.sh \
   -- claude --dangerously-skip-permissions -p "Your prompt"
 ```
 
-**Full Claude worktree example (clone, worktree, Claude, commit):**
+**Chained workflow (non-AI):** each step runs in a fresh container; same directory is mounted so the next step sees the previous step’s output.
 
-See [examples/claude-worktree/](examples/claude-worktree/README.md).
+```bash
+# Lint → test → build, each in an isolated environment
+dockpipe -- make lint && \
+dockpipe -- make test && \
+dockpipe -- make build
+```
+
+Or pipe output from one step into the next:
+
+```bash
+# Generate a config, then validate it in another container
+./scripts/generate-config.sh | dockpipe -- ./scripts/validate-config.sh
+```
+
+**Chained multi-AI workflow:** run multiple AI steps in sequence, each in its own container. Step 1 writes a plan; step 2 reads it and implements; step 3 reviews. Use a shared workdir so each step sees the repo.
+
+```bash
+REPO="$(pwd)"
+# Step 1: generate plan (output to repo or stdout)
+echo "Add auth to the API" | dockpipe --template claude --workdir "$REPO" \
+  -- claude --dangerously-skip-permissions -p "Create a short implementation plan. Write it to plan.md. $(cat)"
+
+# Step 2: implement from plan (same repo)
+dockpipe --template claude --workdir "$REPO" --action examples/actions/commit-worktree.sh \
+  --env "DOCKPIPE_COMMIT_MESSAGE=impl: auth from plan" \
+  -- claude --dangerously-skip-permissions -p "Implement the steps in plan.md"
+
+# Step 3: review (e.g. run tests or another AI pass)
+dockpipe --workdir "$REPO" -- bash -c "npm test"
+```
+
+**Full examples (runnable from the repo):**
+
+- [Chained non-AI](examples/chained-non-ai/README.md) — Lint → test → build, or generate → validate (Makefile + scripts).
+- [Chained multi-AI](examples/chained-multi-ai/README.md) — Plan → implement → review with Claude (shared workdir).
+- [Claude worktree](examples/claude-worktree/README.md) — Clone, worktree, Claude, commit.
 
 ---
 
@@ -200,6 +235,7 @@ Runs CLI and runner unit tests; optionally runs a smoke test (requires Docker).
 
 ## Documentation
 
+- [Blog post: Run, Isolate, and Act](https://dev.to/jamie-steele/run-isolate-and-act-a-minimal-primitive-for-container-workflows-553m) — Intro, benefits, and examples on DEV Community.
 - [Architecture](docs/architecture.md) — Core primitive, data flow, extension points.
 - [Examples](examples/) — Actions and the [Claude worktree example](examples/claude-worktree/README.md).
 - [AGENTS.md](AGENTS.md) — For maintainers and AI agents: repo purpose, standards, how to add templates/actions.
