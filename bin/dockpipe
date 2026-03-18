@@ -11,6 +11,7 @@ dockpipe — Run, isolate, and act. Pipe commands into disposable containers and
 
 Usage:
   dockpipe [options] -- <command> [args...]
+  dockpipe action init <filename>   Scaffold a new action script (e.g. my-action.sh)
   <stdin> | dockpipe [options] -- <command> [args...]
 
 Options:
@@ -50,6 +51,55 @@ resolve_template() {
     *)          echo "" ;;
   esac
 }
+
+# Subcommand: dockpipe action init <name> — scaffold an action script so users can "Act" without digging examples.
+action_subcommand() {
+  local sub="${1:-}"
+  local name="${2:-my-action.sh}"
+  if [[ "$sub" != "init" && "$sub" != "create" ]]; then
+    echo "Usage: dockpipe action init <filename>" >&2
+    echo "       dockpipe action create <filename>" >&2
+    echo "Creates a boilerplate action script with DOCKPIPE_EXIT_CODE and DOCKPIPE_CONTAINER_WORKDIR." >&2
+    exit 1
+  fi
+  [[ -z "$name" ]] && name="my-action.sh"
+  [[ "$name" != *.sh ]] && name="${name}.sh"
+  local dest="$name"
+  [[ "$dest" != /* ]] && dest="$(pwd)/$dest"
+  mkdir -p "$(dirname "$dest")"
+  if [[ -f "$dest" ]]; then
+    echo "Error: $dest already exists" >&2
+    exit 1
+  fi
+  cat > "$dest" << 'ACTIONEOF'
+#!/usr/bin/env bash
+# dockpipe action — runs inside the container after your command.
+# Available env:
+#   DOCKPIPE_EXIT_CODE       Exit code of the command that just ran
+#   DOCKPIPE_CONTAINER_WORKDIR  Work dir in container (default /work)
+set -euo pipefail
+
+cd "${DOCKPIPE_CONTAINER_WORKDIR:-/work}"
+
+if [[ "${DOCKPIPE_EXIT_CODE:-1}" -eq 0 ]]; then
+  echo "Command succeeded, acting on results..."
+  # Your logic here (e.g. git commit, curl a webhook, write a summary)
+else
+  echo "Command failed with code ${DOCKPIPE_EXIT_CODE}" >&2
+fi
+exit "${DOCKPIPE_EXIT_CODE:-1}"
+ACTIONEOF
+  chmod +x "$dest"
+  echo "Created: $dest"
+  echo "Use: dockpipe --action $name -- <your-command>"
+}
+
+# Handle "dockpipe action init ..." before main option parsing
+if [[ "${1:-}" == "action" ]]; then
+  shift
+  action_subcommand "$@"
+  exit 0
+fi
 
 # Parse arguments
 DOCKPIPE_IMAGE=""

@@ -187,7 +187,7 @@ docker build -t dockpipe-claude -f images/claude/Dockerfile .
 
 ## Actions
 
-Actions are scripts that run **inside** the container after your command. They receive:
+Actions are scripts that run **inside** the container after your command. Scaffold one with **`dockpipe action init my-action.sh`** (or `action create`); then use it with `--action my-action.sh`. They receive:
 
 - `DOCKPIPE_EXIT_CODE` — Exit code of the command that just ran.
 - `DOCKPIPE_CONTAINER_WORKDIR` — Work dir in the container (default `/work`).
