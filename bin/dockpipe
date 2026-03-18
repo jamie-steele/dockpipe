@@ -25,7 +25,10 @@ Options:
   --template <name>    Use a preset (base-dev | dev | agent-dev | claude). Builds image if needed.
   --action <script>   Run this script inside the container after the command (e.g. commit-worktree)
   --workdir <path>    Host path to mount at /work (default: current directory)
-  --mount <v>         Extra volume (e.g. /host/path:/container/path). Can be repeated.
+  --data-vol <name>   Named volume for persistent data (default: dockpipe-data). Same volume each run = reusable agent environment.
+  --data-dir <path>   Bind mount host path for persistent data (e.g. \$HOME/.dockpipe). Mounted at /dockpipe-data; HOME set there.
+  --no-data           Do not mount the data volume (minimal run; no persistence)
+  --mount <v>         Extra volume or bind mount (e.g. /host/path:/container/path). Can be repeated.
   --env <KEY=VAL>     Pass env var into container. Can be repeated.
   --build <path>      Build image from path (relative to repo or absolute) and use as --image
   -d, --detach        Run container in background; do not attach. Container stays up until command exits.
@@ -118,6 +121,9 @@ DOCKPIPE_BUILD_CONTEXT=""
 DOCKPIPE_EXTRA_MOUNTS=""
 DOCKPIPE_EXTRA_ENV=""
 DOCKPIPE_DETACH=""
+DOCKPIPE_DATA_VOLUME=""
+DOCKPIPE_DATA_DIR=""
+DOCKPIPE_NO_DATA=""
 TEMPLATE=""
 SEEN_DASH=""
 
@@ -125,6 +131,17 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --help|-h) usage ;;
     -d|--detach) DOCKPIPE_DETACH=1; shift ;;
+    --data-vol|--data-volume)
+      [[ $# -lt 2 ]] && { echo "Error: $1 requires an argument" >&2; exit 1; }
+      DOCKPIPE_DATA_VOLUME="$2"
+      shift 2
+      ;;
+    --data-dir)
+      [[ $# -lt 2 ]] && { echo "Error: --data-dir requires an argument" >&2; exit 1; }
+      DOCKPIPE_DATA_DIR="$2"
+      shift 2
+      ;;
+    --no-data) DOCKPIPE_NO_DATA=1; shift ;;
     --image)
       [[ $# -lt 2 ]] && { echo "Error: --image requires an argument" >&2; exit 1; }
       DOCKPIPE_IMAGE="$2"
@@ -209,7 +226,18 @@ if [[ -n "${DOCKPIPE_ACTION}" ]] && [[ "${DOCKPIPE_ACTION}" != /* ]]; then
   fi
 fi
 
-export DOCKPIPE_IMAGE DOCKPIPE_ACTION DOCKPIPE_WORKDIR DOCKPIPE_EXTRA_MOUNTS DOCKPIPE_EXTRA_ENV DOCKPIPE_DETACH
+# Data volume: default named volume "dockpipe-data". Use --data-vol <name> for another volume, or --data-dir <path> for a bind mount. --no-data = no mount.
+if [[ -n "${DOCKPIPE_NO_DATA}" ]]; then
+  DOCKPIPE_DATA_VOLUME=""
+  DOCKPIPE_DATA_DIR=""
+else
+  if [[ -n "${DOCKPIPE_DATA_DIR}" ]]; then
+    DOCKPIPE_DATA_VOLUME=""
+  else
+    DOCKPIPE_DATA_VOLUME="${DOCKPIPE_DATA_VOLUME:-dockpipe-data}"
+  fi
+fi
+export DOCKPIPE_IMAGE DOCKPIPE_ACTION DOCKPIPE_WORKDIR DOCKPIPE_EXTRA_MOUNTS DOCKPIPE_EXTRA_ENV DOCKPIPE_DETACH DOCKPIPE_DATA_VOLUME DOCKPIPE_DATA_DIR
 
 # Build if we have a build path
 if [[ -n "${DOCKPIPE_BUILD}" ]] && [[ -d "${DOCKPIPE_BUILD}" ]]; then

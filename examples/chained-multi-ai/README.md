@@ -10,8 +10,7 @@ Run from the **dockpipe repo root**. You need the Claude template and API access
 
 - Docker
 - dockpipe on PATH
-- `ANTHROPIC_API_KEY` or Claude login at `~/.claude`
-- For Claude template: mount `~/.claude` and `~/.claude.json` (see below)
+- `ANTHROPIC_API_KEY` or Claude login (first run in container; saved in named volume `dockpipe-data`)
 
 ---
 
@@ -36,9 +35,6 @@ TASK="Add a simple health check endpoint to the API"
 # Step 1: generate plan (writes plan.md in $REPO)
 echo "$TASK" | dockpipe --template claude \
   --workdir "$REPO" \
-  --mount "$HOME/.claude:/claude-home/.claude" \
-  --mount "$HOME/.claude.json:/claude-home/.claude.json" \
-  --env "HOME=/claude-home" \
   --env "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
   -- claude --dangerously-skip-permissions -p "Create a short implementation plan (bullet points). Write it to a file named plan.md in the current directory. Task: $(cat)"
 
@@ -46,9 +42,6 @@ echo "$TASK" | dockpipe --template claude \
 dockpipe --template claude \
   --workdir "$REPO" \
   --action examples/actions/commit-worktree.sh \
-  --mount "$HOME/.claude:/claude-home/.claude" \
-  --mount "$HOME/.claude.json:/claude-home/.claude.json" \
-  --env "HOME=/claude-home" \
   --env "DOCKPIPE_COMMIT_MESSAGE=impl: from plan" \
   --env "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
   -- claude --dangerously-skip-permissions -p "Implement the steps described in plan.md. Make the changes in the current directory."
@@ -72,18 +65,12 @@ mkdir -p "$REPO"
 # Step 1: plan
 echo "Add a README with setup instructions" | dockpipe --template claude \
   --workdir "$REPO" \
-  --mount "$HOME/.claude:/claude-home/.claude" \
-  --mount "$HOME/.claude.json:/claude-home/.claude.json" \
-  --env "HOME=/claude-home" \
   --env "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
   -- claude --dangerously-skip-permissions -p "Create a short plan (bullet points) and write it to plan.md. Task: $(cat)"
 
 # Step 2: implement (no git in project/ by default; action may no-op or you can init git)
 dockpipe --template claude \
   --workdir "$REPO" \
-  --mount "$HOME/.claude:/claude-home/.claude" \
-  --mount "$HOME/.claude.json:/claude-home/.claude.json" \
-  --env "HOME=/claude-home" \
   --env "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}" \
   -- claude --dangerously-skip-permissions -p "Implement the steps in plan.md. Write files in the current directory."
 

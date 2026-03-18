@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Example script: clone repo, create/reuse worktree, run Claude, commit all changes.
-# Run inside dockpipe with: --template claude --mount "$REPOS_DIR:/repos" and env:
-#   REPO_URL, BRANCH, [BASE_BRANCH], [PROMPT], [GIT_PAT]
+# Run inside dockpipe with: --template claude (named volume or bind mount at /dockpipe-data). Env:
+#   REPO_URL, REPO_NAME, BRANCH, [BASE_BRANCH], [PROMPT], [GIT_PAT]
 # No separate action needed; this script performs the commit.
 set -euo pipefail
 
-REPO_PATH="/repos/${REPO_NAME:?REPO_NAME required}"
+DATA="${DOCKPIPE_DATA:-/dockpipe-data}"
+REPO_PATH="${DATA}/repos/${REPO_NAME:?REPO_NAME required}"
 SAFE_BRANCH="${BRANCH//\//-}"
-WORKTREE_PATH="/repos/${REPO_NAME}/worktrees/${SAFE_BRANCH}"
+WORKTREE_PATH="${DATA}/repos/${REPO_NAME}/worktrees/${SAFE_BRANCH}"
 
 # Git auth
 if [[ -n "${GIT_PAT:-}" ]]; then
@@ -46,8 +47,8 @@ fi
 
 cd "${WORKTREE_PATH}"
 
-# Pre-trust for Claude
-CLAUDE_JSON="/claude-home/.claude.json"
+# Pre-trust for Claude (HOME is /dockpipe-data when data volume is used)
+CLAUDE_JSON="${HOME:-/dockpipe-data}/.claude.json"
 if [[ -f "${CLAUDE_JSON}" ]] || true; then
   node -e "
 const fs = require('fs');

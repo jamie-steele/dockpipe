@@ -2,23 +2,18 @@
 
 This example reproduces the original dockpipe flow: clone a repo, create or reuse a worktree, run Claude Code, and commit the result. Use it as a template for AI-assisted workflows.
 
+**Data volume:** By default dockpipe uses a named volume `dockpipe-data` (mounted at `/dockpipe-data`, `HOME` set there). Repos and worktrees live under `/dockpipe-data/repos` in the container. Tool state (e.g. Claude login) is saved in the volume—log in once, next run reuses the same volume. Use `--data-dir $HOME/.dockpipe` to bind mount a host path if you want repos on the host (e.g. for the cherry-pick step below). Use `--data-vol <name>` for a different volume, or `--no-data` to disable.
+
 ## Prerequisites
 
 - Docker
 - [dockpipe](../../README.md) (add `bin/` to PATH or use full path)
-- `ANTHROPIC_API_KEY` or a Claude login at `~/.claude`
+- `ANTHROPIC_API_KEY` or Claude login (first run in the container; saved in the data volume)
 - For private repos: `GIT_PAT` (HTTPS personal access token)
 
 ## Quick run (full flow)
 
-1. Set a repos directory (clone and worktrees live here):
-
-   ```bash
-   export REPOS_DIR="${REPOS_DIR:-$HOME/.dockpipe/repos}"
-   mkdir -p "$REPOS_DIR"
-   ```
-
-2. From the **dockpipe repo root**, run with your repo, branch, and prompt:
+1. From the **dockpipe repo root**, run with your repo, branch, and prompt (no extra mounts; data dir is automatic):
 
    ```bash
    REPO_URL="https://github.com/you/your-repo.git"
@@ -27,10 +22,6 @@ This example reproduces the original dockpipe flow: clone a repo, create or reus
    REPO_NAME="$(basename "$REPO_URL" .git)"
 
    dockpipe --template claude \
-     --mount "$REPOS_DIR:/repos" \
-     --mount "$HOME/.claude:/claude-home/.claude" \
-     --mount "$HOME/.claude.json:/claude-home/.claude.json" \
-     --env "HOME=/claude-home" \
      --env "REPO_URL=$REPO_URL" \
      --env "REPO_NAME=$REPO_NAME" \
      --env "BRANCH=$BRANCH" \
@@ -40,25 +31,25 @@ This example reproduces the original dockpipe flow: clone a repo, create or reus
      -- ./examples/claude-worktree/setup-and-claude.sh
    ```
 
-3. Apply the commit from the worktree:
+2. Apply the commit from the worktree (if you used `--data-dir $HOME/.dockpipe`, repos are on the host):
 
    ```bash
-   WORKTREE="$REPOS_DIR/$REPO_NAME/worktrees/${BRANCH//\//-}"
+   WORKTREE="$HOME/.dockpipe/repos/$REPO_NAME/worktrees/${BRANCH//\//-}"
    git cherry-pick $(git -C "$WORKTREE" log -1 --format=%H)
    ```
+   With the default named volume, the worktree lives inside the volume; use a container with the volume mounted to push the branch, then pull and merge on the host.
 
 ## Piping a prompt
 
 ```bash
+REPO_NAME="$(basename "$REPO_URL" .git)"
 echo "Add unit tests for UserService" | dockpipe --template claude \
-  --mount "$REPOS_DIR:/repos" \
-  --mount "$HOME/.claude:/claude-home/.claude" \
   --env "REPO_URL=$REPO_URL" \
   --env "REPO_NAME=$REPO_NAME" \
   --env "BRANCH=$BRANCH" \
   --env "GIT_PAT=$GIT_PAT" \
   --env "PROMPT=$(cat)" \
-  -- ... setup-and-claude.sh
+  -- ./examples/claude-worktree/setup-and-claude.sh
 ```
 
 ## Simpler flow (current directory as repo)
@@ -77,5 +68,5 @@ The commit-worktree action will commit all changes in `/work` (your repo) after 
 
 ## Files
 
-- **setup-and-claude.sh** — Clone, worktree, Claude, commit. Use with `--mount .../repos:/repos` and the env vars above.
+- **setup-and-claude.sh** — Clone, worktree, Claude, commit. Uses `DOCKPIPE_DATA` (default `/dockpipe-data`) for repos; pass env vars above.
 - **README.md** — This file.

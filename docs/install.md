@@ -29,6 +29,8 @@ Using `dpkg -i` avoids apt sandbox warnings when the .deb is in your home direct
 sudo apt-get install docker.io
 ```
 
+**Persistent data:** By default dockpipe uses a named volume `dockpipe-data` for persistent state (repos, tool config, first-time login), mounted at `/dockpipe-data`. Same volume every run = reusable agent environment. Use `--data-vol <name>` for a different volume, `--data-dir /path` to bind mount a host path, or `--no-data` to disable.
+
 ---
 
 ## Or run from source (Linux or macOS, no root)

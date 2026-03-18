@@ -1,4 +1,4 @@
-**dockpipe** is a general-purpose CLI: run any command in a disposable container, then optionally run an action on the result (e.g. commit, export patch). Same flow for tests, one-off scripts, codegen, or AI tools—not an AI framework; AI is one use case.
+**dockpipe** is a general-purpose CLI: run any command in a disposable container, then optionally run an action on the result (e.g. commit, export patch). Same flow for tests, one-off scripts, codegen, or AI tools—not an AI framework; AI is one use case. In **0.5** a default data volume means you only mount your work directory; tool state and first-time login persist in a named volume.
 
 This post is a short intro to what it is, why it's useful, and how you can use it for automation and chained workflows (including AI).
 
@@ -14,7 +14,7 @@ dockpipe is a **single primitive** for running commands in disposable containers
 2. **Run** — Execute whatever you pass in: a one-liner, a script, or a tool (e.g. Claude, Codex, `npm test`).
 3. **Act** — Optionally run an action script after the command (e.g. commit all changes, export a patch, print a summary).
 
-Your current directory is mounted at `/work` in the container, so the command sees your project. The action runs inside the same container right after the command, with access to exit code and work dir. By default the run is **attached**: if you close the terminal, the container exits (no lingering processes). Use **`-d`** to run in the background and disconnect.
+Your current directory is mounted at `/work` in the container, so the command sees your project. The action runs inside the same container right after the command, with access to exit code and work dir. By default a **named volume** (`dockpipe-data`) is mounted at `/dockpipe-data` and set as `HOME`—tool state (e.g. first-time login) and repos persist there, so the same volume is your reusable agent environment. Use **`--data-vol <name>`** for a different volume, **`--data-dir /path`** to bind mount a host path instead, or **`--no-data`** to skip. By default the run is **attached**: if you close the terminal, the container exits (no lingering processes). Use **`-d`** to run in the background and disconnect.
 
 ---
 

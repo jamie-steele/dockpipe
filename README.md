@@ -42,6 +42,8 @@ Scaffold your own action: `dockpipe action init my-action.sh` → then `--action
 
 You pick the image, the command, and the action. No workflow engine—just one primitive you compose.
 
+**Persistent data:** By default dockpipe uses a named volume `dockpipe-data` (mounted at `/dockpipe-data`, `HOME` set there) so tool state (e.g. first-time login) and repos persist across runs—same volume each time is your agent environment. Use `--data-vol <name>` for a different volume, `--data-dir /path` to bind mount a host path instead, or `--no-data` to disable.
+
 ---
 
 ## Why not just `docker run`?
@@ -81,6 +83,9 @@ dockpipe action init <filename>
 | `--template <name>` | Preset: `base-dev`, `dev`, `agent-dev` (or `claude`). |
 | `--action <script>` | Script run inside container after the command. |
 | `--workdir <path>` | Host path mounted at `/work` (default: current dir). |
+| `--data-vol <name>` | Named volume for persistent data (default: `dockpipe-data`). Same volume each run = reusable agent environment. |
+| `--data-dir <path>` | Bind mount host path for persistent data (e.g. `$HOME/.dockpipe`). |
+| `--no-data` | Do not mount the data volume (minimal run). |
 | `--mount`, `--env` | Extra volumes or env vars. |
 | `-d`, `--detach` | Run container in background; don't attach. Container stays up until command exits. |
 | `--help` | Help. |
