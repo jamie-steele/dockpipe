@@ -14,6 +14,8 @@ dockpipe implements a single flow:
 
 No built-in commit, clone, or AI logic — those are actions or scripts you plug in.
 
+**Lifecycle:** By default the container runs **attached** (stdin/stdout connected). Closing the terminal or disconnecting the client sends SIGTERM; the entrypoint stops the command and the container exits (`--rm` removes it). Use **`-d` / `--detach`** to run in the background (no attach); the container stays up until the command inside exits.
+
 ---
 
 ## Components

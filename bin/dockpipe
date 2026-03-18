@@ -28,10 +28,12 @@ Options:
   --mount <v>         Extra volume (e.g. /host/path:/container/path). Can be repeated.
   --env <KEY=VAL>     Pass env var into container. Can be repeated.
   --build <path>      Build image from path (relative to repo or absolute) and use as --image
+  -d, --detach        Run container in background; do not attach. Container stays up until command exits.
   --help, -h           Show this help
 
 Examples:
   dockpipe -- ls -la
+  dockpipe -d --template agent-dev -- claude -p "review this code"
   dockpipe --image alpine -- sh -c "echo hello"
   echo "fix the bug" | dockpipe --template agent-dev -- claude -p "\$(cat)"
   dockpipe --action examples/actions/commit-worktree.sh -- ./script.sh
@@ -115,12 +117,14 @@ DOCKPIPE_BUILD=""
 DOCKPIPE_BUILD_CONTEXT=""
 DOCKPIPE_EXTRA_MOUNTS=""
 DOCKPIPE_EXTRA_ENV=""
+DOCKPIPE_DETACH=""
 TEMPLATE=""
 SEEN_DASH=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --help|-h) usage ;;
+    -d|--detach) DOCKPIPE_DETACH=1; shift ;;
     --image)
       [[ $# -lt 2 ]] && { echo "Error: --image requires an argument" >&2; exit 1; }
       DOCKPIPE_IMAGE="$2"
@@ -205,7 +209,7 @@ if [[ -n "${DOCKPIPE_ACTION}" ]] && [[ "${DOCKPIPE_ACTION}" != /* ]]; then
   fi
 fi
 
-export DOCKPIPE_IMAGE DOCKPIPE_ACTION DOCKPIPE_WORKDIR DOCKPIPE_EXTRA_MOUNTS DOCKPIPE_EXTRA_ENV
+export DOCKPIPE_IMAGE DOCKPIPE_ACTION DOCKPIPE_WORKDIR DOCKPIPE_EXTRA_MOUNTS DOCKPIPE_EXTRA_ENV DOCKPIPE_DETACH
 
 # Build if we have a build path
 if [[ -n "${DOCKPIPE_BUILD}" ]] && [[ -d "${DOCKPIPE_BUILD}" ]]; then

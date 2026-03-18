@@ -1,6 +1,6 @@
 # Core dockpipe runner: spawn container → run command → run action (if any).
 # Sourced by the CLI. Uses: DOCKPIPE_IMAGE, DOCKPIPE_CMD (array), DOCKPIPE_ACTION,
-# DOCKPIPE_WORKDIR, DOCKPIPE_EXTRA_MOUNTS, DOCKPIPE_EXTRA_ENV, DOCKPIPE_BUILD.
+# DOCKPIPE_WORKDIR, DOCKPIPE_EXTRA_MOUNTS, DOCKPIPE_EXTRA_ENV, DOCKPIPE_BUILD, DOCKPIPE_DETACH.
 
 set -euo pipefail
 
@@ -18,6 +18,7 @@ dockpipe_run() {
 
   local -a run_args=(
     --rm
+    --init
     -u "$(id -u):$(id -g)"
     -v "${workdir_host}:${DOCKPIPE_CONTAINER_WORKDIR}"
     -w "${DOCKPIPE_CONTAINER_WORKDIR}"
@@ -48,11 +49,15 @@ dockpipe_run() {
     run_args+=(-e "$e")
   done
 
-  # Pass through stdin if we're in a terminal (for piping into dockpipe)
-  if [[ -t 0 ]]; then
-    run_args+=(-it)
+  # Attach vs detach: -d runs in background (container stays up until command exits)
+  if [[ -n "${DOCKPIPE_DETACH:-}" ]]; then
+    run_args+=(-d)
   else
-    run_args+=(-i)
+    if [[ -t 0 ]]; then
+      run_args+=(-it)
+    else
+      run_args+=(-i)
+    fi
   fi
 
   # Run: image + command as arguments (exec form)

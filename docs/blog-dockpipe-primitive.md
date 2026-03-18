@@ -16,7 +16,7 @@ dockpipe is a **single primitive** for running commands in disposable containers
 2. **Run** — Execute whatever you pass in: a one-liner, a script, or a tool (e.g. Claude, Codex, `npm test`).
 3. **Act** — Optionally run an action script after the command (e.g. commit all changes, export a patch, print a summary).
 
-Your current directory is mounted at `/work` in the container, so the command sees your project. The action runs inside the same container right after the command, with access to exit code and work dir. That's it.
+Your current directory is mounted at `/work` in the container, so the command sees your project. The action runs inside the same container right after the command, with access to exit code and work dir. By default the run is **attached**: if you close the terminal, the container exits (no lingering processes). Use **`-d`** to run in the background and disconnect.
 
 ---
 
@@ -85,6 +85,13 @@ echo "refactor the auth module" \
 ```
 
 (Use `--template agent-dev` for the Node + Claude image; `--template claude` is an alias.)
+
+**Run Claude in the background (detach):**
+
+```bash
+dockpipe -d --template agent-dev -- claude -p "review this code"
+# Prints container ID; use docker logs <id> or docker attach <id>
+```
 
 **Custom image and workdir:**
 

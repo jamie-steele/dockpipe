@@ -17,7 +17,7 @@ Or from source: `git clone https://github.com/jamie-steele/dockpipe.git` and add
 dockpipe -- make test
 ```
 
-Runs `make test` in a clean container. Your current directory is at `/work`. When it exits, the container is removed. Same for `npm test`, `cargo test`, or any command.
+Runs `make test` in a clean container. Your current directory is at `/work`. When it exits, the container is removed. Closing the terminal also tears down the container (attached run). Use `-d` to run in the background. Same for `npm test`, `cargo test`, or any command.
 
 ---
 
@@ -82,6 +82,7 @@ dockpipe action init <filename>
 | `--action <script>` | Script run inside container after the command. |
 | `--workdir <path>` | Host path mounted at `/work` (default: current dir). |
 | `--mount`, `--env` | Extra volumes or env vars. |
+| `-d`, `--detach` | Run container in background; don't attach. Container stays up until command exits. |
 | `--help` | Help. |
 
 ---
@@ -109,6 +110,12 @@ cd /path/to/repo
 dockpipe --template agent-dev --action examples/actions/commit-worktree.sh \
   --env "DOCKPIPE_COMMIT_MESSAGE=agent: my task" \
   -- claude --dangerously-skip-permissions -p "Your prompt"
+```
+
+**Run in background (detach):** close terminal and container keeps running until the command exits; use `docker logs <id>` or `docker attach <id>`:
+
+```bash
+dockpipe -d --template agent-dev -- claude -p "review this"
 ```
 
 **Chained (each step in a fresh container):**
