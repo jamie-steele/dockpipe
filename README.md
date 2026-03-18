@@ -42,7 +42,7 @@ Scaffold your own action: `dockpipe action init my-action.sh` → then `--action
 
 You pick the image, the command, and the action. No workflow engine—just one primitive you compose.
 
-**Persistent data:** By default dockpipe uses a named volume `dockpipe-data` (mounted at `/dockpipe-data`, `HOME` set there) so tool state (e.g. first-time login) and repos persist across runs—same volume each time is your agent environment. Use `--data-vol <name>` for a different volume, `--data-dir /path` to bind mount a host path instead, or `--no-data` to disable.
+**Persistent data:** By default dockpipe mounts a named volume `dockpipe-data` at `/dockpipe-data` and sets `HOME` there so tool state (e.g. first-time Claude login) persists. Use `--data-vol <name>` or `--data-dir /path` to change where; `--no-data` to disable. Override `HOME` with `--env HOME=...` if a tool needs a different home.
 
 ---
 
@@ -84,7 +84,7 @@ dockpipe action init <filename>
 | `--action <script>` | Script run inside container after the command. |
 | `--workdir <path>` | Host path mounted at `/work` (default: current dir). |
 | `--data-vol <name>` | Named volume for persistent data (default: `dockpipe-data`). Same volume each run = reusable agent environment. |
-| `--data-dir <path>` | Bind mount host path for persistent data (e.g. `$HOME/.dockpipe`). |
+| `--data-dir <path>` | Bind mount host path for persistent data (e.g. `$HOME/.dockpipe`). Mounted at `/dockpipe-data`; HOME set there. |
 | `--no-data` | Do not mount the data volume (minimal run). |
 | `--mount`, `--env` | Extra volumes or env vars. |
 | `-d`, `--detach` | Run container in background; don't attach. Container stays up until command exits. |
@@ -153,6 +153,6 @@ Scripts that run **inside** the container after your command. They get `DOCKPIPE
 
 - [Blog: Run, Isolate, and Act](https://dev.to/jamie-steele/run-isolate-and-act-a-minimal-primitive-for-container-workflows-553m)
 - [Architecture](docs/architecture.md) · [Install](docs/install.md) · [AGENTS.md](AGENTS.md)
-- **Tests:** `bash tests/run_tests.sh` (from repo root)
+- **Tests:** `bash tests/run_tests.sh` (from repo root). **Integration tests** (Docker + agent-dev): [integration-tests/README.md](integration-tests/README.md) → `bash integration-tests/run.sh`
 
 **License:** Apache-2.0. See [LICENSE](LICENSE).

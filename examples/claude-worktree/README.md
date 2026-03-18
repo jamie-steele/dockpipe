@@ -2,7 +2,7 @@
 
 This example reproduces the original dockpipe flow: clone a repo, create or reuse a worktree, run Claude Code, and commit the result. Use it as a template for AI-assisted workflows.
 
-**Data volume:** By default dockpipe uses a named volume `dockpipe-data` (mounted at `/dockpipe-data`, `HOME` set there). Repos and worktrees live under `/dockpipe-data/repos` in the container. Tool state (e.g. Claude login) is saved in the volume—log in once, next run reuses the same volume. Use `--data-dir $HOME/.dockpipe` to bind mount a host path if you want repos on the host (e.g. for the cherry-pick step below). Use `--data-vol <name>` for a different volume, or `--no-data` to disable.
+**Data volume:** By default dockpipe mounts a named volume `dockpipe-data` at `/dockpipe-data` and sets `HOME` there; repos and worktrees live under `$DOCKPIPE_DATA/repos`. Use `--data-dir $HOME/.dockpipe` to bind mount a host path (e.g. for the cherry-pick step). Use `--data-vol <name>` or `--no-data` to change or disable.
 
 ## Prerequisites
 

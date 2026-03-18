@@ -36,19 +36,14 @@ dockpipe_run() {
   fi
 
   # Data volume: persistent state (repos, tool config, first-time login). Either a bind mount (--data-dir) or a named volume (--data-vol, default dockpipe-data).
+  # We set DOCKPIPE_DATA and HOME=/dockpipe-data so tool state (e.g. Claude login) persists in the volume. Override with --env HOME=... if needed.
   if [[ -n "${DOCKPIPE_DATA_DIR:-}" ]]; then
     mkdir -p "${DOCKPIPE_DATA_DIR}"
     run_args+=(-v "${DOCKPIPE_DATA_DIR}:/dockpipe-data")
-    run_args+=(
-      -e "DOCKPIPE_DATA=/dockpipe-data"
-      -e "HOME=/dockpipe-data"
-    )
+    run_args+=(-e "DOCKPIPE_DATA=/dockpipe-data" -e "HOME=/dockpipe-data")
   elif [[ -n "${DOCKPIPE_DATA_VOLUME:-}" ]]; then
     run_args+=(-v "${DOCKPIPE_DATA_VOLUME}:/dockpipe-data")
-    run_args+=(
-      -e "DOCKPIPE_DATA=/dockpipe-data"
-      -e "HOME=/dockpipe-data"
-    )
+    run_args+=(-e "DOCKPIPE_DATA=/dockpipe-data" -e "HOME=/dockpipe-data")
   fi
 
   # Extra mounts: "host_path:container_path[:ro]" space-separated
@@ -58,12 +53,12 @@ dockpipe_run() {
     run_args+=(-v "$m")
   done
 
-  # Extra env: "KEY=VAL" space-separated
+  # Extra env: "KEY=VAL" per line (values may contain spaces)
   local e
-  for e in ${extra_env}; do
+  while IFS= read -r e; do
     [[ -z "$e" ]] && continue
     run_args+=(-e "$e")
-  done
+  done <<< "${extra_env}"
 
   # Attach vs detach: -d runs in background (container stays up until command exits)
   if [[ -n "${DOCKPIPE_DETACH:-}" ]]; then
