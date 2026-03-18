@@ -19,6 +19,8 @@
    sudo apt-get install -f
    ```
 
+Using `dpkg -i` avoids apt sandbox warnings when the .deb is in your home directory; `apt install ./file.deb` there can show a permission notice (apt’s `_apt` user can’t read the file).
+
 **Upgrades:** download the new .deb and run `sudo dpkg -i dockpipe_*_all.deb` again.
 
 **Requirements:** Bash and Docker (`docker.io` or `docker-ce`). Install Docker if needed:
