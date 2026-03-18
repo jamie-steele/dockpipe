@@ -1,63 +1,70 @@
 # dockpipe
 
-**Run, isolate, and act — pipe commands into disposable containers and act on the results.**
+**Run any command in a disposable container. Optionally run an action on the result (e.g. commit, export patch).**
+
+General-purpose: run tests, one-off scripts, codegen, or AI tools—same flow. Your dir is mounted, your user owns the files, container is gone when done. Not an AI framework; AI is one use case.
 
 ---
 
-## The model
+## Try it (15 seconds)
 
-dockpipe is one primitive:
+**Install:** [Download the .deb](https://github.com/jamie-steele/dockpipe/releases) → `sudo dpkg -i dockpipe_*_all.deb`  
+Or from source: `git clone https://github.com/jamie-steele/dockpipe.git` and add `bin` to your PATH.
 
-**spawn → run → act**
-
-1. **Spawn** — Start a container from an image.
-2. **Run** — Execute your command or script inside it (your directory is mounted at `/work`).
-3. **Act** — Optionally run an action script on the result (e.g. commit, export patch, print summary).
-
-- **Spawn** gives you an isolated environment. **Run** is whatever you pass in — a one-liner, a script, or an AI tool. **Act** is pluggable: you choose the script that runs after the command (or none). Commands can themselves be scripts; chaining and composition are the point.
-
-dockpipe is **not** an AI framework, a Claude wrapper, or a workflow engine. It is a **primitive** for running commands in disposable containers, a **pipe-friendly execution boundary**, and something you **compose** into larger workflows. AI is one use case; the core is command-agnostic. Images use a single entrypoint: run your command, then the action (if any). No vendor-specific logic in the core.
-
----
-
-## One example
-
-Pipe in a task, run it in a container, act on the result:
+**First run:**
 
 ```bash
-echo "refactor the auth module" \
-  | dockpipe --template claude --action examples/actions/commit-worktree.sh \
-  -- claude --dangerously-skip-permissions -p "$(cat)"
+dockpipe -- make test
 ```
 
-Stdin → spawn container → run Claude with that prompt → action commits the changes. Same primitive works for any command (e.g. `npm test`, `make build`, your own script).
+Runs `make test` in a clean container. Your current directory is at `/work`. When it exits, the container is removed. Same for `npm test`, `cargo test`, or any command.
 
 ---
 
-## What problem it solves
+## What you can do
 
-- **Isolation** — Run arbitrary commands in a clean container without polluting your host.
-- **Composition** — Same flow for any command; the action is optional and pluggable.
-- **Reusability** — Base images and templates give you a consistent environment; actions and scripts are separate so you can mix and match.
+| Use case | Command |
+|----------|--------|
+| **Run tests in isolation** | `dockpipe -- make test` |
+| **Run a script and commit the result** | `dockpipe --action examples/actions/commit-worktree.sh -- ./scripts/generate-docs.sh` |
+| **Pipe stdin** | `echo "input" \| dockpipe -- cmd` |
+| **AI + commit** | `dockpipe --template agent-dev --action examples/actions/commit-worktree.sh -- claude -p "Your prompt"` |
+
+Scaffold your own action: `dockpipe action init my-action.sh` → then `--action my-action.sh`.
 
 ---
 
-## Install
+## How it works
 
-**Package** — Download the latest [.deb from Releases](https://github.com/jamie-steele/dockpipe/releases) and run:
+1. **Spawn** — Start a container (default: small dev image, built if needed).
+2. **Run** — Execute the command you pass after `--`.
+3. **Act** — Optionally run a script after the command (e.g. commit, notify).
+
+You pick the image, the command, and the action. No workflow engine—just one primitive you compose.
+
+---
+
+## Why not just `docker run`?
+
+Same isolation, less boilerplate. You’d otherwise write:
 
 ```bash
-sudo dpkg -i dockpipe_*_all.deb
+docker run --rm -v "$(pwd):/work" -w /work -u "$(id -u):$(id -g)" some-image make test
 ```
 
-**From source** — Clone and add `bin` to your `PATH`:
+dockpipe does that by default and adds: **action phase** (run then act in one go), **templates** (`--template dev` / `agent-dev`), **pipe-friendly CLI**. Files created in the container are owned by you (UID/GID passed through).
 
-```bash
-git clone https://github.com/jamie-steele/dockpipe.git
-export PATH="$PATH:$(pwd)/dockpipe/bin"
-```
+---
 
-**Requirements:** Bash, Docker. The runner uses your host UID/GID so files created in the container are owned by you. See [docs/install.md](docs/install.md) and [docs/architecture.md](docs/architecture.md) for more.
+## Install (details)
+
+| Platform | How |
+|----------|-----|
+| **Linux** | [Releases](https://github.com/jamie-steele/dockpipe/releases) → `sudo dpkg -i dockpipe_*_all.deb` |
+| **macOS** | Clone repo, add `bin` to PATH. Requires Bash + Docker. |
+| **Windows** | Not supported; [WSL](https://docs.microsoft.com/en-us/windows/wsl/) + source may work. |
+
+Requirements: **Bash**, **Docker**. [More in docs/install.md](docs/install.md).
 
 ---
 
@@ -65,184 +72,75 @@ export PATH="$PATH:$(pwd)/dockpipe/bin"
 
 ```text
 dockpipe [options] -- <command> [args...]
-<stdin> | dockpipe [options] -- <command> [args...]
+dockpipe action init <filename>
 ```
 
 | Option | Description |
 |--------|-------------|
-| `--image <name>` | Use this Docker image (default: `dockpipe-base-dev`, built if missing). |
-| `--template <name>` | Preset: `base-dev`, `dev`, or `claude`. Builds the image if needed. |
-| `--action <script>` | Script run inside the container after the command (e.g. commit, export patch). |
-| `--workdir <path>` | Host path to mount at `/work` (default: current directory). |
-| `--mount <host:container>` | Extra volume; can be repeated. |
-| `--env <KEY=VAL>` | Pass env var into container; can be repeated. |
-| `--build <path>` | Build image from path and use as `--image`. |
-| `--help` | Show help. |
+| `--image <name>` | Docker image (default: dockpipe-base-dev). |
+| `--template <name>` | Preset: `base-dev`, `dev`, `agent-dev` (or `claude`). |
+| `--action <script>` | Script run inside container after the command. |
+| `--workdir <path>` | Host path mounted at `/work` (default: current dir). |
+| `--mount`, `--env` | Extra volumes or env vars. |
+| `--help` | Help. |
 
 ---
 
 ## Examples
 
-**Generic command (default base-dev image):**
+**Generic:**
 
 ```bash
 dockpipe -- ls -la
 dockpipe -- bash -c "npm test"
-dockpipe --image alpine -- sh -c "echo hello"
-```
-
-**Using a template:**
-
-```bash
 dockpipe --template dev -- make test
-dockpipe --template claude -- claude --dangerously-skip-permissions -p "Explain this function"
 ```
 
-**Piping stdin (e.g. prompt):**
-
-```bash
-echo "fix the auth bug" | dockpipe --template claude -- claude --dangerously-skip-permissions -p "$(cat)"
-```
-
-**Custom image and workdir:**
-
-```bash
-dockpipe --image my-dev --workdir /path/to/repo -- bash -c "npm ci && npm test"
-```
-
-**Run a script and then commit (action):**
+**Run script then commit:**
 
 ```bash
 dockpipe --action examples/actions/commit-worktree.sh -- ./my-script.sh
 ```
 
-**Claude + commit in current repo:**
+**AI (agent-dev template) + commit:**
 
 ```bash
-cd /path/to/your/repo
-dockpipe --template claude --action examples/actions/commit-worktree.sh \
-  --env "DOCKPIPE_COMMIT_MESSAGE=claude: my task" \
+cd /path/to/repo
+dockpipe --template agent-dev --action examples/actions/commit-worktree.sh \
+  --env "DOCKPIPE_COMMIT_MESSAGE=agent: my task" \
   -- claude --dangerously-skip-permissions -p "Your prompt"
 ```
 
-**Chained workflow (non-AI):** each step runs in a fresh container; same directory is mounted so the next step sees the previous step’s output.
+**Chained (each step in a fresh container):**
 
 ```bash
-# Lint → test → build, each in an isolated environment
-dockpipe -- make lint && \
-dockpipe -- make test && \
-dockpipe -- make build
+dockpipe -- make lint && dockpipe -- make test && dockpipe -- make build
 ```
 
-Or pipe output from one step into the next:
-
-```bash
-# Generate a config, then validate it in another container
-./scripts/generate-config.sh | dockpipe -- ./scripts/validate-config.sh
-```
-
-**Chained multi-AI workflow:** run multiple AI steps in sequence, each in its own container. Step 1 writes a plan; step 2 reads it and implements; step 3 reviews. Use a shared workdir so each step sees the repo.
-
-```bash
-REPO="$(pwd)"
-# Step 1: generate plan (output to repo or stdout)
-echo "Add auth to the API" | dockpipe --template claude --workdir "$REPO" \
-  -- claude --dangerously-skip-permissions -p "Create a short implementation plan. Write it to plan.md. $(cat)"
-
-# Step 2: implement from plan (same repo)
-dockpipe --template claude --workdir "$REPO" --action examples/actions/commit-worktree.sh \
-  --env "DOCKPIPE_COMMIT_MESSAGE=impl: auth from plan" \
-  -- claude --dangerously-skip-permissions -p "Implement the steps in plan.md"
-
-# Step 3: review (e.g. run tests or another AI pass)
-dockpipe --workdir "$REPO" -- bash -c "npm test"
-```
-
-**Full examples (runnable from the repo):**
-
-- [Chained non-AI](examples/chained-non-ai/README.md) — Lint → test → build, or generate → validate (Makefile + scripts).
-- [Chained multi-AI](examples/chained-multi-ai/README.md) — Plan → implement → review with Claude (shared workdir).
-- [Claude worktree](examples/claude-worktree/README.md) — Clone, worktree, Claude, commit.
+**Full runnable examples:** [chained non-AI](examples/chained-non-ai/README.md) · [chained multi-AI](examples/chained-multi-ai/README.md) · [Claude worktree](examples/claude-worktree/README.md)
 
 ---
 
-## Templates and images
+## Templates
 
-| Template | Image | Description |
-|----------|--------|-------------|
-| `base-dev` | `dockpipe-base-dev` | Light: git, curl, bash, ripgrep, jq, ca-certificates. |
-| `dev` | `dockpipe-dev` | Heavier: base-dev + build-essential, ssh, less, man, zip, etc. |
-| `agent-dev` | `dockpipe-claude` | Node 20 + Claude Code; for AI/agent workflows (command-agnostic name). |
-| `claude` | `dockpipe-claude` | Alias for `agent-dev` (backward compatible). |
-
-Images are built from the repo when you use `--template` (or default) and the image is missing. Build from repo root so `COPY lib/entrypoint.sh` works:
-
-```bash
-docker build -t dockpipe-base-dev -f images/base-dev/Dockerfile .
-docker build -t dockpipe-dev -f images/dev/Dockerfile .      # after base-dev
-docker build -t dockpipe-claude -f images/claude/Dockerfile .
-```
+| Template | Description |
+|----------|-------------|
+| `base-dev` | Light: git, curl, bash, ripgrep, jq. |
+| `dev` | base-dev + build-essential, ssh, etc. |
+| `agent-dev` | Node + Claude Code (AI/agent workflows). `claude` is an alias. |
 
 ---
 
 ## Actions
 
-Actions are scripts that run **inside** the container after your command. Scaffold one with **`dockpipe action init my-action.sh`** (or `action create`); then use it with `--action my-action.sh`. They receive:
-
-- `DOCKPIPE_EXIT_CODE` — Exit code of the command that just ran.
-- `DOCKPIPE_CONTAINER_WORKDIR` — Work dir in the container (default `/work`).
-
-Bundled examples:
-
-- **examples/actions/commit-worktree.sh** — `git add -A && git commit` in the current dir (optional `DOCKPIPE_COMMIT_MESSAGE`).
-- **examples/actions/export-patch.sh** — Write uncommitted changes to a patch file (e.g. `DOCKPIPE_PATCH_PATH`).
-- **examples/actions/print-summary.sh** — Print exit code and git summary.
-
-Use `--action /path/to/script.sh` or a path relative to the dockpipe repo (e.g. `examples/actions/commit-worktree.sh` when run from the dockpipe CLI).
+Scripts that run **inside** the container after your command. They get `DOCKPIPE_EXIT_CODE` and `DOCKPIPE_CONTAINER_WORKDIR`. Create one: `dockpipe action init my-action.sh`. Bundled: [commit-worktree](examples/actions/commit-worktree.sh), [export-patch](examples/actions/export-patch.sh), [print-summary](examples/actions/print-summary.sh).
 
 ---
 
-## Repo layout
+## Docs & repo
 
-```text
-bin/dockpipe          # CLI entrypoint
-lib/
-  runner.sh           # Core runner (sourced by CLI)
-  entrypoint.sh       # Container entrypoint (copied into images)
-images/
-  base-dev/           # Light dev Dockerfile
-  dev/                # Heavier dev Dockerfile
-  claude/             # Claude Code Dockerfile
-examples/
-  actions/            # Example action scripts
-  claude-worktree/    # Full Claude + worktree example
-docs/                 # Additional documentation
-tests/                # Tests
-```
+- [Blog: Run, Isolate, and Act](https://dev.to/jamie-steele/run-isolate-and-act-a-minimal-primitive-for-container-workflows-553m)
+- [Architecture](docs/architecture.md) · [Install](docs/install.md) · [AGENTS.md](AGENTS.md)
+- **Tests:** `bash tests/run_tests.sh` (from repo root)
 
----
-
-## Tests
-
-From the repo root:
-
-```bash
-bash tests/run_tests.sh
-```
-
-Runs CLI and runner unit tests; optionally runs a smoke test (requires Docker).
-
----
-
-## Documentation
-
-- [Blog post: Run, Isolate, and Act](https://dev.to/jamie-steele/run-isolate-and-act-a-minimal-primitive-for-container-workflows-553m) — Intro, benefits, and examples on DEV Community.
-- [Architecture](docs/architecture.md) — Core primitive, data flow, extension points.
-- [Examples](examples/) — Actions and the [Claude worktree example](examples/claude-worktree/README.md).
-- [AGENTS.md](AGENTS.md) — For maintainers and AI agents: repo purpose, standards, how to add templates/actions.
-
----
-
-## License
-
-Apache-2.0. See [LICENSE](LICENSE).
+**License:** Apache-2.0. See [LICENSE](LICENSE).

@@ -1,6 +1,10 @@
 # Installing dockpipe
 
-## Install the .deb (recommended)
+**Platforms:** Linux is the primary target (`.deb` package). macOS is supported from source (Bash + Docker). Windows is not supported; use [WSL](https://docs.microsoft.com/en-us/windows/wsl/) and install from source if you need it there.
+
+---
+
+## Install the .deb (Linux)
 
 1. Download the latest `.deb` from [Releases](https://github.com/jamie-steele/dockpipe/releases).
 2. Install:
@@ -25,7 +29,7 @@ sudo apt-get install docker.io
 
 ---
 
-## Or run from source (no root)
+## Or run from source (Linux or macOS, no root)
 
 ```bash
 git clone https://github.com/jamie-steele/dockpipe.git
@@ -40,8 +44,8 @@ dockpipe -- ls -la
 From the repo root:
 
 ```bash
-./packaging/build-deb.sh 0.1.0
-# Output: packaging/build/dockpipe_0.1.0_all.deb
+./packaging/build-deb.sh
+# Output: packaging/build/dockpipe_<version>_all.deb
 ```
 
 Attach that file to a GitHub Release. If we add a proper APT repo later, we’ll document it here.
