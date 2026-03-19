@@ -1,15 +1,25 @@
 # dockpipe
 
-**Run any command in a disposable container. Optionally run an action on the result (e.g. commit, export patch).**
+```
+    ██████╗  ██████╗ ██████╗██╗  ██╗██████╗ ██╗██████╗ ███████╗
+    ██╔══██╗██╔═══██╗██╔═══╝██║ ██╔╝██╔══██╗██║██╔══██╗██╔════╝
+    ██║  ██║██║   ██║██║    █████╔╝ ██████╔╝██║██████╔╝█████╗
+    ██║  ██║██║   ██║██║    ██╔═██╗ ██╔═══╝ ██║██╔═══╝ ██╔══╝
+    ██████╔╝╚██████╔╝██████╗██║  ██╗██║     ██║██║     ███████╗
+    ╚═════╝  ╚═════╝ ╚═════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝     ╚══════╝
+                      Run  →  Isolate  →  Act
+```
 
-General-purpose: run tests, one-off scripts, codegen, or AI tools—same flow. Your dir is mounted, your user owns the files, container is gone when done. Not an AI framework; AI is one use case.
+**Run any command in a disposable container. Optionally run an action on the result.**
+
+One primitive: run → isolate → act. Use it for isolated tests, one-off scripts, builds, or piping—no workflow engine. AI (Claude, Codex) and git/worktree flows are optional examples built on the same primitive; the core is command-agnostic.
 
 ---
 
 ## Try it (15 seconds)
 
-**Install:** [Download the .deb](https://github.com/jamie-steele/dockpipe/releases) → `sudo dpkg -i dockpipe_*_all.deb`  
-Or from source: `git clone https://github.com/jamie-steele/dockpipe.git` and add `bin` to your PATH.
+**Install:** [Download the .deb](https://github.com/jamie-steele/dockpipe/releases) → `sudo dpkg -i dockpipe_*_amd64.deb`  
+Or from source: `git clone … && cd dockpipe && make && export PATH="$PWD/bin:$PATH"` (needs **Go 1.22+** to build; or run without `make` if Go is installed — `bin/dockpipe` uses `go run` as a fallback).
 
 **First run:**
 
@@ -23,14 +33,17 @@ Runs `make test` in a clean container. Your current directory is at `/work`. Whe
 
 ## What you can do
 
+Same primitive for everything. Examples:
+
 | Use case | Command |
 |----------|--------|
 | **Run tests in isolation** | `dockpipe -- make test` |
-| **Run a script and commit the result** | `dockpipe --action examples/actions/commit-worktree.sh -- ./scripts/generate-docs.sh` |
+| **Run a script** | `dockpipe -- ./scripts/generate-docs.sh` |
 | **Pipe stdin** | `echo "input" \| dockpipe -- cmd` |
-| **AI + commit** | `dockpipe --template agent-dev --action examples/actions/commit-worktree.sh -- claude -p "Your prompt"` |
+| **Run then act** (e.g. commit) | `dockpipe --act scripts/commit-worktree.sh -- ./my-script.sh` |
+| **AI in worktree** (optional) | `dockpipe --workflow llm-worktree --repo https://github.com/you/repo.git -- claude -p "Fix the bug"` |
 
-Scaffold your own action: `dockpipe action init my-action.sh` (or `init my-commit.sh --from commit-worktree` to copy a bundled one) → then `--action my-action.sh`.
+You pick the image, the command, and the action. **Init a workspace:** `dockpipe init [<dest>]` creates **scripts/**, **images/**, **templates/** (templates folder has a README only). `dockpipe init my-template [<dest>]` adds a new template at **templates/my-template/** and copies sample scripts/images so it can point at them. Use `--from <url>` to clone a repo with that layout. Scaffold: `dockpipe action init my-action.sh`, `dockpipe template init my-workflow --from llm-worktree`.
 
 ---
 
@@ -38,11 +51,11 @@ Scaffold your own action: `dockpipe action init my-action.sh` (or `init my-commi
 
 1. **Spawn** — Start a container (default: small dev image, built if needed).
 2. **Run** — Execute the command you pass after `--`.
-3. **Act** — Optionally run a script after the command (e.g. commit, notify).
+3. **Act** — Optionally run a script after the command (e.g. commit, notify, export a patch).
 
-You pick the image, the command, and the action. No workflow engine—just one primitive you compose.
+No workflow engine—just one primitive you compose. Tests, scripts, builds, or AI tools all use the same flow.
 
-**Persistent data:** By default dockpipe mounts a named volume `dockpipe-data` at `/dockpipe-data` and sets `HOME` there so tool state (e.g. first-time Claude login) persists. Use `--data-vol <name>` or `--data-dir /path` to change where; `--no-data` to disable. Override `HOME` with `--env HOME=...` if a tool needs a different home. If a tool (e.g. Claude) exits immediately with the default volume, try `--no-data` or `--reinit` (removes the named volume so the next run gets a fresh one).
+**Data:** Default volume `dockpipe-data` at `/dockpipe-data` (HOME). `--data-dir /path` or `--no-data`. `--reinit` to wipe the volume.
 
 ---
 
@@ -54,7 +67,17 @@ Same isolation, less boilerplate. You’d otherwise write:
 docker run --rm -v "$(pwd):/work" -w /work -u "$(id -u):$(id -g)" some-image make test
 ```
 
-dockpipe does that by default and adds: **action phase** (run then act in one go), **templates** (`--template dev` / `agent-dev`), **pipe-friendly CLI**. Files created in the container are owned by you (UID/GID passed through).
+dockpipe does that + action phase, templates, pipe-friendly CLI. Your UID/GID so files are yours.
+
+---
+
+## Platforms
+
+| Platform | Notes |
+|----------|-------|
+| **Linux** | Primary platform. **CLI is a Go binary** (orchestration + YAML); pre/act scripts stay Bash. Install via [.deb](https://github.com/jamie-steele/dockpipe/releases) (amd64) or `make` from source. **Docker** + **Bash** required; **git** for commit-on-host. |
+| **Windows (WSL2)** | Run dockpipe inside WSL2 (Go or `.deb`, Bash + Docker in your distro). Optional: [docs/wsl-windows.md](docs/wsl-windows.md) for fetching a git bundle into a Windows repo when using `--bundle-out`. |
+| **macOS** | From source: `make` (Go 1.22+), add `bin` to PATH. Bash + Docker. |
 
 ---
 
@@ -62,9 +85,9 @@ dockpipe does that by default and adds: **action phase** (run then act in one go
 
 | Platform | How |
 |----------|-----|
-| **Linux** | [Releases](https://github.com/jamie-steele/dockpipe/releases) → `sudo dpkg -i dockpipe_*_all.deb` |
+| **Linux** | [Releases](https://github.com/jamie-steele/dockpipe/releases) → `sudo dpkg -i dockpipe_*_amd64.deb` |
 | **macOS** | Clone repo, add `bin` to PATH. Requires Bash + Docker. |
-| **Windows** | Not supported; [WSL](https://docs.microsoft.com/en-us/windows/wsl/) + source may work. |
+| **Windows** | Use [WSL2](https://docs.microsoft.com/en-us/windows/wsl/); run dockpipe from your Linux distro (clone + PATH). See [docs/wsl-windows.md](docs/wsl-windows.md) for fetching into a Windows repo. |
 
 Requirements: **Bash**, **Docker**. [More in docs/install.md](docs/install.md).
 
@@ -75,20 +98,30 @@ Requirements: **Bash**, **Docker**. [More in docs/install.md](docs/install.md).
 ```text
 dockpipe [options] -- <command> [args...]
 dockpipe action init [--from <bundled>] <filename>
+dockpipe template init [--from <bundled>] <dirname>
 ```
 
 | Option | Description |
 |--------|-------------|
-| `--image <name>` | Docker image (default: dockpipe-base-dev). |
-| `--template <name>` | Preset: `base-dev`, `dev`, `agent-dev` (or `claude`). |
-| `--action <script>` | Script run inside container after the command. |
+| `--workflow <name>` | Load `templates/<name>/config.yml` (run, isolate, act, optional **vars:**). |
+| `--run <path>` | **Run:** script(s) on host before container. Can be repeated. |
+| `--isolate <name>` | **Isolate:** image or template (`base-dev`, `dev`, `agent-dev`, `claude`, `codex`). Builds if template. |
+| `--act <path>` | **Act:** script after command (e.g. commit-worktree). |
+| `--resolver <name>` | `claude` or `codex`; use with `--repo`/`--branch`. Add more in the template’s `resolvers/` (e.g. `templates/llm-worktree/resolvers/`). |
+| `--repo <url>` | With `--branch`: worktree on host, commit on host. |
+| `--branch <name>` | Work branch for `--repo` (optional). Omit for a new branch each run; set to use or resume a specific branch. |
+| `--work-path <path>` | Subfolder inside repo to open in container (full repo at `/work`; command cwd = `/work/<path>`). |
+| `--work-branch <name>` | When on main/master and committing on host, create/use this branch (default: `dockpipe/agent-<timestamp>`). |
+| `--bundle-out <path>` | After commit-on-host, write a git bundle at this path (for WSL→Windows fetch). |
 | `--workdir <path>` | Host path mounted at `/work` (default: current dir). |
-| `--data-vol <name>` | Named volume for persistent data (default: `dockpipe-data`). Same volume each run = reusable agent environment. |
-| `--data-dir <path>` | Bind mount host path for persistent data (e.g. `$HOME/.dockpipe`). Mounted at `/dockpipe-data`; HOME set there. |
+| `--data-vol <name>` | Named volume for persistent data (default: `dockpipe-data`). Same volume each run = state persists. |
+| `--data-dir <path>` | Bind mount host path for persistent data (e.g. `$HOME/.dockpipe`). For `--repo`/`--branch`, defaults to `~/.dockpipe` if not set. |
 | `--no-data` | Do not mount the data volume (minimal run). |
 | `--reinit` | Remove the named data volume before running (fresh volume). Prompts to confirm; use `-f` to skip. |
 | `-f`, `--force` | With `--reinit`, skip confirmation (warning still shown). |
-| `--mount`, `--env` | Extra volumes or env vars. |
+| `--mount`, `--env` | Extra volumes or env vars (into container). |
+| `--env-file <path>` | With `--workflow`: merge `KEY=VAL` from file if unset. Repeatable. |
+| `--var KEY=VAL` | With `--workflow`: set workflow var (overrides yml / `.env`). Repeatable. |
 | `-d`, `--detach` | Run container in background; don't attach. Container stays up until command exits. |
 | `--help` | Help. |
 
@@ -96,48 +129,55 @@ dockpipe action init [--from <bundled>] <filename>
 
 ## Examples
 
-**Generic:**
+**Single run (isolation, tests, scripts):**
 
 ```bash
 dockpipe -- ls -la
 dockpipe -- bash -c "npm test"
-dockpipe --template dev -- make test
+dockpipe --isolate dev -- make test
 ```
 
-**Run script then commit:**
+**Run a script, then run an action** (e.g. commit):
 
 ```bash
-dockpipe --action examples/actions/commit-worktree.sh -- ./my-script.sh
+dockpipe --act scripts/commit-worktree.sh -- ./my-script.sh
 ```
 
-**AI (agent-dev template) + commit:**
+**Chaining** — Multiple steps, same workdir; each step in a fresh container. See [docs/chaining.md](docs/chaining.md):
+
+```bash
+WORKDIR="/path/to/your/project"
+dockpipe --workdir "$WORKDIR" -- make lint && dockpipe --workdir "$WORKDIR" -- make test && dockpipe --workdir "$WORKDIR" -- make build
+```
+
+Same pattern with AI: plan → implement → review (same folder). One doc: [Chaining](docs/chaining.md).
+
+**AI in a worktree** (optional; same primitive):
+
+```bash
+dockpipe --resolver claude --repo https://github.com/you/repo.git --branch task -- claude -p "Fix the bug"
+```
+
+**AI in current dir + commit on host:**
 
 ```bash
 cd /path/to/repo
-dockpipe --template agent-dev --action examples/actions/commit-worktree.sh \
-  --env "DOCKPIPE_COMMIT_MESSAGE=agent: my task" \
-  -- claude --dangerously-skip-permissions -p "Your prompt"
+dockpipe --isolate agent-dev --act scripts/commit-worktree.sh -- claude -p "Your prompt"
 ```
 
-**Run in background (detach):** close terminal and container keeps running until the command exits; use `docker logs <id>` or `docker attach <id>`:
+**Detach** (container keeps running after you close the terminal):
 
 ```bash
-dockpipe -d --template agent-dev -- claude -p "review this"
+dockpipe -d -- make test
 ```
 
-**Resume a previous Claude session** (state lives in the default data volume):
+**Docs:** [docs/cli-reference.md](docs/cli-reference.md) (flags, overrides), [docs/chaining.md](docs/chaining.md), [docs/wsl-windows.md](docs/wsl-windows.md). **Workflow template:** [templates/llm-worktree](templates/llm-worktree/README.md) — use `--workflow llm-worktree --repo <url> -- claude -p "…"`.
 
-```bash
-dockpipe --template agent-dev -- claude --resume <session-id> --dangerously-skip-permissions
-```
+---
 
-**Chained (each step in a fresh container):**
+## Resolvers and worktree (optional)
 
-```bash
-dockpipe -- make lint && dockpipe -- make test && dockpipe -- make build
-```
-
-**Full runnable examples:** [chained non-AI](examples/chained-non-ai/README.md) · [chained multi-AI](examples/chained-multi-ai/README.md) · [Claude worktree](examples/claude-worktree/README.md) · [Codex worktree](examples/codex-worktree/README.md)
+The same primitive can drive AI or git workflows. **Resolvers:** one file per tool in the template’s `resolvers/` (e.g. `templates/llm-worktree/resolvers/claude`, `codex`) → template + cmd; add a file, no core change. **`--resolver` + `--repo` + `--branch`:** worktree on host, run in container, commit on host. **Template init:** `dockpipe template init my-workflow [--from llm-worktree]` copies the workflow (config, resolvers, isolate). Run `dockpipe --workflow my-workflow --repo <url> -- ...`; config points to scripts/. Use `--resolver claude` or `codex`.
 
 ---
 
@@ -147,20 +187,21 @@ dockpipe -- make lint && dockpipe -- make test && dockpipe -- make build
 |----------|-------------|
 | `base-dev` | Light: git, curl, bash, ripgrep, jq. |
 | `dev` | base-dev + build-essential, ssh, etc. |
-| `agent-dev` | Node + Claude Code (AI/agent workflows). `claude` is an alias. |
+| `agent-dev` | Node + Claude Code. `claude` is an alias. One of several templates. |
+| `codex` | Node + OpenAI Codex CLI. |
 
 ---
 
 ## Actions
 
-Scripts that run **inside** the container after your command. They get `DOCKPIPE_EXIT_CODE` and `DOCKPIPE_CONTAINER_WORKDIR`. Create one: `dockpipe action init my-action.sh`, or clone a bundled one to customize: `dockpipe action init my-commit.sh --from commit-worktree`. Bundled: [commit-worktree](examples/actions/commit-worktree.sh), [export-patch](examples/actions/export-patch.sh), [print-summary](examples/actions/print-summary.sh).
+Scripts that run after your command. Use them for anything: commit, export a patch, notify. Bundled **commit-worktree** runs on the host when you use it (current dir or `--repo`/`--branch`). `dockpipe action init my-action.sh --from commit-worktree` (or export-patch, print-summary).
 
 ---
 
 ## Docs & repo
 
 - [Blog: Run, Isolate, and Act](https://dev.to/jamie-steele/run-isolate-and-act-a-minimal-primitive-for-container-workflows-553m)
-- [Architecture](docs/architecture.md) · [Install](docs/install.md) · [AGENTS.md](AGENTS.md)
-- **Tests:** `bash tests/run_tests.sh` (from repo root). **Integration tests** (Docker + agent-dev): [integration-tests/README.md](integration-tests/README.md) → `bash integration-tests/run.sh`
+- [Contributing](CONTRIBUTING.md) · [Architecture](docs/architecture.md) · [Chaining](docs/chaining.md) · [Install](docs/install.md) · [AGENTS.md](AGENTS.md)
+- **Tests:** `bash tests/run_tests.sh` (unit tests, from repo root). **Integration tests** (Docker + agent-dev): [tests/integration-tests/README.md](tests/integration-tests/README.md) → `bash tests/integration-tests/run.sh`
 
 **License:** Apache-2.0. See [LICENSE](LICENSE).

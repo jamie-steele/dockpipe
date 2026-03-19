@@ -18,12 +18,13 @@ The core is **agent-agnostic** and **command-agnostic**. AI tools (Claude, Codex
 
 ## Architecture
 
-- **CLI** (`bin/dockpipe`) — Parses flags, resolves templates (image + optional build path), sets env for the runner, then sources `lib/runner.sh` and calls `dockpipe_run "$@"` with the user’s command.
-- **Runner** (`lib/runner.sh`) — Builds the `docker run` invocation: mounts, env, optional action script mount, then `exec docker run ... <image> "$@"`.
+- **CLI (Go)** — `cmd/dockpipe` (thin `main`) + **`lib/dockpipe/application`** (flags, subcommands, run orchestration) + **`lib/dockpipe/domain`** (workflow model, env/resolver rules) + **`lib/dockpipe/infrastructure`** (FS, docker, bash pre-scripts, git). Loads **`config.yml`** / **`steps:`** with `gopkg.in/yaml.v3`, merges workflow env (same rules as legacy bash), runs pre-scripts via **`bash -c 'source …; env -0'`**, builds `docker run` (mirrors `lib/runner.sh`), optional host **git** commit. **`make`** or `go build -o bin/dockpipe.bin ./cmd/dockpipe`.
+- **Launcher** (`bin/dockpipe`) — Bash script: exec `bin/dockpipe.bin` if present, else `go run ./cmd/dockpipe`.
+- **Legacy** (`scripts/dockpipe-legacy.sh`, `lib/runner.sh`, `lib/config-vars.sh`) — All-bash path kept for reference; not the default.
 - **Entrypoint** (`lib/entrypoint.sh`) — Runs inside every image. Executes the command (argv or `DOCKPIPE_CMD`), then runs `DOCKPIPE_ACTION` if set, then exits with the command’s exit code.
 - **Images** — Dockerfiles in `images/`; they `COPY lib/entrypoint.sh` from the **repo root** build context. Build with `-f images/<name>/Dockerfile .` from repo root.
 - **Templates** — Named presets (e.g. `base-dev`, `dev`, `agent-dev`, `claude`) that map to an image name and a build path. Resolved in the CLI; no plugin system. Prefer `agent-dev` over `claude` in docs for command-agnostic appeal.
-- **Actions** — Shell scripts that run inside the container after the user command. They receive `DOCKPIPE_EXIT_CODE` and `DOCKPIPE_CONTAINER_WORKDIR`. Shipped as examples under `examples/actions/`.
+- **Actions** — Shell scripts that run inside the container after the user command. They receive `DOCKPIPE_EXIT_CODE` and `DOCKPIPE_CONTAINER_WORKDIR`. Shipped under `scripts/` (e.g. commit-worktree.sh).
 
 Data flow: **Host CLI → Docker → container entrypoint → user command → action (if any) → exit.**
 
@@ -31,9 +32,10 @@ Data flow: **Host CLI → Docker → container entrypoint → user command → a
 
 ## Coding standards
 
-- **Shell:** Use Bash with `set -euo pipefail`. Prefer portable constructs; avoid Bash 5-only features if avoidable.
+- **Go:** `go fmt`, table-driven tests where helpful; keep **`lib/dockpipe/*`** free of unnecessary deps. Domain = pure types/rules; infrastructure = I/O and docker/bash; application wires them; pre/act scripts stay Bash. **File baseline:** see `lib/dockpipe/README.md` (split `run.go` / `run_steps.go` / `workflow_env.go` — don’t let `run.go` absorb everything).
+- **Shell:** Pre/act scripts and launcher: Bash with `set -euo pipefail` where used.
 - **Naming:** `DOCKPIPE_*` for env vars used by the tool. Scripts and paths: lowercase, hyphenated (e.g. `commit-worktree.sh`).
-- **No vendor lock-in:** The core must not depend on Claude, Codex, or any specific AI tool. Such logic lives in `examples/` or `images/claude/` (or similar).
+- **No vendor lock-in:** The core must not depend on Claude, Codex, or any specific AI tool. Such logic lives in `templates/` or `images/claude/` (or similar).
 - **Simplicity:** Prefer obvious, boring code. No hidden magic; no framework or plugin layer unless clearly justified.
 - **Composition:** Keep the core minimal; add integrations and examples in a modular way (templates, actions, example scripts).
 
@@ -45,18 +47,18 @@ Data flow: **Host CLI → Docker → container entrypoint → user command → a
 
 1. Add `images/<name>/Dockerfile`. Use `COPY lib/entrypoint.sh` and set `ENTRYPOINT ["/entrypoint.sh"]` so the generic flow is preserved.
 2. Build from repo root: `docker build -t dockpipe-<name> -f images/<name>/Dockerfile .`
-3. In `bin/dockpipe`, add a case in `resolve_template()` so `--template <name>` maps to the image and build path.
-4. Document in README and, if useful, add an example under `examples/`.
+3. In **`lib/dockpipe/infrastructure/template.go`** (`TemplateBuild`), map the template name → image and Dockerfile dir so `--isolate <name>` builds/runs correctly.
+4. Document in README and in the template's README if applicable.
 
 ### New action
 
-1. Add a script under `examples/actions/` (e.g. `examples/actions/my-action.sh`). It will run inside the container; use `DOCKPIPE_EXIT_CODE` and `DOCKPIPE_CONTAINER_WORKDIR` as needed.
-2. Document in README and in `examples/actions/` (e.g. a one-line comment in the script and a mention in README). Users can copy it with `dockpipe action init my-copy.sh --from my-action`.
+1. Add a script under `scripts/` (e.g. `scripts/my-action.sh`). It will run inside the container; use `DOCKPIPE_EXIT_CODE` and `DOCKPIPE_CONTAINER_WORKDIR` as needed.
+2. Document in README and in the script. Users can copy it with `dockpipe action init my-copy.sh --from my-action`.
 
-### New example workflow
+### New workflow template
 
-1. Add a directory under `examples/` (e.g. `examples/my-workflow/`) with a README and any scripts.
-2. Do not put vendor-specific or commit-specific logic in `lib/` or `bin/`; keep it in the example.
+1. Add a directory under `templates/<name>/` with config.yml, resolvers/, and a README.
+2. Do not put vendor-specific or commit-specific logic in `lib/` or `bin/`; keep it in the template or scripts.
 
 ---
 
@@ -95,7 +97,7 @@ You can run `docker` or dockpipe **from inside** a container by mounting the hos
 **How:** Pass the socket as an extra mount:
 
 ```bash
-dockpipe --mount /var/run/docker.sock:/var/run/docker.sock --template agent-dev -- your-command
+dockpipe --mount /var/run/docker.sock:/var/run/docker.sock --isolate agent-dev -- your-command
 ```
 
 **Use cases:**
@@ -109,7 +111,7 @@ dockpipe --mount /var/run/docker.sock:/var/run/docker.sock --template agent-dev 
 
 ## Tests
 
-- `tests/` contains CLI and runner tests (argument parsing, template/action resolution, basic smoke tests).
+- `tests/unit-tests/` contains CLI and runner tests (argument parsing, template/action resolution, basic smoke tests). `tests/integration-tests/` contains Docker-based integration tests.
 - Run from repo root. Prefer practical assertions (exit codes, expected output) over heavy mocking.
 - Adding a new template or flag should be accompanied by a small test where appropriate.
 

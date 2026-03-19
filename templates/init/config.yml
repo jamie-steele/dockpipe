@@ -1,0 +1,10 @@
+# Example template (used when you run "dockpipe init <name>"). Points at scripts/ and images/ at workspace root.
+name: example
+description: Example workflow using scripts/example-run.sh and scripts/example-act.sh.
+
+run: scripts/example-run.sh
+isolate: claude
+act: scripts/example-act.sh
+
+resolvers:
+  - claude

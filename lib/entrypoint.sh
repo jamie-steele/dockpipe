@@ -8,9 +8,9 @@ set -euo pipefail
 WORKDIR="${DOCKPIPE_CONTAINER_WORKDIR:-/work}"
 cd "${WORKDIR}"
 
-# Diagnostic lines shown when runner dumps logs (e.g. "Container exited quickly").
-echo "dockpipe entrypoint: argc=$# argv=($*)" >&2
-echo "dockpipe entrypoint: stdin is TTY=$([ -t 0 ] && echo yes || echo no)" >&2
+# Git identity: container can't see host's .gitconfig. Pass from host: --env "GIT_AUTHOR_EMAIL=$(git config user.email)" --env "GIT_AUTHOR_NAME=$(git config user.name)"
+if [[ -n "${GIT_AUTHOR_EMAIL:-}" ]]; then git config --global user.email "${GIT_AUTHOR_EMAIL}"; fi
+if [[ -n "${GIT_AUTHOR_NAME:-}" ]]; then git config --global user.name "${GIT_AUTHOR_NAME}"; fi
 
 CMD_PID=""
 cleanup() {
@@ -28,7 +28,6 @@ if [[ -z "${DOCKPIPE_ACTION:-}" ]] || [[ ! -f "${DOCKPIPE_ACTION:-}" ]]; then
   if [[ $# -gt 0 ]]; then
     bash -i -c 'exec "$@"' _ "$@" || true
     _rc=$?
-    echo "dockpipe entrypoint: command exited with code $_rc" >&2
     exit "$_rc"
   else
     if [[ -n "${DOCKPIPE_CMD:-}" ]]; then

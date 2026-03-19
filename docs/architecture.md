@@ -8,9 +8,10 @@ This document describes the core primitive, data flow, and extension points.
 
 dockpipe implements a single flow:
 
-1. **Spawn** — Start a container from a given image (default or from `--image` / `--template`).
-2. **Run** — Execute the user’s command inside the container. The host directory (or `--workdir`) is mounted at `/work`; the command runs with that as the working directory.
-3. **Act** — If `--action <script>` was given, run that script inside the container after the command, with access to the command’s exit code and work dir. The container then exits with the original command’s exit code.
+1. **Run** (host) — Optional scripts on the host before the container (`--run`). E.g. clone-worktree.
+2. **Isolate** — Start a container from a given image (default or from `--isolate`: template name or image).
+3. **Command** — Execute the user's command inside the container. Workdir is mounted at `/work`.
+4. **Act** — If `--act <script>` was given, run that script inside the container after the command (e.g. commit-worktree). Container exits with the command's exit code.
 
 No built-in commit, clone, or AI logic — those are actions or scripts you plug in.
 
@@ -22,26 +23,25 @@ No built-in commit, clone, or AI logic — those are actions or scripts you plug
 
 | Component | Role |
 |-----------|------|
-| `bin/dockpipe` | CLI: parse args, resolve template → image (and build path), set env, source runner, call `dockpipe_run "$@"`. |
-| `lib/runner.sh` | Build `docker run` args (mounts, env, action script mount), then `exec docker run ... image "$@"`. |
-| `lib/entrypoint.sh` | Container entrypoint: run command (argv or `DOCKPIPE_CMD`), then run `DOCKPIPE_ACTION` if set, exit with command’s exit code. |
-| `images/*/Dockerfile` | Define images; each copies `lib/entrypoint.sh` and uses it as `ENTRYPOINT`. |
-| `examples/actions/*.sh` | Example action scripts; usable with `--action`. |
-| `examples/*/` | Example workflows (e.g. Claude worktree); scripts + README. |
+| `bin/dockpipe` | Launcher: runs **`bin/dockpipe.bin`** if present (`make`), otherwise **`go run ./cmd/dockpipe`**. |
+| `cmd/dockpipe`, `lib/dockpipe/application`, `lib/dockpipe/domain`, `lib/dockpipe/infrastructure` | **Go** CLI (DDD-ish): application layer (flags + orchestration), domain (workflow/env/resolver semantics), infrastructure (FS, docker, bash, git). **`config.yml`** / **`steps:`** (YAML v3), resolver `KEY=value` files, template→image map, bash `source` for pre-scripts, **`docker run`** / build, host **git** commit. |
+| `lib/entrypoint.sh` | Container entrypoint: run command, then `DOCKPIPE_ACTION` if set. |
+| `images/*/Dockerfile` | Shared images; each copies `lib/entrypoint.sh` as `ENTRYPOINT`. |
+| `scripts/*.sh` | Run/act scripts; invoked via `--run` / `--act` or workflow (Go sources them with bash). |
+| `templates/*/` | Workflow templates (`config.yml`, `resolvers/`). |
+| `scripts/dockpipe-legacy.sh`, `lib/*.sh` | **Legacy** all-bash implementation (optional); default install uses Go. |
 
 ---
 
 ## Data flow
 
 ```
-User: dockpipe --template claude --action examples/actions/commit-worktree.sh -- claude -p "..."
+User: dockpipe --isolate claude --act scripts/commit-worktree.sh -- claude -p "..."
 
-  bin/dockpipe
-    → resolve_template("claude") → image=dockpipe-claude, build=.../images/claude
-    → build image if needed
-    → set DOCKPIPE_IMAGE, DOCKPIPE_ACTION, DOCKPIPE_WORKDIR, ...
-    → source lib/runner.sh
-    → dockpipe_run claude -p "..."
+  bin/dockpipe → dockpipe.bin (Go) by default
+    → TemplateBuild("claude") from --isolate → image=dockpipe-claude, build=.../images/claude
+    → docker build / docker run (see lib/dockpipe/infrastructure/docker.go)
+  (Legacy bash path still documents resolve_template in lib/runner.sh for reference.)
 
   lib/runner.sh
     → docker run --rm -v $PWD:/work -v <action>:/dockpipe-action.sh -e DOCKPIPE_ACTION=... dockpipe-claude claude -p "..."
@@ -63,9 +63,9 @@ Environment variables that cross the boundary:
 
 ## Extension points
 
-1. **Images** — Add a Dockerfile under `images/<name>/`, use the shared entrypoint, and (optionally) register a template in `bin/dockpipe` so `--template <name>` builds and uses it.
-2. **Actions** — Any script that can run in the container and read `DOCKPIPE_EXIT_CODE` / `DOCKPIPE_CONTAINER_WORKDIR`. Place under `examples/actions/` and reference with `--action`. Users can copy a bundled action to customize: `dockpipe action init my-commit.sh --from commit-worktree` (or `export-patch`, `print-summary`).
-3. **Scripts / workflows** — Arbitrary scripts (e.g. clone + worktree + run tool + commit) live in `examples/` and are invoked as the “command” (e.g. `dockpipe ... -- ./examples/claude-worktree/setup-and-claude.sh`). No change to core required.
+1. **Images** — Add a Dockerfile under `images/<name>/`, use the shared entrypoint, and add a case in **`lib/dockpipe/infrastructure/template.go`** (`TemplateBuild`) so `--isolate <name>` builds and uses it (legacy bash: `resolve_template()` in `scripts/dockpipe-legacy.sh`).
+2. **Act scripts** — Any script that can run in the container and read `DOCKPIPE_EXIT_CODE` / `DOCKPIPE_CONTAINER_WORKDIR`. Place under `scripts/` and reference with `--act` or workflow config `act:`. Users can copy a bundled script: `dockpipe action init my-commit.sh --from commit-worktree`.
+3. **Scripts / workflows** — Named workflows use `templates/<name>/config.yml` + `resolvers/`. **`dockpipe init`** creates top-level **scripts/**, **images/**, **templates/** (templates has a README only). **`dockpipe init my-template`** adds **templates/my-template/** and copies sample scripts/images. **llm-worktree** lives under `templates/llm-worktree/`; copy with `dockpipe template init my-workflow --from llm-worktree`.
 
 The core does not parse command content or assume any particular tool (Claude, git, etc.). It only runs the given argv and the optional action script.
 
@@ -94,6 +94,6 @@ The primitive is deliberately minimal. You might need to script around it when:
 
 - You want **orchestration** (retries, fan-out, dependencies) — use a Makefile, shell loop, or a real orchestrator and call dockpipe as one step.
 - You need **rich state** between many steps — use the workdir (or a DB) and a convention; or a single long-running script inside one container that does the whole pipeline.
-- You hit **image or tool limits** — use a custom image (`--image` / `--build`) or run the heavy part outside dockpipe and use it for the parts that benefit from isolation.
+- You hit **image or tool limits** — use a custom image (`--isolate <image>` / `--build`) or run the heavy part outside dockpipe and use it for the parts that benefit from isolation.
 
 Escape hatch: compose dockpipe with other tools rather than stretching the core.

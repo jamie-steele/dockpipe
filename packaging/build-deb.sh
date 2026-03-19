@@ -5,22 +5,27 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-VERSION="${1:-0.5.8}"
-PACKAGE="dockpipe_${VERSION}_all"
+VERSION="${1:-0.6.0}"
+PACKAGE="dockpipe_${VERSION}_amd64"
 BUILD_DIR="${REPO_ROOT}/packaging/build/${PACKAGE}"
 DEST="${BUILD_DIR}/usr/lib/dockpipe"
 
 rm -rf "${REPO_ROOT}/packaging/build"
-mkdir -p "${DEST}"
+mkdir -p "${DEST}/bin"
 
-# Copy core files (same layout as repo so DOCKPIPE_REPO_ROOT works)
-cp -r bin lib images examples "${DEST}/"
+# Core layout (same as repo so DOCKPIPE_REPO_ROOT works)
+cp -r lib scripts images templates "${DEST}/"
 echo "${VERSION}" > "${DEST}/version"
-chmod 755 "${DEST}/bin/dockpipe"
 chmod 755 "${DEST}/lib/"*.sh
-chmod 755 "${DEST}/examples/actions/"*.sh
-chmod 755 "${DEST}/examples/claude-worktree/"*.sh 2>/dev/null || true
-chmod 755 "${DEST}/examples/codex-worktree/"*.sh 2>/dev/null || true
+chmod 755 "${DEST}/scripts/"*.sh 2>/dev/null || true
+find "${DEST}/templates" -name "*.sh" -exec chmod 755 {} \; 2>/dev/null || true
+
+# Go binary (linux/amd64; adjust GOARCH for other targets)
+(
+  cd "${REPO_ROOT}"
+  GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "${DEST}/bin/dockpipe" ./cmd/dockpipe
+)
+chmod 755 "${DEST}/bin/dockpipe"
 
 # Symlink from PATH
 mkdir -p "${BUILD_DIR}/usr/bin"
@@ -28,7 +33,7 @@ ln -s ../lib/dockpipe/bin/dockpipe "${BUILD_DIR}/usr/bin/dockpipe"
 
 # Doc
 mkdir -p "${BUILD_DIR}/usr/share/doc/dockpipe"
-cp README.md LICENSE "${BUILD_DIR}/usr/share/doc/dockpipe/"
+cp README.md LICENSE CONTRIBUTING.md "${BUILD_DIR}/usr/share/doc/dockpipe/"
 cp -r docs "${BUILD_DIR}/usr/share/doc/dockpipe/" 2>/dev/null || true
 
 # Debian control (version substituted)

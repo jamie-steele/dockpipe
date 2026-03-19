@@ -1,9 +1,9 @@
 Package: dockpipe
-Version: 0.5.8
+Version: 0.6.0
 Section: utils
 Priority: optional
-Architecture: all
-Depends: bash, docker.io | docker-ce
+Architecture: amd64
+Depends: bash, docker.io | docker-ce, git
 Maintainer: dockpipe maintainers
 Description: Run, isolate, and act — pipe commands into disposable containers
  dockpipe is a primitive: spawn container, run command/script inside it,

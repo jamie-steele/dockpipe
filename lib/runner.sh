@@ -36,6 +36,33 @@ dockpipe_launch_spinner() {
   printf '\r  %*s\r' 40 ' ' >&2
 }
 
+# Run the commit-worktree logic on the host (so the AI never has git access).
+# Call with: workdir_host (path on host). Uses DOCKPIPE_COMMIT_MESSAGE, DOCKPIPE_WORK_BRANCH, DOCKPIPE_BUNDLE_OUT.
+dockpipe_commit_on_host() {
+  local workdir_host="${1:?}"
+  local msg="${DOCKPIPE_COMMIT_MESSAGE:-dockpipe: automated commit}"
+  if ! git -C "${workdir_host}" rev-parse --is-inside-work-tree &>/dev/null; then
+    echo "[dockpipe] Not a git repo; skipping commit." >&2
+    return 0
+  fi
+  if git -C "${workdir_host}" diff --quiet HEAD 2>/dev/null && [[ -z "$(git -C "${workdir_host}" status --porcelain)" ]]; then
+    echo "[dockpipe] No changes to commit." >&2
+    return 0
+  fi
+  local current_branch
+  current_branch="$(git -C "${workdir_host}" branch --show-current)"
+  echo "[dockpipe] Committing on branch: ${current_branch}" >&2
+  git -C "${workdir_host}" add -A
+  git -C "${workdir_host}" commit -m "${msg}"
+  if [[ -n "${DOCKPIPE_BUNDLE_OUT:-}" ]]; then
+    if git -C "${workdir_host}" bundle create "${DOCKPIPE_BUNDLE_OUT}" --all; then
+      echo "[dockpipe] Bundle written: ${DOCKPIPE_BUNDLE_OUT}" >&2
+    else
+      echo "[dockpipe] Failed to write bundle: ${DOCKPIPE_BUNDLE_OUT}" >&2
+    fi
+  fi
+}
+
 # ------------------------------------------------------------------------------
 # dockpipe_run [command argv...] — run the container with the current env config.
 # ------------------------------------------------------------------------------
@@ -51,12 +78,17 @@ dockpipe_run() {
     dockpipe_launch_spinner
   fi
 
+  local container_cwd="${DOCKPIPE_CONTAINER_WORKDIR}"
+  if [[ -n "${DOCKPIPE_WORK_PATH:-}" ]]; then
+    local work_path="${DOCKPIPE_WORK_PATH#/}"
+    container_cwd="${DOCKPIPE_CONTAINER_WORKDIR}/${work_path}"
+  fi
   local -a run_args=(
     --init
     --hostname dockpipe
     -u "$(id -u):$(id -g)"
     -v "${workdir_host}:${DOCKPIPE_CONTAINER_WORKDIR}"
-    -w "${DOCKPIPE_CONTAINER_WORKDIR}"
+    -w "${container_cwd}"
     -e "DOCKPIPE_CONTAINER_WORKDIR=${DOCKPIPE_CONTAINER_WORKDIR}"
   )
 
@@ -146,6 +178,9 @@ WARN
       echo "  ---" >&2
     fi
     docker rm "$cid" 2>/dev/null || true
+    if [[ -n "${DOCKPIPE_COMMIT_ON_HOST:-}" ]]; then
+      dockpipe_commit_on_host "${workdir_host}"
+    fi
     return "$rc"
   fi
 

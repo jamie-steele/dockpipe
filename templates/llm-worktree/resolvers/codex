@@ -1,0 +1,7 @@
+# Resolver: OpenAI Codex. Source this to set template and metadata for the CLI.
+# Pre-script and action come from workflow config (config.yml) when using --workflow; here for --resolver-only use.
+DOCKPIPE_RESOLVER_TEMPLATE=codex
+DOCKPIPE_RESOLVER_CMD=codex
+DOCKPIPE_RESOLVER_ENV=OPENAI_API_KEY
+DOCKPIPE_RESOLVER_PRE_SCRIPT=scripts/clone-worktree.sh
+DOCKPIPE_RESOLVER_ACTION=scripts/commit-worktree.sh

@@ -1,6 +1,7 @@
 # Build output
 packaging/build/
 *.deb
+bin/dockpipe.bin
 
 # OS
 .DS_Store

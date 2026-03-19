@@ -10,7 +10,7 @@
 2. Install:
 
    ```bash
-   sudo dpkg -i dockpipe_*_all.deb
+   sudo dpkg -i dockpipe_*_amd64.deb
    ```
 
 3. If `dpkg` reports missing dependencies (e.g. Docker):
@@ -21,9 +21,9 @@
 
 Using `dpkg -i` avoids apt sandbox warnings when the .deb is in your home directory; `apt install ./file.deb` there can show a permission notice (apt’s `_apt` user can’t read the file).
 
-**Upgrades:** download the new .deb and run `sudo dpkg -i dockpipe_*_all.deb` again.
+**Upgrades:** download the new .deb and run `sudo dpkg -i dockpipe_*_amd64.deb` again.
 
-**Requirements:** Bash and Docker (`docker.io` or `docker-ce`). Install Docker if needed:
+**Requirements:** **amd64** package. Bash, Docker (`docker.io` or `docker-ce`), and **git** (for commit-on-host). Install Docker if needed:
 
 ```bash
 sudo apt-get install docker.io
@@ -36,9 +36,13 @@ sudo apt-get install docker.io
 
 ## Or run from source (Linux or macOS, no root)
 
+The CLI is built with **Go 1.22+** (`go build -o bin/dockpipe.bin ./cmd/dockpipe` or **`make`**). The `bin/dockpipe` script runs the binary if present, otherwise `go run`.
+
 ```bash
 git clone https://github.com/jamie-steele/dockpipe.git
-export PATH="$PATH:$(pwd)/dockpipe/bin"
+cd dockpipe
+make   # or: go build -o bin/dockpipe.bin ./cmd/dockpipe
+export PATH="$PATH:$(pwd)/bin"
 dockpipe -- ls -la
 ```
 
@@ -50,7 +54,7 @@ From the repo root:
 
 ```bash
 ./packaging/build-deb.sh
-# Output: packaging/build/dockpipe_<version>_all.deb
+# Output: packaging/build/dockpipe_<version>_amd64.deb
 ```
 
 Attach that file to a GitHub Release. If we add a proper APT repo later, we’ll document it here.
