@@ -16,9 +16,14 @@ $fourPart = if ($Version -match '^\d+\.\d+\.\d+$') { "$Version.0" } elseif ($Ver
     throw "Version must be semver like 0.6.0 or 0.6.0.0, got: $Version"
 }
 
-$wixRoot = $env:WIX
-if (-not $wixRoot -or -not (Test-Path "$wixRoot\bin\candle.exe")) {
+# CI may set WIX with forward slashes (GITHUB_ENV treats backslashes as escape sequences).
+$rawWix = $env:WIX
+if (-not $rawWix) {
     throw "WIX environment variable must point to WiX Toolset v3 root (bin\candle.exe). Install from https://github.com/wixtoolset/wix3/releases"
+}
+$wixRoot = [IO.Path]::GetFullPath($rawWix.Replace('/', '\'))
+if (-not (Test-Path (Join-Path $wixRoot "bin\candle.exe"))) {
+    throw "WIX environment variable must point to WiX Toolset v3 root (bin\candle.exe). Got: $rawWix. Install from https://github.com/wixtoolset/wix3/releases"
 }
 
 $candle = Join-Path $wixRoot "bin\candle.exe"
