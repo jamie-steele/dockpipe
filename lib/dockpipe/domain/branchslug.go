@@ -2,8 +2,8 @@ package domain
 
 import (
 	"crypto/rand"
-	"encoding/binary"
 	"fmt"
+	"math/big"
 	"strings"
 )
 
@@ -40,12 +40,12 @@ func rndIndex(max int) (int, error) {
 	if max <= 0 {
 		return 0, fmt.Errorf("invalid max %d", max)
 	}
-	var buf [8]byte
-	if _, err := rand.Read(buf[:]); err != nil {
+	// crypto/rand uniform index in [0,max); avoids G115 (uint64→int) from manual modular reduction.
+	n, err := rand.Int(rand.Reader, big.NewInt(int64(max)))
+	if err != nil {
 		return 0, err
 	}
-	u := binary.BigEndian.Uint64(buf[:])
-	return int(u % uint64(max)), nil
+	return int(n.Int64()), nil
 }
 
 // RandomWorkBranchSlug returns a lowercase hyphenated slug safe for git branch names,
