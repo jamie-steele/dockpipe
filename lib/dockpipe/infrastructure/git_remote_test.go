@@ -21,8 +21,10 @@ func TestGitTopLevel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if top != dir {
-		t.Fatalf("GitTopLevel(subdir) = %q want %q", top, dir)
+	fiTop, err1 := os.Stat(top)
+	fiDir, err2 := os.Stat(dir)
+	if err1 != nil || err2 != nil || !os.SameFile(fiTop, fiDir) {
+		t.Fatalf("GitTopLevel(subdir) = %q want same dir as %q (stat: %v, %v)", top, dir, err1, err2)
 	}
 }
 

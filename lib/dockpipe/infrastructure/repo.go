@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 var (
@@ -24,9 +25,12 @@ func RepoRoot() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Dir(exe)
-	if dir == "/usr/bin" {
+	// Debian .deb: /usr/bin/dockpipe → /usr/lib/dockpipe. On Windows, filepath.Dir("/usr/bin/dockpipe")
+	// does not equal "/usr/bin", so match on normalized exe path.
+	exeSlash := filepath.ToSlash(filepath.Clean(exe))
+	if strings.HasSuffix(exeSlash, "/usr/bin/dockpipe") || strings.HasSuffix(exeSlash, "/usr/bin/dockpipe.exe") {
 		return "/usr/lib/dockpipe", nil
 	}
+	dir := filepath.Dir(exe)
 	return filepathAbsFn(filepath.Join(dir, ".."))
 }

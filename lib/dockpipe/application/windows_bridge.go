@@ -81,7 +81,7 @@ func winPathToWSL(distro, winPath string) string {
 	cmd := windowsExecCommandFn("wsl.exe", "-d", distro, "wslpath", "-u", winPath)
 	out, err := cmd.Output()
 	if err == nil {
-		return strings.TrimSpace(string(out))
+		return strings.ReplaceAll(strings.TrimSpace(string(out)), `\`, `/`)
 	}
 	return windowsPathToWSLFallback(winPath)
 }
@@ -94,12 +94,14 @@ func isUNCPathNormalized(s string) bool {
 }
 
 func windowsPathToWSLFallback(winPath string) string {
-	// Normalize Windows separators without filepath.ToSlash: on Unix GOOS, ToSlash is a no-op.
+	// Normalize Windows separators; on Unix GOOS, filepath.Clean leaves slashes alone.
 	s := strings.TrimSpace(winPath)
 	s = strings.ReplaceAll(s, `\`, `/`)
 	// filepath.Clean turns "//server/share" into "/server/share" on Unix — breaks UNC.
 	if !isUNCPathNormalized(s) {
 		s = filepath.Clean(s)
+		// On Windows, Clean reintroduces '\' — WSL paths must use '/'.
+		s = strings.ReplaceAll(s, `\`, `/`)
 	}
 	if len(s) >= 2 && s[1] == ':' && s[0] != '/' {
 		drive := strings.ToLower(string(s[0]))

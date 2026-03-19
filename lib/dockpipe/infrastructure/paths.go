@@ -7,11 +7,15 @@ import (
 )
 
 // ResolveWorkflowScript resolves run/act path: scripts/* from repo root, else workflow template dir.
+// Uses forward slashes so YAML workflow paths match Linux/container expectations on every GOOS.
 func ResolveWorkflowScript(rel, workflowRoot, repoRoot string) string {
+	var joined string
 	if strings.HasPrefix(rel, "scripts/") {
-		return filepath.Join(repoRoot, rel)
+		joined = filepath.Join(repoRoot, rel)
+	} else {
+		joined = filepath.Join(workflowRoot, rel)
 	}
-	return filepath.Join(workflowRoot, rel)
+	return filepath.ToSlash(joined)
 }
 
 // ResolveActionPath resolves act script like bin/dockpipe.

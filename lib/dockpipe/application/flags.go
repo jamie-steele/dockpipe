@@ -6,6 +6,16 @@ import (
 	"strings"
 )
 
+// isPosixAbsPath reports paths like /abs/foo (single leading slash, not UNC).
+// filepath.IsAbs is false for these on Windows; they are still valid for --build (container) paths.
+func isPosixAbsPath(p string) bool {
+	p = strings.TrimSpace(p)
+	if len(p) < 2 || p[0] != '/' {
+		return false
+	}
+	return p[1] != '/'
+}
+
 // CliOpts holds parsed CLI flags (before --).
 type CliOpts struct {
 	Help          bool
@@ -169,7 +179,10 @@ func ParseFlags(repoRoot string, argv []string) ([]string, *CliOpts, error) {
 				return nil, nil, fmt.Errorf("--build requires an argument")
 			}
 			p := argv[i+1]
-			if filepath.IsAbs(p) {
+			// POSIX-style absolute (e.g. /abs/build) is not filepath.IsAbs on Windows but is valid for container paths.
+			if isPosixAbsPath(p) {
+				o.BuildPath = filepath.ToSlash(filepath.Clean(p))
+			} else if filepath.IsAbs(p) {
 				o.BuildPath = p
 			} else {
 				o.BuildPath = filepath.Join(repoRoot, p)
