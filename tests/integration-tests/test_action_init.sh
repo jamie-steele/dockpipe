@@ -19,7 +19,7 @@ grep -q "DOCKPIPE_EXIT_CODE" "$tmp/my-action.sh" || { echo "Expected boilerplate
 "$DOCKPIPE" action init my-commit.sh --from commit-worktree
 [[ -f "$tmp/my-commit.sh" ]] || { echo "Expected my-commit.sh"; exit 1; }
 [[ -x "$tmp/my-commit.sh" ]] || { echo "Expected executable"; exit 1; }
-grep -q "git add -A" "$tmp/my-commit.sh" && grep -q "git commit" "$tmp/my-commit.sh" && grep -q "DOCKPIPE" "$tmp/my-commit.sh" || { echo "Expected my-commit.sh to contain commit-worktree logic"; head -5 "$tmp/my-commit.sh"; exit 1; }
+grep -q "commit-on-host" "$tmp/my-commit.sh" && grep -q "Not a git repo; skipping commit" "$tmp/my-commit.sh" && grep -q "DOCKPIPE" "$tmp/my-commit.sh" || { echo "Expected my-commit.sh to contain commit-worktree logic"; head -20 "$tmp/my-commit.sh"; exit 1; }
 
 # 3. Clone with --from first (arg order)
 "$DOCKPIPE" action init --from print-summary my-summary.sh

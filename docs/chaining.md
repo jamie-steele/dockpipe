@@ -46,4 +46,12 @@ dockpipe --workdir "$REPO" -- make test
 
 Use your own repo path and commands. Compose in your shell or Makefile.
 
-**Future:** First-class **multi-step pipelines** where each step declares **outputs** that become **variables for the next step** (see **`docs/future-updates.md`** — *Multi-step pipelines* and *Terraform*).
+---
+
+## Same repo, one workflow file: `steps:`
+
+If you want **one** `dockpipe` invocation to run several containers in order (and optionally **parallel** groups with a **join** step), put **`steps:`** in `templates/<name>/config.yml` and use **`dockpipe --workflow <name> -- …`**. Handoff between steps uses **`outputs:`** (dotenv files) and env merge — see **[workflow-yaml.md](workflow-yaml.md)**.
+
+---
+
+**Future ideas:** richer step kinds (e.g. Terraform), repo-root `dockpipe.yml` — see **[future-updates.md](future-updates.md)**.

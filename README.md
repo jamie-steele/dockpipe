@@ -43,7 +43,7 @@ Same primitive for everything. Examples:
 | **Run then act** (e.g. commit) | `dockpipe --act scripts/commit-worktree.sh -- ./my-script.sh` |
 | **AI in worktree** (optional) | `dockpipe --workflow llm-worktree --repo https://github.com/you/repo.git -- claude -p "Fix the bug"` |
 
-You pick the image, the command, and the action. **Init a workspace:** `dockpipe init [<dest>]` creates **scripts/**, **images/**, **templates/** (templates folder has a README only). `dockpipe init my-template [<dest>]` adds a new template at **templates/my-template/** and copies sample scripts/images so it can point at them. Use `--from <url>` to clone a repo with that layout. Scaffold: `dockpipe action init my-action.sh`, `dockpipe template init my-workflow --from llm-worktree`.
+You pick the image, the command, and the action. **Init a workspace:** `dockpipe init [<dest>]` creates **scripts/**, **images/**, **templates/** (templates folder has a README only). `dockpipe init my-template [<dest>]` adds a new template at **templates/my-template/** and copies sample scripts/images so it can point at them. Use `--from <url>` to clone a repo with that layout. Scaffold: `dockpipe action init my-action.sh`, `dockpipe template init my-workflow --from llm-worktree`. **YAML demo:** `templates/workflow-demo/` (async group + outputs + join) — `dockpipe --workflow workflow-demo` from repo root; see **[templates/workflow-demo/README.md](templates/workflow-demo/README.md)**.
 
 ---
 
@@ -53,7 +53,7 @@ You pick the image, the command, and the action. **Init a workspace:** `dockpipe
 2. **Run** — Execute the command you pass after `--`.
 3. **Act** — Optionally run a script after the command (e.g. commit, notify, export a patch).
 
-No workflow engine—just one primitive you compose. Tests, scripts, builds, or AI tools all use the same flow.
+No separate orchestrator service—just one primitive you compose. Optional **multi-step** flows live in **`config.yml`** (`steps:`), including parallel **async** groups and **`outputs:`** handoff; see **[docs/workflow-yaml.md](docs/workflow-yaml.md)**. Tests, scripts, builds, or AI tools all use the same flow.
 
 **Data:** Default volume `dockpipe-data` at `/dockpipe-data` (HOME). `--data-dir /path` or `--no-data`. `--reinit` to wipe the volume.
 
@@ -171,7 +171,7 @@ dockpipe --isolate agent-dev --act scripts/commit-worktree.sh -- claude -p "Your
 dockpipe -d -- make test
 ```
 
-**Docs:** [docs/cli-reference.md](docs/cli-reference.md) (flags, overrides), [docs/chaining.md](docs/chaining.md), [docs/wsl-windows.md](docs/wsl-windows.md). **Workflow template:** [templates/llm-worktree](templates/llm-worktree/README.md) — use `--workflow llm-worktree --repo <url> -- claude -p "…"`.
+**Docs:** [docs/workflow-yaml.md](docs/workflow-yaml.md) (`steps:`, async, `outputs:`), [docs/cli-reference.md](docs/cli-reference.md), [docs/chaining.md](docs/chaining.md), [docs/wsl-windows.md](docs/wsl-windows.md). **Workflow template:** [templates/llm-worktree](templates/llm-worktree/README.md) — use `--workflow llm-worktree --repo <url> -- claude -p "…"`.
 
 ---
 
@@ -201,7 +201,7 @@ Scripts that run after your command. Use them for anything: commit, export a pat
 ## Docs & repo
 
 - [Blog: Run, Isolate, and Act](https://dev.to/jamie-steele/run-isolate-and-act-a-minimal-primitive-for-container-workflows-553m)
-- [Contributing](CONTRIBUTING.md) · [Architecture](docs/architecture.md) · [Chaining](docs/chaining.md) · [Install](docs/install.md) · [AGENTS.md](AGENTS.md)
+- [Contributing](CONTRIBUTING.md) · [Architecture](docs/architecture.md) · **[Workflow YAML](docs/workflow-yaml.md)** · [CLI reference](docs/cli-reference.md) · [Chaining](docs/chaining.md) · [Install](docs/install.md) · [AGENTS.md](AGENTS.md)
 - **Tests:** `bash tests/run_tests.sh` (unit tests, from repo root). **Integration tests** (Docker + agent-dev): [tests/integration-tests/README.md](tests/integration-tests/README.md) → `bash tests/integration-tests/run.sh`
 
 **License:** Apache-2.0. See [LICENSE](LICENSE).

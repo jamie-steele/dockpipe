@@ -1,6 +1,8 @@
 # CLI reference
 
-**Run → isolate → act.** Overrides use the same names as workflow yml. Precedence: **CLI** > config > environment.
+**Run → isolate → act.** Overrides use the same names as workflow YAML. Precedence: **CLI** > config > environment.
+
+**Workflow YAML (`config.yml`):** single-command layout (`run` / `isolate` / `act`) or multi-step **`steps:`** (ordering, **`outputs:`**, **`is_blocking`**, optional **`group.mode: async`**). Full reference: **[workflow-yaml.md](workflow-yaml.md)**.
 
 ## Workflow variables (`--workflow`)
 
@@ -21,7 +23,7 @@ Use **`--var`** for one-off overrides; use **`.env`** files for local secrets an
 
 | Flag | Purpose |
 |------|---------|
-| `--workflow <name>` | Use a workflow; config sets run/isolate/act. Override with below. |
+| `--workflow <name>` | Use a workflow; config sets run/isolate/act and/or **`steps:`**. Override with below. See **[workflow-yaml.md](workflow-yaml.md)**. |
 | `--run <path>` | **Run:** script(s) on host before container. Can be repeated. |
 | `--isolate <name>` | **Isolate:** image or template (base-dev, claude, codex, …). Builds if template. |
 | `--act <path>` | **Act:** script after command (e.g. commit-worktree). |

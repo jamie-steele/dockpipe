@@ -89,8 +89,11 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	}
 
 	if !o.Detach && term.IsTerminal(int(stdout.Fd())) {
-		fmt.Fprint(stderr, banner)
-		spin(stderr)
+		width := terminalWidth(int(stdout.Fd()))
+		fmt.Fprint(stderr, renderBannerForWidth(width))
+		if shouldShowSpinner(width) {
+			spin(stderr)
+		}
 	}
 
 	cwdInContainer := containerWorkMount
@@ -189,7 +192,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		return 0, nil
 	}
 
-	if term.IsTerminal(int(stdin.Fd())) {
+	if term.IsTerminal(int(stdin.Fd())) && term.IsTerminal(int(stdout.Fd())) {
 		args = append(args, "-it")
 	} else {
 		args = append(args, "-i")
@@ -215,7 +218,10 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	}
 	elapsed := time.Since(start)
 
-	if rc != 0 || elapsed < 3*time.Second {
+	// Keep default output quiet on success. Quick-exit dumps are useful for debugging
+	// but noisy in normal/test runs; opt in via DOCKPIPE_LOG_QUICK_EXIT=1.
+	logQuickExit := os.Getenv("DOCKPIPE_LOG_QUICK_EXIT") == "1"
+	if rc != 0 || (logQuickExit && elapsed < 3*time.Second) {
 		fmt.Fprintln(stderr, "")
 		if rc != 0 {
 			fmt.Fprintf(stderr, "  Container exited with code %d. Full container output:\n", rc)
@@ -250,6 +256,30 @@ const banner = `
                       Run  →  Isolate  →  Act
 
 `
+
+const compactBanner = "dockpipe — Run -> Isolate -> Act\n"
+
+func terminalWidth(fd int) int {
+	width, _, err := term.GetSize(fd)
+	if err != nil || width <= 0 {
+		return 0
+	}
+	return width
+}
+
+func renderBannerForWidth(width int) string {
+	// Use a conservative threshold to avoid wrapping/artifacts in split panes.
+	const minBannerWidth = 70
+	if width < minBannerWidth {
+		return compactBanner
+	}
+	return banner
+}
+
+func shouldShowSpinner(width int) bool {
+	// Spinner uses carriage-return updates; hide it in narrow terminals to avoid messy wraps.
+	return width >= 60
+}
 
 func spin(w *os.File) {
 	chars := `|/-\`

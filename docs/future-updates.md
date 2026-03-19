@@ -6,13 +6,14 @@ Backlog and brainstorm. No commitment to implement in any order.
 
 ## Done / mostly there (kept for history)
 
-These landed in spirit; see **`docs/cli-reference.md`**, **`docs/architecture.md`**, and **`docs/chaining.md`** for the current model.
+These landed; see **`docs/workflow-yaml.md`** (full step / async contract), **`docs/cli-reference.md`**, **`docs/architecture.md`**, and **`docs/chaining.md`**.
 
-- **Project / template YAML** — `templates/<name>/config.yml` with **`vars:`**, **`run` / `isolate` / `act`**, and **`--workflow <name>`**. Precedence: CLI > config > environment (and `.env` / `--env-file` where documented).
-- **Named workflows** — Same as above; not a separate `dockpipe run fix` task table yet, but workflows are first-class via `--workflow`.
-- **Docs** — CLI reference, WSL/Windows notes, chaining as doc-only patterns.
+- **Project / template YAML** — `templates/<name>/config.yml` with **`vars:`**, **`run` / `isolate` / `act`**, **`--workflow <name>`**. Precedence: CLI > config > environment (and `.env` / `--env-file` where documented).
+- **Multi-step pipelines** — **`steps:`** in Go: ordered steps, **`outputs:`** dotenv handoff, **`is_blocking`**, optional **`group: { mode: async, tasks: [...] }`**, merge logging. Not a separate `dockpipe run` task table; workflows are first-class via **`--workflow`**.
+- **Named workflows** — Same as above.
+- **Docs** — CLI reference, workflow YAML, WSL/Windows notes, chaining (shell + workflow file).
 
-Still nice-to-have on top of that: optional **repo-root** `dockpipe.yml` (same shape as template config), **`dockpipe init` scaffolds config**, schema validation, sharing partial configs.
+Still nice-to-have: optional **repo-root** `dockpipe.yml` (same shape as template config), **`dockpipe init` scaffolds richer config**, JSON-schema validation for YAML, sharing partial configs.
 
 ---
 
@@ -32,23 +33,15 @@ Run any GUI app (IDE, editor, browser, etc.) inside a dockpipe container so the 
 
 **Why:** IaC fits the same "isolated run + deterministic teardown / apply" story; teams often chain clone → plan/apply → notify without writing glue for every project.
 
-**Open questions:** State handling (remote backend vs local), secret injection (env vs `-var`), approval gates for apply, and how this composes with **multi-step pipelines** below.
+**Open questions:** State handling (remote backend vs local), secret injection (env vs `-var`), approval gates for apply, and how this composes with **`steps:`** workflows (**[workflow-yaml.md](workflow-yaml.md)**).
 
 ---
 
-## Multi-step pipelines: step outputs → next-step variables
+## Multi-step pipelines (implemented)
 
-**Goal:** When we wire up **ordered steps** (each step = script on host and/or container image + command), **every step exposes `outputs`** that **feed the next step** by **setting or overriding variables** for that step.
+**Shipped:** `steps:` with **`outputs:`** (dotenv files), **`vars`**, **`is_blocking`** / async **`group`**, declaration-order merge and **`[merge]`** logs. See **`docs/workflow-yaml.md`**.
 
-**Model (intent):**
-
-- Step *N* runs with a merged var set (shared `vars`, step *N* `vars`, CLI).
-- Step *N* declares (or emits) **outputs** — e.g. named keys from a small manifest file, `stdout` parsing, or explicit `outputs:` in YAML after we define the format.
-- Before step *N+1*, those outputs are applied as **environment / template variables** for step *N+1*, with clear precedence: e.g. **step *N* outputs** override inherited defaults but **CLI / explicit step *N+1* vars** can still override outputs where we want that.
-
-**Mental model:** **input ⇒ output** along the chain — each step’s output namespace becomes part of the **input** context for the next step, so you don’t rely only on files in the workdir for structured handoff (though files remain valid for large artifacts).
-
-**Compatibility:** Today’s single `run → isolate → act` invocation maps to a **one-step** pipeline with no cross-step outputs; chaining today is separate processes + workdir conventions (see **`docs/chaining.md`**).
+**Still open / nicer:** stdout capture as outputs, small JSON manifest format, richer precedence docs per field.
 
 ---
 

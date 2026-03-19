@@ -1,0 +1,36 @@
+# Example workflow: multi-step + async group + outputs merge (join step).
+# Full reference: docs/workflow-yaml.md
+#
+# Run from repo root (or any dir with Docker):
+#   dockpipe --workflow workflow-demo
+#
+# Expected stderr: setup → parallel fanout → join prints DEMO_BRANCH=b
+# (fanout_b runs after fanout_a in YAML order for merge; last write wins.)
+
+name: workflow-demo
+description: Demo of steps:, group.mode async, outputs:, and blocking join.
+
+isolate: alpine
+
+steps:
+  - id: setup
+    isolate: alpine
+    cmd: sh -c 'echo "[workflow-demo] setup" >&2'
+    is_blocking: true
+
+  - group:
+      mode: async
+      tasks:
+        - id: fanout_a
+          isolate: alpine
+          cmd: sh -c 'mkdir -p .dockpipe && echo "DEMO_BRANCH=a" > .dockpipe/demo-a.env'
+          outputs: .dockpipe/demo-a.env
+        - id: fanout_b
+          isolate: alpine
+          cmd: sh -c 'mkdir -p .dockpipe && echo "DEMO_BRANCH=b" > .dockpipe/demo-b.env'
+          outputs: .dockpipe/demo-b.env
+
+  - id: join
+    isolate: alpine
+    cmd: sh -c 'echo "[workflow-demo] join: DEMO_BRANCH=${DEMO_BRANCH:-missing} (expect b = last merged)" >&2'
+    is_blocking: true

@@ -18,7 +18,7 @@ The core is **agent-agnostic** and **command-agnostic**. AI tools (Claude, Codex
 
 ## Architecture
 
-- **CLI (Go)** — `cmd/dockpipe` (thin `main`) + **`lib/dockpipe/application`** (flags, subcommands, run orchestration) + **`lib/dockpipe/domain`** (workflow model, env/resolver rules) + **`lib/dockpipe/infrastructure`** (FS, docker, bash pre-scripts, git). Loads **`config.yml`** / **`steps:`** with `gopkg.in/yaml.v3`, merges workflow env (same rules as legacy bash), runs pre-scripts via **`bash -c 'source …; env -0'`**, builds `docker run` (mirrors `lib/runner.sh`), optional host **git** commit. **`make`** or `go build -o bin/dockpipe.bin ./cmd/dockpipe`.
+- **CLI (Go)** — `cmd/dockpipe` (thin `main`) + **`lib/dockpipe/application`** (flags, subcommands, run orchestration) + **`lib/dockpipe/domain`** (workflow model, env/resolver rules, YAML parse including optional **`group.mode: async`**) + **`lib/dockpipe/infrastructure`** (FS, docker, bash pre-scripts, git). Loads **`config.yml`** / **`steps:`** with `gopkg.in/yaml.v3`, merges workflow env, runs pre-scripts via **`bash -c 'source …; env -0'`**, builds `docker run`, optional host **git** commit. **`make`** or `go build -o bin/dockpipe.bin ./cmd/dockpipe`. **User-facing workflow spec:** **`docs/workflow-yaml.md`**.
 - **Launcher** (`bin/dockpipe`) — Bash script: exec `bin/dockpipe.bin` if present, else `go run ./cmd/dockpipe`.
 - **Legacy** (`scripts/dockpipe-legacy.sh`, `lib/runner.sh`, `lib/config-vars.sh`) — All-bash path kept for reference; not the default.
 - **Entrypoint** (`lib/entrypoint.sh`) — Runs inside every image. Executes the command (argv or `DOCKPIPE_CMD`), then runs `DOCKPIPE_ACTION` if set, then exits with the command’s exit code.
@@ -66,13 +66,13 @@ Data flow: **Host CLI → Docker → container entrypoint → user command → a
 
 - **Core = primitive only:** Spawn → run → act. No hardcoded commit behavior, no hardcoded AI tool.
 - **Templates and actions are the extension points:** Simple, obvious names and file locations.
-- **Documentation is first-class:** README, AGENTS.md, and docs should make the primitive and extension model clear so users and contributors can add their own images and actions without reading the whole codebase.
+- **Documentation is first-class:** README, AGENTS.md, **`docs/workflow-yaml.md`**, and the rest of **`docs/`** should make the primitive, YAML contract, and extension model clear so users and contributors can add their own images and actions without reading the whole codebase.
 
 ---
 
 ## Contributing: keep it primitive
 
-Contributions should extend the primitive (templates, actions, examples) or fix bugs in the core—not turn the core into a workflow engine or add first-class support for specific tools.
+Contributions should extend the primitive (templates, actions, examples) or fix bugs in the core—not turn the core into an open-ended workflow engine beyond the documented **`steps:`** contract (**`docs/workflow-yaml.md`**) or add first-class support for specific tools.
 
 **Do:**
 - Add or improve templates, actions, and example scripts.
@@ -84,7 +84,7 @@ Contributions should extend the primitive (templates, actions, examples) or fix 
 - **Vendor- or AI-specific behavior in `bin/` or `lib/`** — e.g. “if command is claude then …”. Keep that in templates and examples.
 - **Built-in worktree/clone/commit logic** — Those are actions or example scripts that use the primitive, not core features.
 - **Plugin/registry system** — Templates and actions are the extension points; no dynamic loading or plugin API unless the current model clearly can’t scale.
-- **Orchestration in the core** — Retries, fan-out, multi-step state machines: script around dockpipe (Makefile, shell, CI), don’t build them into the CLI.
+- **Heavy orchestration in the core** — Retries, arbitrary DAGs, plugin registries: script around dockpipe (Makefile, shell, CI). **Declarative `steps:`** in workflow YAML is intentionally narrow (see **`docs/workflow-yaml.md`**); don’t grow it into a general-purpose engine beyond that contract.
 
 When in doubt: if it can be done by a script that runs `dockpipe` and passes `--mount` / `--env`, prefer that over adding new flags or core behavior.
 

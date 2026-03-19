@@ -10,7 +10,8 @@ test_chain_outputs() {
   tmp="$(mktemp -d)"
   (
     cd "$tmp"
-    if ! DOCKPIPE_REPO_ROOT="$REPO_ROOT" "$CLI" --workflow chain-test 2>&1 | tee "$tmp/out.log" | grep -q "step2:hello"; then
+    DOCKPIPE_REPO_ROOT="$REPO_ROOT" "$CLI" --workflow chain-test 2>&1 | tee "$tmp/out.log"
+    if ! grep -q "step2:hello" "$tmp/out.log"; then
       echo "test_chain_outputs FAIL: expected step2:hello in output"
       cat "$tmp/out.log"
       return 1

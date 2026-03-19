@@ -72,7 +72,20 @@ func applyBranchPrefix(env map[string]string, resolver, templateName string) {
 	env["DOCKPIPE_BRANCH_PREFIX"] = domain.BranchPrefixForTemplate(templateName)
 }
 
-func applyOutputsFile(path string, envMap, dockerEnv map[string]string, locked map[string]bool) {
+// parallelMergeState tracks which step last set each key during a parallel batch output merge
+// (declaration order → last wins; used for [merge] overwrite logs).
+type parallelMergeState struct {
+	keySource map[string]string
+}
+
+func newParallelMergeState() *parallelMergeState {
+	return &parallelMergeState{keySource: make(map[string]string)}
+}
+
+// applyOutputsFile merges KEY=VAL from path into envMap and dockerEnv. Existing keys are
+// overwritten (callers rely on this for “last merge wins”, including parallel aggregate order).
+// If mergeState and mergeSource are set, logs when a key already exists (parallel aggregate).
+func applyOutputsFile(path string, envMap, dockerEnv map[string]string, locked map[string]bool, mergeState *parallelMergeState, mergeSource string) {
 	m, err := infrastructure.ParseEnvFile(path)
 	if err != nil || len(m) == 0 {
 		return
@@ -82,6 +95,16 @@ func applyOutputsFile(path string, envMap, dockerEnv map[string]string, locked m
 	for k, v := range m {
 		if locked[k] {
 			continue
+		}
+		if mergeState != nil && mergeSource != "" {
+			if _, had := envMap[k]; had {
+				prev := "environment before parallel batch"
+				if ps, ok := mergeState.keySource[k]; ok {
+					prev = ps
+				}
+				fmt.Fprintf(os.Stderr, "[dockpipe] [merge] variable %q overwritten by %s (previously set by %s)\n", k, mergeSource, prev)
+			}
+			mergeState.keySource[k] = mergeSource
 		}
 		envMap[k] = v
 		dockerEnv[k] = v

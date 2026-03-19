@@ -31,6 +31,8 @@ sudo apt-get install docker.io
 
 **Persistent data:** By default dockpipe mounts a named volume `dockpipe-data` at `/dockpipe-data` and sets `HOME` there so tool state (e.g. first-time login) persists. Use `--data-vol <name>`, `--data-dir /path`, or `--no-data` to change or disable. If a tool exits immediately with the default volume, try `--no-data` or `--reinit` to get a fresh volume.
 
+**Workflow YAML:** Multi-step templates (`steps:`, async groups, `outputs:`) are documented in **[workflow-yaml.md](workflow-yaml.md)**.
+
 ---
 
 

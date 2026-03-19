@@ -16,12 +16,12 @@ echo "initial" > initial.txt
 git add initial.txt
 git commit -q -m "initial"
 
-stderr=$(mktemp)
-trap 'rm -f "$stderr"' RETURN
+out=$(mktemp)
+trap 'rm -f "$out"' RETURN
 "$DOCKPIPE" --no-data --template agent-dev --workdir "$tmp" --action "$ACTION" \
-  -- sh -c 'echo "new" > newfile.txt' 2>"$stderr" || true
+  -- sh -c 'echo "new" > newfile.txt' >"$out" 2>&1 || true
 
-grep -q "\[dockpipe summary\]" "$stderr" || { echo "Expected [dockpipe summary] in stderr"; cat "$stderr"; exit 1; }
-grep -q "Uncommitted changes" "$stderr" || { echo "Expected Uncommitted changes in summary"; cat "$stderr"; exit 1; }
+grep -q "\[dockpipe summary\]" "$out" || { echo "Expected [dockpipe summary] in output"; cat "$out"; exit 1; }
+grep -q "Uncommitted changes" "$out" || { echo "Expected Uncommitted changes in summary"; cat "$out"; exit 1; }
 
 echo "test_print_summary_action OK"

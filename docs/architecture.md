@@ -28,31 +28,32 @@ No built-in commit, clone, or AI logic — those are actions or scripts you plug
 | `lib/entrypoint.sh` | Container entrypoint: run command, then `DOCKPIPE_ACTION` if set. |
 | `images/*/Dockerfile` | Shared images; each copies `lib/entrypoint.sh` as `ENTRYPOINT`. |
 | `scripts/*.sh` | Run/act scripts; invoked via `--run` / `--act` or workflow (Go sources them with bash). |
-| `templates/*/` | Workflow templates (`config.yml`, `resolvers/`). |
+| `templates/*/` | Workflow templates (`config.yml`, `resolvers/`). Multi-step / async: see **[workflow-yaml.md](workflow-yaml.md)**. |
 | `scripts/dockpipe-legacy.sh`, `lib/*.sh` | **Legacy** all-bash implementation (optional); default install uses Go. |
 
 ---
 
-## Data flow
+## Data flow (default: Go CLI)
 
 ```
 User: dockpipe --isolate claude --act scripts/commit-worktree.sh -- claude -p "..."
 
-  bin/dockpipe → dockpipe.bin (Go) by default
+  bin/dockpipe → dockpipe (Go binary when packaged / built)
     → TemplateBuild("claude") from --isolate → image=dockpipe-claude, build=.../images/claude
-    → docker build / docker run (see lib/dockpipe/infrastructure/docker.go)
-  (Legacy bash path still documents resolve_template in lib/runner.sh for reference.)
-
-  lib/runner.sh
-    → docker run --rm -v $PWD:/work -v <action>:/dockpipe-action.sh -e DOCKPIPE_ACTION=... dockpipe-claude claude -p "..."
+    → docker build (if needed) / docker run
+    → see lib/dockpipe/infrastructure/docker.go
 
   Container (lib/entrypoint.sh)
     → cd /work
-    → exec "claude" "-p" "..."
+    → exec user argv (e.g. claude -p "...")
     → save exit code
-    → run /dockpipe-action.sh (commit-worktree)
+    → run DOCKPIPE_ACTION if set (e.g. commit-worktree)
     → exit with saved exit code
 ```
+
+**`--workflow` with `steps:`** — `lib/dockpipe/application/run_steps.go` runs each step (optional parallel async groups, merge `outputs:` in order). Spec: **[workflow-yaml.md](workflow-yaml.md)**.
+
+**Legacy:** `scripts/dockpipe-legacy.sh` + `lib/runner.sh` mirror a similar `docker run` sequence; not the default install path.
 
 Environment variables that cross the boundary:
 
@@ -65,7 +66,7 @@ Environment variables that cross the boundary:
 
 1. **Images** — Add a Dockerfile under `images/<name>/`, use the shared entrypoint, and add a case in **`lib/dockpipe/infrastructure/template.go`** (`TemplateBuild`) so `--isolate <name>` builds and uses it (legacy bash: `resolve_template()` in `scripts/dockpipe-legacy.sh`).
 2. **Act scripts** — Any script that can run in the container and read `DOCKPIPE_EXIT_CODE` / `DOCKPIPE_CONTAINER_WORKDIR`. Place under `scripts/` and reference with `--act` or workflow config `act:`. Users can copy a bundled script: `dockpipe action init my-commit.sh --from commit-worktree`.
-3. **Scripts / workflows** — Named workflows use `templates/<name>/config.yml` + `resolvers/`. **`dockpipe init`** creates top-level **scripts/**, **images/**, **templates/** (templates has a README only). **`dockpipe init my-template`** adds **templates/my-template/** and copies sample scripts/images. **llm-worktree** lives under `templates/llm-worktree/`; copy with `dockpipe template init my-workflow --from llm-worktree`.
+3. **Scripts / workflows** — Named workflows use `templates/<name>/config.yml` + `resolvers/`. Optional **`steps:`** for multi-step and async groups — **[workflow-yaml.md](workflow-yaml.md)**. **`dockpipe init`** creates top-level **scripts/**, **images/**, **templates/**. **`dockpipe init my-template`** adds **templates/my-template/** and copies sample scripts/images. **llm-worktree** lives under `templates/llm-worktree/`; copy with `dockpipe template init my-workflow --from llm-worktree`.
 
 The core does not parse command content or assume any particular tool (Claude, git, etc.). It only runs the given argv and the optional action script.
 
