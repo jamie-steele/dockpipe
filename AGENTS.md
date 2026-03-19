@@ -18,7 +18,7 @@ The core is **agent-agnostic** and **command-agnostic**. AI tools (Claude, Codex
 
 ## Architecture
 
-- **CLI (Go)** — `cmd/dockpipe` (thin `main`) + **`lib/dockpipe/application`** (flags, subcommands, run orchestration) + **`lib/dockpipe/domain`** (workflow model, env/resolver rules, YAML parse including optional **`group.mode: async`**) + **`lib/dockpipe/infrastructure`** (FS, docker, bash pre-scripts, git). Loads **`config.yml`** / **`steps:`** with `gopkg.in/yaml.v3`, merges workflow env, runs pre-scripts via **`bash -c 'source …; env -0'`**, builds `docker run`, optional host **git** commit. **`make`** or `go build -o bin/dockpipe.bin ./cmd/dockpipe`. **User-facing workflow spec:** **`docs/workflow-yaml.md`**.
+- **CLI (Go)** — `cmd/dockpipe` (thin `main`) + **`lib/dockpipe/application`** (flags, subcommands, run orchestration, Windows `windows setup` / `windows doctor`, **Windows `dockpipe.exe` → WSL argv forward + cwd via `wslpath` + Windows-path translation for path-like flags / init positionals (not after `--`)**) + **`lib/dockpipe/domain`** (workflow model, env/resolver rules, YAML parse including optional **`group.mode: async`**) + **`lib/dockpipe/infrastructure`** (FS, docker, bash pre-scripts, git). Loads **`config.yml`** / **`steps:`** with `gopkg.in/yaml.v3`, merges workflow env, runs pre-scripts via **`bash -c 'source …; env -0'`**, builds `docker run`, optional host **git** commit. **`make`** or `go build -o bin/dockpipe.bin ./cmd/dockpipe`. **User-facing workflow spec:** **`docs/workflow-yaml.md`**.
 - **Launcher** (`bin/dockpipe`) — Bash script: exec `bin/dockpipe.bin` if present, else `go run ./cmd/dockpipe`.
 - **Legacy** (`scripts/dockpipe-legacy.sh`, `lib/runner.sh`, `lib/config-vars.sh`) — All-bash path kept for reference; not the default.
 - **Entrypoint** (`lib/entrypoint.sh`) — Runs inside every image. Executes the command (argv or `DOCKPIPE_CMD`), then runs `DOCKPIPE_ACTION` if set, then exits with the command’s exit code.
@@ -114,6 +114,12 @@ dockpipe --mount /var/run/docker.sock:/var/run/docker.sock --isolate agent-dev -
 - `tests/unit-tests/` contains CLI and runner tests (argument parsing, template/action resolution, basic smoke tests). `tests/integration-tests/` contains Docker-based integration tests.
 - Run from repo root. Prefer practical assertions (exit codes, expected output) over heavy mocking.
 - Adding a new template or flag should be accompanied by a small test where appropriate.
+
+**Cross-platform:** CI does **not** replace real installs. Checklists: **[docs/manual-qa.md](docs/manual-qa.md)** ([core](docs/manual-qa-core.md), [macOS](docs/manual-qa-macos.md), [Windows/WSL](docs/manual-qa-windows.md)). Contributor expectations: **[CONTRIBUTING.md — Platform testing](CONTRIBUTING.md#platform-testing-we-need-you)**.
+
+**Releases:** **`VERSION`** at repo root + **`releasenotes/X.Y.Z.md`**; merge to **`main`** runs **Release** (see **[docs/branching.md](docs/branching.md)**). PRs must **bump `VERSION`** and touch the matching release notes file.
+
+**CI / security:** **`govulncheck`**, **`gosec`** with **`.gosec.json`** (`global.exclude`: CLI-typical noise — subprocess/git, user-chosen paths, workspace `0o755`/`0o644`, template `WalkDir`); **CodeQL** uses **`.github/codeql/codeql-config.yml`** (`security-extended`) via **`.github/workflows/codeql.yml`** → **Security → Code scanning**. Plus tests and release-notes gate — see **`docs/branching.md`**.
 
 ---
 

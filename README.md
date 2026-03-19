@@ -18,7 +18,8 @@ One primitive: run → isolate → act. Use it for isolated tests, one-off scrip
 
 ## Try it (15 seconds)
 
-**Install:** [Download the .deb](https://github.com/jamie-steele/dockpipe/releases) → `sudo dpkg -i dockpipe_*_amd64.deb`  
+**Linux:** [Download the .deb](https://github.com/jamie-steele/dockpipe/releases) for your arch (`*_amd64.deb` or `*_arm64.deb`) → `sudo dpkg -i` that file.  
+**Windows:** `irm https://raw.githubusercontent.com/jamie-steele/dockpipe/main/packaging/windows/install.ps1 | iex` (MSI + checksum), or grab **`.msi` / `.zip`** from [Releases](https://github.com/jamie-steele/dockpipe/releases) — then `dockpipe windows setup`. See [docs/install.md](docs/install.md).  
 Or from source: `git clone … && cd dockpipe && make && export PATH="$PWD/bin:$PATH"` (needs **Go 1.22+** to build; or run without `make` if Go is installed — `bin/dockpipe` uses `go run` as a fallback).
 
 **First run:**
@@ -75,9 +76,9 @@ dockpipe does that + action phase, templates, pipe-friendly CLI. Your UID/GID so
 
 | Platform | Notes |
 |----------|-------|
-| **Linux** | Primary platform. **CLI is a Go binary** (orchestration + YAML); pre/act scripts stay Bash. Install via [.deb](https://github.com/jamie-steele/dockpipe/releases) (amd64) or `make` from source. **Docker** + **Bash** required; **git** for commit-on-host. |
-| **Windows (WSL2)** | Run dockpipe inside WSL2 (Go or `.deb`, Bash + Docker in your distro). Optional: [docs/wsl-windows.md](docs/wsl-windows.md) for fetching a git bundle into a Windows repo when using `--bundle-out`. |
-| **macOS** | From source: `make` (Go 1.22+), add `bin` to PATH. Bash + Docker. |
+| **Linux** | Primary platform. **CLI is a Go binary** (orchestration + YAML); pre/act scripts stay Bash. Install via [.deb](https://github.com/jamie-steele/dockpipe/releases) (**amd64** or **arm64**) or `make` from source. **Docker** + **Bash** required; **git** for commit-on-host. |
+| **Windows (WSL2)** | Install via **MSI**, **`install.ps1`** (see [install.md](docs/install.md)), or zip. `dockpipe.exe` forwards runs into WSL (**cwd** + path-like flags). Run `dockpipe windows setup` once. [docs/wsl-windows.md](docs/wsl-windows.md). |
+| **macOS** | Homebrew-friendly formula is included (`packaging/homebrew/dockpipe.rb`). Preferred install: `brew tap jamie-steele/dockpipe && brew install dockpipe`. Source fallback still supported (`make`). |
 
 ---
 
@@ -85,9 +86,9 @@ dockpipe does that + action phase, templates, pipe-friendly CLI. Your UID/GID so
 
 | Platform | How |
 |----------|-----|
-| **Linux** | [Releases](https://github.com/jamie-steele/dockpipe/releases) → `sudo dpkg -i dockpipe_*_amd64.deb` |
-| **macOS** | Clone repo, add `bin` to PATH. Requires Bash + Docker. |
-| **Windows** | Use [WSL2](https://docs.microsoft.com/en-us/windows/wsl/); run dockpipe from your Linux distro (clone + PATH). See [docs/wsl-windows.md](docs/wsl-windows.md) for fetching into a Windows repo. |
+| **Linux** | [Releases](https://github.com/jamie-steele/dockpipe/releases) → `sudo dpkg -i dockpipe_*_amd64.deb` or `*_arm64.deb` (match your CPU) |
+| **macOS** | `brew tap jamie-steele/dockpipe && brew install dockpipe` (or source fallback). |
+| **Windows** | Run `dockpipe windows setup` (PowerShell/CMD) to configure WSL distro + bootstrap; optionally pass `--distro` and `--install-command` for automation. |
 
 Requirements: **Bash**, **Docker**. [More in docs/install.md](docs/install.md).
 
@@ -99,6 +100,8 @@ Requirements: **Bash**, **Docker**. [More in docs/install.md](docs/install.md).
 dockpipe [options] -- <command> [args...]
 dockpipe action init [--from <bundled>] <filename>
 dockpipe template init [--from <bundled>] <dirname>
+dockpipe windows setup [--distro <name>] [--install-command <cmd>] [--non-interactive]
+dockpipe windows doctor
 ```
 
 | Option | Description |
@@ -201,7 +204,17 @@ Scripts that run after your command. Use them for anything: commit, export a pat
 ## Docs & repo
 
 - [Blog: Run, Isolate, and Act](https://dev.to/jamie-steele/run-isolate-and-act-a-minimal-primitive-for-container-workflows-553m)
-- [Contributing](CONTRIBUTING.md) · [Architecture](docs/architecture.md) · **[Workflow YAML](docs/workflow-yaml.md)** · [CLI reference](docs/cli-reference.md) · [Chaining](docs/chaining.md) · [Install](docs/install.md) · [AGENTS.md](AGENTS.md)
+- [Contributing](CONTRIBUTING.md) (includes **[platform testing](CONTRIBUTING.md#platform-testing-we-need-you)** — we can’t validate every OS/arch; help on yours) · **[Manual QA](docs/manual-qa.md)** ([core](docs/manual-qa-core.md) · [macOS](docs/manual-qa-macos.md) · [Windows/WSL](docs/manual-qa-windows.md)) · [Architecture](docs/architecture.md) · **[Workflow YAML](docs/workflow-yaml.md)** · [CLI reference](docs/cli-reference.md) · [Chaining](docs/chaining.md) · [Install](docs/install.md) · [Releasing](docs/releasing.md) · [Branching & CI](docs/branching.md) · [AGENTS.md](AGENTS.md)
 - **Tests:** `bash tests/run_tests.sh` (unit tests, from repo root). **Integration tests** (Docker + agent-dev): [tests/integration-tests/README.md](tests/integration-tests/README.md) → `bash tests/integration-tests/run.sh`
+
+## Disclaimer
+
+**Not legal advice.** dockpipe is **open-source software under active development** (pre-1.0): APIs, flags, and behavior can change between releases.
+
+It is provided **“as is”** under the [Apache License 2.0](LICENSE), which includes **no warranty** and **limits liability** — read the license for the exact terms.
+
+**Use at your own risk.** The tool runs **commands in containers** and can be configured to run **scripts on the host** (e.g. git actions, mounts). You are responsible for what you execute, for **reviewing** workflows, mounts, env, and actions before use, and for **backing up** important data. Do not rely on it for safety- or compliance-critical systems without your own review and testing.
+
+---
 
 **License:** Apache-2.0. See [LICENSE](LICENSE).

@@ -4,12 +4,19 @@ package main
 import (
 	"fmt"
 	"os"
+	"runtime"
 
 	"dockpipe/lib/dockpipe/application"
 )
 
 func main() {
-	if err := application.Run(os.Args[1:], os.Environ()); err != nil {
+	argv := os.Args[1:]
+	if runtime.GOOS == "windows" {
+		if handled, code := application.TryWindowsWSLBridge(argv, os.Stdin, os.Stdout, os.Stderr); handled {
+			os.Exit(code)
+		}
+	}
+	if err := application.Run(argv, os.Environ()); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

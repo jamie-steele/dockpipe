@@ -1,16 +1,29 @@
 #!/usr/bin/env bash
-# Build a .deb package. Run from repo root: ./packaging/build-deb.sh [version]
+# Build a .deb package. Run from repo root:
+#   ./packaging/build-deb.sh [version] [deb-arch]
+# deb-arch: amd64 (x86_64 Linux) or arm64 (aarch64 Linux). Default amd64.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-VERSION="${1:-0.6.0}"
-PACKAGE="dockpipe_${VERSION}_amd64"
+_default_ver="$(tr -d ' \t\r\n' < "${REPO_ROOT}/VERSION" 2>/dev/null || true)"
+[[ -z "${_default_ver}" ]] && _default_ver="0.5.8"
+VERSION="${1:-${_default_ver}}"
+DEB_ARCH="${2:-amd64}"
+case "${DEB_ARCH}" in
+  amd64 | arm64) ;;
+  *)
+    echo "usage: $0 [version] [amd64|arm64]" >&2
+    exit 1
+    ;;
+esac
+# Go uses the same GOARCH names for these Debian ports.
+GOARCH="${DEB_ARCH}"
+PACKAGE="dockpipe_${VERSION}_${DEB_ARCH}"
 BUILD_DIR="${REPO_ROOT}/packaging/build/${PACKAGE}"
 DEST="${BUILD_DIR}/usr/lib/dockpipe"
 
-rm -rf "${REPO_ROOT}/packaging/build"
 mkdir -p "${DEST}/bin"
 
 # Core layout (same as repo so DOCKPIPE_REPO_ROOT works)
@@ -20,10 +33,10 @@ chmod 755 "${DEST}/lib/"*.sh
 chmod 755 "${DEST}/scripts/"*.sh 2>/dev/null || true
 find "${DEST}/templates" -name "*.sh" -exec chmod 755 {} \; 2>/dev/null || true
 
-# Go binary (linux/amd64; adjust GOARCH for other targets)
+# Go binary (linux/${GOARCH})
 (
   cd "${REPO_ROOT}"
-  GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "${DEST}/bin/dockpipe" ./cmd/dockpipe
+  GOOS=linux GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "${DEST}/bin/dockpipe" ./cmd/dockpipe
 )
 chmod 755 "${DEST}/bin/dockpipe"
 
@@ -38,8 +51,9 @@ cp -r docs "${BUILD_DIR}/usr/share/doc/dockpipe/" 2>/dev/null || true
 
 # Debian control (version substituted)
 mkdir -p "${BUILD_DIR}/DEBIAN"
-sed "s/^Version: .*/Version: ${VERSION}/" packaging/control > "${BUILD_DIR}/DEBIAN/control"
+sed -e "s/^Version: .*/Version: ${VERSION}/" -e "s/^Architecture: .*/Architecture: ${DEB_ARCH}/" packaging/control > "${BUILD_DIR}/DEBIAN/control"
 
+mkdir -p "${REPO_ROOT}/packaging/build"
 dpkg-deb --root-owner-group --build "${BUILD_DIR}" "${REPO_ROOT}/packaging/build/${PACKAGE}.deb"
 echo "Built: packaging/build/${PACKAGE}.deb"
 rm -rf "${BUILD_DIR}"

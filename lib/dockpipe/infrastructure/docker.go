@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,15 @@ import (
 
 	"golang.org/x/term"
 )
+
+// fdInt converts *os.File Fd() to int for term.IsTerminal / GetSize without G115 overflow on sane platforms.
+func fdInt(f *os.File) (int, bool) {
+	fd := f.Fd()
+	if fd > uintptr(math.MaxInt) {
+		return 0, false
+	}
+	return int(fd), true
+}
 
 const containerWorkMount = "/work"
 
@@ -101,8 +111,9 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		stdin = os.Stdin
 	}
 
-	if !o.Detach && isTerminalDockerFn(int(stdout.Fd())) {
-		width := terminalWidth(int(stdout.Fd()))
+	outFd, outOK := fdInt(stdout)
+	if !o.Detach && outOK && isTerminalDockerFn(outFd) {
+		width := terminalWidth(outFd)
 		fmt.Fprint(stderr, renderBannerForWidth(width))
 		if shouldShowSpinner(width) {
 			spin(stderr)
@@ -138,7 +149,8 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	if o.Reinit && o.DataVolume != "" {
 		fmt.Fprintf(stderr, "  ⚠  REINIT: This will permanently delete all data in volume '%s' (login, cache, repos).\n", o.DataVolume)
 		if !o.Force {
-			if !isTerminalDockerFn(int(stdin.Fd())) {
+			reinitInFd, reinitInOK := fdInt(stdin)
+			if !reinitInOK || !isTerminalDockerFn(reinitInFd) {
 				return 1, fmt.Errorf("no TTY; use -f to reinit non-interactively")
 			}
 			fmt.Fprintf(stderr, "  Continue? [y/N] ")
@@ -205,7 +217,9 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		return 0, nil
 	}
 
-	if isTerminalDockerFn(int(stdin.Fd())) && isTerminalDockerFn(int(stdout.Fd())) {
+	inFd, inOK := fdInt(stdin)
+	outFd2, outOK2 := fdInt(stdout)
+	if inOK && outOK2 && isTerminalDockerFn(inFd) && isTerminalDockerFn(outFd2) {
 		args = append(args, "-it")
 	} else {
 		args = append(args, "-i")

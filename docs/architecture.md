@@ -24,7 +24,7 @@ No built-in commit, clone, or AI logic — those are actions or scripts you plug
 | Component | Role |
 |-----------|------|
 | `bin/dockpipe` | Launcher: runs **`bin/dockpipe.bin`** if present (`make`), otherwise **`go run ./cmd/dockpipe`**. |
-| `cmd/dockpipe`, `lib/dockpipe/application`, `lib/dockpipe/domain`, `lib/dockpipe/infrastructure` | **Go** CLI (DDD-ish): application layer (flags + orchestration), domain (workflow/env/resolver semantics), infrastructure (FS, docker, bash, git). **`config.yml`** / **`steps:`** (YAML v3), resolver `KEY=value` files, template→image map, bash `source` for pre-scripts, **`docker run`** / build, host **git** commit. |
+| `cmd/dockpipe`, `lib/dockpipe/application`, `lib/dockpipe/domain`, `lib/dockpipe/infrastructure` | **Go** CLI (DDD-ish): application layer (flags + orchestration + `windows setup/doctor`), domain (workflow/env/resolver semantics), infrastructure (FS, docker, bash, git). **`config.yml`** / **`steps:`** (YAML v3), resolver `KEY=value` files, template→image map, bash `source` for pre-scripts, **`docker run`** / build, host **git** commit. |
 | `lib/entrypoint.sh` | Container entrypoint: run command, then `DOCKPIPE_ACTION` if set. |
 | `images/*/Dockerfile` | Shared images; each copies `lib/entrypoint.sh` as `ENTRYPOINT`. |
 | `scripts/*.sh` | Run/act scripts; invoked via `--run` / `--act` or workflow (Go sources them with bash). |

@@ -45,6 +45,9 @@ func Run(argv []string, baseEnviron []string) error {
 	if argv[0] == "template" {
 		return cmdTemplate(argv[1:])
 	}
+	if argv[0] == "windows" {
+		return cmdWindows(argv[1:])
+	}
 
 	repoRoot, err := repoRootAppFn()
 	if err != nil {

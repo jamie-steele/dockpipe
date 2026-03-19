@@ -9,7 +9,7 @@ Usage:
   dockpipe [options] -- <command> [args...]
   dockpipe --workflow <name> [options] -- <command>
   dockpipe --workflow <name> [options]          multi-step (steps: in config.yml), optional -- for last step
-  dockpipe init | action init | pre init | template init  — see legacy docs
+  dockpipe init | action init | pre init | template init | windows setup
 
 Options:
   --workflow, --run, --isolate, --act, --resolver, --repo, --branch, --workdir,

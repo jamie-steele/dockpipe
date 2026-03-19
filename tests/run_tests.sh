@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Run unit tests. Exit 0 if all pass. From repo root: bash tests/run_tests.sh
-# Integration tests: bash tests/integration-tests/run.sh
+# Integration tests (Docker): bash tests/integration-tests/run.sh
+# smoke.sh counts toward pass/fail when Docker is available (exits 0 if Docker missing).
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/unit-tests" && pwd)"
@@ -14,7 +15,7 @@ for f in test_cli.sh test_runner.sh test_repo_root.sh; do
 done
 
 echo "--- smoke.sh (needs Docker) ---"
-bash "$DIR/smoke.sh" || true
+bash "$DIR/smoke.sh" || failed=1
 
 echo "--- test_deb_install.sh (needs Docker + .deb) ---"
 _deb="$(echo "$DIR/../../packaging/build"/dockpipe_*_amd64.deb 2>/dev/null)"

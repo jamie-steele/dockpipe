@@ -1,0 +1,81 @@
+# govulncheck + gosec (SAST linter) + full tests + release-notes gate on PRs.
+# Semantic SAST: .github/workflows/codeql.yml
+# See docs/branching.md
+name: CI
+
+on:
+  pull_request:
+    branches: [main, master]
+  push:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          "$(go env GOPATH)/bin/govulncheck" ./...
+
+      - name: gosec (SAST)
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          "$(go env GOPATH)/bin/gosec" -conf .gosec.json -fmt text -stdout -verbose=text ./...
+
+      - name: Go test
+        run: go test ./...
+
+      - name: Release notes + version bump (PRs to main/master only)
+        if: github.event_name == 'pull_request'
+        shell: bash
+        run: |
+          set -euo pipefail
+          V=$(tr -d ' \n\r' < VERSION)
+          if [[ ! "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::VERSION must be a single line semver X.Y.Z (got '$V')"
+            exit 1
+          fi
+          notes="releasenotes/${V}.md"
+          if [[ ! -f "$notes" ]]; then
+            echo "::error::Missing $notes for VERSION=$V — add or bump VERSION and matching releasenotes/X.Y.Z.md"
+            exit 1
+          fi
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          base_v=$(git show "${base}:VERSION" 2>/dev/null | tr -d ' \n\r' || true)
+          if [[ -n "$base_v" && "$base_v" == "$V" ]]; then
+            echo "::error::VERSION is still $V (same as target branch). Bump VERSION for each release merge."
+            exit 1
+          fi
+          changed=$(git diff --name-only "$base" "$head")
+          if ! echo "$changed" | grep -qx "$notes"; then
+            echo "::error::This PR must modify $notes (current VERSION is $V)."
+            echo "Changed paths:"
+            echo "$changed"
+            exit 1
+          fi
+          echo "OK: shipping $V with updated $notes (was ${base_v:-<no VERSION on base>})"
+
+      - name: Build CLI (Bash tests use bin/dockpipe)
+        run: make
+
+      - name: Build amd64 .deb (for test_deb_install.sh)
+        run: ./packaging/build-deb.sh "$(tr -d ' \t\r\n' < VERSION)" amd64
+
+      - name: Shell unit tests
+        run: bash tests/run_tests.sh
+
+      - name: Integration tests (Docker)
+        run: bash tests/integration-tests/run.sh

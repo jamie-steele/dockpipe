@@ -2,7 +2,22 @@
 
 Get branches from a repo in WSL into your Windows clone **without pushing to a remote**. dockpipe can write a git bundle when it commits on the host; you then fetch that bundle from PowerShell.
 
-**One-time:** Set your default WSL distro to your Linux (e.g. Ubuntu): `wsl -l -v` then `wsl --set-default Ubuntu` if needed. Ensure dockpipe and Docker run inside WSL; API keys in WSL environment.
+**Install `dockpipe.exe` first** (MSI, script, or zip) — see **[install.md](install.md)** (Windows section). Quick option: `irm https://raw.githubusercontent.com/jamie-steele/dockpipe/main/packaging/windows/install.ps1 | iex`
+
+**Recommended one-time setup (Windows terminal):**
+
+```powershell
+dockpipe windows setup
+dockpipe windows doctor
+```
+
+This configures the target distro, bootstraps WSL host-awareness env (`DOCKPIPE_WINDOWS_HOST=1`), and can run a distro install command when needed (`--install-command`).
+
+**Manual test checklist:** **[manual-qa-windows.md](manual-qa-windows.md)** (install Linux build in WSL via **[manual-qa-core.md](manual-qa-core.md)**).
+
+### Running dockpipe from Windows without opening WSL
+
+After setup, use **`dockpipe.exe`** from PowerShell or CMD. Normal commands are **forwarded into WSL**: your **current Windows folder** becomes the working directory in Linux (via `wslpath`), then `dockpipe` runs there. Only **`dockpipe windows …`** stays on the host. **Windows paths in typical file flags** (e.g. `--workdir`, `--mount`, drive letters and UNC) are rewritten for the Linux argv; the command you pass after **`--`** is not altered.
 
 ---
 

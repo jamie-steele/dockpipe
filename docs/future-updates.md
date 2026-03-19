@@ -2,121 +2,49 @@
 
 Backlog and brainstorm. No commitment to implement in any order.
 
----
+Only include items that are **not implemented yet**.
 
-## Done / mostly there (kept for history)
+**Clarification (so this file isn’t confused with what already shipped):**
 
-These landed; see **`docs/workflow-yaml.md`** (full step / async contract), **`docs/cli-reference.md`**, **`docs/architecture.md`**, and **`docs/chaining.md`**.
-
-- **Project / template YAML** — `templates/<name>/config.yml` with **`vars:`**, **`run` / `isolate` / `act`**, **`--workflow <name>`**. Precedence: CLI > config > environment (and `.env` / `--env-file` where documented).
-- **Multi-step pipelines** — **`steps:`** in Go: ordered steps, **`outputs:`** dotenv handoff, **`is_blocking`**, optional **`group: { mode: async, tasks: [...] }`**, merge logging. Not a separate `dockpipe run` task table; workflows are first-class via **`--workflow`**.
-- **Named workflows** — Same as above.
-- **Docs** — CLI reference, workflow YAML, WSL/Windows notes, chaining (shell + workflow file).
-
-Still nice-to-have: optional **repo-root** `dockpipe.yml` (same shape as template config), **`dockpipe init` scaffolds richer config**, JSON-schema validation for YAML, sharing partial configs.
+- **In-repo / CI today:** Repo-root **`VERSION`** + **`releasenotes/X.Y.Z.md`**; **PRs to `main`/`master`** run **CI** (**`govulncheck`**, **`gosec`**, `go test`, **`make`**, **`.deb`**, **`tests/run_tests.sh`**, **`tests/integration-tests/run.sh`**, release-notes gate) and **CodeQL** (`security-extended`); **merges to `main`/`master`** run **Release** (build + GitHub Release `v$VERSION`). Optional **dev.to** article update when **`DEVTO_PUBLISH`** / **`DEVTO_ARTICLE_ID`** / **`DEVTO_API_KEY`** are set — **[docs/devto.md](devto.md)**. `packaging/homebrew/dockpipe.rb`, **`.github/workflows/release.yml`**, Linux/macOS/Windows artifacts + `.deb` + **Windows `.msi`** + zip, **`packaging/windows/install.ps1`**, **`dockpipe windows setup` / `windows doctor`**, **`dockpipe.exe` → WSL forwarding**, **`packaging/winget/README.md`**, docs (`docs/wsl-windows.md`, `docs/releasing.md`, `docs/branching.md`).
+- **Still future:** everything listed below — e.g. **`dockpipe workflow validate`**, **template-level host actions**, **`dockpipe macos doctor`**, **`winget install` from the default Microsoft catalog** (requires a merged `winget-pkgs` PR per release), and **automating Homebrew tap bumps**.
 
 ---
 
-## GUI apps in container
+## Workflow UX enhancements
 
-Run any GUI app (IDE, editor, browser, etc.) inside a dockpipe container so the full experience is isolated. Same "run → isolate → act" story: work in the container, close when done, commit from host or via actions.
-
-**Possible approaches:** X11 forwarding (`DISPLAY` + `/tmp/.X11-unix`), Wayland socket, or VNC/noVNC for a full desktop in the container. Mount the same worktree layout; when you're done, close the container and apply changes via existing workflows.
-
----
-
-## Terraform as a step / action kind
-
-**Goal:** Treat **Terraform** as a first-class kind of thing dockpipe can run in a workflow — not only arbitrary shell in a container.
-
-**Sketch:** A step could be typed as `terraform` (or `kind: terraform`) with fields like working directory, `plan` / `apply`, var-files, backend config, and whether it runs on the **host** or in an **image** that ships the Terraform CLI. Same lifecycle hooks as today: optional pre/post scripts, act phase, workdir mount.
-
-**Why:** IaC fits the same "isolated run + deterministic teardown / apply" story; teams often chain clone → plan/apply → notify without writing glue for every project.
-
-**Open questions:** State handling (remote backend vs local), secret injection (env vs `-var`), approval gates for apply, and how this composes with **`steps:`** workflows (**[workflow-yaml.md](workflow-yaml.md)**).
+- Optional repo-root `dockpipe.yml` (same shape as template config).
+- `dockpipe init` scaffolds richer default config.
+- JSON schema validation / linting for workflow YAML (e.g. `dockpipe workflow validate`).
+- Partial config imports / sharing snippets across templates.
+- Optional stdout capture as `outputs` for step chaining.
+- Optional small JSON manifest output format for steps.
 
 ---
 
-## Multi-step pipelines (implemented)
+## Host actions (Windows/macOS/Linux)
 
-**Shipped:** `steps:` with **`outputs:`** (dotenv files), **`vars`**, **`is_blocking`** / async **`group`**, declaration-order merge and **`[merge]`** logs. See **`docs/workflow-yaml.md`**.
+**Today:** WSL→Windows bundle fetch is documented (`docs/wsl-windows.md`); `windows setup` sets host-aware env in WSL (`DOCKPIPE_WINDOWS_HOST`, etc.). That is **not** the same as a host-actions feature in workflows.
 
-**Still open / nicer:** stdout capture as outputs, small JSON manifest format, richer precedence docs per field.
+**Still to build:**
+
+- Built-in host actions (open URL/path/app, fetch/apply results) as first-class commands or workflow hooks.
+- User-defined host scripts/commands with an explicit, documented contract.
+- Template-level `host-actions` (or equivalent) in YAML.
+- Optional allowlist/permission model for stricter environments.
+- Cross-platform action abstraction (Windows/macOS/Linux).
 
 ---
 
-## Host Actions (Built-in + User-Defined PowerShell via WSL2)
+## macOS distribution and DX
 
-### Goal
+**Today:** macOS tarballs ship from the release workflow; a Homebrew **formula source** lives in-repo (`packaging/homebrew/dockpipe.rb`). Users still need a **published tap** that tracks those releases.
 
-Enable Dockpipe workflows running in WSL2 to invoke Windows host actions seamlessly using PowerShell — supporting both **first-class built-in actions** and **user-defined scripts**.
+**Still to build or automate:**
 
-This removes manual steps and allows full end-to-end automation from a single workflow execution.
-
-### Summary
-
-The WSL2 runtime acts as the orchestration layer and can invoke Windows-side actions using:
-
-```bash
-powershell.exe -Command "<command>"
-```
-
-or
-
-```bash
-powershell.exe -File <script.ps1>
-```
-
-Two types of host actions are supported:
-
-1. **Built-in actions (first-class, bundled)**
-2. **User-defined actions (custom PowerShell)**
-
-### Action Types
-
-**1. Built-in Host Actions**
-
-Dockpipe provides a set of predefined, tested actions that are: safe, consistent, cross-platform adaptable (future), zero-config for users.
-
-Examples: `open-url`, `copy-text`, `open-path`, `launch-app`, `fetch-worktree`.
-
-Implementation: PowerShell scripts bundled with Dockpipe, invoked from WSL2, e.g. `powershell.exe -File dockpipe/actions/open-url.ps1 "https://example.com"`.
-
-**2. User-Defined Host Actions**
-
-Users can define custom PowerShell scripts or inline commands to be executed from WSL2 (e.g. `powershell.exe -File custom-script.ps1 "arg1"` or `powershell.exe -Command "Start-Process notepad.exe"`). Use cases: custom integrations, enterprise workflows, project-specific tooling.
-
-### Example Workflow
-
-1. Run Dockpipe isolated task
-2. Task completes
-3. WSL2 runtime triggers host actions: `powershell.exe -File FetchFromWsl2.ps1 "$WORKTREE"`; `powershell.exe -Command "Start-Process code"`
-4. User continues in Windows environment
-
-### Path Handling
-
-Convert WSL paths when passing to Windows: `wslpath -w /mnt/c/Users/you/project`.
-
-### Design Principles
-
-- Container never interacts with Windows directly
-- WSL2 is the only layer invoking host actions
-- Built-in actions preferred for common workflows; user-defined for flexibility
-- Default behavior safe and predictable
-
-### Safety Model
-
-Built-in actions trusted and controlled; user-defined actions explicitly configured; no implicit or hidden host execution; all host actions visible in workflow definitions.
-
-### Future Expansion
-
-Template-level `host-actions` section; cross-platform abstraction (macOS/Linux equivalents); action registry / plugin system; optional allowlist or permission model for enterprise use.
-
-### Key Insight
-
-Workflows should not stop at isolation. They should: **Run → Isolate → Act → Integrate (Host)**. This feature completes the loop and removes the need for manual glue scripts.
-
-Current WSL-oriented usage is documented in **`docs/wsl-windows.md`**.
+- Automate or standardize **tap repo updates** each release (bump `url` / `sha256` in `Formula/dockpipe.rb` — see `packaging/homebrew/README.md`).
+- Optional **codesign / notarize** macOS binaries (releases are currently unsigned archives).
+- **`dockpipe macos doctor`** (Docker, bash, PATH sanity checks).
 
 ---
 
