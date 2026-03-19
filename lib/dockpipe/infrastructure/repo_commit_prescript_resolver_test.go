@@ -82,7 +82,7 @@ func TestCommitOnHostNoRepoReturnsNil(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmp, "x.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := CommitOnHost(tmp, "msg", ""); err != nil {
+	if err := CommitOnHost(tmp, "msg", "", false); err != nil {
 		t.Fatalf("CommitOnHost should skip non-repo and return nil: %v", err)
 	}
 }
@@ -112,7 +112,7 @@ func TestCommitOnHostCreatesCommitAndBundle(t *testing.T) {
 		t.Fatal(err)
 	}
 	bundle := filepath.Join(tmp, "repo.bundle")
-	if err := CommitOnHost(tmp, "test commit", bundle); err != nil {
+	if err := CommitOnHost(tmp, "test commit", bundle, false); err != nil {
 		t.Fatalf("CommitOnHost error: %v", err)
 	}
 
@@ -122,5 +122,114 @@ func TestCommitOnHostCreatesCommitAndBundle(t *testing.T) {
 	}
 	if _, err := os.Stat(bundle); err != nil {
 		t.Fatalf("expected bundle file %q: %v", bundle, err)
+	}
+}
+
+func TestCommitOnHostBundleDefaultIsCurrentBranchOnly(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmp := t.TempDir()
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = tmp
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+		return string(out)
+	}
+
+	run("init", "-b", "main")
+	run("config", "user.email", "test@example.com")
+	run("config", "user.name", "Dockpipe Test")
+	if err := os.WriteFile(filepath.Join(tmp, "README.md"), []byte("v1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "README.md")
+	run("commit", "-m", "init")
+
+	run("checkout", "-b", "side")
+	if err := os.WriteFile(filepath.Join(tmp, "only-side.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "only-side.txt")
+	run("commit", "-m", "side only")
+
+	run("checkout", "main")
+	if err := os.WriteFile(filepath.Join(tmp, "README.md"), []byte("v2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	bundle := filepath.Join(tmp, "thin.bundle")
+	if err := CommitOnHost(tmp, "update main", bundle, false); err != nil {
+		t.Fatalf("CommitOnHost: %v", err)
+	}
+
+	out, err := exec.Command("git", "bundle", "list-heads", bundle).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git bundle list-heads: %v\n%s", err, out)
+	}
+	heads := string(out)
+	if strings.Contains(heads, "refs/heads/side") {
+		t.Fatalf("thin bundle should not advertise side, got:\n%s", heads)
+	}
+	if !strings.Contains(heads, "refs/heads/main") {
+		t.Fatalf("expected refs/heads/main in bundle heads, got:\n%s", heads)
+	}
+}
+
+func TestCommitOnHostBundleAllIncludesEveryHead(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmp := t.TempDir()
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = tmp
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+		return string(out)
+	}
+
+	run("init", "-b", "main")
+	run("config", "user.email", "test@example.com")
+	run("config", "user.name", "Dockpipe Test")
+	if err := os.WriteFile(filepath.Join(tmp, "README.md"), []byte("v1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "README.md")
+	run("commit", "-m", "init")
+
+	run("checkout", "-b", "side")
+	if err := os.WriteFile(filepath.Join(tmp, "only-side.txt"), []byte("x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", "only-side.txt")
+	run("commit", "-m", "side only")
+
+	run("checkout", "main")
+	if err := os.WriteFile(filepath.Join(tmp, "README.md"), []byte("v2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	bundle := filepath.Join(tmp, "fat.bundle")
+	if err := CommitOnHost(tmp, "update main", bundle, true); err != nil {
+		t.Fatalf("CommitOnHost: %v", err)
+	}
+
+	out, err := exec.Command("git", "bundle", "list-heads", bundle).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git bundle list-heads: %v\n%s", err, out)
+	}
+	heads := string(out)
+	if !strings.Contains(heads, "refs/heads/side") || !strings.Contains(heads, "refs/heads/main") {
+		t.Fatalf("expected both branch heads with bundleAll, got:\n%s", heads)
 	}
 }

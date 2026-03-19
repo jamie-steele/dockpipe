@@ -55,7 +55,7 @@ func mergeCommitEnvFromLines(env map[string]string, lines []string) {
 			continue
 		}
 		switch k {
-		case "DOCKPIPE_COMMIT_MESSAGE", "DOCKPIPE_WORK_BRANCH", "DOCKPIPE_BUNDLE_OUT", "GIT_PAT":
+		case "DOCKPIPE_COMMIT_MESSAGE", "DOCKPIPE_WORK_BRANCH", "DOCKPIPE_BUNDLE_OUT", "DOCKPIPE_BUNDLE_ALL", "GIT_PAT":
 			env[k] = v
 		}
 	}

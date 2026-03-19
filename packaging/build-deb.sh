@@ -8,7 +8,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
 _default_ver="$(tr -d ' \t\r\n' < "${REPO_ROOT}/VERSION" 2>/dev/null || true)"
-[[ -z "${_default_ver}" ]] && _default_ver="0.5.8"
+[[ -z "${_default_ver}" ]] && _default_ver="0.6.0"
 VERSION="${1:-${_default_ver}}"
 DEB_ARCH="${2:-amd64}"
 case "${DEB_ARCH}" in
@@ -36,7 +36,7 @@ find "${DEST}/templates" -name "*.sh" -exec chmod 755 {} \; 2>/dev/null || true
 # Go binary (linux/${GOARCH})
 (
   cd "${REPO_ROOT}"
-  GOOS=linux GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o "${DEST}/bin/dockpipe" ./cmd/dockpipe
+  GOOS=linux GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.Version=${VERSION}" -o "${DEST}/bin/dockpipe" ./cmd/dockpipe
 )
 chmod 755 "${DEST}/bin/dockpipe"
 

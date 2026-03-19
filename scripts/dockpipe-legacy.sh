@@ -18,6 +18,8 @@ fi
 export DOCKPIPE_REPO_ROOT
 # shellcheck source=lib/config-vars.sh
 source "${DOCKPIPE_REPO_ROOT}/lib/config-vars.sh"
+# shellcheck source=scripts/branch-slug.sh
+source "${DOCKPIPE_REPO_ROOT}/scripts/branch-slug.sh"
 
 usage() {
   cat <<EOF
@@ -40,7 +42,7 @@ Options (run → isolate → act):
   --act <path>        Act: script after command (e.g. commit-worktree). Runs in container or on host when commit-on-host.
   --resolver <name>   Resolver (claude | codex); sets isolate + command. Use with --repo/--branch.
   --repo <url>        Clone and use a worktree for this repo (with --branch). Worktree on host; commit on host.
-  --branch <name>     Work branch (optional). Omit for new branch each run (e.g. claude/agent-<timestamp>).
+  --branch <name>     Work branch (optional). Omit for new branch each run (e.g. claude/steady-ngrok-calm-worktree).
   --work-path <path>  Subfolder inside repo to open in container (cwd = /work/<path>).
   --work-branch <name> Default branch name when using --repo without --branch.
   --bundle-out <path> After commit-on-host, write a git bundle here.
@@ -414,6 +416,7 @@ DOCKPIPE_REPO_BRANCH=""
 DOCKPIPE_WORK_PATH=""
 DOCKPIPE_WORK_BRANCH=""
 DOCKPIPE_BUNDLE_OUT=""
+DOCKPIPE_BUNDLE_ALL=""
 DOCKPIPE_BUILD=""
 DOCKPIPE_BUILD_CONTEXT=""
 DOCKPIPE_EXTRA_MOUNTS=""
@@ -759,6 +762,7 @@ fi
           DOCKPIPE_COMMIT_MESSAGE=*) export "$e" ;;
           DOCKPIPE_WORK_BRANCH=*) export "$e" ;;
           DOCKPIPE_BUNDLE_OUT=*) export "$e" ;;
+          DOCKPIPE_BUNDLE_ALL=*) export "$e" ;;
         esac
       done <<< "${DOCKPIPE_EXTRA_ENV}"
       DOCKPIPE_ACTION="" # do not mount or run action in container
@@ -807,7 +811,7 @@ if [[ -n "${DOCKPIPE_REPO_URL}" ]] && [[ -z "${DOCKPIPE_REPO_BRANCH}" ]]; then
     fi
   fi
   branch_prefix="${branch_prefix:-dockpipe}"
-  DOCKPIPE_REPO_BRANCH="${DOCKPIPE_WORK_BRANCH:-${branch_prefix}/agent-$(date +%Y%m%d-%H%M%S)}"
+  DOCKPIPE_REPO_BRANCH="${DOCKPIPE_WORK_BRANCH:-${branch_prefix}/$(dockpipe_random_branch_slug)}"
   echo "[dockpipe] No --branch; using new branch: ${DOCKPIPE_REPO_BRANCH}" >&2
 fi
 
@@ -854,12 +858,13 @@ if [[ -n "${DOCKPIPE_COMMIT_ON_HOST:-}" ]] && [[ -n "${DOCKPIPE_EXTRA_ENV:-}" ]]
       DOCKPIPE_COMMIT_MESSAGE=*) export "$e" ;;
       DOCKPIPE_WORK_BRANCH=*) export "$e" ;;
       DOCKPIPE_BUNDLE_OUT=*) export "$e" ;;
+      DOCKPIPE_BUNDLE_ALL=*) export "$e" ;;
       GIT_PAT=*) export "$e" ;;
     esac
   done <<< "${DOCKPIPE_EXTRA_ENV}"
 fi
 
-export DOCKPIPE_IMAGE DOCKPIPE_ACTION DOCKPIPE_WORKDIR DOCKPIPE_WORK_PATH DOCKPIPE_WORK_BRANCH DOCKPIPE_BUNDLE_OUT DOCKPIPE_EXTRA_MOUNTS DOCKPIPE_EXTRA_ENV DOCKPIPE_DETACH DOCKPIPE_DATA_VOLUME DOCKPIPE_DATA_DIR DOCKPIPE_REINIT DOCKPIPE_FORCE DOCKPIPE_COMMIT_ON_HOST
+export DOCKPIPE_IMAGE DOCKPIPE_ACTION DOCKPIPE_WORKDIR DOCKPIPE_WORK_PATH DOCKPIPE_WORK_BRANCH DOCKPIPE_BUNDLE_OUT DOCKPIPE_BUNDLE_ALL DOCKPIPE_EXTRA_MOUNTS DOCKPIPE_EXTRA_ENV DOCKPIPE_DETACH DOCKPIPE_DATA_VOLUME DOCKPIPE_DATA_DIR DOCKPIPE_REINIT DOCKPIPE_FORCE DOCKPIPE_COMMIT_ON_HOST
 
 # Pass build path to runner (runner does not build; we build below before calling dockpipe_run).
 if [[ -n "${DOCKPIPE_BUILD:-}" ]] && [[ -d "${DOCKPIPE_BUILD}" ]]; then

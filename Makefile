@@ -1,9 +1,10 @@
 # Build the Go CLI into bin/dockpipe.bin (bin/dockpipe launcher invokes it).
 # Keep in sync with repo-root VERSION (used by CI / release).
-DEB_VERSION ?= $(shell test -f VERSION && tr -d ' \t\r\n' < VERSION || echo 0.5.8)
+DEB_VERSION ?= $(shell test -f VERSION && tr -d ' \t\r\n' < VERSION || echo 0.6.0)
+GO_LDFLAGS := -s -w -X main.Version=$(DEB_VERSION)
 .PHONY: build test deb deb-all
 build:
-	go build -trimpath -ldflags "-s -w" -o bin/dockpipe.bin ./cmd/dockpipe
+	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o bin/dockpipe.bin ./cmd/dockpipe
 	@echo "Built bin/dockpipe.bin — run via bin/dockpipe"
 
 test:

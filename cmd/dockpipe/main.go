@@ -9,8 +9,18 @@ import (
 	"dockpipe/lib/dockpipe/application"
 )
 
+// Version is set at link time: -X main.Version=X.Y.Z (see Makefile, packaging/build-deb.sh, CI).
+var Version = "dev"
+
 func main() {
 	argv := os.Args[1:]
+	if len(argv) == 1 {
+		switch argv[0] {
+		case "--version", "-v", "-V":
+			fmt.Println(Version)
+			return
+		}
+	}
 	if runtime.GOOS == "windows" {
 		if handled, code := application.TryWindowsWSLBridge(argv, os.Stdin, os.Stdout, os.Stderr); handled {
 			os.Exit(code)

@@ -14,7 +14,7 @@ Usage:
 Options:
   --workflow, --run, --isolate, --act, --resolver, --repo, --branch, --workdir,
   --data-dir, --data-vol, --no-data, --reinit, -f, --mount, --env, --env-file,
-  --var, --build, -d/--detach, -h/--help
+  --var, --build, -d/--detach, -h/--help, --version / -v / -V
 
 Requires: docker, bash (for pre-scripts). Config: YAML (steps:) parsed natively — no python3.
 

@@ -114,8 +114,8 @@ dockpipe windows doctor
 | `--repo <url>` | With `--branch`: worktree on host, commit on host. |
 | `--branch <name>` | Work branch for `--repo` (optional). Omit for a new branch each run; set to use or resume a specific branch. |
 | `--work-path <path>` | Subfolder inside repo to open in container (full repo at `/work`; command cwd = `/work/<path>`). |
-| `--work-branch <name>` | When on `master` and committing on host, create/use this branch (default: `dockpipe/agent-<timestamp>`). |
-| `--bundle-out <path>` | After commit-on-host, write a git bundle at this path (for WSL→Windows fetch). |
+| `--work-branch <name>` | When on `master` and committing on host, create/use this branch (default: `dockpipe/<random-adj-noun-adj-noun>` worktree slug). |
+| `--bundle-out <path>` | After commit-on-host, write a git bundle (default: **committed branch only**; set **`DOCKPIPE_BUNDLE_ALL=1`** for all refs). See [docs/wsl-windows.md](docs/wsl-windows.md). |
 | `--workdir <path>` | Host path mounted at `/work` (default: current dir). |
 | `--data-vol <name>` | Named volume for persistent data (default: `dockpipe-data`). Same volume each run = state persists. |
 | `--data-dir <path>` | Bind mount host path for persistent data (e.g. `$HOME/.dockpipe`). For `--repo`/`--branch`, defaults to `~/.dockpipe` if not set. |

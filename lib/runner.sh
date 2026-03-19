@@ -55,8 +55,21 @@ dockpipe_commit_on_host() {
   git -C "${workdir_host}" add -A
   git -C "${workdir_host}" commit -m "${msg}"
   if [[ -n "${DOCKPIPE_BUNDLE_OUT:-}" ]]; then
-    if git -C "${workdir_host}" bundle create "${DOCKPIPE_BUNDLE_OUT}" --all; then
-      echo "[dockpipe] Bundle written: ${DOCKPIPE_BUNDLE_OUT}" >&2
+    # Default: only the branch that was committed (smaller bundle). Set DOCKPIPE_BUNDLE_ALL=1 for git's --all.
+    if [[ "${DOCKPIPE_BUNDLE_ALL:-}" == "1" ]]; then
+      if git -C "${workdir_host}" bundle create "${DOCKPIPE_BUNDLE_OUT}" --all; then
+        echo "[dockpipe] Bundle written (--all): ${DOCKPIPE_BUNDLE_OUT}" >&2
+      else
+        echo "[dockpipe] Failed to write bundle: ${DOCKPIPE_BUNDLE_OUT}" >&2
+      fi
+    elif [[ -n "${current_branch}" ]]; then
+      if git -C "${workdir_host}" bundle create "${DOCKPIPE_BUNDLE_OUT}" "refs/heads/${current_branch}"; then
+        echo "[dockpipe] Bundle written (branch ${current_branch}): ${DOCKPIPE_BUNDLE_OUT}" >&2
+      else
+        echo "[dockpipe] Failed to write bundle: ${DOCKPIPE_BUNDLE_OUT}" >&2
+      fi
+    elif git -C "${workdir_host}" bundle create "${DOCKPIPE_BUNDLE_OUT}" HEAD; then
+      echo "[dockpipe] Bundle written (HEAD): ${DOCKPIPE_BUNDLE_OUT}" >&2
     else
       echo "[dockpipe] Failed to write bundle: ${DOCKPIPE_BUNDLE_OUT}" >&2
     fi

@@ -11,11 +11,12 @@ func TestMergeCommitEnvFromLines_AllowsKnownKeysOnly(t *testing.T) {
 		"DOCKPIPE_COMMIT_MESSAGE=new msg",
 		"DOCKPIPE_WORK_BRANCH=wb",
 		"DOCKPIPE_BUNDLE_OUT=out.bundle",
+		"DOCKPIPE_BUNDLE_ALL=1",
 		"GIT_PAT=token",
 		"IGNORED=changed",
 		"no_equals_line",
 	})
-	if env["DOCKPIPE_COMMIT_MESSAGE"] != "new msg" || env["DOCKPIPE_WORK_BRANCH"] != "wb" || env["DOCKPIPE_BUNDLE_OUT"] != "out.bundle" || env["GIT_PAT"] != "token" {
+	if env["DOCKPIPE_COMMIT_MESSAGE"] != "new msg" || env["DOCKPIPE_WORK_BRANCH"] != "wb" || env["DOCKPIPE_BUNDLE_OUT"] != "out.bundle" || env["DOCKPIPE_BUNDLE_ALL"] != "1" || env["GIT_PAT"] != "token" {
 		t.Fatalf("expected known keys to be merged, got %#v", env)
 	}
 	if env["IGNORED"] != "keep" {

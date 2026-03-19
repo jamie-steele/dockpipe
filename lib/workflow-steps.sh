@@ -168,6 +168,7 @@ dockpipe_workflow_run_steps() {
           DOCKPIPE_COMMIT_MESSAGE=*) export "$e" ;;
           DOCKPIPE_WORK_BRANCH=*) export "$e" ;;
           DOCKPIPE_BUNDLE_OUT=*) export "$e" ;;
+          DOCKPIPE_BUNDLE_ALL=*) export "$e" ;;
           GIT_PAT=*) export "$e" ;;
         esac
       done <<< "${DOCKPIPE_EXTRA_ENV}"
@@ -307,6 +308,7 @@ dockpipe_workflow_run_steps() {
             DOCKPIPE_COMMIT_MESSAGE=*) export "$e" ;;
             DOCKPIPE_WORK_BRANCH=*) export "$e" ;;
             DOCKPIPE_BUNDLE_OUT=*) export "$e" ;;
+            DOCKPIPE_BUNDLE_ALL=*) export "$e" ;;
           esac
         done <<< "${DOCKPIPE_EXTRA_ENV:-}"
         DOCKPIPE_ACTION=""

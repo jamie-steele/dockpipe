@@ -15,6 +15,12 @@ This configures the target distro, bootstraps WSL host-awareness env (`DOCKPIPE_
 
 **Manual test checklist:** **[manual-qa-windows.md](manual-qa-windows.md)** (install Linux build in WSL via **[manual-qa-core.md](manual-qa-core.md)**).
 
+### Dockpipe vs manual bundle (what’s actually “one branch”)
+
+- **Workflow (llm-worktree + commit-worktree):** work happens in **one new worktree branch** (e.g. `claude/…` or `codex/…`); the **commit** is only on that branch’s tree. From the CLI this feels like a single branch.
+- **The bundle file:** after commit-on-host, dockpipe runs **`git bundle create <path> refs/heads/<current-branch>`** (or **`HEAD`** if detached) — only the branch that was committed, so the file is usually **smaller** than `--all` when other branches have unique commits. Set **`DOCKPIPE_BUNDLE_ALL=1`** to restore the old **`--all`** behavior ([`commit.go`](../lib/dockpipe/infrastructure/commit.go), [`runner.sh`](../lib/runner.sh)).
+- **Windows fetch:** the pain you hit (`refusing to fetch into branch … checked out`) is **Git on Windows**, not the bridge. A bare **`git fetch <bundle>`** (or `+refs/heads/*:refs/heads/*`) tries to move **local** `refs/heads/…` and **fails for the branch you have checked out**. Fetch resolver branches into **`refs/remotes/wsl/…`** first (and only then update other local branches), or restrict refspecs to **`claude/*`** / **`codex/*`** if that’s all you need.
+
 ### Running dockpipe from Windows without opening WSL
 
 After setup, use **`dockpipe.exe`** from PowerShell or CMD. Normal commands are **forwarded into WSL**: your **current Windows folder** becomes the working directory in Linux (via `wslpath`), then `dockpipe` runs there. Only **`dockpipe windows …`** stays on the host. **Windows paths in typical file flags** (e.g. `--workdir`, `--mount`, drive letters and UNC) are rewritten for the Linux argv; the command you pass after **`--`** is not altered.
@@ -79,11 +85,18 @@ dockpipe --workflow llm-worktree --repo https://github.com/org/repo.git --branch
 
 ```powershell
 # Fetch from a git bundle into your Windows repo. Optionally create the bundle from a WSL repo first.
+# Fetches every branch head that EXISTS IN THE BUNDLE into refs/remotes/wsl/* (safe: does not update your checked-out local branch).
+# Dockpipe’s default bundle has only the work branch; a manual "git bundle create --all" has every head.
+# -MirrorLocalBranches: copy wsl/* to local branches (skips the branch you have checked out).
+# -OnlyResolverBranches: when mirroring, only names under claude/* and codex/* (for fat bundles).
 param(
     [Parameter(Mandatory = $true)] [string] $WindowsRepo,
     [Parameter(Mandatory = $true)] [string] $BundlePath,
-    [string] $WSLRepoPath
+    [string] $WSLRepoPath,
+    [switch] $MirrorLocalBranches,
+    [switch] $OnlyResolverBranches
 )
+$ErrorActionPreference = "Stop"
 if ($WSLRepoPath) {
     $root = [System.IO.Path]::GetPathRoot($BundlePath)
     $drive = $root.TrimEnd(':\').ToLower()
@@ -93,8 +106,22 @@ if ($WSLRepoPath) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 Set-Location $WindowsRepo
-git fetch $BundlePath
-exit $LASTEXITCODE
+git fetch $BundlePath "+refs/heads/*:refs/remotes/wsl/*"
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+if ($MirrorLocalBranches) {
+    $current = (git branch --show-current 2>$null).Trim()
+    $refs = git for-each-ref "refs/remotes/wsl" --format="%(refname)"
+    foreach ($ref in $refs) {
+        if ($ref -notmatch '^refs/remotes/wsl/(.+)$') { continue }
+        $name = $Matches[1]
+        if ($OnlyResolverBranches -and ($name -notmatch '^(claude|codex)/')) { continue }
+        if ($name -eq $current) { continue }
+        git show-ref -q --verify "refs/heads/$name" 2>$null | Out-Null
+        if ($LASTEXITCODE -eq 0) { git branch -f $name $ref } else { git branch $name $ref }
+    }
+}
+exit 0
 ```
 
 Run:
@@ -104,3 +131,7 @@ Run:
 ```
 
 To create the bundle from an existing WSL repo (no dockpipe): pass `-WSLRepoPath "/home/YOUR_USER/source/YOUR_REPO"`.
+
+To also align **local** branch tips with the bundle (except the branch you have checked out): add **`-MirrorLocalBranches`**. If the bundle was built with **`--all`** and you only want **claude/** and **codex/** locals: **`-MirrorLocalBranches -OnlyResolverBranches`**.
+
+**Even smaller bundles (optional):** Git can pack only commits not reachable from a basis (e.g. `origin/main..HEAD`), but dockpipe does not pick a basis for you; the default **single-branch** bundle already drops **other branch tips** and their unique commits from the pack.

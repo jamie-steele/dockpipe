@@ -27,13 +27,13 @@ Use **`--var`** for one-off overrides; use **`.env`** files for local secrets an
 | `--run <path>` | **Run:** script(s) on host before container. Can be repeated. |
 | `--isolate <name>` | **Isolate:** image or template (base-dev, claude, codex, …). Builds if template. |
 | `--act <path>` | **Act:** script after command (e.g. commit-worktree). |
-| `--resolver <name>` | Resolver (claude, codex); sets isolate + command. Use with `--repo`. |
-| `--repo <url>` | Clone and use a worktree; worktree on host, commit on host. |
-| `--branch <name>` | Work branch (optional). Omit for new branch each run. |
+| `--resolver <name>` | Resolver (claude, codex); sets isolate + command. Often used with worktree flows. |
+| `--repo <url>` | Clone URL for worktree scripts. If omitted and the run step uses `clone-worktree.sh`, dockpipe sets the URL from **`git remote get-url origin`** in the current dir (or **`--workdir`**). When that URL matches your **`origin`**, the worktree is created from **your local checkout** (current branch/HEAD + uncommitted changes via stash), not from a fresh mirror of the default remote branch. |
+| `--branch <name>` | Work branch (optional). If omitted (with `--repo` / worktree flow), dockpipe picks **`prefix/adjective-noun-adjective-noun`** (crypto-random dev-flavored words, huge namespace). Override fully with **`--work-branch`**. |
 | `--workdir <path>` | Host path to mount at `/work`. Default: current directory. |
 | `--work-path <path>` | Subfolder inside repo as cwd. |
-| `--bundle-out <path>` | After commit-on-host, write a git bundle here. |
-| `--env KEY=VAL` | Pass env var into container. Can be repeated. |
+| `--bundle-out <path>` | After commit-on-host, write a git bundle here (default: **current branch only** — smaller than `--all`). Set env **`DOCKPIPE_BUNDLE_ALL=1`** for `git bundle create … --all`. |
+| `--env KEY=VAL` | Pass env var into container. Can be repeated. When `/work` is a git worktree, dockpipe also sets **`DOCKPIPE_WORKTREE_BRANCH`**, **`DOCKPIPE_WORKTREE_HEAD`** (full SHA), or **`DOCKPIPE_WORKTREE_DETACHED=1`** from the **host** `git` view (so tools in the container can read branch truth without running `git` first). |
 | `--mount <host:container>` | Extra volume. Can be repeated. |
 | `--data-dir <path>` | Bind mount for persistent data. |
 | `--no-data` | Do not mount the data volume. |

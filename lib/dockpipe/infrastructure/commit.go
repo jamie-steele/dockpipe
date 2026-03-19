@@ -8,7 +8,8 @@ import (
 )
 
 // CommitOnHost runs git add/commit in workdir (like commit-worktree on host).
-func CommitOnHost(workdir, message, bundleOut string) error {
+// If bundleOut is set, bundleAll selects git's --all; otherwise only refs/heads/<current> (or HEAD if detached).
+func CommitOnHost(workdir, message, bundleOut string, bundleAll bool) error {
 	check := exec.Command("git", "-C", workdir, "rev-parse", "--is-inside-work-tree")
 	if out, err := check.CombinedOutput(); err != nil || !strings.Contains(string(out), "true") {
 		fmt.Fprintln(os.Stderr, "[dockpipe] Not a git repo; skipping commit.")
@@ -38,12 +39,27 @@ func CommitOnHost(workdir, message, bundleOut string) error {
 		return err
 	}
 	if bundleOut != "" {
-		b := exec.Command("git", "-C", workdir, "bundle", "create", bundleOut, "--all")
+		branch := strings.TrimSpace(string(cur))
+		gitArgs := []string{"-C", workdir, "bundle", "create", bundleOut}
+		if bundleAll {
+			gitArgs = append(gitArgs, "--all")
+		} else if branch != "" {
+			gitArgs = append(gitArgs, "refs/heads/"+branch)
+		} else {
+			gitArgs = append(gitArgs, "HEAD")
+		}
+		b := exec.Command("git", gitArgs...)
 		if out, err := b.CombinedOutput(); err != nil {
 			fmt.Fprintf(os.Stderr, "[dockpipe] Failed to write bundle: %s\n", bundleOut)
 			return fmt.Errorf("git bundle: %w\n%s", err, out)
 		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] Bundle written: %s\n", bundleOut)
+		if bundleAll {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Bundle written (--all): %s\n", bundleOut)
+		} else if branch != "" {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Bundle written (branch %s): %s\n", branch, bundleOut)
+		} else {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Bundle written (HEAD): %s\n", bundleOut)
+		}
 	}
 	return nil
 }

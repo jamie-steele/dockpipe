@@ -2,6 +2,7 @@ package application
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -229,5 +230,80 @@ func TestRunAutoBranchForRepoWithoutBranch(t *testing.T) {
 	}
 	if gotRunOpts.Image == "" {
 		t.Fatalf("expected run container options to be populated")
+	}
+}
+
+func TestRunInfersOriginWhenWorkflowUsesCloneWorktree(t *testing.T) {
+	withRunSeams(t)
+	gitDir := t.TempDir()
+	if out, err := exec.Command("git", "-C", gitDir, "init").CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	wantURL := "https://example.test/unite.git"
+	if out, err := exec.Command("git", "-C", gitDir, "remote", "add", "origin", wantURL).CombinedOutput(); err != nil {
+		t.Fatalf("git remote add: %v\n%s", err, out)
+	}
+
+	repoRoot := t.TempDir()
+	wfDir := filepath.Join(repoRoot, "templates", "wfinfer")
+	if err := os.MkdirAll(filepath.Join(wfDir, "resolvers"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `run: scripts/clone-worktree.sh
+act: scripts/noop.sh
+isolate: codex
+`
+	if err := os.WriteFile(filepath.Join(wfDir, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfDir, "resolvers", "codex"), []byte("DOCKPIPE_RESOLVER_TEMPLATE=codex\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repoRoot, "scripts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"clone-worktree.sh", "noop.sh"} {
+		if err := os.WriteFile(filepath.Join(repoRoot, "scripts", name), []byte("#!/usr/bin/env bash\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	repoRootAppFn = func() (string, error) { return repoRoot, nil }
+	templateBuildAppFn = func(repoRoot, name string) (string, string, bool) {
+		return "dockpipe-codex", "/build", true
+	}
+	maybeVersionTagAppFn = func(repoRoot, image string) string { return image }
+	dockerBuildAppFn = func(image, dockerfileDir, contextDir string) error { return nil }
+
+	var capturedPreEnv []string
+	sourceHostScriptAppFn = func(scriptPath string, env []string) (map[string]string, error) {
+		capturedPreEnv = append([]string(nil), env...)
+		return map[string]string{"DOCKPIPE_WORKDIR": filepath.Join(gitDir, "fake-worktree")}, nil
+	}
+
+	runContainerAppFn = func(o infrastructure.RunOpts, argv []string) (int, error) {
+		return 0, nil
+	}
+
+	oldWd, _ := os.Getwd()
+	if err := os.Chdir(gitDir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	err := Run([]string{"--workflow", "wfinfer", "--", "echo", "hi"}, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	want := "DOCKPIPE_REPO_URL=" + wantURL
+	found := false
+	for _, e := range capturedPreEnv {
+		if e == want {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected %q in pre-script env, got:\n%s", want, strings.Join(capturedPreEnv, "\n"))
 	}
 }

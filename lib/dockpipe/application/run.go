@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
+	"strings"
 
 	"dockpipe/lib/dockpipe/domain"
 	"dockpipe/lib/dockpipe/infrastructure"
@@ -26,6 +26,41 @@ var (
 	runStepsAppFn         = runSteps
 	osExitAppFn           = os.Exit
 )
+
+func preScriptsIncludeCloneWorktree(paths []string) bool {
+	for _, p := range paths {
+		if strings.HasSuffix(p, "clone-worktree.sh") {
+			return true
+		}
+	}
+	return false
+}
+
+// setUserRepoRootForWorktree sets DOCKPIPE_USER_REPO_ROOT when cwd/--workdir is a clone whose
+// origin matches repoURL, so clone-worktree.sh can use git worktree add from that checkout
+// (current HEAD + optional stash of uncommitted work) instead of a mirror from origin/HEAD.
+func setUserRepoRootForWorktree(env map[string]string, opts *CliOpts, repoURL string) {
+	gitDir, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	if opts.Workdir != "" {
+		gitDir = opts.Workdir
+	}
+	top, err := infrastructure.GitTopLevel(gitDir)
+	if err != nil {
+		return
+	}
+	origin, err := infrastructure.GitRemoteGetURL(gitDir, "origin")
+	if err != nil {
+		return
+	}
+	if !infrastructure.RepoURLsEquivalent(origin, repoURL) {
+		return
+	}
+	env["DOCKPIPE_USER_REPO_ROOT"] = top
+	fmt.Fprintf(os.Stderr, "[dockpipe] Worktree will branch from your local repo: %s\n", top)
+}
 
 // Run is the CLI entry (after stripping os.Args[0]).
 func Run(argv []string, baseEnviron []string) error {
@@ -152,6 +187,24 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 	}
 
+	// llm-worktree flow: clone-worktree.sh needs DOCKPIPE_REPO_URL. Without --repo we infer
+	// origin from the current checkout (or --workdir) so workflow runs don't silently skip.
+	if !stepsMode && opts.RepoURL == "" && preScriptsIncludeCloneWorktree(opts.PreScripts) {
+		gitDir, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("cannot infer --repo (getwd): %w", err)
+		}
+		if opts.Workdir != "" {
+			gitDir = opts.Workdir
+		}
+		u, err := infrastructure.GitRemoteGetURL(gitDir, "origin")
+		if err != nil {
+			return fmt.Errorf("workflow run includes clone-worktree.sh but --repo was not set and origin URL could not be read from %s: %w\n(hint: pass --repo <url> or run from a git clone with `git remote add origin ...`)", gitDir, err)
+		}
+		opts.RepoURL = u
+		fmt.Fprintf(os.Stderr, "[dockpipe] No --repo; using git origin URL from %s\n", gitDir)
+	}
+
 	userIso := opts.Isolate
 	userAct := opts.Action
 
@@ -218,7 +271,11 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 		wb := opts.WorkBranch
 		if wb == "" {
-			wb = prefix + "/agent-" + time.Now().Format("20060102-150405")
+			slug, err := domain.RandomWorkBranchSlug()
+			if err != nil {
+				return fmt.Errorf("generate work branch name: %w", err)
+			}
+			wb = prefix + "/" + slug
 		}
 		opts.RepoBranch = wb
 		envMap["DOCKPIPE_REPO_BRANCH"] = wb
@@ -236,6 +293,15 @@ func Run(argv []string, baseEnviron []string) error {
 			dataVol = ""
 		}
 		opts.PreScripts = []string{filepath.Join(repoRoot, "scripts/clone-worktree.sh")}
+	}
+
+	// Drop inherited DOCKPIPE_WORKDIR before pre-scripts: a leftover export (or workflow .env)
+	// would be passed into bash and survive env -0 if clone-worktree ever exited without exporting.
+	if !stepsMode && preScriptsIncludeCloneWorktree(opts.PreScripts) {
+		if opts.RepoURL != "" {
+			setUserRepoRootForWorktree(envMap, opts, opts.RepoURL)
+		}
+		delete(envMap, "DOCKPIPE_WORKDIR")
 	}
 
 	envSlice := domain.EnvMapToSlice(envMap)
@@ -303,7 +369,10 @@ func Run(argv []string, baseEnviron []string) error {
 		return fmt.Errorf("no command given after --")
 	}
 
-	extraDocker := domain.EnvMapToSlice(domain.EnvSliceToMap(opts.ExtraEnvLines))
+	dockerEnvMap := domain.EnvSliceToMap(opts.ExtraEnvLines)
+	workHostForEnv := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
+	mergeWorktreeGitDockerEnv(dockerEnvMap, workHostForEnv)
+	extraDocker := domain.EnvMapToSlice(dockerEnvMap)
 
 	if stepsMode {
 		return runStepsAppFn(runStepsOpts{
@@ -331,9 +400,21 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 	}
 
+	workHost := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
+	if commitOnHost && strings.TrimSpace(envMap["DOCKPIPE_WORKDIR"]) != "" {
+		fmt.Fprintf(os.Stderr, "[dockpipe] Mounting /work from host: %s\n", envMap["DOCKPIPE_WORKDIR"])
+	}
+	if strings.TrimSpace(envMap["DOCKPIPE_WORKDIR"]) != "" {
+		if b := dockerEnvMap["DOCKPIPE_WORKTREE_BRANCH"]; b != "" {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Passing to container: DOCKPIPE_WORKTREE_BRANCH=%s\n", b)
+		} else if dockerEnvMap["DOCKPIPE_WORKTREE_DETACHED"] == "1" {
+			fmt.Fprintln(os.Stderr, "[dockpipe] Passing to container: DOCKPIPE_WORKTREE_DETACHED=1")
+		}
+	}
+
 	rc, err := runContainerAppFn(infrastructure.RunOpts{
 		Image:         image,
-		WorkdirHost:   firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir),
+		WorkdirHost:   workHost,
 		WorkPath:      opts.WorkPath,
 		ActionPath:    actionForContainer,
 		ExtraMounts:   opts.ExtraMounts,
@@ -346,6 +427,7 @@ func Run(argv []string, baseEnviron []string) error {
 		CommitOnHost:  commitOnHost,
 		CommitMessage: envMap["DOCKPIPE_COMMIT_MESSAGE"],
 		BundleOut:     firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut),
+		BundleAll:     strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1",
 	}, rest)
 	if err != nil {
 		return err

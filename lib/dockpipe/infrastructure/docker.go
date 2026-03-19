@@ -78,6 +78,7 @@ type RunOpts struct {
 	CommitOnHost  bool
 	CommitMessage string
 	BundleOut     string
+	BundleAll     bool
 	Stdin         *os.File
 	Stdout        *os.File
 	Stderr        *os.File
@@ -268,7 +269,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	_ = execCommandFn("docker", "rm", cid).Run()
 
 	if o.CommitOnHost {
-		_ = commitOnHostFn(workHost, o.CommitMessage, o.BundleOut)
+		_ = commitOnHostFn(workHost, o.CommitMessage, o.BundleOut, o.BundleAll)
 	}
 	return rc, nil
 }

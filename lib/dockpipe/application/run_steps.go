@@ -403,13 +403,17 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 		}
 	}
 
+	workHost := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
+	dockerForRun := maps.Clone(dockerEnv)
+	mergeWorktreeGitDockerEnv(dockerForRun, workHost)
+
 	runOpts = infrastructure.RunOpts{
 		Image:         image,
-		WorkdirHost:   firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir),
+		WorkdirHost:   workHost,
 		WorkPath:      o.opts.WorkPath,
 		ActionPath:    actionPath,
 		ExtraMounts:   o.opts.ExtraMounts,
-		ExtraEnv:      domain.EnvMapToSlice(dockerEnv),
+		ExtraEnv:      domain.EnvMapToSlice(dockerForRun),
 		DataVolume:    o.dataVol,
 		DataDir:       o.dataDir,
 		Reinit:        o.opts.Reinit,
@@ -418,6 +422,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 		CommitOnHost:  commitOnHost,
 		CommitMessage: envMap["DOCKPIPE_COMMIT_MESSAGE"],
 		BundleOut:     firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], o.opts.BundleOut),
+		BundleAll:     strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1",
 	}
 	return argv, runOpts, dockerfileDir, contextDir, nil
 }
