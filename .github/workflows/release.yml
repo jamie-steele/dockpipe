@@ -134,7 +134,8 @@ jobs:
       - name: Run tests
         run: go test ./...
 
-      - name: Install WiX Toolset v3.14
+      # One pwsh step: GITHUB_ENV mangles/truncates Windows paths for WIX — pass -WixRoot into build.ps1 instead.
+      - name: Install WiX and build MSI
         shell: pwsh
         run: |
           $ProgressPreference = 'SilentlyContinue'
@@ -145,25 +146,17 @@ jobs:
           $candle = Get-ChildItem -LiteralPath $dest -Recurse -Filter "candle.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $candle) { throw "candle.exe not found under WiX zip extract" }
           $wixRoot = $candle.Directory.Parent.FullName
-          # GITHUB_ENV parses backslashes as escapes (\w, \a, \t, …) and truncates paths — use forward slashes.
-          $wixForEnv = $wixRoot.Replace('\', '/')
-          "WIX=$wixForEnv" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8NoBOM
-
-      - name: Build MSI
-        shell: pwsh
-        run: |
+          if (-not (Test-Path (Join-Path $wixRoot "bin\candle.exe"))) {
+            throw "WiX root invalid: $wixRoot"
+          }
           $v = "${{ needs.meta.outputs.version }}"
           go build -trimpath -ldflags "-s -w -X main.Version=$v" -o dockpipe.exe ./cmd/dockpipe
           New-Item -ItemType Directory -Force -Path msi-dist | Out-Null
-          $wixNorm = [IO.Path]::GetFullPath($env:WIX.Replace('/', '\'))
-          if (-not $env:WIX -or -not (Test-Path (Join-Path $wixNorm "bin\candle.exe"))) {
-            throw "WIX is not set or invalid after Install WiX step (GITHUB_ENV). WIX='$($env:WIX)'"
-          }
-          # Run build.ps1 in this pwsh process so job env (WIX) is visible; nested powershell.exe can miss GITHUB_ENV on some runners.
           & (Join-Path $PWD "packaging\msi\build.ps1") `
             -Version $v `
             -SourceExe (Join-Path $PWD "dockpipe.exe") `
-            -OutDir (Join-Path $PWD "msi-dist")
+            -OutDir (Join-Path $PWD "msi-dist") `
+            -WixRoot $wixRoot
 
       - uses: actions/upload-artifact@v7
         with:

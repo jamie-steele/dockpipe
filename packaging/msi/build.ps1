@@ -3,7 +3,9 @@
 param(
     [Parameter(Mandatory = $true)][string]$Version,
     [Parameter(Mandatory = $true)][string]$SourceExe,
-    [Parameter(Mandatory = $true)][string]$OutDir
+    [Parameter(Mandatory = $true)][string]$OutDir,
+    # Optional: WiX root (folder containing bin\candle.exe). Prefer passing this in CI — GITHUB_ENV can mangle Windows paths.
+    [Parameter(Mandatory = $false)][string]$WixRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,8 +18,8 @@ $fourPart = if ($Version -match '^\d+\.\d+\.\d+$') { "$Version.0" } elseif ($Ver
     throw "Version must be semver like 0.6.0 or 0.6.0.0, got: $Version"
 }
 
-# CI may set WIX with forward slashes (GITHUB_ENV treats backslashes as escape sequences).
-$rawWix = $env:WIX
+$rawWix = if ($WixRoot) { $WixRoot } else { $env:WIX }
+# CI may set WIX with forward slashes; normalize for Windows APIs.
 if (-not $rawWix) {
     throw "WIX environment variable must point to WiX Toolset v3 root (bin\candle.exe). Install from https://github.com/wixtoolset/wix3/releases"
 }
