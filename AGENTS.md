@@ -119,7 +119,7 @@ dockpipe --mount /var/run/docker.sock:/var/run/docker.sock --isolate agent-dev -
 
 **Releases:** **`VERSION`** + **`releasenotes/X.Y.Z.md`**; **PR `staging` → `master`** runs **Release** on merge (see **[docs/branching.md](docs/branching.md)**). Contributor PRs target **`staging`**; the **ship** PR must **bump `VERSION`** and update the matching release notes file.
 
-**CI / security:** **`govulncheck`**, **`gosec`** with **`.gosec.json`** (`global.exclude`: CLI-typical noise — subprocess/git, user-chosen paths, workspace `0o755`/`0o644`, template `WalkDir`); **CodeQL** uses **`.github/codeql/codeql-config.yml`** (`security-extended`) via **`.github/workflows/codeql.yml`** → **Security → Code scanning**. Plus tests; **release-notes + VERSION gate** only on PRs **into `master`** — see **`docs/branching.md`**.
+**CI / security:** **`.github/workflows/ci.yml`** — job **`test`** (**`govulncheck`**, **`gosec`** with **`.gosec.json`**, **`go test`**, **`make`**, **`.deb`**, shell + integration tests); job **`codeql`** (**`security-extended`** via **`.github/codeql/codeql-config.yml`**) → **Security → Code scanning**. **release-notes + VERSION gate** only on PRs **into `master`** — see **`docs/branching.md`**.
 
 ---
 

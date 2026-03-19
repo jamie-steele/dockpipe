@@ -204,7 +204,7 @@ Scripts that run after your command. Use them for anything: commit, export a pat
 ## Docs & repo
 
 - [Blog: Run, Isolate, and Act](https://dev.to/jamie-steele/run-isolate-and-act-a-minimal-primitive-for-container-workflows-553m)
-- [Contributing](CONTRIBUTING.md) (includes **[platform testing](CONTRIBUTING.md#platform-testing-we-need-you)** — we can’t validate every OS/arch; help on yours) · **[Manual QA](docs/manual-qa.md)** ([core](docs/manual-qa-core.md) · [macOS](docs/manual-qa-macos.md) · [Windows/WSL](docs/manual-qa-windows.md)) · [Architecture](docs/architecture.md) · **[Workflow YAML](docs/workflow-yaml.md)** · [CLI reference](docs/cli-reference.md) · [Chaining](docs/chaining.md) · [Install](docs/install.md) · [Releasing](docs/releasing.md) · [Branching & CI](docs/branching.md) · [AGENTS.md](AGENTS.md)
+- [Contributing](CONTRIBUTING.md) (includes **[platform testing](CONTRIBUTING.md#platform-testing-we-need-you)** — we can’t validate every OS/arch; help on yours) · **[Security](SECURITY.md)** · **[Manual QA](docs/manual-qa.md)** ([core](docs/manual-qa-core.md) · [macOS](docs/manual-qa-macos.md) · [Windows/WSL](docs/manual-qa-windows.md)) · [Architecture](docs/architecture.md) · **[Workflow YAML](docs/workflow-yaml.md)** · [CLI reference](docs/cli-reference.md) · [Chaining](docs/chaining.md) · [Install](docs/install.md) · [Releasing](docs/releasing.md) · [Branching & CI](docs/branching.md) · [AGENTS.md](AGENTS.md)
 - **Tests:** `bash tests/run_tests.sh` (unit tests, from repo root). **Integration tests** (Docker + agent-dev): [tests/integration-tests/README.md](tests/integration-tests/README.md) → `bash tests/integration-tests/run.sh`
 
 ## Disclaimer

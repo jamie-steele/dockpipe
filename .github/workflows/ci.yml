@@ -1,30 +1,34 @@
-# govulncheck + gosec (SAST linter) + full tests + release-notes gate on PRs.
-# Semantic SAST: .github/workflows/codeql.yml
+# Tests, packaging, gosec/govulncheck, and CodeQL in one workflow (one Actions run per trigger).
 # See docs/branching.md
 name: CI
 
 on:
-  # Manual run from any branch (Actions → CI → Run workflow) — no PR required.
   workflow_dispatch:
   pull_request:
     branches: [master, staging]
   push:
     branches: [master, staging]
+  schedule:
+    - cron: "18 11 * * 1" # weekly Monday ~ UTC — CodeQL only (test job skipped)
 
-permissions:
-  contents: read
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: "1.22"
+          go-version: "1.25.8"
 
       - name: govulncheck
         run: |
@@ -34,7 +38,7 @@ jobs:
       - name: gosec (SAST)
         run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          "$(go env GOPATH)/bin/gosec" -conf .gosec.json -fmt text -stdout -verbose=text ./...
+          "$(go env GOPATH)/bin/gosec" -conf .gosec.json -fmt text -stdout ./...
 
       - name: Go test
         run: go test ./...
@@ -82,3 +86,33 @@ jobs:
 
       - name: Integration tests (Docker)
         run: bash tests/integration-tests/run.sh
+
+  codeql:
+    name: CodeQL (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: go
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:go"

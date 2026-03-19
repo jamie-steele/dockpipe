@@ -32,7 +32,7 @@ jobs:
       tag: ${{ steps.m.outputs.tag }}
       dry_run: ${{ steps.m.outputs.dry_run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - id: m
         shell: bash
@@ -74,11 +74,11 @@ jobs:
     needs: [meta]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: "1.22"
+          go-version: "1.25.8"
 
       - name: Run tests
         run: go test ./...
@@ -124,11 +124,11 @@ jobs:
     needs: [meta]
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
-          go-version: "1.22"
+          go-version: "1.25.8"
 
       - name: Run tests
         run: go test ./...
@@ -166,7 +166,7 @@ jobs:
     needs: [meta, build-ubuntu, build-msi]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/download-artifact@v4
         with:
@@ -234,7 +234,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Update dev.to article
         shell: bash

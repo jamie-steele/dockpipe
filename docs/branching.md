@@ -35,6 +35,10 @@ Turn off **“allow administrators to bypass”** if you want **your own** chang
 4. **PR `staging` → `master`:** CI runs **with** the VERSION + release-notes gate → merge **ships**.
 5. **Release dry run:** **Actions → Release → Run workflow** → branch + **dry_run: true**.
 
+### Dependabot
+
+**`.github/dependabot.yml`** runs **weekly** version updates for **`gomod`** (repo root) and **`github-actions`** (workflows; grouped into one PR). PRs target **`staging`** so dependency bumps do not push straight to **`master`** (which would run **Release**). Ensure branch **`staging`** exists, or remove **`target-branch`** until it does.
+
 ---
 
 ## `VERSION` + `releasenotes/X.Y.Z.md`
@@ -53,15 +57,26 @@ Turn off **“allow administrators to bypass”** if you want **your own** chang
 
 ---
 
+## One PR → one CI workflow run (two jobs)
+
+**`.github/workflows/ci.yml`** is a single workflow named **CI**. Each trigger creates **one** run in the Actions list. Inside it, two **jobs** run in parallel:
+
+- **`test`** — **`govulncheck`**, **`gosec`**, **`go test`**, **`make`**, **`.deb`**, shell + integration tests, and (on PRs to **`master`**) the VERSION / release-notes gate.
+- **`codeql`** — **CodeQL** (Go, **`security-extended`** via **`.github/codeql/codeql-config.yml`**), uploads to **Security → Code scanning** when allowed.
+
+On the **weekly schedule**, only **`codeql`** runs ( **`test`** is skipped).
+
+---
+
 ## What runs when
 
 | Event | Workflow | What it does |
 |--------|-----------|----------------|
-| **PR** → **`staging`** | **`ci.yml`** | **`govulncheck`**, **`gosec`**, tests, **`make`**, **`.deb`**, shell + integration tests — **no** VERSION / release-notes gate |
-| **PR** → **`master`** | **`ci.yml`** | Same as above **+** **release notes + VERSION bump** gate |
-| **Push** **`staging`** | **`ci.yml`** | Same as **PR → `staging`** row (no gate on push) |
-| **workflow_dispatch** | **`ci.yml`** | Same jobs **except** the PR-only gate |
-| **PR** / **push** **`master`** / **`staging`** | **`codeql.yml`** | **CodeQL** (Go, `security-extended`) |
+| **PR** → **`staging`** | **`ci.yml`** | Jobs **`test`** + **`codeql`** — **no** VERSION / release-notes gate on **`test`** |
+| **PR** → **`master`** | **`ci.yml`** | Same + **release notes + VERSION bump** on **`test`** |
+| **Push** **`staging`** / **`master`** | **`ci.yml`** | **`test`** + **`codeql`** (no VERSION gate on push) |
+| **workflow_dispatch** | **`ci.yml`** | **`test`** + **`codeql`** (no VERSION gate) |
+| **Schedule** (weekly) | **`ci.yml`** | **`codeql`** only |
 | **Push** **`master`** (merge) | **`release.yml`** | Full build + **GitHub Release** `v$(cat VERSION)`; optional **dev.to** ([devto.md](devto.md)) |
 | **workflow_dispatch** on Release | **`release.yml`** | Same pipeline; **dry_run** optional |
 
