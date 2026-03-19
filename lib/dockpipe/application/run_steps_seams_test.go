@@ -92,7 +92,8 @@ func TestRunStepPreScripts_UsesInjectedSourceFunction(t *testing.T) {
 		if o.envMap["SEEN"] != "1" {
 			t.Fatalf("expected env mutation from source script, got %#v", o.envMap)
 		}
-		wantPath := filepath.Join("/wf", "local/pre.sh")
+		// ResolveWorkflowScript returns ToSlash paths on every GOOS (see infrastructure/paths.go).
+		wantPath := filepath.ToSlash(filepath.Join("/wf", "local/pre.sh"))
 		if o.envMap["FROM_PRE"] != wantPath {
 			t.Fatalf("expected resolved workflow path %q, got %q", wantPath, o.envMap["FROM_PRE"])
 		}
