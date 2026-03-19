@@ -14,6 +14,14 @@ import (
 	"dockpipe/lib/dockpipe/infrastructure"
 )
 
+var (
+	dockerBuildFn      = infrastructure.DockerBuild
+	runContainerFn     = infrastructure.RunContainer
+	sourceHostScriptFn = infrastructure.SourceHostScript
+	osStatFn           = os.Stat
+	getwdFn            = os.Getwd
+)
+
 type runStepsOpts struct {
 	wf             *domain.Workflow
 	wfRoot         string
@@ -83,11 +91,11 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 		return err
 	}
 	if buildDir != "" && buildCtx != "" {
-		if err := infrastructure.DockerBuild(runOpts.Image, buildDir, buildCtx); err != nil {
+		if err := dockerBuildFn(runOpts.Image, buildDir, buildCtx); err != nil {
 			return err
 		}
 	}
-	rc, err := infrastructure.RunContainer(runOpts, argv)
+	rc, err := runContainerFn(runOpts, argv)
 	if err != nil {
 		return err
 	}
@@ -97,7 +105,7 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 	}
 	wd := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
 	if wd == "" {
-		wd, _ = os.Getwd()
+		wd, _ = getwdFn()
 	}
 	applyOutputsFile(filepath.Join(wd, step.OutputsPath()), o.envMap, dockerEnv, o.locked, nil, "")
 	return nil
@@ -147,7 +155,7 @@ func runParallelBatch(o *runStepsOpts, from, to, n int, dockerEnv map[string]str
 		step := o.wf.Steps[idx]
 		wd := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
 		if wd == "" {
-			wd, _ = os.Getwd()
+			wd, _ = getwdFn()
 		}
 		src := step.DisplayName(idx)
 		applyOutputsFile(filepath.Join(wd, step.OutputsPath()), o.envMap, dockerEnv, o.locked, mergeLog, src)
@@ -222,7 +230,7 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 			continue
 		}
 		done[key] = struct{}{}
-		if err := infrastructure.DockerBuild(runOpts.Image, buildDir, buildCtx); err != nil {
+		if err := dockerBuildFn(runOpts.Image, buildDir, buildCtx); err != nil {
 			return err
 		}
 	}
@@ -255,11 +263,11 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 		if p == "" {
 			continue
 		}
-		if _, err := os.Stat(p); err != nil {
+		if _, err := osStatFn(p); err != nil {
 			return fmt.Errorf("pre-script not found: %s", p)
 		}
 		fmt.Fprintf(os.Stderr, "[dockpipe] [parallel %d] pre-script: %s\n", idx+1, p)
-		em, err := infrastructure.SourceHostScript(p, envSlice)
+		em, err := sourceHostScriptFn(p, envSlice)
 		if err != nil {
 			return err
 		}
@@ -277,7 +285,7 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 	if err != nil {
 		return err
 	}
-	rc, err := infrastructure.RunContainer(runOpts, argv)
+	rc, err := runContainerFn(runOpts, argv)
 	if err != nil {
 		return err
 	}
@@ -311,11 +319,11 @@ func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {
 		if p == "" {
 			continue
 		}
-		if _, err := os.Stat(p); err != nil {
+		if _, err := osStatFn(p); err != nil {
 			return fmt.Errorf("pre-script not found: %s", p)
 		}
 		fmt.Fprintf(os.Stderr, "[dockpipe] Running pre-script: %s\n", p)
-		em, err := infrastructure.SourceHostScript(p, o.envSlice)
+		em, err := sourceHostScriptFn(p, o.envSlice)
 		if err != nil {
 			return err
 		}
@@ -385,7 +393,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 	actionPath := actAbs
 	commitOnHost := false
 	if actionPath != "" {
-		if _, err := os.Stat(actionPath); err != nil {
+		if _, err := osStatFn(actionPath); err != nil {
 			return nil, runOpts, "", "", fmt.Errorf("action script not found: %s", actionPath)
 		}
 		if infrastructure.IsBundledCommitWorktree(actionPath, o.repoRoot) {
@@ -415,7 +423,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 }
 
 func mustGetwd() string {
-	wd, _ := os.Getwd()
+	wd, _ := getwdFn()
 	return wd
 }
 

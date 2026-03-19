@@ -10,6 +10,23 @@ import (
 	"dockpipe/lib/dockpipe/infrastructure"
 )
 
+var (
+	repoRootAppFn         = infrastructure.RepoRoot
+	loadWorkflowAppFn     = infrastructure.LoadWorkflow
+	loadResolverFileAppFn = infrastructure.LoadResolverFile
+	templateBuildAppFn    = infrastructure.TemplateBuild
+	maybeVersionTagAppFn  = infrastructure.MaybeVersionTag
+	resolveActionPathFn   = infrastructure.ResolveActionPath
+	sourceHostScriptAppFn = infrastructure.SourceHostScript
+	dockerBuildAppFn      = infrastructure.DockerBuild
+	runContainerAppFn     = infrastructure.RunContainer
+	resolvePreScriptAppFn = infrastructure.ResolvePreScriptPath
+	resolveWorkflowAppFn  = infrastructure.ResolveWorkflowScript
+	isBundledCommitAppFn  = infrastructure.IsBundledCommitWorktree
+	runStepsAppFn         = runSteps
+	osExitAppFn           = os.Exit
+)
+
 // Run is the CLI entry (after stripping os.Args[0]).
 func Run(argv []string, baseEnviron []string) error {
 	if len(argv) == 0 {
@@ -29,7 +46,7 @@ func Run(argv []string, baseEnviron []string) error {
 		return cmdTemplate(argv[1:])
 	}
 
-	repoRoot, err := infrastructure.RepoRoot()
+	repoRoot, err := repoRootAppFn()
 	if err != nil {
 		return err
 	}
@@ -52,7 +69,7 @@ func Run(argv []string, baseEnviron []string) error {
 		if _, err := os.Stat(wfConfig); err != nil {
 			return fmt.Errorf("workflow %q not found (expected %s)", opts.Workflow, wfConfig)
 		}
-		wf, err = infrastructure.LoadWorkflow(wfConfig)
+		wf, err = loadWorkflowAppFn(wfConfig)
 		if err != nil {
 			return fmt.Errorf("parse config: %w", err)
 		}
@@ -93,7 +110,7 @@ func Run(argv []string, baseEnviron []string) error {
 			resBase = filepath.Join(wfRoot, "resolvers")
 		}
 		resFile := filepath.Join(resBase, resolver)
-		rm, err := infrastructure.LoadResolverFile(resFile)
+		rm, err := loadResolverFileAppFn(resFile)
 		if err != nil {
 			return fmt.Errorf("resolver %q not found (expected %s)", resolver, resFile)
 		}
@@ -116,7 +133,7 @@ func Run(argv []string, baseEnviron []string) error {
 	if !stepsMode && wf != nil {
 		if len(opts.PreScripts) == 0 && len(wf.Run) > 0 {
 			for _, r := range wf.Run {
-				opts.PreScripts = append(opts.PreScripts, infrastructure.ResolveWorkflowScript(r, wfRoot, repoRoot))
+				opts.PreScripts = append(opts.PreScripts, resolveWorkflowAppFn(r, wfRoot, repoRoot))
 			}
 			fmt.Fprintf(os.Stderr, "[dockpipe] Using run from workflow\n")
 		}
@@ -126,7 +143,7 @@ func Run(argv []string, baseEnviron []string) error {
 				act = wf.Action
 			}
 			if act != "" {
-				opts.Action = infrastructure.ResolveWorkflowScript(act, wfRoot, repoRoot)
+				opts.Action = resolveWorkflowAppFn(act, wfRoot, repoRoot)
 				fmt.Fprintf(os.Stderr, "[dockpipe] Using act from workflow\n")
 			}
 		}
@@ -142,7 +159,7 @@ func Run(argv []string, baseEnviron []string) error {
 
 	if !stepsMode {
 		if opts.Isolate != "" {
-			if im, dir, ok := infrastructure.TemplateBuild(repoRoot, opts.Isolate); ok {
+			if im, dir, ok := templateBuildAppFn(repoRoot, opts.Isolate); ok {
 				effectiveTemplate = opts.Isolate
 				image, buildDir, buildCtx = im, dir, repoRoot
 			} else {
@@ -150,7 +167,7 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 		} else if templateName != "" {
 			effectiveTemplate = templateName
-			if im, dir, ok := infrastructure.TemplateBuild(repoRoot, templateName); ok {
+			if im, dir, ok := templateBuildAppFn(repoRoot, templateName); ok {
 				image, buildDir, buildCtx = im, dir, repoRoot
 			}
 		}
@@ -158,11 +175,11 @@ func Run(argv []string, baseEnviron []string) error {
 			image, buildDir = "dockpipe-base-dev", filepath.Join(repoRoot, "images/base-dev")
 			buildCtx = repoRoot
 		}
-		image = infrastructure.MaybeVersionTag(repoRoot, image)
+		image = maybeVersionTagAppFn(repoRoot, image)
 
 		cwd, _ := os.Getwd()
 		if opts.Action != "" {
-			ap, err := infrastructure.ResolveActionPath(opts.Action, repoRoot, cwd)
+			ap, err := resolveActionPathFn(opts.Action, repoRoot, cwd)
 			if err != nil {
 				return err
 			}
@@ -171,7 +188,7 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 			opts.Action = ap
 			actionForContainer = ap
-			if infrastructure.IsBundledCommitWorktree(ap, repoRoot) {
+			if isBundledCommitAppFn(ap, repoRoot) {
 				commitOnHost = true
 				actionForContainer = ""
 				applyBranchPrefix(envMap, resolver, effectiveTemplate)
@@ -243,13 +260,13 @@ func Run(argv []string, baseEnviron []string) error {
 	var firstStepExtra []string
 	if stepsMode {
 		for _, p := range opts.PreScripts {
-			firstStepExtra = append(firstStepExtra, infrastructure.ResolvePreScriptPath(p, repoRoot))
+			firstStepExtra = append(firstStepExtra, resolvePreScriptAppFn(p, repoRoot))
 		}
 		opts.PreScripts = nil
 	} else {
 		resolvedPre := make([]string, 0, len(opts.PreScripts))
 		for _, p := range opts.PreScripts {
-			resolvedPre = append(resolvedPre, infrastructure.ResolvePreScriptPath(p, repoRoot))
+			resolvedPre = append(resolvedPre, resolvePreScriptAppFn(p, repoRoot))
 		}
 		opts.PreScripts = resolvedPre
 	}
@@ -260,7 +277,7 @@ func Run(argv []string, baseEnviron []string) error {
 				return fmt.Errorf("pre-script not found: %s", p)
 			}
 			fmt.Fprintf(os.Stderr, "[dockpipe] Running pre-script: %s\n", p)
-			em, err := infrastructure.SourceHostScript(p, envSlice)
+			em, err := sourceHostScriptAppFn(p, envSlice)
 			if err != nil {
 				return err
 			}
@@ -286,7 +303,7 @@ func Run(argv []string, baseEnviron []string) error {
 	extraDocker := domain.EnvMapToSlice(domain.EnvSliceToMap(opts.ExtraEnvLines))
 
 	if stepsMode {
-		return runSteps(runStepsOpts{
+		return runStepsAppFn(runStepsOpts{
 			wf:             wf,
 			wfRoot:         wfRoot,
 			repoRoot:       repoRoot,
@@ -306,12 +323,12 @@ func Run(argv []string, baseEnviron []string) error {
 	}
 
 	if buildDir != "" && buildCtx != "" {
-		if err := infrastructure.DockerBuild(image, buildDir, buildCtx); err != nil {
+		if err := dockerBuildAppFn(image, buildDir, buildCtx); err != nil {
 			return err
 		}
 	}
 
-	rc, err := infrastructure.RunContainer(infrastructure.RunOpts{
+	rc, err := runContainerAppFn(infrastructure.RunOpts{
 		Image:         image,
 		WorkdirHost:   firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir),
 		WorkPath:      opts.WorkPath,
@@ -331,7 +348,7 @@ func Run(argv []string, baseEnviron []string) error {
 		return err
 	}
 	if rc != 0 {
-		os.Exit(rc)
+		osExitAppFn(rc)
 	}
 	return nil
 }

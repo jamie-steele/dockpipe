@@ -29,6 +29,7 @@ bash tests/integration-tests/test_action_resolution.sh
 | `test_print_summary_action.sh` | Temp git repo, print-summary action, command creates uncommitted file; asserts stderr contains summary and "Uncommitted changes". |
 | `test_export_patch_action.sh` | Temp git repo, export-patch action, command creates file; asserts `dockpipe.patch` exists and contains the diff. |
 | `test_agent_dev_tooling.sh` | Agent-dev image: `node -e` and `which claude`; asserts Node and Claude CLI are present (no API call). |
+| `test_repo_worktree_local_remote.sh` | Creates a local bare Git remote (`file://`), runs `--repo/--branch` with `--data-dir`, and asserts host worktree creation/reuse without credentials. |
 
 These are separate from `tests/unit-tests/` (unit and smoke tests). The main suite is `bash tests/run_tests.sh`; use `bash tests/integration-tests/run.sh` when you want to validate the full flow with Docker and the agent-dev image.
 

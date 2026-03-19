@@ -15,6 +15,19 @@ import (
 
 const containerWorkMount = "/work"
 
+var (
+	execCommandFn      = exec.Command
+	getwdDockerFn      = os.Getwd
+	filepathAbsDocker  = filepath.Abs
+	osStatDockerFn     = os.Stat
+	mkdirAllDockerFn   = os.MkdirAll
+	getuidDockerFn     = os.Getuid
+	getgidDockerFn     = os.Getgid
+	isTerminalDockerFn = term.IsTerminal
+	timeNowDockerFn    = time.Now
+	commitOnHostFn     = CommitOnHost
+)
+
 // DockerBuild runs docker build -q -t image -f Dir/Dockerfile context.
 func DockerBuild(image, dockerfileDir, contextDir string) error {
 	df := filepath.Join(dockerfileDir, "Dockerfile")
@@ -23,8 +36,8 @@ func DockerBuild(image, dockerfileDir, contextDir string) error {
 		baseName = image[:i]
 	}
 	if baseName == "dockpipe-dev" {
-		if err := exec.Command("docker", "image", "inspect", "dockpipe-base-dev:latest").Run(); err != nil {
-			cmd := exec.Command("docker", "build", "-q", "-t", "dockpipe-base-dev",
+		if err := execCommandFn("docker", "image", "inspect", "dockpipe-base-dev:latest").Run(); err != nil {
+			cmd := execCommandFn("docker", "build", "-q", "-t", "dockpipe-base-dev",
 				"-f", filepath.Join(contextDir, "images/base-dev/Dockerfile"), contextDir)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
@@ -33,7 +46,7 @@ func DockerBuild(image, dockerfileDir, contextDir string) error {
 			}
 		}
 	}
-	cmd := exec.Command("docker", "build", "-q", "-t", image, "-f", df, contextDir)
+	cmd := execCommandFn("docker", "build", "-q", "-t", image, "-f", df, contextDir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -67,13 +80,13 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	}
 	workHost := o.WorkdirHost
 	if workHost == "" {
-		wd, err := os.Getwd()
+		wd, err := getwdDockerFn()
 		if err != nil {
 			return 1, err
 		}
 		workHost = wd
 	}
-	workHost, _ = filepath.Abs(workHost)
+	workHost, _ = filepathAbsDocker(workHost)
 
 	stdout := o.Stdout
 	if stdout == nil {
@@ -88,7 +101,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		stdin = os.Stdin
 	}
 
-	if !o.Detach && term.IsTerminal(int(stdout.Fd())) {
+	if !o.Detach && isTerminalDockerFn(int(stdout.Fd())) {
 		width := terminalWidth(int(stdout.Fd()))
 		fmt.Fprint(stderr, renderBannerForWidth(width))
 		if shouldShowSpinner(width) {
@@ -106,18 +119,18 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		"run",
 		"--init",
 		"--hostname", "dockpipe",
-		"-u", strconv.Itoa(os.Getuid()) + ":" + strconv.Itoa(os.Getgid()),
+		"-u", strconv.Itoa(getuidDockerFn()) + ":" + strconv.Itoa(getgidDockerFn()),
 		"-v", workHost + ":" + containerWorkMount,
 		"-w", cwdInContainer,
 		"-e", "DOCKPIPE_CONTAINER_WORKDIR=" + containerWorkMount,
 	}
 
 	if o.ActionPath != "" {
-		ap, err := filepath.Abs(o.ActionPath)
+		ap, err := filepathAbsDocker(o.ActionPath)
 		if err != nil {
 			return 1, err
 		}
-		if st, err := os.Stat(ap); err == nil && !st.IsDir() {
+		if st, err := osStatDockerFn(ap); err == nil && !st.IsDir() {
 			args = append(args, "-v", ap+":/dockpipe-action.sh:ro", "-e", "DOCKPIPE_ACTION=/dockpipe-action.sh")
 		}
 	}
@@ -125,7 +138,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	if o.Reinit && o.DataVolume != "" {
 		fmt.Fprintf(stderr, "  ⚠  REINIT: This will permanently delete all data in volume '%s' (login, cache, repos).\n", o.DataVolume)
 		if !o.Force {
-			if !term.IsTerminal(int(stdin.Fd())) {
+			if !isTerminalDockerFn(int(stdin.Fd())) {
 				return 1, fmt.Errorf("no TTY; use -f to reinit non-interactively")
 			}
 			fmt.Fprintf(stderr, "  Continue? [y/N] ")
@@ -138,22 +151,22 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 			}
 		}
 		fmt.Fprintf(stderr, "  Removing volume '%s'...\n", o.DataVolume)
-		_ = exec.Command("docker", "volume", "rm", o.DataVolume).Run()
+		_ = execCommandFn("docker", "volume", "rm", o.DataVolume).Run()
 		fmt.Fprintln(stderr, "  Done. Starting with a fresh volume.")
 	}
 
-	uid := strconv.Itoa(os.Getuid())
-	gid := strconv.Itoa(os.Getgid())
+	uid := strconv.Itoa(getuidDockerFn())
+	gid := strconv.Itoa(getgidDockerFn())
 	chown := "chown -R " + uid + ":" + gid + " /dockpipe-data 2>/dev/null || true"
 
 	if o.DataDir != "" {
-		_ = os.MkdirAll(o.DataDir, 0o755)
+		_ = mkdirAllDockerFn(o.DataDir, 0o755)
 		args = append(args,
 			"-v", o.DataDir+":/dockpipe-data",
 			"-e", "DOCKPIPE_DATA=/dockpipe-data",
 			"-e", "HOME=/dockpipe-data",
 		)
-		ch := exec.Command("docker", "run", "--rm", "-v", o.DataDir+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
+		ch := execCommandFn("docker", "run", "--rm", "-v", o.DataDir+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
 		_ = ch.Run()
 	} else if o.DataVolume != "" {
 		args = append(args,
@@ -161,7 +174,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 			"-e", "DOCKPIPE_DATA=/dockpipe-data",
 			"-e", "HOME=/dockpipe-data",
 		)
-		ch := exec.Command("docker", "run", "--rm", "-v", o.DataVolume+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
+		ch := execCommandFn("docker", "run", "--rm", "-v", o.DataVolume+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
 		_ = ch.Run()
 	}
 
@@ -182,7 +195,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		args = append(args, "-d", "--rm")
 		args = append(args, o.Image)
 		args = append(args, argv...)
-		cmd := exec.Command("docker", args...)
+		cmd := execCommandFn("docker", args...)
 		cmd.Stdin = stdin
 		cmd.Stdout = stdout
 		cmd.Stderr = stderr
@@ -192,18 +205,18 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		return 0, nil
 	}
 
-	if term.IsTerminal(int(stdin.Fd())) && term.IsTerminal(int(stdout.Fd())) {
+	if isTerminalDockerFn(int(stdin.Fd())) && isTerminalDockerFn(int(stdout.Fd())) {
 		args = append(args, "-it")
 	} else {
 		args = append(args, "-i")
 	}
 
-	cid := fmt.Sprintf("dockpipe-%d-%d", os.Getpid(), time.Now().UnixNano()%1e9)
+	cid := fmt.Sprintf("dockpipe-%d-%d", os.Getpid(), timeNowDockerFn().UnixNano()%1e9)
 	args = append(args, "--name", cid, o.Image)
 	args = append(args, argv...)
 
-	start := time.Now()
-	cmd := exec.Command("docker", args...)
+	start := timeNowDockerFn()
+	cmd := execCommandFn("docker", args...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -216,7 +229,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 			rc = 1
 		}
 	}
-	elapsed := time.Since(start)
+	elapsed := timeNowDockerFn().Sub(start)
 
 	// Keep default output quiet on success. Quick-exit dumps are useful for debugging
 	// but noisy in normal/test runs; opt in via DOCKPIPE_LOG_QUICK_EXIT=1.
@@ -229,7 +242,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 			fmt.Fprintf(stderr, "  Container exited quickly (%s). Full container output:\n", elapsed.Truncate(time.Second))
 		}
 		fmt.Fprintln(stderr, "  ---")
-		logs := exec.Command("docker", "logs", cid)
+		logs := execCommandFn("docker", "logs", cid)
 		logOut, _ := logs.CombinedOutput()
 		for _, line := range strings.Split(string(logOut), "\n") {
 			if line != "" {
@@ -238,10 +251,10 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		}
 		fmt.Fprintln(stderr, "  ---")
 	}
-	_ = exec.Command("docker", "rm", cid).Run()
+	_ = execCommandFn("docker", "rm", cid).Run()
 
 	if o.CommitOnHost {
-		_ = CommitOnHost(workHost, o.CommitMessage, o.BundleOut)
+		_ = commitOnHostFn(workHost, o.CommitMessage, o.BundleOut)
 	}
 	return rc, nil
 }

@@ -5,16 +5,22 @@ import (
 	"path/filepath"
 )
 
+var (
+	executableFn    = os.Executable
+	evalSymlinksFn  = filepath.EvalSymlinks
+	filepathAbsFn   = filepath.Abs
+)
+
 // RepoRoot returns DOCKPIPE_REPO_ROOT layout: from executable parent, or /usr/lib/dockpipe when running from /usr/bin.
 func RepoRoot() (string, error) {
 	if v := os.Getenv("DOCKPIPE_REPO_ROOT"); v != "" {
-		return filepath.Abs(v)
+		return filepathAbsFn(v)
 	}
-	exe, err := os.Executable()
+	exe, err := executableFn()
 	if err != nil {
 		return "", err
 	}
-	exe, err = filepath.EvalSymlinks(exe)
+	exe, err = evalSymlinksFn(exe)
 	if err != nil {
 		return "", err
 	}
@@ -22,5 +28,5 @@ func RepoRoot() (string, error) {
 	if dir == "/usr/bin" {
 		return "/usr/lib/dockpipe", nil
 	}
-	return filepath.Abs(filepath.Join(dir, ".."))
+	return filepathAbsFn(filepath.Join(dir, ".."))
 }
