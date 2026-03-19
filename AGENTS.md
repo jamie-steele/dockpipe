@@ -113,6 +113,7 @@ dockpipe --mount /var/run/docker.sock:/var/run/docker.sock --isolate agent-dev -
 
 - `tests/unit-tests/` contains CLI and runner tests (argument parsing, template/action resolution, basic smoke tests). `tests/integration-tests/` contains Docker-based integration tests.
 - Run from repo root. Prefer practical assertions (exit codes, expected output) over heavy mocking.
+- **Go tests:** do not hardcode a developer’s machine path (e.g. `/home/you/...`). Use **`testRepoRoot(t)`** (`lib/dockpipe/application/repo_root_test.go`) for the real repo layout, **`t.TempDir()`** + stubs, or **`DOCKPIPE_REPO_ROOT`** — CI clones to arbitrary directories.
 - Adding a new template or flag should be accompanied by a small test where appropriate.
 
 **Cross-platform:** CI does **not** replace real installs. Checklists: **[docs/manual-qa.md](docs/manual-qa.md)** ([core](docs/manual-qa-core.md), [macOS](docs/manual-qa-macos.md), [Windows/WSL](docs/manual-qa-windows.md)). Contributor expectations: **[CONTRIBUTING.md — Platform testing](CONTRIBUTING.md#platform-testing-we-need-you)**.

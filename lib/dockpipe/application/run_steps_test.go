@@ -1,6 +1,7 @@
 package application
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -27,10 +28,10 @@ func TestValidateParallelOutputPaths(t *testing.T) {
 }
 
 func TestValidateParallelNoHostCommit(t *testing.T) {
-	repoRoot := "/home/jamie/source/dockpipe"
+	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{
 		repoRoot: repoRoot,
-		wfRoot:   repoRoot + "/templates/llm-worktree",
+		wfRoot:   filepath.Join(repoRoot, "templates/llm-worktree"),
 		wf: &domain.Workflow{
 			Steps: []domain.Step{
 				{Action: "scripts/commit-worktree.sh", Blocking: boolPtr(false)},

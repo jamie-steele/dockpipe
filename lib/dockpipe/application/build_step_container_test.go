@@ -9,7 +9,7 @@ import (
 )
 
 func TestBuildStepContainer_UsesCliArgsForLastStep(t *testing.T) {
-	repoRoot := "/home/jamie/source/dockpipe"
+	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{
 		repoRoot:    repoRoot,
 		wfRoot:      filepath.Join(repoRoot, "templates/chain-test"),
@@ -35,7 +35,7 @@ func TestBuildStepContainer_UsesCliArgsForLastStep(t *testing.T) {
 }
 
 func TestBuildStepContainer_ErrorsWhenActionMissing(t *testing.T) {
-	repoRoot := "/home/jamie/source/dockpipe"
+	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{
 		repoRoot: repoRoot,
 		wfRoot:   filepath.Join(repoRoot, "templates/chain-test"),
@@ -50,7 +50,7 @@ func TestBuildStepContainer_ErrorsWhenActionMissing(t *testing.T) {
 }
 
 func TestBuildStepContainer_CommitWorktreeTurnsIntoHostCommit(t *testing.T) {
-	repoRoot := "/home/jamie/source/dockpipe"
+	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{
 		repoRoot: repoRoot,
 		wfRoot:   filepath.Join(repoRoot, "templates/chain-test"),

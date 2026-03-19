@@ -156,10 +156,10 @@ make
 export PATH="$PATH:$(pwd)/bin"
 ```
 
-To persist PATH on zsh:
+To persist PATH on zsh (run from your **dockpipe** clone so `$(pwd)` is correct):
 
 ```bash
-echo 'export PATH="$PATH:$HOME/source/dockpipe/bin"' >> ~/.zshrc
+echo "export PATH=\"\$PATH:$(pwd)/bin\"" >> ~/.zshrc
 ```
 
 ## Building the .deb (for maintainers)
