@@ -143,4 +143,4 @@ dockpipe --isolate my-dev --workdir /path/to/repo -- bash -c "npm ci && npm test
 
 dockpipe gives you one primitive: **spawn → run → act**. Use it for isolated runs, automation, chained steps, or AI workflows. **0.6** adds resolvers (agnostic AI), worktree and commit on host (AI never has git), and template init (copy workflows and customize without contributing). Same isolation as `docker run`, with less boilerplate: consistent workdir + UID/GID, optional action phase, templates, resolvers, and pipe-friendly CLI. It stays minimal and composable so you can plug it into your own scripts and tooling without adopting a framework.
 
-If you try it and have ideas or feedback, the repo is [github.com/jamie-steele/dockpipe](https://github.com/jamie-steele/dockpipe). See [CONTRIBUTING.md](https://github.com/jamie-steele/dockpipe/blob/main/CONTRIBUTING.md) to add a resolver or template.
+If you try it and have ideas or feedback, the repo is [github.com/jamie-steele/dockpipe](https://github.com/jamie-steele/dockpipe). See [CONTRIBUTING.md](https://github.com/jamie-steele/dockpipe/blob/master/CONTRIBUTING.md) to add a resolver or template.

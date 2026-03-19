@@ -19,7 +19,7 @@ One primitive: run → isolate → act. Use it for isolated tests, one-off scrip
 ## Try it (15 seconds)
 
 **Linux:** [Download the .deb](https://github.com/jamie-steele/dockpipe/releases) for your arch (`*_amd64.deb` or `*_arm64.deb`) → `sudo dpkg -i` that file.  
-**Windows:** `irm https://raw.githubusercontent.com/jamie-steele/dockpipe/main/packaging/windows/install.ps1 | iex` (MSI + checksum), or grab **`.msi` / `.zip`** from [Releases](https://github.com/jamie-steele/dockpipe/releases) — then `dockpipe windows setup`. See [docs/install.md](docs/install.md).  
+**Windows:** `irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex` (MSI + checksum), or grab **`.msi` / `.zip`** from [Releases](https://github.com/jamie-steele/dockpipe/releases) — then `dockpipe windows setup`. See [docs/install.md](docs/install.md).  
 Or from source: `git clone … && cd dockpipe && make && export PATH="$PWD/bin:$PATH"` (needs **Go 1.22+** to build; or run without `make` if Go is installed — `bin/dockpipe` uses `go run` as a fallback).
 
 **First run:**
@@ -114,7 +114,7 @@ dockpipe windows doctor
 | `--repo <url>` | With `--branch`: worktree on host, commit on host. |
 | `--branch <name>` | Work branch for `--repo` (optional). Omit for a new branch each run; set to use or resume a specific branch. |
 | `--work-path <path>` | Subfolder inside repo to open in container (full repo at `/work`; command cwd = `/work/<path>`). |
-| `--work-branch <name>` | When on main/master and committing on host, create/use this branch (default: `dockpipe/agent-<timestamp>`). |
+| `--work-branch <name>` | When on `master` and committing on host, create/use this branch (default: `dockpipe/agent-<timestamp>`). |
 | `--bundle-out <path>` | After commit-on-host, write a git bundle at this path (for WSL→Windows fetch). |
 | `--workdir <path>` | Host path mounted at `/work` (default: current dir). |
 | `--data-vol <name>` | Named volume for persistent data (default: `dockpipe-data`). Same volume each run = state persists. |

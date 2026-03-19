@@ -4,10 +4,12 @@
 name: CI
 
 on:
+  # Manual run from any branch (Actions → CI → Run workflow) — no PR required.
+  workflow_dispatch:
   pull_request:
-    branches: [main, master]
+    branches: [master, staging]
   push:
-    branches: [main, master]
+    branches: [master, staging]
 
 permissions:
   contents: read
@@ -37,8 +39,9 @@ jobs:
       - name: Go test
         run: go test ./...
 
-      - name: Release notes + version bump (PRs to main/master only)
-        if: github.event_name == 'pull_request'
+      # Ship PRs only: staging/integration PRs skip this (maintainer bumps VERSION when merging staging → master).
+      - name: Release notes + version bump (PRs targeting master only)
+        if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'master'
         shell: bash
         run: |
           set -euo pipefail

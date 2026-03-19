@@ -117,9 +117,9 @@ dockpipe --mount /var/run/docker.sock:/var/run/docker.sock --isolate agent-dev -
 
 **Cross-platform:** CI does **not** replace real installs. Checklists: **[docs/manual-qa.md](docs/manual-qa.md)** ([core](docs/manual-qa-core.md), [macOS](docs/manual-qa-macos.md), [Windows/WSL](docs/manual-qa-windows.md)). Contributor expectations: **[CONTRIBUTING.md — Platform testing](CONTRIBUTING.md#platform-testing-we-need-you)**.
 
-**Releases:** **`VERSION`** at repo root + **`releasenotes/X.Y.Z.md`**; merge to **`main`** runs **Release** (see **[docs/branching.md](docs/branching.md)**). PRs must **bump `VERSION`** and touch the matching release notes file.
+**Releases:** **`VERSION`** + **`releasenotes/X.Y.Z.md`**; **PR `staging` → `master`** runs **Release** on merge (see **[docs/branching.md](docs/branching.md)**). Contributor PRs target **`staging`**; the **ship** PR must **bump `VERSION`** and update the matching release notes file.
 
-**CI / security:** **`govulncheck`**, **`gosec`** with **`.gosec.json`** (`global.exclude`: CLI-typical noise — subprocess/git, user-chosen paths, workspace `0o755`/`0o644`, template `WalkDir`); **CodeQL** uses **`.github/codeql/codeql-config.yml`** (`security-extended`) via **`.github/workflows/codeql.yml`** → **Security → Code scanning**. Plus tests and release-notes gate — see **`docs/branching.md`**.
+**CI / security:** **`govulncheck`**, **`gosec`** with **`.gosec.json`** (`global.exclude`: CLI-typical noise — subprocess/git, user-chosen paths, workspace `0o755`/`0o644`, template `WalkDir`); **CodeQL** uses **`.github/codeql/codeql-config.yml`** (`security-extended`) via **`.github/workflows/codeql.yml`** → **Security → Code scanning**. Plus tests; **release-notes + VERSION gate** only on PRs **into `master`** — see **`docs/branching.md`**.
 
 ---
 

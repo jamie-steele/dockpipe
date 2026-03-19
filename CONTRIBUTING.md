@@ -2,7 +2,7 @@
 
 Primitive first: run in container, optionally act after. Keep the core minimal.
 
-**Issues** for bugs/ideas (check [future-updates.md](docs/future-updates.md)). **PRs** for code/docs; see [AGENTS.md](AGENTS.md). Prefer **`dev` / feature branches** → PR → **`main`**. **CI** (**`govulncheck`**, **`gosec`**, `go test`, `make`, `.deb`, `tests/run_tests.sh`, `tests/integration-tests/run.sh`, plus **required** `releasenotes/X.Y.Z.md` / **VERSION** bump on PRs) and **CodeQL** (`.github/workflows/codeql.yml`) run on PRs; **merging ships a GitHub Release** — see [docs/branching.md](docs/branching.md). **Tests:** `bash tests/run_tests.sh` (unit); integration: `bash tests/integration-tests/run.sh`.
+**Issues** for bugs/ideas (check [future-updates.md](docs/future-updates.md)). **PRs** for code/docs; see [AGENTS.md](AGENTS.md). Prefer **feature branch** or **fork** → **PR → `staging`** (integration). **Do not push directly** to **`staging`** / **`master`** if those branches are protected. The maintainer ships by **PR `staging` → `master`** with a **`VERSION`** bump + **`releasenotes/X.Y.Z.md`** — that merge runs **Release**. **CI** (**`govulncheck`**, **`gosec`**, tests, **`make`**, **`.deb`**, **`tests/run_tests.sh`**, **`tests/integration-tests/run.sh`**) runs on PRs to **`staging`** and **`master`**; the **VERSION / release-notes gate** runs only on PRs **into `master`**. **CodeQL:** `.github/workflows/codeql.yml`. Details: [docs/branching.md](docs/branching.md). **Tests:** `bash tests/run_tests.sh` (unit); integration: `bash tests/integration-tests/run.sh`.
 
 **Go:** layout is `lib/dockpipe/{domain,application,infrastructure}` — see [lib/dockpipe/README.md](lib/dockpipe/README.md). Run `go test ./...` and `gofmt` before PRs.
 
@@ -14,7 +14,7 @@ Primitive first: run in container, optionally act after. Keep the core minimal.
 
 **Action:** add `scripts/<name>.sh`; use `DOCKPIPE_EXIT_CODE`, `DOCKPIPE_CONTAINER_WORKDIR`. Add to `action init --from` list in `bin/dockpipe` if copyable.
 
-**Releases:** merge to **`main`** triggers **`.github/workflows/release.yml`** (version from **`VERSION`**, notes from **`releasenotes/X.Y.Z.md`**). See [docs/releasing.md](docs/releasing.md). Blog post remains manual.
+**Releases:** merge **`staging` → `master`** (after **`VERSION`** + **`releasenotes/…`**) triggers **`.github/workflows/release.yml`**. See [docs/releasing.md](docs/releasing.md). Optional **dev.to**: [docs/devto.md](docs/devto.md).
 
 ---
 

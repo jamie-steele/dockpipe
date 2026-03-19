@@ -62,10 +62,10 @@ You need the **Windows** binary on `PATH` before `dockpipe windows setup` and be
 **Automated (recommended):** downloads the latest release **MSI** (or zip fallback), verifies **`SHA256SUMS.txt`** when available, installs **per-user** (no admin):
 
 ```powershell
-irm https://raw.githubusercontent.com/jamie-steele/dockpipe/main/packaging/windows/install.ps1 | iex
+irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex
 ```
 
-Pin a version: save [packaging/windows/install.ps1](https://github.com/jamie-steele/dockpipe/blob/main/packaging/windows/install.ps1) and run `.\install.ps1 -Version 0.6.0`.
+Pin a version: save [packaging/windows/install.ps1](https://github.com/jamie-steele/dockpipe/blob/master/packaging/windows/install.ps1) and run `.\install.ps1 -Version 0.6.0`.
 
 **Manual:** from [Releases](https://github.com/jamie-steele/dockpipe/releases):
 

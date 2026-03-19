@@ -1,10 +1,10 @@
 name: Release
 
-# Merging to main/master ships a release: version comes from repo-root VERSION + releasenotes/X.Y.Z.md.
+# Merging to master ships a release: version comes from repo-root VERSION + releasenotes/X.Y.Z.md.
 # workflow_dispatch is for dry-runs or manual runs (optional version override).
 on:
   push:
-    branches: [main, master]
+    branches: [master]
   workflow_dispatch:
     inputs:
       version:

@@ -4,7 +4,7 @@ This repo now supports an automated GitHub Actions release pipeline.
 
 **Optional dev.to:** After a release, you can auto-update a dev.to article via the API — see **[devto.md](devto.md)** (GitHub **variables** + **`DEVTO_API_KEY`** secret).
 
-**Ship model:** Merging to **`main`** / **`master`** runs **Release** (see **[branching.md](branching.md)**). Version = repo-root **`VERSION`**; **`releasenotes/X.Y.Z.md`** must exist and be updated on the PR. PRs also run **CI** (tests + release-notes gate).
+**Ship model:** Integrate on **`staging`**; when ready, **PR `staging` → `master`** — that merge runs **Release** (see **[branching.md](branching.md)**). Version = repo-root **`VERSION`**; **`releasenotes/X.Y.Z.md`** must exist and be updated on the **ship** PR. **CI** runs on **`staging`** PRs too (tests only); the **VERSION + release-notes gate** applies only to PRs **into `master`**.
 
 ---
 
@@ -14,7 +14,7 @@ Pipeline file: `.github/workflows/release.yml`
 
 Trigger options:
 
-1. **Merge (push) to `main` or `master`** — ships **`v$(cat VERSION)`** if **`releasenotes/${VERSION}.md`** exists on that commit.
+1. **Merge (push) to `master`** — ships **`v$(cat VERSION)`** if **`releasenotes/${VERSION}.md`** exists on that commit.
 2. **Manual dispatch** (Actions UI):
    - `version`: optional — defaults to **`VERSION`** on the checked-out branch
    - `dry_run`: `true` → build + artifact upload only, **no** GitHub Release
@@ -40,7 +40,7 @@ Trigger options:
 
 > `releasenotes/<version>.md` is required. The workflow fails fast if it is missing.
 
-**Before merging to `main` (optional but recommended):** run the relevant **[manual QA](manual-qa.md)** pages — at minimum **[manual-qa-core.md](manual-qa-core.md)** for `.deb`; **[manual-qa-windows.md](manual-qa-windows.md)** if you touched the bridge, **MSI**, or `windows setup`; **[manual-qa-macos.md](manual-qa-macos.md)** if you changed Darwin builds or docs.
+**Before merging to `master` (optional but recommended):** run the relevant **[manual QA](manual-qa.md)** pages — at minimum **[manual-qa-core.md](manual-qa-core.md)** for `.deb`; **[manual-qa-windows.md](manual-qa-windows.md)** if you touched the bridge, **MSI**, or `windows setup`; **[manual-qa-macos.md](manual-qa-macos.md)** if you changed Darwin builds or docs.
 
 **winget:** after the release is live, optionally submit/update a manifest for the Microsoft community repo — see **[packaging/winget/README.md](../packaging/winget/README.md)**.
 

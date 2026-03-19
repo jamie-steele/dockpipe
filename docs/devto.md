@@ -1,6 +1,6 @@
 # Automating dev.to release posts
 
-After each **GitHub Release** (merge to `main` / `master` — see [releasing.md](releasing.md)), the **Release** workflow can **update an existing** [dev.to](https://dev.to) article via the [Forem API](https://developers.forem.com/).
+After each **GitHub Release** (merge **`staging` → `master`** in normal flow — see [branching.md](branching.md) / [releasing.md](releasing.md)), the **Release** workflow can **update an existing** [dev.to](https://dev.to) article via the [Forem API](https://developers.forem.com/).
 
 We **PUT** `https://dev.to/api/articles/{id}` so the same URL stays your “living” release post; you create the article once on dev.to, copy its numeric **article id**, then wire GitHub.
 

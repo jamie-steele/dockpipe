@@ -13,7 +13,7 @@
 - **Windows 10/11** with **WSL2** and at least one Linux distro.
 - **Docker** usable **from inside that distro** (Docker Desktop + WSL integration, or `docker.io` in WSL).
 - **`dockpipe` installed inside WSL** (e.g. `dpkg -i` per [manual-qa-core.md](manual-qa-core.md) §1).
-- **`dockpipe.exe`** on PATH — from **MSI**, **[install.ps1](https://github.com/jamie-steele/dockpipe/blob/main/packaging/windows/install.ps1)**, release **zip**, or `GOOS=windows GOARCH=amd64 go build …`.
+- **`dockpipe.exe`** on PATH — from **MSI**, **[install.ps1](https://github.com/jamie-steele/dockpipe/blob/master/packaging/windows/install.ps1)**, release **zip**, or `GOOS=windows GOARCH=amd64 go build …`.
 
 ---
 

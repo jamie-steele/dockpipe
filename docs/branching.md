@@ -1,29 +1,55 @@
 # Branching, CI, and releases
 
-## Model: **merge to `main` = ship that version**
+## Model: **`staging` → `master` = ship**
 
-1. Work on **`dev`** / **`feature/…`**.
-2. Open a **PR → `main`** (or **`master`** — CI listens for both).
-3. **CI must pass** before merge: `go test ./…` **and** a **release-notes gate** (below).
-4. **Merge** → **Release** workflow runs: builds all artifacts (Linux/macOS/Windows zip + **MSI** + `.deb`s) and creates a **GitHub Release** tagged **`vX.Y.Z`**, where **`X.Y.Z` is read from the repo-root [`VERSION`](../VERSION) file** on that commit.
+1. **Contributors** (or you) work on **feature branches** or **forks** → open **PR → `staging`**.
+2. **Merge to `staging`** when the change is accepted. **No release** yet — you can push follow-ups, edit **`releasenotes/`**, bump **`VERSION`**, or tweak the contributor’s work on **`staging`** (via PR or maintainer commits, per your rules).
+3. When you’re ready to **cut a release**, open **PR `staging` → `master`** (or merge with the same protections). That PR must **bump `VERSION`** and **update `releasenotes/X.Y.Z.md`** (CI enforces this only for PRs **targeting `master`**).
+4. **Merge to `master`** → **Release** workflow runs: artifacts + **GitHub Release** **`vX.Y.Z`**.
+
+**`master`** is **the released line**. **`staging`** holds “next release” integration until you ship.
 
 There is **no separate “push a tag to release”** step for normal flow — the tag is created as part of the GitHub Release. (You can still use **Release → Run workflow** manually for dry-runs.)
+
+### Vetting: PRs only (no direct pushes to `staging` / `master`)
+
+**Use pull requests** instead of pushing straight to protected branches. Typical setup:
+
+- **Outside contributors:** **fork** → **PR → `staging`**.
+- **Maintainers:** **feature branch** → **PR → `staging`** (same as contributors), or whatever your org allows on **`staging`**.
+- **Release:** **PR `staging` → `master`** when **`VERSION`** + release notes are final — merge triggers **Release**.
+
+Turn off **“allow administrators to bypass”** if you want **your own** changes to use the same PR path.
+
+### Default branch = latest release (no drift)
+
+**`master`** should match **what you last shipped** (and **`v$(cat VERSION)`** on that branch). **`staging`** may be **ahead** until the next ship PR.
+
+**First-time GitHub Actions:** Workflows must exist on **`master`** once. Prefer shipping them with a normal **`staging` → `master`** release PR (or a small patch release).
+
+### Recommended flow
+
+1. **On a feature branch:** **Actions → CI → Run workflow** → pick your branch (full tests; **no** VERSION gate).
+2. **PR → `staging`:** CI runs **without** the release-notes / VERSION bump requirement.
+3. **On `staging`:** You adjust code, **release notes**, and **`VERSION`** when you’re ready to ship.
+4. **PR `staging` → `master`:** CI runs **with** the VERSION + release-notes gate → merge **ships**.
+5. **Release dry run:** **Actions → Release → Run workflow** → branch + **dry_run: true**.
 
 ---
 
 ## `VERSION` + `releasenotes/X.Y.Z.md`
 
-- **[`VERSION`](../VERSION)** — single line, semver **`X.Y.Z`** (no `v` prefix). This is the version **you are about to ship** when the PR lands.
-- **`releasenotes/${VERSION}.md`** — required body for the GitHub release (same as today).
+- **[`VERSION`](../VERSION)** — single line, semver **`X.Y.Z`** (no `v` prefix). This is the version **you are about to ship** when the **`staging` → `master`** PR lands.
+- **`releasenotes/${VERSION}.md`** — required body for the GitHub release.
 
-**Every PR into `main` / `master` must:**
+**Every PR into `master` must** (enforced by CI):
 
-1. **Bump** **`VERSION`** to a **new** semver vs **`main`** (same version twice will **fail** CI — avoids duplicate GitHub Releases).
-2. **Modify** **`releasenotes/<new-version>.md`** in the same PR (usually add `releasenotes/0.6.1.md` when bumping to `0.6.1`).
+1. **Bump** **`VERSION`** to a **new** semver vs the **base** branch (`master`).
+2. **Modify** **`releasenotes/<new-version>.md`** in that same PR.
 
-If either is missing, **CI fails** and the PR cannot be merged (assuming branch protection uses CI).
+**PRs into `staging`** do **not** run that gate — integrate freely, then finalize notes + version on **`staging`** before the ship PR.
 
-**Docs-only or chore PRs** use a **patch** bump + a short release note (e.g. “Docs: …”). There is no “merge without shipping” path on `main` unless you change this workflow.
+**Docs-only or chore ship PRs** use a **patch** bump + a short release note (e.g. “Docs: …”).
 
 ---
 
@@ -31,11 +57,15 @@ If either is missing, **CI fails** and the PR cannot be merged (assuming branch 
 
 | Event | Workflow | What it does |
 |--------|-----------|----------------|
-| **PR** → `main` / `master` | **`ci.yml`** | **`govulncheck`**, **`gosec`**, `go test ./…`, **`make`**, **`.deb`**, **`tests/run_tests.sh`**, **`tests/integration-tests/run.sh`**, **release notes + VERSION bump** |
-| **PR** / **push** `main` / `master` | **`codeql.yml`** | **CodeQL** (Go, `security-extended`) — results under **Security → Code scanning** |
-| **Push** `main` / `master` (merge) | **`ci.yml`** | Same as PR row except **no** release-notes step |
-| **Push** `main` / `master` (merge) | **`release.yml`** | Full build + **GitHub Release** `v$(cat VERSION)`; optional **dev.to** article update ([devto.md](devto.md)) |
-| **workflow_dispatch** on Release | **`release.yml`** | Same pipeline; **dry_run** optional; **version** optional (defaults to **`VERSION`**) |
+| **PR** → **`staging`** | **`ci.yml`** | **`govulncheck`**, **`gosec`**, tests, **`make`**, **`.deb`**, shell + integration tests — **no** VERSION / release-notes gate |
+| **PR** → **`master`** | **`ci.yml`** | Same as above **+** **release notes + VERSION bump** gate |
+| **Push** **`staging`** | **`ci.yml`** | Same as **PR → `staging`** row (no gate on push) |
+| **workflow_dispatch** | **`ci.yml`** | Same jobs **except** the PR-only gate |
+| **PR** / **push** **`master`** / **`staging`** | **`codeql.yml`** | **CodeQL** (Go, `security-extended`) |
+| **Push** **`master`** (merge) | **`release.yml`** | Full build + **GitHub Release** `v$(cat VERSION)`; optional **dev.to** ([devto.md](devto.md)) |
+| **workflow_dispatch** on Release | **`release.yml`** | Same pipeline; **dry_run** optional |
+
+> **Release** still runs only on **`push` to `master`**, not on pushes to **`staging`**.
 
 ---
 
@@ -45,11 +75,11 @@ If either is missing, **CI fails** and the PR cannot be merged (assuming branch 
 
 ---
 
-## Local checks before opening a PR
+## Local checks before a **ship** PR (`staging` → `master`)
 
 ```bash
 go test ./…
-# Ensure VERSION matches the file you edited:
+# Ship PR must match VERSION file:
 test -f "releasenotes/$(tr -d ' \t\r\n' < VERSION).md"
 ```
 
