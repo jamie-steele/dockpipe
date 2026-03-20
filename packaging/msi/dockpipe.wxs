@@ -35,11 +35,18 @@
 
   <Fragment>
     <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+      <!-- ICE38: per-user profile install cannot use a file as KeyPath; ICE64: profile dir needs RemoveFolder -->
       <Component Id="cmp_dockpipe_exe" Guid="*">
+        <RegistryValue Id="reg_dockpipe_install"
+                       Root="HKCU"
+                       Key="Software\dockpipe"
+                       Name="InstallDir"
+                       Type="string"
+                       Value="[INSTALLFOLDER]"
+                       KeyPath="yes" />
         <File Id="fil_dockpipe_exe"
               Source="$(var.DockpipeSource)"
-              KeyPath="yes" />
-        <!-- Append install dir to user PATH (core WiX Environment table) -->
+              KeyPath="no" />
         <Environment Id="env_path_dockpipe"
                      Action="set"
                      Name="PATH"
@@ -47,6 +54,7 @@
                      Part="last"
                      Permanent="no"
                      System="no" />
+        <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
       </Component>
     </ComponentGroup>
   </Fragment>
