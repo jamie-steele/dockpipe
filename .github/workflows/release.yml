@@ -142,12 +142,23 @@ jobs:
           $zip = Join-Path $env:TEMP "wix314.zip"
           Invoke-WebRequest -Uri "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip" -OutFile $zip
           $dest = Join-Path $env:RUNNER_TEMP "wix314-expand"
+          if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Expand-Archive -Path $zip -DestinationPath $dest -Force
-          $candle = Get-ChildItem -LiteralPath $dest -Recurse -Filter "candle.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $candle) { throw "candle.exe not found under WiX zip extract" }
+          $destFull = (Resolve-Path -LiteralPath $dest).Path.TrimEnd('\')
+          # Do not use "first candle.exe" — the zip can contain multiple; we need .../bin/candle.exe (sibling light.exe).
+          $sep = [IO.Path]::DirectorySeparatorChar
+          $candles = @(Get-ChildItem -LiteralPath $destFull -Recurse -File -Filter "candle.exe" -ErrorAction SilentlyContinue |
+            Where-Object {
+              $_.Directory.Name -ieq 'bin' -and
+              $_.FullName.StartsWith($destFull + $sep, [StringComparison]::OrdinalIgnoreCase)
+            })
+          if ($candles.Count -eq 0) { throw "bin\candle.exe not found under WiX zip extract at $destFull" }
+          $candle = $candles | Where-Object { Test-Path -LiteralPath (Join-Path $_.Directory.FullName "light.exe") } | Select-Object -First 1
+          if (-not $candle) { $candle = $candles[0] }
           $wixRoot = $candle.Directory.Parent.FullName
-          if (-not (Test-Path (Join-Path $wixRoot "bin\candle.exe"))) {
-            throw "WiX root invalid: $wixRoot"
+          if (-not (Test-Path -LiteralPath (Join-Path $wixRoot "bin\candle.exe"))) {
+            throw "WiX root invalid: $wixRoot (expected bin\candle.exe under WiX root)"
           }
           $v = "${{ needs.meta.outputs.version }}"
           go build -trimpath -ldflags "-s -w -X main.Version=$v" -o dockpipe.exe ./cmd/dockpipe

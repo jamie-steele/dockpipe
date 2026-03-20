@@ -20,4 +20,4 @@ Output: `msi-dist\dockpipe_0.6.0_windows_amd64.msi`
 
 ## CI
 
-Release workflow **`.github/workflows/release.yml`** runs this on `windows-latest` and uploads the MSI next to the zip and `SHA256SUMS.txt`.
+Release workflow **`.github/workflows/release.yml`** downloads **`wix314-binaries.zip`**, expands it under **`RUNNER_TEMP`**, and resolves the WiX root as the parent of **`bin\candle.exe`** (must live in a directory named **`bin`** under the extract — not the first arbitrary `candle.exe` in the tree). It passes **`-WixRoot`** into **`build.ps1`** so **`GITHUB_ENV`** path mangling is avoided.
