@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -127,13 +128,28 @@ func TestRunContainerDetachBuildsDockerRun(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(calls) < 2 {
-		t.Fatalf("expected chown + run calls, got %#v", calls)
+	wantMin := 2
+	if runtime.GOOS == "windows" {
+		// Chown helper docker run is skipped on Windows (no meaningful host uid/gid).
+		wantMin = 1
+	}
+	if len(calls) < wantMin {
+		t.Fatalf("expected at least %d docker calls, got %#v", wantMin, calls)
+	}
+	if runtime.GOOS != "windows" {
+		ch := calls[0]
+		chJoined := strings.Join(ch.args, " ")
+		if ch.name != "docker" || !strings.Contains(chJoined, "chown") {
+			t.Fatalf("expected first call to be chown docker run, got %s %v", ch.name, ch.args)
+		}
 	}
 	last := calls[len(calls)-1]
 	joined := strings.Join(last.args, " ")
 	if last.name != "docker" || !strings.Contains(joined, "-d --rm") || !strings.Contains(joined, "img echo ok") {
 		t.Fatalf("unexpected detach docker args: %s %s", last.name, joined)
+	}
+	if runtime.GOOS == "windows" && strings.Contains(joined, "-u ") {
+		t.Fatalf("expected no -u on Windows detach run, got %s", joined)
 	}
 }
 

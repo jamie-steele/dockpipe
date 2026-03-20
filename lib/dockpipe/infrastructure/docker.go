@@ -132,11 +132,16 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		"run",
 		"--init",
 		"--hostname", "dockpipe",
-		"-u", strconv.Itoa(getuidDockerFn()) + ":" + strconv.Itoa(getgidDockerFn()),
-		"-v", workHost + ":" + containerWorkMount,
-		"-w", cwdInContainer,
-		"-e", "DOCKPIPE_CONTAINER_WORKDIR=" + containerWorkMount,
 	}
+	// Windows has no POSIX uid/gid; Docker Desktop rejects -u -1:-1. Omit user mapping.
+	if runtime.GOOS != "windows" {
+		args = append(args, "-u", strconv.Itoa(getuidDockerFn())+":"+strconv.Itoa(getgidDockerFn()))
+	}
+	args = append(args,
+		"-v", workHost+":"+containerWorkMount,
+		"-w", cwdInContainer,
+		"-e", "DOCKPIPE_CONTAINER_WORKDIR="+containerWorkMount,
+	)
 
 	if o.ActionPath != "" {
 		ap, err := filepathAbsDocker(o.ActionPath)
