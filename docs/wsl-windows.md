@@ -4,7 +4,9 @@ Get branches from a repo in WSL into your Windows clone **without pushing to a r
 
 **Install `dockpipe.exe` first** (MSI, script, or zip) — see **[install.md](install.md)** (Windows section). Quick option: `irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex`
 
-**Recommended one-time setup (Windows terminal):**
+**Default Windows UX:** `dockpipe.exe` runs **natively** (Docker Desktop + Windows git); you usually **do not** need this doc unless you are **mixing** a WSL-side clone with a Windows-side clone or using **`DOCKPIPE_USE_WSL_BRIDGE=1`**.
+
+**If you use the WSL bridge**, recommended one-time setup (Windows terminal):
 
 ```powershell
 dockpipe windows setup
@@ -13,7 +15,7 @@ dockpipe windows doctor
 
 This configures the target distro, bootstraps WSL host-awareness env (`DOCKPIPE_WINDOWS_HOST=1`), and can run a distro install command when needed (`--install-command`).
 
-**Manual test checklist:** **[manual-qa-windows.md](manual-qa-windows.md)** (install Linux build in WSL via **[manual-qa-core.md](manual-qa-core.md)**).
+**Manual test checklist:** **[manual-qa-windows.md](manual-qa-windows.md)** (native + optional bridge; install Linux build in WSL via **[manual-qa-core.md](manual-qa-core.md)** when testing the bridge).
 
 ### Dockpipe vs manual bundle (what’s actually “one branch”)
 
@@ -21,9 +23,11 @@ This configures the target distro, bootstraps WSL host-awareness env (`DOCKPIPE_
 - **The bundle file:** after commit-on-host, dockpipe runs **`git bundle create <path> refs/heads/<current-branch>`** (or **`HEAD`** if detached) — only the branch that was committed, so the file is usually **smaller** than `--all` when other branches have unique commits. Set **`DOCKPIPE_BUNDLE_ALL=1`** to restore the old **`--all`** behavior ([`commit.go`](../lib/dockpipe/infrastructure/commit.go), [`runner.sh`](../lib/runner.sh)).
 - **Windows fetch:** the pain you hit (`refusing to fetch into branch … checked out`) is **Git on Windows**, not the bridge. A bare **`git fetch <bundle>`** (or `+refs/heads/*:refs/heads/*`) tries to move **local** `refs/heads/…` and **fails for the branch you have checked out**. Fetch resolver branches into **`refs/remotes/wsl/…`** first (and only then update other local branches), or restrict refspecs to **`claude/*`** / **`codex/*`** if that’s all you need.
 
-### Running dockpipe from Windows without opening WSL
+### Running dockpipe from Windows
 
-After setup, use **`dockpipe.exe`** from PowerShell or CMD. Normal commands are **forwarded into WSL**: your **current Windows folder** becomes the working directory in Linux (via `wslpath`), then `dockpipe` runs there. Only **`dockpipe windows …`** stays on the host. **Windows paths in typical file flags** (e.g. `--workdir`, `--mount`, drive letters and UNC) are rewritten for the Linux argv; the command you pass after **`--`** is not altered.
+**Default:** use **`dockpipe.exe`** from PowerShell or CMD; it runs **on Windows** (same as Linux/macOS for git/docker), no WSL shell required.
+
+**WSL bridge:** set **`DOCKPIPE_USE_WSL_BRIDGE=1`** so normal commands are **forwarded into WSL**: your **current Windows folder** becomes the working directory in Linux (via `wslpath`), then `dockpipe` runs there. Only **`dockpipe windows …`** stays on the host. **Windows paths in typical file flags** (e.g. `--workdir`, `--mount`, drive letters and UNC) are rewritten for the Linux argv; the command you pass after **`--`** is not altered.
 
 ---
 

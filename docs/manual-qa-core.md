@@ -1,6 +1,6 @@
 # Manual test plan — core (Linux `.deb` / tarballs)
 
-**Scope:** Validates **Linux packaging** and **portable behavior** of the Go CLI on **native Linux** or **inside WSL** (same `.deb` and same checks). Does **not** cover the Windows `dockpipe.exe` bridge — see **[manual-qa-windows.md](manual-qa-windows.md)** after installing dockpipe in WSL.
+**Scope:** Validates **Linux packaging** and **portable behavior** of the Go CLI on **native Linux** or **inside WSL** (same `.deb` and same checks). Does **not** cover the Windows `dockpipe.exe` host — see **[manual-qa-windows.md](manual-qa-windows.md)** (native + optional WSL bridge); use this doc when the bridge forwards into WSL and you need Linux `dockpipe` inside the distro.
 
 **Who:** Maintainers and [platform-testing contributors](../CONTRIBUTING.md#platform-testing-we-need-you).
 

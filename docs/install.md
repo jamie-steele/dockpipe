@@ -1,6 +1,6 @@
 # Installing dockpipe
 
-**Platforms:** Linux is the primary target (`.deb` package). macOS is supported from source (Bash + Docker). Windows is supported via **WSL2** with `dockpipe windows setup`.
+**Platforms:** Linux is the primary target (`.deb` package). macOS is supported from source (Bash + Docker). Windows uses **`dockpipe.exe` natively** (Docker Desktop + Git for Windows); optional **WSL forwarding** via `DOCKPIPE_USE_WSL_BRIDGE=1` if you prefer Linux git inside a distro.
 
 ---
 
@@ -53,11 +53,15 @@ dockpipe -- ls -la
 
 ---
 
-## Windows (WSL2)
+## Windows (Docker Desktop + native `dockpipe.exe`)
+
+**What you actually need:** **Docker Desktop** is enough for *containers*, but dockpipe also runs **`git`** and **`bash` on the Windows host** (worktrees, commit-on-host, sourcing pre-scripts). Docker Desktop does **not** put `git` / `bash` on your PATH. In practice that means **two installs**: **Docker Desktop** + **Git for Windows** (covers git + bash). You do **not** need a separate WSL distro or Linux `dockpipe` unless you opt into **`DOCKPIPE_USE_WSL_BRIDGE=1`**.
 
 ### Install `dockpipe.exe` on Windows
 
-You need the **Windows** binary on `PATH` before `dockpipe windows setup` and before using the WSL bridge.
+Add the **Windows** binary to `PATH` (MSI, install script, or zip). Ensure **Docker Desktop** is running and **`git`** / **`bash`** are on PATH (Git for Windows is the usual choice).
+
+**Optional WSL bridge:** if you set **`DOCKPIPE_USE_WSL_BRIDGE=1`**, commands are forwarded into WSL. Then you also need **`dockpipe` installed inside that distro** and should run **`dockpipe windows setup`** once.
 
 **Automated (recommended):** downloads the latest release **MSI** (or zip fallback), verifies **`SHA256SUMS.txt`** when available, installs **per-user** (no admin):
 
@@ -76,48 +80,36 @@ Pin a version: save [packaging/windows/install.ps1](https://github.com/jamie-ste
 
 Open a **new** terminal after install so `PATH` is picked up.
 
-### One-time WSL bootstrap (`windows setup`)
+### Daily use from Windows
 
-From PowerShell or CMD on Windows:
-
-```powershell
-dockpipe windows setup
-```
-
-What setup does:
-
-1. Detects available WSL distros (`wsl.exe -l -q`).
-2. Prompts for distro selection (or uses `--distro <name>`).
-3. Saves chosen distro in `%APPDATA%\dockpipe\windows-config.env`.
-4. Bootstraps `~/.dockpipe/windows-host.env` in WSL and sources it from `.bashrc`.
-5. Optionally runs your install command in WSL via `--install-command "<cmd>"`.
-6. Verifies `dockpipe` exists in the selected distro.
-
-Automation-friendly setup:
-
-```powershell
-dockpipe windows setup --distro Ubuntu --install-command "<your install command>" --non-interactive
-```
-
-Diagnostics:
-
-```powershell
-dockpipe windows doctor
-```
-
-### Daily use from Windows (no WSL shell required)
-
-With **`dockpipe.exe`** on `PATH` (MSI, install script, or zip). From **PowerShell or CMD**, run the same commands you would in Linux, e.g.:
+With **`dockpipe.exe`** on `PATH` (MSI, install script, or zip). From **PowerShell or CMD**, `cd` to your repo and run the same CLI as on Linux, e.g.:
 
 ```powershell
 cd C:\Users\you\src\myrepo
 dockpipe -- echo ok
 ```
 
-The Windows binary **forwards** argv into WSL: it maps your **current Windows directory** to a WSL path (`wslpath`), `cd`s there, and runs **`dockpipe`** inside the distro from `windows setup` (or the first listed distro if you have not run setup yet).
+**Native mode (default):** `dockpipe` runs on Windows; **`docker`** comes from Docker Desktop, **`git`** / **`bash`** from Git for Windows (or your own tooling). No WSL shell or Linux `dockpipe` required.
 
-- **`dockpipe windows …`** still runs **only on Windows** (setup / doctor).
-- **Paths in flags** (`--workdir`, `--mount`, `--env` / `--var` when the value is a path, etc.): you can use **`C:\…` / `D:\…`**, **UNC** (`\\server\share\…`), or **`/mnt/c/…`**; the bridge rewrites obvious Windows filesystem paths before calling dockpipe in WSL (`wslpath` when it works, otherwise a safe fallback). Arguments after **`--`** (the inner command) are not rewritten.
+### Optional: WSL bridge (`DOCKPIPE_USE_WSL_BRIDGE=1`)
+
+Set the environment variable **for the session** (or in your profile) so **`dockpipe.exe` forwards** into WSL: cwd is mapped with `wslpath`, then **`dockpipe`** runs inside the distro from **`dockpipe windows setup`** (or the first listed distro).
+
+- **`dockpipe windows …`** always runs **only on Windows** (setup / doctor).
+- With the bridge, path-like flags are rewritten to WSL paths before the inner `dockpipe` sees them. Arguments after **`--`** are not rewritten.
+
+**One-time WSL bootstrap** (only if you use the bridge):
+
+```powershell
+dockpipe windows setup
+```
+
+What setup does: picks a distro, saves it to `%APPDATA%\dockpipe\windows-config.env`, bootstraps `~/.dockpipe/windows-host.env` in WSL, optionally runs `--install-command`, verifies `dockpipe` in that distro.
+
+```powershell
+dockpipe windows setup --distro Ubuntu --install-command "<your install command>" --non-interactive
+dockpipe windows doctor
+```
 
 **Manual QA:** **[manual-qa.md](manual-qa.md)** — [Linux / `.deb` / WSL Linux](manual-qa-core.md), [macOS](manual-qa-macos.md), [Windows + `dockpipe.exe`](manual-qa-windows.md).
 

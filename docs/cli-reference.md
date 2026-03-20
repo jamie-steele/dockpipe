@@ -50,11 +50,13 @@ Windows host helpers for WSL2 onboarding and diagnostics:
 | `dockpipe windows setup --install-command "<cmd>"` | Run custom install command inside selected distro during setup. |
 | `dockpipe windows doctor` | Show discovered WSL distros and currently configured default distro (if set). |
 
-### Windows host: forward runs into WSL
+### Windows host: native vs WSL bridge
 
-When using **`dockpipe.exe`** on Windows, every command **except** `dockpipe windows …` is executed inside WSL via `wsl.exe -d <distro>`. The **current Windows working directory** is mapped with `wslpath` and used as `cd` before `dockpipe` runs, so a repo opened at `C:\…\project` is used as `/mnt/c/…/project` in WSL.
+**Default:** **`dockpipe.exe`** runs **on Windows** (same CLI as Linux/macOS): **Docker Desktop** supplies `docker`; host **`git`** and **`bash`** are separate (Docker Desktop does not include them — use **Git for Windows** or equivalent). Working directory and paths stay Windows-style unless you pass explicit flags.
 
-Environment: `DOCKPIPE_WINDOWS_BRIDGE=1` is set for the inner process. **Windows-style paths** in path-like flags (`--workdir`, `--work-path`, `--data-dir`, `--mount`, `--build`, `--env-file`, `--run` / `--act`, `--isolate` / `--template` / `--image` when the value is a host path, `--env` / `--var` when the value is a path, etc.) and in **`init` / `action init` / `pre init` / `template init`** destination args are translated to WSL paths: **`wslpath -u`** on Windows first, then a **drive-letter mapper** (`C:\…` → `/mnt/c/…`). **UNC** paths (`\\server\share\…`) are normalized without being mangled by Unix `filepath.Clean` in the fallback. Everything after a standalone **`--`** is passed through unchanged.
+**WSL bridge:** set **`DOCKPIPE_USE_WSL_BRIDGE=1`** so every command **except** `dockpipe windows …` runs inside WSL via `wsl.exe -d <distro>`. The **current Windows directory** is mapped with `wslpath` before `cd` and `dockpipe` in the distro.
+
+Environment: `DOCKPIPE_WINDOWS_BRIDGE=1` is set for the **inner** process when the bridge is used. **Windows-style paths** in path-like flags (`--workdir`, `--work-path`, `--data-dir`, `--mount`, `--build`, `--env-file`, `--run` / `--act`, `--isolate` / `--template` / `--image` when the value is a host path, `--env` / `--var` when the value is a path, etc.) and in **`init` / `action init` / `pre init` / `template init`** destination args are translated to WSL paths: **`wslpath -u`** on Windows first, then a **drive-letter mapper** (`C:\…` → `/mnt/c/…`). **UNC** paths (`\\server\share\…`) are normalized without being mangled by Unix `filepath.Clean` in the fallback. Everything after a standalone **`--`** is passed through unchanged.
 
 ## Examples
 

@@ -6,7 +6,7 @@ Only include items that are **not implemented yet**.
 
 **Clarification (so this file isn’t confused with what already shipped):**
 
-- **In-repo / CI today:** **`staging`** for integration PRs; **PR `staging` → `master`** ships (**`VERSION`** + **`releasenotes/X.Y.Z.md`**, CI gate on that PR only). **CI** on **`staging`** + **`master`** (**`govulncheck`**, **`gosec`**, tests, **`make`**, **`.deb`**, **`tests/run_tests.sh`**, **`tests/integration-tests/run.sh`**) and **CodeQL** (`security-extended`); **merge to `master`** runs **Release**. Optional **dev.to** — **[docs/devto.md](devto.md)**. `packaging/homebrew/dockpipe.rb`, **`.github/workflows/release.yml`**, Linux/macOS/Windows artifacts + `.deb` + **Windows `.msi`** + zip, **`packaging/windows/install.ps1`**, **`dockpipe windows setup` / `windows doctor`**, **`dockpipe.exe` → WSL forwarding**, **`packaging/winget/README.md`**, docs (`docs/wsl-windows.md`, `docs/releasing.md`, `docs/branching.md`).
+- **In-repo / CI today:** **`staging`** for integration PRs; **PR `staging` → `master`** ships (**`VERSION`** + **`releasenotes/X.Y.Z.md`**, CI gate on that PR only). **CI** on **`staging`** + **`master`** (**`govulncheck`**, **`gosec`**, tests, **`make`**, **`.deb`**, **`tests/run_tests.sh`**, **`tests/integration-tests/run.sh`**) and **CodeQL** (`security-extended`); **merge to `master`** runs **Release**. Optional **dev.to** — **[docs/devto.md](devto.md)**. `packaging/homebrew/dockpipe.rb`, **`.github/workflows/release.yml`**, Linux/macOS/Windows artifacts + `.deb` + **Windows `.msi`** + zip, **`packaging/windows/install.ps1`**, **`dockpipe windows setup` / `windows doctor`**, **Windows `dockpipe.exe` native by default** (optional **`DOCKPIPE_USE_WSL_BRIDGE=1`** to run the Linux CLI in WSL), **`packaging/winget/README.md`**, docs (`docs/wsl-windows.md`, `docs/releasing.md`, `docs/branching.md`).
 - **Still future:** everything listed below — e.g. **`dockpipe workflow validate`**, **template-level host actions**, **`dockpipe macos doctor`**, **`winget install` from the default Microsoft catalog** (requires a merged `winget-pkgs` PR per release), and **automating Homebrew tap bumps**.
 
 ---
@@ -24,7 +24,7 @@ Only include items that are **not implemented yet**.
 
 ## Host actions (Windows/macOS/Linux)
 
-**Today:** WSL→Windows bundle fetch is documented (`docs/wsl-windows.md`); `windows setup` sets host-aware env in WSL (`DOCKPIPE_WINDOWS_HOST`, etc.). That is **not** the same as a host-actions feature in workflows.
+**Today:** Native Windows `dockpipe.exe` uses host git/docker; WSL→Windows bundle fetch remains documented (`docs/wsl-windows.md`) for mixed-clone workflows; `windows setup` sets host-aware env in WSL (`DOCKPIPE_WINDOWS_HOST`, etc.) when using the bridge. That is **not** the same as a host-actions feature in workflows.
 
 **Still to build:**
 

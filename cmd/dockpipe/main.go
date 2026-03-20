@@ -21,6 +21,8 @@ func main() {
 			return
 		}
 	}
+	// Windows: run natively (Docker Desktop + Windows git) by default. Set
+	// DOCKPIPE_USE_WSL_BRIDGE=1 to forward into WSL instead.
 	if runtime.GOOS == "windows" {
 		if handled, code := application.TryWindowsWSLBridge(argv, os.Stdin, os.Stdout, os.Stderr); handled {
 			os.Exit(code)

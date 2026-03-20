@@ -54,7 +54,7 @@ Examples:
   dockpipe windows setup
   dockpipe windows setup --distro Ubuntu --install-command "curl -fsSL https://example/install.sh | sh" --non-interactive
 
-Other dockpipe commands from Windows (dockpipe.exe) forward into WSL automatically; only "windows …" runs on the host.
+Other dockpipe commands run natively on Windows (Docker Desktop + git). Set DOCKPIPE_USE_WSL_BRIDGE=1 to forward into WSL. Only "windows …" is always host-only.
 `)
 }
 

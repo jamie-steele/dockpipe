@@ -9,13 +9,26 @@ import (
 	"strings"
 )
 
+// EnvUseWSLBridge, when set to "1", makes dockpipe.exe forward all commands
+// (except "windows …") into WSL. The default is native Windows execution so Git,
+// Docker Desktop, and paths stay on one side.
+const EnvUseWSLBridge = "DOCKPIPE_USE_WSL_BRIDGE"
+
 var windowsGetwdFn = os.Getwd
+
+// UseWSLBridge reports whether the Windows host binary should forward into WSL.
+func UseWSLBridge() bool {
+	return os.Getenv(EnvUseWSLBridge) == "1"
+}
 
 // TryWindowsWSLBridge runs dockpipe inside WSL when invoked from Windows.
 // It returns handled=false for subcommands that must stay on the host (e.g. "windows").
 // The current Windows working directory is mapped with wslpath and used as cwd in WSL.
 func TryWindowsWSLBridge(argv []string, stdin io.Reader, stdout, stderr io.Writer) (handled bool, exitCode int) {
 	if windowsGoosFn() != "windows" {
+		return false, 0
+	}
+	if !UseWSLBridge() {
 		return false, 0
 	}
 	if len(argv) > 0 && argv[0] == "windows" {

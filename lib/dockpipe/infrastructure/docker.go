@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -179,16 +180,21 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 			"-e", "DOCKPIPE_DATA=/dockpipe-data",
 			"-e", "HOME=/dockpipe-data",
 		)
-		ch := execCommandFn("docker", "run", "--rm", "-v", o.DataDir+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
-		_ = ch.Run()
+		// POSIX chown inside the container is meaningless for host uid/gid on Windows.
+		if runtime.GOOS != "windows" {
+			ch := execCommandFn("docker", "run", "--rm", "-v", o.DataDir+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
+			_ = ch.Run()
+		}
 	} else if o.DataVolume != "" {
 		args = append(args,
 			"-v", o.DataVolume+":/dockpipe-data",
 			"-e", "DOCKPIPE_DATA=/dockpipe-data",
 			"-e", "HOME=/dockpipe-data",
 		)
-		ch := execCommandFn("docker", "run", "--rm", "-v", o.DataVolume+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
-		_ = ch.Run()
+		if runtime.GOOS != "windows" {
+			ch := execCommandFn("docker", "run", "--rm", "-v", o.DataVolume+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
+			_ = ch.Run()
+		}
 	}
 
 	for _, m := range o.ExtraMounts {

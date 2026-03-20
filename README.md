@@ -19,7 +19,7 @@ One primitive: run → isolate → act. Use it for isolated tests, one-off scrip
 ## Try it (15 seconds)
 
 **Linux:** [Download the .deb](https://github.com/jamie-steele/dockpipe/releases) for your arch (`*_amd64.deb` or `*_arm64.deb`) → `sudo dpkg -i` that file.  
-**Windows:** `irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex` (MSI + checksum), or grab **`.msi` / `.zip`** from [Releases](https://github.com/jamie-steele/dockpipe/releases) — then `dockpipe windows setup`. See [docs/install.md](docs/install.md).  
+**Windows:** `irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex` (MSI + checksum), or grab **`.msi` / `.zip`** from [Releases](https://github.com/jamie-steele/dockpipe/releases). You still need **Docker Desktop** plus **git** and **bash** on PATH (easiest: **Git for Windows**). See [docs/install.md](docs/install.md).  
 Or from source: `git clone … && cd dockpipe && make && export PATH="$PWD/bin:$PATH"` (needs **Go 1.22+** to build; or run without `make` if Go is installed — `bin/dockpipe` uses `go run` as a fallback).
 
 **First run:**
@@ -77,7 +77,7 @@ dockpipe does that + action phase, templates, pipe-friendly CLI. Your UID/GID so
 | Platform | Notes |
 |----------|-------|
 | **Linux** | Primary platform. **CLI is a Go binary** (orchestration + YAML); pre/act scripts stay Bash. Install via [.deb](https://github.com/jamie-steele/dockpipe/releases) (**amd64** or **arm64**) or `make` from source. **Docker** + **Bash** required; **git** for commit-on-host. |
-| **Windows (WSL2)** | Install via **MSI**, **`install.ps1`** (see [install.md](docs/install.md)), or zip. `dockpipe.exe` forwards runs into WSL (**cwd** + path-like flags). Run `dockpipe windows setup` once. [docs/wsl-windows.md](docs/wsl-windows.md). |
+| **Windows** | Install via **MSI**, **`install.ps1`** (see [install.md](docs/install.md)), or zip. **`dockpipe.exe` runs natively** — **Docker Desktop** + **Git for Windows** (host git/bash; Docker alone isn’t enough). Optional **`DOCKPIPE_USE_WSL_BRIDGE=1`** forwards into WSL. [docs/wsl-windows.md](docs/wsl-windows.md) for bundle/mixed-clone flows. |
 | **macOS** | Homebrew-friendly formula is included (`packaging/homebrew/dockpipe.rb`). Preferred install: `brew tap jamie-steele/dockpipe && brew install dockpipe`. Source fallback still supported (`make`). |
 
 ---
@@ -88,7 +88,7 @@ dockpipe does that + action phase, templates, pipe-friendly CLI. Your UID/GID so
 |----------|-----|
 | **Linux** | [Releases](https://github.com/jamie-steele/dockpipe/releases) → `sudo dpkg -i dockpipe_*_amd64.deb` or `*_arm64.deb` (match your CPU) |
 | **macOS** | `brew tap jamie-steele/dockpipe && brew install dockpipe` (or source fallback). |
-| **Windows** | Run `dockpipe windows setup` (PowerShell/CMD) to configure WSL distro + bootstrap; optionally pass `--distro` and `--install-command` for automation. |
+| **Windows** | **MSI / install.ps1 / zip** → `dockpipe.exe` on PATH. **Docker Desktop** (containers) + **Git for Windows** (host `git` + `bash` for pre-scripts / worktrees — Docker Desktop does not ship those). **`dockpipe windows setup`** only with **`DOCKPIPE_USE_WSL_BRIDGE=1`**. |
 
 Requirements: **Bash**, **Docker**. [More in docs/install.md](docs/install.md).
 
