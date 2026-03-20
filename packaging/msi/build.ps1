@@ -48,14 +48,14 @@ $msiPath = Join-Path $OutDir $msiName
 
 $srcAbs = (Resolve-Path -LiteralPath $SourceExe).Path
 
-& $candle -nologo -arch x64 -ext WixUtilExtension `
+& $candle -nologo -arch x64 `
     "-dProductVersion=$fourPart" `
     "-dDockpipeSource=$srcAbs" `
     -out "$objDir\\" `
     $wxs
 if ($LASTEXITCODE -ne 0) { throw "candle failed" }
 
-& $light -nologo -arch x64 -ext WixUtilExtension `
+& $light -nologo -arch x64 `
     -sw1076 `
     -out $msiPath `
     $wixobj

@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- WiX 3.x — build on Windows: see build.ps1 -->
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
-     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product Id="*"
            Name="dockpipe"
            Language="1033"
@@ -40,14 +39,14 @@
         <File Id="fil_dockpipe_exe"
               Source="$(var.DockpipeSource)"
               KeyPath="yes" />
-        <!-- Append install dir to machine PATH (WiX UtilExtension) -->
-        <util:Environment Id="env_path_dockpipe"
-                          Action="set"
-                          Name="PATH"
-                          Value="[INSTALLFOLDER]"
-                          Part="last"
-                          Permanent="no"
-                          System="no" />
+        <!-- Append install dir to user PATH (core WiX Environment table) -->
+        <Environment Id="env_path_dockpipe"
+                     Action="set"
+                     Name="PATH"
+                     Value="[INSTALLFOLDER]"
+                     Part="last"
+                     Permanent="no"
+                     System="no" />
       </Component>
     </ComponentGroup>
   </Fragment>
