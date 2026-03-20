@@ -55,7 +55,8 @@ $srcAbs = (Resolve-Path -LiteralPath $SourceExe).Path
     $wxs
 if ($LASTEXITCODE -ne 0) { throw "candle failed" }
 
-& $light -nologo -arch x64 `
+# WiX 3: -arch is for candle only; light treats unknown args as .wixobj paths — "x64" became a bogus Source file (LGHT0103).
+& $light -nologo `
     -sw1076 `
     -out $msiPath `
     $wixobj

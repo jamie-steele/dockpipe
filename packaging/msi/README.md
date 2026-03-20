@@ -20,4 +20,4 @@ Output: `msi-dist\dockpipe_0.6.0_windows_amd64.msi`
 
 ## CI
 
-Release workflow **`.github/workflows/release.yml`** downloads **`wix314-binaries.zip`**, expands it under **`RUNNER_TEMP`**, and passes that folder as **`-WixRoot`** (the zip puts **`candle.exe`** / **`light.exe`** at the extract root). **`build.ps1`** also supports an installed WiX layout with **`bin\candle.exe`**. **`GITHUB_ENV`** is avoided for WiX paths.
+The **`build-msi`** job in **`.github/workflows/release.yml`** runs on **`windows-latest`** only (WiX does not run on Linux). It downloads **`wix314-binaries.zip`**, expands it under **`RUNNER_TEMP`**, and passes that folder as **`-WixRoot`**. **`build.ps1`** also supports an installed WiX layout with **`bin\candle.exe`**. **`GITHUB_ENV`** is avoided for WiX paths.
