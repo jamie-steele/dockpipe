@@ -5,9 +5,7 @@ param(
     [Parameter(Mandatory = $true)][string]$SourceExe,
     [Parameter(Mandatory = $true)][string]$OutDir,
     # Optional: WiX root (extract folder: root candle.exe from wix314-binaries.zip, or parent of bin\candle.exe). Prefer passing this in CI — GITHUB_ENV can mangle Windows paths.
-    [Parameter(Mandatory = $false)][string]$WixRoot = "",
-    # Dev only: pass -sval to light (skips ICE; faster). Do not use for release builds.
-    [switch]$SkipIceValidation
+    [Parameter(Mandatory = $false)][string]$WixRoot = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -58,11 +56,10 @@ $srcAbs = (Resolve-Path -LiteralPath $SourceExe).Path
 if ($LASTEXITCODE -ne 0) { throw "candle failed" }
 
 # WiX 3: -arch is for candle only; light treats unknown args as .wixobj paths — "x64" became a bogus Source file (LGHT0103).
-$lightArgs = @('-nologo', '-sw1076', '-out', $msiPath, $wixobj)
-if ($SkipIceValidation) {
-    $lightArgs = @('-nologo', '-sval', '-sw1076', '-out', $msiPath, $wixobj)
-}
-& $light @lightArgs
+& $light -nologo `
+    -sw1076 `
+    -out $msiPath `
+    $wixobj
 if ($LASTEXITCODE -ne 0) { throw "light failed" }
 
 Write-Host "Built: $msiPath"
