@@ -146,20 +146,13 @@ jobs:
           New-Item -ItemType Directory -Force -Path $dest | Out-Null
           Expand-Archive -Path $zip -DestinationPath $dest -Force
           $destFull = (Resolve-Path -LiteralPath $dest).Path.TrimEnd('\')
-          # Do not use "first candle.exe" — the zip can contain multiple; we need .../bin/candle.exe (sibling light.exe).
-          $sep = [IO.Path]::DirectorySeparatorChar
-          $candles = @(Get-ChildItem -LiteralPath $destFull -Recurse -File -Filter "candle.exe" -ErrorAction SilentlyContinue |
-            Where-Object {
-              $_.Directory.Name -ieq 'bin' -and
-              $_.FullName.StartsWith($destFull + $sep, [StringComparison]::OrdinalIgnoreCase)
-            })
-          if ($candles.Count -eq 0) { throw "bin\candle.exe not found under WiX zip extract at $destFull" }
-          $candle = $candles | Where-Object { Test-Path -LiteralPath (Join-Path $_.Directory.FullName "light.exe") } | Select-Object -First 1
-          if (-not $candle) { $candle = $candles[0] }
-          $wixRoot = $candle.Directory.Parent.FullName
-          if (-not (Test-Path -LiteralPath (Join-Path $wixRoot "bin\candle.exe"))) {
-            throw "WiX root invalid: $wixRoot (expected bin\candle.exe under WiX root)"
+          # wix314-binaries.zip puts candle.exe + light.exe at the extract root (not bin\). build.ps1 supports both layouts.
+          $rootCandle = Join-Path $destFull "candle.exe"
+          $binCandle = Join-Path $destFull "bin\candle.exe"
+          if (-not ((Test-Path -LiteralPath $rootCandle) -or (Test-Path -LiteralPath $binCandle))) {
+            throw "candle.exe not found at WiX zip root or under bin\ at $destFull"
           }
+          $wixRoot = $destFull
           $v = "${{ needs.meta.outputs.version }}"
           go build -trimpath -ldflags "-s -w -X main.Version=$v" -o dockpipe.exe ./cmd/dockpipe
           New-Item -ItemType Directory -Force -Path msi-dist | Out-Null

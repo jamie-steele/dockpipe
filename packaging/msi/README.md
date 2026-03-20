@@ -5,7 +5,7 @@ Builds **`dockpipe_<version>_windows_amd64.msi`**: per-user install to `%LOCALAP
 ## Requirements (local)
 
 - Windows
-- [WiX Toolset v3.14](https://github.com/wixtoolset/wix3/releases) — unzip and set `WIX` to the folder that contains `bin\candle.exe`
+- [WiX Toolset v3.14](https://github.com/wixtoolset/wix3/releases) — unzip and set `WIX` to the extract folder: **`wix314-binaries.zip`** has **`candle.exe`** at the **root** of the extract; an MSI install often has **`bin\candle.exe`**. **`build.ps1`** accepts either layout.
 - Go 1.22+
 
 ## Build
@@ -20,4 +20,4 @@ Output: `msi-dist\dockpipe_0.6.0_windows_amd64.msi`
 
 ## CI
 
-Release workflow **`.github/workflows/release.yml`** downloads **`wix314-binaries.zip`**, expands it under **`RUNNER_TEMP`**, and resolves the WiX root as the parent of **`bin\candle.exe`** (must live in a directory named **`bin`** under the extract — not the first arbitrary `candle.exe` in the tree). It passes **`-WixRoot`** into **`build.ps1`** so **`GITHUB_ENV`** path mangling is avoided.
+Release workflow **`.github/workflows/release.yml`** downloads **`wix314-binaries.zip`**, expands it under **`RUNNER_TEMP`**, and passes that folder as **`-WixRoot`** (the zip puts **`candle.exe`** / **`light.exe`** at the extract root). **`build.ps1`** also supports an installed WiX layout with **`bin\candle.exe`**. **`GITHUB_ENV`** is avoided for WiX paths.
