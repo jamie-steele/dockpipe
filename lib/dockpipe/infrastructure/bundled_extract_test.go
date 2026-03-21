@@ -15,8 +15,8 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	if !EmbeddedWorkflowConfigExists("cursor-dev") {
 		t.Fatal("expected cursor-dev")
 	}
-	if !EmbeddedWorkflowConfigExists("claude-code") {
-		t.Fatal("expected claude-code")
+	if !EmbeddedWorkflowConfigExists("chain-test") {
+		t.Fatal("expected chain-test")
 	}
 	if EmbeddedWorkflowConfigExists("") {
 		t.Fatal("empty name should be false")

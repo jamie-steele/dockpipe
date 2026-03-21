@@ -1,0 +1,7 @@
+# Resolver: OSS VS Code (code-server) — image = dockpipe-vscode (see images/vscode).
+# For a browser IDE with host port mapping, prefer --workflow vscode (host publishes 127.0.0.1:PORT).
+# This resolver runs your command after -- inside the code-server image (worktree at /work).
+DOCKPIPE_RESOLVER_TEMPLATE=vscode
+DOCKPIPE_RESOLVER_CMD=code-server
+DOCKPIPE_RESOLVER_PRE_SCRIPT=scripts/clone-worktree.sh
+DOCKPIPE_RESOLVER_ACTION=scripts/commit-worktree.sh

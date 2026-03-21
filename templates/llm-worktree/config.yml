@@ -12,6 +12,7 @@ resolvers:
   - claude
   - codex
   - cursor
+  - vscode
 
 vars:
   DOCKPIPE_BRANCH_PREFIX: ""

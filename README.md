@@ -132,6 +132,7 @@ dockpipe -d -- make test
 | `dev` | base-dev + build-essential, ssh, etc. |
 | `agent-dev` | Node + Claude Code. `claude` is an alias. |
 | `codex` | Node + OpenAI Codex CLI. |
+| `vscode` | OSS code-server stack (`codercom/code-server` + dockpipe entrypoint) — used by **llm-worktree** `--resolver vscode`. |
 
 ---
 
@@ -143,7 +144,6 @@ YAML presets via **`--workflow <name>`** (see **`templates/<name>/README.md`**):
 |----------|------|
 | `vscode` | Browser IDE (code-server) — [templates/vscode/README.md](templates/vscode/README.md) |
 | `cursor-dev` | `base-dev` session container + Cursor on host (docker wait) — [templates/cursor-dev/README.md](templates/cursor-dev/README.md) |
-| `claude-code` | Prep + Claude Code CLI on the host — [templates/claude-code/README.md](templates/claude-code/README.md) |
 | `llm-worktree` | AI + git worktree — [templates/llm-worktree/README.md](templates/llm-worktree/README.md) |
 | `chain-test` | Two-step env chain demo — [docs/workflow-yaml.md](docs/workflow-yaml.md) |
 | `workflow-demo` | Async group + merged outputs — [docs/workflow-yaml.md](docs/workflow-yaml.md) |

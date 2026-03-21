@@ -17,6 +17,8 @@ func TemplateBuild(repoRoot, name string) (image string, dockerfileDir string, o
 		return "dockpipe-claude", filepath.Join(repoRoot, "images/claude"), true
 	case "codex":
 		return "dockpipe-codex", filepath.Join(repoRoot, "images/codex"), true
+	case "vscode":
+		return "dockpipe-vscode", filepath.Join(repoRoot, "images/vscode"), true
 	default:
 		return "", "", false
 	}
