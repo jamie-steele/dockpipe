@@ -7,8 +7,9 @@
 | Read first | Deeper / reference |
 |------------|-------------------|
 | [install.md](install.md) | [architecture.md](architecture.md) |
-| [commit-run (simple on-branch commit)](../templates/commit-run/README.md) | [run-worktree (advanced)](../templates/run-worktree/README.md) |
-| [workflow-yaml.md](workflow-yaml.md) | [cli-reference.md](cli-reference.md) |
+| [runtime-architecture.md](runtime-architecture.md) — **workflow / runtime / strategy** triad, `--runtime` plan | [isolation-layer.md](isolation-layer.md) (today’s resolver profiles) |
+| [workflow-yaml.md](workflow-yaml.md) (`isolate:` / `resolver:`) | [cli-reference.md](cli-reference.md) |
+| [run](../templates/run/README.md) · [test](../templates/test/README.md) · [run-apply-validate](../templates/run-apply-validate/README.md) | [worktree strategy](../templates/core/strategies/worktree) · [workflow YAML — strategies](workflow-yaml.md#named-strategies) |
 | [chaining.md](chaining.md) | [wsl-windows.md](wsl-windows.md) (optional WSL↔Windows bundle — most users skip) |
 
 **QA:** [qa/manual-qa.md](qa/manual-qa.md)

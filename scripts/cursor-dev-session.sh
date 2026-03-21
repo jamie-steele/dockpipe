@@ -92,7 +92,7 @@ else
 fi
 
 # When Cursor exits, stop the session container so docker wait returns.
-# CURSOR_DEV_WAIT=0|none — only wait on docker (see templates/cursor-dev/README.md).
+# CURSOR_DEV_WAIT=0|none — only wait on docker (see templates/core/resolvers/cursor-dev/README.md).
 CURSOR_DEV_WAIT="${CURSOR_DEV_WAIT:-1}"
 CURSOR_BG_WAIT_PID=""
 

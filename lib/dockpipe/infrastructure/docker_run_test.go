@@ -115,15 +115,15 @@ func TestRunContainerDetachBuildsDockerRun(t *testing.T) {
 	defer errf.Close()
 
 	rc, err := RunContainer(RunOpts{
-		Image:         "img",
-		Detach:        true,
-		WorkdirHost:   "/tmp/wd",
-		DataDir:       "/tmp/data",
-		ExtraMounts:   []string{" /h:/c ", ""},
-		ExtraEnv:      []string{" A=B ", ""},
-		Stdin:         in,
-		Stdout:        out,
-		Stderr:        errf,
+		Image:       "img",
+		Detach:      true,
+		WorkdirHost: "/tmp/wd",
+		DataDir:     "/tmp/data",
+		ExtraMounts: []string{" /h:/c ", ""},
+		ExtraEnv:    []string{" A=B ", ""},
+		Stdin:       in,
+		Stdout:      out,
+		Stderr:      errf,
 	}, []string{"echo", "ok"})
 	if err != nil || rc != 0 {
 		t.Fatalf("RunContainer detach failed rc=%d err=%v", rc, err)

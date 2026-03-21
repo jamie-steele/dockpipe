@@ -156,7 +156,7 @@ type RunOpts struct {
 	StdoutTeePath string
 }
 
-// RunContainer mirrors lib/runner.sh dockpipe_run (attached path with logs on failure).
+// RunContainer runs docker attach/detach with logging on failure (same contract as the historical bash runner).
 func RunContainer(o RunOpts, argv []string) (int, error) {
 	if o.Image == "" {
 		return 1, fmt.Errorf("DOCKPIPE_IMAGE is required")

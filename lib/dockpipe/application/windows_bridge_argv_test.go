@@ -225,12 +225,21 @@ func TestTranslateBridgeArgv_linuxAbsUnchanged(t *testing.T) {
 	}
 }
 
-// TestTranslateBridgeArgv_initDest translates dockpipe init destination directory to WSL.
-func TestTranslateBridgeArgv_initDest(t *testing.T) {
-	in := []string{"init", `D:\newproj`}
+// TestTranslateBridgeArgv_initWorkflowNameUnchanged does not rewrite the workflow name (not a path).
+func TestTranslateBridgeArgv_initWorkflowNameUnchanged(t *testing.T) {
+	in := []string{"init", `D:\looks-like-a-path`}
 	out := translateBridgeArgv("d", in)
-	if out[1] != "/mnt/d/newproj" {
+	if out[1] != `D:\looks-like-a-path` {
 		t.Fatalf("got %q", out[1])
+	}
+}
+
+// TestTranslateBridgeArgv_initFromTranslatesLocalTemplatePath maps --from Windows dirs for dockpipe init.
+func TestTranslateBridgeArgv_initFromTranslatesLocalTemplatePath(t *testing.T) {
+	in := []string{"init", "mywf", "--from", `D:\src\tpl`}
+	out := translateBridgeArgv("d", in)
+	if !reflect.DeepEqual(out, []string{"init", "mywf", "--from", "/mnt/d/src/tpl"}) {
+		t.Fatalf("got %#v", out)
 	}
 }
 
@@ -243,11 +252,11 @@ func TestTranslateBridgeArgv_initTemplateNameUnchanged(t *testing.T) {
 	}
 }
 
-// TestTranslateBridgeArgv_initFromSkipsURLAndTranslatesDest keeps --from URL and translates local dest for git clone init.
-func TestTranslateBridgeArgv_initFromSkipsURLAndTranslatesDest(t *testing.T) {
-	in := []string{"init", "--from", "https://example.com/tpl", `C:\dest`}
+// TestTranslateBridgeArgv_initFromURLUnchanged passes --from URL through (CLI rejects; bridge does not rewrite URLs).
+func TestTranslateBridgeArgv_initFromURLUnchanged(t *testing.T) {
+	in := []string{"init", "wf", "--from", "https://example.com/tpl"}
 	out := translateBridgeArgv("d", in)
-	if !reflect.DeepEqual(out, []string{"init", "--from", "https://example.com/tpl", "/mnt/c/dest"}) {
+	if !reflect.DeepEqual(out, []string{"init", "wf", "--from", "https://example.com/tpl"}) {
 		t.Fatalf("got %#v", out)
 	}
 }
@@ -275,7 +284,7 @@ func TestTranslateBridgeArgv_preInit(t *testing.T) {
 
 // TestTranslateBridgeArgv_templateInit translates template init directory argument.
 func TestTranslateBridgeArgv_templateInit(t *testing.T) {
-	in := []string{"template", "init", "--from", "run-worktree", `C:\w`}
+	in := []string{"template", "init", "--from", "init", `C:\w`}
 	out := translateBridgeArgv("d", in)
 	if out[4] != "/mnt/c/w" {
 		t.Fatalf("got %#v", out)

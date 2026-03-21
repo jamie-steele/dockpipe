@@ -1,29 +1,78 @@
 package infrastructure
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 )
 
-// ListWorkflowNamesInRepoRoot returns names of templates/<name>/ that contain config.yml under repoRoot.
+// ResolveWorkflowConfigPath returns the first existing workflow config for a bundled or user workflow name.
+// Order: templates/<name>/config.yml, templates/core/resolvers/<name>/config.yml (resolver delegate YAML).
+func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("workflow name is empty")
+	}
+	candidates := []string{
+		filepath.Join(repoRoot, "templates", name, "config.yml"),
+		filepath.Join(repoRoot, "templates", "core", "resolvers", name, "config.yml"),
+	}
+	for _, p := range candidates {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("workflow config not found for %q", name)
+}
+
+// ResolveEmbeddedResolverWorkflowConfigPath returns delegate YAML for DOCKPIPE_*_WORKFLOW (resolver-driven isolate).
+// Order: templates/core/resolvers/<name>/config.yml, templates/<name>/config.yml.
+func ResolveEmbeddedResolverWorkflowConfigPath(repoRoot, name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("embedded resolver workflow name is empty")
+	}
+	candidates := []string{
+		filepath.Join(repoRoot, "templates", "core", "resolvers", name, "config.yml"),
+		filepath.Join(repoRoot, "templates", name, "config.yml"),
+	}
+	for _, p := range candidates {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("embedded resolver workflow config not found for %q", name)
+}
+
+// ListWorkflowNamesInRepoRoot returns workflow names from templates/<name>/ (excluding templates/core).
 func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
-	dir := filepath.Join(repoRoot, "templates")
-	entries, err := os.ReadDir(dir)
+	seen := make(map[string]struct{})
+	var out []string
+
+	templatesDir := filepath.Join(repoRoot, "templates")
+	entries, err := os.ReadDir(templatesDir)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
-	var out []string
 	for _, e := range entries {
-		if !e.IsDir() {
+		if !e.IsDir() || e.Name() == "core" {
 			continue
 		}
 		name := e.Name()
-		cfg := filepath.Join(dir, name, "config.yml")
+		cfg := filepath.Join(templatesDir, name, "config.yml")
 		if st, err := os.Stat(cfg); err == nil && !st.IsDir() {
-			out = append(out, name)
+			if _, ok := seen[name]; !ok {
+				seen[name] = struct{}{}
+				out = append(out, name)
+			}
 		}
 	}
+
 	sort.Strings(out)
 	return out, nil
 }

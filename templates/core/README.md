@@ -1,14 +1,17 @@
 # Shared template assets (`templates/core/`)
 
-Bundled **shared** pieces used by multiple workflows. Workflow folders under **`templates/<name>/`** typically contain only **`config.yml`**, **`README.md`**, and workflow-specific overrides; they **reference** resolvers and strategies here.
+Bundled **scaffolding** copied by **`dockpipe init`**. **Architecture** is defined in **[docs/architecture-model.md](../../docs/architecture-model.md)** — not inferred from folder names alone.
+
+**Workflow shapes** (user-facing **`--workflow <name>`**) live under **`templates/<name>/`** at the repo root — **`init`**, **`run`**, **`test`**, **`run-apply-validate`**, … — not under **`core/`**. **Strategies** (e.g. **`worktree`**, **`commit`**) are **`KEY=value`** files here, not duplicate workflow trees.
 
 | Subfolder | Role |
 |-----------|------|
-| **`resolvers/`** | Shared **`KEY=value`** resolver files (e.g. `claude`, `codex`) — same contract as per-workflow `resolvers/`. |
-| **`strategies/`** | Shared named strategy files (e.g. **`git-worktree`**, **`git-commit`**). |
-| **`scripts/`** | Optional notes or snippets; primary repo scripts stay at repo **`scripts/`** (referenced from strategies and workflows). |
-| **`images/`** | Optional shared image notes or assets; most Dockerfiles remain under repo **`images/`**. |
+| **`runtimes/`** | **Runtime** substrates — **where** execution runs (**`cli`**, **`docker`**, **`kube-pod`**; **`DOCKPIPE_RUNTIME_*`**). |
+| **`resolvers/`** | **Resolver** profiles — **which** tool/platform (**`profile`** or flat file **`DOCKPIPE_RESOLVER_*`**, optional **`config.yml`** delegate). |
+| **`strategies/`** | Lifecycle strategy files (**`worktree`**, **`commit`**, …). |
 
-**Resolution:** the runner loads **`templates/<workflow>/resolvers/<name>`** first if present, then **`templates/core/resolvers/<name>`**, then the legacy path **`templates/run-worktree/resolvers/<name>`**. Same idea for strategies: per-workflow **`strategies/<name>`** → **`templates/core/strategies/<name>`** → legacy **`templates/strategies/<name>`**.
+The runner **merges** `runtimes/<name>` with `resolvers/<name>` when both exist, or you can set **`--runtime`** and **`--resolver`** to different basenames.
 
-**`dockpipe init`** copies **`templates/core/`** into your workspace so local workflows resolve the same way.
+**Resolution:** runtime **`templates/core/runtimes/<name>`** (file or **`profile`**); resolver **`templates/core/resolvers/<name>`** (file or **`profile`**) → legacy **`templates/run-worktree/resolvers/<name>`**. **Strategies:** **`templates/<workflow>/strategies/<name>`** → **`templates/core/strategies/<name>`** → legacy **`templates/strategies/<name>`**.
+
+**`dockpipe init`** copies **`templates/core/`** into your workspace.

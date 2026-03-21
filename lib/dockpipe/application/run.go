@@ -133,23 +133,21 @@ func Run(argv []string, baseEnviron []string) error {
 			stepsMode = true
 		}
 	} else if opts.Workflow != "" {
-		wfRoot = filepath.Join(repoRoot, "templates", opts.Workflow)
-		wfConfig = filepath.Join(wfRoot, "config.yml")
-		if _, statErr := os.Stat(wfConfig); statErr != nil {
+		var statErr error
+		wfConfig, statErr = infrastructure.ResolveWorkflowConfigPath(repoRoot, opts.Workflow)
+		if statErr != nil {
 			if os.Getenv("DOCKPIPE_REPO_ROOT") == "" && infrastructure.EmbeddedWorkflowConfigExists(opts.Workflow) {
 				if invErr := infrastructure.InvalidateBundledCache(); invErr == nil {
 					repoRoot, err = repoRootAppFn()
 					if err != nil {
 						return err
 					}
-					wfRoot = filepath.Join(repoRoot, "templates", opts.Workflow)
-					wfConfig = filepath.Join(wfRoot, "config.yml")
-					_, statErr = os.Stat(wfConfig)
+					wfConfig, statErr = infrastructure.ResolveWorkflowConfigPath(repoRoot, opts.Workflow)
 				}
 			}
 			if statErr != nil {
 				names, _ := infrastructure.ListWorkflowNamesInRepoRoot(repoRoot)
-				msg := fmt.Sprintf("workflow %q not found — expected %s", opts.Workflow, wfConfig)
+				msg := fmt.Sprintf("workflow %q not found — tried templates/%[1]s/config.yml and templates/core/resolvers/%[1]s/config.yml", opts.Workflow)
 				if len(names) > 0 {
 					msg += fmt.Sprintf(" (available in this install: %s)", strings.Join(names, ", "))
 				}
@@ -161,6 +159,7 @@ func Run(argv []string, baseEnviron []string) error {
 				return fmt.Errorf("%s", msg)
 			}
 		}
+		wfRoot = filepath.Dir(wfConfig)
 		wf, err = loadWorkflowAppFn(wfConfig)
 		if err != nil {
 			return fmt.Errorf("parse config: %w", err)
@@ -190,31 +189,26 @@ func Run(argv []string, baseEnviron []string) error {
 		stratAfterAbs = ResolveStrategyScriptPaths(sa.After, wfRoot, repoRoot)
 		strategyHandlesCommit = StrategyAfterHandlesBundledCommit(stratAfterAbs, repoRoot)
 		if wf != nil {
-			if err := ValidateNoDuplicateClone(wf, wfRoot, repoRoot, effStrat == "git-worktree", stratBeforeAbs); err != nil {
+			if err := ValidateNoDuplicateClone(wf, wfRoot, repoRoot, effStrat == "worktree", stratBeforeAbs); err != nil {
 				return err
 			}
 		}
 	}
-	if effStrat == "git-commit" && opts.RepoURL != "" {
-		fmt.Fprintf(os.Stderr, "[dockpipe] warning: --repo set with strategy git-commit (no clone; strategy only commits after success)\n")
+	if effStrat == "commit" && opts.RepoURL != "" {
+		fmt.Fprintf(os.Stderr, "[dockpipe] warning: --repo set with strategy commit (no clone; strategy only commits after success)\n")
 	}
 
-	resolver := opts.Resolver
-	if resolver == "" && wf != nil {
-		if stepsMode {
-			resolver = wf.Resolver
-			if resolver == "" {
-				resolver = wf.DefaultResolver
-			}
-		} else {
-			// Prefer explicit default_resolver; isolate doubles as legacy default resolver name for run-worktree-style YAML.
-			resolver = wf.DefaultResolver
-			if resolver == "" {
-				resolver = wf.Isolate
-			}
+	rtName := EffectiveRuntimeProfileName(opts, wf, stepsMode)
+	rsName := EffectiveResolverProfileName(opts, wf, stepsMode)
+	if rtName == "" && rsName == "" {
+		if leg := EffectiveLegacyIsolateName(wf); leg != "" {
+			rtName, rsName = leg, leg
 		}
-		if resolver != "" {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Resolver: %s\n", resolver)
+	}
+	profileLabel := ProfileLabelForEnv(rtName, rsName)
+	if profileLabel != "" {
+		if err := ValidateRuntimeAllowlist(wf, profileLabel); err != nil {
+			return err
 		}
 	}
 
@@ -222,26 +216,33 @@ func Run(argv []string, baseEnviron []string) error {
 	var preFromResolver, actFromResolver string
 	hostIsolate := ""
 	resolverWorkflow := ""
-	if resolver != "" {
-		resFile, err := infrastructure.ResolveResolverFilePath(repoRoot, wfRoot, resolver)
+	if rtName != "" || rsName != "" {
+		rm, err := infrastructure.LoadIsolationProfile(repoRoot, rtName, rsName)
 		if err != nil {
-			return err
-		}
-		rm, err := loadResolverFileAppFn(resFile)
-		if err != nil {
-			return fmt.Errorf("resolver %q not found (expected %s)", resolver, resFile)
+			return fmt.Errorf("isolation profile: %w", err)
 		}
 		ra := domain.FromResolverMap(rm)
+		if rtName != "" && rsName != "" {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Runtime: %s  Resolver: %s", rtName, rsName)
+			if rk := strings.TrimSpace(ra.RuntimeKind); rk != "" {
+				fmt.Fprintf(os.Stderr, "  runtime.type: %s", rk)
+			}
+			fmt.Fprintln(os.Stderr)
+		} else if rk := strings.TrimSpace(ra.RuntimeKind); rk != "" {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Profile: %s (runtime.type: %s)\n", profileLabel, rk)
+		} else {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Profile: %s\n", profileLabel)
+		}
 		templateName = ra.Template
 		hostIsolate = strings.TrimSpace(ra.HostIsolate)
 		resolverWorkflow = strings.TrimSpace(ra.Workflow)
 		if resolverWorkflow != "" && hostIsolate != "" {
-			return fmt.Errorf("resolver %q: set only one of DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RESOLVER_HOST_ISOLATE", resolver)
+			return fmt.Errorf("profile %q: set only one of DOCKPIPE_RUNTIME_WORKFLOW / DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RUNTIME_HOST_SCRIPT / DOCKPIPE_RESOLVER_HOST_ISOLATE", profileLabel)
 		}
 		preFromResolver = ra.PreScript
 		actFromResolver = ra.Action
 		if ra.Experimental {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Resolver %q is experimental — see %s and template README.\n", resolver, resFile)
+			fmt.Fprintf(os.Stderr, "[dockpipe] Profile %q is experimental — see templates/core and docs.\n", profileLabel)
 		}
 		if opts.Workflow == "" && opts.WorkflowFile == "" {
 			if len(opts.PreScripts) == 0 && preFromResolver != "" {
@@ -300,7 +301,7 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 	}
 
-	// run-worktree flow: clone-worktree.sh needs DOCKPIPE_REPO_URL. Without --repo we infer
+	// worktree strategy flow: clone-worktree.sh needs DOCKPIPE_REPO_URL. Without --repo we infer
 	// origin from the current checkout (or --workdir) so workflow runs don't silently skip.
 	if !stepsMode && opts.RepoURL == "" && preScriptsIncludeCloneWorktree(opts.PreScripts) {
 		gitDir, err := os.Getwd()
@@ -324,7 +325,7 @@ func Run(argv []string, baseEnviron []string) error {
 	var image, buildDir, buildCtx string
 	effectiveTemplate := templateName
 	if effectiveTemplate == "" && (hostIsolate != "" || resolverWorkflow != "") {
-		effectiveTemplate = resolver
+		effectiveTemplate = profileLabel
 	}
 	commitOnHost := false
 	actionForContainer := opts.Action
@@ -371,7 +372,7 @@ func Run(argv []string, baseEnviron []string) error {
 				}
 				commitOnHost = true
 				actionForContainer = ""
-				applyBranchPrefix(envMap, resolver, effectiveTemplate)
+				applyBranchPrefix(envMap, profileLabel, effectiveTemplate)
 				mergeCommitEnvFromLines(envMap, opts.ExtraEnvLines)
 			}
 		}
@@ -388,7 +389,7 @@ func Run(argv []string, baseEnviron []string) error {
 	if opts.RepoURL != "" && opts.RepoBranch == "" {
 		prefix := envMap["DOCKPIPE_BRANCH_PREFIX"]
 		if prefix == "" {
-			prefix = resolver
+			prefix = profileLabel
 		}
 		if prefix == "" {
 			prefix = domain.BranchPrefixForTemplate(effectiveTemplate)
@@ -440,8 +441,15 @@ func Run(argv []string, baseEnviron []string) error {
 	if dataDir != "" {
 		envSlice = appendUniqueEnv(envSlice, "DOCKPIPE_DATA_DIR="+dataDir)
 	}
-	if resolver != "" {
-		envSlice = appendUniqueEnv(envSlice, "RESOLVER="+resolver)
+	if rsName != "" {
+		envSlice = appendUniqueEnv(envSlice, "RESOLVER="+rsName)
+	}
+	if rtName != "" {
+		envSlice = appendUniqueEnv(envSlice, "RUNTIME="+rtName)
+	}
+	if rsName == "" && rtName == "" && profileLabel != "" {
+		envSlice = appendUniqueEnv(envSlice, "RESOLVER="+profileLabel)
+		envSlice = appendUniqueEnv(envSlice, "RUNTIME="+profileLabel)
 	}
 	if templateName != "" {
 		envSlice = appendUniqueEnv(envSlice, "TEMPLATE="+templateName)
@@ -540,7 +548,7 @@ func Run(argv []string, baseEnviron []string) error {
 	}
 
 	if !stepsMode && resolverWorkflow != "" {
-		if err := runEmbeddedResolverWorkflow(resolverWorkflow, repoRoot, envMap, opts, rest, locked, dataVol, dataDir, resolver, templateName, runStepsAppFn); err != nil {
+		if err := runEmbeddedResolverWorkflow(resolverWorkflow, repoRoot, envMap, opts, rest, locked, dataVol, dataDir, profileLabel, templateName, runStepsAppFn); err != nil {
 			return err
 		}
 		workHost := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
@@ -549,7 +557,7 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 		if strategyHandlesCommit {
 			mergeCommitEnvFromLines(envMap, opts.ExtraEnvLines)
-			applyBranchPrefix(envMap, resolver, effectiveTemplate)
+			applyBranchPrefix(envMap, profileLabel, effectiveTemplate)
 			envSlice = domain.EnvMapToSlice(envMap)
 		}
 		if len(stratAfterAbs) > 0 {
@@ -583,7 +591,7 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 		if strategyHandlesCommit {
 			mergeCommitEnvFromLines(envMap, opts.ExtraEnvLines)
-			applyBranchPrefix(envMap, resolver, effectiveTemplate)
+			applyBranchPrefix(envMap, profileLabel, effectiveTemplate)
 			envSlice = domain.EnvMapToSlice(envMap)
 		}
 		if len(stratAfterAbs) > 0 {
@@ -624,7 +632,7 @@ func Run(argv []string, baseEnviron []string) error {
 			opts:                  opts,
 			dataVol:               dataVol,
 			dataDir:               dataDir,
-			resolver:              resolver,
+			resolver:              profileLabel,
 			templateName:          templateName,
 			strategyHandlesCommit: strategyHandlesCommit,
 		}); err != nil {
@@ -632,7 +640,7 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 		if strategyHandlesCommit {
 			mergeCommitEnvFromLines(envMap, opts.ExtraEnvLines)
-			applyBranchPrefix(envMap, resolver, templateName)
+			applyBranchPrefix(envMap, profileLabel, templateName)
 			envSlice = domain.EnvMapToSlice(envMap)
 		}
 		if len(stratAfterAbs) > 0 {
@@ -689,7 +697,7 @@ func Run(argv []string, baseEnviron []string) error {
 	}
 	if strategyHandlesCommit {
 		mergeCommitEnvFromLines(envMap, opts.ExtraEnvLines)
-		applyBranchPrefix(envMap, resolver, effectiveTemplate)
+		applyBranchPrefix(envMap, profileLabel, effectiveTemplate)
 		envSlice = domain.EnvMapToSlice(envMap)
 	}
 	if len(stratAfterAbs) > 0 {

@@ -49,7 +49,9 @@ func unixDockerUserSpec(image string, stderr io.Writer) string {
 // setups. Omit -u so the image USER applies (see images/claude USER node).
 //
 // For Claude Code with --dangerously-skip-permissions (rejects root), set explicitly:
-//   DOCKPIPE_WINDOWS_CONTAINER_USER=node
+//
+//	DOCKPIPE_WINDOWS_CONTAINER_USER=node
+//
 // Or "0" for root, "1000:1000", etc.
 func windowsDockerUserSpec() string {
 	u := strings.TrimSpace(os.Getenv("DOCKPIPE_WINDOWS_CONTAINER_USER"))

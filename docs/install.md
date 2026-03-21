@@ -11,7 +11,7 @@
 - **`DOCKPIPE_REPO_ROOT`** — optional override to point at a **dockpipe source tree** (e.g. when editing templates).
 - **`DOCKPIPE_BUNDLED_CACHE`** — optional parent directory for the `dockpipe/bundled-*` folder (tests, custom cache location).
 
-User-created files from **`dockpipe init`** / **`dockpipe template init`** still live on disk under the destination you choose.
+User-created workflow files from **`dockpipe init`** and **`dockpipe template init`** live in your project (typically under **`templates/`**).
 
 ---
 

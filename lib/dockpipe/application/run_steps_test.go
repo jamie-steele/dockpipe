@@ -33,7 +33,7 @@ func TestValidateParallelNoHostCommit(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{
 		repoRoot: repoRoot,
-		wfRoot:   filepath.Join(repoRoot, "templates/run-worktree"),
+		wfRoot:   filepath.Join(repoRoot, "templates", "test"),
 		wf: &domain.Workflow{
 			Steps: []domain.Step{
 				{Action: "scripts/commit-worktree.sh", Blocking: boolPtr(false)},
@@ -98,4 +98,3 @@ func TestMergeStepVarsRespectsLocks(t *testing.T) {
 		t.Fatalf("docker free key not updated: %q", got)
 	}
 }
-

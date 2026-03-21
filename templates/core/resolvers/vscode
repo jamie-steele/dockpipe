@@ -1,5 +1,0 @@
-# Browser IDE: delegates to the vscode workflow (templates/vscode) — same as `dockpipe --workflow vscode` after clone-worktree.
-# For running a command inside the code-server *image* instead, use --resolver code-server.
-DOCKPIPE_RESOLVER_WORKFLOW=vscode
-DOCKPIPE_RESOLVER_PRE_SCRIPT=scripts/clone-worktree.sh
-DOCKPIPE_RESOLVER_ACTION=scripts/commit-worktree.sh

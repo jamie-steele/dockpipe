@@ -26,7 +26,9 @@ See **[README § Try it](../README.md#try-it)** for copy-paste examples.
 | **Isolate** | Container | Your command after `--`; project at **`/work`**. Ephemeral — container is removed when the command exits. |
 | **Act** | Host | Optional script *after* the container (e.g. commit, notify). |
 
-**Named strategies** (optional): **`--strategy <name>`** or **`strategy:`** in workflow YAML load **`templates/core/strategies/<name>`** (or per-workflow overrides) and run **before** / **after** hooks around the body (e.g. **`git-worktree`**, **`git-commit`**). See **[workflow-yaml.md § Named strategies](workflow-yaml.md#named-strategies)**.
+**Named strategies** (optional): **`--strategy <name>`** or **`strategy:`** in workflow YAML load **`templates/core/strategies/<name>`** (or per-workflow overrides) and run **before** / **after** hooks around the body (e.g. **`worktree`**, **`commit`**). See **[workflow-yaml.md § Named strategies](workflow-yaml.md#named-strategies)**.
+
+**Isolation profiles** (optional, separate concern): **named** execution setups — Docker images, embedded IDE workflows, or host scripts — defined as shared files under **`templates/core/resolvers/`** and chosen with **`--runtime`** / **`--resolver`** / **`isolate:`**. See **[isolation-layer.md](isolation-layer.md)** (claude, codex, **cursor-dev**, **vscode**, …).
 
 Most days: **`dockpipe -- <command>`** only (isolate).
 
@@ -37,14 +39,14 @@ Most days: **`dockpipe -- <command>`** only (isolate).
 From the **dockpipe repo root** (or any checkout with `templates/`):
 
 ```bash
-dockpipe --workflow chain-test
+dockpipe --workflow test
 ```
 
 Shows two steps and env handoff. No API keys.
 
-**Simple git (optional):** **`--workflow commit-run`** runs your command in a container, then **one commit on your current branch** if anything changed — no worktrees or branch automation. See **[templates/commit-run/README.md](../templates/commit-run/README.md)**.
+**Simple git (optional):** **`--workflow run`** runs your command in a container, then **one commit on your current branch** if anything changed — no worktrees or branch automation. See **[templates/run/README.md](../templates/run/README.md)**.
 
-**Advanced git / AI:** **`--workflow run-worktree`** adds isolated branches, worktrees, and resolvers — **[templates/run-worktree/README.md](../templates/run-worktree/README.md)**.
+**Advanced git / AI:** use **runtime** profiles (**`--resolver claude`**, …) with **`--repo`** / **`--branch`** and **strategy `worktree`** (clone + commit hooks). Add **`strategy: worktree`** to your **`templates/<name>/config.yml`** — **[workflow-yaml.md § Named strategies](workflow-yaml.md#named-strategies)**. Browser IDE: **`vscode`** **resolver** — **[templates/core/resolvers/vscode](../templates/core/resolvers/vscode)**.
 
 ---
 
@@ -60,7 +62,7 @@ Shows two steps and env handoff. No API keys.
 | Term | Meaning |
 |------|---------|
 | **Workflow** | Named preset: **`--workflow <name>`** loads **`templates/<name>/config.yml`**. |
-| **Resolver** | Small file under **`resolvers/`** naming a tool profile (default image, scripts, env) — optional. |
+| **Runtime** / **resolver** / **isolation profile** | Small **`KEY=value`** file under **`templates/core/resolvers/`** naming *how* the isolate phase runs — optional. See **[isolation-layer.md](isolation-layer.md)**. |
 | **Strategy** | Optional lifecycle wrapper: **`templates/core/strategies/<name>`** (KEY=value) — before/after host scripts. |
 
 ---
@@ -69,6 +71,7 @@ Shows two steps and env handoff. No API keys.
 
 | Doc | When |
 |-----|------|
+| [isolation-layer.md](isolation-layer.md) | Named isolate profiles (claude, cursor-dev, compose roadmap, …) |
 | [architecture.md](architecture.md) | Internals, commit-on-host exception, data flow |
 | [chaining.md](chaining.md) | Multiple `dockpipe` invocations, same workdir |
 | [wsl-windows.md](wsl-windows.md) | Optional: WSL↔Windows **git bundle** handoff (advanced; most users skip) |

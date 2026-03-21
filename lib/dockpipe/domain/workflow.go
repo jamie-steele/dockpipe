@@ -31,7 +31,7 @@ func (r *RunSpec) UnmarshalYAML(n *yaml.Node) error {
 	return fmt.Errorf("expected string or sequence for run")
 }
 
-// Workflow is templates/<name>/config.yml.
+// Workflow is templates/<name>/config.yml (bundled or user project) or templates/core/resolvers/<name>/config.yml (delegate).
 type Workflow struct {
 	Name            string  `yaml:"name"`
 	Description     string  `yaml:"description,omitempty"`
@@ -41,6 +41,12 @@ type Workflow struct {
 	Action          string  `yaml:"action"`
 	Resolver        string  `yaml:"resolver"`
 	DefaultResolver string  `yaml:"default_resolver"`
+	// Runtime: default runtime profile name (templates/core/runtimes/<name>); preferred over default_resolver for env selection.
+	Runtime string `yaml:"runtime,omitempty"`
+	// DefaultRuntime: YAML default_runtime — same role as default_resolver when runtime is unset.
+	DefaultRuntime string `yaml:"default_runtime,omitempty"`
+	// Runtimes: optional allowlist; if non-empty, the effective runtime must be listed.
+	Runtimes []string `yaml:"runtimes,omitempty"`
 	// Strategy: default named strategy (templates/core/strategies/<name> or templates/<wf>/strategies/<name>).
 	Strategy string `yaml:"strategy,omitempty"`
 	// Strategies: optional allowlist of strategy names; if non-empty, --strategy / workflow.strategy must be listed.
@@ -61,7 +67,7 @@ func (w *Workflow) AnyContainerStep() bool {
 
 // NeedsDockerReachable reports whether we should run EnsureDockerReachable before executing steps.
 // True when any step uses the container runner, or when any step has run:/pre_script (host scripts
-// may invoke docker directly — e.g. templates/vscode is skip_container-only but runs docker on the host).
+// may invoke docker directly — e.g. templates/core/resolvers/vscode/config.yml is skip_container-only but runs docker on the host).
 func (w *Workflow) NeedsDockerReachable() bool {
 	if w.AnyContainerStep() {
 		return true
@@ -100,9 +106,25 @@ type Step struct {
 	CaptureStdout string `yaml:"capture_stdout,omitempty"`
 	// Manifest: host path to write a small JSON manifest after the step (exit_code, duration_ms, id).
 	Manifest string `yaml:"manifest,omitempty"`
-	// Resolver: optional name of resolvers/<name> next to this workflow (same as top-level resolver).
-	// Loads DOCKPIPE_RESOLVER_TEMPLATE / DOCKPIPE_RESOLVER_HOST_ISOLATE / defaults for act when unset on the step.
+	// Runtime: optional runtime profile name (templates/core/runtimes/<name>); preferred over resolver for pairing.
+	Runtime string `yaml:"runtime,omitempty"`
+	// Resolver: legacy alias for the same shared profile (not files next to this workflow).
+	// Loads DOCKPIPE_RESOLVER_* / DOCKPIPE_RUNTIME_* when unset on the step.
 	Resolver string `yaml:"resolver,omitempty"`
+}
+
+// RuntimeProfileName returns per-step isolation profile name (runtime: or resolver:).
+func (s *Step) RuntimeProfileName() string {
+	r := strings.TrimSpace(s.Runtime)
+	if r != "" {
+		return r
+	}
+	return strings.TrimSpace(s.Resolver)
+}
+
+// RuntimeProfileConflict is always false — both runtime: and resolver: may be set (merged profiles).
+func (s *Step) RuntimeProfileConflict() bool {
+	return false
 }
 
 // IsBlocking reports whether this step completes before the pipeline advances (default true).
@@ -161,6 +183,9 @@ type workflowFile struct {
 	Action          string            `yaml:"action"`
 	Resolver        string            `yaml:"resolver"`
 	DefaultResolver string            `yaml:"default_resolver"`
+	Runtime         string            `yaml:"runtime,omitempty"`
+	DefaultRuntime  string            `yaml:"default_runtime,omitempty"`
+	Runtimes        []string          `yaml:"runtimes,omitempty"`
 	Strategy        string            `yaml:"strategy,omitempty"`
 	Strategies      []string          `yaml:"strategies,omitempty"`
 	Vars            map[string]string `yaml:"vars"`

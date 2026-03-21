@@ -1,0 +1,7 @@
+# Scaffolded by `dockpipe init <name>` — edit paths for your repo.
+name: example
+description: Example: host run → container → host act.
+
+run: scripts/example-run.sh
+isolate: dev
+act: scripts/example-act.sh

@@ -13,11 +13,12 @@ import (
 )
 
 // bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "46"
+const bundledFormatVersion = "53"
 
 var bundledMu sync.Mutex
 
-// EmbeddedWorkflowConfigExists reports whether templates/<name>/config.yml is embedded.
+// EmbeddedWorkflowConfigExists reports whether a bundled workflow or resolver-delegate config exists for name.
+// Checks templates/<name>/config.yml and templates/core/resolvers/<name>/config.yml.
 func EmbeddedWorkflowConfigExists(name string) bool {
 	if name == "" {
 		return false
@@ -28,9 +29,15 @@ func EmbeddedWorkflowConfigExists(name string) bool {
 			return false
 		}
 	}
-	p := "templates/" + name + "/config.yml"
-	_, err := fs.Stat(dockpipe.BundledFS, p)
-	return err == nil
+	for _, p := range []string{
+		"templates/" + name + "/config.yml",
+		"templates/core/resolvers/" + name + "/config.yml",
+	} {
+		if _, err := fs.Stat(dockpipe.BundledFS, p); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // InvalidateBundledCache removes the on-disk bundle for this binary's VERSION so it will re-extract.
@@ -76,7 +83,7 @@ func extractBundledToCache() (string, error) {
 		return "", err
 	}
 	dest := filepath.Join(cacheBase, "dockpipe", "bundled-"+ver)
-	cfgPath := filepath.Join(dest, "templates", "run-worktree", "config.yml")
+	cfgPath := filepath.Join(dest, "templates", "test", "config.yml")
 	formatPath := filepath.Join(dest, ".bundled-format")
 	if st, err := os.Stat(cfgPath); err == nil && !st.IsDir() {
 		if b, err := os.ReadFile(filepath.Join(dest, "version")); err == nil && strings.TrimSpace(string(b)) == ver {

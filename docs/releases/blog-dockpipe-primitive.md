@@ -26,11 +26,11 @@ Your current directory (or a **worktree** dockpipe creates on the host) is mount
 
 ## Agnostic AI: resolvers and worktree on host
 
-AI support is **provider-agnostic**. **Resolvers** are one file per tool in the template’s `resolvers/` (e.g. `templates/run-worktree/resolvers/claude`, `codex`). Each sets template (image), default command, and env hint. Adding a new AI tool = add a new resolver file; no changes to core. Use **`--resolver claude`** or **`--resolver codex`**; same flags, same flow.
+AI support is **provider-agnostic**. **Resolvers** are profiles under **`templates/core/resolvers/<name>`** (or **`profile`** inside that directory) (legacy: **`templates/run-worktree/resolvers/`**). Each sets template (image), default command, and env hint. Adding a new AI tool = add a new resolver profile; no changes to core. Use **`--resolver claude`** or **`--resolver codex`**; same flags, same flow.
 
 **Worktree on host:** With **`--repo <url>`**, dockpipe prepares the clone/worktree on the **host**. The container only sees the worktree at `/work`. When the run finishes, dockpipe can run **git on the host** for commit-on-host flows—so the model in the container never needs your credentials. **Authentication** is your normal **git** setup on the OS (HTTPS/SSH, Credential Manager, etc.); dockpipe does not replace that.
 
-**Template init:** Run **`dockpipe template init my-ai [--from run-worktree]`** to copy the worktree workflow. Then run `dockpipe --workflow my-ai --repo <url> [--resolver claude|codex] -- claude -p "..."`. Config points to repo **scripts/**; you can add your own templates—no need to contribute upstream.
+**Template init:** Run **`dockpipe template init my-ai [--from init]`** to copy a starter workflow. Add **`strategy: worktree`** in **`config.yml`** when you need clone/resolver flows — see **[workflow-yaml.md](../workflow-yaml.md#named-strategies)**. Then run `dockpipe --workflow my-ai --repo <url> [--resolver claude|codex] -- claude -p "..."`.
 
 **Multi-step workflows:** Optional **`steps:`** in **`config.yml`** (blocking vs parallel **async** steps, **`outputs:`** between steps) — see **[workflow-yaml.md](../workflow-yaml.md)** and **[cli-reference.md](../cli-reference.md)**.
 
@@ -55,7 +55,7 @@ AI support is **provider-agnostic**. **Resolvers** are one file per tool in the 
 Because dockpipe is a single primitive, you can:
 
 - **Chain steps** — Run one script in a container, pipe or pass its output to the next (e.g. plan → implement → review, each in its own clean run). See **[chaining.md](../chaining.md)**.
-- **Automate AI workflows** — "Run Claude (or Codex) in a worktree → commit on host." Use **`--resolver claude --repo URL`** (add **`--branch`** or **`--work-branch`** as needed) or copy a template with **`dockpipe template init my-ai --from run-worktree`** and edit.
+- **Automate AI workflows** — "Run Claude (or Codex) in a worktree → commit on host." Use **`--resolver claude --repo URL`** (add **`--branch`** or **`--work-branch`** as needed) and **`strategy: worktree`** in workflow YAML.
 - **CI-like local runs** — `dockpipe -- make test` or `dockpipe -- bash -c "npm ci && npm test"` in a clean environment.
 - **One-off experiments** — Try a new tool or version in a container; no global installs, no cleanup.
 
@@ -100,7 +100,7 @@ dockpipe --resolver claude --repo https://github.com/you/repo.git --branch claud
 **Copy a workflow template and customize (no contribution required):**
 
 ```bash
-dockpipe template init my-ai --from run-worktree
+dockpipe template init my-ai --from init
 # Run with your workflow (config points to scripts/):
 dockpipe --workflow my-ai --repo <url> --resolver claude -- claude -p "Your prompt"
 ```

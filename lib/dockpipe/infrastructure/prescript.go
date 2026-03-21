@@ -85,7 +85,7 @@ func RunHostScript(scriptPath string, env []string) error {
 	return nil
 }
 
-// bashSingleQuoted returns s as a single-quoted bash literal ('...' with ' escaped as '\'').
+// bashSingleQuoted returns s as a single-quoted bash literal ('...' with ' escaped as '\”).
 func bashSingleQuoted(s string) string {
 	return `'` + strings.ReplaceAll(s, `'`, `'\''`) + `'`
 }

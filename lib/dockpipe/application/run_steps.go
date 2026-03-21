@@ -37,7 +37,7 @@ type runStepsOpts struct {
 	opts           *CliOpts
 	dataVol        string
 	dataDir        string
-	resolver       string
+	resolver       string // display/branch label (ProfileLabelForEnv)
 	templateName   string
 	// strategyHandlesCommit: parent workflow uses a named strategy whose after hook runs bundled commit.
 	// Suppress per-step bundled commit so CommitOnHost runs once after all steps (strategy after).
@@ -76,20 +76,22 @@ func runSteps(o runStepsOpts) error {
 }
 
 func loadStepResolver(o *runStepsOpts, step domain.Step, stepIndex int) (*domain.ResolverAssignments, error) {
-	if strings.TrimSpace(step.Resolver) == "" {
+	rtName := strings.TrimSpace(step.Runtime)
+	rsName := strings.TrimSpace(step.Resolver)
+	if rtName == "" && rsName == "" {
 		return nil, nil
 	}
-	path, err := infrastructure.ResolveResolverFilePath(o.repoRoot, o.wfRoot, step.Resolver)
+	m, err := infrastructure.LoadIsolationProfile(o.repoRoot, rtName, rsName)
 	if err != nil {
-		return nil, fmt.Errorf("step %s: resolver %q: %w", step.DisplayName(stepIndex), step.Resolver, err)
-	}
-	m, err := infrastructure.LoadResolverFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("step %s: resolver %q: %w", step.DisplayName(stepIndex), step.Resolver, err)
+		return nil, fmt.Errorf("step %s: isolation profile: %w", step.DisplayName(stepIndex), err)
 	}
 	ra := domain.FromResolverMap(m)
+	label := ProfileLabelForEnv(rtName, rsName)
+	if rk := strings.TrimSpace(ra.RuntimeKind); rk != "" {
+		fmt.Fprintf(os.Stderr, "[dockpipe] Step %s: profile %q (runtime.type: %s)\n", step.DisplayName(stepIndex), label, rk)
+	}
 	if strings.TrimSpace(ra.Workflow) != "" && strings.TrimSpace(ra.HostIsolate) != "" {
-		return nil, fmt.Errorf("step %s: resolver %q: set only one of DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RESOLVER_HOST_ISOLATE", step.DisplayName(stepIndex), step.Resolver)
+		return nil, fmt.Errorf("step %s: profile %q: set only one of DOCKPIPE_RUNTIME_WORKFLOW / DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RUNTIME_HOST_SCRIPT / DOCKPIPE_RESOLVER_HOST_ISOLATE", step.DisplayName(stepIndex), label)
 	}
 	return &ra, nil
 }
@@ -108,8 +110,8 @@ func stepUsesResolverDelegate(ra *domain.ResolverAssignments) bool {
 }
 
 func branchResolverName(o *runStepsOpts, step domain.Step) string {
-	if strings.TrimSpace(step.Resolver) != "" {
-		return step.Resolver
+	if s := ProfileLabelForEnv(strings.TrimSpace(step.Runtime), strings.TrimSpace(step.Resolver)); s != "" {
+		return s
 	}
 	return o.resolver
 }
@@ -178,7 +180,7 @@ func finalizeResolverStepAfterHost(o *runStepsOpts, step domain.Step, dockerEnv 
 				mergeCommitEnvFromLines(o.envMap, o.opts.ExtraEnvLines)
 				tmpl := ra.Template
 				if tmpl == "" {
-					tmpl = step.Resolver
+					tmpl = ProfileLabelForEnv(strings.TrimSpace(step.Runtime), strings.TrimSpace(step.Resolver))
 				}
 				applyBranchPrefix(o.envMap, branchResolverName(o, step), tmpl)
 				if err := infrastructure.CommitOnHost(workHost, o.envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(o.envMap["DOCKPIPE_BUNDLE_OUT"], o.opts.BundleOut), strings.TrimSpace(o.envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
@@ -209,7 +211,7 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 		return err
 	}
 	if step.SkipContainer && stepUsesResolverDelegate(ra) {
-		return fmt.Errorf("step %d: resolver %q uses DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RESOLVER_HOST_ISOLATE — remove skip_container: true", i+1, step.Resolver)
+		return fmt.Errorf("step %d: profile %q uses DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RESOLVER_HOST_ISOLATE — remove skip_container: true", i+1, ProfileLabelForEnv(strings.TrimSpace(step.Runtime), strings.TrimSpace(step.Resolver)))
 	}
 
 	if step.SkipContainer {
@@ -327,7 +329,7 @@ func validateParallelNoResolverDelegate(o *runStepsOpts, from, to int) error {
 			return err
 		}
 		if stepUsesResolverDelegate(ra) {
-			return fmt.Errorf("parallel step %d: resolver %q uses DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RESOLVER_HOST_ISOLATE — not supported in async groups (use is_blocking: true)", i+1, step.Resolver)
+			return fmt.Errorf("parallel step %d: profile %q uses DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RESOLVER_HOST_ISOLATE — not supported in async groups (use is_blocking: true)", i+1, ProfileLabelForEnv(strings.TrimSpace(step.Runtime), strings.TrimSpace(step.Resolver)))
 		}
 	}
 	return nil
@@ -528,7 +530,7 @@ func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {
 }
 
 // buildStepContainer returns argv, docker run options, and Dockerfile build dir/context (if any).
-// ra is optional assignments from step.resolver (resolvers/<name>); must not describe host isolate (handled before this).
+// ra is optional assignments from a shared core runtime profile; must not describe host isolate (handled before this).
 func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, dockerEnv map[string]string, ra *domain.ResolverAssignments) (
 	argv []string, runOpts infrastructure.RunOpts, buildDir, buildCtx string, err error,
 ) {

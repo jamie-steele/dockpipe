@@ -15,7 +15,7 @@ Usage:
   dockpipe doctor                             verify bash, Docker, bundled assets
 
 Options:
-  --workflow, --workflow-file, --run, --isolate, --act, --resolver, --strategy, --repo, --branch, --workdir,
+  --workflow, --workflow-file, --run, --isolate, --act, --runtime, --resolver, --strategy, --repo, --branch, --workdir,
   --data-dir, --data-vol, --no-data, --reinit, -f, --mount, --env, --env-file,
   --var, --build, -d/--detach, -h/--help, --version / -v / -V
 

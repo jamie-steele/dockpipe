@@ -8,14 +8,25 @@
 
 **Subcommands:** `dockpipe init`, `dockpipe workflow validate [path]`, `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
 
+## `dockpipe init`
+
+Local project setup only: **no `git clone`**, no treating **`init`** as a remote bootstrap. Everything runs in the **current working directory**.
+
+| Command | Purpose |
+|---------|---------|
+| `dockpipe init` | Create **`scripts/`**, **`images/`**, **`templates/`** if needed; merge bundled **`templates/core/`**; add **`README.md`** and **`dockpipe.yml`** when missing. |
+| `dockpipe init <name>` | Create **`templates/<name>/`** using the bundled **`init`** template by default. |
+| `dockpipe init <name> --from <source>` | **`--from`** selects a **template source**: **`blank`**, a **bundled** name (e.g. **`run`**, **`test`**), or a **filesystem path** to an existing workflow directory. Not a Git URL. |
+| `dockpipe init <name> --resolver <n> --runtime <n> --strategy <n>` | Optional; written into the new **`config.yml`** (same meaning as run flags — see the table below). |
+
 ## Workflow variables (`--workflow`)
 
-When you use `--workflow <name>`, `templates/<name>/config.yml` may include a top-level **`vars:`** block: indented `KEY: value` lines. Those names are **exported** before run scripts, **only if** they are not already set in your shell (so your environment and CI secrets win).
+When you use `--workflow <name>`, the resolved **`config.yml`** (see **[workflow-yaml.md](workflow-yaml.md)** for lookup order) may include a top-level **`vars:`** block: indented `KEY: value` lines. Those names are **exported** before run scripts, **only if** they are not already set in your shell (so your environment and CI secrets win).
 
 Additional sources (each only sets **unset** variables, except `--var`):
 
 1. `vars:` defaults in `config.yml`
-2. `templates/<name>/.env`
+2. `.env` beside the resolved workflow **`config.yml`** (e.g. `templates/<name>/.env` or `templates/<name>/.env`)
 3. `.env` at the bundled materialized root (default: user cache) or at **`DOCKPIPE_REPO_ROOT`** if you set it
 4. Each `--env-file <path>` (in order)
 5. Path in **`DOCKPIPE_ENV_FILE`** if set
@@ -29,13 +40,14 @@ All options must appear **before** a standalone **`--`**. The command and its ar
 
 | Flag | Aliases | Purpose |
 |------|---------|---------|
-| `--workflow <name>` | | Load `templates/<name>/config.yml`. With **`steps:`**, a final **`--`** is optional (see **[workflow-yaml.md](workflow-yaml.md)**). Mutually exclusive with **`--workflow-file`**. |
-| `--workflow-file <path>` | | Load workflow YAML from an arbitrary path (same shape as **`templates/<name>/config.yml`**). Paths under the file (e.g. **`resolvers/`**) resolve next to that file. Mutually exclusive with **`--workflow`**. |
+| `--workflow <name>` | | Load workflow YAML: **`templates/<name>/config.yml`**, then **`templates/core/resolvers/<name>/config.yml`**, then legacy **`templates/core/workflows/<name>/config.yml`**. With **`steps:`**, a final **`--`** is optional (see **[workflow-yaml.md](workflow-yaml.md)**). Mutually exclusive with **`--workflow-file`**. |
+| `--workflow-file <path>` | | Load workflow YAML from an arbitrary path (same shape as bundled **`config.yml`**). Relative **`run:`** / **`act:`** paths resolve next to that file. **Resolver** profiles load from **`templates/core/resolvers/`** (and legacy **`templates/run-worktree/resolvers/`**) — not from folders beside the YAML file. Mutually exclusive with **`--workflow`**. |
 | `--run <path>` | `--pre-script` | **Run:** script(s) on the host before the container. Repeatable. |
 | `--isolate <name>` | `--template`, `--image` | **Isolate:** image or template (`base-dev`, `dev`, `agent-dev`, `claude`, `codex`, …). Builds if the value is a template. |
 | `--act <path>` | `--action` | **Act:** script after the container command (e.g. commit-worktree). |
-| `--resolver <name>` | | Resolver (`claude`, `codex`, …); often used with **`--repo`** / worktree flows. |
-| `--strategy <name>` | | Named lifecycle wrapper from **`templates/core/strategies/<name>`** (or **`templates/<workflow>/strategies/<name>`**): runs **before** / **after** host scripts around the workflow body. Overrides **`strategy:`** in workflow YAML when both are set. |
+| `--runtime <name>` | | **Runtime** profile — **`templates/core/runtimes/<name>`** (environment / **`DOCKPIPE_RUNTIME_*`**). May be combined with **`--resolver`**. |
+| `--resolver <name>` | | **Resolver** profile — **`templates/core/resolvers/<name>`** or **`templates/core/resolvers/<name>/profile`** (tool adapter / **`DOCKPIPE_RESOLVER_*`**). Often used with **`--repo`** / worktree flows. Both flags may be set; the runner **merges** the two files. |
+| `--strategy <name>` | | Named lifecycle wrapper from **`templates/core/strategies/<name>`** (or **`templates/<workflow>/strategies/<name>`** / **`templates/<workflow>/strategies/<name>`**): runs **before** / **after** host scripts around the workflow body. Overrides **`strategy:`** in workflow YAML when both are set. |
 | `--repo <url>` | | Clone URL for worktree flows. If omitted and the workflow uses **`clone-worktree.sh`**, dockpipe sets the URL from **`git remote get-url origin`** in the current dir (or **`--workdir`**). When that URL matches your **`origin`**, the worktree can be created from **your local checkout** (not only a fresh remote default). |
 | `--branch <name>` | | Explicit work branch for **`--repo`** (optional). |
 | `--work-branch <name>` | | When **`--repo`** is set and **`--branch`** is **omitted**, use this as the **full** branch name. If both are omitted, dockpipe generates **`prefix/<adj>-<noun>-<adj>-<noun>`** (random hyphenated slug; **`prefix`** from resolver / template — see **`domain.RandomWorkBranchSlug`** in **[branchslug.go](../lib/dockpipe/domain/branchslug.go)**). If **`--branch`** is set, it takes precedence over **`--work-branch`**. |
@@ -92,13 +104,13 @@ Environment: **`DOCKPIPE_WINDOWS_BRIDGE=1`** is set for the **inner** process wh
 **Minimal (workflow does the rest):**
 
 ```bash
-dockpipe --workflow run-worktree --repo https://github.com/you/repo.git -- claude -p "Fix the bug"
+dockpipe --workflow my-ai --resolver claude --repo https://github.com/you/repo.git -- claude -p "Fix the bug"
 ```
 
 **Override branch, add env:**
 
 ```bash
-dockpipe --workflow run-worktree --repo https://github.com/you/repo.git --branch my-feature \
+dockpipe --workflow my-ai --resolver claude --repo https://github.com/you/repo.git --branch my-feature \
   --env "GIT_PAT=$GIT_PAT" -- claude -p "Implement the plan"
 ```
 

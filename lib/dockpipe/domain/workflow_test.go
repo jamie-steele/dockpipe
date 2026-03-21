@@ -6,6 +6,22 @@ import (
 	"testing"
 )
 
+// TestParseWorkflowYAMLStepRuntime checks per-step runtime field.
+func TestParseWorkflowYAMLStepRuntime(t *testing.T) {
+	y := `
+steps:
+  - runtime: code-server
+    cmd: echo hi
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Steps) != 1 || w.Steps[0].Runtime != "code-server" || w.Steps[0].RuntimeProfileName() != "code-server" {
+		t.Fatalf("runtime: got %+v", w.Steps)
+	}
+}
+
 // TestParseWorkflowYAMLStepResolver checks per-step resolver field.
 func TestParseWorkflowYAMLStepResolver(t *testing.T) {
 	y := `
@@ -212,6 +228,6 @@ func TestWorkflowNeedsDockerReachable(t *testing.T) {
 	}
 	withStepResolver := &Workflow{Steps: []Step{{SkipContainer: true, Resolver: "cursor"}}}
 	if !withStepResolver.NeedsDockerReachable() {
-		t.Fatal("expected NeedsDockerReachable when a step references resolvers/<name>")
+		t.Fatal("expected NeedsDockerReachable when a step references a runtime profile name")
 	}
 }

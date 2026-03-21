@@ -10,10 +10,10 @@ import (
 func TestTemplateBuild(t *testing.T) {
 	repoRoot := "/repo"
 	cases := []struct {
-		name   string
-		image  string
-		dir    string
-		ok     bool
+		name  string
+		image string
+		dir   string
+		ok    bool
 	}{
 		{"base-dev", "dockpipe-base-dev", filepath.Join(repoRoot, "images/base-dev"), true},
 		{"dev", "dockpipe-dev", filepath.Join(repoRoot, "images/dev"), true},
@@ -54,4 +54,3 @@ func TestMaybeVersionTag(t *testing.T) {
 		t.Fatalf("empty image should stay empty, got %q", got)
 	}
 }
-

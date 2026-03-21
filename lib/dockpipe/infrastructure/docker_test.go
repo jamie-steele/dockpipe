@@ -46,4 +46,3 @@ func TestUseDockerInteractiveTTYNonTTYFiles(t *testing.T) {
 		t.Fatal("temp files are not terminals")
 	}
 }
-

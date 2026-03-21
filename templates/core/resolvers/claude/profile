@@ -1,0 +1,3 @@
+# Resolver: Claude Code CLI (tool adapter under templates/core/resolvers/claude).
+DOCKPIPE_RESOLVER_CMD=claude
+DOCKPIPE_RESOLVER_ENV=ANTHROPIC_API_KEY

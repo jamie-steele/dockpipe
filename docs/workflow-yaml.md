@@ -1,8 +1,8 @@
 # Workflow YAML (`config.yml`)
 
-**Bundled templates** use **`templates/<name>/config.yml`**. Load with **`dockpipe --workflow <name>`** (plus your command after **`--`**).
+**Bundled workflows** use **`templates/<name>/config.yml`**. **`--workflow <name>`** can also load **`templates/core/resolvers/<name>/config.yml`** (resolver delegate YAML). User projects may use **`templates/<name>/config.yml`**. Load with **`dockpipe --workflow <name>`** (plus your command after **`--`**).
 
-**Repo-root workflow:** put the **same** YAML shape in **`dockpipe.yml`** (or any path) and run **`dockpipe --workflow-file dockpipe.yml`** so scripts resolve relative to that file’s directory (e.g. **`resolvers/`** next to the file). Do not pass **`--workflow`** and **`--workflow-file`** together.
+**Repo-root workflow:** put the **same** YAML shape in **`dockpipe.yml`** (or any path) and run **`dockpipe --workflow-file dockpipe.yml`** so **`run:`** / **`act:`** paths resolve relative to that file’s directory. **Resolver** profiles are **not** beside the file — they load only from **`templates/core/resolvers/`** (see below). Do not pass **`--workflow`** and **`--workflow-file`** together.
 
 **Lint:** **`dockpipe workflow validate [path]`** — parses the workflow (including **`imports:`**) and checks against a small embedded JSON Schema. Default path: **`dockpipe.yml`** in the current directory.
 
@@ -14,9 +14,10 @@
 | **isolate** | Container image (and your command after `--`). |
 | **act** | Follow-up after the main command (usually a **host** script; see **[architecture.md](architecture.md)** for in-container `DOCKPIPE_ACTION`). |
 | **workflow** | This file: a named preset selected with **`--workflow <name>`**. |
-| **strategy** | Optional **named lifecycle** wrapper: small **`KEY=value`** files under **`templates/core/strategies/<name>`** (or **`templates/<workflow>/strategies/<name>`** next to this workflow) define host scripts to run **before** and **after** the workflow body. See [Named strategies](#named-strategies) below. |
+| **strategy** | Optional **named lifecycle** wrapper: small **`KEY=value`** files under **`templates/core/strategies/<name>`** (or **`templates/<workflow>/strategies/<name>`** / **`templates/<workflow>/strategies/<name>`** next to this workflow) define host scripts to run **before** and **after** the workflow body. See [Named strategies](#named-strategies) below. |
+| **runtime** / **resolver** / **isolation profile** | **Runtime** file **`templates/core/runtimes/<name>`** (**`DOCKPIPE_RUNTIME_*`**); **resolver** file **`templates/core/resolvers/<name>`** (**`DOCKPIPE_RESOLVER_*`**). Both may be set; the runner **merges** them. **Legacy:** same basename pairs **`runtimes/foo`** + **`resolvers/foo`**. See **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)**. Optional **`runtimes:`** allowlist (like **`strategies:`**). |
 
-**Learning path:** [onboarding.md](onboarding.md) · Implementation notes: [`lib/dockpipe/README.md`](../lib/dockpipe/README.md).
+**Learning path:** [onboarding.md](onboarding.md) · **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)** · Implementation notes: [`lib/dockpipe/README.md`](../lib/dockpipe/README.md).
 
 ---
 
@@ -35,14 +36,17 @@ Variable precedence for workflows is documented in **[CLI reference](cli-referen
 
 | Key | Purpose |
 |-----|---------|
-| `name` | Optional display title for stderr (defaults to the template folder name, e.g. `run-worktree`). |
+| `name` | Optional display title for stderr (defaults to the template folder name, e.g. `run`). |
 | `description` | Optional one-line task summary printed after `name` (e.g. what this workflow is for). |
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
 | `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). |
-| `isolate` | Template name or image for the container. For **resolver-driven** workflows (e.g. **run-worktree**), prefer **`default_resolver`** to pick **`resolvers/<name>`**; **`isolate`** still works as a **legacy** default resolver name when **`default_resolver`** is empty. |
+| `isolate` | Template name or image for the container. For **resolver-driven** flows with **`strategy: worktree`**, prefer **`default_runtime`** / **`default_resolver`** to pick a **core** profile name; **`isolate`** still works as a **legacy** default profile name when those are empty. |
 | `act` / `action` | Action script after the container command (when not using per-step act). |
-| `resolver` | Default resolver name (**multi-step** workflows). |
-| `default_resolver` | Default resolver name (**single-flow** workflows); takes precedence over **`isolate`** for selecting **`resolvers/<name>`**. |
+| `runtime` | Default isolation profile (**single-flow**); preferred over **`default_resolver`** when both are set. |
+| `default_runtime` | Like **`default_resolver`** for selecting a profile under **`templates/core/resolvers/`** (**single-flow**). |
+| `runtimes` | Optional allowlist: if non-empty, the effective runtime (CLI **`--runtime`** / **`--resolver`** or workflow fields) must be listed. |
+| `resolver` | Default profile name (**multi-step** workflows; legacy name for top-level multi-step default). |
+| `default_resolver` | Default profile name (**single-flow**); takes precedence over **`isolate`** for selecting a **core** shared profile. |
 | `steps` | List of **steps** (multi-step mode). |
 | `imports` | List of paths (relative to this file) to merge **before** this file: each imported file’s **`vars`** are merged (later files override), then **`steps`** from imports run **before** **`steps`** here. Circular imports are rejected. Requires loading from disk (not raw bytes-only parse). |
 | `strategy` | Default **strategy name** when the CLI does **not** pass **`--strategy <name>`**. |
@@ -54,7 +58,7 @@ Variable precedence for workflows is documented in **[CLI reference](cli-referen
 
 **Strategies** wrap the workflow body with optional **host** scripts **before** and **after** success (same spirit as **`resolvers/`** small files). Shared definitions live under **`templates/core/strategies/`**; see **[templates/core/README.md](../templates/core/README.md)**.
 
-**Resolution order** for the strategy file path: **`--strategy <name>`** (overrides **`strategy:`** in YAML when both are set) → **`templates/<this-workflow>/strategies/<name>`** (if present) → **`templates/core/strategies/<name>`** → legacy **`templates/strategies/<name>`**.
+**Resolution order** for the strategy file path: **`--strategy <name>`** (overrides **`strategy:`** in YAML when both are set) → **`templates/<this-workflow>/strategies/<name>`** or **`templates/<this-workflow>/strategies/<name>`** (if present) → **`templates/core/strategies/<name>`** → legacy **`templates/strategies/<name>`**.
 
 **File format** (`KEY=value`, `#` comments):
 
@@ -68,10 +72,22 @@ Variable precedence for workflows is documented in **[CLI reference](cli-referen
 
 | Name | Role |
 |------|------|
-| **`git-worktree`** | **`before`:** `scripts/clone-worktree.sh` · **`after`:** `scripts/commit-worktree.sh` — worktree + resolver flows (**legacy template folder** **`run-worktree`** uses this). |
-| **`git-commit`** | **`after`:** commit only — e.g. **`commit-run`** workflow. |
+| **`worktree`** | **`before`:** `scripts/clone-worktree.sh` · **`after`:** `scripts/commit-worktree.sh` — clone/worktree on the host, then resolver-driven isolate, then commit. There is **no** separate bundled workflow for this; add **`strategy: worktree`** to **your** `templates/<name>/config.yml` (or **`--workflow-file`**). |
+| **`commit`** | **`after`:** commit only — e.g. **`run`** workflow. |
 
-Do **not** list **`clone-worktree.sh`** in **`run:`** when **`git-worktree`** already provides clone (dockpipe will error). Do **not** duplicate bundled **`act:`** commit with the same strategy **`after`** hook.
+**Example** (your repo, e.g. **`templates/my-ai/config.yml`**):
+
+```yaml
+name: my-ai
+strategy: worktree
+strategies: [worktree, commit]
+default_resolver: claude
+resolvers: [claude, codex, cursor-dev, vscode, code-server]
+```
+
+Then: **`dockpipe --workflow my-ai --resolver claude --repo https://github.com/you/repo.git -- claude -p "…"`**
+
+Do **not** list **`clone-worktree.sh`** in **`run:`** when **`worktree`** already provides clone (dockpipe will error). Do **not** duplicate bundled **`act:`** commit with the same strategy **`after`** hook.
 
 ---
 
@@ -85,8 +101,9 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `cmd` / `command` | Shell command line inside the container (parsed for argv). |
 | `run` | String or YAML list: host pre-scripts before this step’s container. |
 | `pre_script` | Single extra pre-script path (in addition to `run`). |
-| `isolate` | Template/image for this step (falls back to workflow / CLI / resolver). |
-| `resolver` | Optional **name** of **`resolvers/<name>`** next to this workflow (same folder layout as **run-worktree**). Loads **`DOCKPIPE_RESOLVER_TEMPLATE`**, **`DOCKPIPE_RESOLVER_WORKFLOW`** (runs **`templates/<name>/config.yml`** via the same runner), **`DOCKPIPE_RESOLVER_HOST_ISOLATE`**, and default **`act`** when the step does not set them. **`isolate:`** on the step still overrides the template from the resolver file. Workflow or host-isolate resolvers cannot run in **async** groups (`is_blocking: false`); use a blocking step. |
+| `isolate` | Template/image for this step (falls back to workflow / CLI / runtime profile). |
+| `runtime` | Optional **runtime** profile basename (same as CLI **`--runtime`**). Pairs with **`resolver:`**; merged by the runner. |
+| `resolver` | Optional **resolver** profile basename (same as CLI **`--resolver`**). **May** be set together with **`runtime:`** on the same step. **`isolate:`** can still override the template. Profiles that delegate to host or embedded workflows cannot run in **async** groups (`is_blocking: false`); use a blocking step. |
 | `act` / `action` | Action script for this step. |
 | `vars` | Per-step env map (merged for that step; `--var` keys can be “locked”). |
 | `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Default if omitted: `.dockpipe/outputs.env`. |
@@ -177,14 +194,21 @@ Multiple **separate** `dockpipe` invocations (same `--workdir`) are still valid;
 
 ---
 
-## Example templates in this repo
+## Example workflows in this repo
 
-| Template | Purpose |
+| Workflow | Purpose |
 |----------|---------|
-| **[templates/workflow-demo/](../templates/workflow-demo/)** | Runnable demo: **`group.mode: async`**, distinct **`outputs:`**, blocking **join**; uses **`alpine`**. |
-| **[templates/chain-test/](../templates/chain-test/)** | Minimal **two-step** sequential chain via **`.dockpipe/outputs.env`**. |
+| **[templates/test/](../templates/test/)** | Minimal **two-step** sequential chain via **`.dockpipe/outputs.env`**. |
+| **[templates/run/](../templates/run/)** | Single command in a container, then optional **git** commit on the current branch (**strategy `git-commit`**). |
+| **[templates/run-apply-validate/](../templates/run-apply-validate/)** | Three-step **run → apply → validate** pipeline (replace **`cmd:`** with your tools). |
 
-Run from repo root: `dockpipe --workflow workflow-demo` (see each template’s README).
+**Async groups** (`group.mode: async`) are documented above in this file.
+
+```bash
+dockpipe --workflow test
+dockpipe --workflow run -- echo ok
+dockpipe --workflow run-apply-validate
+```
 
 ---
 

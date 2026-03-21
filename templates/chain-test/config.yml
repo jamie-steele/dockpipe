@@ -1,9 +1,0 @@
-# Multi-step demo: step 1 writes env; step 2 reads it (see docs/workflow-yaml.md)
-name: chain-test
-description: Two alpine steps; outputs chain to the next step.
-
-steps:
-  - isolate: alpine
-    cmd: sh -c 'mkdir -p .dockpipe && echo "CHAIN_MSG=hello" > .dockpipe/outputs.env'
-  - isolate: alpine
-    cmd: sh -c 'echo "step2:${CHAIN_MSG:-missing}"'

@@ -10,8 +10,8 @@ import (
 	"dockpipe/lib/dockpipe/infrastructure"
 )
 
-// runEmbeddedResolverWorkflow runs templates/<name>/config.yml (multi-step) with merged env.
-// Used when DOCKPIPE_RESOLVER_WORKFLOW is set so resolvers delegate to bundled workflows (e.g. claude, codex, code-server, cursor-dev, vscode).
+// runEmbeddedResolverWorkflow runs bundled delegate YAML for DOCKPIPE_*_WORKFLOW (multi-step) with merged env.
+// Used when DOCKPIPE_RESOLVER_WORKFLOW is set so resolvers delegate (e.g. claude, codex, code-server, cursor-dev, vscode under templates/core/resolvers/<name>/config.yml).
 // runStepsFn must be the steps runner (e.g. runStepsAppFn) — passed in to avoid an init cycle with run_steps.go.
 func runEmbeddedResolverWorkflow(
 	workflowName string,
@@ -45,9 +45,9 @@ func runEmbeddedResolverWorkflowWithLoad(
 	if name == "" {
 		return fmt.Errorf("resolver workflow name is empty")
 	}
-	wfPath := filepath.Join(repoRoot, "templates", name, "config.yml")
-	if _, err := os.Stat(wfPath); err != nil {
-		return fmt.Errorf("resolver workflow %q: expected %s: %w", name, wfPath, err)
+	wfPath, err := infrastructure.ResolveEmbeddedResolverWorkflowConfigPath(repoRoot, name)
+	if err != nil {
+		return fmt.Errorf("resolver workflow %q: %w", name, err)
 	}
 	subWf, err := loadWF(wfPath)
 	if err != nil {

@@ -1,6 +1,0 @@
-# Resolver: Claude Code — delegates to templates/claude after clone-worktree (same as DOCKPIPE_RESOLVER_WORKFLOW=claude).
-DOCKPIPE_RESOLVER_WORKFLOW=claude
-DOCKPIPE_RESOLVER_CMD=claude
-DOCKPIPE_RESOLVER_ENV=ANTHROPIC_API_KEY
-DOCKPIPE_RESOLVER_PRE_SCRIPT=scripts/clone-worktree.sh
-DOCKPIPE_RESOLVER_ACTION=scripts/commit-worktree.sh

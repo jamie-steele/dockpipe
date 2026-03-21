@@ -1,0 +1,3 @@
+# Resolver: OpenAI Codex CLI (pairs with runtimes/codex).
+DOCKPIPE_RESOLVER_CMD=codex
+DOCKPIPE_RESOLVER_ENV=OPENAI_API_KEY

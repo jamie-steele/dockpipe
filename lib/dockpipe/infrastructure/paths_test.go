@@ -8,12 +8,7 @@ import (
 
 func TestResolveResolverFilePath(t *testing.T) {
 	repo := t.TempDir()
-	wf := filepath.Join(repo, "templates", "mywf")
-	_ = os.MkdirAll(filepath.Join(wf, "resolvers"), 0o755)
-	local := filepath.Join(wf, "resolvers", "local")
-	if err := os.WriteFile(local, []byte("x=1\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	// Workflow-local resolvers/ are not used — only templates/core/resolvers/.
 	coreDir := filepath.Join(repo, "templates", "core", "resolvers")
 	_ = os.MkdirAll(coreDir, 0o755)
 	core := filepath.Join(coreDir, "shared")
@@ -21,22 +16,48 @@ func TestResolveResolverFilePath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	p, err := ResolveResolverFilePath(repo, wf, "local")
+	p, err := ResolveResolverFilePath(repo, "shared")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p != local {
-		t.Fatalf("want local resolver %s got %s", local, p)
+	if p != core {
+		t.Fatalf("want core resolver %s got %s", core, p)
 	}
-	p2, err := ResolveResolverFilePath(repo, wf, "shared")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p2 != core {
-		t.Fatalf("want core resolver %s got %s", core, p2)
-	}
-	_, err = ResolveResolverFilePath(repo, wf, "missing")
+	_, err = ResolveResolverFilePath(repo, "missing")
 	if err == nil {
 		t.Fatal("expected error for missing resolver")
+	}
+}
+
+func TestResolveResolverFilePathPrefersProfileInDirectory(t *testing.T) {
+	repo := t.TempDir()
+	rsDir := filepath.Join(repo, "templates", "core", "resolvers", "tool")
+	if err := os.MkdirAll(rsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	prof := filepath.Join(rsDir, "profile")
+	if err := os.WriteFile(prof, []byte("DOCKPIPE_RESOLVER_CMD=x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p, err := ResolveResolverFilePath(repo, "tool")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p != prof {
+		t.Fatalf("want profile %s got %s", prof, p)
+	}
+}
+
+// TestResolveResolverFilePathIgnoresWorkflowLocal verifies profiles beside templates/<wf>/ are not used.
+func TestResolveResolverFilePathIgnoresWorkflowLocal(t *testing.T) {
+	repo := t.TempDir()
+	wf := filepath.Join(repo, "templates", "acme")
+	_ = os.MkdirAll(filepath.Join(wf, "resolvers"), 0o755)
+	if err := os.WriteFile(filepath.Join(wf, "resolvers", "onlyhere"), []byte("DOCKPIPE_RESOLVER_TEMPLATE=x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ResolveResolverFilePath(repo, "onlyhere")
+	if err == nil {
+		t.Fatal("expected error: runtime profiles are not read from workflow template folders")
 	}
 }

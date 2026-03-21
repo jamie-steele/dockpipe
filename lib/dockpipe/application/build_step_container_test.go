@@ -13,7 +13,7 @@ func TestBuildStepContainer_UsesCliArgsForLastStep(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{
 		repoRoot:    repoRoot,
-		wfRoot:      filepath.Join(repoRoot, "templates/chain-test"),
+		wfRoot:      filepath.Join(repoRoot, "templates", "test"),
 		wf:          &domain.Workflow{Isolate: "base-dev"},
 		cliArgs:     []string{"echo", "from-cli"},
 		opts:        &CliOpts{},
@@ -40,7 +40,7 @@ func TestBuildStepContainer_ErrorsWhenActionMissing(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{
 		repoRoot: repoRoot,
-		wfRoot:   filepath.Join(repoRoot, "templates/chain-test"),
+		wfRoot:   filepath.Join(repoRoot, "templates", "test"),
 		wf:       &domain.Workflow{Isolate: "base-dev"},
 		opts:     &CliOpts{},
 	}
@@ -56,7 +56,7 @@ func TestBuildStepContainer_CommitWorktreeTurnsIntoHostCommit(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{
 		repoRoot: repoRoot,
-		wfRoot:   filepath.Join(repoRoot, "templates/chain-test"),
+		wfRoot:   filepath.Join(repoRoot, "templates", "test"),
 		wf:       &domain.Workflow{Isolate: "base-dev"},
 		opts:     &CliOpts{},
 	}
@@ -82,7 +82,7 @@ func TestBuildStepContainer_StepResolverTemplate(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{
 		repoRoot: repoRoot,
-		wfRoot:   filepath.Join(repoRoot, "templates/chain-test"),
+		wfRoot:   filepath.Join(repoRoot, "templates", "test"),
 		wf:       &domain.Workflow{},
 		opts:     &CliOpts{},
 	}
@@ -96,4 +96,3 @@ func TestBuildStepContainer_StepResolverTemplate(t *testing.T) {
 		t.Fatalf("expected vscode image from resolver template, got %q", runOpts.Image)
 	}
 }
-

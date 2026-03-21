@@ -6,21 +6,21 @@ import (
 
 // TestEmbeddedWorkflowConfigExists matches known bundled template names.
 func TestEmbeddedWorkflowConfigExists(t *testing.T) {
-	if !EmbeddedWorkflowConfigExists("run-worktree") {
-		t.Fatal("expected run-worktree")
+	if !EmbeddedWorkflowConfigExists("test") {
+		t.Fatal("expected test")
 	}
-	if !EmbeddedWorkflowConfigExists("vscode") {
-		t.Fatal("expected vscode")
+	if !EmbeddedWorkflowConfigExists("run") {
+		t.Fatal("expected run")
 	}
-	if !EmbeddedWorkflowConfigExists("cursor-dev") {
-		t.Fatal("expected cursor-dev")
+	if !EmbeddedWorkflowConfigExists("run-apply-validate") {
+		t.Fatal("expected run-apply-validate")
 	}
-	if !EmbeddedWorkflowConfigExists("chain-test") {
-		t.Fatal("expected chain-test")
+	if !EmbeddedWorkflowConfigExists("init") {
+		t.Fatal("expected init")
 	}
-	for _, name := range []string{"claude", "codex", "code-server"} {
+	for _, name := range []string{"vscode", "cursor-dev", "claude", "codex", "code-server"} {
 		if !EmbeddedWorkflowConfigExists(name) {
-			t.Fatalf("expected %s", name)
+			t.Fatalf("expected resolver delegate %s", name)
 		}
 	}
 	if EmbeddedWorkflowConfigExists("") {

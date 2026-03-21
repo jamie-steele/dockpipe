@@ -25,7 +25,7 @@ This configures the target distro, bootstraps WSL host-awareness env (`DOCKPIPE_
 
 ### Dockpipe vs manual bundle (what’s actually “one branch”)
 
-- **Workflow (run-worktree + commit-worktree):** work happens in **one new worktree branch** (e.g. `claude/…` or `codex/…`); the **commit** is only on that branch’s tree. From the CLI this feels like a single branch.
+- **Workflow (worktree strategy + commit-worktree):** work happens in **one new worktree branch** (e.g. `claude/…` or `codex/…`); the **commit** is only on that branch’s tree. From the CLI this feels like a single branch.
 - **The bundle file:** after commit-on-host, dockpipe runs **`git bundle create <path> refs/heads/<current-branch>`** (or **`HEAD`** if detached) — only the branch that was committed, so the file is usually **smaller** than `--all` when other branches have unique commits. Set **`DOCKPIPE_BUNDLE_ALL=1`** to restore the old **`--all`** behavior ([`commit.go`](../lib/dockpipe/infrastructure/commit.go), [`runner.sh`](../lib/runner.sh)).
 - **Windows fetch:** the pain you hit (`refusing to fetch into branch … checked out`) is **Git on Windows**, not the bridge. A bare **`git fetch <bundle>`** (or `+refs/heads/*:refs/heads/*`) tries to move **local** `refs/heads/…` and **fails for the branch you have checked out**. Fetch resolver branches into **`refs/remotes/wsl/…`** first (and only then update other local branches), or restrict refspecs to **`claude/*`** / **`codex/*`** if that’s all you need.
 
@@ -84,7 +84,7 @@ exit $LASTEXITCODE
 Use a path under `/mnt/c/...` so Windows can see the file.
 
 ```bash
-dockpipe --workflow run-worktree --repo https://github.com/org/repo.git --branch my-branch \
+dockpipe --workflow my-ai --resolver claude --repo https://github.com/org/repo.git --branch my-branch \
   --bundle-out /mnt/c/Users/YOUR_USER/YOUR_REPO.bundle \
   -- claude -p "Your prompt"
 ```

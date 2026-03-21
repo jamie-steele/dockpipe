@@ -1,8 +1,0 @@
-# Bundled workflow for resolver claude and DOCKPIPE_RESOLVER_WORKFLOW=claude.
-# Used after run-worktree clone; parent runs commit-worktree on the host.
-name: claude
-description: Claude Code in a worktree (dockpipe-claude image).
-
-steps:
-  - id: claude
-    isolate: claude

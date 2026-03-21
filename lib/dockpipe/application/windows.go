@@ -14,12 +14,12 @@ import (
 )
 
 var (
-	windowsGoosFn         = func() string { return runtime.GOOS }
-	windowsExecCommandFn  = exec.Command
-	windowsStdin          io.Reader = os.Stdin
-	windowsStdout         io.Writer = os.Stdout
-	windowsStderr         io.Writer = os.Stderr
-	windowsUserHomeDirFn            = os.UserHomeDir
+	windowsGoosFn                  = func() string { return runtime.GOOS }
+	windowsExecCommandFn           = exec.Command
+	windowsStdin         io.Reader = os.Stdin
+	windowsStdout        io.Writer = os.Stdout
+	windowsStderr        io.Writer = os.Stderr
+	windowsUserHomeDirFn           = os.UserHomeDir
 )
 
 type windowsSetupOpts struct {

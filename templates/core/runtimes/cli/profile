@@ -1,0 +1,3 @@
+# Runtime substrate: host / local shell (cli).
+# Execution happens on the host without a container; pairing with resolvers is via templates/core/resolvers/<name>.
+DOCKPIPE_RUNTIME_SUBSTRATE=cli

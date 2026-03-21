@@ -52,26 +52,28 @@ func ResolvePreScriptPath(p, repoRoot string) string {
 	return p
 }
 
-// ResolveResolverFilePath returns the path to a resolver KEY=value file (workflow or step resolver name).
-// Order: workflow-local wfRoot/resolvers/<name>, then templates/core/resolvers/<name>,
-// then legacy templates/run-worktree/resolvers/<name> for older workspaces.
-func ResolveResolverFilePath(repoRoot, wfRoot, resolverName string) (string, error) {
+// ResolveResolverFilePath returns the path to a specific resolver profile (KEY=value) by name.
+// name selects a concrete profile (claude, codex, …); the agnostic runtime contract is DOCKPIPE_RUNTIME_* / DOCKPIPE_RESOLVER_* inside the file.
+// Search order:
+//
+//	templates/core/resolvers/<name> (file) → templates/core/resolvers/<name>/profile
+//
+// Custom execution graphs belong in workflow YAML under templates/<workflow>/ (or --workflow-file), not beside it as profile files.
+func ResolveResolverFilePath(repoRoot, resolverName string) (string, error) {
 	resolverName = strings.TrimSpace(resolverName)
 	if resolverName == "" {
-		return "", fmt.Errorf("resolver name is empty")
+		return "", fmt.Errorf("resolver profile name is empty")
 	}
-	var candidates []string
-	if wfRoot != "" {
-		candidates = append(candidates, filepath.Join(wfRoot, "resolvers", resolverName))
+	candidates := []string{
+		filepath.Join(repoRoot, "templates", "core", "resolvers", resolverName),
+		filepath.Join(repoRoot, "templates", "core", "resolvers", resolverName, "profile"),
 	}
-	candidates = append(candidates, filepath.Join(repoRoot, "templates", "core", "resolvers", resolverName))
-	candidates = append(candidates, filepath.Join(repoRoot, "templates", "run-worktree", "resolvers", resolverName))
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p, nil
 		}
 	}
-	return "", fmt.Errorf("resolver file not found for %q (tried %v); shared resolvers live under templates/core/resolvers/ — upgrade dockpipe, re-extract the bundle (bundled format bump), or run `dockpipe doctor` / delete the bundled cache folder if your install is stale", resolverName, candidates)
+	return "", fmt.Errorf("resolver profile not found for %q (tried %v); shared profiles live under templates/core/resolvers/ — use workflow YAML for custom flows — upgrade dockpipe or run `dockpipe doctor` if your install is stale", resolverName, candidates)
 }
 
 // IsBundledCommitWorktree reports whether action is the bundled commit-worktree.sh.

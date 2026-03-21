@@ -34,4 +34,3 @@ BADLINE
 		t.Fatalf("BADLINE should be ignored: %#v", m)
 	}
 }
-

@@ -9,7 +9,7 @@ import (
 
 // branchSlugAdjectives and branchSlugNouns are mixed dev/infra-flavored tokens.
 // Four picks (adj-noun-adj-noun) give |A|×|N|×|A|×|N| combinations — on the order of 10^8+.
-// Keep scripts/branch-slug.sh (sourced by dockpipe-legacy.sh) in sync when editing these lists.
+// Word lists used for random work-branch slugs; keep adjectives/nouns in sensible pairs for readability.
 var branchSlugAdjectives = []string{
 	"able", "apt", "azure", "bold", "brisk", "bright", "calm", "clear", "cool", "crisp",
 	"curious", "dapper", "eager", "fancy", "fast", "fleet", "fresh", "gentle", "grand", "happy",

@@ -53,11 +53,11 @@ func TestBranchPrefixForTemplate(t *testing.T) {
 // TestFromResolverMap builds a Resolver from DOCKPIPE_RESOLVER_* env-style map entries.
 func TestFromResolverMap(t *testing.T) {
 	r := FromResolverMap(map[string]string{
-		"DOCKPIPE_RESOLVER_TEMPLATE":   "codex",
-		"DOCKPIPE_RESOLVER_PRE_SCRIPT": "scripts/pre.sh",
-		"DOCKPIPE_RESOLVER_ACTION":     "actions/do.sh",
-		"DOCKPIPE_RESOLVER_CMD":        "codex",
-		"DOCKPIPE_RESOLVER_ENV":        "OPENAI_API_KEY",
+		"DOCKPIPE_RESOLVER_TEMPLATE":     "codex",
+		"DOCKPIPE_RESOLVER_PRE_SCRIPT":   "scripts/pre.sh",
+		"DOCKPIPE_RESOLVER_ACTION":       "actions/do.sh",
+		"DOCKPIPE_RESOLVER_CMD":          "codex",
+		"DOCKPIPE_RESOLVER_ENV":          "OPENAI_API_KEY",
 		"DOCKPIPE_RESOLVER_EXPERIMENTAL": "1",
 	})
 	if r.Template != "codex" || r.PreScript != "scripts/pre.sh" || r.Action != "actions/do.sh" {

@@ -19,7 +19,7 @@ func TestParseFlagsHappyPath(t *testing.T) {
 		"--work-path", "subdir",
 		"--work-branch", "dockpipe/wb",
 		"--bundle-out", "out.bundle",
-		"--resolver", "claude",
+		"--runtime", "claude",
 		"--mount", "/h:/c",
 		"--env", "A=B",
 		"--env-file", ".env.local",
@@ -39,7 +39,7 @@ func TestParseFlagsHappyPath(t *testing.T) {
 	if !o.SeenDash || len(rest) != 2 || rest[0] != "echo" || rest[1] != "ok" {
 		t.Fatalf("rest/SeenDash mismatch: rest=%v seenDash=%v", rest, o.SeenDash)
 	}
-	if o.Workflow != "demo" || o.Isolate != "codex" || o.Action != "scripts/act.sh" {
+	if o.Workflow != "demo" || o.Isolate != "codex" || o.Action != "scripts/act.sh" || o.Runtime != "claude" {
 		t.Fatalf("basic options mismatch: %+v", o)
 	}
 	if o.RepoURL == "" || o.RepoBranch != "feat/x" || o.WorkPath != "subdir" {
@@ -99,6 +99,17 @@ func TestParseFlagsUnknownOption(t *testing.T) {
 	}
 }
 
+// TestParseFlagsRuntimeAndResolverBothAllowed allows both --runtime and --resolver.
+func TestParseFlagsRuntimeAndResolverBothAllowed(t *testing.T) {
+	_, o, err := ParseFlags("/tmp/repo", []string{"--runtime", "docker-node", "--resolver", "claude"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Runtime != "docker-node" || o.Resolver != "claude" {
+		t.Fatalf("got runtime=%q resolver=%q", o.Runtime, o.Resolver)
+	}
+}
+
 // TestParseFlagsUnexpectedPositionalBeforeDash errors when a bare positional appears before --.
 func TestParseFlagsUnexpectedPositionalBeforeDash(t *testing.T) {
 	_, _, err := ParseFlags("/tmp/repo", []string{"echo"})
@@ -106,4 +117,3 @@ func TestParseFlagsUnexpectedPositionalBeforeDash(t *testing.T) {
 		t.Fatalf("expected positional-before-dash error, got %v", err)
 	}
 }
-

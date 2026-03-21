@@ -23,7 +23,6 @@ func mkRepoRootForSubcmdTests(t *testing.T) string {
 	writeFile(t, filepath.Join(repoRoot, "templates", "init", "config.yml"), "name: init\n", 0o644)
 	writeFile(t, filepath.Join(repoRoot, "templates", "core", "resolvers", "default"), "DOCKPIPE_RESOLVER_TEMPLATE=codex\n", 0o644)
 	writeFile(t, filepath.Join(repoRoot, "templates", "core", "resolvers", "claude"), "DOCKPIPE_RESOLVER_TEMPLATE=claude\n", 0o644)
-	writeFile(t, filepath.Join(repoRoot, "templates", "run-worktree", "config.yml"), "name: run-worktree\n", 0o644)
 	writeFile(t, filepath.Join(repoRoot, "scripts", "commit-worktree.sh"), "#!/usr/bin/env bash\n", 0o755)
 	writeFile(t, filepath.Join(repoRoot, "scripts", "clone-worktree.sh"), "#!/usr/bin/env bash\n", 0o755)
 	return repoRoot
@@ -129,21 +128,49 @@ func TestCmdPreInitCreatesDefaultScript(t *testing.T) {
 	}
 }
 
-// TestCmdInitCreatesWorkspaceAndTemplate creates workspace layout and templates/<name> from init template.
+// TestMergeBundledTemplatesCoreCopiesCoreTree copies templates/core from repoRoot into dest.
+func TestMergeBundledTemplatesCoreCopiesCoreTree(t *testing.T) {
+	repo := t.TempDir()
+	dest := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "templates", "core", "x"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "templates", "core", "x", "marker.txt"), []byte("ok\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := mergeBundledTemplatesCore(repo, dest); err != nil {
+		t.Fatalf("mergeBundledTemplatesCore: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(dest, "templates", "core", "x", "marker.txt"))
+	if err != nil || string(b) != "ok\n" {
+		t.Fatalf("got %v %q", err, string(b))
+	}
+}
+
+// TestCmdInitCreatesWorkspaceAndTemplate creates workspace layout and templates/<name> from init template in cwd.
 func TestCmdInitCreatesWorkspaceAndTemplate(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
 
-	dest := filepath.Join(t.TempDir(), "workspace")
-	if err := cmdInit([]string{"demo", dest}); err != nil {
+	project := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(project); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	if err := cmdInit([]string{"demo"}); err != nil {
 		t.Fatalf("cmdInit failed: %v", err)
 	}
 	checks := []string{
-		filepath.Join(dest, "README.md"),
-		filepath.Join(dest, "scripts"),
-		filepath.Join(dest, "images"),
-		filepath.Join(dest, "templates", "demo", "config.yml"),
-		filepath.Join(dest, "templates", "core", "resolvers", "default"),
+		filepath.Join(project, "README.md"),
+		filepath.Join(project, "scripts"),
+		filepath.Join(project, "images"),
+		filepath.Join(project, "templates", "demo", "config.yml"),
+		filepath.Join(project, "templates", "core", "resolvers", "default"),
 	}
 	for _, p := range checks {
 		if _, err := os.Stat(p); err != nil {
@@ -163,21 +190,79 @@ func TestCmdInitErrorsOnUnknownOption(t *testing.T) {
 	}
 }
 
-// TestCmdInitErrorsOnNonEmptyDestination refuses to init into a non-empty directory.
-func TestCmdInitErrorsOnNonEmptyDestination(t *testing.T) {
+// TestCmdInitRejectsExistingTemplate refuses to create a workflow when templates/<name> already exists.
+func TestCmdInitRejectsExistingTemplate(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
 
-	dest := filepath.Join(t.TempDir(), "workspace")
-	if err := os.MkdirAll(dest, 0o755); err != nil {
+	project := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(project, "templates", "demo"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dest, "existing.txt"), []byte("x"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(project, "templates", "demo", "config.yml"), []byte("name: demo\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := cmdInit([]string{"demo", dest})
-	if err == nil || !strings.Contains(err.Error(), "destination exists and is not empty") {
-		t.Fatalf("expected non-empty destination error, got %v", err)
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(project); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	err = cmdInit([]string{"demo"})
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("expected existing template error, got %v", err)
+	}
+}
+
+// TestCmdInitAppliesResolverRuntimeStrategy writes optional fields into config.yml.
+func TestCmdInitAppliesResolverRuntimeStrategy(t *testing.T) {
+	repoRoot := mkRepoRootForSubcmdTests(t)
+	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
+
+	project := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(project); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	if err := cmdInit([]string{"demo", "--resolver", "claude", "--runtime", "vscode", "--strategy", "worktree"}); err != nil {
+		t.Fatalf("cmdInit failed: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(project, "templates", "demo", "config.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	if !strings.Contains(s, "claude") || !strings.Contains(s, "vscode") || !strings.Contains(s, "worktree") {
+		t.Fatalf("expected resolver/runtime/strategy in config, got:\n%s", s)
+	}
+}
+
+// TestCmdInitRequiresNameForFrom errors when --from is set without a workflow name.
+func TestCmdInitRequiresNameForFrom(t *testing.T) {
+	repoRoot := mkRepoRootForSubcmdTests(t)
+	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
+
+	project := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(project); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	err = cmdInit([]string{"--from", "run"})
+	if err == nil || !strings.Contains(err.Error(), "requires a workflow name") {
+		t.Fatalf("expected --from requires name error, got %v", err)
 	}
 }
 

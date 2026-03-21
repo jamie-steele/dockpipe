@@ -155,7 +155,7 @@ func TestRunHostIsolateHappyPath(t *testing.T) {
 	}
 }
 
-// TestRunMissingWorkflowErrors when --workflow name has no templates/<name>/config.yml.
+// TestRunMissingWorkflowErrors when --workflow name has no matching config.yml.
 func TestRunMissingWorkflowErrors(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
@@ -325,17 +325,15 @@ func TestRunInfersOriginWhenWorkflowUsesCloneWorktree(t *testing.T) {
 
 	repoRoot := t.TempDir()
 	wfDir := filepath.Join(repoRoot, "templates", "wfinfer")
-	if err := os.MkdirAll(filepath.Join(wfDir, "resolvers"), 0o755); err != nil {
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
 	cfg := `run: scripts/clone-worktree.sh
 act: scripts/noop.sh
 isolate: codex
 `
 	if err := os.WriteFile(filepath.Join(wfDir, "config.yml"), []byte(cfg), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(wfDir, "resolvers", "codex"), []byte("DOCKPIPE_RESOLVER_TEMPLATE=codex\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(repoRoot, "scripts"), 0o755); err != nil {
@@ -408,12 +406,7 @@ func TestStrategyHookOrder(t *testing.T) {
 		}
 	}
 	wfDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(wfDir, "resolvers"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(wfDir, "resolvers", "codex"), []byte("DOCKPIPE_RESOLVER_TEMPLATE=codex\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
 	cfg := `name: hook-order
 strategy: hook-order
 isolate: codex

@@ -1,6 +1,0 @@
-# Resolver: OpenAI Codex CLI — delegates to templates/codex after clone-worktree (same as DOCKPIPE_RESOLVER_WORKFLOW=codex).
-DOCKPIPE_RESOLVER_WORKFLOW=codex
-DOCKPIPE_RESOLVER_CMD=codex
-DOCKPIPE_RESOLVER_ENV=OPENAI_API_KEY
-DOCKPIPE_RESOLVER_PRE_SCRIPT=scripts/clone-worktree.sh
-DOCKPIPE_RESOLVER_ACTION=scripts/commit-worktree.sh

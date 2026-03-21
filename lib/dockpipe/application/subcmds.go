@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -41,102 +40,61 @@ func cmdInit(args []string) error {
 	if err != nil {
 		return err
 	}
-	var fromURL, templateName, dest string
-	for i := 0; i < len(args); i++ {
-		if args[i] == "--from" {
-			if i+1 >= len(args) {
-				return fmt.Errorf("--from requires URL")
-			}
-			fromURL = args[i+1]
-			i++
-			continue
-		}
-		if strings.HasPrefix(args[i], "-") {
-			return fmt.Errorf("unknown option %s", args[i])
-		}
-		if templateName == "" && dest == "" {
-			if strings.Contains(args[i], "/") || args[i] == "." {
-				dest = args[i]
-			} else {
-				templateName = args[i]
-			}
-		} else if dest == "" {
-			dest = args[i]
-		}
+	projectDir, err := os.Getwd()
+	if err != nil {
+		return err
 	}
-	if dest == "" {
-		dest = "."
-	}
-	dest, err = filepath.Abs(dest)
+	projectDir, err = filepath.Abs(projectDir)
 	if err != nil {
 		return err
 	}
 
-	if fromURL != "" {
-		if _, err := os.Stat(dest); err == nil {
-			entries, _ := os.ReadDir(dest)
-			if len(entries) > 0 {
-				return fmt.Errorf("destination exists and is not empty: %s", dest)
+	var name, from string
+	var resolver, runtime, strategy string
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--from" && i+1 < len(args):
+			from = args[i+1]
+			i++
+		case args[i] == "--resolver" && i+1 < len(args):
+			resolver = args[i+1]
+			i++
+		case args[i] == "--runtime" && i+1 < len(args):
+			runtime = args[i+1]
+			i++
+		case args[i] == "--strategy" && i+1 < len(args):
+			strategy = args[i+1]
+			i++
+		case strings.HasPrefix(args[i], "-"):
+			return fmt.Errorf("unknown option %s", args[i])
+		default:
+			if name != "" {
+				return fmt.Errorf("unexpected argument %q", args[i])
 			}
-		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] Cloning %s into %s ...\n", fromURL, dest)
-		c := exec.Command("git", "clone", fromURL, dest)
-		c.Stdout = os.Stdout
-		c.Stderr = os.Stderr
-		return c.Run()
-	}
-
-	if fi, err := os.Stat(dest); err == nil {
-		if !fi.IsDir() {
-			return fmt.Errorf("destination is not a directory: %s", dest)
-		}
-		entries, _ := os.ReadDir(dest)
-		if len(entries) > 0 {
-			return fmt.Errorf("destination exists and is not empty: %s", dest)
-		}
-	} else {
-		if err := os.MkdirAll(dest, 0o755); err != nil {
-			return err
+			name = args[i]
 		}
 	}
 
-	initTpl := filepath.Join(repoRoot, "templates/init")
-	if _, err := os.Stat(filepath.Join(initTpl, "config.yml")); err != nil {
-		return fmt.Errorf("init template not found: %s", initTpl)
+	if (resolver != "" || runtime != "" || strategy != "") && name == "" {
+		return fmt.Errorf("--resolver, --runtime, and --strategy require a workflow name: dockpipe init <name> ...")
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] Creating workspace at %s ...\n", dest)
-	_ = os.MkdirAll(filepath.Join(dest, "scripts"), 0o755)
-	_ = os.MkdirAll(filepath.Join(dest, "images"), 0o755)
-	_ = os.MkdirAll(filepath.Join(dest, "templates"), 0o755)
-	_ = os.MkdirAll(filepath.Join(dest, "templates", "core"), 0o755)
-	_ = copyDirMaybe(filepath.Join(repoRoot, "templates/core"), filepath.Join(dest, "templates/core"))
-	readme := `# Dockpipe workspace
-
-- **scripts/** — Run and act scripts.
-- **images/** — Dockerfiles.
-- **templates/** — Your workflows (**config.yml**). Use **dockpipe --workflow &lt;name&gt;** (each folder is one workflow).
-- **templates/core/** — Shared **resolvers/**, **strategies/**, optional **scripts/** and **images/** (copied from the bundled tree so workflows can reference them).
-- **dockpipe.yml** (optional) — Repo-root workflow; use **dockpipe --workflow-file dockpipe.yml**.
-`
-	_ = os.WriteFile(filepath.Join(dest, "README.md"), []byte(readme), 0o644)
-	_ = os.WriteFile(filepath.Join(dest, "dockpipe.yml"), []byte(dockpipeYmlBoilerplate), 0o644)
-
-	if templateName != "" {
-		td := filepath.Join(dest, "templates", templateName)
-		if err := os.MkdirAll(td, 0o755); err != nil {
-			return err
-		}
-		if err := copyFile(filepath.Join(initTpl, "config.yml"), filepath.Join(td, "config.yml")); err != nil {
-			return err
-		}
-		_ = copyFileMaybe(filepath.Join(repoRoot, "scripts/example-run.sh"), filepath.Join(dest, "scripts/example-run.sh"))
-		_ = copyFileMaybe(filepath.Join(repoRoot, "scripts/example-act.sh"), filepath.Join(dest, "scripts/example-act.sh"))
-		_ = copyDirMaybe(filepath.Join(repoRoot, "images/example"), filepath.Join(dest, "images/example"))
-		fmt.Printf("Created: %s with templates/%s/ (shared resolvers/strategies under templates/core/)\n", dest, templateName)
-	} else {
-		fmt.Printf("Created: %s (scripts/, images/, templates/)\n", dest)
+	if strings.TrimSpace(from) != "" && name == "" {
+		return fmt.Errorf("--from requires a workflow name: dockpipe init <name> --from <source>")
 	}
-	return nil
+
+	if err := ensureProjectScaffold(repoRoot, projectDir); err != nil {
+		return err
+	}
+	if name == "" {
+		fmt.Fprintf(os.Stderr, "[dockpipe] Initialized Dockpipe in %s\n", projectDir)
+		return nil
+	}
+
+	fromSource := strings.TrimSpace(from)
+	if fromSource == "" {
+		fromSource = "init"
+	}
+	return createNamedWorkflow(repoRoot, projectDir, name, fromSource, resolver, runtime, strategy)
 }
 
 func cmdAction(args []string) error {
@@ -174,7 +132,7 @@ func cmdTemplate(args []string) error {
 		name = "my-workflow"
 	}
 	if from == "" {
-		from = "run-worktree"
+		from = "init"
 	}
 	src := filepath.Join(repoRoot, "templates", from)
 	if _, err := os.Stat(src); err != nil {
@@ -265,6 +223,13 @@ func cmdInitLikeScript(args []string, defaultName string, bundled []string, boil
 		return os.Chmod(dest, 0o755)
 	}
 	return os.WriteFile(dest, []byte(boiler), 0o755)
+}
+
+// mergeBundledTemplatesCore copies templates/core (runtimes, resolvers, strategies) from the dockpipe
+// install into dest, matching dockpipe init without --from.
+func mergeBundledTemplatesCore(repoRoot, dest string) error {
+	_ = os.MkdirAll(filepath.Join(dest, "templates"), 0o755)
+	return copyDirMaybe(filepath.Join(repoRoot, "templates/core"), filepath.Join(dest, "templates/core"))
 }
 
 func copyFile(src, dst string) error {

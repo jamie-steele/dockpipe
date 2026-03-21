@@ -36,6 +36,7 @@ type CliOpts struct {
 	WorkPath      string
 	WorkBranch    string
 	BundleOut     string
+	Runtime       string
 	Resolver      string
 	Strategy      string
 	ExtraMounts   []string
@@ -148,6 +149,12 @@ func ParseFlags(repoRoot string, argv []string) ([]string, *CliOpts, error) {
 				return nil, nil, fmt.Errorf("--bundle-out requires an argument")
 			}
 			o.BundleOut = argv[i+1]
+			i += 2
+		case "--runtime":
+			if i+1 >= len(argv) {
+				return nil, nil, fmt.Errorf("--runtime requires an argument")
+			}
+			o.Runtime = argv[i+1]
 			i += 2
 		case "--resolver":
 			if i+1 >= len(argv) {

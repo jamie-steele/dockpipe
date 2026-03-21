@@ -1,4 +1,0 @@
-# Cursor: delegates to the cursor-dev workflow (templates/cursor-dev) — same as `dockpipe --workflow cursor-dev` after clone-worktree.
-DOCKPIPE_RESOLVER_WORKFLOW=cursor-dev
-DOCKPIPE_RESOLVER_PRE_SCRIPT=scripts/clone-worktree.sh
-DOCKPIPE_RESOLVER_ACTION=scripts/commit-worktree.sh

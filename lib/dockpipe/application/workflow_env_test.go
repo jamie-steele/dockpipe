@@ -6,7 +6,7 @@ import "testing"
 func TestMergeCommitEnvFromLines_AllowsKnownKeysOnly(t *testing.T) {
 	env := map[string]string{
 		"DOCKPIPE_COMMIT_MESSAGE": "old",
-		"IGNORED":                "keep",
+		"IGNORED":                 "keep",
 	}
 	mergeCommitEnvFromLines(env, []string{
 		"DOCKPIPE_COMMIT_MESSAGE=new msg",
@@ -62,4 +62,3 @@ func TestAppendUniqueEnvAndFirstNonEmpty(t *testing.T) {
 		t.Fatalf("firstNonEmpty mismatch: got %q", got)
 	}
 }
-

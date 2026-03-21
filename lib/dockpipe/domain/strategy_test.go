@@ -34,19 +34,19 @@ func TestFromStrategyMapEmpty(t *testing.T) {
 func TestParseWorkflowYAMLStrategyFields(t *testing.T) {
 	y := `
 name: t
-strategy: git-worktree
+strategy: worktree
 strategies:
-  - git-worktree
-  - git-commit
+  - worktree
+  - commit
 `
 	w, err := ParseWorkflowYAML([]byte(y))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w.Strategy != "git-worktree" {
+	if w.Strategy != "worktree" {
 		t.Fatalf("strategy: %q", w.Strategy)
 	}
-	if len(w.Strategies) != 2 || w.Strategies[0] != "git-worktree" {
+	if len(w.Strategies) != 2 || w.Strategies[0] != "worktree" {
 		t.Fatalf("strategies: %#v", w.Strategies)
 	}
 }

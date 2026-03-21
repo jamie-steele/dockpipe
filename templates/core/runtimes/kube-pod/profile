@@ -1,0 +1,2 @@
+# Runtime substrate: Kubernetes (pod / job execution).
+DOCKPIPE_RUNTIME_SUBSTRATE=kube-pod

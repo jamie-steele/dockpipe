@@ -8,7 +8,7 @@ Dockpipe runs any CLI command in a disposable container with your project at **`
 
 - **`dockpipe -- <command>`** — project at **`/work`**, your **uid/gid**, container removed when the command exits.
 - **No flag soup** — same defaults every time instead of hand-rolling `docker run -v … -w … -u … --rm …`.
-- **Optional power** — workflows (`--workflow`), resolvers, and worktrees only when you need them.
+- **Optional power** — workflows (`--workflow`), runtimes / resolvers, and strategies only when you need them.
 
 **Troubleshooting:** `dockpipe doctor` checks **bash**, **Docker**, and bundled assets.
 
@@ -34,7 +34,9 @@ No manual cleanup—you keep using the same commands (`make`, tests, linters—w
 
 **Under the hood:** Dockpipe follows a simple flow—**run** (optional prep on your machine), **isolate** (your command in the container), **act** (optional script on your machine after the container exits). Most of the time you only use the middle step: **`dockpipe -- <command>`**.
 
-Optional **named workflows** in YAML — bundled templates via **`--workflow <name>`**, or a file anywhere (often **`dockpipe.yml`** at the repo root) via **`--workflow-file <path>`**. Optional **named strategies** (**`--strategy`** / **`strategy:`** in YAML) wrap the workflow with host **before/after** scripts (e.g. **`git-worktree`**, **`git-commit`** under **`templates/core/strategies/`**). **Learning path:** **[docs/onboarding.md](docs/onboarding.md)** · **[docs/workflow-yaml.md](docs/workflow-yaml.md)** · **[templates/run-worktree/README.md](templates/run-worktree/README.md)**.
+**Conceptual model:** **workflow** = execution intent · **runtime** = isolated environment (platform-agnostic) · **resolver** = tool/platform adapter · **strategy** = lifecycle before/after · **`runtime.type`** = behavior class (`execution` / `ide` / `agent`). Canonical definitions and examples: **[docs/architecture-model.md](docs/architecture-model.md)**. Refactor plan: **[docs/runtime-architecture.md](docs/runtime-architecture.md)**.
+
+Optional **named workflows** in YAML — bundled **scaffolding** via **`--workflow <name>`**, or any path with **`--workflow-file`**. **Templates do not define architecture** — see **[docs/architecture-model.md](docs/architecture-model.md)**. Core **workflow** *names* in this repo include **`init`**, **`test`**, **`run`**, **`run-apply-validate`** (under **`templates/`**). **Clone + worktree + commit** with resolvers uses the **`worktree`** **strategy** (**`templates/core/strategies/worktree`**) in **your** workflow YAML — see **[docs/workflow-yaml.md](docs/workflow-yaml.md#named-strategies)**. **`templates/core/resolvers/`** holds **resolver** bundles only. See **[docs/isolation-layer.md](docs/isolation-layer.md)**. **Learning path:** **[docs/onboarding.md](docs/onboarding.md)** · **[docs/workflow-yaml.md](docs/workflow-yaml.md)** · **[docs/architecture-model.md](docs/architecture-model.md)**.
 
 ---
 
@@ -112,7 +114,7 @@ dockpipe -d -- make test
 
 ## How it works
 
-**Bundled assets:** Default **`templates/`**, **`scripts/`**, **`images/`**, and **`lib/entrypoint.sh`** are embedded in the binary and unpacked to your **user cache** on first use (override with **`DOCKPIPE_REPO_ROOT`** for development). **`dockpipe init`** / **`dockpipe template init`** write files where you choose.
+**Bundled assets:** Default **`templates/`**, **`scripts/`**, **`images/`**, and **`lib/entrypoint.sh`** are embedded in the binary and unpacked to your **user cache** on first use (override with **`DOCKPIPE_REPO_ROOT`** for development). **`dockpipe init`** scaffolds the **current project** (and optional **`templates/<name>/`**); **`dockpipe template init`** creates a workflow folder (often with **`--from`** a bundled name).
 
 **Data:** By default a named volume **`dockpipe-data`** is mounted at **`/dockpipe-data`** with **`HOME`** there so tool state can persist between runs. Use **`--data-dir`**, **`--no-data`**, or **`--reinit`** to change that.
 
@@ -120,7 +122,7 @@ dockpipe -d -- make test
 
 ## Resolvers and worktree (optional)
 
-**Resolvers** map a name (e.g. `claude`, `codex`) to an image and defaults — or, for **`cursor`** / **`vscode`**, to a **bundled workflow** (`DOCKPIPE_RESOLVER_WORKFLOW` → **`cursor-dev`** / **`vscode`** templates), same as **`--workflow cursor-dev`** / **`vscode`** but inside **run-worktree** with clone/commit (clone/commit are provided by the **`git-worktree`** **strategy** on that template). **`--resolver code-server`** uses the **`vscode`** Docker image for a normal container command. **`--resolver`** with **`--repo`** / **`--branch`** drives worktree-on-host flows. **`dockpipe template init my-workflow --from run-worktree`** copies a workflow you can edit.
+**Resolvers** map a name (e.g. `claude`, `codex`) to an image and defaults — or, for **`cursor-dev`** / **`vscode`**, to a **bundled delegate** (`DOCKPIPE_RESOLVER_WORKFLOW`), same as **`--workflow cursor-dev`** / **`vscode`** but under the **`worktree`** **strategy** with clone/commit. **`--resolver code-server`** uses the **`vscode`** Docker image for a normal container command. **`--resolver`** with **`--repo`** / **`--branch`** drives worktree-on-host flows. Add **`strategy: worktree`** (and **`strategies:`** / **`default_resolver:`** as needed) in **`templates/<name>/config.yml`** — see **[docs/workflow-yaml.md](docs/workflow-yaml.md#named-strategies)**.
 
 ---
 
@@ -132,23 +134,21 @@ dockpipe -d -- make test
 | `dev` | base-dev + build-essential, ssh, etc. |
 | `agent-dev` | Node + Claude Code. `claude` is an alias. |
 | `codex` | Node + OpenAI Codex CLI. |
-| `vscode` | OSS code-server stack (`codercom/code-server` + dockpipe entrypoint). **run-worktree** `--resolver code-server` uses workflow **`code-server`** (isolate step → this image); **`--resolver vscode`** delegates to **`templates/vscode`** (host browser IDE). |
+| `vscode` | OSS code-server **image** stack (`codercom/code-server` + dockpipe entrypoint) for **`TemplateBuild`**. **`--resolver code-server`** uses workflow **`code-server`** (container isolate). Browser IDE on the host is the **`vscode`** **runtime** profile, not a separate workflow row. |
 
 ---
 
 ## Bundled workflows
 
-YAML presets via **`--workflow <name>`** (see **`templates/<name>/README.md`**):
+YAML presets via **`--workflow <name>`** (bundled under **`templates/`**; resolver delegate YAML also loads via the same flag from **`templates/core/resolvers/<name>/config.yml`** — see **[docs/workflow-yaml.md](docs/workflow-yaml.md)**):
 
 | Workflow | Role |
 |----------|------|
-| `commit-run` | **Simple git:** run in a container, then **one commit on the current branch** (no worktrees) — [templates/commit-run/README.md](templates/commit-run/README.md) |
-| `claude` / `codex` / `code-server` | Thin isolate workflows used by **`run-worktree`** resolvers (`DOCKPIPE_RESOLVER_WORKFLOW`) — [templates/claude/README.md](templates/claude/README.md) · [codex](templates/codex/README.md) · [code-server](templates/code-server/README.md) |
-| `vscode` | Browser IDE (code-server) — [templates/vscode/README.md](templates/vscode/README.md) |
-| `cursor-dev` | `base-dev` session container + Cursor on host (docker wait) — [templates/cursor-dev/README.md](templates/cursor-dev/README.md) |
-| `run-worktree` | **Advanced:** AI + isolated branch/worktree + resolvers — [templates/run-worktree/README.md](templates/run-worktree/README.md) |
-| `chain-test` | Two-step env chain demo — [docs/workflow-yaml.md](docs/workflow-yaml.md) |
-| `workflow-demo` | Async group + merged outputs — [docs/workflow-yaml.md](docs/workflow-yaml.md) |
+| `test` | Multi-step **outputs** chain (`.dockpipe/outputs.env`) — [templates/test/README.md](templates/test/README.md) |
+| `run` | **Simple git:** run in a container, then **one commit on your current branch** (no worktrees) — [templates/run/README.md](templates/run/README.md) |
+| `run-apply-validate` | **run → apply → validate** pipeline (three steps; customize cmds) — [templates/run-apply-validate/README.md](templates/run-apply-validate/README.md) |
+
+**Resolvers** (tool/platform integration — not separate top-level templates): **`claude`**, **`codex`**, **`code-server`**, **`cursor-dev`**, **`vscode`** live under **[templates/core/resolvers/](templates/core/resolvers/)** (each **`profile`** + optional **`config.yml`**). **Clone + worktree + commit** uses **strategy `worktree`** in your workflow YAML — **[docs/workflow-yaml.md](docs/workflow-yaml.md#named-strategies)**.
 
 ---
 

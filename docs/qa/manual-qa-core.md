@@ -72,7 +72,7 @@ Release artifact: `dockpipe_<version>_linux_amd64.tar.gz` or `_linux_arm64.tar.g
 ## 5. Optional: workflow / template (heavier)
 
 - [ ] `dockpipe --workflow <bundled-name> -- …` minimal command (if you have credentials / network for tools).
-- [ ] Or `dockpipe init` / `dockpipe template init` into a temp dir (no network if using `--from` bundled name only).
+- [ ] Or `dockpipe init` / `dockpipe template init` in a temp project dir (no network if using `--from` with a bundled name or `blank` only).
 
 ---
 

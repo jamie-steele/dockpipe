@@ -35,7 +35,7 @@ func ValidateStrategyAllowlist(wf *domain.Workflow, name string) error {
 }
 
 // ResolveStrategyFilePath returns the path to the strategy KEY=value file:
-// per-workflow strategies/<name>, then templates/core/strategies/<name>, then legacy templates/strategies/<name>.
+// per-workflow strategies/<name>, then templates/core/strategies/<name>.
 func ResolveStrategyFilePath(repoRoot, wfRoot, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -46,7 +46,6 @@ func ResolveStrategyFilePath(repoRoot, wfRoot, name string) (string, error) {
 		candidates = append(candidates, filepath.Join(wfRoot, "strategies", name))
 	}
 	candidates = append(candidates, filepath.Join(repoRoot, "templates", "core", "strategies", name))
-	candidates = append(candidates, filepath.Join(repoRoot, "templates", "strategies", name))
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p, nil
@@ -109,7 +108,7 @@ func ValidateNoDuplicateClone(wf *domain.Workflow, wfRoot, repoRoot string, stra
 	for _, r := range wf.Run {
 		ap := infrastructure.ResolveWorkflowScript(r, wfRoot, repoRoot)
 		if strings.HasSuffix(ap, "clone-worktree.sh") {
-			return fmt.Errorf("workflow run lists clone-worktree.sh but strategy already runs clone; remove clone from workflow run: (hint: rely on strategy git-worktree or remove duplicate from run:)")
+			return fmt.Errorf("workflow run lists clone-worktree.sh but strategy already runs clone; remove clone from workflow run: (hint: rely on strategy worktree or remove duplicate from run:)")
 		}
 	}
 	return nil

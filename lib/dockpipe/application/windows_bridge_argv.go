@@ -62,7 +62,7 @@ func translateDockpipeArgs(distro string, argv []string) []string {
 	}
 	switch out[0] {
 	case "init":
-		translateInitLikePositionals(distro, out, 1)
+		translateInitSubcommandArgs(distro, out)
 	case "action", "pre":
 		if len(out) >= 2 && (out[1] == "init" || out[1] == "create") {
 			translateInitLikePositionals(distro, out, 2)
@@ -75,11 +75,23 @@ func translateDockpipeArgs(distro string, argv []string) []string {
 	return out
 }
 
+// translateInitSubcommandArgs maps Windows paths in dockpipe init --from <path> only.
+// The optional workflow name positional must not be rewritten (it is not a filesystem path).
+func translateInitSubcommandArgs(distro string, out []string) {
+	for i := 1; i < len(out); i++ {
+		if out[i] == "--from" && i+1 < len(out) {
+			i++
+			out[i] = maybeTranslateWinPath(distro, out[i])
+		}
+	}
+}
+
 func translateInitLikePositionals(distro string, out []string, start int) {
 	for i := start; i < len(out); i++ {
 		if out[i] == "--from" {
 			if i+1 < len(out) {
 				i++
+				out[i] = maybeTranslateWinPath(distro, out[i])
 			}
 			continue
 		}
