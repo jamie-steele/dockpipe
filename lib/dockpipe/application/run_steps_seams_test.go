@@ -116,7 +116,8 @@ func TestRunStepPreScripts_SkipContainerUsesRunHostExec(t *testing.T) {
 		called := false
 		runHostScriptFn = func(path string, env []string) error {
 			called = true
-			if path != script {
+			// ResolveWorkflowScript uses ToSlash; compare in slash form for Windows.
+			if filepath.ToSlash(path) != filepath.ToSlash(script) {
 				t.Fatalf("path %q want %q", path, script)
 			}
 			return nil

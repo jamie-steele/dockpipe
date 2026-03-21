@@ -219,9 +219,10 @@ func TestRunContainerAttachedCallsCommitOnHost(t *testing.T) {
 	isTerminalDockerFn = func(fd int) bool { return false }
 	timeNowDockerFn = func() time.Time { return time.Unix(1000, 0) }
 	called := false
+	wantWorkdir := HostPathForGit("/tmp/wd")
 	commitOnHostFn = func(workdir, message, bundleOut string, bundleAll bool) error {
 		called = true
-		if workdir != "/tmp/wd" || message != "m" || bundleOut != "b.bundle" || bundleAll {
+		if workdir != wantWorkdir || message != "m" || bundleOut != "b.bundle" || bundleAll {
 			t.Fatalf("unexpected commit args: %q %q %q bundleAll=%v", workdir, message, bundleOut, bundleAll)
 		}
 		return nil

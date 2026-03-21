@@ -150,7 +150,7 @@ func TestRunHostIsolateHappyPath(t *testing.T) {
 	if dockerBuilt || containerRan {
 		t.Fatalf("expected no docker build/run, built=%v ran=%v", dockerBuilt, containerRan)
 	}
-	if gotIsolate != isolatePath {
+	if filepath.Clean(gotIsolate) != filepath.Clean(isolatePath) {
 		t.Fatalf("unexpected isolate script: got %q want %q", gotIsolate, isolatePath)
 	}
 }
