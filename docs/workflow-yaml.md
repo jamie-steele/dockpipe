@@ -58,6 +58,7 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `run` | String or YAML list: host pre-scripts before this step’s container. |
 | `pre_script` | Single extra pre-script path (in addition to `run`). |
 | `isolate` | Template/image for this step (falls back to workflow / CLI / resolver). |
+| `resolver` | Optional **name** of **`resolvers/<name>`** next to this workflow (same folder layout as **llm-worktree**). Loads **`DOCKPIPE_RESOLVER_TEMPLATE`**, **`DOCKPIPE_RESOLVER_WORKFLOW`** (runs **`templates/<name>/config.yml`** via the same runner), **`DOCKPIPE_RESOLVER_HOST_ISOLATE`**, and default **`act`** when the step does not set them. **`isolate:`** on the step still overrides the template from the resolver file. Workflow or host-isolate resolvers cannot run in **async** groups (`is_blocking: false`); use a blocking step. |
 | `act` / `action` | Action script for this step. |
 | `vars` | Per-step env map (merged for that step; `--var` keys can be “locked”). |
 | `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Default if omitted: `.dockpipe/outputs.env`. |

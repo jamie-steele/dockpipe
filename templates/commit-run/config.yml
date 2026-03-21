@@ -1,0 +1,11 @@
+# Simple git path: run a command in isolation, then one commit on the current branch (no worktrees / new branches).
+# For isolated branches, worktrees, and AI resolver flows, use workflow llm-worktree instead.
+name: commit-run
+description: Disposable container run, then commit changes on your current branch.
+
+isolate: base-dev
+act: scripts/commit-worktree.sh
+
+vars:
+  # Override with --var DOCKPIPE_COMMIT_MESSAGE="..." or env.
+  DOCKPIPE_COMMIT_MESSAGE: "dockpipe(commit-run): automated commit"

@@ -23,7 +23,7 @@ func TestBuildStepContainer_UsesCliArgsForLastStep(t *testing.T) {
 	envMap := map[string]string{}
 	dockerEnv := map[string]string{}
 	step := domain.Step{} // no cmd
-	argv, runOpts, buildDir, buildCtx, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv)
+	argv, runOpts, buildDir, buildCtx, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestBuildStepContainer_ErrorsWhenActionMissing(t *testing.T) {
 		opts:     &CliOpts{},
 	}
 	step := domain.Step{Cmd: "echo hi", Action: "scripts/does-not-exist.sh"}
-	_, _, _, _, err := buildStepContainer(o, 0, 1, step, map[string]string{}, map[string]string{})
+	_, _, _, _, err := buildStepContainer(o, 0, 1, step, map[string]string{}, map[string]string{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "action script not found") {
 		t.Fatalf("expected missing action error, got %v", err)
 	}
@@ -62,7 +62,7 @@ func TestBuildStepContainer_CommitWorktreeTurnsIntoHostCommit(t *testing.T) {
 	}
 	envMap := map[string]string{}
 	step := domain.Step{Cmd: "echo hi", Action: "scripts/commit-worktree.sh"}
-	_, runOpts, _, _, err := buildStepContainer(o, 0, 1, step, envMap, map[string]string{})
+	_, runOpts, _, _, err := buildStepContainer(o, 0, 1, step, envMap, map[string]string{}, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -74,6 +74,26 @@ func TestBuildStepContainer_CommitWorktreeTurnsIntoHostCommit(t *testing.T) {
 	}
 	if envMap["DOCKPIPE_BRANCH_PREFIX"] == "" {
 		t.Fatalf("expected branch prefix to be set for host commit path")
+	}
+}
+
+// TestBuildStepContainer_StepResolverTemplate uses DOCKPIPE_RESOLVER_TEMPLATE from a per-step resolver assignment.
+func TestBuildStepContainer_StepResolverTemplate(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	o := &runStepsOpts{
+		repoRoot: repoRoot,
+		wfRoot:   filepath.Join(repoRoot, "templates/chain-test"),
+		wf:       &domain.Workflow{},
+		opts:     &CliOpts{},
+	}
+	step := domain.Step{Cmd: "echo hi"}
+	ra := &domain.ResolverAssignments{Template: "vscode"}
+	_, runOpts, _, _, err := buildStepContainer(o, 0, 1, step, map[string]string{}, map[string]string{}, ra)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !strings.Contains(runOpts.Image, "vscode") {
+		t.Fatalf("expected vscode image from resolver template, got %q", runOpts.Image)
 	}
 }
 

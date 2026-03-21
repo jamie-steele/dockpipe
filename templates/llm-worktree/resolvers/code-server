@@ -1,0 +1,5 @@
+# Run a command in the dockpipe-vscode image (code-server stack). For browser IDE + host port, use --resolver vscode.
+DOCKPIPE_RESOLVER_TEMPLATE=vscode
+DOCKPIPE_RESOLVER_CMD=code-server
+DOCKPIPE_RESOLVER_PRE_SCRIPT=scripts/clone-worktree.sh
+DOCKPIPE_RESOLVER_ACTION=scripts/commit-worktree.sh

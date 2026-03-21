@@ -6,6 +6,22 @@ import (
 	"testing"
 )
 
+// TestParseWorkflowYAMLStepResolver checks per-step resolver field.
+func TestParseWorkflowYAMLStepResolver(t *testing.T) {
+	y := `
+steps:
+  - resolver: code-server
+    cmd: echo hi
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Steps) != 1 || w.Steps[0].Resolver != "code-server" {
+		t.Fatalf("resolver: got %+v", w.Steps)
+	}
+}
+
 // TestParseWorkflowYAMLSteps checks multi-step YAML: two steps, per-step isolate override, and CmdLine.
 func TestParseWorkflowYAMLSteps(t *testing.T) {
 	dir := t.TempDir()
@@ -193,5 +209,9 @@ func TestWorkflowNeedsDockerReachable(t *testing.T) {
 	hostOnly := &Workflow{Steps: []Step{{SkipContainer: true}}}
 	if hostOnly.NeedsDockerReachable() {
 		t.Fatal("expected false when no container and no run scripts")
+	}
+	withStepResolver := &Workflow{Steps: []Step{{SkipContainer: true, Resolver: "cursor"}}}
+	if !withStepResolver.NeedsDockerReachable() {
+		t.Fatal("expected NeedsDockerReachable when a step references resolvers/<name>")
 	}
 }

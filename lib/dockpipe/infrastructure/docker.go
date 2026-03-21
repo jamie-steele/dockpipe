@@ -402,7 +402,11 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	_ = execCommandFn("docker", "rm", cid).Run()
 
 	if o.CommitOnHost {
-		_ = commitOnHostFn(workHost, o.CommitMessage, o.BundleOut, o.BundleAll)
+		if rc != 0 {
+			fmt.Fprintln(stderr, "[dockpipe] Skipping host commit (container exited with non-zero code).")
+		} else {
+			_ = commitOnHostFn(workHost, o.CommitMessage, o.BundleOut, o.BundleAll)
+		}
 	}
 	return rc, nil
 }

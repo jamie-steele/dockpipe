@@ -27,6 +27,7 @@ func withRunSeams(t *testing.T) {
 	oldResolveWfScript := resolveWorkflowAppFn
 	oldBundledCommit := isBundledCommitAppFn
 	oldRunSteps := runStepsAppFn
+	oldRunHost := runHostScriptAppFn
 	oldExit := osExitAppFn
 	t.Cleanup(func() {
 		repoRootAppFn = oldRepoRoot
@@ -42,8 +43,13 @@ func withRunSeams(t *testing.T) {
 		resolveWorkflowAppFn = oldResolveWfScript
 		isBundledCommitAppFn = oldBundledCommit
 		runStepsAppFn = oldRunSteps
+		runHostScriptAppFn = oldRunHost
 		osExitAppFn = oldExit
 	})
+	runHostScriptAppFn = func(scriptAbs string, env []string) error {
+		t.Fatalf("unexpected RunHostScript call: %s", scriptAbs)
+		return nil
+	}
 }
 
 // TestRunNonStepsHappyPath runs resolver-driven single-command mode with mocked docker build/run.
@@ -87,6 +93,51 @@ func TestRunNonStepsHappyPath(t *testing.T) {
 	}
 	if !dockerBuilt || !containerRan {
 		t.Fatalf("expected docker build and run, built=%v ran=%v", dockerBuilt, containerRan)
+	}
+}
+
+// TestRunHostIsolateHappyPath runs host isolate instead of docker when DOCKPIPE_RESOLVER_HOST_ISOLATE is set.
+func TestRunHostIsolateHappyPath(t *testing.T) {
+	withRunSeams(t)
+	repoRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, "scripts"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	isolatePath := filepath.Join(repoRoot, "scripts", "host-isolate-test.sh")
+	if err := os.WriteFile(isolatePath, []byte("#!/usr/bin/env bash\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	repoRootAppFn = func() (string, error) { return repoRoot, nil }
+	loadResolverFileAppFn = func(path string) (map[string]string, error) {
+		return map[string]string{
+			"DOCKPIPE_RESOLVER_HOST_ISOLATE": "scripts/host-isolate-test.sh",
+		}, nil
+	}
+	dockerBuilt := false
+	templateBuildAppFn = func(repoRoot, name string) (string, string, bool) {
+		dockerBuilt = true
+		return "", "", false
+	}
+	containerRan := false
+	runContainerAppFn = func(o infrastructure.RunOpts, argv []string) (int, error) {
+		containerRan = true
+		return 0, nil
+	}
+	var gotIsolate string
+	runHostScriptAppFn = func(scriptAbs string, env []string) error {
+		gotIsolate = scriptAbs
+		return nil
+	}
+
+	err := Run([]string{"--resolver", "hostiso", "--"}, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if dockerBuilt || containerRan {
+		t.Fatalf("expected no docker build/run, built=%v ran=%v", dockerBuilt, containerRan)
+	}
+	if gotIsolate != isolatePath {
+		t.Fatalf("unexpected isolate script: got %q want %q", gotIsolate, isolatePath)
 	}
 }
 

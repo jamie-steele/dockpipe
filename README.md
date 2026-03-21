@@ -120,7 +120,7 @@ dockpipe -d -- make test
 
 ## Resolvers and worktree (optional)
 
-**Resolvers** map a name (e.g. `claude`, `codex`) to an image and defaults. **`--resolver`** with **`--repo`** / **`--branch`** drives worktree-on-host flows. **`dockpipe template init my-workflow --from llm-worktree`** copies a workflow you can edit.
+**Resolvers** map a name (e.g. `claude`, `codex`) to an image and defaults — or, for **`cursor`** / **`vscode`**, to a **bundled workflow** (`DOCKPIPE_RESOLVER_WORKFLOW` → **`cursor-dev`** / **`vscode`** templates), same as **`--workflow cursor-dev`** / **`vscode`** but inside **llm-worktree** with clone/commit. **`--resolver code-server`** uses the **`vscode`** Docker image for a normal container command. **`--resolver`** with **`--repo`** / **`--branch`** drives worktree-on-host flows. **`dockpipe template init my-workflow --from llm-worktree`** copies a workflow you can edit.
 
 ---
 
@@ -132,7 +132,7 @@ dockpipe -d -- make test
 | `dev` | base-dev + build-essential, ssh, etc. |
 | `agent-dev` | Node + Claude Code. `claude` is an alias. |
 | `codex` | Node + OpenAI Codex CLI. |
-| `vscode` | OSS code-server stack (`codercom/code-server` + dockpipe entrypoint) — used by **llm-worktree** `--resolver vscode`. |
+| `vscode` | OSS code-server stack (`codercom/code-server` + dockpipe entrypoint). **llm-worktree** `--resolver code-server` uses this image; **`--resolver vscode`** runs the host browser-IDE flow (no container isolate — see **templates/vscode**). |
 
 ---
 
@@ -142,9 +142,10 @@ YAML presets via **`--workflow <name>`** (see **`templates/<name>/README.md`**):
 
 | Workflow | Role |
 |----------|------|
+| `commit-run` | **Simple git:** run in a container, then **one commit on the current branch** (no worktrees) — [templates/commit-run/README.md](templates/commit-run/README.md) |
 | `vscode` | Browser IDE (code-server) — [templates/vscode/README.md](templates/vscode/README.md) |
 | `cursor-dev` | `base-dev` session container + Cursor on host (docker wait) — [templates/cursor-dev/README.md](templates/cursor-dev/README.md) |
-| `llm-worktree` | AI + git worktree — [templates/llm-worktree/README.md](templates/llm-worktree/README.md) |
+| `llm-worktree` | **Advanced:** AI + isolated branch/worktree + resolvers — [templates/llm-worktree/README.md](templates/llm-worktree/README.md) |
 | `chain-test` | Two-step env chain demo — [docs/workflow-yaml.md](docs/workflow-yaml.md) |
 | `workflow-demo` | Async group + merged outputs — [docs/workflow-yaml.md](docs/workflow-yaml.md) |
 

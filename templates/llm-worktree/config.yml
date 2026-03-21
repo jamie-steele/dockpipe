@@ -13,6 +13,7 @@ resolvers:
   - codex
   - cursor
   - vscode
+  - code-server
 
 vars:
   DOCKPIPE_BRANCH_PREFIX: ""

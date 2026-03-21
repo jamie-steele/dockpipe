@@ -251,6 +251,52 @@ func TestRunContainerAttachedCallsCommitOnHost(t *testing.T) {
 	}
 }
 
+// TestRunContainerAttachedSkipsCommitOnNonZero does not invoke CommitOnHost when the container exits with an error.
+func TestRunContainerAttachedSkipsCommitOnNonZero(t *testing.T) {
+	withDockerSeams(t)
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		// docker run ... → failure; docker logs / rm still run
+		if name == "docker" && len(args) > 0 && args[0] == "run" {
+			return exec.Command("bash", "-c", "exit 3")
+		}
+		return exec.Command("bash", "-c", "exit 0")
+	}
+	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
+	filepathAbsDocker = func(path string) (string, error) { return path, nil }
+	osStatDockerFn = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	isTerminalDockerFn = func(fd int) bool { return false }
+	timeNowDockerFn = func() time.Time { return time.Unix(1000, 0) }
+	called := false
+	commitOnHostFn = func(workdir, message, bundleOut string, bundleAll bool) error {
+		called = true
+		return nil
+	}
+	in, _ := os.CreateTemp(t.TempDir(), "in")
+	out, _ := os.CreateTemp(t.TempDir(), "out")
+	errf, _ := os.CreateTemp(t.TempDir(), "err")
+	defer in.Close()
+	defer out.Close()
+	defer errf.Close()
+
+	rc, err := RunContainer(RunOpts{
+		Image:        "img",
+		WorkdirHost:  "/tmp/wd",
+		CommitOnHost: true,
+		Stdin:        in,
+		Stdout:       out,
+		Stderr:       errf,
+	}, []string{"false"})
+	if err != nil {
+		t.Fatalf("RunContainer: %v", err)
+	}
+	if rc != 3 {
+		t.Fatalf("expected rc 3, got %d", rc)
+	}
+	if called {
+		t.Fatal("expected CommitOnHost to be skipped on container failure")
+	}
+}
+
 // TestRunContainerActionAbsError fails when the action script path cannot be made absolute.
 func TestRunContainerActionAbsError(t *testing.T) {
 	withDockerSeams(t)

@@ -19,6 +19,7 @@ var (
 	maybeVersionTagAppFn  = infrastructure.MaybeVersionTag
 	resolveActionPathFn   = infrastructure.ResolveActionPath
 	sourceHostScriptAppFn = infrastructure.SourceHostScript
+	runHostScriptAppFn    = infrastructure.RunHostScript
 	dockerBuildAppFn      = infrastructure.DockerBuild
 	runContainerAppFn     = infrastructure.RunContainer
 	resolvePreScriptAppFn = infrastructure.ResolvePreScriptPath
@@ -169,26 +170,6 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 	}
 
-	// Banner first: session start, before status lines or host work.
-	if !opts.Detach && (stepsMode || (opts.SeenDash && len(rest) > 0)) {
-		infrastructure.PrintLaunchBanner(os.Stdout, os.Stderr)
-	}
-	if wf != nil && (opts.Workflow != "" || opts.WorkflowFile != "") {
-		disp := strings.TrimSpace(wf.Name)
-		if disp == "" {
-			if opts.Workflow != "" {
-				disp = opts.Workflow
-			} else {
-				disp = filepath.Base(opts.WorkflowFile)
-			}
-		}
-		stepCount := 0
-		if stepsMode {
-			stepCount = len(wf.Steps)
-		}
-		fmt.Fprint(os.Stderr, workflowTaskLines(disp, wf.Description, stepCount))
-	}
-
 	envMap := domain.EnvironToMap(baseEnviron)
 	if wf != nil {
 		buildWorkflowEnvInto(envMap, wf, wfRoot, repoRoot, opts)
@@ -215,6 +196,8 @@ func Run(argv []string, baseEnviron []string) error {
 
 	templateName := ""
 	var preFromResolver, actFromResolver string
+	hostIsolate := ""
+	resolverWorkflow := ""
 	if resolver != "" {
 		resBase := filepath.Join(repoRoot, "templates", "llm-worktree", "resolvers")
 		if wfRoot != "" {
@@ -227,6 +210,11 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 		ra := domain.FromResolverMap(rm)
 		templateName = ra.Template
+		hostIsolate = strings.TrimSpace(ra.HostIsolate)
+		resolverWorkflow = strings.TrimSpace(ra.Workflow)
+		if resolverWorkflow != "" && hostIsolate != "" {
+			return fmt.Errorf("resolver %q: set only one of DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RESOLVER_HOST_ISOLATE", resolver)
+		}
 		preFromResolver = ra.PreScript
 		actFromResolver = ra.Action
 		if ra.Experimental {
@@ -240,6 +228,26 @@ func Run(argv []string, baseEnviron []string) error {
 				opts.Action = filepath.Join(repoRoot, actFromResolver)
 			}
 		}
+	}
+
+	// Banner after resolver: workflow / host-isolate resolvers may omit argv after --.
+	if !opts.Detach && (stepsMode || (opts.SeenDash && (len(rest) > 0 || hostIsolate != "" || resolverWorkflow != ""))) {
+		infrastructure.PrintLaunchBanner(os.Stdout, os.Stderr)
+	}
+	if wf != nil && (opts.Workflow != "" || opts.WorkflowFile != "") {
+		disp := strings.TrimSpace(wf.Name)
+		if disp == "" {
+			if opts.Workflow != "" {
+				disp = opts.Workflow
+			} else {
+				disp = filepath.Base(opts.WorkflowFile)
+			}
+		}
+		stepCount := 0
+		if stepsMode {
+			stepCount = len(wf.Steps)
+		}
+		fmt.Fprint(os.Stderr, workflowTaskLines(disp, wf.Description, stepCount))
 	}
 
 	locked := lockedKeys(opts.VarOverrides)
@@ -284,11 +292,17 @@ func Run(argv []string, baseEnviron []string) error {
 
 	var image, buildDir, buildCtx string
 	effectiveTemplate := templateName
+	if effectiveTemplate == "" && (hostIsolate != "" || resolverWorkflow != "") {
+		effectiveTemplate = resolver
+	}
 	commitOnHost := false
 	actionForContainer := opts.Action
 
 	if !stepsMode {
-		if opts.Isolate != "" {
+		if hostIsolate != "" || resolverWorkflow != "" {
+			// Host script or embedded workflow replaces docker isolate (e.g. cursor-dev / vscode templates).
+			image, buildDir, buildCtx = "", "", ""
+		} else if opts.Isolate != "" {
 			if im, dir, ok := templateBuildAppFn(repoRoot, opts.Isolate); ok {
 				effectiveTemplate = opts.Isolate
 				image, buildDir, buildCtx = im, dir, repoRoot
@@ -301,11 +315,13 @@ func Run(argv []string, baseEnviron []string) error {
 				image, buildDir, buildCtx = im, dir, repoRoot
 			}
 		}
-		if image == "" {
-			image, buildDir = "dockpipe-base-dev", filepath.Join(repoRoot, "images/base-dev")
-			buildCtx = repoRoot
+		if hostIsolate == "" && resolverWorkflow == "" {
+			if image == "" {
+				image, buildDir = "dockpipe-base-dev", filepath.Join(repoRoot, "images/base-dev")
+				buildCtx = repoRoot
+			}
+			image = maybeVersionTagAppFn(repoRoot, image)
 		}
-		image = maybeVersionTagAppFn(repoRoot, image)
 
 		cwd, _ := os.Getwd()
 		if opts.Action != "" {
@@ -458,8 +474,48 @@ func Run(argv []string, baseEnviron []string) error {
 	if !opts.SeenDash && !stepsMode {
 		return fmt.Errorf("expected -- before command (e.g. dockpipe -- ls -la)")
 	}
-	if len(rest) == 0 && !stepsMode {
+	if len(rest) == 0 && !stepsMode && hostIsolate == "" && resolverWorkflow == "" {
 		return fmt.Errorf("no command given after --")
+	}
+
+	if !stepsMode && resolverWorkflow != "" {
+		if err := runEmbeddedResolverWorkflow(resolverWorkflow, repoRoot, envMap, opts, rest, locked, dataVol, dataDir, resolver, templateName, runStepsAppFn); err != nil {
+			return err
+		}
+		workHost := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
+		if commitOnHost && strings.TrimSpace(envMap["DOCKPIPE_WORKDIR"]) != "" {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Mount /work ← %s\n", envMap["DOCKPIPE_WORKDIR"])
+		}
+		if commitOnHost {
+			if err := infrastructure.CommitOnHost(workHost, envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut), strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if !stepsMode && hostIsolate != "" {
+		if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {
+			return err
+		}
+		scriptAbs := resolveWorkflowAppFn(hostIsolate, wfRoot, repoRoot)
+		if _, err := os.Stat(scriptAbs); err != nil {
+			return fmt.Errorf("host isolate script not found: %s: %w", scriptAbs, err)
+		}
+		fmt.Fprintf(os.Stderr, "[dockpipe] Host isolate: %s\n", hostIsolate)
+		workHost := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
+		if commitOnHost && strings.TrimSpace(envMap["DOCKPIPE_WORKDIR"]) != "" {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Mount /work ← %s\n", envMap["DOCKPIPE_WORKDIR"])
+		}
+		if err := runHostScriptAppFn(scriptAbs, envSlice); err != nil {
+			return err
+		}
+		if commitOnHost {
+			if err := infrastructure.CommitOnHost(workHost, envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut), strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
 	dockerEnvMap := domain.EnvSliceToMap(opts.ExtraEnvLines)

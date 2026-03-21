@@ -1,8 +1,4 @@
-# Experimental: no official Cursor-in-container product line. Uses a minimal image so you can
-# run YOUR OWN command after -- (scripts, linters). For real AI-in-container, prefer claude/codex.
-DOCKPIPE_RESOLVER_EXPERIMENTAL=1
-DOCKPIPE_RESOLVER_TEMPLATE=base-dev
-DOCKPIPE_RESOLVER_CMD=
-DOCKPIPE_RESOLVER_ENV=
+# Cursor: delegates to the cursor-dev workflow (templates/cursor-dev) — same as `dockpipe --workflow cursor-dev` after clone-worktree.
+DOCKPIPE_RESOLVER_WORKFLOW=cursor-dev
 DOCKPIPE_RESOLVER_PRE_SCRIPT=scripts/clone-worktree.sh
 DOCKPIPE_RESOLVER_ACTION=scripts/commit-worktree.sh

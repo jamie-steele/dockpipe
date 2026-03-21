@@ -40,13 +40,16 @@ dockpipe --workflow chain-test
 
 Shows two steps and env handoff. No API keys.
 
+**Simple git (optional):** **`--workflow commit-run`** runs your command in a container, then **one commit on your current branch** if anything changed — no worktrees or branch automation. See **[templates/commit-run/README.md](../templates/commit-run/README.md)**.
+
+**Advanced git / AI:** **`--workflow llm-worktree`** adds isolated branches, worktrees, and resolvers — **[templates/llm-worktree/README.md](../templates/llm-worktree/README.md)**.
+
 ---
 
 ## 4. Customize YAML
 
 - **Single-file workflows:** [workflow-yaml.md](workflow-yaml.md) (`run` / `isolate` / `act`, optional `steps:`).
 - **Flags:** [cli-reference.md](cli-reference.md).
-- **AI + worktree example:** [templates/llm-worktree/README.md](../templates/llm-worktree/README.md).
 
 ---
 

@@ -66,6 +66,10 @@ func (w *Workflow) NeedsDockerReachable() bool {
 		if len(s.RunPaths()) > 0 {
 			return true
 		}
+		if strings.TrimSpace(s.Resolver) != "" {
+			// May be host-isolate (docker on host) or a template name via resolver file — run preflight.
+			return true
+		}
 	}
 	return false
 }
@@ -92,6 +96,9 @@ type Step struct {
 	CaptureStdout string `yaml:"capture_stdout,omitempty"`
 	// Manifest: host path to write a small JSON manifest after the step (exit_code, duration_ms, id).
 	Manifest string `yaml:"manifest,omitempty"`
+	// Resolver: optional name of resolvers/<name> next to this workflow (same as top-level resolver).
+	// Loads DOCKPIPE_RESOLVER_TEMPLATE / DOCKPIPE_RESOLVER_HOST_ISOLATE / defaults for act when unset on the step.
+	Resolver string `yaml:"resolver,omitempty"`
 }
 
 // IsBlocking reports whether this step completes before the pipeline advances (default true).
