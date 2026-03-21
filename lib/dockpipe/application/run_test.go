@@ -13,6 +13,7 @@ import (
 
 func withRunSeams(t *testing.T) {
 	t.Helper()
+	t.Setenv("DOCKPIPE_SKIP_DOCKER_PREFLIGHT", "1")
 	oldRepoRoot := repoRootAppFn
 	oldLoadWf := loadWorkflowAppFn
 	oldLoadResolver := loadResolverFileAppFn

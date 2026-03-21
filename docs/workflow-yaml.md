@@ -63,7 +63,7 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Default if omitted: `.dockpipe/outputs.env`. |
 | `capture_stdout` | Host path (relative to **`DOCKPIPE_WORKDIR`** / **`--workdir`**) — container **stdout** is also appended to this file (still printed on the terminal). |
 | `manifest` | Host path — after the step, dockpipe writes a small JSON file with **`exit_code`**, **`duration_ms`**, **`step_index`**, **`id`** (if set), and **`step_display`**. |
-| `skip_container` | If `true`, no container: only pre-scripts + merge `outputs` from disk. |
+| `skip_container` | If `true`, no container: only pre-scripts + merge `outputs` from disk. **`run:`** scripts are **executed** with inherited stdio (so messages and launchers are visible). Steps that use the container still **source** `run:` scripts to capture exported env (see `lib/dockpipe/infrastructure/prescript.go`). |
 | `is_blocking` | Default **`true`**. If **`false`**, this step joins an **async group** with adjacent non-blocking steps (see below). |
 
 All keys use **snake_case** in YAML (e.g. `is_blocking`, not `isBlocking`).

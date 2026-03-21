@@ -173,3 +173,25 @@ isolate: alpine
 		t.Fatalf("description: %q", w.Description)
 	}
 }
+
+func TestWorkflowAnyContainerStep(t *testing.T) {
+	w := &Workflow{Steps: []Step{{SkipContainer: true}, {Cmd: "echo x", Isolate: "alpine"}}}
+	if !w.AnyContainerStep() {
+		t.Fatal("expected AnyContainerStep true when one step uses the container")
+	}
+	w2 := &Workflow{Steps: []Step{{SkipContainer: true}}}
+	if w2.AnyContainerStep() {
+		t.Fatal("expected AnyContainerStep false when all steps skip_container")
+	}
+}
+
+func TestWorkflowNeedsDockerReachable(t *testing.T) {
+	vscodeLike := &Workflow{Steps: []Step{{SkipContainer: true, Run: []string{"scripts/vscode-code-server.sh"}}}}
+	if !vscodeLike.NeedsDockerReachable() {
+		t.Fatal("expected NeedsDockerReachable when host run: invokes docker")
+	}
+	hostOnly := &Workflow{Steps: []Step{{SkipContainer: true}}}
+	if hostOnly.NeedsDockerReachable() {
+		t.Fatal("expected false when no container and no run scripts")
+	}
+}

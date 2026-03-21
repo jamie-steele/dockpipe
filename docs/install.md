@@ -1,6 +1,6 @@
 # Installing dockpipe
 
-**New to dockpipe?** Run **`dockpipe -- pwd`** after install, then read **[onboarding.md](onboarding.md)**.
+**New to dockpipe?** Run **`dockpipe -- pwd`** after install, then read **[onboarding.md](onboarding.md)**. If something fails, **`dockpipe doctor`** checks **bash**, **Docker**, and bundled assets.
 
 **Platforms:** **Docker** and **bash** on the host are required everywhere. Linux is the primary target (`.deb`). macOS: Docker Desktop + bash (system `/bin/bash` is fine). Windows: **`dockpipe.exe`** + Docker Desktop + **Git for Windows** (bash + git). **`DOCKPIPE_USE_WSL_BRIDGE=1`** and **`dockpipe windows …`** are **optional** — only if you want the Linux `dockpipe` binary inside a WSL distro.
 

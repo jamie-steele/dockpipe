@@ -2,6 +2,7 @@ package infrastructure
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"math"
@@ -11,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/term"
@@ -56,6 +58,41 @@ func extraEnvHasKey(pairs []string, key string) bool {
 		}
 	}
 	return false
+}
+
+var dockerValuePropOnce sync.Once
+
+// printDockerValuePropOnce prints a one-line contrast vs raw docker run (TTY stderr only).
+func printDockerValuePropOnce(stderr *os.File) {
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+	dockerValuePropOnce.Do(func() {
+		fd, ok := fdInt(stderr)
+		if !ok || !isTerminalDockerFn(fd) {
+			return
+		}
+		fmt.Fprintln(stderr, "[dockpipe] Disposable run: project at /work, your uid/gid, --rm — no manual docker run flags.")
+	})
+}
+
+func printDockerRunFailureHints(stderr *os.File, dockerStderr string) {
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+	s := strings.ToLower(dockerStderr)
+	if s == "" {
+		return
+	}
+	if strings.Contains(s, "permission denied") && (strings.Contains(s, "mount") || strings.Contains(s, "bind") || strings.Contains(s, "/work")) {
+		fmt.Fprintln(stderr, "[dockpipe] Bind mount: check the host path exists, permissions, and Docker Desktop “File sharing” / drive access (Windows/macOS). WSL: docs/wsl-windows.md")
+	}
+	if strings.Contains(s, "invalid mount") || strings.Contains(s, "not a directory") {
+		fmt.Fprintln(stderr, "[dockpipe] Mount: verify `-v` paths and that the directory exists on the host.")
+	}
+	if strings.Contains(s, "cannot connect to the docker daemon") || strings.Contains(s, "is the docker daemon running") {
+		fmt.Fprintln(stderr, "[dockpipe] Docker daemon not reachable — start Docker Desktop or `sudo systemctl start docker` (Linux).")
+	}
 }
 
 var (
@@ -286,18 +323,26 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	}
 
 	if o.Detach {
+		printDockerValuePropOnce(stderr)
 		args = append(args, "-d", "--rm")
 		args = append(args, o.Image)
 		args = append(args, argv...)
 		cmd := execCommandFn("docker", args...)
 		cmd.Stdin = stdin
-		cmd.Stdout = stdoutOut
-		cmd.Stderr = stderr
+		var cidBuf bytes.Buffer
+		cmd.Stdout = io.MultiWriter(stdoutOut, &cidBuf)
+		var errBuf bytes.Buffer
+		cmd.Stderr = io.MultiWriter(stderr, &errBuf)
 		stopSpin := StartLineSpinner(stderr, "Starting container…")
 		err := cmd.Run()
 		stopSpin()
 		if err != nil {
+			printDockerRunFailureHints(stderr, errBuf.String())
 			return 1, err
+		}
+		cid := strings.TrimSpace(cidBuf.String())
+		if cid != "" {
+			fmt.Fprintf(stderr, "[dockpipe] Detached: container %s (--rm removes it when the process exits). Logs: docker logs -f %s\n", cid, cid)
 		}
 		return 0, nil
 	}
@@ -313,13 +358,15 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	args = append(args, argv...)
 
 	// User-visible checkpoint: docker run can block on pull, VM, or volume (especially on Windows).
+	printDockerValuePropOnce(stderr)
 	fmt.Fprintln(stderr, "[dockpipe] Starting container…")
 
 	start := timeNowDockerFn()
 	cmd := execCommandFn("docker", args...)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdoutOut
-	cmd.Stderr = stderr
+	var runErrBuf bytes.Buffer
+	cmd.Stderr = io.MultiWriter(stderr, &runErrBuf)
 	err := cmd.Run()
 	rc := 0
 	if err != nil {
@@ -337,6 +384,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	if rc != 0 || (logQuickExit && elapsed < 3*time.Second) {
 		fmt.Fprintln(stderr, "")
 		if rc != 0 {
+			printDockerRunFailureHints(stderr, runErrBuf.String())
 			fmt.Fprintf(stderr, "  Container exited with code %d. Full container output:\n", rc)
 		} else {
 			fmt.Fprintf(stderr, "  Container exited quickly (%s). Full container output:\n", elapsed.Truncate(time.Second))

@@ -87,6 +87,9 @@ func Run(argv []string, baseEnviron []string) error {
 	if argv[0] == "workflow" {
 		return cmdWorkflow(argv[1:])
 	}
+	if argv[0] == "doctor" {
+		return cmdDoctor(argv[1:])
+	}
 
 	repoRoot, err := repoRootAppFn()
 	if err != nil {
@@ -465,6 +468,11 @@ func Run(argv []string, baseEnviron []string) error {
 	extraDocker := domain.EnvMapToSlice(dockerEnvMap)
 
 	if stepsMode {
+		if wf != nil && wf.NeedsDockerReachable() {
+			if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {
+				return err
+			}
+		}
 		return runStepsAppFn(runStepsOpts{
 			wf:             wf,
 			wfRoot:         wfRoot,
@@ -482,6 +490,10 @@ func Run(argv []string, baseEnviron []string) error {
 			resolver:       resolver,
 			templateName:   templateName,
 		})
+	}
+
+	if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {
+		return err
 	}
 
 	if buildDir != "" && buildCtx != "" {

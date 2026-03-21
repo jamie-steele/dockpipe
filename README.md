@@ -4,6 +4,14 @@ Run the CLI commands you already use in a disposable container. Your project is 
 
 Dockpipe runs any CLI command in a disposable container with your project at **`/work`**. It handles the usual Docker wiring (mount, workdir, user) so you don’t have to, and removes the container when the command finishes. Use it when you want a clean, throwaway environment for tests, linters, or other tools—without leftover containers on your machine.
 
+**At a glance**
+
+- **`dockpipe -- <command>`** — project at **`/work`**, your **uid/gid**, container removed when the command exits.
+- **No flag soup** — same defaults every time instead of hand-rolling `docker run -v … -w … -u … --rm …`.
+- **Optional power** — workflows (`--workflow`), resolvers, and worktrees only when you need them.
+
+**Troubleshooting:** `dockpipe doctor` checks **bash**, **Docker**, and bundled assets.
+
 ## Try it
 
 ```bash
@@ -51,6 +59,7 @@ dockpipe action init [--from <bundled>] <filename>
 dockpipe template init [--from <bundled>] <dirname>
 dockpipe windows setup [--distro <name>] [--install-command <cmd>] [--non-interactive]
 dockpipe windows doctor
+dockpipe doctor
 ```
 
 **All flags** (`--workflow`, `--isolate`, `--act`, `--repo`, `--data-dir`, …): **[docs/cli-reference.md](docs/cli-reference.md)**
@@ -133,7 +142,7 @@ YAML presets via **`--workflow <name>`** (see **`templates/<name>/README.md`**):
 | Workflow | Role |
 |----------|------|
 | `vscode` | Browser IDE (code-server) — [templates/vscode/README.md](templates/vscode/README.md) |
-| `cursor-dev` | Open Cursor on the host — [templates/cursor-dev/README.md](templates/cursor-dev/README.md) |
+| `cursor-dev` | `base-dev` session container + Cursor on host (docker wait) — [templates/cursor-dev/README.md](templates/cursor-dev/README.md) |
 | `claude-code` | Prep + Claude Code CLI on the host — [templates/claude-code/README.md](templates/claude-code/README.md) |
 | `llm-worktree` | AI + git worktree — [templates/llm-worktree/README.md](templates/llm-worktree/README.md) |
 | `chain-test` | Two-step env chain demo — [docs/workflow-yaml.md](docs/workflow-yaml.md) |

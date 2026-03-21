@@ -3,7 +3,7 @@
 ## What it does
 
 1. **Host (`run`):** Writes **`.dockpipe/claude-code/README.txt`** with notes about using **Claude Code** on the host and **`/work`** in containers.
-2. **Container (`isolate`):** Runs a tiny **base-dev** smoke test so **`/work`** is your project.
+2. **Container (`isolate`):** Runs a tiny **base-dev** smoke test so **`/work`** is your project (prints a **count** of top-level entries, not filenames).
 3. **Host (second step):** Prints install/run instructions and **optionally runs `claude`** from your project directory (same **vars / env** pattern as **cursor-dev** / **vscode** templates).
 
 This template does **not** install **@anthropic-ai/claude-code** for you. It does **not** configure API keys — use Anthropic’s docs for **`ANTHROPIC_API_KEY`** / credentials.

@@ -57,6 +57,34 @@ func SourceHostScript(scriptPath string, env []string) (map[string]string, error
 	return m, nil
 }
 
+// RunHostScript runs a bash script as a subprocess with stdin/stdout/stderr attached to this
+// process (not sourced). Use for workflow steps with skip_container: true that print messages or
+// launch programs — SourceHostScript captures all output and hides it from the user.
+func RunHostScript(scriptPath string, env []string) error {
+	bashExe, err := resolveBashExe()
+	if err != nil {
+		hint := ""
+		if runtime.GOOS == "windows" {
+			hint = " (dockpipe requires bash on the host — e.g. Git for Windows, or DOCKPIPE_USE_WSL_BRIDGE=1 with dockpipe in WSL; see docs/install.md)"
+		}
+		return fmt.Errorf("bash not found for host script%s: %w", hint, err)
+	}
+	pathFor := pathMapperFor(bashExe)
+	bashPath, err := pathFor(scriptPath)
+	if err != nil {
+		return fmt.Errorf("host script path: %w", err)
+	}
+	cmd := exec.Command(bashExe, bashPath)
+	cmd.Env = env
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("host script %s: %w", scriptPath, err)
+	}
+	return nil
+}
+
 // bashSingleQuoted returns s as a single-quoted bash literal ('...' with ' escaped as '\'').
 func bashSingleQuoted(s string) string {
 	return `'` + strings.ReplaceAll(s, `'`, `'\''`) + `'`

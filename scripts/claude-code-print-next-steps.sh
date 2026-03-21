@@ -6,6 +6,15 @@ set -euo pipefail
 W="${DOCKPIPE_WORKDIR:-$PWD}"
 W="$(cd "$W" && pwd)"
 
+CLAUDE_CODE_SKIP_DOCKER_CHECK="${CLAUDE_CODE_SKIP_DOCKER_CHECK:-0}"
+if [[ "${CLAUDE_CODE_SKIP_DOCKER_CHECK}" != "1" ]] && command -v docker >/dev/null 2>&1; then
+  if ! docker version >/dev/null 2>&1; then
+    printf '[dockpipe] Docker daemon is not reachable — not launching claude.\n' >&2
+    printf '  Start Docker Desktop (or Linux: sudo systemctl start docker), then re-run.\n' >&2
+    exit 1
+  fi
+fi
+
 # CLAUDE_CODE_LAUNCH: none = print only; cli = try `claude` on PATH + common npm global paths.
 CLAUDE_CODE_LAUNCH="${CLAUDE_CODE_LAUNCH:-cli}"
 CLAUDE_CODE_WAIT="${CLAUDE_CODE_WAIT:-0}"

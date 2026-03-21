@@ -1,17 +1,15 @@
-# Experimental: no Cursor server — prep on host, disposable isolate smoke test, then host launcher + hints.
+# Experimental: long-lived base-dev container (docker wait) + Cursor on the host — same session idea as vscode.
 name: cursor-dev
-description: Experimental — repo prep + container smoke test; open Cursor on the host (no remote server).
+description: Experimental — base-dev session container until you stop it; open Cursor on the host (no remote server).
 
 steps:
-  - id: prep-and-isolate
-    run: scripts/cursor-prep.sh
-    isolate: base-dev
-    cmd: sh -c 'echo "[cursor-dev] disposable check: cwd=$(pwd)"; ls -1 /work 2>/dev/null | head -n 8 || true'
-  - id: host-next-steps
-    run: scripts/cursor-print-next-steps.sh
+  - id: session
+    run: scripts/cursor-dev-session.sh
     skip_container: true
     vars:
       # none = print paths only; cli = try Cursor CLI / default install paths (Windows/macOS/Linux).
       CURSOR_DEV_LAUNCH: "cli"
-      CURSOR_DEV_WAIT: "0" # 1 = wait on launcher PID after start (best-effort; optional).
-      # CURSOR_DEV_CMD: optional full path to cursor/Cursor.exe if not on PATH.
+      # Optional: pin image (default dockpipe-base-dev:latest after first dockpipe build).
+      # CURSOR_DEV_SESSION_IMAGE: "dockpipe-base-dev:latest"
+      # CURSOR_DEV_CONTAINER_NAME: dockpipe-cursor-dev-mine
+      # CURSOR_DEV_SKIP_DOCKER_CHECK: "0"

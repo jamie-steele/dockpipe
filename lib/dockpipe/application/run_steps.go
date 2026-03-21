@@ -18,6 +18,7 @@ var (
 	dockerBuildFn      = infrastructure.DockerBuild
 	runContainerFn     = infrastructure.RunContainer
 	sourceHostScriptFn = infrastructure.SourceHostScript
+	runHostScriptFn    = infrastructure.RunHostScript
 	osStatFn           = os.Stat
 	getwdFn            = os.Getwd
 )
@@ -273,6 +274,12 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 			return fmt.Errorf("pre-script not found: %s", p)
 		}
 		fmt.Fprintf(os.Stderr, "[dockpipe] [parallel %d] Host setup\n", idx+1)
+		if step.SkipContainer {
+			if err := runHostScriptFn(p, envSlice); err != nil {
+				return err
+			}
+			continue
+		}
 		em, err := sourceHostScriptFn(p, envSlice)
 		if err != nil {
 			return err
@@ -327,6 +334,15 @@ func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {
 		}
 		if _, err := osStatFn(p); err != nil {
 			return fmt.Errorf("pre-script not found: %s", p)
+		}
+		if step.SkipContainer {
+			// skip_container run: must exec with inherited stdio — SourceHostScript sources and
+			// captures CombinedOutput(), so users would see nothing (e.g. cursor-dev step 2, vscode).
+			fmt.Fprintf(os.Stderr, "[dockpipe] Host setup\n")
+			if err := runHostScriptFn(p, o.envSlice); err != nil {
+				return err
+			}
+			continue
 		}
 		stop := infrastructure.StartLineSpinner(os.Stderr, hostSpinnerLabel(p))
 		em, err := sourceHostScriptFn(p, o.envSlice)

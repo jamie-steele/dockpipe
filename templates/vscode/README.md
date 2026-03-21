@@ -6,6 +6,8 @@ Starts **[code-server](https://github.com/coder/code-server)** (MIT-licensed VS 
 
 Dockpipe’s built-in container run does **not** publish ports to the host, so this template uses a **host script** that runs `docker run … -p …` for you. That keeps the feature in a **template**, not core.
 
+**Docker must be running** before you start this workflow (the script calls `docker` on the host). Dockpipe checks the daemon up front; **`dockpipe doctor`** verifies Docker + bash + bundled assets.
+
 ### “Like Slack / VS Code” — without bundling Electron
 
 Desktop **Slack** and **VS Code** feel native because they ship **Electron** (a full Chromium runtime inside the app). That’s tens or hundreds of MB **per app**, not “zero dependency.”

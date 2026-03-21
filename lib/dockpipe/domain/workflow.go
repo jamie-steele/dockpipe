@@ -45,6 +45,31 @@ type Workflow struct {
 	Steps           []Step            `yaml:"steps"`
 }
 
+// AnyContainerStep reports whether any step runs inside Docker (skip_container is false or omitted).
+func (w *Workflow) AnyContainerStep() bool {
+	for _, s := range w.Steps {
+		if !s.SkipContainer {
+			return true
+		}
+	}
+	return false
+}
+
+// NeedsDockerReachable reports whether we should run EnsureDockerReachable before executing steps.
+// True when any step uses the container runner, or when any step has run:/pre_script (host scripts
+// may invoke docker directly — e.g. templates/vscode is skip_container-only but runs docker on the host).
+func (w *Workflow) NeedsDockerReachable() bool {
+	if w.AnyContainerStep() {
+		return true
+	}
+	for _, s := range w.Steps {
+		if len(s.RunPaths()) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // Step is one entry under steps:.
 type Step struct {
 	// ID is optional; used in logs (e.g. [merge] lines). If empty, runner uses "step N".

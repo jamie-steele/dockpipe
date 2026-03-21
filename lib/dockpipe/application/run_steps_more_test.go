@@ -15,12 +15,14 @@ func withRunStepsSeams(t *testing.T) {
 	oldBuild := dockerBuildFn
 	oldRun := runContainerFn
 	oldSource := sourceHostScriptFn
+	oldRunHost := runHostScriptFn
 	oldStat := osStatFn
 	oldGetwd := getwdFn
 	t.Cleanup(func() {
 		dockerBuildFn = oldBuild
 		runContainerFn = oldRun
 		sourceHostScriptFn = oldSource
+		runHostScriptFn = oldRunHost
 		osStatFn = oldStat
 		getwdFn = oldGetwd
 	})
@@ -141,14 +143,17 @@ func TestRunParallelStepWorkerFirstStepExtraPreScript(t *testing.T) {
 		return os.Stat(name)
 	}
 	called := false
-	sourceHostScriptFn = func(scriptPath string, env []string) (map[string]string, error) {
+	runHostScriptFn = func(scriptPath string, env []string) error {
 		called = true
-		return map[string]string{"FROM_PRE": "1"}, nil
+		if scriptPath != pre {
+			t.Fatalf("unexpected script path %q want %q", scriptPath, pre)
+		}
+		return nil
 	}
 	if err := runParallelStepWorker(&o, 0, 1, 0, map[string]string{}, map[string]string{}); err != nil {
 		t.Fatalf("runParallelStepWorker error: %v", err)
 	}
 	if !called {
-		t.Fatal("expected pre-script to be sourced for first parallel step")
+		t.Fatal("expected host exec for skip_container parallel pre-script")
 	}
 }

@@ -60,12 +60,23 @@ Data flow: **Host CLI → Docker → container entrypoint → user command → a
 1. Add a directory under `templates/<name>/` with config.yml, resolvers/, and a README.
 2. Do not put vendor-specific or commit-specific logic in `lib/` or `bin/`; keep it in the template or scripts.
 
+### Working on templates (framework as user)
+
+When you **add or edit workflow templates** (`templates/<name>/`, and host scripts those workflows invoke under `scripts/`), treat the **core** as if you were **only a user of dockpipe**, not a maintainer changing the engine.
+
+- **Stay in the extension surface:** template YAML (`config.yml`, `steps:`, `vars`, `skip_container`, `run:`), bundled or referenced **shell scripts** in `scripts/`, `images/` when the template needs a dedicated image, and template **README / docs**. Use the **documented** contract (**`docs/workflow-yaml.md`**, `DOCKPIPE_*` env, flags users get from `--help`).
+- **Do not modify** `lib/dockpipe/`, `cmd/dockpipe/`, or other Go entrypoints **for one template’s convenience** — no template-specific branches, flags, or shortcuts in the core.
+- **If the template needs something impossible today:** first assume you missed a documented pattern (script wrapping, `run:`, env). If there is a **real gap** in the **public** primitive, split the work: propose a **small, general** core change (usable by any template) in its own change; keep the template change separate and consumer-shaped.
+
+This keeps templates honest as **examples of what users can build** without forking dockpipe.
+
 ---
 
 ## Philosophy
 
 - **Core = primitive only:** Spawn → run → act. No hardcoded commit behavior, no hardcoded AI tool.
 - **Templates and actions are the extension points:** Simple, obvious names and file locations.
+- **Template work is user-mode:** Changing a template should not require (or tempt) core edits; templates consume the framework like any user (**see [Working on templates (framework as user)](#working-on-templates-framework-as-user)**).
 - **Documentation is first-class:** README, AGENTS.md, **`docs/workflow-yaml.md`**, and the rest of **`docs/`** should make the primitive, YAML contract, and extension model clear so users and contributors can add their own images and actions without reading the whole codebase.
 
 ---
@@ -75,7 +86,7 @@ Data flow: **Host CLI → Docker → container entrypoint → user command → a
 Contributions should extend the primitive (templates, actions, examples) or fix bugs in the core—not turn the core into an open-ended workflow engine beyond the documented **`steps:`** contract (**`docs/workflow-yaml.md`**) or add first-class support for specific tools.
 
 **Do:**
-- Add or improve templates, actions, and example scripts.
+- Add or improve templates, actions, and example scripts — **without** coupling templates to core changes unless the core gains a **general** primitive (see **Working on templates (framework as user)** above).
 - Fix bugs in CLI/runner/entrypoint; improve docs and tests.
 - Use env vars and `--mount` / `--env` for one-off needs; document patterns in examples or docs.
 

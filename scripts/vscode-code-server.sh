@@ -17,6 +17,13 @@ if [[ "${OSTYPE:-}" == msys* ]] || [[ "${OSTYPE:-}" == cygwin* ]] || [[ "${OSTYP
 fi
 unset _u
 
+# Fail before pull/run so we never open a browser when the daemon is down (Docker Desktop stopped, etc.).
+if ! docker version >/dev/null 2>&1; then
+  printf '[dockpipe] Docker is not reachable — start Docker Desktop (or Linux: sudo systemctl start docker), then re-run.\n' >&2
+  printf '[dockpipe] Tip: dockpipe doctor\n' >&2
+  exit 1
+fi
+
 IMAGE="${CODE_SERVER_IMAGE:-codercom/code-server:latest}"
 
 # Host port: unset / auto / random → pick IANA dynamic range (49152–65535). Set CODE_SERVER_PORT to pin (e.g. 8080).

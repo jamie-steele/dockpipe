@@ -14,12 +14,14 @@ func withRunStepSeams(t *testing.T, fn func()) {
 	oldBuild := dockerBuildFn
 	oldRun := runContainerFn
 	oldSource := sourceHostScriptFn
+	oldRunHost := runHostScriptFn
 	oldStat := osStatFn
 	oldGetwd := getwdFn
 	t.Cleanup(func() {
 		dockerBuildFn = oldBuild
 		runContainerFn = oldRun
 		sourceHostScriptFn = oldSource
+		runHostScriptFn = oldRunHost
 		osStatFn = oldStat
 		getwdFn = oldGetwd
 	})
@@ -98,6 +100,40 @@ func TestRunStepPreScripts_UsesInjectedSourceFunction(t *testing.T) {
 		wantPath := filepath.ToSlash(filepath.Join("/wf", "local/pre.sh"))
 		if o.envMap["FROM_PRE"] != wantPath {
 			t.Fatalf("expected resolved workflow path %q, got %q", wantPath, o.envMap["FROM_PRE"])
+		}
+	})
+}
+
+// TestRunStepPreScripts_SkipContainerUsesRunHostExec runs skip_container run: via RunHostScript (not sourced).
+func TestRunStepPreScripts_SkipContainerUsesRunHostExec(t *testing.T) {
+	withRunStepSeams(t, func() {
+		tmp := t.TempDir()
+		script := filepath.Join(tmp, "host.sh")
+		if err := os.WriteFile(script, []byte("#!/usr/bin/env bash\necho ok\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		osStatFn = func(name string) (os.FileInfo, error) { return os.Stat(name) }
+		called := false
+		runHostScriptFn = func(path string, env []string) error {
+			called = true
+			if path != script {
+				t.Fatalf("path %q want %q", path, script)
+			}
+			return nil
+		}
+		o := &runStepsOpts{
+			wfRoot:   tmp,
+			repoRoot: "/repo",
+			envMap:   map[string]string{},
+			envSlice: []string{},
+			opts:     &CliOpts{},
+		}
+		step := domain.Step{SkipContainer: true, Run: []string{"host.sh"}}
+		if err := runStepPreScripts(o, 0, step); err != nil {
+			t.Fatalf("runStepPreScripts: %v", err)
+		}
+		if !called {
+			t.Fatal("expected RunHostScript for skip_container")
 		}
 	})
 }

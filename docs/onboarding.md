@@ -12,6 +12,8 @@ From any directory:
 dockpipe -- pwd
 ```
 
+If Docker or bash is misconfigured, run **`dockpipe doctor`** for a quick diagnostic.
+
 See **[README § Try it](../README.md#try-it)** for copy-paste examples.
 
 ---

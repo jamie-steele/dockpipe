@@ -12,6 +12,7 @@ Usage:
   dockpipe --workflow <name> [options]          multi-step (steps: in config.yml), optional -- for last step
   dockpipe workflow validate [path]             lint workflow YAML (default: dockpipe.yml)
   dockpipe init | action init | pre init | template init | windows setup
+  dockpipe doctor                             verify bash, Docker, bundled assets
 
 Options:
   --workflow, --workflow-file, --run, --isolate, --act, --resolver, --repo, --branch, --workdir,

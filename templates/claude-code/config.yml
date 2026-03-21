@@ -6,7 +6,7 @@ steps:
   - id: prep-and-isolate
     run: scripts/claude-code-prep.sh
     isolate: base-dev
-    cmd: sh -c 'echo "[claude-code] disposable check: cwd=$(pwd)"; ls -1 /work 2>/dev/null | head -n 8 || true'
+    cmd: "sh -c 'echo \"[claude-code] disposable check: cwd=$(pwd)\"; c=$(ls -1 /work 2>/dev/null | wc -l); echo \"[claude-code] /work has $c top-level entries (names not listed)\"'"
   - id: host-next-steps
     run: scripts/claude-code-print-next-steps.sh
     skip_container: true

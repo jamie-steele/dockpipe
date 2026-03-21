@@ -181,6 +181,13 @@ func TestCmdInitErrorsOnNonEmptyDestination(t *testing.T) {
 	}
 }
 
+// TestDoctorHelp runs dockpipe doctor --help without requiring Docker.
+func TestDoctorHelp(t *testing.T) {
+	if err := Run([]string{"doctor", "--help"}, nil); err != nil {
+		t.Fatalf("doctor --help: %v", err)
+	}
+}
+
 // TestRunHelpAndMissingWorkflow prints help without error and errors on missing workflow name.
 func TestRunHelpAndMissingWorkflow(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
