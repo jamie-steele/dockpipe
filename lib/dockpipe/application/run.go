@@ -131,8 +131,31 @@ func Run(argv []string, baseEnviron []string) error {
 	} else if opts.Workflow != "" {
 		wfRoot = filepath.Join(repoRoot, "templates", opts.Workflow)
 		wfConfig = filepath.Join(wfRoot, "config.yml")
-		if _, err := os.Stat(wfConfig); err != nil {
-			return fmt.Errorf("workflow %q not found (expected %s)", opts.Workflow, wfConfig)
+		if _, statErr := os.Stat(wfConfig); statErr != nil {
+			if os.Getenv("DOCKPIPE_REPO_ROOT") == "" && infrastructure.EmbeddedWorkflowConfigExists(opts.Workflow) {
+				if invErr := infrastructure.InvalidateBundledCache(); invErr == nil {
+					repoRoot, err = repoRootAppFn()
+					if err != nil {
+						return err
+					}
+					wfRoot = filepath.Join(repoRoot, "templates", opts.Workflow)
+					wfConfig = filepath.Join(wfRoot, "config.yml")
+					_, statErr = os.Stat(wfConfig)
+				}
+			}
+			if statErr != nil {
+				names, _ := infrastructure.ListWorkflowNamesInRepoRoot(repoRoot)
+				msg := fmt.Sprintf("workflow %q not found — expected %s", opts.Workflow, wfConfig)
+				if len(names) > 0 {
+					msg += fmt.Sprintf(" (available in this install: %s)", strings.Join(names, ", "))
+				}
+				if !infrastructure.EmbeddedWorkflowConfigExists(opts.Workflow) {
+					msg += ". This dockpipe build does not include that workflow; install a newer release or use --workflow-file path/to/config.yml."
+				} else {
+					msg += ". Try deleting the bundled cache folder under your user cache (dockpipe/bundled-*) or set DOCKPIPE_REPO_ROOT to a full git checkout."
+				}
+				return fmt.Errorf("%s", msg)
+			}
 		}
 		wf, err = loadWorkflowAppFn(wfConfig)
 		if err != nil {

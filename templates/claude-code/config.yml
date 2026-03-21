@@ -1,0 +1,17 @@
+# Host-focused: prep + disposable isolate smoke test + optional `claude` CLI launch (no Anthropic integration).
+name: claude-code
+description: Repo prep + container smoke test; run Anthropic Claude Code on the host from the project directory.
+
+steps:
+  - id: prep-and-isolate
+    run: scripts/claude-code-prep.sh
+    isolate: base-dev
+    cmd: sh -c 'echo "[claude-code] disposable check: cwd=$(pwd)"; ls -1 /work 2>/dev/null | head -n 8 || true'
+  - id: host-next-steps
+    run: scripts/claude-code-print-next-steps.sh
+    skip_container: true
+    vars:
+      # none = print only; cli = try `claude` on PATH / common npm paths (default).
+      CLAUDE_CODE_LAUNCH: "cli"
+      CLAUDE_CODE_WAIT: "0" # 1 = wait on launcher PID (best-effort).
+      # CLAUDE_CODE_CMD: optional path to claude executable if not on PATH.

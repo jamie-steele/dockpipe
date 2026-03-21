@@ -1,4 +1,4 @@
-# Experimental: no Cursor server — prep on host, disposable isolate smoke test, then host reminder.
+# Experimental: no Cursor server — prep on host, disposable isolate smoke test, then host launcher + hints.
 name: cursor-dev
 description: Experimental — repo prep + container smoke test; open Cursor on the host (no remote server).
 
@@ -10,3 +10,8 @@ steps:
   - id: host-next-steps
     run: scripts/cursor-print-next-steps.sh
     skip_container: true
+    vars:
+      # none = print paths only; cli = try Cursor CLI / default install paths (Windows/macOS/Linux).
+      CURSOR_DEV_LAUNCH: "cli"
+      CURSOR_DEV_WAIT: "0" # 1 = wait on launcher PID after start (best-effort; optional).
+      # CURSOR_DEV_CMD: optional full path to cursor/Cursor.exe if not on PATH.

@@ -13,9 +13,45 @@ import (
 )
 
 // bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "6"
+const bundledFormatVersion = "23"
 
 var bundledMu sync.Mutex
+
+// EmbeddedWorkflowConfigExists reports whether templates/<name>/config.yml is embedded.
+func EmbeddedWorkflowConfigExists(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		isAlnum := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
+		if !isAlnum && r != '-' && r != '_' {
+			return false
+		}
+	}
+	p := "templates/" + name + "/config.yml"
+	_, err := fs.Stat(dockpipe.BundledFS, p)
+	return err == nil
+}
+
+// InvalidateBundledCache removes the on-disk bundle for this binary's VERSION so it will re-extract.
+func InvalidateBundledCache() error {
+	bundledMu.Lock()
+	defer bundledMu.Unlock()
+	versionBytes, err := fs.ReadFile(dockpipe.BundledFS, "VERSION")
+	if err != nil {
+		return fmt.Errorf("read embedded VERSION: %w", err)
+	}
+	ver := strings.TrimSpace(string(versionBytes))
+	if ver == "" {
+		return fmt.Errorf("embedded VERSION is empty")
+	}
+	cacheBase, err := bundledCacheBase()
+	if err != nil {
+		return err
+	}
+	dest := filepath.Join(cacheBase, "dockpipe", "bundled-"+ver)
+	return os.RemoveAll(dest)
+}
 
 // MaterializedBundledRoot returns a directory containing templates/, scripts/, images/, lib/, and version.
 // It unpacks dockpipe.BundledFS into the user cache (see also DOCKPIPE_REPO_ROOT override in RepoRoot).
