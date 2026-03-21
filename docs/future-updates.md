@@ -1,13 +1,20 @@
 # Future updates / ideas
 
-Backlog and brainstorm. No commitment to implement in any order.
+Backlog and brainstorm. **No commitment** to implement in any order.
 
 Only include items that are **not implemented yet**.
 
 **Clarification (so this file isn’t confused with what already shipped):**
 
-- **In-repo / CI today:** **`staging`** for integration PRs; **PR `staging` → `master`** ships (**`VERSION`** + **`releasenotes/X.Y.Z.md`**, CI gate on that PR only). **CI** on **`staging`** + **`master`** (**`govulncheck`**, **`gosec`**, tests, **`make`**, **`.deb`**, **`tests/run_tests.sh`**, **`tests/integration-tests/run.sh`**) and **CodeQL** (`security-extended`); **merge to `master`** runs **Release**. Optional **dev.to** — **[docs/devto.md](devto.md)**. `packaging/homebrew/dockpipe.rb`, **`.github/workflows/release.yml`**, Linux/macOS/Windows artifacts + `.deb` + **Windows `.msi`** + zip, **`packaging/windows/install.ps1`**, **`dockpipe windows setup` / `windows doctor`**, **Windows `dockpipe.exe` native by default** (optional **`DOCKPIPE_USE_WSL_BRIDGE=1`** to run the Linux CLI in WSL), **`packaging/winget/README.md`**, docs (`docs/wsl-windows.md`, `docs/releasing.md`, `docs/branching.md`).
-- **Still future:** everything listed below — e.g. **`dockpipe workflow validate`**, **template-level host actions**, **`dockpipe macos doctor`**, **`winget install` from the default Microsoft catalog** (requires a merged `winget-pkgs` PR per release), and **automating Homebrew tap bumps**.
+- **Today:** Integrate on **`staging`**; when ready, **PR `staging` → `master`** ships (**`VERSION`** + **`releasenotes/X.Y.Z.md`**). Details: **[releases/branching.md](releases/branching.md)**, **[releases/releasing.md](releases/releasing.md)**.
+- **This file** lists **future** ideas only — not the current CI matrix, release artifacts, or shipped features.
+
+---
+
+## Windows MSI (release pipeline)
+
+- **Per-user MSI** as a normal release asset (WiX), without an opt-in marker file — or keep opt-in but make CI **reliable** and documented.
+- **`winget install`** from the default Microsoft catalog (requires a merged **`winget-pkgs`** PR per release) — see **[packaging/winget/README.md](../packaging/winget/README.md)**.
 
 ---
 
@@ -24,7 +31,7 @@ Only include items that are **not implemented yet**.
 
 ## Host actions (Windows/macOS/Linux)
 
-**Today:** Native Windows `dockpipe.exe` uses host git/docker; WSL→Windows bundle fetch remains documented (`docs/wsl-windows.md`) for mixed-clone workflows; `windows setup` sets host-aware env in WSL (`DOCKPIPE_WINDOWS_HOST`, etc.) when using the bridge. That is **not** the same as a host-actions feature in workflows.
+**Today:** Native Windows `dockpipe.exe` uses host git/docker; WSL→Windows bundle fetch is documented in **[wsl-windows.md](wsl-windows.md)**; `dockpipe windows setup` applies when using the **optional** bridge. That is **not** the same as first-class **host actions** in workflows.
 
 **Still to build:**
 
@@ -48,4 +55,43 @@ Only include items that are **not implemented yet**.
 
 ---
 
-*Add new ideas below.*
+## Isolated GUI & IDE workbenches
+
+Run graphical applications (IDEs, browsers, AI agents) in a disposable container with a native host-side experience. The core **run → isolate → act** flow stays: work in the window, close to exit, and trigger host-side actions (e.g. git commits) automatically.
+
+### The “lightweight” approach (Electron / web stacks)
+
+Most modern dev tools (VS Code, Cursor, Claude Code, etc.) sit on web engines — decouple the **engine** from the **view** to cut bloat.
+
+- **Isolate (container):** headless backend (e.g. code-server or a specialized AI dev server).
+- **View (host):** a small **Go** front-end using native OS webviews (**WebKitGTK** / **WebView2**) pointed at the container’s mapped port.
+
+**Win:** near-native performance, OS clipboard and shortcuts, low-latency rendering, without shipping a ~500MB Chromium shell.
+
+### Legacy GUI support (X11 / Wayland)
+
+For heavier or non-web apps (traditional IDEs, browsers, arbitrary GUI tools):
+
+- **X11:** headless VNC inside the container + **noVNC** in the Go webview — pixel-accurate isolation for untrusted GUI workloads on X11 hosts (e.g. Pop!_OS).
+- **Wayland:** passthrough the compositor socket on Wayland-native hosts, or **WSLg** on Windows, for hardware-accelerated, high-DPI display while keeping workload isolation.
+
+### Native lifecycle & shell
+
+- **Lifecycle sync:** closing the Go webview stops the container and moves the workflow into the **act** phase (audit complete).
+- **Universal frame:** a standard Dockpipe chrome (commit, status, revert, etc.) regardless of what runs inside the webview.
+
+---
+
+## Terraform & cloud
+
+**Terraform**
+
+- Optional integration: e.g. provider stubs, generated workflow modules, or documented patterns for running Dockpipe-backed automation from Terraform-managed infra (TBD).
+
+**Cloud actions**
+
+- Deeper integrations with hosted CI (beyond “run Dockpipe in GitHub Actions”): reusable **orb** / composite actions, documented secrets patterns, and optional **cloud-side** workflow triggers aligned with **host actions** above.
+
+---
+
+*Add new ideas above the closing sections or extend the sections in place.*

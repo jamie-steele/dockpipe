@@ -4,7 +4,7 @@ Primitive first: run in container, optionally act after. Keep the core minimal.
 
 **Security:** do not file public issues for undisclosed vulnerabilities — see **[SECURITY.md](SECURITY.md)**.
 
-**Issues** for bugs/ideas (check [future-updates.md](docs/future-updates.md)). **PRs** for code/docs; see [AGENTS.md](AGENTS.md). Prefer **feature branch** or **fork** → **PR → `staging`** (integration). **Do not push directly** to **`staging`** / **`master`** if those branches are protected. The maintainer ships by **PR `staging` → `master`** with a **`VERSION`** bump + **`releasenotes/X.Y.Z.md`** — that merge runs **Release**. **CI** (**`govulncheck`**, **`gosec`**, tests, **`make`**, **`.deb`**, **`tests/run_tests.sh`**, **`tests/integration-tests/run.sh`**) runs on PRs to **`staging`** and **`master`**; the **VERSION / release-notes gate** runs only on PRs **into `master`**. **CodeQL** runs in the same **`.github/workflows/ci.yml`** as the **`codeql`** job. Details: [docs/branching.md](docs/branching.md). **Tests:** `bash tests/run_tests.sh` (unit); integration: `bash tests/integration-tests/run.sh`.
+**Issues** for bugs/ideas (check [future-updates.md](docs/future-updates.md)). **PRs** for code/docs; see [AGENTS.md](AGENTS.md). Prefer **feature branch** or **fork** → **PR → `staging`** (integration). **Do not push directly** to **`staging`** / **`master`** if those branches are protected. The maintainer ships by **PR `staging` → `master`** with a **`VERSION`** bump + **`releasenotes/X.Y.Z.md`** — that merge runs **Release**. **CI** (**`govulncheck`**, **`gosec`**, tests, **`make`**, **`.deb`**, **`tests/run_tests.sh`**, **`tests/integration-tests/run.sh`**) runs on PRs to **`staging`** and **`master`**; the **VERSION / release-notes gate** runs only on PRs **into `master`**. **CodeQL** runs in the same **`.github/workflows/ci.yml`** as the **`codeql`** job. Details: [docs/releases/branching.md](docs/releases/branching.md). **Tests:** `bash tests/run_tests.sh` (unit); integration: `bash tests/integration-tests/run.sh`.
 
 **Go:** layout is `lib/dockpipe/{domain,application,infrastructure}` — see [lib/dockpipe/README.md](lib/dockpipe/README.md). Run `go test ./...` and `gofmt` before PRs.
 
@@ -16,7 +16,7 @@ Primitive first: run in container, optionally act after. Keep the core minimal.
 
 **Action:** add `scripts/<name>.sh`; use `DOCKPIPE_EXIT_CODE`, `DOCKPIPE_CONTAINER_WORKDIR`. Add to `action init --from` list in `bin/dockpipe` if copyable.
 
-**Releases:** merge **`staging` → `master`** (after **`VERSION`** + **`releasenotes/…`**) triggers **`.github/workflows/release.yml`**. See [docs/releasing.md](docs/releasing.md). Optional **dev.to**: [docs/devto.md](docs/devto.md).
+**Releases:** merge **`staging` → `master`** (after **`VERSION`** + **`releasenotes/…`**) triggers **`.github/workflows/release.yml`**. See [docs/releases/releasing.md](docs/releases/releasing.md). Optional **dev.to**: [docs/releases/devto.md](docs/releases/devto.md).
 
 ---
 
@@ -24,16 +24,16 @@ Primitive first: run in container, optionally act after. Keep the core minimal.
 
 The maintainer **cannot exercise every OS, CPU, Docker setup, and shell** before a release. CI runs **`go test ./...`** and builds artifacts on **Linux amd64**; everything else depends on **real machines**. If you use dockpipe on an under-tested combo, your reports and small PRs are valuable.
 
-**Manual QA checklists:** **[docs/manual-qa.md](docs/manual-qa.md)** — [core (Linux `.deb`)](docs/manual-qa-core.md), [macOS](docs/manual-qa-macos.md), [Windows + WSL2](docs/manual-qa-windows.md).
+**Manual QA checklists:** **[docs/qa/manual-qa.md](docs/qa/manual-qa.md)** — [core (Linux `.deb`)](docs/qa/manual-qa-core.md), [macOS](docs/qa/manual-qa-macos.md), [Windows + WSL2](docs/qa/manual-qa-windows.md).
 
 **High-impact areas to try before or after a release:**
 
 | Area | Why it matters |
 |------|----------------|
-| **Windows + WSL2** | **[docs/manual-qa-windows.md](docs/manual-qa-windows.md)** (+ [core](docs/manual-qa-core.md) for `.deb` inside WSL); [docs/wsl-windows.md](docs/wsl-windows.md), [docs/install.md](docs/install.md). |
-| **Linux arm64** | `*_arm64.deb` and `linux_arm64` tarball — **[manual-qa-core.md](docs/manual-qa-core.md)** §1–2. |
-| **macOS** | **[docs/manual-qa-macos.md](docs/manual-qa-macos.md)** — Darwin tarballs, Docker Desktop, `PATH`. |
-| **Fresh install** | Release **`.deb` / tarball / exe** per **[manual-qa.md](docs/manual-qa.md)** (not only `go run` / `make` from a dev tree). |
+| **Windows + WSL2** | **[docs/qa/manual-qa-windows.md](docs/qa/manual-qa-windows.md)** (+ [core](docs/qa/manual-qa-core.md) for `.deb` inside WSL); [docs/wsl-windows.md](docs/wsl-windows.md), [docs/install.md](docs/install.md). |
+| **Linux arm64** | `*_arm64.deb` and `linux_arm64` tarball — **[manual-qa-core.md](docs/qa/manual-qa-core.md)** §1–2. |
+| **macOS** | **[docs/qa/manual-qa-macos.md](docs/qa/manual-qa-macos.md)** — Darwin tarballs, Docker Desktop, `PATH`. |
+| **Fresh install** | Release **`.deb` / tarball / exe** per **[manual-qa.md](docs/qa/manual-qa.md)** (not only `go run` / `make` from a dev tree). |
 
 **When you open an issue**, please include:
 

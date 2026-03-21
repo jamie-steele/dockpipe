@@ -1,4 +1,8 @@
-**dockpipe** is a general-purpose CLI: run any command in a disposable container, then optionally run an action on the result (e.g. commit, export patch). Same flow for tests, one-off scripts, codegen, or AI tools—not an AI framework; AI is one use case. **Agnostic by design:** AI support is via **resolvers** (one file per tool—Claude, Codex, or your own) and **templates**; the core never hardcodes a vendor. In **0.6** you get **worktree on host**, **commit on host** (so the AI never has git access), and **template init** so you can copy workflow examples and customize them without contributing back.
+**dockpipe** is a general-purpose CLI: run any command in a disposable container, then optionally run an action on the result (e.g. commit, export patch). Same flow for tests, one-off scripts, codegen, or AI tools—not an AI framework; AI is one use case. **Agnostic by design:** AI support is via **resolvers** (one file per tool—Claude, Codex, or your own) and **templates**; the core never hardcodes a vendor.
+
+The **default implementation is a Go CLI** (`cmd/dockpipe`): it orchestrates Docker, parses **`config.yml`** natively (including optional multi-step **`steps:`**, parallel **async** groups, and **`outputs:`** handoff—see **[workflow-yaml.md](../workflow-yaml.md)**), and runs host **bash** for pre-scripts. Legacy bash-only helpers remain under `scripts/` for reference.
+
+In **0.6** you get **worktree on host**, **commit on host** (so the AI never has container git access), **template init** (copy workflows and customize without contributing back), and **Windows** support (**`dockpipe.exe`** natively with Docker Desktop; optional **WSL bridge** for Linux `dockpipe` inside a distro).
 
 This post is a short intro to what it is, why it's useful, and how you can use it for automation and chained workflows (including AI).
 
@@ -14,7 +18,9 @@ dockpipe is a **single primitive** for running commands in disposable containers
 2. **Run** — Execute whatever you pass in: a one-liner, a script, or a tool (e.g. Claude, Codex, `npm test`).
 3. **Act** — Optionally run an action after the command (e.g. commit all changes, export a patch). When you use the bundled commit flow, the **commit runs on the host** so the AI never touches git.
 
-Your current directory (or a **worktree** dockpipe creates on the host) is mounted at `/work`. By default a **named volume** (`dockpipe-data`) is mounted at `/dockpipe-data` and set as `HOME`—tool state persists there. Use **`--data-dir /path`** or **`--no-data`** to change. **`--repo` + `--branch`**: dockpipe creates the clone and worktree on the **host**, mounts it as `/work`, runs your command, then runs the commit on the host. One primitive for Claude, Codex, or any resolver you add.
+Your current directory (or a **worktree** dockpipe creates on the host) is mounted at `/work`. By default a **named volume** (`dockpipe-data`) is mounted at `/dockpipe-data` and set as `HOME`—tool state persists there. Use **`--data-dir /path`** or **`--no-data`** to change.
+
+**`--repo` + worktree flows:** dockpipe creates or reuses the clone and worktree on the **host** (often under `~/.dockpipe` when using **`--data-dir`** defaults), mounts it as `/work`, runs your command, then can commit on the host. **`--branch`** is optional—omit it and dockpipe picks a new branch name each run (or set **`--work-branch`** / **`--branch`** explicitly). One primitive for Claude, Codex, or any resolver you add.
 
 ---
 
@@ -22,9 +28,11 @@ Your current directory (or a **worktree** dockpipe creates on the host) is mount
 
 AI support is **provider-agnostic**. **Resolvers** are one file per tool in the template’s `resolvers/` (e.g. `templates/llm-worktree/resolvers/claude`, `codex`). Each sets template (image), default command, and env hint. Adding a new AI tool = add a new resolver file; no changes to core. Use **`--resolver claude`** or **`--resolver codex`**; same flags, same flow.
 
-**Worktree on host:** With **`--repo <url>`** and **`--branch <name>`**, dockpipe creates (or reuses) the clone and worktree on the **host** (e.g. under `~/.dockpipe`). The container only sees the worktree at `/work`. When the run finishes, dockpipe runs the **commit on the host** in that worktree—so the AI never runs git, never has credentials, and you keep full control. Same primitive for every resolver.
+**Worktree on host:** With **`--repo <url>`**, dockpipe prepares the clone/worktree on the **host**. The container only sees the worktree at `/work`. When the run finishes, dockpipe can run **git on the host** for commit-on-host flows—so the model in the container never needs your credentials. **Authentication** is your normal **git** setup on the OS (HTTPS/SSH, Credential Manager, etc.); dockpipe does not replace that.
 
-**Template init:** Run **`dockpipe template init my-ai [--from llm-worktree]`** to copy the worktree workflow. Then run `dockpipe --workflow my-ai --repo <url> [--resolver claude|codex] -- claude -p "..."`. Config points to scripts/; no run script in the template. You can add your own templates and init from them—no need to contribute upstream.
+**Template init:** Run **`dockpipe template init my-ai [--from llm-worktree]`** to copy the worktree workflow. Then run `dockpipe --workflow my-ai --repo <url> [--resolver claude|codex] -- claude -p "..."`. Config points to repo **scripts/**; you can add your own templates—no need to contribute upstream.
+
+**Multi-step workflows:** Optional **`steps:`** in **`config.yml`** (blocking vs parallel **async** steps, **`outputs:`** between steps) — see **[workflow-yaml.md](../workflow-yaml.md)** and **[cli-reference.md](../cli-reference.md)**.
 
 ---
 
@@ -46,8 +54,8 @@ AI support is **provider-agnostic**. **Resolvers** are one file per tool in the 
 
 Because dockpipe is a single primitive, you can:
 
-- **Chain steps** — Run one script in a container, pipe or pass its output to the next (e.g. plan → implement → review, each in its own clean run).
-- **Automate AI workflows** — "Run Claude (or Codex) in a worktree → commit on host." Use **`--resolver claude --repo URL --branch NAME -- claude -p "..."`** or copy a template with **`dockpipe template init my-ai --from llm-worktree`** and edit.
+- **Chain steps** — Run one script in a container, pipe or pass its output to the next (e.g. plan → implement → review, each in its own clean run). See **[chaining.md](../chaining.md)**.
+- **Automate AI workflows** — "Run Claude (or Codex) in a worktree → commit on host." Use **`--resolver claude --repo URL`** (add **`--branch`** or **`--work-branch`** as needed) or copy a template with **`dockpipe template init my-ai --from llm-worktree`** and edit.
 - **CI-like local runs** — `dockpipe -- make test` or `dockpipe -- bash -c "npm ci && npm test"` in a clean environment.
 - **One-off experiments** — Try a new tool or version in a container; no global installs, no cleanup.
 
@@ -57,13 +65,17 @@ You stay in control: you pick the image (or resolver), the command, and the acti
 
 ## Try it (15 seconds)
 
-Install the [latest .deb](https://github.com/jamie-steele/dockpipe/releases) or clone the repo and add `bin` to your PATH. Then:
+**Install:** pick your platform from **[GitHub Releases](https://github.com/jamie-steele/dockpipe/releases)** and follow **[install.md](../install.md)** (Linux `.deb`, tarballs, macOS, **Windows** `dockpipe.exe` + Docker Desktop + **Git for Windows** for bash/git on PATH, etc.).
+
+**First run:**
 
 ```bash
 dockpipe -- make test
 ```
 
-Runs `make test` in a clean container; your dir is at `/work`, container is removed when done. Same for `npm test`, `cargo test`, or any command. Sanity check: `dockpipe -- echo "hello from container"`. Requirements: Bash and Docker.
+Runs `make test` in a clean container; your dir is at `/work`, container is removed when done. Same for `npm test`, `cargo test`, or any command. Sanity check: `dockpipe -- echo "hello from container"`.
+
+**Requirements:** **Docker** and **`bash` on the host** (dockpipe always invokes bash for host tooling). **`git` on the host** only for **`--repo`**, worktrees, and commit-on-host.
 
 ---
 
@@ -82,7 +94,7 @@ dockpipe -- bash -c "npm test"
 dockpipe --resolver claude --repo https://github.com/you/repo.git --branch claude/task \
   -- claude --dangerously-skip-permissions -p "Fix the bug"
 # For Codex: --resolver codex and use codex / codex exec "..." as the command.
-# Commit runs on host; your host git config is used—no need to pass git identity.
+# Commit runs on host; your host git auth applies—dockpipe does not replace Git Credential Manager / SSH.
 ```
 
 **Copy a workflow template and customize (no contribution required):**
@@ -141,6 +153,6 @@ dockpipe --isolate my-dev --workdir /path/to/repo -- bash -c "npm ci && npm test
 
 ## Summary
 
-dockpipe gives you one primitive: **spawn → run → act**. Use it for isolated runs, automation, chained steps, or AI workflows. **0.6** adds resolvers (agnostic AI), worktree and commit on host (AI never has git), and template init (copy workflows and customize without contributing). Same isolation as `docker run`, with less boilerplate: consistent workdir + UID/GID, optional action phase, templates, resolvers, and pipe-friendly CLI. It stays minimal and composable so you can plug it into your own scripts and tooling without adopting a framework.
+dockpipe gives you one primitive: **spawn → run → act**. Use it for isolated runs, automation, chained steps, or AI workflows. **0.6** ships the **Go CLI**, **resolvers** (agnostic AI), **worktree and commit on host**, **template init**, **native Windows** (`dockpipe.exe` + Docker Desktop), optional **multi-step `config.yml`**, and the same isolation story as `docker run` with less boilerplate: consistent workdir, optional user mapping on Unix, optional action phase, templates, resolvers, and a pipe-friendly CLI. It stays minimal and composable so you can plug it into your own scripts and tooling without adopting a framework.
 
 If you try it and have ideas or feedback, the repo is [github.com/jamie-steele/dockpipe](https://github.com/jamie-steele/dockpipe). See [CONTRIBUTING.md](https://github.com/jamie-steele/dockpipe/blob/master/CONTRIBUTING.md) to add a resolver or template.

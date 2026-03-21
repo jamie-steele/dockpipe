@@ -13,7 +13,7 @@ func SourceHostScript(scriptPath string, env []string) (map[string]string, error
 	if _, err := exec.LookPath("bash"); err != nil {
 		hint := ""
 		if runtime.GOOS == "windows" {
-			hint = " (install Git for Windows and ensure bash.exe is on PATH, or use DOCKPIPE_USE_WSL_BRIDGE=1)"
+			hint = " (dockpipe requires bash on the host — e.g. Git for Windows, or DOCKPIPE_USE_WSL_BRIDGE=1 with dockpipe in WSL; see docs/install.md)"
 		}
 		return nil, fmt.Errorf("bash not found for pre-script%s: %w", hint, err)
 	}

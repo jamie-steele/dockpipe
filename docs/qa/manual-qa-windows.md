@@ -1,10 +1,10 @@
 # Manual test plan — Windows
 
-**Scope:** **`dockpipe.exe`** on the **Windows** host: **native** Docker + git (default), optional **WSL bridge** (`DOCKPIPE_USE_WSL_BRIDGE=1`), **`windows setup` / `doctor`**, and **cold-start** behavior. Validate the Linux binary in WSL separately with **[manual-qa-core.md](manual-qa-core.md)** when testing the bridge.
+**Scope:** **`dockpipe.exe`** on the **Windows** host: **native** Docker + **bash** + git (default), optional **WSL bridge** (`DOCKPIPE_USE_WSL_BRIDGE=1`), **`windows setup` / `doctor`**, and **cold-start** behavior. Validate the Linux binary in WSL separately with **[manual-qa-core.md](manual-qa-core.md)** when testing the bridge.
 
 **Who:** Maintainers and [platform-testing contributors](../CONTRIBUTING.md#platform-testing-we-need-you).
 
-**Also see:** [install.md](install.md) · [wsl-windows.md](wsl-windows.md) · [cli-reference.md](cli-reference.md) (Windows) · [manual-qa.md](manual-qa.md) (index)
+**Also see:** [install.md](../install.md) · [wsl-windows.md](../wsl-windows.md) · [cli-reference.md](../cli-reference.md) (Windows) · [manual-qa.md](manual-qa.md) (index)
 
 ---
 
@@ -79,7 +79,7 @@ Assumes WSL already has dockpipe and you have run **`dockpipe windows setup`** a
 ## 4. Optional: workflow / bundle
 
 - [ ] `dockpipe.exe --workflow …` from a Windows cwd (heavier; may need API keys).
-- [ ] **Git bundle / fetch** flow (mostly relevant when mixing WSL + Windows git): [wsl-windows.md](wsl-windows.md).
+- [ ] **Git bundle / fetch** flow (mostly relevant when mixing WSL + Windows git): [wsl-windows.md](../wsl-windows.md).
 
 ---
 
@@ -117,6 +117,6 @@ go test ./...
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o bin/dockpipe.exe ./cmd/dockpipe
 ```
 
-On **Windows**, build MSI with **`packaging/msi/build.ps1`** (see **[packaging/msi/README.md](../packaging/msi/README.md)**).
+On **Windows**, build MSI with **`packaging/msi/build.ps1`** (see **[packaging/msi/README.md](../../packaging/msi/README.md)**).
 
 Copy **`packaging/build/dockpipe_<version>_amd64.deb`** (or arm64 if WSL is aarch64) and the **MSI or exe** to the Windows PC. Install the `.deb` **inside WSL** before testing the bridge.

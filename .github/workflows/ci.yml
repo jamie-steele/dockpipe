@@ -1,5 +1,5 @@
 # Tests, packaging, gosec/govulncheck, and CodeQL in one workflow (one Actions run per trigger).
-# See docs/branching.md
+# See docs/releases/branching.md
 name: CI
 
 on:

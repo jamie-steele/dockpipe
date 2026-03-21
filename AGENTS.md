@@ -116,11 +116,11 @@ dockpipe --mount /var/run/docker.sock:/var/run/docker.sock --isolate agent-dev -
 - **Go tests:** do not hardcode a developer’s machine path (e.g. `/home/you/...`). Use **`testRepoRoot(t)`** (`lib/dockpipe/application/repo_root_test.go`) for the real repo layout, **`t.TempDir()`** + stubs, or **`DOCKPIPE_REPO_ROOT`** — CI clones to arbitrary directories.
 - Adding a new template or flag should be accompanied by a small test where appropriate.
 
-**Cross-platform:** CI does **not** replace real installs. Checklists: **[docs/manual-qa.md](docs/manual-qa.md)** ([core](docs/manual-qa-core.md), [macOS](docs/manual-qa-macos.md), [Windows/WSL](docs/manual-qa-windows.md)). Contributor expectations: **[CONTRIBUTING.md — Platform testing](CONTRIBUTING.md#platform-testing-we-need-you)**.
+**Cross-platform:** CI does **not** replace real installs. Checklists: **[docs/qa/manual-qa.md](docs/qa/manual-qa.md)** ([core](docs/qa/manual-qa-core.md), [macOS](docs/qa/manual-qa-macos.md), [Windows/WSL](docs/qa/manual-qa-windows.md)). Contributor expectations: **[CONTRIBUTING.md — Platform testing](CONTRIBUTING.md#platform-testing-we-need-you)**.
 
-**Releases:** **`VERSION`** + **`releasenotes/X.Y.Z.md`**; **PR `staging` → `master`** runs **Release** on merge (see **[docs/branching.md](docs/branching.md)**). Contributor PRs target **`staging`**; the **ship** PR must **bump `VERSION`** and update the matching release notes file.
+**Releases:** **`VERSION`** + **`releasenotes/X.Y.Z.md`**; **PR `staging` → `master`** runs **Release** on merge (see **[docs/releases/branching.md](docs/releases/branching.md)**). Contributor PRs target **`staging`**; the **ship** PR must **bump `VERSION`** and update the matching release notes file.
 
-**CI / security:** **`.github/workflows/ci.yml`** — job **`test`** (**`govulncheck`**, **`gosec`** with **`.gosec.json`**, **`go test`**, **`make`**, **`.deb`**, shell + integration tests); job **`codeql`** (**`security-extended`** via **`.github/codeql/codeql-config.yml`**) → **Security → Code scanning**. **release-notes + VERSION gate** only on PRs **into `master`** — see **`docs/branching.md`**.
+**CI / security:** **`.github/workflows/ci.yml`** — job **`test`** (**`govulncheck`**, **`gosec`** with **`.gosec.json`**, **`go test`**, **`make`**, **`.deb`**, shell + integration tests); job **`codeql`** (**`security-extended`** via **`.github/codeql/codeql-config.yml`**) → **Security → Code scanning**. **release-notes + VERSION gate** only on PRs **into `master`** — see **`docs/releases/branching.md`**.
 
 ---
 

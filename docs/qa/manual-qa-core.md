@@ -4,7 +4,7 @@
 
 **Who:** Maintainers and [platform-testing contributors](../CONTRIBUTING.md#platform-testing-we-need-you).
 
-**Also see:** [install.md](install.md) · [manual-qa.md](manual-qa.md) (index)
+**Also see:** [install.md](../install.md) · [manual-qa.md](manual-qa.md) (index)
 
 ---
 

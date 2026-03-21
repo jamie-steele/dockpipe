@@ -44,7 +44,7 @@ func cmdWindows(args []string) error {
 }
 
 func printWindowsUsage() {
-	fmt.Fprint(windowsStdout, `dockpipe windows — Windows + WSL2 bridge utilities.
+	fmt.Fprint(windowsStdout, `dockpipe windows — WSL setup and diagnostics (Windows only).
 
 Usage:
   dockpipe windows setup [--distro <name>] [--install-command <cmd>] [--non-interactive]
@@ -54,7 +54,7 @@ Examples:
   dockpipe windows setup
   dockpipe windows setup --distro Ubuntu --install-command "curl -fsSL https://example/install.sh | sh" --non-interactive
 
-Other dockpipe commands run natively on Windows (Docker Desktop + git). Set DOCKPIPE_USE_WSL_BRIDGE=1 to forward into WSL. Only "windows …" is always host-only.
+Details: docs/install.md (Windows section).
 `)
 }
 

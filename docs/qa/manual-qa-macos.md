@@ -4,7 +4,7 @@
 
 **Who:** Maintainers and [platform-testing contributors](../CONTRIBUTING.md#platform-testing-we-need-you).
 
-**Also see:** [install.md](install.md) · [manual-qa.md](manual-qa.md) (index) · [packaging/homebrew/README.md](../packaging/homebrew/README.md) if using Homebrew
+**Also see:** [install.md](../install.md) · [manual-qa.md](manual-qa.md) (index) · [packaging/homebrew/README.md](../../packaging/homebrew/README.md) if using Homebrew
 
 ---
 
@@ -47,7 +47,7 @@ uname -m   # arm64 → use darwin_arm64; x86_64 → darwin_amd64
 
 If you test the in-repo formula or a tap:
 
-- [ ] `brew install …` / upgrade path per [packaging/homebrew/README.md](../packaging/homebrew/README.md).
+- [ ] `brew install …` / upgrade path per [packaging/homebrew/README.md](../../packaging/homebrew/README.md).
 - [ ] `dockpipe --help` from Homebrew prefix.
 
 ---
@@ -78,4 +78,4 @@ GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o do
 # or GOARCH=amd64 for Intel
 ```
 
-Release pipeline builds both tarballs; see [releasing.md](releasing.md).
+Release pipeline builds both tarballs; see [releasing.md](../releases/releasing.md).

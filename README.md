@@ -16,11 +16,13 @@ One primitive: run → isolate → act. Use it for isolated tests, one-off scrip
 
 ---
 
-## Try it (15 seconds)
+## Install
 
-**Linux:** [Download the .deb](https://github.com/jamie-steele/dockpipe/releases) for your arch (`*_amd64.deb` or `*_arm64.deb`) → `sudo dpkg -i` that file.  
-**Windows:** `irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex` (MSI + checksum), or grab **`.msi` / `.zip`** from [Releases](https://github.com/jamie-steele/dockpipe/releases). You still need **Docker Desktop** plus **git** and **bash** on PATH (easiest: **Git for Windows**). See [docs/install.md](docs/install.md).  
-Or from source: `git clone … && cd dockpipe && make && export PATH="$PWD/bin:$PATH"` (needs **Go 1.22+** to build; or run without `make` if Go is installed — `bin/dockpipe` uses `go run` as a fallback).
+[docs/install.md](docs/install.md) · [GitHub Releases](https://github.com/jamie-steele/dockpipe/releases)
+
+---
+
+## Try it (15 seconds)
 
 **First run:**
 
@@ -69,28 +71,6 @@ docker run --rm -v "$(pwd):/work" -w /work -u "$(id -u):$(id -g)" some-image mak
 ```
 
 dockpipe does that + action phase, templates, pipe-friendly CLI. Your UID/GID so files are yours.
-
----
-
-## Platforms
-
-| Platform | Notes |
-|----------|-------|
-| **Linux** | Primary platform. **CLI is a Go binary** (orchestration + YAML); pre/act scripts stay Bash. Install via [.deb](https://github.com/jamie-steele/dockpipe/releases) (**amd64** or **arm64**) or `make` from source. **Docker** + **Bash** required; **git** for commit-on-host. |
-| **Windows** | Install via **MSI**, **`install.ps1`** (see [install.md](docs/install.md)), or zip. **`dockpipe.exe` runs natively** — **Docker Desktop** + **Git for Windows** (host git/bash; Docker alone isn’t enough). Optional **`DOCKPIPE_USE_WSL_BRIDGE=1`** forwards into WSL. [docs/wsl-windows.md](docs/wsl-windows.md) for bundle/mixed-clone flows. |
-| **macOS** | Homebrew-friendly formula is included (`packaging/homebrew/dockpipe.rb`). Preferred install: `brew tap jamie-steele/dockpipe && brew install dockpipe`. Source fallback still supported (`make`). |
-
----
-
-## Install (details)
-
-| Platform | How |
-|----------|-----|
-| **Linux** | [Releases](https://github.com/jamie-steele/dockpipe/releases) → `sudo dpkg -i dockpipe_*_amd64.deb` or `*_arm64.deb` (match your CPU) |
-| **macOS** | `brew tap jamie-steele/dockpipe && brew install dockpipe` (or source fallback). |
-| **Windows** | **MSI / install.ps1 / zip** → `dockpipe.exe` on PATH. **Docker Desktop** (containers) + **Git for Windows** (host `git` + `bash` for pre-scripts / worktrees — Docker Desktop does not ship those). **`dockpipe windows setup`** only with **`DOCKPIPE_USE_WSL_BRIDGE=1`**. |
-
-Requirements: **Bash**, **Docker**. [More in docs/install.md](docs/install.md).
 
 ---
 
@@ -203,8 +183,8 @@ Scripts that run after your command. Use them for anything: commit, export a pat
 
 ## Docs & repo
 
-- [Blog: Run, Isolate, and Act](https://dev.to/jamie-steele/run-isolate-and-act-a-minimal-primitive-for-container-workflows-553m)
-- [Contributing](CONTRIBUTING.md) (includes **[platform testing](CONTRIBUTING.md#platform-testing-we-need-you)** — we can’t validate every OS/arch; help on yours) · **[Security](SECURITY.md)** · **[Manual QA](docs/manual-qa.md)** ([core](docs/manual-qa-core.md) · [macOS](docs/manual-qa-macos.md) · [Windows/WSL](docs/manual-qa-windows.md)) · [Architecture](docs/architecture.md) · **[Workflow YAML](docs/workflow-yaml.md)** · [CLI reference](docs/cli-reference.md) · [Chaining](docs/chaining.md) · [Install](docs/install.md) · [Releasing](docs/releasing.md) · [Branching & CI](docs/branching.md) · [AGENTS.md](AGENTS.md)
+- [Blog: Run, Isolate, and Act](https://dev.to/jamie-steele/run-isolate-and-act-a-minimal-primitive-for-container-workflows-553m) · **Source draft:** [docs/releases/blog-dockpipe-primitive.md](docs/releases/blog-dockpipe-primitive.md)
+- [Contributing](CONTRIBUTING.md) (includes **[platform testing](CONTRIBUTING.md#platform-testing-we-need-you)** — we can’t validate every OS/arch; help on yours) · **[Security](SECURITY.md)** · **[Manual QA](docs/qa/manual-qa.md)** ([core](docs/qa/manual-qa-core.md) · [macOS](docs/qa/manual-qa-macos.md) · [Windows/WSL](docs/qa/manual-qa-windows.md)) · [Architecture](docs/architecture.md) · **[Workflow YAML](docs/workflow-yaml.md)** · [CLI reference](docs/cli-reference.md) · [Chaining](docs/chaining.md) · [Install](docs/install.md) · [Releasing](docs/releases/releasing.md) · [Branching & CI](docs/releases/branching.md) · [AGENTS.md](AGENTS.md)
 - **Tests:** `bash tests/run_tests.sh` (unit tests, from repo root). **Integration tests** (Docker + agent-dev): [tests/integration-tests/README.md](tests/integration-tests/README.md) → `bash tests/integration-tests/run.sh`
 
 ## Disclaimer

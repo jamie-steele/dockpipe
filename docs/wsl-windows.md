@@ -4,7 +4,7 @@ Get branches from a repo in WSL into your Windows clone **without pushing to a r
 
 **Install `dockpipe.exe` first** (MSI, script, or zip) — see **[install.md](install.md)** (Windows section). Quick option: `irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex`
 
-**Default Windows UX:** `dockpipe.exe` runs **natively** (Docker Desktop + Windows git); you usually **do not** need this doc unless you are **mixing** a WSL-side clone with a Windows-side clone or using **`DOCKPIPE_USE_WSL_BRIDGE=1`**.
+**Default Windows UX:** use **`dockpipe.exe` on Windows** (Docker Desktop + Git for Windows) — same mental model as on Linux: Windows is Windows. This doc is for **git bundle / mixed-clone** workflows across WSL and Windows, or if you use the **optional** WSL bridge; it is **not** part of the default install story.
 
 **If you use the WSL bridge**, recommended one-time setup (Windows terminal):
 
@@ -15,7 +15,7 @@ dockpipe windows doctor
 
 This configures the target distro, bootstraps WSL host-awareness env (`DOCKPIPE_WINDOWS_HOST=1`), and can run a distro install command when needed (`--install-command`).
 
-**Manual test checklist:** **[manual-qa-windows.md](manual-qa-windows.md)** (native + optional bridge; install Linux build in WSL via **[manual-qa-core.md](manual-qa-core.md)** when testing the bridge).
+**Manual test checklist:** **[manual-qa-windows.md](qa/manual-qa-windows.md)** (native + optional bridge; install Linux build in WSL via **[manual-qa-core.md](qa/manual-qa-core.md)** when testing the bridge).
 
 ### Dockpipe vs manual bundle (what’s actually “one branch”)
 

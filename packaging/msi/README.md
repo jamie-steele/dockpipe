@@ -2,6 +2,12 @@
 
 Builds **`dockpipe_<version>_windows_amd64.msi`**: per-user install to `%LOCALAPPDATA%\dockpipe`, appends that directory to the **user** `PATH` (no admin for silent install).
 
+## Release pipeline (optional)
+
+**Push to `master`:** the GitHub **Release** workflow **does not** build the MSI unless you commit a marker file **`packaging/msi/SHIP_MSI`** (empty file is fine). That keeps **`dockpipe_<version>_windows_amd64.zip`** as the default Windows artifact when you want to ship without WiX. Remove or add **`SHIP_MSI`** when you want the next release to include **`*.msi`**.
+
+**Manual `workflow_dispatch`:** use input **`build_msi`** (default **true**).
+
 ## Requirements (local)
 
 - Windows

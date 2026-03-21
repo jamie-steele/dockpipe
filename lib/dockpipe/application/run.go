@@ -3,6 +3,7 @@ package application
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -96,6 +97,9 @@ func Run(argv []string, baseEnviron []string) error {
 	if opts.Help {
 		printUsage()
 		return nil
+	}
+	if err := ensureHostBash(); err != nil {
+		return err
 	}
 
 	var wf *domain.Workflow
@@ -338,6 +342,23 @@ func Run(argv []string, baseEnviron []string) error {
 			resolvedPre = append(resolvedPre, resolvePreScriptAppFn(p, repoRoot))
 		}
 		opts.PreScripts = resolvedPre
+	}
+
+	needsHostGit := opts.RepoURL != "" || commitOnHost
+	if !stepsMode {
+		needsHostGit = needsHostGit || preScriptsIncludeCloneWorktree(opts.PreScripts)
+	} else {
+		for _, p := range firstStepExtra {
+			if strings.HasSuffix(p, "clone-worktree.sh") {
+				needsHostGit = true
+				break
+			}
+		}
+	}
+	if needsHostGit {
+		if _, err := exec.LookPath("git"); err != nil {
+			return fmt.Errorf("git not found in PATH — required on the host for clone/worktree/commit flows (by design; dockpipe invokes your normal git). Install git (e.g. Git for Windows on Windows, git from your OS package manager on Linux). HTTPS/SSH auth uses your existing git setup (Credential Manager, SSH keys, etc.)")
+		}
 	}
 
 	if !stepsMode {

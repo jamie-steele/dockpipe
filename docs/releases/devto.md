@@ -1,5 +1,7 @@
 # Automating dev.to release posts
 
+**Related:** Long-form article draft in-repo: **[blog-dockpipe-primitive.md](blog-dockpipe-primitive.md)** (source for dev.to / announcements; the workflow below posts **`releasenotes/X.Y.Z.md`**, not this file).
+
 After each **GitHub Release** (merge **`staging` → `master`** in normal flow — see [branching.md](branching.md) / [releasing.md](releasing.md)), the **Release** workflow can **update an existing** [dev.to](https://dev.to) article via the [Forem API](https://developers.forem.com/).
 
 We **PUT** `https://dev.to/api/articles/{id}` so the same URL stays your “living” release post; you create the article once on dev.to, copy its numeric **article id**, then wire GitHub.

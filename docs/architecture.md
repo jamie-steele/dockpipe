@@ -11,7 +11,7 @@ dockpipe implements a single flow:
 1. **Run** (host) — Optional scripts on the host before the container (`--run`). E.g. clone-worktree.
 2. **Isolate** — Start a container from a given image (default or from `--isolate`: template name or image).
 3. **Command** — Execute the user's command inside the container. Workdir is mounted at `/work`.
-4. **Act** — If `--act <script>` was given, run that script inside the container after the command (e.g. commit-worktree). Container exits with the command's exit code.
+4. **Act** — If `--act <script>` was given, run that script **after** the command. **Usually** the entrypoint runs it **inside** the container (`DOCKPIPE_ACTION`). **Exception:** the bundled **`scripts/commit-worktree.sh`** is detected and run **on the host** after the container exits (your normal `git` against the mounted worktree), so the container does not set `DOCKPIPE_ACTION` in that case. Container exit code is still the main command's exit code.
 
 No built-in commit, clone, or AI logic — those are actions or scripts you plug in.
 
@@ -25,7 +25,7 @@ No built-in commit, clone, or AI logic — those are actions or scripts you plug
 |-----------|------|
 | `bin/dockpipe` | Launcher: runs **`bin/dockpipe.bin`** if present (`make`), otherwise **`go run ./cmd/dockpipe`**. |
 | `cmd/dockpipe`, `lib/dockpipe/application`, `lib/dockpipe/domain`, `lib/dockpipe/infrastructure` | **Go** CLI (DDD-ish): application layer (flags + orchestration + `windows setup/doctor`), domain (workflow/env/resolver semantics), infrastructure (FS, docker, bash, git). **`config.yml`** / **`steps:`** (YAML v3), resolver `KEY=value` files, template→image map, bash `source` for pre-scripts, **`docker run`** / build, host **git** commit. |
-| `lib/entrypoint.sh` | Container entrypoint: run command, then `DOCKPIPE_ACTION` if set. |
+| `lib/entrypoint.sh` | Container entrypoint: run command, then `DOCKPIPE_ACTION` if set (skipped when act is **host** commit — see bundled `commit-worktree`). |
 | `images/*/Dockerfile` | Shared images; each copies `lib/entrypoint.sh` as `ENTRYPOINT`. |
 | `scripts/*.sh` | Run/act scripts; invoked via `--run` / `--act` or workflow (Go sources them with bash). |
 | `templates/*/` | Workflow templates (`config.yml`, `resolvers/`). Multi-step / async: see **[workflow-yaml.md](workflow-yaml.md)**. |
@@ -40,15 +40,18 @@ User: dockpipe --isolate claude --act scripts/commit-worktree.sh -- claude -p ".
 
   bin/dockpipe → dockpipe (Go binary when packaged / built)
     → TemplateBuild("claude") from --isolate → image=dockpipe-claude, build=.../images/claude
-    → docker build (if needed) / docker run
+    → docker build (if needed) / docker run (no DOCKPIPE_ACTION for bundled commit-worktree)
     → see lib/dockpipe/infrastructure/docker.go
 
   Container (lib/entrypoint.sh)
     → cd /work
     → exec user argv (e.g. claude -p "...")
     → save exit code
-    → run DOCKPIPE_ACTION if set (e.g. commit-worktree)
+    → run DOCKPIPE_ACTION if set (not set for bundled commit-worktree)
     → exit with saved exit code
+
+  Host (after container exits, if --act is bundled commit-worktree)
+    → host git commit / bundle (CommitOnHost path)
 ```
 
 **`--workflow` with `steps:`** — `lib/dockpipe/application/run_steps.go` runs each step (optional parallel async groups, merge `outputs:` in order). Spec: **[workflow-yaml.md](workflow-yaml.md)**.

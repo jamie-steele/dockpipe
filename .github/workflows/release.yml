@@ -16,6 +16,11 @@ on:
         required: false
         default: false
         type: boolean
+      build_msi:
+        description: "Build Windows MSI (WiX). On push to master, use committed file packaging/msi/SHIP_MSI instead."
+        required: false
+        default: true
+        type: boolean
 
 concurrency:
   group: dockpipe-release
@@ -31,6 +36,7 @@ jobs:
       version: ${{ steps.m.outputs.version }}
       tag: ${{ steps.m.outputs.tag }}
       dry_run: ${{ steps.m.outputs.dry_run }}
+      build_msi: ${{ steps.m.outputs.build_msi }}
     steps:
       - uses: actions/checkout@v6
 
@@ -39,9 +45,11 @@ jobs:
         env:
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_BUILD_MSI: ${{ inputs.build_msi }}
         run: |
           set -euo pipefail
           dry_run="false"
+          build_msi="false"
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
             raw="${INPUT_VERSION:-}"
             if [[ -z "${raw}" ]]; then
@@ -50,8 +58,15 @@ jobs:
             if [[ "${INPUT_DRY_RUN:-false}" == "true" ]]; then
               dry_run="true"
             fi
+            case "${INPUT_BUILD_MSI:-true}" in
+              true|True) build_msi="true" ;;
+              *) build_msi="false" ;;
+            esac
           elif [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
             raw="$(tr -d ' \n\r' < VERSION)"
+            if [[ -f packaging/msi/SHIP_MSI ]]; then
+              build_msi="true"
+            fi
           else
             echo "Unsupported event: ${GITHUB_EVENT_NAME}" >&2
             exit 1
@@ -69,6 +84,7 @@ jobs:
           echo "version=${raw}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "dry_run=${dry_run}" >> "$GITHUB_OUTPUT"
+          echo "build_msi=${build_msi}" >> "$GITHUB_OUTPUT"
 
   build-ubuntu:
     needs: [meta]
@@ -123,6 +139,7 @@ jobs:
 
   build-msi:
     needs: [meta]
+    if: needs.meta.outputs.build_msi == 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
@@ -169,6 +186,7 @@ jobs:
 
   publish:
     needs: [meta, build-ubuntu, build-msi]
+    if: always() && needs.meta.result == 'success' && needs.build-ubuntu.result == 'success' && (needs.build-msi.result == 'success' || needs.build-msi.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -179,6 +197,7 @@ jobs:
           path: dist
 
       - uses: actions/download-artifact@v8
+        if: needs.meta.outputs.build_msi == 'true'
         with:
           name: release-msi
           path: dist
@@ -222,6 +241,8 @@ jobs:
           tag_name: ${{ needs.meta.outputs.tag }}
           name: ${{ needs.meta.outputs.tag }}
           body_path: dist/RELEASE_NOTES.md
+          # MSI is optional (build-msi may be skipped); do not fail when dist has no .msi
+          fail_on_unmatched_files: false
           files: |
             dist/*.tar.gz
             dist/*.zip
@@ -231,7 +252,7 @@ jobs:
 
   # Optional: update an existing dev.to article (API: PUT /api/articles/:id).
   # Enable with repo variable DEVTO_PUBLISH=true + DEVTO_ARTICLE_ID + secret DEVTO_API_KEY.
-  # See docs/devto.md
+  # See docs/releases/devto.md (blog draft / context: docs/releases/blog-dockpipe-primitive.md)
   devto:
     needs: [meta, publish]
     runs-on: ubuntu-latest

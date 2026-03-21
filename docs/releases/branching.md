@@ -43,7 +43,7 @@ Turn off **“allow administrators to bypass”** if you want **your own** chang
 
 ## `VERSION` + `releasenotes/X.Y.Z.md`
 
-- **[`VERSION`](../VERSION)** — single line, semver **`X.Y.Z`** (no `v` prefix). This is the version **you are about to ship** when the **`staging` → `master`** PR lands.
+- **[`VERSION`](../../VERSION)** — single line, semver **`X.Y.Z`** (no `v` prefix). This is the version **you are about to ship** when the **`staging` → `master`** PR lands.
 - **`releasenotes/${VERSION}.md`** — required body for the GitHub release.
 
 **Every PR into `master` must** (enforced by CI):

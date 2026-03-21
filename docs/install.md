@@ -1,6 +1,6 @@
 # Installing dockpipe
 
-**Platforms:** Linux is the primary target (`.deb` package). macOS is supported from source (Bash + Docker). Windows uses **`dockpipe.exe` natively** (Docker Desktop + Git for Windows); optional **WSL forwarding** via `DOCKPIPE_USE_WSL_BRIDGE=1` if you prefer Linux git inside a distro.
+**Platforms:** **Docker** and **bash** on the host are required everywhere. Linux is the primary target (`.deb`). macOS: Docker Desktop + bash (system `/bin/bash` is fine). Windows: **`dockpipe.exe`** + Docker Desktop + **Git for Windows** (bash + git). **`DOCKPIPE_USE_WSL_BRIDGE=1`** and **`dockpipe windows …`** are **optional** — only if you want the Linux `dockpipe` binary inside a WSL distro.
 
 ---
 
@@ -26,7 +26,7 @@ Using `dpkg -i` avoids apt sandbox warnings when the .deb is in your home direct
 
 **Upgrades:** download the new .deb (same arch as before) and run `sudo dpkg -i dockpipe_*_amd64.deb` or `dockpipe_*_arm64.deb` as appropriate.
 
-**Requirements:** **amd64** or **arm64** package matching your machine. Bash, Docker (`docker.io` or `docker-ce`), and **git** (for commit-on-host). Install Docker if needed:
+**Requirements:** **amd64** or **arm64** package matching your machine. **Docker** (`docker.io` or `docker-ce`), **`bash`** on the host (required — dockpipe uses it), and **git** (for clone/worktree/commit-on-host only). Install Docker if needed:
 
 ```bash
 sudo apt-get install docker.io
@@ -41,7 +41,7 @@ sudo apt-get install docker.io
 
 ## Or run from source (Linux or macOS, no root)
 
-The CLI is built with **Go 1.22+** (`go build -o bin/dockpipe.bin ./cmd/dockpipe` or **`make`**). The `bin/dockpipe` script runs the binary if present, otherwise `go run`.
+The CLI is built with **Go** matching **`go.mod`** (currently **1.25**; see `toolchain` there) (`go build -o bin/dockpipe.bin ./cmd/dockpipe` or **`make`**). The `bin/dockpipe` script runs the binary if present, otherwise `go run`.
 
 ```bash
 git clone https://github.com/jamie-steele/dockpipe.git
@@ -55,15 +55,19 @@ dockpipe -- ls -la
 
 ## Windows (Docker Desktop + native `dockpipe.exe`)
 
-**What you actually need:** **Docker Desktop** is enough for *containers*, but dockpipe also runs **`git`** and **`bash` on the Windows host** (worktrees, commit-on-host, sourcing pre-scripts). Docker Desktop does **not** put `git` / `bash` on your PATH. In practice that means **two installs**: **Docker Desktop** + **Git for Windows** (covers git + bash). You do **not** need a separate WSL distro or Linux `dockpipe` unless you opt into **`DOCKPIPE_USE_WSL_BRIDGE=1`**.
+**Required:** **Docker Desktop**, **`bash.exe`** on `PATH`, and **`dockpipe.exe`** on `PATH`. Dockpipe always invokes **bash** on the host; **Git for Windows** is the usual way to get **`bash.exe`** (and **`git.exe`**) together. Docker Desktop does **not** ship bash.
+
+**Host `git`:** additionally required for **clone / worktree / commit-on-host** (e.g. **`--repo`**, **`clone-worktree.sh`**). Git for Windows covers that for most users.
+
+You do **not** need a WSL distro or Linux `dockpipe` unless you opt into **`DOCKPIPE_USE_WSL_BRIDGE=1`** (or follow [wsl-windows.md](wsl-windows.md) for bundle/mixed-clone flows). If **`bash`** is missing but **WSL** is installed, the CLI may offer to **re-run through WSL** (interactive).
 
 ### Install `dockpipe.exe` on Windows
 
-Add the **Windows** binary to `PATH` (MSI, install script, or zip). Ensure **Docker Desktop** is running and **`git`** / **`bash`** are on PATH (Git for Windows is the usual choice).
+Add **`dockpipe.exe`** to `PATH` (**install script** or **zip**; **MSI** when published on a given release). Ensure **Docker Desktop** is running and **Git for Windows** (or another **`bash`** + **`git`** on `PATH`).
 
 **Optional WSL bridge:** if you set **`DOCKPIPE_USE_WSL_BRIDGE=1`**, commands are forwarded into WSL. Then you also need **`dockpipe` installed inside that distro** and should run **`dockpipe windows setup`** once.
 
-**Automated (recommended):** downloads the latest release **MSI** (or zip fallback), verifies **`SHA256SUMS.txt`** when available, installs **per-user** (no admin):
+**Automated (recommended):** downloads from the latest release — prefers **MSI** when the release includes it, otherwise **zip** — verifies **`SHA256SUMS.txt`** when available, installs **per-user** (no admin):
 
 ```powershell
 irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex
@@ -73,8 +77,8 @@ Pin a version: save [packaging/windows/install.ps1](https://github.com/jamie-ste
 
 **Manual:** from [Releases](https://github.com/jamie-steele/dockpipe/releases):
 
-- **`dockpipe_<version>_windows_amd64.msi`** — double-click, or `msiexec /i .\….msi /qn` (adds `%LOCALAPPDATA%\dockpipe` to your user **PATH**).
 - **`dockpipe_<version>_windows_amd64.zip`** — unzip and add the folder to `PATH`.
+- **`dockpipe_<version>_windows_amd64.msi`** — **when published** for that release: double-click, or `msiexec /i .\….msi /qn` (adds `%LOCALAPPDATA%\dockpipe` to your user **PATH**). Some releases ship **zip only** until MSI is enabled for that tag.
 
 **winget:** not in the default Microsoft catalog until a manifest is accepted; see **[packaging/winget/README.md](../packaging/winget/README.md)** for maintainers and future `winget install`.
 
@@ -82,18 +86,28 @@ Open a **new** terminal after install so `PATH` is picked up.
 
 ### Daily use from Windows
 
-With **`dockpipe.exe`** on `PATH` (MSI, install script, or zip). From **PowerShell or CMD**, `cd` to your repo and run the same CLI as on Linux, e.g.:
+With **`dockpipe.exe`** on `PATH` (install script, zip, or MSI when available). From **PowerShell or CMD**, `cd` to your repo and run the same CLI as on Linux, e.g.:
 
 ```powershell
 cd C:\Users\you\src\myrepo
 dockpipe -- echo ok
 ```
 
-**Native mode (default):** `dockpipe` runs on Windows; **`docker`** comes from Docker Desktop, **`git`** / **`bash`** from Git for Windows (or your own tooling). No WSL shell or Linux `dockpipe` required.
+**Native mode (default):** `dockpipe` runs on Windows; **`docker`** comes from Docker Desktop; **`bash`** (and usually **`git`**) from Git for Windows. **`git`** is only needed for worktree/repo flows (see above). No WSL shell or Linux `dockpipe` required unless you use the bridge.
 
 ### Optional: WSL bridge (`DOCKPIPE_USE_WSL_BRIDGE=1`)
 
-Set the environment variable **for the session** (or in your profile) so **`dockpipe.exe` forwards** into WSL: cwd is mapped with `wslpath`, then **`dockpipe`** runs inside the distro from **`dockpipe windows setup`** (or the first listed distro).
+Set the environment variable **for the session** (or persist it in **Windows user environment variables** / your shell profile) so **`dockpipe.exe` forwards** into WSL: cwd is mapped with `wslpath`, then **`dockpipe`** runs inside the distro from **`dockpipe windows setup`** (or the first listed distro).
+
+```powershell
+# PowerShell — this session only
+$env:DOCKPIPE_USE_WSL_BRIDGE = "1"
+```
+
+```bat
+REM cmd.exe — this session only
+set DOCKPIPE_USE_WSL_BRIDGE=1
+```
 
 - **`dockpipe windows …`** always runs **only on Windows** (setup / doctor).
 - With the bridge, path-like flags are rewritten to WSL paths before the inner `dockpipe` sees them. Arguments after **`--`** are not rewritten.
@@ -111,11 +125,13 @@ dockpipe windows setup --distro Ubuntu --install-command "<your install command>
 dockpipe windows doctor
 ```
 
-**Manual QA:** **[manual-qa.md](manual-qa.md)** — [Linux / `.deb` / WSL Linux](manual-qa-core.md), [macOS](manual-qa-macos.md), [Windows + `dockpipe.exe`](manual-qa-windows.md).
+**Manual QA:** **[manual-qa.md](qa/manual-qa.md)** — [Linux / `.deb` / WSL Linux](qa/manual-qa-core.md), [macOS](qa/manual-qa-macos.md), [Windows + `dockpipe.exe`](qa/manual-qa-windows.md).
 
 ---
 
 ## macOS (Homebrew)
+
+**Requirements:** **Docker Desktop** (or another engine), and **`bash`** (dockpipe requires it; `/bin/bash` is normal). **git** for worktree / `--repo` flows.
 
 Preferred path once tap is published:
 
@@ -133,7 +149,7 @@ brew upgrade dockpipe
 
 Maintainer note: formula source is tracked in `packaging/homebrew/dockpipe.rb` with release process in `packaging/homebrew/README.md`.
 
-General release automation details: `docs/releasing.md`.
+General release automation details: **[releases/releasing.md](releases/releasing.md)**.
 
 ---
 
