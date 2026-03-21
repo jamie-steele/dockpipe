@@ -188,6 +188,7 @@ jobs:
     needs: [meta, build-ubuntu, build-msi]
     if: always() && needs.meta.result == 'success' && needs.build-ubuntu.result == 'success' && (needs.build-msi.result == 'success' || needs.build-msi.result == 'skipped')
     runs-on: ubuntu-latest
+    environment: release
     steps:
       - uses: actions/checkout@v6
 
@@ -251,11 +252,12 @@ jobs:
             dist/SHA256SUMS.txt
 
   # Optional: update an existing dev.to article (API: PUT /api/articles/:id).
-  # Enable with repo variable DEVTO_PUBLISH=true + DEVTO_ARTICLE_ID + secret DEVTO_API_KEY.
+  # Configure DEVTO_* + DEVTO_API_KEY on GitHub Environment "release" (or repo-level secrets/vars).
   # See docs/releases/devto.md (blog draft / context: docs/releases/blog-dockpipe-primitive.md)
   devto:
     needs: [meta, publish]
     runs-on: ubuntu-latest
+    environment: release
     if: ${{ needs.meta.outputs.dry_run != 'true' && vars.DEVTO_PUBLISH == 'true' && vars.DEVTO_ARTICLE_ID != '' }}
     permissions:
       contents: read

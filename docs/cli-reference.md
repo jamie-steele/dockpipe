@@ -19,6 +19,16 @@ Local project setup only: **no `git clone`**, no treating **`init`** as a remote
 | `dockpipe init <name> --from <source>` | **`--from`** selects a **template source**: **`blank`**, a **bundled** name (e.g. **`run`**, **`test`**), or a **filesystem path** to an existing workflow directory. Not a Git URL. |
 | `dockpipe init <name> --resolver <n> --runtime <n> --strategy <n>` | Optional; written into the new **`config.yml`** (same meaning as run flags — see the table below). |
 
+**Optional dogfood workflows** (copy bundled presets into **`dockpipe/workflows/<name>/`** — repo-local; each flag is independent; default is off). **`--workflow`** resolves **`dockpipe/workflows/<name>/config.yml`** before **`templates/<name>/config.yml`** on a checkout.
+
+| Flag | Installs |
+|------|----------|
+| **`--dogfood-test`** | **`test`** — multi-step outputs chain ([templates/test/README.md](../templates/test/README.md) in the bundle; copy lands under **`dockpipe/workflows/test/`**). |
+| **`--dogfood-codex-pav`** | **`dogfood-codex-pav`** — plan → apply → validate with **`runtime: docker`**, **`resolver: codex`** ([templates/dogfood-codex-pav/README.md](../templates/dogfood-codex-pav/README.md)). |
+| **`--dogfood-codex-security`** | **`dogfood-codex-security`** — tests step then Codex security-style step ([templates/dogfood-codex-security/README.md](../templates/dogfood-codex-security/README.md)). |
+
+Example: **`dockpipe init --dogfood-test --dogfood-codex-security`**. If **`dockpipe/workflows/<name>/`** already exists, that workflow is skipped. **`dockpipe init`** also creates **`dockpipe/README.md`** and an empty **`dockpipe/workflows/`** tree when missing.
+
 ## Workflow variables (`--workflow`)
 
 When you use `--workflow <name>`, the resolved **`config.yml`** (see **[workflow-yaml.md](workflow-yaml.md)** for lookup order) may include a top-level **`vars:`** block: indented `KEY: value` lines. Those names are **exported** before run scripts, **only if** they are not already set in your shell (so your environment and CI secrets win).

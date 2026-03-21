@@ -51,6 +51,7 @@ func cmdInit(args []string) error {
 
 	var name, from string
 	var resolver, runtime, strategy string
+	var dogfood dogfoodInstallOpts
 	for i := 0; i < len(args); i++ {
 		switch {
 		case args[i] == "--from" && i+1 < len(args):
@@ -65,6 +66,12 @@ func cmdInit(args []string) error {
 		case args[i] == "--strategy" && i+1 < len(args):
 			strategy = args[i+1]
 			i++
+		case args[i] == "--dogfood-test":
+			dogfood.Test = true
+		case args[i] == "--dogfood-codex-pav":
+			dogfood.CodexPAV = true
+		case args[i] == "--dogfood-codex-security":
+			dogfood.CodexSecurity = true
 		case strings.HasPrefix(args[i], "-"):
 			return fmt.Errorf("unknown option %s", args[i])
 		default:
@@ -83,6 +90,9 @@ func cmdInit(args []string) error {
 	}
 
 	if err := ensureProjectScaffold(repoRoot, projectDir); err != nil {
+		return err
+	}
+	if err := installDogfoodWorkflows(repoRoot, projectDir, dogfood); err != nil {
 		return err
 	}
 	if name == "" {

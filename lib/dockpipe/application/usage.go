@@ -11,7 +11,7 @@ Usage:
   dockpipe --workflow-file <path> [options]     workflow YAML (e.g. repo-root dockpipe.yml)
   dockpipe --workflow <name> [options]          multi-step (steps: in config.yml), optional -- for last step
   dockpipe workflow validate [path]             lint workflow YAML (default: dockpipe.yml)
-  dockpipe init | action init | pre init | template init | windows setup
+  dockpipe init [--dogfood-test] [--dogfood-codex-pav] [--dogfood-codex-security] | action init | pre init | template init | windows setup
   dockpipe doctor                             verify bash, Docker, bundled assets
 
 Options:

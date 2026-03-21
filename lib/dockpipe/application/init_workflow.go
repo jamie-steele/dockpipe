@@ -16,9 +16,24 @@ const dockpipeProjectReadme = `# Dockpipe project
 
 - **scripts/** — Run and act scripts.
 - **images/** — Optional project Dockerfiles (e.g. **images/example/** copied from **templates/core/assets/images/example/**).
-- **templates/** — Your workflows (**config.yml**), one folder per name. Use **dockpipe --workflow &lt;name&gt;**.
+- **templates/** — Bundled-style workflows (**config.yml**), one folder per name (from upstream / **dockpipe init &lt;name&gt;**).
 - **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/**, **assets/** (**scripts/**, **images/**, **compose/**) (from **dockpipe init**).
+- **dockpipe/workflows/** — Optional **repo-local** workflows (e.g. **dockpipe init --dogfood-***); **--workflow** checks here before **templates/**.
 - **dockpipe.yml** (optional) — Repo-root workflow; use **dockpipe --workflow-file dockpipe.yml**.
+`
+
+const dockpipeDirReadme = `# dockpipe/
+
+Optional **repo-local** workflows live under **workflows/** (one directory per workflow with **config.yml**). Resolution checks here before **templates/**.
+
+To copy the bundled dogfood workflows from a dockpipe **source checkout** (set **DOCKPIPE_REPO_ROOT** so **init** reads **templates/** from this tree, not only the binary cache):
+
+    export DOCKPIPE_REPO_ROOT="$(pwd)"
+    make build
+    ./bin/dockpipe init --dogfood-test --dogfood-codex-pav --dogfood-codex-security
+
+Skips **workflows/<name>/** if it already exists. See **docs/cli-reference.md** (**dockpipe init**).
+
 `
 
 // ensureProjectScaffold creates scripts/, images/, templates/, merges bundled templates/core,
@@ -29,6 +44,11 @@ func ensureProjectScaffold(repoRoot, projectDir string) error {
 	_ = os.MkdirAll(filepath.Join(projectDir, "templates"), 0o755)
 	if err := mergeBundledTemplatesCore(repoRoot, projectDir); err != nil {
 		return fmt.Errorf("templates/core: %w", err)
+	}
+	_ = os.MkdirAll(filepath.Join(projectDir, "dockpipe", "workflows"), 0o755)
+	dpReadme := filepath.Join(projectDir, "dockpipe", "README.md")
+	if _, err := os.Stat(dpReadme); os.IsNotExist(err) {
+		_ = os.WriteFile(dpReadme, []byte(dockpipeDirReadme), 0o644)
 	}
 	readme := filepath.Join(projectDir, "README.md")
 	if _, err := os.Stat(readme); os.IsNotExist(err) {
@@ -63,7 +83,7 @@ func resolveInitFromSource(repoRoot, from string) (srcDir string, isBlank bool, 
 	if st, e := os.Stat(abs); e == nil && st.IsDir() {
 		return abs, false, nil
 	}
-	return "", false, fmt.Errorf("unknown --from source %q — use blank, a bundled name (e.g. init, run, test, run-apply-validate), or a path to an existing workflow directory", from)
+	return "", false, fmt.Errorf("unknown --from source %q — use blank, a bundled name (e.g. init, run, test, run-apply-validate, dogfood-codex-pav, dogfood-codex-security), or a path to an existing workflow directory", from)
 }
 
 func writeWorkflowYAML(path string, wf *domain.Workflow) error {

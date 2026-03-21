@@ -33,3 +33,9 @@ func WorkflowsRootDir(repoRoot string) string {
 	}
 	return filepath.Join(repoRoot, "templates")
 }
+
+// AuthoringDockpipeWorkflowsDir is .../dockpipe/workflows on a git checkout (not the materialized bundle).
+// Optional repo-local workflows (e.g. dockpipe init --dogfood-*) install here; bundled authoring stays under templates/.
+func AuthoringDockpipeWorkflowsDir(repoRoot string) string {
+	return filepath.Join(repoRoot, BundledDockpipeDir, "workflows")
+}

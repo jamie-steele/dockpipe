@@ -147,6 +147,8 @@ YAML presets via **`--workflow <name>`** (bundled under **`templates/`**; resolv
 | `test` | Multi-step **outputs** chain (`.dockpipe/outputs.env`) — [templates/test/README.md](templates/test/README.md) |
 | `run` | **Simple git:** run in a container, then **one commit on your current branch** (no worktrees) — [templates/run/README.md](templates/run/README.md) |
 | `run-apply-validate` | **run → apply → validate** pipeline (three steps; customize cmds) — [templates/run-apply-validate/README.md](templates/run-apply-validate/README.md) |
+| `dogfood-codex-pav` | **Plan → apply → validate** with **`runtime: docker`**, **`resolver: codex`** — [templates/dogfood-codex-pav/README.md](templates/dogfood-codex-pav/README.md) |
+| `dogfood-codex-security` | **Tests** then **Codex** security-style step — [templates/dogfood-codex-security/README.md](templates/dogfood-codex-security/README.md) |
 
 **Resolvers** (tool/platform integration — not separate top-level templates): **`claude`**, **`codex`**, **`code-server`**, **`cursor-dev`**, **`vscode`** live under **[templates/core/resolvers/](templates/core/resolvers/)** (each **`profile`** + optional **`config.yml`**). **Clone + worktree + commit** uses **strategy `worktree`** in your workflow YAML — **[docs/workflow-yaml.md](docs/workflow-yaml.md#named-strategies)**.
 

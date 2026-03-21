@@ -1,4 +1,5 @@
 # Build the Go CLI into bin/dockpipe.bin (bin/dockpipe launcher invokes it).
+# build: compile only — does not install. Use: make install (needs prior build) or make dev-install (build + install).
 # Keep in sync with repo-root VERSION (used by CI / release).
 DEB_VERSION ?= $(shell test -f VERSION && tr -d ' \t\r\n' < VERSION || echo 0.6.0)
 GO_LDFLAGS := -s -w -X main.Version=$(DEB_VERSION)
@@ -6,11 +7,18 @@ GO_LDFLAGS := -s -w -X main.Version=$(DEB_VERSION)
 #   make build-windows WINDOWS_OUT=/Volumes/jsteele/Downloads/dockpipe.exe
 # (exact /Volumes/… name appears in Finder after connecting to smb://anton.local/…)
 WINDOWS_OUT ?= bin/dockpipe.exe
-.PHONY: build build-windows test check-paths deb deb-all
+.PHONY: build build-windows install dev-install test check-paths deb deb-all
 build:
 	cp VERSION cmd/dockpipe/VERSION
 	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o bin/dockpipe.bin ./cmd/dockpipe
-	@echo "Built bin/dockpipe.bin — run via bin/dockpipe"
+	@echo "Built bin/dockpipe.bin — run via bin/dockpipe (repo) or make install / make dev-install"
+
+# Install pre-built binary to a local PATH directory (~/.local/bin, %USERPROFILE%\\bin, …). Does not run go build.
+install:
+	bash scripts/install-dockpipe.sh
+
+# Developer loop: compile then install (same as: make build && make install).
+dev-install: build install
 
 # Cross-compile for Windows (default bin/dockpipe.exe — gitignored). From repo root only.
 build-windows:

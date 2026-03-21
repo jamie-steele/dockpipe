@@ -1,5 +1,17 @@
 # Tests, packaging, gosec/govulncheck, and CodeQL in one workflow (one Actions run per trigger).
 # See docs/releases/branching.md
+#
+# --- Optional GitHub repo configuration (Settings → Secrets and variables → Actions) ---
+#
+# CI dogfood (this workflow):
+#   Variable  DOCKPIPE_CI_CODEX     Set to "true" to run dockpipe/workflows/dogfood-codex-* in CI (pulls Codex image; needs network).
+#   Secret    OPENAI_API_KEY        OpenAI API key for Codex when DOCKPIPE_CI_CODEX is true (same as local Codex usage).
+#
+# dev.to release posts (release.yml only — not this job):
+#   Variables DEVTO_PUBLISH, DEVTO_ARTICLE_ID, optional DEVTO_TAGS, DEVTO_TITLE
+#   Secret    DEVTO_API_KEY
+#   See docs/releases/devto.md
+#
 name: CI
 
 on:
@@ -48,6 +60,29 @@ jobs:
 
       - name: Templates/core path guard (docs + code)
         run: bash scripts/check-templates-core-paths.sh
+
+      # Dogfood: run bundled multi-step workflow via the CLI (repo-local dockpipe/workflows/test when present).
+      - name: Dogfood — dockpipe workflow test
+        env:
+          DOCKPIPE_REPO_ROOT: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          ./bin/dockpipe --workflow test --runtime docker --workdir "${{ github.workspace }}" --
+
+      # Optional: Codex resolver workflows (set repo variable DOCKPIPE_CI_CODEX=true and secret OPENAI_API_KEY).
+      - name: Dogfood — dockpipe Codex workflows (optional)
+        if: ${{ vars.DOCKPIPE_CI_CODEX == 'true' }}
+        env:
+          DOCKPIPE_REPO_ROOT: ${{ github.workspace }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+            echo "::error::Set repository secret OPENAI_API_KEY when vars.DOCKPIPE_CI_CODEX is true."
+            exit 1
+          fi
+          ./bin/dockpipe --workflow dogfood-codex-pav --resolver codex --runtime docker --workdir "${{ github.workspace }}" --
+          ./bin/dockpipe --workflow dogfood-codex-security --resolver codex --runtime docker --workdir "${{ github.workspace }}" --
 
       # Ship PRs only: staging/integration PRs skip this (maintainer bumps VERSION when merging staging → master).
       - name: Release notes + version bump (PRs targeting master only)
