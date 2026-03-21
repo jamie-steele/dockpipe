@@ -3,6 +3,7 @@ package application
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"strings"
@@ -38,8 +39,8 @@ func ensureHostBash() error {
 		)
 	}
 
-	fd := int(os.Stdin.Fd())
-	if !term.IsTerminal(fd) {
+	fd, ok := stdinFDInt()
+	if !ok || !term.IsTerminal(fd) {
 		return fmt.Errorf(
 			"bash not found on PATH — dockpipe requires bash. Install Git for Windows: %s — or set %s=1 and use WSL (see `dockpipe windows setup`). WSL distros detected: %s",
 			gitForWindowsURL, EnvUseWSLBridge, strings.Join(distros, ", "),
@@ -65,6 +66,15 @@ func ensureHostBash() error {
 	return reexecWithWSLBridge(distro)
 }
 
+// stdinFDInt converts os.Stdin's file descriptor to int without truncation (G115).
+func stdinFDInt() (int, bool) {
+	fd := os.Stdin.Fd()
+	if fd > uintptr(math.MaxInt) {
+		return 0, false
+	}
+	return int(fd), true
+}
+
 func reexecWithWSLBridge(distro string) error {
 	if err := saveWindowsConfig(distro); err != nil {
 		return fmt.Errorf("save WSL distro config: %w", err)
@@ -73,6 +83,7 @@ func reexecWithWSLBridge(distro string) error {
 	if err != nil {
 		return err
 	}
+	// #nosec G702 -- intentional self re-exec: same binary (exe) and same argv as this process (WSL bridge bootstrap).
 	cmd := exec.Command(exe, os.Args[1:]...)
 	cmd.Env = append(os.Environ(), EnvUseWSLBridge+"=1")
 	cmd.Stdin = os.Stdin
