@@ -2,24 +2,75 @@ package application
 
 import "fmt"
 
-func printUsage() {
-	fmt.Print(`dockpipe — Run any CLI command in a disposable container; project at /work.
+const mainUsageText = `  ____             _     ____  _            
+ |  _ \  ___   ___| | __|  _ \(_)_ __   ___ 
+ | | | |/ _ \ / __| |/ /| | | | | '_ \ / _ \
+ | |_| | (_) | (__|   < | |_| | | |_) |  __/
+ |____/ \___/ \___|_|\_\|____/|_| .__/ \___|
+                               |_|          
+
+DockPipe — run anything, anywhere, in isolation.
 
 Usage:
   dockpipe [options] -- <command> [args...]
-  dockpipe --workflow <name> [options] -- <command>
-  dockpipe --workflow-file <path> [options]     workflow YAML (e.g. repo-root dockpipe.yml)
-  dockpipe --workflow <name> [options]          multi-step (steps: in config.yml), optional -- for last step
-  dockpipe workflow validate [path]             lint workflow YAML (default: dockpipe.yml)
-  dockpipe init [--dogfood-test] [--dogfood-codex-pav] [--dogfood-codex-security] | action init | pre init | template init | windows setup
-  dockpipe doctor                             verify bash, Docker, bundled assets
+  dockpipe --workflow <name> [options] [--] [args for last step]
 
-Options:
-  --workflow, --workflow-file, --run, --isolate, --act, --runtime, --resolver, --strategy, --repo, --branch, --workdir,
-  --data-dir, --data-vol, --no-data, --reinit, -f, --mount, --env, --env-file,
-  --var, --build, -d/--detach, -h/--help, --version / -v / -V
+Core:
+  --workflow <name>     Workflow to run (e.g. test)
+  --runtime <name>      Runtime profile (e.g. docker)
+  --resolver <name>     Resolver profile (optional)
 
-Requires: docker, bash (host). Git (host) for worktree / --repo / commit-on-host. Config: YAML (steps:) parsed natively — no python3.
+Optional:
+  --workdir <path>      Host directory mounted at /work (default: current dir)
+  --isolate <name>      Image or template for the container
+  --                    End of dockpipe flags; rest goes to your command
 
-`)
+More flags:
+  --workflow-file, --run, --act, --strategy, --repo, --branch, --mount
+  --env, --env-file, --var, --data-dir, --data-vol, --no-data, --reinit, -f, -d/--detach
+
+Commands:
+  init                    Add DockPipe to the current project
+  workflow validate       Check workflow YAML (default: dockpipe.yml)
+  doctor                  Check docker, bash, and bundled assets
+  windows setup|doctor    Windows: optional WSL bridge setup
+  action|pre|template init  Copy sample scripts (use each with --help)
+
+Examples:
+  dockpipe init
+  dockpipe --workflow test --runtime docker
+  dockpipe --workflow test --runtime docker -- go test ./...
+
+Requires: docker and bash on the host. Git for --repo and worktree-style flows.
+Workflows: YAML. See docs/cli-reference.md for every flag.
+`
+
+const initUsageText = `dockpipe init
+
+Add DockPipe to the current project (scripts, templates, shared core files).
+
+Usage:
+  dockpipe init [flags]
+  dockpipe init <name> [flags]   add a workflow from a template
+
+Flags:
+  --dogfood-test            Copy the bundled test workflow
+  --dogfood-codex-pav       Copy the Codex plan → apply → validate workflow
+  --dogfood-codex-security  Copy the Codex security workflow
+  --from <source>          Template to copy from (with <name>)
+  --runtime <name>         Written into new config (with <name>)
+  --resolver <name>        Written into new config (with <name>)
+  --strategy <name>        Written into new config (with <name>)
+
+Examples:
+  dockpipe init
+  dockpipe init --dogfood-test --dogfood-codex-pav
+`
+
+func printUsage() {
+	fmt.Print(mainUsageText)
+}
+
+func printInitUsage() {
+	fmt.Print(initUsageText)
 }

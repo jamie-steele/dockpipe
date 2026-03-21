@@ -15,7 +15,7 @@
 | **act** | Follow-up after the main command (usually a **host** script; see **[architecture.md](architecture.md)** for in-container `DOCKPIPE_ACTION`). |
 | **workflow** | This file: a named preset selected with **`--workflow <name>`**. |
 | **strategy** | Optional **named lifecycle** wrapper: small **`KEY=value`** files under **`templates/<workflow>/strategies/<name>`** (optional) or **`templates/core/strategies/<name>`** define host scripts to run **before** and **after** the workflow body. See [Named strategies](#named-strategies) below. |
-| **runtime** / **resolver** / **isolation profile** | **Runtime** file **`templates/core/runtimes/<name>`** (**`DOCKPIPE_RUNTIME_*`**); **resolver** file **`templates/core/resolvers/<name>`** (**`DOCKPIPE_RESOLVER_*`**). Both may be set; the runner **merges** them. **Legacy:** same basename pairs **`runtimes/foo`** + **`resolvers/foo`**. See **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)**. Optional **`runtimes:`** allowlist (like **`strategies:`**). |
+| **runtime** / **resolver** | **Runtime** — **`templates/core/runtimes/<name>`** (**`DOCKPIPE_RUNTIME_*`**). **Resolver** — **`templates/core/resolvers/<name>`** (**`DOCKPIPE_RESOLVER_*`**). In the materialized bundle, the same paths live under **`dockpipe/core/`**. Both may be set; the runner **merges** them. See **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)**. Optional **`runtimes:`** allowlist (like **`strategies:`**). |
 
 **Learning path:** [onboarding.md](onboarding.md) · **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)** · Implementation notes: [`lib/dockpipe/README.md`](../lib/dockpipe/README.md).
 
@@ -40,12 +40,12 @@ Variable precedence for workflows is documented in **[CLI reference](cli-referen
 | `description` | Optional one-line task summary printed after `name` (e.g. what this workflow is for). |
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
 | `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). |
-| `isolate` | Template name or image for the container. For **resolver-driven** flows with **`strategy: worktree`**, prefer **`default_runtime`** / **`default_resolver`** to pick a **core** profile name; **`isolate`** still works as a **legacy** default profile name when those are empty. |
+| `isolate` | Template name or image for the container. For **resolver-driven** flows with **`strategy: worktree`**, prefer **`default_runtime`** / **`default_resolver`** to pick a **core** profile name; **`isolate`** remains a **fallback** default when those are empty. |
 | `act` / `action` | Action script after the container command (when not using per-step act). |
 | `runtime` | Default isolation profile (**single-flow**); preferred over **`default_resolver`** when both are set. |
 | `default_runtime` | Like **`default_resolver`** for selecting a profile under **`templates/core/resolvers/`** (**single-flow**). |
 | `runtimes` | Optional allowlist: if non-empty, the effective runtime (CLI **`--runtime`** / **`--resolver`** or workflow fields) must be listed. |
-| `resolver` | Default profile name (**multi-step** workflows; legacy name for top-level multi-step default). |
+| `resolver` | Default profile name (**multi-step** workflows; prefer **`default_runtime`** where possible). |
 | `default_resolver` | Default profile name (**single-flow**); takes precedence over **`isolate`** for selecting a **core** shared profile. |
 | `steps` | List of **steps** (multi-step mode). |
 | `imports` | List of paths (relative to this file) to merge **before** this file: each imported file’s **`vars`** are merged (later files override), then **`steps`** from imports run **before** **`steps`** here. Circular imports are rejected. Requires loading from disk (not raw bytes-only parse). |

@@ -7,7 +7,7 @@ GO_LDFLAGS := -s -w -X main.Version=$(DEB_VERSION)
 #   make build-windows WINDOWS_OUT=/Volumes/jsteele/Downloads/dockpipe.exe
 # (exact /Volumes/… name appears in Finder after connecting to smb://anton.local/…)
 WINDOWS_OUT ?= bin/dockpipe.exe
-.PHONY: build build-windows install dev-install test check-paths deb deb-all
+.PHONY: build build-windows install dev-install test check-paths deb deb-all demo-record dev-deps
 build:
 	cp VERSION cmd/dockpipe/VERSION
 	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o bin/dockpipe.bin ./cmd/dockpipe
@@ -40,3 +40,11 @@ deb:
 
 deb-all:
 	./packaging/build-deb-all.sh "$(DEB_VERSION)"
+
+# Terminal demo GIF for sharing (requires asciinema + agg + Docker — see demo/README.md).
+demo-record: build
+	bash scripts/record-demo.sh
+
+# Optional dev tools aligned with CI (govulncheck, gosec) — contributors only; not required for dockpipe users.
+dev-deps:
+	bash scripts/install-deps.sh

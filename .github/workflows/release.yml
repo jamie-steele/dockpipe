@@ -251,33 +251,34 @@ jobs:
             dist/*.msi
             dist/SHA256SUMS.txt
 
-  # Optional: update an existing dev.to article (API: PUT /api/articles/:id).
-  # Configure DEVTO_* + DEVTO_API_KEY on GitHub Environment "release" (or repo-level secrets/vars).
-  # See docs/releases/devto.md (blog draft / context: docs/releases/blog-dockpipe-primitive.md)
+  # Optional: dev.to — PUT main article (DEVTO_ARTICLE_ID) + optional one-time POST per release (DEVTO_ONE_TIME_POST).
+  # See docs/releases/devto.md
   devto:
     needs: [meta, publish]
     runs-on: ubuntu-latest
     environment: release
-    if: ${{ needs.meta.outputs.dry_run != 'true' && vars.DEVTO_PUBLISH == 'true' && vars.DEVTO_ARTICLE_ID != '' }}
+    if: ${{ needs.meta.outputs.dry_run != 'true' && vars.DEVTO_PUBLISH == 'true' && (vars.DEVTO_ARTICLE_ID != '' || vars.DEVTO_ONE_TIME_POST == 'true') }}
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v6
 
-      - name: Update dev.to article
+      - name: Publish to dev.to (main PUT + optional one-time POST)
         shell: bash
         env:
           DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
           DEVTO_ARTICLE_ID: ${{ vars.DEVTO_ARTICLE_ID }}
+          DEVTO_ONE_TIME_POST: ${{ vars.DEVTO_ONE_TIME_POST }}
           DEVTO_TAGS: ${{ vars.DEVTO_TAGS }}
           DEVTO_TITLE: ${{ vars.DEVTO_TITLE }}
+          DEVTO_ONE_TIME_TITLE: ${{ vars.DEVTO_ONE_TIME_TITLE }}
           VERSION: ${{ needs.meta.outputs.version }}
           TAG: ${{ needs.meta.outputs.tag }}
           REPO_URL: ${{ github.server_url }}/${{ github.repository }}
         run: |
           set -euo pipefail
           if [[ -z "${DEVTO_API_KEY:-}" ]]; then
-            echo "::error::Set repository secret DEVTO_API_KEY (Settings → Secrets) when DEVTO_PUBLISH is true."
+            echo "::error::Set secret DEVTO_API_KEY when DEVTO_PUBLISH is true."
             exit 1
           fi
           NOTES="releasenotes/${VERSION}.md"
@@ -286,14 +287,14 @@ jobs:
             exit 1
           fi
           RELEASE_URL="${REPO_URL}/releases/tag/${TAG}"
-          TITLE="${DEVTO_TITLE:-dockpipe ${TAG} released}"
+          TITLE_MAIN="${DEVTO_TITLE:-dockpipe ${TAG} released}"
+          TITLE_ONETIME="${DEVTO_ONE_TIME_TITLE:-dockpipe ${TAG} released}"
           {
             printf '**[%s](%s)** — [GitHub release →](%s)\n\n' "${TAG}" "${RELEASE_URL}" "${RELEASE_URL}"
             echo "---"
             echo ""
             cat "${NOTES}"
           } > /tmp/devto-body.md
-          # Title line: strip accidental markdown from DEVTO_TITLE if user set full sentence
           TAGS_JSON=$(python3 <<'PY'
           import json, os
           raw = os.environ.get("DEVTO_TAGS") or "dockpipe,cli,golang"
@@ -301,29 +302,56 @@ jobs:
           print(json.dumps(tags))
           PY
           )
-          jq -n \
-            --arg title "$TITLE" \
-            --rawfile body /tmp/devto-body.md \
-            --arg canonical "$RELEASE_URL" \
-            --argjson tags "$TAGS_JSON" \
-            '{
-              article: {
-                title: $title,
-                body_markdown: ($body | rtrimstr("\n")),
-                published: true,
-                canonical_url: $canonical,
-                tags: $tags
-              }
-            }' > /tmp/devto-payload.json
-          code=$(curl -sS -o /tmp/devto-resp.json -w "%{http_code}" \
-            -X PUT "https://dev.to/api/articles/${DEVTO_ARTICLE_ID}" \
-            -H "api-key: ${DEVTO_API_KEY}" \
-            -H "Content-Type: application/json" \
-            -H "Accept: application/json" \
-            --data-binary @/tmp/devto-payload.json)
-          if [[ "$code" != "200" && "$code" != "201" ]]; then
-            echo "::error::dev.to API HTTP ${code}"
-            cat /tmp/devto-resp.json >&2 || true
-            exit 1
+
+          build_payload() {
+            local title="$1"
+            local out="$2"
+            jq -n \
+              --arg title "$title" \
+              --rawfile body /tmp/devto-body.md \
+              --arg canonical "$RELEASE_URL" \
+              --argjson tags "$TAGS_JSON" \
+              '{
+                article: {
+                  title: $title,
+                  body_markdown: ($body | rtrimstr("\n")),
+                  published: true,
+                  canonical_url: $canonical,
+                  tags: $tags
+                }
+              }' > "$out"
+          }
+
+          if [[ -n "${DEVTO_ARTICLE_ID:-}" ]]; then
+            build_payload "$TITLE_MAIN" /tmp/devto-payload-main.json
+            code=$(curl -sS -o /tmp/devto-resp.json -w "%{http_code}" \
+              -X PUT "https://dev.to/api/articles/${DEVTO_ARTICLE_ID}" \
+              -H "api-key: ${DEVTO_API_KEY}" \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json" \
+              --data-binary @/tmp/devto-payload-main.json)
+            if [[ "$code" != "200" && "$code" != "201" ]]; then
+              echo "::error::dev.to PUT (main) HTTP ${code}"
+              cat /tmp/devto-resp.json >&2 || true
+              exit 1
+            fi
+            echo "dev.to main article ${DEVTO_ARTICLE_ID} updated (HTTP ${code})."
           fi
-          echo "dev.to article ${DEVTO_ARTICLE_ID} updated (HTTP ${code})."
+
+          if [[ "${DEVTO_ONE_TIME_POST:-}" == "true" ]]; then
+            build_payload "$TITLE_ONETIME" /tmp/devto-payload-onetime.json
+            code=$(curl -sS -o /tmp/devto-resp-onetime.json -w "%{http_code}" \
+              -X POST "https://dev.to/api/articles" \
+              -H "api-key: ${DEVTO_API_KEY}" \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json" \
+              --data-binary @/tmp/devto-payload-onetime.json)
+            if [[ "$code" != "200" && "$code" != "201" ]]; then
+              echo "::error::dev.to POST (one-time) HTTP ${code}"
+              cat /tmp/devto-resp-onetime.json >&2 || true
+              exit 1
+            fi
+            ot_id=$(jq -r '.id // .article.id // empty' /tmp/devto-resp-onetime.json)
+            ot_url=$(jq -r '.url // .article.url // empty' /tmp/devto-resp-onetime.json)
+            echo "dev.to one-time post created (HTTP ${code}). id=${ot_id} url=${ot_url}"
+          fi

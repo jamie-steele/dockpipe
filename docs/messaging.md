@@ -1,15 +1,17 @@
 # External messaging (canonical)
 
-Use this text for the GitHub **About** description, README intro, and similar. Full copy lives at the top of **[README.md](../README.md)**.
+Use for the GitHub **About** field, short blurbs, and anything that should match the README.
 
-**GitHub repository description** (About field, ~100 characters):
+**Repository description** (~100 characters):
 
-> Run any CLI command in a disposable container—project at /work, removed when it exits.
+> Run commands in a disposable container; project at /work, removed when it exits.
 
-**Tagline** (README opening lines):
+**One-line product:**
 
-> Run the CLI commands you already use in a disposable container. Your project is at `/work`; when the process exits, the container is gone.
+> DockPipe runs anything, anywhere, in isolation.
 
-**Short pitch** (README next paragraph):
+**Longer pitch** (README body):
 
-> Dockpipe runs any CLI command in a disposable container with your project at `/work`. It handles the usual Docker wiring (mount, workdir, user) so you don’t have to, and removes the container when the command finishes. Use it when you want a clean, throwaway environment for tests, linters, or other tools—without leftover containers on your machine.
+> Your project is mounted at **`/work`** in a disposable container. When the command finishes, the container is gone. Optional host scripts run before and after. Same defaults every time—no hand-rolled `docker run` for the common case.
+
+Full README: **[README.md](../README.md)**

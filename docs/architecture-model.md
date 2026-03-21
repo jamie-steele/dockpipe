@@ -12,6 +12,7 @@ This document is **FINAL**. It defines the core concepts, their relationships, a
 | **runtime** | **Where execution happens** — isolated environment, **platform-agnostic**. |
 | **resolver** | **Which platform/tool performs the work** — **platform-specific** adapter. |
 | **strategy** | **Lifecycle wrapper** — before/after execution behavior. |
+| **assets** | **Support files** — scripts, image trees, compose examples under **`templates/core/assets/`** (not additional primitives). |
 | **runtime.type** | **Classification of runtime behavior** — not implementation. |
 
 ---

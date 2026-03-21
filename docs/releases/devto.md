@@ -1,80 +1,69 @@
 # Automating dev.to release posts
 
-**Related:** Long-form article draft in-repo: **[blog-dockpipe-primitive.md](blog-dockpipe-primitive.md)** (source for dev.to / announcements; the workflow below posts **`releasenotes/X.Y.Z.md`**, not this file).
+**Related:** In-repo drafts: **[blog-dockpipe-primitive.md](blog-dockpipe-primitive.md)**.
 
-After each **GitHub Release** (merge **`staging` → `master`** in normal flow — see [branching.md](branching.md) / [releasing.md](releasing.md)), the **Release** workflow can **update an existing** [dev.to](https://dev.to) article via the [Forem API](https://developers.forem.com/).
+After each **GitHub Release**, the **Release** workflow can call the [Forem API](https://developers.forem.com/) for two **independent** actions:
 
-We **PUT** `https://dev.to/api/articles/{id}` so the same URL stays your “living” release post; you create the article once on dev.to, copy its numeric **article id**, then wire GitHub.
+| Action | API | When | Article id |
+|--------|-----|------|------------|
+| **Main** (living changelog) | `PUT /api/articles/{id}` | **`DEVTO_ARTICLE_ID`** is set | You create the post once on dev.to, store its numeric **id** in GitHub — every release **updates that same URL**. |
+| **One-time post** | `POST /api/articles` | **`DEVTO_ONE_TIME_POST=true`** | **No id.** Each release **creates a new** article (release blog / announcement). Nothing to save for the next run. |
 
----
+You can enable **either**, **both**, or **neither** (job runs only if at least one action is configured — see below).
 
-## One-time on dev.to
-
-1. Create a post (draft or published) — e.g. “dockpipe releases”.
-2. Get the numeric **`DEVTO_ARTICLE_ID`** (used in `PUT https://dev.to/api/articles/{id}`):
-   - **Editor URL (when shown):** `https://dev.to/username/edit/12345678` → **`12345678`** is the id.
-   - **Page HTML:** Open the **public** article page, open **DevTools → Elements**, and find the `<article>` element. It includes **`data-article-id="<id>"`** (and often **`data-article-slug`**, **`data-path`**, etc.). That **`data-article-id`** value is **`DEVTO_ARTICLE_ID`**. You can also **View Page Source** and search for `data-article-id` or the same number in embedded JSON / `meta` tags.
-   - **Slug-only editor** (no `/edit/digits`): list your public articles and read **`id`** from the JSON:
-     ```bash
-     curl -sS "https://dev.to/api/articles?username=YOUR_USERNAME" | jq '.[] | select(.slug | test("run-isolate"; "i")) | {id, title, slug}'
-     ```
-     Or open the response in a browser:  
-     `https://dev.to/api/articles?username=YOUR_USERNAME`  
-     Find the object whose **`slug`** or **`path`** matches your post; copy **`id`** (integer).
-   - **Single article (public):** `GET https://dev.to/api/articles/{id}` works only if you already know **`id`** (useful to verify).
-   There is **no** `GET /api/articles/{username}/{slug}` endpoint on dev.to.
-3. Under **Settings → Account → DEV API keys**, create an API key (used only on GitHub as a **secret**).
+Body for both is the same: link to the **GitHub release**, then **`releasenotes/X.Y.Z.md`**.
 
 ---
 
 ## GitHub configuration
 
-The **Release** workflow assigns the **`publish`** and **`devto`** jobs to GitHub **Environment** **`release`**. Store **`DEVTO_*`** and **`DEVTO_API_KEY`** there (recommended) or at repository scope — same names.
+**Environment `release`** (recommended) or repository **Variables** + **Secrets**:
 
-**Settings → Environments → `release` → Environment secrets / Environment variables**
-
-### Secret (required when the dev.to job runs)
+### Secret
 
 | Name | Value |
-|------|--------|
-| **`DEVTO_API_KEY`** | API key from dev.to account settings |
+|------|-------|
+| **`DEVTO_API_KEY`** | dev.to → Settings → Account → **DEV API keys** |
 
 ### Variables
 
-| Name | Required | Description |
-|------|----------|-------------|
-| **`DEVTO_PUBLISH`** | Yes, to run the job | Set to **`true`** to update dev.to after each non–dry-run release. Anything else → job skipped. |
-| **`DEVTO_ARTICLE_ID`** | Yes | Numeric id (`data-article-id` on `<article>`, or editor URL). |
-| **`DEVTO_TAGS`** | No | Comma-separated tag **names** (spaces after commas are fine). Use **lowercase** (e.g. `cli,docker,automation,ai`). Default: `dockpipe,cli,golang`. |
-| **`DEVTO_TITLE`** | No | Article **title** on dev.to. Default: `dockpipe vX.Y.Z released` (uses release tag). |
+| Name | Description |
+|------|-------------|
+| **`DEVTO_PUBLISH`** | Set to **`true`** to run the dev.to job (still needs at least one action below). |
+| **`DEVTO_ARTICLE_ID`** | Numeric id of the **main** post to **PUT** each release. Omit if you only use one-time posts. |
+| **`DEVTO_ONE_TIME_POST`** | Set to **`true`** to **POST** a **new** article every release (no id). Omit if you only update the main post. |
+| **`DEVTO_TAGS`** | Optional. Comma-separated tags (lowercase). Default: `dockpipe,cli,golang`. |
+| **`DEVTO_TITLE`** | Optional. Title for **PUT** (main). Default: `dockpipe vX.Y.Z released`. |
+| **`DEVTO_ONE_TIME_TITLE`** | Optional. Title for **POST** (one-time). Default: same pattern as **`DEVTO_TITLE`**. |
 
-Until **`DEVTO_PUBLISH`** is **`true`** and **`DEVTO_ARTICLE_ID`** is set, the **`devto`** job does not run.
+**Job runs when:** `DEVTO_PUBLISH=true` **and** **`DEVTO_ARTICLE_ID` is non-empty** **or** **`DEVTO_ONE_TIME_POST=true`**.
 
-**Protection rules:** If **`release`** has **required reviewers** or a **wait timer**, the **`publish`** job (GitHub Release) waits on that gate every time **`master`** runs this workflow. Drop those rules on **`release`** if you want releases without a manual approval step.
+If **`DEVTO_PUBLISH=true`** but neither action is set, the job is **skipped** (condition false).
+
+---
+
+## One-time setup
+
+1. Create **`DEVTO_API_KEY`** on dev.to and add it as a **secret** on GitHub.
+2. **Main post only:** Create a post on dev.to, copy **`id`** from the editor URL or **`data-article-id`**, set **`DEVTO_ARTICLE_ID`**. Leave **`DEVTO_ONE_TIME_POST`** unset or not `true`.
+3. **One-time posts only:** Set **`DEVTO_ONE_TIME_POST=true`**. Do **not** set **`DEVTO_ARTICLE_ID`** (not used for POST).
+4. **Both:** Set **`DEVTO_ARTICLE_ID`** **and** **`DEVTO_ONE_TIME_POST=true`** — each release **PUT**s the main article and **POST**s a separate new post.
 
 ---
 
 ## What gets published
 
-- **Title:** `DEVTO_TITLE` or default `dockpipe v{VERSION} released`.
-- **Body:** Short header with links to the **GitHub release**, then the full contents of **`releasenotes/X.Y.Z.md`** for that version.
-- **`canonical_url`:** Set to the GitHub release URL (good for cross-posting / SEO).
-- **`published`:** `true` (post goes live on update — same as other edits on dev.to).
+- **Title:** `DEVTO_TITLE` / `DEVTO_ONE_TIME_TITLE` or default from release tag.
+- **Body:** `**[tag](url)**` + **GitHub release** link + **`releasenotes/X.Y.Z.md`**.
+- **`canonical_url`:** GitHub release URL.
+- **`published`:** `true`.
 
-Workflow logic lives in **`.github/workflows/release.yml`** (job **`devto`**), after **`publish`**.
-
----
-
-## Dry runs and forks
-
-- **`dry_run: true`** (manual dispatch) → no GitHub Release → **`devto`** does not run.
-- Forks: only run if you set variables + secret on **that** fork (they are not copied from upstream).
+Workflow: **`.github/workflows/release.yml`** → job **`devto`**.
 
 ---
 
 ## Troubleshooting
 
-- **`401` / `403`:** Regenerate **DEVTO_API_KEY**; ensure no extra spaces when pasting the secret.
-- **`404` on PUT:** Wrong **`DEVTO_ARTICLE_ID`** or key not allowed to edit that article (must be your post).
-- **Job skipped:** Check **`DEVTO_PUBLISH`** is exactly **`true`** (lowercase) and **`DEVTO_ARTICLE_ID`** is non-empty.
-- **“No such endpoint” / wrong GET URL:** Use **`GET https://dev.to/api/articles?username=…`** to list articles, or **`GET https://dev.to/api/articles/{id}`** once you have the numeric id — not a username/slug path.
+- **`401` / `403`:** Regenerate **DEVTO_API_KEY**.
+- **`404` on PUT:** Wrong **`DEVTO_ARTICLE_ID`** or key cannot edit that article.
+- **Job skipped:** **`DEVTO_PUBLISH`** must be **`true`** and you need **`DEVTO_ARTICLE_ID`** and/or **`DEVTO_ONE_TIME_POST=true`**.

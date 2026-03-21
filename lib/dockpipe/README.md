@@ -2,7 +2,7 @@
 
 | Layer | Package | Responsibility |
 |-------|---------|----------------|
-| **Domain** | `dockpipe/lib/dockpipe/domain` | Workflow/step model, YAML parse from **bytes** (`ParseWorkflowYAML`), env merge helpers, **isolation profile** (resolver) key semantics, branch-prefix rules. No `docker` / subprocess / file I/O in non-test code. |
+| **Domain** | `dockpipe/lib/dockpipe/domain` | Workflow/step model, YAML parse from **bytes** (`ParseWorkflowYAML`), env merge helpers, **resolver** key semantics, branch-prefix rules. No `docker` / subprocess / file I/O in non-test code. |
 | **Infrastructure** | `dockpipe/lib/dockpipe/infrastructure` | Filesystem, `docker`, `bash` pre-scripts, git commit-on-host, repo root discovery, `.env` files, template→image paths, version tags. |
 | **Application** | `dockpipe/lib/dockpipe/application` | CLI flags, subcommands (`init`, `template`, …), and the **run** use-case that wires domain + infrastructure. |
 

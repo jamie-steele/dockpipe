@@ -24,8 +24,8 @@ Local project setup only: **no `git clone`**, no treating **`init`** as a remote
 | Flag | Installs |
 |------|----------|
 | **`--dogfood-test`** | **`test`** — multi-step outputs chain ([templates/test/README.md](../templates/test/README.md) in the bundle; copy lands under **`dockpipe/workflows/test/`**). |
-| **`--dogfood-codex-pav`** | **`dogfood-codex-pav`** — plan → apply → validate with **`runtime: docker`**, **`resolver: codex`** ([templates/dogfood-codex-pav/README.md](../templates/dogfood-codex-pav/README.md)). |
-| **`--dogfood-codex-security`** | **`dogfood-codex-security`** — tests step then Codex security-style step ([templates/dogfood-codex-security/README.md](../templates/dogfood-codex-security/README.md)). |
+| **`--dogfood-codex-pav`** | **`dogfood-codex-pav`** — plan → apply → validate with **`runtime: docker`**, **`resolver: codex`** ([dockpipe/workflows/dogfood-codex-pav/README.md](../dockpipe/workflows/dogfood-codex-pav/README.md)). |
+| **`--dogfood-codex-security`** | **`dogfood-codex-security`** — tests step then Codex security-style step ([dockpipe/workflows/dogfood-codex-security/README.md](../dockpipe/workflows/dogfood-codex-security/README.md)). |
 
 Example: **`dockpipe init --dogfood-test --dogfood-codex-security`**. If **`dockpipe/workflows/<name>/`** already exists, that workflow is skipped. **`dockpipe init`** also creates **`dockpipe/README.md`** and an empty **`dockpipe/workflows/`** tree when missing.
 

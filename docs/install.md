@@ -6,12 +6,15 @@
 
 ### Bundled templates (no extra install tree)
 
-The binary **embeds** the same authoring tree as this repo (**`templates/`**, including **`templates/core/`** with **`assets/`** — scripts, images, compose — plus runtimes, resolvers, strategies) and **`lib/entrypoint.sh`**. On first use they unpack to the **user cache** (e.g. `~/.cache/dockpipe/bundled-<version>` on Linux, `%LocalAppData%\dockpipe\...` on Windows) using a **materialized layout** that is **not** identical to the repo on disk:
+The binary **embeds** **`templates/`** (including **`templates/core/`**: **assets**, runtimes, resolvers, strategies) and **`lib/entrypoint.sh`**. On first use it unpacks to the **user cache** with this **materialized** layout:
 
-- **`dockpipe/core/`** — `assets/`, `resolvers/`, `runtimes/`, `strategies/` (same content as embedded **`templates/core/`**).
-- **`dockpipe/workflows/`** — bundled workflow dirs (same content as embedded **`templates/<name>/`** for each workflow).
+```text
+dockpipe/
+  core/          # assets/, resolvers/, runtimes/, strategies/
+  workflows/     # one dir per bundled workflow (same as templates/<name>/ in a checkout)
+```
 
-**`lib/`** and **`version`** sit next to **`dockpipe/`** at that cache root. Resolution in the CLI understands both this layout and a normal project checkout (**`templates/`** + **`templates/core/`**). You do **not** need a git clone of dockpipe next to the binary for **`--workflow`** or default images.
+**`lib/`** and **`version`** sit beside **`dockpipe/`** at the cache root. The CLI resolves **either** this layout **or** a normal git checkout (**`templates/`** + **`templates/core/`**). You do **not** need a clone of the dockpipe repo next to the binary for **`--workflow`** or default images.
 
 - **`DOCKPIPE_REPO_ROOT`** — optional override to point at a **dockpipe source tree** (e.g. when editing templates).
 - **`DOCKPIPE_BUNDLED_CACHE`** — optional parent directory for the `dockpipe/bundled-*` folder (tests, custom cache location).

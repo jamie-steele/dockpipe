@@ -19,6 +19,12 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	if !EmbeddedWorkflowConfigExists("init") {
 		t.Fatal("expected init")
 	}
+	if !EmbeddedWorkflowConfigExists("dogfood-codex-pav") {
+		t.Fatal("expected dogfood-codex-pav")
+	}
+	if !EmbeddedWorkflowConfigExists("dogfood-codex-security") {
+		t.Fatal("expected dogfood-codex-security")
+	}
 	for _, name := range []string{"vscode", "cursor-dev", "claude", "codex", "code-server"} {
 		if !EmbeddedWorkflowConfigExists(name) {
 			t.Fatalf("expected resolver delegate %s", name)
@@ -46,6 +52,7 @@ func TestMapEmbeddedToMaterializedPath(t *testing.T) {
 		{"templates/core", "dockpipe/core"},
 		{"templates/core/runtimes/docker/profile", "dockpipe/core/runtimes/docker/profile"},
 		{"templates/test/config.yml", filepath.Join("dockpipe", "workflows", "test", "config.yml")},
+		{filepath.Join("dockpipe", "workflows", "dogfood-codex-pav", "config.yml"), filepath.Join("dockpipe", "workflows", "dogfood-codex-pav", "config.yml")},
 	}
 	for _, tc := range cases {
 		got := mapEmbeddedToMaterializedPath(tc.in)

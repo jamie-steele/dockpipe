@@ -26,7 +26,7 @@ Below, **`runtime`** still refers to **isolated execution environment** (technic
 
 **Strict separation:**
 
-- Do **not** encode **runtime** or **strategy** choices into **workflow** names (avoid `*-claude-*` workflows except as legacy aliases).
+- Do **not** encode **runtime** or **strategy** choices into **workflow** names (avoid `*-claude-*` workflows except as compatibility aliases).
 - Do **not** put lifecycle policy (clone, commit) into **runtime** — that stays **strategy**.
 - Do **not** overload **strategy** with “which container” — that is **`DOCKPIPE_RUNTIME_*`** wiring and **resolver** selection, not lifecycle.
 
@@ -39,7 +39,7 @@ Below, **`runtime`** still refers to **isolated execution environment** (technic
 | **`--isolate`** | Image or `TemplateBuild` name for single-command / step `isolate:` | Becomes **runtime selection** for container-backed runtimes (subset of `--runtime`). |
 | **`--resolver`** | Selects a **specific** named profile (**`templates/core/resolvers/<name>`**, or **`runtimes/<name>`** first) | **`--runtime <name>`** is preferred; same lookup. **Resolver** = **specific** name; **runtime** = **agnostic** contract the file implements. |
 | **`templates/core/resolvers/`** | **Specific** named profiles (`claude`, …) | **`templates/core/runtimes/`** checked first for the same **name**; bundled files still ship under **`resolvers/`** today. |
-| **`DOCKPIPE_RESOLVER_*`** keys | **Specific** profile fields (per named resolver file) | **`DOCKPIPE_RUNTIME_*`** = **agnostic** contract; **`DOCKPIPE_RESOLVER_*`** = same semantics, legacy name (reader merges both). |
+| **`DOCKPIPE_RESOLVER_*`** keys | **Specific** profile fields (per named resolver file) | **`DOCKPIPE_RUNTIME_*`** = **agnostic** contract; **`DOCKPIPE_RESOLVER_*`** = same semantics, alternate key names (reader merges both). |
 | **`domain.ResolverAssignments`** | Parsed profile | **`RuntimeAssignments`** (or `ResolverAssignments` embedded in `RuntimeConfig`) with same semantics. |
 
 **Absorption rule:** the **agnostic** “how do we isolate?” contract is **runtime** (**`DOCKPIPE_RUNTIME_*`**). The **specific** “which named profile (`claude`, …)?” is **resolver** (on-disk file + **`DOCKPIPE_RESOLVER_*`** aliases). Neither belongs in **workflow** (what runs) or **strategy** (lifecycle hooks).
@@ -110,9 +110,9 @@ dockpipe --workflow plan-apply-validate --runtime claude --strategy worktree -- 
 
 **Precedence (proposed):**
 
-1. **`--runtime <name>`** — selects **`templates/core/runtimes/<name>`** (or legacy **`resolvers/<name>`**).
+1. **`--runtime <name>`** — selects **`templates/core/runtimes/<name>`** (or **`resolvers/<name>`**).
 2. If omitted: **`workflow.runtime`** in YAML (new field, optional).
-3. If omitted: **`default_runtime`** / **`default_resolver`** (legacy) / **`isolate`** (legacy) — same resolution order as today for compatibility.
+3. If omitted: **`default_runtime`** / **`default_resolver`** / **`isolate`** — same resolution order as today for compatibility.
 
 **Aliases:** **`--resolver <name>`** → identical to **`--runtime <name>`** for N releases; deprecate **`--resolver`** in docs once **`--runtime`** is ubiquitous.
 
@@ -166,7 +166,7 @@ steps: ...
 |-----|------|
 | **A — Docs & naming** | Treat **`docs/isolation-layer.md`** as predecessor to **`runtime`**; add this doc; README/onboarding use **workflow / runtime / strategy** triad. **No** breaking CLI. |
 | **B — CLI alias** | Add **`--runtime`** to **`CliOpts`**, **`ParseFlags`**, same variable as **`--resolver`** internally (`effectiveRuntime := opts.Runtime \|\| opts.Resolver`) or unified field. Update usage + **`cli-reference.md`**. |
-| **C — YAML** | Add **`runtime`**, **`runtimes`** optional allowlist; mirror **`strategy`** validation. **`default_resolver`** → **`default_runtime`** with legacy read of old key. |
+| **C — YAML** | Add **`runtime`**, **`runtimes`** optional allowlist; mirror **`strategy`** validation. **`default_resolver`** → **`default_runtime`** with compatibility read of old key. |
 | **D — On-disk** | Optionally symlink or copy **`templates/core/resolvers` → `templates/core/runtimes`**; loader checks both. |
 | **E — Keys** | Introduce **`DOCKPIPE_RUNTIME_*`** with **`FromResolverMap`** compatibility shim reading old keys. |
 | **F — Domain** | Rename or wrap **`ResolverAssignments`** as **`RuntimeAssignments`**; keep JSON tag aliases for tests. |

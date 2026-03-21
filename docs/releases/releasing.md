@@ -2,7 +2,7 @@
 
 This repo now supports an automated GitHub Actions release pipeline.
 
-**Optional dev.to:** After a release, you can auto-update a dev.to article via the API — see **[devto.md](devto.md)** (GitHub **variables** + **`DEVTO_API_KEY`** secret).
+**Optional dev.to:** **PUT** a main article (**`DEVTO_ARTICLE_ID`**) and/or **POST** a one-time post per release (**`DEVTO_ONE_TIME_POST`**) — see **[devto.md](devto.md)** (**`DEVTO_PUBLISH`**, **`DEVTO_API_KEY`** secret).
 
 **Ship model:** Integrate on **`staging`**; when ready, **PR `staging` → `master`** — that merge runs **Release** (see **[branching.md](branching.md)**). Version = repo-root **`VERSION`**; **`releasenotes/X.Y.Z.md`** must exist and be updated on the **ship** PR. **CI** runs on **`staging`** PRs too (tests only); the **VERSION + release-notes gate** applies only to PRs **into `master`**.
 
@@ -60,4 +60,4 @@ After release artifacts are published, update Homebrew formula SHA/version:
 
 ## dev.to announcement (optional)
 
-If **`DEVTO_PUBLISH=true`** and **`DEVTO_ARTICLE_ID`** are set (plus **`DEVTO_API_KEY`** secret), the Release workflow updates your existing dev.to post. See **[devto.md](devto.md)**.
+If **`DEVTO_PUBLISH=true`** and **`DEVTO_API_KEY`** are set, the workflow can **PUT** the main article (**`DEVTO_ARTICLE_ID`**) and/or **POST** a new one-time article each release (**`DEVTO_ONE_TIME_POST=true`**). See **[devto.md](devto.md)**.

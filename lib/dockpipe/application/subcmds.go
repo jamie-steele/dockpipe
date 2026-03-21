@@ -36,6 +36,13 @@ steps: []
 `
 
 func cmdInit(args []string) error {
+	for _, a := range args {
+		if a == "--help" || a == "-h" {
+			printInitUsage()
+			return nil
+		}
+	}
+
 	repoRoot, err := infrastructure.RepoRoot()
 	if err != nil {
 		return err

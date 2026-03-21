@@ -1,15 +1,17 @@
 # Documentation
 
-**Start here:** **[onboarding.md](onboarding.md)** — first command → core model → bundled workflow → customize YAML.
+**Start:** [onboarding.md](onboarding.md) — first commands, then concepts.
 
-**Repo messaging (GitHub About, etc.):** **[messaging.md](messaging.md)**.
+**Canonical terms:** [architecture-model.md](architecture-model.md) — workflow, runtime, resolver, strategy, assets.
 
-| Read first | Deeper / reference |
-|------------|-------------------|
-| [install.md](install.md) | [architecture.md](architecture.md) · [templates-core-assets.md](templates-core-assets.md) (bundled **`templates/core/`** surface) |
-| [runtime-architecture.md](runtime-architecture.md) — **workflow / runtime / strategy** triad, `--runtime` plan | [isolation-layer.md](isolation-layer.md) (today’s resolver profiles) |
-| [workflow-yaml.md](workflow-yaml.md) (`isolate:` / `resolver:`) | [cli-reference.md](cli-reference.md) |
-| [run](../templates/run/README.md) · [test](../templates/test/README.md) · [run-apply-validate](../templates/run-apply-validate/README.md) | [worktree strategy](../templates/core/strategies/worktree) · [workflow YAML — strategies](workflow-yaml.md#named-strategies) |
-| [chaining.md](chaining.md) | [wsl-windows.md](wsl-windows.md) (optional WSL↔Windows bundle — most users skip) |
+| First | Reference |
+|-------|-----------|
+| [install.md](install.md) | [cli-reference.md](cli-reference.md) |
+| [workflow-yaml.md](workflow-yaml.md) | [architecture.md](architecture.md) |
+| [isolation-layer.md](isolation-layer.md) | [chaining.md](chaining.md) |
+
+**Bundled paths:** In the materialized cache, **`dockpipe/core/`** and **`dockpipe/workflows/`** mirror **`templates/core/`** and **`templates/<workflow>/`** in a git checkout. See [install.md](install.md#bundled-templates-no-extra-install-tree).
 
 **QA:** [qa/manual-qa.md](qa/manual-qa.md)
+
+**Repo copy (About, etc.):** [messaging.md](messaging.md)

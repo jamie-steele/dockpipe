@@ -26,7 +26,7 @@ const dockpipeDirReadme = `# dockpipe/
 
 Optional **repo-local** workflows live under **workflows/** (one directory per workflow with **config.yml**). Resolution checks here before **templates/**.
 
-To copy the bundled dogfood workflows from a dockpipe **source checkout** (set **DOCKPIPE_REPO_ROOT** so **init** reads **templates/** from this tree, not only the binary cache):
+To copy the bundled dogfood workflows from a dockpipe **source checkout** (set **DOCKPIPE_REPO_ROOT**; Codex presets ship under **dockpipe/workflows/** in-tree):
 
     export DOCKPIPE_REPO_ROOT="$(pwd)"
     make build
@@ -75,6 +75,11 @@ func resolveInitFromSource(repoRoot, from string) (srcDir string, isBlank bool, 
 	bundled := filepath.Join(infrastructure.WorkflowsRootDir(repoRoot), from)
 	if st, e := os.Stat(bundled); e == nil && st.IsDir() {
 		return bundled, false, nil
+	}
+	// Codex dogfood presets live under dockpipe/workflows/ in this repo (not templates/).
+	alt := filepath.Join(repoRoot, infrastructure.BundledDockpipeDir, "workflows", from)
+	if st, e := os.Stat(alt); e == nil && st.IsDir() {
+		return alt, false, nil
 	}
 	abs, e := filepath.Abs(from)
 	if e != nil {

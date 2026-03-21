@@ -322,6 +322,13 @@ func TestDoctorHelp(t *testing.T) {
 	}
 }
 
+// TestInitHelp runs dockpipe init --help without touching the project layout.
+func TestInitHelp(t *testing.T) {
+	if err := Run([]string{"init", "--help"}, nil); err != nil {
+		t.Fatalf("init --help: %v", err)
+	}
+}
+
 // TestRunHelpAndMissingWorkflow prints help without error and errors on missing workflow name.
 func TestRunHelpAndMissingWorkflow(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)

@@ -13,7 +13,7 @@ import (
 )
 
 // bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "57"
+const bundledFormatVersion = "58"
 
 var bundledMu sync.Mutex
 
@@ -31,6 +31,7 @@ func EmbeddedWorkflowConfigExists(name string) bool {
 	}
 	for _, p := range []string{
 		"templates/" + name + "/config.yml",
+		"dockpipe/workflows/" + name + "/config.yml",
 		"templates/core/resolvers/" + name + "/config.yml",
 	} {
 		if _, err := fs.Stat(dockpipe.BundledFS, p); err == nil {

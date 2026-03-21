@@ -22,7 +22,7 @@ No built-in commit, clone, or AI logic — those are scripts you plug in.
 
 | Component | Role |
 |-----------|------|
-| **Isolation layer** | Named **resolver profiles** (`KEY=value` under **`templates/core/resolvers/`**): **runtime** wiring (`DOCKPIPE_RUNTIME_*`) + tool integration (**`DOCKPIPE_RESOLVER_*`**); **`DOCKPIPE_RUNTIME_TYPE`** = **`runtime.type`**. See **[architecture-model.md](architecture-model.md)** and **[isolation-layer.md](isolation-layer.md)**. |
+| **Isolation layer** | **Runtime** (where) and **resolver** (which tool) profiles under **`templates/core/runtimes/`** and **`templates/core/resolvers/`** — **`DOCKPIPE_RUNTIME_*`** / **`DOCKPIPE_RESOLVER_*`**; **`DOCKPIPE_RUNTIME_TYPE`** = **`runtime.type`**. See **[architecture-model.md](architecture-model.md)** and **[isolation-layer.md](isolation-layer.md)**. |
 | `bin/dockpipe` | Launcher: runs **`bin/dockpipe.bin`** if present (`make`), otherwise **`go run ./cmd/dockpipe`**. |
 | `cmd/dockpipe`, `lib/dockpipe/application`, `lib/dockpipe/domain`, `lib/dockpipe/infrastructure` | **Go** CLI (DDD-ish): application layer (flags + orchestration + `windows setup/doctor`), domain (workflow/env/resolver semantics), infrastructure (FS, docker, bash, git). **`config.yml`** / **`steps:`** (YAML v3), resolver `KEY=value` files, template→image map, bash `source` for pre-scripts, **`docker run`** / build, host **git** commit. |
 | **Embedded bundle** (`embed.go`) | Stock **`templates/`** (including full **`templates/core/`**: **`assets/`** — scripts, images, compose — plus runtimes, resolvers, strategies), **`lib/entrypoint.sh`**, **`VERSION`** compiled into the binary; materialized to the **user cache** at runtime (override with **`DOCKPIPE_REPO_ROOT`** for development). |

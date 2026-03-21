@@ -12,14 +12,11 @@ Dockpipe separates **what runs** (workflow, steps, commands) from **where / how 
 |------|--------|
 | **runtime.type** | **`execution`** \| **`ide`** \| **`agent`** — classification of **runtime behavior** only (not Docker vs EC2). Set with **`DOCKPIPE_RUNTIME_TYPE`** (see **`domain/runtime_kind.go`**). |
 | **Technical runtime keys** | *How* isolation is wired — Dockerfile-backed image, pinned image, embedded workflow YAML, or host script. Expressed with **`DOCKPIPE_RUNTIME_*`** (vendor-agnostic field names). |
-| **Resolver (specific)** | *Which named profile* — **`templates/core/resolvers/<name>`** (file or **`profile`**), **`--resolver`**, **`DOCKPIPE_RESOLVER_*`** as aliases of **`DOCKPIPE_RUNTIME_*`** for that **specific** file. |
-| **Isolation profile** | Informal: the **specific** on-disk **`KEY=value`** file (resolver) that describes one isolate phase. |
-| **Profile name** | The string you pass as **`--runtime`** / **`--resolver`** or **`runtime:`** / **`resolver:`** in YAML (resolved only under **`templates/core/`**). **`--isolate`** / **`isolate:`** can also name a **`TemplateBuild`** template or a raw image without a profile file. |
+| **Resolver** | *Which tool or platform* — **`templates/core/resolvers/<name>`** (file or **`profile`**), **`--resolver`**, **`DOCKPIPE_RESOLVER_*`** (same semantics as **`DOCKPIPE_RUNTIME_*`** for that file where applicable). |
+| **Profile name** | The string you pass as **`--runtime`** / **`--resolver`** or **`runtime:`** / **`resolver:`** in YAML (resolved under **`templates/core/`** or **`dockpipe/core/`** in the materialized bundle). **`--isolate`** / **`isolate:`** can also name a **`TemplateBuild`** template or a raw image without a profile file. |
 | **Profile file** | A **`KEY=value`** file under **`templates/core/resolvers/<name>`** or **`templates/core/resolvers/<name>/profile`**. **No** per-workflow override — custom behavior belongs in **workflow** YAML. |
 
-**Workflow** = sequence, vars, steps, **`strategy:`** (lifecycle wrappers).  
-**Strategy** = before/after host hooks around that body.  
-**Isolation profile** (informal) = on-disk **`KEY=value`** used for the isolate phase; **`DOCKPIPE_RUNTIME_TYPE`** carries **`runtime.type`**; **`DOCKPIPE_RUNTIME_*`** / **`DOCKPIPE_RESOLVER_*`** map to **runtime** vs **resolver** roles per **[architecture-model.md](architecture-model.md)**.
+**Workflow** = sequence, vars, steps. **`strategy:`** = lifecycle hooks before/after the body. **Runtime** and **resolver** are separate; **`DOCKPIPE_RUNTIME_TYPE`** carries **`runtime.type`** per **[architecture-model.md](architecture-model.md)**.
 
 ---
 

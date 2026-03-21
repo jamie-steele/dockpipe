@@ -128,5 +128,5 @@ Copy **`packaging/build/dockpipe_<version>_amd64.deb`** (or arm64 if WSL is aarc
 After **`[dockpipe] Starting container…`**, the process is inside **`docker run`**. It may stay **silent** for a while: image pull, Docker Desktop / WSL engine, or **first touch** on a large bind-mounted worktree (AV can slow this).
 
 - Confirm **Docker Desktop** is running; try **`docker run --rm hello-world`** in another window.
-- **Interactive** tools expect a **TTY**. Prefer **Windows Terminal** over legacy **conhost** if a CLI hangs or shows no UI.
+- **Interactive** tools expect a **TTY**. Prefer **Windows Terminal** over classic **conhost** if a CLI hangs or shows no UI.
 - **`sha256:`** lines earlier in the log are usually **Docker** (e.g. build/pull); they are **not** the final container attach.

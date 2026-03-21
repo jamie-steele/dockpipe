@@ -1,77 +1,62 @@
 # Onboarding
 
-**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and **bash** on the host — see **[install.md](install.md)**.
+**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and **bash** — see **[install.md](install.md)**.
 
 ---
 
 ## 1. First run
 
-From any directory:
-
 ```bash
 dockpipe -- pwd
 ```
 
-If Docker or bash is misconfigured, run **`dockpipe doctor`** for a quick diagnostic.
-
-See **[README § Try it](../README.md#try-it)** for copy-paste examples.
+If something fails, **`dockpipe doctor`** checks **bash**, **Docker**, and bundled assets.
 
 ---
 
-## 2. Core model (run → isolate → act)
+## 2. Primitive: run → isolate → act
 
 | Phase | Where | What |
 |--------|--------|------|
-| **Run** | Host | Optional scripts *before* the container (e.g. prepare a worktree). |
-| **Isolate** | Container | Your command after `--`; project at **`/work`**. Ephemeral — container is removed when the command exits. |
-| **Act** | Host | Optional script *after* the container (e.g. commit, notify). |
+| **Run** | Host | Optional scripts before the container (`run:` / `--run`). |
+| **Isolate** | Container | Your command after **`--`**; project at **`/work`**. |
+| **Act** | Host or container | Optional script after the main command (see **[architecture.md](architecture.md)**). |
 
-**Named strategies** (optional): **`--strategy <name>`** or **`strategy:`** in workflow YAML load **`templates/core/strategies/<name>`** (or per-workflow overrides) and run **before** / **after** hooks around the body (e.g. **`worktree`**, **`commit`**). See **[workflow-yaml.md § Named strategies](workflow-yaml.md#named-strategies)**.
-
-**Isolation profiles** (optional, separate concern): **named** execution setups — Docker images, embedded IDE workflows, or host scripts — defined as shared files under **`templates/core/resolvers/`** and chosen with **`--runtime`** / **`--resolver`** / **`isolate:`**. See **[isolation-layer.md](isolation-layer.md)** (claude, codex, **cursor-dev**, **vscode**, …).
-
-Most days: **`dockpipe -- <command>`** only (isolate).
+Most days: **`dockpipe -- <command>`** only.
 
 ---
 
-## 3. Try a bundled workflow
-
-From the **dockpipe repo root** (or any checkout with `templates/`):
+## 3. Try a workflow
 
 ```bash
-dockpipe --workflow test
+dockpipe --workflow test --runtime docker
 ```
 
-Shows two steps and env handoff. No API keys.
+Two Alpine steps with **`outputs:`** handoff; no API keys. The workflow loads from the **materialized bundle** in your cache (**`dockpipe/workflows/test/`**) or from **`templates/test/`** in a checkout.
 
-**Simple git (optional):** **`--workflow run`** runs your command in a container, then **one commit on your current branch** if anything changed — no worktrees or branch automation. See **[templates/run/README.md](../templates/run/README.md)**.
-
-**Advanced git / AI:** use **runtime** profiles (**`--resolver claude`**, …) with **`--repo`** / **`--branch`** and **strategy `worktree`** (clone + commit hooks). Add **`strategy: worktree`** to your **`templates/<name>/config.yml`** — **[workflow-yaml.md § Named strategies](workflow-yaml.md#named-strategies)**. Browser IDE: **`vscode`** **resolver** — **[templates/core/resolvers/vscode](../templates/core/resolvers/vscode)**.
+To copy presets into **your** repo: **`dockpipe init --dogfood-test`** (see **[cli-reference.md](cli-reference.md)**).
 
 ---
 
-## 4. Customize YAML
-
-- **Single-file workflows:** [workflow-yaml.md](workflow-yaml.md) (`run` / `isolate` / `act`, optional `steps:`).
-- **Flags:** [cli-reference.md](cli-reference.md).
-
----
-
-## Terms
+## 4. Concepts (same words everywhere)
 
 | Term | Meaning |
 |------|---------|
-| **Workflow** | Named preset: **`--workflow <name>`** loads **`templates/<name>/config.yml`**. |
-| **Runtime** / **resolver** / **isolation profile** | Small **`KEY=value`** file under **`templates/core/resolvers/`** naming *how* the isolate phase runs — optional. See **[isolation-layer.md](isolation-layer.md)**. |
-| **Strategy** | Optional lifecycle wrapper: **`templates/core/strategies/<name>`** (KEY=value) — before/after host scripts. |
+| **Workflow** | What happens — **`config.yml`**, **`--workflow <name>`**. |
+| **Runtime** | Where execution runs — **`templates/core/runtimes/<name>`** (or **`dockpipe/core/runtimes/`** in the cache). |
+| **Resolver** | Which tool or platform — **`templates/core/resolvers/<name>`** (or **`dockpipe/core/resolvers/`**). |
+| **Strategy** | Lifecycle wrapper — **`templates/core/strategies/<name>`**, optional **`strategy:`** in YAML. |
+| **Assets** | Support files — **`templates/core/assets/`** (`scripts/`, `images/`, `compose/`). |
+
+Details: **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)**.
 
 ---
 
-## Deeper reading
+## 5. Next steps
 
-| Doc | When |
-|-----|------|
-| [isolation-layer.md](isolation-layer.md) | Named isolate profiles (claude, cursor-dev, compose roadmap, …) |
-| [architecture.md](architecture.md) | Internals, commit-on-host exception, data flow |
-| [chaining.md](chaining.md) | Multiple `dockpipe` invocations, same workdir |
-| [wsl-windows.md](wsl-windows.md) | Optional: WSL↔Windows **git bundle** handoff (advanced; most users skip) |
+| Doc | Use when |
+|-----|----------|
+| [workflow-yaml.md](workflow-yaml.md) | Editing **`config.yml`**, **`steps:`**, strategies |
+| [cli-reference.md](cli-reference.md) | Flags and precedence |
+| [chaining.md](chaining.md) | Multiple **`dockpipe`** runs, same workdir |
+| [wsl-windows.md](wsl-windows.md) | Optional WSL bridge on Windows |

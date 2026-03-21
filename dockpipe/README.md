@@ -1,10 +1,12 @@
-# dockpipe/
+# `dockpipe/`
 
-Repo-local workflows live under **`workflows/`** (one directory per workflow with **`config.yml`**). **`--workflow`** checks **`dockpipe/workflows/<name>/`** before **`templates/<name>/`** on a checkout.
+**Workflows** (what happens) live here when you materialize them into a project: **`dockpipe/workflows/<name>/config.yml`**. On a git checkout, **`--workflow`** looks at **`dockpipe/workflows/<name>/`** before **`templates/<name>/`**.
 
-## Populate these workflows (dockpipe source tree)
+**Core** files (**runtimes**, **resolvers**, **strategies**, **assets**) unpack to **`dockpipe/core/`** in the user cache; **`dockpipe init`** merges **`templates/core/`** into your project when authoring.
 
-From the repository root, point **`DOCKPIPE_REPO_ROOT`** at this tree so **`init`** copies from **`templates/`** here (not only the materialized bundle cache), then run **`init`** with the dogfood flags:
+## Dogfood presets (this repository)
+
+From the repo root, point **`DOCKPIPE_REPO_ROOT`** here so **`init`** copies from **`templates/`**, then:
 
 ```bash
 export DOCKPIPE_REPO_ROOT="$(pwd)"
@@ -12,6 +14,6 @@ make build
 ./bin/dockpipe init --dogfood-test --dogfood-codex-pav --dogfood-codex-security
 ```
 
-That installs **`test`**, **`dogfood-codex-pav`**, and **`dogfood-codex-security`** into **`dockpipe/workflows/`**. If a name already exists, **`init`** skips it—remove that directory first if you need a fresh copy.
+That installs **`test`**, **`dogfood-codex-pav`**, and **`dogfood-codex-security`** under **`dockpipe/workflows/`**. Existing dirs are skipped—remove one first to refresh.
 
-See **docs/cli-reference.md** (**dockpipe init**).
+See **[docs/cli-reference.md](../docs/cli-reference.md)** (**`dockpipe init`**).

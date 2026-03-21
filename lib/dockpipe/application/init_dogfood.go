@@ -10,7 +10,8 @@ import (
 	"dockpipe/lib/dockpipe/infrastructure"
 )
 
-// Bundled dogfood workflow names (authoring: templates/<name>/ in the install tree; materialized: dockpipe/workflows/<name>/).
+// Bundled dogfood workflow names (Codex presets: source under dockpipe/workflows/<name>/ in this repo;
+// other dogfood names use templates/<name>/; materialized bundle: dockpipe/workflows/<name>/).
 const (
 	dogfoodWorkflowTest          = "test"
 	dogfoodWorkflowCodexPAV      = "dogfood-codex-pav"
@@ -52,8 +53,17 @@ func installDogfoodWorkflows(repoRoot, projectDir string, o dogfoodInstallOpts) 
 	return nil
 }
 
+func bundledDogfoodWorkflowSourceDir(repoRoot, workflowName string) string {
+	switch workflowName {
+	case dogfoodWorkflowCodexPAV, dogfoodWorkflowCodexSecurity:
+		return filepath.Join(repoRoot, infrastructure.BundledDockpipeDir, "workflows", workflowName)
+	default:
+		return filepath.Join(infrastructure.WorkflowsRootDir(repoRoot), workflowName)
+	}
+}
+
 func copyBundledWorkflowIntoProject(repoRoot, projectDir, workflowName string) error {
-	src := filepath.Join(infrastructure.WorkflowsRootDir(repoRoot), workflowName)
+	src := bundledDogfoodWorkflowSourceDir(repoRoot, workflowName)
 	st, err := os.Stat(src)
 	if err != nil || !st.IsDir() {
 		return fmt.Errorf("dogfood: bundled workflow %q not found under install tree", workflowName)
