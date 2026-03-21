@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// TestMergeWorktreeGitDockerEnv adds DOCKPIPE_WORKTREE_* from host git when /work is a normal repo checkout.
 func TestMergeWorktreeGitDockerEnv(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

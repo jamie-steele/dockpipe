@@ -8,6 +8,7 @@ import (
 	"dockpipe/lib/dockpipe/domain"
 )
 
+// TestBuildStepContainer_UsesCliArgsForLastStep uses argv after -- when the last step has no cmd in YAML.
 func TestBuildStepContainer_UsesCliArgsForLastStep(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{
@@ -34,6 +35,7 @@ func TestBuildStepContainer_UsesCliArgsForLastStep(t *testing.T) {
 	}
 }
 
+// TestBuildStepContainer_ErrorsWhenActionMissing when act script path does not exist.
 func TestBuildStepContainer_ErrorsWhenActionMissing(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{
@@ -49,6 +51,7 @@ func TestBuildStepContainer_ErrorsWhenActionMissing(t *testing.T) {
 	}
 }
 
+// TestBuildStepContainer_CommitWorktreeTurnsIntoHostCommit maps bundled commit-worktree to CommitOnHost instead of in-container act.
 func TestBuildStepContainer_CommitWorktreeTurnsIntoHostCommit(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{

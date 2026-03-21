@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// TestParseFlagsHappyPath verifies ParseFlags accepts a full option set, resolves relative --build, and splits command after --.
 func TestParseFlagsHappyPath(t *testing.T) {
 	repoRoot := "/tmp/repo"
 	rest, o, err := ParseFlags(repoRoot, []string{
@@ -52,6 +53,7 @@ func TestParseFlagsHappyPath(t *testing.T) {
 	}
 }
 
+// TestParseFlagsWorkflowFile checks --workflow-file stores the path as given.
 func TestParseFlagsWorkflowFile(t *testing.T) {
 	_, o, err := ParseFlags("/tmp/repo", []string{"--workflow-file", "/projects/foo/dockpipe.yml"})
 	if err != nil {
@@ -62,6 +64,7 @@ func TestParseFlagsWorkflowFile(t *testing.T) {
 	}
 }
 
+// TestParseFlagsWorkflowAndWorkflowFileConflict ensures --workflow and --workflow-file cannot be used together.
 func TestParseFlagsWorkflowAndWorkflowFileConflict(t *testing.T) {
 	_, _, err := ParseFlags("/tmp/repo", []string{"--workflow", "demo", "--workflow-file", "/x/dockpipe.yml"})
 	if err == nil || !strings.Contains(err.Error(), "both") {
@@ -69,6 +72,7 @@ func TestParseFlagsWorkflowAndWorkflowFileConflict(t *testing.T) {
 	}
 }
 
+// TestParseFlagsBuildAbsolutePath keeps POSIX-absolute --build paths without joining repo root.
 func TestParseFlagsBuildAbsolutePath(t *testing.T) {
 	_, o, err := ParseFlags("/tmp/repo", []string{"--build", "/abs/build"})
 	if err != nil {
@@ -79,6 +83,7 @@ func TestParseFlagsBuildAbsolutePath(t *testing.T) {
 	}
 }
 
+// TestParseFlagsVarValidation rejects --var values that are not KEY=VAL.
 func TestParseFlagsVarValidation(t *testing.T) {
 	_, _, err := ParseFlags("/tmp/repo", []string{"--var", "BROKEN"})
 	if err == nil || !strings.Contains(err.Error(), "--var requires KEY=VAL") {
@@ -86,6 +91,7 @@ func TestParseFlagsVarValidation(t *testing.T) {
 	}
 }
 
+// TestParseFlagsUnknownOption errors on unrecognized flags.
 func TestParseFlagsUnknownOption(t *testing.T) {
 	_, _, err := ParseFlags("/tmp/repo", []string{"--def-not-real"})
 	if err == nil || !strings.Contains(err.Error(), "unknown option") {
@@ -93,6 +99,7 @@ func TestParseFlagsUnknownOption(t *testing.T) {
 	}
 }
 
+// TestParseFlagsUnexpectedPositionalBeforeDash errors when a bare positional appears before --.
 func TestParseFlagsUnexpectedPositionalBeforeDash(t *testing.T) {
 	_, _, err := ParseFlags("/tmp/repo", []string{"echo"})
 	if err == nil || !strings.Contains(err.Error(), "expected options before --") {

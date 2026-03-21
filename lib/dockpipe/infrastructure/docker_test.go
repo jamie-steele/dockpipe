@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestRenderBannerForWidth picks compact vs full stderr banner based on terminal width.
 func TestRenderBannerForWidth(t *testing.T) {
 	if got := renderBannerForWidth(69); got != compactBanner {
 		t.Fatalf("width 69 should use compact banner")
@@ -14,6 +15,7 @@ func TestRenderBannerForWidth(t *testing.T) {
 	}
 }
 
+// TestShouldShowSpinner hides the spinner below a minimum terminal width.
 func TestShouldShowSpinner(t *testing.T) {
 	if shouldShowSpinner(59) {
 		t.Fatalf("spinner should be hidden for narrow width")
@@ -23,6 +25,7 @@ func TestShouldShowSpinner(t *testing.T) {
 	}
 }
 
+// TestUseDockerInteractiveTTYNonTTYFiles returns false when stdin/stdout/stderr are regular files, not TTYs.
 func TestUseDockerInteractiveTTYNonTTYFiles(t *testing.T) {
 	a, err := os.CreateTemp(t.TempDir(), "stdin")
 	if err != nil {

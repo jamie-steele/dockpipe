@@ -29,6 +29,7 @@ func mkRepoRootForSubcmdTests(t *testing.T) string {
 	return repoRoot
 }
 
+// TestCmdTemplateUsageAndUnknownTemplate checks template init usage and --from validation.
 func TestCmdTemplateUsageAndUnknownTemplate(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
@@ -41,6 +42,7 @@ func TestCmdTemplateUsageAndUnknownTemplate(t *testing.T) {
 	}
 }
 
+// TestCmdTemplateCreatesFromBundled copies a bundled template into a new directory.
 func TestCmdTemplateCreatesFromBundled(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
@@ -65,6 +67,7 @@ func TestCmdTemplateCreatesFromBundled(t *testing.T) {
 	}
 }
 
+// TestCmdInitLikeScriptCreateAndFromBundled covers dockpipe action init default and --from bundled script.
 func TestCmdInitLikeScriptCreateAndFromBundled(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
@@ -101,6 +104,7 @@ func TestCmdInitLikeScriptCreateAndFromBundled(t *testing.T) {
 	}
 }
 
+// TestCmdPreInitCreatesDefaultScript writes my-pre.sh boilerplate in cwd.
 func TestCmdPreInitCreatesDefaultScript(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
@@ -125,6 +129,7 @@ func TestCmdPreInitCreatesDefaultScript(t *testing.T) {
 	}
 }
 
+// TestCmdInitCreatesWorkspaceAndTemplate creates workspace layout and templates/<name> from init template.
 func TestCmdInitCreatesWorkspaceAndTemplate(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
@@ -147,6 +152,7 @@ func TestCmdInitCreatesWorkspaceAndTemplate(t *testing.T) {
 	}
 }
 
+// TestCmdInitErrorsOnUnknownOption rejects unsupported flags to dockpipe init.
 func TestCmdInitErrorsOnUnknownOption(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
@@ -157,6 +163,7 @@ func TestCmdInitErrorsOnUnknownOption(t *testing.T) {
 	}
 }
 
+// TestCmdInitErrorsOnNonEmptyDestination refuses to init into a non-empty directory.
 func TestCmdInitErrorsOnNonEmptyDestination(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
@@ -174,6 +181,7 @@ func TestCmdInitErrorsOnNonEmptyDestination(t *testing.T) {
 	}
 }
 
+// TestRunHelpAndMissingWorkflow prints help without error and errors on missing workflow name.
 func TestRunHelpAndMissingWorkflow(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)

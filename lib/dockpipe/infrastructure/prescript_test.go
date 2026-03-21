@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// TestBashIsWSL distinguishes System32 bash (WSL) from Git Bash paths on Windows.
 func TestBashIsWSL(t *testing.T) {
 	tests := []struct {
 		exe  string
@@ -23,6 +24,7 @@ func TestBashIsWSL(t *testing.T) {
 	}
 }
 
+// TestPathForWSLNonWindowsPath passes Unix paths through on non-Windows (no wslpath).
 func TestPathForWSLNonWindowsPath(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("path layout differs on Windows")

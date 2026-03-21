@@ -7,6 +7,7 @@ import (
 	"testing"
 )
 
+// TestGitTopLevel resolves the git work tree root from a subdirectory.
 func TestGitTopLevel(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -28,6 +29,7 @@ func TestGitTopLevel(t *testing.T) {
 	}
 }
 
+// TestGitRemoteGetURL reads origin URL from a temp repo and errors for non-repo paths.
 func TestGitRemoteGetURL(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

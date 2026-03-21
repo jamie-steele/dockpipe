@@ -39,6 +39,7 @@ func baseRunStepsOpts() runStepsOpts {
 	}
 }
 
+// TestRunBlockingStepSkipContainerMergesOutputs loads outputs.env into env for a blocking skip_container step.
 func TestRunBlockingStepSkipContainerMergesOutputs(t *testing.T) {
 	withRunStepsSeams(t)
 	wd := t.TempDir()
@@ -62,6 +63,7 @@ func TestRunBlockingStepSkipContainerMergesOutputs(t *testing.T) {
 	}
 }
 
+// TestRunBlockingStepBuildAndRun builds the isolate image if needed and runs the container command.
 func TestRunBlockingStepBuildAndRun(t *testing.T) {
 	withRunStepsSeams(t)
 	o := baseRunStepsOpts()
@@ -89,6 +91,7 @@ func TestRunBlockingStepBuildAndRun(t *testing.T) {
 	}
 }
 
+// TestPrefetchDockerBuildsForBatchDedupes builds each distinct isolate image once per async batch.
 func TestPrefetchDockerBuildsForBatchDedupes(t *testing.T) {
 	withRunStepsSeams(t)
 	o := baseRunStepsOpts()
@@ -110,6 +113,7 @@ func TestPrefetchDockerBuildsForBatchDedupes(t *testing.T) {
 	}
 }
 
+// TestRunParallelStepWorkerNonZeroExit surfaces container non-zero exit as a parallel-step error.
 func TestRunParallelStepWorkerNonZeroExit(t *testing.T) {
 	withRunStepsSeams(t)
 	o := baseRunStepsOpts()
@@ -122,6 +126,7 @@ func TestRunParallelStepWorkerNonZeroExit(t *testing.T) {
 	}
 }
 
+// TestRunParallelStepWorkerFirstStepExtraPreScript runs workflow-level extra pre-scripts on the first parallel step only.
 func TestRunParallelStepWorkerFirstStepExtraPreScript(t *testing.T) {
 	withRunStepsSeams(t)
 	pre := filepath.Join(t.TempDir(), "pre.sh")

@@ -26,6 +26,7 @@ func withRunStepSeams(t *testing.T, fn func()) {
 	fn()
 }
 
+// TestRunSteps_ParallelBatchAggregatesOutputsInOrder merges async skip_container outputs in declaration order (last wins).
 func TestRunSteps_ParallelBatchAggregatesOutputsInOrder(t *testing.T) {
 	tmp := t.TempDir()
 	aPath := filepath.Join(tmp, ".dockpipe", "a.env")
@@ -71,6 +72,7 @@ func TestRunSteps_ParallelBatchAggregatesOutputsInOrder(t *testing.T) {
 	})
 }
 
+// TestRunStepPreScripts_UsesInjectedSourceFunction resolves workflow-relative pre-script paths and merges sourced env.
 func TestRunStepPreScripts_UsesInjectedSourceFunction(t *testing.T) {
 	withRunStepSeams(t, func() {
 		osStatFn = func(string) (os.FileInfo, error) { return nil, nil }

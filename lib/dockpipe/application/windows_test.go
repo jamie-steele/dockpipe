@@ -24,6 +24,7 @@ func withWindowsSeams(t *testing.T) {
 	})
 }
 
+// TestParseWindowsSetupArgs parses dockpipe windows setup flags (distro, install command, non-interactive).
 func TestParseWindowsSetupArgs(t *testing.T) {
 	o, err := parseWindowsSetupArgs([]string{
 		"--distro", "Ubuntu",
@@ -38,6 +39,7 @@ func TestParseWindowsSetupArgs(t *testing.T) {
 	}
 }
 
+// TestParseWindowsSetupArgsErrors on missing --distro value and unknown options.
 func TestParseWindowsSetupArgsErrors(t *testing.T) {
 	_, err := parseWindowsSetupArgs([]string{"--distro"})
 	if err == nil || !strings.Contains(err.Error(), "--distro requires a value") {
@@ -49,6 +51,7 @@ func TestParseWindowsSetupArgsErrors(t *testing.T) {
 	}
 }
 
+// TestParseWSLDistroList parses wsl -l -q output into distro name lines.
 func TestParseWSLDistroList(t *testing.T) {
 	got := parseWSLDistroList("Ubuntu\n* Debian\r\n\n")
 	if len(got) != 2 || got[0] != "Ubuntu" || got[1] != "Debian" {
@@ -56,6 +59,7 @@ func TestParseWSLDistroList(t *testing.T) {
 	}
 }
 
+// TestChooseWSLDistro selects distro by --distro, errors if non-interactive without distro, or reads stdin.
 func TestChooseWSLDistro(t *testing.T) {
 	withWindowsSeams(t)
 	distros := []string{"Ubuntu", "Debian"}
@@ -76,6 +80,7 @@ func TestChooseWSLDistro(t *testing.T) {
 	}
 }
 
+// TestWindowsConfigSaveLoad round-trips default WSL distro under APPDATA.
 func TestWindowsConfigSaveLoad(t *testing.T) {
 	withWindowsSeams(t)
 	appData := t.TempDir()
@@ -99,6 +104,7 @@ func TestWindowsConfigSaveLoad(t *testing.T) {
 	}
 }
 
+// TestWindowsConfigPathFallsBackToHome when APPDATA is unset uses user home for config path.
 func TestWindowsConfigPathFallsBackToHome(t *testing.T) {
 	withWindowsSeams(t)
 	t.Setenv("APPDATA", "")

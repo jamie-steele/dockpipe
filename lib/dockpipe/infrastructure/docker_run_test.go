@@ -42,6 +42,7 @@ func withDockerSeams(t *testing.T) {
 	})
 }
 
+// TestRunContainerRequiresImage fails fast when Image is empty.
 func TestRunContainerRequiresImage(t *testing.T) {
 	rc, err := RunContainer(RunOpts{}, nil)
 	if err == nil || rc != 1 {
@@ -58,6 +59,7 @@ func TestRunContainerGetwdError(t *testing.T) {
 	}
 }
 
+// TestRunContainerReinitNoTTYRequiresForce refuses destructive --reinit without a TTY unless --force.
 func TestRunContainerReinitNoTTYRequiresForce(t *testing.T) {
 	withDockerSeams(t)
 	isTerminalDockerFn = func(fd int) bool { return false }
@@ -86,6 +88,7 @@ func TestRunContainerReinitNoTTYRequiresForce(t *testing.T) {
 	}
 }
 
+// TestRunContainerDetachBuildsDockerRun exercises detached mode: chown helper (Unix), docker run -d, mounts and env.
 func TestRunContainerDetachBuildsDockerRun(t *testing.T) {
 	withDockerSeams(t)
 	var mu sync.Mutex
@@ -155,6 +158,7 @@ func TestRunContainerDetachBuildsDockerRun(t *testing.T) {
 	}
 }
 
+// TestRunContainerAttachedExitCodeTriggersLogsAndRm on non-zero exit runs docker logs and rm for the container.
 func TestRunContainerAttachedExitCodeTriggersLogsAndRm(t *testing.T) {
 	withDockerSeams(t)
 	var mu sync.Mutex
@@ -203,6 +207,7 @@ func TestRunContainerAttachedExitCodeTriggersLogsAndRm(t *testing.T) {
 	}
 }
 
+// TestRunContainerAttachedCallsCommitOnHost invokes commit-on-host after a successful attached run when requested.
 func TestRunContainerAttachedCallsCommitOnHost(t *testing.T) {
 	withDockerSeams(t)
 	execCommandFn = func(name string, args ...string) *exec.Cmd {
@@ -246,6 +251,7 @@ func TestRunContainerAttachedCallsCommitOnHost(t *testing.T) {
 	}
 }
 
+// TestRunContainerActionAbsError fails when the action script path cannot be made absolute.
 func TestRunContainerActionAbsError(t *testing.T) {
 	withDockerSeams(t)
 	filepathAbsDocker = func(path string) (string, error) {
@@ -275,6 +281,7 @@ func TestRunContainerActionAbsError(t *testing.T) {
 	}
 }
 
+// TestDockerBuildPaths verifies DockerBuild runs inspect/build steps for dockpipe-dev (base chain) and plain image names.
 func TestDockerBuildPaths(t *testing.T) {
 	withDockerSeams(t)
 	var mu sync.Mutex

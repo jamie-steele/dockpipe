@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestRandomWorkBranchSlugFormat checks generated slugs match the expected hyphenated word pattern.
 func TestRandomWorkBranchSlugFormat(t *testing.T) {
 	t.Parallel()
 	re := regexp.MustCompile(`^[a-z]+(-[a-z]+){3}$`)
@@ -19,6 +20,7 @@ func TestRandomWorkBranchSlugFormat(t *testing.T) {
 	}
 }
 
+// TestRandomWorkBranchSlugVaries checks two successive slugs are usually different (rare flake if equal).
 func TestRandomWorkBranchSlugVaries(t *testing.T) {
 	t.Parallel()
 	a, err := RandomWorkBranchSlug()

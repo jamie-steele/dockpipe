@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestUseWSLBridge reads DOCKPIPE_USE_WSL_BRIDGE for 0/1/unset.
 func TestUseWSLBridge(t *testing.T) {
 	t.Setenv(EnvUseWSLBridge, "")
 	if UseWSLBridge() {
@@ -21,6 +22,7 @@ func TestUseWSLBridge(t *testing.T) {
 	_ = os.Unsetenv(EnvUseWSLBridge)
 }
 
+// TestBashSingleQuote escapes strings for safe bash single-quoted literals.
 func TestBashSingleQuote(t *testing.T) {
 	if got := bashSingleQuote(`hello`); got != `'hello'` {
 		t.Fatalf("got %q", got)
@@ -30,6 +32,7 @@ func TestBashSingleQuote(t *testing.T) {
 	}
 }
 
+// TestWindowsPathToWSLFallback maps Windows paths to /mnt/c/... and normalizes UNC for WSL.
 func TestWindowsPathToWSLFallback(t *testing.T) {
 	cases := []struct {
 		in, want string
@@ -51,6 +54,7 @@ func TestWindowsPathToWSLFallback(t *testing.T) {
 	}
 }
 
+// TestIsUNCPathNormalized detects //server/share style paths used after UNC normalization.
 func TestIsUNCPathNormalized(t *testing.T) {
 	if !isUNCPathNormalized("//srv/share") {
 		t.Fatal("expected UNC")
@@ -63,6 +67,7 @@ func TestIsUNCPathNormalized(t *testing.T) {
 	}
 }
 
+// TestBuildBashForwardScript builds the inner bash -lc script for WSL bridge (cd + exec dockpipe).
 func TestBuildBashForwardScript(t *testing.T) {
 	got := buildBashForwardScript("/mnt/c/proj", []string{"--", "echo", "a b"})
 	want := "cd '/mnt/c/proj' && exec dockpipe '--' 'echo' 'a b'"
@@ -71,6 +76,7 @@ func TestBuildBashForwardScript(t *testing.T) {
 	}
 }
 
+// TestBuildBashForwardScript_translatedPathsQuoted ensures argv with spaces survives quoting after translation.
 func TestBuildBashForwardScript_translatedPathsQuoted(t *testing.T) {
 	// Simulates argv after translateBridgeArgv (spaces + special chars safe for bash -lc).
 	argv := []string{"--workdir", "/mnt/c/Program Files/repo", "--", "echo", "ok"}

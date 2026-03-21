@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestMergeIfUnset copies keys from src into dst only when dst does not already have the key.
 func TestMergeIfUnset(t *testing.T) {
 	dst := map[string]string{"A": "1", "B": "2"}
 	src := map[string]string{"B": "override", "C": "3"}
@@ -14,6 +15,7 @@ func TestMergeIfUnset(t *testing.T) {
 	}
 }
 
+// TestEnvHelpers covers EnvSliceToMap, EnvironToMap, and EnvMapToSlice round-trips and edge cases.
 func TestEnvHelpers(t *testing.T) {
 	m := EnvSliceToMap([]string{" A = x ", "", "B=y", "BROKEN"})
 	if m["A"] != "x" || m["B"] != "y" {
@@ -32,6 +34,7 @@ func TestEnvHelpers(t *testing.T) {
 	}
 }
 
+// TestBranchPrefixForTemplate maps template/isolate names to random work-branch slug prefixes.
 func TestBranchPrefixForTemplate(t *testing.T) {
 	if got := BranchPrefixForTemplate("claude"); got != "claude" {
 		t.Fatalf("claude prefix: %q", got)
@@ -47,6 +50,7 @@ func TestBranchPrefixForTemplate(t *testing.T) {
 	}
 }
 
+// TestFromResolverMap builds a Resolver from DOCKPIPE_RESOLVER_* env-style map entries.
 func TestFromResolverMap(t *testing.T) {
 	r := FromResolverMap(map[string]string{
 		"DOCKPIPE_RESOLVER_TEMPLATE":   "codex",

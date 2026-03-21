@@ -2,6 +2,7 @@ package application
 
 import "testing"
 
+// TestMergeCommitEnvFromLines_AllowsKnownKeysOnly merges only documented DOCKPIPE_* / GIT_PAT keys from docker log lines.
 func TestMergeCommitEnvFromLines_AllowsKnownKeysOnly(t *testing.T) {
 	env := map[string]string{
 		"DOCKPIPE_COMMIT_MESSAGE": "old",
@@ -24,6 +25,7 @@ func TestMergeCommitEnvFromLines_AllowsKnownKeysOnly(t *testing.T) {
 	}
 }
 
+// TestApplyBranchPrefix sets DOCKPIPE_BRANCH_PREFIX from resolver, template mapping, or preserves preset.
 func TestApplyBranchPrefix(t *testing.T) {
 	env := map[string]string{}
 	applyBranchPrefix(env, "codex", "")
@@ -44,6 +46,7 @@ func TestApplyBranchPrefix(t *testing.T) {
 	}
 }
 
+// TestAppendUniqueEnvAndFirstNonEmpty dedupes env slice keys and picks first non-empty string helper.
 func TestAppendUniqueEnvAndFirstNonEmpty(t *testing.T) {
 	s := []string{"A=1"}
 	s = appendUniqueEnv(s, "A=2")

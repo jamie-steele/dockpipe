@@ -2,6 +2,7 @@ package infrastructure
 
 import "testing"
 
+// TestRepoURLsEquivalent normalizes and compares clone URLs (.git suffix, case, empty).
 func TestRepoURLsEquivalent(t *testing.T) {
 	t.Parallel()
 	if !RepoURLsEquivalent("https://x/a.git", "https://x/a") {

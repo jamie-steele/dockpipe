@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// TestLoadWorkflow reads a YAML file from disk and parses steps (no imports in this minimal case).
 func TestLoadWorkflow(t *testing.T) {
 	tmp := t.TempDir()
 	p := filepath.Join(tmp, "config.yml")
@@ -21,6 +22,7 @@ func TestLoadWorkflow(t *testing.T) {
 	}
 }
 
+// TestLoadWorkflowReadError returns an error when the workflow file is missing.
 func TestLoadWorkflowReadError(t *testing.T) {
 	if _, err := LoadWorkflow(filepath.Join(t.TempDir(), "missing.yml")); err == nil {
 		t.Fatal("expected read error for missing workflow file")

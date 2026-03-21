@@ -10,6 +10,7 @@ import (
 
 func boolPtr(v bool) *bool { return &v }
 
+// TestValidateParallelOutputPaths rejects duplicate outputs paths within one async group.
 func TestValidateParallelOutputPaths(t *testing.T) {
 	wf := &domain.Workflow{
 		Steps: []domain.Step{
@@ -27,6 +28,7 @@ func TestValidateParallelOutputPaths(t *testing.T) {
 	}
 }
 
+// TestValidateParallelNoHostCommit forbids bundled commit-worktree in parallel async steps.
 func TestValidateParallelNoHostCommit(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{
@@ -49,6 +51,7 @@ func TestValidateParallelNoHostCommit(t *testing.T) {
 	}
 }
 
+// TestParseStepArgv splits shell command lines for container argv and treats blank as nil argv.
 func TestParseStepArgv(t *testing.T) {
 	argv, err := parseStepArgv("echo hello")
 	if err != nil {
@@ -67,6 +70,7 @@ func TestParseStepArgv(t *testing.T) {
 	}
 }
 
+// TestMergeStepVarsRespectsLocks applies step vars to unlocked keys only (CLI-locked keys unchanged).
 func TestMergeStepVarsRespectsLocks(t *testing.T) {
 	o := &runStepsOpts{
 		envMap: map[string]string{"LOCKED": "old", "FREE": "old"},

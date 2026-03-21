@@ -2,6 +2,7 @@ package domain
 
 import "testing"
 
+// TestStepHelpers covers Step DisplayName, IsBlocking, ActPath, CmdLine, OutputsPath, RunPaths defaults and fallbacks.
 func TestStepHelpers(t *testing.T) {
 	bFalse := false
 	bTrue := true
@@ -60,6 +61,7 @@ func TestStepHelpers(t *testing.T) {
 	}
 }
 
+// TestRunSpecInvalidNodeType rejects YAML where run: is not a string or string list.
 func TestRunSpecInvalidNodeType(t *testing.T) {
 	_, err := ParseWorkflowYAML([]byte("run:\n  nested: x\n"))
 	if err == nil {
@@ -67,6 +69,7 @@ func TestRunSpecInvalidNodeType(t *testing.T) {
 	}
 }
 
+// TestFlattenStepsInternalEmptyEntryError ensures an empty step entry fails flattening.
 func TestFlattenStepsInternalEmptyEntryError(t *testing.T) {
 	_, err := flattenSteps([]stepOrGroupYAML{{}})
 	if err == nil {

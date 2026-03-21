@@ -45,6 +45,7 @@ func withRunSeams(t *testing.T) {
 	})
 }
 
+// TestRunNonStepsHappyPath runs resolver-driven single-command mode with mocked docker build/run.
 func TestRunNonStepsHappyPath(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
@@ -88,6 +89,7 @@ func TestRunNonStepsHappyPath(t *testing.T) {
 	}
 }
 
+// TestRunMissingWorkflowErrors when --workflow name has no templates/<name>/config.yml.
 func TestRunMissingWorkflowErrors(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
@@ -99,6 +101,7 @@ func TestRunMissingWorkflowErrors(t *testing.T) {
 	}
 }
 
+// TestRunPreScriptNotFoundErrors when resolved pre-script path does not exist on disk.
 func TestRunPreScriptNotFoundErrors(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
@@ -118,6 +121,7 @@ func TestRunPreScriptNotFoundErrors(t *testing.T) {
 	}
 }
 
+// TestRunMissingDashErrors when user omits the standalone -- before the command.
 func TestRunMissingDashErrors(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
@@ -136,6 +140,7 @@ func TestRunMissingDashErrors(t *testing.T) {
 	}
 }
 
+// TestRunNonZeroContainerExitCallsExitFn propagates container exit code via os.Exit shim.
 func TestRunNonZeroContainerExitCallsExitFn(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
@@ -161,6 +166,7 @@ func TestRunNonZeroContainerExitCallsExitFn(t *testing.T) {
 	}
 }
 
+// TestRunWorkflowStepsModeDelegatesToRunSteps when workflow has steps:, Run calls runStepsAppFn.
 func TestRunWorkflowStepsModeDelegatesToRunSteps(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
@@ -200,6 +206,7 @@ func TestRunWorkflowStepsModeDelegatesToRunSteps(t *testing.T) {
 	}
 }
 
+// TestRunAutoBranchForRepoWithoutBranch sets work branch when --repo is set without --branch (clone-worktree flow).
 func TestRunAutoBranchForRepoWithoutBranch(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
@@ -233,6 +240,7 @@ func TestRunAutoBranchForRepoWithoutBranch(t *testing.T) {
 	}
 }
 
+// TestRunInfersOriginWhenWorkflowUsesCloneWorktree fills --repo from git remote when workflow uses clone-worktree pre-script.
 func TestRunInfersOriginWhenWorkflowUsesCloneWorktree(t *testing.T) {
 	withRunSeams(t)
 	gitDir := t.TempDir()

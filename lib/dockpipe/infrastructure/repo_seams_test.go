@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// TestRepoRootMaterializesBundledTemplates copies bundled templates into DOCKPIPE_BUNDLED_CACHE and finds config.yml.
 func TestRepoRootMaterializesBundledTemplates(t *testing.T) {
 	t.Setenv("DOCKPIPE_REPO_ROOT", "")
 	t.Setenv("DOCKPIPE_BUNDLED_CACHE", t.TempDir())

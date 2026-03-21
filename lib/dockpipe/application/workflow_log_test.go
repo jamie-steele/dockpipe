@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestWorkflowTaskLines formats stderr banner lines for single-step vs multi-step workflows and missing names.
 func TestWorkflowTaskLines(t *testing.T) {
 	got := workflowTaskLines("My flow", "Do the thing", 0)
 	if !strings.Contains(got, "My flow") || strings.Contains(got, "steps") {

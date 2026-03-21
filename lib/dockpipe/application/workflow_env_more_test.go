@@ -8,6 +8,7 @@ import (
 	"dockpipe/lib/dockpipe/domain"
 )
 
+// TestBuildWorkflowEnvIntoPrecedenceAndOverrides merges wf .env, repo .env, --env-file, DOCKPIPE_ENV_FILE, vars, --var.
 func TestBuildWorkflowEnvIntoPrecedenceAndOverrides(t *testing.T) {
 	tmp := t.TempDir()
 	wfRoot := filepath.Join(tmp, "wf")
@@ -51,6 +52,7 @@ func TestBuildWorkflowEnvIntoPrecedenceAndOverrides(t *testing.T) {
 	}
 }
 
+// TestLockedKeysAndApplyOutputsFile merges step outputs into env except CLI-locked keys and deletes the file after read.
 func TestLockedKeysAndApplyOutputsFile(t *testing.T) {
 	tmp := t.TempDir()
 	outFile := filepath.Join(tmp, "outputs.env")

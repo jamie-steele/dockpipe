@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// TestRewriteMsysOrMntToWindows maps /c/... and /mnt/c/... style paths to Windows paths (Windows only).
 func TestRewriteMsysOrMntToWindows(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("MSYS/WSL path conversion is only applied on Windows")
@@ -26,6 +27,7 @@ func TestRewriteMsysOrMntToWindows(t *testing.T) {
 	}
 }
 
+// TestHostPathForGitNonWindowsPassthrough ensures non-Windows hosts get filepath-clean paths unchanged.
 func TestHostPathForGitNonWindowsPassthrough(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip()
@@ -36,6 +38,7 @@ func TestHostPathForGitNonWindowsPassthrough(t *testing.T) {
 	}
 }
 
+// TestNormalizeDockerBindMountWindows normalizes MSYS host paths in host:container bind specs (Windows only).
 func TestNormalizeDockerBindMountWindows(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("bind-mount MSYS normalization is Windows-only")

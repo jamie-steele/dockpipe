@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// TestResolveWorkflowScript resolves scripts/ from repo root and other paths from workflow root.
 func TestResolveWorkflowScript(t *testing.T) {
 	got := ResolveWorkflowScript("scripts/pre.sh", "/wf", "/repo")
 	if got != "/repo/scripts/pre.sh" {
@@ -17,6 +18,7 @@ func TestResolveWorkflowScript(t *testing.T) {
 	}
 }
 
+// TestResolvePreScriptPath finds host pre-scripts under repo root or passes absolute paths through.
 func TestResolvePreScriptPath(t *testing.T) {
 	tmp := t.TempDir()
 	repoRoot := filepath.Join(tmp, "repo")
@@ -35,6 +37,7 @@ func TestResolvePreScriptPath(t *testing.T) {
 	}
 }
 
+// TestResolveActionPath resolves act scripts from repo scripts/ when present.
 func TestResolveActionPath(t *testing.T) {
 	tmp := t.TempDir()
 	repoRoot := filepath.Join(tmp, "repo")
@@ -58,6 +61,7 @@ func TestResolveActionPath(t *testing.T) {
 	}
 }
 
+// TestResolveActionPathVariants covers empty, absolute, cwd-relative, and missing action paths.
 func TestResolveActionPathVariants(t *testing.T) {
 	tmp := t.TempDir()
 	repoRoot := filepath.Join(tmp, "repo")
@@ -105,6 +109,7 @@ func TestResolveActionPathVariants(t *testing.T) {
 	}
 }
 
+// TestIsBundledCommitWorktree matches only the bundled commit-worktree.sh next to repo scripts.
 func TestIsBundledCommitWorktree(t *testing.T) {
 	tmp := t.TempDir()
 	repoRoot := filepath.Join(tmp, "repo")

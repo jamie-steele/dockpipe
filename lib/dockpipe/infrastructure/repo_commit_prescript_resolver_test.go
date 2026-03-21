@@ -8,6 +8,7 @@ import (
 	"testing"
 )
 
+// TestRepoRootUsesEnvOverride returns DOCKPIPE_REPO_ROOT when set.
 func TestRepoRootUsesEnvOverride(t *testing.T) {
 	tmp := t.TempDir()
 	override := filepath.Join(tmp, "repo-root")
@@ -26,6 +27,7 @@ func TestRepoRootUsesEnvOverride(t *testing.T) {
 	}
 }
 
+// TestLoadResolverFileParsesAssignments reads DOCKPIPE_RESOLVER_* lines from resolver env files.
 func TestLoadResolverFileParsesAssignments(t *testing.T) {
 	tmp := t.TempDir()
 	p := filepath.Join(tmp, "resolver.env")
@@ -58,6 +60,7 @@ DOCKPIPE_RESOLVER_ACTION = actions/do.sh
 	}
 }
 
+// TestSourceHostScriptExportsEnvironment runs a bash script and captures exported variables plus inherited env.
 func TestSourceHostScriptExportsEnvironment(t *testing.T) {
 	tmp := t.TempDir()
 	script := filepath.Join(tmp, "pre.sh")
@@ -77,6 +80,7 @@ func TestSourceHostScriptExportsEnvironment(t *testing.T) {
 	}
 }
 
+// TestCommitOnHostNoRepoReturnsNil skips git work when the workdir is not a git repository.
 func TestCommitOnHostNoRepoReturnsNil(t *testing.T) {
 	tmp := t.TempDir()
 	if err := os.WriteFile(filepath.Join(tmp, "x.txt"), []byte("x"), 0o644); err != nil {
@@ -87,6 +91,7 @@ func TestCommitOnHostNoRepoReturnsNil(t *testing.T) {
 	}
 }
 
+// TestCommitOnHostCreatesCommitAndBundle creates a commit and default (thin) bundle in a real git repo.
 func TestCommitOnHostCreatesCommitAndBundle(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
@@ -125,6 +130,7 @@ func TestCommitOnHostCreatesCommitAndBundle(t *testing.T) {
 	}
 }
 
+// TestCommitOnHostBundleDefaultIsCurrentBranchOnly writes a bundle listing only the current branch head.
 func TestCommitOnHostBundleDefaultIsCurrentBranchOnly(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")
@@ -181,6 +187,7 @@ func TestCommitOnHostBundleDefaultIsCurrentBranchOnly(t *testing.T) {
 	}
 }
 
+// TestCommitOnHostBundleAllIncludesEveryHead uses git bundle --all so every branch head is advertised.
 func TestCommitOnHostBundleAllIncludesEveryHead(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not available")

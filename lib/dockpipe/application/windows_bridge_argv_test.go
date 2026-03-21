@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestSplitDockerMountHostContainer splits docker -v host:container[:opts] into host and container paths.
 func TestSplitDockerMountHostContainer(t *testing.T) {
 	cases := []struct {
 		val, wantHost, wantCont string
@@ -26,6 +27,7 @@ func TestSplitDockerMountHostContainer(t *testing.T) {
 	}
 }
 
+// TestTranslateMountSpec_fallbackDrive converts Windows drive paths in --mount for WSL.
 func TestTranslateMountSpec_fallbackDrive(t *testing.T) {
 	got := translateMountSpec("Ubuntu", `C:\proj:/work:ro`)
 	want := "/mnt/c/proj:/work:ro"
@@ -34,6 +36,7 @@ func TestTranslateMountSpec_fallbackDrive(t *testing.T) {
 	}
 }
 
+// TestTranslateMountSpec_namedVolumeUnchanged leaves Docker named volumes unchanged in mount specs.
 func TestTranslateMountSpec_namedVolumeUnchanged(t *testing.T) {
 	got := translateMountSpec("Ubuntu", "mydata:/var/lib/data:ro")
 	want := "mydata:/var/lib/data:ro"
@@ -42,6 +45,7 @@ func TestTranslateMountSpec_namedVolumeUnchanged(t *testing.T) {
 	}
 }
 
+// TestTranslateMountSpec_zSuffix preserves :Z/:z SELinux suffix after host path translation.
 func TestTranslateMountSpec_zSuffix(t *testing.T) {
 	got := translateMountSpec("Ubuntu", `C:\x:/work:Z`)
 	want := "/mnt/c/x:/work:Z"
@@ -50,6 +54,7 @@ func TestTranslateMountSpec_zSuffix(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_flagsAndDoubleDash translates path flags before -- and leaves command args after -- on Windows.
 func TestTranslateBridgeArgv_flagsAndDoubleDash(t *testing.T) {
 	in := []string{"--workdir", `C:\repo`, "--", "echo", `C:\nope`}
 	out := translateBridgeArgv("d", in)
@@ -72,6 +77,7 @@ func TestTranslateBridgeArgv_doubleDashMultipleOnlyFirstSplit(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_noDoubleDash_allTranslated translates all path-like flags when there is no --.
 func TestTranslateBridgeArgv_noDoubleDash_allTranslated(t *testing.T) {
 	in := []string{"--data-dir", `C:\data`, "--workdir", `D:\w`}
 	out := translateBridgeArgv("d", in)
@@ -80,6 +86,7 @@ func TestTranslateBridgeArgv_noDoubleDash_allTranslated(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_mount translates host side of --mount bind specs.
 func TestTranslateBridgeArgv_mount(t *testing.T) {
 	in := []string{"--mount", `C:\Users\x:/work:rw`}
 	out := translateBridgeArgv("d", in)
@@ -88,6 +95,7 @@ func TestTranslateBridgeArgv_mount(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_twoMounts translates each repeated --mount value.
 func TestTranslateBridgeArgv_twoMounts(t *testing.T) {
 	in := []string{"--mount", `C:\a:/a`, "--mount", `D:\b:/b`}
 	out := translateBridgeArgv("d", in)
@@ -96,6 +104,7 @@ func TestTranslateBridgeArgv_twoMounts(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_envPath translates Windows paths in KEY=path --env values.
 func TestTranslateBridgeArgv_envPath(t *testing.T) {
 	in := []string{"--env", `HOST=C:\tmp`}
 	out := translateBridgeArgv("d", in)
@@ -104,6 +113,7 @@ func TestTranslateBridgeArgv_envPath(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_envURLValueUnchanged does not rewrite URL-looking --env values.
 func TestTranslateBridgeArgv_envURLValueUnchanged(t *testing.T) {
 	in := []string{"--env", `FETCH=https://example.com/x`}
 	out := translateBridgeArgv("d", in)
@@ -112,6 +122,7 @@ func TestTranslateBridgeArgv_envURLValueUnchanged(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_varPath translates Windows paths in --var KEY=path.
 func TestTranslateBridgeArgv_varPath(t *testing.T) {
 	in := []string{"--var", `OUT=C:\out.txt`}
 	out := translateBridgeArgv("d", in)
@@ -120,6 +131,7 @@ func TestTranslateBridgeArgv_varPath(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_buildBundleEnvFileWorkPath translates paths for --build, --bundle-out, --env-file, --work-path, --run, --act.
 func TestTranslateBridgeArgv_buildBundleEnvFileWorkPath(t *testing.T) {
 	d := "distro"
 	cases := []struct {
@@ -168,6 +180,7 @@ func TestTranslateBridgeArgv_buildBundleEnvFileWorkPath(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_isolateDockerImageUnchanged keeps docker image refs like ubuntu:22.04 as-is.
 func TestTranslateBridgeArgv_isolateDockerImageUnchanged(t *testing.T) {
 	in := []string{"--isolate", "ubuntu:22.04"}
 	out := translateBridgeArgv("d", in)
@@ -176,6 +189,7 @@ func TestTranslateBridgeArgv_isolateDockerImageUnchanged(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_isolateWindowsPathTranslated translates --isolate when the value is a Windows directory.
 func TestTranslateBridgeArgv_isolateWindowsPathTranslated(t *testing.T) {
 	in := []string{"--isolate", `C:\myctx`}
 	out := translateBridgeArgv("d", in)
@@ -184,6 +198,7 @@ func TestTranslateBridgeArgv_isolateWindowsPathTranslated(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_runURLUnchanged does not rewrite --run when the value is a URL.
 func TestTranslateBridgeArgv_runURLUnchanged(t *testing.T) {
 	in := []string{"--run", "https://example.com/x.yml"}
 	out := translateBridgeArgv("d", in)
@@ -192,6 +207,7 @@ func TestTranslateBridgeArgv_runURLUnchanged(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_mntPathNormalized leaves already-WSL /mnt/c paths unchanged.
 func TestTranslateBridgeArgv_mntPathNormalized(t *testing.T) {
 	in := []string{"--workdir", `/mnt/c/already/linux-style`}
 	out := translateBridgeArgv("d", in)
@@ -200,6 +216,7 @@ func TestTranslateBridgeArgv_mntPathNormalized(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_linuxAbsUnchanged passes through POSIX absolute --workdir on the Linux side.
 func TestTranslateBridgeArgv_linuxAbsUnchanged(t *testing.T) {
 	in := []string{"--workdir", "/home/user/repo"}
 	out := translateBridgeArgv("d", in)
@@ -208,6 +225,7 @@ func TestTranslateBridgeArgv_linuxAbsUnchanged(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_initDest translates dockpipe init destination directory to WSL.
 func TestTranslateBridgeArgv_initDest(t *testing.T) {
 	in := []string{"init", `D:\newproj`}
 	out := translateBridgeArgv("d", in)
@@ -216,6 +234,7 @@ func TestTranslateBridgeArgv_initDest(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_initTemplateNameUnchanged does not rewrite template name args for init.
 func TestTranslateBridgeArgv_initTemplateNameUnchanged(t *testing.T) {
 	in := []string{"init", "my-workflow"}
 	out := translateBridgeArgv("d", in)
@@ -224,6 +243,7 @@ func TestTranslateBridgeArgv_initTemplateNameUnchanged(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_initFromSkipsURLAndTranslatesDest keeps --from URL and translates local dest for git clone init.
 func TestTranslateBridgeArgv_initFromSkipsURLAndTranslatesDest(t *testing.T) {
 	in := []string{"init", "--from", "https://example.com/tpl", `C:\dest`}
 	out := translateBridgeArgv("d", in)
@@ -232,6 +252,7 @@ func TestTranslateBridgeArgv_initFromSkipsURLAndTranslatesDest(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_actionInitSkipsFrom translates action init output path but not bundled --from names.
 func TestTranslateBridgeArgv_actionInitSkipsFrom(t *testing.T) {
 	in := []string{"action", "init", "--from", "commit-worktree", `C:\a.sh`}
 	out := translateBridgeArgv("d", in)
@@ -243,6 +264,7 @@ func TestTranslateBridgeArgv_actionInitSkipsFrom(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_preInit translates pre init script destination path.
 func TestTranslateBridgeArgv_preInit(t *testing.T) {
 	in := []string{"pre", "init", "--from", "x", `C:\p.sh`}
 	out := translateBridgeArgv("d", in)
@@ -251,6 +273,7 @@ func TestTranslateBridgeArgv_preInit(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_templateInit translates template init directory argument.
 func TestTranslateBridgeArgv_templateInit(t *testing.T) {
 	in := []string{"template", "init", "--from", "llm-worktree", `C:\w`}
 	out := translateBridgeArgv("d", in)
@@ -259,6 +282,7 @@ func TestTranslateBridgeArgv_templateInit(t *testing.T) {
 	}
 }
 
+// TestTranslateBridgeArgv_actionCreate translates action create output script path.
 func TestTranslateBridgeArgv_actionCreate(t *testing.T) {
 	in := []string{"action", "create", `C:\x.sh`}
 	out := translateBridgeArgv("d", in)
@@ -267,6 +291,7 @@ func TestTranslateBridgeArgv_actionCreate(t *testing.T) {
 	}
 }
 
+// TestIsProbablyWindowsFilesystemPath heuristically detects paths that should go through Windows→WSL translation.
 func TestIsProbablyWindowsFilesystemPath(t *testing.T) {
 	cases := []struct {
 		p    string

@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// TestParseEnvFile parses dotenv lines: comments, spacing, quotes, and ignores invalid lines.
 func TestParseEnvFile(t *testing.T) {
 	tmp := t.TempDir()
 	p := filepath.Join(tmp, ".env")

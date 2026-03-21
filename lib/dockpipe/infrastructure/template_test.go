@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// TestTemplateBuild maps template names to image names and Dockerfile directories under the repo.
 func TestTemplateBuild(t *testing.T) {
 	repoRoot := "/repo"
 	cases := []struct {
@@ -31,6 +32,7 @@ func TestTemplateBuild(t *testing.T) {
 	}
 }
 
+// TestMaybeVersionTag appends dockpipe-* image tags from VERSION file when missing.
 func TestMaybeVersionTag(t *testing.T) {
 	tmp := t.TempDir()
 	versionFile := filepath.Join(tmp, "version")

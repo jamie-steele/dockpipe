@@ -6,6 +6,7 @@ import (
 	"testing"
 )
 
+// TestParseWorkflowYAMLSteps checks multi-step YAML: two steps, per-step isolate override, and CmdLine.
 func TestParseWorkflowYAMLSteps(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "config.yml")
@@ -36,6 +37,7 @@ steps:
 	}
 }
 
+// TestParseWorkflowYAMLAsyncGroupAndID checks step id, is_blocking, and DisplayName for flat async-style steps.
 func TestParseWorkflowYAMLAsyncGroupAndID(t *testing.T) {
 	y := `
 steps:
@@ -64,6 +66,7 @@ steps:
 	}
 }
 
+// TestParseWorkflowYAMLAsyncGroupSugar checks that group.mode: async expands to the expected flattened steps and blocking flags.
 func TestParseWorkflowYAMLAsyncGroupSugar(t *testing.T) {
 	y := `
 steps:
@@ -102,46 +105,61 @@ steps:
 	}
 }
 
+// TestParseWorkflowYAMLGroupValidation rejects invalid group blocks (wrong mode, empty tasks, blocking inside tasks, extra keys).
 func TestParseWorkflowYAMLGroupValidation(t *testing.T) {
-	_, err := ParseWorkflowYAML([]byte(`steps:
+	cases := []struct {
+		name string
+		yaml string
+	}{
+		{
+			"group_mode_must_be_async_not_parallel",
+			`steps:
   - group:
       mode: parallel
       tasks:
         - cmd: x
-`))
-	if err == nil {
-		t.Fatal("expected error for mode != async")
-	}
-	_, err = ParseWorkflowYAML([]byte(`steps:
+`,
+		},
+		{
+			"group_tasks_must_not_be_empty",
+			`steps:
   - group:
       mode: async
       tasks: []
-`))
-	if err == nil {
-		t.Fatal("expected error for empty tasks")
-	}
-	_, err = ParseWorkflowYAML([]byte(`steps:
+`,
+		},
+		{
+			"group_task_must_not_set_is_blocking_true",
+			`steps:
   - group:
       mode: async
       tasks:
         - cmd: x
           is_blocking: true
-`))
-	if err == nil {
-		t.Fatal("expected error for is_blocking inside group")
-	}
-	_, err = ParseWorkflowYAML([]byte(`steps:
+`,
+		},
+		{
+			"group_step_must_not_mix_group_with_other_step_keys",
+			`steps:
   - group:
       mode: async
       tasks:
         - cmd: x
     cmd: oops
-`))
-	if err == nil {
-		t.Fatal("expected error for group + extra keys")
+`,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseWorkflowYAML([]byte(tc.yaml))
+			if err == nil {
+				t.Fatal("expected parse error")
+			}
+		})
 	}
 }
 
+// TestParseWorkflowYAMLDescription checks top-level description is parsed into Workflow.Description.
 func TestParseWorkflowYAMLDescription(t *testing.T) {
 	y := `name: t
 description: Do the task

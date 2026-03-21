@@ -5,6 +5,7 @@ import (
 	"testing"
 )
 
+// TestIsNodeFamilyImage classifies dockpipe claude/codex/agent-dev images vs base/alpine.
 func TestIsNodeFamilyImage(t *testing.T) {
 	if !isNodeFamilyImage("dockpipe-claude:latest") || !isNodeFamilyImage("dockpipe-codex:1") || !isNodeFamilyImage("dockpipe-agent-dev") {
 		t.Fatal("expected node family")
@@ -14,6 +15,7 @@ func TestIsNodeFamilyImage(t *testing.T) {
 	}
 }
 
+// TestUnixDockerUserSpec_nonRootHost maps host uid:gid into -u for node-family images on Unix.
 func TestUnixDockerUserSpec_nonRootHost(t *testing.T) {
 	oldU, oldG := getuidDockerFn, getgidDockerFn
 	getuidDockerFn = func() int { return 1000 }
@@ -48,6 +50,7 @@ func TestUnixDockerUserSpec_rootHost_nodeImage(t *testing.T) {
 	}
 }
 
+// TestUnixDockerUserSpec_rootHost_baseDev keeps 0:0 for base-dev when the host is root.
 func TestUnixDockerUserSpec_rootHost_baseDev(t *testing.T) {
 	oldU, oldG := getuidDockerFn, getgidDockerFn
 	getuidDockerFn = func() int { return 0 }
@@ -64,6 +67,7 @@ func TestUnixDockerUserSpec_rootHost_baseDev(t *testing.T) {
 	}
 }
 
+// TestUnixDockerUserSpec_forceRoot honors DOCKPIPE_FORCE_ROOT_CONTAINER for node-family images.
 func TestUnixDockerUserSpec_forceRoot(t *testing.T) {
 	oldU, oldG := getuidDockerFn, getgidDockerFn
 	getuidDockerFn = func() int { return 0 }
@@ -80,6 +84,7 @@ func TestUnixDockerUserSpec_forceRoot(t *testing.T) {
 	}
 }
 
+// TestWindowsDockerUserSpec covers DOCKPIPE_WINDOWS_CONTAINER_USER: omit, node, root, and empty.
 func TestWindowsDockerUserSpec(t *testing.T) {
 	t.Run("unset omits -u", func(t *testing.T) {
 		t.Setenv("DOCKPIPE_WINDOWS_CONTAINER_USER", "")
@@ -107,6 +112,7 @@ func TestWindowsDockerUserSpec(t *testing.T) {
 	})
 }
 
+// TestUnixDockerUserSpec_overrideUser honors DOCKPIPE_CONTAINER_USER when set.
 func TestUnixDockerUserSpec_overrideUser(t *testing.T) {
 	oldU, oldG := getuidDockerFn, getgidDockerFn
 	getuidDockerFn = func() int { return 0 }
