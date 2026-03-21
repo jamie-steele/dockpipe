@@ -1,24 +1,20 @@
 # workflow-demo
 
-Small **example template** for **`docs/workflow-yaml.md`**: blocking step → **async group** (two parallel alpine containers writing different **`outputs:`** files) → **join** step that sees merged env (**last declarer wins** on `DEMO_BRANCH` → `b`).
+**Purpose:** Show **`steps:`**, an **async** group, and **merged `outputs:`** before a blocking join. Smaller sequential example: **`templates/chain-test/`**.
 
 ## Run
-
-From the **dockpipe repo root** (so `templates/workflow-demo/` exists):
 
 ```bash
 dockpipe --workflow workflow-demo
 ```
 
-Requires **Docker** and a pullable **`alpine`** image. No extra scripts or resolvers.
+From a checkout that includes **`templates/workflow-demo/`** (e.g. repo root). Needs Docker + **`alpine`**.
 
-## Copy into your workspace
+## Copy
 
 ```bash
 dockpipe template init my-demo --from workflow-demo
 dockpipe --workflow my-demo
 ```
 
-## Simpler two-step chain
-
-For a minimal sequential **outputs** handoff only, see **`templates/chain-test/`**.
+**Details:** **[docs/workflow-yaml.md](../../docs/workflow-yaml.md)**

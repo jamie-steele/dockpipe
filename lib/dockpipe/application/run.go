@@ -39,7 +39,7 @@ func preScriptsIncludeCloneWorktree(paths []string) bool {
 
 // setUserRepoRootForWorktree sets DOCKPIPE_USER_REPO_ROOT when cwd/--workdir is a clone whose
 // origin matches repoURL, so clone-worktree.sh can use git worktree add from that checkout
-// (current HEAD + optional stash of uncommitted work) instead of a mirror from origin/HEAD.
+// (current HEAD; uncommitted changes copied to worktree by default, or stash if DOCKPIPE_STASH_UNCOMMITTED=1) instead of a mirror from origin/HEAD.
 func setUserRepoRootForWorktree(env map[string]string, opts *CliOpts, repoURL string) {
 	gitDir, err := os.Getwd()
 	if err != nil {
@@ -60,7 +60,7 @@ func setUserRepoRootForWorktree(env map[string]string, opts *CliOpts, repoURL st
 		return
 	}
 	env["DOCKPIPE_USER_REPO_ROOT"] = top
-	fmt.Fprintf(os.Stderr, "[dockpipe] Worktree will branch from your local repo: %s\n", top)
+	fmt.Fprintf(os.Stderr, "[dockpipe] Worktree base: %s (same origin as --repo)\n", top)
 }
 
 // Run is the CLI entry (after stripping os.Args[0]).
@@ -117,8 +117,23 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 		if len(wf.Steps) > 0 {
 			stepsMode = true
-			fmt.Fprintf(os.Stderr, "[dockpipe] Multi-step workflow (%s)\n", opts.Workflow)
 		}
+	}
+
+	// Banner first: session start, before status lines or host work.
+	if !opts.Detach && (stepsMode || (opts.SeenDash && len(rest) > 0)) {
+		infrastructure.PrintLaunchBanner(os.Stdout, os.Stderr)
+	}
+	if opts.Workflow != "" && wf != nil {
+		disp := strings.TrimSpace(wf.Name)
+		if disp == "" {
+			disp = opts.Workflow
+		}
+		stepCount := 0
+		if stepsMode {
+			stepCount = len(wf.Steps)
+		}
+		fmt.Fprint(os.Stderr, workflowTaskLines(disp, wf.Description, stepCount))
 	}
 
 	envMap := domain.EnvironToMap(baseEnviron)
@@ -134,13 +149,14 @@ func Run(argv []string, baseEnviron []string) error {
 				resolver = wf.DefaultResolver
 			}
 		} else {
-			resolver = wf.Isolate
+			// Prefer explicit default_resolver; isolate doubles as legacy default resolver name for llm-worktree-style YAML.
+			resolver = wf.DefaultResolver
 			if resolver == "" {
-				resolver = wf.DefaultResolver
+				resolver = wf.Isolate
 			}
 		}
 		if resolver != "" {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Using resolver from workflow: %s\n", resolver)
+			fmt.Fprintf(os.Stderr, "[dockpipe] Resolver: %s\n", resolver)
 		}
 	}
 
@@ -160,6 +176,9 @@ func Run(argv []string, baseEnviron []string) error {
 		templateName = ra.Template
 		preFromResolver = ra.PreScript
 		actFromResolver = ra.Action
+		if ra.Experimental {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Resolver %q is experimental — see %s and template README.\n", resolver, resFile)
+		}
 		if opts.Workflow == "" {
 			if len(opts.PreScripts) == 0 && preFromResolver != "" {
 				opts.PreScripts = []string{filepath.Join(repoRoot, preFromResolver)}
@@ -177,7 +196,6 @@ func Run(argv []string, baseEnviron []string) error {
 			for _, r := range wf.Run {
 				opts.PreScripts = append(opts.PreScripts, resolveWorkflowAppFn(r, wfRoot, repoRoot))
 			}
-			fmt.Fprintf(os.Stderr, "[dockpipe] Using run from workflow\n")
 		}
 		if opts.Action == "" {
 			act := wf.Act
@@ -186,7 +204,6 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 			if act != "" {
 				opts.Action = resolveWorkflowAppFn(act, wfRoot, repoRoot)
-				fmt.Fprintf(os.Stderr, "[dockpipe] Using act from workflow\n")
 			}
 		}
 	}
@@ -206,7 +223,7 @@ func Run(argv []string, baseEnviron []string) error {
 			return fmt.Errorf("workflow run includes clone-worktree.sh but --repo was not set and origin URL could not be read from %s: %w\n(hint: pass --repo <url> or run from a git clone with `git remote add origin ...`)", gitDir, err)
 		}
 		opts.RepoURL = u
-		fmt.Fprintf(os.Stderr, "[dockpipe] No --repo; using git origin URL from %s\n", gitDir)
+		fmt.Fprintf(os.Stderr, "[dockpipe] Repo: using origin from %s\n", gitDir)
 	}
 
 	userIso := opts.Isolate
@@ -283,7 +300,7 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 		opts.RepoBranch = wb
 		envMap["DOCKPIPE_REPO_BRANCH"] = wb
-		fmt.Fprintf(os.Stderr, "[dockpipe] No --branch; using new branch: %s\n", wb)
+		fmt.Fprintf(os.Stderr, "[dockpipe] Branch: %s (new)\n", wb)
 	}
 
 	if opts.RepoURL != "" && len(opts.PreScripts) == 0 && !stepsMode {
@@ -293,7 +310,7 @@ func Run(argv []string, baseEnviron []string) error {
 				home = "/tmp"
 			}
 			dataDir = filepath.Join(home, ".dockpipe")
-			fmt.Fprintf(os.Stderr, "[dockpipe] Using %s for worktree (set --data-dir to override)\n", dataDir)
+			fmt.Fprintf(os.Stderr, "[dockpipe] Data dir for worktrees: %s (override with --data-dir)\n", dataDir)
 			dataVol = ""
 		}
 		opts.PreScripts = []string{filepath.Join(repoRoot, "scripts/clone-worktree.sh")}
@@ -366,8 +383,10 @@ func Run(argv []string, baseEnviron []string) error {
 			if _, err := os.Stat(p); err != nil {
 				return fmt.Errorf("pre-script not found: %s", p)
 			}
-			fmt.Fprintf(os.Stderr, "[dockpipe] Running pre-script: %s\n", p)
+			fmt.Fprintf(os.Stderr, "[dockpipe] Host setup\n")
+			stop := infrastructure.StartLineSpinner(os.Stderr, hostSpinnerLabel(p))
 			em, err := sourceHostScriptAppFn(p, envSlice)
+			stop()
 			if err != nil {
 				return err
 			}
@@ -416,6 +435,7 @@ func Run(argv []string, baseEnviron []string) error {
 	}
 
 	if buildDir != "" && buildCtx != "" {
+		fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
 		if err := dockerBuildAppFn(image, buildDir, buildCtx); err != nil {
 			return err
 		}
@@ -423,13 +443,13 @@ func Run(argv []string, baseEnviron []string) error {
 
 	workHost := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
 	if commitOnHost && strings.TrimSpace(envMap["DOCKPIPE_WORKDIR"]) != "" {
-		fmt.Fprintf(os.Stderr, "[dockpipe] Mounting /work from host: %s\n", envMap["DOCKPIPE_WORKDIR"])
+		fmt.Fprintf(os.Stderr, "[dockpipe] Mount /work ← %s\n", envMap["DOCKPIPE_WORKDIR"])
 	}
 	if strings.TrimSpace(envMap["DOCKPIPE_WORKDIR"]) != "" {
 		if b := dockerEnvMap["DOCKPIPE_WORKTREE_BRANCH"]; b != "" {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Passing to container: DOCKPIPE_WORKTREE_BRANCH=%s\n", b)
+			fmt.Fprintf(os.Stderr, "[dockpipe] Container: DOCKPIPE_WORKTREE_BRANCH=%s\n", b)
 		} else if dockerEnvMap["DOCKPIPE_WORKTREE_DETACHED"] == "1" {
-			fmt.Fprintln(os.Stderr, "[dockpipe] Passing to container: DOCKPIPE_WORKTREE_DETACHED=1")
+			fmt.Fprintln(os.Stderr, "[dockpipe] Container: DOCKPIPE_WORKTREE_DETACHED=1")
 		}
 	}
 

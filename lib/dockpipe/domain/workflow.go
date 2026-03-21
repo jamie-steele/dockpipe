@@ -34,6 +34,7 @@ func (r *RunSpec) UnmarshalYAML(n *yaml.Node) error {
 // Workflow is templates/<name>/config.yml.
 type Workflow struct {
 	Name            string            `yaml:"name"`
+	Description     string            `yaml:"description,omitempty"`
 	Run             RunSpec           `yaml:"run"`
 	Isolate         string            `yaml:"isolate"`
 	Act             string            `yaml:"act"`
@@ -113,6 +114,7 @@ func (s *Step) OutputsPath() string {
 // workflowFile is the on-disk shape: steps may mix plain steps and group wrappers.
 type workflowFile struct {
 	Name            string            `yaml:"name"`
+	Description     string            `yaml:"description,omitempty"`
 	Run             RunSpec           `yaml:"run"`
 	Isolate         string            `yaml:"isolate"`
 	Act             string            `yaml:"act"`
@@ -225,6 +227,7 @@ func ParseWorkflowYAML(data []byte) (*Workflow, error) {
 	}
 	return &Workflow{
 		Name:            f.Name,
+		Description:     f.Description,
 		Run:             f.Run,
 		Isolate:         f.Isolate,
 		Act:             f.Act,

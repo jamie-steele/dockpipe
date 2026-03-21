@@ -1,17 +1,38 @@
 package infrastructure
 
-import "testing"
+import (
+	"path/filepath"
+	"runtime"
+	"testing"
+)
 
-func TestParseEnv0(t *testing.T) {
-	data := []byte("A=1\x00BROKEN\x00B=two=parts\x00\x00")
-	m := parseEnv0(data)
-	if m["A"] != "1" {
-		t.Fatalf("A mismatch: %#v", m)
+func TestBashIsWSL(t *testing.T) {
+	tests := []struct {
+		exe  string
+		want bool
+	}{
+		{`C:\Windows\System32\bash.exe`, true},
+		{`c:/windows/system32/bash.exe`, true},
+		{`C:\Program Files\Git\bin\bash.exe`, false},
+		{`/usr/bin/bash`, false},
 	}
-	if m["B"] != "two=parts" {
-		t.Fatalf("B mismatch: %#v", m)
+	for _, tc := range tests {
+		if got := bashIsWSL(tc.exe); got != tc.want {
+			t.Errorf("bashIsWSL(%q) = %v, want %v", tc.exe, got, tc.want)
+		}
 	}
-	if _, ok := m["BROKEN"]; ok {
-		t.Fatalf("BROKEN should be ignored: %#v", m)
+}
+
+func TestPathForWSLNonWindowsPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("path layout differs on Windows")
+	}
+	got, err := pathForWSL("/tmp/foo/bar")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.ToSlash("/tmp/foo/bar")
+	if got != want {
+		t.Fatalf("pathForWSL: got %q want %q", got, want)
 	}
 }

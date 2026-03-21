@@ -12,6 +12,7 @@ func gitDir(dir string) (string, error) {
 	if s == "" {
 		return "", fmt.Errorf("git dir is empty")
 	}
+	s = HostPathForGit(s)
 	return filepath.Clean(s), nil
 }
 
@@ -50,7 +51,11 @@ func GitRevParse(dir, rev string) (string, error) {
 	if strings.TrimSpace(dir) == "" || strings.TrimSpace(rev) == "" {
 		return "", fmt.Errorf("git dir or rev is empty")
 	}
-	cmd := exec.Command("git", "-C", dir, "rev-parse", rev)
+	d, err := gitDir(dir)
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.Command("git", "-C", d, "rev-parse", rev)
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse %s: %w", rev, err)

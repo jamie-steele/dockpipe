@@ -33,5 +33,5 @@ This directory contains the Homebrew formula used by a tap repo.
 
 ## Notes
 
-- Formula builds from source using Go and installs full dockpipe runtime assets (`lib`, `scripts`, `images`, `templates`, `docs`) into `libexec`.
-- Wrapper sets `DOCKPIPE_REPO_ROOT` so runtime path resolution works in Homebrew layouts.
+- Formula builds from source using Go and installs the **`dockpipe`** binary only. Bundled templates, scripts, and images are **embedded** and materialize to the user cache on first run (same as `.deb` and Windows zip).
+- Optional: set **`DOCKPIPE_REPO_ROOT`** to a git checkout of dockpipe when developing templates.

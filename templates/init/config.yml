@@ -1,6 +1,6 @@
-# Example template (used when you run "dockpipe init <name>"). Points at scripts/ and images/ at workspace root.
+# Scaffolded by `dockpipe init <name>` — edit paths for your repo.
 name: example
-description: Example workflow using scripts/example-run.sh and scripts/example-act.sh.
+description: Example: host run → container → host act.
 
 run: scripts/example-run.sh
 isolate: claude

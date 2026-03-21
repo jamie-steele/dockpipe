@@ -87,6 +87,32 @@ jobs:
       - name: Integration tests (Docker)
         run: bash tests/integration-tests/run.sh
 
+  # Windows: Go + bash scripts that mirror host pre-script behavior (Git Bash on the runner).
+  # Full tests/run_tests.sh and Docker integration tests stay on Linux — Docker/Linux images
+  # are not reliable on windows-latest the same way as ubuntu-latest.
+  test-windows:
+    if: github.event_name != 'schedule'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.8"
+
+      - name: Go test
+        run: go test ./...
+
+      - name: clone-worktree include script (bash + git)
+        run: bash tests/unit-tests/test_clone_worktree_include.sh
+
   codeql:
     name: CodeQL (Go)
     runs-on: ubuntu-latest

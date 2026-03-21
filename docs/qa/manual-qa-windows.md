@@ -114,9 +114,19 @@ Assumes WSL already has dockpipe and you have run **`dockpipe windows setup`** a
 ```bash
 go test ./...
 ./packaging/build-deb-all.sh <version>
-GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o bin/dockpipe.exe ./cmd/dockpipe
+make build-windows   # writes bin/dockpipe.exe (VERSION + -ldflags from Makefile)
 ```
 
 On **Windows**, build MSI with **`packaging/msi/build.ps1`** (see **[packaging/msi/README.md](../../packaging/msi/README.md)**).
 
 Copy **`packaging/build/dockpipe_<version>_amd64.deb`** (or arm64 if WSL is aarch64) and the **MSI or exe** to the Windows PC. Install the `.deb` **inside WSL** before testing the bridge.
+
+---
+
+## 8. Troubleshooting: quiet after “Starting container…”
+
+After **`[dockpipe] Starting container…`**, the process is inside **`docker run`**. It may stay **silent** for a while: image pull, Docker Desktop / WSL engine, or **first touch** on a large bind-mounted worktree (AV can slow this).
+
+- Confirm **Docker Desktop** is running; try **`docker run --rm hello-world`** in another window.
+- **Interactive** tools expect a **TTY**. Prefer **Windows Terminal** over legacy **conhost** if a CLI hangs or shows no UI.
+- **`sha256:`** lines earlier in the log are usually **Docker** (e.g. build/pull); they are **not** the final container attach.

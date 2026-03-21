@@ -1,0 +1,12 @@
+# Experimental: no Cursor server — prep on host, disposable isolate smoke test, then host reminder.
+name: cursor-dev
+description: Experimental — repo prep + container smoke test; open Cursor on the host (no remote server).
+
+steps:
+  - id: prep-and-isolate
+    run: scripts/cursor-prep.sh
+    isolate: base-dev
+    cmd: sh -c 'echo "[cursor-dev] disposable check: cwd=$(pwd)"; ls -1 /work 2>/dev/null | head -n 8 || true'
+  - id: host-next-steps
+    run: scripts/cursor-print-next-steps.sh
+    skip_container: true

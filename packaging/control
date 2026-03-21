@@ -5,7 +5,6 @@ Priority: optional
 Architecture: amd64
 Depends: bash, docker.io | docker-ce, git
 Maintainer: dockpipe maintainers
-Description: Run, isolate, and act — pipe commands into disposable containers
- dockpipe is a primitive: spawn container, run command/script inside it,
- perform an optional action on the result. Agent-agnostic and
- command-agnostic. Use for one-off commands, CI-like runs, or AI tools.
+Description: Run any CLI command in a disposable container—project at /work, removed when it exits.
+ dockpipe wires docker run for you: your project at /work, container removed when the
+ command exits, optional host step after. Use for tests, linters, one-off tools, or agents.

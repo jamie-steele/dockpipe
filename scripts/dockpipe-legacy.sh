@@ -1,19 +1,24 @@
 #!/usr/bin/env bash
-# dockpipe — Run, isolate, and act. Pipe commands into disposable containers and act on the result.
+# dockpipe — Run any CLI command in a disposable container; project at /work.
 #
 # Layout: resolve repo root → usage/helpers → action subcommand (early exit) → option loop →
 #         resolve template/image, action path, data volume → source runner → build image → dockpipe_run.
 set -euo pipefail
 
 # ------------------------------------------------------------------------------
-# Repo root (install path). When installed via .deb, /usr/bin/dockpipe is a symlink
-# so dirname would be /usr; we use a fixed path. From source, we use script dir/..
+# Repo root (install path). The default .deb ships only the Go binary in /usr/bin
+# (no /usr/lib/dockpipe tree). Legacy bash needs a source checkout: set DOCKPIPE_REPO_ROOT.
+# From this repo, script dir → repo root.
 # ------------------------------------------------------------------------------
 _script_dir="$(dirname "${BASH_SOURCE[0]}")"
 if [[ "${_script_dir}" == "/usr/bin" ]]; then
-  DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-/usr/lib/dockpipe}"
+  DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-}"
 else
   DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$(cd "${_script_dir}/.." && pwd)}"
+fi
+if [[ -z "${DOCKPIPE_REPO_ROOT}" ]] || [[ ! -f "${DOCKPIPE_REPO_ROOT}/lib/config-vars.sh" ]]; then
+  echo "dockpipe-legacy.sh: set DOCKPIPE_REPO_ROOT to a dockpipe git checkout (this script is optional; the default install is the Go binary with embedded assets)." >&2
+  exit 1
 fi
 export DOCKPIPE_REPO_ROOT
 # shellcheck source=lib/config-vars.sh
@@ -23,7 +28,7 @@ source "${DOCKPIPE_REPO_ROOT}/scripts/branch-slug.sh"
 
 usage() {
   cat <<EOF
-dockpipe — Run, isolate, and act. Pipe commands into disposable containers and act on the result.
+dockpipe — Run any CLI command in a disposable container; project at /work.
 
 Usage:
   dockpipe [options] -- <command> [args...]

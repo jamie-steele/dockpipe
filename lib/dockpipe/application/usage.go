@@ -3,7 +3,7 @@ package application
 import "fmt"
 
 func printUsage() {
-	fmt.Print(`dockpipe — Run, isolate, and act (Go). Pipe commands into disposable containers.
+	fmt.Print(`dockpipe — Run any CLI command in a disposable container; project at /work.
 
 Usage:
   dockpipe [options] -- <command> [args...]

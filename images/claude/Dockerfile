@@ -13,10 +13,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN npm install -g @anthropic-ai/claude-code
 
-RUN git config --global user.email "dockpipe@local" \
-    && git config --global user.name "Dockpipe" \
-    && git config --global init.defaultBranch main \
-    && git config --global --add safe.directory '*'
+# --system so non-root USER below still sees identity (global would be under /root only).
+RUN git config --system user.email "dockpipe@local" \
+    && git config --system user.name "Dockpipe" \
+    && git config --system init.defaultBranch main \
+    && git config --system --add safe.directory '*'
 
 RUN mkdir -p /work /claude-home && chmod 777 /work /claude-home
 
@@ -25,4 +26,7 @@ COPY lib/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 WORKDIR /work
+# Non-root: Windows omits -u (Getuid -1); Linux still passes -u host:host which overrides USER.
+# Avoids CLIs that refuse --dangerously-skip-permissions as root.
+USER node
 ENTRYPOINT ["/entrypoint.sh"]

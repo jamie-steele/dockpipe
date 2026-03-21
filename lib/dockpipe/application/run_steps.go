@@ -91,6 +91,7 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 		return err
 	}
 	if buildDir != "" && buildCtx != "" {
+		fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
 		if err := dockerBuildFn(runOpts.Image, buildDir, buildCtx); err != nil {
 			return err
 		}
@@ -205,6 +206,7 @@ func validateParallelNoHostCommit(o *runStepsOpts, from, to int) error {
 
 func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, baseDocker map[string]string) error {
 	done := make(map[string]struct{})
+	buildAnnounced := false
 	for idx := from; idx < to; idx++ {
 		step := o.wf.Steps[idx]
 		if step.SkipContainer {
@@ -230,6 +232,10 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 			continue
 		}
 		done[key] = struct{}{}
+		if !buildAnnounced {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
+			buildAnnounced = true
+		}
 		if err := dockerBuildFn(runOpts.Image, buildDir, buildCtx); err != nil {
 			return err
 		}
@@ -266,7 +272,7 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 		if _, err := osStatFn(p); err != nil {
 			return fmt.Errorf("pre-script not found: %s", p)
 		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] [parallel %d] pre-script: %s\n", idx+1, p)
+		fmt.Fprintf(os.Stderr, "[dockpipe] [parallel %d] Host setup\n", idx+1)
 		em, err := sourceHostScriptFn(p, envSlice)
 		if err != nil {
 			return err
@@ -322,8 +328,9 @@ func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {
 		if _, err := osStatFn(p); err != nil {
 			return fmt.Errorf("pre-script not found: %s", p)
 		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] Running pre-script: %s\n", p)
+		stop := infrastructure.StartLineSpinner(os.Stderr, hostSpinnerLabel(p))
 		em, err := sourceHostScriptFn(p, o.envSlice)
+		stop()
 		if err != nil {
 			return err
 		}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Integration test: install the .deb in a container and run dockpipe --help.
-# Validates that DOCKPIPE_REPO_ROOT resolves to /usr/lib/dockpipe when run from /usr/bin
+# Validates dpkg install + dockpipe --help (bundled assets are embedded in the binary).
 # (fix for issue #1). Requires Docker and a built .deb; fails if either is missing.
 set -euo pipefail
 

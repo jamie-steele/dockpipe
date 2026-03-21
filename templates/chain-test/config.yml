@@ -1,14 +1,6 @@
-# Example multi-step workflow: step 1 writes .dockpipe/outputs.env; step 2 sees those vars.
-# Run from any directory (workdir defaults to cwd):
-#   dockpipe --workflow chain-test
-#
-# Optional per-step `outputs:` sets a path under the workdir (default .dockpipe/outputs.env).
-# `--var KEY=VAL` is never overwritten by step outputs.
-
+# Multi-step demo: step 1 writes env; step 2 reads it (see docs/workflow-yaml.md)
 name: chain-test
-description: Two alpine steps; outputs chain into the next step's environment.
-
-isolate: alpine
+description: Two alpine steps; outputs chain to the next step.
 
 steps:
   - isolate: alpine

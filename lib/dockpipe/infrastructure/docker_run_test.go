@@ -148,8 +148,10 @@ func TestRunContainerDetachBuildsDockerRun(t *testing.T) {
 	if last.name != "docker" || !strings.Contains(joined, "-d --rm") || !strings.Contains(joined, "img echo ok") {
 		t.Fatalf("unexpected detach docker args: %s %s", last.name, joined)
 	}
-	if runtime.GOOS == "windows" && strings.Contains(joined, "-u ") {
-		t.Fatalf("expected no -u on Windows detach run, got %s", joined)
+	if runtime.GOOS == "windows" {
+		if strings.Contains(joined, "-u ") {
+			t.Fatalf("expected no -u on Windows detach run by default (set DOCKPIPE_WINDOWS_CONTAINER_USER to opt in), got %s", joined)
+		}
 	}
 }
 

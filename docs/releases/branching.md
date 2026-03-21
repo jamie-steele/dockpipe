@@ -57,14 +57,15 @@ Turn off **“allow administrators to bypass”** if you want **your own** chang
 
 ---
 
-## One PR → one CI workflow run (two jobs)
+## One PR → one CI workflow run (three jobs)
 
-**`.github/workflows/ci.yml`** is a single workflow named **CI**. Each trigger creates **one** run in the Actions list. Inside it, two **jobs** run in parallel:
+**`.github/workflows/ci.yml`** is a single workflow named **CI**. Each trigger creates **one** run in the Actions list. Inside it, three **jobs** run in parallel:
 
-- **`test`** — **`govulncheck`**, **`gosec`**, **`go test`**, **`make`**, **`.deb`**, shell + integration tests, and (on PRs to **`master`**) the VERSION / release-notes gate.
+- **`test`** (Ubuntu) — **`govulncheck`**, **`gosec`**, **`go test`**, **`make`**, **`.deb`**, shell + integration tests, and (on PRs to **`master`**) the VERSION / release-notes gate.
+- **`test-windows`** (Windows) — **`go test ./...`** and **`test_clone_worktree_include.sh`** (bash + git; host pre-script–like coverage). Does **not** run Docker integration tests or full **`tests/run_tests.sh`** (those stay on Linux).
 - **`codeql`** — **CodeQL** (Go, **`security-extended`** via **`.github/codeql/codeql-config.yml`**), uploads to **Security → Code scanning** when allowed.
 
-On the **weekly schedule**, only **`codeql`** runs ( **`test`** is skipped).
+On the **weekly schedule**, only **`codeql`** runs (**`test`** and **`test-windows`** are skipped).
 
 ---
 
@@ -72,10 +73,10 @@ On the **weekly schedule**, only **`codeql`** runs ( **`test`** is skipped).
 
 | Event | Workflow | What it does |
 |--------|-----------|----------------|
-| **PR** → **`staging`** | **`ci.yml`** | Jobs **`test`** + **`codeql`** — **no** VERSION / release-notes gate on **`test`** |
+| **PR** → **`staging`** | **`ci.yml`** | Jobs **`test`** + **`test-windows`** + **`codeql`** — **no** VERSION / release-notes gate on **`test`** |
 | **PR** → **`master`** | **`ci.yml`** | Same + **release notes + VERSION bump** on **`test`** |
-| **Push** **`staging`** / **`master`** | **`ci.yml`** | **`test`** + **`codeql`** (no VERSION gate on push) |
-| **workflow_dispatch** | **`ci.yml`** | **`test`** + **`codeql`** (no VERSION gate) |
+| **Push** **`staging`** / **`master`** | **`ci.yml`** | **`test`** + **`test-windows`** + **`codeql`** (no VERSION gate on push) |
+| **workflow_dispatch** | **`ci.yml`** | **`test`** + **`test-windows`** + **`codeql`** (no VERSION gate) |
 | **Schedule** (weekly) | **`ci.yml`** | **`codeql`** only |
 | **Push** **`master`** (merge) | **`release.yml`** | Full build + **GitHub Release** `v$(cat VERSION)`; optional **dev.to** ([devto.md](devto.md)) |
 | **workflow_dispatch** on Release | **`release.yml`** | Same pipeline; **dry_run** optional |

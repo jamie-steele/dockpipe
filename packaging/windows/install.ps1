@@ -6,7 +6,8 @@
 .DESCRIPTION
   - Fetches the latest GitHub release (or a specific -Version).
   - Verifies SHA256 using SHA256SUMS.txt from the same release when available.
-  - Installs via MSI (quiet, machine-wide, adds Program Files\dockpipe to PATH) or extracts zip to %LOCALAPPDATA%\Programs\dockpipe.
+  - Installs dockpipe.exe only (bundled templates/images unpack to the user cache on first run — no extra folders beside the exe).
+  - MSI: per-user WiX install to %LOCALAPPDATA%\dockpipe, PATH updated. Zip fallback: %LOCALAPPDATA%\Programs\dockpipe.
 
   After install, run: dockpipe windows setup
 

@@ -13,10 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN npm install -g @openai/codex
 
-RUN git config --global user.email "dockpipe@local" \
-    && git config --global user.name "Dockpipe" \
-    && git config --global init.defaultBranch main \
-    && git config --global --add safe.directory '*'
+RUN git config --system user.email "dockpipe@local" \
+    && git config --system user.name "Dockpipe" \
+    && git config --system init.defaultBranch main \
+    && git config --system --add safe.directory '*'
 
 RUN mkdir -p /work && chmod 777 /work
 
@@ -24,4 +24,5 @@ COPY lib/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 WORKDIR /work
+USER node
 ENTRYPOINT ["/entrypoint.sh"]

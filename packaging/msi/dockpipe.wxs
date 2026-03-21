@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- WiX 3.x - build on Windows: see build.ps1 -->
+<!-- WiX 3.x - build on Windows: see build.ps1. Ships dockpipe.exe only; bundled assets are embedded. -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product Id="*"
            Name="dockpipe"

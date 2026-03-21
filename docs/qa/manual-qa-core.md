@@ -20,7 +20,7 @@
 
 ## 1. Debian package (`.deb`)
 
-Validates layout under **`/usr/lib/dockpipe`**, symlink **`/usr/bin/dockpipe`**, and **upgrade** behavior.
+Validates **`/usr/bin/dockpipe`** is the **Go binary** (no `/usr/lib/dockpipe` layout) and **upgrade** behavior. Bundled templates/scripts are **embedded** (unpacked to the user cache on first run).
 
 ### 1.1 Fresh install
 

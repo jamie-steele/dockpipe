@@ -16,7 +16,7 @@ Additional sources (each only sets **unset** variables, except `--var`):
 
 1. `vars:` defaults in `config.yml`
 2. `templates/<name>/.env`
-3. `.env` at `DOCKPIPE_REPO_ROOT` (your workspace / install tree)
+3. `.env` at the bundled materialized root (default: user cache) or at **`DOCKPIPE_REPO_ROOT`** if you set it
 4. Each `--env-file <path>` (in order)
 5. Path in **`DOCKPIPE_ENV_FILE`** if set
 6. **`--var KEY=VAL`** (always exported; overrides yml and `.env`)
@@ -68,6 +68,18 @@ All options must appear **before** a standalone **`--`**. The command and its ar
 ### Windows host: native vs WSL bridge
 
 **Default:** **`dockpipe.exe`** runs on **Windows**. **Docker Desktop** supplies **`docker`**; **`bash`** and **`git`** must be on **`PATH`** separately (e.g. **Git for Windows**) — Docker Desktop does not ship them.
+
+**Container user:** **Linux/macOS** pass **`-u`** with the host **uid:gid** (overrides **`USER`** in the image). If you run **`dockpipe` as root** (e.g. **`sudo`**), that maps to **`-u 0:0`**, which breaks CLIs that refuse flags like **`--dangerously-skip-permissions`** as root. For **claude / codex / agent-dev** images, dockpipe defaults to **`-u node`** when the host uid is **0** (unless **`DOCKPIPE_FORCE_ROOT_CONTAINER=1`**). Override with **`DOCKPIPE_CONTAINER_USER`**.
+
+**Windows:** host uid is unavailable; dockpipe **does not** pass **`-u`** unless **`DOCKPIPE_WINDOWS_CONTAINER_USER`** is set (image **`USER`** applies — e.g. **`node`** in **claude/codex** images). Defaulting **`-u node`** from the CLI caused bind-mount stalls for some Docker Desktop setups, so use an **explicit** value when needed: **`DOCKPIPE_WINDOWS_CONTAINER_USER=node`** for Claude Code with **`--dangerously-skip-permissions`**, or **`0`** for root.
+
+**Claude Code `--dangerously-skip-permissions`:** The CLI blocks that flag when it thinks you’re root/sudo. Two mechanisms in **`lib/entrypoint.sh`:** (1) **`IS_SANDBOX=1`** is set by default (Claude Code’s supported way to treat the run as sandboxed — see **[anthropics/claude-code#9184](https://github.com/anthropics/claude-code/issues/9184)**). Already set **`IS_SANDBOX`** via **`-e`**? Left as-is. Opt out: **`DOCKPIPE_NO_SANDBOX_ENV=1`**. (2) **root → `node`** via **`runuser`**/**`setpriv`** when the container still starts as uid 0. Opt out: **`DOCKPIPE_SKIP_DROP_TO_NODE=1`**. **`DOCKPIPE_DEBUG=1`** prints **`id`**. Rebuild the image after **`entrypoint.sh`** changes (`docker rmi dockpipe-claude:…`). **`DOCKPIPE_WINDOWS_CONTAINER_USER`** remains available if you want an explicit **`-u`** from the host.
+
+**Design: loose defaults in isolation.** Dockpipe targets **disposable containers**; defaults skew **automation-friendly** (e.g. **`IS_SANDBOX=1`**, host **uid:gid** on Unix). People who want stricter behavior can opt out with the env vars above. **Dockpipe does not append** **`--dangerously-skip-permissions`** to your command — add it after **`--`** if you want that mode. **Security** is mostly **what you mount** (only **`/work`** etc.), **secrets** in env/volumes, and **network** — not “CLI tightness” alone.
+
+**Windows + host `git` / Docker mounts:** Bash scripts may export **`DOCKPIPE_WORKDIR`** as **`/c/Users/...`** (Git Bash). Native **`git.exe`** and **`docker -v`** need normal Windows paths; dockpipe converts MSYS-style paths before **`git -C`**, **`docker run` bind mounts**, **`--data-dir`**, and **`--mount`**. If **`/work`** looks empty in the container, rebuild with a current dockpipe and confirm the printed **Mount /work ← …** path exists on the host.
+
+**Code edits vs host user:** On **Linux/macOS**, the container usually runs as **your host uid:gid**, so files written under **`/work`** are owned by **you** on the host (unless you override **`-u`**). **Claude**’s permission model (prompts vs **`--dangerously-skip-permissions`**) is **application-level**; it does not replace **POSIX** ownership — both apply: the process uid writes files, and Claude may still ask or gate tools unless you pass flags it documents.
 
 **WSL bridge (opt-in):** set **`DOCKPIPE_USE_WSL_BRIDGE=1`** so every command **except** `dockpipe windows …` runs inside WSL via **`wsl.exe -d <distro>`**. The current Windows working directory is mapped with **`wslpath`**.
 

@@ -6,14 +6,13 @@ This document describes the core primitive, data flow, and extension points.
 
 ## Primitive
 
-dockpipe implements a single flow:
+Mental model (same as **[onboarding.md](onboarding.md)**): **run** (host prep) → **isolate** (container) → **act** (host follow-up). Under the hood:
 
-1. **Run** (host) — Optional scripts on the host before the container (`--run`). E.g. clone-worktree.
-2. **Isolate** — Start a container from a given image (default or from `--isolate`: template name or image).
-3. **Command** — Execute the user's command inside the container. Workdir is mounted at `/work`.
-4. **Act** — If `--act <script>` was given, run that script **after** the command. **Usually** the entrypoint runs it **inside** the container (`DOCKPIPE_ACTION`). **Exception:** the bundled **`scripts/commit-worktree.sh`** is detected and run **on the host** after the container exits (your normal `git` against the mounted worktree), so the container does not set `DOCKPIPE_ACTION` in that case. Container exit code is still the main command's exit code.
+1. **Run** (host) — Optional scripts before the container (`--run`), e.g. clone-worktree.
+2. **Isolate** — Container from image or template (`--isolate`); your argv after `--` runs **inside** it with the project at **`/work`**.
+3. **Act** — Optional script after the main command. **Usually** the entrypoint runs it **inside** the container (`DOCKPIPE_ACTION`). **Exception:** the bundled **`scripts/commit-worktree.sh`** is detected and run **on the host** after the container exits (normal `git` against the mounted worktree); the container does not set `DOCKPIPE_ACTION` in that case. Container exit code is still the main command's exit code.
 
-No built-in commit, clone, or AI logic — those are actions or scripts you plug in.
+No built-in commit, clone, or AI logic — those are scripts you plug in.
 
 **Lifecycle:** By default the container runs **attached** (stdin/stdout connected). Closing the terminal or disconnecting the client sends SIGTERM; the entrypoint stops the command and the container exits (`--rm` removes it). Use **`-d` / `--detach`** to run in the background (no attach); the container stays up until the command inside exits.
 
@@ -25,6 +24,7 @@ No built-in commit, clone, or AI logic — those are actions or scripts you plug
 |-----------|------|
 | `bin/dockpipe` | Launcher: runs **`bin/dockpipe.bin`** if present (`make`), otherwise **`go run ./cmd/dockpipe`**. |
 | `cmd/dockpipe`, `lib/dockpipe/application`, `lib/dockpipe/domain`, `lib/dockpipe/infrastructure` | **Go** CLI (DDD-ish): application layer (flags + orchestration + `windows setup/doctor`), domain (workflow/env/resolver semantics), infrastructure (FS, docker, bash, git). **`config.yml`** / **`steps:`** (YAML v3), resolver `KEY=value` files, template→image map, bash `source` for pre-scripts, **`docker run`** / build, host **git** commit. |
+| **Embedded bundle** (`embed.go`) | Stock **`templates/`**, **`scripts/`**, **`images/`**, **`lib/entrypoint.sh`**, **`VERSION`** compiled into the binary; materialized to the **user cache** at runtime (override with **`DOCKPIPE_REPO_ROOT`** for development). |
 | `lib/entrypoint.sh` | Container entrypoint: run command, then `DOCKPIPE_ACTION` if set (skipped when act is **host** commit — see bundled `commit-worktree`). |
 | `images/*/Dockerfile` | Shared images; each copies `lib/entrypoint.sh` as `ENTRYPOINT`. |
 | `scripts/*.sh` | Run/act scripts; invoked via `--run` / `--act` or workflow (Go sources them with bash). |

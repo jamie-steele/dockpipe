@@ -141,3 +141,17 @@ func TestParseWorkflowYAMLGroupValidation(t *testing.T) {
 		t.Fatal("expected error for group + extra keys")
 	}
 }
+
+func TestParseWorkflowYAMLDescription(t *testing.T) {
+	y := `name: t
+description: Do the task
+isolate: alpine
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Description != "Do the task" {
+		t.Fatalf("description: %q", w.Description)
+	}
+}

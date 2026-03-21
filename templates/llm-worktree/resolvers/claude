@@ -1,5 +1,4 @@
-# Resolver: Claude Code. Source this to set template and metadata for the CLI.
-# Pre-script and action come from workflow config (config.yml) when using --workflow; here for --resolver-only use.
+# Resolver: Claude Code (Anthropic). Image = dockpipe-claude (see images/claude).
 DOCKPIPE_RESOLVER_TEMPLATE=claude
 DOCKPIPE_RESOLVER_CMD=claude
 DOCKPIPE_RESOLVER_ENV=ANTHROPIC_API_KEY

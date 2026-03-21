@@ -10,21 +10,26 @@ import (
 // CommitOnHost runs git add/commit in workdir (like commit-worktree on host).
 // If bundleOut is set, bundleAll selects git's --all; otherwise only refs/heads/<current> (or HEAD if detached).
 func CommitOnHost(workdir, message, bundleOut string, bundleAll bool) error {
-	check := exec.Command("git", "-C", workdir, "rev-parse", "--is-inside-work-tree")
+	wd, err := gitDir(workdir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "[dockpipe] Not a git repo; skipping commit.")
+		return nil
+	}
+	check := exec.Command("git", "-C", wd, "rev-parse", "--is-inside-work-tree")
 	if out, err := check.CombinedOutput(); err != nil || !strings.Contains(string(out), "true") {
 		fmt.Fprintln(os.Stderr, "[dockpipe] Not a git repo; skipping commit.")
 		return nil
 	}
-	st := exec.Command("git", "-C", workdir, "status", "--porcelain")
+	st := exec.Command("git", "-C", wd, "status", "--porcelain")
 	porcelain, _ := st.Output()
 	if len(strings.TrimSpace(string(porcelain))) == 0 {
 		fmt.Fprintln(os.Stderr, "[dockpipe] No changes to commit.")
 		return nil
 	}
-	br := exec.Command("git", "-C", workdir, "branch", "--show-current")
+	br := exec.Command("git", "-C", wd, "branch", "--show-current")
 	cur, _ := br.Output()
 	fmt.Fprintf(os.Stderr, "[dockpipe] Committing on branch: %s\n", strings.TrimSpace(string(cur)))
-	add := exec.Command("git", "-C", workdir, "add", "-A")
+	add := exec.Command("git", "-C", wd, "add", "-A")
 	if out, err := add.CombinedOutput(); err != nil {
 		return fmt.Errorf("git add: %w\n%s", err, out)
 	}
@@ -32,7 +37,7 @@ func CommitOnHost(workdir, message, bundleOut string, bundleAll bool) error {
 	if msg == "" {
 		msg = "dockpipe: automated commit"
 	}
-	cmt := exec.Command("git", "-C", workdir, "commit", "-m", msg)
+	cmt := exec.Command("git", "-C", wd, "commit", "-m", msg)
 	cmt.Stdout = os.Stdout
 	cmt.Stderr = os.Stderr
 	if err := cmt.Run(); err != nil {
@@ -40,7 +45,7 @@ func CommitOnHost(workdir, message, bundleOut string, bundleAll bool) error {
 	}
 	if bundleOut != "" {
 		branch := strings.TrimSpace(string(cur))
-		gitArgs := []string{"-C", workdir, "bundle", "create", bundleOut}
+		gitArgs := []string{"-C", wd, "bundle", "create", bundleOut}
 		if bundleAll {
 			gitArgs = append(gitArgs, "--all")
 		} else if branch != "" {

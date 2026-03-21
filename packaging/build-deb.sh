@@ -22,27 +22,14 @@ esac
 GOARCH="${DEB_ARCH}"
 PACKAGE="dockpipe_${VERSION}_${DEB_ARCH}"
 BUILD_DIR="${REPO_ROOT}/packaging/build/${PACKAGE}"
-DEST="${BUILD_DIR}/usr/lib/dockpipe"
 
-mkdir -p "${DEST}/bin"
-
-# Core layout (same as repo so DOCKPIPE_REPO_ROOT works)
-cp -r lib scripts images templates "${DEST}/"
-echo "${VERSION}" > "${DEST}/version"
-chmod 755 "${DEST}/lib/"*.sh
-chmod 755 "${DEST}/scripts/"*.sh 2>/dev/null || true
-find "${DEST}/templates" -name "*.sh" -exec chmod 755 {} \; 2>/dev/null || true
-
-# Go binary (linux/${GOARCH})
+# Single binary in /usr/bin — templates/scripts/images are embedded (see embed.go).
+mkdir -p "${BUILD_DIR}/usr/bin"
 (
   cd "${REPO_ROOT}"
-  GOOS=linux GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.Version=${VERSION}" -o "${DEST}/bin/dockpipe" ./cmd/dockpipe
+  GOOS=linux GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.Version=${VERSION}" -o "${BUILD_DIR}/usr/bin/dockpipe" ./cmd/dockpipe
 )
-chmod 755 "${DEST}/bin/dockpipe"
-
-# Symlink from PATH
-mkdir -p "${BUILD_DIR}/usr/bin"
-ln -s ../lib/dockpipe/bin/dockpipe "${BUILD_DIR}/usr/bin/dockpipe"
+chmod 755 "${BUILD_DIR}/usr/bin/dockpipe"
 
 # Doc
 mkdir -p "${BUILD_DIR}/usr/share/doc/dockpipe"

@@ -2,6 +2,8 @@
 
 CI runs **`go test ./...`**; it does **not** replace installs on real machines. Use these checklists **before a release** or after changing packaging, Windows native/bridge behavior, or Docker-facing behavior.
 
+**New users / learning path:** **[../onboarding.md](../onboarding.md)**.
+
 | Doc | Use when |
 |-----|----------|
 | **[manual-qa-core.md](manual-qa-core.md)** | **Linux** (native or **WSL**): `.deb` install/upgrade, Linux tarballs, core CLI smoke. |

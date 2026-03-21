@@ -52,8 +52,14 @@ func TestFromResolverMap(t *testing.T) {
 		"DOCKPIPE_RESOLVER_TEMPLATE":   "codex",
 		"DOCKPIPE_RESOLVER_PRE_SCRIPT": "scripts/pre.sh",
 		"DOCKPIPE_RESOLVER_ACTION":     "actions/do.sh",
+		"DOCKPIPE_RESOLVER_CMD":        "codex",
+		"DOCKPIPE_RESOLVER_ENV":        "OPENAI_API_KEY",
+		"DOCKPIPE_RESOLVER_EXPERIMENTAL": "1",
 	})
 	if r.Template != "codex" || r.PreScript != "scripts/pre.sh" || r.Action != "actions/do.sh" {
 		t.Fatalf("unexpected resolver assignments: %#v", r)
+	}
+	if r.Cmd != "codex" || r.EnvHint != "OPENAI_API_KEY" || !r.Experimental {
+		t.Fatalf("unexpected extended fields: %#v", r)
 	}
 }

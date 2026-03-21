@@ -1,25 +1,17 @@
-# Workflow template config. Loaded when you use --workflow llm-worktree.
-# Override with --run, --isolate, --act, --var, --env-file.
-
+# Resolver-driven: image comes from resolvers/<name> (DOCKPIPE_RESOLVER_TEMPLATE), not from this file.
 name: llm-worktree
-description: Run AI in a worktree; commit on host.
+description: Run an AI CLI in a worktree; commit on host. Backend = --resolver (see resolvers/).
 
-# run → isolate → act (paths relative to repo root when under scripts/)
-# If you omit --repo, dockpipe sets DOCKPIPE_REPO_URL from `git remote get-url origin`
-# in the current directory (or --workdir), so the worktree step is not skipped.
-# When origin matches, the worktree is created from your local HEAD (and stashes dirty files
-# into the new worktree). Set DOCKPIPE_STASH_UNCOMMITTED=0 to skip stashing.
 run: scripts/clone-worktree.sh
-isolate: claude
 act: scripts/commit-worktree.sh
 
-# Resolvers in resolvers/ (claude, codex).
+# Default when --resolver is omitted (prefer this over reusing isolate: for the same purpose).
+default_resolver: claude
+
 resolvers:
   - claude
   - codex
+  - cursor
 
-# Variables: exported before run scripts if not already set in the environment.
-# Precedence: shell env (unchanged) < vars below < templates/llm-worktree/.env < repo .env < --env-file < $DOCKPIPE_ENV_FILE < --var
 vars:
-  # Prefix for auto-generated branch when --repo without --branch: branch is PREFIX/adj-noun-adj-noun (random word pairs; see domain/branchslug.go).
   DOCKPIPE_BRANCH_PREFIX: ""

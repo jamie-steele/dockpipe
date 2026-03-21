@@ -3,6 +3,8 @@ packaging/build/
 *.deb
 bin/dockpipe.bin
 bin/dockpipe.exe
+# ad-hoc go build -o in repo root (prefer: make build-windows → bin/dockpipe.exe)
+/dockpipe.exe
 msi-dist/
 *.wixobj
 *.wixpdb

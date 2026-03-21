@@ -2,22 +2,36 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"runtime"
+	"strings"
 
 	"dockpipe/lib/dockpipe/application"
 )
 
 // Version is set at link time: -X main.Version=X.Y.Z (see Makefile, packaging/build-deb.sh, CI).
+// When left as "dev", versionString() uses the embedded copy of repo-root VERSION (see cmd/dockpipe/VERSION).
 var Version = "dev"
+
+//go:embed VERSION
+var versionFile string
+
+func versionString() string {
+	v := strings.TrimSpace(Version)
+	if v != "" && v != "dev" {
+		return v
+	}
+	return strings.TrimSpace(versionFile)
+}
 
 func main() {
 	argv := os.Args[1:]
 	if len(argv) == 1 {
 		switch argv[0] {
 		case "--version", "-v", "-V":
-			fmt.Println(Version)
+			fmt.Println(versionString())
 			return
 		}
 	}

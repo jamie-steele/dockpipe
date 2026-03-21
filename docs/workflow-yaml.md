@@ -2,7 +2,16 @@
 
 Templates use **`templates/<name>/config.yml`**. Load with **`dockpipe --workflow <name>`** (plus your command after `--`).
 
-This doc is the **user-facing contract** for workflow config. Implementation notes live in [`lib/dockpipe/README.md`](../lib/dockpipe/README.md).
+**Terminology (same as the CLI):**
+
+| Word | Meaning |
+|------|---------|
+| **run** | Host scripts *before* the container (paths under `run:`). |
+| **isolate** | Container image (and your command after `--`). |
+| **act** | Follow-up after the main command (usually a **host** script; see **[architecture.md](architecture.md)** for in-container `DOCKPIPE_ACTION`). |
+| **workflow** | This file: a named preset selected with **`--workflow <name>`**. |
+
+**Learning path:** [onboarding.md](onboarding.md) · Implementation notes: [`lib/dockpipe/README.md`](../lib/dockpipe/README.md).
 
 ---
 
@@ -21,12 +30,14 @@ Variable precedence for workflows is documented in **[CLI reference](cli-referen
 
 | Key | Purpose |
 |-----|---------|
-| `name` | Optional label. |
+| `name` | Optional display title for stderr (defaults to the template folder name, e.g. `llm-worktree`). |
+| `description` | Optional one-line task summary printed after `name` (e.g. what this workflow is for). |
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
 | `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). |
-| `isolate` | Template name or image (when not using per-step `isolate`). |
+| `isolate` | Template name or image for the container. For **resolver-driven** workflows (e.g. **llm-worktree**), prefer **`default_resolver`** to pick **`resolvers/<name>`**; **`isolate`** still works as a **legacy** default resolver name when **`default_resolver`** is empty. |
 | `act` / `action` | Action script after the container command (when not using per-step act). |
-| `resolver` / `default_resolver` | Default resolver name for template `resolvers/`. |
+| `resolver` | Default resolver name (**multi-step** workflows). |
+| `default_resolver` | Default resolver name (**single-flow** workflows); takes precedence over **`isolate`** for selecting **`resolvers/<name>`**. |
 | `steps` | List of **steps** (multi-step mode). |
 
 ---

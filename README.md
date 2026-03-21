@@ -1,18 +1,20 @@
 # dockpipe
 
-```
-    ██████╗  ██████╗ ██████╗██╗  ██╗██████╗ ██╗██████╗ ███████╗
-    ██╔══██╗██╔═══██╗██╔═══╝██║ ██╔╝██╔══██╗██║██╔══██╗██╔════╝
-    ██║  ██║██║   ██║██║    █████╔╝ ██████╔╝██║██████╔╝█████╗
-    ██║  ██║██║   ██║██║    ██╔═██╗ ██╔═══╝ ██║██╔═══╝ ██╔══╝
-    ██████╔╝╚██████╔╝██████╗██║  ██╗██║     ██║██║     ███████╗
-    ╚═════╝  ╚═════╝ ╚═════╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝     ╚══════╝
-                      Run  →  Isolate  →  Act
+Run the CLI commands you already use in a disposable container. Your project is at **`/work`**; when the process exits, the container is gone.
+
+Dockpipe runs any CLI command in a disposable container with your project at **`/work`**. It handles the usual Docker wiring (mount, workdir, user) so you don’t have to, and removes the container when the command finishes. Use it when you want a clean, throwaway environment for tests, linters, or other tools—without leftover containers on your machine.
+
+## Try it
+
+```bash
+dockpipe -- pwd
+dockpipe -- ls
+dockpipe -- echo ok
 ```
 
-**Run any command in a disposable container. Optionally run an action on the result.**
+You need **Docker** and **bash** on the host. See **[Install](#install)**.
 
-One primitive: run → isolate → act. Use it for isolated tests, one-off scripts, builds, or piping—no workflow engine. AI (Claude, Codex) and git/worktree flows are optional examples built on the same primitive; the core is command-agnostic.
+No manual cleanup—you keep using the same commands (`make`, tests, linters—whatever you pass after `--`).
 
 ---
 
@@ -22,55 +24,21 @@ One primitive: run → isolate → act. Use it for isolated tests, one-off scrip
 
 ---
 
-## Try it (15 seconds)
+**Under the hood:** Dockpipe follows a simple flow—**run** (optional prep on your machine), **isolate** (your command in the container), **act** (optional script on your machine after the container exits). Most of the time you only use the middle step: **`dockpipe -- <command>`**.
 
-**First run:**
-
-```bash
-dockpipe -- make test
-```
-
-Runs `make test` in a clean container. Your current directory is at `/work`. When it exits, the container is removed. Closing the terminal also tears down the container (attached run). Use `-d` to run in the background. Same for `npm test`, `cargo test`, or any command.
-
----
-
-## What you can do
-
-Same primitive for everything. Examples:
-
-| Use case | Command |
-|----------|--------|
-| **Run tests in isolation** | `dockpipe -- make test` |
-| **Run a script** | `dockpipe -- ./scripts/generate-docs.sh` |
-| **Pipe stdin** | `echo "input" \| dockpipe -- cmd` |
-| **Run then act** (e.g. commit) | `dockpipe --act scripts/commit-worktree.sh -- ./my-script.sh` |
-| **AI in worktree** (optional) | `dockpipe --workflow llm-worktree --repo https://github.com/you/repo.git -- claude -p "Fix the bug"` |
-
-You pick the image, the command, and the action. **Init a workspace:** `dockpipe init [<dest>]` creates **scripts/**, **images/**, **templates/** (templates folder has a README only). `dockpipe init my-template [<dest>]` adds a new template at **templates/my-template/** and copies sample scripts/images so it can point at them. Use `--from <url>` to clone a repo with that layout. Scaffold: `dockpipe action init my-action.sh`, `dockpipe template init my-workflow --from llm-worktree`. **YAML demo:** `templates/workflow-demo/` (async group + outputs + join) — `dockpipe --workflow workflow-demo` from repo root; see **[templates/workflow-demo/README.md](templates/workflow-demo/README.md)**.
-
----
-
-## How it works
-
-1. **Spawn** — Start a container (default: small dev image, built if needed).
-2. **Run** — Execute the command you pass after `--`.
-3. **Act** — Optionally run a script after the command (e.g. commit, notify, export a patch).
-
-No separate orchestrator service—just one primitive you compose. Optional **multi-step** flows live in **`config.yml`** (`steps:`), including parallel **async** groups and **`outputs:`** handoff; see **[docs/workflow-yaml.md](docs/workflow-yaml.md)**. Tests, scripts, builds, or AI tools all use the same flow.
-
-**Data:** Default volume `dockpipe-data` at `/dockpipe-data` (HOME). `--data-dir /path` or `--no-data`. `--reinit` to wipe the volume.
+Optional **named workflows** in YAML (`--workflow`) are there when you want the same setup every time—copy-paste isn’t required to get started. **Learning path:** **[docs/onboarding.md](docs/onboarding.md)** · **[docs/workflow-yaml.md](docs/workflow-yaml.md)** · **[templates/llm-worktree/README.md](templates/llm-worktree/README.md)**.
 
 ---
 
 ## Why not just `docker run`?
 
-Same isolation, less boilerplate. You’d otherwise write:
+Less typing for the common case:
 
 ```bash
 docker run --rm -v "$(pwd):/work" -w /work -u "$(id -u):$(id -g)" some-image make test
 ```
 
-dockpipe does that + action phase, templates, pipe-friendly CLI. Your UID/GID so files are yours.
+dockpipe does the wiring, optional **act** phase, and a pipe-friendly CLI. On Linux/macOS, file ownership matches your user.
 
 ---
 
@@ -84,35 +52,13 @@ dockpipe windows setup [--distro <name>] [--install-command <cmd>] [--non-intera
 dockpipe windows doctor
 ```
 
-| Option | Description |
-|--------|-------------|
-| `--workflow <name>` | Load `templates/<name>/config.yml` (run, isolate, act, optional **vars:**). |
-| `--run <path>` | **Run:** script(s) on host before container. Can be repeated. |
-| `--isolate <name>` | **Isolate:** image or template (`base-dev`, `dev`, `agent-dev`, `claude`, `codex`). Builds if template. |
-| `--act <path>` | **Act:** script after command (e.g. commit-worktree). |
-| `--resolver <name>` | `claude` or `codex`; use with `--repo`/`--branch`. Add more in the template’s `resolvers/` (e.g. `templates/llm-worktree/resolvers/`). |
-| `--repo <url>` | With `--branch`: worktree on host, commit on host. |
-| `--branch <name>` | Work branch for `--repo` (optional). Omit for a new branch each run; set to use or resume a specific branch. |
-| `--work-path <path>` | Subfolder inside repo to open in container (full repo at `/work`; command cwd = `/work/<path>`). |
-| `--work-branch <name>` | When on `master` and committing on host, create/use this branch (default: `dockpipe/<random-adj-noun-adj-noun>` worktree slug). |
-| `--bundle-out <path>` | After commit-on-host, write a git bundle (default: **committed branch only**; set **`DOCKPIPE_BUNDLE_ALL=1`** for all refs). See [docs/wsl-windows.md](docs/wsl-windows.md). |
-| `--workdir <path>` | Host path mounted at `/work` (default: current dir). |
-| `--data-vol <name>` | Named volume for persistent data (default: `dockpipe-data`). Same volume each run = state persists. |
-| `--data-dir <path>` | Bind mount host path for persistent data (e.g. `$HOME/.dockpipe`). For `--repo`/`--branch`, defaults to `~/.dockpipe` if not set. |
-| `--no-data` | Do not mount the data volume (minimal run). |
-| `--reinit` | Remove the named data volume before running (fresh volume). Prompts to confirm; use `-f` to skip. |
-| `-f`, `--force` | With `--reinit`, skip confirmation (warning still shown). |
-| `--mount`, `--env` | Extra volumes or env vars (into container). |
-| `--env-file <path>` | With `--workflow`: merge `KEY=VAL` from file if unset. Repeatable. |
-| `--var KEY=VAL` | With `--workflow`: set workflow var (overrides yml / `.env`). Repeatable. |
-| `-d`, `--detach` | Run container in background; don't attach. Container stays up until command exits. |
-| `--help` | Help. |
+**All flags** (`--workflow`, `--isolate`, `--act`, `--repo`, `--data-dir`, …): **[docs/cli-reference.md](docs/cli-reference.md)**
 
 ---
 
 ## Examples
 
-**Single run (isolation, tests, scripts):**
+**Single run:**
 
 ```bash
 dockpipe -- ls -la
@@ -120,47 +66,51 @@ dockpipe -- bash -c "npm test"
 dockpipe --isolate dev -- make test
 ```
 
-**Run a script, then run an action** (e.g. commit):
+**Run a script, then a host script after the container exits:**
 
 ```bash
 dockpipe --act scripts/commit-worktree.sh -- ./my-script.sh
 ```
 
-**Chaining** — Multiple steps, same workdir; each step in a fresh container. See [docs/chaining.md](docs/chaining.md):
+**Chaining** — same workdir, fresh container each time; see [docs/chaining.md](docs/chaining.md):
 
 ```bash
 WORKDIR="/path/to/your/project"
-dockpipe --workdir "$WORKDIR" -- make lint && dockpipe --workdir "$WORKDIR" -- make test && dockpipe --workdir "$WORKDIR" -- make build
+dockpipe --workdir "$WORKDIR" -- make lint && dockpipe --workdir "$WORKDIR" -- make test
 ```
 
-Same pattern with AI: plan → implement → review (same folder). One doc: [Chaining](docs/chaining.md).
-
-**AI in a worktree** (optional; same primitive):
+**AI + worktree** (optional):
 
 ```bash
 dockpipe --resolver claude --repo https://github.com/you/repo.git --branch task -- claude -p "Fix the bug"
 ```
 
-**AI in current dir + commit on host:**
+**AI in repo dir + commit on host:**
 
 ```bash
 cd /path/to/repo
 dockpipe --isolate agent-dev --act scripts/commit-worktree.sh -- claude -p "Your prompt"
 ```
 
-**Detach** (container keeps running after you close the terminal):
+**Detach** (container runs in background):
 
 ```bash
 dockpipe -d -- make test
 ```
 
-**Docs:** [docs/workflow-yaml.md](docs/workflow-yaml.md) (`steps:`, async, `outputs:`), [docs/cli-reference.md](docs/cli-reference.md), [docs/chaining.md](docs/chaining.md), [docs/wsl-windows.md](docs/wsl-windows.md). **Workflow template:** [templates/llm-worktree](templates/llm-worktree/README.md) — use `--workflow llm-worktree --repo <url> -- claude -p "…"`.
+---
+
+## How it works
+
+**Bundled assets:** Default **`templates/`**, **`scripts/`**, **`images/`**, and **`lib/entrypoint.sh`** are embedded in the binary and unpacked to your **user cache** on first use (override with **`DOCKPIPE_REPO_ROOT`** for development). **`dockpipe init`** / **`dockpipe template init`** write files where you choose.
+
+**Data:** By default a named volume **`dockpipe-data`** is mounted at **`/dockpipe-data`** with **`HOME`** there so tool state can persist between runs. Use **`--data-dir`**, **`--no-data`**, or **`--reinit`** to change that.
 
 ---
 
 ## Resolvers and worktree (optional)
 
-The same primitive can drive AI or git workflows. **Resolvers:** one file per tool in the template’s `resolvers/` (e.g. `templates/llm-worktree/resolvers/claude`, `codex`) → template + cmd; add a file, no core change. **`--resolver` + `--repo` + `--branch`:** worktree on host, run in container, commit on host. **Template init:** `dockpipe template init my-workflow [--from llm-worktree]` copies the workflow (config, resolvers, isolate). Run `dockpipe --workflow my-workflow --repo <url> -- ...`; config points to scripts/. Use `--resolver claude` or `codex`.
+**Resolvers** map a name (e.g. `claude`, `codex`) to an image and defaults. **`--resolver`** with **`--repo`** / **`--branch`** drives worktree-on-host flows. **`dockpipe template init my-workflow --from llm-worktree`** copies a workflow you can edit.
 
 ---
 
@@ -170,21 +120,21 @@ The same primitive can drive AI or git workflows. **Resolvers:** one file per to
 |----------|-------------|
 | `base-dev` | Light: git, curl, bash, ripgrep, jq. |
 | `dev` | base-dev + build-essential, ssh, etc. |
-| `agent-dev` | Node + Claude Code. `claude` is an alias. One of several templates. |
+| `agent-dev` | Node + Claude Code. `claude` is an alias. |
 | `codex` | Node + OpenAI Codex CLI. |
 
 ---
 
-## Actions
+## Act scripts
 
-Scripts that run after your command. Use them for anything: commit, export a patch, notify. Bundled **commit-worktree** runs on the host when you use it (current dir or `--repo`/`--branch`). `dockpipe action init my-action.sh --from commit-worktree` (or export-patch, print-summary).
+Scripts for the **act** phase (after the main command in the container). Bundled **commit-worktree** is a common choice. **`dockpipe action init my-action.sh --from commit-worktree`** (or `export-patch`, `print-summary`).
 
 ---
 
 ## Docs & repo
 
 - [Blog: Run, Isolate, and Act](https://dev.to/jamie-steele/run-isolate-and-act-a-minimal-primitive-for-container-workflows-553m) · **Source draft:** [docs/releases/blog-dockpipe-primitive.md](docs/releases/blog-dockpipe-primitive.md)
-- [Contributing](CONTRIBUTING.md) (includes **[platform testing](CONTRIBUTING.md#platform-testing-we-need-you)** — we can’t validate every OS/arch; help on yours) · **[Security](SECURITY.md)** · **[Manual QA](docs/qa/manual-qa.md)** ([core](docs/qa/manual-qa-core.md) · [macOS](docs/qa/manual-qa-macos.md) · [Windows/WSL](docs/qa/manual-qa-windows.md)) · [Architecture](docs/architecture.md) · **[Workflow YAML](docs/workflow-yaml.md)** · [CLI reference](docs/cli-reference.md) · [Chaining](docs/chaining.md) · [Install](docs/install.md) · [Releasing](docs/releases/releasing.md) · [Branching & CI](docs/releases/branching.md) · [AGENTS.md](AGENTS.md)
+- **[Onboarding](docs/onboarding.md)** (learning path) · **[Messaging](docs/messaging.md)** (GitHub About / canonical copy) · [Contributing](CONTRIBUTING.md) (includes **[platform testing](CONTRIBUTING.md#platform-testing-we-need-you)**) · **[Security](SECURITY.md)** · **[Manual QA](docs/qa/manual-qa.md)** ([core](docs/qa/manual-qa-core.md) · [macOS](docs/qa/manual-qa-macos.md) · [Windows/WSL](docs/qa/manual-qa-windows.md)) · [Architecture](docs/architecture.md) · **[Workflow YAML](docs/workflow-yaml.md)** · [CLI reference](docs/cli-reference.md) · [Chaining](docs/chaining.md) · [Install](docs/install.md) · [Releasing](docs/releases/releasing.md) · [Branching & CI](docs/releases/branching.md) · [AGENTS.md](AGENTS.md)
 - **Tests:** `bash tests/run_tests.sh` (unit tests, from repo root). **Integration tests** (Docker + agent-dev): [tests/integration-tests/README.md](tests/integration-tests/README.md) → `bash tests/integration-tests/run.sh`
 
 ## Disclaimer

@@ -8,14 +8,9 @@ class Dockpipe < Formula
   depends_on "go" => :build
 
   def install
-    # Install runtime assets next to the binary and pin runtime root
-    # via wrapper script (DOCKPIPE_REPO_ROOT).
-    libexec.install "lib", "scripts", "images", "templates", "docs"
-    (libexec/"version").write version.to_s
-    (libexec/"bin").mkpath
-
-    system "go", "build", "-trimpath", "-ldflags", "-s -w", "-o", libexec/"bin/dockpipe", "./cmd/dockpipe"
-    bin.write_env_script libexec/"bin/dockpipe", DOCKPIPE_REPO_ROOT: libexec
+    # Templates/scripts/images are embedded in the binary; unpacked to the user cache on first run.
+    system "go", "build", "-trimpath", "-ldflags", "-s -w", "-o", "dockpipe", "./cmd/dockpipe"
+    bin.install "dockpipe"
   end
 
   test do

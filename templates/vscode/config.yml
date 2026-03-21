@@ -1,0 +1,12 @@
+# run = host invokes docker with -p (Dockpipe runner has no port publish). No isolate via dockpipe.
+name: vscode
+description: OSS browser IDE (code-server) via host docker; project at /work in the server container.
+
+steps:
+  - id: code-server
+    run: scripts/vscode-code-server.sh
+    skip_container: true
+
+vars:
+  CODE_SERVER_IMAGE: "codercom/code-server:latest"
+  CODE_SERVER_PORT: "8080"

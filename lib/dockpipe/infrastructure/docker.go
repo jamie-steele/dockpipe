@@ -24,7 +24,38 @@ func fdInt(f *os.File) (int, bool) {
 	return int(fd), true
 }
 
+// useDockerInteractiveTTY chooses docker run -it vs -i for the attached (non-detach) path.
+// Interactive CLIs need a TTY; stdin must be a terminal. Some Windows setups report stdout as
+// non-TTY while stderr is still the console — without -t those tools can hang or show no UI.
+func useDockerInteractiveTTY(stdin, stdout, stderr *os.File) bool {
+	inFd, inOK := fdInt(stdin)
+	if !inOK || !isTerminalDockerFn(inFd) {
+		return false
+	}
+	outFd, outOK := fdInt(stdout)
+	if outOK && isTerminalDockerFn(outFd) {
+		return true
+	}
+	errFd, errOK := fdInt(stderr)
+	return errOK && isTerminalDockerFn(errFd)
+}
+
 const containerWorkMount = "/work"
+
+// extraEnvHasKey reports whether pairs contains KEY=... (case-insensitive key).
+func extraEnvHasKey(pairs []string, key string) bool {
+	prefix := strings.ToLower(key) + "="
+	for _, e := range pairs {
+		e = strings.TrimSpace(e)
+		if e == "" {
+			continue
+		}
+		if strings.HasPrefix(strings.ToLower(e), prefix) {
+			return true
+		}
+	}
+	return false
+}
 
 var (
 	execCommandFn      = exec.Command
@@ -98,7 +129,16 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		}
 		workHost = wd
 	}
-	workHost, _ = filepathAbsDocker(workHost)
+	// Git Bash exports DOCKPIPE_WORKDIR as /c/Users/...; filepath.Abs on Windows does not treat
+	// that as absolute, so docker -v can bind the wrong path and /work looks empty.
+	if runtime.GOOS == "windows" {
+		workHost = HostPathForGit(workHost)
+	}
+	var absErr error
+	workHost, absErr = filepathAbsDocker(workHost)
+	if absErr != nil {
+		return 1, absErr
+	}
 
 	stdout := o.Stdout
 	if stdout == nil {
@@ -113,15 +153,6 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		stdin = os.Stdin
 	}
 
-	outFd, outOK := fdInt(stdout)
-	if !o.Detach && outOK && isTerminalDockerFn(outFd) {
-		width := terminalWidth(outFd)
-		fmt.Fprint(stderr, renderBannerForWidth(width))
-		if shouldShowSpinner(width) {
-			spin(stderr)
-		}
-	}
-
 	cwdInContainer := containerWorkMount
 	if o.WorkPath != "" {
 		wp := strings.TrimPrefix(o.WorkPath, "/")
@@ -133,18 +164,31 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		"--init",
 		"--hostname", "dockpipe",
 	}
-	// Windows has no POSIX uid/gid; Docker Desktop rejects -u -1:-1. Omit user mapping.
-	if runtime.GOOS != "windows" {
-		args = append(args, "-u", strconv.Itoa(getuidDockerFn())+":"+strconv.Itoa(getgidDockerFn()))
+	// Map container user to the host user on Unix so bind mounts have sane ownership.
+	// On Windows, optional -u via DOCKPIPE_WINDOWS_CONTAINER_USER only (see windowsDockerUserSpec).
+	if runtime.GOOS == "windows" {
+		if u := windowsDockerUserSpec(); u != "" {
+			args = append(args, "-u", u)
+		}
+	} else {
+		args = append(args, "-u", unixDockerUserSpec(o.Image, stderr))
 	}
 	args = append(args,
 		"-v", workHost+":"+containerWorkMount,
 		"-w", cwdInContainer,
 		"-e", "DOCKPIPE_CONTAINER_WORKDIR="+containerWorkMount,
 	)
+	// Claude Code: IS_SANDBOX=1 must be present even if the image lacks our entrypoint (rebuild still recommended).
+	if os.Getenv("DOCKPIPE_NO_SANDBOX_ENV") == "" && !extraEnvHasKey(o.ExtraEnv, "IS_SANDBOX") {
+		args = append(args, "-e", "IS_SANDBOX=1")
+	}
 
 	if o.ActionPath != "" {
-		ap, err := filepathAbsDocker(o.ActionPath)
+		ap := o.ActionPath
+		if runtime.GOOS == "windows" {
+			ap = HostPathForGit(ap)
+		}
+		ap, err := filepathAbsDocker(ap)
 		if err != nil {
 			return 1, err
 		}
@@ -179,15 +223,23 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	chown := "chown -R " + uid + ":" + gid + " /dockpipe-data 2>/dev/null || true"
 
 	if o.DataDir != "" {
-		_ = mkdirAllDockerFn(o.DataDir, 0o755)
+		dataDir := o.DataDir
+		if runtime.GOOS == "windows" {
+			dataDir = HostPathForGit(dataDir)
+		}
+		dataDir, absErr = filepathAbsDocker(dataDir)
+		if absErr != nil {
+			return 1, absErr
+		}
+		_ = mkdirAllDockerFn(dataDir, 0o755)
 		args = append(args,
-			"-v", o.DataDir+":/dockpipe-data",
+			"-v", dataDir+":/dockpipe-data",
 			"-e", "DOCKPIPE_DATA=/dockpipe-data",
 			"-e", "HOME=/dockpipe-data",
 		)
 		// POSIX chown inside the container is meaningless for host uid/gid on Windows.
 		if runtime.GOOS != "windows" {
-			ch := execCommandFn("docker", "run", "--rm", "-v", o.DataDir+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
+			ch := execCommandFn("docker", "run", "--rm", "-v", dataDir+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
 			_ = ch.Run()
 		}
 	} else if o.DataVolume != "" {
@@ -205,6 +257,9 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	for _, m := range o.ExtraMounts {
 		m = strings.TrimSpace(m)
 		if m != "" {
+			if runtime.GOOS == "windows" {
+				m = normalizeDockerBindMountWindows(m)
+			}
 			args = append(args, "-v", m)
 		}
 	}
@@ -223,15 +278,16 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		cmd.Stdin = stdin
 		cmd.Stdout = stdout
 		cmd.Stderr = stderr
-		if err := cmd.Run(); err != nil {
+		stopSpin := StartLineSpinner(stderr, "Starting container…")
+		err := cmd.Run()
+		stopSpin()
+		if err != nil {
 			return 1, err
 		}
 		return 0, nil
 	}
 
-	inFd, inOK := fdInt(stdin)
-	outFd2, outOK2 := fdInt(stdout)
-	if inOK && outOK2 && isTerminalDockerFn(inFd) && isTerminalDockerFn(outFd2) {
+	if useDockerInteractiveTTY(stdin, stdout, stderr) {
 		args = append(args, "-it")
 	} else {
 		args = append(args, "-i")
@@ -240,6 +296,9 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	cid := fmt.Sprintf("dockpipe-%d-%d", os.Getpid(), timeNowDockerFn().UnixNano()%1e9)
 	args = append(args, "--name", cid, o.Image)
 	args = append(args, argv...)
+
+	// User-visible checkpoint: docker run can block on pull, VM, or volume (especially on Windows).
+	fmt.Fprintln(stderr, "[dockpipe] Starting container…")
 
 	start := timeNowDockerFn()
 	cmd := execCommandFn("docker", args...)
@@ -306,6 +365,47 @@ func terminalWidth(fd int) int {
 	return width
 }
 
+// terminalWidthForBanner prefers a non-zero GetSize from stdout or stderr; on Windows if both
+// are zero but we're on a TTY, assume a wide console so the full ASCII banner matches Linux.
+func terminalWidthForBanner(outFd, errFd int) int {
+	for _, fd := range []int{outFd, errFd} {
+		if fd <= 0 {
+			continue
+		}
+		if !isTerminalDockerFn(fd) {
+			continue
+		}
+		if w := terminalWidth(fd); w > 0 {
+			return w
+		}
+	}
+	if runtime.GOOS == "windows" {
+		return 120
+	}
+	return 0
+}
+
+// PrintLaunchBanner prints the ASCII banner to stderr when stdout or stderr is a TTY.
+// The application calls this once at CLI launch (before host work). Spinners for long-running
+// work run separately via StartLineSpinner.
+func PrintLaunchBanner(stdout, stderr *os.File) {
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+	outFd, outOK := fdInt(stdout)
+	errFd, errOK := fdInt(stderr)
+	stdoutTTY := outOK && isTerminalDockerFn(outFd)
+	stderrTTY := errOK && isTerminalDockerFn(errFd)
+	if !stdoutTTY && !stderrTTY {
+		return
+	}
+	width := terminalWidthForBanner(outFd, errFd)
+	fmt.Fprint(stderr, renderBannerForWidth(width))
+}
+
 func renderBannerForWidth(width int) string {
 	// Use a conservative threshold to avoid wrapping/artifacts in split panes.
 	const minBannerWidth = 70
@@ -318,13 +418,4 @@ func renderBannerForWidth(width int) string {
 func shouldShowSpinner(width int) bool {
 	// Spinner uses carriage-return updates; hide it in narrow terminals to avoid messy wraps.
 	return width >= 60
-}
-
-func spin(w *os.File) {
-	chars := `|/-\`
-	for i := 0; i < 8; i++ {
-		fmt.Fprintf(w, "\r  Launching container... %c  ", chars[i%4])
-		time.Sleep(80 * time.Millisecond)
-	}
-	fmt.Fprintf(w, "\r  %40s\r", "")
 }

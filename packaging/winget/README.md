@@ -48,6 +48,6 @@ Use **`InstallerType: msi`** (or `wix` if the validator prefers it for WiX-built
 
 PRs to **winget-pkgs** are reviewed by Microsoft/community volunteers; expect latency.
 
-## In-repo templates (optional)
+## In-repo winget manifests (optional)
 
-You can keep a **copy** of the last accepted manifest tree under `manifests/` for reference when opening the next PR. Do **not** commit secrets; URLs are public.
+You can keep a **copy** of the last accepted **winget** manifest tree under `manifests/` for reference when opening the next PR. Do **not** commit secrets; URLs are public.
