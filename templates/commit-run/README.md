@@ -2,7 +2,7 @@
 
 **Audience:** default-friendly — **current branch only**, no worktrees, no new branches.
 
-| | **commit-run** (this template) | **llm-worktree** (advanced) |
+| | **commit-run** (this template) | **run-worktree** (advanced) |
 |--|-------------------------------|----------------------------|
 | Branch | Commits on **whatever branch you’re on** | Isolated **work branch** + worktree (clone/worktree automation) |
 | Git concepts | “Run tool → optional commit” | `--repo`, resolvers, branch prefixes |
@@ -12,7 +12,7 @@
 
 1. **Isolate:** runs your command after `--` inside the **base-dev** image (override with `--isolate` if needed).
 2. **Project:** host directory is mounted at **`/work`** (default: current working directory; set `--workdir` for another path).
-3. **Act:** after the container exits **successfully** (exit code 0), dockpipe runs **one** `git add -A` + `git commit` on the **host** repo at that directory — **same branch**, no branch creation.
+3. **Strategy `git-commit`:** after the container exits **successfully** (exit code 0), the **`templates/core/strategies/git-commit`** **after** hook runs **`scripts/commit-worktree.sh`** on the host — **one** `git add -A` + `git commit` at that directory — **same branch**, no branch creation (equivalent to the older top-level **`act:`** in **`config.yml`**).
 4. **One commit per invocation** when there are staged/uncommitted changes after the run.
 5. **No worktrees** and **no** `clone-worktree.sh` — nothing in this workflow creates branches or extra checkouts.
 
@@ -45,7 +45,7 @@ dockpipe --workflow commit-run --workdir /path/to/repo -- ./scripts/task.sh
 | Detached HEAD | Commit still runs if there are changes (same as `git commit` rules). |
 | `DOCKPIPE_COMMIT_MESSAGE` empty | Falls back to a generic automated message (see `CommitOnHost` in code). |
 
-## Compared to `llm-worktree`
+## Compared to `run-worktree`
 
 - **commit-run** does **not** use `resolvers/`, `--repo`, or worktree scripts.
-- **llm-worktree** remains the full **advanced** path for branch isolation and AI backends — see [templates/llm-worktree/README.md](../llm-worktree/README.md).
+- **run-worktree** remains the full **advanced** path for branch isolation and AI backends — see **[run-worktree README](../run-worktree/README.md)**.

@@ -21,9 +21,9 @@ func mkRepoRootForSubcmdTests(t *testing.T) string {
 	t.Helper()
 	repoRoot := t.TempDir()
 	writeFile(t, filepath.Join(repoRoot, "templates", "init", "config.yml"), "name: init\n", 0o644)
-	writeFile(t, filepath.Join(repoRoot, "templates", "init", "resolvers", "default"), "DOCKPIPE_RESOLVER_TEMPLATE=codex\n", 0o644)
-	writeFile(t, filepath.Join(repoRoot, "templates", "llm-worktree", "config.yml"), "name: llm-worktree\n", 0o644)
-	writeFile(t, filepath.Join(repoRoot, "templates", "llm-worktree", "resolvers", "claude"), "DOCKPIPE_RESOLVER_TEMPLATE=claude\n", 0o644)
+	writeFile(t, filepath.Join(repoRoot, "templates", "core", "resolvers", "default"), "DOCKPIPE_RESOLVER_TEMPLATE=codex\n", 0o644)
+	writeFile(t, filepath.Join(repoRoot, "templates", "core", "resolvers", "claude"), "DOCKPIPE_RESOLVER_TEMPLATE=claude\n", 0o644)
+	writeFile(t, filepath.Join(repoRoot, "templates", "run-worktree", "config.yml"), "name: run-worktree\n", 0o644)
 	writeFile(t, filepath.Join(repoRoot, "scripts", "commit-worktree.sh"), "#!/usr/bin/env bash\n", 0o755)
 	writeFile(t, filepath.Join(repoRoot, "scripts", "clone-worktree.sh"), "#!/usr/bin/env bash\n", 0o755)
 	return repoRoot
@@ -61,9 +61,9 @@ func TestCmdTemplateCreatesFromBundled(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(dest, "config.yml")); err != nil {
 		t.Fatalf("expected copied config.yml: %v", err)
 	}
-	sh := filepath.Join(dest, "resolvers", "claude")
-	if _, err := os.Stat(sh); err != nil {
-		t.Fatalf("expected copied resolver file: %v", err)
+	coreClaude := filepath.Join(wd, "templates", "core", "resolvers", "claude")
+	if _, err := os.Stat(coreClaude); err != nil {
+		t.Fatalf("expected shared templates/core/resolvers/claude: %v", err)
 	}
 }
 
@@ -143,7 +143,7 @@ func TestCmdInitCreatesWorkspaceAndTemplate(t *testing.T) {
 		filepath.Join(dest, "scripts"),
 		filepath.Join(dest, "images"),
 		filepath.Join(dest, "templates", "demo", "config.yml"),
-		filepath.Join(dest, "templates", "demo", "resolvers", "default"),
+		filepath.Join(dest, "templates", "core", "resolvers", "default"),
 	}
 	for _, p := range checks {
 		if _, err := os.Stat(p); err != nil {

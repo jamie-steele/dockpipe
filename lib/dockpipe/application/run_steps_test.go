@@ -33,7 +33,7 @@ func TestValidateParallelNoHostCommit(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	o := &runStepsOpts{
 		repoRoot: repoRoot,
-		wfRoot:   filepath.Join(repoRoot, "templates/llm-worktree"),
+		wfRoot:   filepath.Join(repoRoot, "templates/run-worktree"),
 		wf: &domain.Workflow{
 			Steps: []domain.Step{
 				{Action: "scripts/commit-worktree.sh", Blocking: boolPtr(false)},

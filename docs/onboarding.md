@@ -26,6 +26,8 @@ See **[README § Try it](../README.md#try-it)** for copy-paste examples.
 | **Isolate** | Container | Your command after `--`; project at **`/work`**. Ephemeral — container is removed when the command exits. |
 | **Act** | Host | Optional script *after* the container (e.g. commit, notify). |
 
+**Named strategies** (optional): **`--strategy <name>`** or **`strategy:`** in workflow YAML load **`templates/core/strategies/<name>`** (or per-workflow overrides) and run **before** / **after** hooks around the body (e.g. **`git-worktree`**, **`git-commit`**). See **[workflow-yaml.md § Named strategies](workflow-yaml.md#named-strategies)**.
+
 Most days: **`dockpipe -- <command>`** only (isolate).
 
 ---
@@ -42,7 +44,7 @@ Shows two steps and env handoff. No API keys.
 
 **Simple git (optional):** **`--workflow commit-run`** runs your command in a container, then **one commit on your current branch** if anything changed — no worktrees or branch automation. See **[templates/commit-run/README.md](../templates/commit-run/README.md)**.
 
-**Advanced git / AI:** **`--workflow llm-worktree`** adds isolated branches, worktrees, and resolvers — **[templates/llm-worktree/README.md](../templates/llm-worktree/README.md)**.
+**Advanced git / AI:** **`--workflow run-worktree`** adds isolated branches, worktrees, and resolvers — **[templates/run-worktree/README.md](../templates/run-worktree/README.md)**.
 
 ---
 
@@ -59,6 +61,7 @@ Shows two steps and env handoff. No API keys.
 |------|---------|
 | **Workflow** | Named preset: **`--workflow <name>`** loads **`templates/<name>/config.yml`**. |
 | **Resolver** | Small file under **`resolvers/`** naming a tool profile (default image, scripts, env) — optional. |
+| **Strategy** | Optional lifecycle wrapper: **`templates/core/strategies/<name>`** (KEY=value) — before/after host scripts. |
 
 ---
 

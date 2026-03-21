@@ -1,10 +1,14 @@
 # Simple git path: run a command in isolation, then one commit on the current branch (no worktrees / new branches).
-# For isolated branches, worktrees, and AI resolver flows, use workflow llm-worktree instead.
+# For isolated branches, worktrees, and AI resolver flows, use workflow run-worktree instead.
+# Commit is provided by named strategy git-commit (templates/core/strategies/git-commit).
 name: commit-run
 description: Disposable container run, then commit changes on your current branch.
 
+strategy: git-commit
+strategies:
+  - git-commit
+
 isolate: base-dev
-act: scripts/commit-worktree.sh
 
 vars:
   # Override with --var DOCKPIPE_COMMIT_MESSAGE="..." or env.

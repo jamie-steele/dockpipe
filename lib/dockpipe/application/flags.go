@@ -37,6 +37,7 @@ type CliOpts struct {
 	WorkBranch    string
 	BundleOut     string
 	Resolver      string
+	Strategy      string
 	ExtraMounts   []string
 	ExtraEnvLines []string
 	EnvFiles      []string
@@ -153,6 +154,12 @@ func ParseFlags(repoRoot string, argv []string) ([]string, *CliOpts, error) {
 				return nil, nil, fmt.Errorf("--resolver requires an argument")
 			}
 			o.Resolver = argv[i+1]
+			i += 2
+		case "--strategy":
+			if i+1 >= len(argv) {
+				return nil, nil, fmt.Errorf("--strategy requires an argument")
+			}
+			o.Strategy = argv[i+1]
 			i += 2
 		case "--mount":
 			if i+1 >= len(argv) {

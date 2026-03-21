@@ -10,9 +10,9 @@ Primitive first: run in container, optionally act after. Keep the core minimal.
 
 **Workflow YAML (user contract):** when changing step/async/merge behavior, update **[docs/workflow-yaml.md](docs/workflow-yaml.md)** and keep [lib/dockpipe/README.md](lib/dockpipe/README.md) in sync for contributor-oriented detail.
 
-**Resolver:** add a file under `templates/<template>/resolvers/<name>`. New named template → `images/<name>/Dockerfile` + a branch in `lib/dockpipe/infrastructure/template.go` (`TemplateBuild`). **Scripts:** add run/act scripts in `scripts/`; workflow configs use `run:` and `act:`.
+**Resolver:** shared tool profiles live under **`templates/core/resolvers/<name>`**; override per-workflow with **`templates/<workflow>/resolvers/<name>`** when needed. New named template → `images/<name>/Dockerfile` + a branch in `lib/dockpipe/infrastructure/template.go` (`TemplateBuild`). **Scripts:** add run/act scripts in `scripts/`; workflow configs use `run:` and `act:` (or **`strategy:`** for lifecycle wrappers).
 
-**Template:** add `templates/<name>/` with config.yml (run, isolate, act pointing to scripts/), resolvers/, isolate/. No run script in the template; config points to the repo scripts folder. See `templates/llm-worktree/`.
+**Template:** add `templates/<name>/` with **`config.yml`** (and optional per-workflow **`resolvers/`** / **`strategies/`**). Shared resolvers/strategies ship under **`templates/core/`**. See **`templates/run-worktree/`** and **`templates/core/README.md`**.
 
 **Action:** add `scripts/<name>.sh`; use `DOCKPIPE_EXIT_CODE`, `DOCKPIPE_CONTAINER_WORKDIR`. Add to `action init --from` list in `bin/dockpipe` if copyable.
 

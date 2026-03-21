@@ -1,0 +1,6 @@
+# Run a command in the dockpipe-vscode image — delegates to templates/code-server after clone-worktree.
+# For browser IDE + host port publish, use --resolver vscode (templates/vscode).
+DOCKPIPE_RESOLVER_WORKFLOW=code-server
+DOCKPIPE_RESOLVER_CMD=code-server
+DOCKPIPE_RESOLVER_PRE_SCRIPT=scripts/clone-worktree.sh
+DOCKPIPE_RESOLVER_ACTION=scripts/commit-worktree.sh

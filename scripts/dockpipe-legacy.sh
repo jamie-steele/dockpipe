@@ -36,7 +36,7 @@ Usage:
   dockpipe --workflow <name> [options]               Multi-step: if config has steps:, each step runs in order; optional -- for last step cmd only.
   dockpipe action init [--from <bundled>] <filename>   New action script; --from copies a bundled one
   dockpipe pre init [--from <bundled>] <filename>   New run script (host); --from copies a bundled one
-  dockpipe template init [--from <bundled>] <dirname>   New workflow folder; --from copies a bundled template (llm-worktree)
+  dockpipe template init [--from <bundled>] <dirname>   New workflow folder; --from copies a bundled template (run-worktree)
   dockpipe init [<template-name>] [<dest>]   New workspace: scripts/, images/, templates/. Optional name = new template + samples.
   <stdin> | dockpipe [options] -- <command> [args...]
 
@@ -66,7 +66,7 @@ Options (run → isolate → act):
   --help, -h           Show this help
 
 Examples:
-  dockpipe --workflow llm-worktree --repo https://github.com/you/repo.git -- claude -p "Fix the bug"
+  dockpipe --workflow run-worktree --repo https://github.com/you/repo.git -- claude -p "Fix the bug"
   dockpipe -- ls -la
   dockpipe --isolate claude --repo https://github.com/you/repo.git --run scripts/clone-worktree.sh --act scripts/commit-worktree.sh -- claude -p "Fix the bug"
   dockpipe -d --isolate agent-dev -- claude -p "review this code"
@@ -182,7 +182,7 @@ template_subcommand() {
     echo "Usage: dockpipe template init [--from <bundled>] <dirname>" >&2
     echo "       dockpipe template create [--from <bundled>] <dirname>" >&2
     echo "Copies a workflow template (config.yml, resolvers/, isolate/) so you can use it with --workflow. No run script in template; config points to scripts/." >&2
-    echo "Bundled: llm-worktree (default). Use: dockpipe --workflow <name> --repo <url> -- ..." >&2
+    echo "Bundled: run-worktree (default). Use: dockpipe --workflow <name> --repo <url> -- ..." >&2
     exit 1
   fi
   shift
@@ -202,10 +202,10 @@ template_subcommand() {
     esac
   done
   [[ -z "$name" ]] && name="my-workflow"
-  from="${from:-llm-worktree}"
+  from="${from:-run-worktree}"
   local src_dir="${DOCKPIPE_REPO_ROOT}/templates/${from}"
   if [[ ! -d "$src_dir" ]]; then
-    echo "Error: unknown bundled template '$from'. Available: llm-worktree" >&2
+    echo "Error: unknown bundled template '$from'. Available: run-worktree" >&2
     exit 1
   fi
   local dest="$name"
@@ -274,7 +274,7 @@ init_subcommand() {
     echo "cd ${dest} && DOCKPIPE_REPO_ROOT=\$(pwd) dockpipe --workflow <name> -- ..."
   else
     local init_tpl="${DOCKPIPE_REPO_ROOT}/templates/init"
-    local rwt_tpl="${DOCKPIPE_REPO_ROOT}/templates/llm-worktree"
+    local rwt_tpl="${DOCKPIPE_REPO_ROOT}/templates/run-worktree"
     if [[ ! -f "${init_tpl}/config.yml" ]]; then
       echo "Error: init template not found (expected ${init_tpl}/config.yml)" >&2
       exit 1
@@ -293,7 +293,7 @@ Top-level folders:
 
 ## Add a template
 
-Copy a bundled template: `dockpipe template init my-workflow --from llm-worktree`
+Copy a bundled template: `dockpipe template init my-workflow --from run-worktree`
 
 Or scaffold one with example scripts and image: `dockpipe init my-template .` (from an empty dir).
 
@@ -315,7 +315,7 @@ INITREADME
       echo "cd ${dest} && DOCKPIPE_REPO_ROOT=\$(pwd) dockpipe --workflow ${template_name} --repo <url> -- ..."
     else
       echo "Created: ${dest} (scripts/, images/, templates/)"
-      echo "cd ${dest} && dockpipe template init <name> --from llm-worktree, or dockpipe init <template-name> . to scaffold with examples"
+      echo "cd ${dest} && dockpipe template init <name> --from run-worktree, or dockpipe init <template-name> . to scaffold with examples"
     fi
   fi
 }
@@ -645,7 +645,7 @@ if [[ -n "${RESOLVER}" ]]; then
   if [[ -n "${DOCKPIPE_WORKFLOW_ROOT:-}" ]]; then
     _resolver_base="${DOCKPIPE_WORKFLOW_ROOT}/resolvers"
   else
-    _resolver_base="${DOCKPIPE_REPO_ROOT}/templates/${DOCKPIPE_WORKFLOW:-llm-worktree}/resolvers"
+    _resolver_base="${DOCKPIPE_REPO_ROOT}/templates/${DOCKPIPE_WORKFLOW:-run-worktree}/resolvers"
   fi
   resolver_file="${_resolver_base}/${RESOLVER}"
   if [[ ! -f "${resolver_file}" ]]; then
@@ -653,7 +653,7 @@ if [[ -n "${RESOLVER}" ]]; then
     exit 1
   fi
   unset _resolver_base
-  # shellcheck source=templates/llm-worktree/resolvers/claude
+  # shellcheck source=templates/run-worktree/resolvers/claude
   source "${resolver_file}"
   TEMPLATE="${DOCKPIPE_RESOLVER_TEMPLATE:-$TEMPLATE}"
   # Resolver can set default pre-script and action only when we did not get them from workflow config

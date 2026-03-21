@@ -1,6 +1,7 @@
 package infrastructure
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,6 +50,28 @@ func ResolvePreScriptPath(p, repoRoot string) string {
 		return c
 	}
 	return p
+}
+
+// ResolveResolverFilePath returns the path to a resolver KEY=value file (workflow or step resolver name).
+// Order: workflow-local wfRoot/resolvers/<name>, then templates/core/resolvers/<name>,
+// then legacy templates/run-worktree/resolvers/<name> for older workspaces.
+func ResolveResolverFilePath(repoRoot, wfRoot, resolverName string) (string, error) {
+	resolverName = strings.TrimSpace(resolverName)
+	if resolverName == "" {
+		return "", fmt.Errorf("resolver name is empty")
+	}
+	var candidates []string
+	if wfRoot != "" {
+		candidates = append(candidates, filepath.Join(wfRoot, "resolvers", resolverName))
+	}
+	candidates = append(candidates, filepath.Join(repoRoot, "templates", "core", "resolvers", resolverName))
+	candidates = append(candidates, filepath.Join(repoRoot, "templates", "run-worktree", "resolvers", resolverName))
+	for _, p := range candidates {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("resolver file not found for %q (tried %v); shared resolvers live under templates/core/resolvers/ — upgrade dockpipe, re-extract the bundle (bundled format bump), or run `dockpipe doctor` / delete the bundled cache folder if your install is stale", resolverName, candidates)
 }
 
 // IsBundledCommitWorktree reports whether action is the bundled commit-worktree.sh.

@@ -1,5 +1,5 @@
 # OSS VS Code (code-server) — same upstream family as templates/vscode (codercom/code-server).
-# Used by llm-worktree --resolver vscode. For a browser IDE with host port publish, prefer --workflow vscode.
+# Used by run-worktree --resolver vscode. For a browser IDE with host port publish, prefer --workflow vscode.
 FROM codercom/code-server:latest
 
 USER root

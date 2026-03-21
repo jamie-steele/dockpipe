@@ -39,6 +39,9 @@ type runStepsOpts struct {
 	dataDir        string
 	resolver       string
 	templateName   string
+	// strategyHandlesCommit: parent workflow uses a named strategy whose after hook runs bundled commit.
+	// Suppress per-step bundled commit so CommitOnHost runs once after all steps (strategy after).
+	strategyHandlesCommit bool
 }
 
 // runSteps executes workflow steps. Blocking steps run alone. Consecutive steps with
@@ -76,7 +79,10 @@ func loadStepResolver(o *runStepsOpts, step domain.Step, stepIndex int) (*domain
 	if strings.TrimSpace(step.Resolver) == "" {
 		return nil, nil
 	}
-	path := filepath.Join(o.wfRoot, "resolvers", step.Resolver)
+	path, err := infrastructure.ResolveResolverFilePath(o.repoRoot, o.wfRoot, step.Resolver)
+	if err != nil {
+		return nil, fmt.Errorf("step %s: resolver %q: %w", step.DisplayName(stepIndex), step.Resolver, err)
+	}
 	m, err := infrastructure.LoadResolverFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("step %s: resolver %q: %w", step.DisplayName(stepIndex), step.Resolver, err)
@@ -166,14 +172,18 @@ func finalizeResolverStepAfterHost(o *runStepsOpts, step domain.Step, dockerEnv 
 			return fmt.Errorf("action script not found: %s", actAbs)
 		}
 		if infrastructure.IsBundledCommitWorktree(actAbs, o.repoRoot) {
-			mergeCommitEnvFromLines(o.envMap, o.opts.ExtraEnvLines)
-			tmpl := ra.Template
-			if tmpl == "" {
-				tmpl = step.Resolver
-			}
-			applyBranchPrefix(o.envMap, branchResolverName(o, step), tmpl)
-			if err := infrastructure.CommitOnHost(workHost, o.envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(o.envMap["DOCKPIPE_BUNDLE_OUT"], o.opts.BundleOut), strings.TrimSpace(o.envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
-				return err
+			if o.strategyHandlesCommit {
+				// Strategy after hook will commit once after the workflow completes.
+			} else {
+				mergeCommitEnvFromLines(o.envMap, o.opts.ExtraEnvLines)
+				tmpl := ra.Template
+				if tmpl == "" {
+					tmpl = step.Resolver
+				}
+				applyBranchPrefix(o.envMap, branchResolverName(o, step), tmpl)
+				if err := infrastructure.CommitOnHost(workHost, o.envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(o.envMap["DOCKPIPE_BUNDLE_OUT"], o.opts.BundleOut), strings.TrimSpace(o.envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -586,9 +596,13 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 			return nil, runOpts, "", "", fmt.Errorf("action script not found: %s", actionPath)
 		}
 		if infrastructure.IsBundledCommitWorktree(actionPath, o.repoRoot) {
-			commitOnHost = true
-			actionPath = ""
-			applyBranchPrefix(envMap, branchResolverName(o, step), tmpl)
+			if !o.strategyHandlesCommit {
+				commitOnHost = true
+				actionPath = ""
+				applyBranchPrefix(envMap, branchResolverName(o, step), tmpl)
+			} else {
+				actionPath = ""
+			}
 		}
 	}
 

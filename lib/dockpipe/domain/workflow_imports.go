@@ -30,6 +30,8 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 		Action:          f.Action,
 		Resolver:        f.Resolver,
 		DefaultResolver: f.DefaultResolver,
+		Strategy:        f.Strategy,
+		Strategies:      f.Strategies,
 		Vars:            f.Vars,
 		Steps:           steps,
 	}, nil

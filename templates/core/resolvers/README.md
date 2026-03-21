@@ -1,4 +1,4 @@
-# llm-worktree resolvers
+# Shared resolvers (`templates/core/resolvers/`)
 
 Each file is **`KEY=value`** lines. The Go runner reads **`DOCKPIPE_RESOLVER_*`** only; other lines are comments (`#`).
 
@@ -7,7 +7,7 @@ Each file is **`KEY=value`** lines. The Go runner reads **`DOCKPIPE_RESOLVER_*`*
 | Key | Required | Meaning |
 |-----|----------|---------|
 | **`DOCKPIPE_RESOLVER_TEMPLATE`** | Usually yes | Built-in template name passed to **`TemplateBuild`** → Docker image (e.g. `claude`, `codex`, `vscode`, `base-dev`). **Omit** when **`DOCKPIPE_RESOLVER_WORKFLOW`** or **`DOCKPIPE_RESOLVER_HOST_ISOLATE`** is set. |
-| **`DOCKPIPE_RESOLVER_WORKFLOW`** | no | Bundled workflow name under **`templates/<name>/config.yml`** (e.g. `cursor-dev`, `vscode`). After **`run`** pre-scripts, the runner executes that workflow with the **same** multi-step engine as **`dockpipe --workflow <name>`** — preferred over copying script paths. **Mutually exclusive** with **`DOCKPIPE_RESOLVER_HOST_ISOLATE`**. |
+| **`DOCKPIPE_RESOLVER_WORKFLOW`** | no | Bundled workflow under **`templates/<name>/config.yml`** (e.g. `claude`, `codex`, `code-server`, `cursor-dev`, `vscode`). After **`run`** pre-scripts, the runner executes that workflow with the **same** engine as **`dockpipe --workflow <name>`**. **Mutually exclusive** with **`DOCKPIPE_RESOLVER_HOST_ISOLATE`**. |
 | **`DOCKPIPE_RESOLVER_HOST_ISOLATE`** | no | Repo-relative script run on the **host** after pre-scripts instead of **`docker run`**. Use when there is no bundled workflow; prefer **`DOCKPIPE_RESOLVER_WORKFLOW`** when **`templates/<name>`** already exists. |
 | **`DOCKPIPE_RESOLVER_PRE_SCRIPT`** | no | Host script when using **`--resolver`** *without* **`--workflow`** (defaults from workflow **`run`** otherwise). |
 | **`DOCKPIPE_RESOLVER_ACTION`** | no | Act script for resolver-only runs; **`--workflow`** uses **`config.yml`** **`act`**. |

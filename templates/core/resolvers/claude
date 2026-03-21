@@ -1,5 +1,5 @@
-# Resolver: Claude Code (Anthropic). Image = dockpipe-claude (see images/claude).
-DOCKPIPE_RESOLVER_TEMPLATE=claude
+# Resolver: Claude Code — delegates to templates/claude after clone-worktree (same as DOCKPIPE_RESOLVER_WORKFLOW=claude).
+DOCKPIPE_RESOLVER_WORKFLOW=claude
 DOCKPIPE_RESOLVER_CMD=claude
 DOCKPIPE_RESOLVER_ENV=ANTHROPIC_API_KEY
 DOCKPIPE_RESOLVER_PRE_SCRIPT=scripts/clone-worktree.sh

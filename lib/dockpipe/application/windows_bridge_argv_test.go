@@ -275,7 +275,7 @@ func TestTranslateBridgeArgv_preInit(t *testing.T) {
 
 // TestTranslateBridgeArgv_templateInit translates template init directory argument.
 func TestTranslateBridgeArgv_templateInit(t *testing.T) {
-	in := []string{"template", "init", "--from", "llm-worktree", `C:\w`}
+	in := []string{"template", "init", "--from", "run-worktree", `C:\w`}
 	out := translateBridgeArgv("d", in)
 	if out[4] != "/mnt/c/w" {
 		t.Fatalf("got %#v", out)

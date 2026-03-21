@@ -101,7 +101,6 @@ func cmdInit(args []string) error {
 	}
 
 	initTpl := filepath.Join(repoRoot, "templates/init")
-	rwtTpl := filepath.Join(repoRoot, "templates/llm-worktree")
 	if _, err := os.Stat(filepath.Join(initTpl, "config.yml")); err != nil {
 		return fmt.Errorf("init template not found: %s", initTpl)
 	}
@@ -109,11 +108,14 @@ func cmdInit(args []string) error {
 	_ = os.MkdirAll(filepath.Join(dest, "scripts"), 0o755)
 	_ = os.MkdirAll(filepath.Join(dest, "images"), 0o755)
 	_ = os.MkdirAll(filepath.Join(dest, "templates"), 0o755)
+	_ = os.MkdirAll(filepath.Join(dest, "templates", "core"), 0o755)
+	_ = copyDirMaybe(filepath.Join(repoRoot, "templates/core"), filepath.Join(dest, "templates/core"))
 	readme := `# Dockpipe workspace
 
 - **scripts/** — Run and act scripts.
 - **images/** — Dockerfiles.
-- **templates/** — Bundled workflows (**config.yml**). Use **dockpipe --workflow &lt;name&gt;**.
+- **templates/** — Your workflows (**config.yml**). Use **dockpipe --workflow &lt;name&gt;** (each folder is one workflow).
+- **templates/core/** — Shared **resolvers/**, **strategies/**, optional **scripts/** and **images/** (copied from the bundled tree so workflows can reference them).
 - **dockpipe.yml** (optional) — Repo-root workflow; use **dockpipe --workflow-file dockpipe.yml**.
 `
 	_ = os.WriteFile(filepath.Join(dest, "README.md"), []byte(readme), 0o644)
@@ -127,20 +129,10 @@ func cmdInit(args []string) error {
 		if err := copyFile(filepath.Join(initTpl, "config.yml"), filepath.Join(td, "config.yml")); err != nil {
 			return err
 		}
-		if err := copyDir(filepath.Join(initTpl, "resolvers"), filepath.Join(td, "resolvers")); err != nil {
-			return err
-		}
 		_ = copyFileMaybe(filepath.Join(repoRoot, "scripts/example-run.sh"), filepath.Join(dest, "scripts/example-run.sh"))
 		_ = copyFileMaybe(filepath.Join(repoRoot, "scripts/example-act.sh"), filepath.Join(dest, "scripts/example-act.sh"))
 		_ = copyDirMaybe(filepath.Join(repoRoot, "images/example"), filepath.Join(dest, "images/example"))
-		if d, err := os.Open(filepath.Join(rwtTpl, "resolvers")); err == nil {
-			names, _ := d.Readdirnames(-1)
-			_ = d.Close()
-			for _, n := range names {
-				_ = copyFileMaybe(filepath.Join(rwtTpl, "resolvers", n), filepath.Join(td, "resolvers", n))
-			}
-		}
-		fmt.Printf("Created: %s with templates/%s/\n", dest, templateName)
+		fmt.Printf("Created: %s with templates/%s/ (shared resolvers/strategies under templates/core/)\n", dest, templateName)
 	} else {
 		fmt.Printf("Created: %s (scripts/, images/, templates/)\n", dest)
 	}
@@ -182,7 +174,7 @@ func cmdTemplate(args []string) error {
 		name = "my-workflow"
 	}
 	if from == "" {
-		from = "llm-worktree"
+		from = "run-worktree"
 	}
 	src := filepath.Join(repoRoot, "templates", from)
 	if _, err := os.Stat(src); err != nil {
@@ -198,6 +190,18 @@ func cmdTemplate(args []string) error {
 	}
 	if err := copyDir(src, dest); err != nil {
 		return err
+	}
+	// Pull in shared templates/core next to the new workflow if not already present (resolvers, strategies).
+	wdParent := filepath.Dir(dest)
+	coreDest := filepath.Join(wdParent, "templates", "core")
+	coreSrc := filepath.Join(repoRoot, "templates", "core")
+	if _, err := os.Stat(coreDest); err != nil && os.IsNotExist(err) {
+		if err := os.MkdirAll(filepath.Join(wdParent, "templates"), 0o755); err != nil {
+			return err
+		}
+		if err := copyDirMaybe(coreSrc, coreDest); err != nil {
+			return fmt.Errorf("copy shared templates/core: %w", err)
+		}
 	}
 	_ = filepath.WalkDir(dest, func(p string, d fs.DirEntry, err error) error {
 		if err == nil && strings.HasSuffix(p, ".sh") {

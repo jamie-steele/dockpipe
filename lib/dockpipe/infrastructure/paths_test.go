@@ -6,127 +6,37 @@ import (
 	"testing"
 )
 
-// TestResolveWorkflowScript resolves scripts/ from repo root and other paths from workflow root.
-func TestResolveWorkflowScript(t *testing.T) {
-	got := ResolveWorkflowScript("scripts/pre.sh", "/wf", "/repo")
-	if got != "/repo/scripts/pre.sh" {
-		t.Fatalf("scripts/* should resolve from repo root, got %q", got)
+func TestResolveResolverFilePath(t *testing.T) {
+	repo := t.TempDir()
+	wf := filepath.Join(repo, "templates", "mywf")
+	_ = os.MkdirAll(filepath.Join(wf, "resolvers"), 0o755)
+	local := filepath.Join(wf, "resolvers", "local")
+	if err := os.WriteFile(local, []byte("x=1\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	got = ResolveWorkflowScript("local/pre.sh", "/wf", "/repo")
-	if got != "/wf/local/pre.sh" {
-		t.Fatalf("non-scripts path should resolve from workflow root, got %q", got)
+	coreDir := filepath.Join(repo, "templates", "core", "resolvers")
+	_ = os.MkdirAll(coreDir, 0o755)
+	core := filepath.Join(coreDir, "shared")
+	if err := os.WriteFile(core, []byte("y=2\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-}
 
-// TestResolvePreScriptPath finds host pre-scripts under repo root or passes absolute paths through.
-func TestResolvePreScriptPath(t *testing.T) {
-	tmp := t.TempDir()
-	repoRoot := filepath.Join(tmp, "repo")
-	if err := os.MkdirAll(filepath.Join(repoRoot, "scripts"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	target := filepath.Join(repoRoot, "scripts", "pre.sh")
-	if err := os.WriteFile(target, []byte(""), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if got := ResolvePreScriptPath("scripts/pre.sh", repoRoot); got != target {
-		t.Fatalf("expected repo-root resolved path, got %q", got)
-	}
-	if got := ResolvePreScriptPath("/abs/pre.sh", repoRoot); got != "/abs/pre.sh" {
-		t.Fatalf("absolute path should pass through, got %q", got)
-	}
-}
-
-// TestResolveActionPath resolves act scripts from repo scripts/ when present.
-func TestResolveActionPath(t *testing.T) {
-	tmp := t.TempDir()
-	repoRoot := filepath.Join(tmp, "repo")
-	cwd := filepath.Join(tmp, "cwd")
-	if err := os.MkdirAll(filepath.Join(repoRoot, "scripts"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(cwd, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	repoAction := filepath.Join(repoRoot, "scripts", "act.sh")
-	if err := os.WriteFile(repoAction, []byte(""), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	got, err := ResolveActionPath("act.sh", repoRoot, cwd)
+	p, err := ResolveResolverFilePath(repo, wf, "local")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != repoAction {
-		t.Fatalf("expected repo scripts resolution, got %q", got)
+	if p != local {
+		t.Fatalf("want local resolver %s got %s", local, p)
 	}
-}
-
-// TestResolveActionPathVariants covers empty, absolute, cwd-relative, and missing action paths.
-func TestResolveActionPathVariants(t *testing.T) {
-	tmp := t.TempDir()
-	repoRoot := filepath.Join(tmp, "repo")
-	cwd := filepath.Join(tmp, "cwd")
-	if err := os.MkdirAll(repoRoot, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(cwd, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := ResolveActionPath("", repoRoot, cwd)
-	if err != nil || got != "" {
-		t.Fatalf("empty action should return empty path, got=%q err=%v", got, err)
-	}
-
-	absAction := filepath.Join(tmp, "abs.sh")
-	if err := os.WriteFile(absAction, []byte(""), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	got, err = ResolveActionPath(absAction, repoRoot, cwd)
-	if err != nil || got != absAction {
-		t.Fatalf("abs action should pass through, got=%q err=%v", got, err)
-	}
-
-	cwdAction := filepath.Join(cwd, "in-cwd.sh")
-	if err := os.WriteFile(cwdAction, []byte(""), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	got, err = ResolveActionPath("in-cwd.sh", repoRoot, cwd)
+	p2, err := ResolveResolverFilePath(repo, wf, "shared")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != cwdAction {
-		t.Fatalf("expected cwd fallback, got %q", got)
+	if p2 != core {
+		t.Fatalf("want core resolver %s got %s", core, p2)
 	}
-
-	got, err = ResolveActionPath("missing.sh", repoRoot, cwd)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want, _ := filepath.Abs(filepath.Join(cwd, "missing.sh"))
-	if got != want {
-		t.Fatalf("missing action should return cwd abs candidate, got=%q want=%q", got, want)
+	_, err = ResolveResolverFilePath(repo, wf, "missing")
+	if err == nil {
+		t.Fatal("expected error for missing resolver")
 	}
 }
-
-// TestIsBundledCommitWorktree matches only the bundled commit-worktree.sh next to repo scripts.
-func TestIsBundledCommitWorktree(t *testing.T) {
-	tmp := t.TempDir()
-	repoRoot := filepath.Join(tmp, "repo")
-	if err := os.MkdirAll(filepath.Join(repoRoot, "scripts"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	bundled := filepath.Join(repoRoot, "scripts", "commit-worktree.sh")
-	if err := os.WriteFile(bundled, []byte(""), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if !IsBundledCommitWorktree(bundled, repoRoot) {
-		t.Fatalf("expected bundled action to match")
-	}
-	other := filepath.Join(repoRoot, "scripts", "print-summary.sh")
-	if IsBundledCommitWorktree(other, repoRoot) {
-		t.Fatalf("unexpected match for non-bundled action")
-	}
-}
-

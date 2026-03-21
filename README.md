@@ -34,7 +34,7 @@ No manual cleanup—you keep using the same commands (`make`, tests, linters—w
 
 **Under the hood:** Dockpipe follows a simple flow—**run** (optional prep on your machine), **isolate** (your command in the container), **act** (optional script on your machine after the container exits). Most of the time you only use the middle step: **`dockpipe -- <command>`**.
 
-Optional **named workflows** in YAML — bundled templates via **`--workflow <name>`**, or a file anywhere (often **`dockpipe.yml`** at the repo root) via **`--workflow-file <path>`**. **Learning path:** **[docs/onboarding.md](docs/onboarding.md)** · **[docs/workflow-yaml.md](docs/workflow-yaml.md)** · **[templates/llm-worktree/README.md](templates/llm-worktree/README.md)**.
+Optional **named workflows** in YAML — bundled templates via **`--workflow <name>`**, or a file anywhere (often **`dockpipe.yml`** at the repo root) via **`--workflow-file <path>`**. Optional **named strategies** (**`--strategy`** / **`strategy:`** in YAML) wrap the workflow with host **before/after** scripts (e.g. **`git-worktree`**, **`git-commit`** under **`templates/core/strategies/`**). **Learning path:** **[docs/onboarding.md](docs/onboarding.md)** · **[docs/workflow-yaml.md](docs/workflow-yaml.md)** · **[templates/run-worktree/README.md](templates/run-worktree/README.md)**.
 
 ---
 
@@ -120,7 +120,7 @@ dockpipe -d -- make test
 
 ## Resolvers and worktree (optional)
 
-**Resolvers** map a name (e.g. `claude`, `codex`) to an image and defaults — or, for **`cursor`** / **`vscode`**, to a **bundled workflow** (`DOCKPIPE_RESOLVER_WORKFLOW` → **`cursor-dev`** / **`vscode`** templates), same as **`--workflow cursor-dev`** / **`vscode`** but inside **llm-worktree** with clone/commit. **`--resolver code-server`** uses the **`vscode`** Docker image for a normal container command. **`--resolver`** with **`--repo`** / **`--branch`** drives worktree-on-host flows. **`dockpipe template init my-workflow --from llm-worktree`** copies a workflow you can edit.
+**Resolvers** map a name (e.g. `claude`, `codex`) to an image and defaults — or, for **`cursor`** / **`vscode`**, to a **bundled workflow** (`DOCKPIPE_RESOLVER_WORKFLOW` → **`cursor-dev`** / **`vscode`** templates), same as **`--workflow cursor-dev`** / **`vscode`** but inside **run-worktree** with clone/commit (clone/commit are provided by the **`git-worktree`** **strategy** on that template). **`--resolver code-server`** uses the **`vscode`** Docker image for a normal container command. **`--resolver`** with **`--repo`** / **`--branch`** drives worktree-on-host flows. **`dockpipe template init my-workflow --from run-worktree`** copies a workflow you can edit.
 
 ---
 
@@ -132,7 +132,7 @@ dockpipe -d -- make test
 | `dev` | base-dev + build-essential, ssh, etc. |
 | `agent-dev` | Node + Claude Code. `claude` is an alias. |
 | `codex` | Node + OpenAI Codex CLI. |
-| `vscode` | OSS code-server stack (`codercom/code-server` + dockpipe entrypoint). **llm-worktree** `--resolver code-server` uses this image; **`--resolver vscode`** runs the host browser-IDE flow (no container isolate — see **templates/vscode**). |
+| `vscode` | OSS code-server stack (`codercom/code-server` + dockpipe entrypoint). **run-worktree** `--resolver code-server` uses workflow **`code-server`** (isolate step → this image); **`--resolver vscode`** delegates to **`templates/vscode`** (host browser IDE). |
 
 ---
 
@@ -143,9 +143,10 @@ YAML presets via **`--workflow <name>`** (see **`templates/<name>/README.md`**):
 | Workflow | Role |
 |----------|------|
 | `commit-run` | **Simple git:** run in a container, then **one commit on the current branch** (no worktrees) — [templates/commit-run/README.md](templates/commit-run/README.md) |
+| `claude` / `codex` / `code-server` | Thin isolate workflows used by **`run-worktree`** resolvers (`DOCKPIPE_RESOLVER_WORKFLOW`) — [templates/claude/README.md](templates/claude/README.md) · [codex](templates/codex/README.md) · [code-server](templates/code-server/README.md) |
 | `vscode` | Browser IDE (code-server) — [templates/vscode/README.md](templates/vscode/README.md) |
 | `cursor-dev` | `base-dev` session container + Cursor on host (docker wait) — [templates/cursor-dev/README.md](templates/cursor-dev/README.md) |
-| `llm-worktree` | **Advanced:** AI + isolated branch/worktree + resolvers — [templates/llm-worktree/README.md](templates/llm-worktree/README.md) |
+| `run-worktree` | **Advanced:** AI + isolated branch/worktree + resolvers — [templates/run-worktree/README.md](templates/run-worktree/README.md) |
 | `chain-test` | Two-step env chain demo — [docs/workflow-yaml.md](docs/workflow-yaml.md) |
 | `workflow-demo` | Async group + merged outputs — [docs/workflow-yaml.md](docs/workflow-yaml.md) |
 

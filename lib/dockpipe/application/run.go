@@ -175,6 +175,30 @@ func Run(argv []string, baseEnviron []string) error {
 		buildWorkflowEnvInto(envMap, wf, wfRoot, repoRoot, opts)
 	}
 
+	effStrat := EffectiveStrategyName(opts, wf)
+	var stratBeforeAbs, stratAfterAbs []string
+	strategyHandlesCommit := false
+	if effStrat != "" {
+		if err := ValidateStrategyAllowlist(wf, effStrat); err != nil {
+			return err
+		}
+		sa, _, err := LoadStrategyAssignments(repoRoot, wfRoot, effStrat)
+		if err != nil {
+			return err
+		}
+		stratBeforeAbs = ResolveStrategyScriptPaths(sa.Before, wfRoot, repoRoot)
+		stratAfterAbs = ResolveStrategyScriptPaths(sa.After, wfRoot, repoRoot)
+		strategyHandlesCommit = StrategyAfterHandlesBundledCommit(stratAfterAbs, repoRoot)
+		if wf != nil {
+			if err := ValidateNoDuplicateClone(wf, wfRoot, repoRoot, effStrat == "git-worktree", stratBeforeAbs); err != nil {
+				return err
+			}
+		}
+	}
+	if effStrat == "git-commit" && opts.RepoURL != "" {
+		fmt.Fprintf(os.Stderr, "[dockpipe] warning: --repo set with strategy git-commit (no clone; strategy only commits after success)\n")
+	}
+
 	resolver := opts.Resolver
 	if resolver == "" && wf != nil {
 		if stepsMode {
@@ -183,7 +207,7 @@ func Run(argv []string, baseEnviron []string) error {
 				resolver = wf.DefaultResolver
 			}
 		} else {
-			// Prefer explicit default_resolver; isolate doubles as legacy default resolver name for llm-worktree-style YAML.
+			// Prefer explicit default_resolver; isolate doubles as legacy default resolver name for run-worktree-style YAML.
 			resolver = wf.DefaultResolver
 			if resolver == "" {
 				resolver = wf.Isolate
@@ -199,11 +223,10 @@ func Run(argv []string, baseEnviron []string) error {
 	hostIsolate := ""
 	resolverWorkflow := ""
 	if resolver != "" {
-		resBase := filepath.Join(repoRoot, "templates", "llm-worktree", "resolvers")
-		if wfRoot != "" {
-			resBase = filepath.Join(wfRoot, "resolvers")
+		resFile, err := infrastructure.ResolveResolverFilePath(repoRoot, wfRoot, resolver)
+		if err != nil {
+			return err
 		}
-		resFile := filepath.Join(resBase, resolver)
 		rm, err := loadResolverFileAppFn(resFile)
 		if err != nil {
 			return fmt.Errorf("resolver %q not found (expected %s)", resolver, resFile)
@@ -252,24 +275,32 @@ func Run(argv []string, baseEnviron []string) error {
 
 	locked := lockedKeys(opts.VarOverrides)
 
-	if !stepsMode && wf != nil {
-		if len(opts.PreScripts) == 0 && len(wf.Run) > 0 {
-			for _, r := range wf.Run {
-				opts.PreScripts = append(opts.PreScripts, resolveWorkflowAppFn(r, wfRoot, repoRoot))
+	if !stepsMode {
+		if wf != nil {
+			cliPre := opts.PreScripts
+			opts.PreScripts = nil
+			opts.PreScripts = append(opts.PreScripts, stratBeforeAbs...)
+			if len(cliPre) == 0 && len(wf.Run) > 0 {
+				for _, r := range wf.Run {
+					opts.PreScripts = append(opts.PreScripts, resolveWorkflowAppFn(r, wfRoot, repoRoot))
+				}
 			}
-		}
-		if opts.Action == "" {
-			act := wf.Act
-			if act == "" {
-				act = wf.Action
+			opts.PreScripts = append(opts.PreScripts, cliPre...)
+			if opts.Action == "" {
+				act := wf.Act
+				if act == "" {
+					act = wf.Action
+				}
+				if act != "" && !(strategyHandlesCommit && ActWouldBeBundledCommit(act, wfRoot, repoRoot)) {
+					opts.Action = resolveWorkflowAppFn(act, wfRoot, repoRoot)
+				}
 			}
-			if act != "" {
-				opts.Action = resolveWorkflowAppFn(act, wfRoot, repoRoot)
-			}
+		} else {
+			opts.PreScripts = append(stratBeforeAbs, opts.PreScripts...)
 		}
 	}
 
-	// llm-worktree flow: clone-worktree.sh needs DOCKPIPE_REPO_URL. Without --repo we infer
+	// run-worktree flow: clone-worktree.sh needs DOCKPIPE_REPO_URL. Without --repo we infer
 	// origin from the current checkout (or --workdir) so workflow runs don't silently skip.
 	if !stepsMode && opts.RepoURL == "" && preScriptsIncludeCloneWorktree(opts.PreScripts) {
 		gitDir, err := os.Getwd()
@@ -335,6 +366,9 @@ func Run(argv []string, baseEnviron []string) error {
 			opts.Action = ap
 			actionForContainer = ap
 			if isBundledCommitAppFn(ap, repoRoot) {
+				if strategyHandlesCommit {
+					return fmt.Errorf("strategy %q already runs commit in its after hook; omit --act / workflow act that points at commit-worktree.sh", effStrat)
+				}
 				commitOnHost = true
 				actionForContainer = ""
 				applyBranchPrefix(envMap, resolver, effectiveTemplate)
@@ -440,10 +474,37 @@ func Run(argv []string, baseEnviron []string) error {
 				break
 			}
 		}
+		if !needsHostGit {
+			for _, p := range stratBeforeAbs {
+				if strings.HasSuffix(p, "clone-worktree.sh") {
+					needsHostGit = true
+					break
+				}
+			}
+		}
 	}
 	if needsHostGit {
 		if _, err := exec.LookPath("git"); err != nil {
 			return fmt.Errorf("git not found in PATH — required on the host for clone/worktree/commit flows (by design; dockpipe invokes your normal git). Install git (e.g. Git for Windows on Windows, git from your OS package manager on Linux). HTTPS/SSH auth uses your existing git setup (Credential Manager, SSH keys, etc.)")
+		}
+	}
+
+	if stepsMode {
+		for _, p := range stratBeforeAbs {
+			if _, err := os.Stat(p); err != nil {
+				return fmt.Errorf("strategy before script not found: %s: %w", p, err)
+			}
+			fmt.Fprintf(os.Stderr, "[dockpipe] Host setup (strategy)\n")
+			stop := infrastructure.StartLineSpinner(os.Stderr, hostSpinnerLabel(p))
+			em, err := sourceHostScriptAppFn(p, envSlice)
+			stop()
+			if err != nil {
+				return err
+			}
+			for k, v := range em {
+				envMap[k] = v
+			}
+			envSlice = domain.EnvMapToSlice(envMap)
 		}
 	}
 
@@ -486,7 +547,17 @@ func Run(argv []string, baseEnviron []string) error {
 		if commitOnHost && strings.TrimSpace(envMap["DOCKPIPE_WORKDIR"]) != "" {
 			fmt.Fprintf(os.Stderr, "[dockpipe] Mount /work ← %s\n", envMap["DOCKPIPE_WORKDIR"])
 		}
-		if commitOnHost {
+		if strategyHandlesCommit {
+			mergeCommitEnvFromLines(envMap, opts.ExtraEnvLines)
+			applyBranchPrefix(envMap, resolver, effectiveTemplate)
+			envSlice = domain.EnvMapToSlice(envMap)
+		}
+		if len(stratAfterAbs) > 0 {
+			if err := RunStrategyAfterScripts(stratAfterAbs, repoRoot, envMap, envSlice, opts); err != nil {
+				return err
+			}
+		}
+		if commitOnHost && !strategyHandlesCommit {
 			if err := infrastructure.CommitOnHost(workHost, envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut), strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
 				return err
 			}
@@ -510,7 +581,17 @@ func Run(argv []string, baseEnviron []string) error {
 		if err := runHostScriptAppFn(scriptAbs, envSlice); err != nil {
 			return err
 		}
-		if commitOnHost {
+		if strategyHandlesCommit {
+			mergeCommitEnvFromLines(envMap, opts.ExtraEnvLines)
+			applyBranchPrefix(envMap, resolver, effectiveTemplate)
+			envSlice = domain.EnvMapToSlice(envMap)
+		}
+		if len(stratAfterAbs) > 0 {
+			if err := RunStrategyAfterScripts(stratAfterAbs, repoRoot, envMap, envSlice, opts); err != nil {
+				return err
+			}
+		}
+		if commitOnHost && !strategyHandlesCommit {
 			if err := infrastructure.CommitOnHost(workHost, envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut), strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
 				return err
 			}
@@ -529,23 +610,35 @@ func Run(argv []string, baseEnviron []string) error {
 				return err
 			}
 		}
-		return runStepsAppFn(runStepsOpts{
-			wf:             wf,
-			wfRoot:         wfRoot,
-			repoRoot:       repoRoot,
-			cliArgs:        rest,
-			envMap:         envMap,
-			envSlice:       envSlice,
-			locked:         locked,
-			userIsolate:    userIso,
-			userAct:        userAct,
-			firstStepExtra: firstStepExtra,
-			opts:           opts,
-			dataVol:        dataVol,
-			dataDir:        dataDir,
-			resolver:       resolver,
-			templateName:   templateName,
-		})
+		if err := runStepsAppFn(runStepsOpts{
+			wf:                    wf,
+			wfRoot:                wfRoot,
+			repoRoot:              repoRoot,
+			cliArgs:               rest,
+			envMap:                envMap,
+			envSlice:              envSlice,
+			locked:                locked,
+			userIsolate:           userIso,
+			userAct:               userAct,
+			firstStepExtra:        firstStepExtra,
+			opts:                  opts,
+			dataVol:               dataVol,
+			dataDir:               dataDir,
+			resolver:              resolver,
+			templateName:          templateName,
+			strategyHandlesCommit: strategyHandlesCommit,
+		}); err != nil {
+			return err
+		}
+		if strategyHandlesCommit {
+			mergeCommitEnvFromLines(envMap, opts.ExtraEnvLines)
+			applyBranchPrefix(envMap, resolver, templateName)
+			envSlice = domain.EnvMapToSlice(envMap)
+		}
+		if len(stratAfterAbs) > 0 {
+			return RunStrategyAfterScripts(stratAfterAbs, repoRoot, envMap, envSlice, opts)
+		}
+		return nil
 	}
 
 	if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {
@@ -583,7 +676,7 @@ func Run(argv []string, baseEnviron []string) error {
 		Reinit:        opts.Reinit,
 		Force:         opts.Force,
 		Detach:        opts.Detach,
-		CommitOnHost:  commitOnHost,
+		CommitOnHost:  commitOnHost && !strategyHandlesCommit,
 		CommitMessage: envMap["DOCKPIPE_COMMIT_MESSAGE"],
 		BundleOut:     firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut),
 		BundleAll:     strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1",
@@ -593,6 +686,16 @@ func Run(argv []string, baseEnviron []string) error {
 	}
 	if rc != 0 {
 		osExitAppFn(rc)
+	}
+	if strategyHandlesCommit {
+		mergeCommitEnvFromLines(envMap, opts.ExtraEnvLines)
+		applyBranchPrefix(envMap, resolver, effectiveTemplate)
+		envSlice = domain.EnvMapToSlice(envMap)
+	}
+	if len(stratAfterAbs) > 0 {
+		if err := RunStrategyAfterScripts(stratAfterAbs, repoRoot, envMap, envSlice, opts); err != nil {
+			return err
+		}
 	}
 	return nil
 }

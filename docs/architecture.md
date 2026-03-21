@@ -69,7 +69,7 @@ Environment variables that cross the boundary:
 
 1. **Images** — Add a Dockerfile under `images/<name>/`, use the shared entrypoint, and add a case in **`lib/dockpipe/infrastructure/template.go`** (`TemplateBuild`) so `--isolate <name>` builds and uses it (legacy bash: `resolve_template()` in `scripts/dockpipe-legacy.sh`).
 2. **Act scripts** — Any script that can run in the container and read `DOCKPIPE_EXIT_CODE` / `DOCKPIPE_CONTAINER_WORKDIR`. Place under `scripts/` and reference with `--act` or workflow config `act:`. Users can copy a bundled script: `dockpipe action init my-commit.sh --from commit-worktree`.
-3. **Scripts / workflows** — Named workflows use `templates/<name>/config.yml` + `resolvers/`. Optional **`steps:`** for multi-step and async groups — **[workflow-yaml.md](workflow-yaml.md)**. **`dockpipe init`** creates top-level **scripts/**, **images/**, **templates/**. **`dockpipe init my-template`** adds **templates/my-template/** and copies sample scripts/images. **llm-worktree** lives under `templates/llm-worktree/`; copy with `dockpipe template init my-workflow --from llm-worktree`.
+3. **Scripts / workflows** — Named workflows use `templates/<name>/config.yml` + `resolvers/`. Optional **`steps:`** for multi-step and async groups — **[workflow-yaml.md](workflow-yaml.md)**. **`dockpipe init`** creates top-level **scripts/**, **images/**, **templates/**. **`dockpipe init my-template`** adds **templates/my-template/** and copies sample scripts/images. **run-worktree** lives under `templates/run-worktree/`; copy with `dockpipe template init my-workflow --from run-worktree`.
 
 The core does not parse command content or assume any particular tool (Claude, git, etc.). It only runs the given argv and the optional action script.
 

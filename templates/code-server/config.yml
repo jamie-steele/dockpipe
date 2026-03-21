@@ -1,0 +1,8 @@
+# Bundled workflow for resolver code-server and DOCKPIPE_RESOLVER_WORKFLOW=code-server.
+# Used after run-worktree clone; parent runs commit-worktree on the host.
+name: code-server
+description: Run a command in the dockpipe-vscode image (code-server stack).
+
+steps:
+  - id: code-server
+    isolate: vscode

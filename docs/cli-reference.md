@@ -35,6 +35,7 @@ All options must appear **before** a standalone **`--`**. The command and its ar
 | `--isolate <name>` | `--template`, `--image` | **Isolate:** image or template (`base-dev`, `dev`, `agent-dev`, `claude`, `codex`, …). Builds if the value is a template. |
 | `--act <path>` | `--action` | **Act:** script after the container command (e.g. commit-worktree). |
 | `--resolver <name>` | | Resolver (`claude`, `codex`, …); often used with **`--repo`** / worktree flows. |
+| `--strategy <name>` | | Named lifecycle wrapper from **`templates/core/strategies/<name>`** (or **`templates/<workflow>/strategies/<name>`**): runs **before** / **after** host scripts around the workflow body. Overrides **`strategy:`** in workflow YAML when both are set. |
 | `--repo <url>` | | Clone URL for worktree flows. If omitted and the workflow uses **`clone-worktree.sh`**, dockpipe sets the URL from **`git remote get-url origin`** in the current dir (or **`--workdir`**). When that URL matches your **`origin`**, the worktree can be created from **your local checkout** (not only a fresh remote default). |
 | `--branch <name>` | | Explicit work branch for **`--repo`** (optional). |
 | `--work-branch <name>` | | When **`--repo`** is set and **`--branch`** is **omitted**, use this as the **full** branch name. If both are omitted, dockpipe generates **`prefix/<adj>-<noun>-<adj>-<noun>`** (random hyphenated slug; **`prefix`** from resolver / template — see **`domain.RandomWorkBranchSlug`** in **[branchslug.go](../lib/dockpipe/domain/branchslug.go)**). If **`--branch`** is set, it takes precedence over **`--work-branch`**. |
@@ -91,13 +92,13 @@ Environment: **`DOCKPIPE_WINDOWS_BRIDGE=1`** is set for the **inner** process wh
 **Minimal (workflow does the rest):**
 
 ```bash
-dockpipe --workflow llm-worktree --repo https://github.com/you/repo.git -- claude -p "Fix the bug"
+dockpipe --workflow run-worktree --repo https://github.com/you/repo.git -- claude -p "Fix the bug"
 ```
 
 **Override branch, add env:**
 
 ```bash
-dockpipe --workflow llm-worktree --repo https://github.com/you/repo.git --branch my-feature \
+dockpipe --workflow run-worktree --repo https://github.com/you/repo.git --branch my-feature \
   --env "GIT_PAT=$GIT_PAT" -- claude -p "Implement the plan"
 ```
 

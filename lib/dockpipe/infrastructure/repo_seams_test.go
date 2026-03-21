@@ -14,7 +14,7 @@ func TestRepoRootMaterializesBundledTemplates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RepoRoot: %v", err)
 	}
-	cfg := filepath.Join(got, "templates", "llm-worktree", "config.yml")
+	cfg := filepath.Join(got, "templates", "run-worktree", "config.yml")
 	st, err := os.Stat(cfg)
 	if err != nil || st.IsDir() {
 		t.Fatalf("expected file %s: err=%v isDir=%v", cfg, err, st != nil && st.IsDir())

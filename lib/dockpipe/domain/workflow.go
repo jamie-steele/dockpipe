@@ -33,16 +33,20 @@ func (r *RunSpec) UnmarshalYAML(n *yaml.Node) error {
 
 // Workflow is templates/<name>/config.yml.
 type Workflow struct {
-	Name            string            `yaml:"name"`
-	Description     string            `yaml:"description,omitempty"`
-	Run             RunSpec           `yaml:"run"`
-	Isolate         string            `yaml:"isolate"`
-	Act             string            `yaml:"act"`
-	Action          string            `yaml:"action"`
-	Resolver        string            `yaml:"resolver"`
-	DefaultResolver string            `yaml:"default_resolver"`
-	Vars            map[string]string `yaml:"vars"`
-	Steps           []Step            `yaml:"steps"`
+	Name            string  `yaml:"name"`
+	Description     string  `yaml:"description,omitempty"`
+	Run             RunSpec `yaml:"run"`
+	Isolate         string  `yaml:"isolate"`
+	Act             string  `yaml:"act"`
+	Action          string  `yaml:"action"`
+	Resolver        string  `yaml:"resolver"`
+	DefaultResolver string  `yaml:"default_resolver"`
+	// Strategy: default named strategy (templates/core/strategies/<name> or templates/<wf>/strategies/<name>).
+	Strategy string `yaml:"strategy,omitempty"`
+	// Strategies: optional allowlist of strategy names; if non-empty, --strategy / workflow.strategy must be listed.
+	Strategies []string          `yaml:"strategies,omitempty"`
+	Vars       map[string]string `yaml:"vars"`
+	Steps      []Step            `yaml:"steps"`
 }
 
 // AnyContainerStep reports whether any step runs inside Docker (skip_container is false or omitted).
@@ -157,6 +161,8 @@ type workflowFile struct {
 	Action          string            `yaml:"action"`
 	Resolver        string            `yaml:"resolver"`
 	DefaultResolver string            `yaml:"default_resolver"`
+	Strategy        string            `yaml:"strategy,omitempty"`
+	Strategies      []string          `yaml:"strategies,omitempty"`
 	Vars            map[string]string `yaml:"vars"`
 	Imports         []string          `yaml:"imports,omitempty"`
 	Steps           []stepOrGroupYAML `yaml:"steps"`

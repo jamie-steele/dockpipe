@@ -11,6 +11,18 @@ import (
 	"dockpipe/lib/dockpipe/infrastructure"
 )
 
+// writeTestCoreResolver seeds templates/core/resolvers/<name> for tests that use a temp repoRoot.
+func writeTestCoreResolver(t *testing.T, repoRoot, name, body string) {
+	t.Helper()
+	p := filepath.Join(repoRoot, "templates", "core", "resolvers", name)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func withRunSeams(t *testing.T) {
 	t.Helper()
 	t.Setenv("DOCKPIPE_SKIP_DOCKER_PREFLIGHT", "1")
@@ -56,6 +68,7 @@ func withRunSeams(t *testing.T) {
 func TestRunNonStepsHappyPath(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
+	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
 	repoRootAppFn = func() (string, error) { return repoRoot, nil }
 	loadResolverFileAppFn = func(path string) (map[string]string, error) {
 		return map[string]string{"DOCKPIPE_RESOLVER_TEMPLATE": "codex"}, nil
@@ -107,6 +120,7 @@ func TestRunHostIsolateHappyPath(t *testing.T) {
 	if err := os.WriteFile(isolatePath, []byte("#!/usr/bin/env bash\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeTestCoreResolver(t, repoRoot, "hostiso", "DOCKPIPE_RESOLVER_HOST_ISOLATE=scripts/host-isolate-test.sh\n")
 	repoRootAppFn = func() (string, error) { return repoRoot, nil }
 	loadResolverFileAppFn = func(path string) (map[string]string, error) {
 		return map[string]string{
@@ -157,6 +171,7 @@ func TestRunMissingWorkflowErrors(t *testing.T) {
 func TestRunPreScriptNotFoundErrors(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
+	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
 	repoRootAppFn = func() (string, error) { return repoRoot, nil }
 	loadResolverFileAppFn = func(path string) (map[string]string, error) {
 		return map[string]string{"DOCKPIPE_RESOLVER_TEMPLATE": "codex"}, nil
@@ -177,6 +192,7 @@ func TestRunPreScriptNotFoundErrors(t *testing.T) {
 func TestRunMissingDashErrors(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
+	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
 	repoRootAppFn = func() (string, error) { return repoRoot, nil }
 	loadResolverFileAppFn = func(path string) (map[string]string, error) {
 		return map[string]string{"DOCKPIPE_RESOLVER_TEMPLATE": "codex"}, nil
@@ -196,6 +212,7 @@ func TestRunMissingDashErrors(t *testing.T) {
 func TestRunNonZeroContainerExitCallsExitFn(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
+	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
 	repoRootAppFn = func() (string, error) { return repoRoot, nil }
 	loadResolverFileAppFn = func(path string) (map[string]string, error) {
 		return map[string]string{"DOCKPIPE_RESOLVER_TEMPLATE": "codex"}, nil
@@ -222,6 +239,7 @@ func TestRunNonZeroContainerExitCallsExitFn(t *testing.T) {
 func TestRunWorkflowStepsModeDelegatesToRunSteps(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
+	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
 	repoRootAppFn = func() (string, error) { return repoRoot, nil }
 	workflowDir := filepath.Join(repoRoot, "templates", "demo")
 	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
@@ -268,6 +286,7 @@ func TestRunAutoBranchForRepoWithoutBranch(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repoRoot, "scripts", "clone-worktree.sh"), []byte("#!/usr/bin/env bash\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
 	repoRootAppFn = func() (string, error) { return repoRoot, nil }
 	loadResolverFileAppFn = func(path string) (map[string]string, error) {
 		return map[string]string{"DOCKPIPE_RESOLVER_TEMPLATE": "codex"}, nil
@@ -365,5 +384,79 @@ isolate: codex
 	}
 	if !found {
 		t.Fatalf("expected %q in pre-script env, got:\n%s", want, strings.Join(capturedPreEnv, "\n"))
+	}
+}
+
+// TestStrategyHookOrder asserts strategy before → container → strategy after for single-command mode.
+func TestStrategyHookOrder(t *testing.T) {
+	withRunSeams(t)
+	repoRoot := t.TempDir()
+	stratDir := filepath.Join(repoRoot, "templates", "core", "strategies")
+	if err := os.MkdirAll(stratDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stratDir, "hook-order"), []byte("DOCKPIPE_STRATEGY_BEFORE=scripts/strat-before.sh\nDOCKPIPE_STRATEGY_AFTER=scripts/strat-after.sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	scriptDir := filepath.Join(repoRoot, "scripts")
+	if err := os.MkdirAll(scriptDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"strat-before.sh", "strat-after.sh"} {
+		if err := os.WriteFile(filepath.Join(scriptDir, n), []byte("#!/usr/bin/env bash\nexit 0\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wfDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(wfDir, "resolvers"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfDir, "resolvers", "codex"), []byte("DOCKPIPE_RESOLVER_TEMPLATE=codex\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: hook-order
+strategy: hook-order
+isolate: codex
+`
+	if err := os.WriteFile(filepath.Join(wfDir, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	repoRootAppFn = func() (string, error) { return repoRoot, nil }
+	templateBuildAppFn = func(repoRoot, name string) (string, string, bool) {
+		if name == "codex" {
+			return "dockpipe-codex", "/build/codex", true
+		}
+		return "", "", false
+	}
+	maybeVersionTagAppFn = func(repoRoot, image string) string { return image }
+	dockerBuildAppFn = func(image, dockerfileDir, contextDir string) error { return nil }
+
+	var order []string
+	sourceHostScriptAppFn = func(scriptPath string, env []string) (map[string]string, error) {
+		order = append(order, "before:"+filepath.Base(scriptPath))
+		return nil, nil
+	}
+	runContainerAppFn = func(o infrastructure.RunOpts, argv []string) (int, error) {
+		order = append(order, "container")
+		return 0, nil
+	}
+	runHostScriptAppFn = func(scriptAbs string, env []string) error {
+		order = append(order, "after:"+filepath.Base(scriptAbs))
+		return nil
+	}
+
+	err := Run([]string{"--workflow-file", filepath.Join(wfDir, "config.yml"), "--", "echo", "hi"}, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	want := []string{"before:strat-before.sh", "container", "after:strat-after.sh"}
+	if len(order) != len(want) {
+		t.Fatalf("hook order: got %#v want %#v", order, want)
+	}
+	for i := range want {
+		if order[i] != want[i] {
+			t.Fatalf("hook order: got %#v want %#v", order, want)
+		}
 	}
 }

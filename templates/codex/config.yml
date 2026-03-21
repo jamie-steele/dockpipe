@@ -1,0 +1,8 @@
+# Bundled workflow for resolver codex and DOCKPIPE_RESOLVER_WORKFLOW=codex.
+# Used after run-worktree clone; parent runs commit-worktree on the host.
+name: codex
+description: OpenAI Codex CLI in a worktree (dockpipe-codex image).
+
+steps:
+  - id: codex
+    isolate: codex

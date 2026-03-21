@@ -1,7 +1,7 @@
 package domain
 
 // ResolverAssignments is derived from resolvers/<name> KEY=value files.
-// Contract (llm-worktree-style resolvers):
+// Contract (run-worktree resolvers — KEY=value files):
 //   - DOCKPIPE_RESOLVER_TEMPLATE: built-in template name for docker image (see infrastructure.TemplateBuild).
 //     Omit when DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RESOLVER_HOST_ISOLATE is set.
 //   - DOCKPIPE_RESOLVER_WORKFLOW: optional; bundled workflow name under templates/<name>/config.yml (e.g. cursor-dev, vscode).

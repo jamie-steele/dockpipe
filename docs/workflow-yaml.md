@@ -14,6 +14,7 @@
 | **isolate** | Container image (and your command after `--`). |
 | **act** | Follow-up after the main command (usually a **host** script; see **[architecture.md](architecture.md)** for in-container `DOCKPIPE_ACTION`). |
 | **workflow** | This file: a named preset selected with **`--workflow <name>`**. |
+| **strategy** | Optional **named lifecycle** wrapper: small **`KEY=value`** files under **`templates/core/strategies/<name>`** (or **`templates/<workflow>/strategies/<name>`** next to this workflow) define host scripts to run **before** and **after** the workflow body. See [Named strategies](#named-strategies) below. |
 
 **Learning path:** [onboarding.md](onboarding.md) · Implementation notes: [`lib/dockpipe/README.md`](../lib/dockpipe/README.md).
 
@@ -34,16 +35,43 @@ Variable precedence for workflows is documented in **[CLI reference](cli-referen
 
 | Key | Purpose |
 |-----|---------|
-| `name` | Optional display title for stderr (defaults to the template folder name, e.g. `llm-worktree`). |
+| `name` | Optional display title for stderr (defaults to the template folder name, e.g. `run-worktree`). |
 | `description` | Optional one-line task summary printed after `name` (e.g. what this workflow is for). |
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
 | `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). |
-| `isolate` | Template name or image for the container. For **resolver-driven** workflows (e.g. **llm-worktree**), prefer **`default_resolver`** to pick **`resolvers/<name>`**; **`isolate`** still works as a **legacy** default resolver name when **`default_resolver`** is empty. |
+| `isolate` | Template name or image for the container. For **resolver-driven** workflows (e.g. **run-worktree**), prefer **`default_resolver`** to pick **`resolvers/<name>`**; **`isolate`** still works as a **legacy** default resolver name when **`default_resolver`** is empty. |
 | `act` / `action` | Action script after the container command (when not using per-step act). |
 | `resolver` | Default resolver name (**multi-step** workflows). |
 | `default_resolver` | Default resolver name (**single-flow** workflows); takes precedence over **`isolate`** for selecting **`resolvers/<name>`**. |
 | `steps` | List of **steps** (multi-step mode). |
 | `imports` | List of paths (relative to this file) to merge **before** this file: each imported file’s **`vars`** are merged (later files override), then **`steps`** from imports run **before** **`steps`** here. Circular imports are rejected. Requires loading from disk (not raw bytes-only parse). |
+| `strategy` | Default **strategy name** when the CLI does **not** pass **`--strategy <name>`**. |
+| `strategies` | Optional allowlist: if non-empty, the effective strategy (CLI **`--strategy`** or **`strategy:`**) must be one of the listed names. |
+
+---
+
+## Named strategies
+
+**Strategies** wrap the workflow body with optional **host** scripts **before** and **after** success (same spirit as **`resolvers/`** small files). Shared definitions live under **`templates/core/strategies/`**; see **[templates/core/README.md](../templates/core/README.md)**.
+
+**Resolution order** for the strategy file path: **`--strategy <name>`** (overrides **`strategy:`** in YAML when both are set) → **`templates/<this-workflow>/strategies/<name>`** (if present) → **`templates/core/strategies/<name>`** → legacy **`templates/strategies/<name>`**.
+
+**File format** (`KEY=value`, `#` comments):
+
+| Key | Meaning |
+|-----|--------|
+| `DOCKPIPE_STRATEGY_BEFORE` | Comma-separated repo-relative script paths (under **`scripts/…`** from repo root, or paths relative to the workflow template dir), run **in order** on the host before **`run:`** / the container / **`steps:`**. |
+| `DOCKPIPE_STRATEGY_AFTER` | Same, run **after** the workflow body completes successfully (exit **0**). Bundled **`scripts/commit-worktree.sh`** is treated like today’s commit-on-host path (single commit, no duplicate with workflow **`act:`** when the strategy owns commit). |
+| `DOCKPIPE_STRATEGY_KIND` | Optional tag (e.g. `git`) for documentation only. |
+
+**Built-in names** (bundled under **`templates/core/strategies/`**):
+
+| Name | Role |
+|------|------|
+| **`git-worktree`** | **`before`:** `scripts/clone-worktree.sh` · **`after`:** `scripts/commit-worktree.sh` — worktree + resolver flows (**legacy template folder** **`run-worktree`** uses this). |
+| **`git-commit`** | **`after`:** commit only — e.g. **`commit-run`** workflow. |
+
+Do **not** list **`clone-worktree.sh`** in **`run:`** when **`git-worktree`** already provides clone (dockpipe will error). Do **not** duplicate bundled **`act:`** commit with the same strategy **`after`** hook.
 
 ---
 
@@ -58,7 +86,7 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `run` | String or YAML list: host pre-scripts before this step’s container. |
 | `pre_script` | Single extra pre-script path (in addition to `run`). |
 | `isolate` | Template/image for this step (falls back to workflow / CLI / resolver). |
-| `resolver` | Optional **name** of **`resolvers/<name>`** next to this workflow (same folder layout as **llm-worktree**). Loads **`DOCKPIPE_RESOLVER_TEMPLATE`**, **`DOCKPIPE_RESOLVER_WORKFLOW`** (runs **`templates/<name>/config.yml`** via the same runner), **`DOCKPIPE_RESOLVER_HOST_ISOLATE`**, and default **`act`** when the step does not set them. **`isolate:`** on the step still overrides the template from the resolver file. Workflow or host-isolate resolvers cannot run in **async** groups (`is_blocking: false`); use a blocking step. |
+| `resolver` | Optional **name** of **`resolvers/<name>`** next to this workflow (same folder layout as **run-worktree**). Loads **`DOCKPIPE_RESOLVER_TEMPLATE`**, **`DOCKPIPE_RESOLVER_WORKFLOW`** (runs **`templates/<name>/config.yml`** via the same runner), **`DOCKPIPE_RESOLVER_HOST_ISOLATE`**, and default **`act`** when the step does not set them. **`isolate:`** on the step still overrides the template from the resolver file. Workflow or host-isolate resolvers cannot run in **async** groups (`is_blocking: false`); use a blocking step. |
 | `act` / `action` | Action script for this step. |
 | `vars` | Per-step env map (merged for that step; `--var` keys can be “locked”). |
 | `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Default if omitted: `.dockpipe/outputs.env`. |

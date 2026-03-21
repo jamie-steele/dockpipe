@@ -6,8 +6,8 @@ import (
 
 // TestEmbeddedWorkflowConfigExists matches known bundled template names.
 func TestEmbeddedWorkflowConfigExists(t *testing.T) {
-	if !EmbeddedWorkflowConfigExists("llm-worktree") {
-		t.Fatal("expected llm-worktree")
+	if !EmbeddedWorkflowConfigExists("run-worktree") {
+		t.Fatal("expected run-worktree")
 	}
 	if !EmbeddedWorkflowConfigExists("vscode") {
 		t.Fatal("expected vscode")
@@ -17,6 +17,11 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	}
 	if !EmbeddedWorkflowConfigExists("chain-test") {
 		t.Fatal("expected chain-test")
+	}
+	for _, name := range []string{"claude", "codex", "code-server"} {
+		if !EmbeddedWorkflowConfigExists(name) {
+			t.Fatalf("expected %s", name)
+		}
 	}
 	if EmbeddedWorkflowConfigExists("") {
 		t.Fatal("empty name should be false")

@@ -21,6 +21,8 @@
     "action": { "type": "string" },
     "resolver": { "type": "string" },
     "default_resolver": { "type": "string" },
+    "strategy": { "type": "string" },
+    "strategies": { "type": "array", "items": { "type": "string" } },
     "steps": { "type": "array" },
     "resolvers": { "type": "array", "items": { "type": "string" } }
   }

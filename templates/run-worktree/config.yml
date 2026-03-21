@@ -1,9 +1,12 @@
 # Resolver-driven: image comes from resolvers/<name> (DOCKPIPE_RESOLVER_TEMPLATE), not from this file.
-name: llm-worktree
+# Clone + commit are provided by named strategy git-worktree (templates/core/strategies/git-worktree).
+name: run-worktree
 description: Run an AI CLI in a worktree; commit on host. Backend = --resolver (see resolvers/).
 
-run: scripts/clone-worktree.sh
-act: scripts/commit-worktree.sh
+strategy: git-worktree
+strategies:
+  - git-worktree
+  - git-commit
 
 # Default when --resolver is omitted (prefer this over reusing isolate: for the same purpose).
 default_resolver: claude
