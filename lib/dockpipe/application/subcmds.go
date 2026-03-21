@@ -213,7 +213,7 @@ func cmdInitLikeScript(args []string, defaultName string, bundled []string, boil
 	}
 	if from != "" {
 		base := strings.TrimSuffix(from, ".sh")
-		src := filepath.Join(repoRoot, "scripts", base+".sh")
+		src := filepath.Join(repoRoot, "templates", "core", "assets", "scripts", base+".sh")
 		if _, err := os.Stat(src); err != nil {
 			return fmt.Errorf("unknown bundled script %q (try: %v)", from, bundled)
 		}
@@ -225,7 +225,7 @@ func cmdInitLikeScript(args []string, defaultName string, bundled []string, boil
 	return os.WriteFile(dest, []byte(boiler), 0o755)
 }
 
-// mergeBundledTemplatesCore copies templates/core (runtimes, resolvers, strategies) from the dockpipe
+// mergeBundledTemplatesCore copies templates/core (runtimes, resolvers, strategies, assets) from the dockpipe
 // install into dest, matching dockpipe init without --from.
 func mergeBundledTemplatesCore(repoRoot, dest string) error {
 	_ = os.MkdirAll(filepath.Join(dest, "templates"), 0o755)

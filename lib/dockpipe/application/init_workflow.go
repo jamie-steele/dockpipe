@@ -14,9 +14,9 @@ import (
 const dockpipeProjectReadme = `# Dockpipe project
 
 - **scripts/** — Run and act scripts.
-- **images/** — Dockerfiles.
+- **images/** — Optional project Dockerfiles (e.g. **images/example/** copied from **templates/core/assets/images/example/**).
 - **templates/** — Your workflows (**config.yml**), one folder per name. Use **dockpipe --workflow &lt;name&gt;**.
-- **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/** (from **dockpipe init**).
+- **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/**, **assets/** (**scripts/**, **images/**, **compose/**) (from **dockpipe init**).
 - **dockpipe.yml** (optional) — Repo-root workflow; use **dockpipe --workflow-file dockpipe.yml**.
 `
 
@@ -162,9 +162,9 @@ func createNamedWorkflow(repoRoot, projectDir, name, fromSource, resolver, runti
 	if err := applyInitWorkflowFlags(cfgPath, resolver, runtime, strategy); err != nil {
 		return err
 	}
-	_ = copyFileMaybe(filepath.Join(repoRoot, "scripts/example-run.sh"), filepath.Join(projectDir, "scripts/example-run.sh"))
-	_ = copyFileMaybe(filepath.Join(repoRoot, "scripts/example-act.sh"), filepath.Join(projectDir, "scripts/example-act.sh"))
-	_ = copyDirMaybe(filepath.Join(repoRoot, "images/example"), filepath.Join(projectDir, "images/example"))
+	_ = copyFileMaybe(filepath.Join(repoRoot, "templates", "core", "assets", "scripts", "example-run.sh"), filepath.Join(projectDir, "scripts/example-run.sh"))
+	_ = copyFileMaybe(filepath.Join(repoRoot, "templates", "core", "assets", "scripts", "example-act.sh"), filepath.Join(projectDir, "scripts/example-act.sh"))
+	_ = copyDirMaybe(filepath.Join(repoRoot, "templates", "core", "assets", "images", "example"), filepath.Join(projectDir, "images/example"))
 	fmt.Printf("Created templates/%s/ (from %s)\n", name, fromSource)
 	return nil
 }

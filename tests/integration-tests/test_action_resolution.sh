@@ -16,7 +16,7 @@ echo "initial" > initial.txt
 git add initial.txt
 git commit -q -m "initial"
 
-# Run from $tmp with relative action path (must resolve to bundled scripts/commit-worktree.sh)
+# Run from $tmp with relative action path (must resolve to bundled templates/core/assets/scripts/commit-worktree.sh)
 "$DOCKPIPE" --workdir "$tmp" --action scripts/commit-worktree.sh \
   --env "DOCKPIPE_COMMIT_MESSAGE=resolution test" \
   -- sh -c 'echo "resolved" > resolved.txt'

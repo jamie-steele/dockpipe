@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Example act script (runs after command in container). Use as a starting point.
-# Config points to scripts/example-act.sh. Reads: DOCKPIPE_EXIT_CODE, DOCKPIPE_CONTAINER_WORKDIR.
+# Config points to scripts/example-act.sh (project copy from init). Reads: DOCKPIPE_EXIT_CODE, DOCKPIPE_CONTAINER_WORKDIR.
 set -euo pipefail
 
 echo "[example-act] Exit code: ${DOCKPIPE_EXIT_CODE:-0}" >&2

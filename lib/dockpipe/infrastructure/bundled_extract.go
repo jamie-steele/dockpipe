@@ -13,7 +13,7 @@ import (
 )
 
 // bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "53"
+const bundledFormatVersion = "56"
 
 var bundledMu sync.Mutex
 
@@ -60,7 +60,8 @@ func InvalidateBundledCache() error {
 	return os.RemoveAll(dest)
 }
 
-// MaterializedBundledRoot returns a directory containing templates/, scripts/, images/, lib/, and version.
+// MaterializedBundledRoot returns a directory containing templates/ (including templates/core with
+// assets: scripts/, images/, compose/), lib/, and version.
 // It unpacks dockpipe.BundledFS into the user cache (see also DOCKPIPE_REPO_ROOT override in RepoRoot).
 func MaterializedBundledRoot() (string, error) {
 	bundledMu.Lock()

@@ -33,3 +33,90 @@ func TestListWorkflowNamesInRepoRoot(t *testing.T) {
 		t.Fatalf("got %#v", got)
 	}
 }
+
+func TestResolveWorkflowConfigPathPrefersTemplatesWorkflow(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmp, "templates", "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wf := filepath.Join(tmp, "templates", "demo", "config.yml")
+	if err := os.WriteFile(wf, []byte("name: demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Resolver delegate YAML (would be second choice).
+	if err := os.MkdirAll(filepath.Join(tmp, "templates", "core", "resolvers", "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rs := filepath.Join(tmp, "templates", "core", "resolvers", "demo", "config.yml")
+	if err := os.WriteFile(rs, []byte("name: delegate\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveWorkflowConfigPath(tmp, "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != wf {
+		t.Fatalf("want workflow path %s got %s", wf, got)
+	}
+}
+
+func TestResolveWorkflowConfigPathFallsBackToResolverDelegate(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmp, "templates", "core", "resolvers", "codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rs := filepath.Join(tmp, "templates", "core", "resolvers", "codex", "config.yml")
+	if err := os.WriteFile(rs, []byte("name: codex\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveWorkflowConfigPath(tmp, "codex")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != rs {
+		t.Fatalf("want resolver delegate %s got %s", rs, got)
+	}
+}
+
+// TestResolveWorkflowConfigPathDoesNotSearchLegacyCoreWorkflowsDir ensures we do not load YAML
+// from an obsolete nested "workflows" directory under core (not a valid workflow lookup path).
+func TestResolveWorkflowConfigPathDoesNotSearchLegacyCoreWorkflowsDir(t *testing.T) {
+	tmp := t.TempDir()
+	legacyDir := filepath.Join(tmp, "templates", "core", "workflows", "ghost")
+	if err := os.MkdirAll(legacyDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	legacy := filepath.Join(legacyDir, "config.yml")
+	if err := os.WriteFile(legacy, []byte("name: ghost\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ResolveWorkflowConfigPath(tmp, "ghost")
+	if err == nil {
+		t.Fatal("expected error: workflow ghost must not resolve from obsolete core workflows tree")
+	}
+}
+
+func TestResolveEmbeddedResolverWorkflowConfigPathPrefersCoreResolverThenWorkflow(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmp, "templates", "core", "resolvers", "vscode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	coreCfg := filepath.Join(tmp, "templates", "core", "resolvers", "vscode", "config.yml")
+	if err := os.WriteFile(coreCfg, []byte("steps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, "templates", "vscode"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wfCfg := filepath.Join(tmp, "templates", "vscode", "config.yml")
+	if err := os.WriteFile(wfCfg, []byte("steps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveEmbeddedResolverWorkflowConfigPath(tmp, "vscode")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != coreCfg {
+		t.Fatalf("want core resolver delegate first %s got %s", coreCfg, got)
+	}
+}

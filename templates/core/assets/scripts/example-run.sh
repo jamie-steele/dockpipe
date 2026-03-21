@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Example run script (runs on host before container). Use as a starting point; replace with your workflow.
-# Config points to scripts/example-run.sh; override with --run or use dockpipe --workflow <name>.
+# Config points to scripts/example-run.sh (project copy from init); override with --run or use dockpipe --workflow <name>.
 set -euo pipefail
 
 # Minimal: run a command in the example image with current dir at /work.

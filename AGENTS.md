@@ -14,7 +14,7 @@ DockPipe provides one primitive:
 
 Everything else is built around this.
 
-**`dockpipe init`** is project-local scaffolding only: it creates or updates **`templates/`**, **`scripts/`**, **`images/`**, and merged **`templates/core/`** in the **current directory**. It does **not** clone Git repositories or bootstrap a remote project. See **`docs/cli-reference.md`**.
+**`dockpipe init`** is project-local scaffolding only: it creates or updates **`templates/`** (including merged **`templates/core/`** with **`runtimes/`**, **`resolvers/`**, **`strategies/`**, **`assets/`** — scripts, images, compose), a project-local **`scripts/`** for copies/samples, **`images/`** for the example scaffold, in the **current directory**. It does **not** clone Git repositories or bootstrap a remote project. See **`docs/cli-reference.md`** and **`docs/templates-core-assets.md`**.
 
 ---
 
@@ -106,6 +106,10 @@ templates/core/
   runtimes/
   resolvers/
   strategies/
+  assets/
+    scripts/
+    images/
+    compose/
 
 Invalid:
 templates/core/claude
@@ -184,7 +188,7 @@ DO NOT:
 
 ---
 
-## One-line philosophy
+## One-line philosophyZZZZZZZZZZZZZZZz
 
 DockPipe runs anything, anywhere, in isolation.
 

@@ -114,7 +114,7 @@ dockpipe -d -- make test
 
 ## How it works
 
-**Bundled assets:** Default **`templates/`**, **`scripts/`**, **`images/`**, and **`lib/entrypoint.sh`** are embedded in the binary and unpacked to your **user cache** on first use (override with **`DOCKPIPE_REPO_ROOT`** for development). **`dockpipe init`** scaffolds the **current project** (and optional **`templates/<name>/`**); **`dockpipe template init`** creates a workflow folder (often with **`--from`** a bundled name).
+**Bundled assets:** **`templates/`** (including **`templates/core/`**: runtimes, resolvers, strategies, **`assets/`** — scripts, images, compose) and **`lib/entrypoint.sh`** are embedded in the binary and unpacked to your **user cache** on first use (override with **`DOCKPIPE_REPO_ROOT`** for development). **`dockpipe init`** scaffolds the **current project** (and optional **`templates/<name>/`**); **`dockpipe template init`** creates a workflow folder (often with **`--from`** a bundled name). Project-local scripts live under top-level **`scripts/`** after init (samples); YAML **`scripts/…`** paths resolve there first, then bundled **`templates/core/assets/scripts/`**. See **[docs/templates-core-assets.md](docs/templates-core-assets.md)** for the bundled surface and compliance notes.
 
 **Data:** By default a named volume **`dockpipe-data`** is mounted at **`/dockpipe-data`** with **`HOME`** there so tool state can persist between runs. Use **`--data-dir`**, **`--no-data`**, or **`--reinit`** to change that.
 

@@ -1,0 +1,5 @@
+# Optional example — not executed by dockpipe. Build image first from templates/core/assets/images/vscode/ (code-server stack)
+services:
+  code-server:
+    image: dockpipe-vscode:latest
+    working_dir: /work

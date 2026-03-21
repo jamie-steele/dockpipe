@@ -54,6 +54,23 @@ In configuration, **`DOCKPIPE_RUNTIME_TYPE`** is the field that carries **`runti
 
 ---
 
+## `templates/core/` layout (filesystem)
+
+Under the repository (and in materialized bundles), **`templates/core/`** contains **only** these category directories — **no loose files** at the `core/` root:
+
+| Directory | Role |
+|-----------|------|
+| **`runtimes/`** | Runtime profiles (**where** execution runs). |
+| **`resolvers/`** | Resolver profiles (**which** tool/platform). |
+| **`strategies/`** | Strategy **KEY=value** files (lifecycle before/after). |
+| **`assets/`** | Reusable **support files** only — **`assets/scripts/`**, **`assets/images/`** (Dockerfiles), **`assets/compose/`** (optional Compose examples). Not additional primitives. |
+
+Workflows continue to reference scripts in YAML as **`scripts/…`**; the runner resolves **`repo/scripts/…`** first, then **`templates/core/assets/scripts/…`** in the bundled tree.
+
+Bundling policy and legal classification: **[templates-core-assets.md](templates-core-assets.md)**.
+
+---
+
 ## Strict invariants (must never be violated)
 
 1. **Runtime and resolver are separate concepts and must NEVER be merged** (not in naming, not in documentation, not as a single “thing” in the mental model).

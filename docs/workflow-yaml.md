@@ -14,7 +14,7 @@
 | **isolate** | Container image (and your command after `--`). |
 | **act** | Follow-up after the main command (usually a **host** script; see **[architecture.md](architecture.md)** for in-container `DOCKPIPE_ACTION`). |
 | **workflow** | This file: a named preset selected with **`--workflow <name>`**. |
-| **strategy** | Optional **named lifecycle** wrapper: small **`KEY=value`** files under **`templates/core/strategies/<name>`** (or **`templates/<workflow>/strategies/<name>`** / **`templates/<workflow>/strategies/<name>`** next to this workflow) define host scripts to run **before** and **after** the workflow body. See [Named strategies](#named-strategies) below. |
+| **strategy** | Optional **named lifecycle** wrapper: small **`KEY=value`** files under **`templates/<workflow>/strategies/<name>`** (optional) or **`templates/core/strategies/<name>`** define host scripts to run **before** and **after** the workflow body. See [Named strategies](#named-strategies) below. |
 | **runtime** / **resolver** / **isolation profile** | **Runtime** file **`templates/core/runtimes/<name>`** (**`DOCKPIPE_RUNTIME_*`**); **resolver** file **`templates/core/resolvers/<name>`** (**`DOCKPIPE_RESOLVER_*`**). Both may be set; the runner **merges** them. **Legacy:** same basename pairs **`runtimes/foo`** + **`resolvers/foo`**. See **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)**. Optional **`runtimes:`** allowlist (like **`strategies:`**). |
 
 **Learning path:** [onboarding.md](onboarding.md) · **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)** · Implementation notes: [`lib/dockpipe/README.md`](../lib/dockpipe/README.md).
@@ -56,9 +56,9 @@ Variable precedence for workflows is documented in **[CLI reference](cli-referen
 
 ## Named strategies
 
-**Strategies** wrap the workflow body with optional **host** scripts **before** and **after** success (same spirit as **`resolvers/`** small files). Shared definitions live under **`templates/core/strategies/`**; see **[templates/core/README.md](../templates/core/README.md)**.
+**Strategies** wrap the workflow body with optional **host** scripts **before** and **after** success (same spirit as **`resolvers/`** small files). Shared definitions live under **`templates/core/strategies/`**; see **[docs/architecture-model.md](architecture-model.md)** ( **`templates/core/`** layout ).
 
-**Resolution order** for the strategy file path: **`--strategy <name>`** (overrides **`strategy:`** in YAML when both are set) → **`templates/<this-workflow>/strategies/<name>`** or **`templates/<this-workflow>/strategies/<name>`** (if present) → **`templates/core/strategies/<name>`** → legacy **`templates/strategies/<name>`**.
+**Resolution order** for the strategy file path: **`--strategy <name>`** (overrides **`strategy:`** in YAML when both are set) → **`templates/<this-workflow>/strategies/<name>`** (beside that workflow’s `config.yml`, if present) → **`templates/core/strategies/<name>`** (see **`ResolveStrategyFilePath`** in **`lib/dockpipe/application/strategy.go`**).
 
 **File format** (`KEY=value`, `#` comments):
 

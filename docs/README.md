@@ -6,7 +6,7 @@
 
 | Read first | Deeper / reference |
 |------------|-------------------|
-| [install.md](install.md) | [architecture.md](architecture.md) |
+| [install.md](install.md) | [architecture.md](architecture.md) · [templates-core-assets.md](templates-core-assets.md) (bundled **`templates/core/`** surface) |
 | [runtime-architecture.md](runtime-architecture.md) — **workflow / runtime / strategy** triad, `--runtime` plan | [isolation-layer.md](isolation-layer.md) (today’s resolver profiles) |
 | [workflow-yaml.md](workflow-yaml.md) (`isolate:` / `resolver:`) | [cli-reference.md](cli-reference.md) |
 | [run](../templates/run/README.md) · [test](../templates/test/README.md) · [run-apply-validate](../templates/run-apply-validate/README.md) | [worktree strategy](../templates/core/strategies/worktree) · [workflow YAML — strategies](workflow-yaml.md#named-strategies) |

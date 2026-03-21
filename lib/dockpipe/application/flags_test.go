@@ -24,7 +24,7 @@ func TestParseFlagsHappyPath(t *testing.T) {
 		"--env", "A=B",
 		"--env-file", ".env.local",
 		"--var", "X=1",
-		"--build", "images/dev",
+		"--build", "templates/core/assets/images/dev",
 		"--data-dir", "/data",
 		"--data-vol", "dockpipe-data",
 		"--reinit",
@@ -45,7 +45,7 @@ func TestParseFlagsHappyPath(t *testing.T) {
 	if o.RepoURL == "" || o.RepoBranch != "feat/x" || o.WorkPath != "subdir" {
 		t.Fatalf("repo/work options mismatch: %+v", o)
 	}
-	if got, want := o.BuildPath, filepath.Join(repoRoot, "images/dev"); got != want {
+	if got, want := o.BuildPath, filepath.Join(repoRoot, "templates/core/assets/images/dev"); got != want {
 		t.Fatalf("BuildPath = %q, want %q", got, want)
 	}
 	if !o.Reinit || !o.Force || !o.Detach {

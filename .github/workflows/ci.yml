@@ -43,6 +43,9 @@ jobs:
       - name: Go test
         run: go test ./...
 
+      - name: Templates/core path guard (docs + code)
+        run: bash scripts/check-templates-core-paths.sh
+
       # Ship PRs only: staging/integration PRs skip this (maintainer bumps VERSION when merging staging → master).
       - name: Release notes + version bump (PRs targeting master only)
         if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'master'
@@ -109,6 +112,9 @@ jobs:
 
       - name: Go test
         run: go test ./...
+
+      - name: Templates/core path guard (docs + code)
+        run: bash scripts/check-templates-core-paths.sh
 
       - name: clone-worktree include script (bash + git)
         run: bash tests/unit-tests/test_clone_worktree_include.sh

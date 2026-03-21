@@ -14,7 +14,7 @@ Local project setup only: **no `git clone`**, no treating **`init`** as a remote
 
 | Command | Purpose |
 |---------|---------|
-| `dockpipe init` | Create **`scripts/`**, **`images/`**, **`templates/`** if needed; merge bundled **`templates/core/`**; add **`README.md`** and **`dockpipe.yml`** when missing. |
+| `dockpipe init` | Create **`scripts/`**, **`images/`**, **`templates/`** if needed; merge bundled **`templates/core/`** (**`runtimes/`**, **`resolvers/`**, **`strategies/`**, **`assets/`** — scripts, images, compose); add **`README.md`** and **`dockpipe.yml`** when missing. |
 | `dockpipe init <name>` | Create **`templates/<name>/`** using the bundled **`init`** template by default. |
 | `dockpipe init <name> --from <source>` | **`--from`** selects a **template source**: **`blank`**, a **bundled** name (e.g. **`run`**, **`test`**), or a **filesystem path** to an existing workflow directory. Not a Git URL. |
 | `dockpipe init <name> --resolver <n> --runtime <n> --strategy <n>` | Optional; written into the new **`config.yml`** (same meaning as run flags — see the table below). |
@@ -40,14 +40,14 @@ All options must appear **before** a standalone **`--`**. The command and its ar
 
 | Flag | Aliases | Purpose |
 |------|---------|---------|
-| `--workflow <name>` | | Load workflow YAML: **`templates/<name>/config.yml`**, then **`templates/core/resolvers/<name>/config.yml`**, then legacy **`templates/core/workflows/<name>/config.yml`**. With **`steps:`**, a final **`--`** is optional (see **[workflow-yaml.md](workflow-yaml.md)**). Mutually exclusive with **`--workflow-file`**. |
-| `--workflow-file <path>` | | Load workflow YAML from an arbitrary path (same shape as bundled **`config.yml`**). Relative **`run:`** / **`act:`** paths resolve next to that file. **Resolver** profiles load from **`templates/core/resolvers/`** (and legacy **`templates/run-worktree/resolvers/`**) — not from folders beside the YAML file. Mutually exclusive with **`--workflow`**. |
+| `--workflow <name>` | | Load workflow YAML: **`templates/<name>/config.yml`**, then **`templates/core/resolvers/<name>/config.yml`** (see **`ResolveWorkflowConfigPath`** in **`lib/dockpipe/infrastructure/workflow_dirs.go`**). With **`steps:`**, a final **`--`** is optional (see **[workflow-yaml.md](workflow-yaml.md)**). Mutually exclusive with **`--workflow-file`**. |
+| `--workflow-file <path>` | | Load workflow YAML from an arbitrary path (same shape as bundled **`config.yml`**). Relative **`run:`** / **`act:`** paths resolve next to that file. **Resolver** profiles load only from **`templates/core/resolvers/`** — not from folders beside the YAML file. Mutually exclusive with **`--workflow`**. |
 | `--run <path>` | `--pre-script` | **Run:** script(s) on the host before the container. Repeatable. |
 | `--isolate <name>` | `--template`, `--image` | **Isolate:** image or template (`base-dev`, `dev`, `agent-dev`, `claude`, `codex`, …). Builds if the value is a template. |
 | `--act <path>` | `--action` | **Act:** script after the container command (e.g. commit-worktree). |
 | `--runtime <name>` | | **Runtime** profile — **`templates/core/runtimes/<name>`** (environment / **`DOCKPIPE_RUNTIME_*`**). May be combined with **`--resolver`**. |
 | `--resolver <name>` | | **Resolver** profile — **`templates/core/resolvers/<name>`** or **`templates/core/resolvers/<name>/profile`** (tool adapter / **`DOCKPIPE_RESOLVER_*`**). Often used with **`--repo`** / worktree flows. Both flags may be set; the runner **merges** the two files. |
-| `--strategy <name>` | | Named lifecycle wrapper from **`templates/core/strategies/<name>`** (or **`templates/<workflow>/strategies/<name>`** / **`templates/<workflow>/strategies/<name>`**): runs **before** / **after** host scripts around the workflow body. Overrides **`strategy:`** in workflow YAML when both are set. |
+| `--strategy <name>` | | Named lifecycle wrapper from **`templates/<workflow>/strategies/<name>`** (optional) or **`templates/core/strategies/<name>`**: runs **before** / **after** host scripts around the workflow body. Overrides **`strategy:`** in workflow YAML when both are set. |
 | `--repo <url>` | | Clone URL for worktree flows. If omitted and the workflow uses **`clone-worktree.sh`**, dockpipe sets the URL from **`git remote get-url origin`** in the current dir (or **`--workdir`**). When that URL matches your **`origin`**, the worktree can be created from **your local checkout** (not only a fresh remote default). |
 | `--branch <name>` | | Explicit work branch for **`--repo`** (optional). |
 | `--work-branch <name>` | | When **`--repo`** is set and **`--branch`** is **omitted**, use this as the **full** branch name. If both are omitted, dockpipe generates **`prefix/<adj>-<noun>-<adj>-<noun>`** (random hyphenated slug; **`prefix`** from resolver / template — see **`domain.RandomWorkBranchSlug`** in **[branchslug.go](../lib/dockpipe/domain/branchslug.go)**). If **`--branch`** is set, it takes precedence over **`--work-branch`**. |

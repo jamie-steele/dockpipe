@@ -26,7 +26,7 @@ Your current directory (or a **worktree** dockpipe creates on the host) is mount
 
 ## Agnostic AI: resolvers and worktree on host
 
-AI support is **provider-agnostic**. **Resolvers** are profiles under **`templates/core/resolvers/<name>`** (or **`profile`** inside that directory) (legacy: **`templates/run-worktree/resolvers/`**). Each sets template (image), default command, and env hint. Adding a new AI tool = add a new resolver profile; no changes to core. Use **`--resolver claude`** or **`--resolver codex`**; same flags, same flow.
+AI support is **provider-agnostic**. **Resolvers** are profiles under **`templates/core/resolvers/<name>`** (or **`profile`** inside that directory). Each sets template (image), default command, and env hint. Adding a new AI tool = add a new resolver profile; no changes to core. Use **`--resolver claude`** or **`--resolver codex`**; same flags, same flow.
 
 **Worktree on host:** With **`--repo <url>`**, dockpipe prepares the clone/worktree on the **host**. The container only sees the worktree at `/work`. When the run finishes, dockpipe can run **git on the host** for commit-on-host flows—so the model in the container never needs your credentials. **Authentication** is your normal **git** setup on the OS (HTTPS/SSH, Credential Manager, etc.); dockpipe does not replace that.
 

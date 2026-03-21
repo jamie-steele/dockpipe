@@ -15,12 +15,12 @@ func TestTemplateBuild(t *testing.T) {
 		dir   string
 		ok    bool
 	}{
-		{"base-dev", "dockpipe-base-dev", filepath.Join(repoRoot, "images/base-dev"), true},
-		{"dev", "dockpipe-dev", filepath.Join(repoRoot, "images/dev"), true},
-		{"agent-dev", "dockpipe-claude", filepath.Join(repoRoot, "images/claude"), true},
-		{"claude", "dockpipe-claude", filepath.Join(repoRoot, "images/claude"), true},
-		{"codex", "dockpipe-codex", filepath.Join(repoRoot, "images/codex"), true},
-		{"vscode", "dockpipe-vscode", filepath.Join(repoRoot, "images/vscode"), true},
+		{"base-dev", "dockpipe-base-dev", filepath.Join(repoRoot, "templates", "core", "assets", "images", "base-dev"), true},
+		{"dev", "dockpipe-dev", filepath.Join(repoRoot, "templates", "core", "assets", "images", "dev"), true},
+		{"agent-dev", "dockpipe-claude", filepath.Join(repoRoot, "templates", "core", "assets", "images", "claude"), true},
+		{"claude", "dockpipe-claude", filepath.Join(repoRoot, "templates", "core", "assets", "images", "claude"), true},
+		{"codex", "dockpipe-codex", filepath.Join(repoRoot, "templates", "core", "assets", "images", "codex"), true},
+		{"vscode", "dockpipe-vscode", filepath.Join(repoRoot, "templates", "core", "assets", "images", "vscode"), true},
 		{"unknown", "", "", false},
 	}
 	for _, tc := range cases {

@@ -21,10 +21,11 @@ func mkRepoRootForSubcmdTests(t *testing.T) string {
 	t.Helper()
 	repoRoot := t.TempDir()
 	writeFile(t, filepath.Join(repoRoot, "templates", "init", "config.yml"), "name: init\n", 0o644)
+	writeFile(t, filepath.Join(repoRoot, "templates", "run", "config.yml"), "name: run\nrun: []\n", 0o644)
 	writeFile(t, filepath.Join(repoRoot, "templates", "core", "resolvers", "default"), "DOCKPIPE_RESOLVER_TEMPLATE=codex\n", 0o644)
 	writeFile(t, filepath.Join(repoRoot, "templates", "core", "resolvers", "claude"), "DOCKPIPE_RESOLVER_TEMPLATE=claude\n", 0o644)
-	writeFile(t, filepath.Join(repoRoot, "scripts", "commit-worktree.sh"), "#!/usr/bin/env bash\n", 0o755)
-	writeFile(t, filepath.Join(repoRoot, "scripts", "clone-worktree.sh"), "#!/usr/bin/env bash\n", 0o755)
+	writeFile(t, filepath.Join(repoRoot, "templates", "core", "assets", "scripts", "commit-worktree.sh"), "#!/usr/bin/env bash\n", 0o755)
+	writeFile(t, filepath.Join(repoRoot, "templates", "core", "assets", "scripts", "clone-worktree.sh"), "#!/usr/bin/env bash\n", 0o755)
 	return repoRoot
 }
 
@@ -70,7 +71,7 @@ func TestCmdTemplateCreatesFromBundled(t *testing.T) {
 func TestCmdInitLikeScriptCreateAndFromBundled(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
-	writeFile(t, filepath.Join(repoRoot, "scripts", "print-summary.sh"), "#!/usr/bin/env bash\necho ok\n", 0o755)
+	writeFile(t, filepath.Join(repoRoot, "templates", "core", "assets", "scripts", "print-summary.sh"), "#!/usr/bin/env bash\necho ok\n", 0o755)
 
 	wd := t.TempDir()
 	oldWd, _ := os.Getwd()
@@ -128,20 +129,21 @@ func TestCmdPreInitCreatesDefaultScript(t *testing.T) {
 	}
 }
 
-// TestMergeBundledTemplatesCoreCopiesCoreTree copies templates/core from repoRoot into dest.
+// TestMergeBundledTemplatesCoreCopiesCoreTree copies templates/core from repoRoot into dest,
+// including nested assets (mergeBundledTemplatesCore is path-agnostic under templates/core).
 func TestMergeBundledTemplatesCoreCopiesCoreTree(t *testing.T) {
 	repo := t.TempDir()
 	dest := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(repo, "templates", "core", "x"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(repo, "templates", "core", "assets", "scripts"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(repo, "templates", "core", "x", "marker.txt"), []byte("ok\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "templates", "core", "assets", "scripts", "merge-marker.txt"), []byte("ok\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := mergeBundledTemplatesCore(repo, dest); err != nil {
 		t.Fatalf("mergeBundledTemplatesCore: %v", err)
 	}
-	b, err := os.ReadFile(filepath.Join(dest, "templates", "core", "x", "marker.txt"))
+	b, err := os.ReadFile(filepath.Join(dest, "templates", "core", "assets", "scripts", "merge-marker.txt"))
 	if err != nil || string(b) != "ok\n" {
 		t.Fatalf("got %v %q", err, string(b))
 	}
@@ -263,6 +265,53 @@ func TestCmdInitRequiresNameForFrom(t *testing.T) {
 	err = cmdInit([]string{"--from", "run"})
 	if err == nil || !strings.Contains(err.Error(), "requires a workflow name") {
 		t.Fatalf("expected --from requires name error, got %v", err)
+	}
+}
+
+// TestCmdInitBareMergesFullCoreTree verifies dockpipe init (no name) merges the real bundled
+// templates/core tree including assets/scripts, assets/images, assets/compose, runtimes, resolvers, strategies.
+func TestCmdInitBareMergesFullCoreTree(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
+	project := t.TempDir()
+	oldWd, _ := os.Getwd()
+	if err := os.Chdir(project); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	if err := cmdInit([]string{}); err != nil {
+		t.Fatalf("cmdInit: %v", err)
+	}
+	markers := []string{
+		filepath.Join(project, "templates", "core", "assets", "scripts", "helloworld.ps1"),
+		filepath.Join(project, "templates", "core", "assets", "compose", "README.md"),
+		filepath.Join(project, "templates", "core", "assets", "images", "base-dev", "Dockerfile"),
+		filepath.Join(project, "templates", "core", "runtimes", "cli", "profile"),
+		filepath.Join(project, "templates", "core", "strategies", "worktree"),
+		filepath.Join(project, "templates", "core", "resolvers", "claude", "profile"),
+	}
+	for _, p := range markers {
+		if _, err := os.Stat(p); err != nil {
+			t.Fatalf("expected merged path %q: %v", p, err)
+		}
+	}
+}
+
+// TestCmdInitFromURLRejected ensures init --from does not accept git URLs (project-local sources only).
+func TestCmdInitFromURLRejected(t *testing.T) {
+	repoRoot := mkRepoRootForSubcmdTests(t)
+	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
+	project := t.TempDir()
+	oldWd, _ := os.Getwd()
+	if err := os.Chdir(project); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	err := cmdInit([]string{"demo", "--from", "https://example.com/repo.git"})
+	if err == nil || !strings.Contains(err.Error(), "not a URL") {
+		t.Fatalf("expected URL rejection, got %v", err)
 	}
 }
 

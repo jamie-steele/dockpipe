@@ -6,7 +6,7 @@ GO_LDFLAGS := -s -w -X main.Version=$(DEB_VERSION)
 #   make build-windows WINDOWS_OUT=/Volumes/jsteele/Downloads/dockpipe.exe
 # (exact /Volumes/… name appears in Finder after connecting to smb://anton.local/…)
 WINDOWS_OUT ?= bin/dockpipe.exe
-.PHONY: build build-windows test deb deb-all
+.PHONY: build build-windows test check-paths deb deb-all
 build:
 	cp VERSION cmd/dockpipe/VERSION
 	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o bin/dockpipe.bin ./cmd/dockpipe
@@ -21,6 +21,10 @@ build-windows:
 
 test:
 	go test ./...
+
+# Docs/code guardrail: obsolete templates/core paths (pre-assets layout). See CONTRIBUTING.md.
+check-paths:
+	bash scripts/check-templates-core-paths.sh
 
 # Debian packages (requires dpkg-deb). Default arch amd64; deb-all builds amd64 + arm64.
 deb:

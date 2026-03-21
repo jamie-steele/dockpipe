@@ -7,16 +7,23 @@ import (
 	"strings"
 )
 
-// ResolveWorkflowScript resolves run/act path: scripts/* from repo root, else workflow template dir.
-// Uses forward slashes so YAML workflow paths match Linux/container expectations on every GOOS.
+// ResolveWorkflowScript resolves run/act path: scripts/* from the project (repoRoot/scripts/) if
+// present, else bundled framework scripts under templates/core/assets/scripts/; other paths are relative
+// to the workflow template dir. Uses forward slashes so YAML paths match Linux/container expectations.
 func ResolveWorkflowScript(rel, workflowRoot, repoRoot string) string {
-	var joined string
 	if strings.HasPrefix(rel, "scripts/") {
-		joined = filepath.Join(repoRoot, rel)
-	} else {
-		joined = filepath.Join(workflowRoot, rel)
+		return filepath.ToSlash(resolveScriptsPrefixedPath(repoRoot, rel))
 	}
-	return filepath.ToSlash(joined)
+	return filepath.ToSlash(filepath.Join(workflowRoot, rel))
+}
+
+func resolveScriptsPrefixedPath(repoRoot, rel string) string {
+	rest := strings.TrimPrefix(rel, "scripts/")
+	user := filepath.Join(repoRoot, "scripts", rest)
+	if st, err := os.Stat(user); err == nil && !st.IsDir() {
+		return user
+	}
+	return filepath.Join(repoRoot, "templates", "core", "assets", "scripts", rest)
 }
 
 // ResolveActionPath resolves act script like bin/dockpipe.
@@ -27,11 +34,14 @@ func ResolveActionPath(action, repoRoot, cwd string) (string, error) {
 	if filepath.IsAbs(action) {
 		return action, nil
 	}
-	candidates := []string{
-		filepath.Join(repoRoot, action),
-		filepath.Join(repoRoot, "scripts", action),
-		filepath.Join(cwd, action),
+	candidates := []string{filepath.Join(repoRoot, action)}
+	if strings.HasPrefix(action, "scripts/") {
+		rest := strings.TrimPrefix(action, "scripts/")
+		candidates = append(candidates, filepath.Join(repoRoot, "templates", "core", "assets", "scripts", rest))
+	} else {
+		candidates = append(candidates, filepath.Join(repoRoot, "scripts", action))
 	}
+	candidates = append(candidates, filepath.Join(cwd, action))
 	for _, c := range candidates {
 		if st, err := os.Stat(c); err == nil && !st.IsDir() {
 			return filepath.Abs(c)
@@ -44,6 +54,9 @@ func ResolveActionPath(action, repoRoot, cwd string) (string, error) {
 func ResolvePreScriptPath(p, repoRoot string) string {
 	if filepath.IsAbs(p) {
 		return p
+	}
+	if strings.HasPrefix(p, "scripts/") {
+		return resolveScriptsPrefixedPath(repoRoot, p)
 	}
 	c := filepath.Join(repoRoot, p)
 	if _, err := os.Stat(c); err == nil {
@@ -78,14 +91,21 @@ func ResolveResolverFilePath(repoRoot, resolverName string) (string, error) {
 
 // IsBundledCommitWorktree reports whether action is the bundled commit-worktree.sh.
 func IsBundledCommitWorktree(actionPath, repoRoot string) bool {
-	b := filepath.Join(repoRoot, "scripts/commit-worktree.sh")
 	a, err := filepath.Abs(actionPath)
 	if err != nil {
 		return false
 	}
-	b, err = filepath.Abs(b)
-	if err != nil {
-		return false
+	for _, b := range []string{
+		filepath.Join(repoRoot, "scripts", "commit-worktree.sh"),
+		filepath.Join(repoRoot, "templates", "core", "assets", "scripts", "commit-worktree.sh"),
+	} {
+		bp, err := filepath.Abs(b)
+		if err != nil {
+			continue
+		}
+		if a == bp {
+			return true
+		}
 	}
-	return a == b
+	return false
 }

@@ -1,0 +1,5 @@
+# Optional example — not executed by dockpipe. Build image first from templates/core/assets/images/claude/
+services:
+  claude:
+    image: dockpipe-claude:latest
+    working_dir: /work

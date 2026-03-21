@@ -46,7 +46,7 @@ Below, **`runtime`** still refers to **isolated execution environment** (technic
 
 **On-disk layout**
 
-- **Specific** profiles: **`KEY=value`** files only under **`templates/core/runtimes/<name>`** or **`templates/core/resolvers/<name>`** (or **`resolvers/<name>/profile`**) (plus legacy **`templates/run-worktree/resolvers/<name>`**). **Not** next to a workflow’s `config.yml`.
+- **Specific** profiles: **`KEY=value`** files only under **`templates/core/runtimes/<name>`** or **`templates/core/resolvers/<name>`** (or **`resolvers/<name>/profile`**). **Not** next to a workflow’s `config.yml`.
 - **Workflows** are **`templates/<workflow>/config.yml`** (or any path via **`--workflow-file`**). Multi-step pipelines (`test` → `run` → **apply** → **validate**) are expressed as **steps:** or **imports:** in YAML, or as separate **`--workflow`** names — not as extra files beside the workflow folder.
 
 ---

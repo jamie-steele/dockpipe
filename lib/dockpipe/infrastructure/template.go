@@ -6,19 +6,22 @@ import (
 	"strings"
 )
 
-// TemplateBuild maps template name → image name and Dockerfile directory under repo root.
+// TemplateBuild maps template name → image name and Dockerfile directory under templates/core/assets/images/.
 func TemplateBuild(repoRoot, name string) (image string, dockerfileDir string, ok bool) {
+	coreImg := func(n string) string {
+		return filepath.Join(repoRoot, "templates", "core", "assets", "images", n)
+	}
 	switch name {
 	case "base-dev":
-		return "dockpipe-base-dev", filepath.Join(repoRoot, "images/base-dev"), true
+		return "dockpipe-base-dev", coreImg("base-dev"), true
 	case "dev":
-		return "dockpipe-dev", filepath.Join(repoRoot, "images/dev"), true
+		return "dockpipe-dev", coreImg("dev"), true
 	case "agent-dev", "claude":
-		return "dockpipe-claude", filepath.Join(repoRoot, "images/claude"), true
+		return "dockpipe-claude", coreImg("claude"), true
 	case "codex":
-		return "dockpipe-codex", filepath.Join(repoRoot, "images/codex"), true
+		return "dockpipe-codex", coreImg("codex"), true
 	case "vscode":
-		return "dockpipe-vscode", filepath.Join(repoRoot, "images/vscode"), true
+		return "dockpipe-vscode", coreImg("vscode"), true
 	default:
 		return "", "", false
 	}

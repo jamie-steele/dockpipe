@@ -342,10 +342,10 @@ func TestDockerBuildPaths(t *testing.T) {
 		}
 		return exec.Command("bash", "-c", "exit 0")
 	}
-	if err := DockerBuild("dockpipe-dev:0.6.0", "/repo/images/dev", "/repo"); err != nil {
+	if err := DockerBuild("dockpipe-dev:0.6.0", "/repo/templates/core/assets/images/dev", "/repo"); err != nil {
 		t.Fatalf("DockerBuild dockpipe-dev failed: %v", err)
 	}
-	if err := DockerBuild("ubuntu:latest", "/repo/images/dev", "/repo"); err != nil {
+	if err := DockerBuild("ubuntu:latest", "/repo/templates/core/assets/images/dev", "/repo"); err != nil {
 		t.Fatalf("DockerBuild non-dockpipe failed: %v", err)
 	}
 	mu.Lock()

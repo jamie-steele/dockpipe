@@ -6,7 +6,7 @@
 
 ### Bundled templates (no extra install tree)
 
-**`templates/`**, **`scripts/`**, **`images/`**, and **`lib/entrypoint.sh`** ship **inside** the `dockpipe` binary. On first use they unpack to the **user cache** (e.g. `~/.cache/dockpipe/bundled-<version>` on Linux, `%LocalAppData%\dockpipe\...` on Windows). You do **not** need a git clone of dockpipe next to the binary for **`--workflow`** or default images.
+**`templates/`** (including **`templates/core/`** with **`assets/`** — scripts, images, compose — plus runtimes, resolvers, strategies) and **`lib/entrypoint.sh`** ship **inside** the `dockpipe` binary. On first use they unpack to the **user cache** (e.g. `~/.cache/dockpipe/bundled-<version>` on Linux, `%LocalAppData%\dockpipe\...` on Windows). You do **not** need a git clone of dockpipe next to the binary for **`--workflow`** or default images.
 
 - **`DOCKPIPE_REPO_ROOT`** — optional override to point at a **dockpipe source tree** (e.g. when editing templates).
 - **`DOCKPIPE_BUNDLED_CACHE`** — optional parent directory for the `dockpipe/bundled-*` folder (tests, custom cache location).

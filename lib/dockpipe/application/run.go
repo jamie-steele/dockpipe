@@ -349,7 +349,7 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 		if hostIsolate == "" && resolverWorkflow == "" {
 			if image == "" {
-				image, buildDir = "dockpipe-base-dev", filepath.Join(repoRoot, "images/base-dev")
+				image, buildDir = "dockpipe-base-dev", filepath.Join(repoRoot, "templates", "core", "assets", "images", "base-dev")
 				buildCtx = repoRoot
 			}
 			image = maybeVersionTagAppFn(repoRoot, image)
@@ -417,7 +417,7 @@ func Run(argv []string, baseEnviron []string) error {
 			fmt.Fprintf(os.Stderr, "[dockpipe] Data dir for worktrees: %s (override with --data-dir)\n", dataDir)
 			dataVol = ""
 		}
-		opts.PreScripts = []string{filepath.Join(repoRoot, "scripts/clone-worktree.sh")}
+		opts.PreScripts = []string{"scripts/clone-worktree.sh"}
 	}
 
 	// Drop inherited DOCKPIPE_WORKDIR before pre-scripts: a leftover export (or workflow .env)

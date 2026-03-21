@@ -4,7 +4,7 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DOCKPIPE="$REPO_ROOT/bin/dockpipe"
-ACTION="$REPO_ROOT/scripts/commit-worktree.sh"
+ACTION="$REPO_ROOT/templates/core/assets/scripts/commit-worktree.sh"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

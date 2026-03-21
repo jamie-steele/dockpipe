@@ -232,12 +232,34 @@ if [[ -n "$user_root" ]] && git -C "$user_root" rev-parse --is-inside-work-tree 
   return 0
 fi
 
+# HTTPS clone with GIT_PAT: inject credentials without embedding the token in the git config.
+# The old pattern (password=${GIT_PAT} inside a shell snippet in the config file) broke when the
+# token contained shell metacharacters, quotes, $, or newlines. We use a tiny helper script that
+# reads GIT_PAT from the environment when git invokes it (same UX: export GIT_PAT before running).
 tmp_config=""
+tmp_helper=""
 if [[ -n "${GIT_PAT:-}" ]]; then
+  if [[ "${GIT_PAT}" == *$'\n'* ]]; then
+    echo "[dockpipe] clone-worktree: GIT_PAT must not contain newline characters" >&2
+    return 1
+  fi
+  tmp_helper=$(mktemp)
   tmp_config=$(mktemp)
-  echo '[credential]' >> "${tmp_config}"
-  echo "	helper = !f() { echo username=pat; echo password=${GIT_PAT}; }; f" >> "${tmp_config}"
+  cat >"${tmp_helper}" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+echo username=pat
+printf 'password=%s\n' "${GIT_PAT}"
+EOF
+  chmod +x "${tmp_helper}"
+  {
+    echo '[credential]'
+    # Token is not written here; helper reads GIT_PAT at runtime. Path is from mktemp (no spaces).
+    printf '\thelper = !%s\n' "${tmp_helper}"
+  } >"${tmp_config}"
   export GIT_CONFIG_GLOBAL="${tmp_config}"
+  # Ensure temp files are removed if git clone/fetch fails (set -e).
+  trap 'rm -f "${tmp_config}" "${tmp_helper}" 2>/dev/null; unset GIT_CONFIG_GLOBAL; trap - EXIT' EXIT
 fi
 
 if [[ ! -d "${repo_path}/.git" ]]; then
@@ -249,8 +271,9 @@ else
 fi
 
 if [[ -n "${tmp_config}" ]]; then
-  rm -f "${tmp_config}"
+  rm -f "${tmp_config}" "${tmp_helper}"
   unset GIT_CONFIG_GLOBAL
+  trap - EXIT
 fi
 
 base_branch="${BASE_BRANCH:-}"
