@@ -8,6 +8,6 @@
 |------------|-------------------|
 | [install.md](install.md) | [architecture.md](architecture.md) |
 | [workflow-yaml.md](workflow-yaml.md) | [cli-reference.md](cli-reference.md) |
-| [chaining.md](chaining.md) | [wsl-windows.md](wsl-windows.md) |
+| [chaining.md](chaining.md) | [wsl-windows.md](wsl-windows.md) (optional WSL↔Windows bundle — most users skip) |
 
 **QA:** [qa/manual-qa.md](qa/manual-qa.md)

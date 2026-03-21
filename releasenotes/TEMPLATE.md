@@ -152,7 +152,7 @@ dockpipe --version
 dockpipe -- echo ok
 ```
 
-**Optional — WSL bridge** (`DOCKPIPE_USE_WSL_BRIDGE=1`): install **`dockpipe`** in WSL, then **`dockpipe windows setup`**. See **[docs/wsl-windows.md](https://github.com/jamie-steele/dockpipe/blob/vX.Y.Z/docs/wsl-windows.md)**.
+**Optional — WSL bridge** (`DOCKPIPE_USE_WSL_BRIDGE=1`): install **`dockpipe`** in WSL, then **`dockpipe windows setup`**. See **[docs/install.md](https://github.com/jamie-steele/dockpipe/blob/vX.Y.Z/docs/install.md)** (Windows). Optional advanced **git bundle** handoff between WSL and Windows: **[docs/wsl-windows.md](https://github.com/jamie-steele/dockpipe/blob/vX.Y.Z/docs/wsl-windows.md)**.
 
 **Build from source on Windows**
 

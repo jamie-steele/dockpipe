@@ -8,11 +8,13 @@ func printUsage() {
 Usage:
   dockpipe [options] -- <command> [args...]
   dockpipe --workflow <name> [options] -- <command>
+  dockpipe --workflow-file <path> [options]     workflow YAML (e.g. repo-root dockpipe.yml)
   dockpipe --workflow <name> [options]          multi-step (steps: in config.yml), optional -- for last step
+  dockpipe workflow validate [path]             lint workflow YAML (default: dockpipe.yml)
   dockpipe init | action init | pre init | template init | windows setup
 
 Options:
-  --workflow, --run, --isolate, --act, --resolver, --repo, --branch, --workdir,
+  --workflow, --workflow-file, --run, --isolate, --act, --resolver, --repo, --branch, --workdir,
   --data-dir, --data-vol, --no-data, --reinit, -f, --mount, --env, --env-file,
   --var, --build, -d/--detach, -h/--help, --version / -v / -V
 

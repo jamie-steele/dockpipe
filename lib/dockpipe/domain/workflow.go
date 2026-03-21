@@ -63,6 +63,10 @@ type Step struct {
 	// non-blocking steps. Inputs = env after last blocking step + this step’s vars/pre-scripts only;
 	// outputs merge in order after the whole batch (see lib/dockpipe/README.md).
 	Blocking *bool `yaml:"is_blocking,omitempty"`
+	// CaptureStdout: host path (relative to DOCKPIPE_WORKDIR or cwd) to tee container stdout into.
+	CaptureStdout string `yaml:"capture_stdout,omitempty"`
+	// Manifest: host path to write a small JSON manifest after the step (exit_code, duration_ms, id).
+	Manifest string `yaml:"manifest,omitempty"`
 }
 
 // IsBlocking reports whether this step completes before the pipeline advances (default true).
@@ -122,6 +126,7 @@ type workflowFile struct {
 	Resolver        string            `yaml:"resolver"`
 	DefaultResolver string            `yaml:"default_resolver"`
 	Vars            map[string]string `yaml:"vars"`
+	Imports         []string          `yaml:"imports,omitempty"`
 	Steps           []stepOrGroupYAML `yaml:"steps"`
 }
 
@@ -213,28 +218,8 @@ func flattenSteps(items []stepOrGroupYAML) ([]Step, error) {
 	return out, nil
 }
 
-// ParseWorkflowYAML unmarshals workflow config from YAML bytes.
-// Optional sugar: an entry `{ group: { mode: async, tasks: [...] } }` expands to consecutive
-// steps with is_blocking: false (same runtime as writing those steps by hand).
+// ParseWorkflowYAML unmarshals workflow config from YAML bytes (no imports).
+// If the document contains imports:, use ParseWorkflowFromDisk with a readFile callback (see LoadWorkflow in infrastructure).
 func ParseWorkflowYAML(data []byte) (*Workflow, error) {
-	var f workflowFile
-	if err := yaml.Unmarshal(data, &f); err != nil {
-		return nil, err
-	}
-	steps, err := flattenSteps(f.Steps)
-	if err != nil {
-		return nil, err
-	}
-	return &Workflow{
-		Name:            f.Name,
-		Description:     f.Description,
-		Run:             f.Run,
-		Isolate:         f.Isolate,
-		Act:             f.Act,
-		Action:          f.Action,
-		Resolver:        f.Resolver,
-		DefaultResolver: f.DefaultResolver,
-		Vars:            f.Vars,
-		Steps:           steps,
-	}, nil
+	return ParseWorkflowFromDisk(data, ".", nil)
 }

@@ -26,7 +26,7 @@ No manual cleanup—you keep using the same commands (`make`, tests, linters—w
 
 **Under the hood:** Dockpipe follows a simple flow—**run** (optional prep on your machine), **isolate** (your command in the container), **act** (optional script on your machine after the container exits). Most of the time you only use the middle step: **`dockpipe -- <command>`**.
 
-Optional **named workflows** in YAML (`--workflow`) are there when you want the same setup every time—copy-paste isn’t required to get started. **Learning path:** **[docs/onboarding.md](docs/onboarding.md)** · **[docs/workflow-yaml.md](docs/workflow-yaml.md)** · **[templates/llm-worktree/README.md](templates/llm-worktree/README.md)**.
+Optional **named workflows** in YAML — bundled templates via **`--workflow <name>`**, or a file anywhere (often **`dockpipe.yml`** at the repo root) via **`--workflow-file <path>`**. **Learning path:** **[docs/onboarding.md](docs/onboarding.md)** · **[docs/workflow-yaml.md](docs/workflow-yaml.md)** · **[templates/llm-worktree/README.md](templates/llm-worktree/README.md)**.
 
 ---
 
@@ -46,6 +46,7 @@ dockpipe does the wiring, optional **act** phase, and a pipe-friendly CLI. On Li
 
 ```text
 dockpipe [options] -- <command> [args...]
+dockpipe workflow validate [path]
 dockpipe action init [--from <bundled>] <filename>
 dockpipe template init [--from <bundled>] <dirname>
 dockpipe windows setup [--distro <name>] [--install-command <cmd>] [--non-interactive]

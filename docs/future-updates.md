@@ -18,20 +18,15 @@ Only include items that are **not implemented yet**.
 
 ---
 
-## Workflow UX enhancements
+## Workflow UX (remaining)
 
-- Optional repo-root `dockpipe.yml` (same shape as template config).
-- `dockpipe init` scaffolds richer default config.
-- JSON schema validation / linting for workflow YAML (e.g. `dockpipe workflow validate`).
-- Partial config imports / sharing snippets across templates.
-- Optional stdout capture as `outputs` for step chaining.
-- Optional small JSON manifest output format for steps.
+- Optional: treat captured **stdout** as **`outputs:`**-style env for the next step (today **`capture_stdout`** only writes a host file; it does not merge into the dotenv chain).
 
 ---
 
 ## Host actions (Windows/macOS/Linux)
 
-**Today:** Native Windows `dockpipe.exe` uses host git/docker; WSL→Windows bundle fetch is documented in **[wsl-windows.md](wsl-windows.md)**; `dockpipe windows setup` applies when using the **optional** bridge. That is **not** the same as first-class **host actions** in workflows.
+**Today:** Native Windows **`dockpipe.exe`** uses host git/docker (same model as Linux/macOS). The **optional WSL bridge** (**`DOCKPIPE_USE_WSL_BRIDGE=1`**, **`dockpipe windows setup`**) forwards commands into a distro — see **[install.md](install.md)** / **[cli-reference.md](cli-reference.md)**. That is **not** the same as first-class **host actions** in workflows.
 
 **Still to build:**
 
@@ -55,30 +50,11 @@ Only include items that are **not implemented yet**.
 
 ---
 
-## Isolated GUI & IDE workbenches
+## Optional GUI / web shell (research — not on the core roadmap)
 
-Run graphical applications (IDEs, browsers, AI agents) in a disposable container with a native host-side experience. The core **run → isolate → act** flow stays: work in the window, close to exit, and trigger host-side actions (e.g. git commits) automatically.
+Dockpipe’s product is **run → isolate → act** with Docker and host git — not a replacement IDE or compositor.
 
-### The “lightweight” approach (Electron / web stacks)
-
-Most modern dev tools (VS Code, Cursor, Claude Code, etc.) sit on web engines — decouple the **engine** from the **view** to cut bloat.
-
-- **Isolate (container):** headless backend (e.g. code-server or a specialized AI dev server).
-- **View (host):** a small **Go** front-end using native OS webviews (**WebKitGTK** / **WebView2**) pointed at the container’s mapped port.
-
-**Win:** near-native performance, OS clipboard and shortcuts, low-latency rendering, without shipping a ~500MB Chromium shell.
-
-### Legacy GUI support (X11 / Wayland)
-
-For heavier or non-web apps (traditional IDEs, browsers, arbitrary GUI tools):
-
-- **X11:** headless VNC inside the container + **noVNC** in the Go webview — pixel-accurate isolation for untrusted GUI workloads on X11 hosts (e.g. Pop!_OS).
-- **Wayland:** passthrough the compositor socket on Wayland-native hosts, or **WSLg** on Windows, for hardware-accelerated, high-DPI display while keeping workload isolation.
-
-### Native lifecycle & shell
-
-- **Lifecycle sync:** closing the Go webview stops the container and moves the workflow into the **act** phase (audit complete).
-- **Universal frame:** a standard Dockpipe chrome (commit, status, revert, etc.) regardless of what runs inside the webview.
+If someone wanted a **thin host UI** around a containerized dev server (e.g. port-forward + native webview instead of a full browser tab), that would be a **separate experiment**: no commitment to X11, Wayland, VNC, or WSLg passthrough; those were old brainstorm bullets, not a plan. Anything serious would need a dedicated design and owner.
 
 ---
 

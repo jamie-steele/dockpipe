@@ -1,6 +1,10 @@
 # Workflow YAML (`config.yml`)
 
-Templates use **`templates/<name>/config.yml`**. Load with **`dockpipe --workflow <name>`** (plus your command after `--`).
+**Bundled templates** use **`templates/<name>/config.yml`**. Load with **`dockpipe --workflow <name>`** (plus your command after **`--`**).
+
+**Repo-root workflow:** put the **same** YAML shape in **`dockpipe.yml`** (or any path) and run **`dockpipe --workflow-file dockpipe.yml`** so scripts resolve relative to that file’s directory (e.g. **`resolvers/`** next to the file). Do not pass **`--workflow`** and **`--workflow-file`** together.
+
+**Lint:** **`dockpipe workflow validate [path]`** — parses the workflow (including **`imports:`**) and checks against a small embedded JSON Schema. Default path: **`dockpipe.yml`** in the current directory.
 
 **Terminology (same as the CLI):**
 
@@ -39,6 +43,7 @@ Variable precedence for workflows is documented in **[CLI reference](cli-referen
 | `resolver` | Default resolver name (**multi-step** workflows). |
 | `default_resolver` | Default resolver name (**single-flow** workflows); takes precedence over **`isolate`** for selecting **`resolvers/<name>`**. |
 | `steps` | List of **steps** (multi-step mode). |
+| `imports` | List of paths (relative to this file) to merge **before** this file: each imported file’s **`vars`** are merged (later files override), then **`steps`** from imports run **before** **`steps`** here. Circular imports are rejected. Requires loading from disk (not raw bytes-only parse). |
 
 ---
 
@@ -56,6 +61,8 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `act` / `action` | Action script for this step. |
 | `vars` | Per-step env map (merged for that step; `--var` keys can be “locked”). |
 | `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Default if omitted: `.dockpipe/outputs.env`. |
+| `capture_stdout` | Host path (relative to **`DOCKPIPE_WORKDIR`** / **`--workdir`**) — container **stdout** is also appended to this file (still printed on the terminal). |
+| `manifest` | Host path — after the step, dockpipe writes a small JSON file with **`exit_code`**, **`duration_ms`**, **`step_index`**, **`id`** (if set), and **`step_display`**. |
 | `skip_container` | If `true`, no container: only pre-scripts + merge `outputs` from disk. |
 | `is_blocking` | Default **`true`**. If **`false`**, this step joins an **async group** with adjacent non-blocking steps (see below). |
 
@@ -154,6 +161,6 @@ Run from repo root: `dockpipe --workflow workflow-demo` (see each template’s R
 
 ## See also
 
-- **[CLI reference](cli-reference.md)** — flags, `--workflow`, `--var`, `--env-file`.
+- **[CLI reference](cli-reference.md)** — flags, `--workflow`, `--workflow-file`, `workflow validate`, `--var`, `--env-file`.
 - **[Architecture](architecture.md)** — how the Go CLI runs steps, docker, pre-scripts.
 - **[lib/dockpipe/README.md](../lib/dockpipe/README.md)** — package layout and contributor-oriented notes.

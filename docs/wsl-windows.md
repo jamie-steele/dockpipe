@@ -1,10 +1,16 @@
-# WSL2 → Windows: git bundle fetch
+# WSL2 → Windows: git bundle fetch (optional / advanced)
 
-Get branches from a repo in WSL into your Windows clone **without pushing to a remote**. dockpipe can write a git bundle when it commits on the host; you then fetch that bundle from PowerShell.
+**Most users:** run **`dockpipe.exe` natively on Windows** (Docker Desktop + Git for Windows) and ignore this page — worktrees and commit-on-host use **Windows git** only.
+
+This doc is **only** for a **niche** flow: moving refs between a **WSL** clone and a **Windows** clone **via git bundle** (no remote), or related **mixed-environment** git gymnastics. It is **not** required for normal Dockpipe on Windows.
+
+---
+
+Get branches from a repo in WSL into your Windows clone **without pushing to a remote**. Dockpipe can write a git bundle when it commits on the host; you then fetch that bundle from PowerShell.
 
 **Install `dockpipe.exe` first** (MSI, script, or zip) — see **[install.md](install.md)** (Windows section). Quick option: `irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex`
 
-**Default Windows UX:** use **`dockpipe.exe` on Windows** (Docker Desktop + Git for Windows) — same mental model as on Linux: Windows is Windows. This doc is for **git bundle / mixed-clone** workflows across WSL and Windows, or if you use the **optional** WSL bridge; it is **not** part of the default install story.
+**WSL bridge users** may also read the sections below; the **default** Windows story remains **native `dockpipe.exe`**, not bundle fetch.
 
 **If you use the WSL bridge**, recommended one-time setup (Windows terminal):
 

@@ -6,7 +6,7 @@
 
 **Workflow YAML (`config.yml`):** single-command layout (`run` / `isolate` / `act`) or multi-step **`steps:`** (ordering, **`outputs:`**, **`is_blocking`**, optional **`group.mode: async`**). Full reference: **[workflow-yaml.md](workflow-yaml.md)**.
 
-**Subcommands:** `dockpipe init`, `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
+**Subcommands:** `dockpipe init`, `dockpipe workflow validate [path]`, `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
 
 ## Workflow variables (`--workflow`)
 
@@ -29,7 +29,8 @@ All options must appear **before** a standalone **`--`**. The command and its ar
 
 | Flag | Aliases | Purpose |
 |------|---------|---------|
-| `--workflow <name>` | | Load `templates/<name>/config.yml`. With **`steps:`**, a final **`--`** is optional (see **[workflow-yaml.md](workflow-yaml.md)**). |
+| `--workflow <name>` | | Load `templates/<name>/config.yml`. With **`steps:`**, a final **`--`** is optional (see **[workflow-yaml.md](workflow-yaml.md)**). Mutually exclusive with **`--workflow-file`**. |
+| `--workflow-file <path>` | | Load workflow YAML from an arbitrary path (same shape as **`templates/<name>/config.yml`**). Paths under the file (e.g. **`resolvers/`**) resolve next to that file. Mutually exclusive with **`--workflow`**. |
 | `--run <path>` | `--pre-script` | **Run:** script(s) on the host before the container. Repeatable. |
 | `--isolate <name>` | `--template`, `--image` | **Isolate:** image or template (`base-dev`, `dev`, `agent-dev`, `claude`, `codex`, …). Builds if the value is a template. |
 | `--act <path>` | `--action` | **Act:** script after the container command (e.g. commit-worktree). |

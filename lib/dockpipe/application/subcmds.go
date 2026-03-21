@@ -28,6 +28,14 @@ const preBoilerplate = `#!/usr/bin/env bash
 set -euo pipefail
 `
 
+const dockpipeYmlBoilerplate = `# Dockpipe workflow at repository root (same shape as templates/<name>/config.yml).
+# Run: dockpipe --workflow-file dockpipe.yml [options] -- <command>
+name: my-project
+description: Local workflow
+imports: []
+steps: []
+`
+
 func cmdInit(args []string) error {
 	repoRoot, err := infrastructure.RepoRoot()
 	if err != nil {
@@ -105,9 +113,11 @@ func cmdInit(args []string) error {
 
 - **scripts/** — Run and act scripts.
 - **images/** — Dockerfiles.
-- **templates/** — Workflows (config.yml). Use dockpipe --workflow <name>.
+- **templates/** — Bundled workflows (**config.yml**). Use **dockpipe --workflow &lt;name&gt;**.
+- **dockpipe.yml** (optional) — Repo-root workflow; use **dockpipe --workflow-file dockpipe.yml**.
 `
 	_ = os.WriteFile(filepath.Join(dest, "README.md"), []byte(readme), 0o644)
+	_ = os.WriteFile(filepath.Join(dest, "dockpipe.yml"), []byte(dockpipeYmlBoilerplate), 0o644)
 
 	if templateName != "" {
 		td := filepath.Join(dest, "templates", templateName)

@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"os/exec"
@@ -114,6 +115,8 @@ type RunOpts struct {
 	Stdin         *os.File
 	Stdout        *os.File
 	Stderr        *os.File
+	// StdoutTeePath: if set, container stdout is also written to this host file (in addition to Stdout).
+	StdoutTeePath string
 }
 
 // RunContainer mirrors lib/runner.sh dockpipe_run (attached path with logs on failure).
@@ -140,9 +143,21 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		return 1, absErr
 	}
 
-	stdout := o.Stdout
-	if stdout == nil {
-		stdout = os.Stdout
+	stdoutFile := o.Stdout
+	if stdoutFile == nil {
+		stdoutFile = os.Stdout
+	}
+	stdoutOut := io.Writer(stdoutFile)
+	if p := strings.TrimSpace(o.StdoutTeePath); p != "" {
+		if err := mkdirAllDockerFn(filepath.Dir(p), 0o755); err != nil {
+			return 1, err
+		}
+		f, err := os.OpenFile(p, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+		if err != nil {
+			return 1, fmt.Errorf("stdout tee: %w", err)
+		}
+		defer f.Close()
+		stdoutOut = io.MultiWriter(stdoutOut, f)
 	}
 	stderr := o.Stderr
 	if stderr == nil {
@@ -276,7 +291,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		args = append(args, argv...)
 		cmd := execCommandFn("docker", args...)
 		cmd.Stdin = stdin
-		cmd.Stdout = stdout
+		cmd.Stdout = stdoutOut
 		cmd.Stderr = stderr
 		stopSpin := StartLineSpinner(stderr, "Starting container…")
 		err := cmd.Run()
@@ -287,7 +302,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		return 0, nil
 	}
 
-	if useDockerInteractiveTTY(stdin, stdout, stderr) {
+	if useDockerInteractiveTTY(stdin, stdoutFile, stderr) {
 		args = append(args, "-it")
 	} else {
 		args = append(args, "-i")
@@ -303,7 +318,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	start := timeNowDockerFn()
 	cmd := execCommandFn("docker", args...)
 	cmd.Stdin = stdin
-	cmd.Stdout = stdout
+	cmd.Stdout = stdoutOut
 	cmd.Stderr = stderr
 	err := cmd.Run()
 	rc := 0

@@ -30,7 +30,7 @@ The maintainer **cannot exercise every OS, CPU, Docker setup, and shell** before
 
 | Area | Why it matters |
 |------|----------------|
-| **Windows + WSL2** | **[docs/qa/manual-qa-windows.md](docs/qa/manual-qa-windows.md)** (+ [core](docs/qa/manual-qa-core.md) for `.deb` inside WSL); [docs/wsl-windows.md](docs/wsl-windows.md), [docs/install.md](docs/install.md). |
+| **Windows + WSL2** | **[docs/qa/manual-qa-windows.md](docs/qa/manual-qa-windows.md)** (+ [core](docs/qa/manual-qa-core.md) for `.deb` inside WSL); [docs/install.md](docs/install.md); optional [docs/wsl-windows.md](docs/wsl-windows.md) (git bundle between WSL/Windows — niche). |
 | **Linux arm64** | `*_arm64.deb` and `linux_arm64` tarball — **[manual-qa-core.md](docs/qa/manual-qa-core.md)** §1–2. |
 | **macOS** | **[docs/qa/manual-qa-macos.md](docs/qa/manual-qa-macos.md)** — Darwin tarballs, Docker Desktop, `PATH`. |
 | **Fresh install** | Release **`.deb` / tarball / exe** per **[manual-qa.md](docs/qa/manual-qa.md)** (not only `go run` / `make` from a dev tree). |

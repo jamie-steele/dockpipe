@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dockpipe.dev/schema/workflow.schema.json",
+  "title": "Dockpipe workflow",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "imports": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "vars": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "run": {},
+    "isolate": { "type": "string" },
+    "act": { "type": "string" },
+    "action": { "type": "string" },
+    "resolver": { "type": "string" },
+    "default_resolver": { "type": "string" },
+    "steps": { "type": "array" },
+    "resolvers": { "type": "array", "items": { "type": "string" } }
+  }
+}

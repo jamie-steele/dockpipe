@@ -84,6 +84,9 @@ func Run(argv []string, baseEnviron []string) error {
 	if argv[0] == "windows" {
 		return cmdWindows(argv[1:])
 	}
+	if argv[0] == "workflow" {
+		return cmdWorkflow(argv[1:])
+	}
 
 	repoRoot, err := repoRootAppFn()
 	if err != nil {
@@ -105,7 +108,27 @@ func Run(argv []string, baseEnviron []string) error {
 	var wf *domain.Workflow
 	var wfRoot, wfConfig string
 	stepsMode := false
-	if opts.Workflow != "" {
+	if opts.Workflow != "" && opts.WorkflowFile != "" {
+		return fmt.Errorf("use only one of --workflow and --workflow-file")
+	}
+	if opts.WorkflowFile != "" {
+		wfPath, err := filepath.Abs(opts.WorkflowFile)
+		if err != nil {
+			return fmt.Errorf("workflow file: %w", err)
+		}
+		if _, err := os.Stat(wfPath); err != nil {
+			return fmt.Errorf("workflow file: %w", err)
+		}
+		wf, err = loadWorkflowAppFn(wfPath)
+		if err != nil {
+			return fmt.Errorf("parse config: %w", err)
+		}
+		wfRoot = filepath.Dir(wfPath)
+		wfConfig = wfPath
+		if len(wf.Steps) > 0 {
+			stepsMode = true
+		}
+	} else if opts.Workflow != "" {
 		wfRoot = filepath.Join(repoRoot, "templates", opts.Workflow)
 		wfConfig = filepath.Join(wfRoot, "config.yml")
 		if _, err := os.Stat(wfConfig); err != nil {
@@ -124,10 +147,14 @@ func Run(argv []string, baseEnviron []string) error {
 	if !opts.Detach && (stepsMode || (opts.SeenDash && len(rest) > 0)) {
 		infrastructure.PrintLaunchBanner(os.Stdout, os.Stderr)
 	}
-	if opts.Workflow != "" && wf != nil {
+	if wf != nil && (opts.Workflow != "" || opts.WorkflowFile != "") {
 		disp := strings.TrimSpace(wf.Name)
 		if disp == "" {
-			disp = opts.Workflow
+			if opts.Workflow != "" {
+				disp = opts.Workflow
+			} else {
+				disp = filepath.Base(opts.WorkflowFile)
+			}
 		}
 		stepCount := 0
 		if stepsMode {
@@ -179,7 +206,7 @@ func Run(argv []string, baseEnviron []string) error {
 		if ra.Experimental {
 			fmt.Fprintf(os.Stderr, "[dockpipe] Resolver %q is experimental — see %s and template README.\n", resolver, resFile)
 		}
-		if opts.Workflow == "" {
+		if opts.Workflow == "" && opts.WorkflowFile == "" {
 			if len(opts.PreScripts) == 0 && preFromResolver != "" {
 				opts.PreScripts = []string{filepath.Join(repoRoot, preFromResolver)}
 			}

@@ -74,7 +74,7 @@ dockpipe -- ls -la
 
 **Local / gitignored config in worktrees** (e.g. `.env`, `appsettings.Development.json`): see **[worktree-include.md](worktree-include.md)** — use **`.dockpipe-worktreeinclude`** or **`.worktreeinclude`** so dockpipe copies those paths into the worktree after it is created.
 
-You do **not** need a WSL distro or Linux `dockpipe` unless you opt into **`DOCKPIPE_USE_WSL_BRIDGE=1`** (or follow [wsl-windows.md](wsl-windows.md) for bundle/mixed-clone flows). If **`bash`** is missing but **WSL** is installed, the CLI may offer to **re-run through WSL** (interactive).
+You do **not** need a WSL distro or Linux `dockpipe` unless you opt into **`DOCKPIPE_USE_WSL_BRIDGE=1`**. If **`bash`** is missing but **WSL** is installed, the CLI may offer to **re-run through WSL** (interactive). Optional advanced note: **[wsl-windows.md](wsl-windows.md)** only if you still use **git bundle** handoff between WSL and Windows clones — not part of the default native-Windows flow.
 
 ### Install `dockpipe.exe` on Windows
 

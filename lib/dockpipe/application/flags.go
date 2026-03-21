@@ -29,6 +29,7 @@ type CliOpts struct {
 	Isolate       string
 	Action        string
 	Workflow      string
+	WorkflowFile  string
 	Workdir       string
 	RepoURL       string
 	RepoBranch    string
@@ -104,6 +105,12 @@ func ParseFlags(repoRoot string, argv []string) ([]string, *CliOpts, error) {
 				return nil, nil, fmt.Errorf("--workflow requires an argument")
 			}
 			o.Workflow = argv[i+1]
+			i += 2
+		case "--workflow-file":
+			if i+1 >= len(argv) {
+				return nil, nil, fmt.Errorf("--workflow-file requires a path to a YAML file (e.g. dockpipe.yml)")
+			}
+			o.WorkflowFile = argv[i+1]
 			i += 2
 		case "--workdir":
 			if i+1 >= len(argv) {
@@ -194,6 +201,9 @@ func ParseFlags(repoRoot string, argv []string) ([]string, *CliOpts, error) {
 			}
 			return nil, nil, fmt.Errorf("unexpected argument %q (expected options before --)", a)
 		}
+	}
+	if o.Workflow != "" && o.WorkflowFile != "" {
+		return nil, nil, fmt.Errorf("use either --workflow or --workflow-file, not both")
 	}
 	return nil, o, nil
 }

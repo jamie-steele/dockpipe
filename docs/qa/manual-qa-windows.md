@@ -76,10 +76,10 @@ Assumes WSL already has dockpipe and you have run **`dockpipe windows setup`** a
 
 ---
 
-## 4. Optional: workflow / bundle
+## 4. Optional: heavier workflow
 
 - [ ] `dockpipe.exe --workflow …` from a Windows cwd (heavier; may need API keys).
-- [ ] **Git bundle / fetch** flow (mostly relevant when mixing WSL + Windows git): [wsl-windows.md](../wsl-windows.md).
+- [ ] (Only if you maintain a **WSL + Windows split clone** and use **git bundle** handoff — niche.) [wsl-windows.md](../wsl-windows.md).
 
 ---
 

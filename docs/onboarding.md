@@ -63,4 +63,4 @@ Shows two steps and env handoff. No API keys.
 |-----|------|
 | [architecture.md](architecture.md) | Internals, commit-on-host exception, data flow |
 | [chaining.md](chaining.md) | Multiple `dockpipe` invocations, same workdir |
-| [wsl-windows.md](wsl-windows.md) | Windows / WSL |
+| [wsl-windows.md](wsl-windows.md) | Optional: WSL↔Windows **git bundle** handoff (advanced; most users skip) |
