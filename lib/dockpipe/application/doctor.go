@@ -42,7 +42,7 @@ Quick checks before a real run. Does not start a project container.
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[dockpipe] bundled assets: could not resolve (%v)\n", err)
 	} else {
-		cfg := filepath.Join(rr, "templates", "test", "config.yml")
+		cfg := filepath.Join(infrastructure.WorkflowsRootDir(rr), "test", "config.yml")
 		if _, statErr := os.Stat(cfg); statErr != nil {
 			fmt.Fprintf(os.Stderr, "[dockpipe] bundled assets: incomplete (%s)\n", rr)
 		} else {

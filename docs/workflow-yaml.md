@@ -1,6 +1,6 @@
 # Workflow YAML (`config.yml`)
 
-**Bundled workflows** use **`templates/<name>/config.yml`**. **`--workflow <name>`** can also load **`templates/core/resolvers/<name>/config.yml`** (resolver delegate YAML). User projects may use **`templates/<name>/config.yml`**. Load with **`dockpipe --workflow <name>`** (plus your command after **`--`**).
+**Workflow YAML** for **`--workflow <name>`** resolves to **`templates/<name>/config.yml`** in a project checkout, or **`dockpipe/workflows/<name>/config.yml`** in the **materialized bundle** (see **[install.md](install.md#bundled-templates-no-extra-install-tree)**). Resolver delegate YAML loads from **`templates/core/resolvers/<name>/config.yml`** (authoring) or **`dockpipe/core/resolvers/<name>/config.yml`** (materialized bundle). Load with **`dockpipe --workflow <name>`** (plus your command after **`--`**).
 
 **Repo-root workflow:** put the **same** YAML shape in **`dockpipe.yml`** (or any path) and run **`dockpipe --workflow-file dockpipe.yml`** so **`run:`** / **`act:`** paths resolve relative to that file’s directory. **Resolver** profiles are **not** beside the file — they load only from **`templates/core/resolvers/`** (see below). Do not pass **`--workflow`** and **`--workflow-file`** together.
 

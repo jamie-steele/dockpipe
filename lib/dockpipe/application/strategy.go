@@ -45,7 +45,7 @@ func ResolveStrategyFilePath(repoRoot, wfRoot, name string) (string, error) {
 	if wfRoot != "" {
 		candidates = append(candidates, filepath.Join(wfRoot, "strategies", name))
 	}
-	candidates = append(candidates, filepath.Join(repoRoot, "templates", "core", "strategies", name))
+	candidates = append(candidates, filepath.Join(infrastructure.CoreDir(repoRoot), "strategies", name))
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p, nil

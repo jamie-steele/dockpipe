@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"dockpipe/lib/dockpipe/domain"
+	"dockpipe/lib/dockpipe/infrastructure"
 
 	"gopkg.in/yaml.v3"
 )
@@ -51,7 +52,7 @@ func resolveInitFromSource(repoRoot, from string) (srcDir string, isBlank bool, 
 	if strings.Contains(from, "://") {
 		return "", false, fmt.Errorf("--from must be a template source (blank, bundled name, or local directory path), not a URL")
 	}
-	bundled := filepath.Join(repoRoot, "templates", from)
+	bundled := filepath.Join(infrastructure.WorkflowsRootDir(repoRoot), from)
 	if st, e := os.Stat(bundled); e == nil && st.IsDir() {
 		return bundled, false, nil
 	}
@@ -162,9 +163,9 @@ func createNamedWorkflow(repoRoot, projectDir, name, fromSource, resolver, runti
 	if err := applyInitWorkflowFlags(cfgPath, resolver, runtime, strategy); err != nil {
 		return err
 	}
-	_ = copyFileMaybe(filepath.Join(repoRoot, "templates", "core", "assets", "scripts", "example-run.sh"), filepath.Join(projectDir, "scripts/example-run.sh"))
-	_ = copyFileMaybe(filepath.Join(repoRoot, "templates", "core", "assets", "scripts", "example-act.sh"), filepath.Join(projectDir, "scripts/example-act.sh"))
-	_ = copyDirMaybe(filepath.Join(repoRoot, "templates", "core", "assets", "images", "example"), filepath.Join(projectDir, "images/example"))
+	_ = copyFileMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "scripts", "example-run.sh"), filepath.Join(projectDir, "scripts/example-run.sh"))
+	_ = copyFileMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "scripts", "example-act.sh"), filepath.Join(projectDir, "scripts/example-act.sh"))
+	_ = copyDirMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "images", "example"), filepath.Join(projectDir, "images/example"))
 	fmt.Printf("Created templates/%s/ (from %s)\n", name, fromSource)
 	return nil
 }

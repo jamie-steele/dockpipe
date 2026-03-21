@@ -14,8 +14,8 @@ func tryResolveRuntime(repoRoot, name string) string {
 		return ""
 	}
 	candidates := []string{
-		filepath.Join(repoRoot, "templates", "core", "runtimes", name),
-		filepath.Join(repoRoot, "templates", "core", "runtimes", name, "profile"),
+		filepath.Join(CoreDir(repoRoot), "runtimes", name),
+		filepath.Join(CoreDir(repoRoot), "runtimes", name, "profile"),
 	}
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
@@ -32,8 +32,8 @@ func tryResolveResolver(repoRoot, name string) string {
 		return ""
 	}
 	candidates := []string{
-		filepath.Join(repoRoot, "templates", "core", "resolvers", name),
-		filepath.Join(repoRoot, "templates", "core", "resolvers", name, "profile"),
+		filepath.Join(CoreDir(repoRoot), "resolvers", name),
+		filepath.Join(CoreDir(repoRoot), "resolvers", name, "profile"),
 	}
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {

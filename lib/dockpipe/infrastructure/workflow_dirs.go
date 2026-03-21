@@ -9,15 +9,15 @@ import (
 )
 
 // ResolveWorkflowConfigPath returns the first existing workflow config for a bundled or user workflow name.
-// Order: templates/<name>/config.yml, templates/core/resolvers/<name>/config.yml (resolver delegate YAML).
+// Order: workflows root/<name>/config.yml, core/resolvers/<name>/config.yml (authoring: templates/...; materialized bundle: dockpipe/...).
 func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", fmt.Errorf("workflow name is empty")
 	}
 	candidates := []string{
-		filepath.Join(repoRoot, "templates", name, "config.yml"),
-		filepath.Join(repoRoot, "templates", "core", "resolvers", name, "config.yml"),
+		filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"),
+		filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml"),
 	}
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
@@ -28,15 +28,15 @@ func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 }
 
 // ResolveEmbeddedResolverWorkflowConfigPath returns delegate YAML for DOCKPIPE_*_WORKFLOW (resolver-driven isolate).
-// Order: templates/core/resolvers/<name>/config.yml, templates/<name>/config.yml.
+// Order: core/resolvers/<name>/config.yml, workflows root/<name>/config.yml.
 func ResolveEmbeddedResolverWorkflowConfigPath(repoRoot, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", fmt.Errorf("embedded resolver workflow name is empty")
 	}
 	candidates := []string{
-		filepath.Join(repoRoot, "templates", "core", "resolvers", name, "config.yml"),
-		filepath.Join(repoRoot, "templates", name, "config.yml"),
+		filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml"),
+		filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"),
 	}
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
@@ -46,12 +46,12 @@ func ResolveEmbeddedResolverWorkflowConfigPath(repoRoot, name string) (string, e
 	return "", fmt.Errorf("embedded resolver workflow config not found for %q", name)
 }
 
-// ListWorkflowNamesInRepoRoot returns workflow names from templates/<name>/ (excluding templates/core).
+// ListWorkflowNamesInRepoRoot returns workflow names from the workflows root (authoring: templates/<name>/ excluding templates/core; bundle: dockpipe/workflows/<name>/).
 func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 	seen := make(map[string]struct{})
 	var out []string
 
-	templatesDir := filepath.Join(repoRoot, "templates")
+	templatesDir := WorkflowsRootDir(repoRoot)
 	entries, err := os.ReadDir(templatesDir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -60,7 +60,10 @@ func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 		return nil, err
 	}
 	for _, e := range entries {
-		if !e.IsDir() || e.Name() == "core" {
+		if !e.IsDir() {
+			continue
+		}
+		if !UsesBundledAssetLayout(repoRoot) && e.Name() == "core" {
 			continue
 		}
 		name := e.Name()

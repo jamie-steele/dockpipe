@@ -40,6 +40,9 @@ jobs:
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           "$(go env GOPATH)/bin/gosec" -conf .gosec.json -fmt text -stdout ./...
 
+      - name: Build CLI (Bash tests use bin/dockpipe)
+        run: make
+
       - name: Go test
         run: go test ./...
 
@@ -77,9 +80,6 @@ jobs:
             exit 1
           fi
           echo "OK: shipping $V with updated $notes (was ${base_v:-<no VERSION on base>})"
-
-      - name: Build CLI (Bash tests use bin/dockpipe)
-        run: make
 
       - name: Build amd64 .deb (for test_deb_install.sh)
         run: ./packaging/build-deb.sh "$(tr -d ' \t\r\n' < VERSION)" amd64

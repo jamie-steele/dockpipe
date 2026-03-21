@@ -1,6 +1,7 @@
 package infrastructure
 
 import (
+	"path/filepath"
 	"testing"
 )
 
@@ -31,5 +32,25 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	}
 	if EmbeddedWorkflowConfigExists("nope-not-a-real-template-xyz") {
 		t.Fatal("unknown template should be false")
+	}
+}
+
+func TestMapEmbeddedToMaterializedPath(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in, want string
+	}{
+		{"VERSION", "version"},
+		{"lib/entrypoint.sh", "lib/entrypoint.sh"},
+		{"templates", "dockpipe"},
+		{"templates/core", "dockpipe/core"},
+		{"templates/core/runtimes/docker/profile", "dockpipe/core/runtimes/docker/profile"},
+		{"templates/test/config.yml", filepath.Join("dockpipe", "workflows", "test", "config.yml")},
+	}
+	for _, tc := range cases {
+		got := mapEmbeddedToMaterializedPath(tc.in)
+		if got != tc.want {
+			t.Fatalf("mapEmbeddedToMaterializedPath(%q): got %q want %q", tc.in, got, tc.want)
+		}
 	}
 }

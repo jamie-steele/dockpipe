@@ -9,7 +9,7 @@ import (
 // TemplateBuild maps template name → image name and Dockerfile directory under templates/core/assets/images/.
 func TemplateBuild(repoRoot, name string) (image string, dockerfileDir string, ok bool) {
 	coreImg := func(n string) string {
-		return filepath.Join(repoRoot, "templates", "core", "assets", "images", n)
+		return filepath.Join(CoreDir(repoRoot), "assets", "images", n)
 	}
 	switch name {
 	case "base-dev":

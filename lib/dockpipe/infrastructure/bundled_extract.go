@@ -13,12 +13,12 @@ import (
 )
 
 // bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "56"
+const bundledFormatVersion = "57"
 
 var bundledMu sync.Mutex
 
 // EmbeddedWorkflowConfigExists reports whether a bundled workflow or resolver-delegate config exists for name.
-// Checks templates/<name>/config.yml and templates/core/resolvers/<name>/config.yml.
+// Checks embed paths templates/<name>/config.yml and templates/core/resolvers/<name>/config.yml (source layout in the binary).
 func EmbeddedWorkflowConfigExists(name string) bool {
 	if name == "" {
 		return false
@@ -60,9 +60,10 @@ func InvalidateBundledCache() error {
 	return os.RemoveAll(dest)
 }
 
-// MaterializedBundledRoot returns a directory containing templates/ (including templates/core with
-// assets: scripts/, images/, compose/), lib/, and version.
-// It unpacks dockpipe.BundledFS into the user cache (see also DOCKPIPE_REPO_ROOT override in RepoRoot).
+// MaterializedBundledRoot returns a directory containing the unpacked bundle: dockpipe/core/
+// (assets, resolvers, runtimes, strategies), dockpipe/workflows/, lib/, and version.
+// Embedded source still uses templates/...; copyEmbeddedFS maps that to the layout above on disk.
+// See also DOCKPIPE_REPO_ROOT override in RepoRoot.
 func MaterializedBundledRoot() (string, error) {
 	bundledMu.Lock()
 	defer bundledMu.Unlock()
@@ -84,7 +85,7 @@ func extractBundledToCache() (string, error) {
 		return "", err
 	}
 	dest := filepath.Join(cacheBase, "dockpipe", "bundled-"+ver)
-	cfgPath := filepath.Join(dest, "templates", "test", "config.yml")
+	cfgPath := filepath.Join(dest, BundledDockpipeDir, "workflows", "test", "config.yml")
 	formatPath := filepath.Join(dest, ".bundled-format")
 	if st, err := os.Stat(cfgPath); err == nil && !st.IsDir() {
 		if b, err := os.ReadFile(filepath.Join(dest, "version")); err == nil && strings.TrimSpace(string(b)) == ver {
@@ -127,6 +128,28 @@ func bundledCacheBase() (string, error) {
 	return cacheBase, nil
 }
 
+// mapEmbeddedToMaterializedPath maps embed paths (templates/..., lib/..., VERSION) to the on-disk
+// materialized layout: dockpipe/core/..., dockpipe/workflows/..., lib/, version.
+func mapEmbeddedToMaterializedPath(rel string) string {
+	switch {
+	case rel == "VERSION":
+		return "version"
+	case rel == "templates/core" || strings.HasPrefix(rel, "templates/core/"):
+		suffix := strings.TrimPrefix(rel, "templates/core")
+		if suffix == "" {
+			return "dockpipe/core"
+		}
+		return "dockpipe/core" + suffix
+	case rel == "templates":
+		return "dockpipe"
+	case strings.HasPrefix(rel, "templates/"):
+		rest := strings.TrimPrefix(rel, "templates/")
+		return filepath.Join("dockpipe", "workflows", rest)
+	default:
+		return rel
+	}
+}
+
 func copyEmbeddedFS(dstRoot string, versionBytes []byte) error {
 	return fs.WalkDir(dockpipe.BundledFS, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -135,10 +158,7 @@ func copyEmbeddedFS(dstRoot string, versionBytes []byte) error {
 		if path == "." {
 			return nil
 		}
-		outRel := path
-		if path == "VERSION" {
-			outRel = "version"
-		}
+		outRel := mapEmbeddedToMaterializedPath(path)
 		out := filepath.Join(dstRoot, filepath.FromSlash(outRel))
 		if d.IsDir() {
 			return os.MkdirAll(out, 0o755)

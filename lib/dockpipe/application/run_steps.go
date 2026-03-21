@@ -586,7 +586,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 		image = effIso
 	}
 	if image == "" {
-		image, dockerfileDir = "dockpipe-base-dev", filepath.Join(o.repoRoot, "templates", "core", "assets", "images", "base-dev")
+		image, dockerfileDir = "dockpipe-base-dev", filepath.Join(infrastructure.CoreDir(o.repoRoot), "assets", "images", "base-dev")
 		contextDir = o.repoRoot
 	}
 	image = infrastructure.MaybeVersionTag(o.repoRoot, image)

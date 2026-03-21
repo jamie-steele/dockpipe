@@ -118,7 +118,7 @@ func DockerBuild(image, dockerfileDir, contextDir string) error {
 	if baseName == "dockpipe-dev" {
 		if err := execCommandFn("docker", "image", "inspect", "dockpipe-base-dev:latest").Run(); err != nil {
 			cmd := execCommandFn("docker", "build", "-q", "-t", "dockpipe-base-dev",
-				"-f", filepath.Join(contextDir, "templates", "core", "assets", "images", "base-dev", "Dockerfile"), contextDir)
+				"-f", filepath.Join(CoreDir(contextDir), "assets", "images", "base-dev", "Dockerfile"), contextDir)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {

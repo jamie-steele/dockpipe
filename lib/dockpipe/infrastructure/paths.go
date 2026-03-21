@@ -23,7 +23,7 @@ func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 	if st, err := os.Stat(user); err == nil && !st.IsDir() {
 		return user
 	}
-	return filepath.Join(repoRoot, "templates", "core", "assets", "scripts", rest)
+	return filepath.Join(CoreDir(repoRoot), "assets", "scripts", rest)
 }
 
 // ResolveActionPath resolves act script like bin/dockpipe.
@@ -37,7 +37,7 @@ func ResolveActionPath(action, repoRoot, cwd string) (string, error) {
 	candidates := []string{filepath.Join(repoRoot, action)}
 	if strings.HasPrefix(action, "scripts/") {
 		rest := strings.TrimPrefix(action, "scripts/")
-		candidates = append(candidates, filepath.Join(repoRoot, "templates", "core", "assets", "scripts", rest))
+		candidates = append(candidates, filepath.Join(CoreDir(repoRoot), "assets", "scripts", rest))
 	} else {
 		candidates = append(candidates, filepath.Join(repoRoot, "scripts", action))
 	}
@@ -78,8 +78,8 @@ func ResolveResolverFilePath(repoRoot, resolverName string) (string, error) {
 		return "", fmt.Errorf("resolver profile name is empty")
 	}
 	candidates := []string{
-		filepath.Join(repoRoot, "templates", "core", "resolvers", resolverName),
-		filepath.Join(repoRoot, "templates", "core", "resolvers", resolverName, "profile"),
+		filepath.Join(CoreDir(repoRoot), "resolvers", resolverName),
+		filepath.Join(CoreDir(repoRoot), "resolvers", resolverName, "profile"),
 	}
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
@@ -97,7 +97,7 @@ func IsBundledCommitWorktree(actionPath, repoRoot string) bool {
 	}
 	for _, b := range []string{
 		filepath.Join(repoRoot, "scripts", "commit-worktree.sh"),
-		filepath.Join(repoRoot, "templates", "core", "assets", "scripts", "commit-worktree.sh"),
+		filepath.Join(CoreDir(repoRoot), "assets", "scripts", "commit-worktree.sh"),
 	} {
 		bp, err := filepath.Abs(b)
 		if err != nil {

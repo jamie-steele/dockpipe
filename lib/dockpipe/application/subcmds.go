@@ -134,7 +134,7 @@ func cmdTemplate(args []string) error {
 	if from == "" {
 		from = "init"
 	}
-	src := filepath.Join(repoRoot, "templates", from)
+	src := filepath.Join(infrastructure.WorkflowsRootDir(repoRoot), from)
 	if _, err := os.Stat(src); err != nil {
 		return fmt.Errorf("unknown bundled template %q", from)
 	}
@@ -152,7 +152,7 @@ func cmdTemplate(args []string) error {
 	// Pull in shared templates/core next to the new workflow if not already present (resolvers, strategies).
 	wdParent := filepath.Dir(dest)
 	coreDest := filepath.Join(wdParent, "templates", "core")
-	coreSrc := filepath.Join(repoRoot, "templates", "core")
+	coreSrc := infrastructure.CoreDir(repoRoot)
 	if _, err := os.Stat(coreDest); err != nil && os.IsNotExist(err) {
 		if err := os.MkdirAll(filepath.Join(wdParent, "templates"), 0o755); err != nil {
 			return err
@@ -213,7 +213,7 @@ func cmdInitLikeScript(args []string, defaultName string, bundled []string, boil
 	}
 	if from != "" {
 		base := strings.TrimSuffix(from, ".sh")
-		src := filepath.Join(repoRoot, "templates", "core", "assets", "scripts", base+".sh")
+		src := filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "scripts", base+".sh")
 		if _, err := os.Stat(src); err != nil {
 			return fmt.Errorf("unknown bundled script %q (try: %v)", from, bundled)
 		}
@@ -229,7 +229,7 @@ func cmdInitLikeScript(args []string, defaultName string, bundled []string, boil
 // install into dest, matching dockpipe init without --from.
 func mergeBundledTemplatesCore(repoRoot, dest string) error {
 	_ = os.MkdirAll(filepath.Join(dest, "templates"), 0o755)
-	return copyDirMaybe(filepath.Join(repoRoot, "templates/core"), filepath.Join(dest, "templates/core"))
+	return copyDirMaybe(infrastructure.CoreDir(repoRoot), filepath.Join(dest, "templates/core"))
 }
 
 func copyFile(src, dst string) error {

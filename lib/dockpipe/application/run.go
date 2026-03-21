@@ -147,7 +147,7 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 			if statErr != nil {
 				names, _ := infrastructure.ListWorkflowNamesInRepoRoot(repoRoot)
-				msg := fmt.Sprintf("workflow %q not found — tried templates/%[1]s/config.yml and templates/core/resolvers/%[1]s/config.yml", opts.Workflow)
+				msg := fmt.Sprintf("workflow %q not found — tried workflows dir (templates/ or dockpipe/workflows/) and core/resolvers/%[1]s/config.yml", opts.Workflow)
 				if len(names) > 0 {
 					msg += fmt.Sprintf(" (available in this install: %s)", strings.Join(names, ", "))
 				}
@@ -349,7 +349,7 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 		if hostIsolate == "" && resolverWorkflow == "" {
 			if image == "" {
-				image, buildDir = "dockpipe-base-dev", filepath.Join(repoRoot, "templates", "core", "assets", "images", "base-dev")
+				image, buildDir = "dockpipe-base-dev", filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "images", "base-dev")
 				buildCtx = repoRoot
 			}
 			image = maybeVersionTagAppFn(repoRoot, image)
