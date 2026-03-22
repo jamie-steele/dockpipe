@@ -7,7 +7,7 @@ GO_LDFLAGS := -s -w -X main.Version=$(DEB_VERSION)
 #   make build-windows WINDOWS_OUT=/Volumes/jsteele/Downloads/dockpipe.exe
 # (exact /Volumes/… name appears in Finder after connecting to smb://anton.local/…)
 WINDOWS_OUT ?= bin/dockpipe.exe
-.PHONY: build build-windows install dev-install test test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci
+.PHONY: build build-windows install dev-install test test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci self-analysis self-analysis-host self-analysis-stack
 build:
 	cp VERSION cmd/dockpipe/VERSION
 	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o bin/dockpipe.bin ./cmd/dockpipe
@@ -69,3 +69,15 @@ dev-deps:
 # Optional tools for `make demo-record` only (see demo/README.md).
 install-record-deps:
 	bash scripts/install-record-deps.sh
+
+# Accelerator: DorkPipe self-analysis in this repo (Cursor handoff + paste prompt). Requires Docker for default targets.
+# make self-analysis-host — same DAG on the host if you have no Docker.
+# DORKPIPE_DEV_STACK_AUTODOWN=0 make self-analysis-stack — leave Postgres+Ollama up after.
+self-analysis: build
+	./bin/dockpipe --workflow dorkpipe-self-analysis --workdir . --
+
+self-analysis-host: build
+	./bin/dockpipe --workflow dorkpipe-self-analysis-host --workdir . --
+
+self-analysis-stack: build
+	./bin/dockpipe --workflow dorkpipe-self-analysis-stack --workdir . --

@@ -16,7 +16,7 @@ PROJECT="${DORKPIPE_DEV_STACK_PROJECT:-dorkpipe-dev}"
 case "$cmd" in
 up)
 	docker compose -p "$PROJECT" -f "$COMPOSE" --project-directory "$REPO_ROOT" up -d --remove-orphans
-	echo "dev-stack: up — Ollama http://127.0.0.1:11434  Postgres localhost:5432 (project $PROJECT)"
+	echo "dev-stack: up — Ollama http://127.0.0.1:11434  Postgres postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe (project $PROJECT)"
 	;;
 down)
 	docker compose -p "$PROJECT" -f "$COMPOSE" --project-directory "$REPO_ROOT" down

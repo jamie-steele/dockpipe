@@ -1,10 +1,12 @@
 ## workflows (dockpipe/workflows)
-/home/jamie/source/dockpipe/dockpipe/workflows/demo-gui-cursor/config.yml
-/home/jamie/source/dockpipe/dockpipe/workflows/demo-gui-vscode/config.yml
-/home/jamie/source/dockpipe/dockpipe/workflows/dogfood-codex-pav/config.yml
-/home/jamie/source/dockpipe/dockpipe/workflows/dogfood-codex-security/config.yml
-/home/jamie/source/dockpipe/dockpipe/workflows/dorkpipe-orchestrator/config.yml
-/home/jamie/source/dockpipe/dockpipe/workflows/dorkpipe-self-analysis/config.yml
-/home/jamie/source/dockpipe/dockpipe/workflows/test/config.yml
-/home/jamie/source/dockpipe/dockpipe/workflows/test-demo-claude/config.yml
-/home/jamie/source/dockpipe/dockpipe/workflows/test-demo/config.yml
+/work/dockpipe/workflows/demo-gui-cursor/config.yml
+/work/dockpipe/workflows/demo-gui-vscode/config.yml
+/work/dockpipe/workflows/dogfood-codex-pav/config.yml
+/work/dockpipe/workflows/dogfood-codex-security/config.yml
+/work/dockpipe/workflows/dorkpipe-orchestrator/config.yml
+/work/dockpipe/workflows/dorkpipe-self-analysis-host/config.yml
+/work/dockpipe/workflows/dorkpipe-self-analysis-stack/config.yml
+/work/dockpipe/workflows/dorkpipe-self-analysis/config.yml
+/work/dockpipe/workflows/test-demo-claude/config.yml
+/work/dockpipe/workflows/test-demo/config.yml
+/work/dockpipe/workflows/test/config.yml

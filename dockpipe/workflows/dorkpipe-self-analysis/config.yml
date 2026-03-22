@@ -19,9 +19,8 @@ steps:
       bash -c 'set -euo pipefail
       cd /work
       export DOCKPIPE_WORKDIR=/work
-      export DEBIAN_FRONTEND=noninteractive
-      apt-get update -qq
-      apt-get install -y -qq --no-install-recommends ca-certificates git curl ripgrep || true
+      # No apt-get: dockpipe maps the container user to the host uid, so apt cannot run as root.
+      # golang:bookworm images ship git and curl; scripts fall back to grep if ripgrep is absent.
       if [[ ! -x bin/dorkpipe ]]; then
         echo "[dorkpipe-self-analysis] building bin/dorkpipe in container..."
         go build -trimpath -o bin/dorkpipe ./cmd/dorkpipe

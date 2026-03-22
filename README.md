@@ -53,6 +53,20 @@ make test-quick  # Go + path guard + bash unit tests (no Docker)
 make ci          # full Linux CI mirror (govulncheck, gosec, Docker, integration — see scripts/ci-local.sh)
 ```
 
+**Accelerator (this repo):** run DorkPipe self-analysis from DockPipe — isolated container, **`.dockpipe/paste-this-prompt.txt`** for Cursor, optional Compose sidecars. From repo root after **`make build`**:
+
+| Command | What it does |
+|---------|----------------|
+| **`make self-analysis`** | `dorkpipe-self-analysis` — analysis only |
+| **`make self-analysis-stack`** | Compose up → analysis → compose down (set **`DORKPIPE_DEV_STACK_AUTODOWN=0`** to keep sidecars) |
+| **`make self-analysis-host`** | Host-only, no Docker |
+
+See **`dockpipe/workflows/dorkpipe-self-analysis/README.md`** and **`docs/dorkpipe.md`**.
+
+```bash
+make self-analysis
+```
+
 Contributors: **`make dev-deps`** installs **govulncheck** and **gosec** (CI parity) and tries **user-level** installs for **asciinema** + **agg** (for **`make demo-record`**). None of this is required to use DockPipe. For demo tools only: **`make install-record-deps`**.
 
 Optional **Codex** workflows in CI (when **`DOCKPIPE_CI_CODEX=true`**): `DOCKPIPE_CI_CODEX=true OPENAI_API_KEY=... make ci`.

@@ -30,6 +30,62 @@ To reuse workflows from a dockpipe **source tree**, copy **dockpipe/workflows/&l
 
 `
 
+// agentsSelfAnalysisMarker is embedded once in AGENTS.md so re-init does not duplicate the section.
+const agentsSelfAnalysisMarker = "<!-- dockpipe: self-analysis handoff -->"
+
+func agentsSelfAnalysisSection() string {
+	return agentsSelfAnalysisMarker + "\n\n## Self-analysis handoff\n\n" +
+		"Generated outputs: **`.dockpipe/paste-this-prompt.txt`**, **`.dockpipe/orchestrator-cursor-prompt.md`**, **`.dorkpipe/self-analysis/`**, and optionally **`.dorkpipe/run.json`**.\n\n" +
+		"### Agent workflow (read before repo-wide work)\n\n" +
+		"1. **Discover:** Read **AGENTS.md** and load these paths if present.\n" +
+		"2. **Freshness:** Compare to **git HEAD**, file dates, **VERSION**, or **`.dorkpipe/run.json`**.\n" +
+		"3. **Use** current analysis as primary context; if **stale**, tell the user refresh is recommended before big changes; **do not** auto-refresh.\n" +
+		"4. **Refresh** only when the user asks; then run **`make self-analysis`**, **`make self-analysis-host`**, or **`make self-analysis-stack`** (or **`dockpipe --workflow dorkpipe-self-analysis --workdir . --`**).\n" +
+		"5. **Isolation:** Analysis runs in a **Docker** isolate (see workflow **isolate:** image). **`dorkpipe-self-analysis-stack`** uses **docker compose** on the host for Postgres/Ollama, then the same isolate step.\n\n" +
+		"**Cursor:** Copy **`.cursor/rules/dockpipe-agents.mdc`** from the dockpipe source tree for always-on IDE rules aligned with **AGENTS.md**.\n"
+}
+
+// isSelfAnalysisWorkflowSource reports whether --from copied the repo self-analysis workflow
+// (dorkpipe-self-analysis, -host, -stack, or a path ending with that name prefix).
+func isSelfAnalysisWorkflowSource(srcDir, fromSource string) bool {
+	base := filepath.Base(filepath.Clean(srcDir))
+	if strings.HasPrefix(base, "dorkpipe-self-analysis") {
+		return true
+	}
+	fs := strings.TrimSpace(fromSource)
+	return strings.HasPrefix(fs, "dorkpipe-self-analysis")
+}
+
+// ensureAgentsSelfAnalysisPointer appends a stable handoff section to AGENTS.md when missing.
+// Returns whether the file was written or updated.
+func ensureAgentsSelfAnalysisPointer(projectDir string) (bool, error) {
+	path := filepath.Join(projectDir, "AGENTS.md")
+	b, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return false, err
+	}
+	existing := string(b)
+	if strings.Contains(existing, agentsSelfAnalysisMarker) {
+		return false, nil
+	}
+	body := agentsSelfAnalysisSection() + "\n"
+	if existing == "" {
+		data := "# AGENTS.md\n\n" + body
+		if err := os.WriteFile(path, []byte(data), 0o644); err != nil {
+			return false, err
+		}
+		return true, nil
+	}
+	sep := "\n"
+	if !strings.HasSuffix(existing, "\n") {
+		sep = "\n\n"
+	}
+	if err := os.WriteFile(path, []byte(existing+sep+body), 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // ensureProjectScaffold creates scripts/, images/, templates/, merges bundled templates/core,
 // and adds README.md / dockpipe.yml when missing. Idempotent for an existing repo tree.
 func ensureProjectScaffold(repoRoot, projectDir string) error {
@@ -185,6 +241,15 @@ func createNamedWorkflow(repoRoot, projectDir, name, fromSource, resolver, runti
 	_ = copyFileMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "scripts", "example-run.sh"), filepath.Join(projectDir, "scripts/example-run.sh"))
 	_ = copyFileMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "scripts", "example-act.sh"), filepath.Join(projectDir, "scripts/example-act.sh"))
 	_ = copyDirMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "images", "example"), filepath.Join(projectDir, "images/example"))
+	if !isBlank && isSelfAnalysisWorkflowSource(srcDir, fromSource) {
+		changed, err := ensureAgentsSelfAnalysisPointer(projectDir)
+		if err != nil {
+			return fmt.Errorf("AGENTS.md: %w", err)
+		}
+		if changed {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Appended self-analysis handoff to AGENTS.md\n")
+		}
+	}
 	fmt.Printf("Created templates/%s/ (from %s)\n", name, fromSource)
 	return nil
 }

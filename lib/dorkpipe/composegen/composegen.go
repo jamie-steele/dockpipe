@@ -22,7 +22,7 @@ func DefaultOptions() Options {
 		PostgresPassword: "dorkpipe",
 		PostgresDB:       "dorkpipe",
 		PostgresUser:     "dorkpipe",
-		PostgresPort:     "5432",
+		PostgresPort:     "15432",
 		OllamaPort:       "11434",
 		IncludeOllama:    true,
 	}
@@ -40,7 +40,7 @@ func Render(o Options) string {
 		o.PostgresUser = "dorkpipe"
 	}
 	if o.PostgresPort == "" {
-		o.PostgresPort = "5432"
+		o.PostgresPort = "15432"
 	}
 	if o.OllamaPort == "" {
 		o.OllamaPort = "11434"

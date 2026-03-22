@@ -9,7 +9,7 @@ Advance **DockPipe** (workflow execution fabric) and **DorkPipe** (`lib/dorkpipe
 - **Go files in `lib/dorkpipe`**: 21
 - **Git HEAD / branch** (see `.dockpipe/self-analysis/git.txt` for full):
   ## git
-  91184a0e3567b274fd019ad03a2c76a43d597c34
+  c255b0bba680b4b575343ffc7feca77f6555bfcb
   js/dev
 - **DorkPipe packages (file counts)**:
   aggregator	3
@@ -25,17 +25,20 @@ Advance **DockPipe** (workflow execution fabric) and **DorkPipe** (`lib/dorkpipe
   workers	1
 - **Workflow configs present**:
   ## workflows (dockpipe/workflows)
-  /home/jamie/source/dockpipe/dockpipe/workflows/demo-gui-cursor/config.yml
-  /home/jamie/source/dockpipe/dockpipe/workflows/demo-gui-vscode/config.yml
-  /home/jamie/source/dockpipe/dockpipe/workflows/dogfood-codex-pav/config.yml
-  /home/jamie/source/dockpipe/dockpipe/workflows/dogfood-codex-security/config.yml
-  /home/jamie/source/dockpipe/dockpipe/workflows/dorkpipe-orchestrator/config.yml
-  /home/jamie/source/dockpipe/dockpipe/workflows/dorkpipe-self-analysis/config.yml
-  /home/jamie/source/dockpipe/dockpipe/workflows/test/config.yml
-  /home/jamie/source/dockpipe/dockpipe/workflows/test-demo-claude/config.yml
-  /home/jamie/source/dockpipe/dockpipe/workflows/test-demo/config.yml
+  /work/dockpipe/workflows/demo-gui-cursor/config.yml
+  /work/dockpipe/workflows/demo-gui-vscode/config.yml
+  /work/dockpipe/workflows/dogfood-codex-pav/config.yml
+  /work/dockpipe/workflows/dogfood-codex-security/config.yml
+  /work/dockpipe/workflows/dorkpipe-orchestrator/config.yml
+  /work/dockpipe/workflows/dorkpipe-self-analysis-host/config.yml
+  /work/dockpipe/workflows/dorkpipe-self-analysis-stack/config.yml
+  /work/dockpipe/workflows/dorkpipe-self-analysis/config.yml
+  /work/dockpipe/workflows/test-demo-claude/config.yml
+  /work/dockpipe/workflows/test-demo/config.yml
+  /work/dockpipe/workflows/test/config.yml
 - **Recent commits**:
   ### Recent git log
+  c255b0b Added self analyiss and side car reasoning
   91184a0 Added improved token improvement local ollama to expiremental demo
   6aad678 Dog fooding clean up
   afcc5b5 Final polish
@@ -43,7 +46,6 @@ Advance **DockPipe** (workflow execution fabric) and **DorkPipe** (`lib/dorkpipe
   7342f49 Dogfooding and proper release pipelines and CI verification using DockPipe
   a2abdbb New lib/dockpipe/infrastructure/layout.go:
   b414573 Testing updates
-  5f2ce77 Test improvements
 
 ## 3. Highest-value opportunities (grounded + strategic)
 The following are **actionable** directions consistent with `AGENTS.md` (primitive core, templates as extension):
@@ -57,18 +59,18 @@ The following are **actionable** directions consistent with `AGENTS.md` (primiti
 
 ### Search hits (files touching orchestration keywords)
   ### Orchestration keyword files
-  /home/jamie/source/dockpipe/lib/dorkpipe/engine/provenance.go
-  /home/jamie/source/dockpipe/lib/dorkpipe/engine/run.go
-  /home/jamie/source/dockpipe/lib/dorkpipe/planner/planner.go
-  /home/jamie/source/dockpipe/lib/dorkpipe/confidence/vector.go
-  /home/jamie/source/dockpipe/lib/dorkpipe/aggregator/merge.go
-  /home/jamie/source/dockpipe/lib/dorkpipe/eval/eval_test.go
-  /home/jamie/source/dockpipe/lib/dorkpipe/eval/eval.go
-  /home/jamie/source/dockpipe/lib/dorkpipe/examples/full-bar.yaml
-  /home/jamie/source/dockpipe/lib/dorkpipe/README.md
-  /home/jamie/source/dockpipe/lib/dorkpipe/spec/spec.go
-  /home/jamie/source/dockpipe/lib/dorkpipe/promotion/promotion.go
-  /home/jamie/source/dockpipe/lib/dorkpipe/workers/workers.go
+  /work/lib/dorkpipe/engine/provenance.go
+  /work/lib/dorkpipe/engine/run.go
+  /work/lib/dorkpipe/planner/planner.go
+  /work/lib/dorkpipe/confidence/vector.go
+  /work/lib/dorkpipe/aggregator/merge.go
+  /work/lib/dorkpipe/eval/eval_test.go
+  /work/lib/dorkpipe/eval/eval.go
+  /work/lib/dorkpipe/examples/full-bar.yaml
+  /work/lib/dorkpipe/README.md
+  /work/lib/dorkpipe/spec/spec.go
+  /work/lib/dorkpipe/promotion/promotion.go
+  /work/lib/dorkpipe/workers/workers.go
 
 ## 4. Exact files/modules to inspect
 | Area | Path |
@@ -84,11 +86,11 @@ The following are **actionable** directions consistent with `AGENTS.md` (primiti
 
 ### Line counts (signal for complexity hotspots)
   ## key file line counts
-  204 /home/jamie/source/dockpipe/lib/dorkpipe/engine/run.go
-  161 /home/jamie/source/dockpipe/lib/dorkpipe/spec/spec.go
-  99 /home/jamie/source/dockpipe/lib/dorkpipe/aggregator/merge.go
-  370 /home/jamie/source/dockpipe/lib/dorkpipe/workers/workers.go
-  198 /home/jamie/source/dockpipe/cmd/dorkpipe/main.go
+  204 /work/lib/dorkpipe/engine/run.go
+  161 /work/lib/dorkpipe/spec/spec.go
+  99 /work/lib/dorkpipe/aggregator/merge.go
+  370 /work/lib/dorkpipe/workers/workers.go
+  198 /work/cmd/dorkpipe/main.go
 
 ## 5. Constraints / architecture rules (non-negotiable)
 - **DockPipe core** stays the single execution fabric: workflows, runtimes, resolvers, strategies, assets (`AGENTS.md`).
@@ -118,4 +120,4 @@ The following are **actionable** directions consistent with `AGENTS.md` (primiti
 The **plain, copy-paste-ready** implementation prompt (no extra narrative) is in **`.dockpipe/paste-this-prompt.txt`**. Running `scripts/dorkpipe/run-self-analysis.sh` **prints that file to stdout** at the end. With `spec.combined.yaml`, Ollama output is merged into the same file after the base prompt.
 
 ---
-_Generated: 2026-03-22T04:11:20Z_ · _Facts under `.dockpipe/self-analysis/`_
+_Generated: 2026-03-22T04:38:37Z_ · _Facts under `.dockpipe/self-analysis/`_

@@ -1,13 +1,13 @@
 ### Orchestration keyword files
-/home/jamie/source/dockpipe/lib/dorkpipe/engine/provenance.go
-/home/jamie/source/dockpipe/lib/dorkpipe/engine/run.go
-/home/jamie/source/dockpipe/lib/dorkpipe/planner/planner.go
-/home/jamie/source/dockpipe/lib/dorkpipe/confidence/vector.go
-/home/jamie/source/dockpipe/lib/dorkpipe/aggregator/merge.go
-/home/jamie/source/dockpipe/lib/dorkpipe/eval/eval_test.go
-/home/jamie/source/dockpipe/lib/dorkpipe/eval/eval.go
-/home/jamie/source/dockpipe/lib/dorkpipe/examples/full-bar.yaml
-/home/jamie/source/dockpipe/lib/dorkpipe/README.md
-/home/jamie/source/dockpipe/lib/dorkpipe/spec/spec.go
-/home/jamie/source/dockpipe/lib/dorkpipe/promotion/promotion.go
-/home/jamie/source/dockpipe/lib/dorkpipe/workers/workers.go
+/work/lib/dorkpipe/engine/provenance.go
+/work/lib/dorkpipe/engine/run.go
+/work/lib/dorkpipe/planner/planner.go
+/work/lib/dorkpipe/confidence/vector.go
+/work/lib/dorkpipe/aggregator/merge.go
+/work/lib/dorkpipe/eval/eval_test.go
+/work/lib/dorkpipe/eval/eval.go
+/work/lib/dorkpipe/examples/full-bar.yaml
+/work/lib/dorkpipe/README.md
+/work/lib/dorkpipe/spec/spec.go
+/work/lib/dorkpipe/promotion/promotion.go
+/work/lib/dorkpipe/workers/workers.go

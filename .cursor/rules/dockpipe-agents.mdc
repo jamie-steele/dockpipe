@@ -1,0 +1,22 @@
+---
+description: DockPipe maintainer contract + repo analysis artifacts (mirrors AGENTS.md)
+alwaysApply: true
+---
+
+# DockPipe — agent rules (summary)
+
+**Canonical detail lives in `AGENTS.md` in the repo root.** Follow it for architecture, primitives, and extension points.
+
+## Repository analysis (before repo-wide reasoning)
+
+1. **Discover:** Read `AGENTS.md`, then load analysis artifacts if present — typically `.dockpipe/paste-this-prompt.txt`, `.dockpipe/orchestrator-cursor-prompt.md`, `.dorkpipe/self-analysis/`, and optionally `.dorkpipe/run.json` / `.dorkpipe/metrics.jsonl`.
+2. **Freshness:** Use git ref/commit in outputs, file mtimes, `VERSION`, or `run.json` vs current `HEAD` / change volume.
+3. **Behavior:** Use analysis when current; if possibly stale, say refresh is recommended before substantial work; continue with existing artifacts unless the user wants otherwise. If missing, say analysis was not generated and point at `make self-analysis*` / `dorkpipe-self-analysis` workflow.
+4. **Refresh:** Do **not** auto-run analysis. Refresh only when the user explicitly asks; then re-load artifacts.
+
+## Isolation (DockPipe)
+
+- **Default self-analysis:** analysis runs in a **Docker**-isolated step (`golang` image); repo mounted at `/work`, host uid — see `dockpipe/workflows/dorkpipe-self-analysis/config.yml`.
+- **Stack variant:** `dorkpipe-self-analysis-stack` runs **docker compose** on the **host** for Postgres + Ollama sidecars, then the **same** isolated container step, then optional compose down — see `dockpipe/workflows/dorkpipe-self-analysis-stack/config.yml`.
+
+Do not move orchestration into DockPipe core; workflows and `scripts/dorkpipe/` stay the extension surface.

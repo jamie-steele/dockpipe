@@ -1,5 +1,8 @@
 ### TODO/FIXME/XXX in lib/dorkpipe and scripts/dorkpipe (first 50)
-/home/jamie/source/dockpipe/scripts/dorkpipe/build-cursor-handoff.sh:68:	echo "- **TODO/FIXME triage**: review hits in \`.dockpipe/self-analysis/signals_todo.txt\`; convert stable items into issues or small PRs."
-/home/jamie/source/dockpipe/scripts/dorkpipe/self-analysis-signals.sh:11:		rg -n 'TODO|FIXME|XXX' "$ROOT/lib/dorkpipe" "$ROOT/scripts/dorkpipe" 2>/dev/null | head -50 || true
-/home/jamie/source/dockpipe/scripts/dorkpipe/self-analysis-signals.sh:13:		grep -R -n -E 'TODO|FIXME|XXX' "$ROOT/lib/dorkpipe" "$ROOT/scripts/dorkpipe" 2>/dev/null | head -50 || true
-/home/jamie/source/dockpipe/scripts/dorkpipe/self-analysis-signals.sh:27:	echo "### TODO/FIXME/XXX in lib/dorkpipe and scripts/dorkpipe (first 50)"
+/work/scripts/dorkpipe/build-cursor-handoff.sh:68:	echo "- **TODO/FIXME triage**: review hits in \`.dockpipe/self-analysis/signals_todo.txt\`; convert stable items into issues or small PRs."
+/work/scripts/dorkpipe/self-analysis-signals.sh:11:		rg -n 'TODO|FIXME|XXX' "$ROOT/lib/dorkpipe" "$ROOT/scripts/dorkpipe" 2>/dev/null | head -50 || true
+/work/scripts/dorkpipe/self-analysis-signals.sh:13:		grep -R -n -E 'TODO|FIXME|XXX' "$ROOT/lib/dorkpipe" "$ROOT/scripts/dorkpipe" 2>/dev/null | head -50 || true
+/work/scripts/dorkpipe/self-analysis-signals.sh:27:	echo "### TODO/FIXME/XXX in lib/dorkpipe and scripts/dorkpipe (first 50)"
+/work/scripts/dorkpipe/dev-stack-maybe-down.sh:3:# Set DORKPIPE_DEV_STACK_AUTODOWN=0 to keep Postgres+Ollama running after the workflow.
+/work/scripts/dorkpipe/dev-stack-maybe-down.sh:6:if [[ "${DORKPIPE_DEV_STACK_AUTODOWN:-1}" == "0" ]]; then
+/work/scripts/dorkpipe/dev-stack-maybe-down.sh:7:	echo "dev-stack-maybe-down: DORKPIPE_DEV_STACK_AUTODOWN=0 — leaving sidecars up"

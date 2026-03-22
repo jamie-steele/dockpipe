@@ -9,13 +9,16 @@
 | `.dorkpipe/self-analysis/*.txt` | Raw facts (git, package counts, ripgrep hits) — auditable |
 | `.dockpipe/orchestrator-cursor-prompt.refined.md` | Only with **`spec.combined.yaml`**: Ollama refine; merged into `paste-this-prompt.txt` |
 
-The workflow **`cmd`** installs **`git`**, **`curl`**, **`ripgrep`**, builds **`bin/dorkpipe`** inside the container if missing, then runs **`scripts/dorkpipe/run-self-analysis.sh`**.
+The workflow **`cmd`** runs in **`golang:1.25-bookworm`** (git and curl from the image; no **`apt-get`** — DockPipe runs the container as your host uid, so package installs as root are not available). It builds **`bin/dorkpipe`** inside the container if missing, then runs **`scripts/dorkpipe/run-self-analysis.sh`** (signals use **`rg`** when present, else **`grep`**).
+
+**Full YAML lifecycle (Compose up → analysis → Compose down):** use **`dorkpipe-self-analysis-stack`** — see **`../dorkpipe-self-analysis-stack/README.md`**.
 
 ## Run (default — Docker + isolation)
 
 ```bash
-# From repo root (Docker must be running)
-dockpipe --workflow dorkpipe-self-analysis --workdir . --
+# From repo root — use the repo launcher (not bare `dockpipe` unless installed on PATH)
+make build
+./bin/dockpipe --workflow dorkpipe-self-analysis --workdir . --
 ```
 
 Direct script (still uses **host** — no container):
@@ -29,20 +32,22 @@ make build
 
 Bring up **long-lived** services for DAG nodes that need **`OLLAMA_HOST`** / **`DATABASE_URL`**. Tear down when finished — nothing stays running unless you want it.
 
+Postgres is mapped to **host port `15432`** (not `5432`) so it does not fight a system Postgres on the default port.
+
 ```bash
 scripts/dorkpipe/dev-stack.sh up    # postgres + ollama
 scripts/dorkpipe/dev-stack.sh ps
 scripts/dorkpipe/dev-stack.sh down
 ```
 
-Compose file: **`templates/core/assets/compose/dorkpipe/docker-compose.yml`**.
+Compose file: **`templates/core/assets/compose/dorkpipe/docker-compose.yml`**. Example DSN: **`postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe`**.
 
 ## Host-only workflow (no Docker)
 
 Use **`dorkpipe-self-analysis-host`** when Docker isn’t available or you want the fastest iteration on the host:
 
 ```bash
-dockpipe --workflow dorkpipe-self-analysis-host --workdir . --
+./bin/dockpipe --workflow dorkpipe-self-analysis-host --workdir . --
 ```
 
 ## Combined spec (Ollama refine inside DorkPipe)

@@ -2,7 +2,7 @@ You are working in the DockPipe repository. Follow AGENTS.md: DockPipe stays the
 
 Repository snapshot (machine-generated):
 - ref: js/dev
-- HEAD: 91184a0e3567b274fd019ad03a2c76a43d597c34
+- HEAD: c255b0bba680b4b575343ffc7feca77f6555bfcb
 - lib/dorkpipe Go files: 21
 
 Task: Implement the next concrete improvements to DorkPipe orchestration (multi-signal confidence, conditional nodes, verifiers, eval/promotion) without unnecessary DockPipe core changes.

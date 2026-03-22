@@ -177,6 +177,56 @@ When you work **on the dockpipe project itself**, you are a **user** of the tool
 
 **Preferred pattern:** `dockpipe init <name> --from run-apply` or **`run-apply-validate`** (or **`run`**, **`blank`**) for user-shaped scaffolds; keep automation-specific YAML under **`dockpipe/workflows/`**.
 
+**Accelerator (maintainers):** After **`make build`**, **`make self-analysis`**, **`make self-analysis-host`**, or **`make self-analysis-stack`** run the DorkPipe self-analysis workflows on this repo (container, host-only, or compose stack). See **`docs/dorkpipe.md`** and **`dockpipe/workflows/dorkpipe-self-analysis/README.md`**.
+
+### Agent guidance: repository analysis (before repo-level work)
+
+**Cursor / IDE:** This repo ships **`.cursor/rules/dockpipe-agents.mdc`** (**`alwaysApply: true`**) so sessions load the same contract as this section. Keep it in sync when you change the rules below.
+
+This repository includes **this file (`AGENTS.md`)** and may include **generated analysis artifacts**. Other trees may use different layout (e.g. a project-local directory under **`.dockpipe/`**); **here**, the canonical locations are below.
+
+**1. Discover context**
+
+- Read **`AGENTS.md`** first.
+- Locate analysis artifacts. In **this** repo they typically live under **`.dockpipe/`** (handoff / paste text) and **`.dorkpipe/`** (orchestrator metadata and **`.dorkpipe/self-analysis/`** raw facts). Use whatever paths this section and your checkout reference.
+
+| Artifact | Path (this repo) |
+|----------|------------------|
+| Short paste block | **`.dockpipe/paste-this-prompt.txt`** |
+| Full handoff | **`.dockpipe/orchestrator-cursor-prompt.md`** |
+| Raw facts (git, signals, excerpts) | **`.dorkpipe/self-analysis/`** |
+| Orchestrator run metadata (if present) | **`.dorkpipe/run.json`**, **`.dorkpipe/metrics.jsonl`** |
+
+If present, **load and use** them as **primary** context for understanding the repository, together with normal code reading.
+
+**2. Evaluate freshness**
+
+- Use available metadata: **git** ref / commit in **`self-analysis`** or handoff text, **timestamps** on files, **`VERSION`**, or fields in **`.dorkpipe/run.json`** when present.
+- Judge whether analysis appears **current** relative to **`HEAD`** and recent change volume (merges, large refactors).
+
+**3. Decide behavior**
+
+- If analysis **exists** and appears **current** → use it **directly** as context.
+- If analysis **exists** but may be **stale** → **tell the user** that refreshing repo analysis is **recommended** before substantial work → **continue** with existing analysis **unless** they say otherwise.
+- If **no** analysis exists → **tell the user** it has not been generated and **recommend** running the repo-analyzer workflow (here: **`dorkpipe-self-analysis`** via **`make self-analysis`**, **`make self-analysis-host`**, or **`make self-analysis-stack`** — see **Accelerator** above).
+
+**4. Refresh rules**
+
+- Do **not** automatically refresh analysis unless the user **explicitly** asks.
+- If the user requests a refresh → run the **repo-analyzer** workflow (**`dorkpipe-self-analysis`** / **`make self-analysis*`**), let artifacts update, then **re-load** analysis before continuing.
+
+**5. Usage contract**
+
+- Treat analysis artifacts as **structured, authoritative** context **where applicable**.
+- Do **not** duplicate **large-scale** repo analysis if usable artifacts already exist.
+- Use analysis to guide **planning**, **validation**, and **implementation** decisions.
+
+**6. Response requirements**
+
+When responding, **state** whether analysis artifacts were **found**, and whether they appear **current** or **potentially stale**; **recommend refresh** when appropriate; then **proceed** with the requested task using the **best available** context.
+
+**Scaffold note:** **`dockpipe init … --from dorkpipe-self-analysis`** appends a handoff section to **`AGENTS.md`** in new projects (marker **`<!-- dockpipe: self-analysis handoff -->`**).
+
 ---
 
 ## Milestone: we run the tool on ourselves

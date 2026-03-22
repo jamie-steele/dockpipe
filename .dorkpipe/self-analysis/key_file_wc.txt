@@ -1,6 +1,6 @@
 ## key file line counts
-204 /home/jamie/source/dockpipe/lib/dorkpipe/engine/run.go
-161 /home/jamie/source/dockpipe/lib/dorkpipe/spec/spec.go
-99 /home/jamie/source/dockpipe/lib/dorkpipe/aggregator/merge.go
-370 /home/jamie/source/dockpipe/lib/dorkpipe/workers/workers.go
-198 /home/jamie/source/dockpipe/cmd/dorkpipe/main.go
+204 /work/lib/dorkpipe/engine/run.go
+161 /work/lib/dorkpipe/spec/spec.go
+99 /work/lib/dorkpipe/aggregator/merge.go
+370 /work/lib/dorkpipe/workers/workers.go
+198 /work/cmd/dorkpipe/main.go
