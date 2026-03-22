@@ -48,9 +48,14 @@ dockpipe --isolate agent-dev -- npm test
 ```bash
 make dev-deps
 make dev-install
+make test        # fastest: Go tests only
+make test-quick  # Go + path guard + bash unit tests (no Docker)
+make ci          # full Linux CI mirror (govulncheck, gosec, Docker, integration — see scripts/ci-local.sh)
 ```
 
-Contributors: `make dev-deps` installs **govulncheck** and **gosec** (same checks as CI). Optional — not required to use DockPipe.
+Contributors: **`make dev-deps`** installs **govulncheck** and **gosec** (CI parity) and tries **user-level** installs for **asciinema** + **agg** (for **`make demo-record`**). None of this is required to use DockPipe. For demo tools only: **`make install-record-deps`**.
+
+Optional **Codex** workflows in CI (when **`DOCKPIPE_CI_CODEX=true`**): `DOCKPIPE_CI_CODEX=true OPENAI_API_KEY=... make ci`.
 
 ## Disclaimer
 

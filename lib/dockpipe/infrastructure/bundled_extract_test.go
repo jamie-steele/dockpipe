@@ -10,8 +10,14 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	if !EmbeddedWorkflowConfigExists("test") {
 		t.Fatal("expected test")
 	}
+	if !EmbeddedWorkflowConfigExists("test-demo") {
+		t.Fatal("expected test-demo")
+	}
 	if !EmbeddedWorkflowConfigExists("run") {
 		t.Fatal("expected run")
+	}
+	if !EmbeddedWorkflowConfigExists("run-apply") {
+		t.Fatal("expected run-apply")
 	}
 	if !EmbeddedWorkflowConfigExists("run-apply-validate") {
 		t.Fatal("expected run-apply-validate")
@@ -52,6 +58,7 @@ func TestMapEmbeddedToMaterializedPath(t *testing.T) {
 		{"templates/core", "dockpipe/core"},
 		{"templates/core/runtimes/docker/profile", "dockpipe/core/runtimes/docker/profile"},
 		{"templates/test/config.yml", filepath.Join("dockpipe", "workflows", "test", "config.yml")},
+		{"templates/test-demo/config.yml", filepath.Join("dockpipe", "workflows", "test-demo", "config.yml")},
 		{filepath.Join("dockpipe", "workflows", "dogfood-codex-pav", "config.yml"), filepath.Join("dockpipe", "workflows", "dogfood-codex-pav", "config.yml")},
 	}
 	for _, tc := range cases {

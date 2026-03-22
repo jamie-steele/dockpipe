@@ -1,12 +1,20 @@
 # Demo recording (developer / social)
 
-Record a short terminal clip of:
+Install **asciinema** + **agg** (best effort, no sudo):
 
-`dockpipe --workflow test --runtime docker`
+```bash
+make install-record-deps
+```
 
-## One command
+(`make dev-deps` runs this after CI tools — see repo README → Development.)
 
-From the repo root:
+Recordings use **`--workflow test-demo`**: **tests → `go vet` → security brief** (`make demo-record`). **This repo’s CI** uses **`--workflow test`** (**`go vet`** in Docker only; **govulncheck**/**gosec** on the host). The **long** variant also runs **`dockpipe --version`** first.
+
+**What you see (`test-demo`):** **isolation** banner → **`go test`** → **`go vet`** → **security brief**. The brief is **labeled** bundled copy — **not** a live LLM. **`make demo-record`** mounts **`$(go env GOPATH)/pkg` → `/go/pkg`** for module reuse.
+
+## One command (builds both GIFs)
+
+From the repo root (or from `scripts/` — same Makefile forwards to the root):
 
 ```bash
 make demo-record
@@ -14,8 +22,16 @@ make demo-record
 
 Output:
 
-- `demo/dockpipe-demo.gif` — shareable loop
-- `demo/dockpipe-demo.cast` — asciinema source (can delete after rendering)
+- `demo/dockpipe-demo-short.gif` — compact layout (quick social / thumbnail)
+- `demo/dockpipe-demo-long.gif` — wider terminal + version + workflow (longer story)
+- Matching `.cast` files — asciinema sources (can delete after rendering)
+
+Record only one variant:
+
+```bash
+make demo-record-short
+make demo-record-long
+```
 
 ## Prerequisites
 
@@ -49,5 +65,5 @@ Install **agg** from [GitHub releases](https://github.com/asciinema/agg/releases
 
 ```bash
 make build
-bash scripts/record-demo.sh
+bash scripts/record-demo.sh all    # or: short | long
 ```

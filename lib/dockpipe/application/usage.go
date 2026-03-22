@@ -54,9 +54,6 @@ Usage:
   dockpipe init <name> [flags]   add a workflow from a template
 
 Flags:
-  --dogfood-test            Copy the bundled test workflow
-  --dogfood-codex-pav       Copy the Codex plan → apply → validate workflow
-  --dogfood-codex-security  Copy the Codex security workflow
   --from <source>          Template to copy from (with <name>)
   --runtime <name>         Written into new config (with <name>)
   --resolver <name>        Written into new config (with <name>)
@@ -64,7 +61,7 @@ Flags:
 
 Examples:
   dockpipe init
-  dockpipe init --dogfood-test --dogfood-codex-pav
+  dockpipe init my-pipeline --from run-apply --resolver codex --runtime docker
 `
 
 func printUsage() {

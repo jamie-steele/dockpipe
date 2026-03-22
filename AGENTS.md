@@ -35,11 +35,13 @@ User-facing workflows.
 Examples:
 - `init`
 - `run`
-- `test`
+- `run-apply`
 - `run-apply-validate`
 
 📁 Location:
 templates/<name>/
+
+**Do not** put **this repository’s** CI, demo, or internal automation workflows in **`templates/`**. Those belong under **`dockpipe/workflows/<name>/`** (see **Internal workflows** below).
 
 ---
 
@@ -164,6 +166,27 @@ If something cannot be done:
 
 ---
 
+## Internal workflows (this repository)
+
+When you work **on the dockpipe project itself**, you are a **user** of the tool: extend it via **`templates/`**, **`scripts/`**, and **`dockpipe/workflows/`** — **not** by stuffing internal pipelines into **`templates/`**.
+
+| Location | Purpose |
+|----------|---------|
+| **`templates/<name>/`** | **User-facing** workflow examples shipped in the bundle (**`run`**, **`run-apply`**, **`run-apply-validate`**, **`init`**, …). Reusable for any downstream project. |
+| **`dockpipe/workflows/<name>/`** | **This repo only:** CI, recordings, experiments — workflows that exist to run **dockpipe** on **this** codebase. Not installed by a special `init` flag; copy dirs or use **`dockpipe init &lt;name&gt; --from …`** pointing at a workflow path. |
+
+**Preferred pattern:** `dockpipe init <name> --from run-apply` or **`run-apply-validate`** (or **`run`**, **`blank`**) for user-shaped scaffolds; keep automation-specific YAML under **`dockpipe/workflows/`**.
+
+---
+
+## Milestone: we run the tool on ourselves
+
+**Dogfooding** is not a CLI feature or a built-in primitive — it is **how we build confidence in the product.**
+
+We run the **same released binary** and **declarative workflows** in **this repository’s CI** (see **`.github/workflows/ci.yml`**) that users get: multi-step **`steps:`**, Docker isolation, resolver/runtime wiring. That alignment is a **deliberate quality bar** — talk it up in release notes and blog posts — but it lives in **automation and culture**, not in extra flags on **`dockpipe init`**.
+
+---
+
 ## Core constraints
 
 DO:
@@ -188,7 +211,7 @@ DO NOT:
 
 ---
 
-## One-line philosophyZZZZZZZZZZZZZZZz
+## One-line philosophy
 
 DockPipe runs anything, anywhere, in isolation.
 

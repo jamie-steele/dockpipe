@@ -8,4 +8,4 @@
 dockpipe --workflow dogfood-codex-pav --resolver codex --runtime docker --
 ```
 
-Install into a project with **`dockpipe init --dogfood-codex-pav`** — copies this preset to **`dockpipe/workflows/dogfood-codex-pav/`** (repo-local). See **[docs/cli-reference.md](../../docs/cli-reference.md)** (`dockpipe init`).
+This workflow ships with the dockpipe **source tree** under **`dockpipe/workflows/`**. To reuse it elsewhere, copy the directory or run **`dockpipe init yourflow --from /path/to/dockpipe/workflows/dogfood-codex-pav`**. See **[AGENTS.md](../../AGENTS.md)**.

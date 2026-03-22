@@ -16,18 +16,12 @@ Local project setup only: **no `git clone`**, no treating **`init`** as a remote
 |---------|---------|
 | `dockpipe init` | Create **`scripts/`**, **`images/`**, **`templates/`** if needed; merge bundled **`templates/core/`** (**`runtimes/`**, **`resolvers/`**, **`strategies/`**, **`assets/`** — scripts, images, compose); add **`README.md`** and **`dockpipe.yml`** when missing. |
 | `dockpipe init <name>` | Create **`templates/<name>/`** using the bundled **`init`** template by default. |
-| `dockpipe init <name> --from <source>` | **`--from`** selects a **template source**: **`blank`**, a **bundled** name (e.g. **`run`**, **`test`**), or a **filesystem path** to an existing workflow directory. Not a Git URL. |
-| `dockpipe init <name> --resolver <n> --runtime <n> --strategy <n>` | Optional; written into the new **`config.yml`** (same meaning as run flags — see the table below). |
+| `dockpipe init <name> --from <source>` | **`--from`** selects **`blank`**, a **bundled template** under **`templates/`** (e.g. **`run`**, **`run-apply`**, **`run-apply-validate`**), a **filesystem path** to any workflow directory (including **`dockpipe/workflows/…`** in a dockpipe **source checkout**), or a path under **`templates/<name>/`** resolved from **`DOCKPIPE_REPO_ROOT`**. Not a Git URL. |
+| `dockpipe init <name> --resolver <n> --runtime <n> --strategy <n>` | Optional; written into the new **`config.yml`** as **`resolver:`** / **`default_resolver:`**, **`runtime:`** / **`default_runtime:`**, **`strategy:`** (same meaning as **`dockpipe run`**). Example: **`dockpipe init my-pipeline --from run-apply --resolver codex --runtime docker`**. |
 
-**Optional dogfood workflows** (copy bundled presets into **`dockpipe/workflows/<name>/`** — repo-local; each flag is independent; default is off). **`--workflow`** resolves **`dockpipe/workflows/<name>/config.yml`** before **`templates/<name>/config.yml`** on a checkout.
+On a source checkout, **`--workflow`** resolves **`dockpipe/workflows/<name>/config.yml`** before **`templates/<name>/config.yml`**. The dockpipe project keeps its **own** CI and demo workflows under **`dockpipe/workflows/`** in the tree (see **[AGENTS.md](../AGENTS.md)**); there is **no** `init` flag for that — copy directories by hand or point **`--from`** at such a path when running **`dockpipe init`** with a workflow name.
 
-| Flag | Installs |
-|------|----------|
-| **`--dogfood-test`** | **`test`** — multi-step outputs chain ([templates/test/README.md](../templates/test/README.md) in the bundle; copy lands under **`dockpipe/workflows/test/`**). |
-| **`--dogfood-codex-pav`** | **`dogfood-codex-pav`** — plan → apply → validate with **`runtime: docker`**, **`resolver: codex`** ([dockpipe/workflows/dogfood-codex-pav/README.md](../dockpipe/workflows/dogfood-codex-pav/README.md)). |
-| **`--dogfood-codex-security`** | **`dogfood-codex-security`** — tests step then Codex security-style step ([dockpipe/workflows/dogfood-codex-security/README.md](../dockpipe/workflows/dogfood-codex-security/README.md)). |
-
-Example: **`dockpipe init --dogfood-test --dogfood-codex-security`**. If **`dockpipe/workflows/<name>/`** already exists, that workflow is skipped. **`dockpipe init`** also creates **`dockpipe/README.md`** and an empty **`dockpipe/workflows/`** tree when missing.
+**`dockpipe init`** also creates **`dockpipe/README.md`** and an empty **`dockpipe/workflows/`** tree when missing.
 
 ## Workflow variables (`--workflow`)
 

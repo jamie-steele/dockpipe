@@ -198,8 +198,9 @@ Multiple **separate** `dockpipe` invocations (same `--workdir`) are still valid;
 
 | Workflow | Purpose |
 |----------|---------|
-| **[templates/test/](../templates/test/)** | Minimal **two-step** sequential chain via **`.dockpipe/outputs.env`**. |
+| **[dockpipe/workflows/test/](../dockpipe/workflows/test/)** (this repo) | CI-style **go vet** chain via **`.dockpipe/outputs.env`** — under **`dockpipe/workflows/`**, not **`templates/`**. |
 | **[templates/run/](../templates/run/)** | Single command in a container, then optional **git** commit on the current branch (**strategy `git-commit`**). |
+| **[templates/run-apply/](../templates/run-apply/)** | Two-step **run → apply** pipeline (replace **`cmd:`** with your tools). |
 | **[templates/run-apply-validate/](../templates/run-apply-validate/)** | Three-step **run → apply → validate** pipeline (replace **`cmd:`** with your tools). |
 
 **Async groups** (`group.mode: async`) are documented above in this file.
@@ -207,6 +208,7 @@ Multiple **separate** `dockpipe` invocations (same `--workdir`) are still valid;
 ```bash
 dockpipe --workflow test
 dockpipe --workflow run -- echo ok
+dockpipe --workflow run-apply
 dockpipe --workflow run-apply-validate
 ```
 

@@ -1,13 +1,11 @@
 package application
 
 import (
+	"dockpipe/lib/dockpipe/infrastructure"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
-
-	"dockpipe/lib/dockpipe/infrastructure"
 )
 
 func cmdDoctor(argv []string) error {
@@ -42,11 +40,10 @@ Quick checks before a real run. Does not start a project container.
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[dockpipe] bundled assets: could not resolve (%v)\n", err)
 	} else {
-		cfg := filepath.Join(infrastructure.WorkflowsRootDir(rr), "test", "config.yml")
-		if _, statErr := os.Stat(cfg); statErr != nil {
+		if wfPath, err := infrastructure.ResolveWorkflowConfigPath(rr, "test"); err != nil {
 			fmt.Fprintf(os.Stderr, "[dockpipe] bundled assets: incomplete (%s)\n", rr)
 		} else {
-			fmt.Fprintf(os.Stderr, "[dockpipe] bundled assets: ok (%s)\n", rr)
+			fmt.Fprintf(os.Stderr, "[dockpipe] bundled assets: ok (%s)\n", wfPath)
 		}
 	}
 

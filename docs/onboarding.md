@@ -32,9 +32,12 @@ Most days: **`dockpipe -- <command>`** only.
 dockpipe --workflow test --runtime docker
 ```
 
-Two Alpine steps with **`outputs:`** handoff; no API keys. The workflow loads from the **materialized bundle** in your cache (**`dockpipe/workflows/test/`**) or from **`templates/test/`** in a checkout.
+- **`--workflow test`** — **This repo’s CI** uses **`go vet`** in Docker only (no `go test`); **govulncheck** / **gosec** run on the **host** in the same job.  
+- **`--workflow test-demo`** — **Recording**: **`go test`** → **`go vet`** → security brief (`make demo-record`).
 
-To copy presets into **your** repo: **`dockpipe init --dogfood-test`** (see **[cli-reference.md](cli-reference.md)**).
+Mount **`--mount "$(go env GOPATH)/pkg:/go/pkg:rw"`** so module data is visible in the container. Workflows load from the **materialized bundle** or **`dockpipe/workflows/`** / **`templates/`** in a checkout.
+
+To reuse **`dockpipe/workflows/`** presets in another tree, copy the directory or use **`dockpipe init`** with **`--from`** pointing at that path (see **[AGENTS.md](../AGENTS.md)**).
 
 ---
 

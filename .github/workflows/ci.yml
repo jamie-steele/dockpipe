@@ -1,5 +1,6 @@
 # Tests, packaging, gosec/govulncheck, and CodeQL in one workflow (one Actions run per trigger).
 # See docs/releases/branching.md
+# Local: quick tests  make test-quick  |  full Linux job  make ci  (scripts/ci-local.sh)
 #
 # --- Optional GitHub repo configuration (Settings → Secrets and variables → Actions) ---
 #
@@ -61,13 +62,15 @@ jobs:
       - name: Templates/core path guard (docs + code)
         run: bash scripts/check-templates-core-paths.sh
 
-      # Dogfood: run bundled multi-step workflow via the CLI (repo-local dockpipe/workflows/test when present).
+      # Dogfood: workflow "test" = go vet in Docker (no go test); govulncheck/gosec run on the host elsewhere in this job.
       - name: Dogfood — dockpipe workflow test
         env:
           DOCKPIPE_REPO_ROOT: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          ./bin/dockpipe --workflow test --runtime docker --workdir "${{ github.workspace }}" --
+          ./bin/dockpipe --workflow test --runtime docker --workdir "${{ github.workspace }}" \
+            --mount "$(go env GOPATH)/pkg:/go/pkg:rw" \
+            --
 
       # Optional: Codex resolver workflows (set repo variable DOCKPIPE_CI_CODEX=true and secret OPENAI_API_KEY).
       - name: Dogfood — dockpipe Codex workflows (optional)

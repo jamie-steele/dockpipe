@@ -18,7 +18,7 @@ const dockpipeProjectReadme = `# Dockpipe project
 - **images/** — Optional project Dockerfiles (e.g. **images/example/** copied from **templates/core/assets/images/example/**).
 - **templates/** — Bundled-style workflows (**config.yml**), one folder per name (from upstream / **dockpipe init &lt;name&gt;**).
 - **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/**, **assets/** (**scripts/**, **images/**, **compose/**) (from **dockpipe init**).
-- **dockpipe/workflows/** — Optional **repo-local** workflows (e.g. **dockpipe init --dogfood-***); **--workflow** checks here before **templates/**.
+- **dockpipe/workflows/** — Optional **repo-local** workflows; **--workflow** checks here before **templates/**.
 - **dockpipe.yml** (optional) — Repo-root workflow; use **dockpipe --workflow-file dockpipe.yml**.
 `
 
@@ -26,13 +26,7 @@ const dockpipeDirReadme = `# dockpipe/
 
 Optional **repo-local** workflows live under **workflows/** (one directory per workflow with **config.yml**). Resolution checks here before **templates/**.
 
-To copy the bundled dogfood workflows from a dockpipe **source checkout** (set **DOCKPIPE_REPO_ROOT**; Codex presets ship under **dockpipe/workflows/** in-tree):
-
-    export DOCKPIPE_REPO_ROOT="$(pwd)"
-    make build
-    ./bin/dockpipe init --dogfood-test --dogfood-codex-pav --dogfood-codex-security
-
-Skips **workflows/<name>/** if it already exists. See **docs/cli-reference.md** (**dockpipe init**).
+To reuse workflows from a dockpipe **source tree**, copy **dockpipe/workflows/&lt;name&gt;/** from the checkout (or point **--from** at that path when running **dockpipe init &lt;name&gt; --from …**). See **AGENTS.md** (internal workflows) and **docs/cli-reference.md**.
 
 `
 
@@ -76,7 +70,7 @@ func resolveInitFromSource(repoRoot, from string) (srcDir string, isBlank bool, 
 	if st, e := os.Stat(bundled); e == nil && st.IsDir() {
 		return bundled, false, nil
 	}
-	// Codex dogfood presets live under dockpipe/workflows/ in this repo (not templates/).
+	// This repo ships optional workflows under dockpipe/workflows/ (not under templates/).
 	alt := filepath.Join(repoRoot, infrastructure.BundledDockpipeDir, "workflows", from)
 	if st, e := os.Stat(alt); e == nil && st.IsDir() {
 		return alt, false, nil
@@ -88,7 +82,7 @@ func resolveInitFromSource(repoRoot, from string) (srcDir string, isBlank bool, 
 	if st, e := os.Stat(abs); e == nil && st.IsDir() {
 		return abs, false, nil
 	}
-	return "", false, fmt.Errorf("unknown --from source %q — use blank, a bundled name (e.g. init, run, test, run-apply-validate, dogfood-codex-pav, dogfood-codex-security), or a path to an existing workflow directory", from)
+	return "", false, fmt.Errorf("unknown --from source %q — use blank, a bundled name under templates/ (e.g. init, run, run-apply, run-apply-validate), a path to dockpipe/workflows/<name> in a dockpipe checkout, or another filesystem path to a workflow directory", from)
 }
 
 func writeWorkflowYAML(path string, wf *domain.Workflow) error {

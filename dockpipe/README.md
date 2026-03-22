@@ -4,16 +4,8 @@
 
 **Core** files (**runtimes**, **resolvers**, **strategies**, **assets**) unpack to **`dockpipe/core/`** in the user cache; **`dockpipe init`** merges **`templates/core/`** into your project when authoring.
 
-## Dogfood presets (this repository)
+## Internal workflows (this repository)
 
-From the repo root, point **`DOCKPIPE_REPO_ROOT`** here so **`init`** copies from **`templates/`**, then:
+CI, demos, and other **dockpipe-the-tool** workflows live only under **`dockpipe/workflows/<name>/`**, not under **`templates/`**. User-facing examples stay under **`templates/`** (e.g. **`run`**, **`run-apply`**, **`run-apply-validate`**).
 
-```bash
-export DOCKPIPE_REPO_ROOT="$(pwd)"
-make build
-./bin/dockpipe init --dogfood-test --dogfood-codex-pav --dogfood-codex-security
-```
-
-That installs **`test`**, **`dogfood-codex-pav`**, and **`dogfood-codex-security`** under **`dockpipe/workflows/`**. Existing dirs are skipped—remove one first to refresh.
-
-See **[docs/cli-reference.md](../docs/cli-reference.md)** (**`dockpipe init`**).
+There is **no** CLI shortcut to install these — they are not a product feature. To reuse one elsewhere, copy the directory or run **`dockpipe init &lt;name&gt; --from /path/to/dockpipe/workflows/&lt;name&gt;`**. See **[AGENTS.md](../AGENTS.md)**.

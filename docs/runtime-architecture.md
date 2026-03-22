@@ -10,7 +10,7 @@ Below, **`runtime`** still refers to **isolated execution environment** (technic
 
 | Concept | Answers | Examples |
 |--------|---------|----------|
-| **`workflow`** | **What** runs — the execution pattern, steps, vars, structure. | **`test`**, **`run`**, **`run-apply-validate`**, thin **`claude`** / **`codex`** / **`code-server`** helpers — each is **`templates/<name>/config.yml`**, not a runtime folder. **`vscode`** delegate YAML is not marketed as a first-class workflow in the README. |
+| **`workflow`** | **What** runs — the execution pattern, steps, vars, structure. | **`test`**, **`run`**, **`run-apply`**, **`run-apply-validate`**, thin **`claude`** / **`codex`** / **`code-server`** helpers — each is **`templates/<name>/config.yml`**, not a runtime folder. **`vscode`** delegate YAML is not marketed as a first-class workflow in the README. |
 | **`runtime` (environment)** | **Isolated execution environment** — *where* work runs; **platform-agnostic** contract via **`DOCKPIPE_RUNTIME_*`**. | Image template, embedded workflow isolate, host script — not “Claude vs Codex.” |
 | **`runtime.type` (`DOCKPIPE_RUNTIME_TYPE`)** | **Behavior classification** — **`execution`** \| **`ide`** \| **`agent`**; intent only, not Docker vs EC2. | Bundled **`claude`** profile → **`agent`**; **`vscode`** → **`ide`** |
 | **Profile name (CLI `--runtime` / `--resolver`)** | Selects **`templates/core/runtimes/<name>`** or **`resolvers/<name>`** — file that **composes** runtime + resolver for that integration. | **`--runtime vscode`** → **`templates/core/resolvers/vscode`** |

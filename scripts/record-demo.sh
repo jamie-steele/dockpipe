@@ -1,23 +1,38 @@
 #!/usr/bin/env bash
-# Record a short terminal demo: dockpipe --workflow test --runtime docker → demo/dockpipe-demo.gif
+# Record terminal demos: dockpipe test-demo workflow (tests → scans → report) → demo/dockpipe-demo-{short,long}.gif
 # Requires: asciinema, agg, Docker, and a built CLI (make build).
+#
+# Usage: bash scripts/record-demo.sh [short|long|all]
+#   short — compact GIF (social / quick share)
+#   long  — wider terminal + version line + workflow (fuller showcase)
+#   all   — both (default)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 DEMO_DIR="${ROOT}/demo"
-CAST="${DEMO_DIR}/dockpipe-demo.cast"
-GIF="${DEMO_DIR}/dockpipe-demo.gif"
 
 die() { echo "record-demo: $*" >&2; exit 1; }
+
+MODE="${1:-all}"
+case "$MODE" in
+short | long | all) ;;
+*)
+	die "usage: bash scripts/record-demo.sh [short|long|all]"
+	;;
+esac
 
 print_record_deps_help() {
 	cat >&2 <<'EOT'
 
 Missing tools for demo recording. Install:
 
+  First try (from repo root):  make install-record-deps
+  If that leaves tools missing, install manually:
+
   asciinema   Debian/Ubuntu/Pop!_OS:  sudo apt install asciinema
+              or:  sudo apt install pipx && pipx install asciinema   (user-level)
               Fedora:                 sudo dnf install asciinema
               macOS:                  brew install asciinema
 
@@ -25,7 +40,10 @@ Missing tools for demo recording. Install:
               https://github.com/asciinema/agg/releases  (download binary → chmod +x → put on PATH)
               or:  cargo install --locked --git https://github.com/asciinema/agg
 
+Ensure ~/.local/bin and ~/.cargo/bin are on your PATH if you used pip/cargo.
+
 Then re-run:  make demo-record
+(  make dev-deps  installs CI tools plus the demo-record helpers. )
 EOT
 }
 
@@ -35,36 +53,109 @@ command -v docker >/dev/null 2>&1 || die "install Docker and ensure it is runnin
 docker info >/dev/null 2>&1 || die "Docker daemon not reachable — start Docker"
 
 [[ -x "${ROOT}/bin/dockpipe.bin" ]] || [[ -f "${ROOT}/bin/dockpipe" ]] || die "run \`make build\` first (or: make demo-record)"
+command -v go >/dev/null 2>&1 || die "need Go on PATH (go mod download + module cache mount for the test-demo workflow)"
 
 mkdir -p "$DEMO_DIR"
 
-INNER="$(mktemp)"
-trap 'rm -f "$INNER"' EXIT
-cat > "$INNER" <<EOF
+write_inner_short() {
+	local f="$1"
+	cat >"$f" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$ROOT"
 export DOCKPIPE_REPO_ROOT="$ROOT"
-printf '%s\n' '$ dockpipe --workflow test --runtime docker'
-exec ./bin/dockpipe --workflow test --runtime docker
+go mod download
+GOPKG="\$(go env GOPATH)/pkg"
+printf '%s\n' '$ dockpipe --workflow test-demo --runtime docker --workdir . --mount "$(go env GOPATH)/pkg:/go/pkg:rw"'
+exec ./bin/dockpipe --workflow test-demo --runtime docker --workdir "$ROOT" --mount "\${GOPKG}:/go/pkg:rw" --
 EOF
-chmod +x "$INNER"
+}
 
-echo "Recording to ${CAST} …"
-asciinema rec --overwrite "$CAST" -c "$INNER"
+write_inner_long() {
+	local f="$1"
+	cat >"$f" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$ROOT"
+export DOCKPIPE_REPO_ROOT="$ROOT"
+go mod download
+GOPKG="\$(go env GOPATH)/pkg"
+printf '%s\n' '$ dockpipe --version'
+./bin/dockpipe --version
+printf '%s\n' '$ dockpipe --workflow test-demo --runtime docker --workdir . --mount "$(go env GOPATH)/pkg:/go/pkg:rw"'
+exec ./bin/dockpipe --workflow test-demo --runtime docker --workdir "$ROOT" --mount "\${GOPKG}:/go/pkg:rw" --
+EOF
+}
 
-echo "Rendering GIF with agg …"
-# Readable when scaled down: slightly larger font, modest terminal size, snappier playback
-agg \
-  --theme asciinema \
-  --font-size 18 \
-  --cols 82 \
-  --rows 22 \
-  --fps 12 \
-  --speed 1.15 \
-  "$CAST" \
-  "$GIF"
+render_gif() {
+	local cast="$1"
+	local gif="$2"
+	shift 2
+	agg \
+		--theme asciinema \
+		"$@" \
+		"$cast" \
+		"$gif"
+}
 
-echo ""
-echo "Saved: $GIF"
-echo "Intermediate cast (optional): $CAST"
+record_variant() {
+	local variant="$1"
+	local inner cast gif
+	inner="$(mktemp)"
+	trap 'rm -f "$inner"' RETURN
+	chmod +x "$inner"
+
+	case "$variant" in
+	short)
+		write_inner_short "$inner"
+		cast="${DEMO_DIR}/dockpipe-demo-short.cast"
+		gif="${DEMO_DIR}/dockpipe-demo-short.gif"
+		echo "Recording (short) → ${cast} …"
+		asciinema rec --overwrite "$cast" -c "$inner"
+		echo "Rendering GIF (short, compact) …"
+		# Tight layout for thumbnails / quick shares
+		render_gif "$cast" "$gif" \
+			--font-size 16 \
+			--cols 72 \
+			--rows 18 \
+			--fps-cap 14 \
+			--speed 1.2
+		echo "Saved: $gif"
+		;;
+	long)
+		write_inner_long "$inner"
+		cast="${DEMO_DIR}/dockpipe-demo-long.cast"
+		gif="${DEMO_DIR}/dockpipe-demo-long.gif"
+		echo "Recording (long) → ${cast} …"
+		asciinema rec --overwrite "$cast" -c "$inner"
+		echo "Rendering GIF (long, readable) …"
+		# Wider + taller: version line + full workflow output
+		render_gif "$cast" "$gif" \
+			--font-size 18 \
+			--cols 92 \
+			--rows 30 \
+			--fps-cap 10 \
+			--speed 1.0
+		echo "Saved: $gif"
+		;;
+	*)
+		die "internal: bad variant $variant"
+		;;
+	esac
+	echo "Intermediate cast (optional): $cast"
+	echo ""
+}
+
+case "$MODE" in
+all)
+	record_variant short
+	record_variant long
+	echo "Done: demo/dockpipe-demo-short.gif and demo/dockpipe-demo-long.gif"
+	;;
+short)
+	record_variant short
+	;;
+long)
+	record_variant long
+	;;
+esac

@@ -11,8 +11,8 @@ msi-dist/
 dist/
 
 # Local demo recordings (asciinema + agg)
-demo/dockpipe-demo.cast
-demo/dockpipe-demo.gif
+demo/dockpipe-demo*.cast
+demo/dockpipe-demo*.gif
 
 # OS
 .DS_Store

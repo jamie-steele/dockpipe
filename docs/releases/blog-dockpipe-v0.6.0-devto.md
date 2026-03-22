@@ -21,7 +21,7 @@ That’s a real multi-step workflow—alpine containers, outputs handed to the n
 - **Stable story** — workflow = what happens; runtime = where; resolver = which tool; strategies and assets stay in their lanes.
 - **Bundled layout you can reason about** — `dockpipe/core/` and `dockpipe/workflows/` when the binary unpacks; authoring trees still use `templates/` if you’re in the repo.
 - **`dockpipe init`** — the obvious way to add DockPipe to a project.
-- **Built-in examples** — including the `test` workflow above; optional presets via `dockpipe init` flags if you want Codex dogfood flows.
+- **Bundled examples** — including the `test` workflow above; the dockpipe project also ships extra workflows under `dockpipe/workflows/` and runs them in CI (same binary you install — see **AGENTS.md**).
 - **Windows in the test matrix** — same Go CLI, same tests, fewer surprises.
 
 ---
