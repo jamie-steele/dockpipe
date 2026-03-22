@@ -1,0 +1,17 @@
+[
+  {
+    "key": "ctrl+alt+shift+p",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Pipeon: chat"
+  },
+  {
+    "key": "ctrl+alt+shift+b",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Pipeon: bundle context"
+  },
+  {
+    "key": "ctrl+alt+shift+s",
+    "command": "workbench.action.tasks.runTask",
+    "args": "Pipeon: status"
+  }
+]

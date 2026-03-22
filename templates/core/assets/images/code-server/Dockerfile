@@ -1,0 +1,38 @@
+# Browser code-server (Coder OSS image) with Pipeon extension + baseline User settings.
+# Does NOT use lib/entrypoint.sh — this image is only for vscode-code-server.sh (workflow vscode).
+# Isolate runs use templates/core/assets/images/vscode/ (dockpipe-vscode + entrypoint).
+#
+# Build from repo root:
+#   docker build -t dockpipe-code-server:latest -f templates/core/assets/images/code-server/Dockerfile .
+# Or: make build-code-server-image
+
+# Pack Pipeon as .vsix (code-server only accepts .vsix or marketplace IDs, not an unpacked folder).
+FROM node:20-alpine AS vsix
+WORKDIR /ext
+COPY contrib/pipeon-vscode-extension .
+RUN npm install -g @vscode/vsce \
+  && vsce package --allow-missing-repository --skip-license -o /pipeon.vsix
+
+FROM codercom/code-server:latest
+
+USER root
+RUN mkdir -p /work && chmod 777 /work
+
+# Pipeon P-mark favicon (browser tab) — replaces code-server defaults.
+COPY templates/core/assets/images/code-server/favicon.ico /usr/lib/code-server/src/browser/media/favicon.ico
+COPY templates/core/assets/images/code-server/favicon.svg /usr/lib/code-server/src/browser/media/favicon.svg
+COPY templates/core/assets/images/code-server/favicon-dark-support.svg /usr/lib/code-server/src/browser/media/favicon-dark-support.svg
+COPY templates/core/assets/images/code-server/favicon.ico /usr/lib/code-server/lib/vscode/resources/server/favicon.ico
+
+COPY --from=vsix /pipeon.vsix /tmp/pipeon.vsix
+COPY templates/core/assets/images/code-server/user-settings.json /tmp/user-settings.json
+RUN mkdir -p /home/coder/.local/share/code-server/User \
+  && cp /tmp/user-settings.json /home/coder/.local/share/code-server/User/settings.json \
+  && chown -R coder:coder /home/coder/.local/share/code-server \
+  && chown coder:coder /tmp/pipeon.vsix \
+  && rm -f /tmp/user-settings.json
+
+USER coder
+RUN code-server --install-extension /tmp/pipeon.vsix && rm -f /tmp/pipeon.vsix
+
+WORKDIR /work

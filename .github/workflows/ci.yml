@@ -43,15 +43,33 @@ jobs:
         with:
           go-version: "1.25.8"
 
-      - name: govulncheck
+      - name: govulncheck + gosec + DorkPipe CI signal bundle
+        env:
+          DOCKPIPE_WORKDIR: ${{ github.workspace }}
         run: |
+          set -euo pipefail
+          mkdir -p .dockpipe/ci-raw
+          GOBIN="$(go env GOPATH)/bin"
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          "$(go env GOPATH)/bin/govulncheck" ./...
-
-      - name: gosec (SAST)
-        run: |
           go install github.com/securego/gosec/v2/cmd/gosec@latest
-          "$(go env GOPATH)/bin/gosec" -conf .gosec.json -fmt text -stdout ./...
+          set +e
+          "$GOBIN/govulncheck" -format json ./... > .dockpipe/ci-raw/govulncheck.json
+          VC=$?
+          "$GOBIN/gosec" -conf .gosec.json -fmt json -out=.dockpipe/ci-raw/gosec.json ./...
+          GC=$?
+          set -e
+          bash scripts/dorkpipe/normalize-ci-scans.sh
+          echo "::group::gosec stats (JSON)"
+          jq '.Stats // empty' .dockpipe/ci-raw/gosec.json || true
+          echo "::endgroup::"
+          if [[ $VC -ne 0 ]]; then
+            echo "::error::govulncheck failed (exit $VC)"
+            exit "$VC"
+          fi
+          if [[ $GC -ne 0 ]]; then
+            echo "::error::gosec failed (exit $GC)"
+            exit "$GC"
+          fi
 
       - name: Build CLI (Bash tests use bin/dockpipe)
         run: make
@@ -62,7 +80,7 @@ jobs:
       - name: Templates/core path guard (docs + code)
         run: bash scripts/check-templates-core-paths.sh
 
-      # Dogfood: workflow "test" = go vet in Docker (no go test); govulncheck/gosec run on the host elsewhere in this job.
+      # Dogfood: workflow "test" = go test + vet + govulncheck + gosec inside Docker (tools installed in-container; only mod cache mounted).
       - name: Dogfood — dockpipe workflow test
         env:
           DOCKPIPE_REPO_ROOT: ${{ github.workspace }}
@@ -127,6 +145,16 @@ jobs:
 
       - name: Integration tests (Docker)
         run: bash tests/integration-tests/run.sh
+
+      - name: Upload DorkPipe CI analysis bundle
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: dockpipe-ci-analysis-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .dockpipe/ci-analysis/
+            .dockpipe/ci-raw/
 
   # Windows: Go + bash scripts that mirror host pre-script behavior (Git Bash on the runner).
   # Full tests/run_tests.sh and Docker integration tests stay on Linux — Docker/Linux images

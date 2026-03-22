@@ -1,10 +1,13 @@
-# This repo’s CI: scans only (no go test). Container runs go vet; govulncheck/gosec run on the host in CI.
-# See dockpipe/workflows/test-demo for tests → go vet → Codex review (recordings).
+# CI dogfood: same checks as the Linux job, but this multi-step workflow runs them inside Docker.
+# Host job still runs govulncheck/gosec/go test first for fast signal; this workflow mirrors the stack in isolation.
+# Mount only $(go env GOPATH)/pkg:/go/pkg — do NOT mount host GOBIN: govulncheck/gosec must be built with the
+# container Go (e.g. 1.25); a host-built binary often mismatches and breaks vulncheck.
+# See dockpipe/workflows/test-demo for tests → Codex recordings.
 # Images: golang official (pulls from Docker Hub on first use).
 name: test
 description: >-
-  Isolation preamble → verify artifact → go vet (static scan in container) → security brief (static copy in this workflow).
-  For video: workflow test-demo (real tests → go vet → Codex resolver). Govulncheck/gosec stay in the CI job on the host.
+  Isolation preamble → verify artifact → go test → go vet → govulncheck → gosec → security brief.
+  Tools are go install’d inside the image (match container Go); mount GOPATH/pkg only. govulncheck needs outbound HTTPS to vuln.go.dev.
 
 steps:
   - id: prepare
@@ -26,15 +29,25 @@ steps:
     isolate: golang:1.25-bookworm
     cmd: |-
       bash -c 'set -euo pipefail
-      echo "[demo] --- Step 2: verify artifact + scan (go vet) — no go test; govulncheck runs on host in CI ---"
+      echo "[demo] --- Step 2: verify artifact + full Go + security scan (same spirit as CI / ci-local.sh) ---"
       test -n "${ARTIFACT_SHA256:-}" || { echo "[demo] FAIL missing ARTIFACT_SHA256"; exit 1; }
       test -f "$DEMO_FILE" || { echo "[demo] FAIL missing $DEMO_FILE"; exit 1; }
       GOT=$(sha256sum "$DEMO_FILE" | cut -b1-64)
       test "$GOT" = "$ARTIFACT_SHA256" || { echo "[demo] FAIL checksum mismatch"; exit 1; }
       echo "[demo] Checksum OK — same bytes on disk as in step 1."
-      echo "[demo] Running: go vet ./...  (static analysis in this container)"
+      export PATH="$(go env GOPATH)/bin:$PATH"
+      echo "[demo] Running: go test ./..."
+      go test ./...
+      echo "[demo] Running: go vet ./..."
       go vet ./...
-      echo "[demo] Container scan finished with exit 0. (govulncheck/gosec run on the host in CI.)"
+      echo "[demo] go install govulncheck + gosec (must match container Go — do not use host GOBIN in Docker)"
+      go install golang.org/x/vuln/cmd/govulncheck@latest
+      go install github.com/securego/gosec/v2/cmd/gosec@latest
+      echo "[demo] Running: govulncheck ./..."
+      govulncheck ./...
+      echo "[demo] Running: gosec -conf .gosec.json ./..."
+      gosec -conf .gosec.json -fmt text -stdout ./...
+      echo "[demo] Container scan finished OK (go test + vet + govulncheck + gosec)."
       mkdir -p .dockpipe
       printf "%s\n" "VERIFY_OK=1" "SCAN_PASS=1" "DEMO_STAGE=scan" > .dockpipe/outputs.env'
 
@@ -52,4 +65,4 @@ steps:
       echo "[demo]   golang:1.25-bookworm for reproducible test runs."
       echo "[demo] • For an actual model-driven security review, use a resolver workflow"
       echo "[demo]   (e.g. Codex) with your policy — this block is static showcase copy."
-      echo "[demo] pipeline complete — go vet in isolation + security brief emitted"'
+      echo "[demo] pipeline complete — go test + vet + govulncheck + gosec in isolation + security brief emitted"'

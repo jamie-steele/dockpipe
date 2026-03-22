@@ -15,6 +15,6 @@ steps:
     run: scripts/vscode-code-server.sh
     skip_container: true
     vars:
-      CODE_SERVER_IMAGE: "codercom/code-server:latest"
+      CODE_SERVER_IMAGE: "dockpipe-code-server:latest"
       CODE_SERVER_AUTH: "none"
       CODE_SERVER_LAUNCH: "app"

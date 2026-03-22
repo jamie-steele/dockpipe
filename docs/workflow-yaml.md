@@ -51,6 +51,7 @@ Variable precedence for workflows is documented in **[CLI reference](cli-referen
 | `imports` | List of paths (relative to this file) to merge **before** this file: each imported file’s **`vars`** are merged (later files override), then **`steps`** from imports run **before** **`steps`** here. Circular imports are rejected. Requires loading from disk (not raw bytes-only parse). |
 | `strategy` | Default **strategy name** when the CLI does **not** pass **`--strategy <name>`**. |
 | `strategies` | Optional allowlist: if non-empty, the effective strategy (CLI **`--strategy`** or **`strategy:`**) must be one of the listed names. |
+| `docker_preflight` | Default **true**. When **false**, the runner skips the Docker reachability check before **`steps:`** if **no** step uses the container (**`skip_container`** omitted or false on any step still forces the check). Use for **host-only** workflows whose **`run:`** / **`pre_script`** scripts do **not** invoke Docker. If a script calls **`docker`**, keep the default or the workflow may fail later. |
 
 ---
 

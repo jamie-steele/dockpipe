@@ -230,4 +230,9 @@ func TestWorkflowNeedsDockerReachable(t *testing.T) {
 	if !withStepResolver.NeedsDockerReachable() {
 		t.Fatal("expected NeedsDockerReachable when a step references a runtime profile name")
 	}
+	preflightOff := false
+	hostRunNoDocker := &Workflow{DockerPreflight: &preflightOff, Steps: []Step{{SkipContainer: true, Run: []string{"scripts/print.sh"}}}}
+	if hostRunNoDocker.NeedsDockerReachable() {
+		t.Fatal("expected false when docker_preflight: false and no container steps")
+	}
 }

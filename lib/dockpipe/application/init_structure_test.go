@@ -142,7 +142,7 @@ func TestCmdInitMergedCoreTopLevelMatchesModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assetWant := []string{"compose", "images", "scripts"}
+	assetWant := []string{"compose", "docs", "images", "scripts"}
 	var anames []string
 	for _, e := range aents {
 		if e.IsDir() && e.Name()[0] != '.' {

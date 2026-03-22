@@ -60,6 +60,7 @@ make ci          # full Linux CI mirror (govulncheck, gosec, Docker, integration
 | **`make self-analysis`** | `dorkpipe-self-analysis` — analysis only |
 | **`make self-analysis-stack`** | Compose up → analysis → compose down (set **`DORKPIPE_DEV_STACK_AUTODOWN=0`** to keep sidecars) |
 | **`make self-analysis-host`** | Host-only, no Docker |
+| **`make compliance-handoff`** | Print CI + self-analysis **signal paths** for AI (“compliance issues?”) — **`docs/compliance-ai-handoff.md`** |
 
 See **`dockpipe/workflows/dorkpipe-self-analysis/README.md`** and **`docs/dorkpipe.md`**.
 

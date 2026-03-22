@@ -5,7 +5,7 @@
 # Optional Codex dogfood (same as CI when vars.DOCKPIPE_CI_CODEX=true):
 #   DOCKPIPE_CI_CODEX=true OPENAI_API_KEY=... bash scripts/ci-local.sh
 #
-# Requires: Go, make, Docker (for workflow + integration tests), dpkg-deb (for .deb build).
+# Requires: Go, make, Docker (for workflow + integration tests), dpkg-deb (for .deb build), jq.
 # govulncheck / gosec: install with  make dev-deps  or  bash scripts/install-deps.sh
 set -euo pipefail
 
@@ -32,12 +32,25 @@ if ! have gosec; then
 	echo "ci-local: gosec not found. Run:  make dev-deps  or  bash scripts/install-deps.sh" >&2
 	exit 1
 fi
+if ! have jq; then
+	echo "ci-local: jq not found (needed for DorkPipe CI signal bundle). Install jq." >&2
+	exit 1
+fi
 
-step "govulncheck"
-govulncheck ./...
-
-step "gosec"
-gosec -conf .gosec.json -fmt text -stdout ./...
+step "govulncheck + gosec + DorkPipe signal bundle (.dockpipe/ci-analysis/)"
+mkdir -p .dockpipe/ci-raw
+set +e
+govulncheck -format json ./... > .dockpipe/ci-raw/govulncheck.json
+VC=$?
+gosec -conf .gosec.json -fmt json -out=.dockpipe/ci-raw/gosec.json ./...
+GC=$?
+set -e
+export DOCKPIPE_WORKDIR="$ROOT"
+bash scripts/dorkpipe/normalize-ci-scans.sh
+jq -r '"govulncheck raw vulns: " + ((.vulns // .Vulns // [] | length) | tostring)' .dockpipe/ci-raw/govulncheck.json 2>/dev/null || true
+jq -r '"gosec raw issues: " + ((.Stats.found // 0) | tostring)' .dockpipe/ci-raw/gosec.json 2>/dev/null || true
+if [[ $VC -ne 0 ]]; then exit "$VC"; fi
+if [[ $GC -ne 0 ]]; then exit "$GC"; fi
 
 step "make (build CLI)"
 make
@@ -48,7 +61,7 @@ go test ./...
 step "templates/core path guard"
 bash scripts/check-templates-core-paths.sh
 
-step "dogfood — workflow test (go vet in Docker; mount host module cache)"
+step "dogfood — workflow test (go test + vet + govulncheck + gosec in Docker; mount module cache only)"
 ./bin/dockpipe --workflow test --runtime docker --workdir "$ROOT" \
 	--mount "$(go env GOPATH)/pkg:/go/pkg:rw" \
 	--

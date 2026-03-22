@@ -50,9 +50,12 @@ type Workflow struct {
 	// Strategy: default named strategy (templates/core/strategies/<name> or templates/<wf>/strategies/<name>).
 	Strategy string `yaml:"strategy,omitempty"`
 	// Strategies: optional allowlist of strategy names; if non-empty, --strategy / workflow.strategy must be listed.
-	Strategies []string          `yaml:"strategies,omitempty"`
-	Vars       map[string]string `yaml:"vars"`
-	Steps      []Step            `yaml:"steps"`
+	Strategies []string `yaml:"strategies,omitempty"`
+	// DockerPreflight: when false, skip EnsureDockerReachable before steps when no step uses the container runner.
+	// Use only for workflows where every step is skip_container and host run:/pre_script scripts do not invoke Docker.
+	DockerPreflight *bool             `yaml:"docker_preflight,omitempty"`
+	Vars            map[string]string `yaml:"vars"`
+	Steps           []Step            `yaml:"steps"`
 }
 
 // AnyContainerStep reports whether any step runs inside Docker (skip_container is false or omitted).
@@ -68,9 +71,14 @@ func (w *Workflow) AnyContainerStep() bool {
 // NeedsDockerReachable reports whether we should run EnsureDockerReachable before executing steps.
 // True when any step uses the container runner, or when any step has run:/pre_script (host scripts
 // may invoke docker directly — e.g. templates/core/resolvers/vscode/config.yml is skip_container-only but runs docker on the host).
+// If docker_preflight: false is set on the workflow, this returns false when no step uses the container runner
+// (opt-out for host-only workflows; scripts under run: must not require Docker).
 func (w *Workflow) NeedsDockerReachable() bool {
 	if w.AnyContainerStep() {
 		return true
+	}
+	if w.DockerPreflight != nil && !*w.DockerPreflight {
+		return false
 	}
 	for _, s := range w.Steps {
 		if len(s.RunPaths()) > 0 {
@@ -188,6 +196,7 @@ type workflowFile struct {
 	Runtimes        []string          `yaml:"runtimes,omitempty"`
 	Strategy        string            `yaml:"strategy,omitempty"`
 	Strategies      []string          `yaml:"strategies,omitempty"`
+	DockerPreflight *bool             `yaml:"docker_preflight,omitempty"`
 	Vars            map[string]string `yaml:"vars"`
 	Imports         []string          `yaml:"imports,omitempty"`
 	Steps           []stepOrGroupYAML `yaml:"steps"`

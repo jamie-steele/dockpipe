@@ -7,7 +7,8 @@ steps:
     run: scripts/vscode-code-server.sh
     skip_container: true
     vars:
-      CODE_SERVER_IMAGE: "codercom/code-server:latest"
+      # Local build: make build-code-server-image (Coder OSS + Pipeon extension). Upstream: codercom/code-server:latest
+      CODE_SERVER_IMAGE: "dockpipe-code-server:latest"
       # Edit here (or dockpipe.yml / imports). You can also set CODE_SERVER_* via shell env or repo `.env`
       # (omit a key from YAML so the env value is used). For password auth, e.g. export CODE_SERVER_PASSWORD=… in CI.
       CODE_SERVER_AUTH: "none" # "none" = no password on 127.0.0.1; "password" = login page (optional CODE_SERVER_PASSWORD).

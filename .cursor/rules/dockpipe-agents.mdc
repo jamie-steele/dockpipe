@@ -20,3 +20,14 @@ alwaysApply: true
 - **Stack variant:** `dorkpipe-self-analysis-stack` runs **docker compose** on the **host** for Postgres + Ollama sidecars, then the **same** isolated container step, then optional compose down — see `dockpipe/workflows/dorkpipe-self-analysis-stack/config.yml`.
 
 Do not move orchestration into DockPipe core; workflows and `scripts/dorkpipe/` stay the extension surface.
+
+## Compliance / security / governance questions
+
+When the user asks in plain language (e.g. “do we have compliance issues?”, “security posture”, “governance gaps”):
+
+1. Read **`docs/compliance-ai-handoff.md`** — contract for grounded answers (not certified compliance).
+2. Prefer **structured signals**: **`.dockpipe/ci-analysis/findings.json`**, **`.dockpipe/ci-analysis/SUMMARY.md`**, **`.dorkpipe/self-analysis/`**, **`.dorkpipe/run.json`** when present.
+3. State **uncertainty** if artifacts are missing or stale; never invent scan results.
+4. Keep **DockPipe** as execution fabric only; reasoning stays in DorkPipe / assistant — aligned with **`AGENTS.md`**.
+
+Quick discovery: **`make compliance-handoff`** or **`./bin/dockpipe --workflow compliance-handoff --workdir . --`** (after **`make build`**).

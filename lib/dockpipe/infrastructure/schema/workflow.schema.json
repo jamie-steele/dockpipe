@@ -26,6 +26,7 @@
     "runtimes": { "type": "array", "items": { "type": "string" } },
     "strategy": { "type": "string" },
     "strategies": { "type": "array", "items": { "type": "string" } },
+    "docker_preflight": { "type": "boolean", "description": "When false, skip Docker reachability preflight when no step uses the container runner (host-only workflows)." },
     "steps": { "type": "array" },
     "resolvers": { "type": "array", "items": { "type": "string" } }
   }

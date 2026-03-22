@@ -48,8 +48,8 @@ func TestBundledTemplatesCoreLayoutEnforcesCategoryDirs(t *testing.T) {
 	}
 }
 
-// TestBundledTemplatesCoreAssetsSubdirsEnforcesScriptsImagesCompose fails if assets/ gains a fourth
-// category (e.g. treating a new primitive as an asset sibling incorrectly).
+// TestBundledTemplatesCoreAssetsSubdirsEnforcesScriptsImagesCompose fails if assets/ gains an
+// unexpected top-level sibling (e.g. treating a new primitive as an asset category incorrectly).
 func TestBundledTemplatesCoreAssetsSubdirsEnforcesScriptsImagesCompose(t *testing.T) {
 	root := localModuleRoot(t)
 	assets := filepath.Join(root, "templates", "core", "assets")
@@ -57,7 +57,7 @@ func TestBundledTemplatesCoreAssetsSubdirsEnforcesScriptsImagesCompose(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"compose", "images", "scripts"}
+	want := []string{"compose", "docs", "images", "scripts"}
 	var names []string
 	for _, e := range ents {
 		if e.IsDir() && e.Name()[0] != '.' {

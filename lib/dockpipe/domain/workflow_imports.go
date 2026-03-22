@@ -35,6 +35,7 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 		Runtimes:        f.Runtimes,
 		Strategy:        f.Strategy,
 		Strategies:      f.Strategies,
+		DockerPreflight: f.DockerPreflight,
 		Vars:            f.Vars,
 		Steps:           steps,
 	}, nil

@@ -30,3 +30,17 @@ Thumbs.db
 
 # DorkPipe self-analysis scratch facts (handoff markdown may be kept locally)
 .dockpipe/self-analysis/
+
+# CI scan normalization (local / optional; CI uploads as workflow artifacts)
+.dockpipe/ci-raw/
+.dockpipe/ci-analysis/
+
+# User insight queue + normalized insights (local; optional commit of curated insights.json)
+.dockpipe/analysis/
+
+# Pipeon generated context bundle (local)
+.dockpipe/pipeon-context.md
+
+# VS Code extension (packed / dev)
+contrib/pipeon-vscode-extension/node_modules/
+contrib/pipeon-vscode-extension/*.vsix

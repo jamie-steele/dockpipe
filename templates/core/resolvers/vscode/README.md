@@ -6,6 +6,8 @@
 
 Starts **[code-server](https://github.com/coder/code-server)** (MIT-licensed VS Code in the browser) in a **separate Docker container** on the **host**, with your project at **`/work`**. The container listens on **8080** inside; Docker publishes it to **`127.0.0.1` + host port only** (not your LAN). By default the **host port is random** in the IANA dynamic range **49152–65535** each run unless you set **`CODE_SERVER_PORT`**.
 
+**Default image** is **`dockpipe-code-server:latest`**: **Coder’s** `codercom/code-server` plus the **Pipeon** extension and baseline User settings (telemetry off, no auto-update, **Pipeon** window title, **light/dark follows system** via `window.autoDetectColorScheme`), built from **`templates/core/assets/images/code-server/`**. Build once: **`make build-code-server-image`**. To use plain upstream with no Pipeon: set **`CODE_SERVER_IMAGE=codercom/code-server:latest`**.
+
 Dockpipe’s built-in container run does **not** publish ports to the host, so this template uses a **host script** that runs `docker run … -p …` for you. That keeps the feature in a **template**, not core.
 
 **Docker must be running** before you start this workflow (the script calls `docker` on the host). Dockpipe checks the daemon up front; **`dockpipe doctor`** verifies Docker + bash + bundled assets.
@@ -20,6 +22,8 @@ Desktop **Slack** and **VS Code** feel native because they ship **Electron** (a 
 - **macOS / Linux:** it looks for Edge or Chrome in the usual install locations, or a Chromium-based binary in `PATH` — same idea: **app window**, not “pick a random browser tab.”
 
 If you don’t want any launcher, set **`CODE_SERVER_LAUNCH=none`** and open the printed URL however you like.
+
+If no **Chromium-based** browser is found (Chrome, Edge, Brave, Chromium, …), the script falls back to **your default browser** on Linux (**`xdg-open`**), macOS (**`open`**), and Windows (**`start`**), when a GUI session is available.
 
 ## Why use it
 

@@ -1,0 +1,22 @@
+{
+  "schema_version": "1.0",
+  "kind": "dockpipe_user_insight_queue",
+  "items": [
+    {
+      "id": "ui-20260322T120000Z-aaaaaaaaaaaaaa",
+      "raw_text": "Prefer two-space indent in YAML; keep workflows readable.",
+      "category_hint": "unknown",
+      "source": "user",
+      "timestamp_utc": "2026-03-22T12:00:00Z",
+      "scope": { "repo_path": "dockpipe/workflows/" }
+    },
+    {
+      "id": "ui-20260322T120001Z-bbbbbbbbbbbbbb",
+      "raw_text": "PCI scope: payment data must not be logged in debug traces.",
+      "category_hint": "unknown",
+      "source": "user",
+      "timestamp_utc": "2026-03-22T12:00:01Z",
+      "scope": { "component": "logging" }
+    }
+  ]
+}

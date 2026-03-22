@@ -45,7 +45,8 @@ Merged into user projects by **`dockpipe init`** as part of **`templates/core/`*
 |-----------|----------------|-------|
 | `base-dev/`, `dev/`, `example/` | **SAFE TO BUNDLE** | OSS base images + entrypoint. |
 | `claude/`, `codex/` | **SAFE TO BUNDLE** (Dockerfile) / **USER-SUPPLIED** (runtime) | Public npm installs; API access is user-owned. |
-| `vscode/` | **SAFE TO BUNDLE** (Dockerfile) / **REFERENCE ONLY** (base) | `FROM codercom/code-server:latest` pulls at build time. |
+| `vscode/` | **SAFE TO BUNDLE** (Dockerfile) / **REFERENCE ONLY** (base) | `FROM codercom/code-server:latest` + dockpipe entrypoint for **isolate** runs. |
+| `code-server/` | **SAFE TO BUNDLE** (Dockerfile) / **REFERENCE ONLY** (base) | **Browser** code-server: Coder image + Pipeon extension + defaults; **no** dockpipe entrypoint. Build **`dockpipe-code-server:latest`**. |
 
 ---
 

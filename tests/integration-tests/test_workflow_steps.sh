@@ -13,7 +13,8 @@ test_chain_outputs() {
   (
     cd "$tmp"
     DOCKPIPE_REPO_ROOT="$REPO_ROOT" "$CLI" --workflow test --workdir "$REPO_ROOT" \
-      --mount "${pkg}:/go/pkg:rw" 2>&1 | tee "$tmp/out.log"
+      --mount "${pkg}:/go/pkg:rw" \
+      2>&1 | tee "$tmp/out.log"
     if ! grep -q "pipeline complete" "$tmp/out.log"; then
       echo "test_chain_outputs FAIL: expected pipeline complete line in output"
       cat "$tmp/out.log"

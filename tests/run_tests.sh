@@ -7,7 +7,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/unit-tests" && pwd)"
 failed=0
 
-for f in test_cli.sh test_repo_root.sh test_clone_worktree_include.sh; do
+for f in test_cli.sh test_repo_root.sh test_clone_worktree_include.sh test_normalize_ci_scans.sh test_user_insight_queue.sh test_pipeon.sh; do
   if [[ -f "$DIR/$f" ]]; then
     echo "--- $f ---"
     bash "$DIR/$f" || failed=1

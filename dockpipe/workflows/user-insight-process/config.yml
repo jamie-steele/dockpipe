@@ -1,0 +1,21 @@
+# Host-only: normalize .dockpipe/analysis/queue.json → insights.json (deterministic jq + rules).
+name: user-insight-process
+description: >-
+  Run scripts/dorkpipe/user-insight-process.sh and optional export-by-category.
+  Requires jq. Does not treat user text as truth — see docs/user-insight-queue.md.
+
+docker_preflight: false
+runtime: cli
+resolver: codex
+runtimes: [cli]
+resolvers: [codex]
+
+steps:
+  - id: process
+    skip_container: true
+    run:
+      - scripts/dorkpipe/user-insight-process.sh
+  - id: export
+    skip_container: true
+    run:
+      - scripts/dorkpipe/user-insight-export-by-category.sh

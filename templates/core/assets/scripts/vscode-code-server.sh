@@ -24,7 +24,9 @@ if ! docker version >/dev/null 2>&1; then
   exit 1
 fi
 
-IMAGE="${CODE_SERVER_IMAGE:-codercom/code-server:latest}"
+# Default: local build dockpipe-code-server (Coder OSS + Pipeon extension + baseline settings).
+# Upstream only: CODE_SERVER_IMAGE=codercom/code-server:latest
+IMAGE="${CODE_SERVER_IMAGE:-dockpipe-code-server:latest}"
 
 # Host port: unset / auto / random → pick IANA dynamic range (49152–65535). Set CODE_SERVER_PORT to pin (e.g. 8080).
 _pick_host_port() {
@@ -81,9 +83,23 @@ fi
 
 docker rm -f "$NAME" 2>/dev/null || true
 
+# dockpipe-* images are built locally (not on a registry); skip pull and require docker build.
 if [[ "${DOCKPIPE_SKIP_PULL:-}" != "1" ]]; then
-  printf '[dockpipe] Pulling image %s …\n' "$IMAGE" >&2
-  docker pull "$IMAGE" >&2
+  case "$IMAGE" in
+    dockpipe-*|*/dockpipe-*)
+      if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+        printf '[dockpipe] Image %q not found. Build from repo root:\n' "$IMAGE" >&2
+        printf '  docker build -t dockpipe-code-server:latest -f templates/core/assets/images/code-server/Dockerfile .\n' >&2
+        printf 'Or: make build-code-server-image\n' >&2
+        exit 1
+      fi
+      printf '[dockpipe] Using local image %s (dockpipe-* images are not pulled from a registry).\n' "$IMAGE" >&2
+      ;;
+    *)
+      printf '[dockpipe] Pulling image %s …\n' "$IMAGE" >&2
+      docker pull "$IMAGE" >&2
+      ;;
+  esac
 fi
 
 args=(
@@ -205,7 +221,8 @@ launch_app_window() {
         return 0
       fi
     done
-    printf '[dockpipe] No Edge/Chrome found. Open this URL yourself:\n  %s\n' "$URL" >&2
+    printf '[dockpipe] Opening URL in default browser (start)…\n' >&2
+    MSYS2_ARG_CONV_EXCL='*' cmd.exe //c start "" "$URL" 2>/dev/null || true
     return 0
   fi
 
@@ -225,7 +242,9 @@ launch_app_window() {
       BROWSER_PID=$!
       return 0
     fi
-    printf '[dockpipe] Install Microsoft Edge or Google Chrome, or open:\n  %s\n' "$URL" >&2
+    printf '[dockpipe] Opening in default browser (open)…\n' >&2
+    open "$URL" >/dev/null 2>&1 &
+    BROWSER_PID=$!
     return 0
   fi
 
@@ -233,6 +252,7 @@ launch_app_window() {
   # that exits immediately after spawning the real process.
   for b in \
     /opt/google/chrome/chrome \
+    /opt/brave.com/brave/brave-browser \
     /usr/lib/chromium/chromium \
     /usr/lib/chromium-browser/chromium-browser; do
     if [[ -x "$b" ]]; then
@@ -242,7 +262,7 @@ launch_app_window() {
       return 0
     fi
   done
-  for c in microsoft-edge-stable microsoft-edge google-chrome-stable google-chrome chromium chromium-browser; do
+  for c in microsoft-edge-stable microsoft-edge google-chrome-stable google-chrome brave brave-browser chromium chromium-browser; do
     if command -v "$c" >/dev/null 2>&1; then
       printf '[dockpipe] Opening in %s (app window; close window to stop code-server)…\n' "$c" >&2
       "$c" "${BROWSER_FLAGS[@]}" --user-data-dir="$EDGE_DATA_DIR" --app="$URL" >/dev/null 2>&1 &
@@ -250,7 +270,16 @@ launch_app_window() {
       return 0
     fi
   done
-  printf '[dockpipe] No chromium-based browser in PATH. Open:\n  %s\n' "$URL" >&2
+  # No Chromium-family binary: open default browser (Firefox-only, Flatpak-only, etc.).
+  if [[ -n "${DISPLAY:-}" || -n "${WAYLAND_DISPLAY:-}" ]]; then
+    if command -v xdg-open >/dev/null 2>&1; then
+      printf '[dockpipe] Opening in default browser (xdg-open)…\n' >&2
+      xdg-open "$URL" >/dev/null 2>&1 &
+      BROWSER_PID=$!
+      return 0
+    fi
+  fi
+  printf '[dockpipe] No GUI or xdg-open; open this URL in a browser:\n  %s\n' "$URL" >&2
 }
 
 cleanup_session() {

@@ -196,6 +196,10 @@ This repository includes **this file (`AGENTS.md`)** and may include **generated
 | Full handoff | **`.dockpipe/orchestrator-cursor-prompt.md`** |
 | Raw facts (git, signals, excerpts) | **`.dorkpipe/self-analysis/`** |
 | Orchestrator run metadata (if present) | **`.dorkpipe/run.json`**, **`.dorkpipe/metrics.jsonl`** |
+| **CI scan signals** (govulncheck + gosec, normalized) | **`.dockpipe/ci-analysis/findings.json`** — produced by CI / **`scripts/ci-local.sh`**; download from **Actions artifacts** if not local. See **`docs/dorkpipe-ci-signals.md`**. |
+| **Compliance / security posture (for AI)** | **`docs/compliance-ai-handoff.md`** — how to answer “compliance issues?” without claiming certification; **`make compliance-handoff`** / workflow **`compliance-handoff`** lists signal paths. |
+| **Structured user guidance (optional)** | **`.dockpipe/analysis/insights.json`** — normalized, reviewable **signals** from **`user-insight-enqueue` / `user-insight-process`** (see **`docs/user-insight-queue.md`**). Not repo facts or scan truth. |
+| **Pipeon (local Ollama helper)** | **`bin/pipeon`** — builds **`.dockpipe/pipeon-context.md`** and can **`chat`** via Ollama; **feature-flagged** (`DOCKPIPE_PIPEON=1`, min version **0.6.5** unless **`DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1`**). Editor story: **Code OSS fork** + **`contrib/pipeon-vscode-extension/`** — **`docs/pipeon-vscode-fork.md`**, **`docs/pipeon-architecture.md`**. Harness: **`scripts/pipeon/README.md`**, **`docs/pipeon-shortcuts.md`**. |
 
 If present, **load and use** them as **primary** context for understanding the repository, together with normal code reading.
 
