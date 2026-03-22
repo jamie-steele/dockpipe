@@ -47,3 +47,11 @@ QPushButton#dangerButton:hover {
     background-color: rgba(183, 28, 28, 0.18);
     color: #3d0606;
 }
+
+QLabel#disclaimerWatermark {
+    color: #5c5c5c;
+}
+
+QStatusBar {
+    border-top: 1px solid #c8c8c8;
+}

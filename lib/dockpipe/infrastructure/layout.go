@@ -6,11 +6,12 @@ import (
 )
 
 // BundledDockpipeDir is the top-level directory name for the materialized bundle layout
-// (dockpipe/core/..., dockpipe/workflows/...) under RepoRoot.
-const BundledDockpipeDir = "dockpipe"
+// (…/core/…, …/workflows/…) under RepoRoot. Authoring checkouts use this name for repo-local
+// experimental workflows (CI, dogfood, quick iteration) — distinct from stable templates/ and future CDN bundles.
+const BundledDockpipeDir = "dockpipe-experimental"
 
 // UsesBundledAssetLayout reports whether repoRoot is the materialized embedded bundle:
-// it contains dockpipe/core (and typically dockpipe/workflows). Authoring checkouts use
+// it contains …/core (and typically …/workflows). Authoring checkouts use
 // templates/ and templates/core/ instead.
 func UsesBundledAssetLayout(repoRoot string) bool {
 	p := filepath.Join(repoRoot, BundledDockpipeDir, "core")
@@ -18,7 +19,7 @@ func UsesBundledAssetLayout(repoRoot string) bool {
 	return err == nil && st.IsDir()
 }
 
-// CoreDir returns .../templates/core (authoring) or .../dockpipe/core (materialized bundle).
+// CoreDir returns .../templates/core (authoring) or .../<BundledDockpipeDir>/core (materialized bundle).
 func CoreDir(repoRoot string) string {
 	if UsesBundledAssetLayout(repoRoot) {
 		return filepath.Join(repoRoot, BundledDockpipeDir, "core")
@@ -26,7 +27,7 @@ func CoreDir(repoRoot string) string {
 	return filepath.Join(repoRoot, "templates", "core")
 }
 
-// WorkflowsRootDir returns .../templates (authoring) or .../dockpipe/workflows (materialized bundle).
+// WorkflowsRootDir returns .../templates (authoring) or .../<BundledDockpipeDir>/workflows (materialized bundle).
 func WorkflowsRootDir(repoRoot string) string {
 	if UsesBundledAssetLayout(repoRoot) {
 		return filepath.Join(repoRoot, BundledDockpipeDir, "workflows")
@@ -34,8 +35,8 @@ func WorkflowsRootDir(repoRoot string) string {
 	return filepath.Join(repoRoot, "templates")
 }
 
-// AuthoringDockpipeWorkflowsDir is .../dockpipe/workflows on a git checkout (not the materialized bundle).
-// Repo-local workflows (e.g. this project’s dockpipe/workflows/) live here — not under templates/. User-facing examples stay under templates/.
+// AuthoringDockpipeWorkflowsDir is .../<BundledDockpipeDir>/workflows on a git checkout (not the materialized bundle).
+// Repo-local experimental workflows live here — not under templates/. User-facing examples stay under templates/.
 func AuthoringDockpipeWorkflowsDir(repoRoot string) string {
 	return filepath.Join(repoRoot, BundledDockpipeDir, "workflows")
 }

@@ -276,6 +276,45 @@ func TestRunWorkflowStepsModeDelegatesToRunSteps(t *testing.T) {
 	}
 }
 
+// TestRunWorkflowStepsModeCliWorkdirOverridesInheritedEnvMap ensures --workdir is stored on envMap so
+// envSlice rebuilds after strategy pre-scripts still pass DOCKPIPE_WORKDIR to host steps.
+func TestRunWorkflowStepsModeCliWorkdirOverridesInheritedEnvMap(t *testing.T) {
+	withRunSeams(t)
+	repoRoot := t.TempDir()
+	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
+	repoRootAppFn = func() (string, error) { return repoRoot, nil }
+	workflowDir := filepath.Join(repoRoot, "templates", "demo")
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "config.yml"), []byte("name: demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loadWorkflowAppFn = func(path string) (*domain.Workflow, error) {
+		bFalse := false
+		return &domain.Workflow{
+			Resolver: "codex",
+			Steps:    []domain.Step{{Cmd: "echo hi", Blocking: &bFalse}},
+		}, nil
+	}
+	loadResolverFileAppFn = func(path string) (map[string]string, error) {
+		return map[string]string{"DOCKPIPE_RESOLVER_TEMPLATE": "codex"}, nil
+	}
+	wantWd := "/path/to/your/project"
+	runStepsAppFn = func(o runStepsOpts) error {
+		if o.envMap["DOCKPIPE_WORKDIR"] != wantWd {
+			t.Fatalf("envMap DOCKPIPE_WORKDIR=%q want %q", o.envMap["DOCKPIPE_WORKDIR"], wantWd)
+		}
+		return nil
+	}
+
+	base := []string{"DOCKPIPE_WORKDIR=/wrong/inherited"}
+	err := Run([]string{"--workflow", "demo", "--workdir", wantWd, "--", "echo", "x"}, base)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+}
+
 // TestRunAutoBranchForRepoWithoutBranch sets work branch when --repo is set without --branch (clone-worktree flow).
 func TestRunAutoBranchForRepoWithoutBranch(t *testing.T) {
 	withRunSeams(t)

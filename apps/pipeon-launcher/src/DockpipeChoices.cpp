@@ -10,7 +10,7 @@ namespace {
 bool looksLikeRepoRoot(const QString &absPath)
 {
     const QDir d(absPath);
-    return QFileInfo(d.filePath(QStringLiteral("dockpipe/workflows"))).isDir()
+    return QFileInfo(d.filePath(QStringLiteral("dockpipe-experimental/workflows"))).isDir()
         || QFileInfo(d.filePath(QStringLiteral("templates/core"))).isDir();
 }
 
@@ -65,7 +65,7 @@ QStringList DockpipeChoices::listWorkflowNamesFromRepo(const QString &repoRoot)
     const QDir root(repoRoot);
 
     {
-        const QDir wf(root.filePath(QStringLiteral("dockpipe/workflows")));
+        const QDir wf(root.filePath(QStringLiteral("dockpipe-experimental/workflows")));
         if (wf.exists()) {
             const auto dirs = wf.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {
@@ -114,7 +114,7 @@ void DockpipeChoices::scan(const QString &repoRoot)
     const QDir root(repoRoot);
 
     {
-        const QDir wf(root.filePath(QStringLiteral("dockpipe/workflows")));
+        const QDir wf(root.filePath(QStringLiteral("dockpipe-experimental/workflows")));
         if (wf.exists()) {
             const auto dirs = wf.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {

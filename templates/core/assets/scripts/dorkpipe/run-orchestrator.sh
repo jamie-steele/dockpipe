@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Invoked from dockpipe/workflows/dorkpipe-orchestrator (skip_container host step).
+# Invoked from dockpipe-experimental/workflows/dorkpipe-orchestrator (skip_container host step).
 set -euo pipefail
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 cd "$ROOT"
 BIN="${DORKPIPE_BIN:-${ROOT}/bin/dorkpipe}"
-SPEC="${DORKPIPE_SPEC:-${ROOT}/dockpipe/workflows/dorkpipe-orchestrator/spec.example.yaml}"
+SPEC="${DORKPIPE_SPEC:-${ROOT}/dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml}"
 if [[ ! -x "$BIN" ]]; then
 	echo "dorkpipe: build the orchestrator first: make build (produces bin/dorkpipe)" >&2
 	exit 1

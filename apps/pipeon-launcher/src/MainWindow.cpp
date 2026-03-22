@@ -1,10 +1,14 @@
 #include "MainWindow.h"
 
+#include "BasicModeWidget.h"
 #include "ContextDiscovery.h"
 #include "ContextRowWidget.h"
+#include "DockpipeChoices.h"
 #include "EditContextDialog.h"
 #include "GitHelper.h"
+#include "WorkflowCatalog.h"
 
+#include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
 #include <QDesktopServices>
@@ -17,9 +21,11 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
+#include <QMenuBar>
 #include <QMessageBox>
-#include <QProcess>
 #include <QPushButton>
+#include <QStackedWidget>
+#include <QStatusBar>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -47,11 +53,143 @@ QString statusLabel(SessionManager &sm, const QString &id, bool *runningOut, boo
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
 {
     setWindowTitle(tr("Pipeon"));
-    resize(720, 480);
+    resize(800, 520);
+
+    m_settings.load();
+
+    setupMenuBar();
 
     auto *central = new QWidget(this);
-    central->setObjectName(QStringLiteral("mainCentral"));
-    auto *root = new QVBoxLayout(central);
+    auto *outer = new QVBoxLayout(central);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->setSpacing(0);
+
+    m_stack = new QStackedWidget;
+    m_basicWidget = new BasicModeWidget(this);
+    m_advancedPage = new QWidget;
+    setupAdvancedPage(m_advancedPage);
+
+    m_stack->addWidget(m_basicWidget);
+    m_stack->addWidget(m_advancedPage);
+    outer->addWidget(m_stack);
+
+    setCentralWidget(central);
+
+    setupDisclaimerBar();
+
+    connect(m_basicWidget, &BasicModeWidget::openProjectRequested, this, &MainWindow::onFileOpenProject);
+    connect(m_basicWidget, &BasicModeWidget::refreshAppsRequested, this, &MainWindow::onRefreshAppList);
+    connect(m_basicWidget, &BasicModeWidget::launchRequested, this, &MainWindow::onBasicLaunch);
+
+    m_store.load();
+    rebuildUi();
+
+    connect(&m_sessions, &SessionManager::sessionStarted, this, &MainWindow::onSessionChanged);
+    connect(&m_sessions, &SessionManager::sessionStopped, this, &MainWindow::onSessionChanged);
+    connect(&m_sessions, &SessionManager::sessionFailed, this, &MainWindow::onSessionChanged);
+    connect(&m_sessions, &SessionManager::sessionFailed, this,
+            [this](const QString &, const QString &err) { QMessageBox::warning(this, tr("Pipeon"), err); });
+
+    setupTray();
+    applyUiMode();
+}
+
+void MainWindow::setupDisclaimerBar()
+{
+    if (m_settings.thirdPartyDisclaimerDismissed || m_disclaimerContainer)
+        return;
+
+    auto *wrap = new QWidget;
+    auto *lay = new QHBoxLayout(wrap);
+    lay->setContentsMargins(4, 0, 4, 0);
+    lay->setSpacing(8);
+
+    auto *disclaimer = new QLabel(
+        tr("Notice: Pipeon does not distribute Steam, Valve software, Flatpak, or other third-party "
+           "applications. Dockpipe workflows run on your machine; install tools from official sources "
+           "(vendor, Flathub, or your distro) and accept each publisher’s terms."));
+    disclaimer->setObjectName(QStringLiteral("disclaimerWatermark"));
+    disclaimer->setWordWrap(true);
+    disclaimer->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+    auto *dismiss = new QPushButton(tr("Dismiss"));
+    dismiss->setObjectName(QStringLiteral("disclaimerDismiss"));
+    dismiss->setCursor(Qt::PointingHandCursor);
+    connect(dismiss, &QPushButton::clicked, this, &MainWindow::onDismissThirdPartyDisclaimer);
+
+    lay->addWidget(disclaimer, 1);
+    lay->addWidget(dismiss, 0, Qt::AlignTop);
+
+    m_disclaimerContainer = wrap;
+    statusBar()->addWidget(wrap, 1);
+}
+
+void MainWindow::onDismissThirdPartyDisclaimer()
+{
+    m_settings.thirdPartyDisclaimerDismissed = true;
+    m_settings.save();
+    if (!m_disclaimerContainer)
+        return;
+    statusBar()->removeWidget(m_disclaimerContainer);
+    QWidget *w = m_disclaimerContainer;
+    m_disclaimerContainer = nullptr;
+    w->deleteLater();
+}
+
+void MainWindow::onRestoreThirdPartyDisclaimer()
+{
+    m_settings.thirdPartyDisclaimerDismissed = false;
+    m_settings.save();
+    setupDisclaimerBar();
+}
+
+void MainWindow::setupMenuBar()
+{
+    QMenu *file = menuBar()->addMenu(tr("File"));
+    file->addAction(tr("Open project folder…"), this, &MainWindow::onFileOpenProject, QKeySequence::Open);
+    file->addAction(tr("Refresh app list"), this, &MainWindow::onRefreshAppList, QKeySequence::Refresh);
+    file->addSeparator();
+    file->addAction(tr("Quit"), qApp, &QApplication::quit, QKeySequence::Quit);
+
+    QMenu *view = menuBar()->addMenu(tr("View"));
+    auto *modeGroup = new QActionGroup(this);
+    m_actBasic = view->addAction(tr("Basic mode"));
+    m_actBasic->setCheckable(true);
+    modeGroup->addAction(m_actBasic);
+    m_actAdvanced = view->addAction(tr("Advanced mode"));
+    m_actAdvanced->setCheckable(true);
+    modeGroup->addAction(m_actAdvanced);
+    connect(m_actBasic, &QAction::triggered, this, &MainWindow::onViewBasic);
+    connect(m_actAdvanced, &QAction::triggered, this, &MainWindow::onViewAdvanced);
+
+    QMenu *help = menuBar()->addMenu(tr("Help"));
+    help->addAction(tr("Show notice in status bar again"), this, &MainWindow::onRestoreThirdPartyDisclaimer);
+    help->addAction(tr("Third-party software notice…"), this, [this]() {
+        QMessageBox::information(
+            this, tr("Third-party software"),
+            tr("Pipeon is a launcher for dockpipe workflows. It does not ship, bundle, or redistribute "
+               "Steam, the Valve Steam client, Flatpak runtimes, or games.\n\n"
+               "If a workflow uses third-party software, you install it yourself using official channels "
+               "(for example your operating system’s packages or Flathub). Use of those products is subject "
+               "to their respective licensors’ terms. Pipeon and dockpipe are not affiliated with Valve "
+               "or Flathub."));
+    });
+
+    view->addSeparator();
+    auto *viewGroup = new QActionGroup(this);
+    m_actIcons = view->addAction(tr("Icon grid"));
+    m_actIcons->setCheckable(true);
+    viewGroup->addAction(m_actIcons);
+    m_actList = view->addAction(tr("Compact list"));
+    m_actList->setCheckable(true);
+    viewGroup->addAction(m_actList);
+    connect(m_actIcons, &QAction::triggered, this, &MainWindow::onViewIconGrid);
+    connect(m_actList, &QAction::triggered, this, &MainWindow::onViewCompactList);
+}
+
+void MainWindow::setupAdvancedPage(QWidget *page)
+{
+    auto *root = new QVBoxLayout(page);
     root->setSpacing(14);
     root->setContentsMargins(16, 16, 16, 16);
 
@@ -61,9 +199,9 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     headLay->setSpacing(12);
     headLay->setContentsMargins(14, 14, 14, 14);
 
-    auto *title = new QLabel(tr("Pipeon"));
+    auto *title = new QLabel(tr("Contexts (advanced)"));
     title->setObjectName(QStringLiteral("appTitle"));
-    auto *subtitle = new QLabel(tr("Launch dockpipe per saved folder. Execution stays in DockPipe."));
+    auto *subtitle = new QLabel(tr("Full DockPipe workflow list per saved folder. Switch to Basic in View for app shortcuts."));
     subtitle->setObjectName(QStringLiteral("appSubtitle"));
     subtitle->setWordWrap(true);
     headLay->addWidget(title);
@@ -103,7 +241,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
 
     root->addWidget(header);
 
-    m_hint = new QLabel(tr("Saved contexts appear below. Add folder scans this checkout’s dockpipe workflows when a repo is found. Right-click a row for the same actions."));
+    m_hint = new QLabel(tr("Saved contexts appear below. Add folder scans workflows from this checkout. Right-click a row for actions."));
     m_hint->setObjectName(QStringLiteral("hintText"));
     m_hint->setWordWrap(true);
     root->addWidget(m_hint);
@@ -113,7 +251,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     auto *listOuter = new QVBoxLayout(listPanel);
     listOuter->setContentsMargins(0, 0, 0, 0);
 
-    m_list = new QListWidget(this);
+    m_list = new QListWidget(page);
     m_list->setFrameShape(QFrame::NoFrame);
     m_list->setSpacing(2);
     m_list->setUniformItemSizes(true);
@@ -129,7 +267,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     emptyTitle->setObjectName(QStringLiteral("emptyTitle"));
     emptyTitle->setAlignment(Qt::AlignCenter);
     auto *emptyBody = new QLabel(
-        tr("Add a folder to create a context, then launch dockpipe. You can refine workflow and runtime in Edit."));
+        tr("Use Add folder… to import workflows, or use View → Basic mode and open a project folder."));
     emptyBody->setObjectName(QStringLiteral("emptyBody"));
     emptyBody->setWordWrap(true);
     emptyBody->setAlignment(Qt::AlignCenter);
@@ -143,24 +281,127 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
 
     root->addWidget(listPanel, 1);
 
-    setCentralWidget(central);
-
-    m_store.load();
-    rebuildContextList();
-
     connect(m_list, &QListWidget::itemDoubleClicked, this, [this]() { onLaunch(); });
     connect(m_list, &QListWidget::customContextMenuRequested, this, [this](const QPoint &p) {
         if (QListWidgetItem *it = m_list->itemAt(p))
             applyContextMenu(it, m_list->mapToGlobal(p));
     });
+}
 
-    connect(&m_sessions, &SessionManager::sessionStarted, this, &MainWindow::onSessionChanged);
-    connect(&m_sessions, &SessionManager::sessionStopped, this, &MainWindow::onSessionChanged);
-    connect(&m_sessions, &SessionManager::sessionFailed, this, &MainWindow::onSessionChanged);
-    connect(&m_sessions, &SessionManager::sessionFailed, this,
-            [this](const QString &, const QString &err) { QMessageBox::warning(this, tr("Pipeon"), err); });
+void MainWindow::applyUiMode()
+{
+    m_actBasic->blockSignals(true);
+    m_actAdvanced->blockSignals(true);
+    m_actIcons->blockSignals(true);
+    m_actList->blockSignals(true);
 
-    setupTray();
+    m_stack->setCurrentIndex(m_settings.isAdvanced() ? 1 : 0);
+    m_actBasic->setChecked(!m_settings.isAdvanced());
+    m_actAdvanced->setChecked(m_settings.isAdvanced());
+    const bool basic = !m_settings.isAdvanced();
+    m_actIcons->setEnabled(basic);
+    m_actList->setEnabled(basic);
+    m_actIcons->setChecked(basic && m_settings.isBasicIcons());
+    m_actList->setChecked(basic && !m_settings.isBasicIcons());
+    m_basicWidget->setViewIconMode(m_settings.isBasicIcons());
+    m_basicWidget->setProjectFolder(m_settings.projectFolder);
+
+    m_actBasic->blockSignals(false);
+    m_actAdvanced->blockSignals(false);
+    m_actIcons->blockSignals(false);
+    m_actList->blockSignals(false);
+
+    updateBasicPage();
+}
+
+void MainWindow::onViewBasic()
+{
+    m_settings.uiMode = QStringLiteral("basic");
+    m_settings.save();
+    applyUiMode();
+}
+
+void MainWindow::onViewAdvanced()
+{
+    m_settings.uiMode = QStringLiteral("advanced");
+    m_settings.save();
+    applyUiMode();
+}
+
+void MainWindow::onViewIconGrid()
+{
+    m_settings.basicView = QStringLiteral("icons");
+    m_settings.save();
+    m_basicWidget->setViewIconMode(true);
+    m_actIcons->setChecked(true);
+    m_actList->setChecked(false);
+}
+
+void MainWindow::onViewCompactList()
+{
+    m_settings.basicView = QStringLiteral("list");
+    m_settings.save();
+    m_basicWidget->setViewIconMode(false);
+    m_actIcons->setChecked(false);
+    m_actList->setChecked(true);
+}
+
+void MainWindow::onFileOpenProject()
+{
+    const QString d = QFileDialog::getExistingDirectory(this, tr("Open project folder"), m_settings.projectFolder);
+    if (d.isEmpty())
+        return;
+    m_settings.projectFolder = QDir::cleanPath(d);
+    m_settings.save();
+    m_basicWidget->setProjectFolder(m_settings.projectFolder);
+    updateBasicPage();
+}
+
+void MainWindow::onRefreshAppList()
+{
+    updateBasicPage();
+}
+
+void MainWindow::updateBasicPage()
+{
+    const QString repo = DockpipeChoices::findRepoRoot(m_settings.projectFolder);
+    const QVector<WorkflowMeta> apps = WorkflowCatalog::discoverAppWorkflows(repo);
+    m_basicWidget->setApps(apps);
+
+    QHash<QString, bool> run;
+    if (!m_settings.projectFolder.isEmpty()) {
+        const QString wd = QDir::cleanPath(m_settings.projectFolder);
+        for (const Context &c : m_store.contexts) {
+            if (QDir::cleanPath(c.workdir) != wd)
+                continue;
+            if (m_sessions.isRunning(c.id))
+                run.insert(c.workflow, true);
+        }
+    }
+    m_basicWidget->setRunningByWorkflow(run);
+}
+
+void MainWindow::onBasicLaunch(const QString &workflowId)
+{
+    if (m_settings.projectFolder.isEmpty()) {
+        QMessageBox::information(this, tr("Pipeon"),
+                                 tr("Choose a project folder first (File → Open project folder, or Choose folder…)."));
+        return;
+    }
+    Context *c = findContext(m_settings.projectFolder, workflowId, QString());
+    if (!c) {
+        Context nc = Context::createNew();
+        nc.workdir = m_settings.projectFolder;
+        nc.workflow = workflowId;
+        nc.label = QFileInfo(m_settings.projectFolder).fileName() + QStringLiteral(" — ") + workflowId;
+        m_store.contexts.append(nc);
+        m_store.save();
+        c = &m_store.contexts.last();
+    }
+    if (m_sessions.launch(*c, ContextStore::logsDir()))
+        rebuildUi();
+    else if (!m_sessions.isRunning(c->id))
+        QMessageBox::warning(this, tr("Pipeon"), tr("Could not start dockpipe (see stderr)."));
 }
 
 void MainWindow::setupTray()
@@ -210,7 +451,7 @@ void MainWindow::clearContextList()
     }
 }
 
-void MainWindow::rebuildContextList()
+void MainWindow::rebuildAdvancedContextList()
 {
     clearContextList();
 
@@ -233,14 +474,35 @@ void MainWindow::rebuildContextList()
     }
 }
 
+void MainWindow::rebuildUi()
+{
+    rebuildAdvancedContextList();
+    updateBasicPage();
+}
+
 void MainWindow::onSessionChanged()
 {
-    rebuildContextList();
+    rebuildUi();
 }
 
 QListWidgetItem *MainWindow::currentItem()
 {
     return m_list->currentItem();
+}
+
+Context *MainWindow::findContext(const QString &workdir, const QString &workflow, const QString &workflowFile)
+{
+    const QString wd = QDir::cleanPath(workdir);
+    for (Context &c : m_store.contexts) {
+        if (QDir::cleanPath(c.workdir) != wd)
+            continue;
+        if (c.workflow != workflow)
+            continue;
+        if (c.workflowFile != workflowFile)
+            continue;
+        return &c;
+    }
+    return nullptr;
 }
 
 Context *MainWindow::currentContext()
@@ -288,7 +550,7 @@ void MainWindow::onAddFolder()
         return;
     }
     m_store.save();
-    rebuildContextList();
+    rebuildUi();
 }
 
 void MainWindow::onRefreshWorktrees()
@@ -325,7 +587,7 @@ void MainWindow::onRefreshWorktrees()
         m_store.contexts.append(nc);
     }
     m_store.save();
-    rebuildContextList();
+    rebuildUi();
 }
 
 void MainWindow::onRemoveContext()
@@ -344,7 +606,7 @@ void MainWindow::onRemoveContext()
         }
     }
     m_store.save();
-    rebuildContextList();
+    rebuildUi();
 }
 
 void MainWindow::onEditContext()
@@ -359,7 +621,7 @@ void MainWindow::onEditContext()
 
     *c = dlg.editedContext();
     m_store.save();
-    rebuildContextList();
+    rebuildUi();
 }
 
 void MainWindow::onLaunch()
@@ -368,7 +630,7 @@ void MainWindow::onLaunch()
     if (!c)
         return;
     if (m_sessions.launch(*c, ContextStore::logsDir()))
-        rebuildContextList();
+        rebuildUi();
     else if (!m_sessions.isRunning(c->id))
         QMessageBox::warning(this, tr("Pipeon"), tr("Could not start dockpipe (see stderr)."));
 }
@@ -389,7 +651,7 @@ void MainWindow::onStop()
     if (!c)
         return;
     m_sessions.stop(c->id);
-    rebuildContextList();
+    rebuildUi();
 }
 
 void MainWindow::onStopAllForRepo()
@@ -401,7 +663,7 @@ void MainWindow::onStopAllForRepo()
     if (root.isEmpty()) {
         QMessageBox::information(this, tr("Pipeon"), tr("Not a git repository; stopping this context only."));
         m_sessions.stop(c->id);
-        rebuildContextList();
+        rebuildUi();
         return;
     }
     for (const Context &x : m_store.contexts) {
@@ -409,7 +671,7 @@ void MainWindow::onStopAllForRepo()
         if (xr == root && m_sessions.isRunning(x.id))
             m_sessions.stop(x.id);
     }
-    rebuildContextList();
+    rebuildUi();
 }
 
 void MainWindow::onOpenLogs()

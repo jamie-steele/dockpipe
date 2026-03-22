@@ -64,7 +64,7 @@ steps:
       bash -c 'set -euo pipefail
       test "${SCAN_PASS:-0}" = "1" || { echo "[test-demo-claude] scan did not pass; skipping Claude review" >&2; exit 1; }
       test -n "${ANTHROPIC_API_KEY:-}${CLAUDE_API_KEY:-}" || { echo "[test-demo-claude] ANTHROPIC_API_KEY or CLAUDE_API_KEY is required for the Claude review step" >&2; exit 1; }
-      PROMPT_FILE="dockpipe/workflows/test-demo/prompts/claude-chain-review.md"
+      PROMPT_FILE="dockpipe-experimental/workflows/test-demo/prompts/claude-chain-review.md"
       test -f "$PROMPT_FILE" || { echo "[test-demo-claude] missing $PROMPT_FILE" >&2; exit 1; }
       PROMPT=$(cat "$PROMPT_FILE"; echo ""; echo "--- Workflow context (DockPipe merged outputs) ---"; echo "WORKFLOW_NAME=${WORKFLOW_NAME:-}"; echo "PREPARE_OK=${PREPARE_OK:-}"; echo "TESTS_PASS=${TESTS_PASS:-}"; echo "TESTS_EXIT=${TESTS_EXIT:-}"; echo "SCAN_PASS=${SCAN_PASS:-}"; echo "VET_EXIT=${VET_EXIT:-}"; echo "DEMO_STAGE=${DEMO_STAGE:-}")
       claude --dangerously-skip-permissions -p "$PROMPT"'

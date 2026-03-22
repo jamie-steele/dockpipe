@@ -20,6 +20,18 @@ QLabel#hintText {
     font-size: 12px;
 }
 
+QLabel#disclaimerWatermark {
+    font-size: 11px;
+    font-style: italic;
+    padding: 4px 10px 6px 10px;
+}
+
+QPushButton#disclaimerDismiss {
+    font-size: 11px;
+    padding: 2px 10px;
+    min-height: 22px;
+}
+
 QFrame#headerBar {
     background-color: palette(alternate-base);
     border: none;

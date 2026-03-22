@@ -7,6 +7,10 @@
   "properties": {
     "name": { "type": "string" },
     "description": { "type": "string" },
+    "category": {
+      "type": "string",
+      "description": "Optional UI hint: e.g. \"app\" for Pipeon Basic mode (launchable GUI/container tools)."
+    },
     "imports": {
       "type": "array",
       "items": { "type": "string" }

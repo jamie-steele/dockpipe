@@ -145,10 +145,14 @@ func applyOutputsFile(path string, envMap, dockerEnv map[string]string, locked m
 	_ = os.Remove(path)
 }
 
+// appendUniqueEnv appends pair, or replaces an existing entry with the same key prefix (KEY=).
+// Replacement matters when envSlice was built from os.Environ(): inherited DOCKPIPE_WORKDIR must not
+// block --workdir, and explicit dockpipe-injected values must win.
 func appendUniqueEnv(slice []string, pair string) []string {
 	k, _, _ := strings.Cut(pair, "=")
-	for _, e := range slice {
+	for i, e := range slice {
 		if strings.HasPrefix(e, k+"=") {
+			slice[i] = pair
 			return slice
 		}
 	}

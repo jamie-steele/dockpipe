@@ -19,4 +19,4 @@ dockpipe --workflow test-demo --resolver codex --runtime docker --workdir /path/
   --mount "$(go env GOPATH)/pkg:/go/pkg:rw" --
 ```
 
-See **`make demo-record`**, **[docs/workflow-yaml.md](../../docs/workflow-yaml.md)**, **[docs/cli-reference.md](../../docs/cli-reference.md)** (env / `--var`). For DAG-style orchestration (parallel levels, pgvector, escalation) see **[docs/dorkpipe.md](../../docs/dorkpipe.md)** and **`dockpipe/workflows/dorkpipe-orchestrator/`**.
+See **`make demo-record`**, **[docs/workflow-yaml.md](../../docs/workflow-yaml.md)**, **[docs/cli-reference.md](../../docs/cli-reference.md)** (env / `--var`). For DAG-style orchestration (parallel levels, pgvector, escalation) see **[docs/dorkpipe.md](../../docs/dorkpipe.md)** and **`dockpipe-experimental/workflows/dorkpipe-orchestrator/`**.

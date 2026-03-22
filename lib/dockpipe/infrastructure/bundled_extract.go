@@ -13,7 +13,7 @@ import (
 )
 
 // bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "70"
+const bundledFormatVersion = "71"
 
 var bundledMu sync.Mutex
 
@@ -31,7 +31,7 @@ func EmbeddedWorkflowConfigExists(name string) bool {
 	}
 	for _, p := range []string{
 		"templates/" + name + "/config.yml",
-		"dockpipe/workflows/" + name + "/config.yml",
+		BundledDockpipeDir + "/workflows/" + name + "/config.yml",
 		"templates/core/resolvers/" + name + "/config.yml",
 	} {
 		if _, err := fs.Stat(dockpipe.BundledFS, p); err == nil {
@@ -57,12 +57,12 @@ func InvalidateBundledCache() error {
 	if err != nil {
 		return err
 	}
-	dest := filepath.Join(cacheBase, "dockpipe", "bundled-"+ver)
+	dest := filepath.Join(cacheBase, BundledDockpipeDir, "bundled-"+ver)
 	return os.RemoveAll(dest)
 }
 
-// MaterializedBundledRoot returns a directory containing the unpacked bundle: dockpipe/core/
-// (assets, resolvers, runtimes, strategies), dockpipe/workflows/, lib/, and version.
+// MaterializedBundledRoot returns a directory containing the unpacked bundle: <BundledDockpipeDir>/core/
+// (assets, resolvers, runtimes, strategies), workflows/, lib/, and version.
 // Embedded source still uses templates/...; copyEmbeddedFS maps that to the layout above on disk.
 // See also DOCKPIPE_REPO_ROOT override in RepoRoot.
 func MaterializedBundledRoot() (string, error) {
@@ -85,7 +85,7 @@ func extractBundledToCache() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dest := filepath.Join(cacheBase, "dockpipe", "bundled-"+ver)
+	dest := filepath.Join(cacheBase, BundledDockpipeDir, "bundled-"+ver)
 	cfgPath := filepath.Join(dest, BundledDockpipeDir, "workflows", "test", "config.yml")
 	formatPath := filepath.Join(dest, ".bundled-format")
 	if st, err := os.Stat(cfgPath); err == nil && !st.IsDir() {
@@ -116,7 +116,7 @@ func extractBundledToCache() (string, error) {
 	return dest, nil
 }
 
-// bundledCacheBase is the parent directory for dockpipe/bundled-<version> (default: user cache dir).
+// bundledCacheBase is the parent directory for <BundledDockpipeDir>/bundled-<version> (default: user cache dir).
 // Set DOCKPIPE_BUNDLED_CACHE to override (tests, read-only home, etc.).
 func bundledCacheBase() (string, error) {
 	if v := os.Getenv("DOCKPIPE_BUNDLED_CACHE"); v != "" {
@@ -130,7 +130,7 @@ func bundledCacheBase() (string, error) {
 }
 
 // mapEmbeddedToMaterializedPath maps embed paths (templates/..., lib/..., VERSION) to the on-disk
-// materialized layout: dockpipe/core/..., dockpipe/workflows/..., lib/, version.
+// materialized layout: <BundledDockpipeDir>/core/..., workflows/..., lib/, version.
 func mapEmbeddedToMaterializedPath(rel string) string {
 	switch {
 	case rel == "VERSION":
@@ -138,14 +138,14 @@ func mapEmbeddedToMaterializedPath(rel string) string {
 	case rel == "templates/core" || strings.HasPrefix(rel, "templates/core/"):
 		suffix := strings.TrimPrefix(rel, "templates/core")
 		if suffix == "" {
-			return "dockpipe/core"
+			return filepath.Join(BundledDockpipeDir, "core")
 		}
-		return "dockpipe/core" + suffix
+		return filepath.Join(BundledDockpipeDir, "core") + suffix
 	case rel == "templates":
-		return "dockpipe"
+		return BundledDockpipeDir
 	case strings.HasPrefix(rel, "templates/"):
 		rest := strings.TrimPrefix(rel, "templates/")
-		return filepath.Join("dockpipe", "workflows", rest)
+		return filepath.Join(BundledDockpipeDir, "workflows", rest)
 	default:
 		return rel
 	}

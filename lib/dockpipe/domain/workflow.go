@@ -35,6 +35,8 @@ func (r *RunSpec) UnmarshalYAML(n *yaml.Node) error {
 type Workflow struct {
 	Name            string  `yaml:"name"`
 	Description     string  `yaml:"description,omitempty"`
+	// Category: optional launcher/UI hint (e.g. "app" = show in Pipeon Basic mode as a launchable GUI/tool).
+	Category string `yaml:"category,omitempty"`
 	Run             RunSpec `yaml:"run"`
 	Isolate         string  `yaml:"isolate"`
 	Act             string  `yaml:"act"`

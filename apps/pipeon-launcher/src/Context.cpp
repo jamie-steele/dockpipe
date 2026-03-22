@@ -1,5 +1,6 @@
 #include "Context.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 
 Context Context::createNew()
@@ -22,6 +23,10 @@ Context Context::fromJson(const QJsonObject &o)
     c.runtime = o.value(QStringLiteral("runtime")).toString();
     c.dockpipeBinary = o.value(QStringLiteral("dockpipeBinary")).toString();
     c.envFile = o.value(QStringLiteral("envFile")).toString();
+    if (const QJsonArray extra = o.value(QStringLiteral("extraDockpipeEnv")).toArray(); !extra.isEmpty()) {
+        for (const QJsonValue &v : extra)
+            c.extraDockpipeEnv.append(v.toString());
+    }
     if (c.id.isEmpty())
         c.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     return c;
@@ -40,5 +45,11 @@ QJsonObject Context::toJson() const
     o.insert(QStringLiteral("runtime"), runtime);
     o.insert(QStringLiteral("dockpipeBinary"), dockpipeBinary);
     o.insert(QStringLiteral("envFile"), envFile);
+    if (!extraDockpipeEnv.isEmpty()) {
+        QJsonArray arr;
+        for (const QString &s : extraDockpipeEnv)
+            arr.append(s);
+        o.insert(QStringLiteral("extraDockpipeEnv"), arr);
+    }
     return o;
 }

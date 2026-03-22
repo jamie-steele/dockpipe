@@ -7,12 +7,12 @@ js/dev
  M Makefile
  M README.md
  M bin/dorkpipe
- M dockpipe/workflows/dorkpipe-self-analysis/README.md
- M dockpipe/workflows/dorkpipe-self-analysis/config.yml
+ M dockpipe-experimental/workflows/dorkpipe-self-analysis/README.md
+ M dockpipe-experimental/workflows/dorkpipe-self-analysis/config.yml
  M docs/dorkpipe.md
  M lib/dorkpipe/composegen/composegen.go
  M scripts/dorkpipe/dev-stack.sh
  M templates/core/assets/compose/dorkpipe/docker-compose.yml
-?? dockpipe/workflows/dorkpipe-self-analysis-stack/
+?? dockpipe-experimental/workflows/dorkpipe-self-analysis-stack/
 ?? scripts/dorkpipe/dev-stack-ensure-up.sh
 ?? scripts/dorkpipe/dev-stack-maybe-down.sh

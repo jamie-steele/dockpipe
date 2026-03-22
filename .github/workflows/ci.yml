@@ -5,7 +5,7 @@
 # --- Optional GitHub repo configuration (Settings → Secrets and variables → Actions) ---
 #
 # CI dogfood (this workflow):
-#   Variable  DOCKPIPE_CI_CODEX     Set to "true" to run dockpipe/workflows/dogfood-codex-* in CI (pulls Codex image; needs network).
+#   Variable  DOCKPIPE_CI_CODEX     Set to "true" to run dockpipe-experimental/workflows/dogfood-codex-* in CI (pulls Codex image; needs network).
 #   Secret    OPENAI_API_KEY        OpenAI API key for Codex when DOCKPIPE_CI_CODEX is true (same as local Codex usage).
 #
 # dev.to release posts (release.yml only — not this job):

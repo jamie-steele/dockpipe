@@ -1,0 +1,13 @@
+# Host script builds/runs Steam (Flathub) inside Docker — see scripts/docker-steam-flatpak.sh and templates/core/assets/images/steam-flatpak/README.md
+name: steam-flatpak-docker
+category: app
+description: >-
+  Build dockpipe-steam-flatpak (Debian + Flathub Steam) and run it in Docker with X11/Wayland, DRI, D-Bus.
+  Linux desktop; first build is large. Set DOCKER_STEAM_NVIDIA=1 for NVIDIA. Not core — scripts + image only.
+
+docker_preflight: true
+
+steps:
+  - id: steam
+    run: scripts/docker-steam-flatpak.sh
+    skip_container: true

@@ -1,9 +1,12 @@
 #include "SessionManager.h"
 
+#include "DockpipeChoices.h"
+
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QProcess>
+#include <QProcessEnvironment>
 
 #ifdef Q_OS_WIN
 // taskkill used below
@@ -45,6 +48,12 @@ QStringList SessionManager::dockpipeArguments(const Context &ctx)
         args << QStringLiteral("--strategy") << ctx.strategy;
     if (!ctx.envFile.isEmpty())
         args << QStringLiteral("--env-file") << QDir::toNativeSeparators(ctx.envFile);
+    for (const QString &line : ctx.extraDockpipeEnv) {
+        const QString t = line.trimmed();
+        if (t.isEmpty())
+            continue;
+        args << QStringLiteral("--env") << t;
+    }
     return args;
 }
 
@@ -66,7 +75,19 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
     proc->setProgram(program);
     proc->setArguments(dockpipeArguments(ctx));
     proc->setProcessChannelMode(QProcess::MergedChannels);
-    proc->setWorkingDirectory(QDir::homePath());
+
+    // Force project workdir for dockpipe and host scripts. Inherited DOCKPIPE_* from the desktop/shell
+    // can be wrong (e.g. repo root). Dockpipe replaces duplicate keys when injecting explicit values,
+    // but we still set DOCKPIPE_WORKDIR and DOCKPIPE_REPO_ROOT so the child matches the chosen context.
+    // Host scripts (e.g. vscode-code-server.sh) use DOCKPIPE_WORKDIR or fall back to $PWD — set both explicitly.
+    const QString wd = QDir::cleanPath(ctx.workdir);
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("DOCKPIPE_WORKDIR"), wd);
+    const QString repoRoot = DockpipeChoices::findRepoRoot(wd);
+    if (!repoRoot.isEmpty())
+        env.insert(QStringLiteral("DOCKPIPE_REPO_ROOT"), repoRoot);
+    proc->setProcessEnvironment(env);
+    proc->setWorkingDirectory(wd);
 
     auto *logFile = new QFile(logPath, proc);
     if (!logFile->open(QIODevice::WriteOnly | QIODevice::Append)) {

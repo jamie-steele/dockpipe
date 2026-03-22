@@ -8,4 +8,4 @@
 dockpipe --workflow dogfood-codex-pav --resolver codex --runtime docker --
 ```
 
-This workflow ships with the dockpipe **source tree** under **`dockpipe/workflows/`**. To reuse it elsewhere, copy the directory or run **`dockpipe init yourflow --from /path/to/dockpipe/workflows/dogfood-codex-pav`**. See **[AGENTS.md](../../AGENTS.md)**.
+This workflow ships with the dockpipe **source tree** under **`dockpipe-experimental/workflows/`**. To reuse it elsewhere, copy the directory or run **`dockpipe init yourflow --from /path/to/dockpipe-experimental/workflows/dogfood-codex-pav`**. See **[AGENTS.md](../../AGENTS.md)**.

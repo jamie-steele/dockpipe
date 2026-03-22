@@ -10,7 +10,7 @@ Each profile is **`templates/core/resolvers/<name>`** (flat **`KEY=value`** file
 |-----|----------|---------|
 | **`DOCKPIPE_RUNTIME_TYPE`** | Recommended | **`runtime.type`**: **`execution`** \| **`ide`** \| **`agent`** — classification only (see **`domain/runtime_kind.go`**). |
 | **`DOCKPIPE_RESOLVER_TEMPLATE`** | Usually yes | Built-in template name passed to **`TemplateBuild`** → Docker image. **Omit** when **`DOCKPIPE_RESOLVER_WORKFLOW`** or **`DOCKPIPE_RESOLVER_HOST_ISOLATE`** is set. |
-| **`DOCKPIPE_RESOLVER_WORKFLOW`** | no | Bundled delegate YAML under **`templates/core/resolvers/<name>/config.yml`** (or **`dockpipe/core/resolvers/<name>/config.yml`** when materialized). **Mutually exclusive** with **`DOCKPIPE_RESOLVER_HOST_ISOLATE`**. |
+| **`DOCKPIPE_RESOLVER_WORKFLOW`** | no | Bundled delegate YAML under **`templates/core/resolvers/<name>/config.yml`** (or **`dockpipe-experimental/core/resolvers/<name>/config.yml`** when materialized). **Mutually exclusive** with **`DOCKPIPE_RESOLVER_HOST_ISOLATE`**. |
 | **`DOCKPIPE_RESOLVER_HOST_ISOLATE`** | no | Repo-relative host script instead of **`docker run`**. |
 | **`DOCKPIPE_RESOLVER_PRE_SCRIPT`** | no | Host script when using **`--resolver`** *without* **`--workflow`** (defaults from workflow **`run`** otherwise). |
 | **`DOCKPIPE_RESOLVER_ACTION`** | no | Act script for resolver-only runs; **`--workflow`** uses **`config.yml`** **`act`**. |

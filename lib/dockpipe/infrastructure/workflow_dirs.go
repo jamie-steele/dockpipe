@@ -9,8 +9,8 @@ import (
 )
 
 // ResolveWorkflowConfigPath returns the first existing workflow config for a bundled or user workflow name.
-// Authoring checkout: dockpipe/workflows/<name>/config.yml first (repo-local), then templates/<name>/config.yml, then core/resolvers.
-// Materialized bundle: dockpipe/workflows/ only (same path as WorkflowsRootDir).
+// Authoring checkout: dockpipe-experimental/workflows/<name>/config.yml first (repo-local), then templates/<name>/config.yml, then core/resolvers.
+// Materialized bundle: dockpipe-experimental/workflows/ only (same path as WorkflowsRootDir).
 func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -51,7 +51,7 @@ func ResolveEmbeddedResolverWorkflowConfigPath(repoRoot, name string) (string, e
 	return "", fmt.Errorf("embedded resolver workflow config not found for %q", name)
 }
 
-// ListWorkflowNamesInRepoRoot returns workflow names from templates/<name>/ and (authoring only) dockpipe/workflows/<name>/.
+// ListWorkflowNamesInRepoRoot returns workflow names from templates/<name>/ and (authoring only) dockpipe-experimental/workflows/<name>/.
 func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 	seen := make(map[string]struct{})
 	var out []string

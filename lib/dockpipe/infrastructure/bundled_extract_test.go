@@ -66,12 +66,12 @@ func TestMapEmbeddedToMaterializedPath(t *testing.T) {
 	}{
 		{"VERSION", "version"},
 		{"lib/entrypoint.sh", "lib/entrypoint.sh"},
-		{"templates", "dockpipe"},
-		{"templates/core", "dockpipe/core"},
-		{"templates/core/runtimes/docker/profile", "dockpipe/core/runtimes/docker/profile"},
-		{"templates/test/config.yml", filepath.Join("dockpipe", "workflows", "test", "config.yml")},
-		{"templates/test-demo/config.yml", filepath.Join("dockpipe", "workflows", "test-demo", "config.yml")},
-		{filepath.Join("dockpipe", "workflows", "dogfood-codex-pav", "config.yml"), filepath.Join("dockpipe", "workflows", "dogfood-codex-pav", "config.yml")},
+		{"templates", BundledDockpipeDir},
+		{"templates/core", filepath.Join(BundledDockpipeDir, "core")},
+		{"templates/core/runtimes/docker/profile", filepath.Join(BundledDockpipeDir, "core/runtimes/docker/profile")},
+		{"templates/test/config.yml", filepath.Join(BundledDockpipeDir, "workflows", "test", "config.yml")},
+		{"templates/test-demo/config.yml", filepath.Join(BundledDockpipeDir, "workflows", "test-demo", "config.yml")},
+		{filepath.Join(BundledDockpipeDir, "workflows", "dogfood-codex-pav", "config.yml"), filepath.Join(BundledDockpipeDir, "workflows", "dogfood-codex-pav", "config.yml")},
 	}
 	for _, tc := range cases {
 		got := mapEmbeddedToMaterializedPath(tc.in)

@@ -34,7 +34,7 @@ func TestCmdInitFromBlankScaffold(t *testing.T) {
 // TestCmdInitFromSelfAnalysisWorkflowAppendsAgentsPointer ensures init --from dorkpipe-self-analysis updates AGENTS.md once.
 func TestCmdInitFromSelfAnalysisWorkflowAppendsAgentsPointer(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
-	writeFile(t, filepath.Join(repoRoot, "dockpipe", "workflows", "dorkpipe-self-analysis", "config.yml"), "name: dorkpipe-self-analysis\nsteps: []\n", 0o644)
+	writeFile(t, filepath.Join(repoRoot, "dockpipe-experimental", "workflows", "dorkpipe-self-analysis", "config.yml"), "name: dorkpipe-self-analysis\nsteps: []\n", 0o644)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
 	project := t.TempDir()
 	oldWd, _ := os.Getwd()

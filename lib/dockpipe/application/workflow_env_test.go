@@ -46,12 +46,12 @@ func TestApplyBranchPrefix(t *testing.T) {
 	}
 }
 
-// TestAppendUniqueEnvAndFirstNonEmpty dedupes env slice keys and picks first non-empty string helper.
+// TestAppendUniqueEnvAndFirstNonEmpty replaces duplicate env keys (later wins) and tests firstNonEmpty.
 func TestAppendUniqueEnvAndFirstNonEmpty(t *testing.T) {
 	s := []string{"A=1"}
 	s = appendUniqueEnv(s, "A=2")
-	if len(s) != 1 {
-		t.Fatalf("expected duplicate key to be ignored, got %v", s)
+	if len(s) != 1 || s[0] != "A=2" {
+		t.Fatalf("expected duplicate key to be replaced by later value, got %v", s)
 	}
 	s = appendUniqueEnv(s, "B=2")
 	if len(s) != 2 {

@@ -17,6 +17,8 @@ struct Context {
     QString runtime;
     QString dockpipeBinary;
     QString envFile;
+    /// Each entry is one dockpipe `--env` argument, typically `KEY=value` (e.g. FLATHUB_APP_ID=com.valvesoftware.Steam).
+    QStringList extraDockpipeEnv;
 
     static Context createNew();
     static Context fromJson(const QJsonObject &o);

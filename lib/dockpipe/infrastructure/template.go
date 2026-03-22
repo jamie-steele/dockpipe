@@ -24,6 +24,8 @@ func TemplateBuild(repoRoot, name string) (image string, dockerfileDir string, o
 		return "dockpipe-vscode", coreImg("vscode"), true
 	case "ollama":
 		return "dockpipe-ollama", coreImg("ollama"), true
+	case "steam-flatpak":
+		return "dockpipe-steam-flatpak", coreImg("steam-flatpak"), true
 	default:
 		return "", "", false
 	}

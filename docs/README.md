@@ -10,7 +10,7 @@
 | [workflow-yaml.md](workflow-yaml.md) | [architecture.md](architecture.md) |
 | [isolation-layer.md](isolation-layer.md) | [chaining.md](chaining.md) |
 
-**Bundled paths:** In the materialized cache, **`dockpipe/core/`** and **`dockpipe/workflows/`** mirror **`templates/core/`** and **`templates/<workflow>/`** in a git checkout. See [install.md](install.md#bundled-templates-no-extra-install-tree).
+**Bundled paths:** In the materialized cache, **`dockpipe-experimental/core/`** and **`dockpipe-experimental/workflows/`** mirror **`templates/core/`** and **`templates/<workflow>/`** in a git checkout. See [install.md](install.md#bundled-templates-no-extra-install-tree).
 
 **QA:** [qa/manual-qa.md](qa/manual-qa.md)
 

@@ -2,7 +2,7 @@
 # Host job still runs govulncheck/gosec/go test first for fast signal; this workflow mirrors the stack in isolation.
 # Mount only $(go env GOPATH)/pkg:/go/pkg — do NOT mount host GOBIN: govulncheck/gosec must be built with the
 # container Go (e.g. 1.25); a host-built binary often mismatches and breaks vulncheck.
-# See dockpipe/workflows/test-demo for tests → Codex recordings.
+# See dockpipe-experimental/workflows/test-demo for tests → Codex recordings.
 # Images: golang official (pulls from Docker Hub on first use).
 name: test
 description: >-

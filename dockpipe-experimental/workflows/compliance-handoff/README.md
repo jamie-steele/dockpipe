@@ -16,4 +16,4 @@ make compliance-handoff
 
 **Touches:** **`scripts/dorkpipe/compliance-handoff.sh`** — prints artifact presence + short summaries.
 
-**Copy elsewhere:** `dockpipe init myproj --from /path/to/dockpipe/workflows/compliance-handoff` or copy this directory.
+**Copy elsewhere:** `dockpipe init myproj --from /path/to/dockpipe-experimental/workflows/compliance-handoff` or copy this directory.

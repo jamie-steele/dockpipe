@@ -1,5 +1,6 @@
 # Experimental: long-lived base-dev container (docker wait) + Cursor on the host — same session idea as vscode.
 name: cursor-dev
+category: app
 description: Experimental — base-dev session container until you stop it; open Cursor on the host (no remote server).
 
 steps:

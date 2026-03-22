@@ -1,6 +1,6 @@
 ### spec.example.yaml (orchestrator) excerpt
 # Example DAG for DorkPipe — tune policy/nodes for your repo.
-# Run: bin/dorkpipe run -f dockpipe/workflows/dorkpipe-orchestrator/spec.example.yaml --workdir .
+# Run: bin/dorkpipe run -f dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml --workdir .
 #
 # Requires: Ollama reachable (OLLAMA_HOST) for local_reason; dockpipe on PATH for escalation.
 # Optional: DATABASE_URL for pgvector nodes (see templates/core/assets/compose/dorkpipe/docker-compose.yml).

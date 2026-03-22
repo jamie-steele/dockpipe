@@ -1,0 +1,14 @@
+# Host-only workflow: Steam + sandbox notes (no lib/dockpipe changes).
+# Run: dockpipe --workflow sandbox-steam --workdir /path/to/project
+name: sandbox-steam
+category: app
+description: >-
+  Prints your workdir and resolves a Steam launcher (PATH, STEAM_CMD, or Flatpak com.valvesoftware.Steam).
+  Optional: STEAM_SANDBOX_LAUNCH=1 execs that launcher. Extend scripts/sandbox-steam.sh locally — not in core.
+
+docker_preflight: false
+
+steps:
+  - id: hint
+    run: scripts/sandbox-steam.sh
+    skip_container: true

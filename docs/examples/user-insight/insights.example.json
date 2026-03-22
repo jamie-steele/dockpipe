@@ -15,7 +15,7 @@
       "normalized_text": "Prefer two-space indent in YAML; keep workflows readable.",
       "intent": "user_guidance_signal",
       "severity": "unspecified",
-      "scope": { "repo_path": "dockpipe/workflows/" },
+      "scope": { "repo_path": "dockpipe-experimental/workflows/" },
       "provenance": {
         "source": "user",
         "original_text": "Prefer two-space indent in YAML; keep workflows readable.",

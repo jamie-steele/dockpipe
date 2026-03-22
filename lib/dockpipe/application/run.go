@@ -147,7 +147,7 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 			if statErr != nil {
 				names, _ := infrastructure.ListWorkflowNamesInRepoRoot(repoRoot)
-				msg := fmt.Sprintf("workflow %q not found — tried workflows dir (templates/ or dockpipe/workflows/) and core/resolvers/%[1]s/config.yml", opts.Workflow)
+				msg := fmt.Sprintf("workflow %q not found — tried workflows dir (templates/ or dockpipe-experimental/workflows/) and core/resolvers/%[1]s/config.yml", opts.Workflow)
 				if len(names) > 0 {
 					msg += fmt.Sprintf(" (available in this install: %s)", strings.Join(names, ", "))
 				}
@@ -172,6 +172,11 @@ func Run(argv []string, baseEnviron []string) error {
 	envMap := domain.EnvironToMap(baseEnviron)
 	if wf != nil {
 		buildWorkflowEnvInto(envMap, wf, wfRoot, repoRoot, opts)
+	}
+	// CLI --workdir must live in envMap, not only on envSlice: strategy pre-scripts rebuild
+	// envSlice from envMap (run.go) and would otherwise drop DOCKPIPE_WORKDIR from appendUniqueEnv.
+	if opts.Workdir != "" {
+		envMap["DOCKPIPE_WORKDIR"] = opts.Workdir
 	}
 
 	effStrat := EffectiveStrategyName(opts, wf)
@@ -430,6 +435,9 @@ func Run(argv []string, baseEnviron []string) error {
 			setUserRepoRootForWorktree(envMap, opts, opts.RepoURL)
 		}
 		delete(envMap, "DOCKPIPE_WORKDIR")
+		if opts.Workdir != "" {
+			envMap["DOCKPIPE_WORKDIR"] = opts.Workdir
+		}
 	}
 
 	envSlice := domain.EnvMapToSlice(envMap)

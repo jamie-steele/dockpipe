@@ -1,12 +1,12 @@
-## workflows (dockpipe/workflows)
-/work/dockpipe/workflows/demo-gui-cursor/config.yml
-/work/dockpipe/workflows/demo-gui-vscode/config.yml
-/work/dockpipe/workflows/dogfood-codex-pav/config.yml
-/work/dockpipe/workflows/dogfood-codex-security/config.yml
-/work/dockpipe/workflows/dorkpipe-orchestrator/config.yml
-/work/dockpipe/workflows/dorkpipe-self-analysis-host/config.yml
-/work/dockpipe/workflows/dorkpipe-self-analysis-stack/config.yml
-/work/dockpipe/workflows/dorkpipe-self-analysis/config.yml
-/work/dockpipe/workflows/test-demo-claude/config.yml
-/work/dockpipe/workflows/test-demo/config.yml
-/work/dockpipe/workflows/test/config.yml
+## workflows (dockpipe-experimental/workflows)
+/work/dockpipe-experimental/workflows/demo-gui-cursor/config.yml
+/work/dockpipe-experimental/workflows/demo-gui-vscode/config.yml
+/work/dockpipe-experimental/workflows/dogfood-codex-pav/config.yml
+/work/dockpipe-experimental/workflows/dogfood-codex-security/config.yml
+/work/dockpipe-experimental/workflows/dorkpipe-orchestrator/config.yml
+/work/dockpipe-experimental/workflows/dorkpipe-self-analysis-host/config.yml
+/work/dockpipe-experimental/workflows/dorkpipe-self-analysis-stack/config.yml
+/work/dockpipe-experimental/workflows/dorkpipe-self-analysis/config.yml
+/work/dockpipe-experimental/workflows/test-demo-claude/config.yml
+/work/dockpipe-experimental/workflows/test-demo/config.yml
+/work/dockpipe-experimental/workflows/test/config.yml

@@ -1,6 +1,6 @@
 # Workflow YAML (`config.yml`)
 
-**Workflow YAML** for **`--workflow <name>`** resolves to **`templates/<name>/config.yml`** in a project checkout, or **`dockpipe/workflows/<name>/config.yml`** in the **materialized bundle** (see **[install.md](install.md#bundled-templates-no-extra-install-tree)**). Resolver delegate YAML loads from **`templates/core/resolvers/<name>/config.yml`** (authoring) or **`dockpipe/core/resolvers/<name>/config.yml`** (materialized bundle). Load with **`dockpipe --workflow <name>`** (plus your command after **`--`**).
+**Workflow YAML** for **`--workflow <name>`** resolves to **`templates/<name>/config.yml`** in a project checkout, or **`dockpipe-experimental/workflows/<name>/config.yml`** in the **materialized bundle** (see **[install.md](install.md#bundled-templates-no-extra-install-tree)**). Resolver delegate YAML loads from **`templates/core/resolvers/<name>/config.yml`** (authoring) or **`dockpipe-experimental/core/resolvers/<name>/config.yml`** (materialized bundle). Load with **`dockpipe --workflow <name>`** (plus your command after **`--`**).
 
 **Repo-root workflow:** put the **same** YAML shape in **`dockpipe.yml`** (or any path) and run **`dockpipe --workflow-file dockpipe.yml`** so **`run:`** / **`act:`** paths resolve relative to that file’s directory. **Resolver** profiles are **not** beside the file — they load only from **`templates/core/resolvers/`** (see below). Do not pass **`--workflow`** and **`--workflow-file`** together.
 
@@ -15,7 +15,7 @@
 | **act** | Follow-up after the main command (usually a **host** script; see **[architecture.md](architecture.md)** for in-container `DOCKPIPE_ACTION`). |
 | **workflow** | This file: a named preset selected with **`--workflow <name>`**. |
 | **strategy** | Optional **named lifecycle** wrapper: small **`KEY=value`** files under **`templates/<workflow>/strategies/<name>`** (optional) or **`templates/core/strategies/<name>`** define host scripts to run **before** and **after** the workflow body. See [Named strategies](#named-strategies) below. |
-| **runtime** / **resolver** | **Runtime** — **`templates/core/runtimes/<name>`** (**`DOCKPIPE_RUNTIME_*`**). **Resolver** — **`templates/core/resolvers/<name>`** (**`DOCKPIPE_RESOLVER_*`**). In the materialized bundle, the same paths live under **`dockpipe/core/`**. Both may be set; the runner **merges** them. See **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)**. Optional **`runtimes:`** allowlist (like **`strategies:`**). |
+| **runtime** / **resolver** | **Runtime** — **`templates/core/runtimes/<name>`** (**`DOCKPIPE_RUNTIME_*`**). **Resolver** — **`templates/core/resolvers/<name>`** (**`DOCKPIPE_RESOLVER_*`**). In the materialized bundle, the same paths live under **`dockpipe-experimental/core/`**. Both may be set; the runner **merges** them. See **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)**. Optional **`runtimes:`** allowlist (like **`strategies:`**). |
 
 **Learning path:** [onboarding.md](onboarding.md) · **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)** · Implementation notes: [`lib/dockpipe/README.md`](../lib/dockpipe/README.md).
 
@@ -38,6 +38,7 @@ Variable precedence for workflows is documented in **[CLI reference](cli-referen
 |-----|---------|
 | `name` | Optional display title for stderr (defaults to the template folder name, e.g. `run`). |
 | `description` | Optional one-line task summary printed after `name` (e.g. what this workflow is for). |
+| `category` | Optional UI hint for tools like **Pipeon**: e.g. `app` marks a launchable GUI/container IDE-style workflow shown in **Basic** mode. Omit or use other values for pipelines and advanced-only flows. |
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
 | `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). |
 | `isolate` | Template name or image for the container. For **resolver-driven** flows with **`strategy: worktree`**, prefer **`default_runtime`** / **`default_resolver`** to pick a **core** profile name; **`isolate`** remains a **fallback** default when those are empty. |
@@ -199,7 +200,7 @@ Multiple **separate** `dockpipe` invocations (same `--workdir`) are still valid;
 
 | Workflow | Purpose |
 |----------|---------|
-| **[dockpipe/workflows/test/](../dockpipe/workflows/test/)** (this repo) | CI-style **go vet** chain via **`.dockpipe/outputs.env`** — under **`dockpipe/workflows/`**, not **`templates/`**. |
+| **[dockpipe-experimental/workflows/test/](../dockpipe-experimental/workflows/test/)** (this repo) | CI-style **go vet** chain via **`.dockpipe/outputs.env`** — under **`dockpipe-experimental/workflows/`**, not **`templates/`**. |
 | **[templates/run/](../templates/run/)** | Single command in a container, then optional **git** commit on the current branch (**strategy `git-commit`**). |
 | **[templates/run-apply/](../templates/run-apply/)** | Two-step **run → apply** pipeline (replace **`cmd:`** with your tools). |
 | **[templates/run-apply-validate/](../templates/run-apply-validate/)** | Three-step **run → apply → validate** pipeline (replace **`cmd:`** with your tools). |

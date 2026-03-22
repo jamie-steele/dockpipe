@@ -58,9 +58,9 @@ Artifacts: **`.dorkpipe/run.json`** (provenance, branch winner, skipped nodes) a
 
 ## Internal workflow
 
-**`dockpipe/workflows/dorkpipe-orchestrator/`** runs the orchestrator via a host script (`skip_container`) so the same repo can dogfood **`bin/dorkpipe`** without changing DockPipe’s core engine.
+**`dockpipe-experimental/workflows/dorkpipe-orchestrator/`** runs the orchestrator via a host script (`skip_container`) so the same repo can dogfood **`bin/dorkpipe`** without changing DockPipe’s core engine.
 
-**`dockpipe/workflows/dorkpipe-self-analysis/`** runs **`scripts/dorkpipe/run-self-analysis.sh`** inside an **isolated container** (`isolate: golang:1.25-bookworm`, workdir **`/work`**). **`dorkpipe-self-analysis-stack`** adds **host** steps before/after: **`dev-stack-ensure-up.sh`** (compose up) and **`dev-stack-maybe-down.sh`** (compose down unless **`DORKPIPE_DEV_STACK_AUTODOWN=0`**). **`scripts/dorkpipe/dev-stack.sh`** is the same compose driver used by that workflow. **`dorkpipe-self-analysis-host`** is the same analysis on the **host** when Docker is unavailable.
+**`dockpipe-experimental/workflows/dorkpipe-self-analysis/`** runs **`scripts/dorkpipe/run-self-analysis.sh`** inside an **isolated container** (`isolate: golang:1.25-bookworm`, workdir **`/work`**). **`dorkpipe-self-analysis-stack`** adds **host** steps before/after: **`dev-stack-ensure-up.sh`** (compose up) and **`dev-stack-maybe-down.sh`** (compose down unless **`DORKPIPE_DEV_STACK_AUTODOWN=0`**). **`scripts/dorkpipe/dev-stack.sh`** is the same compose driver used by that workflow. **`dorkpipe-self-analysis-host`** is the same analysis on the **host** when Docker is unavailable.
 
 The DorkPipe DAG is **`spec.yaml`** (deterministic) or **`spec.combined.yaml`** (adds **Ollama** `refine`). Outputs include **`.dockpipe/orchestrator-cursor-prompt.md`**, **`.dockpipe/paste-this-prompt.txt`**, **`.dorkpipe/self-analysis/`**, and **`merge-paste-prompt.sh`** when using the combined spec.
 

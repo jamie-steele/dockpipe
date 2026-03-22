@@ -5,7 +5,7 @@ Cross-platform **Qt 6** system-tray app: save **contexts** (folder + resolver / 
 ## Requirements
 
 - **CMake** 3.16+
-- **Qt 6** (`Widgets` module) — install dev packages (e.g. `qt6-base-dev` on Debian/Ubuntu) or use the [Qt Online Installer](https://www.qt.io/download) and set **`CMAKE_PREFIX_PATH`** to the Qt 6 prefix.
+- **Qt 6** (`Widgets` + **`Network`**) — install dev packages (e.g. `qt6-base-dev` on Debian/Ubuntu) or use the [Qt Online Installer](https://www.qt.io/download) and set **`CMAKE_PREFIX_PATH`** to the Qt 6 prefix.
 - **OpenGL / EGL development libraries** — Qt 6 Gui pulls in **WrapOpenGL**. On Ubuntu/Pop!_OS, if CMake says `WrapOpenGL could not be found` or `Qt6Gui_FOUND` is FALSE, install **`libgl1-mesa-dev`** and **`libegl1-mesa-dev`** (see Build section below).
 - **`dockpipe`** on **`PATH`** (or set **dockpipe binary** in each context’s settings).
 - Host tools DockPipe already needs: **`bash`**, **`docker`**, **`git`** — see [docs/install.md](../../docs/install.md).
@@ -54,9 +54,24 @@ cmake --build apps/pipeon-launcher/build
 
 Qt is available under **LGPL** and commercially. If you **ship binaries**, comply with Qt’s license terms (e.g. dynamic linking and relinking for LGPL) or use a **commercial Qt license**. This README is not legal advice.
 
-## Add folder
+## Flathub search & extra `dockpipe` env
 
-Choosing **Add folder…** resolves a dockpipe **repo root** from the path (`DOCKPIPE_REPO_ROOT` or walking upward for `dockpipe/workflows` / `templates/core`). For each workflow with a `config.yml` under `dockpipe/workflows/...` and `templates/...` (excluding `templates/core`), the launcher adds **one context** with that **workdir** and the matching `--workflow` name. If no repo is found, it adds a single context with workflow `vscode`. Existing `(workdir, workflow, workflow file)` combinations are skipped.
+**Edit context…** includes **Extra dockpipe env** (one `KEY=value` per line). Each line is passed to dockpipe as **`--env`**, same as the CLI — no dockpipe core changes.
+
+- **Browse Flathub…** opens a search dialog (POST to **`https://flathub.org/api/v2/search`**) with optional **category** filter (client-side on `main_categories`). Choosing an app sets **`FLATHUB_APP_ID=`** plus the Flatpak app id (replaces an existing line with that key).
+
+Use the **`flathub-host`** workflow (`dockpipe-experimental/workflows/flathub-host/`) with **`scripts/flathub-host-run.sh`**, which runs **`flatpak run`** on the **host** (Linux with Flatpak + Flathub installed). **Docker**-based Flathub flows and **named volume caches** stay in separate workflows/scripts (`steam-flatpak-docker`, `package-cache-demo`).
+
+**APT** (or other package managers) does not need a separate browser: add env lines your scripts read, or pass **`dockpipe --mount`** for cache volumes when you run a container-backed workflow from the CLI; Pipeon can mirror those with extra env lines only if your wrapper reads them.
+
+## Basic vs Advanced
+
+- **Basic** (default): **File → Open project folder…** (or **Choose folder…**) sets the project directory passed to `dockpipe` as **`--workdir`** (your code is mounted in the tool’s container). The main area lists only workflows whose workflow YAML includes **`category: app`** (see `docs/workflow-yaml.md`) — GUI/IDE-style apps. Double-click an app to launch. **Refresh apps** (toolbar) or **File → Refresh app list** (**F5**) rescans `dockpipe-experimental/workflows/` and `templates/` from disk so new or edited workflows appear without restarting. **View → Icon grid** / **Compact list** toggles presentation. Mode and view are stored in **`launcher.json`**.
+- **Advanced**: **View → Advanced mode** shows the full **context** list (same as before): **Add folder…** can import every workflow under the resolved repo; technical details per row; **Edit**, worktrees, logs, etc.
+
+## Add folder (Advanced)
+
+Choosing **Add folder…** resolves a dockpipe **repo root** from the path (`DOCKPIPE_REPO_ROOT` or walking upward for `dockpipe-experimental/workflows` / `templates/core`). For each workflow with a `config.yml` under `dockpipe-experimental/workflows/...` and `templates/...` (excluding `templates/core`), the launcher adds **one context** with that **workdir** and the matching `--workflow` name. If no repo is found, it adds a single context with workflow `vscode`. Existing `(workdir, workflow, workflow file)` combinations are skipped.
 
 ## Data locations
 
@@ -67,6 +82,7 @@ Choosing **Add folder…** resolves a dockpipe **repo root** from the path (`DOC
 | Windows | `%APPDATA%\Pipeon\`                      |
 
 - **`contexts.json`** — saved contexts.
+- **`launcher.json`** — UI mode (`basic` / `advanced`), Basic view (`icons` / `list`), last **project folder** for Basic mode.
 - **`logs/`** — per-launch log files for `dockpipe` stdout/stderr.
 
 ## Manual QA (short)
