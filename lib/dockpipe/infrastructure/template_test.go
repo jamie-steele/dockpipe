@@ -8,7 +8,7 @@ import (
 
 // TestTemplateBuild maps template names to image names and Dockerfile directories under the repo.
 func TestTemplateBuild(t *testing.T) {
-	repoRoot := "/repo"
+	repoRoot := localModuleRoot(t)
 	cases := []struct {
 		name  string
 		image string
@@ -17,12 +17,12 @@ func TestTemplateBuild(t *testing.T) {
 	}{
 		{"base-dev", "dockpipe-base-dev", filepath.Join(repoRoot, "templates", "core", "assets", "images", "base-dev"), true},
 		{"dev", "dockpipe-dev", filepath.Join(repoRoot, "templates", "core", "assets", "images", "dev"), true},
-		{"agent-dev", "dockpipe-claude", filepath.Join(repoRoot, "templates", "core", "assets", "images", "claude"), true},
-		{"claude", "dockpipe-claude", filepath.Join(repoRoot, "templates", "core", "assets", "images", "claude"), true},
-		{"codex", "dockpipe-codex", filepath.Join(repoRoot, "templates", "core", "assets", "images", "codex"), true},
-		{"vscode", "dockpipe-vscode", filepath.Join(repoRoot, "templates", "core", "assets", "images", "vscode"), true},
-		{"ollama", "dockpipe-ollama", filepath.Join(repoRoot, "templates", "core", "assets", "images", "ollama"), true},
-		{"steam-flatpak", "dockpipe-steam-flatpak", filepath.Join(repoRoot, "templates", "core", "assets", "images", "steam-flatpak"), true},
+		{"agent-dev", "dockpipe-claude", filepath.Join(repoRoot, "templates", "core", "resolvers", "claude", "assets", "images", "claude"), true},
+		{"claude", "dockpipe-claude", filepath.Join(repoRoot, "templates", "core", "resolvers", "claude", "assets", "images", "claude"), true},
+		{"codex", "dockpipe-codex", filepath.Join(repoRoot, "templates", "core", "resolvers", "codex", "assets", "images", "codex"), true},
+		{"vscode", "dockpipe-vscode", filepath.Join(repoRoot, "templates", "core", "resolvers", "vscode", "assets", "images", "vscode"), true},
+		{"ollama", "dockpipe-ollama", filepath.Join(repoRoot, "templates", "core", "resolvers", "ollama", "assets", "images", "ollama"), true},
+		{"steam-flatpak", "dockpipe-steam-flatpak", filepath.Join(repoRoot, "templates", "core", "bundles", "steam-flatpak", "assets", "images", "steam-flatpak"), true},
 		{"unknown", "", "", false},
 	}
 	for _, tc := range cases {

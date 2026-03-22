@@ -17,14 +17,14 @@ if ! cursor_dev_docker_preflight; then
 fi
 
 # Resolve materialized dockpipe root for docker build. DOCKPIPE_REPO_ROOT from the Go binary may be a
-# Windows path that breaks [[ -f ... ]] in Git Bash; script lives at <root>/templates/core/assets/scripts/… .
+# Windows path that breaks [[ -f ... ]] in Git Bash; script lives under templates/core/resolvers/cursor-dev/assets/scripts/.
 cursor_dev_repo_root() {
   local r=""
   if [[ -n "${DOCKPIPE_REPO_ROOT:-}" ]]; then
     r="$(cd "$DOCKPIPE_REPO_ROOT" 2>/dev/null && pwd || true)"
   fi
   if [[ -z "$r" ]] || [[ ! -f "$r/templates/core/assets/images/base-dev/Dockerfile" ]]; then
-    r="$(cd "$SCRIPT_DIR/../../../.." 2>/dev/null && pwd || true)"
+    r="$(cd "$SCRIPT_DIR/../../../../../../" 2>/dev/null && pwd || true)"
   fi
   printf '%s' "$r"
 }

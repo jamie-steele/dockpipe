@@ -1,5 +1,7 @@
 # cursor-dev
 
+**Scripts** (**`cursor-dev-session.sh`**, **`cursor-prep.sh`**, **`cursor-dev-common.sh`**, **`cursor-print-next-steps.sh`**) live **in this directory** (same folder as **`config.yml`**). Workflows use **`run: scripts/cursor-dev/…`**; the runner resolves that to **`templates/core/resolvers/cursor-dev/…`** (see **`lib/dockpipe/infrastructure/paths.go`**).
+
 ## What it does
 
 1. **Host (`run`):** **`cursor-dev-session.sh`** starts a **long-lived `dockpipe-base-dev` container** with your project at **`/work`**. The main process is **`sleep infinity`** until you stop the container. One startup line is printed to the container log so **Docker Desktop → Logs** isn’t empty.

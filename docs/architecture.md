@@ -27,8 +27,8 @@ No built-in commit, clone, or AI logic — those are scripts you plug in.
 | `cmd/dockpipe`, `lib/dockpipe/application`, `lib/dockpipe/domain`, `lib/dockpipe/infrastructure` | **Go** CLI (DDD-ish): application layer (flags + orchestration + `windows setup/doctor`), domain (workflow/env/resolver semantics), infrastructure (FS, docker, bash, git). **`config.yml`** / **`steps:`** (YAML v3), resolver `KEY=value` files, template→image map, bash `source` for pre-scripts, **`docker run`** / build, host **git** commit. |
 | **Embedded bundle** (`embed.go`) | Stock **`templates/`** (including full **`templates/core/`**: **`assets/`** — scripts, images, compose — plus runtimes, resolvers, strategies), **`lib/entrypoint.sh`**, **`VERSION`** compiled into the binary; materialized to the **user cache** at runtime (override with **`DOCKPIPE_REPO_ROOT`** for development). |
 | `lib/entrypoint.sh` | Container entrypoint: run command, then `DOCKPIPE_ACTION` if set (skipped when act is **host** commit — see bundled `commit-worktree`). |
-| `templates/core/assets/images/*/Dockerfile` | Framework images for **`TemplateBuild`**; each copies `lib/entrypoint.sh` as `ENTRYPOINT` (build context: repo root). |
-| `templates/core/assets/scripts/*.sh` | Shared host scripts (clone/commit, resolver helpers); YAML still uses **`scripts/…`** (resolved to project **`scripts/`** or **`templates/core/assets/scripts/`**). |
+| `templates/core/.../assets/images/*/Dockerfile` | Framework images for **`TemplateBuild`** / **`DockerfileDir`** (resolver → bundle → **`assets/images`**); each copies `lib/entrypoint.sh` where applicable (build context: repo root). |
+| `templates/core/assets/scripts/*.sh`, `templates/core/bundles/…` | Shared host scripts (clone/commit) and **domain** bundles (dorkpipe, pipeon, …); YAML uses **`scripts/…`** (resolved per **`paths.go`**: project → **resolvers** → **bundles** → **assets/scripts**). |
 | `templates/*/` | Workflow templates (`config.yml`). Multi-step / async: see **[workflow-yaml.md](workflow-yaml.md)**. |
 
 ---
@@ -39,7 +39,7 @@ No built-in commit, clone, or AI logic — those are scripts you plug in.
 User: dockpipe --isolate claude --act scripts/commit-worktree.sh -- claude -p "..."
 
   bin/dockpipe → dockpipe (Go binary when packaged / built)
-    → TemplateBuild("claude") from --isolate → image=dockpipe-claude, build=.../templates/core/assets/images/claude
+    → TemplateBuild("claude") from --isolate → image=dockpipe-claude, build=.../templates/core/resolvers/claude/assets/images/claude
     → docker build (if needed) / docker run (no DOCKPIPE_ACTION for bundled commit-worktree)
     → see lib/dockpipe/infrastructure/docker.go
 
@@ -66,8 +66,8 @@ Environment variables that cross the boundary:
 ## Extension points
 
 1. **Isolation profiles** — Add or extend a file under **`templates/core/resolvers/<name>`** (see **[isolation-layer.md](isolation-layer.md)**): **`DOCKPIPE_RESOLVER_TEMPLATE`** (Docker), **`DOCKPIPE_RESOLVER_WORKFLOW`** (embedded `templates/<wf>/config.yml`), or **`DOCKPIPE_RESOLVER_HOST_ISOLATE`** (host script). CLI **`--resolver`** selects the profile name for resolver-driven workflows.
-2. **Images** — Add a Dockerfile under **`templates/core/assets/images/<name>/`**, use the shared entrypoint, and add a case in **`lib/dockpipe/infrastructure/template.go`** (`TemplateBuild`) so `--isolate <name>` builds and uses it.
-3. **Act scripts** — Any script that can run in the container and read `DOCKPIPE_EXIT_CODE` / `DOCKPIPE_CONTAINER_WORKDIR`. Bundled shared scripts live under **`templates/core/assets/scripts/`**; reference with **`scripts/…`** in YAML or `--act`. Users can copy a bundled script: `dockpipe action init my-commit.sh --from commit-worktree`.
+2. **Images** — Add a Dockerfile under **`templates/core/resolvers/<name>/assets/images/<name>/`** (or **`bundles/<domain>/assets/images/<domain>/`**), use the shared entrypoint where applicable, and add a case in **`lib/dockpipe/infrastructure/template.go`** (`TemplateBuild`) so `--isolate <name>` builds and uses it.
+3. **Act scripts** — Any script that can run in the container and read `DOCKPIPE_EXIT_CODE` / `DOCKPIPE_CONTAINER_WORKDIR`. Bundled shared scripts live under **`templates/core/assets/scripts/`** (agnostic) and **`templates/core/bundles/`** (domain); reference with **`scripts/…`** in YAML or `--act`. Users can copy a bundled script: `dockpipe action init my-commit.sh --from commit-worktree`.
 4. **Scripts / workflows** — Bundled workflows use **`templates/<name>/config.yml`**; user workflows may use **`templates/<name>/config.yml`**. Optional **`steps:`** for multi-step and async groups — **[workflow-yaml.md](workflow-yaml.md)**. **`dockpipe init`** creates top-level **scripts/**, **images/**, **templates/** + **`templates/core/`**. **`dockpipe init my-template`** adds **templates/my-template/**. The **`worktree`** strategy is **`templates/core/strategies/worktree`**; use **`strategy: worktree`** in your YAML — **[workflow-yaml.md § Named strategies](workflow-yaml.md#named-strategies)**.
 
 The core does not parse command content or assume any particular tool (Claude, git, etc.). It only runs the given argv and the optional action script.

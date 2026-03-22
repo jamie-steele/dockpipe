@@ -64,7 +64,7 @@ EOF
 	fi
 	echo "- **Surface engine features in shipped examples**: \`lib/dorkpipe/examples/full-bar.yaml\` demonstrates \`branch_judge\`, \`retrieve_if_calibrated_below\`, and skips — mirror one pattern into \`spec.example.yaml\` so dogfood exercises the same code paths operators will rely on."
 	echo "- **Metrics loop**: standardize \`bin/dorkpipe eval\` / \`promote\` after CI or nightly runs; extend \`.dorkpipe/metrics.jsonl\` consumers if new dimensions are added (\`lib/dorkpipe/engine/provenance.go\`)."
-	echo "- **Asset promotion**: scripts under \`templates/core/assets/scripts/dorkpipe/\` should stay referenced from workflows/docs when they become part of a supported path (collect/merge/verify-*)."
+	echo "- **Asset promotion**: scripts under \`templates/core/bundles/dorkpipe/\` should stay referenced from workflows/docs when they become part of a supported path (collect/merge/verify-*)."
 	echo "- **TODO/FIXME triage**: review hits in \`.dockpipe/self-analysis/signals_todo.txt\`; convert stable items into issues or small PRs."
 	if [[ -f "$ROOT/.dorkpipe/metrics.jsonl" ]] && [[ -f "$OUT/signals_metrics_tail.txt" ]]; then
 		echo "- **Existing \`.dorkpipe/metrics.jsonl\`**: tail captured in \`.dockpipe/self-analysis/signals_metrics_tail.txt\` — use for escalation / early-stop rates."

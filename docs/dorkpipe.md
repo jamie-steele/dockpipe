@@ -66,7 +66,7 @@ The DorkPipe DAG is **`spec.yaml`** (deterministic) or **`spec.combined.yaml`** 
 
 ## Reusable assets
 
-Starter scripts and prompts live under **`templates/core/assets/scripts/dorkpipe/`** (including **`prompts/`** as a subdirectory — not a sibling of `scripts/` under `assets/`).
+Starter scripts and prompts live under **`templates/core/bundles/dorkpipe/`** (including **`prompts/`** under that tree).
 
 ## Research roadmap (still open-ended)
 

@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// isNodeFamilyImage reports images that ship a non-root "node" user (see templates/core/assets/images/claude, codex).
+// isNodeFamilyImage reports images that ship a non-root "node" user (see resolver assets/images for claude, codex).
 // dockpipe-base-dev / dockpipe-dev do not use USER node; root host should not force -u node there.
 func isNodeFamilyImage(image string) bool {
 	i := strings.ToLower(image)
@@ -46,7 +46,7 @@ func unixDockerUserSpec(image string, stderr io.Writer) string {
 // windowsDockerUserSpec returns the value for docker run -u on Windows, or "" to omit -u.
 //
 // We do not default -u on Windows: passing -u node caused bind-mount stalls for some Docker Desktop
-// setups. Omit -u so the image USER applies (see templates/core/assets/images/claude USER node).
+// setups. Omit -u so the image USER applies (see claude resolver image USER node).
 //
 // For Claude Code with --dangerously-skip-permissions (rejects root), set explicitly:
 //

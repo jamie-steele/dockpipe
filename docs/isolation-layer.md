@@ -26,7 +26,7 @@ A profile is **one** of these execution shapes. The runner decides from which ke
 
 | Kind | Mechanism | Typical examples |
 |------|-----------|------------------|
-| **Dockerfile template** | **`DOCKPIPE_RESOLVER_TEMPLATE`** → **`TemplateBuild`** → build **`templates/core/assets/images/<name>/`**, run **`docker run`**. | `claude`, `codex`, `vscode`, `base-dev`, `dev`, `agent-dev` |
+| **Dockerfile template** | **`DOCKPIPE_RESOLVER_TEMPLATE`** → **`TemplateBuild`** / **`DockerfileDir`** → build **`resolvers/<name>/assets/images/<name>`** (or **`bundles/…/assets/images`**, then **`assets/images/<name>`**), run **`docker run`**. | `claude`, `codex`, `vscode`, `base-dev`, `dev`, `agent-dev` |
 | **Pinned image** | **`isolate:`** in YAML or CLI **`--isolate`** with a name **`TemplateBuild`** does not know → treat as **image name** (optional `:` tag). | `alpine`, `dockpipe-claude:1.2.3` |
 | **Embedded workflow** | **`DOCKPIPE_RESOLVER_WORKFLOW`** → run **`templates/<name>/config.yml`** with the same runner (multi-step / host IDE). | `cursor-dev`, `vscode`, `claude`, `codex`, `code-server` (single-step templates) |
 | **Host isolate** | **`DOCKPIPE_RESOLVER_HOST_ISOLATE`** → host script instead of `docker run` for that step/run. | Custom installers |
@@ -41,10 +41,10 @@ A profile is **one** of these execution shapes. The runner decides from which ke
 | Location | Role |
 |----------|------|
 | **`templates/core/resolvers/<name>`** | Shared **resolver** profiles (tool integrations): claude, codex, cursor, vscode, code-server, … |
-| **`templates/core/assets/images/<name>/Dockerfile`** | **Dockerfile-backed** profiles; **`TemplateBuild`** maps template name → image + build dir. |
+| **`templates/core/resolvers/<name>/assets/images/<name>/Dockerfile`** (or **`bundles/…/assets/images/…`**, else **`assets/images/<name>`**) | **Dockerfile-backed** profiles; **`TemplateBuild`** maps template name → image + build dir. |
 | **`templates/<workflow>/config.yml`** | **Embedded workflows** referenced by **`DOCKPIPE_RESOLVER_WORKFLOW`** (e.g. cursor-dev, vscode). |
-| **`templates/core/assets/scripts/*.sh`** | Shared host helpers; **host isolate** profiles point here via **`DOCKPIPE_RESOLVER_HOST_ISOLATE`** (often as **`scripts/…`**, resolved to **`templates/core/assets/scripts/`** when not in project **`scripts/`**). |
-| **`templates/core/assets/compose/`** | Optional **Compose** example assets (not a runtime/resolver); use with **`docker compose`** when a resolver benefits from multi-service setups. |
+| **`templates/core/assets/scripts/*.sh`**, **`templates/core/bundles/**`** | Shared host helpers and **domain** bundles; **`scripts/…`** resolves to project **`scripts/`**, then **`resolvers/`**, **`bundles/`**, then **`assets/scripts/`**. |
+| **`templates/core/resolvers/…/assets/compose/`**, **`templates/core/bundles/…/assets/compose/`** | Optional **Compose** example assets (not a runtime); use with **`docker compose`** when a resolver or bundle benefits from multi-service setups. **`assets/compose/README.md`** documents the layout. |
 
 Resolution order for a profile file: **`templates/core/resolvers/<name>`** → **`templates/core/resolvers/<name>/profile`** (see **`tryResolveResolver`** / **`ResolveResolverFilePath`**). Profiles are **not** read from **`templates/<workflow>/resolvers/`** — custom flows use **workflow** YAML under **`templates/`** or **`templates/<workflow>/`**, not parallel resolver trees.
 
@@ -52,7 +52,7 @@ Resolution order for a profile file: **`templates/core/resolvers/<name>`** → *
 
 ## Adding a new profile (checklist)
 
-1. **Container from a new Dockerfile** — add **`templates/core/assets/images/<name>/`**, **`TemplateBuild`** case in **`lib/dockpipe/infrastructure/template.go`**, optional **`templates/core/resolvers/<name>`** with **`DOCKPIPE_RESOLVER_TEMPLATE=<name>`** (and docs / env hints).
+1. **Container from a new Dockerfile** — add **`templates/core/resolvers/<name>/assets/images/<name>/`** (or **`bundles/<domain>/assets/images/<domain>/`**), **`TemplateBuild`** case in **`lib/dockpipe/infrastructure/template.go`**, **`templates/core/resolvers/<name>`** with **`DOCKPIPE_RESOLVER_TEMPLATE=<name>`** when it is a resolver (and docs / env hints).
 2. **Reuse an existing image only** — often no new Dockerfile; **resolver** file sets **`DOCKPIPE_RESOLVER_TEMPLATE`** or users pass **`--isolate <image>`** directly.
 3. **IDE / long-running host flow** — add **`templates/<myflow>/config.yml`** + **`steps:`**; set **`DOCKPIPE_RESOLVER_WORKFLOW=myflow`** in a resolver profile.
 4. **Host-only** — **`DOCKPIPE_RESOLVER_HOST_ISOLATE=scripts/...`**.
@@ -65,7 +65,7 @@ These are **not** implemented as separate kinds in the runner today, but the iso
 
 | Idea | Possible direction |
 |------|---------------------|
-| **Docker Compose** | Reusable examples under **`templates/core/assets/compose/`**; optional profile keys later → `docker compose run` / `up` with a defined service name. |
+| **Docker Compose** | Reusable examples under each **`resolvers/<name>/assets/compose/`** or **`bundles/<domain>/assets/compose/`**; optional profile keys later → `docker compose run` / `up` with a defined service name. |
 | **Raw image URL** | Already partially supported **via** `--isolate` when the value looks like a registry reference; could be first-class in profile files. |
 | **Electron / desktop app** | Profile kind **desktop** → host script that launches a binary; same **host isolate** path with richer conventions. |
 | **Browser / remote** | **Embedded workflow** (vscode, code-server) **or** host script opening a URL — already covered by **workflow** + **host** patterns. |

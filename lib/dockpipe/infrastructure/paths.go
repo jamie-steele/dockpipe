@@ -8,8 +8,12 @@ import (
 )
 
 // ResolveWorkflowScript resolves run/act path: scripts/* from the project (repoRoot/scripts/) if
-// present, else bundled framework scripts under templates/core/assets/scripts/; other paths are relative
-// to the workflow template dir. Uses forward slashes so YAML paths match Linux/container expectations.
+// present, else templates/core/resolvers/<name>/assets/scripts/… (and legacy flat resolvers/<rest>),
+// then templates/core/bundles/<name>/assets/scripts/… (and legacy flat bundles/<rest>),
+// then templates/core/assets/scripts/; other paths are relative to the workflow template dir.
+// Domain-specific scripts live under each resolver or bundle’s assets/scripts tree; only agnostic
+// helpers sit directly under templates/core/assets/scripts/.
+// Uses forward slashes so YAML paths match Linux/container expectations.
 func ResolveWorkflowScript(rel, workflowRoot, repoRoot string) string {
 	if strings.HasPrefix(rel, "scripts/") {
 		return filepath.ToSlash(resolveScriptsPrefixedPath(repoRoot, rel))
@@ -17,13 +21,49 @@ func ResolveWorkflowScript(rel, workflowRoot, repoRoot string) string {
 	return filepath.ToSlash(filepath.Join(workflowRoot, rel))
 }
 
+func scriptFileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
+}
+
+// tryBundledAssetsScripts maps rest "domain/tail/path" to core/<top>/domain/assets/scripts/tail/path.
+func tryBundledAssetsScripts(core, top string, rest string) (string, bool) {
+	if !strings.Contains(rest, "/") {
+		return "", false
+	}
+	first, after, ok := strings.Cut(rest, "/")
+	if !ok || after == "" {
+		return "", false
+	}
+	p := filepath.Join(core, top, first, "assets", "scripts", after)
+	if scriptFileExists(p) {
+		return p, true
+	}
+	return "", false
+}
+
 func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 	rest := strings.TrimPrefix(rel, "scripts/")
 	user := filepath.Join(repoRoot, "scripts", rest)
-	if st, err := os.Stat(user); err == nil && !st.IsDir() {
+	if scriptFileExists(user) {
 		return user
 	}
-	return filepath.Join(CoreDir(repoRoot), "assets", "scripts", rest)
+	core := CoreDir(repoRoot)
+	if p, ok := tryBundledAssetsScripts(core, "resolvers", rest); ok {
+		return p
+	}
+	resolverPath := filepath.Join(core, "resolvers", rest)
+	if scriptFileExists(resolverPath) {
+		return resolverPath
+	}
+	if p, ok := tryBundledAssetsScripts(core, "bundles", rest); ok {
+		return p
+	}
+	bundlePath := filepath.Join(core, "bundles", rest)
+	if scriptFileExists(bundlePath) {
+		return bundlePath
+	}
+	return filepath.Join(core, "assets", "scripts", rest)
 }
 
 // ResolveActionPath resolves act script like bin/dockpipe.
@@ -36,8 +76,10 @@ func ResolveActionPath(action, repoRoot, cwd string) (string, error) {
 	}
 	candidates := []string{filepath.Join(repoRoot, action)}
 	if strings.HasPrefix(action, "scripts/") {
-		rest := strings.TrimPrefix(action, "scripts/")
-		candidates = append(candidates, filepath.Join(CoreDir(repoRoot), "assets", "scripts", rest))
+		p := resolveScriptsPrefixedPath(repoRoot, action)
+		if scriptFileExists(p) {
+			return filepath.Abs(p)
+		}
 	} else {
 		candidates = append(candidates, filepath.Join(repoRoot, "scripts", action))
 	}

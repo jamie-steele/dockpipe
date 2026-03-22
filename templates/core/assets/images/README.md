@@ -1,9 +1,13 @@
 # Framework images (`templates/core/assets/images/`)
 
-Dockerfiles used by **`TemplateBuild`** and **`--isolate`** for template names (`base-dev`, `dev`, `claude`, `codex`, `vscode`, `ollama`, `steam-flatpak`, …). Build context is always the **repository root** (for **`COPY lib/entrypoint.sh`**).
+**Agnostic** Dockerfiles used as **defaults** for **`--isolate`** when no resolver/bundle override exists: **`base-dev/`**, **`dev/`**, **`example/`**, **`minimal/`**.
 
-**Ollama image (`ollama/Dockerfile`):** extends **`ollama/ollama`** with bash/curl/jq/python3 and the dockpipe entrypoint; workflows use **`isolate: ollama`** so the CLI builds **`dockpipe-ollama`** like other templates. The step starts **`ollama serve`** then runs the review summary script (see **`templates/core/assets/scripts/review/run-local-model-with-ollama-daemon.sh`**).
+**Domain-specific** images live next to their owner (search order in **`DockerfileDir`** / **`TemplateBuild`**):
 
-**Codex image (`codex/Dockerfile`):** do **not** install Debian **`bubblewrap`** — distro **`bwrap`** is often too old (`--argv0`); Codex uses vendored bwrap when **`/usr/bin/bwrap`** is absent. **`ENV RUST_LOG=error`** keeps **`codex exec`** logs quieter in CI/demos (override when debugging).
+1. **`templates/core/resolvers/<name>/assets/images/<name>/`** — e.g. **claude**, **codex**, **vscode**, **code-server**, **ollama**
+2. **`templates/core/bundles/<domain>/assets/images/<domain>/`** — e.g. **steam-flatpak**
+3. Fallback: **`templates/core/assets/images/<name>/`** (this directory)
+
+Build context is always the **repository root** (for **`COPY lib/entrypoint.sh`** where used).
 
 **Bundling and licensing:** **[docs/templates-core-assets.md](../../../../docs/templates-core-assets.md)**.

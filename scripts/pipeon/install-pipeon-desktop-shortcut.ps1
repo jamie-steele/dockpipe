@@ -4,13 +4,13 @@
   Install Pipeon shortcuts (Desktop + Start Menu) with the P icon on Windows.
 
 .DESCRIPTION
-  Creates .lnk files that run scripts/pipeon-code-server-launch.ps1 via powershell.exe.
+  Creates .lnk files that run scripts/pipeon/pipeon-code-server-launch.ps1 via powershell.exe.
   Requires Docker Desktop, Git Bash, and dockpipe.exe (PATH or repo bin\dockpipe.exe).
   Run from the dockpipe repo root:
-    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-pipeon-desktop-shortcut.ps1
+    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pipeon/install-pipeon-desktop-shortcut.ps1
 
 .EXAMPLE
-  .\scripts\install-pipeon-desktop-shortcut.ps1 -DesktopOnly
+  .\scripts\pipeon\install-pipeon-desktop-shortcut.ps1 -DesktopOnly
 #>
 param(
     [switch]$DesktopOnly,
@@ -19,8 +19,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$Launch = Join-Path $RepoRoot "scripts\pipeon-code-server-launch.ps1"
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$Launch = Join-Path $RepoRoot "scripts\pipeon\pipeon-code-server-launch.ps1"
 $Icon = Join-Path $RepoRoot "templates\core\assets\images\code-server\favicon.ico"
 
 if (-not (Test-Path -LiteralPath $Launch)) {
@@ -72,7 +72,7 @@ Next: build the image once (Git Bash from repo root):
   make build-code-server-image
 
 Or in PowerShell (Docker must be on PATH):
-  docker build -t dockpipe-code-server:latest -f templates/core/assets/images/code-server/Dockerfile .
+  docker build -t dockpipe-code-server:latest -f templates/core/resolvers/code-server/assets/images/code-server/Dockerfile .
 
 Workspace defaults to USERPROFILE. Override: set PIPEON_WORKDIR before launching, or edit the shortcut.
 "@

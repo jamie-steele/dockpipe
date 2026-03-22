@@ -1,4 +1,4 @@
-# Host script builds/runs Steam (Flathub) inside Docker — see scripts/docker-steam-flatpak.sh and templates/core/assets/images/steam-flatpak/README.md
+# Host script builds/runs Steam (Flathub) inside Docker — see scripts/docker-steam-flatpak.sh and templates/core/bundles/steam-flatpak/assets/images/steam-flatpak/README.md
 name: steam-flatpak-docker
 category: app
 description: >-

@@ -15,9 +15,9 @@ import (
 const dockpipeProjectReadme = `# Dockpipe project
 
 - **scripts/** — Run and act scripts.
-- **images/** — Optional project Dockerfiles (e.g. **images/example/** copied from **templates/core/assets/images/example/**).
+- **images/** — Optional project Dockerfiles (e.g. **images/example/** copied from **templates/core/assets/images/example/**). Bundled framework images resolve via **DockerfileDir** (**resolvers/** / **bundles/** / **assets/images/**).
 - **templates/** — Bundled-style workflows (**config.yml**), one folder per name (from upstream / **dockpipe init &lt;name&gt;**).
-- **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/**, **assets/** (**scripts/**, **images/**, **compose/**) (from **dockpipe init**).
+- **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/**, **assets/** (**agnostic scripts**, **images/**, **compose/**), **bundles/** (domain asset packs) (from **dockpipe init**).
 - **dockpipe-experimental/workflows/** — Optional **repo-local** workflows; **--workflow** checks here before **templates/**.
 - **dockpipe.yml** (optional) — Repo-root workflow; use **dockpipe --workflow-file dockpipe.yml**.
 `

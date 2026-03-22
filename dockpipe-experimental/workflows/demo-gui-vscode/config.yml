@@ -13,7 +13,7 @@ resolvers: [vscode]
 
 steps:
   - id: code-server
-    run: scripts/vscode-code-server.sh
+    run: scripts/vscode/vscode-code-server.sh
     skip_container: true
     vars:
       CODE_SERVER_IMAGE: "dockpipe-code-server:latest"

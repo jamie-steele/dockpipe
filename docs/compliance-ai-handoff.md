@@ -36,4 +36,4 @@ This runs **`scripts/dorkpipe/compliance-handoff.sh`** and prints artifact statu
 
 ## Bundled copy
 
-Projects that run **`dockpipe init`** receive **`templates/core/assets/docs/compliance-ai-handoff.md`** (same content as this file) with **`templates/core/`** — use it as the **user-shaped** copy of this contract.
+Projects that run **`dockpipe init`** receive **`templates/core/bundles/dorkpipe/assets/docs/compliance-ai-handoff.md`** (same content as this file) with **`templates/core/`** — use it as the **user-shaped** copy of this contract.

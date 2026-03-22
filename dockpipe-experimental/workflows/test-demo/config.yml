@@ -1,5 +1,5 @@
 # Demo: prepare → go test → go vet → deterministic review prep → local Ollama summary (isolate: ollama) → Codex final review.
-# Prep writes .dockpipe/review-context.md; Codex reads it — see templates/core/assets/scripts/review/README.md
+# Prep writes .dockpipe/review-context.md; Codex reads it — see templates/core/bundles/review-pipeline/README.md
 # API keys: OPENAI_API_KEY / CODEX_API_KEY. Codex: --dangerously-bypass-approvals-and-sandbox (no nested bwrap in Docker).
 name: test-demo
 description: >-
@@ -64,7 +64,7 @@ steps:
       bash -c 'set -euo pipefail
       test "${SCAN_PASS:-0}" = "1" || { echo "[test-demo] scan did not pass; skipping review prep" >&2; exit 1; }
       mkdir -p .dockpipe
-      bash scripts/review/collect-go-review-signals.sh
+      bash scripts/review-pipeline/collect-go-review-signals.sh
       NFC=$(wc -l < .dockpipe/review-files.txt | tr -d " ")
       NSL=$(wc -l < .dockpipe/review-signals.txt | tr -d " ")
       printf "%s\n" \
@@ -81,21 +81,21 @@ steps:
     cmd: |-
       bash -c 'set -euo pipefail
       test "${REVIEW_PREP_OK:-0}" = "1" || { echo "[test-demo] review prep failed" >&2; exit 1; }
-      bash scripts/review/aggregate-review-context.sh
+      bash scripts/review-pipeline/aggregate-review-context.sh
       printf "%s\n" \
         "REVIEW_CONTEXT_READY=1" \
         "DEMO_STAGE=aggregate" \
         > .dockpipe/outputs.env
       echo "[test-demo] bundle: .dockpipe/review-context.md"'
 
-  # isolate: ollama → dockpipe builds dockpipe-ollama (templates/core/assets/images/ollama); script starts ollama serve then summarizes.
+  # isolate: ollama → dockpipe builds dockpipe-ollama (templates/core/resolvers/ollama/assets/images/ollama); script starts ollama serve then summarizes.
   - id: local-summary
     runtime: docker
     isolate: ollama
     cmd: |-
       bash -c 'set -euo pipefail
         test "${REVIEW_CONTEXT_READY:-0}" = "1" || exit 1
-        bash scripts/review/run-local-model-with-ollama-daemon.sh'
+        bash scripts/review-pipeline/run-local-model-with-ollama-daemon.sh'
 
   - id: review
     runtime: docker

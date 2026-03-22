@@ -5,7 +5,7 @@ description: Experimental — base-dev session container until you stop it; open
 
 steps:
   - id: session
-    run: scripts/cursor-dev-session.sh
+    run: scripts/cursor-dev/cursor-dev-session.sh
     skip_container: true
     vars:
       # none = print paths only; cli = try Cursor CLI / default install paths (Windows/macOS/Linux).

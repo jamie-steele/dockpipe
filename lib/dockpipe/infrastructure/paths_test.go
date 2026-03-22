@@ -64,6 +64,36 @@ func TestResolveWorkflowScriptResolvesScriptsPrefixToCoreWhenUserMissing(t *test
 	}
 }
 
+func TestResolveWorkflowScriptResolvesScriptsPrefixToBundlesDirWhenPresent(t *testing.T) {
+	repo := t.TempDir()
+	b := filepath.Join(repo, "templates", "core", "bundles", "dorkpipe", "assets", "scripts", "aggregate-reasoning-context.sh")
+	if err := os.MkdirAll(filepath.Dir(b), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(b, []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := ResolveWorkflowScript("scripts/dorkpipe/aggregate-reasoning-context.sh", "/wf", repo)
+	if got != filepath.ToSlash(b) {
+		t.Fatalf("got %q want %q", got, filepath.ToSlash(b))
+	}
+}
+
+func TestResolveWorkflowScriptResolvesScriptsPrefixToResolverDirWhenPresent(t *testing.T) {
+	repo := t.TempDir()
+	rs := filepath.Join(repo, "templates", "core", "resolvers", "cursor-dev", "assets", "scripts", "cursor-dev-session.sh")
+	if err := os.MkdirAll(filepath.Dir(rs), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(rs, []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := ResolveWorkflowScript("scripts/cursor-dev/cursor-dev-session.sh", "/wf", repo)
+	if got != filepath.ToSlash(rs) {
+		t.Fatalf("got %q want %q", got, filepath.ToSlash(rs))
+	}
+}
+
 func TestResolveWorkflowScriptPrefersUserScriptsOverCore(t *testing.T) {
 	repo := t.TempDir()
 	user := filepath.Join(repo, "scripts", "shared.sh")

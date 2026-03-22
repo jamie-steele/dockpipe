@@ -7,7 +7,7 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
-REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 # Pipeon mark: deep blue tile + light "P"
 BG = (20, 50, 82, 255)

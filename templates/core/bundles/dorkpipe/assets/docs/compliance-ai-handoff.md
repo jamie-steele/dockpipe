@@ -36,4 +36,4 @@ This runs **`scripts/dorkpipe/compliance-handoff.sh`** and prints artifact statu
 
 ## Shipped with templates/core
 
-This file lives under **`templates/core/assets/docs/`** so **`dockpipe init`** merges it into downstream projects alongside **`scripts/dorkpipe/`** and other assets.
+This file lives under **`templates/core/bundles/dorkpipe/assets/docs/`** so **`dockpipe init`** merges it into downstream projects alongside **`scripts/dorkpipe/`** and other bundle assets.

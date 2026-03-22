@@ -12,7 +12,7 @@ Flatpak uses **bubblewrap** and expects a usable session (D-Bus, GPU, display). 
 
 ```bash
 docker build -t dockpipe-steam-flatpak:$(tr -d '\n' < VERSION) \
-  -f templates/core/assets/images/steam-flatpak/Dockerfile .
+  -f templates/core/bundles/steam-flatpak/assets/images/steam-flatpak/Dockerfile .
 ```
 
 First build downloads the Steam Flatpak payload (large).

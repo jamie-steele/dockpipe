@@ -4,7 +4,7 @@ Reusable **support files** for workflows, resolvers, runtimes, and strategies â€
 
 | Subfolder | Contents |
 |-----------|----------|
-| **`scripts/`** | Shared shell/PowerShell scripts (host helpers, examples). |
+| **`scripts/`** | **Agnostic** helpers at this folder root only. **Domain** bundles (**`dorkpipe/`**, **`pipeon/`**, **`review-pipeline/`**) live under **`../bundles/`**. Resolver-only host scripts live under **`../resolvers/<name>/`**. See **`scripts/README.md`**, **`bundles/README.md`**. |
 | **`images/`** | Dockerfiles for **`TemplateBuild`** / **`--isolate`**. |
 | **`compose/`** | Optional **Compose** examples for richer multi-service setups (see **`compose/README.md`**). |
 

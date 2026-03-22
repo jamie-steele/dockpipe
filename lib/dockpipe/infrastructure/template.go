@@ -6,26 +6,44 @@ import (
 	"strings"
 )
 
-// TemplateBuild maps template name → image name and Dockerfile directory under templates/core/assets/images/.
+// DockerfileDir returns the directory that contains Dockerfile for a template isolate name.
+// Search order: templates/core/resolvers/<name>/assets/images/<name>,
+// templates/core/bundles/<name>/assets/images/<name>, then templates/core/assets/images/<name>.
+func DockerfileDir(repoRoot, name string) string {
+	core := CoreDir(repoRoot)
+	candidates := []string{
+		filepath.Join(core, "resolvers", name, "assets", "images", name),
+		filepath.Join(core, "bundles", name, "assets", "images", name),
+		filepath.Join(core, "assets", "images", name),
+	}
+	for _, d := range candidates {
+		if st, err := os.Stat(filepath.Join(d, "Dockerfile")); err == nil && !st.IsDir() {
+			return d
+		}
+	}
+	return filepath.Join(core, "assets", "images", name)
+}
+
+// TemplateBuild maps template name → image name and Dockerfile directory for docker build.
 func TemplateBuild(repoRoot, name string) (image string, dockerfileDir string, ok bool) {
-	coreImg := func(n string) string {
-		return filepath.Join(CoreDir(repoRoot), "assets", "images", n)
+	dir := func(n string) string {
+		return DockerfileDir(repoRoot, n)
 	}
 	switch name {
 	case "base-dev":
-		return "dockpipe-base-dev", coreImg("base-dev"), true
+		return "dockpipe-base-dev", dir("base-dev"), true
 	case "dev":
-		return "dockpipe-dev", coreImg("dev"), true
+		return "dockpipe-dev", dir("dev"), true
 	case "agent-dev", "claude":
-		return "dockpipe-claude", coreImg("claude"), true
+		return "dockpipe-claude", dir("claude"), true
 	case "codex":
-		return "dockpipe-codex", coreImg("codex"), true
+		return "dockpipe-codex", dir("codex"), true
 	case "vscode":
-		return "dockpipe-vscode", coreImg("vscode"), true
+		return "dockpipe-vscode", dir("vscode"), true
 	case "ollama":
-		return "dockpipe-ollama", coreImg("ollama"), true
+		return "dockpipe-ollama", dir("ollama"), true
 	case "steam-flatpak":
-		return "dockpipe-steam-flatpak", coreImg("steam-flatpak"), true
+		return "dockpipe-steam-flatpak", dir("steam-flatpak"), true
 	default:
 		return "", "", false
 	}

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build (if missing) and run Flathub Steam in Docker with GUI/GPU-friendly mounts.
-# Linux desktop only; Flatpak-in-Docker needs --privileged for bwrap (see templates/core/assets/images/steam-flatpak/README.md).
+# Linux desktop only; Flatpak-in-Docker needs --privileged for bwrap (see templates/core/bundles/steam-flatpak/assets/images/steam-flatpak/README.md).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/docker-cache-volumes.sh"
 
 REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
-DF="${REPO_ROOT}/templates/core/assets/images/steam-flatpak/Dockerfile"
+DF="${REPO_ROOT}/templates/core/bundles/steam-flatpak/assets/images/steam-flatpak/Dockerfile"
 if [[ ! -f "${DF}" ]]; then
   echo "docker-steam-flatpak: Dockerfile not found: ${DF}" >&2
   exit 1

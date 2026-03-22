@@ -232,7 +232,7 @@ func cmdInitLikeScript(args []string, defaultName string, bundled []string, boil
 	return os.WriteFile(dest, []byte(boiler), 0o755)
 }
 
-// mergeBundledTemplatesCore copies templates/core (runtimes, resolvers, strategies, assets) from the dockpipe
+// mergeBundledTemplatesCore copies templates/core (runtimes, resolvers, strategies, assets, bundles) from the dockpipe
 // install into dest, matching dockpipe init without --from.
 func mergeBundledTemplatesCore(repoRoot, dest string) error {
 	_ = os.MkdirAll(filepath.Join(dest, "templates"), 0o755)

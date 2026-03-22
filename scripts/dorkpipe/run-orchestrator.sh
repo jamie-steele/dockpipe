@@ -1,1 +1,1 @@
-../../templates/core/assets/scripts/dorkpipe/run-orchestrator.sh
+../../templates/core/bundles/dorkpipe/assets/scripts/run-orchestrator.sh

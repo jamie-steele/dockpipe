@@ -89,7 +89,7 @@ if [[ "${DOCKPIPE_SKIP_PULL:-}" != "1" ]]; then
     dockpipe-*|*/dockpipe-*)
       if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
         printf '[dockpipe] Image %q not found. Build from repo root:\n' "$IMAGE" >&2
-        printf '  docker build -t dockpipe-code-server:latest -f templates/core/assets/images/code-server/Dockerfile .\n' >&2
+        printf '  docker build -t dockpipe-code-server:latest -f templates/core/resolvers/code-server/assets/images/code-server/Dockerfile .\n' >&2
         printf 'Or: make build-code-server-image\n' >&2
         exit 1
       fi

@@ -3,7 +3,7 @@
 **DorkPipe** — DAG orchestration on top of DockPipe (`lib/dorkpipe/`, binary `bin/dorkpipe`).
 
 - **Spec:** `spec.example.yaml` (nodes: shell → Ollama → optional Codex escalation).
-- **Compose:** `templates/core/assets/compose/dorkpipe/docker-compose.yml` for Postgres+pgvector and Ollama.
+- **Compose:** `templates/core/bundles/dorkpipe/assets/compose/docker-compose.yml` for Postgres+pgvector and Ollama.
 - **Run directly:** `bin/dorkpipe run -f dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml --workdir .`
 - **Run via DockPipe workflow:** `dockpipe --workflow dorkpipe-orchestrator --workdir . --` (host script invokes `bin/dorkpipe`).
 

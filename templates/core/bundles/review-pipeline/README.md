@@ -1,4 +1,6 @@
-# Reusable review prep (`scripts/review/`)
+# Review pipeline (`scripts/review-pipeline/`)
+
+**Not** a DockPipe **resolver** — this is a **bundled workflow asset pack** (prep → optional local model → handoff to Codex/Claude). Name distinguishes it from **`templates/core/resolvers/`**.
 
 Deterministic helpers that write **`.dockpipe/`** artifacts for a **final** resolver step (e.g. Codex), so the expensive LLM pass reads a **compact bundle** instead of rediscovering the repo.
 
@@ -11,4 +13,4 @@ Deterministic helpers that write **`.dockpipe/`** artifacts for a **final** reso
 
 **Workflow integration:** **`test-demo`** uses **`isolate: ollama`** so dockpipe **builds** the image via **`TemplateBuild`** (same as `codex`, `claude`, …). Merge keys into **`.dockpipe/outputs.env`** as usual. For a **host-only** Ollama (no dockpipe image), use **`skip_container: true`** + **`run: …/optional-local-model-summary.sh`** instead.
 
-**Promotion:** copy or reference these from **`templates/core/assets/scripts/`** in resolver-oriented workflows; keep resolver-specific flags in **resolver profiles** / workflow YAML.
+**Promotion:** reference **`scripts/review-pipeline/…`** from resolver-oriented workflows; keep resolver-specific flags in **resolver profiles** / workflow YAML.

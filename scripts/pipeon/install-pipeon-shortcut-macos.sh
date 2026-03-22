@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # macOS: double-clickable Pipeon.command in ~/Applications (opens Terminal to run dockpipe).
-# Usage: from repo root — bash scripts/install-pipeon-shortcut-macos.sh
+# Usage: from repo root — bash scripts/pipeon/install-pipeon-shortcut-macos.sh
 set -euo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="${HOME}/Applications"
 mkdir -p "$OUT"
 TARGET="$OUT/Pipeon.command"

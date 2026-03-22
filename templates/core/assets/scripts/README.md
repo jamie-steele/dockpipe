@@ -1,6 +1,10 @@
 # Scripts
 
-Run and act scripts in **one folder**. Mix and match with any workflow.
+**Agnostic** run/act helpers live **here** (root of this folder): clone/commit worktree, export patch, print summary, examples.
+
+**Resolver-specific** host scripts live **only** under **`templates/core/resolvers/<name>/`** (next to **`config.yml`**). **`ResolveWorkflowScript`** maps **`scripts/cursor-dev/…`** and **`scripts/vscode/…`** to those paths — nothing duplicate under **`assets/scripts/`** for those names.
+
+**Domain assets** (**DorkPipe**, Pipeon, review-pipeline, …) live under **`templates/core/bundles/<domain>/`** — see **`../bundles/README.md`**. They are **merged** with **`dockpipe init`** / the materialized **`templates/core`** bundle and referenced as **`scripts/<domain>/…`** in YAML. Do not park domain scripts next to **`resolvers/`** unless they are true **`--resolver`** profiles.
 
 | Script | Type | What it does |
 |--------|------|--------------|
@@ -9,4 +13,4 @@ Run and act scripts in **one folder**. Mix and match with any workflow.
 | `export-patch.sh` | action | Write uncommitted changes to a patch file. |
 | `print-summary.sh` | action | Print exit code and git status summary. |
 
-Use with `--run scripts/clone-worktree.sh`, `--act scripts/commit-worktree.sh`, or set `run:` and `act:` in a workflow config. Framework Dockerfiles live under **`templates/core/assets/images/`** (see **[docs/templates-core-assets.md](../../../../docs/templates-core-assets.md)**).
+Use with `--run scripts/clone-worktree.sh`, `--act scripts/commit-worktree.sh`, or set `run:` and `act:` in a workflow config. Framework Dockerfiles are resolved by **`DockerfileDir`** / **`TemplateBuild`** (see **[docs/templates-core-assets.md](../../../../docs/templates-core-assets.md)**).

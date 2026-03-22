@@ -5,7 +5,7 @@ description: OSS browser IDE (code-server) via host docker; project at /work in 
 
 steps:
   - id: code-server
-    run: scripts/vscode-code-server.sh
+    run: scripts/vscode/vscode-code-server.sh
     skip_container: true
     vars:
       # Local build: make build-code-server-image (Coder OSS + Pipeon extension). Upstream: codercom/code-server:latest

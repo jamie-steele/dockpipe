@@ -7,11 +7,13 @@
 ## Layout
 
 ```
-templates/core/assets/
-  README.md
-  scripts/          # shell, PowerShell, …
-  images/           # Dockerfiles for TemplateBuild / --isolate
-  compose/          # optional docker-compose examples (not executed by dockpipe)
+templates/core/
+  assets/
+    README.md
+    scripts/          # agnostic shell/PowerShell only
+    images/           # Dockerfiles for TemplateBuild / --isolate
+    compose/          # optional docker-compose examples (not executed by dockpipe)
+  bundles/            # domain asset packs (dorkpipe, pipeon, review-pipeline, …)
 ```
 
 Merged into user projects by **`dockpipe init`** as part of **`templates/core/`**.
@@ -32,27 +34,29 @@ Merged into user projects by **`dockpipe init`** as part of **`templates/core/`*
 
 | Asset | Classification | Notes |
 |-------|----------------|-------|
-| Host helpers (`clone-worktree.sh`, `commit-worktree.sh`, …) | **SAFE TO BUNDLE** | Original shell. |
+| Host helpers (`clone-worktree.sh`, `commit-worktree.sh`, …) | **SAFE TO BUNDLE** | Original shell — **agnostic**; stay at **`assets/scripts/`** root. |
 | `example-run.sh`, `example-act.sh` | **SAFE TO BUNDLE** | Samples copied to project **`scripts/`**. |
-| `cursor-*.sh`, `vscode-code-server.sh` | **SAFE TO BUNDLE** | Invoke user environment; tools may be **USER-SUPPLIED**. |
+| **`scripts/cursor-dev/*.sh`**, **`scripts/vscode/vscode-code-server.sh`** | **SAFE TO BUNDLE** | Implemented only under **`templates/core/resolvers/<name>/`**; the runner maps **`scripts/…`** paths there. Resolver-specific; tools may be **USER-SUPPLIED**. |
+| **`scripts/dorkpipe/`**, **`scripts/pipeon/`**, **`scripts/review-pipeline/`**, … | **SAFE TO BUNDLE** | **Domain asset packs** — **not** DockPipe resolvers; canonical tree **`templates/core/bundles/<domain>/`** (runner maps **`scripts/…`** there). |
 | `helloworld.ps1` | **SAFE TO BUNDLE** | Minimal PowerShell example asset. |
 
 ---
 
-## Images (`assets/images/`)
+## Images
 
-| Image dir | Classification | Notes |
-|-----------|----------------|-------|
-| `base-dev/`, `dev/`, `example/` | **SAFE TO BUNDLE** | OSS base images + entrypoint. |
-| `claude/`, `codex/` | **SAFE TO BUNDLE** (Dockerfile) / **USER-SUPPLIED** (runtime) | Public npm installs; API access is user-owned. |
-| `vscode/` | **SAFE TO BUNDLE** (Dockerfile) / **REFERENCE ONLY** (base) | `FROM codercom/code-server:latest` + dockpipe entrypoint for **isolate** runs. |
-| `code-server/` | **SAFE TO BUNDLE** (Dockerfile) / **REFERENCE ONLY** (base) | **Browser** code-server: Coder image + Pipeon extension + defaults; **no** dockpipe entrypoint. Build **`dockpipe-code-server:latest`**. |
+**`TemplateBuild`** / **`DockerfileDir`** search: **`resolvers/<name>/assets/images/<name>`** → **`bundles/<domain>/assets/images/<domain>`** → **`assets/images/<name>`** (agnostic fallback).
+
+| Location | Classification | Notes |
+|----------|------------------|-------|
+| **`assets/images/`** | **Agnostic** | **`base-dev/`**, **`dev/`**, **`example/`**, **`minimal/`** — shared bases and demos. |
+| **`resolvers/…/assets/images/`** | **Per resolver** | **claude**, **codex**, **vscode**, **code-server**, **ollama**, … |
+| **`bundles/…/assets/images/`** | **Per bundle** | E.g. **steam-flatpak**. |
 
 ---
 
-## Compose (`assets/compose/`)
+## Compose
 
-**Compose is an asset**, not a runtime, resolver, or strategy. Optional **`docker-compose.yml`** examples under **`compose/<resolver-name>/`** illustrate multi-service or sidecar setups; normal **`dockpipe --resolver …`** flows do **not** require Compose.
+**Compose is an asset**, not a runtime, resolver, or strategy. Optional **`docker-compose.yml`** files live with the domain that owns them: **`templates/core/resolvers/<name>/assets/compose/docker-compose.yml`** or **`templates/core/bundles/<domain>/assets/compose/`** (e.g. DorkPipe dev stack). **`templates/core/assets/compose/README.md`** only explains the pattern; per-example YAMLs are not parked under generic **`assets/compose/<name>/`** anymore.
 
 See **`templates/core/assets/compose/README.md`** in the repo.
 

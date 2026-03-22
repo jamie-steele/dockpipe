@@ -64,9 +64,10 @@ Under the repository (and in materialized bundles), **`templates/core/`** contai
 | **`runtimes/`** | Runtime profiles (**where** execution runs). |
 | **`resolvers/`** | Resolver profiles (**which** tool/platform). |
 | **`strategies/`** | Strategy **KEY=value** files (lifecycle before/after). |
-| **`assets/`** | Reusable **support files** only — **`assets/scripts/`**, **`assets/images/`** (Dockerfiles), **`assets/compose/`** (optional Compose examples). Not additional primitives. |
+| **`bundles/`** | **Domain** script/asset trees (**dorkpipe**, **pipeon**, **review-pipeline**, …) — not resolvers; see **`paths.go`** resolution order. |
+| **`assets/`** | Reusable **support files** — **`assets/scripts/`** (agnostic shell only), **`assets/images/`** (agnostic Dockerfiles only: **base-dev**, **dev**, **example**, **minimal**), **`assets/compose/README.md`** + agnostic **`minimal/`** / **`multi-service/`** demos. Per-domain images and compose live under **`resolvers/…/assets/`** or **`bundles/…/assets/`**. Not additional primitives. |
 
-Workflows continue to reference scripts in YAML as **`scripts/…`**; the runner resolves **`repo/scripts/…`** first, then **`templates/core/assets/scripts/…`** in the bundled tree.
+Workflows continue to reference scripts in YAML as **`scripts/…`**; the runner resolves **`repo/scripts/…`** first, then **`templates/core/resolvers/…`** (resolver-owned), **`templates/core/bundles/…`** (domain asset packs), then **`templates/core/assets/scripts/…`** in the bundled tree.
 
 Bundling policy and legal classification: **[templates-core-assets.md](templates-core-assets.md)**.
 

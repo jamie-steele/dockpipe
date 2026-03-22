@@ -218,7 +218,7 @@ func TestWorkflowAnyContainerStep(t *testing.T) {
 }
 
 func TestWorkflowNeedsDockerReachable(t *testing.T) {
-	vscodeLike := &Workflow{Steps: []Step{{SkipContainer: true, Run: []string{"scripts/vscode-code-server.sh"}}}}
+	vscodeLike := &Workflow{Steps: []Step{{SkipContainer: true, Run: []string{"scripts/vscode/vscode-code-server.sh"}}}}
 	if !vscodeLike.NeedsDockerReachable() {
 		t.Fatal("expected NeedsDockerReachable when host run: invokes docker")
 	}

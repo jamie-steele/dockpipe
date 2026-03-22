@@ -26,8 +26,8 @@ func localModuleRoot(t *testing.T) string {
 	}
 }
 
-// TestBundledTemplatesCoreLayoutEnforcesCategoryDirs fails if templates/core gains a fifth top-level
-// category or renames assets/runtimes/resolvers/strategies (guardrail against filesystem drift).
+// TestBundledTemplatesCoreLayoutEnforcesCategoryDirs fails if templates/core top-level dirs drift
+// (assets, bundles, resolvers, runtimes, strategies).
 func TestBundledTemplatesCoreLayoutEnforcesCategoryDirs(t *testing.T) {
 	root := localModuleRoot(t)
 	core := filepath.Join(root, "templates", "core")
@@ -35,7 +35,7 @@ func TestBundledTemplatesCoreLayoutEnforcesCategoryDirs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	allowed := []string{"assets", "resolvers", "runtimes", "strategies"}
+	allowed := []string{"assets", "bundles", "resolvers", "runtimes", "strategies"}
 	var names []string
 	for _, e := range ents {
 		if e.IsDir() && e.Name()[0] != '.' {
@@ -50,6 +50,7 @@ func TestBundledTemplatesCoreLayoutEnforcesCategoryDirs(t *testing.T) {
 
 // TestBundledTemplatesCoreAssetsSubdirsEnforcesScriptsImagesCompose fails if assets/ gains an
 // unexpected top-level sibling (e.g. treating a new primitive as an asset category incorrectly).
+// Domain docs live only under bundles/.../assets/docs/ — not under core assets/.
 func TestBundledTemplatesCoreAssetsSubdirsEnforcesScriptsImagesCompose(t *testing.T) {
 	root := localModuleRoot(t)
 	assets := filepath.Join(root, "templates", "core", "assets")
@@ -57,7 +58,7 @@ func TestBundledTemplatesCoreAssetsSubdirsEnforcesScriptsImagesCompose(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"compose", "docs", "images", "scripts"}
+	want := []string{"compose", "images", "scripts"}
 	var names []string
 	for _, e := range ents {
 		if e.IsDir() && e.Name()[0] != '.' {

@@ -40,7 +40,7 @@ scripts/dorkpipe/dev-stack.sh ps
 scripts/dorkpipe/dev-stack.sh down
 ```
 
-Compose file: **`templates/core/assets/compose/dorkpipe/docker-compose.yml`**. Example DSN: **`postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe`**.
+Compose file: **`templates/core/bundles/dorkpipe/assets/compose/docker-compose.yml`**. Example DSN: **`postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe`**.
 
 ## Host-only workflow (no Docker)
 

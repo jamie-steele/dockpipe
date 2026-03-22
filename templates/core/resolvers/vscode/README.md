@@ -2,11 +2,13 @@
 
 **Model:** **`vscode`** is a **resolver** bundle (**profile** + **`config.yml`**) that sets **`DOCKPIPE_RESOLVER_WORKFLOW=vscode`** — this folder holds the **delegate YAML** the runner loads (also addressable via **`--workflow vscode`** as a convenience to the same file).
 
+**Host script:** **`vscode-code-server.sh`** is **in this directory**. **`run: scripts/vscode/vscode-code-server.sh`** resolves here via **`ResolveWorkflowScript`** (not under **`assets/scripts/`**).
+
 ## What it does
 
 Starts **[code-server](https://github.com/coder/code-server)** (MIT-licensed VS Code in the browser) in a **separate Docker container** on the **host**, with your project at **`/work`**. The container listens on **8080** inside; Docker publishes it to **`127.0.0.1` + host port only** (not your LAN). By default the **host port is random** in the IANA dynamic range **49152–65535** each run unless you set **`CODE_SERVER_PORT`**.
 
-**Default image** is **`dockpipe-code-server:latest`**: **Coder’s** `codercom/code-server` plus the **Pipeon** extension and baseline User settings (telemetry off, no auto-update, **Pipeon** window title, **light/dark follows system** via `window.autoDetectColorScheme`), built from **`templates/core/assets/images/code-server/`**. Build once: **`make build-code-server-image`**. To use plain upstream with no Pipeon: set **`CODE_SERVER_IMAGE=codercom/code-server:latest`**.
+**Default image** is **`dockpipe-code-server:latest`**: **Coder’s** `codercom/code-server` plus the **Pipeon** extension and baseline User settings (telemetry off, no auto-update, **Pipeon** window title, **light/dark follows system** via `window.autoDetectColorScheme`), built from **`templates/core/resolvers/code-server/assets/images/code-server/`**. Build once: **`make build-code-server-image`**. To use plain upstream with no Pipeon: set **`CODE_SERVER_IMAGE=codercom/code-server:latest`**.
 
 Dockpipe’s built-in container run does **not** publish ports to the host, so this template uses a **host script** that runs `docker run … -p …` for you. That keeps the feature in a **template**, not core.
 

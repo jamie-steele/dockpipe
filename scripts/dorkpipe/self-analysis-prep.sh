@@ -35,8 +35,8 @@ find "$ROOT/lib/dorkpipe" -name '*.go' 2>/dev/null | wc -l | tr -d ' ' >"$OUT/do
 } >"$OUT/scripts_dorkpipe_ls.txt"
 
 {
-	echo "## templates/core/assets/scripts/dorkpipe (sample)"
-	find "$ROOT/templates/core/assets/scripts/dorkpipe" -type f 2>/dev/null | sort | head -60
+	echo "## templates/core/bundles/dorkpipe (sample)"
+	find "$ROOT/templates/core/bundles/dorkpipe" -type f 2>/dev/null | sort | head -60
 } >"$OUT/assets_dorkpipe_files.txt" || true
 
 {

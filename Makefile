@@ -31,28 +31,28 @@ build-windows:
 
 # Regenerate Pipeon P-mark PNG / favicon.ico / SVG (requires Pillow: pip install Pillow).
 pipeon-icons:
-	python3 scripts/generate-pipeon-icons.py
+	python3 scripts/pipeon/generate-pipeon-icons.py
 
 # Pipeon shortcuts with P icon: Linux (Freedesktop), macOS (~/Applications/Pipeon.command), Windows (.lnk).
 # From Git Bash on Windows, `make install-pipeon-shortcut` runs the PowerShell installer.
 install-pipeon-shortcut:
 	@UNAME="$$(uname -s 2>/dev/null || echo unknown)"; \
 	case "$$UNAME" in \
-	  Darwin) bash scripts/install-pipeon-shortcut-macos.sh ;; \
-	  Linux) bash scripts/install-pipeon-desktop-shortcut.sh ;; \
-	  MINGW*|MSYS*|CYGWIN*) powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-pipeon-desktop-shortcut.ps1 ;; \
-	  *) echo "Unknown OS (uname=$$UNAME). Try: make install-pipeon-shortcut-macos | install-pipeon-shortcut-windows, or run the scripts under scripts/ manually." >&2; exit 1 ;; \
+	  Darwin) bash scripts/pipeon/install-pipeon-shortcut-macos.sh ;; \
+	  Linux) bash scripts/pipeon/install-pipeon-desktop-shortcut.sh ;; \
+	  MINGW*|MSYS*|CYGWIN*) powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/pipeon/install-pipeon-desktop-shortcut.ps1 ;; \
+	  *) echo "Unknown OS (uname=$$UNAME). Try: make install-pipeon-shortcut-macos | install-pipeon-shortcut-windows, or run scripts under scripts/pipeon/ manually." >&2; exit 1 ;; \
 	esac
 
 install-pipeon-shortcut-windows:
-	powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/install-pipeon-desktop-shortcut.ps1
+	powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/pipeon/install-pipeon-desktop-shortcut.ps1
 
 install-pipeon-shortcut-macos:
-	bash scripts/install-pipeon-shortcut-macos.sh
+	bash scripts/pipeon/install-pipeon-shortcut-macos.sh
 
 # Coder code-server image with Pipeon extension (workflow vscode). Requires Docker; build from repo root.
 build-code-server-image:
-	docker build -t dockpipe-code-server:latest -f templates/core/assets/images/code-server/Dockerfile .
+	docker build -t dockpipe-code-server:latest -f templates/core/resolvers/code-server/assets/images/code-server/Dockerfile .
 
 test:
 	go test ./...

@@ -14,6 +14,10 @@ Requires **Docker** and **bash**. Use a [release binary](https://github.com/jami
 
 Your project is mounted at **`/work`** in a disposable container; when the command exits, the container is gone.
 
+## Core tools in this repo
+
+The **DockPipe** CLI lives under **`cmd/dockpipe/`** and **`lib/dockpipe/`**. This repository also contains **DorkPipe** (orchestration, **`cmd/dorkpipe/`**), **Pipeon Launcher** (native UI, **`apps/pipeon-launcher/`**), and **Pipeon IDE** (VS Code extension, **`contrib/pipeon-vscode-extension/`**). They are separate products with explicit integration (subprocess, files, env) — see **[docs/core-tools.md](docs/core-tools.md)**. Indexes: **[apps/README.md](apps/README.md)**, **[contrib/README.md](contrib/README.md)**.
+
 ## Concepts
 
 | Term | Meaning |

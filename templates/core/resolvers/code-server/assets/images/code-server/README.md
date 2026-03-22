@@ -10,7 +10,7 @@
 
 **Isolation:** Each **`docker run`** is a separate container; your project is only the **`/work`** bind-mount. Editor state and extensions live in the image (or container layer), not on the host — unlike a desktop VS Code profile.
 
-**Not** the same as **`images/vscode/`** (`dockpipe-vscode`): that Dockerfile swaps in **`lib/entrypoint.sh`** for **`dockpipe --isolate vscode`** CLI runs. This **`code-server/`** image keeps the upstream **code-server** entrypoint for **`scripts/vscode-code-server.sh`**.
+**Not** the same as **`images/vscode/`** (`dockpipe-vscode`): that Dockerfile swaps in **`lib/entrypoint.sh`** for **`dockpipe --isolate vscode`** CLI runs. This **`code-server/`** image keeps the upstream **code-server** entrypoint for **`scripts/vscode/vscode-code-server.sh`** (canonical script under **`templates/core/resolvers/vscode/`**).
 
 ## Desktop shortcuts (cross-platform)
 
@@ -20,7 +20,7 @@ Prereqs: **`make build`** (or **`make build-windows`** + copy **`bin\dockpipe.ex
 |----|---------|----------------|
 | **Linux** | `make install-pipeon-shortcut` | Freedesktop **`~/.local/share/applications/pipeon-code-server.desktop`** + **P** icon in **`~/.local/share/icons/hicolor/`** |
 | **macOS** | `make install-pipeon-shortcut` or `make install-pipeon-shortcut-macos` | **`~/Applications/Pipeon.command`** (double-click opens Terminal; set custom Dock icon manually if you want) |
-| **Windows** | `make install-pipeon-shortcut` from **Git Bash**, or **`make install-pipeon-shortcut-windows`**, or `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install-pipeon-desktop-shortcut.ps1` | **`Pipeon.lnk`** on **Desktop** and under **Start Menu → Programs** with **`favicon.ico`** as the icon; target runs **`scripts\pipeon-code-server-launch.ps1`** |
+| **Windows** | `make install-pipeon-shortcut` from **Git Bash**, or **`make install-pipeon-shortcut-windows`**, or `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\pipeon\install-pipeon-desktop-shortcut.ps1` | **`Pipeon.lnk`** on **Desktop** and under **Start Menu → Programs** with **`favicon.ico`** as the icon; target runs **`scripts\pipeon\pipeon-code-server-launch.ps1`** |
 
 Workspace defaults to **user profile** (`$HOME` / **`%USERPROFILE%`**). Override: **`PIPEON_WORKDIR`** (bash/macOS) or **`PIPEON_WORKDIR`** env var before double-click (Windows: edit shortcut or set user environment variable).
 
@@ -31,7 +31,7 @@ Workspace defaults to **user profile** (`$HOME` / **`%USERPROFILE%`**). Override
 From the repository root:
 
 ```bash
-docker build -t dockpipe-code-server:latest -f templates/core/assets/images/code-server/Dockerfile .
+docker build -t dockpipe-code-server:latest -f templates/core/resolvers/code-server/assets/images/code-server/Dockerfile .
 ```
 
 Or **`make build-code-server-image`**.

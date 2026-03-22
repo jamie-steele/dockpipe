@@ -20,6 +20,6 @@ Does **not** replace DockPipe’s workflow engine; it **invokes** the `dockpipe`
 
 **Orchestration:** `policy.branch_judge` + `branch_required` on nodes (JSON `{"winner":"…"}` from judge); `retrieve_if_calibrated_below`; `policy.early_stop_calibrated_above`; `parallel_group` agreement within a level; `kind: verifier` (Ollama transport, `verifier` score in JSON). CLI: **`dorkpipe eval`**, **`dorkpipe promote`**.
 
-Artifacts: **`.dorkpipe/run.json`**, **`.dorkpipe/metrics.jsonl`** (schema v2). Example DAG: **`lib/dorkpipe/examples/full-bar.yaml`**. Reusable assets: **`templates/core/assets/scripts/dorkpipe/`** and **`prompts/`** under that tree.
+Artifacts: **`.dorkpipe/run.json`**, **`.dorkpipe/metrics.jsonl`** (schema v2). Example DAG: **`lib/dorkpipe/examples/full-bar.yaml`**. Reusable assets: **`templates/core/bundles/dorkpipe/`** and **`prompts/`** under that tree.
 
 **DockPipe self-analysis:** **`dockpipe-experimental/workflows/dorkpipe-self-analysis/`** runs the script **in a container** (isolated); **`dorkpipe-self-analysis-host`** is host-only. Optional **Compose** sidecar: **`scripts/dorkpipe/dev-stack.sh`**. Writes **`.dockpipe/`** + **`.dorkpipe/`** artifacts.

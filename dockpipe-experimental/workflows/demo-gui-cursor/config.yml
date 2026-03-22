@@ -13,7 +13,7 @@ resolvers: [cursor-dev]
 
 steps:
   - id: session
-    run: scripts/cursor-dev-session.sh
+    run: scripts/cursor-dev/cursor-dev-session.sh
     skip_container: true
     vars:
       CURSOR_DEV_LAUNCH: "cli"
