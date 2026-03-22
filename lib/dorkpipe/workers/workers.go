@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -168,6 +169,30 @@ func (e *Executor) http() *http.Client {
 	return &http.Client{Timeout: 15 * time.Minute}
 }
 
+// ollamaGenerateURL builds the /api/generate URL from OLLAMA_HOST-style config after validating
+// scheme and host so requests are not flagged as blind SSRF (gosec G704).
+func ollamaGenerateURL(rawBase string) (*url.URL, error) {
+	s := strings.TrimSpace(rawBase)
+	s = strings.TrimSuffix(s, "/")
+	if s == "" {
+		return nil, fmt.Errorf("ollama: empty base URL")
+	}
+	if !strings.Contains(s, "://") {
+		s = "http://" + s
+	}
+	u, err := url.Parse(s)
+	if err != nil {
+		return nil, fmt.Errorf("ollama: parse base URL: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return nil, fmt.Errorf("ollama: only http and https URLs are allowed")
+	}
+	if strings.TrimSpace(u.Host) == "" {
+		return nil, fmt.Errorf("ollama: URL must include a host")
+	}
+	return &url.URL{Scheme: u.Scheme, Host: u.Host, Path: "/api/generate"}, nil
+}
+
 func (e *Executor) runOllama(ctx context.Context, n *spec.Node, subst map[string]string) *Result {
 	r := &Result{NodeID: n.ID, Kind: "ollama"}
 	host := strings.TrimSpace(n.OllamaHost)
@@ -177,7 +202,11 @@ func (e *Executor) runOllama(ctx context.Context, n *spec.Node, subst map[string
 	if host == "" {
 		host = "http://127.0.0.1:11434"
 	}
-	host = strings.TrimSuffix(host, "/")
+	genURL, err := ollamaGenerateURL(host)
+	if err != nil {
+		r.Err = err
+		return r
+	}
 	prompt := applySubst(n.Prompt, subst)
 	body := map[string]any{
 		"model":  n.Model,
@@ -189,13 +218,14 @@ func (e *Executor) runOllama(ctx context.Context, n *spec.Node, subst map[string
 		r.Err = err
 		return r
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, host+"/api/generate", bytes.NewReader(b))
+	// G704: taint still traces from env/spec; destination is the configured Ollama HTTP API only (validated above).
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, genURL.String(), bytes.NewReader(b)) // #nosec G704
 	if err != nil {
 		r.Err = err
 		return r
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := e.http().Do(req)
+	resp, err := e.http().Do(req) // #nosec G704
 	if err != nil {
 		r.Err = err
 		return r
