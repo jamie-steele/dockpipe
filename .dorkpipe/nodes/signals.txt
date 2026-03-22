@@ -1,0 +1,1 @@
+self-analysis-signals: wrote /home/jamie/source/dockpipe/.dorkpipe/self-analysis/signals_*.txt

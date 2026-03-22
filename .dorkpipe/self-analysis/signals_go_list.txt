@@ -1,0 +1,11 @@
+### go list (lib/dorkpipe/...)
+dockpipe/lib/dorkpipe/aggregator
+dockpipe/lib/dorkpipe/composegen
+dockpipe/lib/dorkpipe/confidence
+dockpipe/lib/dorkpipe/engine
+dockpipe/lib/dorkpipe/eval
+dockpipe/lib/dorkpipe/planner
+dockpipe/lib/dorkpipe/promotion
+dockpipe/lib/dorkpipe/scheduler
+dockpipe/lib/dorkpipe/spec
+dockpipe/lib/dorkpipe/workers

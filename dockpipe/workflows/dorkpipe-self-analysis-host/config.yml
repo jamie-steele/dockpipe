@@ -1,0 +1,17 @@
+# Same as dorkpipe-self-analysis but runs on the host (skip_container) — CI or machines without Docker.
+# Prefer: dockpipe --workflow dorkpipe-self-analysis (container-isolated).
+name: dorkpipe-self-analysis-host
+description: >-
+  Host-only self-analysis (no container). Same outputs as dorkpipe-self-analysis.
+  Use when Docker is unavailable or for fastest local iteration.
+
+runtime: docker
+resolver: codex
+runtimes: [docker, cli]
+resolvers: [codex]
+
+steps:
+  - id: self_analysis
+    skip_container: true
+    run:
+      - scripts/dorkpipe/run-self-analysis.sh

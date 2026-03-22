@@ -1,0 +1,16 @@
+# Internal workflow: run the DorkPipe orchestrator (bin/dorkpipe) on a DAG spec.
+# This repo: orchestration is a separate binary that still calls `dockpipe` for tool steps.
+name: dorkpipe-orchestrator
+description: >-
+  Host step runs scripts/dorkpipe/run-orchestrator.sh (requires `make build` for bin/dorkpipe).
+
+runtime: docker
+resolver: codex
+runtimes: [docker, cli]
+resolvers: [codex]
+
+steps:
+  - id: orchestrate
+    skip_container: true
+    run:
+      - scripts/dorkpipe/run-orchestrator.sh

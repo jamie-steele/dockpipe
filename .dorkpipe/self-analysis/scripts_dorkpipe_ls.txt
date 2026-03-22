@@ -1,0 +1,10 @@
+## scripts/dorkpipe
+total 40
+drwxrwxr-x 2 jamie jamie  4096 Mar 22 00:07 .
+drwxrwxr-x 4 jamie jamie  4096 Mar 21 23:16 ..
+-rwxrwxr-x 1 jamie jamie 11444 Mar 22 00:08 build-cursor-handoff.sh
+-rwxrwxr-x 1 jamie jamie  1017 Mar 22 00:07 merge-paste-prompt.sh
+lrwxrwxrwx 1 jamie jamie    64 Mar 21 23:16 run-orchestrator.sh -> ../../templates/core/assets/scripts/dorkpipe/run-orchestrator.sh
+-rwxrwxr-x 1 jamie jamie  1622 Mar 22 00:07 run-self-analysis.sh
+-rwxrwxr-x 1 jamie jamie  2063 Mar 21 23:55 self-analysis-prep.sh
+-rwxrwxr-x 1 jamie jamie  1953 Mar 21 23:53 self-analysis-signals.sh

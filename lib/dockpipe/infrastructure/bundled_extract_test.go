@@ -40,6 +40,9 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	if !EmbeddedWorkflowConfigExists("dogfood-codex-security") {
 		t.Fatal("expected dogfood-codex-security")
 	}
+	if !EmbeddedWorkflowConfigExists("dorkpipe-orchestrator") {
+		t.Fatal("expected dorkpipe-orchestrator")
+	}
 	for _, name := range []string{"vscode", "cursor-dev", "claude", "codex", "code-server"} {
 		if !EmbeddedWorkflowConfigExists(name) {
 			t.Fatalf("expected resolver delegate %s", name)

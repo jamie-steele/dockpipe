@@ -1,0 +1,13 @@
+### Orchestration keyword files
+/home/jamie/source/dockpipe/lib/dorkpipe/engine/provenance.go
+/home/jamie/source/dockpipe/lib/dorkpipe/engine/run.go
+/home/jamie/source/dockpipe/lib/dorkpipe/planner/planner.go
+/home/jamie/source/dockpipe/lib/dorkpipe/confidence/vector.go
+/home/jamie/source/dockpipe/lib/dorkpipe/aggregator/merge.go
+/home/jamie/source/dockpipe/lib/dorkpipe/eval/eval_test.go
+/home/jamie/source/dockpipe/lib/dorkpipe/eval/eval.go
+/home/jamie/source/dockpipe/lib/dorkpipe/examples/full-bar.yaml
+/home/jamie/source/dockpipe/lib/dorkpipe/README.md
+/home/jamie/source/dockpipe/lib/dorkpipe/spec/spec.go
+/home/jamie/source/dockpipe/lib/dorkpipe/promotion/promotion.go
+/home/jamie/source/dockpipe/lib/dorkpipe/workers/workers.go

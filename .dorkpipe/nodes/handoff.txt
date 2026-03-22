@@ -1,0 +1,3 @@
+build-cursor-handoff: wrote /home/jamie/source/dockpipe/.dockpipe/orchestrator-cursor-prompt.md
+build-cursor-handoff: bytes 7761
+build-cursor-handoff: wrote /home/jamie/source/dockpipe/.dockpipe/paste-this-prompt.txt

@@ -1,0 +1,23 @@
+## git
+91184a0e3567b274fd019ad03a2c76a43d597c34
+js/dev
+## js/dev...origin/js/dev
+ M .gitignore
+ M Makefile
+ M dockpipe/workflows/test-demo/README.md
+ M go.mod
+ M go.sum
+ M lib/dockpipe/infrastructure/bundled_extract_test.go
+?? .dockpipe/local-model-notes.txt
+?? .dockpipe/local-model.env
+?? .dockpipe/orchestrator-cursor-prompt.md
+?? .dockpipe/paste-this-prompt.txt
+?? .dockpipe/review-context.json
+?? .dockpipe/review-context.md
+?? .dockpipe/review-files.count
+?? .dockpipe/review-files.txt
+?? .dockpipe/review-signals.lines
+?? .dockpipe/review-signals.txt
+?? .dockpipe/review-summary.env
+?? .dorkpipe/
+?? bin/dorkpipe

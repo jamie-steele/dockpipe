@@ -1,0 +1,1 @@
+../../templates/core/assets/scripts/review/optional-local-model-summary.sh

@@ -1,0 +1,59 @@
+{
+  "name": "dorkpipe-self-analysis",
+  "ts": "2026-03-22T04:07:55.525367314Z",
+  "policy": {
+    "EscalateConfidenceBelow": 0.01,
+    "MergeWeights": {
+      "NodeSelf": 0,
+      "Agreement": 0,
+      "RetrievalSupport": 0,
+      "Verifier": 0,
+      "ToolSuccess": 0
+    },
+    "MinParallel": 0,
+    "EarlyStopCalibratedAbove": 0,
+    "BranchJudge": ""
+  },
+  "phase1": {
+    "nodes": [
+      {
+        "id": "prep",
+        "kind": "shell",
+        "exit_code": 0,
+        "vector": {
+          "node_self": 1,
+          "tool_success": 1,
+          "calibrated": 0
+        },
+        "stdout_len": 78
+      },
+      {
+        "id": "signals",
+        "kind": "shell",
+        "exit_code": 0,
+        "vector": {
+          "node_self": 1,
+          "tool_success": 1,
+          "calibrated": 0
+        },
+        "stdout_len": 95
+      },
+      {
+        "id": "handoff",
+        "kind": "shell",
+        "exit_code": 0,
+        "vector": {
+          "node_self": 1,
+          "tool_success": 1,
+          "calibrated": 0
+        },
+        "stdout_len": 217
+      }
+    ],
+    "aggregate": {
+      "node_self": 1,
+      "tool_success": 1,
+      "calibrated": 1
+    }
+  }
+}

@@ -1,0 +1,29 @@
+# Dev stack for DorkPipe pgvector + Ollama (see lib/dorkpipe/composegen).
+# scripts/dorkpipe/dev-stack.sh up   # project name: dorkpipe-dev (override: DORKPIPE_DEV_STACK_PROJECT)
+# docker compose -p dorkpipe-dev -f templates/core/assets/compose/dorkpipe/docker-compose.yml up -d
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: dorkpipe
+      POSTGRES_PASSWORD: dorkpipe
+      POSTGRES_DB: dorkpipe
+    ports:
+      - "5432:5432"
+    volumes:
+      - dorkpipe_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dorkpipe -d dorkpipe"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - dorkpipe_ollama:/root/.ollama
+
+volumes:
+  dorkpipe_pgdata:
+  dorkpipe_ollama:

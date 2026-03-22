@@ -1,0 +1,9 @@
+### Recent git log
+91184a0 Added improved token improvement local ollama to expiremental demo
+6aad678 Dog fooding clean up
+afcc5b5 Final polish
+ad05651 Windows test fixes
+7342f49 Dogfooding and proper release pipelines and CI verification using DockPipe
+a2abdbb New lib/dockpipe/infrastructure/layout.go:
+b414573 Testing updates
+5f2ce77 Test improvements

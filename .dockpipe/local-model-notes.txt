@@ -1,0 +1,14 @@
+Here are 10 concise bullets highlighting risks, hotspots, and gaps in the provided review bundle for a security/code review prep:
+
+1. **Unclosed stdout**: Multiple `exec.Command` calls have unhandled stdout values (`CombinedOutput()`), which can lead to resource leaks or unexpected behavior.
+2. **Lack of error handling**: Some functions (`docker_run_test.go`, `commit.go`) do not handle errors properly, leaving the program in an unknown state if something goes wrong.
+3. **Unvalidated user input**: Functions like `docker_run_test.go` and `host_bash.go` execute external commands without validating user input, making them vulnerable to command injection attacks.
+4. **Hardcoded paths**: Paths (e.g., `/bin/bash`) are hardcoded in multiple places, which can lead to issues if the system is modified or if the paths change.
+5. **Insecure use of `exec`**: Functions like `docker_preflight.go` and `commit.go` use `exec.Command` without providing proper context, making it vulnerable to command injection attacks.
+6. **Lack of testing for edge cases**: Some functions (e.g., `docker_run_test.go`) only test normal scenarios but do not account for edge cases like invalid input or unexpected errors.
+7. **Unused imports**: The codebase uses some imported packages (e.g., `ioutil`) without actually using them, which can lead to unused dependencies and potential security vulnerabilities.
+8. **Missing tests for certain functions**: Some functions (e.g., `docker_run_test.go`, `host_bash.go`) do not have comprehensive test coverage, making it harder to ensure their correctness.
+9. **Potential resource leaks**: The code uses some resources (e.g., file descriptors) without properly closing them, which can lead to resource leaks and performance issues.
+10. **Outdated warnings and errors**: Some functions (e.g., `docker_run_test.go`) use deprecated or old warning messages that may indicate potential security vulnerabilities.
+
+These hotspots and gaps highlight areas where the codebase could be improved for better security, reliability, and maintainability.

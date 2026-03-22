@@ -1,0 +1,111 @@
+### docs/dorkpipe.md (first 40 lines)
+# DorkPipe orchestrator
+
+DorkPipe is a **local-first reasoning orchestrator** built on DockPipe. It lives in **`lib/dorkpipe/`** and ships as **`bin/dorkpipe`** (see `Makefile` `build`).
+
+## Model (aligned with design notes)
+
+- **Workflows** in DockPipe remain the user-facing primitive; DorkPipe adds a **DAG spec** (YAML) for multi-stage reasoning.
+- **Runtimes / resolvers** are unchanged — DorkPipe **invokes** the real `dockpipe` binary for tool/resolver steps.
+- **Pipeline stages:** intake → plan → optional conditional retrieve → parallel workers → aggregate (multi-signal confidence) → optional Codex escalation.
+
+## Modules
+
+| Area | Package |
+|------|---------|
+| DAG + policy | `lib/dorkpipe/spec` |
+| Validation | `lib/dorkpipe/planner` |
+| Parallel levels | `lib/dorkpipe/scheduler` |
+| Execution | `lib/dorkpipe/workers` |
+| Confidence + escalation | `lib/dorkpipe/aggregator` |
+| Compose (pgvector + Ollama) | `lib/dorkpipe/composegen` |
+| Run loop | `lib/dorkpipe/engine` |
+| Metrics summary | `lib/dorkpipe/eval` |
+| Promotion hints | `lib/dorkpipe/promotion` |
+
+## CLI
+
+```bash
+bin/dorkpipe run -f lib/dorkpipe/examples/full-bar.yaml --workdir /tmp/run
+bin/dorkpipe compose -o docker-compose.dorkpipe.yml
+bin/dorkpipe validate -f <spec.yaml>
+bin/dorkpipe eval --workdir /tmp/run
+bin/dorkpipe promote --workdir /tmp/run
+```
+
+## Policy and node knobs (high level)
+
+| Mechanism | Purpose |
+|-----------|---------|
+| `policy.merge_weights` | Blend harmonic means into `calibrated`. |
+| `policy.escalate_confidence_below` | Trigger Codex (`escalate_only`) when `calibrated` is low. |
+
+### lib/dorkpipe/README.md (first 40 lines)
+# DorkPipe (`lib/dorkpipe/`)
+
+Local-first orchestration **on top of** DockPipe: DAG specs, parallel levels, real workers (shell, `dockpipe` subprocess, Ollama HTTP, PostgreSQL/pgvector), aggregation + confidence, optional Codex escalation.
+
+- **`spec/`** — YAML DAG schema  
+- **`planner/`** — validation + cycle detection  
+- **`scheduler/`** — parallel batches + escalation ordering  
+- **`workers/`** — real execution (no stubs)  
+- **`aggregator/`** — harmonic per dimension + weighted `calibrated` + escalation policy  
+- **`eval/`** — summarize `.dorkpipe/metrics.jsonl`  
+- **`promotion/`** — heuristic promotion hints from metrics + last `run.json`  
+- **`composegen/`** — Postgres+pgvector (+ optional Ollama) compose file  
+- **`engine/`** — wires planner → scheduler → workers → aggregator  
+
+CLI: **`go build -o bin/dorkpipe ./cmd/dorkpipe`** (see Makefile `build`).
+
+Does **not** replace DockPipe’s workflow engine; it **invokes** the `dockpipe` binary for resolver steps.
+
+**Confidence:** per-node **vectors** → harmonic mean **per dimension** across nodes → **weighted `calibrated`** (see `policy.merge_weights`). Skipped nodes (branch, `retrieve_if`, `early_stop`) are excluded from the aggregate.
+
+**Orchestration:** `policy.branch_judge` + `branch_required` on nodes (JSON `{"winner":"…"}` from judge); `retrieve_if_calibrated_below`; `policy.early_stop_calibrated_above`; `parallel_group` agreement within a level; `kind: verifier` (Ollama transport, `verifier` score in JSON). CLI: **`dorkpipe eval`**, **`dorkpipe promote`**.
+
+Artifacts: **`.dorkpipe/run.json`**, **`.dorkpipe/metrics.jsonl`** (schema v2). Example DAG: **`lib/dorkpipe/examples/full-bar.yaml`**. Reusable assets: **`templates/core/assets/scripts/dorkpipe/`** and **`prompts/`** under that tree.
+
+**DockPipe self-analysis:** workflow **`dockpipe/workflows/dorkpipe-self-analysis/`** runs **`scripts/dorkpipe/run-self-analysis.sh`** and writes **`.dockpipe/orchestrator-cursor-prompt.md`** (Cursor handoff) plus **`.dockpipe/self-analysis/`** (raw scans).
+
+### AGENTS.md (first 40 lines)
+# AGENTS.md — dockpipe maintainer + agent guide
+
+This file defines how this repo works. Follow it strictly.
+
+---
+
+## Core concept
+
+DockPipe provides one primitive:
+
+1. Spawn an isolated environment  
+2. Run a command inside it  
+3. Optionally act on the result  
+
+Everything else is built around this.
+
+**`dockpipe init`** is project-local scaffolding only: it creates or updates **`templates/`** (including merged **`templates/core/`** with **`runtimes/`**, **`resolvers/`**, **`strategies/`**, **`assets/`** — scripts, images, compose), a project-local **`scripts/`** for copies/samples, **`images/`** for the example scaffold, in the **current directory**. It does **not** clone Git repositories or bootstrap a remote project. See **`docs/cli-reference.md`** and **`docs/templates-core-assets.md`**.
+
+---
+
+## Architecture model (STRICT)
+
+There are four core concepts:
+
+---
+
+### 1. Templates
+
+User-facing workflows.
+
+- Define **what happens**
+- Contain YAML (`config.yml`), steps, and scripts
+- Used directly in projects
+
+Examples:
+- `init`
+- `run`
+- `run-apply`
+- `run-apply-validate`
+
+

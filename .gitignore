@@ -27,3 +27,6 @@ Thumbs.db
 # Optional local overrides (do not commit)
 .env
 .env.local
+
+# DorkPipe self-analysis scratch facts (handoff markdown may be kept locally)
+.dockpipe/self-analysis/

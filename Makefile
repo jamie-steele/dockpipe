@@ -11,7 +11,9 @@ WINDOWS_OUT ?= bin/dockpipe.exe
 build:
 	cp VERSION cmd/dockpipe/VERSION
 	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o bin/dockpipe.bin ./cmd/dockpipe
+	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o bin/dorkpipe ./cmd/dorkpipe
 	@echo "Built bin/dockpipe.bin — run via bin/dockpipe (repo) or make install / make dev-install"
+	@echo "Built bin/dorkpipe (DorkPipe DAG orchestrator on lib/dorkpipe)"
 
 # Install pre-built binary to a local PATH directory (~/.local/bin, %USERPROFILE%\\bin, …). Does not run go build.
 install:
