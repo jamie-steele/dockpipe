@@ -1,0 +1,18 @@
+# Quick GUI demo: long-lived base-dev session container + Cursor on the host; repo → /work in the container.
+# From this repo: dockpipe --workflow demo-gui-cursor --resolver cursor-dev --runtime docker --workdir .
+name: demo-gui-cursor
+description: >-
+  Experimental cursor-dev flow: session container holds /work; open Cursor on the host against the
+  same folder path. Mount is the directory you pass as --workdir (this repo when you run from here).
+
+runtime: docker
+resolver: cursor-dev
+runtimes: [docker, cli]
+resolvers: [cursor-dev]
+
+steps:
+  - id: session
+    run: scripts/cursor-dev-session.sh
+    skip_container: true
+    vars:
+      CURSOR_DEV_LAUNCH: "cli"

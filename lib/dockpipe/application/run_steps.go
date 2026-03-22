@@ -610,6 +610,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 
 	workHost := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
 	dockerForRun := maps.Clone(dockerEnv)
+	mergeResolverAuthEnvFromHost(dockerForRun, envMap, ra)
 	mergeWorktreeGitDockerEnv(dockerForRun, workHost)
 
 	runOpts = infrastructure.RunOpts{

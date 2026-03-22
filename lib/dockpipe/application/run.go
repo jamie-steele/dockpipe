@@ -206,8 +206,9 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 	}
 	profileLabel := ProfileLabelForEnv(rtName, rsName)
-	if profileLabel != "" {
-		if err := ValidateRuntimeAllowlist(wf, profileLabel); err != nil {
+	// runtimes: allowlist names runtime substrates (docker, cli, …), not resolver/tool names (codex, …).
+	if rtName != "" {
+		if err := ValidateRuntimeAllowlist(wf, rtName); err != nil {
 			return err
 		}
 	}
@@ -216,12 +217,14 @@ func Run(argv []string, baseEnviron []string) error {
 	var preFromResolver, actFromResolver string
 	hostIsolate := ""
 	resolverWorkflow := ""
+	var resolverEnvHint string
 	if rtName != "" || rsName != "" {
 		rm, err := infrastructure.LoadIsolationProfile(repoRoot, rtName, rsName)
 		if err != nil {
 			return fmt.Errorf("isolation profile: %w", err)
 		}
 		ra := domain.FromResolverMap(rm)
+		resolverEnvHint = ra.EnvHint
 		if rtName != "" && rsName != "" {
 			fmt.Fprintf(os.Stderr, "[dockpipe] Runtime: %s  Resolver: %s", rtName, rsName)
 			if rk := strings.TrimSpace(ra.RuntimeKind); rk != "" {
@@ -610,6 +613,7 @@ func Run(argv []string, baseEnviron []string) error {
 	dockerEnvMap := domain.EnvSliceToMap(opts.ExtraEnvLines)
 	workHostForEnv := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
 	mergeWorktreeGitDockerEnv(dockerEnvMap, workHostForEnv)
+	mergeEnvHintKeys(dockerEnvMap, envMap, resolverEnvHint)
 	extraDocker := domain.EnvMapToSlice(dockerEnvMap)
 
 	if stepsMode {

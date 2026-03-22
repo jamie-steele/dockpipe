@@ -1,3 +1,12 @@
 # Resolver: OpenAI Codex CLI (pairs with runtimes/codex).
 DOCKPIPE_RESOLVER_CMD=codex
-DOCKPIPE_RESOLVER_ENV=OPENAI_API_KEY
+# Codex exec / HTTPS fallback often reads CODEX_API_KEY; OPENAI_API_KEY is the usual export — forward both into Docker.
+DOCKPIPE_RESOLVER_ENV=OPENAI_API_KEY,CODEX_API_KEY
+#
+# Docker + Codex sandbox (nested isolation):
+# - DockPipe's Docker run is the isolation boundary for /work.
+# - Codex --sandbox workspace-write uses bubblewrap inside the container; that needs Linux
+#   unprivileged user namespaces and often fails in Docker (bwrap namespace errors).
+# - Workflows that run codex exec inside this resolver's image should use
+#   `codex exec --dangerously-bypass-approvals-and-sandbox` so Codex does not add a second
+#   sandbox layer. See dockpipe/workflows/test-demo and this directory's README.

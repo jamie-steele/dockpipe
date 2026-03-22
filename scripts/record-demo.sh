@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Record terminal demos: dockpipe test-demo workflow (tests → scans → report) → demo/dockpipe-demo-{short,long}.gif
+# Record terminal demos: dockpipe test-demo (go test → vet → review prep → local Ollama → codex exec) → demo/dockpipe-demo-{short,long}.gif
+# The test-demo review step is resolver-driven (codex) inside runtime docker; Codex inner sandbox is
+# off via workflow YAML (--dangerously-bypass-approvals-and-sandbox) — see templates/core/resolvers/codex/README.md
+# Requires OPENAI_API_KEY (and/or CODEX_API_KEY) for the final Codex step (export or .env before recording).
 # Requires: asciinema, agg, Docker, and a built CLI (make build).
 #
 # Usage: bash scripts/record-demo.sh [short|long|all]
@@ -66,8 +69,8 @@ cd "$ROOT"
 export DOCKPIPE_REPO_ROOT="$ROOT"
 go mod download
 GOPKG="\$(go env GOPATH)/pkg"
-printf '%s\n' '$ dockpipe --workflow test-demo --runtime docker --workdir . --mount "$(go env GOPATH)/pkg:/go/pkg:rw"'
-exec ./bin/dockpipe --workflow test-demo --runtime docker --workdir "$ROOT" --mount "\${GOPKG}:/go/pkg:rw" --
+printf '%s\n' '$ dockpipe --workflow test-demo --resolver codex --runtime docker --workdir . --mount "$(go env GOPATH)/pkg:/go/pkg:rw"'
+exec ./bin/dockpipe --workflow test-demo --resolver codex --runtime docker --workdir "$ROOT" --mount "\${GOPKG}:/go/pkg:rw" --
 EOF
 }
 
@@ -82,8 +85,8 @@ go mod download
 GOPKG="\$(go env GOPATH)/pkg"
 printf '%s\n' '$ dockpipe --version'
 ./bin/dockpipe --version
-printf '%s\n' '$ dockpipe --workflow test-demo --runtime docker --workdir . --mount "$(go env GOPATH)/pkg:/go/pkg:rw"'
-exec ./bin/dockpipe --workflow test-demo --runtime docker --workdir "$ROOT" --mount "\${GOPKG}:/go/pkg:rw" --
+printf '%s\n' '$ dockpipe --workflow test-demo --resolver codex --runtime docker --workdir . --mount "$(go env GOPATH)/pkg:/go/pkg:rw"'
+exec ./bin/dockpipe --workflow test-demo --resolver codex --runtime docker --workdir "$ROOT" --mount "\${GOPKG}:/go/pkg:rw" --
 EOF
 }
 

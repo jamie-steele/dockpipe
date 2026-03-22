@@ -22,6 +22,8 @@ func TemplateBuild(repoRoot, name string) (image string, dockerfileDir string, o
 		return "dockpipe-codex", coreImg("codex"), true
 	case "vscode":
 		return "dockpipe-vscode", coreImg("vscode"), true
+	case "ollama":
+		return "dockpipe-ollama", coreImg("ollama"), true
 	default:
 		return "", "", false
 	}

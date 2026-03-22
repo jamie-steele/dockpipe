@@ -1,64 +1,114 @@
-# Recording / showcase: tests → go vet → report. CI uses workflow "test" (go vet only in container).
-# Images: golang official.
+# Demo: prepare → go test → go vet → deterministic review prep → local Ollama summary (isolate: ollama) → Codex final review.
+# Prep writes .dockpipe/review-context.md; Codex reads it — see templates/core/assets/scripts/review/README.md
+# API keys: OPENAI_API_KEY / CODEX_API_KEY. Codex: --dangerously-bypass-approvals-and-sandbox (no nested bwrap in Docker).
 name: test-demo
 description: >-
-  Full story: isolation → go test → go vet (container scan) → security brief. Govulncheck/gosec on host in CI.
+  Chain: metadata → go test → go vet → collect/aggregate review bundle → local Ollama (dockpipe-ollama) →
+  Codex final review. State via .dockpipe/outputs.env; artifacts under .dockpipe/.
+
+runtime: docker
+resolver: codex
+runtimes: [docker, cli]
+resolvers: [codex]
 
 steps:
   - id: prepare
+    runtime: docker
     isolate: golang:1.25-bookworm
     cmd: |-
       bash -c 'set -euo pipefail
-      echo "[demo] ================================================================="
-      echo "[demo] Isolation — each step runs in a fresh container; your repo is mounted"
-      echo "[demo] at /work with your UID/GID mapped. Containers are removed after each step."
-      echo "[demo] ================================================================="
       mkdir -p .dockpipe/demo
-      printf "%s\n" "package main" "func main() {}" > .dockpipe/demo/main.go
-      SHA=$(sha256sum .dockpipe/demo/main.go | cut -b1-64)
-      mkdir -p .dockpipe
-      printf "%s\n" "ARTIFACT_SHA256=$SHA" "DEMO_FILE=.dockpipe/demo/main.go" "DEMO_STAGE=prepare" > .dockpipe/outputs.env
-      echo "[demo] step 1/4 prepare — wrote demo artifact + checksum"'
+      printf "%s\n" \
+        "WORKFLOW_NAME=test-demo" \
+        "PREPARE_OK=1" \
+        "DEMO_STAGE=prepare" \
+        > .dockpipe/outputs.env
+      echo "[test-demo] prepare: workflow chain initialized"'
 
   - id: gotest
+    runtime: docker
     isolate: golang:1.25-bookworm
     cmd: |-
       bash -c 'set -euo pipefail
-      echo "[demo] --- Step 2: verify artifact + run Go tests (go test ./...) ---"
-      test -n "${ARTIFACT_SHA256:-}" || { echo "[demo] FAIL missing ARTIFACT_SHA256"; exit 1; }
-      test -f "$DEMO_FILE" || { echo "[demo] FAIL missing $DEMO_FILE"; exit 1; }
-      GOT=$(sha256sum "$DEMO_FILE" | cut -b1-64)
-      test "$GOT" = "$ARTIFACT_SHA256" || { echo "[demo] FAIL checksum mismatch"; exit 1; }
-      echo "[demo] Running: go test ./... -count=1"
-      go test ./... -count=1
-      echo "[demo] Go tests finished with exit 0."
       mkdir -p .dockpipe
-      printf "%s\n" "VERIFY_OK=1" "TESTS_PASS=1" "DEMO_STAGE=gotest" > .dockpipe/outputs.env'
+      set +e
+      go test ./... -count=1
+      tc=$?
+      set -e
+      tp=0
+      if [ "$tc" -eq 0 ]; then tp=1; fi
+      printf "%s\n" "TESTS_PASS=$tp" "TESTS_EXIT=$tc" "DEMO_STAGE=gotest" > .dockpipe/outputs.env
+      echo "[test-demo] go test finished exit=$tc"
+      exit "$tc"'
 
   - id: scan
+    runtime: docker
     isolate: golang:1.25-bookworm
     cmd: |-
       bash -c 'set -euo pipefail
-      echo "[demo] --- Step 3: scan (go vet) after tests — govulncheck/gosec run on host in CI ---"
-      test "${TESTS_PASS:-0}" = "1" || { echo "[demo] FAIL TESTS_PASS not set"; exit 1; }
-      echo "[demo] Running: go vet ./..."
+      test "${TESTS_PASS:-0}" = "1" || { echo "[test-demo] go test did not pass; skipping go vet" >&2; exit 1; }
+      set +e
       go vet ./...
-      echo "[demo] go vet finished with exit 0."
-      mkdir -p .dockpipe
-      printf "%s\n" "SCAN_PASS=1" "DEMO_STAGE=scan" > .dockpipe/outputs.env'
+      vc=$?
+      set -e
+      sp=0
+      if [ "$vc" -eq 0 ]; then sp=1; fi
+      printf "%s\n" "SCAN_PASS=$sp" "VET_EXIT=$vc" "DEMO_STAGE=scan" > .dockpipe/outputs.env
+      echo "[test-demo] go vet finished exit=$vc"
+      exit "$vc"'
 
-  - id: report
+  - id: collect-signals
+    runtime: docker
     isolate: golang:1.25-bookworm
     cmd: |-
       bash -c 'set -euo pipefail
-      test "${SCAN_PASS:-0}" = "1" || { echo "[demo] FAIL SCAN_PASS not set"; exit 1; }
-      echo "[demo] step 4/4 report — TESTS_PASS=$TESTS_PASS SCAN_PASS=$SCAN_PASS"
-      echo "[demo] --- Security brief (bundled demo narrative — not a live LLM call) ---"
-      echo "[demo] • Isolation: commands run in disposable containers; only the bind-mounted"
-      echo "[demo]   workdir persists between steps; review images and workflow YAML like CI."
-      echo "[demo] • Data paths: treat host run:/act: scripts as part of your trust boundary."
-      echo "[demo] • Supply chain: pin image digests in production; this workflow uses"
-      echo "[demo]   golang:1.25-bookworm for reproducible test runs."
-      echo "[demo] • For an actual model-driven security review, use a resolver workflow"
-      echo "[demo]   (e.g. Codex) with your policy — this block is static showcase copy."
-      echo "[demo] pipeline complete — tests + go vet in isolation + security brief emitted"'
+      test "${SCAN_PASS:-0}" = "1" || { echo "[test-demo] scan did not pass; skipping review prep" >&2; exit 1; }
+      mkdir -p .dockpipe
+      bash scripts/review/collect-go-review-signals.sh
+      NFC=$(wc -l < .dockpipe/review-files.txt | tr -d " ")
+      NSL=$(wc -l < .dockpipe/review-signals.txt | tr -d " ")
+      printf "%s\n" \
+        "REVIEW_PREP_OK=1" \
+        "REVIEW_FILES_COUNT=$NFC" \
+        "REVIEW_SIGNALS_LINES=$NSL" \
+        "DEMO_STAGE=collect-signals" \
+        > .dockpipe/outputs.env
+      echo "[test-demo] collect: ${NFC} go files, ${NSL} signal lines"'
+
+  - id: aggregate-context
+    runtime: docker
+    isolate: golang:1.25-bookworm
+    cmd: |-
+      bash -c 'set -euo pipefail
+      test "${REVIEW_PREP_OK:-0}" = "1" || { echo "[test-demo] review prep failed" >&2; exit 1; }
+      bash scripts/review/aggregate-review-context.sh
+      printf "%s\n" \
+        "REVIEW_CONTEXT_READY=1" \
+        "DEMO_STAGE=aggregate" \
+        > .dockpipe/outputs.env
+      echo "[test-demo] bundle: .dockpipe/review-context.md"'
+
+  # isolate: ollama → dockpipe builds dockpipe-ollama (templates/core/assets/images/ollama); script starts ollama serve then summarizes.
+  - id: local-summary
+    runtime: docker
+    isolate: ollama
+    cmd: |-
+      bash -c 'set -euo pipefail
+        test "${REVIEW_CONTEXT_READY:-0}" = "1" || exit 1
+        bash scripts/review/run-local-model-with-ollama-daemon.sh'
+
+  - id: review
+    runtime: docker
+    resolver: codex
+    isolate: codex
+    vars:
+      RUST_LOG: error
+    cmd: |-
+      bash -c 'set -euo pipefail
+      test "${REVIEW_CONTEXT_READY:-0}" = "1" || { echo "[test-demo] review bundle not ready" >&2; exit 1; }
+      test -n "${OPENAI_API_KEY:-}${CODEX_API_KEY:-}" || { echo "[test-demo] OPENAI_API_KEY or CODEX_API_KEY is required" >&2; exit 1; }
+      export CODEX_API_KEY="${CODEX_API_KEY:-$OPENAI_API_KEY}"
+      test -f .dockpipe/review-context.md || { echo "[test-demo] missing .dockpipe/review-context.md" >&2; exit 1; }
+      PROMPT_FILE="dockpipe/workflows/test-demo/prompts/codex-final-review.md"
+      test -f "$PROMPT_FILE" || { echo "[test-demo] missing $PROMPT_FILE" >&2; exit 1; }
+      { cat "$PROMPT_FILE"; echo ""; echo "Prep file on disk: /work/.dockpipe/review-context.md"; } | codex exec --dangerously-bypass-approvals-and-sandbox -'

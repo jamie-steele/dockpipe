@@ -45,6 +45,10 @@ dockpipe --workflow run --workdir /path/to/repo -- ./scripts/task.sh
 | Detached HEAD | Commit still runs if there are changes (same as `git commit` rules). |
 | `DOCKPIPE_COMMIT_MESSAGE` empty | Falls back to a generic automated message (see `CommitOnHost` in code). |
 
+## Resolver images (**codex**, **claude**, …)
+
+If your **`--isolate`** / workflow uses **codex** or **claude** images, read **`templates/core/resolvers/codex/README.md`** and **`templates/core/resolvers/claude/README.md`** for API keys forwarded into Docker and Codex nested-sandbox notes.
+
 ## Compared to **`strategy: worktree`**
 
 - **run** does **not** use runtime profiles for clone, `--repo`, or **`strategy: worktree`**.

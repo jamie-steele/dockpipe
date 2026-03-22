@@ -13,7 +13,7 @@ import (
 )
 
 // bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "60"
+const bundledFormatVersion = "70"
 
 var bundledMu sync.Mutex
 

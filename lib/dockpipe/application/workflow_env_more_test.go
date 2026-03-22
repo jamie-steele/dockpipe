@@ -74,3 +74,22 @@ func TestLockedKeysAndApplyOutputsFile(t *testing.T) {
 		t.Fatalf("outputs file should be removed, err=%v", err)
 	}
 }
+
+// TestApplyOutputsFileDoesNotWipeSecretAPIKeys prevents step outputs from clearing OPENAI_API_KEY etc. with empty values.
+func TestApplyOutputsFileDoesNotWipeSecretAPIKeys(t *testing.T) {
+	tmp := t.TempDir()
+	outFile := filepath.Join(tmp, "outputs.env")
+	if err := os.WriteFile(outFile, []byte("OPENAI_API_KEY=\nOTHER=2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	envMap := map[string]string{"OPENAI_API_KEY": "sk-from-host", "OTHER": "1"}
+	dockerEnv := map[string]string{"OPENAI_API_KEY": "sk-from-host", "OTHER": "1"}
+	applyOutputsFile(outFile, envMap, dockerEnv, nil, nil, "")
+
+	if envMap["OPENAI_API_KEY"] != "sk-from-host" || dockerEnv["OPENAI_API_KEY"] != "sk-from-host" {
+		t.Fatalf("secret should not be wiped: env=%#v docker=%#v", envMap, dockerEnv)
+	}
+	if envMap["OTHER"] != "2" || dockerEnv["OTHER"] != "2" {
+		t.Fatalf("non-secret should merge: env=%#v docker=%#v", envMap, dockerEnv)
+	}
+}

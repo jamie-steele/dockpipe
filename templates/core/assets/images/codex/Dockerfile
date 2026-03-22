@@ -2,6 +2,9 @@
 # Requires OPENAI_API_KEY or Codex login at run time.
 FROM node:20-slim
 
+# Do not install distro bubblewrap: Debian's /usr/bin/bwrap is often too old and lacks --argv0,
+# which Codex's sandbox passes — that breaks exec with "bwrap: Unknown option --argv0".
+# Codex falls back to its vendored bubblewrap when system bwrap is absent (see CLI warning).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
     ca-certificates \
@@ -24,5 +27,7 @@ COPY lib/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 WORKDIR /work
+# Quieter Rust logs for `codex exec` in demos/CI; override per run if you need debug.
+ENV RUST_LOG=error
 USER node
 ENTRYPOINT ["/entrypoint.sh"]

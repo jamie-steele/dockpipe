@@ -23,3 +23,5 @@ Each profile is **`templates/core/resolvers/<name>`** (flat **`KEY=value`** file
 Adding a profile = add **`templates/core/resolvers/<name>`** (file or **`profile`**) and optionally list the name under **`runtimes:`** in workflow **`config.yml`** as an allowlist.
 
 **Multi-step workflows** can set **`runtime:`** / **`resolver:`** on **`steps:`**. **`isolate:`** on a step can override the template from the profile. Async steps (`is_blocking: false`) cannot use profiles that define **`DOCKPIPE_RESOLVER_HOST_ISOLATE`**.
+
+**Operational notes (API keys, Docker vs nested sandboxes):** **`codex/README.md`**, **`claude/README.md`** — especially **`DOCKPIPE_RESOLVER_ENV`** and running **Codex** / **Claude Code** inside **`docker run`**.

@@ -70,15 +70,16 @@ func ProfileLabelForEnv(runtimeName, resolverName string) string {
 	return strings.TrimSpace(runtimeName)
 }
 
-// ValidateRuntimeAllowlist errors if runtimes: is non-empty and the effective profile label is not listed.
-func ValidateRuntimeAllowlist(wf *domain.Workflow, profileLabel string) error {
-	if wf == nil || len(wf.Runtimes) == 0 || profileLabel == "" {
+// ValidateRuntimeAllowlist errors if runtimes: is non-empty and the effective runtime profile name is not listed.
+// Use the runtime substrate name (e.g. docker, cli), not ProfileLabelForEnv (which prefers resolver for display).
+func ValidateRuntimeAllowlist(wf *domain.Workflow, runtimeName string) error {
+	if wf == nil || len(wf.Runtimes) == 0 || runtimeName == "" {
 		return nil
 	}
 	for _, s := range wf.Runtimes {
-		if strings.TrimSpace(s) == profileLabel {
+		if strings.TrimSpace(s) == strings.TrimSpace(runtimeName) {
 			return nil
 		}
 	}
-	return fmt.Errorf("runtime %q is not allowed by this workflow (runtimes: %v)", profileLabel, wf.Runtimes)
+	return fmt.Errorf("runtime %q is not allowed by this workflow (runtimes: %v)", runtimeName, wf.Runtimes)
 }

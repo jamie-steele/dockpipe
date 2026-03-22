@@ -3,3 +3,6 @@ services:
   claude:
     image: dockpipe-claude:latest
     working_dir: /work
+    # environment:
+    #   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+    #   CLAUDE_API_KEY: ${CLAUDE_API_KEY:-${ANTHROPIC_API_KEY}}

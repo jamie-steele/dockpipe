@@ -5,6 +5,16 @@ import (
 	"testing"
 )
 
+func TestEnvVarNamesFromHint(t *testing.T) {
+	got := EnvVarNamesFromHint(" OPENAI_API_KEY , ANTHROPIC_API_KEY ")
+	if len(got) != 2 || got[0] != "OPENAI_API_KEY" || got[1] != "ANTHROPIC_API_KEY" {
+		t.Fatalf("unexpected: %#v", got)
+	}
+	if EnvVarNamesFromHint("") != nil {
+		t.Fatalf("empty hint should return nil slice")
+	}
+}
+
 // TestMergeIfUnset copies keys from src into dst only when dst does not already have the key.
 func TestMergeIfUnset(t *testing.T) {
 	dst := map[string]string{"A": "1", "B": "2"}

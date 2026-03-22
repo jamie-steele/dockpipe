@@ -1,10 +1,10 @@
 # This repo’s CI: scans only (no go test). Container runs go vet; govulncheck/gosec run on the host in CI.
-# See dockpipe/workflows/test-demo for tests → go vet → report (recordings).
+# See dockpipe/workflows/test-demo for tests → go vet → Codex review (recordings).
 # Images: golang official (pulls from Docker Hub on first use).
 name: test
 description: >-
-  Isolation preamble → verify artifact → go vet (static scan in container) → security brief.
-  For video: workflow test-demo (tests → go vet → brief). Govulncheck/gosec stay in the CI job on the host.
+  Isolation preamble → verify artifact → go vet (static scan in container) → security brief (static copy in this workflow).
+  For video: workflow test-demo (real tests → go vet → Codex resolver). Govulncheck/gosec stay in the CI job on the host.
 
 steps:
   - id: prepare

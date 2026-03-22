@@ -37,3 +37,14 @@ func TestProfileLabelForEnv(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestValidateRuntimeAllowlistRuntimeNotResolverLabel(t *testing.T) {
+	wf := &domain.Workflow{Runtimes: []string{"docker", "cli"}}
+	// Allowlist matches runtime substrate (docker), not resolver name (codex).
+	if err := ValidateRuntimeAllowlist(wf, "docker"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateRuntimeAllowlist(wf, "codex"); err == nil {
+		t.Fatal("expected error when runtime name is wrong")
+	}
+}

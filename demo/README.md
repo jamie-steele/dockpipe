@@ -8,9 +8,9 @@ make install-record-deps
 
 (`make dev-deps` runs this after CI tools — see repo README → Development.)
 
-Recordings use **`--workflow test-demo`**: **tests → `go vet` → security brief** (`make demo-record`). **This repo’s CI** uses **`--workflow test`** (**`go vet`** in Docker only; **govulncheck**/**gosec** on the host). The **long** variant also runs **`dockpipe --version`** first.
+Recordings use **`--workflow test-demo`**: **`go test`** → **`go vet`** → **prep bundle** (`.dockpipe/review-context.md`) → **local-summary** (**`isolate: ollama`** — dockpipe builds/runs **`dockpipe-ollama`**) → **Codex final review** (`make demo-record`). Set **`OPENAI_API_KEY`** (or repo-root **`.env`**); **`CODEX_API_KEY`** mirrored when needed. Final prompt: **`prompts/codex-final-review.md`**. See **`templates/core/resolvers/codex/README.md`** (sandbox) and **`templates/core/assets/scripts/review/README.md`** (prep scripts). **This repo’s CI** uses **`--workflow test`** (**`go vet`** in Docker only; **govulncheck**/**gosec** on the host). The **long** variant also runs **`dockpipe --version`** first.
 
-**What you see (`test-demo`):** **isolation** banner → **`go test`** → **`go vet`** → **security brief**. The brief is **labeled** bundled copy — **not** a live LLM. **`make demo-record`** mounts **`$(go env GOPATH)/pkg` → `/go/pkg`** for module reuse.
+**What you see (`test-demo`):** **prepare** → **`go test ./...`** → **`go vet ./...`** → **collect-signals** → **aggregate-context** → **local-summary** (**`dockpipe-ollama`** image; **`ollama serve`** inside the step) → **Codex**. **`make demo-record`** mounts **`$(go env GOPATH)/pkg` → `/go/pkg`** for module reuse.
 
 ## One command (builds both GIFs)
 

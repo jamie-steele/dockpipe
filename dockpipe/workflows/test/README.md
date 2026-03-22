@@ -4,7 +4,7 @@
 
 **Govulncheck** and **gosec** run on the **host** in the same GitHub Actions job (before/after this step) — not duplicated inside the workflow so we avoid Go toolchain / binary mismatches across images.
 
-**For recordings** (tests → scan → brief), use **`test-demo`**.
+**For recordings** (real tests → scan → **Codex** review), use **`test-demo`** (requires **`OPENAI_API_KEY`** for the last step).
 
 ```bash
 dockpipe --workflow test --workdir /path/to/repo --mount "$(go env GOPATH)/pkg:/go/pkg:rw" --

@@ -82,6 +82,36 @@ func newParallelMergeState() *parallelMergeState {
 	return &parallelMergeState{keySource: make(map[string]string)}
 }
 
+// isLikelySecretEnvKey matches env var names that should not be cleared by an empty value from
+// step outputs (e.g. OPENAI_API_KEY= in .dockpipe/outputs.env).
+func isLikelySecretEnvKey(k string) bool {
+	k = strings.ToUpper(strings.TrimSpace(k))
+	if strings.HasSuffix(k, "_API_KEY") {
+		return true
+	}
+	if strings.HasSuffix(k, "_TOKEN") {
+		return true
+	}
+	switch k {
+	case "GIT_PAT", "GITHUB_TOKEN", "GITHUB_PAT", "GITLAB_TOKEN":
+		return true
+	default:
+		return false
+	}
+}
+
+// skipOutputsOverwriteEmptySecret is true when outputs would set an empty value and wipe a
+// non-empty host/workflow secret (mergeResolverAuthEnvFromHost and docker -e rely on envMap).
+func skipOutputsOverwriteEmptySecret(k, v string, envMap map[string]string) bool {
+	if strings.TrimSpace(v) != "" {
+		return false
+	}
+	if strings.TrimSpace(envMap[k]) == "" {
+		return false
+	}
+	return isLikelySecretEnvKey(k)
+}
+
 // applyOutputsFile merges KEY=VAL from path into envMap and dockerEnv. Existing keys are
 // overwritten (callers rely on this for “last merge wins”, including parallel aggregate order).
 // If mergeState and mergeSource are set, logs when a key already exists (parallel aggregate).
@@ -94,6 +124,9 @@ func applyOutputsFile(path string, envMap, dockerEnv map[string]string, locked m
 	fmt.Fprintf(os.Stderr, "[dockpipe] Merging outputs from %s into environment (next step)\n", rel)
 	for k, v := range m {
 		if locked[k] {
+			continue
+		}
+		if skipOutputsOverwriteEmptySecret(k, v, envMap) {
 			continue
 		}
 		if mergeState != nil && mergeSource != "" {

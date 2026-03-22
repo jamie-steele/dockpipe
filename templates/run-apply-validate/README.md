@@ -7,3 +7,5 @@ dockpipe --workflow run-apply-validate
 ```
 
 Needs Docker + **`alpine`**. See **[docs/workflow-yaml.md](../../docs/workflow-yaml.md)** for **`outputs:`**, **`vars:`**, and **`imports:`** if phases need to share state.
+
+**Secrets / AI resolver images:** Same as **[run-apply](../run-apply/README.md)** (`.env`, **`--env`**). For **codex** / **claude** stacks, see **`templates/core/resolvers/codex/README.md`** and **`templates/core/resolvers/claude/README.md`**.

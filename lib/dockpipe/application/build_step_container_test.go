@@ -77,6 +77,52 @@ func TestBuildStepContainer_CommitWorktreeTurnsIntoHostCommit(t *testing.T) {
 	}
 }
 
+// TestBuildStepContainer_ForwardsResolverEnvHintFromHost copies OPENAI_API_KEY from step env into docker ExtraEnv when profile lists DOCKPIPE_RESOLVER_ENV.
+func TestBuildStepContainer_ForwardsResolverEnvHintFromHost(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	o := &runStepsOpts{
+		repoRoot: repoRoot,
+		wfRoot:   filepath.Join(repoRoot, "templates", "test"),
+		wf:       &domain.Workflow{Isolate: "base-dev"},
+		opts:     &CliOpts{},
+	}
+	step := domain.Step{Cmd: "echo hi"}
+	envMap := map[string]string{"OPENAI_API_KEY": "sk-test"}
+	dockerEnv := map[string]string{}
+	ra := &domain.ResolverAssignments{EnvHint: "OPENAI_API_KEY"}
+	_, runOpts, _, _, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv, ra)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	em := domain.EnvSliceToMap(runOpts.ExtraEnv)
+	if em["OPENAI_API_KEY"] != "sk-test" {
+		t.Fatalf("expected OPENAI forwarded to docker env, got %#v", em)
+	}
+}
+
+// TestBuildStepContainer_ForwardsMultipleResolverEnvHints copies every name in DOCKPIPE_RESOLVER_ENV (comma list) from host env into docker ExtraEnv.
+func TestBuildStepContainer_ForwardsMultipleResolverEnvHints(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	o := &runStepsOpts{
+		repoRoot: repoRoot,
+		wfRoot:   filepath.Join(repoRoot, "templates", "test"),
+		wf:       &domain.Workflow{Isolate: "base-dev"},
+		opts:     &CliOpts{},
+	}
+	step := domain.Step{Cmd: "echo hi"}
+	envMap := map[string]string{"ANTHROPIC_API_KEY": "sk-ant", "CLAUDE_API_KEY": "ck-local"}
+	dockerEnv := map[string]string{}
+	ra := &domain.ResolverAssignments{EnvHint: "ANTHROPIC_API_KEY,CLAUDE_API_KEY"}
+	_, runOpts, _, _, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv, ra)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	em := domain.EnvSliceToMap(runOpts.ExtraEnv)
+	if em["ANTHROPIC_API_KEY"] != "sk-ant" || em["CLAUDE_API_KEY"] != "ck-local" {
+		t.Fatalf("expected both resolver env hints forwarded, got %#v", em)
+	}
+}
+
 // TestBuildStepContainer_StepResolverTemplate uses DOCKPIPE_RESOLVER_TEMPLATE from a per-step resolver assignment.
 func TestBuildStepContainer_StepResolverTemplate(t *testing.T) {
 	repoRoot := testRepoRoot(t)

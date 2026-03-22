@@ -76,3 +76,20 @@ func FromResolverMap(m map[string]string) ResolverAssignments {
 		RuntimeKind:  kind,
 	}
 }
+
+// EnvVarNamesFromHint parses DOCKPIPE_RUNTIME_ENV / DOCKPIPE_RESOLVER_ENV values: comma-separated
+// names, trimmed; empty segments are dropped.
+func EnvVarNamesFromHint(s string) []string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		k := strings.TrimSpace(part)
+		if k != "" {
+			out = append(out, k)
+		}
+	}
+	return out
+}

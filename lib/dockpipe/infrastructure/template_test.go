@@ -21,6 +21,7 @@ func TestTemplateBuild(t *testing.T) {
 		{"claude", "dockpipe-claude", filepath.Join(repoRoot, "templates", "core", "assets", "images", "claude"), true},
 		{"codex", "dockpipe-codex", filepath.Join(repoRoot, "templates", "core", "assets", "images", "codex"), true},
 		{"vscode", "dockpipe-vscode", filepath.Join(repoRoot, "templates", "core", "assets", "images", "vscode"), true},
+		{"ollama", "dockpipe-ollama", filepath.Join(repoRoot, "templates", "core", "assets", "images", "ollama"), true},
 		{"unknown", "", "", false},
 	}
 	for _, tc := range cases {

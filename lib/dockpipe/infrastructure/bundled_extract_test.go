@@ -13,6 +13,15 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	if !EmbeddedWorkflowConfigExists("test-demo") {
 		t.Fatal("expected test-demo")
 	}
+	if !EmbeddedWorkflowConfigExists("test-demo-claude") {
+		t.Fatal("expected test-demo-claude")
+	}
+	if !EmbeddedWorkflowConfigExists("demo-gui-vscode") {
+		t.Fatal("expected demo-gui-vscode")
+	}
+	if !EmbeddedWorkflowConfigExists("demo-gui-cursor") {
+		t.Fatal("expected demo-gui-cursor")
+	}
 	if !EmbeddedWorkflowConfigExists("run") {
 		t.Fatal("expected run")
 	}
