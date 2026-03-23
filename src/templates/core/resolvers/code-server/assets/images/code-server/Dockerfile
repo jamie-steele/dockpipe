@@ -1,5 +1,5 @@
 # Browser code-server (Coder OSS image) with Pipeon extension + baseline User settings.
-# Does NOT use lib/entrypoint.sh — this image is only for scripts/vscode/vscode-code-server.sh (workflow vscode).
+# Does NOT use assets/entrypoint.sh — this image is only for scripts/vscode/vscode-code-server.sh (workflow vscode).
 # Isolate runs use templates/core/resolvers/vscode/assets/images/vscode/ (dockpipe-vscode + entrypoint).
 #
 # Build from repo root:
@@ -9,7 +9,7 @@
 # Pack Pipeon as .vsix (code-server only accepts .vsix or marketplace IDs, not an unpacked folder).
 FROM node:20-alpine AS vsix
 WORKDIR /ext
-COPY contrib/pipeon-vscode-extension .
+COPY src/contrib/pipeon-vscode-extension .
 RUN npm install -g @vscode/vsce \
   && vsce package --allow-missing-repository --skip-license -o /pipeon.vsix
 

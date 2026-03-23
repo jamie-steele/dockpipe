@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DOCKPIPE="$REPO_ROOT/bin/dockpipe"
+DOCKPIPE="$REPO_ROOT/src/bin/dockpipe"
 
 # Node is available (agent-dev is Node-based)
 out=$("$DOCKPIPE" --no-data --template agent-dev -- node -e "console.log('node ok')")

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Optional: asciinema + agg for `make demo-record` (see demo/README.md).
+# Optional: asciinema + agg for `make demo-record` (see release/demo/README.md).
 # Best-effort user-level installs; does not use sudo. Exits 0 even if tools remain missing.
 set -uo pipefail
 

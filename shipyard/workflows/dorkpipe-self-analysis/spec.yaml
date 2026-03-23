@@ -1,5 +1,5 @@
 # DorkPipe DAG: deterministic prep → signals → Cursor handoff markdown.
-# Run via: scripts/dorkpipe/run-self-analysis.sh OR bin/dorkpipe run -f dockpipe-experimental/workflows/dorkpipe-self-analysis/spec.yaml --workdir <repo>
+# Run via: scripts/dorkpipe/run-self-analysis.sh OR bin/dorkpipe run -f shipyard/workflows/dorkpipe-self-analysis/spec.yaml --workdir <repo>
 name: dorkpipe-self-analysis
 policy:
   escalate_confidence_below: 0.01

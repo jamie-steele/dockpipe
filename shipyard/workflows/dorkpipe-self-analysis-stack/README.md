@@ -10,13 +10,13 @@ Use this when you want **one command** from YAML instead of running **`dev-stack
 
 ```bash
 make build
-./bin/dockpipe --workflow dorkpipe-self-analysis-stack --workdir . --
+./src/bin/dockpipe --workflow dorkpipe-self-analysis-stack --workdir . --
 ```
 
 Keep sidecars up after the run:
 
 ```bash
-DORKPIPE_DEV_STACK_AUTODOWN=0 ./bin/dockpipe --workflow dorkpipe-self-analysis-stack --workdir . --
+DORKPIPE_DEV_STACK_AUTODOWN=0 ./src/bin/dockpipe --workflow dorkpipe-self-analysis-stack --workdir . --
 ```
 
 Analysis-only (no compose lifecycle): **`dorkpipe-self-analysis`**. Host-only: **`dorkpipe-self-analysis-host`**.

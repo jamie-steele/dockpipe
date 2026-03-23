@@ -109,6 +109,6 @@ steps:
       test -n "${OPENAI_API_KEY:-}${CODEX_API_KEY:-}" || { echo "[test-demo] OPENAI_API_KEY or CODEX_API_KEY is required" >&2; exit 1; }
       export CODEX_API_KEY="${CODEX_API_KEY:-$OPENAI_API_KEY}"
       test -f .dockpipe/review-context.md || { echo "[test-demo] missing .dockpipe/review-context.md" >&2; exit 1; }
-      PROMPT_FILE="dockpipe-experimental/workflows/test-demo/prompts/codex-final-review.md"
+      PROMPT_FILE="shipyard/workflows/test-demo/prompts/codex-final-review.md"
       test -f "$PROMPT_FILE" || { echo "[test-demo] missing $PROMPT_FILE" >&2; exit 1; }
       { cat "$PROMPT_FILE"; echo ""; echo "Prep file on disk: /work/.dockpipe/review-context.md"; } | codex exec --dangerously-bypass-approvals-and-sandbox -'

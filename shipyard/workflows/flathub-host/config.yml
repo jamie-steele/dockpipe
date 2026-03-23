@@ -9,5 +9,5 @@ docker_preflight: false
 
 steps:
   - id: flatpak
-    run: scripts/flathub-host-run.sh
+    run: scripts/flathub-host/flathub-host-run.sh
     skip_container: true

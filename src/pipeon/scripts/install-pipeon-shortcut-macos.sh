@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # macOS: double-clickable Pipeon.command in ~/Applications (opens Terminal to run dockpipe).
-# Usage: from repo root — bash pipeon/scripts/install-pipeon-shortcut-macos.sh
+# Usage: from repo root — bash src/pipeon/scripts/install-pipeon-shortcut-macos.sh
 set -euo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 OUT="${HOME}/Applications"
 mkdir -p "$OUT"
 TARGET="$OUT/Pipeon.command"
@@ -12,7 +12,7 @@ TARGET="$OUT/Pipeon.command"
   echo '#!/bin/bash'
   echo "export DOCKPIPE_REPO_ROOT=$(printf %q "$REPO")"
   echo 'cd "${PIPEON_WORKDIR:-$HOME}"'
-  echo "exec $(printf %q "$REPO/bin/dockpipe") --workflow vscode --workdir ."
+  echo "exec $(printf %q "$REPO/src/bin/dockpipe") --workflow vscode --workdir ."
 } > "$TARGET"
 chmod +x "$TARGET"
 

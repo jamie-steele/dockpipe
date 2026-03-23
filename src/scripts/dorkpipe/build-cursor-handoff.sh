@@ -14,13 +14,13 @@ if [[ ! -d "$OUT" ]]; then
 fi
 
 GO_N=$(cat "$ROOT/.dorkpipe/self-analysis/dorkpipe_go_files.count" 2>/dev/null || echo 0)
-SPEC="$ROOT/dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml"
+SPEC="$ROOT/shipyard/workflows/dorkpipe-orchestrator/spec.example.yaml"
 HAS_VERIFIER=0
 if [[ -f "$SPEC" ]] && grep -q 'kind:.*verifier' "$SPEC"; then
 	HAS_VERIFIER=1
 fi
 HAS_BRANCH=0
-if [[ -f "$ROOT/lib/dorkpipe/examples/full-bar.yaml" ]]; then
+if [[ -f "$ROOT/src/lib/dorkpipe/examples/full-bar.yaml" ]]; then
 	HAS_BRANCH=1
 fi
 
@@ -60,7 +60,7 @@ EOF
 	echo "The following are **actionable** directions consistent with \`AGENTS.md\` (primitive core, templates as extension):"
 	echo ""
 	if [[ "$HAS_VERIFIER" -eq 0 ]]; then
-		echo "- **Independent verifier in the default orchestrator spec** (\`dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml\`): add a \`kind: verifier\` node after local LLM output so \`Vector.Verifier\` is populated before escalation (implementation in \`lib/dorkpipe/workers/workers.go\`, \`parseVerifierScore\`)."
+		echo "- **Independent verifier in the default orchestrator spec** (\`shipyard/workflows/dorkpipe-orchestrator/spec.example.yaml\`): add a \`kind: verifier\` node after local LLM output so \`Vector.Verifier\` is populated before escalation (implementation in \`lib/dorkpipe/workers/workers.go\`, \`parseVerifierScore\`)."
 	fi
 	echo "- **Surface engine features in shipped examples**: \`lib/dorkpipe/examples/full-bar.yaml\` demonstrates \`branch_judge\`, \`retrieve_if_calibrated_below\`, and skips — mirror one pattern into \`spec.example.yaml\` so dogfood exercises the same code paths operators will rely on."
 	echo "- **Metrics loop**: standardize \`bin/dorkpipe eval\` / \`promote\` after CI or nightly runs; extend \`.dorkpipe/metrics.jsonl\` consumers if new dimensions are added (\`lib/dorkpipe/engine/provenance.go\`)."
@@ -85,8 +85,8 @@ EOF
 	echo "| Aggregation | \`lib/dorkpipe/aggregator/merge.go\` |"
 	echo "| CLI | \`src/cmd/dorkpipe/main.go\` |"
 	echo "| Eval / promotion | \`lib/dorkpipe/eval/eval.go\`, \`lib/dorkpipe/promotion/promotion.go\` |"
-	echo "| DockPipe workflow (this integration) | \`dockpipe-experimental/workflows/dorkpipe-self-analysis/\` |"
-	echo "| Orchestrator example DAG | \`dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml\` |"
+	echo "| DockPipe workflow (this integration) | \`shipyard/workflows/dorkpipe-self-analysis/\` |"
+	echo "| Orchestrator example DAG | \`shipyard/workflows/dorkpipe-orchestrator/spec.example.yaml\` |"
 	echo ""
 	if [[ -f "$OUT/key_file_wc.txt" ]]; then
 		echo "### Line counts (signal for complexity hotspots)"
@@ -105,12 +105,12 @@ EOF
 	echo "1. Extend \`spec.example.yaml\` in small steps (verifier OR branch OR \`retrieve_if\` — not all at once if it complicates ops)."
 	echo "2. Add or adjust tests in \`lib/dorkpipe/*/..._test.go\` when touching aggregation, planner, or workers."
 	echo "3. Keep \`dorkpipe validate\` / \`go test ./...\` green."
-	echo "4. Document the new path in \`dockpipe-experimental/workflows/dorkpipe-self-analysis/README.md\` and \`docs/dorkpipe.md\` if behavior is user-visible."
+	echo "4. Document the new path in \`shipyard/workflows/dorkpipe-self-analysis/README.md\` and \`docs/dorkpipe.md\` if behavior is user-visible."
 	echo ""
 
 	echo "## 7. Acceptance criteria"
 	echo "- [ ] \`make build\` and \`go test ./...\` pass."
-	echo "- [ ] \`bin/dorkpipe validate -f dockpipe-experimental/workflows/dorkpipe-self-analysis/spec.yaml\` passes."
+	echo "- [ ] \`bin/dorkpipe validate -f shipyard/workflows/dorkpipe-self-analysis/spec.yaml\` passes."
 	echo "- [ ] Running \`dockpipe --workflow dorkpipe-self-analysis --workdir <repo> --\` writes \`.dockpipe/orchestrator-cursor-prompt.md\`."
 	echo "- [ ] The handoff references **real** paths present in this repo (verify sections 2–4 against your checkout)."
 	echo ""
@@ -122,7 +122,7 @@ EOF
 	echo "4. **Promotion**: act on \`dorkpipe promote\` suggestions or tune thresholds when noise is high."
 	echo ""
 	echo "## 9. Single prompt for your AI assistant"
-	echo "The **plain, copy-paste-ready** implementation prompt (no extra narrative) is in **\`.dockpipe/paste-this-prompt.txt\`**. Running \`scripts/dorkpipe/run-self-analysis.sh\` **prints that file to stdout** at the end. With \`spec.combined.yaml\`, Ollama output is merged into the same file after the base prompt."
+	echo "The **plain, copy-paste-ready** implementation prompt (no extra narrative) is in **\`.dockpipe/paste-this-prompt.txt\`**. Running \`src/scripts/dorkpipe/run-self-analysis.sh\` **prints that file to stdout** at the end. With \`spec.combined.yaml\`, Ollama output is merged into the same file after the base prompt."
 	echo ""
 	echo "---"
 	echo "_Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)_ · _Facts under \`.dockpipe/self-analysis/\`_"
@@ -170,20 +170,20 @@ HEAD_SHA=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "unknown")
 HEAD_REF=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 {
 	cat <<EOF
-You are working in the DockPipe repository. Follow AGENTS.md: DockPipe stays the primitive; DorkPipe (lib/dorkpipe/, bin/dorkpipe) is orchestration on top — no second hidden engine.
+You are working in the DockPipe repository. Follow AGENTS.md: DockPipe stays the primitive; DorkPipe (src/lib/dorkpipe/, src/bin/dorkpipe) is orchestration on top — no second hidden engine.
 
 Repository snapshot (machine-generated):
 - ref: ${HEAD_REF}
 - HEAD: ${HEAD_SHA}
-- lib/dorkpipe Go files: ${GO_N}
+- src/lib/dorkpipe Go files: ${GO_N}
 
 Task: Implement the next concrete improvements to DorkPipe orchestration (multi-signal confidence, conditional nodes, verifiers, eval/promotion) without unnecessary DockPipe core changes.
 
 Do this work in order:
-1) If this is a first pass: read lib/dorkpipe/engine/run.go and lib/dorkpipe/spec/spec.go to see current policy and scheduling.
-2) Add or extend a shipped DAG spec (dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml) so dogfood matches engine capabilities (e.g. kind: verifier after local LLM, or one pattern from lib/dorkpipe/examples/full-bar.yaml).
-3) Add tests under lib/dorkpipe/*/ when you change aggregation, planner, or workers.
-4) Run: make build && go test ./... && bin/dorkpipe validate -f dockpipe-experimental/workflows/dorkpipe-self-analysis/spec.yaml
+1) If this is a first pass: read src/lib/dorkpipe/engine/run.go and src/lib/dorkpipe/spec/spec.go to see current policy and scheduling.
+2) Add or extend a shipped DAG spec (shipyard/workflows/dorkpipe-orchestrator/spec.example.yaml) so dogfood matches engine capabilities (e.g. kind: verifier after local LLM, or one pattern from src/lib/dorkpipe/examples/full-bar.yaml).
+3) Add tests under src/lib/dorkpipe/*/ when you change aggregation, planner, or workers.
+4) Run: make build && go test ./... && src/bin/dorkpipe validate -f shipyard/workflows/dorkpipe-self-analysis/spec.yaml
 
 Constraints:
 - No vendor-specific hooks in src/lib/dockpipe/application for this work.
@@ -192,16 +192,16 @@ Constraints:
 
 EOF
 	if [[ "$HAS_VERIFIER" -eq 0 ]]; then
-		echo "Priority: orchestrator spec.example.yaml still lacks a kind: verifier node after local_reason — add one so Vector.Verifier is populated before escalation (lib/dorkpipe/workers/workers.go)."
+		echo "Priority: orchestrator spec.example.yaml still lacks a kind: verifier node after local_reason — add one so Vector.Verifier is populated before escalation (src/lib/dorkpipe/workers/workers.go)."
 		echo ""
 	fi
 	cat <<'EOF'
 Start here (files):
-- lib/dorkpipe/engine/run.go
-- lib/dorkpipe/workers/workers.go
-- lib/dorkpipe/aggregator/merge.go
-- dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml
-- lib/dorkpipe/examples/full-bar.yaml
+- src/lib/dorkpipe/engine/run.go
+- src/lib/dorkpipe/workers/workers.go
+- src/lib/dorkpipe/aggregator/merge.go
+- shipyard/workflows/dorkpipe-orchestrator/spec.example.yaml
+- src/lib/dorkpipe/examples/full-bar.yaml
 
 Acceptance:
 - make build passes; go test ./... passes; dorkpipe validate passes for the YAML you touched.

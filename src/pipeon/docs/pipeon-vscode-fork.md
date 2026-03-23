@@ -12,7 +12,7 @@ This document is the **maintainer playbook**. It is not legal advice; respect **
 |----------|--------|
 | **Fork `microsoft/vscode` (or mirror)** | Full control; you build Electron, apply `product.json`, ship **Pipeon** as the app name in your build. |
 | **Base on VSCodium** | Community builds without MS telemetry; some teams prefer it as a starting point—still a fork workflow. |
-| **Extension-only (no fork)** | Ship **`contrib/pipeon-vscode-extension`** into **stock VS Code**—fastest path for dev; **not** a branded Pipeon desktop by itself. |
+| **Extension-only (no fork)** | Ship **`src/contrib/pipeon-vscode-extension`** into **stock VS Code**—fastest path for dev; **not** a branded Pipeon desktop by itself. |
 
 **Recommended path for “Pipeon IDE”:** **fork Code OSS** in a dedicated repo (e.g. `pipeon/pipeon-editor`), pin to a **vscode release tag**, apply patches, CI build per OS.
 
@@ -38,33 +38,33 @@ This document is the **maintainer playbook**. It is not legal advice; respect **
 
 | Addition | Purpose |
 |----------|---------|
-| **Bundled or recommended extension** | Ship **`contrib/pipeon-vscode-extension`** from **this** repo as a `.vsix` or built-in extension folder. |
+| **Bundled or recommended extension** | Ship **`src/contrib/pipeon-vscode-extension`** from **this** repo as a `.vsix` or built-in extension folder. |
 | **Default settings / welcome** | Point users at Ollama, workspace folders, link to Pipeon docs. |
 | **Update server** | When you ship Pipeon binaries, host your own update JSON or use a static download page first. |
 
-**Worker:** The long-running **Pipeon worker** (HTTP or stdio next to the editor) usually lives in **another** service/repo or starts from the extension; it reuses the same artifact contracts as **`bin/pipeon`** / **`.dockpipe/pipeon-context.md`**.
+**Worker:** The long-running **Pipeon worker** (HTTP or stdio next to the editor) usually lives in **another** service/repo or starts from the extension; it reuses the same artifact contracts as **`src/bin/pipeon`** / **`.dockpipe/pipeon-context.md`**.
 
 ---
 
 ## 4. Wire in the extension from *this* repo
 
 ```bash
-cd /path/to/dockpipe/contrib/pipeon-vscode-extension
+cd /path/to/dockpipe/src/contrib/pipeon-vscode-extension
 npm install
 npx @vscode/vsce package   # produces pipeon-*.vsix
 ```
 
 Install the `.vsix` into your Pipeon (or VS Code) build: **Extensions → … → Install from VSIX…**
 
-For **development**, open **`contrib/pipeon-vscode-extension`** in VS Code and **F5** (Extension Development Host).
+For **development**, open **`src/contrib/pipeon-vscode-extension`** in VS Code and **F5** (Extension Development Host).
 
-**Browser (Coder code-server):** this repo also ships **`dockpipe-code-server:latest`** — **Coder’s** `codercom/code-server` image with Pipeon pre-installed, baseline User settings, and a **Pipeon P-mark favicon** in the browser tab. Build: **`make build-code-server-image`** (see **`templates/core/resolvers/code-server/assets/images/code-server/README.md`**). The **vscode** workflow uses it by default (`dockpipe --workflow vscode`). Icon sources: **`make pipeon-icons`** → **`pipeon/scripts/generate-pipeon-icons.py`**.
+**Browser (Coder code-server):** this repo also ships **`dockpipe-code-server:latest`** — **Coder’s** `codercom/code-server` image with Pipeon pre-installed, baseline User settings, and a **Pipeon P-mark favicon** in the browser tab. Build: **`make build-code-server-image`** (see **`templates/core/resolvers/code-server/assets/images/code-server/README.md`**). The **vscode** workflow uses it by default (`dockpipe --workflow vscode`). Icon sources: **`make pipeon-icons`** → **`src/pipeon/scripts/generate-pipeon-icons.py`**.
 
 ---
 
 ## 5. Relationship to `dockpipe`
 
-- **This repo** = DockPipe / DorkPipe **engine**, artifact **schemas**, **harness** (`bin/pipeon`), and **extension stub**.
+- **This repo** = DockPipe / DorkPipe **engine**, artifact **schemas**, **harness** (`src/bin/pipeon`), and **extension stub**.
 - **Pipeon editor repo** = **fork** of Code OSS + CI + signing + your product updates.
 
 Keep them **linked** in docs (version pins, extension version).

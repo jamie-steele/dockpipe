@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Launcher: prefers pre-built Go binary; otherwise `go run` from repo root (needs Go 1.20+).
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$ROOT}"
-BIN="${ROOT}/bin/dockpipe.bin"
+BIN="${ROOT}/src/bin/dockpipe.bin"
 if [[ -x "$BIN" ]]; then
   exec "$BIN" "$@"
 fi
 if command -v go >/dev/null 2>&1; then
   exec go -C "$ROOT" run ./src/cmd/dockpipe "$@"
 fi
-echo "dockpipe: install Go, then from ${ROOT} run:  make  or  go build -o bin/dockpipe.bin ./src/cmd/dockpipe" >&2
+echo "dockpipe: install Go, then from ${ROOT} run:  make  or  go build -o src/bin/dockpipe.bin ./src/cmd/dockpipe" >&2
 exit 1

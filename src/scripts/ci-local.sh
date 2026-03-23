@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Mirror the Linux "test" job in .github/workflows/ci.yml (not CodeQL, not Windows).
-# From repo root:  make ci   or   bash scripts/ci-local.sh
+# From repo root:  make ci   or   bash src/scripts/ci-local.sh
 #
 # Optional Codex dogfood (same as CI when vars.DOCKPIPE_CI_CODEX=true):
-#   DOCKPIPE_CI_CODEX=true OPENAI_API_KEY=... bash scripts/ci-local.sh
+#   DOCKPIPE_CI_CODEX=true OPENAI_API_KEY=... bash src/scripts/ci-local.sh
 #
 # Requires: Go, make, Docker (for workflow + integration tests), dpkg-deb (for .deb build), jq.
-# govulncheck / gosec: install with  make dev-deps  or  bash scripts/install-deps.sh
+# govulncheck / gosec: install with  make dev-deps  or  bash src/scripts/install-deps.sh
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 export DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$ROOT}"
@@ -25,11 +25,11 @@ step() {
 }
 
 if ! have govulncheck; then
-	echo "ci-local: govulncheck not found. Run:  make dev-deps  or  bash scripts/install-deps.sh" >&2
+	echo "ci-local: govulncheck not found. Run:  make dev-deps  or  bash src/scripts/install-deps.sh" >&2
 	exit 1
 fi
 if ! have gosec; then
-	echo "ci-local: gosec not found. Run:  make dev-deps  or  bash scripts/install-deps.sh" >&2
+	echo "ci-local: gosec not found. Run:  make dev-deps  or  bash src/scripts/install-deps.sh" >&2
 	exit 1
 fi
 if ! have jq; then
@@ -46,7 +46,7 @@ gosec -conf .gosec.json -fmt json -out=.dockpipe/ci-raw/gosec.json ./...
 GC=$?
 set -e
 export DOCKPIPE_WORKDIR="$ROOT"
-bash scripts/dorkpipe/normalize-ci-scans.sh
+bash src/scripts/dorkpipe/normalize-ci-scans.sh
 jq -r '"govulncheck raw vulns: " + ((.vulns // .Vulns // [] | length) | tostring)' .dockpipe/ci-raw/govulncheck.json 2>/dev/null || true
 jq -r '"gosec raw issues: " + ((.Stats.found // 0) | tostring)' .dockpipe/ci-raw/gosec.json 2>/dev/null || true
 if [[ $VC -ne 0 ]]; then exit "$VC"; fi
@@ -59,10 +59,10 @@ step "go test"
 go test ./...
 
 step "templates/core path guard"
-bash scripts/check-templates-core-paths.sh
+bash src/scripts/check-templates-core-paths.sh
 
 step "dogfood — workflow test (go test + vet + govulncheck + gosec in Docker; mount module cache only)"
-./bin/dockpipe --workflow test --runtime docker --workdir "$ROOT" \
+./src/bin/dockpipe --workflow test --runtime docker --workdir "$ROOT" \
 	--mount "$(go env GOPATH)/pkg:/go/pkg:rw" \
 	--
 
@@ -73,12 +73,12 @@ if [[ "${DOCKPIPE_CI_CODEX:-}" == "true" ]]; then
 		exit 1
 	fi
 	export OPENAI_API_KEY
-	./bin/dockpipe --workflow dogfood-codex-pav --resolver codex --runtime docker --workdir "$ROOT" --
-	./bin/dockpipe --workflow dogfood-codex-security --resolver codex --runtime docker --workdir "$ROOT" --
+	./src/bin/dockpipe --workflow dogfood-codex-pav --resolver codex --runtime docker --workdir "$ROOT" --
+	./src/bin/dockpipe --workflow dogfood-codex-security --resolver codex --runtime docker --workdir "$ROOT" --
 fi
 
 step "build amd64 .deb"
-./packaging/build-deb.sh "$(tr -d ' \t\r\n' < VERSION)" amd64
+./release/packaging/build-deb.sh "$(tr -d ' \t\r\n' < VERSION)" amd64
 
 step "shell unit tests"
 bash tests/run_tests.sh

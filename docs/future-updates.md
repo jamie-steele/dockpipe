@@ -6,7 +6,7 @@ Only include items that are **not implemented yet**.
 
 **Clarification (so this file isn’t confused with what already shipped):**
 
-- **Today:** Integrate on **`staging`**; when ready, **PR `staging` → `master`** ships (**`VERSION`** + **`releasenotes/X.Y.Z.md`**). Details: **[releases/branching.md](releases/branching.md)**, **[releases/releasing.md](releases/releasing.md)**.
+- **Today:** Integrate on **`staging`**; when ready, **PR `staging` → `master`** ships (**`VERSION`** + **`release/releasenotes/X.Y.Z.md`**). Details: **[release/docs/branching.md](../release/docs/branching.md)**, **[release/docs/releasing.md](../release/docs/releasing.md)**.
 - **This file** lists **future** ideas only — not the current CI matrix, release artifacts, or shipped features.
 
 ---
@@ -14,7 +14,7 @@ Only include items that are **not implemented yet**.
 ## Windows MSI (release pipeline)
 
 - **Per-user MSI** as a normal release asset (WiX), without an opt-in marker file — or keep opt-in but make CI **reliable** and documented.
-- **`winget install`** from the default Microsoft catalog (requires a merged **`winget-pkgs`** PR per release) — see **[packaging/winget/README.md](../packaging/winget/README.md)**.
+- **`winget install`** from the default Microsoft catalog (requires a merged **`winget-pkgs`** PR per release) — see **[release/packaging/winget/README.md](../release/packaging/winget/README.md)**.
 
 ---
 
@@ -40,11 +40,11 @@ Only include items that are **not implemented yet**.
 
 ## macOS distribution and DX
 
-**Today:** macOS tarballs ship from the release workflow; a Homebrew **formula source** lives in-repo (`packaging/homebrew/dockpipe.rb`). Users still need a **published tap** that tracks those releases.
+**Today:** macOS tarballs ship from the release workflow; a Homebrew **formula source** lives in-repo (`release/packaging/homebrew/dockpipe.rb`). Users still need a **published tap** that tracks those releases.
 
 **Still to build or automate:**
 
-- Automate or standardize **tap repo updates** each release (bump `url` / `sha256` in `Formula/dockpipe.rb` — see `packaging/homebrew/README.md`).
+- Automate or standardize **tap repo updates** each release (bump `url` / `sha256` in `Formula/dockpipe.rb` — see `release/packaging/homebrew/README.md`).
 - Optional **codesign / notarize** macOS binaries (releases are currently unsigned archives).
 - **`dockpipe macos doctor`** (Docker, bash, PATH sanity checks).
 

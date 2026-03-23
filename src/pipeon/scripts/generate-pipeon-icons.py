@@ -7,7 +7,7 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
 # Pipeon mark: deep blue tile + light "P"
 BG = (20, 50, 82, 255)
@@ -71,8 +71,18 @@ def write_svgs(out_dir: str) -> None:
 
 
 def main() -> int:
-    ext_img = os.path.join(REPO_ROOT, "contrib/pipeon-vscode-extension", "images")
-    cs_dir = os.path.join(REPO_ROOT, "templates", "core", "assets", "images", "code-server")
+    ext_img = os.path.join(REPO_ROOT, "src/contrib/pipeon-vscode-extension", "images")
+    cs_dir = os.path.join(
+        REPO_ROOT,
+        "src",
+        "templates",
+        "core",
+        "resolvers",
+        "code-server",
+        "assets",
+        "images",
+        "code-server",
+    )
     os.makedirs(ext_img, exist_ok=True)
     os.makedirs(cs_dir, exist_ok=True)
 

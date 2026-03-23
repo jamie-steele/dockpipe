@@ -22,9 +22,9 @@ Until **0.6.5** ships, use **`DOCKPIPE_PIPEON=1`** and **`DOCKPIPE_PIPEON_ALLOW_
 ```bash
 export DOCKPIPE_PIPEON=1
 export DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1   # until VERSION >= 0.6.5
-./bin/pipeon status
-./bin/pipeon bundle
-./bin/pipeon chat "Summarize security posture from available signals."
+./src/bin/pipeon status
+./src/bin/pipeon bundle
+./src/bin/pipeon chat "Summarize security posture from available signals."
 ```
 
 ## Shortcuts
@@ -33,7 +33,7 @@ See **[`../docs/pipeon-shortcuts.md`](../docs/pipeon-shortcuts.md)** (VS Code/Cu
 
 ## Desktop / code-server (this repo)
 
-**Bundled Pipeon shell** (**`pipeon.sh`**, **`chat.sh`**, **`bundle-context.sh`**, **`lib/`**, **`prompts/`**) is canonical under **`templates/core/bundles/pipeon/assets/scripts/`**; this directory repeats those paths as **symlinks** for stable **`pipeon/scripts/…`** references (same idea as **`scripts/dorkpipe/`**).
+**Bundled Pipeon shell** (**`pipeon.sh`**, **`chat.sh`**, **`bundle-context.sh`**, **`lib/`**, **`prompts/`**) is canonical under **`src/templates/core/bundles/pipeon/assets/scripts/`**; this directory repeats those paths as **symlinks** for stable **`src/pipeon/scripts/…`** references (same idea as **`scripts/dorkpipe/`**).
 
 Maintainer-only scripts live **here** (same folder as the harness):
 

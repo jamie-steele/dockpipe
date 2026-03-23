@@ -8,6 +8,6 @@
 2. **`templates/core/bundles/<domain>/assets/images/<domain>/`** — e.g. **steam-flatpak**
 3. Fallback: **`templates/core/assets/images/<name>/`** (this directory)
 
-Build context is always the **repository root** (for **`COPY lib/entrypoint.sh`** where used).
+Build context is always the **repository root** (for **`COPY assets/entrypoint.sh`** where used).
 
 **Bundling and licensing:** **[docs/templates-core-assets.md](../../../../docs/templates-core-assets.md)**.

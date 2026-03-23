@@ -11,7 +11,7 @@ After each **GitHub Release**, the **Release** workflow can call the [Forem API]
 
 You can enable **either**, **both**, or **neither** (job runs only if at least one action is configured — see below).
 
-Body for both is the same: link to the **GitHub release**, then **`releasenotes/X.Y.Z.md`**.
+Body for both is the same: link to the **GitHub release**, then **`release/releasenotes/X.Y.Z.md`**.
 
 ---
 
@@ -54,7 +54,7 @@ If **`DEVTO_PUBLISH=true`** but neither action is set, the job is **skipped** (c
 ## What gets published
 
 - **Title:** `DEVTO_TITLE` / `DEVTO_ONE_TIME_TITLE` or default from release tag.
-- **Body:** `**[tag](url)**` + **GitHub release** link + **`releasenotes/X.Y.Z.md`**.
+- **Body:** `**[tag](url)**` + **GitHub release** link + **`release/releasenotes/X.Y.Z.md`**.
 - **`canonical_url`:** GitHub release URL.
 - **`published`:** `true`.
 

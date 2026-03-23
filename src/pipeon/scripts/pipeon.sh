@@ -1,1 +1,1 @@
-../../../templates/core/bundles/pipeon/assets/scripts/pipeon.sh
+../../templates/core/bundles/pipeon/assets/scripts/pipeon.sh

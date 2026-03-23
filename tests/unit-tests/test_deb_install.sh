@@ -5,7 +5,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DEB_GLOB="${REPO_ROOT}/packaging/build/dockpipe_*_amd64.deb"
+DEB_GLOB="${REPO_ROOT}/release/packaging/build/dockpipe_*_amd64.deb"
 DEB="${DOCKPIPE_DEB_PATH:-}"
 
 if ! command -v docker &>/dev/null; then
@@ -17,7 +17,7 @@ if [[ -z "${DEB}" ]]; then
   DEB=$(echo $DEB_GLOB 2>/dev/null)
 fi
 if [[ ! -f "${DEB}" ]]; then
-  echo "test_deb_install FAIL: No .deb found at packaging/build/dockpipe_*_amd64.deb (run ./packaging/build-deb.sh first)"
+  echo "test_deb_install FAIL: No .deb found at release/packaging/build/dockpipe_*_amd64.deb (run ./release/packaging/build-deb.sh first)"
   exit 1
 fi
 

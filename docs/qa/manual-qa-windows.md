@@ -13,7 +13,7 @@
 **Native (default):**
 
 - **Windows 10/11**, **Docker Desktop** (Windows `docker` on PATH), **Git for Windows** (or `git` + `bash` on PATH).
-- **`dockpipe.exe`** on PATH — **MSI**, **[install.ps1](https://github.com/jamie-steele/dockpipe/blob/master/packaging/windows/install.ps1)**, release **zip**, or `GOOS=windows GOARCH=amd64 go build …`.
+- **`dockpipe.exe`** on PATH — **MSI**, **[install.ps1](https://github.com/jamie-steele/dockpipe/blob/master/release/packaging/windows/install.ps1)**, release **zip**, or `GOOS=windows GOARCH=amd64 go build …`.
 
 **WSL bridge (`DOCKPIPE_USE_WSL_BRIDGE=1`):**
 
@@ -99,7 +99,7 @@ Assumes WSL already has dockpipe and you have run **`dockpipe windows setup`** a
 
 ## 6. Optional: MSI install smoke
 
-- [ ] On a clean Windows profile (or VM), install **`dockpipe_<version>_windows_amd64.msi`** from the release (or build locally with **`packaging/msi/build.ps1`**).
+- [ ] On a clean Windows profile (or VM), install **`dockpipe_<version>_windows_amd64.msi`** from the release (or build locally with **`release/packaging/msi/build.ps1`**).
 - [ ] New shell: `dockpipe --help`
 - [ ] Uninstall via **Apps & features** (or `msiexec /x {ProductCode}`) if you need a retest — PATH may retain an extra segment until edited manually (WiX util limitation).
 
@@ -113,13 +113,13 @@ Assumes WSL already has dockpipe and you have run **`dockpipe windows setup`** a
 
 ```bash
 go test ./...
-./packaging/build-deb-all.sh <version>
-make build-windows   # writes bin/dockpipe.exe (VERSION + -ldflags from Makefile)
+./release/packaging/build-deb-all.sh <version>
+make build-windows   # writes src/bin/dockpipe.exe (VERSION + -ldflags from Makefile)
 ```
 
-On **Windows**, build MSI with **`packaging/msi/build.ps1`** (see **[packaging/msi/README.md](../../packaging/msi/README.md)**).
+On **Windows**, build MSI with **`release/packaging/msi/build.ps1`** (see **[release/packaging/msi/README.md](../../release/packaging/msi/README.md)**).
 
-Copy **`packaging/build/dockpipe_<version>_amd64.deb`** (or arm64 if WSL is aarch64) and the **MSI or exe** to the Windows PC. Install the `.deb` **inside WSL** before testing the bridge.
+Copy **`release/packaging/build/dockpipe_<version>_amd64.deb`** (or arm64 if WSL is aarch64) and the **MSI or exe** to the Windows PC. Install the `.deb` **inside WSL** before testing the bridge.
 
 ---
 

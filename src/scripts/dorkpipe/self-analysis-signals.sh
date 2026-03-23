@@ -8,16 +8,16 @@ mkdir -p "$OUT"
 
 todo_hits() {
 	if command -v rg >/dev/null 2>&1; then
-		rg -n 'TODO|FIXME|XXX' "$ROOT/lib/dorkpipe" "$ROOT/scripts/dorkpipe" 2>/dev/null | head -50 || true
+		rg -n 'TODO|FIXME|XXX' "$ROOT/src/lib/dorkpipe" "$ROOT/src/scripts/dorkpipe" 2>/dev/null | head -50 || true
 	else
-		grep -R -n -E 'TODO|FIXME|XXX' "$ROOT/lib/dorkpipe" "$ROOT/scripts/dorkpipe" 2>/dev/null | head -50 || true
+		grep -R -n -E 'TODO|FIXME|XXX' "$ROOT/src/lib/dorkpipe" "$ROOT/src/scripts/dorkpipe" 2>/dev/null | head -50 || true
 	fi
 }
 
 engine_files() {
 	if command -v rg >/dev/null 2>&1; then
 		rg -l 'branch_judge|retrieve_if|EarlyStop|verifier|ShouldEscalate|mergeVectors|dorkpipe\.metrics' \
-			"$ROOT/lib/dorkpipe" "$ROOT/dockpipe-experimental/workflows" "$ROOT/scripts/dorkpipe" 2>/dev/null | sort -u | head -80 || true
+			"$ROOT/lib/dorkpipe" "$ROOT/shipyard/workflows" "$ROOT/scripts/dorkpipe" 2>/dev/null | sort -u | head -80 || true
 	else
 		grep -R -l -E 'branch_judge|retrieve_if|EarlyStop|verifier' "$ROOT/lib/dorkpipe" 2>/dev/null | head -80 || true
 	fi
@@ -35,7 +35,7 @@ engine_files() {
 
 {
 	echo "### spec.example.yaml (orchestrator) excerpt"
-	f="$ROOT/dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml"
+	f="$ROOT/shipyard/workflows/dorkpipe-orchestrator/spec.example.yaml"
 	if [[ -f "$f" ]]; then
 		sed -n '1,80p' "$f"
 	fi
@@ -47,9 +47,9 @@ engine_files() {
 } >"$OUT/signals_git_log.txt"
 
 {
-	echo "### go list (lib/dorkpipe/...)"
+	echo "### go list (src/lib/dorkpipe/...)"
 	if command -v go >/dev/null 2>&1; then
-		(cd "$ROOT" && go list ./lib/dorkpipe/... 2>/dev/null) || true
+		(cd "$ROOT" && go list ./src/lib/dorkpipe/... 2>/dev/null) || true
 	fi
 } >"$OUT/signals_go_list.txt"
 

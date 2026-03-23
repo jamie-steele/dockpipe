@@ -31,12 +31,12 @@ find "$ROOT/src/lib/dorkpipe" -name '*.go' 2>/dev/null | wc -l | tr -d ' ' >"$OU
 
 {
 	echo "## scripts/dorkpipe"
-	ls -la "$ROOT/scripts/dorkpipe" 2>/dev/null || true
+	ls -la "$ROOT/src/scripts/dorkpipe" 2>/dev/null || true
 } >"$OUT/scripts_dorkpipe_ls.txt"
 
 {
-	echo "## templates/core/bundles/dorkpipe (sample)"
-	find "$ROOT/templates/core/bundles/dorkpipe" -type f 2>/dev/null | sort | head -60
+	echo "## src/templates/core/bundles/dorkpipe (sample)"
+	find "$ROOT/src/templates/core/bundles/dorkpipe" -type f 2>/dev/null | sort | head -60
 } >"$OUT/assets_dorkpipe_files.txt" || true
 
 {
@@ -54,8 +54,8 @@ find "$ROOT/src/lib/dorkpipe" -name '*.go' 2>/dev/null | wc -l | tr -d ' ' >"$OU
 } >"$OUT/key_file_wc.txt" || true
 
 {
-	echo "## workflows (dockpipe-experimental/workflows)"
-	find "$ROOT/dockpipe-experimental/workflows" -name 'config.yml' 2>/dev/null | sort
+	echo "## workflows (shipyard/workflows)"
+	find "$ROOT/shipyard/workflows" -name 'config.yml' 2>/dev/null | sort
 } >"$OUT/workflow_configs.txt" || true
 
 for doc in docs/dorkpipe.md src/lib/dorkpipe/README.md AGENTS.md; do

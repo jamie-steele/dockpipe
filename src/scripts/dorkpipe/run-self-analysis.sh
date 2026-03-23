@@ -5,8 +5,8 @@ ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
 cd "$ROOT"
 export DOCKPIPE_WORKDIR="$ROOT"
-BIN="${DORKPIPE_BIN:-$ROOT/bin/dorkpipe}"
-SPEC="${DORKPIPE_SELF_ANALYSIS_SPEC:-$ROOT/dockpipe-experimental/workflows/dorkpipe-self-analysis/spec.yaml}"
+BIN="${DORKPIPE_BIN:-$ROOT/src/bin/dorkpipe}"
+SPEC="${DORKPIPE_SELF_ANALYSIS_SPEC:-$ROOT/shipyard/workflows/dorkpipe-self-analysis/spec.yaml}"
 if [[ ! -x "$BIN" ]]; then
 	echo "dorkpipe-self-analysis: build the orchestrator first: make build (expected $BIN)" >&2
 	exit 1
@@ -23,7 +23,7 @@ if [[ "$SPEC" == *spec.combined.yaml ]]; then
 		if ! curl -sf --connect-timeout 2 "${OHOST}/api/tags" >/dev/null; then
 			echo "dorkpipe-self-analysis: Ollama not reachable at ${OHOST} (needed for spec.combined.yaml)." >&2
 			echo "  Start Ollama (e.g. run the Ollama app or: ollama serve), or set OLLAMA_HOST to your server." >&2
-			echo "  Or use the fast path without Ollama: ./scripts/dorkpipe/run-self-analysis.sh" >&2
+			echo "  Or use the fast path without Ollama: ./src/scripts/dorkpipe/run-self-analysis.sh" >&2
 			exit 1
 		fi
 	else

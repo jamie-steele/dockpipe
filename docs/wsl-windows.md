@@ -8,7 +8,7 @@ This doc is **only** for a **niche** flow: moving refs between a **WSL** clone a
 
 Get branches from a repo in WSL into your Windows clone **without pushing to a remote**. Dockpipe can write a git bundle when it commits on the host; you then fetch that bundle from PowerShell.
 
-**Install `dockpipe.exe` first** (MSI, script, or zip) — see **[install.md](install.md)** (Windows section). Quick option: `irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex`
+**Install `dockpipe.exe` first** (MSI, script, or zip) — see **[install.md](install.md)** (Windows section). Quick option: `irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/release/packaging/windows/install.ps1 | iex`
 
 **WSL bridge users** may also read the sections below; the **default** Windows story remains **native `dockpipe.exe`**, not bundle fetch.
 
@@ -64,7 +64,7 @@ $root = [System.IO.Path]::GetPathRoot($BundlePath)
 $drive = $root.TrimEnd(':\').ToLower()
 $rel = $BundlePath.Substring($root.Length) -replace '\\', '/'
 $BundlePathWsl = "/mnt/$drive/$rel"
-$dockpipeCmd = if ($DockpipePath) { "cd ""$DockpipePath"" && ./bin/dockpipe" } else { "dockpipe" }
+$dockpipeCmd = if ($DockpipePath) { "cd ""$DockpipePath"" && ./src/bin/dockpipe" } else { "dockpipe" }
 $resolverArg = switch ($Resolver) { "claude" { "claude -p" }; "codex" { "codex -p" }; default { "claude -p" } }
 $PromptEscaped = "'" + ($Prompt -replace "'", "'\\''") + "'"
 $wslCmd = "$dockpipeCmd --resolver $Resolver --repo ""$RepoUrl"" --branch ""$Branch"" --act scripts/commit-worktree.sh --bundle-out ""$BundlePathWsl"" -- $resolverArg $PromptEscaped"

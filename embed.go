@@ -2,10 +2,10 @@ package dockpipe
 
 import "embed"
 
-// BundledFS holds embedded templates/ (user-facing workflows + templates/core), lib/entrypoint.sh, VERSION,
-// and dockpipe-experimental/workflows/* (repo-local experimental CI/dogfood workflows — not under templates/).
-// On unpack, templates/core/* → dockpipe-experimental/core/*, templates/<wf>/* → dockpipe-experimental/workflows/<wf>/* (see bundled_extract.go);
-// paths already under dockpipe-experimental/workflows/ are copied as-is.
+// BundledFS holds embedded src/templates/ (user-facing workflows + core/), assets/entrypoint.sh, VERSION,
+// and shipyard/workflows/* (repo-local maintainer CI/dogfood workflows — not under src/templates/).
+// On unpack, src/templates/core/* → shipyard/core/*, src/templates/<wf>/* → shipyard/workflows/<wf>/* (see bundled_extract.go);
+// paths already under shipyard/workflows/ are copied as-is.
 //
-//go:embed templates lib/entrypoint.sh VERSION dockpipe-experimental/workflows
+//go:embed src/templates assets/entrypoint.sh VERSION shipyard/workflows
 var BundledFS embed.FS

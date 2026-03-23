@@ -112,6 +112,39 @@ func TestResolveWorkflowScriptPrefersUserScriptsOverCore(t *testing.T) {
 	}
 }
 
+func TestResolveWorkflowScriptPrefersRepoScriptsOverSrcScripts(t *testing.T) {
+	repo := t.TempDir()
+	top := filepath.Join(repo, "scripts", "tool.sh")
+	src := filepath.Join(repo, "src", "scripts", "tool.sh")
+	for _, p := range []string{top, src} {
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := ResolveWorkflowScript("scripts/tool.sh", "/wf", repo)
+	if got != filepath.ToSlash(top) {
+		t.Fatalf("got %q want top-level scripts/ %q", got, filepath.ToSlash(top))
+	}
+}
+
+func TestResolveWorkflowScriptUsesSrcScriptsWhenTopLevelScriptsMissing(t *testing.T) {
+	repo := t.TempDir()
+	src := filepath.Join(repo, "src", "scripts", "maint.sh")
+	if err := os.MkdirAll(filepath.Dir(src), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(src, []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := ResolveWorkflowScript("scripts/maint.sh", "/wf", repo)
+	if got != filepath.ToSlash(src) {
+		t.Fatalf("got %q want %q", got, filepath.ToSlash(src))
+	}
+}
+
 // TestResolveResolverFilePathFailsWhenProfileOnlyInRuntimes verifies resolver profiles are not read
 // from templates/core/runtimes/ (taxonomy boundary).
 func TestResolveResolverFilePathFailsWhenProfileOnlyInRuntimes(t *testing.T) {

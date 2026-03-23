@@ -9,4 +9,4 @@ DOCKPIPE_RESOLVER_ENV=OPENAI_API_KEY,CODEX_API_KEY
 #   unprivileged user namespaces and often fails in Docker (bwrap namespace errors).
 # - Workflows that run codex exec inside this resolver's image should use
 #   `codex exec --dangerously-bypass-approvals-and-sandbox` so Codex does not add a second
-#   sandbox layer. See dockpipe-experimental/workflows/test-demo and this directory's README.
+#   sandbox layer. See shipyard/workflows/test-demo and this directory's README.

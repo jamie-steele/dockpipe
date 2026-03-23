@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
-# Record terminal demos: dockpipe test-demo (go test → vet → review prep → local Ollama → codex exec) → demo/dockpipe-demo-{short,long}.gif
+# Record terminal demos: dockpipe test-demo (go test → vet → review prep → local Ollama → codex exec) → release/demo/dockpipe-demo-{short,long}.gif
 # The test-demo review step is resolver-driven (codex) inside runtime docker; Codex inner sandbox is
 # off via workflow YAML (--dangerously-bypass-approvals-and-sandbox) — see templates/core/resolvers/codex/README.md
 # Requires OPENAI_API_KEY (and/or CODEX_API_KEY) for the final Codex step (export or .env before recording).
 # Requires: asciinema, agg, Docker, and a built CLI (make build).
 #
-# Usage: bash scripts/record-demo.sh [short|long|all]
+# Usage: bash src/scripts/record-demo.sh [short|long|all]
 #   short — compact GIF (social / quick share)
 #   long  — wider terminal + version line + workflow (fuller showcase)
 #   all   — both (default)
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 DEMO_DIR="${ROOT}/demo"
@@ -22,7 +22,7 @@ MODE="${1:-all}"
 case "$MODE" in
 short | long | all) ;;
 *)
-	die "usage: bash scripts/record-demo.sh [short|long|all]"
+	die "usage: bash src/scripts/record-demo.sh [short|long|all]"
 	;;
 esac
 
@@ -55,7 +55,7 @@ command -v agg >/dev/null 2>&1 || { echo "record-demo: agg not found." >&2; prin
 command -v docker >/dev/null 2>&1 || die "install Docker and ensure it is running"
 docker info >/dev/null 2>&1 || die "Docker daemon not reachable — start Docker"
 
-[[ -x "${ROOT}/bin/dockpipe.bin" ]] || [[ -f "${ROOT}/bin/dockpipe" ]] || die "run \`make build\` first (or: make demo-record)"
+[[ -x "${ROOT}/src/bin/dockpipe.bin" ]] || [[ -f "${ROOT}/src/bin/dockpipe" ]] || die "run \`make build\` first (or: make demo-record)"
 command -v go >/dev/null 2>&1 || die "need Go on PATH (go mod download + module cache mount for the test-demo workflow)"
 
 mkdir -p "$DEMO_DIR"
@@ -70,7 +70,7 @@ export DOCKPIPE_REPO_ROOT="$ROOT"
 go mod download
 GOPKG="\$(go env GOPATH)/pkg"
 printf '%s\n' '$ dockpipe --workflow test-demo --resolver codex --runtime docker --workdir . --mount "$(go env GOPATH)/pkg:/go/pkg:rw"'
-exec ./bin/dockpipe --workflow test-demo --resolver codex --runtime docker --workdir "$ROOT" --mount "\${GOPKG}:/go/pkg:rw" --
+exec ./src/bin/dockpipe --workflow test-demo --resolver codex --runtime docker --workdir "$ROOT" --mount "\${GOPKG}:/go/pkg:rw" --
 EOF
 }
 
@@ -84,9 +84,9 @@ export DOCKPIPE_REPO_ROOT="$ROOT"
 go mod download
 GOPKG="\$(go env GOPATH)/pkg"
 printf '%s\n' '$ dockpipe --version'
-./bin/dockpipe --version
+./src/bin/dockpipe --version
 printf '%s\n' '$ dockpipe --workflow test-demo --resolver codex --runtime docker --workdir . --mount "$(go env GOPATH)/pkg:/go/pkg:rw"'
-exec ./bin/dockpipe --workflow test-demo --resolver codex --runtime docker --workdir "$ROOT" --mount "\${GOPKG}:/go/pkg:rw" --
+exec ./src/bin/dockpipe --workflow test-demo --resolver codex --runtime docker --workdir "$ROOT" --mount "\${GOPKG}:/go/pkg:rw" --
 EOF
 }
 
@@ -153,7 +153,7 @@ case "$MODE" in
 all)
 	record_variant short
 	record_variant long
-	echo "Done: demo/dockpipe-demo-short.gif and demo/dockpipe-demo-long.gif"
+	echo "Done: release/demo/dockpipe-demo-short.gif and release/demo/dockpipe-demo-long.gif"
 	;;
 short)
 	record_variant short

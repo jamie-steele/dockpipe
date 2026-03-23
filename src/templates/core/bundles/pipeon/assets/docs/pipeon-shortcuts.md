@@ -1,6 +1,6 @@
 # Pipeon — shortcuts (easy adoption)
 
-Pipeon is **flag-gated** (`DOCKPIPE_PIPEON=1`); see **`pipeon/scripts/README.md`** (or **`scripts/pipeon/README.md`** — symlink). Until release **0.6.5**, also set **`DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1`**.
+Pipeon is **flag-gated** (`DOCKPIPE_PIPEON=1`); see **`src/pipeon/scripts/README.md`** (or **`scripts/pipeon/README.md`** — symlink). Until release **0.6.5**, also set **`DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1`**.
 
 ---
 
@@ -38,7 +38,7 @@ This repo ships **`.vscode/tasks.json`**:
 
 Run via **Terminal → Run Task…** or Command Palette → **Tasks: Run Task**.
 
-**Keyboard (optional):** VS Code does not load team keybindings from the repo. Merge **`pipeon/docs/pipeon-vscode-keybindings.json.example`** into your **User** keybindings (Command Palette → **Preferences: Open Keyboard Shortcuts (JSON)**):
+**Keyboard (optional):** VS Code does not load team keybindings from the repo. Merge **`src/pipeon/docs/pipeon-vscode-keybindings.json.example`** into your **User** keybindings (Command Palette → **Preferences: Open Keyboard Shortcuts (JSON)**):
 
 | Shortcut | Action |
 |----------|--------|

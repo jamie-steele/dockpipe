@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # Demo: named Docker volumes for Flathub + APT caches (survive image rebuilds / relaunches).
-# Does not install apps for you — shows the pattern. See dockpipe-experimental/workflows/package-cache-demo/README.md
+# Does not install apps for you — shows the pattern. See shipyard/workflows/package-cache-demo/README.md
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=docker-cache-volumes.sh
-source "${SCRIPT_DIR}/docker-cache-volumes.sh"
+REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)}"
+if [[ -z "$REPO_ROOT" ]]; then
+  echo "docker-package-cache-demo: cannot find repo root (set DOCKPIPE_REPO_ROOT or run from a git checkout)" >&2
+  exit 1
+fi
+# shellcheck source=src/templates/core/assets/scripts/docker-cache-volumes.sh
+source "${REPO_ROOT}/src/templates/core/assets/scripts/docker-cache-volumes.sh"
 
 FLATPAK_VOL="${DOCKER_DEMO_FLATPAK_VOL:-dockpipe-flatpak-system}"
 APT_CACHE_VOL="${DOCKER_DEMO_APT_CACHE_VOL:-dockpipe-apt-cache}"

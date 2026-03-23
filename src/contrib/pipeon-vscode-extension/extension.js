@@ -1,6 +1,6 @@
 /**
  * Pipeon — minimal VS Code extension (install into a Code OSS fork or stock VS Code).
- * @see pipeon/docs/pipeon-vscode-fork.md
+ * @see src/pipeon/docs/pipeon-vscode-fork.md
  */
 // @ts-check
 const vscode = require("vscode");
@@ -26,7 +26,7 @@ function activate(context) {
         channel.show(true);
       } catch {
         vscode.window.showInformationMessage(
-          "Pipeon: no .dockpipe/pipeon-context.md — run `bin/pipeon bundle` (see pipeon/scripts/README.md) or generate artifacts first."
+          "Pipeon: no .dockpipe/pipeon-context.md — run `src/bin/pipeon bundle` (see src/pipeon/scripts/README.md) or generate artifacts first."
         );
       }
     })
@@ -39,14 +39,14 @@ function activate(context) {
         vscode.window.showWarningMessage("Pipeon: open the dockpipe repository as a workspace folder first.");
         return;
       }
-      const doc = vscode.Uri.joinPath(root, "pipeon", "docs", "pipeon-vscode-fork.md");
+      const doc = vscode.Uri.joinPath(root, "src", "pipeon", "docs", "pipeon-vscode-fork.md");
       try {
         await vscode.workspace.fs.stat(doc);
         const docShow = await vscode.workspace.openTextDocument(doc);
         await vscode.window.showTextDocument(docShow, { preview: true });
       } catch {
         vscode.window.showInformationMessage(
-          "Pipeon: pipeon/docs/pipeon-vscode-fork.md not found in this workspace — open the dockpipe repo root."
+          "Pipeon: src/pipeon/docs/pipeon-vscode-fork.md not found in this workspace — open the dockpipe repo root."
         );
       }
     })

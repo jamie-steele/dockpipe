@@ -11,7 +11,7 @@ import (
 	"dockpipe/src/lib/dockpipe/application"
 )
 
-// Version is set at link time: -X main.Version=X.Y.Z (see Makefile, packaging/build-deb.sh, CI).
+// Version is set at link time: -X main.Version=X.Y.Z (see Makefile, release/packaging/build-deb.sh, CI).
 // When left as "dev", versionString() uses the embedded copy of repo-root VERSION (see src/cmd/dockpipe/VERSION).
 var Version = "dev"
 

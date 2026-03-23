@@ -7,10 +7,20 @@
 
 namespace {
 
+QString templatesRoot(const QString &repoRoot)
+{
+    const QDir r(repoRoot);
+    const QString src = r.filePath(QStringLiteral("src/templates"));
+    if (QFileInfo(src + QStringLiteral("/core")).isDir())
+        return src;
+    return r.filePath(QStringLiteral("templates"));
+}
+
 bool looksLikeRepoRoot(const QString &absPath)
 {
     const QDir d(absPath);
-    return QFileInfo(d.filePath(QStringLiteral("dockpipe-experimental/workflows"))).isDir()
+    return QFileInfo(d.filePath(QStringLiteral("shipyard/workflows"))).isDir()
+        || QFileInfo(d.filePath(QStringLiteral("src/templates/core"))).isDir()
         || QFileInfo(d.filePath(QStringLiteral("templates/core"))).isDir();
 }
 
@@ -65,7 +75,7 @@ QStringList DockpipeChoices::listWorkflowNamesFromRepo(const QString &repoRoot)
     const QDir root(repoRoot);
 
     {
-        const QDir wf(root.filePath(QStringLiteral("dockpipe-experimental/workflows")));
+        const QDir wf(root.filePath(QStringLiteral("shipyard/workflows")));
         if (wf.exists()) {
             const auto dirs = wf.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {
@@ -77,7 +87,7 @@ QStringList DockpipeChoices::listWorkflowNamesFromRepo(const QString &repoRoot)
     }
 
     {
-        const QDir tpl(root.filePath(QStringLiteral("templates")));
+        const QDir tpl(templatesRoot(repoRoot));
         if (tpl.exists()) {
             const auto dirs = tpl.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {
@@ -112,9 +122,10 @@ void DockpipeChoices::scan(const QString &repoRoot)
     }
 
     const QDir root(repoRoot);
+    const QString tr = templatesRoot(repoRoot);
 
     {
-        const QDir wf(root.filePath(QStringLiteral("dockpipe-experimental/workflows")));
+        const QDir wf(root.filePath(QStringLiteral("shipyard/workflows")));
         if (wf.exists()) {
             const auto dirs = wf.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {
@@ -128,7 +139,7 @@ void DockpipeChoices::scan(const QString &repoRoot)
     }
 
     {
-        const QDir tpl(root.filePath(QStringLiteral("templates")));
+        const QDir tpl(tr);
         if (tpl.exists()) {
             const auto dirs = tpl.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {
@@ -144,7 +155,7 @@ void DockpipeChoices::scan(const QString &repoRoot)
     }
 
     {
-        const QDir res(root.filePath(QStringLiteral("templates/core/resolvers")));
+        const QDir res(tr + QStringLiteral("/core/resolvers"));
         if (res.exists()) {
             const auto dirs = res.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {
@@ -156,7 +167,7 @@ void DockpipeChoices::scan(const QString &repoRoot)
     }
 
     {
-        const QDir strat(root.filePath(QStringLiteral("templates/core/strategies")));
+        const QDir strat(tr + QStringLiteral("/core/strategies"));
         if (strat.exists()) {
             const auto files = strat.entryInfoList(QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : files) {
@@ -168,7 +179,7 @@ void DockpipeChoices::scan(const QString &repoRoot)
     }
 
     {
-        const QDir rt(root.filePath(QStringLiteral("templates/core/runtimes")));
+        const QDir rt(tr + QStringLiteral("/core/runtimes"));
         if (rt.exists()) {
             const auto dirs = rt.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {

@@ -9,8 +9,8 @@ import (
 )
 
 // ResolveWorkflowConfigPath returns the first existing workflow config for a bundled or user workflow name.
-// Authoring checkout: dockpipe-experimental/workflows/<name>/config.yml first (repo-local), then templates/<name>/config.yml, then core/resolvers.
-// Materialized bundle: dockpipe-experimental/workflows/ only (same path as WorkflowsRootDir).
+// Authoring checkout: shipyard/workflows/<name>/config.yml first (repo-local), then src/templates/<name>/ or templates/<name>/config.yml, then core/resolvers.
+// Materialized bundle: shipyard/workflows/ only (same path as WorkflowsRootDir).
 func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -18,7 +18,7 @@ func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 	}
 	var candidates []string
 	if !UsesBundledAssetLayout(repoRoot) {
-		candidates = append(candidates, filepath.Join(AuthoringDockpipeWorkflowsDir(repoRoot), name, "config.yml"))
+		candidates = append(candidates, filepath.Join(AuthoringShipyardWorkflowsDir(repoRoot), name, "config.yml"))
 	}
 	candidates = append(candidates,
 		filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"),
@@ -51,11 +51,12 @@ func ResolveEmbeddedResolverWorkflowConfigPath(repoRoot, name string) (string, e
 	return "", fmt.Errorf("embedded resolver workflow config not found for %q", name)
 }
 
-// ListWorkflowNamesInRepoRoot returns workflow names from templates/<name>/ and (authoring only) dockpipe-experimental/workflows/<name>/.
+// ListWorkflowNamesInRepoRoot returns workflow names from the authoring templates root/<name>/ and (authoring only) shipyard/workflows/<name>/.
 func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 	seen := make(map[string]struct{})
 	var out []string
 
+	templatesDir := WorkflowsRootDir(repoRoot)
 	addDir := func(base string) error {
 		entries, err := os.ReadDir(base)
 		if err != nil {
@@ -68,7 +69,7 @@ func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 			if !e.IsDir() {
 				continue
 			}
-			if base == filepath.Join(repoRoot, "templates") && e.Name() == "core" {
+			if base == templatesDir && e.Name() == "core" {
 				continue
 			}
 			name := e.Name()
@@ -83,12 +84,11 @@ func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 		return nil
 	}
 
-	templatesDir := WorkflowsRootDir(repoRoot)
 	if err := addDir(templatesDir); err != nil {
 		return nil, err
 	}
 	if !UsesBundledAssetLayout(repoRoot) {
-		if err := addDir(AuthoringDockpipeWorkflowsDir(repoRoot)); err != nil {
+		if err := addDir(AuthoringShipyardWorkflowsDir(repoRoot)); err != nil {
 			return nil, err
 		}
 	}

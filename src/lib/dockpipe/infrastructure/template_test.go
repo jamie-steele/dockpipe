@@ -9,20 +9,21 @@ import (
 // TestTemplateBuild maps template names to image names and Dockerfile directories under the repo.
 func TestTemplateBuild(t *testing.T) {
 	repoRoot := localModuleRoot(t)
+	core := CoreDir(repoRoot)
 	cases := []struct {
 		name  string
 		image string
 		dir   string
 		ok    bool
 	}{
-		{"base-dev", "dockpipe-base-dev", filepath.Join(repoRoot, "templates", "core", "assets", "images", "base-dev"), true},
-		{"dev", "dockpipe-dev", filepath.Join(repoRoot, "templates", "core", "assets", "images", "dev"), true},
-		{"agent-dev", "dockpipe-claude", filepath.Join(repoRoot, "templates", "core", "resolvers", "claude", "assets", "images", "claude"), true},
-		{"claude", "dockpipe-claude", filepath.Join(repoRoot, "templates", "core", "resolvers", "claude", "assets", "images", "claude"), true},
-		{"codex", "dockpipe-codex", filepath.Join(repoRoot, "templates", "core", "resolvers", "codex", "assets", "images", "codex"), true},
-		{"vscode", "dockpipe-vscode", filepath.Join(repoRoot, "templates", "core", "resolvers", "vscode", "assets", "images", "vscode"), true},
-		{"ollama", "dockpipe-ollama", filepath.Join(repoRoot, "templates", "core", "resolvers", "ollama", "assets", "images", "ollama"), true},
-		{"steam-flatpak", "dockpipe-steam-flatpak", filepath.Join(repoRoot, "templates", "core", "bundles", "steam-flatpak", "assets", "images", "steam-flatpak"), true},
+		{"base-dev", "dockpipe-base-dev", filepath.Join(core, "assets", "images", "base-dev"), true},
+		{"dev", "dockpipe-dev", filepath.Join(core, "assets", "images", "dev"), true},
+		{"agent-dev", "dockpipe-claude", filepath.Join(core, "resolvers", "claude", "assets", "images", "claude"), true},
+		{"claude", "dockpipe-claude", filepath.Join(core, "resolvers", "claude", "assets", "images", "claude"), true},
+		{"codex", "dockpipe-codex", filepath.Join(core, "resolvers", "codex", "assets", "images", "codex"), true},
+		{"vscode", "dockpipe-vscode", filepath.Join(core, "resolvers", "vscode", "assets", "images", "vscode"), true},
+		{"ollama", "dockpipe-ollama", filepath.Join(core, "resolvers", "ollama", "assets", "images", "ollama"), true},
+		{"steam-flatpak", "dockpipe-steam-flatpak", filepath.Join(core, "bundles", "steam-flatpak", "assets", "images", "steam-flatpak"), true},
 		{"unknown", "", "", false},
 	}
 	for _, tc := range cases {

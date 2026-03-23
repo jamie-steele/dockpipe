@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Lightweight guardrail: fail if docs/templates reintroduce pre-assets paths or removed legacy dirs.
-# Run from repo root: bash scripts/check-templates-core-paths.sh
+# Run from repo root: bash src/scripts/check-templates-core-paths.sh
 set -euo pipefail
 
-root="$(cd "$(dirname "$0")/.." && pwd)"
+root="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$root"
 
 # Regexes only — do not spell obsolete paths verbatim in comments or this file will self-match.
-OBSOLETE_SCRIPTS_IMAGES='templates/core/(scripts|images)/'
-OBSOLETE_LEGACY_DIRS='templates/core/workflows/|templates/run-worktree/'
+OBSOLETE_SCRIPTS_IMAGES='(src/templates|templates)/core/(scripts|images)/'
+OBSOLETE_LEGACY_DIRS='(src/templates|templates)/core/workflows/|(src/templates|templates)/run-worktree/'
 
 fail() {
   echo "check-templates-core-paths: FAIL — $1" >&2
@@ -30,11 +30,11 @@ fi
 if grep -rE "${OBSOLETE_LEGACY_DIRS}" \
     --include='*.md' \
     --include='*.go' \
-    docs README.md AGENTS.md CONTRIBUTING.md templates lib cmd 2>/dev/null | grep -q .; then
+    docs README.md AGENTS.md CONTRIBUTING.md src/templates src/lib src/cmd 2>/dev/null | grep -q .; then
   grep -rE "${OBSOLETE_LEGACY_DIRS}" \
     --include='*.md' \
     --include='*.go' \
-    docs README.md AGENTS.md CONTRIBUTING.md templates lib cmd 2>/dev/null || true
+    docs README.md AGENTS.md CONTRIBUTING.md src/templates src/lib src/cmd 2>/dev/null || true
   fail 'found obsolete workflows/ or run-worktree/ under templates; see docs and workflow_dirs.go'
 fi
 

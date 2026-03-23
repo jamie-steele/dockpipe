@@ -1,1 +1,1 @@
-../../templates/core/assets/scripts/review/collect-go-review-signals.sh
+../../../templates/core/assets/scripts/review/collect-go-review-signals.sh

@@ -4,13 +4,13 @@
 
 **Adds:**
 
-- **Pipeon** extension from **`contrib/pipeon-vscode-extension/`**, packaged with **`vsce`** in a **multi-stage** build (`.vsix`), then `code-server --install-extension`.
+- **Pipeon** extension from **`src/contrib/pipeon-vscode-extension/`**, packaged with **`vsce`** in a **multi-stage** build (`.vsix`), then `code-server --install-extension`.
 - **Browser tab icon**: **`favicon.ico` / `.svg`** (Pipeon **P** mark) copied over code-server’s default media paths inside the image.
 - **Default User settings** (`user-settings.json`): telemetry off, no auto-update; **window title** prefix **Pipeon**; **`window.autoDetectColorScheme`** so light/dark follows the **browser/OS** `prefers-color-scheme` with **Default Dark+** / **Default Light+**. (Full **`product.json`** branding is for a **forked desktop** build, not this image.)
 
 **Isolation:** Each **`docker run`** is a separate container; your project is only the **`/work`** bind-mount. Editor state and extensions live in the image (or container layer), not on the host — unlike a desktop VS Code profile.
 
-**Not** the same as **`images/vscode/`** (`dockpipe-vscode`): that Dockerfile swaps in **`lib/entrypoint.sh`** for **`dockpipe --isolate vscode`** CLI runs. This **`code-server/`** image keeps the upstream **code-server** entrypoint for **`scripts/vscode/vscode-code-server.sh`** (canonical script under **`templates/core/resolvers/vscode/`**).
+**Not** the same as **`images/vscode/`** (`dockpipe-vscode`): that Dockerfile swaps in **`assets/entrypoint.sh`** for **`dockpipe --isolate vscode`** CLI runs. This **`code-server/`** image keeps the upstream **code-server** entrypoint for **`scripts/vscode/vscode-code-server.sh`** (canonical script under **`templates/core/resolvers/vscode/`**).
 
 ## Desktop shortcuts (cross-platform)
 

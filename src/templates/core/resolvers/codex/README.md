@@ -18,4 +18,4 @@ Codex’s **`--sandbox workspace-write`** (and similar) runs **bubblewrap** insi
 - Use **`codex exec --dangerously-bypass-approvals-and-sandbox`** (or the documented alias **`--yolo`**) so **command execution is not wrapped in bwrap**; trust **Docker + uid-mapped bind mounts** as the boundary.
 - Keep **`OPENAI_API_KEY`** / **`CODEX_API_KEY`** in the environment (resolver **`DOCKPIPE_RESOLVER_ENV`** forwards them into the container).
 
-This is **workflow/resolver configuration**, not a dockpipe core special case. Example: **`dockpipe-experimental/workflows/test-demo`** review step.
+This is **workflow/resolver configuration**, not a dockpipe core special case. Example: **`shipyard/workflows/test-demo`** review step.

@@ -1,5 +1,5 @@
 # Dev stack for DorkPipe pgvector + Ollama (see lib/dorkpipe/composegen).
-# scripts/dorkpipe/dev-stack.sh up   # project name: dorkpipe-dev (override: DORKPIPE_DEV_STACK_PROJECT)
+# src/scripts/dorkpipe/dev-stack.sh up   # project name: dorkpipe-dev (override: DORKPIPE_DEV_STACK_PROJECT)
 # docker compose -p dorkpipe-dev -f templates/core/bundles/dorkpipe/assets/compose/docker-compose.yml up -d
 services:
   postgres:

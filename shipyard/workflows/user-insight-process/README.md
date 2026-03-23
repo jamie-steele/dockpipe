@@ -9,7 +9,7 @@
 ```bash
 export DOCKPIPE_WORKDIR="$PWD"
 bash scripts/dorkpipe/user-insight-enqueue.sh -m 'Your guidance here.'
-./bin/dockpipe --workflow user-insight-process --workdir . --
+./src/bin/dockpipe --workflow user-insight-process --workdir . --
 ```
 
 **Docs:** **`docs/user-insight-queue.md`**

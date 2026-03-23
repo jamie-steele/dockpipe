@@ -22,7 +22,7 @@ RUN git config --system user.email "dockpipe@local" \
 RUN mkdir -p /work /claude-home && chmod 777 /work /claude-home
 
 # Use generic dockpipe entrypoint (must copy from context when building from repo root)
-COPY lib/entrypoint.sh /entrypoint.sh
+COPY assets/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 WORKDIR /work

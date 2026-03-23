@@ -1,8 +1,8 @@
 # Release notes template
 
-Copy this file to **`releasenotes/X.Y.Z.md`** for the next release. Replace **`X.Y.Z`** everywhere (and **`vX.Y.Z`** in download URLs). Keep the **Linux → macOS → Windows** install order.
+Copy this file to **`release/releasenotes/X.Y.Z.md`** for the next release. Replace **`X.Y.Z`** everywhere (and **`vX.Y.Z`** in download URLs). Keep the **Linux → macOS → Windows** install order.
 
-The GitHub Release workflow uses **`releasenotes/${VERSION}.md`** as the release body — include complete per-platform install steps below the “What’s new” section.
+The GitHub Release workflow uses **`release/releasenotes/${VERSION}.md`** as the release body — include complete per-platform install steps below the “What’s new” section.
 
 ---
 
@@ -137,7 +137,7 @@ export PATH="$PATH:$(pwd)/bin"
 
 ```powershell
 $i = "$env:TEMP\dockpipe-install.ps1"
-Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1" -OutFile $i -UseBasicParsing
+Invoke-WebRequest -Uri "https://raw.githubusercontent.com/jamie-steele/dockpipe/master/release/packaging/windows/install.ps1" -OutFile $i -UseBasicParsing
 & $i -Version X.Y.Z
 ```
 

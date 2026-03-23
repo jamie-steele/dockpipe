@@ -23,7 +23,7 @@ RUN git config --system user.email "dockpipe@local" \
 
 RUN mkdir -p /work && chmod 777 /work
 
-COPY lib/entrypoint.sh /entrypoint.sh
+COPY assets/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 WORKDIR /work

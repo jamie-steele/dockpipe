@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Pipeon launcher — repo-root pipeon/scripts/pipeon.sh (local Ollama chat + context bundle).
+# Pipeon launcher — src/pipeon/scripts/pipeon.sh (local Ollama chat + context bundle).
 set -euo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$ROOT}"
 export DOCKPIPE_WORKDIR="${DOCKPIPE_WORKDIR:-$ROOT}"
-exec bash "$ROOT/pipeon/scripts/pipeon.sh" "$@"
+exec bash "$ROOT/src/pipeon/scripts/pipeon.sh" "$@"

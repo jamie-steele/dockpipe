@@ -51,7 +51,7 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 			head -25 "$ROOT/.dockpipe/ci-analysis/SUMMARY.md" | sed 's/^/    /'
 		fi
 	else
-		echo "- **findings.json:** not present — run \`bash scripts/ci-local.sh\` or CI to generate (see docs/dorkpipe-ci-signals.md)."
+		echo "- **findings.json:** not present — run \`make ci\` (dockpipe repo) or CI to generate (see docs/dorkpipe-ci-signals.md)."
 	fi
 
 	echo ""
@@ -89,7 +89,7 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo ""
 	echo "- **AGENTS.md** — maintainer/agent contract for this repo."
 	echo "- **docs/compliance-ai-handoff.md** — how to discuss compliance without claiming certification."
-	echo "- **pipeon/docs/pipeon-ide-experience.md** — Pipeon UX and tone."
+	echo "- **src/pipeon/docs/pipeon-ide-experience.md** — Pipeon UX and tone."
 	echo ""
 } >"$CTX"
 

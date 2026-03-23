@@ -22,14 +22,14 @@ Until **0.6.5** ships, use **`DOCKPIPE_PIPEON=1`** and **`DOCKPIPE_PIPEON_ALLOW_
 ```bash
 export DOCKPIPE_PIPEON=1
 export DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1   # until VERSION >= 0.6.5
-./bin/pipeon status
-./bin/pipeon bundle
-./bin/pipeon chat "Summarize security posture from available signals."
+./src/bin/pipeon status
+./src/bin/pipeon bundle
+./src/bin/pipeon chat "Summarize security posture from available signals."
 ```
 
 ## Shortcuts
 
-See **`pipeon/docs/pipeon-shortcuts.md`** (VS Code/Cursor tasks, shell aliases, optional desktop).
+See **`src/pipeon/docs/pipeon-shortcuts.md`** (VS Code/Cursor tasks, shell aliases, optional desktop).
 
 ## Docs
 

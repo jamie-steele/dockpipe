@@ -18,7 +18,7 @@ The workflow **`cmd`** runs in **`golang:1.25-bookworm`** (git and curl from the
 ```bash
 # From repo root — use the repo launcher (not bare `dockpipe` unless installed on PATH)
 make build
-./bin/dockpipe --workflow dorkpipe-self-analysis --workdir . --
+./src/bin/dockpipe --workflow dorkpipe-self-analysis --workdir . --
 ```
 
 Direct script (still uses **host** — no container):
@@ -47,7 +47,7 @@ Compose file: **`templates/core/bundles/dorkpipe/assets/compose/docker-compose.y
 Use **`dorkpipe-self-analysis-host`** when Docker isn’t available or you want the fastest iteration on the host:
 
 ```bash
-./bin/dockpipe --workflow dorkpipe-self-analysis-host --workdir . --
+./src/bin/dockpipe --workflow dorkpipe-self-analysis-host --workdir . --
 ```
 
 ## Combined spec (Ollama refine inside DorkPipe)
@@ -57,7 +57,7 @@ Use **`dorkpipe-self-analysis-host`** when Docker isn’t available or you want 
 Running **`spec.combined.yaml` via the containerized DockPipe workflow** may need **`OLLAMA_HOST`** to reach the **host** (not `127.0.0.1` from inside the isolate). Typical fixes: set **`OLLAMA_HOST=http://host.docker.internal:11434`** (Docker Desktop) or **`http://172.17.0.1:11434`** (Linux bridge), or run **`DORKPIPE_SELF_ANALYSIS_SPEC=.../spec.combined.yaml ./scripts/dorkpipe/run-self-analysis.sh`** on the **host** after **`make build`**.
 
 ```bash
-DORKPIPE_SELF_ANALYSIS_SPEC=dockpipe-experimental/workflows/dorkpipe-self-analysis/spec.combined.yaml \
+DORKPIPE_SELF_ANALYSIS_SPEC=shipyard/workflows/dorkpipe-self-analysis/spec.combined.yaml \
   ./scripts/dorkpipe/run-self-analysis.sh
 ```
 

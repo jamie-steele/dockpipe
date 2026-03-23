@@ -3,8 +3,8 @@
 ## Model: **`staging` → `master` = ship**
 
 1. **Contributors** (or you) work on **feature branches** or **forks** → open **PR → `staging`**.
-2. **Merge to `staging`** when the change is accepted. **No release** yet — you can push follow-ups, edit **`releasenotes/`**, bump **`VERSION`**, or tweak the contributor’s work on **`staging`** (via PR or maintainer commits, per your rules).
-3. When you’re ready to **cut a release**, open **PR `staging` → `master`** (or merge with the same protections). That PR must **bump `VERSION`** and **update `releasenotes/X.Y.Z.md`** (CI enforces this only for PRs **targeting `master`**).
+2. **Merge to `staging`** when the change is accepted. **No release** yet — you can push follow-ups, edit **`release/releasenotes/`**, bump **`VERSION`**, or tweak the contributor’s work on **`staging`** (via PR or maintainer commits, per your rules).
+3. When you’re ready to **cut a release**, open **PR `staging` → `master`** (or merge with the same protections). That PR must **bump `VERSION`** and **update `release/releasenotes/X.Y.Z.md`** (CI enforces this only for PRs **targeting `master`**).
 4. **Merge to `master`** → **Release** workflow runs: artifacts + **GitHub Release** **`vX.Y.Z`**.
 
 **`master`** is **the released line**. **`staging`** holds “next release” integration until you ship.
@@ -41,15 +41,15 @@ Turn off **“allow administrators to bypass”** if you want **your own** chang
 
 ---
 
-## `VERSION` + `releasenotes/X.Y.Z.md`
+## `VERSION` + `release/releasenotes/X.Y.Z.md`
 
 - **[`VERSION`](../../VERSION)** — single line, semver **`X.Y.Z`** (no `v` prefix). This is the version **you are about to ship** when the **`staging` → `master`** PR lands.
-- **`releasenotes/${VERSION}.md`** — required body for the GitHub release.
+- **`release/releasenotes/${VERSION}.md`** — required body for the GitHub release.
 
 **Every PR into `master` must** (enforced by CI):
 
 1. **Bump** **`VERSION`** to a **new** semver vs the **base** branch (`master`).
-2. **Modify** **`releasenotes/<new-version>.md`** in that same PR.
+2. **Modify** **`release/releasenotes/<new-version>.md`** in that same PR.
 
 **PRs into `staging`** do **not** run that gate — integrate freely, then finalize notes + version on **`staging`** before the ship PR.
 
@@ -96,7 +96,7 @@ On the **weekly schedule**, only **`codeql`** runs (**`test`** and **`test-windo
 ```bash
 go test ./…
 # Ship PR must match VERSION file:
-test -f "releasenotes/$(tr -d ' \t\r\n' < VERSION).md"
+test -f "release/releasenotes/$(tr -d ' \t\r\n' < VERSION).md"
 ```
 
 **Makefile** `deb` / `deb-all` use **`VERSION`** automatically when the file exists.

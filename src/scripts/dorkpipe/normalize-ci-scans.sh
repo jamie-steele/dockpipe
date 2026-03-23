@@ -81,7 +81,7 @@ GOV_N="$(jq '(.vulns // .Vulns // []) | length' "$RAW/govulncheck.json" 2>/dev/n
 cat >"$OUT/SUMMARY.md" <<EOF
 # CI scan summary (DorkPipe signal bundle)
 
-- **Schema:** \`1.0\` — see \`schemas/dockpipe-ci-findings.schema.json\`
+- **Schema:** \`1.0\` — see \`src/schemas/dockpipe-ci-findings.schema.json\`
 - **Commit:** \`$COMMIT\` · **ref:** \`$BRANCH\` · **time (UTC):** $TS
 - **Run:** \`$RUN_ID\` attempt \`$RUN_ATT\` · **workflow:** \`$WF_NAME\`
 - **Normalized findings:** **$COUNT** (gosec issues in raw: ~$GOSEC_N · govulncheck vulns in raw: ~$GOV_N)

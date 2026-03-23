@@ -35,9 +35,9 @@ dockpipe --workflow test --runtime docker
 - **`--workflow test`** — **This repo’s CI** uses **`go vet`** in Docker only (no `go test`); **govulncheck** / **gosec** run on the **host** in the same job.  
 - **`--workflow test-demo`** — **Recording**: **`go test`** → **`go vet`** → **review prep bundle** → **local-summary** (**`isolate: ollama`**, dockpipe-built **`dockpipe-ollama`**) → **Codex** final review (`make demo-record`; needs **`OPENAI_API_KEY`** for the last step). Prep scripts: **`templates/core/bundles/review-pipeline/`** (workflow asset pack — not a resolver).
 
-Mount **`--mount "$(go env GOPATH)/pkg:/go/pkg:rw"`** so module data is visible in the container. Workflows load from the **materialized bundle** or **`dockpipe-experimental/workflows/`** / **`templates/`** in a checkout.
+Mount **`--mount "$(go env GOPATH)/pkg:/go/pkg:rw"`** so module data is visible in the container. Workflows load from the **materialized bundle** or **`shipyard/workflows/`** / **`templates/`** in a checkout.
 
-To reuse **`dockpipe-experimental/workflows/`** presets in another tree, copy the directory or use **`dockpipe init`** with **`--from`** pointing at that path (see **[AGENTS.md](../AGENTS.md)**).
+To reuse **`shipyard/workflows/`** presets in another tree, copy the directory or use **`dockpipe init`** with **`--from`** pointing at that path (see **[AGENTS.md](../AGENTS.md)**).
 
 ---
 
@@ -46,8 +46,8 @@ To reuse **`dockpipe-experimental/workflows/`** presets in another tree, copy th
 | Term | Meaning |
 |------|---------|
 | **Workflow** | What happens — **`config.yml`**, **`--workflow <name>`**. |
-| **Runtime** | Where execution runs — **`templates/core/runtimes/<name>`** (or **`dockpipe-experimental/core/runtimes/`** in the cache). |
-| **Resolver** | Which tool or platform — **`templates/core/resolvers/<name>`** (or **`dockpipe-experimental/core/resolvers/`**). |
+| **Runtime** | Where execution runs — **`templates/core/runtimes/<name>`** (or **`shipyard/core/runtimes/`** in the cache). |
+| **Resolver** | Which tool or platform — **`templates/core/resolvers/<name>`** (or **`shipyard/core/resolvers/`**). |
 | **Strategy** | Lifecycle wrapper — **`templates/core/strategies/<name>`**, optional **`strategy:`** in YAML. |
 | **Assets** | Support files — **`templates/core/assets/`** (`scripts/`, `images/`, `compose/`). |
 

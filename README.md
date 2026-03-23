@@ -16,7 +16,7 @@ Your project is mounted at **`/work`** in a disposable container; when the comma
 
 ## Core tools in this repo
 
-The **DockPipe** CLI lives under **`src/cmd/dockpipe/`** and **`src/lib/dockpipe/`**. This repository also contains **DorkPipe** (orchestration, **`src/cmd/dorkpipe/`**), **Pipeon** (IDE docs + harness under **`pipeon/`**, Launcher **`apps/pipeon-launcher/`**, VS Code extension **`contrib/pipeon-vscode-extension/`**). They are separate products with explicit integration (subprocess, files, env) — see **[docs/core-tools.md](docs/core-tools.md)**. Indexes: **[pipeon/README.md](pipeon/README.md)**, **[apps/README.md](apps/README.md)**, **[contrib/README.md](contrib/README.md)**.
+The **DockPipe** CLI lives under **`src/cmd/dockpipe/`** and **`src/lib/dockpipe/`**. This repository also contains **DorkPipe** (orchestration, **`src/cmd/dorkpipe/`**), **Pipeon** (under **`src/pipeon/`**, Launcher **`src/apps/pipeon-launcher/`**, VS Code extension **`src/contrib/pipeon-vscode-extension/`**). Built binaries and launchers: **`src/bin/`**. They are separate products with explicit integration (subprocess, files, env) — see **[docs/core-tools.md](docs/core-tools.md)**. Indexes: **[src/pipeon/README.md](src/pipeon/README.md)**, **[src/apps/README.md](src/apps/README.md)**, **[src/contrib/README.md](src/contrib/README.md)**.
 
 ## Concepts
 
@@ -54,7 +54,7 @@ make dev-deps
 make dev-install
 make test        # fastest: Go tests only
 make test-quick  # Go + path guard + bash unit tests (no Docker)
-make ci          # full Linux CI mirror (govulncheck, gosec, Docker, integration — see scripts/ci-local.sh)
+make ci          # full Linux CI mirror (govulncheck, gosec, Docker, integration — see src/scripts/ci-local.sh)
 ```
 
 **Accelerator (this repo):** run DorkPipe self-analysis from DockPipe — isolated container, **`.dockpipe/paste-this-prompt.txt`** for Cursor, optional Compose sidecars. From repo root after **`make build`**:
@@ -66,7 +66,7 @@ make ci          # full Linux CI mirror (govulncheck, gosec, Docker, integration
 | **`make self-analysis-host`** | Host-only, no Docker |
 | **`make compliance-handoff`** | Print CI + self-analysis **signal paths** for AI (“compliance issues?”) — **`docs/compliance-ai-handoff.md`** |
 
-See **`dockpipe-experimental/workflows/dorkpipe-self-analysis/README.md`** and **`docs/dorkpipe.md`**.
+See **`shipyard/workflows/dorkpipe-self-analysis/README.md`** and **`docs/dorkpipe.md`**.
 
 ```bash
 make self-analysis

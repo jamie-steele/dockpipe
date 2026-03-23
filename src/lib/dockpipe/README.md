@@ -21,7 +21,7 @@ Keep new orchestration in the right file so `run.go` stays the single-command pa
 | `subcmds.go` | `init`, `action`, `pre`, `template` |
 | `usage.go` | `--help` text |
 
-Shell assets (`lib/entrypoint.sh` at repo root, etc.) stay outside **`src/`**; only **Go** lives under `src/lib/dockpipe/`.
+Shell assets (`assets/entrypoint.sh` at repo root, etc.) stay outside **`src/`**; only **Go** lives under `src/lib/dockpipe/`.
 
 ---
 

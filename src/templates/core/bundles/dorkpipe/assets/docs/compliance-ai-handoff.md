@@ -29,7 +29,7 @@ From repo root after **`make build`**:
 
 ```bash
 make compliance-handoff
-# or: ./bin/dockpipe --workflow compliance-handoff --workdir . --
+# or: ./src/bin/dockpipe --workflow compliance-handoff --workdir . --
 ```
 
 This runs **`scripts/dorkpipe/compliance-handoff.sh`** and prints artifact status + pointers.

@@ -14,7 +14,7 @@ export PIPEON_ROOT="$HOME/source/dockpipe"
 pipeon() {
   DOCKPIPE_PIPEON=1 DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1 \
     DOCKPIPE_WORKDIR="${DOCKPIPE_WORKDIR:-$(pwd)}" \
-    "$PIPEON_ROOT/bin/pipeon" "$@"
+    "$PIPEON_ROOT/src/bin/pipeon" "$@"
 }
 ```
 
@@ -30,7 +30,7 @@ pipeon chat "What CI signals do we have?"
 
 ## 2. VS Code / Cursor (workspace tasks)
 
-This repo ships **`.vscode/tasks.json`**:
+The repo root **`.vscode/tasks.json`** is intentionally **empty** (no Pipeon tasks checked in). Copy **`src/pipeon/vscode-tasks.json.example`** into **`.vscode/tasks.json`** (merge) if you want:
 
 - **Pipeon: status** — check flags and artifacts
 - **Pipeon: bundle context** — regenerate `.dockpipe/pipeon-context.md`
@@ -69,4 +69,4 @@ make pipeon-chat   # passes PROMPT=... or first make arg — see Makefile
 
 ## 5. Desktop launcher (optional, Linux)
 
-You can create a `.desktop` file that runs `x-terminal-emulator -e bash -lc 'cd /path/to/repo && DOCKPIPE_PIPEON=1 ... bin/pipeon chat'` — keep it local; not shipped by default.
+You can create a `.desktop` file that runs `x-terminal-emulator -e bash -lc 'cd /path/to/repo && DOCKPIPE_PIPEON=1 ... src/bin/pipeon chat'` — keep it local; not shipped by default.

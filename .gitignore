@@ -1,8 +1,8 @@
 # Build output
-packaging/build/
+release/packaging/build/
 *.deb
-bin/dockpipe.bin
-bin/dockpipe.exe
+src/bin/dockpipe.bin
+src/bin/dockpipe.exe
 # ad-hoc go build -o in repo root (prefer: make build-windows → bin/dockpipe.exe)
 /dockpipe.exe
 msi-dist/
@@ -11,8 +11,8 @@ msi-dist/
 dist/
 
 # Local demo recordings (asciinema + agg)
-demo/dockpipe-demo*.cast
-demo/dockpipe-demo*.gif
+release/demo/dockpipe-demo*.cast
+release/demo/dockpipe-demo*.gif
 
 # OS
 .DS_Store
@@ -42,5 +42,5 @@ Thumbs.db
 .dockpipe/pipeon-context.md
 
 # VS Code extension (packed / dev)
-contrib/pipeon-vscode-extension/node_modules/
-contrib/pipeon-vscode-extension/*.vsix
+src/contrib/pipeon-vscode-extension/node_modules/
+src/contrib/pipeon-vscode-extension/*.vsix

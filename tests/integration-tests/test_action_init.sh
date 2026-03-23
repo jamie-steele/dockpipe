@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DOCKPIPE="$REPO_ROOT/bin/dockpipe"
+DOCKPIPE="$REPO_ROOT/src/bin/dockpipe"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

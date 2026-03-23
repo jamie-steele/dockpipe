@@ -56,7 +56,7 @@ Release artifact: `dockpipe_<version>_linux_amd64.tar.gz` or `_linux_arm64.tar.g
 ## 3. From source (developer smoke)
 
 - [ ] `go test ./...`
-- [ ] `make` or `go build -o bin/dockpipe.bin ./src/cmd/dockpipe`
+- [ ] `make` or `go build -o src/bin/dockpipe.bin ./src/cmd/dockpipe`
 - [ ] `PATH=$PWD/bin:$PATH dockpipe -- echo ok`
 
 ---
@@ -92,7 +92,7 @@ Release artifact: `dockpipe_<version>_linux_amd64.tar.gz` or `_linux_arm64.tar.g
 
 ```bash
 go test ./...
-./packaging/build-deb-all.sh <version>    # packaging/build/dockpipe_<version>_{amd64,arm64}.deb
+./release/packaging/build-deb-all.sh <version>    # release/packaging/build/dockpipe_<version>_{amd64,arm64}.deb
 # Tarballs: match .github/workflows/release.yml (linux_amd64 / linux_arm64 go build + tar)
 ```
 

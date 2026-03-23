@@ -1,10 +1,10 @@
 # Full DockPipe path: Compose sidecars up → isolated DorkPipe self-analysis → Compose down.
 # Step order is the workflow contract (no separate manual dev-stack.sh unless you prefer).
 #
-#   ./bin/dockpipe --workflow dorkpipe-self-analysis-stack --workdir . --
+#   ./src/bin/dockpipe --workflow dorkpipe-self-analysis-stack --workdir . --
 #
 # Leave Ollama/Postgres running after (e.g. for another job):
-#   DORKPIPE_DEV_STACK_AUTODOWN=0 ./bin/dockpipe --workflow dorkpipe-self-analysis-stack --workdir . --
+#   DORKPIPE_DEV_STACK_AUTODOWN=0 ./src/bin/dockpipe --workflow dorkpipe-self-analysis-stack --workdir . --
 name: dorkpipe-self-analysis-stack
 description: >-
   stack_up (host): Postgres+Ollama via docker compose.

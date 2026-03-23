@@ -12,7 +12,7 @@
   After install, run: dockpipe windows setup
 
 .EXAMPLE
-  iwr -useb https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex
+  iwr -useb https://raw.githubusercontent.com/jamie-steele/dockpipe/master/release/packaging/windows/install.ps1 | iex
 
 .EXAMPLE
   .\install.ps1 -Version 0.6.0

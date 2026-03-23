@@ -10,7 +10,7 @@ public:
     /// Walk upward from workdir (or DOCKPIPE_REPO_ROOT) to find a dockpipe repo root.
     static QString findRepoRoot(const QString &hintWorkdir);
 
-    /// Workflow names from `dockpipe-experimental/workflows/<name>/config.yml` and `templates/<name>/config.yml` (excluding `core`).
+    /// Workflow names from `shipyard/workflows/<name>/config.yml` and `src/templates/<name>/` or `templates/<name>/config.yml` (excluding `core`).
     /// No static fallbacks — empty if repoRoot is invalid or nothing is found.
     static QStringList listWorkflowNamesFromRepo(const QString &repoRoot);
 

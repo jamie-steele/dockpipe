@@ -22,4 +22,4 @@ Does **not** replace DockPipe’s workflow engine; it **invokes** the `dockpipe`
 
 Artifacts: **`.dorkpipe/run.json`**, **`.dorkpipe/metrics.jsonl`** (schema v2). Example DAG: **`lib/dorkpipe/examples/full-bar.yaml`**. Reusable assets: **`templates/core/bundles/dorkpipe/`** and **`prompts/`** under that tree.
 
-**DockPipe self-analysis:** **`dockpipe-experimental/workflows/dorkpipe-self-analysis/`** runs the script **in a container** (isolated); **`dorkpipe-self-analysis-host`** is host-only. Optional **Compose** sidecar: **`scripts/dorkpipe/dev-stack.sh`**. Writes **`.dockpipe/`** + **`.dorkpipe/`** artifacts.
+**DockPipe self-analysis:** **`shipyard/workflows/dorkpipe-self-analysis/`** runs the script **in a container** (isolated); **`dorkpipe-self-analysis-host`** is host-only. Optional **Compose** sidecar: **`scripts/dorkpipe/dev-stack.sh`**. Writes **`.dockpipe/`** + **`.dorkpipe/`** artifacts.

@@ -14,10 +14,10 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 export DOCKPIPE_WORKDIR="$tmp"
-bash "$ROOT/scripts/dorkpipe/user-insight-enqueue.sh" -m 'convention: use gofmt for Go.' >/dev/null
-bash "$ROOT/scripts/dorkpipe/user-insight-enqueue.sh" -m 'SOC2 review will cover secret storage.' >/dev/null
+bash "$ROOT/src/templates/core/bundles/dorkpipe/assets/scripts/user-insight-enqueue.sh" -m 'convention: use gofmt for Go.' >/dev/null
+bash "$ROOT/src/templates/core/bundles/dorkpipe/assets/scripts/user-insight-enqueue.sh" -m 'SOC2 review will cover secret storage.' >/dev/null
 echo 'null' >"$tmp/.dockpipe/analysis/insights.json"
-bash "$ROOT/scripts/dorkpipe/user-insight-process.sh"
+bash "$ROOT/src/templates/core/bundles/dorkpipe/assets/scripts/user-insight-process.sh"
 
 if ! jq -e '
   .kind == "dockpipe_user_insights"
@@ -30,7 +30,7 @@ if ! jq -e '
 	exit 1
 fi
 
-bash "$ROOT/scripts/dorkpipe/user-insight-export-by-category.sh"
+bash "$ROOT/src/templates/core/bundles/dorkpipe/assets/scripts/user-insight-export-by-category.sh"
 if ! jq -e 'length >= 1' "$tmp/.dockpipe/analysis/by-category/convention.json" >/dev/null; then
 	echo "test_user_insight_queue: by-category export unexpected" >&2
 	exit 1

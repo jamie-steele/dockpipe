@@ -1,1 +1,1 @@
-../../../templates/core/bundles/pipeon/assets/scripts/chat.sh
+../../templates/core/bundles/pipeon/assets/scripts/chat.sh

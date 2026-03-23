@@ -4,14 +4,19 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CLI="${REPO_ROOT}/bin/dockpipe"
+CLI="${REPO_ROOT}/src/bin/dockpipe"
 
 if ! command -v docker &>/dev/null; then
   echo "smoke: Docker not found, skip"
   exit 0
 fi
 
-# From repo root so default image can be built (needs context for COPY lib/entrypoint.sh)
+if ! docker info &>/dev/null; then
+  echo "smoke: Docker daemon not reachable, skip"
+  exit 0
+fi
+
+# From repo root so default image can be built (needs context for COPY assets/entrypoint.sh)
 cd "$REPO_ROOT"
 out=$("$CLI" -- ls -la /work 2>&1)
 if echo "$out" | grep -q "Dockerfile\|entrypoint\|README"; then

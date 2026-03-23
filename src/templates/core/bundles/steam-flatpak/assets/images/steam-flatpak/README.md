@@ -1,6 +1,6 @@
 # `steam-flatpak` image
 
-Debian **bookworm-slim** with **Flatpak** and **Flathub `com.valvesoftware.Steam`** (system install). Uses the shared **`lib/entrypoint.sh`**.
+Debian **bookworm-slim** with **Flatpak** and **Flathub `com.valvesoftware.Steam`** (system install). Uses the shared **`assets/entrypoint.sh`**.
 
 ## Why a host script?
 
@@ -17,11 +17,14 @@ docker build -t dockpipe-steam-flatpak:$(tr -d '\n' < VERSION) \
 
 First build downloads the Steam Flatpak payload (large).
 
-## Run (prefer `scripts/docker-steam-flatpak.sh`)
+## Run (prefer `scripts/steam-flatpak/docker-steam-flatpak.sh`)
 
 ```bash
-./scripts/docker-steam-flatpak.sh
+bash templates/core/bundles/steam-flatpak/assets/scripts/docker-steam-flatpak.sh
 ```
+
+Or from a project that has dockpipe templates: **`scripts/steam-flatpak/docker-steam-flatpak.sh`** (resolved by `paths.go`).
+
 
 Optional: `DOCKER_STEAM_NVIDIA=1` adds `--gpus all`. Override image with `DOCKER_STEAM_IMAGE=dockpipe-steam-flatpak:tag`.
 

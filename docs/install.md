@@ -6,7 +6,7 @@
 
 ### Bundled templates (no extra install tree)
 
-The binary **embeds** **`templates/`** (including **`templates/core/`**: **assets**, runtimes, resolvers, strategies) and **`lib/entrypoint.sh`**. On first use it unpacks to the **user cache** with this **materialized** layout:
+The binary **embeds** **`templates/`** (including **`templates/core/`**: template **assets**, runtimes, resolvers, strategies) and repository root **`assets/entrypoint.sh`**. On first use it unpacks to the **user cache** with this **materialized** layout:
 
 ```text
 dockpipe/
@@ -14,7 +14,7 @@ dockpipe/
   workflows/     # one dir per bundled workflow (same as templates/<name>/ in a checkout)
 ```
 
-**`lib/`** and **`version`** sit beside **`dockpipe/`** at the cache root. The CLI resolves **either** this layout **or** a normal git checkout (**`templates/`** + **`templates/core/`**). You do **not** need a clone of the dockpipe repo next to the binary for **`--workflow`** or default images.
+**`assets/`** (embedded **`entrypoint.sh`**) and **`version`** sit beside **`dockpipe/`** at the cache root. The CLI resolves **either** this layout **or** a normal git checkout (**`templates/`** + **`templates/core/`** + repository **`assets/`**). You do **not** need a clone of the dockpipe repo next to the binary for **`--workflow`** or default images.
 
 - **`DOCKPIPE_REPO_ROOT`** — optional override to point at a **dockpipe source tree** (e.g. when editing templates).
 - **`DOCKPIPE_BUNDLED_CACHE`** — optional parent directory for the `dockpipe/bundled-*` folder (tests, custom cache location).
@@ -60,17 +60,17 @@ sudo apt-get install docker.io
 
 ## Or run from source (Linux or macOS, no root)
 
-The CLI is built with **Go** matching **`go.mod`** (currently **1.25**; see `toolchain` there) (`go build -o bin/dockpipe.bin ./src/cmd/dockpipe` or **`make`**). The `bin/dockpipe` script runs the binary if present, otherwise `go run`.
+The CLI is built with **Go** matching **`go.mod`** (currently **1.25**; see `toolchain` there) (`go build -o src/bin/dockpipe.bin ./src/cmd/dockpipe` or **`make`**). The `src/bin/dockpipe` script runs the binary if present, otherwise `go run`.
 
 ```bash
 git clone https://github.com/jamie-steele/dockpipe.git
 cd dockpipe
-make   # or: go build -o bin/dockpipe.bin ./src/cmd/dockpipe
+make   # or: go build -o src/bin/dockpipe.bin ./src/cmd/dockpipe
 export PATH="$PATH:$(pwd)/bin"
 dockpipe -- ls -la
 ```
 
-**Windows `dockpipe.exe` from a Unix dev machine:** from the **repo root**, run **`make build-windows`** — output is **`bin/dockpipe.exe`** (gitignored). Copy that file to your PC; do not rely on a hardcoded path on someone else’s machine.
+**Windows `dockpipe.exe` from a Unix dev machine:** from the **repo root**, run **`make build-windows`** — output is **`src/bin/dockpipe.exe`** (gitignored). Copy that file to your PC; do not rely on a hardcoded path on someone else’s machine.
 
 ---
 
@@ -93,17 +93,17 @@ Add **`dockpipe.exe`** to `PATH` (**install script** or **zip**; **MSI** when pu
 **Automated (recommended):** downloads from the latest release — prefers **MSI** when the release includes it, otherwise **zip** — verifies **`SHA256SUMS.txt`** when available, installs **per-user** (no admin):
 
 ```powershell
-irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex
+irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/release/packaging/windows/install.ps1 | iex
 ```
 
-Pin a version: save [packaging/windows/install.ps1](https://github.com/jamie-steele/dockpipe/blob/master/packaging/windows/install.ps1) and run `.\install.ps1 -Version 0.6.0`.
+Pin a version: save [release/packaging/windows/install.ps1](https://github.com/jamie-steele/dockpipe/blob/master/release/packaging/windows/install.ps1) and run `.\install.ps1 -Version 0.6.0`.
 
 **Manual:** from [Releases](https://github.com/jamie-steele/dockpipe/releases):
 
 - **`dockpipe_<version>_windows_amd64.zip`** — unzip and add the folder to `PATH`.
 - **`dockpipe_<version>_windows_amd64.msi`** — **when published** for that release: double-click, or `msiexec /i .\….msi /qn` (adds `%LOCALAPPDATA%\dockpipe` to your user **PATH**). Some releases ship **zip only** until MSI is enabled for that tag.
 
-**winget:** not in the default Microsoft catalog until a manifest is accepted; see **[packaging/winget/README.md](../packaging/winget/README.md)** for maintainers and future `winget install`.
+**winget:** not in the default Microsoft catalog until a manifest is accepted; see **[release/packaging/winget/README.md](../release/packaging/winget/README.md)** for maintainers and future `winget install`.
 
 Open a **new** terminal after install so `PATH` is picked up.
 
@@ -170,9 +170,9 @@ brew update
 brew upgrade dockpipe
 ```
 
-Maintainer note: formula source is tracked in `packaging/homebrew/dockpipe.rb` with release process in `packaging/homebrew/README.md`.
+Maintainer note: formula source is tracked in `release/packaging/homebrew/dockpipe.rb` with release process in `release/packaging/homebrew/README.md`.
 
-General release automation details: **[releases/releasing.md](releases/releasing.md)**.
+General release automation details: **[release/docs/releasing.md](../release/docs/releasing.md)**.
 
 ---
 
@@ -198,9 +198,9 @@ echo "export PATH=\"\$PATH:$(pwd)/bin\"" >> ~/.zshrc
 From the repo root:
 
 ```bash
-./packaging/build-deb.sh [version] [amd64|arm64]   # default: 0.6.0 amd64
-./packaging/build-deb-all.sh [version]             # both amd64 + arm64
-# Output: packaging/build/dockpipe_<version>_{amd64,arm64}.deb
+./release/packaging/build-deb.sh [version] [amd64|arm64]   # default: 0.6.0 amd64
+./release/packaging/build-deb-all.sh [version]             # both amd64 + arm64
+# Output: release/packaging/build/dockpipe_<version>_{amd64,arm64}.deb
 ```
 
 Attach that file to a GitHub Release. If we add a proper APT repo later, we’ll document it here.

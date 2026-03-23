@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Optional: asciinema + agg for `make demo-record` (see demo/README.md).
+# Optional: asciinema + agg for `make demo-record` (see release/demo/README.md).
 # Best-effort user-level installs; does not use sudo. Exits 0 even if tools remain missing.
 set -uo pipefail
 
@@ -54,7 +54,7 @@ else
 	echo "agg: installing via cargo (user-level)..."
 	if have cargo; then
 		if ! cargo install --locked --git https://github.com/asciinema/agg; then
-			echo "agg: cargo install failed — use a release binary from GitHub (see demo/README.md)" >&2
+			echo "agg: cargo install failed — use a release binary from GitHub (see release/demo/README.md)" >&2
 		fi
 	fi
 	if have agg; then

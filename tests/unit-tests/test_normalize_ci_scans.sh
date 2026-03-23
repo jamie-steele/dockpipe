@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke test for scripts/dorkpipe/normalize-ci-scans.sh (requires jq).
+# Smoke test for src/scripts/dorkpipe/normalize-ci-scans.sh (requires jq).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -18,7 +18,7 @@ echo '{"Issues":[],"Stats":{"found":0},"GosecVersion":"fixture"}' >"$tmp/.dockpi
 echo '{"config":{"scanner_version":"fixture"},"vulns":[]}' >"$tmp/.dockpipe/ci-raw/govulncheck.json"
 
 export DOCKPIPE_WORKDIR="$tmp"
-bash "$ROOT/scripts/dorkpipe/normalize-ci-scans.sh"
+bash "$ROOT/src/scripts/dorkpipe/normalize-ci-scans.sh"
 
 if ! jq -e '.schema_version == "1.0" and (.findings | type == "array")' "$tmp/.dockpipe/ci-analysis/findings.json" >/dev/null; then
 	echo "test_normalize_ci_scans: findings.json shape unexpected" >&2

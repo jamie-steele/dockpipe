@@ -30,7 +30,7 @@ func localModuleRoot(t *testing.T) string {
 // (assets, bundles, resolvers, runtimes, strategies).
 func TestBundledTemplatesCoreLayoutEnforcesCategoryDirs(t *testing.T) {
 	root := localModuleRoot(t)
-	core := filepath.Join(root, "templates", "core")
+	core := filepath.Join(root, "src", "templates", "core")
 	ents, err := os.ReadDir(core)
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +53,7 @@ func TestBundledTemplatesCoreLayoutEnforcesCategoryDirs(t *testing.T) {
 // Domain docs live only under bundles/.../assets/docs/ — not under core assets/.
 func TestBundledTemplatesCoreAssetsSubdirsEnforcesScriptsImagesCompose(t *testing.T) {
 	root := localModuleRoot(t)
-	assets := filepath.Join(root, "templates", "core", "assets")
+	assets := filepath.Join(root, "src", "templates", "core", "assets")
 	ents, err := os.ReadDir(assets)
 	if err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func TestBundledTemplatesCoreAssetsSubdirsEnforcesScriptsImagesCompose(t *testin
 // TestBundledAssetsIncludePowerShellExample ensures the reusable script asset remains present.
 func TestBundledAssetsIncludePowerShellExample(t *testing.T) {
 	root := localModuleRoot(t)
-	ps := filepath.Join(root, "templates", "core", "assets", "scripts", "helloworld.ps1")
+	ps := filepath.Join(root, "src", "templates", "core", "assets", "scripts", "helloworld.ps1")
 	st, err := os.Stat(ps)
 	if err != nil || st.IsDir() {
 		t.Fatalf("expected templates/core/assets/scripts/helloworld.ps1: %v", err)

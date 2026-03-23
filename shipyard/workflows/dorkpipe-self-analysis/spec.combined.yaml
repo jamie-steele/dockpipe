@@ -2,7 +2,7 @@
 # Produces: .dockpipe/orchestrator-cursor-prompt.md (facts) + .dockpipe/orchestrator-cursor-prompt.refined.md (model layer).
 #
 # Run:
-#   DORKPIPE_SELF_ANALYSIS_SPEC=dockpipe-experimental/workflows/dorkpipe-self-analysis/spec.combined.yaml ./scripts/dorkpipe/run-self-analysis.sh
+#   DORKPIPE_SELF_ANALYSIS_SPEC=shipyard/workflows/dorkpipe-self-analysis/spec.combined.yaml ./scripts/dorkpipe/run-self-analysis.sh
 #   export OLLAMA_HOST=http://127.0.0.1:11434   # if not default
 name: dorkpipe-self-analysis-combined
 policy:

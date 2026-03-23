@@ -36,8 +36,8 @@ Combine with other mounts as needed.
 
 ## Scripts
 
-- **`scripts/docker-cache-volumes.sh`** — `docker_cache_volume_ensure` / `docker_cache_volume_append_mounts` for host wrappers.
-- **`scripts/docker-steam-flatpak.sh`** — optional `DOCKER_STEAM_FLATPAK_CACHE_VOLUME` (default mounts `dockpipe-flatpak-system:/var/lib/flatpak`); set `DOCKER_STEAM_USE_FLATPAK_CACHE_VOLUME=0` to skip.
+- **`templates/core/assets/scripts/docker-cache-volumes.sh`** — `docker_cache_volume_ensure` / `docker_cache_volume_append_mounts` for host wrappers (also referenced as **`scripts/docker-cache-volumes.sh`** in YAML via `paths.go`).
+- **`scripts/steam-flatpak/docker-steam-flatpak.sh`** — optional `DOCKER_STEAM_FLATPAK_CACHE_VOLUME` (default mounts `dockpipe-flatpak-system:/var/lib/flatpak`); set `DOCKER_STEAM_USE_FLATPAK_CACHE_VOLUME=0` to skip.
 
 ## Isolation
 

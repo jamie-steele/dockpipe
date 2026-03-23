@@ -16,8 +16,8 @@ alwaysApply: true
 
 ## Isolation (DockPipe)
 
-- **Default self-analysis:** analysis runs in a **Docker**-isolated step (`golang` image); repo mounted at `/work`, host uid — see `dockpipe-experimental/workflows/dorkpipe-self-analysis/config.yml`.
-- **Stack variant:** `dorkpipe-self-analysis-stack` runs **docker compose** on the **host** for Postgres + Ollama sidecars, then the **same** isolated container step, then optional compose down — see `dockpipe-experimental/workflows/dorkpipe-self-analysis-stack/config.yml`.
+- **Default self-analysis:** analysis runs in a **Docker**-isolated step (`golang` image); repo mounted at `/work`, host uid — see `shipyard/workflows/dorkpipe-self-analysis/config.yml`.
+- **Stack variant:** `dorkpipe-self-analysis-stack` runs **docker compose** on the **host** for Postgres + Ollama sidecars, then the **same** isolated container step, then optional compose down — see `shipyard/workflows/dorkpipe-self-analysis-stack/config.yml`.
 
 Do not move orchestration into DockPipe core; workflows and `scripts/dorkpipe/` stay the extension surface.
 
@@ -30,4 +30,4 @@ When the user asks in plain language (e.g. “do we have compliance issues?”, 
 3. State **uncertainty** if artifacts are missing or stale; never invent scan results.
 4. Keep **DockPipe** as execution fabric only; reasoning stays in DorkPipe / assistant — aligned with **`AGENTS.md`**.
 
-Quick discovery: **`make compliance-handoff`** or **`./bin/dockpipe --workflow compliance-handoff --workdir . --`** (after **`make build`**).
+Quick discovery: **`make compliance-handoff`** or **`./src/bin/dockpipe --workflow compliance-handoff --workdir . --`** (after **`make build`**).

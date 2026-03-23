@@ -3,7 +3,7 @@
 # From repo root:  make test-quick
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 export DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$ROOT}"
 
@@ -13,9 +13,9 @@ echo "=== go test ==="
 go test ./...
 
 echo "=== check-templates-core-paths ==="
-bash scripts/check-templates-core-paths.sh
+bash src/scripts/check-templates-core-paths.sh
 
-for f in test_cli.sh test_repo_root.sh test_clone_worktree_include.sh; do
+for f in test_cli.sh test_repo_root.sh test_repo_layout.sh test_clone_worktree_include.sh; do
 	echo "=== $f ==="
 	bash "${UNIT}/${f}"
 done

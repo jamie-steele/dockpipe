@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-CLI="${REPO_ROOT}/bin/dockpipe"
+CLI="${REPO_ROOT}/src/bin/dockpipe"
 
 test_help() {
   "$CLI" --help | grep -q "dockpipe"

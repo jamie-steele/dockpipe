@@ -7,8 +7,8 @@ import (
 	"strings"
 )
 
-// ResolveWorkflowScript resolves run/act path: scripts/* from the project (repoRoot/scripts/) if
-// present, else templates/core/resolvers/<name>/assets/scripts/… (and legacy flat resolvers/<rest>),
+// ResolveWorkflowScript resolves run/act path: scripts/* from the project (repoRoot/scripts/ if
+// present, else repoRoot/src/scripts/ for this dockpipe repo layout), else templates/core/resolvers/<name>/assets/scripts/… (and legacy flat resolvers/<rest>),
 // then templates/core/bundles/<name>/assets/scripts/… (and legacy flat bundles/<rest>),
 // then templates/core/assets/scripts/; other paths are relative to the workflow template dir.
 // Domain-specific scripts live under each resolver or bundle’s assets/scripts tree; only agnostic
@@ -48,6 +48,10 @@ func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 	if scriptFileExists(user) {
 		return user
 	}
+	srcScripts := filepath.Join(repoRoot, "src", "scripts", rest)
+	if scriptFileExists(srcScripts) {
+		return srcScripts
+	}
 	core := CoreDir(repoRoot)
 	if p, ok := tryBundledAssetsScripts(core, "resolvers", rest); ok {
 		return p
@@ -82,6 +86,7 @@ func ResolveActionPath(action, repoRoot, cwd string) (string, error) {
 		}
 	} else {
 		candidates = append(candidates, filepath.Join(repoRoot, "scripts", action))
+		candidates = append(candidates, filepath.Join(repoRoot, "src", "scripts", action))
 	}
 	candidates = append(candidates, filepath.Join(cwd, action))
 	for _, c := range candidates {
@@ -139,6 +144,7 @@ func IsBundledCommitWorktree(actionPath, repoRoot string) bool {
 	}
 	for _, b := range []string{
 		filepath.Join(repoRoot, "scripts", "commit-worktree.sh"),
+		filepath.Join(repoRoot, "src", "scripts", "commit-worktree.sh"),
 		filepath.Join(CoreDir(repoRoot), "assets", "scripts", "commit-worktree.sh"),
 	} {
 		bp, err := filepath.Abs(b)

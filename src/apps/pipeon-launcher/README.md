@@ -12,22 +12,22 @@ Cross-platform **Qt 6** system-tray app: save **contexts** (folder + resolver / 
 
 ## Build
 
-`CMakeLists.txt` lives under **`apps/pipeon-launcher/`**, not the dockpipe repo root. Run CMake with that directory as the **source** (or `cd` there first).
+`CMakeLists.txt` lives under **`src/apps/pipeon-launcher/`**, not the dockpipe repo root. Run CMake with that directory as the **source** (or `cd` there first).
 
 **Option A — from the repo root:**
 
 ```bash
 cd ~/source/dockpipe
 sudo apt install cmake build-essential qt6-base-dev   # Pop!_OS / Ubuntu: Qt 6 Widgets + dev tools
-cmake -S apps/pipeon-launcher -B apps/pipeon-launcher/build
-cmake --build apps/pipeon-launcher/build
-./apps/pipeon-launcher/build/pipeon-launcher
+cmake -S src/apps/pipeon-launcher -B src/apps/pipeon-launcher/build
+cmake --build src/apps/pipeon-launcher/build
+./src/apps/pipeon-launcher/build/pipeon-launcher
 ```
 
 **Option B — from the launcher directory:**
 
 ```bash
-cd ~/source/dockpipe/apps/pipeon-launcher
+cd ~/source/dockpipe/src/apps/pipeon-launcher
 cmake -B build
 cmake --build build
 ./build/pipeon-launcher
@@ -36,7 +36,7 @@ cmake --build build
 If you use the **Qt Online Installer** instead of distro packages, point CMake at that kit (replace with your real path):
 
 ```bash
-cmake -S apps/pipeon-launcher -B apps/pipeon-launcher/build \
+cmake -S src/apps/pipeon-launcher -B src/apps/pipeon-launcher/build \
   -DCMAKE_PREFIX_PATH="$HOME/Qt/6.8.0/gcc_64"
 ```
 
@@ -45,9 +45,9 @@ Do **not** use the placeholder `/path/to/Qt/6.x/...` literally — it must be a 
 **If configuration failed earlier** (stale cache): remove the build dir and re-run CMake after installing `libgl1-mesa-dev` / `libegl1-mesa-dev`:
 
 ```bash
-rm -rf apps/pipeon-launcher/build
-cmake -S apps/pipeon-launcher -B apps/pipeon-launcher/build
-cmake --build apps/pipeon-launcher/build
+rm -rf src/apps/pipeon-launcher/build
+cmake -S src/apps/pipeon-launcher -B src/apps/pipeon-launcher/build
+cmake --build src/apps/pipeon-launcher/build
 ```
 
 ## LGPL / Qt
@@ -60,18 +60,18 @@ Qt is available under **LGPL** and commercially. If you **ship binaries**, compl
 
 - **Browse Flathub…** opens a search dialog (POST to **`https://flathub.org/api/v2/search`**) with optional **category** filter (client-side on `main_categories`). Choosing an app sets **`FLATHUB_APP_ID=`** plus the Flatpak app id (replaces an existing line with that key).
 
-Use the **`flathub-host`** workflow (`dockpipe-experimental/workflows/flathub-host/`) with **`scripts/flathub-host-run.sh`**, which runs **`flatpak run`** on the **host** (Linux with Flatpak + Flathub installed). **Docker**-based Flathub flows and **named volume caches** stay in separate workflows/scripts (`steam-flatpak-docker`, `package-cache-demo`).
+Use the **`flathub-host`** workflow (`shipyard/workflows/flathub-host/`) with **`scripts/flathub-host/flathub-host-run.sh`**, which runs **`flatpak run`** on the **host** (Linux with Flatpak + Flathub installed). **Docker**-based Flathub flows and **named volume caches** stay in separate workflows/scripts (`steam-flatpak-docker`, `package-cache-demo`).
 
 **APT** (or other package managers) does not need a separate browser: add env lines your scripts read, or pass **`dockpipe --mount`** for cache volumes when you run a container-backed workflow from the CLI; Pipeon can mirror those with extra env lines only if your wrapper reads them.
 
 ## Basic vs Advanced
 
-- **Basic** (default): **File → Open project folder…** (or **Choose folder…**) sets the project directory passed to `dockpipe` as **`--workdir`** (your code is mounted in the tool’s container). The main area lists only workflows whose workflow YAML includes **`category: app`** (see `docs/workflow-yaml.md`) — GUI/IDE-style apps. Double-click an app to launch. **Refresh apps** (toolbar) or **File → Refresh app list** (**F5**) rescans `dockpipe-experimental/workflows/` and `templates/` from disk so new or edited workflows appear without restarting. **View → Icon grid** / **Compact list** toggles presentation. Mode and view are stored in **`launcher.json`**.
+- **Basic** (default): **File → Open project folder…** (or **Choose folder…**) sets the project directory passed to `dockpipe` as **`--workdir`** (your code is mounted in the tool’s container). The main area lists only workflows whose workflow YAML includes **`category: app`** (see `docs/workflow-yaml.md`) — GUI/IDE-style apps. Double-click an app to launch. **Refresh apps** (toolbar) or **File → Refresh app list** (**F5**) rescans `shipyard/workflows/` and `src/templates/` or `templates/` from disk so new or edited workflows appear without restarting. **View → Icon grid** / **Compact list** toggles presentation. Mode and view are stored in **`launcher.json`**.
 - **Advanced**: **View → Advanced mode** shows the full **context** list (same as before): **Add folder…** can import every workflow under the resolved repo; technical details per row; **Edit**, worktrees, logs, etc.
 
 ## Add folder (Advanced)
 
-Choosing **Add folder…** resolves a dockpipe **repo root** from the path (`DOCKPIPE_REPO_ROOT` or walking upward for `dockpipe-experimental/workflows` / `templates/core`). For each workflow with a `config.yml` under `dockpipe-experimental/workflows/...` and `templates/...` (excluding `templates/core`), the launcher adds **one context** with that **workdir** and the matching `--workflow` name. If no repo is found, it adds a single context with workflow `vscode`. Existing `(workdir, workflow, workflow file)` combinations are skipped.
+Choosing **Add folder…** resolves a dockpipe **repo root** from the path (`DOCKPIPE_REPO_ROOT` or walking upward for `shipyard/workflows` / `src/templates/core` or `templates/core`). For each workflow with a `config.yml` under `shipyard/workflows/...` and `src/templates/...` or `templates/...` (excluding `core`), the launcher adds **one context** with that **workdir** and the matching `--workflow` name. If no repo is found, it adds a single context with workflow `vscode`. Existing `(workdir, workflow, workflow file)` combinations are skipped.
 
 ## Data locations
 

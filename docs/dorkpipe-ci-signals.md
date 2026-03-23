@@ -21,7 +21,7 @@ Traditional tools (**govulncheck**, **gosec**, and future linters) stay **first-
 - **`findings`**: array of objects with stable **`id`** = `tool|rule_id|file|line` (paths as reported by the tool), plus **`tool`**, **`rule_id`**, **`title`**, **`file`**, **`line`**, **`column`**, **`severity`**, **`confidence`**, **`category`**, **`message`**, **`remediation`**, and **`raw`** (tool-specific object for deep correlation).
 - **`raw_paths`**: relative paths under **`ci-analysis/`** to raw JSON copies.
 
-Formal JSON Schema: **`schemas/dockpipe-ci-findings.schema.json`**.
+Formal JSON Schema: **`src/schemas/dockpipe-ci-findings.schema.json`**.
 
 ## Handoff contract for DorkPipe
 

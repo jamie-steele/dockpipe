@@ -13,12 +13,12 @@ import (
 )
 
 // bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "78"
+const bundledFormatVersion = "83"
 
 var bundledMu sync.Mutex
 
 // EmbeddedWorkflowConfigExists reports whether a bundled workflow or resolver-delegate config exists for name.
-// Checks embed paths templates/<name>/config.yml and templates/core/resolvers/<name>/config.yml (source layout in the binary).
+// Checks embed paths src/templates/<name>/config.yml and src/templates/core/resolvers/<name>/config.yml (source layout in the binary).
 func EmbeddedWorkflowConfigExists(name string) bool {
 	if name == "" {
 		return false
@@ -30,9 +30,9 @@ func EmbeddedWorkflowConfigExists(name string) bool {
 		}
 	}
 	for _, p := range []string{
-		"templates/" + name + "/config.yml",
-		BundledDockpipeDir + "/workflows/" + name + "/config.yml",
-		"templates/core/resolvers/" + name + "/config.yml",
+		EmbeddedTemplatesPrefix + "/" + name + "/config.yml",
+		ShipyardDir + "/workflows/" + name + "/config.yml",
+		EmbeddedTemplatesPrefix + "/core/resolvers/" + name + "/config.yml",
 	} {
 		if _, err := fs.Stat(dockpipe.BundledFS, p); err == nil {
 			return true
@@ -57,13 +57,13 @@ func InvalidateBundledCache() error {
 	if err != nil {
 		return err
 	}
-	dest := filepath.Join(cacheBase, BundledDockpipeDir, "bundled-"+ver)
+	dest := filepath.Join(cacheBase, ShipyardDir, "bundled-"+ver)
 	return os.RemoveAll(dest)
 }
 
-// MaterializedBundledRoot returns a directory containing the unpacked bundle: <BundledDockpipeDir>/core/
-// (assets, resolvers, runtimes, strategies), workflows/, lib/, and version.
-// Embedded source still uses templates/...; copyEmbeddedFS maps that to the layout above on disk.
+// MaterializedBundledRoot returns a directory containing the unpacked bundle: <ShipyardDir>/core/
+// (mirrors templates/core: resolvers, runtimes, strategies, …), workflows/, assets/entrypoint.sh, and version.
+// Embedded source still uses src/templates/...; copyEmbeddedFS maps that to the layout above on disk.
 // See also DOCKPIPE_REPO_ROOT override in RepoRoot.
 func MaterializedBundledRoot() (string, error) {
 	bundledMu.Lock()
@@ -85,8 +85,8 @@ func extractBundledToCache() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dest := filepath.Join(cacheBase, BundledDockpipeDir, "bundled-"+ver)
-	cfgPath := filepath.Join(dest, BundledDockpipeDir, "workflows", "test", "config.yml")
+	dest := filepath.Join(cacheBase, ShipyardDir, "bundled-"+ver)
+	cfgPath := filepath.Join(dest, ShipyardDir, "workflows", "test", "config.yml")
 	formatPath := filepath.Join(dest, ".bundled-format")
 	if st, err := os.Stat(cfgPath); err == nil && !st.IsDir() {
 		if b, err := os.ReadFile(filepath.Join(dest, "version")); err == nil && strings.TrimSpace(string(b)) == ver {
@@ -116,7 +116,7 @@ func extractBundledToCache() (string, error) {
 	return dest, nil
 }
 
-// bundledCacheBase is the parent directory for <BundledDockpipeDir>/bundled-<version> (default: user cache dir).
+// bundledCacheBase is the parent directory for <ShipyardDir>/bundled-<version> (default: user cache dir).
 // Set DOCKPIPE_BUNDLED_CACHE to override (tests, read-only home, etc.).
 func bundledCacheBase() (string, error) {
 	if v := os.Getenv("DOCKPIPE_BUNDLED_CACHE"); v != "" {
@@ -129,23 +129,24 @@ func bundledCacheBase() (string, error) {
 	return cacheBase, nil
 }
 
-// mapEmbeddedToMaterializedPath maps embed paths (templates/..., lib/..., VERSION) to the on-disk
-// materialized layout: <BundledDockpipeDir>/core/..., workflows/..., lib/, version.
+// mapEmbeddedToMaterializedPath maps embed paths (src/templates/..., lib/..., VERSION) to the on-disk
+// materialized layout: <ShipyardDir>/core/..., workflows/..., lib/, version.
 func mapEmbeddedToMaterializedPath(rel string) string {
+	corePrefix := EmbeddedTemplatesPrefix + "/core"
 	switch {
 	case rel == "VERSION":
 		return "version"
-	case rel == "templates/core" || strings.HasPrefix(rel, "templates/core/"):
-		suffix := strings.TrimPrefix(rel, "templates/core")
+	case rel == corePrefix || strings.HasPrefix(rel, corePrefix+"/"):
+		suffix := strings.TrimPrefix(rel, corePrefix)
 		if suffix == "" {
-			return filepath.Join(BundledDockpipeDir, "core")
+			return filepath.Join(ShipyardDir, "core")
 		}
-		return filepath.Join(BundledDockpipeDir, "core") + suffix
-	case rel == "templates":
-		return BundledDockpipeDir
-	case strings.HasPrefix(rel, "templates/"):
-		rest := strings.TrimPrefix(rel, "templates/")
-		return filepath.Join(BundledDockpipeDir, "workflows", rest)
+		return filepath.Join(ShipyardDir, "core") + suffix
+	case rel == EmbeddedTemplatesPrefix:
+		return ShipyardDir
+	case strings.HasPrefix(rel, EmbeddedTemplatesPrefix+"/"):
+		rest := strings.TrimPrefix(rel, EmbeddedTemplatesPrefix+"/")
+		return filepath.Join(ShipyardDir, "workflows", rest)
 	default:
 		return rel
 	}

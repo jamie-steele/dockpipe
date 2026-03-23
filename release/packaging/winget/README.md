@@ -9,7 +9,7 @@ dockpipe is **not** in the default `winget` source until a manifest is **accepte
 From an **elevated or normal** PowerShell (MSI is per-user; no admin required):
 
 ```powershell
-irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex
+irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/release/packaging/windows/install.ps1 | iex
 ```
 
 Pinned version: download [install.ps1](../windows/install.ps1) and run:

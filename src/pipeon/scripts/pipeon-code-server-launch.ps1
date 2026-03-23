@@ -1,6 +1,6 @@
 #Requires -Version 5.1
 # Launched by the Pipeon Windows shortcut (Desktop / Start Menu). Starts workflow vscode (code-server + Pipeon image).
-# Requires: Docker Desktop, Git Bash (bash.exe), dockpipe.exe on PATH or repo bin\dockpipe.exe.
+# Requires: Docker Desktop, Git Bash (bash.exe), dockpipe.exe on PATH or repo src\bin\dockpipe.exe.
 param()
 
 $ErrorActionPreference = "Stop"
@@ -13,7 +13,7 @@ try {
     $cmd = Get-Command dockpipe -ErrorAction Stop
     $exe = $cmd.Source
 } catch {
-    $candidate = Join-Path $RepoRoot "bin\dockpipe.exe"
+    $candidate = Join-Path $RepoRoot "src\bin\dockpipe.exe"
     if (Test-Path -LiteralPath $candidate) {
         $exe = $candidate
     }
@@ -22,8 +22,8 @@ try {
 if (-not $exe) {
     Write-Error @"
 dockpipe.exe not found.
-  Install: irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/packaging/windows/install.ps1 | iex
-  Or from a clone: make build-windows   (produces bin\dockpipe.exe)
+  Install: irm https://raw.githubusercontent.com/jamie-steele/dockpipe/master/release/packaging/windows/install.ps1 | iex
+  Or from a clone: make build-windows   (produces src\bin\dockpipe.exe)
 "@
     exit 1
 }

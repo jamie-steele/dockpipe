@@ -39,9 +39,11 @@ Examples:
 - `run-apply-validate`
 
 📁 Location:
-templates/<name>/
 
-**Do not** put **this repository’s** CI, demo, or internal automation workflows in **`templates/`**. Those belong under **`dockpipe-experimental/workflows/<name>/`** (see **Internal workflows** below).
+- In **this repository’s checkout:** **`src/templates/<name>/`** (bundled workflows + **`src/templates/core/`**).
+- In a **downstream project** after **`dockpipe init`:** **`templates/<name>/`** at the project root (same layout conceptually).
+
+**Do not** put **this repository’s** CI, demo, or internal automation workflows under **`src/templates/`**. Those belong under **`shipyard/workflows/<name>/`** (see **Internal workflows** below).
 
 ---
 
@@ -61,8 +63,8 @@ Current runtimes:
 Future:
 - `cloud-runner` (with providers like lambda/fargate)
 
-📁 Location:
-templates/core/runtimes/
+📁 Location (under the authoring templates root — **`src/templates/core/`** in this repo, **`templates/core/`** after **`dockpipe init`**):
+`…/core/runtimes/`
 
 ---
 
@@ -83,7 +85,7 @@ Examples:
 ❗ Resolvers are NOT runtimes.
 
 📁 Location:
-templates/core/resolvers/
+`…/core/resolvers/`
 
 ---
 
@@ -95,16 +97,16 @@ Lifecycle wrappers.
 - Examples: worktree, commit
 
 📁 Location:
-templates/core/strategies/
+`…/core/strategies/`
 
 ---
 
 ## CRITICAL STRUCTURE RULE
 
-`templates/core/` contains ONLY category folders.
+**`…/core/`** (i.e. **`src/templates/core/`** here, **`templates/core/`** in a downstream project) contains ONLY category folders.
 
 Valid:
-templates/core/
+…/core/
   runtimes/
   resolvers/
   strategies/
@@ -114,9 +116,9 @@ templates/core/
     compose/
 
 Invalid:
-templates/core/claude
-templates/core/docker
-templates/core/test
+…/core/claude
+…/core/docker
+…/core/test
 
 Rules:
 
@@ -168,16 +170,16 @@ If something cannot be done:
 
 ## Internal workflows (this repository)
 
-When you work **on the dockpipe project itself**, you are a **user** of the tool: extend it via **`templates/`**, **`scripts/`**, and **`dockpipe-experimental/workflows/`** — **not** by stuffing internal pipelines into **`templates/`**.
+When you work **on the dockpipe project itself**, you are a **user** of the tool: extend it via **`src/templates/`**, **`scripts/`**, and **`shipyard/workflows/`** — **not** by stuffing internal pipelines into **`src/templates/`**.
 
 | Location | Purpose |
 |----------|---------|
-| **`templates/<name>/`** | **User-facing** workflow examples shipped in the bundle (**`run`**, **`run-apply`**, **`run-apply-validate`**, **`init`**, …). Reusable for any downstream project. |
-| **`dockpipe-experimental/workflows/<name>/`** | **This repo only:** CI, recordings, experiments — workflows that exist to run **dockpipe** on **this** codebase. Not installed by a special `init` flag; copy dirs or use **`dockpipe init &lt;name&gt; --from …`** pointing at a workflow path. |
+| **`src/templates/<name>/`** (this repo) / **`templates/<name>/`** (downstream) | **User-facing** workflow examples shipped in the bundle (**`run`**, **`run-apply`**, **`run-apply-validate`**, **`init`**, …). Reusable for any downstream project. |
+| **`shipyard/workflows/<name>/`** | **This repo only:** CI, recordings, experiments — workflows that exist to run **dockpipe** on **this** codebase. Not installed by a special `init` flag; copy dirs or use **`dockpipe init &lt;name&gt; --from …`** pointing at a workflow path. |
 
-**Preferred pattern:** `dockpipe init <name> --from run-apply` or **`run-apply-validate`** (or **`run`**, **`blank`**) for user-shaped scaffolds; keep automation-specific YAML under **`dockpipe-experimental/workflows/`**.
+**Preferred pattern:** `dockpipe init <name> --from run-apply` or **`run-apply-validate`** (or **`run`**, **`blank`**) for user-shaped scaffolds; keep automation-specific YAML under **`shipyard/workflows/`**.
 
-**Accelerator (maintainers):** After **`make build`**, **`make self-analysis`**, **`make self-analysis-host`**, or **`make self-analysis-stack`** run the DorkPipe self-analysis workflows on this repo (container, host-only, or compose stack). See **`docs/dorkpipe.md`** and **`dockpipe-experimental/workflows/dorkpipe-self-analysis/README.md`**.
+**Accelerator (maintainers):** After **`make build`**, **`make self-analysis`**, **`make self-analysis-host`**, or **`make self-analysis-stack`** run the DorkPipe self-analysis workflows on this repo (container, host-only, or compose stack). See **`docs/dorkpipe.md`** and **`shipyard/workflows/dorkpipe-self-analysis/README.md`**.
 
 ### Agent guidance: repository analysis (before repo-level work)
 
@@ -199,7 +201,7 @@ This repository includes **this file (`AGENTS.md`)** and may include **generated
 | **CI scan signals** (govulncheck + gosec, normalized) | **`.dockpipe/ci-analysis/findings.json`** — produced by CI / **`scripts/ci-local.sh`**; download from **Actions artifacts** if not local. See **`docs/dorkpipe-ci-signals.md`**. |
 | **Compliance / security posture (for AI)** | **`docs/compliance-ai-handoff.md`** — how to answer “compliance issues?” without claiming certification; **`make compliance-handoff`** / workflow **`compliance-handoff`** lists signal paths. |
 | **Structured user guidance (optional)** | **`.dockpipe/analysis/insights.json`** — normalized, reviewable **signals** from **`user-insight-enqueue` / `user-insight-process`** (see **`docs/user-insight-queue.md`**). Not repo facts or scan truth. |
-| **Pipeon (local Ollama helper)** | **`bin/pipeon`** — builds **`.dockpipe/pipeon-context.md`** and can **`chat`** via Ollama; **feature-flagged** (`DOCKPIPE_PIPEON=1`, min version **0.6.5** unless **`DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1`**). Editor story: **Code OSS fork** + **`contrib/pipeon-vscode-extension/`** — **`pipeon/docs/`** (fork, architecture, shortcuts). Harness: **`pipeon/scripts/README.md`**. |
+| **Pipeon (local Ollama helper)** | **`src/bin/pipeon`** — builds **`.dockpipe/pipeon-context.md`** and can **`chat`** via Ollama; **feature-flagged** (`DOCKPIPE_PIPEON=1`, min version **0.6.5** unless **`DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1`**). Editor story: **Code OSS fork** + **`src/contrib/pipeon-vscode-extension/`** — **`src/pipeon/docs/`** (fork, architecture, shortcuts). Harness: **`src/pipeon/scripts/README.md`**. |
 
 If present, **load and use** them as **primary** context for understanding the repository, together with normal code reading.
 

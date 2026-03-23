@@ -8,15 +8,25 @@
 
 namespace {
 
+QString templatesRoot(const QString &repoRoot)
+{
+    const QDir r(repoRoot);
+    const QString src = r.filePath(QStringLiteral("src/templates"));
+    if (QFileInfo(src + QStringLiteral("/core")).isDir())
+        return src;
+    return r.filePath(QStringLiteral("templates"));
+}
+
 void collectConfigPaths(const QString &repoRoot, QStringList &out)
 {
     if (repoRoot.isEmpty())
         return;
 
     const QDir root(repoRoot);
+    const QString tr = templatesRoot(repoRoot);
 
     {
-        const QDir wf(root.filePath(QStringLiteral("dockpipe-experimental/workflows")));
+        const QDir wf(root.filePath(QStringLiteral("shipyard/workflows")));
         if (wf.exists()) {
             for (const QFileInfo &fi : wf.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
                 const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
@@ -27,7 +37,7 @@ void collectConfigPaths(const QString &repoRoot, QStringList &out)
     }
 
     {
-        const QDir tpl(root.filePath(QStringLiteral("templates")));
+        const QDir tpl(tr);
         if (tpl.exists()) {
             for (const QFileInfo &fi : tpl.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
                 if (fi.fileName() == QStringLiteral("core"))
@@ -40,7 +50,7 @@ void collectConfigPaths(const QString &repoRoot, QStringList &out)
     }
 
     {
-        const QDir res(root.filePath(QStringLiteral("templates/core/resolvers")));
+        const QDir res(tr + QStringLiteral("/core/resolvers"));
         if (res.exists()) {
             for (const QFileInfo &fi : res.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
                 const QString cfg = fi.filePath() + QStringLiteral("/config.yml");

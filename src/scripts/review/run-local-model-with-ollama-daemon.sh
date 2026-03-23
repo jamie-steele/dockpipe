@@ -1,1 +1,1 @@
-../../templates/core/assets/scripts/review/run-local-model-with-ollama-daemon.sh
+../../../templates/core/assets/scripts/review/run-local-model-with-ollama-daemon.sh

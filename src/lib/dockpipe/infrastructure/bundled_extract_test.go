@@ -65,13 +65,13 @@ func TestMapEmbeddedToMaterializedPath(t *testing.T) {
 		in, want string
 	}{
 		{"VERSION", "version"},
-		{"lib/entrypoint.sh", "lib/entrypoint.sh"},
-		{"templates", BundledDockpipeDir},
-		{"templates/core", filepath.Join(BundledDockpipeDir, "core")},
-		{"templates/core/runtimes/docker/profile", filepath.Join(BundledDockpipeDir, "core/runtimes/docker/profile")},
-		{"templates/test/config.yml", filepath.Join(BundledDockpipeDir, "workflows", "test", "config.yml")},
-		{"templates/test-demo/config.yml", filepath.Join(BundledDockpipeDir, "workflows", "test-demo", "config.yml")},
-		{filepath.Join(BundledDockpipeDir, "workflows", "dogfood-codex-pav", "config.yml"), filepath.Join(BundledDockpipeDir, "workflows", "dogfood-codex-pav", "config.yml")},
+		{"assets/entrypoint.sh", "assets/entrypoint.sh"},
+		{EmbeddedTemplatesPrefix, ShipyardDir},
+		{EmbeddedTemplatesPrefix + "/core", filepath.Join(ShipyardDir, "core")},
+		{EmbeddedTemplatesPrefix + "/core/runtimes/docker/profile", filepath.Join(ShipyardDir, "core/runtimes/docker/profile")},
+		{EmbeddedTemplatesPrefix + "/test/config.yml", filepath.Join(ShipyardDir, "workflows", "test", "config.yml")},
+		{EmbeddedTemplatesPrefix + "/test-demo/config.yml", filepath.Join(ShipyardDir, "workflows", "test-demo", "config.yml")},
+		{filepath.Join(ShipyardDir, "workflows", "dogfood-codex-pav", "config.yml"), filepath.Join(ShipyardDir, "workflows", "dogfood-codex-pav", "config.yml")},
 	}
 	for _, tc := range cases {
 		got := mapEmbeddedToMaterializedPath(tc.in)

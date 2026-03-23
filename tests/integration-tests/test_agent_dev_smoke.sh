@@ -3,7 +3,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-DOCKPIPE="$REPO_ROOT/bin/dockpipe"
+DOCKPIPE="$REPO_ROOT/src/bin/dockpipe"
 
 # 1. Default: data volume mounted, DOCKPIPE_DATA set
 out=$("$DOCKPIPE" --template agent-dev -- sh -c 'echo "workdir=$PWD"; echo "data=${DOCKPIPE_DATA:-not set}"; test -d /dockpipe-data && echo "volume_ok"')

@@ -9,9 +9,9 @@ Task: Implement the next concrete improvements to DorkPipe orchestration (multi-
 
 Do this work in order:
 1) If this is a first pass: read lib/dorkpipe/engine/run.go and lib/dorkpipe/spec/spec.go to see current policy and scheduling.
-2) Add or extend a shipped DAG spec (dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml) so dogfood matches engine capabilities (e.g. kind: verifier after local LLM, or one pattern from lib/dorkpipe/examples/full-bar.yaml).
+2) Add or extend a shipped DAG spec (shipyard/workflows/dorkpipe-orchestrator/spec.example.yaml) so dogfood matches engine capabilities (e.g. kind: verifier after local LLM, or one pattern from lib/dorkpipe/examples/full-bar.yaml).
 3) Add tests under lib/dorkpipe/*/ when you change aggregation, planner, or workers.
-4) Run: make build && go test ./... && bin/dorkpipe validate -f dockpipe-experimental/workflows/dorkpipe-self-analysis/spec.yaml
+4) Run: make build && go test ./... && bin/dorkpipe validate -f shipyard/workflows/dorkpipe-self-analysis/spec.yaml
 
 Constraints:
 - No vendor-specific hooks in lib/dockpipe/application for this work.
@@ -24,7 +24,7 @@ Start here (files):
 - lib/dorkpipe/engine/run.go
 - lib/dorkpipe/workers/workers.go
 - lib/dorkpipe/aggregator/merge.go
-- dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml
+- shipyard/workflows/dorkpipe-orchestrator/spec.example.yaml
 - lib/dorkpipe/examples/full-bar.yaml
 
 Acceptance:

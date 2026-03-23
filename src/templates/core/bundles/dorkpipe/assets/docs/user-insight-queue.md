@@ -10,7 +10,7 @@
 | **System / scan findings** | e.g. `.dockpipe/ci-analysis/findings.json` | Tool output (gosec, govulncheck, …) |
 | **User insights** | `.dockpipe/analysis/insights.json` | Human guidance: **signal**, not truth |
 
-Nothing in this design is hidden state: files are JSON (or JSONL history), **schemas** live under `schemas/`, and classification is **rules** in `scripts/dorkpipe/user-insight-rules.json` (editable, deterministic).
+Nothing in this design is hidden state: files are JSON (or JSONL history), **schemas** live under `src/schemas/`, and classification is **rules** in `scripts/dorkpipe/user-insight-rules.json` (editable, deterministic).
 
 ---
 
@@ -23,7 +23,7 @@ Nothing in this design is hidden state: files are JSON (or JSONL history), **sch
 | `history.jsonl` | Append-only audit events (`enqueue`, `process`, `review_*`, `mark_stale`, `supersede`). |
 | `by-category/*.json` | Optional **views** (generated); canonical source is **`insights.json`**. |
 
-**Schemas:** `schemas/dockpipe-user-insight-queue.schema.json`, `schemas/dockpipe-user-insights.schema.json`.
+**Schemas:** `src/schemas/dockpipe-user-insight-queue.schema.json`, `src/schemas/dockpipe-user-insights.schema.json`.
 
 ---
 

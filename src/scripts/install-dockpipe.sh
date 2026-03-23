@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Install a pre-built dockpipe binary to a local PATH directory. Does not compile.
-# Default binary: repo-root bin/dockpipe.bin (override with DOCKPIPE_INSTALL_BIN).
+# Default binary: repo-root src/bin/dockpipe.bin (override with DOCKPIPE_INSTALL_BIN).
 # Override destination root with DOCKPIPE_INSTALL_PREFIX (e.g. /opt/dockpipe — installs to $PREFIX/bin/dockpipe).
 set -euo pipefail
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-SRC="${DOCKPIPE_INSTALL_BIN:-$REPO_ROOT/bin/dockpipe.bin}"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+SRC="${DOCKPIPE_INSTALL_BIN:-$REPO_ROOT/src/bin/dockpipe.bin}"
 
 if [[ ! -f "$SRC" ]]; then
   echo "install-dockpipe: missing binary: $SRC" >&2

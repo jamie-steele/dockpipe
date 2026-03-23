@@ -14,7 +14,7 @@ Use a **real** project directory; the README path above is only a placeholder.
 
 ## What it does
 
-1. Runs `scripts/sandbox-steam.sh` on the **host** (`skip_container: true`).
+1. Runs `scripts/steam-flatpak/sandbox-steam.sh` on the **host** (`skip_container: true`).
 2. Prints `DOCKPIPE_WORKDIR`, repo root, and which **Steam launcher** it would use (see below).
 3. Optionally **`exec`** that launcher when `STEAM_SANDBOX_LAUNCH=1` (blocks until Steam exits).
 
@@ -55,7 +55,7 @@ Typical building blocks (exact package names differ by distro):
 
 ## Customize
 
-Edit **`scripts/sandbox-steam.sh`** in your fork or overlay — do not need to touch **`src/lib/dockpipe/`**.
+Edit **`templates/core/bundles/steam-flatpak/assets/scripts/sandbox-steam.sh`** (or your copy under **`scripts/steam-flatpak/`** after `dockpipe init`) — do not need to touch **`src/lib/dockpipe/`**.
 
 ## Pipeon Basic
 

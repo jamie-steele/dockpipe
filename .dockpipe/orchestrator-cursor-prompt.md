@@ -24,18 +24,18 @@ Advance **DockPipe** (workflow execution fabric) and **DorkPipe** (`lib/dorkpipe
   spec	1
   workers	1
 - **Workflow configs present**:
-  ## workflows (dockpipe-experimental/workflows)
-  /work/dockpipe-experimental/workflows/demo-gui-cursor/config.yml
-  /work/dockpipe-experimental/workflows/demo-gui-vscode/config.yml
-  /work/dockpipe-experimental/workflows/dogfood-codex-pav/config.yml
-  /work/dockpipe-experimental/workflows/dogfood-codex-security/config.yml
-  /work/dockpipe-experimental/workflows/dorkpipe-orchestrator/config.yml
-  /work/dockpipe-experimental/workflows/dorkpipe-self-analysis-host/config.yml
-  /work/dockpipe-experimental/workflows/dorkpipe-self-analysis-stack/config.yml
-  /work/dockpipe-experimental/workflows/dorkpipe-self-analysis/config.yml
-  /work/dockpipe-experimental/workflows/test-demo-claude/config.yml
-  /work/dockpipe-experimental/workflows/test-demo/config.yml
-  /work/dockpipe-experimental/workflows/test/config.yml
+  ## workflows (shipyard/workflows)
+  /work/shipyard/workflows/demo-gui-cursor/config.yml
+  /work/shipyard/workflows/demo-gui-vscode/config.yml
+  /work/shipyard/workflows/dogfood-codex-pav/config.yml
+  /work/shipyard/workflows/dogfood-codex-security/config.yml
+  /work/shipyard/workflows/dorkpipe-orchestrator/config.yml
+  /work/shipyard/workflows/dorkpipe-self-analysis-host/config.yml
+  /work/shipyard/workflows/dorkpipe-self-analysis-stack/config.yml
+  /work/shipyard/workflows/dorkpipe-self-analysis/config.yml
+  /work/shipyard/workflows/test-demo-claude/config.yml
+  /work/shipyard/workflows/test-demo/config.yml
+  /work/shipyard/workflows/test/config.yml
 - **Recent commits**:
   ### Recent git log
   c255b0b Added self analyiss and side car reasoning
@@ -50,7 +50,7 @@ Advance **DockPipe** (workflow execution fabric) and **DorkPipe** (`lib/dorkpipe
 ## 3. Highest-value opportunities (grounded + strategic)
 The following are **actionable** directions consistent with `AGENTS.md` (primitive core, templates as extension):
 
-- **Independent verifier in the default orchestrator spec** (`dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml`): add a `kind: verifier` node after local LLM output so `Vector.Verifier` is populated before escalation (implementation in `lib/dorkpipe/workers/workers.go`, `parseVerifierScore`).
+- **Independent verifier in the default orchestrator spec** (`shipyard/workflows/dorkpipe-orchestrator/spec.example.yaml`): add a `kind: verifier` node after local LLM output so `Vector.Verifier` is populated before escalation (implementation in `lib/dorkpipe/workers/workers.go`, `parseVerifierScore`).
 - **Surface engine features in shipped examples**: `lib/dorkpipe/examples/full-bar.yaml` demonstrates `branch_judge`, `retrieve_if_calibrated_below`, and skips — mirror one pattern into `spec.example.yaml` so dogfood exercises the same code paths operators will rely on.
 - **Metrics loop**: standardize `bin/dorkpipe eval` / `promote` after CI or nightly runs; extend `.dorkpipe/metrics.jsonl` consumers if new dimensions are added (`lib/dorkpipe/engine/provenance.go`).
 - **Asset promotion**: scripts under `templates/core/assets/scripts/dorkpipe/` should stay referenced from workflows/docs when they become part of a supported path (collect/merge/verify-*).
@@ -81,8 +81,8 @@ The following are **actionable** directions consistent with `AGENTS.md` (primiti
 | Aggregation | `lib/dorkpipe/aggregator/merge.go` |
 | CLI | `cmd/dorkpipe/main.go` |
 | Eval / promotion | `lib/dorkpipe/eval/eval.go`, `lib/dorkpipe/promotion/promotion.go` |
-| DockPipe workflow (this integration) | `dockpipe-experimental/workflows/dorkpipe-self-analysis/` |
-| Orchestrator example DAG | `dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml` |
+| DockPipe workflow (this integration) | `shipyard/workflows/dorkpipe-self-analysis/` |
+| Orchestrator example DAG | `shipyard/workflows/dorkpipe-orchestrator/spec.example.yaml` |
 
 ### Line counts (signal for complexity hotspots)
   ## key file line counts
@@ -102,11 +102,11 @@ The following are **actionable** directions consistent with `AGENTS.md` (primiti
 1. Extend `spec.example.yaml` in small steps (verifier OR branch OR `retrieve_if` — not all at once if it complicates ops).
 2. Add or adjust tests in `lib/dorkpipe/*/..._test.go` when touching aggregation, planner, or workers.
 3. Keep `dorkpipe validate` / `go test ./...` green.
-4. Document the new path in `dockpipe-experimental/workflows/dorkpipe-self-analysis/README.md` and `docs/dorkpipe.md` if behavior is user-visible.
+4. Document the new path in `shipyard/workflows/dorkpipe-self-analysis/README.md` and `docs/dorkpipe.md` if behavior is user-visible.
 
 ## 7. Acceptance criteria
 - [ ] `make build` and `go test ./...` pass.
-- [ ] `bin/dorkpipe validate -f dockpipe-experimental/workflows/dorkpipe-self-analysis/spec.yaml` passes.
+- [ ] `bin/dorkpipe validate -f shipyard/workflows/dorkpipe-self-analysis/spec.yaml` passes.
 - [ ] Running `dockpipe --workflow dorkpipe-self-analysis --workdir <repo> --` writes `.dockpipe/orchestrator-cursor-prompt.md`.
 - [ ] The handoff references **real** paths present in this repo (verify sections 2–4 against your checkout).
 

@@ -23,11 +23,11 @@ No built-in commit, clone, or AI logic — those are scripts you plug in.
 | Component | Role |
 |-----------|------|
 | **Isolation layer** | **Runtime** (where) and **resolver** (which tool) profiles under **`templates/core/runtimes/`** and **`templates/core/resolvers/`** — **`DOCKPIPE_RUNTIME_*`** / **`DOCKPIPE_RESOLVER_*`**; **`DOCKPIPE_RUNTIME_TYPE`** = **`runtime.type`**. See **[architecture-model.md](architecture-model.md)** and **[isolation-layer.md](isolation-layer.md)**. |
-| `bin/dockpipe` | Launcher: runs **`bin/dockpipe.bin`** if present (`make`), otherwise **`go run ./src/cmd/dockpipe`**. |
+| `src/bin/dockpipe` | Launcher: runs **`src/bin/dockpipe.bin`** if present (`make`), otherwise **`go run ./src/cmd/dockpipe`**. |
 | `src/cmd/dockpipe`, `src/lib/dockpipe/application`, `src/lib/dockpipe/domain`, `src/lib/dockpipe/infrastructure` | **Go** CLI (DDD-ish): application layer (flags + orchestration + `windows setup/doctor`), domain (workflow/env/resolver semantics), infrastructure (FS, docker, bash, git). **`config.yml`** / **`steps:`** (YAML v3), resolver `KEY=value` files, template→image map, bash `source` for pre-scripts, **`docker run`** / build, host **git** commit. |
-| **Embedded bundle** (`embed.go`) | Stock **`templates/`** (including full **`templates/core/`**: **`assets/`** — scripts, images, compose — plus runtimes, resolvers, strategies), **`lib/entrypoint.sh`**, **`VERSION`** compiled into the binary; materialized to the **user cache** at runtime (override with **`DOCKPIPE_REPO_ROOT`** for development). |
-| `lib/entrypoint.sh` | Container entrypoint: run command, then `DOCKPIPE_ACTION` if set (skipped when act is **host** commit — see bundled `commit-worktree`). |
-| `templates/core/.../assets/images/*/Dockerfile` | Framework images for **`TemplateBuild`** / **`DockerfileDir`** (resolver → bundle → **`assets/images`**); each copies `lib/entrypoint.sh` where applicable (build context: repo root). |
+| **Embedded bundle** (`embed.go`) | Stock **`templates/`** (including full **`templates/core/`** — scripts under **`templates/core/assets/`**, images, compose, runtimes, resolvers, strategies), repository root **`assets/entrypoint.sh`**, **`VERSION`** compiled into the binary; materialized to the **user cache** at runtime (override with **`DOCKPIPE_REPO_ROOT`** for development). |
+| `assets/entrypoint.sh` | Container entrypoint (repo root **`assets/`**, not **`templates/core/assets/`**): run command, then `DOCKPIPE_ACTION` if set (skipped when act is **host** commit — see bundled `commit-worktree`). |
+| `templates/core/.../assets/images/*/Dockerfile` | Framework images for **`TemplateBuild`** / **`DockerfileDir`** (resolver → bundle → **`assets/images`**); each copies **`assets/entrypoint.sh`** where applicable (build context: repo root). |
 | `templates/core/assets/scripts/*.sh`, `templates/core/bundles/…` | Shared host scripts (clone/commit) and **domain** bundles (dorkpipe, pipeon, …); YAML uses **`scripts/…`** (resolved per **`paths.go`**: project → **resolvers** → **bundles** → **assets/scripts**). |
 | `templates/*/` | Workflow templates (`config.yml`). Multi-step / async: see **[workflow-yaml.md](workflow-yaml.md)**. |
 
@@ -38,12 +38,12 @@ No built-in commit, clone, or AI logic — those are scripts you plug in.
 ```
 User: dockpipe --isolate claude --act scripts/commit-worktree.sh -- claude -p "..."
 
-  bin/dockpipe → dockpipe (Go binary when packaged / built)
+  src/bin/dockpipe → dockpipe (Go binary when packaged / built)
     → TemplateBuild("claude") from --isolate → image=dockpipe-claude, build=.../templates/core/resolvers/claude/assets/images/claude
     → docker build (if needed) / docker run (no DOCKPIPE_ACTION for bundled commit-worktree)
     → see src/lib/dockpipe/infrastructure/docker.go
 
-  Container (lib/entrypoint.sh)
+  Container (assets/entrypoint.sh)
     → cd /work
     → exec user argv (e.g. claude -p "...")
     → save exit code

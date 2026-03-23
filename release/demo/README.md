@@ -14,7 +14,7 @@ Recordings use **`--workflow test-demo`**: **`go test`** → **`go vet`** → **
 
 ## One command (builds both GIFs)
 
-From the repo root (or from `scripts/` — same Makefile forwards to the root):
+From the repo root (or from `src/scripts/` — same Makefile forwards to the root):
 
 ```bash
 make demo-record
@@ -22,8 +22,8 @@ make demo-record
 
 Output:
 
-- `demo/dockpipe-demo-short.gif` — compact layout (quick social / thumbnail)
-- `demo/dockpipe-demo-long.gif` — wider terminal + version + workflow (longer story)
+- `release/demo/dockpipe-demo-short.gif` — compact layout (quick social / thumbnail)
+- `release/demo/dockpipe-demo-long.gif` — wider terminal + version + workflow (longer story)
 - Matching `.cast` files — asciinema sources (can delete after rendering)
 
 Record only one variant:
@@ -65,5 +65,5 @@ Install **agg** from [GitHub releases](https://github.com/asciinema/agg/releases
 
 ```bash
 make build
-bash scripts/record-demo.sh all    # or: short | long
+bash src/scripts/record-demo.sh all    # or: short | long
 ```
