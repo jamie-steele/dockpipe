@@ -3,7 +3,7 @@ package application
 import (
 	"strings"
 
-	"dockpipe/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/domain"
 )
 
 // mergeResolverAuthEnvFromHost copies env vars listed in the isolation profile's DOCKPIPE_*_ENV

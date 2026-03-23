@@ -3,7 +3,7 @@ package application
 import (
 	"testing"
 
-	"dockpipe/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/domain"
 )
 
 func TestEffectiveRuntimeProfileNameCLI(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"dockpipe/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
 // TestRunInvalidResolverErrorsBeforeDocker fails fast when no templates/core/resolvers/<name> exists.

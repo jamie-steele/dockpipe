@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"dockpipe/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/domain"
 )
 
 // LoadWorkflow reads a workflow YAML file from disk and parses it (including imports:).

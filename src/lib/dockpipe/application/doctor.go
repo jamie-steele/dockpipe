@@ -1,7 +1,7 @@
 package application
 
 import (
-	"dockpipe/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/infrastructure"
 	"errors"
 	"fmt"
 	"os"

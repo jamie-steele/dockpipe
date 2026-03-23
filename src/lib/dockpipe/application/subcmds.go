@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"dockpipe/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
 const actionBoilerplate = `#!/usr/bin/env bash

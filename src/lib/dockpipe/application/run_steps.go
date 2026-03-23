@@ -10,8 +10,8 @@ import (
 
 	"github.com/mattn/go-shellwords"
 
-	"dockpipe/lib/dockpipe/domain"
-	"dockpipe/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
 var (

@@ -3,7 +3,7 @@ package planner
 import (
 	"testing"
 
-	"dockpipe/lib/dorkpipe/spec"
+	"dockpipe/src/lib/dorkpipe/spec"
 )
 
 func TestValidateDAG_OK(t *testing.T) {

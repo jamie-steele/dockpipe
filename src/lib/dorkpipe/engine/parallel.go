@@ -4,9 +4,9 @@ import (
 	"math"
 	"strings"
 
-	"dockpipe/lib/dorkpipe/confidence"
-	"dockpipe/lib/dorkpipe/spec"
-	"dockpipe/lib/dorkpipe/workers"
+	"dockpipe/src/lib/dorkpipe/confidence"
+	"dockpipe/src/lib/dorkpipe/spec"
+	"dockpipe/src/lib/dorkpipe/workers"
 )
 
 // ApplyParallelAgreement sets Vector.Agreement for nodes sharing parallel_group in the same level.

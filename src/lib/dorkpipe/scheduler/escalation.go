@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"dockpipe/lib/dorkpipe/spec"
+	"dockpipe/src/lib/dorkpipe/spec"
 )
 
 // EscalationLevels schedules only codex+escalate_only nodes; edges from phase-1 nodes are ignored.

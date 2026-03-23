@@ -110,7 +110,7 @@ type Step struct {
 	Vars          map[string]string `yaml:"vars"`
 	// Blocking is YAML is_blocking: when false, this step joins a parallel batch with adjacent
 	// non-blocking steps. Inputs = env after last blocking step + this step’s vars/pre-scripts only;
-	// outputs merge in order after the whole batch (see lib/dockpipe/README.md).
+	// outputs merge in order after the whole batch (see src/lib/dockpipe/README.md).
 	Blocking *bool `yaml:"is_blocking,omitempty"`
 	// CaptureStdout: host path (relative to DOCKPIPE_WORKDIR or cwd) to tee container stdout into.
 	CaptureStdout string `yaml:"capture_stdout,omitempty"`

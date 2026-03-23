@@ -161,7 +161,7 @@ git clone https://github.com/jamie-steele/dockpipe.git
 cd dockpipe
 git checkout vX.Y.Z
 $env:GOOS = "windows"; $env:GOARCH = "amd64"; $env:CGO_ENABLED = "0"
-go build -trimpath -ldflags "-s -w -X main.Version=X.Y.Z" -o dockpipe.exe ./cmd/dockpipe
+go build -trimpath -ldflags "-s -w -X main.Version=X.Y.Z" -o dockpipe.exe ./src/cmd/dockpipe
 ```
 
 ---

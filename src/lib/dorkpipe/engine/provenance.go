@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"dockpipe/lib/dorkpipe/confidence"
-	"dockpipe/lib/dorkpipe/spec"
-	"dockpipe/lib/dorkpipe/workers"
+	"dockpipe/src/lib/dorkpipe/confidence"
+	"dockpipe/src/lib/dorkpipe/spec"
+	"dockpipe/src/lib/dorkpipe/workers"
 )
 
 type runDoc struct {

@@ -83,7 +83,7 @@ EOF
 	echo "| Spec / policy | \`lib/dorkpipe/spec/spec.go\` |"
 	echo "| Workers | \`lib/dorkpipe/workers/workers.go\` |"
 	echo "| Aggregation | \`lib/dorkpipe/aggregator/merge.go\` |"
-	echo "| CLI | \`cmd/dorkpipe/main.go\` |"
+	echo "| CLI | \`src/cmd/dorkpipe/main.go\` |"
 	echo "| Eval / promotion | \`lib/dorkpipe/eval/eval.go\`, \`lib/dorkpipe/promotion/promotion.go\` |"
 	echo "| DockPipe workflow (this integration) | \`dockpipe-experimental/workflows/dorkpipe-self-analysis/\` |"
 	echo "| Orchestrator example DAG | \`dockpipe-experimental/workflows/dorkpipe-orchestrator/spec.example.yaml\` |"
@@ -96,7 +96,7 @@ EOF
 
 	echo "## 5. Constraints / architecture rules (non-negotiable)"
 	echo "- **DockPipe core** stays the single execution fabric: workflows, runtimes, resolvers, strategies, assets (\`AGENTS.md\`)."
-	echo "- **No** vendor-specific logic in \`lib/dockpipe/application\` / runner for this work."
+	echo "- **No** vendor-specific logic in \`src/lib/dockpipe/application\` / runner for this work."
 	echo "- **DorkPipe** composes via real \`dockpipe\` subprocesses and shell — no parallel hidden scheduler outside \`lib/dorkpipe\`."
 	echo "- Prefer **templates** and **scripts** for repo-specific glue; keep **lib/dorkpipe** changes general-purpose."
 	echo ""
@@ -186,7 +186,7 @@ Do this work in order:
 4) Run: make build && go test ./... && bin/dorkpipe validate -f dockpipe-experimental/workflows/dorkpipe-self-analysis/spec.yaml
 
 Constraints:
-- No vendor-specific hooks in lib/dockpipe/application for this work.
+- No vendor-specific hooks in src/lib/dockpipe/application for this work.
 - Keep changes general; extend templates/scripts for repo-specific glue.
 - Do not fabricate file paths — use paths that exist in this repo.
 

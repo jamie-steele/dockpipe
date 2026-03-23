@@ -8,11 +8,11 @@ import (
 	"runtime"
 	"strings"
 
-	"dockpipe/lib/dockpipe/application"
+	"dockpipe/src/lib/dockpipe/application"
 )
 
 // Version is set at link time: -X main.Version=X.Y.Z (see Makefile, packaging/build-deb.sh, CI).
-// When left as "dev", versionString() uses the embedded copy of repo-root VERSION (see cmd/dockpipe/VERSION).
+// When left as "dev", versionString() uses the embedded copy of repo-root VERSION (see src/cmd/dockpipe/VERSION).
 var Version = "dev"
 
 //go:embed VERSION

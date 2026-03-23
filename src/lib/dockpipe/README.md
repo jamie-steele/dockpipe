@@ -2,11 +2,11 @@
 
 | Layer | Package | Responsibility |
 |-------|---------|----------------|
-| **Domain** | `dockpipe/lib/dockpipe/domain` | Workflow/step model, YAML parse from **bytes** (`ParseWorkflowYAML`), env merge helpers, **resolver** key semantics, branch-prefix rules. No `docker` / subprocess / file I/O in non-test code. |
-| **Infrastructure** | `dockpipe/lib/dockpipe/infrastructure` | Filesystem, `docker`, `bash` pre-scripts, git commit-on-host, repo root discovery, `.env` files, template→image paths, version tags. |
-| **Application** | `dockpipe/lib/dockpipe/application` | CLI flags, subcommands (`init`, `template`, …), and the **run** use-case that wires domain + infrastructure. |
+| **Domain** | `dockpipe/src/lib/dockpipe/domain` | Workflow/step model, YAML parse from **bytes** (`ParseWorkflowYAML`), env merge helpers, **resolver** key semantics, branch-prefix rules. No `docker` / subprocess / file I/O in non-test code. |
+| **Infrastructure** | `dockpipe/src/lib/dockpipe/infrastructure` | Filesystem, `docker`, `bash` pre-scripts, git commit-on-host, repo root discovery, `.env` files, template→image paths, version tags. |
+| **Application** | `dockpipe/src/lib/dockpipe/application` | CLI flags, subcommands (`init`, `template`, …), and the **run** use-case that wires domain + infrastructure. |
 
-`cmd/dockpipe` is a thin entrypoint that calls `application.Run`.
+`src/cmd/dockpipe` is a thin entrypoint that calls `application.Run`.
 
 ### Application package files (baseline)
 
@@ -21,13 +21,13 @@ Keep new orchestration in the right file so `run.go` stays the single-command pa
 | `subcmds.go` | `init`, `action`, `pre`, `template` |
 | `usage.go` | `--help` text |
 
-Shell assets (`lib/entrypoint.sh`, etc.) stay alongside this tree; only **Go** lives under `lib/dockpipe/`.
+Shell assets (`lib/entrypoint.sh` at repo root, etc.) stay outside **`src/`**; only **Go** lives under `src/lib/dockpipe/`.
 
 ---
 
 ### Multi-step workflows: async group, join point, merge
 
-**End-user / authoritative spec:** **[../../docs/workflow-yaml.md](../../docs/workflow-yaml.md)** (keep in sync when behavior changes).
+**End-user / authoritative spec:** **[../../../docs/workflow-yaml.md](../../../docs/workflow-yaml.md)** (keep in sync when behavior changes).
 
 One-liner: **parallel steps share one merge; declaration order decides overwrites; the next blocking step is the join.**
 

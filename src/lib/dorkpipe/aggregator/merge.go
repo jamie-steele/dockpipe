@@ -3,9 +3,9 @@ package aggregator
 import (
 	"math"
 
-	"dockpipe/lib/dorkpipe/confidence"
-	"dockpipe/lib/dorkpipe/spec"
-	"dockpipe/lib/dorkpipe/workers"
+	"dockpipe/src/lib/dorkpipe/confidence"
+	"dockpipe/src/lib/dorkpipe/spec"
+	"dockpipe/src/lib/dorkpipe/workers"
 )
 
 // mergeVectors aggregates per-node vectors: harmonic mean per dimension across nodes, then weighted blend into Calibrated.

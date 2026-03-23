@@ -55,7 +55,7 @@ Typical building blocks (exact package names differ by distro):
 
 ## Customize
 
-Edit **`scripts/sandbox-steam.sh`** in your fork or overlay — do not need to touch **`lib/dockpipe/`**.
+Edit **`scripts/sandbox-steam.sh`** in your fork or overlay — do not need to touch **`src/lib/dockpipe/`**.
 
 ## Pipeon Basic
 

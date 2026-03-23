@@ -3,7 +3,7 @@ package application
 import (
 	"strings"
 
-	"dockpipe/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
 // mergeWorktreeGitDockerEnv sets DOCKPIPE_WORKTREE_HEAD, and either DOCKPIPE_WORKTREE_BRANCH

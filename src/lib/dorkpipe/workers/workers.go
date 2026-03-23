@@ -18,8 +18,8 @@ import (
 
 	_ "github.com/lib/pq"
 
-	"dockpipe/lib/dorkpipe/confidence"
-	"dockpipe/lib/dorkpipe/spec"
+	"dockpipe/src/lib/dorkpipe/confidence"
+	"dockpipe/src/lib/dorkpipe/spec"
 )
 
 // Result is one node's outcome.

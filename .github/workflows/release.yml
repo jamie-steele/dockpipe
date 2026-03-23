@@ -107,23 +107,23 @@ jobs:
           mkdir -p dist
           LDFLAGS="-s -w -X main.Version=${VERSION}"
 
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe" ./cmd/dockpipe
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe" ./src/cmd/dockpipe
           tar -C dist -czf "dist/dockpipe_${VERSION}_linux_amd64.tar.gz" dockpipe
           rm -f dist/dockpipe
 
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe" ./cmd/dockpipe
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe" ./src/cmd/dockpipe
           tar -C dist -czf "dist/dockpipe_${VERSION}_linux_arm64.tar.gz" dockpipe
           rm -f dist/dockpipe
 
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe" ./cmd/dockpipe
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe" ./src/cmd/dockpipe
           tar -C dist -czf "dist/dockpipe_${VERSION}_darwin_amd64.tar.gz" dockpipe
           rm -f dist/dockpipe
 
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe" ./cmd/dockpipe
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe" ./src/cmd/dockpipe
           tar -C dist -czf "dist/dockpipe_${VERSION}_darwin_arm64.tar.gz" dockpipe
           rm -f dist/dockpipe
 
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe.exe" ./cmd/dockpipe
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe.exe" ./src/cmd/dockpipe
           (cd dist && zip -q "dockpipe_${VERSION}_windows_amd64.zip" dockpipe.exe)
           rm -f dist/dockpipe.exe
 
@@ -171,7 +171,7 @@ jobs:
           }
           $wixRoot = $destFull
           $v = "${{ needs.meta.outputs.version }}"
-          go build -trimpath -ldflags "-s -w -X main.Version=$v" -o dockpipe.exe ./cmd/dockpipe
+          go build -trimpath -ldflags "-s -w -X main.Version=$v" -o dockpipe.exe ./src/cmd/dockpipe
           New-Item -ItemType Directory -Force -Path msi-dist | Out-Null
           & (Join-Path $PWD "packaging\msi\build.ps1") `
             -Version $v `

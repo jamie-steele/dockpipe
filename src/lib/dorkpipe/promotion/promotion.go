@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"dockpipe/lib/dorkpipe/eval"
+	"dockpipe/src/lib/dorkpipe/eval"
 )
 
 // Suggestion is a human-readable promotion hint.

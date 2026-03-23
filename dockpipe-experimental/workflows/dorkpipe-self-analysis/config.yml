@@ -23,6 +23,6 @@ steps:
       # golang:bookworm images ship git and curl; scripts fall back to grep if ripgrep is absent.
       if [[ ! -x bin/dorkpipe ]]; then
         echo "[dorkpipe-self-analysis] building bin/dorkpipe in container..."
-        go build -trimpath -o bin/dorkpipe ./cmd/dorkpipe
+        go build -trimpath -o bin/dorkpipe ./src/cmd/dorkpipe
       fi
       exec bash scripts/dorkpipe/run-self-analysis.sh'

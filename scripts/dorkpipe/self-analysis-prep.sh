@@ -13,8 +13,8 @@ mkdir -p "$OUT"
 	git -C "$ROOT" status -sb 2>/dev/null | head -20 || true
 } >"$OUT/git.txt"
 
-if [[ -d "$ROOT/lib/dorkpipe" ]]; then
-	find "$ROOT/lib/dorkpipe" -mindepth 1 -maxdepth 1 -type d | sort | while read -r d; do
+if [[ -d "$ROOT/src/lib/dorkpipe" ]]; then
+	find "$ROOT/src/lib/dorkpipe" -mindepth 1 -maxdepth 1 -type d | sort | while read -r d; do
 		n=$(find "$d" -name '*.go' 2>/dev/null | wc -l | tr -d ' ')
 		printf '%s\t%s\n' "$(basename "$d")" "$n"
 	done >"$OUT/dorkpipe_packages.tsv"
@@ -22,11 +22,11 @@ else
 	: >"$OUT/dorkpipe_packages.tsv"
 fi
 
-find "$ROOT/lib/dorkpipe" -name '*.go' 2>/dev/null | wc -l | tr -d ' ' >"$OUT/dorkpipe_go_files.count" || echo 0 >"$OUT/dorkpipe_go_files.count"
+find "$ROOT/src/lib/dorkpipe" -name '*.go' 2>/dev/null | wc -l | tr -d ' ' >"$OUT/dorkpipe_go_files.count" || echo 0 >"$OUT/dorkpipe_go_files.count"
 
 {
 	echo "## cmd"
-	find "$ROOT/cmd" -name '*.go' 2>/dev/null | head -40
+	find "$ROOT/src/cmd" -name '*.go' 2>/dev/null | head -40
 } >"$OUT/cmd_go_files.txt" || true
 
 {
@@ -42,11 +42,11 @@ find "$ROOT/lib/dorkpipe" -name '*.go' 2>/dev/null | wc -l | tr -d ' ' >"$OUT/do
 {
 	echo "## key file line counts"
 	for f in \
-		lib/dorkpipe/engine/run.go \
-		lib/dorkpipe/spec/spec.go \
-		lib/dorkpipe/aggregator/merge.go \
-		lib/dorkpipe/workers/workers.go \
-		cmd/dorkpipe/main.go; do
+		src/lib/dorkpipe/engine/run.go \
+		src/lib/dorkpipe/spec/spec.go \
+		src/lib/dorkpipe/aggregator/merge.go \
+		src/lib/dorkpipe/workers/workers.go \
+		src/cmd/dorkpipe/main.go; do
 		if [[ -f "$ROOT/$f" ]]; then
 			wc -l "$ROOT/$f"
 		fi
@@ -58,7 +58,7 @@ find "$ROOT/lib/dorkpipe" -name '*.go' 2>/dev/null | wc -l | tr -d ' ' >"$OUT/do
 	find "$ROOT/dockpipe-experimental/workflows" -name 'config.yml' 2>/dev/null | sort
 } >"$OUT/workflow_configs.txt" || true
 
-for doc in docs/dorkpipe.md lib/dorkpipe/README.md AGENTS.md; do
+for doc in docs/dorkpipe.md src/lib/dorkpipe/README.md AGENTS.md; do
 	if [[ -f "$ROOT/$doc" ]]; then
 		echo "### $doc (first 40 lines)"
 		head -40 "$ROOT/$doc"

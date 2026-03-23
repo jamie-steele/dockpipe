@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"dockpipe/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/domain"
 )
 
 // TestBuildWorkflowEnvIntoPrecedenceAndOverrides merges wf .env, repo .env, --env-file, DOCKPIPE_ENV_FILE, vars, --var.

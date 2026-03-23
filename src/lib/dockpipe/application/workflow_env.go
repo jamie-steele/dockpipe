@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"dockpipe/lib/dockpipe/domain"
-	"dockpipe/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
 func buildWorkflowEnvInto(env map[string]string, wf *domain.Workflow, wfRoot, repoRoot string, opts *CliOpts) {

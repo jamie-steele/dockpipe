@@ -10,12 +10,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"dockpipe/lib/dorkpipe/composegen"
-	"dockpipe/lib/dorkpipe/engine"
-	"dockpipe/lib/dorkpipe/eval"
-	"dockpipe/lib/dorkpipe/promotion"
-	"dockpipe/lib/dorkpipe/spec"
-	"dockpipe/lib/dorkpipe/workers"
+	"dockpipe/src/lib/dorkpipe/composegen"
+	"dockpipe/src/lib/dorkpipe/engine"
+	"dockpipe/src/lib/dorkpipe/eval"
+	"dockpipe/src/lib/dorkpipe/promotion"
+	"dockpipe/src/lib/dorkpipe/spec"
+	"dockpipe/src/lib/dorkpipe/workers"
 )
 
 func main() {

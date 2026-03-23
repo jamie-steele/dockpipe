@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"dockpipe/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
 func TestRunEmbeddedResolverWorkflowWithLoad_CallsRunSteps(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"dockpipe/lib/dockpipe/domain"
-	"dockpipe/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
 func withRunStepSeams(t *testing.T, fn func()) {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"dockpipe/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/domain"
 )
 
 // EffectiveRuntimeProfileName returns the isolation **runtime** profile name (templates/core/runtimes/<name>).

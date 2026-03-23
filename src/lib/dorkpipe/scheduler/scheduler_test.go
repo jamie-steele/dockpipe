@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"dockpipe/lib/dorkpipe/spec"
+	"dockpipe/src/lib/dorkpipe/spec"
 )
 
 func TestLevelsParallel(t *testing.T) {

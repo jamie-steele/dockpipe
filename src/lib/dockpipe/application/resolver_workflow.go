@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"dockpipe/lib/dockpipe/domain"
-	"dockpipe/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
 // runEmbeddedResolverWorkflow runs bundled delegate YAML for DOCKPIPE_*_WORKFLOW (multi-step) with merged env.

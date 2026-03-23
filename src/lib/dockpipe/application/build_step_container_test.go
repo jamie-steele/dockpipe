@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"dockpipe/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/domain"
 )
 
 // TestBuildStepContainer_UsesCliArgsForLastStep uses argv after -- when the last step has no cmd in YAML.

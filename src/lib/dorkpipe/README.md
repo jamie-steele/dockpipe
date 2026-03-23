@@ -12,7 +12,7 @@ Local-first orchestration **on top of** DockPipe: DAG specs, parallel levels, re
 - **`composegen/`** — Postgres+pgvector (+ optional Ollama) compose file  
 - **`engine/`** — wires planner → scheduler → workers → aggregator  
 
-CLI: **`go build -o bin/dorkpipe ./cmd/dorkpipe`** (see Makefile `build`).
+CLI: **`go build -o bin/dorkpipe ./src/cmd/dorkpipe`** (see Makefile `build`).
 
 Does **not** replace DockPipe’s workflow engine; it **invokes** the `dockpipe` binary for resolver steps.
 

@@ -8,7 +8,7 @@ if [[ -x "$BIN" ]]; then
   exec "$BIN" "$@"
 fi
 if command -v go >/dev/null 2>&1; then
-  exec go -C "$ROOT" run ./cmd/dockpipe "$@"
+  exec go -C "$ROOT" run ./src/cmd/dockpipe "$@"
 fi
-echo "dockpipe: install Go, then from ${ROOT} run:  make  or  go build -o bin/dockpipe.bin ./cmd/dockpipe" >&2
+echo "dockpipe: install Go, then from ${ROOT} run:  make  or  go build -o bin/dockpipe.bin ./src/cmd/dockpipe" >&2
 exit 1

@@ -7,11 +7,11 @@ import (
 	"strings"
 	"sync"
 
-	"dockpipe/lib/dorkpipe/aggregator"
-	"dockpipe/lib/dorkpipe/planner"
-	"dockpipe/lib/dorkpipe/scheduler"
-	"dockpipe/lib/dorkpipe/spec"
-	"dockpipe/lib/dorkpipe/workers"
+	"dockpipe/src/lib/dorkpipe/aggregator"
+	"dockpipe/src/lib/dorkpipe/planner"
+	"dockpipe/src/lib/dorkpipe/scheduler"
+	"dockpipe/src/lib/dorkpipe/spec"
+	"dockpipe/src/lib/dorkpipe/workers"
 )
 
 // Run executes the full pipeline (real workers). subst seeds {{key}} replacements.

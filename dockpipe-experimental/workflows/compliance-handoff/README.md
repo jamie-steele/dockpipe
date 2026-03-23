@@ -1,6 +1,6 @@
 # compliance-handoff
 
-**Purpose:** One command so **humans and AI** can **discover** where compliance/security **signals** live — without adding logic to **`lib/dockpipe/`** (see **AGENTS.md**).
+**Purpose:** One command so **humans and AI** can **discover** where compliance/security **signals** live — without adding logic to **`src/lib/dockpipe/`** (see **AGENTS.md**).
 
 **Run (repo root, after `make build`):**
 

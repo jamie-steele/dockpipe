@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"dockpipe/lib/dockpipe/domain"
-	"dockpipe/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
 var (

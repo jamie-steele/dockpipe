@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"dockpipe/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
 func cmdWorkflow(args []string) error {

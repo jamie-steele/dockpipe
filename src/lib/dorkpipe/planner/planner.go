@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"dockpipe/lib/dorkpipe/spec"
+	"dockpipe/src/lib/dorkpipe/spec"
 )
 
 var allowedKinds = map[string]struct{}{

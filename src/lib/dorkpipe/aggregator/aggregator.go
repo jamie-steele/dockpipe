@@ -4,9 +4,9 @@ package aggregator
 import (
 	"math"
 
-	"dockpipe/lib/dorkpipe/confidence"
-	"dockpipe/lib/dorkpipe/spec"
-	"dockpipe/lib/dorkpipe/workers"
+	"dockpipe/src/lib/dorkpipe/confidence"
+	"dockpipe/src/lib/dorkpipe/spec"
+	"dockpipe/src/lib/dorkpipe/workers"
 )
 
 // Summary is the combined view after phase 1 (and optionally after codex).

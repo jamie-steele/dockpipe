@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"dockpipe/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/domain"
 )
 
 func boolPtr(v bool) *bool { return &v }
