@@ -58,9 +58,11 @@ Flags:
   --runtime <name>         Written into new config (with <name>)
   --resolver <name>        Written into new config (with <name>)
   --strategy <name>        Written into new config (with <name>)
+  --gitignore              Append a marked block to .gitignore at the git repo root (idempotent; requires a git working tree)
 
 Examples:
   dockpipe init
+  dockpipe init --gitignore
   dockpipe init my-pipeline --from run-apply --resolver codex --runtime docker
 `
 

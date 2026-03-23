@@ -58,8 +58,11 @@ func cmdInit(args []string) error {
 
 	var name, from string
 	var resolver, runtime, strategy string
+	var gitignore bool
 	for i := 0; i < len(args); i++ {
 		switch {
+		case args[i] == "--gitignore":
+			gitignore = true
 		case args[i] == "--from" && i+1 < len(args):
 			from = args[i+1]
 			i++
@@ -91,6 +94,11 @@ func cmdInit(args []string) error {
 
 	if err := ensureProjectScaffold(repoRoot, projectDir); err != nil {
 		return err
+	}
+	if gitignore {
+		if err := appendDockpipeGitignore(projectDir); err != nil {
+			return err
+		}
 	}
 	if name == "" {
 		fmt.Fprintf(os.Stderr, "[dockpipe] Initialized Dockpipe in %s\n", projectDir)
