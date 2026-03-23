@@ -4,10 +4,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=docker-cache-volumes.sh
-source "${SCRIPT_DIR}/docker-cache-volumes.sh"
+REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel 2>/dev/null || true)}"
+if [[ -z "$REPO_ROOT" ]]; then
+  echo "docker-steam-flatpak: cannot find repo root (set DOCKPIPE_REPO_ROOT or run from a git checkout)" >&2
+  exit 1
+fi
+source "${REPO_ROOT}/templates/core/assets/scripts/docker-cache-volumes.sh"
 
-REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 DF="${REPO_ROOT}/templates/core/bundles/steam-flatpak/assets/images/steam-flatpak/Dockerfile"
 if [[ ! -f "${DF}" ]]; then
   echo "docker-steam-flatpak: Dockerfile not found: ${DF}" >&2

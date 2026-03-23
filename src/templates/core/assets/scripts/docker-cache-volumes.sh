@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Reusable Docker named-volume helpers for Flathub, APT, or any "cache across relaunches" path.
-# Source this file:  source "$(dirname "$0")/docker-cache-volumes.sh"
-# Or run:            ./scripts/docker-cache-volumes.sh ensure -- "vol:/path" "vol2:/path2"
+# Source:  source "$(git rev-parse --show-toplevel)/templates/core/assets/scripts/docker-cache-volumes.sh"
+# Or run:  bash scripts/docker-cache-volumes.sh ensure -- "vol:/path" "vol2:/path2"
+# (YAML paths like scripts/… resolve via paths.go — see docs/architecture.md.)
 set -euo pipefail
 
 docker_cache_volume_ensure() {
@@ -47,19 +48,19 @@ docker_cache_volume_append_from_env() {
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
   case "${1:-}" in
-    ensure)
-      shift
-      for pair in "$@"; do
-        vol="${pair%%:*}"
-        [[ "$vol" != "$pair" ]] || { echo "usage: $0 ensure vol:/path [vol2:/path2 ...]" >&2; exit 1; }
-        docker_cache_volume_ensure "$vol"
-        echo "ok ${vol}"
-      done
-      ;;
-    *)
-      echo "usage: source $0   # for docker_cache_volume_* functions" >&2
-      echo "       $0 ensure vol:/path [vol2:/path2 ...]" >&2
-      exit 1
-      ;;
+  ensure)
+    shift
+    for pair in "$@"; do
+      vol="${pair%%:*}"
+      [[ "$vol" != "$pair" ]] || { echo "usage: $0 ensure vol:/path [vol2:/path2 ...]" >&2; exit 1; }
+      docker_cache_volume_ensure "$vol"
+      echo "ok ${vol}"
+    done
+    ;;
+  *)
+    echo "usage: source $0   # for docker_cache_volume_* functions" >&2
+    echo "       $0 ensure vol:/path [vol2:/path2 ...]" >&2
+    exit 1
+    ;;
   esac
 fi
