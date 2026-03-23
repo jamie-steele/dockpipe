@@ -1,3 +1,0 @@
-## cmd
-/work/cmd/dockpipe/main.go
-/work/cmd/dorkpipe/main.go
