@@ -9,7 +9,7 @@
   - Installs dockpipe.exe only (bundled templates/images unpack to the user cache on first run — no extra folders beside the exe).
   - MSI: per-user WiX install to %LOCALAPPDATA%\dockpipe, PATH updated. Zip fallback: %LOCALAPPDATA%\Programs\dockpipe.
 
-  After install, run: dockpipe windows setup
+  After install, optionally configures WSL for DOCKPIPE_USE_WSL_BRIDGE=1 (minimal Alpine + latest Linux dockpipe from GitHub). Use -SkipWSLSetup to skip. May prompt for Administrator (WSL) or require a reboot.
 
 .EXAMPLE
   iwr -useb https://raw.githubusercontent.com/jamie-steele/dockpipe/master/release/packaging/windows/install.ps1 | iex
@@ -19,10 +19,28 @@
 #>
 param(
     [string]$Version = "",
-    [string]$Repo = "jamie-steele/dockpipe"
+    [string]$Repo = "jamie-steele/dockpipe",
+    [switch]$SkipWSLSetup
 )
 
 $ErrorActionPreference = "Stop"
+
+function Invoke-DockpipeWslSetup {
+    param([Parameter(Mandatory = $true)][string]$DockpipeExe)
+    if ($SkipWSLSetup) {
+        Write-Host "Skipping WSL setup (-SkipWSLSetup). For bridge users later: dockpipe windows setup --bootstrap-wsl --distro Alpine --non-interactive --install-dockpipe"
+        return
+    }
+    if (-not (Test-Path -LiteralPath $DockpipeExe)) {
+        Write-Warning "dockpipe.exe not found at $DockpipeExe — skipping WSL setup."
+        return
+    }
+    Write-Host "Configuring WSL for optional DOCKPIPE_USE_WSL_BRIDGE (Alpine + dockpipe from GitHub). Administrator / reboot may be required..."
+    & $DockpipeExe @('windows', 'setup', '--bootstrap-wsl', '--distro', 'Alpine', '--non-interactive', '--install-dockpipe')
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "WSL setup exited $LASTEXITCODE — install Docker Desktop + Git for Windows for native mode, or run manually: dockpipe windows doctor"
+    }
+}
 
 function Get-Release {
     param([string]$Ver)
@@ -74,7 +92,9 @@ if ($msi) {
     if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
         throw "msiexec failed with exit code $($p.ExitCode)"
     }
-    Write-Host "Installed dockpipe $verTag. Open a new terminal, then run: dockpipe windows setup"
+    $msiExe = Join-Path $env:LOCALAPPDATA "dockpipe\dockpipe.exe"
+    Invoke-DockpipeWslSetup -DockpipeExe $msiExe
+    Write-Host "Installed dockpipe $verTag. Open a new terminal for PATH changes, then: dockpipe --help"
     exit 0
 }
 
@@ -105,4 +125,5 @@ if ($userPath -notlike "*$dest*") {
     [Environment]::SetEnvironmentVariable("Path", "$userPath;$dest", "User")
     $env:Path = "$env:Path;$dest"
 }
-Write-Host "Installed dockpipe $verTag to $dest (user PATH updated). Open a new terminal, then run: dockpipe windows setup"
+Invoke-DockpipeWslSetup -DockpipeExe $exe
+Write-Host "Installed dockpipe $verTag to $dest (user PATH updated). Open a new terminal, then: dockpipe --help"

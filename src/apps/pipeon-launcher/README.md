@@ -14,7 +14,9 @@ Cross-platform **Qt 6** system-tray app: save **contexts** (folder + resolver / 
 
 `CMakeLists.txt` lives under **`src/apps/pipeon-launcher/`**, not the dockpipe repo root. Run CMake with that directory as the **source** (or `cd` there first).
 
-**Option A — from the repo root:**
+**Fastest — from the repo root:** `make pipeon-launcher` (writes **`src/apps/pipeon-launcher/build/`**).
+
+**Option A — from the repo root (CMake by hand):**
 
 ```bash
 cd ~/source/dockpipe

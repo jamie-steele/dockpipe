@@ -66,6 +66,20 @@ QString DockpipeChoices::findRepoRoot(const QString &hintWorkdir)
     return QString();
 }
 
+QString DockpipeChoices::cursorPrepScriptPath(const QString &hintWorkdir)
+{
+    const QString root = findRepoRoot(hintWorkdir);
+    if (root.isEmpty())
+        return {};
+    const QString p = QDir::cleanPath(root + QStringLiteral("/src/templates/core/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
+    if (QFileInfo::exists(p))
+        return p;
+    const QString legacy = QDir::cleanPath(root + QStringLiteral("/templates/core/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
+    if (QFileInfo::exists(legacy))
+        return legacy;
+    return {};
+}
+
 QStringList DockpipeChoices::listWorkflowNamesFromRepo(const QString &repoRoot)
 {
     QStringList names;

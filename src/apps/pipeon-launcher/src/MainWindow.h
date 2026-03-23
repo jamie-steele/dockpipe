@@ -49,6 +49,10 @@ private slots:
     void onViewIconGrid();
     void onViewCompactList();
     void onBasicLaunch(const QString &workflowId);
+    void onBasicBackHome();
+    void onBasicOpenRecent(const QString &absPath);
+    void onBasicContinueLast();
+    void onSetupMcp();
     void onDismissThirdPartyDisclaimer();
     void onRestoreThirdPartyDisclaimer();
 

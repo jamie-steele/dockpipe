@@ -80,8 +80,10 @@ All options must appear **before** a standalone **`--`**. The command and its ar
 |---------|---------|
 | `dockpipe windows setup` | Interactive: select WSL distro, bootstrap env, optional **`--install-command`** in the distro. |
 | `dockpipe windows setup --distro <name> --non-interactive` | Scripted setup (**`--distro`** required). |
-| `dockpipe windows setup --install-command "<cmd>"` | Run a command inside the selected distro during setup. |
-| `dockpipe windows doctor` | List WSL distros and the configured default (if any). |
+| `dockpipe windows setup --bootstrap-wsl` | If WSL is missing or has no distros, run **`wsl --install`** (default distro **Alpine** when unset; may UAC / reboot), then continue. |
+| `dockpipe windows setup --install-dockpipe` | Download latest **`dockpipe_*_linux_*.tar.gz`** from GitHub into **`~/.local/bin`** in WSL (for the bridge). |
+| `dockpipe windows setup --install-command "<cmd>"` | Run a command inside the selected distro during setup (overrides **`--install-dockpipe`**). |
+| `dockpipe windows doctor` | Print **`wsl --version`**, list distros and configured default, or hints if WSL is missing. |
 
 ### Windows host: native vs WSL bridge
 

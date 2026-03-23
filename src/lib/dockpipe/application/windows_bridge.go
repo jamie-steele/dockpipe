@@ -83,7 +83,7 @@ func resolveBridgeDistro() (string, error) {
 		return "", fmt.Errorf("WSL: %w (run `dockpipe windows setup` to pick a distro)", err)
 	}
 	if len(distros) == 0 {
-		return "", fmt.Errorf("no WSL distros found; install one with `wsl --install -d Ubuntu` then `dockpipe windows setup`")
+		return "", fmt.Errorf("no WSL distros found; install one with `wsl --install -d Alpine` (or Ubuntu) then `dockpipe windows setup`")
 	}
 	d := distros[0]
 	fmt.Fprintf(windowsStderr, "[dockpipe] No %%APPDATA%%\\dockpipe\\windows-config.env; using first distro %q (run `dockpipe windows setup` to pin)\n", d)

@@ -30,12 +30,37 @@ func TestParseWindowsSetupArgs(t *testing.T) {
 		"--distro", "Ubuntu",
 		"--install-command", "echo hi",
 		"--non-interactive",
+		"--bootstrap-wsl",
+		"--install-dockpipe",
 	})
 	if err != nil {
 		t.Fatalf("parseWindowsSetupArgs error: %v", err)
 	}
-	if o.Distro != "Ubuntu" || o.InstallCommand != "echo hi" || !o.NonInteractive {
+	if o.Distro != "Ubuntu" || o.InstallCommand != "echo hi" || !o.NonInteractive || !o.BootstrapWSL || !o.InstallDockpipe {
 		t.Fatalf("unexpected opts: %#v", o)
+	}
+	o2, err := parseWindowsSetupArgs([]string{"--no-install-dockpipe"})
+	if err != nil || !o2.NoInstallDockpipe {
+		t.Fatalf("no-install-dockpipe: %#v err=%v", o2, err)
+	}
+}
+
+func TestApplyDefaultWSLInstallCommand(t *testing.T) {
+	var o windowsSetupOpts
+	o.BootstrapWSL = true
+	applyDefaultWSLInstallCommand(&o)
+	if !strings.Contains(o.InstallCommand, "jamie-steele/dockpipe") || !strings.Contains(o.InstallCommand, "alpine-release") {
+		t.Fatalf("expected default Alpine-aware install script, got %q", o.InstallCommand)
+	}
+	o = windowsSetupOpts{BootstrapWSL: true, NoInstallDockpipe: true}
+	applyDefaultWSLInstallCommand(&o)
+	if o.InstallCommand != "" {
+		t.Fatalf("NoInstallDockpipe should skip default: %#v", o)
+	}
+	o = windowsSetupOpts{BootstrapWSL: true, InstallCommand: "custom"}
+	applyDefaultWSLInstallCommand(&o)
+	if o.InstallCommand != "custom" {
+		t.Fatalf("custom command should be kept: %#v", o)
 	}
 }
 

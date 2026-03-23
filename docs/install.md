@@ -2,7 +2,7 @@
 
 **New to dockpipe?** Run **`dockpipe -- pwd`** after install, then read **[onboarding.md](onboarding.md)**. If something fails, **`dockpipe doctor`** checks **bash**, **Docker**, and bundled assets.
 
-**Platforms:** **Docker** and **bash** on the host are required everywhere. Linux is the primary target (`.deb`). macOS: Docker Desktop + bash (system `/bin/bash` is fine). Windows: **`dockpipe.exe`** + Docker Desktop + **Git for Windows** (bash + git). **`DOCKPIPE_USE_WSL_BRIDGE=1`** and **`dockpipe windows …`** are **optional** — only if you want the Linux `dockpipe` binary inside a WSL distro.
+**Platforms:** **Docker** and **bash** on the host are required everywhere. Linux: **`.deb`**, **`.apk`**, **`.rpm`**, **Arch `.pkg.tar.zst`**, portable **`.tar.gz`**, or **[`linux/install.sh`](https://github.com/jamie-steele/dockpipe/blob/master/release/packaging/linux/install.sh)** — see sections below. macOS: Docker Desktop + bash (system `/bin/bash` is fine). Windows: **`dockpipe.exe`** + Docker Desktop + **Git for Windows** (bash + git). **`DOCKPIPE_USE_WSL_BRIDGE=1`** and **`dockpipe windows …`** are **optional** — only if you want the Linux `dockpipe` binary inside a WSL distro.
 
 ### Bundled templates (no extra install tree)
 
@@ -57,6 +57,34 @@ sudo apt-get install docker.io
 
 ---
 
+## Alpine, Fedora/RHEL, Arch Linux (release packages)
+
+Releases ship **`.apk`** (Alpine), **`.rpm`** (Fedora, RHEL-compatible), and **`.pkg.tar.zst`** (Arch), for **amd64** and **arm64**, alongside **`.deb`** and **`.tar.gz`**.
+
+| Format | Example install |
+|--------|-----------------|
+| **Alpine** | `sudo apk add --allow-untrusted ./dockpipe_*_linux_amd64.apk` |
+| **Fedora** | `sudo dnf install ./dockpipe_*_linux_amd64.rpm` |
+| **Arch** | `sudo pacman -U ./dockpipe_*_linux_amd64.pkg.tar.zst` |
+
+Packages declare **`bash`** and **`git`** as dependencies; **Docker** is still something you install the usual way for that distro (`docker` / `docker-cli` / `podman` + compose, etc.) — same as the `.deb` story.
+
+---
+
+## One-liner Linux install (try this first)
+
+From a network-connected shell (uses [GitHub Releases](https://github.com/jamie-steele/dockpipe/releases); detects distro from `/etc/os-release`, otherwise drops the **portable `.tar.gz`** into **`~/.local/bin`**):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jamie-steele/dockpipe/master/release/packaging/linux/install.sh | sh
+```
+
+Pin a version: `DOCKPIPE_VERSION=0.6.0 curl -fsSL … | sh`  
+Forks: `DOCKPIPE_REPO=you/dockpipe curl -fsSL … | sh`
+
+Script: **[release/packaging/linux/install.sh](../release/packaging/linux/install.sh)**.
+
+---
 
 ## Or run from source (Linux or macOS, no root)
 
@@ -142,6 +170,14 @@ dockpipe windows setup
 ```
 
 What setup does: picks a distro, saves it to `%APPDATA%\dockpipe\windows-config.env`, bootstraps `~/.dockpipe/windows-host.env` in WSL, optionally runs `--install-command`, verifies `dockpipe` in that distro.
+
+**Automated path for testers** (installs **WSL + Alpine** by default — small footprint — then **Linux `dockpipe`** from the latest GitHub release into `~/.local/bin` inside WSL — may prompt for **Administrator** or require a **reboot**). If **`wsl --install -d Alpine`** is not listed on your PC, use **`--distro Ubuntu`**.
+
+```powershell
+dockpipe windows setup --bootstrap-wsl --distro Alpine --non-interactive --install-dockpipe
+```
+
+The Windows **`install.ps1`** script runs that after installing **`dockpipe.exe`** unless you pass **`-SkipWSLSetup`**.
 
 ```powershell
 dockpipe windows setup --distro Ubuntu --install-command "<your install command>" --non-interactive

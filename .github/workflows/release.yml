@@ -132,6 +132,8 @@ jobs:
           cp "release/packaging/build/dockpipe_${VERSION}_amd64.deb" dist/
           cp "release/packaging/build/dockpipe_${VERSION}_arm64.deb" dist/
 
+          ./release/packaging/build-nfpm.sh "${VERSION}" dist
+
       - uses: actions/upload-artifact@v7
         with:
           name: release-dist-linux
@@ -249,6 +251,9 @@ jobs:
             dist/*.zip
             dist/*.deb
             dist/*.msi
+            dist/*.apk
+            dist/*.rpm
+            dist/*.pkg.tar.zst
             dist/SHA256SUMS.txt
 
   # Optional: dev.to — PUT main article (DEVTO_ARTICLE_ID) + optional one-time POST per release (DEVTO_ONE_TIME_POST).

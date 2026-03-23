@@ -23,6 +23,8 @@
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
+#include <QProcess>
+#include <QProcessEnvironment>
 #include <QPushButton>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -164,6 +166,7 @@ void MainWindow::setupMenuBar()
 
     QMenu *help = menuBar()->addMenu(tr("Help"));
     help->addAction(tr("Show notice in status bar again"), this, &MainWindow::onRestoreThirdPartyDisclaimer);
+    help->addAction(tr("Set up Cursor MCP…"), this, &MainWindow::onSetupMcp);
     help->addAction(tr("Third-party software notice…"), this, [this]() {
         QMessageBox::information(
             this, tr("Third-party software"),
@@ -305,6 +308,10 @@ void MainWindow::applyUiMode()
     m_actList->setChecked(basic && !m_settings.isBasicIcons());
     m_basicWidget->setViewIconMode(m_settings.isBasicIcons());
     m_basicWidget->setProjectFolder(m_settings.projectFolder);
+    m_basicWidget->setRecentProjects(m_settings.recentProjectFolders);
+    m_basicWidget->setContinueLastVisible(!m_settings.projectFolder.isEmpty());
+    if (basic)
+        m_basicWidget->showHomePage();
 
     m_actBasic->blockSignals(false);
     m_actAdvanced->blockSignals(false);
@@ -352,9 +359,90 @@ void MainWindow::onFileOpenProject()
     if (d.isEmpty())
         return;
     m_settings.projectFolder = QDir::cleanPath(d);
+    m_settings.addRecentProject(m_settings.projectFolder);
     m_settings.save();
+    m_basicWidget->setRecentProjects(m_settings.recentProjectFolders);
+    m_basicWidget->setContinueLastVisible(true);
     m_basicWidget->setProjectFolder(m_settings.projectFolder);
+    m_basicWidget->showWorkspacePage();
     updateBasicPage();
+}
+
+void MainWindow::onBasicBackHome()
+{
+    m_basicWidget->setRecentProjects(m_settings.recentProjectFolders);
+    m_basicWidget->setContinueLastVisible(!m_settings.projectFolder.isEmpty());
+    m_basicWidget->showHomePage();
+}
+
+void MainWindow::onBasicOpenRecent(const QString &absPath)
+{
+    if (absPath.isEmpty())
+        return;
+    m_settings.projectFolder = QDir::cleanPath(absPath);
+    m_settings.addRecentProject(m_settings.projectFolder);
+    m_settings.save();
+    m_basicWidget->setRecentProjects(m_settings.recentProjectFolders);
+    m_basicWidget->setContinueLastVisible(true);
+    m_basicWidget->setProjectFolder(m_settings.projectFolder);
+    m_basicWidget->showWorkspacePage();
+    updateBasicPage();
+}
+
+void MainWindow::onBasicContinueLast()
+{
+    if (m_settings.projectFolder.isEmpty())
+        return;
+    m_settings.addRecentProject(m_settings.projectFolder);
+    m_settings.save();
+    m_basicWidget->setRecentProjects(m_settings.recentProjectFolders);
+    m_basicWidget->setProjectFolder(m_settings.projectFolder);
+    m_basicWidget->showWorkspacePage();
+    updateBasicPage();
+}
+
+void MainWindow::onSetupMcp()
+{
+    QString wd = m_settings.projectFolder;
+    if (wd.isEmpty()) {
+        QMessageBox::information(this, tr("Pipeon"),
+                                 tr("Open or select a project folder first (home screen or File → Open project folder)."));
+        return;
+    }
+    wd = QDir::cleanPath(wd);
+    const QString script = DockpipeChoices::cursorPrepScriptPath(wd);
+    if (script.isEmpty()) {
+        QMessageBox::information(
+            this, tr("Cursor MCP"),
+            tr("Could not find cursor-prep.sh next to a DockPipe checkout.\n"
+               "Open a folder inside the dockpipe repository, or set DOCKPIPE_REPO_ROOT to the repo root, then try again."));
+        return;
+    }
+    QProcess proc;
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    env.insert(QStringLiteral("DOCKPIPE_WORKDIR"), wd);
+    const QString repo = DockpipeChoices::findRepoRoot(wd);
+    if (!repo.isEmpty())
+        env.insert(QStringLiteral("DOCKPIPE_REPO_ROOT"), repo);
+    proc.setProcessEnvironment(env);
+    proc.setWorkingDirectory(wd);
+    proc.start(QStringLiteral("bash"), QStringList{script});
+    if (!proc.waitForFinished(60000)) {
+        proc.kill();
+        proc.waitForFinished(3000);
+        QMessageBox::warning(this, tr("Cursor MCP"), tr("cursor-prep.sh timed out or could not be run."));
+        return;
+    }
+    if (proc.exitCode() != 0) {
+        const QString err = QString::fromUtf8(proc.readAllStandardError() + proc.readAllStandardOutput());
+        QMessageBox::warning(this, tr("Cursor MCP"),
+                             tr("cursor-prep.sh exited with an error:\n\n%1").arg(err.isEmpty() ? tr("(no output)") : err));
+        return;
+    }
+    QMessageBox::information(
+        this, tr("Cursor MCP"),
+        tr("Prepared .dockpipe/cursor-dev/ (see AGENT-MCP.md and mcp.json.example).\n"
+           "Follow AGENT-MCP.md in Cursor to enable MCP."));
 }
 
 void MainWindow::onRefreshAppList()
@@ -388,6 +476,9 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
                                  tr("Choose a project folder first (File → Open project folder, or Choose folder…)."));
         return;
     }
+    m_settings.addRecentProject(m_settings.projectFolder);
+    m_settings.save();
+    m_basicWidget->setRecentProjects(m_settings.recentProjectFolders);
     Context *c = findContext(m_settings.projectFolder, workflowId, QString());
     if (!c) {
         Context nc = Context::createNew();

@@ -7,7 +7,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/cursor-dev-common.sh"
 
+if [[ -f "${SCRIPT_DIR}/cursor-prep.sh" ]]; then
+  bash "${SCRIPT_DIR}/cursor-prep.sh"
+fi
+
 cursor_dev_set_workdir
+printf '[dockpipe] AI agent + MCP quickstart: %s/.dockpipe/cursor-dev/AGENT-MCP.md\n' "$W" >&2
+
 if ! cursor_dev_docker_preflight; then
   exit 1
 fi

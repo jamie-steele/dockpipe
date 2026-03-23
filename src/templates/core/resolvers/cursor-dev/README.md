@@ -58,7 +58,21 @@ Use **`--workdir`** if you are not already in the project root.
 - **`dockpipe-base-dev`** must be available locally (bundled first run, or build via **`DOCKPIPE_REPO_ROOT`**).
 - **Git Bash on Windows:** MSYS can rewrite **`/work`** in **`docker run`**. The session sets **`MSYS2_ARG_CONV_EXCL=*`** for **`docker`** so container paths stay **`/work`**. Launches use **`cygpath -w`** for the folder when available.
 
+## AI agent + MCP (“basic mode” for Cursor and any agent UI)
+
+**`cursor-prep.sh`** runs at the start of **`cursor-dev-session.sh`** and **`cursor-print-next-steps.sh`**. It writes **`.dockpipe/cursor-dev/`**:
+
+| File | Purpose |
+|------|---------|
+| **`README.txt`** | Short pointer to the folder and **AGENT-MCP.md**. |
+| **`AGENT-MCP.md`** | **Repo root**, **`DOCKPIPE_REPO_ROOT`**, how **MCP / `mcpd`** connect to Cursor, links to **`docs/mcp-agent-trust.md`**, **`docs/mcp-host-hardening.md`**, **`AGENTS.md`**. |
+| **`mcp.json.example`** | Drop-in MCP server block with **absolute** paths to **`src/bin/mcpd`**, **`dockpipe`**, **`dorkpipe`** when this tree is the **dockpipe** checkout (or a generic template otherwise). |
+
+After prep, the session prints the path to **`AGENT-MCP.md`** — open it in Cursor (or `@` it) so the agent knows repo layout and MCP setup for demos.
+
+For the **dockpipe** repository itself, prefer the committed **`.cursor/mcp.json`** at the repo root (same idea as **`mcp.json.example`**). Run **`make build`** before enabling MCP.
+
 ## What persists
 
-- Files under **`.dockpipe/cursor-dev/`** from **`cursor-prep.sh`** (session start).
+- Files under **`.dockpipe/cursor-dev/`** from **`cursor-prep.sh`** (session start or print-next-steps).
 - Stopping the container does not remove your repo; only the disposable container goes away (`--rm`).

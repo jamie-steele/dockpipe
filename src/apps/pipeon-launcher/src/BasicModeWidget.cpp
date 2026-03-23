@@ -2,26 +2,90 @@
 
 #include <QDir>
 #include <QFileInfo>
-#include <QListWidgetItem>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QListWidget>
+#include <QListWidgetItem>
 #include <QPushButton>
+#include <QStackedWidget>
 #include <QVBoxLayout>
 
 BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
 {
     setObjectName(QStringLiteral("basicMode"));
 
-    auto *root = new QVBoxLayout(this);
+    m_stack = new QStackedWidget(this);
+    auto *outer = new QVBoxLayout(this);
+    outer->setContentsMargins(0, 0, 0, 0);
+    outer->addWidget(m_stack);
+
+    // --- Home ---
+    m_homePage = new QWidget;
+    auto *homeLay = new QVBoxLayout(m_homePage);
+    homeLay->setSpacing(12);
+    homeLay->setContentsMargins(12, 12, 12, 12);
+
+    auto *homeTitle = new QLabel(tr("Pipeon"));
+    homeTitle->setObjectName(QStringLiteral("appTitle"));
+    auto *homeSub = new QLabel(
+        tr("Open a project folder to see DockPipe workflows. Recent folders appear here — pick one or browse."));
+    homeSub->setObjectName(QStringLiteral("appSubtitle"));
+    homeSub->setWordWrap(true);
+
+    m_recentList = new QListWidget;
+    m_recentList->setObjectName(QStringLiteral("basicRecentList"));
+    m_recentList->setSpacing(4);
+    connect(m_recentList, &QListWidget::itemClicked, this, [this](QListWidgetItem *it) {
+        if (!it)
+            return;
+        const QString p = it->data(Qt::UserRole).toString();
+        if (!p.isEmpty())
+            emit recentProjectSelected(p);
+    });
+
+    m_homeEmptyHint = new QLabel(tr("No recent projects yet. Use Open project… below."));
+    m_homeEmptyHint->setObjectName(QStringLiteral("hintText"));
+    m_homeEmptyHint->setWordWrap(true);
+
+    auto *homeBtns = new QHBoxLayout;
+    homeBtns->setSpacing(8);
+    m_openProjectHome = new QPushButton(tr("Open project…"));
+    m_openProjectHome->setObjectName(QStringLiteral("primaryButton"));
+    m_continueLast = new QPushButton(tr("Continue last project"));
+    m_continueLast->setObjectName(QStringLiteral("secondaryButton"));
+    m_continueLast->setVisible(false);
+    connect(m_openProjectHome, &QPushButton::clicked, this, &BasicModeWidget::openProjectRequested);
+    connect(m_continueLast, &QPushButton::clicked, this, &BasicModeWidget::continueLastRequested);
+    homeBtns->addWidget(m_openProjectHome);
+    homeBtns->addWidget(m_continueLast);
+    homeBtns->addStretch(1);
+
+    homeLay->addWidget(homeTitle);
+    homeLay->addWidget(homeSub);
+    homeLay->addWidget(m_homeEmptyHint);
+    homeLay->addWidget(m_recentList, 1);
+    homeLay->addLayout(homeBtns);
+
+    // --- Workspace ---
+    m_workspacePage = new QWidget;
+    auto *root = new QVBoxLayout(m_workspacePage);
     root->setSpacing(12);
     root->setContentsMargins(12, 12, 12, 12);
+
+    auto *navRow = new QHBoxLayout;
+    m_backHome = new QPushButton(tr("← Projects"));
+    m_backHome->setObjectName(QStringLiteral("secondaryButton"));
+    m_backHome->setToolTip(tr("Back to the project list"));
+    connect(m_backHome, &QPushButton::clicked, this, &BasicModeWidget::backToHomeRequested);
+    navRow->addWidget(m_backHome);
+    navRow->addStretch(1);
+    root->addLayout(navRow);
 
     auto *title = new QLabel(tr("Apps"));
     title->setObjectName(QStringLiteral("appTitle"));
 
     auto *sub = new QLabel(
-        tr("Pick a project folder, then launch a tool. Your folder is passed to dockpipe as --workdir (mounted in the container)."));
+        tr("Launch a tool for this folder. It is passed to dockpipe as --workdir (mounted in the container)."));
     sub->setObjectName(QStringLiteral("appSubtitle"));
     sub->setWordWrap(true);
 
@@ -34,13 +98,18 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     m_refresh = new QPushButton(tr("Refresh apps"));
     m_refresh->setObjectName(QStringLiteral("secondaryButton"));
     m_refresh->setToolTip(tr("Reload the app list from disk (new workflows, category changes)."));
-    projRow->addWidget(m_projectLabel, 1);
-    projRow->addWidget(m_refresh, 0, Qt::AlignRight);
-    projRow->addWidget(m_browse, 0, Qt::AlignRight);
+    m_setupMcp = new QPushButton(tr("Set up Cursor MCP"));
+    m_setupMcp->setObjectName(QStringLiteral("secondaryButton"));
+    m_setupMcp->setToolTip(tr("Run cursor-prep.sh for this project (writes .dockpipe/cursor-dev/ hints)."));
     connect(m_browse, &QPushButton::clicked, this, &BasicModeWidget::onBrowse);
     connect(m_refresh, &QPushButton::clicked, this, &BasicModeWidget::onRefresh);
+    connect(m_setupMcp, &QPushButton::clicked, this, &BasicModeWidget::setupMcpRequested);
+    projRow->addWidget(m_projectLabel, 1);
+    projRow->addWidget(m_setupMcp, 0, Qt::AlignRight);
+    projRow->addWidget(m_refresh, 0, Qt::AlignRight);
+    projRow->addWidget(m_browse, 0, Qt::AlignRight);
 
-    m_list = new QListWidget(this);
+    m_list = new QListWidget(m_workspacePage);
     m_list->setObjectName(QStringLiteral("basicAppList"));
     m_list->setMovement(QListWidget::Static);
     m_list->setResizeMode(QListWidget::Adjust);
@@ -59,7 +128,49 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     root->addLayout(projRow);
     root->addWidget(m_list, 1);
 
+    m_stack->addWidget(m_homePage);
+    m_stack->addWidget(m_workspacePage);
+
     applyViewMode();
+}
+
+void BasicModeWidget::showHomePage()
+{
+    m_stack->setCurrentWidget(m_homePage);
+}
+
+void BasicModeWidget::showWorkspacePage()
+{
+    m_stack->setCurrentWidget(m_workspacePage);
+}
+
+void BasicModeWidget::setRecentProjects(const QStringList &paths)
+{
+    m_recentPaths = paths;
+    rebuildRecentList();
+}
+
+void BasicModeWidget::setContinueLastVisible(bool visible)
+{
+    m_continueLast->setVisible(visible);
+}
+
+void BasicModeWidget::rebuildRecentList()
+{
+    m_recentList->clear();
+    for (const QString &p : m_recentPaths) {
+        if (p.isEmpty())
+            continue;
+        const QFileInfo fi(p);
+        auto *it = new QListWidgetItem;
+        it->setText(fi.isDir() ? fi.fileName() : fi.filePath());
+        it->setData(Qt::UserRole, QDir::cleanPath(p));
+        it->setToolTip(QDir::toNativeSeparators(QDir::cleanPath(p)));
+        m_recentList->addItem(it);
+    }
+    const bool empty = m_recentList->count() == 0;
+    m_homeEmptyHint->setVisible(empty);
+    m_recentList->setVisible(!empty);
 }
 
 void BasicModeWidget::setProjectFolder(const QString &absPath)

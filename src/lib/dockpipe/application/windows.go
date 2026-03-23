@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var (
@@ -22,10 +23,18 @@ var (
 	windowsUserHomeDirFn           = os.UserHomeDir
 )
 
+// defaultWSLBootstrapDistro is the default `wsl --install -d …` name for tester bootstrap.
+// Alpine is minimal (musl); release Linux binaries are static (CGO_ENABLED=0) and work on Alpine.
+// If `wsl --install -d Alpine` is unavailable on your Windows build, use --distro Ubuntu.
+const defaultWSLBootstrapDistro = "Alpine"
+
 type windowsSetupOpts struct {
-	Distro         string
-	InstallCommand string
-	NonInteractive bool
+	Distro            string
+	InstallCommand    string
+	NonInteractive    bool
+	BootstrapWSL      bool
+	InstallDockpipe   bool
+	NoInstallDockpipe bool
 }
 
 func cmdWindows(args []string) error {
@@ -62,12 +71,18 @@ func cmdWindowsDoctor() error {
 	if windowsGoosFn() != "windows" {
 		return fmt.Errorf("windows commands must run on Windows host")
 	}
+	if out, err := wslVersionOutput(); err == nil && strings.TrimSpace(out) != "" {
+		fmt.Fprintf(windowsStdout, "[dockpipe] %s\n", strings.TrimSpace(out))
+	}
 	distros, err := listWSLDistros()
 	if err != nil {
-		return err
+		fmt.Fprintf(windowsStdout, "[dockpipe] WSL list failed: %v\n", err)
+		fmt.Fprintf(windowsStdout, "[dockpipe] If WSL is not installed: run `dockpipe windows setup --bootstrap-wsl --distro Alpine --non-interactive` (may need Administrator / reboot). If Alpine is not offered, use --distro Ubuntu.\n")
+		return nil
 	}
 	if len(distros) == 0 {
-		return fmt.Errorf("no WSL distros found. Install one via `wsl --install -d Ubuntu` first")
+		fmt.Fprintf(windowsStdout, "[dockpipe] No WSL distros registered. Install with: `wsl --install -d Alpine` (or Ubuntu) or `dockpipe windows setup --bootstrap-wsl --non-interactive`\n")
+		return nil
 	}
 	fmt.Fprintf(windowsStdout, "[dockpipe] WSL distros found: %s\n", strings.Join(distros, ", "))
 	cfg, _ := loadWindowsConfig()
@@ -75,6 +90,12 @@ func cmdWindowsDoctor() error {
 		fmt.Fprintf(windowsStdout, "[dockpipe] Default configured distro: %s\n", cfg)
 	}
 	return nil
+}
+
+func wslVersionOutput() (string, error) {
+	cmd := windowsExecCommandFn("wsl.exe", "--version")
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
 func cmdWindowsSetup(args []string) error {
@@ -85,12 +106,38 @@ func cmdWindowsSetup(args []string) error {
 	if err != nil {
 		return err
 	}
+	applyDefaultWSLInstallCommand(&opts)
+
 	distros, err := listWSLDistros()
+	needBootstrap := opts.BootstrapWSL && (err != nil || len(distros) == 0)
+	if err != nil && !opts.BootstrapWSL {
+		return fmt.Errorf("WSL not available (%w). Install WSL or re-run with --bootstrap-wsl --distro Alpine (or Ubuntu)", err)
+	}
+	if len(distros) == 0 && !opts.BootstrapWSL && err == nil {
+		return fmt.Errorf("no WSL distros found. Run `wsl --install -d Alpine` or: dockpipe windows setup --bootstrap-wsl --distro Alpine")
+	}
+	if needBootstrap {
+		distro := opts.Distro
+		if distro == "" {
+			distro = defaultWSLBootstrapDistro
+		}
+		fmt.Fprintf(windowsStderr, "[dockpipe] Bootstrapping WSL (distro %q). This may open an Administrator prompt or require a reboot...\n", distro)
+		if err := runWSLBootstrap(distro); err != nil {
+			return fmt.Errorf("WSL bootstrap: %w", err)
+		}
+		for attempt := 0; attempt < 5; attempt++ {
+			time.Sleep(2 * time.Second)
+			distros, err = listWSLDistros()
+			if err == nil && len(distros) > 0 {
+				break
+			}
+		}
+	}
 	if err != nil {
-		return err
+		return fmt.Errorf("WSL not available after bootstrap (%w). If Windows asked for a reboot, restart and run `dockpipe windows setup` again with the same flags", err)
 	}
 	if len(distros) == 0 {
-		return fmt.Errorf("no WSL distros found. Install one via `wsl --install -d Ubuntu` first")
+		return fmt.Errorf("no WSL distros registered yet. If you just installed WSL, reboot Windows, then run `dockpipe windows setup` again (same flags as before)")
 	}
 	chosen, err := chooseWSLDistro(distros, opts)
 	if err != nil {
@@ -110,7 +157,7 @@ func cmdWindowsSetup(args []string) error {
 		}
 	}
 	if err := runInWSL(chosen, "command -v dockpipe >/dev/null 2>&1"); err != nil {
-		return fmt.Errorf("dockpipe not found inside WSL distro %q. Re-run setup with --install-command to install it", chosen)
+		return fmt.Errorf("dockpipe not found inside WSL distro %q. Re-run with --install-dockpipe or --install-command …", chosen)
 	}
 	fmt.Fprintf(windowsStdout, "[dockpipe] Windows setup complete. Default WSL distro: %s\n", chosen)
 	return nil
@@ -135,11 +182,86 @@ func parseWindowsSetupArgs(args []string) (windowsSetupOpts, error) {
 			i++
 		case "--non-interactive":
 			o.NonInteractive = true
+		case "--bootstrap-wsl":
+			o.BootstrapWSL = true
+		case "--install-dockpipe":
+			o.InstallDockpipe = true
+		case "--no-install-dockpipe":
+			o.NoInstallDockpipe = true
 		default:
 			return o, fmt.Errorf("unknown option %s", a)
 		}
 	}
 	return o, nil
+}
+
+// applyDefaultWSLInstallCommand sets the GitHub-latest install script when flags ask for it and the user did not pass a custom command.
+func applyDefaultWSLInstallCommand(o *windowsSetupOpts) {
+	if o.NoInstallDockpipe || strings.TrimSpace(o.InstallCommand) != "" {
+		return
+	}
+	if o.BootstrapWSL || o.InstallDockpipe {
+		o.InstallCommand = defaultWSLInstallDockpipeScript()
+	}
+}
+
+func runWSLBootstrap(distroname string) error {
+	cmd := windowsExecCommandFn("wsl.exe", "--install", "-d", distroname)
+	cmd.Stdout = windowsStdout
+	cmd.Stderr = windowsStderr
+	if err := cmd.Run(); err == nil {
+		return nil
+	}
+	fmt.Fprintf(windowsStderr, "[dockpipe] Retrying WSL install with Administrator elevation (UAC prompt)...\n")
+	return runWSLBootstrapElevated(distroname)
+}
+
+func runWSLBootstrapElevated(distroname string) error {
+	// Single-quoted distro name for PowerShell; avoid injection (distro is validated in choose/bootstrap path).
+	esc := strings.ReplaceAll(distroname, "'", "''")
+	ps := fmt.Sprintf("Start-Process -FilePath 'wsl.exe' -ArgumentList '--install','-d','%s' -Verb RunAs -Wait", esc)
+	cmd := windowsExecCommandFn("powershell.exe", "-NoProfile", "-Command", ps)
+	cmd.Stdout = windowsStdout
+	cmd.Stderr = windowsStderr
+	return cmd.Run()
+}
+
+// defaultWSLInstallDockpipeScript installs the latest release linux tar.gz into ~/.local/bin (for DOCKPIPE_USE_WSL_BRIDGE=1).
+// Minimal deps: Alpine gets a tiny apk set; Debian/Ubuntu/apt a small apt-get line; static dockpipe binary works on musl.
+func defaultWSLInstallDockpipeScript() string {
+	return `set -eu
+REPO="${DOCKPIPE_GITHUB_REPO:-jamie-steele/dockpipe}"
+BIN_DIR="${HOME}/.local/bin"
+mkdir -p "$BIN_DIR"
+if [ -f /etc/alpine-release ]; then
+  apk add --no-cache bash curl ca-certificates git tar gzip docker-cli
+elif command -v apt-get >/dev/null 2>&1 && [ "$(id -u)" = 0 ]; then
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq && apt-get install -y --no-install-recommends curl ca-certificates git
+fi
+ARCH=$(uname -m)
+JSON="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")"
+case "$ARCH" in
+  x86_64) URL=$(printf '%s\n' "$JSON" | tr -d '\r' | grep -oE 'https://[^"]+_linux_amd64\.tar\.gz' | head -1) ;;
+  aarch64) URL=$(printf '%s\n' "$JSON" | tr -d '\r' | grep -oE 'https://[^"]+_linux_arm64\.tar\.gz' | head -1) ;;
+  *) echo "[dockpipe] Unsupported machine ${ARCH}; need x86_64 or aarch64 WSL" >&2; exit 1 ;;
+esac
+if [ -z "$URL" ]; then
+  echo "[dockpipe] Could not find linux tarball in latest GitHub release for ${REPO}" >&2
+  exit 1
+fi
+TMP="$(mktemp)"
+trap 'rm -f "$TMP"' EXIT
+curl -fsSL -o "$TMP" "$URL"
+tar -xzf "$TMP" -C "$BIN_DIR" dockpipe
+chmod +x "$BIN_DIR/dockpipe"
+if ! echo ":${PATH:-}:" | grep -Fq ":$BIN_DIR:"; then
+  printf '\nexport PATH="$HOME/.local/bin:$PATH"\n' >> "${HOME}/.bashrc"
+fi
+export PATH="$BIN_DIR:$PATH"
+command -v dockpipe
+dockpipe version || true
+`
 }
 
 func listWSLDistros() ([]string, error) {

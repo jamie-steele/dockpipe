@@ -6,7 +6,7 @@ This repo now supports an automated GitHub Actions release pipeline.
 
 **Ship model:** Integrate on **`staging`**; when ready, **PR `staging` → `master`** — that merge runs **Release** (see **[branching.md](branching.md)**). Version = repo-root **`VERSION`**; **`release/releasenotes/X.Y.Z.md`** must exist and be updated on the **ship** PR. **CI** runs on **`staging`** PRs too (tests only); the **VERSION + release-notes gate** applies only to PRs **into `master`**.
 
-**Release notes body:** Copy **[TEMPLATE.md](../releasenotes/TEMPLATE.md)** to **`release/releasenotes/X.Y.Z.md`**, replace **`X.Y.Z`** / **`vX.Y.Z`**, and fill in **What’s new**. The **Installation** section must include **Linux**, **macOS**, and **Windows** with concrete commands (`.deb` + tarballs + source, Homebrew + Darwin tarballs + source, `install.ps1` / MSI / zip + optional WSL). That file becomes the GitHub Release description — users should not have to hunt **`docs/install.md`** for basics.
+**Release notes body:** Copy **[TEMPLATE.md](../releasenotes/TEMPLATE.md)** to **`release/releasenotes/X.Y.Z.md`**, replace **`X.Y.Z`** / **`vX.Y.Z`**, and fill in **What’s new**. The **Installation** section must include **Linux**, **macOS**, and **Windows** with concrete commands (`.deb` + **`.apk` / `.rpm` / Arch `.pkg.tar.zst`** + **`linux/install.sh`** + tarballs + source, Homebrew + Darwin tarballs + source, `install.ps1` / MSI / zip + optional WSL). That file becomes the GitHub Release description — users should not have to hunt **`docs/install.md`** for basics.
 
 ---
 
@@ -36,6 +36,9 @@ Trigger options:
    - `dockpipe_<version>_windows_amd64.msi` (WiX, Windows runner) — **only if** MSI is enabled (see **`release/packaging/msi/SHIP_MSI`** on push, or **`build_msi`** on manual dispatch)
    - `dockpipe_<version>_amd64.deb`
    - `dockpipe_<version>_arm64.deb`
+   - `dockpipe_<version>_linux_amd64.apk`, `…_linux_arm64.apk` (Alpine, via **[build-nfpm.sh](../packaging/build-nfpm.sh)**)
+   - `dockpipe_<version>_linux_amd64.rpm`, `…_arm64.rpm` (Fedora/RHEL-compatible)
+   - `dockpipe_<version>_linux_amd64.pkg.tar.zst`, `…_arm64.pkg.tar.zst` (Arch Linux)
 3. Generates `SHA256SUMS.txt`
 4. Uses `release/releasenotes/<version>.md` as GitHub release body (must include **Linux**, **macOS**, and **Windows** install instructions — see **[TEMPLATE.md](../releasenotes/TEMPLATE.md)**)
 5. Creates GitHub release and uploads artifacts

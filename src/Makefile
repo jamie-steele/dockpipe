@@ -12,8 +12,10 @@ build:
 	@mkdir -p src/bin
 	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o src/bin/dockpipe.bin ./src/cmd/dockpipe
 	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o src/bin/dorkpipe ./src/cmd/dorkpipe
+	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o src/bin/mcpd ./src/cmd/mcpd
 	@echo "Built src/bin/dockpipe.bin — run via src/bin/dockpipe (repo) or make install / make dev-install"
 	@echo "Built src/bin/dorkpipe (DorkPipe DAG orchestrator on src/lib/dorkpipe)"
+	@echo "Built src/bin/mcpd (MCP stdio or HTTPS — see src/lib/mcpbridge/README.md)"
 
 build-windows:
 	cp VERSION src/cmd/dockpipe/VERSION

@@ -1,4 +1,20 @@
+# Go module / build caches (never commit — e.g. ad-hoc `go run` / tests)
+.gocache/
+.gomodcache/
+
+# Ad-hoc scratch (local experiments, packaging test output)
+tmp/
+
+# Built Go binaries under src/bin (launchers stay as shell scripts; see Makefile / src/Makefile)
+src/bin/dorkpipe
+src/bin/mcpd
+
+# Cursor MCP config often contains keys; keep rules in .cursor/rules/ instead
+.cursor/mcp.json
+
 # Build output
+# Legacy out-of-tree Pipeon Launcher build (prefer: src/apps/pipeon-launcher/build)
+build-pipeon-launcher/
 release/packaging/build/
 *.deb
 src/bin/dockpipe.bin
@@ -28,18 +44,12 @@ Thumbs.db
 .env
 .env.local
 
-# DorkPipe self-analysis scratch facts (handoff markdown may be kept locally)
-.dockpipe/self-analysis/
+# Local `.dockpipe/` — generated handoffs, CI dumps, review/cursor prompts, demos (see AGENTS.md).
+# Canonical templates live under `src/templates/…`; do not commit this tree.
+.dockpipe/
 
-# CI scan normalization (local / optional; CI uploads as workflow artifacts)
-.dockpipe/ci-raw/
-.dockpipe/ci-analysis/
-
-# User insight queue + normalized insights (local; optional commit of curated insights.json)
-.dockpipe/analysis/
-
-# Pipeon generated context bundle (local)
-.dockpipe/pipeon-context.md
+# DorkPipe runtime outputs (metrics, nodes, self-analysis scratch)
+.dorkpipe/
 
 # VS Code extension (packed / dev)
 src/contrib/pipeon-vscode-extension/node_modules/

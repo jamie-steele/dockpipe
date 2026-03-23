@@ -1,7 +1,7 @@
 # Repository Makefile — Go build rules live in src/Makefile (run `make` from repo root).
 include src/Makefile
 
-.PHONY: build-code-server-image pipeon-icons install-pipeon-shortcut install-pipeon-shortcut-windows install-pipeon-shortcut-macos install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci self-analysis self-analysis-host self-analysis-stack compliance-handoff user-insight-process pipeon-status pipeon-bundle pipeon-chat
+.PHONY: build-code-server-image pipeon-icons pipeon-launcher install-pipeon-shortcut install-pipeon-shortcut-windows install-pipeon-shortcut-macos install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci self-analysis self-analysis-host self-analysis-stack compliance-handoff user-insight-process pipeon-status pipeon-bundle pipeon-chat
 
 # Install pre-built binary to a local PATH directory (~/.local/bin, %USERPROFILE%\\bin, …). Does not run go build.
 install:
@@ -13,6 +13,11 @@ dev-install: build install
 # Regenerate Pipeon P-mark PNG / favicon.ico / SVG (requires Pillow: pip install Pillow).
 pipeon-icons:
 	python3 src/pipeon/scripts/generate-pipeon-icons.py
+
+# Qt Pipeon Launcher — CMake build directory is src/apps/pipeon-launcher/build (see src/apps/pipeon-launcher/README.md).
+pipeon-launcher:
+	cmake -S src/apps/pipeon-launcher -B src/apps/pipeon-launcher/build -DCMAKE_BUILD_TYPE=Release
+	cmake --build src/apps/pipeon-launcher/build -j$$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 
 # Pipeon shortcuts with P icon: Linux (Freedesktop), macOS (~/Applications/Pipeon.command), Windows (.lnk).
 # From Git Bash on Windows, `make install-pipeon-shortcut` runs the PowerShell installer.

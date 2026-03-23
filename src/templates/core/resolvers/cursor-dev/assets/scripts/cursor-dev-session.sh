@@ -12,6 +12,7 @@ if [[ -f "${SCRIPT_DIR}/cursor-prep.sh" ]]; then
 fi
 
 cursor_dev_set_workdir
+printf '[dockpipe] AI agent + MCP quickstart (read in Cursor): %s/.dockpipe/cursor-dev/AGENT-MCP.md\n' "$W" >&2
 if ! cursor_dev_docker_preflight; then
   exit 1
 fi

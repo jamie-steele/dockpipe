@@ -52,6 +52,18 @@ If `dpkg` reports missing dependencies:
 sudo apt-get install -f
 ```
 
+**Option A2 — install script (Debian/Ubuntu, Alpine, Fedora, Arch, or tarball fallback)**
+
+```bash
+DOCKPIPE_VERSION=X.Y.Z curl -fsSL https://raw.githubusercontent.com/jamie-steele/dockpipe/master/release/packaging/linux/install.sh | sh
+```
+
+**Option A3 — Alpine / Fedora / Arch packages** (same tag on [Releases](https://github.com/jamie-steele/dockpipe/releases))
+
+- **Alpine (x86_64 / aarch64):** `dockpipe_X.Y.Z_linux_amd64.apk` / `…_arm64.apk` — `sudo apk add --allow-untrusted ./dockpipe_….apk`
+- **Fedora / RHEL-compatible:** `dockpipe_X.Y.Z_linux_amd64.rpm` / `…_arm64.rpm` — `sudo dnf install ./dockpipe_….rpm`
+- **Arch:** `dockpipe_X.Y.Z_linux_amd64.pkg.tar.zst` / `…_arm64.pkg.tar.zst` — `sudo pacman -U ./dockpipe_….pkg.tar.zst`
+
 **Option B — tarball**
 
 ```bash
