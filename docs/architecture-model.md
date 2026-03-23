@@ -51,7 +51,7 @@ This document is **FINAL**. It defines the core concepts, their relationships, a
   - **`ide`** — interactive development environment
   - **`agent`** — autonomous task execution
 
-In configuration, **`DOCKPIPE_RUNTIME_TYPE`** is the field that carries **`runtime.type`** (see `lib/dockpipe/domain/runtime_kind.go`). The field classifies **behavior intent**, not the substrate.
+In configuration, **`DOCKPIPE_RUNTIME_TYPE`** is the field that carries **`runtime.type`** (see `src/lib/dockpipe/domain/runtime_kind.go`). The field classifies **behavior intent**, not the substrate.
 
 ---
 

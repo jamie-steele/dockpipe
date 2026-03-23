@@ -56,7 +56,7 @@ Release artifact: `dockpipe_<version>_linux_amd64.tar.gz` or `_linux_arm64.tar.g
 ## 3. From source (developer smoke)
 
 - [ ] `go test ./...`
-- [ ] `make` or `go build -o bin/dockpipe.bin ./cmd/dockpipe`
+- [ ] `make` or `go build -o bin/dockpipe.bin ./src/cmd/dockpipe`
 - [ ] `PATH=$PWD/bin:$PATH dockpipe -- echo ok`
 
 ---

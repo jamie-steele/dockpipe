@@ -52,7 +52,7 @@ Resolution order for a profile file: **`templates/core/resolvers/<name>`** → *
 
 ## Adding a new profile (checklist)
 
-1. **Container from a new Dockerfile** — add **`templates/core/resolvers/<name>/assets/images/<name>/`** (or **`bundles/<domain>/assets/images/<domain>/`**), **`TemplateBuild`** case in **`lib/dockpipe/infrastructure/template.go`**, **`templates/core/resolvers/<name>`** with **`DOCKPIPE_RESOLVER_TEMPLATE=<name>`** when it is a resolver (and docs / env hints).
+1. **Container from a new Dockerfile** — add **`templates/core/resolvers/<name>/assets/images/<name>/`** (or **`bundles/<domain>/assets/images/<domain>/`**), **`TemplateBuild`** case in **`src/lib/dockpipe/infrastructure/template.go`**, **`templates/core/resolvers/<name>`** with **`DOCKPIPE_RESOLVER_TEMPLATE=<name>`** when it is a resolver (and docs / env hints).
 2. **Reuse an existing image only** — often no new Dockerfile; **resolver** file sets **`DOCKPIPE_RESOLVER_TEMPLATE`** or users pass **`--isolate <image>`** directly.
 3. **IDE / long-running host flow** — add **`templates/<myflow>/config.yml`** + **`steps:`**; set **`DOCKPIPE_RESOLVER_WORKFLOW=myflow`** in a resolver profile.
 4. **Host-only** — **`DOCKPIPE_RESOLVER_HOST_ISOLATE=scripts/...`**.
@@ -70,7 +70,7 @@ These are **not** implemented as separate kinds in the runner today, but the iso
 | **Electron / desktop app** | Profile kind **desktop** → host script that launches a binary; same **host isolate** path with richer conventions. |
 | **Browser / remote** | **Embedded workflow** (vscode, code-server) **or** host script opening a URL — already covered by **workflow** + **host** patterns. |
 
-When adding a new kind, prefer **one profile file** + **one clear primary key** (e.g. `DOCKPIPE_RESOLVER_COMPOSE_FILE=...`) and keep **`FromResolverMap`** / **domain** in sync — see **`lib/dockpipe/domain/resolver.go`**.
+When adding a new kind, prefer **one profile file** + **one clear primary key** (e.g. `DOCKPIPE_RESOLVER_COMPOSE_FILE=...`) and keep **`FromResolverMap`** / **domain** in sync — see **`src/lib/dockpipe/domain/resolver.go`**.
 
 ---
 

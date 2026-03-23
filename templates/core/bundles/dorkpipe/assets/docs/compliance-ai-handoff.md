@@ -2,7 +2,7 @@
 
 **Audience:** Humans and AI assistants when someone asks things like: *“Do we have compliance issues?”*, *“What’s our security posture?”*, *“Any governance gaps?”*
 
-**Framework:** **DockPipe** is only execution (spawn → run → act). **DorkPipe** and **reasoning** sit on top. This document is **not** a new engine in `lib/dockpipe` — it is **contract + artifact map** so answers stay **grounded** and **honest**.
+**Framework:** **DockPipe** is only execution (spawn → run → act). **DorkPipe** and **reasoning** sit on top. This document is **not** a new engine in `src/lib/dockpipe` — it is **contract + artifact map** so answers stay **grounded** and **honest**.
 
 ---
 

@@ -2,7 +2,7 @@
 
 Pipeon is a **Cursor / VS Code–class** product: **editor + workspace + chat**, backed by **Pipeon’s worker** (intelligence + DockPipe/Docker) and **Ollama** on the host by default; **cloud accounts** for paid models later.
 
-The **editor shell** is implemented by **forking VS Code (Code OSS)** and layering Pipeon-specific UI and the worker—see **`docs/pipeon-vscode-fork.md`**.
+The **editor shell** is implemented by **forking VS Code (Code OSS)** and layering Pipeon-specific UI and the worker—see **`pipeon-vscode-fork.md`**.
 
 This **dockpipe** repository ships **contracts** (artifacts under **`.dockpipe/`** / **`.dorkpipe/`**), a **shell harness** (`bin/pipeon`), and a **VS Code extension** stub under **`contrib/pipeon-vscode-extension/`** that you install into your fork or stock VS Code.
 
@@ -22,5 +22,5 @@ This **dockpipe** repository ships **contracts** (artifacts under **`.dockpipe/`
 
 ## See also
 
-- **`docs/pipeon-ide-experience.md`** — UX and tone  
-- **`docs/pipeon-vscode-fork.md`** — how to fork VS Code and wire Pipeon  
+- **`pipeon-ide-experience.md`** — UX and tone  
+- **`pipeon-vscode-fork.md`** — how to fork VS Code and wire Pipeon  

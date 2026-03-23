@@ -1,6 +1,6 @@
 # cursor-dev
 
-**Scripts** (**`cursor-dev-session.sh`**, **`cursor-prep.sh`**, **`cursor-dev-common.sh`**, **`cursor-print-next-steps.sh`**) live **in this directory** (same folder as **`config.yml`**). Workflows use **`run: scripts/cursor-dev/…`**; the runner resolves that to **`templates/core/resolvers/cursor-dev/…`** (see **`lib/dockpipe/infrastructure/paths.go`**).
+**Scripts** (**`cursor-dev-session.sh`**, **`cursor-prep.sh`**, **`cursor-dev-common.sh`**, **`cursor-print-next-steps.sh`**) live **in this directory** (same folder as **`config.yml`**). Workflows use **`run: scripts/cursor-dev/…`**; the runner resolves that to **`templates/core/resolvers/cursor-dev/…`** (see **`src/lib/dockpipe/infrastructure/paths.go`**).
 
 ## What it does
 

@@ -9,4 +9,4 @@
 
 **Resolvers** (**`templates/core/resolvers/`**) hold **`profile`**, **`config.yml`**, and the same **`assets/`** mirror for tool-specific Dockerfiles and scripts (**`scripts/cursor-dev/…`**, **`scripts/vscode/…`**, etc.). **`paths.go`** and **`template.go`** tie the layout together.
 
-Workflows still reference bundles as **`scripts/<domain>/…`**; **`ResolveWorkflowScript`** resolves there after user **`scripts/`** and resolver paths. See **`lib/dockpipe/infrastructure/paths.go`**.
+Workflows still reference bundles as **`scripts/<domain>/…`**; **`ResolveWorkflowScript`** resolves there after user **`scripts/`** and resolver paths. See **`src/lib/dockpipe/infrastructure/paths.go`**.

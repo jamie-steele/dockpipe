@@ -20,7 +20,7 @@
 
 ### What this repo ships *today* vs the product
 
-The **shell scripts** (`bin/pipeon`, bundle + one-shot chat) are a **developer harness** to exercise the **same context bundle and Ollama contract** before the branded app exists. They are **not** the Pipeon user experience. The **editor** is a **fork of VS Code (Code OSS)** with Pipeon layered on—see **`docs/pipeon-vscode-fork.md`**, **`docs/pipeon-architecture.md`**, and **`contrib/pipeon-vscode-extension/`**. Harness: **`scripts/pipeon/README.md`**.
+The **shell scripts** (`bin/pipeon`, bundle + one-shot chat) are a **developer harness** to exercise the **same context bundle and Ollama contract** before the branded app exists. They are **not** the Pipeon user experience. The **editor** is a **fork of VS Code (Code OSS)** with Pipeon layered on—see **`pipeon-vscode-fork.md`**, **`pipeon-architecture.md`**, and **`../../contrib/pipeon-vscode-extension/`**. Harness: **`../scripts/README.md`**.
 
 ---
 
@@ -133,7 +133,7 @@ If you want this aligned with `HEAD`, refresh CI analysis after your latest chan
 **User:** What should I work on next?
 
 **System:**  
-From **signals**: 3 TODOs in `signals_todo.txt`, and CI is clean. **User insights** prioritize API error handling in `lib/dockpipe/application/`.  
+From **signals**: 3 TODOs in `signals_todo.txt`, and CI is clean. **User insights** prioritize API error handling in `src/lib/dockpipe/application/`.  
 **Suggestion:** tackle the TODOs in that package unless you’re mid-feature elsewhere—your call.
 
 ### Flow C — Stale CI
@@ -179,7 +179,7 @@ This repo already separates:
 - **Scans** (e.g. `.dockpipe/ci-analysis/findings.json`)
 - **User guidance** (e.g. `.dockpipe/analysis/insights.json`)
 
-Pipeon should **treat those as distinct lanes** in prompts and in user-facing disclosure, matching the contracts in **`docs/compliance-ai-handoff.md`**, **`docs/dorkpipe-ci-signals.md`**, and **`docs/user-insight-queue.md`**.
+Pipeon should **treat those as distinct lanes** in prompts and in user-facing disclosure, matching the contracts in **`../../docs/compliance-ai-handoff.md`**, **`../../docs/dorkpipe-ci-signals.md`**, and **`../../docs/user-insight-queue.md`**.
 
 ---
 
@@ -200,11 +200,11 @@ The **shipping** Pipeon experience is a **desktop (or equivalent) application** 
 | Piece | Purpose |
 |-------|---------|
 | **Artifact lanes** | **`.dockpipe/`**, **`.dorkpipe/`**, insights, CI bundle—documented across **`docs/`** |
-| **`scripts/pipeon/bundle-context.sh`** | Builds **`pipeon-context.md`** — same **aggregate** the app should load (harness + future UI) |
+| **`../scripts/bundle-context.sh`** | Builds **`pipeon-context.md`** — same **aggregate** the app should load (harness + future UI) |
 | **`bin/pipeon`** / **`chat.sh`** | **Dev-only:** one-shot Ollama call to validate prompts + bundle (**not** the user-facing UX) |
-| **`scripts/pipeon/lib/enable.sh`** | Feature gate for harness (**`DOCKPIPE_PIPEON`**, min version **0.6.5**, **`DOCKPIPE_PIPEON_ALLOW_PRERELEASE`**) |
+| **`../scripts/lib/enable.sh`** | Feature gate for harness (**`DOCKPIPE_PIPEON`**, min version **0.6.5**, **`DOCKPIPE_PIPEON_ALLOW_PRERELEASE`**) |
 | **`.vscode/tasks.json`** | Optional tasks for **maintainers** testing the harness |
 
 **Release plan:** keep harness gates until **`VERSION` ≥ 0.6.5** as planned; the **app** may ship on its own cadence but should consume the **same** artifact contracts.
 
-**Architecture (gateway, Ollama, Docker, mounts):** **`docs/pipeon-architecture.md`**. Harness details: **`scripts/pipeon/README.md`**.
+**Architecture (gateway, Ollama, Docker, mounts):** **`pipeon-architecture.md`**. Harness details: **`../scripts/README.md`**.

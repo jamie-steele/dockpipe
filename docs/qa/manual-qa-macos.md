@@ -74,7 +74,7 @@ If you test the in-repo formula or a tap:
 ## 6. Maintainer: local build (cross-compile from Linux is fine)
 
 ```bash
-GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dockpipe ./cmd/dockpipe
+GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o dockpipe ./src/cmd/dockpipe
 # or GOARCH=amd64 for Intel
 ```
 

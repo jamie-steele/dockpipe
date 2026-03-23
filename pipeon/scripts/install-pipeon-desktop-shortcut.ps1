@@ -4,13 +4,13 @@
   Install Pipeon shortcuts (Desktop + Start Menu) with the P icon on Windows.
 
 .DESCRIPTION
-  Creates .lnk files that run scripts/pipeon/pipeon-code-server-launch.ps1 via powershell.exe.
+  Creates .lnk files that run pipeon/scripts/pipeon-code-server-launch.ps1 via powershell.exe.
   Requires Docker Desktop, Git Bash, and dockpipe.exe (PATH or repo bin\dockpipe.exe).
   Run from the dockpipe repo root:
-    powershell -NoProfile -ExecutionPolicy Bypass -File scripts/pipeon/install-pipeon-desktop-shortcut.ps1
+    powershell -NoProfile -ExecutionPolicy Bypass -File pipeon/scripts/install-pipeon-desktop-shortcut.ps1
 
 .EXAMPLE
-  .\scripts\pipeon\install-pipeon-desktop-shortcut.ps1 -DesktopOnly
+  .\pipeon\scripts\install-pipeon-desktop-shortcut.ps1 -DesktopOnly
 #>
 param(
     [switch]$DesktopOnly,
@@ -20,7 +20,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
-$Launch = Join-Path $RepoRoot "scripts\pipeon\pipeon-code-server-launch.ps1"
+$Launch = Join-Path $RepoRoot "pipeon\scripts\pipeon-code-server-launch.ps1"
 $Icon = Join-Path $RepoRoot "templates\core\assets\images\code-server\favicon.ico"
 
 if (-not (Test-Path -LiteralPath $Launch)) {

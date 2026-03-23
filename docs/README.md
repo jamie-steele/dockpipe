@@ -4,7 +4,7 @@
 
 **Canonical terms:** [architecture-model.md](architecture-model.md) — workflow, runtime, resolver, strategy, assets.
 
-**Bounded contexts (DockPipe vs DorkPipe vs Pipeon):** [core-tools.md](core-tools.md)
+**Bounded contexts (DockPipe vs DorkPipe vs Pipeon):** [core-tools.md](core-tools.md) · Pipeon-only docs: [pipeon.md](pipeon.md) → [`pipeon/`](../pipeon/README.md)
 
 | First | Reference |
 |-------|-----------|

@@ -37,7 +37,7 @@ Merged into user projects by **`dockpipe init`** as part of **`templates/core/`*
 | Host helpers (`clone-worktree.sh`, `commit-worktree.sh`, …) | **SAFE TO BUNDLE** | Original shell — **agnostic**; stay at **`assets/scripts/`** root. |
 | `example-run.sh`, `example-act.sh` | **SAFE TO BUNDLE** | Samples copied to project **`scripts/`**. |
 | **`scripts/cursor-dev/*.sh`**, **`scripts/vscode/vscode-code-server.sh`** | **SAFE TO BUNDLE** | Implemented only under **`templates/core/resolvers/<name>/`**; the runner maps **`scripts/…`** paths there. Resolver-specific; tools may be **USER-SUPPLIED**. |
-| **`scripts/dorkpipe/`**, **`scripts/pipeon/`**, **`scripts/review-pipeline/`**, … | **SAFE TO BUNDLE** | **Domain asset packs** — **not** DockPipe resolvers; canonical tree **`templates/core/bundles/<domain>/`** (runner maps **`scripts/…`** there). |
+| **`scripts/dorkpipe/`**, **`scripts/pipeon/`** → **`pipeon/scripts/`**, **`scripts/review-pipeline/`**, … | **SAFE TO BUNDLE** | **Domain asset packs** — **not** DockPipe resolvers; canonical tree **`templates/core/bundles/<domain>/`** (runner maps **`scripts/…`** there). **`scripts/pipeon`** is a symlink to **`pipeon/scripts/`**. |
 | `helloworld.ps1` | **SAFE TO BUNDLE** | Minimal PowerShell example asset. |
 
 ---

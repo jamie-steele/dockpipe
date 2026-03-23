@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Install a Pipeon menu shortcut (Freedesktop) with the P icon: ~/.local/share/applications/
-# Usage: from repo root — bash scripts/pipeon/install-pipeon-desktop-shortcut.sh
-# Windows: use scripts/pipeon/install-pipeon-desktop-shortcut.ps1 or: make install-pipeon-shortcut-windows
+# Usage: from repo root — bash pipeon/scripts/install-pipeon-desktop-shortcut.sh
+# Windows: use pipeon/scripts/install-pipeon-desktop-shortcut.ps1 or: make install-pipeon-shortcut-windows
 set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ICON_PNG="${REPO}/contrib/pipeon-vscode-extension/images/icon.png"
 ICON_SVG="${REPO}/templates/core/resolvers/code-server/assets/images/code-server/favicon.svg"
-LAUNCH="${REPO}/scripts/pipeon/pipeon-code-server-launch.sh"
+LAUNCH="${REPO}/pipeon/scripts/pipeon-code-server-launch.sh"
 
 for f in "$ICON_PNG" "$LAUNCH"; do
   if [[ ! -f "$f" ]]; then

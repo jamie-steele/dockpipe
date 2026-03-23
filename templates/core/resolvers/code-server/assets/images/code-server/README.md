@@ -20,7 +20,7 @@ Prereqs: **`make build`** (or **`make build-windows`** + copy **`bin\dockpipe.ex
 |----|---------|----------------|
 | **Linux** | `make install-pipeon-shortcut` | Freedesktop **`~/.local/share/applications/pipeon-code-server.desktop`** + **P** icon in **`~/.local/share/icons/hicolor/`** |
 | **macOS** | `make install-pipeon-shortcut` or `make install-pipeon-shortcut-macos` | **`~/Applications/Pipeon.command`** (double-click opens Terminal; set custom Dock icon manually if you want) |
-| **Windows** | `make install-pipeon-shortcut` from **Git Bash**, or **`make install-pipeon-shortcut-windows`**, or `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\pipeon\install-pipeon-desktop-shortcut.ps1` | **`Pipeon.lnk`** on **Desktop** and under **Start Menu → Programs** with **`favicon.ico`** as the icon; target runs **`scripts\pipeon\pipeon-code-server-launch.ps1`** |
+| **Windows** | `make install-pipeon-shortcut` from **Git Bash**, or **`make install-pipeon-shortcut-windows`**, or `powershell -NoProfile -ExecutionPolicy Bypass -File pipeon\scripts\install-pipeon-desktop-shortcut.ps1` | **`Pipeon.lnk`** on **Desktop** and under **Start Menu → Programs** with **`favicon.ico`** as the icon; target runs **`pipeon\scripts\pipeon-code-server-launch.ps1`** |
 
 Workspace defaults to **user profile** (`$HOME` / **`%USERPROFILE%`**). Override: **`PIPEON_WORKDIR`** (bash/macOS) or **`PIPEON_WORKDIR`** env var before double-click (Windows: edit shortcut or set user environment variable).
 

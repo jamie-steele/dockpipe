@@ -60,12 +60,12 @@ sudo apt-get install docker.io
 
 ## Or run from source (Linux or macOS, no root)
 
-The CLI is built with **Go** matching **`go.mod`** (currently **1.25**; see `toolchain` there) (`go build -o bin/dockpipe.bin ./cmd/dockpipe` or **`make`**). The `bin/dockpipe` script runs the binary if present, otherwise `go run`.
+The CLI is built with **Go** matching **`go.mod`** (currently **1.25**; see `toolchain` there) (`go build -o bin/dockpipe.bin ./src/cmd/dockpipe` or **`make`**). The `bin/dockpipe` script runs the binary if present, otherwise `go run`.
 
 ```bash
 git clone https://github.com/jamie-steele/dockpipe.git
 cd dockpipe
-make   # or: go build -o bin/dockpipe.bin ./cmd/dockpipe
+make   # or: go build -o bin/dockpipe.bin ./src/cmd/dockpipe
 export PATH="$PATH:$(pwd)/bin"
 dockpipe -- ls -la
 ```

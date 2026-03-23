@@ -26,7 +26,7 @@ This configures the target distro, bootstraps WSL host-awareness env (`DOCKPIPE_
 ### Dockpipe vs manual bundle (what’s actually “one branch”)
 
 - **Workflow (worktree strategy + commit-worktree):** work happens in **one new worktree branch** (e.g. `claude/…` or `codex/…`); the **commit** is only on that branch’s tree. From the CLI this feels like a single branch.
-- **The bundle file:** after commit-on-host, dockpipe runs **`git bundle create <path> refs/heads/<current-branch>`** (or **`HEAD`** if detached) — only the branch that was committed, so the file is usually **smaller** than `--all` when other branches have unique commits. Set **`DOCKPIPE_BUNDLE_ALL=1`** to restore the old **`--all`** behavior ([`commit.go`](../lib/dockpipe/infrastructure/commit.go), [`runner.sh`](../lib/runner.sh)).
+- **The bundle file:** after commit-on-host, dockpipe runs **`git bundle create <path> refs/heads/<current-branch>`** (or **`HEAD`** if detached) — only the branch that was committed, so the file is usually **smaller** than `--all` when other branches have unique commits. Set **`DOCKPIPE_BUNDLE_ALL=1`** to restore the old **`--all`** behavior ([`commit.go`](../src/lib/dockpipe/infrastructure/commit.go), [`runner.sh`](../lib/runner.sh)).
 - **Windows fetch:** the pain you hit (`refusing to fetch into branch … checked out`) is **Git on Windows**, not the bridge. A bare **`git fetch <bundle>`** (or `+refs/heads/*:refs/heads/*`) tries to move **local** `refs/heads/…` and **fails for the branch you have checked out**. Fetch resolver branches into **`refs/remotes/wsl/…`** first (and only then update other local branches), or restrict refspecs to **`claude/*`** / **`codex/*`** if that’s all you need.
 
 ### Running dockpipe from Windows
