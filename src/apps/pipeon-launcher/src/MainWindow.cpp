@@ -82,6 +82,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     connect(m_basicWidget, &BasicModeWidget::openProjectRequested, this, &MainWindow::onFileOpenProject);
     connect(m_basicWidget, &BasicModeWidget::refreshAppsRequested, this, &MainWindow::onRefreshAppList);
     connect(m_basicWidget, &BasicModeWidget::launchRequested, this, &MainWindow::onBasicLaunch);
+    connect(m_basicWidget, &BasicModeWidget::recentProjectSelected, this, &MainWindow::onBasicOpenRecent);
+    connect(m_basicWidget, &BasicModeWidget::continueLastRequested, this, &MainWindow::onBasicContinueLast);
+    connect(m_basicWidget, &BasicModeWidget::backToHomeRequested, this, &MainWindow::onBasicBackHome);
+    connect(m_basicWidget, &BasicModeWidget::setupMcpRequested, this, &MainWindow::onSetupMcp);
 
     m_store.load();
     rebuildUi();
@@ -309,7 +313,8 @@ void MainWindow::applyUiMode()
     m_basicWidget->setViewIconMode(m_settings.isBasicIcons());
     m_basicWidget->setProjectFolder(m_settings.projectFolder);
     m_basicWidget->setRecentProjects(m_settings.recentProjectFolders);
-    m_basicWidget->setContinueLastVisible(!m_settings.projectFolder.isEmpty());
+    m_basicWidget->setContinueLastVisible(!m_settings.projectFolder.isEmpty()
+                                           || !m_settings.recentProjectFolders.isEmpty());
     if (basic)
         m_basicWidget->showHomePage();
 
@@ -371,7 +376,8 @@ void MainWindow::onFileOpenProject()
 void MainWindow::onBasicBackHome()
 {
     m_basicWidget->setRecentProjects(m_settings.recentProjectFolders);
-    m_basicWidget->setContinueLastVisible(!m_settings.projectFolder.isEmpty());
+    m_basicWidget->setContinueLastVisible(!m_settings.projectFolder.isEmpty()
+                                           || !m_settings.recentProjectFolders.isEmpty());
     m_basicWidget->showHomePage();
 }
 
@@ -391,11 +397,16 @@ void MainWindow::onBasicOpenRecent(const QString &absPath)
 
 void MainWindow::onBasicContinueLast()
 {
-    if (m_settings.projectFolder.isEmpty())
+    QString folder = m_settings.projectFolder;
+    if (folder.isEmpty() && !m_settings.recentProjectFolders.isEmpty())
+        folder = m_settings.recentProjectFolders.first();
+    if (folder.isEmpty())
         return;
+    m_settings.projectFolder = QDir::cleanPath(folder);
     m_settings.addRecentProject(m_settings.projectFolder);
     m_settings.save();
     m_basicWidget->setRecentProjects(m_settings.recentProjectFolders);
+    m_basicWidget->setContinueLastVisible(true);
     m_basicWidget->setProjectFolder(m_settings.projectFolder);
     m_basicWidget->showWorkspacePage();
     updateBasicPage();

@@ -74,12 +74,28 @@ func RunHostScript(scriptPath string, env []string) error {
 	if err != nil {
 		return fmt.Errorf("host script path: %w", err)
 	}
+	runID, runFile, env, err := BeginHostRun(envGet(env, "DOCKPIPE_WORKDIR"), env)
+	if err != nil {
+		return fmt.Errorf("host run registry: %w", err)
+	}
 	cmd := exec.Command(bashExe, bashPath)
 	cmd.Env = env
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	setRunHostProcAttrs(cmd)
+	defer func() {
+		ApplyHostCleanup(env)
+		RemoveHostRunArtifacts(runFile)
+	}()
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("host script start %s: %w", scriptPath, err)
+	}
+	if err := WriteHostRunRecord(runFile, runID, cmd.Process.Pid, envGet(env, "DOCKPIPE_WORKDIR"), scriptPath); err != nil {
+		_ = cmd.Process.Kill()
+		return fmt.Errorf("host run registry write: %w", err)
+	}
+	if err := waitHostScriptWithSignalForward(cmd); err != nil {
 		return fmt.Errorf("host script %s: %w", scriptPath, err)
 	}
 	return nil

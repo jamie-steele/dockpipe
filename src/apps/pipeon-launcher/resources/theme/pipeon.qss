@@ -72,6 +72,17 @@ QListWidget::item:selected:hover {
     background-color: palette(highlight);
 }
 
+/* Home “recent projects” — compact rows; avoid stretching one item to fill the viewport */
+QListWidget#basicRecentList {
+    padding: 2px;
+}
+
+QListWidget#basicRecentList::item {
+    margin: 0 2px;
+    padding: 6px 10px;
+    min-height: 24px;
+}
+
 QWidget#contextRow {
     background-color: transparent;
 }

@@ -13,7 +13,7 @@ import (
 )
 
 // bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "83"
+const bundledFormatVersion = "84"
 
 var bundledMu sync.Mutex
 
@@ -86,7 +86,7 @@ func extractBundledToCache() (string, error) {
 		return "", err
 	}
 	dest := filepath.Join(cacheBase, ShipyardDir, "bundled-"+ver)
-	cfgPath := filepath.Join(dest, ShipyardDir, "workflows", "test", "config.yml")
+	cfgPath := filepath.Join(dest, ShipyardDir, "workflows", "run", "config.yml")
 	formatPath := filepath.Join(dest, ".bundled-format")
 	if st, err := os.Stat(cfgPath); err == nil && !st.IsDir() {
 		if b, err := os.ReadFile(filepath.Join(dest, "version")); err == nil && strings.TrimSpace(string(b)) == ver {

@@ -48,6 +48,12 @@ func WriteMessage(w io.Writer, body []byte) error {
 	if _, err := fmt.Fprintf(w, "Content-Length: %d\r\n\r\n", len(body)); err != nil {
 		return err
 	}
-	_, err := w.Write(body)
-	return err
+	if _, err := w.Write(body); err != nil {
+		return err
+	}
+	type syncer interface{ Sync() error }
+	if f, ok := w.(syncer); ok {
+		_ = f.Sync()
+	}
+	return nil
 }

@@ -41,7 +41,7 @@ Every request must authenticate with the same secret via **`Authorization: Beare
 
 ### Trying it in Cursor
 
-Run **`make build`** from repo root (builds **`mcpd`**, **`dockpipe`**, **`dorkpipe`**). Use **`.cursor/mcp.json`** — it points **`DOCKPIPE_BIN`** / **`DORKPIPE_BIN`** at **`src/bin/dockpipe`** and **`src/bin/dorkpipe`** so **default absolute-bin checks** pass. If **`${workspaceFolder}`** is not expanded in **`env`**, set those paths to absolute. Cursor speaks Content-Length JSON-RPC over the process stdin/stdout.
+Run **`make build`** from repo root (builds **`mcpd`**, **`dockpipe`**, **`dorkpipe`**). Use **`.cursor/mcp.json`** — set **`"type": "stdio"`**, and point **`DOCKPIPE_BIN`** / **`DORKPIPE_BIN`** at **`src/bin/dockpipe`** and **`src/bin/dorkpipe`** so **default absolute-bin checks** pass. If **`${workspaceFolder}`** is not expanded in **`env`**, set those paths to absolute. Cursor speaks Content-Length JSON-RPC over stdin/stdout; **`initialize`** echoes the client’s **`protocolVersion`** (e.g. **`2025-11-25`**) so the handshake completes with current Cursor hosts.
 
 ## See also
 

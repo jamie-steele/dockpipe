@@ -33,6 +33,7 @@ Commands:
   init                    Add DockPipe to the current project
   workflow validate       Check workflow YAML (default: dockpipe.yml)
   doctor                  Check docker, bash, and bundled assets
+  runs list [--workdir]   List active host-run records under .dockpipe/runs/
   windows setup|doctor    Windows: optional WSL bridge setup
   action|pre|template init  Copy sample scripts (use each with --help)
 
@@ -73,3 +74,16 @@ func printUsage() {
 func printInitUsage() {
 	fmt.Print(initUsageText)
 }
+
+const runsUsageText = `dockpipe runs list — show host-run registry entries
+
+While a skip_container workflow step runs a host script, dockpipe may write
+workdir/.dockpipe/runs/<id>.json (and optional sidecars). This command lists
+those JSON files.
+
+Usage:
+  dockpipe runs list [--workdir <path>]
+
+  --workdir   Project directory (default: DOCKPIPE_WORKDIR or current directory)
+
+`

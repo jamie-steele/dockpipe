@@ -14,6 +14,8 @@ Dockpipe’s built-in container run does **not** publish ports to the host, so t
 
 **Docker must be running** before you start this workflow (the script calls `docker` on the host). Dockpipe checks the daemon up front; **`dockpipe doctor`** verifies Docker + bash + bundled assets.
 
+**Host cleanup (core):** When **`CODE_SERVER_WAIT=1`** (default), after **`docker run`** the script registers the container name in **`.dockpipe/cleanup/docker-code-server`** so **`ApplyHostCleanup`** in **`RunHostScript`** can **`docker stop`** if the host script exits without removing markers (missed trap, **`kill -9`**, etc.). **`CODE_SERVER_WAIT=0`** does **not** register cleanup — the container is meant to stay up in the background. Optional **`DOCKPIPE_LAUNCH_MODE=gui`** in **`vars`** prints that this flow opens a **browser/app window** (see **`docs/workflow-yaml.md`** — host **`skip_container`** lifecycle).
+
 ### “Like Slack / VS Code” — without bundling Electron
 
 Desktop **Slack** and **VS Code** feel native because they ship **Electron** (a full Chromium runtime inside the app). That’s tens or hundreds of MB **per app**, not “zero dependency.”

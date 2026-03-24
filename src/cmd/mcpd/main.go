@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -76,6 +77,7 @@ func main() {
 		return
 	}
 
+	fmt.Fprintf(os.Stderr, "[dockpipe-mcpd] stdio mode (version %s); awaiting MCP JSON-RPC on stdin\n", srv.Version)
 	if err := srv.ServeStdio(os.Stdin, os.Stdout, os.Stderr); err != nil {
 		log.Fatal(err)
 	}

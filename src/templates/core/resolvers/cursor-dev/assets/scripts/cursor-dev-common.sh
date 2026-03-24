@@ -13,6 +13,8 @@ cursor_dev_set_workdir() {
 }
 
 # Optional: set CURSOR_DEV_SKIP_DOCKER_CHECK=1 if your workflow has no container step (custom YAML).
+# Loose check: used by cursor-print-next-steps.sh — if docker is missing from PATH, still returns 0
+# so host-only hints can run; if docker exists but the daemon is down, fail.
 cursor_dev_docker_preflight() {
   CURSOR_DEV_SKIP_DOCKER_CHECK="${CURSOR_DEV_SKIP_DOCKER_CHECK:-0}"
   if [[ "${CURSOR_DEV_SKIP_DOCKER_CHECK}" != "1" ]] && command -v docker >/dev/null 2>&1; then
@@ -21,6 +23,26 @@ cursor_dev_docker_preflight() {
       printf '  Start Docker Desktop (or Linux: sudo systemctl start docker), then re-run.\n' >&2
       return 1
     fi
+  fi
+  return 0
+}
+
+# Strict check for cursor-dev-session.sh: session needs docker on PATH and a reachable daemon
+# (unless CURSOR_DEV_SKIP_DOCKER_CHECK=1).
+cursor_dev_require_docker_for_session() {
+  CURSOR_DEV_SKIP_DOCKER_CHECK="${CURSOR_DEV_SKIP_DOCKER_CHECK:-0}"
+  if [[ "${CURSOR_DEV_SKIP_DOCKER_CHECK}" == "1" ]]; then
+    return 0
+  fi
+  if ! command -v docker >/dev/null 2>&1; then
+    printf '[dockpipe] docker not found in PATH — cannot start the cursor-dev session container.\n' >&2
+    printf '  Install Docker and ensure `docker` is on PATH, or set CURSOR_DEV_SKIP_DOCKER_CHECK=1 for a custom flow.\n' >&2
+    return 1
+  fi
+  if ! docker version >/dev/null 2>&1; then
+    printf '[dockpipe] Docker daemon is not reachable.\n' >&2
+    printf '  Start Docker Desktop (or Linux: sudo systemctl start docker), then re-run.\n' >&2
+    return 1
   fi
   return 0
 }

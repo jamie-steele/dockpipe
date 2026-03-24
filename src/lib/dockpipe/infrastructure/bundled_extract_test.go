@@ -5,23 +5,10 @@ import (
 	"testing"
 )
 
-// TestEmbeddedWorkflowConfigExists matches known bundled template names.
+// TestEmbeddedWorkflowConfigExists checks bundled user templates (src/templates/*/config.yml) and
+// resolver delegates (templates/core/resolvers/*/config.yml). It does not assert maintainer-only
+// shipyard/workflows/* names — those churn independently of the core embed contract.
 func TestEmbeddedWorkflowConfigExists(t *testing.T) {
-	if !EmbeddedWorkflowConfigExists("test") {
-		t.Fatal("expected test")
-	}
-	if !EmbeddedWorkflowConfigExists("test-demo") {
-		t.Fatal("expected test-demo")
-	}
-	if !EmbeddedWorkflowConfigExists("test-demo-claude") {
-		t.Fatal("expected test-demo-claude")
-	}
-	if !EmbeddedWorkflowConfigExists("demo-gui-vscode") {
-		t.Fatal("expected demo-gui-vscode")
-	}
-	if !EmbeddedWorkflowConfigExists("demo-gui-cursor") {
-		t.Fatal("expected demo-gui-cursor")
-	}
 	if !EmbeddedWorkflowConfigExists("run") {
 		t.Fatal("expected run")
 	}
@@ -33,15 +20,6 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	}
 	if !EmbeddedWorkflowConfigExists("init") {
 		t.Fatal("expected init")
-	}
-	if !EmbeddedWorkflowConfigExists("dogfood-codex-pav") {
-		t.Fatal("expected dogfood-codex-pav")
-	}
-	if !EmbeddedWorkflowConfigExists("dogfood-codex-security") {
-		t.Fatal("expected dogfood-codex-security")
-	}
-	if !EmbeddedWorkflowConfigExists("dorkpipe-orchestrator") {
-		t.Fatal("expected dorkpipe-orchestrator")
 	}
 	for _, name := range []string{"vscode", "cursor-dev", "claude", "codex", "code-server"} {
 		if !EmbeddedWorkflowConfigExists(name) {
@@ -69,9 +47,9 @@ func TestMapEmbeddedToMaterializedPath(t *testing.T) {
 		{EmbeddedTemplatesPrefix, ShipyardDir},
 		{EmbeddedTemplatesPrefix + "/core", filepath.Join(ShipyardDir, "core")},
 		{EmbeddedTemplatesPrefix + "/core/runtimes/docker/profile", filepath.Join(ShipyardDir, "core/runtimes/docker/profile")},
-		{EmbeddedTemplatesPrefix + "/test/config.yml", filepath.Join(ShipyardDir, "workflows", "test", "config.yml")},
-		{EmbeddedTemplatesPrefix + "/test-demo/config.yml", filepath.Join(ShipyardDir, "workflows", "test-demo", "config.yml")},
-		{filepath.Join(ShipyardDir, "workflows", "dogfood-codex-pav", "config.yml"), filepath.Join(ShipyardDir, "workflows", "dogfood-codex-pav", "config.yml")},
+		{EmbeddedTemplatesPrefix + "/run/config.yml", filepath.Join(ShipyardDir, "workflows", "run", "config.yml")},
+		// Already-materialized paths pass through unchanged (bundle cache layout uses ShipyardDir).
+		{filepath.Join(ShipyardDir, "workflows", "init", "config.yml"), filepath.Join(ShipyardDir, "workflows", "init", "config.yml")},
 	}
 	for _, tc := range cases {
 		got := mapEmbeddedToMaterializedPath(tc.in)

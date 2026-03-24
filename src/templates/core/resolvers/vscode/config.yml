@@ -8,6 +8,8 @@ steps:
     run: scripts/vscode/vscode-code-server.sh
     skip_container: true
     vars:
+      # Optional: gui = host opens browser/app (see DOCKPIPE_LAUNCH_MODE in docs/workflow-yaml.md).
+      # DOCKPIPE_LAUNCH_MODE: gui
       # Local build: make build-code-server-image (Coder OSS + Pipeon extension). Upstream: codercom/code-server:latest
       CODE_SERVER_IMAGE: "dockpipe-code-server:latest"
       # Edit here (or dockpipe.yml / imports). You can also set CODE_SERVER_* via shell env or repo `.env`

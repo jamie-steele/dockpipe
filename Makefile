@@ -1,7 +1,7 @@
 # Repository Makefile — Go build rules live in src/Makefile (run `make` from repo root).
 include src/Makefile
 
-.PHONY: build-code-server-image pipeon-icons pipeon-launcher install-pipeon-shortcut install-pipeon-shortcut-windows install-pipeon-shortcut-macos install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci self-analysis self-analysis-host self-analysis-stack compliance-handoff user-insight-process pipeon-status pipeon-bundle pipeon-chat
+.PHONY: build-code-server-image pipeon-icons pipeon-launcher install-pipeon-shortcut install-pipeon-launcher-shortcut install-pipeon-all-shortcuts install-pipeon-shortcut-windows install-pipeon-shortcut-macos install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci self-analysis self-analysis-host self-analysis-stack compliance-handoff user-insight-process pipeon-status pipeon-bundle pipeon-chat
 
 # Install pre-built binary to a local PATH directory (~/.local/bin, %USERPROFILE%\\bin, …). Does not run go build.
 install:
@@ -20,6 +20,8 @@ pipeon-launcher:
 	cmake --build src/apps/pipeon-launcher/build -j$$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 
 # Pipeon shortcuts with P icon: Linux (Freedesktop), macOS (~/Applications/Pipeon.command), Windows (.lnk).
+# `install-pipeon-shortcut` = code-server in browser (dockpipe --workflow vscode). NOT the Qt tray app.
+# Qt tray: `make pipeon-launcher` then `make install-pipeon-launcher-shortcut` (Linux Freedesktop).
 # From Git Bash on Windows, `make install-pipeon-shortcut` runs the PowerShell installer.
 install-pipeon-shortcut:
 	@UNAME="$$(uname -s 2>/dev/null || echo unknown)"; \
@@ -35,6 +37,18 @@ install-pipeon-shortcut-windows:
 
 install-pipeon-shortcut-macos:
 	bash src/pipeon/scripts/install-pipeon-shortcut-macos.sh
+
+# Linux (Pop!_OS, etc.): ~/.local/share/applications/pipeon-launcher.desktop — requires `make pipeon-launcher` first.
+install-pipeon-launcher-shortcut:
+	bash src/pipeon/scripts/install-pipeon-launcher-desktop-shortcut.sh
+
+# Linux: Qt launcher shortcut + code-server shortcut. Other OS: use install-pipeon-shortcut only.
+install-pipeon-all-shortcuts:
+	@UNAME="$$(uname -s 2>/dev/null || echo unknown)"; \
+	case "$$UNAME" in \
+	  Linux) $(MAKE) pipeon-launcher install-pipeon-launcher-shortcut install-pipeon-shortcut ;; \
+	  *) echo "install-pipeon-all-shortcuts is Linux-only (Freedesktop). Try: make install-pipeon-shortcut" >&2; exit 1 ;; \
+	esac
 
 # Coder code-server image with Pipeon extension (workflow vscode). Requires Docker; build from repo root.
 build-code-server-image:

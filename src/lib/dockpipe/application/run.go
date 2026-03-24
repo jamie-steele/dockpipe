@@ -91,6 +91,9 @@ func Run(argv []string, baseEnviron []string) error {
 	if argv[0] == "doctor" {
 		return cmdDoctor(argv[1:])
 	}
+	if argv[0] == "runs" {
+		return cmdRuns(argv[1:])
+	}
 
 	repoRoot, err := repoRootAppFn()
 	if err != nil {

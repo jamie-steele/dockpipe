@@ -40,7 +40,7 @@ Quick checks before a real run. Does not start a project container.
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "[dockpipe] bundled assets: could not resolve (%v)\n", err)
 	} else {
-		if wfPath, err := infrastructure.ResolveWorkflowConfigPath(rr, "test"); err != nil {
+		if wfPath, err := infrastructure.ResolveWorkflowConfigPath(rr, "run"); err != nil {
 			fmt.Fprintf(os.Stderr, "[dockpipe] bundled assets: incomplete (%s)\n", rr)
 		} else {
 			fmt.Fprintf(os.Stderr, "[dockpipe] bundled assets: ok (%s)\n", wfPath)

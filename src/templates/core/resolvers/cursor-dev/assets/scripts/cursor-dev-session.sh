@@ -12,8 +12,11 @@ if [[ -f "${SCRIPT_DIR}/cursor-prep.sh" ]]; then
 fi
 
 cursor_dev_set_workdir
+if [[ "${DOCKPIPE_LAUNCH_MODE:-}" == "gui" ]] || [[ "${DOCKPIPE_LAUNCH_MODE:-}" == "GUI" ]]; then
+  printf '[cursor-dev] DOCKPIPE_LAUNCH_MODE=gui — GUI launch (non-server); dockpipe waits on this script until the session ends (Ctrl+C or docker stop <name>).\n' >&2
+fi
 printf '[dockpipe] AI agent + MCP quickstart (read in Cursor): %s/.dockpipe/cursor-dev/AGENT-MCP.md\n' "$W" >&2
-if ! cursor_dev_docker_preflight; then
+if ! cursor_dev_require_docker_for_session; then
   exit 1
 fi
 
@@ -79,6 +82,30 @@ run_args+=(--entrypoint /bin/bash "$IMAGE" -c 'printf "%s\n" "[dockpipe] cursor-
 
 cursor_dev_docker_no_pathconv "${run_args[@]}" >/dev/null
 
+mkdir -p "$W/.dockpipe/cleanup" "$W/.dockpipe/cursor-dev"
+# Core host cleanup: RunHostScript defer stops any name listed here (and legacy session_container).
+printf '%s' "$NAME" > "$W/.dockpipe/cleanup/docker-session"
+printf '%s' "$NAME" > "$W/.dockpipe/cursor-dev/session_container"
+# Legacy path kept for older docs/tools; defer reads .dockpipe/cleanup/docker-* first.
+if [[ -n "${DOCKPIPE_RUN_ID:-}" ]]; then
+  mkdir -p "$W/.dockpipe/runs"
+  printf '%s' "$NAME" > "$W/.dockpipe/runs/${DOCKPIPE_RUN_ID}.container"
+fi
+
+# Register cleanup as soon as the session container exists so set -e / early exit still tears down
+# (e.g. cursor_dev_print_instructions or later steps failing). EXIT covers normal end + signals.
+cleanup_session() {
+  [[ -n "${NAME:-}" ]] || return 0
+  [[ -n "${CURSOR_BG_WAIT_PID:-}" ]] && kill "$CURSOR_BG_WAIT_PID" 2>/dev/null || true
+  cursor_dev_docker_no_pathconv stop "$NAME" >/dev/null 2>&1 || true
+  rm -f "$W/.dockpipe/cleanup/docker-session"
+  rm -f "$W/.dockpipe/cursor-dev/session_container"
+  if [[ -n "${DOCKPIPE_RUN_ID:-}" ]]; then
+    rm -f "$W/.dockpipe/runs/${DOCKPIPE_RUN_ID}.container"
+  fi
+}
+trap cleanup_session INT TERM HUP EXIT
+
 printf '\n[cursor-dev] Session container is running (same idea as vscode: dockpipe waits on Docker).\n' >&2
 printf '  Name:     %s\n' "$NAME" >&2
 printf '  Project:  %s  →  /work in the container\n' "$W" >&2
@@ -92,16 +119,12 @@ else
   printf '\n[cursor-dev] Cursor CLI not found — open the folder above manually in Cursor.\n' >&2
 fi
 
-# When Cursor exits, stop the session container so docker wait returns.
-# CURSOR_DEV_WAIT=0|none — only wait on docker (see templates/core/resolvers/cursor-dev/README.md).
-CURSOR_DEV_WAIT="${CURSOR_DEV_WAIT:-1}"
+# When Cursor exits, optionally stop the session container (CURSOR_DEV_WAIT=1). Default is 0 because
+# on Linux/macOS the `cursor` CLI often exits immediately after spawning the GUI — waiting on that
+# PID would stop the container right away. With 0, the session stays up until Ctrl+C or docker stop.
+# See templates/core/resolvers/cursor-dev/README.md.
+CURSOR_DEV_WAIT="${CURSOR_DEV_WAIT:-0}"
 CURSOR_BG_WAIT_PID=""
-
-cleanup_session() {
-  [[ -n "${CURSOR_BG_WAIT_PID:-}" ]] && kill "$CURSOR_BG_WAIT_PID" 2>/dev/null || true
-  cursor_dev_docker_no_pathconv stop "$NAME" >/dev/null 2>&1 || true
-}
-trap cleanup_session INT TERM
 
 if [[ "${CURSOR_DEV_WAIT}" != "0" ]] && [[ "${CURSOR_DEV_WAIT}" != "none" ]] \
   && [[ "${CURSOR_DEV_WAITABLE:-0}" == "1" ]] && [[ -n "${LAUNCH_PID:-}" ]]; then
@@ -113,7 +136,7 @@ if [[ "${CURSOR_DEV_WAIT}" != "0" ]] && [[ "${CURSOR_DEV_WAIT}" != "none" ]] \
     if cursor_dev_is_msysish && [[ "${_elapsed}" -lt 3 ]] && command -v tasklist >/dev/null 2>&1; then
       if tasklist //FI "IMAGENAME eq Cursor.exe" 2>/dev/null | grep -qi 'Cursor.exe'; then
         printf '[cursor-dev] Launcher exited quickly; waiting for Cursor.exe to finish (all Cursor windows).\n' >&2
-        printf '  Multiple Cursor windows? Set CURSOR_DEV_WAIT=0 and use: docker stop %s\n' "$NAME" >&2
+        printf '  Wrong window count? Use default CURSOR_DEV_WAIT=0 or: docker stop %s\n' "$NAME" >&2
         while tasklist //FI "IMAGENAME eq Cursor.exe" 2>/dev/null | grep -qi 'Cursor.exe'; do
           sleep "$_poll"
         done
@@ -130,7 +153,6 @@ docker wait "$NAME" >/dev/null || true
 trap - INT TERM
 [[ -n "${CURSOR_BG_WAIT_PID:-}" ]] && kill "$CURSOR_BG_WAIT_PID" 2>/dev/null || true
 wait "$CURSOR_BG_WAIT_PID" 2>/dev/null || true
-cleanup_session
 
 printf '[cursor-dev] Session ended.\n' >&2
 cursor_dev_footer

@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Install a Pipeon menu shortcut (Freedesktop) with the P icon: ~/.local/share/applications/
+# Install a Pipeon menu shortcut for code-server in the browser (dockpipe --workflow vscode).
+# NOT the Qt tray app — for that see install-pipeon-launcher-desktop-shortcut.sh / make install-pipeon-launcher-shortcut.
+# Freedesktop: ~/.local/share/applications/pipeon-code-server.desktop
 # Usage: from repo root — bash src/pipeon/scripts/install-pipeon-desktop-shortcut.sh
 # Windows: use src/pipeon/scripts/install-pipeon-desktop-shortcut.ps1 or: make install-pipeon-shortcut-windows
 set -euo pipefail

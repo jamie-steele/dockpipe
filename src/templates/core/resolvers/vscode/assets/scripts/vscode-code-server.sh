@@ -6,6 +6,10 @@ set -euo pipefail
 WORKDIR="${DOCKPIPE_WORKDIR:-$PWD}"
 WORKDIR="$(cd "$WORKDIR" && pwd)"
 
+if [[ "${DOCKPIPE_LAUNCH_MODE:-}" == "gui" ]] || [[ "${DOCKPIPE_LAUNCH_MODE:-}" == "GUI" ]]; then
+  printf '[dockpipe] DOCKPIPE_LAUNCH_MODE=gui — code-server opens in a browser/app window (not a detached server process).\n' >&2
+fi
+
 # Git Bash / MSYS maps "/work" to e.g. C:/Program Files/Git/work when invoking docker.exe; "//work" disables that.
 # OSTYPE/uname checks can miss some shells; WINDIR is set on Windows hosts.
 CWORK="/work"
@@ -130,6 +134,17 @@ else
 fi
 
 docker "${args[@]}" >/dev/null
+
+# Core host cleanup: RunHostScript defer stops containers listed under .dockpipe/cleanup/docker-* when the
+# script exits without removing markers (only when we wait — CODE_SERVER_WAIT=0 keeps the container up).
+if [[ "${CODE_SERVER_WAIT}" == "1" ]]; then
+  mkdir -p "$WORKDIR/.dockpipe/cleanup"
+  printf '%s' "$NAME" > "$WORKDIR/.dockpipe/cleanup/docker-code-server"
+  if [[ -n "${DOCKPIPE_RUN_ID:-}" ]]; then
+    mkdir -p "$WORKDIR/.dockpipe/runs"
+    printf '%s' "$NAME" > "$WORKDIR/.dockpipe/runs/${DOCKPIPE_RUN_ID}.container"
+  fi
+fi
 
 printf '\n[dockpipe] code-server (OSS) is running.\n' >&2
 printf '  Listen:   127.0.0.1:%s only (not LAN)\n' "${PORT}" >&2
@@ -283,11 +298,20 @@ launch_app_window() {
 }
 
 cleanup_session() {
+  [[ -n "${NAME:-}" ]] || return 0
+  rm -f "$WORKDIR/.dockpipe/cleanup/docker-code-server"
+  if [[ -n "${DOCKPIPE_RUN_ID:-}" ]]; then
+    rm -f "$WORKDIR/.dockpipe/runs/${DOCKPIPE_RUN_ID}.container"
+  fi
   docker stop "$NAME" 2>/dev/null || true
   if [[ -n "${BROWSER_PID:-}" ]] && kill -0 "$BROWSER_PID" 2>/dev/null; then
     kill "$BROWSER_PID" 2>/dev/null || true
   fi
 }
+
+if [[ "${CODE_SERVER_WAIT}" == "1" ]]; then
+  trap cleanup_session INT TERM HUP EXIT
+fi
 
 # Windows: true if PID is still a running process (Git Bash kill -0 is unreliable for native PIDs).
 windows_pid_alive() {
@@ -549,7 +573,6 @@ wait_for_browser_profile_gone() {
 if [[ "${CODE_SERVER_WAIT}" == "1" ]]; then
   sleep 2
   launch_app_window
-  trap cleanup_session INT TERM
 
   if [[ "${CODE_SERVER_WAIT_SIGNAL}" == "process" ]]; then
     if [[ -n "${BROWSER_PID:-}" ]]; then
@@ -568,7 +591,7 @@ if [[ "${CODE_SERVER_WAIT}" == "1" ]]; then
   fi
 
   cleanup_session
-  trap - INT TERM
+  trap - INT TERM HUP EXIT
   if [[ "$DELETE_PROFILE_ON_EXIT" == "1" ]]; then
     rm -rf "$EDGE_DATA_DIR" 2>/dev/null || true
   fi

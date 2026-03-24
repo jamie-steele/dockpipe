@@ -3,7 +3,7 @@
 | Layer | Package | Responsibility |
 |-------|---------|----------------|
 | **Domain** | `dockpipe/src/lib/dockpipe/domain` | Workflow/step model, YAML parse from **bytes** (`ParseWorkflowYAML`), env merge helpers, **resolver** key semantics, branch-prefix rules. No `docker` / subprocess / file I/O in non-test code. |
-| **Infrastructure** | `dockpipe/src/lib/dockpipe/infrastructure` | Filesystem, `docker`, `bash` pre-scripts, git commit-on-host, repo root discovery, `.env` files, template→image paths, version tags. |
+| **Infrastructure** | `dockpipe/src/lib/dockpipe/infrastructure` | Filesystem, `docker`, `bash` pre-scripts, git commit-on-host, repo root discovery, `.env` files, template→image paths, version tags. **`RunHostScript`** defer: **`ApplyHostCleanup`** (stops Docker containers registered under **`.dockpipe/cleanup/docker-*`**) and **`RemoveHostRunArtifacts`** for the host-run registry. |
 | **Application** | `dockpipe/src/lib/dockpipe/application` | CLI flags, subcommands (`init`, `template`, …), and the **run** use-case that wires domain + infrastructure. |
 
 `src/cmd/dockpipe` is a thin entrypoint that calls `application.Run`.

@@ -1,5 +1,7 @@
 #include "BasicModeWidget.h"
 
+#include <QAbstractItemView>
+#include <QWidget>
 #include <QDir>
 #include <QFileInfo>
 #include <QHBoxLayout>
@@ -7,6 +9,7 @@
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
@@ -34,14 +37,20 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
 
     m_recentList = new QListWidget;
     m_recentList->setObjectName(QStringLiteral("basicRecentList"));
-    m_recentList->setSpacing(4);
-    connect(m_recentList, &QListWidget::itemClicked, this, [this](QListWidgetItem *it) {
+    m_recentList->setSpacing(2);
+    m_recentList->setUniformItemSizes(true);
+    m_recentList->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
+    m_recentList->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_recentList->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+    auto emitRecent = [this](QListWidgetItem *it) {
         if (!it)
             return;
         const QString p = it->data(Qt::UserRole).toString();
         if (!p.isEmpty())
             emit recentProjectSelected(p);
-    });
+    };
+    connect(m_recentList, &QListWidget::itemClicked, this, emitRecent);
+    connect(m_recentList, &QListWidget::itemActivated, this, emitRecent);
 
     m_homeEmptyHint = new QLabel(tr("No recent projects yet. Use Open project… below."));
     m_homeEmptyHint->setObjectName(QStringLiteral("hintText"));
@@ -63,7 +72,8 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     homeLay->addWidget(homeTitle);
     homeLay->addWidget(homeSub);
     homeLay->addWidget(m_homeEmptyHint);
-    homeLay->addWidget(m_recentList, 1);
+    homeLay->addWidget(m_recentList, 0);
+    homeLay->addStretch(1);
     homeLay->addLayout(homeBtns);
 
     // --- Workspace ---
@@ -85,7 +95,9 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     title->setObjectName(QStringLiteral("appTitle"));
 
     auto *sub = new QLabel(
-        tr("Launch a tool for this folder. It is passed to dockpipe as --workdir (mounted in the container)."));
+        tr("Launch a tool for this folder. It is passed to dockpipe as --workdir (mounted in the container).\n"
+           "The cursor-dev app starts a long-lived Docker session then opens Cursor on the host — "
+           "that is not the same as “Set up Cursor MCP”, which only writes .dockpipe/ hints and does not start Docker."));
     sub->setObjectName(QStringLiteral("appSubtitle"));
     sub->setWordWrap(true);
 
@@ -100,7 +112,10 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     m_refresh->setToolTip(tr("Reload the app list from disk (new workflows, category changes)."));
     m_setupMcp = new QPushButton(tr("Set up Cursor MCP"));
     m_setupMcp->setObjectName(QStringLiteral("secondaryButton"));
-    m_setupMcp->setToolTip(tr("Run cursor-prep.sh for this project (writes .dockpipe/cursor-dev/ hints)."));
+    m_setupMcp->setToolTip(tr(
+        "Run cursor-prep.sh only — writes .dockpipe/cursor-dev/ (AGENT-MCP.md, mcp.json.example). "
+        "Does not run dockpipe or start Docker. To get a session container + Cursor, double-click the "
+        "cursor-dev app in the list above."));
     connect(m_browse, &QPushButton::clicked, this, &BasicModeWidget::onBrowse);
     connect(m_refresh, &QPushButton::clicked, this, &BasicModeWidget::onRefresh);
     connect(m_setupMcp, &QPushButton::clicked, this, &BasicModeWidget::setupMcpRequested);
@@ -171,6 +186,18 @@ void BasicModeWidget::rebuildRecentList()
     const bool empty = m_recentList->count() == 0;
     m_homeEmptyHint->setVisible(empty);
     m_recentList->setVisible(!empty);
+    if (!empty) {
+        const int n = m_recentList->count();
+        const int rowH = 36;
+        const int chrome = 8;
+        const int maxVisible = 6;
+        const int h = qMin(n, maxVisible) * rowH + chrome;
+        m_recentList->setMinimumHeight(h);
+        m_recentList->setMaximumHeight(h);
+    } else {
+        m_recentList->setMinimumHeight(0);
+        m_recentList->setMaximumHeight(QWIDGETSIZE_MAX);
+    }
 }
 
 void BasicModeWidget::setProjectFolder(const QString &absPath)

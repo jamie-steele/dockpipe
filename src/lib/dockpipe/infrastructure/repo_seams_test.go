@@ -6,7 +6,9 @@ import (
 	"testing"
 )
 
-// TestRepoRootMaterializesBundledTemplates copies bundled templates into DOCKPIPE_BUNDLED_CACHE and finds config.yml.
+// TestRepoRootMaterializesBundledTemplates copies embedded src/templates into the bundle cache and
+// materializes a workflow config (under ShipyardDir/workflows/ — cache layout, not a dependency on
+// git-tracked shipyard/workflows/* content).
 func TestRepoRootMaterializesBundledTemplates(t *testing.T) {
 	t.Setenv("DOCKPIPE_REPO_ROOT", "")
 	t.Setenv("DOCKPIPE_BUNDLED_CACHE", t.TempDir())
@@ -14,7 +16,7 @@ func TestRepoRootMaterializesBundledTemplates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RepoRoot: %v", err)
 	}
-	cfg := filepath.Join(got, "shipyard", "workflows", "test", "config.yml")
+	cfg := filepath.Join(got, ShipyardDir, "workflows", "run", "config.yml")
 	st, err := os.Stat(cfg)
 	if err != nil || st.IsDir() {
 		t.Fatalf("expected file %s: err=%v isDir=%v", cfg, err, st != nil && st.IsDir())

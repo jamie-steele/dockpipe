@@ -2,6 +2,7 @@ package mcpbridge
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -38,7 +39,16 @@ func (s *Server) ServeStdio(in io.Reader, out io.Writer, log io.Writer) error {
 			}
 			return err
 		}
-		resp := s.handleMessage(context.Background(), raw, log)
+		reqBody := raw
+		replyAsBatch := false
+		if trim := bytes.TrimSpace(raw); len(trim) > 0 && trim[0] == '[' {
+			var arr []json.RawMessage
+			if err := json.Unmarshal(trim, &arr); err == nil && len(arr) == 1 {
+				reqBody = []byte(arr[0])
+				replyAsBatch = true
+			}
+		}
+		resp := s.handleMessage(context.Background(), reqBody, log)
 		if resp == nil {
 			continue
 		}
@@ -46,6 +56,14 @@ func (s *Server) ServeStdio(in io.Reader, out io.Writer, log io.Writer) error {
 		if err != nil {
 			fmt.Fprintf(log, "mcpbridge: marshal response: %v\n", err)
 			continue
+		}
+		if replyAsBatch {
+			wrapped, err := json.Marshal([]json.RawMessage{json.RawMessage(body)})
+			if err != nil {
+				fmt.Fprintf(log, "mcpbridge: marshal batch response: %v\n", err)
+				continue
+			}
+			body = wrapped
 		}
 		if err := WriteMessage(out, body); err != nil {
 			return err
@@ -92,8 +110,19 @@ func (s *Server) handleInitialize(req *rpcRequest) *rpcResponse {
 			Version string `json:"version"`
 		} `json:"serverInfo"`
 	}
+	type initParams struct {
+		ProtocolVersion string `json:"protocolVersion"`
+	}
+	var p initParams
+	_ = json.Unmarshal(req.Params, &p)
+	ver := strings.TrimSpace(p.ProtocolVersion)
+	if ver == "" {
+		ver = "2024-11-05"
+	}
+	// Cursor and other hosts send newer MCP protocol lines; echo the client's version so
+	// the handshake completes (we only implement tools over stdio; wire format matches).
 	var r result
-	r.ProtocolVersion = "2024-11-05"
+	r.ProtocolVersion = ver
 	r.Capabilities.Tools = struct{}{}
 	r.ServerInfo.Name = "dockpipe-mcp"
 	r.ServerInfo.Version = s.Version

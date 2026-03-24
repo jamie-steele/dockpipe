@@ -45,7 +45,9 @@ Maintainer-only scripts live **here** (same folder as the harness):
 | **`install-pipeon-shortcut-macos.sh`** | macOS `~/Applications/Pipeon.command` |
 | **`pipeon-code-server-launch.sh`** / **`.ps1`** | Target for shortcuts; runs **`dockpipe --workflow vscode`** |
 
-Prefer **`make install-pipeon-shortcut`** from repo root.
+Prefer **`make install-pipeon-shortcut`** from repo root (code-server workflow shortcut).
+
+**Qt Pipeon Launcher** (tray app): **`make pipeon-launcher`** then **`make install-pipeon-launcher-shortcut`** (Linux Freedesktop). **Not** the same as `install-pipeon-shortcut`.
 
 ## Docs
 

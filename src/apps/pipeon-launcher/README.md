@@ -16,6 +16,17 @@ Cross-platform **Qt 6** system-tray app: save **contexts** (folder + resolver / 
 
 **Fastest — from the repo root:** `make pipeon-launcher` (writes **`src/apps/pipeon-launcher/build/`**).
 
+### Pop!_OS / Linux: Applications menu shortcut
+
+`make install-pipeon-shortcut` installs a **different** entry (code-server in the browser). For this **Qt tray app**, build first, then install the Freedesktop file:
+
+```bash
+make pipeon-launcher
+make install-pipeon-launcher-shortcut
+```
+
+That creates **`~/.local/share/applications/pipeon-launcher.desktop`**. Search the app menu for **Pipeon Launcher** (you may need to log out and back in). To install **both** shortcuts on Linux: **`make install-pipeon-all-shortcuts`**.
+
 **Option A — from the repo root (CMake by hand):**
 
 ```bash
@@ -68,7 +79,7 @@ Use the **`flathub-host`** workflow (`shipyard/workflows/flathub-host/`) with **
 
 ## Basic vs Advanced
 
-- **Basic** (default): **File → Open project folder…** (or **Choose folder…**) sets the project directory passed to `dockpipe` as **`--workdir`** (your code is mounted in the tool’s container). The main area lists only workflows whose workflow YAML includes **`category: app`** (see `docs/workflow-yaml.md`) — GUI/IDE-style apps. Double-click an app to launch. **Refresh apps** (toolbar) or **File → Refresh app list** (**F5**) rescans `shipyard/workflows/` and `src/templates/` or `templates/` from disk so new or edited workflows appear without restarting. **View → Icon grid** / **Compact list** toggles presentation. Mode and view are stored in **`launcher.json`**.
+- **Basic** (default): **File → Open project folder…** (or **Choose folder…**) sets the project directory passed to `dockpipe` as **`--workdir`** (your code is mounted in the tool’s container). The main area lists only workflows whose workflow YAML includes **`category: app`** (see `docs/workflow-yaml.md`) — GUI/IDE-style apps. Double-click an app to launch. **Set up Cursor MCP** runs **`cursor-prep.sh` only** (writes **`.dockpipe/cursor-dev/`** hints; **no** Docker, **no** full `dockpipe` session). For a **Docker session container + Cursor on the host**, double-click the **`cursor-dev`** app — not the MCP button. **Refresh apps** (toolbar) or **File → Refresh app list** (**F5**) rescans `shipyard/workflows/` and `src/templates/` or `templates/` from disk so new or edited workflows appear without restarting. **View → Icon grid** / **Compact list** toggles presentation. Mode and view are stored in **`launcher.json`**.
 - **Advanced**: **View → Advanced mode** shows the full **context** list (same as before): **Add folder…** can import every workflow under the resolved repo; technical details per row; **Edit**, worktrees, logs, etc.
 
 ## Add folder (Advanced)

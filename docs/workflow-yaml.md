@@ -30,6 +30,15 @@
 
 Variable precedence for workflows is documented in **[CLI reference](cli-reference.md)** (CLI > config > `.env` / `--env-file` / `--var`).
 
+### Host `skip_container` lifecycle (core)
+
+For steps with **`skip_container: true`**, **`run:`** scripts execute on the host via **`RunHostScript`**. When they start sidecars (e.g. **`docker run -d`**), templates should register what to tear down under **`workdir/.dockpipe/cleanup/`**: one file per resource whose name starts with **`docker-`**, containing a **single line** (the Docker container name). After the host script exits, dockpipe runs **`ApplyHostCleanup`** and **`docker stop`**s any names still listed (plus a legacy **`.dockpipe/cursor-dev/session_container`** marker for older flows). This is the **core** cleanup path—not resolver-specific logic in templates.
+
+| Variable | Meaning |
+|----------|---------|
+| **`DOCKPIPE_LAUNCH_MODE`** | Optional hint for **`vars:`** / templates — e.g. **`gui`** means the step opens a **GUI** on the host (desktop app, not a detached “server” process). Scripts can print clearer messaging; dockpipe still **waits on the host script** until it exits unless the script itself returns early. |
+| **`DOCKPIPE_SKIP_HOST_CLEANUP`** | If **`1`** or **`true`**, the runner **skips** **`ApplyHostCleanup`** after the host script exits (escape hatch: you stop containers yourself). |
+
 ---
 
 ## Top-level keys
