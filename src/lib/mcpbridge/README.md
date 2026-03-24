@@ -12,6 +12,7 @@ This package implements a **minimal** JSON-RPC over stdio (Content-Length framin
 | Variable | Meaning |
 |----------|---------|
 | `DOCKPIPE_MCP_SERVER_VERSION` | Server version string in `initialize` (set by `mcpd` binary `-ldflags` or manually). |
+| `DOCKPIPE_MCP_DEBUG` | If non-empty, **stdio** mode prints a one-line startup message to **stderr**. Default: off — some MCP hosts label all stderr as errors in the UI. |
 | `DOCKPIPE_MCP_TIER` | **`readonly`** \| **`validate`** \| **`exec`** — coarse IAM for which tools exist (see **`docs/mcp-agent-trust.md`**). Default when unset: **`validate`** (unless `DOCKPIPE_MCP_ALLOW_EXEC=1`, then **`exec`**). |
 | `DOCKPIPE_MCP_ALLOWED_TOOLS` | Optional comma-separated allowlist; intersects with the tier (subset only). |
 | `DOCKPIPE_MCP_ALLOW_EXEC` | Legacy: when **`DOCKPIPE_MCP_TIER` is unset**, `1` means tier **`exec`**. Prefer **`DOCKPIPE_MCP_TIER=exec`**. |

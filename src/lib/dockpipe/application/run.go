@@ -625,6 +625,13 @@ func Run(argv []string, baseEnviron []string) error {
 	workHostForEnv := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
 	mergeWorktreeGitDockerEnv(dockerEnvMap, workHostForEnv)
 	mergeEnvHintKeys(dockerEnvMap, envMap, resolverEnvHint)
+	networkMode := infrastructure.DockerNetworkModeFromEnv(dockerEnvMap)
+	if networkMode == "" {
+		networkMode = strings.TrimSpace(envMap["DOCKPIPE_DOCKER_NETWORK"])
+	}
+	if networkMode == "" {
+		networkMode = strings.TrimSpace(os.Getenv("DOCKPIPE_DOCKER_NETWORK"))
+	}
 	extraDocker := domain.EnvMapToSlice(dockerEnvMap)
 
 	if stepsMode {
@@ -693,6 +700,7 @@ func Run(argv []string, baseEnviron []string) error {
 		WorkPath:      opts.WorkPath,
 		ActionPath:    actionForContainer,
 		ExtraMounts:   opts.ExtraMounts,
+		NetworkMode:   networkMode,
 		ExtraEnv:      extraDocker,
 		DataVolume:    dataVol,
 		DataDir:       dataDir,

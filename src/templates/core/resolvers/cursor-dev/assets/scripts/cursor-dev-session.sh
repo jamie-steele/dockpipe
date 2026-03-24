@@ -113,36 +113,27 @@ printf '  Stop:     docker stop %s   or press Ctrl+C here (stops the container).
 
 cursor_dev_print_instructions
 
+CURSOR_LAUNCHED=0
 if try_launch_cursor; then
-  :
+  CURSOR_LAUNCHED=1
 else
   printf '\n[cursor-dev] Cursor CLI not found — open the folder above manually in Cursor.\n' >&2
 fi
 
-# When Cursor exits, optionally stop the session container (CURSOR_DEV_WAIT=1). Default is 0 because
-# on Linux/macOS the `cursor` CLI often exits immediately after spawning the GUI — waiting on that
-# PID would stop the container right away. With 0, the session stays up until Ctrl+C or docker stop.
-# See templates/core/resolvers/cursor-dev/README.md.
-CURSOR_DEV_WAIT="${CURSOR_DEV_WAIT:-0}"
+# When Cursor exits, stop the session container (CURSOR_DEV_WAIT=1, default). The script waits for the
+# GUI process (not the launcher PID): on Linux/macOS the `cursor` CLI often returns before Electron starts.
+# Set CURSOR_DEV_WAIT=0 to keep the container until Ctrl+C or docker stop. See README.
+CURSOR_DEV_WAIT="${CURSOR_DEV_WAIT:-1}"
 CURSOR_BG_WAIT_PID=""
 
-if [[ "${CURSOR_DEV_WAIT}" != "0" ]] && [[ "${CURSOR_DEV_WAIT}" != "none" ]] \
-  && [[ "${CURSOR_DEV_WAITABLE:-0}" == "1" ]] && [[ -n "${LAUNCH_PID:-}" ]]; then
+if [[ "${CURSOR_DEV_WAIT}" != "0" ]] && [[ "${CURSOR_DEV_WAIT}" != "none" ]] && [[ "${CURSOR_LAUNCHED}" == "1" ]]; then
   (
-    _start=$(date +%s)
-    wait "$LAUNCH_PID" 2>/dev/null || true
-    _elapsed=$(( $(date +%s) - _start ))
-    _poll="${CURSOR_DEV_POLL_SEC:-1}"
-    if cursor_dev_is_msysish && [[ "${_elapsed}" -lt 3 ]] && command -v tasklist >/dev/null 2>&1; then
-      if tasklist //FI "IMAGENAME eq Cursor.exe" 2>/dev/null | grep -qi 'Cursor.exe'; then
-        printf '[cursor-dev] Launcher exited quickly; waiting for Cursor.exe to finish (all Cursor windows).\n' >&2
-        printf '  Wrong window count? Use default CURSOR_DEV_WAIT=0 or: docker stop %s\n' "$NAME" >&2
-        while tasklist //FI "IMAGENAME eq Cursor.exe" 2>/dev/null | grep -qi 'Cursor.exe'; do
-          sleep "$_poll"
-        done
-      fi
+    if [[ -n "${LAUNCH_PID:-}" ]] && [[ "${CURSOR_DEV_WAITABLE:-0}" == "1" ]]; then
+      wait "$LAUNCH_PID" 2>/dev/null || true
     fi
-    cursor_dev_docker_no_pathconv stop "$NAME" >/dev/null 2>&1 || true
+    if cursor_dev_wait_for_cursor_gui_exit; then
+      cursor_dev_docker_no_pathconv stop "$NAME" >/dev/null 2>&1 || true
+    fi
   ) &
   CURSOR_BG_WAIT_PID=$!
 fi

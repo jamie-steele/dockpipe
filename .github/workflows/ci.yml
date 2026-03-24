@@ -55,7 +55,7 @@ jobs:
           set +e
           "$GOBIN/govulncheck" -format json ./... > .dockpipe/ci-raw/govulncheck.json
           VC=$?
-          "$GOBIN/gosec" -conf .gosec.json -fmt json -out=.dockpipe/ci-raw/gosec.json ./...
+          "$GOBIN/gosec" -conf .gosec.json -fmt json -out=.dockpipe/ci-raw/gosec.json -exclude-dir=.gomodcache ./...
           GC=$?
           set -e
           bash src/scripts/dorkpipe/normalize-ci-scans.sh

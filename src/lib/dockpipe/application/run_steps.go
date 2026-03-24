@@ -612,6 +612,13 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 	dockerForRun := maps.Clone(dockerEnv)
 	mergeResolverAuthEnvFromHost(dockerForRun, envMap, ra)
 	mergeWorktreeGitDockerEnv(dockerForRun, workHost)
+	networkMode := infrastructure.DockerNetworkModeFromEnv(dockerForRun)
+	if networkMode == "" {
+		networkMode = strings.TrimSpace(envMap["DOCKPIPE_DOCKER_NETWORK"])
+	}
+	if networkMode == "" {
+		networkMode = strings.TrimSpace(os.Getenv("DOCKPIPE_DOCKER_NETWORK"))
+	}
 
 	runOpts = infrastructure.RunOpts{
 		Image:         image,
@@ -619,6 +626,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 		WorkPath:      o.opts.WorkPath,
 		ActionPath:    actionPath,
 		ExtraMounts:   o.opts.ExtraMounts,
+		NetworkMode:   networkMode,
 		ExtraEnv:      domain.EnvMapToSlice(dockerForRun),
 		DataVolume:    o.dataVol,
 		DataDir:       o.dataDir,

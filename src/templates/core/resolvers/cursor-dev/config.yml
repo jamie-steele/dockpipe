@@ -12,9 +12,9 @@ steps:
       # DOCKPIPE_LAUNCH_MODE: gui
       # none = print paths only; cli = try Cursor CLI / default install paths (Windows/macOS/Linux).
       CURSOR_DEV_LAUNCH: "cli"
-      # 0 = session runs until Ctrl+C or docker stop (Linux cursor CLI exits immediately after GUI spawn).
-      # Set 1 to stop the container when the tracked Cursor launcher process exits (best on Windows).
-      CURSOR_DEV_WAIT: "0"
+      # 1 = when you quit Cursor, stop the session container (polls for the GUI; see cursor-dev-common.sh).
+      # 0 = keep the container until Ctrl+C or docker stop here.
+      CURSOR_DEV_WAIT: "1"
       # Optional: pin image (default dockpipe-base-dev:latest after first dockpipe build).
       # CURSOR_DEV_SESSION_IMAGE: "dockpipe-base-dev:latest"
       # CURSOR_DEV_CONTAINER_NAME: dockpipe-cursor-dev-mine

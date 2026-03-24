@@ -77,7 +77,11 @@ func main() {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "[dockpipe-mcpd] stdio mode (version %s); awaiting MCP JSON-RPC on stdin\n", srv.Version)
+	// Do not write to stderr in stdio mode unless explicitly enabled: many MCP hosts
+	// surface stderr as [error], which looks like a failed handshake when this is only a status line.
+	if strings.TrimSpace(os.Getenv("DOCKPIPE_MCP_DEBUG")) != "" {
+		fmt.Fprintf(os.Stderr, "[dockpipe-mcpd] stdio mode (version %s); awaiting MCP JSON-RPC on stdin\n", srv.Version)
+	}
 	if err := srv.ServeStdio(os.Stdin, os.Stdout, os.Stderr); err != nil {
 		log.Fatal(err)
 	}

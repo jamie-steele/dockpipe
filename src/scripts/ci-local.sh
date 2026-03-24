@@ -42,7 +42,7 @@ mkdir -p .dockpipe/ci-raw
 set +e
 govulncheck -format json ./... > .dockpipe/ci-raw/govulncheck.json
 VC=$?
-gosec -conf .gosec.json -fmt json -out=.dockpipe/ci-raw/gosec.json ./...
+gosec -conf .gosec.json -fmt json -out=.dockpipe/ci-raw/gosec.json -exclude-dir=.gomodcache ./...
 GC=$?
 set -e
 export DOCKPIPE_WORKDIR="$ROOT"

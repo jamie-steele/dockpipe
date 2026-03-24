@@ -48,7 +48,8 @@ cursor_dev_require_docker_for_session() {
 }
 
 # CURSOR_DEV_LAUNCH: none = print instructions only; cli = try Cursor CLI / known install paths (default).
-# CURSOR_DEV_WAITABLE: set by try_launch_cursor — 1 if we can wait on LAUNCH_PID, 0 for macOS open -a.
+# CURSOR_DEV_WAITABLE: set by try_launch_cursor — 1 if we spawned a launcher we can wait(1) on (includes open -a).
+# CURSOR_LAUNCHED_EXE: absolute path to the Cursor binary we launched (used to detect when the GUI exited).
 # CURSOR_DEV_CMD: optional path to cursor executable.
 
 # Git Bash: pass a Windows path to Cursor.exe; MSYS2_ARG_CONV_EXCL avoids mangling the exe path.
@@ -72,6 +73,11 @@ launch_cursor() {
   else
     return 1
   fi
+  if command -v readlink >/dev/null 2>&1 && readlink -f "$exe" >/dev/null 2>&1; then
+    CURSOR_LAUNCHED_EXE="$(readlink -f "$exe")"
+  else
+    CURSOR_LAUNCHED_EXE="$exe"
+  fi
   local folder
   folder=$(cursor_dev_host_folder_arg "${1:-}")
   printf '[dockpipe] Opening Cursor: %s\n' "$exe" >&2
@@ -84,8 +90,92 @@ launch_cursor() {
   return 0
 }
 
+# Return 0 if ps output suggests the launched Cursor binary is still running (Linux / non-macOS Unix).
+cursor_dev_cursor_gui_running_unix() {
+  if [[ -z "${CURSOR_LAUNCHED_EXE:-}" ]]; then
+    return 1
+  fi
+  if ! command -v ps >/dev/null 2>&1; then
+    return 1
+  fi
+  if ps -ww -eo args= 2>/dev/null | grep -Fq -- "${CURSOR_LAUNCHED_EXE}"; then
+    return 0
+  fi
+  # Fallback when ps truncates or the process argv differs (snap/flatpak).
+  local base
+  base=$(basename "${CURSOR_LAUNCHED_EXE}")
+  if [[ -n "$base" ]] && command -v pgrep >/dev/null 2>&1; then
+    pgrep -x "$base" >/dev/null 2>&1 && return 0
+  fi
+  return 1
+}
+
+# Block until Cursor GUI is gone (Windows: Cursor.exe; Unix: CURSOR_LAUNCHED_EXE + fallbacks).
+# Uses CURSOR_DEV_POLL_SEC between polls. On Unix, waits up to CURSOR_DEV_GUI_APPEAR_SEC (default 90)
+# for the GUI to show before giving up (keeps session container if Cursor never appeared).
+cursor_dev_wait_for_cursor_gui_exit() {
+  local _poll="${CURSOR_DEV_POLL_SEC:-1}"
+  local _appear="${CURSOR_DEV_GUI_APPEAR_SEC:-90}"
+  if cursor_dev_is_msysish && command -v tasklist >/dev/null 2>&1; then
+    local _start _deadline
+    _start=$(date +%s)
+    _deadline=$((_start + _appear))
+    while (( $(date +%s) < _deadline )); do
+      if tasklist //FI "IMAGENAME eq Cursor.exe" 2>/dev/null | grep -qi 'Cursor.exe'; then
+        printf '[cursor-dev] Waiting for Cursor.exe to exit — then stopping the session container.\n' >&2
+        while tasklist //FI "IMAGENAME eq Cursor.exe" 2>/dev/null | grep -qi 'Cursor.exe'; do
+          sleep "$_poll"
+        done
+        return 0
+      fi
+      sleep "$_poll"
+    done
+    printf '[cursor-dev] Cursor.exe did not appear within %ss — leaving the session container running (Ctrl+C or docker stop).\n' "$_appear" >&2
+    return 1
+  fi
+  local os
+  os=$(uname -s 2>/dev/null || echo unknown)
+  if [[ "$os" == "Darwin" ]]; then
+    local _ds _dd
+    _ds=$(date +%s)
+    _dd=$((_ds + _appear))
+    while (( $(date +%s) < _dd )); do
+      if pgrep -f 'Cursor.app' >/dev/null 2>&1; then
+        printf '[cursor-dev] Waiting for Cursor.app to exit — then stopping the session container.\n' >&2
+        while pgrep -f 'Cursor.app' >/dev/null 2>&1; do
+          sleep "$_poll"
+        done
+        return 0
+      fi
+      sleep "$_poll"
+    done
+    printf '[cursor-dev] Cursor.app did not appear within %ss — leaving the session container running (Ctrl+C or docker stop).\n' "$_appear" >&2
+    return 1
+  fi
+  # Linux / other Unix: launcher often returns before Electron exists — wait for first appearance.
+  if [[ -z "${CURSOR_LAUNCHED_EXE:-}" ]]; then
+    return 1
+  fi
+  local _start _deadline
+  _start=$(date +%s)
+  _deadline=$((_start + _appear))
+  while (( $(date +%s) < _deadline )); do
+    if cursor_dev_cursor_gui_running_unix; then
+      printf '[cursor-dev] Waiting for Cursor to exit — then stopping the session container.\n' >&2
+      while cursor_dev_cursor_gui_running_unix; do
+        sleep "$_poll"
+      done
+      return 0
+    fi
+    sleep "$_poll"
+  done
+  printf '[cursor-dev] Cursor GUI did not appear within %ss — leaving the session container running (Ctrl+C or docker stop).\n' "$_appear" >&2
+  return 1
+}
+
 try_launch_cursor() {
   LAUNCH_PID=""
+  CURSOR_LAUNCHED_EXE=""
   CURSOR_DEV_LAUNCH="${CURSOR_DEV_LAUNCH:-cli}"
   if [[ "${CURSOR_DEV_LAUNCH}" == "none" ]] || [[ "${CURSOR_DEV_LAUNCH}" == "0" ]]; then
     return 1
@@ -130,7 +220,8 @@ try_launch_cursor() {
     fi
     if command -v open >/dev/null 2>&1; then
       printf '[dockpipe] Opening Cursor via open -a Cursor (folder path).\n' >&2
-      CURSOR_DEV_WAITABLE=0
+      CURSOR_DEV_WAITABLE=1
+      CURSOR_LAUNCHED_EXE="/Applications/Cursor.app/Contents/MacOS/Cursor"
       open -a Cursor "$W" >/dev/null 2>&1 &
       LAUNCH_PID=$!
       return 0

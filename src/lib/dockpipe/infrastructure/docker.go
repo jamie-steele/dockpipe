@@ -134,12 +134,14 @@ func DockerBuild(image, dockerfileDir, contextDir string) error {
 
 // RunOpts is passed to RunContainer.
 type RunOpts struct {
-	Image         string
-	WorkdirHost   string
-	WorkPath      string
-	ActionPath    string
-	ExtraMounts   []string
-	ExtraEnv      []string
+	Image       string
+	WorkdirHost string
+	WorkPath    string
+	ActionPath  string
+	ExtraMounts []string
+	ExtraEnv    []string
+	// NetworkMode: if non-empty, passed to docker run as --network <mode> (e.g. host when bridge IPv6 is broken).
+	NetworkMode   string
 	DataVolume    string
 	DataDir       string
 	Reinit        bool
@@ -154,6 +156,18 @@ type RunOpts struct {
 	Stderr        *os.File
 	// StdoutTeePath: if set, container stdout is also written to this host file (in addition to Stdout).
 	StdoutTeePath string
+}
+
+// DockerNetworkModeFromEnv returns DOCKPIPE_DOCKER_NETWORK from m and removes it so it is not passed with docker -e.
+func DockerNetworkModeFromEnv(m map[string]string) string {
+	if m == nil {
+		return ""
+	}
+	v := strings.TrimSpace(m["DOCKPIPE_DOCKER_NETWORK"])
+	if v != "" {
+		delete(m, "DOCKPIPE_DOCKER_NETWORK")
+	}
+	return v
 }
 
 // RunContainer runs docker attach/detach with logging on failure (same contract as the historical bash runner).
@@ -215,6 +229,9 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		"run",
 		"--init",
 		"--hostname", "dockpipe",
+	}
+	if nw := strings.TrimSpace(o.NetworkMode); nw != "" {
+		args = append(args, "--network", nw)
 	}
 	// Map container user to the host user on Unix so bind mounts have sane ownership.
 	// On Windows, optional -u via DOCKPIPE_WINDOWS_CONTAINER_USER only (see windowsDockerUserSpec).

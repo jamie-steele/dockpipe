@@ -42,15 +42,16 @@ Use **`vars`** in **`config.yml`** (or **`dockpipe.yml`**), shell env, or **`.en
 | **`CURSOR_DEV_CONTAINER_NAME`** | *(auto)* | Optional fixed name for **`docker stop`**. |
 | **`CURSOR_DEV_CMD`** | *(unset)* | Force a specific **`cursor`** or **`Cursor.exe`** path. |
 | **`CURSOR_DEV_SKIP_DOCKER_CHECK`** | **`0`** | Set **`1`** only if you customize the workflow and skip the daemon check. |
-| **`CURSOR_DEV_WAIT`** | **`0`** | **`0`** / **`none`** (default) — session stays up until **`docker stop`** or **Ctrl+C** in the terminal (matches Linux/macOS where the **`cursor`** CLI often exits immediately after spawning the GUI). **`1`** — background watcher **`wait`**s on the launcher PID, then **`docker stop`**s the session (useful on **Windows** when you want closing Cursor to end the session). |
-| **`CURSOR_DEV_POLL_SEC`** | **`1`** | *(Windows, only when **`CURSOR_DEV_WAIT=1`**)* Seconds between **`tasklist`** checks if the launcher exited quickly while **`Cursor.exe`** is still running. |
+| **`CURSOR_DEV_WAIT`** | **`1`** | **`1`** (default) — when you **quit Cursor**, a background watcher stops the session container (polls for the GUI; works on Linux/macOS/Windows). **`0`** / **`none`** — session stays up until **`docker stop`** or **Ctrl+C** in the terminal (useful if you close the IDE window but want the container to keep running). |
+| **`CURSOR_DEV_POLL_SEC`** | **`1`** | Seconds between **`tasklist`** / **`pgrep`** / **`ps`** checks while waiting for Cursor to exit. |
+| **`CURSOR_DEV_GUI_APPEAR_SEC`** | **`90`** | If the Cursor GUI never appears within this many seconds (after launch), the watcher **does not** stop the container — leave **`CURSOR_DEV_WAIT=0`** or fix **`CURSOR_DEV_CMD`** if that happens. |
 
-When **`CURSOR_DEV_WAIT`** is **`1`**, a background task **`wait`**s on the launcher, then **`docker stop`**s the session container. On **Windows**, if the launcher returns quickly while **`Cursor.exe`** is still running, the script polls **`tasklist`** until no **`Cursor.exe`**. If that behavior is wrong for you, keep the default **`0`**.
+When **`CURSOR_DEV_WAIT`** is **`1`**, the script records the **`cursor`** binary path, optionally **`wait`**s on the launcher shell, then **`cursor_dev_wait_for_cursor_gui_exit`** waits until **Cursor.exe** / **Cursor.app** / the **`cursor`** process is gone, then **`docker stop`**s the session ( **`docker wait`** in the main script then returns).
 
 ### Performance
 
 - **Dominant cost** is **Docker** and **Cursor** — the shell overhead is small.
-- Default **`CURSOR_DEV_WAIT=0`** skips the background watcher (no extra process, no Windows **`tasklist`** poll). Set **`1`** only when you want that coupling.
+- Default **`CURSOR_DEV_WAIT=1`** runs a small background poll loop until **`docker stop`** fires after you close Cursor. Set **`0`** if you prefer a long-lived session container without that coupling.
 
 ## How to run
 
