@@ -1,6 +1,0 @@
-# Optional example — sidecar + host IDE patterns; not executed by dockpipe.
-# Often you use dockpipe workflows instead; this shows a minimal multi-service placeholder.
-services:
-  base:
-    image: dockpipe-base-dev:latest
-    working_dir: /work

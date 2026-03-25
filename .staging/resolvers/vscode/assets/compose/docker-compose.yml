@@ -1,5 +1,0 @@
-# Optional example — not executed by dockpipe. Build image first from templates/core/resolvers/vscode/assets/images/vscode/
-services:
-  vscode:
-    image: dockpipe-vscode:latest
-    working_dir: /work
