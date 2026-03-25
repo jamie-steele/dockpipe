@@ -21,6 +21,7 @@ func mkRepoRootForSubcmdTests(t *testing.T) string {
 	t.Helper()
 	repoRoot := t.TempDir()
 	writeFile(t, filepath.Join(repoRoot, "templates", "init", "config.yml"), "name: init\n", 0o644)
+	writeFile(t, filepath.Join(repoRoot, "templates", "init", "README.md"), "# init\n", 0o644)
 	writeFile(t, filepath.Join(repoRoot, "templates", "run", "config.yml"), "name: run\nrun: []\n", 0o644)
 	writeFile(t, filepath.Join(repoRoot, "templates", "core", "resolvers", "default"), "DOCKPIPE_RESOLVER_TEMPLATE=codex\n", 0o644)
 	writeFile(t, filepath.Join(repoRoot, "templates", "core", "resolvers", "claude"), "DOCKPIPE_RESOLVER_TEMPLATE=claude\n", 0o644)
@@ -149,8 +150,8 @@ func TestMergeBundledTemplatesCoreCopiesCoreTree(t *testing.T) {
 	}
 }
 
-// TestCmdInitCreatesWorkspaceAndTemplate creates workspace layout and templates/<name> from init template in cwd.
-func TestCmdInitCreatesWorkspaceAndTemplate(t *testing.T) {
+// TestCmdInitCreatesWorkspaceAndMinimalWorkflow creates workspace layout and templates/<name>/config.yml as a blank starter.
+func TestCmdInitCreatesWorkspaceAndMinimalWorkflow(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
 
@@ -178,6 +179,39 @@ func TestCmdInitCreatesWorkspaceAndTemplate(t *testing.T) {
 		if _, err := os.Stat(p); err != nil {
 			t.Fatalf("expected created path %q: %v", p, err)
 		}
+	}
+	b, err := os.ReadFile(filepath.Join(project, "templates", "demo", "config.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	if !strings.Contains(s, "demo") || !strings.Contains(s, "Dockpipe workflow") {
+		t.Fatalf("expected blank starter config, got:\n%s", s)
+	}
+	if _, err := os.Stat(filepath.Join(project, "templates", "demo", "README.md")); err == nil {
+		t.Fatal("default init <name> should not copy bundled init template README; use --from init")
+	}
+}
+
+// TestCmdInitFromInitCopiesBundledInitTemplate restores the legacy copy of templates/init into templates/<name>/.
+func TestCmdInitFromInitCopiesBundledInitTemplate(t *testing.T) {
+	repoRoot := mkRepoRootForSubcmdTests(t)
+	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
+	project := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(project); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	if err := cmdInit([]string{"legacy", "--from", "init"}); err != nil {
+		t.Fatalf("cmdInit: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(project, "templates", "legacy", "README.md")); err != nil {
+		t.Fatalf("expected bundled init README copied: %v", err)
 	}
 }
 

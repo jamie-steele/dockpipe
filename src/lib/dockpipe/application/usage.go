@@ -48,14 +48,15 @@ Workflows: YAML. See docs/cli-reference.md for every flag.
 
 const initUsageText = `dockpipe init
 
-Add DockPipe to the current project (scripts, templates, shared core files).
+Project setup in the current directory, or add a new workflow.
 
 Usage:
-  dockpipe init [flags]
-  dockpipe init <name> [flags]   add a workflow from a template
+  dockpipe init [flags]              merge templates/core, scripts/, images/, dockpipe.yml (no workflow name)
+  dockpipe init <name> [flags]       create templates/<name>/config.yml as an empty starter workflow
+  dockpipe init <name> --from <src>  copy a bundled template or filesystem path into templates/<name>/
 
 Flags:
-  --from <source>          Template to copy from (with <name>)
+  --from <source>          With <name>: copy from blank (same as default), init, run, run-apply, a path, …
   --runtime <name>         Written into new config (with <name>)
   --resolver <name>        Written into new config (with <name>)
   --strategy <name>        Written into new config (with <name>)
@@ -64,7 +65,9 @@ Flags:
 Examples:
   dockpipe init
   dockpipe init --gitignore
+  dockpipe init my-pipeline
   dockpipe init my-pipeline --from run-apply --resolver codex --runtime docker
+  dockpipe init my-starter --from init
 `
 
 func printUsage() {

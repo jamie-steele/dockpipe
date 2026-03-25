@@ -238,9 +238,11 @@ func createNamedWorkflow(repoRoot, projectDir, name, fromSource, resolver, runti
 	if err := applyInitWorkflowFlags(cfgPath, resolver, runtime, strategy); err != nil {
 		return err
 	}
-	_ = copyFileMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "scripts", "example-run.sh"), filepath.Join(projectDir, "scripts/example-run.sh"))
-	_ = copyFileMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "scripts", "example-act.sh"), filepath.Join(projectDir, "scripts/example-act.sh"))
-	_ = copyDirMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "images", "example"), filepath.Join(projectDir, "images/example"))
+	if !isBlank {
+		_ = copyFileMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "scripts", "example-run.sh"), filepath.Join(projectDir, "scripts/example-run.sh"))
+		_ = copyFileMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "scripts", "example-act.sh"), filepath.Join(projectDir, "scripts/example-act.sh"))
+		_ = copyDirMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "images", "example"), filepath.Join(projectDir, "images/example"))
+	}
 	if !isBlank && isSelfAnalysisWorkflowSource(srcDir, fromSource) {
 		changed, err := ensureAgentsSelfAnalysisPointer(projectDir)
 		if err != nil {
@@ -250,6 +252,10 @@ func createNamedWorkflow(repoRoot, projectDir, name, fromSource, resolver, runti
 			fmt.Fprintf(os.Stderr, "[dockpipe] Appended self-analysis handoff to AGENTS.md\n")
 		}
 	}
-	fmt.Printf("Created templates/%s/ (from %s)\n", name, fromSource)
+	if isBlank {
+		fmt.Fprintf(os.Stderr, "[dockpipe] Created templates/%s/ (empty workflow — edit config.yml; use --from to copy a bundled template)\n", name)
+	} else {
+		fmt.Fprintf(os.Stderr, "[dockpipe] Created templates/%s/ (from %s)\n", name, fromSource)
+	}
 	return nil
 }

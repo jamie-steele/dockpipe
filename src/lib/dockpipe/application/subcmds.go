@@ -107,7 +107,7 @@ func cmdInit(args []string) error {
 
 	fromSource := strings.TrimSpace(from)
 	if fromSource == "" {
-		fromSource = "init"
+		fromSource = "blank"
 	}
 	return createNamedWorkflow(repoRoot, projectDir, name, fromSource, resolver, runtime, strategy)
 }
