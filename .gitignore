@@ -1,6 +1,41 @@
+# Go module / build caches (never commit — e.g. ad-hoc `go run` / tests)
+.gocache/
+.gomodcache/
+
+# Ad-hoc scratch (local experiments, packaging test output)
+tmp/
+
+# Built Go binaries under src/bin (launchers stay as shell scripts; see Makefile / src/Makefile)
+src/bin/dorkpipe
+src/bin/mcpd
+
+# Local Cursor / remote server / IDE (binaries, keys, workspace state — do not commit)
+.cache/
+.cursor-server/
+.cursor/
+.devcontainer/
+.ssh/
+
 # Build output
-packaging/build/
+# Legacy out-of-tree Pipeon Launcher build (prefer: src/apps/pipeon-launcher/build)
+build-pipeon-launcher/
+release/packaging/build/
 *.deb
+src/bin/dockpipe.bin
+src/bin/dockpipe.exe
+# ad-hoc go build -o in repo root (prefer: make build-windows → bin/dockpipe.exe)
+/dockpipe.exe
+msi-dist/
+*.wixobj
+*.wixpdb
+# Legacy local output (prefer release/artifacts)
+dist/
+# Local publish + CI-style release binaries (templates-core tarball, nfpm, tar.gz, etc.)
+release/artifacts/
+
+# Local demo recordings (asciinema + agg)
+release/demo/dockpipe-demo*.cast
+release/demo/dockpipe-demo*.gif
 
 # OS
 .DS_Store
@@ -12,6 +47,32 @@ Thumbs.db
 *.swo
 .*.sw?
 
+# SR&ED evidence and timekeeping (local only; see .local/sred/README.md)
+.local/sred/
+
 # Optional local overrides (do not commit)
 .env
 .env.local
+# 1Password inject template (op:// refs; often names private vaults — keep local)
+.env.op.template
+
+# Maintainer-only trees (workflows/resolvers/bundles) — keep on your machine; do not commit.
+# To stop tracking without deleting files: git rm -r --cached .staging
+# Note: embed.go embeds these paths; CI/fresh clones need a populated tree or a future embed-from-tracked-dir change.
+.staging/
+
+# Local `.dockpipe/` — generated handoffs, CI dumps, review/cursor prompts, optional `demo/` stubs (see AGENTS.md).
+# Canonical bundled core + workflows live under `src/core/…`; do not commit a duplicate `templates/` tree here.
+.dockpipe/
+
+# DorkPipe runtime outputs (metrics, nodes, self-analysis scratch)
+.dorkpipe/
+
+# Terraform (e.g. .staging/workflows/r2-publish/terraform — keep .terraform.lock.hcl)
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# VS Code extension (packed / dev)
+src/contrib/pipeon-vscode-extension/node_modules/
+src/contrib/pipeon-vscode-extension/*.vsix

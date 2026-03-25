@@ -1,0 +1,197 @@
+/* Pipeon — shared layout (colors come from pipeon-light.qss / pipeon-dark.qss) */
+
+QWidget#mainCentral {
+    background-color: palette(base);
+}
+
+QLabel#appTitle {
+    font-size: 18px;
+    font-weight: 600;
+    color: palette(window-text);
+}
+
+/* Secondary / muted label colors: see theme companion QSS */
+
+QLabel#appSubtitle {
+    font-size: 12px;
+}
+
+QLabel#hintText {
+    font-size: 12px;
+}
+
+QLabel#disclaimerWatermark {
+    font-size: 11px;
+    font-style: italic;
+    padding: 4px 10px 6px 10px;
+}
+
+QPushButton#disclaimerDismiss {
+    font-size: 11px;
+    padding: 2px 10px;
+    min-height: 22px;
+}
+
+QFrame#headerBar {
+    background-color: palette(alternate-base);
+    border: none;
+    border-radius: 8px;
+    padding: 4px;
+}
+
+QFrame#listPanel {
+    background-color: palette(base);
+    border: none;
+    border-radius: 8px;
+}
+
+QListWidget {
+    outline: none;
+    border: none;
+    background: transparent;
+    padding: 4px;
+}
+
+QListWidget::item {
+    border: none;
+    border-radius: 8px;
+    margin: 2px 4px;
+    padding: 0px;
+    background: transparent;
+}
+
+QListWidget::item:hover {
+    background-color: palette(alternate-base);
+}
+
+QListWidget::item:selected {
+    background-color: palette(highlight);
+}
+
+QListWidget::item:selected:hover {
+    background-color: palette(highlight);
+}
+
+/* Home “recent projects” — compact rows; avoid stretching one item to fill the viewport */
+QListWidget#basicRecentList {
+    padding: 2px;
+}
+
+QListWidget#basicRecentList::item {
+    margin: 0 2px;
+    padding: 6px 10px;
+    min-height: 24px;
+}
+
+QWidget#contextRow {
+    background-color: transparent;
+}
+
+QLabel#contextTitle {
+    font-size: 13px;
+    font-weight: 600;
+    color: palette(window-text);
+}
+
+QLabel#contextPath {
+    font-size: 11px;
+}
+
+QLabel#contextMeta {
+    font-size: 11px;
+    font-style: italic;
+}
+
+QLabel#statusBadge {
+    min-width: 72px;
+    padding: 4px 10px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+/* Badge fill/text: theme companion QSS */
+
+QGroupBox {
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    margin-top: 10px;
+    padding: 12px 12px 10px 12px;
+    background-color: palette(alternate-base);
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 8px;
+    padding: 0 6px;
+    color: palette(window-text);
+}
+
+QPushButton#primaryButton {
+    padding: 8px 16px;
+    min-height: 22px;
+    font-weight: 600;
+    border-radius: 6px;
+    border: 1px solid palette(highlight);
+    background-color: palette(highlight);
+    color: palette(highlighted-text);
+}
+
+QPushButton#primaryButton:hover {
+    background-color: palette(highlight);
+    border-color: palette(highlight);
+}
+
+QPushButton#primaryButton:pressed {
+    padding-top: 9px;
+    padding-bottom: 7px;
+}
+
+QPushButton#secondaryButton {
+    padding: 8px 14px;
+    min-height: 22px;
+    border-radius: 6px;
+    border: 1px solid palette(midlight);
+    background-color: palette(button);
+}
+
+QPushButton#dangerButton {
+    padding: 8px 14px;
+    min-height: 22px;
+    border-radius: 6px;
+}
+
+QLineEdit, QComboBox {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid palette(midlight);
+    background-color: palette(base);
+    color: palette(text);
+    min-height: 18px;
+}
+
+QLineEdit:focus, QComboBox:focus {
+    border: 1px solid palette(highlight);
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 22px;
+}
+
+QFrame#emptyState {
+    background-color: palette(alternate-base);
+    border-radius: 10px;
+    border: none;
+}
+
+QLabel#emptyTitle {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+QLabel#emptyBody {
+    font-size: 12px;
+}

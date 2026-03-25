@@ -1,0 +1,57 @@
+/* Light UI — high contrast for secondary text and badges (WCAG-friendly on white/near-white) */
+
+QLabel#appSubtitle,
+QLabel#hintText,
+QLabel#contextPath,
+QLabel#contextMeta,
+QLabel#emptyBody {
+    color: #2d2d2d;
+}
+
+QLabel#emptyTitle {
+    color: #141414;
+}
+
+QLabel#statusBadge[status="running"] {
+    background-color: #a5d6a7;
+    color: #0a3d14;
+}
+
+QLabel#statusBadge[status="stopped"] {
+    background-color: #cfcfcf;
+    color: #1a1a1a;
+}
+
+QLabel#statusBadge[status="failed"] {
+    background-color: #ffcdd2;
+    color: #5c0000;
+}
+
+QPushButton#secondaryButton {
+    color: #1f1f1f;
+    border: 1px solid #9a9a9a;
+}
+
+QPushButton#secondaryButton:hover {
+    background-color: #dedede;
+    color: #0a0a0a;
+}
+
+QPushButton#dangerButton {
+    color: #5c0a0a;
+    border: 1px solid #b71c1c;
+    background-color: rgba(183, 28, 28, 0.1);
+}
+
+QPushButton#dangerButton:hover {
+    background-color: rgba(183, 28, 28, 0.18);
+    color: #3d0606;
+}
+
+QLabel#disclaimerWatermark {
+    color: #5c5c5c;
+}
+
+QStatusBar {
+    border-top: 1px solid #c8c8c8;
+}

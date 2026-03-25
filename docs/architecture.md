@@ -6,13 +6,13 @@ This document describes the core primitive, data flow, and extension points.
 
 ## Primitive
 
-dockpipe implements a single flow:
+Mental model (same as **[onboarding.md](onboarding.md)**): **run** (host prep) → **isolate** (container) → **act** (host follow-up). Under the hood:
 
-1. **Spawn** — Start a container from a given image (default or from `--image` / `--template`).
-2. **Run** — Execute the user’s command inside the container. The host directory (or `--workdir`) is mounted at `/work`; the command runs with that as the working directory.
-3. **Act** — If `--action <script>` was given, run that script inside the container after the command, with access to the command’s exit code and work dir. The container then exits with the original command’s exit code.
+1. **Run** (host) — Optional scripts before the container (`--run`), e.g. clone-worktree.
+2. **Isolate** — Container from image or template (`--isolate`); your argv after `--` runs **inside** it with the project at **`/work`**.
+3. **Act** — Optional script after the main command. **Usually** the entrypoint runs it **inside** the container (`DOCKPIPE_ACTION`). **Exception:** the bundled **`scripts/commit-worktree.sh`** is detected and run **on the host** after the container exits (normal `git` against the mounted worktree); the container does not set `DOCKPIPE_ACTION` in that case. Container exit code is still the main command's exit code.
 
-No built-in commit, clone, or AI logic — those are actions or scripts you plug in.
+No built-in commit, clone, or AI logic — those are scripts you plug in.
 
 **Lifecycle:** By default the container runs **attached** (stdin/stdout connected). Closing the terminal or disconnecting the client sends SIGTERM; the entrypoint stops the command and the container exits (`--rm` removes it). Use **`-d` / `--detach`** to run in the background (no attach); the container stays up until the command inside exits.
 
@@ -22,37 +22,39 @@ No built-in commit, clone, or AI logic — those are actions or scripts you plug
 
 | Component | Role |
 |-----------|------|
-| `bin/dockpipe` | CLI: parse args, resolve template → image (and build path), set env, source runner, call `dockpipe_run "$@"`. |
-| `lib/runner.sh` | Build `docker run` args (mounts, env, action script mount), then `exec docker run ... image "$@"`. |
-| `lib/entrypoint.sh` | Container entrypoint: run command (argv or `DOCKPIPE_CMD`), then run `DOCKPIPE_ACTION` if set, exit with command’s exit code. |
-| `images/*/Dockerfile` | Define images; each copies `lib/entrypoint.sh` and uses it as `ENTRYPOINT`. |
-| `examples/actions/*.sh` | Example action scripts; usable with `--action`. |
-| `examples/*/` | Example workflows (e.g. Claude worktree); scripts + README. |
+| **Isolation layer** | **Runtime** (where) and **resolver** (which tool) profiles under **`templates/core/runtimes/`** and **`templates/core/resolvers/`** — **`DOCKPIPE_RUNTIME_*`** / **`DOCKPIPE_RESOLVER_*`**; **`DOCKPIPE_RUNTIME_TYPE`** = **`runtime.type`**. See **[architecture-model.md](architecture-model.md)** and **[isolation-layer.md](isolation-layer.md)**. |
+| `src/bin/dockpipe` | Launcher: runs **`src/bin/dockpipe.bin`** if present (`make`), otherwise **`go run ./src/cmd/dockpipe`**. |
+| `src/cmd/dockpipe`, `src/lib/dockpipe/application`, `src/lib/dockpipe/domain`, `src/lib/dockpipe/infrastructure` | **Go** CLI (DDD-ish): application layer (flags + orchestration + `windows setup/doctor`), domain (workflow/env/resolver semantics), infrastructure (FS, docker, bash, git). **`config.yml`** / **`steps:`** (YAML v3), resolver `KEY=value` files, template→image map, bash `source` for pre-scripts, **`docker run`** / build, host **git** commit. |
+| **Embedded bundle** (`embed.go`) | Stock **`templates/`** (including full **`templates/core/`** — scripts under **`templates/core/assets/`**, images, compose, runtimes, resolvers, strategies), repository root **`assets/entrypoint.sh`**, **`VERSION`** compiled into the binary; materialized to the **user cache** at runtime (override with **`DOCKPIPE_REPO_ROOT`** for development). |
+| `assets/entrypoint.sh` | Container entrypoint (repo root **`assets/`**, not **`templates/core/assets/`**): run command, then `DOCKPIPE_ACTION` if set (skipped when act is **host** commit — see bundled `commit-worktree`). |
+| `templates/core/.../assets/images/*/Dockerfile` | Framework images for **`TemplateBuild`** / **`DockerfileDir`** (resolver → bundle → **`assets/images`**); each copies **`assets/entrypoint.sh`** where applicable (build context: repo root). |
+| `templates/core/assets/scripts/*.sh`, `templates/core/bundles/…` | Shared host scripts (clone/commit) and **domain** bundles (dorkpipe, pipeon, …); YAML uses **`scripts/…`** (resolved per **`paths.go`**: project → **resolvers** → **bundles** → **assets/scripts**). |
+| `templates/*/` | Workflow templates (`config.yml`). Multi-step / async: see **[workflow-yaml.md](workflow-yaml.md)**. |
 
 ---
 
-## Data flow
+## Data flow (default: Go CLI)
 
 ```
-User: dockpipe --template claude --action examples/actions/commit-worktree.sh -- claude -p "..."
+User: dockpipe --isolate claude --act scripts/commit-worktree.sh -- claude -p "..."
 
-  bin/dockpipe
-    → resolve_template("claude") → image=dockpipe-claude, build=.../images/claude
-    → build image if needed
-    → set DOCKPIPE_IMAGE, DOCKPIPE_ACTION, DOCKPIPE_WORKDIR, ...
-    → source lib/runner.sh
-    → dockpipe_run claude -p "..."
+  src/bin/dockpipe → dockpipe (Go binary when packaged / built)
+    → TemplateBuild("claude") from --isolate → image=dockpipe-claude, build=.../templates/core/resolvers/claude/assets/images/claude
+    → docker build (if needed) / docker run (no DOCKPIPE_ACTION for bundled commit-worktree)
+    → see src/lib/dockpipe/infrastructure/docker.go
 
-  lib/runner.sh
-    → docker run --rm -v $PWD:/work -v <action>:/dockpipe-action.sh -e DOCKPIPE_ACTION=... dockpipe-claude claude -p "..."
-
-  Container (lib/entrypoint.sh)
+  Container (assets/entrypoint.sh)
     → cd /work
-    → exec "claude" "-p" "..."
+    → exec user argv (e.g. claude -p "...")
     → save exit code
-    → run /dockpipe-action.sh (commit-worktree)
+    → run DOCKPIPE_ACTION if set (not set for bundled commit-worktree)
     → exit with saved exit code
+
+  Host (after container exits, if --act is bundled commit-worktree)
+    → host git commit / bundle (CommitOnHost path)
 ```
+
+**`--workflow` with `steps:`** — `lib/dockpipe/application/run_steps.go` runs each step (optional parallel async groups, merge `outputs:` in order). Spec: **[workflow-yaml.md](workflow-yaml.md)**.
 
 Environment variables that cross the boundary:
 
@@ -63,9 +65,10 @@ Environment variables that cross the boundary:
 
 ## Extension points
 
-1. **Images** — Add a Dockerfile under `images/<name>/`, use the shared entrypoint, and (optionally) register a template in `bin/dockpipe` so `--template <name>` builds and uses it.
-2. **Actions** — Any script that can run in the container and read `DOCKPIPE_EXIT_CODE` / `DOCKPIPE_CONTAINER_WORKDIR`. Place under `examples/actions/` and reference with `--action`. Users can copy a bundled action to customize: `dockpipe action init my-commit.sh --from commit-worktree` (or `export-patch`, `print-summary`).
-3. **Scripts / workflows** — Arbitrary scripts (e.g. clone + worktree + run tool + commit) live in `examples/` and are invoked as the “command” (e.g. `dockpipe ... -- ./examples/claude-worktree/setup-and-claude.sh`). No change to core required.
+1. **Isolation profiles** — Add or extend a file under **`templates/core/resolvers/<name>`** (see **[isolation-layer.md](isolation-layer.md)**): **`DOCKPIPE_RESOLVER_TEMPLATE`** (Docker), **`DOCKPIPE_RESOLVER_WORKFLOW`** (embedded `templates/<wf>/config.yml`), or **`DOCKPIPE_RESOLVER_HOST_ISOLATE`** (host script). CLI **`--resolver`** selects the profile name for resolver-driven workflows.
+2. **Images** — Add a Dockerfile under **`templates/core/resolvers/<name>/assets/images/<name>/`** (or **`bundles/<domain>/assets/images/<domain>/`**), use the shared entrypoint where applicable, and add a case in **`src/lib/dockpipe/infrastructure/template.go`** (`TemplateBuild`) so `--isolate <name>` builds and uses it.
+3. **Act scripts** — Any script that can run in the container and read `DOCKPIPE_EXIT_CODE` / `DOCKPIPE_CONTAINER_WORKDIR`. Bundled shared scripts live under **`templates/core/assets/scripts/`** (agnostic) and **`templates/core/bundles/`** (domain); reference with **`scripts/…`** in YAML or `--act`. Users can copy a bundled script: `dockpipe action init my-commit.sh --from commit-worktree`.
+4. **Scripts / workflows** — Bundled workflows use **`templates/<name>/config.yml`**; user workflows may use **`templates/<name>/config.yml`**. Optional **`steps:`** for multi-step and async groups — **[workflow-yaml.md](workflow-yaml.md)**. **`dockpipe init`** creates top-level **scripts/**, **images/**, **templates/** + **`templates/core/`**. **`dockpipe init my-template`** adds **templates/my-template/config.yml** as an empty starter; use **`--from`** to copy a bundled workflow (e.g. **`init`**, **`run`**). The **`worktree`** strategy is **`templates/core/strategies/worktree`**; use **`strategy: worktree`** in your YAML — **[workflow-yaml.md § Named strategies](workflow-yaml.md#named-strategies)**.
 
 The core does not parse command content or assume any particular tool (Claude, git, etc.). It only runs the given argv and the optional action script.
 
@@ -94,6 +97,6 @@ The primitive is deliberately minimal. You might need to script around it when:
 
 - You want **orchestration** (retries, fan-out, dependencies) — use a Makefile, shell loop, or a real orchestrator and call dockpipe as one step.
 - You need **rich state** between many steps — use the workdir (or a DB) and a convention; or a single long-running script inside one container that does the whole pipeline.
-- You hit **image or tool limits** — use a custom image (`--image` / `--build`) or run the heavy part outside dockpipe and use it for the parts that benefit from isolation.
+- You hit **image or tool limits** — use a custom image (`--isolate <image>` / `--build`) or run the heavy part outside dockpipe and use it for the parts that benefit from isolation.
 
 Escape hatch: compose dockpipe with other tools rather than stretching the core.

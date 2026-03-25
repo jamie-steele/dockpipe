@@ -1,0 +1,25 @@
+# Bundled workflow: run a host command with secrets from a pluggable store (default: 1Password CLI).
+# workflow_type is generic — scripts branch on SECRETSTORE_PROVIDER (op today; add cases in secretstore-exec.sh).
+name: secretstore
+workflow_type: secretstore
+description: >-
+  Host-only: SECRETSTORE_COMMAND runs under injected env (default: op run --env-file).
+  Add providers by extending scripts/dockpipe/secretstore-exec.sh (on disk: src/scripts/dockpipe/ in this repo); compose other workflows by
+  pointing SECRETSTORE_COMMAND at dockpipe.
+
+docker_preflight: false
+# Runtime: keystore = host substrate for secret injection. Resolver: onepassword = 1Password CLI (op).
+runtime: keystore
+resolver: onepassword
+runtimes: [keystore]
+resolvers: [onepassword]
+
+vars:
+  SECRETSTORE_PROVIDER: "op"
+  OP_ENV_FILE: ".env.op.template"
+
+steps:
+  - id: exec-with-secrets
+    skip_container: true
+    run:
+      - scripts/dockpipe/secretstore-exec.sh

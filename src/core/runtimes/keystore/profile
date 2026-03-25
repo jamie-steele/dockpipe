@@ -1,0 +1,4 @@
+# Runtime substrate: host execution with secret-store injection (keystore).
+# "Where" secrets are merged before your command — not which vendor (that is the resolver, e.g. onepassword).
+# Pair with skip_container steps and a resolver profile that sets DOCKPIPE_RESOLVER_* for your provider CLI.
+DOCKPIPE_RUNTIME_SUBSTRATE=keystore

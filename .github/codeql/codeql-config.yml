@@ -1,0 +1,4 @@
+# https://docs.github.com/en/code-security/code-scanning/automatically-scanning-your-code-for-vulnerabilities-and-errors/customizing-code-scanning
+name: dockpipe
+queries:
+  - uses: security-extended

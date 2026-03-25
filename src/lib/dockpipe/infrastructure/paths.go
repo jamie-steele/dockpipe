@@ -1,0 +1,298 @@
+package infrastructure
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"dockpipe/src/lib/dockpipe/infrastructure/packagebuild"
+)
+
+// ResolveWorkflowScript resolves run/act path: scripts/* from the project (repoRoot/scripts/ if
+// present, else repoRoot/src/scripts/ for this dockpipe repo layout), else .staging/resolvers|bundles
+// (dockpipe checkout) or templates/core (materialized merge), then templates/core/assets/scripts/;
+// other paths are relative to the workflow template dir.
+//
+// Namespace: scripts/core.<dot.segments> maps to paths under core/ by turning dots into path segments
+// (e.g. scripts/core.assets.scripts.foo.sh → core/assets/scripts/foo.sh). Resolution order for that path:
+// .dockpipe/core/…, .dockpipe/internal/packages/core/…, then templates/core/… (compiled core spine).
+// Resolver/bundle scripts also resolve under packages/resolvers/ and packages/bundles/ (see resolveScriptsPrefixedPath).
+// Uses forward slashes so YAML paths match Linux/container expectations.
+func ResolveWorkflowScript(rel, workflowRoot, repoRoot string) string {
+	if strings.HasPrefix(rel, "scripts/") {
+		return filepath.ToSlash(resolveScriptsPrefixedPath(repoRoot, rel))
+	}
+	return filepath.ToSlash(filepath.Join(workflowRoot, rel))
+}
+
+func scriptFileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
+}
+
+// tryBundledAssetsScripts maps rest "domain/tail/path" to <base>/<top>/domain/assets/scripts/tail/path.
+func tryBundledAssetsScripts(base, top string, rest string) (string, bool) {
+	if !strings.Contains(rest, "/") {
+		return "", false
+	}
+	first, after, ok := strings.Cut(rest, "/")
+	if !ok || after == "" {
+		return "", false
+	}
+	p := filepath.Join(base, top, first, "assets", "scripts", after)
+	if scriptFileExists(p) {
+		return p, true
+	}
+	return "", false
+}
+
+// relFromCoreNamespace parses scripts/ paths after "core." — segments separated by dots become path segments.
+// Example: "core.assets.scripts.docker-cache-volumes.sh" → "assets/scripts/docker-cache-volumes.sh".
+func relFromCoreNamespace(rest string) (string, bool) {
+	if !strings.HasPrefix(rest, "core.") {
+		return "", false
+	}
+	inner := strings.TrimPrefix(rest, "core.")
+	if inner == "" {
+		return "", false
+	}
+	parts := strings.Split(inner, ".")
+	return filepath.Join(parts...), true
+}
+
+// resolveCoreNamespacedAsset resolves scripts/core.* to a file under core/ (compiled overlays first).
+func resolveCoreNamespacedAsset(repoRoot, rest string) (string, bool) {
+	rel, ok := relFromCoreNamespace(rest)
+	if !ok {
+		return "", false
+	}
+	candidates := []string{
+		filepath.Join(repoRoot, ".dockpipe", "core", rel),
+		filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "core", rel),
+	}
+	if tarPath, err := FindLatestCoreTarball(repoRoot); err == nil && tarPath != "" {
+		if root, err := packagebuild.EnsureTarballExtractedCache(tarPath, TarballExtractCacheRoot(repoRoot)); err == nil {
+			candidates = append(candidates, filepath.Join(root, "core", rel))
+		}
+	}
+	candidates = append(candidates, filepath.Join(CoreDir(repoRoot), rel))
+	if gd, err := GlobalTemplatesCoreDir(); err == nil {
+		candidates = append(candidates, filepath.Join(gd, rel))
+	}
+	for _, p := range candidates {
+		if scriptFileExists(p) {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+// scriptPathFromResolverOrBundleTarballs resolves scripts under packages/{resolvers,bundles} when those
+// stores contain only dockpipe-{resolver,bundle}-*.tar.gz blobs (extracted to a content-addressed cache).
+func scriptPathFromResolverOrBundleTarballs(repoRoot, pkgDir, kindPrefix, rest string) (string, bool) {
+	var pattern string
+	if kindPrefix == "resolvers" {
+		pattern = filepath.Join(pkgDir, "dockpipe-resolver-*.tar.gz")
+	} else {
+		pattern = filepath.Join(pkgDir, "dockpipe-bundle-*.tar.gz")
+	}
+	matches, _ := filepath.Glob(pattern)
+	for _, tgz := range matches {
+		root, err := packagebuild.EnsureTarballExtractedCache(tgz, TarballExtractCacheRoot(repoRoot))
+		if err != nil {
+			continue
+		}
+		p := filepath.Join(root, kindPrefix, rest)
+		if scriptFileExists(p) {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+func resolveScriptsPrefixedPath(repoRoot, rel string) string {
+	rest := strings.TrimPrefix(rel, "scripts/")
+	user := filepath.Join(repoRoot, "scripts", rest)
+	if scriptFileExists(user) {
+		return user
+	}
+	srcScripts := filepath.Join(repoRoot, "src", "scripts", rest)
+	if scriptFileExists(srcScripts) {
+		return srcScripts
+	}
+	if p, ok := resolveCoreNamespacedAsset(repoRoot, rest); ok {
+		return p
+	}
+	pkgRes := filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "resolvers")
+	pkgBun := filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "bundles")
+	if p, ok := tryBundledAssetsScripts(pkgRes, "", rest); ok {
+		return p
+	}
+	if p, ok := tryBundledAssetsScripts(pkgBun, "", rest); ok {
+		return p
+	}
+	if scriptFileExists(filepath.Join(pkgRes, rest)) {
+		return filepath.Join(pkgRes, rest)
+	}
+	if p, ok := scriptPathFromResolverOrBundleTarballs(repoRoot, pkgRes, "resolvers", rest); ok {
+		return p
+	}
+	if scriptFileExists(filepath.Join(pkgBun, rest)) {
+		return filepath.Join(pkgBun, rest)
+	}
+	if p, ok := scriptPathFromResolverOrBundleTarballs(repoRoot, pkgBun, "bundles", rest); ok {
+		return p
+	}
+	core := CoreDir(repoRoot)
+	if UsesBundledAssetLayout(repoRoot) {
+		if p, ok := tryBundledAssetsScripts(core, "resolvers", rest); ok {
+			return p
+		}
+		if p, ok := tryBundledAssetsScripts(core, "bundles", rest); ok {
+			return p
+		}
+		resolverPath := filepath.Join(core, "resolvers", rest)
+		if scriptFileExists(resolverPath) {
+			return resolverPath
+		}
+		bundlePath := filepath.Join(core, "bundles", rest)
+		if scriptFileExists(bundlePath) {
+			return bundlePath
+		}
+		return filepath.Join(core, "assets", "scripts", rest)
+	}
+	stagingRoot := filepath.Join(repoRoot, ".staging")
+	if p, ok := tryBundledAssetsScripts(stagingRoot, "resolvers", rest); ok {
+		return p
+	}
+	if p, ok := tryBundledAssetsScripts(stagingRoot, "bundles", rest); ok {
+		return p
+	}
+	if p, ok := tryBundledAssetsScripts(core, "resolvers", rest); ok {
+		return p
+	}
+	resolverPath := filepath.Join(core, "resolvers", rest)
+	if scriptFileExists(resolverPath) {
+		return resolverPath
+	}
+	stagingResolverPath := filepath.Join(StagingResolversDir(repoRoot), rest)
+	if scriptFileExists(stagingResolverPath) {
+		return stagingResolverPath
+	}
+	stagingBundlePath := filepath.Join(StagingBundlesDir(repoRoot), rest)
+	if scriptFileExists(stagingBundlePath) {
+		return stagingBundlePath
+	}
+	return filepath.Join(core, "assets", "scripts", rest)
+}
+
+// ResolveActionPath resolves act script like bin/dockpipe.
+func ResolveActionPath(action, repoRoot, cwd string) (string, error) {
+	if action == "" {
+		return "", nil
+	}
+	if filepath.IsAbs(action) {
+		return action, nil
+	}
+	candidates := []string{filepath.Join(repoRoot, action)}
+	if strings.HasPrefix(action, "scripts/") {
+		p := resolveScriptsPrefixedPath(repoRoot, action)
+		if scriptFileExists(p) {
+			return filepath.Abs(p)
+		}
+	} else {
+		candidates = append(candidates, filepath.Join(repoRoot, "scripts", action))
+		candidates = append(candidates, filepath.Join(repoRoot, "src", "scripts", action))
+	}
+	candidates = append(candidates, filepath.Join(cwd, action))
+	for _, c := range candidates {
+		if st, err := os.Stat(c); err == nil && !st.IsDir() {
+			return filepath.Abs(c)
+		}
+	}
+	return filepath.Abs(filepath.Join(cwd, action))
+}
+
+// ResolvePreScriptPath resolves --run path.
+func ResolvePreScriptPath(p, repoRoot string) string {
+	if filepath.IsAbs(p) {
+		return p
+	}
+	if strings.HasPrefix(p, "scripts/") {
+		return resolveScriptsPrefixedPath(repoRoot, p)
+	}
+	c := filepath.Join(repoRoot, p)
+	if _, err := os.Stat(c); err == nil {
+		return c
+	}
+	return p
+}
+
+// ResolveResolverFilePath returns the path to a specific resolver profile (KEY=value) by name.
+// Search order: compiled packages/resolvers first, then .staging/resolvers, then templates/core (or src/core).
+func ResolveResolverFilePath(repoRoot, resolverName string) (string, error) {
+	resolverName = strings.TrimSpace(resolverName)
+	if resolverName == "" {
+		return "", fmt.Errorf("resolver profile name is empty")
+	}
+	var candidates []string
+	if pr, err := PackagesResolversDir(repoRoot); err == nil {
+		candidates = append(candidates,
+			filepath.Join(pr, resolverName),
+			filepath.Join(pr, resolverName, "profile"),
+		)
+	}
+	if !UsesBundledAssetLayout(repoRoot) {
+		candidates = append(candidates,
+			filepath.Join(StagingResolversDir(repoRoot), resolverName),
+			filepath.Join(StagingResolversDir(repoRoot), resolverName, "profile"),
+		)
+	}
+	candidates = append(candidates,
+		filepath.Join(CoreDir(repoRoot), "resolvers", resolverName),
+		filepath.Join(CoreDir(repoRoot), "resolvers", resolverName, "profile"),
+	)
+	if gr, err := GlobalPackagesResolversDir(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(gr, resolverName),
+			filepath.Join(gr, resolverName, "profile"),
+		)
+	}
+	if tgz, err := FindLatestResolverTarball(repoRoot, resolverName); err == nil && tgz != "" {
+		if root, err := packagebuild.EnsureTarballExtractedCache(tgz, TarballExtractCacheRoot(repoRoot)); err == nil {
+			candidates = append(candidates,
+				filepath.Join(root, "resolvers", resolverName),
+				filepath.Join(root, "resolvers", resolverName, "profile"),
+			)
+		}
+	}
+	for _, p := range candidates {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("resolver profile not found for %q (tried %v); shared profiles live under .staging/resolvers/ (dockpipe repo) or templates/core/resolvers/ — use workflow YAML for custom flows — upgrade dockpipe or run `dockpipe doctor` if your install is stale", resolverName, candidates)
+}
+
+// IsBundledCommitWorktree reports whether action is the bundled commit-worktree.sh.
+func IsBundledCommitWorktree(actionPath, repoRoot string) bool {
+	a, err := filepath.Abs(actionPath)
+	if err != nil {
+		return false
+	}
+	for _, b := range []string{
+		filepath.Join(repoRoot, "scripts", "commit-worktree.sh"),
+		filepath.Join(repoRoot, "src", "scripts", "commit-worktree.sh"),
+		filepath.Join(CoreDir(repoRoot), "assets", "scripts", "commit-worktree.sh"),
+	} {
+		bp, err := filepath.Abs(b)
+		if err != nil {
+			continue
+		}
+		if a == bp {
+			return true
+		}
+	}
+	return false
+}

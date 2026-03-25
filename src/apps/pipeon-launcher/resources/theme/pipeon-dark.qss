@@ -1,0 +1,56 @@
+/* Dark UI — muted text bright enough on dark surfaces */
+
+QLabel#appSubtitle,
+QLabel#hintText,
+QLabel#contextPath,
+QLabel#contextMeta,
+QLabel#emptyBody {
+    color: #c8c8c8;
+}
+
+QLabel#emptyTitle {
+    color: #f2f2f2;
+}
+
+QLabel#statusBadge[status="running"] {
+    background-color: rgba(46, 160, 67, 0.28);
+    color: #8ef0b0;
+}
+
+QLabel#statusBadge[status="stopped"] {
+    background-color: #3a3a3a;
+    color: #d0d0d0;
+}
+
+QLabel#statusBadge[status="failed"] {
+    background-color: rgba(248, 81, 73, 0.22);
+    color: #ffb4ae;
+}
+
+QPushButton#secondaryButton {
+    color: #ececec;
+}
+
+QPushButton#secondaryButton:hover {
+    background-color: #4a4a4a;
+    color: #ffffff;
+}
+
+QPushButton#dangerButton {
+    color: #ffcdd2;
+    border: 1px solid rgba(248, 81, 73, 0.55);
+    background-color: rgba(248, 81, 73, 0.14);
+}
+
+QPushButton#dangerButton:hover {
+    background-color: rgba(248, 81, 73, 0.24);
+    color: #ffffff;
+}
+
+QLabel#disclaimerWatermark {
+    color: #8a8a8a;
+}
+
+QStatusBar {
+    border-top: 1px solid #3a3a3a;
+}

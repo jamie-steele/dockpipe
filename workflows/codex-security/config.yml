@@ -1,0 +1,20 @@
+# Run tests in isolation, then Codex-assisted security-oriented follow-up.
+# Runtime = docker; resolver = codex only on the review step. Customize cmds for your stack.
+name: codex-security
+description: Isolated tests then Codex security review step (requires OPENAI_API_KEY for Codex).
+
+runtime: docker
+resolver: codex
+runtimes: [docker, cli]
+resolvers: [codex]
+
+steps:
+  - id: tests
+    runtime: docker
+    isolate: alpine
+    cmd: "sh -c 'echo \"[tests] Replace with go test, make test, or your linter suite\" >&2'"
+  - id: codex-security
+    runtime: docker
+    resolver: codex
+    isolate: codex
+    cmd: "sh -c 'echo \"[codex-security] Replace with your Codex security review command\" >&2'"

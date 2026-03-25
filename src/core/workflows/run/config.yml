@@ -1,0 +1,15 @@
+# Simple git path: run a command in isolation, then one commit on the current branch (no worktrees / new branches).
+# For isolated branches, worktrees, and AI resolver flows, use strategy worktree in your own workflow YAML (see docs/workflow-yaml.md).
+# Commit is provided by named strategy commit (templates/core/strategies/commit).
+name: run
+description: Disposable container run, then commit changes on your current branch.
+
+strategy: commit
+strategies:
+  - commit
+
+isolate: base-dev
+
+vars:
+  # Override with --var DOCKPIPE_COMMIT_MESSAGE="..." or env.
+  DOCKPIPE_COMMIT_MESSAGE: "dockpipe(run): automated commit"

@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "compile": {
+    "workflows": [
+      "workflows",
+      ".staging/workflows"
+    ],
+    "resolvers": [
+      "src/core/resolvers",
+      ".staging/resolvers"
+    ],
+    "bundles": [
+      ".staging/bundles"
+    ]
+  },
+  "packages": {
+    "namespace": "dockpipeproject"
+  },
+  "secrets": {
+    "op_inject_template": ".env.op.template",
+    "notes": "1Password op inject mapping (op:// references). Use with op inject / secretstore workflows; see src/core/workflows/secretstore/ and .staging/workflows/secretstore-r2-publish-test/."
+  }
+}

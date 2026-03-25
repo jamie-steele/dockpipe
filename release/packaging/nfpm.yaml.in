@@ -1,0 +1,20 @@
+# Template for release/packaging/build-nfpm.sh — substitutes __VERSION__, __GOARCH__, __BINARY__.
+# Packagers: nfpm (apk, rpm, archlinux). See release/packaging/README.md.
+name: dockpipe
+version: "__VERSION__"
+arch: __GOARCH__
+release: "1"
+platform: linux
+maintainer: "dockpipe maintainers"
+description: Run any CLI command in a disposable container—project at /work, removed when it exits.
+vendor: dockpipe
+homepage: https://github.com/jamie-steele/dockpipe
+license: MIT
+depends:
+  - bash
+  - git
+contents:
+  - src: "__BINARY__"
+    dst: /usr/bin/dockpipe
+    file_info:
+      mode: 0755

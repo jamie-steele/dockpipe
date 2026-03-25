@@ -1,0 +1,27 @@
+{
+  "name": "pipeon",
+  "displayName": "Pipeon",
+  "description": "Pipeon gateway: workspace context from .dockpipe (Ollama / worker integration to follow).",
+  "version": "0.0.1",
+  "publisher": "pipeon",
+  "icon": "images/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished"],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "pipeon.openContextBundle",
+        "title": "Pipeon: Open context bundle (.dockpipe/pipeon-context.md)"
+      },
+      {
+        "command": "pipeon.showReadme",
+        "title": "Pipeon: Open fork & extension docs"
+      }
+    ]
+  },
+  "license": "MIT"
+}

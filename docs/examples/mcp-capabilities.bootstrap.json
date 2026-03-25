@@ -1,0 +1,7 @@
+{
+  "schema": "dockpipe.mcp.bootstrap.v1",
+  "description": "Optional pointer for agents; capabilities are discovered at runtime via mcpd tools/list.",
+  "architecture_doc": "docs/mcp-architecture.md",
+  "server_binary": "src/bin/mcpd",
+  "notes": "Do not treat this file as a second registry. Prefer tools/list from the running MCP server."
+}

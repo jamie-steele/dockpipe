@@ -1,0 +1,66 @@
+package infrastructure
+
+import (
+	"path/filepath"
+	"testing"
+)
+
+// TestEmbeddedWorkflowConfigExists checks bundled user templates (src/core/workflows/*/config.yml) and
+// resolver delegates (src/core/resolvers/*/config.yml and .staging/resolvers). It does not assert maintainer-only
+// Extra embedded workflow names under workflows/ — those churn independently of the core embed contract.
+func TestEmbeddedWorkflowConfigExists(t *testing.T) {
+	if !EmbeddedWorkflowConfigExists("run") {
+		t.Fatal("expected run")
+	}
+	if !EmbeddedWorkflowConfigExists("run-apply") {
+		t.Fatal("expected run-apply")
+	}
+	if !EmbeddedWorkflowConfigExists("run-apply-validate") {
+		t.Fatal("expected run-apply-validate")
+	}
+	if !EmbeddedWorkflowConfigExists("init") {
+		t.Fatal("expected init")
+	}
+	for _, name := range []string{"vscode", "cursor-dev", "claude", "codex", "code-server"} {
+		if !EmbeddedWorkflowConfigExists(name) {
+			t.Fatalf("expected resolver delegate %s", name)
+		}
+	}
+	if !EmbeddedWorkflowConfigExists("secretstore") {
+		t.Fatal("expected secretstore workflow template")
+	}
+	if EmbeddedWorkflowConfigExists("") {
+		t.Fatal("empty name should be false")
+	}
+	if EmbeddedWorkflowConfigExists("../x") {
+		t.Fatal("path traversal should be false")
+	}
+	if EmbeddedWorkflowConfigExists("nope-not-a-real-template-xyz") {
+		t.Fatal("unknown template should be false")
+	}
+}
+
+func TestMapEmbeddedToMaterializedPath(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		in, want string
+	}{
+		{"VERSION", "version"},
+		{"assets/entrypoint.sh", "assets/entrypoint.sh"},
+		{EmbeddedTemplatesPrefix, filepath.Join(ShipyardDir, "core")},
+		{EmbeddedTemplatesPrefix + "/runtimes/docker/profile", filepath.Join(ShipyardDir, "core/runtimes/docker/profile")},
+		{EmbeddedTemplatesPrefix + "/workflows/run/config.yml", filepath.Join(ShipyardDir, "workflows", "run", "config.yml")},
+		{"workflows/r2-publish/config.yml", filepath.Join(ShipyardDir, "workflows", "r2-publish", "config.yml")},
+		{".staging/workflows/r2-publish/config.yml", filepath.Join(ShipyardDir, "workflows", "r2-publish", "config.yml")},
+		{".staging/resolvers/vscode/config.yml", filepath.Join(ShipyardDir, "core", "resolvers", "vscode", "config.yml")},
+		{"workflows", filepath.Join(ShipyardDir, "workflows")},
+		// Already-materialized paths pass through unchanged (bundle cache layout uses ShipyardDir).
+		{filepath.Join(ShipyardDir, "workflows", "init", "config.yml"), filepath.Join(ShipyardDir, "workflows", "init", "config.yml")},
+	}
+	for _, tc := range cases {
+		got := mapEmbeddedToMaterializedPath(tc.in)
+		if got != tc.want {
+			t.Fatalf("mapEmbeddedToMaterializedPath(%q): got %q want %q", tc.in, got, tc.want)
+		}
+	}
+}
