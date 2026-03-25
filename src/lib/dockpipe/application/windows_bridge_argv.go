@@ -32,7 +32,7 @@ func translateDockpipeArgs(distro string, argv []string) []string {
 		a := out[i]
 		switch a {
 		case "--data-dir", "--run", "--pre-script", "--act", "--action", "--workdir", "--work-path", "--bundle-out", "--env-file",
-			"--isolate", "--template", "--image":
+			"--isolate", "--template", "--image", "--base-url", "--url", "--repo-root", "--out":
 			if i+1 < len(out) {
 				out[i+1] = maybeTranslateWinPath(distro, out[i+1])
 			}
@@ -63,6 +63,10 @@ func translateDockpipeArgs(distro string, argv []string) []string {
 	switch out[0] {
 	case "init":
 		translateInitSubcommandArgs(distro, out)
+	case "release":
+		if len(out) >= 2 && out[1] == "upload" {
+			translateReleaseUploadLocalPath(distro, out)
+		}
 	case "action", "pre":
 		if len(out) >= 2 && (out[1] == "init" || out[1] == "create") {
 			translateInitLikePositionals(distro, out, 2)
@@ -73,6 +77,32 @@ func translateDockpipeArgs(distro string, argv []string) []string {
 		}
 	}
 	return out
+}
+
+// translateReleaseUploadLocalPath maps the local file argument for release upload (first non-flag after "upload").
+func translateReleaseUploadLocalPath(distro string, out []string) {
+	i := 2
+	for i < len(out) {
+		a := out[i]
+		switch a {
+		case "--bucket", "--key", "--endpoint-url", "--region", "--content-type":
+			if i+1 < len(out) {
+				i += 2
+			} else {
+				i++
+			}
+			continue
+		case "--dry-run":
+			i++
+			continue
+		}
+		if strings.HasPrefix(a, "-") {
+			i++
+			continue
+		}
+		out[i] = maybeTranslateWinPath(distro, out[i])
+		return
+	}
 }
 
 // translateInitSubcommandArgs maps Windows paths in dockpipe init --from <path> only.

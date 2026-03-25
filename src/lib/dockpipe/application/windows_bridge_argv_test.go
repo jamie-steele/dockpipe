@@ -300,6 +300,26 @@ func TestTranslateBridgeArgv_actionCreate(t *testing.T) {
 	}
 }
 
+func TestTranslateDockpipeArgs_packageBuildRepoOut(t *testing.T) {
+	in := []string{"package", "build", "core", "--repo-root", `C:\rp`, "--out", `C:\out`}
+	out := translateDockpipeArgs("Ubuntu", in)
+	want := []string{"package", "build", "core", "--repo-root", "/mnt/c/rp", "--out", "/mnt/c/out"}
+	if !reflect.DeepEqual(out, want) {
+		t.Fatalf("got %#v", out)
+	}
+}
+
+func TestTranslateDockpipeArgs_releaseUpload(t *testing.T) {
+	in := []string{"release", "upload", "--bucket", "b", "--key", "k", `C:\dist\file.tar.gz`}
+	out := translateDockpipeArgs("Ubuntu", in)
+	if len(out) != 7 {
+		t.Fatalf("len %d", len(out))
+	}
+	if out[6] != "/mnt/c/dist/file.tar.gz" {
+		t.Fatalf("local path: got %q", out[6])
+	}
+}
+
 // TestIsProbablyWindowsFilesystemPath heuristically detects paths that should go through Windows→WSL translation.
 func TestIsProbablyWindowsFilesystemPath(t *testing.T) {
 	cases := []struct {

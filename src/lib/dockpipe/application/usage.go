@@ -31,6 +31,9 @@ More flags:
 
 Commands:
   init                    Add DockPipe to the current project
+  install                 Fetch templates/core from HTTPS (e.g. Cloudflare R2); see install core --help
+  package list|manifest|build   Packages: list installed, example manifest, or author core tarball for a registry
+  release upload          Upload a file to S3-compatible storage (self-hosted; uses aws CLI)
   workflow validate       Check workflow YAML (default: dockpipe.yml)
   doctor                  Check docker, bash, and bundled assets
   runs list [--workdir]   List active host-run records under .dockpipe/runs/

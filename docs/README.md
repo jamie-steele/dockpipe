@@ -4,6 +4,8 @@
 
 **Canonical terms:** [architecture-model.md](architecture-model.md) — workflow, runtime, resolver, strategy, assets.
 
+**Store packages vs authoring tree:** [package-model.md](package-model.md) — `.dockpipe/internal/packages/`, `package.yml`, R2/S3 direction.
+
 **Bounded contexts (DockPipe vs DorkPipe vs Pipeon):** [core-tools.md](core-tools.md) · Pipeon-only docs: [pipeon.md](pipeon.md) → [`src/pipeon/`](../src/pipeon/README.md) · **MCP bridge (AI/client interface):** [mcp-architecture.md](mcp-architecture.md) · **trust:** [mcp-agent-trust.md](mcp-agent-trust.md) · **host hardening:** [mcp-host-hardening.md](mcp-host-hardening.md) → [`src/lib/mcpbridge/`](../src/lib/mcpbridge/README.md)
 
 | First | Reference |

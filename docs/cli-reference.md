@@ -6,7 +6,7 @@
 
 **Workflow YAML (`config.yml`):** single-command layout (`run` / `isolate` / `act`) or multi-step **`steps:`** (ordering, **`outputs:`**, **`is_blocking`**, optional **`group.mode: async`**). Full reference: **[workflow-yaml.md](workflow-yaml.md)**.
 
-**Subcommands:** `dockpipe init`, `dockpipe workflow validate [path]`, `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe runs list [--workdir]` (list **`.dockpipe/runs/*.json`** for host **skip_container** steps), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
+**Subcommands:** `dockpipe init`, `dockpipe install` (fetch **`templates/core`** from HTTPS — e.g. **Cloudflare R2** behind a public URL), `dockpipe package` (list **`package.yml`**, example manifest, or **`package build core`** to author a release tarball), `dockpipe release upload` (S3-compatible upload via **`aws` CLI** — self-hosted registries), `dockpipe workflow validate [path]`, `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe runs list [--workdir]` (list **`.dockpipe/runs/*.json`** for host **skip_container** steps), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
 
 ## `dockpipe init`
 
@@ -23,6 +23,43 @@ Local project setup only: **no `git clone`**, no treating **`init`** as a remote
 On a source checkout, **`--workflow`** resolves **`shipyard/workflows/<name>/config.yml`** before **`src/templates/<name>/config.yml`** (this repo) or **`templates/<name>/config.yml`** (typical project). The dockpipe project keeps its **own** CI and demo workflows under **`shipyard/workflows/`** in the tree (see **[AGENTS.md](../AGENTS.md)**); there is **no** `init` flag for that — copy directories by hand or point **`--from`** at such a path when running **`dockpipe init`** with a workflow name.
 
 **`dockpipe init`** also creates **`dockpipe/README.md`** and an empty **`shipyard/workflows/`** tree when missing.
+
+## `dockpipe install`
+
+Fetches a published **`templates/core`** tree over **HTTPS** and replaces **`<workdir>/templates/core`**. Intended for packages hosted on **Cloudflare R2** (or any static HTTPS origin); credentials are **not** required for public URLs.
+
+| Command | Purpose |
+|---------|---------|
+| `dockpipe install core --dry-run --base-url <https://…>` | Show resolved URLs only. |
+| `dockpipe install core --base-url <https://…>` | **`latest`**: GET **`<base>/install-manifest.json`**, follow **`packages.core`**, verify **`sha256`**, extract. |
+| `dockpipe install core --base-url <https://…> --version 0.6.0` | GET **`<base>/templates-core-0.6.0.tar.gz`** (+ optional **`.sha256`**). |
+| `dockpipe install core --url <https://…/file.tar.gz>` | Direct tarball URL; optional **`--sha256`** or sibling **`.sha256`**. |
+
+**Environment:** **`DOCKPIPE_INSTALL_BASE_URL`**, optional **`DOCKPIPE_INSTALL_VERSION`**, **`DOCKPIPE_INSTALL_MANIFEST`** (default **`install-manifest.json`**), **`DOCKPIPE_INSTALL_ALLOW_INSECURE_HTTP=1`** for **`http://`** (local tests only).
+
+**Publish (dogfood):** **`make package-templates-core`** or **`dockpipe package build core`** → **`dist/templates-core-<VERSION>.tar.gz`**, **`.sha256`**, **`dist/install-manifest.json`** (same layout as **`scripts/dockpipe/package-templates-core.sh`**). Upload those files to the same **`--base-url`** path, then run **`dockpipe --workflow r2-publish`** ( **`shipyard/workflows/r2-publish`**) or **`dockpipe release upload <file>`** / **`aws s3 cp`** to R2. Official releases may use a different pipeline; **`package build`** / **`release upload`** are for self-hosted mirrors and in-repo dogfooding.
+
+**Archive format:** `tar czf -C src/templates core` — entries must be **`core/…`** (see **`scripts/dockpipe/package-templates-core.sh`**). After extract, the CLI **re-reads the tarball** and checks **every file on disk** matches the archive, then prints the **tarball sha256** (and compares to manifest/`.sha256` when present).
+
+## `dockpipe package`
+
+Inspect **installed** package metadata. Store-backed installs are intended to land under **`.dockpipe/internal/packages/`** (workflows, core slices, assets); see **[package-model.md](package-model.md)**.
+
+| Command | Purpose |
+|---------|---------|
+| `dockpipe package list [--workdir <path>]` | Walk **`.dockpipe/internal/packages/`** for **`package.yml`** files; print **path**, **name**, **version**, **description** (tab-separated). |
+| `dockpipe package manifest` | Print an example **`package.yml`** (schema: **name**, **version**, **title**, **description**, **author**, **website**, **license**, optional **kind**). |
+| `dockpipe package build core [--repo-root <path>] [--out <dir>] [--version <ver>]` | Write **`templates/core`** tarball (**`core/…`** prefix), **`.sha256`**, **`install-manifest.json`** for **`dockpipe install core`**. Repo root defaults to **`DOCKPIPE_REPO_ROOT`**, git top-level, or **cwd**; version defaults to **`VERSION`** at repo root. |
+
+**Environment:** **`DOCKPIPE_PACKAGES_ROOT`** — override packages root (default **`<workdir>/.dockpipe/internal/packages`**).
+
+## `dockpipe release`
+
+Upload a single file to an **S3-compatible** bucket (e.g. **Cloudflare R2**) using the **`aws`** CLI. Requires **`AWS_ACCESS_KEY_ID`** and **`AWS_SECRET_ACCESS_KEY`** (or compatible credentials). Not required for **official** DockPipe distribution; use for **self-hosted** package mirrors.
+
+| Command | Purpose |
+|---------|---------|
+| `dockpipe release upload <local-file> [--bucket <name>] [--key <object-key>] [--endpoint-url <url>] [--region <name>] [--content-type <ct>] [--dry-run]` | **`aws s3 cp`** to **`s3://bucket/key`**. **Bucket:** **`--bucket`** or **`DOCKPIPE_RELEASE_BUCKET`** or **`R2_BUCKET`**. **Endpoint:** **`--endpoint-url`** or **`R2_ENDPOINT_URL`** / **`AWS_ENDPOINT_URL_S3`**, or derive **`https://<id>.r2.cloudflarestorage.com`** from **`CLOUDFLARE_ACCOUNT_ID`** / **`R2_ACCOUNT_ID`**. **Key** defaults to the file’s basename. |
 
 ## Workflow variables (`--workflow`)
 

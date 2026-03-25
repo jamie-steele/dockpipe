@@ -13,6 +13,8 @@ Host workflow: **tar.gz** a local folder (default **`./dist`**, already in `.git
 
 R2 is the **destination**, not a DockPipe runtime. **`cloudflare`** is not a runtime; the runtime here is **`cli`** on the host (`skip_container: true`).
 
+**Consumers:** After you publish **`dist/`** (or a custom prefix), point a **public HTTPS hostname** (Cloudflare **Custom Domain** on the bucket or a Worker) at the same objects. Downstream projects can run **`dockpipe install core --base-url https://your-cdn.example/dockpipe`** (or **`DOCKPIPE_INSTALL_BASE_URL`**) to replace **`templates/core/`** without cloning the full dockpipe repo. Build artifacts with **`make package-templates-core`** at the repo root.
+
 ## Prerequisites
 
 - **`dist/`** (or `R2_PUBLISH_SOURCE`) with something to pack

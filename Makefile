@@ -1,7 +1,7 @@
 # Repository Makefile — Go build rules live in src/Makefile (run `make` from repo root).
 include src/Makefile
 
-.PHONY: build-code-server-image pipeon-icons pipeon-launcher install-pipeon-shortcut install-pipeon-launcher-shortcut install-pipeon-all-shortcuts install-pipeon-shortcut-windows install-pipeon-shortcut-macos install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci self-analysis self-analysis-host self-analysis-stack compliance-handoff r2-publish user-insight-process pipeon-status pipeon-bundle pipeon-chat
+.PHONY: build-code-server-image pipeon-icons pipeon-launcher install-pipeon-shortcut install-pipeon-launcher-shortcut install-pipeon-all-shortcuts install-pipeon-shortcut-windows install-pipeon-shortcut-macos install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci self-analysis self-analysis-host self-analysis-stack compliance-handoff r2-publish package-templates-core user-insight-process pipeon-status pipeon-bundle pipeon-chat
 
 # Install pre-built binary to a local PATH directory (~/.local/bin, %USERPROFILE%\\bin, …). Does not run go build.
 install:
@@ -61,6 +61,10 @@ test-quick:
 # Same sequence as Linux job in .github/workflows/ci.yml (not CodeQL, not Windows).
 ci:
 	bash src/scripts/ci-local.sh
+
+# Tar.gz + sha256 + install-manifest.json for `dockpipe install core` (upload dist/* to your HTTPS base URL).
+package-templates-core:
+	bash scripts/dockpipe/package-templates-core.sh
 
 # Docs/code guardrail: obsolete templates/core paths (pre-assets layout). See CONTRIBUTING.md.
 check-paths:

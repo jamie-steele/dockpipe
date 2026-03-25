@@ -14,6 +14,8 @@ DockPipe provides one primitive:
 
 Everything else is built around this.
 
+**Package model (store vs tree):** Installed store artifacts are headed for **`.dockpipe/internal/packages/`** (workflows, **core** slices, assets); authoring stays under **`templates/`** / **`shipyard/`**. See **`docs/package-model.md`**.
+
 **`dockpipe init`** is project-local scaffolding only: without a workflow name it creates or updates **`templates/`** (including merged **`templates/core/`** with **`runtimes/`**, **`resolvers/`**, **`strategies/`**, **`assets/`** — scripts, images, compose), **`scripts/`**, **`images/`**, in the **current directory**. **`dockpipe init <name>`** adds **`templates/<name>/config.yml`** as a **minimal empty workflow**; use **`--from <template>`** (e.g. **`init`**, **`run`**, **`run-apply`**) to copy a full bundled workflow tree. It does **not** clone Git repositories or bootstrap a remote project. See **`docs/cli-reference.md`** and **`docs/templates-core-assets.md`**.
 
 ---
