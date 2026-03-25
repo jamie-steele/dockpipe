@@ -104,40 +104,40 @@ jobs:
         run: |
           set -euo pipefail
           VERSION="${{ needs.meta.outputs.version }}"
-          mkdir -p dist
+          mkdir -p release/artifacts
           LDFLAGS="-s -w -X main.Version=${VERSION}"
 
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe" ./src/cmd/dockpipe
-          tar -C dist -czf "dist/dockpipe_${VERSION}_linux_amd64.tar.gz" dockpipe
-          rm -f dist/dockpipe
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd/dockpipe
+          tar -C release/artifacts -czf "release/artifacts/dockpipe_${VERSION}_linux_amd64.tar.gz" dockpipe
+          rm -f release/artifacts/dockpipe
 
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe" ./src/cmd/dockpipe
-          tar -C dist -czf "dist/dockpipe_${VERSION}_linux_arm64.tar.gz" dockpipe
-          rm -f dist/dockpipe
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd/dockpipe
+          tar -C release/artifacts -czf "release/artifacts/dockpipe_${VERSION}_linux_arm64.tar.gz" dockpipe
+          rm -f release/artifacts/dockpipe
 
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe" ./src/cmd/dockpipe
-          tar -C dist -czf "dist/dockpipe_${VERSION}_darwin_amd64.tar.gz" dockpipe
-          rm -f dist/dockpipe
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd/dockpipe
+          tar -C release/artifacts -czf "release/artifacts/dockpipe_${VERSION}_darwin_amd64.tar.gz" dockpipe
+          rm -f release/artifacts/dockpipe
 
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe" ./src/cmd/dockpipe
-          tar -C dist -czf "dist/dockpipe_${VERSION}_darwin_arm64.tar.gz" dockpipe
-          rm -f dist/dockpipe
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd/dockpipe
+          tar -C release/artifacts -czf "release/artifacts/dockpipe_${VERSION}_darwin_arm64.tar.gz" dockpipe
+          rm -f release/artifacts/dockpipe
 
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "dist/dockpipe.exe" ./src/cmd/dockpipe
-          (cd dist && zip -q "dockpipe_${VERSION}_windows_amd64.zip" dockpipe.exe)
-          rm -f dist/dockpipe.exe
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe.exe" ./src/cmd/dockpipe
+          (cd release/artifacts && zip -q "dockpipe_${VERSION}_windows_amd64.zip" dockpipe.exe)
+          rm -f release/artifacts/dockpipe.exe
 
           ./release/packaging/build-deb.sh "${VERSION}" amd64
           ./release/packaging/build-deb.sh "${VERSION}" arm64
-          cp "release/packaging/build/dockpipe_${VERSION}_amd64.deb" dist/
-          cp "release/packaging/build/dockpipe_${VERSION}_arm64.deb" dist/
+          cp "release/packaging/build/dockpipe_${VERSION}_amd64.deb" release/artifacts/
+          cp "release/packaging/build/dockpipe_${VERSION}_arm64.deb" release/artifacts/
 
-          ./release/packaging/build-nfpm.sh "${VERSION}" dist
+          ./release/packaging/build-nfpm.sh "${VERSION}" release/artifacts
 
       - uses: actions/upload-artifact@v7
         with:
           name: release-dist-linux
-          path: dist/*
+          path: release/artifacts/*
 
   build-msi:
     needs: [meta]
@@ -197,13 +197,13 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: release-dist-linux
-          path: dist
+          path: release/artifacts
 
       - uses: actions/download-artifact@v8
         if: needs.meta.outputs.build_msi == 'true'
         with:
           name: release-msi
-          path: dist
+          path: release/artifacts
 
       - name: Prepare release notes body
         shell: bash
@@ -215,17 +215,17 @@ jobs:
             echo "Missing required release notes file: ${NOTES_FILE}" >&2
             exit 1
           fi
-          cp "${NOTES_FILE}" dist/RELEASE_NOTES.md
+          cp "${NOTES_FILE}" release/artifacts/RELEASE_NOTES.md
 
       - name: Build checksums
         shell: bash
         run: |
           set -euo pipefail
-          cd dist
+          cd release/artifacts
           shopt -s nullglob
           files=( *.tar.gz *.zip *.deb *.msi )
           if [[ ${#files[@]} -eq 0 ]]; then
-            echo "No release files in dist/" >&2
+            echo "No release files in release/artifacts/" >&2
             exit 1
           fi
           sha256sum "${files[@]}" > SHA256SUMS.txt
@@ -235,7 +235,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: dockpipe-release-dry-run-${{ needs.meta.outputs.version }}
-          path: dist/*
+          path: release/artifacts/*
 
       - name: Create GitHub release
         if: needs.meta.outputs.dry_run != 'true'
@@ -243,18 +243,18 @@ jobs:
         with:
           tag_name: ${{ needs.meta.outputs.tag }}
           name: ${{ needs.meta.outputs.tag }}
-          body_path: dist/RELEASE_NOTES.md
-          # MSI is optional (build-msi may be skipped); do not fail when dist has no .msi
+          body_path: release/artifacts/RELEASE_NOTES.md
+          # MSI is optional (build-msi may be skipped); do not fail when artifacts dir has no .msi
           fail_on_unmatched_files: false
           files: |
-            dist/*.tar.gz
-            dist/*.zip
-            dist/*.deb
-            dist/*.msi
-            dist/*.apk
-            dist/*.rpm
-            dist/*.pkg.tar.zst
-            dist/SHA256SUMS.txt
+            release/artifacts/*.tar.gz
+            release/artifacts/*.zip
+            release/artifacts/*.deb
+            release/artifacts/*.msi
+            release/artifacts/*.apk
+            release/artifacts/*.rpm
+            release/artifacts/*.pkg.tar.zst
+            release/artifacts/SHA256SUMS.txt
 
   # Optional: dev.to — PUT main article (DEVTO_ARTICLE_ID) + optional one-time POST per release (DEVTO_ONE_TIME_POST).
   # See release/docs/devto.md

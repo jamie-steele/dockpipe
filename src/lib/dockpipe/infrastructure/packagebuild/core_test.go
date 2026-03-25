@@ -20,7 +20,7 @@ func TestWriteCoreRelease(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(coreParent, "core", "nested", "a.txt"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	out := filepath.Join(dir, "dist")
+	out := filepath.Join(dir, "release", "artifacts")
 	path, err := WriteCoreRelease(coreParent, out, "9.9.9-test")
 	if err != nil {
 		t.Fatal(err)

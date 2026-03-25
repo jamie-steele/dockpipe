@@ -62,7 +62,7 @@ test-quick:
 ci:
 	bash src/scripts/ci-local.sh
 
-# Tar.gz + sha256 + install-manifest.json for `dockpipe install core` (upload dist/* to your HTTPS base URL).
+# Tar.gz + sha256 + install-manifest.json for `dockpipe install core` (upload release/artifacts/* to your HTTPS base URL).
 package-templates-core:
 	bash scripts/dockpipe/package-templates-core.sh
 
@@ -112,7 +112,7 @@ self-analysis-stack: build
 compliance-handoff: build
 	./src/bin/dockpipe --workflow compliance-handoff --workdir . --
 
-# Dogfood: tar ./dist and upload to Cloudflare R2 (S3 API). Set R2_BUCKET, CLOUDFLARE_ACCOUNT_ID, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY.
+# Dogfood: tar ./release/artifacts and upload to Cloudflare R2 (S3 API). Set R2_BUCKET, CLOUDFLARE_ACCOUNT_ID, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY.
 r2-publish: build
 	./src/bin/dockpipe --workflow r2-publish --workdir . --
 

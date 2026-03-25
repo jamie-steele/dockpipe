@@ -59,7 +59,7 @@ func cmdPackageBuildCore(args []string) error {
 		return err
 	}
 	if outDir == "" {
-		outDir = filepath.Join(root, "dist")
+		outDir = filepath.Join(root, infrastructure.DefaultRepoArtifactsDir)
 	} else {
 		outDir = filepath.Clean(outDir)
 		if !filepath.IsAbs(outDir) {
@@ -136,12 +136,12 @@ Usage:
 
 const packageBuildCoreUsageText = `dockpipe package build core
 
-Writes dist/templates-core-<version>.tar.gz, matching .sha256, and install-manifest.json
+Writes templates-core-<version>.tar.gz under release/artifacts (or --out), matching .sha256, and install-manifest.json
 with schema 1 and packages.core (version, tarball name, sha256).
 
 Options:
   --repo-root <path>   Repository root (default: DOCKPIPE_REPO_ROOT, else git top-level, else cwd)
-  --out <dir>          Output directory (default: <repo-root>/dist)
+  --out <dir>          Output directory (default: <repo-root>/release/artifacts)
   --version <ver>      Version string (default: trim contents of VERSION at repo root)
 
 `

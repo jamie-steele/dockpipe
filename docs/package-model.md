@@ -30,6 +30,16 @@ Suggested subdirectories (mirror authoring concepts; not all are required):
 - **`templates/`**, **`src/templates/`**, **`shipyard/workflows/`** — YAML and assets you **build or clone**, commit, and run with **`--workflow`** as today.
 - No **`package.yml`** required; this is normal development.
 
+## 3. Project-local state (`.dockpipe/`) and isolation
+
+**`.dockpipe/`** is the **project-local** tree for generated state: host run records (**`.dockpipe/runs/`**), step outputs (**`.dockpipe/outputs.env`**), handoffs, optional demo stubs, and **installed package material** under **`.dockpipe/internal/`**. That keeps **transient and tool-owned** files out of **`templates/`** and the repo root.
+
+**`.dockpipe/internal/packages/`** is the default store for **fetched or compiled** package trees (workflows, core slices, assets) — the same conceptual layout whether content arrived as a **`.tar.gz`** or is produced by a future **`dockpipe package compile`**-style step. **Uncompressed** authoring under **`templates/`** remains normal; a compile step would **validate** workflow YAML, run linters, and **materialize** into **`.dockpipe/internal/...`** so resolution order can stay predictable (**project `templates/`** → **installed packages** → **bundle**).
+
+**Publish outputs** (templates-core tarball, checksums, GitHub release binaries in CI) live under **`release/artifacts/`** (gitignored), not the project **`templates/`** tree — see **`release/README.md`**.
+
+**Direction:** stronger **validation** (schema, lint) at compile/publish time; **single** on-disk layout for “what the runner sees” under **`.dockpipe/internal/`** when you opt into packaged workflows.
+
 ## Resolution order (directional)
 
 When fully wired, workflow and profile resolution will **prefer** project **`templates/`**, then **installed** **`.dockpipe/internal/packages/`**, then **embedded** / materialized bundle — same four concepts (**templates**, **runtimes**, **resolvers**, **strategies**), extended by **packages** from the store.

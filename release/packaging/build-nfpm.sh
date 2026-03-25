@@ -2,7 +2,7 @@
 # Build Alpine (.apk), Fedora/RHEL (.rpm), and Arch Linux (.pkg.tar.zst) packages via nfpm.
 # Run from repo root:
 #   ./release/packaging/build-nfpm.sh [version] [dest-dir]
-# dest-dir defaults to "dist" (same as CI release artifacts).
+# dest-dir defaults to "release/artifacts" (same as CI release artifacts).
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -11,7 +11,7 @@ cd "$REPO_ROOT"
 _default_ver="$(tr -d ' \t\r\n' < "${REPO_ROOT}/VERSION" 2>/dev/null || true)"
 [[ -z "${_default_ver}" ]] && _default_ver="0.0.0"
 VERSION="${1:-${_default_ver}}"
-DEST="${2:-dist}"
+DEST="${2:-release/artifacts}"
 if [[ "${DEST}" == /* ]]; then
   OUT_DIR="${DEST}"
 else

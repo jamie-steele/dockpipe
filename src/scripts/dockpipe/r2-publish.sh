@@ -13,8 +13,8 @@ cd "$ROOT"
 
 die() { echo "r2-publish: $*" >&2; exit 1; }
 
-SRC_REL="${R2_PUBLISH_SOURCE:-dist}"
-[[ -d "$SRC_REL" ]] || die "source directory missing: $SRC_REL (set R2_PUBLISH_SOURCE or create ./dist)"
+SRC_REL="${R2_PUBLISH_SOURCE:-release/artifacts}"
+[[ -d "$SRC_REL" ]] || die "source directory missing: $SRC_REL (set R2_PUBLISH_SOURCE or mkdir -p release/artifacts)"
 
 BUCKET="${R2_BUCKET:-}"
 [[ -n "$BUCKET" ]] || die "set R2_BUCKET (R2 bucket name)"

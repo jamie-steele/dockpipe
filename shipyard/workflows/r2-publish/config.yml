@@ -9,7 +9,7 @@
 #   R2_STATE_* for Terraform remote state on R2, R2_TF_BACKEND=local to skip remote state.
 name: r2-publish
 description: >-
-  Host-only: compress R2_PUBLISH_SOURCE (default ./dist) and upload to R2.
+  Host-only: compress R2_PUBLISH_SOURCE (default ./release/artifacts) and upload to R2.
   Use R2 S3 keys + aws s3, or a single CLOUDFLARE_API_TOKEN (Terraform creates bucket, Wrangler uploads).
   See README.
 
@@ -20,7 +20,7 @@ runtimes: [cli]
 resolvers: [codex]
 
 vars:
-  R2_PUBLISH_SOURCE: "dist"
+  R2_PUBLISH_SOURCE: "release/artifacts"
 
 steps:
   - id: upload

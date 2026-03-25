@@ -10,7 +10,7 @@
 # Try from repo root:
 #   cp src/templates/secretstore/.env.op.template.example .env.op.template
 #   # edit with real op:// references for R2_* / CLOUDFLARE_* etc.
-#   mkdir -p dist && touch dist/.keep
+#   mkdir -p release/artifacts && touch release/artifacts/.keep
 #   ./src/bin/dockpipe --workflow-file shipyard/workflows/secretstore-r2-publish-test/config.yml --workdir . \
 #     --var R2_TF_BACKEND=local --   # optional: skip remote TF state while testing
 #

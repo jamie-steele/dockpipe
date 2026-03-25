@@ -28,7 +28,10 @@ src/bin/dockpipe.exe
 msi-dist/
 *.wixobj
 *.wixpdb
+# Legacy local output (prefer release/artifacts)
 dist/
+# Local publish + CI-style release binaries (templates-core tarball, nfpm, tar.gz, etc.)
+release/artifacts/
 
 # Local demo recordings (asciinema + agg)
 release/demo/dockpipe-demo*.cast

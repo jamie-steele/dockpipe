@@ -1,6 +1,6 @@
 # r2-publish
 
-Host workflow: **tar.gz** a local folder (default **`./dist`**, already in `.gitignore`) and upload to **Cloudflare R2**.
+Host workflow: **tar.gz** a local folder (default **`./release/artifacts`**, gitignored) and upload to **Cloudflare R2**.
 
 ## Two ways to authenticate
 
@@ -13,11 +13,11 @@ Host workflow: **tar.gz** a local folder (default **`./dist`**, already in `.git
 
 R2 is the **destination**, not a DockPipe runtime. **`cloudflare`** is not a runtime; the runtime here is **`cli`** on the host (`skip_container: true`).
 
-**Consumers:** After you publish **`dist/`** (or a custom prefix), point a **public HTTPS hostname** (Cloudflare **Custom Domain** on the bucket or a Worker) at the same objects. Downstream projects can run **`dockpipe install core --base-url https://your-cdn.example/dockpipe`** (or **`DOCKPIPE_INSTALL_BASE_URL`**) to replace **`templates/core/`** without cloning the full dockpipe repo. Build artifacts with **`make package-templates-core`** at the repo root.
+**Consumers:** After you publish **`release/artifacts/`** (or a custom prefix), point a **public HTTPS hostname** (Cloudflare **Custom Domain** on the bucket or a Worker) at the same objects. Downstream projects can run **`dockpipe install core --base-url https://your-cdn.example/dockpipe`** (or **`DOCKPIPE_INSTALL_BASE_URL`**) to replace **`templates/core/`** without cloning the full dockpipe repo. Build artifacts with **`make package-templates-core`** or **`dockpipe package build core`** at the repo root.
 
 ## Prerequisites
 
-- **`dist/`** (or `R2_PUBLISH_SOURCE`) with something to pack
+- **`release/artifacts/`** (or `R2_PUBLISH_SOURCE`) with something to pack
 - **`R2_BUCKET`** — bucket name (Terraform uses this name when creating the bucket)
 
 ### S3 mode
@@ -68,7 +68,7 @@ R2_PUBLISH_DRY_RUN=1 ./src/bin/dockpipe --workflow r2-publish --workdir . --
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `R2_PUBLISH_SOURCE` | `dist` | Directory to tar (relative to workdir). |
+| `R2_PUBLISH_SOURCE` | `release/artifacts` | Directory to tar (relative to workdir). |
 | `R2_PREFIX` | *(empty)* | Key prefix in the bucket, e.g. `releases/` |
 | `R2_ARCHIVE_NAME` | `dockpipe-publish-YYYYMMDD-HHMMSS.tar.gz` | Object name in the bucket. |
 | `R2_ENDPOINT_URL` | *(from account id, S3 mode)* | Override S3 endpoint URL. |
@@ -90,6 +90,6 @@ R2_PUBLISH_DRY_RUN=1 ./src/bin/dockpipe --workflow r2-publish --workdir . --
 
 ## Git
 
-- **`dist/`** is gitignored — put build artifacts there, then publish.
+- **`release/artifacts/`** is gitignored — put build artifacts there, then publish.
 - Do **not** commit API tokens; use env or a secret manager.
 - Local Terraform state under the module dir (`*.tfstate`, `.terraform/`) is gitignored when using **`R2_TF_BACKEND=local`**. With **remote** state, the live state lives in R2; **commit** `terraform/.terraform.lock.hcl` for reproducible provider versions.

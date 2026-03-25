@@ -28,7 +28,7 @@ From a dockpipe git checkout (repo root):
 ```bash
 cp src/templates/secretstore/.env.op.template.example .env.op.template
 # Edit .env.op.template with real op:// fields for your vault items.
-mkdir -p dist && echo test >dist/README.txt
+mkdir -p release/artifacts && echo test >release/artifacts/README.txt
 R2_PUBLISH_DRY_RUN=1 R2_TF_BACKEND=local \
   ./src/bin/dockpipe --workflow-file shipyard/workflows/secretstore-r2-publish-test/config.yml --workdir . --
 ```

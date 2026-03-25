@@ -310,12 +310,12 @@ func TestTranslateDockpipeArgs_packageBuildRepoOut(t *testing.T) {
 }
 
 func TestTranslateDockpipeArgs_releaseUpload(t *testing.T) {
-	in := []string{"release", "upload", "--bucket", "b", "--key", "k", `C:\dist\file.tar.gz`}
+	in := []string{"release", "upload", "--bucket", "b", "--key", "k", `C:\release\artifacts\file.tar.gz`}
 	out := translateDockpipeArgs("Ubuntu", in)
 	if len(out) != 7 {
 		t.Fatalf("len %d", len(out))
 	}
-	if out[6] != "/mnt/c/dist/file.tar.gz" {
+	if out[6] != "/mnt/c/release/artifacts/file.tar.gz" {
 		t.Fatalf("local path: got %q", out[6])
 	}
 }
