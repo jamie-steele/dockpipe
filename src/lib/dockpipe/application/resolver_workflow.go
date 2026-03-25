@@ -45,7 +45,13 @@ func runEmbeddedResolverWorkflowWithLoad(
 	if name == "" {
 		return fmt.Errorf("resolver workflow name is empty")
 	}
-	wfPath, err := infrastructure.ResolveEmbeddedResolverWorkflowConfigPath(repoRoot, name)
+	wd := ""
+	if opts != nil && strings.TrimSpace(opts.Workdir) != "" {
+		wd = opts.Workdir
+	} else {
+		wd, _ = os.Getwd()
+	}
+	wfPath, err := infrastructure.ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, wd, name)
 	if err != nil {
 		return fmt.Errorf("resolver workflow %q: %w", name, err)
 	}

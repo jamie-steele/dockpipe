@@ -34,6 +34,30 @@ func TestListWorkflowNamesInRepoRoot(t *testing.T) {
 	}
 }
 
+func TestListWorkflowNamesInRepoRootAndPackagesMerges(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmp, "workflows", "a"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "workflows", "a", "config.yml"), []byte("name: a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pkg := filepath.Join(tmp, ".dockpipe", "internal", "packages", "workflows", "b")
+	if err := os.MkdirAll(pkg, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(pkg, "config.yml"), []byte("name: b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ListWorkflowNamesInRepoRootAndPackages(tmp, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []string{"a", "b"}) {
+		t.Fatalf("got %#v", got)
+	}
+}
+
 func TestListWorkflowNamesInRepoRootIncludesDockpipeWorkflows(t *testing.T) {
 	tmp := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(tmp, "workflows", "t1"), 0o755); err != nil {
@@ -130,6 +154,35 @@ func TestResolveWorkflowConfigPathPrefersWorkflowsOverLegacyTemplates(t *testing
 	}
 	if got != modern {
 		t.Fatalf("want workflows path %s got %s", modern, got)
+	}
+}
+
+func TestResolveWorkflowConfigPathWithWorkdirPrefersPackagesOverLegacyTemplates(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmp, "templates", "core"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, "templates", "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	leg := filepath.Join(tmp, "templates", "demo", "config.yml")
+	if err := os.WriteFile(leg, []byte("name: legacy\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pkgDir := filepath.Join(tmp, ".dockpipe", "internal", "packages", "workflows", "demo")
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	pkg := filepath.Join(pkgDir, "config.yml")
+	if err := os.WriteFile(pkg, []byte("name: pkg\nsteps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveWorkflowConfigPathWithWorkdir(tmp, tmp, "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != pkg {
+		t.Fatalf("want package store %s got %s", pkg, got)
 	}
 }
 

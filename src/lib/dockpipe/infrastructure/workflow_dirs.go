@@ -9,10 +9,14 @@ import (
 )
 
 // ResolveWorkflowConfigPath returns the first existing workflow config for a bundled or user workflow name.
-// Authoring checkout: shipyard/workflows/<name>/config.yml first (repo-local), then WorkflowsRootDir/<name>/config.yml
-// (workflows/ or src/templates/), then legacy templates/<name>/config.yml for normal projects, then core/resolvers.
-// Materialized bundle: shipyard/workflows/ only (same path as WorkflowsRootDir).
+// Does not consult .dockpipe/internal/packages (use ResolveWorkflowConfigPathWithWorkdir for that).
 func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
+	return ResolveWorkflowConfigPathWithWorkdir(repoRoot, "", name)
+}
+
+// ResolveWorkflowConfigPathWithWorkdir is like ResolveWorkflowConfigPath but when workdir is non-empty also checks
+// <workdir>/.dockpipe/internal/packages/workflows/<name>/config.yml after WorkflowsRootDir and before legacy templates/.
+func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", fmt.Errorf("workflow name is empty")
@@ -22,6 +26,11 @@ func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 		candidates = append(candidates, filepath.Join(AuthoringShipyardWorkflowsDir(repoRoot), name, "config.yml"))
 	}
 	candidates = append(candidates, filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"))
+	if strings.TrimSpace(workdir) != "" {
+		if pw, err := PackagesWorkflowsDir(workdir); err == nil {
+			candidates = append(candidates, filepath.Join(pw, name, "config.yml"))
+		}
+	}
 	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
 		candidates = append(candidates, filepath.Join(repoRoot, "templates", name, "config.yml"))
 	}
@@ -35,8 +44,14 @@ func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 }
 
 // ResolveEmbeddedResolverWorkflowConfigPath returns delegate YAML for DOCKPIPE_*_WORKFLOW (resolver-driven isolate).
-// Order: core/resolvers/<name>/config.yml, workflows root/<name>/config.yml.
+// Does not consult the packages store (use WithWorkdir).
 func ResolveEmbeddedResolverWorkflowConfigPath(repoRoot, name string) (string, error) {
+	return ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, "", name)
+}
+
+// ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir adds .dockpipe/internal/packages/workflows/<name>/config.yml
+// when workdir is set, after the workflows root and before legacy templates/.
+func ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", fmt.Errorf("embedded resolver workflow name is empty")
@@ -44,6 +59,11 @@ func ResolveEmbeddedResolverWorkflowConfigPath(repoRoot, name string) (string, e
 	candidates := []string{
 		filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml"),
 		filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"),
+	}
+	if strings.TrimSpace(workdir) != "" {
+		if pw, err := PackagesWorkflowsDir(workdir); err == nil {
+			candidates = append(candidates, filepath.Join(pw, name, "config.yml"))
+		}
 	}
 	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
 		candidates = append(candidates, filepath.Join(repoRoot, "templates", name, "config.yml"))
@@ -103,6 +123,59 @@ func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 		}
 	}
 
+	sort.Strings(out)
+	return out, nil
+}
+
+// ListWorkflowNamesInPackagesStore returns workflow names under workdir/.dockpipe/internal/packages/workflows/*/config.yml.
+func ListWorkflowNamesInPackagesStore(workdir string) ([]string, error) {
+	root, err := PackagesWorkflowsDir(workdir)
+	if err != nil {
+		return nil, err
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		cfg := filepath.Join(root, e.Name(), "config.yml")
+		if st, err := os.Stat(cfg); err == nil && !st.IsDir() {
+			out = append(out, e.Name())
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
+// ListWorkflowNamesInRepoRootAndPackages merges ListWorkflowNamesInRepoRoot with ListWorkflowNamesInPackagesStore (deduped).
+func ListWorkflowNamesInRepoRootAndPackages(repoRoot, workdir string) ([]string, error) {
+	a, err := ListWorkflowNamesInRepoRoot(repoRoot)
+	if err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(workdir) == "" {
+		return a, nil
+	}
+	b, err := ListWorkflowNamesInPackagesStore(workdir)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{})
+	var out []string
+	for _, x := range append(append([]string{}, a...), b...) {
+		if _, ok := seen[x]; ok {
+			continue
+		}
+		seen[x] = struct{}{}
+		out = append(out, x)
+	}
 	sort.Strings(out)
 	return out, nil
 }

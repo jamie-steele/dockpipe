@@ -42,6 +42,8 @@ Suggested subdirectories (mirror authoring concepts; not all are required):
 
 ## Resolution order (directional)
 
-When fully wired, workflow and profile resolution will **prefer** project **`templates/`**, then **installed** **`.dockpipe/internal/packages/`**, then **embedded** / materialized bundle — same four concepts (**templates**, **runtimes**, **resolvers**, **strategies**), extended by **packages** from the store.
+**`--workflow`** resolution (see **`workflow_dirs.go`**) already checks **`.dockpipe/internal/packages/workflows/<name>/`** (after **`workflows/`** and before legacy **`templates/<name>/`**) when **`dockpipe run`** uses **`--workdir`** or the current directory; **`dockpipe doctor`** and **`ResolveWorkflowConfigPath(repoRoot, name)`** without a workdir skip the packages store.
+
+When fully wired end-to-end, profile resolution will **prefer** project **`workflows/`**, then **installed** **`.dockpipe/internal/packages/`**, then **embedded** / materialized bundle — same four concepts (**templates**, **runtimes**, **resolvers**, **strategies**), extended by **packages** from the store.
 
 See also **[architecture-model.md](architecture-model.md)** and **[cli-reference.md](cli-reference.md)** (`dockpipe package`, `dockpipe install`).

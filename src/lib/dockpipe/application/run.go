@@ -150,7 +150,8 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 	} else if opts.Workflow != "" {
 		var statErr error
-		wfConfig, statErr = infrastructure.ResolveWorkflowConfigPath(repoRoot, opts.Workflow)
+		effWd := effectiveWorkdirForWorkflowOpts(opts)
+		wfConfig, statErr = infrastructure.ResolveWorkflowConfigPathWithWorkdir(repoRoot, effWd, opts.Workflow)
 		if statErr != nil {
 			if os.Getenv("DOCKPIPE_REPO_ROOT") == "" && infrastructure.EmbeddedWorkflowConfigExists(opts.Workflow) {
 				if invErr := infrastructure.InvalidateBundledCache(); invErr == nil {
@@ -158,12 +159,12 @@ func Run(argv []string, baseEnviron []string) error {
 					if err != nil {
 						return err
 					}
-					wfConfig, statErr = infrastructure.ResolveWorkflowConfigPath(repoRoot, opts.Workflow)
+					wfConfig, statErr = infrastructure.ResolveWorkflowConfigPathWithWorkdir(repoRoot, effWd, opts.Workflow)
 				}
 			}
 			if statErr != nil {
-				names, _ := infrastructure.ListWorkflowNamesInRepoRoot(repoRoot)
-				msg := fmt.Sprintf("workflow %q not found — tried shipyard/workflows/, workflows/ (or DOCKPIPE_WORKFLOWS_DIR), legacy templates/, src/templates/ (dockpipe tree), and core/resolvers/%[1]s/config.yml", opts.Workflow)
+				names, _ := infrastructure.ListWorkflowNamesInRepoRootAndPackages(repoRoot, effWd)
+				msg := fmt.Sprintf("workflow %q not found — tried shipyard/workflows/, workflows/ (or DOCKPIPE_WORKFLOWS_DIR), .dockpipe/internal/packages/workflows/, legacy templates/, src/templates/ (dockpipe tree), and core/resolvers/%[1]s/config.yml", opts.Workflow)
 				if len(names) > 0 {
 					msg += fmt.Sprintf(" (available in this install: %s)", strings.Join(names, ", "))
 				}
@@ -745,4 +746,15 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 	}
 	return nil
+}
+
+func effectiveWorkdirForWorkflowOpts(opts *CliOpts) string {
+	if opts != nil && strings.TrimSpace(opts.Workdir) != "" {
+		return opts.Workdir
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		return "."
+	}
+	return wd
 }
