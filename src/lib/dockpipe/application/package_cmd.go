@@ -108,7 +108,7 @@ func cmdPackageManifest(args []string) error {
 	return nil
 }
 
-const examplePackageManifestYAML = `# package.yml — metadata for a DockPipe package (workflow, core slice, or assets).
+const examplePackageManifestYAML = `# package.yml — metadata for a DockPipe package (workflow, resolver, core slice, or assets).
 # Place next to the package tree under .dockpipe/internal/packages/ (see docs/package-model.md).
 schema: 1
 name: my-package
@@ -119,8 +119,16 @@ description: |
 author: Your name or org
 website: https://example.com
 license: MIT
-# Optional: workflow | core | assets | bundle
+# Optional: workflow | resolver | core | assets | bundle
 kind: workflow
+# Optional — authoring / store discovery (see docs/package-model.md):
+# tags: [ci, security]
+# keywords: [dockpipe, workflow]
+# min_dockpipe_version: "0.9.0"
+# repository: https://github.com/org/repo
+# provides: [codex]           # kind: resolver — capability ids
+# requires_resolvers: [claude] # kind: workflow — hints
+# depends: [other-package]
 `
 
 func printPackageUsage() {

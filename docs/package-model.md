@@ -1,6 +1,18 @@
 # Package model (store vs working tree)
 
-DockPipe distinguishes **two sides** so pipelines stay clear:
+DockPipe distinguishes **two sides** so pipelines stay clear.
+
+## Distribution split (repo vs store)
+
+| What | Where it usually lives | Notes |
+|------|-------------------------|--------|
+| **Runtimes** | **Repo / bundled `templates/core/runtimes/`** | Stable, light profiles — **not** the main “store” surface. |
+| **Strategies** | **Repo / bundled `templates/core/strategies/`** | Thin lifecycle wiring — same as runtimes: **keep in tree**. |
+| **Compiled core** | **HTTPS/S3 (e.g. R2)** + **`dockpipe install core`** | **Tight `templates/core` tarball** so installs stay small; refresh without cloning the whole upstream repo. |
+| **Resolvers** | **Bundled** and/or **store packages** | **Plugin adapters** — shared across workflows; extended catalogs ship as packages with rich **`package.yml`**. |
+| **Workflows** | **Authoring tree**, **`.dockpipe/internal/packages/workflows/`**, or **store** | **Primary rich-metadata** packages for authoring and discovery (`kind: workflow`). |
+
+**Mental model:** the **CLI + slim core** in git or from S3 gives you a **lightweight spine**; **workflows** and **resolver** packs are what you **browse, version, and install** from a registry or internal bucket (the “plugin store” layer).
 
 ## 1. Packages (installed, store-backed)
 
@@ -17,7 +29,20 @@ Suggested subdirectories (mirror authoring concepts; not all are required):
 | **`.dockpipe/internal/packages/core/`** | Same **category** rules as **`templates/core/`**: **`resolvers/`**, **`runtimes/`**, **`strategies/`**, **`assets/`**, **`bundles/`**. |
 | **`.dockpipe/internal/packages/assets/`** | Optional top-level packs (e.g. large binaries) that are not folded under **`core/`**. |
 
-**Metadata:** each installable unit should include **`package.yml`** next to its payload (see **`dockpipe package manifest`**). Fields include **`name`**, **`version`**, **`title`**, **`description`**, **`author`**, **`website`**, **`license`**, optional **`kind`** (`workflow` \| `core` \| `assets` \| `bundle`).
+**Metadata:** each installable unit should include **`package.yml`** next to its payload (see **`dockpipe package manifest`**). Core fields: **`name`**, **`version`**, **`title`**, **`description`**, **`author`**, **`website`**, **`license`**, **`kind`** (`workflow` \| `resolver` \| `core` \| `assets` \| `bundle`).
+
+**Rich metadata (authoring & store discovery)** — optional but recommended for **workflow** and **resolver** packages:
+
+| Field | Purpose |
+|-------|---------|
+| **`tags`**, **`keywords`** | Faceted search / UI filters |
+| **`min_dockpipe_version`** | Semver constraint on the CLI |
+| **`repository`** | Source repo URL |
+| **`provides`** | Resolver capability names (e.g. tool ids) for **`kind: resolver`** |
+| **`requires_resolvers`** | Hint compatible resolver profiles for **`kind: workflow`** |
+| **`depends`** | Other package **names** this package expects |
+
+The Go type **`domain.PackageManifest`** parses these keys; see **`src/lib/dockpipe/domain/package_manifest.go`**.
 
 **Compression:** store objects are typically **`.tar.gz`** (or **`.tar.zst`** later) to keep bandwidth and R2 storage small; the CLI unpacks into the layout above. **Binary-only** packs are possible for asset-only packages if you add a small unpack step later.
 

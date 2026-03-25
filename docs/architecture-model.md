@@ -164,6 +164,24 @@ If any item fails, **correct the wording** before publishing.
 
 ---
 
+## Packaging & distribution (where things live)
+
+This section **does not change** the four primitives above; it describes **where** implementations typically ship.
+
+| Layer | Role | Default home |
+|--------|------|----------------|
+| **Runtimes** | Where execution runs — **stable, platform-agnostic profiles** | **In-repo** under **`templates/core/runtimes/`** (light profile files; stays in the bundle / git tree). |
+| **Strategies** | Lifecycle before/after — **small, stable** | **In-repo** under **`templates/core/strategies/`** (thin env + script pointers). |
+| **Compiled core** | Tight **`templates/core`** tree users can refresh from HTTPS | **Optional S3/R2 (or any static origin)** via **`dockpipe install core`** + manifest (slim baseline; not every resolver in the universe). |
+| **Resolvers** | Tool/platform **adapters** — **plugin-shaped**, reusable across workflows | **Bundled** under **`templates/core/resolvers/`** *or* **store packages** (tarball / **`.dockpipe/internal/packages/`**) for extended catalogs. |
+| **Workflows** | What runs — **rich metadata** for authoring and store discovery | **Project `workflows/`**, **installed packages**, **shipyard/**, or **store**; **`package.yml`** carries discovery and dependency hints. |
+
+**Ecosystem shape:** **workflows** and **resolver** packs are the natural **“plugin store”** surface (metadata-heavy). **Runtimes** and **strategies** stay **minimal and in-repo** so every install has a predictable, lightweight spine.
+
+See **[package-model.md](package-model.md)** for **`package.yml`**, compile/install paths, and resolution order.
+
+---
+
 ## Related docs (non-normative mechanics)
 
 - [isolation-layer.md](isolation-layer.md) — file paths, `DOCKPIPE_RUNTIME_*` / `DOCKPIPE_RESOLVER_*` aliases, lookup order  
