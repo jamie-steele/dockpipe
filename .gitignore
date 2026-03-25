@@ -40,6 +40,9 @@ Thumbs.db
 *.swo
 .*.sw?
 
+# SR&ED evidence and timekeeping (local only; see .local/sred/README.md)
+.local/sred/
+
 # Optional local overrides (do not commit)
 .env
 .env.local
