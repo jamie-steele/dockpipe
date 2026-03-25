@@ -34,11 +34,11 @@ Commands:
   init                    Add DockPipe to the current project
   install                 Fetch templates/core from HTTPS (e.g. Cloudflare R2); see install core --help
   clone <name>            Copy a compiled workflow package to workflows/ when allow_clone is true (see package manifest)
-  build                   Compile packages into .dockpipe/internal (same as package compile all; project = dockpipe.config.json dir)
+  build                   Compile packages into .dockpipe/internal (same as package compile all --force; replaces existing outputs)
   clean                   Remove compiled package store (.dockpipe/internal/packages)
   rebuild                 clean then build
   package list|manifest|build|compile   Packages: list, manifest, author core tarball, or compile into .dockpipe/internal
-  compile                 Same as dockpipe package compile (core, resolvers, bundles, workflows, workflow)
+  compile                 Same as dockpipe package compile (core, resolvers, workflows; bundles optional)
   release upload          Upload a file to S3-compatible storage (self-hosted; uses aws CLI)
   workflow validate       Check workflow YAML ([path] relative to cwd or repo root; omit if one workflow)
   doctor                  Check docker, bash, and bundled assets

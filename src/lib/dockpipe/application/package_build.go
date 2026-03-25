@@ -245,9 +245,9 @@ Options:
 const packageBuildStoreUsageText = `dockpipe package build store
 
 Packs each compiled package under <workdir>/.dockpipe/internal/packages into a gzip tarball
-with a stable in-archive prefix (core/, workflows/<name>/, resolvers/<name>/, bundles/<name>/).
-Writes packages-store-manifest.json listing every artifact with sha256. Each tarball has a
-matching .sha256 file.
+with a stable in-archive prefix (core/, workflows/<name>/, resolvers/<name>/). Optional bundle
+packages only when you pass --only bundles. Writes packages-store-manifest.json listing every
+artifact with sha256. Each tarball has a matching .sha256 file.
 
 Requires a prior dockpipe build (or package compile all) so the store is populated.
 Version in each tarball name comes from that package's package.yml, or --version, or 0.0.0.
@@ -255,7 +255,7 @@ Version in each tarball name comes from that package's package.yml, or --version
 Options:
   --workdir <path>   Project root (default: directory with dockpipe.config.json, else cwd)
   --out <dir>        Output directory (default: <workdir>/release/artifacts)
-  --only <slice>     all (default) | core | workflows | resolvers | bundles
+  --only <slice>     all (default) = core + workflows + resolvers; or core | workflows | resolvers | bundles
   --version <ver>    Fallback version when package.yml omits version (default: VERSION file or 0.0.0)
 
 `

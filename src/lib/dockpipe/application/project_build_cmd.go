@@ -10,9 +10,14 @@ import (
 	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
-// cmdBuild is an alias for `dockpipe package compile all`.
+// cmdBuild runs `dockpipe package compile all` with --force so a normal build replaces
+// existing compiled slices (core, workflows) without requiring an extra flag.
 func cmdBuild(args []string) error {
-	return cmdPackage(append([]string{"compile", "all"}, args...))
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
+		fmt.Print(buildUsageText)
+		return nil
+	}
+	return cmdPackage(append([]string{"compile", "all", "--force"}, args...))
 }
 
 func cmdClean(args []string) error {
@@ -96,6 +101,18 @@ func cmdRebuild(args []string) error {
 	return cmdBuild(args)
 }
 
+const buildUsageText = `dockpipe build
+
+Same as dockpipe package compile all, but always replaces existing compiled packages
+(--force is implied for core and workflow outputs). Use dockpipe clean first if you need
+an empty store before compiling.
+
+Options:
+  Same as dockpipe package compile all: --workdir, --no-staging, --with-bundles
+  (see: dockpipe package compile all --help)
+
+`
+
 const cleanUsageText = `dockpipe clean
 
 Remove the compiled package store (default: <workdir>/.dockpipe/internal/packages).
@@ -115,7 +132,7 @@ Environment:
 
 const rebuildUsageText = `dockpipe rebuild
 
-Runs dockpipe clean, then dockpipe build (same as package compile all). Only --workdir
+Runs dockpipe clean, then dockpipe build (package compile all with --force). Only --workdir
 is forwarded to clean; all other flags apply to the build step.
 
 Default project directory (when --workdir omitted) is the same as compile: the directory
@@ -125,7 +142,7 @@ Usage:
   dockpipe rebuild [options]
 
 Options:
-  Same as dockpipe build / package compile all (--workdir, --force, --no-staging, --skip-bundles).
-  See: dockpipe package compile all --help
+  Same as dockpipe build / package compile all (--workdir, --no-staging, --with-bundles).
+  build implies --force for compile outputs. See: dockpipe package compile all --help
 
 `

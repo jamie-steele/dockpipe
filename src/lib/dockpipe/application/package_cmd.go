@@ -24,6 +24,8 @@ func cmdPackage(args []string) error {
 		return cmdPackageBuild(args[1:])
 	case "compile":
 		return cmdPackageCompile(args[1:])
+	case "read":
+		return cmdPackageRead(args[1:])
 	default:
 		return fmt.Errorf("unknown package subcommand %q (try: dockpipe package --help)", args[0])
 	}
@@ -145,13 +147,15 @@ Inspect installed packages and package metadata. Installed store content lives u
 Usage:
   dockpipe package list [--workdir <path>]
   dockpipe package manifest
+  dockpipe package read <archive.tar.gz> <path-in-archive>
   dockpipe package build core|store [options]
   dockpipe package compile core|resolvers|bundles|workflows|all|workflow [options]
 
   list      Find package.yml under .dockpipe/internal/packages and print rel path, name, version, description.
   manifest  Print an example package.yml schema to stdout.
+  read      Stream one file out of a gzip tar (no full extract); paths use / as in the archive.
   build     core: templates-core tarball + install-manifest; store: gzip tar per compiled package + packages-store-manifest.json.
-  compile   Materialize core / resolvers / bundles / workflows into .dockpipe/internal/packages/ (see compile --help).
+  compile   Materialize core / resolvers / workflows into .dockpipe/internal/packages/ (bundles optional; see compile --help).
 
 Optional repo-root dockpipe.config.json lists compile source dirs (workflows, resolvers, bundles); see docs/package-model.md.
 

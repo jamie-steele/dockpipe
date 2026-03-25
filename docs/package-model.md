@@ -13,7 +13,7 @@ DockPipe distinguishes **two sides** so pipelines stay clear: **what you author*
 | Mode | What you run | Friction | Notes |
 |------|----------------|----------|--------|
 | **Source / today** | Workflow YAML from **`workflows/`**, legacy **`templates/<name>/`**, etc. | **Low** for day-to-day editing — no compile step required. | **`scripts/…`** resolves per **`paths.go`** (project **`scripts/`** first, then bundled **resolvers** / **bundles** / **`assets/scripts/`**). Users can keep scripts wherever those rules allow. |
-| **Compiled / packaged** | **`packages/workflows/<name>/`**, **`packages/resolvers/<name>/`**, **`packages/bundles/<name>/`**, plus **`packages/core/`** (spine only), from **`compile all`** under **`.dockpipe/internal/packages/`**. | **One** compile (or CI) before run. | **Cleaner** tree: optional **`package.yml`** per slice; resolver search prefers **`packages/resolvers/`** when present. |
+| **Compiled / packaged** | **`packages/workflows/<name>/`**, **`packages/resolvers/<name>/`**, plus **`packages/core/`** (spine only), from **`compile all`** under **`.dockpipe/internal/packages/`**. Bundles are optional (**`compile bundles`** or **`compile all --with-bundles`**). | **One** compile (or CI) before run. | **Cleaner** tree: optional **`package.yml`** per slice; resolver search prefers **`packages/resolvers/`** when present. |
 
 **Authors are not forced to pick one path:** keep editing and running from source for low friction; use **compile → package → release** when you want a **self-contained** published artifact.
 
@@ -39,7 +39,7 @@ Compile steps:
 2. **`compile resolvers`** — repeatable **`--from`**; defaults merge **`src/core/resolvers`**, **`templates/core/resolvers`**, then **`.staging/resolvers`** (each path must exist) into **`packages/resolvers/<name>/`**.
 3. **`compile bundles`** — repeatable **`--from`**; defaults from config or **`.staging/bundles`** into **`packages/bundles/<name>/`**.
 4. **`compile workflows`** — every subdir with **`config.yml`** under each **`--from`** root; defaults **`workflows/`** then **`.staging/workflows/`** (or **`dockpipe.config.json`**).
-5. **`compile all`** (alias: **`dockpipe build`**) — runs **core → resolvers → bundles (when roots exist) → workflows**. **`dockpipe clean`** removes the compiled store; **`dockpipe rebuild`** runs **clean** then **build**.
+5. **`compile all`** (alias: **`dockpipe build`**) — runs **core → resolvers → workflows**. Bundles only when **`--with-bundles`** is set (otherwise use **`compile bundles`**). **`dockpipe clean`** removes the compiled store; **`dockpipe rebuild`** runs **clean** then **build**.
 
 The runner checks **compiled `packages/resolvers/`** and **`packages/core/`** before **`.staging`** and authoring **`CoreDir`** so you can **opt in** to the compiled store per workdir. Edit **`package.yml`** after compile to add **namespaces**, **`depends`**, and metadata for store-shaped workflows.
 
@@ -50,7 +50,7 @@ The runner checks **compiled `packages/resolvers/`** and **`packages/core/`** be
 ## Lifecycle: compile → package → release
 
 1. **`compile`** — Validate workflow YAML and **materialize** a **self-contained** tree: copy the workflow and (as the implementation grows) **pull in domain-specific assets** referenced from source so the compiled directory is the **single** execution root for that package.
-2. **`package`** — Archive **that compiled tree** (plus **`package.yml`**, checksums, optional lock metadata). **`dockpipe package build store`** turns the compiled store into **gzip tarballs** (one per core / workflow / resolver / bundle slice) and **`packages-store-manifest.json`**; **`dockpipe package build core`** builds the **`templates/core`** artifact for **`dockpipe install core`**.
+2. **`package`** — Archive **that compiled tree** (plus **`package.yml`**, checksums, optional lock metadata). **`dockpipe package build store`** turns the compiled store into **gzip tarballs** (one per core / workflow / resolver; bundles only with **`--only bundles`**) and **`packages-store-manifest.json`**; **`dockpipe package read`** can stream a single file from a tarball without a full extract. **`dockpipe package build core`** builds the **`templates/core`** artifact for **`dockpipe install core`**.
 3. **`release`** — Upload tarball + manifest to your **static origin**; consumers **`install`** to pull it.
 
 **CI** can chain the same steps locally: **compile → package → release**.

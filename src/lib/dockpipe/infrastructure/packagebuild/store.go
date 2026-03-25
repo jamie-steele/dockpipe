@@ -33,7 +33,7 @@ type StoreArtifact struct {
 
 // BuildCompiledStore writes dockpipe-*.tar.gz (+ .sha256) for each slice under packagesRoot and
 // packages-store-manifest.json under outDir. fallbackVersion is used when package.yml omits version.
-// only is "all" or one of: core, workflows, resolvers, bundles.
+// only is "all" (core + workflows + resolvers, no bundles) or one of: core, workflows, resolvers, bundles.
 func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*StoreBuildManifest, error) {
 	packagesRoot = filepath.Clean(packagesRoot)
 	outDir = filepath.Clean(outDir)
@@ -110,7 +110,7 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 	}
 
 	bunDir := filepath.Join(packagesRoot, "bundles")
-	if only == "all" || only == "bundles" {
+	if only == "bundles" {
 		names, err := listPackageSubdirs(bunDir)
 		if err != nil {
 			return nil, err

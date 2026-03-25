@@ -665,10 +665,10 @@ func cmdPackageCompileAll(args []string) error {
 		return err
 	}
 	var (
-		workdir    string
-		force      bool
-		noStaging  bool
-		skipBundle bool
+		workdir     string
+		force       bool
+		noStaging   bool
+		withBundles bool
 	)
 	for i := 0; i < len(args); i++ {
 		switch {
@@ -679,8 +679,13 @@ func cmdPackageCompileAll(args []string) error {
 			force = true
 		case args[i] == "--no-staging":
 			noStaging = true
+		case args[i] == "--with-bundles":
+			withBundles = true
 		case args[i] == "--skip-bundles":
-			skipBundle = true
+			// Deprecated: bundles are no longer part of compile all unless --with-bundles.
+		case args[i] == "--help" || args[i] == "-h":
+			fmt.Print(packageCompileAllUsageText)
+			return nil
 		case strings.HasPrefix(args[i], "-"):
 			return fmt.Errorf("unknown option %s (try: dockpipe package compile all --help)", args[i])
 		default:
@@ -702,7 +707,7 @@ func cmdPackageCompileAll(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] compile all: core → resolvers → bundles → workflows\n")
+	fmt.Fprintf(os.Stderr, "[dockpipe] compile all: core → resolvers → workflows\n")
 	if err := cmdPackageCompileCore(workdirAndForceArgs(workdir, force)); err != nil {
 		return err
 	}
@@ -718,7 +723,7 @@ func cmdPackageCompileAll(args []string) error {
 			return err
 		}
 	}
-	if !skipBundle && !noStaging {
+	if withBundles && !noStaging {
 		bundleRoots := effectiveBundleCompileRoots(cfg, repoRoot, noStaging)
 		if len(bundleRoots) == 0 {
 			fmt.Fprintf(os.Stderr, "[dockpipe] compile all: skip bundles (no roots)\n")
@@ -759,8 +764,9 @@ Usage:
   dockpipe package compile all [options]
   dockpipe package compile workflow [options] [--from] <source-dir>
 
-Order for a full local store: core (spine only) → resolvers → bundles → workflows, each in its own
-tree under packages/{core,resolvers,bundles,workflows}/. Use "compile all" to run that sequence.
+Order for a full local store: core (spine only) → resolvers → workflows, each in its own
+tree under packages/{core,resolvers,workflows}/. Optional bundles: use "compile bundles" or
+"compile all --with-bundles". Use "compile all" to run the default sequence.
 
 `
 
@@ -840,13 +846,15 @@ Options:
 
 const packageCompileAllUsageText = `dockpipe package compile all
 
-Runs: compile core → compile resolvers → compile bundles (when roots exist) → compile workflows.
+Runs: compile core → compile resolvers → compile workflows. Bundles are optional (see below).
 Uses dockpipe.config.json for source lists when present (see package-model.md).
+
+Note: dockpipe build runs this command with --force so existing compiled trees are replaced.
 
 Options:
   --workdir <path>   Project directory (default: directory with dockpipe.config.json, walking up from cwd; else cwd)
-  --force            Pass --force to core and workflow compile steps
+  --force            Replace existing packages/core and packages/workflows/<name> outputs
   --no-staging       Filter out .staging/* paths when resolving defaults or config lists
-  --skip-bundles     Do not run the bundles merge step
+  --with-bundles     Also run compile bundles (merge into packages/bundles/)
 
 `
