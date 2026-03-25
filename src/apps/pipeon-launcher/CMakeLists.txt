@@ -16,6 +16,7 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 
 set(PIPEON_LAUNCHER_SOURCES
     src/main.cpp
+    src/SingleInstanceGuard.cpp
     src/Theme.cpp
     src/Context.cpp
     src/ContextStore.cpp
