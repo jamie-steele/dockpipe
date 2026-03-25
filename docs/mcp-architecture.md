@@ -52,7 +52,7 @@ flowchart LR
 ### Discovery
 
 - Capabilities are **named tools** with JSON Schema **input** descriptors.
-- **Source of truth** remains the repo + bundled layouts (`src/templates/`, `shipyard/workflows/`, `DOCKPIPE_REPO_ROOT`), not prose in `AGENTS.md`.
+- **Source of truth** remains the repo + bundled layouts (`src/templates/`, `workflows/`, `DOCKPIPE_REPO_ROOT`), not prose in `AGENTS.md`.
 - Optional bootstrap: `docs/examples/mcp-capabilities.bootstrap.json` (see repo) — **pointer only**, not a second registry to maintain long-term if the server can derive lists at runtime.
 
 ### Invocation

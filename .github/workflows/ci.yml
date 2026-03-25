@@ -4,8 +4,8 @@
 #
 # --- Optional GitHub repo configuration (Settings → Secrets and variables → Actions) ---
 #
-# CI dogfood (this workflow):
-#   Variable  DOCKPIPE_CI_CODEX     Set to "true" to run shipyard/workflows/dogfood-codex-* in CI (pulls Codex image; needs network).
+# Optional Codex workflows in this job:
+#   Variable  DOCKPIPE_CI_CODEX     Set to "true" to run workflows/codex-pav and workflows/codex-security in CI (pulls Codex image; needs network).
 #   Secret    OPENAI_API_KEY        OpenAI API key for Codex when DOCKPIPE_CI_CODEX is true (same as local Codex usage).
 #
 # dev.to release posts (release.yml only — not this job):
@@ -80,8 +80,8 @@ jobs:
       - name: Templates/core path guard (docs + code)
         run: bash src/scripts/check-templates-core-paths.sh
 
-      # Dogfood: workflow "test" = go test + vet + govulncheck + gosec inside Docker (tools installed in-container; only mod cache mounted).
-      - name: Dogfood — dockpipe workflow test
+      # Workflow "test" = go test + vet + govulncheck + gosec inside Docker (tools installed in-container; only mod cache mounted).
+      - name: DockPipe workflow — test
         env:
           DOCKPIPE_REPO_ROOT: ${{ github.workspace }}
         run: |
@@ -91,7 +91,7 @@ jobs:
             --
 
       # Optional: Codex resolver workflows (set repo variable DOCKPIPE_CI_CODEX=true and secret OPENAI_API_KEY).
-      - name: Dogfood — dockpipe Codex workflows (optional)
+      - name: DockPipe workflows — codex-pav, codex-security (optional)
         if: ${{ vars.DOCKPIPE_CI_CODEX == 'true' }}
         env:
           DOCKPIPE_REPO_ROOT: ${{ github.workspace }}
@@ -102,8 +102,8 @@ jobs:
             echo "::error::Set repository secret OPENAI_API_KEY when vars.DOCKPIPE_CI_CODEX is true."
             exit 1
           fi
-          ./src/bin/dockpipe --workflow dogfood-codex-pav --resolver codex --runtime docker --workdir "${{ github.workspace }}" --
-          ./src/bin/dockpipe --workflow dogfood-codex-security --resolver codex --runtime docker --workdir "${{ github.workspace }}" --
+          ./src/bin/dockpipe --workflow codex-pav --resolver codex --runtime docker --workdir "${{ github.workspace }}" --
+          ./src/bin/dockpipe --workflow codex-security --resolver codex --runtime docker --workdir "${{ github.workspace }}" --
 
       # Ship PRs only: staging/integration PRs skip this (maintainer bumps VERSION when merging staging → master).
       - name: Release notes + version bump (PRs targeting master only)

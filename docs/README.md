@@ -14,7 +14,7 @@
 | [workflow-yaml.md](workflow-yaml.md) | [architecture.md](architecture.md) |
 | [isolation-layer.md](isolation-layer.md) | [chaining.md](chaining.md) |
 
-**Bundled paths:** In the materialized cache, **`shipyard/core/`** and **`shipyard/workflows/`** mirror **`src/templates/core/`** and **`src/templates/<workflow>/`** in this repo’s git checkout (or **`templates/`** at the project root after **`dockpipe init`**). See [install.md](install.md#bundled-templates-no-extra-install-tree).
+**Bundled paths:** In the materialized cache, **`shipyard/core/`** and **`shipyard/workflows/`** mirror **`src/templates/core/`** and **`src/templates/<workflow>/`**, and embedded repo-root **`workflows/`** lands under **`shipyard/workflows/`** in the cache. This repo’s git checkout uses **`workflows/`** at the project root (or **`templates/`** after **`dockpipe init`**). See [install.md](install.md#bundled-templates-no-extra-install-tree).
 
 **QA:** [qa/manual-qa.md](qa/manual-qa.md)
 

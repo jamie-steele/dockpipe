@@ -13,7 +13,7 @@ import (
 )
 
 // bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "86"
+const bundledFormatVersion = "88"
 
 var bundledMu sync.Mutex
 
@@ -31,7 +31,8 @@ func EmbeddedWorkflowConfigExists(name string) bool {
 	}
 	for _, p := range []string{
 		EmbeddedTemplatesPrefix + "/" + name + "/config.yml",
-		ShipyardDir + "/workflows/" + name + "/config.yml",
+		"workflows/" + name + "/config.yml",
+		".staging/workflows/" + name + "/config.yml",
 		EmbeddedTemplatesPrefix + "/core/resolvers/" + name + "/config.yml",
 	} {
 		if _, err := fs.Stat(dockpipe.BundledFS, p); err == nil {
@@ -147,6 +148,20 @@ func mapEmbeddedToMaterializedPath(rel string) string {
 		return ShipyardDir
 	case strings.HasPrefix(rel, EmbeddedTemplatesPrefix+"/"):
 		rest := strings.TrimPrefix(rel, EmbeddedTemplatesPrefix+"/")
+		return filepath.Join(ShipyardDir, "workflows", rest)
+	case rel == "workflows" || strings.HasPrefix(rel, "workflows/"):
+		rest := strings.TrimPrefix(rel, "workflows")
+		rest = strings.TrimPrefix(rest, "/")
+		if rest == "" {
+			return filepath.Join(ShipyardDir, "workflows")
+		}
+		return filepath.Join(ShipyardDir, "workflows", rest)
+	case rel == ".staging/workflows" || strings.HasPrefix(rel, ".staging/workflows/"):
+		rest := strings.TrimPrefix(rel, ".staging/workflows")
+		rest = strings.TrimPrefix(rest, "/")
+		if rest == "" {
+			return filepath.Join(ShipyardDir, "workflows")
+		}
 		return filepath.Join(ShipyardDir, "workflows", rest)
 	default:
 		return rel

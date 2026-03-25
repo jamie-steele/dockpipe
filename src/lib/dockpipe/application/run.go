@@ -164,7 +164,7 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 			if statErr != nil {
 				names, _ := infrastructure.ListWorkflowNamesInRepoRootAndPackages(repoRoot, effWd)
-				msg := fmt.Sprintf("workflow %q not found — tried shipyard/workflows/, workflows/ (or DOCKPIPE_WORKFLOWS_DIR), .dockpipe/internal/packages/workflows/, legacy templates/, src/templates/ (dockpipe tree), and core/resolvers/%[1]s/config.yml", opts.Workflow)
+				msg := fmt.Sprintf("workflow %q not found — tried workflows/ (or DOCKPIPE_WORKFLOWS_DIR), .staging/workflows/ (dockpipe checkout), .dockpipe/internal/packages/workflows/, legacy templates/, src/templates/ (dockpipe tree), and core/resolvers/%[1]s/config.yml", opts.Workflow)
 				if len(names) > 0 {
 					msg += fmt.Sprintf(" (available in this install: %s)", strings.Join(names, ", "))
 				}

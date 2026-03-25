@@ -1,0 +1,5 @@
+# Optional example — not executed by dockpipe. Build: make build-code-server-image
+services:
+  code-server:
+    image: dockpipe-code-server:latest
+    working_dir: /work

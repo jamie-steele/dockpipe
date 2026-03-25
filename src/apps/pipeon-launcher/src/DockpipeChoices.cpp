@@ -19,7 +19,8 @@ QString templatesRoot(const QString &repoRoot)
 bool looksLikeRepoRoot(const QString &absPath)
 {
     const QDir d(absPath);
-    return QFileInfo(d.filePath(QStringLiteral("shipyard/workflows"))).isDir()
+    return QFileInfo(d.filePath(QStringLiteral("workflows"))).isDir()
+        || QFileInfo(d.filePath(QStringLiteral(".staging/workflows"))).isDir()
         || QFileInfo(d.filePath(QStringLiteral("src/templates/core"))).isDir()
         || QFileInfo(d.filePath(QStringLiteral("templates/core"))).isDir();
 }
@@ -89,9 +90,21 @@ QStringList DockpipeChoices::listWorkflowNamesFromRepo(const QString &repoRoot)
     const QDir root(repoRoot);
 
     {
-        const QDir wf(root.filePath(QStringLiteral("shipyard/workflows")));
+        const QDir wf(root.filePath(QStringLiteral("workflows")));
         if (wf.exists()) {
             const auto dirs = wf.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+            for (const QFileInfo &fi : dirs) {
+                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
+                if (QFileInfo::exists(cfg))
+                    names.append(fi.fileName());
+            }
+        }
+    }
+
+    {
+        const QDir stg(root.filePath(QStringLiteral(".staging/workflows")));
+        if (stg.exists()) {
+            const auto dirs = stg.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {
                 const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
                 if (QFileInfo::exists(cfg))
@@ -139,7 +152,7 @@ void DockpipeChoices::scan(const QString &repoRoot)
     const QString tr = templatesRoot(repoRoot);
 
     {
-        const QDir wf(root.filePath(QStringLiteral("shipyard/workflows")));
+        const QDir wf(root.filePath(QStringLiteral("workflows")));
         if (wf.exists()) {
             const auto dirs = wf.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {

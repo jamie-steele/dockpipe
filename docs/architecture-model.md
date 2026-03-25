@@ -174,11 +174,16 @@ This section **does not change** the four primitives above; it describes **where
 | **Strategies** | Lifecycle before/after — **small, stable** | **In-repo** under **`templates/core/strategies/`** (thin env + script pointers). |
 | **Compiled core** | Tight **`templates/core`** tree users can refresh from HTTPS | **Optional S3/R2 (or any static origin)** via **`dockpipe install core`** + manifest (slim baseline; not every resolver in the universe). |
 | **Resolvers** | Tool/platform **adapters** — **plugin-shaped**, reusable across workflows | **Bundled** under **`templates/core/resolvers/`** *or* **store packages** (tarball / **`.dockpipe/internal/packages/`**) for extended catalogs. |
-| **Workflows** | What runs — **rich metadata** for authoring and store discovery | **Project `workflows/`**, **installed packages**, **shipyard/**, or **store**; **`package.yml`** carries discovery and dependency hints. |
+| **Workflows** | What runs — **rich metadata** for authoring and store discovery | **Project `workflows/`**, **installed packages**, or **store**; **`package.yml`** carries discovery and dependency hints. |
 
 **Ecosystem shape:** **workflows** and **resolver** packs are the natural **“plugin store”** surface (metadata-heavy). **Runtimes** and **strategies** stay **minimal and in-repo** so every install has a predictable, lightweight spine.
 
-See **[package-model.md](package-model.md)** for **`package.yml`**, compile/install paths, and resolution order.
+**Execution and network (product intent):**
+
+- **Two run modes** are both valid: **source** workflows from the repo authoring tree (today’s low-friction path), and **compiled** workflows under **`.dockpipe/internal/packages/workflows/`** after **`dockpipe package compile workflow`** (and future richer compile). Neither replaces the other.
+- **Remote fetches** (HTTPS / CDN / registry) are aimed at **install and release** commands, not at every **`dockpipe run`** once artifacts are local.
+
+Full detail: **[package-model.md](package-model.md)** (**`package.yml`**, compile → package → release, workflow vs resolver dependencies, resolution order).
 
 ---
 

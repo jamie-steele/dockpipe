@@ -19,16 +19,7 @@ const dockpipeProjectReadme = `# Dockpipe project
 - **workflows/** — Default home for named workflows (**config.yml** per folder); **dockpipe init &lt;name&gt;** creates **workflows/&lt;name&gt;/** (override with **--workflows-dir** or **DOCKPIPE_WORKFLOWS_DIR**).
 - **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/**, **assets/** (**agnostic scripts**, **images/**, **compose/**), **bundles/** (domain asset packs) (from **dockpipe init**).
 - **templates/&lt;name&gt;/** — Legacy named workflows; still resolved if **workflows/** does not define the same name.
-- **shipyard/workflows/** — Optional **repo-local** workflows; **--workflow** checks here before **workflows/** and **templates/**.
 - **dockpipe.yml** (optional) — Repo-root workflow; use **dockpipe --workflow-file dockpipe.yml**.
-`
-
-const dockpipeDirReadme = `# shipyard/
-
-**Experimental / repo-local** workflows live under **workflows/** (one directory per workflow with **config.yml**). Resolution checks here before **templates/**.
-
-To reuse workflows from a dockpipe **source tree**, copy **shipyard/workflows/&lt;name&gt;/** from the checkout (or point **--from** at that path when running **dockpipe init &lt;name&gt; --from …**). See **AGENTS.md** and **docs/cli-reference.md**.
-
 `
 
 // agentsSelfAnalysisMarker is embedded once in AGENTS.md so re-init does not duplicate the section.
@@ -96,11 +87,7 @@ func ensureProjectScaffold(repoRoot, projectDir string) error {
 	if err := mergeBundledTemplatesCore(repoRoot, projectDir); err != nil {
 		return fmt.Errorf("templates/core: %w", err)
 	}
-	_ = os.MkdirAll(filepath.Join(projectDir, infrastructure.ShipyardDir, "workflows"), 0o755)
-	dpReadme := filepath.Join(projectDir, infrastructure.ShipyardDir, "README.md")
-	if _, err := os.Stat(dpReadme); os.IsNotExist(err) {
-		_ = os.WriteFile(dpReadme, []byte(dockpipeDirReadme), 0o644)
-	}
+	_ = os.MkdirAll(filepath.Join(projectDir, "workflows"), 0o755)
 	readme := filepath.Join(projectDir, "README.md")
 	if _, err := os.Stat(readme); os.IsNotExist(err) {
 		_ = os.WriteFile(readme, []byte(dockpipeProjectReadme), 0o644)
@@ -137,10 +124,9 @@ func resolveInitFromSource(repoRoot, from string) (srcDir string, isBlank bool, 
 	if st, e := os.Stat(bundled); e == nil && st.IsDir() {
 		return bundled, false, nil
 	}
-	// This repo ships optional workflows under shipyard/workflows/ (not under templates/).
-	alt := filepath.Join(repoRoot, infrastructure.ShipyardDir, "workflows", from)
-	if st, e := os.Stat(alt); e == nil && st.IsDir() {
-		return alt, false, nil
+	stagingWf := filepath.Join(repoRoot, ".staging", "workflows", from)
+	if st, e := os.Stat(stagingWf); e == nil && st.IsDir() {
+		return stagingWf, false, nil
 	}
 	abs, e := filepath.Abs(from)
 	if e != nil {
@@ -149,7 +135,7 @@ func resolveInitFromSource(repoRoot, from string) (srcDir string, isBlank bool, 
 	if st, e := os.Stat(abs); e == nil && st.IsDir() {
 		return abs, false, nil
 	}
-	return "", false, fmt.Errorf("unknown --from source %q — use blank, a bundled workflow name (e.g. init, run, run-apply, run-apply-validate, secretstore), a path to shipyard/workflows/<name> in a dockpipe checkout, or another filesystem path to a workflow directory", from)
+	return "", false, fmt.Errorf("unknown --from source %q — use blank, a bundled workflow name (e.g. init, run, run-apply, run-apply-validate, secretstore), workflows/<name> or .staging/workflows/<name> in a dockpipe checkout, or another filesystem path to a workflow directory", from)
 }
 
 func writeWorkflowYAML(path string, wf *domain.Workflow) error {

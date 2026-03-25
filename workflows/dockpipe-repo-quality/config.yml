@@ -1,0 +1,17 @@
+# Host-only: surface DorkPipe CI signals after running govulncheck + gosec on the host (see ci-local.sh).
+# Pair with workflows/test for the full Docker-isolated CI chain.
+name: dockpipe-repo-quality
+description: >-
+  Print a short summary of .dockpipe/ci-analysis/ (DorkPipe-normalized CI scans). Run after ci-local or CI scan steps.
+
+docker_preflight: false
+runtime: cli
+resolver: codex
+runtimes: [cli]
+resolvers: [codex]
+
+steps:
+  - id: summarize
+    skip_container: true
+    run:
+      - scripts/dockpipe/repo-ci-summary.sh

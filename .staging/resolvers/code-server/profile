@@ -1,0 +1,2 @@
+# Resolver: code-server binary name for docs (pairs with runtimes/code-server).
+DOCKPIPE_RESOLVER_CMD=code-server

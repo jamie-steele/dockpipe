@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Guardrails for repo layout after moves (src/templates, shipyard, Pipeon asset paths).
+# Guardrails for repo layout after moves (src/templates, workflows/, Pipeon asset paths).
 # Run from repo root: bash tests/unit-tests/test_repo_layout.sh
 set -euo pipefail
 
@@ -13,7 +13,7 @@ fail() {
 
 test -d "$ROOT/src/templates/core" || fail "missing src/templates/core"
 test -f "$ROOT/src/templates/run/config.yml" || fail "missing bundled workflow src/templates/run/config.yml"
-test -d "$ROOT/shipyard/workflows" || fail "missing shipyard/workflows"
+test -d "$ROOT/workflows" || fail "missing workflows/"
 test -f "$ROOT/embed.go" || fail "missing repo-root embed.go"
 
 # Pipeon harness (src/bin/pipeon → src/pipeon/scripts/pipeon.sh) must resolve to the bundle

@@ -1,0 +1,25 @@
+# DorkPipe DAG: deterministic prep → signals → Cursor handoff markdown.
+# Run via: scripts/dorkpipe/run-self-analysis.sh OR bin/dorkpipe run -f workflows/dorkpipe-self-analysis/spec.yaml --workdir <repo>
+name: dorkpipe-self-analysis
+policy:
+  escalate_confidence_below: 0.01
+nodes:
+  - id: prep
+    kind: shell
+    script: |
+      set -euo pipefail
+      bash scripts/dorkpipe/self-analysis-prep.sh
+
+  - id: signals
+    kind: shell
+    needs: [prep]
+    script: |
+      set -euo pipefail
+      bash scripts/dorkpipe/self-analysis-signals.sh
+
+  - id: handoff
+    kind: shell
+    needs: [signals]
+    script: |
+      set -euo pipefail
+      bash scripts/dorkpipe/build-cursor-handoff.sh

@@ -26,9 +26,20 @@ void collectConfigPaths(const QString &repoRoot, QStringList &out)
     const QString tr = templatesRoot(repoRoot);
 
     {
-        const QDir wf(root.filePath(QStringLiteral("shipyard/workflows")));
+        const QDir wf(root.filePath(QStringLiteral("workflows")));
         if (wf.exists()) {
             for (const QFileInfo &fi : wf.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
+                if (QFileInfo::exists(cfg))
+                    out.append(QDir::cleanPath(cfg));
+            }
+        }
+    }
+
+    {
+        const QDir stg(root.filePath(QStringLiteral(".staging/workflows")));
+        if (stg.exists()) {
+            for (const QFileInfo &fi : stg.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
                 const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
                 if (QFileInfo::exists(cfg))
                     out.append(QDir::cleanPath(cfg));

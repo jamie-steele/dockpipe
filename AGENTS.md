@@ -14,7 +14,7 @@ DockPipe provides one primitive:
 
 Everything else is built around this.
 
-**Package model (store vs tree):** Installed store artifacts are headed for **`.dockpipe/internal/packages/`** (workflows, **core** slices, assets); authoring stays under **`templates/`** / **`shipyard/`**. See **`docs/package-model.md`**.
+**Package model (store vs tree):** Installed store artifacts are headed for **`.dockpipe/internal/packages/`** (workflows, **core** slices, assets); authoring stays under **`templates/`** and repo-root **`workflows/`**. See **`docs/package-model.md`**.
 
 **`dockpipe init`** is project-local scaffolding only: without a workflow name it creates or updates **`templates/`** (including merged **`templates/core/`** with **`runtimes/`**, **`resolvers/`**, **`strategies/`**, **`assets/`** — scripts, images, compose), **`scripts/`**, **`images/`**, in the **current directory**. **`dockpipe init <name>`** adds **`templates/<name>/config.yml`** as a **minimal empty workflow**; use **`--from <template>`** (e.g. **`init`**, **`run`**, **`run-apply`**) to copy a full bundled workflow tree. It does **not** clone Git repositories or bootstrap a remote project. See **`docs/cli-reference.md`** and **`docs/templates-core-assets.md`**.
 
@@ -45,7 +45,7 @@ Examples:
 - In **this repository’s checkout:** **`src/templates/<name>/`** (bundled workflows + **`src/templates/core/`**).
 - In a **downstream project** after **`dockpipe init`:** **`templates/<name>/`** at the project root (same layout conceptually).
 
-**Do not** put **this repository’s** CI, demo, or internal automation workflows under **`src/templates/`**. Those belong under **`shipyard/workflows/<name>/`** (see **Internal workflows** below).
+**Do not** put **this repository’s** CI, demo, or internal automation workflows under **`src/templates/`**. Those belong under repo-root **`workflows/<name>/`** (lean CI / dogfood) or **`.staging/workflows/<name>/`** (maintainer packaging and experiments) (see **Internal workflows** below).
 
 ---
 
@@ -172,16 +172,17 @@ If something cannot be done:
 
 ## Internal workflows (this repository)
 
-When you work **on the dockpipe project itself**, you are a **user** of the tool: extend it via **`src/templates/`**, **`scripts/`**, and **`shipyard/workflows/`** — **not** by stuffing internal pipelines into **`src/templates/`**.
+When you work **on the dockpipe project itself**, you are a **user** of the tool: extend it via **`src/templates/`**, **`scripts/`**, and repo-root **`workflows/`** — **not** by stuffing internal pipelines into **`src/templates/`**.
 
 | Location | Purpose |
 |----------|---------|
 | **`src/templates/<name>/`** (this repo) / **`templates/<name>/`** (downstream) | **User-facing** workflow examples shipped in the bundle (**`run`**, **`run-apply`**, **`run-apply-validate`**, **`init`**, …). Reusable for any downstream project. |
-| **`shipyard/workflows/<name>/`** | **This repo only:** CI, recordings, experiments — workflows that exist to run **dockpipe** on **this** codebase. Not installed by a special `init` flag; copy dirs or use **`dockpipe init &lt;name&gt; --from …`** pointing at a workflow path. |
+| **`workflows/<name>/`** (repo root, this repo) | **Lean first-party** workflows wired into CI and dogfood: **`test`**, **`codex-pav`**, **`codex-security`**, **`dockpipe-repo-quality`**, etc. |
+| **`.staging/workflows/<name>/`** (repo root, this repo) | **Maintainer / packaging / experiments** (R2 publish, self-analysis stacks, orchestrator, sandbox demos, …). Same **`--workflow <name>`** as **`workflows/`**; the binary embed merges both into the materialized cache. |
 
-**Preferred pattern:** `dockpipe init <name> --from run-apply` or **`run-apply-validate`** (or **`run`**, **`blank`**) for user-shaped scaffolds; keep automation-specific YAML under **`shipyard/workflows/`**.
+**Preferred pattern:** `dockpipe init <name> --from run-apply` or **`run-apply-validate`** (or **`run`**, **`blank`**) for user-shaped scaffolds; keep **automation you want in default CI** under **`workflows/`**; put **extra maintainer trees** under **`.staging/workflows/`**.
 
-**Accelerator (maintainers):** After **`make build`**, **`make self-analysis`**, **`make self-analysis-host`**, or **`make self-analysis-stack`** run the DorkPipe self-analysis workflows on this repo (container, host-only, or compose stack). See **`docs/dorkpipe.md`** and **`shipyard/workflows/dorkpipe-self-analysis/README.md`**.
+**Accelerator (maintainers):** After **`make build`**, **`make self-analysis`**, **`make self-analysis-host`**, or **`make self-analysis-stack`** run the DorkPipe self-analysis workflows on this repo (container, host-only, or compose stack). See **`docs/dorkpipe.md`** and **`.staging/workflows/dorkpipe-self-analysis/README.md`**.
 
 ### Agent guidance (this repository)
 

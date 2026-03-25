@@ -37,6 +37,23 @@ func TestWorkflowsRootDirAuthoringSrcTemplatesLayout(t *testing.T) {
 	}
 }
 
+func TestWorkflowsRootDirAuthoringDogfoodPrefersRepoWorkflowsWhenPresent(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmp, "src", "templates", "core"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, "workflows", "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "workflows", "demo", "config.yml"), []byte("name: demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := WorkflowsRootDir(tmp), filepath.Join(tmp, "workflows"); got != want {
+		t.Fatalf("WorkflowsRootDir = %q, want %q", got, want)
+	}
+}
+
 func TestWorkflowsRootDirPrefersSrcTemplatesWhenBothTreesExist(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()

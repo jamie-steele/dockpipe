@@ -2,7 +2,7 @@
 # Mirror the Linux "test" job in .github/workflows/ci.yml (not CodeQL, not Windows).
 # From repo root:  make ci   or   bash src/scripts/ci-local.sh
 #
-# Optional Codex dogfood (same as CI when vars.DOCKPIPE_CI_CODEX=true):
+# Optional Codex workflows (same as CI when vars.DOCKPIPE_CI_CODEX=true):
 #   DOCKPIPE_CI_CODEX=true OPENAI_API_KEY=... bash src/scripts/ci-local.sh
 #
 # Requires: Go, make, Docker (for workflow + integration tests), dpkg-deb (for .deb build), jq.
@@ -61,20 +61,20 @@ go test ./...
 step "templates/core path guard"
 bash src/scripts/check-templates-core-paths.sh
 
-step "dogfood — workflow test (go test + vet + govulncheck + gosec in Docker; mount module cache only)"
+step "workflow test (go test + vet + govulncheck + gosec in Docker; mount module cache only)"
 ./src/bin/dockpipe --workflow test --runtime docker --workdir "$ROOT" \
 	--mount "$(go env GOPATH)/pkg:/go/pkg:rw" \
 	--
 
 if [[ "${DOCKPIPE_CI_CODEX:-}" == "true" ]]; then
-	step "dogfood — Codex workflows (OPENAI_API_KEY required)"
+	step "Codex workflows — codex-pav, codex-security (OPENAI_API_KEY required)"
 	if [[ -z "${OPENAI_API_KEY:-}" ]]; then
 		echo "ci-local: DOCKPIPE_CI_CODEX=true but OPENAI_API_KEY is empty." >&2
 		exit 1
 	fi
 	export OPENAI_API_KEY
-	./src/bin/dockpipe --workflow dogfood-codex-pav --resolver codex --runtime docker --workdir "$ROOT" --
-	./src/bin/dockpipe --workflow dogfood-codex-security --resolver codex --runtime docker --workdir "$ROOT" --
+	./src/bin/dockpipe --workflow codex-pav --resolver codex --runtime docker --workdir "$ROOT" --
+	./src/bin/dockpipe --workflow codex-security --resolver codex --runtime docker --workdir "$ROOT" --
 fi
 
 step "build amd64 .deb"

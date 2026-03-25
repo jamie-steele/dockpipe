@@ -8,7 +8,7 @@ import (
 
 // TestRepoRootMaterializesBundledTemplates copies embedded src/templates into the bundle cache and
 // materializes a workflow config (under ShipyardDir/workflows/ — cache layout, not a dependency on
-// git-tracked shipyard/workflows/* content).
+// git-tracked workflows/ content).
 func TestRepoRootMaterializesBundledTemplates(t *testing.T) {
 	t.Setenv("DOCKPIPE_REPO_ROOT", "")
 	t.Setenv("DOCKPIPE_BUNDLED_CACHE", t.TempDir())

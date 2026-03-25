@@ -9,6 +9,7 @@ import (
 )
 
 // ResolveWorkflowConfigPath returns the first existing workflow config for a bundled or user workflow name.
+// Resolution uses WorkflowsRootDir (repo workflows/, materialized shipyard/workflows/ in bundle cache, or src/templates in dockpipe source when workflows/ is empty).
 // Does not consult .dockpipe/internal/packages (use ResolveWorkflowConfigPathWithWorkdir for that).
 func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 	return ResolveWorkflowConfigPathWithWorkdir(repoRoot, "", name)
@@ -22,10 +23,10 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 		return "", fmt.Errorf("workflow name is empty")
 	}
 	var candidates []string
-	if !UsesBundledAssetLayout(repoRoot) {
-		candidates = append(candidates, filepath.Join(AuthoringShipyardWorkflowsDir(repoRoot), name, "config.yml"))
-	}
 	candidates = append(candidates, filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"))
+	if !UsesBundledAssetLayout(repoRoot) {
+		candidates = append(candidates, filepath.Join(StagingWorkflowsDir(repoRoot), name, "config.yml"))
+	}
 	if strings.TrimSpace(workdir) != "" {
 		if pw, err := PackagesWorkflowsDir(workdir); err == nil {
 			candidates = append(candidates, filepath.Join(pw, name, "config.yml"))
@@ -76,8 +77,7 @@ func ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, workdir, nam
 	return "", fmt.Errorf("embedded resolver workflow config not found for %q", name)
 }
 
-// ListWorkflowNamesInRepoRoot returns workflow names from WorkflowsRootDir, legacy templates/ (user projects),
-// and (authoring only) shipyard/workflows/.
+// ListWorkflowNamesInRepoRoot returns workflow names from WorkflowsRootDir and legacy templates/ (user projects).
 func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 	seen := make(map[string]struct{})
 	var out []string
@@ -112,13 +112,13 @@ func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 	if err := addDir(WorkflowsRootDir(repoRoot)); err != nil {
 		return nil, err
 	}
-	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
-		if err := addDir(filepath.Join(repoRoot, "templates")); err != nil {
+	if !UsesBundledAssetLayout(repoRoot) {
+		if err := addDir(StagingWorkflowsDir(repoRoot)); err != nil {
 			return nil, err
 		}
 	}
-	if !UsesBundledAssetLayout(repoRoot) {
-		if err := addDir(AuthoringShipyardWorkflowsDir(repoRoot)); err != nil {
+	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
+		if err := addDir(filepath.Join(repoRoot, "templates")); err != nil {
 			return nil, err
 		}
 	}

@@ -148,7 +148,7 @@ Usage:
 
   list      Find package.yml under .dockpipe/internal/packages and print rel path, name, version, description.
   manifest  Print an example package.yml schema to stdout.
-  build     Author templates-core tarball + checksum + install-manifest (self-hosted / dogfood).
+  build     Author templates-core tarball + checksum + install-manifest (self-hosted mirror).
   compile   Validate workflow YAML and copy into .dockpipe/internal/packages/workflows/.
 
 Environment:

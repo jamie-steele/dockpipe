@@ -1,0 +1,72 @@
+# Combined: fast deterministic prep → handoff → local Ollama refinement (requires Ollama).
+# Produces: .dockpipe/orchestrator-cursor-prompt.md (facts) + .dockpipe/orchestrator-cursor-prompt.refined.md (model layer).
+#
+# Run:
+#   DORKPIPE_SELF_ANALYSIS_SPEC=workflows/dorkpipe-self-analysis/spec.combined.yaml ./scripts/dorkpipe/run-self-analysis.sh
+#   export OLLAMA_HOST=http://127.0.0.1:11434   # if not default
+name: dorkpipe-self-analysis-combined
+policy:
+  escalate_confidence_below: 0.01
+nodes:
+  - id: prep
+    kind: shell
+    script: |
+      set -euo pipefail
+      bash scripts/dorkpipe/self-analysis-prep.sh
+
+  - id: signals
+    kind: shell
+    needs: [prep]
+    script: |
+      set -euo pipefail
+      bash scripts/dorkpipe/self-analysis-signals.sh
+
+  - id: handoff
+    kind: shell
+    needs: [signals]
+    script: |
+      set -euo pipefail
+      bash scripts/dorkpipe/build-cursor-handoff.sh
+
+  # Feed the handoff (truncated) into the next node via DorkPipe stdout substitution.
+  - id: emit_ctx
+    kind: shell
+    needs: [handoff]
+    script: |
+      set -euo pipefail
+      head -c 48000 .dockpipe/orchestrator-cursor-prompt.md
+
+  - id: refine
+    kind: ollama
+    needs: [emit_ctx]
+    model: llama3.2
+    prompt: |
+      You are a staff engineer. The following markdown is a DockPipe/DorkPipe self-analysis handoff grounded in real repo scans.
+
+      Add ONE new section only, in markdown:
+
+      ## Refined priorities (5 bullets)
+
+      Each bullet: one concrete next action with a file path from the text. No fluff, no repeating section 1–8 verbatim.
+
+      ---HANDOFF---
+      {{emit_ctx}}
+
+  - id: save_refine
+    kind: shell
+    needs: [refine]
+    script: |
+      set -euo pipefail
+      if [[ ! -f .dorkpipe/nodes/refine.txt ]]; then
+        echo "save_refine: expected .dorkpipe/nodes/refine.txt from refine node" >&2
+        exit 1
+      fi
+      cp .dorkpipe/nodes/refine.txt .dockpipe/orchestrator-cursor-prompt.refined.md
+      echo "save_refine: wrote .dockpipe/orchestrator-cursor-prompt.refined.md ($(wc -c < .dockpipe/orchestrator-cursor-prompt.refined.md) bytes)"
+
+  - id: merge_paste
+    kind: shell
+    needs: [save_refine]
+    script: |
+      set -euo pipefail
+      bash scripts/dorkpipe/merge-paste-prompt.sh

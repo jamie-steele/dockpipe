@@ -66,10 +66,10 @@ func TestListWorkflowNamesInRepoRootIncludesDockpipeWorkflows(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmp, "workflows", "t1", "config.yml"), []byte("name: t1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(tmp, ShipyardDir, "workflows", "local"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, "workflows", "local"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmp, ShipyardDir, "workflows", "local", "config.yml"), []byte("name: local\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "workflows", "local", "config.yml"), []byte("name: local\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got, err := ListWorkflowNamesInRepoRoot(tmp)
@@ -78,31 +78,6 @@ func TestListWorkflowNamesInRepoRootIncludesDockpipeWorkflows(t *testing.T) {
 	}
 	if !slices.Equal(got, []string{"local", "t1"}) {
 		t.Fatalf("got %#v", got)
-	}
-}
-
-func TestResolveWorkflowConfigPathPrefersAuthoringDockpipeWorkflowsOverTemplates(t *testing.T) {
-	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, "templates", "demo"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	templatesWf := filepath.Join(tmp, "templates", "demo", "config.yml")
-	if err := os.WriteFile(templatesWf, []byte("name: from-templates\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(tmp, ShipyardDir, "workflows", "demo"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	localWf := filepath.Join(tmp, ShipyardDir, "workflows", "demo", "config.yml")
-	if err := os.WriteFile(localWf, []byte("name: from-dockpipe\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	got, err := ResolveWorkflowConfigPath(tmp, "demo")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got != localWf {
-		t.Fatalf("want repo-local workflow %s got %s", localWf, got)
 	}
 }
 

@@ -7,7 +7,7 @@ import (
 )
 
 // Project-local layout for content installed from a package store (S3/R2, HTTPS).
-// Uncompressed dev trees stay under templates/ and shipyard/ as today; packaged installs default here.
+// Uncompressed dev trees stay under templates/ and workflows/ as today; packaged installs default here.
 //
 // Default root: <workdir>/.dockpipe/internal/packages with the same conceptual buckets as authoring templates:
 //

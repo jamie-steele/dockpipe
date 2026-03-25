@@ -1,6 +1,6 @@
 # Workflow YAML (`config.yml`)
 
-**Workflow YAML** for **`--workflow <name>`** resolves to **`src/templates/<name>/config.yml`** (dockpipe source tree) or **`templates/<name>/config.yml`** (typical project after **`dockpipe init`**), or **`shipyard/workflows/<name>/config.yml`** in the **materialized bundle** (see **[install.md](install.md#bundled-templates-no-extra-install-tree)**). Resolver delegate YAML loads from **`…/core/resolvers/<name>/config.yml`** next to that authoring **templates** root (**`src/templates/core/…`** or **`templates/core/…`**) or **`shipyard/core/resolvers/<name>/config.yml`** (materialized bundle). Load with **`dockpipe --workflow <name>`** (plus your command after **`--`**).
+**Workflow YAML** for **`--workflow <name>`** resolves to **`workflows/<name>/config.yml`** (when present), **`.staging/workflows/<name>/config.yml`** (dockpipe source checkout, after **`workflows/`**), **`src/templates/<name>/config.yml`** (dockpipe source tree), or **`templates/<name>/config.yml`** (typical project after **`dockpipe init`**). The **materialized bundle cache** still uses a **`shipyard/workflows/`** layout on disk (see **[install.md](install.md#bundled-templates-no-extra-install-tree)**). Resolver delegate YAML loads from **`…/core/resolvers/<name>/config.yml`** next to that authoring **templates** root (**`src/templates/core/…`** or **`templates/core/…`**) or **`shipyard/core/resolvers/<name>/config.yml`** (materialized bundle). Load with **`dockpipe --workflow <name>`** (plus your command after **`--`**).
 
 **Repo-root workflow:** put the **same** YAML shape in **`dockpipe.yml`** (or any path) and run **`dockpipe --workflow-file dockpipe.yml`** so **`run:`** / **`act:`** paths resolve relative to that file’s directory. **Resolver** profiles are **not** beside the file — they load only from **`templates/core/resolvers/`** (see below). Do not pass **`--workflow`** and **`--workflow-file`** together.
 
@@ -209,7 +209,7 @@ Multiple **separate** `dockpipe` invocations (same `--workdir`) are still valid;
 
 | Workflow | Purpose |
 |----------|---------|
-| **[shipyard/workflows/test/](../shipyard/workflows/test/)** (this repo) | CI-style **go vet** chain via **`.dockpipe/outputs.env`** — under **`shipyard/workflows/`**, not **`templates/`**. |
+| **[workflows/test/](../workflows/test/)** (this repo) | CI-style **go test** + **govulncheck** + **gosec** chain via **`.dockpipe/outputs.env`** — canonical repo path is **`workflows/`**, not **`templates/`**. |
 | **[templates/run/](../templates/run/)** | Single command in a container, then optional **git** commit on the current branch (**strategy `git-commit`**). |
 | **[templates/run-apply/](../templates/run-apply/)** | Two-step **run → apply** pipeline (replace **`cmd:`** with your tools). |
 | **[templates/run-apply-validate/](../templates/run-apply-validate/)** | Three-step **run → apply → validate** pipeline (replace **`cmd:`** with your tools). |

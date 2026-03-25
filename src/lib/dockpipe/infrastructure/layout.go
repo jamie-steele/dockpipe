@@ -8,7 +8,7 @@ import (
 
 // ShipyardDir is the top-level directory name for the materialized bundle layout
 // (…/core/…, …/workflows/…) under RepoRoot. Authoring checkouts use this name for repo-local
-// maintainer workflows (CI, dogfood, quick iteration) — distinct from stable templates/ and future CDN bundles.
+// maintainer workflows (CI, quick iteration) — distinct from stable templates/ and future CDN bundles.
 const ShipyardDir = "shipyard"
 
 // EmbeddedTemplatesPrefix is the path prefix of bundled workflow/core files inside dockpipe.BundledFS (see embed.go).
@@ -45,6 +45,14 @@ func CoreDir(repoRoot string) string {
 // The dockpipe source tree and the materialized bundle use different roots (see WorkflowsRootDir).
 const DefaultUserWorkflowsDirRel = "workflows"
 
+// StagingWorkflowsDirRel is committed maintainer / experimental workflows (dockpipe repo only; merged into the same embed + materialized tree).
+const StagingWorkflowsDirRel = ".staging/workflows"
+
+// StagingWorkflowsDir returns <repoRoot>/.staging/workflows (may not exist in downstream projects).
+func StagingWorkflowsDir(repoRoot string) string {
+	return filepath.Join(repoRoot, ".staging", "workflows")
+}
+
 // workflowsDirRelProcess is set by the CLI for the current process (--workflows-dir); cleared after the command.
 var workflowsDirRelProcess string
 
@@ -75,12 +83,17 @@ func DockpipeAuthoringSourceTree(repoRoot string) bool {
 }
 
 // WorkflowsRootDir returns the directory containing named workflow folders (each with config.yml):
-// materialized bundle → shipyard/workflows; dockpipe source → src/templates; normal projects → workflows/ (or override).
+// materialized bundle → shipyard/workflows; dockpipe source → repo workflows/ when present, else src/templates;
+// normal projects → workflows/ (or override).
 func WorkflowsRootDir(repoRoot string) string {
 	if UsesBundledAssetLayout(repoRoot) {
 		return filepath.Join(repoRoot, ShipyardDir, "workflows")
 	}
 	if DockpipeAuthoringSourceTree(repoRoot) {
+		wf := filepath.Join(repoRoot, DefaultUserWorkflowsDirRel)
+		if WorkflowsDirHasDockpipeWorkflow(wf) {
+			return wf
+		}
 		return filepath.Join(repoRoot, "src", "templates")
 	}
 	rel := effectiveWorkflowsDirRel()
@@ -91,10 +104,4 @@ func WorkflowsRootDir(repoRoot string) string {
 		return rel
 	}
 	return filepath.Join(repoRoot, rel)
-}
-
-// AuthoringShipyardWorkflowsDir is .../<ShipyardDir>/workflows on a git checkout (not the materialized bundle).
-// Repo-local maintainer workflows live here — not under src/templates/ or templates/. User-facing examples stay under the authoring templates root.
-func AuthoringShipyardWorkflowsDir(repoRoot string) string {
-	return filepath.Join(repoRoot, ShipyardDir, "workflows")
 }

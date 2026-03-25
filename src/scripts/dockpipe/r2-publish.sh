@@ -67,7 +67,7 @@ find_terraform_dir() {
     fi
     return 1
   fi
-  for d in "shipyard/workflows/r2-publish/terraform" "templates/r2-publish/terraform"; do
+  for d in ".staging/workflows/r2-publish/terraform" "templates/r2-publish/terraform"; do
     if [[ -d "$ROOT/$d" ]]; then
       echo "$ROOT/$d"
       return 0
@@ -171,7 +171,7 @@ run_terraform_apply() {
 }
 
 if should_run_terraform; then
-  TF_DIR="$(find_terraform_dir)" || die "Terraform is required for this run but no module directory found. Copy shipyard/workflows/r2-publish/terraform into your project, set R2_TERRAFORM_DIR, or set R2_SKIP_TERRAFORM=1 if the bucket already exists."
+  TF_DIR="$(find_terraform_dir)" || die "Terraform is required for this run but no module directory found. Copy .staging/workflows/r2-publish/terraform into your project, set R2_TERRAFORM_DIR, or set R2_SKIP_TERRAFORM=1 if the bucket already exists."
   run_terraform_apply "$TF_DIR"
 fi
 

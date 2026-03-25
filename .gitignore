@@ -63,7 +63,7 @@ Thumbs.db
 # DorkPipe runtime outputs (metrics, nodes, self-analysis scratch)
 .dorkpipe/
 
-# Terraform (e.g. shipyard/workflows/r2-publish/terraform — keep .terraform.lock.hcl)
+# Terraform (e.g. .staging/workflows/r2-publish/terraform — keep .terraform.lock.hcl)
 .terraform/
 *.tfstate
 *.tfstate.*

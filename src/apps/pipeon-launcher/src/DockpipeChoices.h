@@ -13,7 +13,7 @@ public:
     /// Path to `cursor-dev` resolver's `cursor-prep.sh` when `hintWorkdir` is inside a dockpipe checkout; empty if not found.
     static QString cursorPrepScriptPath(const QString &hintWorkdir);
 
-    /// Workflow names from `shipyard/workflows/<name>/config.yml` and `src/templates/<name>/` or `templates/<name>/config.yml` (excluding `core`).
+    /// Workflow names from `workflows/<name>/config.yml` and `src/templates/<name>/` or `templates/<name>/config.yml` (excluding `core`).
     /// No static fallbacks — empty if repoRoot is invalid or nothing is found.
     static QStringList listWorkflowNamesFromRepo(const QString &repoRoot);
 

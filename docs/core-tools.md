@@ -13,7 +13,7 @@ This repo contains **three** product-shaped areas plus shared templates/scripts.
 
 **Pipeon docs + harness** (IDE experience, fork playbook, **`src/bin/pipeon`**) live under **`src/pipeon/`** (see **`src/pipeon/README.md`**). The main **`docs/`** index links via **`docs/pipeon.md`**. Optional VS Code tasks: **`src/pipeon/vscode-tasks.json.example`**.
 
-**Experimental / maintainer workflows** for this repo live under **`shipyard/workflows/`**. User-facing scaffolds stay under **`templates/`**.
+**Lean CI / dogfood workflows** for this repo live under repo-root **`workflows/`**; **maintainer, packaging, and experiments** live under **`.staging/workflows/`** (still **`--workflow <name>`** — same resolution order as the CLI). User-facing scaffolds stay under **`templates/`**.
 
 ### DorkPipe scripts — canonical bundle + repo view
 

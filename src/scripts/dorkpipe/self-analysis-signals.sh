@@ -17,7 +17,7 @@ todo_hits() {
 engine_files() {
 	if command -v rg >/dev/null 2>&1; then
 		rg -l 'branch_judge|retrieve_if|EarlyStop|verifier|ShouldEscalate|mergeVectors|dorkpipe\.metrics' \
-			"$ROOT/lib/dorkpipe" "$ROOT/shipyard/workflows" "$ROOT/scripts/dorkpipe" 2>/dev/null | sort -u | head -80 || true
+			"$ROOT/lib/dorkpipe" "$ROOT/workflows" "$ROOT/scripts/dorkpipe" 2>/dev/null | sort -u | head -80 || true
 	else
 		grep -R -l -E 'branch_judge|retrieve_if|EarlyStop|verifier' "$ROOT/lib/dorkpipe" 2>/dev/null | head -80 || true
 	fi
@@ -35,7 +35,7 @@ engine_files() {
 
 {
 	echo "### spec.example.yaml (orchestrator) excerpt"
-	f="$ROOT/shipyard/workflows/dorkpipe-orchestrator/spec.example.yaml"
+	f="$ROOT/.staging/workflows/dorkpipe-orchestrator/spec.example.yaml"
 	if [[ -f "$f" ]]; then
 		sed -n '1,80p' "$f"
 	fi

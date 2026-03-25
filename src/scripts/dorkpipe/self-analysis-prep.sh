@@ -54,8 +54,8 @@ find "$ROOT/src/lib/dorkpipe" -name '*.go' 2>/dev/null | wc -l | tr -d ' ' >"$OU
 } >"$OUT/key_file_wc.txt" || true
 
 {
-	echo "## workflows (shipyard/workflows)"
-	find "$ROOT/shipyard/workflows" -name 'config.yml' 2>/dev/null | sort
+	echo "## workflows/"
+	find "$ROOT/workflows" -name 'config.yml' 2>/dev/null | sort
 } >"$OUT/workflow_configs.txt" || true
 
 for doc in docs/dorkpipe.md src/lib/dorkpipe/README.md AGENTS.md; do
