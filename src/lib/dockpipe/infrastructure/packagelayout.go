@@ -9,11 +9,13 @@ import (
 // Project-local layout for content installed from a package store (S3/R2, HTTPS).
 // Uncompressed dev trees stay under templates/ and workflows/ as today; packaged installs default here.
 //
-// Default root: <workdir>/.dockpipe/internal/packages with the same conceptual buckets as authoring templates:
+// Default root: <workdir>/.dockpipe/internal/packages:
 //
 //	workflows/   — workflow-shaped dirs (config.yml, steps, …)
-//	core/        — lean templates/core mirror: runtimes/, resolvers/, strategies/, assets/
-//	assets/      — optional top-level shared assets not folded under core/ (e.g. large binary packs)
+//	core/        — compiled spine only: runtimes/, strategies/, assets/ (not resolvers/bundles/workflows)
+//	resolvers/   — one package dir per resolver profile (same layout as templates/core/resolvers/<name>/)
+//	bundles/     — one package dir per bundle
+//	assets/      — optional top-level shared assets (e.g. large binary packs)
 //
 // Override with DOCKPIPE_PACKAGES_ROOT (absolute path, or relative to workdir).
 const (
@@ -53,13 +55,31 @@ func PackagesWorkflowsDir(workdir string) (string, error) {
 	return filepath.Join(root, "workflows"), nil
 }
 
-// PackagesCoreDir is .dockpipe/internal/packages/core — same category rules as templates/core (lean core tree).
+// PackagesCoreDir is .dockpipe/internal/packages/core — compiled runtimes, strategies, assets only.
 func PackagesCoreDir(workdir string) (string, error) {
 	root, err := PackagesRoot(workdir)
 	if err != nil {
 		return "", err
 	}
 	return filepath.Join(root, "core"), nil
+}
+
+// PackagesResolversDir is .dockpipe/internal/packages/resolvers — one subdirectory per resolver package.
+func PackagesResolversDir(workdir string) (string, error) {
+	root, err := PackagesRoot(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "resolvers"), nil
+}
+
+// PackagesBundlesDir is .dockpipe/internal/packages/bundles — one subdirectory per bundle package.
+func PackagesBundlesDir(workdir string) (string, error) {
+	root, err := PackagesRoot(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "bundles"), nil
 }
 
 // PackagesAssetsDir is .dockpipe/internal/packages/assets (optional top-level asset packs).

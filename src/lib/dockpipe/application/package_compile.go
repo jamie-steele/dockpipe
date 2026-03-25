@@ -170,6 +170,9 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 			"allow_clone":  true,
 			"distribution": "source",
 		}
+		if ns := strings.TrimSpace(wf.Namespace); ns != "" {
+			pm["namespace"] = ns
+		}
 		out, err := yaml.Marshal(pm)
 		if err != nil {
 			return err
@@ -264,7 +267,9 @@ func cmdPackageCompileCore(args []string) error {
 			return fmt.Errorf("remove existing: %w", err)
 		}
 	}
-	if err := copyDir(srcAbs, destRoot); err != nil {
+	// Keep resolver, bundle, and workflow packages out of core — they compile to packages/{resolvers,bundles,workflows}/.
+	exclude := map[string]bool{"resolvers": true, "bundles": true, "workflows": true}
+	if err := copyDirExcludingTopLevel(srcAbs, destRoot, exclude); err != nil {
 		return fmt.Errorf("copy core: %w", err)
 	}
 	manifestPath := filepath.Join(destRoot, infrastructure.PackageManifestFilename)
@@ -304,17 +309,6 @@ func defaultCoreSource(repoRoot string) (string, error) {
 	return "", fmt.Errorf("no default core tree (expected src/core/runtimes or templates/core/runtimes); use --from <dir>")
 }
 
-func requirePackagesCore(workdir string) (string, error) {
-	dest, err := infrastructure.PackagesCoreDir(workdir)
-	if err != nil {
-		return "", err
-	}
-	if _, err := os.Stat(dest); err != nil {
-		return "", fmt.Errorf("missing compiled core at %s — run `dockpipe package compile core` first (or `dockpipe package compile all`)", dest)
-	}
-	return dest, nil
-}
-
 func cmdPackageCompileResolvers(args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
 		fmt.Print(packageCompileResolversUsageText)
@@ -326,9 +320,9 @@ func cmdPackageCompileResolvers(args []string) error {
 		return err
 	}
 	var (
-		workdir    string
-		from       []string
-		noStaging  bool
+		workdir   string
+		from      []string
+		noStaging bool
 	)
 	for i := 0; i < len(args); i++ {
 		switch {
@@ -371,11 +365,10 @@ func cmdPackageCompileResolvers(args []string) error {
 	if len(from) == 0 {
 		return fmt.Errorf("no resolver source directories (set compile.resolvers in %s or pass --from)", domain.DockpipeProjectConfigFileName)
 	}
-	destCore, err := requirePackagesCore(workdir)
+	destRes, err := infrastructure.PackagesResolversDir(workdir)
 	if err != nil {
 		return err
 	}
-	destRes := filepath.Join(destCore, "resolvers")
 	if err := os.MkdirAll(destRes, 0o755); err != nil {
 		return err
 	}
@@ -455,11 +448,10 @@ func cmdPackageCompileBundles(args []string) error {
 	if len(from) == 0 {
 		return fmt.Errorf("no bundle source directories (set compile.bundles in %s, pass --from, or create .staging/bundles)", domain.DockpipeProjectConfigFileName)
 	}
-	destCore, err := requirePackagesCore(workdir)
+	destB, err := infrastructure.PackagesBundlesDir(workdir)
 	if err != nil {
 		return err
 	}
-	destB := filepath.Join(destCore, "bundles")
 	if err := os.MkdirAll(destB, 0o755); err != nil {
 		return err
 	}
@@ -481,6 +473,30 @@ func cmdPackageCompileBundles(args []string) error {
 	}
 	fmt.Fprintf(os.Stderr, "[dockpipe] merged %d bundle director(y/ies) → %s\n", total, destB)
 	return nil
+}
+
+const resolverMetaFilename = "resolver.yaml"
+
+// readResolverNamespaceYAML returns the optional namespace from <dir>/resolver.yaml (empty if absent).
+func readResolverNamespaceYAML(dir string) (string, error) {
+	p := filepath.Join(dir, resolverMetaFilename)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	var aux struct {
+		Namespace string `yaml:"namespace"`
+	}
+	if err := yaml.Unmarshal(b, &aux); err != nil {
+		return "", fmt.Errorf("parse %s: %w", p, err)
+	}
+	if err := domain.ValidateNamespace(aux.Namespace); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(aux.Namespace), nil
 }
 
 // mergeChildPackages copies each immediate child directory from srcRoot into destRoot/<name>,
@@ -520,6 +536,15 @@ func mergeChildPackages(srcRoot, destRoot string, kind string) (int, error) {
 				"kind":         kind,
 				"allow_clone":  true,
 				"distribution": "source",
+			}
+			if kind == "resolver" {
+				ns, err := readResolverNamespaceYAML(to)
+				if err != nil {
+					return n, fmt.Errorf("resolver %s: %w", name, err)
+				}
+				if ns != "" {
+					pm["namespace"] = ns
+				}
 			}
 			out, err := yaml.Marshal(pm)
 			if err != nil {
@@ -734,8 +759,8 @@ Usage:
   dockpipe package compile all [options]
   dockpipe package compile workflow [options] [--from] <source-dir>
 
-Order for a full local store: core first, then resolvers and bundles (merge into packages/core/),
-then workflows (each under packages/workflows/<name>/). Use "compile all" to run that sequence.
+Order for a full local store: core (spine only) → resolvers → bundles → workflows, each in its own
+tree under packages/{core,resolvers,bundles,workflows}/. Use "compile all" to run that sequence.
 
 `
 
@@ -756,23 +781,27 @@ const packageCompileCoreUsageText = `dockpipe package compile core
 
 Copies a core authoring tree (default: src/core or templates/core when present) into
 <workdir>/.dockpipe/internal/packages/core/ and writes package.yml (kind: core).
+Top-level resolvers/, bundles/, and workflows/ in the source are omitted — compile those with
+"package compile resolvers|bundles|workflows" so they land under packages/resolvers/, etc.
 
 Optional dockpipe.config.json "compile.core_from" overrides the default core path when --from is omitted.
 
 Options:
   --workdir <path>   Project directory (default: current directory)
-  --from <path>      Source core root (must contain category dirs such as runtimes/, resolvers/)
+  --from <path>      Source core root (typically runtimes/, strategies/, assets/, …)
   --force            Replace existing packages/core tree
 
 `
 
 const packageCompileResolversUsageText = `dockpipe package compile resolvers
 
-Requires an existing compile core output. Merges each child directory from each --from
-source into .dockpipe/internal/packages/core/resolvers/<name>/ (later --from wins on name clash).
+Merges each child directory from each --from source into
+.dockpipe/internal/packages/resolvers/<name>/ (later --from wins on name clash).
 
 Defaults come from dockpipe.config.json compile.resolvers when present, else
 src/core/resolvers, templates/core/resolvers, then .staging/resolvers (existing dirs only).
+
+Optional resolver.yaml next to each profile may set namespace: <label> (same rules as workflow namespace).
 
 Options:
   --workdir <path>      Project directory (default: current directory)
@@ -783,8 +812,8 @@ Options:
 
 const packageCompileBundlesUsageText = `dockpipe package compile bundles
 
-Requires compile core. Merges each child directory from each --from into
-.dockpipe/internal/packages/core/bundles/<name>/.
+Merges each child directory from each --from into
+.dockpipe/internal/packages/bundles/<name>/.
 
 Defaults: dockpipe.config.json compile.bundles, or .staging/bundles when present.
 

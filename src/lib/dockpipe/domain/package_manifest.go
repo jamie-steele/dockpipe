@@ -21,6 +21,8 @@ type PackageManifest struct {
 	License     string `yaml:"license"`
 	// Kind hints for tooling: workflow | resolver | core | assets | bundle (optional).
 	Kind string `yaml:"kind,omitempty"`
+	// Namespace: optional author/org label (same rules as workflow namespace; optional).
+	Namespace string `yaml:"namespace,omitempty"`
 	// Tags and keywords: search / store facets (optional).
 	Tags     []string `yaml:"tags,omitempty"`
 	Keywords []string `yaml:"keywords,omitempty"`
@@ -52,5 +54,16 @@ func ParsePackageManifest(path string) (*PackageManifest, error) {
 	if err := yaml.Unmarshal(b, &m); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
+	if err := ValidatePackageManifest(&m); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	return &m, nil
+}
+
+// ValidatePackageManifest checks optional fields (e.g. namespace) after YAML decode.
+func ValidatePackageManifest(m *PackageManifest) error {
+	if m == nil {
+		return nil
+	}
+	return ValidateNamespace(m.Namespace)
 }

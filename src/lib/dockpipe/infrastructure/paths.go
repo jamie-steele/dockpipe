@@ -14,7 +14,8 @@ import (
 //
 // Namespace: scripts/core.<dot.segments> maps to paths under core/ by turning dots into path segments
 // (e.g. scripts/core.assets.scripts.foo.sh → core/assets/scripts/foo.sh). Resolution order for that path:
-// .dockpipe/core/…, .dockpipe/internal/packages/core/…, then templates/core/… (compiled / materialized layout).
+// .dockpipe/core/…, .dockpipe/internal/packages/core/…, then templates/core/… (compiled core spine).
+// Resolver/bundle scripts also resolve under packages/resolvers/ and packages/bundles/ (see resolveScriptsPrefixedPath).
 // Uses forward slashes so YAML paths match Linux/container expectations.
 func ResolveWorkflowScript(rel, workflowRoot, repoRoot string) string {
 	if strings.HasPrefix(rel, "scripts/") {
@@ -90,18 +91,19 @@ func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 	if p, ok := resolveCoreNamespacedAsset(repoRoot, rest); ok {
 		return p
 	}
-	pkgCore := filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "core")
-	if p, ok := tryBundledAssetsScripts(pkgCore, "resolvers", rest); ok {
+	pkgRes := filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "resolvers")
+	pkgBun := filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "bundles")
+	if p, ok := tryBundledAssetsScripts(pkgRes, "", rest); ok {
 		return p
 	}
-	if p, ok := tryBundledAssetsScripts(pkgCore, "bundles", rest); ok {
+	if p, ok := tryBundledAssetsScripts(pkgBun, "", rest); ok {
 		return p
 	}
-	if scriptFileExists(filepath.Join(pkgCore, "resolvers", rest)) {
-		return filepath.Join(pkgCore, "resolvers", rest)
+	if scriptFileExists(filepath.Join(pkgRes, rest)) {
+		return filepath.Join(pkgRes, rest)
 	}
-	if scriptFileExists(filepath.Join(pkgCore, "bundles", rest)) {
-		return filepath.Join(pkgCore, "bundles", rest)
+	if scriptFileExists(filepath.Join(pkgBun, rest)) {
+		return filepath.Join(pkgBun, rest)
 	}
 	core := CoreDir(repoRoot)
 	if UsesBundledAssetLayout(repoRoot) {
@@ -189,17 +191,17 @@ func ResolvePreScriptPath(p, repoRoot string) string {
 }
 
 // ResolveResolverFilePath returns the path to a specific resolver profile (KEY=value) by name.
-// Search order: compiled packages/core first, then .staging/resolvers, then templates/core (or src/core).
+// Search order: compiled packages/resolvers first, then .staging/resolvers, then templates/core (or src/core).
 func ResolveResolverFilePath(repoRoot, resolverName string) (string, error) {
 	resolverName = strings.TrimSpace(resolverName)
 	if resolverName == "" {
 		return "", fmt.Errorf("resolver profile name is empty")
 	}
 	var candidates []string
-	if pc, err := PackagesCoreDir(repoRoot); err == nil {
+	if pr, err := PackagesResolversDir(repoRoot); err == nil {
 		candidates = append(candidates,
-			filepath.Join(pc, "resolvers", resolverName),
-			filepath.Join(pc, "resolvers", resolverName, "profile"),
+			filepath.Join(pr, resolverName),
+			filepath.Join(pr, resolverName, "profile"),
 		)
 	}
 	if !UsesBundledAssetLayout(repoRoot) {

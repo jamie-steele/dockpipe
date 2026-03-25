@@ -31,11 +31,8 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 		if pw, err := PackagesWorkflowsDir(workdir); err == nil {
 			candidates = append(candidates, filepath.Join(pw, name, "config.yml"))
 		}
-		if pc, err := PackagesCoreDir(workdir); err == nil {
-			candidates = append(candidates,
-				filepath.Join(pc, "workflows", name, "config.yml"),
-				filepath.Join(pc, "resolvers", name, "config.yml"),
-			)
+		if pr, err := PackagesResolversDir(workdir); err == nil {
+			candidates = append(candidates, filepath.Join(pr, name, "config.yml"))
 		}
 	}
 	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
@@ -75,8 +72,8 @@ func ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, workdir, nam
 		filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"),
 	)
 	if strings.TrimSpace(workdir) != "" {
-		if pc, err := PackagesCoreDir(workdir); err == nil {
-			candidates = append(candidates, filepath.Join(pc, "resolvers", name, "config.yml"))
+		if pr, err := PackagesResolversDir(workdir); err == nil {
+			candidates = append(candidates, filepath.Join(pr, name, "config.yml"))
 		}
 		if pw, err := PackagesWorkflowsDir(workdir); err == nil {
 			candidates = append(candidates, filepath.Join(pw, name, "config.yml"))
@@ -143,8 +140,7 @@ func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 	return out, nil
 }
 
-// ListWorkflowNamesInPackagesStore returns workflow names under workdir/.dockpipe/internal/packages/workflows/*/config.yml
-// and packages/core/workflows/*/config.yml when present.
+// ListWorkflowNamesInPackagesStore returns workflow names under workdir/.dockpipe/internal/packages/workflows/*/config.yml.
 func ListWorkflowNamesInPackagesStore(workdir string) ([]string, error) {
 	root, err := PackagesWorkflowsDir(workdir)
 	if err != nil {
@@ -177,11 +173,6 @@ func ListWorkflowNamesInPackagesStore(workdir string) ([]string, error) {
 	}
 	if err := addDir(root); err != nil {
 		return nil, err
-	}
-	if pc, err := PackagesCoreDir(workdir); err == nil {
-		if err := addDir(filepath.Join(pc, "workflows")); err != nil {
-			return nil, err
-		}
 	}
 	sort.Strings(out)
 	return out, nil

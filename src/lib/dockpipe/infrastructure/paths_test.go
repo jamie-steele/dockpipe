@@ -29,6 +29,33 @@ func TestResolveResolverFilePath(t *testing.T) {
 	}
 }
 
+func TestResolveResolverFilePathPrefersPackagesResolversStore(t *testing.T) {
+	repo := t.TempDir()
+	rsDir := filepath.Join(repo, ".dockpipe", "internal", "packages", "resolvers", "tool")
+	if err := os.MkdirAll(rsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	prof := filepath.Join(rsDir, "profile")
+	if err := os.WriteFile(prof, []byte("DOCKPIPE_RESOLVER_CMD=x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Shadow templates/core/resolvers — should be ignored when packages store wins first.
+	legacy := filepath.Join(repo, "templates", "core", "resolvers", "tool", "profile")
+	if err := os.MkdirAll(filepath.Dir(legacy), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(legacy, []byte("DOCKPIPE_RESOLVER_CMD=legacy\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	p, err := ResolveResolverFilePath(repo, "tool")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p != prof {
+		t.Fatalf("want packages store profile %s got %s", prof, p)
+	}
+}
+
 func TestResolveResolverFilePathPrefersProfileInDirectory(t *testing.T) {
 	repo := t.TempDir()
 	rsDir := filepath.Join(repo, "templates", "core", "resolvers", "tool")

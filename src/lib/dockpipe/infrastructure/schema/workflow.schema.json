@@ -15,6 +15,10 @@
       "type": "string",
       "description": "Optional classifier for tooling and templates (e.g. secretstore). Lowercase letters, digits, hyphens; must start with a letter. The engine does not branch on this field."
     },
+    "namespace": {
+      "type": "string",
+      "description": "Optional author/org label for packages and discovery. Lowercase label (a-z, digits, hyphens); must not be a reserved word (e.g. dockpipe, core, system)."
+    },
     "imports": {
       "type": "array",
       "items": { "type": "string" }

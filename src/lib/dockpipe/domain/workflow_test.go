@@ -224,6 +224,29 @@ steps:
 	}
 }
 
+func TestParseWorkflowYAMLNamespace(t *testing.T) {
+	y := `name: demo
+namespace: my-org
+run: echo hi
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Namespace != "my-org" {
+		t.Fatalf("namespace: %q", w.Namespace)
+	}
+	if err := ValidateWorkflowNamespaceField(w); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestValidateWorkflowNamespaceFieldReserved(t *testing.T) {
+	if err := ValidateWorkflowNamespaceField(&Workflow{Namespace: "dockpipe"}); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestValidateWorkflowTypeField(t *testing.T) {
 	if err := ValidateWorkflowTypeField(&Workflow{WorkflowType: "secretstore"}); err != nil {
 		t.Fatal(err)

@@ -47,7 +47,9 @@ type Workflow struct {
 	// Category: optional launcher/UI hint (e.g. "app" = show in Pipeon Basic mode as a launchable GUI/tool).
 	Category string `yaml:"category,omitempty"`
 	// WorkflowType: optional classifier (e.g. secretstore). Engine ignores; scripts and UIs may use it.
-	WorkflowType    string  `yaml:"workflow_type,omitempty"`
+	WorkflowType string `yaml:"workflow_type,omitempty"`
+	// Namespace: optional author/org label for packages and tooling (see ValidateNamespace).
+	Namespace       string  `yaml:"namespace,omitempty"`
 	Run             RunSpec `yaml:"run"`
 	Isolate         string  `yaml:"isolate"`
 	Act             string  `yaml:"act"`
@@ -200,6 +202,7 @@ type workflowFile struct {
 	Description     string            `yaml:"description,omitempty"`
 	Category        string            `yaml:"category,omitempty"`
 	WorkflowType    string            `yaml:"workflow_type,omitempty"`
+	Namespace       string            `yaml:"namespace,omitempty"`
 	Run             RunSpec           `yaml:"run"`
 	Isolate         string            `yaml:"isolate"`
 	Act             string            `yaml:"act"`
@@ -318,6 +321,14 @@ func ValidateWorkflowTypeField(w *Workflow) error {
 		return fmt.Errorf("workflow_type %q must match %s (e.g. secretstore, my-kind)", t, workflowTypePattern.String())
 	}
 	return nil
+}
+
+// ValidateWorkflowNamespaceField checks namespace when set (reserved words and pattern).
+func ValidateWorkflowNamespaceField(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	return ValidateNamespace(w.Namespace)
 }
 
 // ParseWorkflowYAML unmarshals workflow config from YAML bytes (no imports).

@@ -288,6 +288,36 @@ func copyDirMaybe(src, dst string) error {
 	return copyDir(src, dst)
 }
 
+// copyDirExcludingTopLevel copies src into dst but skips immediate child entries of src whose names are in exclude.
+// Used for compile core so resolver, bundle, and workflow packages stay separate under packages/{resolvers,bundles,workflows}/.
+func copyDirExcludingTopLevel(src, dst string, exclude map[string]bool) error {
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if exclude[name] {
+			continue
+		}
+		from := filepath.Join(src, name)
+		to := filepath.Join(dst, name)
+		if e.IsDir() {
+			if err := copyDir(from, to); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := copyFile(from, to); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func copyDir(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {

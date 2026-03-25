@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Dev launcher: always uses this repo's built binary (src/bin/dockpipe.bin).
+# Use when ~/.local/bin/dockpipe is an older install: export PATH="/path/to/dockpipe/bin:$PATH"
+# or run: ./bin/dockpipe build
+set -euo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$ROOT}"
+BIN="${ROOT}/src/bin/dockpipe.bin"
+LAUNCHER="${ROOT}/src/bin/dockpipe"
+if [[ -x "$BIN" ]]; then
+  exec "$LAUNCHER" "$@"
+fi
+echo "dockpipe: no built binary at $BIN — run: make build" >&2
+exit 1

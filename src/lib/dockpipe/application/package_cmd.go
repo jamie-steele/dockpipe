@@ -145,12 +145,12 @@ Inspect installed packages and package metadata. Installed store content lives u
 Usage:
   dockpipe package list [--workdir <path>]
   dockpipe package manifest
-  dockpipe package build core [options]
+  dockpipe package build core|store [options]
   dockpipe package compile core|resolvers|bundles|workflows|all|workflow [options]
 
   list      Find package.yml under .dockpipe/internal/packages and print rel path, name, version, description.
   manifest  Print an example package.yml schema to stdout.
-  build     Author templates-core tarball + checksum + install-manifest (self-hosted mirror).
+  build     core: templates-core tarball + install-manifest; store: gzip tar per compiled package + packages-store-manifest.json.
   compile   Materialize core / resolvers / bundles / workflows into .dockpipe/internal/packages/ (see compile --help).
 
 Optional repo-root dockpipe.config.json lists compile source dirs (workflows, resolvers, bundles); see docs/package-model.md.

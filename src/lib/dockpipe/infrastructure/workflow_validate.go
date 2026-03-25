@@ -136,6 +136,9 @@ func ValidateResolvedWorkflowYAML(absPath string) error {
 	if err := domain.ValidateWorkflowTypeField(wf); err != nil {
 		return err
 	}
+	if err := domain.ValidateWorkflowNamespaceField(wf); err != nil {
+		return err
+	}
 	var raw interface{}
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return fmt.Errorf("yaml: %w", err)
