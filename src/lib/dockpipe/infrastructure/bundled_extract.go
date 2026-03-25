@@ -138,10 +138,11 @@ func mapEmbeddedToMaterializedPath(rel string) string {
 		return "version"
 	case rel == corePrefix || strings.HasPrefix(rel, corePrefix+"/"):
 		suffix := strings.TrimPrefix(rel, corePrefix)
+		suffix = strings.TrimPrefix(suffix, "/")
 		if suffix == "" {
 			return filepath.Join(ShipyardDir, "core")
 		}
-		return filepath.Join(ShipyardDir, "core") + suffix
+		return filepath.Join(ShipyardDir, "core", filepath.FromSlash(suffix))
 	case rel == EmbeddedTemplatesPrefix:
 		return ShipyardDir
 	case strings.HasPrefix(rel, EmbeddedTemplatesPrefix+"/"):

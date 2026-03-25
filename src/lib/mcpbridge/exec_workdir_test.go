@@ -1,6 +1,7 @@
 package mcpbridge
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -29,11 +30,21 @@ func TestResolveExecWorkdirOptOut(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("DOCKPIPE_REPO_ROOT", tmp)
 	t.Chdir(tmp)
-	got, err := resolveExecWorkdir("/usr")
+	// /usr is absolute on Unix but not on Windows (filepath.IsAbs); use a path outside the repo on every OS.
+	outside, err := os.MkdirTemp(filepath.Dir(tmp), "mcp-workdir-outside-*")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "/usr" {
-		t.Fatalf("got %q", got)
+	t.Cleanup(func() { _ = os.RemoveAll(outside) })
+	want, err := filepath.Abs(outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := resolveExecWorkdir(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Clean(got) != filepath.Clean(want) {
+		t.Fatalf("got %q want %q", got, want)
 	}
 }
