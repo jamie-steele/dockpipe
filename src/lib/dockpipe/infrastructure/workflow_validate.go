@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"dockpipe/src/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/infrastructure/packagebuild"
 )
 
 //go:embed schema/workflow.schema.json
@@ -125,7 +126,17 @@ func ResolveWorkflowYAMLPath(userPath string) (string, error) {
 
 // ValidateResolvedWorkflowYAML parses and validates a workflow file given an absolute path (YAML + JSON Schema).
 func ValidateResolvedWorkflowYAML(absPath string) error {
-	data, err := os.ReadFile(absPath)
+	var data []byte
+	var err error
+	if strings.HasPrefix(absPath, "tar://") {
+		tarPath, entry, ok := SplitTarWorkflowURI(absPath)
+		if !ok {
+			return fmt.Errorf("invalid tar workflow URI")
+		}
+		data, err = packagebuild.ReadFileFromTarGz(tarPath, entry)
+	} else {
+		data, err = os.ReadFile(absPath)
+	}
 	if err != nil {
 		return err
 	}

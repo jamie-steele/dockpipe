@@ -37,8 +37,13 @@ type DockpipeCompileConfig struct {
 	Bundles   *[]string `json:"bundles,omitempty"`    // roots whose children are bundle dirs
 }
 
-// DockpipePackagesConfig is reserved for future package-source / registry fields.
+// DockpipePackagesConfig holds optional tarball resolution for namespaced workflow packages.
 type DockpipePackagesConfig struct {
+	// TarballDir is a repo-relative directory containing dockpipe-workflow-*.tar.gz from package build store.
+	// When unset, release/artifacts is used if that directory exists.
+	TarballDir *string `json:"tarball_dir,omitempty"`
+	// Namespace when set restricts tarball resolution to archives whose config.yml namespace matches.
+	Namespace *string `json:"namespace,omitempty"`
 }
 
 // LoadDockpipeProjectConfig reads dockpipe.config.json from repoRoot. Returns (nil, nil) if the file is missing.

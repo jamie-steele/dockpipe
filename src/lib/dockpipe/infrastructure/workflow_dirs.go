@@ -47,6 +47,11 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 			return p, nil
 		}
 	}
+	if u, err := tryResolveWorkflowTarballURI(repoRoot, workdir, name); err != nil {
+		return "", err
+	} else if u != "" {
+		return u, nil
+	}
 	return "", fmt.Errorf("workflow config not found for %q", name)
 }
 

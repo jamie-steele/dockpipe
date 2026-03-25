@@ -179,7 +179,7 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 			if statErr != nil {
 				names, _ := infrastructure.ListWorkflowNamesInRepoRootAndPackages(repoRoot, effWd)
-				msg := fmt.Sprintf("workflow %q not found — tried workflows/ (or DOCKPIPE_WORKFLOWS_DIR), .staging/workflows/ (dockpipe checkout), .dockpipe/internal/packages/workflows/, legacy templates/, src/core/workflows/ (dockpipe tree), and core/resolvers/%[1]s/config.yml", opts.Workflow)
+				msg := fmt.Sprintf("workflow %q not found — tried workflows/ (or DOCKPIPE_WORKFLOWS_DIR), .staging/workflows/ (dockpipe checkout), .dockpipe/internal/packages/workflows/, legacy templates/, src/core/workflows/ (dockpipe tree), core/resolvers/%[1]s/config.yml, and namespaced package tarballs (dockpipe-workflow-%[1]s-*.tar.gz under release/artifacts or packages.tarball_dir when config.yml inside the archive sets namespace:)", opts.Workflow)
 				if len(names) > 0 {
 					msg += fmt.Sprintf(" (available in this install: %s)", strings.Join(names, ", "))
 				}
@@ -191,7 +191,11 @@ func Run(argv []string, baseEnviron []string) error {
 				return fmt.Errorf("%s", msg)
 			}
 		}
-		wfRoot = filepath.Dir(wfConfig)
+		if strings.HasPrefix(wfConfig, "tar://") {
+			wfRoot = filepath.Join(infrastructure.WorkflowsRootDir(repoRoot), opts.Workflow)
+		} else {
+			wfRoot = filepath.Dir(wfConfig)
+		}
 		wf, err = loadWorkflowAppFn(wfConfig)
 		if err != nil {
 			return fmt.Errorf("parse config: %w", err)

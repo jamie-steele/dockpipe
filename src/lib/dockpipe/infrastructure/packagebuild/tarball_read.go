@@ -12,7 +12,7 @@ import (
 
 // ReadFileFromTarGz returns the uncompressed body of the first tar member whose path equals entryName.
 // entryName uses forward slashes (e.g. workflows/demo/config.yml). Does not extract to disk — suitable
-// for streaming inspection of package tarballs (dockpipe package read).
+// for workflow resolution (dockpipe run) without extracting the archive.
 func ReadFileFromTarGz(tarGzPath, entryName string) ([]byte, error) {
 	entryName = filepath.ToSlash(strings.TrimSpace(entryName))
 	if entryName == "" || strings.Contains(entryName, "..") {
