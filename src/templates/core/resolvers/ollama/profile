@@ -1,2 +1,0 @@
-# Ollama local model runtime — isolate template dockpipe-ollama (see resolvers/ollama/assets/images/ollama).
-DOCKPIPE_RESOLVER_TEMPLATE=ollama

@@ -1,7 +1,0 @@
-# Bundled workflow for resolver ollama and DOCKPIPE_RESOLVER_WORKFLOW=ollama.
-name: ollama
-description: Local Ollama with dockpipe entrypoint (dockpipe-ollama image).
-
-steps:
-  - id: ollama
-    isolate: ollama

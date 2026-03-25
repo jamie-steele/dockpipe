@@ -1,9 +1,0 @@
-# Resolver: Claude Code CLI (tool adapter under templates/core/resolvers/claude).
-DOCKPIPE_RESOLVER_CMD=claude
-# Claude Code accepts ANTHROPIC_API_KEY; some setups use CLAUDE_API_KEY — forward both into Docker.
-DOCKPIPE_RESOLVER_ENV=ANTHROPIC_API_KEY,CLAUDE_API_KEY
-#
-# Docker + Claude Code:
-# - DockPipe's docker runtime is the isolation boundary for /work (bind mount, uid mapping).
-# - Merge API keys from host / repo .env per DOCKPIPE_RESOLVER_ENV (runner forwards hinted vars into -e).
-# - Non-interactive flows often need --dangerously-skip-permissions; see README in this directory.

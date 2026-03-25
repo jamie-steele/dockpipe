@@ -1,9 +1,0 @@
-{
-  "telemetry.telemetryLevel": "off",
-  "extensions.autoUpdate": false,
-  "update.mode": "none",
-  "window.title": "Pipeon — ${rootName}",
-  "window.autoDetectColorScheme": true,
-  "workbench.preferredDarkColorTheme": "Default Dark+",
-  "workbench.preferredLightColorTheme": "Default Light+"
-}
