@@ -21,4 +21,4 @@ Or use **`--var SECRETSTORE_COMMAND=...`**.
 
 ## Adding a provider
 
-Edit **`scripts/dockpipe/secretstore-exec.sh`**: add a branch for `SECRETSTORE_PROVIDER` (e.g. `vault`, `doppler`). Keep **`workflow_type: secretstore`** in YAML so downstream tools stay generic.
+Edit **`src/scripts/dockpipe/secretstore-exec.sh`**: add a branch for `SECRETSTORE_PROVIDER` (e.g. `vault`, `doppler`). Keep **`workflow_type: secretstore`** in YAML so downstream tools stay generic.

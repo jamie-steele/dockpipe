@@ -6,7 +6,7 @@
 
 **Workflow YAML (`config.yml`):** single-command layout (`run` / `isolate` / `act`) or multi-step **`steps:`** (ordering, **`outputs:`**, **`is_blocking`**, optional **`group.mode: async`**). Full reference: **[workflow-yaml.md](workflow-yaml.md)**.
 
-**Subcommands:** `dockpipe init`, `dockpipe install` (fetch **`templates/core`** from HTTPS — e.g. **Cloudflare R2** behind a public URL), `dockpipe clone` (copy a compiled workflow package to **`workflows/`** when **`allow_clone: true`** in **`package.yml`**), `dockpipe package` (list, manifest, **`package build core`**, **`package compile workflow`** into **`.dockpipe/internal/packages/`**), `dockpipe release upload` (S3-compatible upload via **`aws` CLI** — self-hosted registries), `dockpipe workflow validate [path]`, `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe runs list [--workdir]` (list **`.dockpipe/runs/*.json`** for host **skip_container** steps), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
+**Subcommands:** `dockpipe init`, `dockpipe install` (fetch **`templates/core`** from HTTPS — e.g. **Cloudflare R2** behind a public URL), `dockpipe clone` (copy a compiled workflow package to **`workflows/`** when **`allow_clone: true`** in **`package.yml`**), **`dockpipe build`** / **`clean`** / **`rebuild`** (compiled store under **`.dockpipe/internal/packages/`**), `dockpipe package` (list, manifest, **`package build core`**, **`package compile …`**), `dockpipe release upload` (S3-compatible upload via **`aws` CLI** — self-hosted registries), `dockpipe workflow validate [path]`, `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe runs list [--workdir]` (list **`.dockpipe/runs/*.json`** for host **skip_container** steps), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
 
 ## `dockpipe init`
 
@@ -38,9 +38,9 @@ Fetches a published **`templates/core`** tree over **HTTPS** and replaces **`<wo
 
 **Environment:** **`DOCKPIPE_INSTALL_BASE_URL`**, optional **`DOCKPIPE_INSTALL_VERSION`**, **`DOCKPIPE_INSTALL_MANIFEST`** (default **`install-manifest.json`**), **`DOCKPIPE_INSTALL_ALLOW_INSECURE_HTTP=1`** for **`http://`** (local tests only).
 
-**Publish (self-hosted mirror):** **`make package-templates-core`** or **`dockpipe package build core`** → **`release/artifacts/templates-core-<VERSION>.tar.gz`**, **`.sha256`**, **`release/artifacts/install-manifest.json`** (same layout as **`scripts/dockpipe/package-templates-core.sh`**; override dir with **`DOCKPIPE_ARTIFACTS_DIR`**). Upload those files to the same **`--base-url`** path, then run **`dockpipe --workflow r2-publish`** (on-disk **`.staging/workflows/r2-publish/`** in this checkout) or **`dockpipe release upload <file>`** / **`aws s3 cp`** to R2. Official releases may use a different pipeline; **`package build`** / **`release upload`** are for self-hosted mirrors and in-repo mirrors.
+**Publish (self-hosted mirror):** **`make package-templates-core`** or **`dockpipe package build core`** → **`release/artifacts/templates-core-<VERSION>.tar.gz`**, **`.sha256`**, **`release/artifacts/install-manifest.json`** (same layout as **`release/packaging/package-templates-core.sh`**; override dir with **`DOCKPIPE_ARTIFACTS_DIR`**). Upload those files to the same **`--base-url`** path, then run **`dockpipe --workflow r2-publish`** (on-disk **`.staging/workflows/r2-publish/`** in this checkout) or **`dockpipe release upload <file>`** / **`aws s3 cp`** to R2. Official releases may use a different pipeline; **`package build`** / **`release upload`** are for self-hosted mirrors and in-repo mirrors.
 
-**Archive format:** `tar czf -C src core --exclude='core/workflows'` — entries must be **`core/…`** (category dirs only; see **`scripts/dockpipe/package-templates-core.sh`**). After extract, the CLI **re-reads the tarball** and checks **every file on disk** matches the archive, then prints the **tarball sha256** (and compares to manifest/`.sha256` when present).
+**Archive format:** `tar czf -C src core --exclude='core/workflows'` — entries must be **`core/…`** (category dirs only; see **`release/packaging/package-templates-core.sh`**). After extract, the CLI **re-reads the tarball** and checks **every file on disk** matches the archive, then prints the **tarball sha256** (and compares to manifest/`.sha256` when present).
 
 ## `dockpipe clone`
 
@@ -49,6 +49,16 @@ Fetches a published **`templates/core`** tree over **HTTPS** and replaces **`<wo
 | `dockpipe clone <name> [--workdir <path>] [--to <dest>] [--force]` | Copy **`.dockpipe/internal/packages/workflows/<name>/`** to **`--to`** (default **`<workdir>/workflows/<name>`**) only if **`package.yml`** has **`allow_clone: true`**. Refused when **`allow_clone`** is false or omitted (typical for commercial **binary-only** drops). |
 
 See **[package-model.md](package-model.md)** (**Clone, education, and commercial packages**).
+
+## `dockpipe build` / `clean` / `rebuild`
+
+Familiar names for the **compiled package store** under **`.dockpipe/internal/packages/`** (see **[package-model.md](package-model.md)**).
+
+| Command | Purpose |
+|---------|---------|
+| `dockpipe build [options]` | Same as **`dockpipe package compile all`**: materialize core → resolvers → bundles → workflows from **`dockpipe.config.json`** (and defaults). Options: **`--workdir`**, **`--force`**, **`--no-staging`**, **`--skip-bundles`**. |
+| `dockpipe clean [--workdir <path>]` | **`rm -rf`** the packages root (default **`<workdir>/.dockpipe/internal/packages`**; respects **`DOCKPIPE_PACKAGES_ROOT`**). Does not wipe other **`.dockpipe/`** files. |
+| `dockpipe rebuild [options]` | **`clean`** (only **`--workdir`** is forwarded) then **`build`** with the full option set. |
 
 ## `dockpipe package`
 

@@ -100,6 +100,15 @@ func Run(argv []string, baseEnviron []string) error {
 	if argv[0] == "package" {
 		return cmdPackage(argv[1:])
 	}
+	if argv[0] == "build" {
+		return cmdBuild(argv[1:])
+	}
+	if argv[0] == "clean" {
+		return cmdClean(argv[1:])
+	}
+	if argv[0] == "rebuild" {
+		return cmdRebuild(argv[1:])
+	}
 	if argv[0] == "compile" {
 		return cmdPackage(append([]string{"compile"}, argv[1:]...))
 	}

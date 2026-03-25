@@ -4,7 +4,7 @@ name: secretstore
 workflow_type: secretstore
 description: >-
   Host-only: SECRETSTORE_COMMAND runs under injected env (default: op run --env-file).
-  Add providers by extending scripts/dockpipe/secretstore-exec.sh; compose other workflows by
+  Add providers by extending scripts/dockpipe/secretstore-exec.sh (on disk: src/scripts/dockpipe/ in this repo); compose other workflows by
   pointing SECRETSTORE_COMMAND at dockpipe.
 
 docker_preflight: false

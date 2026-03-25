@@ -127,7 +127,7 @@ const packageBuildUsageText = `dockpipe package build
 
 Author release artifacts (tarball + checksum + install-manifest) for self-hosted
 package sources. Official DockPipe releases use a separate pipeline; this matches
-the layout expected by dockpipe install core and scripts/dockpipe/package-templates-core.sh.
+the layout expected by dockpipe install core and release/packaging/package-templates-core.sh.
 
 Usage:
   dockpipe package build core [options]

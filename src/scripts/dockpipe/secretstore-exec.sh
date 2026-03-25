@@ -19,6 +19,6 @@ case "$PROVIDER" in
     exec op run --env-file="$OP_ENV_FILE" -- bash -c "$CMD"
     ;;
   *)
-    die "unsupported SECRETSTORE_PROVIDER=$PROVIDER — extend scripts/dockpipe/secretstore-exec.sh (known: op)"
+    die "unsupported SECRETSTORE_PROVIDER=$PROVIDER — extend src/scripts/dockpipe/secretstore-exec.sh (known: op)"
     ;;
 esac

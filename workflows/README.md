@@ -10,4 +10,4 @@ This directory is the **canonical** place for **this repository’s** DockPipe w
 
 **Suggested local “full stack”:** run **`make`** / **`go test`**, then **`bash src/scripts/ci-local.sh`** (host scans + **`dockpipe --workflow test`**), optionally **`./src/bin/dockpipe --workflow dockpipe-repo-quality --workdir . --`**.
 
-**`.staging/workflows/`** mirrors this tree for packaging experiments (`scripts/dockpipe/sync-packaging-staging.sh`).
+**`.staging/workflows/`** mirrors this tree for packaging experiments (edit in-tree; no separate sync step).

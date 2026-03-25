@@ -17,7 +17,7 @@ DockPipe distinguishes **two sides** so pipelines stay clear: **what you author*
 
 **Authors are not forced to pick one path:** keep editing and running from source for low friction; use **compile → package → release** when you want a **self-contained** published artifact.
 
-### Local compile (`dockpipe package compile` / `dockpipe compile`)
+### Local compile (`dockpipe build` / `dockpipe package compile` / `dockpipe compile`)
 
 Materialize a **project-local** store under **`.dockpipe/internal/packages/`** without moving authoring trees.
 
@@ -39,7 +39,7 @@ Compile steps:
 2. **`compile resolvers`** — repeatable **`--from`**; defaults merge **`src/core/resolvers`**, **`templates/core/resolvers`**, then **`.staging/resolvers`** (each path must exist).
 3. **`compile bundles`** — repeatable **`--from`**; defaults from config or **`.staging/bundles`**.
 4. **`compile workflows`** — every subdir with **`config.yml`** under each **`--from`** root; defaults **`workflows/`** then **`.staging/workflows/`** (or **`dockpipe.config.json`**).
-5. **`compile all`** — runs **core → resolvers → bundles (when roots exist) → workflows**.
+5. **`compile all`** (alias: **`dockpipe build`**) — runs **core → resolvers → bundles (when roots exist) → workflows**. **`dockpipe clean`** removes the compiled store; **`dockpipe rebuild`** runs **clean** then **build**.
 
 The runner checks **compiled `packages/core`** before **`.staging`** and authoring **`CoreDir`** so you can **opt in** to the compiled slice per workdir. Edit **`package.yml`** after compile to add **namespaces**, **`depends`**, and metadata for store-shaped workflows.
 

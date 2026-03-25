@@ -168,7 +168,7 @@ Manifest JSON (install-manifest.json):
   {"schema":1,"packages":{"core":{"tarball":"templates-core-0.6.0.tar.gz","sha256":"<hex>"}}}
 
 Package the archive from a dockpipe checkout:
-  bash scripts/dockpipe/package-templates-core.sh
+  bash release/packaging/package-templates-core.sh
 
 Upload with dockpipe --workflow r2-publish or aws s3 cp to the same base URL.
 

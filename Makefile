@@ -64,7 +64,7 @@ ci:
 
 # Tar.gz + sha256 + install-manifest.json for `dockpipe install core` (upload release/artifacts/* to your HTTPS base URL).
 package-templates-core:
-	bash scripts/dockpipe/package-templates-core.sh
+	bash release/packaging/package-templates-core.sh
 
 # Docs/code guardrail: obsolete templates/core paths (pre-assets layout). See CONTRIBUTING.md.
 check-paths:
