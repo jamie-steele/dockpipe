@@ -300,6 +300,15 @@ func TestTranslateBridgeArgv_actionCreate(t *testing.T) {
 	}
 }
 
+func TestTranslateDockpipeArgs_workflowsDir(t *testing.T) {
+	in := []string{"--workflows-dir", `C:\wf`, "--workflow", "test"}
+	out := translateDockpipeArgs("Ubuntu", in)
+	want := []string{"--workflows-dir", "/mnt/c/wf", "--workflow", "test"}
+	if !reflect.DeepEqual(out, want) {
+		t.Fatalf("got %#v", out)
+	}
+}
+
 func TestTranslateDockpipeArgs_packageBuildRepoOut(t *testing.T) {
 	in := []string{"package", "build", "core", "--repo-root", `C:\rp`, "--out", `C:\out`}
 	out := translateDockpipeArgs("Ubuntu", in)

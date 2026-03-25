@@ -32,7 +32,7 @@ func translateDockpipeArgs(distro string, argv []string) []string {
 		a := out[i]
 		switch a {
 		case "--data-dir", "--run", "--pre-script", "--act", "--action", "--workdir", "--work-path", "--bundle-out", "--env-file",
-			"--isolate", "--template", "--image", "--base-url", "--url", "--repo-root", "--out":
+			"--isolate", "--template", "--image", "--base-url", "--url", "--repo-root", "--out", "--workflows-dir":
 			if i+1 < len(out) {
 				out[i+1] = maybeTranslateWinPath(distro, out[i+1])
 			}

@@ -16,9 +16,10 @@ const dockpipeProjectReadme = `# Dockpipe project
 
 - **scripts/** — Run and act scripts.
 - **images/** — Optional project Dockerfiles (e.g. **images/example/** copied from **templates/core/assets/images/example/**). Bundled framework images resolve via **DockerfileDir** (**resolvers/** / **bundles/** / **assets/images/**).
-- **templates/** — Bundled-style workflows (**config.yml**), one folder per name (from upstream / **dockpipe init &lt;name&gt;**).
+- **workflows/** — Default home for named workflows (**config.yml** per folder); **dockpipe init &lt;name&gt;** creates **workflows/&lt;name&gt;/** (override with **--workflows-dir** or **DOCKPIPE_WORKFLOWS_DIR**).
 - **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/**, **assets/** (**agnostic scripts**, **images/**, **compose/**), **bundles/** (domain asset packs) (from **dockpipe init**).
-- **shipyard/workflows/** — Optional **repo-local** workflows; **--workflow** checks here before **templates/**.
+- **templates/&lt;name&gt;/** — Legacy named workflows; still resolved if **workflows/** does not define the same name.
+- **shipyard/workflows/** — Optional **repo-local** workflows; **--workflow** checks here before **workflows/** and **templates/**.
 - **dockpipe.yml** (optional) — Repo-root workflow; use **dockpipe --workflow-file dockpipe.yml**.
 `
 
@@ -111,6 +112,16 @@ func ensureProjectScaffold(repoRoot, projectDir string) error {
 	return nil
 }
 
+// bundledWorkflowSourceDir resolves a bundled workflow by name for init --from / template init.
+// Prefers templates/<name> when present (fixtures, materialized bundles), else WorkflowsRootDir/<name>.
+func bundledWorkflowSourceDir(repoRoot, name string) string {
+	legacy := filepath.Join(repoRoot, "templates", name)
+	if st, err := os.Stat(legacy); err == nil && st.IsDir() {
+		return legacy
+	}
+	return filepath.Join(infrastructure.WorkflowsRootDir(repoRoot), name)
+}
+
 func resolveInitFromSource(repoRoot, from string) (srcDir string, isBlank bool, err error) {
 	from = strings.TrimSpace(from)
 	if from == "" {
@@ -122,7 +133,7 @@ func resolveInitFromSource(repoRoot, from string) (srcDir string, isBlank bool, 
 	if strings.Contains(from, "://") {
 		return "", false, fmt.Errorf("--from must be a template source (blank, bundled name, or local directory path), not a URL")
 	}
-	bundled := filepath.Join(infrastructure.WorkflowsRootDir(repoRoot), from)
+	bundled := bundledWorkflowSourceDir(repoRoot, from)
 	if st, e := os.Stat(bundled); e == nil && st.IsDir() {
 		return bundled, false, nil
 	}
@@ -138,7 +149,7 @@ func resolveInitFromSource(repoRoot, from string) (srcDir string, isBlank bool, 
 	if st, e := os.Stat(abs); e == nil && st.IsDir() {
 		return abs, false, nil
 	}
-	return "", false, fmt.Errorf("unknown --from source %q — use blank, a bundled name under templates/ (e.g. init, run, run-apply, run-apply-validate, secretstore), a path to shipyard/workflows/<name> in a dockpipe checkout, or another filesystem path to a workflow directory", from)
+	return "", false, fmt.Errorf("unknown --from source %q — use blank, a bundled workflow name (e.g. init, run, run-apply, run-apply-validate, secretstore), a path to shipyard/workflows/<name> in a dockpipe checkout, or another filesystem path to a workflow directory", from)
 }
 
 func writeWorkflowYAML(path string, wf *domain.Workflow) error {
@@ -205,10 +216,39 @@ func stringSliceContains(ss []string, s string) bool {
 	return false
 }
 
+func maybeWarnUnusedWorkflowsRoot(projectDir string) {
+	if infrastructure.UsesBundledAssetLayout(projectDir) || infrastructure.DockpipeAuthoringSourceTree(projectDir) {
+		return
+	}
+	root := infrastructure.WorkflowsRootDir(projectDir)
+	st, err := os.Stat(root)
+	if err != nil || !st.IsDir() {
+		return
+	}
+	if infrastructure.WorkflowsDirHasDockpipeWorkflow(root) {
+		return
+	}
+	rel := root
+	if r, err := filepath.Rel(projectDir, root); err == nil && !strings.HasPrefix(r, "..") {
+		rel = r
+	}
+	fmt.Fprintf(os.Stderr, "[dockpipe] warning: %q exists but has no DockPipe workflow folders (no <name>/config.yml). "+
+		"This path is often used for GitHub Actions or other tools. New workflows will still be created here. "+
+		"To use a different directory set DOCKPIPE_WORKFLOWS_DIR or run: dockpipe init <name> --workflows-dir <path>\n", rel)
+}
+
 func createNamedWorkflow(repoRoot, projectDir, name, fromSource, resolver, runtime, strategy string) error {
-	td := filepath.Join(projectDir, "templates", name)
+	maybeWarnUnusedWorkflowsRoot(projectDir)
+	wfBase := infrastructure.WorkflowsRootDir(projectDir)
+	td := filepath.Join(wfBase, name)
 	if st, err := os.Stat(td); err == nil && st.IsDir() {
-		return fmt.Errorf("templates/%s already exists", name)
+		return fmt.Errorf("workflow directory already exists: %s", td)
+	}
+	if !infrastructure.DockpipeAuthoringSourceTree(projectDir) && !infrastructure.UsesBundledAssetLayout(projectDir) {
+		leg := filepath.Join(projectDir, "templates", name)
+		if st, err := os.Stat(leg); err == nil && st.IsDir() {
+			return fmt.Errorf("workflow %q already exists at %s (legacy templates/ layout); remove or rename before creating under workflows/", name, leg)
+		}
 	}
 	if err := os.MkdirAll(td, 0o755); err != nil {
 		return err
@@ -252,10 +292,14 @@ func createNamedWorkflow(repoRoot, projectDir, name, fromSource, resolver, runti
 			fmt.Fprintf(os.Stderr, "[dockpipe] Appended self-analysis handoff to AGENTS.md\n")
 		}
 	}
+	showRel := td
+	if r, err := filepath.Rel(projectDir, td); err == nil && !strings.HasPrefix(r, "..") {
+		showRel = r
+	}
 	if isBlank {
-		fmt.Fprintf(os.Stderr, "[dockpipe] Created templates/%s/ (empty workflow — edit config.yml; use --from to copy a bundled template)\n", name)
+		fmt.Fprintf(os.Stderr, "[dockpipe] Created %s/ (empty workflow — edit config.yml; use --from to copy a bundled template)\n", showRel)
 	} else {
-		fmt.Fprintf(os.Stderr, "[dockpipe] Created templates/%s/ (from %s)\n", name, fromSource)
+		fmt.Fprintf(os.Stderr, "[dockpipe] Created %s/ (from %s)\n", showRel, fromSource)
 	}
 	return nil
 }

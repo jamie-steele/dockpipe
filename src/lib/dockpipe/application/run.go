@@ -117,6 +117,10 @@ func Run(argv []string, baseEnviron []string) error {
 		printUsage()
 		return nil
 	}
+	if opts.WorkflowsDir != "" {
+		infrastructure.SetWorkflowsDirForProcess(opts.WorkflowsDir)
+		defer infrastructure.SetWorkflowsDirForProcess("")
+	}
 	if err := ensureHostBash(); err != nil {
 		return err
 	}
@@ -159,7 +163,7 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 			if statErr != nil {
 				names, _ := infrastructure.ListWorkflowNamesInRepoRoot(repoRoot)
-				msg := fmt.Sprintf("workflow %q not found — tried workflows dir (src/templates/, templates/, or shipyard/workflows/) and core/resolvers/%[1]s/config.yml", opts.Workflow)
+				msg := fmt.Sprintf("workflow %q not found — tried shipyard/workflows/, workflows/ (or DOCKPIPE_WORKFLOWS_DIR), legacy templates/, src/templates/ (dockpipe tree), and core/resolvers/%[1]s/config.yml", opts.Workflow)
 				if len(names) > 0 {
 					msg += fmt.Sprintf(" (available in this install: %s)", strings.Join(names, ", "))
 				}

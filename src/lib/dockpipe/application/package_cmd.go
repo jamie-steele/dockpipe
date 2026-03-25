@@ -22,6 +22,8 @@ func cmdPackage(args []string) error {
 		return cmdPackageManifest(args[1:])
 	case "build":
 		return cmdPackageBuild(args[1:])
+	case "compile":
+		return cmdPackageCompile(args[1:])
 	default:
 		return fmt.Errorf("unknown package subcommand %q (try: dockpipe package --help)", args[0])
 	}
@@ -134,10 +136,12 @@ Usage:
   dockpipe package list [--workdir <path>]
   dockpipe package manifest
   dockpipe package build core [options]
+  dockpipe package compile workflow [options] <source-dir>
 
   list      Find package.yml under .dockpipe/internal/packages and print rel path, name, version, description.
   manifest  Print an example package.yml schema to stdout.
   build     Author templates-core tarball + checksum + install-manifest (self-hosted / dogfood).
+  compile   Validate workflow YAML and copy into .dockpipe/internal/packages/workflows/.
 
 Environment:
   DOCKPIPE_PACKAGES_ROOT   Override packages root (default: <workdir>/.dockpipe/internal/packages).

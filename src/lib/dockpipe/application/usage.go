@@ -26,13 +26,14 @@ Optional:
   --                    End of dockpipe flags; rest goes to your command
 
 More flags:
-  --workflow-file, --run, --act, --strategy, --repo, --branch, --mount
+  --workflow-file, --run, --act, --strategy, --repo, --branch,   --mount
+  --workflows-dir <path>  Repo-relative or absolute root for named workflows (default: workflows/; env: DOCKPIPE_WORKFLOWS_DIR)
   --env, --env-file, --var, --data-dir, --data-vol, --no-data, --reinit, -f, -d/--detach
 
 Commands:
   init                    Add DockPipe to the current project
   install                 Fetch templates/core from HTTPS (e.g. Cloudflare R2); see install core --help
-  package list|manifest|build   Packages: list installed, example manifest, or author core tarball for a registry
+  package list|manifest|build|compile   Packages: list, manifest, author core tarball, or compile workflow into .dockpipe/internal
   release upload          Upload a file to S3-compatible storage (self-hosted; uses aws CLI)
   workflow validate       Check workflow YAML (default: dockpipe.yml)
   doctor                  Check docker, bash, and bundled assets
@@ -55,11 +56,12 @@ Project setup in the current directory, or add a new workflow.
 
 Usage:
   dockpipe init [flags]              merge templates/core, scripts/, images/, dockpipe.yml (no workflow name)
-  dockpipe init <name> [flags]       create templates/<name>/config.yml as an empty starter workflow
-  dockpipe init <name> --from <src>  copy a bundled template or filesystem path into templates/<name>/
+  dockpipe init <name> [flags]       create workflows/<name>/config.yml as an empty starter (see --workflows-dir)
+  dockpipe init <name> --from <src>  copy a bundled template or filesystem path into workflows/<name>/
 
 Flags:
   --from <source>          With <name>: copy from blank (same as default), init, run, run-apply, a path, …
+  --workflows-dir <path>   With <name>: repo-relative or absolute directory for named workflows (default: workflows). Same as DOCKPIPE_WORKFLOWS_DIR for dockpipe run.
   --runtime <name>         Written into new config (with <name>)
   --resolver <name>        Written into new config (with <name>)
   --strategy <name>        Written into new config (with <name>)

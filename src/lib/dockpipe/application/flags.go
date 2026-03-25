@@ -30,6 +30,7 @@ type CliOpts struct {
 	Action        string
 	Workflow      string
 	WorkflowFile  string
+	WorkflowsDir  string
 	Workdir       string
 	RepoURL       string
 	RepoBranch    string
@@ -113,6 +114,12 @@ func ParseFlags(repoRoot string, argv []string) ([]string, *CliOpts, error) {
 				return nil, nil, fmt.Errorf("--workflow-file requires a path to a YAML file (e.g. dockpipe.yml)")
 			}
 			o.WorkflowFile = argv[i+1]
+			i += 2
+		case "--workflows-dir":
+			if i+1 >= len(argv) {
+				return nil, nil, fmt.Errorf("--workflows-dir requires a path (repo-relative or absolute)")
+			}
+			o.WorkflowsDir = argv[i+1]
 			i += 2
 		case "--workdir":
 			if i+1 >= len(argv) {

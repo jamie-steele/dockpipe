@@ -6,7 +6,7 @@
 
 **Workflow YAML (`config.yml`):** single-command layout (`run` / `isolate` / `act`) or multi-step **`steps:`** (ordering, **`outputs:`**, **`is_blocking`**, optional **`group.mode: async`**). Full reference: **[workflow-yaml.md](workflow-yaml.md)**.
 
-**Subcommands:** `dockpipe init`, `dockpipe install` (fetch **`templates/core`** from HTTPS — e.g. **Cloudflare R2** behind a public URL), `dockpipe package` (list **`package.yml`**, example manifest, or **`package build core`** to author a release tarball), `dockpipe release upload` (S3-compatible upload via **`aws` CLI** — self-hosted registries), `dockpipe workflow validate [path]`, `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe runs list [--workdir]` (list **`.dockpipe/runs/*.json`** for host **skip_container** steps), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
+**Subcommands:** `dockpipe init`, `dockpipe install` (fetch **`templates/core`** from HTTPS — e.g. **Cloudflare R2** behind a public URL), `dockpipe package` (list, manifest, **`package build core`**, **`package compile workflow`** into **`.dockpipe/internal/packages/`**), `dockpipe release upload` (S3-compatible upload via **`aws` CLI** — self-hosted registries), `dockpipe workflow validate [path]`, `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe runs list [--workdir]` (list **`.dockpipe/runs/*.json`** for host **skip_container** steps), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
 
 ## `dockpipe init`
 
@@ -15,12 +15,13 @@ Local project setup only: **no `git clone`**, no treating **`init`** as a remote
 | Command | Purpose |
 |---------|---------|
 | `dockpipe init` | Create **`scripts/`**, **`images/`**, **`templates/`** if needed; merge bundled **`templates/core/`** (**`runtimes/`**, **`resolvers/`**, **`strategies/`**, **`assets/`** — scripts, images, compose); add **`README.md`** and **`dockpipe.yml`** when missing. |
-| `dockpipe init <name>` | Create **`templates/<name>/config.yml`** as a **minimal empty workflow** (name + description only). Does **not** copy the bundled **`init`** template unless you pass **`--from init`**. |
-| `dockpipe init <name> --from <source>` | Copy into **`templates/<name>/`**: **`--from`** may be **`blank`** (same as the default), **`init`** (legacy starter with scripts next to **`config.yml`**), another **bundled** name under **`templates/`** (e.g. **`run`**, **`run-apply`**), a **filesystem path** to any workflow directory (including **`shipyard/workflows/…`** in a dockpipe **source checkout**), or a path resolved from **`DOCKPIPE_REPO_ROOT`**. Not a Git URL. |
+| `dockpipe init <name>` | Create **`workflows/<name>/config.yml`** as a **minimal empty workflow** (name + description only). Does **not** copy the bundled **`init`** template unless you pass **`--from init`**. If **`workflows/`** already exists but has no **`*/config.yml`** trees, the CLI prints a **warning** (often a conflict with GitHub Actions). |
+| `dockpipe init <name> --workflows-dir <path>` | Put the new workflow under **`<path>/<name>/`** instead of **`workflows/`** (repo-relative or absolute). Same as env **`DOCKPIPE_WORKFLOWS_DIR`** for **`dockpipe run`**. |
+| `dockpipe init <name> --from <source>` | Copy into **`workflows/<name>/`** (or **`--workflows-dir`**): **`--from`** may be **`blank`**, **`init`**, another **bundled** name (resolved under **`templates/&lt;name&gt;`** or the bundled workflows root), a **filesystem path**, or **`shipyard/workflows/…`**. Not a Git URL. |
 | `dockpipe init <name> --resolver <n> --runtime <n> --strategy <n>` | Optional; written into the new **`config.yml`** as **`resolver:`** / **`default_resolver:`**, **`runtime:`** / **`default_runtime:`**, **`strategy:`** (same meaning as **`dockpipe run`**). Example: **`dockpipe init my-pipeline --from run-apply --resolver codex --runtime docker`**. |
 | `dockpipe init --gitignore` | **Opt-in** only: append a marked block to **`.gitignore`** at the **git repository root** (`.dockpipe/`, `.dorkpipe/`, Go caches, `tmp/`). Idempotent if the block is already present. Requires a **git working tree** (run from inside a repo). |
 
-On a source checkout, **`--workflow`** resolves **`shipyard/workflows/<name>/config.yml`** before **`src/templates/<name>/config.yml`** (this repo) or **`templates/<name>/config.yml`** (typical project). The dockpipe project keeps its **own** CI and demo workflows under **`shipyard/workflows/`** in the tree (see **[AGENTS.md](../AGENTS.md)**); there is **no** `init` flag for that — copy directories by hand or point **`--from`** at such a path when running **`dockpipe init`** with a workflow name.
+On a source checkout, **`--workflow`** resolves **`shipyard/workflows/<name>/config.yml`** before **`src/templates/<name>/config.yml`**. In a **typical downstream project**, named workflows live under **`workflows/<name>/config.yml`** by default; **`templates/<name>/config.yml`** remains a **legacy** fallback. Override the folder with **`--workflows-dir`** or **`DOCKPIPE_WORKFLOWS_DIR`**. The dockpipe project keeps CI/demo workflows under **`shipyard/workflows/`** (see **[AGENTS.md](../AGENTS.md)**).
 
 **`dockpipe init`** also creates **`dockpipe/README.md`** and an empty **`shipyard/workflows/`** tree when missing.
 
@@ -49,7 +50,8 @@ Inspect **installed** package metadata. Store-backed installs are intended to la
 |---------|---------|
 | `dockpipe package list [--workdir <path>]` | Walk **`.dockpipe/internal/packages/`** for **`package.yml`** files; print **path**, **name**, **version**, **description** (tab-separated). |
 | `dockpipe package manifest` | Print an example **`package.yml`** (schema: **name**, **version**, **title**, **description**, **author**, **website**, **license**, optional **kind**). |
-| `dockpipe package build core [--repo-root <path>] [--out <dir>] [--version <ver>]` | Write **`templates/core`** tarball (**`core/…`** prefix), **`.sha256`**, **`install-manifest.json`** for **`dockpipe install core`**. Repo root defaults to **`DOCKPIPE_REPO_ROOT`**, git top-level, or **cwd**; version defaults to **`VERSION`** at repo root. |
+| `dockpipe package build core [--repo-root <path>] [--out <dir>] [--version <ver>]` | Write **`templates/core`** tarball (**`core/…`** prefix), **`.sha256`**, **`install-manifest.json`** for **`dockpipe install core`**. Default **`--out`**: **`release/artifacts/`**. |
+| `dockpipe package compile workflow <source-dir> [--workdir <path>] [--name <n>] [--force]` | **`workflow validate`** on **`source-dir/config.yml`**, then copy the tree to **`.dockpipe/internal/packages/workflows/<name>/`** (writes **`package.yml`** if missing). |
 
 **Environment:** **`DOCKPIPE_PACKAGES_ROOT`** — override packages root (default **`<workdir>/.dockpipe/internal/packages`**).
 
@@ -68,7 +70,7 @@ When you use `--workflow <name>`, the resolved **`config.yml`** (see **[workflow
 Additional sources (each only sets **unset** variables, except `--var`):
 
 1. `vars:` defaults in `config.yml`
-2. `.env` beside the resolved workflow **`config.yml`** (e.g. `templates/<name>/.env` in a checkout, or `shipyard/workflows/<name>/.env` in the materialized bundle)
+2. `.env` beside the resolved workflow **`config.yml`** (e.g. **`workflows/<name>/.env`**, **`src/templates/<name>/.env`**, or **`shipyard/workflows/<name>/.env`**)
 3. `.env` at the bundled materialized root (default: user cache; layout under **[install.md](install.md#bundled-templates-no-extra-install-tree)**) or at **`DOCKPIPE_REPO_ROOT`** if you set it
 4. Each `--env-file <path>` (in order)
 5. Path in **`DOCKPIPE_ENV_FILE`** if set
@@ -82,8 +84,9 @@ All options must appear **before** a standalone **`--`**. The command and its ar
 
 | Flag | Aliases | Purpose |
 |------|---------|---------|
-| `--workflow <name>` | | Load workflow YAML: **`templates/<name>/config.yml`** (project) or **`shipyard/workflows/<name>/config.yml`** (materialized bundle), then resolver delegate **`templates/core/resolvers/<name>/config.yml`** or **`shipyard/core/resolvers/<name>/config.yml`** (see **`ResolveWorkflowConfigPath`** in **`src/lib/dockpipe/infrastructure/workflow_dirs.go`**). With **`steps:`**, a final **`--`** is optional (see **[workflow-yaml.md](workflow-yaml.md)**). Mutually exclusive with **`--workflow-file`**. |
+| `--workflow <name>` | | Load workflow YAML: resolution order in **`workflow_dirs.go`** — e.g. **`shipyard/workflows/<name>/config.yml`**, **`workflows/<name>/config.yml`** (default project root; override with **`--workflows-dir`** / **`DOCKPIPE_WORKFLOWS_DIR`**), legacy **`templates/<name>/config.yml`**, **`src/templates/<name>/config.yml`** (dockpipe source tree), then resolver delegate under **`templates/core/resolvers/`** or **`shipyard/core/resolvers/`**. With **`steps:`**, a final **`--`** is optional (see **[workflow-yaml.md](workflow-yaml.md)**). Mutually exclusive with **`--workflow-file`**. |
 | `--workflow-file <path>` | | Load workflow YAML from an arbitrary path (same shape as bundled **`config.yml`**). Relative **`run:`** / **`act:`** paths resolve next to that file. **Resolver** profiles load only from **`templates/core/resolvers/`** (or **`shipyard/core/resolvers/`** in the materialized bundle) — not from folders beside the YAML file. Mutually exclusive with **`--workflow`**. |
+| `--workflows-dir <path>` | | Repo-relative or absolute directory for **`--workflow <name>`** resolution (default **`workflows/`**). Same as **`DOCKPIPE_WORKFLOWS_DIR`**. Also **`dockpipe init <name> --workflows-dir …`**. |
 | `--run <path>` | `--pre-script` | **Run:** script(s) on the host before the container. Repeatable. |
 | `--isolate <name>` | `--template`, `--image` | **Isolate:** image or template (`base-dev`, `dev`, `agent-dev`, `claude`, `codex`, …). Builds if the value is a template. |
 | `--act <path>` | `--action` | **Act:** script after the container command (e.g. commit-worktree). |

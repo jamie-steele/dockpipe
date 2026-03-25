@@ -21,7 +21,7 @@ Suggested subdirectories (mirror authoring concepts; not all are required):
 
 **Compression:** store objects are typically **`.tar.gz`** (or **`.tar.zst`** later) to keep bandwidth and R2 storage small; the CLI unpacks into the layout above. **Binary-only** packs are possible for asset-only packages if you add a small unpack step later.
 
-**CLI today:** **`dockpipe install core`** pulls **`templates/core`** into **`templates/core`** (bootstrap path). Future **`dockpipe install package …`** will unpack into **`.dockpipe/internal/packages/...`** and wire resolution order (project **`templates/`** + **installed packages** + embedded bundle).
+**CLI today:** **`dockpipe install core`** pulls **`templates/core`** into **`templates/core`** (bootstrap path). **`dockpipe package compile workflow`** validates YAML and copies a workflow tree into **`.dockpipe/internal/packages/workflows/<name>/`** (see **`docs/cli-reference.md`**). Future **`dockpipe install package …`** will unpack registry artifacts and extend resolution order (project **`workflows/`** + **installed packages** + embedded bundle).
 
 ## 2. Uncompressed working tree (authoring / clone)
 

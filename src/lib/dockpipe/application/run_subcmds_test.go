@@ -150,7 +150,7 @@ func TestMergeBundledTemplatesCoreCopiesCoreTree(t *testing.T) {
 	}
 }
 
-// TestCmdInitCreatesWorkspaceAndMinimalWorkflow creates workspace layout and templates/<name>/config.yml as a blank starter.
+// TestCmdInitCreatesWorkspaceAndMinimalWorkflow creates workspace layout and workflows/<name>/config.yml as a blank starter.
 func TestCmdInitCreatesWorkspaceAndMinimalWorkflow(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
@@ -172,7 +172,7 @@ func TestCmdInitCreatesWorkspaceAndMinimalWorkflow(t *testing.T) {
 		filepath.Join(project, "README.md"),
 		filepath.Join(project, "scripts"),
 		filepath.Join(project, "images"),
-		filepath.Join(project, "templates", "demo", "config.yml"),
+		filepath.Join(project, "workflows", "demo", "config.yml"),
 		filepath.Join(project, "templates", "core", "resolvers", "default"),
 	}
 	for _, p := range checks {
@@ -180,7 +180,7 @@ func TestCmdInitCreatesWorkspaceAndMinimalWorkflow(t *testing.T) {
 			t.Fatalf("expected created path %q: %v", p, err)
 		}
 	}
-	b, err := os.ReadFile(filepath.Join(project, "templates", "demo", "config.yml"))
+	b, err := os.ReadFile(filepath.Join(project, "workflows", "demo", "config.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -188,12 +188,12 @@ func TestCmdInitCreatesWorkspaceAndMinimalWorkflow(t *testing.T) {
 	if !strings.Contains(s, "demo") || !strings.Contains(s, "Dockpipe workflow") {
 		t.Fatalf("expected blank starter config, got:\n%s", s)
 	}
-	if _, err := os.Stat(filepath.Join(project, "templates", "demo", "README.md")); err == nil {
+	if _, err := os.Stat(filepath.Join(project, "workflows", "demo", "README.md")); err == nil {
 		t.Fatal("default init <name> should not copy bundled init template README; use --from init")
 	}
 }
 
-// TestCmdInitFromInitCopiesBundledInitTemplate restores the legacy copy of templates/init into templates/<name>/.
+// TestCmdInitFromInitCopiesBundledInitTemplate restores the legacy copy of templates/init into workflows/<name>/.
 func TestCmdInitFromInitCopiesBundledInitTemplate(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
@@ -210,7 +210,7 @@ func TestCmdInitFromInitCopiesBundledInitTemplate(t *testing.T) {
 	if err := cmdInit([]string{"legacy", "--from", "init"}); err != nil {
 		t.Fatalf("cmdInit: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(project, "templates", "legacy", "README.md")); err != nil {
+	if _, err := os.Stat(filepath.Join(project, "workflows", "legacy", "README.md")); err != nil {
 		t.Fatalf("expected bundled init README copied: %v", err)
 	}
 }
@@ -226,8 +226,8 @@ func TestCmdInitErrorsOnUnknownOption(t *testing.T) {
 	}
 }
 
-// TestCmdInitRejectsExistingTemplate refuses to create a workflow when templates/<name> already exists.
-func TestCmdInitRejectsExistingTemplate(t *testing.T) {
+// TestCmdInitRejectsLegacyTemplatesCollision refuses to create under workflows/ when templates/<name> already exists (legacy).
+func TestCmdInitRejectsLegacyTemplatesCollision(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
 
@@ -271,7 +271,7 @@ func TestCmdInitAppliesResolverRuntimeStrategy(t *testing.T) {
 	if err := cmdInit([]string{"demo", "--resolver", "claude", "--runtime", "vscode", "--strategy", "worktree"}); err != nil {
 		t.Fatalf("cmdInit failed: %v", err)
 	}
-	b, err := os.ReadFile(filepath.Join(project, "templates", "demo", "config.yml"))
+	b, err := os.ReadFile(filepath.Join(project, "workflows", "demo", "config.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}

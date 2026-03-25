@@ -22,7 +22,7 @@ func TestCmdInitFromBlankScaffold(t *testing.T) {
 	if err := cmdInit([]string{"blankflow", "--from", "blank"}); err != nil {
 		t.Fatalf("cmdInit: %v", err)
 	}
-	b, err := os.ReadFile(filepath.Join(project, "templates", "blankflow", "config.yml"))
+	b, err := os.ReadFile(filepath.Join(project, "workflows", "blankflow", "config.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,7 +78,7 @@ func TestCmdInitFromRunTemplate(t *testing.T) {
 	if err := cmdInit([]string{"myrun", "--from", "run"}); err != nil {
 		t.Fatalf("cmdInit: %v", err)
 	}
-	b, err := os.ReadFile(filepath.Join(project, "templates", "myrun", "config.yml"))
+	b, err := os.ReadFile(filepath.Join(project, "workflows", "myrun", "config.yml"))
 	if err != nil {
 		t.Fatal(err)
 	}

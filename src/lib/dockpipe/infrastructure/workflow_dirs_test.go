@@ -7,22 +7,22 @@ import (
 	"testing"
 )
 
-// TestListWorkflowNamesInRepoRoot lists templates/<name>/ (excluding templates/core).
+// TestListWorkflowNamesInRepoRoot lists workflows/<name>/ for a normal project.
 func TestListWorkflowNamesInRepoRoot(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, "templates", "a"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, "workflows", "a"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmp, "templates", "a", "config.yml"), []byte("name: a\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "workflows", "a", "config.yml"), []byte("name: a\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(tmp, "templates", "b"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, "workflows", "b"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmp, "templates", "b", "config.yml"), []byte("name: b\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "workflows", "b", "config.yml"), []byte("name: b\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(tmp, "templates", "emptydir"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, "workflows", "emptydir"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	got, err := ListWorkflowNamesInRepoRoot(tmp)
@@ -36,10 +36,10 @@ func TestListWorkflowNamesInRepoRoot(t *testing.T) {
 
 func TestListWorkflowNamesInRepoRootIncludesDockpipeWorkflows(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, "templates", "t1"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, "workflows", "t1"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(tmp, "templates", "t1", "config.yml"), []byte("name: t1\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "workflows", "t1", "config.yml"), []byte("name: t1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(tmp, ShipyardDir, "workflows", "local"), 0o755); err != nil {
@@ -84,10 +84,10 @@ func TestResolveWorkflowConfigPathPrefersAuthoringDockpipeWorkflowsOverTemplates
 
 func TestResolveWorkflowConfigPathPrefersTemplatesWorkflow(t *testing.T) {
 	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, "templates", "demo"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, "workflows", "demo"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	wf := filepath.Join(tmp, "templates", "demo", "config.yml")
+	wf := filepath.Join(tmp, "workflows", "demo", "config.yml")
 	if err := os.WriteFile(wf, []byte("name: demo\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -105,6 +105,49 @@ func TestResolveWorkflowConfigPathPrefersTemplatesWorkflow(t *testing.T) {
 	}
 	if got != wf {
 		t.Fatalf("want workflow path %s got %s", wf, got)
+	}
+}
+
+func TestResolveWorkflowConfigPathPrefersWorkflowsOverLegacyTemplates(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmp, "templates", "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	leg := filepath.Join(tmp, "templates", "demo", "config.yml")
+	if err := os.WriteFile(leg, []byte("name: legacy\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, "workflows", "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	modern := filepath.Join(tmp, "workflows", "demo", "config.yml")
+	if err := os.WriteFile(modern, []byte("name: modern\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveWorkflowConfigPath(tmp, "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != modern {
+		t.Fatalf("want workflows path %s got %s", modern, got)
+	}
+}
+
+func TestResolveWorkflowConfigPathLegacyTemplatesWhenWorkflowsMissing(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(tmp, "templates", "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	leg := filepath.Join(tmp, "templates", "demo", "config.yml")
+	if err := os.WriteFile(leg, []byte("name: demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveWorkflowConfigPath(tmp, "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != leg {
+		t.Fatalf("want legacy templates path %s got %s", leg, got)
 	}
 }
 

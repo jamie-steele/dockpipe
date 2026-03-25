@@ -59,10 +59,14 @@ func cmdInit(args []string) error {
 	var name, from string
 	var resolver, runtime, strategy string
 	var gitignore bool
+	var workflowsDir string
 	for i := 0; i < len(args); i++ {
 		switch {
 		case args[i] == "--gitignore":
 			gitignore = true
+		case args[i] == "--workflows-dir" && i+1 < len(args):
+			workflowsDir = args[i+1]
+			i++
 		case args[i] == "--from" && i+1 < len(args):
 			from = args[i+1]
 			i++
@@ -90,6 +94,13 @@ func cmdInit(args []string) error {
 	}
 	if strings.TrimSpace(from) != "" && name == "" {
 		return fmt.Errorf("--from requires a workflow name: dockpipe init <name> --from <source>")
+	}
+	if strings.TrimSpace(workflowsDir) != "" && name == "" {
+		return fmt.Errorf("--workflows-dir requires a workflow name: dockpipe init <name> --workflows-dir <path>")
+	}
+	if workflowsDir != "" {
+		infrastructure.SetWorkflowsDirForProcess(workflowsDir)
+		defer infrastructure.SetWorkflowsDirForProcess("")
 	}
 
 	if err := ensureProjectScaffold(repoRoot, projectDir); err != nil {
@@ -149,7 +160,7 @@ func cmdTemplate(args []string) error {
 	if from == "" {
 		from = "init"
 	}
-	src := filepath.Join(infrastructure.WorkflowsRootDir(repoRoot), from)
+	src := bundledWorkflowSourceDir(repoRoot, from)
 	if _, err := os.Stat(src); err != nil {
 		return fmt.Errorf("unknown bundled template %q", from)
 	}

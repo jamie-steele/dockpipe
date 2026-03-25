@@ -9,7 +9,8 @@ import (
 )
 
 // ResolveWorkflowConfigPath returns the first existing workflow config for a bundled or user workflow name.
-// Authoring checkout: shipyard/workflows/<name>/config.yml first (repo-local), then src/templates/<name>/ or templates/<name>/config.yml, then core/resolvers.
+// Authoring checkout: shipyard/workflows/<name>/config.yml first (repo-local), then WorkflowsRootDir/<name>/config.yml
+// (workflows/ or src/templates/), then legacy templates/<name>/config.yml for normal projects, then core/resolvers.
 // Materialized bundle: shipyard/workflows/ only (same path as WorkflowsRootDir).
 func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 	name = strings.TrimSpace(name)
@@ -20,10 +21,11 @@ func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 	if !UsesBundledAssetLayout(repoRoot) {
 		candidates = append(candidates, filepath.Join(AuthoringShipyardWorkflowsDir(repoRoot), name, "config.yml"))
 	}
-	candidates = append(candidates,
-		filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"),
-		filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml"),
-	)
+	candidates = append(candidates, filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"))
+	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
+		candidates = append(candidates, filepath.Join(repoRoot, "templates", name, "config.yml"))
+	}
+	candidates = append(candidates, filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml"))
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p, nil
@@ -43,6 +45,9 @@ func ResolveEmbeddedResolverWorkflowConfigPath(repoRoot, name string) (string, e
 		filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml"),
 		filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"),
 	}
+	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
+		candidates = append(candidates, filepath.Join(repoRoot, "templates", name, "config.yml"))
+	}
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p, nil
@@ -51,12 +56,12 @@ func ResolveEmbeddedResolverWorkflowConfigPath(repoRoot, name string) (string, e
 	return "", fmt.Errorf("embedded resolver workflow config not found for %q", name)
 }
 
-// ListWorkflowNamesInRepoRoot returns workflow names from the authoring templates root/<name>/ and (authoring only) shipyard/workflows/<name>/.
+// ListWorkflowNamesInRepoRoot returns workflow names from WorkflowsRootDir, legacy templates/ (user projects),
+// and (authoring only) shipyard/workflows/.
 func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 	seen := make(map[string]struct{})
 	var out []string
 
-	templatesDir := WorkflowsRootDir(repoRoot)
 	addDir := func(base string) error {
 		entries, err := os.ReadDir(base)
 		if err != nil {
@@ -69,7 +74,7 @@ func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 			if !e.IsDir() {
 				continue
 			}
-			if base == templatesDir && e.Name() == "core" {
+			if e.Name() == "core" && filepath.Base(base) == "templates" {
 				continue
 			}
 			name := e.Name()
@@ -84,8 +89,13 @@ func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 		return nil
 	}
 
-	if err := addDir(templatesDir); err != nil {
+	if err := addDir(WorkflowsRootDir(repoRoot)); err != nil {
 		return nil, err
+	}
+	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
+		if err := addDir(filepath.Join(repoRoot, "templates")); err != nil {
+			return nil, err
+		}
 	}
 	if !UsesBundledAssetLayout(repoRoot) {
 		if err := addDir(AuthoringShipyardWorkflowsDir(repoRoot)); err != nil {
@@ -95,4 +105,22 @@ func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 
 	sort.Strings(out)
 	return out, nil
+}
+
+// WorkflowsDirHasDockpipeWorkflow reports whether dir contains at least one immediate child directory with config.yml.
+func WorkflowsDirHasDockpipeWorkflow(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		cfg := filepath.Join(dir, e.Name(), "config.yml")
+		if st, err := os.Stat(cfg); err == nil && !st.IsDir() {
+			return true
+		}
+	}
+	return false
 }

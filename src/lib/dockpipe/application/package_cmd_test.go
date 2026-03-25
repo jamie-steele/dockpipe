@@ -48,3 +48,28 @@ func TestCmdPackageUnknown(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestCmdPackageCompileWorkflow(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "mywf")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: mywf
+description: test
+steps: []
+`
+	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(dir, ".dockpipe", "internal", "packages", "workflows", "mywf", "config.yml")
+	if _, err := os.Stat(dest); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".dockpipe", "internal", "packages", "workflows", "mywf", "package.yml")); err != nil {
+		t.Fatal(err)
+	}
+}

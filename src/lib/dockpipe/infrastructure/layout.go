@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // ShipyardDir is the top-level directory name for the materialized bundle layout
@@ -40,12 +41,56 @@ func CoreDir(repoRoot string) string {
 	return filepath.Join(authoringTemplatesRoot(repoRoot), "core")
 }
 
-// WorkflowsRootDir returns .../src/templates or .../templates (authoring) or .../<ShipyardDir>/workflows (materialized bundle).
+// DefaultUserWorkflowsDirRel is the default directory (under repo root) for named workflows in normal projects.
+// The dockpipe source tree and the materialized bundle use different roots (see WorkflowsRootDir).
+const DefaultUserWorkflowsDirRel = "workflows"
+
+// workflowsDirRelProcess is set by the CLI for the current process (--workflows-dir); cleared after the command.
+var workflowsDirRelProcess string
+
+// SetWorkflowsDirForProcess sets a repo-relative or absolute workflows directory for this process (empty clears).
+// Persist across commands with DOCKPIPE_WORKFLOWS_DIR instead.
+func SetWorkflowsDirForProcess(rel string) {
+	workflowsDirRelProcess = strings.TrimSpace(rel)
+	if workflowsDirRelProcess != "" {
+		workflowsDirRelProcess = filepath.Clean(workflowsDirRelProcess)
+	}
+}
+
+func effectiveWorkflowsDirRel() string {
+	if workflowsDirRelProcess != "" {
+		return workflowsDirRelProcess
+	}
+	v := strings.TrimSpace(os.Getenv("DOCKPIPE_WORKFLOWS_DIR"))
+	if v != "" {
+		return filepath.Clean(v)
+	}
+	return ""
+}
+
+// DockpipeAuthoringSourceTree is true when repoRoot is a dockpipe git checkout (src/templates/core present).
+func DockpipeAuthoringSourceTree(repoRoot string) bool {
+	st, err := os.Stat(filepath.Join(repoRoot, "src", "templates", "core"))
+	return err == nil && st.IsDir()
+}
+
+// WorkflowsRootDir returns the directory containing named workflow folders (each with config.yml):
+// materialized bundle → shipyard/workflows; dockpipe source → src/templates; normal projects → workflows/ (or override).
 func WorkflowsRootDir(repoRoot string) string {
 	if UsesBundledAssetLayout(repoRoot) {
 		return filepath.Join(repoRoot, ShipyardDir, "workflows")
 	}
-	return authoringTemplatesRoot(repoRoot)
+	if DockpipeAuthoringSourceTree(repoRoot) {
+		return filepath.Join(repoRoot, "src", "templates")
+	}
+	rel := effectiveWorkflowsDirRel()
+	if rel == "" {
+		rel = DefaultUserWorkflowsDirRel
+	}
+	if filepath.IsAbs(rel) {
+		return rel
+	}
+	return filepath.Join(repoRoot, rel)
 }
 
 // AuthoringShipyardWorkflowsDir is .../<ShipyardDir>/workflows on a git checkout (not the materialized bundle).

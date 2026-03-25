@@ -12,7 +12,7 @@ func TestWorkflowsRootDirAuthoringUserProject(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(tmp, "templates", "core"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := WorkflowsRootDir(tmp), filepath.Join(tmp, "templates"); got != want {
+	if got, want := WorkflowsRootDir(tmp), filepath.Join(tmp, "workflows"); got != want {
 		t.Fatalf("WorkflowsRootDir = %q, want %q", got, want)
 	}
 	if got, want := CoreDir(tmp), filepath.Join(tmp, "templates", "core"); got != want {
