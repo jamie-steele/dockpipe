@@ -9,8 +9,12 @@ tmp/
 src/bin/dorkpipe
 src/bin/mcpd
 
-# Cursor MCP config often contains keys; keep rules in .cursor/rules/ instead
-.cursor/mcp.json
+# Local Cursor / remote server / IDE (binaries, keys, workspace state — do not commit)
+.cache/
+.cursor-server/
+.cursor/
+.devcontainer/
+.ssh/
 
 # Build output
 # Legacy out-of-tree Pipeon Launcher build (prefer: src/apps/pipeon-launcher/build)
