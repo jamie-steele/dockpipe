@@ -29,7 +29,7 @@ export DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1   # until VERSION >= 0.6.5
 
 ## Shortcuts
 
-See **`src/pipeon/docs/pipeon-shortcuts.md`** (VS Code/Cursor tasks, shell aliases, optional desktop).
+See **`src/apps/pipeon/docs/pipeon-shortcuts.md`** (VS Code/Cursor tasks, shell aliases, optional desktop).
 
 ## Docs
 

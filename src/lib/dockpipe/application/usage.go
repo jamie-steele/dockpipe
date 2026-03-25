@@ -33,6 +33,7 @@ More flags:
 Commands:
   init                    Add DockPipe to the current project
   install                 Fetch templates/core from HTTPS (e.g. Cloudflare R2); see install core --help
+  clone <name>            Copy a compiled workflow package to workflows/ when allow_clone is true (see package manifest)
   package list|manifest|build|compile   Packages: list, manifest, author core tarball, or compile workflow into .dockpipe/internal
   release upload          Upload a file to S3-compatible storage (self-hosted; uses aws CLI)
   workflow validate       Check workflow YAML (default: dockpipe.yml)

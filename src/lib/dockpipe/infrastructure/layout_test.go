@@ -23,16 +23,19 @@ func TestWorkflowsRootDirAuthoringUserProject(t *testing.T) {
 	}
 }
 
-func TestWorkflowsRootDirAuthoringSrcTemplatesLayout(t *testing.T) {
+func TestWorkflowsRootDirAuthoringSrcCoreLayout(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, "src", "templates", "core"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, "src", "core", "runtimes"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := WorkflowsRootDir(tmp), filepath.Join(tmp, "src", "templates"); got != want {
+	if err := os.MkdirAll(filepath.Join(tmp, "src", "core", "workflows"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := WorkflowsRootDir(tmp), filepath.Join(tmp, "src", "core", "workflows"); got != want {
 		t.Fatalf("WorkflowsRootDir = %q, want %q", got, want)
 	}
-	if got, want := CoreDir(tmp), filepath.Join(tmp, "src", "templates", "core"); got != want {
+	if got, want := CoreDir(tmp), filepath.Join(tmp, "src", "core"); got != want {
 		t.Fatalf("CoreDir = %q, want %q", got, want)
 	}
 }
@@ -40,7 +43,10 @@ func TestWorkflowsRootDirAuthoringSrcTemplatesLayout(t *testing.T) {
 func TestWorkflowsRootDirAuthoringDogfoodPrefersRepoWorkflowsWhenPresent(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, "src", "templates", "core"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, "src", "core", "runtimes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tmp, "src", "core", "workflows"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(tmp, "workflows", "demo"), 0o755); err != nil {
@@ -54,16 +60,19 @@ func TestWorkflowsRootDirAuthoringDogfoodPrefersRepoWorkflowsWhenPresent(t *test
 	}
 }
 
-func TestWorkflowsRootDirPrefersSrcTemplatesWhenBothTreesExist(t *testing.T) {
+func TestWorkflowsRootDirPrefersSrcCoreWhenBothTreesExist(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(tmp, "templates", "core"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(tmp, "src", "templates", "core"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, "src", "core", "runtimes"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := WorkflowsRootDir(tmp), filepath.Join(tmp, "src", "templates"); got != want {
+	if err := os.MkdirAll(filepath.Join(tmp, "src", "core", "workflows"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := WorkflowsRootDir(tmp), filepath.Join(tmp, "src", "core", "workflows"); got != want {
 		t.Fatalf("WorkflowsRootDir = %q, want %q", got, want)
 	}
 }
@@ -86,8 +95,8 @@ func TestCoreDirMaterializedBundle(t *testing.T) {
 }
 
 func TestEmbeddedTemplatesPrefixMatchesEmbedGo(t *testing.T) {
-	// Keep in sync with repo-root embed.go //go:embed src/templates
-	if EmbeddedTemplatesPrefix != "src/templates" {
+	// Keep in sync with repo-root embed.go //go:embed src/core
+	if EmbeddedTemplatesPrefix != "src/core" {
 		t.Fatalf("EmbeddedTemplatesPrefix = %q", EmbeddedTemplatesPrefix)
 	}
 }

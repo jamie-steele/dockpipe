@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build release/artifacts/templates-core-<VERSION>.tar.gz (+ .sha256 + install-manifest.json) for dockpipe install core.
-# Archive layout: top-level directory "core/" (matches src/templates/core). Upload the three artifacts
+# Archive layout: top-level directory "core/" (matches src/core category dirs; workflows/ excluded). Upload the three artifacts
 # to the same HTTPS base URL you set as DOCKPIPE_INSTALL_BASE_URL (e.g. Cloudflare R2 public bucket).
 # Override output dir with DOCKPIPE_ARTIFACTS_DIR (default: release/artifacts).
 set -euo pipefail
@@ -10,7 +10,7 @@ V="$(tr -d ' \t\r\n' < VERSION)"
 ART="${DOCKPIPE_ARTIFACTS_DIR:-release/artifacts}"
 mkdir -p "$ART"
 OUT="${ART}/templates-core-${V}.tar.gz"
-tar czf "$OUT" -C src/templates core
+tar czf "$OUT" -C src core --exclude='core/workflows'
 if command -v sha256sum >/dev/null 2>&1; then
   sha256sum "$OUT" | awk '{print $1}' > "${OUT}.sha256"
 else

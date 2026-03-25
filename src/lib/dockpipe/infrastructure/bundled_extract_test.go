@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// TestEmbeddedWorkflowConfigExists checks bundled user templates (src/templates/*/config.yml) and
-// resolver delegates (templates/core/resolvers/*/config.yml). It does not assert maintainer-only
+// TestEmbeddedWorkflowConfigExists checks bundled user templates (src/core/workflows/*/config.yml) and
+// resolver delegates (src/core/resolvers/*/config.yml and .staging/resolvers). It does not assert maintainer-only
 // Extra embedded workflow names under workflows/ — those churn independently of the core embed contract.
 func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	if !EmbeddedWorkflowConfigExists("run") {
@@ -47,12 +47,12 @@ func TestMapEmbeddedToMaterializedPath(t *testing.T) {
 	}{
 		{"VERSION", "version"},
 		{"assets/entrypoint.sh", "assets/entrypoint.sh"},
-		{EmbeddedTemplatesPrefix, ShipyardDir},
-		{EmbeddedTemplatesPrefix + "/core", filepath.Join(ShipyardDir, "core")},
-		{EmbeddedTemplatesPrefix + "/core/runtimes/docker/profile", filepath.Join(ShipyardDir, "core/runtimes/docker/profile")},
-		{EmbeddedTemplatesPrefix + "/run/config.yml", filepath.Join(ShipyardDir, "workflows", "run", "config.yml")},
+		{EmbeddedTemplatesPrefix, filepath.Join(ShipyardDir, "core")},
+		{EmbeddedTemplatesPrefix + "/runtimes/docker/profile", filepath.Join(ShipyardDir, "core/runtimes/docker/profile")},
+		{EmbeddedTemplatesPrefix + "/workflows/run/config.yml", filepath.Join(ShipyardDir, "workflows", "run", "config.yml")},
 		{"workflows/r2-publish/config.yml", filepath.Join(ShipyardDir, "workflows", "r2-publish", "config.yml")},
 		{".staging/workflows/r2-publish/config.yml", filepath.Join(ShipyardDir, "workflows", "r2-publish", "config.yml")},
+		{".staging/resolvers/vscode/config.yml", filepath.Join(ShipyardDir, "core", "resolvers", "vscode", "config.yml")},
 		{"workflows", filepath.Join(ShipyardDir, "workflows")},
 		// Already-materialized paths pass through unchanged (bundle cache layout uses ShipyardDir).
 		{filepath.Join(ShipyardDir, "workflows", "init", "config.yml"), filepath.Join(ShipyardDir, "workflows", "init", "config.yml")},

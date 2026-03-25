@@ -9,7 +9,7 @@ import (
 )
 
 // ResolveWorkflowConfigPath returns the first existing workflow config for a bundled or user workflow name.
-// Resolution uses WorkflowsRootDir (repo workflows/, materialized shipyard/workflows/ in bundle cache, or src/templates in dockpipe source when workflows/ is empty).
+// Resolution uses WorkflowsRootDir (repo workflows/, materialized shipyard/workflows/ in bundle cache, or src/core/workflows in dockpipe source when workflows/ is empty).
 // Does not consult .dockpipe/internal/packages (use ResolveWorkflowConfigPathWithWorkdir for that).
 func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 	return ResolveWorkflowConfigPathWithWorkdir(repoRoot, "", name)
@@ -35,6 +35,9 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
 		candidates = append(candidates, filepath.Join(repoRoot, "templates", name, "config.yml"))
 	}
+	if !UsesBundledAssetLayout(repoRoot) {
+		candidates = append(candidates, filepath.Join(StagingResolversDir(repoRoot), name, "config.yml"))
+	}
 	candidates = append(candidates, filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml"))
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
@@ -57,10 +60,14 @@ func ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, workdir, nam
 	if name == "" {
 		return "", fmt.Errorf("embedded resolver workflow name is empty")
 	}
-	candidates := []string{
+	var candidates []string
+	if !UsesBundledAssetLayout(repoRoot) {
+		candidates = append(candidates, filepath.Join(StagingResolversDir(repoRoot), name, "config.yml"))
+	}
+	candidates = append(candidates,
 		filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml"),
 		filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"),
-	}
+	)
 	if strings.TrimSpace(workdir) != "" {
 		if pw, err := PackagesWorkflowsDir(workdir); err == nil {
 			candidates = append(candidates, filepath.Join(pw, name, "config.yml"))

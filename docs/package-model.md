@@ -66,6 +66,8 @@ Suggested subdirectories (mirror authoring concepts; not all are required):
 | **`provides`** | Resolver capability names (e.g. tool ids) for **`kind: resolver`** |
 | **`requires_resolvers`** | Hint compatible resolver profiles for **`kind: workflow`** |
 | **`depends`** | Other package **names** this package expects |
+| **`allow_clone`** | If **`true`**, **`dockpipe clone`** may export the compiled tree to **`workflows/`**; if false or omitted, clone is refused. |
+| **`distribution`** | Optional hint: **`source`** or **`binary`** (documentation for store pages). |
 
 The Go type **`domain.PackageManifest`** parses these keys; see **`src/lib/dockpipe/domain/package_manifest.go`**.
 
@@ -73,11 +75,18 @@ The Go type **`domain.PackageManifest`** parses these keys; see **`src/lib/dockp
 
 **CLI today:** **`dockpipe install core`** pulls **`templates/core`** into **`templates/core`** (bootstrap path). **`dockpipe package compile workflow`** validates YAML and copies a workflow tree into **`.dockpipe/internal/packages/workflows/<name>/`** (see **`docs/cli-reference.md`**). Future **`dockpipe install package …`** will unpack registry artifacts and extend resolution order (project **`workflows/`** + **installed packages** + embedded bundle).
 
+### Clone, education, and commercial packages
+
+- **`package.yml`** may set **`allow_clone: true`** so **`dockpipe clone <name>`** can copy a compiled workflow package from **`.dockpipe/internal/packages/workflows/<name>/`** into **`workflows/<name>/`** (or **`--to`**). This supports **education** and **forking** when the author opts in.
+- **`allow_clone: false`** or omitting **`allow_clone`** means **`dockpipe clone`** refuses — appropriate for **commercial** or **binary-only** releases where the publisher does not grant a recoverable source tree.
+- Optional **`distribution: binary`** documents that the published artifact is not meant for source recovery; publishers who need **strong** protection should ship **only** non-recoverable binaries (obfuscation, native modules, etc.) — DockPipe cannot cryptographically enforce that; **`allow_clone`** is the explicit license bit for **`dockpipe clone`**.
+- **`dockpipe package compile workflow`** writes **`allow_clone: true`** and **`distribution: source`** into a generated **`package.yml`** so local compiles stay cloneable unless you edit the manifest before release.
+
 ## 2. Uncompressed working tree (authoring / clone)
 
 **Not** “packages” in this sense: the repo you edit every day.
 
-- **`workflows/`** (default project root), **`src/templates/<name>/`** (bundled examples in the dockpipe repo), legacy **`templates/<name>/`** — YAML and assets you **build or clone**, commit, and run with **`--workflow`** as today.
+- **`workflows/`** (default project root), **`src/core/workflows/<name>/`** (bundled examples in the dockpipe repo), legacy **`templates/<name>/`** — YAML and assets you **build or clone**, commit, and run with **`--workflow`** as today.
 - No **`package.yml`** required; this is normal development.
 
 ## 3. Project-local state (`.dockpipe/`) and isolation

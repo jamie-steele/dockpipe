@@ -27,7 +27,7 @@ This document is **FINAL**. It defines the core concepts, their relationships, a
 ### Runtime
 
 - Represents an **isolated execution environment**.
-- **Examples (non‑exhaustive):** `docker-node`, `docker-browser`, `ec2-worker`, `ide-local`, `browser-ide`.
+- **Examples (non‑exhaustive):** `docker-node`, `docker-browser`, `ec2-worker`, `ide-local`, `browser-ide`, `keystore` (host + secret-store injection substrate — **not** a specific vault product).
 - **Platform-agnostic:** the same concept applies whether the backend is Docker, EC2, a local browser sandbox, or another substrate.
 - **Must not** encode tool- or vendor-specific logic (no Claude, Cursor, Playwright behavior inside the **runtime** definition).
 
@@ -121,7 +121,16 @@ Each valid run is characterized by **all** of:
 | runtime.type | `ide` |
 | resolver | `cursor` |
 
-**Example 4**
+**Example 4** (host secret injection — **substrate vs vendor**)
+
+| Field | Value |
+|-------|--------|
+| workflow | `secretstore` (or any host `skip_container` flow with env from a vault) |
+| runtime | `keystore` — **where** the run happens: host with secret-store merge (no vendor in the runtime file). |
+| runtime.type | `execution` |
+| resolver | `onepassword` — **which** tool supplies secrets (`op`); other vaults are **other resolver profiles**, not other runtimes. |
+
+**Example 5**
 
 | Field | Value |
 |-------|--------|

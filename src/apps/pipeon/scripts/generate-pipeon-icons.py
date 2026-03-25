@@ -7,7 +7,7 @@ import sys
 
 from PIL import Image, ImageDraw, ImageFont
 
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
 
 # Pipeon mark: deep blue tile + light "P"
 BG = (20, 50, 82, 255)
@@ -74,9 +74,7 @@ def main() -> int:
     ext_img = os.path.join(REPO_ROOT, "src/contrib/pipeon-vscode-extension", "images")
     cs_dir = os.path.join(
         REPO_ROOT,
-        "src",
-        "templates",
-        "core",
+        ".staging",
         "resolvers",
         "code-server",
         "assets",

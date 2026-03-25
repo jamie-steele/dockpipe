@@ -4,13 +4,13 @@
   Install Pipeon shortcuts (Desktop + Start Menu) with the P icon on Windows.
 
 .DESCRIPTION
-  Creates .lnk files that run src/pipeon/scripts/pipeon-code-server-launch.ps1 via powershell.exe.
+  Creates .lnk files that run src/apps/pipeon/scripts/pipeon-code-server-launch.ps1 via powershell.exe.
   Requires Docker Desktop, Git Bash, and dockpipe.exe (PATH or repo src\bin\dockpipe.exe).
   Run from the dockpipe repo root:
-    powershell -NoProfile -ExecutionPolicy Bypass -File src/pipeon/scripts/install-pipeon-desktop-shortcut.ps1
+    powershell -NoProfile -ExecutionPolicy Bypass -File src/apps/pipeon/scripts/install-pipeon-desktop-shortcut.ps1
 
 .EXAMPLE
-  .\src\pipeon\scripts\install-pipeon-desktop-shortcut.ps1 -DesktopOnly
+    .\src\apps\pipeon\scripts\install-pipeon-desktop-shortcut.ps1 -DesktopOnly
 #>
 param(
     [switch]$DesktopOnly,
@@ -19,9 +19,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..")).Path
-$Launch = Join-Path $RepoRoot "src\pipeon\scripts\pipeon-code-server-launch.ps1"
-$Icon = Join-Path $RepoRoot "src\templates\core\resolvers\code-server\assets\images\code-server\favicon.ico"
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path
+$Launch = Join-Path $RepoRoot "src\apps\pipeon\scripts\pipeon-code-server-launch.ps1"
+$Icon = Join-Path $RepoRoot ".staging\resolvers\code-server\assets\images\code-server\favicon.ico"
 
 if (-not (Test-Path -LiteralPath $Launch)) {
     throw "Missing $Launch — run from dockpipe repo root."
@@ -72,7 +72,7 @@ Next: build the image once (Git Bash from repo root):
   make build-code-server-image
 
 Or in PowerShell (Docker must be on PATH):
-  docker build -t dockpipe-code-server:latest -f src/templates/core/resolvers/code-server/assets/images/code-server/Dockerfile .
+  docker build -t dockpipe-code-server:latest -f .staging/resolvers/code-server/assets/images/code-server/Dockerfile .
 
 Workspace defaults to USERPROFILE. Override: set PIPEON_WORKDIR before launching, or edit the shortcut.
 "@

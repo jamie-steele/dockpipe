@@ -8,10 +8,11 @@ description: >-
   pointing SECRETSTORE_COMMAND at dockpipe.
 
 docker_preflight: false
-runtime: cli
-resolver: codex
-runtimes: [cli]
-resolvers: [codex]
+# Runtime: keystore = host substrate for secret injection. Resolver: onepassword = 1Password CLI (op).
+runtime: keystore
+resolver: onepassword
+runtimes: [keystore]
+resolvers: [onepassword]
 
 vars:
   SECRETSTORE_PROVIDER: "op"

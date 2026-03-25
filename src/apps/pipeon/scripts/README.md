@@ -33,7 +33,7 @@ See **[`../docs/pipeon-shortcuts.md`](../docs/pipeon-shortcuts.md)** (VS Code/Cu
 
 ## Desktop / code-server (this repo)
 
-**Bundled Pipeon shell** (**`pipeon.sh`**, **`chat.sh`**, **`bundle-context.sh`**, **`lib/`**, **`prompts/`**) is canonical under **`src/templates/core/bundles/pipeon/assets/scripts/`**; this directory repeats those paths as **symlinks** for stable **`src/pipeon/scripts/…`** references (same idea as **`scripts/dorkpipe/`**).
+**Bundled Pipeon shell** (**`pipeon.sh`**, **`chat.sh`**, **`bundle-context.sh`**, **`lib/`**, **`prompts/`**) is canonical under **`.staging/bundles/pipeon/assets/scripts/`**; this directory repeats those paths as **symlinks** for stable **`src/apps/pipeon/scripts/…`** references (same idea as **`scripts/dorkpipe/`**).
 
 Maintainer-only scripts live **here** (same folder as the harness):
 

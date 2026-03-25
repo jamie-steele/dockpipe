@@ -5,7 +5,7 @@ param()
 
 $ErrorActionPreference = "Stop"
 
-$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
+$RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path
 $env:DOCKPIPE_REPO_ROOT = if ($env:DOCKPIPE_REPO_ROOT) { $env:DOCKPIPE_REPO_ROOT } else { $RepoRoot }
 
 $exe = $null

@@ -2,10 +2,10 @@ package dockpipe
 
 import "embed"
 
-// BundledFS holds embedded src/templates/ (user-facing workflows + core/), assets/entrypoint.sh, VERSION,
-// and workflows/* (first-party repo CI) plus .staging/workflows/* (maintainer / packaging / experiments — merged into the same materialized workflows tree).
-// On unpack, src/templates/core/* → shipyard/core/*, src/templates/<wf>/* → shipyard/workflows/<wf>/* (see bundled_extract.go);
-// embedded workflows/* and .staging/workflows/* → shipyard/workflows/* on disk (cache layout name unchanged).
+// BundledFS holds embedded src/core/ (category dirs + workflows/ for bundled examples), assets/entrypoint.sh, VERSION,
+// workflows/*, .staging/workflows/*, .staging/resolvers/*, .staging/bundles/* (maintainer trees merged into materialized shipyard/core or workflows).
+// On unpack, src/core/<category>/* → shipyard/core/<category>/*; src/core/workflows/<wf>/* → shipyard/workflows/<wf>/*;
+// .staging/resolvers|bundles/* → shipyard/core/resolvers|bundles/*; embedded workflows/* and .staging/workflows/* → shipyard/workflows/*.
 //
-//go:embed src/templates assets/entrypoint.sh VERSION workflows .staging/workflows
+//go:embed src/core assets/entrypoint.sh VERSION workflows .staging/workflows .staging/resolvers .staging/bundles
 var BundledFS embed.FS

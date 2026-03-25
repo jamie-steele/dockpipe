@@ -42,10 +42,12 @@ Examples:
 
 📁 Location:
 
-- In **this repository’s checkout:** **`src/templates/<name>/`** (bundled workflows + **`src/templates/core/`**).
-- In a **downstream project** after **`dockpipe init`:** **`templates/<name>/`** at the project root (same layout conceptually).
+- In **this repository’s checkout:** **`src/core/workflows/<name>/`** (bundled example workflows) alongside **`src/core/`** category dirs (**`runtimes/`**, **`resolvers/`**, **`strategies/`**, **`assets/`**).
+- In a **downstream project** after **`dockpipe init`:** prefer repo-root **`workflows/<name>/`**; legacy **`templates/<name>/`** remains supported.
 
-**Do not** put **this repository’s** CI, demo, or internal automation workflows under **`src/templates/`**. Those belong under repo-root **`workflows/<name>/`** (lean CI / dogfood) or **`.staging/workflows/<name>/`** (maintainer packaging and experiments) (see **Internal workflows** below).
+**Do not** put **this repository’s** CI, demo, or internal automation workflows under **`src/core/workflows/`**. Those belong under repo-root **`workflows/<name>/`** (lean CI / dogfood) or **`.staging/workflows/<name>/`** (maintainer packaging and experiments) (see **Internal workflows** below).
+
+**Package IDs:** Workflow and resolver names may use dotted namespaces (e.g. **`acme.workflow.ci`**, **`acme.resolver.custom`**) when the directory name under **`workflows/`** or **`src/core/workflows/`** matches (same rules as **`--workflow`** resolution).
 
 ---
 
@@ -65,7 +67,7 @@ Current runtimes:
 Future:
 - `cloud-runner` (with providers like lambda/fargate)
 
-📁 Location (under the authoring templates root — **`src/templates/core/`** in this repo, **`templates/core/`** after **`dockpipe init`**):
+📁 Location (under the authoring core root — **`src/core/`** in this repo, **`templates/core/`** after **`dockpipe init`**):
 `…/core/runtimes/`
 
 ---
@@ -105,10 +107,9 @@ Lifecycle wrappers.
 
 ## CRITICAL STRUCTURE RULE
 
-**`…/core/`** (i.e. **`src/templates/core/`** here, **`templates/core/`** in a downstream project) contains ONLY category folders.
+**`…/core/`** (i.e. **`src/core/`** here — category dirs plus **`workflows/`** for bundled examples — and **`templates/core/`** in a downstream project after init) contains ONLY category folders **and** (in this repo only) **`workflows/`** for shipped examples.
 
-Valid:
-…/core/
+Valid (this repo **`src/core/`**):
   runtimes/
   resolvers/
   strategies/
@@ -116,6 +117,8 @@ Valid:
     scripts/
     images/
     compose/
+  workflows/
+    <bundled-example>/
 
 Invalid:
 …/core/claude
@@ -172,11 +175,11 @@ If something cannot be done:
 
 ## Internal workflows (this repository)
 
-When you work **on the dockpipe project itself**, you are a **user** of the tool: extend it via **`src/templates/`**, **`scripts/`**, and repo-root **`workflows/`** — **not** by stuffing internal pipelines into **`src/templates/`**.
+When you work **on the dockpipe project itself**, you are a **user** of the tool: extend it via **`src/core/workflows/`** (bundled examples), **`scripts/`**, and repo-root **`workflows/`** — **not** by stuffing internal pipelines into **`src/core/workflows/`**.
 
 | Location | Purpose |
 |----------|---------|
-| **`src/templates/<name>/`** (this repo) / **`templates/<name>/`** (downstream) | **User-facing** workflow examples shipped in the bundle (**`run`**, **`run-apply`**, **`run-apply-validate`**, **`init`**, …). Reusable for any downstream project. |
+| **`src/core/workflows/<name>/`** (this repo) / **`workflows/<name>/`** or legacy **`templates/<name>/`** (downstream) | **User-facing** workflow examples shipped in the bundle (**`run`**, **`run-apply`**, **`run-apply-validate`**, **`init`**, …). Reusable for any downstream project. |
 | **`workflows/<name>/`** (repo root, this repo) | **Lean first-party** workflows wired into CI and dogfood: **`test`**, **`codex-pav`**, **`codex-security`**, **`dockpipe-repo-quality`**, etc. |
 | **`.staging/workflows/<name>/`** (repo root, this repo) | **Maintainer / packaging / experiments** (R2 publish, self-analysis stacks, orchestrator, sandbox demos, …). Same **`--workflow <name>`** as **`workflows/`**; the binary embed merges both into the materialized cache. |
 
@@ -190,7 +193,7 @@ When you work **on the dockpipe project itself**, you are a **user** of the tool
 
 **Two channels — do not conflate them:**
 
-1. **On-disk context** — **`.dockpipe/`** and **`.dorkpipe/`** hold **generated** handoffs, self-analysis facts, CI bundles, metrics, and optional insights. Use them as **read-only grounding** with normal code reading. Pointers: **`docs/compliance-ai-handoff.md`**, **`docs/dorkpipe-ci-signals.md`**, **`docs/user-insight-queue.md`**. Pipeon: **`src/bin/pipeon`**, **`src/pipeon/docs/`**. Do **not** auto-regenerate; refresh only when the **user** asks (then **`make self-analysis*`** / **`dorkpipe-self-analysis`** — see **Accelerator** above).
+1. **On-disk context** — **`.dockpipe/`** and **`.dorkpipe/`** hold **generated** handoffs, self-analysis facts, CI bundles, metrics, and optional insights. Use them as **read-only grounding** with normal code reading. Pointers: **`docs/compliance-ai-handoff.md`**, **`docs/dorkpipe-ci-signals.md`**, **`docs/user-insight-queue.md`**. Pipeon: **`src/bin/pipeon`**, **`src/apps/pipeon/docs/`**. Do **not** auto-regenerate; refresh only when the **user** asks (then **`make self-analysis*`** / **`dorkpipe-self-analysis`** — see **Accelerator** above).
 
 2. **MCP (`mcpd`)** — **Bounded tools** with **tiered IAM** (`DOCKPIPE_MCP_TIER`: `readonly` → `validate` → `exec`) via **`src/lib/mcpbridge`**. Default tier is **`validate`** (list + validate; **no** `dockpipe.run` / `dorkpipe.run_spec`). Tier **`exec`** (or legacy **`DOCKPIPE_MCP_ALLOW_EXEC=1`** when tier is unset) is required for run tools. See **`docs/mcp-agent-trust.md`** and **`docs/mcp-architecture.md`**.
 

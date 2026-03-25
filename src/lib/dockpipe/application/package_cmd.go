@@ -129,6 +129,8 @@ kind: workflow
 # provides: [codex]           # kind: resolver — capability ids
 # requires_resolvers: [claude] # kind: workflow — hints
 # depends: [other-package]
+# allow_clone: true       # allow dockpipe clone to export to workflows/ (omit or false for commercial/binary-only)
+# distribution: source    # optional: source | binary — policy hint for store pages
 `
 
 func printPackageUsage() {

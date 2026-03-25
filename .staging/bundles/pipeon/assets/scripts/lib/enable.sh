@@ -40,7 +40,7 @@ pipeon_check_enabled() {
 		cat >&2 <<'EOF'
 pipeon: disabled (feature-flag).
 
-  Export DOCKPIPE_PIPEON=1 to enable. Pipeon stays local-first (Ollama by default); see src/pipeon/docs/pipeon-ide-experience.md
+  Export DOCKPIPE_PIPEON=1 to enable. Pipeon stays local-first (Ollama by default); see src/apps/pipeon/docs/pipeon-ide-experience.md
 
 EOF
 		return 2

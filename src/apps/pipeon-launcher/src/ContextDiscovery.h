@@ -7,7 +7,7 @@
 /// Builds launcher contexts from a workdir + resolved dockpipe repo layout (same rules as dockpipe workflow lookup).
 class ContextDiscovery {
 public:
-    /// If a dockpipe repo is found: one context per workflow under `workflows/`, `.staging/workflows/`, and `src/templates/` or `templates/` (see DockpipeChoices).
+    /// If a dockpipe repo is found: one context per workflow under `workflows/`, `.staging/workflows/`, `src/core/workflows/`, or legacy `templates/` (see DockpipeChoices).
     /// Otherwise a single context with workflow `vscode`.
     static QVector<Context> contextsForWorkdir(const QString &workdir);
 };

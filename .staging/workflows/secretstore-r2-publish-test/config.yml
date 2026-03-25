@@ -8,7 +8,7 @@
 # Full walkthrough: README.md in this directory.
 #
 # Try from repo root:
-#   cp src/templates/secretstore/.env.op.template.example .env.op.template
+#   cp src/core/workflows/secretstore/.env.op.template.example .env.op.template
 #   # edit with real op:// references for R2_* / CLOUDFLARE_* etc.
 #   mkdir -p release/artifacts && touch release/artifacts/.keep
 #   ./src/bin/dockpipe --workflow-file workflows/secretstore-r2-publish-test/config.yml --workdir . \
@@ -23,9 +23,9 @@ description: >-
   Test pipeline: op inject secrets into an outputs file, DockPipe merges into env, then r2-publish.
 
 docker_preflight: false
-runtime: cli
+runtime: keystore
 resolver: onepassword
-runtimes: [cli]
+runtimes: [keystore]
 resolvers: [onepassword, codex]
 
 vars:

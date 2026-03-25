@@ -2,6 +2,8 @@
 
 **`workflow_type: secretstore`** marks this as a secret-injection wrapper. DockPipe does not treat it specially at runtime; the type is for classification, generators, and your own tooling.
 
+**Model:** **`runtime: keystore`** is the substrate (host + secret-store merge). **`resolver: onepassword`** is the 1Password CLI adapter (`DOCKPIPE_RESOLVER_*` in **`templates/core/resolvers/onepassword/profile`**). Other vaults belong in **new resolver profiles**, not new runtimes.
+
 ## Default provider: 1Password CLI (`op`)
 
 1. Install [1Password CLI](https://developer.1password.com/docs/cli/) and sign in.

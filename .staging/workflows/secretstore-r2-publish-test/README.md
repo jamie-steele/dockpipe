@@ -6,8 +6,8 @@ There is **no** separate “mapping table” in DockPipe. **You define names and
 
 | What you want | Where to look / what to edit |
 |---------------|------------------------------|
-| **Vault item → environment variable name** (e.g. `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`) | **`--workdir` / `.env.op.template`** — each line is `VAR_NAME=op://Vault/Item/field`. Example for vault **DockPipe** / item **CLOUDFLARE**: **`src/templates/secretstore/.env.op.template.example`**. In this repo, copy that file to **`.env.op.template`** at the repo root (gitignored). |
-| **Hint list** of common var names (documentation only) | **`templates/core/resolvers/onepassword/profile`** → `DOCKPIPE_RESOLVER_ENV=...` |
+| **Vault item → environment variable name** (e.g. `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`) | **`--workdir` / `.env.op.template`** — each line is `VAR_NAME=op://Vault/Item/field`. Example for vault **DockPipe** / item **CLOUDFLARE**: **`src/core/workflows/secretstore/.env.op.template.example`**. In this repo, copy that file to **`.env.op.template`** at the repo root (gitignored). |
+| **Hint list** of common var names (documentation only) | **`templates/core/resolvers/onepassword/profile`** → `DOCKPIPE_RESOLVER_ENV=...` (resolver = 1Password; **`runtime: keystore`** = secret substrate) |
 | **Which script reads the template and where it writes** | This workflow’s **`vars:`** → `OP_ENV_FILE` (input) and `SECRET_ENV_OUT` (must match step 1 **`outputs:`**). Script: **`scripts/dockpipe/secretstore-op-inject-outputs.sh`**. |
 | **What step 2 consumes** | **`scripts/dockpipe/r2-publish.sh`** and **`workflows/r2-publish/README.md`** — same variable names as in your `.env.op.template` after `op inject`. |
 
@@ -26,7 +26,7 @@ DockPipe merges the first step’s **`outputs:`** file into the environment **af
 From a dockpipe git checkout (repo root):
 
 ```bash
-cp src/templates/secretstore/.env.op.template.example .env.op.template
+cp src/core/workflows/secretstore/.env.op.template.example .env.op.template
 # Edit .env.op.template with real op:// fields for your vault items.
 mkdir -p release/artifacts && echo test >release/artifacts/README.txt
 R2_PUBLISH_DRY_RUN=1 R2_TF_BACKEND=local \

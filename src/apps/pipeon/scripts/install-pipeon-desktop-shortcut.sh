@@ -2,14 +2,14 @@
 # Install a Pipeon menu shortcut for code-server in the browser (dockpipe --workflow vscode).
 # NOT the Qt tray app — for that see install-pipeon-launcher-desktop-shortcut.sh / make install-pipeon-launcher-shortcut.
 # Freedesktop: ~/.local/share/applications/pipeon-code-server.desktop
-# Usage: from repo root — bash src/pipeon/scripts/install-pipeon-desktop-shortcut.sh
-# Windows: use src/pipeon/scripts/install-pipeon-desktop-shortcut.ps1 or: make install-pipeon-shortcut-windows
+# Usage: from repo root — bash src/apps/pipeon/scripts/install-pipeon-desktop-shortcut.sh
+# Windows: use src/apps/pipeon/scripts/install-pipeon-desktop-shortcut.ps1 or: make install-pipeon-shortcut-windows
 set -euo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 ICON_PNG="${REPO}/src/contrib/pipeon-vscode-extension/images/icon.png"
-ICON_SVG="${REPO}/src/templates/core/resolvers/code-server/assets/images/code-server/favicon.svg"
-LAUNCH="${REPO}/src/pipeon/scripts/pipeon-code-server-launch.sh"
+ICON_SVG="${REPO}/.staging/resolvers/code-server/assets/images/code-server/favicon.svg"
+LAUNCH="${REPO}/src/apps/pipeon/scripts/pipeon-code-server-launch.sh"
 
 for f in "$ICON_PNG" "$LAUNCH"; do
   if [[ ! -f "$f" ]]; then

@@ -100,15 +100,15 @@ func resolvePackageRepoRoot(flagRoot string) (string, error) {
 
 func resolveTemplatesCoreParent(repoRoot string) (string, error) {
 	repoRoot = filepath.Clean(repoRoot)
-	a := filepath.Join(repoRoot, "src", "templates", "core")
+	a := filepath.Join(repoRoot, "src", "core", "runtimes")
 	if st, err := os.Stat(a); err == nil && st.IsDir() {
-		return filepath.Join(repoRoot, "src", "templates"), nil
+		return filepath.Join(repoRoot, "src"), nil
 	}
 	b := filepath.Join(repoRoot, "templates", "core")
 	if st, err := os.Stat(b); err == nil && st.IsDir() {
 		return filepath.Join(repoRoot, "templates"), nil
 	}
-	return "", fmt.Errorf("no templates/core under %q (expected src/templates/core or templates/core)", repoRoot)
+	return "", fmt.Errorf("no templates/core under %q (expected src/core with runtimes/ or templates/core)", repoRoot)
 }
 
 func readRepoVersion(repoRoot string) (string, error) {

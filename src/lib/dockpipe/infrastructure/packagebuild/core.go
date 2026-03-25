@@ -27,7 +27,7 @@ type CoreReleaseManifest struct {
 }
 
 // WriteCoreRelease writes templates-core-<ver>.tar.gz (+ .sha256 + install-manifest.json) for dockpipe install core.
-// coreParent must be the directory containing a child "core" (e.g. .../src/templates or .../templates).
+// coreParent must be the directory containing a child "core" (e.g. .../src or .../templates).
 func WriteCoreRelease(coreParent, outDir, version string) (tarGzPath string, err error) {
 	coreParent = filepath.Clean(coreParent)
 	coreRoot := filepath.Join(coreParent, "core")
@@ -105,6 +105,13 @@ func tarTreeCore(coreRoot string, tw *tar.Writer) error {
 		rel, err := filepath.Rel(coreRoot, path)
 		if err != nil {
 			return err
+		}
+		// Dockpipe source uses src/core/workflows for bundled examples; omit from templates/core install tarball.
+		if rel == "workflows" || strings.HasPrefix(rel, "workflows"+string(filepath.Separator)) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		nameInTar := "core"
 		if rel != "." {

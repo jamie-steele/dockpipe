@@ -58,7 +58,7 @@ Install the `.vsix` into your Pipeon (or VS Code) build: **Extensions → … �
 
 For **development**, open **`src/contrib/pipeon-vscode-extension`** in VS Code and **F5** (Extension Development Host).
 
-**Browser (Coder code-server):** this repo also ships **`dockpipe-code-server:latest`** — **Coder’s** `codercom/code-server` image with Pipeon pre-installed, baseline User settings, and a **Pipeon P-mark favicon** in the browser tab. Build: **`make build-code-server-image`** (see **`templates/core/resolvers/code-server/assets/images/code-server/README.md`**). The **vscode** workflow uses it by default (`dockpipe --workflow vscode`). Icon sources: **`make pipeon-icons`** → **`src/pipeon/scripts/generate-pipeon-icons.py`**.
+**Browser (Coder code-server):** this repo also ships **`dockpipe-code-server:latest`** — **Coder’s** `codercom/code-server` image with Pipeon pre-installed, baseline User settings, and a **Pipeon P-mark favicon** in the browser tab. Build: **`make build-code-server-image`** (see **`.staging/resolvers/code-server/assets/images/code-server/README.md`**). The **vscode** workflow uses it by default (`dockpipe --workflow vscode`). Icon sources: **`make pipeon-icons`** → **`src/apps/pipeon/scripts/generate-pipeon-icons.py`**.
 
 ---
 

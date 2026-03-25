@@ -13,27 +13,28 @@ import (
 )
 
 // bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "88"
+const bundledFormatVersion = "91"
 
 var bundledMu sync.Mutex
 
 // EmbeddedWorkflowConfigExists reports whether a bundled workflow or resolver-delegate config exists for name.
-// Checks embed paths src/templates/<name>/config.yml and src/templates/core/resolvers/<name>/config.yml (source layout in the binary).
+// Checks embed paths src/core/workflows/<name>/config.yml and src/core/resolvers/<name>/config.yml (plus workflows/ and .staging/*).
 func EmbeddedWorkflowConfigExists(name string) bool {
 	if name == "" {
 		return false
 	}
 	for _, r := range name {
 		isAlnum := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9')
-		if !isAlnum && r != '-' && r != '_' {
+		if !isAlnum && r != '-' && r != '_' && r != '.' {
 			return false
 		}
 	}
 	for _, p := range []string{
-		EmbeddedTemplatesPrefix + "/" + name + "/config.yml",
+		EmbeddedTemplatesPrefix + "/workflows/" + name + "/config.yml",
 		"workflows/" + name + "/config.yml",
 		".staging/workflows/" + name + "/config.yml",
-		EmbeddedTemplatesPrefix + "/core/resolvers/" + name + "/config.yml",
+		EmbeddedTemplatesPrefix + "/resolvers/" + name + "/config.yml",
+		".staging/resolvers/" + name + "/config.yml",
 	} {
 		if _, err := fs.Stat(dockpipe.BundledFS, p); err == nil {
 			return true
@@ -63,8 +64,8 @@ func InvalidateBundledCache() error {
 }
 
 // MaterializedBundledRoot returns a directory containing the unpacked bundle: <ShipyardDir>/core/
-// (mirrors templates/core: resolvers, runtimes, strategies, …), workflows/, assets/entrypoint.sh, and version.
-// Embedded source still uses src/templates/...; copyEmbeddedFS maps that to the layout above on disk.
+// (mirrors bundled category dirs: resolvers, runtimes, strategies, …), workflows/, assets/entrypoint.sh, and version.
+// Embedded source uses src/core/...; copyEmbeddedFS maps that to the layout above on disk.
 // See also DOCKPIPE_REPO_ROOT override in RepoRoot.
 func MaterializedBundledRoot() (string, error) {
 	bundledMu.Lock()
@@ -130,25 +131,41 @@ func bundledCacheBase() (string, error) {
 	return cacheBase, nil
 }
 
-// mapEmbeddedToMaterializedPath maps embed paths (src/templates/..., lib/..., VERSION) to the on-disk
+// mapEmbeddedToMaterializedPath maps embed paths (src/core/..., lib/..., VERSION) to the on-disk
 // materialized layout: <ShipyardDir>/core/..., workflows/..., lib/, version.
 func mapEmbeddedToMaterializedPath(rel string) string {
-	corePrefix := EmbeddedTemplatesPrefix + "/core"
+	wfUnderCore := EmbeddedTemplatesPrefix + "/workflows"
 	switch {
 	case rel == "VERSION":
 		return "version"
-	case rel == corePrefix || strings.HasPrefix(rel, corePrefix+"/"):
-		suffix := strings.TrimPrefix(rel, corePrefix)
+	case rel == wfUnderCore || strings.HasPrefix(rel, wfUnderCore+"/"):
+		rest := strings.TrimPrefix(rel, wfUnderCore)
+		rest = strings.TrimPrefix(rest, "/")
+		if rest == "" {
+			return filepath.Join(ShipyardDir, "workflows")
+		}
+		return filepath.Join(ShipyardDir, "workflows", filepath.FromSlash(rest))
+	case rel == EmbeddedTemplatesPrefix || strings.HasPrefix(rel, EmbeddedTemplatesPrefix+"/"):
+		suffix := strings.TrimPrefix(rel, EmbeddedTemplatesPrefix)
 		suffix = strings.TrimPrefix(suffix, "/")
 		if suffix == "" {
 			return filepath.Join(ShipyardDir, "core")
 		}
 		return filepath.Join(ShipyardDir, "core", filepath.FromSlash(suffix))
-	case rel == EmbeddedTemplatesPrefix:
-		return ShipyardDir
-	case strings.HasPrefix(rel, EmbeddedTemplatesPrefix+"/"):
-		rest := strings.TrimPrefix(rel, EmbeddedTemplatesPrefix+"/")
-		return filepath.Join(ShipyardDir, "workflows", rest)
+	case rel == ".staging/resolvers" || strings.HasPrefix(rel, ".staging/resolvers/"):
+		rest := strings.TrimPrefix(rel, ".staging/resolvers")
+		rest = strings.TrimPrefix(rest, "/")
+		if rest == "" {
+			return filepath.Join(ShipyardDir, "core", "resolvers")
+		}
+		return filepath.Join(ShipyardDir, "core", "resolvers", filepath.FromSlash(rest))
+	case rel == ".staging/bundles" || strings.HasPrefix(rel, ".staging/bundles/"):
+		rest := strings.TrimPrefix(rel, ".staging/bundles")
+		rest = strings.TrimPrefix(rest, "/")
+		if rest == "" {
+			return filepath.Join(ShipyardDir, "core", "bundles")
+		}
+		return filepath.Join(ShipyardDir, "core", "bundles", filepath.FromSlash(rest))
 	case rel == "workflows" || strings.HasPrefix(rel, "workflows/"):
 		rest := strings.TrimPrefix(rel, "workflows")
 		rest = strings.TrimPrefix(rest, "/")

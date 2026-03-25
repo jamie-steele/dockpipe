@@ -57,7 +57,7 @@ Thumbs.db
 .env.op.template
 
 # Local `.dockpipe/` — generated handoffs, CI dumps, review/cursor prompts, optional `demo/` stubs (see AGENTS.md).
-# Canonical templates live under `src/templates/…`; do not commit this tree.
+# Canonical bundled core + workflows live under `src/core/…`; do not commit a duplicate `templates/` tree here.
 .dockpipe/
 
 # DorkPipe runtime outputs (metrics, nodes, self-analysis scratch)

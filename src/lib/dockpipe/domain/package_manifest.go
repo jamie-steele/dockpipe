@@ -34,6 +34,12 @@ type PackageManifest struct {
 	RequiresResolvers []string `yaml:"requires_resolvers,omitempty"`
 	// Depends lists other package names this package expects (optional).
 	Depends []string `yaml:"depends,omitempty"`
+	// AllowClone: when true, dockpipe clone may copy this compiled package into an authoring tree (e.g. workflows/).
+	// Omitted or false: clone is refused — use for commercial/binary-only drops where the publisher does not grant source export.
+	AllowClone bool `yaml:"allow_clone,omitempty"`
+	// Distribution is optional policy for humans and tooling: "source" (recoverable YAML/assets) or "binary" (no meaningful source in the artifact).
+	// Binary releases should set allow_clone: false and ship only non-recoverable artifacts if reverse-engineering must be impractical.
+	Distribution string `yaml:"distribution,omitempty"`
 }
 
 // ParsePackageManifest reads and parses package.yml from path.

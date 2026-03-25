@@ -8,11 +8,13 @@ import (
 )
 
 // ResolveWorkflowScript resolves run/act path: scripts/* from the project (repoRoot/scripts/ if
-// present, else repoRoot/src/scripts/ for this dockpipe repo layout), else templates/core/resolvers/<name>/assets/scripts/… (and legacy flat resolvers/<rest>),
-// then templates/core/bundles/<name>/assets/scripts/… (and legacy flat bundles/<rest>),
-// then templates/core/assets/scripts/; other paths are relative to the workflow template dir.
-// Domain-specific scripts live under each resolver or bundle’s assets/scripts tree; only agnostic
-// helpers sit directly under templates/core/assets/scripts/.
+// present, else repoRoot/src/scripts/ for this dockpipe repo layout), else .staging/resolvers|bundles
+// (dockpipe checkout) or templates/core (materialized merge), then templates/core/assets/scripts/;
+// other paths are relative to the workflow template dir.
+//
+// Namespace: scripts/core.<dot.segments> maps to paths under core/ by turning dots into path segments
+// (e.g. scripts/core.assets.scripts.foo.sh → core/assets/scripts/foo.sh). Resolution order for that path:
+// .dockpipe/core/…, .dockpipe/internal/packages/core/…, then templates/core/… (compiled / materialized layout).
 // Uses forward slashes so YAML paths match Linux/container expectations.
 func ResolveWorkflowScript(rel, workflowRoot, repoRoot string) string {
 	if strings.HasPrefix(rel, "scripts/") {
@@ -26,8 +28,8 @@ func scriptFileExists(p string) bool {
 	return err == nil && !st.IsDir()
 }
 
-// tryBundledAssetsScripts maps rest "domain/tail/path" to core/<top>/domain/assets/scripts/tail/path.
-func tryBundledAssetsScripts(core, top string, rest string) (string, bool) {
+// tryBundledAssetsScripts maps rest "domain/tail/path" to <base>/<top>/domain/assets/scripts/tail/path.
+func tryBundledAssetsScripts(base, top string, rest string) (string, bool) {
 	if !strings.Contains(rest, "/") {
 		return "", false
 	}
@@ -35,9 +37,42 @@ func tryBundledAssetsScripts(core, top string, rest string) (string, bool) {
 	if !ok || after == "" {
 		return "", false
 	}
-	p := filepath.Join(core, top, first, "assets", "scripts", after)
+	p := filepath.Join(base, top, first, "assets", "scripts", after)
 	if scriptFileExists(p) {
 		return p, true
+	}
+	return "", false
+}
+
+// relFromCoreNamespace parses scripts/ paths after "core." — segments separated by dots become path segments.
+// Example: "core.assets.scripts.docker-cache-volumes.sh" → "assets/scripts/docker-cache-volumes.sh".
+func relFromCoreNamespace(rest string) (string, bool) {
+	if !strings.HasPrefix(rest, "core.") {
+		return "", false
+	}
+	inner := strings.TrimPrefix(rest, "core.")
+	if inner == "" {
+		return "", false
+	}
+	parts := strings.Split(inner, ".")
+	return filepath.Join(parts...), true
+}
+
+// resolveCoreNamespacedAsset resolves scripts/core.* to a file under core/ (compiled overlays first).
+func resolveCoreNamespacedAsset(repoRoot, rest string) (string, bool) {
+	rel, ok := relFromCoreNamespace(rest)
+	if !ok {
+		return "", false
+	}
+	candidates := []string{
+		filepath.Join(repoRoot, ".dockpipe", "core", rel),
+		filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "core", rel),
+		filepath.Join(CoreDir(repoRoot), rel),
+	}
+	for _, p := range candidates {
+		if scriptFileExists(p) {
+			return p, true
+		}
 	}
 	return "", false
 }
@@ -52,7 +87,34 @@ func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 	if scriptFileExists(srcScripts) {
 		return srcScripts
 	}
+	if p, ok := resolveCoreNamespacedAsset(repoRoot, rest); ok {
+		return p
+	}
 	core := CoreDir(repoRoot)
+	if UsesBundledAssetLayout(repoRoot) {
+		if p, ok := tryBundledAssetsScripts(core, "resolvers", rest); ok {
+			return p
+		}
+		if p, ok := tryBundledAssetsScripts(core, "bundles", rest); ok {
+			return p
+		}
+		resolverPath := filepath.Join(core, "resolvers", rest)
+		if scriptFileExists(resolverPath) {
+			return resolverPath
+		}
+		bundlePath := filepath.Join(core, "bundles", rest)
+		if scriptFileExists(bundlePath) {
+			return bundlePath
+		}
+		return filepath.Join(core, "assets", "scripts", rest)
+	}
+	stagingRoot := filepath.Join(repoRoot, ".staging")
+	if p, ok := tryBundledAssetsScripts(stagingRoot, "resolvers", rest); ok {
+		return p
+	}
+	if p, ok := tryBundledAssetsScripts(stagingRoot, "bundles", rest); ok {
+		return p
+	}
 	if p, ok := tryBundledAssetsScripts(core, "resolvers", rest); ok {
 		return p
 	}
@@ -60,12 +122,13 @@ func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 	if scriptFileExists(resolverPath) {
 		return resolverPath
 	}
-	if p, ok := tryBundledAssetsScripts(core, "bundles", rest); ok {
-		return p
+	stagingResolverPath := filepath.Join(StagingResolversDir(repoRoot), rest)
+	if scriptFileExists(stagingResolverPath) {
+		return stagingResolverPath
 	}
-	bundlePath := filepath.Join(core, "bundles", rest)
-	if scriptFileExists(bundlePath) {
-		return bundlePath
+	stagingBundlePath := filepath.Join(StagingBundlesDir(repoRoot), rest)
+	if scriptFileExists(stagingBundlePath) {
+		return stagingBundlePath
 	}
 	return filepath.Join(core, "assets", "scripts", rest)
 }
@@ -113,27 +176,29 @@ func ResolvePreScriptPath(p, repoRoot string) string {
 }
 
 // ResolveResolverFilePath returns the path to a specific resolver profile (KEY=value) by name.
-// name selects a concrete profile (claude, codex, …); the agnostic runtime contract is DOCKPIPE_RUNTIME_* / DOCKPIPE_RESOLVER_* inside the file.
-// Search order:
-//
-//	templates/core/resolvers/<name> (file) → templates/core/resolvers/<name>/profile
-//
-// Custom execution graphs belong in workflow YAML under templates/<workflow>/ (or --workflow-file), not beside it as profile files.
+// Search order (dockpipe checkout): .staging/resolvers → templates/core/resolvers. Materialized bundle: shipyard/core/resolvers only.
 func ResolveResolverFilePath(repoRoot, resolverName string) (string, error) {
 	resolverName = strings.TrimSpace(resolverName)
 	if resolverName == "" {
 		return "", fmt.Errorf("resolver profile name is empty")
 	}
-	candidates := []string{
+	var candidates []string
+	if !UsesBundledAssetLayout(repoRoot) {
+		candidates = append(candidates,
+			filepath.Join(StagingResolversDir(repoRoot), resolverName),
+			filepath.Join(StagingResolversDir(repoRoot), resolverName, "profile"),
+		)
+	}
+	candidates = append(candidates,
 		filepath.Join(CoreDir(repoRoot), "resolvers", resolverName),
 		filepath.Join(CoreDir(repoRoot), "resolvers", resolverName, "profile"),
-	}
+	)
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p, nil
 		}
 	}
-	return "", fmt.Errorf("resolver profile not found for %q (tried %v); shared profiles live under templates/core/resolvers/ — use workflow YAML for custom flows — upgrade dockpipe or run `dockpipe doctor` if your install is stale", resolverName, candidates)
+	return "", fmt.Errorf("resolver profile not found for %q (tried %v); shared profiles live under .staging/resolvers/ (dockpipe repo) or templates/core/resolvers/ — use workflow YAML for custom flows — upgrade dockpipe or run `dockpipe doctor` if your install is stale", resolverName, candidates)
 }
 
 // IsBundledCommitWorktree reports whether action is the bundled commit-worktree.sh.

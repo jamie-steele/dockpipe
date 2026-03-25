@@ -66,7 +66,7 @@ func TestResolveWorkflowScriptResolvesScriptsPrefixToCoreWhenUserMissing(t *test
 
 func TestResolveWorkflowScriptResolvesScriptsPrefixToBundlesDirWhenPresent(t *testing.T) {
 	repo := t.TempDir()
-	b := filepath.Join(repo, "templates", "core", "bundles", "dorkpipe", "assets", "scripts", "aggregate-reasoning-context.sh")
+	b := filepath.Join(repo, ".staging", "bundles", "dorkpipe", "assets", "scripts", "aggregate-reasoning-context.sh")
 	if err := os.MkdirAll(filepath.Dir(b), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +81,7 @@ func TestResolveWorkflowScriptResolvesScriptsPrefixToBundlesDirWhenPresent(t *te
 
 func TestResolveWorkflowScriptResolvesScriptsPrefixToResolverDirWhenPresent(t *testing.T) {
 	repo := t.TempDir()
-	rs := filepath.Join(repo, "templates", "core", "resolvers", "cursor-dev", "assets", "scripts", "cursor-dev-session.sh")
+	rs := filepath.Join(repo, ".staging", "resolvers", "cursor-dev", "assets", "scripts", "cursor-dev-session.sh")
 	if err := os.MkdirAll(filepath.Dir(rs), 0o755); err != nil {
 		t.Fatal(err)
 	}

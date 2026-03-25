@@ -12,7 +12,7 @@ import (
 // Default root: <workdir>/.dockpipe/internal/packages with the same conceptual buckets as authoring templates:
 //
 //	workflows/   — workflow-shaped dirs (config.yml, steps, …)
-//	core/        — resolvers/, runtimes/, strategies/, assets/, bundles/ (mirrors templates/core categories)
+//	core/        — lean templates/core mirror: runtimes/, resolvers/, strategies/, assets/
 //	assets/      — optional top-level shared assets not folded under core/ (e.g. large binary packs)
 //
 // Override with DOCKPIPE_PACKAGES_ROOT (absolute path, or relative to workdir).
@@ -53,7 +53,7 @@ func PackagesWorkflowsDir(workdir string) (string, error) {
 	return filepath.Join(root, "workflows"), nil
 }
 
-// PackagesCoreDir is .dockpipe/internal/packages/core — same category rules as templates/core (resolvers, runtimes, …).
+// PackagesCoreDir is .dockpipe/internal/packages/core — same category rules as templates/core (lean core tree).
 func PackagesCoreDir(workdir string) (string, error) {
 	root, err := PackagesRoot(workdir)
 	if err != nil {

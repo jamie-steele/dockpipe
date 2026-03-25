@@ -20,6 +20,13 @@ func TestWriteCoreRelease(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(coreParent, "core", "nested", "a.txt"), []byte("hello"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// Bundled example workflows under src/core/workflows must not ship in templates/core tarball.
+	if err := os.MkdirAll(filepath.Join(coreParent, "core", "workflows", "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(coreParent, "core", "workflows", "demo", "config.yml"), []byte("name: demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	out := filepath.Join(dir, "release", "artifacts")
 	path, err := WriteCoreRelease(coreParent, out, "9.9.9-test")
 	if err != nil {

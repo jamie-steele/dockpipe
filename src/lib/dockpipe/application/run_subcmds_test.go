@@ -131,7 +131,7 @@ func TestCmdPreInitCreatesDefaultScript(t *testing.T) {
 }
 
 // TestMergeBundledTemplatesCoreCopiesCoreTree copies templates/core from repoRoot into dest,
-// including nested assets (mergeBundledTemplatesCore is path-agnostic under templates/core).
+// including nested assets (full copy when source has no workflows/ subdir).
 func TestMergeBundledTemplatesCoreCopiesCoreTree(t *testing.T) {
 	repo := t.TempDir()
 	dest := t.TempDir()
@@ -302,8 +302,8 @@ func TestCmdInitRequiresNameForFrom(t *testing.T) {
 	}
 }
 
-// TestCmdInitBareMergesFullCoreTree verifies dockpipe init (no name) merges the real bundled
-// templates/core tree including assets/scripts, assets/images, assets/compose, runtimes, resolvers, strategies.
+// TestCmdInitBareMergesFullCoreTree verifies dockpipe init (no name) merges the lean bundled
+// templates/core tree (assets, runtimes, resolvers/example, strategies). Tool resolvers live under .staging/ in the dockpipe repo, not in templates/core after init.
 func TestCmdInitBareMergesFullCoreTree(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
@@ -323,7 +323,7 @@ func TestCmdInitBareMergesFullCoreTree(t *testing.T) {
 		filepath.Join(project, "templates", "core", "assets", "images", "base-dev", "Dockerfile"),
 		filepath.Join(project, "templates", "core", "runtimes", "cli", "profile"),
 		filepath.Join(project, "templates", "core", "strategies", "worktree"),
-		filepath.Join(project, "templates", "core", "resolvers", "claude", "profile"),
+		filepath.Join(project, "templates", "core", "resolvers", "example", "config.yml"),
 	}
 	for _, p := range markers {
 		if _, err := os.Stat(p); err != nil {

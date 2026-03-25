@@ -7,13 +7,13 @@
 
 namespace {
 
-QString templatesRoot(const QString &repoRoot)
+QString coreCategoriesRoot(const QString &repoRoot)
 {
     const QDir r(repoRoot);
-    const QString src = r.filePath(QStringLiteral("src/templates"));
-    if (QFileInfo(src + QStringLiteral("/core")).isDir())
-        return src;
-    return r.filePath(QStringLiteral("templates"));
+    const QString srcCore = r.filePath(QStringLiteral("src/core"));
+    if (QFileInfo(srcCore + QStringLiteral("/runtimes")).isDir())
+        return srcCore;
+    return r.filePath(QStringLiteral("templates/core"));
 }
 
 bool looksLikeRepoRoot(const QString &absPath)
@@ -21,7 +21,7 @@ bool looksLikeRepoRoot(const QString &absPath)
     const QDir d(absPath);
     return QFileInfo(d.filePath(QStringLiteral("workflows"))).isDir()
         || QFileInfo(d.filePath(QStringLiteral(".staging/workflows"))).isDir()
-        || QFileInfo(d.filePath(QStringLiteral("src/templates/core"))).isDir()
+        || QFileInfo(d.filePath(QStringLiteral("src/core/runtimes"))).isDir()
         || QFileInfo(d.filePath(QStringLiteral("templates/core"))).isDir();
 }
 
@@ -72,10 +72,16 @@ QString DockpipeChoices::cursorPrepScriptPath(const QString &hintWorkdir)
     const QString root = findRepoRoot(hintWorkdir);
     if (root.isEmpty())
         return {};
-    const QString p = QDir::cleanPath(root + QStringLiteral("/src/templates/core/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
-    if (QFileInfo::exists(p))
-        return p;
-    const QString legacy = QDir::cleanPath(root + QStringLiteral("/templates/core/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
+    const QString staging =
+        QDir::cleanPath(root + QStringLiteral("/.staging/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
+    if (QFileInfo::exists(staging))
+        return staging;
+    const QString srcCore =
+        QDir::cleanPath(root + QStringLiteral("/src/core/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
+    if (QFileInfo::exists(srcCore))
+        return srcCore;
+    const QString legacy =
+        QDir::cleanPath(root + QStringLiteral("/templates/core/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
     if (QFileInfo::exists(legacy))
         return legacy;
     return {};
@@ -114,7 +120,20 @@ QStringList DockpipeChoices::listWorkflowNamesFromRepo(const QString &repoRoot)
     }
 
     {
-        const QDir tpl(templatesRoot(repoRoot));
+        const QString bundledWf = root.filePath(QStringLiteral("src/core/workflows"));
+        if (QFileInfo(bundledWf).isDir()) {
+            const QDir wfd(bundledWf);
+            const auto dirs = wfd.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+            for (const QFileInfo &fi : dirs) {
+                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
+                if (QFileInfo::exists(cfg))
+                    names.append(fi.fileName());
+            }
+        }
+    }
+
+    {
+        const QDir tpl(root.filePath(QStringLiteral("templates")));
         if (tpl.exists()) {
             const auto dirs = tpl.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {
@@ -149,7 +168,7 @@ void DockpipeChoices::scan(const QString &repoRoot)
     }
 
     const QDir root(repoRoot);
-    const QString tr = templatesRoot(repoRoot);
+    const QString cc = coreCategoriesRoot(repoRoot);
 
     {
         const QDir wf(root.filePath(QStringLiteral("workflows")));
@@ -166,7 +185,36 @@ void DockpipeChoices::scan(const QString &repoRoot)
     }
 
     {
-        const QDir tpl(tr);
+        const QDir stg(root.filePath(QStringLiteral(".staging/workflows")));
+        if (stg.exists()) {
+            const auto dirs = stg.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+            for (const QFileInfo &fi : dirs) {
+                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
+                if (QFileInfo::exists(cfg)) {
+                    workflowNames.append(fi.fileName());
+                    workflowConfigPaths.append(QDir::cleanPath(cfg));
+                }
+            }
+        }
+    }
+
+    {
+        const QString bundledWf = root.filePath(QStringLiteral("src/core/workflows"));
+        if (QFileInfo(bundledWf).isDir()) {
+            const QDir wfd(bundledWf);
+            const auto dirs = wfd.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+            for (const QFileInfo &fi : dirs) {
+                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
+                if (QFileInfo::exists(cfg)) {
+                    workflowNames.append(fi.fileName());
+                    workflowConfigPaths.append(QDir::cleanPath(cfg));
+                }
+            }
+        }
+    }
+
+    {
+        const QDir tpl(root.filePath(QStringLiteral("templates")));
         if (tpl.exists()) {
             const auto dirs = tpl.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {
@@ -182,7 +230,7 @@ void DockpipeChoices::scan(const QString &repoRoot)
     }
 
     {
-        const QDir res(tr + QStringLiteral("/core/resolvers"));
+        const QDir res(cc + QStringLiteral("/resolvers"));
         if (res.exists()) {
             const auto dirs = res.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {
@@ -194,7 +242,7 @@ void DockpipeChoices::scan(const QString &repoRoot)
     }
 
     {
-        const QDir strat(tr + QStringLiteral("/core/strategies"));
+        const QDir strat(cc + QStringLiteral("/strategies"));
         if (strat.exists()) {
             const auto files = strat.entryInfoList(QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : files) {
@@ -206,7 +254,7 @@ void DockpipeChoices::scan(const QString &repoRoot)
     }
 
     {
-        const QDir rt(tr + QStringLiteral("/core/runtimes"));
+        const QDir rt(cc + QStringLiteral("/runtimes"));
         if (rt.exists()) {
             const auto dirs = rt.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
             for (const QFileInfo &fi : dirs) {

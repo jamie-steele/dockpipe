@@ -9,8 +9,8 @@ if [[ -z "$REPO_ROOT" ]]; then
   echo "docker-package-cache-demo: cannot find repo root (set DOCKPIPE_REPO_ROOT or run from a git checkout)" >&2
   exit 1
 fi
-# shellcheck source=src/templates/core/assets/scripts/docker-cache-volumes.sh
-source "${REPO_ROOT}/src/templates/core/assets/scripts/docker-cache-volumes.sh"
+# shellcheck source=src/core/assets/scripts/docker-cache-volumes.sh
+source "${REPO_ROOT}/src/core/assets/scripts/docker-cache-volumes.sh"
 
 FLATPAK_VOL="${DOCKER_DEMO_FLATPAK_VOL:-dockpipe-flatpak-system}"
 APT_CACHE_VOL="${DOCKER_DEMO_APT_CACHE_VOL:-dockpipe-apt-cache}"

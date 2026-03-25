@@ -16,7 +16,7 @@ Your project is mounted at **`/work`** in a disposable container; when the comma
 
 ## Core tools in this repo
 
-The **DockPipe** CLI lives under **`src/cmd/dockpipe/`** and **`src/lib/dockpipe/`**. This repository also contains **DorkPipe** (orchestration, **`src/cmd/dorkpipe/`**), **Pipeon** (under **`src/pipeon/`**, Launcher **`src/apps/pipeon-launcher/`**, VS Code extension **`src/contrib/pipeon-vscode-extension/`**). Built binaries and launchers: **`src/bin/`**. They are separate products with explicit integration (subprocess, files, env) — see **[docs/core-tools.md](docs/core-tools.md)**. Indexes: **[src/pipeon/README.md](src/pipeon/README.md)**, **[src/apps/README.md](src/apps/README.md)**, **[src/contrib/README.md](src/contrib/README.md)**.
+The **DockPipe** CLI lives under **`src/cmd/dockpipe/`** and **`src/lib/dockpipe/`**. This repository also contains **DorkPipe** (orchestration, **`src/cmd/dorkpipe/`**), **Pipeon** (under **`src/apps/pipeon/`**, Launcher **`src/apps/pipeon-launcher/`**, VS Code extension **`src/contrib/pipeon-vscode-extension/`**). Built binaries and launchers: **`src/bin/`**. They are separate products with explicit integration (subprocess, files, env) — see **[docs/core-tools.md](docs/core-tools.md)**. Indexes: **[src/apps/pipeon/README.md](src/apps/pipeon/README.md)**, **[src/apps/README.md](src/apps/README.md)**, **[src/contrib/README.md](src/contrib/README.md)**.
 
 ## Concepts
 

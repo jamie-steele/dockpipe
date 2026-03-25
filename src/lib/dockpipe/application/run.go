@@ -100,6 +100,9 @@ func Run(argv []string, baseEnviron []string) error {
 	if argv[0] == "package" {
 		return cmdPackage(argv[1:])
 	}
+	if argv[0] == "clone" {
+		return cmdClone(argv[1:])
+	}
 	if argv[0] == "release" {
 		return cmdRelease(argv[1:])
 	}
@@ -164,7 +167,7 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 			if statErr != nil {
 				names, _ := infrastructure.ListWorkflowNamesInRepoRootAndPackages(repoRoot, effWd)
-				msg := fmt.Sprintf("workflow %q not found — tried workflows/ (or DOCKPIPE_WORKFLOWS_DIR), .staging/workflows/ (dockpipe checkout), .dockpipe/internal/packages/workflows/, legacy templates/, src/templates/ (dockpipe tree), and core/resolvers/%[1]s/config.yml", opts.Workflow)
+				msg := fmt.Sprintf("workflow %q not found — tried workflows/ (or DOCKPIPE_WORKFLOWS_DIR), .staging/workflows/ (dockpipe checkout), .dockpipe/internal/packages/workflows/, legacy templates/, src/core/workflows/ (dockpipe tree), and core/resolvers/%[1]s/config.yml", opts.Workflow)
 				if len(names) > 0 {
 					msg += fmt.Sprintf(" (available in this install: %s)", strings.Join(names, ", "))
 				}

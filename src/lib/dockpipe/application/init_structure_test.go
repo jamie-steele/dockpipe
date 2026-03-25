@@ -126,7 +126,7 @@ func TestCmdInitMergedCoreTopLevelMatchesModel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"assets", "bundles", "resolvers", "runtimes", "strategies"}
+	want := []string{"assets", "resolvers", "runtimes", "strategies"}
 	var names []string
 	for _, e := range ents {
 		if e.IsDir() && e.Name()[0] != '.' {

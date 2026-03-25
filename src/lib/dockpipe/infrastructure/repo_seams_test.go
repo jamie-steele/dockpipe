@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestRepoRootMaterializesBundledTemplates copies embedded src/templates into the bundle cache and
+// TestRepoRootMaterializesBundledTemplates copies embedded src/core into the bundle cache and
 // materializes a workflow config (under ShipyardDir/workflows/ — cache layout, not a dependency on
 // git-tracked workflows/ content).
 func TestRepoRootMaterializesBundledTemplates(t *testing.T) {

@@ -73,3 +73,31 @@ depends: [base-pack]
 		t.Fatalf("depends: %+v", m)
 	}
 }
+
+func TestParsePackageManifestAllowClone(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	body := `schema: 1
+name: x
+version: 1.0.0
+title: X
+description: d
+author: a
+website: https://example.com
+license: MIT
+kind: workflow
+allow_clone: true
+distribution: binary
+`
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := ParsePackageManifest(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !m.AllowClone || m.Distribution != "binary" {
+		t.Fatalf("got %+v", m)
+	}
+}

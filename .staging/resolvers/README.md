@@ -1,8 +1,8 @@
-# Shared resolver profiles (`templates/core/resolvers/`)
+# Staging resolver profiles (`.staging/resolvers/`)
 
 **Normative architecture** (workflow, runtime, resolver, strategy, **`runtime.type`**, invariants): **[docs/architecture-model.md](../../docs/architecture-model.md)**. This README is **mechanical**: file format and keys the Go runner reads. It does **not** redefine those concepts.
 
-Each profile is **`templates/core/resolvers/<name>`** (flat **`KEY=value`** file) or **`templates/core/resolvers/<name>/profile`**, optionally with **`config.yml`** (delegate workflow for **`DOCKPIPE_*_WORKFLOW`**). Selected by resolver profile **name** (CLI **`--runtime`** / **`--resolver`**). The runner merges **`DOCKPIPE_RUNTIME_*`** then **`DOCKPIPE_RESOLVER_*`** (see **`domain.FromResolverMap`**); other lines are comments (`#`). See **[docs/isolation-layer.md](../../docs/isolation-layer.md)** and **[docs/runtime-architecture.md](../../docs/runtime-architecture.md)**.
+In the **dockpipe** repo, tool-specific profiles live here (same authoring story as **`.staging/workflows/`**). Lean **`templates/core/resolvers/`** holds only **`example/`**. Each profile is **`.staging/resolvers/<name>`** (flat **`KEY=value`** file) or **`.staging/resolvers/<name>/profile`**, optionally with **`config.yml`** (delegate workflow for **`DOCKPIPE_*_WORKFLOW`**). The runner merges **`DOCKPIPE_RUNTIME_*`** then **`DOCKPIPE_RESOLVER_*`** (see **`domain.FromResolverMap`**); other lines are comments (`#`). See **[docs/isolation-layer.md](../../docs/isolation-layer.md)** and **[docs/runtime-architecture.md](../../docs/runtime-architecture.md)**.
 
 ## Contract (runner)
 

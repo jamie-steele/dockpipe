@@ -178,12 +178,11 @@ func cmdTemplate(args []string) error {
 	// Pull in shared templates/core next to the new workflow if not already present (resolvers, strategies).
 	wdParent := filepath.Dir(dest)
 	coreDest := filepath.Join(wdParent, "templates", "core")
-	coreSrc := infrastructure.CoreDir(repoRoot)
 	if _, err := os.Stat(coreDest); err != nil && os.IsNotExist(err) {
 		if err := os.MkdirAll(filepath.Join(wdParent, "templates"), 0o755); err != nil {
 			return err
 		}
-		if err := copyDirMaybe(coreSrc, coreDest); err != nil {
+		if err := copyBundledCoreInto(coreDest, repoRoot); err != nil {
 			return fmt.Errorf("copy shared templates/core: %w", err)
 		}
 	}
@@ -251,11 +250,27 @@ func cmdInitLikeScript(args []string, defaultName string, bundled []string, boil
 	return os.WriteFile(dest, []byte(boiler), 0o755)
 }
 
-// mergeBundledTemplatesCore copies templates/core (runtimes, resolvers, strategies, assets, bundles) from the dockpipe
-// install into dest, matching dockpipe init without --from.
+// copyBundledCoreInto merges category dirs (assets, resolvers, runtimes, strategies) into coreDest.
+// When the install tree is dockpipe-style src/core (has workflows/), bundled example workflows are not copied.
+func copyBundledCoreInto(coreDest, repoRoot string) error {
+	coreSrc := infrastructure.CoreDir(repoRoot)
+	wfDir := filepath.Join(coreSrc, "workflows")
+	if st, err := os.Stat(wfDir); err == nil && st.IsDir() {
+		for _, name := range []string{"assets", "resolvers", "runtimes", "strategies"} {
+			if err := copyDirMaybe(filepath.Join(coreSrc, name), filepath.Join(coreDest, name)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	return copyDirMaybe(coreSrc, coreDest)
+}
+
+// mergeBundledTemplatesCore copies templates/core from the dockpipe install into dest,
+// matching dockpipe init without --from. Tool resolvers and bundles ship in the binary via embed (.staging/*), not via templates/vendor.
 func mergeBundledTemplatesCore(repoRoot, dest string) error {
 	_ = os.MkdirAll(filepath.Join(dest, "templates"), 0o755)
-	return copyDirMaybe(infrastructure.CoreDir(repoRoot), filepath.Join(dest, "templates/core"))
+	return copyBundledCoreInto(filepath.Join(dest, "templates", "core"), repoRoot)
 }
 
 func copyFile(src, dst string) error {

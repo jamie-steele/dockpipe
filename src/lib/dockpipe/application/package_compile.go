@@ -114,12 +114,14 @@ func cmdPackageCompileWorkflow(args []string) error {
 	manifestPath := filepath.Join(destRoot, infrastructure.PackageManifestFilename)
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
 		pm := map[string]any{
-			"schema":      1,
-			"name":        pkgName,
-			"version":     "0.1.0",
-			"title":       pkgName,
-			"description": "Compiled from " + srcAbs,
-			"kind":        "workflow",
+			"schema":       1,
+			"name":         pkgName,
+			"version":      "0.1.0",
+			"title":        pkgName,
+			"description":  "Compiled from " + srcAbs,
+			"kind":         "workflow",
+			"allow_clone":  true,
+			"distribution": "source",
 		}
 		out, err := yaml.Marshal(pm)
 		if err != nil {

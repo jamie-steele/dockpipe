@@ -28,7 +28,7 @@ Environment:
   OLLAMA_HOST          Default http://127.0.0.1:11434
   PIPEON_OLLAMA_MODEL  Default llama3.2 (or DOCKPIPE_OLLAMA_MODEL)
 
-See: src/pipeon/docs/pipeon-ide-experience.md  src/pipeon/scripts/README.md
+See: src/apps/pipeon/docs/pipeon-ide-experience.md  src/apps/pipeon/scripts/README.md
 EOF
 	;;
 bundle)

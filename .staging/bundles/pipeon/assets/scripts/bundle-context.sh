@@ -89,7 +89,7 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo ""
 	echo "- **AGENTS.md** — maintainer/agent contract for this repo."
 	echo "- **docs/compliance-ai-handoff.md** — how to discuss compliance without claiming certification."
-	echo "- **src/pipeon/docs/pipeon-ide-experience.md** — Pipeon UX and tone."
+	echo "- **src/apps/pipeon/docs/pipeon-ide-experience.md** — Pipeon UX and tone."
 	echo ""
 } >"$CTX"
 

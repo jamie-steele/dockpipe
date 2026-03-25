@@ -31,10 +31,17 @@ func tryResolveResolver(repoRoot, name string) string {
 	if name == "" {
 		return ""
 	}
-	candidates := []string{
+	var candidates []string
+	if !UsesBundledAssetLayout(repoRoot) {
+		candidates = append(candidates,
+			filepath.Join(StagingResolversDir(repoRoot), name),
+			filepath.Join(StagingResolversDir(repoRoot), name, "profile"),
+		)
+	}
+	candidates = append(candidates,
 		filepath.Join(CoreDir(repoRoot), "resolvers", name),
 		filepath.Join(CoreDir(repoRoot), "resolvers", name, "profile"),
-	}
+	)
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p

@@ -4,7 +4,7 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SCRIPT="$REPO_ROOT/src/templates/core/assets/scripts/clone-worktree.sh"
+SCRIPT="$REPO_ROOT/src/core/assets/scripts/clone-worktree.sh"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT

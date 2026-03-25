@@ -6,7 +6,7 @@
 
 **Workflow YAML (`config.yml`):** single-command layout (`run` / `isolate` / `act`) or multi-step **`steps:`** (ordering, **`outputs:`**, **`is_blocking`**, optional **`group.mode: async`**). Full reference: **[workflow-yaml.md](workflow-yaml.md)**.
 
-**Subcommands:** `dockpipe init`, `dockpipe install` (fetch **`templates/core`** from HTTPS — e.g. **Cloudflare R2** behind a public URL), `dockpipe package` (list, manifest, **`package build core`**, **`package compile workflow`** into **`.dockpipe/internal/packages/`**), `dockpipe release upload` (S3-compatible upload via **`aws` CLI** — self-hosted registries), `dockpipe workflow validate [path]`, `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe runs list [--workdir]` (list **`.dockpipe/runs/*.json`** for host **skip_container** steps), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
+**Subcommands:** `dockpipe init`, `dockpipe install` (fetch **`templates/core`** from HTTPS — e.g. **Cloudflare R2** behind a public URL), `dockpipe clone` (copy a compiled workflow package to **`workflows/`** when **`allow_clone: true`** in **`package.yml`**), `dockpipe package` (list, manifest, **`package build core`**, **`package compile workflow`** into **`.dockpipe/internal/packages/`**), `dockpipe release upload` (S3-compatible upload via **`aws` CLI** — self-hosted registries), `dockpipe workflow validate [path]`, `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe runs list [--workdir]` (list **`.dockpipe/runs/*.json`** for host **skip_container** steps), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
 
 ## `dockpipe init`
 
@@ -21,7 +21,7 @@ Local project setup only: **no `git clone`**, no treating **`init`** as a remote
 | `dockpipe init <name> --resolver <n> --runtime <n> --strategy <n>` | Optional; written into the new **`config.yml`** as **`resolver:`** / **`default_resolver:`**, **`runtime:`** / **`default_runtime:`**, **`strategy:`** (same meaning as **`dockpipe run`**). Example: **`dockpipe init my-pipeline --from run-apply --resolver codex --runtime docker`**. |
 | `dockpipe init --gitignore` | **Opt-in** only: append a marked block to **`.gitignore`** at the **git repository root** (`.dockpipe/`, `.dorkpipe/`, Go caches, `tmp/`). Idempotent if the block is already present. Requires a **git working tree** (run from inside a repo). |
 
-On a **dockpipe source checkout**, **`--workflow`** resolves **`workflows/<name>/config.yml`** first (when that tree has workflows), then **`.staging/workflows/<name>/config.yml`**, then **`src/templates/<name>/config.yml`**. In a **typical downstream project**, named workflows live under **`workflows/<name>/config.yml`** by default; **`templates/<name>/config.yml`** remains a **legacy** fallback. Override the folder with **`--workflows-dir`** or **`DOCKPIPE_WORKFLOWS_DIR`**. This repo keeps **lean CI** under **`workflows/`** and **maintainer / packaging** trees under **`.staging/workflows/`** (see **[AGENTS.md](../AGENTS.md)**).
+On a **dockpipe source checkout**, **`--workflow`** resolves **`workflows/<name>/config.yml`** first (when that tree has workflows), then **`.staging/workflows/<name>/config.yml`**, then **`src/core/workflows/<name>/config.yml`**. In a **typical downstream project**, named workflows live under **`workflows/<name>/config.yml`** by default; **`templates/<name>/config.yml`** remains a **legacy** fallback. Override the folder with **`--workflows-dir`** or **`DOCKPIPE_WORKFLOWS_DIR`**. This repo keeps **lean CI** under **`workflows/`** and **maintainer / packaging** trees under **`.staging/workflows/`** (see **[AGENTS.md](../AGENTS.md)**).
 
 **`dockpipe init`** also creates **`dockpipe/README.md`** when missing and ensures **`workflows/`** exists.
 
@@ -40,7 +40,15 @@ Fetches a published **`templates/core`** tree over **HTTPS** and replaces **`<wo
 
 **Publish (self-hosted mirror):** **`make package-templates-core`** or **`dockpipe package build core`** → **`release/artifacts/templates-core-<VERSION>.tar.gz`**, **`.sha256`**, **`release/artifacts/install-manifest.json`** (same layout as **`scripts/dockpipe/package-templates-core.sh`**; override dir with **`DOCKPIPE_ARTIFACTS_DIR`**). Upload those files to the same **`--base-url`** path, then run **`dockpipe --workflow r2-publish`** (on-disk **`.staging/workflows/r2-publish/`** in this checkout) or **`dockpipe release upload <file>`** / **`aws s3 cp`** to R2. Official releases may use a different pipeline; **`package build`** / **`release upload`** are for self-hosted mirrors and in-repo mirrors.
 
-**Archive format:** `tar czf -C src/templates core` — entries must be **`core/…`** (see **`scripts/dockpipe/package-templates-core.sh`**). After extract, the CLI **re-reads the tarball** and checks **every file on disk** matches the archive, then prints the **tarball sha256** (and compares to manifest/`.sha256` when present).
+**Archive format:** `tar czf -C src core --exclude='core/workflows'` — entries must be **`core/…`** (category dirs only; see **`scripts/dockpipe/package-templates-core.sh`**). After extract, the CLI **re-reads the tarball** and checks **every file on disk** matches the archive, then prints the **tarball sha256** (and compares to manifest/`.sha256` when present).
+
+## `dockpipe clone`
+
+| Command | Purpose |
+|---------|---------|
+| `dockpipe clone <name> [--workdir <path>] [--to <dest>] [--force]` | Copy **`.dockpipe/internal/packages/workflows/<name>/`** to **`--to`** (default **`<workdir>/workflows/<name>`**) only if **`package.yml`** has **`allow_clone: true`**. Refused when **`allow_clone`** is false or omitted (typical for commercial **binary-only** drops). |
+
+See **[package-model.md](package-model.md)** (**Clone, education, and commercial packages**).
 
 ## `dockpipe package`
 
@@ -51,7 +59,7 @@ Inspect **installed** package metadata. Store-backed installs are intended to la
 | `dockpipe package list [--workdir <path>]` | Walk **`.dockpipe/internal/packages/`** for **`package.yml`** files; print **path**, **name**, **version**, **description** (tab-separated). |
 | `dockpipe package manifest` | Print an example **`package.yml`** (schema: **name**, **version**, **title**, **description**, **author**, **website**, **license**, optional **kind**). |
 | `dockpipe package build core [--repo-root <path>] [--out <dir>] [--version <ver>]` | Write **`templates/core`** tarball (**`core/…`** prefix), **`.sha256`**, **`install-manifest.json`** for **`dockpipe install core`**. Default **`--out`**: **`release/artifacts/`**. |
-| `dockpipe package compile workflow <source-dir> [--workdir <path>] [--name <n>] [--force]` | **`workflow validate`** on **`source-dir/config.yml`**, then copy the tree to **`.dockpipe/internal/packages/workflows/<name>/`** (writes **`package.yml`** if missing). |
+| `dockpipe package compile workflow <source-dir> [--workdir <path>] [--name <n>] [--force]` | **`workflow validate`** on **`source-dir/config.yml`**, then copy the tree to **`.dockpipe/internal/packages/workflows/<name>/`** (writes **`package.yml`** if missing, with **`allow_clone: true`** and **`distribution: source`** for local round-trips). |
 
 **Environment:** **`DOCKPIPE_PACKAGES_ROOT`** — override packages root (default **`<workdir>/.dockpipe/internal/packages`**).
 
@@ -70,7 +78,7 @@ When you use `--workflow <name>`, the resolved **`config.yml`** (see **[workflow
 Additional sources (each only sets **unset** variables, except `--var`):
 
 1. `vars:` defaults in `config.yml`
-2. `.env` beside the resolved workflow **`config.yml`** (e.g. **`workflows/<name>/.env`**, **`src/templates/<name>/.env`**)
+2. `.env` beside the resolved workflow **`config.yml`** (e.g. **`workflows/<name>/.env`**, **`src/core/workflows/<name>/.env`**)
 3. `.env` at the bundled materialized root (default: user cache; layout under **[install.md](install.md#bundled-templates-no-extra-install-tree)**) or at **`DOCKPIPE_REPO_ROOT`** if you set it
 4. Each `--env-file <path>` (in order)
 5. Path in **`DOCKPIPE_ENV_FILE`** if set
@@ -84,7 +92,7 @@ All options must appear **before** a standalone **`--`**. The command and its ar
 
 | Flag | Aliases | Purpose |
 |------|---------|---------|
-| `--workflow <name>` | | Load workflow YAML: resolution order in **`workflow_dirs.go`** — e.g. **`workflows/<name>/config.yml`**, **`.staging/workflows/<name>/config.yml`** (dockpipe source checkout), **`.dockpipe/internal/packages/workflows/<name>/config.yml`** (from **`dockpipe package compile workflow`**), legacy **`templates/<name>/config.yml`**, **`src/templates/<name>/config.yml`** (bundled examples; override with **`--workflows-dir`** / **`DOCKPIPE_WORKFLOWS_DIR`**), then resolver delegate under **`templates/core/resolvers/`** or **`shipyard/core/resolvers/`** (materialized bundle cache). With **`steps:`**, a final **`--`** is optional (see **[workflow-yaml.md](workflow-yaml.md)**). Mutually exclusive with **`--workflow-file`**. |
+| `--workflow <name>` | | Load workflow YAML: resolution order in **`workflow_dirs.go`** — e.g. **`workflows/<name>/config.yml`**, **`.staging/workflows/<name>/config.yml`** (dockpipe source checkout), **`.dockpipe/internal/packages/workflows/<name>/config.yml`** (from **`dockpipe package compile workflow`**), legacy **`templates/<name>/config.yml`**, **`src/core/workflows/<name>/config.yml`** (bundled examples; override with **`--workflows-dir`** / **`DOCKPIPE_WORKFLOWS_DIR`**), then resolver delegate under **`templates/core/resolvers/`** or **`shipyard/core/resolvers/`** (materialized bundle cache). With **`steps:`**, a final **`--`** is optional (see **[workflow-yaml.md](workflow-yaml.md)**). Mutually exclusive with **`--workflow-file`**. |
 | `--workflow-file <path>` | | Load workflow YAML from an arbitrary path (same shape as bundled **`config.yml`**). Relative **`run:`** / **`act:`** paths resolve next to that file. **Resolver** profiles load only from **`templates/core/resolvers/`** (or **`shipyard/core/resolvers/`** in the materialized bundle) — not from folders beside the YAML file. Mutually exclusive with **`--workflow`**. |
 | `--workflows-dir <path>` | | Repo-relative or absolute directory for **`--workflow <name>`** resolution (default **`workflows/`**). Same as **`DOCKPIPE_WORKFLOWS_DIR`**. Also **`dockpipe init <name> --workflows-dir …`**. |
 | `--run <path>` | `--pre-script` | **Run:** script(s) on the host before the container. Repeatable. |

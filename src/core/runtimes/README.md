@@ -7,6 +7,7 @@ Bundled **substrate** names:
 | Name | Role |
 |------|------|
 | **`cli`** | Host / local shell. |
+| **`keystore`** | Host execution where env is fed from a **secret store** (substrate only); **which** store (1Password, Vault, …) is chosen by the **resolver**. |
 | **`docker`** | Container-based isolated execution (typical Dockpipe path). |
 | **`kube-pod`** | Kubernetes pod/job execution (future-facing placeholder). |
 

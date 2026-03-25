@@ -4,12 +4,12 @@
 #
 # Prerequisite: build the binary first —  make pipeon-launcher
 #
-# Usage: from repo root —  bash src/pipeon/scripts/install-pipeon-launcher-desktop-shortcut.sh
+# Usage: from repo root —  bash src/apps/pipeon/scripts/install-pipeon-launcher-desktop-shortcut.sh
 set -euo pipefail
 
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 ICON_PNG="${REPO}/src/contrib/pipeon-vscode-extension/images/icon.png"
-ICON_SVG="${REPO}/src/templates/core/resolvers/code-server/assets/images/code-server/favicon.svg"
+ICON_SVG="${REPO}/.staging/resolvers/code-server/assets/images/code-server/favicon.svg"
 BIN="${REPO}/src/apps/pipeon-launcher/build/pipeon-launcher"
 
 if [[ "$(uname -s 2>/dev/null || echo unknown)" != Linux ]]; then

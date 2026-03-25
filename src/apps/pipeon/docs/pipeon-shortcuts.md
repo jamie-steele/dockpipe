@@ -30,7 +30,7 @@ pipeon chat "What CI signals do we have?"
 
 ## 2. VS Code / Cursor (workspace tasks)
 
-The repo root **`.vscode/tasks.json`** is intentionally **empty** (no Pipeon tasks checked in). Copy **`src/pipeon/vscode-tasks.json.example`** into **`.vscode/tasks.json`** (merge) if you want:
+The repo root **`.vscode/tasks.json`** is intentionally **empty** (no Pipeon tasks checked in). Copy **`src/apps/pipeon/vscode-tasks.json.example`** into **`.vscode/tasks.json`** (merge) if you want:
 
 - **Pipeon: status** — check flags and artifacts
 - **Pipeon: bundle context** — regenerate `.dockpipe/pipeon-context.md`

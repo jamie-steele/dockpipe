@@ -8,13 +8,14 @@
 
 namespace {
 
-QString templatesRoot(const QString &repoRoot)
+// Lean category root: dockpipe source src/core, else downstream templates/core.
+QString coreCategoriesRoot(const QString &repoRoot)
 {
     const QDir r(repoRoot);
-    const QString src = r.filePath(QStringLiteral("src/templates"));
-    if (QFileInfo(src + QStringLiteral("/core")).isDir())
-        return src;
-    return r.filePath(QStringLiteral("templates"));
+    const QString srcCore = r.filePath(QStringLiteral("src/core"));
+    if (QFileInfo(srcCore + QStringLiteral("/runtimes")).isDir())
+        return srcCore;
+    return r.filePath(QStringLiteral("templates/core"));
 }
 
 void collectConfigPaths(const QString &repoRoot, QStringList &out)
@@ -23,7 +24,7 @@ void collectConfigPaths(const QString &repoRoot, QStringList &out)
         return;
 
     const QDir root(repoRoot);
-    const QString tr = templatesRoot(repoRoot);
+    const QString cc = coreCategoriesRoot(repoRoot);
 
     {
         const QDir wf(root.filePath(QStringLiteral("workflows")));
@@ -48,9 +49,22 @@ void collectConfigPaths(const QString &repoRoot, QStringList &out)
     }
 
     {
-        const QDir tpl(tr);
-        if (tpl.exists()) {
-            for (const QFileInfo &fi : tpl.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+        const QString bundledWf = root.filePath(QStringLiteral("src/core/workflows"));
+        if (QFileInfo(bundledWf).isDir()) {
+            const QDir wfd(bundledWf);
+            for (const QFileInfo &fi : wfd.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
+                if (QFileInfo::exists(cfg))
+                    out.append(QDir::cleanPath(cfg));
+            }
+        }
+    }
+
+    {
+        const QString tpl = root.filePath(QStringLiteral("templates"));
+        const QDir tpld(tpl);
+        if (tpld.exists()) {
+            for (const QFileInfo &fi : tpld.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
                 if (fi.fileName() == QStringLiteral("core"))
                     continue;
                 const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
@@ -61,7 +75,7 @@ void collectConfigPaths(const QString &repoRoot, QStringList &out)
     }
 
     {
-        const QDir res(tr + QStringLiteral("/core/resolvers"));
+        const QDir res(cc + QStringLiteral("/resolvers"));
         if (res.exists()) {
             for (const QFileInfo &fi : res.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
                 const QString cfg = fi.filePath() + QStringLiteral("/config.yml");

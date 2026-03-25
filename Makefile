@@ -12,7 +12,7 @@ dev-install: build install
 
 # Regenerate Pipeon P-mark PNG / favicon.ico / SVG (requires Pillow: pip install Pillow).
 pipeon-icons:
-	python3 src/pipeon/scripts/generate-pipeon-icons.py
+	python3 src/apps/pipeon/scripts/generate-pipeon-icons.py
 
 # Qt Pipeon Launcher — CMake build directory is src/apps/pipeon-launcher/build (see src/apps/pipeon-launcher/README.md).
 pipeon-launcher:
@@ -26,21 +26,21 @@ pipeon-launcher:
 install-pipeon-shortcut:
 	@UNAME="$$(uname -s 2>/dev/null || echo unknown)"; \
 	case "$$UNAME" in \
-	  Darwin) bash src/pipeon/scripts/install-pipeon-shortcut-macos.sh ;; \
-	  Linux) bash src/pipeon/scripts/install-pipeon-desktop-shortcut.sh ;; \
-	  MINGW*|MSYS*|CYGWIN*) powershell.exe -NoProfile -ExecutionPolicy Bypass -File src/pipeon/scripts/install-pipeon-desktop-shortcut.ps1 ;; \
-	  *) echo "Unknown OS (uname=$$UNAME). Try: make install-pipeon-shortcut-macos | install-pipeon-shortcut-windows, or run scripts under src/pipeon/scripts/ manually." >&2; exit 1 ;; \
+	  Darwin) bash src/apps/pipeon/scripts/install-pipeon-shortcut-macos.sh ;; \
+	  Linux) bash src/apps/pipeon/scripts/install-pipeon-desktop-shortcut.sh ;; \
+	  MINGW*|MSYS*|CYGWIN*) powershell.exe -NoProfile -ExecutionPolicy Bypass -File src/apps/pipeon/scripts/install-pipeon-desktop-shortcut.ps1 ;; \
+	  *) echo "Unknown OS (uname=$$UNAME). Try: make install-pipeon-shortcut-macos | install-pipeon-shortcut-windows, or run scripts under src/apps/pipeon/scripts/ manually." >&2; exit 1 ;; \
 	esac
 
 install-pipeon-shortcut-windows:
-	powershell.exe -NoProfile -ExecutionPolicy Bypass -File src/pipeon/scripts/install-pipeon-desktop-shortcut.ps1
+	powershell.exe -NoProfile -ExecutionPolicy Bypass -File src/apps/pipeon/scripts/install-pipeon-desktop-shortcut.ps1
 
 install-pipeon-shortcut-macos:
-	bash src/pipeon/scripts/install-pipeon-shortcut-macos.sh
+	bash src/apps/pipeon/scripts/install-pipeon-shortcut-macos.sh
 
 # Linux (Pop!_OS, etc.): ~/.local/share/applications/pipeon-launcher.desktop — requires `make pipeon-launcher` first.
 install-pipeon-launcher-shortcut:
-	bash src/pipeon/scripts/install-pipeon-launcher-desktop-shortcut.sh
+	bash src/apps/pipeon/scripts/install-pipeon-launcher-desktop-shortcut.sh
 
 # Linux: Qt launcher shortcut + code-server shortcut. Other OS: use install-pipeon-shortcut only.
 install-pipeon-all-shortcuts:
@@ -52,7 +52,7 @@ install-pipeon-all-shortcuts:
 
 # Coder code-server image with Pipeon extension (workflow vscode). Requires Docker; build from repo root.
 build-code-server-image:
-	docker build -t dockpipe-code-server:latest -f src/templates/core/resolvers/code-server/assets/images/code-server/Dockerfile .
+	docker build -t dockpipe-code-server:latest -f .staging/resolvers/code-server/assets/images/code-server/Dockerfile .
 
 # Go + template guard + bash unit tests (no Docker). Faster than full CI.
 test-quick:
@@ -120,7 +120,7 @@ r2-publish: build
 user-insight-process: build
 	./src/bin/dockpipe --workflow user-insight-process --workdir . --
 
-# Pipeon: local Ollama context + chat helpers (feature-flagged; see src/pipeon/scripts/README.md). Use PROMPT='...' for chat.
+# Pipeon: local Ollama context + chat helpers (feature-flagged; see src/apps/pipeon/scripts/README.md). Use PROMPT='...' for chat.
 pipeon-status:
 	DOCKPIPE_PIPEON=1 DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1 ./src/bin/pipeon status
 

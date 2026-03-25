@@ -1,12 +1,5 @@
 #!/usr/bin/env bash
-# Refresh .staging/resolvers/ from templates (packaging mirror). Committed .staging/workflows/
-# is curated separately — this script does not overwrite it.
-#
-# Core (runtimes, strategies, assets, bundles) stays under src/templates/core for release tarballs.
-# See docs/package-model.md.
+# Tool resolvers and domain bundles are authored under .staging/resolvers/ and .staging/bundles/
+# (same idea as .staging/workflows/). This script is a no-op placeholder — add explicit mirrors here if needed.
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-cd "$ROOT"
-mkdir -p .staging
-rsync -a --delete "${ROOT}/src/templates/core/resolvers/" "${ROOT}/.staging/resolvers/"
-echo "Refreshed ${ROOT}/.staging/resolvers (workflows under .staging/workflows/ are not touched)"
+echo "sync-packaging-staging: nothing to mirror by default — edit .staging/resolvers and .staging/bundles in-tree."
