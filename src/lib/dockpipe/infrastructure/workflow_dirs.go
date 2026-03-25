@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"dockpipe/src/lib/dockpipe/infrastructure/packagebuild"
 )
 
 // ResolveWorkflowConfigPath returns the first existing workflow config for a bundled or user workflow name.
@@ -27,19 +29,10 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 	if !UsesBundledAssetLayout(repoRoot) {
 		candidates = append(candidates, filepath.Join(StagingWorkflowsDir(repoRoot), name, "config.yml"))
 	}
-	if strings.TrimSpace(workdir) != "" {
-		if pw, err := PackagesWorkflowsDir(workdir); err == nil {
-			candidates = append(candidates, filepath.Join(pw, name, "config.yml"))
-		}
-		if pr, err := PackagesResolversDir(workdir); err == nil {
-			candidates = append(candidates, filepath.Join(pr, name, "config.yml"))
-		}
-	}
-	if gw, err := GlobalPackagesWorkflowsDir(); err == nil {
-		candidates = append(candidates, filepath.Join(gw, name, "config.yml"))
-	}
-	if gr, err := GlobalPackagesResolversDir(); err == nil {
-		candidates = append(candidates, filepath.Join(gr, name, "config.yml"))
+	if u, err := tryResolveWorkflowTarballURI(repoRoot, workdir, name); err != nil {
+		return "", err
+	} else if u != "" {
+		return u, nil
 	}
 	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
 		candidates = append(candidates, filepath.Join(repoRoot, "templates", name, "config.yml"))
@@ -52,11 +45,6 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p, nil
 		}
-	}
-	if u, err := tryResolveWorkflowTarballURI(repoRoot, workdir, name); err != nil {
-		return "", err
-	} else if u != "" {
-		return u, nil
 	}
 	return "", fmt.Errorf("workflow config not found for %q", name)
 }
@@ -82,13 +70,10 @@ func ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, workdir, nam
 		filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml"),
 		filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"),
 	)
-	if strings.TrimSpace(workdir) != "" {
-		if pr, err := PackagesResolversDir(workdir); err == nil {
-			candidates = append(candidates, filepath.Join(pr, name, "config.yml"))
-		}
-		if pw, err := PackagesWorkflowsDir(workdir); err == nil {
-			candidates = append(candidates, filepath.Join(pw, name, "config.yml"))
-		}
+	if u, err := tryResolveWorkflowTarballURI(repoRoot, workdir, name); err != nil {
+		return "", err
+	} else if u != "" {
+		return u, nil
 	}
 	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
 		candidates = append(candidates, filepath.Join(repoRoot, "templates", name, "config.yml"))
@@ -151,68 +136,56 @@ func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 	return out, nil
 }
 
-// ListWorkflowNamesInPackagesStore returns workflow names under workdir/.dockpipe/internal/packages/workflows/*/config.yml.
+// ListWorkflowNamesInPackagesStore returns workflow names from dockpipe-workflow-*.tar.gz under packages/workflows (streamable blobs only).
 func ListWorkflowNamesInPackagesStore(workdir string) ([]string, error) {
 	root, err := PackagesWorkflowsDir(workdir)
 	if err != nil {
 		return nil, err
 	}
-	seen := make(map[string]struct{})
-	var out []string
-	addDir := func(base string) error {
-		entries, err := os.ReadDir(base)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return nil
-			}
-			return err
-		}
-		for _, e := range entries {
-			if !e.IsDir() {
-				continue
-			}
-			name := e.Name()
-			cfg := filepath.Join(base, name, "config.yml")
-			if st, err := os.Stat(cfg); err == nil && !st.IsDir() {
-				if _, ok := seen[name]; !ok {
-					seen[name] = struct{}{}
-					out = append(out, name)
-				}
-			}
-		}
-		return nil
-	}
-	if err := addDir(root); err != nil {
+	matches, err := filepath.Glob(filepath.Join(root, "dockpipe-workflow-*.tar.gz"))
+	if err != nil {
 		return nil, err
+	}
+	var out []string
+	for _, tgz := range matches {
+		members, err := packagebuild.ListTarGzMemberPaths(tgz)
+		if err != nil {
+			continue
+		}
+		name, err := packagebuild.WorkflowNameFromTarballMembers(members)
+		if err != nil {
+			continue
+		}
+		out = append(out, name)
 	}
 	sort.Strings(out)
 	return out, nil
 }
 
-// ListWorkflowNamesInGlobalPackagesStore lists workflows under the user-wide packages/workflows tree
-// (see GlobalPackagesWorkflowsDir). Missing directory returns an empty list.
+// ListWorkflowNamesInGlobalPackagesStore lists workflows from dockpipe-workflow-*.tar.gz under the global packages/workflows dir.
 func ListWorkflowNamesInGlobalPackagesStore() ([]string, error) {
 	root, err := GlobalPackagesWorkflowsDir()
 	if err != nil {
 		return nil, err
 	}
-	entries, err := os.ReadDir(root)
+	matches, err := filepath.Glob(filepath.Join(root, "dockpipe-workflow-*.tar.gz"))
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
 		return nil, err
 	}
+	if len(matches) == 0 {
+		return nil, nil
+	}
 	var out []string
-	for _, e := range entries {
-		if !e.IsDir() {
+	for _, tgz := range matches {
+		members, err := packagebuild.ListTarGzMemberPaths(tgz)
+		if err != nil {
 			continue
 		}
-		name := e.Name()
-		cfg := filepath.Join(root, name, "config.yml")
-		if st, err := os.Stat(cfg); err == nil && !st.IsDir() {
-			out = append(out, name)
+		name, err := packagebuild.WorkflowNameFromTarballMembers(members)
+		if err != nil {
+			continue
 		}
+		out = append(out, name)
 	}
 	sort.Strings(out)
 	return out, nil

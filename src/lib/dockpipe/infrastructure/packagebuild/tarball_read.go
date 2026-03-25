@@ -48,3 +48,56 @@ func ReadFileFromTarGz(tarGzPath, entryName string) ([]byte, error) {
 		}
 	}
 }
+
+// ListTarGzMemberPaths returns regular-file member paths (forward slashes) in a gzip tar.
+func ListTarGzMemberPaths(tarGzPath string) ([]string, error) {
+	f, err := os.Open(tarGzPath)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	gz, err := gzip.NewReader(f)
+	if err != nil {
+		return nil, err
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+	var out []string
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if hdr.Typeflag != tar.TypeReg && hdr.Typeflag != tar.TypeRegA {
+			continue
+		}
+		name := strings.TrimSuffix(strings.TrimSpace(hdr.Name), "/")
+		name = strings.TrimPrefix(name, "./")
+		name = filepath.ToSlash(name)
+		if name == "" || strings.Contains(name, "..") {
+			if _, err := io.Copy(io.Discard, tr); err != nil {
+				return nil, err
+			}
+			continue
+		}
+		out = append(out, name)
+		if _, err := io.Copy(io.Discard, tr); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}
+
+// WorkflowNameFromTarballMembers finds workflows/<name>/config.yml and returns name.
+func WorkflowNameFromTarballMembers(members []string) (string, error) {
+	for _, m := range members {
+		parts := strings.Split(m, "/")
+		if len(parts) >= 3 && parts[0] == "workflows" && parts[2] == "config.yml" {
+			return parts[1], nil
+		}
+	}
+	return "", fmt.Errorf("no workflows/<name>/config.yml in archive")
+}

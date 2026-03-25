@@ -8,6 +8,9 @@ import (
 
 	"dockpipe/src/lib/dockpipe/domain"
 	"dockpipe/src/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/infrastructure/packagebuild"
+
+	"gopkg.in/yaml.v3"
 )
 
 func cmdClone(args []string) error {
@@ -55,21 +58,36 @@ func cmdClone(args []string) error {
 	if err != nil {
 		return err
 	}
-	srcRoot := filepath.Join(wfRoot, name)
-	if st, err := os.Stat(srcRoot); err != nil || !st.IsDir() {
-		return fmt.Errorf("compiled workflow package not found: %s (expected under %s)", name, wfRoot)
-	}
-	manifestPath := filepath.Join(srcRoot, infrastructure.PackageManifestFilename)
-	m, err := domain.ParsePackageManifest(manifestPath)
+	tgz, err := infrastructure.FindLatestWorkflowTarball(workdir, name)
 	if err != nil {
-		return fmt.Errorf("read package manifest: %w", err)
+		return err
+	}
+	if tgz == "" {
+		return fmt.Errorf("compiled workflow package not found: %q (expected dockpipe-workflow-%s-*.tar.gz under %s)", name, packagebuild.SafeTarballToken(name), wfRoot)
+	}
+	members, err := packagebuild.ListTarGzMemberPaths(tgz)
+	if err != nil {
+		return fmt.Errorf("read package archive: %w", err)
+	}
+	wfName, err := packagebuild.WorkflowNameFromTarballMembers(members)
+	if err != nil {
+		return fmt.Errorf("workflow archive: %w", err)
+	}
+	pmPath := filepath.ToSlash(filepath.Join("workflows", wfName, infrastructure.PackageManifestFilename))
+	b, err := packagebuild.ReadFileFromTarGz(tgz, pmPath)
+	if err != nil {
+		return fmt.Errorf("read package manifest from archive: %w", err)
+	}
+	var m domain.PackageManifest
+	if err := yaml.Unmarshal(b, &m); err != nil {
+		return fmt.Errorf("parse package manifest: %w", err)
 	}
 	if !m.AllowClone {
 		return fmt.Errorf(
-			`package %q does not allow cloning (allow_clone is false or omitted in %s). `+
+			`package %q does not allow cloning (allow_clone is false or omitted in package.yml inside the tarball). `+
 				`Authors who publish commercial or binary-only artifacts should keep allow_clone false; `+
 				`set allow_clone: true in package.yml to permit dockpipe clone for education or source recovery`,
-			name, manifestPath)
+			name)
 	}
 	if strings.TrimSpace(to) == "" {
 		to = filepath.Join(workdir, infrastructure.DefaultUserWorkflowsDirRel, name)
@@ -86,18 +104,27 @@ func cmdClone(args []string) error {
 			return fmt.Errorf("remove existing: %w", err)
 		}
 	}
-	if err := copyDir(srcRoot, toAbs); err != nil {
+	tmpDir, err := os.MkdirTemp("", "dockpipe-clone-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+	if err := packagebuild.ExtractTarGzToDir(tgz, tmpDir); err != nil {
+		return fmt.Errorf("extract workflow tarball: %w", err)
+	}
+	srcExtracted := filepath.Join(tmpDir, "workflows", wfName)
+	if err := copyDir(srcExtracted, toAbs); err != nil {
 		return fmt.Errorf("clone: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] cloned %s → %s\n", srcRoot, toAbs)
+	fmt.Fprintf(os.Stderr, "[dockpipe] cloned %s → %s\n", tgz, toAbs)
 	return nil
 }
 
 const cloneUsageText = `dockpipe clone
 
-Copy a compiled workflow package from .dockpipe/internal/packages/workflows/<name>/ into an authoring
-tree when package.yml allows it (allow_clone: true). Use this to study, fork, or recover sources for
-packages the author marked as cloneable.
+Copy a compiled workflow from dockpipe-workflow-<name>-*.tar.gz under .dockpipe/internal/packages/workflows/
+into an authoring tree when package.yml in the archive allows it (allow_clone: true). Use this to study,
+fork, or recover sources for packages the author marked as cloneable.
 
 Authors who sell binary-only or obfuscated drops should set allow_clone: false (default when omitted)
 and distribution: binary in package.yml so consumers know clone is intentionally disabled.
@@ -106,7 +133,7 @@ Usage:
   dockpipe clone <package-name> [--workdir <path>] [--to <dest-dir>] [--force]
 
 Arguments:
-  <package-name>   Directory name under .../packages/workflows/
+  <package-name>   Workflow package name (matches dockpipe-workflow-<name>-*.tar.gz)
 
 Options:
   --workdir <path>  Project root (default: current directory)

@@ -57,7 +57,7 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 			if pm, err := domain.ParsePackageManifest(filepath.Join(coreDir, "package.yml")); err == nil && strings.TrimSpace(pm.Version) != "" {
 				ver = strings.TrimSpace(pm.Version)
 			}
-			base := fmt.Sprintf("dockpipe-core-%s.tar.gz", safeTarballToken(ver))
+			base := fmt.Sprintf("dockpipe-core-%s.tar.gz", SafeTarballToken(ver))
 			outPath := filepath.Join(outDir, base)
 			sum, err := WriteDirTarGzWithPrefix(coreDir, outPath, "core")
 			if err != nil {
@@ -76,7 +76,7 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 		for _, name := range names {
 			dir := filepath.Join(wfDir, name)
 			ver := readPackageVersion(dir, fallbackVersion)
-			base := fmt.Sprintf("dockpipe-workflow-%s-%s.tar.gz", safeTarballToken(name), safeTarballToken(ver))
+			base := fmt.Sprintf("dockpipe-workflow-%s-%s.tar.gz", SafeTarballToken(name), SafeTarballToken(ver))
 			outPath := filepath.Join(outDir, base)
 			prefix := "workflows/" + name
 			sum, err := WriteDirTarGzWithPrefix(dir, outPath, prefix)
@@ -97,7 +97,7 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 		for _, name := range names {
 			dir := filepath.Join(resDir, name)
 			ver := readPackageVersion(dir, fallbackVersion)
-			base := fmt.Sprintf("dockpipe-resolver-%s-%s.tar.gz", safeTarballToken(name), safeTarballToken(ver))
+			base := fmt.Sprintf("dockpipe-resolver-%s-%s.tar.gz", SafeTarballToken(name), SafeTarballToken(ver))
 			outPath := filepath.Join(outDir, base)
 			prefix := "resolvers/" + name
 			sum, err := WriteDirTarGzWithPrefix(dir, outPath, prefix)
@@ -118,7 +118,7 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 		for _, name := range names {
 			dir := filepath.Join(bunDir, name)
 			ver := readPackageVersion(dir, fallbackVersion)
-			base := fmt.Sprintf("dockpipe-bundle-%s-%s.tar.gz", safeTarballToken(name), safeTarballToken(ver))
+			base := fmt.Sprintf("dockpipe-bundle-%s-%s.tar.gz", SafeTarballToken(name), SafeTarballToken(ver))
 			outPath := filepath.Join(outDir, base)
 			prefix := "bundles/" + name
 			sum, err := WriteDirTarGzWithPrefix(dir, outPath, prefix)
@@ -178,8 +178,8 @@ func listPackageSubdirs(root string) ([]string, error) {
 	return names, nil
 }
 
-// safeTarballToken replaces characters unsafe in filenames for release artifacts.
-func safeTarballToken(s string) string {
+// SafeTarballToken replaces characters unsafe in filenames for release artifacts.
+func SafeTarballToken(s string) string {
 	var b strings.Builder
 	for _, r := range s {
 		switch {

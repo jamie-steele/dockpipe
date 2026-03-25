@@ -8,6 +8,9 @@ import (
 
 	"dockpipe/src/lib/dockpipe/domain"
 	"dockpipe/src/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/infrastructure/packagebuild"
+
+	"gopkg.in/yaml.v3"
 )
 
 func cmdPackage(args []string) error {
@@ -65,11 +68,52 @@ func cmdPackageList(args []string) error {
 }
 
 func walkPackageDirs(root string) error {
+	for _, tc := range []struct{ sub, glob string }{
+		{"core", "dockpipe-core-*.tar.gz"},
+		{"workflows", "dockpipe-workflow-*.tar.gz"},
+		{"resolvers", "dockpipe-resolver-*.tar.gz"},
+		{"bundles", "dockpipe-bundle-*.tar.gz"},
+	} {
+		matches, err := filepath.Glob(filepath.Join(root, tc.sub, tc.glob))
+		if err != nil {
+			return err
+		}
+		for _, tgz := range matches {
+			members, err := packagebuild.ListTarGzMemberPaths(tgz)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[dockpipe] %s: %v\n", tgz, err)
+				continue
+			}
+			pmPath := packageYMLPathInTarMembers(tc.sub, members)
+			if pmPath == "" {
+				continue
+			}
+			b, err := packagebuild.ReadFileFromTarGz(tgz, pmPath)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "[dockpipe] %s: %v\n", tgz, err)
+				continue
+			}
+			var m domain.PackageManifest
+			if err := yaml.Unmarshal(b, &m); err != nil {
+				fmt.Fprintf(os.Stderr, "[dockpipe] %s: %v\n", tgz, err)
+				continue
+			}
+			if err := domain.ValidatePackageManifest(&m); err != nil {
+				fmt.Fprintf(os.Stderr, "[dockpipe] %s: %v\n", tgz, err)
+				continue
+			}
+			rel, _ := filepath.Rel(root, tgz)
+			fmt.Fprintf(os.Stderr, "%s\t%s\t%s\t%s\n", rel, m.Name, m.Version, trimDesc(m.Description))
+		}
+	}
 	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
+			return nil
+		}
+		if strings.HasSuffix(path, ".tar.gz") || strings.HasSuffix(path, ".sha256") {
 			return nil
 		}
 		if filepath.Base(path) != infrastructure.PackageManifestFilename {
@@ -85,6 +129,32 @@ func walkPackageDirs(root string) error {
 		fmt.Fprintf(os.Stderr, "%s\t%s\t%s\t%s\n", rel, m.Name, m.Version, trimDesc(m.Description))
 		return nil
 	})
+}
+
+func packageYMLPathInTarMembers(sub string, members []string) string {
+	switch sub {
+	case "core":
+		return "core/package.yml"
+	case "workflows":
+		for _, m := range members {
+			if strings.HasPrefix(m, "workflows/") && strings.HasSuffix(m, "/package.yml") {
+				return m
+			}
+		}
+	case "resolvers":
+		for _, m := range members {
+			if strings.HasPrefix(m, "resolvers/") && strings.HasSuffix(m, "/package.yml") {
+				return m
+			}
+		}
+	case "bundles":
+		for _, m := range members {
+			if strings.HasPrefix(m, "bundles/") && strings.HasSuffix(m, "/package.yml") {
+				return m
+			}
+		}
+	}
+	return ""
 }
 
 func trimDesc(s string) string {

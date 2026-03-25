@@ -2,20 +2,19 @@ package application
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"dockpipe/src/lib/dockpipe/domain"
 	"dockpipe/src/lib/dockpipe/infrastructure"
+	"dockpipe/src/lib/dockpipe/infrastructure/packagebuild"
 
 	"gopkg.in/yaml.v3"
 )
 
-// validateCompileOutputs checks that compiled workflow and resolver packages resolve a valid
-// namespace (package.yml, config.yml / resolver.yaml, or repo-root dockpipe.config.json packages.namespace)
-// and that package.yml depends entries refer to packages present in the compiled store.
-// Compile order (core → resolvers → workflows) must be respected so dependencies exist before dependents.
+// validateCompileOutputs checks workflow and resolver tarballs under the compiled store for namespace
+// and depends closure (compile order: core → resolvers → workflows).
 func validateCompileOutputs(workdir string) error {
 	repoRoot, err := filepath.Abs(workdir)
 	if err != nil {
@@ -29,41 +28,52 @@ func validateCompileOutputs(workdir string) error {
 	if err != nil {
 		return err
 	}
-	known := compiledPackageNames(pkgs)
+	known := compiledPackageNamesFromTarballs(pkgs)
 	for _, kind := range []string{"workflows", "resolvers"} {
-		base := filepath.Join(pkgs, kind)
-		entries, err := os.ReadDir(base)
+		var pattern string
+		switch kind {
+		case "workflows":
+			pattern = filepath.Join(pkgs, "workflows", "dockpipe-workflow-*.tar.gz")
+		case "resolvers":
+			pattern = filepath.Join(pkgs, "resolvers", "dockpipe-resolver-*.tar.gz")
+		}
+		matches, err := filepath.Glob(pattern)
 		if err != nil {
-			if os.IsNotExist(err) {
-				continue
-			}
 			return err
 		}
-		for _, e := range entries {
-			if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
-				continue
-			}
-			dir := filepath.Join(base, e.Name())
-			pmPath := filepath.Join(dir, infrastructure.PackageManifestFilename)
-			pm, err := domain.ParsePackageManifest(pmPath)
+		for _, tgz := range matches {
+			members, err := packagebuild.ListTarGzMemberPaths(tgz)
 			if err != nil {
-				return fmt.Errorf("validate %s: %w", pmPath, err)
+				return fmt.Errorf("validate %s: %w", tgz, err)
+			}
+			pmPathInTar, pm, err := readPackageManifestFromTarballMembers(kind, members, tgz)
+			if err != nil {
+				return fmt.Errorf("validate %s: %w", tgz, err)
 			}
 			var ns string
 			switch kind {
 			case "workflows":
-				ns = effectiveWorkflowNamespace(pm, dir, cfg)
-			case "resolvers":
-				ns, err = effectiveResolverNamespace(pm, dir, cfg)
+				wfName, err := packagebuild.WorkflowNameFromTarballMembers(members)
 				if err != nil {
-					return fmt.Errorf("resolver %q: %w", e.Name(), err)
+					return fmt.Errorf("validate %s: %w", tgz, err)
+				}
+				cfgPath := filepath.ToSlash(filepath.Join("workflows", wfName, "config.yml"))
+				b, err := packagebuild.ReadFileFromTarGz(tgz, cfgPath)
+				if err != nil {
+					return fmt.Errorf("validate %s: %w", tgz, err)
+				}
+				ns = effectiveWorkflowNamespace(pm, b, cfg)
+			case "resolvers":
+				ns, err = effectiveResolverNamespaceFromTar(pm, tgz, members, cfg)
+				if err != nil {
+					return fmt.Errorf("validate %s: %w", tgz, err)
 				}
 			}
 			if strings.TrimSpace(ns) == "" {
-				return fmt.Errorf("compiled %s package %q must set namespace (package.yml, config.yml or resolver.yaml, or packages.namespace in %s) — see docs/package-model.md", kind, e.Name(), domain.DockpipeProjectConfigFileName)
+				return fmt.Errorf("compiled %s package in %s must set namespace — see %s and docs/package-model.md", kind, filepath.Base(tgz), pmPathInTar)
 			}
 			if err := domain.ValidateNamespace(ns); err != nil {
-				return fmt.Errorf("%s: %w", pmPath, err)
+				return fmt.Errorf("%s: %w", tgz, err)
 			}
 			for _, dep := range pm.Depends {
 				dep = strings.TrimSpace(dep)
@@ -79,28 +89,43 @@ func validateCompileOutputs(workdir string) error {
 	return nil
 }
 
-func effectiveWorkflowNamespace(pm *domain.PackageManifest, pkgDir string, cfg *domain.DockpipeProjectConfig) string {
-	if s := strings.TrimSpace(pm.Namespace); s != "" {
-		return s
+func readPackageManifestFromTarballMembers(kind string, members []string, tgz string) (pathInTar string, pm *domain.PackageManifest, err error) {
+	var wantSuffix string
+	switch kind {
+	case "workflows":
+		wf, err := packagebuild.WorkflowNameFromTarballMembers(members)
+		if err != nil {
+			return "", nil, err
+		}
+		wantSuffix = filepath.ToSlash(filepath.Join("workflows", wf, infrastructure.PackageManifestFilename))
+	case "resolvers":
+		var resName string
+		for _, m := range members {
+			parts := strings.Split(m, "/")
+			if len(parts) >= 3 && parts[0] == "resolvers" && parts[2] == infrastructure.PackageManifestFilename {
+				resName = parts[1]
+				break
+			}
+		}
+		if resName == "" {
+			return "", nil, fmt.Errorf("no resolvers/<name>/package.yml in archive")
+		}
+		wantSuffix = filepath.ToSlash(filepath.Join("resolvers", resName, infrastructure.PackageManifestFilename))
+	default:
+		return "", nil, fmt.Errorf("unknown kind %q", kind)
 	}
-	if s := namespaceFromWorkflowConfig(filepath.Join(pkgDir, "config.yml")); s != "" {
-		return s
-	}
-	return defaultNamespaceFromProjectConfig(cfg)
-}
-
-func effectiveResolverNamespace(pm *domain.PackageManifest, pkgDir string, cfg *domain.DockpipeProjectConfig) (string, error) {
-	if s := strings.TrimSpace(pm.Namespace); s != "" {
-		return s, nil
-	}
-	ns, err := readResolverNamespaceYAML(pkgDir)
+	b, err := packagebuild.ReadFileFromTarGz(tgz, wantSuffix)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	if strings.TrimSpace(ns) != "" {
-		return ns, nil
+	var m domain.PackageManifest
+	if err := yaml.Unmarshal(b, &m); err != nil {
+		return "", nil, err
 	}
-	return defaultNamespaceFromProjectConfig(cfg), nil
+	if err := domain.ValidatePackageManifest(&m); err != nil {
+		return "", nil, err
+	}
+	return wantSuffix, &m, nil
 }
 
 func defaultNamespaceFromProjectConfig(cfg *domain.DockpipeProjectConfig) string {
@@ -110,39 +135,119 @@ func defaultNamespaceFromProjectConfig(cfg *domain.DockpipeProjectConfig) string
 	return strings.TrimSpace(*cfg.Packages.Namespace)
 }
 
-func namespaceFromWorkflowConfig(cfgPath string) string {
-	b, err := os.ReadFile(cfgPath)
-	if err != nil {
-		return ""
+func effectiveWorkflowNamespace(pm *domain.PackageManifest, configYML []byte, cfg *domain.DockpipeProjectConfig) string {
+	if s := strings.TrimSpace(pm.Namespace); s != "" {
+		return s
 	}
 	var top struct {
 		Namespace string `yaml:"namespace"`
 	}
-	if err := yaml.Unmarshal(b, &top); err != nil {
-		return ""
+	if err := yaml.Unmarshal(configYML, &top); err == nil {
+		if s := strings.TrimSpace(top.Namespace); s != "" {
+			return s
+		}
 	}
-	return strings.TrimSpace(top.Namespace)
+	return defaultNamespaceFromProjectConfig(cfg)
 }
 
-func compiledPackageNames(pkgsRoot string) map[string]bool {
+func effectiveResolverNamespaceFromTar(pm *domain.PackageManifest, tgz string, members []string, cfg *domain.DockpipeProjectConfig) (string, error) {
+	if s := strings.TrimSpace(pm.Namespace); s != "" {
+		return s, nil
+	}
+	var resName string
+	for _, m := range members {
+		parts := strings.Split(m, "/")
+		if len(parts) >= 2 && parts[0] == "resolvers" {
+			resName = parts[1]
+			break
+		}
+	}
+	if resName == "" {
+		return defaultNamespaceFromProjectConfig(cfg), nil
+	}
+	b, err := packagebuild.ReadFileFromTarGz(tgz, filepath.ToSlash(filepath.Join("resolvers", resName, "resolver.yaml")))
+	if err != nil || len(b) == 0 {
+		return defaultNamespaceFromProjectConfig(cfg), nil
+	}
+	var aux struct {
+		Namespace string `yaml:"namespace"`
+	}
+	if err := yaml.Unmarshal(b, &aux); err != nil {
+		return "", err
+	}
+	if err := domain.ValidateNamespace(aux.Namespace); err != nil {
+		return "", err
+	}
+	if s := strings.TrimSpace(aux.Namespace); s != "" {
+		return s, nil
+	}
+	return defaultNamespaceFromProjectConfig(cfg), nil
+}
+
+func compiledPackageNamesFromTarballs(pkgsRoot string) map[string]bool {
 	out := make(map[string]bool)
-	corePath := filepath.Join(pkgsRoot, "core", infrastructure.PackageManifestFilename)
-	if pm, err := domain.ParsePackageManifest(corePath); err == nil && strings.TrimSpace(pm.Name) != "" {
-		out[strings.TrimSpace(pm.Name)] = true
+	coreMatches, _ := filepath.Glob(filepath.Join(pkgsRoot, "core", "dockpipe-core-*.tar.gz"))
+	sort.Strings(coreMatches)
+	if len(coreMatches) > 0 {
+		coreTar := coreMatches[len(coreMatches)-1]
+		b, err := packagebuild.ReadFileFromTarGz(coreTar, filepath.ToSlash(filepath.Join("core", infrastructure.PackageManifestFilename)))
+		if err == nil {
+			var m domain.PackageManifest
+			if yaml.Unmarshal(b, &m) == nil && strings.TrimSpace(m.Name) != "" {
+				out[strings.TrimSpace(m.Name)] = true
+			}
+		}
 	}
 	for _, kind := range []string{"workflows", "resolvers", "bundles"} {
-		base := filepath.Join(pkgsRoot, kind)
-		entries, err := os.ReadDir(base)
-		if err != nil {
-			continue
+		var pattern string
+		switch kind {
+		case "workflows":
+			pattern = filepath.Join(pkgsRoot, "workflows", "dockpipe-workflow-*.tar.gz")
+		case "resolvers":
+			pattern = filepath.Join(pkgsRoot, "resolvers", "dockpipe-resolver-*.tar.gz")
+		case "bundles":
+			pattern = filepath.Join(pkgsRoot, "bundles", "dockpipe-bundle-*.tar.gz")
 		}
-		for _, e := range entries {
-			if !e.IsDir() {
+		matches, _ := filepath.Glob(pattern)
+		for _, tgz := range matches {
+			members, err := packagebuild.ListTarGzMemberPaths(tgz)
+			if err != nil {
 				continue
 			}
-			pmPath := filepath.Join(base, e.Name(), infrastructure.PackageManifestFilename)
-			pm, err := domain.ParsePackageManifest(pmPath)
+			var suffix string
+			switch kind {
+			case "workflows":
+				wf, err := packagebuild.WorkflowNameFromTarballMembers(members)
+				if err != nil {
+					continue
+				}
+				suffix = filepath.ToSlash(filepath.Join("workflows", wf, infrastructure.PackageManifestFilename))
+			case "resolvers":
+				for _, m := range members {
+					parts := strings.Split(m, "/")
+					if len(parts) >= 3 && parts[0] == "resolvers" && parts[2] == infrastructure.PackageManifestFilename {
+						suffix = m
+						break
+					}
+				}
+			case "bundles":
+				for _, m := range members {
+					parts := strings.Split(m, "/")
+					if len(parts) >= 3 && parts[0] == "bundles" && parts[2] == infrastructure.PackageManifestFilename {
+						suffix = m
+						break
+					}
+				}
+			}
+			if suffix == "" {
+				continue
+			}
+			b, err := packagebuild.ReadFileFromTarGz(tgz, suffix)
 			if err != nil {
+				continue
+			}
+			var pm domain.PackageManifest
+			if yaml.Unmarshal(b, &pm) != nil {
 				continue
 			}
 			if n := strings.TrimSpace(pm.Name); n != "" {

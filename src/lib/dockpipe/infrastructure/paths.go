@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"dockpipe/src/lib/dockpipe/infrastructure/packagebuild"
 )
 
 // ResolveWorkflowScript resolves run/act path: scripts/* from the project (repoRoot/scripts/ if
@@ -68,12 +70,40 @@ func resolveCoreNamespacedAsset(repoRoot, rest string) (string, bool) {
 	candidates := []string{
 		filepath.Join(repoRoot, ".dockpipe", "core", rel),
 		filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "core", rel),
-		filepath.Join(CoreDir(repoRoot), rel),
 	}
+	if tarPath, err := FindLatestCoreTarball(repoRoot); err == nil && tarPath != "" {
+		if root, err := packagebuild.EnsureTarballExtractedCache(tarPath, TarballExtractCacheRoot(repoRoot)); err == nil {
+			candidates = append(candidates, filepath.Join(root, "core", rel))
+		}
+	}
+	candidates = append(candidates, filepath.Join(CoreDir(repoRoot), rel))
 	if gd, err := GlobalTemplatesCoreDir(); err == nil {
 		candidates = append(candidates, filepath.Join(gd, rel))
 	}
 	for _, p := range candidates {
+		if scriptFileExists(p) {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+// scriptPathFromResolverOrBundleTarballs resolves scripts under packages/{resolvers,bundles} when those
+// stores contain only dockpipe-{resolver,bundle}-*.tar.gz blobs (extracted to a content-addressed cache).
+func scriptPathFromResolverOrBundleTarballs(repoRoot, pkgDir, kindPrefix, rest string) (string, bool) {
+	var pattern string
+	if kindPrefix == "resolvers" {
+		pattern = filepath.Join(pkgDir, "dockpipe-resolver-*.tar.gz")
+	} else {
+		pattern = filepath.Join(pkgDir, "dockpipe-bundle-*.tar.gz")
+	}
+	matches, _ := filepath.Glob(pattern)
+	for _, tgz := range matches {
+		root, err := packagebuild.EnsureTarballExtractedCache(tgz, TarballExtractCacheRoot(repoRoot))
+		if err != nil {
+			continue
+		}
+		p := filepath.Join(root, kindPrefix, rest)
 		if scriptFileExists(p) {
 			return p, true
 		}
@@ -105,8 +135,14 @@ func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 	if scriptFileExists(filepath.Join(pkgRes, rest)) {
 		return filepath.Join(pkgRes, rest)
 	}
+	if p, ok := scriptPathFromResolverOrBundleTarballs(repoRoot, pkgRes, "resolvers", rest); ok {
+		return p
+	}
 	if scriptFileExists(filepath.Join(pkgBun, rest)) {
 		return filepath.Join(pkgBun, rest)
+	}
+	if p, ok := scriptPathFromResolverOrBundleTarballs(repoRoot, pkgBun, "bundles", rest); ok {
+		return p
 	}
 	core := CoreDir(repoRoot)
 	if UsesBundledAssetLayout(repoRoot) {
@@ -222,6 +258,14 @@ func ResolveResolverFilePath(repoRoot, resolverName string) (string, error) {
 			filepath.Join(gr, resolverName),
 			filepath.Join(gr, resolverName, "profile"),
 		)
+	}
+	if tgz, err := FindLatestResolverTarball(repoRoot, resolverName); err == nil && tgz != "" {
+		if root, err := packagebuild.EnsureTarballExtractedCache(tgz, TarballExtractCacheRoot(repoRoot)); err == nil {
+			candidates = append(candidates,
+				filepath.Join(root, "resolvers", resolverName),
+				filepath.Join(root, "resolvers", resolverName, "profile"),
+			)
+		}
 	}
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {

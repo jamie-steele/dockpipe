@@ -4,7 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
+
+	"dockpipe/src/lib/dockpipe/infrastructure/packagebuild"
 )
 
 // TestListWorkflowNamesInRepoRoot lists workflows/<name>/ for a normal project.
@@ -42,11 +45,19 @@ func TestListWorkflowNamesInRepoRootAndPackagesMerges(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmp, "workflows", "a", "config.yml"), []byte("name: a\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	pkg := filepath.Join(tmp, ".dockpipe", "internal", "packages", "workflows", "b")
-	if err := os.MkdirAll(pkg, 0o755); err != nil {
+	st := t.TempDir()
+	if err := os.WriteFile(filepath.Join(st, "config.yml"), []byte("name: b\nsteps: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(pkg, "config.yml"), []byte("name: b\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: b\nversion: 0.1.0\nkind: workflow\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pw := filepath.Join(tmp, ".dockpipe", "internal", "packages", "workflows")
+	if err := os.MkdirAll(pw, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(pw, "dockpipe-workflow-b-0.1.0.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(st, tgz, "workflows/b"); err != nil {
 		t.Fatal(err)
 	}
 	got, err := ListWorkflowNamesInRepoRootAndPackages(tmp, tmp)
@@ -68,11 +79,19 @@ func TestListWorkflowNamesInRepoRootAndPackagesMergesGlobal(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmp, "workflows", "local", "config.yml"), []byte("name: local\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	gwf := filepath.Join(glob, "packages", "workflows", "globalwf")
-	if err := os.MkdirAll(gwf, 0o755); err != nil {
+	st := t.TempDir()
+	if err := os.WriteFile(filepath.Join(st, "config.yml"), []byte("name: globalwf\nsteps: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(gwf, "config.yml"), []byte("name: globalwf\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: globalwf\nversion: 0.1.0\nkind: workflow\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pw := filepath.Join(glob, "packages", "workflows")
+	if err := os.MkdirAll(pw, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(pw, "dockpipe-workflow-globalwf-0.1.0.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(st, tgz, "workflows/globalwf"); err != nil {
 		t.Fatal(err)
 	}
 	got, err := ListWorkflowNamesInRepoRootAndPackages(tmp, "")
@@ -88,20 +107,27 @@ func TestResolveWorkflowConfigPathGlobalFallback(t *testing.T) {
 	tmp := t.TempDir()
 	glob := t.TempDir()
 	t.Setenv("DOCKPIPE_GLOBAL_ROOT", glob)
-	gwf := filepath.Join(glob, "packages", "workflows", "onlyglobal")
-	if err := os.MkdirAll(gwf, 0o755); err != nil {
+	st := t.TempDir()
+	if err := os.WriteFile(filepath.Join(st, "config.yml"), []byte("name: onlyglobal\nsteps: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg := filepath.Join(gwf, "config.yml")
-	if err := os.WriteFile(cfg, []byte("name: onlyglobal\nsteps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: onlyglobal\nversion: 0.1.0\nkind: workflow\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pw := filepath.Join(glob, "packages", "workflows")
+	if err := os.MkdirAll(pw, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(pw, "dockpipe-workflow-onlyglobal-0.1.0.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(st, tgz, "workflows/onlyglobal"); err != nil {
 		t.Fatal(err)
 	}
 	got, err := ResolveWorkflowConfigPathWithWorkdir(tmp, tmp, "onlyglobal")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != cfg {
-		t.Fatalf("want %s got %s", cfg, got)
+	if !strings.HasPrefix(got, "tar://") {
+		t.Fatalf("want tar workflow URI, got %s", got)
 	}
 }
 
@@ -191,20 +217,27 @@ func TestResolveWorkflowConfigPathWithWorkdirPrefersPackagesOverLegacyTemplates(
 	if err := os.WriteFile(leg, []byte("name: legacy\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	pkgDir := filepath.Join(tmp, ".dockpipe", "internal", "packages", "workflows", "demo")
-	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+	st := t.TempDir()
+	if err := os.WriteFile(filepath.Join(st, "config.yml"), []byte("name: pkg\nsteps: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	pkg := filepath.Join(pkgDir, "config.yml")
-	if err := os.WriteFile(pkg, []byte("name: pkg\nsteps: []\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: demo\nversion: 0.1.0\nkind: workflow\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pw := filepath.Join(tmp, ".dockpipe", "internal", "packages", "workflows")
+	if err := os.MkdirAll(pw, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(pw, "dockpipe-workflow-demo-0.1.0.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(st, tgz, "workflows/demo"); err != nil {
 		t.Fatal(err)
 	}
 	got, err := ResolveWorkflowConfigPathWithWorkdir(tmp, tmp, "demo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != pkg {
-		t.Fatalf("want package store %s got %s", pkg, got)
+	if !strings.HasPrefix(got, "tar://") {
+		t.Fatalf("want tar workflow URI from package store, got %s", got)
 	}
 }
 

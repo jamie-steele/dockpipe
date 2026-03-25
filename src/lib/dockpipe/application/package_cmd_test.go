@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"dockpipe/src/lib/dockpipe/infrastructure/packagebuild"
 )
 
 func TestCmdPackageListFindsPackageYml(t *testing.T) {
@@ -70,8 +72,12 @@ func TestCmdPackageCompileCore(t *testing.T) {
 	if err := cmdPackage([]string{"compile", "core", "--from", src}); err != nil {
 		t.Fatal(err)
 	}
-	corePkg := filepath.Join(dir, ".dockpipe", "internal", "packages", "core", "package.yml")
-	if _, err := os.Stat(corePkg); err != nil {
+	coreDir := filepath.Join(dir, ".dockpipe", "internal", "packages", "core")
+	matches, err := filepath.Glob(filepath.Join(coreDir, "dockpipe-core-*.tar.gz"))
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("expected one core tarball under %s: matches=%v err=%v", coreDir, matches, err)
+	}
+	if _, err := packagebuild.ReadFileFromTarGz(matches[0], "core/package.yml"); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -98,11 +104,14 @@ steps: []
 	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
 		t.Fatal(err)
 	}
-	dest := filepath.Join(dir, ".dockpipe", "internal", "packages", "workflows", "mywf", "config.yml")
-	if _, err := os.Stat(dest); err != nil {
+	tgz := filepath.Join(dir, ".dockpipe", "internal", "packages", "workflows", "dockpipe-workflow-mywf-0.1.0.tar.gz")
+	if _, err := os.Stat(tgz); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".dockpipe", "internal", "packages", "workflows", "mywf", "package.yml")); err != nil {
+	if _, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/config.yml"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/package.yml"); err != nil {
 		t.Fatal(err)
 	}
 }
