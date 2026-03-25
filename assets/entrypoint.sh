@@ -13,7 +13,11 @@ cd "${WORKDIR}"
 # needing docker run -u (avoids bind-mount stalls). Opt out: DOCKPIPE_SKIP_DROP_TO_NODE=1.
 # DOCKPIPE_DEBUG=1 logs uid before your command.
 if [[ "${DOCKPIPE_DEBUG:-}" == "1" ]]; then
-  echo "[dockpipe] entrypoint: uid=$(id -u) gid=$(id -g) name=$(id -un) argv0=$0" >&2
+  _du="$(id -u)" _dg="$(id -g)"
+  _dn="$(awk -F: -v u="$_du" '$3 == u { print $1; exit }' /etc/passwd 2>/dev/null)"
+  [[ -z "${_dn:-}" ]] && _dn="$_du"
+  echo "[dockpipe] entrypoint: uid=${_du} gid=${_dg} name=${_dn} argv0=$0" >&2
+  unset _du _dg _dn
 fi
 
 if [[ -z "${DOCKPIPE_SKIP_DROP_TO_NODE:-}" ]] && [[ "$(id -u)" -eq 0 ]] && [[ -z "${DOCKPIPE_ENTRYPOINT_DROPPED:-}" ]] && id -u node &>/dev/null; then
@@ -35,8 +39,14 @@ fi
 unset SUDO_COMMAND SUDO_USER SUDO_UID SUDO_GID 2>/dev/null || true
 
 # Some CLIs treat USER=root (or stale LOGNAME) as elevated even when uid is non-root (e.g. Docker defaults).
-export USER="$(id -un)"
-export LOGNAME="$(id -un)"
+# docker run -u 1000:1000 often has no passwd row — id -un then spams stderr ("cannot find name for user ID").
+_uid="$(id -u)"
+if _name="$(awk -F: -v u="$_uid" '$3 == u { print $1; exit }' /etc/passwd 2>/dev/null)" && [[ -n "${_name:-}" ]]; then
+  export USER="${_name}" LOGNAME="${_name}"
+else
+  export USER="${_uid}" LOGNAME="${_uid}"
+fi
+unset _uid _name
 
 # Claude Code: --dangerously-skip-permissions is allowed when IS_SANDBOX=1 (disposable Docker / devcontainers).
 # https://github.com/anthropics/claude-code/issues/9184 — without this, root-detection blocks the flag even in real sandboxes.

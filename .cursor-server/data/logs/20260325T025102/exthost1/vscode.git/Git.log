@@ -1,0 +1,37 @@
+2026-03-25 02:51:05.532 [info] [main] Log level: Info
+2026-03-25 02:51:05.532 [info] [main] Validating found git in: "/usr/bin/git"
+2026-03-25 02:51:05.532 [info] [main] Using git "2.39.5" from "/usr/bin/git"
+2026-03-25 02:51:05.532 [info] [Model][doInitialScan] Initial repository scan started
+2026-03-25 02:51:05.532 [info] > git rev-parse --show-toplevel [2ms] (getRepositoryRoot)
+2026-03-25 02:51:05.532 [info] > git rev-parse --git-dir --git-common-dir --show-superproject-working-tree [15ms] 
+2026-03-25 02:51:05.532 [info] [Model][openRepository] Opened repository: /work
+2026-03-25 02:51:05.532 [info] [Model][openRepository] Opened repository (kind): repository
+2026-03-25 02:51:05.532 [info] [Model][doInitialScan] Initial repository scan completed - repositories (1), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-03-25 02:51:05.532 [info] > git config --get commit.template [2ms] 
+2026-03-25 02:51:05.533 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/js/dev refs/remotes/js/dev [3ms] 
+2026-03-25 02:51:05.558 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [11ms] 
+2026-03-25 02:51:05.595 [info] > git status -z -uall [53ms]
+2026-03-25 02:51:06.959 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/js/dev refs/remotes/js/dev [1246ms] 
+2026-03-25 02:51:06.963 [info] > git fetch [1449ms] 
+2026-03-25 02:51:06.973 [info] > git check-ignore -v -z --stdin [6ms]
+2026-03-25 02:51:06.974 [info] > git config --get --local branch.js/dev.vscode-merge-base [12ms] 
+2026-03-25 02:51:06.979 [info] > git config --get commit.template [20ms] 
+2026-03-25 02:51:06.980 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/origin/master refs/remotes/origin/master [1ms] 
+2026-03-25 02:51:06.987 [info] > git config --get commit.template [13ms] 
+2026-03-25 02:51:06.991 [info] > git merge-base refs/heads/js/dev refs/remotes/origin/js/dev [5ms] 
+2026-03-25 02:51:06.999 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/js/dev refs/remotes/js/dev [9ms] 
+2026-03-25 02:51:07.000 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/js/dev refs/remotes/js/dev [1ms] 
+2026-03-25 02:51:07.000 [info] > git diff --name-status -z --diff-filter=ADMR abdcb9003d7810a73b39621d58e17f1c8cf5c19f...refs/remotes/origin/js/dev [5ms] 
+2026-03-25 02:51:07.011 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [1ms] 
+2026-03-25 02:51:07.050 [info] > git status -z -uall [44ms]
+2026-03-25 02:51:08.515 [info] > git config --get commit.template [1ms] 
+2026-03-25 02:51:08.586 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/js/dev refs/remotes/js/dev [66ms] 
+2026-03-25 02:51:08.599 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [2ms] 
+2026-03-25 02:51:08.627 [info] > git status -z -uall [35ms]
+2026-03-25 02:51:15.313 [info] > git config --global user.name [0ms] 
+2026-03-25 02:51:15.320 [info] > git config --global user.email [1ms] 
+2026-03-25 02:51:15.320 [info] [main] Stored git author name in global state: Jamie Steele <jamie@biztraak.com>
+2026-03-25 02:51:18.028 [info] > git config --get commit.template [0ms] 
+2026-03-25 02:51:18.038 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/js/dev refs/remotes/js/dev [1ms] 
+2026-03-25 02:51:18.056 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [2ms] 
+2026-03-25 02:51:18.080 [info] > git status -z -uall [33ms]

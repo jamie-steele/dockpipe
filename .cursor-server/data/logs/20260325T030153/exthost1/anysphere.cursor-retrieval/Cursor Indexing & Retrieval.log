@@ -1,0 +1,10 @@
+2026-03-25 03:02:01.835 [info] Creating Indexing Repo client:  https://repo42.cursor.sh
+2026-03-25 03:02:01.835 [info] Creating repo client with backend url: https://repo42.cursor.sh
+2026-03-25 03:02:01.836 [info] Making keys for a new index
+2026-03-25 03:02:01.878 [info] Using the default key from the server for a new index
+2026-03-25 03:02:01.879 [info] InternalRepoInfo constructor with preferredEmbeddingModel 0
+2026-03-25 03:02:01.918 [info] Starting RepoIndexWatcher for repo: d75371d0-4009-4977-9378-2fc962ce5351, owner: auth0|user_01JTW3S40YXJX3C75NFHTN2HQ4
+2026-03-25 03:02:01.918 [error] We currently do not allow indexing the home directory.
+2026-03-25 03:02:01.918 [info] Indexing job successfully done or aborted.
+2026-03-25 03:02:04.838 [info] multiCodebaseIndexingJob dispose
+2026-03-25 03:02:04.838 [info] Aborting indexing job.

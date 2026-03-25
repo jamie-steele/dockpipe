@@ -1,0 +1,35 @@
+2026-03-25 03:01:55.973 [info] [main] Log level: Info
+2026-03-25 03:01:55.973 [info] [main] Validating found git in: "/usr/bin/git"
+2026-03-25 03:01:55.973 [info] [main] Using git "2.39.5" from "/usr/bin/git"
+2026-03-25 03:01:55.973 [info] [Model][doInitialScan] Initial repository scan started
+2026-03-25 03:01:55.973 [info] > git rev-parse --show-toplevel [2ms] (getRepositoryRoot)
+2026-03-25 03:01:55.973 [info] > git rev-parse --git-dir --git-common-dir --show-superproject-working-tree [15ms] 
+2026-03-25 03:01:55.973 [info] [Model][openRepository] Opened repository: /work
+2026-03-25 03:01:55.973 [info] [Model][openRepository] Opened repository (kind): repository
+2026-03-25 03:01:55.973 [info] [Model][doInitialScan] Initial repository scan completed - repositories (1), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-03-25 03:01:55.973 [info] > git config --get commit.template [2ms] 
+2026-03-25 03:01:55.973 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/js/dev refs/remotes/js/dev [3ms] 
+2026-03-25 03:01:56.003 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [11ms] 
+2026-03-25 03:01:56.044 [info] > git status -z -uall [60ms]
+2026-03-25 03:01:56.165 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/js/dev refs/remotes/js/dev [7ms] 
+2026-03-25 03:01:56.168 [info] > git fetch [217ms] 
+2026-03-25 03:01:57.511 [info] > git config --get --local branch.js/dev.vscode-merge-base [1343ms] 
+2026-03-25 03:01:57.515 [info] > git config --get commit.template [1351ms] 
+2026-03-25 03:01:57.523 [info] > git check-ignore -v -z --stdin [4ms]
+2026-03-25 03:01:57.523 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/origin/master refs/remotes/origin/master [8ms] 
+2026-03-25 03:01:57.529 [info] > git config --get commit.template [19ms] 
+2026-03-25 03:01:57.536 [info] > git merge-base refs/heads/js/dev refs/remotes/origin/js/dev [7ms] 
+2026-03-25 03:01:57.544 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/js/dev refs/remotes/js/dev [9ms] 
+2026-03-25 03:01:57.544 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/js/dev refs/remotes/js/dev [1ms] 
+2026-03-25 03:01:57.544 [info] > git diff --name-status -z --diff-filter=ADMR abdcb9003d7810a73b39621d58e17f1c8cf5c19f...refs/remotes/origin/js/dev [5ms] 
+2026-03-25 03:01:57.557 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [1ms] 
+2026-03-25 03:01:57.612 [info] > git status -z -uall [60ms]
+2026-03-25 03:01:59.132 [info] > git check-ignore -v -z --stdin [17ms]
+2026-03-25 03:01:59.134 [info] > git config --get commit.template [1ms] 
+2026-03-25 03:01:59.205 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/js/dev refs/remotes/js/dev [66ms] 
+2026-03-25 03:01:59.217 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [1ms] 
+2026-03-25 03:01:59.246 [info] > git status -z -uall [35ms]
+2026-03-25 03:02:04.664 [info] > git config --get commit.template [0ms] 
+2026-03-25 03:02:04.672 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/js/dev refs/remotes/js/dev [1ms] 
+2026-03-25 03:02:04.690 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [4ms] 
+2026-03-25 03:02:04.711 [info] > git status -z -uall [31ms]

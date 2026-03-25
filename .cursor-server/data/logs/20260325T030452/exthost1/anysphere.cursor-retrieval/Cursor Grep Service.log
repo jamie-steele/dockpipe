@@ -1,0 +1,2 @@
+2026-03-25 03:04:58.929 [info] 	crepectlPath: <NOT FOUND>
+2026-03-25 03:04:58.929 [error] crepectl binary not found in production build; disabling grep service

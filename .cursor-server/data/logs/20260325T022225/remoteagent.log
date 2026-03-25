@@ -1,0 +1,28 @@
+2026-03-25 02:22:25.205 [info] 
+
+
+
+
+2026-03-25 02:22:25.214 [info] Extension host agent started.
+2026-03-25 02:22:26.140 [info] [127.0.0.1][056842fc][ManagementConnection] New connection established.
+2026-03-25 02:22:26.152 [info] Getting extensions control
+2026-03-25 02:22:26.156 [info] [CursorProclistService] Config enabled feature (subsample every 10s)
+2026-03-25 02:22:26.289 [info] [127.0.0.1][2bbaa9e5][ExtensionHostConnection] New connection established.
+2026-03-25 02:22:26.291 [info] [127.0.0.1][2bbaa9e5][ExtensionHostConnection] <272> Launched Extension Host Process.
+2026-03-25 02:22:26.342 [warning] RequestStore#acceptReply was called without receiving a matching request 1
+2026-03-25 02:22:26.342 [warning] RequestStore#acceptReply was called without receiving a matching request 2
+2026-03-25 02:22:26.342 [warning] RequestStore#acceptReply was called without receiving a matching request 3
+2026-03-25 02:22:26.343 [warning] RequestStore#acceptReply was called without receiving a matching request 4
+2026-03-25 02:22:26.343 [warning] RequestStore#acceptReply was called without receiving a matching request 5
+2026-03-25 02:22:26.343 [warning] RequestStore#acceptReply was called without receiving a matching request 6
+2026-03-25 02:22:26.343 [warning] RequestStore#acceptReply was called without receiving a matching request 7
+2026-03-25 02:22:26.343 [warning] RequestStore#acceptReply was called without receiving a matching request 8
+2026-03-25 02:22:26.343 [warning] RequestStore#acceptReply was called without receiving a matching request 9
+2026-03-25 02:22:26.343 [warning] RequestStore#acceptReply was called without receiving a matching request 10
+2026-03-25 02:22:26.343 [warning] RequestStore#acceptReply was called without receiving a matching request 11
+2026-03-25 02:22:26.343 [warning] RequestStore#acceptReply was called without receiving a matching request 12
+2026-03-25 02:22:29.593 [info] [127.0.0.1][056842fc][ManagementConnection] The client has disconnected gracefully, so the connection will be disposed.
+2026-03-25 02:22:31.085 [info] [127.0.0.1][2bbaa9e5][ExtensionHostConnection] <272> Extension Host Process exited with code: 0, signal: null.
+2026-03-25 02:22:31.085 [info] Cancelling previous shutdown timeout
+2026-03-25 02:22:31.086 [info] Last EH closed, waiting before shutting down
+2026-03-25 02:27:31.088 [info] Last EH closed, shutting down

@@ -12,9 +12,11 @@ steps:
       # DOCKPIPE_LAUNCH_MODE: gui
       # none = print paths only; cli = try Cursor CLI / default install paths (Windows/macOS/Linux).
       CURSOR_DEV_LAUNCH: "cli"
-      # 1 = when you quit Cursor, stop the session container (polls for the GUI; see cursor-dev-common.sh).
+      # 1 = background watcher stops the session container (quit Cursor and/or remote idle — default both; see README).
       # 0 = keep the container until Ctrl+C or docker stop here.
       CURSOR_DEV_WAIT: "1"
+      # Default both = host quit OR close remote window (set host for host-only if remote detection misbehaves).
+      # CURSOR_DEV_SESSION_SHUTDOWN: "both"
       # Optional: pin image (default dockpipe-base-dev:latest after first dockpipe build).
       # CURSOR_DEV_SESSION_IMAGE: "dockpipe-base-dev:latest"
       # CURSOR_DEV_CONTAINER_NAME: dockpipe-cursor-dev-mine

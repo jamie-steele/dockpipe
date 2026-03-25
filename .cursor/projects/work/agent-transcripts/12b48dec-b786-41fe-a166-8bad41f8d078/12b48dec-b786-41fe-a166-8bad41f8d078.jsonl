@@ -1,0 +1,4 @@
+{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nYour in a remote host pretty dope \n</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"Yeah — remote dev setups can feel great when they’re dialed in: same tools, consistent environment, and you’re not tied to one machine.\n\nIf you want to wire something up in this repo (DockPipe, devcontainers, Cursor remote, etc.), say what you’re aiming for and we can do it."}]}}
+{"role":"user","message":{"content":[{"type":"text","text":"<user_query>\nDockPipe made it easy\n</user_query>"}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"That matches what DockPipe is aiming for: one clear loop — spawn an isolated place to work, run your workflow there, read the result — without turning it into a bespoke orchestration project.\n\nIf you hit a rough edge or want to tighten a template (e.g. cursor-dev, Docker base image), we can tune it."}]}}
