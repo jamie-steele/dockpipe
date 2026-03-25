@@ -206,6 +206,39 @@ isolate: alpine
 	}
 }
 
+func TestParseWorkflowYAMLWorkflowTypeAndCategory(t *testing.T) {
+	y := `name: s
+workflow_type: secretstore
+category: tooling
+steps:
+  - id: x
+    skip_container: true
+    run: [scripts/a.sh]
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.WorkflowType != "secretstore" || w.Category != "tooling" {
+		t.Fatalf("got workflow_type=%q category=%q", w.WorkflowType, w.Category)
+	}
+}
+
+func TestValidateWorkflowTypeField(t *testing.T) {
+	if err := ValidateWorkflowTypeField(&Workflow{WorkflowType: "secretstore"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateWorkflowTypeField(&Workflow{WorkflowType: "Bad"}); err == nil {
+		t.Fatal("expected error for uppercase workflow_type")
+	}
+	if err := ValidateWorkflowTypeField(&Workflow{WorkflowType: "9bad"}); err == nil {
+		t.Fatal("expected error when workflow_type does not start with a letter")
+	}
+	if err := ValidateWorkflowTypeField(nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestWorkflowAnyContainerStep(t *testing.T) {
 	w := &Workflow{Steps: []Step{{SkipContainer: true}, {Cmd: "echo x", Isolate: "alpine"}}}
 	if !w.AnyContainerStep() {

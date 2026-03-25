@@ -138,7 +138,7 @@ func resolveInitFromSource(repoRoot, from string) (srcDir string, isBlank bool, 
 	if st, e := os.Stat(abs); e == nil && st.IsDir() {
 		return abs, false, nil
 	}
-	return "", false, fmt.Errorf("unknown --from source %q — use blank, a bundled name under templates/ (e.g. init, run, run-apply, run-apply-validate), a path to shipyard/workflows/<name> in a dockpipe checkout, or another filesystem path to a workflow directory", from)
+	return "", false, fmt.Errorf("unknown --from source %q — use blank, a bundled name under templates/ (e.g. init, run, run-apply, run-apply-validate, secretstore), a path to shipyard/workflows/<name> in a dockpipe checkout, or another filesystem path to a workflow directory", from)
 }
 
 func writeWorkflowYAML(path string, wf *domain.Workflow) error {

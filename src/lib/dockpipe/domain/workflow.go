@@ -3,10 +3,19 @@ package domain
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+// Workflow type identifiers (optional YAML workflow_type). The engine does not branch on these;
+// they classify workflows for tooling, docs, and future composition. Use lowercase + hyphens.
+const (
+	WorkflowTypeSecretstore = "secretstore"
+)
+
+var workflowTypePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
 // RunSpec is a string or YAML list of strings (e.g. run: script.sh vs run: [a, b]).
 type RunSpec []string
@@ -33,10 +42,12 @@ func (r *RunSpec) UnmarshalYAML(n *yaml.Node) error {
 
 // Workflow is templates/<name>/config.yml (bundled or user project) or templates/core/resolvers/<name>/config.yml (delegate).
 type Workflow struct {
-	Name            string  `yaml:"name"`
-	Description     string  `yaml:"description,omitempty"`
+	Name        string `yaml:"name"`
+	Description string `yaml:"description,omitempty"`
 	// Category: optional launcher/UI hint (e.g. "app" = show in Pipeon Basic mode as a launchable GUI/tool).
 	Category string `yaml:"category,omitempty"`
+	// WorkflowType: optional classifier (e.g. secretstore). Engine ignores; scripts and UIs may use it.
+	WorkflowType    string  `yaml:"workflow_type,omitempty"`
 	Run             RunSpec `yaml:"run"`
 	Isolate         string  `yaml:"isolate"`
 	Act             string  `yaml:"act"`
@@ -187,6 +198,8 @@ func (s *Step) OutputsPath() string {
 type workflowFile struct {
 	Name            string            `yaml:"name"`
 	Description     string            `yaml:"description,omitempty"`
+	Category        string            `yaml:"category,omitempty"`
+	WorkflowType    string            `yaml:"workflow_type,omitempty"`
 	Run             RunSpec           `yaml:"run"`
 	Isolate         string            `yaml:"isolate"`
 	Act             string            `yaml:"act"`
@@ -290,6 +303,21 @@ func flattenSteps(items []stepOrGroupYAML) ([]Step, error) {
 		return nil, fmt.Errorf("steps: internal parse error (empty entry)")
 	}
 	return out, nil
+}
+
+// ValidateWorkflowTypeField checks workflow_type when set (lowercase identifier, hyphens allowed).
+func ValidateWorkflowTypeField(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	t := strings.TrimSpace(w.WorkflowType)
+	if t == "" {
+		return nil
+	}
+	if !workflowTypePattern.MatchString(t) {
+		return fmt.Errorf("workflow_type %q must match %s (e.g. secretstore, my-kind)", t, workflowTypePattern.String())
+	}
+	return nil
 }
 
 // ParseWorkflowYAML unmarshals workflow config from YAML bytes (no imports).

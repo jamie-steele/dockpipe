@@ -176,6 +176,9 @@ func Run(argv []string, baseEnviron []string) error {
 	if wf != nil {
 		buildWorkflowEnvInto(envMap, wf, wfRoot, repoRoot, opts)
 	}
+	if stepsMode {
+		MergeExtraEnvCLIIntoSteps(envMap, opts.ExtraEnvLines, opts.VarOverrides)
+	}
 	// CLI --workdir must live in envMap, not only on envSlice: strategy pre-scripts rebuild
 	// envSlice from envMap (run.go) and would otherwise drop DOCKPIPE_WORKDIR from appendUniqueEnv.
 	if opts.Workdir != "" {

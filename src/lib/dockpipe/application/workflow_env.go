@@ -47,6 +47,28 @@ func lockedKeys(vars []string) map[string]bool {
 	return m
 }
 
+// MergeExtraEnvCLIIntoSteps applies `dockpipe --env KEY=VAL` lines into env for multi-step workflows
+// (host scripts and container steps share the same env map). Keys set via `--var` are not
+// overwritten so CLI `--var` wins over `--env`.
+func MergeExtraEnvCLIIntoSteps(env map[string]string, extraLines, varOverrides []string) {
+	if len(extraLines) == 0 {
+		return
+	}
+	locked := lockedKeys(varOverrides)
+	for _, line := range extraLines {
+		line = strings.TrimSpace(line)
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k = strings.TrimSpace(k)
+		if locked[k] {
+			continue
+		}
+		env[k] = strings.TrimSpace(v)
+	}
+}
+
 func mergeCommitEnvFromLines(env map[string]string, lines []string) {
 	for _, line := range lines {
 		line = strings.TrimSpace(line)

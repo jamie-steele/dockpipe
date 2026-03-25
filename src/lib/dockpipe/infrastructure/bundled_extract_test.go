@@ -26,6 +26,9 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 			t.Fatalf("expected resolver delegate %s", name)
 		}
 	}
+	if !EmbeddedWorkflowConfigExists("secretstore") {
+		t.Fatal("expected secretstore workflow template")
+	}
 	if EmbeddedWorkflowConfigExists("") {
 		t.Fatal("empty name should be false")
 	}

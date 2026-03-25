@@ -50,6 +50,8 @@ Thumbs.db
 # Optional local overrides (do not commit)
 .env
 .env.local
+# 1Password inject template (op:// refs; often names private vaults — keep local)
+.env.op.template
 
 # Local `.dockpipe/` — generated handoffs, CI dumps, review/cursor prompts, optional `demo/` stubs (see AGENTS.md).
 # Canonical templates live under `src/templates/…`; do not commit this tree.
@@ -57,6 +59,11 @@ Thumbs.db
 
 # DorkPipe runtime outputs (metrics, nodes, self-analysis scratch)
 .dorkpipe/
+
+# Terraform (e.g. shipyard/workflows/r2-publish/terraform — keep .terraform.lock.hcl)
+.terraform/
+*.tfstate
+*.tfstate.*
 
 # VS Code extension (packed / dev)
 src/contrib/pipeon-vscode-extension/node_modules/

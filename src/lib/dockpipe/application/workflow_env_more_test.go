@@ -52,6 +52,22 @@ func TestBuildWorkflowEnvIntoPrecedenceAndOverrides(t *testing.T) {
 	}
 }
 
+// TestMergeExtraEnvCLIIntoSteps applies --env for multi-step workflows; --var keys are not overwritten.
+func TestMergeExtraEnvCLIIntoSteps(t *testing.T) {
+	// Simulates env after buildWorkflowEnvInto: --var already set SHARED.
+	env := map[string]string{"FROM": "base", "SHARED": "from-var"}
+	MergeExtraEnvCLIIntoSteps(env, []string{" R2_BUCKET=b ", "FROM=from-env", "SHARED=from-env"}, []string{"SHARED=from-var"})
+	if env["R2_BUCKET"] != "b" {
+		t.Fatalf("R2_BUCKET: got %q", env["R2_BUCKET"])
+	}
+	if env["FROM"] != "from-env" {
+		t.Fatalf("FROM: got %q", env["FROM"])
+	}
+	if env["SHARED"] != "from-var" {
+		t.Fatalf("--var should win over --env for SHARED: got %q", env["SHARED"])
+	}
+}
+
 // TestLockedKeysAndApplyOutputsFile merges step outputs into env except CLI-locked keys and deletes the file after read.
 func TestLockedKeysAndApplyOutputsFile(t *testing.T) {
 	tmp := t.TempDir()

@@ -9,6 +9,8 @@ import (
 
 	"github.com/santhosh-tekuri/jsonschema/v5"
 	"gopkg.in/yaml.v3"
+
+	"dockpipe/src/lib/dockpipe/domain"
 )
 
 //go:embed schema/workflow.schema.json
@@ -38,8 +40,12 @@ func ValidateWorkflowYAML(path string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := LoadWorkflow(target); err != nil {
+	wf, err := LoadWorkflow(target)
+	if err != nil {
 		return fmt.Errorf("parse workflow: %w", err)
+	}
+	if err := domain.ValidateWorkflowTypeField(wf); err != nil {
+		return err
 	}
 	var raw interface{}
 	if err := yaml.Unmarshal(data, &raw); err != nil {

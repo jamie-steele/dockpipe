@@ -1,0 +1,46 @@
+# Dogfood: 1Password (op inject) → merge env → r2-publish (same dockpipe run).
+#
+# Mapping (start here):
+#   - 1Password → env NAMES: edit .env.op.template under --workdir (see vars OP_ENV_FILE).
+#     Each line VAR=op://… ; op inject fills values; DockPipe passes VAR to step 2 unchanged.
+#   - Hint list only: templates/core/resolvers/onepassword/profile (DOCKPIPE_RESOLVER_ENV).
+#   - r2-publish vars: shipyard/workflows/r2-publish/README.md
+# Full walkthrough: README.md in this directory.
+#
+# Try from repo root:
+#   cp src/templates/secretstore/.env.op.template.example .env.op.template
+#   # edit with real op:// references for R2_* / CLOUDFLARE_* etc.
+#   mkdir -p dist && touch dist/.keep
+#   ./src/bin/dockpipe --workflow-file shipyard/workflows/secretstore-r2-publish-test/config.yml --workdir . \
+#     --var R2_TF_BACKEND=local --   # optional: skip remote TF state while testing
+#
+# Step 1 uses resolver onepassword (profile under templates/core/resolvers/onepassword/).
+x-secret-out: &SECRET_OUT .dockpipe/secretstore-r2.env
+
+name: secretstore-r2-publish-test
+workflow_type: secretstore
+description: >-
+  Test pipeline: op inject secrets into an outputs file, DockPipe merges into env, then r2-publish.
+
+docker_preflight: false
+runtime: cli
+resolver: onepassword
+runtimes: [cli]
+resolvers: [onepassword, codex]
+
+vars:
+  OP_ENV_FILE: ".env.op.template"
+  SECRET_ENV_OUT: *SECRET_OUT
+
+steps:
+  - id: inject-from-1password
+    resolver: onepassword
+    skip_container: true
+    outputs: *SECRET_OUT
+    run:
+      - scripts/dockpipe/secretstore-op-inject-outputs.sh
+
+  - id: publish-r2
+    skip_container: true
+    run:
+      - scripts/dockpipe/r2-publish.sh
