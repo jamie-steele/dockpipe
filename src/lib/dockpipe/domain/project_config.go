@@ -58,6 +58,29 @@ func LoadDockpipeProjectConfig(repoRoot string) (*DockpipeProjectConfig, error) 
 	return &c, nil
 }
 
+// FindProjectRootWithDockpipeConfig walks up from startDir until it finds a directory
+// containing DockpipeProjectConfigFileName. Returns the absolute path to that directory.
+// If the file is not found in any parent, returns abs(startDir) so callers can still use
+// cwd-based defaults (e.g. compile without a config file).
+func FindProjectRootWithDockpipeConfig(startDir string) (string, error) {
+	startAbs, err := filepath.Abs(startDir)
+	if err != nil {
+		return "", err
+	}
+	for d := startAbs; ; {
+		p := filepath.Join(d, DockpipeProjectConfigFileName)
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+			return d, nil
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			break
+		}
+		d = parent
+	}
+	return startAbs, nil
+}
+
 // ResolveOpInjectTemplatePath returns the absolute path to the op inject template when secrets.op_inject_template is set.
 func ResolveOpInjectTemplatePath(cfg *DockpipeProjectConfig, repoRoot string) (string, bool) {
 	if cfg == nil || cfg.Secrets.OpInjectTemplate == nil {

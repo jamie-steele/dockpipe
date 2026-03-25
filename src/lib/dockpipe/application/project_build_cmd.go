@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"dockpipe/src/lib/dockpipe/domain"
 	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
@@ -56,13 +57,20 @@ func parseWorkdirOnly(args []string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		workdir = wd
+		root, err := domain.FindProjectRootWithDockpipeConfig(wd)
+		if err != nil {
+			return "", err
+		}
+		wdAbs, err := filepath.Abs(wd)
+		if err != nil {
+			return "", err
+		}
+		if root != wdAbs {
+			fmt.Fprintf(os.Stderr, "[dockpipe] using project root %s (%s)\n", root, domain.DockpipeProjectConfigFileName)
+		}
+		return filepath.Abs(root)
 	}
-	abs, err := filepath.Abs(workdir)
-	if err != nil {
-		return "", err
-	}
-	return abs, nil
+	return filepath.Abs(workdir)
 }
 
 // filterCleanArgs keeps only --workdir <path> for the clean step of rebuild.
@@ -93,6 +101,10 @@ const cleanUsageText = `dockpipe clean
 Remove the compiled package store (default: <workdir>/.dockpipe/internal/packages).
 Other .dockpipe/ content (runs, caches, etc.) is left in place.
 
+When --workdir is omitted, the project directory is the folder containing
+dockpipe.config.json (walking up from the current directory), or the current
+directory if that file is not found.
+
 Usage:
   dockpipe clean [--workdir <path>]
 
@@ -105,6 +117,9 @@ const rebuildUsageText = `dockpipe rebuild
 
 Runs dockpipe clean, then dockpipe build (same as package compile all). Only --workdir
 is forwarded to clean; all other flags apply to the build step.
+
+Default project directory (when --workdir omitted) is the same as compile: the directory
+with dockpipe.config.json, found by walking up from the current directory.
 
 Usage:
   dockpipe rebuild [options]

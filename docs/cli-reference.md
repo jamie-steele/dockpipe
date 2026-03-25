@@ -56,7 +56,7 @@ Familiar names for the **compiled package store** under **`.dockpipe/internal/pa
 
 | Command | Purpose |
 |---------|---------|
-| `dockpipe build [options]` | Same as **`dockpipe package compile all`**: materialize core → resolvers → bundles → workflows from **`dockpipe.config.json`** (and defaults). Options: **`--workdir`**, **`--force`**, **`--no-staging`**, **`--skip-bundles`**. |
+| `dockpipe build [options]` | Same as **`dockpipe package compile all`**: materialize core → resolvers → bundles → workflows from **`dockpipe.config.json`** (and defaults). If **`--workdir`** is omitted, the project directory is the folder containing **`dockpipe.config.json`** (walking up from the current directory), or the current directory if that file is absent. Options: **`--workdir`**, **`--force`**, **`--no-staging`**, **`--skip-bundles`**. |
 | `dockpipe clean [--workdir <path>]` | **`rm -rf`** the packages root (default **`<workdir>/.dockpipe/internal/packages`**; respects **`DOCKPIPE_PACKAGES_ROOT`**). Does not wipe other **`.dockpipe/`** files. |
 | `dockpipe rebuild [options]` | **`clean`** (only **`--workdir`** is forwarded) then **`build`** with the full option set. |
 

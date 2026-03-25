@@ -2,6 +2,8 @@ package domain
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -35,5 +37,29 @@ func TestLoadDockpipeProjectConfigMissing(t *testing.T) {
 	}
 	if c != nil {
 		t.Fatal("expected nil when file missing")
+	}
+}
+
+func TestFindProjectRootWithDockpipeConfig(t *testing.T) {
+	root := t.TempDir()
+	sub := filepath.Join(root, "a", "b", "c")
+	if err := os.MkdirAll(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfgPath := filepath.Join(root, DockpipeProjectConfigFileName)
+	if err := os.WriteFile(cfgPath, []byte(`{"schema":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(sub)
+	got, err := FindProjectRootWithDockpipeConfig(sub)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.Abs(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
 	}
 }

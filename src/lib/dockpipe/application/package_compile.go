@@ -12,6 +12,33 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// injectCompileWorkdirFromProjectConfig prepends --workdir <dir> when args does not already
+// set it, where dir is the directory containing dockpipe.config.json found by walking up
+// from the current working directory (or cwd if the file is absent).
+func injectCompileWorkdirFromProjectConfig(args []string) ([]string, error) {
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--workdir" && i+1 < len(args) {
+			return args, nil
+		}
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	root, err := domain.FindProjectRootWithDockpipeConfig(cwd)
+	if err != nil {
+		return nil, err
+	}
+	cwdAbs, err := filepath.Abs(cwd)
+	if err != nil {
+		return nil, err
+	}
+	if root != cwdAbs {
+		fmt.Fprintf(os.Stderr, "[dockpipe] using project root %s (%s)\n", root, domain.DockpipeProjectConfigFileName)
+	}
+	return append([]string{"--workdir", root}, args...), nil
+}
+
 func cmdPackageCompile(args []string) error {
 	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
 		fmt.Print(packageCompileUsageText)
@@ -39,6 +66,11 @@ func cmdPackageCompileWorkflow(args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
 		fmt.Print(packageCompileWorkflowUsageText)
 		return nil
+	}
+	var err error
+	args, err = injectCompileWorkdirFromProjectConfig(args)
+	if err != nil {
+		return err
 	}
 	var (
 		workdir string
@@ -154,6 +186,11 @@ func cmdPackageCompileCore(args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
 		fmt.Print(packageCompileCoreUsageText)
 		return nil
+	}
+	var err error
+	args, err = injectCompileWorkdirFromProjectConfig(args)
+	if err != nil {
+		return err
 	}
 	var (
 		workdir string
@@ -283,6 +320,11 @@ func cmdPackageCompileResolvers(args []string) error {
 		fmt.Print(packageCompileResolversUsageText)
 		return nil
 	}
+	var err error
+	args, err = injectCompileWorkdirFromProjectConfig(args)
+	if err != nil {
+		return err
+	}
 	var (
 		workdir    string
 		from       []string
@@ -361,6 +403,11 @@ func cmdPackageCompileBundles(args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
 		fmt.Print(packageCompileBundlesUsageText)
 		return nil
+	}
+	var err error
+	args, err = injectCompileWorkdirFromProjectConfig(args)
+	if err != nil {
+		return err
 	}
 	var (
 		workdir   string
@@ -492,6 +539,11 @@ func cmdPackageCompileWorkflowsBatch(args []string) error {
 		fmt.Print(packageCompileWorkflowsUsageText)
 		return nil
 	}
+	var err error
+	args, err = injectCompileWorkdirFromProjectConfig(args)
+	if err != nil {
+		return err
+	}
 	var (
 		workdir   string
 		from      []string
@@ -581,6 +633,11 @@ func cmdPackageCompileAll(args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
 		fmt.Print(packageCompileAllUsageText)
 		return nil
+	}
+	var err error
+	args, err = injectCompileWorkdirFromProjectConfig(args)
+	if err != nil {
+		return err
 	}
 	var (
 		workdir    string
@@ -758,7 +815,7 @@ Runs: compile core → compile resolvers → compile bundles (when roots exist) 
 Uses dockpipe.config.json for source lists when present (see package-model.md).
 
 Options:
-  --workdir <path>   Project directory (default: current directory)
+  --workdir <path>   Project directory (default: directory with dockpipe.config.json, walking up from cwd; else cwd)
   --force            Pass --force to core and workflow compile steps
   --no-staging       Filter out .staging/* paths when resolving defaults or config lists
   --skip-bundles     Do not run the bundles merge step
