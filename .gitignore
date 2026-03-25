@@ -56,6 +56,11 @@ Thumbs.db
 # 1Password inject template (op:// refs; often names private vaults — keep local)
 .env.op.template
 
+# Maintainer-only trees (workflows/resolvers/bundles) — keep on your machine; do not commit.
+# To stop tracking without deleting files: git rm -r --cached .staging
+# Note: embed.go embeds these paths; CI/fresh clones need a populated tree or a future embed-from-tracked-dir change.
+.staging/
+
 # Local `.dockpipe/` — generated handoffs, CI dumps, review/cursor prompts, optional `demo/` stubs (see AGENTS.md).
 # Canonical bundled core + workflows live under `src/core/…`; do not commit a duplicate `templates/` tree here.
 .dockpipe/

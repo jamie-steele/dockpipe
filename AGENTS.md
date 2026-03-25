@@ -185,6 +185,14 @@ When you work **on the dockpipe project itself**, you are a **user** of the tool
 
 **Preferred pattern:** `dockpipe init <name> --from run-apply` or **`run-apply-validate`** (or **`run`**, **`blank`**) for user-shaped scaffolds; keep **automation you want in default CI** under **`workflows/`**; put **extra maintainer trees** under **`.staging/workflows/`**.
 
+### Containment and official reference
+
+**`.staging/`** and repo-root **`workflows/`** (this repository) are **maintainer / dogfood** trees. They **must not** alter the **engine contract** for anyone outside this checkout: downstream installs, minimal **`dockpipe`** usage, and **`src/lib/`** + **`src/cmd/`** behavior do **not** depend on those paths.
+
+**Canonical ship:** Published **compiled** artifacts — **`dockpipe install core`**, future **`dockpipe install package …`**, and **HTTPS/static origins** you host (e.g. **`core.*` / `dockpipe.*`** style namespaces once live) — are the **official reference** for **versioned** workflows and core slices. **Those** are what external consumers pin; ad-hoc repo paths are **not** the stability boundary.
+
+**Self-contained:** Packages are **YAML + assets + resolver/runtime wiring** resolved by the existing CLI; they **cannot** inject new engine primitives without a **separate** core change.
+
 **Accelerator (maintainers):** After **`make build`**, **`make self-analysis`**, **`make self-analysis-host`**, or **`make self-analysis-stack`** run the DorkPipe self-analysis workflows on this repo (container, host-only, or compose stack). See **`docs/dorkpipe.md`** and **`.staging/workflows/dorkpipe-self-analysis/README.md`**.
 
 ### Agent guidance (this repository)

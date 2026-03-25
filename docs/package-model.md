@@ -2,6 +2,12 @@
 
 DockPipe distinguishes **two sides** so pipelines stay clear: **what you author** in a repo, and **what you install** as versioned packages. This doc also records the **intended** compile / package / release pipeline (some steps are still evolving in the CLI).
 
+## Official reference vs repo-local trees
+
+**Downstream and the engine** do **not** depend on **this repository’s** **`.staging/`** or repo-root **`workflows/`** — those are **maintainer-only** (CI, dogfood, experiments). They **must not** be required for a minimal install or for **`dockpipe`** semantics.
+
+**Canonical** material for consumers is **published** artifacts: **`dockpipe install core`**, **`dockpipe package compile` → package → release**, and **HTTPS/static origins** you operate (e.g. **`core.*` / `dockpipe.*`** namespaces once live). **Pin installs and docs to those origins**, not to mutable paths in a checkout. That keeps packages **self-contained** (bounded YAML + assets + declared deps) so they **cannot** change **`src/lib/`** or **`src/cmd/`** without a **separate** engine release.
+
 ## Authoring vs execution (two modes, both supported)
 
 | Mode | What you run | Friction | Notes |
