@@ -119,7 +119,7 @@ This is **packaging convenience**, not an architectural merge.
 |------|----------|----------|
 | `dockpipe.version` | `dockpipe --version` | **readonly** |
 | `capabilities.workflows` | List workflow names (repo root resolution) | **readonly** |
-| `dockpipe.validate_workflow` | `dockpipe workflow validate` on a path | **validate** |
+| `dockpipe.validate_workflow` | `dockpipe workflow validate` (optional repo-relative `path`) | **validate** |
 | `dorkpipe.validate_spec` | `dorkpipe validate -f <spec>` | **validate** |
 | `dockpipe.run` | `--workflow` + `--workdir` + argv after `--` | **exec** |
 | `dorkpipe.run_spec` | `dorkpipe run -f <spec>` | **exec** |

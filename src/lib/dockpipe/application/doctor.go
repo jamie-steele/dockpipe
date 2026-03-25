@@ -1,11 +1,15 @@
 package application
 
 import (
-	"dockpipe/src/lib/dockpipe/infrastructure"
 	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"dockpipe/src/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
 func cmdDoctor(argv []string) error {
@@ -44,6 +48,30 @@ Quick checks before a real run. Does not start a project container.
 			fmt.Fprintf(os.Stderr, "[dockpipe] bundled assets: incomplete (%s)\n", rr)
 		} else {
 			fmt.Fprintf(os.Stderr, "[dockpipe] bundled assets: ok (%s)\n", wfPath)
+		}
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "[dockpipe] project config: could not get working directory (%v)\n", err)
+	} else {
+		pc, err := domain.LoadDockpipeProjectConfig(wd)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "[dockpipe] project config: %v\n", err)
+		} else if pc == nil {
+			fmt.Fprintf(os.Stderr, "[dockpipe] project config: %s not in this directory (optional)\n", domain.DockpipeProjectConfigFileName)
+		} else {
+			fmt.Fprintf(os.Stderr, "[dockpipe] project config: ok (%s)\n", filepath.Join(wd, domain.DockpipeProjectConfigFileName))
+			if p, ok := domain.ResolveOpInjectTemplatePath(pc, wd); ok {
+				if st, err := os.Stat(p); err == nil && !st.IsDir() {
+					fmt.Fprintf(os.Stderr, "[dockpipe] secrets op inject template: ok (%s)\n", p)
+				} else {
+					fmt.Fprintf(os.Stderr, "[dockpipe] secrets op inject template: missing (%s)\n", p)
+				}
+			}
+			if pc.Secrets.Notes != nil && strings.TrimSpace(*pc.Secrets.Notes) != "" {
+				fmt.Fprintf(os.Stderr, "[dockpipe] secrets notes: %s\n", strings.TrimSpace(*pc.Secrets.Notes))
+			}
 		}
 	}
 

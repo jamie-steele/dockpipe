@@ -34,9 +34,10 @@ Commands:
   init                    Add DockPipe to the current project
   install                 Fetch templates/core from HTTPS (e.g. Cloudflare R2); see install core --help
   clone <name>            Copy a compiled workflow package to workflows/ when allow_clone is true (see package manifest)
-  package list|manifest|build|compile   Packages: list, manifest, author core tarball, or compile workflow into .dockpipe/internal
+  package list|manifest|build|compile   Packages: list, manifest, author core tarball, or compile into .dockpipe/internal
+  compile                 Same as dockpipe package compile (core, resolvers, bundles, workflows, workflow)
   release upload          Upload a file to S3-compatible storage (self-hosted; uses aws CLI)
-  workflow validate       Check workflow YAML (default: dockpipe.yml)
+  workflow validate       Check workflow YAML ([path] relative to cwd or repo root; omit if one workflow)
   doctor                  Check docker, bash, and bundled assets
   runs list [--workdir]   List active host-run records under .dockpipe/runs/
   windows setup|doctor    Windows: optional WSL bridge setup
@@ -56,7 +57,7 @@ const initUsageText = `dockpipe init
 Project setup in the current directory, or add a new workflow.
 
 Usage:
-  dockpipe init [flags]              merge templates/core, scripts/, images/, dockpipe.yml (no workflow name)
+  dockpipe init [flags]              merge templates/core, scripts/, images/, dockpipe.config.json (no workflow name)
   dockpipe init <name> [flags]       create workflows/<name>/config.yml as an empty starter (see --workflows-dir)
   dockpipe init <name> --from <src>  copy a bundled template or filesystem path into workflows/<name>/
 

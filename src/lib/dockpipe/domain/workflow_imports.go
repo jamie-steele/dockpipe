@@ -55,7 +55,7 @@ func parseWorkflowFileRecursive(data []byte, baseDir string, readFile func(strin
 		return &f, nil
 	}
 	if readFile == nil {
-		return nil, fmt.Errorf("workflow has imports: load from a file (e.g. dockpipe --workflow-file ./dockpipe.yml)")
+		return nil, fmt.Errorf("workflow has imports: load from a file (e.g. dockpipe --workflow-file ./workflows/foo/config.yml)")
 	}
 	baseDir = strings.TrimSpace(baseDir)
 	if baseDir == "" {

@@ -24,7 +24,7 @@ func mcpToolCatalog() []mcpToolMeta {
 		{
 			Name:        "dockpipe.validate_workflow",
 			Description: "Validate workflow YAML (dockpipe workflow validate). Tier: validate+.",
-			InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","description":"defaults to dockpipe.yml"}},"additionalProperties":false}`),
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"path":{"type":"string","description":"optional path to config.yml, repo-relative (e.g. workflows/test/config.yml); omit when exactly one workflows/*/config.yml exists"}},"additionalProperties":false}`),
 		},
 		{
 			Name:        "dorkpipe.validate_spec",

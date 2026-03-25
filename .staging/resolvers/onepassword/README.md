@@ -1,7 +1,7 @@
 # Resolver profile: `onepassword`
 
-Host-only workflows that use the **1Password CLI** (`op`). Pair with **`runtime: keystore`** (preferred for secret-injection flows) or **`runtime: cli`**, and **`skip_container: true`**.
+Host-only workflows that use the **1Password CLI** (`op`). Pair with **`runtime: keystore`** (preferred) or **`runtime: cli`** and **`skip_container: true`**.
 
-Lean **`templates/core/resolvers/onepassword/profile`** ships with **`dockpipe init`**; this staging copy stays in sync for maintainer workflows.
+This resolver is **not** part of the lean **`src/core/resolvers/`** bundle — it lives under **`.staging/resolvers/onepassword/`** for maintainer authoring and is consumed via **`dockpipe package compile resolvers`** (→ **`.dockpipe/internal/packages/core/resolvers/onepassword/`**) or resolved from disk in a dockpipe checkout (**staging** is searched before lean core).
 
-This resolver does **not** run an isolate image; it documents **`DOCKPIPE_RESOLVER_ENV`** hints for tokens you typically inject via `op inject` (see **`.staging/workflows/secretstore-r2-publish-test`** in a dockpipe checkout).
+It documents **`DOCKPIPE_RESOLVER_CMD`** and **`DOCKPIPE_RESOLVER_ENV`** for keys you inject via **`op inject`** / **`op run`**. See **`src/core/workflows/secretstore/`** and **`.staging/workflows/secretstore-r2-publish-test/`**.

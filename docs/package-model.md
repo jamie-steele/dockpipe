@@ -13,9 +13,35 @@ DockPipe distinguishes **two sides** so pipelines stay clear: **what you author*
 | Mode | What you run | Friction | Notes |
 |------|----------------|----------|--------|
 | **Source / today** | Workflow YAML from **`workflows/`**, legacy **`templates/<name>/`**, etc. | **Low** for day-to-day editing — no compile step required. | **`scripts/…`** resolves per **`paths.go`** (project **`scripts/`** first, then bundled **resolvers** / **bundles** / **`assets/scripts/`**). Users can keep scripts wherever those rules allow. |
-| **Compiled / packaged** | Workflow from **`.dockpipe/internal/packages/workflows/<name>/`** (material produced by **`dockpipe package compile workflow`** today; richer “grab referenced assets” compile later). | **One** compile (or CI) before run. | **Cleaner** tree: domain-specific files can be **co-located** under the compiled root so the runner does **less path search** at **`run`** time (often faster startup; heavy steps like Docker still dominate many workflows). |
+| **Compiled / packaged** | **`packages/workflows/<name>/`** from **`dockpipe package compile workflow`**, or a full slice via **`compile all`** (core + resolvers + bundles + workflows under **`.dockpipe/internal/packages/`**). | **One** compile (or CI) before run. | **Cleaner** tree: optional **`package.yml`** per slice for **deps** / namespaces; resolver search prefers **`packages/core/resolvers`** when present. |
 
 **Authors are not forced to pick one path:** keep editing and running from source for low friction; use **compile → package → release** when you want a **self-contained** published artifact.
+
+### Local compile (`dockpipe package compile` / `dockpipe compile`)
+
+Materialize a **project-local** store under **`.dockpipe/internal/packages/`** without moving authoring trees.
+
+**Repo-root `dockpipe.config.json` (optional)** — JSON with a **`compile`** object:
+
+- **`workflows`** — array of repo-relative (or absolute) **directories** to scan for named workflow folders (each with **`config.yml`**).
+- **`resolvers`** — array of **directories** whose **children** are resolver profile dirs to merge into **`packages/core/resolvers/`** (later roots overlay earlier names).
+- **`bundles`** — same for **`packages/core/bundles/`**.
+- **`core_from`** — optional path override for **`compile core`** (same as **`--from`**).
+- **`secrets`** (optional) — not secrets themselves; pointers for humans and tooling:
+  - **`op_inject_template`** — repo-relative or absolute path to a **mapping file** for **`op inject`** (e.g. **`.env.op.template`** with **`op://`** lines). **`dockpipe doctor`** reports whether that file exists when **`dockpipe.config.json`** is present in the current directory.
+  - **`notes`** — free-text reminder (e.g. vault naming, policy).
+
+If **`dockpipe.config.json`** is **missing**, compile uses built-in defaults. If a key is **omitted**, defaults apply for that slice; **`dockpipe init`** seeds a starter JSON. **`--no-staging`** filters out paths under **`.staging/`** when resolving defaults or config lists.
+
+Compile steps:
+
+1. **`compile core`** — copies **`src/core`** (default when **`src/core/runtimes`** exists) or **`templates/core`**, or **`compile.core_from`** / **`--from`**, into **`packages/core/`** and writes **`package.yml`** (`kind: core`; **`depends`** is for future namespaced deps).
+2. **`compile resolvers`** — repeatable **`--from`**; defaults merge **`src/core/resolvers`**, **`templates/core/resolvers`**, then **`.staging/resolvers`** (each path must exist).
+3. **`compile bundles`** — repeatable **`--from`**; defaults from config or **`.staging/bundles`**.
+4. **`compile workflows`** — every subdir with **`config.yml`** under each **`--from`** root; defaults **`workflows/`** then **`.staging/workflows/`** (or **`dockpipe.config.json`**).
+5. **`compile all`** — runs **core → resolvers → bundles (when roots exist) → workflows**.
+
+The runner checks **compiled `packages/core`** before **`.staging`** and authoring **`CoreDir`** so you can **opt in** to the compiled slice per workdir. Edit **`package.yml`** after compile to add **namespaces**, **`depends`**, and metadata for store-shaped workflows.
 
 ## Network boundary: install, not every `run`
 

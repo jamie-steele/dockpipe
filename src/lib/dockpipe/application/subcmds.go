@@ -27,14 +27,6 @@ const preBoilerplate = `#!/usr/bin/env bash
 set -euo pipefail
 `
 
-const dockpipeYmlBoilerplate = `# Dockpipe workflow at repository root (same shape as templates/<name>/config.yml).
-# Run: dockpipe --workflow-file dockpipe.yml [options] -- <command>
-name: my-project
-description: Local workflow
-imports: []
-steps: []
-`
-
 func cmdInit(args []string) error {
 	for _, a := range args {
 		if a == "--help" || a == "-h" {

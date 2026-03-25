@@ -55,18 +55,18 @@ func TestParseFlagsHappyPath(t *testing.T) {
 
 // TestParseFlagsWorkflowFile checks --workflow-file stores the path as given.
 func TestParseFlagsWorkflowFile(t *testing.T) {
-	_, o, err := ParseFlags("/tmp/repo", []string{"--workflow-file", "/projects/foo/dockpipe.yml"})
+	_, o, err := ParseFlags("/tmp/repo", []string{"--workflow-file", "/projects/foo/workflows/demo/config.yml"})
 	if err != nil {
 		t.Fatalf("ParseFlags() err = %v", err)
 	}
-	if o.WorkflowFile != "/projects/foo/dockpipe.yml" {
+	if o.WorkflowFile != "/projects/foo/workflows/demo/config.yml" {
 		t.Fatalf("WorkflowFile = %q", o.WorkflowFile)
 	}
 }
 
 // TestParseFlagsWorkflowAndWorkflowFileConflict ensures --workflow and --workflow-file cannot be used together.
 func TestParseFlagsWorkflowAndWorkflowFileConflict(t *testing.T) {
-	_, _, err := ParseFlags("/tmp/repo", []string{"--workflow", "demo", "--workflow-file", "/x/dockpipe.yml"})
+	_, _, err := ParseFlags("/tmp/repo", []string{"--workflow", "demo", "--workflow-file", "/x/workflows/demo/config.yml"})
 	if err == nil || !strings.Contains(err.Error(), "both") {
 		t.Fatalf("expected mutual exclusion error, got %v", err)
 	}

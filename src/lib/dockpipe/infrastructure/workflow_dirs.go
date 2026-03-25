@@ -31,6 +31,12 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 		if pw, err := PackagesWorkflowsDir(workdir); err == nil {
 			candidates = append(candidates, filepath.Join(pw, name, "config.yml"))
 		}
+		if pc, err := PackagesCoreDir(workdir); err == nil {
+			candidates = append(candidates,
+				filepath.Join(pc, "workflows", name, "config.yml"),
+				filepath.Join(pc, "resolvers", name, "config.yml"),
+			)
+		}
 	}
 	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
 		candidates = append(candidates, filepath.Join(repoRoot, "templates", name, "config.yml"))
@@ -69,6 +75,9 @@ func ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, workdir, nam
 		filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"),
 	)
 	if strings.TrimSpace(workdir) != "" {
+		if pc, err := PackagesCoreDir(workdir); err == nil {
+			candidates = append(candidates, filepath.Join(pc, "resolvers", name, "config.yml"))
+		}
 		if pw, err := PackagesWorkflowsDir(workdir); err == nil {
 			candidates = append(candidates, filepath.Join(pw, name, "config.yml"))
 		}
@@ -134,27 +143,44 @@ func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 	return out, nil
 }
 
-// ListWorkflowNamesInPackagesStore returns workflow names under workdir/.dockpipe/internal/packages/workflows/*/config.yml.
+// ListWorkflowNamesInPackagesStore returns workflow names under workdir/.dockpipe/internal/packages/workflows/*/config.yml
+// and packages/core/workflows/*/config.yml when present.
 func ListWorkflowNamesInPackagesStore(workdir string) ([]string, error) {
 	root, err := PackagesWorkflowsDir(workdir)
 	if err != nil {
 		return nil, err
 	}
-	entries, err := os.ReadDir(root)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
+	seen := make(map[string]struct{})
+	var out []string
+	addDir := func(base string) error {
+		entries, err := os.ReadDir(base)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
 		}
+		for _, e := range entries {
+			if !e.IsDir() {
+				continue
+			}
+			name := e.Name()
+			cfg := filepath.Join(base, name, "config.yml")
+			if st, err := os.Stat(cfg); err == nil && !st.IsDir() {
+				if _, ok := seen[name]; !ok {
+					seen[name] = struct{}{}
+					out = append(out, name)
+				}
+			}
+		}
+		return nil
+	}
+	if err := addDir(root); err != nil {
 		return nil, err
 	}
-	var out []string
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		cfg := filepath.Join(root, e.Name(), "config.yml")
-		if st, err := os.Stat(cfg); err == nil && !st.IsDir() {
-			out = append(out, e.Name())
+	if pc, err := PackagesCoreDir(workdir); err == nil {
+		if err := addDir(filepath.Join(pc, "workflows")); err != nil {
+			return nil, err
 		}
 	}
 	sort.Strings(out)

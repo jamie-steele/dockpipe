@@ -100,6 +100,9 @@ func Run(argv []string, baseEnviron []string) error {
 	if argv[0] == "package" {
 		return cmdPackage(argv[1:])
 	}
+	if argv[0] == "compile" {
+		return cmdPackage(append([]string{"compile"}, argv[1:]...))
+	}
 	if argv[0] == "clone" {
 		return cmdClone(argv[1:])
 	}

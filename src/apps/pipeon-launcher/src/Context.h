@@ -10,7 +10,7 @@ struct Context {
     QString workdir;
     /// Bundled workflow name (e.g. vscode); empty if using workflowFile only.
     QString workflow;
-    /// Path to dockpipe.yml / config; empty if using workflow name only.
+    /// Path to workflow config.yml; empty if using workflow name only.
     QString workflowFile;
     QString resolver;
     QString strategy;

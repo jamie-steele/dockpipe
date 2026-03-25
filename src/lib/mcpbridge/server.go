@@ -206,14 +206,17 @@ func (s *Server) dispatchTool(ctx context.Context, name string, args json.RawMes
 		}
 		_ = json.Unmarshal(args, &in)
 		path := strings.TrimSpace(in.Path)
+		var cmdArgs []string
 		if path == "" {
-			path = "dockpipe.yml"
+			cmdArgs = []string{"workflow", "validate"}
+		} else {
+			absPath, err := ResolvePathUnderRepoRoot(path)
+			if err != nil {
+				return nil, true, err
+			}
+			cmdArgs = []string{"workflow", "validate", absPath}
 		}
-		absPath, err := ResolvePathUnderRepoRoot(path)
-		if err != nil {
-			return nil, true, err
-		}
-		_, stderr, code, err := runDockpipe(ctx, []string{"workflow", "validate", absPath})
+		_, stderr, code, err := runDockpipe(ctx, cmdArgs)
 		msg := strings.TrimSpace(stderr)
 		if err != nil {
 			return nil, true, err

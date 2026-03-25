@@ -11,18 +11,22 @@ func cmdWorkflow(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf(`usage: dockpipe workflow validate [path]
 
-  Validates workflow YAML (parse + JSON Schema). Default path: dockpipe.yml`)
+  Validates workflow YAML (parse + JSON Schema). Relative paths resolve from the current directory, then from the repo root (DOCKPIPE_REPO_ROOT / materialized bundle). Omit path when exactly one workflows/*/config.yml exists under the workflows root.`)
 	}
 	switch args[0] {
 	case "validate":
-		path := "dockpipe.yml"
+		path := ""
 		if len(args) > 1 {
 			path = args[1]
 		}
-		if err := infrastructure.ValidateWorkflowYAML(path); err != nil {
+		resolved, err := infrastructure.ResolveWorkflowYAMLPath(path)
+		if err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stderr, "OK: workflow %q\n", path)
+		if err := infrastructure.ValidateResolvedWorkflowYAML(resolved); err != nil {
+			return err
+		}
+		fmt.Fprintf(os.Stderr, "OK: workflow %q\n", resolved)
 		return nil
 	default:
 		return fmt.Errorf("unknown workflow subcommand %q (try: validate)", args[0])

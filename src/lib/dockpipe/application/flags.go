@@ -111,7 +111,7 @@ func ParseFlags(repoRoot string, argv []string) ([]string, *CliOpts, error) {
 			i += 2
 		case "--workflow-file":
 			if i+1 >= len(argv) {
-				return nil, nil, fmt.Errorf("--workflow-file requires a path to a YAML file (e.g. dockpipe.yml)")
+				return nil, nil, fmt.Errorf("--workflow-file requires a path to a YAML file (e.g. workflows/test/config.yml)")
 			}
 			o.WorkflowFile = argv[i+1]
 			i += 2

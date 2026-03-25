@@ -90,6 +90,19 @@ func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 	if p, ok := resolveCoreNamespacedAsset(repoRoot, rest); ok {
 		return p
 	}
+	pkgCore := filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "core")
+	if p, ok := tryBundledAssetsScripts(pkgCore, "resolvers", rest); ok {
+		return p
+	}
+	if p, ok := tryBundledAssetsScripts(pkgCore, "bundles", rest); ok {
+		return p
+	}
+	if scriptFileExists(filepath.Join(pkgCore, "resolvers", rest)) {
+		return filepath.Join(pkgCore, "resolvers", rest)
+	}
+	if scriptFileExists(filepath.Join(pkgCore, "bundles", rest)) {
+		return filepath.Join(pkgCore, "bundles", rest)
+	}
 	core := CoreDir(repoRoot)
 	if UsesBundledAssetLayout(repoRoot) {
 		if p, ok := tryBundledAssetsScripts(core, "resolvers", rest); ok {
@@ -176,13 +189,19 @@ func ResolvePreScriptPath(p, repoRoot string) string {
 }
 
 // ResolveResolverFilePath returns the path to a specific resolver profile (KEY=value) by name.
-// Search order (dockpipe checkout): .staging/resolvers → templates/core/resolvers. Materialized bundle: shipyard/core/resolvers only.
+// Search order: compiled packages/core first, then .staging/resolvers, then templates/core (or src/core).
 func ResolveResolverFilePath(repoRoot, resolverName string) (string, error) {
 	resolverName = strings.TrimSpace(resolverName)
 	if resolverName == "" {
 		return "", fmt.Errorf("resolver profile name is empty")
 	}
 	var candidates []string
+	if pc, err := PackagesCoreDir(repoRoot); err == nil {
+		candidates = append(candidates,
+			filepath.Join(pc, "resolvers", resolverName),
+			filepath.Join(pc, "resolvers", resolverName, "profile"),
+		)
+	}
 	if !UsesBundledAssetLayout(repoRoot) {
 		candidates = append(candidates,
 			filepath.Join(StagingResolversDir(repoRoot), resolverName),

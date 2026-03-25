@@ -146,12 +146,14 @@ Usage:
   dockpipe package list [--workdir <path>]
   dockpipe package manifest
   dockpipe package build core [options]
-  dockpipe package compile workflow [options] <source-dir>
+  dockpipe package compile core|resolvers|bundles|workflows|all|workflow [options]
 
   list      Find package.yml under .dockpipe/internal/packages and print rel path, name, version, description.
   manifest  Print an example package.yml schema to stdout.
   build     Author templates-core tarball + checksum + install-manifest (self-hosted mirror).
-  compile   Validate workflow YAML and copy into .dockpipe/internal/packages/workflows/.
+  compile   Materialize core / resolvers / bundles / workflows into .dockpipe/internal/packages/ (see compile --help).
+
+Optional repo-root dockpipe.config.json lists compile source dirs (workflows, resolvers, bundles); see docs/package-model.md.
 
 Environment:
   DOCKPIPE_PACKAGES_ROOT   Override packages root (default: <workdir>/.dockpipe/internal/packages).

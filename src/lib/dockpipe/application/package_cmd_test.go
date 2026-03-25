@@ -49,6 +49,39 @@ func TestCmdPackageUnknown(t *testing.T) {
 	}
 }
 
+func TestCmdPackageCompileCore(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "core")
+	if err := os.MkdirAll(filepath.Join(src, "runtimes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "runtimes", ".keep"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	if err := cmdPackage([]string{"compile", "core", "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	corePkg := filepath.Join(dir, ".dockpipe", "internal", "packages", "core", "package.yml")
+	if _, err := os.Stat(corePkg); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunCompileAliasHelp(t *testing.T) {
+	if err := Run([]string{"compile", "core", "--help"}, nil); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCmdPackageCompileWorkflow(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src", "mywf")

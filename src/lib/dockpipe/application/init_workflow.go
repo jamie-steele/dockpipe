@@ -19,7 +19,7 @@ const dockpipeProjectReadme = `# Dockpipe project
 - **workflows/** — Default home for named workflows (**config.yml** per folder); **dockpipe init &lt;name&gt;** creates **workflows/&lt;name&gt;/** (override with **--workflows-dir** or **DOCKPIPE_WORKFLOWS_DIR**).
 - **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/**, **assets/** (**agnostic scripts**, **images/**, **compose/**), **bundles/** (domain asset packs) (from **dockpipe init**).
 - **templates/&lt;name&gt;/** — Legacy named workflows; still resolved if **workflows/** does not define the same name.
-- **dockpipe.yml** (optional) — Repo-root workflow; use **dockpipe --workflow-file dockpipe.yml**.
+- **dockpipe.config.json** (optional) — Repo-root JSON: **compile** source lists and optional **secrets.op_inject_template** (path to e.g. **.env.op.template**); omit to use built-in compile defaults.
 `
 
 // agentsSelfAnalysisMarker is embedded once in AGENTS.md so re-init does not duplicate the section.
@@ -79,7 +79,7 @@ func ensureAgentsSelfAnalysisPointer(projectDir string) (bool, error) {
 }
 
 // ensureProjectScaffold creates scripts/, images/, templates/, merges bundled templates/core,
-// and adds README.md / dockpipe.yml when missing. Idempotent for an existing repo tree.
+// and adds README.md / dockpipe.config.json when missing. Idempotent for an existing repo tree.
 func ensureProjectScaffold(repoRoot, projectDir string) error {
 	_ = os.MkdirAll(filepath.Join(projectDir, "scripts"), 0o755)
 	_ = os.MkdirAll(filepath.Join(projectDir, "images"), 0o755)
@@ -92,9 +92,15 @@ func ensureProjectScaffold(repoRoot, projectDir string) error {
 	if _, err := os.Stat(readme); os.IsNotExist(err) {
 		_ = os.WriteFile(readme, []byte(dockpipeProjectReadme), 0o644)
 	}
-	dock := filepath.Join(projectDir, "dockpipe.yml")
-	if _, err := os.Stat(dock); os.IsNotExist(err) {
-		_ = os.WriteFile(dock, []byte(dockpipeYmlBoilerplate), 0o644)
+	dc := filepath.Join(projectDir, domain.DockpipeProjectConfigFileName)
+	if _, err := os.Stat(dc); os.IsNotExist(err) {
+		b, err := domain.DefaultDockpipeProjectConfigBytes()
+		if err != nil {
+			return fmt.Errorf("%s: %w", domain.DockpipeProjectConfigFileName, err)
+		}
+		if err := os.WriteFile(dc, append(b, '\n'), 0o644); err != nil {
+			return err
+		}
 	}
 	return nil
 }

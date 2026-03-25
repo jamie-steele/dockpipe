@@ -54,4 +54,4 @@ If you want **one** `dockpipe` invocation to run several containers in order (an
 
 ---
 
-**Future ideas:** richer step kinds (e.g. Terraform), repo-root `dockpipe.yml` — see **[future-updates.md](future-updates.md)**.
+**Future ideas:** richer step kinds (e.g. Terraform), repo-level workflow defaults — see **[future-updates.md](future-updates.md)**.

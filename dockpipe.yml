@@ -1,6 +1,0 @@
-# Dockpipe workflow at repository root (same shape as templates/<name>/config.yml).
-# Run: dockpipe --workflow-file dockpipe.yml [options] -- <command>
-name: my-project
-description: Local workflow
-imports: []
-steps: []
