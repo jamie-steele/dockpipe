@@ -18,6 +18,9 @@ import (
 //	assets/      — optional top-level shared assets (e.g. large binary packs)
 //
 // Override with DOCKPIPE_PACKAGES_ROOT (absolute path, or relative to workdir).
+//
+// User-wide installs (optional): GlobalDockpipeDataDir()/packages/{workflows,resolvers,...} — see
+// `dockpipe install core --global` and infrastructure/globaldirs.go.
 const (
 	DockpipeDirRel          = ".dockpipe"
 	PackagesDirRel          = ".dockpipe/internal/packages"

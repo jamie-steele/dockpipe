@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"dockpipe/src/lib/dockpipe/infrastructure"
 	"dockpipe/src/lib/dockpipe/infrastructure/fetchinstall"
 )
 
@@ -36,18 +37,21 @@ func cmdInstallCore(args []string) error {
 		return nil
 	}
 	var (
-		workdir      string
-		baseURL      string
-		tarballURL   string
-		version      string
-		wantSHA      string
-		dryRun       bool
-		manifestFile string
+		workdir         string
+		explicitWorkdir bool
+		globalInstall   bool
+		baseURL         string
+		tarballURL      string
+		version         string
+		wantSHA         string
+		dryRun          bool
+		manifestFile    string
 	)
 	for i := 0; i < len(args); i++ {
 		switch {
 		case args[i] == "--workdir" && i+1 < len(args):
 			workdir = args[i+1]
+			explicitWorkdir = true
 			i++
 		case args[i] == "--base-url" && i+1 < len(args):
 			baseURL = args[i+1]
@@ -66,18 +70,31 @@ func cmdInstallCore(args []string) error {
 			i++
 		case args[i] == "--dry-run":
 			dryRun = true
+		case args[i] == "-g" || args[i] == "--global":
+			globalInstall = true
 		case strings.HasPrefix(args[i], "-"):
 			return fmt.Errorf("unknown option %s (try: dockpipe install core --help)", args[i])
 		default:
 			return fmt.Errorf("unexpected argument %q", args[i])
 		}
 	}
+	if explicitWorkdir && globalInstall {
+		return fmt.Errorf("cannot use --global with --workdir")
+	}
 	if workdir == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
+		if globalInstall {
+			w, err := infrastructure.GlobalDockpipeDataDir()
+			if err != nil {
+				return err
+			}
+			workdir = w
+		} else {
+			wd, err := os.Getwd()
+			if err != nil {
+				return err
+			}
+			workdir = wd
 		}
-		workdir = wd
 	} else {
 		var err error
 		workdir, err = filepath.Abs(workdir)
@@ -95,6 +112,9 @@ func cmdInstallCore(args []string) error {
 		manifestFile = strings.TrimSpace(os.Getenv(envInstallManifest))
 	}
 	allowInsecure := isTruthyEnv(envInstallAllowInsecureHTTP)
+	if globalInstall {
+		fmt.Fprintf(os.Stderr, "[dockpipe] install: user-wide data root %s\n", workdir)
+	}
 
 	opts := fetchinstall.CoreOptions{
 		BaseURL:           strings.TrimSpace(baseURL),
@@ -150,6 +170,7 @@ Resolution:
   • --version X.Y.Z            GET <base>/templates-core-X.Y.Z.tar.gz (+ optional .sha256).
 
 Environment:
+  DOCKPIPE_GLOBAL_ROOT          Absolute path overriding the user-wide data dir (--global).
   DOCKPIPE_INSTALL_BASE_URL     HTTPS origin for manifest and tarballs (no trailing slash).
   DOCKPIPE_INSTALL_VERSION      Default version selector if --version omitted (e.g. latest).
   DOCKPIPE_INSTALL_MANIFEST     Manifest filename (default install-manifest.json).
@@ -157,6 +178,11 @@ Environment:
 
 Options:
   --workdir <path>   Project root (default: current directory).
+  -g, --global       Install into the user-wide DockPipe data directory (OS-appropriate: e.g.
+                     %LOCALAPPDATA%\\dockpipe on Windows, ~/Library/Application Support/dockpipe on
+                     macOS, ~/.local/share/dockpipe on Linux). Same layout as a project:
+                     <global>/templates/core. Override base with DOCKPIPE_GLOBAL_ROOT.
+                     Cannot be combined with --workdir.
   --base-url <url>   Overrides DOCKPIPE_INSTALL_BASE_URL.
   --url <url>        Full tarball URL; skips manifest / version naming.
   --version <ver>    latest | semver (e.g. 0.6.0).

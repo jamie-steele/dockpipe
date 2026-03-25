@@ -29,10 +29,10 @@ func loadWorkflowFromTarball(tarPath, entry string) (*domain.Workflow, error) {
 }
 
 // tryResolveWorkflowTarballURI returns a tar workflow URI when no on-disk config exists but a
-// dockpipe-workflow-<name>-*.tar.gz under the configured tarball dir contains workflows/<name>/config.yml
-// with a non-empty namespace: field (namespaced packages). Optional dockpipe.config.json
-// packages.namespace must match when set.
-func tryResolveWorkflowTarballURI(repoRoot, _ /* workdir */, name string) (string, error) {
+// dockpipe-workflow-<name>-*.tar.gz exists under the packages store workflows dir (first), then
+// packages.tarball_dir or release/artifacts. The archive must contain workflows/<name>/config.yml.
+// When dockpipe.config.json sets packages.namespace, the workflow namespace in that file must match.
+func tryResolveWorkflowTarballURI(repoRoot, workdir, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", nil
@@ -41,45 +41,53 @@ func tryResolveWorkflowTarballURI(repoRoot, _ /* workdir */, name string) (strin
 	if err != nil {
 		return "", err
 	}
-	tarballDir := workflowTarballSearchDir(repoRoot, cfg)
-	if tarballDir == "" {
-		return "", nil
+	var searchDirs []string
+	if strings.TrimSpace(workdir) != "" {
+		if pw, err := PackagesWorkflowsDir(workdir); err == nil {
+			searchDirs = append(searchDirs, pw)
+		}
 	}
-	pattern := filepath.Join(tarballDir, fmt.Sprintf("dockpipe-workflow-%s-*.tar.gz", name))
-	matches, err := filepath.Glob(pattern)
-	if err != nil || len(matches) == 0 {
-		return "", nil
+	if gw, err := GlobalPackagesWorkflowsDir(); err == nil {
+		searchDirs = append(searchDirs, gw)
 	}
-	sort.Strings(matches)
-	// Prefer highest version suffix (lexicographic works for semver-like names).
-	for i := len(matches) - 1; i >= 0; i-- {
-		tarPath := matches[i]
-		entry := filepath.ToSlash(filepath.Join("workflows", name, "config.yml"))
-		b, err := packagebuild.ReadFileFromTarGz(tarPath, entry)
-		if err != nil {
+	if d := workflowTarballSearchDir(repoRoot, cfg); d != "" {
+		searchDirs = append(searchDirs, d)
+	}
+	entry := filepath.ToSlash(filepath.Join("workflows", name, "config.yml"))
+	for _, dir := range searchDirs {
+		pattern := filepath.Join(dir, fmt.Sprintf("dockpipe-workflow-%s-*.tar.gz", name))
+		matches, err := filepath.Glob(pattern)
+		if err != nil || len(matches) == 0 {
 			continue
 		}
-		var top struct {
-			Namespace string `yaml:"namespace"`
-		}
-		if err := yaml.Unmarshal(b, &top); err != nil {
-			continue
-		}
-		ns := strings.TrimSpace(top.Namespace)
-		if ns == "" {
-			continue
-		}
-		if cfg != nil && cfg.Packages.Namespace != nil {
-			want := strings.TrimSpace(*cfg.Packages.Namespace)
-			if want != "" && ns != want {
+		sort.Strings(matches)
+		// Prefer highest version suffix (lexicographic works for semver-like names).
+		for i := len(matches) - 1; i >= 0; i-- {
+			tarPath := matches[i]
+			b, err := packagebuild.ReadFileFromTarGz(tarPath, entry)
+			if err != nil {
 				continue
 			}
+			var top struct {
+				Namespace string `yaml:"namespace"`
+			}
+			if err := yaml.Unmarshal(b, &top); err != nil {
+				continue
+			}
+			if cfg != nil && cfg.Packages.Namespace != nil {
+				want := strings.TrimSpace(*cfg.Packages.Namespace)
+				if want != "" {
+					if strings.TrimSpace(top.Namespace) != want {
+						continue
+					}
+				}
+			}
+			absTar, err := filepath.Abs(tarPath)
+			if err != nil {
+				return "", err
+			}
+			return formatTarWorkflowURI(absTar, entry), nil
 		}
-		absTar, err := filepath.Abs(tarPath)
-		if err != nil {
-			return "", err
-		}
-		return formatTarWorkflowURI(absTar, entry), nil
 	}
 	return "", nil
 }

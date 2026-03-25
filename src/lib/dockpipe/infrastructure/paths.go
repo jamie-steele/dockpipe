@@ -70,6 +70,9 @@ func resolveCoreNamespacedAsset(repoRoot, rest string) (string, bool) {
 		filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "core", rel),
 		filepath.Join(CoreDir(repoRoot), rel),
 	}
+	if gd, err := GlobalTemplatesCoreDir(); err == nil {
+		candidates = append(candidates, filepath.Join(gd, rel))
+	}
 	for _, p := range candidates {
 		if scriptFileExists(p) {
 			return p, true
@@ -214,6 +217,12 @@ func ResolveResolverFilePath(repoRoot, resolverName string) (string, error) {
 		filepath.Join(CoreDir(repoRoot), "resolvers", resolverName),
 		filepath.Join(CoreDir(repoRoot), "resolvers", resolverName, "profile"),
 	)
+	if gr, err := GlobalPackagesResolversDir(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(gr, resolverName),
+			filepath.Join(gr, resolverName, "profile"),
+		)
+	}
 	for _, p := range candidates {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p, nil

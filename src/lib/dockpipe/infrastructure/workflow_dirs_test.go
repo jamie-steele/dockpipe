@@ -58,6 +58,53 @@ func TestListWorkflowNamesInRepoRootAndPackagesMerges(t *testing.T) {
 	}
 }
 
+func TestListWorkflowNamesInRepoRootAndPackagesMergesGlobal(t *testing.T) {
+	tmp := t.TempDir()
+	glob := t.TempDir()
+	t.Setenv("DOCKPIPE_GLOBAL_ROOT", glob)
+	if err := os.MkdirAll(filepath.Join(tmp, "workflows", "local"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, "workflows", "local", "config.yml"), []byte("name: local\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gwf := filepath.Join(glob, "packages", "workflows", "globalwf")
+	if err := os.MkdirAll(gwf, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(gwf, "config.yml"), []byte("name: globalwf\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ListWorkflowNamesInRepoRootAndPackages(tmp, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(got, []string{"globalwf", "local"}) {
+		t.Fatalf("got %#v", got)
+	}
+}
+
+func TestResolveWorkflowConfigPathGlobalFallback(t *testing.T) {
+	tmp := t.TempDir()
+	glob := t.TempDir()
+	t.Setenv("DOCKPIPE_GLOBAL_ROOT", glob)
+	gwf := filepath.Join(glob, "packages", "workflows", "onlyglobal")
+	if err := os.MkdirAll(gwf, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(gwf, "config.yml")
+	if err := os.WriteFile(cfg, []byte("name: onlyglobal\nsteps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveWorkflowConfigPathWithWorkdir(tmp, tmp, "onlyglobal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != cfg {
+		t.Fatalf("want %s got %s", cfg, got)
+	}
+}
+
 func TestListWorkflowNamesInRepoRootIncludesDockpipeWorkflows(t *testing.T) {
 	tmp := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(tmp, "workflows", "t1"), 0o755); err != nil {

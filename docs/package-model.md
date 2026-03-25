@@ -1,6 +1,21 @@
 # Package model (store vs working tree)
 
-DockPipe distinguishes **two sides** so pipelines stay clear: **what you author** in a repo, and **what you install** as versioned packages. This doc also records the **intended** compile / package / release pipeline (some steps are still evolving in the CLI).
+DockPipe distinguishes **what you author** (source trees) from **what you ship** (tarballs and the local compile store). This doc describes that split and how **`dockpipe package compile`** / **`dockpipe build`** validate packages.
+
+## Canonical layout (mental model)
+
+1. **Local build output** lives under **`.dockpipe/internal/`** (default package root: **`.dockpipe/internal/packages/`**, or **`DOCKPIPE_PACKAGES_ROOT`**). **`dockpipe package compile`** materializes **directory trees** here while you iterate: **`core/`**, **`resolvers/<name>/`**, **`workflows/<name>/`**, optional **`bundles/<name>/`**. This is the **working** store — not the long-term transport format.
+
+2. **Published / pulled-in packages** outside that internal compile flow are **categorized** as **`core`**, **`resolvers`**, or **`workflows`** (plus optional **bundles** where used). **Each installable unit from a registry or artifact bucket is a tarball** (e.g. **`dockpipe-workflow-<name>-<ver>.tar.gz`**, **`dockpipe-resolver-…`**, **`dockpipe-core-…`**). The engine **loads these by reading the archive** (e.g. **`tar://`** paths); it does not require an unpacked tree on disk for **that** path.
+
+3. **Source-level** resolution applies when you point at **authoring** trees: repo **`workflows/`**, **`templates/`**, **`src/core/…`**, etc. — normal edit/run **without** packaging.
+
+4. **Build (`dockpipe build` / `compile all`)** is considered successful only if:
+   - **`compile`** order is **core → resolvers → workflows** (bundles optional via **`--with-bundles`**),
+   - each **workflow** and **resolver** package resolves a **valid `namespace`** (from **`package.yml`**, **`config.yml` / `resolver.yaml`**, or repo-root **`dockpipe.config.json`** **`packages.namespace`** as a default),
+   - every **`depends`** entry in **`package.yml`** names a package **already present** in the compiled store (names from **`package.yml`** under **`core/`**, **`resolvers/`**, **`workflows/`**, **`bundles/`**).
+
+**Runtime** may still resolve workflows from **tarballs** under **`.dockpipe/internal/packages/workflows/`** or **`packages.tarball_dir`** / **`release/artifacts`** when no on-disk workflow config wins; optional **`packages.namespace`** filters tarball choice when set.
 
 ## Official reference vs repo-local trees
 

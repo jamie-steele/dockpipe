@@ -170,8 +170,16 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 			"allow_clone":  true,
 			"distribution": "source",
 		}
+		repoRoot, err := filepath.Abs(workdir)
+		if err != nil {
+			return err
+		}
 		if ns := strings.TrimSpace(wf.Namespace); ns != "" {
 			pm["namespace"] = ns
+		} else if pc, err := loadDockpipeProjectConfig(repoRoot); err == nil && pc != nil && pc.Packages.Namespace != nil {
+			if def := strings.TrimSpace(*pc.Packages.Namespace); def != "" {
+				pm["namespace"] = def
+			}
 		}
 		out, err := yaml.Marshal(pm)
 		if err != nil {
@@ -372,6 +380,10 @@ func cmdPackageCompileResolvers(args []string) error {
 	if err := os.MkdirAll(destRes, 0o755); err != nil {
 		return err
 	}
+	var defResolverNamespace string
+	if cfg, err := loadDockpipeProjectConfig(repoRoot); err == nil && cfg != nil && cfg.Packages.Namespace != nil {
+		defResolverNamespace = strings.TrimSpace(*cfg.Packages.Namespace)
+	}
 	total := 0
 	for _, root := range from {
 		srcAbs, err := filepath.Abs(filepath.Clean(root))
@@ -382,7 +394,7 @@ func cmdPackageCompileResolvers(args []string) error {
 			fmt.Fprintf(os.Stderr, "[dockpipe] skip missing resolvers root: %s\n", srcAbs)
 			continue
 		}
-		n, err := mergeChildPackages(srcAbs, destRes, "resolver")
+		n, err := mergeChildPackages(srcAbs, destRes, "resolver", defResolverNamespace)
 		if err != nil {
 			return err
 		}
@@ -465,7 +477,7 @@ func cmdPackageCompileBundles(args []string) error {
 			fmt.Fprintf(os.Stderr, "[dockpipe] skip missing bundles root: %s\n", srcAbs)
 			continue
 		}
-		n, err := mergeChildPackages(srcAbs, destB, "bundle")
+		n, err := mergeChildPackages(srcAbs, destB, "bundle", "")
 		if err != nil {
 			return err
 		}
@@ -501,7 +513,8 @@ func readResolverNamespaceYAML(dir string) (string, error) {
 
 // mergeChildPackages copies each immediate child directory from srcRoot into destRoot/<name>,
 // replacing any existing destination of the same name (overlay merge for compile resolvers/bundles).
-func mergeChildPackages(srcRoot, destRoot string, kind string) (int, error) {
+// defaultNamespace is applied to new resolver package.yml when resolver.yaml omits namespace (see packages.namespace in dockpipe.config.json).
+func mergeChildPackages(srcRoot, destRoot string, kind string, defaultNamespace string) (int, error) {
 	entries, err := os.ReadDir(srcRoot)
 	if err != nil {
 		return 0, err
@@ -544,6 +557,8 @@ func mergeChildPackages(srcRoot, destRoot string, kind string) (int, error) {
 				}
 				if ns != "" {
 					pm["namespace"] = ns
+				} else if strings.TrimSpace(defaultNamespace) != "" {
+					pm["namespace"] = strings.TrimSpace(defaultNamespace)
 				}
 			}
 			out, err := yaml.Marshal(pm)
@@ -741,7 +756,10 @@ func cmdPackageCompileAll(args []string) error {
 	for _, p := range effectiveWorkflowCompileRoots(cfg, repoRoot, noStaging) {
 		wfArgs = append(wfArgs, "--from", p)
 	}
-	return cmdPackageCompileWorkflowsBatch(wfArgs)
+	if err := cmdPackageCompileWorkflowsBatch(wfArgs); err != nil {
+		return err
+	}
+	return validateCompileOutputs(workdir)
 }
 
 func workdirAndForceArgs(workdir string, force bool) []string {
