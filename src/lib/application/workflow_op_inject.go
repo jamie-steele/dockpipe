@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"dockpipe/src/lib/domain"
@@ -14,9 +15,12 @@ import (
 // opLookPathFn is exec.LookPath for the secrets CLI binary (1Password’s `op`); overridden in tests.
 var opLookPathFn = exec.LookPath
 
-// runOpInjectFn runs `op inject -i <template> -o -` (vault-backed template → env); overridden in tests.
+// runOpInjectFn runs `op inject -i <template>` (vault-backed template → env). Per `op inject --help`,
+// `--out-file` / `-o` means "write to a file instead of stdout"; omitting `-o` sends the result to
+// stdout. Do not pass `-o -` — that is a literal output path named "-" in the current directory, same
+// as shell `> -`, not stdout.
 var runOpInjectFn = func(templatePath string) ([]byte, error) {
-	cmd := exec.Command("op", "inject", "-i", templatePath, "-o", "-")
+	cmd := exec.Command("op", "inject", "-i", templatePath)
 	cmd.Env = os.Environ()
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -68,9 +72,6 @@ func vaultModeRequiresOp(v string) bool {
 // else best-effort inject when template exists. Strict op mode (workflow or project) requires template + file.
 // Resolved KEY=VAL pairs overwrite env (vault over workflow .env for those keys).
 func mergeOpInjectFromProjectIfEnabled(env map[string]string, opts *CliOpts, wfRoot string, wf *domain.Workflow) error {
-	if !opInjectWanted(opts) {
-		return nil
-	}
 	start := ""
 	if opts != nil {
 		start = strings.TrimSpace(opts.Workdir)
@@ -85,6 +86,12 @@ func mergeOpInjectFromProjectIfEnabled(env map[string]string, opts *CliOpts, wfR
 	projectRoot, err := domain.FindProjectRootWithDockpipeConfig(start)
 	if err != nil {
 		return err
+	}
+	// Run before op-inject opt-out: DOCKPIPE_OP_INJECT=0 / --no-op-inject must still clean up
+	// accidental `op inject … > -` (shell creates repo-root "-"); otherwise the file never goes away.
+	maybeRemoveStrayDashInjectFile(projectRoot)
+	if !opInjectWanted(opts) {
+		return nil
 	}
 	cfg, err := domain.LoadDockpipeProjectConfig(projectRoot)
 	if err != nil {
@@ -131,4 +138,51 @@ func mergeOpInjectFromProjectIfEnabled(env map[string]string, opts *CliOpts, wfR
 		fmt.Fprintf(os.Stderr, "[dockpipe] vault: merged %d key(s) via op inject (%s)\n", len(m), tmplPath)
 	}
 	return nil
+}
+
+// maybeRemoveStrayDashInjectFile deletes repo-root "-" when it looks like accidental `op inject ... > -`
+// output (shell creates a file named "-"). Set DOCKPIPE_KEEP_DASH_FILE=1 to skip removal.
+func maybeRemoveStrayDashInjectFile(projectRoot string) {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv("DOCKPIPE_KEEP_DASH_FILE")))
+	if v == "1" || v == "true" || v == "yes" {
+		return
+	}
+	p := filepath.Join(projectRoot, "-")
+	st, err := os.Stat(p)
+	if err != nil || st.IsDir() {
+		return
+	}
+	if st.Size() > 256*1024 {
+		fmt.Fprintf(os.Stderr, "[dockpipe] warning: file %q exists — remove with: rm -- - (large file, not auto-removed)\n", p)
+		return
+	}
+	b, err := os.ReadFile(p)
+	if err != nil {
+		return
+	}
+	if len(b) == 0 || bytes.Contains(b, []byte{0}) {
+		return
+	}
+	if !bytes.Contains(b, []byte("=")) {
+		return
+	}
+	ok := false
+	for _, line := range bytes.Split(b, []byte{'\n'}) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 || line[0] == '#' {
+			continue
+		}
+		if bytes.Contains(line, []byte("=")) {
+			ok = true
+			break
+		}
+	}
+	if !ok {
+		return
+	}
+	if err := os.Remove(p); err != nil {
+		fmt.Fprintf(os.Stderr, "[dockpipe] warning: stray file %q — remove with: rm -- - (%v)\n", p, err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "[dockpipe] removed stray file %q (from shell `op inject ... > -`); vault merge stays in memory only\n", p)
 }

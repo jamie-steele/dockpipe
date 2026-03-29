@@ -11,8 +11,8 @@
     "namespace": "dockpipeproject"
   },
   "secrets": {
-    "vault_template": ".env.op.template",
+    "vault_template": ".env.template",
     "vault": "op",
-    "notes": "vault_template: op inject env file. secrets.vault: default when workflows omit vault:."
+    "notes": "vault_template: env mapping file (agnostic name). With vault op, use op inject (op://). Other vault backends can substitute the same keys."
   }
 }

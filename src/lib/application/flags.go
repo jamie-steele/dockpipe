@@ -46,9 +46,16 @@ type CliOpts struct {
 	VarOverrides  []string
 	NoOpInject    bool // skip vault env resolution via op inject (when dockpipe.config.json sets op_inject_template)
 	BuildPath     string
-	// CompileDeps runs package compile for-workflow for --workflow before resolve (materializes .dockpipe store).
+	// CompileDeps is legacy: transitive compile for --workflow is on by default when env is unset.
 	CompileDeps bool
-	SeenDash      bool
+	// NoCompileDeps skips the default pre-run package compile for-workflow (see compileDepsWanted).
+	NoCompileDeps bool
+	// TfCommands sets DOCKPIPE_TF_COMMANDS for workflows/scripts that use terraform-pipeline.sh (e.g. plan, apply, init,plan).
+	TfCommands string
+	TfDryRun   bool // sets DOCKPIPE_TF_DRY_RUN=1
+	// TfNoAutoApprove sets DOCKPIPE_TF_APPLY_AUTO_APPROVE=0 when apply runs.
+	TfNoAutoApprove bool
+	SeenDash        bool
 }
 
 // ParseFlags parses argv until "--" or end; returns remaining args after "--".
@@ -211,6 +218,21 @@ func ParseFlags(repoRoot string, argv []string) ([]string, *CliOpts, error) {
 		case "--compile-deps":
 			o.CompileDeps = true
 			i++
+		case "--no-compile-deps":
+			o.NoCompileDeps = true
+			i++
+		case "--tf":
+			if i+1 >= len(argv) {
+				return nil, nil, fmt.Errorf("--tf requires a command list (e.g. plan, apply, init,plan)")
+			}
+			o.TfCommands = argv[i+1]
+			i += 2
+		case "--tf-dry-run":
+			o.TfDryRun = true
+			i++
+		case "--tf-no-auto-approve":
+			o.TfNoAutoApprove = true
+			i++
 		case "--build":
 			if i+1 >= len(argv) {
 				return nil, nil, fmt.Errorf("--build requires an argument")
@@ -226,6 +248,14 @@ func ParseFlags(repoRoot string, argv []string) ([]string, *CliOpts, error) {
 			}
 			i += 2
 		default:
+			if strings.HasPrefix(a, "--tf=") {
+				o.TfCommands = strings.TrimPrefix(a, "--tf=")
+				if strings.TrimSpace(o.TfCommands) == "" {
+					return nil, nil, fmt.Errorf("--tf= requires a non-empty value")
+				}
+				i++
+				continue
+			}
 			if strings.HasPrefix(a, "-") {
 				return nil, nil, fmt.Errorf("unknown option %s", a)
 			}

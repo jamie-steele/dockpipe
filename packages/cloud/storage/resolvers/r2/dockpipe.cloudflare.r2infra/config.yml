@@ -1,6 +1,9 @@
 # Terraform only: create/update R2 resources (and remote state) — no tarball, no object upload.
 # Same env as r2publish (CLOUDFLARE_*, R2_BUCKET, DOCKPIPE_TF_* / R2_STATE_*). Sets R2_INFRA_ONLY=1 in the script.
 #
+# Non-secret Terraform inputs (TF_VAR_*) live here; override in parent workflow vars or --var. Secrets: vault / .env (not committed).
+# Replace zone_id + public_hostname before apply (Cloudflare: Domains → your zone → Overview → Zone ID).
+#
 # Next: dockpipe.cloudflare.r2upload (or r2publish with R2_SKIP_TERRAFORM=1) after release/artifacts exists.
 name: dockpipe.cloudflare.r2infra
 namespace: dockpipe-cloudflare
@@ -12,6 +15,18 @@ docker_preflight: false
 
 vars:
   R2_INFRA_ONLY: "1"
+
+  # --- Terraform module: R2 bucket + optional public hostname / WAF / cache (see terraform/README.md) ---
+  TF_VAR_zone_id: "REPLACE_WITH_CLOUDFLARE_ZONE_ID"
+  TF_VAR_public_hostname: "packages.example.com"
+  TF_VAR_enable_r2_custom_domain: "true"
+  TF_VAR_r2_custom_domain_enabled: "true"
+  TF_VAR_r2_custom_domain_min_tls: "1.2"
+  TF_VAR_enable_waf_baseline: "true"
+  TF_VAR_enable_cache_rules: "true"
+  TF_VAR_cloudflare_managed_ruleset_id: "efb7b8c949ac4650a09736fc376e9aee"
+  TF_VAR_cache_edge_ttl_seconds: "86400"
+  TF_VAR_cache_browser_ttl_seconds: "3600"
 
 steps:
   - id: terraform

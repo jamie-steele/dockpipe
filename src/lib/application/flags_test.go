@@ -112,6 +112,33 @@ func TestParseFlagsCompileDeps(t *testing.T) {
 	}
 }
 
+func TestParseFlagsNoCompileDeps(t *testing.T) {
+	_, o, err := ParseFlags("/tmp/repo", []string{"--workflow", "demo", "--no-compile-deps"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !o.NoCompileDeps || o.Workflow != "demo" {
+		t.Fatalf("NoCompileDeps=%v Workflow=%q", o.NoCompileDeps, o.Workflow)
+	}
+}
+
+func TestParseFlagsTf(t *testing.T) {
+	_, o, err := ParseFlags("/tmp/repo", []string{"--workflow", "dockpipe.cloudflare.r2infra", "--tf", "plan", "--tf-dry-run"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.TfCommands != "plan" || !o.TfDryRun || o.TfNoAutoApprove {
+		t.Fatalf("Tf: %+v", o)
+	}
+	_, o2, err := ParseFlags("/tmp/repo", []string{"--workflow", "x", "--tf=init,plan"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o2.TfCommands != "init,plan" {
+		t.Fatalf("TfCommands = %q", o2.TfCommands)
+	}
+}
+
 // TestParseFlagsUnknownOption errors on unrecognized flags.
 func TestParseFlagsUnknownOption(t *testing.T) {
 	_, _, err := ParseFlags("/tmp/repo", []string{"--def-not-real"})

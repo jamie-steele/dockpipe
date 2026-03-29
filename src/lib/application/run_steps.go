@@ -291,6 +291,9 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 	if err := runStepPreScripts(o, i, step); err != nil {
 		return err
 	}
+	if err := runStepHostBuiltin(o, step); err != nil {
+		return err
+	}
 	if strings.EqualFold(strings.TrimSpace(step.Runtime), "package") {
 		return runStepPackageWorkflow(o, i, n, step, dockerEnv)
 	}
@@ -586,6 +589,40 @@ func mergeStepVars(o *runStepsOpts, step domain.Step, dockerEnv map[string]strin
 		}
 	}
 	o.envSlice = domain.EnvMapToSlice(o.envMap)
+}
+
+func runStepHostBuiltin(o *runStepsOpts, step domain.Step) error {
+	b := strings.TrimSpace(step.HostBuiltin)
+	if b == "" {
+		return nil
+	}
+	if !step.SkipContainer {
+		return fmt.Errorf("internal: host_builtin without skip_container")
+	}
+	fmt.Fprintf(os.Stderr, "[dockpipe] Host builtin: %s\n", b)
+	switch b {
+	case "package_build_store":
+		wd := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
+		if wd == "" {
+			wd = mustGetwd()
+		}
+		wdAbs, err := filepath.Abs(filepath.Clean(wd))
+		if err != nil {
+			return err
+		}
+		return RunPackageBuildStoreFromEnv(wdAbs, o.envMap)
+	default:
+		return fmt.Errorf("unknown host_builtin %q", b)
+	}
+}
+
+func validateParallelNoHostBuiltin(o *runStepsOpts, from, to int) error {
+	for i := from; i < to; i++ {
+		if strings.TrimSpace(o.wf.Steps[i].HostBuiltin) != "" {
+			return fmt.Errorf("parallel step %d: host_builtin is not supported in non-blocking batches", i+1)
+		}
+	}
+	return nil
 }
 
 func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {

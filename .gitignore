@@ -5,6 +5,9 @@
 # Ad-hoc scratch (local experiments, packaging test output)
 tmp/
 
+# Shell footgun: `op inject ... > -` creates a repo-root file named `-` (not stdout). DockPipe never does this.
+/-
+
 # Built Go binaries under src/bin (launchers stay as shell scripts; see Makefile / src/Makefile)
 # Maintainer packages — built ELF artifacts (not under src/bin/)
 packages/dorkpipe/bin/dorkpipe
@@ -58,8 +61,9 @@ Thumbs.db
 # Optional local overrides (do not commit)
 .env
 .env.local
-# 1Password inject template (op:// refs; often names private vaults — keep local)
+# Vault env template (op:// or other backends; keep local — see dockpipe.config.json secrets.vault_template)
 .env.op.template
+.env.template
 .env.vault.template
 .env.secretstore
 

@@ -40,6 +40,8 @@ dockpipe_tf_map_r2_publish_env() {
   export DOCKPIPE_TF_FMT_ARGS="${DOCKPIPE_TF_FMT_ARGS:-${R2_TERRAFORM_FMT_ARGS:-}}"
   export DOCKPIPE_TF_IMPORT_ARGS="${DOCKPIPE_TF_IMPORT_ARGS:-${R2_TERRAFORM_IMPORT_ARGS:-}}"
   export DOCKPIPE_TF_IMPORT_FILE="${DOCKPIPE_TF_IMPORT_FILE:-${R2_TERRAFORM_IMPORT_FILE:-}}"
+  export DOCKPIPE_TF_IMPORT_R2_BUCKET="${DOCKPIPE_TF_IMPORT_R2_BUCKET:-${R2_TF_IMPORT_R2_BUCKET:-0}}"
+  export DOCKPIPE_TF_R2_IMPORT_JURISDICTION="${DOCKPIPE_TF_R2_IMPORT_JURISDICTION:-${R2_TF_R2_IMPORT_JURISDICTION:-default}}"
   export DOCKPIPE_TF_BACKEND="${DOCKPIPE_TF_BACKEND:-${R2_TF_BACKEND:-remote}}"
   export DOCKPIPE_TF_STATE_BUCKET="${DOCKPIPE_TF_STATE_BUCKET:-${R2_TF_STATE_BUCKET:-dockpipe}}"
   export DOCKPIPE_TF_STATE_KEY="${DOCKPIPE_TF_STATE_KEY:-${R2_TF_STATE_KEY:-state/dockpipe.cloudflare.r2publish/terraform.tfstate}}"
@@ -48,11 +50,35 @@ dockpipe_tf_map_r2_publish_env() {
   export DOCKPIPE_TF_DRY_RUN="${DOCKPIPE_TF_DRY_RUN:-${R2_PUBLISH_DRY_RUN:-0}}"
 }
 
+# CLOUDFLARE_ACCOUNT_ID must be the 32-char hex id. Users sometimes paste the full R2 S3 endpoint URL;
+# normalize so we do not build https://https://...account....r2.cloudflarestorage.com.r2.cloudflarestorage.com
+dockpipe_tf_normalize_cloudflare_account_id() {
+  local raw="$1"
+  while [[ "$raw" == https://* ]] || [[ "$raw" == http://* ]]; do
+    raw="${raw#https://}"
+    raw="${raw#http://}"
+  done
+  raw="${raw%%/*}"
+  raw="${raw%%\?*}"
+  if [[ "$raw" =~ ^([a-fA-F0-9]{32})\.r2\.cloudflarestorage\.com$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  if [[ "$raw" =~ ^[a-fA-F0-9]{32}$ ]]; then
+    echo "$raw"
+    return 0
+  fi
+  echo "$raw"
+}
+
 # Write Terraform s3 backend config for Cloudflare R2 (same shape as scripts/dockpipe/r2-publish.sh).
 dockpipe_tf_write_r2_remote_backend_config() {
   local out="$1"
-  local account="${DOCKPIPE_TF_CLOUDFLARE_ACCOUNT_ID:-${CLOUDFLARE_ACCOUNT_ID:-}}"
-  [[ -n "$account" ]] || dockpipe_tf_die "CLOUDFLARE_ACCOUNT_ID or DOCKPIPE_TF_CLOUDFLARE_ACCOUNT_ID required for remote R2 backend"
+  local account_raw="${DOCKPIPE_TF_CLOUDFLARE_ACCOUNT_ID:-${CLOUDFLARE_ACCOUNT_ID:-}}"
+  [[ -n "$account_raw" ]] || dockpipe_tf_die "CLOUDFLARE_ACCOUNT_ID or DOCKPIPE_TF_CLOUDFLARE_ACCOUNT_ID required for remote R2 backend"
+  local account
+  account="$(dockpipe_tf_normalize_cloudflare_account_id "$account_raw")"
+  [[ "$account" =~ ^[a-fA-F0-9]{32}$ ]] || dockpipe_tf_die "CLOUDFLARE_ACCOUNT_ID must be the 32-char account id (or full https://<id>.r2.cloudflarestorage.com endpoint). Could not parse: ${account_raw}"
   local bucket="${DOCKPIPE_TF_STATE_BUCKET:-dockpipe}"
   local key="${DOCKPIPE_TF_STATE_KEY:-state/terraform.tfstate}"
   local ep="https://${account}.r2.cloudflarestorage.com"
@@ -199,7 +225,7 @@ dockpipe_tf_run_pipeline() {
       export AWS_SECRET_ACCESS_KEY="${R2_STATE_SECRET_ACCESS_KEY}"
     fi
 
-    local step did_init=false
+    local step did_init=false did_apply=false
     for step in "${TF_CMDS[@]}"; do
       case "$step" in
       init)
@@ -222,6 +248,7 @@ dockpipe_tf_run_pipeline() {
         else
           terraform apply -input=false "${apply_extra[@]}"
         fi
+        did_apply=true
         ;;
       validate)
         terraform validate "${validate_extra[@]}"
@@ -237,5 +264,16 @@ dockpipe_tf_run_pipeline() {
         ;;
       esac
     done
+    if [[ "$tf_backend" == remote && "$did_apply" == true ]]; then
+      local b k ws n
+      b="${DOCKPIPE_TF_STATE_BUCKET:-dockpipe}"
+      k="${DOCKPIPE_TF_STATE_KEY:-state/terraform.tfstate}"
+      ws="$(terraform workspace show 2>/dev/null || echo default)"
+      n="$(terraform state list 2>/dev/null | grep -c . || true)"
+      dockpipe_tf_log "Remote state written: workspace=$ws bucket=$b (in R2 UI: open this bucket, search prefix state/ or env/ — default workspace uses key exactly \"$k\")"
+      if [[ "${n:-0}" -gt 0 ]]; then
+        dockpipe_tf_log "State contains $n managed object(s) (terraform state list)."
+      fi
+    fi
   ) || dockpipe_tf_die "terraform failed"
 }

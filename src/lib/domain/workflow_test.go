@@ -319,3 +319,36 @@ func TestWorkflowNeedsDockerReachable(t *testing.T) {
 		t.Fatal("expected false when docker_preflight: false and no container steps")
 	}
 }
+
+func TestParseWorkflowYAMLHostBuiltin(t *testing.T) {
+	y := `
+name: t
+steps:
+  - skip_container: true
+    host_builtin: package_build_store
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Steps) != 1 || w.Steps[0].HostBuiltin != "package_build_store" || !w.Steps[0].SkipContainer {
+		t.Fatalf("got %+v", w.Steps[0])
+	}
+	if err := ValidateLoadedWorkflow(w); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestValidateStepHostBuiltinRejectsCombinedRun(t *testing.T) {
+	s := Step{SkipContainer: true, HostBuiltin: "package_build_store", Run: []string{"x.sh"}}
+	if err := ValidateStepHostBuiltin(0, s); err == nil {
+		t.Fatal("expected error when host_builtin is combined with run:")
+	}
+}
+
+func TestValidateStepHostBuiltinUnknown(t *testing.T) {
+	s := Step{SkipContainer: true, HostBuiltin: "nope"}
+	if err := ValidateStepHostBuiltin(0, s); err == nil {
+		t.Fatal("expected error for unknown host_builtin")
+	}
+}

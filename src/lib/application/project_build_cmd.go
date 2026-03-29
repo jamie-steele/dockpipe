@@ -10,12 +10,27 @@ import (
 	"dockpipe/src/lib/infrastructure"
 )
 
-// cmdBuild runs `dockpipe package compile all` with --force so a normal build replaces
-// existing compiled slices (core, workflows) without requiring an extra flag.
+// cmdBuild runs package compile: full `compile all` by default, or `compile for-workflow` when --for-workflow is set.
 func cmdBuild(args []string) error {
 	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
 		fmt.Print(buildUsageText)
 		return nil
+	}
+	var wfName string
+	forward := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--for-workflow" {
+			if i+1 >= len(args) {
+				return fmt.Errorf("--for-workflow requires a workflow name")
+			}
+			wfName = args[i+1]
+			i++
+			continue
+		}
+		forward = append(forward, args[i])
+	}
+	if wfName != "" {
+		return cmdPackage(append([]string{"compile", "for-workflow", wfName, "--force"}, forward...))
 	}
 	return cmdPackage(append([]string{"compile", "all", "--force"}, args...))
 }
@@ -101,14 +116,16 @@ func cmdRebuild(args []string) error {
 	return cmdBuild(args)
 }
 
-const buildUsageText = `dockpipe build
+const buildUsageText = `dockpipe build [--for-workflow <name>] [options]
 
-Same as dockpipe package compile all, but always replaces existing compiled packages
-(--force is implied for core and workflow outputs). Use dockpipe clean first if you need
-an empty store before compiling.
+Without --for-workflow: same as dockpipe package compile all --force (full store).
+
+With --for-workflow <name>: same as dockpipe package compile for-workflow <name> --force
+(transitive core + resolver + workflow closure only).
 
 Options:
-  Same as dockpipe package compile all: --workdir, --no-staging
+  --for-workflow <name>   Dependency-scoped compile instead of compile all
+  Otherwise same as package compile all / for-workflow: --workdir, --no-staging
   (see: dockpipe package compile all --help)
 
 `
@@ -132,8 +149,9 @@ Environment:
 
 const rebuildUsageText = `dockpipe rebuild
 
-Runs dockpipe clean, then dockpipe build (package compile all with --force). Only --workdir
-is forwarded to clean; all other flags apply to the build step.
+Runs dockpipe clean, then dockpipe build (compile all with --force, or compile for-workflow
+if you pass --for-workflow). Only --workdir is forwarded to clean; all other flags apply
+to the build step.
 
 Default project directory (when --workdir omitted) is the same as compile: the directory
 with dockpipe.config.json, found by walking up from the current directory.

@@ -233,6 +233,16 @@ func Run(argv []string, baseEnviron []string) error {
 		if err := buildWorkflowEnvInto(envMap, wf, wfRoot, repoRoot, opts); err != nil {
 			return err
 		}
+		wn := strings.TrimSpace(wf.Name)
+		if wn == "" {
+			wn = strings.TrimSpace(opts.Workflow)
+		}
+		if wn != "" {
+			domain.MergeIfUnset(envMap, map[string]string{"DOCKPIPE_WORKFLOW_NAME": wn})
+		}
+	}
+	if err := mergeTerraformCLIIntoEnv(envMap, opts); err != nil {
+		return fmt.Errorf("terraform flags: %w", err)
 	}
 	if stepsMode {
 		MergeExtraEnvCLIIntoSteps(envMap, opts.ExtraEnvLines, opts.VarOverrides)
@@ -809,13 +819,20 @@ func effectiveWorkdirForWorkflowOpts(opts *CliOpts) string {
 }
 
 func compileDepsWanted(opts *CliOpts) bool {
-	if opts != nil && opts.CompileDeps {
-		return true
-	}
-	v := strings.TrimSpace(os.Getenv("DOCKPIPE_COMPILE_DEPS"))
-	if v == "" {
+	if opts == nil {
 		return false
 	}
-	vl := strings.ToLower(v)
-	return vl != "0" && vl != "false" && vl != "no" && vl != "off"
+	if opts.NoCompileDeps {
+		return false
+	}
+	v := strings.TrimSpace(os.Getenv("DOCKPIPE_COMPILE_DEPS"))
+	if v != "" {
+		vl := strings.ToLower(v)
+		return vl != "0" && vl != "false" && vl != "no" && vl != "off"
+	}
+	// Env unset: default on for named --workflow (not --workflow-file); same as package compile for-workflow.
+	if opts.Workflow != "" && opts.WorkflowFile == "" {
+		return true
+	}
+	return opts.CompileDeps
 }

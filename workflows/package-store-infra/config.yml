@@ -1,38 +1,56 @@
-# Maintainer / dogfood: materialize the compiled package store and pack it like a public package index
-# (same shape you would host behind HTTPS for dockpipe install / package pulls).
+# Maintainer / dogfood: thin composer — shared vars + nested packaged workflow(s).
+# Primary use: run dockpipe.cloudflare.r2infra with this repo’s canonical TF_VAR_* / DOCKPIPE_TF_* / R2_* in one place.
+# Add more steps later (e.g. another runtime: package, or host scripts) without duplicating what the package already does.
 #
-# Run from the dockpipe git checkout (or any project with dockpipe.config.json + compile roots):
-#   ./src/bin/dockpipe --workflow package-store-infra --workdir . --
-# Or:  dockpipe --workflow package-store-infra --workdir . --
+# Run: ./src/bin/dockpipe --workflow package-store-infra --workdir . --
+# Terraform: --tf plan | apply (or set DOCKPIPE_TF_COMMANDS). Without --tf, r2-publish exits early when DOCKPIPE_TF_OPTIONAL_WHEN_UNSET=1.
 #
-# Produces: release/artifacts/dockpipe-*.tar.gz, packages-store-manifest.json (override with PACKAGE_STORE_OUT).
-# Requires: prior `make build` if you rely on ./src/bin/dockpipe; script prefers that launcher when present.
+# Store tarballs (release/artifacts, packages-store-manifest.json) are not part of this workflow — run
+# `dockpipe package build store` when you need a publishable mirror layout (after compile).
 #
-# R2 follow-up (dockpipe.cloudflare.r2infra + r2upload): set vars here or override with --var.
-# R2_PREFIX: object key prefix under the publish bucket (e.g. packages/).
-# Remote state: DOCKPIPE_TF_* (terraform-pipeline.sh). Credentials: DOCKPIPE_TF_STATE_*_KEY or AWS_* / R2_STATE_*.
+# Default pre-run: package compile for-workflow for this workflow name (same as other --workflow runs).
+# Full compile all first: dockpipe build, then dockpipe --workflow package-store-infra --no-compile-deps
+#
+# TF_VAR_* defaults below; vault template (secrets.vault_template, e.g. .env.template) overwrites same keys when inject runs.
 name: package-store-infra
 description: >-
-  Build the local package store (dockpipe build), pack store tarballs + packages-store-manifest.json
-  under release/artifacts, and print a short listing so you can see the package-manager layout before upload.
+  Shared vars for this repo + nested packaged workflow dockpipe.cloudflare.r2infra (extend with more steps as needed).
+  Terraform optional via --tf when DOCKPIPE_TF_OPTIONAL_WHEN_UNSET is set.
 
 docker_preflight: false
-# Substrate is per-step (runtime / resolver / skip_container), not a single workflow-level runtime.
-# This workflow is host-only; add runtime: on a step when that step uses a container or package runtime.
-# Op inject: dockpipe.config.json secrets.vault_template + optional secrets.vault (omit per-workflow vault: here).
 vars:
-  PACKAGE_STORE_OUT: "release/artifacts"
-  # Publish step: object key prefix under R2_BUCKET (r2publish).
+  # R2 bucket + object layout (matches dockpipe bucket in Cloudflare dashboard).
+  R2_BUCKET: "dockpipe"
   R2_PREFIX: "packages/"
-  # Remote state for r2publish’s Terraform (S3-compatible backend; pipeline writes backend HCL — see terraform-pipeline.sh).
+
+  # Remote state (same bucket; state/ prefix in R2 UI).
   DOCKPIPE_TF_BACKEND: "remote"
   DOCKPIPE_TF_STATE_BUCKET: "dockpipe"
   DOCKPIPE_TF_STATE_KEY: "state/terraform.tfstate"
+
   # r2publish only: 1 skips Terraform (e.g. bucket already exists).
   R2_SKIP_TERRAFORM: "0"
 
+  # Nested dockpipe.cloudflare.r2infra: skip Terraform unless --tf (or DOCKPIPE_TF_COMMANDS) is set.
+  DOCKPIPE_TF_OPTIONAL_WHEN_UNSET: "1"
+
+  # Terraform module (packages/cloud/.../dockpipe.cloudflare.r2publish): zone, hostname, public CDN + edge flags.
+  # Replace placeholders with real zone id (32-char hex) and hostname, or rely on vault template fields zoneid + packages_hostname.
+  TF_VAR_zone_id: "REPLACE_WITH_CLOUDFLARE_ZONE_ID"
+  TF_VAR_public_hostname: "packages.example.com"
+  TF_VAR_enable_r2_custom_domain: "true"
+  TF_VAR_r2_custom_domain_enabled: "true"
+  TF_VAR_r2_custom_domain_min_tls: "1.2"
+  TF_VAR_enable_waf_baseline: "true"
+  TF_VAR_enable_cache_rules: "true"
+  TF_VAR_cloudflare_managed_ruleset_id: "efb7b8c949ac4650a09736fc376e9aee"
+  TF_VAR_cache_edge_ttl_seconds: "86400"
+  TF_VAR_cache_browser_ttl_seconds: "3600"
+
 steps:
-  - id: build_and_pack
-    skip_container: true
-    run:
-      - package-store-setup.sh
+  # Packaged workflow: packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra (namespace dockpipe-cloudflare).
+  # Parent vars merge first; use --tf plan|apply so DOCKPIPE_TF_COMMANDS is set (see DOCKPIPE_TF_OPTIONAL_WHEN_UNSET).
+  - id: r2infra
+    runtime: package
+    resolver: dockpipe.cloudflare.r2infra
+    package: dockpipe-cloudflare

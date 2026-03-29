@@ -8,6 +8,62 @@ import (
 	"dockpipe/src/lib/domain"
 )
 
+func TestMaybeRemoveStrayDashInjectFile_RemovesEnvLikeFile(t *testing.T) {
+	tmp := t.TempDir()
+	dash := filepath.Join(tmp, "-")
+	if err := os.WriteFile(dash, []byte("FOO=bar\n# c\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	maybeRemoveStrayDashInjectFile(tmp)
+	if _, err := os.Stat(dash); err == nil {
+		t.Fatal("expected stray - removed")
+	} else if !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+}
+
+func TestMaybeRemoveStrayDashInjectFile_KeepEnv(t *testing.T) {
+	t.Setenv("DOCKPIPE_KEEP_DASH_FILE", "1")
+	tmp := t.TempDir()
+	dash := filepath.Join(tmp, "-")
+	content := []byte("FOO=bar\n")
+	if err := os.WriteFile(dash, content, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	maybeRemoveStrayDashInjectFile(tmp)
+	b, err := os.ReadFile(dash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(b) != string(content) {
+		t.Fatalf("file changed: %q", b)
+	}
+}
+
+func TestMaybeRemoveStrayDashInjectFile_SkipsNoEquals(t *testing.T) {
+	tmp := t.TempDir()
+	dash := filepath.Join(tmp, "-")
+	if err := os.WriteFile(dash, []byte("not env\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	maybeRemoveStrayDashInjectFile(tmp)
+	if _, err := os.Stat(dash); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestMaybeRemoveStrayDashInjectFile_SkipsBinary(t *testing.T) {
+	tmp := t.TempDir()
+	dash := filepath.Join(tmp, "-")
+	if err := os.WriteFile(dash, []byte("FOO=bar\x00"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	maybeRemoveStrayDashInjectFile(tmp)
+	if _, err := os.Stat(dash); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMergeOpInjectFromProjectIfEnabled_MergesVaultKeys(t *testing.T) {
 	t.Setenv("DOCKPIPE_OP_INJECT", "1")
 	tmp := t.TempDir()
@@ -53,6 +109,10 @@ func TestMergeOpInjectFromProjectIfEnabled_SkipsWithNoOpInject(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmp, ".env.op.template"), []byte("X=1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	dash := filepath.Join(tmp, "-")
+	if err := os.WriteFile(dash, []byte("ACCIDENTAL=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	oldRun := runOpInjectFn
 	defer func() { runOpInjectFn = oldRun }()
@@ -68,6 +128,11 @@ func TestMergeOpInjectFromProjectIfEnabled_SkipsWithNoOpInject(t *testing.T) {
 	}
 	if len(env) != 0 {
 		t.Fatalf("expected no merge, got %#v", env)
+	}
+	if _, err := os.Stat(dash); err == nil {
+		t.Fatal("expected stray - removed even when op inject is skipped")
+	} else if !os.IsNotExist(err) {
+		t.Fatal(err)
 	}
 }
 

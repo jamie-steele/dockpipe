@@ -262,6 +262,24 @@ func tryBundleRootsAssetsScripts(rest string, bundleRoots []string) (string, boo
 	return "", false
 }
 
+// tryLogicalScriptsDockpipe maps scripts/dockpipe/<tail> to the single on-disk copy under
+// packages/dorkpipe/resolvers/dorkpipe/assets/scripts/<tail>. Workflow YAML uses scripts/dockpipe/…;
+// the resolver tree is the canonical location (no second copy under src/core/assets/scripts/).
+func tryLogicalScriptsDockpipe(repoRoot, rest string) (string, bool) {
+	if !strings.HasPrefix(rest, "dockpipe/") {
+		return "", false
+	}
+	tail := strings.TrimPrefix(rest, "dockpipe/")
+	if tail == "" {
+		return "", false
+	}
+	p := filepath.Join(repoRoot, "packages", "dorkpipe", "resolvers", "dorkpipe", "assets", "scripts", tail)
+	if scriptFileExists(p) {
+		return p, true
+	}
+	return "", false
+}
+
 func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 	rest := strings.TrimPrefix(rel, "scripts/")
 	user := filepath.Join(repoRoot, "scripts", rest)
@@ -273,6 +291,11 @@ func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 		return srcScripts
 	}
 	if p, ok := resolveCoreNamespacedAsset(repoRoot, rest); ok {
+		return p
+	}
+	// Logical scripts/dockpipe/<tail> → packages/dorkpipe/resolvers/dorkpipe/assets/scripts/<tail>
+	// (single copy; do not duplicate under src/core/assets/scripts/dockpipe/ — see AGENTS.md).
+	if p, ok := tryLogicalScriptsDockpipe(repoRoot, rest); ok {
 		return p
 	}
 	pkgRes := filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "resolvers")

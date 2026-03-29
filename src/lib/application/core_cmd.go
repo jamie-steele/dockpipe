@@ -18,17 +18,6 @@ Environment: DOCKPIPE_REPO_ROOT overrides the bundled assets root (same as dockp
 
 `
 
-const terraformUsageText = `dockpipe terraform — helpers for core Terraform pipeline scripts
-
-Usage:
-  dockpipe terraform pipeline-path
-
-Prints the absolute path to terraform-pipeline.sh (scripts/core.assets.scripts.terraform-pipeline.sh).
-
-See src/core/assets/scripts/README.md (terraform-pipeline.sh).
-
-`
-
 func cmdCore(args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
 		fmt.Print(coreUsageText)
@@ -60,29 +49,4 @@ func cmdCoreScriptPath(args []string) error {
 	}
 	fmt.Println(p)
 	return nil
-}
-
-func cmdTerraform(args []string) error {
-	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" {
-		fmt.Print(terraformUsageText)
-		return nil
-	}
-	switch args[0] {
-	case "pipeline-path":
-		if len(args) > 1 {
-			return fmt.Errorf("unexpected argument %q", args[1])
-		}
-		rr, err := infrastructure.RepoRoot()
-		if err != nil {
-			return err
-		}
-		p, err := infrastructure.ResolveCoreNamespacedScriptPath(rr, "assets.scripts.terraform-pipeline.sh")
-		if err != nil {
-			return err
-		}
-		fmt.Println(p)
-		return nil
-	default:
-		return fmt.Errorf("unknown terraform subcommand %q (try: dockpipe terraform --help)", args[0])
-	}
 }

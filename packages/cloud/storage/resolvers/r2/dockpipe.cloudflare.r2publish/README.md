@@ -9,7 +9,7 @@ This folder keeps the **Terraform module** under **`terraform/`** (paths and sta
 | **`dockpipe.cloudflare.r2infra`** | Terraform only — **`R2_INFRA_ONLY=1`**. No tarball, no upload; does not require **`release/artifacts`**. |
 | **`dockpipe.cloudflare.r2upload`** | Tar **`R2_PUBLISH_SOURCE`** and upload — **`R2_SKIP_TERRAFORM=1`**. Run after **`r2infra`** (or when the bucket already exists). |
 
-Typical order: **`r2infra`** → build/pack (**`package-store-infra`**, etc.) → **`r2upload`**.
+Typical order: **`r2infra`** (or **`package-store-infra`** with nested r2infra + shared vars) → **`dockpipe package build store`** when you need store tarballs → **`r2upload`**.
 
 ### Design mock (pipeline shape)
 
@@ -107,6 +107,16 @@ R2_PUBLISH_DRY_RUN=1 ./src/bin/dockpipe --workflow dockpipe.cloudflare.r2upload
 | `R2_STATE_SECRET_ACCESS_KEY` | *(unset)* | Secret for `R2_STATE_ACCESS_KEY_ID`. |
 
 ### Terraform: `init` / `plan` / `apply` (same as any env — `--env`, workflow `.env`, `export`)
+
+**CLI (preferred):** pass Terraform steps on the same invocation as your workflow:
+
+```bash
+# From the repo root (usual case): --workdir is optional — default is the current directory.
+./src/bin/dockpipe --workflow dockpipe.cloudflare.r2infra --tf plan
+./src/bin/dockpipe --workflow dockpipe.cloudflare.r2infra --tf apply
+```
+
+Use **`--workdir /path/to/project`** when the shell is not already in that directory (CI, scripts, **`make`**). Also **`--tf-dry-run`**, **`--tf-no-auto-approve`**, and **`--tf=plan`**. Standalone helper: **`dockpipe terraform plan`** (see **`dockpipe terraform --help`**). Workflows that never source **`terraform-pipeline.sh`** ignore these env vars.
 
 Implementation is the shared library **`templates/core/assets/scripts/terraform-pipeline.sh`** (bundled with **`dockpipe init`**), mapped from the **`R2_*`** names below. The canonical env namespace is **`DOCKPIPE_TF_*`** — see **[docs/terraform-pipeline.md](../../../docs/terraform-pipeline.md)** for the full list (including **`validate`**, **`fmt`**, **`import`**, **`DOCKPIPE_TF_WORKSPACE`**, and import file format).
 

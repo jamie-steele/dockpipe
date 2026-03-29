@@ -12,6 +12,8 @@ docker_preflight: false
 vars:
   R2_PUBLISH_SOURCE: "release/artifacts"
   R2_SKIP_TERRAFORM: "1"
+  # Object key prefix in the bucket (matches r2infra / .env layout; non-secret).
+  R2_PREFIX: "packages/"
 
 steps:
   - id: upload

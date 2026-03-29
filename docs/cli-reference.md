@@ -101,6 +101,8 @@ Use **`--var`** for one-off overrides; use **`.env`** files for local secrets an
 
 All options must appear **before** a standalone **`--`**. The command and its arguments follow **`--`**.
 
+**`--workdir`:** Optional. If omitted, the project directory is the **current working directory** (`PWD`). **Typical local use:** **`cd`** to the repo root and run **`dockpipe`** with **no** **`--workdir`**. Use **`--workdir <path>`** when the process is not started from that directory (CI, **`make`**, wrappers) or when you want an explicit path without **`cd`**.
+
 | Flag | Aliases | Purpose |
 |------|---------|---------|
 | `--workflow <name>` | | Load workflow YAML: resolution order in **`workflow_dirs.go`** — e.g. **`workflows/<name>/config.yml`**, nested workflows under **`compile.workflows`** roots (see **`dockpipe.config.json`**), **`.dockpipe/internal/packages/workflows/<name>/config.yml`** (from **`dockpipe package compile workflow`**), legacy **`templates/<name>/config.yml`**, **`src/core/workflows/<name>/config.yml`** (bundled examples; override with **`--workflows-dir`** / **`DOCKPIPE_WORKFLOWS_DIR`**), then resolver delegate under **`templates/core/resolvers/`** or **`shipyard/core/resolvers/`** (materialized bundle cache). With **`steps:`**, a final **`--`** is optional (see **[workflow-yaml.md](workflow-yaml.md)**). Mutually exclusive with **`--workflow-file`**. |
@@ -115,7 +117,7 @@ All options must appear **before** a standalone **`--`**. The command and its ar
 | `--repo <url>` | | Clone URL for worktree flows. If omitted and the workflow uses **`clone-worktree.sh`**, dockpipe sets the URL from **`git remote get-url origin`** in the current dir (or **`--workdir`**). When that URL matches your **`origin`**, the worktree can be created from **your local checkout** (not only a fresh remote default). |
 | `--branch <name>` | | Explicit work branch for **`--repo`** (optional). |
 | `--work-branch <name>` | | When **`--repo`** is set and **`--branch`** is **omitted**, use this as the **full** branch name. If both are omitted, dockpipe generates **`prefix/<adj>-<noun>-<adj>-<noun>`** (random hyphenated slug; **`prefix`** from resolver / template — see **`domain.RandomWorkBranchSlug`** in **[branchslug.go](../src/lib/domain/branchslug.go)**). If **`--branch`** is set, it takes precedence over **`--work-branch`**. |
-| `--workdir <path>` | | Host path mounted at `/work`. Default: current directory. |
+| `--workdir <path>` | | Host path mounted at `/work`. Default: **current directory** (see note above — omit when you **`cd`** to the project first). |
 | `--work-path <path>` | | Subdirectory inside the repo used as the container working directory (`/work/<path>`). |
 | `--bundle-out <path>` | | After commit-on-host, write a git bundle here (default: **current branch only**). Set **`DOCKPIPE_BUNDLE_ALL=1`** for `git bundle create … --all`. |
 | `--env KEY=VAL` | | Pass env into the container. Repeatable. When `/work` is a git worktree, dockpipe also sets **`DOCKPIPE_WORKTREE_BRANCH`**, **`DOCKPIPE_WORKTREE_HEAD`**, or **`DOCKPIPE_WORKTREE_DETACHED=1`** from the **host** `git` view. |

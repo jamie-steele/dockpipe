@@ -143,6 +143,20 @@ func cmdPackageBuildStore(args []string) error {
 		}
 		workdir = wd
 	}
+	return RunPackageBuildStoreFromFlags(workdir, outDir, only, fallbackVersion)
+}
+
+// RunPackageBuildStoreFromEnv runs the same logic as "dockpipe package build store" using merged workflow env.
+// Recognized keys: PACKAGE_STORE_OUT (--out), PACKAGE_STORE_ONLY (--only), PACKAGE_STORE_VERSION (--version).
+func RunPackageBuildStoreFromEnv(projectRoot string, env map[string]string) error {
+	outDir := strings.TrimSpace(env["PACKAGE_STORE_OUT"])
+	only := strings.TrimSpace(env["PACKAGE_STORE_ONLY"])
+	ver := strings.TrimSpace(env["PACKAGE_STORE_VERSION"])
+	return RunPackageBuildStoreFromFlags(projectRoot, outDir, only, ver)
+}
+
+// RunPackageBuildStoreFromFlags implements package build store for a project root (same as CLI flags).
+func RunPackageBuildStoreFromFlags(workdir, outDir, only, fallbackVersion string) error {
 	repoRoot, err := filepath.Abs(filepath.Clean(workdir))
 	if err != nil {
 		return err

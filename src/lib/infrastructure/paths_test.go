@@ -106,6 +106,21 @@ func TestResolveCoreNamespacedScriptPath(t *testing.T) {
 	}
 }
 
+func TestResolveWorkflowScriptResolvesScriptsDockpipeToPackagesResolver(t *testing.T) {
+	repo := t.TempDir()
+	p := filepath.Join(repo, "packages", "dorkpipe", "resolvers", "dorkpipe", "assets", "scripts", "r2-publish.sh")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := ResolveWorkflowScript("scripts/dockpipe/r2-publish.sh", "/wf", repo)
+	if got != filepath.ToSlash(p) {
+		t.Fatalf("got %q want %q", got, filepath.ToSlash(p))
+	}
+}
+
 func TestResolveWorkflowScriptResolvesScriptsPrefixToCoreWhenUserMissing(t *testing.T) {
 	repo := t.TempDir()
 	core := filepath.Join(repo, "templates", "core", "assets", "scripts", "shared.sh")

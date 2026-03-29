@@ -1,20 +1,15 @@
 # package-store-infra
 
-Host-only workflow: **`dockpipe build`** → **`dockpipe package build store`** → print **`release/artifacts/`** so you can inspect the same tarball + manifest layout you would publish for a self-hosted package origin (e.g. Cloudflare R2 behind HTTPS).
+**Thin composer** for this repo: **`vars`** (canonical non-secret **`TF_VAR_*`**, **`DOCKPIPE_TF_*`**, **`R2_*`**) plus **`runtime: package`** → **`dockpipe.cloudflare.r2infra`**. Same packaged workflow as **`dockpipe --workflow dockpipe.cloudflare.r2infra`** alone; this file is where you **centralize env** and **add more steps later** (e.g. another nested package, init/apply ordering) **without** re‑implementing what the package already does.
+
+**Does not** run **`dockpipe package build store`** — that’s separate when you need **`release/artifacts`** tarballs + **`packages-store-manifest.json`**. After compile: **`dockpipe package build store`**, then upload flows (`r2upload`, etc.).
 
 ## Run
 
 ```bash
-./src/bin/dockpipe --workflow package-store-infra --workdir . --
+./src/bin/dockpipe --workflow package-store-infra --
 ```
 
-Optional:
+**Terraform:** **`--tf plan`** or **`--tf apply`**. With **`DOCKPIPE_TF_OPTIONAL_WHEN_UNSET=1`** (default here), runs without **`--tf`** skip Terraform inside **`r2-publish.sh`**.
 
-- **`PACKAGE_STORE_OUT`** — override output directory (default `release/artifacts`).
-- **`DOCKPIPE_BIN`** — path to `dockpipe` if not using `./src/bin/dockpipe` or `PATH`.
-
-## Next step
-
-Upload in two steps: **`dockpipe.cloudflare.r2infra`** (Terraform) then **`dockpipe.cloudflare.r2upload`** (objects). See `packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/README.md` (Terraform module path keeps the historical folder name).
-
-Host script for this workflow: **`workflows/package-store-infra/package-store-setup.sh`** (next to **`config.yml`** — not under repo-root **`scripts/dockpipe/`**).
+**Compile:** Default pre-run is **compile for-workflow** for this name. **`dockpipe build`** (compile all) then **`--no-compile-deps`** if you already compiled fully.

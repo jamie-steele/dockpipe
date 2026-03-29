@@ -208,7 +208,7 @@ When you work **on the dockpipe project itself**, you are a **user** of the tool
 
 **Secrets / vault templates:** Template files must contain **references only** (e.g. **`op://…`**), never committed plaintext secrets. Keep local templates gitignored when they name private vaults. **Never** use shell redirects like **`> -`** (that creates a file named **`-`**). **`op inject`** output for workflow env is read into **process memory** in the CLI — no second “resolved template” file is written by DockPipe for that merge.
 
-**Accelerator (maintainers):** After **`make build`**, run dogfood workflows the same way as any downstream project: **`./src/bin/dockpipe --workflow <name> --workdir . --`** with materialized packages under **`.dockpipe/`**. Names and procedures live in **`docs/`** and maintainer package READMEs — not in **`src/`**.
+**Accelerator (maintainers):** After **`make build`**, run dogfood workflows the same way as any downstream project: from the repo root, **`./src/bin/dockpipe --workflow <name> --`** (omit **`--workdir .`** when **`cwd`** is already the project — default is current directory). Copy-paste examples in **`docs/`** sometimes include **`--workdir .`** to make the project root explicit in CI or non-interactive contexts. Materialized packages live under **`.dockpipe/`**. Names and procedures live in **`docs/`** and maintainer package READMEs — not in **`src/`**.
 
 ### Agent guidance (this repository)
 

@@ -1,8 +1,18 @@
 # Copy to terraform.tfvars (do not commit secrets). All keys optional unless you enable edge features.
 #
+# Preferred: API token (Account R2: Edit or broader).
 # cloudflare_api_token = "..."
+#
+# Legacy: Global API Key + account email (use instead of api_token, not both).
+# cloudflare_api_token = ""
+# cloudflare_email     = "you@example.com"
+# cloudflare_api_key   = "your_global_api_key"
+#
 # account_id           = "..."
 # bucket_name          = "my-packages"
+#
+# Pre-existing bucket (import into state): env DOCKPIPE_TF_IMPORT_R2_BUCKET=1 and DOCKPIPE_TF_COMMANDS=init,import
+# (uses account_id + bucket_name + jurisdiction; override DOCKPIPE_TF_R2_IMPORT_JURISDICTION if needed, default default).
 
 # --- Optional: R2 bucket region hint (WEUR, WNAM, …) ---
 # location = "WEUR"

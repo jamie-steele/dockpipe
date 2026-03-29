@@ -1,7 +1,22 @@
 variable "cloudflare_api_token" {
-  description = "Cloudflare API token (Account R2: Edit, or broader)."
+  description = "Cloudflare API token (preferred). Leave empty if using cloudflare_email + cloudflare_api_key (Global API Key)."
   type        = string
   sensitive   = true
+  default     = ""
+}
+
+variable "cloudflare_email" {
+  description = "Cloudflare account email (required with cloudflare_api_key when not using api_token)."
+  type        = string
+  default     = ""
+  sensitive   = false
+}
+
+variable "cloudflare_api_key" {
+  description = "Cloudflare Global API Key (with cloudflare_email). Leave empty when using cloudflare_api_token."
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 variable "account_id" {

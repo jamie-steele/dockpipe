@@ -179,10 +179,12 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 	legacyDir := filepath.Join(pw, pkgName)
 	if !force {
 		if matches, _ := filepath.Glob(tarGlob); len(matches) > 0 {
-			return fmt.Errorf("compiled workflow package already exists: %s (use --force to replace)", matches[0])
+			fmt.Fprintf(os.Stderr, "[dockpipe] skip workflow compile (already exists): %s (--force to rebuild)\n", matches[0])
+			return nil
 		}
 		if _, err := os.Stat(legacyDir); err == nil {
-			return fmt.Errorf("legacy expanded workflow package exists: %s (use --force to replace with tarball)", legacyDir)
+			fmt.Fprintf(os.Stderr, "[dockpipe] skip workflow compile (legacy dir exists): %s (--force to rebuild)\n", legacyDir)
+			return nil
 		}
 	} else {
 		_ = infrastructure.RemoveGlob(tarGlob)
@@ -324,10 +326,12 @@ func cmdPackageCompileCore(args []string) error {
 	coreTarGlob := filepath.Join(coreDir, "dockpipe-core-*.tar.gz")
 	if !force {
 		if matches, _ := filepath.Glob(coreTarGlob); len(matches) > 0 {
-			return fmt.Errorf("compiled core package already exists: %s (use --force to replace)", matches[0])
+			fmt.Fprintf(os.Stderr, "[dockpipe] skip core compile (already exists): %s (--force to rebuild)\n", matches[0])
+			return nil
 		}
 		if st, err := os.Stat(filepath.Join(coreDir, "runtimes")); err == nil && st.IsDir() {
-			return fmt.Errorf("legacy expanded core tree exists under %s (use --force to replace with tarball)", coreDir)
+			fmt.Fprintf(os.Stderr, "[dockpipe] skip core compile (legacy tree exists): %s (--force to rebuild)\n", coreDir)
+			return nil
 		}
 	} else {
 		_ = infrastructure.RemoveGlob(coreTarGlob)
@@ -610,10 +614,12 @@ func compileSingleResolverDir(destRoot, from, name string, defaultNamespace stri
 	legacyDir := filepath.Join(destRoot, name)
 	if !force {
 		if matches, _ := filepath.Glob(tarGlob); len(matches) > 0 {
-			return fmt.Errorf("compiled %s package %q already exists: %s (use --force)", kind, name, matches[0])
+			fmt.Fprintf(os.Stderr, "[dockpipe] skip %s compile %q (already exists): %s (--force to rebuild)\n", kind, name, matches[0])
+			return nil
 		}
 		if _, err := os.Stat(legacyDir); err == nil {
-			return fmt.Errorf("legacy expanded %s %q exists under %s (use --force)", kind, name, legacyDir)
+			fmt.Fprintf(os.Stderr, "[dockpipe] skip %s compile %q (legacy dir exists): %s (--force to rebuild)\n", kind, name, legacyDir)
+			return nil
 		}
 	} else {
 		_ = infrastructure.RemoveGlob(tarGlob)
