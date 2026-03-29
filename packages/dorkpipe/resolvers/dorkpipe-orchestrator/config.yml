@@ -4,9 +4,9 @@ name: dorkpipe-orchestrator
 description: >-
   Host step runs scripts/dorkpipe/run-orchestrator.sh (requires `make build` for bin/dorkpipe).
 
-runtime: docker
 resolver: codex
 runtimes: [dockerimage]
+vault: none
 
 steps:
   - id: orchestrate

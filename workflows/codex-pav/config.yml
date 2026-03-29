@@ -1,11 +1,12 @@
 # Plan → apply → validate using Docker (runtime) + Codex (resolver only).
 # Customize each step's cmd for your repo (e.g. codex exec "…", or your scripts).
+# Substrate is per-step (runtime / resolver); workflow-level runtime is not used.
 name: codex-pav
 description: Plan, apply, validate — Docker runtime, Codex resolver (requires OPENAI_API_KEY for Codex steps).
 
-runtime: dockerimage
 resolver: codex
 runtimes: [dockerimage]
+vault: none
 
 steps:
   - id: plan

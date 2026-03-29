@@ -6,9 +6,9 @@ description: >-
   Container-isolated DorkPipe run: builds bin/dorkpipe if needed, then scripts/dorkpipe/run-self-analysis.sh.
   Artifacts land in the mounted repo (.dockpipe/, .dorkpipe/). Tear down sidecars with dev-stack.sh down when done.
 
-runtime: docker
 resolver: codex
 runtimes: [dockerimage]
+vault: none
 
 steps:
   - id: self_analysis

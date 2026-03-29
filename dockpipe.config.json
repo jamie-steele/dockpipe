@@ -11,7 +11,7 @@
     "namespace": "dockpipeproject"
   },
   "secrets": {
-    "op_inject_template": ".env.op.template",
-    "notes": "Optional: 1Password op inject mapping (op:// lines). Use with secretstore-onepassword / secretstore-r2-publish-test; template example under packages/secrets/resolvers/onepassword/. Bundled core secretstore uses .env.secretstore (dotenv) — see src/core/workflows/secretstore/."
+    "vault_template": ".env.vault.template",
+    "notes": "Optional: vault env template (op:// lines when using vault: op — op inject today). Same file can be listed as op_inject_template for older configs. Bundled secretstore dotenv: src/core/workflows/secretstore/."
   }
 }

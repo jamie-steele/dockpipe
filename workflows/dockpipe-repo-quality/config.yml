@@ -5,8 +5,9 @@ description: >-
   Print a short summary of .dockpipe/ci-analysis/ (DorkPipe-normalized CI scans). Run after ci-local or CI scan steps.
 
 docker_preflight: false
-runtime: dockerimage
+# Host-only step — no workflow-level runtime (substrate is per step when you add container steps).
 resolver: codex
+vault: none
 
 steps:
   - id: summarize

@@ -70,6 +70,10 @@ type Workflow struct {
 	Strategy string `yaml:"strategy,omitempty"`
 	// Strategies: optional allowlist of strategy names; if non-empty, --strategy / workflow.strategy must be listed.
 	Strategies []string `yaml:"strategies,omitempty"`
+	// Vault names which resolver backs secret→env injection for this workflow (see docs/vault.md).
+	// "op" = 1Password CLI (op inject). "none" / "off" / empty = do not require vault inject from workflow
+	// (project dockpipe.config.json may still enable template-based inject). Omit to inherit project defaults only.
+	Vault string `yaml:"vault,omitempty"`
 	// DockerPreflight: when false, skip EnsureDockerReachable before steps when no step uses the container runner.
 	// Use only for workflows where every step is skip_container and host run:/pre_script scripts do not invoke Docker.
 	DockerPreflight *bool             `yaml:"docker_preflight,omitempty"`
@@ -345,6 +349,23 @@ func ValidateWorkflowNamespaceField(w *Workflow) error {
 	return ValidateNamespace(w.Namespace)
 }
 
+// ValidateWorkflowVaultField checks workflow vault: when set, must be a supported backend (op / 1password) or an explicit opt-out.
+func ValidateWorkflowVaultField(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	v := strings.TrimSpace(w.Vault)
+	if v == "" {
+		return nil
+	}
+	switch strings.ToLower(v) {
+	case "op", "1password", "none", "off", "false", "no", "0":
+		return nil
+	default:
+		return fmt.Errorf("vault %q is not supported (supported: op, 1password, none, off — see docs/vault.md)", v)
+	}
+}
+
 // ValidateWorkflowCapabilityField checks capability when set (dotted id; see docs/capabilities.md).
 func ValidateWorkflowCapabilityField(w *Workflow) error {
 	if w == nil {
@@ -383,6 +404,9 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 		return err
 	}
 	if err := ValidateWorkflowNamespaceField(w); err != nil {
+		return err
+	}
+	if err := ValidateWorkflowVaultField(w); err != nil {
 		return err
 	}
 	for i, s := range w.Steps {

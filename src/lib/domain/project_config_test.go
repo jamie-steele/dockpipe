@@ -25,8 +25,8 @@ func TestDefaultDockpipeProjectConfigBytesRoundTrip(t *testing.T) {
 	if c.Compile.Resolvers != nil {
 		t.Fatal("default config should not set compile.resolvers (workflows is the entry point)")
 	}
-	if c.Secrets.OpInjectTemplate == nil || *c.Secrets.OpInjectTemplate == "" {
-		t.Fatal("expected secrets.op_inject_template in default")
+	if c.Secrets.VaultTemplate == nil || *c.Secrets.VaultTemplate == "" {
+		t.Fatal("expected secrets.vault_template in default")
 	}
 }
 
@@ -37,6 +37,38 @@ func TestLoadDockpipeProjectConfigMissing(t *testing.T) {
 	}
 	if c != nil {
 		t.Fatal("expected nil when file missing")
+	}
+}
+
+func TestResolveVaultTemplatePathPrecedence(t *testing.T) {
+	root := t.TempDir()
+	vault := ".env.vault.template"
+	legacy := ".env.op.template"
+	cfg := &DockpipeProjectConfig{
+		Secrets: DockpipeSecretsConfig{
+			VaultTemplate:    &vault,
+			OpInjectTemplate: &legacy,
+		},
+	}
+	got, ok := ResolveVaultTemplatePath(cfg, root)
+	if !ok {
+		t.Fatal("expected ok")
+	}
+	want := filepath.Join(root, vault)
+	if got != want {
+		t.Fatalf("got %q want %q (vault_template should win)", got, want)
+	}
+	cfg2 := &DockpipeProjectConfig{
+		Secrets: DockpipeSecretsConfig{
+			OpInjectTemplate: &legacy,
+		},
+	}
+	got2, ok2 := ResolveVaultTemplatePath(cfg2, root)
+	if !ok2 {
+		t.Fatal("expected ok for legacy only")
+	}
+	if got2 != filepath.Join(root, legacy) {
+		t.Fatalf("got %q", got2)
 	}
 }
 

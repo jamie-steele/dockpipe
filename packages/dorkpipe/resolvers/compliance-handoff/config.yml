@@ -7,8 +7,8 @@ description: >-
   .dockpipe/ci-analysis/, .dorkpipe/self-analysis/, .dorkpipe/run.json when present.
 
 docker_preflight: false
-runtime: dockerimage
 resolver: codex
+vault: none
 
 steps:
   - id: handoff

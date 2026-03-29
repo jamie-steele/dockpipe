@@ -244,7 +244,9 @@ func runStepPackageWorkflow(o *runStepsOpts, i, n int, step domain.Step, dockerE
 		return fmt.Errorf("step %s: %w", step.DisplayName(i), err)
 	}
 	wfRoot := filepath.Dir(wfPath)
-	buildWorkflowEnvInto(o.envMap, subWf, wfRoot, o.repoRoot, o.opts)
+	if err := buildWorkflowEnvInto(o.envMap, subWf, wfRoot, o.repoRoot, o.opts); err != nil {
+		return fmt.Errorf("step %s: %w", step.DisplayName(i), err)
+	}
 	o.envSlice = domain.EnvMapToSlice(o.envMap)
 	if WorkflowNeedsDockerReachableResolved(subWf, workdir, o.repoRoot) {
 		if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {

@@ -91,6 +91,17 @@ func TestParseFlagsVarValidation(t *testing.T) {
 	}
 }
 
+// TestParseFlagsNoOpInject sets NoOpInject on --no-op-inject.
+func TestParseFlagsNoOpInject(t *testing.T) {
+	_, o, err := ParseFlags("/tmp/repo", []string{"--workflow", "demo", "--no-op-inject"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !o.NoOpInject {
+		t.Fatalf("NoOpInject: %+v", o)
+	}
+}
+
 // TestParseFlagsUnknownOption errors on unrecognized flags.
 func TestParseFlagsUnknownOption(t *testing.T) {
 	_, _, err := ParseFlags("/tmp/repo", []string{"--def-not-real"})

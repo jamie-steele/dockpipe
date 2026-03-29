@@ -1,5 +1,6 @@
 name: review-pipeline
 namespace: dockpipeproject
+vault: none
 description: |
   Repo-local review prep scripts (this checkout: workflows/review-pipeline/). Referenced as
   scripts/review-pipeline/… from other workflows; not intended as a standalone runnable app.

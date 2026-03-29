@@ -63,7 +63,9 @@ func runEmbeddedResolverWorkflowWithLoad(
 		return fmt.Errorf("resolver workflow %q has no steps", name)
 	}
 	wfRoot := filepath.Dir(wfPath)
-	buildWorkflowEnvInto(envMap, subWf, wfRoot, repoRoot, opts)
+	if err := buildWorkflowEnvInto(envMap, subWf, wfRoot, repoRoot, opts); err != nil {
+		return err
+	}
 	envSlice := domain.EnvMapToSlice(envMap)
 	if subWf.NeedsDockerReachable() {
 		if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {

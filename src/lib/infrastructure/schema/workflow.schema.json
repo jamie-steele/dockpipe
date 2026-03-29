@@ -44,6 +44,10 @@
     "runtime": { "type": "string" },
     "default_runtime": { "type": "string" },
     "runtimes": { "type": "array", "items": { "type": "string" } },
+    "vault": {
+      "type": "string",
+      "description": "Vault backend for secrets.vault_template → env (op and 1password use op inject today). Use none/off to skip for this workflow."
+    },
     "strategy": { "type": "string" },
     "strategies": { "type": "array", "items": { "type": "string" } },
     "docker_preflight": { "type": "boolean", "description": "When false, skip Docker reachability preflight when no step uses the container runner (host-only workflows)." },

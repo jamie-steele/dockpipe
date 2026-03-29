@@ -223,7 +223,9 @@ func Run(argv []string, baseEnviron []string) error {
 
 	envMap := domain.EnvironToMap(baseEnviron)
 	if wf != nil {
-		buildWorkflowEnvInto(envMap, wf, wfRoot, repoRoot, opts)
+		if err := buildWorkflowEnvInto(envMap, wf, wfRoot, repoRoot, opts); err != nil {
+			return err
+		}
 	}
 	if stepsMode {
 		MergeExtraEnvCLIIntoSteps(envMap, opts.ExtraEnvLines, opts.VarOverrides)

@@ -36,10 +36,13 @@ func TestBuildWorkflowEnvIntoPrecedenceAndOverrides(t *testing.T) {
 	env := map[string]string{"SHARED": "existing"}
 	wf := &domain.Workflow{Vars: map[string]string{"WFVAR": "x", "SHARED": "fromwfvar"}}
 	opts := &CliOpts{
+		Workdir:      tmp,
 		EnvFiles:     []string{custom},
 		VarOverrides: []string{"SHARED=override", "CLI=ok"},
 	}
-	buildWorkflowEnvInto(env, wf, wfRoot, repoRoot, opts)
+	if err := buildWorkflowEnvInto(env, wf, wfRoot, repoRoot, opts); err != nil {
+		t.Fatal(err)
+	}
 
 	if env["WF"] != "wf" || env["REPO"] != "repo" || env["CUSTOM"] != "1" || env["ENVFILE"] != "1" || env["WFVAR"] != "x" {
 		t.Fatalf("expected merged env sources, got %#v", env)

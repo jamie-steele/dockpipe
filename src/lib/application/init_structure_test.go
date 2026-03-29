@@ -105,6 +105,9 @@ func TestCmdInitDoesNotCreateGitDir(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(project, ".git")); err == nil {
 		t.Fatal("init must not create .git (no clone/bootstrap)")
 	}
+	if _, err := os.Stat(filepath.Join(project, ".env.vault.template.example")); err != nil {
+		t.Fatalf("expected .env.vault.template.example from init scaffold: %v", err)
+	}
 }
 
 // TestCmdInitMergedCoreTopLevelMatchesModel verifies dockpipe init merges only the four category dirs at templates/core/.

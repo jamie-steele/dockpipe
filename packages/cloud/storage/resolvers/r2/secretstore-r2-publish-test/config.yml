@@ -23,8 +23,9 @@ description: >-
   Test pipeline: op inject secrets into an outputs file, DockPipe merges into env, then r2-publish.
 
 docker_preflight: false
-runtime: dockerimage
+# Secrets: resolver-driven op scripts (not workflow-level vault: merge).
 resolver: onepassword
+vault: none
 
 vars:
   OP_ENV_FILE: ".env.op.template"
@@ -32,6 +33,7 @@ vars:
 
 steps:
   - id: inject-from-1password
+    runtime: dockerimage
     resolver: onepassword
     skip_container: true
     outputs: *SECRET_OUT

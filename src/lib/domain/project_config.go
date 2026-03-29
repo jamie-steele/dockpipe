@@ -20,9 +20,12 @@ type DockpipeProjectConfig struct {
 	Packages DockpipePackagesConfig `json:"packages,omitempty"`
 }
 
-// DockpipeSecretsConfig points at host-side secret mapping (e.g. 1Password op inject), not secrets themselves.
+// DockpipeSecretsConfig points at host-side vault mapping (secret references → env), not plaintext secrets.
 type DockpipeSecretsConfig struct {
-	// OpInjectTemplate is a repo-relative or absolute path to an env file with op:// lines (e.g. .env.op.template).
+	// VaultTemplate is the preferred repo-relative or absolute path to the vault env template (e.g. .env.vault.template).
+	// Same role as op_inject_template; takes precedence when both are set.
+	VaultTemplate *string `json:"vault_template,omitempty"`
+	// OpInjectTemplate is a legacy alias for VaultTemplate (1Password op inject format). Use vault_template in new projects.
 	OpInjectTemplate *string `json:"op_inject_template,omitempty"`
 	// Notes is optional human-readable context for maintainers (shown by dockpipe doctor when present).
 	Notes *string `json:"notes,omitempty"`
@@ -103,20 +106,42 @@ func ResolveOpInjectTemplatePath(cfg *DockpipeProjectConfig, repoRoot string) (s
 	return filepath.Join(repoRoot, filepath.Clean(p)), true
 }
 
+// ResolveVaultTemplatePath returns the absolute path to the vault env template.
+// secrets.vault_template takes precedence; secrets.op_inject_template is the legacy alias when vault_template is unset or empty.
+func ResolveVaultTemplatePath(cfg *DockpipeProjectConfig, repoRoot string) (string, bool) {
+	if cfg == nil {
+		return "", false
+	}
+	var p string
+	if cfg.Secrets.VaultTemplate != nil {
+		p = strings.TrimSpace(*cfg.Secrets.VaultTemplate)
+	}
+	if p == "" && cfg.Secrets.OpInjectTemplate != nil {
+		p = strings.TrimSpace(*cfg.Secrets.OpInjectTemplate)
+	}
+	if p == "" {
+		return "", false
+	}
+	if filepath.IsAbs(p) {
+		return filepath.Clean(p), true
+	}
+	return filepath.Join(repoRoot, filepath.Clean(p)), true
+}
+
 // DefaultDockpipeProjectConfigBytes returns indented JSON for a new project (dockpipe init).
 // Paths are repo-relative; compile skips any that do not exist on disk.
 func DefaultDockpipeProjectConfigBytes() ([]byte, error) {
 	wf := []string{"workflows"}
-	opT := ".env.op.template"
-	notes := "1Password op inject mapping (op:// references). Keep vault paths here; do not commit plaintext secrets."
+	vaultT := ".env.vault.template"
+	notes := "Vault env template (op:// references resolved via op inject — 1Password CLI today). Keep references here; do not commit plaintext secrets."
 	cfg := DockpipeProjectConfig{
 		Schema: 1,
 		Compile: DockpipeCompileConfig{
 			Workflows: &wf,
 		},
 		Secrets: DockpipeSecretsConfig{
-			OpInjectTemplate: &opT,
-			Notes:            &notes,
+			VaultTemplate: &vaultT,
+			Notes:         &notes,
 		},
 	}
 	return json.MarshalIndent(cfg, "", "  ")

@@ -96,6 +96,9 @@ func effectiveRuntimesAllowlist(wf *domain.Workflow) []string {
 	}
 	add(wf.Runtime)
 	add(wf.DefaultRuntime)
+	for _, st := range wf.Steps {
+		add(st.Runtime)
+	}
 	if len(out) == 0 {
 		return nil
 	}

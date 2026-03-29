@@ -1,0 +1,28 @@
+# Maintainer / dogfood: materialize the compiled package store and pack it like a public package index
+# (same shape you would host behind HTTPS for dockpipe install / package pulls).
+#
+# Run from the dockpipe git checkout (or any project with dockpipe.config.json + compile roots):
+#   ./src/bin/dockpipe --workflow package-store-infra --workdir . --
+# Or:  dockpipe --workflow package-store-infra --workdir . --
+#
+# Produces: release/artifacts/dockpipe-*.tar.gz, packages-store-manifest.json (override with PACKAGE_STORE_OUT).
+# Requires: prior `make build` if you rely on ./src/bin/dockpipe; script prefers that launcher when present.
+name: package-store-infra
+description: >-
+  Build the local package store (dockpipe build), pack store tarballs + packages-store-manifest.json
+  under release/artifacts, and print a short listing so you can see the package-manager layout before upload.
+
+docker_preflight: false
+# Substrate is per-step (runtime / resolver / skip_container), not a single workflow-level runtime.
+# This workflow is host-only; add runtime: on a step when that step uses a container or package runtime.
+# Merge repo secrets.vault_template via op inject before steps (copy .env.vault.template.example → .env.vault.template).
+vault: 1password
+
+vars:
+  PACKAGE_STORE_OUT: "release/artifacts"
+
+steps:
+  - id: build_and_pack
+    skip_container: true
+    run:
+      - scripts/dockpipe/package-store-setup.sh

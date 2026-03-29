@@ -7,9 +7,8 @@ description: >-
   Copy .env.secretstore.example; for op:// vault mapping use workflow secretstore-onepassword.
 
 docker_preflight: false
-# Runtime: dockerimage (host steps use skip_container: true). Resolver documents vars; injection is script-owned.
-runtime: dockerimage
-resolver: dotenv
+# Substrate is per-step; dotenv resolver documents vars; injection is script-owned (not vault: op).
+vault: none
 
 vars:
   SECRETSTORE_PROVIDER: "dotenv"
@@ -17,6 +16,8 @@ vars:
 
 steps:
   - id: exec-with-secrets
+    runtime: dockerimage
+    resolver: dotenv
     skip_container: true
     run:
       - scripts/dockpipe/secretstore-exec.sh

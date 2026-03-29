@@ -62,11 +62,16 @@ Quick checks before a real run. Does not start a project container.
 			fmt.Fprintf(os.Stderr, "[dockpipe] project config: %s not in this directory (optional)\n", domain.DockpipeProjectConfigFileName)
 		} else {
 			fmt.Fprintf(os.Stderr, "[dockpipe] project config: ok (%s)\n", filepath.Join(wd, domain.DockpipeProjectConfigFileName))
-			if p, ok := domain.ResolveOpInjectTemplatePath(pc, wd); ok {
+			if p, ok := domain.ResolveVaultTemplatePath(pc, wd); ok {
 				if st, err := os.Stat(p); err == nil && !st.IsDir() {
-					fmt.Fprintf(os.Stderr, "[dockpipe] secrets op inject template: ok (%s)\n", p)
+					fmt.Fprintf(os.Stderr, "[dockpipe] secrets vault template (op inject): ok (%s)\n", p)
+					if _, err := opLookPathFn("op"); err == nil {
+						fmt.Fprintf(os.Stderr, "[dockpipe] vault: op inject runs at workflow start (1Password CLI; set DOCKPIPE_OP_INJECT=0 or --no-op-inject to skip)\n")
+					} else {
+						fmt.Fprintf(os.Stderr, "[dockpipe] vault: `op` not in PATH — install 1Password CLI for op inject, or set DOCKPIPE_OP_INJECT=0 to skip\n")
+					}
 				} else {
-					fmt.Fprintf(os.Stderr, "[dockpipe] secrets op inject template: missing (%s)\n", p)
+					fmt.Fprintf(os.Stderr, "[dockpipe] secrets vault template (op inject): missing (%s)\n", p)
 				}
 			}
 			if pc.Secrets.Notes != nil && strings.TrimSpace(*pc.Secrets.Notes) != "" {

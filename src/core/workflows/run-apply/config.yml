@@ -2,6 +2,8 @@
 name: run-apply
 description: Two sequential steps — run phase, then apply phase.
 
+vault: none
+
 steps:
   - id: run
     isolate: alpine

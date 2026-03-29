@@ -2,6 +2,8 @@
 name: example
 description: Example: host run → container → host act.
 
+vault: none
+
 run: scripts/example-run.sh
 isolate: dev
 act: scripts/example-act.sh

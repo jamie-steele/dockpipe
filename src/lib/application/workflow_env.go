@@ -10,7 +10,10 @@ import (
 	"dockpipe/src/lib/infrastructure"
 )
 
-func buildWorkflowEnvInto(env map[string]string, wf *domain.Workflow, wfRoot, repoRoot string, opts *CliOpts) {
+func buildWorkflowEnvInto(env map[string]string, wf *domain.Workflow, wfRoot, repoRoot string, opts *CliOpts) error {
+	if opts == nil {
+		opts = &CliOpts{}
+	}
 	if wf.Vars != nil {
 		domain.MergeIfUnset(env, wf.Vars)
 	}
@@ -19,6 +22,9 @@ func buildWorkflowEnvInto(env map[string]string, wf *domain.Workflow, wfRoot, re
 		if err == nil {
 			domain.MergeIfUnset(env, m)
 		}
+	}
+	if err := mergeOpInjectFromProjectIfEnabled(env, opts, wfRoot, wf); err != nil {
+		return err
 	}
 	for _, ef := range opts.EnvFiles {
 		m, err := infrastructure.ParseEnvFile(ef)
@@ -36,6 +42,7 @@ func buildWorkflowEnvInto(env map[string]string, wf *domain.Workflow, wfRoot, re
 		k, val, _ := strings.Cut(vo, "=")
 		env[strings.TrimSpace(k)] = strings.TrimSpace(val)
 	}
+	return nil
 }
 
 func lockedKeys(vars []string) map[string]bool {

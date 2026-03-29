@@ -5,8 +5,8 @@ description: >-
   Requires jq. Does not treat user text as truth — see docs/artifacts.md and resolvers/user-insight-process/README.md.
 
 docker_preflight: false
-runtime: dockerimage
 resolver: codex
+vault: none
 
 steps:
   - id: process

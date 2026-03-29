@@ -28,7 +28,8 @@ Optional:
 More flags:
   --workflow-file, --run, --act, --strategy, --repo, --branch,   --mount
   --workflows-dir <path>  Repo-relative or absolute root for named workflows (default: workflows/; env: DOCKPIPE_WORKFLOWS_DIR)
-  --env, --env-file, --var, --data-dir, --data-vol, --no-data, --reinit, -f, -d/--detach
+  --env, --env-file, --var, --no-op-inject (skip vault op inject; env: DOCKPIPE_OP_INJECT=0)
+  --data-dir, --data-vol, --no-data, --reinit, -f, -d/--detach
 
 Commands:
   init                    Add DockPipe to the current project
@@ -62,7 +63,7 @@ const initUsageText = `dockpipe init
 Project setup in the current directory, or add a new workflow.
 
 Usage:
-  dockpipe init [flags]              merge templates/core, scripts/, images/, dockpipe.config.json (no workflow name)
+  dockpipe init [flags]              merge templates/core, scripts/, images/, dockpipe.config.json, .env.vault.template.example (no workflow name)
   dockpipe init <name> [flags]       create workflows/<name>/config.yml as an empty starter (see --workflows-dir)
   dockpipe init <name> --from <src>  copy a bundled template or filesystem path into workflows/<name>/
 

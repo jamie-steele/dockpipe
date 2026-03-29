@@ -57,6 +57,7 @@ Thumbs.db
 .env.local
 # 1Password inject template (op:// refs; often names private vaults — keep local)
 .env.op.template
+.env.vault.template
 .env.secretstore
 
 # Maintainer-only trees under .staging — non-first-party experiments (ignored); optional private-repo backup.
