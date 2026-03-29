@@ -8,6 +8,10 @@ description: |
 author: DockPipe
 license: Apache-2.0
 repository: https://github.com/dockpipe/dockpipe
+icon: resolvers/pipeon/vscode-extension/images/icon.png
 tags: [resolver, pipeon, ide]
+artwork:
+  ide: resolvers/pipeon/vscode-extension/images/icon.png
+  launcher: resolvers/pipeon/vscode-extension/images/icon.png
 includes_resolvers:
   - pipeon

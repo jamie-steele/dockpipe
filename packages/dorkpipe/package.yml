@@ -10,7 +10,10 @@ description: |
 author: DockPipe
 license: Apache-2.0
 repository: https://github.com/dockpipe/dockpipe
+icon: assets/images/icon.png
 tags: [dorkpipe, orchestration, maintainer]
+artwork:
+  icon: assets/images/icon.png
 includes_resolvers:
   - compliance-handoff
   - dorkpipe-orchestrator
