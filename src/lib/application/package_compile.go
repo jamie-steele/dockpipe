@@ -475,7 +475,7 @@ func cmdPackageCompileResolvers(args []string) error {
 		}
 		total += n
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] wrote %d resolver tarball(s) → %s\n", total, destRes)
+	fmt.Fprintf(os.Stderr, "[dockpipe] resolver packages: wrote %d tarball(s) (one dockpipe-resolver-* per profile; shared installable units, same store as workflows) → %s\n", total, destRes)
 	return nil
 }
 
@@ -506,6 +506,11 @@ func readResolverNamespaceYAML(dir string) (string, error) {
 // collectResolverPackRoots returns directories whose immediate children are resolver profile dirs
 // (each child has profile/). Order: top-level resolvers/, packages/*/resolvers/, dockpipe/packages/*/resolvers/
 // (legacy), then dockpipe/<package>/resolvers/ (maintainer: agent, ide, secrets — package roots with resolver "plugins").
+//
+// When compile.workflows includes "packages/" as a root, srcRoot is that directory itself — patterns like
+// "<srcRoot>/packages/*/resolvers" look for packages/packages/... and miss "<srcRoot>/dorkpipe/resolvers".
+// Monorepo suite layouts are covered by "<srcRoot>/*/resolvers", "<srcRoot>/*/*/resolvers", and
+// "<srcRoot>/*/*/resolvers/*" (e.g. cloud/storage/resolvers/r2).
 // Each resolver child still becomes its own dockpipe-resolver-<name>-*.tar.gz for the store.
 func collectResolverPackRoots(srcRoot string) []string {
 	seen := map[string]struct{}{}
@@ -525,6 +530,9 @@ func collectResolverPackRoots(srcRoot string) []string {
 		filepath.Join(srcRoot, "packages", "*", "resolvers"),
 		filepath.Join(srcRoot, "dockpipe", "packages", "*", "resolvers"),
 		filepath.Join(srcRoot, "dockpipe", "*", "resolvers"),
+		filepath.Join(srcRoot, "*", "resolvers"),
+		filepath.Join(srcRoot, "*", "*", "resolvers"),
+		filepath.Join(srcRoot, "*", "*", "resolvers", "*"),
 	} {
 		matches, _ := filepath.Glob(pat)
 		for _, m := range matches {
@@ -786,7 +794,7 @@ func cmdPackageCompileWorkflowsBatch(args []string) error {
 			return err
 		}
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] compiled %d workflow tarball(s) under .dockpipe/internal/packages/workflows/\n", total)
+	fmt.Fprintf(os.Stderr, "[dockpipe] workflow packages: compiled %d tarball(s) under .dockpipe/internal/packages/workflows/\n", total)
 	return nil
 }
 
@@ -840,13 +848,13 @@ func cmdPackageCompileAll(args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] compile all: core → resolvers → workflows\n")
+	fmt.Fprintf(os.Stderr, "[dockpipe] compile all: core spine → resolver packages (one tarball per profile) → workflow packages\n")
 	if err := cmdPackageCompileCore(workdirAndForceArgs(workdir, force)); err != nil {
 		return err
 	}
 	resRoots := effectiveResolverCompileRoots(cfg, repoRoot, noStaging)
 	if len(resRoots) == 0 {
-		fmt.Fprintf(os.Stderr, "[dockpipe] compile all: skip resolvers (no source dirs)\n")
+		fmt.Fprintf(os.Stderr, "[dockpipe] compile all: skip resolver packages (no resolver source dirs)\n")
 	} else {
 		resArgs := []string{"--workdir", workdir}
 		if force {
@@ -977,7 +985,7 @@ Options:
 
 const packageCompileAllUsageText = `dockpipe package compile all
 
-Runs: compile core → compile resolvers → compile workflows (compile.bundles merged into compile.workflows when set).
+Runs: compile core → compile resolver packages (one tarball per profile) → compile workflow packages (compile.bundles merged into compile.workflows when set).
 Uses dockpipe.config.json compile.workflows for source lists when present (see package-model.md).
 
 Note: dockpipe build runs this command with --force so existing compiled trees are replaced.

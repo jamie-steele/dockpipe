@@ -1,1 +1,0 @@
-../../../templates/core/bundles/dorkpipe/assets/scripts/jq/process-user-insight-queue.jq

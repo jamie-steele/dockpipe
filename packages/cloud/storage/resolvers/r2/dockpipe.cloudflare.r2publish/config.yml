@@ -10,7 +10,7 @@
 #   R2_STATE_* for Terraform remote state on R2, R2_TF_BACKEND=local to skip remote state.
 # Terraform steps: R2_TERRAFORM_COMMANDS=init,plan or init,apply (default), plus R2_TERRAFORM_*_ARGS — see README.
 name: dockpipe.cloudflare.r2publish
-namespace: dockpipe.cloudflare
+namespace: dockpipe-cloudflare
 description: >-
   Host-only: compress R2_PUBLISH_SOURCE (default ./release/artifacts) and upload to R2.
   Use R2 S3 keys + aws s3, or a single CLOUDFLARE_API_TOKEN (Terraform creates bucket, Wrangler uploads).
