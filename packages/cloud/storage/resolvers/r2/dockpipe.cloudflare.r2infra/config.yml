@@ -3,13 +3,16 @@ namespace: dockpipe-cloudflare
 description: >-
   Terraform-only for the Cloudflare R2 module under dockpipe.cloudflare.r2publish/terraform.
   Secrets: vault / .env. Non-secret TF_VAR_* below. Follow with dockpipe.cloudflare.r2upload for objects.
-  Optional PipeLang defaults live under models/ and materialize into .pipelang/ sidecar bindings for script consumption.
+  PipeLang defaults are typed in IR2InfraConfig/R2InfraConfig and projected directly to matching env names.
+
+types:
+  - models/IR2InfraConfig
 
 docker_preflight: false
 
 vars:
   # Commonly changed values only. Advanced defaults and compatibility aliases are
-  # handled by config.pipe materialized bindings + terraform-cloudflare-r2-run.sh.
+  # handled by IR2InfraConfig/R2InfraConfig defaults + terraform-cloudflare-r2-run.sh.
   CLOUDFLARE_ACCOUNT_ID: ""  # required for apply; 32-char account id
   CLOUDFLARE_API_TOKEN: ""  # preferred auth (or legacy email + global key via env)
   R2_BUCKET: "dockpipe"  # public/package bucket name

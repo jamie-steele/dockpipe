@@ -4,37 +4,37 @@
 public Interface IR2InfraConfig
 {
     /// <summary>Backend mode: local or remote.</summary>
-    public string DockpipeTfBackend;
+    public string DOCKPIPE_TF_BACKEND;
     /// <summary>Attach Cloudflare provider env wiring when enabled.</summary>
-    public string DockpipeTfAttachCloudflareProvider;
+    public string DOCKPIPE_TF_ATTACH_CLOUDFLARE_PROVIDER;
     /// <summary>Use legacy R2 publish module mapping when enabled.</summary>
-    public string DockpipeTfUseR2PublishMap;
+    public string DOCKPIPE_TF_USE_R2_PUBLISH_MAP;
     /// <summary>Use -auto-approve for apply when enabled.</summary>
-    public string DockpipeTfApplyAutoApprove;
+    public string DOCKPIPE_TF_APPLY_AUTO_APPROVE;
     /// <summary>Terraform remote state bucket name.</summary>
-    public string DockpipeTfStateBucket;
+    public string DOCKPIPE_TF_STATE_BUCKET;
     /// <summary>Terraform remote state object key.</summary>
-    public string DockpipeTfStateKey;
+    public string DOCKPIPE_TF_STATE_KEY;
     /// <summary>R2 bucket name.</summary>
-    public string R2Bucket;
+    public string R2_BUCKET;
     /// <summary>Browser cache TTL in seconds.</summary>
-    public string TfVarCacheBrowserTtlSeconds;
+    public string TF_VAR_cache_browser_ttl_seconds;
     /// <summary>Edge cache TTL in seconds.</summary>
-    public string TfVarCacheEdgeTtlSeconds;
+    public string TF_VAR_cache_edge_ttl_seconds;
     /// <summary>Enable cache rule resources.</summary>
-    public string TfVarEnableCacheRules;
+    public string TF_VAR_enable_cache_rules;
     /// <summary>Enable custom domain resources.</summary>
-    public string TfVarEnableR2CustomDomain;
+    public string TF_VAR_enable_r2_custom_domain;
     /// <summary>Enable baseline WAF resources.</summary>
-    public string TfVarEnableWafBaseline;
+    public string TF_VAR_enable_waf_baseline;
     /// <summary>Public hostname for package distribution.</summary>
-    public string TfVarPublicHostname;
+    public string TF_VAR_public_hostname;
     /// <summary>Enable R2 custom domain binding.</summary>
-    public string TfVarR2CustomDomainEnabled;
+    public string TF_VAR_r2_custom_domain_enabled;
     /// <summary>Minimum TLS version for custom domain.</summary>
-    public string TfVarR2CustomDomainMinTls;
+    public string TF_VAR_r2_custom_domain_min_tls;
     /// <summary>Cloudflare managed ruleset identifier.</summary>
-    public string TfVarCloudflareManagedRulesetId;
+    public string TF_VAR_cloudflare_managed_ruleset_id;
     /// <summary>Concise identity string used for diagnostics.</summary>
     public string TerraformIdentity();
 }

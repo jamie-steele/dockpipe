@@ -29,6 +29,8 @@ source_pipelang_defaults_if_present() {
   local p=""
   local candidate
   for candidate in \
+    "$script_dir/../../models/.pipelang/IR2InfraConfig.R2InfraConfig.bindings.env" \
+    "$ROOT/packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/models/.pipelang/IR2InfraConfig.R2InfraConfig.bindings.env" \
     "$script_dir/../../models/.pipelang/R2InfraConfig.R2InfraConfig.bindings.env" \
     "$ROOT/packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/models/.pipelang/R2InfraConfig.R2InfraConfig.bindings.env" \
     "$script_dir/../../models/.pipelang/r2-infra-config.R2InfraConfig.bindings.env" \
@@ -42,23 +44,12 @@ source_pipelang_defaults_if_present() {
   [[ -n "$p" ]] || return 0
   # shellcheck source=/dev/null
   source "$p"
-
-  set_if_unset_from_pipelang DOCKPIPE_TF_BACKEND PIPELANG_DOCKPIPE_TF_BACKEND
-  set_if_unset_from_pipelang DOCKPIPE_TF_ATTACH_CLOUDFLARE_PROVIDER PIPELANG_DOCKPIPE_TF_ATTACH_CLOUDFLARE_PROVIDER
-  set_if_unset_from_pipelang DOCKPIPE_TF_USE_R2_PUBLISH_MAP PIPELANG_DOCKPIPE_TF_USE_R2_PUBLISH_MAP
-  set_if_unset_from_pipelang DOCKPIPE_TF_APPLY_AUTO_APPROVE PIPELANG_DOCKPIPE_TF_APPLY_AUTO_APPROVE
-  set_if_unset_from_pipelang DOCKPIPE_TF_STATE_BUCKET PIPELANG_DOCKPIPE_TF_STATE_BUCKET
-  set_if_unset_from_pipelang DOCKPIPE_TF_STATE_KEY PIPELANG_DOCKPIPE_TF_STATE_KEY
-  set_if_unset_from_pipelang R2_BUCKET PIPELANG_R2_BUCKET
-  set_if_unset_from_pipelang TF_VAR_cache_browser_ttl_seconds PIPELANG_TF_VAR_CACHE_BROWSER_TTL_SECONDS
-  set_if_unset_from_pipelang TF_VAR_cache_edge_ttl_seconds PIPELANG_TF_VAR_CACHE_EDGE_TTL_SECONDS
-  set_if_unset_from_pipelang TF_VAR_enable_cache_rules PIPELANG_TF_VAR_ENABLE_CACHE_RULES
-  set_if_unset_from_pipelang TF_VAR_enable_r2_custom_domain PIPELANG_TF_VAR_ENABLE_R2_CUSTOM_DOMAIN
-  set_if_unset_from_pipelang TF_VAR_enable_waf_baseline PIPELANG_TF_VAR_ENABLE_WAF_BASELINE
-  set_if_unset_from_pipelang TF_VAR_public_hostname PIPELANG_TF_VAR_PUBLIC_HOSTNAME
-  set_if_unset_from_pipelang TF_VAR_r2_custom_domain_enabled PIPELANG_TF_VAR_R2_CUSTOM_DOMAIN_ENABLED
-  set_if_unset_from_pipelang TF_VAR_r2_custom_domain_min_tls PIPELANG_TF_VAR_R2_CUSTOM_DOMAIN_MIN_TLS
-  set_if_unset_from_pipelang TF_VAR_cloudflare_managed_ruleset_id PIPELANG_TF_VAR_CLOUDFLARE_MANAGED_RULESET_ID
+  local key target
+  while IFS= read -r key; do
+    [[ "$key" == PIPELANG_* ]] || continue
+    target="${key#PIPELANG_}"
+    set_if_unset_from_pipelang "$target" "$key"
+  done < <(compgen -A variable PIPELANG_)
 }
 
 dockpipe_r2_normalize_account_id() {

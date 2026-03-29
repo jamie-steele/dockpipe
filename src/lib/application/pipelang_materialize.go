@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"dockpipe/src/lib/pipelang"
+
+	"gopkg.in/yaml.v3"
 )
 
 func dedupeAbsExistingDirs(paths []string) []string {
@@ -77,9 +79,29 @@ func materializePipeLangFile(path string, force bool) (bool, error) {
 	}
 	entryName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 	entryClass := ""
-	if b, ok := files[path]; ok {
-		if p, err := pipelang.Parse(b); err == nil && len(p.Classes) > 0 {
-			entryClass = p.Classes[0].Name
+	mappings, err := loadPipeTypeMappings(moduleRoot)
+	if err != nil {
+		return false, err
+	}
+	pathAbs, err := filepath.Abs(filepath.Clean(path))
+	if err != nil {
+		return false, err
+	}
+	if len(mappings) > 0 {
+		mapped, ok := mappings[pathAbs]
+		if !ok {
+			return false, nil
+		}
+		ec, err := inferEntryClassFromTypeRef(files, mapped.TypeRef)
+		if err != nil {
+			return false, fmt.Errorf("%s: %w", path, err)
+		}
+		entryClass = ec
+	} else {
+		if b, ok := files[path]; ok {
+			if p, err := pipelang.Parse(b); err == nil && len(p.Classes) > 0 {
+				entryClass = p.Classes[0].Name
+			}
 		}
 	}
 	if strings.TrimSpace(entryClass) == "" {
@@ -113,6 +135,99 @@ func materializePipeLangFile(path string, force bool) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+type workflowTypeMapDoc struct {
+	Types []string `yaml:"types"`
+}
+
+type pipeTypeMapping struct {
+	TypeRef string
+}
+
+func loadPipeTypeMappings(moduleRoot string) (map[string]pipeTypeMapping, error) {
+	cfgPath := filepath.Join(moduleRoot, "config.yml")
+	b, err := os.ReadFile(cfgPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return map[string]pipeTypeMapping{}, nil
+		}
+		return nil, err
+	}
+	var doc workflowTypeMapDoc
+	if err := yaml.Unmarshal(b, &doc); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", cfgPath, err)
+	}
+	out := map[string]pipeTypeMapping{}
+	for _, raw := range doc.Types {
+		spec := strings.TrimSpace(raw)
+		if spec == "" {
+			continue
+		}
+		left := spec
+		typeRef := ""
+		i := strings.Index(spec, "<")
+		j := strings.LastIndex(spec, ">")
+		if i >= 0 || j >= 0 {
+			if i <= 0 || j <= i+1 {
+				return nil, fmt.Errorf("invalid types entry %q in %s (expected path/Type<EntryClass>)", spec, cfgPath)
+			}
+			left = strings.TrimSpace(spec[:i])
+			typeRef = strings.TrimSpace(spec[i+1 : j])
+		}
+		left = strings.TrimSpace(left)
+		if left == "" {
+			return nil, fmt.Errorf("invalid types entry %q in %s (empty side)", spec, cfgPath)
+		}
+		leftPath := left
+		if filepath.Ext(leftPath) == "" {
+			leftPath += ".pipe"
+		}
+		leftAbs, err := filepath.Abs(filepath.Join(moduleRoot, filepath.FromSlash(leftPath)))
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(typeRef) == "" {
+			typeRef = strings.TrimSuffix(filepath.Base(leftPath), filepath.Ext(leftPath))
+		}
+		out[leftAbs] = pipeTypeMapping{TypeRef: typeRef}
+	}
+	return out, nil
+}
+
+func inferEntryClassFromTypeRef(files map[string][]byte, typeRef string) (string, error) {
+	ref := strings.TrimSpace(typeRef)
+	if ref == "" {
+		return "", fmt.Errorf("empty type reference")
+	}
+	merged := &pipelang.Program{}
+	for name, b := range files {
+		p, err := pipelang.Parse(b)
+		if err != nil {
+			return "", fmt.Errorf("%s: %w", name, err)
+		}
+		merged.Interfaces = append(merged.Interfaces, p.Interfaces...)
+		merged.Classes = append(merged.Classes, p.Classes...)
+	}
+	for _, c := range merged.Classes {
+		if c.Name == ref {
+			return c.Name, nil
+		}
+	}
+	var impl []string
+	for _, c := range merged.Classes {
+		if strings.TrimSpace(c.Implements) == ref {
+			impl = append(impl, c.Name)
+		}
+	}
+	switch len(impl) {
+	case 1:
+		return impl[0], nil
+	case 0:
+		return "", fmt.Errorf("types entry %q did not match a class or implemented interface", ref)
+	default:
+		return "", fmt.Errorf("types entry %q is ambiguous; multiple implementing classes: %s", ref, strings.Join(impl, ", "))
+	}
 }
 
 func detectPipeLangModuleRoot(startDir string) string {

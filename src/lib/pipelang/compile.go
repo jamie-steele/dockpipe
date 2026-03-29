@@ -317,9 +317,22 @@ func toUpperSnake(s string) string {
 		return ""
 	}
 	var b strings.Builder
-	for i, r := range s {
+	runes := []rune(s)
+	for i, r := range runes {
 		if i > 0 && r >= 'A' && r <= 'Z' {
-			b.WriteByte('_')
+			prev := runes[i-1]
+			var next rune
+			if i+1 < len(runes) {
+				next = runes[i+1]
+			}
+			prevIsLowerOrDigit := (prev >= 'a' && prev <= 'z') || (prev >= '0' && prev <= '9')
+			prevIsUpper := prev >= 'A' && prev <= 'Z'
+			nextIsLower := next >= 'a' && next <= 'z'
+			if prevIsLowerOrDigit || (prevIsUpper && nextIsLower) {
+				if prev != '_' {
+					b.WriteByte('_')
+				}
+			}
 		}
 		if r >= 'a' && r <= 'z' {
 			r = r - ('a' - 'A')

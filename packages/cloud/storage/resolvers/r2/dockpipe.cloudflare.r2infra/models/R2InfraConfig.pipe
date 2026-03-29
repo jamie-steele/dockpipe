@@ -3,25 +3,25 @@
 /// </summary>
 public Class R2InfraConfig : IR2InfraConfig
 {
-    public string DockpipeTfBackend = "remote";
-    public string DockpipeTfAttachCloudflareProvider = "1";
-    public string DockpipeTfUseR2PublishMap = "1";
-    public string DockpipeTfApplyAutoApprove = "1";
-    public string DockpipeTfStateBucket = "dockpipe";
-    public string DockpipeTfStateKey = "state/dockpipe.cloudflare.r2publish/terraform.tfstate";
-    public string R2Bucket = "dockpipe";
-    public string TfVarCacheBrowserTtlSeconds = "3600";
-    public string TfVarCacheEdgeTtlSeconds = "86400";
-    public string TfVarEnableCacheRules = "true";
-    public string TfVarEnableR2CustomDomain = "true";
-    public string TfVarEnableWafBaseline = "true";
-    public string TfVarPublicHostname = "packages.example.com";
-    public string TfVarR2CustomDomainEnabled = "true";
-    public string TfVarR2CustomDomainMinTls = "1.2";
-    public string TfVarCloudflareManagedRulesetId = "efb7b8c949ac4650a09736fc376e9aee";
+    public string DOCKPIPE_TF_BACKEND = "remote";
+    public string DOCKPIPE_TF_ATTACH_CLOUDFLARE_PROVIDER = "1";
+    public string DOCKPIPE_TF_USE_R2_PUBLISH_MAP = "1";
+    public string DOCKPIPE_TF_APPLY_AUTO_APPROVE = "1";
+    public string DOCKPIPE_TF_STATE_BUCKET = "dockpipe";
+    public string DOCKPIPE_TF_STATE_KEY = "state/dockpipe.cloudflare.r2publish/terraform.tfstate";
+    public string R2_BUCKET = "dockpipe";
+    public string TF_VAR_cache_browser_ttl_seconds = "3600";
+    public string TF_VAR_cache_edge_ttl_seconds = "86400";
+    public string TF_VAR_enable_cache_rules = "true";
+    public string TF_VAR_enable_r2_custom_domain = "true";
+    public string TF_VAR_enable_waf_baseline = "true";
+    public string TF_VAR_public_hostname = "packages.example.com";
+    public string TF_VAR_r2_custom_domain_enabled = "true";
+    public string TF_VAR_r2_custom_domain_min_tls = "1.2";
+    public string TF_VAR_cloudflare_managed_ruleset_id = "efb7b8c949ac4650a09736fc376e9aee";
 
     /// <summary>Internal formatting prefix, intentionally not exported.</summary>
     private string InternalIdentityPrefix = "r2infra";
 
-    public string TerraformIdentity() => InternalIdentityPrefix + ":" + R2Bucket + ":" + DockpipeTfBackend;
+    public string TerraformIdentity() => InternalIdentityPrefix + ":" + R2_BUCKET + ":" + DOCKPIPE_TF_BACKEND;
 }
