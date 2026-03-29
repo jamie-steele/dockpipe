@@ -10,10 +10,29 @@ This document is **FINAL**. It defines the core concepts, their relationships, a
 |--------|------------|
 | **workflow** | **What happens** — execution intent (steps, structure, vars). |
 | **runtime** | **Where execution happens** — isolated environment, **platform-agnostic**. |
-| **resolver** | **Which platform/tool performs the work** — **platform-specific** adapter. |
+| **capability** (abstract) | **Which need** — stable dotted id (e.g. **`cli.codex`**, **`blob.storage`**) for packages and docs. **Resolvers satisfy capabilities**; runtime stays separate. See **[capabilities.md](capabilities.md)**. |
+| **resolver** | **Which platform/tool performs the work** — **platform-specific** adapter (a **resolver package** implements a **capability**). |
 | **strategy** | **Lifecycle wrapper** — before/after execution behavior. |
 | **assets** | **Support files** — scripts, image trees, compose examples under **`templates/core/assets/`** (not additional primitives). |
 | **runtime.type** | **Classification of runtime behavior** — not implementation. |
+
+---
+
+## Workflows and packaged workflows (same spine)
+
+**Workflows** and **workflow packages** are the **same idea** at different layers of reuse:
+
+- Both express **what happens** with the **same** knobs: **runtime** (where execution runs), **resolver** (which tool/profile performs the work), and **strategy** (lifecycle before/after). **Packaging** does not invent a parallel model — it **ships** that same shape as an installable unit (**`package.yml`**, **`namespace:`**, compiled or published tree).
+
+- **Running a workflow from disk** is the low-friction path: your repo holds **`workflows/…`** or **`templates/…`** and you point the CLI at it.
+
+- **Using a packaged workflow inside another workflow** is **nesting** at the **call site**: the parent step **must** use **`runtime: package`** — **that is the rule**. There is **no** alternate step shape for “call into a packaged workflow” (for example `runtime: dockerimage` plus a resolver name alone is **not** the packaged entry point). **`resolver:`** names the **nested workflow**; **`package:`** is the **namespace** matching the child’s **`namespace:`** in **`config.yml`**. The parent does **not** duplicate the child’s scripts, resolver trees, or strategy files.
+
+- **Inside** the packaged workflow, **child steps** still use ordinary runtimes (**`dockerimage`**, **`dockerfile`**, **`package`**, …). **`runtime: package`** applies **only** to the **parent step** that **enters** the packaged unit — not to every step in the child.
+
+- **Specialization** is meant to stay **thin**: the **child** workflow still owns its **defaults** (runtime, resolver, strategy inside its YAML). The **caller** tunes behavior with **`vars`**, **`env`**, and shared CLI-style inputs merged into the nested run; explicit **step-level** overrides of the child’s profiles are the natural extension when you need to swap resolver/runtime/strategy **without** forking the package.
+
+This keeps the **mental model** one-dimensional — **template → runtime → resolver → strategy** — whether the workflow is **inline** in the repo or **packaged** and **referenced**.
 
 ---
 
@@ -27,7 +46,7 @@ This document is **FINAL**. It defines the core concepts, their relationships, a
 ### Runtime
 
 - Represents an **isolated execution environment**.
-- **Examples (non‑exhaustive):** `docker-node`, `docker-browser`, `ec2-worker`, `ide-local`, `browser-ide`, `keystore` (host + secret-store injection substrate — **not** a specific vault product).
+- **Canonical substrate names:** **`dockerimage`**, **`dockerfile`**, **`package`** (nesting). Legacy YAML may use **`cli`** / **`powershell`** / **`cmd`** — they normalize to **`dockerimage`**. Labels like **`docker-node`** are **isolate** / image hints paired with **`dockerimage`** or **`dockerfile`**, not additional runtime kinds.
 - **Platform-agnostic:** the same concept applies whether the backend is Docker, EC2, a local browser sandbox, or another substrate.
 - **Must not** encode tool- or vendor-specific logic (no Claude, Cursor, Playwright behavior inside the **runtime** definition).
 
@@ -81,6 +100,7 @@ Bundling policy and legal classification: **[templates-core-assets.md](templates
 4. **runtime.type is ONLY a classification** and must **NOT** depend on implementation (Docker, EC2, browser, etc.).
 5. **Workflows must NOT encode runtime or resolver behavior internally** (no embedding of isolation or tool choice as the only way to run).
 6. **Templates are scaffolding only** and must **NOT** define architecture, behavior, or classification. Bundled `templates/` trees are **examples and file layout** for `dockpipe init` / samples — not the **definition** of workflow, runtime, resolver, strategy, or `runtime.type`.
+7. **Packaged workflow invocation:** a parent step that runs a **packaged** (namespaced) workflow **must** use **`runtime: package`**. Do not document or imply a second nesting primitive.
 
 ---
 
@@ -126,9 +146,9 @@ Each valid run is characterized by **all** of:
 | Field | Value |
 |-------|--------|
 | workflow | `secretstore` (or any host `skip_container` flow with env from a vault) |
-| runtime | `keystore` — **where** the run happens: host with secret-store merge (no vendor in the runtime file). |
+| runtime | `cli` — host shell; secret merge is **resolver**-owned. |
 | runtime.type | `execution` |
-| resolver | `onepassword` — **which** tool supplies secrets (`op`); other vaults are **other resolver profiles**, not other runtimes. |
+| resolver | e.g. bundled **`dotenv`** (plain env file) or maintainer **`onepassword`** (`op`); other vaults are **other resolver profiles**, not other runtimes. |
 
 **Example 5**
 
@@ -162,7 +182,7 @@ Orchestration **selects** a runtime and a resolver **together**; it does **not**
 
 Before treating any description as aligned with this architecture, verify:
 
-- [ ] **Runtime** and **resolver** are **not** merged into a single concept or single named primitive.
+- [ ] **Runtime** and **resolver** are **not** merged into a single concept (the abstract **capability** id in **[capabilities.md](capabilities.md)** is separate from **runtime** — it names a need, not where it runs).
 - [ ] **Runtime** does **not** contain platform/tool product logic (Claude, Cursor, Playwright, etc.).
 - [ ] **Resolver** does **not** contain environment/infrastructure provisioning logic (Docker, EC2, etc.).
 - [ ] **runtime.type** is **only** used for **classification**, not for choosing Docker vs EC2 vs browser.
@@ -182,8 +202,8 @@ This section **does not change** the four primitives above; it describes **where
 | **Runtimes** | Where execution runs — **stable, platform-agnostic profiles** | **In-repo** under **`templates/core/runtimes/`** (light profile files; stays in the bundle / git tree). |
 | **Strategies** | Lifecycle before/after — **small, stable** | **In-repo** under **`templates/core/strategies/`** (thin env + script pointers). |
 | **Compiled core** | Tight **`templates/core`** tree users can refresh from HTTPS | **Optional S3/R2 (or any static origin)** via **`dockpipe install core`** + manifest (slim baseline; not every resolver in the universe). |
-| **Resolvers** | Tool/platform **adapters** — **plugin-shaped**, reusable across workflows | **Bundled** under **`templates/core/resolvers/`** *or* **store packages** (tarball / **`.dockpipe/internal/packages/`**) for extended catalogs. |
-| **Workflows** | What runs — **rich metadata** for authoring and store discovery | **Project `workflows/`**, **installed packages**, or **store**; **`package.yml`** carries discovery and dependency hints. |
+| **Resolvers** | Tool/platform **adapters** — **packages** that **implement** **capabilities** (`capability:` in **`package.yml`**) | **Bundled** under **`templates/core/resolvers/`** *or* **store packages** (tarball / **`.dockpipe/internal/packages/`**) for extended catalogs. |
+| **Workflows** | What runs — **packages** when compiled/published; **rich metadata** for authoring and store discovery | **Project `workflows/`**, **installed packages**, or **store**; **`package.yml`** carries **`requires_capabilities`**, **`requires_resolvers`**, and dependency hints. |
 
 **Ecosystem shape:** **workflows** and **resolver** packs are the natural **“plugin store”** surface (metadata-heavy). **Runtimes** and **strategies** stay **minimal and in-repo** so every install has a predictable, lightweight spine.
 

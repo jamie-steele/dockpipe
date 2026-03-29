@@ -1,2 +1,0 @@
-# Runtime substrate: Docker (isolated container execution).
-DOCKPIPE_RUNTIME_SUBSTRATE=docker

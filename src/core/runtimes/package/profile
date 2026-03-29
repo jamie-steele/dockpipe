@@ -1,0 +1,2 @@
+# Runtime substrate: nested namespaced workflow (parent step uses runtime: package + resolver + package:).
+DOCKPIPE_RUNTIME_SUBSTRATE=package

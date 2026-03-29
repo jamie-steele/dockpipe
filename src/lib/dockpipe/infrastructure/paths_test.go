@@ -76,6 +76,33 @@ func TestResolveResolverFilePathPrefersProfileInDirectory(t *testing.T) {
 }
 
 // TestResolveResolverFilePathIgnoresWorkflowLocal verifies profiles beside templates/<wf>/ are not used.
+func TestResolveCoreNamespacedScriptPath(t *testing.T) {
+	repo := t.TempDir()
+	core := filepath.Join(repo, "templates", "core", "assets", "scripts", "hello.sh")
+	if err := os.MkdirAll(filepath.Dir(core), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(core, []byte("#\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Dotted namespace must map basename.hello.sh → assets/scripts/hello.sh (see relFromCoreNamespace).
+	got, err := ResolveCoreNamespacedScriptPath(repo, "assets.scripts.hello.sh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := filepath.Abs(core)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.Clean(got) != filepath.Clean(want) {
+		t.Fatalf("got %q want %q", got, want)
+	}
+	_, err = ResolveCoreNamespacedScriptPath(repo, "assets.scripts.nope.sh")
+	if err == nil {
+		t.Fatal("expected error for missing script")
+	}
+}
+
 func TestResolveWorkflowScriptResolvesScriptsPrefixToCoreWhenUserMissing(t *testing.T) {
 	repo := t.TempDir()
 	core := filepath.Join(repo, "templates", "core", "assets", "scripts", "shared.sh")
@@ -93,7 +120,11 @@ func TestResolveWorkflowScriptResolvesScriptsPrefixToCoreWhenUserMissing(t *test
 
 func TestResolveWorkflowScriptResolvesScriptsPrefixToBundlesDirWhenPresent(t *testing.T) {
 	repo := t.TempDir()
-	b := filepath.Join(repo, ".staging", "bundles", "dorkpipe", "assets", "scripts", "aggregate-reasoning-context.sh")
+	cfg := `{"schema":1,"compile":{"bundles":[".staging/packages/dockpipe/bundles"]}}`
+	if err := os.WriteFile(filepath.Join(repo, "dockpipe.config.json"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	b := filepath.Join(repo, ".staging", "packages", "dockpipe", "bundles", "dorkpipe", "assets", "scripts", "aggregate-reasoning-context.sh")
 	if err := os.MkdirAll(filepath.Dir(b), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +139,11 @@ func TestResolveWorkflowScriptResolvesScriptsPrefixToBundlesDirWhenPresent(t *te
 
 func TestResolveWorkflowScriptResolvesScriptsPrefixToResolverDirWhenPresent(t *testing.T) {
 	repo := t.TempDir()
-	rs := filepath.Join(repo, ".staging", "resolvers", "cursor-dev", "assets", "scripts", "cursor-dev-session.sh")
+	cfg := `{"schema":1,"compile":{"workflows":[".staging/packages"]}}`
+	if err := os.WriteFile(filepath.Join(repo, "dockpipe.config.json"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rs := filepath.Join(repo, ".staging", "packages", "dockpipe", "ide", "resolvers", "cursor-dev", "assets", "scripts", "cursor-dev-session.sh")
 	if err := os.MkdirAll(filepath.Dir(rs), 0o755); err != nil {
 		t.Fatal(err)
 	}

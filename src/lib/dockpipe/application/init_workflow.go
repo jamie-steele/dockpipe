@@ -19,7 +19,7 @@ const dockpipeProjectReadme = `# Dockpipe project
 - **workflows/** — Default home for named workflows (**config.yml** per folder); **dockpipe init &lt;name&gt;** creates **workflows/&lt;name&gt;/** (override with **--workflows-dir** or **DOCKPIPE_WORKFLOWS_DIR**).
 - **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/**, **assets/** (**agnostic scripts**, **images/**, **compose/**), **bundles/** (domain asset packs) (from **dockpipe init**).
 - **templates/&lt;name&gt;/** — Legacy named workflows; still resolved if **workflows/** does not define the same name.
-- **dockpipe.config.json** (optional) — Repo-root JSON: **compile** source lists and optional **secrets.op_inject_template** (path to e.g. **.env.op.template**); omit to use built-in compile defaults.
+- **dockpipe.config.json** (optional) — Repo-root JSON: **compile** source lists and optional **secrets** (e.g. **op_inject_template** for 1Password dogfood); omit to use built-in compile defaults.
 `
 
 // agentsSelfAnalysisMarker is embedded once in AGENTS.md so re-init does not duplicate the section.
@@ -130,9 +130,15 @@ func resolveInitFromSource(repoRoot, from string) (srcDir string, isBlank bool, 
 	if st, e := os.Stat(bundled); e == nil && st.IsDir() {
 		return bundled, false, nil
 	}
-	stagingWf := filepath.Join(repoRoot, ".staging", "workflows", from)
-	if st, e := os.Stat(stagingWf); e == nil && st.IsDir() {
-		return stagingWf, false, nil
+	dorkpipeWf := filepath.Join(infrastructure.DorkpipeLibraryWorkflowsDir(repoRoot), from)
+	if st, e := os.Stat(dorkpipeWf); e == nil && st.IsDir() {
+		return dorkpipeWf, false, nil
+	}
+	if p := infrastructure.FindNestedWorkflowDirByLeafName(repoRoot, from); p != "" {
+		return p, false, nil
+	}
+	if p := infrastructure.FindBundledWorkflowAuthoringDirByLeafName(repoRoot, from); p != "" {
+		return p, false, nil
 	}
 	abs, e := filepath.Abs(from)
 	if e != nil {
@@ -141,7 +147,7 @@ func resolveInitFromSource(repoRoot, from string) (srcDir string, isBlank bool, 
 	if st, e := os.Stat(abs); e == nil && st.IsDir() {
 		return abs, false, nil
 	}
-	return "", false, fmt.Errorf("unknown --from source %q — use blank, a bundled workflow name (e.g. init, run, run-apply, run-apply-validate, secretstore), workflows/<name> or .staging/workflows/<name> in a dockpipe checkout, or another filesystem path to a workflow directory", from)
+	return "", false, fmt.Errorf("unknown --from source %q — use blank, a bundled workflow name (e.g. init, run, run-apply, run-apply-validate, secretstore, user-insight-process), workflows/<name>, src/core/workflows/**/<name>, src/lib/dorkpipe/workflows/<name> (DorkPipe workflows in this repo), a path under compile.workflows in dockpipe.config.json, or another filesystem path to a workflow directory", from)
 }
 
 func writeWorkflowYAML(path string, wf *domain.Workflow) error {

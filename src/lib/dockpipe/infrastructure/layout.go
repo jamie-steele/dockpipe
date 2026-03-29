@@ -36,27 +36,17 @@ func CoreDir(repoRoot string) string {
 	return filepath.Join(repoRoot, "templates", "core")
 }
 
-// StagingResolversDir returns <repoRoot>/.staging/resolvers — tool and product resolver profiles for the dockpipe
-// repo (authored like .staging/workflows). Merged into shipyard/core/resolvers on bundle extract.
-func StagingResolversDir(repoRoot string) string {
-	return filepath.Join(repoRoot, ".staging", "resolvers")
-}
-
-// StagingBundlesDir returns <repoRoot>/.staging/bundles — domain asset packs (dorkpipe, pipeon, …). Merged into shipyard/core/bundles on extract.
-func StagingBundlesDir(repoRoot string) string {
-	return filepath.Join(repoRoot, ".staging", "bundles")
-}
-
 // DefaultUserWorkflowsDirRel is the default directory (under repo root) for named workflows in normal projects.
 // The dockpipe source tree and the materialized bundle use different roots (see WorkflowsRootDir).
 const DefaultUserWorkflowsDirRel = "workflows"
 
-// StagingWorkflowsDirRel is committed maintainer / experimental workflows (dockpipe repo only; merged into the same embed + materialized tree).
-const StagingWorkflowsDirRel = ".staging/workflows"
+// DorkpipeLibraryWorkflowsDirRel is tracked workflow YAML for DorkPipe integration (orchestrator, self-analysis, compliance-handoff).
+// Lives under the dorkpipe Go module — not under .staging/ (see docs/dorkpipe.md).
+const DorkpipeLibraryWorkflowsDirRel = "src/lib/dorkpipe/workflows"
 
-// StagingWorkflowsDir returns <repoRoot>/.staging/workflows (may not exist in downstream projects).
-func StagingWorkflowsDir(repoRoot string) string {
-	return filepath.Join(repoRoot, StagingWorkflowsDirRel)
+// DorkpipeLibraryWorkflowsDir returns <repoRoot>/src/lib/dorkpipe/workflows (dockpipe source checkout).
+func DorkpipeLibraryWorkflowsDir(repoRoot string) string {
+	return filepath.Join(repoRoot, filepath.FromSlash(DorkpipeLibraryWorkflowsDirRel))
 }
 
 // workflowsDirRelProcess is set by the CLI for the current process (--workflows-dir); cleared after the command.

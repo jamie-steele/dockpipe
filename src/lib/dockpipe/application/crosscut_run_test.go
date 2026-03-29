@@ -42,15 +42,15 @@ func TestCrosscutStrategyWorktreeAndCommitResolveFromCore(t *testing.T) {
 	}
 }
 
-// TestCrosscutRuntimeResolverCliClaudeAgainstBundledTree merges real runtimes/cli + resolvers/claude profiles.
-func TestCrosscutRuntimeResolverCliClaudeAgainstBundledTree(t *testing.T) {
+// TestCrosscutRuntimeResolverDockerimageClaudeAgainstBundledTree merges real runtimes/dockerimage + resolvers/claude profiles.
+func TestCrosscutRuntimeResolverDockerimageClaudeAgainstBundledTree(t *testing.T) {
 	repo := testRepoRoot(t)
-	m, err := infrastructure.LoadIsolationProfile(repo, "cli", "claude")
+	m, err := infrastructure.LoadIsolationProfile(repo, "dockerimage", "claude")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if m["DOCKPIPE_RUNTIME_SUBSTRATE"] != "cli" {
-		t.Fatalf("expected cli substrate, got %#v", m)
+	if m["DOCKPIPE_RUNTIME_SUBSTRATE"] != "dockerimage" {
+		t.Fatalf("expected dockerimage substrate, got %#v", m)
 	}
 	// Bundled claude profile uses DOCKPIPE_RESOLVER_CMD (not necessarily TEMPLATE).
 	if strings.TrimSpace(m["DOCKPIPE_RESOLVER_CMD"]) != "claude" && strings.TrimSpace(m["DOCKPIPE_RESOLVER_TEMPLATE"]) != "claude" {

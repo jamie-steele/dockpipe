@@ -3,6 +3,7 @@ package domain
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -244,6 +245,16 @@ run: echo hi
 func TestValidateWorkflowNamespaceFieldReserved(t *testing.T) {
 	if err := ValidateWorkflowNamespaceField(&Workflow{Namespace: "dockpipe"}); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestValidateWorkflowCapabilityField(t *testing.T) {
+	if err := ValidateWorkflowCapabilityField(&Workflow{Capability: "cli.codex"}); err != nil {
+		t.Fatal(err)
+	}
+	long := strings.Repeat("a", 257)
+	if err := ValidateWorkflowCapabilityField(&Workflow{Capability: long}); err == nil {
+		t.Fatal("expected error for too-long capability")
 	}
 }
 

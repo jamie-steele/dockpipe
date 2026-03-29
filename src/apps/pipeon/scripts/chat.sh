@@ -1,1 +1,1 @@
-../../../../.staging/bundles/pipeon/assets/scripts/chat.sh
+../../../../.staging/packages/dockpipe/bundles/pipeon/assets/scripts/chat.sh

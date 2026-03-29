@@ -106,9 +106,8 @@ func ResolveOpInjectTemplatePath(cfg *DockpipeProjectConfig, repoRoot string) (s
 // DefaultDockpipeProjectConfigBytes returns indented JSON for a new project (dockpipe init).
 // Paths are repo-relative; compile skips any that do not exist on disk.
 func DefaultDockpipeProjectConfigBytes() ([]byte, error) {
-	wf := []string{"workflows", filepath.Join(".staging", "workflows")}
-	res := []string{filepath.Join("src", "core", "resolvers"), filepath.Join("templates", "core", "resolvers"), filepath.Join(".staging", "resolvers")}
-	bun := []string{filepath.Join(".staging", "bundles")}
+	wf := []string{"workflows"}
+	res := []string{filepath.Join("src", "core", "resolvers"), filepath.Join("templates", "core", "resolvers")}
 	opT := ".env.op.template"
 	notes := "1Password op inject mapping (op:// references). Keep vault paths here; do not commit plaintext secrets."
 	cfg := DockpipeProjectConfig{
@@ -116,7 +115,6 @@ func DefaultDockpipeProjectConfigBytes() ([]byte, error) {
 		Compile: DockpipeCompileConfig{
 			Workflows: &wf,
 			Resolvers: &res,
-			Bundles:   &bun,
 		},
 		Secrets: DockpipeSecretsConfig{
 			OpInjectTemplate: &opT,

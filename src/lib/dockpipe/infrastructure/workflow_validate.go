@@ -144,10 +144,7 @@ func ValidateResolvedWorkflowYAML(absPath string) error {
 	if err != nil {
 		return fmt.Errorf("parse workflow: %w", err)
 	}
-	if err := domain.ValidateWorkflowTypeField(wf); err != nil {
-		return err
-	}
-	if err := domain.ValidateWorkflowNamespaceField(wf); err != nil {
+	if err := domain.ValidateLoadedWorkflow(wf); err != nil {
 		return err
 	}
 	var raw interface{}

@@ -17,20 +17,20 @@ test -d "$ROOT/workflows" || fail "missing workflows/"
 test -f "$ROOT/embed.go" || fail "missing repo-root embed.go"
 
 # Pipeon harness (src/bin/pipeon → src/apps/pipeon/scripts/pipeon.sh) must resolve to the bundle
-test -f "$ROOT/src/apps/pipeon/scripts/pipeon.sh" || fail "missing src/apps/pipeon/scripts/pipeon.sh (symlink to .staging/bundles/pipeon/…)"
+test -f "$ROOT/src/apps/pipeon/scripts/pipeon.sh" || fail "missing src/apps/pipeon/scripts/pipeon.sh (symlink to .staging/packages/dockpipe/bundles/pipeon/…)"
 
 # Pipeon desktop / icon pipeline must not point at removed top-level templates/
-test -f "$ROOT/.staging/resolvers/code-server/assets/images/code-server/favicon.svg" \
-	|| fail "missing code-server favicon.svg (Pipeon shortcut + make pipeon-icons)"
+test -f "$ROOT/src/contrib/pipeon-vscode-extension/images/favicon.svg" \
+	|| fail "missing Pipeon favicon.svg (run: make pipeon-icons)"
 
-if ! grep -q 'ICON_SVG=.*\.staging/resolvers/code-server' "$ROOT/src/apps/pipeon/scripts/install-pipeon-desktop-shortcut.sh"; then
-	fail "install-pipeon-desktop-shortcut.sh ICON_SVG must use .staging/resolvers/code-server/…"
+if ! grep -q 'ICON_SVG=.*src/contrib/pipeon-vscode-extension/images/favicon.svg' "$ROOT/src/apps/pipeon/scripts/install-pipeon-desktop-shortcut.sh"; then
+	fail "install-pipeon-desktop-shortcut.sh ICON_SVG must use src/contrib/pipeon-vscode-extension/images/favicon.svg"
 fi
 if grep -q 'os.path.join(REPO_ROOT, "templates"' "$ROOT/src/apps/pipeon/scripts/generate-pipeon-icons.py" 2>/dev/null; then
 	fail "generate-pipeon-icons.py must not join REPO_ROOT to top-level templates/"
 fi
-if ! grep -q '".staging"' "$ROOT/src/apps/pipeon/scripts/generate-pipeon-icons.py" || ! grep -q '"resolvers"' "$ROOT/src/apps/pipeon/scripts/generate-pipeon-icons.py"; then
-	fail "generate-pipeon-icons.py must build path under .staging/resolvers/code-server/…"
+if ! grep -q 'pipeon-vscode-extension' "$ROOT/src/apps/pipeon/scripts/generate-pipeon-icons.py" || ! grep -q '"images"' "$ROOT/src/apps/pipeon/scripts/generate-pipeon-icons.py"; then
+	fail "generate-pipeon-icons.py must write under src/contrib/pipeon-vscode-extension/images/"
 fi
 
 echo "test_repo_layout OK"

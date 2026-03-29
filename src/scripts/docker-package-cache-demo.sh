@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Demo: named Docker volumes for Flathub + APT caches (survive image rebuilds / relaunches).
-# Does not install apps for you — shows the pattern. See .staging/workflows/package-cache-demo/README.md
+# Does not install apps for you — shows the pattern (same idea as the old package-cache-demo workflow).
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

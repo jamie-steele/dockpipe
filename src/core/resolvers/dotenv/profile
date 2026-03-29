@@ -1,0 +1,4 @@
+# Resolver: plain dotenv-style file (KEY=value) on the host — no vendor CLI.
+# Pair with workflow_type: secretstore and scripts/dockpipe/secretstore-exec.sh (bundled core).
+DOCKPIPE_RESOLVER_CMD=dotenv
+DOCKPIPE_RESOLVER_ENV=SECRETSTORE_ENV_FILE,SECRETSTORE_COMMAND

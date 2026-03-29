@@ -46,14 +46,14 @@ Materialize a **project-local** store under **`.dockpipe/internal/packages/`** w
   - **`op_inject_template`** — repo-relative or absolute path to a **mapping file** for **`op inject`** (e.g. **`.env.op.template`** with **`op://`** lines). **`dockpipe doctor`** reports whether that file exists when **`dockpipe.config.json`** is present in the current directory.
   - **`notes`** — free-text reminder (e.g. vault naming, policy).
 
-If **`dockpipe.config.json`** is **missing**, compile uses built-in defaults. If a key is **omitted**, defaults apply for that slice; **`dockpipe init`** seeds a starter JSON. **`--no-staging`** filters out paths under **`.staging/`** when resolving defaults or config lists.
+If **`dockpipe.config.json`** is **missing**, compile uses built-in defaults. If a key is **omitted**, defaults apply for that slice; **`dockpipe init`** seeds a starter JSON. **`--no-staging`** filters out paths under **`.staging/`** when resolving config lists. **`compile`** also **appends** **`.staging/packages`** when that directory exists (unless **`--no-staging`**) so maintainer-authored packages are included even if **`compile.workflows`** / **`compile.resolvers`** omits the path — see **`.staging/packages/README.md`** in this repo.
 
 Compile steps:
 
 1. **`compile core`** — copies **`src/core`** (default when **`src/core/runtimes`** exists) or **`templates/core`**, or **`compile.core_from`** / **`--from`**, into **`packages/core/`** and writes **`package.yml`** (`kind: core`). **Omits** top-level **`resolvers/`**, **`bundles/`**, and **`workflows/`** from that copy so those slices stay separate packages.
-2. **`compile resolvers`** — repeatable **`--from`**; defaults merge **`src/core/resolvers`**, **`templates/core/resolvers`**, then **`.staging/resolvers`** (each path must exist) into **`packages/resolvers/<name>/`**.
-3. **`compile bundles`** — repeatable **`--from`**; defaults from config or **`.staging/bundles`** into **`packages/bundles/<name>/`**.
-4. **`compile workflows`** — every subdir with **`config.yml`** under each **`--from`** root; defaults **`workflows/`** then **`.staging/workflows/`** (or **`dockpipe.config.json`**).
+2. **`compile resolvers`** — repeatable **`--from`**; defaults merge **`src/core/resolvers`**, **`templates/core/resolvers`**, then **`.staging/packages`** (and the same path is **auto-appended** when present — see **`compile_config.go`**). **Pack roots** under each **`--from`** directory include: **`resolvers/`** (flat); **`packages/<group>/resolvers/`**; **`dockpipe/<group>/resolvers/`** (e.g. dockpipe repo: **`agent`**, **`ide`**, **`secrets`**, **`cloud/storage`**, …). Every immediate child of each pack root that contains **`profile/`** becomes **one** tarball (**`dockpipe-resolver-<name>-…`**) — the **store** still lists **separate** installable resolvers. **`src/core/resolvers`** stays a flat list (no nested **`resolvers/resolvers/`**). **Strategies** and **runtimes** are not packed from the same vendor folder yet; keep lifecycle slices in **`compile core`** / **`bundles`** until a follow-up convention exists.
+3. **`compile bundles`** — repeatable **`--from`**; defaults from config or **`.staging/packages/dockpipe/bundles`** into **`packages/bundles/<name>/`**.
+4. **`compile workflows`** — every **`config.yml`** under each **`--from`** root (recursive walk); defaults **`workflows/`**, **`src/lib/dorkpipe/workflows`**, **`.staging/packages`**. Maintainer layout in this repo: **`.staging/packages/README.md`**. Override with **`dockpipe.config.json`** **`compile.workflows`**; **`.staging/packages`** is still appended when present (unless **`--no-staging`**).
 5. **`compile all`** (alias: **`dockpipe build`**) — runs **core → resolvers → workflows**. Bundles only when **`--with-bundles`** is set (otherwise use **`compile bundles`**). **`dockpipe clean`** removes the compiled store; **`dockpipe rebuild`** runs **clean** then **build**.
 
 The runner checks **compiled `packages/resolvers/`** and **`packages/core/`** before **`.staging`** and authoring **`CoreDir`** so you can **opt in** to the compiled store per workdir. Edit **`package.yml`** after compile to add **namespaces**, **`depends`**, and metadata for store-shaped workflows.
@@ -109,6 +109,9 @@ Suggested subdirectories (mirror authoring concepts; not all are required):
 
 | Field | Purpose |
 |-------|---------|
+| **`provider`** | Optional platform or vendor id for filtering and catalog facets (e.g. **`cloudflare`**, **`aws`**, **`github`**) — short stable label, not a URL |
+| **`capability`** | For **`kind: resolver`** — dotted id this package provides (e.g. **`cli.codex`**, **`blob.storage`**) — see **[capabilities.md](capabilities.md)** |
+| **`requires_capabilities`** | For **`kind: workflow`** — dotted capability ids this workflow expects (complements **`requires_resolvers`**) |
 | **`tags`**, **`keywords`** | Faceted search / UI filters |
 | **`min_dockpipe_version`** | Semver constraint on the CLI |
 | **`repository`** | Source repo URL |

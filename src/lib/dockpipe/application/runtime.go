@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"dockpipe/src/lib/dockpipe/domain"
+	"dockpipe/src/lib/dockpipe/infrastructure"
 )
 
 // EffectiveRuntimeProfileName returns the isolation **runtime** profile name (templates/core/runtimes/<name>).
@@ -70,16 +71,53 @@ func ProfileLabelForEnv(runtimeName, resolverName string) string {
 	return strings.TrimSpace(runtimeName)
 }
 
-// ValidateRuntimeAllowlist errors if runtimes: is non-empty and the effective runtime profile name is not listed.
-// Use the runtime substrate name (e.g. docker, cli), not ProfileLabelForEnv (which prefers resolver for display).
-func ValidateRuntimeAllowlist(wf *domain.Workflow, runtimeName string) error {
-	if wf == nil || len(wf.Runtimes) == 0 || runtimeName == "" {
+// effectiveRuntimesAllowlist returns the substrate names allowed for --runtime overrides.
+// Explicit runtimes: wins; otherwise, if runtime and/or default_runtime are set, the allowlist is
+// those non-empty values (deduped), so you do not need runtimes: [dockerimage] when runtime: dockerimage alone (legacy YAML may still say runtime: cli; it normalizes to dockerimage).
+func effectiveRuntimesAllowlist(wf *domain.Workflow) []string {
+	if wf == nil {
 		return nil
 	}
-	for _, s := range wf.Runtimes {
-		if strings.TrimSpace(s) == strings.TrimSpace(runtimeName) {
+	if len(wf.Runtimes) > 0 {
+		return wf.Runtimes
+	}
+	var out []string
+	seen := map[string]struct{}{}
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		if _, ok := seen[s]; ok {
+			return
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	add(wf.Runtime)
+	add(wf.DefaultRuntime)
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// ValidateRuntimeAllowlist errors if the effective runtime profile name is not in the allowlist.
+// The allowlist is explicit runtimes:, or implicit from runtime / default_runtime when runtimes: is omitted.
+// Names are compared after NormalizeRuntimeProfileName (docker → dockerimage, legacy host names → dockerimage, etc.).
+func ValidateRuntimeAllowlist(wf *domain.Workflow, runtimeName string) error {
+	if wf == nil || runtimeName == "" {
+		return nil
+	}
+	allow := effectiveRuntimesAllowlist(wf)
+	if len(allow) == 0 {
+		return nil
+	}
+	want := infrastructure.NormalizeRuntimeProfileName(runtimeName)
+	for _, s := range allow {
+		if infrastructure.NormalizeRuntimeProfileName(strings.TrimSpace(s)) == want {
 			return nil
 		}
 	}
-	return fmt.Errorf("runtime %q is not allowed by this workflow (runtimes: %v)", runtimeName, wf.Runtimes)
+	return fmt.Errorf("runtime %q is not allowed by this workflow (runtimes: %v)", runtimeName, allow)
 }

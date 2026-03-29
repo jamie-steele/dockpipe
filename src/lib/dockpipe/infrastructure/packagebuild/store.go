@@ -25,10 +25,13 @@ type StoreBuildManifest struct {
 
 // StoreArtifact names one gzip tarball built from a compiled package directory.
 type StoreArtifact struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-	Tarball string `json:"tarball"`
-	SHA256  string `json:"sha256"`
+	Name               string   `json:"name"`
+	Version            string   `json:"version"`
+	Tarball            string   `json:"tarball"`
+	SHA256             string   `json:"sha256"`
+	Provider             string   `json:"provider,omitempty"`
+	Capability           string   `json:"capability,omitempty"`
+	RequiresCapabilities []string `json:"requires_capabilities,omitempty"`
 }
 
 // BuildCompiledStore writes dockpipe-*.tar.gz (+ .sha256) for each slice under packagesRoot and
@@ -53,17 +56,15 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 	if only == "all" || only == "core" {
 		coreDir := filepath.Join(packagesRoot, "core")
 		if st, err := os.Stat(coreDir); err == nil && st.IsDir() {
-			ver := fallbackVersion
-			if pm, err := domain.ParsePackageManifest(filepath.Join(coreDir, "package.yml")); err == nil && strings.TrimSpace(pm.Version) != "" {
-				ver = strings.TrimSpace(pm.Version)
-			}
+			meta := readPackageManifestMeta(coreDir, fallbackVersion)
+			ver := meta.Version
 			base := fmt.Sprintf("dockpipe-core-%s.tar.gz", SafeTarballToken(ver))
 			outPath := filepath.Join(outDir, base)
 			sum, err := WriteDirTarGzWithPrefix(coreDir, outPath, "core")
 			if err != nil {
 				return nil, fmt.Errorf("core: %w", err)
 			}
-			m.Packages.Core = &StoreArtifact{Name: "core", Version: ver, Tarball: base, SHA256: sum}
+			m.Packages.Core = &StoreArtifact{Name: "core", Version: ver, Tarball: base, SHA256: sum, Provider: meta.Provider, Capability: meta.Capability}
 		}
 	}
 
@@ -75,7 +76,8 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 		}
 		for _, name := range names {
 			dir := filepath.Join(wfDir, name)
-			ver := readPackageVersion(dir, fallbackVersion)
+			meta := readPackageManifestMeta(dir, fallbackVersion)
+			ver := meta.Version
 			base := fmt.Sprintf("dockpipe-workflow-%s-%s.tar.gz", SafeTarballToken(name), SafeTarballToken(ver))
 			outPath := filepath.Join(outDir, base)
 			prefix := "workflows/" + name
@@ -83,7 +85,10 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 			if err != nil {
 				return nil, fmt.Errorf("workflow %q: %w", name, err)
 			}
-			m.Packages.Workflows = append(m.Packages.Workflows, StoreArtifact{Name: name, Version: ver, Tarball: base, SHA256: sum})
+			m.Packages.Workflows = append(m.Packages.Workflows, StoreArtifact{
+				Name: name, Version: ver, Tarball: base, SHA256: sum,
+				Provider: meta.Provider, Capability: meta.Capability, RequiresCapabilities: meta.RequiresCapabilities,
+			})
 		}
 		sort.Slice(m.Packages.Workflows, func(i, j int) bool { return m.Packages.Workflows[i].Name < m.Packages.Workflows[j].Name })
 	}
@@ -96,7 +101,8 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 		}
 		for _, name := range names {
 			dir := filepath.Join(resDir, name)
-			ver := readPackageVersion(dir, fallbackVersion)
+			meta := readPackageManifestMeta(dir, fallbackVersion)
+			ver := meta.Version
 			base := fmt.Sprintf("dockpipe-resolver-%s-%s.tar.gz", SafeTarballToken(name), SafeTarballToken(ver))
 			outPath := filepath.Join(outDir, base)
 			prefix := "resolvers/" + name
@@ -104,7 +110,10 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 			if err != nil {
 				return nil, fmt.Errorf("resolver %q: %w", name, err)
 			}
-			m.Packages.Resolvers = append(m.Packages.Resolvers, StoreArtifact{Name: name, Version: ver, Tarball: base, SHA256: sum})
+			m.Packages.Resolvers = append(m.Packages.Resolvers, StoreArtifact{
+				Name: name, Version: ver, Tarball: base, SHA256: sum,
+				Provider: meta.Provider, Capability: meta.Capability,
+			})
 		}
 		sort.Slice(m.Packages.Resolvers, func(i, j int) bool { return m.Packages.Resolvers[i].Name < m.Packages.Resolvers[j].Name })
 	}
@@ -117,7 +126,8 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 		}
 		for _, name := range names {
 			dir := filepath.Join(bunDir, name)
-			ver := readPackageVersion(dir, fallbackVersion)
+			meta := readPackageManifestMeta(dir, fallbackVersion)
+			ver := meta.Version
 			base := fmt.Sprintf("dockpipe-bundle-%s-%s.tar.gz", SafeTarballToken(name), SafeTarballToken(ver))
 			outPath := filepath.Join(outDir, base)
 			prefix := "bundles/" + name
@@ -125,7 +135,10 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 			if err != nil {
 				return nil, fmt.Errorf("bundle %q: %w", name, err)
 			}
-			m.Packages.Bundles = append(m.Packages.Bundles, StoreArtifact{Name: name, Version: ver, Tarball: base, SHA256: sum})
+			m.Packages.Bundles = append(m.Packages.Bundles, StoreArtifact{
+				Name: name, Version: ver, Tarball: base, SHA256: sum,
+				Provider: meta.Provider, Capability: meta.Capability,
+			})
 		}
 		sort.Slice(m.Packages.Bundles, func(i, j int) bool { return m.Packages.Bundles[i].Name < m.Packages.Bundles[j].Name })
 	}
@@ -147,16 +160,34 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 }
 
 func readPackageVersion(dir, fallback string) string {
+	return readPackageManifestMeta(dir, fallback).Version
+}
+
+// packageManifestMeta aggregates package.yml fields for store manifests and tooling.
+type packageManifestMeta struct {
+	Version              string
+	Provider             string
+	Capability           string
+	RequiresCapabilities []string
+}
+
+func readPackageManifestMeta(dir, fallback string) packageManifestMeta {
+	var out packageManifestMeta
+	out.Version = fallback
 	p := filepath.Join(dir, "package.yml")
 	pm, err := domain.ParsePackageManifest(p)
 	if err != nil {
-		return fallback
+		return out
 	}
-	v := strings.TrimSpace(pm.Version)
-	if v == "" {
-		return fallback
+	if strings.TrimSpace(pm.Version) != "" {
+		out.Version = strings.TrimSpace(pm.Version)
 	}
-	return v
+	out.Provider = strings.TrimSpace(pm.Provider)
+	out.Capability = strings.TrimSpace(pm.Capability)
+	if len(pm.RequiresCapabilities) > 0 {
+		out.RequiresCapabilities = append([]string(nil), pm.RequiresCapabilities...)
+	}
+	return out
 }
 
 func listPackageSubdirs(root string) ([]string, error) {
@@ -176,6 +207,38 @@ func listPackageSubdirs(root string) ([]string, error) {
 	}
 	sort.Strings(names)
 	return names, nil
+}
+
+// UnmarshalJSON accepts legacy "primitive" / "requires_primitives" keys for older packages-store-manifest.json.
+func (a *StoreArtifact) UnmarshalJSON(data []byte) error {
+	var x struct {
+		Name                 string   `json:"name"`
+		Version              string   `json:"version"`
+		Tarball              string   `json:"tarball"`
+		SHA256               string   `json:"sha256"`
+		Provider             string   `json:"provider,omitempty"`
+		Capability           string   `json:"capability,omitempty"`
+		RequiresCapabilities []string `json:"requires_capabilities,omitempty"`
+		Primitive            string   `json:"primitive,omitempty"`
+		RequiresPrimitives   []string `json:"requires_primitives,omitempty"`
+	}
+	if err := json.Unmarshal(data, &x); err != nil {
+		return err
+	}
+	a.Name = x.Name
+	a.Version = x.Version
+	a.Tarball = x.Tarball
+	a.SHA256 = x.SHA256
+	a.Provider = x.Provider
+	a.Capability = strings.TrimSpace(x.Capability)
+	if a.Capability == "" {
+		a.Capability = strings.TrimSpace(x.Primitive)
+	}
+	a.RequiresCapabilities = x.RequiresCapabilities
+	if len(a.RequiresCapabilities) == 0 && len(x.RequiresPrimitives) > 0 {
+		a.RequiresCapabilities = append([]string(nil), x.RequiresPrimitives...)
+	}
+	return nil
 }
 
 // SafeTarballToken replaces characters unsafe in filenames for release artifacts.

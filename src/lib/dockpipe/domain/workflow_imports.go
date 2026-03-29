@@ -21,12 +21,17 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 	if err != nil {
 		return nil, err
 	}
+	cap := strings.TrimSpace(f.Capability)
+	if cap == "" {
+		cap = strings.TrimSpace(f.PrimitiveYAMLDeprecated)
+	}
 	return &Workflow{
 		Name:            f.Name,
 		Description:     f.Description,
 		Category:        f.Category,
 		WorkflowType:    f.WorkflowType,
 		Namespace:       f.Namespace,
+		Capability:      cap,
 		Run:             f.Run,
 		Isolate:         f.Isolate,
 		Act:             f.Act,

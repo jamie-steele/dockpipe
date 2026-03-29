@@ -42,6 +42,8 @@ Commands:
   release upload          Upload a file to S3-compatible storage (self-hosted; uses aws CLI)
   workflow validate       Check workflow YAML ([path] relative to cwd or repo root; omit if one workflow)
   doctor                  Check docker, bash, and bundled assets
+  core script-path <dots> Print absolute path to a core asset (same as scripts/core.<dots> in YAML)
+  terraform pipeline-path Print absolute path to terraform-pipeline.sh (core assets)
   runs list [--workdir]   List active host-run records under .dockpipe/runs/
   windows setup|doctor    Windows: optional WSL bridge setup
   action|pre|template init  Copy sample scripts (use each with --help)

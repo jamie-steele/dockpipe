@@ -14,7 +14,7 @@ if [[ ! -d "$OUT" ]]; then
 fi
 
 GO_N=$(cat "$ROOT/.dorkpipe/self-analysis/dorkpipe_go_files.count" 2>/dev/null || echo 0)
-SPEC="$ROOT/.staging/workflows/dorkpipe-orchestrator/spec.example.yaml"
+SPEC="$ROOT/src/lib/dorkpipe/workflows/dorkpipe-orchestrator/spec.example.yaml"
 HAS_VERIFIER=0
 if [[ -f "$SPEC" ]] && grep -q 'kind:.*verifier' "$SPEC"; then
 	HAS_VERIFIER=1
@@ -60,7 +60,7 @@ EOF
 	echo "The following are **actionable** directions consistent with \`AGENTS.md\` (primitive core, templates as extension):"
 	echo ""
 	if [[ "$HAS_VERIFIER" -eq 0 ]]; then
-		echo "- **Independent verifier in the default orchestrator spec** (\`.staging/workflows/dorkpipe-orchestrator/spec.example.yaml\`): add a \`kind: verifier\` node after local LLM output so \`Vector.Verifier\` is populated before escalation (implementation in \`lib/dorkpipe/workers/workers.go\`, \`parseVerifierScore\`)."
+		echo "- **Independent verifier in the default orchestrator spec** (\`src/lib/dorkpipe/workflows/dorkpipe-orchestrator/spec.example.yaml\`): add a \`kind: verifier\` node after local LLM output so \`Vector.Verifier\` is populated before escalation (implementation in \`lib/dorkpipe/workers/workers.go\`, \`parseVerifierScore\`)."
 	fi
 	echo "- **Surface engine features in shipped examples**: \`lib/dorkpipe/examples/full-bar.yaml\` demonstrates \`branch_judge\`, \`retrieve_if_calibrated_below\`, and skips — mirror one pattern into \`spec.example.yaml\` so dogfood exercises the same code paths operators will rely on."
 	echo "- **Metrics loop**: standardize \`bin/dorkpipe eval\` / \`promote\` after CI or nightly runs; extend \`.dorkpipe/metrics.jsonl\` consumers if new dimensions are added (\`lib/dorkpipe/engine/provenance.go\`)."
@@ -85,8 +85,8 @@ EOF
 	echo "| Aggregation | \`lib/dorkpipe/aggregator/merge.go\` |"
 	echo "| CLI | \`src/cmd/dorkpipe/main.go\` |"
 	echo "| Eval / promotion | \`lib/dorkpipe/eval/eval.go\`, \`lib/dorkpipe/promotion/promotion.go\` |"
-	echo "| DockPipe workflow (this integration) | \`.staging/workflows/dorkpipe-self-analysis/\` |"
-	echo "| Orchestrator example DAG | \`.staging/workflows/dorkpipe-orchestrator/spec.example.yaml\` |"
+	echo "| DockPipe workflow (this integration) | \`src/lib/dorkpipe/workflows/dorkpipe-self-analysis/\` |"
+	echo "| Orchestrator example DAG | \`src/lib/dorkpipe/workflows/dorkpipe-orchestrator/spec.example.yaml\` |"
 	echo ""
 	if [[ -f "$OUT/key_file_wc.txt" ]]; then
 		echo "### Line counts (signal for complexity hotspots)"
@@ -105,12 +105,12 @@ EOF
 	echo "1. Extend \`spec.example.yaml\` in small steps (verifier OR branch OR \`retrieve_if\` — not all at once if it complicates ops)."
 	echo "2. Add or adjust tests in \`lib/dorkpipe/*/..._test.go\` when touching aggregation, planner, or workers."
 	echo "3. Keep \`dorkpipe validate\` / \`go test ./...\` green."
-	echo "4. Document the new path in \`.staging/workflows/dorkpipe-self-analysis/README.md\` and \`docs/dorkpipe.md\` if behavior is user-visible."
+	echo "4. Document the new path in \`src/lib/dorkpipe/workflows/dorkpipe-self-analysis/README.md\` and \`docs/dorkpipe.md\` if behavior is user-visible."
 	echo ""
 
 	echo "## 7. Acceptance criteria"
 	echo "- [ ] \`make build\` and \`go test ./...\` pass."
-	echo "- [ ] \`bin/dorkpipe validate -f .staging/workflows/dorkpipe-self-analysis/spec.yaml\` passes."
+	echo "- [ ] \`bin/dorkpipe validate -f src/lib/dorkpipe/workflows/dorkpipe-self-analysis/spec.yaml\` passes."
 	echo "- [ ] Running \`dockpipe --workflow dorkpipe-self-analysis --workdir <repo> --\` writes \`.dockpipe/orchestrator-cursor-prompt.md\`."
 	echo "- [ ] The handoff references **real** paths present in this repo (verify sections 2–4 against your checkout)."
 	echo ""
@@ -181,9 +181,9 @@ Task: Implement the next concrete improvements to DorkPipe orchestration (multi-
 
 Do this work in order:
 1) If this is a first pass: read src/lib/dorkpipe/engine/run.go and src/lib/dorkpipe/spec/spec.go to see current policy and scheduling.
-2) Add or extend a shipped DAG spec (.staging/workflows/dorkpipe-orchestrator/spec.example.yaml) so dogfood matches engine capabilities (e.g. kind: verifier after local LLM, or one pattern from src/lib/dorkpipe/examples/full-bar.yaml).
+2) Add or extend a shipped DAG spec (src/lib/dorkpipe/workflows/dorkpipe-orchestrator/spec.example.yaml) so dogfood matches engine capabilities (e.g. kind: verifier after local LLM, or one pattern from src/lib/dorkpipe/examples/full-bar.yaml).
 3) Add tests under src/lib/dorkpipe/*/ when you change aggregation, planner, or workers.
-4) Run: make build && go test ./... && src/bin/dorkpipe validate -f .staging/workflows/dorkpipe-self-analysis/spec.yaml
+4) Run: make build && go test ./... && src/bin/dorkpipe validate -f src/lib/dorkpipe/workflows/dorkpipe-self-analysis/spec.yaml
 
 Constraints:
 - No vendor-specific hooks in src/lib/dockpipe/application for this work.
@@ -200,7 +200,7 @@ Start here (files):
 - src/lib/dorkpipe/engine/run.go
 - src/lib/dorkpipe/workers/workers.go
 - src/lib/dorkpipe/aggregator/merge.go
-- .staging/workflows/dorkpipe-orchestrator/spec.example.yaml
+- src/lib/dorkpipe/workflows/dorkpipe-orchestrator/spec.example.yaml
 - src/lib/dorkpipe/examples/full-bar.yaml
 
 Acceptance:

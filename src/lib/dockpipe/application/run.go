@@ -118,6 +118,12 @@ func Run(argv []string, baseEnviron []string) error {
 	if argv[0] == "release" {
 		return cmdRelease(argv[1:])
 	}
+	if argv[0] == "core" {
+		return cmdCore(argv[1:])
+	}
+	if argv[0] == "terraform" {
+		return cmdTerraform(argv[1:])
+	}
 
 	repoRoot, err := repoRootAppFn()
 	if err != nil {
@@ -179,7 +185,7 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 			if statErr != nil {
 				names, _ := infrastructure.ListWorkflowNamesInRepoRootAndPackages(repoRoot, effWd)
-				msg := fmt.Sprintf("workflow %q not found — tried workflows/ (or DOCKPIPE_WORKFLOWS_DIR), .staging/workflows/ (dockpipe checkout), .dockpipe/internal/packages/workflows/, legacy templates/, src/core/workflows/ (dockpipe tree), core/resolvers/%[1]s/config.yml, and namespaced package tarballs (dockpipe-workflow-%[1]s-*.tar.gz under release/artifacts or packages.tarball_dir when config.yml inside the archive sets namespace:)", opts.Workflow)
+				msg := fmt.Sprintf("workflow %q not found — tried workflows/ (or DOCKPIPE_WORKFLOWS_DIR), extra roots from dockpipe.config.json compile.workflows, .dockpipe/internal/packages/workflows/, legacy templates/, src/core/workflows/ (dockpipe tree), core/resolvers/%[1]s/config.yml, and namespaced package tarballs (dockpipe-workflow-%[1]s-*.tar.gz under release/artifacts or packages.tarball_dir when config.yml inside the archive sets namespace:)", opts.Workflow)
 				if len(names) > 0 {
 					msg += fmt.Sprintf(" (available in this install: %s)", strings.Join(names, ", "))
 				}
@@ -202,6 +208,16 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 		if len(wf.Steps) > 0 {
 			stepsMode = true
+		}
+	}
+
+	effWd := effectiveWorkdirForWorkflowOpts(opts)
+	if wf != nil {
+		if err := domain.ValidateLoadedWorkflow(wf); err != nil {
+			return err
+		}
+		if err := infrastructure.CheckWorkflowPackageRequiresCapabilities(effWd, repoRoot, wfRoot, wfConfig); err != nil {
+			return err
 		}
 	}
 
@@ -244,13 +260,18 @@ func Run(argv []string, baseEnviron []string) error {
 
 	rtName := EffectiveRuntimeProfileName(opts, wf, stepsMode)
 	rsName := EffectiveResolverProfileName(opts, wf, stepsMode)
+	rtName, rsName, err = applyWorkflowCapabilityIsolation(effWd, repoRoot, wf, rtName, rsName)
+	if err != nil {
+		return err
+	}
+	rtName = infrastructure.NormalizeRuntimeProfileName(rtName)
 	if rtName == "" && rsName == "" {
 		if leg := EffectiveLegacyIsolateName(wf); leg != "" {
 			rtName, rsName = leg, leg
 		}
 	}
 	profileLabel := ProfileLabelForEnv(rtName, rsName)
-	// runtimes: allowlist names runtime substrates (docker, cli, …), not resolver/tool names (codex, …).
+	// runtimes: allowlist names runtime substrates (cli, dockerimage, …), not resolver/tool names (codex, …).
 	if rtName != "" {
 		if err := ValidateRuntimeAllowlist(wf, rtName); err != nil {
 			return err
@@ -671,7 +692,7 @@ func Run(argv []string, baseEnviron []string) error {
 	extraDocker := domain.EnvMapToSlice(dockerEnvMap)
 
 	if stepsMode {
-		if wf != nil && wf.NeedsDockerReachable() {
+		if wf != nil && WorkflowNeedsDockerReachableResolved(wf, effWd, repoRoot) {
 			if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {
 				return err
 			}

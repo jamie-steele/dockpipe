@@ -9,7 +9,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 ICON_PNG="${REPO}/src/contrib/pipeon-vscode-extension/images/icon.png"
-ICON_SVG="${REPO}/.staging/resolvers/code-server/assets/images/code-server/favicon.svg"
+ICON_SVG="${REPO}/src/contrib/pipeon-vscode-extension/images/favicon.svg"
 BIN="${REPO}/src/apps/pipeon-launcher/build/pipeon-launcher"
 
 if [[ "$(uname -s 2>/dev/null || echo unknown)" != Linux ]]; then

@@ -1,7 +1,7 @@
 # Repository Makefile — Go build rules live in src/Makefile (run `make` from repo root).
 include src/Makefile
 
-.PHONY: build-code-server-image pipeon-icons pipeon-launcher install-pipeon-shortcut install-pipeon-launcher-shortcut install-pipeon-all-shortcuts install-pipeon-shortcut-windows install-pipeon-shortcut-macos install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci self-analysis self-analysis-host self-analysis-stack compliance-handoff r2-publish package-templates-core user-insight-process pipeon-status pipeon-bundle pipeon-chat
+.PHONY: build-code-server-image pipeon-icons pipeon-launcher install-pipeon-shortcut install-pipeon-launcher-shortcut install-pipeon-all-shortcuts install-pipeon-shortcut-windows install-pipeon-shortcut-macos install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci self-analysis self-analysis-host self-analysis-stack compliance-handoff dockpipe.cloudflare.r2publish r2-publish package-templates-core user-insight-process pipeon-status pipeon-bundle pipeon-chat
 
 # Install pre-built binary to a local PATH directory (~/.local/bin, %USERPROFILE%\\bin, …). Does not run go build.
 install:
@@ -52,7 +52,7 @@ install-pipeon-all-shortcuts:
 
 # Coder code-server image with Pipeon extension (workflow vscode). Requires Docker; build from repo root.
 build-code-server-image:
-	docker build -t dockpipe-code-server:latest -f .staging/resolvers/code-server/assets/images/code-server/Dockerfile .
+	docker build -t dockpipe-code-server:latest -f src/contrib/pipeon-vscode-extension/Dockerfile.code-server .
 
 # Go + template guard + bash unit tests (no Docker). Faster than full CI.
 test-quick:
@@ -113,8 +113,11 @@ compliance-handoff: build
 	./src/bin/dockpipe --workflow compliance-handoff --workdir . --
 
 # Dogfood: tar ./release/artifacts and upload to Cloudflare R2 (S3 API). Set R2_BUCKET, CLOUDFLARE_ACCOUNT_ID, AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY.
-r2-publish: build
-	./src/bin/dockpipe --workflow r2-publish --workdir . --
+dockpipe.cloudflare.r2publish: build
+	./src/bin/dockpipe --workflow dockpipe.cloudflare.r2publish --workdir . --
+
+# Back-compat alias for muscle memory / scripts
+r2-publish: dockpipe.cloudflare.r2publish
 
 # User insight queue: normalize queue.json → insights.json + by-category (host workflow; see docs/user-insight-queue.md).
 user-insight-process: build

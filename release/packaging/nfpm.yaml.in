@@ -9,7 +9,7 @@ maintainer: "dockpipe maintainers"
 description: Run any CLI command in a disposable container—project at /work, removed when it exits.
 vendor: dockpipe
 homepage: https://github.com/jamie-steele/dockpipe
-license: MIT
+license: Apache-2.0
 depends:
   - bash
   - git

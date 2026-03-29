@@ -12,6 +12,8 @@
 
 Nothing in this design is hidden state: files are JSON (or JSONL history), **schemas** live under `src/schemas/`, and classification is **rules** in `scripts/dorkpipe/user-insight-rules.json` (editable, deterministic).
 
+The **`dockpipe --workflow user-insight-process`** entry point is the bundled workflow under **`src/core/workflows/dorkpipe/user-insight-process/`** (YAML + README); the shell steps it invokes remain under **`scripts/dorkpipe/`**.
+
 ---
 
 ## Layout (under `.dockpipe/analysis/`)

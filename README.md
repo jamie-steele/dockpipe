@@ -44,6 +44,7 @@ dockpipe --isolate agent-dev -- npm test
 | Workflow YAML | [docs/workflow-yaml.md](docs/workflow-yaml.md) |
 | CLI | [docs/cli-reference.md](docs/cli-reference.md) |
 | Terms (full definitions) | [docs/architecture-model.md](docs/architecture-model.md) |
+| Capabilities & resolver packages | [docs/capabilities.md](docs/capabilities.md) |
 | Onboarding | [docs/onboarding.md](docs/onboarding.md) |
 | Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
@@ -66,7 +67,7 @@ make ci          # full Linux CI mirror (govulncheck, gosec, Docker, integration
 | **`make self-analysis-host`** | Host-only, no Docker |
 | **`make compliance-handoff`** | Print CI + self-analysis **signal paths** for AI (“compliance issues?”) — **`docs/compliance-ai-handoff.md`** |
 
-See **`.staging/workflows/dorkpipe-self-analysis/README.md`** and **`docs/dorkpipe.md`**.
+See **`src/lib/dorkpipe/workflows/dorkpipe-self-analysis/README.md`** and **`docs/dorkpipe.md`**.
 
 ```bash
 make self-analysis

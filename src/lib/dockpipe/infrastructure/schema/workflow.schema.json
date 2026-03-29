@@ -9,7 +9,7 @@
     "description": { "type": "string" },
     "category": {
       "type": "string",
-      "description": "Optional UI hint: e.g. \"app\" for Pipeon Basic mode (launchable GUI/container tools)."
+      "description": "Optional UI hint: e.g. \"app\" = show in Pipeon Basic mode (launchable GUI/container tools)."
     },
     "workflow_type": {
       "type": "string",
@@ -18,6 +18,14 @@
     "namespace": {
       "type": "string",
       "description": "Optional author/org label for packages and discovery. Lowercase label (a-z, digits, hyphens); must not be a reserved word (e.g. dockpipe, core, system)."
+    },
+    "capability": {
+      "type": "string",
+      "description": "Optional legacy metadata (ignored by the runner)."
+    },
+    "primitive": {
+      "type": "string",
+      "description": "Deprecated — use capability. Same meaning as capability."
     },
     "imports": {
       "type": "array",
@@ -39,7 +47,6 @@
     "strategy": { "type": "string" },
     "strategies": { "type": "array", "items": { "type": "string" } },
     "docker_preflight": { "type": "boolean", "description": "When false, skip Docker reachability preflight when no step uses the container runner (host-only workflows)." },
-    "steps": { "type": "array" },
-    "resolvers": { "type": "array", "items": { "type": "string" } }
+    "steps": { "type": "array" }
   }
 }

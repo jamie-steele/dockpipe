@@ -50,7 +50,11 @@ type Workflow struct {
 	WorkflowType string `yaml:"workflow_type,omitempty"`
 	// Namespace: optional author/org label for packages and tooling (see ValidateNamespace).
 	Namespace       string  `yaml:"namespace,omitempty"`
-	Run             RunSpec `yaml:"run"`
+	// Capability: optional legacy YAML field (ignored by validation).
+	Capability string `yaml:"capability,omitempty"`
+	// PrimitiveYAMLDeprecated is the deprecated YAML key "primitive" — merged into Capability when parsing.
+	PrimitiveYAMLDeprecated string `yaml:"primitive,omitempty"`
+	Run       RunSpec `yaml:"run"`
 	Isolate         string  `yaml:"isolate"`
 	Act             string  `yaml:"act"`
 	Action          string  `yaml:"action"`
@@ -60,7 +64,7 @@ type Workflow struct {
 	Runtime string `yaml:"runtime,omitempty"`
 	// DefaultRuntime: YAML default_runtime — same role as default_resolver when runtime is unset.
 	DefaultRuntime string `yaml:"default_runtime,omitempty"`
-	// Runtimes: optional allowlist; if non-empty, the effective runtime must be listed.
+	// Runtimes: optional explicit allowlist when more than one substrate is allowed (e.g. docker and cli). If omitted, the runner derives an allowlist from runtime / default_runtime when set.
 	Runtimes []string `yaml:"runtimes,omitempty"`
 	// Strategy: default named strategy (templates/core/strategies/<name> or templates/<wf>/strategies/<name>).
 	Strategy string `yaml:"strategy,omitempty"`
@@ -134,6 +138,10 @@ type Step struct {
 	// Resolver: legacy alias for the same shared profile (not files next to this workflow).
 	// Loads DOCKPIPE_RESOLVER_* / DOCKPIPE_RUNTIME_* when unset on the step.
 	Resolver string `yaml:"resolver,omitempty"`
+	// Capability: optional legacy per-step field (ignored by the runner).
+	Capability string `yaml:"capability,omitempty"`
+	// Package: namespace for runtime: package — must match the nested workflow's namespace: (see ResolvePackagedWorkflowConfigPath).
+	Package string `yaml:"package,omitempty"`
 }
 
 // RuntimeProfileName returns per-step isolation profile name (runtime: or resolver:).
@@ -202,7 +210,9 @@ type workflowFile struct {
 	Description     string            `yaml:"description,omitempty"`
 	Category        string            `yaml:"category,omitempty"`
 	WorkflowType    string            `yaml:"workflow_type,omitempty"`
-	Namespace       string            `yaml:"namespace,omitempty"`
+	Namespace                string            `yaml:"namespace,omitempty"`
+	Capability               string            `yaml:"capability,omitempty"`
+	PrimitiveYAMLDeprecated  string            `yaml:"primitive,omitempty"`
 	Run             RunSpec           `yaml:"run"`
 	Isolate         string            `yaml:"isolate"`
 	Act             string            `yaml:"act"`
@@ -329,6 +339,54 @@ func ValidateWorkflowNamespaceField(w *Workflow) error {
 		return nil
 	}
 	return ValidateNamespace(w.Namespace)
+}
+
+// ValidateWorkflowCapabilityField checks capability when set (dotted id; see docs/capabilities.md).
+func ValidateWorkflowCapabilityField(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	return ValidateCapabilityID(w.Capability)
+}
+
+// ValidateWorkflowPrimitiveField is deprecated: use ValidateWorkflowCapabilityField.
+func ValidateWorkflowPrimitiveField(w *Workflow) error {
+	return ValidateWorkflowCapabilityField(w)
+}
+
+// ValidateWorkflowMustDeclareCapability requires a non-empty capability id on the workflow (see docs/capabilities.md).
+func ValidateWorkflowMustDeclareCapability(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	if strings.TrimSpace(w.Capability) == "" {
+		return fmt.Errorf("workflow must declare capability (dotted id, e.g. cli.codex — see docs/capabilities.md)")
+	}
+	return ValidateCapabilityID(w.Capability)
+}
+
+// ValidateWorkflowMustDeclarePrimitive is deprecated: use ValidateWorkflowMustDeclareCapability.
+func ValidateWorkflowMustDeclarePrimitive(w *Workflow) error {
+	return ValidateWorkflowMustDeclareCapability(w)
+}
+
+// ValidateLoadedWorkflow checks workflow fields required for run and dockpipe workflow validate.
+func ValidateLoadedWorkflow(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	if err := ValidateWorkflowTypeField(w); err != nil {
+		return err
+	}
+	if err := ValidateWorkflowNamespaceField(w); err != nil {
+		return err
+	}
+	for i, s := range w.Steps {
+		if err := ValidateCapabilityID(s.Capability); err != nil {
+			return fmt.Errorf("step %d: %w", i+1, err)
+		}
+	}
+	return nil
 }
 
 // ParseWorkflowYAML unmarshals workflow config from YAML bytes (no imports).

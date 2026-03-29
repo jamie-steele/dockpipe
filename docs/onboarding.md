@@ -29,7 +29,7 @@ Most days: **`dockpipe -- <command>`** only.
 ## 3. Try a workflow
 
 ```bash
-dockpipe --workflow test --runtime docker
+dockpipe --workflow test --runtime dockerimage
 ```
 
 - **`--workflow test`** — **This repo’s CI** uses **`go vet`** in Docker only (no `go test`); **govulncheck** / **gosec** run on the **host** in the same job.  

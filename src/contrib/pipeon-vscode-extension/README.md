@@ -9,7 +9,9 @@ Install this into **stock VS Code** for development, or pack as **`.vsix`** and 
 | **Pipeon: Open context bundle** | Shows **`.dockpipe/pipeon-context.md`** in an output channel (run `src/bin/pipeon bundle` in the repo first). |
 | **Pipeon: Open fork & extension docs** | Opens **`src/apps/pipeon/docs/pipeon-vscode-fork.md`** when the workspace is this repository. |
 
-The extension lists a **128×128** **`images/icon.png`** (Pipeon **P** on a blue tile). Regenerate all mark assets (PNG, `.ico`, SVG favicons) from repo root: **`make pipeon-icons`** (needs **Pillow**).
+The **`images/`** directory holds the Pipeon **P** mark: **`icon.png`** (128×128), **`favicon.ico`**, **`favicon.svg`**, **`favicon-dark-support.svg`** (browser tab + desktop shortcuts). Regenerate from repo root: **`make pipeon-icons`** (needs **Pillow**).
+
+**`dockpipe-code-server:latest`** (Coder code-server in the browser) is built via **`Dockerfile.code-server`** in this directory; **`code-server-user-settings.json`** is the default User settings baked into that image. **`make build-code-server-image`** runs the Docker build from the repo root.
 
 ## Pack
 

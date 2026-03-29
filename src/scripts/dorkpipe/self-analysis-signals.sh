@@ -35,7 +35,7 @@ engine_files() {
 
 {
 	echo "### spec.example.yaml (orchestrator) excerpt"
-	f="$ROOT/.staging/workflows/dorkpipe-orchestrator/spec.example.yaml"
+	f="$ROOT/src/lib/dorkpipe/workflows/dorkpipe-orchestrator/spec.example.yaml"
 	if [[ -f "$f" ]]; then
 		sed -n '1,80p' "$f"
 	fi

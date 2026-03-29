@@ -8,6 +8,20 @@
 
 namespace {
 
+void appendStagingWorkflowConfigPaths(const QDir &stg, QStringList &out)
+{
+    if (!stg.exists())
+        return;
+    for (const QFileInfo &fi : stg.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+        const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
+        if (QFileInfo::exists(cfg)) {
+            out.append(QDir::cleanPath(cfg));
+        } else {
+            appendStagingWorkflowConfigPaths(QDir(fi.filePath()), out);
+        }
+    }
+}
+
 // Lean category root: dockpipe source src/core, else downstream templates/core.
 QString coreCategoriesRoot(const QString &repoRoot)
 {
@@ -38,26 +52,21 @@ void collectConfigPaths(const QString &repoRoot, QStringList &out)
     }
 
     {
-        const QDir stg(root.filePath(QStringLiteral(".staging/workflows")));
-        if (stg.exists()) {
-            for (const QFileInfo &fi : stg.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
-                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
-                if (QFileInfo::exists(cfg))
-                    out.append(QDir::cleanPath(cfg));
-            }
-        }
+        const QDir dkw(root.filePath(QStringLiteral("src/lib/dorkpipe/workflows")));
+        if (dkw.exists())
+            appendStagingWorkflowConfigPaths(dkw, out);
+    }
+
+    {
+        const QDir stg(root.filePath(QStringLiteral(".staging/packages")));
+        if (stg.exists())
+            appendStagingWorkflowConfigPaths(stg, out);
     }
 
     {
         const QString bundledWf = root.filePath(QStringLiteral("src/core/workflows"));
-        if (QFileInfo(bundledWf).isDir()) {
-            const QDir wfd(bundledWf);
-            for (const QFileInfo &fi : wfd.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
-                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
-                if (QFileInfo::exists(cfg))
-                    out.append(QDir::cleanPath(cfg));
-            }
-        }
+        if (QFileInfo(bundledWf).isDir())
+            appendStagingWorkflowConfigPaths(QDir(bundledWf), out);
     }
 
     {

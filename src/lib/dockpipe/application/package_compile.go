@@ -2,6 +2,7 @@ package application
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -175,14 +176,15 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
 		pm := map[string]any{
-			"schema":       1,
-			"name":         pkgName,
-			"version":      "0.1.0",
-			"title":        pkgName,
-			"description":  "Compiled from " + srcAbs,
-			"kind":         "workflow",
-			"allow_clone":  true,
-			"distribution": "source",
+			"schema":               1,
+			"name":                 pkgName,
+			"version":              "0.1.0",
+			"title":                pkgName,
+			"description":          "Compiled from " + srcAbs,
+			"kind":                 "workflow",
+			"requires_capabilities": []string{strings.TrimSpace(wf.Capability)},
+			"allow_clone":          true,
+			"distribution":         "source",
 		}
 		repoRoot, err := filepath.Abs(workdir)
 		if err != nil {
@@ -513,7 +515,7 @@ func cmdPackageCompileBundles(args []string) error {
 		from = effectiveBundleCompileRoots(cfg, repoRoot, noStaging)
 	}
 	if len(from) == 0 {
-		return fmt.Errorf("no bundle source directories (set compile.bundles in %s, pass --from, or create .staging/bundles)", domain.DockpipeProjectConfigFileName)
+		return fmt.Errorf("no bundle source directories (set compile.bundles in %s or pass --from)", domain.DockpipeProjectConfigFileName)
 	}
 	destB, err := infrastructure.PackagesBundlesDir(workdir)
 	if err != nil {
@@ -566,13 +568,101 @@ func readResolverNamespaceYAML(dir string) (string, error) {
 	return strings.TrimSpace(aux.Namespace), nil
 }
 
+// collectResolverPackRoots returns directories whose immediate children are resolver profile dirs
+// (each child has profile/). Order: top-level resolvers/, packages/*/resolvers/, dockpipe/packages/*/resolvers/
+// (legacy), then dockpipe/<package>/resolvers/ (maintainer: agent, ide, secrets — package roots with resolver "plugins").
+// Each resolver child still becomes its own dockpipe-resolver-<name>-*.tar.gz for the store.
+func collectResolverPackRoots(srcRoot string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	add := func(p string) {
+		if st, err := os.Stat(p); err != nil || !st.IsDir() {
+			return
+		}
+		if _, ok := seen[p]; ok {
+			return
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	add(filepath.Join(srcRoot, "resolvers"))
+	for _, pat := range []string{
+		filepath.Join(srcRoot, "packages", "*", "resolvers"),
+		filepath.Join(srcRoot, "dockpipe", "packages", "*", "resolvers"),
+		filepath.Join(srcRoot, "dockpipe", "*", "resolvers"),
+	} {
+		matches, _ := filepath.Glob(pat)
+		for _, m := range matches {
+			add(m)
+		}
+	}
+	return out
+}
+
+// hasNestedResolverPackLayout reports whether dir looks like a grouped resolver tree (at least one
+// immediate child directory has no profile/ — recurse into group folders until profile/ is found).
+func hasNestedResolverPackLayout(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, e.Name(), "profile")); err != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // mergeChildPackages packs each immediate child directory from srcRoot into
 // dockpipe-{resolver|bundle}-<name>-<ver>.tar.gz under destRoot (no expanded trees).
+// For resolvers, when the tree is grouped (child dirs without profile/), we descend until profile/ is found.
+//
+// Resolver authoring: one or more pack roots are collected (see collectResolverPackRoots):
+//   - srcRoot/resolvers/ — flat vendor tree
+//   - srcRoot/packages/<group>/resolvers/ — per-package groups (each group is its own folder; same
+//     resolver names must not appear twice across groups)
+//   - srcRoot/dockpipe/<package>/resolvers/ — DockPipe official packages (e.g. agent → codex, ide → vscode)
+// Each resolver child still becomes its own dockpipe-resolver-<name>-*.tar.gz for the store.
 func mergeChildPackages(srcRoot, destRoot string, kind string, defaultNamespace string, force bool) (int, error) {
+	if kind == "resolver" {
+		roots := collectResolverPackRoots(srcRoot)
+		// Drop top-level resolvers/ if it does not exist (collectResolverPackRoots still added it — fix)
+		roots = filterExistingResolverRoots(roots)
+		if len(roots) > 0 {
+			total := 0
+			for _, root := range roots {
+				n, err := mergeChildPackagesWalk(root, destRoot, kind, defaultNamespace, force)
+				total += n
+				if err != nil {
+					return total, err
+				}
+			}
+			return total, nil
+		}
+	}
+	return mergeChildPackagesWalk(srcRoot, destRoot, kind, defaultNamespace, force)
+}
+
+func filterExistingResolverRoots(roots []string) []string {
+	var out []string
+	for _, p := range roots {
+		if st, err := os.Stat(p); err == nil && st.IsDir() {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func mergeChildPackagesWalk(srcRoot, destRoot string, kind string, defaultNamespace string, force bool) (int, error) {
 	entries, err := os.ReadDir(srcRoot)
 	if err != nil {
 		return 0, err
 	}
+	nestedPack := kind == "resolver" && hasNestedResolverPackLayout(srcRoot)
 	n := 0
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -583,6 +673,16 @@ func mergeChildPackages(srcRoot, destRoot string, kind string, defaultNamespace 
 			continue
 		}
 		from := filepath.Join(srcRoot, name)
+		if nestedPack {
+			if _, err := os.Stat(filepath.Join(from, "profile")); err != nil {
+				sub, err := mergeChildPackagesWalk(from, destRoot, kind, defaultNamespace, force)
+				if err != nil {
+					return n, err
+				}
+				n += sub
+				continue
+			}
+		}
 		var tarGlob string
 		switch kind {
 		case "resolver":
@@ -738,32 +838,30 @@ func cmdPackageCompileWorkflowsBatch(args []string) error {
 			fmt.Fprintf(os.Stderr, "[dockpipe] skip missing workflows root: %s\n", rootAbs)
 			continue
 		}
-		entries, err := os.ReadDir(rootAbs)
-		if err != nil {
-			return err
-		}
-		for _, e := range entries {
-			if !e.IsDir() {
-				continue
+		if err := filepath.WalkDir(rootAbs, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				return err
 			}
-			name := e.Name()
-			if strings.HasPrefix(name, ".") {
-				continue
+			if d.IsDir() || d.Name() != "config.yml" {
+				return nil
 			}
-			wfDir := filepath.Join(rootAbs, name)
-			cfg := filepath.Join(wfDir, "config.yml")
-			if _, err := os.Stat(cfg); err != nil {
-				continue
+			wfDir := filepath.Dir(path)
+			wfName := filepath.Base(wfDir)
+			if strings.HasPrefix(wfName, ".") {
+				return nil
 			}
-			if _, ok := seen[name]; ok {
-				fmt.Fprintf(os.Stderr, "[dockpipe] skip duplicate workflow name %q (already compiled from an earlier --from)\n", name)
-				continue
+			if _, ok := seen[wfName]; ok {
+				fmt.Fprintf(os.Stderr, "[dockpipe] skip duplicate workflow name %q (already compiled from an earlier --from)\n", wfName)
+				return nil
 			}
 			if err := compileWorkflowOne(workdir, wfDir, "", force); err != nil {
-				return fmt.Errorf("workflow %q: %w", name, err)
+				return fmt.Errorf("workflow %q: %w", wfName, err)
 			}
-			seen[name] = struct{}{}
+			seen[wfName] = struct{}{}
 			total++
+			return nil
+		}); err != nil {
+			return err
 		}
 	}
 	fmt.Fprintf(os.Stderr, "[dockpipe] compiled %d workflow tarball(s) under .dockpipe/internal/packages/workflows/\n", total)
@@ -930,7 +1028,13 @@ Merges each child directory from each --from source into
 .dockpipe/internal/packages/resolvers/<name>/ (later --from wins on name clash).
 
 Defaults come from dockpipe.config.json compile.resolvers when present, else
-src/core/resolvers, templates/core/resolvers, then .staging/resolvers (existing dirs only).
+src/core/resolvers, templates/core/resolvers, then .staging/packages (dirs with profile/ are packed, including dockpipe/*/resolvers/ and grouped packages/*/resolvers).
+
+Pack roots (each immediate child with profile/ becomes one store tarball):
+  - <from>/resolvers/...                    (flat vendor tree)
+  - <from>/packages/<group>/resolvers/...  (per-package groups, e.g. ides, agents)
+  - <from>/dockpipe/packages/<group>/resolvers/...  (DockPipe official maintainer layout)
+src/core/resolvers has no nested resolvers/ — unchanged.
 
 Optional resolver.yaml next to each profile may set namespace: <label> (same rules as workflow namespace).
 
@@ -946,7 +1050,7 @@ const packageCompileBundlesUsageText = `dockpipe package compile bundles
 Merges each child directory from each --from into
 .dockpipe/internal/packages/bundles/<name>/.
 
-Defaults: dockpipe.config.json compile.bundles, or .staging/bundles when present.
+Defaults: dockpipe.config.json compile.bundles (no implicit paths).
 
 Options:
   --workdir <path>      Project directory (default: current directory)
@@ -959,7 +1063,7 @@ const packageCompileWorkflowsUsageText = `dockpipe package compile workflows
 
 Compiles every immediate subdirectory that contains config.yml under each --from root.
 
-Defaults: dockpipe.config.json compile.workflows, else workflows/ and .staging/workflows/ when present.
+Defaults: dockpipe.config.json compile.workflows, else workflows/ and src/lib/dorkpipe/workflows/ when present.
 
 Options:
   --workdir <path>       Project directory (default: current directory)

@@ -71,18 +71,9 @@ def write_svgs(out_dir: str) -> None:
 
 
 def main() -> int:
+    # Single canonical tree for Pipeon branding + code-server favicons (shortcuts, Docker image, extension).
     ext_img = os.path.join(REPO_ROOT, "src/contrib/pipeon-vscode-extension", "images")
-    cs_dir = os.path.join(
-        REPO_ROOT,
-        ".staging",
-        "resolvers",
-        "code-server",
-        "assets",
-        "images",
-        "code-server",
-    )
     os.makedirs(ext_img, exist_ok=True)
-    os.makedirs(cs_dir, exist_ok=True)
 
     img128 = render_p(128)
     png_path = os.path.join(ext_img, "icon.png")
@@ -91,7 +82,7 @@ def main() -> int:
 
     sizes = [16, 32, 48]
     ico_imgs = [render_p(s).convert("RGBA") for s in sizes]
-    ico_path = os.path.join(cs_dir, "favicon.ico")
+    ico_path = os.path.join(ext_img, "favicon.ico")
     ico_imgs[0].save(
         ico_path,
         format="ICO",
@@ -100,7 +91,7 @@ def main() -> int:
     )
     print("wrote", ico_path)
 
-    write_svgs(cs_dir)
+    write_svgs(ext_img)
     return 0
 
 

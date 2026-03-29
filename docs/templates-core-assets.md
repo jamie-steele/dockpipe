@@ -34,6 +34,7 @@ Merged into user projects by **`dockpipe init`** as part of **`templates/core/`*
 
 | Asset | Classification | Notes |
 |-------|----------------|-------|
+| **`terraform-pipeline.sh`** | **SAFE TO BUNDLE** | Sourced bash library for **`terraform`** `init`/`plan`/`apply`/… from **`DOCKPIPE_TF_*`** env — see **[terraform-pipeline.md](terraform-pipeline.md)**. |
 | Host helpers (`clone-worktree.sh`, `commit-worktree.sh`, …) | **SAFE TO BUNDLE** | Original shell — **agnostic**; stay at **`assets/scripts/`** root. |
 | `example-run.sh`, `example-act.sh` | **SAFE TO BUNDLE** | Samples copied to project **`scripts/`**. |
 | **`scripts/cursor-dev/*.sh`**, **`scripts/vscode/vscode-code-server.sh`** | **SAFE TO BUNDLE** | Implemented only under **`templates/core/resolvers/<name>/`**; the runner maps **`scripts/…`** paths there. Resolver-specific; tools may be **USER-SUPPLIED**. |

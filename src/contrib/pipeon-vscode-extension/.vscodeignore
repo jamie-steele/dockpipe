@@ -1,3 +1,5 @@
 .vscode/**
 **/*.map
 .gitignore
+Dockerfile.code-server
+code-server-user-settings.json

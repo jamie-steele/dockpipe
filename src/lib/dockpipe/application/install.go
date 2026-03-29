@@ -196,6 +196,6 @@ Manifest JSON (install-manifest.json):
 Package the archive from a dockpipe checkout:
   bash release/packaging/package-templates-core.sh
 
-Upload with dockpipe --workflow r2-publish or aws s3 cp to the same base URL.
+Upload with dockpipe --workflow dockpipe.cloudflare.r2publish or aws s3 cp to the same base URL.
 
 `

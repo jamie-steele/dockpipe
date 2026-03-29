@@ -33,10 +33,7 @@ func tryResolveResolver(repoRoot, name string) string {
 	}
 	var candidates []string
 	if !UsesBundledAssetLayout(repoRoot) {
-		candidates = append(candidates,
-			filepath.Join(StagingResolversDir(repoRoot), name),
-			filepath.Join(StagingResolversDir(repoRoot), name, "profile"),
-		)
+		candidates = append(candidates, nestedResolverProfileCandidates(repoRoot, name, ResolverCompileRootsCached(repoRoot))...)
 	}
 	candidates = append(candidates,
 		filepath.Join(CoreDir(repoRoot), "resolvers", name),
@@ -62,7 +59,7 @@ func tryResolveResolver(repoRoot, name string) string {
 // When both names are set and differ, only templates/core/runtimes/<runtimeName> and
 // templates/core/resolvers/<resolverName> are loaded (no cross-name fallback).
 func LoadIsolationProfile(repoRoot, runtimeName, resolverName string) (map[string]string, error) {
-	runtimeName = strings.TrimSpace(runtimeName)
+	runtimeName = NormalizeRuntimeProfileName(strings.TrimSpace(runtimeName))
 	resolverName = strings.TrimSpace(resolverName)
 	explicitPair := runtimeName != "" && resolverName != "" && runtimeName != resolverName
 

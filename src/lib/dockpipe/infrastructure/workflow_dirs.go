@@ -27,7 +27,7 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 	var candidates []string
 	candidates = append(candidates, filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"))
 	if !UsesBundledAssetLayout(repoRoot) {
-		candidates = append(candidates, filepath.Join(StagingWorkflowsDir(repoRoot), name, "config.yml"))
+		candidates = append(candidates, nestedWorkflowConfigCandidates(repoRoot, name, WorkflowCompileRootsCached(repoRoot))...)
 	}
 	if u, err := tryResolveWorkflowTarballURI(repoRoot, workdir, name); err != nil {
 		return "", err
@@ -36,9 +36,6 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 	}
 	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
 		candidates = append(candidates, filepath.Join(repoRoot, "templates", name, "config.yml"))
-	}
-	if !UsesBundledAssetLayout(repoRoot) {
-		candidates = append(candidates, filepath.Join(StagingResolversDir(repoRoot), name, "config.yml"))
 	}
 	candidates = append(candidates, filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml"))
 	for _, p := range candidates {
@@ -64,7 +61,7 @@ func ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, workdir, nam
 	}
 	var candidates []string
 	if !UsesBundledAssetLayout(repoRoot) {
-		candidates = append(candidates, filepath.Join(StagingResolversDir(repoRoot), name, "config.yml"))
+		candidates = append(candidates, nestedWorkflowConfigCandidates(repoRoot, name, WorkflowCompileRootsCached(repoRoot))...)
 	}
 	candidates = append(candidates,
 		filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml"),
@@ -122,8 +119,49 @@ func ListWorkflowNamesInRepoRoot(repoRoot string) ([]string, error) {
 		return nil, err
 	}
 	if !UsesBundledAssetLayout(repoRoot) {
-		if err := addDir(StagingWorkflowsDir(repoRoot)); err != nil {
+		if bw := BundledWorkflowsAuthoringDir(repoRoot); bw != "" {
+			_ = filepath.WalkDir(bw, func(path string, d os.DirEntry, err error) error {
+				if err != nil {
+					if os.IsNotExist(err) {
+						return nil
+					}
+					return err
+				}
+				if d.IsDir() || d.Name() != "config.yml" {
+					return nil
+				}
+				name := filepath.Base(filepath.Dir(path))
+				if _, ok := seen[name]; !ok {
+					seen[name] = struct{}{}
+					out = append(out, name)
+				}
+				return nil
+			})
+		}
+		if err := addDir(DorkpipeLibraryWorkflowsDir(repoRoot)); err != nil {
 			return nil, err
+		}
+		for _, wfRoot := range WorkflowCompileRootsCached(repoRoot) {
+			if err := addDir(wfRoot); err != nil {
+				return nil, err
+			}
+			_ = filepath.WalkDir(wfRoot, func(path string, d os.DirEntry, err error) error {
+				if err != nil {
+					if os.IsNotExist(err) {
+						return nil
+					}
+					return err
+				}
+				if d.IsDir() || d.Name() != "config.yml" {
+					return nil
+				}
+				name := filepath.Base(filepath.Dir(path))
+				if _, ok := seen[name]; !ok {
+					seen[name] = struct{}{}
+					out = append(out, name)
+				}
+				return nil
+			})
 		}
 	}
 	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {

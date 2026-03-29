@@ -49,7 +49,7 @@ func TestListWorkflowNamesInRepoRootAndPackagesMerges(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(st, "config.yml"), []byte("name: b\nsteps: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: b\nversion: 0.1.0\nkind: workflow\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: b\nversion: 0.1.0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	pw := filepath.Join(tmp, ".dockpipe", "internal", "packages", "workflows")
@@ -83,7 +83,7 @@ func TestListWorkflowNamesInRepoRootAndPackagesMergesGlobal(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(st, "config.yml"), []byte("name: globalwf\nsteps: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: globalwf\nversion: 0.1.0\nkind: workflow\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: globalwf\nversion: 0.1.0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	pw := filepath.Join(glob, "packages", "workflows")
@@ -111,7 +111,7 @@ func TestResolveWorkflowConfigPathGlobalFallback(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(st, "config.yml"), []byte("name: onlyglobal\nsteps: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: onlyglobal\nversion: 0.1.0\nkind: workflow\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: onlyglobal\nversion: 0.1.0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	pw := filepath.Join(glob, "packages", "workflows")
@@ -221,7 +221,7 @@ func TestResolveWorkflowConfigPathWithWorkdirPrefersPackagesOverLegacyTemplates(
 	if err := os.WriteFile(filepath.Join(st, "config.yml"), []byte("name: pkg\nsteps: []\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: demo\nversion: 0.1.0\nkind: workflow\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: demo\nversion: 0.1.0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	pw := filepath.Join(tmp, ".dockpipe", "internal", "packages", "workflows")

@@ -10,7 +10,7 @@ import (
 func TestBuildCompiledStore(t *testing.T) {
 	root := t.TempDir()
 	core := filepath.Join(root, "core")
-	if err := os.MkdirAll(filepath.Join(core, "runtimes", "cli"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(core, "runtimes", "dockerimage"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(core, "package.yml"), []byte(`schema: 1
@@ -20,7 +20,7 @@ title: Core
 description: d
 author: a
 website: https://example.com
-license: MIT
+license: Apache-2.0
 kind: core
 `), 0o644); err != nil {
 		t.Fatal(err)
@@ -36,8 +36,10 @@ title: Demo
 description: d
 author: a
 website: https://example.com
-license: MIT
+license: Apache-2.0
 kind: workflow
+provider: cloudflare
+requires_capabilities: [cli.codex]
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -52,7 +54,7 @@ kind: workflow
 	if m.Packages.Core == nil || m.Packages.Core.Version != "1.2.3" {
 		t.Fatalf("core: %+v", m.Packages.Core)
 	}
-	if len(m.Packages.Workflows) != 1 || m.Packages.Workflows[0].Name != "demo" {
+	if len(m.Packages.Workflows) != 1 || m.Packages.Workflows[0].Name != "demo" || m.Packages.Workflows[0].Provider != "cloudflare" {
 		t.Fatalf("workflows: %+v", m.Packages.Workflows)
 	}
 	b, err := os.ReadFile(filepath.Join(out, "packages-store-manifest.json"))
@@ -65,5 +67,11 @@ kind: workflow
 	}
 	if dec.Packages.Core.Tarball == "" {
 		t.Fatal("empty core tarball in manifest")
+	}
+	if len(dec.Packages.Workflows) != 1 || dec.Packages.Workflows[0].Provider != "cloudflare" {
+		t.Fatalf("workflow provider in JSON: %+v", dec.Packages.Workflows)
+	}
+	if len(dec.Packages.Workflows[0].RequiresCapabilities) != 1 || dec.Packages.Workflows[0].RequiresCapabilities[0] != "cli.codex" {
+		t.Fatalf("requires_capabilities in JSON: %+v", dec.Packages.Workflows)
 	}
 }

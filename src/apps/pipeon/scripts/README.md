@@ -39,7 +39,7 @@ Maintainer-only scripts live **here** (same folder as the harness):
 
 | Script | Purpose |
 |--------|---------|
-| **`generate-pipeon-icons.py`** | **`make pipeon-icons`** — extension PNG, code-server ICO/SVG favicons |
+| **`generate-pipeon-icons.py`** | **`make pipeon-icons`** — writes PNG / ICO / SVG under **`src/contrib/pipeon-vscode-extension/images/`** |
 | **`install-pipeon-desktop-shortcut.sh`** | Linux Freedesktop menu entry |
 | **`install-pipeon-desktop-shortcut.ps1`** | Windows `.lnk` shortcuts |
 | **`install-pipeon-shortcut-macos.sh`** | macOS `~/Applications/Pipeon.command` |

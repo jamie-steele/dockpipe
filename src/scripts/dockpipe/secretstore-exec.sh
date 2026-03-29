@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Secret-store wrapper: dispatches on SECRETSTORE_PROVIDER (default op). Used by templates/secretstore.
+# Secret-store wrapper (bundled core): dotenv-style file → run SECRETSTORE_COMMAND.
+# For 1Password (op), use workflow secretstore-onepassword (maintainer staging) and secretstore-op-exec.sh.
 set -euo pipefail
 
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
@@ -8,17 +9,20 @@ cd "$ROOT"
 
 die() { echo "secretstore: $*" >&2; exit 1; }
 
-PROVIDER="${SECRETSTORE_PROVIDER:-op}"
+PROVIDER="${SECRETSTORE_PROVIDER:-dotenv}"
 case "$PROVIDER" in
-  op)
-    command -v op >/dev/null 2>&1 || die "install 1Password CLI (https://developer.1password.com/docs/cli/)"
-    OP_ENV_FILE="${OP_ENV_FILE:-.env.op.template}"
-    [[ -f "$OP_ENV_FILE" ]] || die "missing $OP_ENV_FILE — copy templates/secretstore/.env.op.template.example and add op:// lines"
+  dotenv|file)
+    ENV_FILE="${SECRETSTORE_ENV_FILE:-.env.secretstore}"
+    [[ -f "$ENV_FILE" ]] || die "missing $ENV_FILE — copy src/core/workflows/secretstore/.env.secretstore.example (see README)"
     CMD="${SECRETSTORE_COMMAND:-}"
-    [[ -n "$CMD" ]] || die "set SECRETSTORE_COMMAND (shell command to run with injected env, e.g. ./src/bin/dockpipe --workflow mywf --workdir . --)"
-    exec op run --env-file="$OP_ENV_FILE" -- bash -c "$CMD"
+    [[ -n "$CMD" ]] || die "set SECRETSTORE_COMMAND (shell command to run with loaded env, e.g. ./src/bin/dockpipe --workflow mywf --workdir . --)"
+    set -a
+    # shellcheck disable=SC1090
+    . "$ENV_FILE"
+    set +a
+    exec bash -c "$CMD"
     ;;
   *)
-    die "unsupported SECRETSTORE_PROVIDER=$PROVIDER — extend src/scripts/dockpipe/secretstore-exec.sh (known: op)"
+    die "unsupported SECRETSTORE_PROVIDER=$PROVIDER — bundled core supports dotenv|file only. For op (1Password), use --workflow secretstore-onepassword in this repo."
     ;;
 esac

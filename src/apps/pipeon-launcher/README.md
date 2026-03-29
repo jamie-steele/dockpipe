@@ -73,7 +73,7 @@ Qt is available under **LGPL** and commercially. If you **ship binaries**, compl
 
 - **Browse Flathub…** opens a search dialog (POST to **`https://flathub.org/api/v2/search`**) with optional **category** filter (client-side on `main_categories`). Choosing an app sets **`FLATHUB_APP_ID=`** plus the Flatpak app id (replaces an existing line with that key).
 
-Use the **`flathub-host`** workflow (on disk **`.staging/workflows/flathub-host/`** in this repo) with **`scripts/flathub-host/flathub-host-run.sh`**, which runs **`flatpak run`** on the **host** (Linux with Flatpak + Flathub installed). **Docker**-based Flathub flows and **named volume caches** stay in separate workflows/scripts (`steam-flatpak-docker`, `package-cache-demo`).
+Use **`scripts/flathub-host/flathub-host-run.sh`** from **`.staging/bundles/flathub-host/`** (runs **`flatpak run`** on the **host** when Flatpak + Flathub are installed). **Docker**-based Flathub flows use the **`steam-flatpak`** bundle (`.staging/bundles/steam-flatpak/`); **`src/scripts/docker-package-cache-demo.sh`** demonstrates named cache volumes for repeated container runs.
 
 **APT** (or other package managers) does not need a separate browser: add env lines your scripts read, or pass **`dockpipe --mount`** for cache volumes when you run a container-backed workflow from the CLI; Pipeon can mirror those with extra env lines only if your wrapper reads them.
 

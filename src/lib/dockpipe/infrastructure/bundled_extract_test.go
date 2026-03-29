@@ -6,7 +6,7 @@ import (
 )
 
 // TestEmbeddedWorkflowConfigExists checks bundled user templates (src/core/workflows/*/config.yml) and
-// resolver delegates (src/core/resolvers/*/config.yml and .staging/resolvers). It does not assert maintainer-only
+// resolver delegates (src/core/resolvers/*/config.yml and .staging/packages for tool trees). It does not assert maintainer-only
 // Extra embedded workflow names under workflows/ — those churn independently of the core embed contract.
 func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	if !EmbeddedWorkflowConfigExists("run") {
@@ -29,6 +29,12 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	if !EmbeddedWorkflowConfigExists("secretstore") {
 		t.Fatal("expected secretstore workflow template")
 	}
+	if !EmbeddedWorkflowConfigExists("dorkpipe-self-analysis") {
+		t.Fatal("expected dorkpipe-self-analysis from src/lib/dorkpipe/workflows")
+	}
+	if !EmbeddedWorkflowConfigExists("user-insight-process") {
+		t.Fatal("expected user-insight-process from src/core/workflows/dorkpipe/")
+	}
 	if EmbeddedWorkflowConfigExists("") {
 		t.Fatal("empty name should be false")
 	}
@@ -48,11 +54,13 @@ func TestMapEmbeddedToMaterializedPath(t *testing.T) {
 		{"VERSION", "version"},
 		{"assets/entrypoint.sh", "assets/entrypoint.sh"},
 		{EmbeddedTemplatesPrefix, filepath.Join(ShipyardDir, "core")},
-		{EmbeddedTemplatesPrefix + "/runtimes/docker/profile", filepath.Join(ShipyardDir, "core/runtimes/docker/profile")},
+		{EmbeddedTemplatesPrefix + "/runtimes/dockerimage/profile", filepath.Join(ShipyardDir, "core/runtimes/dockerimage/profile")},
 		{EmbeddedTemplatesPrefix + "/workflows/run/config.yml", filepath.Join(ShipyardDir, "workflows", "run", "config.yml")},
-		{"workflows/r2-publish/config.yml", filepath.Join(ShipyardDir, "workflows", "r2-publish", "config.yml")},
-		{".staging/workflows/r2-publish/config.yml", filepath.Join(ShipyardDir, "workflows", "r2-publish", "config.yml")},
-		{".staging/resolvers/vscode/config.yml", filepath.Join(ShipyardDir, "core", "resolvers", "vscode", "config.yml")},
+		{"workflows/dockpipe.cloudflare.r2publish/config.yml", filepath.Join(ShipyardDir, "workflows", "dockpipe.cloudflare.r2publish", "config.yml")},
+		{".staging/packages/dockpipe/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/config.yml", filepath.Join(ShipyardDir, "workflows", "dockpipe.cloudflare.r2publish", "config.yml")},
+		{".staging/packages/dockpipe/ide/resolvers/vscode/config.yml", filepath.Join(ShipyardDir, "workflows", "vscode", "config.yml")},
+		{EmbeddedTemplatesPrefix + "/workflows/dorkpipe/user-insight-process/config.yml", filepath.Join(ShipyardDir, "workflows", "dorkpipe", "user-insight-process", "config.yml")},
+		{DorkpipeLibraryWorkflowsDirRel + "/dorkpipe-self-analysis/config.yml", filepath.Join(ShipyardDir, "workflows", "dorkpipe-self-analysis", "config.yml")},
 		{"workflows", filepath.Join(ShipyardDir, "workflows")},
 		// Already-materialized paths pass through unchanged (bundle cache layout uses ShipyardDir).
 		{filepath.Join(ShipyardDir, "workflows", "init", "config.yml"), filepath.Join(ShipyardDir, "workflows", "init", "config.yml")},

@@ -103,7 +103,7 @@ func walkPackageDirs(root string) error {
 				continue
 			}
 			rel, _ := filepath.Rel(root, tgz)
-			fmt.Fprintf(os.Stderr, "%s\t%s\t%s\t%s\n", rel, m.Name, m.Version, trimDesc(m.Description))
+			fmt.Fprintf(os.Stderr, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", rel, m.Name, m.Version, m.Provider, m.Capability, joinRequiresComma(m.RequiresCapabilities), trimDesc(m.Description))
 		}
 	}
 	return filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -126,7 +126,7 @@ func walkPackageDirs(root string) error {
 		}
 		dir := filepath.Dir(path)
 		rel, _ := filepath.Rel(root, dir)
-		fmt.Fprintf(os.Stderr, "%s\t%s\t%s\t%s\n", rel, m.Name, m.Version, trimDesc(m.Description))
+		fmt.Fprintf(os.Stderr, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", rel, m.Name, m.Version, m.Provider, m.Capability, joinRequiresComma(m.RequiresCapabilities), trimDesc(m.Description))
 		return nil
 	})
 }
@@ -155,6 +155,13 @@ func packageYMLPathInTarMembers(sub string, members []string) string {
 		}
 	}
 	return ""
+}
+
+func joinRequiresComma(xs []string) string {
+	if len(xs) == 0 {
+		return ""
+	}
+	return strings.Join(xs, ",")
 }
 
 func trimDesc(s string) string {
@@ -188,9 +195,17 @@ description: |
   Longer description for humans and search.
 author: Your name or org
 website: https://example.com
-license: MIT
-# Optional: workflow | resolver | core | assets | bundle
+license: Apache-2.0
+# Optional: workflow | resolver | core | assets | bundle | package
 kind: workflow
+# kind: package — umbrella at e.g. dockpipe/agent/package.yml (metadata only; resolvers are under resolvers/):
+# includes_resolvers: [codex, claude, ollama]
+# kind: resolver — set capability to the dotted id this package provides (see docs/capabilities.md):
+# capability: cli.codex
+# kind: workflow — capability dependencies:
+# requires_capabilities: [cli.codex, app.vscode]
+# Optional — platform/vendor id for filtering (short label, e.g. cloudflare, aws — not a URL):
+# provider: cloudflare
 # Optional — authoring / store discovery (see docs/package-model.md):
 # tags: [ci, security]
 # keywords: [dockpipe, workflow]
@@ -218,7 +233,7 @@ Usage:
   dockpipe package build core|store [options]
   dockpipe package compile core|resolvers|bundles|workflows|all|workflow [options]
 
-  list      Find package.yml under .dockpipe/internal/packages and print rel path, name, version, description.
+  list      Find package.yml under .dockpipe/internal/packages and print rel path, name, version, provider, capability, requires_capabilities (comma-separated), description.
   manifest  Print an example package.yml schema to stdout.
   build     core: templates-core tarball + install-manifest; store: gzip tar per compiled package + packages-store-manifest.json.
   compile   Materialize core / resolvers / workflows into .dockpipe/internal/packages/ (bundles optional; see compile --help).
@@ -233,6 +248,7 @@ Environment:
 const packageListUsageText = `dockpipe package list [--workdir <path>]
 
 Scans .dockpipe/internal/packages (recursive) for package.yml files.
+Output columns (tab-separated): path, name, version, provider, capability, requires_capabilities, description.
 
 `
 

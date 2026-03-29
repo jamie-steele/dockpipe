@@ -79,12 +79,11 @@ func TestLoadIsolationProfileRepresentativePairs(t *testing.T) {
 		rtBody string
 		rsBody string
 	}{
-		{"cli+claude", "cli", "claude", "DOCKPIPE_RUNTIME_SUBSTRATE=cli\n", "DOCKPIPE_RESOLVER_TEMPLATE=claude\n"},
-		{"docker+codex", "docker", "codex", "DOCKPIPE_RUNTIME_SUBSTRATE=docker\n", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n"},
-		{"kube-pod+vscode", "kube-pod", "vscode", "DOCKPIPE_RUNTIME_SUBSTRATE=kube-pod\n", "DOCKPIPE_RESOLVER_WORKFLOW=vscode\n"},
-		{"docker+vscode", "docker", "vscode", "DOCKPIPE_RUNTIME_SUBSTRATE=docker\n", "DOCKPIPE_RESOLVER_WORKFLOW=vscode\n"},
-		{"docker+code-server", "docker", "code-server", "DOCKPIPE_RUNTIME_SUBSTRATE=docker\n", "DOCKPIPE_RESOLVER_TEMPLATE=code-server\n"},
-		{"cli+cursor-dev", "cli", "cursor-dev", "DOCKPIPE_RUNTIME_SUBSTRATE=cli\n", "DOCKPIPE_RESOLVER_CMD=cursor-dev\n"},
+		{"dockerimage+claude", "dockerimage", "claude", "DOCKPIPE_RUNTIME_SUBSTRATE=dockerimage\n", "DOCKPIPE_RESOLVER_TEMPLATE=claude\n"},
+		{"dockerimage+codex", "dockerimage", "codex", "DOCKPIPE_RUNTIME_SUBSTRATE=dockerimage\n", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n"},
+		{"dockerimage+vscode", "dockerimage", "vscode", "DOCKPIPE_RUNTIME_SUBSTRATE=dockerimage\n", "DOCKPIPE_RESOLVER_WORKFLOW=vscode\n"},
+		{"dockerimage+code-server", "dockerimage", "code-server", "DOCKPIPE_RUNTIME_SUBSTRATE=dockerimage\n", "DOCKPIPE_RESOLVER_TEMPLATE=code-server\n"},
+		{"dockerimage+cursor-dev", "dockerimage", "cursor-dev", "DOCKPIPE_RUNTIME_SUBSTRATE=dockerimage\n", "DOCKPIPE_RESOLVER_CMD=cursor-dev\n"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -121,16 +120,16 @@ func TestLoadIsolationProfileExplicitPairDoesNotCrossRead(t *testing.T) {
 	repo := t.TempDir()
 	// Wrong: only a "codex" file under runtimes/ — must not count as resolver "codex".
 	writeRuntimeFile(t, repo, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=should-not-use\n")
-	writeRuntimeFile(t, repo, "docker", "DOCKPIPE_RUNTIME_SUBSTRATE=docker\n")
+	writeRuntimeFile(t, repo, "dockerimage", "DOCKPIPE_RUNTIME_SUBSTRATE=dockerimage\n")
 	writeResolverFile(t, repo, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
-	m, err := LoadIsolationProfile(repo, "docker", "codex")
+	m, err := LoadIsolationProfile(repo, "dockerimage", "codex")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if m["DOCKPIPE_RESOLVER_TEMPLATE"] != "codex" {
 		t.Fatalf("resolver merge: want codex from resolvers/, got %#v", m)
 	}
-	if m["DOCKPIPE_RUNTIME_SUBSTRATE"] != "docker" {
+	if m["DOCKPIPE_RUNTIME_SUBSTRATE"] != "dockerimage" {
 		t.Fatalf("runtime merge: %#v", m)
 	}
 }

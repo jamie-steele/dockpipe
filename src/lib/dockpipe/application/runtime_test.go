@@ -39,12 +39,32 @@ func TestProfileLabelForEnv(t *testing.T) {
 }
 
 func TestValidateRuntimeAllowlistRuntimeNotResolverLabel(t *testing.T) {
-	wf := &domain.Workflow{Runtimes: []string{"docker", "cli"}}
-	// Allowlist matches runtime substrate (docker), not resolver name (codex).
-	if err := ValidateRuntimeAllowlist(wf, "docker"); err != nil {
+	wf := &domain.Workflow{Runtimes: []string{"dockerimage", "dockerfile"}}
+	// Allowlist matches runtime substrate (dockerimage), not resolver name (codex).
+	if err := ValidateRuntimeAllowlist(wf, "dockerimage"); err != nil {
 		t.Fatal(err)
 	}
 	if err := ValidateRuntimeAllowlist(wf, "codex"); err == nil {
 		t.Fatal("expected error when runtime name is wrong")
+	}
+}
+
+func TestValidateRuntimeAllowlistImplicitFromRuntime(t *testing.T) {
+	wf := &domain.Workflow{Runtime: "cli"}
+	if err := ValidateRuntimeAllowlist(wf, "cli"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateRuntimeAllowlist(wf, "dockerimage"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateRuntimeAllowlist(wf, "dockerfile"); err == nil {
+		t.Fatal("expected error: implicit allowlist is cli→dockerimage only")
+	}
+}
+
+func TestValidateRuntimeAllowlistNoRestrictionWhenNoRuntimeFields(t *testing.T) {
+	wf := &domain.Workflow{}
+	if err := ValidateRuntimeAllowlist(wf, "anything"); err != nil {
+		t.Fatal(err)
 	}
 }

@@ -30,7 +30,7 @@ FlathubSearchDialog::FlathubSearchDialog(QWidget *parent) : QDialog(parent)
     auto *root = new QVBoxLayout(this);
     root->setSpacing(10);
 
-    auto *hint = new QLabel(tr("Search Flathub (public API). Pick an app to set FLATHUB_APP_ID for dockpipe — use with the flathub-host workflow."));
+    auto *hint = new QLabel(tr("Search Flathub (public API). Pick an app to set FLATHUB_APP_ID for dockpipe — use with scripts/flathub-host/flathub-host-run.sh (.staging/packages/dockpipe/bundles/flathub-host/)."));
     hint->setWordWrap(true);
     hint->setObjectName(QStringLiteral("appSubtitle"));
     root->addWidget(hint);

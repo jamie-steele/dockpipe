@@ -15,7 +15,7 @@
 | **act** | Follow-up after the main command (usually a **host** script; see **[architecture.md](architecture.md)** for in-container `DOCKPIPE_ACTION`). |
 | **workflow** | This file: a named preset selected with **`--workflow <name>`**. |
 | **strategy** | Optional **named lifecycle** wrapper: small **`KEY=value`** files under **`templates/<workflow>/strategies/<name>`** (optional) or **`templates/core/strategies/<name>`** define host scripts to run **before** and **after** the workflow body. See [Named strategies](#named-strategies) below. |
-| **runtime** / **resolver** | **Runtime** — **`templates/core/runtimes/<name>`** (**`DOCKPIPE_RUNTIME_*`**). **Resolver** — **`templates/core/resolvers/<name>`** (**`DOCKPIPE_RESOLVER_*`**). In the materialized bundle, the same paths live under **`shipyard/core/`**. Both may be set; the runner **merges** them. See **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)**. Optional **`runtimes:`** allowlist (like **`strategies:`**). |
+| **runtime** / **resolver** | **Runtime** — **`templates/core/runtimes/<name>`** (**`DOCKPIPE_RUNTIME_*`**). **Resolver** — **`templates/core/resolvers/<name>`** (**`DOCKPIPE_RESOLVER_*`**). In the materialized bundle, the same paths live under **`shipyard/core/`**. Both may be set; the runner **merges** them. See **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)**. Runtime overrides are constrained by **`runtimes:`** when you list **multiple** allowed substrates; when **`runtimes:`** is omitted, **`runtime`** / **`default_runtime`** imply the allowlist (no duplicate **`runtimes: [dockerimage]`** next to **`runtime: dockerimage`**). |
 
 **Learning path:** [onboarding.md](onboarding.md) · **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)** · Implementation notes: [`src/lib/dockpipe/README.md`](../src/lib/dockpipe/README.md).
 
@@ -47,6 +47,7 @@ For steps with **`skip_container: true`**, **`run:`** scripts execute on the hos
 |-----|---------|
 | `name` | Optional display title for stderr (defaults to the template folder name, e.g. `run`). |
 | `description` | Optional one-line task summary printed after `name` (e.g. what this workflow is for). |
+| `capability` | Dotted **capability** id (e.g. `cli.codex`, **`dockpipe.workflow.*`**). When **`resolver:`** is omitted, the runner picks **`templates/core/resolvers/<name>`** from resolver **`package.yml`** files that declare this capability. **`dockpipe.*`** ids may imply **`runtime:`** when unset (see **[capabilities.md](capabilities.md)**). Deprecated alias: **`primitive`**. |
 | `category` | Optional UI hint for tools like **Pipeon**: e.g. `app` marks a launchable GUI/container IDE-style workflow shown in **Basic** mode. Omit or use other values for pipelines and advanced-only flows. |
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
 | `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). |
@@ -54,7 +55,7 @@ For steps with **`skip_container: true`**, **`run:`** scripts execute on the hos
 | `act` / `action` | Action script after the container command (when not using per-step act). |
 | `runtime` | Default isolation profile (**single-flow**); preferred over **`default_resolver`** when both are set. |
 | `default_runtime` | Like **`default_resolver`** for selecting a profile under **`templates/core/resolvers/`** (**single-flow**). |
-| `runtimes` | Optional allowlist: if non-empty, the effective runtime (CLI **`--runtime`** / **`--resolver`** or workflow fields) must be listed. |
+| `runtimes` | Optional explicit allowlist when **more than one** substrate is allowed (e.g. **`[dockerimage, dockerfile]`**). If omitted, **`runtime`** and **`default_runtime`** (when set) define the allowed substrate names — you do not need a one-element array that repeats **`runtime`**. |
 | `resolver` | Default profile name (**multi-step** workflows; prefer **`default_runtime`** where possible). |
 | `default_resolver` | Default profile name (**single-flow**); takes precedence over **`isolate`** for selecting a **core** shared profile. |
 | `steps` | List of **steps** (multi-step mode). |
@@ -93,7 +94,6 @@ name: my-ai
 strategy: worktree
 strategies: [worktree, commit]
 default_resolver: claude
-resolvers: [claude, codex, cursor-dev, vscode, code-server]
 ```
 
 Then: **`dockpipe --workflow my-ai --resolver claude --repo https://github.com/you/repo.git -- claude -p "…"`**
@@ -113,8 +113,10 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `run` | String or YAML list: host pre-scripts before this step’s container. |
 | `pre_script` | Single extra pre-script path (in addition to `run`). |
 | `isolate` | Template/image for this step (falls back to workflow / CLI / runtime profile). |
-| `runtime` | Optional **runtime** profile basename (same as CLI **`--runtime`**). Pairs with **`resolver:`**; merged by the runner. |
-| `resolver` | Optional **resolver** profile basename (same as CLI **`--resolver`**). **May** be set together with **`runtime:`** on the same step. **`isolate:`** can still override the template. Profiles that delegate to host or embedded workflows cannot run in **async** groups (`is_blocking: false`); use a blocking step. |
+| `runtime` | Optional **runtime** profile basename (same as CLI **`--runtime`**). **Only** **`runtime: package`** enters a **packaged** workflow from a parent step — there is no other nesting shape (see **[architecture-model.md — Workflows and packaged workflows](architecture-model.md#workflows-and-packaged-workflows-same-spine)**). Otherwise pairs with **`resolver:`**; merged by the runner. |
+| `resolver` | Optional **resolver** profile basename (same as CLI **`--resolver`**), **or** when **`runtime: package`**, the **nested workflow name** (directory / workflow id). **May** be set together with **`runtime:`** on the same step (except **`runtime: package`** uses **`resolver`** only as that workflow name). **`isolate:`** can still override the template. Profiles that delegate to host or embedded workflows cannot run in **async** groups (`is_blocking: false`); use a blocking step. |
+| `package` | Required when **`runtime: package`** (the **only** way to invoke a packaged workflow from a parent). **Namespace** label — must match the nested workflow’s **`namespace:`** in **`config.yml`** (resolution searches packaged / staging / **`workflows/`** trees on disk). |
+| `capability` | Optional per-step capability — when set (and **`resolver:`** omitted), the runner resolves the resolver profile from **`package.yml`** like the workflow-level rule. **`dockpipe.*`** may imply **`runtime:`** for the step. |
 | `act` / `action` | Action script for this step. |
 | `vars` | Per-step env map (merged for that step; `--var` keys can be “locked”). |
 | `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Default if omitted: `.dockpipe/outputs.env`. |
@@ -226,6 +228,8 @@ dockpipe --workflow run-apply-validate
 ---
 
 ## See also
+
+- **[capabilities.md](capabilities.md)** — abstract **capabilities**, **resolver** packages, **`capability:`** / **`requires_capabilities:`**
 
 - **[CLI reference](cli-reference.md)** — flags, `--workflow`, `--workflow-file`, `workflow validate`, `--var`, `--env-file`.
 - **[Architecture](architecture.md)** — how the Go CLI runs steps, docker, pre-scripts.

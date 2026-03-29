@@ -8,8 +8,6 @@ import (
 
 	"dockpipe/src/lib/dockpipe/domain"
 	"dockpipe/src/lib/dockpipe/infrastructure/packagebuild"
-
-	"gopkg.in/yaml.v3"
 )
 
 func TestCmdCloneCopiesWhenAllowCloneTrue(t *testing.T) {
@@ -37,11 +35,12 @@ steps: []
 	if err != nil {
 		t.Fatal(err)
 	}
-	var m domain.PackageManifest
-	if err := yaml.Unmarshal(pyml, &m); err != nil {
+	pmPath := filepath.Join(t.TempDir(), "package.yml")
+	if err := os.WriteFile(pmPath, pyml, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := domain.ValidatePackageManifest(&m); err != nil {
+	m, err := domain.ParsePackageManifest(pmPath)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if !m.AllowClone {
@@ -65,6 +64,7 @@ func TestCmdCloneDeniedWhenAllowCloneFalse(t *testing.T) {
 name: paid
 version: 1.0.0
 kind: workflow
+requires_capabilities: [workflow.paid]
 allow_clone: false
 distribution: binary
 `

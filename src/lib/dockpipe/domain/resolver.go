@@ -3,6 +3,7 @@ package domain
 import "strings"
 
 // ResolverAssignments holds merged fields from runtime + resolver profiles (see infrastructure.LoadIsolationProfile).
+// A resolver profile is a concrete package that satisfies a capability (dotted id); see docs/capabilities.md.
 // Runtime file: templates/core/runtimes/<name> (DOCKPIPE_RUNTIME_*). Resolver file: templates/core/resolvers/<name> (DOCKPIPE_RESOLVER_*).
 // Normative model: docs/architecture-model.md.
 // See also docs/isolation-layer.md, docs/runtime-architecture.md.

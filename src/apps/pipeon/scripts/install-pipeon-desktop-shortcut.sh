@@ -8,7 +8,7 @@ set -euo pipefail
 
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 ICON_PNG="${REPO}/src/contrib/pipeon-vscode-extension/images/icon.png"
-ICON_SVG="${REPO}/.staging/resolvers/code-server/assets/images/code-server/favicon.svg"
+ICON_SVG="${REPO}/src/contrib/pipeon-vscode-extension/images/favicon.svg"
 LAUNCH="${REPO}/src/apps/pipeon/scripts/pipeon-code-server-launch.sh"
 
 for f in "$ICON_PNG" "$LAUNCH"; do

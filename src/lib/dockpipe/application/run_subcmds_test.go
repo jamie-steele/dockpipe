@@ -321,7 +321,7 @@ func TestCmdInitBareMergesFullCoreTree(t *testing.T) {
 		filepath.Join(project, "templates", "core", "assets", "scripts", "helloworld.ps1"),
 		filepath.Join(project, "templates", "core", "assets", "compose", "README.md"),
 		filepath.Join(project, "templates", "core", "assets", "images", "base-dev", "Dockerfile"),
-		filepath.Join(project, "templates", "core", "runtimes", "cli", "profile"),
+		filepath.Join(project, "templates", "core", "runtimes", "dockerimage", "profile"),
 		filepath.Join(project, "templates", "core", "strategies", "worktree"),
 		filepath.Join(project, "templates", "core", "resolvers", "example", "config.yml"),
 	}

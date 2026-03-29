@@ -6,7 +6,7 @@ ROOT="$(cd "$ROOT" && pwd)"
 cd "$ROOT"
 export DOCKPIPE_WORKDIR="$ROOT"
 BIN="${DORKPIPE_BIN:-$ROOT/src/bin/dorkpipe}"
-SPEC="${DORKPIPE_SELF_ANALYSIS_SPEC:-$ROOT/.staging/workflows/dorkpipe-self-analysis/spec.yaml}"
+SPEC="${DORKPIPE_SELF_ANALYSIS_SPEC:-$ROOT/src/lib/dorkpipe/workflows/dorkpipe-self-analysis/spec.yaml}"
 if [[ ! -x "$BIN" ]]; then
 	echo "dorkpipe-self-analysis: build the orchestrator first: make build (expected $BIN)" >&2
 	exit 1

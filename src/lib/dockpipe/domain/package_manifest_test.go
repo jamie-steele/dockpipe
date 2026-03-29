@@ -3,8 +3,35 @@ package domain
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestParsePackageManifestKindPackageIncludesResolvers(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	body := `schema: 1
+name: agent
+version: 0.1.0
+title: Agent package
+description: Umbrella for agent resolvers
+author: DockPipe
+license: Apache-2.0
+kind: package
+includes_resolvers: [codex, claude]
+`
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := ParsePackageManifest(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Kind != "package" || len(m.IncludesResolvers) != 2 {
+		t.Fatalf("got kind=%q includes=%v", m.Kind, m.IncludesResolvers)
+	}
+}
 
 func TestParsePackageManifest(t *testing.T) {
 	t.Parallel()
@@ -17,8 +44,9 @@ title: Demo
 description: A demo package
 author: ACME
 website: https://example.com
-license: MIT
+license: Apache-2.0
 kind: workflow
+requires_capabilities: [workflow.demo]
 `
 	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -45,6 +73,7 @@ author: ACME
 website: https://example.com
 license: Apache-2.0
 kind: resolver
+capability: cli.codex
 tags: [resolver, codex]
 keywords: [ai]
 min_dockpipe_version: "1.0.0"
@@ -85,8 +114,9 @@ title: X
 description: d
 author: a
 website: https://example.com
-license: MIT
+license: Apache-2.0
 kind: workflow
+requires_capabilities: [workflow.x]
 namespace: dockpipe
 `
 	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
@@ -109,8 +139,9 @@ title: X
 description: d
 author: a
 website: https://example.com
-license: MIT
+license: Apache-2.0
 kind: workflow
+requires_capabilities: [workflow.x]
 namespace: acme-labs
 `
 	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
@@ -125,6 +156,113 @@ namespace: acme-labs
 	}
 }
 
+func TestParsePackageManifestProvider(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	body := `schema: 1
+name: x
+version: 1.0.0
+title: X
+description: d
+author: a
+website: https://example.com
+license: Apache-2.0
+kind: workflow
+requires_capabilities: [workflow.x]
+provider: cloudflare
+`
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := ParsePackageManifest(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Provider != "cloudflare" {
+		t.Fatalf("provider: %q", m.Provider)
+	}
+}
+
+func TestParsePackageManifestCapability(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	body := `schema: 1
+name: codex-pack
+version: 1.0.0
+title: Codex
+description: d
+author: a
+website: https://example.com
+license: Apache-2.0
+kind: resolver
+capability: cli.codex
+`
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := ParsePackageManifest(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Capability != "cli.codex" {
+		t.Fatalf("capability: %q", m.Capability)
+	}
+}
+
+func TestParsePackageManifestRequiresCapabilities(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	body := `schema: 1
+name: wf
+version: 1.0.0
+title: W
+description: d
+author: a
+website: https://example.com
+license: Apache-2.0
+kind: workflow
+requires_capabilities: [cli.codex, app.vscode]
+`
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := ParsePackageManifest(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.RequiresCapabilities) != 2 || m.RequiresCapabilities[0] != "cli.codex" {
+		t.Fatalf("requires_capabilities: %+v", m.RequiresCapabilities)
+	}
+}
+
+func TestParsePackageManifestProviderRejectsTooLong(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	long := strings.Repeat("a", 257)
+	body := `schema: 1
+name: x
+version: 1.0.0
+title: X
+description: d
+author: a
+website: https://example.com
+license: Apache-2.0
+kind: workflow
+requires_capabilities: [workflow.x]
+provider: ` + long + "\n"
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ParsePackageManifest(p)
+	if err == nil {
+		t.Fatal("expected error for provider longer than 256")
+	}
+}
+
 func TestParsePackageManifestAllowClone(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -136,8 +274,9 @@ title: X
 description: d
 author: a
 website: https://example.com
-license: MIT
+license: Apache-2.0
 kind: workflow
+requires_capabilities: [workflow.x]
 allow_clone: true
 distribution: binary
 `

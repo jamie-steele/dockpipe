@@ -58,9 +58,10 @@ Thumbs.db
 .env.secretstore
 
 # Maintainer-only trees under .staging — keep local experiments out of git; embed.go still embeds paths from a full checkout.
-# Exception: umbrella package.yml (kind: package) under dockpipe/agent|ide|secrets — tracked; resolvers/ and everything else stays ignored.
+# Exception: umbrella package.yml (kind: package) under dockpipe/agent|ide|secrets|cloud/storage — tracked; resolvers/ and everything else stays ignored.
 .staging/*
 !.staging/packages/
+!.staging/packages/README.md
 .staging/packages/*
 !.staging/packages/dockpipe/
 .staging/packages/dockpipe/*
@@ -73,6 +74,10 @@ Thumbs.db
 !.staging/packages/dockpipe/ide/package.yml
 .staging/packages/dockpipe/secrets/*
 !.staging/packages/dockpipe/secrets/package.yml
+!.staging/packages/dockpipe/cloud/
+!.staging/packages/dockpipe/cloud/storage/
+.staging/packages/dockpipe/cloud/storage/*
+!.staging/packages/dockpipe/cloud/storage/package.yml
 # To stop tracking without deleting files: git rm -r --cached .staging
 # Note: CI/fresh clones need a populated .staging tree for go:embed or a future embed-from-tracked-dir change.
 
@@ -83,7 +88,7 @@ Thumbs.db
 # DorkPipe runtime outputs (metrics, nodes, self-analysis scratch)
 .dorkpipe/
 
-# Terraform (e.g. .staging/workflows/dockpipe/storage/cloudflare/r2/dockpipe.cloudflare.r2publish/terraform — keep .terraform.lock.hcl)
+# Terraform (e.g. .staging/packages/dockpipe/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/terraform — keep .terraform.lock.hcl)
 .terraform/
 *.tfstate
 *.tfstate.*

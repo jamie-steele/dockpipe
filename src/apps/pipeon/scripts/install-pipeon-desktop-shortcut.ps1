@@ -21,7 +21,7 @@ $ErrorActionPreference = "Stop"
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..\..\..")).Path
 $Launch = Join-Path $RepoRoot "src\apps\pipeon\scripts\pipeon-code-server-launch.ps1"
-$Icon = Join-Path $RepoRoot ".staging\resolvers\code-server\assets\images\code-server\favicon.ico"
+$Icon = Join-Path $RepoRoot "src\contrib\pipeon-vscode-extension\images\favicon.ico"
 
 if (-not (Test-Path -LiteralPath $Launch)) {
     throw "Missing $Launch — run from dockpipe repo root."
@@ -72,7 +72,7 @@ Next: build the image once (Git Bash from repo root):
   make build-code-server-image
 
 Or in PowerShell (Docker must be on PATH):
-  docker build -t dockpipe-code-server:latest -f .staging/resolvers/code-server/assets/images/code-server/Dockerfile .
+  docker build -t dockpipe-code-server:latest -f src/contrib/pipeon-vscode-extension/Dockerfile.code-server .
 
 Workspace defaults to USERPROFILE. Override: set PIPEON_WORKDIR before launching, or edit the shortcut.
 "@

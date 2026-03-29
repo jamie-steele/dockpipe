@@ -20,7 +20,7 @@ bool looksLikeRepoRoot(const QString &absPath)
 {
     const QDir d(absPath);
     return QFileInfo(d.filePath(QStringLiteral("workflows"))).isDir()
-        || QFileInfo(d.filePath(QStringLiteral(".staging/workflows"))).isDir()
+        || QFileInfo(d.filePath(QStringLiteral(".staging/packages"))).isDir()
         || QFileInfo(d.filePath(QStringLiteral("src/core/runtimes"))).isDir()
         || QFileInfo(d.filePath(QStringLiteral("templates/core"))).isDir();
 }
@@ -38,7 +38,24 @@ void appendStaticFallbacks(DockpipeChoices &c)
     c.resolvers = QStringList{QStringLiteral("vscode"), QStringLiteral("claude"), QStringLiteral("codex"),
                               QStringLiteral("cursor-dev"), QStringLiteral("code-server")};
     c.strategies = QStringList{QStringLiteral("commit"), QStringLiteral("worktree")};
-    c.runtimes = QStringList{QStringLiteral("docker"), QStringLiteral("cli"), QStringLiteral("kube-pod")};
+    c.runtimes = QStringList{QStringLiteral("dockerimage"), QStringLiteral("dockerfile"), QStringLiteral("package")};
+}
+
+// Recursively collect workflow dirs that contain config.yml (.staging/packages may be nested by namespace).
+void collectStagingWorkflowConfigs(const QDir &root, QStringList &names, QStringList *paths)
+{
+    if (!root.exists())
+        return;
+    for (const QFileInfo &fi : root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+        const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
+        if (QFileInfo::exists(cfg)) {
+            names.append(fi.fileName());
+            if (paths)
+                paths->append(QDir::cleanPath(cfg));
+        } else {
+            collectStagingWorkflowConfigs(QDir(fi.filePath()), names, paths);
+        }
+    }
 }
 
 } // namespace
@@ -72,10 +89,14 @@ QString DockpipeChoices::cursorPrepScriptPath(const QString &hintWorkdir)
     const QString root = findRepoRoot(hintWorkdir);
     if (root.isEmpty())
         return {};
-    const QString staging =
-        QDir::cleanPath(root + QStringLiteral("/.staging/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
-    if (QFileInfo::exists(staging))
-        return staging;
+    const QString stagingNs =
+        QDir::cleanPath(root + QStringLiteral("/.staging/packages/dockpipe/ide/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
+    if (QFileInfo::exists(stagingNs))
+        return stagingNs;
+    const QString stagingFlat =
+        QDir::cleanPath(root + QStringLiteral("/.staging/packages/dockpipe/ide/cursor-dev/assets/scripts/cursor-prep.sh"));
+    if (QFileInfo::exists(stagingFlat))
+        return stagingFlat;
     const QString srcCore =
         QDir::cleanPath(root + QStringLiteral("/src/core/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
     if (QFileInfo::exists(srcCore))
@@ -108,28 +129,21 @@ QStringList DockpipeChoices::listWorkflowNamesFromRepo(const QString &repoRoot)
     }
 
     {
-        const QDir stg(root.filePath(QStringLiteral(".staging/workflows")));
-        if (stg.exists()) {
-            const auto dirs = stg.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-            for (const QFileInfo &fi : dirs) {
-                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
-                if (QFileInfo::exists(cfg))
-                    names.append(fi.fileName());
-            }
-        }
+        const QDir dkw(root.filePath(QStringLiteral("src/lib/dorkpipe/workflows")));
+        if (dkw.exists())
+            collectStagingWorkflowConfigs(dkw, names, nullptr);
+    }
+
+    {
+        const QDir stg(root.filePath(QStringLiteral(".staging/packages")));
+        if (stg.exists())
+            collectStagingWorkflowConfigs(stg, names, nullptr);
     }
 
     {
         const QString bundledWf = root.filePath(QStringLiteral("src/core/workflows"));
-        if (QFileInfo(bundledWf).isDir()) {
-            const QDir wfd(bundledWf);
-            const auto dirs = wfd.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-            for (const QFileInfo &fi : dirs) {
-                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
-                if (QFileInfo::exists(cfg))
-                    names.append(fi.fileName());
-            }
-        }
+        if (QFileInfo(bundledWf).isDir())
+            collectStagingWorkflowConfigs(QDir(bundledWf), names, nullptr);
     }
 
     {
@@ -185,32 +199,21 @@ void DockpipeChoices::scan(const QString &repoRoot)
     }
 
     {
-        const QDir stg(root.filePath(QStringLiteral(".staging/workflows")));
-        if (stg.exists()) {
-            const auto dirs = stg.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-            for (const QFileInfo &fi : dirs) {
-                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
-                if (QFileInfo::exists(cfg)) {
-                    workflowNames.append(fi.fileName());
-                    workflowConfigPaths.append(QDir::cleanPath(cfg));
-                }
-            }
-        }
+        const QDir dkw(root.filePath(QStringLiteral("src/lib/dorkpipe/workflows")));
+        if (dkw.exists())
+            collectStagingWorkflowConfigs(dkw, workflowNames, &workflowConfigPaths);
+    }
+
+    {
+        const QDir stg(root.filePath(QStringLiteral(".staging/packages")));
+        if (stg.exists())
+            collectStagingWorkflowConfigs(stg, workflowNames, &workflowConfigPaths);
     }
 
     {
         const QString bundledWf = root.filePath(QStringLiteral("src/core/workflows"));
-        if (QFileInfo(bundledWf).isDir()) {
-            const QDir wfd(bundledWf);
-            const auto dirs = wfd.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-            for (const QFileInfo &fi : dirs) {
-                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
-                if (QFileInfo::exists(cfg)) {
-                    workflowNames.append(fi.fileName());
-                    workflowConfigPaths.append(QDir::cleanPath(cfg));
-                }
-            }
-        }
+        if (QFileInfo(bundledWf).isDir())
+            collectStagingWorkflowConfigs(QDir(bundledWf), workflowNames, &workflowConfigPaths);
     }
 
     {
@@ -278,7 +281,7 @@ void DockpipeChoices::scan(const QString &repoRoot)
         if (strategies.isEmpty())
             strategies = QStringList{QStringLiteral("commit"), QStringLiteral("worktree")};
         if (runtimes.isEmpty())
-            runtimes = QStringList{QStringLiteral("docker"), QStringLiteral("cli"), QStringLiteral("kube-pod")};
+            runtimes = QStringList{QStringLiteral("cli"), QStringLiteral("powershell"), QStringLiteral("cmd"), QStringLiteral("dockerimage"), QStringLiteral("dockerfile"), QStringLiteral("package")};
     }
 
     sortUnique(workflowNames);

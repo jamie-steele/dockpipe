@@ -6,7 +6,7 @@ This file defines how this repo works. Follow it strictly.
 
 ## Core concept
 
-DockPipe provides one primitive:
+DockPipe’s **engine** has one core **action** (spawn → run → act). Separately, **capabilities** (dotted ids like **`cli.codex`**) and **resolver** packages are documented in **`docs/capabilities.md`** — not the same word as this three-step loop.
 
 1. Spawn an isolated environment  
 2. Run a command inside it  
@@ -59,13 +59,12 @@ Execution substrates.
 - May contain implementation logic
 - Must NOT be confused with resolvers
 
-Current runtimes:
-- `cli` → local execution
-- `docker` → container execution
-- `kube-pod` → Kubernetes pod/job execution
+Current runtimes (substrates):
+- `dockerimage` → container from a pre-built image; host-only steps use **`skip_container: true`** (legacy YAML may say `cli` / `powershell` / `cmd` — those normalize to **`dockerimage`**)
+- `dockerfile` → container built from a Dockerfile
+- `package` → nest a namespaced workflow (`resolver:` + `package:`)
 
-Future:
-- `cloud-runner` (with providers like lambda/fargate)
+Not runtimes: Kubernetes, cloud APIs, Terraform — use **`dockerimage`** / **`dockerfile`** plus scripts and resolvers.
 
 📁 Location (under the authoring core root — **`src/core/`** in this repo, **`templates/core/`** after **`dockpipe init`**):
 `…/core/runtimes/`
@@ -74,22 +73,22 @@ Future:
 
 ### 3. Resolvers
 
-Tool/platform integrations.
+**Workflow-local tooling profiles** — **`DOCKPIPE_RESOLVER_*`** (and optional delegate **`config.yml`**) under **`…/core/resolvers/<name>/`**, or maintainer trees under **`.staging/workflows/<name>/profile`** in this repo (same layout, merged into **`packages/resolvers/`** when compiled). You choose **`resolver:`** / **`default_resolver:`** in YAML; there is **no** separate “capability” indirection in the runner. **Packaged** workflows can pull in **additional** resolver packages (e.g. a future **`dockpipe.cloud.aws`** pack) via **`package.yml`** / store installs.
 
-- Define **what performs the work**
+- Define **what performs the work** for that workflow or package slice
 - Always tool/platform-specific
 
-Examples:
+Examples (profile names):
 - `claude`
 - `codex`
 - `code-server`
 - `cursor-dev`
 - `vscode`
 
-❗ Resolvers are NOT runtimes.
+❗ Resolvers are NOT runtimes. **Runtime** = where (see **`…/core/runtimes/README.md`**); **resolver** = which tool profile.
 
 📁 Location:
-`…/core/resolvers/`
+`…/core/resolvers/` (bundled) · **`.staging/workflows/<tool>/`** (maintainer overlays in this repo)
 
 ---
 
@@ -193,7 +192,7 @@ When you work **on the dockpipe project itself**, you are a **user** of the tool
 
 **Self-contained:** Packages are **YAML + assets + resolver/runtime wiring** resolved by the existing CLI; they **cannot** inject new engine primitives without a **separate** core change.
 
-**Accelerator (maintainers):** After **`make build`**, **`make self-analysis`**, **`make self-analysis-host`**, or **`make self-analysis-stack`** run the DorkPipe self-analysis workflows on this repo (container, host-only, or compose stack). See **`docs/dorkpipe.md`** and **`.staging/workflows/dorkpipe-self-analysis/README.md`**.
+**Accelerator (maintainers):** After **`make build`**, **`make self-analysis`**, **`make self-analysis-host`**, or **`make self-analysis-stack`** run the DorkPipe self-analysis workflows on this repo (container, host-only, or compose stack). See **`docs/dorkpipe.md`** and **`src/lib/dorkpipe/workflows/dorkpipe-self-analysis/README.md`**.
 
 ### Agent guidance (this repository)
 
@@ -238,7 +237,7 @@ DO NOT:
 
 - Template → what happens  
 - Runtime → where it runs  
-- Resolver → what tool runs  
+- Resolver → tool profile (**what** runs), declared in workflow YAML or added via packages  
 - Strategy → how it wraps execution  
 
 ---

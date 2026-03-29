@@ -10,8 +10,8 @@ import (
 func TestTemplateBuild(t *testing.T) {
 	repoRoot := localModuleRoot(t)
 	core := CoreDir(repoRoot)
-	stagingRes := filepath.Join(repoRoot, ".staging", "resolvers")
-	stagingBun := filepath.Join(repoRoot, ".staging", "bundles")
+	stagingWF := filepath.Join(repoRoot, ".staging", "packages", "dockpipe")
+	stagingBun := filepath.Join(stagingWF, "bundles")
 	cases := []struct {
 		name  string
 		image string
@@ -20,11 +20,11 @@ func TestTemplateBuild(t *testing.T) {
 	}{
 		{"base-dev", "dockpipe-base-dev", filepath.Join(core, "assets", "images", "base-dev"), true},
 		{"dev", "dockpipe-dev", filepath.Join(core, "assets", "images", "dev"), true},
-		{"agent-dev", "dockpipe-claude", filepath.Join(stagingRes, "claude", "assets", "images", "claude"), true},
-		{"claude", "dockpipe-claude", filepath.Join(stagingRes, "claude", "assets", "images", "claude"), true},
-		{"codex", "dockpipe-codex", filepath.Join(stagingRes, "codex", "assets", "images", "codex"), true},
-		{"vscode", "dockpipe-vscode", filepath.Join(stagingRes, "vscode", "assets", "images", "vscode"), true},
-		{"ollama", "dockpipe-ollama", filepath.Join(stagingRes, "ollama", "assets", "images", "ollama"), true},
+		{"agent-dev", "dockpipe-claude", filepath.Join(stagingWF, "agent", "resolvers", "claude", "assets", "images", "claude"), true},
+		{"claude", "dockpipe-claude", filepath.Join(stagingWF, "agent", "resolvers", "claude", "assets", "images", "claude"), true},
+		{"codex", "dockpipe-codex", filepath.Join(stagingWF, "agent", "resolvers", "codex", "assets", "images", "codex"), true},
+		{"vscode", "dockpipe-vscode", filepath.Join(stagingWF, "ide", "resolvers", "vscode", "assets", "images", "vscode"), true},
+		{"ollama", "dockpipe-ollama", filepath.Join(stagingWF, "agent", "resolvers", "ollama", "assets", "images", "ollama"), true},
 		{"steam-flatpak", "dockpipe-steam-flatpak", filepath.Join(stagingBun, "steam-flatpak", "assets", "images", "steam-flatpak"), true},
 		{"unknown", "", "", false},
 	}

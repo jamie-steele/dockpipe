@@ -7,15 +7,17 @@ import (
 )
 
 // DockerfileDir returns the directory that contains Dockerfile for a template isolate name.
-// Dockpipe checkout: .staging/resolvers → .staging/bundles → templates/core (materialized bundle: merged shipyard/core).
+// Searches compile.resolvers roots (nested) and compile.bundles roots, then templates/core (materialized bundle).
 func DockerfileDir(repoRoot, name string) string {
 	core := CoreDir(repoRoot)
 	var candidates []string
 	if !UsesBundledAssetLayout(repoRoot) {
-		candidates = append(candidates,
-			filepath.Join(StagingResolversDir(repoRoot), name, "assets", "images", name),
-			filepath.Join(StagingBundlesDir(repoRoot), name, "assets", "images", name),
-		)
+		for _, leaf := range nestedResolverLeafDirs(repoRoot, name, ResolverCompileRootsCached(repoRoot)) {
+			candidates = append(candidates, filepath.Join(leaf, "assets", "images", name))
+		}
+		for _, br := range BundleCompileRootsCached(repoRoot) {
+			candidates = append(candidates, filepath.Join(br, name, "assets", "images", name))
+		}
 	}
 	candidates = append(candidates,
 		filepath.Join(core, "resolvers", name, "assets", "images", name),

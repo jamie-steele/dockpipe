@@ -20,7 +20,7 @@ This repo contains **three** product-shaped areas plus shared templates/scripts.
 
 **DorkPipe does not require** shell to live under `scripts/dorkpipe/`. The **`dorkpipe`** binary reads a DAG YAML and runs whatever **commands** the spec lists (paths are just strings).
 
-Workflow resolution (`src/lib/dockpipe/infrastructure/paths.go`): paths under **`scripts/…`** use the project’s **`scripts/`** if present, else **`.staging/resolvers/…`** / **`.staging/bundles/…`** in this repo (merged into **`shipyard/core/…`** when materialized), else lean **`templates/core/resolvers/…`**, else **`templates/core/assets/scripts/…`** (agnostic root only).
+Workflow resolution (`src/lib/dockpipe/infrastructure/paths.go`): paths under **`scripts/…`** use the project’s **`scripts/`** if present, else **`.staging/workflows/…`** / **`.staging/bundles/…`** in this repo (merged into **`shipyard/core/…`** when materialized), else lean **`templates/core/resolvers/…`**, else **`templates/core/assets/scripts/…`** (agnostic root only).
 
 | Location | Role |
 |----------|------|
