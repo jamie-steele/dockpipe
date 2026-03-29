@@ -11,15 +11,15 @@ types:
 docker_preflight: false
 
 vars:
-  # Commonly changed values only. Advanced defaults and compatibility aliases are
-  # handled by IR2InfraConfig/R2InfraConfig defaults + terraform-cloudflare-r2-run.sh.
-  CLOUDFLARE_ACCOUNT_ID: ""  # required for apply; 32-char account id
-  CLOUDFLARE_API_TOKEN: ""  # preferred auth (or legacy email + global key via env)
-  R2_BUCKET: "dockpipe"  # public/package bucket name
-  DOCKPIPE_TF_COMMANDS: ""  # e.g. init,plan | init,apply
-  DOCKPIPE_TF_DRY_RUN: "0"  # 1 = print commands only
-  TF_VAR_public_hostname: "packages.example.com"  # r2 custom domain hostname
-  TF_VAR_zone_id: "REPLACE_WITH_CLOUDFLARE_ZONE_ID"  # Cloudflare zone id
+  CLOUDFLARE_ACCOUNT_ID: ""
+  CLOUDFLARE_API_TOKEN: ""
+  R2_BUCKET: "dockpipe"
+  DOCKPIPE_TF_BACKEND: "remote"
+  DOCKPIPE_TF_COMMANDS: ""
+  DOCKPIPE_TF_DRY_RUN: "0"
+  TF_VAR_public_hostname: "packages.example.com"
+  TF_VAR_r2_custom_domain_min_tls: "1.2"
+  TF_VAR_zone_id: "REPLACE_WITH_CLOUDFLARE_ZONE_ID"
 
 steps:
   - id: terraform

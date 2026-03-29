@@ -260,11 +260,12 @@ func cmdPipeLangMaterialize(args []string) error {
 		from = effectiveWorkflowCompileRoots(cfg, repoRoot, noStaging)
 	}
 	roots := dedupeAbsExistingDirs(from)
-	n, err := materializePipeLangRoots(roots, force)
+	outBase := filepath.Join(repoRoot, "bin", ".dockpipe", "pipelang")
+	n, err := materializePipeLangRoots(roots, force, outBase)
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] pipelang materialize: wrote %d artifact set(s)\n", n)
+	fmt.Fprintf(os.Stderr, "[dockpipe] pipelang materialize: wrote %d artifact set(s) under %s\n", n, outBase)
 	return nil
 }
 
@@ -340,8 +341,8 @@ Default roots:
   - dockpipe.config.json compile.workflows (plus merged compile.bundles)
 
 Artifacts per source file:
-  <dir>/.pipelang/<base>.<EntryClass>.workflow.yml
-  <dir>/.pipelang/<base>.<EntryClass>.bindings.json
-  <dir>/.pipelang/<base>.<EntryClass>.bindings.env
+  <workdir>/bin/.dockpipe/pipelang/<root-hash>/<relative-dir>/<base>.<EntryClass>.workflow.yml
+  <workdir>/bin/.dockpipe/pipelang/<root-hash>/<relative-dir>/<base>.<EntryClass>.bindings.json
+  <workdir>/bin/.dockpipe/pipelang/<root-hash>/<relative-dir>/<base>.<EntryClass>.bindings.env
 
 `

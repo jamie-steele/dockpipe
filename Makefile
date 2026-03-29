@@ -8,13 +8,36 @@
 # Qt launcher: cmake -S src/apps/pipeon-launcher -B src/apps/pipeon-launcher/build && cmake --build ...
 include src/Makefile
 
-.PHONY: pipeon-icons build-code-server-image install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci package-templates-core package-dockpipe-language-support package-vscode-language-support install-dockpipe-language-support
+.PHONY: pipeon-icons build-code-server-image install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci package-templates-core package-dockpipe-language-support package-vscode-language-support install-dockpipe-language-support package-pipeon-vscode-extension install-pipeon-vscode-extension
 
 pipeon-icons:
 	python3 packages/pipeon/resolvers/pipeon/assets/scripts/generate-pipeon-icons.py
 
 build-code-server-image:
 	docker build -t dockpipe-code-server:latest -f packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server .
+
+# Package Pipeon VS Code extension (.vsix) into bin/.dockpipe/extensions.
+package-pipeon-vscode-extension:
+	mkdir -p bin/.dockpipe/extensions
+	cd packages/pipeon/resolvers/pipeon/vscode-extension && npx --yes @vscode/vsce package -o ../../../../../bin/.dockpipe/extensions/pipeon-$$(node -p "require('./package.json').version").vsix
+
+# Build + install Pipeon extension into Cursor (fallback: VS Code CLI).
+install-pipeon-vscode-extension: package-pipeon-vscode-extension
+	VSIX="$$(ls -1t bin/.dockpipe/extensions/pipeon-*.vsix | head -n1)"; \
+	INSTALLED=0; \
+	if command -v cursor >/dev/null 2>&1; then \
+	  echo "[dockpipe] installing Pipeon into Cursor: $$VSIX"; \
+	  cursor --install-extension "$$VSIX"; \
+	  INSTALLED=1; \
+	fi; \
+	if command -v code >/dev/null 2>&1; then \
+	  echo "[dockpipe] installing Pipeon into VS Code: $$VSIX"; \
+	  code --install-extension "$$VSIX"; \
+	  INSTALLED=1; \
+	fi; \
+	if [ "$$INSTALLED" -eq 0 ]; then \
+	  echo "[dockpipe] no editor CLI found. Install manually from VSIX: $$VSIX"; \
+	fi
 
 # Package DockPipe language support extension (.vsix).
 package-dockpipe-language-support:
@@ -27,13 +50,18 @@ package-vscode-language-support: package-dockpipe-language-support
 # Build + install DockPipe language support into Cursor (fallback: VS Code CLI).
 install-dockpipe-language-support: package-dockpipe-language-support
 	VSIX="$$(ls -1t bin/.dockpipe/extensions/dockpipe-language-support-*.vsix | head -n1)"; \
+	INSTALLED=0; \
 	if command -v cursor >/dev/null 2>&1; then \
-	  echo "[dockpipe] installing into Cursor: $$VSIX"; \
+	  echo "[dockpipe] installing DockPipe language support into Cursor: $$VSIX"; \
 	  cursor --install-extension "$$VSIX"; \
-	elif command -v code >/dev/null 2>&1; then \
-	  echo "[dockpipe] Cursor CLI not found; installing via VS Code CLI: $$VSIX"; \
+	  INSTALLED=1; \
+	fi; \
+	if command -v code >/dev/null 2>&1; then \
+	  echo "[dockpipe] installing DockPipe language support into VS Code: $$VSIX"; \
 	  code --install-extension "$$VSIX"; \
-	else \
+	  INSTALLED=1; \
+	fi; \
+	if [ "$$INSTALLED" -eq 0 ]; then \
 	  echo "[dockpipe] no editor CLI found. Install manually from VSIX: $$VSIX"; \
 	fi
 

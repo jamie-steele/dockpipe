@@ -6,6 +6,8 @@ Language support for DockPipe authoring:
 - PipeLang snippets and keyword completion
 - DockPipe `config.yml` IntelliSense for common workflow keys
 - YAML parse diagnostics for DockPipe workflow files (`config.yml` / `config.yaml`)
+- `vars:` key hover/docs/defaults from PipeLang XML summaries (`types:` entrypoint)
+- `vars:` value suggestions from implementing class defaults and nearby `Struct` known-values
 
 ## Install (dev)
 

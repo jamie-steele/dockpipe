@@ -233,7 +233,7 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 	if err := copyDir(srcAbs, staging); err != nil {
 		return fmt.Errorf("copy workflow: %w", err)
 	}
-	if _, err := materializePipeLangRoots([]string{staging}, true); err != nil {
+	if _, err := materializePipeLangRoots([]string{staging}, true, ""); err != nil {
 		return fmt.Errorf("compile pipelang artifacts: %w", err)
 	}
 	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
@@ -384,7 +384,7 @@ func cmdPackageCompileCore(args []string) error {
 	if err := copyDirExcludingTopLevel(srcAbs, staging, exclude); err != nil {
 		return fmt.Errorf("copy core: %w", err)
 	}
-	if _, err := materializePipeLangRoots([]string{staging}, true); err != nil {
+	if _, err := materializePipeLangRoots([]string{staging}, true, ""); err != nil {
 		return fmt.Errorf("compile pipelang artifacts: %w", err)
 	}
 	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
@@ -710,7 +710,7 @@ func compileSingleResolverDir(destRoot, from, name string, defaultNamespace stri
 	if err := copyDir(from, staging); err != nil {
 		return fmt.Errorf("copy %s %s: %w", kind, name, err)
 	}
-	if _, err := materializePipeLangRoots([]string{staging}, true); err != nil {
+	if _, err := materializePipeLangRoots([]string{staging}, true, ""); err != nil {
 		return fmt.Errorf("compile pipelang artifacts for %s %s: %w", kind, name, err)
 	}
 	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)

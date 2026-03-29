@@ -16,11 +16,19 @@ The **`images/`** directory holds the Pipeon **P** mark: **`icon.png`** (128×12
 ## Pack
 
 ```bash
-npm install
-npx --yes @vscode/vsce package
+make package-pipeon-vscode-extension
 ```
 
+This writes a VSIX to:
+`bin/.dockpipe/extensions/pipeon-<version>.vsix`
+
 Install the generated `.vsix`: **Extensions → … → Install from VSIX…**
+
+Or install via CLI:
+
+```bash
+make install-pipeon-vscode-extension
+```
 
 ## Develop
 

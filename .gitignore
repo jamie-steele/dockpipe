@@ -79,6 +79,7 @@ Thumbs.db
 # Legacy path (pre–bin layout): remove after migrating.
 bin/.dockpipe/
 .dockpipe/
+**/.pipelang/
 
 # DorkPipe runtime outputs (metrics, nodes, self-analysis scratch)
 .dorkpipe/

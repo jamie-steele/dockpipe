@@ -1,6 +1,7 @@
 package application
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,15 +30,22 @@ func TestCmdPipeLangMaterializeUsesCompileRootsFromConfig(t *testing.T) {
 	if err := cmdPipeLang([]string{"materialize", "--workdir", project}); err != nil {
 		t.Fatalf("materialize: %v", err)
 	}
-	for _, rel := range []string{
-		"xroots/a/one/.pipelang/config.DefaultDeployConfig.workflow.yml",
-		"xroots/a/one/.pipelang/config.DefaultDeployConfig.bindings.json",
-		"xroots/a/one/.pipelang/config.DefaultDeployConfig.bindings.env",
-		"xroots/b/two/.pipelang/config.DefaultDeployConfig.workflow.yml",
-	} {
-		if _, err := os.Stat(filepath.Join(project, rel)); err != nil {
-			t.Fatalf("missing materialized artifact %s: %v", rel, err)
+	if _, err := os.Stat(filepath.Join(project, "xroots", "a", "one", ".pipelang")); !os.IsNotExist(err) {
+		t.Fatalf("expected no source-side .pipelang output, stat err=%v", err)
+	}
+	outRoot := filepath.Join(project, "bin", ".dockpipe", "pipelang")
+	found := 0
+	_ = filepath.WalkDir(outRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
 		}
+		if filepath.Ext(path) == ".yml" && filepath.Base(path) == "config.DefaultDeployConfig.workflow.yml" {
+			found++
+		}
+		return nil
+	})
+	if found < 2 {
+		t.Fatalf("expected materialized workflow outputs under %s, found=%d", outRoot, found)
 	}
 }
 
@@ -86,16 +94,24 @@ types:
 	if err := os.WriteFile(filepath.Join(models, "AppConfig.pipe"), []byte(class), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdPipeLang([]string{"materialize", "--from", wfDir, "--force"}); err != nil {
+	if err := cmdPipeLang([]string{"materialize", "--workdir", project, "--from", wfDir, "--force"}); err != nil {
 		t.Fatalf("materialize: %v", err)
 	}
-	for _, rel := range []string{
-		"wf/models/.pipelang/IConfig.AppConfig.workflow.yml",
-		"wf/models/.pipelang/IConfig.AppConfig.bindings.json",
-		"wf/models/.pipelang/IConfig.AppConfig.bindings.env",
-	} {
-		if _, err := os.Stat(filepath.Join(project, rel)); err != nil {
-			t.Fatalf("missing mapped artifact %s: %v", rel, err)
+	if _, err := os.Stat(filepath.Join(project, "wf", "models", ".pipelang")); !os.IsNotExist(err) {
+		t.Fatalf("expected no source-side .pipelang output, stat err=%v", err)
+	}
+	outRoot := filepath.Join(project, "bin", ".dockpipe", "pipelang")
+	found := 0
+	_ = filepath.WalkDir(outRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
 		}
+		if filepath.Base(path) == "IConfig.AppConfig.workflow.yml" {
+			found++
+		}
+		return nil
+	})
+	if found == 0 {
+		t.Fatalf("expected mapped artifact under %s", outRoot)
 	}
 }

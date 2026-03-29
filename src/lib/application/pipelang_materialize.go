@@ -1,6 +1,8 @@
 package application
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"os"
@@ -38,9 +40,10 @@ func dedupeAbsExistingDirs(paths []string) []string {
 	return out
 }
 
-func materializePipeLangRoots(roots []string, force bool) (int, error) {
+func materializePipeLangRoots(roots []string, force bool, outBase string) (int, error) {
 	total := 0
 	for _, root := range dedupeAbsExistingDirs(roots) {
+		root := root
 		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
@@ -54,7 +57,7 @@ func materializePipeLangRoots(roots []string, force bool) (int, error) {
 			if !strings.HasSuffix(d.Name(), ".pipe") {
 				return nil
 			}
-			wrote, err := materializePipeLangFile(path, force)
+			wrote, err := materializePipeLangFile(path, root, force, outBase)
 			if err != nil {
 				return err
 			}
@@ -70,7 +73,7 @@ func materializePipeLangRoots(roots []string, force bool) (int, error) {
 	return total, nil
 }
 
-func materializePipeLangFile(path string, force bool) (bool, error) {
+func materializePipeLangFile(path, root string, force bool, outBase string) (bool, error) {
 	entryDir := filepath.Dir(path)
 	moduleRoot := detectPipeLangModuleRoot(entryDir)
 	files, latestMod, err := readPipeFilesUnder(moduleRoot)
@@ -113,6 +116,13 @@ func materializePipeLangFile(path string, force bool) (bool, error) {
 		return false, fmt.Errorf("%s: %w", path, err)
 	}
 	outDir := filepath.Join(entryDir, ".pipelang")
+	if strings.TrimSpace(outBase) != "" {
+		relDir, err := filepath.Rel(root, entryDir)
+		if err != nil {
+			relDir = filepath.Base(entryDir)
+		}
+		outDir = filepath.Join(outBase, rootHashToken(root), relDir)
+	}
 	prefix := filepath.Join(outDir, entryName+"."+res.EntryClass)
 	wfPath := prefix + ".workflow.yml"
 	jsonPath := prefix + ".bindings.json"
@@ -135,6 +145,11 @@ func materializePipeLangFile(path string, force bool) (bool, error) {
 		return false, err
 	}
 	return true, nil
+}
+
+func rootHashToken(root string) string {
+	sum := sha1.Sum([]byte(filepath.Clean(root)))
+	return hex.EncodeToString(sum[:8])
 }
 
 type workflowTypeMapDoc struct {
