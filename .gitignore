@@ -64,12 +64,13 @@ Thumbs.db
 .env.secretstore
 
 # Maintainer-only trees under .staging — non-first-party experiments (ignored); optional private-repo backup.
+# Order matters: `.staging/packages/*` must come before `!.staging/packages/README.md` so the README stays tracked
+# (embed.go requires at least one file under `.staging/packages/` for fresh clones / CI).
 .staging/*
 !.staging/packages/
-!.staging/packages/README.md
 .staging/packages/*
+!.staging/packages/README.md
 # To stop tracking without deleting files: git rm -r --cached .staging
-# Note: CI/fresh clones need a populated .staging tree for go:embed or a future embed-from-tracked-dir change.
 
 # Local `.dockpipe/` — generated handoffs, CI dumps, review/cursor prompts, optional `demo/` stubs (see AGENTS.md).
 # Canonical bundled core + workflows live under `src/core/…`; do not commit a duplicate `templates/` tree here.

@@ -22,9 +22,9 @@ Everything else is built around this.
 
 ## Engine boundary (STRICT — read this)
 
-**`src/lib/`** and **`src/cmd/`** are the **engine**. They must **not** carry **knowledge of** what lives in **`packages/`**, repo-root **`workflows/`**, or **`.staging/workflows/`** — no hardcoded paths into those trees, no maintainer-specific workflow or resolver names in user-facing strings, tests, or control flow, and no “the way to do X is workflow `foo` under `packages/…`” in **`src/`**.
+**`src/lib/`** and **`src/cmd/`** are the **engine**. They must **not** carry **knowledge of** what lives in **`packages/`**, repo-root **`workflows/`**, or **anything under repo-root **`.staging/`** — no hardcoded paths into those trees, no maintainer-specific workflow or resolver names in user-facing strings, tests, or control flow, and no “the way to do X is workflow `foo` under `packages/…`” in **`src/`**.
 
-Treat **`packages/`**, **`workflows/`**, and **`.staging/workflows/`** as **separate products** (as if each were its **own repository**): they ship **YAML + assets** and are consumed only through **compile** → **`.dockpipe/internal/packages/`**, **HTTPS/package-store** tarballs, **embed** (repo-root **`embed.go`** is the **single** build-time list of embed roots — not duplicated as ad-hoc strings across **`src/`**), and **declarative** fields the runner already implements. **Outside** trees **touch** the engine through **compiled materialization** and **public CLI behavior** — not through Go code that imports their layout.
+Treat **`packages/`**, **`workflows/`**, and **`.staging/`** (the whole tree — e.g. **`.staging/packages/…`**, **`.staging/workflows/…`**, experiments beside them) as **separate products** (as if each were its **own repository**): they ship **YAML + assets** and are consumed only through **compile** → **`.dockpipe/internal/packages/`**, **HTTPS/package-store** tarballs, **embed** (repo-root **`embed.go`** is the **single** build-time list of embed roots — includes **`.staging/packages`** — not duplicated as ad-hoc strings across **`src/`**), and **declarative** fields the runner already implements. **Outside** trees **touch** the engine through **compiled materialization** and **public CLI behavior** — not through Go code that imports their layout.
 
 **Allowed in `src/`:** generic resolution (workflow name → config, resolver name → profile, logical `scripts/…` → on-disk path), **`.dockpipe/internal/packages/…`**, manifest/install **wire** shapes, and **one** indirection for embed roots (see **`src/lib/infrastructure/embedded_fs.go`** / **`embeddedPackageRootsPrefixes`**).
 
@@ -57,7 +57,7 @@ Examples:
 - In **this repository’s checkout:** **`src/core/workflows/<name>/`** (bundled example workflows) alongside **`src/core/`** category dirs (**`runtimes/`**, **`resolvers/`**, **`strategies/`**, **`assets/`**).
 - In a **downstream project** after **`dockpipe init`:** prefer repo-root **`workflows/<name>/`**; legacy **`templates/<name>/`** remains supported.
 
-**Do not** put **this repository’s** CI, demo, or internal automation workflows under **`src/core/workflows/`**. Those belong under repo-root **`workflows/<name>/`** (lean CI / dogfood) or **`.staging/workflows/<name>/`** (maintainer packaging and experiments) (see **Internal workflows** below).
+**Do not** put **this repository’s** CI, demo, or internal automation workflows under **`src/core/workflows/`**. Those belong under repo-root **`workflows/<name>/`** (lean CI / dogfood) or under **`.staging/`** (maintainer packaging and experiments — typically **`.staging/packages/…`** or **`.staging/workflows/…`**) (see **Internal workflows** below).
 
 **Package IDs:** Workflow and resolver names may use dotted namespaces (e.g. **`acme.workflow.ci`**, **`acme.resolver.custom`**) when the directory name under **`workflows/`** or **`src/core/workflows/`** matches (same rules as **`--workflow`** resolution).
 
@@ -85,7 +85,7 @@ Not runtimes: Kubernetes, cloud APIs, Terraform — use **`dockerimage`** / **`d
 
 ### 3. Resolvers
 
-**Workflow-local tooling profiles** — **`DOCKPIPE_RESOLVER_*`** (and optional delegate **`config.yml`**) under **`…/core/resolvers/<name>/`**, or maintainer trees under **`.staging/workflows/<name>/profile`** in this repo (same layout, merged into **`packages/resolvers/`** when compiled). You choose **`resolver:`** / **`default_resolver:`** in YAML; there is **no** separate “capability” indirection in the runner. **Packaged** workflows can pull in **additional** resolver packages (e.g. a future **`dockpipe.cloud.aws`** pack) via **`package.yml`** / store installs.
+**Workflow-local tooling profiles** — **`DOCKPIPE_RESOLVER_*`** (and optional delegate **`config.yml`**) under **`…/core/resolvers/<name>/`**, or maintainer resolver trees under **`packages/…/resolvers/…`** / **`.staging/packages/…/resolvers/…`** (same layout). **`dockpipe package compile resolvers`** materializes **`dockpipe-resolver-*.tar.gz`** under **`.dockpipe/internal/packages/resolvers/`** (not the repo **`packages/`** authoring tree). You choose **`resolver:`** / **`default_resolver:`** in YAML; there is **no** separate “capability” indirection in the runner. **Packaged** workflows can pull in **additional** resolver packages (e.g. a future **`dockpipe.cloud.aws`** pack) via **`package.yml`** / store installs.
 
 - Define **what performs the work** for that workflow or package slice
 - Always tool/platform-specific
@@ -100,7 +100,7 @@ Examples (profile names):
 ❗ Resolvers are NOT runtimes. **Runtime** = where (see **`…/core/runtimes/README.md`**); **resolver** = which tool profile.
 
 📁 Location:
-`…/core/resolvers/` (bundled) · **`packages/…/resolvers/…`** / **`.staging/workflows/…`** (maintainer overlays in this repo)
+`…/core/resolvers/` (bundled) · **`packages/…/resolvers/…`** / **`.staging/packages/…/resolvers/…`** (maintainer overlays in this repo)
 
 ---
 
@@ -192,9 +192,9 @@ When you work **on the dockpipe project itself**, you are a **user** of the tool
 |----------|---------|
 | **`src/core/workflows/<name>/`** (this repo) / **`workflows/<name>/`** or legacy **`templates/<name>/`** (downstream) | **User-facing** workflow examples shipped in the bundle (**`run`**, **`run-apply`**, **`run-apply-validate`**, **`init`**, …). Reusable for any downstream project. |
 | **`workflows/<name>/`** (repo root, this repo) | **Lean first-party** workflows wired into CI and dogfood: **`test`**, **`codex-pav`**, **`codex-security`**, **`dockpipe-repo-quality`**, etc. |
-| **`.staging/workflows/<name>/`** (repo root, this repo) | **Maintainer / packaging / experiments** (R2 publish, self-analysis stacks, orchestrator, sandbox demos, …). Same **`--workflow <name>`** as **`workflows/`**; the binary embed merges both into the materialized cache. |
+| **`.staging/…`** (repo root, this repo) | **Maintainer / packaging / experiments** — primarily **`.staging/packages/…`** (nested workflows, resolvers, assets); **`.staging/workflows/…`** may appear as legacy layout. Same **`--workflow`** / compile resolution as other roots; **embed** includes **`.staging/packages`**. |
 
-**Preferred pattern:** `dockpipe init <name> --from run-apply` or **`run-apply-validate`** (or **`run`**, **`blank`**) for user-shaped scaffolds; keep **automation you want in default CI** under **`workflows/`**; put **extra maintainer trees** under **`.staging/workflows/`**.
+**Preferred pattern:** `dockpipe init <name> --from run-apply` or **`run-apply-validate`** (or **`run`**, **`blank`**) for user-shaped scaffolds; keep **automation you want in default CI** under **`workflows/`**; put **extra maintainer trees** under **`.staging/`** (usually **`.staging/packages/…`**).
 
 ### Containment and official reference
 
@@ -204,7 +204,7 @@ When you work **on the dockpipe project itself**, you are a **user** of the tool
 
 **Self-contained:** Packages are **YAML + assets + resolver/runtime wiring** resolved by the existing CLI; they **cannot** inject new engine primitives without a **separate** core change.
 
-**`src/` vs standalone trees (`packages/`, `workflows/`, `.staging/workflows/`):** Same rule as **Engine boundary** above: the engine does **not** mirror those directories in code. **`packages/`** is **standalone** authoring (per-package **`package.yml`**, resolvers, workflows, assets); repo-root **`workflows/`** and **`.staging/workflows/`** are **dogfood / maintainer** trees. All three interact with **`dockpipe`** only through **compile**, **store**, **embed**, and **declared** YAML — never through **`src/`** hardcoding their paths or names. Runtime resolution uses **`.dockpipe/internal/packages/`** and compile roots per **`docs/package-model.md`**.
+**`src/` vs standalone trees (`packages/`, `workflows/`, `.staging/`):** Same rule as **Engine boundary** above: the engine does **not** mirror those directories in code. **`packages/`** is **standalone** authoring (per-package **`package.yml`**, resolvers, workflows, assets); repo-root **`workflows/`** and **`.staging/`** (entire subtree) are **dogfood / maintainer** trees. All interact with **`dockpipe`** only through **compile**, **store**, **embed**, and **declared** YAML — never through **`src/`** hardcoding their paths or names. Runtime resolution uses **`.dockpipe/internal/packages/`** and compile roots per **`docs/package-model.md`**.
 
 **Secrets / vault templates:** Template files must contain **references only** (e.g. **`op://…`**), never committed plaintext secrets. Keep local templates gitignored when they name private vaults. **Never** use shell redirects like **`> -`** (that creates a file named **`-`**). **`op inject`** output for workflow env is read into **process memory** in the CLI — no second “resolved template” file is written by DockPipe for that merge.
 
@@ -246,7 +246,7 @@ DO NOT:
 - introduce vendor-specific logic into core
 - turn this into a workflow engine
 - add orchestration complexity to core
-- put **`packages/`**, **`workflows/`**, or **`.staging/workflows/`** paths, or maintainer-only workflow/resolver **names**, into **`src/lib/`** or **`src/cmd/`** (see **Engine boundary**)
+- put **`packages/`**, **`workflows/`**, or **`.staging/`** paths (anything under **`.staging/`**), or maintainer-only workflow/resolver **names**, into **`src/lib/`** or **`src/cmd/`** (see **Engine boundary**)
 
 ---
 
