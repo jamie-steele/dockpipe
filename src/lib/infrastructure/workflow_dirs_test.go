@@ -295,6 +295,63 @@ func TestResolveWorkflowConfigPathDoesNotSearchLegacyCoreWorkflowsDir(t *testing
 	}
 }
 
+// Materialized bundle as repoRoot + project with both a package tarball and workflows/<name>/:
+// run resolution prefers tar:// (stream from store) before project authoring; compile still uses ProjectWorkflowConfigPath.
+func TestResolveWorkflowConfigPathWithWorkdirPrefersTarballOverProjectWorkflows(t *testing.T) {
+	bundle := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(bundle, BundledLayoutDir, "workflows", "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	onDisk := filepath.Join(project, "workflows", "demo", "config.yml")
+	if err := os.MkdirAll(filepath.Dir(onDisk), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(onDisk, []byte("name: demo\nsteps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := t.TempDir()
+	if err := os.WriteFile(filepath.Join(st, "config.yml"), []byte("name: demo\nsteps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: demo\nversion: 0.1.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pw := filepath.Join(project, ".dockpipe", "internal", "packages", "workflows")
+	if err := os.MkdirAll(pw, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(pw, "dockpipe-workflow-demo-0.1.0.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(st, tgz, "workflows/demo"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveWorkflowConfigPathWithWorkdir(bundle, project, "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got, "tar://") {
+		t.Fatalf("want tar workflow URI when store tarball exists, got %s", got)
+	}
+	if got := ProjectWorkflowConfigPath(project, "demo"); got != onDisk {
+		t.Fatalf("compile path should still see project workflows: got %q want %s", got, onDisk)
+	}
+}
+
+func TestProjectWorkflowConfigPathRespectsDockpipeWorkflowsDir(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DOCKPIPE_WORKFLOWS_DIR", "ci-flows")
+	if err := os.MkdirAll(filepath.Join(tmp, "ci-flows", "demo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(tmp, "ci-flows", "demo", "config.yml")
+	if err := os.WriteFile(cfg, []byte("name: demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := ProjectWorkflowConfigPath(tmp, "demo"); got != cfg {
+		t.Fatalf("got %q want %s", got, cfg)
+	}
+}
+
 func TestResolveEmbeddedResolverWorkflowConfigPathPrefersCoreResolverThenWorkflow(t *testing.T) {
 	tmp := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(tmp, "templates", "core", "resolvers", "vscode"), 0o755); err != nil {

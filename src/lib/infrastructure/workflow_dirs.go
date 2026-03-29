@@ -11,7 +11,7 @@ import (
 )
 
 // ResolveWorkflowConfigPath returns the first existing workflow config for a bundled or user workflow name.
-// Resolution uses WorkflowsRootDir (repo workflows/, materialized shipyard/workflows/ in bundle cache, or src/core/workflows in dockpipe source when workflows/ is empty).
+// Resolution uses WorkflowsRootDir (repo workflows/, materialized bundle/workflows in the cache, or src/core/workflows in dockpipe source when workflows/ is empty).
 // Does not consult .dockpipe/internal/packages (use ResolveWorkflowConfigPathWithWorkdir for that).
 func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 	return ResolveWorkflowConfigPathWithWorkdir(repoRoot, "", name)
@@ -24,26 +24,79 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 	if name == "" {
 		return "", fmt.Errorf("workflow name is empty")
 	}
-	var candidates []string
-	candidates = append(candidates, filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"))
+	// Order: (1) engine workflows tree + nested compile roots, (2) dockpipe-workflow-*.tar.gz as tar://
+	// (read from archive — no duplicate tree), (3) project <workdir>/<workflowsRel>/ authoring, (4) legacy templates, (5) resolver delegate.
+	// compile for-workflow uses ProjectWorkflowConfigPath first so closure compile still sees on-disk sources when present.
+	var batch []string
+	batch = append(batch, filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"))
 	if !UsesBundledAssetLayout(repoRoot) {
-		candidates = append(candidates, nestedWorkflowConfigCandidates(repoRoot, name, WorkflowCompileRootsCached(repoRoot))...)
+		batch = append(batch, nestedWorkflowConfigCandidates(repoRoot, name, WorkflowCompileRootsCached(repoRoot))...)
+	}
+	for _, p := range batch {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p, nil
+		}
 	}
 	if u, err := tryResolveWorkflowTarballURI(repoRoot, workdir, name); err != nil {
 		return "", err
 	} else if u != "" {
 		return u, nil
 	}
-	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
-		candidates = append(candidates, filepath.Join(repoRoot, "templates", name, "config.yml"))
-	}
-	candidates = append(candidates, filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml"))
-	for _, p := range candidates {
-		if st, err := os.Stat(p); err == nil && !st.IsDir() {
-			return p, nil
+	if wd := strings.TrimSpace(workdir); wd != "" {
+		absWd, err := filepath.Abs(filepath.Clean(wd))
+		if err != nil {
+			absWd = filepath.Clean(wd)
+		}
+		wdRel := effectiveWorkflowsDirRel()
+		if wdRel == "" {
+			wdRel = DefaultUserWorkflowsDirRel
+		}
+		var projPath string
+		if filepath.IsAbs(wdRel) {
+			projPath = filepath.Join(wdRel, name, "config.yml")
+		} else {
+			projPath = filepath.Join(absWd, wdRel, name, "config.yml")
+		}
+		if st, err := os.Stat(projPath); err == nil && !st.IsDir() {
+			return projPath, nil
 		}
 	}
+	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
+		tmpl := filepath.Join(repoRoot, "templates", name, "config.yml")
+		if st, err := os.Stat(tmpl); err == nil && !st.IsDir() {
+			return tmpl, nil
+		}
+	}
+	rs := filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml")
+	if st, err := os.Stat(rs); err == nil && !st.IsDir() {
+		return rs, nil
+	}
 	return "", fmt.Errorf("workflow config not found for %q", name)
+}
+
+// ProjectWorkflowConfigPath returns the path to <project>/<workflowsRel>/<name>/config.yml when that file exists,
+// using the same workflows directory resolution as WorkflowsRootDir (process --workflows-dir, DOCKPIPE_WORKFLOWS_DIR).
+// Used by compile for-workflow so tarball URIs never beat a real project tree.
+func ProjectWorkflowConfigPath(projectRoot, name string) string {
+	projectRoot = filepath.Clean(projectRoot)
+	name = strings.TrimSpace(name)
+	if projectRoot == "" || name == "" {
+		return ""
+	}
+	wdRel := effectiveWorkflowsDirRel()
+	if wdRel == "" {
+		wdRel = DefaultUserWorkflowsDirRel
+	}
+	var p string
+	if filepath.IsAbs(wdRel) {
+		p = filepath.Join(wdRel, name, "config.yml")
+	} else {
+		p = filepath.Join(projectRoot, wdRel, name, "config.yml")
+	}
+	if st, err := os.Stat(p); err == nil && !st.IsDir() {
+		return p
+	}
+	return ""
 }
 
 // ResolveEmbeddedResolverWorkflowConfigPath returns delegate YAML for DOCKPIPE_*_WORKFLOW (resolver-driven isolate).
@@ -59,25 +112,47 @@ func ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, workdir, nam
 	if name == "" {
 		return "", fmt.Errorf("embedded resolver workflow name is empty")
 	}
-	var candidates []string
+	var batch []string
 	if !UsesBundledAssetLayout(repoRoot) {
-		candidates = append(candidates, nestedWorkflowConfigCandidates(repoRoot, name, WorkflowCompileRootsCached(repoRoot))...)
+		batch = append(batch, nestedWorkflowConfigCandidates(repoRoot, name, WorkflowCompileRootsCached(repoRoot))...)
 	}
-	candidates = append(candidates,
+	batch = append(batch,
 		filepath.Join(CoreDir(repoRoot), "resolvers", name, "config.yml"),
 		filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"),
 	)
+	for _, p := range batch {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p, nil
+		}
+	}
 	if u, err := tryResolveWorkflowTarballURI(repoRoot, workdir, name); err != nil {
 		return "", err
 	} else if u != "" {
 		return u, nil
 	}
-	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
-		candidates = append(candidates, filepath.Join(repoRoot, "templates", name, "config.yml"))
+	if wd := strings.TrimSpace(workdir); wd != "" {
+		absWd, err := filepath.Abs(filepath.Clean(wd))
+		if err != nil {
+			absWd = filepath.Clean(wd)
+		}
+		wdRel := effectiveWorkflowsDirRel()
+		if wdRel == "" {
+			wdRel = DefaultUserWorkflowsDirRel
+		}
+		var projPath string
+		if filepath.IsAbs(wdRel) {
+			projPath = filepath.Join(wdRel, name, "config.yml")
+		} else {
+			projPath = filepath.Join(absWd, wdRel, name, "config.yml")
+		}
+		if st, err := os.Stat(projPath); err == nil && !st.IsDir() {
+			return projPath, nil
+		}
 	}
-	for _, p := range candidates {
-		if st, err := os.Stat(p); err == nil && !st.IsDir() {
-			return p, nil
+	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
+		tmpl := filepath.Join(repoRoot, "templates", name, "config.yml")
+		if st, err := os.Stat(tmpl); err == nil && !st.IsDir() {
+			return tmpl, nil
 		}
 	}
 	return "", fmt.Errorf("embedded resolver workflow config not found for %q", name)

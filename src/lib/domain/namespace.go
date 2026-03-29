@@ -20,7 +20,7 @@ var reservedNamespaces = map[string]struct{}{
 	"api": {}, "cli": {}, "meta": {}, "vendor": {}, "test": {}, "staging": {},
 	"bundle": {}, "bundles": {}, "workflow": {}, "workflows": {}, "resolver": {}, "resolvers": {},
 	"null": {}, "true": {}, "false": {},
-	"package": {}, "packages": {}, "store": {}, "shipyard": {},
+	"package": {}, "packages": {}, "store": {},
 	"template": {}, "templates": {}, "assets": {}, "runtimes": {}, "strategies": {},
 }
 

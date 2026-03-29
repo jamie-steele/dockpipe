@@ -30,7 +30,7 @@ So: **example workflows** and **`src/core/resolvers/*`** are **not** in the **co
 
 **Note:** Compiled **`templates/core`** tarballs from **`package build core`** no longer carry these scripts; projects that only install core and need Terraform should keep **`packages/terraform`** in the tree or vendor the pack.
 
-**Embedded binary:** `scripts/core.assets.scripts.terraform-*` resolves to **`shipyard/workflows/terraform-core/assets/scripts/`** under the materialized bundle cache (same `terraform-core` tree as **`packages/terraform/resolvers/terraform-core`** in a git checkout). **`bundledFormatVersion`** was bumped so existing caches re-unpack without stale **`core/assets/scripts/terraform-*.sh`**.
+**Embedded binary:** `scripts/core.assets.scripts.terraform-*` resolves to **`bundle/workflows/terraform-core/assets/scripts/`** under the materialized bundle cache (`~/.cache/dockpipe/bundled-<ver>/`, same `terraform-core` tree as **`packages/terraform/resolvers/terraform-core`** in a git checkout). **`bundledFormatVersion`** bumps force re-unpack when layout changes.
 
 ### 2. Cloudflare / R2 (already partly separated)
 

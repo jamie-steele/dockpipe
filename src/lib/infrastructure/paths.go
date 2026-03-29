@@ -171,11 +171,11 @@ func terraformPackCoreAssetPath(repoRoot, rel string) (string, bool) {
 	if rel != want1 && rel != want2 {
 		return "", false
 	}
-	// Git checkout: packages/terraform/resolvers/terraform-core/... — embedded bundle: shipyard/workflows/terraform-core/...
+	// Git checkout: packages/terraform/resolvers/terraform-core/... — embedded bundle: bundle/workflows/terraform-core/...
 	// (see mapEmbeddedStagingWorkflowRel in bundled_extract.go).
 	candidates := []string{
 		filepath.Join(repoRoot, "packages", "terraform", "resolvers", "terraform-core", rel),
-		filepath.Join(repoRoot, ShipyardDir, "workflows", "terraform-core", rel),
+		filepath.Join(repoRoot, BundledLayoutDir, "workflows", "terraform-core", rel),
 	}
 	for _, p := range candidates {
 		if scriptFileExists(p) {

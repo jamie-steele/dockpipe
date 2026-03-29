@@ -14,7 +14,7 @@ import (
 )
 
 // bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "111"
+const bundledFormatVersion = "112"
 
 var bundledMu sync.Mutex
 
@@ -116,11 +116,11 @@ func InvalidateBundledCache() error {
 	if err != nil {
 		return err
 	}
-	dest := filepath.Join(cacheBase, ShipyardDir, "bundled-"+ver)
+	dest := filepath.Join(cacheBase, BundledCacheParentDir, "bundled-"+ver)
 	return os.RemoveAll(dest)
 }
 
-// MaterializedBundledRoot returns a directory containing the unpacked bundle: <ShipyardDir>/core/
+// MaterializedBundledRoot returns a directory containing the unpacked bundle: <BundledLayoutDir>/core/
 // (mirrors bundled category dirs: resolvers, runtimes, strategies, …), workflows/, assets/entrypoint.sh, and version.
 // Embedded source uses src/core/...; copyEmbeddedFS maps that to the layout above on disk.
 // See also DOCKPIPE_REPO_ROOT override in RepoRoot.
@@ -144,8 +144,8 @@ func extractBundledToCache() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dest := filepath.Join(cacheBase, ShipyardDir, "bundled-"+ver)
-	cfgPath := filepath.Join(dest, ShipyardDir, "workflows", "run", "config.yml")
+	dest := filepath.Join(cacheBase, BundledCacheParentDir, "bundled-"+ver)
+	cfgPath := filepath.Join(dest, BundledLayoutDir, "workflows", "run", "config.yml")
 	formatPath := filepath.Join(dest, ".bundled-format")
 	if st, err := os.Stat(cfgPath); err == nil && !st.IsDir() {
 		if b, err := os.ReadFile(filepath.Join(dest, "version")); err == nil && strings.TrimSpace(string(b)) == ver {
@@ -175,7 +175,7 @@ func extractBundledToCache() (string, error) {
 	return dest, nil
 }
 
-// bundledCacheBase is the parent directory for <ShipyardDir>/bundled-<version> (default: user cache dir).
+// bundledCacheBase is the parent directory for <cache>/<BundledCacheParentDir>/bundled-<version> (default: user cache dir).
 // Set DOCKPIPE_BUNDLED_CACHE to override (tests, read-only home, etc.).
 func bundledCacheBase() (string, error) {
 	if v := os.Getenv("DOCKPIPE_BUNDLED_CACHE"); v != "" {
@@ -189,7 +189,7 @@ func bundledCacheBase() (string, error) {
 }
 
 // embedWorkflowRoot records a workflow directory under embeddedPackageRootsPrefixes (any depth) for material
-// shipyard/workflows/<name>/… mapping.
+// bundle/workflows/<name>/… mapping.
 type embedWorkflowRoot struct {
 	prefix string // e.g. ide/resolvers/vscode under packages/ or .staging/packages/ (no leading embed root)
 	name   string // workflow leaf basename (e.g. codex)
@@ -235,7 +235,7 @@ func initStagingEmbedRoots() {
 	})
 }
 
-// mapEmbeddedStagingWorkflowRel maps paths under embeddedPackageRootsPrefixes to shipyard/workflows/<workflow>/… using
+// mapEmbeddedStagingWorkflowRel maps paths under embeddedPackageRootsPrefixes to bundle/workflows/<workflow>/… using
 // discovered config.yml / profile roots (namespace nesting of any depth).
 func mapEmbeddedStagingWorkflowRel(rel string) (string, bool) {
 	for _, pfx := range embeddedPackageRootsPrefixes {
@@ -245,7 +245,7 @@ func mapEmbeddedStagingWorkflowRel(rel string) (string, bool) {
 		normalized := strings.TrimPrefix(rel, pfx)
 		normalized = strings.TrimPrefix(normalized, "/")
 		if normalized == "" {
-			return filepath.Join(ShipyardDir, "workflows"), true
+			return filepath.Join(BundledLayoutDir, "workflows"), true
 		}
 		initStagingEmbedRoots()
 		for _, r := range stagingEmbedRoots {
@@ -253,22 +253,22 @@ func mapEmbeddedStagingWorkflowRel(rel string) (string, bool) {
 				suffix := strings.TrimPrefix(normalized, r.prefix)
 				suffix = strings.TrimPrefix(suffix, "/")
 				if suffix == "" {
-					return filepath.Join(ShipyardDir, "workflows", r.name), true
+					return filepath.Join(BundledLayoutDir, "workflows", r.name), true
 				}
-				return filepath.Join(ShipyardDir, "workflows", r.name, filepath.FromSlash(suffix)), true
+				return filepath.Join(BundledLayoutDir, "workflows", r.name, filepath.FromSlash(suffix)), true
 			}
 		}
 		rest := normalized
 		if rest == "" {
-			return filepath.Join(ShipyardDir, "workflows"), true
+			return filepath.Join(BundledLayoutDir, "workflows"), true
 		}
-		return filepath.Join(ShipyardDir, "workflows", filepath.FromSlash(rest)), true
+		return filepath.Join(BundledLayoutDir, "workflows", filepath.FromSlash(rest)), true
 	}
 	return "", false
 }
 
 // mapEmbeddedToMaterializedPath maps embed paths (src/core/..., lib/..., VERSION) to the on-disk
-// materialized layout: <ShipyardDir>/core/..., workflows/..., lib/, version.
+// materialized layout: <BundledLayoutDir>/core/..., workflows/..., lib/, version.
 func mapEmbeddedToMaterializedPath(rel string) string {
 	wfUnderCore := EmbeddedTemplatesPrefix + "/workflows"
 	switch {
@@ -278,23 +278,23 @@ func mapEmbeddedToMaterializedPath(rel string) string {
 		rest := strings.TrimPrefix(rel, wfUnderCore)
 		rest = strings.TrimPrefix(rest, "/")
 		if rest == "" {
-			return filepath.Join(ShipyardDir, "workflows")
+			return filepath.Join(BundledLayoutDir, "workflows")
 		}
-		return filepath.Join(ShipyardDir, "workflows", filepath.FromSlash(rest))
+		return filepath.Join(BundledLayoutDir, "workflows", filepath.FromSlash(rest))
 	case rel == EmbeddedTemplatesPrefix || strings.HasPrefix(rel, EmbeddedTemplatesPrefix+"/"):
 		suffix := strings.TrimPrefix(rel, EmbeddedTemplatesPrefix)
 		suffix = strings.TrimPrefix(suffix, "/")
 		if suffix == "" {
-			return filepath.Join(ShipyardDir, "core")
+			return filepath.Join(BundledLayoutDir, "core")
 		}
-		return filepath.Join(ShipyardDir, "core", filepath.FromSlash(suffix))
+		return filepath.Join(BundledLayoutDir, "core", filepath.FromSlash(suffix))
 	case rel == "workflows" || strings.HasPrefix(rel, "workflows/"):
 		rest := strings.TrimPrefix(rel, "workflows")
 		rest = strings.TrimPrefix(rest, "/")
 		if rest == "" {
-			return filepath.Join(ShipyardDir, "workflows")
+			return filepath.Join(BundledLayoutDir, "workflows")
 		}
-		return filepath.Join(ShipyardDir, "workflows", rest)
+		return filepath.Join(BundledLayoutDir, "workflows", rest)
 	default:
 		for _, pfx := range embeddedPackageRootsPrefixes {
 			if rel == pfx || strings.HasPrefix(rel, pfx+"/") {
@@ -304,9 +304,9 @@ func mapEmbeddedToMaterializedPath(rel string) string {
 				rest := strings.TrimPrefix(rel, pfx)
 				rest = strings.TrimPrefix(rest, "/")
 				if rest == "" {
-					return filepath.Join(ShipyardDir, "workflows")
+					return filepath.Join(BundledLayoutDir, "workflows")
 				}
-				return filepath.Join(ShipyardDir, "workflows", filepath.FromSlash(rest))
+				return filepath.Join(BundledLayoutDir, "workflows", filepath.FromSlash(rest))
 			}
 		}
 		return rel

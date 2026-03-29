@@ -6,28 +6,31 @@ import (
 	"strings"
 )
 
-// ShipyardDir is the top-level directory name for the materialized bundle layout
-// (…/core/…, …/workflows/…) under RepoRoot. Authoring checkouts use this name for repo-local
-// maintainer workflows (CI, quick iteration) — distinct from stable templates/ and future CDN bundles.
-const ShipyardDir = "shipyard"
+// BundledCacheParentDir is the directory under the user cache (e.g. ~/.cache on Linux) that holds
+// versioned materialized bundles: <cache>/dockpipe/bundled-<version>/.
+const BundledCacheParentDir = "dockpipe"
+
+// BundledLayoutDir is the inner directory name for core/ and workflows/ under a materialized bundle root
+// (…/bundled-<ver>/bundle/core, …/bundle/workflows). Not the old "shipyard" segment name.
+const BundledLayoutDir = "bundle"
 
 // EmbeddedTemplatesPrefix is the path prefix of bundled authoring core + workflows inside dockpipe.BundledFS (see embed.go).
-// Source layout: src/core/{assets,resolvers,runtimes,strategies,workflows/…}; maps to materialized shipyard/core and shipyard/workflows.
+// Source layout: src/core/{assets,resolvers,runtimes,strategies,workflows/…}; maps to materialized bundle/core and bundle/workflows.
 const EmbeddedTemplatesPrefix = "src/core"
 
 // UsesBundledAssetLayout reports whether repoRoot is the materialized embedded bundle:
-// it contains …/core (and typically …/workflows). Authoring checkouts use
+// it contains …/bundle/core (and typically …/bundle/workflows). Authoring checkouts use
 // src/core/ or templates/ + templates/core/ instead.
 func UsesBundledAssetLayout(repoRoot string) bool {
-	p := filepath.Join(repoRoot, ShipyardDir, "core")
+	p := filepath.Join(repoRoot, BundledLayoutDir, "core")
 	st, err := os.Stat(p)
 	return err == nil && st.IsDir()
 }
 
-// CoreDir returns .../src/core (dockpipe source), .../templates/core (downstream init), or .../<ShipyardDir>/core (materialized bundle).
+// CoreDir returns .../src/core (dockpipe source), .../templates/core (downstream init), or .../bundle/core (materialized bundle).
 func CoreDir(repoRoot string) string {
 	if UsesBundledAssetLayout(repoRoot) {
-		return filepath.Join(repoRoot, ShipyardDir, "core")
+		return filepath.Join(repoRoot, BundledLayoutDir, "core")
 	}
 	srcCore := filepath.Join(repoRoot, "src", "core")
 	if st, err := os.Stat(filepath.Join(srcCore, "runtimes")); err == nil && st.IsDir() {
@@ -78,11 +81,11 @@ func BundledWorkflowsAuthoringDir(repoRoot string) string {
 }
 
 // WorkflowsRootDir returns the directory containing named workflow folders (each with config.yml):
-// materialized bundle → shipyard/workflows; dockpipe source → repo workflows/ when present, else src/core/workflows;
+// materialized bundle → bundle/workflows; dockpipe source → repo workflows/ when present, else src/core/workflows;
 // normal projects → workflows/ (or override).
 func WorkflowsRootDir(repoRoot string) string {
 	if UsesBundledAssetLayout(repoRoot) {
-		return filepath.Join(repoRoot, ShipyardDir, "workflows")
+		return filepath.Join(repoRoot, BundledLayoutDir, "workflows")
 	}
 	if DockpipeAuthoringSourceTree(repoRoot) {
 		wf := filepath.Join(repoRoot, DefaultUserWorkflowsDirRel)

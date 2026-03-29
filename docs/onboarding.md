@@ -46,8 +46,8 @@ To reuse **`workflows/`** presets in another tree, copy the directory or use **`
 | Term | Meaning |
 |------|---------|
 | **Workflow** | What happens — **`config.yml`**, **`--workflow <name>`**. |
-| **Runtime** | **Core** concept — **where** execution runs: profiles under **`templates/core/runtimes/<name>`** (or **`shipyard/core/runtimes/`** in the cache). Workflows **select** a runtime by name; they do **not** define new substrates. |
-| **Resolver** | Which tool or platform — **`templates/core/resolvers/<name>`** (or **`shipyard/core/resolvers/`**). |
+| **Runtime** | **Core** concept — **where** execution runs: profiles under **`templates/core/runtimes/<name>`** (or **`bundle/core/runtimes/`** in the cache). Workflows **select** a runtime by name; they do **not** define new substrates. |
+| **Resolver** | Which tool or platform — **`templates/core/resolvers/<name>`** (or **`bundle/core/resolvers/`**). |
 | **Strategy** | Lifecycle wrapper — **`templates/core/strategies/<name>`**, optional **`strategy:`** in YAML. |
 | **Assets** | Support files — **`templates/core/assets/`** (`scripts/`, `images/`, `compose/`). |
 

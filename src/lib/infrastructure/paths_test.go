@@ -136,9 +136,9 @@ func TestResolveWorkflowScriptResolvesCoreTerraformRun(t *testing.T) {
 	}
 }
 
-func TestResolveWorkflowScriptResolvesCoreTerraformRunFromShipyardTerraformCore(t *testing.T) {
+func TestResolveWorkflowScriptResolvesCoreTerraformRunFromBundledTerraformCore(t *testing.T) {
 	repo := t.TempDir()
-	p := filepath.Join(repo, ShipyardDir, "workflows", "terraform-core", "assets", "scripts", "terraform-run.sh")
+	p := filepath.Join(repo, BundledLayoutDir, "workflows", "terraform-core", "assets", "scripts", "terraform-run.sh")
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
 	}

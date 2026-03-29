@@ -19,7 +19,7 @@ func TestWorkflowsRootDirAuthoringUserProject(t *testing.T) {
 		t.Fatalf("CoreDir = %q, want %q", got, want)
 	}
 	if UsesBundledAssetLayout(tmp) {
-		t.Fatal("UsesBundledAssetLayout should be false without shipyard/core")
+		t.Fatal("UsesBundledAssetLayout should be false without bundle/core")
 	}
 }
 
@@ -80,16 +80,16 @@ func TestWorkflowsRootDirPrefersSrcCoreWhenBothTreesExist(t *testing.T) {
 func TestCoreDirMaterializedBundle(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(tmp, ShipyardDir, "core"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(tmp, BundledLayoutDir, "core"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if !UsesBundledAssetLayout(tmp) {
-		t.Fatal("UsesBundledAssetLayout should be true when shipyard/core exists")
+		t.Fatal("UsesBundledAssetLayout should be true when bundle/core exists")
 	}
-	if got, want := CoreDir(tmp), filepath.Join(tmp, ShipyardDir, "core"); got != want {
+	if got, want := CoreDir(tmp), filepath.Join(tmp, BundledLayoutDir, "core"); got != want {
 		t.Fatalf("CoreDir = %q, want %q", got, want)
 	}
-	if got, want := WorkflowsRootDir(tmp), filepath.Join(tmp, ShipyardDir, "workflows"); got != want {
+	if got, want := WorkflowsRootDir(tmp), filepath.Join(tmp, BundledLayoutDir, "workflows"); got != want {
 		t.Fatalf("WorkflowsRootDir = %q, want %q", got, want)
 	}
 }

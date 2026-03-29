@@ -31,12 +31,18 @@ func compileClosureForWorkflow(projectRoot, workflowName string, noStaging, forc
 		return err
 	}
 
-	wfPath, err := infrastructure.ResolveWorkflowConfigPathWithWorkdir(repoRoot, projectRoot, workflowName)
-	if err != nil {
-		return fmt.Errorf("compile for-workflow: resolve workflow %q: %w", workflowName, err)
+	var wfPath string
+	if p := infrastructure.ProjectWorkflowConfigPath(projectRoot, workflowName); p != "" {
+		wfPath = p
+	} else {
+		var errRes error
+		wfPath, errRes = infrastructure.ResolveWorkflowConfigPathWithWorkdir(repoRoot, projectRoot, workflowName)
+		if errRes != nil {
+			return fmt.Errorf("compile for-workflow: resolve workflow %q: %w", workflowName, errRes)
+		}
 	}
 	if strings.HasPrefix(wfPath, "tar://") {
-		return fmt.Errorf("compile for-workflow: %q resolves to a tarball stream — use on-disk workflow sources or run dockpipe package compile workflows", workflowName)
+		return fmt.Errorf("compile for-workflow: %q resolves to a tarball stream — add workflows/%s/config.yml under your project (or set DOCKPIPE_WORKFLOWS_DIR), or run dockpipe package compile workflows, or skip with --no-compile-deps", workflowName, workflowName)
 	}
 	startDir := filepath.Dir(wfPath)
 
