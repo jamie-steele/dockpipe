@@ -102,6 +102,16 @@ func TestParseFlagsNoOpInject(t *testing.T) {
 	}
 }
 
+func TestParseFlagsCompileDeps(t *testing.T) {
+	_, o, err := ParseFlags("/tmp/repo", []string{"--workflow", "demo", "--compile-deps"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !o.CompileDeps || o.Workflow != "demo" {
+		t.Fatalf("CompileDeps=%v Workflow=%q", o.CompileDeps, o.Workflow)
+	}
+}
+
 // TestParseFlagsUnknownOption errors on unrecognized flags.
 func TestParseFlagsUnknownOption(t *testing.T) {
 	_, _, err := ParseFlags("/tmp/repo", []string{"--def-not-real"})

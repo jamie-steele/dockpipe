@@ -46,6 +46,8 @@ type CliOpts struct {
 	VarOverrides  []string
 	NoOpInject    bool // skip vault env resolution via op inject (when dockpipe.config.json sets op_inject_template)
 	BuildPath     string
+	// CompileDeps runs package compile for-workflow for --workflow before resolve (materializes .dockpipe store).
+	CompileDeps bool
 	SeenDash      bool
 }
 
@@ -206,6 +208,9 @@ func ParseFlags(repoRoot string, argv []string) ([]string, *CliOpts, error) {
 			}
 			o.VarOverrides = append(o.VarOverrides, argv[i+1])
 			i += 2
+		case "--compile-deps":
+			o.CompileDeps = true
+			i++
 		case "--build":
 			if i+1 >= len(argv) {
 				return nil, nil, fmt.Errorf("--build requires an argument")

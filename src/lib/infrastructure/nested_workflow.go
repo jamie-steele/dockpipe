@@ -10,6 +10,12 @@ import (
 
 var errStopNestedWalk = errors.New("stop nested workflow walk")
 
+// NestedResolverLeafDirs returns directories under each workflow/resolver root (any depth) named leaf
+// that contain a resolver profile directory (see nestedResolverLeafDirs).
+func NestedResolverLeafDirs(leaf string, roots []string) []string {
+	return nestedResolverLeafDirs(leaf, roots)
+}
+
 // nestedResolverLeafDirs returns directories under each workflow/resolver root (any depth) named leaf
 // that contain a resolver profile directory.
 func nestedResolverLeafDirs(leaf string, roots []string) []string {

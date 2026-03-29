@@ -224,7 +224,7 @@ Usage:
   dockpipe package list [--workdir <path>]
   dockpipe package manifest
   dockpipe package build core|store [options]
-  dockpipe package compile core|resolvers|bundles|workflows|all|workflow [options]  (bundles = alias for workflows)
+  dockpipe package compile core|resolvers|bundles|workflows|all|for-workflow|workflow [options]  (bundles = alias for workflows)
 
   list      Find package.yml under .dockpipe/internal/packages and print rel path, name, version, provider, capability, requires_capabilities (comma-separated), description.
   manifest  Print an example package.yml schema to stdout.

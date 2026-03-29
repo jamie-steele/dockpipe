@@ -48,6 +48,8 @@ func cmdPackageCompile(args []string) error {
 		return nil
 	}
 	switch args[0] {
+	case "for-workflow":
+		return cmdPackageCompileForWorkflow(args[1:])
 	case "workflow":
 		return cmdPackageCompileWorkflow(args[1:])
 	case "core":
@@ -66,7 +68,7 @@ func cmdPackageCompile(args []string) error {
 	case "all":
 		return cmdPackageCompileAll(args[1:])
 	default:
-		return fmt.Errorf("unknown package compile target %q (try: dockpipe package compile --help)", args[0])
+		return fmt.Errorf("unknown package compile target %q (try: dockpipe package compile --help; use for-workflow for dependency-scoped compile)", args[0])
 	}
 }
 
@@ -600,6 +602,77 @@ func filterExistingResolverRoots(roots []string) []string {
 	return out
 }
 
+// compileSingleResolverDir packs one resolver profile directory (contains profile) into
+// dockpipe-resolver-<name>-<ver>.tar.gz under destRoot.
+func compileSingleResolverDir(destRoot, from, name string, defaultNamespace string, force bool) error {
+	kind := "resolver"
+	tarGlob := filepath.Join(destRoot, fmt.Sprintf("dockpipe-resolver-%s-*.tar.gz", packagebuild.SafeTarballToken(name)))
+	legacyDir := filepath.Join(destRoot, name)
+	if !force {
+		if matches, _ := filepath.Glob(tarGlob); len(matches) > 0 {
+			return fmt.Errorf("compiled %s package %q already exists: %s (use --force)", kind, name, matches[0])
+		}
+		if _, err := os.Stat(legacyDir); err == nil {
+			return fmt.Errorf("legacy expanded %s %q exists under %s (use --force)", kind, name, legacyDir)
+		}
+	} else {
+		_ = infrastructure.RemoveGlob(tarGlob)
+		_ = os.RemoveAll(legacyDir)
+	}
+	staging, err := os.MkdirTemp("", "dockpipe-compile-"+kind+"-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(staging)
+	if err := copyDir(from, staging); err != nil {
+		return fmt.Errorf("copy %s %s: %w", kind, name, err)
+	}
+	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
+	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
+		pm := map[string]any{
+			"schema":       1,
+			"name":         name,
+			"version":      "0.1.0",
+			"title":        name,
+			"description":  "Compiled from " + from,
+			"kind":         kind,
+			"allow_clone":  true,
+			"distribution": "source",
+		}
+		ns, err := readResolverNamespaceYAML(staging)
+		if err != nil {
+			return fmt.Errorf("resolver %s: %w", name, err)
+		}
+		if ns != "" {
+			pm["namespace"] = ns
+		} else if strings.TrimSpace(defaultNamespace) != "" {
+			pm["namespace"] = strings.TrimSpace(defaultNamespace)
+		}
+		out, err := yaml.Marshal(pm)
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(manifestPath, out, 0o644); err != nil {
+			return err
+		}
+	}
+	pmParsed, err := domain.ParsePackageManifest(manifestPath)
+	if err != nil {
+		return fmt.Errorf("%s %s: %w", kind, name, err)
+	}
+	ver := strings.TrimSpace(pmParsed.Version)
+	if ver == "" {
+		ver = "0.1.0"
+	}
+	prefix := "resolvers/" + name
+	base := fmt.Sprintf("dockpipe-resolver-%s-%s.tar.gz", packagebuild.SafeTarballToken(name), packagebuild.SafeTarballToken(ver))
+	outPath := filepath.Join(destRoot, base)
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(staging, outPath, prefix); err != nil {
+		return fmt.Errorf("%s %s: %w", kind, name, err)
+	}
+	return nil
+}
+
 func mergeChildPackagesWalk(srcRoot, destRoot string, kind string, defaultNamespace string, force bool) (int, error) {
 	entries, err := os.ReadDir(srcRoot)
 	if err != nil {
@@ -629,77 +702,9 @@ func mergeChildPackagesWalk(srcRoot, destRoot string, kind string, defaultNamesp
 		if kind != "resolver" {
 			return n, fmt.Errorf("mergeChildPackages: unknown kind %q", kind)
 		}
-		tarGlob := filepath.Join(destRoot, fmt.Sprintf("dockpipe-resolver-%s-*.tar.gz", packagebuild.SafeTarballToken(name)))
-		legacyDir := filepath.Join(destRoot, name)
-		if !force {
-			if matches, _ := filepath.Glob(tarGlob); len(matches) > 0 {
-				return n, fmt.Errorf("compiled %s package %q already exists: %s (use --force)", kind, name, matches[0])
-			}
-			if _, err := os.Stat(legacyDir); err == nil {
-				return n, fmt.Errorf("legacy expanded %s %q exists under %s (use --force)", kind, name, legacyDir)
-			}
-		} else {
-			_ = infrastructure.RemoveGlob(tarGlob)
-			_ = os.RemoveAll(legacyDir)
-		}
-		staging, err := os.MkdirTemp("", "dockpipe-compile-"+kind+"-*")
-		if err != nil {
+		if err := compileSingleResolverDir(destRoot, from, name, defaultNamespace, force); err != nil {
 			return n, err
 		}
-		if err := copyDir(from, staging); err != nil {
-			return n, fmt.Errorf("copy %s %s: %w", kind, name, err)
-		}
-		manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
-		if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
-			pm := map[string]any{
-				"schema":       1,
-				"name":         name,
-				"version":      "0.1.0",
-				"title":        name,
-				"description":  "Compiled from " + from,
-				"kind":         kind,
-				"allow_clone":  true,
-				"distribution": "source",
-			}
-			if kind == "resolver" {
-				ns, err := readResolverNamespaceYAML(staging)
-				if err != nil {
-					_ = os.RemoveAll(staging)
-					return n, fmt.Errorf("resolver %s: %w", name, err)
-				}
-				if ns != "" {
-					pm["namespace"] = ns
-				} else if strings.TrimSpace(defaultNamespace) != "" {
-					pm["namespace"] = strings.TrimSpace(defaultNamespace)
-				}
-			}
-			out, err := yaml.Marshal(pm)
-			if err != nil {
-				_ = os.RemoveAll(staging)
-				return n, err
-			}
-			if err := os.WriteFile(manifestPath, out, 0o644); err != nil {
-				_ = os.RemoveAll(staging)
-				return n, err
-			}
-		}
-		pmParsed, err := domain.ParsePackageManifest(manifestPath)
-		if err != nil {
-			_ = os.RemoveAll(staging)
-			return n, fmt.Errorf("%s %s: %w", kind, name, err)
-		}
-		ver := strings.TrimSpace(pmParsed.Version)
-		if ver == "" {
-			ver = "0.1.0"
-		}
-		prefix := "resolvers/" + name
-		base := fmt.Sprintf("dockpipe-resolver-%s-%s.tar.gz", packagebuild.SafeTarballToken(name), packagebuild.SafeTarballToken(ver))
-		outPath := filepath.Join(destRoot, base)
-		if _, err := packagebuild.WriteDirTarGzWithPrefix(staging, outPath, prefix); err != nil {
-			_ = os.RemoveAll(staging)
-			return n, fmt.Errorf("%s %s: %w", kind, name, err)
-		}
-		_ = os.RemoveAll(staging)
 		n++
 	}
 	return n, nil
@@ -895,6 +900,7 @@ Usage:
   dockpipe package compile bundles [options]   (alias: same as compile workflows; compile.bundles merged into roots)
   dockpipe package compile workflows [options]
   dockpipe package compile all [options]
+  dockpipe package compile for-workflow <name> [options]   (core + transitive resolvers/workflows only)
   dockpipe package compile workflow [options] [--from] <source-dir>
 
 Order for a full local store: core (spine only) → resolvers → workflows (dockpipe-workflow-* tarballs only).

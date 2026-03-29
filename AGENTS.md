@@ -26,7 +26,7 @@ Everything else is built around this.
 
 Treat **`packages/`**, **`workflows/`**, and **`.staging/workflows/`** as **separate products** (as if each were its **own repository**): they ship **YAML + assets** and are consumed only through **compile** → **`.dockpipe/internal/packages/`**, **HTTPS/package-store** tarballs, **embed** (repo-root **`embed.go`** is the **single** build-time list of embed roots — not duplicated as ad-hoc strings across **`src/`**), and **declarative** fields the runner already implements. **Outside** trees **touch** the engine through **compiled materialization** and **public CLI behavior** — not through Go code that imports their layout.
 
-**Allowed in `src/`:** generic resolution (workflow name → config, resolver name → profile, logical `scripts/…` → on-disk path), **`.dockpipe/internal/packages/…`**, manifest/install **wire** shapes, and **one** indirection for embed roots (see **`embedded_fs.go`** / **`embeddedPackageRootsPrefixes`**).
+**Allowed in `src/`:** generic resolution (workflow name → config, resolver name → profile, logical `scripts/…` → on-disk path), **`.dockpipe/internal/packages/…`**, manifest/install **wire** shapes, and **one** indirection for embed roots (see **`src/lib/infrastructure/embedded_fs.go`** / **`embeddedPackageRootsPrefixes`**).
 
 **Forbidden in `src/`:** repository-relative paths like **`packages/<group>/…`**, pointers to specific dogfood workflows as **the** documented path for a task, or anything that makes downstream **`dockpipe`** depend on **this** checkout’s tree shape. Put repository-specific procedures in **`docs/`** and package READMEs.
 
@@ -100,7 +100,7 @@ Examples (profile names):
 ❗ Resolvers are NOT runtimes. **Runtime** = where (see **`…/core/runtimes/README.md`**); **resolver** = which tool profile.
 
 📁 Location:
-`…/core/resolvers/` (bundled) · **`.staging/workflows/<tool>/`** (maintainer overlays in this repo)
+`…/core/resolvers/` (bundled) · **`packages/…/resolvers/…`** / **`.staging/workflows/…`** (maintainer overlays in this repo)
 
 ---
 
@@ -216,9 +216,9 @@ When you work **on the dockpipe project itself**, you are a **user** of the tool
 
 **Two channels — do not conflate them:**
 
-1. **On-disk context** — **`.dockpipe/`** and **`.dorkpipe/`** hold **generated** handoffs, self-analysis facts, CI bundles, metrics, and optional insights. Use them as **read-only grounding** with normal code reading. Contract: **`docs/artifacts.md`**. Pipeon: **`ide/bin/pipeon`**, **Pipeon Launcher** **`src/apps/pipeon-launcher/`**, **`ide`** maintainer package READMEs. Do **not** auto-regenerate; refresh only when the **user** asks (then **`dockpipe --workflow dorkpipe-self-analysis`** / related names — see **Accelerator** above).
+1. **On-disk context** — **`.dockpipe/`** and **`.dorkpipe/`** hold **generated** handoffs, self-analysis facts, CI bundles, metrics, and optional insights. Use them as **read-only grounding** with normal code reading. Contract: **`docs/artifacts.md`**. Pipeon binary: **`packages/pipeon/bin/pipeon`**; **Pipeon Launcher:** **`src/apps/pipeon-launcher/`**; docs under **`packages/pipeon/resolvers/pipeon/`** (resolver + VS Code extension). Do **not** auto-regenerate; refresh only when the **user** asks (then **`dockpipe --workflow dorkpipe-self-analysis`** / related names — see **Accelerator** above).
 
-2. **MCP (`mcpd`)** — **Bounded tools** with **tiered IAM** (`DOCKPIPE_MCP_TIER`: `readonly` → `validate` → `exec`) via maintainer package **`dockpipe.mcp`** (**`mcpbridge/`**). Default tier is **`validate`** (list + validate; **no** `dockpipe.run` / `dorkpipe.run_spec`). Tier **`exec`** (or legacy **`DOCKPIPE_MCP_ALLOW_EXEC=1`** when tier is unset) is required for run tools. **Doc:** **`dockpipe-mcp/README.md`** (package root); env/HTTP: **`mcpbridge/README.md`**.
+2. **MCP (`mcpd`)** — **Bounded tools** with **tiered IAM** (`DOCKPIPE_MCP_TIER`: `readonly` → `validate` → `exec`) via maintainer package **`packages/dockpipe-mcp/`** (module **`dockpipe.mcp`**). Default tier is **`validate`** (list + validate; **no** `dockpipe.run` / `dorkpipe.run_spec`). Tier **`exec`** (or legacy **`DOCKPIPE_MCP_ALLOW_EXEC=1`** when tier is unset) is required for run tools. **Docs:** **`packages/dockpipe-mcp/README.md`**; **`packages/dockpipe-mcp/mcpbridge/README.md`**.
 
 **Freshness:** If artifacts exist, say whether they look current vs **`HEAD`**; if missing or stale, say so and suggest refresh **when relevant**.
 

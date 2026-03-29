@@ -146,6 +146,13 @@ func Run(argv []string, baseEnviron []string) error {
 		return err
 	}
 
+	if compileDepsWanted(opts) && opts.Workflow != "" && opts.WorkflowFile == "" {
+		effWd := effectiveWorkdirForWorkflowOpts(opts)
+		if err := compileClosureForWorkflow(effWd, opts.Workflow, false, opts.Force); err != nil {
+			return err
+		}
+	}
+
 	var wf *domain.Workflow
 	var wfRoot, wfConfig string
 	stepsMode := false
@@ -799,4 +806,16 @@ func effectiveWorkdirForWorkflowOpts(opts *CliOpts) string {
 		return "."
 	}
 	return wd
+}
+
+func compileDepsWanted(opts *CliOpts) bool {
+	if opts != nil && opts.CompileDeps {
+		return true
+	}
+	v := strings.TrimSpace(os.Getenv("DOCKPIPE_COMPILE_DEPS"))
+	if v == "" {
+		return false
+	}
+	vl := strings.ToLower(v)
+	return vl != "0" && vl != "false" && vl != "no" && vl != "off"
 }

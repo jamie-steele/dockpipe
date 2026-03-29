@@ -17,6 +17,8 @@ Usage:
 
 Core:
   --workflow <name>     Workflow to run (e.g. test)
+  --compile-deps        Before run: compile only core + transitive resolver/workflow deps for this workflow
+                        (same as: dockpipe package compile for-workflow <name>). Env: DOCKPIPE_COMPILE_DEPS=1
   --runtime <name>      Runtime profile (e.g. docker)
   --resolver <name>     Resolver profile (optional)
 
