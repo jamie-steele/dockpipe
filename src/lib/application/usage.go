@@ -45,6 +45,7 @@ Commands:
   compile                 Same as dockpipe package compile (core, resolvers, workflows)
   release upload          Upload a file to S3-compatible storage (self-hosted; uses aws CLI)
   workflow validate       Check workflow YAML ([path] relative to cwd or repo root; omit if one workflow)
+  pipelang compile|invoke PipeLang typed authoring: compile artifacts and invoke methods via CLI
   doctor                  Check docker, bash, and bundled assets
   core script-path <dots> Print absolute path to a core asset (same as scripts/core.<dots> in YAML)
   terraform pipeline-path | terraform run <cmds>  Terraform helpers (see dockpipe terraform --help)

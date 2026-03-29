@@ -6,7 +6,7 @@
 
 **Workflow YAML (`config.yml`):** single-command layout (`run` / `isolate` / `act`) or multi-step **`steps:`** (ordering, **`outputs:`**, **`is_blocking`**, optional **`group.mode: async`**). Full reference: **[workflow-yaml.md](workflow-yaml.md)**.
 
-**Subcommands:** `dockpipe init`, `dockpipe install` (fetch **`templates/core`** from HTTPS — e.g. **Cloudflare R2** behind a public URL), `dockpipe clone` (copy a compiled workflow package to **`workflows/`** when **`allow_clone: true`** in **`package.yml`**), **`dockpipe build`** / **`clean`** / **`rebuild`** (compiled store under **`.dockpipe/internal/packages/`**), `dockpipe package` (list, manifest, **`package build core`** / **`package build store`**, **`package compile …`**), `dockpipe release upload` (S3-compatible upload via **`aws` CLI** — self-hosted registries), `dockpipe workflow validate [path]`, `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe core script-path <dotted>` (print absolute path to **`scripts/core.<dots>`** — same resolution as workflow YAML), `dockpipe terraform pipeline-path` (shortcut to **`terraform-pipeline.sh`** — **`packages/terraform/resolvers/terraform-core/`**, **`DOCKPIPE_TF_*`** in **`src/core/assets/scripts/README.md`**), `dockpipe runs list [--workdir]` (list **`.dockpipe/runs/*.json`** for host **skip_container** steps), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
+**Subcommands:** `dockpipe init`, `dockpipe install` (fetch **`templates/core`** from HTTPS — e.g. **Cloudflare R2** behind a public URL), `dockpipe clone` (copy a compiled workflow package to **`workflows/`** when **`allow_clone: true`** in **`package.yml`**), **`dockpipe build`** / **`clean`** / **`rebuild`** (compiled store under **`.dockpipe/internal/packages/`**), `dockpipe package` (list, manifest, **`package build core`** / **`package build store`**, **`package compile …`**), `dockpipe release upload` (S3-compatible upload via **`aws` CLI** — self-hosted registries), `dockpipe workflow validate [path]`, `dockpipe pipelang compile|invoke` (optional typed authoring layer: compile inspectable artifacts and invoke methods via CLI), `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe core script-path <dotted>` (print absolute path to **`scripts/core.<dots>`** — same resolution as workflow YAML), `dockpipe terraform pipeline-path` (shortcut to **`terraform-pipeline.sh`** — **`packages/terraform/resolvers/terraform-core/`**, **`DOCKPIPE_TF_*`** in **`src/core/assets/scripts/README.md`**), `dockpipe runs list [--workdir]` (list **`.dockpipe/runs/*.json`** for host **skip_container** steps), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
 
 ## `dockpipe init`
 
@@ -73,6 +73,17 @@ Inspect **installed** package metadata. Store-backed installs are intended to la
 | `dockpipe package compile workflow <source-dir> [--workdir <path>] [--name <n>] [--force]` | **`workflow validate`** on **`source-dir/config.yml`**, then copy the tree to **`.dockpipe/internal/packages/workflows/<name>/`** (writes **`package.yml`** if missing, with **`allow_clone: true`** and **`distribution: source`** for local round-trips). |
 
 **Environment:** **`DOCKPIPE_PACKAGES_ROOT`** — override packages root (default **`<workdir>/.dockpipe/internal/packages`**).
+
+## `dockpipe pipelang`
+
+Optional typed authoring helper. PipeLang compiles to inspectable artifacts; workflow execution still uses normal DockPipe YAML.
+
+| Command | Purpose |
+|---------|---------|
+| `dockpipe pipelang compile --in <file.pipe> [--entry <Class>] [--out <dir>]` | Parse + type-check PipeLang and emit artifacts: `<Class>.workflow.yml`, `<Class>.bindings.json`, `<Class>.bindings.env` (default out: `.dockpipe/pipelang/`). |
+| `dockpipe pipelang invoke --in <file.pipe> [--class <Class>] --method <name> [--arg <value>]... [--format text|json|env]` | Invoke a PipeLang method through CLI only. No resolver/runtime execution path is used. |
+
+Method support (v0.0.0.1): expression-bodied methods are parsed, type-checked, included in bindings metadata, and invocable only via `dockpipe pipelang invoke`.
 
 ## `dockpipe release`
 

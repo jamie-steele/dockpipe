@@ -7,6 +7,7 @@
 | [architecture-model.md](architecture-model.md) | **Normative** terms: workflow, runtime, resolver, strategy |
 | [cli-reference.md](cli-reference.md) | Flags and subcommands |
 | [workflow-yaml.md](workflow-yaml.md) | `config.yml`, `steps:` |
+| [pipelang.md](pipelang.md) | Optional typed authoring layer |
 
 | Topic | |
 |-------|--|
