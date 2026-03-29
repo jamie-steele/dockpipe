@@ -9,7 +9,7 @@ class Dockpipe < Formula
 
   def install
     # Templates/scripts/images are embedded in the binary; unpacked to the user cache on first run.
-    system "go", "build", "-trimpath", "-ldflags", "-s -w", "-o", "dockpipe", "./src/cmd/dockpipe"
+    system "go", "build", "-trimpath", "-ldflags", "-s -w", "-o", "dockpipe", "./src/cmd"
     bin.install "dockpipe"
   end
 

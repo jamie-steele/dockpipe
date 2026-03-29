@@ -29,7 +29,7 @@ BUILD_DIR="${PKG_ROOT}/build/${PACKAGE}"
 mkdir -p "${BUILD_DIR}/usr/bin"
 (
   cd "${REPO_ROOT}"
-  GOOS=linux GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.Version=${VERSION}" -o "${BUILD_DIR}/usr/bin/dockpipe" ./src/cmd/dockpipe
+  GOOS=linux GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.Version=${VERSION}" -o "${BUILD_DIR}/usr/bin/dockpipe" ./src/cmd
 )
 chmod 755 "${BUILD_DIR}/usr/bin/dockpipe"
 

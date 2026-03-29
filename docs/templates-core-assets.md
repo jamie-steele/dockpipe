@@ -1,74 +1,21 @@
-# `templates/core/assets/` — reusable support files
+# `templates/core/assets/`
 
-**Assets** are reusable **implementation/support artifacts** (scripts, image definitions, optional Compose examples). They are **not** new top-level primitives: **workflow**, **runtime**, **resolver**, and **strategy** remain defined in **[architecture-model.md](architecture-model.md)**.
-
----
-
-## Layout
+Support files (scripts, images, compose samples) — **not** extra primitives. Definitions: **[architecture-model.md](architecture-model.md)**.
 
 ```
-templates/core/
-  assets/
-    README.md
-    scripts/          # agnostic shell/PowerShell only
-    images/           # Dockerfiles for TemplateBuild / --isolate
-    compose/          # optional docker-compose examples (not executed by dockpipe)
-  bundles/            # domain script trees (dorkpipe, pipeon, …); this repo’s review prep lives under workflows/review-pipeline/
+templates/core/assets/scripts/   # agnostic helpers (clone, commit, terraform lib, …)
+templates/core/assets/images/    # Dockerfiles for TemplateBuild / --isolate
+templates/core/assets/compose/   # optional examples (not auto-run)
+templates/core/bundles/<domain>/ # domain trees (dorkpipe, …)
 ```
 
-Merged into user projects by **`dockpipe init`** as part of **`templates/core/`**.
+**Merged by `dockpipe init`** into the project’s **`templates/core/`**.
 
----
+| Kind | Notes |
+|------|--------|
+| **SAFE TO BUNDLE** | DockPipe-authored; ship in the binary. |
+| **USER-SUPPLIED** | Credentials / tools the user installs. |
 
-## Classification legend
+**Script details:** **`src/core/assets/scripts/README.md`** (includes **`terraform-pipeline.sh`** / **`DOCKPIPE_TF_*`**). **Image search order:** resolver **`assets/images/<name>`** → bundle → **`assets/images/<name>`**.
 
-| Label | Meaning |
-|-------|---------|
-| **SAFE TO BUNDLE** | DockPipe-authored or clearly redistributable; safe to ship in the binary. |
-| **REFERENCE ONLY** | Upstream image or user build; DockPipe ships only our Dockerfile overlay or pointers. |
-| **USER-SUPPLIED** (runtime) | Credentials, licenses, or installations the user provides. |
-
----
-
-## Scripts (`assets/scripts/`)
-
-| Asset | Classification | Notes |
-|-------|----------------|-------|
-| **`terraform-pipeline.sh`** | **SAFE TO BUNDLE** | Sourced bash library for **`terraform`** `init`/`plan`/`apply`/… from **`DOCKPIPE_TF_*`** env — see **[terraform-pipeline.md](terraform-pipeline.md)**. |
-| Host helpers (`clone-worktree.sh`, `commit-worktree.sh`, …) | **SAFE TO BUNDLE** | Original shell — **agnostic**; stay at **`assets/scripts/`** root. |
-| `example-run.sh`, `example-act.sh` | **SAFE TO BUNDLE** | Samples copied to project **`scripts/`**. |
-| **`scripts/cursor-dev/*.sh`**, **`scripts/vscode/vscode-code-server.sh`** | **SAFE TO BUNDLE** | Implemented only under **`templates/core/resolvers/<name>/`**; the runner maps **`scripts/…`** paths there. Resolver-specific; tools may be **USER-SUPPLIED**. |
-| **`scripts/dorkpipe/`**, **`scripts/pipeon/`** → **`src/apps/pipeon/scripts/`**, **`scripts/review-pipeline/`** (this repo: **`workflows/review-pipeline/`**), … | **SAFE TO BUNDLE** | **Domain workflows** under **`.staging/packages/dockpipe/`** (e.g. **`agent/dorkpipe/`**, **`ide/pipeon/`**) or **`templates/core/bundles/`** after init; runner maps **`scripts/…`** there. Pipeon harness + docs: **`src/apps/pipeon/`**. |
-| `helloworld.ps1` | **SAFE TO BUNDLE** | Minimal PowerShell example asset. |
-
----
-
-## Images
-
-**`TemplateBuild`** / **`DockerfileDir`** search: **`resolvers/<name>/assets/images/<name>`** → **`bundles/<domain>/assets/images/<domain>`** → **`assets/images/<name>`** (agnostic fallback).
-
-| Location | Classification | Notes |
-|----------|------------------|-------|
-| **`assets/images/`** | **Agnostic** | **`base-dev/`**, **`dev/`**, **`example/`**, **`minimal/`** — shared bases and demos. |
-| **`resolvers/…/assets/images/`** | **Per resolver** | **claude**, **codex**, **vscode**, **code-server**, **ollama**, … |
-| **`bundles/…/assets/images/`** | **Per bundle** | Per-domain image trees next to workflow assets. |
-
----
-
-## Compose
-
-**Compose is an asset**, not a runtime, resolver, or strategy. Optional **`docker-compose.yml`** files live with the domain that owns them: **`templates/core/resolvers/<name>/assets/compose/docker-compose.yml`** or **`templates/core/bundles/<domain>/assets/compose/`** (e.g. DorkPipe dev stack). **`templates/core/assets/compose/README.md`** only explains the pattern; per-example YAMLs are not parked under generic **`assets/compose/<name>/`** anymore.
-
-See **`templates/core/assets/compose/README.md`** in the repo.
-
----
-
-## PowerShell example
-
-**`assets/scripts/helloworld.ps1`** — minimal reusable example; not a primitive.
-
----
-
-## What stays outside `templates/core/`
-
-- Top-level **`scripts/README.md`** and **`images/README.md`** — repo pointers only.
+**Maintainer-only script trees** (e.g. **`scripts/dorkpipe/`**) live in **`.staging/packages/…`** per **`dockpipe.config.json`** — not duplicated as fake repo-root stubs.

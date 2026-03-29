@@ -97,7 +97,10 @@ jobs:
           go-version: "1.25.8"
 
       - name: Run tests
-        run: go test ./...
+        run: |
+          go test ./...
+          go test ./packages/dorkpipe/lib/...
+          go test ./packages/dockpipe-mcp/...
 
       - name: Build release artifacts (Linux, macOS, zip, debs)
         shell: bash
@@ -107,23 +110,23 @@ jobs:
           mkdir -p release/artifacts
           LDFLAGS="-s -w -X main.Version=${VERSION}"
 
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd/dockpipe
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd
           tar -C release/artifacts -czf "release/artifacts/dockpipe_${VERSION}_linux_amd64.tar.gz" dockpipe
           rm -f release/artifacts/dockpipe
 
-          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd/dockpipe
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd
           tar -C release/artifacts -czf "release/artifacts/dockpipe_${VERSION}_linux_arm64.tar.gz" dockpipe
           rm -f release/artifacts/dockpipe
 
-          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd/dockpipe
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd
           tar -C release/artifacts -czf "release/artifacts/dockpipe_${VERSION}_darwin_amd64.tar.gz" dockpipe
           rm -f release/artifacts/dockpipe
 
-          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd/dockpipe
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd
           tar -C release/artifacts -czf "release/artifacts/dockpipe_${VERSION}_darwin_arm64.tar.gz" dockpipe
           rm -f release/artifacts/dockpipe
 
-          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe.exe" ./src/cmd/dockpipe
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe.exe" ./src/cmd
           (cd release/artifacts && zip -q "dockpipe_${VERSION}_windows_amd64.zip" dockpipe.exe)
           rm -f release/artifacts/dockpipe.exe
 
@@ -151,7 +154,10 @@ jobs:
           go-version: "1.25.8"
 
       - name: Run tests
-        run: go test ./...
+        run: |
+          go test ./...
+          go test ./packages/dorkpipe/lib/...
+          go test ./packages/dockpipe-mcp/...
 
       # One pwsh step: GITHUB_ENV mangles/truncates Windows paths for WIX — pass -WixRoot into build.ps1 instead.
       - name: Install WiX and build MSI
@@ -173,7 +179,7 @@ jobs:
           }
           $wixRoot = $destFull
           $v = "${{ needs.meta.outputs.version }}"
-          go build -trimpath -ldflags "-s -w -X main.Version=$v" -o dockpipe.exe ./src/cmd/dockpipe
+          go build -trimpath -ldflags "-s -w -X main.Version=$v" -o dockpipe.exe ./src/cmd
           New-Item -ItemType Directory -Force -Path msi-dist | Out-Null
           & (Join-Path $PWD "release\packaging\msi\build.ps1") `
             -Version $v `

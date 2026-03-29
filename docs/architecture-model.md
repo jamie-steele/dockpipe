@@ -70,7 +70,7 @@ This keeps the **mental model** one-dimensional — **template → runtime → r
   - **`ide`** — interactive development environment
   - **`agent`** — autonomous task execution
 
-In configuration, **`DOCKPIPE_RUNTIME_TYPE`** is the field that carries **`runtime.type`** (see `src/lib/dockpipe/domain/runtime_kind.go`). The field classifies **behavior intent**, not the substrate.
+In configuration, **`DOCKPIPE_RUNTIME_TYPE`** is the field that carries **`runtime.type`** (see `src/lib/domain/runtime_kind.go`). The field classifies **behavior intent**, not the substrate.
 
 ---
 
@@ -219,6 +219,5 @@ Full detail: **[package-model.md](package-model.md)** (**`package.yml`**, compil
 ## Related docs (non-normative mechanics)
 
 - [isolation-layer.md](isolation-layer.md) — file paths, `DOCKPIPE_RUNTIME_*` / `DOCKPIPE_RESOLVER_*` aliases, lookup order  
-- [runtime-architecture.md](runtime-architecture.md) — CLI and migration notes  
 - [workflow-yaml.md](workflow-yaml.md) — workflow and strategy fields  
-- [architecture.md](architecture.md) — data flow  
+- [architecture.md](architecture.md) — data flow and extension points  

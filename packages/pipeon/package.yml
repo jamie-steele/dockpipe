@@ -1,0 +1,13 @@
+schema: 1
+kind: package
+name: pipeon
+version: 0.1.0
+title: DockPipe Pipeon
+description: |
+  First-party Pipeon harness, resolver profile, and VS Code extension assets (see resolvers/pipeon/).
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [resolver, pipeon, ide]
+includes_resolvers:
+  - pipeon

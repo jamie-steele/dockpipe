@@ -9,8 +9,10 @@ export DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$ROOT}"
 
 UNIT="$(cd "${ROOT}/tests/unit-tests" && pwd)"
 
-echo "=== go test ==="
+echo "=== go test (root + maintainer modules) ==="
 go test ./...
+go test ./packages/dorkpipe/lib/...
+go test ./packages/dockpipe-mcp/...
 
 echo "=== check-templates-core-paths ==="
 bash src/scripts/check-templates-core-paths.sh

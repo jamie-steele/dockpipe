@@ -1,0 +1,21 @@
+schema: 1
+kind: package
+name: dorkpipe
+version: 0.1.0
+title: DorkPipe (orchestration) maintainer pack
+description: |
+  Single umbrella package for DorkPipe workflows: orchestrator, self-analysis variants,
+  compliance-handoff, user-insight-process, and the small dorkpipe domain workflow. Each ships as its own
+  compiled workflow tarball; trees live under resolvers/ next to profile/config.yml assets.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [dorkpipe, orchestration, maintainer]
+includes_resolvers:
+  - compliance-handoff
+  - dorkpipe-orchestrator
+  - dorkpipe-self-analysis
+  - dorkpipe-self-analysis-host
+  - dorkpipe-self-analysis-stack
+  - dorkpipe
+  - user-insight-process

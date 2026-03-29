@@ -10,7 +10,7 @@
 | **`dockerfile`** | Container **built from a Dockerfile** in the repo. |
 | **`package`** | **Nesting only:** parent step enters a namespaced workflow (**`runtime: package`** + **`resolver:`** + **`package:`**). |
 
-Shipped stubs set **`DOCKPIPE_RUNTIME_SUBSTRATE`** to **`dockerimage`**, **`dockerfile`**, or **`package`**. Other optional **`DOCKPIPE_RUNTIME_*`** keys (e.g. **`DOCKPIPE_RUNTIME_TYPE`**) are documented with resolver/runtime fields in **`src/lib/dockpipe/domain/resolver.go`**.
+Shipped stubs set **`DOCKPIPE_RUNTIME_SUBSTRATE`** to **`dockerimage`**, **`dockerfile`**, or **`package`**. Other optional **`DOCKPIPE_RUNTIME_*`** keys (e.g. **`DOCKPIPE_RUNTIME_TYPE`**) are documented with resolver/runtime fields in **`src/lib/domain/resolver.go`**.
 
 ## Legacy `runtime:` names in YAML
 

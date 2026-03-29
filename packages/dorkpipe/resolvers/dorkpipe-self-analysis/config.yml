@@ -1,0 +1,27 @@
+# DockPipe self-analysis — runs inside an isolated container (golang) over the mounted repo at /work.
+# Optional local sidecar stack (Ollama + Postgres): scripts/dorkpipe/dev-stack.sh up
+# Host-only fallback workflow: dorkpipe-self-analysis-host
+name: dorkpipe-self-analysis
+description: >-
+  Container-isolated DorkPipe run: builds bin/dorkpipe if needed, then scripts/dorkpipe/run-self-analysis.sh.
+  Artifacts land in the mounted repo (.dockpipe/, .dorkpipe/). Tear down sidecars with dev-stack.sh down when done.
+
+runtime: docker
+resolver: codex
+runtimes: [dockerimage]
+
+steps:
+  - id: self_analysis
+    runtime: docker
+    isolate: golang:1.25-bookworm
+    cmd: |-
+      bash -c 'set -euo pipefail
+      cd /work
+      export DOCKPIPE_WORKDIR=/work
+      # No apt-get: dockpipe maps the container user to the host uid, so apt cannot run as root.
+      # golang:bookworm images ship git and curl; scripts fall back to grep if ripgrep is absent.
+      if [[ ! -x bin/dorkpipe ]]; then
+        echo "[dorkpipe-self-analysis] building bin/dorkpipe in container..."
+        go build -C packages/dorkpipe/lib -trimpath -o /work/bin/dorkpipe ./cmd/dorkpipe
+      fi
+      exec bash scripts/dorkpipe/run-self-analysis.sh'

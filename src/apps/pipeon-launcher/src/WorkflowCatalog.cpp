@@ -3,23 +3,38 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QProcessEnvironment>
 #include <QTextStream>
 #include <algorithm>
 
 namespace {
 
-void appendStagingWorkflowConfigPaths(const QDir &stg, QStringList &out)
+void appendNestedWorkflowConfigPaths(const QDir &root, QStringList &out)
 {
-    if (!stg.exists())
+    if (!root.exists())
         return;
-    for (const QFileInfo &fi : stg.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
+    for (const QFileInfo &fi : root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name)) {
         const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
         if (QFileInfo::exists(cfg)) {
             out.append(QDir::cleanPath(cfg));
         } else {
-            appendStagingWorkflowConfigPaths(QDir(fi.filePath()), out);
+            appendNestedWorkflowConfigPaths(QDir(fi.filePath()), out);
         }
     }
+}
+
+QStringList extraWorkflowRootDirsCatalog(const QString &repoRoot)
+{
+    QStringList out;
+    const QString raw = QProcessEnvironment::systemEnvironment().value(QStringLiteral("DOCKPIPE_EXTRA_WORKFLOW_ROOTS"));
+    if (raw.isEmpty())
+        return out;
+    for (const QString &part : raw.split(QLatin1Char(':'), Qt::SkipEmptyParts)) {
+        const QString p = QDir::cleanPath(QDir(repoRoot).filePath(part.trimmed()));
+        if (QFileInfo(p).isDir())
+            out.append(p);
+    }
+    return out;
 }
 
 // Lean category root: dockpipe source src/core, else downstream templates/core.
@@ -52,21 +67,18 @@ void collectConfigPaths(const QString &repoRoot, QStringList &out)
     }
 
     {
-        const QDir dkw(root.filePath(QStringLiteral("src/lib/dorkpipe/workflows")));
-        if (dkw.exists())
-            appendStagingWorkflowConfigPaths(dkw, out);
+        const QDir pkg(root.filePath(QStringLiteral("packages")));
+        if (pkg.exists())
+            appendNestedWorkflowConfigPaths(pkg, out);
     }
-
-    {
-        const QDir stg(root.filePath(QStringLiteral(".staging/packages")));
-        if (stg.exists())
-            appendStagingWorkflowConfigPaths(stg, out);
+    for (const QString &extra : extraWorkflowRootDirsCatalog(repoRoot)) {
+        appendNestedWorkflowConfigPaths(QDir(extra), out);
     }
 
     {
         const QString bundledWf = root.filePath(QStringLiteral("src/core/workflows"));
         if (QFileInfo(bundledWf).isDir())
-            appendStagingWorkflowConfigPaths(QDir(bundledWf), out);
+            appendNestedWorkflowConfigPaths(QDir(bundledWf), out);
     }
 
     {

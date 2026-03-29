@@ -192,7 +192,7 @@ When you work **on the dockpipe project itself**, you are a **user** of the tool
 
 **Self-contained:** Packages are **YAML + assets + resolver/runtime wiring** resolved by the existing CLI; they **cannot** inject new engine primitives without a **separate** core change.
 
-**Accelerator (maintainers):** After **`make build`**, **`make self-analysis`**, **`make self-analysis-host`**, or **`make self-analysis-stack`** run the DorkPipe self-analysis workflows on this repo (container, host-only, or compose stack). See **`docs/dorkpipe.md`** and **`src/lib/dorkpipe/workflows/dorkpipe-self-analysis/README.md`**.
+**Accelerator (maintainers):** After **`make build`**, run workflows the same way as downstream: **`./src/bin/dockpipe --workflow <name> --workdir . --`** (e.g. **`dorkpipe-self-analysis`**, **`dorkpipe-self-analysis-host`**, **`dorkpipe-self-analysis-stack`**) with packages compiled into **`.dockpipe/`** as usual. See the **`dorkpipe`** maintainer package **`README.md`** (resolver **`dorkpipe-self-analysis`**).
 
 ### Agent guidance (this repository)
 
@@ -200,9 +200,9 @@ When you work **on the dockpipe project itself**, you are a **user** of the tool
 
 **Two channels — do not conflate them:**
 
-1. **On-disk context** — **`.dockpipe/`** and **`.dorkpipe/`** hold **generated** handoffs, self-analysis facts, CI bundles, metrics, and optional insights. Use them as **read-only grounding** with normal code reading. Pointers: **`docs/compliance-ai-handoff.md`**, **`docs/dorkpipe-ci-signals.md`**, **`docs/user-insight-queue.md`**. Pipeon: **`src/bin/pipeon`**, **`src/apps/pipeon/docs/`**. Do **not** auto-regenerate; refresh only when the **user** asks (then **`make self-analysis*`** / **`dorkpipe-self-analysis`** — see **Accelerator** above).
+1. **On-disk context** — **`.dockpipe/`** and **`.dorkpipe/`** hold **generated** handoffs, self-analysis facts, CI bundles, metrics, and optional insights. Use them as **read-only grounding** with normal code reading. Contract: **`docs/artifacts.md`**. Pipeon: **`ide/bin/pipeon`**, **Pipeon Launcher** **`src/apps/pipeon-launcher/`**, **`ide`** maintainer package READMEs. Do **not** auto-regenerate; refresh only when the **user** asks (then **`dockpipe --workflow dorkpipe-self-analysis`** / related names — see **Accelerator** above).
 
-2. **MCP (`mcpd`)** — **Bounded tools** with **tiered IAM** (`DOCKPIPE_MCP_TIER`: `readonly` → `validate` → `exec`) via **`src/lib/mcpbridge`**. Default tier is **`validate`** (list + validate; **no** `dockpipe.run` / `dorkpipe.run_spec`). Tier **`exec`** (or legacy **`DOCKPIPE_MCP_ALLOW_EXEC=1`** when tier is unset) is required for run tools. See **`docs/mcp-agent-trust.md`** and **`docs/mcp-architecture.md`**.
+2. **MCP (`mcpd`)** — **Bounded tools** with **tiered IAM** (`DOCKPIPE_MCP_TIER`: `readonly` → `validate` → `exec`) via maintainer package **`dockpipe.mcp`** (**`mcpbridge/`**). Default tier is **`validate`** (list + validate; **no** `dockpipe.run` / `dorkpipe.run_spec`). Tier **`exec`** (or legacy **`DOCKPIPE_MCP_ALLOW_EXEC=1`** when tier is unset) is required for run tools. **Doc:** **`dockpipe-mcp/README.md`** (package root); env/HTTP: **`mcpbridge/README.md`**.
 
 **Freshness:** If artifacts exist, say whether they look current vs **`HEAD`**; if missing or stale, say so and suggest refresh **when relevant**.
 

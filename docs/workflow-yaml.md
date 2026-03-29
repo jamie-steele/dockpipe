@@ -2,7 +2,7 @@
 
 **Workflow YAML** for **`--workflow <name>`** resolves to **`workflows/<name>/config.yml`** (when present), then **nested** **`config.yml`** under any directory listed in **`dockpipe.config.json` `compile.workflows`** (same roots **`dockpipe package compile workflows`** uses), then **`src/core/workflows/<name>/config.yml`** (bundled examples in a dockpipe checkout), or **`templates/<name>/config.yml`** (legacy project layout). The **materialized bundle cache** still uses a **`shipyard/workflows/`** layout on disk (see **[install.md](install.md#bundled-templates-no-extra-install-tree)**).
 
-**Workflows vs core slices:** **Runtimes** are **core-owned** execution substrates ( **`templates/core/runtimes/<name>/`** ). Workflow YAML may only **select** a substrate by **name** (`runtime`, `default_runtime`, `runtimes:` allowlist, per-step `runtime:`) — it does **not** define new runtime types or override how substrates work. **Resolvers** and **strategies** follow the same idea: **definitions** live under **`templates/core/resolvers/`**, **`strategies/`** (or extra **`compile.resolvers`** trees); the workflow **references** them — see **Authoring: workflow YAML vs resolver / runtime / strategy slices** in **[package-model.md](package-model.md)** and **[architecture-model.md](architecture-model.md)**. Resolver delegate YAML also loads from **`…/core/resolvers/<name>/config.yml`** next to the authoring core root (**`src/core/resolvers/…`** or **`templates/core/…`**) or **`shipyard/core/resolvers/<name>/config.yml`** (materialized bundle). Load with **`dockpipe --workflow <name>`** (plus your command after **`--`**).
+**Workflows vs core slices:** **Runtimes** are **core-owned** execution substrates ( **`templates/core/runtimes/<name>/`** ). Workflow YAML may only **select** a substrate by **name** (`runtime`, `default_runtime`, `runtimes:` allowlist, per-step `runtime:`) — it does **not** define new runtime types or override how substrates work. **Resolvers** and **strategies** follow the same idea: **definitions** live under **`templates/core/resolvers/`**, **`strategies/`** (or maintainer trees under **`compile.workflows`**); the workflow **references** them — see **Authoring: workflow YAML vs resolver / runtime / strategy slices** in **[package-model.md](package-model.md)** and **[architecture-model.md](architecture-model.md)**. Resolver delegate YAML also loads from **`…/core/resolvers/<name>/config.yml`** next to the authoring core root (**`src/core/resolvers/…`** or **`templates/core/…`**) or **`shipyard/core/resolvers/<name>/config.yml`** (materialized bundle). Load with **`dockpipe --workflow <name>`** (plus your command after **`--`**).
 
 **Arbitrary-path workflow:** put the **same** YAML shape in any file (for example **`workflows/foo/config.yml`**) and run **`dockpipe --workflow-file <path>`** so **`run:`** / **`act:`** paths resolve relative to that file’s directory. **Resolver** profiles are **not** beside the file — they load only from **`templates/core/resolvers/`** (see below). Do not pass **`--workflow`** and **`--workflow-file`** together.
 
@@ -19,7 +19,7 @@
 | **strategy** | Optional **named lifecycle** wrapper: small **`KEY=value`** files under **`templates/<workflow>/strategies/<name>`** (optional) or **`templates/core/strategies/<name>`** define host scripts to run **before** and **after** the workflow body. See [Named strategies](#named-strategies) below. |
 | **runtime** / **resolver** | **Runtime** — **where** execution runs: **core** profiles under **`templates/core/runtimes/<name>`** (**`DOCKPIPE_RUNTIME_*`**). Workflows **choose** a profile name; they do **not** add substrates. **Resolver** — **which tool**: **`templates/core/resolvers/<name>`** (**`DOCKPIPE_RESOLVER_*`**). In the materialized bundle, the same paths live under **`shipyard/core/`**. Both may be set; the runner **merges** them. See **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)**. Optional **`runtimes:`** lists **which core substrate names** remain valid when more than one is in play; when omitted, **`runtime`** / **`default_runtime`** imply a minimal allowlist (no duplicate **`runtimes: [dockerimage]`** next to **`runtime: dockerimage`**). |
 
-**Learning path:** [onboarding.md](onboarding.md) · **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)** · Implementation notes: [`src/lib/dockpipe/README.md`](../src/lib/dockpipe/README.md).
+**Learning path:** [onboarding.md](onboarding.md) · **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)** · Implementation notes: [`src/lib/README.md`](../src/lib/README.md).
 
 ---
 
@@ -72,7 +72,7 @@ For steps with **`skip_container: true`**, **`run:`** scripts execute on the hos
 
 **Strategies** wrap the workflow body with optional **host** scripts **before** and **after** success (same spirit as **`resolvers/`** small files). Shared definitions live under **`templates/core/strategies/`**; see **[docs/architecture-model.md](architecture-model.md)** ( **`templates/core/`** layout ).
 
-**Resolution order** for the strategy file path: **`--strategy <name>`** (overrides **`strategy:`** in YAML when both are set) → **`templates/<this-workflow>/strategies/<name>`** (beside that workflow’s `config.yml`, if present) → **`templates/core/strategies/<name>`** (see **`ResolveStrategyFilePath`** in **`src/lib/dockpipe/application/strategy.go`**).
+**Resolution order** for the strategy file path: **`--strategy <name>`** (overrides **`strategy:`** in YAML when both are set) → **`templates/<this-workflow>/strategies/<name>`** (beside that workflow’s `config.yml`, if present) → **`templates/core/strategies/<name>`** (see **`ResolveStrategyFilePath`** in **`src/lib/application/strategy.go`**).
 
 **File format** (`KEY=value`, `#` comments):
 
@@ -124,7 +124,7 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Default if omitted: `.dockpipe/outputs.env`. |
 | `capture_stdout` | Host path (relative to **`DOCKPIPE_WORKDIR`** / **`--workdir`**) — container **stdout** is also appended to this file (still printed on the terminal). |
 | `manifest` | Host path — after the step, dockpipe writes a small JSON file with **`exit_code`**, **`duration_ms`**, **`step_index`**, **`id`** (if set), and **`step_display`**. |
-| `skip_container` | If `true`, no container: only pre-scripts + merge `outputs` from disk. **`run:`** scripts are **executed** with inherited stdio (so messages and launchers are visible). Steps that use the container still **source** `run:` scripts to capture exported env (see `src/lib/dockpipe/infrastructure/prescript.go`). |
+| `skip_container` | If `true`, no container: only pre-scripts + merge `outputs` from disk. **`run:`** scripts are **executed** with inherited stdio (so messages and launchers are visible). Steps that use the container still **source** `run:` scripts to capture exported env (see `src/lib/infrastructure/prescript.go`). |
 | `is_blocking` | Default **`true`**. If **`false`**, this step joins an **async group** with adjacent non-blocking steps (see below). |
 
 All keys use **snake_case** in YAML (e.g. `is_blocking`, not `isBlocking`).
@@ -205,7 +205,13 @@ Inside `tasks:`, omitting `is_blocking` means **async** (forced non-blocking). *
 
 ## Chaining without `steps:`
 
-Multiple **separate** `dockpipe` invocations (same `--workdir`) are still valid; see **[chaining.md](chaining.md)**. Use **`steps:`** when you want one workflow file to own ordering, outputs, and optional parallelism.
+Multiple **`dockpipe`** runs with the same **`--workdir`** are valid (fresh container each time). Example:
+
+```bash
+dockpipe --workdir "$R" -- make lint && dockpipe --workdir "$R" -- make test
+```
+
+Pipe stdout between runs if needed. Prefer **`steps:`** in **`config.yml`** when one workflow should own order, **`outputs:`**, and optional parallelism.
 
 ---
 
@@ -235,4 +241,4 @@ dockpipe --workflow run-apply-validate
 
 - **[CLI reference](cli-reference.md)** — flags, `--workflow`, `--workflow-file`, `workflow validate`, `--var`, `--env-file`.
 - **[Architecture](architecture.md)** — how the Go CLI runs steps, docker, pre-scripts.
-- **[src/lib/dockpipe/README.md](../src/lib/dockpipe/README.md)** — package layout and contributor-oriented notes.
+- **[src/lib/README.md](../src/lib/README.md)** — package layout and contributor-oriented notes.

@@ -1,10 +1,5 @@
-# User insight queue — committed examples
+# User insight — examples
 
-These files are **illustrative** shapes only. Live data is normally under **`.dockpipe/analysis/`** (gitignored in this repo).
+JSON shapes for **`queue.json`** / **`insights.json`**.
 
-| File | Role |
-|------|------|
-| `queue.example.json` | Capture queue after two **`user-insight-enqueue`** calls (trimmed). |
-| `insights.example.json` | Normalized bundle after **`user-insight-process`** (illustrative). |
-
-**Full documentation:** **`docs/user-insight-queue.md`**
+**Documentation:** **`docs/artifacts.md`** · **`resolvers/user-insight-process/README.md`** (maintainer **`dorkpipe`** package).

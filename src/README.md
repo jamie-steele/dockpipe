@@ -1,8 +1,8 @@
 # `src/` — source tree
 
-- **`cmd/dockpipe`** — DockPipe CLI entrypoint  
+- **`cmd/`** — DockPipe CLI entrypoint (`main.go`)  
 - **`cmd/dorkpipe`** — DorkPipe DAG orchestrator CLI  
-- **`lib/dockpipe`** — DockPipe library (domain / application / infrastructure)  
+- **`lib/`** (`application`, `domain`, `infrastructure`) — DockPipe library  
 - **`lib/dorkpipe`** — DorkPipe library  
 - **`bin/`** — Launcher scripts (`dockpipe`, `pipeon`, …) and **`make` outputs** (`dockpipe.bin`, `dorkpipe`, `dockpipe.exe`)  
 - **`apps/`** — Host apps (**Pipeon** harness + docs, **Pipeon Launcher** Qt UI)  

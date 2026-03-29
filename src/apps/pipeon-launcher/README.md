@@ -1,6 +1,8 @@
-# Pipeon host launcher
+# Pipeon host launcher (DockPipe GUI)
 
 Cross-platform **Qt 6** system-tray app: save **contexts** (folder + resolver / strategy / runtime), **launch** or **stop** `dockpipe` subprocesses, **open logs** and folders. It does **not** run workflows inside the GUI; all execution stays in **DockPipe** (and optionally **DorkPipe** later).
+
+This tree lives under **`src/apps/pipeon-launcher/`** — first-party host UI next to the DockPipe engine (**`src/lib/`**, **`src/cmd/`**). Icons for the tray are generated into **`packages/pipeon/resolvers/pipeon/vscode-extension/images/`** (**`make pipeon-icons`** from repo root).
 
 ## Requirements
 
@@ -12,20 +14,9 @@ Cross-platform **Qt 6** system-tray app: save **contexts** (folder + resolver / 
 
 ## Build
 
-`CMakeLists.txt` lives under **`src/apps/pipeon-launcher/`**, not the dockpipe repo root. Run CMake with that directory as the **source** (or `cd` there first).
+`CMakeLists.txt` lives under **`src/apps/pipeon-launcher/`**. Run CMake with that directory as the **source** (or `cd` there first).
 
-**Fastest — from the repo root:** `make pipeon-launcher` (writes **`src/apps/pipeon-launcher/build/`**).
-
-### Pop!_OS / Linux: Applications menu shortcut
-
-`make install-pipeon-shortcut` installs a **different** entry (code-server in the browser). For this **Qt tray app**, build first, then install the Freedesktop file:
-
-```bash
-make pipeon-launcher
-make install-pipeon-launcher-shortcut
-```
-
-That creates **`~/.local/share/applications/pipeon-launcher.desktop`**. Search the app menu for **Pipeon Launcher** (you may need to log out and back in). To install **both** shortcuts on Linux: **`make install-pipeon-all-shortcuts`**.
+**Fastest — from the repo root:** `cmake -S src/apps/pipeon-launcher -B src/apps/pipeon-launcher/build && cmake --build src/apps/pipeon-launcher/build` (writes **`src/apps/pipeon-launcher/build/`**).
 
 **Option A — from the repo root (CMake by hand):**
 
@@ -80,7 +71,7 @@ Qt is available under **LGPL** and commercially. If you **ship binaries**, compl
 
 ## Add folder (Advanced)
 
-Choosing **Add folder…** resolves a dockpipe **repo root** from the path (`DOCKPIPE_REPO_ROOT` or walking upward for `workflows` / `.staging/workflows` / `src/core/runtimes` or `templates/core`). For each workflow with a `config.yml` under `workflows/...`, `.staging/workflows/...`, `src/core/workflows/...`, or legacy `templates/...` (excluding `core`), the launcher adds **one context** with that **workdir** and the matching `--workflow` name. If no repo is found, it adds a single context with workflow `vscode`. Existing `(workdir, workflow, workflow file)` combinations are skipped.
+Choosing **Add folder…** resolves a dockpipe **repo root** from the path (`DOCKPIPE_REPO_ROOT` or walking upward for `workflows` / `dockpipe.config.json` / `packages` / `src/core/runtimes` or `templates/core`). For each workflow with a `config.yml` under `workflows/...`, nested `packages/**/`, `src/core/workflows/...`, or legacy `templates/...` (excluding `core`), the launcher adds **one context** with that **workdir** and the matching `--workflow` name. If no repo is found, it adds a single context with workflow `vscode`. Existing `(workdir, workflow, workflow file)` combinations are skipped. **`DOCKPIPE_EXTRA_WORKFLOW_ROOTS`** (colon-separated dirs under the repo root) adds more trees; **`DOCKPIPE_CURSOR_PREP_SCRIPT`** overrides **`cursor-prep.sh`** discovery.
 
 ## Data locations
 

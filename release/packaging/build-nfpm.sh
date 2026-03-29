@@ -30,7 +30,7 @@ LDFLAGS="-s -w -X main.Version=${VERSION}"
 
 for goarch in amd64 arm64; do
   BIN="${STAGE}/dockpipe-linux-${goarch}"
-  GOOS=linux GOARCH="${goarch}" CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "${BIN}" ./src/cmd/dockpipe
+  GOOS=linux GOARCH="${goarch}" CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "${BIN}" ./src/cmd
 
   sed -e "s|__VERSION__|${VERSION}|g" -e "s|__GOARCH__|${goarch}|g" -e "s|__BINARY__|${BIN}|g" \
     "${REPO_ROOT}/release/packaging/nfpm.yaml.in" > "${STAGE}/nfpm.yaml"

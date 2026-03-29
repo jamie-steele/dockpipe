@@ -1,6 +1,6 @@
 <RCC>
   <qresource prefix="/">
-    <file alias="icon.png">../../../src/contrib/pipeon-vscode-extension/images/icon.png</file>
+    <file alias="icon.png">../../../packages/pipeon/resolvers/pipeon/vscode-extension/images/icon.png</file>
     <file alias="theme/pipeon.qss">resources/theme/pipeon.qss</file>
     <file alias="theme/pipeon-light.qss">resources/theme/pipeon-light.qss</file>
     <file alias="theme/pipeon-dark.qss">resources/theme/pipeon-dark.qss</file>

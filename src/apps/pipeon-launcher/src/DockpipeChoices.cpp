@@ -1,6 +1,7 @@
 #include "DockpipeChoices.h"
 
 #include <QDir>
+#include <QDirIterator>
 #include <QFileInfo>
 #include <QProcessEnvironment>
 #include <algorithm>
@@ -20,7 +21,8 @@ bool looksLikeRepoRoot(const QString &absPath)
 {
     const QDir d(absPath);
     return QFileInfo(d.filePath(QStringLiteral("workflows"))).isDir()
-        || QFileInfo(d.filePath(QStringLiteral(".staging/packages"))).isDir()
+        || QFileInfo(d.filePath(QStringLiteral("dockpipe.config.json"))).isFile()
+        || QFileInfo(d.filePath(QStringLiteral("packages"))).isDir()
         || QFileInfo(d.filePath(QStringLiteral("src/core/runtimes"))).isDir()
         || QFileInfo(d.filePath(QStringLiteral("templates/core"))).isDir();
 }
@@ -53,9 +55,37 @@ void collectStagingWorkflowConfigs(const QDir &root, QStringList &names, QString
             if (paths)
                 paths->append(QDir::cleanPath(cfg));
         } else {
-            collectStagingWorkflowConfigs(QDir(fi.filePath()), names, paths);
+            collectNestedWorkflowConfigs(QDir(fi.filePath()), names, paths);
         }
     }
+}
+
+QStringList extraWorkflowRootDirs(const QString &repoRoot)
+{
+    QStringList out;
+    const QString raw = QProcessEnvironment::systemEnvironment().value(QStringLiteral("DOCKPIPE_EXTRA_WORKFLOW_ROOTS"));
+    if (raw.isEmpty())
+        return out;
+    for (const QString &part : raw.split(QLatin1Char(':'), Qt::SkipEmptyParts)) {
+        const QString p = QDir::cleanPath(QDir(repoRoot).filePath(part.trimmed()));
+        if (QFileInfo(p).isDir())
+            out.append(p);
+    }
+    return out;
+}
+
+QString findCursorPrepUnderPackages(const QString &repoRoot)
+{
+    const QDir pkg(QDir(repoRoot).filePath(QStringLiteral("packages")));
+    if (!pkg.exists())
+        return {};
+    QDirIterator it(pkg.path(), QStringList{QStringLiteral("cursor-prep.sh")}, QDir::Files,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        it.next();
+        return QDir::cleanPath(it.filePath());
+    }
+    return {};
 }
 
 } // namespace
@@ -89,14 +119,10 @@ QString DockpipeChoices::cursorPrepScriptPath(const QString &hintWorkdir)
     const QString root = findRepoRoot(hintWorkdir);
     if (root.isEmpty())
         return {};
-    const QString stagingNs =
-        QDir::cleanPath(root + QStringLiteral("/.staging/packages/dockpipe/ide/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
-    if (QFileInfo::exists(stagingNs))
-        return stagingNs;
-    const QString stagingFlat =
-        QDir::cleanPath(root + QStringLiteral("/.staging/packages/dockpipe/ide/cursor-dev/assets/scripts/cursor-prep.sh"));
-    if (QFileInfo::exists(stagingFlat))
-        return stagingFlat;
+    const QString envPrep =
+        QProcessEnvironment::systemEnvironment().value(QStringLiteral("DOCKPIPE_CURSOR_PREP_SCRIPT")).trimmed();
+    if (!envPrep.isEmpty() && QFileInfo(envPrep).exists())
+        return QDir::cleanPath(envPrep);
     const QString srcCore =
         QDir::cleanPath(root + QStringLiteral("/src/core/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
     if (QFileInfo::exists(srcCore))
@@ -105,6 +131,9 @@ QString DockpipeChoices::cursorPrepScriptPath(const QString &hintWorkdir)
         QDir::cleanPath(root + QStringLiteral("/templates/core/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
     if (QFileInfo::exists(legacy))
         return legacy;
+    const QString underPkg = findCursorPrepUnderPackages(root);
+    if (!underPkg.isEmpty())
+        return underPkg;
     return {};
 }
 
@@ -129,21 +158,18 @@ QStringList DockpipeChoices::listWorkflowNamesFromRepo(const QString &repoRoot)
     }
 
     {
-        const QDir dkw(root.filePath(QStringLiteral("src/lib/dorkpipe/workflows")));
-        if (dkw.exists())
-            collectStagingWorkflowConfigs(dkw, names, nullptr);
+        const QDir pkg(root.filePath(QStringLiteral("packages")));
+        if (pkg.exists())
+            collectNestedWorkflowConfigs(pkg, names, nullptr);
     }
-
-    {
-        const QDir stg(root.filePath(QStringLiteral(".staging/packages")));
-        if (stg.exists())
-            collectStagingWorkflowConfigs(stg, names, nullptr);
+    for (const QString &extra : extraWorkflowRootDirs(repoRoot)) {
+        collectNestedWorkflowConfigs(QDir(extra), names, nullptr);
     }
 
     {
         const QString bundledWf = root.filePath(QStringLiteral("src/core/workflows"));
         if (QFileInfo(bundledWf).isDir())
-            collectStagingWorkflowConfigs(QDir(bundledWf), names, nullptr);
+            collectNestedWorkflowConfigs(QDir(bundledWf), names, nullptr);
     }
 
     {
@@ -199,21 +225,18 @@ void DockpipeChoices::scan(const QString &repoRoot)
     }
 
     {
-        const QDir dkw(root.filePath(QStringLiteral("src/lib/dorkpipe/workflows")));
-        if (dkw.exists())
-            collectStagingWorkflowConfigs(dkw, workflowNames, &workflowConfigPaths);
+        const QDir pkg(root.filePath(QStringLiteral("packages")));
+        if (pkg.exists())
+            collectNestedWorkflowConfigs(pkg, workflowNames, &workflowConfigPaths);
     }
-
-    {
-        const QDir stg(root.filePath(QStringLiteral(".staging/packages")));
-        if (stg.exists())
-            collectStagingWorkflowConfigs(stg, workflowNames, &workflowConfigPaths);
+    for (const QString &extra : extraWorkflowRootDirs(repoRoot)) {
+        collectNestedWorkflowConfigs(QDir(extra), workflowNames, &workflowConfigPaths);
     }
 
     {
         const QString bundledWf = root.filePath(QStringLiteral("src/core/workflows"));
         if (QFileInfo(bundledWf).isDir())
-            collectStagingWorkflowConfigs(QDir(bundledWf), workflowNames, &workflowConfigPaths);
+            collectNestedWorkflowConfigs(QDir(bundledWf), workflowNames, &workflowConfigPaths);
     }
 
     {

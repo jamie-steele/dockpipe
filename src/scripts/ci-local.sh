@@ -46,7 +46,7 @@ gosec -conf .gosec.json -fmt json -out=.dockpipe/ci-raw/gosec.json -exclude-dir=
 GC=$?
 set -e
 export DOCKPIPE_WORKDIR="$ROOT"
-bash src/scripts/dorkpipe/normalize-ci-scans.sh
+bash packages/dorkpipe/resolvers/dorkpipe/assets/scripts/normalize-ci-scans.sh
 jq -r '"govulncheck raw vulns: " + ((.vulns // .Vulns // [] | length) | tostring)' .dockpipe/ci-raw/govulncheck.json 2>/dev/null || true
 jq -r '"gosec raw issues: " + ((.Stats.found // 0) | tostring)' .dockpipe/ci-raw/gosec.json 2>/dev/null || true
 if [[ $VC -ne 0 ]]; then exit "$VC"; fi
@@ -55,8 +55,10 @@ if [[ $GC -ne 0 ]]; then exit "$GC"; fi
 step "make (build CLI)"
 make
 
-step "go test"
+step "go test (root + maintainer modules)"
 go test ./...
+go test ./packages/dorkpipe/lib/...
+go test ./packages/dockpipe-mcp/...
 
 step "templates/core path guard"
 bash src/scripts/check-templates-core-paths.sh

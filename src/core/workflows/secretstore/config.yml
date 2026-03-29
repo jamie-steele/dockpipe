@@ -1,5 +1,5 @@
 # Bundled workflow: run a host command with env loaded from a dotenv-style file (no vendor CLI).
-# For 1Password (op), use maintainer workflow secretstore-onepassword (.staging/packages/dockpipe/secrets/resolvers/onepassword/).
+# For 1Password (op), use maintainer workflow secretstore-onepassword (packages/secrets/resolvers/onepassword/).
 name: secretstore
 workflow_type: secretstore
 description: >-

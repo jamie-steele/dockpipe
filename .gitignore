@@ -6,8 +6,9 @@
 tmp/
 
 # Built Go binaries under src/bin (launchers stay as shell scripts; see Makefile / src/Makefile)
-src/bin/dorkpipe
-src/bin/mcpd
+# Maintainer packages — built ELF artifacts (not under src/bin/)
+packages/dorkpipe/bin/dorkpipe
+packages/dockpipe-mcp/bin/mcpd
 
 # Local Cursor / remote server / IDE (binaries, keys, workspace state — do not commit)
 .cache/
@@ -17,7 +18,8 @@ src/bin/mcpd
 .ssh/
 
 # Build output
-# Legacy out-of-tree Pipeon Launcher build (prefer: src/apps/pipeon-launcher/build)
+# Pipeon Launcher CMake build (DockPipe GUI under src/apps/)
+src/apps/pipeon-launcher/build/
 build-pipeon-launcher/
 release/packaging/build/
 *.deb
@@ -57,27 +59,11 @@ Thumbs.db
 .env.op.template
 .env.secretstore
 
-# Maintainer-only trees under .staging — keep local experiments out of git; embed.go still embeds paths from a full checkout.
-# Exception: umbrella package.yml (kind: package) under dockpipe/agent|ide|secrets|cloud/storage — tracked; resolvers/ and everything else stays ignored.
+# Maintainer-only trees under .staging — non-first-party experiments (ignored); optional private-repo backup.
 .staging/*
 !.staging/packages/
 !.staging/packages/README.md
 .staging/packages/*
-!.staging/packages/dockpipe/
-.staging/packages/dockpipe/*
-!.staging/packages/dockpipe/agent/
-!.staging/packages/dockpipe/ide/
-!.staging/packages/dockpipe/secrets/
-.staging/packages/dockpipe/agent/*
-!.staging/packages/dockpipe/agent/package.yml
-.staging/packages/dockpipe/ide/*
-!.staging/packages/dockpipe/ide/package.yml
-.staging/packages/dockpipe/secrets/*
-!.staging/packages/dockpipe/secrets/package.yml
-!.staging/packages/dockpipe/cloud/
-!.staging/packages/dockpipe/cloud/storage/
-.staging/packages/dockpipe/cloud/storage/*
-!.staging/packages/dockpipe/cloud/storage/package.yml
 # To stop tracking without deleting files: git rm -r --cached .staging
 # Note: CI/fresh clones need a populated .staging tree for go:embed or a future embed-from-tracked-dir change.
 
@@ -88,11 +74,11 @@ Thumbs.db
 # DorkPipe runtime outputs (metrics, nodes, self-analysis scratch)
 .dorkpipe/
 
-# Terraform (e.g. .staging/packages/dockpipe/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/terraform — keep .terraform.lock.hcl)
+# Terraform (e.g. packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/terraform — keep .terraform.lock.hcl)
 .terraform/
 *.tfstate
 *.tfstate.*
 
 # VS Code extension (packed / dev)
-src/contrib/pipeon-vscode-extension/node_modules/
-src/contrib/pipeon-vscode-extension/*.vsix
+packages/pipeon/resolvers/pipeon/vscode-extension/node_modules/
+packages/pipeon/resolvers/pipeon/vscode-extension/*.vsix

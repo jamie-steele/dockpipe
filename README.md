@@ -16,7 +16,7 @@ Your project is mounted at **`/work`** in a disposable container; when the comma
 
 ## Core tools in this repo
 
-The **DockPipe** CLI lives under **`src/cmd/dockpipe/`** and **`src/lib/dockpipe/`**. This repository also contains **DorkPipe** (orchestration, **`src/cmd/dorkpipe/`**), **Pipeon** (under **`src/apps/pipeon/`**, Launcher **`src/apps/pipeon-launcher/`**, VS Code extension **`src/contrib/pipeon-vscode-extension/`**). Built binaries and launchers: **`src/bin/`**. They are separate products with explicit integration (subprocess, files, env) — see **[docs/core-tools.md](docs/core-tools.md)**. Indexes: **[src/apps/pipeon/README.md](src/apps/pipeon/README.md)**, **[src/apps/README.md](src/apps/README.md)**, **[src/contrib/README.md](src/contrib/README.md)**.
+The **DockPipe** CLI is **`src/cmd/`** (entry) and **`src/lib/`**. **Pipeon Launcher** (DockPipe GUI) is **`src/apps/pipeon-launcher/`**. **Pipeon**, **DorkPipe**, and **MCP** are first-party under **`packages/`** (`pipeon`, `dorkpipe`, `dockpipe-mcp`). Optional **IDE** resolver trees may live under **`packages/`** or maintainer-only dirs — see **[docs/core-tools.md](docs/core-tools.md)**. **`make build`** produces **`src/bin/dockpipe.bin`** (launcher **`src/bin/dockpipe`**). **`make maintainer-tools`** builds **`packages/dorkpipe/bin/dorkpipe`** and **`packages/dockpipe-mcp/bin/mcpd`**. Running this repo on itself is **`./src/bin/dockpipe --workflow <name> --workdir . --`** once packages are compiled into **`.dockpipe/`** like any project. See also **[src/apps/README.md](src/apps/README.md)**.
 
 ## Concepts
 
@@ -38,6 +38,8 @@ dockpipe --isolate agent-dev -- npm test
 
 ## Docs
 
+**Index:** [docs/README.md](docs/README.md)
+
 | | |
 |--|--|
 | Install | [docs/install.md](docs/install.md) |
@@ -58,19 +60,19 @@ make test-quick  # Go + path guard + bash unit tests (no Docker)
 make ci          # full Linux CI mirror (govulncheck, gosec, Docker, integration — see src/scripts/ci-local.sh)
 ```
 
-**Accelerator (this repo):** run DorkPipe self-analysis from DockPipe — isolated container, **`.dockpipe/paste-this-prompt.txt`** for Cursor, optional Compose sidecars. From repo root after **`make build`**:
+**Accelerator (this repo):** same as any DockPipe project — compile what you need into **`.dockpipe/`**, then run by workflow name. After **`make build`**:
 
-| Command | What it does |
-|---------|----------------|
-| **`make self-analysis`** | `dorkpipe-self-analysis` — analysis only |
-| **`make self-analysis-stack`** | Compose up → analysis → compose down (set **`DORKPIPE_DEV_STACK_AUTODOWN=0`** to keep sidecars) |
-| **`make self-analysis-host`** | Host-only, no Docker |
-| **`make compliance-handoff`** | Print CI + self-analysis **signal paths** for AI (“compliance issues?”) — **`docs/compliance-ai-handoff.md`** |
+| Workflow | Example |
+|----------|---------|
+| **`dorkpipe-self-analysis`** | `./src/bin/dockpipe --workflow dorkpipe-self-analysis --workdir . --` |
+| **`dorkpipe-self-analysis-stack`** | Compose sidecars (set **`DORKPIPE_DEV_STACK_AUTODOWN=0`** to leave Postgres+Ollama up) |
+| **`dorkpipe-self-analysis-host`** | Host-only, no Docker |
+| **`compliance-handoff`** | Print CI + self-analysis **signal paths** — **`docs/artifacts.md`** |
 
-See **`src/lib/dorkpipe/workflows/dorkpipe-self-analysis/README.md`** and **`docs/dorkpipe.md`**.
+See the **`dorkpipe`** maintainer package **`README.md`** (resolver **`dorkpipe-self-analysis`**).
 
 ```bash
-make self-analysis
+./src/bin/dockpipe --workflow dorkpipe-self-analysis --workdir . --
 ```
 
 Contributors: **`make dev-deps`** installs **govulncheck** and **gosec** (CI parity) and tries **user-level** installs for **asciinema** + **agg** (for **`make demo-record`**). None of this is required to use DockPipe. For demo tools only: **`make install-record-deps`**.

@@ -71,5 +71,4 @@ runtime: dockerimage
 
 - **[architecture-model.md](architecture-model.md)** — normative runtime / resolver / workflow definitions  
 - **[package-model.md](package-model.md)** — **`package.yml`** fields  
-- **[workflow-yaml.md](workflow-yaml.md)** — workflow keys (default vs per-step **`resolver`** / **`runtime`**)  
-- **[primitives.md](primitives.md)** — short redirect (old name for this doc)
+- **[workflow-yaml.md](workflow-yaml.md)** — workflow keys (default vs per-step **`resolver`** / **`runtime`**)

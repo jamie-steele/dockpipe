@@ -17,7 +17,7 @@ Builds **`dockpipe_<version>_windows_amd64.msi`**: per-user install to `%LOCALAP
 ## Build
 
 ```powershell
-go build -trimpath -ldflags "-s -w" -o dockpipe.exe ./src/cmd/dockpipe
+go build -trimpath -ldflags "-s -w" -o dockpipe.exe ./src/cmd
 .\release\packaging\msi\build.ps1 -Version 0.6.0 -SourceExe .\dockpipe.exe -OutDir .\msi-dist
 # Or pass WiX root explicitly (avoids relying on $env:WIX): -WixRoot C:\path\to\wix314
 ```

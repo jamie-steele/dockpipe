@@ -88,12 +88,12 @@ Script: **[release/packaging/linux/install.sh](../release/packaging/linux/instal
 
 ## Or run from source (Linux or macOS, no root)
 
-The CLI is built with **Go** matching **`go.mod`** (currently **1.25**; see `toolchain` there) (`go build -o src/bin/dockpipe.bin ./src/cmd/dockpipe` or **`make`**). The `src/bin/dockpipe` script runs the binary if present, otherwise `go run`.
+The CLI is built with **Go** matching **`go.mod`** (currently **1.25**; see `toolchain` there) (`go build -o src/bin/dockpipe.bin ./src/cmd` or **`make`**). The `src/bin/dockpipe` script runs the binary if present, otherwise `go run`.
 
 ```bash
 git clone https://github.com/jamie-steele/dockpipe.git
 cd dockpipe
-make   # or: go build -o src/bin/dockpipe.bin ./src/cmd/dockpipe
+make   # or: go build -o src/bin/dockpipe.bin ./src/cmd
 export PATH="$PATH:$(pwd)/bin"
 dockpipe -- ls -la
 ```
@@ -184,7 +184,7 @@ dockpipe windows setup --distro Ubuntu --install-command "<your install command>
 dockpipe windows doctor
 ```
 
-**Manual QA:** **[manual-qa.md](qa/manual-qa.md)** — [Linux / `.deb` / WSL Linux](qa/manual-qa-core.md), [macOS](qa/manual-qa-macos.md), [Windows + `dockpipe.exe`](qa/manual-qa-windows.md).
+**Manual QA:** **[manual-qa.md](qa/manual-qa.md)**.
 
 ---
 

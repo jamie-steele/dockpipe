@@ -62,5 +62,5 @@ Details: **[architecture-model.md](architecture-model.md)** · **[isolation-laye
 | [workflow-yaml.md](workflow-yaml.md) | Editing **`config.yml`**, **`steps:`**, **`resolver`**, **`strategy`**, **`runtime`** |
 | [package-model.md](package-model.md) | Authoring vs packages, **`compile.*`** in **`dockpipe.config.json`**, how workflows relate to resolver/runtime/strategy slices |
 | [cli-reference.md](cli-reference.md) | Flags and precedence |
-| [chaining.md](chaining.md) | Multiple **`dockpipe`** runs, same workdir |
+| [workflow-yaml.md](workflow-yaml.md) § Chaining | Multiple **`dockpipe`** runs, same workdir |
 | [wsl-windows.md](wsl-windows.md) | Optional WSL bridge on Windows |

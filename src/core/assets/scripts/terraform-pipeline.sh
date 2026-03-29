@@ -12,7 +12,7 @@
 #   export TF_VAR_...
 #   dockpipe_tf_run_pipeline "$tf_dir" "$path/to/backend.hcl"
 #
-# See: docs/terraform-pipeline.md and assets/scripts/README.md
+# See: src/core/assets/scripts/README.md (terraform-pipeline section)
 
 [[ -n "${BASH_VERSION:-}" ]] || {
   echo "terraform-pipeline.sh: bash required" >&2

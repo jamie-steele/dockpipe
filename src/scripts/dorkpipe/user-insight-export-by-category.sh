@@ -1,1 +1,0 @@
-../../templates/core/bundles/dorkpipe/assets/scripts/user-insight-export-by-category.sh

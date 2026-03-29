@@ -3,14 +3,7 @@
   "compile": {
     "workflows": [
       "workflows",
-      "src/lib/dorkpipe/workflows",
-      ".staging/packages"
-    ],
-    "bundles": [
-      ".staging/packages/dockpipe"
-    ],
-    "resolvers": [
-      "src/core/resolvers",
+      "packages",
       ".staging/packages"
     ]
   },
@@ -19,6 +12,6 @@
   },
   "secrets": {
     "op_inject_template": ".env.op.template",
-    "notes": "Optional: 1Password op inject mapping (op:// lines). Use with secretstore-onepassword / secretstore-r2-publish-test; template example under .staging/packages/dockpipe/secrets/resolvers/onepassword/. Bundled core secretstore uses .env.secretstore (dotenv) — see src/core/workflows/secretstore/."
+    "notes": "Optional: 1Password op inject mapping (op:// lines). Use with secretstore-onepassword / secretstore-r2-publish-test; template example under packages/secrets/resolvers/onepassword/. Bundled core secretstore uses .env.secretstore (dotenv) — see src/core/workflows/secretstore/."
   }
 }

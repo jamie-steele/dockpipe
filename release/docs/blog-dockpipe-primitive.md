@@ -1,6 +1,6 @@
 **dockpipe** is a general-purpose CLI: run any command in a disposable container, then optionally run an action on the result (e.g. commit, export patch). Same flow for tests, one-off scripts, codegen, or AI tools—not an AI framework; AI is one use case. **Agnostic by design:** AI support is via **resolvers** (one file per tool—Claude, Codex, or your own) and **templates**; the core never hardcodes a vendor.
 
-The **default implementation is a Go CLI** (`src/cmd/dockpipe`): it orchestrates Docker, parses **`config.yml`** natively (including optional multi-step **`steps:`**, parallel **async** groups, and **`outputs:`** handoff—see **[workflow-yaml.md](../workflow-yaml.md)**), and runs host **bash** for pre-scripts. Legacy bash-only helpers remain under `scripts/` for reference.
+The **default implementation is a Go CLI** (`src/cmd`): it orchestrates Docker, parses **`config.yml`** natively (including optional multi-step **`steps:`**, parallel **async** groups, and **`outputs:`** handoff—see **[workflow-yaml.md](../workflow-yaml.md)**), and runs host **bash** for pre-scripts. Legacy bash-only helpers remain under `scripts/` for reference.
 
 In **0.6** you get **worktree on host**, **commit on host** (so the AI never has container git access), **template init** (copy workflows and customize without contributing back), and **Windows** support (**`dockpipe.exe`** natively with Docker Desktop; optional **WSL bridge** for Linux `dockpipe` inside a distro).
 
@@ -54,7 +54,7 @@ AI support is **provider-agnostic**. **Resolvers** are profiles under **`templat
 
 Because dockpipe is a single primitive, you can:
 
-- **Chain steps** — Run one script in a container, pipe or pass its output to the next (e.g. plan → implement → review, each in its own clean run). See **[chaining.md](../chaining.md)**.
+- **Chain steps** — Run one script in a container, pipe or pass its output to the next (e.g. plan → implement → review, each in its own clean run). See **[workflow-yaml.md](../workflow-yaml.md)** (chaining section).
 - **Automate AI workflows** — "Run Claude (or Codex) in a worktree → commit on host." Use **`--resolver claude --repo URL`** (add **`--branch`** or **`--work-branch`** as needed) and **`strategy: worktree`** in workflow YAML.
 - **CI-like local runs** — `dockpipe -- make test` or `dockpipe -- bash -c "npm ci && npm test"` in a clean environment.
 - **One-off experiments** — Try a new tool or version in a container; no global installs, no cleanup.

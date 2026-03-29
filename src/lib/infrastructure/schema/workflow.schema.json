@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dockpipe.dev/schema/workflow.schema.json",
+  "title": "Dockpipe workflow",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "category": {
+      "type": "string",
+      "description": "Optional UI hint: e.g. \"app\" = show in Pipeon Basic mode (launchable GUI/container tools)."
+    },
+    "workflow_type": {
+      "type": "string",
+      "description": "Optional classifier for tooling and templates (e.g. secretstore). Lowercase letters, digits, hyphens; must start with a letter. The engine does not branch on this field."
+    },
+    "namespace": {
+      "type": "string",
+      "description": "Optional author/org label for packages and discovery. Lowercase label (a-z, digits, hyphens); must not be a reserved word (e.g. dockpipe, core, system)."
+    },
+    "capability": {
+      "type": "string",
+      "description": "Optional legacy metadata (ignored by the runner)."
+    },
+    "primitive": {
+      "type": "string",
+      "description": "Deprecated — use capability. Same meaning as capability."
+    },
+    "imports": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "vars": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "run": {},
+    "isolate": { "type": "string" },
+    "act": { "type": "string" },
+    "action": { "type": "string" },
+    "resolver": { "type": "string" },
+    "default_resolver": { "type": "string" },
+    "runtime": { "type": "string" },
+    "default_runtime": { "type": "string" },
+    "runtimes": { "type": "array", "items": { "type": "string" } },
+    "strategy": { "type": "string" },
+    "strategies": { "type": "array", "items": { "type": "string" } },
+    "docker_preflight": { "type": "boolean", "description": "When false, skip Docker reachability preflight when no step uses the container runner (host-only workflows)." },
+    "compile_hooks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Shell commands run by dockpipe package compile workflow from the workflow source dir after validation, before packaging (e.g. go build)."
+    },
+    "steps": { "type": "array" }
+  }
+}

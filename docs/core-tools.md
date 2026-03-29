@@ -1,49 +1,14 @@
-# Core tools & boundaries
+# Core tools (this repository)
 
-This repo contains **three** product-shaped areas plus shared templates/scripts. They are **separate bounded contexts**: different entrypoints, dependencies, and ship paths. Integration is **explicit** (subprocess, files, env) — not shared Go imports between “engines.”
+| Area | Code / doc |
+|------|------------|
+| **DockPipe** | **`src/cmd/`**, **`src/lib/`** |
+| **DorkPipe** | Maintainer **`dorkpipe`** pack — **`dorkpipe/lib/README.md`** |
+| **Pipeon** | First-party **`packages/pipeon/`** — **`packages/pipeon/resolvers/pipeon/README.md`** (VS Code extension under **`vscode-extension/`**) |
+| **MCP** | **`dockpipe-mcp`** pack — **`dockpipe-mcp/README.md`** |
 
-## Map
+**Package index:** [`.staging/packages/README.md`](../.staging/packages/README.md).
 
-| Tool | Location | Responsibility |
-|------|----------|------------------|
-| **DockPipe** | `src/cmd/dockpipe/`, `src/lib/dockpipe/` | **Primitive:** spawn container or host step → run command → optional action. Workflow YAML, Docker, bash pre/act. |
-| **DorkPipe** | `src/cmd/dorkpipe/`, `src/lib/dorkpipe/` | **Orchestration / AI reasoning:** DAG specs, workers, escalation — **uses** DockPipe as the execution primitive where needed. |
-| **Pipeon** (harness + docs) | `src/apps/pipeon/` | Shell harness (**`src/bin/pipeon`**), shortcuts, fork playbook docs; symlinks into **`.staging/packages/dockpipe/ide/pipeon/`**. |
-| **Pipeon Launcher** | `src/apps/pipeon-launcher/` | **Native UI:** saved contexts, launches **`dockpipe`** as a child process, logs, tray. |
-| **Pipeon IDE** | `src/contrib/pipeon-vscode-extension/` | **Editor UI:** VS Code extension; talks to the workspace and user — not a second copy of DockPipe’s engine. |
+**`make build`** emits **`src/bin/dockpipe.bin`** (launcher **`src/bin/dockpipe`**). **`make maintainer-tools`** emits **`dorkpipe`** and **`mcpd`** under those packages’ **`bin/`** dirs.
 
-**Pipeon-only docs** (IDE experience, shortcuts): **`src/apps/pipeon/README.md`**, **`docs/pipeon.md`**. Optional VS Code tasks: **`src/apps/pipeon/vscode-tasks.json.example`**.
-
-**Lean CI / dogfood workflows** for this repo live under repo-root **`workflows/`**; **grouped maintainer packages** (nested workflows, resolvers, bundles) live under **`.staging/packages/`** when those paths are listed in **`dockpipe.config.json` `compile.workflows`** / **`compile.resolvers`** / **`compile.bundles`**. User-facing scaffolds stay under **`templates/`** (or **`dockpipe init`** output).
-
-### DorkPipe scripts — canonical workflow tree + repo view
-
-**DorkPipe does not require** shell to live under `scripts/dorkpipe/`. The **`dorkpipe`** binary reads a DAG YAML and runs whatever **commands** the spec lists (paths are just strings).
-
-Workflow script resolution (`src/lib/dockpipe/infrastructure/paths.go`): paths under **`scripts/…`** use the project’s **`scripts/`** if present, then compiled **`packages/resolvers`** / **`packages/workflows`**, then **compile roots** from **`dockpipe.config.json`** (same lists as **`dockpipe package compile`** — e.g. **`.staging/packages/…`** in this repo), then **`templates/core/resolvers/…`** / **`bundles/`** / **`assets/scripts/…`** (materialized bundle or init tree).
-
-| Location | Role |
-|----------|------|
-| **`.staging/packages/dockpipe/agent/dorkpipe/`** | **Canonical** DorkPipe workflow tree in this repo (DAG helpers, prompts, user-insight queue, compliance handoff). |
-| **`src/scripts/dorkpipe/`** | **Maintainer-only** scripts (self-analysis, CI normalize, dev-stack, etc.). YAML still uses **`scripts/dorkpipe/…`** (resolved by `paths.go`). |
-
-Nothing in **`lib/dorkpipe/`** imports these paths — they are **glue**, not Go packages. See [dorkpipe.md](dorkpipe.md#reusable-assets).
-
-## How they communicate (allowed)
-
-- **Subprocess:** Launcher (and scripts) run `dockpipe …` with argv and env — same as any shell.
-- **Files:** DorkPipe and DockPipe exchange state via repo files (e.g. `.dockpipe/`, specs, handoff prompts).
-- **Env:** `DOCKPIPE_*` and documented flags — no private RPC between Go packages required.
-
-## What to avoid
-
-- **DockPipe `src/lib/dockpipe/`** should not depend on **`src/lib/dorkpipe/`** (keep the runner primitive agnostic).
-- **Launcher / VS Code extension** should not embed DockPipe’s Go libraries — they are separate processes/products.
-- **DorkPipe** may **invoke** `dockpipe` or share **types** only where already factored (keep imports one-direction: orchestration → primitive).
-
-## Related docs
-
-- DockPipe terms & architecture: [architecture-model.md](architecture-model.md), [architecture.md](architecture.md)
-- DorkPipe: [dorkpipe.md](dorkpipe.md)
-- Pipeon Launcher build: [src/apps/pipeon-launcher/README.md](../src/apps/pipeon-launcher/README.md)
-- Pipeon docs & harness: [src/apps/pipeon/README.md](../src/apps/pipeon/README.md)
+Script paths like **`scripts/dorkpipe/…`** resolve per **`src/lib/infrastructure/paths.go`** (project `scripts/` → compiled packages → config compile roots → templates).

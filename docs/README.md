@@ -1,21 +1,24 @@
 # Documentation
 
-**Start:** [onboarding.md](onboarding.md) — first commands, then concepts.
+| Start here | |
+|------------|--|
+| [onboarding.md](onboarding.md) | First commands |
+| [install.md](install.md) | Install + bundled templates |
+| [architecture-model.md](architecture-model.md) | **Normative** terms: workflow, runtime, resolver, strategy |
+| [cli-reference.md](cli-reference.md) | Flags and subcommands |
+| [workflow-yaml.md](workflow-yaml.md) | `config.yml`, `steps:` |
 
-**Canonical terms:** [architecture-model.md](architecture-model.md) — workflow, runtime, resolver, strategy, assets.
+| Topic | |
+|-------|--|
+| [package-model.md](package-model.md) | Store vs authoring, `package.yml` |
+| [capabilities.md](capabilities.md) | Capability ids vs resolvers |
+| [isolation-layer.md](isolation-layer.md) | Profile files, `DOCKPIPE_*` keys |
+| [architecture.md](architecture.md) | Engine data flow (non-normative) |
 
-**Store packages vs authoring tree:** [package-model.md](package-model.md) — `.dockpipe/internal/packages/`, `package.yml`, R2/S3 direction.
+| Maintainer / integrations | |
+|-----------------------------|--|
+| [core-tools.md](core-tools.md) | DockPipe vs maintainer packages under **`.staging/packages/`** |
+| [artifacts.md](artifacts.md) | `.dockpipe/` / `.dorkpipe/` signals, CI bundle, governance Q&A |
+| MCP (`mcpd`) | **[`packages/dockpipe-mcp/README.md`](../packages/dockpipe-mcp/README.md)** (package — not under `docs/`) |
 
-**Bounded contexts (DockPipe vs DorkPipe vs Pipeon):** [core-tools.md](core-tools.md) · Pipeon-only docs: [pipeon.md](pipeon.md) → [`src/apps/pipeon/`](../src/apps/pipeon/README.md) · **MCP bridge (AI/client interface):** [mcp-architecture.md](mcp-architecture.md) · **trust:** [mcp-agent-trust.md](mcp-agent-trust.md) · **host hardening:** [mcp-host-hardening.md](mcp-host-hardening.md) → [`src/lib/mcpbridge/`](../src/lib/mcpbridge/README.md)
-
-| First | Reference |
-|-------|-----------|
-| [install.md](install.md) | [cli-reference.md](cli-reference.md) |
-| [workflow-yaml.md](workflow-yaml.md) | [architecture.md](architecture.md) |
-| [isolation-layer.md](isolation-layer.md) | [chaining.md](chaining.md) |
-
-**Bundled paths:** In the materialized cache, **`shipyard/core/`** and **`shipyard/workflows/`** mirror **`src/core/`** (category dirs) and **`src/core/workflows/<workflow>/`**, and embedded repo-root **`workflows/`** lands under **`shipyard/workflows/`** in the cache. This repo’s git checkout uses **`workflows/`** at the project root (or **`templates/`** after **`dockpipe init`**). See [install.md](install.md#bundled-templates-no-extra-install-tree).
-
-**QA:** [qa/manual-qa.md](qa/manual-qa.md)
-
-**Repo copy (About, etc.):** [messaging.md](messaging.md)
+**QA:** [qa/manual-qa.md](qa/manual-qa.md) · **Messaging (About copy):** [messaging.md](messaging.md)
