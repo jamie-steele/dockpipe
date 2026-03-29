@@ -228,7 +228,7 @@ func TestResolveWorkflowScriptResolvesReviewPipelineFromWorkflowsRoot(t *testing
 }
 
 // TestResolveWorkflowScriptResolvesPipeonFromNestedCompileRoot verifies logical scripts/pipeon/…
-// resolves via tryNestedWorkflowScripts (compile.workflows includes packages/) — no src/scripts/pipeon symlink.
+// resolves via tryNestedWorkflowScripts (compile.workflows includes a root directory named "packages") — no src/scripts/pipeon symlink.
 func TestResolveWorkflowScriptResolvesPipeonFromNestedCompileRoot(t *testing.T) {
 	repo := t.TempDir()
 	cfg := `{"schema":1,"compile":{"workflows":["packages"]}}`

@@ -1,0 +1,20 @@
+# Terraform only: create/update R2 resources (and remote state) — no tarball, no object upload.
+# Same env as r2publish (CLOUDFLARE_*, R2_BUCKET, DOCKPIPE_TF_* / R2_STATE_*). Sets R2_INFRA_ONLY=1 in the script.
+#
+# Next: dockpipe.cloudflare.r2upload (or r2publish with R2_SKIP_TERRAFORM=1) after release/artifacts exists.
+name: dockpipe.cloudflare.r2infra
+namespace: dockpipe-cloudflare
+description: >-
+  Host-only: run Terraform for the Cloudflare R2 module only. Does not read release/artifacts or upload objects.
+  Use dockpipe.cloudflare.r2upload to publish tarballs separately.
+
+docker_preflight: false
+
+vars:
+  R2_INFRA_ONLY: "1"
+
+steps:
+  - id: terraform
+    skip_container: true
+    run:
+      - scripts/dockpipe/r2-publish.sh

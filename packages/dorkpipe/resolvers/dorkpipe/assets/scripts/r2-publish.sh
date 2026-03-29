@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# Host: tar.gz a folder and upload to Cloudflare R2.
+# Host: tar.gz a folder and upload to Cloudflare R2; optionally Terraform first.
 #
-# Two credential modes:
+# Modes:
+#   R2_INFRA_ONLY=1     — Terraform only (bucket/state/etc.), then exit (no tarball, no upload).
+#   R2_SKIP_TERRAFORM=1 — Skip Terraform; tar + upload only (bucket must already exist).
+#   (default)           — Terraform when enabled, then tar + upload (wrangler mode runs TF by default).
+#
+# Two credential modes for upload:
 #   1) S3-compatible API — AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY (R2 access keys).
 #   2) Single Cloudflare API token — CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID:
 #      Terraform creates the bucket (optional; default for this mode), Wrangler uploads the object.
 #
-# Terraform (when enabled): uses templates/core/assets/scripts/terraform-pipeline.sh (DOCKPIPE_TF_*).
-# Legacy R2_TERRAFORM_* env vars are mapped automatically. See src/core/assets/scripts/README.md.
+# Terraform: templates/core/assets/scripts/terraform-pipeline.sh (DOCKPIPE_TF_* / R2_TF_*).
 set -euo pipefail
 
-# Workflow id (matches workflows/*/config.yml name: dockpipe.cloudflare.r2publish)
+# Workflow id (matches workflows/*/config.yml name)
 WF_NS="${DOCKPIPE_WORKFLOW_NAME:-dockpipe.cloudflare.r2publish}"
 
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
@@ -18,48 +22,6 @@ ROOT="$(cd "$ROOT" && pwd)"
 cd "$ROOT"
 
 die() { echo "${WF_NS}: $*" >&2; exit 1; }
-
-SRC_REL="${R2_PUBLISH_SOURCE:-release/artifacts}"
-[[ -d "$SRC_REL" ]] || die "source directory missing: $SRC_REL (set R2_PUBLISH_SOURCE or mkdir -p release/artifacts)"
-
-BUCKET="${R2_BUCKET:-}"
-[[ -n "$BUCKET" ]] || die "set R2_BUCKET (R2 bucket name)"
-
-# --- upload mode -----------------------------------------------------------
-UPLOAD_MODE=""
-if [[ -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
-  UPLOAD_MODE="s3"
-elif [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
-  UPLOAD_MODE="wrangler"
-else
-  die "set R2 bucket credentials: either AWS_ACCESS_KEY_ID+AWS_SECRET_ACCESS_KEY (R2 S3 keys) or CLOUDFLARE_API_TOKEN (API token + Wrangler/Terraform)"
-fi
-
-if [[ "$UPLOAD_MODE" == wrangler ]]; then
-  [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || die "set CLOUDFLARE_ACCOUNT_ID (required for CLOUDFLARE_API_TOKEN mode)"
-fi
-
-# Endpoint: full S3 API URL for your account (S3 mode only).
-ENDPOINT="${R2_ENDPOINT_URL:-${AWS_ENDPOINT_URL_S3:-}}"
-if [[ "$UPLOAD_MODE" == s3 ]]; then
-  if [[ -z "$ENDPOINT" ]]; then
-    ACCT="${CLOUDFLARE_ACCOUNT_ID:-${R2_ACCOUNT_ID:-}}"
-    [[ -n "$ACCT" ]] || die "set R2_ENDPOINT_URL (https://<account_id>.r2.cloudflarestorage.com) or CLOUDFLARE_ACCOUNT_ID"
-    ENDPOINT="https://${ACCT}.r2.cloudflarestorage.com"
-  fi
-fi
-
-PREFIX="${R2_PREFIX:-}"
-[[ -n "$PREFIX" && "${PREFIX: -1}" != / ]] && PREFIX="${PREFIX}/"
-
-STAMP="$(date +%Y%m%d-%H%M%S)"
-ARCHIVE_NAME="${R2_ARCHIVE_NAME:-dockpipe-publish-${STAMP}.tar.gz}"
-TMPDIR="${TMPDIR:-/tmp}"
-WORK="$(mktemp -d "${TMPDIR}/dockpipe-cf-r2publish.XXXXXX")"
-cleanup() { rm -rf "$WORK"; }
-trap cleanup EXIT
-
-KEY="${PREFIX}${ARCHIVE_NAME}"
 
 find_terraform_dir() {
   if [[ -n "${R2_TERRAFORM_DIR:-}" ]]; then
@@ -95,7 +57,7 @@ should_run_terraform() {
   if [[ "${R2_USE_TERRAFORM:-}" == "1" ]]; then
     return 0
   fi
-  if [[ "$UPLOAD_MODE" == wrangler ]]; then
+  if [[ "${UPLOAD_MODE:-}" == wrangler ]]; then
     return 0
   fi
   return 1
@@ -115,6 +77,7 @@ source_terraform_pipeline_lib() {
 
 run_terraform_pipeline() {
   local tf_dir="$1"
+  local backend_hcl="$2"
   command -v terraform >/dev/null 2>&1 || die "install Terraform (https://developer.hashicorp.com/terraform/downloads)"
   [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] || die "CLOUDFLARE_API_TOKEN required for Terraform"
   [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || die "CLOUDFLARE_ACCOUNT_ID required for Terraform"
@@ -133,26 +96,84 @@ run_terraform_pipeline() {
     unset TF_VAR_location 2>/dev/null || true
   fi
 
-  dockpipe_tf_run_pipeline "$tf_dir" "$WORK/r2-tf-backend.hcl" "would skip tarball upload after Terraform (no apply step; R2_PUBLISH_ALWAYS_UPLOAD=1 to force upload)"
+  dockpipe_tf_run_pipeline "$tf_dir" "$backend_hcl" "would skip tarball upload after Terraform (no apply step; R2_PUBLISH_ALWAYS_UPLOAD=1 to force upload)"
 }
+
+# --- Infra only: Terraform then exit (no source dir, no tarball, no upload) -----------------
+if [[ "${R2_INFRA_ONLY:-0}" == "1" ]]; then
+  if [[ "${R2_SKIP_TERRAFORM:-0}" == "1" ]]; then
+    die "R2_INFRA_ONLY=1 conflicts with R2_SKIP_TERRAFORM=1"
+  fi
+  BUCKET="${R2_BUCKET:-}"
+  [[ -n "$BUCKET" ]] || die "set R2_BUCKET"
+  [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]] || die "CLOUDFLARE_API_TOKEN required for Terraform"
+  [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || die "CLOUDFLARE_ACCOUNT_ID required for Terraform"
+  TMPDIR="${TMPDIR:-/tmp}"
+  WORK="$(mktemp -d "${TMPDIR}/dockpipe-cf-r2infra.XXXXXX")"
+  cleanup() { rm -rf "$WORK"; }
+  trap cleanup EXIT
+  TF_DIR="$(find_terraform_dir)" || die "Terraform module not found — copy packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/terraform or set R2_TERRAFORM_DIR"
+  run_terraform_pipeline "$TF_DIR" "$WORK/r2-tf-backend.hcl"
+  echo "${WF_NS}: infra-only finished (no upload). Publish separately: dockpipe --workflow dockpipe.cloudflare.r2upload"
+  exit 0
+fi
+
+# --- Publish path: needs source tree to tar ---------------------------------------------------
+SRC_REL="${R2_PUBLISH_SOURCE:-release/artifacts}"
+[[ -d "$SRC_REL" ]] || die "source directory missing: $SRC_REL (set R2_PUBLISH_SOURCE or mkdir -p release/artifacts)"
+
+BUCKET="${R2_BUCKET:-}"
+[[ -n "$BUCKET" ]] || die "set R2_BUCKET (R2 bucket name)"
+
+UPLOAD_MODE=""
+if [[ -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+  UPLOAD_MODE="s3"
+elif [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
+  UPLOAD_MODE="wrangler"
+else
+  die "set R2 bucket credentials: either AWS_ACCESS_KEY_ID+AWS_SECRET_ACCESS_KEY (R2 S3 keys) or CLOUDFLARE_API_TOKEN (API token + Wrangler/Terraform)"
+fi
+
+if [[ "$UPLOAD_MODE" == wrangler ]]; then
+  [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || die "set CLOUDFLARE_ACCOUNT_ID (required for CLOUDFLARE_API_TOKEN mode)"
+fi
+
+ENDPOINT="${R2_ENDPOINT_URL:-${AWS_ENDPOINT_URL_S3:-}}"
+if [[ "$UPLOAD_MODE" == s3 ]]; then
+  if [[ -z "$ENDPOINT" ]]; then
+    ACCT="${CLOUDFLARE_ACCOUNT_ID:-${R2_ACCOUNT_ID:-}}"
+    [[ -n "$ACCT" ]] || die "set R2_ENDPOINT_URL (https://<account_id>.r2.cloudflarestorage.com) or CLOUDFLARE_ACCOUNT_ID"
+    ENDPOINT="https://${ACCT}.r2.cloudflarestorage.com"
+  fi
+fi
+
+PREFIX="${R2_PREFIX:-}"
+[[ -n "$PREFIX" && "${PREFIX: -1}" != / ]] && PREFIX="${PREFIX}/"
+
+STAMP="$(date +%Y%m%d-%H%M%S)"
+ARCHIVE_NAME="${R2_ARCHIVE_NAME:-dockpipe-publish-${STAMP}.tar.gz}"
+TMPDIR="${TMPDIR:-/tmp}"
+WORK="$(mktemp -d "${TMPDIR}/dockpipe-cf-r2publish.XXXXXX")"
+cleanup() { rm -rf "$WORK"; }
+trap cleanup EXIT
+
+KEY="${PREFIX}${ARCHIVE_NAME}"
 
 TERRAFORM_RAN=false
 TF_PIPELINE_HAS_APPLY=0
 
 if should_run_terraform; then
   TF_DIR="$(find_terraform_dir)" || die "Terraform is required for this run but no module directory found. Copy packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/terraform into your project, set R2_TERRAFORM_DIR, or set R2_SKIP_TERRAFORM=1 if the bucket already exists."
-  run_terraform_pipeline "$TF_DIR"
+  run_terraform_pipeline "$TF_DIR" "$WORK/r2-tf-backend.hcl"
   TERRAFORM_RAN=true
 fi
 
-# No tarball upload unless Terraform ran apply (or user forces upload). Default R2_TERRAFORM_COMMANDS is init,apply.
 if [[ "$TERRAFORM_RAN" == true ]] && [[ "$TF_PIPELINE_HAS_APPLY" != "1" ]] && [[ "${R2_PUBLISH_ALWAYS_UPLOAD:-0}" != "1" ]]; then
   echo "${WF_NS}: skipping tarball upload (R2_TERRAFORM_COMMANDS has no apply step; set R2_PUBLISH_ALWAYS_UPLOAD=1 to upload anyway)"
   exit 0
 fi
 
 ARCHIVE_PATH="${WORK}/${ARCHIVE_NAME}"
-# Pack so extracting yields a single top-level directory named like the source folder.
 tar -czf "$ARCHIVE_PATH" -C "$(dirname "$SRC_REL")" "$(basename "$SRC_REL")"
 
 if [[ "${R2_PUBLISH_DRY_RUN:-0}" == "1" ]]; then

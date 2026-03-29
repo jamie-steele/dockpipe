@@ -1,6 +1,7 @@
 package infrastructure
 
 import (
+	"path"
 	"path/filepath"
 	"testing"
 )
@@ -48,6 +49,8 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 
 func TestMapEmbeddedToMaterializedPath(t *testing.T) {
 	t.Parallel()
+	pfx0 := embeddedPackageRootsPrefixes[0]
+	pfx1 := embeddedPackageRootsPrefixes[1]
 	cases := []struct {
 		in, want string
 	}{
@@ -56,13 +59,13 @@ func TestMapEmbeddedToMaterializedPath(t *testing.T) {
 		{EmbeddedTemplatesPrefix, filepath.Join(ShipyardDir, "core")},
 		{EmbeddedTemplatesPrefix + "/runtimes/dockerimage/profile", filepath.Join(ShipyardDir, "core/runtimes/dockerimage/profile")},
 		{EmbeddedTemplatesPrefix + "/workflows/run/config.yml", filepath.Join(ShipyardDir, "workflows", "run", "config.yml")},
-		{"workflows/dockpipe.cloudflare.r2publish/config.yml", filepath.Join(ShipyardDir, "workflows", "dockpipe.cloudflare.r2publish", "config.yml")},
-		{"packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/config.yml", filepath.Join(ShipyardDir, "workflows", "dockpipe.cloudflare.r2publish", "config.yml")},
-		{".staging/packages/ide/resolvers/vscode/config.yml", filepath.Join(ShipyardDir, "workflows", "vscode", "config.yml")},
-		{"packages/pipeon/resolvers/pipeon/config.yml", filepath.Join(ShipyardDir, "workflows", "pipeon", "config.yml")},
-		{"packages/dorkpipe/resolvers/dorkpipe/config.yml", filepath.Join(ShipyardDir, "workflows", "dorkpipe", "config.yml")},
-		{"packages/dorkpipe/resolvers/user-insight-process/config.yml", filepath.Join(ShipyardDir, "workflows", "user-insight-process", "config.yml")},
-		{"packages/dorkpipe/resolvers/dorkpipe-self-analysis/config.yml", filepath.Join(ShipyardDir, "workflows", "dorkpipe-self-analysis", "config.yml")},
+		{path.Join("workflows", "test", "config.yml"), filepath.Join(ShipyardDir, "workflows", "test", "config.yml")},
+		{path.Join(pfx0, "cloud", "storage", "resolvers", "r2", "dockpipe.cloudflare.r2infra", "config.yml"), filepath.Join(ShipyardDir, "workflows", "dockpipe.cloudflare.r2infra", "config.yml")},
+		{path.Join(pfx1, "ide", "resolvers", "vscode", "config.yml"), filepath.Join(ShipyardDir, "workflows", "vscode", "config.yml")},
+		{path.Join(pfx0, "pipeon", "resolvers", "pipeon", "config.yml"), filepath.Join(ShipyardDir, "workflows", "pipeon", "config.yml")},
+		{path.Join(pfx0, "dorkpipe", "resolvers", "dorkpipe", "config.yml"), filepath.Join(ShipyardDir, "workflows", "dorkpipe", "config.yml")},
+		{path.Join(pfx0, "dorkpipe", "resolvers", "user-insight-process", "config.yml"), filepath.Join(ShipyardDir, "workflows", "user-insight-process", "config.yml")},
+		{path.Join(pfx0, "dorkpipe", "resolvers", "dorkpipe-self-analysis", "config.yml"), filepath.Join(ShipyardDir, "workflows", "dorkpipe-self-analysis", "config.yml")},
 		{"workflows", filepath.Join(ShipyardDir, "workflows")},
 		// Already-materialized paths pass through unchanged (bundle cache layout uses ShipyardDir).
 		{filepath.Join(ShipyardDir, "workflows", "init", "config.yml"), filepath.Join(ShipyardDir, "workflows", "init", "config.yml")},

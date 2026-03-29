@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Used by workflows/package-store-infra: compile local package store, pack release/artifacts, print manifest preview.
+# Used by workflows/package-store-infra (same directory as config.yml).
 set -euo pipefail
 
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
@@ -12,15 +12,15 @@ if [[ -x "${ROOT}/src/bin/dockpipe" ]]; then
 fi
 
 OUT="${PACKAGE_STORE_OUT:-${ROOT}/release/artifacts}"
-# r2-publish expects R2_PUBLISH_SOURCE relative to workdir (e.g. release/artifacts).
+# r2-upload expects R2_PUBLISH_SOURCE relative to workdir (e.g. release/artifacts).
 if [[ "$OUT" == "$ROOT"/* ]]; then
   REL_OUT="${OUT#"$ROOT"/}"
 else
   REL_OUT="$OUT"
 fi
 
-# Publish + Terraform hints (workflow vars → env). Canonical state vars: DOCKPIPE_TF_* (terraform-pipeline.sh).
-# Legacy R2_TF_* still accepted by r2publish’s mapper when DOCKPIPE_TF_* is unset.
+# R2 follow-up hints (workflow vars → env). Canonical state: DOCKPIPE_TF_* (terraform-pipeline.sh).
+# Legacy R2_TF_* still accepted by the R2 host script’s Terraform mapper when DOCKPIPE_TF_* is unset.
 R2_PREFIX="${R2_PREFIX:-packages/}"
 [[ -n "$R2_PREFIX" && "${R2_PREFIX: -1}" != / ]] && R2_PREFIX="${R2_PREFIX}/"
 DOCKPIPE_TF_BACKEND="${DOCKPIPE_TF_BACKEND:-${R2_TF_BACKEND:-remote}}"
@@ -32,7 +32,7 @@ echo "[package-store-infra] repo root: ${ROOT}"
 echo "[package-store-infra] CLI: ${BIN}"
 echo "[package-store-infra] planned object key prefix (R2_PREFIX): ${R2_PREFIX}"
 echo "[package-store-infra] Terraform state (DOCKPIPE_TF_*): backend=${DOCKPIPE_TF_BACKEND} bucket=${DOCKPIPE_TF_STATE_BUCKET} key=${DOCKPIPE_TF_STATE_KEY}"
-echo "[package-store-infra] R2_SKIP_TERRAFORM=${R2_SKIP_TERRAFORM} (r2publish: 1 skips Terraform if bucket already exists; import if TF tracks resources)"
+echo "[package-store-infra] R2_SKIP_TERRAFORM=${R2_SKIP_TERRAFORM} (for env hints; use dockpipe.cloudflare.r2upload to skip Terraform)"
 echo "[package-store-infra] (1/2) dockpipe build — core, resolver packages, workflow packages → .dockpipe/internal/packages/"
 "$BIN" build
 
@@ -55,9 +55,10 @@ if [[ -f "${OUT}/packages-store-manifest.json" ]]; then
   echo ""
 fi
 
-echo "[package-store-infra] Next: publish ${OUT} (same vars as above; credentials from vault / env):"
-echo "  R2_PUBLISH_SOURCE=\"${REL_OUT}\" R2_PREFIX=\"${R2_PREFIX}\" \\"
-echo "  DOCKPIPE_TF_BACKEND=\"${DOCKPIPE_TF_BACKEND}\" DOCKPIPE_TF_STATE_BUCKET=\"${DOCKPIPE_TF_STATE_BUCKET}\" \\"
-echo "  DOCKPIPE_TF_STATE_KEY=\"${DOCKPIPE_TF_STATE_KEY}\" R2_SKIP_TERRAFORM=\"${R2_SKIP_TERRAFORM}\" \\"
-echo "  ${BIN} --workflow dockpipe.cloudflare.r2publish --workdir \"${ROOT}\" --"
+echo "[package-store-infra] Next — two steps (same DOCKPIPE_TF_* / R2_* from workflow vars or env; vault injects secrets):"
+echo "  1) Infra (Terraform; no release/artifacts needed):"
+echo "    ${BIN} --workflow dockpipe.cloudflare.r2infra --workdir \"${ROOT}\""
+echo "  2) Upload tarball (bucket must exist):"
+echo "    R2_PUBLISH_SOURCE=\"${REL_OUT}\" R2_PREFIX=\"${R2_PREFIX}\" \\"
+echo "    ${BIN} --workflow dockpipe.cloudflare.r2upload --workdir \"${ROOT}\""
 echo "[package-store-infra] State credentials: DOCKPIPE_TF_STATE_ACCESS_KEY_ID/SECRET, R2_STATE_*, or AWS_* (see terraform-pipeline.sh). Dry-run: R2_PUBLISH_DRY_RUN=1. Skip vault: DOCKPIPE_OP_INJECT=0 or --no-op-inject."

@@ -166,7 +166,7 @@ Resolution:
   • --url <URL>     Download this tarball (.tar.gz). Optional .sha256 sibling.
   • Otherwise       DOCKPIPE_INSTALL_BASE_URL or --base-url is required.
   • --version latest (default)  GET <base>/install-manifest.json (override name with
-                    DOCKPIPE_INSTALL_MANIFEST or --manifest) and use packages.core.
+                    DOCKPIPE_INSTALL_MANIFEST or --manifest) and use the core tarball entry.
   • --version X.Y.Z            GET <base>/templates-core-X.Y.Z.tar.gz (+ optional .sha256).
 
 Environment:
@@ -191,11 +191,13 @@ Options:
   --dry-run          Print what would be fetched; do not write files.
 
 Manifest JSON (install-manifest.json):
-  {"schema":1,"packages":{"core":{"tarball":"templates-core-0.6.0.tar.gz","sha256":"<hex>"}}}
+  Wire shape is JSON with a top-level map of component keys; the core entry must list
+  templates-core-*.tar.gz and optional sha256 (see release/artifacts/install-manifest.json).
 
 Package the archive from a dockpipe checkout:
   bash release/packaging/package-templates-core.sh
 
-Upload with dockpipe --workflow dockpipe.cloudflare.r2publish or aws s3 cp to the same base URL.
+Upload published artifacts to your HTTPS origin (same layout as release/artifacts/), e.g. with
+  aws s3 cp or your CI — not part of this command.
 
 `

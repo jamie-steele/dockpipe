@@ -52,6 +52,9 @@ Thumbs.db
 # SR&ED evidence and timekeeping (local only; see .local/sred/README.md)
 .local/sred/
 
+# Accidental shell redirect (`> -`) creates this filename — never commit
+/-
+
 # Optional local overrides (do not commit)
 .env
 .env.local

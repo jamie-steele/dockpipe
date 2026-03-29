@@ -1,0 +1,20 @@
+# Objects only: tar R2_PUBLISH_SOURCE and upload — skip Terraform (bucket must already exist).
+# Same credentials as r2publish; sets R2_SKIP_TERRAFORM=1.
+#
+# Run after dockpipe.cloudflare.r2infra (or if the bucket already exists).
+name: dockpipe.cloudflare.r2upload
+namespace: dockpipe-cloudflare
+description: >-
+  Host-only: compress release/artifacts (or R2_PUBLISH_SOURCE) and upload to R2. Skips Terraform.
+
+docker_preflight: false
+
+vars:
+  R2_PUBLISH_SOURCE: "release/artifacts"
+  R2_SKIP_TERRAFORM: "1"
+
+steps:
+  - id: upload
+    skip_container: true
+    run:
+      - scripts/dockpipe/r2-publish.sh

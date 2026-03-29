@@ -15,4 +15,6 @@ Optional:
 
 ## Next step
 
-Publish the folder (or a tarball of it) to your static origin, then point installs at that base URL. In this repo the packaged R2 flow is **`dockpipe.cloudflare.r2publish`** (see `packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/README.md`).
+Upload in two steps: **`dockpipe.cloudflare.r2infra`** (Terraform) then **`dockpipe.cloudflare.r2upload`** (objects). See `packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/README.md` (Terraform module path keeps the historical folder name).
+
+Host script for this workflow: **`workflows/package-store-infra/package-store-setup.sh`** (next to **`config.yml`** — not under repo-root **`scripts/dockpipe/`**).

@@ -8,11 +8,9 @@
 # Produces: release/artifacts/dockpipe-*.tar.gz, packages-store-manifest.json (override with PACKAGE_STORE_OUT).
 # Requires: prior `make build` if you rely on ./src/bin/dockpipe; script prefers that launcher when present.
 #
-# R2 follow-up (dockpipe.cloudflare.r2publish): set vars here or override with --var.
+# R2 follow-up (dockpipe.cloudflare.r2infra + r2upload): set vars here or override with --var.
 # R2_PREFIX: object key prefix under the publish bucket (e.g. packages/).
-# Terraform remote state: use DOCKPIPE_TF_* (see src/core/assets/scripts/terraform-pipeline.sh) — not R2-specific;
-# map legacy R2_TF_* into the same names in r2publish. Credentials: DOCKPIPE_TF_STATE_*_KEY or AWS_* / R2_STATE_*.
-# Skip TF in r2publish (existing bucket, etc.): R2_SKIP_TERRAFORM=1 — see r2publish README.
+# Remote state: DOCKPIPE_TF_* (terraform-pipeline.sh). Credentials: DOCKPIPE_TF_STATE_*_KEY or AWS_* / R2_STATE_*.
 name: package-store-infra
 description: >-
   Build the local package store (dockpipe build), pack store tarballs + packages-store-manifest.json
@@ -37,4 +35,4 @@ steps:
   - id: build_and_pack
     skip_container: true
     run:
-      - scripts/dockpipe/package-store-setup.sh
+      - package-store-setup.sh

@@ -19,7 +19,7 @@ const bundledFormatVersion = "110"
 var bundledMu sync.Mutex
 
 // EmbeddedWorkflowConfigExists reports whether a bundled workflow or resolver-delegate config exists for name.
-// Checks embed paths src/core/workflows/<name>/config.yml and nested src/core/workflows/**/<name>/config.yml, src/core/resolvers/<name>/config.yml (plus workflows/ and embedded packages/**).
+// Checks embed paths src/core/workflows/<name>/config.yml and nested src/core/workflows/**/<name>/config.yml, src/core/resolvers/<name>/config.yml (plus workflows/ and embedded maintainer roots — see embeddedPackageRootsPrefixes).
 func EmbeddedWorkflowConfigExists(name string) bool {
 	if name == "" {
 		return false
@@ -235,7 +235,7 @@ func initStagingEmbedRoots() {
 	})
 }
 
-// mapEmbeddedStagingWorkflowRel maps embedded packages/** and .staging/packages/** to shipyard/workflows/<workflow>/… using
+// mapEmbeddedStagingWorkflowRel maps paths under embeddedPackageRootsPrefixes to shipyard/workflows/<workflow>/… using
 // discovered config.yml / profile roots (namespace nesting of any depth).
 func mapEmbeddedStagingWorkflowRel(rel string) (string, bool) {
 	for _, pfx := range embeddedPackageRootsPrefixes {

@@ -22,7 +22,7 @@ import (
 // DefaultManifestFile is fetched from the install base URL when version is "latest".
 const DefaultManifestFile = "install-manifest.json"
 
-// CorePackageKey is the manifest.packages key for templates/core archives.
+// CorePackageKey is the manifest entry name for templates/core archives (JSON field name in install-manifest.json).
 const CorePackageKey = "core"
 
 // TemplatesCoreTarballPrefix is the filename prefix for version-pinned tarballs: templates-core-<ver>.tar.gz
@@ -152,7 +152,7 @@ func describeDryRunCoreInstall(o CoreOptions, wd, manifestName, ver string) (str
 	}
 	if ver == "latest" {
 		fmt.Fprintf(&b, "[dockpipe] install dry-run: would GET %s/%s\n", base, manifestName)
-		fmt.Fprintf(&b, "[dockpipe] install dry-run: then fetch packages.core.tarball and verify sha256 when present\n")
+		fmt.Fprintf(&b, "[dockpipe] install dry-run: then fetch the core tarball from the manifest and verify sha256 when present\n")
 	} else {
 		tb := base + "/" + TemplatesCoreTarballPrefix + ver + templatesCoreTarballSuffix
 		fmt.Fprintf(&b, "[dockpipe] install dry-run: would fetch %s\n", tb)
@@ -260,7 +260,7 @@ func parseManifestCore(raw []byte, base string) (tarballURL, sha256hex string, e
 	}
 	p, ok := m.Packages[CorePackageKey]
 	if !ok || strings.TrimSpace(p.Tarball) == "" {
-		return "", "", fmt.Errorf("manifest missing packages.%s.tarball", CorePackageKey)
+		return "", "", fmt.Errorf("manifest missing tarball for %q", CorePackageKey)
 	}
 	tb := strings.TrimSpace(p.Tarball)
 	if u, err := url.Parse(tb); err == nil && u.Scheme != "" && u.Host != "" {

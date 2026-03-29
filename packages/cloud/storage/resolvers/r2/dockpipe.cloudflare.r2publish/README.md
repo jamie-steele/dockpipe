@@ -1,12 +1,19 @@
-# dockpipe.cloudflare.r2publish
+# Cloudflare R2 — Terraform module + `r2-publish.sh`
 
-**Workflow id** (also the `name:` in `config.yml`): dotted namespace **`dockpipe.cloudflare.r2publish`**. The host script remains **`scripts/dockpipe/r2-publish.sh`**.
+This folder keeps the **Terraform module** under **`terraform/`** (paths and state keys still use the historical name **`dockpipe.cloudflare.r2publish`**). The host script is **`scripts/dockpipe/r2-publish.sh`**.
+
+**Infra and object upload are separate workflows** (same script, different env):
+
+| Workflow | What runs |
+|----------|-------------|
+| **`dockpipe.cloudflare.r2infra`** | Terraform only — **`R2_INFRA_ONLY=1`**. No tarball, no upload; does not require **`release/artifacts`**. |
+| **`dockpipe.cloudflare.r2upload`** | Tar **`R2_PUBLISH_SOURCE`** and upload — **`R2_SKIP_TERRAFORM=1`**. Run after **`r2infra`** (or when the bucket already exists). |
+
+Typical order: **`r2infra`** → build/pack (**`package-store-infra`**, etc.) → **`r2upload`**.
 
 ### Design mock (pipeline shape)
 
-**`config.design-mock.yml`** shows a **multi-step** pipeline next to the **single-flow** `config.yml` you run today. **Packaged** composition uses the same **`runtime` / `resolver` / `package`** spine as ordinary steps: **`runtime: package`** with **`resolver:`** = nested workflow name and **`package:`** = namespace (must match **`namespace:`** in the child’s `config.yml`) — see **`docs/architecture-model.md`** (“Workflows and packaged workflows”). That nesting path is **implemented** for on-disk workflows (including **`.staging/workflows/`** in this repo). **Tarball-only** resolution and richer per-step overrides of the child’s profiles are still evolving. Cloud/Kubernetes work is **`cli`** (or **`dockerimage`** / **`dockerfile`**) plus resolvers and scripts — see **`docs/capabilities.md`** and **`src/core/runtimes/README.md`**.
-
-Host workflow: **tar.gz** a local folder (default **`./release/artifacts`**, gitignored) and upload to **Cloudflare R2**.
+**`config.design-mock.yml`** shows **multi-step** packaging (`runtime: package` + nested workflow). See **`docs/architecture-model.md`**.
 
 ## Two ways to authenticate
 
@@ -35,7 +42,7 @@ See [Cloudflare R2 — AWS CLI](https://developers.cloudflare.com/r2/examples/aw
 
 ### Single-token mode (Terraform + Wrangler)
 
-- **Terraform** (`terraform` on `PATH`) — runs **`workflows/dockpipe.cloudflare.r2publish/terraform`** (or `R2_TERRAFORM_DIR`) before upload
+- **Terraform** (`terraform` on `PATH`) — module at **`…/dockpipe.cloudflare.r2publish/terraform`** (or `R2_TERRAFORM_DIR`); use workflow **`dockpipe.cloudflare.r2infra`**
 - **Wrangler** — either `wrangler` on `PATH`, or **Node.js** (`npx` runs `wrangler@3`)
 - **API token** with at least **Account → R2 → Edit** (bucket + objects). If Terraform also creates a **custom domain**, **WAF**, or **cache rules**, the token needs **zone** permissions for that hostname’s zone — see **`terraform/README.md`**. See [R2 API tokens](https://developers.cloudflare.com/r2/api/tokens/).
 - **R2 API keys for Terraform state** — scoped to the **`dockpipe`** bucket (Object Read & Write). Set **`R2_STATE_ACCESS_KEY_ID`** / **`R2_STATE_SECRET_ACCESS_KEY`**, or use the same **`AWS_*`** pair if it already targets that bucket. Use **`R2_TF_BACKEND=local`** to keep state only on disk (no keys).
@@ -44,7 +51,16 @@ Terraform module: [Cloudflare provider + R2](https://developers.cloudflare.com/r
 
 ## Run (this repo)
 
-### S3 keys
+### 1) Terraform only (API token mode)
+
+```bash
+export R2_BUCKET=your-bucket
+export CLOUDFLARE_ACCOUNT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+export CLOUDFLARE_API_TOKEN=...
+./src/bin/dockpipe --workflow dockpipe.cloudflare.r2infra
+```
+
+### 2) Upload tarball only (S3 keys — bucket must exist)
 
 ```bash
 make build   # if needed
@@ -52,22 +68,22 @@ export R2_BUCKET=your-bucket
 export CLOUDFLARE_ACCOUNT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
-./src/bin/dockpipe --workflow dockpipe.cloudflare.r2publish --workdir . --
+./src/bin/dockpipe --workflow dockpipe.cloudflare.r2upload
 ```
 
-### Single Cloudflare API token — bucket + upload
+### 2) Upload only (API token + Wrangler)
 
 ```bash
 export R2_BUCKET=your-bucket
 export CLOUDFLARE_ACCOUNT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 export CLOUDFLARE_API_TOKEN=...
-./src/bin/dockpipe --workflow dockpipe.cloudflare.r2publish --workdir . --
+./src/bin/dockpipe --workflow dockpipe.cloudflare.r2upload
 ```
 
-Dry run (no Terraform apply, no upload):
+Dry run upload (no object put):
 
 ```bash
-R2_PUBLISH_DRY_RUN=1 ./src/bin/dockpipe --workflow dockpipe.cloudflare.r2publish --workdir . --
+R2_PUBLISH_DRY_RUN=1 ./src/bin/dockpipe --workflow dockpipe.cloudflare.r2upload
 ```
 
 ## Environment variables
@@ -81,7 +97,7 @@ R2_PUBLISH_DRY_RUN=1 ./src/bin/dockpipe --workflow dockpipe.cloudflare.r2publish
 | `R2_CONTENT_TYPE` | `application/gzip` | Wrangler object `Content-Type` (token mode). |
 | `R2_TERRAFORM_DIR` | *(auto)* | Path to Terraform module (default: `workflows/dockpipe.cloudflare.r2publish/terraform` or `templates/dockpipe.cloudflare.r2publish/terraform` under workdir; legacy `templates/r2-publish/terraform` still searched). |
 | `R2_TF_LOCATION` | *(omit)* | Optional `location` for `cloudflare_r2_bucket` (e.g. `WEUR`). |
-| `R2_SKIP_TERRAFORM` | `0` | Set to `1` to skip `terraform apply` (bucket must already exist). |
+| `R2_SKIP_TERRAFORM` | `0` | Set to `1` to skip Terraform ( **`dockpipe.cloudflare.r2upload`** sets this). |
 | `R2_USE_TERRAFORM` | *(see below)* | `1` to always run Terraform; `0` to never run. |
 | `R2_PUBLISH_DRY_RUN` | `0` | Set to `1` to print only what would run. |
 | `R2_TF_BACKEND` | `remote` | `remote` — state in R2 (`dockpipe` / `state/dockpipe.cloudflare.r2publish/terraform.tfstate` by default). `local` — `terraform init -backend=false` (no R2 keys). |
@@ -110,20 +126,15 @@ Implementation is the shared library **`templates/core/assets/scripts/terraform-
 
 If `apply` is **not** in `R2_TERRAFORM_COMMANDS`, the script **skips** creating the tarball and uploading (unless `R2_PUBLISH_ALWAYS_UPLOAD=1`).
 
-**Examples (with `dockpipe --workflow dockpipe.cloudflare.r2publish --workdir . --`):**
+**Examples (Terraform via `dockpipe.cloudflare.r2infra`):**
 
 ```bash
-# Plan only (init auto-prepended): no upload
+# Plan only (init auto-prepended)
 export R2_TERRAFORM_COMMANDS=plan
-./src/bin/dockpipe --workflow dockpipe.cloudflare.r2publish --workdir . --
+./src/bin/dockpipe --workflow dockpipe.cloudflare.r2infra
 
-# Init + plan, explicit
-export R2_TERRAFORM_COMMANDS=init,plan
-./src/bin/dockpipe --workflow dockpipe.cloudflare.r2publish --workdir . --
-
-# Same as historical default: init, apply, then upload
-export R2_TERRAFORM_COMMANDS=init,apply
-./src/bin/dockpipe --workflow dockpipe.cloudflare.r2publish --workdir . --
+# Init + apply (default commands)
+./src/bin/dockpipe --workflow dockpipe.cloudflare.r2infra
 ```
 
 ### Terraform: public hostname, WAF, CDN (optional)

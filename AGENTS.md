@@ -20,6 +20,18 @@ Everything else is built around this.
 
 ---
 
+## Engine boundary (STRICT — read this)
+
+**`src/lib/`** and **`src/cmd/`** are the **engine**. They must **not** carry **knowledge of** what lives in **`packages/`**, repo-root **`workflows/`**, or **`.staging/workflows/`** — no hardcoded paths into those trees, no maintainer-specific workflow or resolver names in user-facing strings, tests, or control flow, and no “the way to do X is workflow `foo` under `packages/…`” in **`src/`**.
+
+Treat **`packages/`**, **`workflows/`**, and **`.staging/workflows/`** as **separate products** (as if each were its **own repository**): they ship **YAML + assets** and are consumed only through **compile** → **`.dockpipe/internal/packages/`**, **HTTPS/package-store** tarballs, **embed** (repo-root **`embed.go`** is the **single** build-time list of embed roots — not duplicated as ad-hoc strings across **`src/`**), and **declarative** fields the runner already implements. **Outside** trees **touch** the engine through **compiled materialization** and **public CLI behavior** — not through Go code that imports their layout.
+
+**Allowed in `src/`:** generic resolution (workflow name → config, resolver name → profile, logical `scripts/…` → on-disk path), **`.dockpipe/internal/packages/…`**, manifest/install **wire** shapes, and **one** indirection for embed roots (see **`embedded_fs.go`** / **`embeddedPackageRootsPrefixes`**).
+
+**Forbidden in `src/`:** repository-relative paths like **`packages/<group>/…`**, pointers to specific dogfood workflows as **the** documented path for a task, or anything that makes downstream **`dockpipe`** depend on **this** checkout’s tree shape. Put repository-specific procedures in **`docs/`** and package READMEs.
+
+---
+
 ## Architecture model (STRICT)
 
 There are four core concepts:
@@ -174,7 +186,7 @@ If something cannot be done:
 
 ## Internal workflows (this repository)
 
-When you work **on the dockpipe project itself**, you are a **user** of the tool: extend it via **`src/core/workflows/`** (bundled examples), **`scripts/`**, and repo-root **`workflows/`** — **not** by stuffing internal pipelines into **`src/core/workflows/`**.
+When you work **on the dockpipe project itself**, you are a **user** of the tool: extend it via **`src/core/workflows/`** (bundled examples) and repo-root **`workflows/`** — **not** by stuffing internal pipelines into **`src/core/workflows/`**. First-party workflow scripts belong **beside** that workflow’s **`config.yml`** (e.g. **`workflows/<name>/helper.sh`**) — **do not** add repo-root **`scripts/dockpipe/…`** for one-off flows; logical **`scripts/dockpipe/…`** resolves to **compiled** resolver assets under **`.dockpipe/internal/packages/`** (see **`paths.go`**), and a duplicate directory at the repo root **shadows** the wrong file.
 
 | Location | Purpose |
 |----------|---------|
@@ -192,7 +204,11 @@ When you work **on the dockpipe project itself**, you are a **user** of the tool
 
 **Self-contained:** Packages are **YAML + assets + resolver/runtime wiring** resolved by the existing CLI; they **cannot** inject new engine primitives without a **separate** core change.
 
-**Accelerator (maintainers):** After **`make build`**, run workflows the same way as downstream: **`./src/bin/dockpipe --workflow <name> --workdir . --`** (e.g. **`dorkpipe-self-analysis`**, **`dorkpipe-self-analysis-host`**, **`dorkpipe-self-analysis-stack`**) with packages compiled into **`.dockpipe/`** as usual. See the **`dorkpipe`** maintainer package **`README.md`** (resolver **`dorkpipe-self-analysis`**).
+**`src/` vs standalone trees (`packages/`, `workflows/`, `.staging/workflows/`):** Same rule as **Engine boundary** above: the engine does **not** mirror those directories in code. **`packages/`** is **standalone** authoring (per-package **`package.yml`**, resolvers, workflows, assets); repo-root **`workflows/`** and **`.staging/workflows/`** are **dogfood / maintainer** trees. All three interact with **`dockpipe`** only through **compile**, **store**, **embed**, and **declared** YAML — never through **`src/`** hardcoding their paths or names. Runtime resolution uses **`.dockpipe/internal/packages/`** and compile roots per **`docs/package-model.md`**.
+
+**Secrets / vault templates:** Template files must contain **references only** (e.g. **`op://…`**), never committed plaintext secrets. Keep local templates gitignored when they name private vaults. **Never** use shell redirects like **`> -`** (that creates a file named **`-`**). **`op inject`** output for workflow env is read into **process memory** in the CLI — no second “resolved template” file is written by DockPipe for that merge.
+
+**Accelerator (maintainers):** After **`make build`**, run dogfood workflows the same way as any downstream project: **`./src/bin/dockpipe --workflow <name> --workdir . --`** with materialized packages under **`.dockpipe/`**. Names and procedures live in **`docs/`** and maintainer package READMEs — not in **`src/`**.
 
 ### Agent guidance (this repository)
 
@@ -230,6 +246,7 @@ DO NOT:
 - introduce vendor-specific logic into core
 - turn this into a workflow engine
 - add orchestration complexity to core
+- put **`packages/`**, **`workflows/`**, or **`.staging/workflows/`** paths, or maintainer-only workflow/resolver **names**, into **`src/lib/`** or **`src/cmd/`** (see **Engine boundary**)
 
 ---
 

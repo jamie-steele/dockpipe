@@ -33,11 +33,11 @@ func TestTemplateBuild(t *testing.T) {
 			switch tc.name {
 			case "vscode":
 				if errStagingIDE != nil {
-					t.Skip("no third-party .staging/packages/ide in checkout")
+					t.Skip("no third-party staging IDE slice in checkout")
 				}
 			case "agent-dev", "claude", "codex", "ollama":
 				if errStagingAgent != nil {
-					t.Skip("no third-party .staging/packages/agent in checkout")
+					t.Skip("no third-party staging agent slice in checkout")
 				}
 			}
 			img, dir, ok := TemplateBuild(repoRoot, tc.name)
