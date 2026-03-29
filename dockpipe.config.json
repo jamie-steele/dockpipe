@@ -11,7 +11,7 @@
     "namespace": "dockpipeproject"
   },
   "secrets": {
-    "vault_template": ".env.vault.template",
-    "notes": "Optional: vault env template (op:// lines when using vault: op — op inject today). Same file can be listed as op_inject_template for older configs. Bundled secretstore dotenv: src/core/workflows/secretstore/."
+    "vault_template": ".env.op.template",
+    "notes": "Optional: op inject env file (op:// lines). vault_template can be .env.op.template or .env.vault.template."
   }
 }

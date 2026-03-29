@@ -7,6 +7,12 @@
 #
 # Produces: release/artifacts/dockpipe-*.tar.gz, packages-store-manifest.json (override with PACKAGE_STORE_OUT).
 # Requires: prior `make build` if you rely on ./src/bin/dockpipe; script prefers that launcher when present.
+#
+# R2 follow-up (dockpipe.cloudflare.r2publish): set vars here or override with --var.
+# R2_PREFIX: object key prefix under the publish bucket (e.g. packages/).
+# Terraform remote state: use DOCKPIPE_TF_* (see src/core/assets/scripts/terraform-pipeline.sh) — not R2-specific;
+# map legacy R2_TF_* into the same names in r2publish. Credentials: DOCKPIPE_TF_STATE_*_KEY or AWS_* / R2_STATE_*.
+# Skip TF in r2publish (existing bucket, etc.): R2_SKIP_TERRAFORM=1 — see r2publish README.
 name: package-store-infra
 description: >-
   Build the local package store (dockpipe build), pack store tarballs + packages-store-manifest.json
@@ -15,11 +21,19 @@ description: >-
 docker_preflight: false
 # Substrate is per-step (runtime / resolver / skip_container), not a single workflow-level runtime.
 # This workflow is host-only; add runtime: on a step when that step uses a container or package runtime.
-# Merge repo secrets.vault_template via op inject before steps (copy .env.vault.template.example → .env.vault.template).
+# Merge repo secrets.vault_template via op inject before steps (see dockpipe.config.json; e.g. .env.op.template).
 vault: 1password
 
 vars:
   PACKAGE_STORE_OUT: "release/artifacts"
+  # Publish step: object key prefix under R2_BUCKET (r2publish).
+  R2_PREFIX: "packages/"
+  # Remote state for r2publish’s Terraform (S3-compatible backend; pipeline writes backend HCL — see terraform-pipeline.sh).
+  DOCKPIPE_TF_BACKEND: "remote"
+  DOCKPIPE_TF_STATE_BUCKET: "dockpipe"
+  DOCKPIPE_TF_STATE_KEY: "state/terraform.tfstate"
+  # r2publish only: 1 skips Terraform (e.g. bucket already exists).
+  R2_SKIP_TERRAFORM: "0"
 
 steps:
   - id: build_and_pack
