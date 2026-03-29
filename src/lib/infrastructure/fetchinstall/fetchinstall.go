@@ -491,7 +491,12 @@ func verifyExtractedTreeMatchesTarGz(gz []byte, destCore string) error {
 }
 
 func fsFileMode(m int64) os.FileMode {
-	mode := os.FileMode(m) & 0o777
+	if m < 0 {
+		return 0o644
+	}
+	// Tar mode may include type bits; keep permission bits only (bounded for G115).
+	perm := m & 0o777
+	mode := os.FileMode(perm) & 0o777
 	if mode == 0 {
 		return 0o644
 	}
