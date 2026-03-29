@@ -8,7 +8,8 @@
 
 | Script | Type | What it does |
 |--------|------|--------------|
-| **`terraform-pipeline.sh`** | library | **Source** (not execute): `dockpipe_tf_run_pipeline` — see **Terraform** below. |
+| **`terraform-pipeline.sh` / `terraform-run.sh`** | (moved) | **Provider-agnostic Terraform** ships with **`packages/terraform/resolvers/terraform-core/`** (`dockpipe.terraform.core`), not this folder. Workflow YAML still uses **`scripts/core.assets.scripts.terraform-run.sh`** — resolution finds the package first. |
+| **`packages/cloud/storage/.../terraform-cloudflare-r2-run.sh`** | host | Cloudflare R2 + bundled r2publish module: **`scripts/dockpipe.cloudflare.r2publish/terraform-cloudflare-r2-run.sh`**. Used by **`dockpipe.cloudflare.r2infra`** and **`r2-publish.sh`** (not **`terraform-run.sh`**). |
 | `clone-worktree.sh` | pre | Create worktree and export `DOCKPIPE_WORKDIR` + `DOCKPIPE_COMMIT_ON_HOST`. If `DOCKPIPE_USER_REPO_ROOT` is set (same `origin` as `DOCKPIPE_REPO_URL`), uses **`git worktree add` from that checkout** (new branch from **your current HEAD**). Uncommitted work is **copied** into the worktree (`git diff` + apply + untracked files); your main checkout is unchanged. **Gitignored** local files can be listed in **`.dockpipe-worktreeinclude`** or **`.worktreeinclude`** (see **[docs/worktree-include.md](../../../docs/worktree-include.md)**). Set `DOCKPIPE_STASH_UNCOMMITTED=1` for the **git stash** flow instead. Otherwise clones/fetches into `DOCKPIPE_DATA_DIR` and bases the worktree on **origin/HEAD** (mirror mode). |
 | `commit-worktree.sh` | action | Triggers commit-on-host after container exit (commit runs on host). |
 | `export-patch.sh` | action | Write uncommitted changes to a patch file. |
@@ -25,7 +26,11 @@ Use with `--run scripts/clone-worktree.sh`, `--act scripts/commit-worktree.sh`, 
 **Source** from a workflow script (example):
 
 ```bash
-for candidate in "$ROOT/templates/core/assets/scripts/terraform-pipeline.sh" "$ROOT/src/core/assets/scripts/terraform-pipeline.sh"; do
+for candidate in \
+  "$ROOT/packages/terraform/resolvers/terraform-core/assets/scripts/terraform-pipeline.sh" \
+  "$ROOT/templates/core/assets/scripts/terraform-pipeline.sh" \
+  "$ROOT/src/core/assets/scripts/terraform-pipeline.sh"
+do
   [[ -f "$candidate" ]] && { source "$candidate"; break; }
 done
 ```
@@ -37,6 +42,8 @@ done
 | `DOCKPIPE_TF_COMMANDS` | Comma-separated: `init`, `plan`, `apply`, `validate`, `fmt`, `import`. |
 | `DOCKPIPE_TF_SKIP_INIT` | `1` skips auto-`init`. |
 | `DOCKPIPE_TF_BACKEND` | `local` or `remote` (R2/S3-style state). |
+| `DOCKPIPE_TF_REMOTE_BACKEND_FILE` | If set, `terraform init` uses this file as `-backend-config=` (skip generated R2 `backend` block). |
+| `dockpipe_tf_map_generic_env` (function) | Call after sourcing the library for **`dockpipe.terraform.core`**: default `DOCKPIPE_TF_COMMANDS=plan`, `DOCKPIPE_TF_BACKEND=local`. |
 | `DOCKPIPE_TF_STATE_BUCKET` / `DOCKPIPE_TF_STATE_KEY` | Remote state object. |
 | `DOCKPIPE_TF_STATE_ACCESS_KEY_ID` / `DOCKPIPE_TF_STATE_SECRET_ACCESS_KEY` | State credentials. |
 | `DOCKPIPE_TF_CLOUDFLARE_ACCOUNT_ID` | R2 endpoint in generated backend HCL. |

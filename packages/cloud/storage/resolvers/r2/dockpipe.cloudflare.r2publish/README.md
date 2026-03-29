@@ -1,12 +1,12 @@
 # Cloudflare R2 — Terraform module + `r2-publish.sh`
 
-This folder keeps the **Terraform module** under **`terraform/`** (paths and state keys still use the historical name **`dockpipe.cloudflare.r2publish`**). The host script is **`scripts/dockpipe/r2-publish.sh`**.
+This folder keeps the **Terraform module** under **`terraform/`** (paths and state keys still use the historical name **`dockpipe.cloudflare.r2publish`**). **Cloudflare/R2 Terraform host:** **`assets/scripts/terraform-cloudflare-r2-run.sh`** (resolved by **`scripts/dockpipe.cloudflare.r2publish/terraform-cloudflare-r2-run.sh`** in workflow YAML). **Tar + upload:** **`scripts/dockpipe/r2-publish.sh`**. Provider-agnostic Terraform is **`packages/terraform/resolvers/terraform-core/assets/scripts/terraform-run.sh`** (**`dockpipe.terraform.core`** only; **`scripts/core.assets.scripts.terraform-run.sh`** resolves there).
 
 **Infra and object upload are separate workflows** (same script, different env):
 
 | Workflow | What runs |
 |----------|-------------|
-| **`dockpipe.cloudflare.r2infra`** | Terraform only — **`R2_INFRA_ONLY=1`**. No tarball, no upload; does not require **`release/artifacts`**. |
+| **`dockpipe.cloudflare.r2infra`** | Terraform only via **`scripts/dockpipe.cloudflare.r2publish/terraform-cloudflare-r2-run.sh`** (Cloudflare/R2 host; **`r2-publish.sh`** resolves the same script). No tarball, no upload; does not require **`release/artifacts`**. |
 | **`dockpipe.cloudflare.r2upload`** | Tar **`R2_PUBLISH_SOURCE`** and upload — **`R2_SKIP_TERRAFORM=1`**. Run after **`r2infra`** (or when the bucket already exists). |
 
 Typical order: **`r2infra`** (or **`package-store-infra`** with nested r2infra + shared vars) → **`dockpipe package build store`** when you need store tarballs → **`r2upload`**.
@@ -118,7 +118,7 @@ R2_PUBLISH_DRY_RUN=1 ./src/bin/dockpipe --workflow dockpipe.cloudflare.r2upload
 
 Use **`--workdir /path/to/project`** when the shell is not already in that directory (CI, scripts, **`make`**). Also **`--tf-dry-run`**, **`--tf-no-auto-approve`**, and **`--tf=plan`**. Standalone helper: **`dockpipe terraform plan`** (see **`dockpipe terraform --help`**). Workflows that never source **`terraform-pipeline.sh`** ignore these env vars.
 
-Implementation is the shared library **`templates/core/assets/scripts/terraform-pipeline.sh`** (bundled with **`dockpipe init`**), mapped from the **`R2_*`** names below. The canonical env namespace is **`DOCKPIPE_TF_*`** — see **[docs/terraform-pipeline.md](../../../docs/terraform-pipeline.md)** for the full list (including **`validate`**, **`fmt`**, **`import`**, **`DOCKPIPE_TF_WORKSPACE`**, and import file format).
+Implementation is the shared library **`packages/terraform/resolvers/terraform-core/assets/scripts/terraform-pipeline.sh`** (or **`templates/core/...`** after a copy), mapped from the **`R2_*`** names below. The canonical env namespace is **`DOCKPIPE_TF_*`** — full list in **`src/core/assets/scripts/README.md`** (terraform section) and **`packages/terraform/resolvers/terraform-core/README.md`** (including **`validate`**, **`fmt`**, **`import`**, **`DOCKPIPE_TF_WORKSPACE`**, and import file format).
 
 | Variable | Default | Meaning |
 |----------|---------|---------|

@@ -170,4 +170,4 @@ The Go type **`domain.PackageManifest`** parses these keys; see **`src/lib/domai
 
 When fully wired end-to-end, workflow name resolution will **prefer** project **`workflows/`**, then **installed** **`.dockpipe/internal/packages/workflows/`**, then legacy **`templates/`** paths and the embedded bundle — same four concepts (**workflow**, **runtime**, **resolver**, **strategy**), extended by **packages** from the store.
 
-See also **[architecture-model.md](architecture-model.md)** and **[cli-reference.md](cli-reference.md)** (`dockpipe package`, `dockpipe install`).
+See also **[architecture-model.md](architecture-model.md)** and **[cli-reference.md](cli-reference.md)** (`dockpipe package`, `dockpipe install`). For **core vs optional packages** and an untethering roadmap (slim core, explicit `depends`), see **[core-vs-packages-audit.md](core-vs-packages-audit.md)**.

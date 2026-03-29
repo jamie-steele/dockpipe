@@ -30,9 +30,10 @@ Flags (for run / shorthand):
   --dry-run           Set DOCKPIPE_TF_DRY_RUN=1 (print pipeline steps only)
   --no-auto-approve   Set DOCKPIPE_TF_APPLY_AUTO_APPROVE=0 for apply (interactive confirm)
 
-pipeline-path prints the absolute path to terraform-pipeline.sh (core assets).
+pipeline-path prints the absolute path to terraform-pipeline.sh (dockpipe.terraform.core package).
 
-See src/core/assets/scripts/README.md (terraform-pipeline.sh) and
+See src/core/assets/scripts/README.md (DOCKPIPE_TF_* reference),
+packages/terraform/resolvers/terraform-core/README.md (workflow dockpipe.terraform.core), and
 packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/README.md.
 
 `

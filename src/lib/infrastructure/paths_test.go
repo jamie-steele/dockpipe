@@ -121,6 +121,36 @@ func TestResolveWorkflowScriptResolvesScriptsDockpipeToPackagesResolver(t *testi
 	}
 }
 
+func TestResolveWorkflowScriptResolvesCoreTerraformRun(t *testing.T) {
+	repo := t.TempDir()
+	p := filepath.Join(repo, "packages", "terraform", "resolvers", "terraform-core", "assets", "scripts", "terraform-run.sh")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := ResolveWorkflowScript("scripts/core.assets.scripts.terraform-run.sh", "/wf", repo)
+	if got != filepath.ToSlash(p) {
+		t.Fatalf("got %q want %q", got, filepath.ToSlash(p))
+	}
+}
+
+func TestResolveWorkflowScriptResolvesCoreTerraformRunFromShipyardTerraformCore(t *testing.T) {
+	repo := t.TempDir()
+	p := filepath.Join(repo, ShipyardDir, "workflows", "terraform-core", "assets", "scripts", "terraform-run.sh")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := ResolveWorkflowScript("scripts/core.assets.scripts.terraform-run.sh", "/wf", repo)
+	if got != filepath.ToSlash(p) {
+		t.Fatalf("got %q want %q", got, filepath.ToSlash(p))
+	}
+}
+
 func TestResolveWorkflowScriptResolvesScriptsPrefixToCoreWhenUserMissing(t *testing.T) {
 	repo := t.TempDir()
 	core := filepath.Join(repo, "templates", "core", "assets", "scripts", "shared.sh")

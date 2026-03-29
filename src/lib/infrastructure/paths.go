@@ -162,11 +162,37 @@ func commonExtSegment(s string) bool {
 	}
 }
 
+// terraformPackCoreAssetPath resolves core assets/scripts/terraform-{pipeline,run}.sh to the
+// dockpipe.terraform.core pack (packages/terraform/resolvers/terraform-core) before the compiled
+// core spine — keeps Terraform out of src/core while preserving scripts/core.assets.scripts.* YAML.
+func terraformPackCoreAssetPath(repoRoot, rel string) (string, bool) {
+	want1 := filepath.Join("assets", "scripts", "terraform-pipeline.sh")
+	want2 := filepath.Join("assets", "scripts", "terraform-run.sh")
+	if rel != want1 && rel != want2 {
+		return "", false
+	}
+	// Git checkout: packages/terraform/resolvers/terraform-core/... — embedded bundle: shipyard/workflows/terraform-core/...
+	// (see mapEmbeddedStagingWorkflowRel in bundled_extract.go).
+	candidates := []string{
+		filepath.Join(repoRoot, "packages", "terraform", "resolvers", "terraform-core", rel),
+		filepath.Join(repoRoot, ShipyardDir, "workflows", "terraform-core", rel),
+	}
+	for _, p := range candidates {
+		if scriptFileExists(p) {
+			return p, true
+		}
+	}
+	return "", false
+}
+
 // resolveCoreNamespacedAsset resolves scripts/core.* to a file under core/ (compiled overlays first).
 func resolveCoreNamespacedAsset(repoRoot, rest string) (string, bool) {
 	rel, ok := relFromCoreNamespace(rest)
 	if !ok {
 		return "", false
+	}
+	if p, ok := terraformPackCoreAssetPath(repoRoot, rel); ok {
+		return p, true
 	}
 	candidates := []string{
 		filepath.Join(repoRoot, ".dockpipe", "core", rel),
