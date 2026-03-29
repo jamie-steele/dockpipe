@@ -6,7 +6,6 @@ description: >-
 
 resolver: codex
 runtimes: [dockerimage]
-vault: none
 
 steps:
   - id: orchestrate

@@ -2,8 +2,6 @@
 name: run-apply-validate
 description: Three sequential steps — run phase, apply phase, validate phase.
 
-vault: none
-
 steps:
   - id: run
     isolate: alpine

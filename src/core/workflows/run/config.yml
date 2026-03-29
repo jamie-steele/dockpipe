@@ -4,8 +4,6 @@
 name: run
 description: Disposable container run, then commit changes on your current branch.
 
-vault: none
-
 strategy: commit
 strategies:
   - commit

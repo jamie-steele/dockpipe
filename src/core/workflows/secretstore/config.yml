@@ -7,8 +7,7 @@ description: >-
   Copy .env.secretstore.example; for op:// vault mapping use workflow secretstore-onepassword.
 
 docker_preflight: false
-# Substrate is per-step; dotenv resolver documents vars; injection is script-owned (not vault: op).
-vault: none
+# Substrate is per-step; dotenv resolver loads SECRETSTORE_ENV_FILE; script-owned env merge.
 
 vars:
   SECRETSTORE_PROVIDER: "dotenv"

@@ -62,6 +62,9 @@ Quick checks before a real run. Does not start a project container.
 			fmt.Fprintf(os.Stderr, "[dockpipe] project config: %s not in this directory (optional)\n", domain.DockpipeProjectConfigFileName)
 		} else {
 			fmt.Fprintf(os.Stderr, "[dockpipe] project config: ok (%s)\n", filepath.Join(wd, domain.DockpipeProjectConfigFileName))
+			if pc.Secrets.Vault != nil && strings.TrimSpace(*pc.Secrets.Vault) != "" {
+				fmt.Fprintf(os.Stderr, "[dockpipe] secrets.vault (default when workflow omits vault:): %s\n", strings.TrimSpace(*pc.Secrets.Vault))
+			}
 			if p, ok := domain.ResolveVaultTemplatePath(pc, wd); ok {
 				if st, err := os.Stat(p); err == nil && !st.IsDir() {
 					fmt.Fprintf(os.Stderr, "[dockpipe] secrets vault template (op inject): ok (%s)\n", p)

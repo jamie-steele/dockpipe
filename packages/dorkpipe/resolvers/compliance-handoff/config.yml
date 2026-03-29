@@ -8,8 +8,6 @@ description: >-
 
 docker_preflight: false
 resolver: codex
-vault: none
-
 steps:
   - id: handoff
     skip_container: true

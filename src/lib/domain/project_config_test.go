@@ -40,6 +40,18 @@ func TestLoadDockpipeProjectConfigMissing(t *testing.T) {
 	}
 }
 
+func TestLoadDockpipeProjectConfigInvalidVault(t *testing.T) {
+	tmp := t.TempDir()
+	p := filepath.Join(tmp, DockpipeProjectConfigFileName)
+	if err := os.WriteFile(p, []byte(`{"schema":1,"secrets":{"vault":"bogus"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadDockpipeProjectConfig(tmp)
+	if err == nil {
+		t.Fatal("expected error for invalid secrets.vault")
+	}
+}
+
 func TestResolveVaultTemplatePathPrecedence(t *testing.T) {
 	root := t.TempDir()
 	vault := ".env.vault.template"

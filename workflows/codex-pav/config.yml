@@ -6,7 +6,6 @@ description: Plan, apply, validate — Docker runtime, Codex resolver (requires 
 
 resolver: codex
 runtimes: [dockerimage]
-vault: none
 
 steps:
   - id: plan

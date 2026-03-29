@@ -6,8 +6,6 @@ description: >-
 
 docker_preflight: false
 resolver: codex
-vault: none
-
 steps:
   - id: process
     skip_container: true

@@ -18,7 +18,6 @@ description: >-
 
 docker_preflight: false
 # Host-only; substrate is per-step if you add container steps later.
-vault: none
 
 vars:
   R2_PUBLISH_SOURCE: "release/artifacts"

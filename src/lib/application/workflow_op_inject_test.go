@@ -70,3 +70,68 @@ func TestMergeOpInjectFromProjectIfEnabled_SkipsWithNoOpInject(t *testing.T) {
 		t.Fatalf("expected no merge, got %#v", env)
 	}
 }
+
+func TestMergeOpInjectFromProjectIfEnabled_SkipsWhenProjectVaultNone(t *testing.T) {
+	t.Setenv("DOCKPIPE_OP_INJECT", "1")
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, domain.DockpipeProjectConfigFileName), []byte(`{
+  "schema": 1,
+  "secrets": { "op_inject_template": ".env.op.template", "vault": "none" }
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, ".env.op.template"), []byte("SHOULD_NOT=run\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldRun := runOpInjectFn
+	defer func() { runOpInjectFn = oldRun }()
+	runOpInjectFn = func(string) ([]byte, error) {
+		t.Fatal("op inject should not run when secrets.vault is none")
+		return nil, nil
+	}
+
+	env := map[string]string{}
+	opts := &CliOpts{Workdir: tmp}
+	if err := mergeOpInjectFromProjectIfEnabled(env, opts, tmp, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(env) != 0 {
+		t.Fatalf("expected no merge, got %#v", env)
+	}
+}
+
+func TestMergeOpInjectFromProjectIfEnabled_WorkflowVaultOverridesProjectNone(t *testing.T) {
+	t.Setenv("DOCKPIPE_OP_INJECT", "1")
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, domain.DockpipeProjectConfigFileName), []byte(`{
+  "schema": 1,
+  "secrets": { "op_inject_template": ".env.op.template", "vault": "none" }
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, ".env.op.template"), []byte("K=from_op\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldRun := runOpInjectFn
+	oldLook := opLookPathFn
+	defer func() {
+		runOpInjectFn = oldRun
+		opLookPathFn = oldLook
+	}()
+	opLookPathFn = func(string) (string, error) { return "/fake/op", nil }
+	runOpInjectFn = func(string) ([]byte, error) {
+		return []byte("K=injected\n"), nil
+	}
+
+	env := map[string]string{}
+	opts := &CliOpts{Workdir: tmp}
+	wf := &domain.Workflow{Vault: "op"}
+	if err := mergeOpInjectFromProjectIfEnabled(env, opts, tmp, wf); err != nil {
+		t.Fatal(err)
+	}
+	if env["K"] != "injected" {
+		t.Fatalf("workflow vault: op should override project none: %#v", env)
+	}
+}

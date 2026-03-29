@@ -21,9 +21,7 @@ description: >-
 docker_preflight: false
 # Substrate is per-step (runtime / resolver / skip_container), not a single workflow-level runtime.
 # This workflow is host-only; add runtime: on a step when that step uses a container or package runtime.
-# Merge repo secrets.vault_template via op inject before steps (see dockpipe.config.json; e.g. .env.op.template).
-vault: 1password
-
+# Op inject: dockpipe.config.json secrets.vault_template + optional secrets.vault (omit per-workflow vault: here).
 vars:
   PACKAGE_STORE_OUT: "release/artifacts"
   # Publish step: object key prefix under R2_BUCKET (r2publish).

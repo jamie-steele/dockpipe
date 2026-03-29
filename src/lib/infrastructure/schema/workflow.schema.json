@@ -46,7 +46,7 @@
     "runtimes": { "type": "array", "items": { "type": "string" } },
     "vault": {
       "type": "string",
-      "description": "Vault backend for secrets.vault_template → env (op and 1password use op inject today). Use none/off to skip for this workflow."
+      "description": "Vault mode for op inject (e.g. op). See docs/vault.md."
     },
     "strategy": { "type": "string" },
     "strategies": { "type": "array", "items": { "type": "string" } },

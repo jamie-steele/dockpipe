@@ -25,14 +25,12 @@ description: >-
 docker_preflight: false
 # Secrets: resolver-driven op scripts (not workflow-level vault: merge).
 resolver: onepassword
-vault: none
-
 vars:
   OP_ENV_FILE: ".env.op.template"
   SECRET_ENV_OUT: *SECRET_OUT
 
 steps:
-  - id: inject-from-1password
+  - id: inject-secrets
     runtime: dockerimage
     resolver: onepassword
     skip_container: true

@@ -5,7 +5,6 @@ description: Isolated tests then Codex security review step (requires OPENAI_API
 
 resolver: codex
 runtimes: [dockerimage]
-vault: none
 
 steps:
   - id: tests

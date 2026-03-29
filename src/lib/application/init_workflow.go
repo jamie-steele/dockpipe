@@ -19,7 +19,7 @@ const dockpipeProjectReadme = `# Dockpipe project
 - **workflows/** — Default home for named workflows (**config.yml** per folder); **dockpipe init &lt;name&gt;** creates **workflows/&lt;name&gt;/** (override with **--workflows-dir** or **DOCKPIPE_WORKFLOWS_DIR**).
 - **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/**, **assets/** (**agnostic scripts**, **images/**, **compose/**), **bundles/** (optional domain script trees) (from **dockpipe init**). Add more resolver packages later with **dockpipe install package …** when your release or registry ships them.
 - **templates/&lt;name&gt;/** — Legacy named workflows; still resolved if **workflows/** does not define the same name.
-- **.env.vault.template.example** — Example **op://** mapping for **1Password CLI** ([install separately](https://developer.1password.com/docs/cli/)). Copy to **.env.vault.template** and use **vault: op** / **vault: 1password** when you want **op inject** (see **docs/vault.md**). For a **vendor-neutral** open workflow in core, use **secretstore** + **dotenv** and **.env.secretstore** instead (**vault: none** on that workflow).
+- **.env.vault.template.example** — Example **op://** mapping for **op inject** (install the **op** CLI from 1Password). Copy to **.env.vault.template** and see **docs/vault.md** for **secrets.vault** and workflow **vault:**. For a vendor-neutral path, use **secretstore** + **dotenv** and **.env.secretstore**.
 - **dockpipe.config.json** (optional) — Repo-root JSON: **compile** source lists and optional **secrets** (**vault_template** preferred; **op_inject_template** is legacy). Omit to use built-in compile defaults when you add a config file later.
 `
 

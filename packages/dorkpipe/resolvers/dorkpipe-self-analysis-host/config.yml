@@ -7,8 +7,6 @@ description: >-
 
 resolver: codex
 runtimes: [dockerimage]
-vault: none
-
 steps:
   - id: self_analysis
     skip_container: true

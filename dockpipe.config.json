@@ -12,6 +12,7 @@
   },
   "secrets": {
     "vault_template": ".env.op.template",
-    "notes": "Optional: op inject env file (op:// lines). vault_template can be .env.op.template or .env.vault.template."
+    "vault": "op",
+    "notes": "vault_template: op inject env file. secrets.vault: default when workflows omit vault:."
   }
 }

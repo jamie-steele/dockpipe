@@ -13,8 +13,6 @@ description: >-
 
 resolver: codex
 runtimes: [dockerimage]
-vault: none
-
 steps:
   - id: stack_up
     skip_container: true

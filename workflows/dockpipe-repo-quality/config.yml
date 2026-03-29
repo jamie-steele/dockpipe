@@ -7,7 +7,6 @@ description: >-
 docker_preflight: false
 # Host-only step — no workflow-level runtime (substrate is per step when you add container steps).
 resolver: codex
-vault: none
 
 steps:
   - id: summarize
