@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Local sidecar stack for DorkPipe: Postgres+pgvector + Ollama (docker compose).
 # Usage: scripts/dorkpipe/dev-stack.sh up|down|ps
-# Compose file: .staging/bundles/dorkpipe/assets/compose/docker-compose.yml
+# Compose file: .staging/packages/dockpipe/agent/dorkpipe/assets/compose/docker-compose.yml
 # When done: dev-stack.sh down — containers stop (nothing long-lived required for orchestration).
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-COMPOSE="$REPO_ROOT/.staging/bundles/dorkpipe/assets/compose/docker-compose.yml"
+COMPOSE="$REPO_ROOT/.staging/packages/dockpipe/agent/dorkpipe/assets/compose/docker-compose.yml"
 if [[ ! -f "$COMPOSE" ]]; then
 	echo "dev-stack: missing $COMPOSE" >&2
 	exit 1

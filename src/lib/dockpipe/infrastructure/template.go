@@ -7,7 +7,7 @@ import (
 )
 
 // DockerfileDir returns the directory that contains Dockerfile for a template isolate name.
-// Searches compile.resolvers roots (nested) and compile.bundles roots, then templates/core (materialized bundle).
+// Searches compile.resolvers roots (nested), bundle compile roots (BundleCompileRootsCached), then templates/core.
 func DockerfileDir(repoRoot, name string) string {
 	core := CoreDir(repoRoot)
 	var candidates []string
@@ -50,8 +50,6 @@ func TemplateBuild(repoRoot, name string) (image string, dockerfileDir string, o
 		return "dockpipe-vscode", dir("vscode"), true
 	case "ollama":
 		return "dockpipe-ollama", dir("ollama"), true
-	case "steam-flatpak":
-		return "dockpipe-steam-flatpak", dir("steam-flatpak"), true
 	default:
 		return "", "", false
 	}

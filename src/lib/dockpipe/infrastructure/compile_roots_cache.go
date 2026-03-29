@@ -46,7 +46,8 @@ func ResolverCompileRootsCached(repoRoot string) []string {
 	return out
 }
 
-// BundleCompileRootsCached returns absolute bundle compile roots from dockpipe.config.json.
+// BundleCompileRootsCached returns compile.bundles paths for DockerfileDir and source script resolution.
+// There is no implicit default: list bundle roots in dockpipe.config.json when you need them.
 func BundleCompileRootsCached(repoRoot string) []string {
 	k := absRepoKey(repoRoot)
 	if v, ok := bunRootsCache.Load(k); ok {

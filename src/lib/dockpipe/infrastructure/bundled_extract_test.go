@@ -6,7 +6,7 @@ import (
 )
 
 // TestEmbeddedWorkflowConfigExists checks bundled user templates (src/core/workflows/*/config.yml) and
-// resolver delegates (src/core/resolvers/*/config.yml and .staging/packages for tool trees). It does not assert maintainer-only
+// resolver delegates (src/core/resolvers/*/config.yml and embedded maintainer packages for tool trees). It does not assert maintainer-only
 // Extra embedded workflow names under workflows/ — those churn independently of the core embed contract.
 func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	if !EmbeddedWorkflowConfigExists("run") {
@@ -57,8 +57,10 @@ func TestMapEmbeddedToMaterializedPath(t *testing.T) {
 		{EmbeddedTemplatesPrefix + "/runtimes/dockerimage/profile", filepath.Join(ShipyardDir, "core/runtimes/dockerimage/profile")},
 		{EmbeddedTemplatesPrefix + "/workflows/run/config.yml", filepath.Join(ShipyardDir, "workflows", "run", "config.yml")},
 		{"workflows/dockpipe.cloudflare.r2publish/config.yml", filepath.Join(ShipyardDir, "workflows", "dockpipe.cloudflare.r2publish", "config.yml")},
-		{".staging/packages/dockpipe/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/config.yml", filepath.Join(ShipyardDir, "workflows", "dockpipe.cloudflare.r2publish", "config.yml")},
-		{".staging/packages/dockpipe/ide/resolvers/vscode/config.yml", filepath.Join(ShipyardDir, "workflows", "vscode", "config.yml")},
+		{embeddedFSPackagesPrefix + "/dockpipe/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/config.yml", filepath.Join(ShipyardDir, "workflows", "dockpipe.cloudflare.r2publish", "config.yml")},
+		{embeddedFSPackagesPrefix + "/dockpipe/ide/resolvers/vscode/config.yml", filepath.Join(ShipyardDir, "workflows", "vscode", "config.yml")},
+		{embeddedFSPackagesPrefix + "/dockpipe/ide/pipeon/config.yml", filepath.Join(ShipyardDir, "workflows", "pipeon", "config.yml")},
+		{embeddedFSPackagesPrefix + "/dockpipe/agent/dorkpipe/config.yml", filepath.Join(ShipyardDir, "workflows", "dorkpipe", "config.yml")},
 		{EmbeddedTemplatesPrefix + "/workflows/dorkpipe/user-insight-process/config.yml", filepath.Join(ShipyardDir, "workflows", "dorkpipe", "user-insight-process", "config.yml")},
 		{DorkpipeLibraryWorkflowsDirRel + "/dorkpipe-self-analysis/config.yml", filepath.Join(ShipyardDir, "workflows", "dorkpipe-self-analysis", "config.yml")},
 		{"workflows", filepath.Join(ShipyardDir, "workflows")},

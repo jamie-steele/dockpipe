@@ -6,12 +6,12 @@
       "src/lib/dorkpipe/workflows",
       ".staging/packages"
     ],
+    "bundles": [
+      ".staging/packages/dockpipe"
+    ],
     "resolvers": [
       "src/core/resolvers",
       ".staging/packages"
-    ],
-    "bundles": [
-      ".staging/packages/dockpipe/bundles"
     ]
   },
   "packages": {

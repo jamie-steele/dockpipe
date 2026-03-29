@@ -41,7 +41,7 @@ func CoreDir(repoRoot string) string {
 const DefaultUserWorkflowsDirRel = "workflows"
 
 // DorkpipeLibraryWorkflowsDirRel is tracked workflow YAML for DorkPipe integration (orchestrator, self-analysis, compliance-handoff).
-// Lives under the dorkpipe Go module — not under .staging/ (see docs/dorkpipe.md).
+// Lives under the dorkpipe Go module (see docs/dorkpipe.md).
 const DorkpipeLibraryWorkflowsDirRel = "src/lib/dorkpipe/workflows"
 
 // DorkpipeLibraryWorkflowsDir returns <repoRoot>/src/lib/dorkpipe/workflows (dockpipe source checkout).

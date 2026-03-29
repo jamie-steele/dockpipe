@@ -30,7 +30,7 @@ This document is **FINAL**. It defines the core concepts, their relationships, a
 
 - **Inside** the packaged workflow, **child steps** still use ordinary runtimes (**`dockerimage`**, **`dockerfile`**, **`package`**, …). **`runtime: package`** applies **only** to the **parent step** that **enters** the packaged unit — not to every step in the child.
 
-- **Specialization** is meant to stay **thin**: the **child** workflow still owns its **defaults** (runtime, resolver, strategy inside its YAML). The **caller** tunes behavior with **`vars`**, **`env`**, and shared CLI-style inputs merged into the nested run; explicit **step-level** overrides of the child’s profiles are the natural extension when you need to swap resolver/runtime/strategy **without** forking the package.
+- **Specialization** is meant to stay **thin**: the **child** workflow still owns its **defaults** (names of **core** runtime / resolver / strategy profiles in its YAML). The **caller** tunes behavior with **`vars`**, **`env`**, and shared CLI-style inputs merged into the nested run; explicit **step-level** **`runtime:`** / **`resolver:`** **selection** among **core** profiles is the natural extension when you need to swap substrate or tool **without** forking the package.
 
 This keeps the **mental model** one-dimensional — **template → runtime → resolver → strategy** — whether the workflow is **inline** in the repo or **packaged** and **referenced**.
 
@@ -83,10 +83,10 @@ Under the repository (and in materialized bundles), **`templates/core/`** contai
 | **`runtimes/`** | Runtime profiles (**where** execution runs). |
 | **`resolvers/`** | Resolver profiles (**which** tool/platform). |
 | **`strategies/`** | Strategy **KEY=value** files (lifecycle before/after). |
-| **`bundles/`** | **Domain** script/asset trees (**dorkpipe**, **pipeon**, **review-pipeline**, …) — not resolvers; see **`paths.go`** resolution order. |
+| **`bundles/`** | **Domain** script/asset trees (**dorkpipe**, **pipeon**, …) — not resolvers; see **`paths.go`** resolution order. (This repo’s review prep scripts live under **`workflows/review-pipeline/`**.) |
 | **`assets/`** | Reusable **support files** — **`assets/scripts/`** (agnostic shell only), **`assets/images/`** (agnostic Dockerfiles only: **base-dev**, **dev**, **example**, **minimal**), **`assets/compose/README.md`** + agnostic **`minimal/`** / **`multi-service/`** demos. Per-domain images and compose live under **`resolvers/…/assets/`** or **`bundles/…/assets/`**. Not additional primitives. |
 
-Workflows continue to reference scripts in YAML as **`scripts/…`**; the runner resolves **`repo/scripts/…`** first, then **`templates/core/resolvers/…`** (resolver-owned), **`templates/core/bundles/…`** (domain asset packs), then **`templates/core/assets/scripts/…`** in the bundled tree.
+Workflows continue to reference scripts in YAML as **`scripts/…`**; the runner resolves **`repo/scripts/…`** first, then **`templates/core/resolvers/…`** (resolver-owned), **`templates/core/bundles/…`** (domain script trees), then **`templates/core/assets/scripts/…`** in the bundled tree.
 
 Bundling policy and legal classification: **[templates-core-assets.md](templates-core-assets.md)**.
 

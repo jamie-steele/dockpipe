@@ -1,1 +1,1 @@
-../../../../.staging/packages/dockpipe/bundles/pipeon/assets/scripts/bundle-context.sh
+../../../../.staging/packages/dockpipe/ide/pipeon/assets/scripts/bundle-context.sh

@@ -1,1 +1,1 @@
-../../../../.staging/packages/dockpipe/bundles/pipeon/assets/scripts/pipeon.sh
+../../../../.staging/packages/dockpipe/ide/pipeon/assets/scripts/pipeon.sh

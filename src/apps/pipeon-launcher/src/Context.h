@@ -17,7 +17,7 @@ struct Context {
     QString runtime;
     QString dockpipeBinary;
     QString envFile;
-    /// Each entry is one dockpipe `--env` argument, typically `KEY=value` (e.g. FLATHUB_APP_ID=com.valvesoftware.Steam).
+    /// Each entry is one dockpipe `--env` argument, typically `KEY=value` (e.g. OPENAI_API_KEY=…).
     QStringList extraDockpipeEnv;
 
     static Context createNew();

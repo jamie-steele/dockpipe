@@ -303,7 +303,7 @@ func TestCmdInitRequiresNameForFrom(t *testing.T) {
 }
 
 // TestCmdInitBareMergesFullCoreTree verifies dockpipe init (no name) merges the lean bundled
-// templates/core tree (assets, runtimes, resolvers/example, strategies). Tool resolvers live under .staging/ in the dockpipe repo, not in templates/core after init.
+// templates/core tree (assets, runtimes, resolvers/example, strategies). Extra resolver trees ship via embed / project compile config, not only templates/core after init.
 func TestCmdInitBareMergesFullCoreTree(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)

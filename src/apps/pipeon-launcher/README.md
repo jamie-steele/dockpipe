@@ -67,15 +67,11 @@ cmake --build src/apps/pipeon-launcher/build
 
 Qt is available under **LGPL** and commercially. If you **ship binaries**, comply with Qt’s license terms (e.g. dynamic linking and relinking for LGPL) or use a **commercial Qt license**. This README is not legal advice.
 
-## Flathub search & extra `dockpipe` env
+## Extra `dockpipe` env
 
-**Edit context…** includes **Extra dockpipe env** (one `KEY=value` per line). Each line is passed to dockpipe as **`--env`**, same as the CLI — no dockpipe core changes.
+**Edit context…** includes **Extra dockpipe env** (one `KEY=value` per line). Each line is passed to dockpipe as **`--env`**, same as the CLI.
 
-- **Browse Flathub…** opens a search dialog (POST to **`https://flathub.org/api/v2/search`**) with optional **category** filter (client-side on `main_categories`). Choosing an app sets **`FLATHUB_APP_ID=`** plus the Flatpak app id (replaces an existing line with that key).
-
-Use **`scripts/flathub-host/flathub-host-run.sh`** from **`.staging/bundles/flathub-host/`** (runs **`flatpak run`** on the **host** when Flatpak + Flathub are installed). **Docker**-based Flathub flows use the **`steam-flatpak`** bundle (`.staging/bundles/steam-flatpak/`); **`src/scripts/docker-package-cache-demo.sh`** demonstrates named cache volumes for repeated container runs.
-
-**APT** (or other package managers) does not need a separate browser: add env lines your scripts read, or pass **`dockpipe --mount`** for cache volumes when you run a container-backed workflow from the CLI; Pipeon can mirror those with extra env lines only if your wrapper reads them.
+**`src/scripts/docker-package-cache-demo.sh`** demonstrates named Docker volumes for persistent APT caches inside containers. Add env lines your workflows read, or pass **`dockpipe --mount`** when you run from the CLI; Pipeon can supply extra env lines if your wrapper reads them.
 
 ## Basic vs Advanced
 

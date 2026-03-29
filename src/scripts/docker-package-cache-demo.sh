@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Demo: named Docker volumes for Flathub + APT caches (survive image rebuilds / relaunches).
+# Demo: named Docker volumes for APT caches (survive image rebuilds / relaunches).
 # Does not install apps for you — shows the pattern (same idea as the old package-cache-demo workflow).
 set -euo pipefail
 
@@ -12,19 +12,17 @@ fi
 # shellcheck source=src/core/assets/scripts/docker-cache-volumes.sh
 source "${REPO_ROOT}/src/core/assets/scripts/docker-cache-volumes.sh"
 
-FLATPAK_VOL="${DOCKER_DEMO_FLATPAK_VOL:-dockpipe-flatpak-system}"
 APT_CACHE_VOL="${DOCKER_DEMO_APT_CACHE_VOL:-dockpipe-apt-cache}"
 APT_LISTS_VOL="${DOCKER_DEMO_APT_LISTS_VOL:-dockpipe-apt-lists}"
 
 CACHE_ARGS=()
 docker_cache_volume_append_mounts CACHE_ARGS \
-  "${FLATPAK_VOL}:/var/lib/flatpak" \
   "${APT_CACHE_VOL}:/var/cache/apt" \
   "${APT_LISTS_VOL}:/var/lib/apt/lists"
 
 echo "[package-cache-demo] Named volumes are ready. Reuse these mounts on every run to avoid re-downloading."
 echo ""
-echo "Flathub (system) + APT cache paths:"
+echo "APT cache paths:"
 printf ' '; printf '%q ' "${CACHE_ARGS[@]}"
 echo ""
 echo ""
@@ -35,9 +33,6 @@ for ((i = 0; i < ${#CACHE_ARGS[@]}; i += 2)); do
 done
 echo " \\"
 echo "    debian:bookworm-slim bash -lc 'apt-get update && apt-get install -y curl && exec bash'"
-echo ""
-echo "Example — dockpipe with Flathub system cache (same volume as optional Steam script):"
-echo "  dockpipe --mount ${FLATPAK_VOL}:/var/lib/flatpak --isolate steam-flatpak -- true"
 echo ""
 
 if [[ "${DOCKER_PACKAGE_CACHE_DEMO_RUN:-0}" == "1" ]]; then

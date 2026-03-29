@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// PackageManifest is optional metadata for a DockPipe package (workflow slice, core slice, or asset pack).
+// PackageManifest is optional metadata for a DockPipe package (workflow slice, core slice, or umbrella package).
 // Stored as package.yml next to the package contents. Schema may evolve; extra YAML keys are ignored by the parser.
 // Rich fields support store discovery, authoring, and dependency hints (workflows vs resolver packs).
 type PackageManifest struct {

@@ -17,7 +17,7 @@ test -d "$ROOT/workflows" || fail "missing workflows/"
 test -f "$ROOT/embed.go" || fail "missing repo-root embed.go"
 
 # Pipeon harness (src/bin/pipeon → src/apps/pipeon/scripts/pipeon.sh) must resolve to the bundle
-test -f "$ROOT/src/apps/pipeon/scripts/pipeon.sh" || fail "missing src/apps/pipeon/scripts/pipeon.sh (symlink to .staging/packages/dockpipe/bundles/pipeon/…)"
+test -f "$ROOT/src/apps/pipeon/scripts/pipeon.sh" || fail "missing src/apps/pipeon/scripts/pipeon.sh (symlink to .staging/packages/dockpipe/ide/pipeon/…)"
 
 # Pipeon desktop / icon pipeline must not point at removed top-level templates/
 test -f "$ROOT/src/contrib/pipeon-vscode-extension/images/favicon.svg" \

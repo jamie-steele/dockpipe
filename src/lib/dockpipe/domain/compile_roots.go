@@ -8,6 +8,7 @@ import (
 )
 
 // EffectiveWorkflowCompileRoots merges dockpipe.config.json compile.workflows with CLI defaults.
+// compile.bundles (deprecated) entries are appended and deduplicated — same recursive config.yml walk as workflows.
 // noStaging drops paths whose repo-relative path starts with ".staging".
 func EffectiveWorkflowCompileRoots(cfg *DockpipeProjectConfig, repoRoot string, noStaging bool) []string {
 	var out []string
@@ -16,7 +17,27 @@ func EffectiveWorkflowCompileRoots(cfg *DockpipeProjectConfig, repoRoot string, 
 	} else {
 		out = defaultWorkflowRoots(repoRoot, noStaging)
 	}
+	if cfg != nil && cfg.Compile.Bundles != nil {
+		out = mergeUniqueAbsPaths(out, resolveCompilePathList(repoRoot, *cfg.Compile.Bundles, noStaging))
+	}
 	return out
+}
+
+func mergeUniqueAbsPaths(a, b []string) []string {
+	seen := map[string]struct{}{}
+	for _, p := range a {
+		p = filepath.Clean(p)
+		seen[p] = struct{}{}
+	}
+	for _, p := range b {
+		p = filepath.Clean(p)
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		a = append(a, p)
+	}
+	return a
 }
 
 // EffectiveResolverCompileRoots merges config with defaults: src/core/resolvers, templates/core/resolvers.
@@ -41,7 +62,9 @@ func EffectiveResolverCompileRoots(cfg *DockpipeProjectConfig, repoRoot string, 
 	return out
 }
 
-// EffectiveBundleCompileRoots uses compile.bundles when set; otherwise no default (empty slice).
+// EffectiveBundleCompileRoots returns paths from compile.bundles only (for DockerfileDir and other
+// lookups that need the bundle compile root without walking the whole workflows list). Compile itself
+// merges these into EffectiveWorkflowCompileRoots — there is no separate bundle compile step.
 func EffectiveBundleCompileRoots(cfg *DockpipeProjectConfig, repoRoot string, noStaging bool) []string {
 	if cfg != nil && cfg.Compile.Bundles != nil {
 		return resolveCompilePathList(repoRoot, *cfg.Compile.Bundles, noStaging)

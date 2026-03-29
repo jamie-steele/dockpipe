@@ -38,7 +38,7 @@ Commands:
   clean                   Remove compiled package store (.dockpipe/internal/packages)
   rebuild                 clean then build
   package list|manifest|build|compile   Packages: list, manifest, author core tarball, or compile into .dockpipe/internal
-  compile                 Same as dockpipe package compile (core, resolvers, workflows; bundles optional)
+  compile                 Same as dockpipe package compile (core, resolvers, workflows)
   release upload          Upload a file to S3-compatible storage (self-hosted; uses aws CLI)
   workflow validate       Check workflow YAML ([path] relative to cwd or repo root; omit if one workflow)
   doctor                  Check docker, bash, and bundled assets

@@ -108,7 +108,7 @@ Same as dockpipe package compile all, but always replaces existing compiled pack
 an empty store before compiling.
 
 Options:
-  Same as dockpipe package compile all: --workdir, --no-staging, --with-bundles
+  Same as dockpipe package compile all: --workdir, --no-staging
   (see: dockpipe package compile all --help)
 
 `
@@ -142,7 +142,7 @@ Usage:
   dockpipe rebuild [options]
 
 Options:
-  Same as dockpipe build / package compile all (--workdir, --no-staging, --with-bundles).
+  Same as dockpipe build / package compile all (--workdir, --no-staging).
   build implies --force for compile outputs. See: dockpipe package compile all --help
 
 `

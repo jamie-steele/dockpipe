@@ -8,11 +8,11 @@ import (
 
 func TestResolvePackagedWorkflowConfigPath(t *testing.T) {
 	repo := t.TempDir()
-	projectCfg := `{"schema":1,"compile":{"workflows":[".staging/packages"]}}`
+	projectCfg := `{"schema":1,"compile":{"workflows":["vendor/my-workflows"]}}`
 	if err := os.WriteFile(filepath.Join(repo, "dockpipe.config.json"), []byte(projectCfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	wfDir := filepath.Join(repo, ".staging", "packages", "mywf")
+	wfDir := filepath.Join(repo, "vendor", "my-workflows", "mywf")
 	if err := os.MkdirAll(wfDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

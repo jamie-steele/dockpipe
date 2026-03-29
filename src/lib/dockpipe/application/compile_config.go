@@ -34,7 +34,3 @@ func effectiveWorkflowCompileRoots(cfg *domain.DockpipeProjectConfig, repoRoot s
 func effectiveResolverCompileRoots(cfg *domain.DockpipeProjectConfig, repoRoot string, noStaging bool) []string {
 	return domain.EffectiveResolverCompileRoots(cfg, repoRoot, noStaging)
 }
-
-func effectiveBundleCompileRoots(cfg *domain.DockpipeProjectConfig, repoRoot string, noStaging bool) []string {
-	return domain.EffectiveBundleCompileRoots(cfg, repoRoot, noStaging)
-}

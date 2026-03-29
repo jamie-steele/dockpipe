@@ -17,7 +17,7 @@ const dockpipeProjectReadme = `# Dockpipe project
 - **scripts/** — Run and act scripts.
 - **images/** — Optional project Dockerfiles (e.g. **images/example/** copied from **templates/core/assets/images/example/**). Bundled framework images resolve via **DockerfileDir** (**resolvers/** / **bundles/** / **assets/images/**).
 - **workflows/** — Default home for named workflows (**config.yml** per folder); **dockpipe init &lt;name&gt;** creates **workflows/&lt;name&gt;/** (override with **--workflows-dir** or **DOCKPIPE_WORKFLOWS_DIR**).
-- **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/**, **assets/** (**agnostic scripts**, **images/**, **compose/**), **bundles/** (domain asset packs) (from **dockpipe init**).
+- **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/**, **assets/** (**agnostic scripts**, **images/**, **compose/**), **bundles/** (optional domain script trees) (from **dockpipe init**).
 - **templates/&lt;name&gt;/** — Legacy named workflows; still resolved if **workflows/** does not define the same name.
 - **dockpipe.config.json** (optional) — Repo-root JSON: **compile** source lists and optional **secrets** (e.g. **op_inject_template** for 1Password dogfood); omit to use built-in compile defaults.
 `

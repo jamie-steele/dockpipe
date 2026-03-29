@@ -4,16 +4,16 @@ DockPipe distinguishes **what you author** (source trees) from **what you ship**
 
 ## Canonical layout (mental model)
 
-1. **Local build output** lives under **`.dockpipe/internal/`** (default package root: **`.dockpipe/internal/packages/`**, or **`DOCKPIPE_PACKAGES_ROOT`**). **`dockpipe package compile`** materializes **directory trees** here while you iterate: **`core/`**, **`resolvers/<name>/`**, **`workflows/<name>/`**, optional **`bundles/<name>/`**. This is the **working** store — not the long-term transport format.
+1. **Local build output** lives under **`.dockpipe/internal/`** (default package root: **`.dockpipe/internal/packages/`**, or **`DOCKPIPE_PACKAGES_ROOT`**). **`dockpipe package compile`** materializes **tarballs** here: **`core/`**, **`resolvers/`**, **`workflows/`** (**`dockpipe-workflow-*`** only). This is the **working** store — not the long-term transport format.
 
-2. **Published / pulled-in packages** outside that internal compile flow are **categorized** as **`core`**, **`resolvers`**, or **`workflows`** (plus optional **bundles** where used). **Each installable unit from a registry or artifact bucket is a tarball** (e.g. **`dockpipe-workflow-<name>-<ver>.tar.gz`**, **`dockpipe-resolver-…`**, **`dockpipe-core-…`**). The engine **loads these by reading the archive** (e.g. **`tar://`** paths); it does not require an unpacked tree on disk for **that** path.
+2. **Published / pulled-in packages** outside that internal compile flow are **categorized** as **`core`**, **`resolvers`**, or **`workflows`**. **Each installable unit from a registry or artifact bucket is a tarball** (e.g. **`dockpipe-workflow-<name>-<ver>.tar.gz`**, **`dockpipe-resolver-…`**, **`dockpipe-core-…`**). The engine **loads these by reading the archive** (e.g. **`tar://`** paths); it does not require an unpacked tree on disk for **that** path.
 
 3. **Source-level** resolution applies when you point at **authoring** trees: repo **`workflows/`**, **`templates/`**, **`src/core/…`**, etc. — normal edit/run **without** packaging.
 
 4. **Build (`dockpipe build` / `compile all`)** is considered successful only if:
-   - **`compile`** order is **core → resolvers → workflows** (bundles optional via **`--with-bundles`**),
+   - **`compile`** order is **core → resolvers → workflows** (legacy **`compile.bundles`** paths are merged into workflow roots),
    - each **workflow** and **resolver** package resolves a **valid `namespace`** (from **`package.yml`**, **`config.yml` / `resolver.yaml`**, or repo-root **`dockpipe.config.json`** **`packages.namespace`** as a default),
-   - every **`depends`** entry in **`package.yml`** names a package **already present** in the compiled store (names from **`package.yml`** under **`core/`**, **`resolvers/`**, **`workflows/`**, **`bundles/`**).
+   - every **`depends`** entry in **`package.yml`** names a package **already present** in the compiled store (names from **`package.yml`** under **`core/`**, **`resolvers/`**, **`workflows/`**).
 
 **Runtime** may still resolve workflows from **tarballs** under **`.dockpipe/internal/packages/workflows/`** or **`packages.tarball_dir`** / **`release/artifacts`** when no on-disk workflow config wins; optional **`packages.namespace`** filters tarball choice when set.
 
@@ -28,9 +28,22 @@ DockPipe distinguishes **what you author** (source trees) from **what you ship**
 | Mode | What you run | Friction | Notes |
 |------|----------------|----------|--------|
 | **Source / today** | Workflow YAML from **`workflows/`**, legacy **`templates/<name>/`**, etc. | **Low** for day-to-day editing — no compile step required. | **`scripts/…`** resolves per **`paths.go`** (project **`scripts/`** first, then bundled **resolvers** / **bundles** / **`assets/scripts/`**). Users can keep scripts wherever those rules allow. |
-| **Compiled / packaged** | **`packages/workflows/<name>/`**, **`packages/resolvers/<name>/`**, plus **`packages/core/`** (spine only), from **`compile all`** under **`.dockpipe/internal/packages/`**. Bundles are optional (**`compile bundles`** or **`compile all --with-bundles`**). | **One** compile (or CI) before run. | **Cleaner** tree: optional **`package.yml`** per slice; resolver search prefers **`packages/resolvers/`** when present. |
+| **Compiled / packaged** | **`packages/workflows/`** (tarballs), **`packages/resolvers/`**, **`packages/core/`**, from **`compile all`** under **`.dockpipe/internal/packages/`**. | **One** compile (or CI) before run. | **Cleaner** tree: optional **`package.yml`** per slice; resolver search prefers **`packages/resolvers/`** when present. |
 
 **Authors are not forced to pick one path:** keep editing and running from source for low friction; use **compile → package → release** when you want a **self-contained** published artifact.
+
+### Authoring: workflow YAML vs resolver / runtime / strategy slices
+
+A **workflow** is primarily **`config.yml`** (plus assets next to it). In that file you **declare** what to run and **which profiles** to merge — you do **not** embed full resolver or strategy trees inside the workflow directory (unless you choose colocated assets for scripts/images).
+
+| Concern | Where definitions usually live | What the workflow YAML does |
+|--------|--------------------------------|-----------------------------|
+| **Runtime** (substrate) | **Only in core:** **`templates/core/runtimes/<name>/`** (or bundled **`src/core/runtimes/`**) — substrates are an **engine** concept. | **`runtime`**, **`default_runtime`**, **`runtimes:`** **reference** an existing profile **name** (and optionally **constrain** CLI/workflow selection). Workflows **do not** define or override substrate types; adding a new runtime is a **core** change. |
+| **Resolver** (tool / env profile) | **`templates/core/resolvers/<name>/`** or extra roots in **`compile.resolvers`** (e.g. nested **`…/resolvers/codex/`** with **`profile/`**) | **`resolver`**, **`default_resolver`**, **`capability`** name the profile or capability. |
+| **Strategy** (lifecycle wrapper) | **`templates/core/strategies/<name>/`** | **`strategy`**, **`strategies:`** select host before/after scripts. |
+| **Domain workflows** (under maintainer packages) | Same as workflows: **`config.yml`** under e.g. **`.staging/packages/dockpipe/ide/pipeon/`** or **`…/agent/dorkpipe/`** | **`scripts/…`** resolves via compiled **`dockpipe-workflow-*`** tarballs first, then source trees. |
+
+So **one repo** can ship **workflows**, **resolvers**, and **runtimes** / **strategies** / the rest of the spine via **`compile core`** ( **`templates/core`** or **`src/core`** ): list **`compile.workflows`**, **`compile.resolvers`** as needed; legacy **`compile.bundles`** entries are **merged** into the workflow root list. **Runtimes** are **not** authored as workflow-only overrides — they live under **core**. **Compile** emits **`dockpipe-workflow-*`**, **`dockpipe-resolver-*`**, and **`core`** tarballs while **`package.yml`** records **`depends`**, **`namespace`**, and metadata. Step-by-step keys: **[workflow-yaml.md](workflow-yaml.md)**.
 
 ### Local compile (`dockpipe build` / `dockpipe package compile` / `dockpipe compile`)
 
@@ -40,21 +53,20 @@ Materialize a **project-local** store under **`.dockpipe/internal/packages/`** w
 
 - **`workflows`** — array of repo-relative (or absolute) **directories** to scan for named workflow folders (each with **`config.yml`**).
 - **`resolvers`** — array of **directories** whose **children** are resolver profile dirs to merge into **`packages/resolvers/<name>/`** (later roots overlay earlier names).
-- **`bundles`** — same for **`packages/bundles/<name>/`**.
+- **`bundles`** (deprecated) — merged into **`workflows`**; same recursive **`config.yml`** walk.
 - **`core_from`** — optional path override for **`compile core`** (same as **`--from`**).
 - **`secrets`** (optional) — not secrets themselves; pointers for humans and tooling:
   - **`op_inject_template`** — repo-relative or absolute path to a **mapping file** for **`op inject`** (e.g. **`.env.op.template`** with **`op://`** lines). **`dockpipe doctor`** reports whether that file exists when **`dockpipe.config.json`** is present in the current directory.
   - **`notes`** — free-text reminder (e.g. vault naming, policy).
 
-If **`dockpipe.config.json`** is **missing**, compile uses built-in defaults. If a key is **omitted**, defaults apply for that slice; **`dockpipe init`** seeds a starter JSON. **`--no-staging`** filters out paths under **`.staging/`** when resolving config lists. **`compile`** also **appends** **`.staging/packages`** when that directory exists (unless **`--no-staging`**) so maintainer-authored packages are included even if **`compile.workflows`** / **`compile.resolvers`** omits the path — see **`.staging/packages/README.md`** in this repo.
+If **`dockpipe.config.json`** is **missing**, compile uses built-in defaults for each omitted key. **`dockpipe init`** seeds a starter JSON. **`--no-staging`** drops paths whose repo-relative path starts with **`.staging/`** when resolving config lists. **Maintainer trees** (e.g. **`.staging/packages`**) are **not** implied: add them explicitly under **`compile.workflows`** and **`compile.resolvers`** when you want them compiled (legacy **`compile.bundles`** is merged into **`compile.workflows`**). See **`.staging/packages/README.md`** in this repo for a typical layout.
 
 Compile steps:
 
 1. **`compile core`** — copies **`src/core`** (default when **`src/core/runtimes`** exists) or **`templates/core`**, or **`compile.core_from`** / **`--from`**, into **`packages/core/`** and writes **`package.yml`** (`kind: core`). **Omits** top-level **`resolvers/`**, **`bundles/`**, and **`workflows/`** from that copy so those slices stay separate packages.
-2. **`compile resolvers`** — repeatable **`--from`**; defaults merge **`src/core/resolvers`**, **`templates/core/resolvers`**, then **`.staging/packages`** (and the same path is **auto-appended** when present — see **`compile_config.go`**). **Pack roots** under each **`--from`** directory include: **`resolvers/`** (flat); **`packages/<group>/resolvers/`**; **`dockpipe/<group>/resolvers/`** (e.g. dockpipe repo: **`agent`**, **`ide`**, **`secrets`**, **`cloud/storage`**, …). Every immediate child of each pack root that contains **`profile/`** becomes **one** tarball (**`dockpipe-resolver-<name>-…`**) — the **store** still lists **separate** installable resolvers. **`src/core/resolvers`** stays a flat list (no nested **`resolvers/resolvers/`**). **Strategies** and **runtimes** are not packed from the same vendor folder yet; keep lifecycle slices in **`compile core`** / **`bundles`** until a follow-up convention exists.
-3. **`compile bundles`** — repeatable **`--from`**; defaults from config or **`.staging/packages/dockpipe/bundles`** into **`packages/bundles/<name>/`**.
-4. **`compile workflows`** — every **`config.yml`** under each **`--from`** root (recursive walk); defaults **`workflows/`**, **`src/lib/dorkpipe/workflows`**, **`.staging/packages`**. Maintainer layout in this repo: **`.staging/packages/README.md`**. Override with **`dockpipe.config.json`** **`compile.workflows`**; **`.staging/packages`** is still appended when present (unless **`--no-staging`**).
-5. **`compile all`** (alias: **`dockpipe build`**) — runs **core → resolvers → workflows**. Bundles only when **`--with-bundles`** is set (otherwise use **`compile bundles`**). **`dockpipe clean`** removes the compiled store; **`dockpipe rebuild`** runs **clean** then **build**.
+2. **`compile resolvers`** — repeatable **`--from`**; with no config, defaults are **`src/core/resolvers`** and **`templates/core/resolvers`** if those directories exist. With **`compile.resolvers`** set, only listed roots are used (plus **`--from`** passes). **Pack roots** under each **`--from`** directory include: **`resolvers/`** (flat); **`packages/<group>/resolvers/`**; **`dockpipe/<group>/resolvers/`** (e.g. dockpipe repo: **`agent`**, **`ide`**, **`secrets`**, **`cloud/storage`**, …). Every immediate child of each pack root that contains **`profile/`** becomes **one** tarball (**`dockpipe-resolver-<name>-…`**) — the **store** still lists **separate** installable resolvers. **`src/core/resolvers`** stays a flat list (no nested **`resolvers/resolvers/`**). **Strategies** and **runtimes** are not packed from the same vendor folder as resolvers; keep lifecycle slices in **`compile core`** until a follow-up convention exists.
+3. **`compile workflows`** — every **`config.yml`** under each **`--from`** root (recursive walk). With no config, defaults are **`workflows/`** and **`src/lib/dorkpipe/workflows/`** when present. List any extra roots (e.g. **`.staging/packages`**) in **`compile.workflows`**; legacy **`compile.bundles`** paths are merged into this list. **`dockpipe package compile bundles`** is an alias for **`compile workflows`**. Maintainer layout in this repo: **`.staging/packages/README.md`**.
+4. **`compile all`** (alias: **`dockpipe build`**) — runs **core → resolvers → workflows**. **`dockpipe clean`** removes the compiled store; **`dockpipe rebuild`** runs **clean** then **build**.
 
 The runner checks **compiled `packages/resolvers/`** and **`packages/core/`** before **`.staging`** and authoring **`CoreDir`** so you can **opt in** to the compiled store per workdir. Edit **`package.yml`** after compile to add **namespaces**, **`depends`**, and metadata for store-shaped workflows.
 
@@ -65,7 +77,7 @@ The runner checks **compiled `packages/resolvers/`** and **`packages/core/`** be
 ## Lifecycle: compile → package → release
 
 1. **`compile`** — Validate workflow YAML and **materialize** a **self-contained** tree: copy the workflow and (as the implementation grows) **pull in domain-specific assets** referenced from source so the compiled directory is the **single** execution root for that package.
-2. **`package`** — Archive **that compiled tree** (plus **`package.yml`**, checksums, optional lock metadata). **`dockpipe package build store`** turns the compiled store into **gzip tarballs** (one per core / workflow / resolver; bundles only with **`--only bundles`**) and **`packages-store-manifest.json`**. **`dockpipe run --workflow`** can **stream** a workflow from **`dockpipe-workflow-<name>-*.tar.gz`** when **`config.yml` in the archive** sets **`namespace:`** and on-disk paths do not win (see **`packages.tarball_dir`** / **`packages.namespace`** in **`dockpipe.config.json`**). **`dockpipe package build core`** builds the **`templates/core`** artifact for **`dockpipe install core`**.
+2. **`package`** — Archive **that compiled tree** (plus **`package.yml`**, checksums, optional lock metadata). **`dockpipe package build store`** turns the compiled store into **gzip tarballs** (one per core / workflow / resolver) and **`packages-store-manifest.json`**. **`dockpipe run --workflow`** can **stream** a workflow from **`dockpipe-workflow-<name>-*.tar.gz`** when **`config.yml` in the archive** sets **`namespace:`** and on-disk paths do not win (see **`packages.tarball_dir`** / **`packages.namespace`** in **`dockpipe.config.json`**). **`dockpipe package build core`** builds the **`templates/core`** artifact for **`dockpipe install core`**.
 3. **`release`** — Upload tarball + manifest to your **static origin**; consumers **`install`** to pull it.
 
 **CI** can chain the same steps locally: **compile → package → release**.
@@ -88,7 +100,7 @@ When **`dockpipe install`** (workflow package) exists end-to-end, installing a *
 
 ## 1. Packages (installed, store-backed)
 
-**Packages** are **self-contained** artifacts you fetch from an object store (e.g. **Cloudflare R2** behind HTTPS) or another registry. They are **building blocks** for YAML workflows: full workflows, slices of **`templates/core`** (resolvers, runtimes, strategies, assets), or asset packs.
+**Packages** are **self-contained** artifacts you fetch from an object store (e.g. **Cloudflare R2** behind HTTPS) or another registry. They are **building blocks** for YAML workflows: full workflows, slices of **`templates/core`** (resolvers, runtimes, strategies, assets), or extra workflow tarballs from package installs.
 
 - **Default layout on disk:** **`<workdir>/.dockpipe/internal/packages/`** — kept under **`internal/`** so user-created and installable packages stay separate from other **`.dockpipe/`** state (runs, handoffs, CI).  
   Override with **`DOCKPIPE_PACKAGES_ROOT`** (absolute path, or relative to workdir), e.g. **`vendor/dockpipe-packages`** if you want packages **versioned in git** without fighting a blanket **`.dockpipe/`** ignore.
@@ -100,7 +112,7 @@ Suggested subdirectories (mirror authoring concepts; not all are required):
 | **`.dockpipe/internal/packages/workflows/<name>/`** | Workflow-shaped trees (`config.yml`, steps, …). |
 | **`.dockpipe/internal/packages/core/`** | Compiled **spine** only: **`runtimes/`**, **`strategies/`**, **`assets/`**, etc. — not resolver/bundle/workflow packages. |
 | **`.dockpipe/internal/packages/resolvers/<name>/`** | One resolver package per profile (same shape as **`templates/core/resolvers/<name>/`**). |
-| **`.dockpipe/internal/packages/bundles/<name>/`** | One bundle package per domain. |
+| **`.dockpipe/internal/packages/workflows/`** | Workflow packages (**`dockpipe-workflow-*`**). |
 | **`.dockpipe/internal/packages/assets/`** | Optional top-level packs (e.g. large binaries) that are not folded under **`core/`**. |
 
 **Metadata:** each installable unit should include **`package.yml`** next to its payload (see **`dockpipe package manifest`**). Core fields: **`name`**, **`version`**, **`title`**, **`description`**, **`author`**, **`website`**, **`license`**, **`kind`** (`workflow` \| `resolver` \| `core` \| `assets` \| `bundle`). Optional **`namespace`** — same rules as workflow **`config.yml`** **`namespace:`** (lowercase label; reserved words like **`dockpipe`**, **`core`**, **`system`** are rejected).

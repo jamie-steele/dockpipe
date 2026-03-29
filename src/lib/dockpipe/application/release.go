@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// env vars aligned with .staging/packages/dockpipe/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish and AWS CLI conventions.
+// env vars aligned with the dockpipe.cloudflare.r2publish workflow (R2 publish resolver) and AWS CLI conventions.
 const (
 	envReleaseBucket  = "DOCKPIPE_RELEASE_BUCKET"
 	envR2Bucket       = "R2_BUCKET"
@@ -165,7 +165,7 @@ const releaseUsageText = `dockpipe release
 Upload artifacts to a self-hosted S3-compatible bucket (e.g. Cloudflare R2).
 Official DockPipe distribution does not require this; it is for dogfooding and
 downstream registries. Credentials: AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY
-(R2 API tokens or AWS keys). Same endpoint patterns as dockpipe.cloudflare.r2publish (.staging/packages/dockpipe/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish in this repo).
+(R2 API tokens or AWS keys). Same endpoint patterns as the dockpipe.cloudflare.r2publish workflow in this repository’s package layout.
 
 Usage:
   dockpipe release upload <local-file> [options]

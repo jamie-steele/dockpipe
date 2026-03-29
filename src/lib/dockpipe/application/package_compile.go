@@ -54,7 +54,12 @@ func cmdPackageCompile(args []string) error {
 	case "resolvers":
 		return cmdPackageCompileResolvers(args[1:])
 	case "bundles":
-		return cmdPackageCompileBundles(args[1:])
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(packageCompileBundlesUsageText)
+			return nil
+		}
+		// compile.bundles paths are merged into compile.workflows; same recursive config.yml walk.
+		return cmdPackageCompileWorkflowsBatch(args[1:])
 	case "workflows":
 		return cmdPackageCompileWorkflowsBatch(args[1:])
 	case "all":
@@ -458,92 +463,6 @@ func cmdPackageCompileResolvers(args []string) error {
 	return nil
 }
 
-func cmdPackageCompileBundles(args []string) error {
-	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
-		fmt.Print(packageCompileBundlesUsageText)
-		return nil
-	}
-	var err error
-	args, err = injectCompileWorkdirFromProjectConfig(args)
-	if err != nil {
-		return err
-	}
-	var (
-		workdir   string
-		from      []string
-		noStaging bool
-		force     bool
-	)
-	for i := 0; i < len(args); i++ {
-		switch {
-		case args[i] == "--workdir" && i+1 < len(args):
-			workdir = args[i+1]
-			i++
-		case (args[i] == "--from" || args[i] == "--source") && i+1 < len(args):
-			from = append(from, args[i+1])
-			i++
-		case args[i] == "--no-staging":
-			noStaging = true
-		case args[i] == "--force":
-			force = true
-		case strings.HasPrefix(args[i], "-"):
-			return fmt.Errorf("unknown option %s (try: dockpipe package compile bundles --help)", args[i])
-		default:
-			if len(from) == 0 {
-				from = append(from, args[i])
-				continue
-			}
-			return fmt.Errorf("unexpected argument %q", args[i])
-		}
-	}
-	if workdir == "" {
-		wd, err := os.Getwd()
-		if err != nil {
-			return err
-		}
-		workdir = wd
-	}
-	repoRoot, err := filepath.Abs(workdir)
-	if err != nil {
-		return err
-	}
-	if len(from) == 0 {
-		cfg, err := loadDockpipeProjectConfig(repoRoot)
-		if err != nil {
-			return err
-		}
-		from = effectiveBundleCompileRoots(cfg, repoRoot, noStaging)
-	}
-	if len(from) == 0 {
-		return fmt.Errorf("no bundle source directories (set compile.bundles in %s or pass --from)", domain.DockpipeProjectConfigFileName)
-	}
-	destB, err := infrastructure.PackagesBundlesDir(workdir)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(destB, 0o755); err != nil {
-		return err
-	}
-	total := 0
-	for _, root := range from {
-		srcAbs, err := filepath.Abs(filepath.Clean(root))
-		if err != nil {
-			return err
-		}
-		if st, err := os.Stat(srcAbs); err != nil || !st.IsDir() {
-			fmt.Fprintf(os.Stderr, "[dockpipe] skip missing bundles root: %s\n", srcAbs)
-			continue
-		}
-		n, err := mergeChildPackages(srcAbs, destB, "bundle", "", force)
-		if err != nil {
-			return err
-		}
-		total += n
-	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] wrote %d bundle tarball(s) → %s\n", total, destB)
-	return nil
-}
-
 const resolverMetaFilename = "resolver.yaml"
 
 // readResolverNamespaceYAML returns the optional namespace from <dir>/resolver.yaml (empty if absent).
@@ -618,7 +537,7 @@ func hasNestedResolverPackLayout(dir string) bool {
 }
 
 // mergeChildPackages packs each immediate child directory from srcRoot into
-// dockpipe-{resolver|bundle}-<name>-<ver>.tar.gz under destRoot (no expanded trees).
+// dockpipe-resolver-<name>-<ver>.tar.gz under destRoot (no expanded trees).
 // For resolvers, when the tree is grouped (child dirs without profile/), we descend until profile/ is found.
 //
 // Resolver authoring: one or more pack roots are collected (see collectResolverPackRoots):
@@ -683,15 +602,10 @@ func mergeChildPackagesWalk(srcRoot, destRoot string, kind string, defaultNamesp
 				continue
 			}
 		}
-		var tarGlob string
-		switch kind {
-		case "resolver":
-			tarGlob = filepath.Join(destRoot, fmt.Sprintf("dockpipe-resolver-%s-*.tar.gz", packagebuild.SafeTarballToken(name)))
-		case "bundle":
-			tarGlob = filepath.Join(destRoot, fmt.Sprintf("dockpipe-bundle-%s-*.tar.gz", packagebuild.SafeTarballToken(name)))
-		default:
+		if kind != "resolver" {
 			return n, fmt.Errorf("mergeChildPackages: unknown kind %q", kind)
 		}
+		tarGlob := filepath.Join(destRoot, fmt.Sprintf("dockpipe-resolver-%s-*.tar.gz", packagebuild.SafeTarballToken(name)))
 		legacyDir := filepath.Join(destRoot, name)
 		if !force {
 			if matches, _ := filepath.Glob(tarGlob); len(matches) > 0 {
@@ -754,16 +668,8 @@ func mergeChildPackagesWalk(srcRoot, destRoot string, kind string, defaultNamesp
 		if ver == "" {
 			ver = "0.1.0"
 		}
-		var prefix string
-		var base string
-		switch kind {
-		case "resolver":
-			prefix = "resolvers/" + name
-			base = fmt.Sprintf("dockpipe-resolver-%s-%s.tar.gz", packagebuild.SafeTarballToken(name), packagebuild.SafeTarballToken(ver))
-		case "bundle":
-			prefix = "bundles/" + name
-			base = fmt.Sprintf("dockpipe-bundle-%s-%s.tar.gz", packagebuild.SafeTarballToken(name), packagebuild.SafeTarballToken(ver))
-		}
+		prefix := "resolvers/" + name
+		base := fmt.Sprintf("dockpipe-resolver-%s-%s.tar.gz", packagebuild.SafeTarballToken(name), packagebuild.SafeTarballToken(ver))
 		outPath := filepath.Join(destRoot, base)
 		if _, err := packagebuild.WriteDirTarGzWithPrefix(staging, outPath, prefix); err != nil {
 			_ = os.RemoveAll(staging)
@@ -879,10 +785,9 @@ func cmdPackageCompileAll(args []string) error {
 		return err
 	}
 	var (
-		workdir     string
-		force       bool
-		noStaging   bool
-		withBundles bool
+		workdir   string
+		force     bool
+		noStaging bool
 	)
 	for i := 0; i < len(args); i++ {
 		switch {
@@ -893,10 +798,8 @@ func cmdPackageCompileAll(args []string) error {
 			force = true
 		case args[i] == "--no-staging":
 			noStaging = true
-		case args[i] == "--with-bundles":
-			withBundles = true
-		case args[i] == "--skip-bundles":
-			// Deprecated: bundles are no longer part of compile all unless --with-bundles.
+		case args[i] == "--with-bundles", args[i] == "--skip-bundles":
+			// Ignored: bundle roots compile as workflows (compile.bundles merged into compile.workflows).
 		case args[i] == "--help" || args[i] == "-h":
 			fmt.Print(packageCompileAllUsageText)
 			return nil
@@ -940,23 +843,6 @@ func cmdPackageCompileAll(args []string) error {
 			return err
 		}
 	}
-	if withBundles && !noStaging {
-		bundleRoots := effectiveBundleCompileRoots(cfg, repoRoot, noStaging)
-		if len(bundleRoots) == 0 {
-			fmt.Fprintf(os.Stderr, "[dockpipe] compile all: skip bundles (no roots)\n")
-		} else {
-			bArgs := []string{"--workdir", workdir}
-			if force {
-				bArgs = append(bArgs, "--force")
-			}
-			for _, p := range bundleRoots {
-				bArgs = append(bArgs, "--from", p)
-			}
-			if err := cmdPackageCompileBundles(bArgs); err != nil {
-				return err
-			}
-		}
-	}
 	wfArgs := workdirAndForceArgs(workdir, force)
 	for _, p := range effectiveWorkflowCompileRoots(cfg, repoRoot, noStaging) {
 		wfArgs = append(wfArgs, "--from", p)
@@ -982,14 +868,13 @@ Validate and materialize packages into .dockpipe/internal/packages/ (see docs/pa
 Usage:
   dockpipe package compile core [options]
   dockpipe package compile resolvers [options]
-  dockpipe package compile bundles [options]
+  dockpipe package compile bundles [options]   (alias: same as compile workflows; compile.bundles merged into roots)
   dockpipe package compile workflows [options]
   dockpipe package compile all [options]
   dockpipe package compile workflow [options] [--from] <source-dir>
 
-Order for a full local store: core (spine only) → resolvers → workflows, each in its own
-tree under packages/{core,resolvers,workflows}/. Optional bundles: use "compile bundles" or
-"compile all --with-bundles". Use "compile all" to run the default sequence.
+Order for a full local store: core (spine only) → resolvers → workflows (dockpipe-workflow-* tarballs only).
+Use "compile all" to run the default sequence.
 
 `
 
@@ -1011,7 +896,7 @@ const packageCompileCoreUsageText = `dockpipe package compile core
 Copies a core authoring tree (default: src/core or templates/core when present) into
 <workdir>/.dockpipe/internal/packages/core/ and writes package.yml (kind: core).
 Top-level resolvers/, bundles/, and workflows/ in the source are omitted — compile those with
-"package compile resolvers|bundles|workflows" so they land under packages/resolvers/, etc.
+"package compile resolvers|workflows" so they land under packages/resolvers/ or packages/workflows/.
 
 Optional dockpipe.config.json "compile.core_from" overrides the default core path when --from is omitted.
 
@@ -1028,7 +913,8 @@ Merges each child directory from each --from source into
 .dockpipe/internal/packages/resolvers/<name>/ (later --from wins on name clash).
 
 Defaults come from dockpipe.config.json compile.resolvers when present, else
-src/core/resolvers, templates/core/resolvers, then .staging/packages (dirs with profile/ are packed, including dockpipe/*/resolvers/ and grouped packages/*/resolvers).
+src/core/resolvers and templates/core/resolvers when those directories exist. Add more roots in compile.resolvers
+(e.g. maintainer package trees). Dirs with profile/ under each root become resolver tarballs.
 
 Pack roots (each immediate child with profile/ becomes one store tarball):
   - <from>/resolvers/...                    (flat vendor tree)
@@ -1047,14 +933,13 @@ Options:
 
 const packageCompileBundlesUsageText = `dockpipe package compile bundles
 
-Merges each child directory from each --from into
-.dockpipe/internal/packages/bundles/<name>/.
-
-Defaults: dockpipe.config.json compile.bundles (no implicit paths).
+Same as "dockpipe package compile workflows". Legacy name only — compile.bundles paths are merged into
+compile.workflows; bundle-listed trees are normal workflows (config.yml per directory).
 
 Options:
   --workdir <path>      Project directory (default: current directory)
-  --from <path>         Repeatable
+  --from <path>         Repeatable workflow roots
+  --force               Replace existing tarballs
   --no-staging          Skip .staging paths when using defaults
 
 `
@@ -1075,15 +960,15 @@ Options:
 
 const packageCompileAllUsageText = `dockpipe package compile all
 
-Runs: compile core → compile resolvers → compile workflows. Bundles are optional (see below).
+Runs: compile core → compile resolvers → compile workflows (including roots from compile.bundles merged into compile.workflows).
 Uses dockpipe.config.json for source lists when present (see package-model.md).
 
 Note: dockpipe build runs this command with --force so existing compiled trees are replaced.
 
 Options:
   --workdir <path>   Project directory (default: directory with dockpipe.config.json, walking up from cwd; else cwd)
-  --force            Replace existing packages/core and packages/workflows/<name> outputs
+  --force            Replace existing packages/core and tarball outputs under packages/workflows/
   --no-staging       Filter out .staging/* paths when resolving defaults or config lists
-  --with-bundles     Also run compile bundles (merge into packages/bundles/)
+  --with-bundles, --skip-bundles   Ignored (compatibility no-ops)
 
 `

@@ -1,6 +1,5 @@
 #include "EditContextDialog.h"
 #include "DockpipeChoices.h"
-#include "FlathubSearchDialog.h"
 
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -14,24 +13,6 @@
 #include <QVBoxLayout>
 
 namespace {
-
-void replaceOrAppendEnvLine(QString &block, const QString &key, const QString &value)
-{
-    const QString newLine = key + QLatin1Char('=') + value;
-    QStringList lines = block.split(QLatin1Char('\n'));
-    bool found = false;
-    for (QString &line : lines) {
-        const QString t = line.trimmed();
-        if (t.startsWith(key + QLatin1Char('='))) {
-            line = newLine;
-            found = true;
-            break;
-        }
-    }
-    if (!found)
-        lines.append(newLine);
-    block = lines.join(QLatin1Char('\n'));
-}
 
 void fillCombo(QComboBox *cb, const QStringList &items, const QString &current)
 {
@@ -65,12 +46,9 @@ EditContextDialog::EditContextDialog(const Context &ctx, QWidget *parent)
     m_env = new QLineEdit(ctx.envFile);
 
     m_extraEnv = new QPlainTextEdit;
-    m_extraEnv->setPlaceholderText(tr("One KEY=value per line, passed as dockpipe --env (e.g. FLATHUB_APP_ID=com.valvesoftware.Steam)"));
+    m_extraEnv->setPlaceholderText(tr("One KEY=value per line, passed as dockpipe --env (e.g. OPENAI_API_KEY=…)"));
     m_extraEnv->setTabChangesFocus(true);
     m_extraEnv->setPlainText(ctx.extraDockpipeEnv.join(QLatin1Char('\n')));
-
-    m_flathubBtn = new QPushButton(tr("Browse Flathub…"));
-    m_flathubBtn->setObjectName(QStringLiteral("secondaryButton"));
 
     populateCombos(ctx.workdir);
 
@@ -114,10 +92,6 @@ EditContextDialog::EditContextDialog(const Context &ctx, QWidget *parent)
     extraLay->setContentsMargins(0, 0, 0, 0);
     extraLay->setSpacing(6);
     extraLay->addWidget(m_extraEnv);
-    auto *extraBtnRow = new QHBoxLayout;
-    extraBtnRow->addWidget(m_flathubBtn);
-    extraBtnRow->addStretch(1);
-    extraLay->addLayout(extraBtnRow);
     wForm->addRow(tr("Extra dockpipe env"), extraRow);
 
     auto *exec = new QGroupBox(tr("Execution"));
@@ -145,7 +119,6 @@ EditContextDialog::EditContextDialog(const Context &ctx, QWidget *parent)
     connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
     connect(wfBrowse, &QPushButton::clicked, this, &EditContextDialog::browseWorkflowFile);
     connect(envBrowse, &QPushButton::clicked, this, &EditContextDialog::browseEnvFile);
-    connect(m_flathubBtn, &QPushButton::clicked, this, &EditContextDialog::browseFlathub);
 }
 
 void EditContextDialog::populateCombos(const QString &workdir)
@@ -175,19 +148,6 @@ void EditContextDialog::browseEnvFile()
                                                       tr("Env (*.env *.sh);;All files (*)"));
     if (!path.isEmpty())
         m_env->setText(path);
-}
-
-void EditContextDialog::browseFlathub()
-{
-    FlathubSearchDialog dlg(this);
-    if (dlg.exec() != QDialog::Accepted)
-        return;
-    const QString id = dlg.selectedAppId();
-    if (id.isEmpty())
-        return;
-    QString block = m_extraEnv->toPlainText();
-    replaceOrAppendEnvLine(block, QStringLiteral("FLATHUB_APP_ID"), id);
-    m_extraEnv->setPlainText(block);
 }
 
 Context EditContextDialog::editedContext() const

@@ -20,7 +20,6 @@ private:
     void populateCombos(const QString &workdir);
     void browseWorkflowFile();
     void browseEnvFile();
-    void browseFlathub();
 
     Context m_original;
 
@@ -34,5 +33,4 @@ private:
     QLineEdit *m_dockpipe = nullptr;
     QLineEdit *m_env = nullptr;
     QPlainTextEdit *m_extraEnv = nullptr;
-    QPushButton *m_flathubBtn = nullptr;
 };

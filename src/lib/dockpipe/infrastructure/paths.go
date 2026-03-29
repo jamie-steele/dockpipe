@@ -23,7 +23,7 @@ var errStopScriptWalk = errors.New("stop script walk")
 // Namespace: scripts/core.<dot.segments> maps to paths under core/ by turning dots into path segments
 // (e.g. scripts/core.assets.scripts.foo.sh → core/assets/scripts/foo.sh). Resolution order for that path:
 // .dockpipe/core/…, .dockpipe/internal/packages/core/…, then templates/core/… (compiled core spine).
-// Resolver/bundle scripts also resolve under packages/resolvers/ and packages/bundles/ (see resolveScriptsPrefixedPath).
+// Resolver tarballs under packages/resolvers/; workflow tarballs under packages/workflows/ (see resolveScriptsPrefixedPath).
 // Uses forward slashes so YAML paths match Linux/container expectations.
 func ResolveWorkflowScript(rel, workflowRoot, repoRoot string) string {
 	if strings.HasPrefix(rel, "scripts/") {
@@ -206,22 +206,42 @@ func resolveCoreNamespacedAsset(repoRoot, rest string) (string, bool) {
 	return "", false
 }
 
-// scriptPathFromResolverOrBundleTarballs resolves scripts under packages/{resolvers,bundles} when those
-// stores contain only dockpipe-{resolver,bundle}-*.tar.gz blobs (extracted to a content-addressed cache).
-func scriptPathFromResolverOrBundleTarballs(repoRoot, pkgDir, kindPrefix, rest string) (string, bool) {
-	var pattern string
-	if kindPrefix == "resolvers" {
-		pattern = filepath.Join(pkgDir, "dockpipe-resolver-*.tar.gz")
-	} else {
-		pattern = filepath.Join(pkgDir, "dockpipe-bundle-*.tar.gz")
-	}
+// scriptPathFromResolverTarballs resolves scripts under packages/resolvers (dockpipe-resolver-*.tar.gz).
+func scriptPathFromResolverTarballs(repoRoot, pkgDir, rest string) (string, bool) {
+	pattern := filepath.Join(pkgDir, "dockpipe-resolver-*.tar.gz")
 	matches, _ := filepath.Glob(pattern)
 	for _, tgz := range matches {
 		root, err := packagebuild.EnsureTarballExtractedCache(tgz, TarballExtractCacheRoot(repoRoot))
 		if err != nil {
 			continue
 		}
-		p := filepath.Join(root, kindPrefix, rest)
+		p := filepath.Join(root, "resolvers", rest)
+		if scriptFileExists(p) {
+			return p, true
+		}
+	}
+	return "", false
+}
+
+// scriptPathFromWorkflowTarballs resolves scripts/<domain>/tail to workflows/<domain>/assets/scripts/tail
+// inside dockpipe-workflow-*.tar.gz (compiled store).
+func scriptPathFromWorkflowTarballs(repoRoot, pkgDir, rest string) (string, bool) {
+	if !strings.Contains(rest, "/") {
+		return "", false
+	}
+	first, after, ok := strings.Cut(rest, "/")
+	if !ok || after == "" {
+		return "", false
+	}
+	rel := filepath.ToSlash(filepath.Join("workflows", first, "assets", "scripts", after))
+	pattern := filepath.Join(pkgDir, "dockpipe-workflow-*.tar.gz")
+	matches, _ := filepath.Glob(pattern)
+	for _, tgz := range matches {
+		root, err := packagebuild.EnsureTarballExtractedCache(tgz, TarballExtractCacheRoot(repoRoot))
+		if err != nil {
+			continue
+		}
+		p := filepath.Join(root, filepath.FromSlash(rel))
 		if scriptFileExists(p) {
 			return p, true
 		}
@@ -261,24 +281,24 @@ func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 		return p
 	}
 	pkgRes := filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "resolvers")
-	pkgBun := filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "bundles")
+	pkgWf := filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "workflows")
 	if p, ok := tryBundledAssetsScripts(pkgRes, "", rest); ok {
 		return p
 	}
-	if p, ok := tryBundledAssetsScripts(pkgBun, "", rest); ok {
+	if p, ok := tryBundledAssetsScripts(pkgWf, "", rest); ok {
+		return p
+	}
+	if p, ok := scriptPathFromWorkflowTarballs(repoRoot, pkgWf, rest); ok {
 		return p
 	}
 	if scriptFileExists(filepath.Join(pkgRes, rest)) {
 		return filepath.Join(pkgRes, rest)
 	}
-	if p, ok := scriptPathFromResolverOrBundleTarballs(repoRoot, pkgRes, "resolvers", rest); ok {
+	if p, ok := scriptPathFromResolverTarballs(repoRoot, pkgRes, rest); ok {
 		return p
 	}
-	if scriptFileExists(filepath.Join(pkgBun, rest)) {
-		return filepath.Join(pkgBun, rest)
-	}
-	if p, ok := scriptPathFromResolverOrBundleTarballs(repoRoot, pkgBun, "bundles", rest); ok {
-		return p
+	if scriptFileExists(filepath.Join(pkgWf, rest)) {
+		return filepath.Join(pkgWf, rest)
 	}
 	core := CoreDir(repoRoot)
 	wfRoots := WorkflowCompileRootsCached(repoRoot)

@@ -120,11 +120,11 @@ func TestResolveWorkflowScriptResolvesScriptsPrefixToCoreWhenUserMissing(t *test
 
 func TestResolveWorkflowScriptResolvesScriptsPrefixToBundlesDirWhenPresent(t *testing.T) {
 	repo := t.TempDir()
-	cfg := `{"schema":1,"compile":{"bundles":[".staging/packages/dockpipe/bundles"]}}`
+	cfg := `{"schema":1,"compile":{"bundles":["vendor/dockpipe-pkgs"]}}`
 	if err := os.WriteFile(filepath.Join(repo, "dockpipe.config.json"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	b := filepath.Join(repo, ".staging", "packages", "dockpipe", "bundles", "dorkpipe", "assets", "scripts", "aggregate-reasoning-context.sh")
+	b := filepath.Join(repo, "vendor", "dockpipe-pkgs", "agent", "dorkpipe", "assets", "scripts", "aggregate-reasoning-context.sh")
 	if err := os.MkdirAll(filepath.Dir(b), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -139,11 +139,11 @@ func TestResolveWorkflowScriptResolvesScriptsPrefixToBundlesDirWhenPresent(t *te
 
 func TestResolveWorkflowScriptResolvesScriptsPrefixToResolverDirWhenPresent(t *testing.T) {
 	repo := t.TempDir()
-	cfg := `{"schema":1,"compile":{"workflows":[".staging/packages"]}}`
+	cfg := `{"schema":1,"compile":{"workflows":["vendor/extra-workflows"]}}`
 	if err := os.WriteFile(filepath.Join(repo, "dockpipe.config.json"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	rs := filepath.Join(repo, ".staging", "packages", "dockpipe", "ide", "resolvers", "cursor-dev", "assets", "scripts", "cursor-dev-session.sh")
+	rs := filepath.Join(repo, "vendor", "extra-workflows", "dockpipe", "ide", "resolvers", "cursor-dev", "assets", "scripts", "cursor-dev-session.sh")
 	if err := os.MkdirAll(filepath.Dir(rs), 0o755); err != nil {
 		t.Fatal(err)
 	}

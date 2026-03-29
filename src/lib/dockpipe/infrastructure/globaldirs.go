@@ -60,7 +60,7 @@ func GlobalTemplatesCoreDir() (string, error) {
 	return filepath.Join(root, "templates", "core"), nil
 }
 
-// GlobalPackagesRoot holds global package trees: packages/{workflows,resolvers,core,bundles}/...
+// GlobalPackagesRoot holds global package trees: packages/{workflows,resolvers,core}/...
 // (flat under the global data dir — not under .dockpipe/internal).
 func GlobalPackagesRoot() (string, error) {
 	root, err := GlobalDockpipeDataDir()

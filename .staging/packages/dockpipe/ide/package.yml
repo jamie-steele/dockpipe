@@ -5,7 +5,8 @@ version: 0.1.0
 title: DockPipe IDE resolvers
 description: |
   Umbrella package for editor and IDE-style tool profiles. Resolvers under resolvers/ ship as
-  separate installable packages (vscode, cursor-dev, code-server, …).
+  separate installable packages (vscode, cursor-dev, code-server, …). The **pipeon** workflow
+  (product harness + scripts) lives under **ide/pipeon/** next to resolvers.
 author: DockPipe
 license: Apache-2.0
 repository: https://github.com/dockpipe/dockpipe

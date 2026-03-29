@@ -175,17 +175,17 @@ func cmdPackageBuildStore(args []string) error {
 	if m.Packages.Core != nil {
 		n++
 	}
-	n += len(m.Packages.Workflows) + len(m.Packages.Resolvers) + len(m.Packages.Bundles)
+	n += len(m.Packages.Workflows) + len(m.Packages.Resolvers)
 	fmt.Fprintf(os.Stderr, "[dockpipe] wrote %d tarball(s) + packages-store-manifest.json under %s\n", n, outDir)
 	return nil
 }
 
 func validatePackageBuildStoreOnly(only string) error {
 	switch strings.TrimSpace(strings.ToLower(only)) {
-	case "", "all", "core", "workflows", "resolvers", "bundles":
+	case "", "all", "core", "workflows", "resolvers":
 		return nil
 	default:
-		return fmt.Errorf(`invalid --only %q (use all, core, workflows, resolvers, bundles)`, only)
+		return fmt.Errorf(`invalid --only %q (use all, core, workflows, resolvers)`, only)
 	}
 }
 
@@ -226,7 +226,7 @@ Usage:
          (same layout as dockpipe install core / release/packaging).
 
   store  From the compiled package store (.dockpipe/internal/packages after dockpipe build) —
-         dockpipe-{core|workflow|resolver|bundle}-<name>-<ver>.tar.gz + packages-store-manifest.json.
+         dockpipe-{core|workflow|resolver}-<name>-<ver>.tar.gz + packages-store-manifest.json.
 
 `
 
@@ -245,9 +245,8 @@ Options:
 const packageBuildStoreUsageText = `dockpipe package build store
 
 Packs each compiled package under <workdir>/.dockpipe/internal/packages into a gzip tarball
-with a stable in-archive prefix (core/, workflows/<name>/, resolvers/<name>/). Optional bundle
-packages only when you pass --only bundles. Writes packages-store-manifest.json listing every
-artifact with sha256. Each tarball has a matching .sha256 file.
+with a stable in-archive prefix (core/, workflows/<name>/, resolvers/<name>/).
+Writes packages-store-manifest.json listing every artifact with sha256. Each tarball has a matching .sha256 file.
 
 Requires a prior dockpipe build (or package compile all) so the store is populated.
 Version in each tarball name comes from that package's package.yml, or --version, or 0.0.0.
@@ -255,7 +254,7 @@ Version in each tarball name comes from that package's package.yml, or --version
 Options:
   --workdir <path>   Project root (default: directory with dockpipe.config.json, else cwd)
   --out <dir>        Output directory (default: <workdir>/release/artifacts)
-  --only <slice>     all (default) = core + workflows + resolvers; or core | workflows | resolvers | bundles
+  --only <slice>     all (default) = core + workflows + resolvers; or core | workflows | resolvers
   --version <ver>    Fallback version when package.yml omits version (default: VERSION file or 0.0.0)
 
 `

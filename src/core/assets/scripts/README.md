@@ -4,7 +4,7 @@
 
 **Resolver-specific** host scripts live **only** under **`templates/core/resolvers/<name>/`** (next to **`config.yml`**). **`ResolveWorkflowScript`** maps **`scripts/cursor-dev/…`** and **`scripts/vscode/…`** to those paths — nothing duplicate under **`assets/scripts/`** for those names.
 
-**Domain assets** (**DorkPipe**, Pipeon, review-pipeline, …) live under **`templates/core/bundles/<domain>/`** — see **`../bundles/README.md`**. They are **merged** with **`dockpipe init`** / the materialized **`templates/core`** bundle and referenced as **`scripts/<domain>/…`** in YAML. Do not park domain scripts next to **`resolvers/`** unless they are true **`--resolver`** profiles.
+**Domain assets** (**DorkPipe**, Pipeon, …) live under **`templates/core/bundles/<domain>/`** — see **`../bundles/README.md`**. They are **merged** with **`dockpipe init`** / the materialized **`templates/core`** bundle and referenced as **`scripts/<domain>/…`** in YAML. In **this** repository, review prep lives under **`workflows/review-pipeline/`** (same **`scripts/review-pipeline/…`** path in YAML). Do not park domain scripts next to **`resolvers/`** unless they are true **`--resolver`** profiles.
 
 | Script | Type | What it does |
 |--------|------|--------------|

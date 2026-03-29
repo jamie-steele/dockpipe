@@ -34,7 +34,7 @@ type DockpipeCompileConfig struct {
 	CoreFrom  *string   `json:"core_from,omitempty"`  // optional override for compile core --from
 	Workflows *[]string `json:"workflows,omitempty"`  // roots scanned for named workflow folders
 	Resolvers *[]string `json:"resolvers,omitempty"`  // roots whose children are resolver profile dirs
-	Bundles   *[]string `json:"bundles,omitempty"`    // roots whose children are bundle dirs
+	Bundles   *[]string `json:"bundles,omitempty"`    // deprecated: merged into compile.workflows (same config.yml walk)
 }
 
 // DockpipePackagesConfig holds optional defaults for packaged workflows/resolvers and tarball resolution.

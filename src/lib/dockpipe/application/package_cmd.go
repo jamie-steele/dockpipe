@@ -72,7 +72,6 @@ func walkPackageDirs(root string) error {
 		{"core", "dockpipe-core-*.tar.gz"},
 		{"workflows", "dockpipe-workflow-*.tar.gz"},
 		{"resolvers", "dockpipe-resolver-*.tar.gz"},
-		{"bundles", "dockpipe-bundle-*.tar.gz"},
 	} {
 		matches, err := filepath.Glob(filepath.Join(root, tc.sub, tc.glob))
 		if err != nil {
@@ -144,12 +143,6 @@ func packageYMLPathInTarMembers(sub string, members []string) string {
 	case "resolvers":
 		for _, m := range members {
 			if strings.HasPrefix(m, "resolvers/") && strings.HasSuffix(m, "/package.yml") {
-				return m
-			}
-		}
-	case "bundles":
-		for _, m := range members {
-			if strings.HasPrefix(m, "bundles/") && strings.HasSuffix(m, "/package.yml") {
 				return m
 			}
 		}
@@ -231,14 +224,14 @@ Usage:
   dockpipe package list [--workdir <path>]
   dockpipe package manifest
   dockpipe package build core|store [options]
-  dockpipe package compile core|resolvers|bundles|workflows|all|workflow [options]
+  dockpipe package compile core|resolvers|bundles|workflows|all|workflow [options]  (bundles = alias for workflows)
 
   list      Find package.yml under .dockpipe/internal/packages and print rel path, name, version, provider, capability, requires_capabilities (comma-separated), description.
   manifest  Print an example package.yml schema to stdout.
   build     core: templates-core tarball + install-manifest; store: gzip tar per compiled package + packages-store-manifest.json.
-  compile   Materialize core / resolvers / workflows into .dockpipe/internal/packages/ (bundles optional; see compile --help).
+  compile   Materialize core / resolvers / workflows into .dockpipe/internal/packages/ (see compile --help).
 
-Optional repo-root dockpipe.config.json lists compile source dirs (workflows, resolvers, bundles); see docs/package-model.md.
+Optional repo-root dockpipe.config.json lists compile source dirs (workflows, resolvers; compile.bundles merged into workflows); see docs/package-model.md.
 
 Environment:
   DOCKPIPE_PACKAGES_ROOT   Override packages root (default: <workdir>/.dockpipe/internal/packages).

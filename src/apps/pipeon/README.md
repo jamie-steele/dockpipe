@@ -7,7 +7,7 @@ Optional VS Code / Cursor tasks: merge **`vscode-tasks.json.example`** into your
 | Location | What |
 |----------|------|
 | **[docs/](docs/)** | Pipeon IDE experience, VS Code fork playbook, architecture, shortcuts, keybindings example |
-| **[scripts/](scripts/)** | Harness entrypoints (symlinks into **`.staging/bundles/pipeon/`**), icon generation, desktop shortcuts, code-server launch helpers |
+| **[scripts/](scripts/)** | Harness entrypoints (symlinks into **`.staging/packages/dockpipe/ide/pipeon/`**), icon generation, desktop shortcuts, code-server launch helpers |
 | **[../apps/pipeon-launcher/](../apps/pipeon-launcher/)** | **Pipeon Launcher** (Qt tray app) |
 | **[../../src/contrib/pipeon-vscode-extension/](../../src/contrib/pipeon-vscode-extension/)** | **Pipeon IDE** VS Code extension |
 

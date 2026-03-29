@@ -32,8 +32,8 @@ func TestEffectiveWorkflowCompileRootsUsesConfigOnly(t *testing.T) {
 func TestEffectiveWorkflowCompileRootsNoDuplicateWhenListedTwice(t *testing.T) {
 	t.Parallel()
 	repo := t.TempDir()
-	staging := filepath.Join(repo, ".staging", "packages")
-	if err := os.MkdirAll(staging, 0o755); err != nil {
+	extra := filepath.Join(repo, "vendor", "extra-wf")
+	if err := os.MkdirAll(extra, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.MkdirAll(filepath.Join(repo, "workflows"), 0o755); err != nil {
@@ -41,7 +41,7 @@ func TestEffectiveWorkflowCompileRootsNoDuplicateWhenListedTwice(t *testing.T) {
 	}
 	cfg := &domain.DockpipeProjectConfig{
 		Compile: domain.DockpipeCompileConfig{
-			Workflows: &[]string{"workflows", ".staging/packages"},
+			Workflows: &[]string{"workflows", "vendor/extra-wf"},
 		},
 	}
 	out := effectiveWorkflowCompileRoots(cfg, repo, false)

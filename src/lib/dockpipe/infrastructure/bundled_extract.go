@@ -14,12 +14,12 @@ import (
 )
 
 // bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "101"
+const bundledFormatVersion = "105"
 
 var bundledMu sync.Mutex
 
 // EmbeddedWorkflowConfigExists reports whether a bundled workflow or resolver-delegate config exists for name.
-// Checks embed paths src/core/workflows/<name>/config.yml and nested src/core/workflows/**/<name>/config.yml, src/core/resolvers/<name>/config.yml (plus workflows/ and .staging/*).
+// Checks embed paths src/core/workflows/<name>/config.yml and nested src/core/workflows/**/<name>/config.yml, src/core/resolvers/<name>/config.yml (plus workflows/ and embedded maintainer packages).
 func EmbeddedWorkflowConfigExists(name string) bool {
 	if name == "" {
 		return false
@@ -34,7 +34,7 @@ func EmbeddedWorkflowConfigExists(name string) bool {
 		EmbeddedTemplatesPrefix + "/workflows/" + name + "/config.yml",
 		"workflows/" + name + "/config.yml",
 		DorkpipeLibraryWorkflowsDirRel + "/" + name + "/config.yml",
-		".staging/packages/" + name + "/config.yml",
+		embeddedFSPackagesPrefix + "/" + name + "/config.yml",
 		EmbeddedTemplatesPrefix + "/resolvers/" + name + "/config.yml",
 	} {
 		if _, err := fs.Stat(dockpipe.BundledFS, p); err == nil {
@@ -73,7 +73,7 @@ func embeddedBundledWorkflowsNestedConfigExists(name string) bool {
 
 func embeddedStagingWorkflowConfigExists(name string) bool {
 	found := false
-	_ = fs.WalkDir(dockpipe.BundledFS, ".staging/packages", func(path string, d fs.DirEntry, err error) error {
+	_ = fs.WalkDir(dockpipe.BundledFS, embeddedFSPackagesPrefix, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if os.IsNotExist(err) {
 				return nil
@@ -180,10 +180,10 @@ func bundledCacheBase() (string, error) {
 	return cacheBase, nil
 }
 
-// embedWorkflowRoot records a workflow directory under .staging/packages (any depth) for material
+// embedWorkflowRoot records a workflow directory under embeddedFSPackagesPrefix (any depth) for material
 // shipyard/workflows/<name>/… mapping.
 type embedWorkflowRoot struct {
-	prefix string // e.g. dockpipe/ide/resolvers/vscode (no leading .staging/packages)
+	prefix string // e.g. dockpipe/ide/resolvers/vscode (no leading embedded packages prefix)
 	name   string // workflow leaf basename (e.g. codex)
 }
 
@@ -195,7 +195,7 @@ var (
 func initStagingEmbedRoots() {
 	stagingEmbedRootsOnce.Do(func() {
 		seen := map[string]struct{}{}
-		_ = fs.WalkDir(dockpipe.BundledFS, ".staging/packages", func(path string, d fs.DirEntry, err error) error {
+		_ = fs.WalkDir(dockpipe.BundledFS, embeddedFSPackagesPrefix, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				if os.IsNotExist(err) {
 					return nil
@@ -205,7 +205,7 @@ func initStagingEmbedRoots() {
 			if d.IsDir() || (d.Name() != "config.yml" && d.Name() != "profile") {
 				return nil
 			}
-			rel := strings.TrimPrefix(path, ".staging/packages")
+			rel := strings.TrimPrefix(path, embeddedFSPackagesPrefix)
 			rel = strings.TrimPrefix(rel, "/")
 			parent := filepath.Dir(rel)
 			if parent == "." || parent == "" {
@@ -225,10 +225,10 @@ func initStagingEmbedRoots() {
 	})
 }
 
-// mapEmbeddedStagingWorkflowRel maps .staging/packages/** to shipyard/workflows/<workflow>/… using
+// mapEmbeddedStagingWorkflowRel maps embedded packages/** to shipyard/workflows/<workflow>/… using
 // discovered config.yml / profile roots (namespace nesting of any depth).
 func mapEmbeddedStagingWorkflowRel(rel string) (string, bool) {
-	const pfx = ".staging/packages"
+	pfx := embeddedFSPackagesPrefix
 	if rel != pfx && !strings.HasPrefix(rel, pfx+"/") {
 		return "", false
 	}
@@ -272,13 +272,6 @@ func mapEmbeddedToMaterializedPath(rel string) string {
 			return filepath.Join(ShipyardDir, "core")
 		}
 		return filepath.Join(ShipyardDir, "core", filepath.FromSlash(suffix))
-	case rel == ".staging/packages/dockpipe/bundles" || strings.HasPrefix(rel, ".staging/packages/dockpipe/bundles/"):
-		rest := strings.TrimPrefix(rel, ".staging/packages/dockpipe/bundles")
-		rest = strings.TrimPrefix(rest, "/")
-		if rest == "" {
-			return filepath.Join(ShipyardDir, "core", "bundles")
-		}
-		return filepath.Join(ShipyardDir, "core", "bundles", filepath.FromSlash(rest))
 	case rel == "workflows" || strings.HasPrefix(rel, "workflows/"):
 		rest := strings.TrimPrefix(rel, "workflows")
 		rest = strings.TrimPrefix(rest, "/")
@@ -286,11 +279,11 @@ func mapEmbeddedToMaterializedPath(rel string) string {
 			return filepath.Join(ShipyardDir, "workflows")
 		}
 		return filepath.Join(ShipyardDir, "workflows", rest)
-	case rel == ".staging/packages" || strings.HasPrefix(rel, ".staging/packages/"):
+	case rel == embeddedFSPackagesPrefix || strings.HasPrefix(rel, embeddedFSPackagesPrefix+"/"):
 		if out, ok := mapEmbeddedStagingWorkflowRel(rel); ok {
 			return out
 		}
-		rest := strings.TrimPrefix(rel, ".staging/packages")
+		rest := strings.TrimPrefix(rel, embeddedFSPackagesPrefix)
 		rest = strings.TrimPrefix(rest, "/")
 		if rest == "" {
 			return filepath.Join(ShipyardDir, "workflows")

@@ -81,7 +81,7 @@ func validateCompileOutputs(workdir string) error {
 					continue
 				}
 				if !known[dep] {
-					return fmt.Errorf("package %q depends on %q, which is not present in the compiled store — build core → resolvers → workflows (and bundles if needed) so dependencies exist first", pm.Name, dep)
+					return fmt.Errorf("package %q depends on %q, which is not present in the compiled store — run dockpipe build so dependencies exist first", pm.Name, dep)
 				}
 			}
 		}
@@ -198,15 +198,13 @@ func compiledPackageNamesFromTarballs(pkgsRoot string) map[string]bool {
 			}
 		}
 	}
-	for _, kind := range []string{"workflows", "resolvers", "bundles"} {
+	for _, kind := range []string{"workflows", "resolvers"} {
 		var pattern string
 		switch kind {
 		case "workflows":
 			pattern = filepath.Join(pkgsRoot, "workflows", "dockpipe-workflow-*.tar.gz")
 		case "resolvers":
 			pattern = filepath.Join(pkgsRoot, "resolvers", "dockpipe-resolver-*.tar.gz")
-		case "bundles":
-			pattern = filepath.Join(pkgsRoot, "bundles", "dockpipe-bundle-*.tar.gz")
 		}
 		matches, _ := filepath.Glob(pattern)
 		for _, tgz := range matches {
@@ -226,14 +224,6 @@ func compiledPackageNamesFromTarballs(pkgsRoot string) map[string]bool {
 				for _, m := range members {
 					parts := strings.Split(m, "/")
 					if len(parts) >= 3 && parts[0] == "resolvers" && parts[2] == infrastructure.PackageManifestFilename {
-						suffix = m
-						break
-					}
-				}
-			case "bundles":
-				for _, m := range members {
-					parts := strings.Split(m, "/")
-					if len(parts) >= 3 && parts[0] == "bundles" && parts[2] == infrastructure.PackageManifestFilename {
 						suffix = m
 						break
 					}

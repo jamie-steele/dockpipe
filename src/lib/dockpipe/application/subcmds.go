@@ -259,7 +259,7 @@ func copyBundledCoreInto(coreDest, repoRoot string) error {
 }
 
 // mergeBundledTemplatesCore copies templates/core from the dockpipe install into dest,
-// matching dockpipe init without --from. Tool resolvers and bundles ship in the binary via embed (.staging/*), not via templates/vendor.
+// matching dockpipe init without --from. Extra maintainer packages ship in the binary via go:embed (see embed.go), not via templates/vendor.
 func mergeBundledTemplatesCore(repoRoot, dest string) error {
 	_ = os.MkdirAll(filepath.Join(dest, "templates"), 0o755)
 	return copyBundledCoreInto(filepath.Join(dest, "templates", "core"), repoRoot)
@@ -289,7 +289,7 @@ func copyDirMaybe(src, dst string) error {
 }
 
 // copyDirExcludingTopLevel copies src into dst but skips immediate child entries of src whose names are in exclude.
-// Used for compile core so resolver, bundle, and workflow packages stay separate under packages/{resolvers,bundles,workflows}/.
+// Used for compile core so resolver and workflow slices are not folded into the core tarball (those compile separately).
 func copyDirExcludingTopLevel(src, dst string, exclude map[string]bool) error {
 	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return err

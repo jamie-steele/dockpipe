@@ -16,10 +16,9 @@ type StoreBuildManifest struct {
 	Schema    int    `json:"schema"`
 	StoreRoot string `json:"store_root,omitempty"`
 	Packages  struct {
-		Core      *StoreArtifact   `json:"core,omitempty"`
-		Workflows []StoreArtifact  `json:"workflows,omitempty"`
-		Resolvers []StoreArtifact  `json:"resolvers,omitempty"`
-		Bundles   []StoreArtifact  `json:"bundles,omitempty"`
+		Core      *StoreArtifact  `json:"core,omitempty"`
+		Workflows []StoreArtifact `json:"workflows,omitempty"`
+		Resolvers []StoreArtifact `json:"resolvers,omitempty"`
 	} `json:"packages"`
 }
 
@@ -36,7 +35,7 @@ type StoreArtifact struct {
 
 // BuildCompiledStore writes dockpipe-*.tar.gz (+ .sha256) for each slice under packagesRoot and
 // packages-store-manifest.json under outDir. fallbackVersion is used when package.yml omits version.
-// only is "all" (core + workflows + resolvers, no bundles) or one of: core, workflows, resolvers, bundles.
+// only is "all" (core + workflows + resolvers) or one of: core, workflows, resolvers.
 func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*StoreBuildManifest, error) {
 	packagesRoot = filepath.Clean(packagesRoot)
 	outDir = filepath.Clean(outDir)
@@ -118,32 +117,7 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 		sort.Slice(m.Packages.Resolvers, func(i, j int) bool { return m.Packages.Resolvers[i].Name < m.Packages.Resolvers[j].Name })
 	}
 
-	bunDir := filepath.Join(packagesRoot, "bundles")
-	if only == "bundles" {
-		names, err := listPackageSubdirs(bunDir)
-		if err != nil {
-			return nil, err
-		}
-		for _, name := range names {
-			dir := filepath.Join(bunDir, name)
-			meta := readPackageManifestMeta(dir, fallbackVersion)
-			ver := meta.Version
-			base := fmt.Sprintf("dockpipe-bundle-%s-%s.tar.gz", SafeTarballToken(name), SafeTarballToken(ver))
-			outPath := filepath.Join(outDir, base)
-			prefix := "bundles/" + name
-			sum, err := WriteDirTarGzWithPrefix(dir, outPath, prefix)
-			if err != nil {
-				return nil, fmt.Errorf("bundle %q: %w", name, err)
-			}
-			m.Packages.Bundles = append(m.Packages.Bundles, StoreArtifact{
-				Name: name, Version: ver, Tarball: base, SHA256: sum,
-				Provider: meta.Provider, Capability: meta.Capability,
-			})
-		}
-		sort.Slice(m.Packages.Bundles, func(i, j int) bool { return m.Packages.Bundles[i].Name < m.Packages.Bundles[j].Name })
-	}
-
-	if m.Packages.Core == nil && len(m.Packages.Workflows) == 0 && len(m.Packages.Resolvers) == 0 && len(m.Packages.Bundles) == 0 {
+	if m.Packages.Core == nil && len(m.Packages.Workflows) == 0 && len(m.Packages.Resolvers) == 0 {
 		return nil, fmt.Errorf("no compiled packages under %s — run `dockpipe build` (or `dockpipe package compile all`) first", packagesRoot)
 	}
 

@@ -111,9 +111,9 @@ void MainWindow::setupDisclaimerBar()
     lay->setSpacing(8);
 
     auto *disclaimer = new QLabel(
-        tr("Notice: Pipeon does not distribute Steam, Valve software, Flatpak, or other third-party "
-           "applications. Dockpipe workflows run on your machine; install tools from official sources "
-           "(vendor, Flathub, or your distro) and accept each publisher’s terms."));
+        tr("Notice: Pipeon does not distribute third-party applications. Dockpipe workflows run on "
+           "your machine; install tools from official vendor or distribution channels and accept each "
+           "publisher’s terms."));
     disclaimer->setObjectName(QStringLiteral("disclaimerWatermark"));
     disclaimer->setWordWrap(true);
     disclaimer->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -174,12 +174,10 @@ void MainWindow::setupMenuBar()
     help->addAction(tr("Third-party software notice…"), this, [this]() {
         QMessageBox::information(
             this, tr("Third-party software"),
-            tr("Pipeon is a launcher for dockpipe workflows. It does not ship, bundle, or redistribute "
-               "Steam, the Valve Steam client, Flatpak runtimes, or games.\n\n"
-               "If a workflow uses third-party software, you install it yourself using official channels "
-               "(for example your operating system’s packages or Flathub). Use of those products is subject "
-               "to their respective licensors’ terms. Pipeon and dockpipe are not affiliated with Valve "
-               "or Flathub."));
+            tr("Pipeon is a launcher for dockpipe workflows. It does not ship or bundle third-party "
+               "applications.\n\n"
+               "If a workflow needs external tools, you install them yourself from official sources. Use of "
+               "those products is subject to their respective licensors’ terms."));
     });
 
     view->addSeparator();

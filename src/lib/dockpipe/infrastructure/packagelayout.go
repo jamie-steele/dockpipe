@@ -11,15 +11,14 @@ import (
 //
 // Default root: <workdir>/.dockpipe/internal/packages:
 //
-//	workflows/   — workflow-shaped dirs (config.yml, steps, …)
+//	workflows/   — dockpipe-workflow-*.tar.gz
 //	core/        — compiled spine only: runtimes/, strategies/, assets/ (not resolvers/bundles/workflows)
 //	resolvers/   — one package dir per resolver profile (same layout as templates/core/resolvers/<name>/)
-//	bundles/     — one package dir per bundle
 //	assets/      — optional top-level shared assets (e.g. large binary packs)
 //
 // Override with DOCKPIPE_PACKAGES_ROOT (absolute path, or relative to workdir).
 //
-// User-wide installs (optional): GlobalDockpipeDataDir()/packages/{workflows,resolvers,...} — see
+// User-wide installs (optional): GlobalDockpipeDataDir()/packages/{workflows,resolvers,core,...} — see
 // `dockpipe install core --global` and infrastructure/globaldirs.go.
 const (
 	DockpipeDirRel          = ".dockpipe"
@@ -76,16 +75,7 @@ func PackagesResolversDir(workdir string) (string, error) {
 	return filepath.Join(root, "resolvers"), nil
 }
 
-// PackagesBundlesDir is .dockpipe/internal/packages/bundles — one subdirectory per bundle package.
-func PackagesBundlesDir(workdir string) (string, error) {
-	root, err := PackagesRoot(workdir)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(root, "bundles"), nil
-}
-
-// PackagesAssetsDir is .dockpipe/internal/packages/assets (optional top-level asset packs).
+// PackagesAssetsDir is .dockpipe/internal/packages/assets (optional).
 func PackagesAssetsDir(workdir string) (string, error) {
 	root, err := PackagesRoot(workdir)
 	if err != nil {

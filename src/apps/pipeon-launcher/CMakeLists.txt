@@ -12,7 +12,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_package(OpenGL REQUIRED)
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
+find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 set(PIPEON_LAUNCHER_SOURCES
     src/main.cpp
@@ -29,8 +29,6 @@ set(PIPEON_LAUNCHER_SOURCES
     src/BasicModeWidget.cpp
     src/ContextRowWidget.cpp
     src/EditContextDialog.cpp
-    src/FlathubClient.cpp
-    src/FlathubSearchDialog.cpp
     src/MainWindow.cpp
     pipeon.qrc
 )
@@ -38,7 +36,7 @@ set(PIPEON_LAUNCHER_SOURCES
 qt_add_executable(pipeon-launcher ${PIPEON_LAUNCHER_SOURCES})
 
 target_include_directories(pipeon-launcher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(pipeon-launcher PRIVATE Qt6::Widgets Qt6::Network)
+target_link_libraries(pipeon-launcher PRIVATE Qt6::Widgets)
 
 if(MSVC)
     target_compile_definitions(pipeon-launcher PRIVATE _CRT_SECURE_NO_WARNINGS)

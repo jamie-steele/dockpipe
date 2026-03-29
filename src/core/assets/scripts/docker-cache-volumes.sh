@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reusable Docker named-volume helpers for Flathub, APT, or any "cache across relaunches" path.
+# Reusable Docker named-volume helpers for APT or any "cache across relaunches" path.
 # Source:  source "$(git rev-parse --show-toplevel)/templates/core/assets/scripts/docker-cache-volumes.sh"
 # Or run:  bash scripts/docker-cache-volumes.sh ensure -- "vol:/path" "vol2:/path2"
 # (YAML paths like scripts/… resolve via paths.go — see docs/architecture.md.)
@@ -29,7 +29,7 @@ docker_cache_volume_append_mounts() {
   done
 }
 
-# Space-separated pairs in DOCKER_CACHE_VOLUMES (e.g. "dockpipe-flathub:/var/lib/flatpak dockpipe-apt-cache:/var/cache/apt")
+# Space-separated pairs in DOCKER_CACHE_VOLUMES (e.g. "dockpipe-apt-cache:/var/cache/apt dockpipe-apt-lists:/var/lib/apt/lists")
 docker_cache_volume_append_from_env() {
   local -n _out="$1"
   local pair vol path
