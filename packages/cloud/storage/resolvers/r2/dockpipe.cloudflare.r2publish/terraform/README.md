@@ -91,11 +91,24 @@ terraform import 'cloudflare_r2_custom_domain.publish[0]' '<IMPORT_ID>'
 
 ## Remote state on R2
 
-State is stored in the **`dockpipe`** bucket (override with `R2_TF_STATE_BUCKET` / `R2_TF_STATE_KEY` in **`r2-publish.sh`**) under the object key **`state/dockpipe.cloudflare.r2publish/terraform.tfstate`** (legacy: **`state/r2-publish/terraform.tfstate`**), using Terraform’s **`s3`** backend and [R2’s S3 API](https://developers.cloudflare.com/terraform/advanced-topics/remote-backend/).
+State is stored via Terraform’s **`s3`** backend and [R2’s S3 API](https://developers.cloudflare.com/terraform/advanced-topics/remote-backend/). Override bucket/key with **`DOCKPIPE_TF_STATE_BUCKET`** / **`DOCKPIPE_TF_STATE_KEY`** (or legacy **`R2_TF_STATE_*`** in **`r2-publish.sh`**). Default key shape: **`state/terraform.tfstate`** or **`state/dockpipe.cloudflare.r2publish/terraform.tfstate`** (legacy).
 
 The S3 backend needs **R2 API tokens** (Access Key ID + Secret Access Key) scoped to that bucket with **Object Read & Write** — not the Cloudflare API token used by the Terraform provider. Set **`R2_STATE_ACCESS_KEY_ID`** and **`R2_STATE_SECRET_ACCESS_KEY`**, or reuse **`AWS_ACCESS_KEY_ID`** / **`AWS_SECRET_ACCESS_KEY`** if they already target that bucket.
 
 For **local state only** (no R2 backend), run with **`R2_TF_BACKEND=local`** (see workflow README).
+
+### Security: do not share one bucket between public CDN and state
+
+If you attach an **R2 custom domain** (public HTTPS) to a bucket, **every object key** in that bucket can become reachable at `https://<hostname>/<key>` unless you restrict public access. **Terraform state must not live in that same bucket** — otherwise URLs like **`/state/terraform.tfstate`** are world-readable and leak resource metadata (and sometimes secrets).
+
+**Do this instead:**
+
+1. **Dedicated state bucket** — Create a **second** R2 bucket used **only** for remote state. **Do not** connect a public custom domain to it. Set **`DOCKPIPE_TF_STATE_BUCKET`** to that bucket name; keep **`R2_BUCKET`** / the module bucket for packages + the hostname **`packages.example.com`**.
+2. **Migrate state** — After the new bucket exists and credentials can write to it: `terraform init -migrate-state` (or re-init with the new backend and follow prompts). Then **delete** the old state object from the public bucket.
+3. **Quick mitigation** (until migrated) — In the **zone** for your domain, add a **WAF custom rule** or **Firewall rule** to **block** requests where the hostname is your R2 custom domain **and** the path starts with **`/state`** (Rules expression e.g. `(http.host eq "packages.example.com") and starts_with(http.request.uri.path, "/state")`). Prefer (1) long term.
+4. **Assume state was exposed** — Rotate credentials that might appear in state; treat the file as compromised for confidentiality.
+
+**Migrate state to a new bucket (same account):** create the new bucket in the R2 dashboard (no custom domain). Copy the state object from the old bucket to the new one with the **same key** (e.g. `state/terraform.tfstate`) using the S3-compatible API (`aws s3 cp` with your R2 endpoint and credentials), **or** run `terraform init -migrate-state` from a checkout of the module after pointing the backend at the new bucket. Only then switch **`DOCKPIPE_TF_STATE_BUCKET`** and run Terraform again. If you change the backend env without migrating, Terraform will see an empty backend and may plan **duplicate** resources — do not apply that plan.
 
 ## Import an existing bucket
 

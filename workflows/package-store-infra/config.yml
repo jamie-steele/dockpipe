@@ -23,9 +23,9 @@ vars:
   R2_BUCKET: "dockpipe"
   R2_PREFIX: "packages/"
 
-  # Remote state (same bucket; state/ prefix in R2 UI).
+  # Remote state: dedicated bucket (NOT R2_BUCKET). Prefer vault: DOCKPIPE_TF_STATE_BUCKET from .env.template (field state-bucket).
   DOCKPIPE_TF_BACKEND: "remote"
-  DOCKPIPE_TF_STATE_BUCKET: "dockpipe"
+  DOCKPIPE_TF_STATE_BUCKET: "dockpipe-tfstate"
   DOCKPIPE_TF_STATE_KEY: "state/terraform.tfstate"
 
   # r2publish only: 1 skips Terraform (e.g. bucket already exists).
