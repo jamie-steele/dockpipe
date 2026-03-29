@@ -26,8 +26,7 @@ src/apps/pipeon-launcher/build/
 build-pipeon-launcher/
 release/packaging/build/
 *.deb
-src/bin/dockpipe.bin
-src/bin/dockpipe.exe
+src/bin/
 # ad-hoc go build -o in repo root (prefer: make build-windows → src/bin/dockpipe.exe)
 /dockpipe.exe
 msi-dist/
@@ -92,3 +91,4 @@ bin/.dockpipe/
 # VS Code extension (packed / dev)
 packages/pipeon/resolvers/pipeon/vscode-extension/node_modules/
 packages/pipeon/resolvers/pipeon/vscode-extension/*.vsix
+
