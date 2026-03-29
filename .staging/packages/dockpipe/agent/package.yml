@@ -1,0 +1,16 @@
+schema: 1
+kind: package
+name: agent
+version: 0.1.0
+title: DockPipe agent resolvers
+description: |
+  Umbrella package for coding-agent tooling profiles. Each resolver under resolvers/ is a separate
+  store artifact; users install only the ones they need (codex, claude, ollama, …).
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [resolver, agents, ai]
+includes_resolvers:
+  - codex
+  - claude
+  - ollama

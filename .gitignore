@@ -55,11 +55,26 @@ Thumbs.db
 .env.local
 # 1Password inject template (op:// refs; often names private vaults — keep local)
 .env.op.template
+.env.secretstore
 
-# Maintainer-only trees (workflows/resolvers/bundles) — keep on your machine; do not commit.
+# Maintainer-only trees under .staging — keep local experiments out of git; embed.go still embeds paths from a full checkout.
+# Exception: umbrella package.yml (kind: package) under dockpipe/agent|ide|secrets — tracked; resolvers/ and everything else stays ignored.
+.staging/*
+!.staging/packages/
+.staging/packages/*
+!.staging/packages/dockpipe/
+.staging/packages/dockpipe/*
+!.staging/packages/dockpipe/agent/
+!.staging/packages/dockpipe/ide/
+!.staging/packages/dockpipe/secrets/
+.staging/packages/dockpipe/agent/*
+!.staging/packages/dockpipe/agent/package.yml
+.staging/packages/dockpipe/ide/*
+!.staging/packages/dockpipe/ide/package.yml
+.staging/packages/dockpipe/secrets/*
+!.staging/packages/dockpipe/secrets/package.yml
 # To stop tracking without deleting files: git rm -r --cached .staging
-# Note: embed.go embeds these paths; CI/fresh clones need a populated tree or a future embed-from-tracked-dir change.
-.staging/
+# Note: CI/fresh clones need a populated .staging tree for go:embed or a future embed-from-tracked-dir change.
 
 # Local `.dockpipe/` — generated handoffs, CI dumps, review/cursor prompts, optional `demo/` stubs (see AGENTS.md).
 # Canonical bundled core + workflows live under `src/core/…`; do not commit a duplicate `templates/` tree here.
@@ -68,7 +83,7 @@ Thumbs.db
 # DorkPipe runtime outputs (metrics, nodes, self-analysis scratch)
 .dorkpipe/
 
-# Terraform (e.g. .staging/workflows/r2-publish/terraform — keep .terraform.lock.hcl)
+# Terraform (e.g. .staging/workflows/dockpipe/storage/cloudflare/r2/dockpipe.cloudflare.r2publish/terraform — keep .terraform.lock.hcl)
 .terraform/
 *.tfstate
 *.tfstate.*
