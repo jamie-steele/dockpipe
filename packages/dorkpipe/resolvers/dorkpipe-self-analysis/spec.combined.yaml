@@ -1,5 +1,5 @@
 # Combined: fast deterministic prep → handoff → local Ollama refinement (requires Ollama).
-# Produces: .dockpipe/orchestrator-cursor-prompt.md (facts) + .dockpipe/orchestrator-cursor-prompt.refined.md (model layer).
+# Produces: bin/.dockpipe/orchestrator-cursor-prompt.md (facts) + bin/.dockpipe/orchestrator-cursor-prompt.refined.md (model layer).
 #
 # Run:
 #   DORKPIPE_SELF_ANALYSIS_SPEC=workflows/dorkpipe-self-analysis/spec.combined.yaml ./scripts/dorkpipe/run-self-analysis.sh
@@ -34,7 +34,7 @@ nodes:
     needs: [handoff]
     script: |
       set -euo pipefail
-      head -c 48000 .dockpipe/orchestrator-cursor-prompt.md
+      head -c 48000 bin/.dockpipe/orchestrator-cursor-prompt.md
 
   - id: refine
     kind: ollama
@@ -61,8 +61,8 @@ nodes:
         echo "save_refine: expected .dorkpipe/nodes/refine.txt from refine node" >&2
         exit 1
       fi
-      cp .dorkpipe/nodes/refine.txt .dockpipe/orchestrator-cursor-prompt.refined.md
-      echo "save_refine: wrote .dockpipe/orchestrator-cursor-prompt.refined.md ($(wc -c < .dockpipe/orchestrator-cursor-prompt.refined.md) bytes)"
+      cp .dorkpipe/nodes/refine.txt bin/.dockpipe/orchestrator-cursor-prompt.refined.md
+      echo "save_refine: wrote bin/.dockpipe/orchestrator-cursor-prompt.refined.md ($(wc -c < bin/.dockpipe/orchestrator-cursor-prompt.refined.md) bytes)"
 
   - id: merge_paste
     kind: shell

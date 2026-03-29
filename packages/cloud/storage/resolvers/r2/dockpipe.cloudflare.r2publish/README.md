@@ -1,12 +1,12 @@
 # Cloudflare R2 — Terraform module + `r2-publish.sh`
 
-This folder keeps the **Terraform module** under **`terraform/`** (paths and state keys still use the historical name **`dockpipe.cloudflare.r2publish`**). **Cloudflare/R2 Terraform host:** **`assets/scripts/terraform-cloudflare-r2-run.sh`** (resolved by **`scripts/dockpipe.cloudflare.r2publish/terraform-cloudflare-r2-run.sh`** in workflow YAML). **Tar + upload:** **`scripts/dockpipe/r2-publish.sh`**. Provider-agnostic Terraform is **`packages/terraform/resolvers/terraform-core/assets/scripts/terraform-run.sh`** (**`dockpipe.terraform.core`** only; **`scripts/core.assets.scripts.terraform-run.sh`** resolves there).
+This folder keeps the **Terraform module** under **`terraform/`** (paths and state keys still use the historical name **`dockpipe.cloudflare.r2publish`**). The **Cloudflare/R2 Terraform host script** (thin wrapper around **`terraform-core`**’s **`terraform-pipeline.sh`**) lives with the infra workflow resolver: **`packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/assets/scripts/terraform-cloudflare-r2-run.sh`**, referenced in YAML as **`scripts/dockpipe.cloudflare.r2infra/terraform-cloudflare-r2-run.sh`**. **Tar + upload:** **`scripts/dockpipe/r2-publish.sh`**. Provider-agnostic Terraform is **`packages/terraform/resolvers/terraform-core/assets/scripts/terraform-run.sh`** (**`dockpipe.terraform.core`** only; **`scripts/core.assets.scripts.terraform-run.sh`** resolves there).
 
 **Infra and object upload are separate workflows** (same script, different env):
 
 | Workflow | What runs |
 |----------|-------------|
-| **`dockpipe.cloudflare.r2infra`** | Terraform only via **`scripts/dockpipe.cloudflare.r2publish/terraform-cloudflare-r2-run.sh`** (Cloudflare/R2 host; **`r2-publish.sh`** resolves the same script). No tarball, no upload; does not require **`release/artifacts`**. |
+| **`dockpipe.cloudflare.r2infra`** | Terraform only via **`scripts/dockpipe.cloudflare.r2infra/terraform-cloudflare-r2-run.sh`** (Cloudflare/R2 host; **`r2-publish.sh`** resolves the same file). No tarball, no upload; does not require **`release/artifacts`**. |
 | **`dockpipe.cloudflare.r2upload`** | Tar **`R2_PUBLISH_SOURCE`** and upload — **`R2_SKIP_TERRAFORM=1`**. Run after **`r2infra`** (or when the bucket already exists). |
 
 Typical order: **`r2infra`** (or **`package-store-infra`** with nested r2infra + shared vars) → **`dockpipe package build store`** when you need store tarballs → **`r2upload`**.

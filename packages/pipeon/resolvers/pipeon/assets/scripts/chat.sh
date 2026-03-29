@@ -23,7 +23,7 @@ if [[ -z "${QUESTION// }" ]]; then
 	QUESTION="$(cat)"
 fi
 
-CTX_FILE="$ROOT/.dockpipe/pipeon-context.md"
+CTX_FILE="$ROOT/bin/.dockpipe/pipeon-context.md"
 SYS_FILE="$SCRIPT_DIR/prompts/system.md"
 if [[ ! -f "$CTX_FILE" ]]; then
 	echo "pipeon: missing $CTX_FILE — run: pipeon bundle" >&2

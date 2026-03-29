@@ -2,6 +2,8 @@ package application
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"dockpipe/src/lib/infrastructure"
 )
@@ -43,7 +45,12 @@ func cmdCoreScriptPath(args []string) error {
 	if err != nil {
 		return err
 	}
-	p, err := infrastructure.ResolveCoreNamespacedScriptPath(rr, dotted)
+	wd, _ := os.Getwd()
+	projectRoot := wd
+	if ap, err := filepath.Abs(wd); err == nil {
+		projectRoot = ap
+	}
+	p, err := infrastructure.ResolveCoreNamespacedScriptPath(rr, projectRoot, dotted)
 	if err != nil {
 		return err
 	}

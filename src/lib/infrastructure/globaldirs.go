@@ -61,7 +61,7 @@ func GlobalTemplatesCoreDir() (string, error) {
 }
 
 // GlobalPackagesRoot holds global package trees: packages/{workflows,resolvers,core}/...
-// (flat under the global data dir — not under .dockpipe/internal).
+// (flat under the global data dir — not under bin/.dockpipe/internal).
 func GlobalPackagesRoot() (string, error) {
 	root, err := GlobalDockpipeDataDir()
 	if err != nil {

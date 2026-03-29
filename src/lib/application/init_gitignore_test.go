@@ -31,7 +31,7 @@ func TestAppendDockpipeGitignoreCreatesFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(b, []byte(dockpipeGitignoreBegin)) || !bytes.Contains(b, []byte(".dockpipe/")) {
+	if !bytes.Contains(b, []byte(dockpipeGitignoreBegin)) || !bytes.Contains(b, []byte("bin/.dockpipe/")) {
 		t.Fatalf("unexpected .gitignore:\n%s", b)
 	}
 }

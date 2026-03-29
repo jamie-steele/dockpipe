@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
-OUT="$ROOT/.dockpipe/analysis"
+OUT="$ROOT/bin/.dockpipe/analysis"
 INS="$OUT/insights.json"
 
 ACTION="${1:-}"

@@ -34,7 +34,7 @@ func TestResolveResolverFilePath(t *testing.T) {
 
 func TestResolveResolverFilePathPrefersPackagesResolversStore(t *testing.T) {
 	repo := t.TempDir()
-	rsDir := filepath.Join(repo, ".dockpipe", "internal", "packages", "resolvers", "tool")
+	rsDir := filepath.Join(repo, DockpipeDirRel, "internal", "packages", "resolvers", "tool")
 	if err := os.MkdirAll(rsDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestResolveCoreNamespacedScriptPath(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Dotted namespace must map basename.hello.sh → assets/scripts/hello.sh (see relFromCoreNamespace).
-	got, err := ResolveCoreNamespacedScriptPath(repo, "assets.scripts.hello.sh")
+	got, err := ResolveCoreNamespacedScriptPath(repo, "", "assets.scripts.hello.sh")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +100,7 @@ func TestResolveCoreNamespacedScriptPath(t *testing.T) {
 	if filepath.Clean(got) != filepath.Clean(want) {
 		t.Fatalf("got %q want %q", got, want)
 	}
-	_, err = ResolveCoreNamespacedScriptPath(repo, "assets.scripts.nope.sh")
+	_, err = ResolveCoreNamespacedScriptPath(repo, "", "assets.scripts.nope.sh")
 	if err == nil {
 		t.Fatal("expected error for missing script")
 	}
@@ -115,7 +115,7 @@ func TestResolveWorkflowScriptResolvesScriptsDockpipeToPackagesResolver(t *testi
 	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := ResolveWorkflowScript("scripts/dockpipe/r2-publish.sh", "/wf", repo)
+	got := ResolveWorkflowScript("scripts/dockpipe/r2-publish.sh", "/wf", repo, "")
 	if got != filepath.ToSlash(p) {
 		t.Fatalf("got %q want %q", got, filepath.ToSlash(p))
 	}
@@ -130,7 +130,7 @@ func TestResolveWorkflowScriptResolvesCoreTerraformRun(t *testing.T) {
 	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := ResolveWorkflowScript("scripts/core.assets.scripts.terraform-run.sh", "/wf", repo)
+	got := ResolveWorkflowScript("scripts/core.assets.scripts.terraform-run.sh", "/wf", repo, "")
 	if got != filepath.ToSlash(p) {
 		t.Fatalf("got %q want %q", got, filepath.ToSlash(p))
 	}
@@ -145,7 +145,7 @@ func TestResolveWorkflowScriptResolvesCoreTerraformRunFromBundledTerraformCore(t
 	if err := os.WriteFile(p, []byte("#!/bin/sh\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := ResolveWorkflowScript("scripts/core.assets.scripts.terraform-run.sh", "/wf", repo)
+	got := ResolveWorkflowScript("scripts/core.assets.scripts.terraform-run.sh", "/wf", repo, "")
 	if got != filepath.ToSlash(p) {
 		t.Fatalf("got %q want %q", got, filepath.ToSlash(p))
 	}
@@ -160,7 +160,7 @@ func TestResolveWorkflowScriptResolvesScriptsPrefixToCoreWhenUserMissing(t *test
 	if err := os.WriteFile(core, []byte("#!/bin/sh\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := ResolveWorkflowScript("scripts/shared.sh", "/wf", repo)
+	got := ResolveWorkflowScript("scripts/shared.sh", "/wf", repo, "")
 	if got != filepath.ToSlash(core) {
 		t.Fatalf("got %q want %q", got, filepath.ToSlash(core))
 	}
@@ -179,7 +179,7 @@ func TestResolveWorkflowScriptResolvesScriptsPrefixToBundlesDirWhenPresent(t *te
 	if err := os.WriteFile(b, []byte("#!/bin/sh\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := ResolveWorkflowScript("scripts/dorkpipe/aggregate-reasoning-context.sh", "/wf", repo)
+	got := ResolveWorkflowScript("scripts/dorkpipe/aggregate-reasoning-context.sh", "/wf", repo, "")
 	if got != filepath.ToSlash(b) {
 		t.Fatalf("got %q want %q", got, filepath.ToSlash(b))
 	}
@@ -198,7 +198,7 @@ func TestResolveWorkflowScriptResolvesScriptsPrefixToResolverDirWhenPresent(t *t
 	if err := os.WriteFile(rs, []byte("#!/bin/sh\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := ResolveWorkflowScript("scripts/cursor-dev/cursor-dev-session.sh", "/wf", repo)
+	got := ResolveWorkflowScript("scripts/cursor-dev/cursor-dev-session.sh", "/wf", repo, "")
 	if got != filepath.ToSlash(rs) {
 		t.Fatalf("got %q want %q", got, filepath.ToSlash(rs))
 	}
@@ -216,7 +216,7 @@ func TestResolveWorkflowScriptPrefersUserScriptsOverCore(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got := ResolveWorkflowScript("scripts/shared.sh", "/wf", repo)
+	got := ResolveWorkflowScript("scripts/shared.sh", "/wf", repo, "")
 	if got != filepath.ToSlash(user) {
 		t.Fatalf("got %q want user path %q", got, filepath.ToSlash(user))
 	}
@@ -234,7 +234,7 @@ func TestResolveWorkflowScriptPrefersRepoScriptsOverSrcScripts(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got := ResolveWorkflowScript("scripts/tool.sh", "/wf", repo)
+	got := ResolveWorkflowScript("scripts/tool.sh", "/wf", repo, "")
 	if got != filepath.ToSlash(top) {
 		t.Fatalf("got %q want top-level scripts/ %q", got, filepath.ToSlash(top))
 	}
@@ -249,7 +249,7 @@ func TestResolveWorkflowScriptUsesSrcScriptsWhenTopLevelScriptsMissing(t *testin
 	if err := os.WriteFile(src, []byte("#!/bin/sh\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := ResolveWorkflowScript("scripts/maint.sh", "/wf", repo)
+	got := ResolveWorkflowScript("scripts/maint.sh", "/wf", repo, "")
 	if got != filepath.ToSlash(src) {
 		t.Fatalf("got %q want %q", got, filepath.ToSlash(src))
 	}
@@ -266,7 +266,7 @@ func TestResolveWorkflowScriptResolvesReviewPipelineFromWorkflowsRoot(t *testing
 	if err := os.WriteFile(script, []byte("#!/bin/sh\n# review-pipeline\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := ResolveWorkflowScript("scripts/review-pipeline/hello.sh", "/wf", repo)
+	got := ResolveWorkflowScript("scripts/review-pipeline/hello.sh", "/wf", repo, "")
 	if filepath.ToSlash(got) != filepath.ToSlash(script) {
 		t.Fatalf("got %q want %q", got, script)
 	}
@@ -287,7 +287,7 @@ func TestResolveWorkflowScriptResolvesPipeonFromNestedCompileRoot(t *testing.T) 
 	if err := os.WriteFile(script, []byte("#!/bin/sh\n# pipeon-nested\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := ResolveWorkflowScript("scripts/pipeon/hello.sh", "/wf", repo)
+	got := ResolveWorkflowScript("scripts/pipeon/hello.sh", "/wf", repo, "")
 	if filepath.ToSlash(got) != filepath.ToSlash(script) {
 		t.Fatalf("got %q want %q", got, script)
 	}
@@ -298,7 +298,7 @@ func TestResolveWorkflowScriptResolvesPipeonFromNestedCompileRoot(t *testing.T) 
 // from a flat extracted tree or .staging authoring paths.
 func TestResolveWorkflowScriptPrefersCompiledResolverTarball(t *testing.T) {
 	repo := t.TempDir()
-	pkgRes := filepath.Join(repo, ".dockpipe", "internal", "packages", "resolvers")
+	pkgRes := filepath.Join(repo, DockpipeDirRel, "internal", "packages", "resolvers")
 	if err := os.MkdirAll(pkgRes, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +316,7 @@ func TestResolveWorkflowScriptPrefersCompiledResolverTarball(t *testing.T) {
 		t.Fatal(err)
 	}
 	// No flat pkgRes/dorkpipe/assets/scripts/ — only the tarball should satisfy resolution.
-	got := ResolveWorkflowScript("scripts/dorkpipe/tarball-only.sh", "/wf", repo)
+	got := ResolveWorkflowScript("scripts/dorkpipe/tarball-only.sh", "/wf", repo, "")
 	if !strings.Contains(got, string(filepath.Separator)+".dockpipe"+string(filepath.Separator)) {
 		t.Fatalf("expected path under .dockpipe (tarball extract cache), got %q", got)
 	}
@@ -356,5 +356,27 @@ func TestResolveResolverFilePathIgnoresWorkflowLocal(t *testing.T) {
 	_, err := ResolveResolverFilePath(repo, "onlyhere")
 	if err == nil {
 		t.Fatal("expected error: runtime profiles are not read from workflow template folders")
+	}
+}
+
+// TestResolveWorkflowScriptUsesProjectRootWhenRepoRootIsBundle verifies scripts/… resolution uses
+// projectRoot (checkout) for nested resolver trees even when repoRoot is the materialized bundle layout.
+func TestResolveWorkflowScriptUsesProjectRootWhenRepoRootIsBundle(t *testing.T) {
+	bundle := t.TempDir()
+	proj := t.TempDir()
+	cfg := `{"schema":1,"compile":{"workflows":["packages"]}}`
+	if err := os.WriteFile(filepath.Join(proj, "dockpipe.config.json"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(proj, "packages", "acme", "resolvers", "r2", "dockpipe.cloudflare.r2infra", "assets", "scripts", "terraform-cloudflare-r2-run.sh")
+	if err := os.MkdirAll(filepath.Dir(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(script, []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := ResolveWorkflowScript("scripts/dockpipe.cloudflare.r2infra/terraform-cloudflare-r2-run.sh", "/wf", bundle, proj)
+	if filepath.ToSlash(got) != filepath.ToSlash(script) {
+		t.Fatalf("got %q want %q", got, script)
 	}
 }

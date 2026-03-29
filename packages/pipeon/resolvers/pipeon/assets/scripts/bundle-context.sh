@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Build .dockpipe/pipeon-context.md from repo signals (CI, insights, self-analysis pointers).
+# Build bin/.dockpipe/pipeon-context.md from repo signals (CI, insights, self-analysis pointers).
 # Bounded size; no network. Run after enabling Pipeon (see lib/enable.sh).
 set -euo pipefail
 
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
-OUT="$ROOT/.dockpipe"
+OUT="$ROOT/bin/.dockpipe"
 CTX="$OUT/pipeon-context.md"
 mkdir -p "$OUT"
 
@@ -29,13 +29,13 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo "| Lane | Meaning |"
 	echo "|------|---------|"
 	echo "| Repo / analysis facts | e.g. \`.dorkpipe/self-analysis/\` |"
-	echo "| Scan signals | e.g. \`.dockpipe/ci-analysis/findings.json\` |"
-	echo "| User guidance | e.g. \`.dockpipe/analysis/insights.json\` (signal, not truth) |"
+	echo "| Scan signals | e.g. \`bin/.dockpipe/ci-analysis/findings.json\` |"
+	echo "| User guidance | e.g. \`bin/.dockpipe/analysis/insights.json\` (signal, not truth) |"
 	echo ""
-	echo "## CI / scans (\`.dockpipe/ci-analysis/\`)"
+	echo "## CI / scans (\`bin/.dockpipe/ci-analysis/\`)"
 	echo ""
 
-	FIND="$ROOT/.dockpipe/ci-analysis/findings.json"
+	FIND="$ROOT/bin/.dockpipe/ci-analysis/findings.json"
 	if [[ -f "$FIND" ]] && have_jq; then
 		FC="$(jq '.findings | length' "$FIND" 2>/dev/null || echo 0)"
 		SC="$(jq -r '.schema_version // "?"' "$FIND")"
@@ -44,20 +44,20 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 		if [[ "$FCOMMIT" != "unknown" && "$FCOMMIT" != "$COMMIT" ]]; then
 			echo "- **Staleness:** findings commit differs from current HEAD — refresh recommended for scan-aligned answers."
 		fi
-		if [[ -f "$ROOT/.dockpipe/ci-analysis/SUMMARY.md" ]]; then
+		if [[ -f "$ROOT/bin/.dockpipe/ci-analysis/SUMMARY.md" ]]; then
 			echo ""
 			echo "### SUMMARY.md (excerpt)"
 			echo ""
-			head -25 "$ROOT/.dockpipe/ci-analysis/SUMMARY.md" | sed 's/^/    /'
+			head -25 "$ROOT/bin/.dockpipe/ci-analysis/SUMMARY.md" | sed 's/^/    /'
 		fi
 	else
 		echo "- **findings.json:** not present — run \`make ci\` (dockpipe repo) or CI to generate (see docs/dorkpipe-ci-signals.md)."
 	fi
 
 	echo ""
-	echo "## User insights (\`.dockpipe/analysis/\`)"
+	echo "## User insights (\`bin/.dockpipe/analysis/\`)"
 	echo ""
-	INS="$ROOT/.dockpipe/analysis/insights.json"
+	INS="$ROOT/bin/.dockpipe/analysis/insights.json"
 	if [[ -f "$INS" ]] && have_jq; then
 		echo "- **file:** present"
 		jq -r '"- count: " + ((.insights // []) | length | tostring)' "$INS" 2>/dev/null || true

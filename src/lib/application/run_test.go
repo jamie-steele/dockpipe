@@ -143,7 +143,7 @@ func TestRunHostIsolateHappyPath(t *testing.T) {
 		return nil
 	}
 
-	err := Run([]string{"--resolver", "hostiso", "--"}, nil)
+	err := Run([]string{"--resolver", "hostiso", "--workdir", repoRoot, "--"}, nil)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestRunPreScriptNotFoundErrors(t *testing.T) {
 		return "dockpipe-codex", "/build", true
 	}
 	maybeVersionTagAppFn = func(repoRoot, image string) string { return image }
-	resolvePreScriptAppFn = func(p, root string) string { return filepath.Join(root, "does-not-exist.sh") }
+	resolvePreScriptAppFn = func(p, root, _ string) string { return filepath.Join(root, "does-not-exist.sh") }
 
 	err := Run([]string{"--resolver", "codex", "--run", "scripts/pre.sh", "--", "echo", "x"}, nil)
 	if err == nil || !strings.Contains(err.Error(), "pre-script not found") {
@@ -341,7 +341,7 @@ func TestRunAutoBranchForRepoWithoutBranch(t *testing.T) {
 		return 0, nil
 	}
 
-	err := Run([]string{"--resolver", "codex", "--repo", "https://example.com/r.git", "--", "echo", "x"}, nil)
+	err := Run([]string{"--resolver", "codex", "--repo", "https://example.com/r.git", "--workdir", repoRoot, "--", "echo", "x"}, nil)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -353,21 +353,22 @@ func TestRunAutoBranchForRepoWithoutBranch(t *testing.T) {
 // TestRunInfersOriginWhenWorkflowUsesCloneWorktree fills --repo from git remote when workflow uses clone-worktree pre-script.
 func TestRunInfersOriginWhenWorkflowUsesCloneWorktree(t *testing.T) {
 	withRunSeams(t)
-	gitDir := t.TempDir()
-	if out, err := exec.Command("git", "-C", gitDir, "init").CombinedOutput(); err != nil {
+	// Single tree: git remote, workflow YAML, and scripts/ must share the same project root as cwd
+	// so origin inference and scripts/… resolution agree (see projectRoot in paths.go).
+	root := t.TempDir()
+	if out, err := exec.Command("git", "-C", root, "init").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v\n%s", err, out)
 	}
 	wantURL := "https://example.test/unite.git"
-	if out, err := exec.Command("git", "-C", gitDir, "remote", "add", "origin", wantURL).CombinedOutput(); err != nil {
+	if out, err := exec.Command("git", "-C", root, "remote", "add", "origin", wantURL).CombinedOutput(); err != nil {
 		t.Fatalf("git remote add: %v\n%s", err, out)
 	}
 
-	repoRoot := t.TempDir()
-	wfDir := filepath.Join(repoRoot, "templates", "wfinfer")
+	wfDir := filepath.Join(root, "templates", "wfinfer")
 	if err := os.MkdirAll(wfDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
+	writeTestCoreResolver(t, root, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
 	cfg := `run: scripts/clone-worktree.sh
 act: scripts/noop.sh
 isolate: codex
@@ -375,16 +376,16 @@ isolate: codex
 	if err := os.WriteFile(filepath.Join(wfDir, "config.yml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(repoRoot, "scripts"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, "scripts"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	for _, name := range []string{"clone-worktree.sh", "noop.sh"} {
-		if err := os.WriteFile(filepath.Join(repoRoot, "scripts", name), []byte("#!/usr/bin/env bash\n"), 0o755); err != nil {
+		if err := os.WriteFile(filepath.Join(root, "scripts", name), []byte("#!/usr/bin/env bash\n"), 0o755); err != nil {
 			t.Fatal(err)
 		}
 	}
 
-	repoRootAppFn = func() (string, error) { return repoRoot, nil }
+	repoRootAppFn = func() (string, error) { return root, nil }
 	templateBuildAppFn = func(repoRoot, name string) (string, string, bool) {
 		return "dockpipe-codex", "/build", true
 	}
@@ -394,7 +395,7 @@ isolate: codex
 	var capturedPreEnv []string
 	sourceHostScriptAppFn = func(scriptPath string, env []string) (map[string]string, error) {
 		capturedPreEnv = append([]string(nil), env...)
-		return map[string]string{"DOCKPIPE_WORKDIR": filepath.Join(gitDir, "fake-worktree")}, nil
+		return map[string]string{"DOCKPIPE_WORKDIR": filepath.Join(root, "fake-worktree")}, nil
 	}
 
 	runContainerAppFn = func(o infrastructure.RunOpts, argv []string) (int, error) {
@@ -402,7 +403,7 @@ isolate: codex
 	}
 
 	oldWd, _ := os.Getwd()
-	if err := os.Chdir(gitDir); err != nil {
+	if err := os.Chdir(root); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldWd) })
@@ -478,7 +479,7 @@ isolate: codex
 		return nil
 	}
 
-	err := Run([]string{"--workflow-file", filepath.Join(wfDir, "config.yml"), "--", "echo", "hi"}, nil)
+	err := Run([]string{"--workflow-file", filepath.Join(wfDir, "config.yml"), "--workdir", repoRoot, "--", "echo", "hi"}, nil)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}

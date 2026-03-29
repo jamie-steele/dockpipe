@@ -27,6 +27,7 @@ type runStepsOpts struct {
 	wf             *domain.Workflow
 	wfRoot         string
 	repoRoot       string
+	projectRoot    string // DockPipe project dir (--workdir / cwd); script resolution for scripts/…
 	cliArgs        []string
 	envMap         map[string]string
 	envSlice       []string
@@ -168,7 +169,7 @@ func runStepHostIsolate(o *runStepsOpts, step domain.Step, dockerEnv map[string]
 		return err
 	}
 	rel := strings.TrimSpace(ra.HostIsolate)
-	scriptAbs := infrastructure.ResolveWorkflowScript(rel, o.wfRoot, o.repoRoot)
+	scriptAbs := infrastructure.ResolveWorkflowScript(rel, o.wfRoot, o.repoRoot, o.projectRoot)
 	if _, err := osStatFn(scriptAbs); err != nil {
 		return fmt.Errorf("host isolate script not found: %s: %w", scriptAbs, err)
 	}
@@ -189,7 +190,7 @@ func finalizeResolverStepAfterHost(o *runStepsOpts, step domain.Step, dockerEnv 
 	workHost := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
 	effAct := effActPathForStep(o, step, ra)
 	if effAct != "" {
-		actAbs := infrastructure.ResolveWorkflowScript(effAct, o.wfRoot, o.repoRoot)
+		actAbs := infrastructure.ResolveWorkflowScript(effAct, o.wfRoot, o.repoRoot, o.projectRoot)
 		if _, err := osStatFn(actAbs); err != nil {
 			return fmt.Errorf("action script not found: %s", actAbs)
 		}
@@ -259,6 +260,7 @@ func runStepPackageWorkflow(o *runStepsOpts, i, n int, step domain.Step, dockerE
 		wf:                    subWf,
 		wfRoot:                wfRoot,
 		repoRoot:              o.repoRoot,
+		projectRoot:           o.projectRoot,
 		cliArgs:               o.cliArgs,
 		envMap:                o.envMap,
 		envSlice:              o.envSlice,
@@ -449,7 +451,7 @@ func validateParallelNoHostCommit(o *runStepsOpts, from, to int) error {
 		if effAct == "" {
 			continue
 		}
-		actAbs := infrastructure.ResolveWorkflowScript(effAct, o.wfRoot, o.repoRoot)
+		actAbs := infrastructure.ResolveWorkflowScript(effAct, o.wfRoot, o.repoRoot, o.projectRoot)
 		if infrastructure.IsBundledCommitWorktree(actAbs, o.repoRoot) {
 			return fmt.Errorf("step %d: host commit-worktree action cannot run inside a parallel (is_blocking: false) batch", i+1)
 		}
@@ -521,7 +523,7 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 
 	var pre []string
 	for _, r := range step.RunPaths() {
-		pre = append(pre, infrastructure.ResolveWorkflowScript(r, o.wfRoot, o.repoRoot))
+		pre = append(pre, infrastructure.ResolveWorkflowScript(r, o.wfRoot, o.repoRoot, o.projectRoot))
 	}
 	if idx == batchStart && idx == 0 {
 		for _, p := range o.firstStepExtra {
@@ -628,7 +630,7 @@ func validateParallelNoHostBuiltin(o *runStepsOpts, from, to int) error {
 func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {
 	var pre []string
 	for _, r := range step.RunPaths() {
-		pre = append(pre, infrastructure.ResolveWorkflowScript(r, o.wfRoot, o.repoRoot))
+		pre = append(pre, infrastructure.ResolveWorkflowScript(r, o.wfRoot, o.repoRoot, o.projectRoot))
 	}
 	if i == 0 {
 		for _, p := range o.firstStepExtra {
@@ -710,7 +712,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 	}
 	var actAbs string
 	if effAct != "" {
-		actAbs = infrastructure.ResolveWorkflowScript(effAct, o.wfRoot, o.repoRoot)
+		actAbs = infrastructure.ResolveWorkflowScript(effAct, o.wfRoot, o.repoRoot, o.projectRoot)
 	}
 
 	var image, dockerfileDir, contextDir string

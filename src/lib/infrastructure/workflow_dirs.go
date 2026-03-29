@@ -12,13 +12,13 @@ import (
 
 // ResolveWorkflowConfigPath returns the first existing workflow config for a bundled or user workflow name.
 // Resolution uses WorkflowsRootDir (repo workflows/, materialized bundle/workflows in the cache, or src/core/workflows in dockpipe source when workflows/ is empty).
-// Does not consult .dockpipe/internal/packages (use ResolveWorkflowConfigPathWithWorkdir for that).
+// Does not consult bin/.dockpipe/internal/packages (use ResolveWorkflowConfigPathWithWorkdir for that).
 func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 	return ResolveWorkflowConfigPathWithWorkdir(repoRoot, "", name)
 }
 
 // ResolveWorkflowConfigPathWithWorkdir is like ResolveWorkflowConfigPath but when workdir is non-empty also checks
-// <workdir>/.dockpipe/internal/packages/workflows/<name>/config.yml after WorkflowsRootDir and before legacy templates/.
+// <workdir>/bin/.dockpipe/internal/packages/workflows/<name>/config.yml after WorkflowsRootDir and before legacy templates/.
 func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -99,13 +99,64 @@ func ProjectWorkflowConfigPath(projectRoot, name string) string {
 	return ""
 }
 
+// OnDiskWorkflowConfigPath returns the first existing workflow config.yml for name under projectRoot:
+// WorkflowsRootDir, nested compile.workflows trees, project workflows dir, templates, resolver delegate.
+// It does not consult package tarballs (tar://). Use before ResolveWorkflowConfigPathWithWorkdir when the
+// materialized bundle root (RepoRoot) differs from the project checkout — otherwise resolution can match a
+// store tarball before any on-disk tree under the project.
+func OnDiskWorkflowConfigPath(projectRoot, name string) string {
+	projectRoot = filepath.Clean(projectRoot)
+	name = strings.TrimSpace(name)
+	if projectRoot == "" || name == "" {
+		return ""
+	}
+	var batch []string
+	batch = append(batch, filepath.Join(WorkflowsRootDir(projectRoot), name, "config.yml"))
+	if !UsesBundledAssetLayout(projectRoot) {
+		batch = append(batch, nestedWorkflowConfigCandidates(projectRoot, name, WorkflowCompileRootsCached(projectRoot))...)
+	}
+	for _, p := range batch {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
+	}
+	absWd, err := filepath.Abs(projectRoot)
+	if err != nil {
+		absWd = projectRoot
+	}
+	wdRel := effectiveWorkflowsDirRel()
+	if wdRel == "" {
+		wdRel = DefaultUserWorkflowsDirRel
+	}
+	var projPath string
+	if filepath.IsAbs(wdRel) {
+		projPath = filepath.Join(wdRel, name, "config.yml")
+	} else {
+		projPath = filepath.Join(absWd, wdRel, name, "config.yml")
+	}
+	if st, err := os.Stat(projPath); err == nil && !st.IsDir() {
+		return projPath
+	}
+	if !UsesBundledAssetLayout(projectRoot) && !DockpipeAuthoringSourceTree(projectRoot) {
+		tmpl := filepath.Join(projectRoot, "templates", name, "config.yml")
+		if st, err := os.Stat(tmpl); err == nil && !st.IsDir() {
+			return tmpl
+		}
+	}
+	rs := filepath.Join(CoreDir(projectRoot), "resolvers", name, "config.yml")
+	if st, err := os.Stat(rs); err == nil && !st.IsDir() {
+		return rs
+	}
+	return ""
+}
+
 // ResolveEmbeddedResolverWorkflowConfigPath returns delegate YAML for DOCKPIPE_*_WORKFLOW (resolver-driven isolate).
 // Does not consult the packages store (use WithWorkdir).
 func ResolveEmbeddedResolverWorkflowConfigPath(repoRoot, name string) (string, error) {
 	return ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, "", name)
 }
 
-// ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir adds .dockpipe/internal/packages/workflows/<name>/config.yml
+// ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir adds bin/.dockpipe/internal/packages/workflows/<name>/config.yml
 // when workdir is set, after the workflows root and before legacy templates/.
 func ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (string, error) {
 	name = strings.TrimSpace(name)

@@ -5,8 +5,8 @@ set -euo pipefail
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
 OUT="$ROOT/.dorkpipe/self-analysis"
-DEST="$ROOT/.dockpipe/orchestrator-cursor-prompt.md"
-mkdir -p "$ROOT/.dockpipe"
+DEST="$ROOT/bin/.dockpipe/orchestrator-cursor-prompt.md"
+mkdir -p "$ROOT/bin/.dockpipe"
 
 if [[ ! -d "$OUT" ]]; then
 	echo "build-cursor-handoff: missing $OUT — run self-analysis-prep.sh and self-analysis-signals.sh first" >&2
@@ -40,7 +40,7 @@ EOF
 
 	echo "## 2. Current state summary (from this checkout)"
 	echo "- **Go files in \`lib/dorkpipe\`**: ${GO_N}"
-	echo "- **Git HEAD / branch** (see \`.dockpipe/self-analysis/git.txt\` for full):"
+	echo "- **Git HEAD / branch** (see \`.dorkpipe/self-analysis/git.txt\` for full):"
 	head -3 "$OUT/git.txt" 2>/dev/null | sed 's/^/  /' || true
 	echo "- **DorkPipe packages (file counts)**:"
 	if [[ -f "$OUT/dorkpipe_packages.tsv" ]]; then
@@ -65,9 +65,9 @@ EOF
 	echo "- **Surface engine features in shipped examples**: \`lib/dorkpipe/examples/full-bar.yaml\` demonstrates \`branch_judge\`, \`retrieve_if_calibrated_below\`, and skips — mirror one pattern into \`spec.example.yaml\` so dogfood exercises the same code paths operators will rely on."
 	echo "- **Metrics loop**: standardize \`bin/dorkpipe eval\` / \`promote\` after CI or nightly runs; extend \`.dorkpipe/metrics.jsonl\` consumers if new dimensions are added (\`lib/dorkpipe/engine/provenance.go\`)."
 	echo "- **Asset promotion**: scripts under \`templates/core/bundles/dorkpipe/\` should stay referenced from workflows/docs when they become part of a supported path (collect/merge/verify-*)."
-	echo "- **TODO/FIXME triage**: review hits in \`.dockpipe/self-analysis/signals_todo.txt\`; convert stable items into issues or small PRs."
+	echo "- **TODO/FIXME triage**: review hits in \`.dorkpipe/self-analysis/signals_todo.txt\`; convert stable items into issues or small PRs."
 	if [[ -f "$ROOT/.dorkpipe/metrics.jsonl" ]] && [[ -f "$OUT/signals_metrics_tail.txt" ]]; then
-		echo "- **Existing \`.dorkpipe/metrics.jsonl\`**: tail captured in \`.dockpipe/self-analysis/signals_metrics_tail.txt\` — use for escalation / early-stop rates."
+		echo "- **Existing \`.dorkpipe/metrics.jsonl\`**: tail captured in \`.dorkpipe/self-analysis/signals_metrics_tail.txt\` — use for escalation / early-stop rates."
 	fi
 	echo ""
 	echo "### Search hits (files touching orchestration keywords)"
@@ -111,7 +111,7 @@ EOF
 	echo "## 7. Acceptance criteria"
 	echo "- [ ] \`make build\` and \`go test ./...\` pass."
 	echo "- [ ] \`bin/dorkpipe validate -f packages/dorkpipe/resolvers/dorkpipe-self-analysis/spec.yaml\` passes."
-	echo "- [ ] Running \`dockpipe --workflow dorkpipe-self-analysis --workdir <repo> --\` writes \`.dockpipe/orchestrator-cursor-prompt.md\`."
+	echo "- [ ] Running \`dockpipe --workflow dorkpipe-self-analysis --workdir <repo> --\` writes \`bin/.dockpipe/orchestrator-cursor-prompt.md\`."
 	echo "- [ ] The handoff references **real** paths present in this repo (verify sections 2–4 against your checkout)."
 	echo ""
 
@@ -122,10 +122,10 @@ EOF
 	echo "4. **Promotion**: act on \`dorkpipe promote\` suggestions or tune thresholds when noise is high."
 	echo ""
 	echo "## 9. Single prompt for your AI assistant"
-	echo "The **plain, copy-paste-ready** implementation prompt (no extra narrative) is in **\`.dockpipe/paste-this-prompt.txt\`**. Running \`./packages/dorkpipe/resolvers/dorkpipe/assets/scripts/run-self-analysis.sh\` **prints that file to stdout** at the end. With \`spec.combined.yaml\`, Ollama output is merged into the same file after the base prompt."
+	echo "The **plain, copy-paste-ready** implementation prompt (no extra narrative) is in **\`bin/.dockpipe/paste-this-prompt.txt\`**. Running \`./packages/dorkpipe/resolvers/dorkpipe/assets/scripts/run-self-analysis.sh\` **prints that file to stdout** at the end. With \`spec.combined.yaml\`, Ollama output is merged into the same file after the base prompt."
 	echo ""
 	echo "---"
-	echo "_Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)_ · _Facts under \`.dockpipe/self-analysis/\`_"
+	echo "_Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)_ · _Facts under \`.dorkpipe/self-analysis/\`_"
 } >"$DEST"
 
 # Optional Ollama appendix (facts-grounded; set DORKPIPE_SELF_ANALYSIS_USE_OLLAMA=1)
@@ -165,7 +165,7 @@ echo "build-cursor-handoff: wrote $DEST"
 wc -c "$DEST" | awk '{print "build-cursor-handoff: bytes", $1}'
 
 # Single copy-paste prompt for an AI assistant (plain text; see below).
-PASTE="${ROOT}/.dockpipe/paste-this-prompt.txt"
+PASTE="${ROOT}/bin/.dockpipe/paste-this-prompt.txt"
 HEAD_SHA=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || echo "unknown")
 HEAD_REF=$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
 {

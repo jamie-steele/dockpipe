@@ -179,7 +179,7 @@ func cmdPackageManifest(args []string) error {
 }
 
 const examplePackageManifestYAML = `# package.yml — metadata for a DockPipe package (workflow, resolver, core slice, or assets).
-# Place next to the package tree under .dockpipe/internal/packages/ (see docs/package-model.md).
+# Place next to the package tree under bin/.dockpipe/internal/packages/ (see docs/package-model.md).
 schema: 1
 name: my-package
 version: 0.1.0
@@ -218,7 +218,7 @@ func printPackageUsage() {
 const packageUsageText = `dockpipe package
 
 Inspect installed packages and package metadata. Installed store content lives under
-.dockpipe/internal/packages/ by default (see docs/package-model.md).
+bin/.dockpipe/internal/packages/ by default (see docs/package-model.md).
 
 Usage:
   dockpipe package list [--workdir <path>]
@@ -226,21 +226,21 @@ Usage:
   dockpipe package build core|store [options]
   dockpipe package compile core|resolvers|bundles|workflows|all|for-workflow|workflow [options]  (bundles = alias for workflows)
 
-  list      Find package.yml under .dockpipe/internal/packages and print rel path, name, version, provider, capability, requires_capabilities (comma-separated), description.
+  list      Find package.yml under bin/.dockpipe/internal/packages and print rel path, name, version, provider, capability, requires_capabilities (comma-separated), description.
   manifest  Print an example package.yml schema to stdout.
   build     core: templates-core tarball + install-manifest; store: gzip tar per compiled package + packages-store-manifest.json.
-  compile   Materialize core / resolvers / workflows into .dockpipe/internal/packages/ (see compile --help).
+  compile   Materialize core / resolvers / workflows into bin/.dockpipe/internal/packages/ (see compile --help).
 
 Optional repo-root dockpipe.config.json lists compile.workflows roots (resolver discovery uses the same list plus src/core/resolvers); compile.bundles merged into workflows when set; see docs/package-model.md.
 
 Environment:
-  DOCKPIPE_PACKAGES_ROOT   Override packages root (default: <workdir>/.dockpipe/internal/packages).
+  DOCKPIPE_PACKAGES_ROOT   Override packages root (default: <workdir>/bin/.dockpipe/internal/packages).
 
 `
 
 const packageListUsageText = `dockpipe package list [--workdir <path>]
 
-Scans .dockpipe/internal/packages (recursive) for package.yml files.
+Scans bin/.dockpipe/internal/packages (recursive) for package.yml files.
 Output columns (tab-separated): path, name, version, provider, capability, requires_capabilities, description.
 
 `

@@ -10,7 +10,7 @@ import (
 
 func TestHostRunsDir(t *testing.T) {
 	got := HostRunsDir("/tmp/proj")
-	want := filepath.Join("/tmp/proj", ".dockpipe", "runs")
+	want := filepath.Join("/tmp/proj", DockpipeDirRel, "runs")
 	if got != want {
 		t.Fatalf("HostRunsDir: got %q want %q", got, want)
 	}

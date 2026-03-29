@@ -14,9 +14,9 @@ import (
 )
 
 // compileClosureForWorkflow compiles core (if missing), then resolver tarballs and workflow tarballs
-// for the transitive closure of workflowName: package.yml depends, requires_resolvers, resolver/runtime
-// names on the workflow and steps, and nested delegate workflows from merged isolation profiles.
-// projectRoot is the DockPipe project directory (contains .dockpipe and usually dockpipe.config.json).
+// for the transitive closure of workflowName: config.yml inject:, package.yml depends, requires_resolvers,
+// resolver/runtime names on the workflow and steps, and nested delegate workflows from merged isolation profiles.
+// projectRoot is the DockPipe project directory (contains bin/.dockpipe and usually dockpipe.config.json).
 func compileClosureForWorkflow(projectRoot, workflowName string, noStaging, force bool) error {
 	repoRoot, err := infrastructure.RepoRoot()
 	if err != nil {
@@ -31,20 +31,10 @@ func compileClosureForWorkflow(projectRoot, workflowName string, noStaging, forc
 		return err
 	}
 
-	var wfPath string
-	if p := infrastructure.ProjectWorkflowConfigPath(projectRoot, workflowName); p != "" {
-		wfPath = p
-	} else {
-		var errRes error
-		wfPath, errRes = infrastructure.ResolveWorkflowConfigPathWithWorkdir(repoRoot, projectRoot, workflowName)
-		if errRes != nil {
-			return fmt.Errorf("compile for-workflow: resolve workflow %q: %w", workflowName, errRes)
-		}
+	startDir, err := infrastructure.WorkflowCompileStartDir(repoRoot, projectRoot, workflowName)
+	if err != nil {
+		return fmt.Errorf("compile for-workflow: workflow %q: %w", workflowName, err)
 	}
-	if strings.HasPrefix(wfPath, "tar://") {
-		return fmt.Errorf("compile for-workflow: %q resolves to a tarball stream — add workflows/%s/config.yml under your project (or set DOCKPIPE_WORKFLOWS_DIR), or run dockpipe package compile workflows, or skip with --no-compile-deps", workflowName, workflowName)
-	}
-	startDir := filepath.Dir(wfPath)
 
 	order, resNames, err := closureWorkflowOrderAndResolvers(repoRoot, projectRoot, startDir, cfg, noStaging)
 	if err != nil {
@@ -131,6 +121,20 @@ func closureWorkflowOrderAndResolvers(dockpipeRepoRoot, projectRoot, startDir st
 		var wf domain.Workflow
 		if err := yaml.Unmarshal(b, &wf); err != nil {
 			return fmt.Errorf("parse %s: %w", cfgPath, err)
+		}
+
+		for _, ent := range wf.Inject {
+			if name := ent.WorkflowManifestName(); name != "" {
+				depDir := findWorkflowSourceDir(projectRoot, name, wfRoots)
+				if depDir == "" {
+					fmt.Fprintf(os.Stderr, "[dockpipe] compile for-workflow: warning: inject workflow %q not found under compile.workflows — skip\n", name)
+					continue
+				}
+				if err := visit(depDir); err != nil {
+					return err
+				}
+			}
+			addResolverName(resNames, ent.Resolver)
 		}
 
 		pmPath := filepath.Join(k, infrastructure.PackageManifestFilename)
@@ -302,9 +306,9 @@ func cmdPackageCompileForWorkflow(args []string) error {
 const packageCompileForWorkflowUsageText = `dockpipe package compile for-workflow <name>
 
 Compiles only the core spine (if missing), resolver packs, and workflow packages needed for the
-transitive closure of the named workflow: package.yml depends, requires_resolvers, resolver/runtime
-names on the workflow and steps, and nested delegate workflows (DOCKPIPE_*_WORKFLOW from merged
-profiles). Dependencies are compiled before dependents.
+transitive closure of the named workflow: config.yml inject: (explicit workflow/resolver deps),
+package.yml depends, requires_resolvers, resolver/runtime names on the workflow and steps, and nested
+delegate workflows (DOCKPIPE_*_WORKFLOW from merged profiles). Dependencies are compiled before dependents.
 
 Does not replace a full "package compile all" — only what this workflow needs.
 

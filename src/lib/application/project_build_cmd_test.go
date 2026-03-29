@@ -4,11 +4,13 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"dockpipe/src/lib/infrastructure"
 )
 
 func TestCmdCleanRemovesPackagesRoot(t *testing.T) {
 	dir := t.TempDir()
-	pkg := filepath.Join(dir, ".dockpipe", "internal", "packages", "core")
+	pkg := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "core")
 	if err := os.MkdirAll(pkg, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -18,7 +20,7 @@ func TestCmdCleanRemovesPackagesRoot(t *testing.T) {
 	if err := cmdClean([]string{"--workdir", dir}); err != nil {
 		t.Fatalf("cmdClean: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".dockpipe", "internal", "packages")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages")); !os.IsNotExist(err) {
 		t.Fatalf("expected packages dir removed, stat err=%v", err)
 	}
 }

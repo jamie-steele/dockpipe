@@ -106,14 +106,16 @@ run_terraform_pipeline() {
   export DOCKPIPE_TF_LOG_PREFIX="${DOCKPIPE_TF_LOG_PREFIX:-${WF_NS}}"
   export DOCKPIPE_TF_PIPELINE_HINT="would skip tarball upload after Terraform (no apply step; R2_PUBLISH_ALWAYS_UPLOAD=1 to force upload)"
   local _tr
-  _tr="$(dockpipe_resolve_terraform_cloudflare_r2_run)" || die "terraform-cloudflare-r2-run.sh not found — expected packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/assets/scripts/"
+  _tr="$(dockpipe_resolve_terraform_cloudflare_r2_run)" || die "terraform-cloudflare-r2-run.sh not found — expected packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/assets/scripts/"
   bash "$_tr"
 }
 
-# Resolves the Cloudflare R2 Terraform host script (not core terraform-run.sh).
+# Resolves the Cloudflare R2 Terraform host script (not core terraform-run.sh). Canonical copy lives with dockpipe.cloudflare.r2infra.
 dockpipe_resolve_terraform_cloudflare_r2_run() {
   local c
   for c in \
+    "$ROOT/packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/assets/scripts/terraform-cloudflare-r2-run.sh" \
+    "$ROOT/templates/dockpipe.cloudflare.r2infra/assets/scripts/terraform-cloudflare-r2-run.sh" \
     "$ROOT/packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/assets/scripts/terraform-cloudflare-r2-run.sh" \
     "$ROOT/templates/dockpipe.cloudflare.r2publish/assets/scripts/terraform-cloudflare-r2-run.sh"; do
     [[ -f "$c" ]] && echo "$c" && return 0
@@ -153,7 +155,7 @@ if [[ "${R2_INFRA_ONLY:-0}" == "1" ]]; then
   export DOCKPIPE_TF_USE_R2_PUBLISH_MAP=1
   export DOCKPIPE_TF_ATTACH_CLOUDFLARE_PROVIDER=1
   export DOCKPIPE_TF_LOG_PREFIX="${DOCKPIPE_TF_LOG_PREFIX:-${WF_NS}}"
-  _tr="$(dockpipe_resolve_terraform_cloudflare_r2_run)" || die "terraform-cloudflare-r2-run.sh not found — expected packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/assets/scripts/"
+  _tr="$(dockpipe_resolve_terraform_cloudflare_r2_run)" || die "terraform-cloudflare-r2-run.sh not found — expected packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/assets/scripts/"
   bash "$_tr"
   echo "${WF_NS}: infra-only done — no package tarball upload (use dockpipe.cloudflare.r2upload for that)."
   echo "${WF_NS}: Terraform remote state → s3 backend bucket=${DOCKPIPE_TF_STATE_BUCKET:-dockpipe} key=${DOCKPIPE_TF_STATE_KEY:-state/terraform.tfstate}; object appears in R2 after terraform apply (plan/init do not write the state blob)."

@@ -12,7 +12,9 @@ build:
 	cp VERSION src/cmd/VERSION
 	@mkdir -p src/bin
 	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o src/bin/dockpipe.bin ./src/cmd
-	@echo "Built src/bin/dockpipe.bin — run:  ./src/bin/dockpipe  (bare \`dockpipe\` is your PATH install, not this build)"
+	@cp -f src/bin/dockpipe.bin src/bin/dockpipe
+	@chmod +x src/bin/dockpipe
+	@echo "Built src/bin/dockpipe.bin — copied to src/bin/dockpipe (use either; bare \`dockpipe\` on PATH may still be an older install)"
 	@echo "Install into PATH:  make install   or   make dev-install"
 	@echo "Optional: make maintainer-tools (dorkpipe + mcpd under packages/)"
 

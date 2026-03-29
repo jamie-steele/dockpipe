@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Host entry: run DorkPipe self-analysis DAG (writes .dockpipe/orchestrator-cursor-prompt.md).
+# Host entry: run DorkPipe self-analysis DAG (writes bin/.dockpipe/orchestrator-cursor-prompt.md).
 set -euo pipefail
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
@@ -32,12 +32,12 @@ if [[ "$SPEC" == *spec.combined.yaml ]]; then
 fi
 "$BIN" run -f "$SPEC" --workdir "$ROOT"
 echo ""
-echo "dorkpipe-self-analysis: full handoff → ${ROOT}/.dockpipe/orchestrator-cursor-prompt.md"
-echo "dorkpipe-self-analysis: raw facts → ${ROOT}/.dockpipe/self-analysis/"
-if [[ -f "${ROOT}/.dockpipe/orchestrator-cursor-prompt.refined.md" ]]; then
-	echo "dorkpipe-self-analysis: Ollama refine → ${ROOT}/.dockpipe/orchestrator-cursor-prompt.refined.md"
+echo "dorkpipe-self-analysis: full handoff → ${ROOT}/bin/.dockpipe/orchestrator-cursor-prompt.md"
+echo "dorkpipe-self-analysis: raw facts → ${ROOT}/.dorkpipe/self-analysis/"
+if [[ -f "${ROOT}/bin/.dockpipe/orchestrator-cursor-prompt.refined.md" ]]; then
+	echo "dorkpipe-self-analysis: Ollama refine → ${ROOT}/bin/.dockpipe/orchestrator-cursor-prompt.refined.md"
 fi
-PASTE="${ROOT}/.dockpipe/paste-this-prompt.txt"
+PASTE="${ROOT}/bin/.dockpipe/paste-this-prompt.txt"
 if [[ -f "$PASTE" ]]; then
 	echo ""
 	echo "========================================================================"

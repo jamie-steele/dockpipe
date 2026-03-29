@@ -122,7 +122,7 @@ func cmdClone(args []string) error {
 
 const cloneUsageText = `dockpipe clone
 
-Copy a compiled workflow from dockpipe-workflow-<name>-*.tar.gz under .dockpipe/internal/packages/workflows/
+Copy a compiled workflow from dockpipe-workflow-<name>-*.tar.gz under bin/.dockpipe/internal/packages/workflows/
 into an authoring tree when package.yml in the archive allows it (allow_clone: true). Use this to study,
 fork, or recover sources for packages the author marked as cloneable.
 

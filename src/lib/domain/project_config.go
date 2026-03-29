@@ -37,7 +37,7 @@ type DockpipeSecretsConfig struct {
 // Pointer slices distinguish JSON "key absent" (nil → use CLI defaults) from "empty array" (non-nil, len 0 → compile nothing from that category).
 type DockpipeCompileConfig struct {
 	CoreFrom  *string   `json:"core_from,omitempty"` // optional override for compile core --from
-	Workflows *[]string `json:"workflows,omitempty"` // single entry point: same roots used for workflow tarballs and resolver discovery (+ src/core/resolvers, templates/core/resolvers)
+	Workflows *[]string `json:"workflows,omitempty"` // roots to scan for workflow/resolver trees (e.g. workflows/, packages/, .staging/packages/); same walk for tarballs and resolver discovery (+ src/core/resolvers, templates/core/resolvers)
 	Resolvers *[]string `json:"resolvers,omitempty"` // deprecated: merged into effective resolver roots if present (prefer compile.workflows only)
 	Bundles   *[]string `json:"bundles,omitempty"`   // deprecated: merged into compile.workflows (same config.yml walk)
 }
@@ -46,11 +46,14 @@ type DockpipeCompileConfig struct {
 type DockpipePackagesConfig struct {
 	// TarballDir is a repo-relative directory containing dockpipe-workflow-*.tar.gz (after package build store).
 	// When unset, release/artifacts is used if that directory exists. Resolution also checks
-	// <workdir>/.dockpipe/internal/packages/workflows/ first.
+	// <workdir>/bin/.dockpipe/internal/packages/workflows/ first.
 	TarballDir *string `json:"tarball_dir,omitempty"`
 	// Namespace: default author/org label for compile (package.yml) when workflow/resolver metadata omits it;
 	// when set, tarball resolution prefers archives whose config.yml namespace matches.
 	Namespace *string `json:"namespace,omitempty"`
+	// RegistryURLs optional HTTPS bases for future package id resolution (e.g. https://packages.dockpipe.com).
+	// Not wired in the runner yet; compile and resolution use compile.workflows paths and local stores.
+	RegistryURLs *[]string `json:"registry_urls,omitempty"`
 }
 
 // LoadDockpipeProjectConfig reads dockpipe.config.json from repoRoot. Returns (nil, nil) if the file is missing.

@@ -29,7 +29,26 @@
     },
     "imports": {
       "type": "array",
-      "items": { "type": "string" }
+      "items": { "type": "string" },
+      "description": "Relative YAML files to merge (file inclusion). Not named package dependencies."
+    },
+    "inject": {
+      "type": "array",
+      "description": "Explicit compile-closure dependencies for package compile for-workflow: workflow/package ids (string or workflow:/package: maps) and resolver: profile names. Does not merge YAML — use imports for that.",
+      "items": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "workflow": { "type": "string" },
+              "package": { "type": "string" },
+              "resolver": { "type": "string" }
+            }
+          }
+        ]
+      }
     },
     "vars": {
       "type": "object",

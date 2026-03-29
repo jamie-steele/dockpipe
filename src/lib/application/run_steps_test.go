@@ -14,15 +14,15 @@ func boolPtr(v bool) *bool { return &v }
 func TestValidateParallelOutputPaths(t *testing.T) {
 	wf := &domain.Workflow{
 		Steps: []domain.Step{
-			{Outputs: ".dockpipe/a.env", Blocking: boolPtr(false)},
-			{Outputs: ".dockpipe/b.env", Blocking: boolPtr(false)},
+			{Outputs: "bin/.dockpipe/a.env", Blocking: boolPtr(false)},
+			{Outputs: "bin/.dockpipe/b.env", Blocking: boolPtr(false)},
 		},
 	}
 	if err := validateParallelOutputPaths(wf, 0, 2); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	wf.Steps[1].Outputs = ".dockpipe/a.env"
+	wf.Steps[1].Outputs = "bin/.dockpipe/a.env"
 	if err := validateParallelOutputPaths(wf, 0, 2); err == nil || !strings.Contains(err.Error(), "duplicate outputs path") {
 		t.Fatalf("expected duplicate outputs path error, got %v", err)
 	}

@@ -52,7 +52,7 @@ func TestListWorkflowNamesInRepoRootAndPackagesMerges(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: b\nversion: 0.1.0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	pw := filepath.Join(tmp, ".dockpipe", "internal", "packages", "workflows")
+	pw := filepath.Join(tmp, DockpipeDirRel, "internal", "packages", "workflows")
 	if err := os.MkdirAll(pw, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -224,7 +224,7 @@ func TestResolveWorkflowConfigPathWithWorkdirPrefersPackagesOverLegacyTemplates(
 	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: demo\nversion: 0.1.0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	pw := filepath.Join(tmp, ".dockpipe", "internal", "packages", "workflows")
+	pw := filepath.Join(tmp, DockpipeDirRel, "internal", "packages", "workflows")
 	if err := os.MkdirAll(pw, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -296,7 +296,7 @@ func TestResolveWorkflowConfigPathDoesNotSearchLegacyCoreWorkflowsDir(t *testing
 }
 
 // Materialized bundle as repoRoot + project with both a package tarball and workflows/<name>/:
-// run resolution prefers tar:// (stream from store) before project authoring; compile still uses ProjectWorkflowConfigPath.
+// run resolution prefers tar:// (stream from store) before project authoring; compile uses OnDiskWorkflowConfigPath.
 func TestResolveWorkflowConfigPathWithWorkdirPrefersTarballOverProjectWorkflows(t *testing.T) {
 	bundle := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(bundle, BundledLayoutDir, "workflows", "demo"), 0o755); err != nil {
@@ -317,7 +317,7 @@ func TestResolveWorkflowConfigPathWithWorkdirPrefersTarballOverProjectWorkflows(
 	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: demo\nversion: 0.1.0\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	pw := filepath.Join(project, ".dockpipe", "internal", "packages", "workflows")
+	pw := filepath.Join(project, DockpipeDirRel, "internal", "packages", "workflows")
 	if err := os.MkdirAll(pw, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +332,7 @@ func TestResolveWorkflowConfigPathWithWorkdirPrefersTarballOverProjectWorkflows(
 	if !strings.HasPrefix(got, "tar://") {
 		t.Fatalf("want tar workflow URI when store tarball exists, got %s", got)
 	}
-	if got := ProjectWorkflowConfigPath(project, "demo"); got != onDisk {
+	if got := OnDiskWorkflowConfigPath(project, "demo"); got != onDisk {
 		t.Fatalf("compile path should still see project workflows: got %q want %s", got, onDisk)
 	}
 }

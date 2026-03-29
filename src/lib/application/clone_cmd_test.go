@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"dockpipe/src/lib/domain"
+	"dockpipe/src/lib/infrastructure"
 	"dockpipe/src/lib/infrastructure/packagebuild"
 )
 
@@ -26,7 +27,7 @@ steps: []
 	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
 		t.Fatal(err)
 	}
-	pw := filepath.Join(dir, ".dockpipe", "internal", "packages", "workflows")
+	pw := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows")
 	matches, err := filepath.Glob(filepath.Join(pw, "dockpipe-workflow-mywf-*.tar.gz"))
 	if err != nil || len(matches) != 1 {
 		t.Fatalf("expected one compiled tarball under %s: matches=%v err=%v", pw, matches, err)
@@ -71,7 +72,7 @@ distribution: binary
 	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte(manifest), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	pw := filepath.Join(dir, ".dockpipe", "internal", "packages", "workflows")
+	pw := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows")
 	if err := os.MkdirAll(pw, 0o755); err != nil {
 		t.Fatal(err)
 	}

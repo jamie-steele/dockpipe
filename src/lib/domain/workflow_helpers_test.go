@@ -52,7 +52,7 @@ func TestStepHelpers(t *testing.T) {
 		t.Fatalf("OutputsPath mismatch: %q", got)
 	}
 	s.Outputs = ""
-	if got := s.OutputsPath(); got != ".dockpipe/outputs.env" {
+	if got := s.OutputsPath(); got != DefaultOutputsEnvRel {
 		t.Fatalf("OutputsPath default mismatch: %q", got)
 	}
 	r := s.RunPaths()

@@ -20,7 +20,7 @@ Pipeon (local IDE assistant helper)
   Version gate: default min ${PIPEON_MIN_VERSION} — set DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1 to try earlier.
 
 Commands:
-  bundle          Write .dockpipe/pipeon-context.md from repo artifacts
+  bundle          Write bin/.dockpipe/pipeon-context.md from repo artifacts
   chat [text]     Ask Ollama (requires bundle + ollama serve). Or: pipeon chat < file.txt
   status          Show enablement, version gate, and artifact presence
 
@@ -37,7 +37,7 @@ bundle)
 	;;
 chat)
 	pipeon_check_enabled "$ROOT" || exit $?
-	if [[ ! -f "$ROOT/.dockpipe/pipeon-context.md" ]]; then
+	if [[ ! -f "$ROOT/bin/.dockpipe/pipeon-context.md" ]]; then
 		bash "$SCRIPT_DIR/bundle-context.sh"
 	fi
 	bash "$SCRIPT_DIR/chat.sh" "$@"
@@ -60,7 +60,7 @@ status)
 	else
 		echo "gate: version ok for Pipeon"
 	fi
-	for p in "$ROOT/.dockpipe/pipeon-context.md" "$ROOT/.dockpipe/ci-analysis/findings.json" "$ROOT/.dockpipe/analysis/insights.json" "$ROOT/.dorkpipe/run.json"; do
+	for p in "$ROOT/bin/.dockpipe/pipeon-context.md" "$ROOT/bin/.dockpipe/ci-analysis/findings.json" "$ROOT/bin/.dockpipe/analysis/insights.json" "$ROOT/.dorkpipe/run.json"; do
 		if [[ -f "$p" ]]; then
 			echo "present: $p"
 		else

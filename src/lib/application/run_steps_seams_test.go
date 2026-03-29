@@ -31,8 +31,8 @@ func withRunStepSeams(t *testing.T, fn func()) {
 // TestRunSteps_ParallelBatchAggregatesOutputsInOrder merges async skip_container outputs in declaration order (last wins).
 func TestRunSteps_ParallelBatchAggregatesOutputsInOrder(t *testing.T) {
 	tmp := t.TempDir()
-	aPath := filepath.Join(tmp, ".dockpipe", "a.env")
-	bPath := filepath.Join(tmp, ".dockpipe", "b.env")
+	aPath := filepath.Join(tmp, infrastructure.DockpipeDirRel, "a.env")
+	bPath := filepath.Join(tmp, infrastructure.DockpipeDirRel, "b.env")
 	if err := os.MkdirAll(filepath.Dir(aPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -53,8 +53,8 @@ func TestRunSteps_ParallelBatchAggregatesOutputsInOrder(t *testing.T) {
 		nonBlocking := false
 		wf := &domain.Workflow{
 			Steps: []domain.Step{
-				{ID: "a", SkipContainer: true, Outputs: ".dockpipe/a.env", Blocking: &nonBlocking},
-				{ID: "b", SkipContainer: true, Outputs: ".dockpipe/b.env", Blocking: &nonBlocking},
+				{ID: "a", SkipContainer: true, Outputs: "bin/.dockpipe/a.env", Blocking: &nonBlocking},
+				{ID: "b", SkipContainer: true, Outputs: "bin/.dockpipe/b.env", Blocking: &nonBlocking},
 				{ID: "join", SkipContainer: true}, // default blocking
 			},
 		}

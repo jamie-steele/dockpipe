@@ -51,6 +51,10 @@ func runEmbeddedResolverWorkflowWithLoad(
 	} else {
 		wd, _ = os.Getwd()
 	}
+	projectRoot := wd
+	if ap, err := filepath.Abs(wd); err == nil {
+		projectRoot = ap
+	}
 	wfPath, err := infrastructure.ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, wd, name)
 	if err != nil {
 		return fmt.Errorf("resolver workflow %q: %w", name, err)
@@ -77,6 +81,7 @@ func runEmbeddedResolverWorkflowWithLoad(
 		wf:             subWf,
 		wfRoot:         wfRoot,
 		repoRoot:       repoRoot,
+		projectRoot:    projectRoot,
 		cliArgs:        cliArgs,
 		envMap:         envMap,
 		envSlice:       envSlice,

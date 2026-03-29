@@ -3,7 +3,7 @@ namespace: dockpipe-terraform
 description: >-
   Provider-agnostic host: packages/terraform/resolvers/terraform-core/assets/scripts/terraform-run.sh + terraform-pipeline.sh.
   Set DOCKPIPE_TF_MODULE_DIR. Remote: DOCKPIPE_TF_REMOTE_BACKEND_FILE only (no generated R2 backend here).
-  Cloudflare R2: dockpipe.cloudflare.r2infra uses terraform-cloudflare-r2-run.sh in this repo’s cloud.storage package.
+  Cloudflare R2: dockpipe.cloudflare.r2infra resolver ships terraform-cloudflare-r2-run.sh (wraps this pipeline; module .tf under dockpipe.cloudflare.r2publish/terraform).
 
 docker_preflight: false
 

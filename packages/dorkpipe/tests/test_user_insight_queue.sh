@@ -18,7 +18,7 @@ trap 'rm -rf "$tmp"' EXIT
 export DOCKPIPE_WORKDIR="$tmp"
 bash "$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts/user-insight-enqueue.sh" -m 'convention: use gofmt for Go.' >/dev/null
 bash "$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts/user-insight-enqueue.sh" -m 'SOC2 review will cover secret storage.' >/dev/null
-echo 'null' >"$tmp/.dockpipe/analysis/insights.json"
+echo 'null' >"$tmp/bin/.dockpipe/analysis/insights.json"
 bash "$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts/user-insight-process.sh"
 
 if ! jq -e '
@@ -26,14 +26,14 @@ if ! jq -e '
   and (.insights | length == 2)
   and ([.insights[].category] | sort == ["compliance", "convention"])
   and ([.insights[].status] | sort == ["accepted", "pending"])
-' "$tmp/.dockpipe/analysis/insights.json" >/dev/null; then
+' "$tmp/bin/.dockpipe/analysis/insights.json" >/dev/null; then
 	echo "test_user_insight_queue: insights.json shape unexpected" >&2
-	jq '.' "$tmp/.dockpipe/analysis/insights.json" >&2 || true
+	jq '.' "$tmp/bin/.dockpipe/analysis/insights.json" >&2 || true
 	exit 1
 fi
 
 bash "$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts/user-insight-export-by-category.sh"
-if ! jq -e 'length >= 1' "$tmp/.dockpipe/analysis/by-category/convention.json" >/dev/null; then
+if ! jq -e 'length >= 1' "$tmp/bin/.dockpipe/analysis/by-category/convention.json" >/dev/null; then
 	echo "test_user_insight_queue: by-category export unexpected" >&2
 	exit 1
 fi

@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
 cd "$ROOT"
-PASTE="${ROOT}/.dockpipe/paste-this-prompt.txt"
-REFINED="${ROOT}/.dockpipe/orchestrator-cursor-prompt.refined.md"
+PASTE="${ROOT}/bin/.dockpipe/paste-this-prompt.txt"
+REFINED="${ROOT}/bin/.dockpipe/orchestrator-cursor-prompt.refined.md"
 if [[ ! -f "$REFINED" ]]; then
 	echo "merge-paste-prompt: no $REFINED; leaving $PASTE unchanged" >&2
 	exit 0

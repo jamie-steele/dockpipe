@@ -13,22 +13,22 @@ echo ""
 
 have_jq() { command -v jq >/dev/null 2>&1; }
 
-if [[ -f "$ROOT/.dockpipe/ci-analysis/findings.json" ]]; then
-	echo "--- .dockpipe/ci-analysis/ (CI-normalized signals) ---"
+if [[ -f "$ROOT/bin/.dockpipe/ci-analysis/findings.json" ]]; then
+	echo "--- bin/.dockpipe/ci-analysis/ (CI-normalized signals) ---"
 	if have_jq; then
-		jq -r '"schema: " + .schema_version + " | findings: " + (.findings|length|tostring) + " | commit: " + .provenance.commit + " | source: " + .provenance.source' "$ROOT/.dockpipe/ci-analysis/findings.json"
+		jq -r '"schema: " + .schema_version + " | findings: " + (.findings|length|tostring) + " | commit: " + .provenance.commit + " | source: " + .provenance.source' "$ROOT/bin/.dockpipe/ci-analysis/findings.json"
 	else
 		echo "(install jq for JSON summary)"
-		ls -la "$ROOT/.dockpipe/ci-analysis/"
+		ls -la "$ROOT/bin/.dockpipe/ci-analysis/"
 	fi
 else
-	echo "[ ] .dockpipe/ci-analysis/findings.json — run: bash scripts/ci-local.sh (or CI) to generate"
+	echo "[ ] bin/.dockpipe/ci-analysis/findings.json — run: bash src/scripts/ci-local.sh (or CI) to generate"
 fi
 
-if [[ -f "$ROOT/.dockpipe/ci-analysis/SUMMARY.md" ]]; then
+if [[ -f "$ROOT/bin/.dockpipe/ci-analysis/SUMMARY.md" ]]; then
 	echo ""
 	echo "--- SUMMARY.md (head) ---"
-	head -15 "$ROOT/.dockpipe/ci-analysis/SUMMARY.md"
+	head -15 "$ROOT/bin/.dockpipe/ci-analysis/SUMMARY.md"
 fi
 
 if [[ -d "$ROOT/.dorkpipe/self-analysis" ]] && [[ -n "$(ls -A "$ROOT/.dorkpipe/self-analysis" 2>/dev/null)" ]]; then
@@ -47,13 +47,13 @@ if [[ -f "$ROOT/.dorkpipe/run.json" ]]; then
 	fi
 fi
 
-if [[ -f "$ROOT/.dockpipe/analysis/insights.json" ]]; then
+if [[ -f "$ROOT/bin/.dockpipe/analysis/insights.json" ]]; then
 	echo ""
-	echo "--- .dockpipe/analysis/insights.json (user guidance signals; not verified facts) ---"
+	echo "--- bin/.dockpipe/analysis/insights.json (user guidance signals; not verified facts) ---"
 	if have_jq; then
-		jq '{kind, insight_count: (.insights | length), categories: [.insights[].category] | unique}' "$ROOT/.dockpipe/analysis/insights.json" 2>/dev/null || true
+		jq '{kind, insight_count: (.insights | length), categories: [.insights[].category] | unique}' "$ROOT/bin/.dockpipe/analysis/insights.json" 2>/dev/null || true
 	else
-		head -8 "$ROOT/.dockpipe/analysis/insights.json"
+		head -8 "$ROOT/bin/.dockpipe/analysis/insights.json"
 	fi
 fi
 

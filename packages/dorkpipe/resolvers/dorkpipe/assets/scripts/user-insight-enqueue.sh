@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Append one user insight to .dockpipe/analysis/queue.json (structured capture; not implicit memory).
+# Append one user insight to bin/.dockpipe/analysis/queue.json (structured capture; not implicit memory).
 # Usage: user-insight-enqueue.sh -m 'text' [--category-hint unknown] [--repo-path p] [--component c] [--workflow w]
 #        echo 'text' | user-insight-enqueue.sh
 set -euo pipefail
 
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
-OUT="$ROOT/.dockpipe/analysis"
+OUT="$ROOT/bin/.dockpipe/analysis"
 mkdir -p "$OUT"
 QUEUE="$OUT/queue.json"
 

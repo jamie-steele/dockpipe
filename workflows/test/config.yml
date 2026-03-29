@@ -21,11 +21,11 @@ steps:
       echo "[demo] Isolation — each step runs in a fresh container; your repo is mounted"
       echo "[demo] at /work with your UID/GID mapped. Containers are removed after each step."
       echo "[demo] ================================================================="
-      mkdir -p .dockpipe/demo
-      printf "%s\n" "package main" "func main() {}" > .dockpipe/demo/main.go
-      SHA=$(sha256sum .dockpipe/demo/main.go | cut -b1-64)
-      mkdir -p .dockpipe
-      printf "%s\n" "ARTIFACT_SHA256=$SHA" "DEMO_FILE=.dockpipe/demo/main.go" "DEMO_STAGE=prepare" > .dockpipe/outputs.env
+      mkdir -p bin/.dockpipe/demo
+      printf "%s\n" "package main" "func main() {}" > bin/.dockpipe/demo/main.go
+      SHA=$(sha256sum bin/.dockpipe/demo/main.go | cut -b1-64)
+      mkdir -p bin/.dockpipe
+      printf "%s\n" "ARTIFACT_SHA256=$SHA" "DEMO_FILE=bin/.dockpipe/demo/main.go" "DEMO_STAGE=prepare" > bin/.dockpipe/outputs.env
       echo "[demo] step 1/3 prepare — wrote demo artifact + checksum for next step"'
 
   - id: scan
@@ -51,8 +51,8 @@ steps:
       echo "[demo] Running: gosec (first-party only — exclude .gomodcache if present under the repo)"
       gosec -conf .gosec.json -fmt text -stdout -exclude-dir=.gomodcache ./...
       echo "[demo] Container scan finished OK (go test + vet + govulncheck + gosec)."
-      mkdir -p .dockpipe
-      printf "%s\n" "VERIFY_OK=1" "SCAN_PASS=1" "DEMO_STAGE=scan" > .dockpipe/outputs.env'
+      mkdir -p bin/.dockpipe
+      printf "%s\n" "VERIFY_OK=1" "SCAN_PASS=1" "DEMO_STAGE=scan" > bin/.dockpipe/outputs.env'
 
   - id: report
     isolate: golang:1.25-bookworm

@@ -37,18 +37,18 @@ if ! have jq; then
 	exit 1
 fi
 
-step "govulncheck + gosec + DorkPipe signal bundle (.dockpipe/ci-analysis/)"
-mkdir -p .dockpipe/ci-raw
+step "govulncheck + gosec + DorkPipe signal bundle (bin/.dockpipe/ci-analysis/)"
+mkdir -p bin/.dockpipe/ci-raw
 set +e
-govulncheck -format json ./... > .dockpipe/ci-raw/govulncheck.json
+govulncheck -format json ./... > bin/.dockpipe/ci-raw/govulncheck.json
 VC=$?
-gosec -conf .gosec.json -fmt json -out=.dockpipe/ci-raw/gosec.json -exclude-dir=.gomodcache ./...
+gosec -conf .gosec.json -fmt json -out=bin/.dockpipe/ci-raw/gosec.json -exclude-dir=.gomodcache ./...
 GC=$?
 set -e
 export DOCKPIPE_WORKDIR="$ROOT"
 bash packages/dorkpipe/resolvers/dorkpipe/assets/scripts/normalize-ci-scans.sh
-jq -r '"govulncheck raw vulns: " + ((.vulns // .Vulns // [] | length) | tostring)' .dockpipe/ci-raw/govulncheck.json 2>/dev/null || true
-jq -r '"gosec raw issues: " + ((.Stats.found // 0) | tostring)' .dockpipe/ci-raw/gosec.json 2>/dev/null || true
+jq -r '"govulncheck raw vulns: " + ((.vulns // .Vulns // [] | length) | tostring)' bin/.dockpipe/ci-raw/govulncheck.json 2>/dev/null || true
+jq -r '"gosec raw issues: " + ((.Stats.found // 0) | tostring)' bin/.dockpipe/ci-raw/gosec.json 2>/dev/null || true
 if [[ $VC -ne 0 ]]; then exit "$VC"; fi
 if [[ $GC -ne 0 ]]; then exit "$GC"; fi
 

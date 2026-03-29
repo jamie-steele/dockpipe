@@ -13,6 +13,8 @@ import (
 // they classify workflows for tooling, docs, and future composition. Use lowercase + hyphens.
 const (
 	WorkflowTypeSecretstore = "secretstore"
+	// DefaultOutputsEnvRel is the default step outputs path when outputs: is omitted (forward slashes for YAML).
+	DefaultOutputsEnvRel = "bin/.dockpipe/outputs.env"
 )
 
 var workflowTypePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
@@ -80,6 +82,9 @@ type Workflow struct {
 	// CompileHooks: shell commands run by `dockpipe package compile workflow` from the workflow source directory
 	// after validation and before the package tarball is written (e.g. go build, code generation).
 	CompileHooks []string `yaml:"compile_hooks,omitempty"`
+	// Inject: explicit compile closure dependencies (workflow/package ids and resolver profile names).
+	// Unlike imports:, this does not merge YAML — it only guides package compile for-workflow ordering.
+	Inject WorkflowInjectList `yaml:"inject,omitempty"`
 	Vars            map[string]string `yaml:"vars"`
 	Steps           []Step            `yaml:"steps"`
 }
@@ -211,7 +216,7 @@ func (s *Step) OutputsPath() string {
 	if s.Outputs != "" {
 		return s.Outputs
 	}
-	return ".dockpipe/outputs.env"
+	return DefaultOutputsEnvRel
 }
 
 // workflowFile is the on-disk shape: steps may mix plain steps and group wrappers.
@@ -238,6 +243,7 @@ type workflowFile struct {
 	CompileHooks    []string          `yaml:"compile_hooks,omitempty"`
 	Vars            map[string]string `yaml:"vars"`
 	Imports         []string          `yaml:"imports,omitempty"`
+	Inject          WorkflowInjectList `yaml:"inject,omitempty"`
 	Steps           []stepOrGroupYAML `yaml:"steps"`
 }
 

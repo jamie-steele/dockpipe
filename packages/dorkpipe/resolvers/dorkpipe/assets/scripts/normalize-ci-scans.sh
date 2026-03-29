@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Normalize gosec + govulncheck JSON into .dockpipe/ci-analysis/ for DorkPipe downstream reasoning.
-# Prerequisites: jq. Raw inputs: .dockpipe/ci-raw/gosec.json and govulncheck.json (objects or empty {}).
+# Normalize gosec + govulncheck JSON into bin/.dockpipe/ci-analysis/ for DorkPipe downstream reasoning.
+# Prerequisites: jq. Raw inputs: bin/.dockpipe/ci-raw/gosec.json and govulncheck.json (objects or empty {}).
 set -euo pipefail
 
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
-RAW="$ROOT/.dockpipe/ci-raw"
-OUT="$ROOT/.dockpipe/ci-analysis"
+RAW="$ROOT/bin/.dockpipe/ci-raw"
+OUT="$ROOT/bin/.dockpipe/ci-analysis"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MERGE_JQ="$SCRIPT_DIR/jq/merge-ci-findings.jq"
 
@@ -88,7 +88,7 @@ cat >"$OUT/SUMMARY.md" <<EOF
 
 **Artifacts:** \`findings.json\` (machine-readable), \`raw/\` (original tool JSON), this file (human).
 
-**DorkPipe:** load \`.dockpipe/ci-analysis/findings.json\` to classify, correlate with repo analysis, prioritize, and suggest fixes. Compare \`findings[].id\` across runs for new/resolved/changed severity.
+**DorkPipe:** load \`bin/.dockpipe/ci-analysis/findings.json\` to classify, correlate with repo analysis, prioritize, and suggest fixes. Compare \`findings[].id\` across runs for new/resolved/changed severity.
 
 See **docs/artifacts.md** (CI bundle).
 EOF

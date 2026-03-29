@@ -28,7 +28,7 @@ const agentsSelfAnalysisMarker = "<!-- dockpipe: self-analysis handoff -->"
 
 func agentsSelfAnalysisSection() string {
 	return agentsSelfAnalysisMarker + "\n\n## Self-analysis handoff\n\n" +
-		"Generated outputs: **`.dockpipe/paste-this-prompt.txt`**, **`.dockpipe/orchestrator-cursor-prompt.md`**, **`.dorkpipe/self-analysis/`**, and optionally **`.dorkpipe/run.json`**.\n\n" +
+		"Generated outputs: **`bin/.dockpipe/paste-this-prompt.txt`**, **`bin/.dockpipe/orchestrator-cursor-prompt.md`**, **`.dorkpipe/self-analysis/`**, and optionally **`.dorkpipe/run.json`**.\n\n" +
 		"### Agent workflow (read before repo-wide work)\n\n" +
 		"1. **Discover:** Read **AGENTS.md** and load these paths if present.\n" +
 		"2. **Freshness:** Compare to **git HEAD**, file dates, **VERSION**, or **`.dorkpipe/run.json`**.\n" +

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Split insights.json into .dockpipe/analysis/by-category/<category>.json (arrays only; canonical file remains insights.json).
+# Split insights.json into bin/.dockpipe/analysis/by-category/<category>.json (arrays only; canonical file remains insights.json).
 set -euo pipefail
 
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
-OUT="$ROOT/.dockpipe/analysis"
+OUT="$ROOT/bin/.dockpipe/analysis"
 INS="$OUT/insights.json"
 CATDIR="$OUT/by-category"
 

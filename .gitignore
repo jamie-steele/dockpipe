@@ -76,8 +76,9 @@ Thumbs.db
 !.staging/packages/README.md
 # To stop tracking without deleting files: git rm -r --cached .staging
 
-# Local `.dockpipe/` — generated handoffs, CI dumps, review/cursor prompts, optional `demo/` stubs (see AGENTS.md).
-# Canonical bundled core + workflows live under `src/core/…`; do not commit a duplicate `templates/` tree here.
+# DockPipe project-local state (compile store, runs, caches) under `bin/.dockpipe/` — covered by `bin/` if you ignore it.
+# Legacy path (pre–bin layout): remove after migrating.
+bin/.dockpipe/
 .dockpipe/
 
 # DorkPipe runtime outputs (metrics, nodes, self-analysis scratch)

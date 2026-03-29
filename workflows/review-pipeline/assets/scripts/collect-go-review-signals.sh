@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Deterministic prep: Go file list + bounded pattern hits for downstream review bundles.
-# Writes under .dockpipe/ — reusable from any workflow; requires bash + git or find + grep.
+# Writes under bin/.dockpipe/ — reusable from any workflow; requires bash + git or find + grep.
 set -euo pipefail
 
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 cd "$ROOT"
-OUT="${ROOT}/.dockpipe"
+OUT="${ROOT}/bin/.dockpipe"
 mkdir -p "$OUT"
 
 FILES="$OUT/review-files.txt"
@@ -17,7 +17,7 @@ if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 	git ls-files '*.go' 2>/dev/null | head -n 500 >>"$FILES" || true
 fi
 if [[ ! -s "$FILES" ]]; then
-	find . -name '*.go' -not -path './.git/*' -not -path './.dockpipe/*' 2>/dev/null | head -n 500 | sed 's|^\./||' >>"$FILES" || true
+	find . -name '*.go' -not -path './.git/*' -not -path './bin/.dockpipe/*' -not -path './.dockpipe/*' 2>/dev/null | head -n 500 | sed 's|^\./||' >>"$FILES" || true
 fi
 
 {

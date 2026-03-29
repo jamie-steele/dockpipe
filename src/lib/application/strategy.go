@@ -68,14 +68,14 @@ func LoadStrategyAssignments(repoRoot, wfRoot, name string) (domain.StrategyAssi
 }
 
 // ResolveStrategyScriptPaths turns repo-relative strategy paths into absolute paths like workflow run:/act:.
-func ResolveStrategyScriptPaths(rels []string, wfRoot, repoRoot string) []string {
+func ResolveStrategyScriptPaths(rels []string, wfRoot, repoRoot, projectRoot string) []string {
 	out := make([]string, 0, len(rels))
 	for _, rel := range rels {
 		rel = strings.TrimSpace(rel)
 		if rel == "" {
 			continue
 		}
-		out = append(out, infrastructure.ResolveWorkflowScript(rel, wfRoot, repoRoot))
+		out = append(out, infrastructure.ResolveWorkflowScript(rel, wfRoot, repoRoot, projectRoot))
 	}
 	return out
 }
@@ -91,7 +91,7 @@ func StrategyAfterHandlesBundledCommit(afterAbs []string, repoRoot string) bool 
 }
 
 // ValidateNoDuplicateClone errors when workflow.run lists clone-worktree.sh while the strategy already provides clone.
-func ValidateNoDuplicateClone(wf *domain.Workflow, wfRoot, repoRoot string, strategyProvidesClone bool, stratBeforeAbs []string) error {
+func ValidateNoDuplicateClone(wf *domain.Workflow, wfRoot, repoRoot, projectRoot string, strategyProvidesClone bool, stratBeforeAbs []string) error {
 	if wf == nil {
 		return nil
 	}
@@ -106,7 +106,7 @@ func ValidateNoDuplicateClone(wf *domain.Workflow, wfRoot, repoRoot string, stra
 		return nil
 	}
 	for _, r := range wf.Run {
-		ap := infrastructure.ResolveWorkflowScript(r, wfRoot, repoRoot)
+		ap := infrastructure.ResolveWorkflowScript(r, wfRoot, repoRoot, projectRoot)
 		if strings.HasSuffix(ap, "clone-worktree.sh") {
 			return fmt.Errorf("workflow run lists clone-worktree.sh but strategy already runs clone; remove clone from workflow run: (hint: rely on strategy worktree or remove duplicate from run:)")
 		}
@@ -115,12 +115,12 @@ func ValidateNoDuplicateClone(wf *domain.Workflow, wfRoot, repoRoot string, stra
 }
 
 // ActWouldBeBundledCommit resolves a workflow/resolver act path and reports bundled commit-worktree.sh.
-func ActWouldBeBundledCommit(actRel string, wfRoot, repoRoot string) bool {
+func ActWouldBeBundledCommit(actRel string, wfRoot, repoRoot, projectRoot string) bool {
 	actRel = strings.TrimSpace(actRel)
 	if actRel == "" {
 		return false
 	}
-	ap := infrastructure.ResolveWorkflowScript(actRel, wfRoot, repoRoot)
+	ap := infrastructure.ResolveWorkflowScript(actRel, wfRoot, repoRoot, projectRoot)
 	return infrastructure.IsBundledCommitWorktree(ap, repoRoot)
 }
 

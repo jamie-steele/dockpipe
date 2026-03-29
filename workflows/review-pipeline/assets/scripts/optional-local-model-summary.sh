@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Cheap local pass: call Ollama HTTP API (default) or DOCKPIPE_LOCAL_MODEL_CMD override.
 # Used after ollama serve (isolate: ollama + run-local-model-with-ollama-daemon.sh) or from a host run:.
-# Writes .dockpipe/local-model-notes.txt, local-model.env, and outputs.env for the next step.
+# Writes bin/.dockpipe/local-model-notes.txt, local-model.env, and outputs.env for the next step.
 set -euo pipefail
 
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 cd "$ROOT"
-OUT="${ROOT}/.dockpipe"
+OUT="${ROOT}/bin/.dockpipe"
 mkdir -p "$OUT"
 NOTES="$OUT/local-model-notes.txt"
 CTX="$OUT/review-context.md"

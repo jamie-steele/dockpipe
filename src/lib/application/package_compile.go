@@ -177,16 +177,51 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 	}
 	tarGlob := filepath.Join(pw, fmt.Sprintf("dockpipe-workflow-%s-*.tar.gz", packagebuild.SafeTarballToken(pkgName)))
 	legacyDir := filepath.Join(pw, pkgName)
+	rebuild := force
 	if !force {
-		if matches, _ := filepath.Glob(tarGlob); len(matches) > 0 {
-			fmt.Fprintf(os.Stderr, "[dockpipe] skip workflow compile (already exists): %s (--force to rebuild)\n", matches[0])
-			return nil
+		matches, _ := filepath.Glob(tarGlob)
+		if len(matches) > 0 {
+			latestTar := infrastructure.PickLatestModTimePath(matches)
+			if latestTar == "" {
+				rebuild = true
+			} else {
+				stale, err := infrastructure.SourceDirNewerThanPath(srcAbs, latestTar)
+				if err != nil {
+					return err
+				}
+				if !stale {
+					fmt.Fprintf(os.Stderr, "[dockpipe] skip workflow compile (store tarball up to date): %s\n", latestTar)
+					return nil
+				}
+				fmt.Fprintf(os.Stderr, "[dockpipe] recompiling workflow %q (sources newer than %s)\n", pkgName, filepath.Base(latestTar))
+				rebuild = true
+			}
+		} else if _, err := os.Stat(legacyDir); err == nil {
+			refMax, err := infrastructure.MaxModTimeFilesUnder(legacyDir)
+			if err != nil {
+				return err
+			}
+			srcMax, err := infrastructure.MaxModTimeFilesUnder(srcAbs)
+			if err != nil {
+				return err
+			}
+			switch {
+			case srcMax.IsZero():
+				fmt.Fprintf(os.Stderr, "[dockpipe] recompiling workflow %q (no source files timed; refresh legacy store)\n", pkgName)
+				rebuild = true
+			case refMax.IsZero():
+				fmt.Fprintf(os.Stderr, "[dockpipe] recompiling workflow %q (legacy store empty)\n", pkgName)
+				rebuild = true
+			case !srcMax.After(refMax):
+				fmt.Fprintf(os.Stderr, "[dockpipe] skip workflow compile (legacy store tree up to date): %s\n", legacyDir)
+				return nil
+			default:
+				fmt.Fprintf(os.Stderr, "[dockpipe] recompiling workflow %q (sources newer than legacy store tree)\n", pkgName)
+				rebuild = true
+			}
 		}
-		if _, err := os.Stat(legacyDir); err == nil {
-			fmt.Fprintf(os.Stderr, "[dockpipe] skip workflow compile (legacy dir exists): %s (--force to rebuild)\n", legacyDir)
-			return nil
-		}
-	} else {
+	}
+	if rebuild {
 		_ = infrastructure.RemoveGlob(tarGlob)
 		_ = os.RemoveAll(legacyDir)
 	}
@@ -612,16 +647,51 @@ func compileSingleResolverDir(destRoot, from, name string, defaultNamespace stri
 	kind := "resolver"
 	tarGlob := filepath.Join(destRoot, fmt.Sprintf("dockpipe-resolver-%s-*.tar.gz", packagebuild.SafeTarballToken(name)))
 	legacyDir := filepath.Join(destRoot, name)
+	rebuild := force
 	if !force {
-		if matches, _ := filepath.Glob(tarGlob); len(matches) > 0 {
-			fmt.Fprintf(os.Stderr, "[dockpipe] skip %s compile %q (already exists): %s (--force to rebuild)\n", kind, name, matches[0])
-			return nil
+		matches, _ := filepath.Glob(tarGlob)
+		if len(matches) > 0 {
+			latestTar := infrastructure.PickLatestModTimePath(matches)
+			if latestTar == "" {
+				rebuild = true
+			} else {
+				stale, err := infrastructure.SourceDirNewerThanPath(from, latestTar)
+				if err != nil {
+					return err
+				}
+				if !stale {
+					fmt.Fprintf(os.Stderr, "[dockpipe] skip %s compile %q (store tarball up to date): %s\n", kind, name, latestTar)
+					return nil
+				}
+				fmt.Fprintf(os.Stderr, "[dockpipe] recompiling %s %q (sources newer than %s)\n", kind, name, filepath.Base(latestTar))
+				rebuild = true
+			}
+		} else if _, err := os.Stat(legacyDir); err == nil {
+			refMax, err := infrastructure.MaxModTimeFilesUnder(legacyDir)
+			if err != nil {
+				return err
+			}
+			srcMax, err := infrastructure.MaxModTimeFilesUnder(from)
+			if err != nil {
+				return err
+			}
+			switch {
+			case srcMax.IsZero():
+				fmt.Fprintf(os.Stderr, "[dockpipe] recompiling %s %q (no source files timed; refresh legacy store)\n", kind, name)
+				rebuild = true
+			case refMax.IsZero():
+				fmt.Fprintf(os.Stderr, "[dockpipe] recompiling %s %q (legacy store empty)\n", kind, name)
+				rebuild = true
+			case !srcMax.After(refMax):
+				fmt.Fprintf(os.Stderr, "[dockpipe] skip %s compile %q (legacy store tree up to date): %s\n", kind, name, legacyDir)
+				return nil
+			default:
+				fmt.Fprintf(os.Stderr, "[dockpipe] recompiling %s %q (sources newer than legacy store tree)\n", kind, name)
+				rebuild = true
+			}
 		}
-		if _, err := os.Stat(legacyDir); err == nil {
-			fmt.Fprintf(os.Stderr, "[dockpipe] skip %s compile %q (legacy dir exists): %s (--force to rebuild)\n", kind, name, legacyDir)
-			return nil
-		}
-	} else {
+	}
+	if rebuild {
 		_ = infrastructure.RemoveGlob(tarGlob)
 		_ = os.RemoveAll(legacyDir)
 	}
@@ -805,7 +875,7 @@ func cmdPackageCompileWorkflowsBatch(args []string) error {
 			return err
 		}
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] workflow packages: compiled %d tarball(s) under .dockpipe/internal/packages/workflows/\n", total)
+	fmt.Fprintf(os.Stderr, "[dockpipe] workflow packages: compiled %d tarball(s) under bin/.dockpipe/internal/packages/workflows/\n", total)
 	return nil
 }
 
@@ -898,7 +968,7 @@ func workdirAndForceArgs(workdir string, force bool) []string {
 
 const packageCompileUsageText = `dockpipe package compile
 
-Validate and materialize packages into .dockpipe/internal/packages/ (see docs/package-model.md).
+Validate and materialize packages into bin/.dockpipe/internal/packages/ (see docs/package-model.md).
 
 Usage:
   dockpipe package compile core [options]
@@ -918,7 +988,7 @@ const packageCompileWorkflowUsageText = `dockpipe package compile workflow <sour
 
 Runs workflow YAML validation (same rules as dockpipe workflow validate), runs optional
 compile_hooks from config.yml (shell, cwd = source dir), then writes the workflow tarball under
-<workdir>/.dockpipe/internal/packages/workflows/.
+<workdir>/bin/.dockpipe/internal/packages/workflows/.
 
 Options:
   --workdir <path>   Project directory (default: current directory)
@@ -931,7 +1001,7 @@ Options:
 const packageCompileCoreUsageText = `dockpipe package compile core
 
 Copies a core authoring tree (default: src/core or templates/core when present) into
-<workdir>/.dockpipe/internal/packages/core/ and writes package.yml (kind: core).
+<workdir>/bin/.dockpipe/internal/packages/core/ and writes package.yml (kind: core).
 Top-level resolvers/, bundles/, and workflows/ in the source are omitted — compile those with
 "package compile resolvers|workflows" so they land under packages/resolvers/ or packages/workflows/.
 
@@ -947,7 +1017,7 @@ Options:
 const packageCompileResolversUsageText = `dockpipe package compile resolvers
 
 Merges each child directory from each --from source into
-.dockpipe/internal/packages/resolvers/<name>/ (later --from wins on name clash).
+bin/.dockpipe/internal/packages/resolvers/<name>/ (later --from wins on name clash).
 
 Defaults: same roots as compile.workflows (plus legacy compile.bundles merged in), plus src/core/resolvers and
 templates/core/resolvers when those directories exist. Deprecated compile.resolvers entries are merged if present.

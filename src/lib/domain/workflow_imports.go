@@ -45,6 +45,7 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 		Strategies:      f.Strategies,
 		DockerPreflight: f.DockerPreflight,
 		CompileHooks:    f.CompileHooks,
+		Inject:          f.Inject,
 		Vars:            f.Vars,
 		Steps:           steps,
 	}, nil
@@ -69,6 +70,7 @@ func parseWorkflowFileRecursive(data []byte, baseDir string, readFile func(strin
 		baseDir = "."
 	}
 	mergedVars := map[string]string{}
+	var mergedInject []WorkflowInjectEntry
 	var stepParts []stepOrGroupYAML
 	for _, imp := range f.Imports {
 		imp = strings.TrimSpace(imp)
@@ -98,6 +100,7 @@ func parseWorkflowFileRecursive(data []byte, baseDir string, readFile func(strin
 				mergedVars[k] = v
 			}
 		}
+		mergedInject = append(mergedInject, sub.Inject...)
 		stepParts = append(stepParts, sub.Steps...)
 	}
 	for k, v := range f.Vars {
@@ -105,6 +108,7 @@ func parseWorkflowFileRecursive(data []byte, baseDir string, readFile func(strin
 	}
 	out := f
 	out.Vars = mergedVars
+	out.Inject = append(mergedInject, f.Inject...)
 	out.Steps = append(stepParts, f.Steps...)
 	out.Imports = nil
 	return &out, nil

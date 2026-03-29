@@ -14,7 +14,7 @@ import (
 
 const hostRunIDBytes = 4 // 8 hex chars
 
-// HostRunRecord is written to .dockpipe/runs/<id>.json while a host script (skip_container step) runs.
+// HostRunRecord is written to bin/.dockpipe/runs/<id>.json while a host script (skip_container step) runs.
 type HostRunRecord struct {
 	ID        string `json:"id"`
 	PID       int    `json:"pid"`
@@ -26,7 +26,7 @@ type HostRunRecord struct {
 
 // HostRunsDir returns the per-project runs directory.
 func HostRunsDir(workdir string) string {
-	return filepath.Join(workdir, ".dockpipe", "runs")
+	return filepath.Join(workdir, DockpipeDirRel, "runs")
 }
 
 // BeginHostRun adds DOCKPIPE_RUN_ID and DOCKPIPE_RUN_FILE to env and returns the JSON path to fill after Start.
@@ -121,7 +121,7 @@ func ReadHostRunContainerSidecar(runFile string) string {
 	return strings.TrimSpace(string(b))
 }
 
-// ListHostRuns prints a human-readable table of runs under workdir/.dockpipe/runs/*.json
+// ListHostRuns prints a human-readable table of runs under workdir/bin/.dockpipe/runs/*.json
 func ListHostRuns(workdir string, w io.Writer) error {
 	wd := strings.TrimSpace(workdir)
 	if wd == "" {

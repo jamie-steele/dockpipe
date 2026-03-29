@@ -3,6 +3,7 @@ package application
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"dockpipe/src/lib/infrastructure"
@@ -34,7 +35,7 @@ pipeline-path prints the absolute path to terraform-pipeline.sh (dockpipe.terraf
 
 See src/core/assets/scripts/README.md (DOCKPIPE_TF_* reference),
 packages/terraform/resolvers/terraform-core/README.md (workflow dockpipe.terraform.core), and
-packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/README.md.
+packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/README.md (Terraform module) and dockpipe.cloudflare.r2infra (workflow + host script).
 
 `
 
@@ -52,7 +53,12 @@ func cmdTerraform(args []string) error {
 		if err != nil {
 			return err
 		}
-		p, err := infrastructure.ResolveCoreNamespacedScriptPath(rr, "assets.scripts.terraform-pipeline.sh")
+		wd, _ := os.Getwd()
+		projectRoot := wd
+		if ap, err := filepath.Abs(wd); err == nil {
+			projectRoot = ap
+		}
+		p, err := infrastructure.ResolveCoreNamespacedScriptPath(rr, projectRoot, "assets.scripts.terraform-pipeline.sh")
 		if err != nil {
 			return err
 		}

@@ -38,17 +38,17 @@ Commands:
   init                    Add DockPipe to the current project
   install                 Fetch templates/core from HTTPS (e.g. Cloudflare R2); see install core --help
   clone <name>            Copy a compiled workflow package to workflows/ when allow_clone is true (see package manifest)
-  build                   Compile packages into .dockpipe/internal (same as package compile all --force; replaces existing outputs)
-  clean                   Remove compiled package store (.dockpipe/internal/packages)
+  build                   Compile packages into bin/.dockpipe/internal (same as package compile all --force; replaces existing outputs)
+  clean                   Remove compiled package store (bin/.dockpipe/internal/packages)
   rebuild                 clean then build
-  package list|manifest|build|compile   Packages: list, manifest, author core tarball, or compile into .dockpipe/internal
+  package list|manifest|build|compile   Packages: list, manifest, author core tarball, or compile into bin/.dockpipe/internal
   compile                 Same as dockpipe package compile (core, resolvers, workflows)
   release upload          Upload a file to S3-compatible storage (self-hosted; uses aws CLI)
   workflow validate       Check workflow YAML ([path] relative to cwd or repo root; omit if one workflow)
   doctor                  Check docker, bash, and bundled assets
   core script-path <dots> Print absolute path to a core asset (same as scripts/core.<dots> in YAML)
   terraform pipeline-path | terraform run <cmds>  Terraform helpers (see dockpipe terraform --help)
-  runs list [--workdir]   List active host-run records under .dockpipe/runs/
+  runs list [--workdir]   List active host-run records under bin/.dockpipe/runs/
   windows setup|doctor    Windows: optional WSL bridge setup
   action|pre|template init  Copy sample scripts (use each with --help)
 
@@ -97,7 +97,7 @@ func printInitUsage() {
 const runsUsageText = `dockpipe runs list — show host-run registry entries
 
 While a skip_container workflow step runs a host script, dockpipe may write
-workdir/.dockpipe/runs/<id>.json (and optional sidecars). This command lists
+workdir/bin/.dockpipe/runs/<id>.json (and optional sidecars). This command lists
 those JSON files.
 
 Usage:

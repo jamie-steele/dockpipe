@@ -112,7 +112,7 @@ func newParallelMergeState() *parallelMergeState {
 }
 
 // isLikelySecretEnvKey matches env var names that should not be cleared by an empty value from
-// step outputs (e.g. OPENAI_API_KEY= in .dockpipe/outputs.env).
+// step outputs (e.g. OPENAI_API_KEY= in bin/.dockpipe/outputs.env).
 func isLikelySecretEnvKey(k string) bool {
 	k = strings.ToUpper(strings.TrimSpace(k))
 	if strings.HasSuffix(k, "_API_KEY") {

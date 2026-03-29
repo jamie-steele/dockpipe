@@ -13,19 +13,19 @@ import (
 // Host cleanup after skip_container host scripts (RunHostScript):
 //
 // When DOCKPIPE_RUN_ID is set (normal host run with a workdir), cleanup is run-scoped only:
-// workdir/.dockpipe/runs/<runID>.container holds the Docker container name for this invocation.
-// Matching entries under workdir/.dockpipe/cleanup/docker-* and the legacy session_container file
+// workdir/bin/.dockpipe/runs/<runID>.container holds the Docker container name for this invocation.
+// Matching entries under workdir/bin/.dockpipe/cleanup/docker-* and the legacy session_container file
 // are removed without stopping other containers.
 //
-// When DOCKPIPE_RUN_ID is empty (no host run registry), legacy mode scans workdir/.dockpipe/cleanup/docker-*
-// and workdir/.dockpipe/cursor-dev/session_container — each file is one line: a container name to stop.
+// When DOCKPIPE_RUN_ID is empty (no host run registry), legacy mode scans workdir/bin/.dockpipe/cleanup/docker-*
+// and workdir/bin/.dockpipe/cursor-dev/session_container — each file is one line: a container name to stop.
 //
 // Templates register resources by writing those files; the Go runner applies cleanup when the bash
 // child exits (trap, normal return, or defer if the process died without removing markers).
 
-const (
-	hostCleanupDirRel         = ".dockpipe/cleanup"
-	cursorDevSessionLegacyRel = ".dockpipe/cursor-dev/session_container"
+var (
+	hostCleanupDirRel         = filepath.Join(DockpipeDirRel, "cleanup")
+	cursorDevSessionLegacyRel = filepath.Join(DockpipeDirRel, "cursor-dev", "session_container")
 )
 
 func envGet(env []string, key string) string {

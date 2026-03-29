@@ -9,7 +9,7 @@ import (
 // Project-local layout for content installed from a package store (S3/R2, HTTPS).
 // Uncompressed dev trees stay under templates/ and workflows/ as today; packaged installs default here.
 //
-// Default root: <workdir>/.dockpipe/internal/packages:
+// Default root: <workdir>/bin/.dockpipe/internal/packages (under bin/ so a common `bin/` gitignore applies):
 //
 //	workflows/   — dockpipe-workflow-*.tar.gz
 //	core/        — compiled spine only: runtimes/, strategies/, assets/ (not resolvers/bundles/workflows)
@@ -20,16 +20,20 @@ import (
 //
 // User-wide installs (optional): GlobalDockpipeDataDir()/packages/{workflows,resolvers,core,...} — see
 // `dockpipe install core --global` and infrastructure/globaldirs.go.
-const (
-	DockpipeDirRel          = ".dockpipe"
-	PackagesDirRel          = ".dockpipe/internal/packages"
-	PackageManifestFilename = "package.yml"
+const PackageManifestFilename = "package.yml"
+
+// DockpipeDirRel is the project-relative root for materialized DockPipe state (compiled packages,
+// tarball cache, host runs, cleanup markers). Placed under bin/ so typical .gitignore `bin/` rules
+// cover compile output without a separate `.dockpipe/` entry.
+var (
+	DockpipeDirRel = filepath.Join("bin", ".dockpipe")
+	PackagesDirRel = filepath.Join(DockpipeDirRel, "internal", "packages")
 )
 
 // envPackagesRoot is the optional override for the packages root directory.
 const envPackagesRoot = "DOCKPIPE_PACKAGES_ROOT"
 
-// PackagesRoot returns the absolute directory for installed packages (default: workdir/.dockpipe/internal/packages).
+// PackagesRoot returns the absolute directory for installed packages (default: workdir/bin/.dockpipe/internal/packages).
 func PackagesRoot(workdir string) (string, error) {
 	if v := strings.TrimSpace(os.Getenv(envPackagesRoot)); v != "" {
 		if filepath.IsAbs(v) {
@@ -48,7 +52,7 @@ func PackagesRoot(workdir string) (string, error) {
 	return filepath.Join(wd, PackagesDirRel), nil
 }
 
-// PackagesWorkflowsDir is .dockpipe/internal/packages/workflows (or under DOCKPIPE_PACKAGES_ROOT).
+// PackagesWorkflowsDir is bin/.dockpipe/internal/packages/workflows (or under DOCKPIPE_PACKAGES_ROOT).
 func PackagesWorkflowsDir(workdir string) (string, error) {
 	root, err := PackagesRoot(workdir)
 	if err != nil {
@@ -57,7 +61,7 @@ func PackagesWorkflowsDir(workdir string) (string, error) {
 	return filepath.Join(root, "workflows"), nil
 }
 
-// PackagesCoreDir is .dockpipe/internal/packages/core — compiled runtimes, strategies, assets only.
+// PackagesCoreDir is bin/.dockpipe/internal/packages/core — compiled runtimes, strategies, assets only.
 func PackagesCoreDir(workdir string) (string, error) {
 	root, err := PackagesRoot(workdir)
 	if err != nil {
@@ -66,7 +70,7 @@ func PackagesCoreDir(workdir string) (string, error) {
 	return filepath.Join(root, "core"), nil
 }
 
-// PackagesResolversDir is .dockpipe/internal/packages/resolvers — one subdirectory per resolver package.
+// PackagesResolversDir is bin/.dockpipe/internal/packages/resolvers — one subdirectory per resolver package.
 func PackagesResolversDir(workdir string) (string, error) {
 	root, err := PackagesRoot(workdir)
 	if err != nil {
@@ -75,7 +79,7 @@ func PackagesResolversDir(workdir string) (string, error) {
 	return filepath.Join(root, "resolvers"), nil
 }
 
-// PackagesAssetsDir is .dockpipe/internal/packages/assets (optional).
+// PackagesAssetsDir is bin/.dockpipe/internal/packages/assets (optional).
 func PackagesAssetsDir(workdir string) (string, error) {
 	root, err := PackagesRoot(workdir)
 	if err != nil {

@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
-INS="$ROOT/.dockpipe/analysis/insights.json"
+INS="$ROOT/bin/.dockpipe/analysis/insights.json"
 NEW_ID="${1:-}"
 OLD_ID="${2:-}"
 
@@ -32,7 +32,7 @@ jq --arg new "$NEW_ID" \
 ' "$INS" >"$tmp"
 mv "$tmp" "$INS"
 
-HIST="$ROOT/.dockpipe/analysis/history.jsonl"
+HIST="$ROOT/bin/.dockpipe/analysis/history.jsonl"
 jq -n --arg ev "supersede" --arg ts "$NOW" --arg new "$NEW_ID" --arg old "$OLD_ID" \
 	'{event: $ev, at_utc: $ts, new_id: $new, old_id: $old}' >>"$HIST"
 echo "user-insight-supersede: $NEW_ID supersedes $OLD_ID"

@@ -192,7 +192,7 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 			if statErr != nil {
 				names, _ := infrastructure.ListWorkflowNamesInRepoRootAndPackages(repoRoot, effWd)
-				msg := fmt.Sprintf("workflow %q not found — tried workflows/ (or DOCKPIPE_WORKFLOWS_DIR), extra roots from dockpipe.config.json compile.workflows, .dockpipe/internal/packages/workflows/, legacy templates/, src/core/workflows/ (dockpipe tree), core/resolvers/%[1]s/config.yml, and namespaced package tarballs (dockpipe-workflow-%[1]s-*.tar.gz under release/artifacts or packages.tarball_dir when config.yml inside the archive sets namespace:)", opts.Workflow)
+				msg := fmt.Sprintf("workflow %q not found — tried workflows/ (or DOCKPIPE_WORKFLOWS_DIR), extra roots from dockpipe.config.json compile.workflows, bin/.dockpipe/internal/packages/workflows/, legacy templates/, src/core/workflows/ (dockpipe tree), core/resolvers/%[1]s/config.yml, and namespaced package tarballs (dockpipe-workflow-%[1]s-*.tar.gz under release/artifacts or packages.tarball_dir when config.yml inside the archive sets namespace:)", opts.Workflow)
 				if len(names) > 0 {
 					msg += fmt.Sprintf(" (available in this install: %s)", strings.Join(names, ", "))
 				}
@@ -219,6 +219,10 @@ func Run(argv []string, baseEnviron []string) error {
 	}
 
 	effWd := effectiveWorkdirForWorkflowOpts(opts)
+	projectRoot := effWd
+	if ap, err := filepath.Abs(effWd); err == nil {
+		projectRoot = ap
+	}
 	if wf != nil {
 		if err := domain.ValidateLoadedWorkflow(wf); err != nil {
 			return err
@@ -264,11 +268,11 @@ func Run(argv []string, baseEnviron []string) error {
 		if err != nil {
 			return err
 		}
-		stratBeforeAbs = ResolveStrategyScriptPaths(sa.Before, wfRoot, repoRoot)
-		stratAfterAbs = ResolveStrategyScriptPaths(sa.After, wfRoot, repoRoot)
+		stratBeforeAbs = ResolveStrategyScriptPaths(sa.Before, wfRoot, repoRoot, projectRoot)
+		stratAfterAbs = ResolveStrategyScriptPaths(sa.After, wfRoot, repoRoot, projectRoot)
 		strategyHandlesCommit = StrategyAfterHandlesBundledCommit(stratAfterAbs, repoRoot)
 		if wf != nil {
-			if err := ValidateNoDuplicateClone(wf, wfRoot, repoRoot, effStrat == "worktree", stratBeforeAbs); err != nil {
+			if err := ValidateNoDuplicateClone(wf, wfRoot, repoRoot, projectRoot, effStrat == "worktree", stratBeforeAbs); err != nil {
 				return err
 			}
 		}
@@ -370,7 +374,7 @@ func Run(argv []string, baseEnviron []string) error {
 			opts.PreScripts = append(opts.PreScripts, stratBeforeAbs...)
 			if len(cliPre) == 0 && len(wf.Run) > 0 {
 				for _, r := range wf.Run {
-					opts.PreScripts = append(opts.PreScripts, resolveWorkflowAppFn(r, wfRoot, repoRoot))
+					opts.PreScripts = append(opts.PreScripts, resolveWorkflowAppFn(r, wfRoot, repoRoot, projectRoot))
 				}
 			}
 			opts.PreScripts = append(opts.PreScripts, cliPre...)
@@ -379,8 +383,8 @@ func Run(argv []string, baseEnviron []string) error {
 				if act == "" {
 					act = wf.Action
 				}
-				if act != "" && !(strategyHandlesCommit && ActWouldBeBundledCommit(act, wfRoot, repoRoot)) {
-					opts.Action = resolveWorkflowAppFn(act, wfRoot, repoRoot)
+				if act != "" && !(strategyHandlesCommit && ActWouldBeBundledCommit(act, wfRoot, repoRoot, projectRoot)) {
+					opts.Action = resolveWorkflowAppFn(act, wfRoot, repoRoot, projectRoot)
 				}
 			}
 		} else {
@@ -444,7 +448,7 @@ func Run(argv []string, baseEnviron []string) error {
 
 		cwd, _ := os.Getwd()
 		if opts.Action != "" {
-			ap, err := resolveActionPathFn(opts.Action, repoRoot, cwd)
+			ap, err := resolveActionPathFn(opts.Action, repoRoot, cwd, projectRoot)
 			if err != nil {
 				return err
 			}
@@ -551,13 +555,13 @@ func Run(argv []string, baseEnviron []string) error {
 	var firstStepExtra []string
 	if stepsMode {
 		for _, p := range opts.PreScripts {
-			firstStepExtra = append(firstStepExtra, resolvePreScriptAppFn(p, repoRoot))
+			firstStepExtra = append(firstStepExtra, resolvePreScriptAppFn(p, repoRoot, projectRoot))
 		}
 		opts.PreScripts = nil
 	} else {
 		resolvedPre := make([]string, 0, len(opts.PreScripts))
 		for _, p := range opts.PreScripts {
-			resolvedPre = append(resolvedPre, resolvePreScriptAppFn(p, repoRoot))
+			resolvedPre = append(resolvedPre, resolvePreScriptAppFn(p, repoRoot, projectRoot))
 		}
 		opts.PreScripts = resolvedPre
 	}
@@ -667,7 +671,7 @@ func Run(argv []string, baseEnviron []string) error {
 		if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {
 			return err
 		}
-		scriptAbs := resolveWorkflowAppFn(hostIsolate, wfRoot, repoRoot)
+		scriptAbs := resolveWorkflowAppFn(hostIsolate, wfRoot, repoRoot, projectRoot)
 		if _, err := os.Stat(scriptAbs); err != nil {
 			return fmt.Errorf("host isolate script not found: %s: %w", scriptAbs, err)
 		}
@@ -720,6 +724,7 @@ func Run(argv []string, baseEnviron []string) error {
 			wf:                    wf,
 			wfRoot:                wfRoot,
 			repoRoot:              repoRoot,
+			projectRoot:           projectRoot,
 			cliArgs:               rest,
 			envMap:                envMap,
 			envSlice:              envSlice,

@@ -9,7 +9,7 @@ def doc_default:
       separation: {
         user_insights: "This file — structured human guidance; not verified facts.",
         repo_facts: ".dorkpipe/self-analysis/ (example layout)",
-        system_findings: ".dockpipe/ci-analysis/findings.json"
+        system_findings: "bin/.dockpipe/ci-analysis/findings.json"
       },
       insights: []
     }

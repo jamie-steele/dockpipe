@@ -14,20 +14,22 @@ import (
 
 var errStopScriptWalk = errors.New("stop script walk")
 
-// ResolveWorkflowScript resolves run/act path: scripts/* from the project (repoRoot/scripts/ if
-// present, else repoRoot/src/scripts/ for this dockpipe repo layout), else extra workflow roots
+// ResolveWorkflowScript resolves run/act path: scripts/* from the project (projectRoot/scripts/ if
+// present, else projectRoot/src/scripts/ for this dockpipe repo layout), else extra workflow roots
 // from dockpipe.config.json compile.workflows (nested trees), bundle roots from compile.bundles,
 // then templates/core (materialized merge), then templates/core/assets/scripts/;
 // other paths are relative to the workflow template dir.
+// repoRoot is the layout root (bundled cache or checkout); projectRoot is the DockPipe project
+// directory (--workdir or cwd). Pass projectRoot == "" to treat project as repoRoot.
 //
 // Namespace: scripts/core.<dot.segments> maps to paths under core/ by turning dots into path segments
 // (e.g. scripts/core.assets.scripts.foo.sh → core/assets/scripts/foo.sh). Resolution order for that path:
-// .dockpipe/core/…, .dockpipe/internal/packages/core/…, then templates/core/… (compiled core spine).
+// bin/.dockpipe/core/…, bin/.dockpipe/internal/packages/core/…, then templates/core/… (compiled core spine).
 // Resolver tarballs under packages/resolvers/; workflow tarballs under packages/workflows/ (see resolveScriptsPrefixedPath).
 // Uses forward slashes so YAML paths match Linux/container expectations.
-func ResolveWorkflowScript(rel, workflowRoot, repoRoot string) string {
+func ResolveWorkflowScript(rel, workflowRoot, repoRoot, projectRoot string) string {
 	if strings.HasPrefix(rel, "scripts/") {
-		return filepath.ToSlash(resolveScriptsPrefixedPath(repoRoot, rel))
+		return filepath.ToSlash(resolveScriptsPrefixedPath(repoRoot, projectRoot, rel))
 	}
 	return filepath.ToSlash(filepath.Join(workflowRoot, rel))
 }
@@ -36,7 +38,7 @@ func ResolveWorkflowScript(rel, workflowRoot, repoRoot string) string {
 // (see ResolveWorkflowScript). Pass dotted without the scripts/ prefix, e.g.
 // "assets.scripts.terraform-pipeline.sh" or "core.assets.scripts.terraform-pipeline.sh".
 // Returns an absolute path if the file exists, otherwise an error.
-func ResolveCoreNamespacedScriptPath(repoRoot, dotted string) (string, error) {
+func ResolveCoreNamespacedScriptPath(repoRoot, projectRoot, dotted string) (string, error) {
 	dotted = strings.TrimSpace(dotted)
 	if dotted == "" {
 		return "", fmt.Errorf("empty core script path")
@@ -46,7 +48,7 @@ func ResolveCoreNamespacedScriptPath(repoRoot, dotted string) (string, error) {
 		rest = "core." + rest
 	}
 	rel := "scripts/" + rest
-	p := resolveScriptsPrefixedPath(repoRoot, rel)
+	p := resolveScriptsPrefixedPath(repoRoot, projectRoot, rel)
 	if !scriptFileExists(p) {
 		return "", fmt.Errorf("core script not found for %q (resolved %s)", dotted, p)
 	}
@@ -165,16 +167,20 @@ func commonExtSegment(s string) bool {
 // terraformPackCoreAssetPath resolves core assets/scripts/terraform-{pipeline,run}.sh to the
 // dockpipe.terraform.core pack (packages/terraform/resolvers/terraform-core) before the compiled
 // core spine — keeps Terraform out of src/core while preserving scripts/core.assets.scripts.* YAML.
-func terraformPackCoreAssetPath(repoRoot, rel string) (string, bool) {
+// projectRoot is the user's project/checkout (where packages/ lives); repoRoot is the layout root (often the materialized bundle cache).
+func terraformPackCoreAssetPath(repoRoot, projectRoot, rel string) (string, bool) {
 	want1 := filepath.Join("assets", "scripts", "terraform-pipeline.sh")
 	want2 := filepath.Join("assets", "scripts", "terraform-run.sh")
 	if rel != want1 && rel != want2 {
 		return "", false
 	}
+	if projectRoot == "" {
+		projectRoot = repoRoot
+	}
 	// Git checkout: packages/terraform/resolvers/terraform-core/... — embedded bundle: bundle/workflows/terraform-core/...
 	// (see mapEmbeddedStagingWorkflowRel in bundled_extract.go).
 	candidates := []string{
-		filepath.Join(repoRoot, "packages", "terraform", "resolvers", "terraform-core", rel),
+		filepath.Join(projectRoot, "packages", "terraform", "resolvers", "terraform-core", rel),
 		filepath.Join(repoRoot, BundledLayoutDir, "workflows", "terraform-core", rel),
 	}
 	for _, p := range candidates {
@@ -186,20 +192,24 @@ func terraformPackCoreAssetPath(repoRoot, rel string) (string, bool) {
 }
 
 // resolveCoreNamespacedAsset resolves scripts/core.* to a file under core/ (compiled overlays first).
-func resolveCoreNamespacedAsset(repoRoot, rest string) (string, bool) {
+// projectRoot is the DockPipe project directory (bin/.dockpipe, packages/); repoRoot is the layout root for CoreDir / bundle.
+func resolveCoreNamespacedAsset(repoRoot, projectRoot, rest string) (string, bool) {
+	if projectRoot == "" {
+		projectRoot = repoRoot
+	}
 	rel, ok := relFromCoreNamespace(rest)
 	if !ok {
 		return "", false
 	}
-	if p, ok := terraformPackCoreAssetPath(repoRoot, rel); ok {
+	if p, ok := terraformPackCoreAssetPath(repoRoot, projectRoot, rel); ok {
 		return p, true
 	}
 	candidates := []string{
-		filepath.Join(repoRoot, ".dockpipe", "core", rel),
-		filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "core", rel),
+		filepath.Join(projectRoot, DockpipeDirRel, "core", rel),
+		filepath.Join(projectRoot, DockpipeDirRel, "internal", "packages", "core", rel),
 	}
-	if tarPath, err := FindLatestCoreTarball(repoRoot); err == nil && tarPath != "" {
-		if root, err := packagebuild.EnsureTarballExtractedCache(tarPath, TarballExtractCacheRoot(repoRoot)); err == nil {
+	if tarPath, err := FindLatestCoreTarball(projectRoot); err == nil && tarPath != "" {
+		if root, err := packagebuild.EnsureTarballExtractedCache(tarPath, TarballExtractCacheRoot(projectRoot)); err == nil {
 			candidates = append(candidates, filepath.Join(root, "core", rel))
 		}
 	}
@@ -218,11 +228,14 @@ func resolveCoreNamespacedAsset(repoRoot, rest string) (string, bool) {
 // scriptPathFromResolverTarballs resolves paths under compiled resolver tarballs (dockpipe-resolver-*.tar.gz).
 // For rest like "dorkpipe/run.sh" it tries resolvers/dorkpipe/run.sh then
 // resolvers/dorkpipe/assets/scripts/run.sh (canonical resolver layout).
-func scriptPathFromResolverTarballs(repoRoot, pkgDir, rest string) (string, bool) {
+func scriptPathFromResolverTarballs(projectRoot, pkgDir, rest string) (string, bool) {
+	if projectRoot == "" {
+		return "", false
+	}
 	pattern := filepath.Join(pkgDir, "dockpipe-resolver-*.tar.gz")
 	matches, _ := filepath.Glob(pattern)
 	for _, tgz := range matches {
-		root, err := packagebuild.EnsureTarballExtractedCache(tgz, TarballExtractCacheRoot(repoRoot))
+		root, err := packagebuild.EnsureTarballExtractedCache(tgz, TarballExtractCacheRoot(projectRoot))
 		if err != nil {
 			continue
 		}
@@ -246,7 +259,10 @@ func scriptPathFromResolverTarballs(repoRoot, pkgDir, rest string) (string, bool
 
 // scriptPathFromWorkflowTarballs resolves scripts/<domain>/tail to workflows/<domain>/assets/scripts/tail
 // inside dockpipe-workflow-*.tar.gz (compiled store).
-func scriptPathFromWorkflowTarballs(repoRoot, pkgDir, rest string) (string, bool) {
+func scriptPathFromWorkflowTarballs(projectRoot, pkgDir, rest string) (string, bool) {
+	if projectRoot == "" {
+		return "", false
+	}
 	if !strings.Contains(rest, "/") {
 		return "", false
 	}
@@ -258,7 +274,7 @@ func scriptPathFromWorkflowTarballs(repoRoot, pkgDir, rest string) (string, bool
 	pattern := filepath.Join(pkgDir, "dockpipe-workflow-*.tar.gz")
 	matches, _ := filepath.Glob(pattern)
 	for _, tgz := range matches {
-		root, err := packagebuild.EnsureTarballExtractedCache(tgz, TarballExtractCacheRoot(repoRoot))
+		root, err := packagebuild.EnsureTarballExtractedCache(tgz, TarballExtractCacheRoot(projectRoot))
 		if err != nil {
 			continue
 		}
@@ -291,7 +307,10 @@ func tryBundleRootsAssetsScripts(rest string, bundleRoots []string) (string, boo
 // tryLogicalScriptsDockpipe maps scripts/dockpipe/<tail> to the single on-disk copy under
 // packages/dorkpipe/resolvers/dorkpipe/assets/scripts/<tail>. Workflow YAML uses scripts/dockpipe/…;
 // the resolver tree is the canonical location (no second copy under src/core/assets/scripts/).
-func tryLogicalScriptsDockpipe(repoRoot, rest string) (string, bool) {
+func tryLogicalScriptsDockpipe(projectRoot, rest string) (string, bool) {
+	if projectRoot == "" {
+		return "", false
+	}
 	if !strings.HasPrefix(rest, "dockpipe/") {
 		return "", false
 	}
@@ -299,44 +318,47 @@ func tryLogicalScriptsDockpipe(repoRoot, rest string) (string, bool) {
 	if tail == "" {
 		return "", false
 	}
-	p := filepath.Join(repoRoot, "packages", "dorkpipe", "resolvers", "dorkpipe", "assets", "scripts", tail)
+	p := filepath.Join(projectRoot, "packages", "dorkpipe", "resolvers", "dorkpipe", "assets", "scripts", tail)
 	if scriptFileExists(p) {
 		return p, true
 	}
 	return "", false
 }
 
-func resolveScriptsPrefixedPath(repoRoot, rel string) string {
+func resolveScriptsPrefixedPath(repoRoot, projectRoot, rel string) string {
+	if projectRoot == "" {
+		projectRoot = repoRoot
+	}
 	rest := strings.TrimPrefix(rel, "scripts/")
-	user := filepath.Join(repoRoot, "scripts", rest)
+	user := filepath.Join(projectRoot, "scripts", rest)
 	if scriptFileExists(user) {
 		return user
 	}
-	srcScripts := filepath.Join(repoRoot, "src", "scripts", rest)
+	srcScripts := filepath.Join(projectRoot, "src", "scripts", rest)
 	if scriptFileExists(srcScripts) {
 		return srcScripts
 	}
-	if p, ok := resolveCoreNamespacedAsset(repoRoot, rest); ok {
+	if p, ok := resolveCoreNamespacedAsset(repoRoot, projectRoot, rest); ok {
 		return p
 	}
 	// Logical scripts/dockpipe/<tail> → packages/dorkpipe/resolvers/dorkpipe/assets/scripts/<tail>
 	// (single copy; do not duplicate under src/core/assets/scripts/dockpipe/ — see AGENTS.md).
-	if p, ok := tryLogicalScriptsDockpipe(repoRoot, rest); ok {
+	if p, ok := tryLogicalScriptsDockpipe(projectRoot, rest); ok {
 		return p
 	}
-	pkgRes := filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "resolvers")
-	pkgWf := filepath.Join(repoRoot, ".dockpipe", "internal", "packages", "workflows")
+	pkgRes := filepath.Join(projectRoot, DockpipeDirRel, "internal", "packages", "resolvers")
+	pkgWf := filepath.Join(projectRoot, DockpipeDirRel, "internal", "packages", "workflows")
 	// Compiled local store first (package compile resolvers → tarballs under pkgRes).
 	if p, ok := tryBundledAssetsScripts(pkgRes, "", rest); ok {
 		return p
 	}
-	if p, ok := scriptPathFromResolverTarballs(repoRoot, pkgRes, rest); ok {
+	if p, ok := scriptPathFromResolverTarballs(projectRoot, pkgRes, rest); ok {
 		return p
 	}
 	if p, ok := tryBundledAssetsScripts(pkgWf, "", rest); ok {
 		return p
 	}
-	if p, ok := scriptPathFromWorkflowTarballs(repoRoot, pkgWf, rest); ok {
+	if p, ok := scriptPathFromWorkflowTarballs(projectRoot, pkgWf, rest); ok {
 		return p
 	}
 	if scriptFileExists(filepath.Join(pkgRes, rest)) {
@@ -346,8 +368,11 @@ func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 		return filepath.Join(pkgWf, rest)
 	}
 	core := CoreDir(repoRoot)
-	wfRoots := WorkflowCompileRootsCached(repoRoot)
-	bundleRoots := BundleCompileRootsCached(repoRoot)
+	wfRoots := WorkflowCompileRootsCached(projectRoot)
+	bundleRoots := BundleCompileRootsCached(projectRoot)
+	// Bundled cache layout: prefer spine resolvers/bundles under core/, then project compile roots
+	// (packages/, workflows/, …) so nested resolver trees resolve even when repoRoot is the
+	// materialized bundle and the real workflow lives under projectRoot.
 	if UsesBundledAssetLayout(repoRoot) {
 		if p, ok := tryBundledAssetsScripts(core, "resolvers", rest); ok {
 			return p
@@ -363,7 +388,6 @@ func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 		if scriptFileExists(bundlePath) {
 			return bundlePath
 		}
-		return filepath.Join(core, "assets", "scripts", rest)
 	}
 	for _, root := range wfRoots {
 		if p, ok := tryBundledAssetsScripts(root, "", rest); ok {
@@ -399,7 +423,8 @@ func resolveScriptsPrefixedPath(repoRoot, rel string) string {
 }
 
 // ResolveActionPath resolves act script like bin/dockpipe.
-func ResolveActionPath(action, repoRoot, cwd string) (string, error) {
+// projectRoot is the DockPipe project directory; pass "" to use repoRoot.
+func ResolveActionPath(action, repoRoot, cwd, projectRoot string) (string, error) {
 	if action == "" {
 		return "", nil
 	}
@@ -408,7 +433,7 @@ func ResolveActionPath(action, repoRoot, cwd string) (string, error) {
 	}
 	candidates := []string{filepath.Join(repoRoot, action)}
 	if strings.HasPrefix(action, "scripts/") {
-		p := resolveScriptsPrefixedPath(repoRoot, action)
+		p := resolveScriptsPrefixedPath(repoRoot, projectRoot, action)
 		if scriptFileExists(p) {
 			return filepath.Abs(p)
 		}
@@ -426,12 +451,12 @@ func ResolveActionPath(action, repoRoot, cwd string) (string, error) {
 }
 
 // ResolvePreScriptPath resolves --run path.
-func ResolvePreScriptPath(p, repoRoot string) string {
+func ResolvePreScriptPath(p, repoRoot, projectRoot string) string {
 	if filepath.IsAbs(p) {
 		return p
 	}
 	if strings.HasPrefix(p, "scripts/") {
-		return resolveScriptsPrefixedPath(repoRoot, p)
+		return resolveScriptsPrefixedPath(repoRoot, projectRoot, p)
 	}
 	c := filepath.Join(repoRoot, p)
 	if _, err := os.Stat(c); err == nil {

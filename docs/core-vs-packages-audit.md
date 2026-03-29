@@ -36,7 +36,7 @@ So: **example workflows** and **`src/core/resolvers/*`** are **not** in the **co
 
 | Today | Location |
 |-------|----------|
-| `terraform-cloudflare-r2-run.sh` | `packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/assets/scripts/` |
+| `terraform-cloudflare-r2-run.sh` | `packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/assets/scripts/` (uses `terraform-core` / `terraform-pipeline.sh`) |
 | `r2-publish.sh` | `packages/dorkpipe/.../scripts/` |
 
 **Target:** `package.yml` **`depends`** / **`requires_resolvers`** for workflows that nest R2; no Cloudflare imports in **`src/lib`**.

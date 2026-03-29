@@ -74,4 +74,4 @@ steps:
   - id: terraform
     skip_container: true
     run:
-      - scripts/dockpipe.cloudflare.r2publish/terraform-cloudflare-r2-run.sh
+      - scripts/dockpipe.cloudflare.r2infra/terraform-cloudflare-r2-run.sh

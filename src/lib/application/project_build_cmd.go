@@ -132,8 +132,8 @@ Options:
 
 const cleanUsageText = `dockpipe clean
 
-Remove the compiled package store (default: <workdir>/.dockpipe/internal/packages).
-Other .dockpipe/ content (runs, caches, etc.) is left in place.
+Remove the compiled package store (default: <workdir>/bin/.dockpipe/internal/packages).
+Other bin/.dockpipe/ content (runs, caches, etc.) is left in place.
 
 When --workdir is omitted, the project directory is the folder containing
 dockpipe.config.json (walking up from the current directory), or the current
@@ -143,7 +143,7 @@ Usage:
   dockpipe clean [--workdir <path>]
 
 Environment:
-  DOCKPIPE_PACKAGES_ROOT  If set, that directory is removed (instead of <workdir>/.dockpipe/internal/packages).
+  DOCKPIPE_PACKAGES_ROOT  If set, that directory is removed (instead of <workdir>/bin/.dockpipe/internal/packages).
 
 `
 

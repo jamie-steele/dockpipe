@@ -48,19 +48,19 @@ jobs:
           DOCKPIPE_WORKDIR: ${{ github.workspace }}
         run: |
           set -euo pipefail
-          mkdir -p .dockpipe/ci-raw
+          mkdir -p bin/.dockpipe/ci-raw
           GOBIN="$(go env GOPATH)/bin"
           go install golang.org/x/vuln/cmd/govulncheck@latest
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           set +e
-          "$GOBIN/govulncheck" -format json ./... > .dockpipe/ci-raw/govulncheck.json
+          "$GOBIN/govulncheck" -format json ./... > bin/.dockpipe/ci-raw/govulncheck.json
           VC=$?
-          "$GOBIN/gosec" -conf .gosec.json -fmt json -out=.dockpipe/ci-raw/gosec.json -exclude-dir=.gomodcache ./...
+          "$GOBIN/gosec" -conf .gosec.json -fmt json -out=bin/.dockpipe/ci-raw/gosec.json -exclude-dir=.gomodcache ./...
           GC=$?
           set -e
           bash packages/dorkpipe/resolvers/dorkpipe/assets/scripts/normalize-ci-scans.sh
           echo "::group::gosec stats (JSON)"
-          jq '.Stats // empty' .dockpipe/ci-raw/gosec.json || true
+          jq '.Stats // empty' bin/.dockpipe/ci-raw/gosec.json || true
           echo "::endgroup::"
           if [[ $VC -ne 0 ]]; then
             echo "::error::govulncheck failed (exit $VC)"
@@ -156,8 +156,8 @@ jobs:
         with:
           name: dockpipe-ci-analysis-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
-            .dockpipe/ci-analysis/
-            .dockpipe/ci-raw/
+            bin/.dockpipe/ci-analysis/
+            bin/.dockpipe/ci-raw/
 
   # Windows: Go + bash scripts that mirror host pre-script behavior (Git Bash on the runner).
   # Full tests/run_tests.sh and Docker integration tests stay on Linux — Docker/Linux images

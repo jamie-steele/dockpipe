@@ -34,7 +34,7 @@ func ResolvePackagedWorkflowConfigPath(repoRoot, workdir, workflowName, namespac
 		}
 		return p, nil
 	}
-	return "", fmt.Errorf("no workflow %q with namespace %q found (set namespace: in config.yml; unpacked packages under .dockpipe/internal/packages/workflows/ or workflows/)", workflowName, namespace)
+	return "", fmt.Errorf("no workflow %q with namespace %q found (set namespace: in config.yml; unpacked packages under bin/.dockpipe/internal/packages/workflows/ or workflows/)", workflowName, namespace)
 }
 
 func packagedWorkflowDiskCandidates(repoRoot, workdir, name string) []string {

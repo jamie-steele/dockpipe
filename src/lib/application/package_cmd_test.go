@@ -6,12 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	"dockpipe/src/lib/infrastructure"
 	"dockpipe/src/lib/infrastructure/packagebuild"
 )
 
 func TestCmdPackageListFindsPackageYml(t *testing.T) {
 	dir := t.TempDir()
-	pkgRoot := filepath.Join(dir, ".dockpipe", "internal", "packages", "workflows", "demo")
+	pkgRoot := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "demo")
 	if err := os.MkdirAll(pkgRoot, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +73,7 @@ func TestCmdPackageCompileCore(t *testing.T) {
 	if err := cmdPackage([]string{"compile", "core", "--from", src}); err != nil {
 		t.Fatal(err)
 	}
-	coreDir := filepath.Join(dir, ".dockpipe", "internal", "packages", "core")
+	coreDir := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "core")
 	matches, err := filepath.Glob(filepath.Join(coreDir, "dockpipe-core-*.tar.gz"))
 	if err != nil || len(matches) != 1 {
 		t.Fatalf("expected one core tarball under %s: matches=%v err=%v", coreDir, matches, err)
@@ -104,7 +105,7 @@ func TestCmdPackageCompileResolversVendorResolversSubdir(t *testing.T) {
 	if err := cmdPackage([]string{"compile", "resolvers", "--from", pack}); err != nil {
 		t.Fatal(err)
 	}
-	dest := filepath.Join(dir, ".dockpipe", "internal", "packages", "resolvers")
+	dest := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "resolvers")
 	matches, err := filepath.Glob(filepath.Join(dest, "dockpipe-resolver-alpha-*.tar.gz"))
 	if err != nil || len(matches) != 1 {
 		t.Fatalf("expected one resolver tarball: matches=%v err=%v", matches, err)
@@ -136,7 +137,7 @@ steps: []
 	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
 		t.Fatal(err)
 	}
-	tgz := filepath.Join(dir, ".dockpipe", "internal", "packages", "workflows", "dockpipe-workflow-mywf-0.1.0.tar.gz")
+	tgz := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-0.1.0.tar.gz")
 	if _, err := os.Stat(tgz); err != nil {
 		t.Fatal(err)
 	}

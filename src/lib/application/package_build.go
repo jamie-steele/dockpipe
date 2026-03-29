@@ -239,7 +239,7 @@ Usage:
   core   From templates/core (or src/core) source tree — templates-core-<ver>.tar.gz + install-manifest.json
          (same layout as dockpipe install core / release/packaging).
 
-  store  From the compiled package store (.dockpipe/internal/packages after dockpipe build) —
+  store  From the compiled package store (bin/.dockpipe/internal/packages after dockpipe build) —
          dockpipe-{core|workflow|resolver}-<name>-<ver>.tar.gz + packages-store-manifest.json.
 
 `
@@ -258,7 +258,7 @@ Options:
 
 const packageBuildStoreUsageText = `dockpipe package build store
 
-Packs each compiled package under <workdir>/.dockpipe/internal/packages into a gzip tarball
+Packs each compiled package under <workdir>/bin/.dockpipe/internal/packages into a gzip tarball
 with a stable in-archive prefix (core/, workflows/<name>/, resolvers/<name>/).
 Writes packages-store-manifest.json listing every artifact with sha256. Each tarball has a matching .sha256 file.
 

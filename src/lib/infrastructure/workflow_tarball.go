@@ -126,3 +126,42 @@ func SplitTarWorkflowURI(path string) (tarPath, entry string, ok bool) {
 	}
 	return rest[:i], rest[i+len(tarWorkflowSep):], true
 }
+
+// WorkflowCompileStartDir returns an absolute directory containing config.yml for workflowName for
+// package compile closure (filesystem walk). On-disk configs under projectRoot (including nested
+// compile.workflows) win before bundle cache + tarball resolution — RepoRoot() is often the
+// materialized embed bundle, not the user's git tree.
+// When resolution is tar://, the workflow tarball is extracted under TarballExtractCacheRoot(projectRoot)
+// and the path to workflows/<name>/ inside that tree is returned.
+func WorkflowCompileStartDir(repoRoot, projectRoot, workflowName string) (string, error) {
+	workflowName = strings.TrimSpace(workflowName)
+	if workflowName == "" {
+		return "", fmt.Errorf("workflow name is empty")
+	}
+	if p := OnDiskWorkflowConfigPath(projectRoot, workflowName); p != "" {
+		return filepath.Dir(p), nil
+	}
+	wfPath, err := ResolveWorkflowConfigPathWithWorkdir(repoRoot, projectRoot, workflowName)
+	if err != nil {
+		return "", err
+	}
+	if strings.HasPrefix(wfPath, "tar://") {
+		tarPath, entry, ok := SplitTarWorkflowURI(wfPath)
+		if !ok {
+			return "", fmt.Errorf("invalid tar workflow path %q", wfPath)
+		}
+		root, err := packagebuild.EnsureTarballExtractedCache(tarPath, TarballExtractCacheRoot(projectRoot))
+		if err != nil {
+			return "", fmt.Errorf("extract workflow tarball for compile: %w", err)
+		}
+		entry = filepath.ToSlash(entry)
+		relDir := filepath.ToSlash(filepath.Dir(entry))
+		start := filepath.Join(root, filepath.FromSlash(relDir))
+		cfg := filepath.Join(start, "config.yml")
+		if st, err := os.Stat(cfg); err != nil || st.IsDir() {
+			return "", fmt.Errorf("extracted workflow tree missing %s", cfg)
+		}
+		return filepath.Clean(start), nil
+	}
+	return filepath.Dir(wfPath), nil
+}

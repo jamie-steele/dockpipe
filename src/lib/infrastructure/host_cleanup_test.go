@@ -61,11 +61,11 @@ func TestIsValidHostRunID(t *testing.T) {
 func TestRemoveCleanupMarkersForContainerName(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	cleanup := filepath.Join(root, ".dockpipe", "cleanup")
+	cleanup := filepath.Join(root, DockpipeDirRel, "cleanup")
 	if err := os.MkdirAll(cleanup, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	legacy := filepath.Join(root, ".dockpipe", "cursor-dev")
+	legacy := filepath.Join(root, DockpipeDirRel, "cursor-dev")
 	if err := os.MkdirAll(legacy, 0o755); err != nil {
 		t.Fatal(err)
 	}

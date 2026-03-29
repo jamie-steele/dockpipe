@@ -45,7 +45,7 @@ func baseRunStepsOpts() runStepsOpts {
 func TestRunBlockingStepSkipContainerMergesOutputs(t *testing.T) {
 	withRunStepsSeams(t)
 	wd := t.TempDir()
-	out := filepath.Join(wd, ".dockpipe", "outputs.env")
+	out := filepath.Join(wd, infrastructure.DockpipeDirRel, "outputs.env")
 	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +55,7 @@ func TestRunBlockingStepSkipContainerMergesOutputs(t *testing.T) {
 
 	o := baseRunStepsOpts()
 	o.opts.Workdir = wd
-	o.wf.Steps = []domain.Step{{SkipContainer: true, Outputs: ".dockpipe/outputs.env"}}
+		o.wf.Steps = []domain.Step{{SkipContainer: true, Outputs: domain.DefaultOutputsEnvRel}}
 	dockerEnv := map[string]string{}
 	if err := runBlockingStep(&o, 0, 1, dockerEnv); err != nil {
 		t.Fatalf("runBlockingStep error: %v", err)

@@ -16,7 +16,8 @@ const (
 
 const dockpipeGitignoreBlock = dockpipeGitignoreBegin + `
 # Local tooling and cache (see dockpipe docs). Safe to re-run; idempotent.
-.dockpipe/
+# Compile output and host-run state live under bin/.dockpipe/ (ignored if you already ignore bin/).
+bin/.dockpipe/
 .dorkpipe/
 .gocache/
 .gomodcache/

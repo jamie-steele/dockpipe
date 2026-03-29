@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build a compact markdown + JSON bundle for the final LLM step from env + collect-go-review-signals outputs.
-# Expects merged workflow env (TESTS_PASS, SCAN_PASS, …) and .dockpipe/review-files.txt / review-signals.txt.
+# Expects merged workflow env (TESTS_PASS, SCAN_PASS, …) and bin/.dockpipe/review-files.txt / review-signals.txt.
 set -euo pipefail
 
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
@@ -38,9 +38,9 @@ printf '{"workflow":"%s","tests_pass":"%s","scan_pass":"%s","review_prep_ok":"%s
 	"${WORKFLOW_NAME:-}" "${TESTS_PASS:-}" "${SCAN_PASS:-}" "${REVIEW_PREP_OK:-}" >"$JSON"
 
 {
-	echo "REVIEW_CONTEXT_PATH=.dockpipe/review-context.md"
-	echo "REVIEW_JSON_PATH=.dockpipe/review-context.json"
-	echo "REVIEW_FILES_LIST=.dockpipe/review-files.txt"
+	echo "REVIEW_CONTEXT_PATH=bin/.dockpipe/review-context.md"
+	echo "REVIEW_JSON_PATH=bin/.dockpipe/review-context.json"
+	echo "REVIEW_FILES_LIST=bin/.dockpipe/review-files.txt"
 } >"$ENV_SUM"
 
 echo "[review] aggregate-review-context: wrote $MD" >&2

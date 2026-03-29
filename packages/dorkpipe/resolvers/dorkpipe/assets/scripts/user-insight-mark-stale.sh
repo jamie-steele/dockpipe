@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
-INS="$ROOT/.dockpipe/analysis/insights.json"
+INS="$ROOT/bin/.dockpipe/analysis/insights.json"
 ID="${1:-}"
 
 if [[ -z "$ID" ]] || [[ ! -f "$INS" ]]; then
@@ -27,6 +27,6 @@ jq --arg id "$ID" \
 ' "$INS" >"$tmp"
 mv "$tmp" "$INS"
 
-HIST="$ROOT/.dockpipe/analysis/history.jsonl"
+HIST="$ROOT/bin/.dockpipe/analysis/history.jsonl"
 jq -n --arg ev "mark_stale" --arg ts "$NOW" --arg id "$ID" '{event: $ev, at_utc: $ts, insight_or_queue_id: $id}' >>"$HIST"
 echo "user-insight-mark-stale: $ID"
