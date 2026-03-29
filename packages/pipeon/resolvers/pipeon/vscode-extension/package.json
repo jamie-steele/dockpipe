@@ -14,7 +14,14 @@
   },
   "categories": ["Other"],
   "activationEvents": ["onStartupFinished"],
-  "main": "./extension.js",
+  "files": [
+    "extension.js",
+    "images/**",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "main": "extension.js",
   "contributes": {
     "commands": [
       {

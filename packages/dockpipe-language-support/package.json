@@ -24,7 +24,16 @@
     "onLanguage:pipelang",
     "onLanguage:yaml"
   ],
-  "main": "./extension.js",
+  "files": [
+    "extension.js",
+    "language-configuration.json",
+    "syntaxes/**",
+    "snippets/**",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "main": "extension.js",
   "contributes": {
     "languages": [
       {
@@ -53,9 +62,7 @@
       }
     ]
   },
-  "dependencies": {
-    "yaml": "^2.8.1"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@vscode/vsce": "^3.6.2"
   }

@@ -1,6 +1,5 @@
 // @ts-check
 const vscode = require("vscode");
-const YAML = require("yaml");
 const fs = require("fs/promises");
 const path = require("path");
 
@@ -61,16 +60,10 @@ function isDockpipeWorkflowFile(doc) {
  */
 function existingTopLevelKeys(doc) {
   const out = new Set();
-  const parsed = YAML.parseDocument(doc.getText(), { prettyErrors: false });
-  const root = parsed.contents;
-  if (!root || root.type !== "MAP" || !Array.isArray(root.items)) {
-    return out;
-  }
-  for (const item of root.items) {
-    const k = item?.key?.value;
-    if (typeof k === "string") {
-      out.add(k);
-    }
+  const lines = doc.getText().split(/\r?\n/);
+  for (const line of lines) {
+    const m = line.match(/^([A-Za-z_][A-Za-z0-9_-]*)\s*:/);
+    if (m) out.add(m[1]);
   }
   return out;
 }
@@ -80,15 +73,45 @@ function existingTopLevelKeys(doc) {
  * @returns {vscode.Diagnostic[]}
  */
 function validateYaml(doc) {
-  const parsed = YAML.parseDocument(doc.getText(), { prettyErrors: true });
   const diagnostics = [];
-  for (const err of parsed.errors || []) {
-    const pos = err.pos || [0, 1];
-    const start = doc.positionAt(Math.max(0, pos[0] || 0));
-    const end = doc.positionAt(Math.max(start.character + 1, pos[1] || (pos[0] || 0) + 1));
-    diagnostics.push(new vscode.Diagnostic(new vscode.Range(start, end), String(err.message || "YAML parse error"), vscode.DiagnosticSeverity.Error));
+  const lines = doc.getText().split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    // Basic guard: tabs in YAML are usually invalid and confusing for indentation.
+    if (/\t/.test(line)) {
+      const start = new vscode.Position(i, line.indexOf("\t"));
+      const end = new vscode.Position(i, line.indexOf("\t") + 1);
+      diagnostics.push(new vscode.Diagnostic(new vscode.Range(start, end), "Use spaces, not tabs, for YAML indentation.", vscode.DiagnosticSeverity.Warning));
+    }
   }
   return diagnostics;
+}
+
+/**
+ * @param {vscode.TextDocument} doc
+ * @returns {string[]}
+ */
+function extractTypesEntries(doc) {
+  const out = [];
+  const lines = doc.getText().split(/\r?\n/);
+  let inTypes = false;
+  let typesIndent = -1;
+  for (const line of lines) {
+    if (!inTypes) {
+      const m = line.match(/^(\s*)types:\s*$/);
+      if (m) {
+        inTypes = true;
+        typesIndent = m[1].length;
+      }
+      continue;
+    }
+    if (!line.trim()) continue;
+    const indent = (line.match(/^\s*/) || [""])[0].length;
+    if (indent <= typesIndent) break;
+    const m = line.match(/^\s*-\s*(.+?)\s*$/);
+    if (m) out.push(m[1]);
+  }
+  return out;
 }
 
 function summaryFromComment(raw) {
@@ -178,13 +201,7 @@ async function readIfExists(filePath) {
  * @returns {Promise<ModelContext>}
  */
 async function buildModelContext(doc) {
-  const parsed = YAML.parseDocument(doc.getText(), { prettyErrors: false });
-  const root = parsed.contents;
-  if (!root || root.type !== "MAP") {
-    return { types: {}, knownValues: [] };
-  }
-  const typesNode = root.get("types", true);
-  const typeEntries = Array.isArray(typesNode?.items) ? typesNode.items.map((i) => String(i?.value ?? "")).filter(Boolean) : [];
+  const typeEntries = extractTypesEntries(doc);
   if (typeEntries.length === 0) {
     return { types: {}, knownValues: [] };
   }
