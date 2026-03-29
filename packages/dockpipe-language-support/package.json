@@ -4,6 +4,10 @@
   "description": "PipeLang (.pipe) syntax + DockPipe workflow YAML IntelliSense.",
   "version": "0.0.1",
   "publisher": "dockpipe",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jamie-steele/dockpipe.git"
+  },
   "license": "Apache-2.0",
   "engines": {
     "vscode": "^1.85.0"

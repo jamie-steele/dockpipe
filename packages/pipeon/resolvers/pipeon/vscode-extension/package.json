@@ -4,6 +4,10 @@
   "description": "Pipeon gateway: workspace context from .dockpipe (Ollama / worker integration to follow).",
   "version": "0.0.1",
   "publisher": "pipeon",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jamie-steele/dockpipe.git"
+  },
   "icon": "images/icon.png",
   "engines": {
     "vscode": "^1.85.0"
