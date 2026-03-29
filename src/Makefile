@@ -12,7 +12,8 @@ build:
 	cp VERSION src/cmd/VERSION
 	@mkdir -p src/bin
 	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o src/bin/dockpipe.bin ./src/cmd
-	@echo "Built src/bin/dockpipe.bin — run via src/bin/dockpipe or make install / make dev-install"
+	@echo "Built src/bin/dockpipe.bin — run:  ./src/bin/dockpipe  (bare \`dockpipe\` is your PATH install, not this build)"
+	@echo "Install into PATH:  make install   or   make dev-install"
 	@echo "Optional: make maintainer-tools (dorkpipe + mcpd under packages/)"
 
 # Maintainer: orchestrator + MCP (separate modules under packages/). Not required for dockpipe core.
