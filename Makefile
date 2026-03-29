@@ -28,12 +28,12 @@ install-pipeon-vscode-extension: package-pipeon-vscode-extension
 	INSTALLED=0; \
 	if command -v cursor >/dev/null 2>&1; then \
 	  echo "[dockpipe] installing Pipeon into Cursor: $$VSIX"; \
-	  cursor --install-extension "$$VSIX"; \
+	  cursor --install-extension "$$VSIX" --force; \
 	  INSTALLED=1; \
 	fi; \
 	if command -v code >/dev/null 2>&1; then \
 	  echo "[dockpipe] installing Pipeon into VS Code: $$VSIX"; \
-	  code --install-extension "$$VSIX"; \
+	  code --install-extension "$$VSIX" --force; \
 	  INSTALLED=1; \
 	fi; \
 	if [ "$$INSTALLED" -eq 0 ]; then \
@@ -54,12 +54,12 @@ install-dockpipe-language-support: package-dockpipe-language-support
 	INSTALLED=0; \
 	if command -v cursor >/dev/null 2>&1; then \
 	  echo "[dockpipe] installing DockPipe language support into Cursor: $$VSIX"; \
-	  cursor --install-extension "$$VSIX"; \
+	  cursor --install-extension "$$VSIX" --force; \
 	  INSTALLED=1; \
 	fi; \
 	if command -v code >/dev/null 2>&1; then \
 	  echo "[dockpipe] installing DockPipe language support into VS Code: $$VSIX"; \
-	  code --install-extension "$$VSIX"; \
+	  code --install-extension "$$VSIX" --force; \
 	  INSTALLED=1; \
 	fi; \
 	if [ "$$INSTALLED" -eq 0 ]; then \
