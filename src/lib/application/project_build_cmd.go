@@ -119,6 +119,7 @@ func cmdRebuild(args []string) error {
 const buildUsageText = `dockpipe build [--for-workflow <name>] [options]
 
 Without --for-workflow: same as dockpipe package compile all --force (full store).
+PipeLang sources are compiled during package staging and included in package tarballs.
 
 With --for-workflow <name>: same as dockpipe package compile for-workflow <name> --force
 (transitive core + resolver + workflow closure only).

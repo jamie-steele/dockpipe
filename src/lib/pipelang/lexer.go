@@ -18,6 +18,9 @@ const (
 	tokBool
 	tokInterface
 	tokClass
+	tokStruct
+	tokPublic
+	tokPrivate
 	tokLBrace
 	tokRBrace
 	tokLParen
@@ -76,6 +79,12 @@ func lex(src string) ([]token, error) {
 				out = append(out, token{kind: tokInterface, lit: lit, pos: start})
 			case "Class":
 				out = append(out, token{kind: tokClass, lit: lit, pos: start})
+			case "Struct":
+				out = append(out, token{kind: tokStruct, lit: lit, pos: start})
+			case "public":
+				out = append(out, token{kind: tokPublic, lit: lit, pos: start})
+			case "private":
+				out = append(out, token{kind: tokPrivate, lit: lit, pos: start})
 			case "true", "false":
 				out = append(out, token{kind: tokBool, lit: lit, pos: start})
 			default:

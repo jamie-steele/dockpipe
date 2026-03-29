@@ -10,6 +10,7 @@ Supported:
 - Primitive types: `string`, `int`, `bool`, `float`
 - `Interface` declarations (structural contracts)
 - `Class` declarations with optional defaults
+- Split declarations across multiple `.pipe` files in the same module tree
 - `Class : Interface` conformance checks
 - Expression-bodied methods (`=>`) with static type-checking
 - Deterministic artifact generation
@@ -32,6 +33,12 @@ Invoke method via CLI:
 
 ```bash
 dockpipe pipelang invoke --in workflows/mywf/model.pipe --class DefaultDeployConfig --method FullImage --format text
+```
+
+Materialize all `.pipe` files under configured compile roots:
+
+```bash
+dockpipe pipelang materialize --workdir .
 ```
 
 ## Artifacts

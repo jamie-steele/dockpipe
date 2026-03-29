@@ -37,3 +37,10 @@ func TestInvokeMethod(t *testing.T) {
 		t.Fatalf("unexpected invoke result: %#v", out)
 	}
 }
+
+func TestInvokePrivateMethodDenied(t *testing.T) {
+	_, err := Invoke([]byte(sampleProgram), "DefaultDeployConfig", "IsTiny", nil)
+	if err == nil || !strings.Contains(err.Error(), "private") {
+		t.Fatalf("expected private method invoke failure, got %v", err)
+	}
+}

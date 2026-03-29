@@ -22,27 +22,31 @@ func Parse(src []byte) (*Program, error) {
 func (p *parser) parseProgram() (*Program, error) {
 	prog := &Program{}
 	for p.peek().kind != tokEOF {
+		vis, err := p.parseOptionalVisibility()
+		if err != nil {
+			return nil, err
+		}
 		switch p.peek().kind {
 		case tokInterface:
-			i, err := p.parseInterface()
+			i, err := p.parseInterface(vis)
 			if err != nil {
 				return nil, err
 			}
 			prog.Interfaces = append(prog.Interfaces, i)
-		case tokClass:
-			c, err := p.parseClass()
+		case tokClass, tokStruct:
+			c, err := p.parseClass(vis)
 			if err != nil {
 				return nil, err
 			}
 			prog.Classes = append(prog.Classes, c)
 		default:
-			return nil, p.errf("expected Interface or Class")
+			return nil, p.errf("expected Interface, Class, or Struct")
 		}
 	}
 	return prog, nil
 }
 
-func (p *parser) parseInterface() (*InterfaceDecl, error) {
+func (p *parser) parseInterface(vis Visibility) (*InterfaceDecl, error) {
 	if _, err := p.expect(tokInterface); err != nil {
 		return nil, err
 	}
@@ -53,8 +57,12 @@ func (p *parser) parseInterface() (*InterfaceDecl, error) {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
-	decl := &InterfaceDecl{Name: nameTok.lit}
+	decl := &InterfaceDecl{Name: nameTok.lit, Visibility: normalizeVisibility(vis)}
 	for p.peek().kind != tokRBrace {
+		memberVis, err := p.parseOptionalVisibility()
+		if err != nil {
+			return nil, err
+		}
 		t, n, params, isMethod, err := p.parseTypedMemberHeader()
 		if err != nil {
 			return nil, err
@@ -63,13 +71,22 @@ func (p *parser) parseInterface() (*InterfaceDecl, error) {
 			if _, err := p.expect(tokSemi); err != nil {
 				return nil, err
 			}
-			decl.Methods = append(decl.Methods, MethodSig{ReturnType: t, Name: n, Params: params})
+			decl.Methods = append(decl.Methods, MethodSig{
+				Visibility: normalizeVisibility(memberVis),
+				ReturnType: t,
+				Name:       n,
+				Params:     params,
+			})
 			continue
 		}
 		if _, err := p.expect(tokSemi); err != nil {
 			return nil, err
 		}
-		decl.Fields = append(decl.Fields, FieldSig{Type: t, Name: n})
+		decl.Fields = append(decl.Fields, FieldSig{
+			Visibility: normalizeVisibility(memberVis),
+			Type:       t,
+			Name:       n,
+		})
 	}
 	if _, err := p.expect(tokRBrace); err != nil {
 		return nil, err
@@ -77,15 +94,18 @@ func (p *parser) parseInterface() (*InterfaceDecl, error) {
 	return decl, nil
 }
 
-func (p *parser) parseClass() (*ClassDecl, error) {
-	if _, err := p.expect(tokClass); err != nil {
-		return nil, err
+func (p *parser) parseClass(vis Visibility) (*ClassDecl, error) {
+	switch p.peek().kind {
+	case tokClass, tokStruct:
+		p.next()
+	default:
+		return nil, p.errf("expected Class or Struct")
 	}
 	nameTok, err := p.expect(tokIdent)
 	if err != nil {
 		return nil, err
 	}
-	decl := &ClassDecl{Name: nameTok.lit}
+	decl := &ClassDecl{Name: nameTok.lit, Visibility: normalizeVisibility(vis)}
 	if p.peek().kind == tokColon {
 		p.next()
 		implTok, err := p.expect(tokIdent)
@@ -98,6 +118,10 @@ func (p *parser) parseClass() (*ClassDecl, error) {
 		return nil, err
 	}
 	for p.peek().kind != tokRBrace {
+		memberVis, err := p.parseOptionalVisibility()
+		if err != nil {
+			return nil, err
+		}
 		t, n, params, isMethod, err := p.parseTypedMemberHeader()
 		if err != nil {
 			return nil, err
@@ -113,10 +137,16 @@ func (p *parser) parseClass() (*ClassDecl, error) {
 			if _, err := p.expect(tokSemi); err != nil {
 				return nil, err
 			}
-			decl.Methods = append(decl.Methods, MethodDecl{ReturnType: t, Name: n, Params: params, Body: expr})
+			decl.Methods = append(decl.Methods, MethodDecl{
+				Visibility: normalizeVisibility(memberVis),
+				ReturnType: t,
+				Name:       n,
+				Params:     params,
+				Body:       expr,
+			})
 			continue
 		}
-		f := FieldDecl{Type: t, Name: n}
+		f := FieldDecl{Visibility: normalizeVisibility(memberVis), Type: t, Name: n}
 		if p.peek().kind == tokAssign {
 			p.next()
 			expr, err := p.parseExpr(1)
@@ -134,6 +164,19 @@ func (p *parser) parseClass() (*ClassDecl, error) {
 		return nil, err
 	}
 	return decl, nil
+}
+
+func (p *parser) parseOptionalVisibility() (Visibility, error) {
+	switch p.peek().kind {
+	case tokPublic:
+		p.next()
+		return VisibilityPublic, nil
+	case tokPrivate:
+		p.next()
+		return VisibilityPrivate, nil
+	default:
+		return VisibilityPublic, nil
+	}
 }
 
 func (p *parser) parseTypedMemberHeader() (TypeName, string, []Param, bool, error) {

@@ -5,6 +5,25 @@ import "fmt"
 // TypeName is a primitive type in PipeLang v0.0.0.1.
 type TypeName string
 
+type Visibility string
+
+const (
+	VisibilityPublic  Visibility = "public"
+	VisibilityPrivate Visibility = "private"
+)
+
+func normalizeVisibility(v Visibility) Visibility {
+	if v == VisibilityPrivate {
+		return VisibilityPrivate
+	}
+	return VisibilityPublic
+}
+
+func (v Visibility) IsValid() bool {
+	n := normalizeVisibility(v)
+	return n == VisibilityPublic || n == VisibilityPrivate
+}
+
 const (
 	TypeString TypeName = "string"
 	TypeInt    TypeName = "int"
@@ -27,36 +46,42 @@ type Program struct {
 }
 
 type InterfaceDecl struct {
-	Name    string
-	Fields  []FieldSig
-	Methods []MethodSig
+	Name       string
+	Visibility Visibility
+	Fields     []FieldSig
+	Methods    []MethodSig
 }
 
 type ClassDecl struct {
 	Name       string
+	Visibility Visibility
 	Implements string
 	Fields     []FieldDecl
 	Methods    []MethodDecl
 }
 
 type FieldSig struct {
-	Type TypeName
-	Name string
+	Visibility Visibility
+	Type       TypeName
+	Name       string
 }
 
 type MethodSig struct {
+	Visibility Visibility
 	ReturnType TypeName
 	Name       string
 	Params     []Param
 }
 
 type FieldDecl struct {
-	Type    TypeName
-	Name    string
-	Default Expr
+	Visibility Visibility
+	Type       TypeName
+	Name       string
+	Default    Expr
 }
 
 type MethodDecl struct {
+	Visibility Visibility
 	ReturnType TypeName
 	Name       string
 	Params     []Param

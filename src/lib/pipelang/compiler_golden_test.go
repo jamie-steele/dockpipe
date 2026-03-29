@@ -30,8 +30,14 @@ func TestCompileGolden(t *testing.T) {
 	if !strings.Contains(gotJSON, `"name": "FullImage"`) {
 		t.Fatalf("bindings json missing method metadata:\n%s", gotJSON)
 	}
+	if strings.Contains(gotJSON, `"name": "IsTiny"`) {
+		t.Fatalf("bindings json should not expose private method:\n%s", gotJSON)
+	}
 	gotEnv := string(out.BindingsEnv)
 	if !strings.Contains(gotEnv, "PIPELANG_IMAGE='nginx'") {
 		t.Fatalf("bindings env missing IMAGE:\n%s", gotEnv)
+	}
+	if strings.Contains(gotEnv, "PIPELANG_INTERNAL_SUFFIX") {
+		t.Fatalf("bindings env should not expose private field:\n%s", gotEnv)
 	}
 }

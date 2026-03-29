@@ -20,8 +20,10 @@ func cmdPipeLang(args []string) error {
 		return cmdPipeLangCompile(args[1:])
 	case "invoke":
 		return cmdPipeLangInvoke(args[1:])
+	case "materialize":
+		return cmdPipeLangMaterialize(args[1:])
 	default:
-		return fmt.Errorf("unknown pipelang subcommand %q (try: compile or invoke)", args[0])
+		return fmt.Errorf("unknown pipelang subcommand %q (try: compile, invoke, or materialize)", args[0])
 	}
 }
 
@@ -72,7 +74,17 @@ func cmdPipeLangCompile(args []string) error {
 	if err != nil {
 		return err
 	}
-	res, err := pipelang.Compile(src, entry)
+	moduleRoot := detectPipeLangModuleRoot(filepath.Dir(inPath))
+	files, _, err := readPipeFilesUnder(moduleRoot)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(entry) == "" {
+		if p, err := pipelang.Parse(src); err == nil && len(p.Classes) > 0 {
+			entry = p.Classes[0].Name
+		}
+	}
+	res, err := pipelang.CompileFiles(files, entry)
 	if err != nil {
 		return err
 	}
@@ -162,7 +174,17 @@ func cmdPipeLangInvoke(args []string) error {
 	if err != nil {
 		return err
 	}
-	res, err := pipelang.Invoke(src, className, methodName, argVals)
+	moduleRoot := detectPipeLangModuleRoot(filepath.Dir(inPath))
+	files, _, err := readPipeFilesUnder(moduleRoot)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(className) == "" {
+		if p, err := pipelang.Parse(src); err == nil && len(p.Classes) > 0 {
+			className = p.Classes[0].Name
+		}
+	}
+	res, err := pipelang.InvokeFiles(files, className, methodName, argVals)
 	if err != nil {
 		return err
 	}
@@ -187,6 +209,62 @@ func cmdPipeLangInvoke(args []string) error {
 	default:
 		return fmt.Errorf("unknown --format %q (use text|json|env)", format)
 	}
+	return nil
+}
+
+func cmdPipeLangMaterialize(args []string) error {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
+		fmt.Print(pipelangMaterializeUsageText)
+		return nil
+	}
+	var (
+		workdir   string
+		from      []string
+		noStaging bool
+		force     bool
+	)
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--workdir" && i+1 < len(args):
+			workdir = args[i+1]
+			i++
+		case args[i] == "--from" && i+1 < len(args):
+			from = append(from, args[i+1])
+			i++
+		case args[i] == "--no-staging":
+			noStaging = true
+		case args[i] == "--force":
+			force = true
+		case strings.HasPrefix(args[i], "-"):
+			return fmt.Errorf("unknown option %s", args[i])
+		default:
+			return fmt.Errorf("unexpected argument %q", args[i])
+		}
+	}
+	if workdir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		workdir = wd
+	}
+	repoRoot, err := filepath.Abs(workdir)
+	if err != nil {
+		return err
+	}
+	if len(from) == 0 {
+		cfg, err := loadDockpipeProjectConfig(repoRoot)
+		if err != nil {
+			return err
+		}
+		from = effectiveWorkflowCompileRoots(cfg, repoRoot, noStaging)
+	}
+	roots := dedupeAbsExistingDirs(from)
+	n, err := materializePipeLangRoots(roots, force)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(os.Stderr, "[dockpipe] pipelang materialize: wrote %d artifact set(s)\n", n)
 	return nil
 }
 
@@ -220,6 +298,7 @@ Typed authoring helpers for PipeLang (optional layer over workflow YAML).
 Usage:
   dockpipe pipelang compile --in <file.pipe> [--entry <ClassName>] [--out <dir>]
   dockpipe pipelang invoke --in <file.pipe> [--class <ClassName>] --method <name> [--arg <value>]... [--format text|json|env]
+  dockpipe pipelang materialize [--workdir <path>] [--from <root>]... [--no-staging] [--force]
 
 `
 
@@ -247,5 +326,22 @@ Usage:
 Notes:
   - Methods are pure expression-bodied logic in v0.0.0.1.
   - No runtime/resolver execution path is used by invoke.
+
+`
+
+const pipelangMaterializeUsageText = `dockpipe pipelang materialize
+
+Recursively compile .pipe files under workflow/package roots into inspectable local artifacts.
+
+Usage:
+  dockpipe pipelang materialize [--workdir <path>] [--from <root>]... [--no-staging] [--force]
+
+Default roots:
+  - dockpipe.config.json compile.workflows (plus merged compile.bundles)
+
+Artifacts per source file:
+  <dir>/.pipelang/<base>.<EntryClass>.workflow.yml
+  <dir>/.pipelang/<base>.<EntryClass>.bindings.json
+  <dir>/.pipelang/<base>.<EntryClass>.bindings.env
 
 `

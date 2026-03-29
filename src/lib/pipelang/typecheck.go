@@ -32,6 +32,9 @@ func Check(prog *Program) (*checkedProgram, error) {
 			return nil, fmt.Errorf("duplicate interface %q", i.Name)
 		}
 		cp.interfaces[i.Name] = i
+		if !i.Visibility.IsValid() {
+			return nil, fmt.Errorf("interface %s has invalid visibility %q", i.Name, i.Visibility)
+		}
 		if err := validateInterface(i); err != nil {
 			return nil, err
 		}
@@ -47,6 +50,9 @@ func Check(prog *Program) (*checkedProgram, error) {
 			return nil, fmt.Errorf("duplicate class %q", c.Name)
 		}
 		cp.classes[c.Name] = c
+		if !c.Visibility.IsValid() {
+			return nil, fmt.Errorf("class %s has invalid visibility %q", c.Name, c.Visibility)
+		}
 		if err := validateClass(c); err != nil {
 			return nil, err
 		}
@@ -65,6 +71,9 @@ func Check(prog *Program) (*checkedProgram, error) {
 func validateInterface(i *InterfaceDecl) error {
 	seen := map[string]struct{}{}
 	for _, f := range i.Fields {
+		if normalizeVisibility(f.Visibility) != VisibilityPublic {
+			return fmt.Errorf("interface %s field %s must be public", i.Name, f.Name)
+		}
 		if !f.Type.IsValid() {
 			return fmt.Errorf("interface %s field %s has invalid type %q", i.Name, f.Name, f.Type)
 		}
@@ -74,6 +83,9 @@ func validateInterface(i *InterfaceDecl) error {
 		seen[f.Name] = struct{}{}
 	}
 	for _, m := range i.Methods {
+		if normalizeVisibility(m.Visibility) != VisibilityPublic {
+			return fmt.Errorf("interface %s method %s must be public", i.Name, m.Name)
+		}
 		if !m.ReturnType.IsValid() {
 			return fmt.Errorf("interface %s method %s has invalid return type %q", i.Name, m.Name, m.ReturnType)
 		}
@@ -92,6 +104,9 @@ func validateClass(c *ClassDecl) error {
 	seen := map[string]struct{}{}
 	fieldTypes := map[string]TypeName{}
 	for _, f := range c.Fields {
+		if !f.Visibility.IsValid() {
+			return fmt.Errorf("class %s field %s has invalid visibility %q", c.Name, f.Name, f.Visibility)
+		}
 		if !f.Type.IsValid() {
 			return fmt.Errorf("class %s field %s has invalid type %q", c.Name, f.Name, f.Type)
 		}
@@ -102,6 +117,9 @@ func validateClass(c *ClassDecl) error {
 		fieldTypes[f.Name] = f.Type
 	}
 	for _, m := range c.Methods {
+		if !m.Visibility.IsValid() {
+			return fmt.Errorf("class %s method %s has invalid visibility %q", c.Name, m.Name, m.Visibility)
+		}
 		if !m.ReturnType.IsValid() {
 			return fmt.Errorf("class %s method %s has invalid return type %q", c.Name, m.Name, m.ReturnType)
 		}
@@ -179,6 +197,9 @@ func (cp *checkedProgram) validateImplements(c *ClassDecl) error {
 		if !ok {
 			return fmt.Errorf("class %s missing interface field %s.%s", c.Name, i.Name, f.Name)
 		}
+		if normalizeVisibility(cf.Visibility) != VisibilityPublic {
+			return fmt.Errorf("class %s field %s must be public to satisfy interface %s", c.Name, f.Name, i.Name)
+		}
 		if cf.Type != f.Type {
 			return fmt.Errorf("class %s field %s type %s does not match interface %s", c.Name, f.Name, cf.Type, f.Type)
 		}
@@ -187,6 +208,9 @@ func (cp *checkedProgram) validateImplements(c *ClassDecl) error {
 		cm, ok := methods[m.Name]
 		if !ok {
 			return fmt.Errorf("class %s missing interface method %s.%s", c.Name, i.Name, m.Name)
+		}
+		if normalizeVisibility(cm.Visibility) != VisibilityPublic {
+			return fmt.Errorf("class %s method %s must be public to satisfy interface %s", c.Name, m.Name, i.Name)
 		}
 		if cm.ReturnType != m.ReturnType {
 			return fmt.Errorf("class %s method %s return type %s does not match interface %s", c.Name, m.Name, cm.ReturnType, m.ReturnType)
@@ -299,12 +323,20 @@ func pickEntryClass(cp *checkedProgram, name string) (*ClassDecl, error) {
 		if !ok {
 			return nil, fmt.Errorf("class %q not found", name)
 		}
+		if normalizeVisibility(c.Visibility) != VisibilityPublic {
+			return nil, fmt.Errorf("class %q is private and cannot be referenced from CLI", name)
+		}
 		return c, nil
 	}
 	if len(cp.program.Classes) == 0 {
 		return nil, fmt.Errorf("no class declarations found")
 	}
-	return cp.program.Classes[0], nil
+	for _, c := range cp.program.Classes {
+		if normalizeVisibility(c.Visibility) == VisibilityPublic {
+			return c, nil
+		}
+	}
+	return nil, fmt.Errorf("no public class declarations found")
 }
 
 func sortedClassNames(cp *checkedProgram) []string {

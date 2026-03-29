@@ -233,18 +233,21 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 	if err := copyDir(srcAbs, staging); err != nil {
 		return fmt.Errorf("copy workflow: %w", err)
 	}
+	if _, err := materializePipeLangRoots([]string{staging}, true); err != nil {
+		return fmt.Errorf("compile pipelang artifacts: %w", err)
+	}
 	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
 		pm := map[string]any{
-			"schema":               1,
-			"name":                 pkgName,
-			"version":              "0.1.0",
-			"title":                pkgName,
-			"description":          "Compiled from " + srcAbs,
-			"kind":                 "workflow",
+			"schema":                1,
+			"name":                  pkgName,
+			"version":               "0.1.0",
+			"title":                 pkgName,
+			"description":           "Compiled from " + srcAbs,
+			"kind":                  "workflow",
 			"requires_capabilities": []string{strings.TrimSpace(wf.Capability)},
-			"allow_clone":          true,
-			"distribution":         "source",
+			"allow_clone":           true,
+			"distribution":          "source",
 		}
 		repoRoot, err := filepath.Abs(workdir)
 		if err != nil {
@@ -380,6 +383,9 @@ func cmdPackageCompileCore(args []string) error {
 	exclude := map[string]bool{"resolvers": true, "bundles": true, "workflows": true}
 	if err := copyDirExcludingTopLevel(srcAbs, staging, exclude); err != nil {
 		return fmt.Errorf("copy core: %w", err)
+	}
+	if _, err := materializePipeLangRoots([]string{staging}, true); err != nil {
+		return fmt.Errorf("compile pipelang artifacts: %w", err)
 	}
 	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
@@ -610,6 +616,7 @@ func hasNestedResolverPackLayout(dir string) bool {
 //   - srcRoot/packages/<group>/resolvers/ — per-package groups (each group is its own folder; same
 //     resolver names must not appear twice across groups)
 //   - srcRoot/dockpipe/<package>/resolvers/ — DockPipe official packages (e.g. agent → codex, ide → vscode)
+//
 // Each resolver child still becomes its own dockpipe-resolver-<name>-*.tar.gz for the store.
 func mergeChildPackages(srcRoot, destRoot string, kind string, defaultNamespace string, force bool) (int, error) {
 	if kind == "resolver" {
@@ -702,6 +709,9 @@ func compileSingleResolverDir(destRoot, from, name string, defaultNamespace stri
 	defer os.RemoveAll(staging)
 	if err := copyDir(from, staging); err != nil {
 		return fmt.Errorf("copy %s %s: %w", kind, name, err)
+	}
+	if _, err := materializePipeLangRoots([]string{staging}, true); err != nil {
+		return fmt.Errorf("compile pipelang artifacts for %s %s: %w", kind, name, err)
 	}
 	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
@@ -853,7 +863,7 @@ func cmdPackageCompileWorkflowsBatch(args []string) error {
 			if err != nil {
 				return err
 			}
-			if d.IsDir() || d.Name() != "config.yml" {
+			if d.IsDir() || (d.Name() != "config.yml" && d.Name() != "config.pipe") {
 				return nil
 			}
 			wfDir := filepath.Dir(path)
@@ -861,11 +871,20 @@ func cmdPackageCompileWorkflowsBatch(args []string) error {
 			if strings.HasPrefix(wfName, ".") {
 				return nil
 			}
+			if d.Name() == "config.pipe" {
+				if _, err := os.Stat(filepath.Join(wfDir, "config.yml")); err == nil {
+					return nil
+				}
+			}
 			if _, ok := seen[wfName]; ok {
 				fmt.Fprintf(os.Stderr, "[dockpipe] skip duplicate workflow name %q (already compiled from an earlier --from)\n", wfName)
 				return nil
 			}
-			if err := compileWorkflowOne(workdir, wfDir, "", force); err != nil {
+			if d.Name() == "config.pipe" {
+				if err := compileWorkflowOneFromPipe(workdir, wfDir, force); err != nil {
+					return fmt.Errorf("workflow %q (config.pipe): %w", wfName, err)
+				}
+			} else if err := compileWorkflowOne(workdir, wfDir, "", force); err != nil {
 				return fmt.Errorf("workflow %q: %w", wfName, err)
 			}
 			seen[wfName] = struct{}{}

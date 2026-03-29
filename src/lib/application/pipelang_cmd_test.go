@@ -8,22 +8,24 @@ import (
 	"testing"
 )
 
-const samplePipeLang = `Interface DeployConfig
+const samplePipeLang = `public Interface DeployConfig
 {
-    string Image;
-    int Replicas;
-    bool Public;
-    string FullImage();
+    public string Image;
+    public int Replicas;
+    public bool Public;
+    public string FullImage();
 }
 
-Class DefaultDeployConfig : DeployConfig
+public Class DefaultDeployConfig : DeployConfig
 {
-    string Image = "nginx";
-    int Replicas = 1;
-    bool Public = false;
+    public string Image = "nginx";
+    public int Replicas = 1;
+    public bool Public = false;
+    private string InternalSuffix = ":latest";
 
-    string FullImage() => Image + ":latest";
-    bool IsScaled(int threshold) => Replicas > threshold;
+    public string FullImage() => Image + InternalSuffix;
+    public bool IsScaled(int threshold) => Replicas > threshold;
+    private bool IsTiny() => Replicas < 1;
 }
 `
 
@@ -70,5 +72,40 @@ func TestPipeLangBindingsEnvConsumableByScript(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "ok") {
 		t.Fatalf("unexpected script output: %s", string(out))
+	}
+}
+
+func TestPipeLangSplitFilesCompileAndInvoke(t *testing.T) {
+	wd := t.TempDir()
+	modelsDir := filepath.Join(wd, "models")
+	if err := os.MkdirAll(modelsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	iface := `Interface IAppConfig { string Name; string FullName(); }`
+	class := `Class AppConfig : IAppConfig { string Name = "dockpipe"; string FullName() => Name + "-cloud"; }`
+	if err := os.WriteFile(filepath.Join(modelsDir, "iface.pipe"), []byte(iface), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wd, "config.pipe"), []byte(class), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outDir := filepath.Join(wd, "out")
+	if err := cmdPipeLang([]string{"compile", "--in", filepath.Join(wd, "config.pipe"), "--out", outDir}); err != nil {
+		t.Fatalf("compile split files: %v", err)
+	}
+	if err := cmdPipeLang([]string{"invoke", "--in", filepath.Join(wd, "config.pipe"), "--method", "FullName"}); err != nil {
+		t.Fatalf("invoke split files: %v", err)
+	}
+}
+
+func TestPipeLangInvokePrivateMethodDenied(t *testing.T) {
+	wd := t.TempDir()
+	in := filepath.Join(wd, "demo.pipe")
+	if err := os.WriteFile(in, []byte(samplePipeLang), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := cmdPipeLang([]string{"invoke", "--in", in, "--class", "DefaultDeployConfig", "--method", "IsTiny"})
+	if err == nil || !strings.Contains(err.Error(), "private") {
+		t.Fatalf("expected private method invoke failure, got %v", err)
 	}
 }

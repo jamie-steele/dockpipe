@@ -12,6 +12,55 @@ cd "$ROOT"
 
 die() { echo "${WF_NS}: $*" >&2; exit 1; }
 
+set_if_unset_from_pipelang() {
+  local target="${1:-}"
+  local source_name="${2:-}"
+  [[ -n "$target" && -n "$source_name" ]] || return 0
+  local source_val="${!source_name:-}"
+  local target_val="${!target:-}"
+  if [[ -z "$target_val" && -n "$source_val" ]]; then
+    export "$target=$source_val"
+  fi
+}
+
+source_pipelang_defaults_if_present() {
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  local p=""
+  local candidate
+  for candidate in \
+    "$script_dir/../../models/.pipelang/R2InfraConfig.R2InfraConfig.bindings.env" \
+    "$ROOT/packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/models/.pipelang/R2InfraConfig.R2InfraConfig.bindings.env" \
+    "$script_dir/../../models/.pipelang/r2-infra-config.R2InfraConfig.bindings.env" \
+    "$ROOT/packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/models/.pipelang/r2-infra-config.R2InfraConfig.bindings.env"
+  do
+    if [[ -f "$candidate" ]]; then
+      p="$candidate"
+      break
+    fi
+  done
+  [[ -n "$p" ]] || return 0
+  # shellcheck source=/dev/null
+  source "$p"
+
+  set_if_unset_from_pipelang DOCKPIPE_TF_BACKEND PIPELANG_DOCKPIPE_TF_BACKEND
+  set_if_unset_from_pipelang DOCKPIPE_TF_ATTACH_CLOUDFLARE_PROVIDER PIPELANG_DOCKPIPE_TF_ATTACH_CLOUDFLARE_PROVIDER
+  set_if_unset_from_pipelang DOCKPIPE_TF_USE_R2_PUBLISH_MAP PIPELANG_DOCKPIPE_TF_USE_R2_PUBLISH_MAP
+  set_if_unset_from_pipelang DOCKPIPE_TF_APPLY_AUTO_APPROVE PIPELANG_DOCKPIPE_TF_APPLY_AUTO_APPROVE
+  set_if_unset_from_pipelang DOCKPIPE_TF_STATE_BUCKET PIPELANG_DOCKPIPE_TF_STATE_BUCKET
+  set_if_unset_from_pipelang DOCKPIPE_TF_STATE_KEY PIPELANG_DOCKPIPE_TF_STATE_KEY
+  set_if_unset_from_pipelang R2_BUCKET PIPELANG_R2_BUCKET
+  set_if_unset_from_pipelang TF_VAR_cache_browser_ttl_seconds PIPELANG_TF_VAR_CACHE_BROWSER_TTL_SECONDS
+  set_if_unset_from_pipelang TF_VAR_cache_edge_ttl_seconds PIPELANG_TF_VAR_CACHE_EDGE_TTL_SECONDS
+  set_if_unset_from_pipelang TF_VAR_enable_cache_rules PIPELANG_TF_VAR_ENABLE_CACHE_RULES
+  set_if_unset_from_pipelang TF_VAR_enable_r2_custom_domain PIPELANG_TF_VAR_ENABLE_R2_CUSTOM_DOMAIN
+  set_if_unset_from_pipelang TF_VAR_enable_waf_baseline PIPELANG_TF_VAR_ENABLE_WAF_BASELINE
+  set_if_unset_from_pipelang TF_VAR_public_hostname PIPELANG_TF_VAR_PUBLIC_HOSTNAME
+  set_if_unset_from_pipelang TF_VAR_r2_custom_domain_enabled PIPELANG_TF_VAR_R2_CUSTOM_DOMAIN_ENABLED
+  set_if_unset_from_pipelang TF_VAR_r2_custom_domain_min_tls PIPELANG_TF_VAR_R2_CUSTOM_DOMAIN_MIN_TLS
+  set_if_unset_from_pipelang TF_VAR_cloudflare_managed_ruleset_id PIPELANG_TF_VAR_CLOUDFLARE_MANAGED_RULESET_ID
+}
+
 dockpipe_r2_normalize_account_id() {
   local raw="$1"
   while [[ "$raw" == https://* ]] || [[ "$raw" == http://* ]]; do
@@ -79,6 +128,8 @@ find_terraform_dir() {
   fi
   return 1
 }
+
+source_pipelang_defaults_if_present
 
 if [[ "${DOCKPIPE_TF_OPTIONAL_WHEN_UNSET:-0}" == "1" ]]; then
   case "${DOCKPIPE_TF_COMMANDS:-}" in
