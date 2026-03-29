@@ -1,0 +1,58 @@
+{
+  "name": "dockpipe-language-support",
+  "displayName": "DockPipe Language Support",
+  "description": "PipeLang (.pipe) syntax + DockPipe workflow YAML IntelliSense.",
+  "version": "0.0.1",
+  "publisher": "dockpipe",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "keywords": [
+    "dockpipe",
+    "pipelang",
+    "yaml"
+  ],
+  "activationEvents": [
+    "onLanguage:pipelang",
+    "onLanguage:yaml"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "pipelang",
+        "aliases": [
+          "PipeLang",
+          "pipelang"
+        ],
+        "extensions": [
+          ".pipe"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "pipelang",
+        "scopeName": "source.pipelang",
+        "path": "./syntaxes/pipelang.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "pipelang",
+        "path": "./snippets/pipelang.json"
+      }
+    ]
+  },
+  "dependencies": {
+    "yaml": "^2.8.1"
+  },
+  "devDependencies": {
+    "@vscode/vsce": "^3.6.2"
+  }
+}

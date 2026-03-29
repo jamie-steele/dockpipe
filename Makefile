@@ -8,13 +8,34 @@
 # Qt launcher: cmake -S src/apps/pipeon-launcher -B src/apps/pipeon-launcher/build && cmake --build ...
 include src/Makefile
 
-.PHONY: pipeon-icons build-code-server-image install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci package-templates-core
+.PHONY: pipeon-icons build-code-server-image install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci package-templates-core package-dockpipe-language-support package-vscode-language-support install-dockpipe-language-support
 
 pipeon-icons:
 	python3 packages/pipeon/resolvers/pipeon/assets/scripts/generate-pipeon-icons.py
 
 build-code-server-image:
 	docker build -t dockpipe-code-server:latest -f packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server .
+
+# Package DockPipe language support extension (.vsix).
+package-dockpipe-language-support:
+	mkdir -p bin/.dockpipe/extensions
+	cd packages/dockpipe-language-support && npm install && npx --yes @vscode/vsce package -o ../../bin/.dockpipe/extensions/dockpipe-language-support-$$(node -p "require('./package.json').version").vsix
+
+# Back-compat alias.
+package-vscode-language-support: package-dockpipe-language-support
+
+# Build + install DockPipe language support into Cursor (fallback: VS Code CLI).
+install-dockpipe-language-support: package-dockpipe-language-support
+	VSIX="$$(ls -1t bin/.dockpipe/extensions/dockpipe-language-support-*.vsix | head -n1)"; \
+	if command -v cursor >/dev/null 2>&1; then \
+	  echo "[dockpipe] installing into Cursor: $$VSIX"; \
+	  cursor --install-extension "$$VSIX"; \
+	elif command -v code >/dev/null 2>&1; then \
+	  echo "[dockpipe] Cursor CLI not found; installing via VS Code CLI: $$VSIX"; \
+	  code --install-extension "$$VSIX"; \
+	else \
+	  echo "[dockpipe] no editor CLI found. Install manually from VSIX: $$VSIX"; \
+	fi
 
 # Install pre-built binary to a local PATH directory (~/.local/bin, %USERPROFILE%\\bin, …). Does not run go build.
 install:
