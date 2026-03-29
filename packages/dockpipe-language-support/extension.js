@@ -38,6 +38,61 @@ const DOCKPIPE_STEP_KEYS = [
   "is_blocking"
 ];
 
+const TOP_LEVEL_KEY_DETAILS = {
+  name: "Workflow name.",
+  description: "Human-readable workflow description.",
+  namespace: "Package namespace used for compiled workflow material.",
+  types: "PipeLang entrypoint list used to drive model-backed vars help.",
+  docker_preflight: "Enable or disable the Docker preflight check before running.",
+  vars: "Workflow variables exported before execution unless already set in the environment.",
+  steps: "Ordered workflow steps. Each step can run in a container or on the host.",
+  resolver: "Tooling profile for this workflow.",
+  default_resolver: "Fallback resolver when a step does not set one.",
+  runtime: "Execution substrate for this workflow.",
+  default_runtime: "Fallback runtime when a step does not set one.",
+  runtimes: "Allowlist of runtimes permitted for the workflow.",
+  strategy: "Lifecycle wrapper that runs around the workflow.",
+  strategies: "Available strategies for selection or validation.",
+  vault: "Vault provider used for secret injection.",
+  compile_hooks: "Shell hooks run during package compile before the tarball is written.",
+  imports: "Additional workflow material pulled in during authoring or compile.",
+  inject: "Injection rules for env/template expansion."
+};
+
+const STEP_KEY_DETAILS = {
+  id: "Stable step label used in logs and outputs.",
+  run: "Command or script list to execute for this step.",
+  pre_script: "Host-side scripts that run before the step body.",
+  skip_container: "Run this step on the host instead of inside the runtime container.",
+  vars: "Step-local variables merged for this step.",
+  outputs: "Named outputs passed to later steps.",
+  runtime: "Override the runtime for this step.",
+  resolver: "Override the resolver for this step.",
+  package: "Nested workflow/package selector for package runtime steps.",
+  host_builtin: "Built-in host action instead of a script.",
+  is_blocking: "When false, allows async grouping with surrounding steps."
+};
+
+const CONTAINER_KEYS = new Set([
+  "types",
+  "vars",
+  "steps",
+  "run",
+  "outputs",
+  "imports",
+  "inject",
+  "runtimes",
+  "strategies"
+]);
+
+const SEMANTIC_LEGEND = new vscode.SemanticTokensLegend([
+  "keyword",
+  "property",
+  "variable",
+  "type",
+  "enumMember"
+]);
+
 /**
  * @typedef {{ doc?: string, type?: string, defaultValue?: string }} FieldInfo
  * @typedef {{ name: string, kind: "Interface"|"Class"|"Struct", implements?: string, doc?: string, fields: Record<string, FieldInfo> }} TypeInfo
@@ -271,26 +326,170 @@ function wordRange(document, position) {
   return document.getWordRangeAtPosition(position, /[A-Za-z0-9_.-]+/);
 }
 
-function findVarsBlockInfo(document, position) {
-  let varsLine = -1;
-  let varsIndent = -1;
-  for (let i = position.line; i >= 0; i--) {
-    const line = document.lineAt(i).text;
-    if (!line.trim()) continue;
-    const m = line.match(/^(\s*)vars:\s*$/);
-    if (m) {
-      varsLine = i;
-      varsIndent = m[1].length;
-      break;
-    }
-    const top = line.match(/^(\s*)([A-Za-z_][A-Za-z0-9_]*):\s*$/);
-    if (top && top[1].length === 0 && i < position.line) break;
+function quoted(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function leadingSpaces(text) {
+  return (text.match(/^\s*/) || [""])[0].length;
+}
+
+function parseYamlLine(text) {
+  const mapMatch = text.match(/^(\s*)([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/);
+  if (mapMatch) {
+    const indent = mapMatch[1].length;
+    const key = mapMatch[2];
+    const afterColon = mapMatch[3] || "";
+    const keyStart = indent;
+    const keyEnd = keyStart + key.length;
+    const colonIndex = text.indexOf(":", keyEnd);
+    return {
+      indent,
+      key,
+      keyStart,
+      keyEnd,
+      isListKey: false,
+      hasInlineValue: afterColon.trim().length > 0,
+      valueStart: colonIndex >= 0 ? colonIndex + 1 : -1,
+      valueText: afterColon
+    };
   }
-  if (varsLine < 0) return null;
-  const curr = document.lineAt(position.line).text;
-  const currIndent = (curr.match(/^\s*/) || [""])[0].length;
-  if (position.line <= varsLine || currIndent <= varsIndent) return null;
-  return { varsLine, varsIndent };
+
+  const listKeyMatch = text.match(/^(\s*)-\s+([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/);
+  if (listKeyMatch) {
+    const indent = listKeyMatch[1].length;
+    const key = listKeyMatch[2];
+    const afterColon = listKeyMatch[3] || "";
+    const keyStart = indent + 2;
+    const keyEnd = keyStart + key.length;
+    const colonIndex = text.indexOf(":", keyEnd);
+    return {
+      indent,
+      key,
+      keyStart,
+      keyEnd,
+      isListKey: true,
+      hasInlineValue: afterColon.trim().length > 0,
+      valueStart: colonIndex >= 0 ? colonIndex + 1 : -1,
+      valueText: afterColon
+    };
+  }
+
+  const scalarListMatch = text.match(/^(\s*)-\s*([^\s#][^#]*?)\s*$/);
+  if (scalarListMatch) {
+    const indent = scalarListMatch[1].length;
+    const value = scalarListMatch[2];
+    return {
+      indent,
+      scalarListValue: value,
+      scalarStart: indent + 2,
+      scalarEnd: indent + 2 + value.length
+    };
+  }
+
+  return { indent: leadingSpaces(text) };
+}
+
+function analyzeYamlStructure(document) {
+  const infos = [];
+  const stack = [];
+
+  for (let lineNo = 0; lineNo < document.lineCount; lineNo++) {
+    const text = document.lineAt(lineNo).text;
+    const parsed = parseYamlLine(text);
+    const trimmed = text.trim();
+
+    while (stack.length && parsed.indent <= stack[stack.length - 1].indent) {
+      stack.pop();
+    }
+
+    const parents = stack.map((entry) => entry.key);
+    /** @type {any} */
+    const info = {
+      line: lineNo,
+      text,
+      indent: parsed.indent,
+      trimmed,
+      parents,
+      inVars: parents.includes("vars"),
+      inSteps: parents.includes("steps"),
+      inTypes: parents.includes("types")
+    };
+
+    if (parsed.key) {
+      info.key = parsed.key;
+      info.keyRange = new vscode.Range(lineNo, parsed.keyStart, lineNo, parsed.keyEnd);
+      info.isListKey = parsed.isListKey;
+      info.valueText = parsed.valueText;
+      info.valueRange = parsed.valueStart >= 0
+        ? new vscode.Range(lineNo, parsed.valueStart, lineNo, text.length)
+        : null;
+
+      if (parsed.indent === 0 && !parsed.isListKey) {
+        info.kind = "topLevelKey";
+      } else if (parents.includes("vars")) {
+        info.kind = "varKey";
+      } else if (parents.includes("steps")) {
+        info.kind = "stepKey";
+      } else {
+        info.kind = "key";
+      }
+
+      const shouldPush = !parsed.hasInlineValue || CONTAINER_KEYS.has(parsed.key);
+      if (shouldPush) {
+        stack.push({ indent: parsed.indent, key: parsed.key });
+      }
+    } else if (parsed.scalarListValue) {
+      info.scalarListValue = parsed.scalarListValue;
+      info.scalarRange = new vscode.Range(lineNo, parsed.scalarStart, lineNo, parsed.scalarEnd);
+      if (parents.includes("types")) {
+        info.kind = "typeEntry";
+      }
+    }
+
+    infos.push(info);
+  }
+
+  return infos;
+}
+
+function structureInfoAt(document, position) {
+  return analyzeYamlStructure(document)[position.line];
+}
+
+function findVarsBlockInfo(document, position) {
+  const info = structureInfoAt(document, position);
+  if (!info) return null;
+  if (info.kind === "varKey" || info.inVars) {
+    return info;
+  }
+  return null;
+}
+
+function hoverForWorkflowKey(word, docs, range) {
+  const doc = docs[word];
+  if (!doc) return null;
+  const md = new vscode.MarkdownString();
+  md.appendMarkdown(`**${word}**`);
+  md.appendMarkdown(`\n\n${doc}`);
+  return new vscode.Hover(md, range);
+}
+
+function findTypeEntryModel(modelCtx, entry) {
+  if (!entry) return null;
+  let left = String(entry).trim();
+  let explicitRef = "";
+  const i = left.indexOf("<");
+  const j = left.lastIndexOf(">");
+  if (i >= 0 && j > i) {
+    explicitRef = left.slice(i + 1, j).trim();
+    left = left.slice(0, i).trim();
+  }
+  const name = left.split("/").pop() || left;
+  return {
+    entry: modelCtx.types[name],
+    implementation: explicitRef ? modelCtx.types[explicitRef] : undefined
+  };
 }
 
 /** @param {vscode.ExtensionContext} context */
@@ -316,6 +515,54 @@ function activate(context) {
   );
 
   context.subscriptions.push(
+    vscode.languages.registerDocumentSemanticTokensProvider(
+      { language: "yaml", scheme: "file" },
+      {
+        async provideDocumentSemanticTokens(document) {
+          if (!isDockpipeWorkflowFile(document)) {
+            return null;
+          }
+          const modelCtx = await buildModelContext(document);
+          const infos = analyzeYamlStructure(document);
+          const builder = new vscode.SemanticTokensBuilder(SEMANTIC_LEGEND);
+
+          for (const info of infos) {
+            if (info.keyRange) {
+              if (info.kind === "topLevelKey") {
+                builder.push(info.keyRange, "keyword");
+              } else if (info.kind === "stepKey") {
+                builder.push(info.keyRange, "property");
+              } else if (info.kind === "varKey") {
+                builder.push(info.keyRange, "variable");
+              }
+            }
+
+            if (info.kind === "typeEntry" && info.scalarRange) {
+              builder.push(info.scalarRange, "type");
+            }
+
+            if (info.kind === "varKey" && info.valueText && info.valueRange) {
+              const key = info.key;
+              const rawValue = String(info.valueText).trim().replace(/^['"]|['"]$/g, "");
+              const implDefault = modelCtx.entryClass ? modelCtx.types[modelCtx.entryClass]?.fields[key]?.defaultValue : undefined;
+              const knownValue = modelCtx.knownValues.find((kv) => kv.value === rawValue);
+              if ((implDefault && implDefault === rawValue) || knownValue) {
+                const valueOffset = info.text.indexOf(rawValue, info.valueRange.start.character);
+                if (valueOffset >= 0) {
+                  builder.push(
+                    new vscode.Range(info.line, valueOffset, info.line, valueOffset + rawValue.length),
+                    "enumMember"
+                  );
+                }
+              }
+            }
+          }
+
+          return builder.build();
+        }
+      },
+      SEMANTIC_LEGEND
+    ),
     vscode.languages.registerCompletionItemProvider(
       { language: "yaml", scheme: "file" },
       {
@@ -324,10 +571,10 @@ function activate(context) {
             return [];
           }
           const modelCtx = await buildModelContext(document);
+          const info = structureInfoAt(document, position);
           const line = document.lineAt(position.line).text;
           const leading = line.match(/^\s*/)?.[0] || "";
           const lineToCursor = line.slice(0, position.character);
-          const insideSteps = document.getText(new vscode.Range(new vscode.Position(0, 0), position)).includes("\nsteps:");
           const items = [];
 
           if (!lineToCursor.includes(":")) {
@@ -343,7 +590,7 @@ function activate(context) {
               }
               return items;
             }
-            if (insideSteps && (leading.length === 2 || leading.length === 4 || lineToCursor.trimStart().startsWith("- "))) {
+            if (info?.inSteps && !info?.inVars && leading.length > 0) {
               for (const k of DOCKPIPE_STEP_KEYS) {
                 const it = new vscode.CompletionItem(k, vscode.CompletionItemKind.Property);
                 it.insertText = `${k}: `;
@@ -376,7 +623,9 @@ function activate(context) {
                   it.detail = `${fi.type || "string"} (from ${iface.name})`;
                   if (fi.doc) it.documentation = fi.doc;
                   const implDefault = modelCtx.entryClass ? modelCtx.types[modelCtx.entryClass]?.fields[fieldName]?.defaultValue : undefined;
-                  if (implDefault) it.documentation = new vscode.MarkdownString(`${fi.doc || ""}\n\nDefault: \`${implDefault}\``);
+                  if (implDefault) {
+                    it.documentation = new vscode.MarkdownString(`${fi.doc || ""}\n\nDefault: \`${implDefault}\``);
+                  }
                   items.push(it);
                 }
                 return items;
@@ -386,7 +635,7 @@ function activate(context) {
               const implDefault = modelCtx.entryClass ? modelCtx.types[modelCtx.entryClass]?.fields[key]?.defaultValue : undefined;
               if (implDefault) {
                 const it = new vscode.CompletionItem(implDefault, vscode.CompletionItemKind.Value);
-                it.insertText = `'${implDefault}'`;
+                it.insertText = quoted(implDefault);
                 it.detail = `${key} default from ${modelCtx.entryClass}`;
                 items.push(it);
               }
@@ -395,7 +644,7 @@ function activate(context) {
                 const valueN = kv.name.toLowerCase().replace(/[^a-z0-9]/g, "");
                 const score = keyN && valueN.includes(keyN) ? "0" : "1";
                 const it = new vscode.CompletionItem(kv.value, vscode.CompletionItemKind.EnumMember);
-                it.insertText = `'${kv.value}'`;
+                it.insertText = quoted(kv.value);
                 it.detail = kv.name;
                 it.sortText = `${score}-${kv.name}`;
                 if (kv.doc) it.documentation = kv.doc;
@@ -418,13 +667,41 @@ function activate(context) {
       {
         async provideHover(document, position) {
           if (!isDockpipeWorkflowFile(document)) return null;
-          const varsInfo = findVarsBlockInfo(document, position);
-          if (!varsInfo) return null;
+          const info = structureInfoAt(document, position);
           const range = wordRange(document, position);
           if (!range) return null;
           const word = document.getText(range);
           if (!word) return null;
+
+          if (info?.kind === "topLevelKey") {
+            return hoverForWorkflowKey(word, TOP_LEVEL_KEY_DETAILS, range);
+          }
+
+          if (info?.kind === "stepKey") {
+            return hoverForWorkflowKey(word, STEP_KEY_DETAILS, range);
+          }
+
           const modelCtx = await buildModelContext(document);
+
+          if (info?.kind === "typeEntry") {
+            const match = findTypeEntryModel(modelCtx, info.scalarListValue);
+            if (match?.entry) {
+              const md = new vscode.MarkdownString();
+              md.appendMarkdown(`**${info.scalarListValue}**`);
+              md.appendMarkdown(`\n\nEntry type: \`${match.entry.kind} ${match.entry.name}\``);
+              if (match.entry.doc) md.appendMarkdown(`\n\n${match.entry.doc}`);
+              if (match.implementation) {
+                md.appendMarkdown(`\n\nImplementation: \`${match.implementation.name}\``);
+              } else if (modelCtx.entryClass) {
+                md.appendMarkdown(`\n\nImplementation: \`${modelCtx.entryClass}\``);
+              }
+              return new vscode.Hover(md, range);
+            }
+          }
+
+          const varsInfo = findVarsBlockInfo(document, position);
+          if (!varsInfo) return null;
+
           const iface = modelCtx.entryInterface ? modelCtx.types[modelCtx.entryInterface] : undefined;
           const impl = modelCtx.entryClass ? modelCtx.types[modelCtx.entryClass] : undefined;
           const fi = iface?.fields[word];
@@ -437,6 +714,7 @@ function activate(context) {
             if (def) md.appendMarkdown(`\n\nDefault: \`${def}\``);
             return new vscode.Hover(md, range);
           }
+
           const kv = modelCtx.knownValues.find((k) => k.value === word || k.name.endsWith("." + word));
           if (kv) {
             const md = new vscode.MarkdownString();
@@ -445,6 +723,22 @@ function activate(context) {
             if (kv.doc) md.appendMarkdown(`\n\n${kv.doc}`);
             return new vscode.Hover(md, range);
           }
+
+          const lineKey = info?.kind === "varKey" ? info.key : null;
+          if (lineKey) {
+            const field = iface?.fields[lineKey];
+            if (field) {
+              const md = new vscode.MarkdownString();
+              md.appendMarkdown(`**${lineKey}**`);
+              md.appendMarkdown(`\n\nType: \`${field.type || "string"}\``);
+              if (field.doc) md.appendMarkdown(`\n\n${field.doc}`);
+              const def = impl?.fields[lineKey]?.defaultValue;
+              if (def) md.appendMarkdown(`\n\nModel default: \`${def}\``);
+              md.appendMarkdown(`\n\nCurrent value: \`${word}\``);
+              return new vscode.Hover(md, range);
+            }
+          }
+
           return null;
         }
       }
