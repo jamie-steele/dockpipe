@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# One-time: nest flat .staging/workflows dirs under dockpipe/packages/*/resolvers and dockpipe/storage/....
-# Resolver packs: .staging/workflows/dockpipe/packages/<group>/resolvers/<name>/ (see docs/package-model.md).
-# This repo gitignores .staging/ — use plain mv (not git mv). Run from repo root.
+# One-time migration: nest flat .staging/workflows dirs under dockpipe/packages/*/resolvers (legacy layout).
+# This repo gitignores .staging/ — use plain mv (not git mv). Run from repo root:
+#   bash src/scripts/dockpipe/reloc-staging-workflows.sh
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT/.staging/workflows"
 
 if [[ ! -d dockpipe-agents ]] && [[ ! -d dockpipe-ide ]] && [[ ! -d dockpipe.secrets.1password ]] && [[ ! -d dockpipe.storage.cloudflare.r2 ]]; then

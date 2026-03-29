@@ -221,7 +221,7 @@ func ParseFlags(repoRoot string, argv []string) ([]string, *CliOpts, error) {
 				return nil, nil, fmt.Errorf("unknown option %s", a)
 			}
 			if a == "build" || a == "clean" || a == "rebuild" {
-				return nil, nil, fmt.Errorf("%q is a subcommand in current dockpipe — your binary is outdated (run: make build && make install, or use ./bin/dockpipe from the repo)", a)
+				return nil, nil, fmt.Errorf("%q is a subcommand in current dockpipe — your binary is outdated (run: make build && make install, or use ./src/bin/dockpipe from the repo)", a)
 			}
 			return nil, nil, fmt.Errorf("unexpected argument %q (expected options before --)", a)
 		}

@@ -23,7 +23,7 @@ release/packaging/build/
 *.deb
 src/bin/dockpipe.bin
 src/bin/dockpipe.exe
-# ad-hoc go build -o in repo root (prefer: make build-windows → bin/dockpipe.exe)
+# ad-hoc go build -o in repo root (prefer: make build-windows → src/bin/dockpipe.exe)
 /dockpipe.exe
 msi-dist/
 *.wixobj
