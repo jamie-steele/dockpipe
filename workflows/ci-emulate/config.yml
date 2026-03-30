@@ -1,0 +1,13 @@
+name: ci-emulate
+description: >-
+  Host-only quick emulator for the repo's GitHub CI scan and Go test steps. Uses
+  review-pipeline scripts so maintainers can reproduce failures locally without
+  recursing into src/scripts/ci-local.sh.
+
+docker_preflight: false
+
+steps:
+  - id: emulate
+    skip_container: true
+    run:
+      - scripts/review-pipeline/emulate-ci-host.sh

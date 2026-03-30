@@ -1,7 +1,7 @@
 package application
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io/fs"
@@ -148,7 +148,7 @@ func materializePipeLangFile(path, root string, force bool, outBase string) (boo
 }
 
 func rootHashToken(root string) string {
-	sum := sha1.Sum([]byte(filepath.Clean(root)))
+	sum := sha256.Sum256([]byte(filepath.Clean(root)))
 	return hex.EncodeToString(sum[:8])
 }
 

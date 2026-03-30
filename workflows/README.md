@@ -5,6 +5,7 @@ This directory is the **canonical** place for **this repository’s** DockPipe w
 | Workflow | Role |
 |----------|------|
 | **`test`** | Multi-step Docker chain: go test → vet → govulncheck → gosec → security brief (mirrors the spirit of `.github/workflows/ci.yml`’s DockPipe workflow step). |
+| **`ci-emulate`** | Host-only quick emulator for the GitHub scan + Go test steps; useful for reproducing CI failures locally. |
 | **`dockpipe-repo-quality`** | Host-only: lists **`.dockpipe/ci-analysis/`** after you run **`bash src/scripts/ci-local.sh`** (or the govulncheck + gosec + normalize steps from CI). |
 | **`codex-pav`** / **`codex-security`** | Optional Codex resolver demos (`OPENAI_API_KEY`; CI gated by `DOCKPIPE_CI_CODEX`). |
 | **`review-pipeline`** | Review prep scripts only (`steps: []`); other workflows reference **`scripts/review-pipeline/…`**. Used by demo / **`test-demo`**-style flows (`make demo-record`). |
