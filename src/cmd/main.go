@@ -86,13 +86,15 @@ func isInteractiveSession(stdin, stdout *os.File) bool {
 	if stdin == nil || stdout == nil {
 		return false
 	}
-	const maxInt = int(^uint(0) >> 1)
-	inFD := stdin.Fd()
-	outFD := stdout.Fd()
-	if inFD > uintptr(maxInt) || outFD > uintptr(maxInt) {
+	// We only treat the real process stdio handles as interactive here.
+	// main() passes os.Stdin/os.Stdout, so using the well-known fds avoids
+	// uintptr->int conversions that gosec flags.
+	if stdin != os.Stdin || stdout != os.Stdout {
 		return false
 	}
-	return isTerminalFn(int(inFD)) && isTerminalFn(int(outFD))
+	const stdinFD = 0
+	const stdoutFD = 1
+	return isTerminalFn(stdinFD) && isTerminalFn(stdoutFD)
 }
 
 func promptGitignore(in io.Reader, out io.Writer) (bool, error) {
