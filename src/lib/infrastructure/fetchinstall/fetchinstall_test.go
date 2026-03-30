@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -141,7 +142,7 @@ func TestInstallTemplatesCoreEndToEnd(t *testing.T) {
 		w.Header().Set("Content-Type", "application/gzip")
 		_, _ = w.Write(payload)
 	})
-	srv := httptest.NewServer(mux)
+	srv := newIPv4TestServer(t, mux)
 	t.Cleanup(srv.Close)
 
 	dir := t.TempDir()
@@ -219,4 +220,16 @@ func TestVerifySHA256(t *testing.T) {
 	if err := verifySHA256([]byte("y"), h, "u"); err == nil {
 		t.Fatal("expected mismatch")
 	}
+}
+
+func newIPv4TestServer(t *testing.T, h http.Handler) *httptest.Server {
+	t.Helper()
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewUnstartedServer(h)
+	srv.Listener = ln
+	srv.Start()
+	return srv
 }

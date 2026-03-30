@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -76,7 +77,7 @@ func TestAPIKeyGateUnauthorized(t *testing.T) {
 	t.Parallel()
 	s := NewServer("1")
 	h := s.jsonRPCHandler(io.Discard)
-	srv := httptest.NewServer(apiKeyGate("secret", h))
+	srv := newIPv4TestServer(t, apiKeyGate("secret", h))
 	defer srv.Close()
 
 	resp, err := http.Post(srv.URL, "application/json", bytes.NewReader([]byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`)))
@@ -93,7 +94,7 @@ func TestAPIKeyGateOK(t *testing.T) {
 	t.Parallel()
 	s := NewServer("1")
 	h := s.jsonRPCHandler(io.Discard)
-	srv := httptest.NewServer(apiKeyGate("secret", h))
+	srv := newIPv4TestServer(t, apiKeyGate("secret", h))
 	defer srv.Close()
 
 	req, err := http.NewRequest(http.MethodPost, srv.URL, bytes.NewReader([]byte(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}`)))
@@ -125,7 +126,7 @@ func TestHTTPKeyTierGateReadonlyVsExec(t *testing.T) {
 		{key: "ex", tier: TierExec},
 	}
 	h := httpKeyTierGate(entries, s.jsonRPCHandler(io.Discard))
-	srv := httptest.NewServer(h)
+	srv := newIPv4TestServer(t, h)
 	defer srv.Close()
 
 	body := []byte(`{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}`)
@@ -178,4 +179,16 @@ func TestHTTPKeyTierGateReadonlyVsExec(t *testing.T) {
 	if len(wrapEX.Result.Tools) != 6 {
 		t.Fatalf("exec key: want 6 tools, got %d", len(wrapEX.Result.Tools))
 	}
+}
+
+func newIPv4TestServer(t *testing.T, h http.Handler) *httptest.Server {
+	t.Helper()
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewUnstartedServer(h)
+	srv.Listener = ln
+	srv.Start()
+	return srv
 }
