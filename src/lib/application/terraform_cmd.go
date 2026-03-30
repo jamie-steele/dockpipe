@@ -1,6 +1,7 @@
 package application
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -212,7 +213,7 @@ func mergeTerraformCLIIntoEnv(env map[string]string, opts *CliOpts) error {
 	return nil
 }
 
-func withTerraformRunEnv(commands string, dryRun, noAutoApprove bool, fn func() error) error {
+func withTerraformRunEnv(commands string, dryRun, noAutoApprove bool, fn func() error) (err error) {
 	opts := &CliOpts{TfCommands: commands, TfDryRun: dryRun, TfNoAutoApprove: noAutoApprove}
 	o, err := applyTerraformCLIFromOpts(opts)
 	if err != nil {
@@ -231,19 +232,30 @@ func withTerraformRunEnv(commands string, dryRun, noAutoApprove bool, fn func() 
 			val string
 			had bool
 		}{prev, had}
-		os.Setenv(k, v)
+		if err := os.Setenv(k, v); err != nil {
+			return fmt.Errorf("set %s: %w", k, err)
+		}
 	}
 	defer func() {
+		var restoreErr error
 		for k, s := range old {
 			if s.had {
-				os.Setenv(k, s.val)
+				if e := os.Setenv(k, s.val); e != nil {
+					restoreErr = errors.Join(restoreErr, fmt.Errorf("restore %s: %w", k, e))
+				}
 			} else {
-				os.Unsetenv(k)
+				if e := os.Unsetenv(k); e != nil {
+					restoreErr = errors.Join(restoreErr, fmt.Errorf("unset %s: %w", k, e))
+				}
 			}
+		}
+		if restoreErr != nil {
+			err = errors.Join(err, restoreErr)
 		}
 	}()
 	if cmd := o["DOCKPIPE_TF_COMMANDS"]; cmd != "" {
 		fmt.Fprintf(os.Stderr, "[dockpipe] terraform: DOCKPIPE_TF_COMMANDS=%s\n", cmd)
 	}
-	return fn()
+	err = fn()
+	return err
 }

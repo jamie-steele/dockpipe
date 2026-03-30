@@ -86,7 +86,13 @@ func isInteractiveSession(stdin, stdout *os.File) bool {
 	if stdin == nil || stdout == nil {
 		return false
 	}
-	return isTerminalFn(int(stdin.Fd())) && isTerminalFn(int(stdout.Fd()))
+	const maxInt = int(^uint(0) >> 1)
+	inFD := stdin.Fd()
+	outFD := stdout.Fd()
+	if inFD > uintptr(maxInt) || outFD > uintptr(maxInt) {
+		return false
+	}
+	return isTerminalFn(int(inFD)) && isTerminalFn(int(outFD))
 }
 
 func promptGitignore(in io.Reader, out io.Writer) (bool, error) {
