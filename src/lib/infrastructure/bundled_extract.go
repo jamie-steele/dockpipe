@@ -77,27 +77,25 @@ func embeddedBundledWorkflowsNestedConfigExists(name string) bool {
 
 func embeddedStagingWorkflowConfigExists(name string) bool {
 	found := false
-	for _, root := range embeddedPackageRootsPrefixes {
-		_ = fs.WalkDir(dockpipe.BundledFS, root, func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				if os.IsNotExist(err) {
-					return nil
-				}
-				return err
-			}
-			if d.IsDir() || d.Name() != "config.yml" {
+	_ = fs.WalkDir(dockpipe.BundledFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
 				return nil
 			}
-			if pathpkg.Base(pathpkg.Dir(path)) != name {
-				return nil
-			}
-			found = true
-			return fs.SkipAll
-		})
-		if found {
-			break
+			return err
 		}
-	}
+		if !embeddedPathHasPackageRootPrefix(path) {
+			return nil
+		}
+		if d.IsDir() || d.Name() != "config.yml" {
+			return nil
+		}
+		if pathpkg.Base(pathpkg.Dir(path)) != name {
+			return nil
+		}
+		found = true
+		return fs.SkipAll
+	})
 	return found
 }
 
@@ -204,36 +202,55 @@ var (
 func initStagingEmbedRoots() {
 	stagingEmbedRootsOnce.Do(func() {
 		seen := map[string]struct{}{}
-		for _, rootPfx := range embeddedPackageRootsPrefixes {
-			_ = fs.WalkDir(dockpipe.BundledFS, rootPfx, func(path string, d fs.DirEntry, err error) error {
-				if err != nil {
-					if os.IsNotExist(err) {
-						return nil
-					}
-					return err
-				}
-				if d.IsDir() || (d.Name() != "config.yml" && d.Name() != "profile") {
+		_ = fs.WalkDir(dockpipe.BundledFS, ".", func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				if os.IsNotExist(err) {
 					return nil
 				}
-				rel := strings.TrimPrefix(path, rootPfx)
-				rel = strings.TrimPrefix(rel, "/")
-				parent := pathpkg.Dir(rel)
-				if parent == "." || parent == "" {
-					return nil
-				}
-				name := pathpkg.Base(parent)
-				if _, ok := seen[parent]; ok {
-					return nil
-				}
-				seen[parent] = struct{}{}
-				stagingEmbedRoots = append(stagingEmbedRoots, embedWorkflowRoot{prefix: parent, name: name})
+				return err
+			}
+			if !embeddedPathHasPackageRootPrefix(path) {
 				return nil
-			})
-		}
+			}
+			if d.IsDir() || (d.Name() != "config.yml" && d.Name() != "profile") {
+				return nil
+			}
+			rootPfx, ok := embeddedPackageRootPrefixForPath(path)
+			if !ok {
+				return nil
+			}
+			rel := strings.TrimPrefix(path, rootPfx)
+			rel = strings.TrimPrefix(rel, "/")
+			parent := pathpkg.Dir(rel)
+			if parent == "." || parent == "" {
+				return nil
+			}
+			name := pathpkg.Base(parent)
+			if _, ok := seen[parent]; ok {
+				return nil
+			}
+			seen[parent] = struct{}{}
+			stagingEmbedRoots = append(stagingEmbedRoots, embedWorkflowRoot{prefix: parent, name: name})
+			return nil
+		})
 		sort.Slice(stagingEmbedRoots, func(i, j int) bool {
 			return len(stagingEmbedRoots[i].prefix) > len(stagingEmbedRoots[j].prefix)
 		})
 	})
+}
+
+func embeddedPathHasPackageRootPrefix(path string) bool {
+	_, ok := embeddedPackageRootPrefixForPath(path)
+	return ok
+}
+
+func embeddedPackageRootPrefixForPath(path string) (string, bool) {
+	for _, pfx := range embeddedPackageRootsPrefixes {
+		if path == pfx || strings.HasPrefix(path, pfx+"/") {
+			return pfx, true
+		}
+	}
+	return "", false
 }
 
 // mapEmbeddedStagingWorkflowRel maps paths under embeddedPackageRootsPrefixes to bundle/workflows/<workflow>/… using

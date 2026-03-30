@@ -38,6 +38,7 @@ if ! have jq; then
 fi
 
 step "govulncheck + gosec + DorkPipe signal bundle (bin/.dockpipe/ci-analysis/)"
+rm -rf bin/.dockpipe/ci-raw bin/.dockpipe/ci-analysis
 mkdir -p bin/.dockpipe/ci-raw
 set +e
 govulncheck -format json ./... > bin/.dockpipe/ci-raw/govulncheck.json
