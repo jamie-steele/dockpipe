@@ -4,6 +4,9 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DOCKPIPE="$REPO_ROOT/src/bin/dockpipe"
+source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
+
+require_agent_dev_template "$REPO_ROOT"
 
 # Node is available (agent-dev is Node-based)
 out=$("$DOCKPIPE" --no-data --template agent-dev -- node -e "console.log('node ok')")

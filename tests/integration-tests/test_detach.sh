@@ -4,6 +4,9 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 DOCKPIPE="$REPO_ROOT/src/bin/dockpipe"
+source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
+
+require_agent_dev_template "$REPO_ROOT"
 
 # Run detached: sleep 2 so the container stays up briefly; we capture the ID
 # (stdout may include image digest from build; container ID is the last line)
