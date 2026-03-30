@@ -239,6 +239,7 @@ type workflowFile struct {
 	Runtimes        []string          `yaml:"runtimes,omitempty"`
 	Strategy        string            `yaml:"strategy,omitempty"`
 	Strategies      []string          `yaml:"strategies,omitempty"`
+	Vault           string            `yaml:"vault,omitempty"`
 	DockerPreflight *bool             `yaml:"docker_preflight,omitempty"`
 	CompileHooks    []string          `yaml:"compile_hooks,omitempty"`
 	Vars            map[string]string `yaml:"vars"`

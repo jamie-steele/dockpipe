@@ -258,6 +258,23 @@ compile_hooks:
 	}
 }
 
+func TestParseWorkflowYAMLVault(t *testing.T) {
+	y := `name: demo
+vault: none
+run: echo hi
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Vault != "none" {
+		t.Fatalf("vault: %q", w.Vault)
+	}
+	if err := ValidateWorkflowVaultField(w); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestValidateWorkflowNamespaceFieldReserved(t *testing.T) {
 	if err := ValidateWorkflowNamespaceField(&Workflow{Namespace: "dockpipe"}); err == nil {
 		t.Fatal("expected error")
