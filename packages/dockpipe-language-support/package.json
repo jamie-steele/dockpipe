@@ -23,7 +23,9 @@
   ],
   "activationEvents": [
     "onLanguage:pipelang",
-    "onLanguage:yaml"
+    "onLanguage:yaml",
+    "onLanguage:json",
+    "onLanguage:jsonc"
   ],
   "files": [
     "extension.js",

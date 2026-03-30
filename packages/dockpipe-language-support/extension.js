@@ -73,6 +73,91 @@ const STEP_KEY_DETAILS = {
   is_blocking: "When false, allows async grouping with surrounding steps."
 };
 
+const PACKAGE_MANIFEST_KEYS = [
+  "schema",
+  "kind",
+  "name",
+  "version",
+  "title",
+  "description",
+  "author",
+  "website",
+  "license",
+  "provider",
+  "capability",
+  "primitive",
+  "namespace",
+  "tags",
+  "keywords",
+  "min_dockpipe_version",
+  "repository",
+  "provides",
+  "requires_capabilities",
+  "requires_primitives",
+  "requires_resolvers",
+  "includes_resolvers",
+  "depends",
+  "allow_clone",
+  "distribution"
+];
+
+const PACKAGE_MANIFEST_KEY_DETAILS = {
+  schema: "Manifest schema version.",
+  kind: "Package kind hint such as package, workflow, resolver, core, assets, or bundle.",
+  name: "Stable package name used in manifests, compile output, and dependencies.",
+  version: "Package version string.",
+  title: "Human-friendly package title.",
+  description: "Long-form package summary shown in listings and docs.",
+  author: "Package author or maintainer label.",
+  website: "Optional project or docs URL.",
+  license: "Package license identifier.",
+  provider: "Optional short vendor or platform id such as cloudflare or github.",
+  capability: "Optional dotted capability id provided by this package, such as cli.codex.",
+  primitive: "Deprecated alias for capability.",
+  namespace: "Optional author or org namespace used for compiled artifacts and lookup preference.",
+  tags: "Search and filtering tags.",
+  keywords: "Additional search keywords.",
+  min_dockpipe_version: "Optional minimum DockPipe version constraint.",
+  repository: "Source repository URL.",
+  provides: "Additional named capabilities or features exposed by this package.",
+  requires_capabilities: "Capabilities a workflow package expects from its chosen resolver.",
+  requires_primitives: "Deprecated alias for requires_capabilities.",
+  requires_resolvers: "Resolver profile names suggested or required by a workflow package.",
+  includes_resolvers: "Resolver names included under a kind: package umbrella tree.",
+  depends: "Other package names this package expects in the compiled store.",
+  allow_clone: "When true, dockpipe clone may copy this compiled package back into an authoring tree.",
+  distribution: "Human/tooling hint such as source or binary."
+};
+
+const DOCKPIPE_PROJECT_TOP_LEVEL_KEYS = ["schema", "compile", "packages", "secrets"];
+
+const DOCKPIPE_PROJECT_TOP_LEVEL_KEY_DETAILS = {
+  schema: "Project config schema version.",
+  compile: "Compile roots and related project-level source discovery settings.",
+  packages: "Defaults for package namespace and tarball lookup behavior.",
+  secrets: "Project-level secret template and vault defaults."
+};
+
+const DOCKPIPE_PROJECT_SECTION_KEY_DETAILS = {
+  compile: {
+    core_from: "Optional override for the core slice source passed to compile core.",
+    workflows: "Repo-relative or absolute roots scanned for workflows and resolver trees.",
+    resolvers: "Deprecated extra resolver roots; merged into effective workflow roots when present.",
+    bundles: "Deprecated extra bundle roots; merged into compile.workflows."
+  },
+  secrets: {
+    vault_template: "Preferred env template file containing secret references such as op:// entries.",
+    op_inject_template: "Legacy alias for vault_template.",
+    vault: "Default vault mode used when workflow YAML omits vault.",
+    notes: "Optional maintainer-facing notes shown by tooling such as dockpipe doctor."
+  },
+  packages: {
+    tarball_dir: "Directory containing built dockpipe-workflow-*.tar.gz archives for local resolution.",
+    namespace: "Default package namespace when manifests or workflows omit one.",
+    registry_urls: "Optional future package registry base URLs."
+  }
+};
+
 const VAR_KEY_FALLBACK_DETAIL = "Workflow variable override. This key exports an environment variable for the workflow or step.";
 
 const CONTAINER_KEYS = new Set([
@@ -92,7 +177,9 @@ const SEMANTIC_LEGEND = new vscode.SemanticTokensLegend([
   "property",
   "variable",
   "type",
-  "enumMember"
+  "enumMember",
+  "string",
+  "number"
 ]);
 
 /**
@@ -111,6 +198,22 @@ function isDockpipeWorkflowFile(doc) {
   return text.includes("steps:") || text.includes("vars:") || text.includes("name:");
 }
 
+/** @param {vscode.TextDocument} doc */
+function isDockpipePackageManifestFile(doc) {
+  const name = doc.fileName.toLowerCase();
+  if (!(name.endsWith("/package.yml") || name.endsWith("\\package.yml") || name.endsWith("/package.yaml") || name.endsWith("\\package.yaml"))) {
+    return false;
+  }
+  const text = doc.getText();
+  return text.includes("schema:") && text.includes("name:");
+}
+
+/** @param {vscode.TextDocument} doc */
+function isDockpipeProjectConfigFile(doc) {
+  const name = doc.fileName.toLowerCase();
+  return name.endsWith("/dockpipe.config.json") || name.endsWith("\\dockpipe.config.json");
+}
+
 /**
  * @param {vscode.TextDocument} doc
  * @returns {Set<string>}
@@ -121,6 +224,16 @@ function existingTopLevelKeys(doc) {
   for (const line of lines) {
     const m = line.match(/^([A-Za-z_][A-Za-z0-9_-]*)\s*:/);
     if (m) out.add(m[1]);
+  }
+  return out;
+}
+
+function existingJsonObjectKeys(document, parents = []) {
+  const out = new Set();
+  for (const info of analyzeJsonStructure(document)) {
+    if (info.key && JSON.stringify(info.parents) === JSON.stringify(parents)) {
+      out.add(info.key);
+    }
   }
   return out;
 }
@@ -461,6 +574,100 @@ function analyzeYamlStructure(document) {
   return infos;
 }
 
+function trimmedValueRange(info) {
+  if (!info?.valueRange || typeof info.valueText !== "string") return null;
+  const leading = info.valueText.match(/^\s*/)?.[0].length || 0;
+  const trimmed = info.valueText.trim();
+  if (!trimmed) return null;
+  const start = info.valueRange.start.character + leading;
+  return new vscode.Range(info.line, start, info.line, start + trimmed.length);
+}
+
+function packageManifestValueTokenType(key, value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  if (key === "schema" && /^\d+$/.test(raw)) {
+    return "number";
+  }
+  return "string";
+}
+
+function packageManifestListTokenType(parentKey) {
+  if (!parentKey) return null;
+  if (parentKey === "tags" || parentKey === "keywords") {
+    return "enumMember";
+  }
+  return "string";
+}
+
+function parseJsonLine(text) {
+  const keyMatch = text.match(/^(\s*)"([^"]+)"\s*:\s*(.*)$/);
+  if (!keyMatch) {
+    return { indent: leadingSpaces(text) };
+  }
+  const indent = keyMatch[1].length;
+  const key = keyMatch[2];
+  const keyStart = text.indexOf(`"${key}"`) + 1;
+  const keyEnd = keyStart + key.length;
+  const valueText = keyMatch[3] || "";
+  const colonIndex = text.indexOf(":", keyEnd);
+  return {
+    indent,
+    key,
+    keyStart,
+    keyEnd,
+    valueStart: colonIndex >= 0 ? colonIndex + 1 : -1,
+    valueText
+  };
+}
+
+function analyzeJsonStructure(document) {
+  const infos = [];
+  const stack = [];
+
+  for (let lineNo = 0; lineNo < document.lineCount; lineNo++) {
+    const text = document.lineAt(lineNo).text;
+    const parsed = parseJsonLine(text);
+    const trimmed = text.trim();
+
+    while (stack.length && parsed.indent <= stack[stack.length - 1].indent) {
+      stack.pop();
+    }
+
+    const parents = stack.map((entry) => entry.key);
+    /** @type {any} */
+    const info = {
+      line: lineNo,
+      text,
+      indent: parsed.indent,
+      trimmed,
+      parents
+    };
+
+    if (parsed.key) {
+      info.key = parsed.key;
+      info.keyRange = new vscode.Range(lineNo, parsed.keyStart, lineNo, parsed.keyEnd);
+      info.valueText = parsed.valueText;
+      info.valueRange = parsed.valueStart >= 0
+        ? new vscode.Range(lineNo, parsed.valueStart, lineNo, text.length)
+        : null;
+      info.kind = parents.length === 0 ? "topLevelKey" : "key";
+
+      if (/\{\s*,?\s*$/.test(parsed.valueText)) {
+        stack.push({ indent: parsed.indent, key: parsed.key });
+      }
+    }
+
+    infos.push(info);
+  }
+
+  return infos;
+}
+
+function jsonStructureInfoAt(document, position) {
+  return analyzeJsonStructure(document)[position.line];
+}
+
 function structureInfoAt(document, position) {
   return analyzeYamlStructure(document)[position.line];
 }
@@ -503,7 +710,43 @@ function hoverForWorkflowKey(word, docs, range) {
   const md = new vscode.MarkdownString();
   md.appendMarkdown(`**${word}**`);
   md.appendMarkdown(`\n\n${doc}`);
-  return new vscode.Hover(md, range);
+  return new vscode.Hover(md);
+}
+
+function hoverForJsonKey(word, docs, range, sectionName) {
+  const doc = docs?.[word];
+  if (!doc) return null;
+  const md = new vscode.MarkdownString();
+  md.appendMarkdown(`**${word}**`);
+  if (sectionName) {
+    md.appendMarkdown(`\n\nSection: \`${sectionName}\``);
+  }
+  md.appendMarkdown(`\n\n${doc}`);
+  return new vscode.Hover(md);
+}
+
+function hoverForVarsContainer(range, modelCtx, fallbackDoc) {
+  const iface = modelCtx.entryInterface ? modelCtx.types[modelCtx.entryInterface] : undefined;
+  const md = new vscode.MarkdownString();
+  md.appendMarkdown("**vars**");
+  md.appendMarkdown(`\n\n${fallbackDoc || TOP_LEVEL_KEY_DETAILS.vars}`);
+  if (!iface) {
+    return new vscode.Hover(md);
+  }
+
+  const names = Object.keys(iface.fields);
+  if (names.length === 0) {
+    return new vscode.Hover(md);
+  }
+
+  md.appendMarkdown("\n\nPossible variables:");
+  for (const name of names) {
+    const field = iface.fields[name];
+    const exportName = exportedVarName(name);
+    const detail = field?.doc ? ` - ${field.doc}` : "";
+    md.appendMarkdown(`\n- \`${exportName}\`${detail}`);
+  }
+  return new vscode.Hover(md);
 }
 
 function yamlScalarValue(text) {
@@ -582,7 +825,7 @@ function hoverForModelField(fieldName, fieldInfo, range, currentValue) {
   if (fieldInfo.doc) md.appendMarkdown(`\n\n${fieldInfo.doc}`);
   if (fieldInfo.defaultValue) md.appendMarkdown(`\n\nModel default: \`${fieldInfo.defaultValue}\``);
   if (currentValue !== undefined) md.appendMarkdown(`\n\nCurrent value: \`${currentValue}\``);
-  return new vscode.Hover(md, range);
+  return new vscode.Hover(md);
 }
 
 function hoverForKnownValue(fieldName, rawValue, fieldInfo, knownValue, range) {
@@ -596,7 +839,7 @@ function hoverForKnownValue(fieldName, rawValue, fieldInfo, knownValue, range) {
     md.appendMarkdown(`\n\nKnown value: \`${knownValue.name}\``);
     if (knownValue.doc) md.appendMarkdown(`\n\n${knownValue.doc}`);
   }
-  return new vscode.Hover(md, range);
+  return new vscode.Hover(md);
 }
 
 function findTypeEntryModel(modelCtx, entry) {
@@ -643,12 +886,37 @@ function activate(context) {
       { language: "yaml", scheme: "file" },
       {
         async provideDocumentSemanticTokens(document) {
-          if (!isDockpipeWorkflowFile(document)) {
+          if (!isDockpipeWorkflowFile(document) && !isDockpipePackageManifestFile(document)) {
             return null;
           }
-          const modelCtx = await buildModelContext(document);
           const infos = analyzeYamlStructure(document);
           const builder = new vscode.SemanticTokensBuilder(SEMANTIC_LEGEND);
+
+          if (isDockpipePackageManifestFile(document)) {
+            for (const info of infos) {
+              if (info.keyRange && info.kind === "topLevelKey") {
+                builder.push(info.keyRange, "property");
+              }
+
+              if (info.key && info.kind === "topLevelKey") {
+                const valueRange = trimmedValueRange(info);
+                const tokenType = packageManifestValueTokenType(info.key, info.valueText);
+                if (valueRange && tokenType) {
+                  builder.push(valueRange, tokenType);
+                }
+              }
+
+              if (info.scalarRange) {
+                const tokenType = packageManifestListTokenType(info.parents?.[info.parents.length - 1]);
+                if (tokenType) {
+                  builder.push(info.scalarRange, tokenType);
+                }
+              }
+            }
+            return builder.build();
+          }
+
+          const modelCtx = await buildModelContext(document);
 
           for (const info of infos) {
             if (info.keyRange) {
@@ -792,21 +1060,37 @@ function activate(context) {
       { language: "yaml", scheme: "file" },
       {
         async provideHover(document, position) {
+          if (isDockpipePackageManifestFile(document)) {
+            const target = hoverTargetAt(document, position);
+            if (!target) return null;
+            const { info, range, word } = target;
+            if (info?.kind === "topLevelKey") {
+              return hoverForWorkflowKey(word, PACKAGE_MANIFEST_KEY_DETAILS, range);
+            }
+            return null;
+          }
+
           if (!isDockpipeWorkflowFile(document)) return null;
           const target = hoverTargetAt(document, position);
           if (!target) return null;
           const { info, range, word } = target;
           if (!word || !range) return null;
 
+          const modelCtx = await buildModelContext(document);
+
           if (info?.kind === "topLevelKey") {
+            if (word === "vars") {
+              return hoverForVarsContainer(range, modelCtx, TOP_LEVEL_KEY_DETAILS.vars);
+            }
             return hoverForWorkflowKey(word, TOP_LEVEL_KEY_DETAILS, range);
           }
 
           if (info?.kind === "stepKey") {
+            if (word === "vars") {
+              return hoverForVarsContainer(range, modelCtx, STEP_KEY_DETAILS.vars);
+            }
             return hoverForWorkflowKey(word, STEP_KEY_DETAILS, range);
           }
-
-          const modelCtx = await buildModelContext(document);
 
           if (info?.kind === "typeEntry") {
             const match = findTypeEntryModel(modelCtx, info.scalarListValue);
@@ -820,7 +1104,7 @@ function activate(context) {
               } else if (modelCtx.entryClass) {
                 md.appendMarkdown(`\n\nImplementation: \`${modelCtx.entryClass}\``);
               }
-              return new vscode.Hover(md, range);
+              return new vscode.Hover(md);
             }
           }
 
@@ -854,6 +1138,117 @@ function activate(context) {
           return null;
         }
       }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.languages.registerCompletionItemProvider(
+      { language: "yaml", scheme: "file" },
+      {
+        provideCompletionItems(document, position) {
+          if (!isDockpipePackageManifestFile(document)) {
+            return [];
+          }
+          const line = document.lineAt(position.line).text;
+          const lineToCursor = line.slice(0, position.character);
+          if (lineToCursor.includes(":")) {
+            return [];
+          }
+          const leading = line.match(/^\s*/)?.[0] || "";
+          if (leading.length !== 0) {
+            return [];
+          }
+          const seen = existingTopLevelKeys(document);
+          return PACKAGE_MANIFEST_KEYS
+            .filter((k) => !seen.has(k))
+            .map((k) => {
+              const it = new vscode.CompletionItem(k, vscode.CompletionItemKind.Property);
+              it.insertText = `${k}: `;
+              const doc = PACKAGE_MANIFEST_KEY_DETAILS[k];
+              if (doc) it.documentation = doc;
+              return it;
+            });
+        }
+      },
+      ":"
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.languages.registerHoverProvider(
+      [
+        { language: "json", scheme: "file" },
+        { language: "jsonc", scheme: "file" }
+      ],
+      {
+        provideHover(document, position) {
+          if (!isDockpipeProjectConfigFile(document)) return null;
+          const info = jsonStructureInfoAt(document, position);
+          if (!info?.keyRange || !rangeContains(info.keyRange, position) || !info.key) {
+            return null;
+          }
+          if (info.parents.length === 0) {
+            return hoverForJsonKey(info.key, DOCKPIPE_PROJECT_TOP_LEVEL_KEY_DETAILS, info.keyRange);
+          }
+          const sectionName = info.parents[0];
+          const docs = DOCKPIPE_PROJECT_SECTION_KEY_DETAILS[sectionName];
+          return hoverForJsonKey(info.key, docs, info.keyRange, sectionName);
+        }
+      }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.languages.registerCompletionItemProvider(
+      [
+        { language: "json", scheme: "file" },
+        { language: "jsonc", scheme: "file" }
+      ],
+      {
+        provideCompletionItems(document, position) {
+          if (!isDockpipeProjectConfigFile(document)) {
+            return [];
+          }
+          const info = jsonStructureInfoAt(document, position);
+          const line = document.lineAt(position.line).text;
+          const lineToCursor = line.slice(0, position.character);
+          if (lineToCursor.includes(":")) {
+            return [];
+          }
+
+          const items = [];
+          const parentKeys = info?.parents || [];
+          if (parentKeys.length === 0) {
+            const seen = existingJsonObjectKeys(document, []);
+            for (const key of DOCKPIPE_PROJECT_TOP_LEVEL_KEYS) {
+              if (seen.has(key)) continue;
+              const it = new vscode.CompletionItem(key, vscode.CompletionItemKind.Property);
+              it.insertText = `"${key}": `;
+              if (DOCKPIPE_PROJECT_TOP_LEVEL_KEY_DETAILS[key]) {
+                it.documentation = DOCKPIPE_PROJECT_TOP_LEVEL_KEY_DETAILS[key];
+              }
+              items.push(it);
+            }
+            return items;
+          }
+
+          const sectionName = parentKeys[0];
+          const docs = DOCKPIPE_PROJECT_SECTION_KEY_DETAILS[sectionName];
+          if (!docs) {
+            return items;
+          }
+          const seen = existingJsonObjectKeys(document, parentKeys);
+          for (const key of Object.keys(docs)) {
+            if (seen.has(key)) continue;
+            const it = new vscode.CompletionItem(key, vscode.CompletionItemKind.Property);
+            it.insertText = `"${key}": `;
+            it.documentation = docs[key];
+            items.push(it);
+          }
+          return items;
+        }
+      },
+      "\""
     )
   );
 

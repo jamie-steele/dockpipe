@@ -5,6 +5,8 @@ Language support for DockPipe authoring:
 - `.pipe` PipeLang syntax highlighting
 - PipeLang snippets and keyword completion
 - DockPipe `config.yml` IntelliSense for common workflow keys
+- DockPipe `package.yml` hover/docs and top-level key completion
+- DockPipe `dockpipe.config.json` hover/docs and section-key completion
 - Structure-aware YAML semantic coloring for workflow keys, step keys, `vars:` fields, and `types:` entries
 - YAML parse diagnostics for DockPipe workflow files (`config.yml` / `config.yaml`)
 - Hover/docs for top-level workflow keys, step keys, `types:` entries, and `vars:` fields from PipeLang XML summaries (`types:` entrypoint)
