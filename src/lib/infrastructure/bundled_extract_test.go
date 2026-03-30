@@ -22,7 +22,9 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	if !EmbeddedWorkflowConfigExists("init") {
 		t.Fatal("expected init")
 	}
-	for _, name := range []string{"vscode", "cursor-dev", "claude", "codex", "code-server"} {
+	// Optional third-party slices under .staging/ are gitignored in this repo, so CI/fresh clones
+	// should only assert tracked bundled maintainer packages here.
+	for _, name := range []string{"pipeon", "dorkpipe"} {
 		if !EmbeddedWorkflowConfigExists(name) {
 			t.Fatalf("expected resolver delegate %s", name)
 		}
@@ -50,7 +52,6 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 func TestMapEmbeddedToMaterializedPath(t *testing.T) {
 	t.Parallel()
 	pfx0 := embeddedPackageRootsPrefixes[0]
-	pfx1 := embeddedPackageRootsPrefixes[1]
 	cases := []struct {
 		in, want string
 	}{
@@ -61,7 +62,6 @@ func TestMapEmbeddedToMaterializedPath(t *testing.T) {
 		{EmbeddedTemplatesPrefix + "/workflows/run/config.yml", filepath.Join(BundledLayoutDir, "workflows", "run", "config.yml")},
 		{path.Join("workflows", "test", "config.yml"), filepath.Join(BundledLayoutDir, "workflows", "test", "config.yml")},
 		{path.Join(pfx0, "cloud", "storage", "resolvers", "r2", "dockpipe.cloudflare.r2infra", "config.yml"), filepath.Join(BundledLayoutDir, "workflows", "dockpipe.cloudflare.r2infra", "config.yml")},
-		{path.Join(pfx1, "ide", "resolvers", "vscode", "config.yml"), filepath.Join(BundledLayoutDir, "workflows", "vscode", "config.yml")},
 		{path.Join(pfx0, "pipeon", "resolvers", "pipeon", "config.yml"), filepath.Join(BundledLayoutDir, "workflows", "pipeon", "config.yml")},
 		{path.Join(pfx0, "dorkpipe", "resolvers", "dorkpipe", "config.yml"), filepath.Join(BundledLayoutDir, "workflows", "dorkpipe", "config.yml")},
 		{path.Join(pfx0, "dorkpipe", "resolvers", "user-insight-process", "config.yml"), filepath.Join(BundledLayoutDir, "workflows", "user-insight-process", "config.yml")},
