@@ -41,3 +41,44 @@ func TestCompileGolden(t *testing.T) {
 		t.Fatalf("bindings env should not expose private field:\n%s", gotEnv)
 	}
 }
+
+func TestCompileMapsPascalCaseFieldsToWorkflowBindings(t *testing.T) {
+	src := `public Interface IR2
+{
+    public string DockpipeTfBackend;
+    public string TfVarPublicHostname;
+    public string R2Bucket;
+}
+
+public Class R2Config : IR2
+{
+    public string DockpipeTfBackend = "remote";
+    public string TfVarPublicHostname = "packages.example.com";
+    public string R2Bucket = "dockpipe";
+}
+`
+	out, err := Compile([]byte(src), "R2Config")
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	gotYAML := string(out.WorkflowYAML)
+	for _, want := range []string{
+		"DOCKPIPE_TF_BACKEND: remote",
+		"TF_VAR_public_hostname: packages.example.com",
+		"R2_BUCKET: dockpipe",
+	} {
+		if !strings.Contains(gotYAML, want) {
+			t.Fatalf("workflow yaml missing %q:\n%s", want, gotYAML)
+		}
+	}
+	gotEnv := string(out.BindingsEnv)
+	for _, want := range []string{
+		"PIPELANG_DOCKPIPE_TF_BACKEND='remote'",
+		"PIPELANG_TF_VAR_public_hostname='packages.example.com'",
+		"PIPELANG_R2_BUCKET='dockpipe'",
+	} {
+		if !strings.Contains(gotEnv, want) {
+			t.Fatalf("bindings env missing %q:\n%s", want, gotEnv)
+		}
+	}
+}

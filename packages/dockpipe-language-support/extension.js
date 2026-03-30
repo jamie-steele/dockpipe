@@ -73,6 +73,8 @@ const STEP_KEY_DETAILS = {
   is_blocking: "When false, allows async grouping with surrounding steps."
 };
 
+const VAR_KEY_FALLBACK_DETAIL = "Workflow variable override. This key exports an environment variable for the workflow or step.";
+
 const CONTAINER_KEYS = new Set([
   "types",
   "vars",
@@ -189,6 +191,7 @@ function parsePipeModel(source) {
   /** @type {TypeInfo|null} */
   let current = null;
   let depth = 0;
+  let currentBodyStarted = false;
   /** @type {string[]} */
   let summaryLines = [];
   let collectingSummary = false;
@@ -213,6 +216,7 @@ function parsePipeModel(source) {
         doc: pendingSummary,
         fields: {}
       };
+      currentBodyStarted = false;
       out.push(current);
       summaryLines = [];
     } else if (current) {
@@ -236,8 +240,12 @@ function parsePipeModel(source) {
       if (ch === "{") depth++;
       if (ch === "}") depth--;
     }
-    if (depth <= 0) {
+    if (current && depth > 0) {
+      currentBodyStarted = true;
+    }
+    if (current && currentBodyStarted && depth <= 0) {
       current = null;
+      currentBodyStarted = false;
     }
   }
   return out;
@@ -323,7 +331,7 @@ async function buildModelContext(doc) {
 }
 
 function wordRange(document, position) {
-  return document.getWordRangeAtPosition(position, /[A-Za-z0-9_.-]+/);
+  return document.getWordRangeAtPosition(position, /[A-Za-z0-9_.-]+/u);
 }
 
 function quoted(value) {
@@ -466,12 +474,128 @@ function findVarsBlockInfo(document, position) {
   return null;
 }
 
+function rangeContains(range, position) {
+  if (!range) return false;
+  return range.contains(position);
+}
+
+function hoverTargetAt(document, position) {
+  const info = structureInfoAt(document, position);
+  if (!info) return null;
+
+  if (rangeContains(info.keyRange, position) && info.key) {
+    return { info, range: info.keyRange, word: info.key };
+  }
+
+  if (rangeContains(info.scalarRange, position) && info.scalarListValue) {
+    return { info, range: info.scalarRange, word: info.scalarListValue };
+  }
+
+  const range = wordRange(document, position);
+  if (!range) return info ? { info, range: null, word: "" } : null;
+  const word = document.getText(range);
+  return { info, range, word };
+}
+
 function hoverForWorkflowKey(word, docs, range) {
   const doc = docs[word];
   if (!doc) return null;
   const md = new vscode.MarkdownString();
   md.appendMarkdown(`**${word}**`);
   md.appendMarkdown(`\n\n${doc}`);
+  return new vscode.Hover(md, range);
+}
+
+function yamlScalarValue(text) {
+  return String(text || "").trim().replace(/^['"]|['"]$/g, "");
+}
+
+function splitIdentifierWords(name) {
+  const value = String(name || "").trim();
+  if (!value) return [];
+  const parts = [];
+  let start = 0;
+  for (let i = 1; i < value.length; i++) {
+    const ch = value[i];
+    const prev = value[i - 1];
+    const next = value[i + 1] || "";
+    const isUpper = ch >= "A" && ch <= "Z";
+    const prevIsLower = prev >= "a" && prev <= "z";
+    const prevIsDigit = prev >= "0" && prev <= "9";
+    const prevIsUpper = prev >= "A" && prev <= "Z";
+    const nextIsLower = next >= "a" && next <= "z";
+    if (isUpper && (prevIsLower || prevIsDigit || (prevIsUpper && nextIsLower))) {
+      parts.push(value.slice(start, i));
+      start = i;
+    }
+  }
+  parts.push(value.slice(start));
+  return parts.filter(Boolean);
+}
+
+function exportedVarName(name) {
+  const value = String(name || "").trim();
+  if (!value) return "";
+  if (value.includes("_")) return value;
+  const parts = splitIdentifierWords(value);
+  if (parts.length >= 2 && /^tf$/i.test(parts[0]) && /^var$/i.test(parts[1])) {
+    if (parts.length === 2) return "TF_VAR";
+    return `TF_VAR_${parts.slice(2).join("_").toLowerCase()}`;
+  }
+  return parts.join("_").toUpperCase();
+}
+
+function modelFieldInfo(modelCtx, fieldName) {
+  if (!fieldName) return null;
+  const iface = modelCtx.entryInterface ? modelCtx.types[modelCtx.entryInterface] : undefined;
+  const impl = modelCtx.entryClass ? modelCtx.types[modelCtx.entryClass] : undefined;
+  let sourceName = fieldName;
+  let ifaceField = iface?.fields[fieldName];
+  if (!ifaceField && iface) {
+    for (const name of Object.keys(iface.fields)) {
+      if (exportedVarName(name) === fieldName) {
+        sourceName = name;
+        ifaceField = iface.fields[name];
+        break;
+      }
+    }
+  }
+  const implField = impl?.fields[sourceName];
+  if (!ifaceField && !implField) return null;
+  return {
+    sourceName,
+    exportedName: exportedVarName(sourceName),
+    type: ifaceField?.type || implField?.type || "string",
+    doc: ifaceField?.doc || implField?.doc,
+    defaultValue: implField?.defaultValue
+  };
+}
+
+function hoverForModelField(fieldName, fieldInfo, range, currentValue) {
+  if (!fieldInfo) return null;
+  const md = new vscode.MarkdownString();
+  md.appendMarkdown(`**${fieldName}**`);
+  if (fieldInfo.sourceName && fieldInfo.sourceName !== fieldName) {
+    md.appendMarkdown(`\n\nModel field: \`${fieldInfo.sourceName}\``);
+  }
+  md.appendMarkdown(`\n\nType: \`${fieldInfo.type || "string"}\``);
+  if (fieldInfo.doc) md.appendMarkdown(`\n\n${fieldInfo.doc}`);
+  if (fieldInfo.defaultValue) md.appendMarkdown(`\n\nModel default: \`${fieldInfo.defaultValue}\``);
+  if (currentValue !== undefined) md.appendMarkdown(`\n\nCurrent value: \`${currentValue}\``);
+  return new vscode.Hover(md, range);
+}
+
+function hoverForKnownValue(fieldName, rawValue, fieldInfo, knownValue, range) {
+  if (!rawValue) return null;
+  const md = new vscode.MarkdownString();
+  md.appendMarkdown(`**${rawValue}**`);
+  if (fieldName) md.appendMarkdown(`\n\nValue for \`${fieldName}\``);
+  if (fieldInfo?.doc) md.appendMarkdown(`\n\n${fieldInfo.doc}`);
+  if (fieldInfo?.defaultValue) md.appendMarkdown(`\n\nModel default: \`${fieldInfo.defaultValue}\``);
+  if (knownValue) {
+    md.appendMarkdown(`\n\nKnown value: \`${knownValue.name}\``);
+    if (knownValue.doc) md.appendMarkdown(`\n\n${knownValue.doc}`);
+  }
   return new vscode.Hover(md, range);
 }
 
@@ -544,7 +668,8 @@ function activate(context) {
             if (info.kind === "varKey" && info.valueText && info.valueRange) {
               const key = info.key;
               const rawValue = String(info.valueText).trim().replace(/^['"]|['"]$/g, "");
-              const implDefault = modelCtx.entryClass ? modelCtx.types[modelCtx.entryClass]?.fields[key]?.defaultValue : undefined;
+              const fieldInfo = modelFieldInfo(modelCtx, key);
+              const implDefault = fieldInfo?.defaultValue;
               const knownValue = modelCtx.knownValues.find((kv) => kv.value === rawValue);
               if ((implDefault && implDefault === rawValue) || knownValue) {
                 const valueOffset = info.text.indexOf(rawValue, info.valueRange.start.character);
@@ -618,9 +743,10 @@ function activate(context) {
               const iface = modelCtx.entryInterface ? modelCtx.types[modelCtx.entryInterface] : undefined;
               if (iface) {
                 for (const [fieldName, fi] of Object.entries(iface.fields)) {
-                  const it = new vscode.CompletionItem(fieldName, vscode.CompletionItemKind.Variable);
-                  it.insertText = `${fieldName}: `;
-                  it.detail = `${fi.type || "string"} (from ${iface.name})`;
+                  const exportName = exportedVarName(fieldName);
+                  const it = new vscode.CompletionItem(exportName, vscode.CompletionItemKind.Variable);
+                  it.insertText = `${exportName}: `;
+                  it.detail = `${fi.type || "string"} (from ${iface.name}.${fieldName})`;
                   if (fi.doc) it.documentation = fi.doc;
                   const implDefault = modelCtx.entryClass ? modelCtx.types[modelCtx.entryClass]?.fields[fieldName]?.defaultValue : undefined;
                   if (implDefault) {
@@ -632,10 +758,10 @@ function activate(context) {
               }
             } else {
               const key = before.slice(0, colonIdx).trim().replace(/^- /, "");
-              const implDefault = modelCtx.entryClass ? modelCtx.types[modelCtx.entryClass]?.fields[key]?.defaultValue : undefined;
-              if (implDefault) {
-                const it = new vscode.CompletionItem(implDefault, vscode.CompletionItemKind.Value);
-                it.insertText = quoted(implDefault);
+              const fieldInfo = modelFieldInfo(modelCtx, key);
+              if (fieldInfo?.defaultValue) {
+                const it = new vscode.CompletionItem(fieldInfo.defaultValue, vscode.CompletionItemKind.Value);
+                it.insertText = quoted(fieldInfo.defaultValue);
                 it.detail = `${key} default from ${modelCtx.entryClass}`;
                 items.push(it);
               }
@@ -667,11 +793,10 @@ function activate(context) {
       {
         async provideHover(document, position) {
           if (!isDockpipeWorkflowFile(document)) return null;
-          const info = structureInfoAt(document, position);
-          const range = wordRange(document, position);
-          if (!range) return null;
-          const word = document.getText(range);
-          if (!word) return null;
+          const target = hoverTargetAt(document, position);
+          if (!target) return null;
+          const { info, range, word } = target;
+          if (!word || !range) return null;
 
           if (info?.kind === "topLevelKey") {
             return hoverForWorkflowKey(word, TOP_LEVEL_KEY_DETAILS, range);
@@ -702,41 +827,28 @@ function activate(context) {
           const varsInfo = findVarsBlockInfo(document, position);
           if (!varsInfo) return null;
 
-          const iface = modelCtx.entryInterface ? modelCtx.types[modelCtx.entryInterface] : undefined;
-          const impl = modelCtx.entryClass ? modelCtx.types[modelCtx.entryClass] : undefined;
-          const fi = iface?.fields[word];
-          if (fi) {
-            const md = new vscode.MarkdownString();
-            md.appendMarkdown(`**${word}**`);
-            md.appendMarkdown(`\n\nType: \`${fi.type || "string"}\``);
-            if (fi.doc) md.appendMarkdown(`\n\n${fi.doc}`);
-            const def = impl?.fields[word]?.defaultValue;
-            if (def) md.appendMarkdown(`\n\nDefault: \`${def}\``);
-            return new vscode.Hover(md, range);
+          const lineKey = varsInfo.kind === "varKey" ? varsInfo.key : null;
+          const lineField = modelFieldInfo(modelCtx, lineKey);
+          if (lineKey && rangeContains(info?.keyRange, position)) {
+            return hoverForModelField(lineKey, lineField || { type: "string", doc: VAR_KEY_FALLBACK_DETAIL }, info.keyRange, yamlScalarValue(info.valueText));
           }
 
           const kv = modelCtx.knownValues.find((k) => k.value === word || k.name.endsWith("." + word));
           if (kv) {
-            const md = new vscode.MarkdownString();
-            md.appendMarkdown(`**${kv.name}**`);
-            md.appendMarkdown(`\n\nValue: \`${kv.value}\``);
-            if (kv.doc) md.appendMarkdown(`\n\n${kv.doc}`);
-            return new vscode.Hover(md, range);
+            return hoverForKnownValue(lineKey, kv.value, lineField, kv, range);
           }
 
-          const lineKey = info?.kind === "varKey" ? info.key : null;
-          if (lineKey) {
-            const field = iface?.fields[lineKey];
-            if (field) {
-              const md = new vscode.MarkdownString();
-              md.appendMarkdown(`**${lineKey}**`);
-              md.appendMarkdown(`\n\nType: \`${field.type || "string"}\``);
-              if (field.doc) md.appendMarkdown(`\n\n${field.doc}`);
-              const def = impl?.fields[lineKey]?.defaultValue;
-              if (def) md.appendMarkdown(`\n\nModel default: \`${def}\``);
-              md.appendMarkdown(`\n\nCurrent value: \`${word}\``);
-              return new vscode.Hover(md, range);
+          if (lineKey && rangeContains(info?.valueRange, position)) {
+            const rawValue = yamlScalarValue(info.valueText);
+            const matchedKnownValue = modelCtx.knownValues.find((k) => k.value === rawValue || k.name.endsWith("." + rawValue));
+            if (lineField || matchedKnownValue) {
+              return hoverForKnownValue(lineKey, rawValue, lineField, matchedKnownValue, range);
             }
+            return hoverForKnownValue(lineKey, rawValue, { type: "string", doc: VAR_KEY_FALLBACK_DETAIL }, matchedKnownValue, range);
+          }
+
+          if (lineKey && lineField) {
+            return hoverForModelField(lineKey, lineField, range, word);
           }
 
           return null;

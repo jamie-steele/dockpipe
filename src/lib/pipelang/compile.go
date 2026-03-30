@@ -197,7 +197,7 @@ func emitWorkflowYAML(className string, vals map[string]Value) ([]byte, error) {
 	}
 	sort.Strings(fieldNames)
 	for _, name := range fieldNames {
-		k := toUpperSnake(name)
+		k := exportedBindingName(name)
 		v := vals[name].StringValue()
 		vars.Content = append(vars.Content,
 			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k},
@@ -299,7 +299,7 @@ func emitBindingsEnv(vals map[string]Value) []byte {
 	sort.Strings(names)
 	var b strings.Builder
 	for _, name := range names {
-		fmt.Fprintf(&b, "PIPELANG_%s=%s\n", toUpperSnake(name), shellEscape(vals[name].StringValue()))
+		fmt.Fprintf(&b, "PIPELANG_%s=%s\n", exportedBindingName(name), shellEscape(vals[name].StringValue()))
 	}
 	return []byte(b.String())
 }
@@ -312,34 +312,52 @@ func shellEscape(s string) string {
 	return "'" + repl + "'"
 }
 
-func toUpperSnake(s string) string {
+func exportedBindingName(s string) string {
 	if s == "" {
 		return ""
 	}
-	var b strings.Builder
-	runes := []rune(s)
-	for i, r := range runes {
-		if i > 0 && r >= 'A' && r <= 'Z' {
-			prev := runes[i-1]
-			var next rune
-			if i+1 < len(runes) {
-				next = runes[i+1]
-			}
-			prevIsLowerOrDigit := (prev >= 'a' && prev <= 'z') || (prev >= '0' && prev <= '9')
-			prevIsUpper := prev >= 'A' && prev <= 'Z'
-			nextIsLower := next >= 'a' && next <= 'z'
-			if prevIsLowerOrDigit || (prevIsUpper && nextIsLower) {
-				if prev != '_' {
-					b.WriteByte('_')
-				}
-			}
-		}
-		if r >= 'a' && r <= 'z' {
-			r = r - ('a' - 'A')
-		}
-		b.WriteRune(r)
+	if strings.ContainsRune(s, '_') {
+		return s
 	}
-	return b.String()
+	parts := splitIdentifierWords(s)
+	if len(parts) == 0 {
+		return s
+	}
+	if len(parts) >= 2 && strings.EqualFold(parts[0], "tf") && strings.EqualFold(parts[1], "var") {
+		if len(parts) == 2 {
+			return "TF_VAR"
+		}
+		return "TF_VAR_" + strings.ToLower(strings.Join(parts[2:], "_"))
+	}
+	return strings.ToUpper(strings.Join(parts, "_"))
+}
+
+func splitIdentifierWords(s string) []string {
+	if s == "" {
+		return nil
+	}
+	runes := []rune(s)
+	var parts []string
+	start := 0
+	for i := 1; i < len(runes); i++ {
+		r := runes[i]
+		prev := runes[i-1]
+		var next rune
+		if i+1 < len(runes) {
+			next = runes[i+1]
+		}
+		isUpper := r >= 'A' && r <= 'Z'
+		prevIsLower := prev >= 'a' && prev <= 'z'
+		prevIsDigit := prev >= '0' && prev <= '9'
+		prevIsUpper := prev >= 'A' && prev <= 'Z'
+		nextIsLower := next >= 'a' && next <= 'z'
+		if isUpper && (prevIsLower || prevIsDigit || (prevIsUpper && nextIsLower)) {
+			parts = append(parts, string(runes[start:i]))
+			start = i
+		}
+	}
+	parts = append(parts, string(runes[start:]))
+	return parts
 }
 
 func ExprString(e Expr) string {
