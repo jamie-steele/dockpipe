@@ -1,6 +1,8 @@
 package application
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -45,6 +47,9 @@ func TestCrosscutStrategyWorktreeAndCommitResolveFromCore(t *testing.T) {
 // TestCrosscutRuntimeResolverDockerimageClaudeAgainstBundledTree merges real runtimes/dockerimage + resolvers/claude profiles.
 func TestCrosscutRuntimeResolverDockerimageClaudeAgainstBundledTree(t *testing.T) {
 	repo := testRepoRoot(t)
+	if _, err := os.Stat(filepath.Join(repo, ".staging", "packages", "agent", "resolvers", "claude")); err != nil {
+		t.Skip("no third-party staging agent slice in checkout")
+	}
 	m, err := infrastructure.LoadIsolationProfile(repo, "dockerimage", "claude")
 	if err != nil {
 		t.Fatal(err)
