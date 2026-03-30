@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -65,7 +66,7 @@ func embeddedBundledWorkflowsNestedConfigExists(name string) bool {
 		if d.IsDir() || d.Name() != "config.yml" {
 			return nil
 		}
-		if filepath.Base(filepath.Dir(path)) != name {
+		if pathpkg.Base(pathpkg.Dir(path)) != name {
 			return nil
 		}
 		found = true
@@ -87,7 +88,7 @@ func embeddedStagingWorkflowConfigExists(name string) bool {
 			if d.IsDir() || d.Name() != "config.yml" {
 				return nil
 			}
-			if filepath.Base(filepath.Dir(path)) != name {
+			if pathpkg.Base(pathpkg.Dir(path)) != name {
 				return nil
 			}
 			found = true
@@ -216,11 +217,11 @@ func initStagingEmbedRoots() {
 				}
 				rel := strings.TrimPrefix(path, rootPfx)
 				rel = strings.TrimPrefix(rel, "/")
-				parent := filepath.Dir(rel)
+				parent := pathpkg.Dir(rel)
 				if parent == "." || parent == "" {
 					return nil
 				}
-				name := filepath.Base(parent)
+				name := pathpkg.Base(parent)
 				if _, ok := seen[parent]; ok {
 					return nil
 				}

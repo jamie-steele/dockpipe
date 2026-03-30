@@ -317,7 +317,7 @@ func TestResolveWorkflowScriptPrefersCompiledResolverTarball(t *testing.T) {
 	}
 	// No flat pkgRes/dorkpipe/assets/scripts/ — only the tarball should satisfy resolution.
 	got := ResolveWorkflowScript("scripts/dorkpipe/tarball-only.sh", "/wf", repo, "")
-	if !strings.Contains(got, string(filepath.Separator)+".dockpipe"+string(filepath.Separator)) {
+	if !strings.Contains(filepath.ToSlash(got), "/.dockpipe/") {
 		t.Fatalf("expected path under .dockpipe (tarball extract cache), got %q", got)
 	}
 	b, err := os.ReadFile(got)
