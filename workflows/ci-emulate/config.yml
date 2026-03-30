@@ -1,4 +1,5 @@
 name: ci-emulate
+vault: none
 description: >-
   Host-only quick emulator for the repo's GitHub CI scan and Go test steps. Uses
   review-pipeline scripts so maintainers can reproduce failures locally without

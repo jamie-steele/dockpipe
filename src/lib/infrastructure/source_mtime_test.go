@@ -21,12 +21,14 @@ func TestSourceDirNewerThanPath(t *testing.T) {
 	if err := os.WriteFile(tarPath, []byte("gz"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Touch tarball to be newer than source
-	old := time.Now().Add(-2 * time.Hour)
+	// Use clearly separated timestamps so coarse filesystem resolution on Windows
+	// cannot collapse "source newer than tarball" into the same instant.
+	base := time.Now().Add(-2 * time.Hour).Round(0)
+	old := base
 	if err := os.Chtimes(cfg, old, old); err != nil {
 		t.Fatal(err)
 	}
-	newer := time.Now()
+	newer := base.Add(1 * time.Hour)
 	if err := os.Chtimes(tarPath, newer, newer); err != nil {
 		t.Fatal(err)
 	}
@@ -37,8 +39,9 @@ func TestSourceDirNewerThanPath(t *testing.T) {
 	if stale {
 		t.Fatal("expected not stale when tarball is newer")
 	}
-	// Make source newer
-	if err := os.Chtimes(cfg, time.Now(), time.Now()); err != nil {
+	// Make source newer than the tarball by a full hour.
+	latest := base.Add(2 * time.Hour)
+	if err := os.Chtimes(cfg, latest, latest); err != nil {
 		t.Fatal(err)
 	}
 	stale, err = SourceDirNewerThanPath(src, tarPath)
