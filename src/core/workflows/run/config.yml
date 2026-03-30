@@ -10,6 +10,9 @@ strategies:
 
 isolate: base-dev
 
+types:
+  - models/IRunConfig
+
 vars:
   # Override with --var DOCKPIPE_COMMIT_MESSAGE="..." or env.
   DOCKPIPE_COMMIT_MESSAGE: "dockpipe(run): automated commit"

@@ -1,0 +1,24 @@
+/// <summary>
+/// Concrete defaults for the provider-agnostic Terraform core workflow.
+/// </summary>
+public Class TerraformCoreConfig : ITerraformCoreConfig
+{
+    public string DockpipeTfApplyArgs = "";
+    public string DockpipeTfApplyAutoApprove = "1";
+    public string DockpipeTfBackend = "local";
+    public string DockpipeTfBackendHclPath = "";
+    public string DockpipeTfCommands = "";
+    public string DockpipeTfDryRun = "0";
+    public string DockpipeTfFmtArgs = "";
+    public string DockpipeTfImportArgs = "";
+    public string DockpipeTfImportFile = "";
+    public string DockpipeTfInitArgs = "";
+    public string DockpipeTfModuleDir = "";
+    public string DockpipeTfOptionalWhenUnset = "0";
+    public string DockpipeTfPipelineHint = "";
+    public string DockpipeTfPlanArgs = "";
+    public string DockpipeTfRemoteBackendFile = "";
+    public string DockpipeTfSkipInit = "0";
+    public string DockpipeTfValidateArgs = "";
+    public string DockpipeTfWorkspace = "";
+}

@@ -25,6 +25,8 @@ description: >-
 docker_preflight: false
 # Secrets: resolver-driven op scripts (not workflow-level vault: merge).
 resolver: onepassword
+types:
+  - models/ISecretstoreR2PublishTestConfig
 vars:
   OP_ENV_FILE: ".env.op.template"
   SECRET_ENV_OUT: *SECRET_OUT

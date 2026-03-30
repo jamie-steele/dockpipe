@@ -7,6 +7,9 @@ description: >-
 
 docker_preflight: false
 
+types:
+  - models/IPackageStoreInfraConfig
+
 vars:
   R2_BUCKET: "dockpipe"  # R2 bucket name (matches dashboard)
   R2_PREFIX: "packages/"  # object key prefix for uploads (r2upload); trailing slash optional in scripts

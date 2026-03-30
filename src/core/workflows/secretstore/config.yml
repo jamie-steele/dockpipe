@@ -9,6 +9,9 @@ description: >-
 docker_preflight: false
 # Substrate is per-step; dotenv resolver loads SECRETSTORE_ENV_FILE; script-owned env merge.
 
+types:
+  - models/ISecretstoreConfig
+
 vars:
   SECRETSTORE_PROVIDER: "dotenv"
   SECRETSTORE_ENV_FILE: ".env.secretstore"

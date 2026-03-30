@@ -6,6 +6,8 @@
 # DOCKPIPE_DOCKER_NETWORK=host: many Linux setups have no working IPv6 from Docker bridge; Go then
 # cannot reach proxy.golang.org for go install / govulncheck. Host network matches the host stack.
 name: test
+types:
+  - models/ITestWorkflowConfig
 vars:
   DOCKPIPE_DOCKER_NETWORK: host
 description: >-

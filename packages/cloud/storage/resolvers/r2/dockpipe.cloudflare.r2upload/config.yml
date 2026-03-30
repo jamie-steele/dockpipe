@@ -6,6 +6,9 @@ description: >-
 
 docker_preflight: false
 
+types:
+  - models/IR2UploadConfig
+
 vars:
   R2_ARCHIVE_NAME: ""  # empty = default dockpipe-publish-<timestamp>.tar.gz
   R2_BUCKET: ""  # required; target bucket name

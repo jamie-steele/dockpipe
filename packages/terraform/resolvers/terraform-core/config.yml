@@ -7,6 +7,9 @@ description: >-
 
 docker_preflight: false
 
+types:
+  - models/ITerraformCoreConfig
+
 vars:
   DOCKPIPE_TF_APPLY_ARGS: ""  # extra args passed to terraform apply
   DOCKPIPE_TF_APPLY_AUTO_APPROVE: "1"  # 1 = -auto-approve on apply; 0 = interactive
