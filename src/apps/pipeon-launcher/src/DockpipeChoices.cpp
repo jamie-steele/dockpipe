@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QProcess>
 #include <QProcessEnvironment>
 #include <algorithm>
 
@@ -43,8 +44,8 @@ void appendStaticFallbacks(DockpipeChoices &c)
     c.runtimes = QStringList{QStringLiteral("dockerimage"), QStringLiteral("dockerfile"), QStringLiteral("package")};
 }
 
-// Recursively collect workflow dirs that contain config.yml (.staging/packages may be nested by namespace).
-void collectStagingWorkflowConfigs(const QDir &root, QStringList &names, QStringList *paths)
+// Recursively collect workflow dirs that contain config.yml under nested roots such as packages or bundled workflows.
+void collectNestedWorkflowConfigs(const QDir &root, QStringList &names, QStringList *paths)
 {
     if (!root.exists())
         return;
@@ -86,6 +87,77 @@ QString findCursorPrepUnderPackages(const QString &repoRoot)
         return QDir::cleanPath(it.filePath());
     }
     return {};
+}
+
+QString packageStoreRoot(const QString &hintWorkdir)
+{
+    if (hintWorkdir.isEmpty())
+        return {};
+    const QString env = QProcessEnvironment::systemEnvironment().value(QStringLiteral("DOCKPIPE_PACKAGES_ROOT")).trimmed();
+    if (!env.isEmpty()) {
+        if (QDir::isAbsolutePath(env))
+            return QDir::cleanPath(env);
+        return QDir::cleanPath(QDir(hintWorkdir).filePath(env));
+    }
+    return QDir::cleanPath(QDir(hintWorkdir).filePath(QStringLiteral("bin/.dockpipe/internal/packages")));
+}
+
+QString globalPackagesRoot()
+{
+    const QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    const QString overrideRoot = env.value(QStringLiteral("DOCKPIPE_GLOBAL_ROOT")).trimmed();
+    if (!overrideRoot.isEmpty())
+        return QDir::cleanPath(overrideRoot + QStringLiteral("/packages"));
+#ifdef Q_OS_WIN
+    QString base = env.value(QStringLiteral("LOCALAPPDATA")).trimmed();
+    if (base.isEmpty())
+        base = QDir::homePath() + QStringLiteral("/AppData/Local");
+    return QDir::cleanPath(QDir(base).filePath(QStringLiteral("dockpipe/packages")));
+#elif defined(Q_OS_MACOS)
+    return QDir::cleanPath(QDir::home().filePath(QStringLiteral("Library/Application Support/dockpipe/packages")));
+#else
+    QString base = env.value(QStringLiteral("XDG_DATA_HOME")).trimmed();
+    if (base.isEmpty())
+        base = QDir::home().filePath(QStringLiteral(".local/share"));
+    return QDir::cleanPath(QDir(base).filePath(QStringLiteral("dockpipe/packages")));
+#endif
+}
+
+QStringList listTarballMembers(const QString &tarPath)
+{
+    QProcess proc;
+    proc.start(QStringLiteral("tar"), {QStringLiteral("-tzf"), tarPath});
+    if (!proc.waitForFinished(5000) || proc.exitCode() != 0)
+        return {};
+    return QString::fromUtf8(proc.readAllStandardOutput()).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+}
+
+QString workflowNameFromTarballMembers(const QStringList &members)
+{
+    for (QString member : members) {
+        member = QDir::cleanPath(member);
+        const QString prefix = QStringLiteral("workflows/");
+        if (!member.startsWith(prefix) || !member.endsWith(QStringLiteral("/config.yml")))
+            continue;
+        const QString rel = member.mid(prefix.size());
+        const int slash = rel.indexOf(QLatin1Char('/'));
+        if (slash > 0)
+            return rel.left(slash);
+    }
+    return {};
+}
+
+void appendWorkflowNamesFromTarballs(const QDir &root, QStringList &names)
+{
+    if (!root.exists())
+        return;
+    const auto tars =
+        root.entryInfoList(QStringList{QStringLiteral("dockpipe-workflow-*.tar.gz")}, QDir::Files, QDir::Name);
+    for (const QFileInfo &fi : tars) {
+        const QString name = workflowNameFromTarballMembers(listTarballMembers(fi.filePath()));
+        if (!name.isEmpty())
+            names.append(name);
+    }
 }
 
 } // namespace
@@ -137,60 +209,66 @@ QString DockpipeChoices::cursorPrepScriptPath(const QString &hintWorkdir)
     return {};
 }
 
-QStringList DockpipeChoices::listWorkflowNamesFromRepo(const QString &repoRoot)
+QStringList DockpipeChoices::listWorkflowNamesFromRepo(const QString &repoRoot, const QString &hintWorkdir)
 {
     QStringList names;
-    if (repoRoot.isEmpty())
+    if (repoRoot.isEmpty() && hintWorkdir.isEmpty())
         return names;
 
-    const QDir root(repoRoot);
+    if (!repoRoot.isEmpty()) {
+        const QDir root(repoRoot);
 
-    {
-        const QDir wf(root.filePath(QStringLiteral("workflows")));
-        if (wf.exists()) {
-            const auto dirs = wf.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-            for (const QFileInfo &fi : dirs) {
-                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
-                if (QFileInfo::exists(cfg))
-                    names.append(fi.fileName());
+        {
+            const QDir wf(root.filePath(QStringLiteral("workflows")));
+            if (wf.exists()) {
+                const auto dirs = wf.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+                for (const QFileInfo &fi : dirs) {
+                    const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
+                    if (QFileInfo::exists(cfg))
+                        names.append(fi.fileName());
+                }
+            }
+        }
+
+        {
+            const QDir pkg(root.filePath(QStringLiteral("packages")));
+            if (pkg.exists())
+                collectNestedWorkflowConfigs(pkg, names, nullptr);
+        }
+        for (const QString &extra : extraWorkflowRootDirs(repoRoot)) {
+            collectNestedWorkflowConfigs(QDir(extra), names, nullptr);
+        }
+
+        {
+            const QString bundledWf = root.filePath(QStringLiteral("src/core/workflows"));
+            if (QFileInfo(bundledWf).isDir())
+                collectNestedWorkflowConfigs(QDir(bundledWf), names, nullptr);
+        }
+
+        {
+            const QDir tpl(root.filePath(QStringLiteral("templates")));
+            if (tpl.exists()) {
+                const auto dirs = tpl.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+                for (const QFileInfo &fi : dirs) {
+                    if (fi.fileName() == QStringLiteral("core"))
+                        continue;
+                    const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
+                    if (QFileInfo::exists(cfg))
+                        names.append(fi.fileName());
+                }
             }
         }
     }
 
-    {
-        const QDir pkg(root.filePath(QStringLiteral("packages")));
-        if (pkg.exists())
-            collectNestedWorkflowConfigs(pkg, names, nullptr);
-    }
-    for (const QString &extra : extraWorkflowRootDirs(repoRoot)) {
-        collectNestedWorkflowConfigs(QDir(extra), names, nullptr);
-    }
-
-    {
-        const QString bundledWf = root.filePath(QStringLiteral("src/core/workflows"));
-        if (QFileInfo(bundledWf).isDir())
-            collectNestedWorkflowConfigs(QDir(bundledWf), names, nullptr);
-    }
-
-    {
-        const QDir tpl(root.filePath(QStringLiteral("templates")));
-        if (tpl.exists()) {
-            const auto dirs = tpl.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-            for (const QFileInfo &fi : dirs) {
-                if (fi.fileName() == QStringLiteral("core"))
-                    continue;
-                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
-                if (QFileInfo::exists(cfg))
-                    names.append(fi.fileName());
-            }
-        }
-    }
+    if (!hintWorkdir.isEmpty())
+        appendWorkflowNamesFromTarballs(QDir(packageStoreRoot(hintWorkdir) + QStringLiteral("/workflows")), names);
+    appendWorkflowNamesFromTarballs(QDir(globalPackagesRoot() + QStringLiteral("/workflows")), names);
 
     sortUnique(names);
     return names;
 }
 
-void DockpipeChoices::scan(const QString &repoRoot)
+void DockpipeChoices::scan(const QString &repoRoot, const QString &hintWorkdir)
 {
     workflowNames.clear();
     workflowConfigPaths.clear();
@@ -198,98 +276,95 @@ void DockpipeChoices::scan(const QString &repoRoot)
     strategies.clear();
     runtimes.clear();
 
-    if (repoRoot.isEmpty()) {
-        appendStaticFallbacks(*this);
-        sortUnique(workflowNames);
-        sortUnique(resolvers);
-        sortUnique(strategies);
-        sortUnique(runtimes);
-        return;
-    }
+    if (!repoRoot.isEmpty()) {
+        const QDir root(repoRoot);
+        const QString cc = coreCategoriesRoot(repoRoot);
 
-    const QDir root(repoRoot);
-    const QString cc = coreCategoriesRoot(repoRoot);
+        {
+            const QDir wf(root.filePath(QStringLiteral("workflows")));
+            if (wf.exists()) {
+                const auto dirs = wf.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+                for (const QFileInfo &fi : dirs) {
+                    const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
+                    if (QFileInfo::exists(cfg)) {
+                        workflowNames.append(fi.fileName());
+                        workflowConfigPaths.append(QDir::cleanPath(cfg));
+                    }
+                }
+            }
+        }
 
-    {
-        const QDir wf(root.filePath(QStringLiteral("workflows")));
-        if (wf.exists()) {
-            const auto dirs = wf.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-            for (const QFileInfo &fi : dirs) {
-                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
-                if (QFileInfo::exists(cfg)) {
-                    workflowNames.append(fi.fileName());
-                    workflowConfigPaths.append(QDir::cleanPath(cfg));
+        {
+            const QDir pkg(root.filePath(QStringLiteral("packages")));
+            if (pkg.exists())
+                collectNestedWorkflowConfigs(pkg, workflowNames, &workflowConfigPaths);
+        }
+        for (const QString &extra : extraWorkflowRootDirs(repoRoot)) {
+            collectNestedWorkflowConfigs(QDir(extra), workflowNames, &workflowConfigPaths);
+        }
+
+        {
+            const QString bundledWf = root.filePath(QStringLiteral("src/core/workflows"));
+            if (QFileInfo(bundledWf).isDir())
+                collectNestedWorkflowConfigs(QDir(bundledWf), workflowNames, &workflowConfigPaths);
+        }
+
+        {
+            const QDir tpl(root.filePath(QStringLiteral("templates")));
+            if (tpl.exists()) {
+                const auto dirs = tpl.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+                for (const QFileInfo &fi : dirs) {
+                    if (fi.fileName() == QStringLiteral("core"))
+                        continue;
+                    const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
+                    if (QFileInfo::exists(cfg)) {
+                        workflowNames.append(fi.fileName());
+                        workflowConfigPaths.append(QDir::cleanPath(cfg));
+                    }
+                }
+            }
+        }
+
+        {
+            const QDir res(cc + QStringLiteral("/resolvers"));
+            if (res.exists()) {
+                const auto dirs = res.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+                for (const QFileInfo &fi : dirs) {
+                    const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
+                    if (QFileInfo::exists(cfg))
+                        resolvers.append(fi.fileName());
+                }
+            }
+        }
+
+        {
+            const QDir strat(cc + QStringLiteral("/strategies"));
+            if (strat.exists()) {
+                const auto files = strat.entryInfoList(QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
+                for (const QFileInfo &fi : files) {
+                    if (fi.fileName() == QStringLiteral("README.md"))
+                        continue;
+                    strategies.append(fi.fileName());
+                }
+            }
+        }
+
+        {
+            const QDir rt(cc + QStringLiteral("/runtimes"));
+            if (rt.exists()) {
+                const auto dirs = rt.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
+                for (const QFileInfo &fi : dirs) {
+                    if (fi.fileName().endsWith(QStringLiteral(".md"), Qt::CaseInsensitive))
+                        continue;
+                    runtimes.append(fi.fileName());
                 }
             }
         }
     }
 
-    {
-        const QDir pkg(root.filePath(QStringLiteral("packages")));
-        if (pkg.exists())
-            collectNestedWorkflowConfigs(pkg, workflowNames, &workflowConfigPaths);
-    }
-    for (const QString &extra : extraWorkflowRootDirs(repoRoot)) {
-        collectNestedWorkflowConfigs(QDir(extra), workflowNames, &workflowConfigPaths);
-    }
-
-    {
-        const QString bundledWf = root.filePath(QStringLiteral("src/core/workflows"));
-        if (QFileInfo(bundledWf).isDir())
-            collectNestedWorkflowConfigs(QDir(bundledWf), workflowNames, &workflowConfigPaths);
-    }
-
-    {
-        const QDir tpl(root.filePath(QStringLiteral("templates")));
-        if (tpl.exists()) {
-            const auto dirs = tpl.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-            for (const QFileInfo &fi : dirs) {
-                if (fi.fileName() == QStringLiteral("core"))
-                    continue;
-                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
-                if (QFileInfo::exists(cfg)) {
-                    workflowNames.append(fi.fileName());
-                    workflowConfigPaths.append(QDir::cleanPath(cfg));
-                }
-            }
-        }
-    }
-
-    {
-        const QDir res(cc + QStringLiteral("/resolvers"));
-        if (res.exists()) {
-            const auto dirs = res.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-            for (const QFileInfo &fi : dirs) {
-                const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
-                if (QFileInfo::exists(cfg))
-                    resolvers.append(fi.fileName());
-            }
-        }
-    }
-
-    {
-        const QDir strat(cc + QStringLiteral("/strategies"));
-        if (strat.exists()) {
-            const auto files = strat.entryInfoList(QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
-            for (const QFileInfo &fi : files) {
-                if (fi.fileName() == QStringLiteral("README.md"))
-                    continue;
-                strategies.append(fi.fileName());
-            }
-        }
-    }
-
-    {
-        const QDir rt(cc + QStringLiteral("/runtimes"));
-        if (rt.exists()) {
-            const auto dirs = rt.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-            for (const QFileInfo &fi : dirs) {
-                if (fi.fileName().endsWith(QStringLiteral(".md"), Qt::CaseInsensitive))
-                    continue;
-                runtimes.append(fi.fileName());
-            }
-        }
-    }
+    if (!hintWorkdir.isEmpty())
+        appendWorkflowNamesFromTarballs(QDir(packageStoreRoot(hintWorkdir) + QStringLiteral("/workflows")), workflowNames);
+    appendWorkflowNamesFromTarballs(QDir(globalPackagesRoot() + QStringLiteral("/workflows")), workflowNames);
 
     if (workflowNames.isEmpty() && resolvers.isEmpty()) {
         appendStaticFallbacks(*this);

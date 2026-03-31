@@ -14,7 +14,7 @@ vars:
   CLOUDFLARE_ACCOUNT_ID: ""
   CLOUDFLARE_API_TOKEN: ""
   R2_BUCKET: "dockpipe"
-  DOCKPIPE_TF_BACKEND: "remote"
+  DOCKPIPE_TF_BACKEND: "local"
   DOCKPIPE_TF_COMMANDS: ""
   DOCKPIPE_TF_DRY_RUN: "0"
   TF_VAR_public_hostname: "packages.example.com"

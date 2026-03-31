@@ -16,8 +16,8 @@ struct WorkflowMeta {
 class WorkflowCatalog {
 public:
     /// All workflows with metadata (any category).
-    static QVector<WorkflowMeta> discoverAll(const QString &repoRoot);
+    static QVector<WorkflowMeta> discoverAll(const QString &repoRoot, const QString &hintWorkdir = QString());
 
     /// Only workflows with `category: app` (case-insensitive).
-    static QVector<WorkflowMeta> discoverAppWorkflows(const QString &repoRoot);
+    static QVector<WorkflowMeta> discoverAppWorkflows(const QString &repoRoot, const QString &hintWorkdir = QString());
 };

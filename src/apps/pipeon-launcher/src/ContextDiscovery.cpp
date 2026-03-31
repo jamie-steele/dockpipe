@@ -15,7 +15,7 @@ QVector<Context> ContextDiscovery::contextsForWorkdir(const QString &workdir)
         baseLabel = QFileInfo(gitRoot).fileName() + QStringLiteral(" — ") + QFileInfo(clean).fileName();
 
     const QString repoRoot = DockpipeChoices::findRepoRoot(clean);
-    const QStringList wfNames = DockpipeChoices::listWorkflowNamesFromRepo(repoRoot);
+    const QStringList wfNames = DockpipeChoices::listWorkflowNamesFromRepo(repoRoot, clean);
 
     QVector<Context> out;
     if (wfNames.isEmpty()) {

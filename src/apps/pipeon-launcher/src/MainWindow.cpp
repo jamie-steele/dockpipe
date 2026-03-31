@@ -462,7 +462,7 @@ void MainWindow::onRefreshAppList()
 void MainWindow::updateBasicPage()
 {
     const QString repo = DockpipeChoices::findRepoRoot(m_settings.projectFolder);
-    const QVector<WorkflowMeta> apps = WorkflowCatalog::discoverAppWorkflows(repo);
+    const QVector<WorkflowMeta> apps = WorkflowCatalog::discoverAppWorkflows(repo, m_settings.projectFolder);
     m_basicWidget->setApps(apps);
 
     QHash<QString, bool> run;

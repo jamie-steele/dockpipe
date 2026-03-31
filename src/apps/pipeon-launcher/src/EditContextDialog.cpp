@@ -124,7 +124,7 @@ EditContextDialog::EditContextDialog(const Context &ctx, QWidget *parent)
 void EditContextDialog::populateCombos(const QString &workdir)
 {
     DockpipeChoices ch;
-    ch.scan(DockpipeChoices::findRepoRoot(workdir));
+    ch.scan(DockpipeChoices::findRepoRoot(workdir), workdir);
 
     fillCombo(m_workflow, ch.workflowNames, m_original.workflow);
     fillCombo(m_workflowFile, ch.workflowConfigPaths, m_original.workflowFile);
