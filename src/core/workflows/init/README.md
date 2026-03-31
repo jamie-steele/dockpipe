@@ -1,5 +1,13 @@
 # Init template
 
-Copied to **`templates/<name>/`** when you run **`dockpipe init <name> --from init`**, together with merged **`templates/core/`** from a prior **`dockpipe init`** (no name) and optional example **`scripts/`** / **`images/example/`** when copying any non-blank **`--from`** template.
+Copied to **`workflows/<name>/`** when you run **`dockpipe init <name> --from init`**. Bare **`dockpipe init`** also seeds **`workflows/example/`** from this starter when the project has no DockPipe workflows yet.
 
-Edit **`config.yml`** to match your workflow. **`resolver:`** / **`default_resolver:`** profile names load from **`templates/core/resolvers/<name>`** unless you add **`templates/<name>/resolvers/`** overrides. For **codex** / **claude** stacks (API keys, Docker isolation), read **`templates/core/resolvers/codex/README.md`** and **`templates/core/resolvers/claude/README.md`**. **Learning path:** **[docs/onboarding.md](../../docs/onboarding.md)** · **[docs/architecture-model.md](../../docs/architecture-model.md)**.
+Edit **`config.yml`** to match your workflow. This starter intentionally uses the current **multi-step pipeline** style with:
+
+- **`types:`** pointing at a tiny typed contract under **`models/`**
+- **`vars:`** for user-tunable inputs
+- a host **`prepare`** step with **`outputs:`**
+- an isolated container **`run`** step
+- a host **`report`** step
+
+Use it as a sketch, then replace the commands, images, and env names with your real pipeline. **Learning path:** **[docs/onboarding.md](../../docs/onboarding.md)** · **[docs/architecture-model.md](../../docs/architecture-model.md)**.

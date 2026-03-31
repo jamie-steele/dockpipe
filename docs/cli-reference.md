@@ -14,16 +14,16 @@ Local project setup only: **no `git clone`**, no treating **`init`** as a remote
 
 | Command | Purpose |
 |---------|---------|
-| `dockpipe init` | Create **`scripts/`**, **`images/`**, **`templates/`** if needed; merge bundled **`templates/core/`** (**`runtimes/`**, **`resolvers/`**, **`strategies/`**, **`assets/`** — scripts, images, compose); add **`README.md`** and **`dockpipe.config.json`** when missing. |
+| `dockpipe init` | Create the **minimal project scaffold**: **`workflows/`**, **`README.md`**, **`dockpipe.config.json`**, and **`.env.vault.template.example`** when missing. If no DockPipe workflows exist yet, also create **`workflows/example/config.yml`** as a starter. It does **not** copy **`templates/core/`**, **`scripts/`**, or **`images/`** into the project. |
 | `dockpipe init <name>` | Create **`workflows/<name>/config.yml`** as a **minimal empty workflow** (name + description only). Does **not** copy the bundled **`init`** template unless you pass **`--from init`**. If **`workflows/`** already exists but has no **`*/config.yml`** trees, the CLI prints a **warning** (often a conflict with GitHub Actions). |
 | `dockpipe init <name> --workflows-dir <path>` | Put the new workflow under **`<path>/<name>/`** instead of **`workflows/`** (repo-relative or absolute). Same as env **`DOCKPIPE_WORKFLOWS_DIR`** for **`dockpipe run`**. |
 | `dockpipe init <name> --from <source>` | Copy into **`workflows/<name>/`** (or **`--workflows-dir`**): **`--from`** may be **`blank`**, **`init`**, another **bundled** name (resolved under **`templates/&lt;name&gt;`** or the bundled workflows root), or a **filesystem path** (e.g. **`workflows/&lt;name&gt;`** in a dockpipe checkout). Not a Git URL. |
 | `dockpipe init <name> --resolver <n> --runtime <n> --strategy <n>` | Optional; written into the new **`config.yml`** as **`resolver:`** / **`default_resolver:`**, **`runtime:`** / **`default_runtime:`**, **`strategy:`** (same meaning as **`dockpipe run`**). Example: **`dockpipe init my-pipeline --from run-apply --resolver codex --runtime dockerimage`**. |
-| `dockpipe init --gitignore` | **Opt-in** only: append a marked block to **`.gitignore`** at the **git repository root** (`.dockpipe/`, `.dorkpipe/`, Go caches, `tmp/`). Idempotent if the block is already present. Requires a **git working tree** (run from inside a repo). |
+| `dockpipe init --gitignore` | **Opt-in** only: append a marked block to **`.gitignore`** at the **git repository root** (`bin/.dockpipe/`, `.dorkpipe/`, Go caches, `tmp/`). Idempotent if the block is already present. Requires a **git working tree** (run from inside a repo). |
 
 On a **dockpipe source checkout**, **`--workflow`** resolves **`workflows/<name>/config.yml`** first (when that tree has workflows), then **nested** **`config.yml`** under directories listed in **`dockpipe.config.json` `compile.workflows`** (e.g. **`.staging/packages/...`** in this repo — see **[package-model.md](package-model.md)**), then **`src/core/workflows/<name>/config.yml`**. In a **typical downstream project**, named workflows live under **`workflows/<name>/config.yml`** by default; **`templates/<name>/config.yml`** remains a **legacy** fallback. Override the primary folder with **`--workflows-dir`** or **`DOCKPIPE_WORKFLOWS_DIR`**. This repo keeps **lean CI** under **`workflows/`** and **grouped maintainer packages** under **`.staging/packages/`** when listed in config (see **[AGENTS.md](../AGENTS.md)**).
 
-**`dockpipe init`** also creates **`dockpipe/README.md`** when missing and ensures **`workflows/`** exists.
+**`dockpipe init`** creates the root **`README.md`** when missing and ensures **`workflows/`** exists.
 
 ## `dockpipe install`
 

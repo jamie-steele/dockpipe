@@ -67,7 +67,7 @@ const initUsageText = `dockpipe init
 Project setup in the current directory, or add a new workflow.
 
 Usage:
-  dockpipe init [flags]              merge templates/core, scripts/, images/, dockpipe.config.json, .env.vault.template.example (no workflow name)
+  dockpipe init [flags]              create a blank project scaffold plus workflows/example/ when no DockPipe workflows exist yet
   dockpipe init <name> [flags]       create workflows/<name>/config.yml as an empty starter (see --workflows-dir)
   dockpipe init <name> --from <src>  copy a bundled template or filesystem path into workflows/<name>/
 

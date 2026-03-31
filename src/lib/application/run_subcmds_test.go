@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"dockpipe/src/lib/domain"
 )
 
 func writeFile(t *testing.T, path, content string, mode os.FileMode) {
@@ -20,8 +22,28 @@ func writeFile(t *testing.T, path, content string, mode os.FileMode) {
 func mkRepoRootForSubcmdTests(t *testing.T) string {
 	t.Helper()
 	repoRoot := t.TempDir()
-	writeFile(t, filepath.Join(repoRoot, "templates", "init", "config.yml"), "name: init\n", 0o644)
+	writeFile(t, filepath.Join(repoRoot, "templates", "init", "config.yml"), `name: example
+description: Starter typed pipeline with a prepare step, an isolated run step, and a host summary step.
+types:
+  - models/IExampleWorkflowConfig.pipe
+vars:
+  EXAMPLE_MESSAGE: "hello from dockpipe"
+  EXAMPLE_IMAGE: "alpine:3.22"
+steps:
+  - id: prepare
+    skip_container: true
+    cmd: echo prepare
+    outputs: bin/.dockpipe/example.env
+  - id: run
+    isolate: ${EXAMPLE_IMAGE}
+    cmd: echo run
+  - id: report
+    skip_container: true
+    cmd: echo report
+`, 0o644)
 	writeFile(t, filepath.Join(repoRoot, "templates", "init", "README.md"), "# init\n", 0o644)
+	writeFile(t, filepath.Join(repoRoot, "templates", "init", "models", "IExampleWorkflowConfig.pipe"), "public Interface IExampleWorkflowConfig { public string ExampleMessage; public string ExampleImage; }\n", 0o644)
+	writeFile(t, filepath.Join(repoRoot, "templates", "init", "models", "ExampleWorkflowConfig.pipe"), "public Class ExampleWorkflowConfig : IExampleWorkflowConfig { public string ExampleMessage = \"hello from dockpipe\"; public string ExampleImage = \"alpine:3.22\"; }\n", 0o644)
 	writeFile(t, filepath.Join(repoRoot, "templates", "run", "config.yml"), "name: run\nrun: []\n", 0o644)
 	writeFile(t, filepath.Join(repoRoot, "templates", "core", "resolvers", "default"), "DOCKPIPE_RESOLVER_TEMPLATE=codex\n", 0o644)
 	writeFile(t, filepath.Join(repoRoot, "templates", "core", "resolvers", "claude"), "DOCKPIPE_RESOLVER_TEMPLATE=claude\n", 0o644)
@@ -150,7 +172,7 @@ func TestMergeBundledTemplatesCoreCopiesCoreTree(t *testing.T) {
 	}
 }
 
-// TestCmdInitCreatesWorkspaceAndMinimalWorkflow creates workspace layout and workflows/<name>/config.yml as a blank starter.
+// TestCmdInitCreatesWorkspaceAndMinimalWorkflow creates the minimal root scaffold and workflows/<name>/config.yml as a blank starter.
 func TestCmdInitCreatesWorkspaceAndMinimalWorkflow(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
@@ -170,10 +192,10 @@ func TestCmdInitCreatesWorkspaceAndMinimalWorkflow(t *testing.T) {
 	}
 	checks := []string{
 		filepath.Join(project, "README.md"),
-		filepath.Join(project, "scripts"),
-		filepath.Join(project, "images"),
+		filepath.Join(project, domain.DockpipeProjectConfigFileName),
+		filepath.Join(project, ".env.vault.template.example"),
+		filepath.Join(project, "workflows"),
 		filepath.Join(project, "workflows", "demo", "config.yml"),
-		filepath.Join(project, "templates", "core", "resolvers", "default"),
 	}
 	for _, p := range checks {
 		if _, err := os.Stat(p); err != nil {
@@ -190,6 +212,15 @@ func TestCmdInitCreatesWorkspaceAndMinimalWorkflow(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(project, "workflows", "demo", "README.md")); err == nil {
 		t.Fatal("default init <name> should not copy bundled init template README; use --from init")
+	}
+	for _, p := range []string{
+		filepath.Join(project, "scripts"),
+		filepath.Join(project, "images"),
+		filepath.Join(project, "templates", "core"),
+	} {
+		if _, err := os.Stat(p); err == nil {
+			t.Fatalf("did not expect legacy scaffold path %q", p)
+		}
 	}
 }
 
@@ -302,9 +333,8 @@ func TestCmdInitRequiresNameForFrom(t *testing.T) {
 	}
 }
 
-// TestCmdInitBareMergesFullCoreTree verifies dockpipe init (no name) merges the lean bundled
-// templates/core tree (assets, runtimes, resolvers/example, strategies). Extra resolver trees ship via embed / project compile config, not only templates/core after init.
-func TestCmdInitBareMergesFullCoreTree(t *testing.T) {
+// TestCmdInitBareCreatesMinimalScaffold verifies dockpipe init (no name) creates root metadata plus a starter workflows/example/.
+func TestCmdInitBareCreatesMinimalScaffold(t *testing.T) {
 	repoRoot := testRepoRoot(t)
 	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
 	project := t.TempDir()
@@ -318,16 +348,24 @@ func TestCmdInitBareMergesFullCoreTree(t *testing.T) {
 		t.Fatalf("cmdInit: %v", err)
 	}
 	markers := []string{
-		filepath.Join(project, "templates", "core", "assets", "scripts", "helloworld.ps1"),
-		filepath.Join(project, "templates", "core", "assets", "compose", "README.md"),
-		filepath.Join(project, "templates", "core", "assets", "images", "base-dev", "Dockerfile"),
-		filepath.Join(project, "templates", "core", "runtimes", "dockerimage", "profile"),
-		filepath.Join(project, "templates", "core", "strategies", "worktree"),
-		filepath.Join(project, "templates", "core", "resolvers", "example", "config.yml"),
+		filepath.Join(project, "README.md"),
+		filepath.Join(project, domain.DockpipeProjectConfigFileName),
+		filepath.Join(project, ".env.vault.template.example"),
+		filepath.Join(project, "workflows"),
+		filepath.Join(project, "workflows", "example", "config.yml"),
 	}
 	for _, p := range markers {
 		if _, err := os.Stat(p); err != nil {
-			t.Fatalf("expected merged path %q: %v", p, err)
+			t.Fatalf("expected scaffold path %q: %v", p, err)
+		}
+	}
+	for _, p := range []string{
+		filepath.Join(project, "scripts"),
+		filepath.Join(project, "images"),
+		filepath.Join(project, "templates", "core"),
+	} {
+		if _, err := os.Stat(p); err == nil {
+			t.Fatalf("did not expect legacy scaffold path %q", p)
 		}
 	}
 }

@@ -399,3 +399,20 @@ func WorkflowsDirHasDockpipeWorkflow(dir string) bool {
 	}
 	return false
 }
+
+// WorkflowsDirHasFiles reports whether dir contains any regular file anywhere under it.
+// Empty directories or placeholder directory trees return false.
+func WorkflowsDirHasFiles(dir string) bool {
+	found := false
+	_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil || found {
+			return nil
+		}
+		if d == nil || d.IsDir() {
+			return nil
+		}
+		found = true
+		return filepath.SkipAll
+	})
+	return found
+}

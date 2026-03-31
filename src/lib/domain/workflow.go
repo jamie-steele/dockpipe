@@ -56,12 +56,12 @@ type Workflow struct {
 	Capability string `yaml:"capability,omitempty"`
 	// PrimitiveYAMLDeprecated is the deprecated YAML key "primitive" — merged into Capability when parsing.
 	PrimitiveYAMLDeprecated string `yaml:"primitive,omitempty"`
-	Run       RunSpec `yaml:"run"`
-	Isolate         string  `yaml:"isolate"`
-	Act             string  `yaml:"act"`
-	Action          string  `yaml:"action"`
-	Resolver        string  `yaml:"resolver"`
-	DefaultResolver string  `yaml:"default_resolver"`
+	Run             RunSpec `yaml:"run,omitempty"`
+	Isolate         string  `yaml:"isolate,omitempty"`
+	Act             string  `yaml:"act,omitempty"`
+	Action          string  `yaml:"action,omitempty"`
+	Resolver        string  `yaml:"resolver,omitempty"`
+	DefaultResolver string  `yaml:"default_resolver,omitempty"`
 	// Runtime: default runtime profile name (templates/core/runtimes/<name>); preferred over default_resolver for env selection.
 	Runtime string `yaml:"runtime,omitempty"`
 	// DefaultRuntime: YAML default_runtime — same role as default_resolver when runtime is unset.
@@ -82,11 +82,13 @@ type Workflow struct {
 	// CompileHooks: shell commands run by `dockpipe package compile workflow` from the workflow source directory
 	// after validation and before the package tarball is written (e.g. go build, code generation).
 	CompileHooks []string `yaml:"compile_hooks,omitempty"`
+	// Types: optional PipeLang type declarations used by tooling/materialization.
+	Types []string `yaml:"types,omitempty"`
 	// Inject: explicit compile closure dependencies (workflow/package ids and resolver profile names).
 	// Unlike imports:, this does not merge YAML — it only guides package compile for-workflow ordering.
 	Inject WorkflowInjectList `yaml:"inject,omitempty"`
-	Vars            map[string]string `yaml:"vars"`
-	Steps           []Step            `yaml:"steps"`
+	Vars            map[string]string `yaml:"vars,omitempty"`
+	Steps           []Step            `yaml:"steps,omitempty"`
 }
 
 // AnyContainerStep reports whether any step runs inside Docker (skip_container is false or omitted).
@@ -127,16 +129,16 @@ func (w *Workflow) NeedsDockerReachable() bool {
 type Step struct {
 	// ID is optional; used in logs (e.g. [merge] lines). If empty, runner uses "step N".
 	ID            string            `yaml:"id,omitempty"`
-	Run           RunSpec           `yaml:"run"`
-	PreScript     string            `yaml:"pre_script"`
-	Isolate       string            `yaml:"isolate"`
-	Act           string            `yaml:"act"`
-	Action        string            `yaml:"action"`
-	Cmd           string            `yaml:"cmd"`
-	Command       string            `yaml:"command"`
-	Outputs       string            `yaml:"outputs"`
-	SkipContainer bool              `yaml:"skip_container"`
-	Vars          map[string]string `yaml:"vars"`
+	Run           RunSpec           `yaml:"run,omitempty"`
+	PreScript     string            `yaml:"pre_script,omitempty"`
+	Isolate       string            `yaml:"isolate,omitempty"`
+	Act           string            `yaml:"act,omitempty"`
+	Action        string            `yaml:"action,omitempty"`
+	Cmd           string            `yaml:"cmd,omitempty"`
+	Command       string            `yaml:"command,omitempty"`
+	Outputs       string            `yaml:"outputs,omitempty"`
+	SkipContainer bool              `yaml:"skip_container,omitempty"`
+	Vars          map[string]string `yaml:"vars,omitempty"`
 	// Blocking is YAML is_blocking: when false, this step joins a parallel batch with adjacent
 	// non-blocking steps. Inputs = env after last blocking step + this step’s vars/pre-scripts only;
 	// outputs merge in order after the whole batch (see src/lib/README.md).
@@ -242,6 +244,7 @@ type workflowFile struct {
 	Vault           string            `yaml:"vault,omitempty"`
 	DockerPreflight *bool             `yaml:"docker_preflight,omitempty"`
 	CompileHooks    []string          `yaml:"compile_hooks,omitempty"`
+	Types           []string          `yaml:"types,omitempty"`
 	Vars            map[string]string `yaml:"vars"`
 	Imports         []string          `yaml:"imports,omitempty"`
 	Inject          WorkflowInjectList `yaml:"inject,omitempty"`

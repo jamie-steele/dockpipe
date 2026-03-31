@@ -104,6 +104,9 @@ func cmdInit(args []string) error {
 		}
 	}
 	if name == "" {
+		if err := ensureDefaultStarterWorkflow(repoRoot, projectDir); err != nil {
+			return err
+		}
 		fmt.Fprintf(os.Stderr, "[dockpipe] Initialized Dockpipe in %s\n", projectDir)
 		return nil
 	}

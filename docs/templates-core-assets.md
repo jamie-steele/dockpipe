@@ -9,7 +9,7 @@ templates/core/assets/compose/   # optional examples (not auto-run)
 templates/core/bundles/<domain>/ # domain trees (dorkpipe, …)
 ```
 
-**Merged by `dockpipe init`** into the project’s **`templates/core/`**.
+**Installed or materialized separately from `dockpipe init`** into a project’s **`templates/core/`** when you use **`dockpipe install core`** or other package/materialization flows.
 
 | Kind | Notes |
 |------|--------|

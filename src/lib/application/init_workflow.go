@@ -14,10 +14,8 @@ import (
 
 const dockpipeProjectReadme = `# Dockpipe project
 
-- **scripts/** — Run and act scripts.
-- **images/** — Optional project Dockerfiles (e.g. **images/example/** copied from **templates/core/assets/images/example/**). Bundled framework images resolve via **DockerfileDir** (**resolvers/** / **bundles/** / **assets/images/**).
 - **workflows/** — Default home for named workflows (**config.yml** per folder); **dockpipe init &lt;name&gt;** creates **workflows/&lt;name&gt;/** (override with **--workflows-dir** or **DOCKPIPE_WORKFLOWS_DIR**).
-- **templates/core/** — Shared **runtimes/**, **resolvers/**, **strategies/**, **assets/** (**agnostic scripts**, **images/**, **compose/**), **bundles/** (optional domain script trees) (from **dockpipe init**). Add more resolver packages later with **dockpipe install package …** when your release or registry ships them.
+- **Compiled packages** — Workflows, resolvers, and core slices are expected to come from **compile** / **install** flows now rather than a copied **templates/core/** scaffold.
 - **templates/&lt;name&gt;/** — Legacy named workflows; still resolved if **workflows/** does not define the same name.
 - **.env.vault.template.example** — Example **op://** mapping for **op inject** (install the **op** CLI from 1Password). Copy to **.env.vault.template** and see **docs/vault.md** for **secrets.vault** and workflow **vault:**. For a vendor-neutral path, use **secretstore** + **dotenv** and **.env.secretstore**.
 - **dockpipe.config.json** (optional) — Repo-root JSON: **compile** source lists and optional **secrets** (**vault_template** preferred; **op_inject_template** is legacy). Omit to use built-in compile defaults when you add a config file later.
@@ -79,15 +77,9 @@ func ensureAgentsSelfAnalysisPointer(projectDir string) (bool, error) {
 	return true, nil
 }
 
-// ensureProjectScaffold creates scripts/, images/, templates/, merges bundled templates/core,
-// and adds README.md / dockpipe.config.json when missing. Idempotent for an existing repo tree.
+// ensureProjectScaffold creates the minimal project scaffold and root metadata files.
+// Shared workflows/resolvers/runtime material now comes from compile/install flows instead of copying templates/core.
 func ensureProjectScaffold(repoRoot, projectDir string) error {
-	_ = os.MkdirAll(filepath.Join(projectDir, "scripts"), 0o755)
-	_ = os.MkdirAll(filepath.Join(projectDir, "images"), 0o755)
-	_ = os.MkdirAll(filepath.Join(projectDir, "templates"), 0o755)
-	if err := mergeBundledTemplatesCore(repoRoot, projectDir); err != nil {
-		return fmt.Errorf("templates/core: %w", err)
-	}
 	_ = os.MkdirAll(filepath.Join(projectDir, "workflows"), 0o755)
 	readme := filepath.Join(projectDir, "README.md")
 	if _, err := os.Stat(readme); os.IsNotExist(err) {
@@ -226,6 +218,9 @@ func maybeWarnUnusedWorkflowsRoot(projectDir string) {
 	if infrastructure.WorkflowsDirHasDockpipeWorkflow(root) {
 		return
 	}
+	if !infrastructure.WorkflowsDirHasFiles(root) {
+		return
+	}
 	rel := root
 	if r, err := filepath.Rel(projectDir, root); err == nil && !strings.HasPrefix(r, "..") {
 		rel = r
@@ -233,6 +228,14 @@ func maybeWarnUnusedWorkflowsRoot(projectDir string) {
 	fmt.Fprintf(os.Stderr, "[dockpipe] warning: %q exists but has no DockPipe workflow folders (no <name>/config.yml). "+
 		"This path is often used for GitHub Actions or other tools. New workflows will still be created here. "+
 		"To use a different directory set DOCKPIPE_WORKFLOWS_DIR or run: dockpipe init <name> --workflows-dir <path>\n", rel)
+}
+
+func ensureDefaultStarterWorkflow(repoRoot, projectDir string) error {
+	wfRoot := infrastructure.WorkflowsRootDir(projectDir)
+	if infrastructure.WorkflowsDirHasDockpipeWorkflow(wfRoot) {
+		return nil
+	}
+	return createNamedWorkflow(repoRoot, projectDir, "example", "init", "", "", "")
 }
 
 func createNamedWorkflow(repoRoot, projectDir, name, fromSource, resolver, runtime, strategy string) error {
@@ -275,11 +278,6 @@ func createNamedWorkflow(repoRoot, projectDir, name, fromSource, resolver, runti
 	}
 	if err := applyInitWorkflowFlags(cfgPath, resolver, runtime, strategy); err != nil {
 		return err
-	}
-	if !isBlank {
-		_ = copyFileMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "scripts", "example-run.sh"), filepath.Join(projectDir, "scripts/example-run.sh"))
-		_ = copyFileMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "scripts", "example-act.sh"), filepath.Join(projectDir, "scripts/example-act.sh"))
-		_ = copyDirMaybe(filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "images", "example"), filepath.Join(projectDir, "images/example"))
 	}
 	if !isBlank && isSelfAnalysisWorkflowSource(srcDir, fromSource) {
 		changed, err := ensureAgentsSelfAnalysisPointer(projectDir)
