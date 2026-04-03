@@ -19,18 +19,24 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
+#include <QPlainTextEdit>
 #include <QMenu>
 #include <QMenuBar>
 #include <QMessageBox>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QPushButton>
+#include <QScrollBar>
+#include <QSplitter>
 #include <QStackedWidget>
 #include <QStatusBar>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
+#include <QFontDatabase>
+#include <QRegularExpression>
 
 namespace {
 
@@ -48,6 +54,39 @@ QString statusLabel(SessionManager &sm, const QString &id, bool *runningOut, boo
     }
     *failedOut = false;
     return QObject::tr("Stopped");
+}
+
+bool contextMatchesFilter(const Context &c, const QString &filter)
+{
+    const QString needle = filter.trimmed().toCaseFolded();
+    if (needle.isEmpty())
+        return true;
+
+    const QString haystack = QStringList{
+                                 c.label,
+                                 c.workdir,
+                                 c.workflow,
+                                 c.workflowFile,
+                                 c.resolver,
+                                 c.strategy,
+                                 c.runtime,
+                                 c.dockpipeBinary,
+                                 c.envFile,
+                                 c.id,
+                             }
+                                 .join(QLatin1Char('\n'))
+                                 .toCaseFolded();
+    return haystack.contains(needle);
+}
+
+QString shellQuote(QString s)
+{
+    if (s.isEmpty())
+        return QStringLiteral("''");
+    s.replace(QLatin1Char('\''), QStringLiteral("'\"'\"'"));
+    if (s.contains(QRegularExpression(QStringLiteral("[\\s\"'`$&|;<>()\\[\\]{}*!?\\\\]"))))
+        return QStringLiteral("'") + s + QStringLiteral("'");
+    return s;
 }
 
 } // namespace
@@ -93,6 +132,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     connect(&m_sessions, &SessionManager::sessionStarted, this, &MainWindow::onSessionChanged);
     connect(&m_sessions, &SessionManager::sessionStopped, this, &MainWindow::onSessionChanged);
     connect(&m_sessions, &SessionManager::sessionFailed, this, &MainWindow::onSessionChanged);
+    connect(&m_sessions, &SessionManager::sessionOutput, this, &MainWindow::onSessionOutput);
     connect(&m_sessions, &SessionManager::sessionFailed, this,
             [this](const QString &, const QString &err) { QMessageBox::warning(this, tr("Pipeon"), err); });
 
@@ -239,17 +279,26 @@ void MainWindow::setupAdvancedPage(QWidget *page)
     addSecondary(tr("Refresh worktrees"), &MainWindow::onRefreshWorktrees, "secondaryButton");
     addSecondary(tr("Open logs"), &MainWindow::onOpenLogs, "secondaryButton");
     addSecondary(tr("Open folder"), &MainWindow::onOpenFolder, "secondaryButton");
-    addSecondary(tr("Remove"), &MainWindow::onRemoveContext, "dangerButton");
+    addSecondary(tr("Forget saved row"), &MainWindow::onRemoveContext, "dangerButton");
     addSecondary(tr("Stop all for repo"), &MainWindow::onStopAllForRepo, "secondaryButton");
     secondaryRow->addStretch(1);
     headLay->addLayout(secondaryRow);
 
     root->addWidget(header);
 
-    m_hint = new QLabel(tr("Saved contexts appear below. Add folder scans workflows from this checkout. Right-click a row for actions."));
+    m_hint = new QLabel(tr("Saved workflow rows appear below. Add folder scans workflows from this checkout. Right-click a row for actions."));
     m_hint->setObjectName(QStringLiteral("hintText"));
     m_hint->setWordWrap(true);
     root->addWidget(m_hint);
+
+    m_search = new QLineEdit(page);
+    m_search->setClearButtonEnabled(true);
+    m_search->setPlaceholderText(tr("Search saved rows by label, folder, workflow, resolver…"));
+    connect(m_search, &QLineEdit::textChanged, this, &MainWindow::onAdvancedSearchChanged);
+    root->addWidget(m_search);
+
+    auto *splitter = new QSplitter(Qt::Vertical, page);
+    splitter->setChildrenCollapsible(false);
 
     auto *listPanel = new QFrame;
     listPanel->setObjectName(QStringLiteral("listPanel"));
@@ -268,29 +317,58 @@ void MainWindow::setupAdvancedPage(QWidget *page)
     auto *emptyLay = new QVBoxLayout(m_emptyState);
     emptyLay->setContentsMargins(28, 36, 28, 36);
     emptyLay->setSpacing(8);
-    auto *emptyTitle = new QLabel(tr("No contexts yet"));
-    emptyTitle->setObjectName(QStringLiteral("emptyTitle"));
-    emptyTitle->setAlignment(Qt::AlignCenter);
-    auto *emptyBody = new QLabel(
+    m_emptyTitle = new QLabel(tr("No contexts yet"));
+    m_emptyTitle->setObjectName(QStringLiteral("emptyTitle"));
+    m_emptyTitle->setAlignment(Qt::AlignCenter);
+    m_emptyBody = new QLabel(
         tr("Use Add folder… to import workflows, or use View → Basic mode and open a project folder."));
-    emptyBody->setObjectName(QStringLiteral("emptyBody"));
-    emptyBody->setWordWrap(true);
-    emptyBody->setAlignment(Qt::AlignCenter);
-    emptyLay->addWidget(emptyTitle);
-    emptyLay->addWidget(emptyBody);
+    m_emptyBody->setObjectName(QStringLiteral("emptyBody"));
+    m_emptyBody->setWordWrap(true);
+    m_emptyBody->setAlignment(Qt::AlignCenter);
+    emptyLay->addWidget(m_emptyTitle);
+    emptyLay->addWidget(m_emptyBody);
 
     listOuter->addWidget(m_emptyState, 1);
     listOuter->addWidget(m_list, 1);
     m_emptyState->hide();
     m_list->hide();
 
-    root->addWidget(listPanel, 1);
+    splitter->addWidget(listPanel);
 
-    connect(m_list, &QListWidget::itemDoubleClicked, this, [this]() { onLaunch(); });
+    auto *consolePanel = new QFrame;
+    consolePanel->setObjectName(QStringLiteral("inlineConsolePanel"));
+    auto *consoleLay = new QVBoxLayout(consolePanel);
+    consoleLay->setContentsMargins(12, 12, 12, 12);
+    consoleLay->setSpacing(8);
+
+    m_consoleTitle = new QLabel(tr("Inline CLI"));
+    m_consoleTitle->setObjectName(QStringLiteral("consoleTitle"));
+    m_consoleMeta = new QLabel(tr("Select a saved row, then launch it to see output here."));
+    m_consoleMeta->setObjectName(QStringLiteral("consoleMeta"));
+    m_consoleMeta->setWordWrap(true);
+
+    m_console = new QPlainTextEdit(consolePanel);
+    m_console->setObjectName(QStringLiteral("inlineConsole"));
+    m_console->setReadOnly(true);
+    m_console->setPlaceholderText(tr("Command output will appear here."));
+    m_console->setLineWrapMode(QPlainTextEdit::NoWrap);
+    m_console->setMinimumHeight(120);
+    m_console->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+
+    consoleLay->addWidget(m_consoleTitle);
+    consoleLay->addWidget(m_consoleMeta);
+    consoleLay->addWidget(m_console, 1);
+    splitter->addWidget(consolePanel);
+    splitter->setStretchFactor(0, 3);
+    splitter->setStretchFactor(1, 2);
+    splitter->setSizes({360, 240});
+    root->addWidget(splitter, 1);
+
     connect(m_list, &QListWidget::customContextMenuRequested, this, [this](const QPoint &p) {
         if (QListWidgetItem *it = m_list->itemAt(p))
             applyContextMenu(it, m_list->mapToGlobal(p));
     });
+    connect(m_list, &QListWidget::itemSelectionChanged, this, &MainWindow::onAdvancedSelectionChanged);
 }
 
 void MainWindow::applyUiMode()
@@ -555,11 +633,26 @@ void MainWindow::rebuildAdvancedContextList()
 {
     clearContextList();
 
-    const bool empty = m_store.contexts.isEmpty();
-    m_emptyState->setVisible(empty);
-    m_list->setVisible(!empty);
+    const QString filter = m_search ? m_search->text() : QString();
+    int visibleCount = 0;
+    const bool noSavedRows = m_store.contexts.isEmpty();
+
+    if (m_emptyTitle && m_emptyBody) {
+        if (noSavedRows) {
+            m_emptyTitle->setText(tr("No contexts yet"));
+            m_emptyBody->setText(
+                tr("Use Add folder… to import workflows, or use View → Basic mode and open a project folder."));
+        } else {
+            m_emptyTitle->setText(tr("No matching rows"));
+            m_emptyBody->setText(tr("Try a different search, or clear the filter to show every saved row."));
+        }
+    }
 
     for (const Context &c : m_store.contexts) {
+        if (!contextMatchesFilter(c, filter))
+            continue;
+        ++visibleCount;
+
         bool running = false;
         bool failed = false;
         const QString st = statusLabel(m_sessions, c.id, &running, &failed);
@@ -572,17 +665,39 @@ void MainWindow::rebuildAdvancedContextList()
         auto *row = new ContextRowWidget(c, st, running, failed, m_list);
         m_list->setItemWidget(item, row);
     }
+
+    const bool empty = visibleCount == 0;
+    m_emptyState->setVisible(empty);
+    m_list->setVisible(!empty);
 }
 
 void MainWindow::rebuildUi()
 {
     rebuildAdvancedContextList();
     updateBasicPage();
+    refreshInlineConsole();
 }
 
 void MainWindow::onSessionChanged()
 {
     rebuildUi();
+}
+
+void MainWindow::onAdvancedSearchChanged(const QString &)
+{
+    rebuildAdvancedContextList();
+}
+
+void MainWindow::onAdvancedSelectionChanged()
+{
+    refreshInlineConsole();
+}
+
+void MainWindow::onSessionOutput(const QString &contextId, const QString &text)
+{
+    if (contextId != m_consoleContextId)
+        return;
+    appendInlineConsole(text);
 }
 
 QListWidgetItem *MainWindow::currentItem()
@@ -696,7 +811,15 @@ void MainWindow::onRemoveContext()
     if (!c)
         return;
     if (m_sessions.isRunning(c->id)) {
-        QMessageBox::warning(this, tr("Pipeon"), tr("Stop the session before removing."));
+        QMessageBox::warning(this, tr("Pipeon"), tr("Stop this context before forgetting the saved row."));
+        return;
+    }
+    const QString label = c->label.isEmpty() ? c->workdir : c->label;
+    const auto choice = QMessageBox::question(
+        this, tr("Forget saved row"),
+        tr("Remove \"%1\" from Pipeon?\n\nThis only removes the saved launcher row. It does not delete files from disk.")
+            .arg(label));
+    if (choice != QMessageBox::Yes) {
         return;
     }
     for (int i = 0; i < m_store.contexts.size(); ++i) {
@@ -807,6 +930,74 @@ void MainWindow::applyContextMenu(QListWidgetItem *, const QPoint &globalPos)
     menu.addAction(tr("Open folder"), this, &MainWindow::onOpenFolder);
     menu.addAction(tr("Edit settings…"), this, &MainWindow::onEditContext);
     menu.addSeparator();
-    menu.addAction(tr("Remove context"), this, &MainWindow::onRemoveContext);
+    menu.addAction(tr("Forget saved row"), this, &MainWindow::onRemoveContext);
     menu.exec(globalPos);
+}
+
+void MainWindow::refreshInlineConsole()
+{
+    if (!m_console || !m_consoleTitle || !m_consoleMeta)
+        return;
+
+    Context *c = currentContext();
+    if (!c) {
+        m_consoleContextId.clear();
+        m_consoleTitle->setText(tr("Inline CLI"));
+        m_consoleMeta->setText(tr("Select a saved row, then launch it to see output here."));
+        m_console->setPlainText(QString());
+        return;
+    }
+
+    m_consoleContextId = c->id;
+    m_consoleTitle->setText(c->label.isEmpty() ? tr("Inline CLI") : c->label);
+    m_consoleMeta->setText(currentContextCommandLine());
+
+    const SessionInfo si = m_sessions.info(c->id);
+    QString text;
+    if (!si.logPath.isEmpty()) {
+        QFile f(si.logPath);
+        if (f.open(QIODevice::ReadOnly | QIODevice::Text))
+            text = QString::fromLocal8Bit(f.readAll());
+    }
+    if (text.isEmpty()) {
+        text = tr("# No output yet.\n# Launch this row to run dockpipe inline here.");
+    }
+    m_console->setPlainText(text);
+    auto *bar = m_console->verticalScrollBar();
+    if (bar)
+        bar->setValue(bar->maximum());
+}
+
+void MainWindow::appendInlineConsole(const QString &text)
+{
+    if (!m_console || text.isEmpty())
+        return;
+    m_console->moveCursor(QTextCursor::End);
+    m_console->insertPlainText(text);
+    auto *bar = m_console->verticalScrollBar();
+    if (bar)
+        bar->setValue(bar->maximum());
+}
+
+QString MainWindow::currentContextCommandLine() const
+{
+    const Context *c = const_cast<MainWindow *>(this)->currentContext();
+    if (!c)
+        return tr("Select a saved row, then launch it to see output here.");
+
+    SessionInfo si = m_sessions.info(c->id);
+    QString program = si.program;
+    QStringList args = si.arguments;
+    if (program.isEmpty()) {
+        program = c->dockpipeBinary.trimmed();
+        if (program.isEmpty())
+            program = QStringLiteral("dockpipe");
+        args = SessionManager::dockpipeArguments(*c);
+    }
+
+    QStringList parts;
+    parts.append(shellQuote(program));
+    for (const QString &arg : args)
+        parts.append(shellQuote(arg));
+    return parts.join(QLatin1Char(' '));
 }

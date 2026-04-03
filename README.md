@@ -58,6 +58,8 @@ make dev-install
 make test        # fastest: Go tests only
 make test-quick  # Go + path guard + bash unit tests (no Docker)
 make ci          # full Linux CI mirror (govulncheck, gosec, Docker, integration — see src/scripts/ci-local.sh)
+# same thing via DockPipe:
+./src/bin/dockpipe --workflow ci-emulate --workdir . --
 ```
 
 **Accelerator (this repo):** same as any DockPipe project — compile what you need into **`.dockpipe/`**, then run by workflow name. After **`make build`**:

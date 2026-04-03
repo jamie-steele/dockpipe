@@ -4,6 +4,7 @@ QLabel#appSubtitle,
 QLabel#hintText,
 QLabel#contextPath,
 QLabel#contextMeta,
+QLabel#consoleMeta,
 QLabel#emptyBody {
     color: #2d2d2d;
 }
@@ -54,4 +55,15 @@ QLabel#disclaimerWatermark {
 
 QStatusBar {
     border-top: 1px solid #c8c8c8;
+}
+
+QFrame#inlineConsolePanel {
+    background-color: #f5f6f8;
+    border: 1px solid #d3d7de;
+}
+
+QPlainTextEdit#inlineConsole {
+    background-color: #fbfcfe;
+    color: #1b2230;
+    border-color: #c4cad4;
 }

@@ -1,6 +1,7 @@
 #include "ContextDiscovery.h"
 #include "DockpipeChoices.h"
 #include "GitHelper.h"
+#include "WorkflowCatalog.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -15,10 +16,10 @@ QVector<Context> ContextDiscovery::contextsForWorkdir(const QString &workdir)
         baseLabel = QFileInfo(gitRoot).fileName() + QStringLiteral(" — ") + QFileInfo(clean).fileName();
 
     const QString repoRoot = DockpipeChoices::findRepoRoot(clean);
-    const QStringList wfNames = DockpipeChoices::listWorkflowNamesFromRepo(repoRoot, clean);
+    const QVector<WorkflowMeta> workflows = WorkflowCatalog::discoverAll(repoRoot, clean);
 
     QVector<Context> out;
-    if (wfNames.isEmpty()) {
+    if (workflows.isEmpty()) {
         Context c = Context::createNew();
         c.workdir = clean;
         c.label = baseLabel;
@@ -27,11 +28,13 @@ QVector<Context> ContextDiscovery::contextsForWorkdir(const QString &workdir)
         return out;
     }
 
-    for (const QString &wf : wfNames) {
+    for (const WorkflowMeta &wf : workflows) {
+        if (wf.workflowId.trimmed().isEmpty())
+            continue;
         Context c = Context::createNew();
         c.workdir = clean;
-        c.label = baseLabel + QStringLiteral(" — ") + wf;
-        c.workflow = wf;
+        c.label = baseLabel + QStringLiteral(" — ") + wf.workflowId;
+        c.workflow = wf.workflowId;
         out.append(c);
     }
     return out;

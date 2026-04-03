@@ -45,6 +45,25 @@ QFrame#listPanel {
     border-radius: 8px;
 }
 
+QFrame#inlineConsolePanel {
+    background-color: palette(base);
+    border: none;
+    border-radius: 8px;
+}
+
+QSplitter::handle {
+    background: transparent;
+}
+
+QSplitter::handle:vertical {
+    height: 10px;
+}
+
+QSplitter::handle:vertical:hover {
+    background: palette(midlight);
+    border-radius: 4px;
+}
+
 QListWidget {
     outline: none;
     border: none;
@@ -93,6 +112,12 @@ QLabel#contextTitle {
     color: palette(window-text);
 }
 
+QLabel#consoleTitle {
+    font-size: 13px;
+    font-weight: 700;
+    color: palette(window-text);
+}
+
 QLabel#contextPath {
     font-size: 11px;
 }
@@ -100,6 +125,10 @@ QLabel#contextPath {
 QLabel#contextMeta {
     font-size: 11px;
     font-style: italic;
+}
+
+QLabel#consoleMeta {
+    font-size: 11px;
 }
 
 QLabel#statusBadge {
@@ -179,6 +208,14 @@ QLineEdit:focus, QComboBox:focus {
 QComboBox::drop-down {
     border: none;
     width: 22px;
+}
+
+QPlainTextEdit#inlineConsole {
+    border-radius: 8px;
+    padding: 10px 12px;
+    border: 1px solid palette(midlight);
+    selection-background-color: palette(highlight);
+    font-size: 12px;
 }
 
 QFrame#emptyState {

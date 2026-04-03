@@ -16,7 +16,11 @@ RUN npm install -g @vscode/vsce \
 FROM codercom/code-server:latest
 
 USER root
-RUN mkdir -p /work && chmod 777 /work
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends jq \
+  && rm -rf /var/lib/apt/lists/* \
+  && mkdir -p /work \
+  && chmod 777 /work
 
 # Pipeon P-mark favicon (browser tab) — replaces code-server defaults.
 COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon.ico /usr/lib/code-server/src/browser/media/favicon.ico

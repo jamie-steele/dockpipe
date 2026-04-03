@@ -13,6 +13,8 @@ class QCloseEvent;
 class QListWidget;
 class QListWidgetItem;
 class QLabel;
+class QLineEdit;
+class QPlainTextEdit;
 class QFrame;
 class QStackedWidget;
 class QAction;
@@ -55,6 +57,9 @@ private slots:
     void onSetupMcp();
     void onDismissThirdPartyDisclaimer();
     void onRestoreThirdPartyDisclaimer();
+    void onAdvancedSearchChanged(const QString &text);
+    void onAdvancedSelectionChanged();
+    void onSessionOutput(const QString &contextId, const QString &text);
 
 private:
     void setupMenuBar();
@@ -70,6 +75,9 @@ private:
     void setupTray();
     void setupDisclaimerBar();
     void applyContextMenu(QListWidgetItem *item, const QPoint &globalPos);
+    void refreshInlineConsole();
+    void appendInlineConsole(const QString &text);
+    QString currentContextCommandLine() const;
 
     ContextStore m_store;
     SessionManager m_sessions;
@@ -81,7 +89,13 @@ private:
 
     QListWidget *m_list = nullptr;
     QLabel *m_hint = nullptr;
+    QLineEdit *m_search = nullptr;
+    QLabel *m_consoleTitle = nullptr;
+    QLabel *m_consoleMeta = nullptr;
+    QPlainTextEdit *m_console = nullptr;
     QFrame *m_emptyState = nullptr;
+    QLabel *m_emptyTitle = nullptr;
+    QLabel *m_emptyBody = nullptr;
     QSystemTrayIcon *m_tray = nullptr;
 
     QAction *m_actBasic = nullptr;
@@ -90,4 +104,5 @@ private:
     QAction *m_actList = nullptr;
 
     QWidget *m_disclaimerContainer = nullptr;
+    QString m_consoleContextId;
 };

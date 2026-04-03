@@ -109,11 +109,15 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
     si.contextId = ctx.id;
     si.status = SessionStatus::Starting;
     si.logPath = logPath;
+    si.program = program;
+    si.arguments = proc->arguments();
     m_info[ctx.id] = si;
 
-    connect(proc, &QProcess::readyReadStandardOutput, proc, [proc, logFile]() {
-        logFile->write(proc->readAllStandardOutput());
+    connect(proc, &QProcess::readyReadStandardOutput, this, [this, ctx, proc, logFile]() {
+        const QByteArray chunk = proc->readAllStandardOutput();
+        logFile->write(chunk);
         logFile->flush();
+        emit sessionOutput(ctx.id, QString::fromLocal8Bit(chunk));
     });
 
     connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
