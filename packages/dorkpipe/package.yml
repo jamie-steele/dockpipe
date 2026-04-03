@@ -1,7 +1,7 @@
 schema: 1
 kind: package
 name: dorkpipe
-version: 0.1.0
+version: 0.6.0
 title: DorkPipe (orchestration) maintainer pack
 description: |
   Single umbrella package for DorkPipe workflows: orchestrator, self-analysis variants,

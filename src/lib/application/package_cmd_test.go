@@ -61,6 +61,9 @@ func TestCmdPackageCompileCore(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "runtimes", ".keep"), []byte(""), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "VERSION"), []byte("9.8.7\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	oldWd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -81,6 +84,9 @@ func TestCmdPackageCompileCore(t *testing.T) {
 	if _, err := packagebuild.ReadFileFromTarGz(matches[0], "core/package.yml"); err != nil {
 		t.Fatal(err)
 	}
+	if filepath.Base(matches[0]) != "dockpipe-core-9.8.7.tar.gz" {
+		t.Fatalf("expected repo VERSION in core tarball name, got %s", filepath.Base(matches[0]))
+	}
 }
 
 func TestCmdPackageCompileResolversVendorResolversSubdir(t *testing.T) {
@@ -91,6 +97,9 @@ func TestCmdPackageCompileResolversVendorResolversSubdir(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(resRoot, "profile"), []byte("DOCKPIPE_RESOLVER_CMD=test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "VERSION"), []byte("3.4.5\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	oldWd, err := os.Getwd()
@@ -110,6 +119,9 @@ func TestCmdPackageCompileResolversVendorResolversSubdir(t *testing.T) {
 	if err != nil || len(matches) != 1 {
 		t.Fatalf("expected one resolver tarball: matches=%v err=%v", matches, err)
 	}
+	if filepath.Base(matches[0]) != "dockpipe-resolver-alpha-3.4.5.tar.gz" {
+		t.Fatalf("expected repo VERSION in resolver tarball name, got %s", filepath.Base(matches[0]))
+	}
 	if _, err := packagebuild.ReadFileFromTarGz(matches[0], "resolvers/alpha/profile"); err != nil {
 		t.Fatal(err)
 	}
@@ -127,6 +139,9 @@ func TestCmdPackageCompileWorkflow(t *testing.T) {
 	if err := os.MkdirAll(src, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "VERSION"), []byte("2.3.4\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	cfg := `name: mywf
 description: test
 steps: []
@@ -137,14 +152,18 @@ steps: []
 	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
 		t.Fatal(err)
 	}
-	tgz := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-0.1.0.tar.gz")
+	tgz := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-2.3.4.tar.gz")
 	if _, err := os.Stat(tgz); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/config.yml"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/package.yml"); err != nil {
+	pyml, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/package.yml")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !strings.Contains(string(pyml), "version: 2.3.4") {
+		t.Fatalf("expected generated manifest version 2.3.4, got:\n%s", string(pyml))
 	}
 }

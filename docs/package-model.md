@@ -117,6 +117,8 @@ Suggested subdirectories (mirror authoring concepts; not all are required):
 
 **Metadata:** each installable unit should include **`package.yml`** next to its payload (see **`dockpipe package manifest`**). Core fields: **`name`**, **`version`**, **`title`**, **`description`**, **`author`**, **`website`**, **`license`**, **`kind`** (`workflow` \| `resolver` \| `core` \| `assets` \| `bundle`). Optional **`namespace`** — same rules as workflow **`config.yml`** **`namespace:`** (lowercase label; reserved words like **`dockpipe`**, **`core`**, **`system`** are rejected).
 
+**Versioning:** treat **`package.yml version`** as the release identity for that package. In this repo, authored package metadata under **`packages/`**, **`.staging/packages/`**, and bundled example package metadata under **`src/core/`** should normally track the repo-root **`VERSION`** unless a package is intentionally released on a different cadence. Generated manifests from **`dockpipe package compile`** inherit repo-root **`VERSION`** by default when present; explicit versions must be semver-shaped so tarball names and CDN paths stay stable.
+
 **Rich metadata (authoring & store discovery)** — optional but recommended for **workflow** and **resolver** packages:
 
 | Field | Purpose |

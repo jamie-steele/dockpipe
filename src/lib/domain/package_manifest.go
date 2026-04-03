@@ -3,6 +3,7 @@ package domain
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -83,6 +84,9 @@ func ValidatePackageManifest(m *PackageManifest) error {
 	if m == nil {
 		return nil
 	}
+	if err := ValidatePackageVersion(m.Version); err != nil {
+		return err
+	}
 	if err := ValidateNamespace(m.Namespace); err != nil {
 		return err
 	}
@@ -127,6 +131,21 @@ func ValidateCapabilityID(s string) error {
 // ValidatePrimitive is deprecated: use ValidateCapabilityID. Kept for transitional call sites.
 func ValidatePrimitive(s string) error {
 	return ValidateCapabilityID(s)
+}
+
+var packageVersionPattern = regexp.MustCompile(`^v?[0-9]+(?:\.[0-9]+){2}(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+
+// ValidatePackageVersion checks optional package version metadata.
+// Keep this semver-shaped so tarball names and CDN paths stay predictable.
+func ValidatePackageVersion(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	if !packageVersionPattern.MatchString(s) {
+		return fmt.Errorf("version: %q is not semver-like (expected 1.2.3, 1.2.3-rc1, or v1.2.3)", s)
+	}
+	return nil
 }
 
 func validateOptionalMetadataString(s, field string) error {

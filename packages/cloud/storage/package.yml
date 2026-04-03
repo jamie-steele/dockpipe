@@ -1,7 +1,7 @@
 schema: 1
 kind: package
 name: cloud.storage
-version: 0.1.0
+version: 0.6.0
 title: DockPipe cloud storage
 description: |
   Umbrella for cloud object storage workflows. Package id cloud.storage; resolver r2 → dotted

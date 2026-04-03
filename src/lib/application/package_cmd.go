@@ -182,7 +182,7 @@ const examplePackageManifestYAML = `# package.yml — metadata for a DockPipe pa
 # Place next to the package tree under bin/.dockpipe/internal/packages/ (see docs/package-model.md).
 schema: 1
 name: my-package
-version: 0.1.0
+version: 1.2.3
 title: Short human title
 description: |
   Longer description for humans and search.

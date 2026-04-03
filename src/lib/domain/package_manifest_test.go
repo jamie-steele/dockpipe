@@ -291,3 +291,26 @@ distribution: binary
 		t.Fatalf("got %+v", m)
 	}
 }
+
+func TestParsePackageManifestRejectsInvalidVersion(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	body := `schema: 1
+name: demo
+version: latest
+title: Demo
+description: A demo package
+author: ACME
+website: https://example.com
+license: Apache-2.0
+kind: workflow
+`
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ParsePackageManifest(p)
+	if err == nil || !strings.Contains(err.Error(), "semver-like") {
+		t.Fatalf("expected semver-like version error, got %v", err)
+	}
+}

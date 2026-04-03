@@ -236,12 +236,13 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 	if _, err := materializePipeLangRoots([]string{staging}, true, ""); err != nil {
 		return fmt.Errorf("compile pipelang artifacts: %w", err)
 	}
+	defaultVersion := authoredPackageVersion(workdir)
 	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
 		pm := map[string]any{
 			"schema":                1,
 			"name":                  pkgName,
-			"version":               "0.1.0",
+			"version":               defaultVersion,
 			"title":                 pkgName,
 			"description":           "Compiled from " + srcAbs,
 			"kind":                  "workflow",
@@ -274,7 +275,7 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 	}
 	ver := strings.TrimSpace(pmParsed.Version)
 	if ver == "" {
-		ver = "0.1.0"
+		ver = defaultVersion
 	}
 	outPath := filepath.Join(pw, fmt.Sprintf("dockpipe-workflow-%s-%s.tar.gz", packagebuild.SafeTarballToken(pkgName), packagebuild.SafeTarballToken(ver)))
 	if _, err := packagebuild.WriteDirTarGzWithPrefix(staging, outPath, "workflows/"+pkgName); err != nil {
@@ -387,12 +388,13 @@ func cmdPackageCompileCore(args []string) error {
 	if _, err := materializePipeLangRoots([]string{staging}, true, ""); err != nil {
 		return fmt.Errorf("compile pipelang artifacts: %w", err)
 	}
+	defaultVersion := authoredPackageVersion(workdir)
 	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
 		pm := map[string]any{
 			"schema":       1,
 			"name":         "dockpipe.core",
-			"version":      "0.1.0",
+			"version":      defaultVersion,
 			"title":        "Compiled core slice",
 			"description":  "Compiled from " + srcAbs,
 			"kind":         "core",
@@ -414,7 +416,7 @@ func cmdPackageCompileCore(args []string) error {
 	}
 	ver := strings.TrimSpace(pmParsed.Version)
 	if ver == "" {
-		ver = "0.1.0"
+		ver = defaultVersion
 	}
 	outPath := filepath.Join(coreDir, fmt.Sprintf("dockpipe-core-%s.tar.gz", packagebuild.SafeTarballToken(ver)))
 	if _, err := packagebuild.WriteDirTarGzWithPrefix(staging, outPath, "core"); err != nil {
@@ -516,7 +518,7 @@ func cmdPackageCompileResolvers(args []string) error {
 			fmt.Fprintf(os.Stderr, "[dockpipe] skip missing resolvers root: %s\n", srcAbs)
 			continue
 		}
-		n, err := mergeChildPackages(srcAbs, destRes, "resolver", defResolverNamespace, force)
+		n, err := mergeChildPackages(srcAbs, destRes, "resolver", defResolverNamespace, authoredPackageVersion(repoRoot), force)
 		if err != nil {
 			return err
 		}
@@ -618,7 +620,7 @@ func hasNestedResolverPackLayout(dir string) bool {
 //   - srcRoot/dockpipe/<package>/resolvers/ — DockPipe official packages (e.g. agent → codex, ide → vscode)
 //
 // Each resolver child still becomes its own dockpipe-resolver-<name>-*.tar.gz for the store.
-func mergeChildPackages(srcRoot, destRoot string, kind string, defaultNamespace string, force bool) (int, error) {
+func mergeChildPackages(srcRoot, destRoot string, kind string, defaultNamespace string, defaultVersion string, force bool) (int, error) {
 	if kind == "resolver" {
 		roots := collectResolverPackRoots(srcRoot)
 		// Drop top-level resolvers/ if it does not exist (collectResolverPackRoots still added it — fix)
@@ -626,7 +628,7 @@ func mergeChildPackages(srcRoot, destRoot string, kind string, defaultNamespace 
 		if len(roots) > 0 {
 			total := 0
 			for _, root := range roots {
-				n, err := mergeChildPackagesWalk(root, destRoot, kind, defaultNamespace, force)
+				n, err := mergeChildPackagesWalk(root, destRoot, kind, defaultNamespace, defaultVersion, force)
 				total += n
 				if err != nil {
 					return total, err
@@ -635,7 +637,7 @@ func mergeChildPackages(srcRoot, destRoot string, kind string, defaultNamespace 
 			return total, nil
 		}
 	}
-	return mergeChildPackagesWalk(srcRoot, destRoot, kind, defaultNamespace, force)
+	return mergeChildPackagesWalk(srcRoot, destRoot, kind, defaultNamespace, defaultVersion, force)
 }
 
 func filterExistingResolverRoots(roots []string) []string {
@@ -650,7 +652,7 @@ func filterExistingResolverRoots(roots []string) []string {
 
 // compileSingleResolverDir packs one resolver profile directory (contains profile) into
 // dockpipe-resolver-<name>-<ver>.tar.gz under destRoot.
-func compileSingleResolverDir(destRoot, from, name string, defaultNamespace string, force bool) error {
+func compileSingleResolverDir(destRoot, from, name string, defaultNamespace string, defaultVersion string, force bool) error {
 	kind := "resolver"
 	tarGlob := filepath.Join(destRoot, fmt.Sprintf("dockpipe-resolver-%s-*.tar.gz", packagebuild.SafeTarballToken(name)))
 	legacyDir := filepath.Join(destRoot, name)
@@ -718,7 +720,7 @@ func compileSingleResolverDir(destRoot, from, name string, defaultNamespace stri
 		pm := map[string]any{
 			"schema":       1,
 			"name":         name,
-			"version":      "0.1.0",
+			"version":      defaultVersion,
 			"title":        name,
 			"description":  "Compiled from " + from,
 			"kind":         kind,
@@ -748,7 +750,7 @@ func compileSingleResolverDir(destRoot, from, name string, defaultNamespace stri
 	}
 	ver := strings.TrimSpace(pmParsed.Version)
 	if ver == "" {
-		ver = "0.1.0"
+		ver = defaultVersion
 	}
 	prefix := "resolvers/" + name
 	base := fmt.Sprintf("dockpipe-resolver-%s-%s.tar.gz", packagebuild.SafeTarballToken(name), packagebuild.SafeTarballToken(ver))
@@ -759,7 +761,7 @@ func compileSingleResolverDir(destRoot, from, name string, defaultNamespace stri
 	return nil
 }
 
-func mergeChildPackagesWalk(srcRoot, destRoot string, kind string, defaultNamespace string, force bool) (int, error) {
+func mergeChildPackagesWalk(srcRoot, destRoot string, kind string, defaultNamespace string, defaultVersion string, force bool) (int, error) {
 	entries, err := os.ReadDir(srcRoot)
 	if err != nil {
 		return 0, err
@@ -777,7 +779,7 @@ func mergeChildPackagesWalk(srcRoot, destRoot string, kind string, defaultNamesp
 		from := filepath.Join(srcRoot, name)
 		if nestedPack {
 			if _, err := os.Stat(filepath.Join(from, "profile")); err != nil {
-				sub, err := mergeChildPackagesWalk(from, destRoot, kind, defaultNamespace, force)
+				sub, err := mergeChildPackagesWalk(from, destRoot, kind, defaultNamespace, defaultVersion, force)
 				if err != nil {
 					return n, err
 				}
@@ -788,7 +790,7 @@ func mergeChildPackagesWalk(srcRoot, destRoot string, kind string, defaultNamesp
 		if kind != "resolver" {
 			return n, fmt.Errorf("mergeChildPackages: unknown kind %q", kind)
 		}
-		if err := compileSingleResolverDir(destRoot, from, name, defaultNamespace, force); err != nil {
+		if err := compileSingleResolverDir(destRoot, from, name, defaultNamespace, defaultVersion, force); err != nil {
 			return n, err
 		}
 		n++
