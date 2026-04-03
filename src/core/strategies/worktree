@@ -1,0 +1,4 @@
+# Named strategy: clone worktree before workflow, commit after success.
+DOCKPIPE_STRATEGY_KIND=git
+DOCKPIPE_STRATEGY_BEFORE=scripts/clone-worktree.sh
+DOCKPIPE_STRATEGY_AFTER=scripts/commit-worktree.sh

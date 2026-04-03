@@ -1,0 +1,8 @@
+/// <summary>
+/// Contract for the bundled run workflow variables.
+/// </summary>
+public Interface IRunConfig
+{
+    /// <summary>Commit message used by the commit strategy after the isolated run finishes.</summary>
+    public string DockpipeCommitMessage;
+}

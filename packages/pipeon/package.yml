@@ -1,0 +1,22 @@
+schema: 1
+kind: package
+name: pipeon
+version: 0.6.0
+title: DockPipe Pipeon
+description: |
+  First-party Pipeon harness, resolver profile, VS Code extension assets, and local assistant surface.
+  Pipeon is intended to sit on top of the DorkPipe orchestration and DockPipe MCP bridge packages for
+  local fallback/editor-integrated use.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+icon: resolvers/pipeon/vscode-extension/images/icon.png
+tags: [resolver, pipeon, ide]
+artwork:
+  ide: resolvers/pipeon/vscode-extension/images/icon.png
+  launcher: resolvers/pipeon/vscode-extension/images/icon.png
+includes_resolvers:
+  - pipeon
+depends:
+  - dorkpipe
+  - dockpipe-mcp

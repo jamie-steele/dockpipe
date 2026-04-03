@@ -1,0 +1,60 @@
+{
+  "name": "pipeon",
+  "displayName": "Pipeon",
+  "description": "Pipeon gateway: workspace context from .dockpipe (Ollama / worker integration to follow).",
+  "version": "0.0.1",
+  "publisher": "pipeon",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jamie-steele/dockpipe.git"
+  },
+  "icon": "images/icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onStartupFinished", "onView:pipeon.chatView", "onCommand:pipeon.openChat"],
+  "files": [
+    "extension.js",
+    "images/**",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "main": "extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "pipeon",
+          "title": "Pipeon",
+          "icon": "images/icon.png"
+        }
+      ]
+    },
+    "views": {
+      "pipeon": [
+        {
+          "id": "pipeon.chatView",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "pipeon.openChat",
+        "title": "Pipeon: Focus chat"
+      },
+      {
+        "command": "pipeon.openContextBundle",
+        "title": "Pipeon: Open context bundle (.dockpipe/pipeon-context.md)"
+      },
+      {
+        "command": "pipeon.showReadme",
+        "title": "Pipeon: Open fork & extension docs"
+      }
+    ]
+  },
+  "license": "Apache-2.0"
+}

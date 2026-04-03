@@ -1,0 +1,42 @@
+# Browser code-server (Coder OSS image) with Pipeon extension + baseline User settings.
+# Does NOT use assets/entrypoint.sh — this image is only for scripts/vscode/vscode-code-server.sh (workflow vscode).
+# Isolate runs use templates/core/resolvers/vscode/assets/images/vscode/ (dockpipe-vscode + entrypoint).
+#
+# Build from repo root:
+#   docker build -t dockpipe-code-server:latest -f packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server .
+# Or: make build-code-server-image
+
+# Pack Pipeon as .vsix (code-server only accepts .vsix or marketplace IDs, not an unpacked folder).
+FROM node:20-alpine AS vsix
+WORKDIR /ext
+COPY packages/pipeon/resolvers/pipeon/vscode-extension .
+RUN npm install -g @vscode/vsce \
+  && vsce package --allow-missing-repository --skip-license -o /pipeon.vsix
+
+FROM codercom/code-server:latest
+
+USER root
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends jq \
+  && rm -rf /var/lib/apt/lists/* \
+  && mkdir -p /work \
+  && chmod 777 /work
+
+# Pipeon P-mark favicon (browser tab) — replaces code-server defaults.
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon.ico /usr/lib/code-server/src/browser/media/favicon.ico
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon.svg /usr/lib/code-server/src/browser/media/favicon.svg
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon-dark-support.svg /usr/lib/code-server/src/browser/media/favicon-dark-support.svg
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon.ico /usr/lib/code-server/lib/vscode/resources/server/favicon.ico
+
+COPY --from=vsix /pipeon.vsix /tmp/pipeon.vsix
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/code-server-user-settings.json /tmp/user-settings.json
+RUN mkdir -p /home/coder/.local/share/code-server/User \
+  && cp /tmp/user-settings.json /home/coder/.local/share/code-server/User/settings.json \
+  && chown -R coder:coder /home/coder/.local/share/code-server \
+  && chown coder:coder /tmp/pipeon.vsix \
+  && rm -f /tmp/user-settings.json
+
+USER coder
+RUN code-server --install-extension /tmp/pipeon.vsix && rm -f /tmp/pipeon.vsix
+
+WORKDIR /work
