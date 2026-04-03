@@ -30,6 +30,32 @@ func TestBeginHostRun_emptyWorkdir(t *testing.T) {
 	}
 }
 
+func TestBeginHostRun_addsRunEnvAndCreatesDir(t *testing.T) {
+	dir := t.TempDir()
+	env := []string{"FOO=bar"}
+	rid, rf, out, err := BeginHostRun(dir, env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isValidHostRunID(rid) {
+		t.Fatalf("expected valid run id, got %q", rid)
+	}
+	wantFile := filepath.Join(HostRunsDir(dir), rid+".json")
+	if rf != wantFile {
+		t.Fatalf("run file mismatch: got %q want %q", rf, wantFile)
+	}
+	if st, err := os.Stat(HostRunsDir(dir)); err != nil || !st.IsDir() {
+		t.Fatalf("expected host runs dir created: stat=%v err=%v", st, err)
+	}
+	joined := strings.Join(out, "\n")
+	if !strings.Contains(joined, "DOCKPIPE_RUN_ID="+rid) {
+		t.Fatalf("expected DOCKPIPE_RUN_ID in env, got %q", joined)
+	}
+	if !strings.Contains(joined, "DOCKPIPE_RUN_FILE="+rf) {
+		t.Fatalf("expected DOCKPIPE_RUN_FILE in env, got %q", joined)
+	}
+}
+
 func TestListHostRuns_emptyDir(t *testing.T) {
 	dir := t.TempDir()
 	var buf bytes.Buffer

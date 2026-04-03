@@ -26,6 +26,7 @@ import (
 var (
 	hostCleanupDirRel         = filepath.Join(DockpipeDirRel, "cleanup")
 	cursorDevSessionLegacyRel = filepath.Join(DockpipeDirRel, "cursor-dev", "session_container")
+	hostCleanupExecCommandFn  = exec.CommandContext
 )
 
 func envGet(env []string, key string) string {
@@ -182,7 +183,7 @@ func tryStopDockerAndRemoveMarker(ctx context.Context, name, markerPath string) 
 		return false
 	}
 	run := func(args ...string) error {
-		cmd := exec.CommandContext(ctx, "docker", args...)
+		cmd := hostCleanupExecCommandFn(ctx, "docker", args...)
 		cmd.Stderr = os.Stderr
 		return cmd.Run()
 	}

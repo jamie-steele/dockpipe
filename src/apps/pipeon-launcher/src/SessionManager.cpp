@@ -11,6 +11,7 @@
 #ifdef Q_OS_WIN
 // taskkill used below
 #else
+#include <errno.h>
 #include <signal.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -75,6 +76,14 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
     proc->setProgram(program);
     proc->setArguments(dockpipeArguments(ctx));
     proc->setProcessChannelMode(QProcess::MergedChannels);
+#ifndef Q_OS_WIN
+    // stop() sends SIGTERM to -pid, so give each dockpipe launch its own process group.
+    proc->setChildProcessModifier([]() {
+        if (::setpgid(0, 0) != 0 && errno != EACCES) {
+            _exit(127);
+        }
+    });
+#endif
 
     // Force project workdir for dockpipe and host scripts. Inherited DOCKPIPE_* from the desktop/shell
     // can be wrong (e.g. repo root). Dockpipe replaces duplicate keys when injecting explicit values,
