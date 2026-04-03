@@ -2,10 +2,16 @@
 """Generate Pipeon P-mark PNG (extension icon), ICO (browser tab), and matching SVG favicons."""
 from __future__ import annotations
 
+import base64
 import os
 import sys
 
 from PIL import Image, ImageDraw, ImageFont
+
+try:
+    RESAMPLE_LANCZOS = Image.Resampling.LANCZOS
+except AttributeError:
+    RESAMPLE_LANCZOS = Image.LANCZOS
 
 def _repo_root() -> str:
     d = os.path.dirname(os.path.abspath(__file__))
@@ -64,32 +70,19 @@ def render_p(size: int) -> Image.Image:
     return img
 
 
-def write_svgs(out_dir: str) -> None:
-    """SVG favicons (viewBox matches upstream code-server 147 for drop-in)."""
-    svg = """<svg width="100%" height="100%" viewBox="0 0 147 147" xmlns="http://www.w3.org/2000/svg">
-  <rect width="147" height="147" rx="32" fill="#143252"/>
-  <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle"
-    font-family="DejaVu Sans, Liberation Sans, Arial, Helvetica, sans-serif"
-    font-weight="700" font-size="78" fill="#e8f0ff">P</text>
-</svg>
-"""
-    dark = """<svg width="100%" height="100%" viewBox="0 0 147 147" xmlns="http://www.w3.org/2000/svg">
-  <style>
-    @media (prefers-color-scheme: dark) {
-      rect { fill: #1a5080; }
-    }
-  </style>
-  <rect width="147" height="147" rx="32" fill="#143252"/>
-  <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle"
-    font-family="DejaVu Sans, Liberation Sans, Arial, Helvetica, sans-serif"
-    font-weight="700" font-size="78" fill="#e8f0ff">P</text>
+def write_svgs(out_dir: str, png_path: str) -> None:
+    """Write SVG wrappers that embed the canonical PNG icon."""
+    with open(png_path, "rb") as f:
+        png_b64 = base64.b64encode(f.read()).decode("ascii")
+    svg = f"""<svg width="100%" height="100%" viewBox="0 0 256 256" xmlns="http://www.w3.org/2000/svg">
+  <image width="256" height="256" href="data:image/png;base64,{png_b64}"/>
 </svg>
 """
     os.makedirs(out_dir, exist_ok=True)
-    for name, content in (("favicon.svg", svg), ("favicon-dark-support.svg", dark)):
+    for name in ("favicon.svg", "favicon-dark-support.svg"):
         path = os.path.join(out_dir, name)
         with open(path, "w", encoding="utf-8") as f:
-            f.write(content.strip() + "\n")
+            f.write(svg.strip() + "\n")
         print("wrote", path)
 
 
@@ -106,13 +99,17 @@ def main() -> int:
     )
     os.makedirs(ext_img, exist_ok=True)
 
-    img128 = render_p(128)
     png_path = os.path.join(ext_img, "icon.png")
-    img128.save(png_path)
-    print("wrote", png_path)
+    if os.path.exists(png_path):
+        src = Image.open(png_path).convert("RGBA")
+        print("using existing", png_path)
+    else:
+        src = render_p(256)
+        src.save(png_path)
+        print("wrote", png_path)
 
     sizes = [16, 32, 48]
-    ico_imgs = [render_p(s).convert("RGBA") for s in sizes]
+    ico_imgs = [src.resize((s, s), RESAMPLE_LANCZOS) for s in sizes]
     ico_path = os.path.join(ext_img, "favicon.ico")
     ico_imgs[0].save(
         ico_path,
@@ -122,7 +119,7 @@ def main() -> int:
     )
     print("wrote", ico_path)
 
-    write_svgs(ext_img)
+    write_svgs(ext_img, png_path)
     return 0
 
 

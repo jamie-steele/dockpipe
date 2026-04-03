@@ -13,6 +13,24 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
+namespace {
+
+QIcon appIconForWorkflow(const QString &workflowId)
+{
+    if (workflowId == QStringLiteral("vscode")) {
+        return QIcon(QStringLiteral(":/app-vscode.png"));
+    }
+    if (workflowId == QStringLiteral("cursor-dev")) {
+        return QIcon(QStringLiteral(":/app-cursor-dev.png"));
+    }
+    if (workflowId == QStringLiteral("code-server")) {
+        return QIcon(QStringLiteral(":/app-code-server.png"));
+    }
+    return QIcon(QStringLiteral(":/icon.png"));
+}
+
+} // namespace
+
 BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
 {
     setObjectName(QStringLiteral("basicMode"));
@@ -234,10 +252,9 @@ void BasicModeWidget::setApps(const QVector<WorkflowMeta> &apps)
 {
     m_apps = apps;
     m_list->clear();
-    const QIcon ico(QStringLiteral(":/icon.png"));
     for (const WorkflowMeta &m : apps) {
         auto *it = new QListWidgetItem;
-        it->setIcon(ico);
+        it->setIcon(appIconForWorkflow(m.workflowId));
         it->setData(Qt::UserRole, m.workflowId);
         it->setToolTip(m.description.isEmpty() ? m.displayName : m.description);
         m_list->addItem(it);

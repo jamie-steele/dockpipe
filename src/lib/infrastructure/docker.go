@@ -499,6 +499,24 @@ func renderBannerForWidth(width int) string {
 	return banner
 }
 
+// RenderBannerForTerminal returns the launch/help banner variant for the current terminal width.
+// Unlike PrintLaunchBanner, this always returns a string so callers can embed it in other output.
+func RenderBannerForTerminal(stdout, stderr *os.File) string {
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+	outFd, outOK := fdInt(stdout)
+	errFd, errOK := fdInt(stderr)
+	width := 0
+	if outOK || errOK {
+		width = terminalWidthForBanner(outFd, errFd)
+	}
+	return renderBannerForWidth(width)
+}
+
 func shouldShowSpinner(width int) bool {
 	// Spinner uses carriage-return updates; hide it in narrow terminals to avoid messy wraps.
 	return width >= 60
