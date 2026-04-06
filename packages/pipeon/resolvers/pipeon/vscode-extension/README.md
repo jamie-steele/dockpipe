@@ -6,7 +6,7 @@ Install this into **stock VS Code** for development, or pack as **`.vsix`** and 
 
 | Command | Action |
 |---------|--------|
-| **Pipeon: Open context bundle** | Shows **`.dockpipe/pipeon-context.md`** in an output channel (run `src/bin/pipeon bundle` in the repo first). |
+| **Pipeon: Open context bundle** | Shows **`.dockpipe/pipeon-context.md`** in an output channel (run `packages/pipeon/resolvers/pipeon/bin/pipeon bundle` in the repo first). |
 | **Pipeon: Open fork & extension docs** | Opens the fork doc from the **`pipeon`** resolver **`assets/docs/`** when the workspace is this repository. |
 
 The **`images/`** directory holds the Pipeon **P** mark: **`icon.png`** (128×128), **`favicon.ico`**, **`favicon.svg`**, **`favicon-dark-support.svg`** (browser tab + desktop shortcuts). Regenerate from repo root: **`make pipeon-icons`** (needs **Pillow**).

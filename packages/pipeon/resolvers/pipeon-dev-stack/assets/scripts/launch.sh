@@ -20,7 +20,7 @@ DOCKPIPE_BIN="$REPO_ROOT/src/bin/dockpipe"
 DORKPIPE_BIN="$REPO_ROOT/packages/dorkpipe/bin/dorkpipe"
 MCPD_BIN="$REPO_ROOT/packages/dockpipe-mcp/bin/mcpd"
 VSCODE_SCRIPT="$REPO_ROOT/.staging/packages/ide/resolvers/vscode/assets/scripts/vscode-code-server.sh"
-PIPEON_BIN="$REPO_ROOT/packages/pipeon/bin/pipeon"
+PIPEON_BIN="$REPO_ROOT/packages/pipeon/resolvers/pipeon/bin/pipeon"
 STACK_STARTED_BY_ME=0
 MCP_STARTED_BY_ME=0
 

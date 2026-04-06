@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pipeon CLI entry — canonical path: packages/pipeon/bin/pipeon. src/bin/pipeon is a launcher that execs this file.
+# Pipeon CLI entry — canonical path: packages/pipeon/resolvers/pipeon/bin/pipeon.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$HERE"

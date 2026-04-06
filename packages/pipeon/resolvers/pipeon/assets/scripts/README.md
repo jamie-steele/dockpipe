@@ -2,4 +2,4 @@
 
 Canonical harness: **`pipeon.sh`**, **`chat.sh`**, **`bundle-context.sh`**, **`lib/`**, **`prompts/`**, **`generate-pipeon-icons.py`**.
 
-**`make build`** installs **`src/bin/pipeon`** from **`ide/bin/pipeon`**, which invokes **`pipeon.sh`** here. Index: **`../../../../apps/pipeon/README.md`**. Product docs: **`../docs/`**.
+**`packages/pipeon/resolvers/pipeon/bin/pipeon`** invokes **`pipeon.sh`** here. Product docs: **`../docs/`**.

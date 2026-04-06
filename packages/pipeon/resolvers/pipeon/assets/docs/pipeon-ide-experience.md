@@ -20,7 +20,7 @@
 
 ### What this repo ships *today* vs the product
 
-The **shell scripts** (`src/bin/pipeon`, bundle + one-shot chat) are a **developer harness** to exercise the **same context bundle and Ollama contract** before the branded app exists. They are **not** the Pipeon user experience. The **editor** is a **fork of VS Code (Code OSS)** with Pipeon layered on—see **`pipeon-vscode-fork.md`**, **`pipeon-architecture.md`**, and **`../vscode-extension/`** (sibling of **`assets/`**). Harness: **`../assets/scripts/README.md`**.
+The **shell scripts** (`packages/pipeon/resolvers/pipeon/bin/pipeon`, bundle + one-shot chat) are a **developer harness** to exercise the **same context bundle and Ollama contract** before the branded app exists. They are **not** the Pipeon user experience. The **editor** is a **fork of VS Code (Code OSS)** with Pipeon layered on—see **`pipeon-vscode-fork.md`**, **`pipeon-architecture.md`**, and **`../vscode-extension/`** (sibling of **`assets/`**). Harness: **`../assets/scripts/README.md`**.
 
 ---
 
@@ -201,7 +201,7 @@ The **shipping** Pipeon experience is a **desktop (or equivalent) application** 
 |-------|---------|
 | **Artifact lanes** | **`.dockpipe/`**, **`.dorkpipe/`**, insights, CI bundle—documented across **`docs/`** |
 | **`../scripts/bundle-context.sh`** | Builds **`pipeon-context.md`** — same **aggregate** the app should load (harness + future UI) |
-| **`src/bin/pipeon`** / **`chat.sh`** | **Dev-only:** one-shot Ollama call to validate prompts + bundle (**not** the user-facing UX) |
+| **`packages/pipeon/resolvers/pipeon/bin/pipeon`** / **`chat.sh`** | **Dev-only:** one-shot Ollama call to validate prompts + bundle (**not** the user-facing UX) |
 | **`../scripts/lib/enable.sh`** | Feature gate for harness (**`DOCKPIPE_PIPEON`**, min version **0.6.5**, **`DOCKPIPE_PIPEON_ALLOW_PRERELEASE`**) |
 | **`.vscode/tasks.json`** | Optional tasks for **maintainers** testing the harness |
 

@@ -52,12 +52,12 @@ On macOS, use `cmd`/`ctrl` as you prefer; edit the `key` fields if they clash.
 
 ## 3. Pipeon CLI (from repo root)
 
-Use the resolver entrypoint (same as **`src/bin/pipeon`** → **`packages/pipeon/bin/pipeon`** after install):
+Use the resolver entrypoint (same as **`src/bin/pipeon`** → **`packages/pipeon/resolvers/pipeon/bin/pipeon`** after install):
 
 ```bash
-packages/pipeon/bin/pipeon status
-packages/pipeon/bin/pipeon bundle
-PIPEON_OLLAMA_MODEL=llama3.2 packages/pipeon/bin/pipeon chat "your prompt"
+packages/pipeon/resolvers/pipeon/bin/pipeon status
+packages/pipeon/resolvers/pipeon/bin/pipeon bundle
+PIPEON_OLLAMA_MODEL=llama3.2 packages/pipeon/resolvers/pipeon/bin/pipeon chat "your prompt"
 ```
 
 ---

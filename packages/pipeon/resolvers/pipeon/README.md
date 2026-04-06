@@ -17,16 +17,16 @@ flows can treat Pipeon as the top-level product surface rather than a disconnect
 | **`vscode-tasks.json.example`** | Optional VS Code / Cursor tasks (copy into User or workspace). |
 | **`../pipeon-dev-stack/`** | First-party local product stack: Pipeon UI + DorkPipe sidecars + MCP bridge. |
 
-**Entrypoint on PATH:** **`src/bin/pipeon`** in this repository runs **`assets/scripts/pipeon.sh`**.
+**Entrypoint on PATH:** **`packages/pipeon/resolvers/pipeon/bin/pipeon`** in this repository runs **`assets/scripts/pipeon.sh`**.
 
 ## Quick start
 
 ```bash
 export DOCKPIPE_PIPEON=1
 export DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1   # until VERSION >= min gate
-./src/bin/pipeon status
-./src/bin/pipeon bundle
-./src/bin/pipeon chat "Summarize security posture from available signals."
+./packages/pipeon/resolvers/pipeon/bin/pipeon status
+./packages/pipeon/resolvers/pipeon/bin/pipeon bundle
+./packages/pipeon/resolvers/pipeon/bin/pipeon chat "Summarize security posture from available signals."
 ```
 
 See **`assets/docs/pipeon-ide-experience.md`** and **`assets/docs/pipeon-shortcuts.md`**.

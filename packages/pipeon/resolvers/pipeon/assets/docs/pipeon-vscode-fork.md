@@ -42,7 +42,7 @@ This document is the **maintainer playbook**. It is not legal advice; respect **
 | **Default settings / welcome** | Point users at Ollama, workspace folders, link to Pipeon docs. |
 | **Update server** | When you ship Pipeon binaries, host your own update JSON or use a static download page first. |
 
-**Worker:** The long-running **Pipeon worker** (HTTP or stdio next to the editor) usually lives in **another** service/repo or starts from the extension; it reuses the same artifact contracts as **`src/bin/pipeon`** / **`.dockpipe/pipeon-context.md`**.
+**Worker:** The long-running **Pipeon worker** (HTTP or stdio next to the editor) usually lives in **another** service/repo or starts from the extension; it reuses the same artifact contracts as **`packages/pipeon/resolvers/pipeon/bin/pipeon`** / **`.dockpipe/pipeon-context.md`**.
 
 ---
 
@@ -64,7 +64,7 @@ For **development**, open **`packages/pipeon/resolvers/pipeon/vscode-extension`*
 
 ## 5. Relationship to `dockpipe`
 
-- **This repo** = DockPipe / DorkPipe **engine**, artifact **schemas**, **harness** (`src/bin/pipeon`), and **extension stub**.
+- **This repo** = DockPipe / DorkPipe **engine**, artifact **schemas**, **harness** (`packages/pipeon/resolvers/pipeon/bin/pipeon`), and **extension stub**.
 - **Pipeon editor repo** = **fork** of Code OSS + CI + signing + your product updates.
 
 Keep them **linked** in docs (version pins, extension version).

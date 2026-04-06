@@ -265,7 +265,7 @@ async function handleLocalCommand(root, rawText) {
         ].join("\n"),
       };
     case "/status": {
-      const result = await runCommand("./packages/pipeon/bin/pipeon status", root, {
+      const result = await runCommand("./packages/pipeon/resolvers/pipeon/bin/pipeon status", root, {
         DOCKPIPE_WORKDIR: root,
         DOCKPIPE_PIPEON: process.env.DOCKPIPE_PIPEON || "1",
         DOCKPIPE_PIPEON_ALLOW_PRERELEASE: process.env.DOCKPIPE_PIPEON_ALLOW_PRERELEASE || "1",
@@ -276,7 +276,7 @@ async function handleLocalCommand(root, rawText) {
       };
     }
     case "/bundle": {
-      const result = await runCommand("./packages/pipeon/bin/pipeon bundle", root, {
+      const result = await runCommand("./packages/pipeon/resolvers/pipeon/bin/pipeon bundle", root, {
         DOCKPIPE_WORKDIR: root,
         DOCKPIPE_PIPEON: process.env.DOCKPIPE_PIPEON || "1",
         DOCKPIPE_PIPEON_ALLOW_PRERELEASE: process.env.DOCKPIPE_PIPEON_ALLOW_PRERELEASE || "1",

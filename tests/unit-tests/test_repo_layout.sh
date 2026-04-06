@@ -22,10 +22,10 @@ test ! -d "$ROOT/src/scripts/dockpipe" || fail "src/scripts/dockpipe removed —
 test ! -e "$ROOT/scripts/dockpipe" || fail "repo-root scripts/dockpipe must not exist (shadows logical scripts/dockpipe); use packages/dorkpipe/.../assets/scripts/ or workflows/<name>/ beside config.yml"
 test ! -e "$ROOT/src/bin/dorkpipe" || fail "src/bin/dorkpipe must not exist — use packages/dorkpipe/bin/dorkpipe"
 test ! -e "$ROOT/src/bin/mcpd" || fail "src/bin/mcpd must not exist — use packages/dockpipe-mcp/bin/mcpd"
-test ! -e "$ROOT/src/bin/pipeon" || fail "src/bin/pipeon must not exist — use packages/pipeon/bin/pipeon"
+test ! -e "$ROOT/src/bin/pipeon" || fail "src/bin/pipeon must not exist — use packages/pipeon/resolvers/pipeon/bin/pipeon"
 
 # Pipeon (first-party — packages/pipeon/)
-test -f "$ROOT/packages/pipeon/bin/pipeon" || fail "missing packages/pipeon/bin/pipeon"
+test -f "$ROOT/packages/pipeon/resolvers/pipeon/bin/pipeon" || fail "missing packages/pipeon/resolvers/pipeon/bin/pipeon"
 test -f "$ROOT/packages/pipeon/resolvers/pipeon/assets/scripts/pipeon.sh" || fail "missing pipeon resolver pipeon.sh"
 test -f "$ROOT/packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon.svg" \
 	|| fail "missing Pipeon favicon.svg (run: make pipeon-icons)"
