@@ -406,12 +406,7 @@ async function handleLocalCommand(root, rawText) {
 
 function renderChatHtml(webview, state) {
   const nonce = String(Date.now());
-  const transcript = state.messages
-    .map((m) => {
-      const role = m.role === "assistant" ? "DorkPipe" : "You";
-      return `<article class="msg ${m.role}"><div class="role">${role}</div><div class="body">${escapeHtml(m.text)}</div></article>`;
-    })
-    .join("");
+  const initialState = JSON.stringify(state).replace(/</g, "\\u003c");
   return `<!doctype html>
 <html>
   <head>
@@ -465,20 +460,6 @@ function renderChatHtml(webview, state) {
         display: flex;
         flex-direction: column;
         gap: 14px;
-      }
-      .quick {
-        display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        padding: 0 16px 10px;
-      }
-      .quick button {
-        min-width: 0;
-        padding: 8px 12px;
-        border-radius: 999px;
-        background: color-mix(in srgb, var(--vscode-button-background) 14%, transparent);
-        color: var(--vscode-editor-foreground);
-        border: 1px solid var(--vscode-panel-border);
       }
       .msg {
         max-width: 100%;
@@ -563,17 +544,11 @@ function renderChatHtml(webview, state) {
       <header class="header">
         <div class="eyebrow">DorkPipe</div>
         <h1 class="title">Workspace Chat</h1>
-        <div class="sub">Ask about this repo, local signals, workflows, and environment. DorkPipe will ground answers in the context bundle when available. You can also use local commands like <code>/test</code>, <code>/bundle</code>, or <code>/edit fix the README intro</code>.</div>
+        <div class="sub">Ask about this workspace, codebase, or local environment. DorkPipe will use the local context bundle when available.</div>
       </header>
-      <div class="quick">
-        <button type="button" data-command="/bundle">Bundle</button>
-        <button type="button" data-command="/context">Context</button>
-        <button type="button" data-command="/test">Test</button>
-        <button type="button" data-command="/ci">CI</button>
-      </div>
-      <main class="transcript" id="transcript">${transcript || `<article class="msg assistant"><div class="role">DorkPipe</div><div class="body">Ask about this workspace. DorkPipe will use the local context bundle when available.</div></article>`}</main>
+      <main class="transcript" id="transcript"></main>
       <div class="composerWrap">
-        <div class="status">${escapeHtml(state.status)}</div>
+        <div class="status" id="status"></div>
         <form class="composer" id="composer">
           <textarea id="prompt" placeholder="Ask DorkPipe about this repo... or use /help for local commands"></textarea>
           <div class="actions">
@@ -584,30 +559,82 @@ function renderChatHtml(webview, state) {
     </div>
     <script nonce="${nonce}">
       const vscode = acquireVsCodeApi();
+      const initialState = ${initialState};
       const form = document.getElementById("composer");
       const prompt = document.getElementById("prompt");
       const send = document.getElementById("send");
-      for (const button of document.querySelectorAll(".quick button")) {
-        button.addEventListener("click", () => {
-          send.disabled = true;
-          vscode.postMessage({ type: "ask", text: button.dataset.command });
-        });
+      const transcript = document.getElementById("transcript");
+      const status = document.getElementById("status");
+      let viewState = vscode.getState() || { draft: "", pinnedToBottom: true };
+      let currentState = initialState;
+
+      function escapeHtml(text) {
+        return String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
       }
+
+      function renderMessages(messages) {
+        if (!messages.length) {
+          return '<article class="msg assistant"><div class="role">DorkPipe</div><div class="body">Ask about this workspace. DorkPipe will use the local context bundle when available.</div></article>';
+        }
+        return messages.map((message) => {
+          const role = message.role === "assistant" ? "DorkPipe" : "You";
+          return '<article class="msg ' + message.role + '"><div class="role">' + role + '</div><div class="body">' + escapeHtml(message.text) + '</div></article>';
+        }).join("");
+      }
+
+      function saveViewState(extra) {
+        viewState = { ...viewState, ...extra };
+        vscode.setState(viewState);
+      }
+
+      function render(nextState) {
+        currentState = nextState;
+        const previousBottomOffset = transcript.scrollHeight - transcript.scrollTop;
+        const stickToBottom = previousBottomOffset - transcript.clientHeight <= 24 || !!viewState.pinnedToBottom;
+        transcript.innerHTML = renderMessages(currentState.messages || []);
+        status.textContent = currentState.status || "";
+        send.disabled = !!currentState.isBusy;
+        if (stickToBottom) {
+          transcript.scrollTop = transcript.scrollHeight;
+        } else {
+          transcript.scrollTop = Math.max(0, transcript.scrollHeight - previousBottomOffset);
+        }
+        saveViewState({ pinnedToBottom: stickToBottom });
+      }
+
+      transcript.addEventListener("scroll", () => {
+        const bottomGap = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight;
+        saveViewState({ pinnedToBottom: bottomGap <= 24 });
+      });
+
+      prompt.value = viewState.draft || "";
+      prompt.addEventListener("input", () => {
+        saveViewState({ draft: prompt.value });
+      });
+
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         const text = prompt.value.trim();
         if (!text) return;
-        send.disabled = true;
+        saveViewState({ draft: prompt.value, pinnedToBottom: true });
         vscode.postMessage({ type: "ask", text });
       });
       window.addEventListener("message", (event) => {
         const msg = event.data || {};
+        if (msg.type === "state" && msg.state) {
+          render(msg.state);
+        }
         if (msg.type === "done") {
           prompt.value = "";
+          saveViewState({ draft: "", pinnedToBottom: true });
           send.disabled = false;
           prompt.focus();
         }
       });
+      render(currentState);
       prompt.focus();
     </script>
   </body>
@@ -784,6 +811,35 @@ function looksLikeStockWelcomeTab(tab) {
   return label.includes("welcome") || label.includes("get started");
 }
 
+async function closeStockWelcomeTabs() {
+  const groups = vscode.window.tabGroups?.all || [];
+  const tabsToClose = [];
+
+  for (const group of groups) {
+    for (const tab of group.tabs) {
+      if (looksLikeStockWelcomeTab(tab)) {
+        tabsToClose.push(tab);
+      }
+    }
+  }
+
+  if (tabsToClose.length === 0) {
+    return false;
+  }
+
+  try {
+    await vscode.window.tabGroups.close(tabsToClose);
+    return true;
+  } catch {
+    try {
+      await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
+
 async function replaceStockWelcomeWithPipeon(context) {
   const groups = vscode.window.tabGroups?.all || [];
   let foundWelcome = false;
@@ -803,12 +859,34 @@ async function replaceStockWelcomeWithPipeon(context) {
     return;
   }
 
-  try {
-    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
-  } catch {
-    // ignore close failures and still try to show Pipeon
-  }
+  await closeStockWelcomeTabs();
   openPipeonWelcome(context);
+}
+
+async function redirectStockWelcomeToPipeon(context) {
+  const groups = vscode.window.tabGroups?.all || [];
+  let foundWelcome = false;
+
+  for (const group of groups) {
+    for (const tab of group.tabs) {
+      if (looksLikeStockWelcomeTab(tab)) {
+        foundWelcome = true;
+        break;
+      }
+    }
+    if (foundWelcome) {
+      break;
+    }
+  }
+
+  if (!foundWelcome) {
+    return;
+  }
+
+  const closed = await closeStockWelcomeTabs();
+  if (closed) {
+    openPipeonWelcome(context);
+  }
 }
 
 async function revealDorkpipePanel() {
@@ -833,9 +911,11 @@ class PipeonChatViewProvider {
   constructor(channel) {
     this.channel = channel;
     this.view = null;
+    this.rendered = false;
     this.state = {
       messages: [],
       status: "Waiting for workspace...",
+      isBusy: false,
     };
   }
 
@@ -845,13 +925,19 @@ class PipeonChatViewProvider {
 
   refresh() {
     if (this.view) {
-      this.view.webview.html = renderChatHtml(this.view.webview, this.state);
+      if (!this.rendered) {
+        this.view.webview.html = renderChatHtml(this.view.webview, this.state);
+        this.rendered = true;
+      } else {
+        this.view.webview.postMessage({ type: "state", state: this.state });
+      }
     }
   }
 
   async ask(root, text) {
     this.state.messages.push({ role: "user", text });
     this.state.status = "Thinking...";
+    this.state.isBusy = true;
     this.refresh();
     try {
       this.state.messages.push({ role: "assistant", text: "" });
@@ -870,12 +956,14 @@ class PipeonChatViewProvider {
       this.state.status = `Error talking to Ollama`;
       this.channel.error(message);
     }
+    this.state.isBusy = false;
     this.refresh();
     this.view?.webview.postMessage({ type: "done" });
   }
 
   resolveWebviewView(webviewView) {
     this.view = webviewView;
+    this.rendered = false;
     webviewView.webview.options = { enableScripts: true };
     const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (root) {
@@ -886,6 +974,10 @@ class PipeonChatViewProvider {
       this.state.status = "Open a workspace folder to chat with DorkPipe.";
     }
     this.refresh();
+    webviewView.onDidDispose(() => {
+      this.view = null;
+      this.rendered = false;
+    });
     webviewView.webview.onDidReceiveMessage(async (msg) => {
       const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (!workspaceRoot) {
@@ -970,6 +1062,14 @@ function activate(context) {
           "DorkPipe: fork doc not found in this workspace — open the dockpipe repo root."
         );
       }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.window.tabGroups.onDidChangeTabs(() => {
+      setTimeout(() => {
+        void redirectStockWelcomeToPipeon(context);
+      }, 50);
     })
   );
 
