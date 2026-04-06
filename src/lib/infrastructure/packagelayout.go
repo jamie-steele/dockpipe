@@ -31,7 +31,66 @@ var (
 )
 
 // envPackagesRoot is the optional override for the packages root directory.
-const envPackagesRoot = "DOCKPIPE_PACKAGES_ROOT"
+const (
+	envPackagesRoot      = "DOCKPIPE_PACKAGES_ROOT"
+	EnvStateDir          = "DOCKPIPE_STATE_DIR"
+	EnvPackageID         = "DOCKPIPE_PACKAGE_ID"
+	EnvPackageStateDir   = "DOCKPIPE_PACKAGE_STATE_DIR"
+)
+
+// StateRoot returns the absolute project-local DockPipe state root (default: workdir/bin/.dockpipe).
+func StateRoot(workdir string) (string, error) {
+	wd, err := absHostWorkdir(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(wd, DockpipeDirRel), nil
+}
+
+// SanitizePackageStateScope reduces package/workflow/resolver ids into a stable filesystem segment.
+func SanitizePackageStateScope(scope string) string {
+	scope = strings.TrimSpace(strings.ToLower(scope))
+	if scope == "" {
+		return "default"
+	}
+	var b strings.Builder
+	b.Grow(len(scope))
+	lastDash := false
+	for _, r := range scope {
+		keep := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if keep {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		switch r {
+		case '.', '_', '-', '/', '\\', ' ':
+			if !lastDash {
+				b.WriteByte('-')
+				lastDash = true
+			}
+		default:
+			if !lastDash {
+				b.WriteByte('-')
+				lastDash = true
+			}
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return "default"
+	}
+	return out
+}
+
+// PackageStateDir returns the absolute package-scoped state root under bin/.dockpipe/packages/<scope>.
+func PackageStateDir(workdir, scope string) (string, error) {
+	root, err := StateRoot(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "packages", SanitizePackageStateScope(scope)), nil
+}
 
 // PackagesRoot returns the absolute directory for installed packages (default: workdir/bin/.dockpipe/internal/packages).
 func PackagesRoot(workdir string) (string, error) {

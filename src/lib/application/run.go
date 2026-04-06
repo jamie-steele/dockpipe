@@ -296,6 +296,9 @@ func Run(argv []string, baseEnviron []string) error {
 			rtName, rsName = leg, leg
 		}
 	}
+	if err := applyDockpipeStateEnv(envMap, effWd, workflowStateScopeHint(opts, wfRoot, wf, rtName, rsName)); err != nil {
+		return err
+	}
 	profileLabel := ProfileLabelForEnv(rtName, rsName)
 	// runtimes: allowlist names runtime substrates (cli, dockerimage, …), not resolver/tool names (codex, …).
 	if rtName != "" {

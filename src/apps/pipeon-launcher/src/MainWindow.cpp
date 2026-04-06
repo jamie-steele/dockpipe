@@ -528,7 +528,7 @@ void MainWindow::onSetupMcp()
     }
     QMessageBox::information(
         this, tr("Cursor MCP"),
-        tr("Prepared .dockpipe/cursor-dev/ (see AGENT-MCP.md and mcp.json.example).\n"
+        tr("Prepared bin/.dockpipe/packages/cursor-dev/ (see AGENT-MCP.md and mcp.json.example).\n"
            "Follow AGENT-MCP.md in Cursor to enable MCP."));
 }
 

@@ -14,8 +14,9 @@ import (
 	"dockpipe"
 )
 
-// bundledFormatVersion bumps when extraction rules change (forces re-unpack; see .bundled-format).
-const bundledFormatVersion = "113"
+// bundledFormatVersion bumps when extraction rules or embedded workflow wiring change
+// and a stale on-disk bundle must be re-extracted (see .bundled-format).
+const bundledFormatVersion = "114"
 
 var bundledMu sync.Mutex
 

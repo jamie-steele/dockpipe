@@ -46,3 +46,36 @@ func TestPackagesRootEnvRelative(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestStateRootDefault(t *testing.T) {
+	dir := t.TempDir()
+	got, err := StateRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dir, DockpipeDirRel)
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestPackageStateDirDefault(t *testing.T) {
+	dir := t.TempDir()
+	got, err := PackageStateDir(dir, "pipeon-dev-stack")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dir, DockpipeDirRel, "packages", "pipeon-dev-stack")
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestSanitizePackageStateScope(t *testing.T) {
+	if got := SanitizePackageStateScope("Pipeon Dev/Stack"); got != "pipeon-dev-stack" {
+		t.Fatalf("got %q", got)
+	}
+	if got := SanitizePackageStateScope(""); got != "default" {
+		t.Fatalf("got %q", got)
+	}
+}

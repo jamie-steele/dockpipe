@@ -67,6 +67,17 @@ func runEmbeddedResolverWorkflowWithLoad(
 		return fmt.Errorf("resolver workflow %q has no steps", name)
 	}
 	wfRoot := filepath.Dir(wfPath)
+	prevStateDir := envMap[infrastructure.EnvStateDir]
+	prevPackageID := envMap[infrastructure.EnvPackageID]
+	prevPackageStateDir := envMap[infrastructure.EnvPackageStateDir]
+	if err := applyDockpipeStateEnv(envMap, wd, name); err != nil {
+		return err
+	}
+	defer func() {
+		envMap[infrastructure.EnvStateDir] = prevStateDir
+		envMap[infrastructure.EnvPackageID] = prevPackageID
+		envMap[infrastructure.EnvPackageStateDir] = prevPackageStateDir
+	}()
 	if err := buildWorkflowEnvInto(envMap, subWf, wfRoot, repoRoot, opts); err != nil {
 		return err
 	}

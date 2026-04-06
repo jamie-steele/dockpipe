@@ -17,6 +17,9 @@ namespace {
 
 QIcon appIconForWorkflow(const QString &workflowId)
 {
+    if (workflowId == QStringLiteral("pipeon-dev-stack") || workflowId == QStringLiteral("pipeon")) {
+        return QIcon(QStringLiteral(":/icon.png"));
+    }
     if (workflowId == QStringLiteral("vscode")) {
         return QIcon(QStringLiteral(":/app-vscode.png"));
     }
@@ -115,7 +118,7 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     auto *sub = new QLabel(
         tr("Launch a tool for this folder. It is passed to dockpipe as --workdir (mounted in the container).\n"
            "The cursor-dev app starts a long-lived Docker session then opens Cursor on the host — "
-           "that is not the same as “Set up Cursor MCP”, which only writes .dockpipe/ hints and does not start Docker."));
+           "that is not the same as “Set up Cursor MCP”, which only writes package-scoped hints under bin/.dockpipe and does not start Docker."));
     sub->setObjectName(QStringLiteral("appSubtitle"));
     sub->setWordWrap(true);
 
@@ -131,7 +134,7 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     m_setupMcp = new QPushButton(tr("Set up Cursor MCP"));
     m_setupMcp->setObjectName(QStringLiteral("secondaryButton"));
     m_setupMcp->setToolTip(tr(
-        "Run cursor-prep.sh only — writes .dockpipe/cursor-dev/ (AGENT-MCP.md, mcp.json.example). "
+        "Run cursor-prep.sh only — writes bin/.dockpipe/packages/cursor-dev/ (AGENT-MCP.md, mcp.json.example). "
         "Does not run dockpipe or start Docker. To get a session container + Cursor, double-click the "
         "cursor-dev app in the list above."));
     connect(m_browse, &QPushButton::clicked, this, &BasicModeWidget::onBrowse);
@@ -148,13 +151,16 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     m_list->setResizeMode(QListWidget::Adjust);
     m_list->setSpacing(8);
     m_list->setWordWrap(true);
-    connect(m_list, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem *it) {
+    auto launchItem = [this](QListWidgetItem *it) {
         if (!it)
             return;
         const QString id = it->data(Qt::UserRole).toString();
         if (!id.isEmpty())
             emit launchRequested(id);
-    });
+    };
+    connect(m_list, &QListWidget::itemClicked, this, launchItem);
+    connect(m_list, &QListWidget::itemDoubleClicked, this, launchItem);
+    connect(m_list, &QListWidget::itemActivated, this, launchItem);
 
     root->addWidget(title);
     root->addWidget(sub);

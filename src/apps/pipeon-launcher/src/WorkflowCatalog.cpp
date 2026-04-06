@@ -322,9 +322,16 @@ QVector<WorkflowMeta> WorkflowCatalog::discoverAppWorkflows(const QString &repoR
 {
     const QVector<WorkflowMeta> all = discoverAll(repoRoot, hintWorkdir);
     QVector<WorkflowMeta> out;
+    QStringList seenDisplayNames;
     for (const WorkflowMeta &m : all) {
-        if (m.category.compare(QStringLiteral("app"), Qt::CaseInsensitive) == 0)
-            out.append(m);
+        if (m.category.compare(QStringLiteral("app"), Qt::CaseInsensitive) != 0)
+            continue;
+        const QString displayKey = m.displayName.trimmed().toLower();
+        if (!displayKey.isEmpty() && seenDisplayNames.contains(displayKey))
+            continue;
+        out.append(m);
+        if (!displayKey.isEmpty())
+            seenDisplayNames.append(displayKey);
     }
     return out;
 }

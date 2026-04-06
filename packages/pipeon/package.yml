@@ -17,6 +17,7 @@ artwork:
   launcher: resolvers/pipeon/vscode-extension/images/icon.png
 includes_resolvers:
   - pipeon
+  - pipeon-dev-stack
 depends:
   - dorkpipe
   - dockpipe-mcp

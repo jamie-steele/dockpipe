@@ -15,6 +15,7 @@ flows can treat Pipeon as the top-level product surface rather than a disconnect
 | **`assets/scripts/`** | **`pipeon.sh`**, **`chat.sh`**, **`bundle-context.sh`**, installers, **`generate-pipeon-icons.py`**. |
 | **`assets/docs/`** | Pipeon UX, shortcuts, architecture notes. |
 | **`vscode-tasks.json.example`** | Optional VS Code / Cursor tasks (copy into User or workspace). |
+| **`../pipeon-dev-stack/`** | First-party local product stack: Pipeon UI + DorkPipe sidecars + MCP bridge. |
 
 **Entrypoint on PATH:** **`src/bin/pipeon`** in this repository runs **`assets/scripts/pipeon.sh`**.
 
@@ -29,6 +30,12 @@ export DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1   # until VERSION >= min gate
 ```
 
 See **`assets/docs/pipeon-ide-experience.md`** and **`assets/docs/pipeon-shortcuts.md`**.
+
+## Pipeon ↔ DorkPipe boundary
+
+The internal client/orchestrator contract lives in **`assets/docs/pipeon-dorkpipe-contract.md`**. Pipeon is
+the chat client and UX shell; DorkPipe remains server-authoritative for routing and validation; DockPipe is
+the isolated mutation boundary.
 
 ## VS Code extension and fork
 

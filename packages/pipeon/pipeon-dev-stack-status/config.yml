@@ -1,0 +1,9 @@
+name: pipeon-dev-stack-status
+description: Print status for the Pipeon local dev stack for the current workdir.
+docker_preflight: false
+
+steps:
+  - id: status
+    skip_container: true
+    run:
+      - bash packages/pipeon/resolvers/pipeon-dev-stack/assets/scripts/status.sh
