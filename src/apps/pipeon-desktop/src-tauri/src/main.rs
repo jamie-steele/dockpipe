@@ -1,5 +1,5 @@
 use std::env;
-use tauri::{LogicalSize, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{LogicalSize, WebviewUrl, WebviewWindowBuilder};
 
 #[tauri::command]
 fn read_clipboard_text() -> Result<String, String> {

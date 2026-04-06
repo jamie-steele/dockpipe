@@ -31,6 +31,7 @@ pipeon_wait_for_http() {
 }
 
 pipeon_start_code_server() {
+  local cid
   mkdir -p "$CODE_SERVER_HOME"
   if docker ps --format '{{.Names}}' | grep -qx "$CODE_SERVER_CONTAINER_NAME"; then
     return 0
@@ -39,9 +40,10 @@ pipeon_start_code_server() {
     docker rm -f "$CODE_SERVER_CONTAINER_NAME" >/dev/null 2>&1 || true
   fi
 
-  docker run -d \
-    --rm \
+  cid="$(
+    docker run -d \
     --name "$CODE_SERVER_CONTAINER_NAME" \
+    --entrypoint /bin/bash \
     --add-host=host.docker.internal:host-gateway \
     -p "127.0.0.1:${CODE_SERVER_PORT}:8080" \
     -e HOME=/home/coder \
@@ -61,7 +63,27 @@ pipeon_start_code_server() {
     -v "$WORKDIR:/work" \
     -v "$CODE_SERVER_HOME:/home/coder" \
     "$CODE_SERVER_IMAGE" \
-    code-server --bind-addr 0.0.0.0:8080 --auth "$CODE_SERVER_AUTH" /work >/dev/null
+    -lc '
+      set -e
+      mkdir -p /home/coder/.local/share/code-server/User
+      if [[ ! -f /home/coder/.local/share/code-server/User/settings.json ]] && [[ -f /opt/pipeon/default-user-data/User/settings.json ]]; then
+        cp /opt/pipeon/default-user-data/User/settings.json /home/coder/.local/share/code-server/User/settings.json
+      fi
+      exec code-server \
+        --bind-addr 0.0.0.0:8080 \
+        --auth "'"$CODE_SERVER_AUTH"'" \
+        --user-data-dir /home/coder/.local/share/code-server \
+        --extensions-dir /opt/pipeon/extensions \
+        /work
+    '
+  )"
+
+  sleep 1
+  if ! docker ps --format '{{.Names}}' | grep -qx "$CODE_SERVER_CONTAINER_NAME"; then
+    echo "pipeon-dev-stack: code-server container exited during startup" >&2
+    docker logs "$CODE_SERVER_CONTAINER_NAME" >&2 || true
+    return 1
+  fi
 }
 
 if [[ ! -x "$PIPEON_DESKTOP_BIN" ]]; then
@@ -80,6 +102,7 @@ pipeon_start_code_server
 if [[ "$WAIT_FOR_UI" == "1" ]]; then
   if ! pipeon_wait_for_http "$CODE_SERVER_URL" 120; then
     echo "pipeon-dev-stack: Pipeon UI did not become reachable at $CODE_SERVER_URL" >&2
+    docker logs "$CODE_SERVER_CONTAINER_NAME" >&2 || true
     exit 1
   fi
 fi

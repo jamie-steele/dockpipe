@@ -48,7 +48,7 @@ cleanup() {
   if [[ "$MCP_STARTED_BY_ME" == "1" && "$AUTODOWN" == "1" ]]; then
     pipeon_stack_stop_mcpd
   fi
-  if [[ "$STACK_STARTED_BY_ME" == "1" && "$AUTODOWN" == "1" ]]; then
+  if [[ "$AUTODOWN" == "1" ]]; then
     docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$REPO_ROOT" down >/dev/null 2>&1 || true
   fi
 }

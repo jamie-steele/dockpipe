@@ -25,6 +25,7 @@ USER root
 RUN apt-get update \
   && apt-get install -y --no-install-recommends jq \
   && rm -rf /var/lib/apt/lists/* \
+  && mkdir -p /opt/pipeon/extensions /opt/pipeon/default-user-data/User \
   && mkdir -p /work \
   && chmod 777 /work
 
@@ -44,16 +45,15 @@ COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/pipeon-512.png /us
 COPY --from=vsix /pipeon.vsix /tmp/pipeon.vsix
 COPY --from=vsix /dockpipe-language-support.vsix /tmp/dockpipe-language-support.vsix
 COPY packages/pipeon/resolvers/pipeon/vscode-extension/code-server-user-settings.json /tmp/user-settings.json
-RUN mkdir -p /home/coder/.local/share/code-server/User \
-  && cp /tmp/user-settings.json /home/coder/.local/share/code-server/User/settings.json \
-  && chown -R coder:coder /home/coder/.local/share/code-server \
+RUN cp /tmp/user-settings.json /opt/pipeon/default-user-data/User/settings.json \
+  && chown -R coder:coder /opt/pipeon \
   && chown coder:coder /tmp/pipeon.vsix \
   && chown coder:coder /tmp/dockpipe-language-support.vsix \
   && rm -f /tmp/user-settings.json
 
 USER coder
-RUN code-server --install-extension /tmp/pipeon.vsix \
-  && code-server --install-extension /tmp/dockpipe-language-support.vsix \
+RUN code-server --extensions-dir /opt/pipeon/extensions --install-extension /tmp/pipeon.vsix \
+  && code-server --extensions-dir /opt/pipeon/extensions --install-extension /tmp/dockpipe-language-support.vsix \
   && rm -f /tmp/pipeon.vsix /tmp/dockpipe-language-support.vsix
 
 WORKDIR /work
