@@ -15,10 +15,10 @@ for f in test_cli.sh test_repo_root.sh test_repo_layout.sh test_clone_worktree_i
   fi
 done
 
-echo "--- maintainer package tests (pipeon, dorkpipe, dockpipe-mcp) ---"
+echo "--- maintainer package tests (pipeon, dorkpipe, dorkpipe-mcp) ---"
 bash "$ROOT/packages/pipeon/tests/run.sh" || failed=1
 bash "$ROOT/packages/dorkpipe/tests/run.sh" || failed=1
-bash "$ROOT/packages/dockpipe-mcp/tests/run.sh" || failed=1
+bash "$ROOT/packages/dorkpipe-mcp/tests/run.sh" || failed=1
 
 echo "--- smoke.sh (needs Docker) ---"
 bash "$UNIT/smoke.sh" || failed=1

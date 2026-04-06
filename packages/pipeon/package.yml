@@ -20,4 +20,4 @@ includes_resolvers:
   - pipeon-dev-stack
 depends:
   - dorkpipe
-  - dockpipe-mcp
+  - dorkpipe-mcp

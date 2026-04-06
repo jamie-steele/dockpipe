@@ -18,7 +18,7 @@ BUILD_MODE="${PIPEON_DEV_STACK_BUILD:-auto}"
 MODEL_NAME="${PIPEON_OLLAMA_MODEL:-${DOCKPIPE_OLLAMA_MODEL:-llama3.2}}"
 DOCKPIPE_BIN="$REPO_ROOT/src/bin/dockpipe"
 DORKPIPE_BIN="$REPO_ROOT/packages/dorkpipe/bin/dorkpipe"
-MCPD_BIN="$REPO_ROOT/packages/dockpipe-mcp/bin/mcpd"
+MCPD_BIN="$REPO_ROOT/packages/dorkpipe-mcp/bin/mcpd"
 VSCODE_SCRIPT="$REPO_ROOT/.staging/packages/ide/resolvers/vscode/assets/scripts/vscode-code-server.sh"
 PIPEON_BIN="$REPO_ROOT/packages/pipeon/resolvers/pipeon/bin/pipeon"
 STACK_STARTED_BY_ME=0
@@ -58,7 +58,7 @@ case "$BUILD_MODE" in
   always)
     env GOCACHE=/tmp/dockpipe-go-build-cache make build
     env GOCACHE=/tmp/dockpipe-go-build-cache go build -C "$REPO_ROOT/packages/dorkpipe/lib" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o ../bin/dorkpipe ./cmd/dorkpipe
-    env GOCACHE=/tmp/dockpipe-go-build-cache go build -C "$REPO_ROOT/packages/dockpipe-mcp" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o bin/mcpd ./cmd/mcpd
+    env GOCACHE=/tmp/dockpipe-go-build-cache go build -C "$REPO_ROOT/packages/dorkpipe-mcp" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o bin/mcpd ./cmd/mcpd
     ;;
   auto)
     if [[ ! -x "$DOCKPIPE_BIN" ]]; then
@@ -68,7 +68,7 @@ case "$BUILD_MODE" in
       env GOCACHE=/tmp/dockpipe-go-build-cache go build -C "$REPO_ROOT/packages/dorkpipe/lib" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o ../bin/dorkpipe ./cmd/dorkpipe
     fi
     if [[ ! -x "$MCPD_BIN" ]]; then
-      env GOCACHE=/tmp/dockpipe-go-build-cache go build -C "$REPO_ROOT/packages/dockpipe-mcp" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o bin/mcpd ./cmd/mcpd
+      env GOCACHE=/tmp/dockpipe-go-build-cache go build -C "$REPO_ROOT/packages/dorkpipe-mcp" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o bin/mcpd ./cmd/mcpd
     fi
     ;;
   never)

@@ -1,8 +1,8 @@
 # Pipeon resolver (IDE pack)
 
-**Pipeon** is an **IDE-oriented resolver** in the **`ide`** package: same layout as **`vscode`**, **`cursor-dev`**, and **`code-server`** (`profile/`, **`config.yml`**, **`assets/`**). It is the **product harness** for a local-first assistant (Ollama chat, **`.dockpipe/pipeon-context.md`** bundle) — not an agent-style model resolver under **`agent/`**.
+**Pipeon** is an **IDE-oriented resolver** in the **`ide`** package: same layout as **`vscode`** and **`cursor-dev`** (`profile/`, **`config.yml`**, **`assets/`**). It is the **product harness** for a local-first assistant (Ollama chat, **`.dockpipe/pipeon-context.md`** bundle) — not an agent-style model resolver under **`agent/`**. Pipeon owns the browser/editor lane directly; there is no separate standalone `code-server` product surface in this repo.
 
-Package intent: the **`pipeon`** package should travel with **`dorkpipe`** and **`dockpipe-mcp`** for the
+Package intent: the **`pipeon`** package should travel with **`dorkpipe`** and **`dorkpipe-mcp`** for the
 full local assistant stack. Its package manifest declares those as **`depends`** so compile/store/release
 flows can treat Pipeon as the top-level product surface rather than a disconnected IDE skin.
 

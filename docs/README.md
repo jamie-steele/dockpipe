@@ -20,6 +20,6 @@
 |-----------------------------|--|
 | [core-tools.md](core-tools.md) | DockPipe vs maintainer packages under **`.staging/packages/`** |
 | [artifacts.md](artifacts.md) | `.dockpipe/` / `.dorkpipe/` signals, CI bundle, governance Q&A |
-| MCP (`mcpd`) | **[`packages/dockpipe-mcp/README.md`](../packages/dockpipe-mcp/README.md)** (package — not under `docs/`) |
+| MCP (`mcpd`) | **[`packages/dorkpipe-mcp/README.md`](../packages/dorkpipe-mcp/README.md)** (package — not under `docs/`) |
 
 **QA:** [qa/manual-qa.md](qa/manual-qa.md) · **Messaging (About copy):** [messaging.md](messaging.md)

@@ -3,7 +3,6 @@
     <file alias="icon.png">resources/icon.png</file>
     <file alias="app-vscode.png">resources/app-vscode.png</file>
     <file alias="app-cursor-dev.png">resources/app-cursor-dev.png</file>
-    <file alias="app-code-server.png">resources/app-code-server.png</file>
     <file alias="theme/pipeon.qss">resources/theme/pipeon.qss</file>
     <file alias="theme/pipeon-light.qss">resources/theme/pipeon-light.qss</file>
     <file alias="theme/pipeon-dark.qss">resources/theme/pipeon-dark.qss</file>

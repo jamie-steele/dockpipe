@@ -21,7 +21,7 @@ test ! -e "$ROOT/src/scripts/review" || fail "src/scripts/review removed — use
 test ! -d "$ROOT/src/scripts/dockpipe" || fail "src/scripts/dockpipe removed — maintainer scripts live under packages/dorkpipe/resolvers/dorkpipe/assets/scripts/ (logical scripts/dockpipe/…)"
 test ! -e "$ROOT/scripts/dockpipe" || fail "repo-root scripts/dockpipe must not exist (shadows logical scripts/dockpipe); use packages/dorkpipe/.../assets/scripts/ or workflows/<name>/ beside config.yml"
 test ! -e "$ROOT/src/bin/dorkpipe" || fail "src/bin/dorkpipe must not exist — use packages/dorkpipe/bin/dorkpipe"
-test ! -e "$ROOT/src/bin/mcpd" || fail "src/bin/mcpd must not exist — use packages/dockpipe-mcp/bin/mcpd"
+test ! -e "$ROOT/src/bin/mcpd" || fail "src/bin/mcpd must not exist — use packages/dorkpipe-mcp/bin/mcpd"
 test ! -e "$ROOT/src/bin/pipeon" || fail "src/bin/pipeon must not exist — use packages/pipeon/resolvers/pipeon/bin/pipeon"
 
 # Pipeon (first-party — packages/pipeon/)

@@ -26,9 +26,6 @@ QIcon appIconForWorkflow(const QString &workflowId)
     if (workflowId == QStringLiteral("cursor-dev")) {
         return QIcon(QStringLiteral(":/app-cursor-dev.png"));
     }
-    if (workflowId == QStringLiteral("code-server")) {
-        return QIcon(QStringLiteral(":/app-code-server.png"));
-    }
     return QIcon(QStringLiteral(":/icon.png"));
 }
 

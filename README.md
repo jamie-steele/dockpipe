@@ -16,7 +16,7 @@ Your project is mounted at **`/work`** in a disposable container; when the comma
 
 ## Core tools in this repo
 
-The **DockPipe** CLI is **`src/cmd/`** (entry) and **`src/lib/`**. **Pipeon Launcher** (DockPipe GUI) is **`src/apps/pipeon-launcher/`**. **Pipeon**, **DorkPipe**, and **MCP** are first-party under **`packages/`** (`pipeon`, `dorkpipe`, `dockpipe-mcp`). Optional **IDE** resolver trees may live under **`packages/`** or maintainer-only dirs — see **[docs/core-tools.md](docs/core-tools.md)**. **`make build`** produces **`src/bin/dockpipe.bin`** (launcher **`src/bin/dockpipe`**). **`make maintainer-tools`** builds **`packages/dorkpipe/bin/dorkpipe`** and **`packages/dockpipe-mcp/bin/mcpd`**. Running this repo on itself is **`./src/bin/dockpipe --workflow <name> --workdir . --`** once packages are compiled into **`.dockpipe/`** like any project. See also **[src/apps/README.md](src/apps/README.md)**.
+The **DockPipe** CLI is **`src/cmd/`** (entry) and **`src/lib/`**. **Pipeon Launcher** (DockPipe GUI) is **`src/apps/pipeon-launcher/`**. **Pipeon**, **DorkPipe**, and **MCP** are first-party under **`packages/`** (`pipeon`, `dorkpipe`, `dorkpipe-mcp`). Optional **IDE** resolver trees may live under **`packages/`** or maintainer-only dirs — see **[docs/core-tools.md](docs/core-tools.md)**. **`make build`** produces **`src/bin/dockpipe.bin`** (launcher **`src/bin/dockpipe`**). **`make maintainer-tools`** builds **`packages/dorkpipe/bin/dorkpipe`** and **`packages/dorkpipe-mcp/bin/mcpd`**. Running this repo on itself is **`./src/bin/dockpipe --workflow <name> --workdir . --`** once packages are compiled into **`.dockpipe/`** like any project. See also **[src/apps/README.md](src/apps/README.md)**.
 
 ## Concepts
 

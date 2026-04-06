@@ -20,10 +20,10 @@ build:
 
 # Maintainer: orchestrator + MCP (separate modules under packages/). Not required for dockpipe core.
 maintainer-tools:
-	@mkdir -p packages/dorkpipe/bin packages/dockpipe-mcp/bin
+	@mkdir -p packages/dorkpipe/bin packages/dorkpipe-mcp/bin
 	go build -C packages/dorkpipe/lib -trimpath -ldflags "$(GO_LDFLAGS)" -o ../bin/dorkpipe ./cmd/dorkpipe
-	go build -C packages/dockpipe-mcp -trimpath -ldflags "$(GO_LDFLAGS)" -o bin/mcpd ./cmd/mcpd
-	@echo "Built packages/dorkpipe/bin/dorkpipe and packages/dockpipe-mcp/bin/mcpd"
+	go build -C packages/dorkpipe-mcp -trimpath -ldflags "$(GO_LDFLAGS)" -o bin/mcpd ./cmd/mcpd
+	@echo "Built packages/dorkpipe/bin/dorkpipe and packages/dorkpipe-mcp/bin/mcpd"
 
 build-windows:
 	cp VERSION src/cmd/VERSION
@@ -34,4 +34,4 @@ build-windows:
 test:
 	go test ./...
 	go test ./packages/dorkpipe/lib/...
-	go test ./packages/dockpipe-mcp/...
+	go test ./packages/dorkpipe-mcp/...

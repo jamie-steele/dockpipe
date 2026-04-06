@@ -27,7 +27,7 @@ if [[ -d dockpipe-agents ]]; then
 fi
 
 if [[ -d dockpipe-ide ]]; then
-  for d in vscode cursor-dev code-server; do
+  for d in vscode cursor-dev; do
     [[ -d "dockpipe-ide/$d" ]] || continue
     mv "dockpipe-ide/$d" "dockpipe/packages/ides/resolvers/$d"
   done

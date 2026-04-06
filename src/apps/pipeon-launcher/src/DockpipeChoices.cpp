@@ -40,7 +40,7 @@ void appendStaticFallbacks(DockpipeChoices &c)
     c.workflowNames = QStringList{QStringLiteral("vscode"), QStringLiteral("init"), QStringLiteral("run"),
                                   QStringLiteral("run-apply"), QStringLiteral("run-apply-validate")};
     c.resolvers = QStringList{QStringLiteral("vscode"), QStringLiteral("claude"), QStringLiteral("codex"),
-                              QStringLiteral("cursor-dev"), QStringLiteral("code-server")};
+                              QStringLiteral("cursor-dev")};
     c.strategies = QStringList{QStringLiteral("commit"), QStringLiteral("worktree")};
     c.runtimes = QStringList{QStringLiteral("dockerimage"), QStringLiteral("dockerfile"), QStringLiteral("package")};
 }
@@ -175,7 +175,7 @@ void DockpipeChoices::scan(const QString &repoRoot, const QString &hintWorkdir)
         }
         if (resolvers.isEmpty())
             resolvers = QStringList{QStringLiteral("vscode"), QStringLiteral("claude"), QStringLiteral("codex"),
-                                    QStringLiteral("cursor-dev"), QStringLiteral("code-server")};
+                                    QStringLiteral("cursor-dev")};
         if (strategies.isEmpty())
             strategies = QStringList{QStringLiteral("commit"), QStringLiteral("worktree")};
         if (runtimes.isEmpty()) {

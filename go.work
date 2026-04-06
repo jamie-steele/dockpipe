@@ -3,5 +3,5 @@ go 1.25
 use (
 	.
 	./packages/dorkpipe/lib
-	./packages/dockpipe-mcp
+	./packages/dorkpipe-mcp
 )
