@@ -1,14 +1,14 @@
 {
   "name": "pipeon",
-  "displayName": "Pipeon",
-  "description": "Pipeon gateway: workspace context from .dockpipe (Ollama / worker integration to follow).",
+  "displayName": "DorkPipe",
+  "description": "DorkPipe editor companion: local-first chat, workflow actions, and workspace context from .dockpipe.",
   "version": "0.0.1",
-  "publisher": "pipeon",
+  "publisher": "dorkpipe",
   "repository": {
     "type": "git",
     "url": "https://github.com/jamie-steele/dockpipe.git"
   },
-  "icon": "images/icon.png",
+  "icon": "images/dorkpipe-icon.png",
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -27,8 +27,8 @@
       "activitybar": [
         {
           "id": "pipeon",
-          "title": "Pipeon",
-          "icon": "images/icon.png"
+          "title": "DorkPipe",
+          "icon": "images/dorkpipe-icon.png"
         }
       ]
     },
@@ -44,15 +44,15 @@
     "commands": [
       {
         "command": "pipeon.openChat",
-        "title": "Pipeon: Focus chat"
+        "title": "DorkPipe: Focus chat"
       },
       {
         "command": "pipeon.openContextBundle",
-        "title": "Pipeon: Open context bundle (.dockpipe/pipeon-context.md)"
+        "title": "DorkPipe: Open context bundle (bin/.dockpipe/pipeon-context.md)"
       },
       {
         "command": "pipeon.showReadme",
-        "title": "Pipeon: Open fork & extension docs"
+        "title": "DorkPipe: Open docs"
       }
     ]
   },

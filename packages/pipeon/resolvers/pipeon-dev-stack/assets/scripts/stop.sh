@@ -10,7 +10,7 @@ COMPOSE_PROJECT="$(pipeon_stack_compose_project)"
 CODE_SERVER_CONTAINER_NAME="$(pipeon_stack_code_server_name)"
 
 pipeon_stack_stop_mcpd
-docker stop "$CODE_SERVER_CONTAINER_NAME" >/dev/null 2>&1 || true
+docker rm -f "$CODE_SERVER_CONTAINER_NAME" >/dev/null 2>&1 || true
 docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$REPO_ROOT" down >/dev/null 2>&1 || true
 
-echo "pipeon-dev-stack: stopped MCP, code-server, and compose sidecars for $(pipeon_stack_workdir)"
+echo "pipeon-dev-stack: removed MCP, code-server, and compose sidecars for $(pipeon_stack_workdir)"

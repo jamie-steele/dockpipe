@@ -9,6 +9,7 @@ REPO_ROOT="$(pipeon_stack_repo_root)"
 COMPOSE_FILE="$(pipeon_stack_compose_file)"
 COMPOSE_PROJECT="$(pipeon_stack_compose_project)"
 CODE_SERVER_CONTAINER_NAME="$(pipeon_stack_code_server_name)"
+CODE_SERVER_URL="$(pipeon_stack_code_server_url)"
 MCP_PORT="$(pipeon_stack_mcp_port)"
 MCP_URL="$(pipeon_stack_mcp_url)"
 PID_FILE="$(pipeon_stack_pid_file)"
@@ -19,7 +20,8 @@ MODEL_NAME="${PIPEON_OLLAMA_MODEL:-${DOCKPIPE_OLLAMA_MODEL:-llama3.2}}"
 DOCKPIPE_BIN="$REPO_ROOT/src/bin/dockpipe"
 DORKPIPE_BIN="$REPO_ROOT/packages/dorkpipe/bin/dorkpipe"
 MCPD_BIN="$REPO_ROOT/packages/dorkpipe-mcp/bin/mcpd"
-VSCODE_SCRIPT="$REPO_ROOT/.staging/packages/ide/resolvers/vscode/assets/scripts/vscode-code-server.sh"
+PIPEON_DESKTOP_BIN="${PIPEON_DESKTOP_BIN:-$(pipeon_stack_desktop_bin)}"
+PIPEON_DESKTOP_SCRIPT="$SCRIPT_DIR/desktop.sh"
 PIPEON_BIN="$REPO_ROOT/packages/pipeon/resolvers/pipeon/bin/pipeon"
 STACK_STARTED_BY_ME=0
 MCP_STARTED_BY_ME=0
@@ -40,6 +42,9 @@ ensure_pipeon_stack_state_dir
 ensure_pipeon_stack_api_key
 
 cleanup() {
+  if [[ "$AUTODOWN" == "1" ]]; then
+    docker rm -f "$CODE_SERVER_CONTAINER_NAME" >/dev/null 2>&1 || true
+  fi
   if [[ "$MCP_STARTED_BY_ME" == "1" && "$AUTODOWN" == "1" ]]; then
     pipeon_stack_stop_mcpd
   fi
@@ -59,6 +64,7 @@ case "$BUILD_MODE" in
     env GOCACHE=/tmp/dockpipe-go-build-cache make build
     env GOCACHE=/tmp/dockpipe-go-build-cache go build -C "$REPO_ROOT/packages/dorkpipe/lib" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o ../bin/dorkpipe ./cmd/dorkpipe
     env GOCACHE=/tmp/dockpipe-go-build-cache go build -C "$REPO_ROOT/packages/dorkpipe-mcp" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o bin/mcpd ./cmd/mcpd
+    make build-pipeon-desktop
     ;;
   auto)
     if [[ ! -x "$DOCKPIPE_BIN" ]]; then
@@ -69,6 +75,11 @@ case "$BUILD_MODE" in
     fi
     if [[ ! -x "$MCPD_BIN" ]]; then
       env GOCACHE=/tmp/dockpipe-go-build-cache go build -C "$REPO_ROOT/packages/dorkpipe-mcp" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o bin/mcpd ./cmd/mcpd
+    fi
+    if [[ ! -x "$PIPEON_DESKTOP_BIN" ]]; then
+      if command -v cargo >/dev/null 2>&1; then
+        make build-pipeon-desktop
+      fi
     fi
     ;;
   never)
@@ -84,8 +95,8 @@ if [[ ! -x "$DOCKPIPE_BIN" || ! -x "$DORKPIPE_BIN" || ! -x "$MCPD_BIN" ]]; then
   exit 1
 fi
 
-if [[ ! -x "$VSCODE_SCRIPT" ]]; then
-  echo "pipeon-dev-stack: missing VS Code launcher script at $VSCODE_SCRIPT" >&2
+if [[ ! -f "$PIPEON_DESKTOP_SCRIPT" ]]; then
+  echo "pipeon-dev-stack: missing desktop launcher script at $PIPEON_DESKTOP_SCRIPT" >&2
   exit 1
 fi
 
@@ -127,12 +138,14 @@ export DATABASE_URL="${DATABASE_URL:-postgresql://dorkpipe:dorkpipe@127.0.0.1:15
 export CODE_SERVER_WAIT="${CODE_SERVER_WAIT:-1}"
 export CODE_SERVER_AUTH="${CODE_SERVER_AUTH:-none}"
 export CODE_SERVER_CONTAINER_NAME="$CODE_SERVER_CONTAINER_NAME"
-export CODE_SERVER_BROWSER_WINDOW_TITLE="${CODE_SERVER_BROWSER_WINDOW_TITLE:-Pipeon}"
+export CODE_SERVER_URL="$CODE_SERVER_URL"
+export PIPEON_WINDOW_TITLE="${PIPEON_WINDOW_TITLE:-Pipeon}"
 export DOCKPIPE_PIPEON="${DOCKPIPE_PIPEON:-1}"
 export DOCKPIPE_PIPEON_ALLOW_PRERELEASE="${DOCKPIPE_PIPEON_ALLOW_PRERELEASE:-1}"
 export OLLAMA_HOST="${OLLAMA_HOST:-http://172.17.0.1:11434}"
 export PIPEON_OLLAMA_MODEL="${PIPEON_OLLAMA_MODEL:-$MODEL_NAME}"
 export MCP_HTTP_URL="$MCP_URL"
+export PIPEON_DESKTOP_BIN
 
 if [[ "${CODE_SERVER_IMAGE:-dockpipe-code-server:latest}" == "dockpipe-code-server:latest" ]] \
   && ! docker image inspect dockpipe-code-server:latest >/dev/null 2>&1; then
@@ -163,6 +176,7 @@ cat >&2 <<EOF
 [pipeon-dev-stack] ready
   workdir:      $WORKDIR
   ide:          Pipeon
+  ui:           $CODE_SERVER_URL
   mcp:          $MCP_URL
   mcp api key:  $(pipeon_stack_api_key_file)
   ollama:       $OLLAMA_HOST
@@ -171,4 +185,4 @@ cat >&2 <<EOF
   log:          $LOG_FILE
 EOF
 
-exec bash "$VSCODE_SCRIPT"
+bash "$PIPEON_DESKTOP_SCRIPT"

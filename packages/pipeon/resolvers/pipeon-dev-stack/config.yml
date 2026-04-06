@@ -8,8 +8,7 @@ description: >-
 steps:
   - id: launch
     skip_container: true
-    run:
-      - bash packages/pipeon/resolvers/pipeon-dev-stack/assets/scripts/launch.sh
+    run: scripts/pipeon-dev-stack/launch.sh
     vars:
       # Default behavior: when the Pipeon/code-server window closes, the stack tears down automatically.
       # Set to 0 only if you intentionally want warm backends left running.

@@ -11,7 +11,7 @@ What it does:
 - brings up the DorkPipe sidecars (**Ollama** + **Postgres/pgvector**)
 - starts **`mcpd`** on loopback HTTP with a generated API key
 - refreshes the Pipeon context bundle
-- opens the branded Pipeon editor session against the current workdir
+- starts the branded Pipeon code-server surface and opens it in the Pipeon desktop shell
 
 Companion workflows:
 
@@ -21,8 +21,13 @@ Companion workflows:
 Typical use from the repo root:
 
 ```bash
+make build-pipeon-desktop
 ./src/bin/dockpipe --workflow pipeon-dev-stack --workdir . --
 ```
+
+The stack now prefers the dedicated Tauri desktop shell at
+**`src/apps/pipeon-desktop/bin/pipeon-desktop`** instead of opening a normal
+browser window.
 
 ## Boundary
 

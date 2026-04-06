@@ -8,13 +8,23 @@
 # Qt launcher: cmake -S src/apps/pipeon-launcher -B src/apps/pipeon-launcher/build && cmake --build ...
 include src/Makefile
 
-.PHONY: pipeon-icons build-code-server-image install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci package-templates-core package-dockpipe-language-support package-vscode-language-support install-dockpipe-language-support package-pipeon-vscode-extension install-pipeon-vscode-extension
+.PHONY: pipeon-icons build-code-server-image build-pipeon-desktop install-pipeon-desktop install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci package-templates-core package-dockpipe-language-support package-vscode-language-support install-dockpipe-language-support package-pipeon-vscode-extension install-pipeon-vscode-extension
 
 pipeon-icons:
 	python3 packages/pipeon/resolvers/pipeon/assets/scripts/generate-pipeon-icons.py
 
 build-code-server-image:
 	docker build -t dockpipe-code-server:latest -f packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server .
+
+build-pipeon-desktop:
+	cargo build --manifest-path src/apps/pipeon-desktop/src-tauri/Cargo.toml --release
+	mkdir -p src/apps/pipeon-desktop/bin
+	cp -f src/apps/pipeon-desktop/src-tauri/target/release/pipeon-desktop src/apps/pipeon-desktop/bin/pipeon-desktop
+	chmod +x src/apps/pipeon-desktop/bin/pipeon-desktop
+
+install-pipeon-desktop: build-pipeon-desktop
+	mkdir -p "$$HOME/.local/bin"
+	install -m 755 src/apps/pipeon-desktop/bin/pipeon-desktop "$$HOME/.local/bin/pipeon-desktop"
 
 # Package Pipeon VS Code extension (.vsix) into bin/.dockpipe/extensions.
 # Reuses the locally installed vsce from dockpipe-language-support to avoid network fetches.

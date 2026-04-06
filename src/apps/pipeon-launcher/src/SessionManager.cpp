@@ -113,15 +113,20 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
     si.arguments = proc->arguments();
     m_info[ctx.id] = si;
 
-    connect(proc, &QProcess::readyReadStandardOutput, this, [this, ctx, proc, logFile]() {
-        const QByteArray chunk = proc->readAllStandardOutput();
+    auto flushOutput = [this, ctx, proc, logFile]() {
+        const QByteArray chunk = proc->readAll();
+        if (chunk.isEmpty())
+            return;
         logFile->write(chunk);
         logFile->flush();
         emit sessionOutput(ctx.id, QString::fromLocal8Bit(chunk));
-    });
+    };
+
+    connect(proc, &QProcess::readyRead, this, flushOutput);
 
     connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
-            [this, ctx, proc, logFile](int exitCode, QProcess::ExitStatus st) {
+            [this, ctx, proc, logFile, flushOutput](int exitCode, QProcess::ExitStatus st) {
+                flushOutput();
                 logFile->close();
                 logFile->deleteLater();
                 m_processes.remove(ctx.id);
@@ -131,7 +136,8 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
                 emit sessionStopped(ctx.id, exitCode, st);
             });
 
-    connect(proc, &QProcess::errorOccurred, this, [this, ctx, proc, logFile](QProcess::ProcessError) {
+    connect(proc, &QProcess::errorOccurred, this, [this, ctx, proc, logFile, flushOutput](QProcess::ProcessError) {
+        flushOutput();
         if (proc->state() == QProcess::NotRunning) {
             logFile->close();
             logFile->deleteLater();

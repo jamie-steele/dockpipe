@@ -5,5 +5,4 @@ docker_preflight: false
 steps:
   - id: status
     skip_container: true
-    run:
-      - bash packages/pipeon/resolvers/pipeon-dev-stack/assets/scripts/status.sh
+    run: scripts/pipeon-dev-stack/status.sh

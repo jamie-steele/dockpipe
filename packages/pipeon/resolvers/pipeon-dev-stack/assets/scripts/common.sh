@@ -52,6 +52,50 @@ pipeon_stack_code_server_name() {
   printf 'pipeon-vscode-%s\n' "$(pipeon_stack_slug)"
 }
 
+pipeon_stack_code_server_port_file() {
+  printf '%s/code-server.port\n' "$(pipeon_stack_state_dir)"
+}
+
+pipeon_stack_pick_free_port() {
+  python3 - <<'PY'
+import socket
+s = socket.socket()
+s.bind(("127.0.0.1", 0))
+print(s.getsockname()[1])
+s.close()
+PY
+}
+
+ensure_pipeon_stack_code_server_port() {
+  local port_file port
+  port_file="$(pipeon_stack_code_server_port_file)"
+  ensure_pipeon_stack_state_dir
+  if [[ -s "$port_file" ]]; then
+    return 0
+  fi
+  port="$(pipeon_stack_pick_free_port)"
+  printf '%s\n' "$port" > "$port_file"
+}
+
+pipeon_stack_code_server_port() {
+  ensure_pipeon_stack_code_server_port
+  tr -d ' \t\r\n' < "$(pipeon_stack_code_server_port_file)"
+}
+
+pipeon_stack_code_server_url() {
+  printf 'http://127.0.0.1:%s/\n' "$(pipeon_stack_code_server_port)"
+}
+
+pipeon_stack_code_server_home() {
+  printf '%s/code-server-home\n' "$(pipeon_stack_state_dir)"
+}
+
+pipeon_stack_desktop_bin() {
+  local repo_root
+  repo_root="$(pipeon_stack_repo_root)"
+  printf '%s/src/apps/pipeon-desktop/bin/pipeon-desktop\n' "$repo_root"
+}
+
 pipeon_stack_mcp_port() {
   printf '%s\n' "${PIPEON_DEV_STACK_MCP_PORT:-8765}"
 }
@@ -106,6 +150,7 @@ WORKDIR=$workdir
 REPO_ROOT=$repo_root
 DORKPIPE_DEV_STACK_PROJECT=$(pipeon_stack_compose_project)
 CODE_SERVER_CONTAINER_NAME=$(pipeon_stack_code_server_name)
+CODE_SERVER_URL=$(pipeon_stack_code_server_url)
 MCP_HTTP_URL=$(pipeon_stack_mcp_url)
 MCP_HTTP_API_KEY=$api_key
 MCP_HTTP_API_KEY_FILE=$api_key_file

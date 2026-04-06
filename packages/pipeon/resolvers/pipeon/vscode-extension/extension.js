@@ -1,5 +1,5 @@
 /**
- * Pipeon — minimal VS Code extension (install into a Code OSS fork or stock VS Code).
+ * DorkPipe — minimal VS Code extension (install into a Code OSS fork or stock VS Code).
  * @see pipeon resolver assets/docs/pipeon-vscode-fork.md (maintainer IDE pack)
  */
 // @ts-check
@@ -52,7 +52,7 @@ async function writeTaskFile(root, kind, prompt) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const file = path.join(dir, `${kind}-${stamp}.md`);
   const body = [
-    `# Pipeon ${kind} task`,
+    `# DorkPipe ${kind} task`,
     "",
     `Created: ${new Date().toISOString()}`,
     "",
@@ -74,7 +74,7 @@ async function writeTaskFile(root, kind, prompt) {
 
 function systemPrompt(contextText) {
   return [
-    "You are Pipeon, a local-first repo-aware IDE assistant.",
+    "You are DorkPipe, a local-first repo-aware IDE assistant.",
     "Ground your answer in the provided repository context bundle when relevant.",
     "Be concise, practical, and explicit about uncertainty.",
     contextText ? `\nRepository context bundle:\n\n${contextText}` : "",
@@ -250,7 +250,7 @@ async function handleLocalCommand(root, rawText) {
       return {
         mode: "local",
         text: [
-          "Pipeon local commands:",
+          "DorkPipe local commands:",
           "/help",
           "/status",
           "/bundle",
@@ -290,7 +290,7 @@ async function handleLocalCommand(root, rawText) {
       const ctxPath = await resolveContextBundlePath(root);
       return {
         mode: "local",
-        text: ctxPath ? `Context bundle: ${path.relative(root, ctxPath)}` : "No Pipeon context bundle found yet. Run /bundle first.",
+        text: ctxPath ? `Context bundle: ${path.relative(root, ctxPath)}` : "No DorkPipe context bundle found yet. Run /bundle first.",
       };
     }
     case "/workflow": {
@@ -298,17 +298,17 @@ async function handleLocalCommand(root, rawText) {
         return { mode: "local", text: "Usage: /workflow <name>" };
       }
       const workflow = args[0];
-      launchTerminalCommand(root, `Pipeon workflow: ${workflow}`, `./src/bin/dockpipe --workflow ${workflow} --workdir . --`);
+      launchTerminalCommand(root, `DorkPipe workflow: ${workflow}`, `./src/bin/dockpipe --workflow ${workflow} --workdir . --`);
       return {
         mode: "local",
         text: `Started workflow \`${workflow}\` in a terminal.`,
       };
     }
     case "/test":
-      launchTerminalCommand(root, "Pipeon test", "./src/bin/dockpipe --workflow test --workdir . --");
+      launchTerminalCommand(root, "DorkPipe test", "./src/bin/dockpipe --workflow test --workdir . --");
       return { mode: "local", text: "Started `test` workflow in a terminal." };
     case "/ci":
-      launchTerminalCommand(root, "Pipeon ci-emulate", "./src/bin/dockpipe --workflow ci-emulate --workdir . --");
+      launchTerminalCommand(root, "DorkPipe ci-emulate", "./src/bin/dockpipe --workflow ci-emulate --workdir . --");
       return { mode: "local", text: "Started `ci-emulate` workflow in a terminal." };
     case "/validate": {
       if (args.length > 0) {
@@ -316,7 +316,7 @@ async function handleLocalCommand(root, rawText) {
         const result = await runCommand(`./src/bin/dockpipe workflow validate ${target}`, root);
         return { mode: "local", text: (result.stdout || result.stderr || "No output").trim() };
       }
-      launchTerminalCommand(root, "Pipeon validate", "./src/bin/dockpipe --workflow test --workdir . --");
+      launchTerminalCommand(root, "DorkPipe validate", "./src/bin/dockpipe --workflow test --workdir . --");
       return { mode: "local", text: "Started validation via the `test` workflow in a terminal." };
     }
     case "/plan":
@@ -346,7 +346,7 @@ async function handleLocalCommand(root, rawText) {
     default:
       return {
         mode: "local",
-        text: `Unknown Pipeon local command: ${cmd}\nTry /help`,
+        text: `Unknown DorkPipe local command: ${cmd}\nTry /help`,
       };
   }
 }
@@ -355,7 +355,7 @@ function renderChatHtml(webview, state) {
   const nonce = String(Date.now());
   const transcript = state.messages
     .map((m) => {
-      const role = m.role === "assistant" ? "Pipeon" : "You";
+      const role = m.role === "assistant" ? "DorkPipe" : "You";
       return `<article class="msg ${m.role}"><div class="role">${role}</div><div class="body">${escapeHtml(m.text)}</div></article>`;
     })
     .join("");
@@ -508,9 +508,9 @@ function renderChatHtml(webview, state) {
   <body>
     <div class="wrap">
       <header class="header">
-        <div class="eyebrow">Pipeon</div>
+        <div class="eyebrow">DorkPipe</div>
         <h1 class="title">Workspace Chat</h1>
-        <div class="sub">Ask about this repo, local signals, workflows, and environment. Pipeon will ground answers in the context bundle when available. You can also use local commands like <code>/test</code>, <code>/bundle</code>, or <code>/edit fix the README intro</code>.</div>
+        <div class="sub">Ask about this repo, local signals, workflows, and environment. DorkPipe will ground answers in the context bundle when available. You can also use local commands like <code>/test</code>, <code>/bundle</code>, or <code>/edit fix the README intro</code>.</div>
       </header>
       <div class="quick">
         <button type="button" data-command="/bundle">Bundle</button>
@@ -518,11 +518,11 @@ function renderChatHtml(webview, state) {
         <button type="button" data-command="/test">Test</button>
         <button type="button" data-command="/ci">CI</button>
       </div>
-      <main class="transcript" id="transcript">${transcript || `<article class="msg assistant"><div class="role">Pipeon</div><div class="body">Ask about this workspace. Pipeon will use the local context bundle when available.</div></article>`}</main>
+      <main class="transcript" id="transcript">${transcript || `<article class="msg assistant"><div class="role">DorkPipe</div><div class="body">Ask about this workspace. DorkPipe will use the local context bundle when available.</div></article>`}</main>
       <div class="composerWrap">
         <div class="status">${escapeHtml(state.status)}</div>
         <form class="composer" id="composer">
-          <textarea id="prompt" placeholder="Ask Pipeon about this repo... or use /help for local commands"></textarea>
+          <textarea id="prompt" placeholder="Ask DorkPipe about this repo... or use /help for local commands"></textarea>
           <div class="actions">
             <button id="send" type="submit">Send</button>
           </div>
@@ -598,7 +598,7 @@ class PipeonChatViewProvider {
       const local = await handleLocalCommand(root, text);
       if (local) {
         this.state.messages.push({ role: "assistant", text: local.text });
-        this.state.status = "Local Pipeon command executed";
+        this.state.status = "Local DorkPipe command executed";
         this.refresh();
         this.view?.webview.postMessage({ type: "done" });
         return;
@@ -622,7 +622,7 @@ class PipeonChatViewProvider {
         : `Model: ${model}  |  Ollama: ${host}  |  No context bundle found`;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.state.messages.push({ role: "assistant", text: `Pipeon error: ${message}` });
+      this.state.messages.push({ role: "assistant", text: `DorkPipe error: ${message}` });
       this.state.status = `Error talking to Ollama`;
       this.channel.error(message);
     }
@@ -639,13 +639,13 @@ class PipeonChatViewProvider {
       const model = process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL;
       this.state.status = `Model: ${model}  |  Ollama: ${host}`;
     } else {
-      this.state.status = "Open a workspace folder to chat with Pipeon.";
+      this.state.status = "Open a workspace folder to chat with DorkPipe.";
     }
     this.refresh();
     webviewView.webview.onDidReceiveMessage(async (msg) => {
       const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (!workspaceRoot) {
-        vscode.window.showWarningMessage("Pipeon: open a workspace folder first.");
+        vscode.window.showWarningMessage("DorkPipe: open a workspace folder first.");
         return;
       }
       if (msg?.type === "ask" && msg.text) {
@@ -657,7 +657,7 @@ class PipeonChatViewProvider {
 
 /** @param {vscode.ExtensionContext} context */
 function activate(context) {
-  const channel = vscode.window.createOutputChannel("Pipeon", { log: true });
+  const channel = vscode.window.createOutputChannel("DorkPipe", { log: true });
   const chatProvider = new PipeonChatViewProvider(channel);
 
   context.subscriptions.push(
@@ -676,7 +676,7 @@ function activate(context) {
     vscode.commands.registerCommand("pipeon.openContextBundle", async () => {
       const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (!root) {
-        vscode.window.showWarningMessage("Pipeon: open a workspace folder first.");
+        vscode.window.showWarningMessage("DorkPipe: open a workspace folder first.");
         return;
       }
       try {
@@ -689,7 +689,7 @@ function activate(context) {
         channel.appendLine(text);
         channel.show(true);
       } catch {
-        vscode.window.showInformationMessage("Pipeon: no pipeon-context bundle found — run `pipeon bundle` first.");
+        vscode.window.showInformationMessage("DorkPipe: no pipeon-context bundle found — run `pipeon bundle` first.");
       }
     })
   );
@@ -698,7 +698,7 @@ function activate(context) {
     vscode.commands.registerCommand("pipeon.showReadme", async () => {
       const root = vscode.workspace.workspaceFolders?.[0]?.uri;
       if (!root) {
-        vscode.window.showWarningMessage("Pipeon: open the dockpipe repository as a workspace folder first.");
+        vscode.window.showWarningMessage("DorkPipe: open the dockpipe repository as a workspace folder first.");
         return;
       }
       const doc = vscode.Uri.joinPath(
@@ -717,7 +717,7 @@ function activate(context) {
         await vscode.window.showTextDocument(docShow, { preview: true });
       } catch {
         vscode.window.showInformationMessage(
-          "Pipeon: fork doc not found in this workspace — open the dockpipe repo root."
+          "DorkPipe: fork doc not found in this workspace — open the dockpipe repo root."
         );
       }
     })
