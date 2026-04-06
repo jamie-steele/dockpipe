@@ -66,7 +66,7 @@ pipeon_start_code_server() {
     -lc '
       set -e
       mkdir -p /home/coder/.local/share/code-server/User
-      if [[ ! -f /home/coder/.local/share/code-server/User/settings.json ]] && [[ -f /opt/pipeon/default-user-data/User/settings.json ]]; then
+      if [[ -f /opt/pipeon/default-user-data/User/settings.json ]]; then
         cp /opt/pipeon/default-user-data/User/settings.json /home/coder/.local/share/code-server/User/settings.json
       fi
       exec code-server \

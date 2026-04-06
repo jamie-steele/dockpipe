@@ -13,7 +13,12 @@
     "vscode": "^1.85.0"
   },
   "categories": ["Other"],
-  "activationEvents": ["onStartupFinished", "onView:pipeon.chatView", "onCommand:pipeon.openChat"],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:pipeon.chatView",
+    "onCommand:pipeon.openChat",
+    "onChatParticipant:dorkpipe.pipeon.dorkpipe"
+  ],
   "files": [
     "extension.js",
     "images/**",
@@ -28,7 +33,7 @@
         {
           "id": "pipeon",
           "title": "DorkPipe",
-          "icon": "images/dorkpipe-icon.png"
+          "icon": "images/dorkpipe-activity.svg"
         }
       ]
     },
@@ -41,10 +46,23 @@
         }
       ]
     },
+    "chatParticipants": [
+      {
+        "id": "dorkpipe.pipeon.dorkpipe",
+        "name": "dorkpipe",
+        "fullName": "DorkPipe",
+        "description": "Ask DorkPipe about this repo, local signals, and workflows.",
+        "isSticky": true
+      }
+    ],
     "commands": [
       {
         "command": "pipeon.openChat",
-        "title": "DorkPipe: Focus chat"
+        "title": "DorkPipe: Open chat"
+      },
+      {
+        "command": "pipeon.openWelcome",
+        "title": "Pipeon: Open welcome"
       },
       {
         "command": "pipeon.openContextBundle",

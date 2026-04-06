@@ -13,6 +13,8 @@ const cp = require("child_process");
 const DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434";
 const DEFAULT_MODEL = "llama3.2";
 const CHAT_VIEW_ID = "pipeon.chatView";
+const CHAT_PARTICIPANT_ID = "dorkpipe.pipeon.dorkpipe";
+const WELCOME_PANEL_ID = "pipeon.welcome";
 
 async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
@@ -44,6 +46,10 @@ async function readContextBundle(root) {
     return { text: "", path: null };
   }
   return { text: await fs.readFile(ctxPath, "utf8"), path: ctxPath };
+}
+
+function getWorkspaceRoot() {
+  return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || null;
 }
 
 async function writeTaskFile(root, kind, prompt) {
@@ -83,6 +89,53 @@ function systemPrompt(contextText) {
 
 function buildOllamaUrl(host) {
   return new URL("/api/chat", host.endsWith("/") ? host : `${host}/`);
+}
+
+async function executeDorkpipeRequest(root, text, options = {}) {
+  const host = process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST;
+  const model = process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL;
+  const onToken = typeof options.onToken === "function" ? options.onToken : null;
+  const local = await handleLocalCommand(root, text);
+  if (local) {
+    return {
+      kind: "local",
+      text: local.text,
+      host,
+      model,
+      status: "Local DorkPipe command executed",
+      contextPath: null,
+    };
+  }
+
+  const { text: contextText, path: contextPath } = await readContextBundle(root);
+  let answer = "";
+  if (onToken) {
+    answer = await ollamaChatStream({
+      host,
+      model,
+      system: systemPrompt(contextText),
+      user: text,
+      onToken,
+    });
+  } else {
+    answer = await ollamaChat({
+      host,
+      model,
+      system: systemPrompt(contextText),
+      user: text,
+    });
+  }
+
+  return {
+    kind: "model",
+    text: answer || "(No response text returned.)",
+    host,
+    model,
+    contextPath,
+    status: contextPath
+      ? `Model: ${model}  |  Ollama: ${host}  |  Context: ${path.relative(root, contextPath)}`
+      : `Model: ${model}  |  Ollama: ${host}  |  No context bundle found`,
+  };
 }
 
 function ollamaChat({ host, model, system, user }) {
@@ -568,6 +621,196 @@ function escapeHtml(text) {
     .replace(/>/g, "&gt;");
 }
 
+function renderWelcomeHtml(webview, extensionUri) {
+  const nonce = String(Date.now());
+  const iconUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, "images", "icon.png"));
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      body {
+        margin: 0;
+        font-family: var(--vscode-font-family);
+        color: var(--vscode-editor-foreground);
+        background:
+          radial-gradient(circle at top left, color-mix(in srgb, var(--vscode-button-background) 22%, transparent), transparent 45%),
+          linear-gradient(180deg, color-mix(in srgb, var(--vscode-sideBar-background) 94%, transparent), var(--vscode-editor-background));
+      }
+      .wrap {
+        min-height: 100vh;
+        display: grid;
+        grid-template-columns: minmax(320px, 560px) 1fr;
+        gap: 32px;
+        align-items: center;
+        padding: 48px;
+      }
+      .copy {
+        max-width: 520px;
+      }
+      .eyebrow {
+        text-transform: uppercase;
+        letter-spacing: 0.14em;
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
+        margin-bottom: 12px;
+      }
+      h1 {
+        margin: 0 0 16px;
+        font-size: 42px;
+        line-height: 1.05;
+      }
+      p {
+        margin: 0 0 16px;
+        font-size: 17px;
+        line-height: 1.6;
+        color: var(--vscode-descriptionForeground);
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        flex-wrap: wrap;
+        margin-top: 20px;
+      }
+      button {
+        border: 0;
+        border-radius: 12px;
+        padding: 12px 18px;
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+      button.secondary {
+        background: color-mix(in srgb, var(--vscode-button-background) 15%, transparent);
+        color: var(--vscode-editor-foreground);
+        border: 1px solid var(--vscode-panel-border);
+      }
+      .hero {
+        display: flex;
+        justify-content: center;
+      }
+      .card {
+        width: min(100%, 560px);
+        aspect-ratio: 1.2 / 1;
+        border-radius: 28px;
+        border: 1px solid color-mix(in srgb, var(--vscode-button-background) 22%, var(--vscode-panel-border));
+        background:
+          radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--vscode-button-background) 24%, transparent), transparent 30%),
+          linear-gradient(180deg, color-mix(in srgb, var(--vscode-editorWidget-background) 96%, transparent), color-mix(in srgb, var(--vscode-editorWidget-background) 88%, transparent));
+        box-shadow: 0 24px 60px rgba(0,0,0,0.22);
+        display: grid;
+        place-items: center;
+      }
+      .card img {
+        width: min(62%, 320px);
+        height: auto;
+        filter: drop-shadow(0 18px 30px rgba(0,0,0,0.35));
+      }
+      @media (max-width: 960px) {
+        .wrap {
+          grid-template-columns: 1fr;
+          padding: 28px;
+        }
+        h1 { font-size: 34px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <section class="copy">
+        <div class="eyebrow">Pipeon</div>
+        <h1>Get Started with Pipeon</h1>
+        <p>Local-first coding with a proper app shell, DorkPipe in-editor help, DockPipe workflows, and your repo context already wired in.</p>
+        <p>Open chat, inspect the local bundle, or jump straight into the workspace without the stock web welcome getting in the way.</p>
+        <div class="actions">
+          <button data-command="chat">Open DorkPipe Chat</button>
+          <button class="secondary" data-command="context">Open Context Bundle</button>
+          <button class="secondary" data-command="docs">Open Docs</button>
+        </div>
+      </section>
+      <section class="hero">
+        <div class="card">
+          <img src="${iconUri}" alt="Pipeon" />
+        </div>
+      </section>
+    </div>
+    <script nonce="${nonce}">
+      const vscode = acquireVsCodeApi();
+      for (const button of document.querySelectorAll('button[data-command]')) {
+        button.addEventListener('click', () => {
+          vscode.postMessage({ type: 'command', command: button.dataset.command });
+        });
+      }
+    </script>
+  </body>
+</html>`;
+}
+
+function openPipeonWelcome(context) {
+  const panel = vscode.window.createWebviewPanel(
+    WELCOME_PANEL_ID,
+    "Pipeon",
+    vscode.ViewColumn.Active,
+    {
+      enableScripts: true,
+      retainContextWhenHidden: true,
+    }
+  );
+  panel.webview.html = renderWelcomeHtml(panel.webview, context.extensionUri);
+  panel.webview.onDidReceiveMessage(async (msg) => {
+    switch (msg?.command) {
+      case "chat":
+        await vscode.commands.executeCommand("pipeon.openChat");
+        break;
+      case "context":
+        await vscode.commands.executeCommand("pipeon.openContextBundle");
+        break;
+      case "docs":
+        await vscode.commands.executeCommand("pipeon.showReadme");
+        break;
+      default:
+        break;
+    }
+  });
+  return panel;
+}
+
+function looksLikeStockWelcomeTab(tab) {
+  const label = String(tab?.label || "").toLowerCase();
+  return label.includes("welcome") || label.includes("get started");
+}
+
+async function replaceStockWelcomeWithPipeon(context) {
+  const groups = vscode.window.tabGroups?.all || [];
+  let foundWelcome = false;
+  let foundNonWelcome = false;
+
+  for (const group of groups) {
+    for (const tab of group.tabs) {
+      if (looksLikeStockWelcomeTab(tab)) {
+        foundWelcome = true;
+      } else {
+        foundNonWelcome = true;
+      }
+    }
+  }
+
+  if (!foundWelcome || foundNonWelcome) {
+    return;
+  }
+
+  try {
+    await vscode.commands.executeCommand("workbench.action.closeAllEditors");
+  } catch {
+    // ignore close failures and still try to show Pipeon
+  }
+  openPipeonWelcome(context);
+}
+
 class PipeonChatViewProvider {
   constructor(channel) {
     this.channel = channel;
@@ -589,37 +832,20 @@ class PipeonChatViewProvider {
   }
 
   async ask(root, text) {
-    const host = process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST;
-    const model = process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL;
     this.state.messages.push({ role: "user", text });
-    this.state.status = `Thinking with ${model}...`;
+    this.state.status = "Thinking...";
     this.refresh();
     try {
-      const local = await handleLocalCommand(root, text);
-      if (local) {
-        this.state.messages.push({ role: "assistant", text: local.text });
-        this.state.status = "Local DorkPipe command executed";
-        this.refresh();
-        this.view?.webview.postMessage({ type: "done" });
-        return;
-      }
-      const { text: contextText, path: contextPath } = await readContextBundle(root);
       this.state.messages.push({ role: "assistant", text: "" });
       const assistantIndex = this.state.messages.length - 1;
-      const answer = await ollamaChatStream({
-        host,
-        model,
-        system: systemPrompt(contextText),
-        user: text,
+      const result = await executeDorkpipeRequest(root, text, {
         onToken: (_piece, fullText) => {
           this.state.messages[assistantIndex].text = fullText;
           this.refresh();
         },
       });
-      this.state.messages[assistantIndex].text = answer || "(No response text returned.)";
-      this.state.status = contextPath
-        ? `Model: ${model}  |  Ollama: ${host}  |  Context: ${path.relative(root, contextPath)}`
-        : `Model: ${model}  |  Ollama: ${host}  |  No context bundle found`;
+      this.state.messages[assistantIndex].text = result.text;
+      this.state.status = result.status;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.state.messages.push({ role: "assistant", text: `DorkPipe error: ${message}` });
@@ -668,9 +894,49 @@ function activate(context) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("pipeon.openChat", async () => {
-      await vscode.commands.executeCommand(`${CHAT_VIEW_ID}.focus`);
+      try {
+        await vscode.commands.executeCommand("workbench.action.chat.open", `@dorkpipe `);
+      } catch {
+        await vscode.commands.executeCommand(`${CHAT_VIEW_ID}.focus`);
+      }
     })
   );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pipeon.openWelcome", async () => {
+      openPipeonWelcome(context);
+    })
+  );
+
+  if (vscode.chat && typeof vscode.chat.createChatParticipant === "function") {
+    const participant = vscode.chat.createChatParticipant(CHAT_PARTICIPANT_ID, async (request, _chatContext, stream) => {
+      const root = getWorkspaceRoot();
+      if (!root) {
+        stream.markdown("Open a workspace folder first.");
+        return {};
+      }
+
+      const prompt = request.prompt?.trim();
+      if (!prompt) {
+        stream.markdown("Ask DorkPipe about this repo, local signals, workflows, or use local commands like `/test`.");
+        return {};
+      }
+
+      try {
+        stream.progress("DorkPipe is working...");
+        const result = await executeDorkpipeRequest(root, prompt);
+        stream.markdown(result.text);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        channel.error(message);
+        stream.markdown(`DorkPipe error: ${message}`);
+      }
+
+      return {};
+    });
+    participant.iconPath = vscode.Uri.joinPath(context.extensionUri, "images", "dorkpipe-icon.png");
+    context.subscriptions.push(participant);
+  }
 
   context.subscriptions.push(
     vscode.commands.registerCommand("pipeon.openContextBundle", async () => {
@@ -722,6 +988,10 @@ function activate(context) {
       }
     })
   );
+
+  setTimeout(() => {
+    void replaceStockWelcomeWithPipeon(context);
+  }, 400);
 }
 
 function deactivate() {}

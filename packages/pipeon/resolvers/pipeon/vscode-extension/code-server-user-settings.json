@@ -2,6 +2,8 @@
   "telemetry.telemetryLevel": "off",
   "extensions.autoUpdate": false,
   "update.mode": "none",
+  "workbench.startupEditor": "none",
+  "workbench.welcome.enabled": false,
   "window.title": "Pipeon — ${rootName}",
   "window.autoDetectColorScheme": true,
   "workbench.preferredDarkColorTheme": "Default Dark+",
