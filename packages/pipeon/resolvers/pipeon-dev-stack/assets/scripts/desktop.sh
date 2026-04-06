@@ -30,9 +30,76 @@ pipeon_wait_for_http() {
   return 1
 }
 
+pipeon_seed_code_server_settings() {
+  local target_dir="$CODE_SERVER_HOME/.local/share/code-server/User"
+  local target_path="$target_dir/settings.json"
+  local defaults_rel="packages/pipeon/resolvers/pipeon/vscode-extension/code-server-user-settings.json"
+  local defaults_path="$REPO_ROOT/$defaults_rel"
+
+  mkdir -p "$target_dir"
+  if [[ ! -f "$defaults_path" ]]; then
+    return 0
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    DEFAULTS_PATH="$defaults_path" TARGET_PATH="$target_path" python3 - <<'PY'
+import json
+import os
+from pathlib import Path
+
+defaults_path = Path(os.environ["DEFAULTS_PATH"])
+target_path = Path(os.environ["TARGET_PATH"])
+
+defaults = json.loads(defaults_path.read_text(encoding="utf-8"))
+existing = {}
+if target_path.exists():
+    try:
+        existing = json.loads(target_path.read_text(encoding="utf-8"))
+    except Exception:
+        existing = {}
+
+existing.pop("workbench.panel.defaultLocation", None)
+
+merged = dict(existing)
+merged.update(defaults)
+target_path.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+PY
+    return 0
+  fi
+
+  if command -v node >/dev/null 2>&1; then
+    DEFAULTS_PATH="$defaults_path" TARGET_PATH="$target_path" node - <<'NODE'
+const fs = require('fs');
+
+const defaultsPath = process.env.DEFAULTS_PATH;
+const targetPath = process.env.TARGET_PATH;
+
+const defaults = JSON.parse(fs.readFileSync(defaultsPath, 'utf8'));
+let existing = {};
+
+if (fs.existsSync(targetPath)) {
+  try {
+    existing = JSON.parse(fs.readFileSync(targetPath, 'utf8'));
+  } catch {
+    existing = {};
+  }
+}
+
+delete existing['workbench.panel.defaultLocation'];
+
+const merged = { ...existing, ...defaults };
+fs.writeFileSync(targetPath, `${JSON.stringify(merged, null, 2)}\n`, 'utf8');
+NODE
+    return 0
+  fi
+
+  cp "$defaults_path" "$target_path"
+}
+
 pipeon_start_code_server() {
   local cid
   mkdir -p "$CODE_SERVER_HOME"
+  pipeon_seed_code_server_settings
   if docker ps --format '{{.Names}}' | grep -qx "$CODE_SERVER_CONTAINER_NAME"; then
     return 0
   fi
@@ -65,10 +132,6 @@ pipeon_start_code_server() {
     "$CODE_SERVER_IMAGE" \
     -lc '
       set -e
-      mkdir -p /home/coder/.local/share/code-server/User
-      if [[ -f /opt/pipeon/default-user-data/User/settings.json ]]; then
-        cp /opt/pipeon/default-user-data/User/settings.json /home/coder/.local/share/code-server/User/settings.json
-      fi
       exec code-server \
         --bind-addr 0.0.0.0:8080 \
         --auth "'"$CODE_SERVER_AUTH"'" \

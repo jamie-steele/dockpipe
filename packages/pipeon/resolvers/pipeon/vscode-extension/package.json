@@ -16,8 +16,7 @@
   "activationEvents": [
     "onStartupFinished",
     "onView:pipeon.chatView",
-    "onCommand:pipeon.openChat",
-    "onChatParticipant:dorkpipe.pipeon.dorkpipe"
+    "onCommand:pipeon.openChat"
   ],
   "files": [
     "extension.js",
@@ -29,16 +28,16 @@
   "main": "extension.js",
   "contributes": {
     "viewsContainers": {
-      "activitybar": [
+      "panel": [
         {
-          "id": "pipeon",
+          "id": "dorkpipe-panel",
           "title": "DorkPipe",
           "icon": "images/dorkpipe-activity.svg"
         }
       ]
     },
     "views": {
-      "pipeon": [
+      "dorkpipe-panel": [
         {
           "id": "pipeon.chatView",
           "name": "Chat",
@@ -46,15 +45,6 @@
         }
       ]
     },
-    "chatParticipants": [
-      {
-        "id": "dorkpipe.pipeon.dorkpipe",
-        "name": "dorkpipe",
-        "fullName": "DorkPipe",
-        "description": "Ask DorkPipe about this repo, local signals, and workflows.",
-        "isSticky": true
-      }
-    ],
     "commands": [
       {
         "command": "pipeon.openChat",

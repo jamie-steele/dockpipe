@@ -13,8 +13,8 @@ const cp = require("child_process");
 const DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434";
 const DEFAULT_MODEL = "llama3.2";
 const CHAT_VIEW_ID = "pipeon.chatView";
-const CHAT_PARTICIPANT_ID = "dorkpipe.pipeon.dorkpipe";
 const WELCOME_PANEL_ID = "pipeon.welcome";
+const PANEL_BOTTOM_MIGRATION_KEY = "pipeon.panelBottomMigrated.v1";
 
 async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
@@ -811,6 +811,24 @@ async function replaceStockWelcomeWithPipeon(context) {
   openPipeonWelcome(context);
 }
 
+async function revealDorkpipePanel() {
+  await vscode.commands.executeCommand(`${CHAT_VIEW_ID}.focus`);
+}
+
+async function resetPanelToBottomOnce(context) {
+  if (context.globalState.get(PANEL_BOTTOM_MIGRATION_KEY)) {
+    return;
+  }
+
+  await context.globalState.update(PANEL_BOTTOM_MIGRATION_KEY, true);
+
+  try {
+    await vscode.commands.executeCommand("workbench.action.positionPanelBottom");
+  } catch {
+    // Best-effort cleanup for the old broken layout migration.
+  }
+}
+
 class PipeonChatViewProvider {
   constructor(channel) {
     this.channel = channel;
@@ -894,11 +912,7 @@ function activate(context) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("pipeon.openChat", async () => {
-      try {
-        await vscode.commands.executeCommand("workbench.action.chat.open", `@dorkpipe `);
-      } catch {
-        await vscode.commands.executeCommand(`${CHAT_VIEW_ID}.focus`);
-      }
+      await revealDorkpipePanel();
     })
   );
 
@@ -907,36 +921,6 @@ function activate(context) {
       openPipeonWelcome(context);
     })
   );
-
-  if (vscode.chat && typeof vscode.chat.createChatParticipant === "function") {
-    const participant = vscode.chat.createChatParticipant(CHAT_PARTICIPANT_ID, async (request, _chatContext, stream) => {
-      const root = getWorkspaceRoot();
-      if (!root) {
-        stream.markdown("Open a workspace folder first.");
-        return {};
-      }
-
-      const prompt = request.prompt?.trim();
-      if (!prompt) {
-        stream.markdown("Ask DorkPipe about this repo, local signals, workflows, or use local commands like `/test`.");
-        return {};
-      }
-
-      try {
-        stream.progress("DorkPipe is working...");
-        const result = await executeDorkpipeRequest(root, prompt);
-        stream.markdown(result.text);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        channel.error(message);
-        stream.markdown(`DorkPipe error: ${message}`);
-      }
-
-      return {};
-    });
-    participant.iconPath = vscode.Uri.joinPath(context.extensionUri, "images", "dorkpipe-icon.png");
-    context.subscriptions.push(participant);
-  }
 
   context.subscriptions.push(
     vscode.commands.registerCommand("pipeon.openContextBundle", async () => {
@@ -991,6 +975,7 @@ function activate(context) {
 
   setTimeout(() => {
     void replaceStockWelcomeWithPipeon(context);
+    void resetPanelToBottomOnce(context);
   }, 400);
 }
 
