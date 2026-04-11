@@ -253,8 +253,23 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 	verifyOutput, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
 	if err != nil {
 		_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
-		emitEditError(reqID, "VALIDATION_FAILED", "The generated patch did not apply cleanly.", true)
-		return nil, "", "", err
+		artifact, modelText, err = retryInvalidEditArtifact(ctx, reqID, host, chosenModel, prompt, modelText, fmt.Sprintf("The generated patch did not apply cleanly.\n\nVerifier output:\n%s", emptyFallback(verifyOutput, "(no verifier output)")), artifactsDir)
+		if err != nil {
+			emitEditError(reqID, "VALIDATION_FAILED", "The generated patch did not apply cleanly.", true)
+			return nil, "", "", err
+		}
+		writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
+		patchPath = filepath.Join(artifactsDir, "patch.diff")
+		if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
+			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Could not write repaired patch artifact: %v", err), false)
+			return nil, "", "", err
+		}
+		verifyOutput, err = runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
+		if err != nil {
+			_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
+			emitEditError(reqID, "VALIDATION_FAILED", "The generated patch did not apply cleanly.", true)
+			return nil, "", "", err
+		}
 	}
 	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
 	return artifact, patchPath, artifactsDir, nil
