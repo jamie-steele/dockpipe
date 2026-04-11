@@ -1432,14 +1432,29 @@ func emptyFallback(s, fallback string) string {
 }
 
 func tryDeterministicEditPrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
-	if artifact, patchPath, ok, err := tryDeterministicPackageScaffoldPrimitive(reqID, root, message, artifactsDir); ok {
+	if artifact, patchPath, ok, err := tryDeterministicFileCreatePrimitive(reqID, root, message, artifactsDir); ok {
+		return artifact, patchPath, true, err
+	}
+	if artifact, patchPath, ok, err := tryDeterministicAnchorInsertPrimitive(reqID, root, message, activeFile, artifactsDir); ok {
+		return artifact, patchPath, true, err
+	}
+	if artifact, patchPath, ok, err := tryDeterministicCollectionScaffoldPrimitive(reqID, root, message, artifactsDir); ok {
+		return artifact, patchPath, true, err
+	}
+	if artifact, patchPath, ok, err := tryDeterministicYAMLScalarUpdatePrimitive(reqID, root, message, activeFile, artifactsDir); ok {
+		return artifact, patchPath, true, err
+	}
+	if artifact, patchPath, ok, err := tryDeterministicYAMLListAddPrimitive(reqID, root, message, activeFile, artifactsDir); ok {
+		return artifact, patchPath, true, err
+	}
+	if artifact, patchPath, ok, err := tryDeterministicMarkdownSectionPrimitive(reqID, root, message, activeFile, artifactsDir); ok {
 		return artifact, patchPath, true, err
 	}
 	targetFile, lineText, ok := deterministicReadmeAppend(root, message, activeFile)
 	if !ok {
 		return nil, "", false, nil
 	}
-	emitEditEvent(reqID, "context_gathering", "Using deterministic README edit primitive", 0.18, map[string]any{
+	emitEditEvent(reqID, "context_gathering", "Using deterministic text append primitive", 0.18, map[string]any{
 		"target_file": targetFile,
 	})
 	beforeBytes, err := os.ReadFile(filepath.Join(root, targetFile))
@@ -1468,7 +1483,7 @@ func tryDeterministicEditPrimitive(reqID, root, message, activeFile, artifactsDi
 		Summary:     fmt.Sprintf("Append the requested proof text to `%s`.", targetFile),
 		TargetFiles: []string{targetFile},
 		Patch:       buildAppendLinePatch(targetFile, before, lineText),
-		Validations: []string{"Verify the README now includes the requested proof text."},
+		Validations: []string{"Verify the target file now includes the requested text."},
 	}
 	if err := validateEditArtifact(artifact); err != nil {
 		emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Deterministic edit artifact validation failed: %v", err), false)
@@ -1479,7 +1494,7 @@ func tryDeterministicEditPrimitive(reqID, root, message, activeFile, artifactsDi
 	if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
 		return nil, "", true, err
 	}
-	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte("Deterministic README append primitive selected."), 0o644)
+	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte("Deterministic text append primitive selected."), 0o644)
 	return artifact, patchPath, true, nil
 }
 
@@ -1526,12 +1541,174 @@ func deterministicReadmeAppend(root, message, activeFile string) (string, string
 	return targetFile, lineText, true
 }
 
-func tryDeterministicPackageScaffoldPrimitive(reqID, root, message, artifactsDir string) (*editModelArtifact, string, bool, error) {
+func tryDeterministicFileCreatePrimitive(reqID, root, message, artifactsDir string) (*editModelArtifact, string, bool, error) {
+	targetFile, content, ok := inferFileCreateSpec(message)
+	if !ok {
+		return nil, "", false, nil
+	}
+	if strings.HasPrefix(targetFile, "/") || strings.Contains(targetFile, "..") {
+		return nil, "", false, nil
+	}
+	if _, err := os.Stat(filepath.Join(root, targetFile)); err == nil {
+		return nil, "", false, nil
+	}
+	emitEditEvent(reqID, "context_gathering", "Using deterministic file creation primitive", 0.18, map[string]any{
+		"target_file": targetFile,
+	})
+	artifact := &editModelArtifact{
+		Summary:     fmt.Sprintf("Create `%s` using a local file-creation primitive.", targetFile),
+		TargetFiles: []string{targetFile},
+		Patch:       buildCreateFilePatch(targetFile, content),
+		Validations: []string{"Verify the new file content matches the requested intent."},
+	}
+	if err := validateEditArtifact(artifact); err != nil {
+		return nil, "", true, err
+	}
+	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic file creation primitive selected.")
+}
+
+func tryDeterministicAnchorInsertPrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
+	targetFile := resolveDeterministicTargetFile(root, activeFile, message, []string{".go", ".js", ".ts", ".tsx", ".jsx", ".py", ".md", ".yml", ".yaml", ".json", ".txt"})
+	if targetFile == "" {
+		return nil, "", false, nil
+	}
+	anchor, block, ok := inferAnchorInsertSpec(message)
+	if !ok {
+		return nil, "", false, nil
+	}
+	beforeBytes, err := os.ReadFile(filepath.Join(root, targetFile))
+	if err != nil {
+		return nil, "", false, err
+	}
+	before := string(beforeBytes)
+	after, changed := insertBlockAfterAnchor(before, anchor, block)
+	if !changed {
+		return nil, "", false, nil
+	}
+	emitEditEvent(reqID, "context_gathering", "Using deterministic anchor insert primitive", 0.18, map[string]any{
+		"target_file": targetFile,
+		"anchor":      anchor,
+	})
+	artifact := &editModelArtifact{
+		Summary:     fmt.Sprintf("Insert a requested block into `%s` after `%s` using a local anchor primitive.", targetFile, anchor),
+		TargetFiles: []string{targetFile},
+		Patch:       buildReplaceFilePatch(targetFile, before, after),
+		Validations: []string{"Verify the inserted block landed at the intended anchor."},
+	}
+	if err := validateEditArtifact(artifact); err != nil {
+		return nil, "", true, err
+	}
+	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic anchor insert primitive selected.")
+}
+
+func tryDeterministicYAMLScalarUpdatePrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
+	targetFile := resolveDeterministicTargetFile(root, activeFile, message, []string{".yml", ".yaml"})
+	if targetFile == "" {
+		return nil, "", false, nil
+	}
+	key, value, ok := inferYAMLScalarUpdate(message)
+	if !ok {
+		return nil, "", false, nil
+	}
+	beforeBytes, err := os.ReadFile(filepath.Join(root, targetFile))
+	if err != nil {
+		return nil, "", false, err
+	}
+	before := string(beforeBytes)
+	after, changed := updateYAMLScalarField(before, key, value)
+	if !changed {
+		return nil, "", false, nil
+	}
+	emitEditEvent(reqID, "context_gathering", "Using deterministic YAML field update primitive", 0.18, map[string]any{
+		"target_file": targetFile,
+		"yaml_key":    key,
+	})
+	artifact := &editModelArtifact{
+		Summary:     fmt.Sprintf("Update `%s` in `%s` using a local YAML primitive.", key, targetFile),
+		TargetFiles: []string{targetFile},
+		Patch:       buildReplaceFilePatch(targetFile, before, after),
+		Validations: []string{fmt.Sprintf("Verify `%s` now reflects the requested value.", key)},
+	}
+	if err := validateEditArtifact(artifact); err != nil {
+		return nil, "", true, err
+	}
+	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic YAML field update primitive selected.")
+}
+
+func tryDeterministicYAMLListAddPrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
+	targetFile := resolveDeterministicTargetFile(root, activeFile, message, []string{".yml", ".yaml"})
+	if targetFile == "" {
+		return nil, "", false, nil
+	}
+	key, value, ok := inferYAMLListAppend(message)
+	if !ok {
+		return nil, "", false, nil
+	}
+	beforeBytes, err := os.ReadFile(filepath.Join(root, targetFile))
+	if err != nil {
+		return nil, "", false, err
+	}
+	before := string(beforeBytes)
+	after, changed := appendYAMLListItem(before, key, value)
+	if !changed {
+		return nil, "", false, nil
+	}
+	emitEditEvent(reqID, "context_gathering", "Using deterministic YAML list primitive", 0.18, map[string]any{
+		"target_file": targetFile,
+		"yaml_key":    key,
+	})
+	artifact := &editModelArtifact{
+		Summary:     fmt.Sprintf("Add `%s` to `%s` in `%s` using a local YAML primitive.", value, key, targetFile),
+		TargetFiles: []string{targetFile},
+		Patch:       buildReplaceFilePatch(targetFile, before, after),
+		Validations: []string{fmt.Sprintf("Verify `%s` now includes `%s`.", key, value)},
+	}
+	if err := validateEditArtifact(artifact); err != nil {
+		return nil, "", true, err
+	}
+	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic YAML list primitive selected.")
+}
+
+func tryDeterministicMarkdownSectionPrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
+	targetFile := resolveDeterministicTargetFile(root, activeFile, message, []string{".md"})
+	if targetFile == "" {
+		return nil, "", false, nil
+	}
+	title, body, ok := inferMarkdownSection(message)
+	if !ok {
+		return nil, "", false, nil
+	}
+	beforeBytes, err := os.ReadFile(filepath.Join(root, targetFile))
+	if err != nil {
+		return nil, "", false, err
+	}
+	before := string(beforeBytes)
+	after, changed := appendMarkdownSection(before, title, body)
+	if !changed {
+		return nil, "", false, nil
+	}
+	emitEditEvent(reqID, "context_gathering", "Using deterministic markdown section primitive", 0.18, map[string]any{
+		"target_file": targetFile,
+		"title":       title,
+	})
+	artifact := &editModelArtifact{
+		Summary:     fmt.Sprintf("Add a `%s` section to `%s` using a local markdown primitive.", title, targetFile),
+		TargetFiles: []string{targetFile},
+		Patch:       buildReplaceFilePatch(targetFile, before, after),
+		Validations: []string{"Verify the new markdown section reads naturally in context."},
+	}
+	if err := validateEditArtifact(artifact); err != nil {
+		return nil, "", true, err
+	}
+	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic markdown section primitive selected.")
+}
+
+func tryDeterministicCollectionScaffoldPrimitive(reqID, root, message, artifactsDir string) (*editModelArtifact, string, bool, error) {
 	spec, ok := inferPackageScaffoldSpec(root, message)
 	if !ok {
 		return nil, "", false, nil
 	}
-	emitEditEvent(reqID, "context_gathering", "Using deterministic package scaffold primitive", 0.18, map[string]any{
+	emitEditEvent(reqID, "context_gathering", "Using deterministic scaffold primitive", 0.18, map[string]any{
 		"package_root": spec.PackageRoot,
 		"package_name": spec.PackageName,
 	})
@@ -1548,7 +1725,7 @@ func tryDeterministicPackageScaffoldPrimitive(reqID, root, message, artifactsDir
 		Validations: []string{spec.ValidationMsg},
 	}
 	if err := validateEditArtifact(artifact); err != nil {
-		emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Deterministic package scaffold validation failed: %v", err), false)
+		emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Deterministic scaffold validation failed: %v", err), false)
 		return nil, "", true, err
 	}
 	writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
@@ -1556,7 +1733,17 @@ func tryDeterministicPackageScaffoldPrimitive(reqID, root, message, artifactsDir
 	if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
 		return nil, "", true, err
 	}
-	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte("Deterministic package scaffold primitive selected."), 0o644)
+	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte("Deterministic scaffold primitive selected."), 0o644)
+	return artifact, patchPath, true, nil
+}
+
+func writePreparedDeterministicArtifact(artifactsDir string, artifact *editModelArtifact, verifyText string) (*editModelArtifact, string, bool, error) {
+	writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
+	patchPath := filepath.Join(artifactsDir, "patch.diff")
+	if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
+		return nil, "", true, err
+	}
+	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyText), 0o644)
 	return artifact, patchPath, true, nil
 }
 
@@ -1592,12 +1779,12 @@ func inferPackageScaffoldSpec(root, message string) (*packageScaffoldSpec, bool)
 kind: package
 name: %s
 version: %s
-title: DockPipe %s
+title: %s
 description: |
-  A fun first-party package scaffold generated through DorkPipe's primitive-first edit lane.
+  A generated package scaffold created through a primitive-first edit lane.
   This package is intended as a lightweight authoring starting point that can grow into real
   workflows, resolvers, or assets.
-author: DockPipe
+author: Generated
 license: Apache-2.0
 repository: https://github.com/dockpipe/dockpipe
 tags: [experimental, authoring, generated]
@@ -1620,7 +1807,7 @@ Ideas to extend it:
 		ManifestBody:  manifestBody,
 		ReadmeBody:    readmeBody,
 		TargetFiles:   []string{manifestPath, readmePath},
-		Summary:       fmt.Sprintf("Scaffold a new `%s` package under `%s` using a local package primitive.", packageName, packageRoot),
+		Summary:       fmt.Sprintf("Scaffold a new `%s` collection item under `%s` using a local scaffold primitive.", packageName, packageRoot),
 		ValidationMsg: "Verify the new package manifest and README reflect the intended package direction.",
 	}, true
 }
@@ -1777,6 +1964,33 @@ func buildCreateFilePatch(targetFile, content string) string {
 	return b.String()
 }
 
+func buildReplaceFilePatch(targetFile, before, after string) string {
+	beforeLines := strings.Split(strings.ReplaceAll(before, "\r\n", "\n"), "\n")
+	afterLines := strings.Split(strings.ReplaceAll(after, "\r\n", "\n"), "\n")
+	if len(beforeLines) > 0 && beforeLines[len(beforeLines)-1] == "" {
+		beforeLines = beforeLines[:len(beforeLines)-1]
+	}
+	if len(afterLines) > 0 && afterLines[len(afterLines)-1] == "" {
+		afterLines = afterLines[:len(afterLines)-1]
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "diff --git a/%s b/%s\n", targetFile, targetFile)
+	fmt.Fprintf(&b, "--- a/%s\n", targetFile)
+	fmt.Fprintf(&b, "+++ b/%s\n", targetFile)
+	fmt.Fprintf(&b, "@@ -1,%d +1,%d @@\n", len(beforeLines), len(afterLines))
+	for _, line := range beforeLines {
+		b.WriteString("-")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	for _, line := range afterLines {
+		b.WriteString("+")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
 func pathBase(value string) string {
 	value = strings.TrimSuffix(filepath.ToSlash(value), "/")
 	if idx := strings.LastIndex(value, "/"); idx >= 0 {
@@ -1822,4 +2036,353 @@ func buildNoopPatch(targetFile string) string {
 	return fmt.Sprintf("diff --git a/%s b/%s\n", targetFile, targetFile) +
 		fmt.Sprintf("--- a/%s\n", targetFile) +
 		fmt.Sprintf("+++ b/%s\n", targetFile)
+}
+
+func resolveDeterministicTargetFile(root, activeFile, message string, exts []string) string {
+	candidates := []string{}
+	if strings.TrimSpace(activeFile) != "" {
+		candidates = append(candidates, strings.TrimSpace(activeFile))
+	}
+	for _, token := range strings.Fields(message) {
+		token = strings.Trim(token, ".,:;!?()[]{}\"'`")
+		if token == "" {
+			continue
+		}
+		for _, ext := range exts {
+			if strings.HasSuffix(strings.ToLower(token), ext) {
+				candidates = append(candidates, token)
+				break
+			}
+		}
+	}
+	if containsExt(message, ".md") && !strings.EqualFold(activeFile, "") {
+		candidates = append(candidates, "README.md")
+	}
+	for _, candidate := range uniqueNonEmpty(candidates) {
+		lower := strings.ToLower(candidate)
+		matched := false
+		for _, ext := range exts {
+			if strings.HasSuffix(lower, ext) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		if strings.HasPrefix(candidate, "/") || strings.Contains(candidate, "..") {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(root, candidate)); err == nil {
+			return filepath.ToSlash(candidate)
+		}
+	}
+	if len(exts) == 1 && exts[0] == ".md" && strings.Contains(strings.ToLower(message), "readme") {
+		if _, err := os.Stat(filepath.Join(root, "README.md")); err == nil {
+			return "README.md"
+		}
+	}
+	return ""
+}
+
+func inferYAMLScalarUpdate(message string) (string, string, bool) {
+	lower := strings.ToLower(message)
+	for _, key := range []string{"title", "description", "version", "name", "license", "author", "repository"} {
+		for _, marker := range []string{
+			"set " + key + " to ",
+			"change " + key + " to ",
+			"update " + key + " to ",
+			"make " + key + " ",
+		} {
+			if idx := strings.Index(lower, marker); idx >= 0 {
+				raw := strings.TrimSpace(message[idx+len(marker):])
+				value := cleanPrimitiveValue(raw)
+				if value != "" {
+					return key, value, true
+				}
+			}
+		}
+	}
+	return "", "", false
+}
+
+func updateYAMLScalarField(before, key, value string) (string, bool) {
+	lines := strings.Split(strings.ReplaceAll(before, "\r\n", "\n"), "\n")
+	replaced := false
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), key+":") {
+			indent := line[:len(line)-len(strings.TrimLeft(line, " "))]
+			lines[i] = fmt.Sprintf("%s%s: %s", indent, key, quoteYAMLValue(value))
+			replaced = true
+			break
+		}
+	}
+	if !replaced {
+		return before, false
+	}
+	after := strings.Join(lines, "\n")
+	if after == before {
+		return before, false
+	}
+	return after, true
+}
+
+func inferYAMLListAppend(message string) (string, string, bool) {
+	lower := strings.ToLower(message)
+	type pair struct {
+		key string
+		phrases []string
+	}
+	pairs := []pair{
+		{key: "tags", phrases: []string{"add tag ", "add the tag "}},
+		{key: "includes_resolvers", phrases: []string{"add resolver ", "include resolver "}},
+		{key: "depends", phrases: []string{"add dependency ", "depend on ", "add depends "}},
+	}
+	for _, item := range pairs {
+		for _, phrase := range item.phrases {
+			if idx := strings.Index(lower, phrase); idx >= 0 {
+				raw := strings.TrimSpace(message[idx+len(phrase):])
+				value := normalizePackageNameToken(firstToken(raw))
+				if value != "" {
+					return item.key, value, true
+				}
+			}
+		}
+	}
+	return "", "", false
+}
+
+func inferFileCreateSpec(message string) (string, string, bool) {
+	lower := strings.ToLower(message)
+	if !(strings.Contains(lower, "create file") || strings.Contains(lower, "new file") || strings.Contains(lower, "make file")) {
+		return "", "", false
+	}
+	target := ""
+	targetLower := ""
+	for _, marker := range []string{"create file ", "new file ", "make file ", "create a file ", "make a file "} {
+		if idx := strings.Index(lower, marker); idx >= 0 {
+			target = strings.TrimSpace(message[idx+len(marker):])
+			targetLower = strings.TrimSpace(lower[idx+len(marker):])
+			break
+		}
+	}
+	if target == "" {
+		target = extractQuotedText(message)
+		targetLower = strings.ToLower(target)
+	}
+	for _, stop := range []string{" with content ", " saying ", " containing "} {
+		if idx := strings.Index(targetLower, stop); idx >= 0 {
+			target = strings.TrimSpace(target[:idx])
+			break
+		}
+	}
+	target = strings.Trim(strings.TrimSpace(target), "`\"'")
+	target = filepath.ToSlash(target)
+	if target == "" {
+		return "", "", false
+	}
+	content := ""
+	for _, marker := range []string{" with content ", " saying ", " containing "} {
+		if idx := strings.Index(lower, marker); idx >= 0 {
+			content = strings.TrimSpace(message[idx+len(marker):])
+			break
+		}
+	}
+	if content == "" {
+		content = "TODO: fill this in.\n"
+	} else {
+		content = strings.TrimSpace(strings.Trim(content, "`\"'")) + "\n"
+	}
+	return target, content, true
+}
+
+func inferAnchorInsertSpec(message string) (string, string, bool) {
+	lower := strings.ToLower(message)
+	if !(strings.Contains(lower, "after ") && (strings.Contains(lower, "insert ") || strings.Contains(lower, "add "))) {
+		return "", "", false
+	}
+	anchor := ""
+	anchorLower := ""
+	for _, marker := range []string{"after ", "below "} {
+		if idx := strings.Index(lower, marker); idx >= 0 {
+			anchor = strings.TrimSpace(message[idx+len(marker):])
+			anchorLower = strings.TrimSpace(lower[idx+len(marker):])
+			for _, stop := range []string{" insert ", " add ", " saying ", " containing "} {
+				if cut := strings.Index(anchorLower, stop); cut >= 0 {
+					anchor = strings.TrimSpace(anchor[:cut])
+					break
+				}
+			}
+			break
+		}
+	}
+	anchor = strings.Trim(anchor, "`\"'")
+	if anchor == "" {
+		return "", "", false
+	}
+	block := ""
+	for _, marker := range []string{" insert ", " add ", " saying ", " containing "} {
+		if idx := strings.Index(lower, marker); idx >= 0 {
+			block = strings.TrimSpace(message[idx+len(marker):])
+			break
+		}
+	}
+	if block == "" {
+		block = extractQuotedText(message)
+	}
+	block = strings.TrimSpace(strings.Trim(block, "`\"'"))
+	if block == "" {
+		return "", "", false
+	}
+	return anchor, block, true
+}
+
+func appendYAMLListItem(before, key, value string) (string, bool) {
+	lines := strings.Split(strings.ReplaceAll(before, "\r\n", "\n"), "\n")
+	for _, line := range lines {
+		if strings.TrimSpace(line) == "- "+value {
+			return before, false
+		}
+	}
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, key+": [") && strings.HasSuffix(trimmed, "]") {
+			start := strings.Index(trimmed, "[")
+			end := strings.LastIndex(trimmed, "]")
+			if start >= 0 && end > start {
+				items := strings.Split(trimmed[start+1:end], ",")
+				var cleaned []string
+				exists := false
+				for _, item := range items {
+					part := strings.TrimSpace(item)
+					if part == "" {
+						continue
+					}
+					if part == value {
+						exists = true
+					}
+					cleaned = append(cleaned, part)
+				}
+				if exists {
+					return before, false
+				}
+				cleaned = append(cleaned, value)
+				prefix := line[:len(line)-len(strings.TrimLeft(line, " "))]
+				lines[i] = fmt.Sprintf("%s%s: [%s]", prefix, key, strings.Join(cleaned, ", "))
+				return strings.Join(lines, "\n"), true
+			}
+		}
+		if trimmed == key+":" {
+			insertAt := i + 1
+			for insertAt < len(lines) {
+				next := lines[insertAt]
+				if strings.TrimSpace(next) == "" {
+					insertAt++
+					continue
+				}
+				if !strings.HasPrefix(next, "  - ") {
+					break
+				}
+				insertAt++
+			}
+			newLine := "  - " + value
+			lines = append(lines[:insertAt], append([]string{newLine}, lines[insertAt:]...)...)
+			return strings.Join(lines, "\n"), true
+		}
+	}
+	return before, false
+}
+
+func inferMarkdownSection(message string) (string, string, bool) {
+	lower := strings.ToLower(message)
+	if !strings.Contains(lower, "section") {
+		return "", "", false
+	}
+	title := ""
+	for _, marker := range []string{"section called ", "section named ", "section titled "} {
+		if idx := strings.Index(lower, marker); idx >= 0 {
+			title = strings.TrimSpace(message[idx+len(marker):])
+			for _, stop := range []string{" saying ", " with text ", " with body "} {
+				if cut := strings.Index(strings.ToLower(title), stop); cut >= 0 {
+					title = strings.TrimSpace(title[:cut])
+					break
+				}
+			}
+			break
+		}
+	}
+	if title == "" {
+		title = extractQuotedText(message)
+	}
+	title = cleanPrimitiveValue(title)
+	if title == "" {
+		return "", "", false
+	}
+	body := "Add details here."
+	for _, marker := range []string{"saying ", "with text ", "with body "} {
+		if idx := strings.Index(lower, marker); idx >= 0 {
+			body = cleanPrimitiveValue(message[idx+len(marker):])
+			break
+		}
+	}
+	return title, body, true
+}
+
+func appendMarkdownSection(before, title, body string) (string, bool) {
+	heading := "## " + title
+	if strings.Contains(before, heading) {
+		return before, false
+	}
+	section := strings.TrimSpace(heading + "\n\n" + body) + "\n"
+	trimmed := strings.TrimRight(before, "\n")
+	if trimmed == "" {
+		return section, true
+	}
+	return trimmed + "\n\n" + section, true
+}
+
+func insertBlockAfterAnchor(before, anchor, block string) (string, bool) {
+	normalized := strings.ReplaceAll(before, "\r\n", "\n")
+	idx := strings.Index(normalized, anchor)
+	if idx < 0 {
+		return before, false
+	}
+	insertPos := idx + len(anchor)
+	if insertPos < len(normalized) && normalized[insertPos] == '\n' {
+		insertPos++
+	}
+	insertion := block
+	if !strings.HasSuffix(insertion, "\n") {
+		insertion += "\n"
+	}
+	after := normalized[:insertPos] + insertion + normalized[insertPos:]
+	if after == before {
+		return before, false
+	}
+	return after, true
+}
+
+func cleanPrimitiveValue(raw string) string {
+	value := strings.TrimSpace(raw)
+	value = strings.Trim(value, "`\"' ")
+	for _, suffix := range []string{" in ", " for ", " on ", " to "} {
+		if idx := strings.Index(strings.ToLower(value), suffix); idx > 0 {
+			value = strings.TrimSpace(value[:idx])
+		}
+	}
+	return strings.TrimSpace(value)
+}
+
+func containsExt(text, ext string) bool {
+	return strings.Contains(strings.ToLower(text), ext)
+}
+
+func quoteYAMLValue(value string) string {
+	if value == "" {
+		return `""`
+	}
+	if strings.ContainsAny(value, ":#[]{}") || strings.Contains(value, "  ") || strings.Contains(value, "http://") || strings.Contains(value, "https://") {
+		return `"` + strings.ReplaceAll(value, `"`, `\"`) + `"`
+	}
+	return value
 }
