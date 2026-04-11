@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -62,6 +63,15 @@ type editRequestRecord struct {
 	Apply           bool     `json:"apply"`
 	CandidateFiles  []string `json:"candidate_files,omitempty"`
 	ContextPath     string   `json:"context_path,omitempty"`
+}
+
+type editPlan struct {
+	Summary        string   `json:"summary"`
+	TargetFiles    []string `json:"target_files,omitempty"`
+	SearchTerms    []string `json:"search_terms,omitempty"`
+	AllowNewFiles  bool     `json:"allow_new_files,omitempty"`
+	Complexity     string   `json:"complexity,omitempty"`
+	RetrievalStyle string   `json:"retrieval_style,omitempty"`
 }
 
 func editCmd(argv []string) {
@@ -193,8 +203,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 	})
 
 	contextPath, contextText := readEditContextBundle(root)
-	snippets := readCandidateSnippets(root, candidates)
-	requestRecord := editRequestRecord{
+	baseRequest := editRequestRecord{
 		ContractVersion: editContractVersion,
 		RequestID:       reqID,
 		WorkspaceRoot:   root,
@@ -205,9 +214,34 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		CandidateFiles:  candidates,
 		ContextPath:     contextPath,
 	}
+	plan := buildDefaultEditPlan(root, baseRequest)
+	if shouldUseComplexEditFlow(message, activeFile, selectionText) {
+		emitEditEvent(reqID, "planning", "Planning edit strategy", 0.24, map[string]any{
+			"candidate_count": len(candidates),
+		})
+		if planned, planErr := buildEditPlan(ctx, host, chosenModel, baseRequest, contextText, candidates); planErr == nil && planned != nil {
+			plan = planned
+		}
+	}
+	candidates = mergePlannedCandidates(candidates, plan.TargetFiles)
+	rankedCandidates := rankCandidates(root, candidates, message)
+	snippets := readCandidateSnippets(root, rankedCandidates)
+	retrievalBundle := collectRetrievalBundle(root, message, plan, rankedCandidates)
+	requestRecord := editRequestRecord{
+		ContractVersion: editContractVersion,
+		RequestID:       reqID,
+		WorkspaceRoot:   root,
+		UserMessage:     message,
+		ActiveFile:      activeFile,
+		SelectionText:   clampString(selectionText, maxEditSelectionChars),
+		Apply:           false,
+		CandidateFiles:  rankedCandidates,
+		ContextPath:     contextPath,
+	}
 	writeJSON(filepath.Join(artifactsDir, "request.json"), requestRecord)
+	writeJSON(filepath.Join(artifactsDir, "plan.json"), plan)
 
-	prompt := buildEditPrompt(requestRecord, contextText, snippets)
+	prompt := buildEditPrompt(requestRecord, plan, contextText, snippets, retrievalBundle)
 	if err := os.WriteFile(filepath.Join(artifactsDir, "prompt.md"), []byte(prompt), 0o644); err != nil {
 		emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Could not write prompt artifact: %v", err), false)
 		return nil, "", "", err
@@ -432,7 +466,299 @@ func readCandidateSnippets(root string, candidates []string) string {
 	return strings.Join(parts, "\n\n")
 }
 
-func buildEditPrompt(req editRequestRecord, contextText, snippets string) string {
+func shouldUseComplexEditFlow(message, activeFile, selectionText string) bool {
+	lower := strings.ToLower(strings.TrimSpace(message))
+	if lower == "" {
+		return false
+	}
+	if strings.Contains(lower, ".staging") || strings.Contains(lower, "staging") {
+		return true
+	}
+	if strings.Contains(lower, "package") && (strings.Contains(lower, "make") || strings.Contains(lower, "create") || strings.Contains(lower, "author") || strings.Contains(lower, "new")) {
+		return true
+	}
+	if strings.Contains(lower, "resolver") || strings.Contains(lower, "workflow") || strings.Contains(lower, "scaffold") {
+		return true
+	}
+	if selectionText == "" && activeFile == "" && (strings.Contains(lower, "add") || strings.Contains(lower, "build") || strings.Contains(lower, "implement")) {
+		return true
+	}
+	return false
+}
+
+func buildDefaultEditPlan(root string, req editRequestRecord) *editPlan {
+	heuristicTargets := heuristicTargetsForRequest(root, req.UserMessage)
+	plan := &editPlan{
+		Summary:        "Use nearby workspace context and keep the edit narrowly scoped.",
+		TargetFiles:    uniqueNonEmpty(append(heuristicTargets, req.CandidateFiles...)),
+		SearchTerms:    extractSearchTerms(req.UserMessage),
+		Complexity:     "simple",
+		RetrievalStyle: "local_search",
+	}
+	if shouldUseComplexEditFlow(req.UserMessage, req.ActiveFile, req.SelectionText) {
+		plan.Complexity = "complex"
+		plan.AllowNewFiles = true
+		plan.RetrievalStyle = "ranked_search"
+	}
+	return plan
+}
+
+func heuristicTargetsForRequest(root, message string) []string {
+	lower := strings.ToLower(strings.TrimSpace(message))
+	var out []string
+	if strings.Contains(lower, ".staging") || strings.Contains(lower, "staging") {
+		if matches, _ := filepath.Glob(filepath.Join(root, ".staging", "packages", "*", "package.yml")); len(matches) > 0 {
+			for _, match := range matches {
+				out = append(out, relativeTo(root, match))
+			}
+		}
+		out = append(out, ".staging/packages/README.md")
+	}
+	if strings.Contains(lower, "package") {
+		if matches, _ := filepath.Glob(filepath.Join(root, "packages", "*", "package.yml")); len(matches) > 0 {
+			for _, match := range matches {
+				out = append(out, relativeTo(root, match))
+			}
+		}
+	}
+	if strings.Contains(lower, "resolver") {
+		if matches, _ := filepath.Glob(filepath.Join(root, ".staging", "packages", "*", "resolvers", "*", "config.yml")); len(matches) > 0 {
+			for _, match := range matches {
+				out = append(out, relativeTo(root, match))
+			}
+		}
+	}
+	return uniqueNonEmpty(out)
+}
+
+func buildEditPlan(ctx context.Context, host, model string, req editRequestRecord, contextText string, candidates []string) (*editPlan, error) {
+	prompt := buildEditPlanPrompt(req, contextText, candidates)
+	text, err := runEditModel(ctx, host, model, prompt)
+	if err != nil {
+		return nil, err
+	}
+	return parseEditPlan(text)
+}
+
+func buildEditPlanPrompt(req editRequestRecord, contextText string, candidates []string) string {
+	return strings.TrimSpace(fmt.Sprintf(`
+You are DorkPipe planning a complex repository edit before patch generation.
+
+Return JSON only. No markdown fences. The JSON shape must be:
+{
+  "summary": "short planning summary",
+  "target_files": ["repo/relative/path"],
+  "search_terms": ["term one", "term two"],
+  "allow_new_files": true,
+  "complexity": "simple or complex",
+  "retrieval_style": "local_search or ranked_search"
+}
+
+Rules:
+- Prefer repo-relative paths.
+- Include likely package manifests, configs, and nearby files needed to author the edit.
+- Use "complex" when the request sounds like authoring/scaffolding/new-package work.
+- Keep search_terms short and practical.
+
+User request:
+%s
+
+Active file:
+%s
+
+Selection:
+%s
+
+Current candidate files:
+%s
+
+Context bundle:
+%s
+`, req.UserMessage,
+		emptyFallback(req.ActiveFile, "(none)"),
+		emptyFallback(req.SelectionText, "(none)"),
+		emptyFallback(strings.Join(candidates, "\n"), "(none)"),
+		emptyFallback(contextText, "(no context bundle available)")))
+}
+
+func parseEditPlan(text string) (*editPlan, error) {
+	clean := strings.TrimSpace(text)
+	clean = strings.TrimPrefix(clean, "```json")
+	clean = strings.TrimPrefix(clean, "```")
+	clean = strings.TrimSuffix(clean, "```")
+	clean = strings.TrimSpace(clean)
+	start := strings.Index(clean, "{")
+	end := strings.LastIndex(clean, "}")
+	if start >= 0 && end > start {
+		clean = clean[start : end+1]
+	}
+	var plan editPlan
+	if err := json.Unmarshal([]byte(clean), &plan); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(plan.Summary) == "" {
+		plan.Summary = "Plan a safe scoped edit."
+	}
+	plan.TargetFiles = uniqueNonEmpty(plan.TargetFiles)
+	plan.SearchTerms = uniqueNonEmpty(plan.SearchTerms)
+	if strings.TrimSpace(plan.Complexity) == "" {
+		plan.Complexity = "complex"
+	}
+	if strings.TrimSpace(plan.RetrievalStyle) == "" {
+		plan.RetrievalStyle = "ranked_search"
+	}
+	return &plan, nil
+}
+
+func extractSearchTerms(message string) []string {
+	raw := strings.Fields(strings.ToLower(message))
+	var terms []string
+	for _, token := range raw {
+		token = strings.Trim(token, ".,:;!?()[]{}\"'`")
+		if len(token) < 4 {
+			continue
+		}
+		if token == "with" || token == "that" || token == "make" || token == "your" || token == "real" || token == "test" {
+			continue
+		}
+		terms = append(terms, token)
+	}
+	return uniqueNonEmpty(terms)
+}
+
+func mergePlannedCandidates(candidates []string, planned []string) []string {
+	return uniqueNonEmpty(append(planned, candidates...))
+}
+
+func rankCandidates(root string, candidates []string, message string) []string {
+	if len(candidates) == 0 {
+		return nil
+	}
+	scored := uniqueNonEmpty(candidates)
+	sort.SliceStable(scored, func(i, j int) bool {
+		return candidatePathScore(message, scored[i]) > candidatePathScore(message, scored[j])
+	})
+	rankScript := filepath.Join(root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/rank-candidate-files.sh")
+	cmd := exec.Command("bash", rankScript)
+	cmd.Dir = root
+	cmd.Stdin = strings.NewReader(strings.Join(scored, "\n"))
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Run(); err != nil {
+		if len(scored) > maxEditCandidateCount {
+			return scored[:maxEditCandidateCount]
+		}
+		return scored
+	}
+	ranked := uniqueNonEmpty(strings.Split(stdout.String(), "\n"))
+	if len(ranked) == 0 {
+		if len(scored) > maxEditCandidateCount {
+			return scored[:maxEditCandidateCount]
+		}
+		return scored
+	}
+	if len(ranked) > maxEditCandidateCount {
+		ranked = ranked[:maxEditCandidateCount]
+	}
+	return ranked
+}
+
+func candidatePathScore(message, rel string) int {
+	lowerMsg := strings.ToLower(message)
+	lowerPath := strings.ToLower(rel)
+	score := 0
+	if strings.Contains(lowerMsg, ".staging") || strings.Contains(lowerMsg, "staging") {
+		if strings.Contains(lowerPath, ".staging/") {
+			score += 100
+		}
+	}
+	if strings.Contains(lowerMsg, "package") {
+		if strings.HasSuffix(lowerPath, "package.yml") {
+			score += 80
+		}
+		if strings.Contains(lowerPath, "/packages/") {
+			score += 35
+		}
+	}
+	if strings.Contains(lowerMsg, "resolver") && strings.HasSuffix(lowerPath, "config.yml") {
+		score += 45
+	}
+	if strings.HasSuffix(lowerPath, "readme.md") {
+		score -= 15
+	}
+	if strings.HasSuffix(lowerPath, ".go") {
+		score -= 10
+	}
+	return score
+}
+
+func collectRetrievalBundle(root, message string, plan *editPlan, candidates []string) string {
+	var sections []string
+	if plan != nil {
+		sections = append(sections, fmt.Sprintf("## Plan\n\n- Summary: %s\n- Complexity: %s\n- Retrieval style: %s\n- Allow new files: %t",
+			plan.Summary, emptyFallback(plan.Complexity, "unknown"), emptyFallback(plan.RetrievalStyle, "unknown"), plan.AllowNewFiles))
+		if len(plan.TargetFiles) > 0 {
+			sections = append(sections, "## Planned targets\n\n- "+strings.Join(plan.TargetFiles, "\n- "))
+		}
+		if len(plan.SearchTerms) > 0 {
+			sections = append(sections, "## Search terms\n\n- "+strings.Join(plan.SearchTerms, "\n- "))
+		}
+	}
+	searchTerms := extractSearchTerms(message)
+	if plan != nil && len(plan.SearchTerms) > 0 {
+		searchTerms = uniqueNonEmpty(append(plan.SearchTerms, searchTerms...))
+	}
+	if len(searchTerms) > 0 {
+		var matches []string
+		files := append([]string{}, candidates...)
+		if plan != nil {
+			files = append(files, plan.TargetFiles...)
+		}
+		files = uniqueNonEmpty(files)
+		for _, rel := range files {
+			abs := filepath.Join(root, rel)
+			b, err := os.ReadFile(abs)
+			if err != nil {
+				continue
+			}
+			lower := strings.ToLower(string(b))
+			for _, term := range searchTerms {
+				if strings.Contains(lower, strings.ToLower(term)) {
+					matches = append(matches, fmt.Sprintf("- %s matches %q", rel, term))
+					break
+				}
+			}
+			if len(matches) >= 12 {
+				break
+			}
+		}
+		if len(matches) > 0 {
+			sections = append(sections, "## Retrieval bundle\n\n"+strings.Join(matches, "\n"))
+		}
+	}
+	return strings.Join(sections, "\n\n")
+}
+
+func formatEditPlan(plan *editPlan) string {
+	if plan == nil {
+		return ""
+	}
+	parts := []string{
+		fmt.Sprintf("Summary: %s", emptyFallback(plan.Summary, "(none)")),
+		fmt.Sprintf("Complexity: %s", emptyFallback(plan.Complexity, "unknown")),
+		fmt.Sprintf("Retrieval style: %s", emptyFallback(plan.RetrievalStyle, "unknown")),
+		fmt.Sprintf("Allow new files: %t", plan.AllowNewFiles),
+	}
+	if len(plan.TargetFiles) > 0 {
+		parts = append(parts, "Target files:\n- "+strings.Join(plan.TargetFiles, "\n- "))
+	}
+	if len(plan.SearchTerms) > 0 {
+		parts = append(parts, "Search terms:\n- "+strings.Join(plan.SearchTerms, "\n- "))
+	}
+	return strings.Join(parts, "\n")
+}
+
+func buildEditPrompt(req editRequestRecord, plan *editPlan, contextText, snippets, retrievalBundle string) string {
 	applyLine := "Do not assume the patch will be applied automatically."
 	if req.Apply {
 		applyLine = "The user explicitly requested an applied edit; keep the patch minimal and safe."
@@ -454,9 +780,13 @@ Rules:
 - Use repo-relative paths in target_files.
 - Do not invent files not supported by the provided context unless the request clearly needs a new file.
 - Prefer editing the active file when it is relevant.
+- If a plan is provided, follow it unless the retrieved code clearly contradicts it.
 - %s
 
 User request:
+%s
+
+Plan:
 %s
 
 Active file:
@@ -468,13 +798,18 @@ Selection:
 Context bundle:
 %s
 
+Retrieval bundle:
+%s
+
 Candidate file snippets:
 %s
 `, applyLine,
 		req.UserMessage,
+		emptyFallback(formatEditPlan(plan), "(no explicit plan)"),
 		emptyFallback(req.ActiveFile, "(none)"),
 		emptyFallback(req.SelectionText, "(none)"),
 		emptyFallback(contextText, "(no context bundle available)"),
+		emptyFallback(retrievalBundle, "(no retrieval bundle available)"),
 		emptyFallback(snippets, "(no candidate file snippets available)")))
 }
 
