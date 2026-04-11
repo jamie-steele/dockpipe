@@ -197,6 +197,27 @@ function summarizeRequestActivity(label, mode) {
   if (lower.includes("building retrieval bundle")) {
     return "Assembling retrieval context";
   }
+  if (lower.includes("consulting mcp bridge")) {
+    return "Consulting MCP tools";
+  }
+  if (lower.includes("running bounded mcp retrieval loop")) {
+    return "Running bounded MCP retrieval";
+  }
+  if (lower.includes("completed bounded mcp retrieval loop")) {
+    return "Bounded MCP retrieval complete";
+  }
+  if (lower.includes("refining mcp retrieval focus")) {
+    return "Refining MCP retrieval";
+  }
+  if (lower.includes("running bounded mcp context loop")) {
+    return "Running bounded MCP context";
+  }
+  if (lower.includes("completed bounded mcp context loop")) {
+    return "Bounded MCP context complete";
+  }
+  if (lower.includes("refining mcp context focus")) {
+    return "Refining MCP context";
+  }
   if (lower.includes("generating bounded helper script")) {
     return "Generating a bounded helper";
   }
@@ -859,6 +880,12 @@ function buildDorkpipeStatus(metadata, fallbackMode = "ask") {
   const route = metadata.route || "request";
   const mode = metadata.mode || fallbackMode;
   const profile = modelProfileLabel(metadata.model_profile || "balanced");
+  const mcpPart = metadata.mcp_connected
+    ? `MCP: connected${metadata.mcp_tool_count ? ` (${metadata.mcp_tool_count} tools)` : ""}`
+    : "";
+  const mcpLoopPart = metadata.mcp_steps_used
+    ? `MCP steps: ${metadata.mcp_steps_used}${metadata.mcp_files_read ? `, files ${metadata.mcp_files_read}` : ""}${metadata.mcp_search_hits ? `, hits ${metadata.mcp_search_hits}` : ""}`
+    : "";
   if (route === "chat") {
     const parts = [
       `Mode: ${String(mode).replace(/^./, (c) => c.toUpperCase())}`,
@@ -874,6 +901,12 @@ function buildDorkpipeStatus(metadata, fallbackMode = "ask") {
     }
     if (metadata.active_file) {
       parts.push(`Active file: ${metadata.active_file}`);
+    }
+    if (mcpPart) {
+      parts.push(mcpPart);
+    }
+    if (mcpLoopPart) {
+      parts.push(mcpLoopPart);
     }
     return parts.join("  |  ");
   }
@@ -894,6 +927,12 @@ function buildDorkpipeStatus(metadata, fallbackMode = "ask") {
     if (metadata.validation_status) {
       parts.push(`Validation: ${metadata.validation_status}`);
     }
+    if (mcpPart) {
+      parts.push(mcpPart);
+    }
+    if (mcpLoopPart) {
+      parts.push(mcpLoopPart);
+    }
     return parts.join("  |  ");
   }
   if (route === "edit") {
@@ -912,6 +951,12 @@ function buildDorkpipeStatus(metadata, fallbackMode = "ask") {
     }
     if (metadata.artifact_dir) {
       parts.push(`Artifact: ${metadata.artifact_dir}`);
+    }
+    if (mcpPart) {
+      parts.push(mcpPart);
+    }
+    if (mcpLoopPart) {
+      parts.push(mcpLoopPart);
     }
     return parts.join("  |  ");
   }
@@ -1062,6 +1107,8 @@ function shouldDelegateSlashToDorkpipe(text) {
     trimmed === "/context" ||
     trimmed === "/status" ||
     trimmed === "/bundle" ||
+    trimmed.startsWith("/callstack") ||
+    trimmed.startsWith("/heap") ||
     trimmed === "/test" ||
     trimmed === "/ci" ||
     trimmed.startsWith("/workflow ") ||
@@ -1113,6 +1160,8 @@ async function handleLocalCommand(root, rawText) {
           "- `/status`",
           "- `/bundle`",
           "- `/context`",
+          "- `/callstack [symbol]`",
+          "- `/heap [pid|profile-path]`",
           "- `/test`",
           "- `/ci`",
           "- `/validate [path]`",
@@ -1231,6 +1280,12 @@ function getDeterministicIntent(text) {
   }
   if (/^(show|check|what is).*\bstatus\b/.test(value) || value === "status") {
     return { command: "/status", reason: "status request" };
+  }
+  if (/\b(callstack|stack trace)\b/.test(value)) {
+    return { command: "/callstack", reason: "callstack inspection request" };
+  }
+  if (/\b(heap|memory profile|heap profile)\b/.test(value)) {
+    return { command: "/heap", reason: "heap inspection request" };
   }
   if (/\b(run|start)\b.*\btests?\b/.test(value)) {
     return { command: "/test", reason: "test workflow request" };

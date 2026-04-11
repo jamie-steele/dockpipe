@@ -200,6 +200,54 @@ func (s *Server) dispatchTool(ctx context.Context, name string, args json.RawMes
 		}
 		return b, false, nil
 
+	case "repo.list_files":
+		var in struct {
+			Query string `json:"query"`
+			Limit int    `json:"limit"`
+		}
+		_ = json.Unmarshal(args, &in)
+		files, err := repoListFiles(in.Query, in.Limit)
+		if err != nil {
+			return nil, true, err
+		}
+		b, err := json.MarshalIndent(files, "", "  ")
+		if err != nil {
+			return nil, true, err
+		}
+		return b, false, nil
+
+	case "repo.read_file":
+		var in struct {
+			Path     string `json:"path"`
+			MaxChars int    `json:"max_chars"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, true, err
+		}
+		text, err := repoReadFile(in.Path, in.MaxChars)
+		if err != nil {
+			return nil, true, err
+		}
+		return []byte(text), false, nil
+
+	case "repo.search_text":
+		var in struct {
+			Query string `json:"query"`
+			Limit int    `json:"limit"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, true, err
+		}
+		matches, err := repoSearchText(in.Query, in.Limit)
+		if err != nil {
+			return nil, true, err
+		}
+		b, err := json.MarshalIndent(matches, "", "  ")
+		if err != nil {
+			return nil, true, err
+		}
+		return b, false, nil
+
 	case "dockpipe.validate_workflow":
 		var in struct {
 			Path string `json:"path"`

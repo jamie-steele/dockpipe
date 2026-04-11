@@ -68,6 +68,7 @@ type editRequestRecord struct {
 	Apply           bool     `json:"apply"`
 	CandidateFiles  []string `json:"candidate_files,omitempty"`
 	ContextPath     string   `json:"context_path,omitempty"`
+	MCPSummary      string   `json:"mcp_summary,omitempty"`
 }
 
 type editPlan struct {
@@ -101,6 +102,15 @@ type packageScaffoldSpec struct {
 	TargetFiles   []string
 	Summary       string
 	ValidationMsg string
+}
+
+type boundedMCPRetrieval struct {
+	Bundle       string
+	SnippetMap   map[string]string
+	StepsUsed    int
+	SearchHits   []string
+	SelectedRead []string
+	RefinedTerms []string
 }
 
 func editCmd(argv []string) {
@@ -235,6 +245,12 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 	})
 
 	contextPath, contextText := readEditContextBundle(root)
+	var mcpText string
+	mcpDisc, mcpErr := discoverMCPContext(ctx)
+	if mcpErr == nil && mcpDisc != nil {
+		emitEditEvent(reqID, "retrieving", "Consulting MCP bridge", 0.2, mcpMetadata(mcpDisc))
+		mcpText = mcpSummaryText(mcpDisc)
+	}
 	baseRequest := editRequestRecord{
 		ContractVersion: editContractVersion,
 		RequestID:       reqID,
@@ -245,6 +261,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		Apply:           false,
 		CandidateFiles:  candidates,
 		ContextPath:     contextPath,
+		MCPSummary:      mcpText,
 	}
 	plan := buildDefaultEditPlan(root, baseRequest)
 	if shouldUseComplexEditFlow(message, activeFile, selectionText) {
@@ -275,8 +292,20 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 	emitEditEvent(reqID, "retrieving", "Building retrieval bundle", 0.4, map[string]any{
 		"ranked_candidate_count": len(rankedCandidates),
 	})
-	snippets := readCandidateSnippets(root, rankedCandidates)
-	retrievalBundle := collectRetrievalBundle(root, message, plan, rankedCandidates)
+	var bounded *boundedMCPRetrieval
+	if mcpDisc != nil {
+		emitEditEvent(reqID, "retrieving", "Running bounded MCP retrieval loop", 0.41, map[string]any{
+			"step_cap": 6,
+		})
+		bounded = runBoundedMCPRetrievalLoop(ctx, reqID, message, plan, rankedCandidates, mcpDisc)
+		if bounded != nil && len(bounded.RefinedTerms) > 0 {
+			emitEditEvent(reqID, "retrieving", "Refining MCP retrieval focus", 0.42, map[string]any{
+				"refined_terms": bounded.RefinedTerms,
+			})
+		}
+	}
+	snippets := readCandidateSnippets(ctx, root, rankedCandidates, mcpDisc, bounded)
+	retrievalBundle := collectRetrievalBundle(ctx, root, message, plan, rankedCandidates, mcpDisc, bounded)
 	requestRecord := editRequestRecord{
 		ContractVersion: editContractVersion,
 		RequestID:       reqID,
@@ -287,6 +316,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		Apply:           false,
 		CandidateFiles:  rankedCandidates,
 		ContextPath:     contextPath,
+		MCPSummary:      mcpText,
 	}
 	writeJSON(filepath.Join(artifactsDir, "request.json"), requestRecord)
 	writeJSON(filepath.Join(artifactsDir, "plan.json"), plan)
@@ -312,7 +342,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		return nil, "", "", err
 	}
 	emitEditEvent(reqID, "routed", "Generating patch artifact", 0.48, map[string]any{
-		"model": chosenModel,
+		"model":   chosenModel,
 		"num_ctx": chosenNumCtx,
 	})
 
@@ -392,12 +422,12 @@ func emitReadyToApply(reqID, root, artifactsDir, patchPath string, artifact *edi
 	}
 	emitEditEvent(reqID, "ready_to_apply", "Prepared a validated patch artifact", 0.8, metadata)
 	emitEditDone(reqID, fmt.Sprintf("%s\n\nPrepared patch artifact at `%s`.", strings.TrimSpace(artifact.Summary), relativeTo(root, patchPath)), map[string]any{
-		"route":             "edit",
-		"files_touched":     len(artifact.TargetFiles),
-		"validation_status": "patch_applies",
-		"artifact_dir":      relativeTo(root, artifactsDir),
-		"patch_path":        relativeTo(root, patchPath),
-		"ready_to_apply":    true,
+		"route":              "edit",
+		"files_touched":      len(artifact.TargetFiles),
+		"validation_status":  "patch_applies",
+		"artifact_dir":       relativeTo(root, artifactsDir),
+		"patch_path":         relativeTo(root, patchPath),
+		"ready_to_apply":     true,
 		"helper_script_used": artifact.HelperScript != nil,
 	})
 }
@@ -530,15 +560,27 @@ func readEditContextBundle(root string) (string, string) {
 	return "", ""
 }
 
-func readCandidateSnippets(root string, candidates []string) string {
+func readCandidateSnippets(ctx context.Context, root string, candidates []string, mcpDisc *mcpDiscovery, bounded *boundedMCPRetrieval) string {
 	var parts []string
 	for _, rel := range candidates {
-		abs := filepath.Join(root, rel)
-		b, err := os.ReadFile(abs)
-		if err != nil {
-			continue
+		text := ""
+		if bounded != nil && bounded.SnippetMap != nil {
+			text = strings.TrimSpace(bounded.SnippetMap[rel])
 		}
-		parts = append(parts, fmt.Sprintf("## %s\n\n```text\n%s\n```", rel, clampString(string(b), maxEditSnippetPerFile)))
+		if text == "" && mcpDisc != nil {
+			if viaMCP, err := mcpReadFileText(ctx, mcpDisc, rel, maxEditSnippetPerFile); err == nil && strings.TrimSpace(viaMCP) != "" {
+				text = viaMCP
+			}
+		}
+		if text == "" {
+			abs := filepath.Join(root, rel)
+			b, err := os.ReadFile(abs)
+			if err != nil {
+				continue
+			}
+			text = clampString(string(b), maxEditSnippetPerFile)
+		}
+		parts = append(parts, fmt.Sprintf("## %s\n\n```text\n%s\n```", rel, text))
 	}
 	return strings.Join(parts, "\n\n")
 }
@@ -651,11 +693,15 @@ Current candidate files:
 
 Context bundle:
 %s
+
+MCP discovery context:
+%s
 `, req.UserMessage,
 		emptyFallback(req.ActiveFile, "(none)"),
 		emptyFallback(req.SelectionText, "(none)"),
 		emptyFallback(strings.Join(candidates, "\n"), "(none)"),
-		emptyFallback(contextText, "(no context bundle available)")))
+		emptyFallback(contextText, "(no context bundle available)"),
+		emptyFallback(req.MCPSummary, "(no MCP discovery available)")))
 }
 
 func parseEditPlan(text string) (*editPlan, error) {
@@ -769,7 +815,7 @@ func candidatePathScore(message, rel string) int {
 	return score
 }
 
-func collectRetrievalBundle(root, message string, plan *editPlan, candidates []string) string {
+func collectRetrievalBundle(ctx context.Context, root, message string, plan *editPlan, candidates []string, mcpDisc *mcpDiscovery, bounded *boundedMCPRetrieval) string {
 	var sections []string
 	if plan != nil {
 		sections = append(sections, fmt.Sprintf("## Plan\n\n- Summary: %s\n- Complexity: %s\n- Retrieval style: %s\n- Allow new files: %t",
@@ -784,6 +830,27 @@ func collectRetrievalBundle(root, message string, plan *editPlan, candidates []s
 	searchTerms := extractSearchTerms(message)
 	if plan != nil && len(plan.SearchTerms) > 0 {
 		searchTerms = uniqueNonEmpty(append(plan.SearchTerms, searchTerms...))
+	}
+	if mcpDisc != nil && len(searchTerms) > 0 {
+		var mcpMatches []string
+		for _, term := range searchTerms {
+			matches, err := mcpSearchMatches(ctx, mcpDisc, term, 6)
+			if err != nil || len(matches) == 0 {
+				continue
+			}
+			for _, match := range matches {
+				mcpMatches = append(mcpMatches, fmt.Sprintf("- %s", match))
+			}
+			if len(mcpMatches) >= 12 {
+				break
+			}
+		}
+		if len(mcpMatches) > 0 {
+			sections = append(sections, "## MCP search hits\n\n"+strings.Join(uniqueNonEmpty(mcpMatches), "\n"))
+		}
+	}
+	if bounded != nil && strings.TrimSpace(bounded.Bundle) != "" {
+		sections = append(sections, bounded.Bundle)
 	}
 	if len(searchTerms) > 0 {
 		var matches []string
@@ -814,6 +881,154 @@ func collectRetrievalBundle(root, message string, plan *editPlan, candidates []s
 		}
 	}
 	return strings.Join(sections, "\n\n")
+}
+
+func runBoundedMCPRetrievalLoop(ctx context.Context, reqID, message string, plan *editPlan, candidates []string, mcpDisc *mcpDiscovery) *boundedMCPRetrieval {
+	if mcpDisc == nil || !mcpDisc.Connected {
+		return nil
+	}
+	const maxSteps = 6
+	const maxReads = 4
+	result := &boundedMCPRetrieval{SnippetMap: map[string]string{}}
+	seenFiles := map[string]struct{}{}
+	var chosenFiles []string
+	var sections []string
+	searchTerms := extractSearchTerms(message)
+	if plan != nil && len(plan.SearchTerms) > 0 {
+		searchTerms = uniqueNonEmpty(append(plan.SearchTerms, searchTerms...))
+	}
+	searchTerms = searchTerms[:minInt(len(searchTerms), 3)]
+
+	for _, term := range searchTerms {
+		if result.StepsUsed >= maxSteps {
+			break
+		}
+		matches, err := mcpSearchMatches(ctx, mcpDisc, term, 5)
+		result.StepsUsed++
+		if err != nil || len(matches) == 0 {
+			continue
+		}
+		result.SearchHits = append(result.SearchHits, matches...)
+		for _, match := range matches {
+			if rel := relPathFromSearchHit(match); rel != "" {
+				if _, ok := seenFiles[rel]; !ok {
+					seenFiles[rel] = struct{}{}
+					chosenFiles = append(chosenFiles, rel)
+				}
+			}
+		}
+	}
+
+	refinedTerms := deriveMCPRefinementTerms(searchTerms, result.SearchHits, chosenFiles)
+	result.RefinedTerms = refinedTerms
+	for _, term := range refinedTerms {
+		if result.StepsUsed >= maxSteps || len(chosenFiles) >= maxReads {
+			break
+		}
+		matches, err := mcpSearchMatches(ctx, mcpDisc, term, 4)
+		result.StepsUsed++
+		if err != nil || len(matches) == 0 {
+			continue
+		}
+		result.SearchHits = append(result.SearchHits, matches...)
+		for _, match := range matches {
+			if rel := relPathFromSearchHit(match); rel != "" {
+				if _, ok := seenFiles[rel]; !ok {
+					seenFiles[rel] = struct{}{}
+					chosenFiles = append(chosenFiles, rel)
+				}
+			}
+			if len(chosenFiles) >= maxReads {
+				break
+			}
+		}
+	}
+
+	for _, rel := range uniqueNonEmpty(append(append([]string{}, candidates...), planTargetFiles(plan)...)) {
+		if len(chosenFiles) >= maxReads {
+			break
+		}
+		if _, ok := seenFiles[rel]; ok {
+			continue
+		}
+		seenFiles[rel] = struct{}{}
+		chosenFiles = append(chosenFiles, rel)
+	}
+
+	if len(chosenFiles) < maxReads {
+		for _, term := range searchTerms {
+			if result.StepsUsed >= maxSteps {
+				break
+			}
+			listed, err := mcpListFiles(ctx, mcpDisc, term, 6)
+			result.StepsUsed++
+			if err != nil || len(listed) == 0 {
+				continue
+			}
+			for _, rel := range listed {
+				if len(chosenFiles) >= maxReads {
+					break
+				}
+				if _, ok := seenFiles[rel]; ok {
+					continue
+				}
+				seenFiles[rel] = struct{}{}
+				chosenFiles = append(chosenFiles, rel)
+			}
+		}
+	}
+
+	for _, rel := range chosenFiles {
+		if result.StepsUsed >= maxSteps {
+			break
+		}
+		text, err := mcpReadFileText(ctx, mcpDisc, rel, maxEditSnippetPerFile)
+		result.StepsUsed++
+		if err != nil || strings.TrimSpace(text) == "" {
+			continue
+		}
+		result.SnippetMap[rel] = text
+		result.SelectedRead = append(result.SelectedRead, rel)
+	}
+
+	if len(result.SearchHits) > 0 {
+		sections = append(sections, "## MCP bounded search hits\n\n- "+strings.Join(uniqueNonEmpty(result.SearchHits), "\n- "))
+	}
+	if len(result.SelectedRead) > 0 {
+		sections = append(sections, "## MCP bounded file reads\n\n- "+strings.Join(uniqueNonEmpty(result.SelectedRead), "\n- "))
+	}
+	if result.StepsUsed > 0 {
+		sections = append(sections, fmt.Sprintf("## MCP bounded loop summary\n\n- Steps used: %d\n- Search hits: %d\n- Files read: %d", result.StepsUsed, len(uniqueNonEmpty(result.SearchHits)), len(uniqueNonEmpty(result.SelectedRead))))
+	}
+	result.Bundle = strings.Join(sections, "\n\n")
+	emitEditEvent(reqID, "retrieving", "Completed bounded MCP retrieval loop", 0.43, map[string]any{
+		"mcp_steps_used":  result.StepsUsed,
+		"mcp_search_hits": len(uniqueNonEmpty(result.SearchHits)),
+		"mcp_files_read":  len(uniqueNonEmpty(result.SelectedRead)),
+	})
+	return result
+}
+
+func relPathFromSearchHit(match string) string {
+	parts := strings.SplitN(strings.TrimSpace(match), ":", 3)
+	if len(parts) < 2 {
+		return ""
+	}
+	return strings.TrimSpace(parts[0])
+}
+
+func planTargetFiles(plan *editPlan) []string {
+	if plan == nil {
+		return nil
+	}
+	return uniqueNonEmpty(plan.TargetFiles)
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func shouldTryHelperSidecar(reqID string, req editRequestRecord, plan *editPlan) bool {
@@ -861,6 +1076,7 @@ func buildEditPrompt(req editRequestRecord, plan *editPlan, contextText, snippet
 		contextBudget = 1200
 	}
 	contextText = clampString(emptyFallback(contextText, "(no context bundle available)"), contextBudget)
+	mcpText := clampString(emptyFallback(req.MCPSummary, "(no MCP discovery available)"), 1400)
 	prompt := strings.TrimSpace(fmt.Sprintf(`
 You are DorkPipe preparing a bounded edit artifact for a local repository.
 
@@ -879,6 +1095,7 @@ Rules:
 - Do not invent files not supported by the provided context unless the request clearly needs a new file.
 - Prefer editing the active file when it is relevant.
 - If a plan is provided, follow it unless the retrieved code clearly contradicts it.
+- When MCP discovery context is present, use it as the trusted source for workflow and tool availability.
 - %s
 
 User request:
@@ -896,6 +1113,9 @@ Selection:
 Context bundle:
 %s
 
+MCP discovery context:
+%s
+
 Retrieval bundle:
 %s
 
@@ -907,6 +1127,7 @@ Candidate file snippets:
 		emptyFallback(req.ActiveFile, "(none)"),
 		emptyFallback(req.SelectionText, "(none)"),
 		contextText,
+		mcpText,
 		retrievalText,
 		snippetText))
 	if len(prompt) > maxEditPromptChars {
@@ -957,7 +1178,10 @@ Retrieval bundle:
 
 Candidate file snippets:
 %s
-`, req.UserMessage, planText, emptyFallback(req.ActiveFile, "(none)"), emptyFallback(req.SelectionText, "(none)"), retrievalText, snippetText))
+
+MCP discovery context:
+%s
+`, req.UserMessage, planText, emptyFallback(req.ActiveFile, "(none)"), emptyFallback(req.SelectionText, "(none)"), retrievalText, snippetText, emptyFallback(req.MCPSummary, "(no MCP discovery available)")))
 }
 
 func runEditModel(ctx context.Context, host, model string, numCtx int, prompt string) (string, error) {
@@ -1438,6 +1662,12 @@ func tryDeterministicEditPrimitive(reqID, root, message, activeFile, artifactsDi
 	if artifact, patchPath, ok, err := tryDeterministicAnchorInsertPrimitive(reqID, root, message, activeFile, artifactsDir); ok {
 		return artifact, patchPath, true, err
 	}
+	if artifact, patchPath, ok, err := tryDeterministicScopedRenamePrimitive(reqID, root, message, activeFile, artifactsDir); ok {
+		return artifact, patchPath, true, err
+	}
+	if artifact, patchPath, ok, err := tryDeterministicLiteralReplacePrimitive(reqID, root, message, activeFile, artifactsDir); ok {
+		return artifact, patchPath, true, err
+	}
 	if artifact, patchPath, ok, err := tryDeterministicCollectionScaffoldPrimitive(reqID, root, message, artifactsDir); ok {
 		return artifact, patchPath, true, err
 	}
@@ -1599,6 +1829,77 @@ func tryDeterministicAnchorInsertPrimitive(reqID, root, message, activeFile, art
 		return nil, "", true, err
 	}
 	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic anchor insert primitive selected.")
+}
+
+func tryDeterministicScopedRenamePrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
+	targetFile := resolveDeterministicTargetFile(root, activeFile, message, []string{".go", ".js", ".ts", ".tsx", ".jsx", ".py", ".java", ".rb", ".rs", ".md", ".txt"})
+	if targetFile == "" {
+		return nil, "", false, nil
+	}
+	oldValue, newValue, ok := inferScopedRename(message)
+	if !ok {
+		return nil, "", false, nil
+	}
+	beforeBytes, err := os.ReadFile(filepath.Join(root, targetFile))
+	if err != nil {
+		return nil, "", false, err
+	}
+	before := string(beforeBytes)
+	after, changed := replaceWholeWord(before, oldValue, newValue)
+	if !changed {
+		return nil, "", false, nil
+	}
+	emitEditEvent(reqID, "context_gathering", "Using deterministic scoped rename primitive", 0.18, map[string]any{
+		"target_file": targetFile,
+		"from":        oldValue,
+		"to":          newValue,
+	})
+	artifact := &editModelArtifact{
+		Summary:     fmt.Sprintf("Rename `%s` to `%s` in `%s` using a local scoped rename primitive.", oldValue, newValue, targetFile),
+		TargetFiles: []string{targetFile},
+		Patch:       buildReplaceFilePatch(targetFile, before, after),
+		Validations: []string{"Verify the rename only touched the intended file scope."},
+	}
+	if err := validateEditArtifact(artifact); err != nil {
+		return nil, "", true, err
+	}
+	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic scoped rename primitive selected.")
+}
+
+func tryDeterministicLiteralReplacePrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
+	targetFile := resolveDeterministicTargetFile(root, activeFile, message, []string{".go", ".js", ".ts", ".tsx", ".jsx", ".py", ".java", ".rb", ".rs", ".md", ".txt", ".yml", ".yaml", ".json"})
+	if targetFile == "" {
+		return nil, "", false, nil
+	}
+	oldValue, newValue, ok := inferLiteralReplace(message)
+	if !ok {
+		return nil, "", false, nil
+	}
+	beforeBytes, err := os.ReadFile(filepath.Join(root, targetFile))
+	if err != nil {
+		return nil, "", false, err
+	}
+	before := string(beforeBytes)
+	if !strings.Contains(before, oldValue) {
+		return nil, "", false, nil
+	}
+	after := strings.Replace(before, oldValue, newValue, 1)
+	if after == before {
+		return nil, "", false, nil
+	}
+	emitEditEvent(reqID, "context_gathering", "Using deterministic replace primitive", 0.18, map[string]any{
+		"target_file": targetFile,
+	})
+	artifact := &editModelArtifact{
+		Summary:     fmt.Sprintf("Replace `%s` with `%s` in `%s` using a local replace primitive.", oldValue, newValue, targetFile),
+		TargetFiles: []string{targetFile},
+		Patch:       buildReplaceFilePatch(targetFile, before, after),
+		Validations: []string{"Verify the replacement touched the intended occurrence."},
+	}
+	if err := validateEditArtifact(artifact); err != nil {
+		return nil, "", true, err
+	}
+	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic replace primitive selected.")
 }
 
 func tryDeterministicYAMLScalarUpdatePrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
@@ -1826,12 +2127,12 @@ func looksLikePackageCreation(lower string) bool {
 
 func discoverPackageRoots(root string) []string {
 	skipDirs := map[string]struct{}{
-		".git":      {},
+		".git":         {},
 		"node_modules": {},
-		"target":    {},
-		"bin":       {},
-		".dockpipe": {},
-		".dorkpipe": {},
+		"target":       {},
+		"bin":          {},
+		".dockpipe":    {},
+		".dorkpipe":    {},
 	}
 	var roots []string
 	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
@@ -2130,7 +2431,7 @@ func updateYAMLScalarField(before, key, value string) (string, bool) {
 func inferYAMLListAppend(message string) (string, string, bool) {
 	lower := strings.ToLower(message)
 	type pair struct {
-		key string
+		key     string
 		phrases []string
 	}
 	pairs := []pair{
@@ -2237,6 +2538,44 @@ func inferAnchorInsertSpec(message string) (string, string, bool) {
 	return anchor, block, true
 }
 
+func inferScopedRename(message string) (string, string, bool) {
+	lower := strings.ToLower(message)
+	for _, marker := range []string{"rename ", "change symbol "} {
+		if idx := strings.Index(lower, marker); idx >= 0 {
+			rest := strings.TrimSpace(message[idx+len(marker):])
+			for _, sep := range []string{" to ", " into "} {
+				if cut := strings.Index(strings.ToLower(rest), sep); cut >= 0 {
+					oldValue := strings.TrimSpace(strings.Trim(rest[:cut], "`\"'"))
+					newValue := strings.TrimSpace(strings.Trim(rest[cut+len(sep):], "`\"'"))
+					if oldValue != "" && newValue != "" {
+						return oldValue, newValue, true
+					}
+				}
+			}
+		}
+	}
+	return "", "", false
+}
+
+func inferLiteralReplace(message string) (string, string, bool) {
+	lower := strings.ToLower(message)
+	for _, marker := range []string{"replace ", "swap "} {
+		if idx := strings.Index(lower, marker); idx >= 0 {
+			rest := strings.TrimSpace(message[idx+len(marker):])
+			for _, sep := range []string{" with ", " to "} {
+				if cut := strings.Index(strings.ToLower(rest), sep); cut >= 0 {
+					oldValue := strings.TrimSpace(strings.Trim(rest[:cut], "`\"'"))
+					newValue := strings.TrimSpace(strings.Trim(rest[cut+len(sep):], "`\"'"))
+					if oldValue != "" && newValue != "" {
+						return oldValue, newValue, true
+					}
+				}
+			}
+		}
+	}
+	return "", "", false
+}
+
 func appendYAMLListItem(before, key, value string) (string, bool) {
 	lines := strings.Split(strings.ReplaceAll(before, "\r\n", "\n"), "\n")
 	for _, line := range lines {
@@ -2333,7 +2672,7 @@ func appendMarkdownSection(before, title, body string) (string, bool) {
 	if strings.Contains(before, heading) {
 		return before, false
 	}
-	section := strings.TrimSpace(heading + "\n\n" + body) + "\n"
+	section := strings.TrimSpace(heading+"\n\n"+body) + "\n"
 	trimmed := strings.TrimRight(before, "\n")
 	if trimmed == "" {
 		return section, true
@@ -2360,6 +2699,37 @@ func insertBlockAfterAnchor(before, anchor, block string) (string, bool) {
 		return before, false
 	}
 	return after, true
+}
+
+func replaceWholeWord(before, oldValue, newValue string) (string, bool) {
+	if oldValue == "" || newValue == "" || oldValue == newValue {
+		return before, false
+	}
+	isWord := func(r byte) bool {
+		return (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_'
+	}
+	var out strings.Builder
+	changed := false
+	i := 0
+	for i < len(before) {
+		if strings.HasPrefix(before[i:], oldValue) {
+			leftOK := i == 0 || !isWord(before[i-1])
+			rightIdx := i + len(oldValue)
+			rightOK := rightIdx >= len(before) || !isWord(before[rightIdx])
+			if leftOK && rightOK {
+				out.WriteString(newValue)
+				i = rightIdx
+				changed = true
+				continue
+			}
+		}
+		out.WriteByte(before[i])
+		i++
+	}
+	if !changed {
+		return before, false
+	}
+	return out.String(), true
 }
 
 func cleanPrimitiveValue(raw string) string {

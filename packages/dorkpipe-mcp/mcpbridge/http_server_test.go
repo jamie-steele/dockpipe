@@ -151,8 +151,8 @@ func TestHTTPKeyTierGateReadonlyVsExec(t *testing.T) {
 	if err := json.NewDecoder(respRO.Body).Decode(&wrapRO); err != nil {
 		t.Fatal(err)
 	}
-	if len(wrapRO.Result.Tools) != 2 {
-		t.Fatalf("readonly key: want 2 tools, got %d", len(wrapRO.Result.Tools))
+	if len(wrapRO.Result.Tools) != 5 {
+		t.Fatalf("readonly key: want 5 tools, got %d", len(wrapRO.Result.Tools))
 	}
 
 	reqEX, err := http.NewRequest(http.MethodPost, srv.URL, bytes.NewReader(body))
@@ -176,8 +176,8 @@ func TestHTTPKeyTierGateReadonlyVsExec(t *testing.T) {
 	if err := json.NewDecoder(respEX.Body).Decode(&wrapEX); err != nil {
 		t.Fatal(err)
 	}
-	if len(wrapEX.Result.Tools) != 6 {
-		t.Fatalf("exec key: want 6 tools, got %d", len(wrapEX.Result.Tools))
+	if len(wrapEX.Result.Tools) != 9 {
+		t.Fatalf("exec key: want 9 tools, got %d", len(wrapEX.Result.Tools))
 	}
 }
 

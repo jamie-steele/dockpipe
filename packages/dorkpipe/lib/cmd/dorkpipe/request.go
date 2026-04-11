@@ -95,7 +95,7 @@ func requestCmd(argv []string) {
 	chosenNumCtx := resolveNumCtx(*numCtx)
 	switch routed.Route {
 	case "inspect":
-		handleInspectRoute(ctx, reqID, absWd, routed.Action, routed.Arg)
+		handleInspectRoute(ctx, reqID, absWd, req, routed.Action, routed.Arg)
 	case "edit":
 		if routed.Arg != "" {
 			req.Message = routed.Arg
@@ -119,7 +119,7 @@ func chooseRoute(req routeRequest) routedRequest {
 		switch name {
 		case "edit":
 			return routedRequest{Route: "edit", Action: "edit", Arg: arg, Reason: "explicit slash edit"}
-		case "context", "status", "bundle", "test", "ci", "workflow", "validate", "workflow-validate":
+		case "context", "status", "bundle", "test", "ci", "workflow", "validate", "workflow-validate", "callstack", "heap":
 			return routedRequest{Route: "inspect", Action: name, Arg: arg, Reason: "explicit slash command"}
 		default:
 			return routedRequest{Route: "inspect", Action: "slash", Arg: raw, Reason: "explicit slash command"}
@@ -170,7 +170,7 @@ func parseSlashCommand(raw string) (string, string) {
 	return name, strings.TrimSpace(arg)
 }
 
-func handleInspectRoute(ctx context.Context, reqID, root, action, arg string) {
+func handleInspectRoute(ctx context.Context, reqID, root string, req routeRequest, action, arg string) {
 	switch action {
 	case "bundle":
 		emitEditEvent(reqID, "context_gathering", "Refreshing context bundle", 0.45, nil)
@@ -255,6 +255,38 @@ func handleInspectRoute(ctx context.Context, reqID, root, action, arg string) {
 			"target":            target,
 			"validation_status": "passed",
 		})
+	case "callstack":
+		emitEditEvent(reqID, "context_gathering", "Inspecting callstack candidates", 0.45, map[string]any{
+			"target":      arg,
+			"active_file": req.ActiveFile,
+		})
+		out, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/inspect-callstack.sh", root, arg, req.ActiveFile, req.SelectionText)
+		if err != nil {
+			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Callstack inspection failed: %s", out), true)
+			return
+		}
+		emitEditDone(reqID, codeFence("text", nonEmpty(out, "No callstack candidates found.")), map[string]any{
+			"route":             "inspect",
+			"action":            "callstack",
+			"target":            arg,
+			"validation_status": "not_applicable",
+			"active_file":       req.ActiveFile,
+		})
+	case "heap":
+		emitEditEvent(reqID, "context_gathering", "Inspecting heap or memory profile", 0.45, map[string]any{
+			"target": arg,
+		})
+		out, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/inspect-heap.sh", root, arg)
+		if err != nil {
+			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Heap inspection failed: %s", out), true)
+			return
+		}
+		emitEditDone(reqID, codeFence("text", nonEmpty(out, "No heap data available.")), map[string]any{
+			"route":             "inspect",
+			"action":            "heap",
+			"target":            arg,
+			"validation_status": "not_applicable",
+		})
 	default:
 		emitEditEvent(reqID, "context_gathering", "Reading context bundle", 0.45, nil)
 		rel, text := readEditContextBundle(root)
@@ -266,8 +298,8 @@ func handleInspectRoute(ctx context.Context, reqID, root, action, arg string) {
 			return
 		}
 		emitEditDone(reqID, fmt.Sprintf("Context bundle: `%s`\n\n%s", rel, codeFence("markdown", text)), map[string]any{
-			"route":  "inspect",
-			"action": "context",
+			"route":        "inspect",
+			"action":       "context",
 			"context_path": rel,
 		})
 	}
@@ -314,7 +346,30 @@ func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, 
 func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, host, model string, numCtx int) {
 	emitEditEvent(reqID, "context_gathering", "Inspecting workspace context", 0.35, nil)
 	contextPath, contextText := readEditContextBundle(root)
-	prompt := buildChatPrompt(root, req, contextText)
+	var mcpText string
+	var mcpLoop *boundedMCPContextResult
+	mcpDisc, mcpErr := discoverMCPContext(ctx)
+	if mcpErr == nil && mcpDisc != nil {
+		emitEditEvent(reqID, "context_gathering", "Consulting MCP bridge", 0.42, mcpMetadata(mcpDisc))
+		mcpText = mcpSummaryText(mcpDisc)
+		emitEditEvent(reqID, "retrieving", "Running bounded MCP context loop", 0.46, map[string]any{
+			"step_cap": 5,
+		})
+		mcpLoop = runBoundedMCPContextLoop(ctx, req, mcpDisc)
+		if mcpLoop != nil {
+			if len(mcpLoop.Refined) > 0 {
+				emitEditEvent(reqID, "retrieving", "Refining MCP context focus", 0.48, map[string]any{
+					"refined_terms": mcpLoop.Refined,
+				})
+			}
+			emitEditEvent(reqID, "retrieving", "Completed bounded MCP context loop", 0.5, map[string]any{
+				"mcp_steps_used":  mcpLoop.StepsUsed,
+				"mcp_search_hits": len(uniqueNonEmpty(mcpLoop.SearchHits)),
+				"mcp_files_read":  len(uniqueNonEmpty(mcpLoop.ReadFiles)),
+			})
+		}
+	}
+	prompt := buildChatPrompt(root, req, contextText, mcpText, mcpLoop)
 	emitEditEvent(reqID, "routed", fmt.Sprintf("Streaming from %s", model), 0.55, map[string]any{
 		"route":        "chat",
 		"model":        model,
@@ -346,6 +401,14 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	if contextPath != "" {
 		status["context_path"] = contextPath
 	}
+	for key, value := range mcpMetadata(mcpDisc) {
+		status[key] = value
+	}
+	if mcpLoop != nil {
+		status["mcp_steps_used"] = mcpLoop.StepsUsed
+		status["mcp_search_hits"] = len(uniqueNonEmpty(mcpLoop.SearchHits))
+		status["mcp_files_read"] = len(uniqueNonEmpty(mcpLoop.ReadFiles))
+	}
 	emitEditDone(reqID, nonEmpty(answer, "(No response text returned.)"), status)
 }
 
@@ -353,11 +416,18 @@ func isInspectIntent(msg string) bool {
 	return strings.Contains(msg, "context bundle") ||
 		(strings.Contains(msg, "what context") || strings.Contains(msg, "show context")) ||
 		(strings.Contains(msg, "status") && (strings.Contains(msg, "show") || strings.Contains(msg, "check") || msg == "status")) ||
-		(strings.Contains(msg, "bundle context") || strings.Contains(msg, "refresh context"))
+		(strings.Contains(msg, "bundle context") || strings.Contains(msg, "refresh context")) ||
+		strings.Contains(msg, "callstack") ||
+		strings.Contains(msg, "stack trace") ||
+		(strings.Contains(msg, "heap") && (strings.Contains(msg, "inspect") || strings.Contains(msg, "show") || strings.Contains(msg, "profile") || strings.Contains(msg, "memory")))
 }
 
 func inspectAction(msg string) string {
 	switch {
+	case strings.Contains(msg, "callstack") || strings.Contains(msg, "stack trace"):
+		return "callstack"
+	case strings.Contains(msg, "heap") || strings.Contains(msg, "memory profile"):
+		return "heap"
 	case strings.Contains(msg, "bundle context") || strings.Contains(msg, "refresh context"):
 		return "bundle"
 	case strings.Contains(msg, "status") && (strings.Contains(msg, "show") || strings.Contains(msg, "check") || msg == "status"):
@@ -402,10 +472,12 @@ func isChatIntent(msg string) bool {
 		(strings.Contains(msg, "what ") || strings.Contains(msg, "how ") || strings.Contains(msg, "why ") || strings.Contains(msg, "who "))
 }
 
-func buildChatPrompt(root string, req routeRequest, contextText string) string {
+func buildChatPrompt(root string, req routeRequest, contextText, mcpText string, mcpLoop *boundedMCPContextResult) string {
 	opening := []string{
 		"You are DorkPipe, a local-first repo-aware coding assistant.",
 		"Ground your answer in the provided workspace context when relevant.",
+		"When MCP discovery data is provided, treat it as typed control-plane context and prefer it over guessing about workflows or tool availability.",
+		"When a bounded MCP context loop is provided, use it as curated retrieval context rather than asking for broad extra context.",
 		"If you provide code, use fenced code blocks with a language tag when possible.",
 		"Be concise, practical, and explicit about uncertainty.",
 	}
@@ -429,6 +501,12 @@ func buildChatPrompt(root string, req routeRequest, contextText string) string {
 	}
 	if strings.TrimSpace(contextText) != "" {
 		opening = append(opening, fmt.Sprintf("Repository context bundle:\n\n%s", contextText))
+	}
+	if strings.TrimSpace(mcpText) != "" {
+		opening = append(opening, fmt.Sprintf("MCP discovery context:\n\n%s", mcpText))
+	}
+	if mcpLoop != nil && strings.TrimSpace(mcpLoop.Summary) != "" {
+		opening = append(opening, fmt.Sprintf("MCP bounded context loop:\n\n%s", mcpLoop.Summary))
 	}
 	opening = append(opening, fmt.Sprintf("User request:\n%s", req.Message))
 	return strings.Join(opening, "\n\n")

@@ -82,8 +82,8 @@ func TestToolsListFilteredByTier(t *testing.T) {
 	if err := json.Unmarshal(resp.Result, &out); err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Tools) != 2 {
-		t.Fatalf("readonly tier: want 2 tools, got %d (%+v)", len(out.Tools), out.Tools)
+	if len(out.Tools) != 5 {
+		t.Fatalf("readonly tier: want 5 tools, got %d (%+v)", len(out.Tools), out.Tools)
 	}
 }
 

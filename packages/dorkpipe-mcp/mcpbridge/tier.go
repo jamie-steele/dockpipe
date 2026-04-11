@@ -76,6 +76,9 @@ func parseTierName(s string) (MCPTier, error) {
 var toolMinTier = map[string]MCPTier{
 	"dockpipe.version":           TierReadonly,
 	"capabilities.workflows":     TierReadonly,
+	"repo.list_files":            TierReadonly,
+	"repo.read_file":             TierReadonly,
+	"repo.search_text":           TierReadonly,
 	"dockpipe.validate_workflow": TierValidate,
 	"dorkpipe.validate_spec":     TierValidate,
 	"dockpipe.run":               TierExec,
