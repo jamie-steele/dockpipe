@@ -386,6 +386,24 @@ function sortSessionsByUpdate(sessions) {
   return [...sessions].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }
 
+function ensureValidChatStore(chatStore) {
+  if (!chatStore || !Array.isArray(chatStore.sessions) || chatStore.sessions.length === 0) {
+    return createInitialChatState();
+  }
+  const sessions = chatStore.sessions.filter(Boolean);
+  if (!sessions.length) {
+    return createInitialChatState();
+  }
+  const activeSessionId = sessions.some((session) => session.id === chatStore.activeSessionId)
+    ? chatStore.activeSessionId
+    : sessions[0].id;
+  return {
+    ...chatStore,
+    sessions,
+    activeSessionId,
+  };
+}
+
 async function resolveContextBundlePath(root) {
   const candidates = [
     path.join(root, "bin", ".dockpipe", "pipeon-context.md"),
@@ -2110,29 +2128,35 @@ function renderChatHtml(webview, state) {
       }
 
       function render(nextState) {
-        currentState = nextState;
-        const previousBottomOffset = transcript.scrollHeight - transcript.scrollTop;
-        const stickToBottom = previousBottomOffset - transcript.clientHeight <= 24 || !!viewState.pinnedToBottom;
-        transcript.innerHTML = renderMessages(currentState.messages || []);
-        trace.innerHTML = renderTrace(currentState.trace || []);
-        status.textContent = currentState.status || "";
-        renderSessions(currentState);
-        modeSelect.value = currentState.composerMode || viewState.mode || "ask";
-        autoApplyEdits.checked = !!currentState.autoApplyEdits;
-        modelProfileSelect.value = currentState.modelProfile || "balanced";
-        send.disabled = !!currentState.isBusy;
-        clearBtn.disabled = !!currentState.isBusy;
-        newChatBtn.disabled = !!currentState.isBusy;
-        newFromComposer.disabled = !!currentState.isBusy;
-        modeSelect.disabled = !!currentState.isBusy;
-        autoApplyEdits.disabled = !!currentState.isBusy;
-        modelProfileSelect.disabled = !!currentState.isBusy;
-        if (stickToBottom) {
-          transcript.scrollTop = transcript.scrollHeight;
-        } else {
-          transcript.scrollTop = Math.max(0, transcript.scrollHeight - previousBottomOffset);
+        try {
+          currentState = nextState || {};
+          const previousBottomOffset = transcript.scrollHeight - transcript.scrollTop;
+          const stickToBottom = previousBottomOffset - transcript.clientHeight <= 24 || !!viewState.pinnedToBottom;
+          transcript.innerHTML = renderMessages(currentState.messages || []);
+          trace.innerHTML = renderTrace(currentState.trace || []);
+          status.textContent = currentState.status || "";
+          renderSessions(currentState);
+          modeSelect.value = currentState.composerMode || viewState.mode || "ask";
+          autoApplyEdits.checked = !!currentState.autoApplyEdits;
+          modelProfileSelect.value = currentState.modelProfile || "balanced";
+          send.disabled = !!currentState.isBusy;
+          clearBtn.disabled = !!currentState.isBusy;
+          newChatBtn.disabled = !!currentState.isBusy;
+          newFromComposer.disabled = !!currentState.isBusy;
+          modeSelect.disabled = !!currentState.isBusy;
+          autoApplyEdits.disabled = !!currentState.isBusy;
+          modelProfileSelect.disabled = !!currentState.isBusy;
+          if (stickToBottom) {
+            transcript.scrollTop = transcript.scrollHeight;
+          } else {
+            transcript.scrollTop = Math.max(0, transcript.scrollHeight - previousBottomOffset);
+          }
+          saveViewState({ pinnedToBottom: stickToBottom });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          transcript.innerHTML = '<article class="msg assistant"><div class="role">DorkPipe</div><div class="body"><p>UI render failed.</p><p><code>' + escapeHtml(message) + '</code></p></div></article>';
+          status.textContent = "DorkPipe UI hit a render error";
         }
-        saveViewState({ pinnedToBottom: stickToBottom });
       }
 
       transcript.addEventListener("scroll", () => {
@@ -2160,6 +2184,9 @@ function renderChatHtml(webview, state) {
         if (event.key !== "Enter") {
           return;
         }
+        if (event.isComposing) {
+          return;
+        }
         if (event.altKey) {
           return;
         }
@@ -2167,6 +2194,7 @@ function renderChatHtml(webview, state) {
           return;
         }
         event.preventDefault();
+        event.stopPropagation();
         form.requestSubmit();
       });
 
@@ -2508,6 +2536,7 @@ class PipeonChatViewProvider {
   }
 
   get activeSession() {
+    this.chatStore = ensureValidChatStore(this.chatStore);
     return this.chatStore.sessions.find((session) => session.id === this.chatStore.activeSessionId) || this.chatStore.sessions[0];
   }
 
@@ -2516,6 +2545,7 @@ class PipeonChatViewProvider {
   }
 
   syncViewState() {
+    this.chatStore = ensureValidChatStore(this.chatStore);
     const session = this.activeSession || createSession();
     this.state.activeSessionId = session.id;
     this.state.composerMode = this.chatStore.composerMode || "ask";
@@ -2836,41 +2866,51 @@ class PipeonChatViewProvider {
       this.rendered = false;
     });
     webviewView.webview.onDidReceiveMessage(async (msg) => {
-      const workspaceRoot = getWorkspaceRoot();
-      if (msg?.type === "switchSession" && msg.sessionId) {
-        await this.switchSession(msg.sessionId);
-        return;
-      }
-      if (msg?.type === "newSession") {
-        await this.newSession(msg.seed || "");
-        return;
-      }
-      if (msg?.type === "clearSession") {
-        await this.clearActiveSession();
-        return;
-      }
-      if (msg?.type === "setComposerMode") {
-        await this.setComposerMode(msg.mode);
-        return;
-      }
-      if (msg?.type === "setAutoApplyEdits") {
-        await this.setAutoApplyEdits(!!msg.value);
-        return;
-      }
-      if (msg?.type === "setModelProfile") {
-        await this.setModelProfile(msg.value);
-        return;
-      }
-      if (!workspaceRoot) {
-        vscode.window.showWarningMessage("DorkPipe: open a workspace folder first.");
-        return;
-      }
-      if (msg?.type === "resolvePendingAction" && msg.messageId) {
-        await this.resolvePendingAction(workspaceRoot, msg.messageId, msg.decision);
-        return;
-      }
-      if (msg?.type === "ask" && msg.text) {
-        await this.ask(workspaceRoot, msg.text, msg.mode, msg.modelProfile);
+      try {
+        const workspaceRoot = getWorkspaceRoot();
+        if (msg?.type === "switchSession" && msg.sessionId) {
+          await this.switchSession(msg.sessionId);
+          return;
+        }
+        if (msg?.type === "newSession") {
+          await this.newSession(msg.seed || "");
+          return;
+        }
+        if (msg?.type === "clearSession") {
+          await this.clearActiveSession();
+          return;
+        }
+        if (msg?.type === "setComposerMode") {
+          await this.setComposerMode(msg.mode);
+          return;
+        }
+        if (msg?.type === "setAutoApplyEdits") {
+          await this.setAutoApplyEdits(!!msg.value);
+          return;
+        }
+        if (msg?.type === "setModelProfile") {
+          await this.setModelProfile(msg.value);
+          return;
+        }
+        if (!workspaceRoot) {
+          vscode.window.showWarningMessage("DorkPipe: open a workspace folder first.");
+          return;
+        }
+        if (msg?.type === "resolvePendingAction" && msg.messageId) {
+          await this.resolvePendingAction(workspaceRoot, msg.messageId, msg.decision);
+          return;
+        }
+        if (msg?.type === "ask" && msg.text) {
+          await this.ask(workspaceRoot, msg.text, msg.mode, msg.modelProfile);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        this.channel.error(message);
+        this.state.isBusy = false;
+        this.state.status = buildRequestErrorStatus(message);
+        this.state.trace = [];
+        this.refresh();
+        vscode.window.showErrorMessage(`DorkPipe: ${message}`);
       }
     });
   }
