@@ -1,11 +1,26 @@
-# DorkPipe — VS Code extension (minimal)
+# DorkPipe — VS Code extension
 
 Install this into **stock VS Code** for development, or pack as **`.vsix`** and install into your **Pipeon** app/editor surface. The outer product can still be Pipeon while the in-editor assistant surface is **DorkPipe**.
+
+## What it does now
+
+- Persistent per-workspace chat history with multiple chat sessions
+- **New chat** and **clear current chat** commands
+- Natural-language requests are first routed by DorkPipe into `chat`, `inspect`, or `edit`
+- Explicit **`/edit ...`** requests still work as an override, but they are not the main UX
+- Safe local orchestration for obvious actions before the model call
+- Edit flows prepare and validate a patch first, then ask for confirmation before applying
+- Streaming status breadcrumbs before and during the Ollama request
+- Markdown-style assistant rendering for headings, lists, code fences, block quotes, and inline code
+- Workspace-aware prompts built from the current context bundle, active file, selection, and recent chat turns
 
 ## Commands
 
 | Command | Action |
 |---------|--------|
+| **DorkPipe: Open chat** | Reveal the DorkPipe chat panel. |
+| **DorkPipe: New chat** | Start a fresh persisted chat session in the current workspace. |
+| **DorkPipe: Clear current chat** | Clear the active session without deleting other saved chats. |
 | **DorkPipe: Open context bundle** | Shows **`bin/.dockpipe/pipeon-context.md`** in an output channel (run `packages/pipeon/resolvers/pipeon/bin/pipeon bundle` in the repo first). |
 | **DorkPipe: Open docs** | Opens the extension doc from the **`pipeon`** resolver when the workspace is this repository. |
 
@@ -36,4 +51,4 @@ Open this folder in VS Code and press **F5** (Extension Development Host).
 
 ## Note
 
-This is still a **stub**: the richer chat/orchestration story lives in the Pipeon app/backend stack, while this extension provides the in-editor DorkPipe surface.
+This extension now carries a meaningful in-editor chat surface, but the long-term product boundary is still the same: Pipeon owns UX, DorkPipe should become the server-authoritative orchestration layer, and DockPipe remains the mutation boundary.

@@ -1,5 +1,5 @@
 /**
- * DorkPipe — minimal VS Code extension (install into a Code OSS fork or stock VS Code).
+ * DorkPipe — VS Code extension (install into a Code OSS fork or stock VS Code).
  * @see pipeon resolver assets/docs/pipeon-vscode-fork.md (maintainer IDE pack)
  */
 // @ts-check
@@ -15,6 +15,12 @@ const DEFAULT_MODEL = "llama3.2";
 const CHAT_VIEW_ID = "pipeon.chatView";
 const WELCOME_PANEL_ID = "pipeon.welcome";
 const PANEL_BOTTOM_MIGRATION_KEY = "pipeon.panelBottomMigrated.v1";
+const CHAT_STATE_KEY = "pipeon.chatState.v2";
+const MAX_SAVED_SESSIONS = 20;
+const MAX_HISTORY_MESSAGES = 14;
+const MAX_CONTEXT_CHARS = 18000;
+const MAX_SELECTION_CHARS = 2400;
+const MAX_MESSAGE_CHARS = 32000;
 
 async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
@@ -22,6 +28,101 @@ async function ensureDir(dir) {
 
 function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function makeId(prefix) {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function clampText(text, maxChars) {
+  if (!text) return "";
+  const value = String(text);
+  if (value.length <= maxChars) {
+    return value;
+  }
+  return `${value.slice(0, maxChars)}\n\n[truncated]`;
+}
+
+function relativeToRoot(root, target) {
+  if (!root || !target) return null;
+  const rel = path.relative(root, target);
+  if (!rel || rel.startsWith("..")) {
+    return target;
+  }
+  return rel;
+}
+
+function summarizeSessionTitle(text) {
+  const oneLine = String(text || "")
+    .replace(/\s+/g, " ")
+    .replace(/^\/\S+\s*/g, "")
+    .trim();
+  if (!oneLine) {
+    return "New chat";
+  }
+  if (oneLine.length <= 44) {
+    return oneLine;
+  }
+  return `${oneLine.slice(0, 41)}...`;
+}
+
+function createSession(seedText = "") {
+  const createdAt = nowIso();
+  return {
+    id: makeId("chat"),
+    title: summarizeSessionTitle(seedText),
+    createdAt,
+    updatedAt: createdAt,
+    messages: [],
+  };
+}
+
+function createInitialChatState() {
+  const session = createSession();
+  return {
+    activeSessionId: session.id,
+    sessions: [session],
+  };
+}
+
+function sanitizeMessage(message) {
+  return {
+    id: String(message?.id || makeId("msg")),
+    role: message?.role === "user" ? "user" : "assistant",
+    text: clampText(message?.text || "", MAX_MESSAGE_CHARS),
+    format: message?.format === "plain" ? "plain" : "markdown",
+    createdAt: String(message?.createdAt || nowIso()),
+  };
+}
+
+function normalizeStoredChatState(raw) {
+  if (!raw || !Array.isArray(raw.sessions) || raw.sessions.length === 0) {
+    return createInitialChatState();
+  }
+
+  const sessions = raw.sessions
+    .map((session) => ({
+      id: String(session?.id || makeId("chat")),
+      title: summarizeSessionTitle(session?.title || "New chat"),
+      createdAt: String(session?.createdAt || nowIso()),
+      updatedAt: String(session?.updatedAt || session?.createdAt || nowIso()),
+      messages: Array.isArray(session?.messages) ? session.messages.map(sanitizeMessage).slice(-MAX_HISTORY_MESSAGES * 4) : [],
+    }))
+    .slice(0, MAX_SAVED_SESSIONS);
+
+  const activeSession = sessions.find((session) => session.id === raw.activeSessionId) || sessions[0];
+  return {
+    activeSessionId: activeSession.id,
+    sessions,
+  };
+}
+
+function sortSessionsByUpdate(sessions) {
+  return [...sessions].sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }
 
 async function resolveContextBundlePath(root) {
@@ -43,9 +144,14 @@ async function resolveContextBundlePath(root) {
 async function readContextBundle(root) {
   const ctxPath = await resolveContextBundlePath(root);
   if (!ctxPath) {
-    return { text: "", path: null };
+    return { text: "", path: null, mtime: null };
   }
-  return { text: await fs.readFile(ctxPath, "utf8"), path: ctxPath };
+  const stat = await fs.stat(ctxPath);
+  return {
+    text: clampText(await fs.readFile(ctxPath, "utf8"), MAX_CONTEXT_CHARS),
+    path: ctxPath,
+    mtime: stat.mtime.toISOString(),
+  };
 }
 
 function getWorkspaceRoot() {
@@ -78,82 +184,225 @@ async function writeTaskFile(root, kind, prompt) {
   return file;
 }
 
-function systemPrompt(contextText) {
-  return [
-    "You are DorkPipe, a local-first repo-aware IDE assistant.",
-    "Ground your answer in the provided repository context bundle when relevant.",
-    "Be concise, practical, and explicit about uncertainty.",
-    contextText ? `\nRepository context bundle:\n\n${contextText}` : "",
-  ].join("\n");
-}
-
 function buildOllamaUrl(host) {
   return new URL("/api/chat", host.endsWith("/") ? host : `${host}/`);
 }
 
-async function executeDorkpipeRequest(root, text, options = {}) {
-  const host = process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST;
-  const model = process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL;
-  const onToken = typeof options.onToken === "function" ? options.onToken : null;
-  const local = await handleLocalCommand(root, text);
-  if (local) {
-    return {
-      kind: "local",
-      text: local.text,
-      host,
-      model,
-      status: "Local DorkPipe command executed",
-      contextPath: null,
-    };
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+function renderInlineMarkdown(text) {
+  const placeholders = [];
+  let html = escapeHtml(text);
+
+  html = html.replace(/`([^`]+)`/g, (_match, code) => {
+    const token = `@@CODE${placeholders.length}@@`;
+    placeholders.push(`<code>${escapeHtml(code)}</code>`);
+    return token;
+  });
+
+  html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, (_match, label, href) => {
+    return `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
+  });
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+
+  for (let i = 0; i < placeholders.length; i += 1) {
+    html = html.replace(`@@CODE${i}@@`, placeholders[i]);
+  }
+  return html;
+}
+
+function renderMarkdown(text) {
+  const lines = String(text || "").replace(/\r\n/g, "\n").split("\n");
+  const out = [];
+  let paragraph = [];
+  let listItems = [];
+  let inCode = false;
+  let codeFence = "";
+  let codeLang = "";
+  let codeLines = [];
+  let quoteLines = [];
+
+  const flushParagraph = () => {
+    if (!paragraph.length) return;
+    out.push(`<p>${renderInlineMarkdown(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+
+  const flushList = () => {
+    if (!listItems.length) return;
+    out.push(`<ul>${listItems.map((item) => `<li>${renderInlineMarkdown(item)}</li>`).join("")}</ul>`);
+    listItems = [];
+  };
+
+  const flushQuote = () => {
+    if (!quoteLines.length) return;
+    out.push(`<blockquote>${renderMarkdown(quoteLines.join("\n"))}</blockquote>`);
+    quoteLines = [];
+  };
+
+  const flushCode = () => {
+    const langClass = codeLang ? ` class="language-${escapeHtml(codeLang)}"` : "";
+    out.push(`<pre><code${langClass}>${escapeHtml(codeLines.join("\n"))}</code></pre>`);
+    codeLines = [];
+    codeLang = "";
+    codeFence = "";
+  };
+
+  for (const line of lines) {
+    if (inCode) {
+      if (line.startsWith(codeFence)) {
+        inCode = false;
+        flushCode();
+      } else {
+        codeLines.push(line);
+      }
+      continue;
+    }
+
+    const codeMatch = line.match(/^(```+|~~~+)\s*(\S+)?\s*$/);
+    if (codeMatch) {
+      flushParagraph();
+      flushList();
+      flushQuote();
+      inCode = true;
+      codeFence = codeMatch[1];
+      codeLang = codeMatch[2] || "";
+      continue;
+    }
+
+    if (/^\s*> ?/.test(line)) {
+      flushParagraph();
+      flushList();
+      quoteLines.push(line.replace(/^\s*> ?/, ""));
+      continue;
+    }
+    flushQuote();
+
+    if (/^\s*$/.test(line)) {
+      flushParagraph();
+      flushList();
+      continue;
+    }
+
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      const level = headingMatch[1].length;
+      out.push(`<h${level}>${renderInlineMarkdown(headingMatch[2])}</h${level}>`);
+      continue;
+    }
+
+    if (/^---+$/.test(line.trim()) || /^___+$/.test(line.trim())) {
+      flushParagraph();
+      flushList();
+      out.push("<hr />");
+      continue;
+    }
+
+    const listMatch = line.match(/^\s*[-*]\s+(.+)$/);
+    if (listMatch) {
+      flushParagraph();
+      listItems.push(listMatch[1]);
+      continue;
+    }
+
+    paragraph.push(line.trim());
   }
 
-  const { text: contextText, path: contextPath } = await readContextBundle(root);
-  let answer = "";
-  if (onToken) {
-    answer = await ollamaChatStream({
-      host,
-      model,
-      system: systemPrompt(contextText),
-      user: text,
-      onToken,
-    });
-  } else {
-    answer = await ollamaChat({
-      host,
-      model,
-      system: systemPrompt(contextText),
-      user: text,
-    });
+  flushParagraph();
+  flushList();
+  flushQuote();
+  if (inCode) {
+    flushCode();
+  }
+  return out.join("");
+}
+
+function renderMessageBody(message) {
+  if (message.format === "plain") {
+    return `<pre class="plain">${escapeHtml(message.text)}</pre>`;
+  }
+  return renderMarkdown(message.text);
+}
+
+async function collectWorkspaceSignals(root) {
+  const editor = vscode.window.activeTextEditor;
+  const activePath = editor?.document?.uri?.scheme === "file" ? editor.document.uri.fsPath : null;
+  const selectionText =
+    editor && !editor.selection.isEmpty
+      ? clampText(editor.document.getText(editor.selection), MAX_SELECTION_CHARS)
+      : "";
+  const openFiles = [];
+  for (const group of vscode.window.tabGroups?.all || []) {
+    for (const tab of group.tabs || []) {
+      const input = tab.input;
+      const uri = input && typeof input === "object" && "uri" in input ? input.uri : null;
+      if (uri?.scheme === "file" && uri.fsPath) {
+        openFiles.push(relativeToRoot(root, uri.fsPath));
+      }
+    }
   }
 
+  const context = await readContextBundle(root);
   return {
-    kind: "model",
-    text: answer || "(No response text returned.)",
-    host,
-    model,
-    contextPath,
-    status: contextPath
-      ? `Model: ${model}  |  Ollama: ${host}  |  Context: ${path.relative(root, contextPath)}`
-      : `Model: ${model}  |  Ollama: ${host}  |  No context bundle found`,
+    rootName: path.basename(root),
+    activeFile: activePath ? relativeToRoot(root, activePath) : null,
+    languageId: editor?.document?.languageId || null,
+    selectionText,
+    openFiles: [...new Set(openFiles)].slice(0, 8).filter(Boolean),
+    contextText: context.text,
+    contextPath: context.path,
+    contextMtime: context.mtime,
   };
 }
 
-function ollamaChat({ host, model, system, user }) {
+function buildSystemPrompt(signals) {
+  return [
+    "You are DorkPipe, a local-first repo-aware IDE assistant inside VS Code.",
+    "Ground your answers in the provided workspace context when relevant.",
+    "If you provide code, use fenced code blocks with a language tag when possible.",
+    "Prefer concise, practical guidance and state uncertainty plainly.",
+    signals.activeFile ? `Active file: ${signals.activeFile}` : "Active file: none",
+    signals.selectionText ? `Selected text:\n${signals.selectionText}` : "Selected text: none",
+    signals.openFiles.length ? `Open files:\n- ${signals.openFiles.join("\n- ")}` : "Open files: none",
+    signals.contextPath
+      ? `Repository context bundle (${signals.contextMtime || "unknown time"}):\n\n${signals.contextText}`
+      : "Repository context bundle: unavailable. Say so if grounding would help.",
+  ].join("\n\n");
+}
+
+function buildConversationMessages(session, signals) {
+  const system = { role: "system", content: buildSystemPrompt(signals) };
+  const history = session.messages
+    .filter((message) => (message.role === "user" || message.role === "assistant") && String(message.text || "").trim())
+    .slice(-MAX_HISTORY_MESSAGES)
+    .map((message) => ({
+      role: message.role,
+      content: clampText(message.text, 6000),
+    }));
+  return [system, ...history];
+}
+
+function ollamaChat({ host, model, messages }) {
   return new Promise((resolve, reject) => {
     let url;
     try {
       url = buildOllamaUrl(host);
-    } catch (err) {
+    } catch {
       reject(new Error(`Invalid OLLAMA_HOST: ${host}`));
       return;
     }
     const payload = JSON.stringify({
       model,
       stream: false,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
+      messages,
     });
     const transport = url.protocol === "https:" ? https : http;
     const req = transport.request(
@@ -179,7 +428,7 @@ function ollamaChat({ host, model, system, user }) {
           try {
             const parsed = JSON.parse(body);
             resolve(parsed.message?.content || parsed.response || "");
-          } catch (err) {
+          } catch {
             reject(new Error(`Could not parse Ollama response: ${body}`));
           }
         });
@@ -191,22 +440,19 @@ function ollamaChat({ host, model, system, user }) {
   });
 }
 
-function ollamaChatStream({ host, model, system, user, onToken }) {
+function ollamaChatStream({ host, model, messages, onToken }) {
   return new Promise((resolve, reject) => {
     let url;
     try {
       url = buildOllamaUrl(host);
-    } catch (err) {
+    } catch {
       reject(new Error(`Invalid OLLAMA_HOST: ${host}`));
       return;
     }
     const payload = JSON.stringify({
       model,
       stream: true,
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
+      messages,
     });
     const transport = url.protocol === "https:" ? https : http;
     let buffer = "";
@@ -230,6 +476,7 @@ function ollamaChatStream({ host, model, system, user, onToken }) {
           res.on("end", () => reject(new Error(`Ollama returned HTTP ${res.statusCode}: ${body}`)));
           return;
         }
+
         res.setEncoding("utf8");
         res.on("data", (chunk) => {
           buffer += chunk;
@@ -250,7 +497,7 @@ function ollamaChatStream({ host, model, system, user, onToken }) {
                 return;
               }
             } catch {
-              // ignore partial/invalid line noise
+              // ignore partial lines
             }
           }
         });
@@ -274,6 +521,402 @@ function runCommand(command, cwd, extraEnv = {}) {
       });
     });
   });
+}
+
+function fileExists(target) {
+  return fs
+    .stat(target)
+    .then(() => true)
+    .catch(() => false);
+}
+
+function parseExplicitEditRequest(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed.toLowerCase().startsWith("/edit")) {
+    return null;
+  }
+  const body = trimmed.replace(/^\/edit\s*/i, "").trim();
+  return body || null;
+}
+
+function spawnStreamingCommand(command, args, options = {}) {
+  return new Promise((resolve, reject) => {
+    const child = cp.spawn(command, args, {
+      cwd: options.cwd,
+      env: { ...process.env, ...(options.env || {}) },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+
+    let stdoutBuffer = "";
+    let stderrBuffer = "";
+    let stdoutText = "";
+    let stderrText = "";
+
+    child.stdout.on("data", (chunk) => {
+      const text = String(chunk);
+      stdoutText += text;
+      stdoutBuffer += text;
+      const lines = stdoutBuffer.split("\n");
+      stdoutBuffer = lines.pop() || "";
+      for (const line of lines) {
+        if (options.onStdoutLine) {
+          options.onStdoutLine(line);
+        }
+      }
+    });
+
+    child.stderr.on("data", (chunk) => {
+      const text = String(chunk);
+      stderrText += text;
+      stderrBuffer += text;
+      const lines = stderrBuffer.split("\n");
+      stderrBuffer = lines.pop() || "";
+      for (const line of lines) {
+        if (options.onStderrLine) {
+          options.onStderrLine(line);
+        }
+      }
+    });
+
+    child.on("error", (error) => reject(error));
+    child.on("close", (code) => {
+      if (stdoutBuffer && options.onStdoutLine) {
+        options.onStdoutLine(stdoutBuffer);
+      }
+      if (stderrBuffer && options.onStderrLine) {
+        options.onStderrLine(stderrBuffer);
+      }
+      resolve({
+        code: typeof code === "number" ? code : 0,
+        stdout: stdoutText,
+        stderr: stderrText,
+      });
+    });
+  });
+}
+
+async function resolveDorkpipeInvocation(root) {
+  const binary = path.join(root, "packages", "dorkpipe", "bin", "dorkpipe");
+  if (await fileExists(binary)) {
+    return {
+      command: binary,
+      argsPrefix: [],
+      cwd: root,
+      mode: "binary",
+    };
+  }
+  return {
+    command: "go",
+    argsPrefix: ["run", "./cmd/dorkpipe"],
+    cwd: path.join(root, "packages", "dorkpipe", "lib"),
+    mode: "go-run",
+  };
+}
+
+async function executeStructuredEdit(root, rawText, options = {}) {
+  const request = String(rawText || "").trim();
+  const explicitRequest = parseExplicitEditRequest(request);
+  const inferred = !explicitRequest && !!options.force;
+  if (!explicitRequest && !inferred) {
+    return null;
+  }
+  const effectiveRequest = explicitRequest || request;
+
+  const onEvent = typeof options.onEvent === "function" ? options.onEvent : null;
+  const editor = vscode.window.activeTextEditor;
+  const activeFile =
+    editor?.document?.uri?.scheme === "file" ? relativeToRoot(root, editor.document.uri.fsPath) : "";
+  const selectionText =
+    editor && !editor.selection.isEmpty ? clampText(editor.document.getText(editor.selection), MAX_SELECTION_CHARS) : "";
+
+  const invocation = await resolveDorkpipeInvocation(root);
+  if (onEvent) {
+    onEvent(invocation.mode === "binary" ? "Using DorkPipe binary" : "Using go run for DorkPipe");
+    onEvent(explicitRequest ? "Explicit edit route" : "Inferred edit route");
+  }
+
+  const args = [
+    ...invocation.argsPrefix,
+    "edit",
+    "--workdir",
+    root,
+    "--message",
+    effectiveRequest,
+    "--apply",
+  ];
+  if (activeFile) {
+    args.push("--active-file", activeFile);
+  }
+  if (selectionText) {
+    args.push("--selection-text", selectionText);
+  }
+
+  let finalEvent = null;
+  const stderrLines = [];
+  const result = await spawnStreamingCommand(invocation.command, args, {
+    cwd: invocation.cwd,
+    env: {
+      DOCKPIPE_WORKDIR: root,
+    },
+    onStdoutLine: (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      try {
+        const event = JSON.parse(trimmed);
+        if (event.display_text && onEvent) {
+          onEvent(event.display_text);
+        }
+        if (event.type === "done") {
+          finalEvent = event;
+        }
+        if (event.type === "error" && event.error?.user_message) {
+          finalEvent = event;
+        }
+      } catch {
+        if (onEvent) {
+          onEvent(trimmed);
+        }
+      }
+    },
+    onStderrLine: (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      stderrLines.push(trimmed);
+    },
+  });
+
+  if (stderrLines.length) {
+    options.channel?.appendLine(stderrLines.join("\n"));
+  }
+
+  if (finalEvent?.type === "error") {
+    throw new Error(finalEvent.error?.user_message || "Structured edit failed.");
+  }
+  if (result.code !== 0) {
+    throw new Error(stderrLines.join("\n") || "Structured edit command failed.");
+  }
+  if (!finalEvent) {
+    throw new Error("Structured edit did not return a final event.");
+  }
+
+  return {
+    kind: "edit",
+    text: finalEvent.user_message || "Applied an edit.",
+    format: "markdown",
+    status: "Structured edit applied",
+  };
+}
+
+async function routeDorkpipeRequest(root, text, signals, options = {}) {
+  const invocation = await resolveDorkpipeInvocation(root);
+  const args = [
+    ...invocation.argsPrefix,
+    "request",
+    "--workdir",
+    root,
+    "--message",
+    text,
+  ];
+  if (signals.activeFile) {
+    args.push("--active-file", signals.activeFile);
+  }
+  if (signals.selectionText) {
+    args.push("--selection-text", signals.selectionText);
+  }
+
+  let finalEvent = null;
+  const stderrLines = [];
+  const result = await spawnStreamingCommand(invocation.command, args, {
+    cwd: invocation.cwd,
+    env: {
+      DOCKPIPE_WORKDIR: root,
+    },
+    onStdoutLine: (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      try {
+        const event = JSON.parse(trimmed);
+        if (event.display_text && options.onEvent) {
+          options.onEvent(event.display_text);
+        }
+        if (event.type === "done" || event.type === "error") {
+          finalEvent = event;
+        }
+      } catch {
+        if (options.onEvent) {
+          options.onEvent(trimmed);
+        }
+      }
+    },
+    onStderrLine: (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      stderrLines.push(trimmed);
+    },
+  });
+
+  if (stderrLines.length) {
+    options.channel?.appendLine(stderrLines.join("\n"));
+  }
+  if (result.code !== 0) {
+    throw new Error(stderrLines.join("\n") || "DorkPipe request routing failed.");
+  }
+  if (finalEvent?.type === "error") {
+    throw new Error(finalEvent.error?.user_message || "DorkPipe request routing failed.");
+  }
+  return {
+    route: finalEvent?.metadata?.route || "chat",
+    action: finalEvent?.metadata?.action || "",
+    reason: finalEvent?.metadata?.reason || "",
+  };
+}
+
+async function executeNaturalLanguageRequest(root, text, signals, options = {}) {
+  const invocation = await resolveDorkpipeInvocation(root);
+  const args = [
+    ...invocation.argsPrefix,
+    "request",
+    "--execute",
+    "--workdir",
+    root,
+    "--message",
+    text,
+  ];
+  if (signals.activeFile) {
+    args.push("--active-file", signals.activeFile);
+  }
+  if (signals.selectionText) {
+    args.push("--selection-text", signals.selectionText);
+  }
+
+  let finalEvent = null;
+  let readyToApply = null;
+  const stderrLines = [];
+  let streamedText = "";
+  const result = await spawnStreamingCommand(invocation.command, args, {
+    cwd: invocation.cwd,
+    env: {
+      DOCKPIPE_WORKDIR: root,
+    },
+    onStdoutLine: (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      try {
+        const event = JSON.parse(trimmed);
+        if (event.display_text && options.onEvent) {
+          options.onEvent(event.display_text);
+        }
+        if (event.type === "model_stream") {
+          const piece = event.metadata?.text || "";
+          if (piece) {
+            streamedText += piece;
+            options.onToken?.(piece, streamedText);
+          }
+        }
+        if (event.type === "ready_to_apply") {
+          readyToApply = event.metadata || {};
+        }
+        if (event.type === "done" || event.type === "error") {
+          finalEvent = event;
+        }
+      } catch {
+        if (options.onEvent) {
+          options.onEvent(trimmed);
+        }
+      }
+    },
+    onStderrLine: (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      stderrLines.push(trimmed);
+    },
+  });
+
+  if (stderrLines.length) {
+    options.channel?.appendLine(stderrLines.join("\n"));
+  }
+  if (finalEvent?.type === "error") {
+    throw new Error(finalEvent.error?.user_message || "DorkPipe request failed.");
+  }
+  if (result.code !== 0) {
+    throw new Error(stderrLines.join("\n") || "DorkPipe request failed.");
+  }
+  if (!finalEvent) {
+    throw new Error("DorkPipe request did not return a final event.");
+  }
+  return {
+    kind: finalEvent.metadata?.route || "chat",
+    text: finalEvent.user_message || streamedText || "(No response text returned.)",
+    format: "markdown",
+    readyToApply,
+    metadata: finalEvent.metadata || {},
+    status:
+      finalEvent.metadata?.route === "chat"
+        ? `Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}`
+        : "Request handled by DorkPipe",
+  };
+}
+
+async function applyPreparedEdit(root, artifactDir, options = {}) {
+  const invocation = await resolveDorkpipeInvocation(root);
+  const args = [
+    ...invocation.argsPrefix,
+    "apply-edit",
+    "--workdir",
+    root,
+    "--artifact-dir",
+    artifactDir,
+  ];
+  let finalEvent = null;
+  const stderrLines = [];
+  const result = await spawnStreamingCommand(invocation.command, args, {
+    cwd: invocation.cwd,
+    env: {
+      DOCKPIPE_WORKDIR: root,
+    },
+    onStdoutLine: (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      try {
+        const event = JSON.parse(trimmed);
+        if (event.display_text && options.onEvent) {
+          options.onEvent(event.display_text);
+        }
+        if (event.type === "done" || event.type === "error") {
+          finalEvent = event;
+        }
+      } catch {
+        if (options.onEvent) {
+          options.onEvent(trimmed);
+        }
+      }
+    },
+    onStderrLine: (line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return;
+      stderrLines.push(trimmed);
+    },
+  });
+  if (stderrLines.length) {
+    options.channel?.appendLine(stderrLines.join("\n"));
+  }
+  if (finalEvent?.type === "error") {
+    throw new Error(finalEvent.error?.user_message || "Apply edit failed.");
+  }
+  if (result.code !== 0) {
+    throw new Error(stderrLines.join("\n") || "Apply edit failed.");
+  }
+  return {
+    kind: "edit",
+    text: finalEvent?.user_message || "Applied prepared edit.",
+    format: "markdown",
+    status: "Structured edit applied",
+  };
+}
+
+function shouldDelegateSlashToDorkpipe(text) {
+  const trimmed = String(text || "").trim().toLowerCase();
+  return trimmed === "/context" || trimmed === "/status" || trimmed === "/bundle";
 }
 
 function launchTerminalCommand(root, name, command, extraEnv = {}) {
@@ -301,21 +944,23 @@ async function handleLocalCommand(root, rawText) {
   switch (cmd) {
     case "/help":
       return {
-        mode: "local",
+        kind: "local",
         text: [
-          "DorkPipe local commands:",
-          "/help",
-          "/status",
-          "/bundle",
-          "/context",
-          "/test",
-          "/ci",
-          "/validate [path]",
-          "/plan <task>",
-          "/edit <task>",
-          "/workflow <name>",
-          "/workflow-validate <path-to-config.yml>",
+          "# DorkPipe local commands",
+          "",
+          "- `/help`",
+          "- `/status`",
+          "- `/bundle`",
+          "- `/context`",
+          "- `/test`",
+          "- `/ci`",
+          "- `/validate [path]`",
+          "- `/plan <task>`",
+          "- `/edit <task>`",
+          "- `/workflow <name>`",
+          "- `/workflow-validate <path-to-config.yml>`",
         ].join("\n"),
+        status: "Local command help",
       };
     case "/status": {
       const result = await runCommand("./packages/pipeon/resolvers/pipeon/bin/pipeon status", root, {
@@ -324,8 +969,9 @@ async function handleLocalCommand(root, rawText) {
         DOCKPIPE_PIPEON_ALLOW_PRERELEASE: process.env.DOCKPIPE_PIPEON_ALLOW_PRERELEASE || "1",
       });
       return {
-        mode: "local",
-        text: (result.stdout || result.stderr || "No output").trim(),
+        kind: "local",
+        text: ["```text", (result.stdout || result.stderr || "No output").trim(), "```"].join("\n"),
+        status: "Local status command executed",
       };
     }
     case "/bundle": {
@@ -335,73 +981,191 @@ async function handleLocalCommand(root, rawText) {
         DOCKPIPE_PIPEON_ALLOW_PRERELEASE: process.env.DOCKPIPE_PIPEON_ALLOW_PRERELEASE || "1",
       });
       return {
-        mode: "local",
-        text: (result.stdout || result.stderr || "No output").trim(),
+        kind: "local",
+        text: ["```text", (result.stdout || result.stderr || "No output").trim(), "```"].join("\n"),
+        status: "Context bundle refreshed",
       };
     }
     case "/context": {
       const ctxPath = await resolveContextBundlePath(root);
       return {
-        mode: "local",
-        text: ctxPath ? `Context bundle: ${path.relative(root, ctxPath)}` : "No DorkPipe context bundle found yet. Run /bundle first.",
+        kind: "local",
+        text: ctxPath ? `Current context bundle: \`${path.relative(root, ctxPath)}\`` : "No DorkPipe context bundle found yet. Run `/bundle` first.",
+        status: ctxPath ? "Context bundle available" : "No context bundle found",
       };
     }
     case "/workflow": {
       if (args.length === 0) {
-        return { mode: "local", text: "Usage: /workflow <name>" };
+        return { kind: "local", text: "Usage: `/workflow <name>`", status: "Workflow command needs a name" };
       }
       const workflow = args[0];
       launchTerminalCommand(root, `DorkPipe workflow: ${workflow}`, `./src/bin/dockpipe --workflow ${workflow} --workdir . --`);
       return {
-        mode: "local",
+        kind: "local",
         text: `Started workflow \`${workflow}\` in a terminal.`,
+        status: `Started workflow ${workflow}`,
       };
     }
     case "/test":
       launchTerminalCommand(root, "DorkPipe test", "./src/bin/dockpipe --workflow test --workdir . --");
-      return { mode: "local", text: "Started `test` workflow in a terminal." };
+      return { kind: "local", text: "Started `test` workflow in a terminal.", status: "Started test workflow" };
     case "/ci":
       launchTerminalCommand(root, "DorkPipe ci-emulate", "./src/bin/dockpipe --workflow ci-emulate --workdir . --");
-      return { mode: "local", text: "Started `ci-emulate` workflow in a terminal." };
+      return { kind: "local", text: "Started `ci-emulate` workflow in a terminal.", status: "Started ci-emulate workflow" };
     case "/validate": {
       if (args.length > 0) {
         const target = args.join(" ");
-        const result = await runCommand(`./src/bin/dockpipe workflow validate ${target}`, root);
-        return { mode: "local", text: (result.stdout || result.stderr || "No output").trim() };
+        const result = await runCommand(`./src/bin/dockpipe workflow validate ${shellQuote(target)}`, root);
+        return {
+          kind: "local",
+          text: ["```text", (result.stdout || result.stderr || "No output").trim(), "```"].join("\n"),
+          status: "Workflow validation finished",
+        };
       }
       launchTerminalCommand(root, "DorkPipe validate", "./src/bin/dockpipe --workflow test --workdir . --");
-      return { mode: "local", text: "Started validation via the `test` workflow in a terminal." };
+      return { kind: "local", text: "Started validation via the `test` workflow in a terminal.", status: "Started validation workflow" };
     }
-    case "/plan":
-    case "/edit": {
+    case "/plan": {
       if (args.length === 0) {
-        return { mode: "local", text: `Usage: ${cmd} <task description>` };
+        return { kind: "local", text: `Usage: \`${cmd} <task description>\``, status: "Task scaffold command needs a description" };
       }
       const task = args.join(" ");
       const file = await writeTaskFile(root, cmd.slice(1), task);
       const doc = await vscode.workspace.openTextDocument(file);
       await vscode.window.showTextDocument(doc, { preview: false });
       return {
-        mode: "local",
-        text: `Created ${cmd.slice(1)} task scaffold at \`${path.relative(root, file)}\`.\nNext: run /test, /ci, or /workflow <name> after you wire the execution step you want.`,
+        kind: "local",
+        text: `Created ${cmd.slice(1)} task scaffold at \`${path.relative(root, file)}\`.\n\nNext: run \`/test\`, \`/ci\`, or \`/workflow <name>\` after you wire the execution step you want.`,
+        status: `Created ${cmd.slice(1)} task scaffold`,
       };
     }
     case "/workflow-validate": {
       if (args.length === 0) {
-        return { mode: "local", text: "Usage: /workflow-validate <path-to-config.yml>" };
+        return { kind: "local", text: "Usage: `/workflow-validate <path-to-config.yml>`", status: "Workflow validation needs a path" };
       }
-      const result = await runCommand(`./src/bin/dockpipe workflow validate ${args.join(" ")}`, root);
+      const result = await runCommand(`./src/bin/dockpipe workflow validate ${shellQuote(args.join(" "))}`, root);
       return {
-        mode: "local",
-        text: (result.stdout || result.stderr || "No output").trim(),
+        kind: "local",
+        text: ["```text", (result.stdout || result.stderr || "No output").trim(), "```"].join("\n"),
+        status: "Workflow validation finished",
       };
     }
     default:
       return {
-        mode: "local",
-        text: `Unknown DorkPipe local command: ${cmd}\nTry /help`,
+        kind: "local",
+        text: `Unknown DorkPipe local command: \`${cmd}\`\n\nTry \`/help\`.`,
+        status: "Unknown local command",
       };
   }
+}
+
+function getDeterministicIntent(text) {
+  const value = text.trim().toLowerCase();
+  if (!value) return null;
+  if (/^(show|open|what is).*(context bundle|context)\??$/.test(value) || /\bwhat context\b/.test(value)) {
+    return { command: "/context", reason: "workspace context question" };
+  }
+  if (/\b(refresh|rebuild|bundle)\b.*\bcontext\b/.test(value)) {
+    return { command: "/bundle", reason: "context refresh request" };
+  }
+  if (/^(show|check|what is).*\bstatus\b/.test(value) || value === "status") {
+    return { command: "/status", reason: "status request" };
+  }
+  if (/\b(run|start)\b.*\btests?\b/.test(value)) {
+    return { command: "/test", reason: "test workflow request" };
+  }
+  if (/\b(run|start)\b.*\bci\b/.test(value)) {
+    return { command: "/ci", reason: "ci workflow request" };
+  }
+  return null;
+}
+
+async function executeDorkpipeRequest(root, session, text, options = {}) {
+  const onToken = typeof options.onToken === "function" ? options.onToken : null;
+  const onEvent = typeof options.onEvent === "function" ? options.onEvent : null;
+
+  const emitEvent = (label) => {
+    if (onEvent) {
+      onEvent(label);
+    }
+  };
+
+  emitEvent("Received request");
+  const signals = await collectWorkspaceSignals(root);
+
+  if (!text.trim().startsWith("/") || shouldDelegateSlashToDorkpipe(text)) {
+    return executeNaturalLanguageRequest(root, text, signals, {
+      onEvent,
+      channel: options.channel,
+      onToken,
+    });
+  }
+
+  const local = await handleLocalCommand(root, text);
+  if (local) {
+    emitEvent("Routing to safe local action");
+    return {
+      kind: "local",
+      text: local.text,
+      format: "markdown",
+      host,
+      model,
+      status: local.status || "Local DorkPipe command executed",
+      contextPath: null,
+    };
+  }
+
+  emitEvent("Inspecting workspace context");
+  emitEvent(signals.contextPath ? `Loaded ${path.relative(root, signals.contextPath)}` : "No context bundle found");
+  if (signals.activeFile) {
+    emitEvent(`Active file: ${signals.activeFile}`);
+  }
+
+  const deterministicIntent = getDeterministicIntent(text);
+  if (deterministicIntent) {
+    emitEvent(`Confident route: ${deterministicIntent.reason}`);
+    const orchestrated = await handleLocalCommand(root, deterministicIntent.command);
+    if (orchestrated) {
+      return {
+        kind: "local",
+        text: `${orchestrated.text}\n\n_Handled locally without calling the model._`,
+        format: "markdown",
+        status: orchestrated.status || "Handled locally",
+        contextPath: signals.contextPath,
+      };
+    }
+  }
+
+  emitEvent("Routing to model");
+  const messages = buildConversationMessages(session, signals);
+
+  let answer = "";
+  if (onToken) {
+    emitEvent(`Streaming from ${model}`);
+    answer = await ollamaChatStream({
+      host,
+      model,
+      messages,
+      onToken,
+    });
+  } else {
+    emitEvent(`Waiting for ${model}`);
+    answer = await ollamaChat({
+      host,
+      model,
+      messages,
+    });
+  }
+
+  return {
+    kind: "model",
+    text: answer || "(No response text returned.)",
+    format: "markdown",
+    contextPath: signals.contextPath,
+    status: signals.contextPath
+      ? `Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  Context: ${path.relative(root, signals.contextPath)}`
+      : `Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  No context bundle found`,
+  };
 }
 
 function renderChatHtml(webview, state) {
@@ -422,8 +1186,8 @@ function renderChatHtml(webview, state) {
         font-family: var(--vscode-font-family);
         margin: 0;
         background:
-          radial-gradient(circle at top, color-mix(in srgb, var(--vscode-button-background) 10%, transparent) 0%, transparent 40%),
-          var(--vscode-editor-background);
+          radial-gradient(circle at top, color-mix(in srgb, var(--vscode-button-background) 12%, transparent) 0%, transparent 40%),
+          linear-gradient(180deg, color-mix(in srgb, var(--vscode-sideBar-background) 95%, transparent), var(--vscode-editor-background));
         color: var(--vscode-editor-foreground);
       }
       .wrap {
@@ -444,6 +1208,12 @@ function renderChatHtml(webview, state) {
         color: var(--vscode-descriptionForeground);
         margin-bottom: 6px;
       }
+      .titleRow {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
       .title {
         font-size: 18px;
         font-weight: 700;
@@ -453,6 +1223,54 @@ function renderChatHtml(webview, state) {
         font-size: 12px;
         color: var(--vscode-descriptionForeground);
         line-height: 1.45;
+        margin-top: 2px;
+      }
+      .headerActions {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      select, textarea, button {
+        font: inherit;
+      }
+      select {
+        min-width: 176px;
+        max-width: 240px;
+        background: var(--vscode-dropdown-background, var(--vscode-input-background));
+        color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+        border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border));
+        border-radius: 10px;
+        padding: 8px 10px;
+      }
+      .btn {
+        border: 0;
+        border-radius: 10px;
+        padding: 9px 13px;
+        min-width: 88px;
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .btn.ghost {
+        background: color-mix(in srgb, var(--vscode-button-background) 14%, transparent);
+        color: var(--vscode-editor-foreground);
+        border: 1px solid var(--vscode-panel-border);
+      }
+      .btn:disabled { opacity: 0.6; cursor: default; }
+      .trace {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .traceItem {
+        padding: 5px 9px;
+        border-radius: 999px;
+        border: 1px solid var(--vscode-panel-border);
+        background: color-mix(in srgb, var(--vscode-editorWidget-background) 92%, transparent);
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
       }
       .transcript {
         padding: 18px 16px 24px;
@@ -469,11 +1287,11 @@ function renderChatHtml(webview, state) {
         box-shadow: 0 10px 24px rgba(0,0,0,0.08);
       }
       .msg.user {
-        background: linear-gradient(180deg, color-mix(in srgb, var(--vscode-button-background) 20%, transparent), color-mix(in srgb, var(--vscode-button-background) 9%, transparent));
+        background: linear-gradient(180deg, color-mix(in srgb, var(--vscode-button-background) 18%, transparent), color-mix(in srgb, var(--vscode-button-background) 9%, transparent));
         border-bottom-right-radius: 6px;
       }
       .msg.assistant {
-        background: linear-gradient(180deg, color-mix(in srgb, var(--vscode-editorWidget-background) 94%, transparent), color-mix(in srgb, var(--vscode-editorWidget-background) 80%, transparent));
+        background: linear-gradient(180deg, color-mix(in srgb, var(--vscode-editorWidget-background) 96%, transparent), color-mix(in srgb, var(--vscode-editorWidget-background) 84%, transparent));
         border-bottom-left-radius: 6px;
       }
       .role {
@@ -484,9 +1302,51 @@ function renderChatHtml(webview, state) {
         letter-spacing: 0.08em;
       }
       .body {
-        white-space: pre-wrap;
-        line-height: 1.55;
+        line-height: 1.58;
         font-size: 13px;
+        word-break: break-word;
+      }
+      .body p:first-child,
+      .body h1:first-child,
+      .body h2:first-child,
+      .body h3:first-child { margin-top: 0; }
+      .body p:last-child,
+      .body ul:last-child,
+      .body pre:last-child,
+      .body blockquote:last-child { margin-bottom: 0; }
+      .body pre {
+        margin: 12px 0;
+        padding: 12px;
+        overflow-x: auto;
+        background: color-mix(in srgb, var(--vscode-textCodeBlock-background, #111) 92%, transparent);
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 12px;
+      }
+      .body code {
+        font-family: var(--vscode-editor-font-family, monospace);
+        font-size: 0.95em;
+      }
+      .body :not(pre) > code {
+        padding: 2px 6px;
+        border-radius: 6px;
+        background: color-mix(in srgb, var(--vscode-textCodeBlock-background, #111) 68%, transparent);
+      }
+      .body ul {
+        padding-left: 20px;
+      }
+      .body blockquote {
+        margin: 12px 0;
+        padding-left: 12px;
+        border-left: 3px solid var(--vscode-button-background);
+        color: var(--vscode-descriptionForeground);
+      }
+      .body a {
+        color: var(--vscode-textLink-foreground);
+      }
+      .plain {
+        white-space: pre-wrap;
+        margin: 0;
+        font-family: var(--vscode-editor-font-family, monospace);
       }
       .composerWrap {
         border-top: 1px solid var(--vscode-panel-border);
@@ -513,29 +1373,33 @@ function renderChatHtml(webview, state) {
         border: 1px solid var(--vscode-input-border);
         border-radius: 14px;
         padding: 12px 14px;
-        font: inherit;
         line-height: 1.45;
       }
       .actions {
         display: flex;
-        justify-content: flex-end;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: center;
       }
-      button {
-        border: 0;
-        border-radius: 12px;
-        padding: 10px 16px;
-        min-width: 112px;
-        background: var(--vscode-button-background);
-        color: var(--vscode-button-foreground);
-        font: inherit;
-        font-weight: 600;
-        cursor: pointer;
+      .hint {
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
       }
-      button:disabled { opacity: 0.6; cursor: default; }
-      @media (max-width: 420px) {
-        .header { padding: 12px; }
-        .transcript { padding: 14px 12px 20px; }
-        .composerWrap { padding: 10px 12px 12px; }
+      .sendWrap {
+        display: flex;
+        gap: 8px;
+      }
+      @media (max-width: 520px) {
+        .titleRow, .actions {
+          flex-direction: column;
+          align-items: stretch;
+        }
+        .headerActions {
+          flex-wrap: wrap;
+        }
+        select {
+          max-width: none;
+        }
       }
     </style>
   </head>
@@ -543,8 +1407,18 @@ function renderChatHtml(webview, state) {
     <div class="wrap">
       <header class="header">
         <div class="eyebrow">DorkPipe</div>
-        <h1 class="title">Workspace Chat</h1>
-        <div class="sub">Ask about this workspace, codebase, or local environment. DorkPipe will use the local context bundle when available.</div>
+        <div class="titleRow">
+          <div>
+            <h1 class="title">Workspace Chat</h1>
+            <div class="sub">Persistent chats, repo context, safe local actions, and streamed model responses.</div>
+          </div>
+          <div class="headerActions">
+            <select id="sessionSelect" aria-label="Chat session"></select>
+            <button class="btn ghost" id="clearBtn" type="button">Clear</button>
+            <button class="btn" id="newChatBtn" type="button">New chat</button>
+          </div>
+        </div>
+        <div class="trace" id="trace"></div>
       </header>
       <main class="transcript" id="transcript"></main>
       <div class="composerWrap">
@@ -552,7 +1426,11 @@ function renderChatHtml(webview, state) {
         <form class="composer" id="composer">
           <textarea id="prompt" placeholder="Ask DorkPipe about this repo... or use /help for local commands"></textarea>
           <div class="actions">
-            <button id="send" type="submit">Send</button>
+            <div class="hint">Uses the workspace bundle when available. Safe local routing can skip the model for obvious actions.</div>
+            <div class="sendWrap">
+              <button class="btn ghost" id="newFromComposer" type="button">New</button>
+              <button class="btn" id="send" type="submit">Send</button>
+            </div>
           </div>
         </form>
       </div>
@@ -563,25 +1441,38 @@ function renderChatHtml(webview, state) {
       const form = document.getElementById("composer");
       const prompt = document.getElementById("prompt");
       const send = document.getElementById("send");
+      const clearBtn = document.getElementById("clearBtn");
+      const newChatBtn = document.getElementById("newChatBtn");
+      const newFromComposer = document.getElementById("newFromComposer");
+      const sessionSelect = document.getElementById("sessionSelect");
       const transcript = document.getElementById("transcript");
       const status = document.getElementById("status");
+      const trace = document.getElementById("trace");
       let viewState = vscode.getState() || { draft: "", pinnedToBottom: true };
       let currentState = initialState;
 
-      function escapeHtml(text) {
-        return String(text)
-          .replace(/&/g, "&amp;")
-          .replace(/</g, "&lt;")
-          .replace(/>/g, "&gt;");
-      }
-
       function renderMessages(messages) {
         if (!messages.length) {
-          return '<article class="msg assistant"><div class="role">DorkPipe</div><div class="body">Ask about this workspace. DorkPipe will use the local context bundle when available.</div></article>';
+          return '<article class="msg assistant"><div class="role">DorkPipe</div><div class="body"><p>Ask about this workspace. DorkPipe will use the local context bundle when available, keep chat history per workspace, and route obvious safe actions locally first.</p></div></article>';
         }
         return messages.map((message) => {
           const role = message.role === "assistant" ? "DorkPipe" : "You";
-          return '<article class="msg ' + message.role + '"><div class="role">' + role + '</div><div class="body">' + escapeHtml(message.text) + '</div></article>';
+          return '<article class="msg ' + message.role + '"><div class="role">' + role + '</div><div class="body">' + (message.html || "") + '</div></article>';
+        }).join("");
+      }
+
+      function renderTrace(items) {
+        if (!items || !items.length) {
+          return "";
+        }
+        return items.map((item) => '<div class="traceItem">' + item + '</div>').join("");
+      }
+
+      function renderSessions(nextState) {
+        const sessions = nextState.sessionList || [];
+        sessionSelect.innerHTML = sessions.map((session) => {
+          const selected = session.id === nextState.activeSessionId ? " selected" : "";
+          return '<option value="' + session.id + '"' + selected + '>' + session.title + '</option>';
         }).join("");
       }
 
@@ -595,8 +1486,13 @@ function renderChatHtml(webview, state) {
         const previousBottomOffset = transcript.scrollHeight - transcript.scrollTop;
         const stickToBottom = previousBottomOffset - transcript.clientHeight <= 24 || !!viewState.pinnedToBottom;
         transcript.innerHTML = renderMessages(currentState.messages || []);
+        trace.innerHTML = renderTrace(currentState.trace || []);
         status.textContent = currentState.status || "";
+        renderSessions(currentState);
         send.disabled = !!currentState.isBusy;
+        clearBtn.disabled = !!currentState.isBusy;
+        newChatBtn.disabled = !!currentState.isBusy;
+        newFromComposer.disabled = !!currentState.isBusy;
         if (stickToBottom) {
           transcript.scrollTop = transcript.scrollHeight;
         } else {
@@ -615,6 +1511,21 @@ function renderChatHtml(webview, state) {
         saveViewState({ draft: prompt.value });
       });
 
+      sessionSelect.addEventListener("change", () => {
+        vscode.postMessage({ type: "switchSession", sessionId: sessionSelect.value });
+      });
+
+      clearBtn.addEventListener("click", () => {
+        vscode.postMessage({ type: "clearSession" });
+      });
+
+      function startNewChat() {
+        vscode.postMessage({ type: "newSession", seed: prompt.value.trim() });
+      }
+
+      newChatBtn.addEventListener("click", startNewChat);
+      newFromComposer.addEventListener("click", startNewChat);
+
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         const text = prompt.value.trim();
@@ -622,6 +1533,7 @@ function renderChatHtml(webview, state) {
         saveViewState({ draft: prompt.value, pinnedToBottom: true });
         vscode.postMessage({ type: "ask", text });
       });
+
       window.addEventListener("message", (event) => {
         const msg = event.data || {};
         if (msg.type === "state" && msg.state) {
@@ -634,18 +1546,12 @@ function renderChatHtml(webview, state) {
           prompt.focus();
         }
       });
+
       render(currentState);
       prompt.focus();
     </script>
   </body>
 </html>`;
-}
-
-function escapeHtml(text) {
-  return String(text)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }
 
 function renderWelcomeHtml(webview, extensionUri) {
@@ -908,22 +1814,51 @@ async function resetPanelToBottomOnce(context) {
 }
 
 class PipeonChatViewProvider {
-  constructor(channel) {
+  /** @param {vscode.ExtensionContext} context */
+  constructor(context, channel) {
+    this.context = context;
     this.channel = channel;
     this.view = null;
     this.rendered = false;
+    this.chatStore = normalizeStoredChatState(this.context.workspaceState.get(CHAT_STATE_KEY));
     this.state = {
+      sessionList: [],
+      activeSessionId: this.chatStore.activeSessionId,
       messages: [],
+      trace: [],
       status: "Waiting for workspace...",
       isBusy: false,
     };
+    this.syncViewState();
   }
 
-  focus() {
-    vscode.commands.executeCommand(`${CHAT_VIEW_ID}.focus`);
+  get activeSession() {
+    return this.chatStore.sessions.find((session) => session.id === this.chatStore.activeSessionId) || this.chatStore.sessions[0];
+  }
+
+  async persistChatStore() {
+    await this.context.workspaceState.update(CHAT_STATE_KEY, this.chatStore);
+  }
+
+  syncViewState() {
+    const session = this.activeSession || createSession();
+    this.state.activeSessionId = session.id;
+    this.state.sessionList = sortSessionsByUpdate(this.chatStore.sessions).map((item) => ({
+      id: item.id,
+      title: item.title || "New chat",
+    }));
+    this.state.messages = session.messages.map((message) => ({
+      ...message,
+      html: renderMessageBody(message),
+    }));
+  }
+
+  async focus() {
+    await vscode.commands.executeCommand(`${CHAT_VIEW_ID}.focus`);
   }
 
   refresh() {
+    this.syncViewState();
     if (this.view) {
       if (!this.rendered) {
         this.view.webview.html = renderChatHtml(this.view.webview, this.state);
@@ -934,30 +1869,123 @@ class PipeonChatViewProvider {
     }
   }
 
-  async ask(root, text) {
-    this.state.messages.push({ role: "user", text });
-    this.state.status = "Thinking...";
-    this.state.isBusy = true;
+  async saveAndRefresh() {
+    await this.persistChatStore();
     this.refresh();
+  }
+
+  async newSession(seedText = "") {
+    const session = createSession(seedText);
+    this.chatStore.sessions = [session, ...this.chatStore.sessions].slice(0, MAX_SAVED_SESSIONS);
+    this.chatStore.activeSessionId = session.id;
+    this.state.trace = [];
+    this.state.status = "Started a new chat.";
+    await this.saveAndRefresh();
+  }
+
+  async clearActiveSession() {
+    const session = this.activeSession;
+    session.messages = [];
+    session.updatedAt = nowIso();
+    session.title = "New chat";
+    this.state.trace = [];
+    this.state.status = "Cleared current chat.";
+    await this.saveAndRefresh();
+  }
+
+  async switchSession(sessionId) {
+    const found = this.chatStore.sessions.find((session) => session.id === sessionId);
+    if (!found) {
+      return;
+    }
+    this.chatStore.activeSessionId = found.id;
+    this.state.trace = [];
+    this.state.status = `Viewing chat: ${found.title}`;
+    await this.saveAndRefresh();
+  }
+
+  pushTrace(label) {
+    const items = [...this.state.trace, label].slice(-6);
+    this.state.trace = items;
+    this.refresh();
+  }
+
+  async ask(root, text) {
+    const session = this.activeSession;
+    const createdAt = nowIso();
+    const userMessage = sanitizeMessage({
+      id: makeId("msg"),
+      role: "user",
+      text,
+      format: "markdown",
+      createdAt,
+    });
+    session.messages.push(userMessage);
+    session.updatedAt = createdAt;
+    if (session.messages.filter((message) => message.role === "user").length === 1) {
+      session.title = summarizeSessionTitle(text);
+    }
+
+    this.state.trace = [];
+    this.state.status = "Routing request...";
+    this.state.isBusy = true;
+    await this.saveAndRefresh();
+
+    const assistantMessage = sanitizeMessage({
+      id: makeId("msg"),
+      role: "assistant",
+      text: "",
+      format: "markdown",
+      createdAt: nowIso(),
+    });
+    session.messages.push(assistantMessage);
+    await this.saveAndRefresh();
+
     try {
-      this.state.messages.push({ role: "assistant", text: "" });
-      const assistantIndex = this.state.messages.length - 1;
-      const result = await executeDorkpipeRequest(root, text, {
+      const result = await executeDorkpipeRequest(root, session, text, {
+        onEvent: (label) => this.pushTrace(label),
         onToken: (_piece, fullText) => {
-          this.state.messages[assistantIndex].text = fullText;
+          assistantMessage.text = fullText;
           this.refresh();
         },
+        channel: this.channel,
       });
-      this.state.messages[assistantIndex].text = result.text;
+      assistantMessage.text = result.text;
+      assistantMessage.format = result.format || "markdown";
+      session.updatedAt = nowIso();
       this.state.status = result.status;
+      if (result.readyToApply?.artifact_dir) {
+        const applyChoice = await vscode.window.showInformationMessage(
+          "DorkPipe prepared a validated edit. Apply it now?",
+          { modal: true },
+          "Apply",
+          "Not now"
+        );
+        if (applyChoice === "Apply") {
+          this.pushTrace("Applying confirmed edit");
+          const applied = await applyPreparedEdit(root, result.readyToApply.artifact_dir, {
+            onEvent: (label) => this.pushTrace(label),
+            channel: this.channel,
+          });
+          assistantMessage.text = `${result.text}\n\n---\n\n${applied.text}`;
+          assistantMessage.format = applied.format || "markdown";
+          this.state.status = applied.status;
+        } else {
+          assistantMessage.text = `${result.text}\n\n_Edit prepared but not applied._`;
+          this.state.status = "Edit prepared; waiting for confirmation";
+        }
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.state.messages.push({ role: "assistant", text: `DorkPipe error: ${message}` });
-      this.state.status = `Error talking to Ollama`;
+      assistantMessage.text = `DorkPipe error: ${message}`;
+      assistantMessage.format = "markdown";
+      this.state.status = "Error talking to Ollama";
       this.channel.error(message);
     }
+
+    session.messages = session.messages.slice(-MAX_HISTORY_MESSAGES * 4);
     this.state.isBusy = false;
-    this.refresh();
+    await this.saveAndRefresh();
     this.view?.webview.postMessage({ type: "done" });
   }
 
@@ -965,7 +1993,7 @@ class PipeonChatViewProvider {
     this.view = webviewView;
     this.rendered = false;
     webviewView.webview.options = { enableScripts: true };
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+    const root = getWorkspaceRoot();
     if (root) {
       const host = process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST;
       const model = process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL;
@@ -979,7 +2007,19 @@ class PipeonChatViewProvider {
       this.rendered = false;
     });
     webviewView.webview.onDidReceiveMessage(async (msg) => {
-      const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const workspaceRoot = getWorkspaceRoot();
+      if (msg?.type === "switchSession" && msg.sessionId) {
+        await this.switchSession(msg.sessionId);
+        return;
+      }
+      if (msg?.type === "newSession") {
+        await this.newSession(msg.seed || "");
+        return;
+      }
+      if (msg?.type === "clearSession") {
+        await this.clearActiveSession();
+        return;
+      }
       if (!workspaceRoot) {
         vscode.window.showWarningMessage("DorkPipe: open a workspace folder first.");
         return;
@@ -994,7 +2034,7 @@ class PipeonChatViewProvider {
 /** @param {vscode.ExtensionContext} context */
 function activate(context) {
   const channel = vscode.window.createOutputChannel("DorkPipe", { log: true });
-  const chatProvider = new PipeonChatViewProvider(channel);
+  const chatProvider = new PipeonChatViewProvider(context, channel);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(CHAT_VIEW_ID, chatProvider, {
@@ -1009,6 +2049,20 @@ function activate(context) {
   );
 
   context.subscriptions.push(
+    vscode.commands.registerCommand("pipeon.newChat", async () => {
+      await chatProvider.newSession();
+      await revealDorkpipePanel();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pipeon.clearChat", async () => {
+      await chatProvider.clearActiveSession();
+      await revealDorkpipePanel();
+    })
+  );
+
+  context.subscriptions.push(
     vscode.commands.registerCommand("pipeon.openWelcome", async () => {
       openPipeonWelcome(context);
     })
@@ -1016,7 +2070,7 @@ function activate(context) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("pipeon.openContextBundle", async () => {
-      const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const root = getWorkspaceRoot();
       if (!root) {
         vscode.window.showWarningMessage("DorkPipe: open a workspace folder first.");
         return;

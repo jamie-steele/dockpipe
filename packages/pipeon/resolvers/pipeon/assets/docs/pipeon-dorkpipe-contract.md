@@ -20,6 +20,7 @@ filesystem. Model output is never executed directly.
 - may send advisory hints
 - must not mutate the repo directly
 - must not bypass DorkPipe routing
+- may provide active-file, selection, and recent-turn hints, but route authority stays with DorkPipe
 
 ### DorkPipe
 
@@ -29,6 +30,8 @@ filesystem. Model output is never executed directly.
 - validation of model output into bounded artifacts
 - optional confirmation gates
 - hands only validated artifacts to DockPipe
+- may return a routed non-mutating action for Pipeon to execute locally when that action is already a bounded primitive
+- may stop edit flows at `ready_to_apply` so Pipeon can ask for confirmation before mutation
 
 ### DockPipe
 
@@ -99,6 +102,7 @@ Rules:
 - only validated artifacts may drive execution
 - ordering must be consistent
 - non-streaming backends may still emit synthetic progress and a buffered `model_stream`
+- `ready_to_apply` must carry only safe metadata such as artifact location and touched-file counts, not raw patch bodies
 
 ## Final response
 

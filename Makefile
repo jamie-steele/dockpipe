@@ -53,7 +53,7 @@ install-pipeon-vscode-extension: package-pipeon-vscode-extension
 # Package DockPipe language support extension (.vsix).
 package-dockpipe-language-support:
 	mkdir -p bin/.dockpipe/extensions
-	cd packages/dockpipe-language-support && NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache npm install && NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache npx --yes @vscode/vsce package --no-dependencies -o ../../bin/.dockpipe/extensions/dockpipe-language-support-$$(node -p "require('./package.json').version").vsix
+	cd packages/dockpipe-language-support && NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache npm ci --no-audit --no-fund && NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache npx --yes @vscode/vsce package --no-dependencies -o ../../bin/.dockpipe/extensions/dockpipe-language-support-$$(node -p "require('./package.json').version").vsix
 
 # Back-compat alias.
 package-vscode-language-support: package-dockpipe-language-support

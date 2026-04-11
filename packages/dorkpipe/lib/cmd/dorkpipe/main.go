@@ -26,6 +26,12 @@ func main() {
 	switch os.Args[1] {
 	case "run":
 		runCmd(os.Args[2:])
+	case "request":
+		requestCmd(os.Args[2:])
+	case "edit":
+		editCmd(os.Args[2:])
+	case "apply-edit":
+		applyEditCmd(os.Args[2:])
 	case "compose":
 		composeCmd(os.Args[2:])
 	case "validate":
@@ -48,6 +54,9 @@ func usage() {
 
 Usage:
   dorkpipe run -f <spec.yaml> [--workdir <dir>]
+  dorkpipe request --message <text> [--workdir <dir>]
+  dorkpipe edit --message <text> [--workdir <dir>] [--apply]
+  dorkpipe apply-edit --artifact-dir <dir> [--workdir <dir>]
   dorkpipe compose [-o <compose.yml>] [--no-ollama]
   dorkpipe validate -f <spec.yaml>
   dorkpipe eval [--workdir <dir>]

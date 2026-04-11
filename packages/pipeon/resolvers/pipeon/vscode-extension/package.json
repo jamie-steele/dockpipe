@@ -16,7 +16,9 @@
   "activationEvents": [
     "onStartupFinished",
     "onView:pipeon.chatView",
-    "onCommand:pipeon.openChat"
+    "onCommand:pipeon.openChat",
+    "onCommand:pipeon.newChat",
+    "onCommand:pipeon.clearChat"
   ],
   "files": [
     "extension.js",
@@ -49,6 +51,14 @@
       {
         "command": "pipeon.openChat",
         "title": "DorkPipe: Open chat"
+      },
+      {
+        "command": "pipeon.newChat",
+        "title": "DorkPipe: New chat"
+      },
+      {
+        "command": "pipeon.clearChat",
+        "title": "DorkPipe: Clear current chat"
       },
       {
         "command": "pipeon.openWelcome",
