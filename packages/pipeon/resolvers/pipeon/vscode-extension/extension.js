@@ -140,6 +140,10 @@ function sanitizePendingAction(value) {
     artifactDir: value.artifactDir ? String(value.artifactDir) : "",
     patchPath: value.patchPath ? String(value.patchPath) : "",
     diffPreview: value.diffPreview ? clampText(String(value.diffPreview), 12000) : "",
+    helperScriptPath: value.helperScriptPath ? String(value.helperScriptPath) : "",
+    helperScriptPurpose: value.helperScriptPurpose ? String(value.helperScriptPurpose) : "",
+    helperScriptRuntime: value.helperScriptRuntime ? String(value.helperScriptRuntime) : "",
+    helperScriptPreview: value.helperScriptPreview ? clampText(String(value.helperScriptPreview), 12000) : "",
     targetFiles: Array.isArray(value.targetFiles) ? value.targetFiles.map((item) => String(item)).slice(0, 8) : [],
     requestText: value.requestText ? String(value.requestText) : "",
     mode: ["ask", "agent", "plan"].includes(String(value.mode || "").toLowerCase()) ? String(value.mode).toLowerCase() : "ask",
@@ -169,8 +173,14 @@ function summarizeRequestActivity(label, mode) {
   if (lower.includes("received")) {
     return "Reading your request";
   }
+  if (lower.includes("breaking the request into primitives")) {
+    return "Breaking the job into primitives";
+  }
   if (lower.includes("inspecting workspace context")) {
     return "Scanning the workspace";
+  }
+  if (lower.includes("package scaffold primitive")) {
+    return "Scaffolding the package locally";
   }
   if (lower.includes("collected candidate files")) {
     return "Picking likely files";
@@ -186,6 +196,18 @@ function summarizeRequestActivity(label, mode) {
   }
   if (lower.includes("building retrieval bundle")) {
     return "Assembling retrieval context";
+  }
+  if (lower.includes("generating bounded helper script")) {
+    return "Generating a bounded helper";
+  }
+  if (lower.includes("running bounded helper script")) {
+    return "Running the bounded helper";
+  }
+  if (lower.includes("helper script produced a valid patch")) {
+    return "Helper generated a valid patch";
+  }
+  if (lower.includes("helper script fell back")) {
+    return "Falling back to direct patch generation";
   }
   if (lower.includes("deterministic")) {
     return "Using a fast local edit path";
@@ -882,6 +904,9 @@ function buildDorkpipeStatus(metadata, fallbackMode = "ask") {
     if (typeof metadata.files_touched === "number") {
       parts.push(`Files: ${metadata.files_touched}`);
     }
+    if (metadata.helper_script_used) {
+      parts.push("Primitive: sidecar");
+    }
     if (metadata.validation_status) {
       parts.push(`Validation: ${metadata.validation_status}`);
     }
@@ -970,6 +995,20 @@ async function readPatchPreview(root, readyToApply) {
     }
   }
   return "";
+}
+
+async function readHelperScriptPreview(root, readyToApply) {
+  const relHelper = String(readyToApply?.helper_script_path || "").trim();
+  if (!relHelper) {
+    return "";
+  }
+  const target = path.isAbsolute(relHelper) ? relHelper : path.join(root, relHelper);
+  try {
+    const text = await fs.readFile(target, "utf8");
+    return clampText(text.split(/\r?\n/).slice(0, 120).join("\n"), 12000);
+  } catch {
+    return "";
+  }
 }
 
 function looksLikeShellCommand(text) {
@@ -1707,9 +1746,19 @@ function renderChatHtml(webview, state) {
         if (pending.kind === "edit" && Array.isArray(pending.targetFiles) && pending.targetFiles.length) {
           meta.push("Files: " + pending.targetFiles.join(", "));
         }
+        if (pending.kind === "edit" && pending.helperScriptRuntime) {
+          meta.push("Sidecar: " + pending.helperScriptRuntime);
+        }
         if (pending.kind === "command" && pending.requestText) {
           meta.push("Command: " + pending.requestText);
         }
+        const helper = pending.helperScriptPreview
+          ? [
+              '<div class="pendingTitle">Bounded helper script</div>',
+              pending.helperScriptPurpose ? '<div class="pendingMeta">' + escapeHtml(pending.helperScriptPurpose) + "</div>" : "",
+              '<pre class="diffPreview">' + escapeHtml(pending.helperScriptPreview) + "</pre>",
+            ].join("")
+          : "";
         const diff = pending.diffPreview
           ? '<pre class="diffPreview">' + escapeHtml(pending.diffPreview) + "</pre>"
           : "";
@@ -1717,6 +1766,7 @@ function renderChatHtml(webview, state) {
           '<div class="pendingCard">',
           '<div class="pendingTitle">' + escapeHtml(pending.title || (pending.kind === "edit" ? "Review edit" : "Confirm command")) + "</div>",
           meta.length ? '<div class="pendingMeta">' + escapeHtml(meta.join("  |  ")) + "</div>" : "",
+          helper,
           diff,
           '<div class="pendingActions">',
           '<button class="btn" type="button" data-pending-action="approve" data-message-id="' + escapeHtml(message.id) + '">' + (pending.kind === "edit" ? "Apply" : "Run") + "</button>",
@@ -2369,17 +2419,22 @@ class PipeonChatViewProvider {
       assistantMessage.format = result.format || "markdown";
       session.updatedAt = nowIso();
       this.state.status = result.status;
-      if (result.readyToApply?.artifact_dir) {
-        const diffPreview = await readPatchPreview(root, result.readyToApply);
-        assistantMessage.diffPreview = diffPreview;
-        assistantMessage.pendingAction = sanitizePendingAction({
-          kind: "edit",
-          title: "Review this code edit",
-          artifactDir: result.readyToApply.artifact_dir,
-          patchPath: result.readyToApply.patch_path,
-          diffPreview,
-          targetFiles: result.readyToApply.target_files,
-        });
+        if (result.readyToApply?.artifact_dir) {
+          const diffPreview = await readPatchPreview(root, result.readyToApply);
+          const helperScriptPreview = await readHelperScriptPreview(root, result.readyToApply);
+          assistantMessage.diffPreview = diffPreview;
+          assistantMessage.pendingAction = sanitizePendingAction({
+            kind: "edit",
+            title: "Review this code edit",
+            artifactDir: result.readyToApply.artifact_dir,
+            patchPath: result.readyToApply.patch_path,
+            diffPreview,
+            helperScriptPath: result.readyToApply.helper_script_path,
+            helperScriptPurpose: result.readyToApply.helper_script_purpose,
+            helperScriptRuntime: result.readyToApply.helper_script_runtime,
+            helperScriptPreview,
+            targetFiles: result.readyToApply.target_files,
+          });
         if (this.chatStore.autoApplyEdits) {
           this.pushTrace("Applying confirmed edit");
           assistantMessage.liveStatus = "Applying the change";

@@ -51,10 +51,11 @@ type editError struct {
 }
 
 type editModelArtifact struct {
-	Summary     string   `json:"summary"`
-	TargetFiles []string `json:"target_files"`
-	Patch       string   `json:"patch"`
-	Validations []string `json:"validations,omitempty"`
+	Summary      string            `json:"summary"`
+	TargetFiles  []string          `json:"target_files"`
+	Patch        string            `json:"patch"`
+	Validations  []string          `json:"validations,omitempty"`
+	HelperScript *editHelperScript `json:"helper_script,omitempty"`
 }
 
 type editRequestRecord struct {
@@ -76,6 +77,30 @@ type editPlan struct {
 	AllowNewFiles  bool     `json:"allow_new_files,omitempty"`
 	Complexity     string   `json:"complexity,omitempty"`
 	RetrievalStyle string   `json:"retrieval_style,omitempty"`
+}
+
+type editHelperScript struct {
+	Runtime string `json:"runtime"`
+	Purpose string `json:"purpose"`
+	Content string `json:"content"`
+}
+
+type editHelperResponse struct {
+	Summary      string            `json:"summary"`
+	HelperScript *editHelperScript `json:"helper_script"`
+}
+
+type packageScaffoldSpec struct {
+	PackageRoot   string
+	PackageName   string
+	PackageDir    string
+	ManifestPath  string
+	ReadmePath    string
+	ManifestBody  string
+	ReadmeBody    string
+	TargetFiles   []string
+	Summary       string
+	ValidationMsg string
 }
 
 func editCmd(argv []string) {
@@ -195,6 +220,7 @@ func applyEditCmd(argv []string) {
 }
 
 func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, selectionText, host, chosenModel string, chosenNumCtx int, artifactsDir string) (*editModelArtifact, string, string, error) {
+	emitEditEvent(reqID, "decomposing", "Breaking the request into primitives", 0.08, nil)
 	if artifact, patchPath, ok, err := tryDeterministicEditPrimitive(reqID, root, message, activeFile, artifactsDir); ok {
 		return artifact, patchPath, artifactsDir, err
 	}
@@ -264,6 +290,21 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 	}
 	writeJSON(filepath.Join(artifactsDir, "request.json"), requestRecord)
 	writeJSON(filepath.Join(artifactsDir, "plan.json"), plan)
+
+	if shouldTryHelperSidecar(reqID, baseRequest, plan) {
+		emitEditEvent(reqID, "scripting", "Generating bounded helper script", 0.44, map[string]any{
+			"model":   chosenModel,
+			"num_ctx": chosenNumCtx,
+		})
+		if artifact, patchPath, used, sidecarErr := tryHelperSidecarPatch(ctx, reqID, root, host, chosenModel, chosenNumCtx, requestRecord, plan, snippets, retrievalBundle, artifactsDir); used {
+			if sidecarErr == nil {
+				return artifact, patchPath, artifactsDir, nil
+			}
+			emitEditEvent(reqID, "scripting", "Helper script fell back to patch generation", 0.46, map[string]any{
+				"reason": sidecarErr.Error(),
+			})
+		}
+	}
 
 	prompt := buildEditPrompt(requestRecord, plan, contextText, snippets, retrievalBundle)
 	if err := os.WriteFile(filepath.Join(artifactsDir, "prompt.md"), []byte(prompt), 0o644); err != nil {
@@ -337,11 +378,19 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 }
 
 func emitReadyToApply(reqID, root, artifactsDir, patchPath string, artifact *editModelArtifact) {
-	emitEditEvent(reqID, "ready_to_apply", "Prepared a validated patch artifact", 0.8, map[string]any{
+	metadata := map[string]any{
 		"artifact_dir": relativeTo(root, artifactsDir),
 		"patch_path":   relativeTo(root, patchPath),
 		"target_files": artifact.TargetFiles,
-	})
+	}
+	if artifact.HelperScript != nil {
+		helperPath := filepath.Join(artifactsDir, "sidecar", "helper.sh")
+		metadata["helper_script_used"] = true
+		metadata["helper_script_runtime"] = artifact.HelperScript.Runtime
+		metadata["helper_script_purpose"] = artifact.HelperScript.Purpose
+		metadata["helper_script_path"] = relativeTo(root, helperPath)
+	}
+	emitEditEvent(reqID, "ready_to_apply", "Prepared a validated patch artifact", 0.8, metadata)
 	emitEditDone(reqID, fmt.Sprintf("%s\n\nPrepared patch artifact at `%s`.", strings.TrimSpace(artifact.Summary), relativeTo(root, patchPath)), map[string]any{
 		"route":             "edit",
 		"files_touched":     len(artifact.TargetFiles),
@@ -349,6 +398,7 @@ func emitReadyToApply(reqID, root, artifactsDir, patchPath string, artifact *edi
 		"artifact_dir":      relativeTo(root, artifactsDir),
 		"patch_path":        relativeTo(root, patchPath),
 		"ready_to_apply":    true,
+		"helper_script_used": artifact.HelperScript != nil,
 	})
 }
 
@@ -766,6 +816,19 @@ func collectRetrievalBundle(root, message string, plan *editPlan, candidates []s
 	return strings.Join(sections, "\n\n")
 }
 
+func shouldTryHelperSidecar(reqID string, req editRequestRecord, plan *editPlan) bool {
+	lower := strings.ToLower(req.UserMessage)
+	if plan != nil && strings.EqualFold(plan.Complexity, "complex") && plan.AllowNewFiles {
+		return true
+	}
+	for _, token := range []string{"package", "workflow", "resolver", "scaffold", "author", "create", "make"} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
+}
+
 func formatEditPlan(plan *editPlan) string {
 	if plan == nil {
 		return ""
@@ -852,6 +915,51 @@ Candidate file snippets:
 	return prompt
 }
 
+func buildHelperSidecarPrompt(req editRequestRecord, plan *editPlan, snippets, retrievalBundle string) string {
+	planText := clampString(emptyFallback(formatEditPlan(plan), "(no explicit plan)"), maxEditPlanChars)
+	retrievalText := clampString(emptyFallback(retrievalBundle, "(no retrieval bundle available)"), maxEditRetrievalChars)
+	snippetText := clampString(emptyFallback(snippets, "(no candidate file snippets available)"), maxEditPromptChars/4)
+	return strings.TrimSpace(fmt.Sprintf(`
+You are DorkPipe generating a bounded helper script for a local repository edit.
+
+Return JSON only. No markdown fences. The JSON shape must be:
+{
+  "summary": "short user-facing summary",
+  "helper_script": {
+    "runtime": "bash",
+    "purpose": "what the helper is doing",
+    "content": "bash script that prints a unified diff to stdout"
+  }
+}
+
+Rules:
+- The script must only PRINT a unified diff patch to stdout.
+- The script must not modify the repository directly.
+- The script must not use network access, package managers, git apply, git checkout, git reset, rm, mv, sudo, or chmod.
+- Prefer printf/cat heredocs and simple shell text generation over clever tricks.
+- The patch must be valid for git apply once the script runs.
+- Keep the script short and deterministic.
+
+User request:
+%s
+
+Plan:
+%s
+
+Active file:
+%s
+
+Selection:
+%s
+
+Retrieval bundle:
+%s
+
+Candidate file snippets:
+%s
+`, req.UserMessage, planText, emptyFallback(req.ActiveFile, "(none)"), emptyFallback(req.SelectionText, "(none)"), retrievalText, snippetText))
+}
+
 func runEditModel(ctx context.Context, host, model string, numCtx int, prompt string) (string, error) {
 	u, err := buildOllamaChatURL(host)
 	if err != nil {
@@ -908,6 +1016,101 @@ func runEditModel(ctx context.Context, host, model string, numCtx int, prompt st
 	return parsed.Response, nil
 }
 
+func tryHelperSidecarPatch(ctx context.Context, reqID, root, host, model string, numCtx int, req editRequestRecord, plan *editPlan, snippets, retrievalBundle, artifactsDir string) (*editModelArtifact, string, bool, error) {
+	prompt := buildHelperSidecarPrompt(req, plan, snippets, retrievalBundle)
+	modelText, err := runEditModel(ctx, host, model, numCtx, prompt)
+	if err != nil {
+		return nil, "", true, err
+	}
+	_ = os.WriteFile(filepath.Join(artifactsDir, "helper-response.txt"), []byte(modelText), 0o644)
+	resp, err := parseHelperSidecarResponse(modelText)
+	if err != nil {
+		return nil, "", true, err
+	}
+	emitEditEvent(reqID, "scripting", "Running bounded helper script", 0.5, map[string]any{
+		"runtime": resp.HelperScript.Runtime,
+		"purpose": resp.HelperScript.Purpose,
+	})
+	patchText, helperPath, err := runHelperSidecarScript(ctx, root, artifactsDir, req, resp.HelperScript)
+	if err != nil {
+		return nil, "", true, err
+	}
+	patchText = normalizeGeneratedPatch(patchText)
+	targetFiles := targetFilesFromPatch(patchText)
+	artifact := &editModelArtifact{
+		Summary:      resp.Summary,
+		TargetFiles:  targetFiles,
+		Patch:        patchText,
+		Validations:  []string{"Verify the helper-generated patch still matches the requested scope."},
+		HelperScript: resp.HelperScript,
+	}
+	if err := validateEditArtifact(artifact); err != nil {
+		return nil, "", true, err
+	}
+	writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
+	patchPath := filepath.Join(artifactsDir, "patch.diff")
+	if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
+		return nil, "", true, err
+	}
+	verifyOutput, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
+	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
+	if err != nil {
+		return nil, "", true, err
+	}
+	emitEditEvent(reqID, "scripting", "Helper script produced a valid patch", 0.58, map[string]any{
+		"helper_path": relativeTo(root, helperPath),
+	})
+	return artifact, patchPath, true, nil
+}
+
+func runHelperSidecarScript(ctx context.Context, root, artifactsDir string, req editRequestRecord, helper *editHelperScript) (string, string, error) {
+	sidecarDir := filepath.Join(artifactsDir, "sidecar")
+	if err := os.MkdirAll(sidecarDir, 0o755); err != nil {
+		return "", "", err
+	}
+	helperPath := filepath.Join(sidecarDir, "helper.sh")
+	content := strings.TrimSpace(helper.Content)
+	if !strings.HasPrefix(content, "#!") {
+		content = "#!/usr/bin/env bash\nset -euo pipefail\n\n" + content
+	}
+	if err := os.WriteFile(helperPath, []byte(content+"\n"), 0o755); err != nil {
+		return "", "", err
+	}
+	runCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(runCtx, "bash", helperPath)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(),
+		"DORKPIPE_ROOT="+root,
+		"DORKPIPE_REQUEST="+req.UserMessage,
+		"DORKPIPE_ACTIVE_FILE="+req.ActiveFile,
+		"DORKPIPE_SELECTION="+req.SelectionText,
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return "", helperPath, errors.New(msg)
+	}
+	_ = os.WriteFile(filepath.Join(sidecarDir, "helper.stdout.txt"), stdout.Bytes(), 0o644)
+	_ = os.WriteFile(filepath.Join(sidecarDir, "helper.stderr.txt"), stderr.Bytes(), 0o644)
+	return stdout.String(), helperPath, nil
+}
+
+func targetFilesFromPatch(patch string) []string {
+	var out []string
+	for _, line := range strings.Split(strings.ReplaceAll(patch, "\r\n", "\n"), "\n") {
+		if strings.HasPrefix(line, "+++ b/") {
+			out = append(out, strings.TrimPrefix(line, "+++ b/"))
+		}
+	}
+	return uniqueNonEmpty(out)
+}
+
 func buildOllamaChatURL(rawBase string) (*url.URL, error) {
 	s := strings.TrimSpace(rawBase)
 	s = strings.TrimSuffix(s, "/")
@@ -948,6 +1151,27 @@ func parseEditArtifact(text string) (*editModelArtifact, error) {
 	return &artifact, nil
 }
 
+func parseHelperSidecarResponse(text string) (*editHelperResponse, error) {
+	clean := strings.TrimSpace(text)
+	clean = strings.TrimPrefix(clean, "```json")
+	clean = strings.TrimPrefix(clean, "```")
+	clean = strings.TrimSuffix(clean, "```")
+	clean = strings.TrimSpace(clean)
+	start := strings.Index(clean, "{")
+	end := strings.LastIndex(clean, "}")
+	if start >= 0 && end > start {
+		clean = clean[start : end+1]
+	}
+	var resp editHelperResponse
+	if err := json.Unmarshal([]byte(clean), &resp); err != nil {
+		return nil, err
+	}
+	if err := validateHelperSidecarResponse(&resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 func normalizeGeneratedPatch(patch string) string {
 	p := strings.ReplaceAll(patch, "\r\n", "\n")
 	p = strings.ReplaceAll(p, " 100644 --- a/", " 100644\n--- a/")
@@ -966,6 +1190,40 @@ func normalizeGeneratedPatch(patch string) string {
 		}
 	}
 	return strings.TrimSpace(strings.Join(lines, "\n")) + "\n"
+}
+
+func validateHelperSidecarResponse(resp *editHelperResponse) error {
+	if resp == nil {
+		return errors.New("helper response is empty")
+	}
+	if strings.TrimSpace(resp.Summary) == "" {
+		return errors.New("helper summary is empty")
+	}
+	if resp.HelperScript == nil {
+		return errors.New("helper_script is missing")
+	}
+	runtime := strings.ToLower(strings.TrimSpace(resp.HelperScript.Runtime))
+	if runtime != "bash" && runtime != "sh" {
+		return fmt.Errorf("unsupported helper runtime %q", resp.HelperScript.Runtime)
+	}
+	if strings.TrimSpace(resp.HelperScript.Content) == "" {
+		return errors.New("helper script content is empty")
+	}
+	if len(resp.HelperScript.Content) > 12000 {
+		return errors.New("helper script content is too large")
+	}
+	lower := strings.ToLower(resp.HelperScript.Content)
+	for _, banned := range []string{
+		"curl ", "wget ", "ssh ", "scp ", "rsync ", "nc ", "telnet ", "sudo ", "doas ",
+		"rm ", " rm\n", "mv ", "chmod ", "chown ", "tee ", "git apply", "git checkout", "git reset", "git clean",
+		"npm ", "pnpm ", "yarn ", "bun ", "pip ", "go build", "go test", "cargo ", "docker ", "podman ",
+		">", ">>", "touch ", "mkdir ", "cp ", "install ",
+	} {
+		if strings.Contains(lower, banned) {
+			return fmt.Errorf("helper script contains blocked token %q", strings.TrimSpace(banned))
+		}
+	}
+	return nil
 }
 
 func repairInvalidArtifactLoop(ctx context.Context, reqID, host, model string, numCtx int, originalPrompt, previousOutput, reason, artifactsDir string) (*editModelArtifact, string, error) {
@@ -1050,7 +1308,7 @@ func validateEditArtifact(artifact *editModelArtifact) error {
 	if !strings.Contains(artifact.Patch, "diff --git ") {
 		return errors.New("patch does not look like a unified diff")
 	}
-	if !strings.Contains(artifact.Patch, "\n--- a/") || !strings.Contains(artifact.Patch, "\n+++ b/") {
+	if !(strings.Contains(artifact.Patch, "\n--- a/") || strings.Contains(artifact.Patch, "\n--- /dev/null")) || !strings.Contains(artifact.Patch, "\n+++ b/") {
 		return errors.New("patch is missing unified diff file headers")
 	}
 	if len(artifact.TargetFiles) == 0 {
@@ -1120,6 +1378,9 @@ func buildAppliedSummary(artifact *editModelArtifact, root, artifactsDir, valida
 	if base == "" {
 		base = "Applied a verified edit patch."
 	}
+	if artifact.HelperScript != nil {
+		base += fmt.Sprintf("\n\nBounded helper script: `%s` (%s)", artifact.HelperScript.Runtime, emptyFallback(artifact.HelperScript.Purpose, "generated patch helper"))
+	}
 	return fmt.Sprintf("%s\n\nFiles: `%s`\nValidation: `%s`\nArtifacts: `%s`", base, files, validationStatus, relativeTo(root, artifactsDir))
 }
 
@@ -1171,6 +1432,9 @@ func emptyFallback(s, fallback string) string {
 }
 
 func tryDeterministicEditPrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
+	if artifact, patchPath, ok, err := tryDeterministicPackageScaffoldPrimitive(reqID, root, message, artifactsDir); ok {
+		return artifact, patchPath, true, err
+	}
 	targetFile, lineText, ok := deterministicReadmeAppend(root, message, activeFile)
 	if !ok {
 		return nil, "", false, nil
@@ -1260,6 +1524,265 @@ func deterministicReadmeAppend(root, message, activeFile string) (string, string
 		return "", "", false
 	}
 	return targetFile, lineText, true
+}
+
+func tryDeterministicPackageScaffoldPrimitive(reqID, root, message, artifactsDir string) (*editModelArtifact, string, bool, error) {
+	spec, ok := inferPackageScaffoldSpec(root, message)
+	if !ok {
+		return nil, "", false, nil
+	}
+	emitEditEvent(reqID, "context_gathering", "Using deterministic package scaffold primitive", 0.18, map[string]any{
+		"package_root": spec.PackageRoot,
+		"package_name": spec.PackageName,
+	})
+	if _, err := os.Stat(filepath.Join(root, spec.ManifestPath)); err == nil {
+		return nil, "", false, nil
+	}
+	var patchParts []string
+	patchParts = append(patchParts, buildCreateFilePatch(spec.ManifestPath, spec.ManifestBody))
+	patchParts = append(patchParts, buildCreateFilePatch(spec.ReadmePath, spec.ReadmeBody))
+	artifact := &editModelArtifact{
+		Summary:     spec.Summary,
+		TargetFiles: spec.TargetFiles,
+		Patch:       strings.Join(patchParts, "\n"),
+		Validations: []string{spec.ValidationMsg},
+	}
+	if err := validateEditArtifact(artifact); err != nil {
+		emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Deterministic package scaffold validation failed: %v", err), false)
+		return nil, "", true, err
+	}
+	writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
+	patchPath := filepath.Join(artifactsDir, "patch.diff")
+	if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
+		return nil, "", true, err
+	}
+	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte("Deterministic package scaffold primitive selected."), 0o644)
+	return artifact, patchPath, true, nil
+}
+
+func inferPackageScaffoldSpec(root, message string) (*packageScaffoldSpec, bool) {
+	lower := strings.ToLower(strings.TrimSpace(message))
+	if !looksLikePackageCreation(lower) {
+		return nil, false
+	}
+	packageRoots := discoverPackageRoots(root)
+	if len(packageRoots) == 0 {
+		return nil, false
+	}
+	packageRoot := selectPackageRootForMessage(lower, packageRoots)
+	if packageRoot == "" {
+		return nil, false
+	}
+	packageName := inferRequestedPackageName(lower)
+	if packageName == "" {
+		packageName = pickAvailablePackageName(root, packageRoot)
+	}
+	if packageName == "" {
+		return nil, false
+	}
+	packageDir := filepath.ToSlash(filepath.Join(packageRoot, packageName))
+	manifestPath := filepath.ToSlash(filepath.Join(packageDir, "package.yml"))
+	readmePath := filepath.ToSlash(filepath.Join(packageDir, "README.md"))
+	version := strings.TrimSpace(readRepoVersion(root))
+	if version == "" {
+		version = "0.1.0"
+	}
+	titleName := humanizePackageName(packageName)
+	manifestBody := strings.TrimSpace(fmt.Sprintf(`schema: 1
+kind: package
+name: %s
+version: %s
+title: DockPipe %s
+description: |
+  A fun first-party package scaffold generated through DorkPipe's primitive-first edit lane.
+  This package is intended as a lightweight authoring starting point that can grow into real
+  workflows, resolvers, or assets.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [experimental, authoring, generated]
+`, packageName, version, titleName)) + "\n"
+	readmeBody := strings.TrimSpace(fmt.Sprintf(`# %s
+
+This package was scaffolded as a fast local authoring starting point.
+
+Ideas to extend it:
+- add a workflow under a nested package/resolver tree
+- add assets or scripts beside the package manifest
+- tighten the title, description, and tags once the package direction is clear
+`, titleName)) + "\n"
+	return &packageScaffoldSpec{
+		PackageRoot:   packageRoot,
+		PackageName:   packageName,
+		PackageDir:    packageDir,
+		ManifestPath:  manifestPath,
+		ReadmePath:    readmePath,
+		ManifestBody:  manifestBody,
+		ReadmeBody:    readmeBody,
+		TargetFiles:   []string{manifestPath, readmePath},
+		Summary:       fmt.Sprintf("Scaffold a new `%s` package under `%s` using a local package primitive.", packageName, packageRoot),
+		ValidationMsg: "Verify the new package manifest and README reflect the intended package direction.",
+	}, true
+}
+
+func looksLikePackageCreation(lower string) bool {
+	if !strings.Contains(lower, "package") {
+		return false
+	}
+	for _, verb := range []string{"make", "create", "new", "scaffold", "author", "build"} {
+		if strings.Contains(lower, verb) {
+			return true
+		}
+	}
+	return strings.Contains(lower, "of your choosing")
+}
+
+func discoverPackageRoots(root string) []string {
+	skipDirs := map[string]struct{}{
+		".git":      {},
+		"node_modules": {},
+		"target":    {},
+		"bin":       {},
+		".dockpipe": {},
+		".dorkpipe": {},
+	}
+	var roots []string
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if _, skip := skipDirs[d.Name()]; skip && path != root {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Name() != "package.yml" {
+			return nil
+		}
+		rel := filepath.ToSlash(relativeTo(root, filepath.Dir(filepath.Dir(path))))
+		if rel == "." || rel == "" {
+			return nil
+		}
+		if rel == "packages" || strings.HasPrefix(rel, "packages/") || rel == ".staging/packages" || strings.HasPrefix(rel, ".staging/packages/") {
+			roots = append(roots, rel)
+		}
+		return nil
+	})
+	return uniqueNonEmpty(roots)
+}
+
+func selectPackageRootForMessage(lower string, roots []string) string {
+	sort.SliceStable(roots, func(i, j int) bool {
+		return len(roots[i]) > len(roots[j])
+	})
+	for _, root := range roots {
+		if strings.Contains(lower, strings.ToLower(root)) {
+			return root
+		}
+		base := pathBase(root)
+		if base != "" && strings.Contains(lower, base) {
+			return root
+		}
+	}
+	for _, root := range roots {
+		if strings.Contains(root, "/") {
+			return root
+		}
+	}
+	return roots[0]
+}
+
+func inferRequestedPackageName(lower string) string {
+	for _, prefix := range []string{"package called ", "package named ", "package name ", "called ", "named "} {
+		if idx := strings.Index(lower, prefix); idx >= 0 {
+			tail := strings.TrimSpace(lower[idx+len(prefix):])
+			name := normalizePackageNameToken(firstToken(tail))
+			if name != "" && name != "package" {
+				return name
+			}
+		}
+	}
+	return ""
+}
+
+func pickAvailablePackageName(root, packageRoot string) string {
+	for _, candidate := range []string{"playground", "spark", "arcade", "lab", "pixel"} {
+		manifestPath := filepath.Join(root, packageRoot, candidate, "package.yml")
+		if _, err := os.Stat(manifestPath); errors.Is(err, os.ErrNotExist) {
+			return candidate
+		}
+	}
+	return fmt.Sprintf("package-%d", time.Now().Unix()%10000)
+}
+
+func normalizePackageNameToken(token string) string {
+	token = strings.TrimSpace(token)
+	token = strings.Trim(token, ".,:;!?()[]{}\"'`")
+	token = strings.ToLower(token)
+	token = strings.ReplaceAll(token, " ", "-")
+	var b strings.Builder
+	for _, ch := range token {
+		if (ch >= 'a' && ch <= 'z') || (ch >= '0' && ch <= '9') || ch == '-' {
+			b.WriteRune(ch)
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
+
+func firstToken(text string) string {
+	fields := strings.Fields(text)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
+}
+
+func readRepoVersion(root string) string {
+	b, err := os.ReadFile(filepath.Join(root, "VERSION"))
+	if err != nil {
+		return ""
+	}
+	return string(bytes.TrimSpace(b))
+}
+
+func humanizePackageName(name string) string {
+	parts := strings.Fields(strings.ReplaceAll(name, "-", " "))
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		parts[i] = strings.ToUpper(part[:1]) + part[1:]
+	}
+	return strings.Join(parts, " ")
+}
+
+func buildCreateFilePatch(targetFile, content string) string {
+	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "diff --git a/%s b/%s\n", targetFile, targetFile)
+	b.WriteString("new file mode 100644\n")
+	b.WriteString("index 0000000..1111111\n")
+	fmt.Fprintf(&b, "--- /dev/null\n")
+	fmt.Fprintf(&b, "+++ b/%s\n", targetFile)
+	fmt.Fprintf(&b, "@@ -0,0 +1,%d @@\n", len(lines))
+	for _, line := range lines {
+		b.WriteString("+")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func pathBase(value string) string {
+	value = strings.TrimSuffix(filepath.ToSlash(value), "/")
+	if idx := strings.LastIndex(value, "/"); idx >= 0 {
+		return value[idx+1:]
+	}
+	return value
 }
 
 func extractQuotedText(message string) string {
