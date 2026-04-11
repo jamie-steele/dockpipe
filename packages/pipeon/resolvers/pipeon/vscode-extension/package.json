@@ -1,0 +1,78 @@
+{
+  "name": "pipeon",
+  "displayName": "DorkPipe",
+  "description": "DorkPipe editor companion: local-first chat, workflow actions, and workspace context from .dockpipe.",
+  "version": "0.0.1",
+  "publisher": "dorkpipe",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jamie-steele/dockpipe.git"
+  },
+  "icon": "images/dorkpipe-icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:pipeon.chatView",
+    "onCommand:pipeon.openChat",
+    "onCommand:pipeon.newChat",
+    "onCommand:pipeon.clearChat"
+  ],
+  "files": [
+    "extension.js",
+    "images/**",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "main": "extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "dorkpipe-panel",
+          "title": "DorkPipe",
+          "icon": "images/dorkpipe-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "dorkpipe-panel": [
+        {
+          "id": "pipeon.chatView",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "pipeon.openChat",
+        "title": "DorkPipe: Open chat"
+      },
+      {
+        "command": "pipeon.newChat",
+        "title": "DorkPipe: New chat"
+      },
+      {
+        "command": "pipeon.clearChat",
+        "title": "DorkPipe: Clear current chat"
+      },
+      {
+        "command": "pipeon.openWelcome",
+        "title": "Pipeon: Open welcome"
+      },
+      {
+        "command": "pipeon.openContextBundle",
+        "title": "DorkPipe: Open context bundle (bin/.dockpipe/pipeon-context.md)"
+      },
+      {
+        "command": "pipeon.showReadme",
+        "title": "DorkPipe: Open docs"
+      }
+    ]
+  },
+  "license": "Apache-2.0"
+}

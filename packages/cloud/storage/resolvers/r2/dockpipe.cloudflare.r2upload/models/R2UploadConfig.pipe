@@ -1,0 +1,21 @@
+/// <summary>
+/// Concrete defaults for the Cloudflare R2 upload workflow.
+/// </summary>
+public Class R2UploadConfig : IR2UploadConfig
+{
+    public string R2ArchiveName = "";
+    public string R2Bucket = "";
+    public string R2ContentType = "application/gzip";
+    public string R2EndpointUrl = "";
+    public string R2Prefix = "packages/";
+    public string R2PublishAlwaysUpload = "0";
+    public string R2PublishDryRun = "0";
+    public string R2PublishSource = "release/artifacts";
+    public string R2SkipTerraform = "1";
+    public string R2UseTerraform = "";
+    public string AwsAccessKeyId = "";
+    public string AwsSecretAccessKey = "";
+    public string AwsEndpointUrlS3 = "";
+    public string CloudflareAccountId = "";
+    public string CloudflareApiToken = "";
+}

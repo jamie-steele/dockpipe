@@ -1,0 +1,8 @@
+name: pipeon-dev-stack-stop
+description: Stop the Pipeon local dev stack for the current workdir.
+docker_preflight: false
+
+steps:
+  - id: stop
+    skip_container: true
+    run: scripts/pipeon-dev-stack/stop.sh

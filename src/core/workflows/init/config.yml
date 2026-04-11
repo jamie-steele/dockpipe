@@ -1,0 +1,45 @@
+# Scaffolded by `dockpipe init` or `dockpipe init <name> --from init`.
+# This starter shows the current DockPipe style:
+# - a small typed config contract under models/
+# - a couple of vars with concrete defaults
+# - clear multi-step flow with host/container boundaries
+name: example
+description: Starter typed pipeline with a prepare step, an isolated run step, and a host summary step.
+
+types:
+  - models/IExampleWorkflowConfig.pipe
+
+vars:
+  # Keep the starter small: a message and the image you want to run in.
+  EXAMPLE_MESSAGE: "hello from dockpipe"
+  EXAMPLE_IMAGE: "alpine:3.22"
+
+steps:
+  - id: prepare
+    # Host step: shape values for later steps and persist them as outputs.
+    skip_container: true
+    cmd: |-
+      bash -c 'set -euo pipefail
+      mkdir -p bin/.dockpipe
+      printf "%s\n" "EXAMPLE_MESSAGE=$EXAMPLE_MESSAGE" "EXAMPLE_STAGE=prepare" > bin/.dockpipe/example.env
+      echo "[example] prepared bin/.dockpipe/example.env for the next step"'
+    outputs: bin/.dockpipe/example.env
+
+  - id: run
+    # Container step: this is where your real tool or build would run.
+    isolate: ${EXAMPLE_IMAGE}
+    cmd: |-
+      sh -c 'set -eu
+      echo "[example] container step"
+      echo "[example] message: ${EXAMPLE_MESSAGE:-unset}"
+      printf "%s\n" "EXAMPLE_STAGE=run" > bin/.dockpipe/example.env'
+    outputs: bin/.dockpipe/example.env
+
+  - id: report
+    # Host step: summarize what happened and point the user at the next edit.
+    skip_container: true
+    cmd: |-
+      bash -c 'set -euo pipefail
+      echo "[example] workflow complete"
+      echo "[example] final stage: ${EXAMPLE_STAGE:-unknown}"
+      echo "[example] edit workflows/example/config.yml and models/ to fit your project"'

@@ -1,0 +1,14 @@
+schema: 1
+kind: package
+name: terraform
+version: 0.6.0
+title: DockPipe Terraform primitives
+description: |
+  Generic host Terraform workflow (dockpipe.terraform.core) — DOCKPIPE_TF_* module dir, backends, and
+  terraform-pipeline.sh. Compose domain packs (e.g. cloud.storage.r2) on top; see resolver README.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [terraform, iac, workflow]
+includes_resolvers:
+  - terraform-core

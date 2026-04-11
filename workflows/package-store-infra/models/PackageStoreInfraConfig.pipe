@@ -1,0 +1,70 @@
+/// <summary>
+/// Concrete defaults for the maintainer package-store infrastructure workflow.
+/// </summary>
+public Class PackageStoreInfraConfig : IPackageStoreInfraConfig
+{
+    public string R2Bucket = "dockpipe";
+    public string R2Prefix = "packages/";
+    public string R2PublishDryRun = "0";
+    public string R2SkipTerraform = "0";
+    public string R2StateAccessKeyId = "";
+    public string R2StateSecretAccessKey = "";
+    public string R2TfBackend = "";
+    public string R2TfImportR2Bucket = "";
+    public string R2TfR2ImportJurisdiction = "";
+    public string R2TfStateBucket = "";
+    public string R2TfStateKey = "";
+    public string R2TerraformApplyArgs = "";
+    public string R2TerraformApplyAutoApprove = "";
+    public string R2TerraformCommands = "";
+    public string R2TerraformFmtArgs = "";
+    public string R2TerraformImportArgs = "";
+    public string R2TerraformImportFile = "";
+    public string R2TerraformInitArgs = "";
+    public string R2TerraformPlanArgs = "";
+    public string R2TerraformSkipInit = "";
+    public string R2TerraformValidateArgs = "";
+    public string R2TerraformDir = "";
+    public string R2TfLocation = "";
+    public string CloudflareAccountId = "";
+    public string CloudflareApiToken = "";
+    public string CloudflareEmail = "";
+    public string CloudflareGlobalApiKey = "";
+    public string DockpipeTfApplyArgs = "";
+    public string DockpipeTfApplyAutoApprove = "1";
+    public string DockpipeTfAttachCloudflareProvider = "1";
+    public string DockpipeTfBackend = "remote";
+    public string DockpipeTfBackendHclPath = "";
+    public string DockpipeTfCloudflareAccountId = "";
+    public string DockpipeTfCommands = "";
+    public string DockpipeTfDryRun = "0";
+    public string DockpipeTfFmtArgs = "";
+    public string DockpipeTfImportArgs = "";
+    public string DockpipeTfImportFile = "";
+    public string DockpipeTfImportR2Bucket = "0";
+    public string DockpipeTfInitArgs = "-reconfigure";
+    public string DockpipeTfModuleDir = "";
+    public string DockpipeTfOptionalWhenUnset = "1";
+    public string DockpipeTfPipelineHint = "";
+    public string DockpipeTfPlanArgs = "";
+    public string DockpipeTfRemoteBackendFile = "";
+    public string DockpipeTfR2ImportJurisdiction = "default";
+    public string DockpipeTfSkipInit = "0";
+    public string DockpipeTfStateAccessKeyId = "";
+    public string DockpipeTfStateBucket = "dockpipe-tfstate";
+    public string DockpipeTfStateKey = "state/terraform.tfstate";
+    public string DockpipeTfStateSecretAccessKey = "";
+    public string DockpipeTfUseR2PublishMap = "1";
+    public string DockpipeTfValidateArgs = "";
+    public string DockpipeTfWorkspace = "";
+    public string TfVarCacheBrowserTtlSeconds = "3600";
+    public string TfVarCacheEdgeTtlSeconds = "86400";
+    public string TfVarCloudflareManagedRulesetId = "efb7b8c949ac4650a09736fc376e9aee";
+    public string TfVarEnableCacheRules = "true";
+    public string TfVarEnableR2CustomDomain = "true";
+    public string TfVarEnableWafBaseline = "true";
+    public string TfVarPublicHostname = "packages.example.com";
+    public string TfVarR2CustomDomainEnabled = "true";
+    public string TfVarR2CustomDomainMinTls = "1.2";
+    public string TfVarZoneId = "REPLACE_WITH_CLOUDFLARE_ZONE_ID";
+}

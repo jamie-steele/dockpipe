@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dockpipe.dev/schemas/dockpipe-ci-findings.schema.json",
+  "title": "DorkPipe CI findings bundle",
+  "description": "Normalized security/scan signals for DorkPipe reasoning. Version with schema_version.",
+  "type": "object",
+  "required": ["schema_version", "provenance", "findings"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Bump when finding shape or semantics change."
+    },
+    "provenance": {
+      "type": "object",
+      "required": ["commit", "timestamp_utc"],
+      "properties": {
+        "commit": { "type": "string", "description": "Full git SHA when available." },
+        "branch_or_ref": { "type": "string" },
+        "workflow_run_id": { "type": "string" },
+        "workflow_run_attempt": { "type": "string" },
+        "workflow_name": { "type": "string" },
+        "repository": { "type": "string" },
+        "tools": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "tool name -> version string when known."
+        },
+        "timestamp_utc": { "type": "string", "format": "date-time" },
+        "source": { "type": "string", "enum": ["ci", "local", "unknown"] }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/finding" }
+    },
+    "raw_paths": {
+      "type": "object",
+      "description": "Relative paths under .dockpipe/ci-analysis/raw/ for traceability.",
+      "additionalProperties": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "finding": {
+      "type": "object",
+      "required": ["id", "tool", "message"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable within a run: tool|rule|file|line (normalized path). Compare across runs for history."
+        },
+        "tool": { "type": "string", "examples": ["gosec", "govulncheck"] },
+        "rule_id": { "type": "string" },
+        "title": { "type": "string" },
+        "file": { "type": "string" },
+        "line": { "type": "integer" },
+        "column": { "type": "integer" },
+        "severity": { "type": "string" },
+        "confidence": { "type": "string" },
+        "category": { "type": "string" },
+        "message": { "type": "string" },
+        "remediation": { "type": ["string", "null"] },
+        "raw": { "description": "Tool-specific fragment for correlation." }
+      }
+    }
+  }
+}
