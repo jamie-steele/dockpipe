@@ -39,6 +39,7 @@ func requestCmd(argv []string) {
 	executeRoute := fs.Bool("execute", false, "execute the routed request and stream events")
 	model := fs.String("model", "", "Ollama model override")
 	ollamaHost := fs.String("ollama-host", "", "Ollama host override")
+	numCtx := fs.Int("num-ctx", 0, "Ollama context window override")
 	_ = fs.Parse(argv)
 	if strings.TrimSpace(*message) == "" {
 		fmt.Fprintln(os.Stderr, "request: --message is required")
@@ -91,6 +92,7 @@ func requestCmd(argv []string) {
 
 	ctx := context.Background()
 	host, chosenModel := resolveModelConfig(strings.TrimSpace(*ollamaHost), strings.TrimSpace(*model))
+	chosenNumCtx := resolveNumCtx(*numCtx)
 	switch routed.Route {
 	case "inspect":
 		handleInspectRoute(ctx, reqID, absWd, routed.Action, routed.Arg)
@@ -98,9 +100,9 @@ func requestCmd(argv []string) {
 		if routed.Arg != "" {
 			req.Message = routed.Arg
 		}
-		handleEditRoute(ctx, reqID, absWd, req, host, chosenModel)
+		handleEditRoute(ctx, reqID, absWd, req, host, chosenModel, chosenNumCtx)
 	default:
-		handleChatRoute(ctx, reqID, absWd, req, host, chosenModel)
+		handleChatRoute(ctx, reqID, absWd, req, host, chosenModel, chosenNumCtx)
 	}
 }
 
@@ -271,7 +273,7 @@ func handleInspectRoute(ctx context.Context, reqID, root, action, arg string) {
 	}
 }
 
-func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, host, model string) {
+func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, host, model string, numCtx int) {
 	exe, err := os.Executable()
 	if err != nil {
 		emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Could not resolve dorkpipe executable: %v", err), false)
@@ -294,6 +296,9 @@ func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	if model != "" {
 		args = append(args, "--model", model)
 	}
+	if numCtx > 0 {
+		args = append(args, "--num-ctx", fmt.Sprintf("%d", numCtx))
+	}
 	cmd := exec.CommandContext(ctx, exe, args...)
 	cmd.Dir = root
 	cmd.Env = os.Environ()
@@ -306,7 +311,7 @@ func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	}
 }
 
-func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, host, model string) {
+func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, host, model string, numCtx int) {
 	emitEditEvent(reqID, "context_gathering", "Inspecting workspace context", 0.35, nil)
 	contextPath, contextText := readEditContextBundle(root)
 	prompt := buildChatPrompt(root, req, contextText)
@@ -314,8 +319,9 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 		"route":        "chat",
 		"model":        model,
 		"context_path": contextPath,
+		"num_ctx":      numCtx,
 	})
-	answer, err := runChatModelStream(ctx, host, model, prompt, func(piece string) {
+	answer, err := runChatModelStream(ctx, host, model, numCtx, prompt, func(piece string) {
 		writeEvent(editEvent{
 			ContractVersion: editContractVersion,
 			RequestID:       reqID,
@@ -332,6 +338,7 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	status := map[string]any{
 		"route":             "chat",
 		"model":             model,
+		"num_ctx":           numCtx,
 		"mode":              normalizeRequestMode(req.Mode),
 		"validation_status": "not_applicable",
 		"active_file":       req.ActiveFile,
@@ -438,7 +445,7 @@ func normalizeRequestMode(mode string) string {
 	}
 }
 
-func runChatModelStream(ctx context.Context, host, model, prompt string, onToken func(string)) (string, error) {
+func runChatModelStream(ctx context.Context, host, model string, numCtx int, prompt string, onToken func(string)) (string, error) {
 	u, err := buildOllamaChatURL(host)
 	if err != nil {
 		return "", err
@@ -450,6 +457,9 @@ func runChatModelStream(ctx context.Context, host, model, prompt string, onToken
 			{"role": "system", "content": "You are DorkPipe, a repo-aware coding assistant."},
 			{"role": "user", "content": prompt},
 		},
+	}
+	if numCtx > 0 {
+		payload["options"] = map[string]any{"num_ctx": numCtx}
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -529,6 +539,25 @@ func resolveModelConfig(hostOverride, modelOverride string) (string, string) {
 		model = defaultEditModel
 	}
 	return host, model
+}
+
+func resolveNumCtx(flagValue int) int {
+	if flagValue > 0 {
+		return flagValue
+	}
+	raw := strings.TrimSpace(os.Getenv("PIPEON_OLLAMA_NUM_CTX"))
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("DOCKPIPE_OLLAMA_NUM_CTX"))
+	}
+	if raw == "" {
+		return 0
+	}
+	var num int
+	fmt.Sscanf(raw, "%d", &num)
+	if num > 0 {
+		return num
+	}
+	return 0
 }
 
 func runRepoCommand(ctx context.Context, root, command string, args ...string) (string, error) {

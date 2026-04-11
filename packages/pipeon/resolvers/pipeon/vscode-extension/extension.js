@@ -9,6 +9,7 @@ const path = require("path");
 const http = require("http");
 const https = require("https");
 const cp = require("child_process");
+const os = require("os");
 
 const DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434";
 const DEFAULT_MODEL = "llama3.2";
@@ -21,6 +22,7 @@ const MAX_HISTORY_MESSAGES = 14;
 const MAX_CONTEXT_CHARS = 18000;
 const MAX_SELECTION_CHARS = 2400;
 const MAX_MESSAGE_CHARS = 32000;
+const MODEL_PROFILES = ["fast", "balanced", "deep", "max"];
 
 async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
@@ -88,7 +90,40 @@ function createInitialChatState() {
     sessions: [session],
     composerMode: "ask",
     autoApplyEdits: false,
+    modelProfile: "balanced",
   };
+}
+
+function normalizeModelProfile(value) {
+  const next = String(value || "").toLowerCase();
+  return MODEL_PROFILES.includes(next) ? next : "balanced";
+}
+
+function resolveNumCtxForProfile(profile) {
+  const memGiB = os.totalmem() / (1024 ** 3);
+  switch (normalizeModelProfile(profile)) {
+    case "fast":
+      return memGiB >= 24 ? 4096 : 3072;
+    case "deep":
+      return memGiB >= 48 ? 24576 : memGiB >= 24 ? 16384 : 8192;
+    case "max":
+      return memGiB >= 64 ? 32768 : memGiB >= 32 ? 24576 : memGiB >= 24 ? 16384 : 8192;
+    default:
+      return memGiB >= 32 ? 16384 : memGiB >= 16 ? 8192 : 4096;
+  }
+}
+
+function modelProfileLabel(profile) {
+  switch (normalizeModelProfile(profile)) {
+    case "fast":
+      return "Fast";
+    case "deep":
+      return "Deep";
+    case "max":
+      return "Max";
+    default:
+      return "Balanced";
+  }
 }
 
 function sanitizePendingAction(value) {
@@ -213,6 +248,7 @@ function normalizeStoredChatState(raw) {
       ? String(raw.composerMode).toLowerCase()
       : "ask",
     autoApplyEdits: !!raw.autoApplyEdits,
+    modelProfile: normalizeModelProfile(raw.modelProfile),
   };
 }
 
@@ -485,7 +521,7 @@ function buildConversationMessages(session, signals) {
   return [system, ...history];
 }
 
-function ollamaChat({ host, model, messages }) {
+function ollamaChat({ host, model, messages, numCtx }) {
   return new Promise((resolve, reject) => {
     let url;
     try {
@@ -498,6 +534,7 @@ function ollamaChat({ host, model, messages }) {
       model,
       stream: false,
       messages,
+      options: numCtx ? { num_ctx: numCtx } : undefined,
     });
     const transport = url.protocol === "https:" ? https : http;
     const req = transport.request(
@@ -535,7 +572,7 @@ function ollamaChat({ host, model, messages }) {
   });
 }
 
-function ollamaChatStream({ host, model, messages, onToken }) {
+function ollamaChatStream({ host, model, messages, onToken, numCtx }) {
   return new Promise((resolve, reject) => {
     let url;
     try {
@@ -548,6 +585,7 @@ function ollamaChatStream({ host, model, messages, onToken }) {
       model,
       stream: true,
       messages,
+      options: numCtx ? { num_ctx: numCtx } : undefined,
     });
     const transport = url.protocol === "https:" ? https : http;
     let buffer = "";
@@ -708,6 +746,8 @@ async function executeNaturalLanguageRequest(root, text, signals, options = {}) 
   const requestMode = ["ask", "agent", "plan"].includes(String(options.mode || "").toLowerCase())
     ? String(options.mode).toLowerCase()
     : "ask";
+  const modelProfile = normalizeModelProfile(options.modelProfile);
+  const numCtx = resolveNumCtxForProfile(modelProfile);
   const args = [
     ...invocation.argsPrefix,
     "request",
@@ -718,6 +758,8 @@ async function executeNaturalLanguageRequest(root, text, signals, options = {}) 
     requestMode,
     "--message",
     text,
+    "--num-ctx",
+    String(numCtx),
   ];
   if (signals.activeFile) {
     args.push("--active-file", signals.activeFile);
@@ -787,19 +829,24 @@ async function executeNaturalLanguageRequest(root, text, signals, options = {}) 
     format: "markdown",
     readyToApply,
     metadata: finalEvent.metadata || {},
-    status: buildDorkpipeStatus(finalEvent.metadata || {}, requestMode),
+    status: buildDorkpipeStatus({ ...(finalEvent.metadata || {}), model_profile: modelProfile, num_ctx: numCtx }, requestMode),
   };
 }
 
 function buildDorkpipeStatus(metadata, fallbackMode = "ask") {
   const route = metadata.route || "request";
   const mode = metadata.mode || fallbackMode;
+  const profile = modelProfileLabel(metadata.model_profile || "balanced");
   if (route === "chat") {
     const parts = [
       `Mode: ${String(mode).replace(/^./, (c) => c.toUpperCase())}`,
       `Model: ${metadata.model || process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}`,
+      `Profile: ${profile}`,
       `Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}`,
     ];
+    if (metadata.num_ctx) {
+      parts.push(`Context: ${metadata.num_ctx}`);
+    }
     if (metadata.context_path) {
       parts.push(`Context: ${metadata.context_path}`);
     }
@@ -828,7 +875,10 @@ function buildDorkpipeStatus(metadata, fallbackMode = "ask") {
     return parts.join("  |  ");
   }
   if (route === "edit") {
-    const parts = [`Mode: ${String(mode).replace(/^./, (c) => c.toUpperCase())}`, "Route: edit"];
+    const parts = [`Mode: ${String(mode).replace(/^./, (c) => c.toUpperCase())}`, "Route: edit", `Profile: ${profile}`];
+    if (metadata.num_ctx) {
+      parts.push(`Context: ${metadata.num_ctx}`);
+    }
     if (typeof metadata.files_touched === "number") {
       parts.push(`Files: ${metadata.files_touched}`);
     }
@@ -1158,6 +1208,8 @@ async function executeDorkpipeRequest(root, session, text, options = {}) {
   const mode = ["ask", "agent", "plan"].includes(String(options.mode || "").toLowerCase())
     ? String(options.mode).toLowerCase()
     : "ask";
+  const modelProfile = normalizeModelProfile(options.modelProfile);
+  const numCtx = resolveNumCtxForProfile(modelProfile);
 
   const emitEvent = (label) => {
     if (onEvent) {
@@ -1174,6 +1226,7 @@ async function executeDorkpipeRequest(root, session, text, options = {}) {
       channel: options.channel,
       onToken,
       mode,
+      modelProfile,
     });
   }
 
@@ -1223,6 +1276,7 @@ async function executeDorkpipeRequest(root, session, text, options = {}) {
       model,
       messages,
       onToken,
+      numCtx,
     });
   } else {
     emitEvent(`Waiting for ${model}`);
@@ -1230,6 +1284,7 @@ async function executeDorkpipeRequest(root, session, text, options = {}) {
       host,
       model,
       messages,
+      numCtx,
     });
   }
 
@@ -1239,8 +1294,8 @@ async function executeDorkpipeRequest(root, session, text, options = {}) {
     format: "markdown",
     contextPath: signals.contextPath,
     status: signals.contextPath
-      ? `Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  Context: ${path.relative(root, signals.contextPath)}`
-      : `Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  No context bundle found`,
+      ? `Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Profile: ${modelProfileLabel(modelProfile)}  |  num_ctx: ${numCtx}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  Context: ${path.relative(root, signals.contextPath)}`
+      : `Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Profile: ${modelProfileLabel(modelProfile)}  |  num_ctx: ${numCtx}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  No context bundle found`,
   };
 }
 
@@ -1597,6 +1652,12 @@ function renderChatHtml(webview, state) {
             <div class="hint">Uses the workspace bundle when available. Safe local routing can skip the model for obvious actions.</div>
             <div class="sendWrap">
               <label class="toggleWrap"><input id="autoApplyEdits" type="checkbox" /> Auto-apply edits</label>
+              <select id="modelProfileSelect" aria-label="Model profile">
+                <option value="fast">Fast</option>
+                <option value="balanced">Balanced</option>
+                <option value="deep">Deep</option>
+                <option value="max">Max</option>
+              </select>
               <select id="modeSelect" aria-label="Request mode">
                 <option value="ask">Ask</option>
                 <option value="agent">Agent</option>
@@ -1621,10 +1682,11 @@ function renderChatHtml(webview, state) {
       const sessionSelect = document.getElementById("sessionSelect");
       const modeSelect = document.getElementById("modeSelect");
       const autoApplyEdits = document.getElementById("autoApplyEdits");
+      const modelProfileSelect = document.getElementById("modelProfileSelect");
       const transcript = document.getElementById("transcript");
       const status = document.getElementById("status");
       const trace = document.getElementById("trace");
-      let viewState = vscode.getState() || { draft: "", pinnedToBottom: true, mode: "ask" };
+      let viewState = vscode.getState() || { draft: "", pinnedToBottom: true, mode: "ask", modelProfile: "balanced" };
       let currentState = initialState;
 
       function escapeHtml(value) {
@@ -1732,12 +1794,14 @@ function renderChatHtml(webview, state) {
         renderSessions(currentState);
         modeSelect.value = currentState.composerMode || viewState.mode || "ask";
         autoApplyEdits.checked = !!currentState.autoApplyEdits;
+        modelProfileSelect.value = currentState.modelProfile || "balanced";
         send.disabled = !!currentState.isBusy;
         clearBtn.disabled = !!currentState.isBusy;
         newChatBtn.disabled = !!currentState.isBusy;
         newFromComposer.disabled = !!currentState.isBusy;
         modeSelect.disabled = !!currentState.isBusy;
         autoApplyEdits.disabled = !!currentState.isBusy;
+        modelProfileSelect.disabled = !!currentState.isBusy;
         if (stickToBottom) {
           transcript.scrollTop = transcript.scrollHeight;
         } else {
@@ -1753,6 +1817,7 @@ function renderChatHtml(webview, state) {
 
       prompt.value = viewState.draft || "";
       modeSelect.value = viewState.mode || currentState.composerMode || "ask";
+      modelProfileSelect.value = viewState.modelProfile || currentState.modelProfile || "balanced";
       prompt.addEventListener("input", () => {
         saveViewState({ draft: prompt.value });
       });
@@ -1762,6 +1827,9 @@ function renderChatHtml(webview, state) {
       });
       autoApplyEdits.addEventListener("change", () => {
         vscode.postMessage({ type: "setAutoApplyEdits", value: autoApplyEdits.checked });
+      });
+      modelProfileSelect.addEventListener("change", () => {
+        vscode.postMessage({ type: "setModelProfile", value: modelProfileSelect.value });
       });
       prompt.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") {
@@ -1797,8 +1865,8 @@ function renderChatHtml(webview, state) {
         const text = prompt.value.trim();
         if (!text) return;
         prompt.value = "";
-        saveViewState({ draft: "", pinnedToBottom: true, mode: modeSelect.value });
-        vscode.postMessage({ type: "ask", text, mode: modeSelect.value });
+        saveViewState({ draft: "", pinnedToBottom: true, mode: modeSelect.value, modelProfile: modelProfileSelect.value });
+        vscode.postMessage({ type: "ask", text, mode: modeSelect.value, modelProfile: modelProfileSelect.value });
       });
 
       transcript.addEventListener("click", (event) => {
@@ -2105,6 +2173,7 @@ class PipeonChatViewProvider {
       activeSessionId: this.chatStore.activeSessionId,
       composerMode: this.chatStore.composerMode || "ask",
       autoApplyEdits: !!this.chatStore.autoApplyEdits,
+      modelProfile: normalizeModelProfile(this.chatStore.modelProfile),
       messages: [],
       trace: [],
       status: "Waiting for workspace...",
@@ -2126,6 +2195,7 @@ class PipeonChatViewProvider {
     this.state.activeSessionId = session.id;
     this.state.composerMode = this.chatStore.composerMode || "ask";
     this.state.autoApplyEdits = !!this.chatStore.autoApplyEdits;
+    this.state.modelProfile = normalizeModelProfile(this.chatStore.modelProfile);
     this.state.sessionList = sortSessionsByUpdate(this.chatStore.sessions).map((item) => ({
       id: item.id,
       title: item.title || "New chat",
@@ -2202,13 +2272,19 @@ class PipeonChatViewProvider {
     await this.saveAndRefresh();
   }
 
+  async setModelProfile(value) {
+    this.chatStore.modelProfile = normalizeModelProfile(value);
+    this.state.modelProfile = normalizeModelProfile(value);
+    await this.saveAndRefresh();
+  }
+
   pushTrace(label) {
     const items = [...this.state.trace, label].slice(-6);
     this.state.trace = items;
     this.refresh();
   }
 
-  async ask(root, text, mode = "ask") {
+  async ask(root, text, mode = "ask", modelProfile = "balanced") {
     const session = this.activeSession;
     const createdAt = nowIso();
     const userMessage = sanitizeMessage({
@@ -2229,6 +2305,9 @@ class PipeonChatViewProvider {
       : (this.chatStore.composerMode || "ask");
     this.chatStore.composerMode = normalizedMode;
     this.state.composerMode = normalizedMode;
+    const normalizedProfile = normalizeModelProfile(modelProfile || this.chatStore.modelProfile);
+    this.chatStore.modelProfile = normalizedProfile;
+    this.state.modelProfile = normalizedProfile;
 
     const commandConfirmation = getCliConfirmationRequest(text, normalizedMode);
     if (commandConfirmation) {
@@ -2238,7 +2317,7 @@ class PipeonChatViewProvider {
         text: `${commandConfirmation.title}\n\nI’ll wait for your approval before running this command.`,
         format: "markdown",
         createdAt: nowIso(),
-        pendingAction: commandConfirmation,
+        pendingAction: { ...commandConfirmation, modelProfile: normalizedProfile },
       });
       session.messages.push(assistantMessage);
       session.updatedAt = nowIso();
@@ -2282,6 +2361,7 @@ class PipeonChatViewProvider {
         },
         channel: this.channel,
         mode: normalizedMode,
+        modelProfile: normalizedProfile,
       });
       assistantMessage.liveStatus = "";
       assistantMessage.liveTrace = [];
@@ -2305,7 +2385,7 @@ class PipeonChatViewProvider {
           assistantMessage.liveStatus = "Applying the change";
           assistantMessage.liveTrace = ["Prepared a validated patch artifact", "Applying confirmed edit"];
           this.refresh();
-          const applied = await applyPreparedEdit(root, result.readyToApply.artifact_dir, {
+        const applied = await applyPreparedEdit(root, result.readyToApply.artifact_dir, {
             onEvent: (label) => this.pushTrace(label),
             channel: this.channel,
           });
@@ -2445,6 +2525,10 @@ class PipeonChatViewProvider {
         await this.setAutoApplyEdits(!!msg.value);
         return;
       }
+      if (msg?.type === "setModelProfile") {
+        await this.setModelProfile(msg.value);
+        return;
+      }
       if (!workspaceRoot) {
         vscode.window.showWarningMessage("DorkPipe: open a workspace folder first.");
         return;
@@ -2454,7 +2538,7 @@ class PipeonChatViewProvider {
         return;
       }
       if (msg?.type === "ask" && msg.text) {
-        await this.ask(workspaceRoot, msg.text, msg.mode);
+        await this.ask(workspaceRoot, msg.text, msg.mode, msg.modelProfile);
       }
     });
   }

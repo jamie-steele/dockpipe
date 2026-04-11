@@ -87,6 +87,7 @@ func editCmd(argv []string) {
 	apply := fs.Bool("apply", false, "apply the verified patch to the working tree")
 	model := fs.String("model", "", "Ollama model override")
 	ollamaHost := fs.String("ollama-host", "", "Ollama host override")
+	numCtx := fs.Int("num-ctx", 0, "Ollama context window override")
 	_ = fs.Parse(argv)
 	if strings.TrimSpace(*message) == "" {
 		fmt.Fprintln(os.Stderr, "edit: --message is required")
@@ -125,6 +126,7 @@ func editCmd(argv []string) {
 	if chosenModel == "" {
 		chosenModel = defaultEditModel
 	}
+	chosenNumCtx := resolveNumCtx(*numCtx)
 
 	reqID := fmt.Sprintf("req_%d", time.Now().UnixNano())
 	artifactsDir := filepath.Join(absWd, ".dorkpipe", "edit", reqID)
@@ -136,7 +138,7 @@ func editCmd(argv []string) {
 	ctx := context.Background()
 	emitEditEvent(reqID, "received", "Received edit request", 0.05, nil)
 
-	artifact, patchPath, artifactsDir, err := prepareEditArtifact(ctx, reqID, absWd, strings.TrimSpace(*message), strings.TrimSpace(*activeFile), strings.TrimSpace(*selectionText), host, chosenModel, artifactsDir)
+	artifact, patchPath, artifactsDir, err := prepareEditArtifact(ctx, reqID, absWd, strings.TrimSpace(*message), strings.TrimSpace(*activeFile), strings.TrimSpace(*selectionText), host, chosenModel, chosenNumCtx, artifactsDir)
 	if err != nil {
 		os.Exit(1)
 	}
@@ -192,7 +194,7 @@ func applyEditCmd(argv []string) {
 	}
 }
 
-func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, selectionText, host, chosenModel, artifactsDir string) (*editModelArtifact, string, string, error) {
+func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, selectionText, host, chosenModel string, chosenNumCtx int, artifactsDir string) (*editModelArtifact, string, string, error) {
 	if artifact, patchPath, ok, err := tryDeterministicEditPrimitive(reqID, root, message, activeFile, artifactsDir); ok {
 		return artifact, patchPath, artifactsDir, err
 	}
@@ -226,8 +228,8 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 				"planned_target_count": len(plan.TargetFiles),
 			})
 		} else {
-			emitEditEvent(reqID, "planning", "Routing to planner model", 0.27, map[string]any{"model": chosenModel})
-			if planned, planErr := buildEditPlan(ctx, host, chosenModel, baseRequest, contextText, candidates); planErr == nil && planned != nil {
+			emitEditEvent(reqID, "planning", "Routing to planner model", 0.27, map[string]any{"model": chosenModel, "num_ctx": chosenNumCtx})
+			if planned, planErr := buildEditPlan(ctx, host, chosenModel, chosenNumCtx, baseRequest, contextText, candidates); planErr == nil && planned != nil {
 				plan = planned
 				emitEditEvent(reqID, "planning", "Planner selected edit targets", 0.3, map[string]any{
 					"planned_target_count": len(plan.TargetFiles),
@@ -270,9 +272,10 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 	}
 	emitEditEvent(reqID, "routed", "Generating patch artifact", 0.48, map[string]any{
 		"model": chosenModel,
+		"num_ctx": chosenNumCtx,
 	})
 
-	modelText, err := runEditModel(ctx, host, chosenModel, prompt)
+	modelText, err := runEditModel(ctx, host, chosenModel, chosenNumCtx, prompt)
 	if err != nil {
 		emitEditError(reqID, "MODEL_UNAVAILABLE", fmt.Sprintf("Ollama request failed: %v", err), true)
 		return nil, "", "", err
@@ -284,19 +287,20 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 
 	artifact, err := parseEditArtifact(modelText)
 	if err != nil {
-		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, prompt, modelText, fmt.Sprintf("Model output was not valid JSON: %v", err), artifactsDir)
+		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("Model output was not valid JSON: %v", err), artifactsDir)
 		if err != nil {
 			emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Model output was not a valid edit artifact: %v", err), true)
 			return nil, "", "", err
 		}
 	}
 	if err := validateEditArtifact(artifact); err != nil {
-		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, prompt, modelText, fmt.Sprintf("Edit artifact validation failed: %v", err), artifactsDir)
+		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("Edit artifact validation failed: %v", err), artifactsDir)
 		if err != nil {
 			emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Edit artifact validation failed: %v", err), true)
 			return nil, "", "", err
 		}
 	}
+	artifact.Patch = normalizeGeneratedPatch(artifact.Patch)
 	writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
 
 	patchPath := filepath.Join(artifactsDir, "patch.diff")
@@ -309,7 +313,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 	verifyOutput, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
 	if err != nil {
 		_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
-		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, prompt, modelText, fmt.Sprintf("The generated patch did not apply cleanly.\n\nVerifier output:\n%s", emptyFallback(verifyOutput, "(no verifier output)")), artifactsDir)
+		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("The generated patch did not apply cleanly.\n\nVerifier output:\n%s", emptyFallback(verifyOutput, "(no verifier output)")), artifactsDir)
 		if err != nil {
 			emitEditError(reqID, "VALIDATION_FAILED", "The generated patch did not apply cleanly.", true)
 			return nil, "", "", err
@@ -554,9 +558,9 @@ func heuristicTargetsForRequest(root, message string) []string {
 	return uniqueNonEmpty(out)
 }
 
-func buildEditPlan(ctx context.Context, host, model string, req editRequestRecord, contextText string, candidates []string) (*editPlan, error) {
+func buildEditPlan(ctx context.Context, host, model string, numCtx int, req editRequestRecord, contextText string, candidates []string) (*editPlan, error) {
 	prompt := buildEditPlanPrompt(req, contextText, candidates)
-	text, err := runEditModel(ctx, host, model, prompt)
+	text, err := runEditModel(ctx, host, model, numCtx, prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -848,7 +852,7 @@ Candidate file snippets:
 	return prompt
 }
 
-func runEditModel(ctx context.Context, host, model, prompt string) (string, error) {
+func runEditModel(ctx context.Context, host, model string, numCtx int, prompt string) (string, error) {
 	u, err := buildOllamaChatURL(host)
 	if err != nil {
 		return "", err
@@ -866,6 +870,9 @@ func runEditModel(ctx context.Context, host, model, prompt string) (string, erro
 				"content": prompt,
 			},
 		},
+	}
+	if numCtx > 0 {
+		payload["options"] = map[string]any{"num_ctx": numCtx}
 	}
 	b, err := json.Marshal(payload)
 	if err != nil {
@@ -941,11 +948,31 @@ func parseEditArtifact(text string) (*editModelArtifact, error) {
 	return &artifact, nil
 }
 
-func repairInvalidArtifactLoop(ctx context.Context, reqID, host, model, originalPrompt, previousOutput, reason, artifactsDir string) (*editModelArtifact, string, error) {
+func normalizeGeneratedPatch(patch string) string {
+	p := strings.ReplaceAll(patch, "\r\n", "\n")
+	p = strings.ReplaceAll(p, " 100644 --- a/", " 100644\n--- a/")
+	p = strings.ReplaceAll(p, " 100755 --- a/", " 100755\n--- a/")
+	lines := strings.Split(p, "\n")
+	for i, line := range lines {
+		switch {
+		case strings.HasPrefix(line, "-diff --git a/"):
+			lines[i] = strings.TrimPrefix(line, "-")
+		case strings.HasPrefix(line, "-index "):
+			lines[i] = strings.TrimPrefix(line, "-")
+		case strings.HasPrefix(line, "---- a/"):
+			lines[i] = strings.TrimPrefix(line, "-")
+		case strings.HasPrefix(line, "-+++ b/"):
+			lines[i] = strings.TrimPrefix(line, "-")
+		}
+	}
+	return strings.TrimSpace(strings.Join(lines, "\n")) + "\n"
+}
+
+func repairInvalidArtifactLoop(ctx context.Context, reqID, host, model string, numCtx int, originalPrompt, previousOutput, reason, artifactsDir string) (*editModelArtifact, string, error) {
 	var lastErr error
 	currentOutput := previousOutput
 	for attempt := 1; attempt <= maxArtifactRepairPass; attempt++ {
-		artifact, repairedOutput, err := retryInvalidEditArtifact(ctx, reqID, host, model, originalPrompt, currentOutput, reason, artifactsDir, attempt)
+		artifact, repairedOutput, err := retryInvalidEditArtifact(ctx, reqID, host, model, numCtx, originalPrompt, currentOutput, reason, artifactsDir, attempt)
 		if err == nil {
 			return artifact, repairedOutput, nil
 		}
@@ -955,13 +982,14 @@ func repairInvalidArtifactLoop(ctx context.Context, reqID, host, model, original
 	return nil, currentOutput, lastErr
 }
 
-func retryInvalidEditArtifact(ctx context.Context, reqID, host, model, originalPrompt, previousOutput, reason, artifactsDir string, attempt int) (*editModelArtifact, string, error) {
+func retryInvalidEditArtifact(ctx context.Context, reqID, host, model string, numCtx int, originalPrompt, previousOutput, reason, artifactsDir string, attempt int) (*editModelArtifact, string, error) {
 	emitEditEvent(reqID, "repairing", fmt.Sprintf("Repairing invalid patch artifact (pass %d/%d)", attempt, maxArtifactRepairPass), 0.52, map[string]any{
 		"model":   model,
 		"attempt": attempt,
+		"num_ctx": numCtx,
 	})
 	retryPrompt := buildEditArtifactRepairPrompt(originalPrompt, previousOutput, reason)
-	modelText, err := runEditModel(ctx, host, model, retryPrompt)
+	modelText, err := runEditModel(ctx, host, model, numCtx, retryPrompt)
 	if err != nil {
 		return nil, previousOutput, err
 	}
@@ -991,7 +1019,24 @@ Problem:
 Previous response:
 %s
 
-Return JSON only. No markdown fences. Do not truncate the JSON. The "patch" field must contain a valid unified diff beginning with "diff --git".
+Return JSON only. No markdown fences. Do not truncate the JSON.
+
+The "patch" field must contain a valid unified diff. Metadata lines are not file deletions.
+Every edited file must look like this:
+
+diff --git a/path/to/file b/path/to/file
+index 1234567..89abcde 100644
+--- a/path/to/file
++++ b/path/to/file
+@@ -1,2 +1,2 @@
+-old line
++new line
+
+Rules:
+- "diff --git", "index", "--- a/...", and "+++ b/..." must each be on their own lines
+- never prefix diff metadata lines with "-" or "+"
+- only changed file content lines inside hunks may begin with "-" or "+"
+- the patch must apply with git apply
 `, originalPrompt, reason, emptyFallback(previousOutput, "(empty response)")))
 }
 
@@ -1004,6 +1049,9 @@ func validateEditArtifact(artifact *editModelArtifact) error {
 	}
 	if !strings.Contains(artifact.Patch, "diff --git ") {
 		return errors.New("patch does not look like a unified diff")
+	}
+	if !strings.Contains(artifact.Patch, "\n--- a/") || !strings.Contains(artifact.Patch, "\n+++ b/") {
+		return errors.New("patch is missing unified diff file headers")
 	}
 	if len(artifact.TargetFiles) == 0 {
 		return errors.New("target_files is empty")
