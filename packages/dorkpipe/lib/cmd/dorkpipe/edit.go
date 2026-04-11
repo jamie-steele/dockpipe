@@ -20,12 +20,15 @@ import (
 
 const (
 	defaultEditModel      = "llama3.2"
-	maxEditContextChars   = 18000
+	maxEditContextChars   = 6000
 	maxEditSelectionChars = 2400
-	maxEditSnippetPerFile = 5000
-	maxEditCandidateCount = 6
+	maxEditSnippetPerFile = 1200
+	maxEditCandidateCount = 4
 	editContractVersion   = "v1"
 	maxArtifactRepairPass = 2
+	maxEditPromptChars    = 12000
+	maxEditPlanChars      = 1600
+	maxEditRetrievalChars = 2200
 )
 
 type editEvent struct {
@@ -217,21 +220,23 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 	}
 	plan := buildDefaultEditPlan(root, baseRequest)
 	if shouldUseComplexEditFlow(message, activeFile, selectionText) {
-		emitEditEvent(reqID, "planning", "Planning edit strategy", 0.24, map[string]any{
-			"candidate_count": len(candidates),
-		})
-		emitEditEvent(reqID, "planning", "Routing to planner model", 0.27, map[string]any{
-			"model": chosenModel,
-		})
-		if planned, planErr := buildEditPlan(ctx, host, chosenModel, baseRequest, contextText, candidates); planErr == nil && planned != nil {
-			plan = planned
-			emitEditEvent(reqID, "planning", "Planner selected edit targets", 0.3, map[string]any{
+		emitEditEvent(reqID, "planning", "Planning edit strategy", 0.24, map[string]any{"candidate_count": len(candidates)})
+		if len(plan.TargetFiles) >= 3 {
+			emitEditEvent(reqID, "planning", "Using heuristic edit plan", 0.28, map[string]any{
 				"planned_target_count": len(plan.TargetFiles),
 			})
 		} else {
-			emitEditEvent(reqID, "planning", "Planner unavailable; using heuristic plan", 0.3, map[string]any{
-				"planned_target_count": len(plan.TargetFiles),
-			})
+			emitEditEvent(reqID, "planning", "Routing to planner model", 0.27, map[string]any{"model": chosenModel})
+			if planned, planErr := buildEditPlan(ctx, host, chosenModel, baseRequest, contextText, candidates); planErr == nil && planned != nil {
+				plan = planned
+				emitEditEvent(reqID, "planning", "Planner selected edit targets", 0.3, map[string]any{
+					"planned_target_count": len(plan.TargetFiles),
+				})
+			} else {
+				emitEditEvent(reqID, "planning", "Planner unavailable; using heuristic plan", 0.3, map[string]any{
+					"planned_target_count": len(plan.TargetFiles),
+				})
+			}
 		}
 	}
 	candidates = mergePlannedCandidates(candidates, plan.TargetFiles)
@@ -781,7 +786,15 @@ func buildEditPrompt(req editRequestRecord, plan *editPlan, contextText, snippet
 	if req.Apply {
 		applyLine = "The user explicitly requested an applied edit; keep the patch minimal and safe."
 	}
-	return strings.TrimSpace(fmt.Sprintf(`
+	planText := clampString(emptyFallback(formatEditPlan(plan), "(no explicit plan)"), maxEditPlanChars)
+	retrievalText := clampString(emptyFallback(retrievalBundle, "(no retrieval bundle available)"), maxEditRetrievalChars)
+	snippetText := clampString(emptyFallback(snippets, "(no candidate file snippets available)"), maxEditPromptChars/3)
+	contextBudget := maxEditPromptChars - len(planText) - len(retrievalText) - len(snippetText) - 2200
+	if contextBudget < 1200 {
+		contextBudget = 1200
+	}
+	contextText = clampString(emptyFallback(contextText, "(no context bundle available)"), contextBudget)
+	prompt := strings.TrimSpace(fmt.Sprintf(`
 You are DorkPipe preparing a bounded edit artifact for a local repository.
 
 Return JSON only. No markdown fences. The JSON shape must be:
@@ -823,12 +836,16 @@ Candidate file snippets:
 %s
 `, applyLine,
 		req.UserMessage,
-		emptyFallback(formatEditPlan(plan), "(no explicit plan)"),
+		planText,
 		emptyFallback(req.ActiveFile, "(none)"),
 		emptyFallback(req.SelectionText, "(none)"),
-		emptyFallback(contextText, "(no context bundle available)"),
-		emptyFallback(retrievalBundle, "(no retrieval bundle available)"),
-		emptyFallback(snippets, "(no candidate file snippets available)")))
+		contextText,
+		retrievalText,
+		snippetText))
+	if len(prompt) > maxEditPromptChars {
+		prompt = clampString(prompt, maxEditPromptChars)
+	}
+	return prompt
 }
 
 func runEditModel(ctx context.Context, host, model, prompt string) (string, error) {
