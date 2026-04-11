@@ -356,30 +356,34 @@ function buildRequestErrorStatus(message) {
 }
 
 function normalizeStoredChatState(raw) {
-  if (!raw || !Array.isArray(raw.sessions) || raw.sessions.length === 0) {
+  try {
+    if (!raw || !Array.isArray(raw.sessions) || raw.sessions.length === 0) {
+      return createInitialChatState();
+    }
+
+    const sessions = raw.sessions
+      .map((session) => ({
+        id: String(session?.id || makeId("chat")),
+        title: summarizeSessionTitle(session?.title || "New chat"),
+        createdAt: String(session?.createdAt || nowIso()),
+        updatedAt: String(session?.updatedAt || session?.createdAt || nowIso()),
+        messages: Array.isArray(session?.messages) ? session.messages.map(sanitizeMessage).slice(-MAX_HISTORY_MESSAGES * 3) : [],
+      }))
+      .slice(0, MAX_SAVED_SESSIONS);
+
+    const activeSession = sessions.find((session) => session.id === raw.activeSessionId) || sessions[0];
+    return {
+      activeSessionId: activeSession.id,
+      sessions,
+      composerMode: ["ask", "agent", "plan"].includes(String(raw.composerMode || "").toLowerCase())
+        ? String(raw.composerMode).toLowerCase()
+        : "ask",
+      autoApplyEdits: !!raw.autoApplyEdits,
+      modelProfile: normalizeModelProfile(raw.modelProfile),
+    };
+  } catch {
     return createInitialChatState();
   }
-
-  const sessions = raw.sessions
-    .map((session) => ({
-      id: String(session?.id || makeId("chat")),
-      title: summarizeSessionTitle(session?.title || "New chat"),
-      createdAt: String(session?.createdAt || nowIso()),
-      updatedAt: String(session?.updatedAt || session?.createdAt || nowIso()),
-      messages: Array.isArray(session?.messages) ? session.messages.map(sanitizeMessage).slice(-MAX_HISTORY_MESSAGES * 4) : [],
-    }))
-    .slice(0, MAX_SAVED_SESSIONS);
-
-  const activeSession = sessions.find((session) => session.id === raw.activeSessionId) || sessions[0];
-  return {
-    activeSessionId: activeSession.id,
-    sessions,
-    composerMode: ["ask", "agent", "plan"].includes(String(raw.composerMode || "").toLowerCase())
-      ? String(raw.composerMode).toLowerCase()
-      : "ask",
-    autoApplyEdits: !!raw.autoApplyEdits,
-    modelProfile: normalizeModelProfile(raw.modelProfile),
-  };
 }
 
 function sortSessionsByUpdate(sessions) {
@@ -401,6 +405,57 @@ function ensureValidChatStore(chatStore) {
     ...chatStore,
     sessions,
     activeSessionId,
+  };
+}
+
+function compactPendingActionForStorage(value) {
+  const pending = sanitizePendingAction(value);
+  if (!pending) {
+    return null;
+  }
+  return {
+    kind: pending.kind,
+    title: pending.title,
+    artifactDir: pending.artifactDir,
+    patchPath: pending.patchPath,
+    helperScriptPath: pending.helperScriptPath,
+    helperScriptPurpose: pending.helperScriptPurpose,
+    helperScriptRuntime: pending.helperScriptRuntime,
+    targetFiles: pending.targetFiles,
+    requestText: pending.requestText,
+    mode: pending.mode,
+  };
+}
+
+function compactMessageForStorage(message) {
+  const safe = sanitizeMessage(message);
+  return {
+    id: safe.id,
+    role: safe.role,
+    text: clampText(safe.text, 12000),
+    format: safe.format,
+    createdAt: safe.createdAt,
+    pendingAction: compactPendingActionForStorage(safe.pendingAction),
+    diffPreview: safe.diffPreview ? clampText(safe.diffPreview, 3000) : "",
+  };
+}
+
+function compactChatStoreForPersistence(chatStore) {
+  const safe = ensureValidChatStore(chatStore);
+  return {
+    activeSessionId: safe.activeSessionId,
+    composerMode: ["ask", "agent", "plan"].includes(String(safe.composerMode || "").toLowerCase())
+      ? String(safe.composerMode).toLowerCase()
+      : "ask",
+    autoApplyEdits: !!safe.autoApplyEdits,
+    modelProfile: normalizeModelProfile(safe.modelProfile),
+    sessions: safe.sessions.slice(0, MAX_SAVED_SESSIONS).map((session) => ({
+      id: String(session.id || makeId("chat")),
+      title: summarizeSessionTitle(session.title || "New chat"),
+      createdAt: String(session.createdAt || nowIso()),
+      updatedAt: String(session.updatedAt || session.createdAt || nowIso()),
+      messages: Array.isArray(session.messages) ? session.messages.slice(-MAX_HISTORY_MESSAGES * 2).map(compactMessageForStorage) : [],
+    })),
   };
 }
 
@@ -471,7 +526,9 @@ function escapeHtml(text) {
   return String(text)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 function renderInlineMarkdown(text) {
@@ -609,6 +666,26 @@ function renderMessageBody(message) {
     return `<pre class="plain">${escapeHtml(message.text)}</pre>`;
   }
   return renderMarkdown(message.text);
+}
+
+function safeRenderMessageBody(message, channel) {
+  try {
+    return renderMessageBody(message);
+  } catch (error) {
+    const detail = error instanceof Error ? (error.stack || error.message) : String(error);
+    if (channel) {
+      channel.error(`Failed to render message body: ${detail}`);
+    }
+    const fallback = message?.text ? String(message.text) : "(Message render failed.)";
+    return `<pre class="plain">${escapeHtml(fallback)}</pre>`;
+  }
+}
+
+function serializeForInlineScript(value) {
+  return JSON.stringify(value)
+    .replace(/</g, "\\u003c")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
 }
 
 async function collectWorkspaceSignals(root) {
@@ -1500,7 +1577,6 @@ async function executeDorkpipeRequest(root, session, text, options = {}) {
 
 function renderChatHtml(webview, state) {
   const nonce = String(Date.now());
-  const initialState = JSON.stringify(state).replace(/</g, "\\u003c");
   return `<!doctype html>
 <html>
   <head>
@@ -1974,7 +2050,6 @@ function renderChatHtml(webview, state) {
     </div>
     <script nonce="${nonce}">
       const vscode = acquireVsCodeApi();
-      const initialState = ${initialState};
       const form = document.getElementById("composer");
       const prompt = document.getElementById("prompt");
       const send = document.getElementById("send");
@@ -1988,8 +2063,51 @@ function renderChatHtml(webview, state) {
       const transcript = document.getElementById("transcript");
       const status = document.getElementById("status");
       const trace = document.getElementById("trace");
-      let viewState = vscode.getState() || { draft: "", pinnedToBottom: true, mode: "ask", modelProfile: "balanced" };
-      let currentState = initialState;
+      let viewState = (() => {
+        const raw = vscode.getState();
+        if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+          return { draft: "", pinnedToBottom: true, mode: "ask", modelProfile: "balanced" };
+        }
+        return {
+          draft: typeof raw.draft === "string" ? raw.draft : "",
+          pinnedToBottom: raw.pinnedToBottom !== false,
+          mode: ["ask", "agent", "plan"].includes(String(raw.mode || "").toLowerCase()) ? String(raw.mode).toLowerCase() : "ask",
+          modelProfile: ["fast", "balanced", "deep", "max"].includes(String(raw.modelProfile || "").toLowerCase())
+            ? String(raw.modelProfile).toLowerCase()
+            : "balanced",
+        };
+      })();
+      let currentState = {};
+
+      function renderFatalError(message) {
+        const safe = String(message || "Unknown webview error");
+        document.body.innerHTML = '<div style="padding:16px;font-family:var(--vscode-font-family);color:var(--vscode-editor-foreground);background:var(--vscode-editor-background);height:100vh;box-sizing:border-box;">'
+          + '<article style="max-width:760px;border:1px solid var(--vscode-panel-border);border-radius:14px;padding:16px;background:color-mix(in srgb, var(--vscode-editorWidget-background) 94%, transparent);">'
+          + '<div style="font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">DorkPipe</div>'
+          + '<h2 style="margin:0 0 10px;font-size:18px;">The chat UI hit a client-side error.</h2>'
+          + '<p style="margin:0 0 10px;line-height:1.5;">The panel stayed alive, but the webview renderer failed.</p>'
+          + '<pre style="margin:0;padding:12px;border-radius:10px;overflow:auto;background:color-mix(in srgb, var(--vscode-textCodeBlock-background, #111) 92%, transparent);border:1px solid var(--vscode-panel-border);white-space:pre-wrap;">'
+          + safe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+          + '</pre></article></div>';
+      }
+
+      function reportClientError(kind, error) {
+        const message = error instanceof Error ? (error.stack || error.message) : String(error);
+        try {
+          vscode.postMessage({ type: "clientError", kind, message });
+        } catch {
+          // Ignore bridge failures while reporting a renderer error.
+        }
+        renderFatalError(message);
+      }
+
+      window.addEventListener("error", (event) => {
+        reportClientError("error", event?.error || event?.message || "Unknown webview error");
+      });
+
+      window.addEventListener("unhandledrejection", (event) => {
+        reportClientError("unhandledrejection", event?.reason || "Unhandled promise rejection");
+      });
 
       function escapeHtml(value) {
         return String(value || "")
@@ -2111,20 +2229,28 @@ function renderChatHtml(webview, state) {
         if (!items || !items.length) {
           return "";
         }
-        return items.map((item) => '<div class="traceItem">' + item + '</div>').join("");
+        return items.map((item) => '<div class="traceItem">' + escapeHtml(item) + '</div>').join("");
       }
 
       function renderSessions(nextState) {
         const sessions = nextState.sessionList || [];
         sessionSelect.innerHTML = sessions.map((session) => {
           const selected = session.id === nextState.activeSessionId ? " selected" : "";
-          return '<option value="' + session.id + '"' + selected + '>' + session.title + '</option>';
+          return '<option value="' + escapeHtml(session.id) + '"' + selected + '>' + escapeHtml(session.title) + '</option>';
         }).join("");
       }
 
       function saveViewState(extra) {
         viewState = { ...viewState, ...extra };
         vscode.setState(viewState);
+      }
+
+      function submitPrompt() {
+        const text = prompt.value.trim();
+        if (!text) return;
+        prompt.value = "";
+        saveViewState({ draft: "", pinnedToBottom: true, mode: modeSelect.value, modelProfile: modelProfileSelect.value });
+        vscode.postMessage({ type: "ask", text, mode: modeSelect.value, modelProfile: modelProfileSelect.value });
       }
 
       function render(nextState) {
@@ -2159,96 +2285,97 @@ function renderChatHtml(webview, state) {
         }
       }
 
-      transcript.addEventListener("scroll", () => {
-        const bottomGap = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight;
-        saveViewState({ pinnedToBottom: bottomGap <= 24 });
-      });
-
-      prompt.value = viewState.draft || "";
-      modeSelect.value = viewState.mode || currentState.composerMode || "ask";
-      modelProfileSelect.value = viewState.modelProfile || currentState.modelProfile || "balanced";
-      prompt.addEventListener("input", () => {
-        saveViewState({ draft: prompt.value });
-      });
-      modeSelect.addEventListener("change", () => {
-        saveViewState({ mode: modeSelect.value });
-        vscode.postMessage({ type: "setComposerMode", mode: modeSelect.value });
-      });
-      autoApplyEdits.addEventListener("change", () => {
-        vscode.postMessage({ type: "setAutoApplyEdits", value: autoApplyEdits.checked });
-      });
-      modelProfileSelect.addEventListener("change", () => {
-        vscode.postMessage({ type: "setModelProfile", value: modelProfileSelect.value });
-      });
-      prompt.addEventListener("keydown", (event) => {
-        if (event.key !== "Enter") {
-          return;
-        }
-        if (event.isComposing) {
-          return;
-        }
-        if (event.altKey) {
-          return;
-        }
-        if (event.shiftKey || event.ctrlKey || event.metaKey) {
-          return;
-        }
-        event.preventDefault();
-        event.stopPropagation();
-        form.requestSubmit();
-      });
-
-      sessionSelect.addEventListener("change", () => {
-        vscode.postMessage({ type: "switchSession", sessionId: sessionSelect.value });
-      });
-
-      clearBtn.addEventListener("click", () => {
-        vscode.postMessage({ type: "clearSession" });
-      });
-
-      function startNewChat() {
-        vscode.postMessage({ type: "newSession", seed: prompt.value.trim() });
-      }
-
-      newChatBtn.addEventListener("click", startNewChat);
-      newFromComposer.addEventListener("click", startNewChat);
-
-      form.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const text = prompt.value.trim();
-        if (!text) return;
-        prompt.value = "";
-        saveViewState({ draft: "", pinnedToBottom: true, mode: modeSelect.value, modelProfile: modelProfileSelect.value });
-        vscode.postMessage({ type: "ask", text, mode: modeSelect.value, modelProfile: modelProfileSelect.value });
-      });
-
-      transcript.addEventListener("click", (event) => {
-        const target = event.target instanceof HTMLElement ? event.target.closest("[data-pending-action]") : null;
-        if (!target) {
-          return;
-        }
-        vscode.postMessage({
-          type: "resolvePendingAction",
-          messageId: target.getAttribute("data-message-id"),
-          decision: target.getAttribute("data-pending-action"),
+      try {
+        transcript.addEventListener("scroll", () => {
+          const bottomGap = transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight;
+          saveViewState({ pinnedToBottom: bottomGap <= 24 });
         });
-      });
 
-      window.addEventListener("message", (event) => {
-        const msg = event.data || {};
-        if (msg.type === "state" && msg.state) {
-          render(msg.state);
-        }
-        if (msg.type === "done") {
-          prompt.value = "";
-          saveViewState({ draft: "", pinnedToBottom: true });
-          send.disabled = false;
-          prompt.focus();
-        }
-      });
+        prompt.value = viewState.draft || "";
+        modeSelect.value = viewState.mode || currentState.composerMode || "ask";
+        modelProfileSelect.value = viewState.modelProfile || currentState.modelProfile || "balanced";
+        prompt.addEventListener("input", () => {
+          saveViewState({ draft: prompt.value });
+        });
+        modeSelect.addEventListener("change", () => {
+          saveViewState({ mode: modeSelect.value });
+          vscode.postMessage({ type: "setComposerMode", mode: modeSelect.value });
+        });
+        autoApplyEdits.addEventListener("change", () => {
+          vscode.postMessage({ type: "setAutoApplyEdits", value: autoApplyEdits.checked });
+        });
+        modelProfileSelect.addEventListener("change", () => {
+          vscode.postMessage({ type: "setModelProfile", value: modelProfileSelect.value });
+        });
+        prompt.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter") {
+            return;
+          }
+          if (event.isComposing) {
+            return;
+          }
+          if (event.altKey) {
+            return;
+          }
+          if (event.shiftKey || event.ctrlKey || event.metaKey) {
+            return;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          submitPrompt();
+        });
 
-      render(currentState);
-      prompt.focus();
+        sessionSelect.addEventListener("change", () => {
+          vscode.postMessage({ type: "switchSession", sessionId: sessionSelect.value });
+        });
+
+        clearBtn.addEventListener("click", () => {
+          vscode.postMessage({ type: "clearSession" });
+        });
+
+        function startNewChat() {
+          vscode.postMessage({ type: "newSession", seed: prompt.value.trim() });
+        }
+
+        newChatBtn.addEventListener("click", startNewChat);
+        newFromComposer.addEventListener("click", startNewChat);
+
+        form.addEventListener("submit", (event) => {
+          event.preventDefault();
+          submitPrompt();
+        });
+
+        transcript.addEventListener("click", (event) => {
+          const target = event.target instanceof HTMLElement ? event.target.closest("[data-pending-action]") : null;
+          if (!target) {
+            return;
+          }
+          vscode.postMessage({
+            type: "resolvePendingAction",
+            messageId: target.getAttribute("data-message-id"),
+            decision: target.getAttribute("data-pending-action"),
+          });
+        });
+
+        window.addEventListener("message", (event) => {
+          const msg = event.data || {};
+          if (msg.type === "state" && msg.state) {
+            render(msg.state);
+          }
+          if (msg.type === "done") {
+            prompt.value = "";
+            saveViewState({ draft: "", pinnedToBottom: true });
+            send.disabled = false;
+            prompt.focus();
+          }
+        });
+
+        render(currentState);
+        vscode.postMessage({ type: "webviewReady" });
+        prompt.focus();
+      } catch (error) {
+        reportClientError("boot", error);
+      }
     </script>
   </body>
 </html>`;
@@ -2520,7 +2647,13 @@ class PipeonChatViewProvider {
     this.channel = channel;
     this.view = null;
     this.rendered = false;
-    this.chatStore = normalizeStoredChatState(this.context.workspaceState.get(CHAT_STATE_KEY));
+    try {
+      this.chatStore = normalizeStoredChatState(this.context.workspaceState.get(CHAT_STATE_KEY));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.channel.error(`Failed to restore chat history: ${message}`);
+      this.chatStore = createInitialChatState();
+    }
     this.state = {
       sessionList: [],
       activeSessionId: this.chatStore.activeSessionId,
@@ -2541,7 +2674,26 @@ class PipeonChatViewProvider {
   }
 
   async persistChatStore() {
-    await this.context.workspaceState.update(CHAT_STATE_KEY, this.chatStore);
+    const compact = compactChatStoreForPersistence(this.chatStore);
+    try {
+      await this.context.workspaceState.update(CHAT_STATE_KEY, compact);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.channel.error(`Failed to persist chat history, retrying with a smaller snapshot: ${message}`);
+      const fallback = {
+        ...compact,
+        sessions: compact.sessions.slice(0, Math.min(6, MAX_SAVED_SESSIONS)).map((session) => ({
+          ...session,
+          messages: Array.isArray(session.messages) ? session.messages.slice(-Math.min(24, MAX_HISTORY_MESSAGES)) : [],
+        })),
+      };
+      try {
+        await this.context.workspaceState.update(CHAT_STATE_KEY, fallback);
+      } catch (fallbackError) {
+        const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+        this.channel.error(`Failed to persist compact chat history: ${fallbackMessage}`);
+      }
+    }
   }
 
   syncViewState() {
@@ -2557,7 +2709,7 @@ class PipeonChatViewProvider {
     }));
     this.state.messages = session.messages.map((message) => ({
       ...message,
-      html: renderMessageBody(message),
+      html: safeRenderMessageBody(message, this.channel),
     }));
   }
 
@@ -2568,11 +2720,17 @@ class PipeonChatViewProvider {
   refresh() {
     this.syncViewState();
     if (this.view) {
-      if (!this.rendered) {
-        this.view.webview.html = renderChatHtml(this.view.webview, this.state);
-        this.rendered = true;
-      } else {
-        this.view.webview.postMessage({ type: "state", state: this.state });
+      try {
+        if (!this.rendered) {
+          this.view.webview.html = renderChatHtml(this.view.webview, this.state);
+          this.rendered = true;
+        } else {
+          this.view.webview.postMessage({ type: "state", state: this.state });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.channel.error(`Webview refresh failed: ${message}`);
+        this.rendered = false;
       }
     }
   }
@@ -2852,19 +3010,6 @@ class PipeonChatViewProvider {
     this.view = webviewView;
     this.rendered = false;
     webviewView.webview.options = { enableScripts: true };
-    const root = getWorkspaceRoot();
-    if (root) {
-      const host = process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST;
-      const model = process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL;
-      this.state.status = `Model: ${model}  |  Ollama: ${host}`;
-    } else {
-      this.state.status = "Open a workspace folder to chat with DorkPipe.";
-    }
-    this.refresh();
-    webviewView.onDidDispose(() => {
-      this.view = null;
-      this.rendered = false;
-    });
     webviewView.webview.onDidReceiveMessage(async (msg) => {
       try {
         const workspaceRoot = getWorkspaceRoot();
@@ -2892,6 +3037,18 @@ class PipeonChatViewProvider {
           await this.setModelProfile(msg.value);
           return;
         }
+        if (msg?.type === "clientError") {
+          const detail = msg.message ? ` (${msg.message})` : "";
+          this.channel.error(`Pipeon webview ${msg.kind || "error"}${detail}`);
+          this.state.isBusy = false;
+          this.state.status = "DorkPipe UI hit a client-side error";
+          this.state.trace = [];
+          return;
+        }
+        if (msg?.type === "webviewReady") {
+          this.refresh();
+          return;
+        }
         if (!workspaceRoot) {
           vscode.window.showWarningMessage("DorkPipe: open a workspace folder first.");
           return;
@@ -2912,6 +3069,19 @@ class PipeonChatViewProvider {
         this.refresh();
         vscode.window.showErrorMessage(`DorkPipe: ${message}`);
       }
+    });
+    const root = getWorkspaceRoot();
+    if (root) {
+      const host = process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST;
+      const model = process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL;
+      this.state.status = `Model: ${model}  |  Ollama: ${host}`;
+    } else {
+      this.state.status = "Open a workspace folder to chat with DorkPipe.";
+    }
+    this.refresh();
+    webviewView.onDidDispose(() => {
+      this.view = null;
+      this.rendered = false;
     });
   }
 }

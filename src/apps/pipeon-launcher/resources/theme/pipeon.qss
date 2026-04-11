@@ -69,9 +69,11 @@ QLabel#launchOverlayTitle {
 }
 
 QLabel#launchOverlayBody {
-    font-size: 12px;
-    line-height: 1.45;
+    font-size: 13px;
+    font-weight: 500;
     color: palette(window-text);
+    padding: 2px 8px 0 8px;
+    qproperty-wordWrap: true;
 }
 
 QFrame#listPanel {

@@ -199,6 +199,9 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     m_launchOverlayBody->setObjectName(QStringLiteral("launchOverlayBody"));
     m_launchOverlayBody->setWordWrap(true);
     m_launchOverlayBody->setAlignment(Qt::AlignCenter);
+    m_launchOverlayBody->setMinimumWidth(320);
+    m_launchOverlayBody->setMaximumWidth(420);
+    m_launchOverlayBody->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Minimum);
 
     cardLay->addWidget(m_launchOverlayGlyph);
     cardLay->addWidget(m_launchOverlayTitle);
