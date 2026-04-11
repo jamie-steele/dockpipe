@@ -120,7 +120,56 @@ function sanitizeMessage(message) {
     createdAt: String(message?.createdAt || nowIso()),
     pendingAction: sanitizePendingAction(message?.pendingAction),
     diffPreview: message?.diffPreview ? clampText(String(message.diffPreview), 12000) : "",
+    liveStatus: message?.liveStatus ? String(message.liveStatus) : "",
+    liveTrace: Array.isArray(message?.liveTrace) ? message.liveTrace.map((item) => String(item)).slice(-5) : [],
   };
+}
+
+function summarizeRequestActivity(label, mode) {
+  const normalizedMode = ["ask", "agent", "plan"].includes(String(mode || "").toLowerCase()) ? String(mode).toLowerCase() : "ask";
+  const lower = String(label || "").toLowerCase();
+  if (!lower) {
+    return normalizedMode === "agent" ? "Working through the request" : "Thinking";
+  }
+  if (lower.includes("received")) {
+    return "Reading your request";
+  }
+  if (lower.includes("inspecting workspace context")) {
+    return "Scanning the workspace";
+  }
+  if (lower.includes("collected candidate files")) {
+    return "Picking likely files";
+  }
+  if (lower.includes("deterministic")) {
+    return "Using a fast local edit path";
+  }
+  if (lower.includes("routing to model")) {
+    return "Handing off to the model";
+  }
+  if (lower.includes("streaming from")) {
+    return "Generating a response";
+  }
+  if (lower.includes("prepared a validated patch artifact")) {
+    return "Prepared a validated edit";
+  }
+  if (lower.includes("applying")) {
+    return "Applying the change";
+  }
+  if (lower.includes("validating")) {
+    return "Validating the result";
+  }
+  return normalizedMode === "agent" ? "Working through the request" : "Thinking";
+}
+
+function buildRequestErrorStatus(message) {
+  const lower = String(message || "").toLowerCase();
+  if (lower.includes("ollama")) {
+    return "Error talking to Ollama";
+  }
+  if (lower.includes("patch") || lower.includes("edit")) {
+    return "Edit request failed";
+  }
+  return "DorkPipe request failed";
 }
 
 function normalizeStoredChatState(raw) {
@@ -1365,6 +1414,49 @@ function renderChatHtml(webview, state) {
         gap: 8px;
         margin-top: 10px;
       }
+      .liveCard {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid var(--vscode-panel-border);
+        background: color-mix(in srgb, var(--vscode-editorWidget-background) 94%, transparent);
+      }
+      .liveRow {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 8px;
+      }
+      .liveDot {
+        width: 10px;
+        height: 10px;
+        border-radius: 999px;
+        background: var(--vscode-button-background);
+        box-shadow: 0 0 0 0 color-mix(in srgb, var(--vscode-button-background) 45%, transparent);
+        animation: pulse 1.4s ease-in-out infinite;
+      }
+      .liveTitle {
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .liveMeta {
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
+      }
+      .liveTrace {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .liveChip {
+        padding: 4px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        border: 1px solid var(--vscode-panel-border);
+        color: var(--vscode-descriptionForeground);
+        background: color-mix(in srgb, var(--vscode-sideBar-background) 92%, transparent);
+      }
       .toggleWrap {
         display: flex;
         align-items: center;
@@ -1432,6 +1524,11 @@ function renderChatHtml(webview, state) {
         select {
           max-width: none;
         }
+      }
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--vscode-button-background) 45%, transparent); }
+        70% { box-shadow: 0 0 0 9px transparent; }
+        100% { box-shadow: 0 0 0 0 transparent; }
       }
     </style>
   </head>
@@ -1540,13 +1637,29 @@ function renderChatHtml(webview, state) {
         ].join("");
       }
 
+      function renderLiveCard(message) {
+        if (!message.liveStatus) {
+          return "";
+        }
+        const chips = Array.isArray(message.liveTrace) && message.liveTrace.length
+          ? '<div class="liveTrace">' + message.liveTrace.map((item) => '<div class="liveChip">' + escapeHtml(item) + '</div>').join("") + "</div>"
+          : "";
+        return [
+          '<div class="liveCard">',
+          '<div class="liveRow"><div class="liveDot"></div><div class="liveTitle">' + escapeHtml(message.liveStatus) + "</div></div>",
+          '<div class="liveMeta">DorkPipe is routing, gathering context, and deciding the safest next step.</div>',
+          chips,
+          "</div>",
+        ].join("");
+      }
+
       function renderMessages(messages) {
         if (!messages.length) {
           return '<article class="msg assistant"><div class="role">DorkPipe</div><div class="body"><p>Ask about this workspace. DorkPipe will use the local context bundle when available, keep chat history per workspace, and route obvious safe actions locally first.</p></div></article>';
         }
         return messages.map((message) => {
           const role = message.role === "assistant" ? "DorkPipe" : "You";
-          return '<article class="msg ' + message.role + '"><div class="role">' + role + '</div><div class="body">' + (message.html || "") + renderDiffPreview(message) + renderPendingAction(message) + '</div></article>';
+          return '<article class="msg ' + message.role + '"><div class="role">' + role + '</div><div class="body">' + (message.html || "") + renderLiveCard(message) + renderDiffPreview(message) + renderPendingAction(message) + '</div></article>';
         }).join("");
       }
 
@@ -2109,20 +2222,30 @@ class PipeonChatViewProvider {
       text: "",
       format: "markdown",
       createdAt: nowIso(),
+      liveStatus: summarizeRequestActivity("", normalizedMode),
+      liveTrace: [],
     });
     session.messages.push(assistantMessage);
     await this.saveAndRefresh();
 
     try {
       const result = await executeDorkpipeRequest(root, session, text, {
-        onEvent: (label) => this.pushTrace(label),
+        onEvent: (label) => {
+          this.pushTrace(label);
+          assistantMessage.liveStatus = summarizeRequestActivity(label, normalizedMode);
+          assistantMessage.liveTrace = [...(assistantMessage.liveTrace || []), label].slice(-5);
+          this.refresh();
+        },
         onToken: (_piece, fullText) => {
           assistantMessage.text = fullText;
+          assistantMessage.liveStatus = "Generating a response";
           this.refresh();
         },
         channel: this.channel,
         mode: normalizedMode,
       });
+      assistantMessage.liveStatus = "";
+      assistantMessage.liveTrace = [];
       assistantMessage.text = result.text;
       assistantMessage.format = result.format || "markdown";
       session.updatedAt = nowIso();
@@ -2140,10 +2263,15 @@ class PipeonChatViewProvider {
         });
         if (this.chatStore.autoApplyEdits) {
           this.pushTrace("Applying confirmed edit");
+          assistantMessage.liveStatus = "Applying the change";
+          assistantMessage.liveTrace = ["Prepared a validated patch artifact", "Applying confirmed edit"];
+          this.refresh();
           const applied = await applyPreparedEdit(root, result.readyToApply.artifact_dir, {
             onEvent: (label) => this.pushTrace(label),
             channel: this.channel,
           });
+          assistantMessage.liveStatus = "";
+          assistantMessage.liveTrace = [];
           assistantMessage.text = `${result.text}\n\n---\n\n${applied.text}`;
           assistantMessage.format = applied.format || "markdown";
           assistantMessage.pendingAction = null;
@@ -2154,9 +2282,11 @@ class PipeonChatViewProvider {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      assistantMessage.liveStatus = "";
+      assistantMessage.liveTrace = [];
       assistantMessage.text = `DorkPipe error: ${message}`;
       assistantMessage.format = "markdown";
-      this.state.status = "Error talking to Ollama";
+      this.state.status = buildRequestErrorStatus(message);
       this.channel.error(message);
     }
 
@@ -2189,21 +2319,41 @@ class PipeonChatViewProvider {
     try {
       if (pending.kind === "edit") {
         this.pushTrace("Applying confirmed edit");
+        assistantMessage.liveStatus = "Applying the change";
+        assistantMessage.liveTrace = ["Applying confirmed edit"];
+        this.refresh();
         const applied = await applyPreparedEdit(root, pending.artifactDir, {
-          onEvent: (label) => this.pushTrace(label),
+          onEvent: (label) => {
+            this.pushTrace(label);
+            assistantMessage.liveStatus = summarizeRequestActivity(label, pending.mode);
+            assistantMessage.liveTrace = [...(assistantMessage.liveTrace || []), label].slice(-5);
+            this.refresh();
+          },
           channel: this.channel,
         });
+        assistantMessage.liveStatus = "";
+        assistantMessage.liveTrace = [];
         assistantMessage.text = `${assistantMessage.text}\n\n---\n\n${applied.text}`;
         assistantMessage.format = applied.format || "markdown";
         assistantMessage.pendingAction = null;
         this.state.status = applied.status;
       } else {
         this.pushTrace("Running confirmed command");
+        assistantMessage.liveStatus = "Running the command";
+        assistantMessage.liveTrace = ["Running confirmed command"];
+        this.refresh();
         const result = await executeDorkpipeRequest(root, session, pending.requestText, {
-          onEvent: (label) => this.pushTrace(label),
+          onEvent: (label) => {
+            this.pushTrace(label);
+            assistantMessage.liveStatus = summarizeRequestActivity(label, pending.mode);
+            assistantMessage.liveTrace = [...(assistantMessage.liveTrace || []), label].slice(-5);
+            this.refresh();
+          },
           channel: this.channel,
           mode: pending.mode,
         });
+        assistantMessage.liveStatus = "";
+        assistantMessage.liveTrace = [];
         assistantMessage.text = result.text;
         assistantMessage.format = result.format || "markdown";
         assistantMessage.pendingAction = null;
@@ -2211,10 +2361,12 @@ class PipeonChatViewProvider {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      assistantMessage.liveStatus = "";
+      assistantMessage.liveTrace = [];
       assistantMessage.text = `DorkPipe error: ${message}`;
       assistantMessage.format = "markdown";
       assistantMessage.pendingAction = null;
-      this.state.status = "Action failed";
+      this.state.status = buildRequestErrorStatus(message);
       this.channel.error(message);
     }
 
