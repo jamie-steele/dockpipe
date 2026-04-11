@@ -29,6 +29,8 @@ set(PIPEON_LAUNCHER_SOURCES
     src/BasicModeWidget.cpp
     src/PackageManagerDialog.cpp
     src/SettingsDialog.cpp
+    src/LogViewerDialog.cpp
+    src/DockerObservabilityWidget.cpp
     src/ContextRowWidget.cpp
     src/EditContextDialog.cpp
     src/MainWindow.cpp

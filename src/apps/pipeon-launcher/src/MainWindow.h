@@ -110,4 +110,6 @@ private:
     QWidget *m_disclaimerContainer = nullptr;
     QString m_consoleContextId;
     QVector<WorkflowMeta> m_basicApps;
+    QString m_basicLaunchingContextId;
+    QString m_basicLaunchingWorkflowId;
 };

@@ -1,4 +1,5 @@
 #include "BasicModeWidget.h"
+#include "DockerObservabilityWidget.h"
 
 #include <QAbstractItemView>
 #include <QWidget>
@@ -11,6 +12,8 @@
 #include <QPushButton>
 #include <QSizePolicy>
 #include <QStackedWidget>
+#include <QTabWidget>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace {
@@ -118,6 +121,15 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     sub->setObjectName(QStringLiteral("appSubtitle"));
     sub->setWordWrap(true);
 
+    m_loadingBanner = new QLabel;
+    m_loadingBanner->setObjectName(QStringLiteral("hintText"));
+    m_loadingBanner->setVisible(false);
+    m_loadingBanner->setWordWrap(true);
+
+    m_loadingTimer = new QTimer(this);
+    m_loadingTimer->setInterval(170);
+    connect(m_loadingTimer, &QTimer::timeout, this, &BasicModeWidget::updateLoadingBanner);
+
     auto *projRow = new QHBoxLayout;
     m_projectLabel = new QLabel(tr("No project folder"));
     m_projectLabel->setObjectName(QStringLiteral("hintText"));
@@ -133,7 +145,13 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     projRow->addWidget(m_refresh, 0, Qt::AlignRight);
     projRow->addWidget(m_browse, 0, Qt::AlignRight);
 
-    m_list = new QListWidget(m_workspacePage);
+    m_workspaceTabs = new QTabWidget(m_workspacePage);
+
+    auto *appsPage = new QWidget(m_workspaceTabs);
+    auto *appsLay = new QVBoxLayout(appsPage);
+    appsLay->setContentsMargins(0, 0, 0, 0);
+
+    m_list = new QListWidget(appsPage);
     m_list->setObjectName(QStringLiteral("basicAppList"));
     m_list->setMovement(QListWidget::Static);
     m_list->setResizeMode(QListWidget::Adjust);
@@ -150,10 +168,20 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     connect(m_list, &QListWidget::itemDoubleClicked, this, launchItem);
     connect(m_list, &QListWidget::itemActivated, this, launchItem);
 
+    appsLay->addWidget(m_list, 1);
+
+    m_docker = new DockerObservabilityWidget(m_workspaceTabs);
+    m_workspaceTabs->addTab(appsPage, tr("Applications"));
+    m_workspaceTabs->addTab(m_docker, tr("Docker"));
+    connect(m_workspaceTabs, &QTabWidget::currentChanged, this, [this](int index) {
+        setDockerTabActive(index == 1);
+    });
+
     root->addWidget(title);
     root->addWidget(sub);
+    root->addWidget(m_loadingBanner);
     root->addLayout(projRow);
-    root->addWidget(m_list, 1);
+    root->addWidget(m_workspaceTabs, 1);
 
     m_stack->addWidget(m_homePage);
     m_stack->addWidget(m_workspacePage);
@@ -163,12 +191,14 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
 
 void BasicModeWidget::showHomePage()
 {
+    setDockerTabActive(false);
     m_stack->setCurrentWidget(m_homePage);
 }
 
 void BasicModeWidget::showWorkspacePage()
 {
     m_stack->setCurrentWidget(m_workspacePage);
+    setDockerTabActive(m_workspaceTabs && m_workspaceTabs->currentIndex() == 1);
 }
 
 void BasicModeWidget::setRecentProjects(const QStringList &paths)
@@ -262,15 +292,19 @@ void BasicModeWidget::rebuildItemTexts()
         const WorkflowMeta &m = m_apps[i];
         QListWidgetItem *it = m_list->item(i);
         const bool run = m_running.value(m.workflowId, false);
+        const bool launching = (m.workflowId == m_launchingWorkflowId);
         QString t = m.displayName;
-        if (run)
+        if (launching)
+            t += tr(" — Launching");
+        else if (run)
             t += tr(" — Running");
         it->setText(t);
         if (!m_iconMode) {
             QString sub = m.description;
             if (sub.length() > 120)
                 sub = sub.left(117) + QStringLiteral("…");
-            it->setText(m.displayName + QStringLiteral("\n") + sub + (run ? tr("\n(Running)") : QString()));
+            const QString stateLine = launching ? tr("\n(Launching)") : (run ? tr("\n(Running)") : QString());
+            it->setText(m.displayName + QStringLiteral("\n") + sub + stateLine);
         }
     }
 }
@@ -288,5 +322,56 @@ void BasicModeWidget::onBrowse()
 
 void BasicModeWidget::onRefresh()
 {
+    if (m_workspaceTabs && m_workspaceTabs->currentIndex() == 1 && m_docker) {
+        m_docker->refresh();
+        return;
+    }
     emit refreshAppsRequested();
+}
+
+void BasicModeWidget::setDockerTabActive(bool active)
+{
+    if (m_docker)
+        m_docker->setActive(active);
+}
+
+void BasicModeWidget::setLaunchingWorkflow(const QString &workflowId, const QString &displayName)
+{
+    m_launchingWorkflowId = workflowId;
+    m_launchingWorkflowName = displayName;
+    m_loadingFrame = 0;
+    updateLoadingBanner();
+    m_loadingBanner->setVisible(true);
+    if (m_loadingTimer)
+        m_loadingTimer->start();
+    rebuildItemTexts();
+}
+
+void BasicModeWidget::clearLaunchingWorkflow()
+{
+    m_launchingWorkflowId.clear();
+    m_launchingWorkflowName.clear();
+    if (m_loadingTimer)
+        m_loadingTimer->stop();
+    if (m_loadingBanner) {
+        m_loadingBanner->clear();
+        m_loadingBanner->setVisible(false);
+    }
+    rebuildItemTexts();
+}
+
+void BasicModeWidget::updateLoadingBanner()
+{
+    if (!m_loadingBanner || m_launchingWorkflowId.isEmpty()) {
+        return;
+    }
+    static const QStringList frames = {
+        QStringLiteral("▖▘▝▗"),
+        QStringLiteral("▘▝▗▖"),
+        QStringLiteral("▝▗▖▘"),
+        QStringLiteral("▗▖▘▝"),
+    };
+    const QString name = m_launchingWorkflowName.isEmpty() ? tr("workflow") : m_launchingWorkflowName;
+    m_loadingBanner->setText(tr("Launching %1  %2").arg(name, frames[m_loadingFrame % frames.size()]));
+    m_loadingFrame += 1;
 }

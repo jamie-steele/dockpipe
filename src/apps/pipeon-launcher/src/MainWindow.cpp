@@ -6,6 +6,7 @@
 #include "DockpipeChoices.h"
 #include "EditContextDialog.h"
 #include "GitHelper.h"
+#include "LogViewerDialog.h"
 #include "PackageManagerDialog.h"
 #include "SettingsDialog.h"
 #include "WorkflowCatalog.h"
@@ -600,6 +601,21 @@ void MainWindow::updateBasicPage()
         }
     }
     m_basicWidget->setRunningByWorkflow(run);
+    if (!m_basicLaunchingWorkflowId.isEmpty()) {
+        QString label = m_basicLaunchingWorkflowId;
+        for (const WorkflowMeta &meta : m_basicApps) {
+            QString metaWorkflowId = meta.workflowId;
+            if (metaWorkflowId == QStringLiteral("pipeon") || metaWorkflowId == QStringLiteral("Pipeon"))
+                metaWorkflowId = QStringLiteral("pipeon-dev-stack");
+            if (metaWorkflowId == m_basicLaunchingWorkflowId) {
+                label = meta.displayName;
+                break;
+            }
+        }
+        m_basicWidget->setLaunchingWorkflow(m_basicLaunchingWorkflowId, label);
+    } else {
+        m_basicWidget->clearLaunchingWorkflow();
+    }
 }
 
 void MainWindow::onBasicLaunch(const QString &workflowId)
@@ -622,9 +638,15 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
             metaWorkflowId = QStringLiteral("pipeon-dev-stack");
         if (metaWorkflowId == effectiveWorkflowId) {
             effectiveWorkflowFile = meta.configPath;
+            m_basicLaunchingWorkflowId = effectiveWorkflowId;
             break;
         }
     }
+    if (m_basicLaunchingWorkflowId.isEmpty())
+        m_basicLaunchingWorkflowId = effectiveWorkflowId;
+    updateBasicPage();
+
+    QTimer::singleShot(0, this, [this, effectiveWorkflowId, effectiveWorkflowFile]() {
     const QString basicWorkflowFileKey =
         (!effectiveWorkflowFile.isEmpty() && !effectiveWorkflowFile.startsWith(QStringLiteral("tar://")))
             ? effectiveWorkflowFile
@@ -647,10 +669,16 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
             c->workflowFile = effectiveWorkflowFile;
         m_store.save();
     }
+    m_basicLaunchingContextId = c->id;
     if (m_sessions.launch(*c, ContextStore::logsDir()))
         rebuildUi();
-    else if (!m_sessions.isRunning(c->id))
+    else if (!m_sessions.isRunning(c->id)) {
+        m_basicLaunchingContextId.clear();
+        m_basicLaunchingWorkflowId.clear();
+        updateBasicPage();
         QMessageBox::warning(this, tr("Pipeon"), tr("Could not start dockpipe (see stderr)."));
+    }
+    });
 }
 
 void MainWindow::setupTray()
@@ -751,6 +779,13 @@ void MainWindow::rebuildUi()
 
 void MainWindow::onSessionChanged()
 {
+    if (!m_basicLaunchingContextId.isEmpty()) {
+        const SessionInfo si = m_sessions.info(m_basicLaunchingContextId);
+        if (si.status == SessionStatus::Running || si.status == SessionStatus::Failed || si.status == SessionStatus::Stopped) {
+            m_basicLaunchingContextId.clear();
+            m_basicLaunchingWorkflowId.clear();
+        }
+    }
     rebuildUi();
 }
 
@@ -766,6 +801,11 @@ void MainWindow::onAdvancedSelectionChanged()
 
 void MainWindow::onSessionOutput(const QString &contextId, const QString &text)
 {
+    if (!m_basicLaunchingContextId.isEmpty() && contextId == m_basicLaunchingContextId) {
+        m_basicLaunchingContextId.clear();
+        m_basicLaunchingWorkflowId.clear();
+        updateBasicPage();
+    }
     if (contextId != m_consoleContextId)
         return;
     appendInlineConsole(text);
@@ -976,9 +1016,18 @@ void MainWindow::onOpenLogs()
     const SessionInfo si = m_sessions.info(c->id);
     QString path = si.logPath;
     if (path.isEmpty()) {
-        path = ContextStore::logsDir();
+        const QDir logsRoot(ContextStore::logsDir());
+        const QStringList matches = logsRoot.entryList({c->id + QStringLiteral("-*.log")}, QDir::Files, QDir::Time);
+        if (!matches.isEmpty())
+            path = logsRoot.filePath(matches.first());
     }
-    QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(path).isDir() ? path : QFileInfo(path).path()));
+
+    LogViewerDialog dialog(c->label.isEmpty() ? tr("Session logs") : tr("%1 logs").arg(c->label),
+                           path,
+                           currentContextCommandLine(),
+                           m_sessions.isRunning(c->id),
+                           this);
+    dialog.exec();
 }
 
 void MainWindow::onOpenFolder()
