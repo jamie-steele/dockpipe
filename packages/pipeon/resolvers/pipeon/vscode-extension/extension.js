@@ -688,6 +688,14 @@ function serializeForInlineScript(value) {
     .replace(/\u2029/g, "\\u2029");
 }
 
+function logChannelInfo(channel, message, data) {
+  if (!channel) {
+    return;
+  }
+  const suffix = data === undefined ? "" : ` ${JSON.stringify(data)}`;
+  channel.info(`${message}${suffix}`);
+}
+
 async function collectWorkspaceSignals(root) {
   const editor = vscode.window.activeTextEditor;
   const activePath = editor?.document?.uri?.scheme === "file" ? editor.document.uri.fsPath : null;
@@ -2049,7 +2057,49 @@ function renderChatHtml(webview, state) {
       </div>
     </div>
     <script nonce="${nonce}">
-      const vscode = acquireVsCodeApi();
+      let vscode = { postMessage() {}, getState() { return null; }, setState() {} };
+      if (typeof acquireVsCodeApi === "function") {
+        try {
+          vscode = acquireVsCodeApi();
+        } catch {
+          // Keep the stub so the UI can still render a visible error.
+        }
+      }
+
+      function renderFatalError(message) {
+        const safe = String(message || "Unknown webview error");
+        document.body.innerHTML = '<div style="padding:16px;font-family:var(--vscode-font-family);color:var(--vscode-editor-foreground);background:var(--vscode-editor-background);height:100vh;box-sizing:border-box;">'
+          + '<article style="max-width:760px;border:1px solid var(--vscode-panel-border);border-radius:14px;padding:16px;background:color-mix(in srgb, var(--vscode-editorWidget-background) 94%, transparent);">'
+          + '<div style="font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">DorkPipe</div>'
+          + '<h2 style="margin:0 0 10px;font-size:18px;">The chat UI hit a client-side error.</h2>'
+          + '<p style="margin:0 0 10px;line-height:1.5;">The panel stayed alive, but the webview renderer failed.</p>'
+          + '<pre style="margin:0;padding:12px;border-radius:10px;overflow:auto;background:color-mix(in srgb, var(--vscode-textCodeBlock-background, #111) 92%, transparent);border:1px solid var(--vscode-panel-border);white-space:pre-wrap;">'
+          + safe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+          + '</pre></article></div>';
+      }
+
+      function reportClientError(kind, error) {
+        const message = error instanceof Error ? (error.stack || error.message) : String(error);
+        try {
+          vscode.postMessage({ type: "clientError", kind, message });
+        } catch {
+          // Ignore bridge failures while reporting a renderer error.
+        }
+        renderFatalError(message);
+      }
+
+      if (typeof acquireVsCodeApi !== "function") {
+        reportClientError("boot", "acquireVsCodeApi is unavailable in this webview");
+      }
+
+      window.addEventListener("error", (event) => {
+        reportClientError("error", event?.error || event?.message || "Unknown webview error");
+      });
+
+      window.addEventListener("unhandledrejection", (event) => {
+        reportClientError("unhandledrejection", event?.reason || "Unhandled promise rejection");
+      });
+
       const form = document.getElementById("composer");
       const prompt = document.getElementById("prompt");
       const send = document.getElementById("send");
@@ -2078,36 +2128,6 @@ function renderChatHtml(webview, state) {
         };
       })();
       let currentState = {};
-
-      function renderFatalError(message) {
-        const safe = String(message || "Unknown webview error");
-        document.body.innerHTML = '<div style="padding:16px;font-family:var(--vscode-font-family);color:var(--vscode-editor-foreground);background:var(--vscode-editor-background);height:100vh;box-sizing:border-box;">'
-          + '<article style="max-width:760px;border:1px solid var(--vscode-panel-border);border-radius:14px;padding:16px;background:color-mix(in srgb, var(--vscode-editorWidget-background) 94%, transparent);">'
-          + '<div style="font-size:11px;opacity:.8;text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">DorkPipe</div>'
-          + '<h2 style="margin:0 0 10px;font-size:18px;">The chat UI hit a client-side error.</h2>'
-          + '<p style="margin:0 0 10px;line-height:1.5;">The panel stayed alive, but the webview renderer failed.</p>'
-          + '<pre style="margin:0;padding:12px;border-radius:10px;overflow:auto;background:color-mix(in srgb, var(--vscode-textCodeBlock-background, #111) 92%, transparent);border:1px solid var(--vscode-panel-border);white-space:pre-wrap;">'
-          + safe.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
-          + '</pre></article></div>';
-      }
-
-      function reportClientError(kind, error) {
-        const message = error instanceof Error ? (error.stack || error.message) : String(error);
-        try {
-          vscode.postMessage({ type: "clientError", kind, message });
-        } catch {
-          // Ignore bridge failures while reporting a renderer error.
-        }
-        renderFatalError(message);
-      }
-
-      window.addEventListener("error", (event) => {
-        reportClientError("error", event?.error || event?.message || "Unknown webview error");
-      });
-
-      window.addEventListener("unhandledrejection", (event) => {
-        reportClientError("unhandledrejection", event?.reason || "Unhandled promise rejection");
-      });
 
       function escapeHtml(value) {
         return String(value || "")
@@ -2647,8 +2667,13 @@ class PipeonChatViewProvider {
     this.channel = channel;
     this.view = null;
     this.rendered = false;
+    logChannelInfo(this.channel, "Pipeon chat provider constructing");
     try {
       this.chatStore = normalizeStoredChatState(this.context.workspaceState.get(CHAT_STATE_KEY));
+      logChannelInfo(this.channel, "Chat history restored", {
+        sessions: Array.isArray(this.chatStore?.sessions) ? this.chatStore.sessions.length : 0,
+        activeSessionId: this.chatStore?.activeSessionId || "",
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       this.channel.error(`Failed to restore chat history: ${message}`);
@@ -2722,15 +2747,32 @@ class PipeonChatViewProvider {
     if (this.view) {
       try {
         if (!this.rendered) {
+          logChannelInfo(this.channel, "Rendering chat webview shell", {
+            activeSessionId: this.state.activeSessionId,
+            messages: Array.isArray(this.state.messages) ? this.state.messages.length : 0,
+          });
           this.view.webview.html = renderChatHtml(this.view.webview, this.state);
           this.rendered = true;
         } else {
+          logChannelInfo(this.channel, "Posting state to chat webview", {
+            activeSessionId: this.state.activeSessionId,
+            messages: Array.isArray(this.state.messages) ? this.state.messages.length : 0,
+            isBusy: !!this.state.isBusy,
+          });
           this.view.webview.postMessage({ type: "state", state: this.state });
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.channel.error(`Webview refresh failed: ${message}`);
-        this.rendered = false;
+        try {
+          logChannelInfo(this.channel, "Attempting full webview reload after refresh failure");
+          this.view.webview.html = renderChatHtml(this.view.webview, this.state);
+          this.rendered = true;
+        } catch (reloadError) {
+          const reloadMessage = reloadError instanceof Error ? reloadError.message : String(reloadError);
+          this.channel.error(`Webview reload failed: ${reloadMessage}`);
+          this.rendered = false;
+        }
       }
     }
   }
@@ -2798,6 +2840,11 @@ class PipeonChatViewProvider {
   }
 
   async ask(root, text, mode = "ask", modelProfile = "balanced") {
+    logChannelInfo(this.channel, "Received ask request", {
+      mode,
+      modelProfile,
+      promptChars: String(text || "").length,
+    });
     const session = this.activeSession;
     const createdAt = nowIso();
     const userMessage = sanitizeMessage({
@@ -3009,9 +3056,15 @@ class PipeonChatViewProvider {
   resolveWebviewView(webviewView) {
     this.view = webviewView;
     this.rendered = false;
+    logChannelInfo(this.channel, "resolveWebviewView called");
     webviewView.webview.options = { enableScripts: true };
     webviewView.webview.onDidReceiveMessage(async (msg) => {
       try {
+        logChannelInfo(this.channel, "Webview message received", {
+          type: msg?.type || "",
+          hasText: !!msg?.text,
+          messageId: msg?.messageId || "",
+        });
         const workspaceRoot = getWorkspaceRoot();
         if (msg?.type === "switchSession" && msg.sessionId) {
           await this.switchSession(msg.sessionId);
@@ -3046,6 +3099,7 @@ class PipeonChatViewProvider {
           return;
         }
         if (msg?.type === "webviewReady") {
+          logChannelInfo(this.channel, "Webview reported ready");
           this.refresh();
           return;
         }
@@ -3075,11 +3129,14 @@ class PipeonChatViewProvider {
       const host = process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST;
       const model = process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL;
       this.state.status = `Model: ${model}  |  Ollama: ${host}`;
+      logChannelInfo(this.channel, "Workspace root detected for chat view", { root, model, host });
     } else {
       this.state.status = "Open a workspace folder to chat with DorkPipe.";
+      logChannelInfo(this.channel, "No workspace root available for chat view");
     }
     this.refresh();
     webviewView.onDidDispose(() => {
+      logChannelInfo(this.channel, "Chat webview disposed");
       this.view = null;
       this.rendered = false;
     });
@@ -3089,6 +3146,7 @@ class PipeonChatViewProvider {
 /** @param {vscode.ExtensionContext} context */
 function activate(context) {
   const channel = vscode.window.createOutputChannel("DorkPipe", { log: true });
+  logChannelInfo(channel, "Activating Pipeon VS Code extension");
   const chatProvider = new PipeonChatViewProvider(context, channel);
 
   context.subscriptions.push(
