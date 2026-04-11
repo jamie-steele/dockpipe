@@ -87,6 +87,27 @@ function createInitialChatState() {
     activeSessionId: session.id,
     sessions: [session],
     composerMode: "ask",
+    autoApplyEdits: false,
+  };
+}
+
+function sanitizePendingAction(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const kind = value.kind === "command" ? "command" : value.kind === "edit" ? "edit" : "";
+  if (!kind) {
+    return null;
+  }
+  return {
+    kind,
+    title: String(value.title || ""),
+    artifactDir: value.artifactDir ? String(value.artifactDir) : "",
+    patchPath: value.patchPath ? String(value.patchPath) : "",
+    diffPreview: value.diffPreview ? clampText(String(value.diffPreview), 12000) : "",
+    targetFiles: Array.isArray(value.targetFiles) ? value.targetFiles.map((item) => String(item)).slice(0, 8) : [],
+    requestText: value.requestText ? String(value.requestText) : "",
+    mode: ["ask", "agent", "plan"].includes(String(value.mode || "").toLowerCase()) ? String(value.mode).toLowerCase() : "ask",
   };
 }
 
@@ -97,6 +118,8 @@ function sanitizeMessage(message) {
     text: clampText(message?.text || "", MAX_MESSAGE_CHARS),
     format: message?.format === "plain" ? "plain" : "markdown",
     createdAt: String(message?.createdAt || nowIso()),
+    pendingAction: sanitizePendingAction(message?.pendingAction),
+    diffPreview: message?.diffPreview ? clampText(String(message.diffPreview), 12000) : "",
   };
 }
 
@@ -122,6 +145,7 @@ function normalizeStoredChatState(raw) {
     composerMode: ["ask", "agent", "plan"].includes(String(raw.composerMode || "").toLowerCase())
       ? String(raw.composerMode).toLowerCase()
       : "ask",
+    autoApplyEdits: !!raw.autoApplyEdits,
   };
 }
 
@@ -809,6 +833,61 @@ async function applyPreparedEdit(root, artifactDir, options = {}) {
   };
 }
 
+async function readPatchPreview(root, readyToApply) {
+  const relPatch = String(readyToApply?.patch_path || "").trim();
+  const relArtifact = String(readyToApply?.artifact_dir || "").trim();
+  const candidates = [];
+  if (relPatch) {
+    candidates.push(path.isAbsolute(relPatch) ? relPatch : path.join(root, relPatch));
+  }
+  if (relArtifact) {
+    candidates.push(path.join(root, relArtifact, "patch.diff"));
+  }
+  for (const candidate of candidates) {
+    try {
+      const text = await fs.readFile(candidate, "utf8");
+      const lines = text.split(/\r?\n/).slice(0, 120).join("\n");
+      return clampText(lines, 12000);
+    } catch {
+      // Try next candidate.
+    }
+  }
+  return "";
+}
+
+function getCliConfirmationRequest(text, mode = "ask") {
+  const trimmed = String(text || "").trim();
+  const lower = trimmed.toLowerCase();
+  let title = "";
+  if (lower === "/test") {
+    title = "Run the `test` workflow?";
+  } else if (lower === "/ci") {
+    title = "Run the `ci-emulate` workflow?";
+  } else if (lower.startsWith("/workflow ")) {
+    title = `Run ${trimmed.slice("/workflow ".length).trim()}?`;
+  } else if (lower.startsWith("/validate ")) {
+    title = `Validate ${trimmed.slice("/validate ".length).trim()}?`;
+  } else if (lower.startsWith("/workflow-validate ")) {
+    title = `Validate ${trimmed.slice("/workflow-validate ".length).trim()}?`;
+  } else {
+    const deterministic = getDeterministicIntent(trimmed);
+    if (deterministic?.command === "/test") {
+      title = "Run the `test` workflow?";
+    } else if (deterministic?.command === "/ci") {
+      title = "Run the `ci-emulate` workflow?";
+    }
+  }
+  if (!title) {
+    return null;
+  }
+  return {
+    kind: "command",
+    title,
+    requestText: trimmed,
+    mode,
+  };
+}
+
 function shouldDelegateSlashToDorkpipe(text) {
   const trimmed = String(text || "").trim().toLowerCase();
   return (
@@ -1252,6 +1331,50 @@ function renderChatHtml(webview, state) {
       .body a {
         color: var(--vscode-textLink-foreground);
       }
+      .pendingCard {
+        margin-top: 12px;
+        padding: 12px;
+        border-radius: 12px;
+        border: 1px solid var(--vscode-panel-border);
+        background: color-mix(in srgb, var(--vscode-editorWidget-background) 92%, transparent);
+      }
+      .pendingTitle {
+        font-size: 12px;
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+      .pendingMeta {
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
+        margin-bottom: 8px;
+      }
+      .diffPreview {
+        margin: 10px 0 0;
+        padding: 10px;
+        overflow-x: auto;
+        border-radius: 10px;
+        border: 1px solid var(--vscode-panel-border);
+        background: color-mix(in srgb, var(--vscode-textCodeBlock-background, #111) 92%, transparent);
+        font-family: var(--vscode-editor-font-family, monospace);
+        font-size: 12px;
+        line-height: 1.45;
+        white-space: pre;
+      }
+      .pendingActions {
+        display: flex;
+        gap: 8px;
+        margin-top: 10px;
+      }
+      .toggleWrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
+      }
+      .toggleWrap input {
+        margin: 0;
+      }
       .plain {
         white-space: pre-wrap;
         margin: 0;
@@ -1337,6 +1460,7 @@ function renderChatHtml(webview, state) {
           <div class="actions">
             <div class="hint">Uses the workspace bundle when available. Safe local routing can skip the model for obvious actions.</div>
             <div class="sendWrap">
+              <label class="toggleWrap"><input id="autoApplyEdits" type="checkbox" /> Auto-apply edits</label>
               <select id="modeSelect" aria-label="Request mode">
                 <option value="ask">Ask</option>
                 <option value="agent">Agent</option>
@@ -1360,11 +1484,61 @@ function renderChatHtml(webview, state) {
       const newFromComposer = document.getElementById("newFromComposer");
       const sessionSelect = document.getElementById("sessionSelect");
       const modeSelect = document.getElementById("modeSelect");
+      const autoApplyEdits = document.getElementById("autoApplyEdits");
       const transcript = document.getElementById("transcript");
       const status = document.getElementById("status");
       const trace = document.getElementById("trace");
       let viewState = vscode.getState() || { draft: "", pinnedToBottom: true, mode: "ask" };
       let currentState = initialState;
+
+      function escapeHtml(value) {
+        return String(value || "")
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
+      }
+
+      function renderPendingAction(message) {
+        const pending = message.pendingAction;
+        if (!pending) {
+          return "";
+        }
+        const meta = [];
+        if (pending.kind === "edit" && Array.isArray(pending.targetFiles) && pending.targetFiles.length) {
+          meta.push("Files: " + pending.targetFiles.join(", "));
+        }
+        if (pending.kind === "command" && pending.requestText) {
+          meta.push("Command: " + pending.requestText);
+        }
+        const diff = pending.diffPreview
+          ? '<pre class="diffPreview">' + escapeHtml(pending.diffPreview) + "</pre>"
+          : "";
+        return [
+          '<div class="pendingCard">',
+          '<div class="pendingTitle">' + escapeHtml(pending.title || (pending.kind === "edit" ? "Review edit" : "Confirm command")) + "</div>",
+          meta.length ? '<div class="pendingMeta">' + escapeHtml(meta.join("  |  ")) + "</div>" : "",
+          diff,
+          '<div class="pendingActions">',
+          '<button class="btn" type="button" data-pending-action="approve" data-message-id="' + escapeHtml(message.id) + '">' + (pending.kind === "edit" ? "Apply" : "Run") + "</button>",
+          '<button class="btn ghost" type="button" data-pending-action="dismiss" data-message-id="' + escapeHtml(message.id) + '">Dismiss</button>',
+          "</div>",
+          "</div>",
+        ].join("");
+      }
+
+      function renderDiffPreview(message) {
+        if (!message.diffPreview) {
+          return "";
+        }
+        return [
+          '<div class="pendingCard">',
+          '<div class="pendingTitle">Diff preview</div>',
+          '<pre class="diffPreview">' + escapeHtml(message.diffPreview) + "</pre>",
+          "</div>",
+        ].join("");
+      }
 
       function renderMessages(messages) {
         if (!messages.length) {
@@ -1372,7 +1546,7 @@ function renderChatHtml(webview, state) {
         }
         return messages.map((message) => {
           const role = message.role === "assistant" ? "DorkPipe" : "You";
-          return '<article class="msg ' + message.role + '"><div class="role">' + role + '</div><div class="body">' + (message.html || "") + '</div></article>';
+          return '<article class="msg ' + message.role + '"><div class="role">' + role + '</div><div class="body">' + (message.html || "") + renderDiffPreview(message) + renderPendingAction(message) + '</div></article>';
         }).join("");
       }
 
@@ -1405,11 +1579,13 @@ function renderChatHtml(webview, state) {
         status.textContent = currentState.status || "";
         renderSessions(currentState);
         modeSelect.value = currentState.composerMode || viewState.mode || "ask";
+        autoApplyEdits.checked = !!currentState.autoApplyEdits;
         send.disabled = !!currentState.isBusy;
         clearBtn.disabled = !!currentState.isBusy;
         newChatBtn.disabled = !!currentState.isBusy;
         newFromComposer.disabled = !!currentState.isBusy;
         modeSelect.disabled = !!currentState.isBusy;
+        autoApplyEdits.disabled = !!currentState.isBusy;
         if (stickToBottom) {
           transcript.scrollTop = transcript.scrollHeight;
         } else {
@@ -1431,6 +1607,9 @@ function renderChatHtml(webview, state) {
       modeSelect.addEventListener("change", () => {
         saveViewState({ mode: modeSelect.value });
         vscode.postMessage({ type: "setComposerMode", mode: modeSelect.value });
+      });
+      autoApplyEdits.addEventListener("change", () => {
+        vscode.postMessage({ type: "setAutoApplyEdits", value: autoApplyEdits.checked });
       });
       prompt.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") {
@@ -1468,6 +1647,18 @@ function renderChatHtml(webview, state) {
         prompt.value = "";
         saveViewState({ draft: "", pinnedToBottom: true, mode: modeSelect.value });
         vscode.postMessage({ type: "ask", text, mode: modeSelect.value });
+      });
+
+      transcript.addEventListener("click", (event) => {
+        const target = event.target instanceof HTMLElement ? event.target.closest("[data-pending-action]") : null;
+        if (!target) {
+          return;
+        }
+        vscode.postMessage({
+          type: "resolvePendingAction",
+          messageId: target.getAttribute("data-message-id"),
+          decision: target.getAttribute("data-pending-action"),
+        });
       });
 
       window.addEventListener("message", (event) => {
@@ -1761,6 +1952,7 @@ class PipeonChatViewProvider {
       sessionList: [],
       activeSessionId: this.chatStore.activeSessionId,
       composerMode: this.chatStore.composerMode || "ask",
+      autoApplyEdits: !!this.chatStore.autoApplyEdits,
       messages: [],
       trace: [],
       status: "Waiting for workspace...",
@@ -1781,6 +1973,7 @@ class PipeonChatViewProvider {
     const session = this.activeSession || createSession();
     this.state.activeSessionId = session.id;
     this.state.composerMode = this.chatStore.composerMode || "ask";
+    this.state.autoApplyEdits = !!this.chatStore.autoApplyEdits;
     this.state.sessionList = sortSessionsByUpdate(this.chatStore.sessions).map((item) => ({
       id: item.id,
       title: item.title || "New chat",
@@ -1851,6 +2044,12 @@ class PipeonChatViewProvider {
     await this.saveAndRefresh();
   }
 
+  async setAutoApplyEdits(value) {
+    this.chatStore.autoApplyEdits = !!value;
+    this.state.autoApplyEdits = !!value;
+    await this.saveAndRefresh();
+  }
+
   pushTrace(label) {
     const items = [...this.state.trace, label].slice(-6);
     this.state.trace = items;
@@ -1873,12 +2072,33 @@ class PipeonChatViewProvider {
       session.title = summarizeSessionTitle(text);
     }
 
-    this.state.trace = [];
     const normalizedMode = ["ask", "agent", "plan"].includes(String(mode || "").toLowerCase())
       ? String(mode).toLowerCase()
       : (this.chatStore.composerMode || "ask");
     this.chatStore.composerMode = normalizedMode;
     this.state.composerMode = normalizedMode;
+
+    const commandConfirmation = getCliConfirmationRequest(text, normalizedMode);
+    if (commandConfirmation) {
+      const assistantMessage = sanitizeMessage({
+        id: makeId("msg"),
+        role: "assistant",
+        text: `${commandConfirmation.title}\n\nI’ll wait for your approval before running this command.`,
+        format: "markdown",
+        createdAt: nowIso(),
+        pendingAction: commandConfirmation,
+      });
+      session.messages.push(assistantMessage);
+      session.updatedAt = nowIso();
+      this.state.trace = [];
+      this.state.status = "Awaiting command confirmation";
+      this.state.isBusy = false;
+      await this.saveAndRefresh();
+      this.view?.webview.postMessage({ type: "done" });
+      return;
+    }
+
+    this.state.trace = [];
     this.state.status = `Routing ${normalizedMode} request...`;
     this.state.isBusy = true;
     await this.saveAndRefresh();
@@ -1908,13 +2128,17 @@ class PipeonChatViewProvider {
       session.updatedAt = nowIso();
       this.state.status = result.status;
       if (result.readyToApply?.artifact_dir) {
-        const applyChoice = await vscode.window.showInformationMessage(
-          "DorkPipe prepared a validated edit. Apply it now?",
-          { modal: true },
-          "Apply",
-          "Not now"
-        );
-        if (applyChoice === "Apply") {
+        const diffPreview = await readPatchPreview(root, result.readyToApply);
+        assistantMessage.diffPreview = diffPreview;
+        assistantMessage.pendingAction = sanitizePendingAction({
+          kind: "edit",
+          title: "Review this code edit",
+          artifactDir: result.readyToApply.artifact_dir,
+          patchPath: result.readyToApply.patch_path,
+          diffPreview,
+          targetFiles: result.readyToApply.target_files,
+        });
+        if (this.chatStore.autoApplyEdits) {
           this.pushTrace("Applying confirmed edit");
           const applied = await applyPreparedEdit(root, result.readyToApply.artifact_dir, {
             onEvent: (label) => this.pushTrace(label),
@@ -1922,10 +2146,10 @@ class PipeonChatViewProvider {
           });
           assistantMessage.text = `${result.text}\n\n---\n\n${applied.text}`;
           assistantMessage.format = applied.format || "markdown";
+          assistantMessage.pendingAction = null;
           this.state.status = applied.status;
         } else {
-          assistantMessage.text = `${result.text}\n\n_Edit prepared but not applied._`;
-          this.state.status = "Edit prepared; waiting for confirmation";
+          this.state.status = "Edit prepared; review diff below";
         }
       }
     } catch (err) {
@@ -1937,6 +2161,64 @@ class PipeonChatViewProvider {
     }
 
     session.messages = session.messages.slice(-MAX_HISTORY_MESSAGES * 4);
+    this.state.isBusy = false;
+    await this.saveAndRefresh();
+    this.view?.webview.postMessage({ type: "done" });
+  }
+
+  async resolvePendingAction(root, messageId, decision) {
+    const session = this.activeSession;
+    const assistantMessage = session.messages.find((message) => message.id === messageId);
+    if (!assistantMessage?.pendingAction) {
+      return;
+    }
+    const pending = assistantMessage.pendingAction;
+    if (decision !== "approve") {
+      assistantMessage.pendingAction = null;
+      assistantMessage.text = `${assistantMessage.text}\n\n_${pending.kind === "edit" ? "Edit" : "Command"} dismissed._`;
+      this.state.status = pending.kind === "edit" ? "Edit dismissed" : "Command dismissed";
+      await this.saveAndRefresh();
+      return;
+    }
+
+    this.state.isBusy = true;
+    this.state.trace = [];
+    this.state.status = pending.kind === "edit" ? "Applying prepared edit..." : "Running confirmed command...";
+    await this.saveAndRefresh();
+
+    try {
+      if (pending.kind === "edit") {
+        this.pushTrace("Applying confirmed edit");
+        const applied = await applyPreparedEdit(root, pending.artifactDir, {
+          onEvent: (label) => this.pushTrace(label),
+          channel: this.channel,
+        });
+        assistantMessage.text = `${assistantMessage.text}\n\n---\n\n${applied.text}`;
+        assistantMessage.format = applied.format || "markdown";
+        assistantMessage.pendingAction = null;
+        this.state.status = applied.status;
+      } else {
+        this.pushTrace("Running confirmed command");
+        const result = await executeDorkpipeRequest(root, session, pending.requestText, {
+          onEvent: (label) => this.pushTrace(label),
+          channel: this.channel,
+          mode: pending.mode,
+        });
+        assistantMessage.text = result.text;
+        assistantMessage.format = result.format || "markdown";
+        assistantMessage.pendingAction = null;
+        this.state.status = result.status;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      assistantMessage.text = `DorkPipe error: ${message}`;
+      assistantMessage.format = "markdown";
+      assistantMessage.pendingAction = null;
+      this.state.status = "Action failed";
+      this.channel.error(message);
+    }
+
+    session.updatedAt = nowIso();
     this.state.isBusy = false;
     await this.saveAndRefresh();
     this.view?.webview.postMessage({ type: "done" });
@@ -1977,8 +2259,16 @@ class PipeonChatViewProvider {
         await this.setComposerMode(msg.mode);
         return;
       }
+      if (msg?.type === "setAutoApplyEdits") {
+        await this.setAutoApplyEdits(!!msg.value);
+        return;
+      }
       if (!workspaceRoot) {
         vscode.window.showWarningMessage("DorkPipe: open a workspace folder first.");
+        return;
+      }
+      if (msg?.type === "resolvePendingAction" && msg.messageId) {
+        await this.resolvePendingAction(workspaceRoot, msg.messageId, msg.decision);
         return;
       }
       if (msg?.type === "ask" && msg.text) {
