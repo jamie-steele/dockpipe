@@ -140,11 +140,29 @@ function summarizeRequestActivity(label, mode) {
   if (lower.includes("collected candidate files")) {
     return "Picking likely files";
   }
+  if (lower.includes("planning edit strategy") || lower.includes("routing to planner model")) {
+    return "Planning the edit";
+  }
+  if (lower.includes("planner selected edit targets")) {
+    return "Chose edit targets";
+  }
+  if (lower.includes("ranking likely target files")) {
+    return "Ranking candidate files";
+  }
+  if (lower.includes("building retrieval bundle")) {
+    return "Assembling retrieval context";
+  }
   if (lower.includes("deterministic")) {
     return "Using a fast local edit path";
   }
-  if (lower.includes("routing to model")) {
+  if (lower.includes("routing to model") || lower.includes("generating patch artifact")) {
     return "Handing off to the model";
+  }
+  if (lower.includes("repairing invalid patch artifact")) {
+    return "Repairing the patch artifact";
+  }
+  if (lower.includes("re-checking repaired patch")) {
+    return "Re-validating the repaired patch";
   }
   if (lower.includes("streaming from")) {
     return "Generating a response";

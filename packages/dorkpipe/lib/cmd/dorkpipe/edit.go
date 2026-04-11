@@ -25,6 +25,7 @@ const (
 	maxEditSnippetPerFile = 5000
 	maxEditCandidateCount = 6
 	editContractVersion   = "v1"
+	maxArtifactRepairPass = 2
 )
 
 type editEvent struct {
@@ -219,12 +220,28 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		emitEditEvent(reqID, "planning", "Planning edit strategy", 0.24, map[string]any{
 			"candidate_count": len(candidates),
 		})
+		emitEditEvent(reqID, "planning", "Routing to planner model", 0.27, map[string]any{
+			"model": chosenModel,
+		})
 		if planned, planErr := buildEditPlan(ctx, host, chosenModel, baseRequest, contextText, candidates); planErr == nil && planned != nil {
 			plan = planned
+			emitEditEvent(reqID, "planning", "Planner selected edit targets", 0.3, map[string]any{
+				"planned_target_count": len(plan.TargetFiles),
+			})
+		} else {
+			emitEditEvent(reqID, "planning", "Planner unavailable; using heuristic plan", 0.3, map[string]any{
+				"planned_target_count": len(plan.TargetFiles),
+			})
 		}
 	}
 	candidates = mergePlannedCandidates(candidates, plan.TargetFiles)
+	emitEditEvent(reqID, "retrieving", "Ranking likely target files", 0.34, map[string]any{
+		"candidate_count": len(candidates),
+	})
 	rankedCandidates := rankCandidates(root, candidates, message)
+	emitEditEvent(reqID, "retrieving", "Building retrieval bundle", 0.4, map[string]any{
+		"ranked_candidate_count": len(rankedCandidates),
+	})
 	snippets := readCandidateSnippets(root, rankedCandidates)
 	retrievalBundle := collectRetrievalBundle(root, message, plan, rankedCandidates)
 	requestRecord := editRequestRecord{
@@ -246,7 +263,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Could not write prompt artifact: %v", err), false)
 		return nil, "", "", err
 	}
-	emitEditEvent(reqID, "routed", "Routing to model for patch artifact", 0.32, map[string]any{
+	emitEditEvent(reqID, "routed", "Generating patch artifact", 0.48, map[string]any{
 		"model": chosenModel,
 	})
 
@@ -262,14 +279,14 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 
 	artifact, err := parseEditArtifact(modelText)
 	if err != nil {
-		artifact, modelText, err = retryInvalidEditArtifact(ctx, reqID, host, chosenModel, prompt, modelText, fmt.Sprintf("Model output was not valid JSON: %v", err), artifactsDir)
+		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, prompt, modelText, fmt.Sprintf("Model output was not valid JSON: %v", err), artifactsDir)
 		if err != nil {
 			emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Model output was not a valid edit artifact: %v", err), true)
 			return nil, "", "", err
 		}
 	}
 	if err := validateEditArtifact(artifact); err != nil {
-		artifact, modelText, err = retryInvalidEditArtifact(ctx, reqID, host, chosenModel, prompt, modelText, fmt.Sprintf("Edit artifact validation failed: %v", err), artifactsDir)
+		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, prompt, modelText, fmt.Sprintf("Edit artifact validation failed: %v", err), artifactsDir)
 		if err != nil {
 			emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Edit artifact validation failed: %v", err), true)
 			return nil, "", "", err
@@ -283,11 +300,11 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		return nil, "", "", err
 	}
 
-	emitEditEvent(reqID, "validating", "Checking patch applicability", 0.55, nil)
+	emitEditEvent(reqID, "validating", "Checking patch applicability", 0.62, nil)
 	verifyOutput, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
 	if err != nil {
 		_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
-		artifact, modelText, err = retryInvalidEditArtifact(ctx, reqID, host, chosenModel, prompt, modelText, fmt.Sprintf("The generated patch did not apply cleanly.\n\nVerifier output:\n%s", emptyFallback(verifyOutput, "(no verifier output)")), artifactsDir)
+		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, prompt, modelText, fmt.Sprintf("The generated patch did not apply cleanly.\n\nVerifier output:\n%s", emptyFallback(verifyOutput, "(no verifier output)")), artifactsDir)
 		if err != nil {
 			emitEditError(reqID, "VALIDATION_FAILED", "The generated patch did not apply cleanly.", true)
 			return nil, "", "", err
@@ -298,6 +315,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Could not write repaired patch artifact: %v", err), false)
 			return nil, "", "", err
 		}
+		emitEditEvent(reqID, "validating", "Re-checking repaired patch", 0.7, nil)
 		verifyOutput, err = runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
 		if err != nil {
 			_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
@@ -906,16 +924,35 @@ func parseEditArtifact(text string) (*editModelArtifact, error) {
 	return &artifact, nil
 }
 
-func retryInvalidEditArtifact(ctx context.Context, reqID, host, model, originalPrompt, previousOutput, reason, artifactsDir string) (*editModelArtifact, string, error) {
-	emitEditEvent(reqID, "routed", "Repairing invalid patch artifact", 0.4, map[string]any{
-		"model": model,
+func repairInvalidArtifactLoop(ctx context.Context, reqID, host, model, originalPrompt, previousOutput, reason, artifactsDir string) (*editModelArtifact, string, error) {
+	var lastErr error
+	currentOutput := previousOutput
+	for attempt := 1; attempt <= maxArtifactRepairPass; attempt++ {
+		artifact, repairedOutput, err := retryInvalidEditArtifact(ctx, reqID, host, model, originalPrompt, currentOutput, reason, artifactsDir, attempt)
+		if err == nil {
+			return artifact, repairedOutput, nil
+		}
+		lastErr = err
+		currentOutput = repairedOutput
+	}
+	return nil, currentOutput, lastErr
+}
+
+func retryInvalidEditArtifact(ctx context.Context, reqID, host, model, originalPrompt, previousOutput, reason, artifactsDir string, attempt int) (*editModelArtifact, string, error) {
+	emitEditEvent(reqID, "repairing", fmt.Sprintf("Repairing invalid patch artifact (pass %d/%d)", attempt, maxArtifactRepairPass), 0.52, map[string]any{
+		"model":   model,
+		"attempt": attempt,
 	})
 	retryPrompt := buildEditArtifactRepairPrompt(originalPrompt, previousOutput, reason)
 	modelText, err := runEditModel(ctx, host, model, retryPrompt)
 	if err != nil {
-		return nil, "", err
+		return nil, previousOutput, err
 	}
-	_ = os.WriteFile(filepath.Join(artifactsDir, "model-response-repair.txt"), []byte(modelText), 0o644)
+	suffix := ""
+	if attempt > 1 {
+		suffix = fmt.Sprintf("-%d", attempt)
+	}
+	_ = os.WriteFile(filepath.Join(artifactsDir, "model-response-repair"+suffix+".txt"), []byte(modelText), 0o644)
 	artifact, err := parseEditArtifact(modelText)
 	if err != nil {
 		return nil, modelText, err
