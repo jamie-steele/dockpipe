@@ -23,17 +23,22 @@ git -C "$ROOT" status --short --untracked-files=no 2>/dev/null | awk '{print $2}
 done
 
 printf '%s\n' "$MESSAGE" \
-  | grep -Eo '[A-Za-z0-9_./-]+\.[A-Za-z0-9]+' \
+  | grep -Eo '[A-Za-z0-9_./-]+\.[A-Za-z0-9]+' || true \
   | while IFS= read -r hinted; do
       emit "$hinted"
     done
 
-tokens="$(printf '%s\n' "$MESSAGE" | tr '[:upper:]' '[:lower:]' | grep -Eo '[a-z0-9_-]{4,}' | sort -u | sed -n '1,12p')"
+tokens="$(
+  printf '%s\n' "$MESSAGE" \
+    | tr '[:upper:]' '[:lower:]' \
+    | grep -Eo '[a-z0-9_-]{4,}' || true
+)"
+tokens="$(printf '%s\n' "$tokens" | sort -u | sed -n '1,12p')"
 if [[ -n "$tokens" ]]; then
   while IFS= read -r token; do
     [[ -z "$token" ]] && continue
     rg --files --hidden -g '!**/.git/**' -g '!**/node_modules/**' -g '!**/target/**' -g '!**/.dockpipe/**' -g '!**/.dorkpipe/**' "$ROOT" \
-      | grep -i "$token" \
+      | grep -i "$token" || true \
       | sed "s#^$ROOT/##" \
       | sed -n '1,4p'
   done <<<"$tokens"

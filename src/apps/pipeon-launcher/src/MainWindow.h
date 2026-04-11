@@ -4,6 +4,7 @@
 #include "ContextStore.h"
 #include "LauncherSettings.h"
 #include "SessionManager.h"
+#include "WorkflowCatalog.h"
 
 #include <QMainWindow>
 #include <QPointer>
@@ -50,10 +51,13 @@ private slots:
     void onViewAdvanced();
     void onViewIconGrid();
     void onViewCompactList();
+    void onOpenSettings();
+    void onManagePackages();
     void onBasicLaunch(const QString &workflowId);
     void onBasicBackHome();
     void onBasicOpenRecent(const QString &absPath);
     void onBasicContinueLast();
+    void activateHome();
     void onSetupMcp();
     void onDismissThirdPartyDisclaimer();
     void onRestoreThirdPartyDisclaimer();
@@ -105,4 +109,5 @@ private:
 
     QWidget *m_disclaimerContainer = nullptr;
     QString m_consoleContextId;
+    QVector<WorkflowMeta> m_basicApps;
 };

@@ -86,6 +86,7 @@ function createInitialChatState() {
   return {
     activeSessionId: session.id,
     sessions: [session],
+    composerMode: "ask",
   };
 }
 
@@ -118,6 +119,9 @@ function normalizeStoredChatState(raw) {
   return {
     activeSessionId: activeSession.id,
     sessions,
+    composerMode: ["ask", "agent", "plan"].includes(String(raw.composerMode || "").toLowerCase())
+      ? String(raw.composerMode).toLowerCase()
+      : "ask",
   };
 }
 
@@ -530,15 +534,6 @@ function fileExists(target) {
     .catch(() => false);
 }
 
-function parseExplicitEditRequest(text) {
-  const trimmed = String(text || "").trim();
-  if (!trimmed.toLowerCase().startsWith("/edit")) {
-    return null;
-  }
-  const body = trimmed.replace(/^\/edit\s*/i, "").trim();
-  return body || null;
-}
-
 function spawnStreamingCommand(command, args, options = {}) {
   return new Promise((resolve, reject) => {
     const child = cp.spawn(command, args, {
@@ -598,12 +593,16 @@ function spawnStreamingCommand(command, args, options = {}) {
 async function resolveDorkpipeInvocation(root) {
   const binary = path.join(root, "packages", "dorkpipe", "bin", "dorkpipe");
   if (await fileExists(binary)) {
-    return {
-      command: binary,
-      argsPrefix: [],
-      cwd: root,
-      mode: "binary",
-    };
+    const probe = await runCommand(`${shellQuote(binary)} --help`, root);
+    const helpText = `${probe.stdout}\n${probe.stderr}`;
+    if (probe.ok && /\brequest\b/.test(helpText) && /\bapply-edit\b/.test(helpText)) {
+      return {
+        command: binary,
+        argsPrefix: [],
+        cwd: root,
+        mode: "binary",
+      };
+    }
   }
   return {
     command: "go",
@@ -613,172 +612,19 @@ async function resolveDorkpipeInvocation(root) {
   };
 }
 
-async function executeStructuredEdit(root, rawText, options = {}) {
-  const request = String(rawText || "").trim();
-  const explicitRequest = parseExplicitEditRequest(request);
-  const inferred = !explicitRequest && !!options.force;
-  if (!explicitRequest && !inferred) {
-    return null;
-  }
-  const effectiveRequest = explicitRequest || request;
-
-  const onEvent = typeof options.onEvent === "function" ? options.onEvent : null;
-  const editor = vscode.window.activeTextEditor;
-  const activeFile =
-    editor?.document?.uri?.scheme === "file" ? relativeToRoot(root, editor.document.uri.fsPath) : "";
-  const selectionText =
-    editor && !editor.selection.isEmpty ? clampText(editor.document.getText(editor.selection), MAX_SELECTION_CHARS) : "";
-
-  const invocation = await resolveDorkpipeInvocation(root);
-  if (onEvent) {
-    onEvent(invocation.mode === "binary" ? "Using DorkPipe binary" : "Using go run for DorkPipe");
-    onEvent(explicitRequest ? "Explicit edit route" : "Inferred edit route");
-  }
-
-  const args = [
-    ...invocation.argsPrefix,
-    "edit",
-    "--workdir",
-    root,
-    "--message",
-    effectiveRequest,
-    "--apply",
-  ];
-  if (activeFile) {
-    args.push("--active-file", activeFile);
-  }
-  if (selectionText) {
-    args.push("--selection-text", selectionText);
-  }
-
-  let finalEvent = null;
-  const stderrLines = [];
-  const result = await spawnStreamingCommand(invocation.command, args, {
-    cwd: invocation.cwd,
-    env: {
-      DOCKPIPE_WORKDIR: root,
-    },
-    onStdoutLine: (line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      try {
-        const event = JSON.parse(trimmed);
-        if (event.display_text && onEvent) {
-          onEvent(event.display_text);
-        }
-        if (event.type === "done") {
-          finalEvent = event;
-        }
-        if (event.type === "error" && event.error?.user_message) {
-          finalEvent = event;
-        }
-      } catch {
-        if (onEvent) {
-          onEvent(trimmed);
-        }
-      }
-    },
-    onStderrLine: (line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      stderrLines.push(trimmed);
-    },
-  });
-
-  if (stderrLines.length) {
-    options.channel?.appendLine(stderrLines.join("\n"));
-  }
-
-  if (finalEvent?.type === "error") {
-    throw new Error(finalEvent.error?.user_message || "Structured edit failed.");
-  }
-  if (result.code !== 0) {
-    throw new Error(stderrLines.join("\n") || "Structured edit command failed.");
-  }
-  if (!finalEvent) {
-    throw new Error("Structured edit did not return a final event.");
-  }
-
-  return {
-    kind: "edit",
-    text: finalEvent.user_message || "Applied an edit.",
-    format: "markdown",
-    status: "Structured edit applied",
-  };
-}
-
-async function routeDorkpipeRequest(root, text, signals, options = {}) {
-  const invocation = await resolveDorkpipeInvocation(root);
-  const args = [
-    ...invocation.argsPrefix,
-    "request",
-    "--workdir",
-    root,
-    "--message",
-    text,
-  ];
-  if (signals.activeFile) {
-    args.push("--active-file", signals.activeFile);
-  }
-  if (signals.selectionText) {
-    args.push("--selection-text", signals.selectionText);
-  }
-
-  let finalEvent = null;
-  const stderrLines = [];
-  const result = await spawnStreamingCommand(invocation.command, args, {
-    cwd: invocation.cwd,
-    env: {
-      DOCKPIPE_WORKDIR: root,
-    },
-    onStdoutLine: (line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      try {
-        const event = JSON.parse(trimmed);
-        if (event.display_text && options.onEvent) {
-          options.onEvent(event.display_text);
-        }
-        if (event.type === "done" || event.type === "error") {
-          finalEvent = event;
-        }
-      } catch {
-        if (options.onEvent) {
-          options.onEvent(trimmed);
-        }
-      }
-    },
-    onStderrLine: (line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      stderrLines.push(trimmed);
-    },
-  });
-
-  if (stderrLines.length) {
-    options.channel?.appendLine(stderrLines.join("\n"));
-  }
-  if (result.code !== 0) {
-    throw new Error(stderrLines.join("\n") || "DorkPipe request routing failed.");
-  }
-  if (finalEvent?.type === "error") {
-    throw new Error(finalEvent.error?.user_message || "DorkPipe request routing failed.");
-  }
-  return {
-    route: finalEvent?.metadata?.route || "chat",
-    action: finalEvent?.metadata?.action || "",
-    reason: finalEvent?.metadata?.reason || "",
-  };
-}
-
 async function executeNaturalLanguageRequest(root, text, signals, options = {}) {
   const invocation = await resolveDorkpipeInvocation(root);
+  const requestMode = ["ask", "agent", "plan"].includes(String(options.mode || "").toLowerCase())
+    ? String(options.mode).toLowerCase()
+    : "ask";
   const args = [
     ...invocation.argsPrefix,
     "request",
     "--execute",
     "--workdir",
     root,
+    "--mode",
+    requestMode,
     "--message",
     text,
   ];
@@ -850,11 +696,60 @@ async function executeNaturalLanguageRequest(root, text, signals, options = {}) 
     format: "markdown",
     readyToApply,
     metadata: finalEvent.metadata || {},
-    status:
-      finalEvent.metadata?.route === "chat"
-        ? `Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}`
-        : "Request handled by DorkPipe",
+    status: buildDorkpipeStatus(finalEvent.metadata || {}, requestMode),
   };
+}
+
+function buildDorkpipeStatus(metadata, fallbackMode = "ask") {
+  const route = metadata.route || "request";
+  const mode = metadata.mode || fallbackMode;
+  if (route === "chat") {
+    const parts = [
+      `Mode: ${String(mode).replace(/^./, (c) => c.toUpperCase())}`,
+      `Model: ${metadata.model || process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}`,
+      `Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}`,
+    ];
+    if (metadata.context_path) {
+      parts.push(`Context: ${metadata.context_path}`);
+    }
+    if (metadata.active_file) {
+      parts.push(`Active file: ${metadata.active_file}`);
+    }
+    return parts.join("  |  ");
+  }
+  if (route === "inspect") {
+    const parts = [
+      `Mode: ${String(mode).replace(/^./, (c) => c.toUpperCase())}`,
+      `Action: ${metadata.action || "inspect"}`,
+    ];
+    if (metadata.workflow) {
+      parts.push(`Workflow: ${metadata.workflow}`);
+    }
+    if (metadata.target) {
+      parts.push(`Target: ${metadata.target}`);
+    }
+    if (metadata.context_path) {
+      parts.push(`Context: ${metadata.context_path}`);
+    }
+    if (metadata.validation_status) {
+      parts.push(`Validation: ${metadata.validation_status}`);
+    }
+    return parts.join("  |  ");
+  }
+  if (route === "edit") {
+    const parts = [`Mode: ${String(mode).replace(/^./, (c) => c.toUpperCase())}`, "Route: edit"];
+    if (typeof metadata.files_touched === "number") {
+      parts.push(`Files: ${metadata.files_touched}`);
+    }
+    if (metadata.validation_status) {
+      parts.push(`Validation: ${metadata.validation_status}`);
+    }
+    if (metadata.artifact_dir) {
+      parts.push(`Artifact: ${metadata.artifact_dir}`);
+    }
+    return parts.join("  |  ");
+  }
+  return "Request handled by DorkPipe";
 }
 
 async function applyPreparedEdit(root, artifactDir, options = {}) {
@@ -916,7 +811,17 @@ async function applyPreparedEdit(root, artifactDir, options = {}) {
 
 function shouldDelegateSlashToDorkpipe(text) {
   const trimmed = String(text || "").trim().toLowerCase();
-  return trimmed === "/context" || trimmed === "/status" || trimmed === "/bundle";
+  return (
+    trimmed === "/context" ||
+    trimmed === "/status" ||
+    trimmed === "/bundle" ||
+    trimmed === "/test" ||
+    trimmed === "/ci" ||
+    trimmed.startsWith("/workflow ") ||
+    trimmed.startsWith("/validate ") ||
+    trimmed.startsWith("/workflow-validate ") ||
+    trimmed.startsWith("/edit ")
+  );
 }
 
 function launchTerminalCommand(root, name, command, extraEnv = {}) {
@@ -1083,6 +988,9 @@ function getDeterministicIntent(text) {
 async function executeDorkpipeRequest(root, session, text, options = {}) {
   const onToken = typeof options.onToken === "function" ? options.onToken : null;
   const onEvent = typeof options.onEvent === "function" ? options.onEvent : null;
+  const mode = ["ask", "agent", "plan"].includes(String(options.mode || "").toLowerCase())
+    ? String(options.mode).toLowerCase()
+    : "ask";
 
   const emitEvent = (label) => {
     if (onEvent) {
@@ -1098,6 +1006,7 @@ async function executeDorkpipeRequest(root, session, text, options = {}) {
       onEvent,
       channel: options.channel,
       onToken,
+      mode,
     });
   }
 
@@ -1428,6 +1337,11 @@ function renderChatHtml(webview, state) {
           <div class="actions">
             <div class="hint">Uses the workspace bundle when available. Safe local routing can skip the model for obvious actions.</div>
             <div class="sendWrap">
+              <select id="modeSelect" aria-label="Request mode">
+                <option value="ask">Ask</option>
+                <option value="agent">Agent</option>
+                <option value="plan">Plan</option>
+              </select>
               <button class="btn ghost" id="newFromComposer" type="button">New</button>
               <button class="btn" id="send" type="submit">Send</button>
             </div>
@@ -1445,10 +1359,11 @@ function renderChatHtml(webview, state) {
       const newChatBtn = document.getElementById("newChatBtn");
       const newFromComposer = document.getElementById("newFromComposer");
       const sessionSelect = document.getElementById("sessionSelect");
+      const modeSelect = document.getElementById("modeSelect");
       const transcript = document.getElementById("transcript");
       const status = document.getElementById("status");
       const trace = document.getElementById("trace");
-      let viewState = vscode.getState() || { draft: "", pinnedToBottom: true };
+      let viewState = vscode.getState() || { draft: "", pinnedToBottom: true, mode: "ask" };
       let currentState = initialState;
 
       function renderMessages(messages) {
@@ -1489,10 +1404,12 @@ function renderChatHtml(webview, state) {
         trace.innerHTML = renderTrace(currentState.trace || []);
         status.textContent = currentState.status || "";
         renderSessions(currentState);
+        modeSelect.value = currentState.composerMode || viewState.mode || "ask";
         send.disabled = !!currentState.isBusy;
         clearBtn.disabled = !!currentState.isBusy;
         newChatBtn.disabled = !!currentState.isBusy;
         newFromComposer.disabled = !!currentState.isBusy;
+        modeSelect.disabled = !!currentState.isBusy;
         if (stickToBottom) {
           transcript.scrollTop = transcript.scrollHeight;
         } else {
@@ -1507,8 +1424,26 @@ function renderChatHtml(webview, state) {
       });
 
       prompt.value = viewState.draft || "";
+      modeSelect.value = viewState.mode || currentState.composerMode || "ask";
       prompt.addEventListener("input", () => {
         saveViewState({ draft: prompt.value });
+      });
+      modeSelect.addEventListener("change", () => {
+        saveViewState({ mode: modeSelect.value });
+        vscode.postMessage({ type: "setComposerMode", mode: modeSelect.value });
+      });
+      prompt.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") {
+          return;
+        }
+        if (event.altKey) {
+          return;
+        }
+        if (event.shiftKey || event.ctrlKey || event.metaKey) {
+          return;
+        }
+        event.preventDefault();
+        form.requestSubmit();
       });
 
       sessionSelect.addEventListener("change", () => {
@@ -1530,8 +1465,9 @@ function renderChatHtml(webview, state) {
         event.preventDefault();
         const text = prompt.value.trim();
         if (!text) return;
-        saveViewState({ draft: prompt.value, pinnedToBottom: true });
-        vscode.postMessage({ type: "ask", text });
+        prompt.value = "";
+        saveViewState({ draft: "", pinnedToBottom: true, mode: modeSelect.value });
+        vscode.postMessage({ type: "ask", text, mode: modeSelect.value });
       });
 
       window.addEventListener("message", (event) => {
@@ -1824,6 +1760,7 @@ class PipeonChatViewProvider {
     this.state = {
       sessionList: [],
       activeSessionId: this.chatStore.activeSessionId,
+      composerMode: this.chatStore.composerMode || "ask",
       messages: [],
       trace: [],
       status: "Waiting for workspace...",
@@ -1843,6 +1780,7 @@ class PipeonChatViewProvider {
   syncViewState() {
     const session = this.activeSession || createSession();
     this.state.activeSessionId = session.id;
+    this.state.composerMode = this.chatStore.composerMode || "ask";
     this.state.sessionList = sortSessionsByUpdate(this.chatStore.sessions).map((item) => ({
       id: item.id,
       title: item.title || "New chat",
@@ -1904,13 +1842,22 @@ class PipeonChatViewProvider {
     await this.saveAndRefresh();
   }
 
+  async setComposerMode(mode) {
+    const nextMode = ["ask", "agent", "plan"].includes(String(mode || "").toLowerCase())
+      ? String(mode).toLowerCase()
+      : "ask";
+    this.chatStore.composerMode = nextMode;
+    this.state.composerMode = nextMode;
+    await this.saveAndRefresh();
+  }
+
   pushTrace(label) {
     const items = [...this.state.trace, label].slice(-6);
     this.state.trace = items;
     this.refresh();
   }
 
-  async ask(root, text) {
+  async ask(root, text, mode = "ask") {
     const session = this.activeSession;
     const createdAt = nowIso();
     const userMessage = sanitizeMessage({
@@ -1927,7 +1874,12 @@ class PipeonChatViewProvider {
     }
 
     this.state.trace = [];
-    this.state.status = "Routing request...";
+    const normalizedMode = ["ask", "agent", "plan"].includes(String(mode || "").toLowerCase())
+      ? String(mode).toLowerCase()
+      : (this.chatStore.composerMode || "ask");
+    this.chatStore.composerMode = normalizedMode;
+    this.state.composerMode = normalizedMode;
+    this.state.status = `Routing ${normalizedMode} request...`;
     this.state.isBusy = true;
     await this.saveAndRefresh();
 
@@ -1949,6 +1901,7 @@ class PipeonChatViewProvider {
           this.refresh();
         },
         channel: this.channel,
+        mode: normalizedMode,
       });
       assistantMessage.text = result.text;
       assistantMessage.format = result.format || "markdown";
@@ -2020,12 +1973,16 @@ class PipeonChatViewProvider {
         await this.clearActiveSession();
         return;
       }
+      if (msg?.type === "setComposerMode") {
+        await this.setComposerMode(msg.mode);
+        return;
+      }
       if (!workspaceRoot) {
         vscode.window.showWarningMessage("DorkPipe: open a workspace folder first.");
         return;
       }
       if (msg?.type === "ask" && msg.text) {
-        await this.ask(workspaceRoot, msg.text);
+        await this.ask(workspaceRoot, msg.text, msg.mode);
       }
     });
   }

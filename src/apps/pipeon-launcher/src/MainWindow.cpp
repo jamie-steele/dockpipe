@@ -6,11 +6,14 @@
 #include "DockpipeChoices.h"
 #include "EditContextDialog.h"
 #include "GitHelper.h"
+#include "PackageManagerDialog.h"
+#include "SettingsDialog.h"
 #include "WorkflowCatalog.h"
 
 #include <QActionGroup>
 #include <QApplication>
 #include <QCloseEvent>
+#include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDir>
 #include <QDialog>
@@ -97,6 +100,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     resize(800, 520);
 
     m_settings.load();
+    const QStringList args = QCoreApplication::arguments();
+    const bool startHome = args.contains(QStringLiteral("--start-home"));
 
     setupMenuBar();
 
@@ -124,7 +129,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     connect(m_basicWidget, &BasicModeWidget::recentProjectSelected, this, &MainWindow::onBasicOpenRecent);
     connect(m_basicWidget, &BasicModeWidget::continueLastRequested, this, &MainWindow::onBasicContinueLast);
     connect(m_basicWidget, &BasicModeWidget::backToHomeRequested, this, &MainWindow::onBasicBackHome);
-    connect(m_basicWidget, &BasicModeWidget::setupMcpRequested, this, &MainWindow::onSetupMcp);
 
     m_store.load();
     rebuildUi();
@@ -138,6 +142,8 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
 
     setupTray();
     applyUiMode();
+    if (startHome)
+        activateHome();
 }
 
 void MainWindow::setupDisclaimerBar()
@@ -207,6 +213,12 @@ void MainWindow::setupMenuBar()
     modeGroup->addAction(m_actAdvanced);
     connect(m_actBasic, &QAction::triggered, this, &MainWindow::onViewBasic);
     connect(m_actAdvanced, &QAction::triggered, this, &MainWindow::onViewAdvanced);
+
+    QMenu *settingsMenu = menuBar()->addMenu(tr("Settings"));
+    settingsMenu->addAction(tr("Preferences…"), this, &MainWindow::onOpenSettings);
+
+    QMenu *packagesMenu = menuBar()->addMenu(tr("Packages"));
+    packagesMenu->addAction(tr("Manage Packages…"), this, &MainWindow::onManagePackages);
 
     QMenu *help = menuBar()->addMenu(tr("Help"));
     help->addAction(tr("Show notice in status bar again"), this, &MainWindow::onRestoreThirdPartyDisclaimer);
@@ -434,6 +446,22 @@ void MainWindow::onViewCompactList()
     m_actList->setChecked(true);
 }
 
+void MainWindow::onOpenSettings()
+{
+    SettingsDialog dialog(m_settings, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    m_settings = dialog.updatedSettings();
+    m_settings.save();
+    rebuildUi();
+}
+
+void MainWindow::onManagePackages()
+{
+    PackageManagerDialog dialog(m_settings.projectFolder, this);
+    dialog.exec();
+}
+
 void MainWindow::onFileOpenProject()
 {
     const QString d = QFileDialog::getExistingDirectory(this, tr("Open project folder"), m_settings.projectFolder);
@@ -486,6 +514,23 @@ void MainWindow::onBasicContinueLast()
     m_basicWidget->setProjectFolder(m_settings.projectFolder);
     m_basicWidget->showWorkspacePage();
     updateBasicPage();
+}
+
+void MainWindow::activateHome()
+{
+    m_settings.uiMode = QStringLiteral("basic");
+    m_settings.projectFolder.clear();
+    m_settings.save();
+    m_basicWidget->setProjectFolder(QString());
+    m_basicWidget->setRecentProjects(m_settings.recentProjectFolders);
+    m_basicWidget->setContinueLastVisible(!m_settings.recentProjectFolders.isEmpty());
+    m_basicWidget->showHomePage();
+    applyUiMode();
+    show();
+    if (isMinimized())
+        showNormal();
+    raise();
+    activateWindow();
 }
 
 void MainWindow::onSetupMcp()
@@ -541,6 +586,7 @@ void MainWindow::updateBasicPage()
 {
     const QString repo = DockpipeChoices::findRepoRoot(m_settings.projectFolder);
     const QVector<WorkflowMeta> apps = WorkflowCatalog::discoverAppWorkflows(repo, m_settings.projectFolder);
+    m_basicApps = apps;
     m_basicWidget->setApps(apps);
 
     QHash<QString, bool> run;
@@ -566,15 +612,40 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
     m_settings.addRecentProject(m_settings.projectFolder);
     m_settings.save();
     m_basicWidget->setRecentProjects(m_settings.recentProjectFolders);
-    Context *c = findContext(m_settings.projectFolder, workflowId, QString());
+    QString effectiveWorkflowId = workflowId;
+    if (effectiveWorkflowId == QStringLiteral("pipeon") || effectiveWorkflowId == QStringLiteral("Pipeon"))
+        effectiveWorkflowId = QStringLiteral("pipeon-dev-stack");
+    QString effectiveWorkflowFile;
+    for (const WorkflowMeta &meta : m_basicApps) {
+        QString metaWorkflowId = meta.workflowId;
+        if (metaWorkflowId == QStringLiteral("pipeon") || metaWorkflowId == QStringLiteral("Pipeon"))
+            metaWorkflowId = QStringLiteral("pipeon-dev-stack");
+        if (metaWorkflowId == effectiveWorkflowId) {
+            effectiveWorkflowFile = meta.configPath;
+            break;
+        }
+    }
+    const QString basicWorkflowFileKey =
+        (!effectiveWorkflowFile.isEmpty() && !effectiveWorkflowFile.startsWith(QStringLiteral("tar://")))
+            ? effectiveWorkflowFile
+            : QString();
+    Context *c = findContext(m_settings.projectFolder, effectiveWorkflowId, basicWorkflowFileKey);
     if (!c) {
         Context nc = Context::createNew();
         nc.workdir = m_settings.projectFolder;
-        nc.workflow = workflowId;
-        nc.label = QFileInfo(m_settings.projectFolder).fileName() + QStringLiteral(" — ") + workflowId;
+        nc.workflow = effectiveWorkflowId;
+        if (!effectiveWorkflowFile.startsWith(QStringLiteral("tar://")))
+            nc.workflowFile = effectiveWorkflowFile;
+        nc.dockpipeBinary = DockpipeChoices::preferredDockpipeBinary(m_settings.projectFolder);
+        nc.label = QFileInfo(m_settings.projectFolder).fileName() + QStringLiteral(" — ") + effectiveWorkflowId;
         m_store.contexts.append(nc);
         m_store.save();
         c = &m_store.contexts.last();
+    } else if (c->dockpipeBinary.trimmed().isEmpty() || c->dockpipeBinary.trimmed() == QStringLiteral("dockpipe")) {
+        c->dockpipeBinary = DockpipeChoices::preferredDockpipeBinary(m_settings.projectFolder);
+        if (!effectiveWorkflowFile.isEmpty() && !effectiveWorkflowFile.startsWith(QStringLiteral("tar://")))
+            c->workflowFile = effectiveWorkflowFile;
+        m_store.save();
     }
     if (m_sessions.launch(*c, ContextStore::logsDir()))
         rebuildUi();
@@ -991,7 +1062,7 @@ QString MainWindow::currentContextCommandLine() const
     if (program.isEmpty()) {
         program = c->dockpipeBinary.trimmed();
         if (program.isEmpty())
-            program = QStringLiteral("dockpipe");
+            program = DockpipeChoices::preferredDockpipeBinary(c->workdir);
         args = SessionManager::dockpipeArguments(*c);
     }
 

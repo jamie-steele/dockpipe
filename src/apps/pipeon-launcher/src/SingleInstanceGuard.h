@@ -23,12 +23,12 @@ public:
     SingleInstanceGuard &operator=(const SingleInstanceGuard &) = delete;
 
     /** @return true if this process should continue as primary; false if secondary (exit main). */
-    bool tryRunPrimaryInstance();
+    bool tryRunPrimaryInstance(bool startHome = false);
 
     void setActivationTarget(QWidget *w) { m_target = w; }
 
 private:
-    bool notifyPrimaryToActivate();
+    bool notifyPrimaryToActivate(bool startHome);
 
     QSharedMemory m_mem;
     QLocalServer m_server;

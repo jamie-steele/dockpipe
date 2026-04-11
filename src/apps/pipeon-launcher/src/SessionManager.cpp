@@ -67,7 +67,7 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
 
     QString program = ctx.dockpipeBinary.trimmed();
     if (program.isEmpty())
-        program = QStringLiteral("dockpipe");
+        program = DockpipeChoices::preferredDockpipeBinary(ctx.workdir);
 
     const QString ts = QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"));
     const QString logPath = logsDir + QLatin1Char('/') + ctx.id + QLatin1Char('-') + ts + QStringLiteral(".log");

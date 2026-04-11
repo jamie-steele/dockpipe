@@ -69,6 +69,12 @@ Rules:
 - hints are advisory only
 - route authority stays with DorkPipe
 
+CLI equivalent in the current local-first harness:
+
+```bash
+dorkpipe request --execute --workdir /workspace --message "fix the README intro"
+```
+
 ## Stream events (`v1`)
 
 ```json
@@ -184,6 +190,11 @@ Allowed additions in debug mode:
 - timing
 - validation summary
 - safe internal IDs
+
+See also:
+
+- **`packages/dorkpipe/resolvers/dorkpipe/assets/docs/request-contract.md`**
+- **`packages/dorkpipe/resolvers/dorkpipe/assets/docs/edit-artifact.md`**
 
 ## Attachments
 

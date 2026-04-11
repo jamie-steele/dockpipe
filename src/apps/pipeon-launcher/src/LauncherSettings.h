@@ -11,6 +11,10 @@ public:
     QString uiMode;     ///< `"basic"` (default) or `"advanced"`
     QString basicView;  ///< `"icons"` or `"list"`
     QString projectFolder;
+    QString repoRootOverride;
+    QString globalRootOverride;
+    QStringList extraWorkflowRoots;
+    QStringList packageRemotes;
     /// Most recently opened project folders (newest first), capped at `kMaxRecentProjects`.
     QStringList recentProjectFolders;
     /// When true, the status-bar third-party disclaimer is hidden until restored from Help.
@@ -25,5 +29,6 @@ public:
     bool isAdvanced() const { return uiMode == QStringLiteral("advanced"); }
     bool isBasicIcons() const { return basicView != QStringLiteral("list"); }
 
+    static LauncherSettings current();
     static QString filePath();
 };

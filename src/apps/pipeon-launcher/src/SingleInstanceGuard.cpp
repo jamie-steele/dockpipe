@@ -1,6 +1,7 @@
 #include "SingleInstanceGuard.h"
 
 #include <QObject>
+#include <QMetaObject>
 #include <QLocalServer>
 #include <QLocalSocket>
 #include <QSharedMemory>
@@ -35,7 +36,7 @@ SingleInstanceGuard::~SingleInstanceGuard()
         m_mem.detach();
 }
 
-bool SingleInstanceGuard::notifyPrimaryToActivate()
+bool SingleInstanceGuard::notifyPrimaryToActivate(bool startHome)
 {
     QLocalSocket socket;
     for (int i = 0; i < 25; ++i) {
@@ -46,18 +47,20 @@ bool SingleInstanceGuard::notifyPrimaryToActivate()
     }
     if (socket.state() != QLocalSocket::ConnectedState)
         return false;
-    socket.write("SHOW\n");
+    socket.write(startHome ? "SHOW_HOME\n" : "SHOW\n");
     socket.waitForBytesWritten(2000);
     return true;
 }
 
-bool SingleInstanceGuard::tryRunPrimaryInstance()
+bool SingleInstanceGuard::tryRunPrimaryInstance(bool startHome)
 {
-    // Another instance holds the segment
+    // Another instance appears to hold the segment. Only exit if we can actually
+    // reach that primary process; otherwise recover from stale IPC state.
     if (m_mem.attach()) {
         m_mem.detach();
-        notifyPrimaryToActivate();
-        return false;
+        if (notifyPrimaryToActivate(startHome))
+            return false;
+        qWarning("Pipeon: stale single-instance shared memory found; recovering primary instance.");
     }
 
     if (!m_mem.create(1)) {
@@ -65,13 +68,25 @@ bool SingleInstanceGuard::tryRunPrimaryInstance()
             QThread::msleep(120);
             if (m_mem.attach()) {
                 m_mem.detach();
-                notifyPrimaryToActivate();
-                return false;
+                if (notifyPrimaryToActivate(startHome))
+                    return false;
+                qWarning("Pipeon: stale shared memory persisted after retry; continuing as primary.");
+                if (!m_mem.create(1)) {
+                    qWarning("Pipeon: could not recreate shared memory after stale-state recovery (%s); continuing without guard.",
+                             qPrintable(m_mem.errorString()));
+                    return true;
+                }
+            } else if (!m_mem.create(1)) {
+                qWarning("Pipeon: single-instance shared memory unavailable after retry (%s); continuing without guard.",
+                         qPrintable(m_mem.errorString()));
+                return true;
             }
         }
-        qWarning("Pipeon: single-instance shared memory unavailable (%s); continuing without guard.",
-                 qPrintable(m_mem.errorString()));
-        return true;
+        if (!m_mem.isAttached()) {
+            qWarning("Pipeon: single-instance shared memory unavailable (%s); continuing without guard.",
+                     qPrintable(m_mem.errorString()));
+            return true;
+        }
     }
 
     const QString name = ipcServerName();
@@ -91,7 +106,14 @@ bool SingleInstanceGuard::tryRunPrimaryInstance()
             const QByteArray data = client->readAll();
             client->deleteLater();
 
-            if (!data.contains("SHOW") || !m_target)
+            if (!m_target)
+                return;
+
+            if (data.contains("SHOW_HOME")) {
+                QMetaObject::invokeMethod(m_target, "activateHome", Qt::QueuedConnection);
+                return;
+            }
+            if (!data.contains("SHOW"))
                 return;
 
             m_target->show();

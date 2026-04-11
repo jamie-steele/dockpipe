@@ -26,6 +26,73 @@ PIPEON_BIN="$REPO_ROOT/packages/pipeon/resolvers/pipeon/bin/pipeon"
 STACK_STARTED_BY_ME=0
 MCP_STARTED_BY_ME=0
 
+go_build_in_dir() {
+  local dir="$1"
+  shift
+  (
+    cd "$dir"
+    env GOCACHE=/tmp/dockpipe-go-build-cache go build "$@"
+  )
+}
+
+try_rebuild_or_keep_existing() {
+  local target="$1"
+  local label="$2"
+  shift 2
+  if "$@"; then
+    return 0
+  fi
+  if [[ -x "$target" ]]; then
+    printf '[pipeon-dev-stack] warning: could not rebuild %s; using existing binary at %s\n' "$label" "$target" >&2
+    return 0
+  fi
+  printf '[pipeon-dev-stack] error: rebuild failed and no existing %s binary is available at %s\n' "$label" "$target" >&2
+  return 1
+}
+
+paths_newer_than() {
+  local target="$1"
+  shift
+  if [[ ! -e "$target" ]]; then
+    return 0
+  fi
+  local path
+  for path in "$@"; do
+    [[ -e "$path" ]] || continue
+    if [[ -d "$path" ]]; then
+      if find "$path" -type f -newer "$target" -print -quit 2>/dev/null | grep -q .; then
+        return 0
+      fi
+    elif [[ "$path" -nt "$target" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+code_server_image_needs_rebuild() {
+  local stamp
+  stamp="$(pipeon_stack_image_stamp_file)"
+  paths_newer_than "$stamp" \
+    "$REPO_ROOT/packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server" \
+    "$REPO_ROOT/packages/pipeon/resolvers/pipeon/vscode-extension/code-server-user-settings.json" \
+    "$REPO_ROOT/packages/pipeon/resolvers/pipeon/vscode-extension/extension.js" \
+    "$REPO_ROOT/packages/pipeon/resolvers/pipeon/vscode-extension/package.json" \
+    "$REPO_ROOT/packages/dockpipe-language-support" \
+    "$REPO_ROOT/packages/pipeon/resolvers/pipeon/vscode-extension/images"
+}
+
+build_code_server_image_if_needed() {
+  local stamp
+  stamp="$(pipeon_stack_image_stamp_file)"
+  ensure_pipeon_stack_state_dir
+  if ! docker image inspect dockpipe-code-server:latest >/dev/null 2>&1 || code_server_image_needs_rebuild; then
+    printf '[pipeon-dev-stack] rebuilding dockpipe-code-server:latest for fresh extension assets...\n' >&2
+    make build-code-server-image >&2
+    date -Iseconds > "$stamp"
+  fi
+}
+
 wait_for_ollama_ready() {
   local attempts="${1:-60}"
   local i
@@ -61,26 +128,31 @@ fi
 
 case "$BUILD_MODE" in
   always)
-    env GOCACHE=/tmp/dockpipe-go-build-cache make build
-    env GOCACHE=/tmp/dockpipe-go-build-cache go build -C "$REPO_ROOT/packages/dorkpipe/lib" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o ../bin/dorkpipe ./cmd/dorkpipe
-    env GOCACHE=/tmp/dockpipe-go-build-cache go build -C "$REPO_ROOT/packages/dorkpipe-mcp" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o bin/mcpd ./cmd/mcpd
+    try_rebuild_or_keep_existing "$DOCKPIPE_BIN" dockpipe env GOCACHE=/tmp/dockpipe-go-build-cache make build
+    try_rebuild_or_keep_existing "$DORKPIPE_BIN" dorkpipe \
+      go_build_in_dir "$REPO_ROOT/packages/dorkpipe/lib" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o ../bin/dorkpipe ./cmd/dorkpipe
+    try_rebuild_or_keep_existing "$MCPD_BIN" mcpd \
+      go_build_in_dir "$REPO_ROOT/packages/dorkpipe-mcp" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o bin/mcpd ./cmd/mcpd
     make build-pipeon-desktop
     ;;
   auto)
-    if [[ ! -x "$DOCKPIPE_BIN" ]]; then
-      env GOCACHE=/tmp/dockpipe-go-build-cache make build
+    if [[ ! -x "$DOCKPIPE_BIN" ]] || paths_newer_than "$DOCKPIPE_BIN" "$REPO_ROOT/src" "$REPO_ROOT/src/Makefile" "$REPO_ROOT/VERSION"; then
+      try_rebuild_or_keep_existing "$DOCKPIPE_BIN" dockpipe env GOCACHE=/tmp/dockpipe-go-build-cache make build
     fi
-    if [[ ! -x "$DORKPIPE_BIN" ]]; then
-      env GOCACHE=/tmp/dockpipe-go-build-cache go build -C "$REPO_ROOT/packages/dorkpipe/lib" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o ../bin/dorkpipe ./cmd/dorkpipe
+    if [[ ! -x "$DORKPIPE_BIN" ]] || paths_newer_than "$DORKPIPE_BIN" "$REPO_ROOT/packages/dorkpipe/lib" "$REPO_ROOT/VERSION"; then
+      try_rebuild_or_keep_existing "$DORKPIPE_BIN" dorkpipe \
+        go_build_in_dir "$REPO_ROOT/packages/dorkpipe/lib" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o ../bin/dorkpipe ./cmd/dorkpipe
     fi
-    if [[ ! -x "$MCPD_BIN" ]]; then
-      env GOCACHE=/tmp/dockpipe-go-build-cache go build -C "$REPO_ROOT/packages/dorkpipe-mcp" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o bin/mcpd ./cmd/mcpd
+    if [[ ! -x "$MCPD_BIN" ]] || paths_newer_than "$MCPD_BIN" "$REPO_ROOT/packages/dorkpipe-mcp" "$REPO_ROOT/VERSION"; then
+      try_rebuild_or_keep_existing "$MCPD_BIN" mcpd \
+        go_build_in_dir "$REPO_ROOT/packages/dorkpipe-mcp" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o bin/mcpd ./cmd/mcpd
     fi
-    if [[ ! -x "$PIPEON_DESKTOP_BIN" ]]; then
+    if [[ ! -x "$PIPEON_DESKTOP_BIN" ]] || paths_newer_than "$PIPEON_DESKTOP_BIN" "$REPO_ROOT/src/apps/pipeon-desktop" "$REPO_ROOT/VERSION"; then
       if command -v cargo >/dev/null 2>&1; then
         make build-pipeon-desktop
       fi
     fi
+    build_code_server_image_if_needed
     ;;
   never)
     ;;

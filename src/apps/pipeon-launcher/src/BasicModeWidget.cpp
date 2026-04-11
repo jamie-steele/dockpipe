@@ -114,8 +114,7 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
 
     auto *sub = new QLabel(
         tr("Launch a tool for this folder. It is passed to dockpipe as --workdir (mounted in the container).\n"
-           "The cursor-dev app starts a long-lived Docker session then opens Cursor on the host — "
-           "that is not the same as “Set up Cursor MCP”, which only writes package-scoped hints under bin/.dockpipe and does not start Docker."));
+           "The cursor-dev app starts a long-lived Docker session then opens Cursor on the host."));
     sub->setObjectName(QStringLiteral("appSubtitle"));
     sub->setWordWrap(true);
 
@@ -128,17 +127,9 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     m_refresh = new QPushButton(tr("Refresh apps"));
     m_refresh->setObjectName(QStringLiteral("secondaryButton"));
     m_refresh->setToolTip(tr("Reload the app list from disk (new workflows, category changes)."));
-    m_setupMcp = new QPushButton(tr("Set up Cursor MCP"));
-    m_setupMcp->setObjectName(QStringLiteral("secondaryButton"));
-    m_setupMcp->setToolTip(tr(
-        "Run cursor-prep.sh only — writes bin/.dockpipe/packages/cursor-dev/ (AGENT-MCP.md, mcp.json.example). "
-        "Does not run dockpipe or start Docker. To get a session container + Cursor, double-click the "
-        "cursor-dev app in the list above."));
     connect(m_browse, &QPushButton::clicked, this, &BasicModeWidget::onBrowse);
     connect(m_refresh, &QPushButton::clicked, this, &BasicModeWidget::onRefresh);
-    connect(m_setupMcp, &QPushButton::clicked, this, &BasicModeWidget::setupMcpRequested);
     projRow->addWidget(m_projectLabel, 1);
-    projRow->addWidget(m_setupMcp, 0, Qt::AlignRight);
     projRow->addWidget(m_refresh, 0, Qt::AlignRight);
     projRow->addWidget(m_browse, 0, Qt::AlignRight);
 

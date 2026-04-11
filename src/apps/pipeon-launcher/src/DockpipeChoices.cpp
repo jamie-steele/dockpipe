@@ -1,5 +1,6 @@
 #include "DockpipeChoices.h"
 
+#include "LauncherSettings.h"
 #include "WorkflowCatalog.h"
 
 #include <QDir>
@@ -82,7 +83,24 @@ QString DockpipeChoices::findRepoRoot(const QString &hintWorkdir)
                 break;
         }
     }
+    const LauncherSettings settings = LauncherSettings::current();
+    if (!settings.repoRootOverride.trimmed().isEmpty()) {
+        const QString clean = QDir::cleanPath(settings.repoRootOverride.trimmed());
+        if (looksLikeRepoRoot(clean))
+            return clean;
+    }
     return QString();
+}
+
+QString DockpipeChoices::preferredDockpipeBinary(const QString &hintWorkdir)
+{
+    const QString root = findRepoRoot(hintWorkdir);
+    if (!root.isEmpty()) {
+        const QString repoBin = QDir(root).filePath(QStringLiteral("src/bin/dockpipe"));
+        if (QFileInfo(repoBin).isFile() && QFileInfo(repoBin).isExecutable())
+            return QDir::cleanPath(repoBin);
+    }
+    return QStringLiteral("dockpipe");
 }
 
 QString DockpipeChoices::cursorPrepScriptPath(const QString &hintWorkdir)

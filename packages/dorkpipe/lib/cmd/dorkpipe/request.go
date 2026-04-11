@@ -19,6 +19,14 @@ type routeRequest struct {
 	Message       string
 	ActiveFile    string
 	SelectionText string
+	Mode          string
+}
+
+type routedRequest struct {
+	Route  string
+	Action string
+	Arg    string
+	Reason string
 }
 
 func requestCmd(argv []string) {
@@ -27,6 +35,7 @@ func requestCmd(argv []string) {
 	message := fs.String("message", "", "request text")
 	activeFile := fs.String("active-file", "", "repo-relative active file hint")
 	selectionText := fs.String("selection-text", "", "selection hint")
+	mode := fs.String("mode", "ask", "request mode: ask, agent, or plan")
 	executeRoute := fs.Bool("execute", false, "execute the routed request and stream events")
 	model := fs.String("model", "", "Ollama model override")
 	ollamaHost := fs.String("ollama-host", "", "Ollama host override")
@@ -57,19 +66,24 @@ func requestCmd(argv []string) {
 		Message:       strings.TrimSpace(*message),
 		ActiveFile:    strings.TrimSpace(*activeFile),
 		SelectionText: strings.TrimSpace(*selectionText),
+		Mode:          normalizeRequestMode(*mode),
 	}
-	route, action, reason := chooseRoute(req)
-	emitEditEvent(reqID, "routed", fmt.Sprintf("Route: %s", route), 0.22, map[string]any{
-		"route":  route,
-		"action": action,
-		"reason": reason,
+	routed := chooseRoute(req)
+	emitEditEvent(reqID, "routed", fmt.Sprintf("Route: %s", routed.Route), 0.22, map[string]any{
+		"route":  routed.Route,
+		"action": routed.Action,
+		"arg":    routed.Arg,
+		"reason": routed.Reason,
+		"mode":   req.Mode,
 	})
 
 	if !*executeRoute {
 		emitEditDone(reqID, "Request routed.", map[string]any{
-			"route":   route,
-			"action":  action,
-			"reason":  reason,
+			"route":   routed.Route,
+			"action":  routed.Action,
+			"arg":     routed.Arg,
+			"reason":  routed.Reason,
+			"mode":    req.Mode,
 			"workdir": absWd,
 		})
 		return
@@ -77,38 +91,84 @@ func requestCmd(argv []string) {
 
 	ctx := context.Background()
 	host, chosenModel := resolveModelConfig(strings.TrimSpace(*ollamaHost), strings.TrimSpace(*model))
-	switch route {
+	switch routed.Route {
 	case "inspect":
-		handleInspectRoute(ctx, reqID, absWd, action)
+		handleInspectRoute(ctx, reqID, absWd, routed.Action, routed.Arg)
 	case "edit":
+		if routed.Arg != "" {
+			req.Message = routed.Arg
+		}
 		handleEditRoute(ctx, reqID, absWd, req, host, chosenModel)
 	default:
 		handleChatRoute(ctx, reqID, absWd, req, host, chosenModel)
 	}
 }
 
-func chooseRoute(req routeRequest) (route, action, reason string) {
-	msg := strings.TrimSpace(strings.ToLower(req.Message))
+func chooseRoute(req routeRequest) routedRequest {
+	raw := strings.TrimSpace(req.Message)
+	msg := strings.ToLower(raw)
+	mode := normalizeRequestMode(req.Mode)
 	if msg == "" {
-		return "chat", "", "empty fallback"
+		return routedRequest{Route: "chat", Reason: "empty fallback"}
 	}
 
 	if strings.HasPrefix(msg, "/") {
-		return "inspect", "slash", "explicit slash command"
+		name, arg := parseSlashCommand(raw)
+		switch name {
+		case "edit":
+			return routedRequest{Route: "edit", Action: "edit", Arg: arg, Reason: "explicit slash edit"}
+		case "context", "status", "bundle", "test", "ci", "workflow", "validate", "workflow-validate":
+			return routedRequest{Route: "inspect", Action: name, Arg: arg, Reason: "explicit slash command"}
+		default:
+			return routedRequest{Route: "inspect", Action: "slash", Arg: raw, Reason: "explicit slash command"}
+		}
 	}
 
 	if isInspectIntent(msg) {
-		return "inspect", inspectAction(msg), "natural-language inspect request"
+		return routedRequest{Route: "inspect", Action: inspectAction(msg), Reason: "natural-language inspect request"}
 	}
 
+	switch mode {
+	case "plan":
+		if isEditIntent(msg, req.ActiveFile != "", req.SelectionText != "") {
+			return routedRequest{Route: "chat", Reason: "plan mode prefers planning over mutation"}
+		}
+		return routedRequest{Route: "chat", Reason: "plan mode routes to planning chat"}
+	case "agent":
+		if isChatIntent(msg) {
+			return routedRequest{Route: "chat", Reason: "agent mode kept a clearly conversational request in chat"}
+		}
+		if isEditIntent(msg, req.ActiveFile != "", req.SelectionText != "") {
+			return routedRequest{Route: "edit", Reason: "agent mode with edit-oriented cues"}
+		}
+		return routedRequest{Route: "edit", Reason: "agent mode defaults to edit"}
+	}
+
+	if isChatIntent(msg) {
+		return routedRequest{Route: "chat", Reason: "ask mode kept a conversational/information request in chat"}
+	}
 	if isEditIntent(msg, req.ActiveFile != "", req.SelectionText != "") {
-		return "edit", "", "edit-oriented request with code/workspace cues"
+		return routedRequest{Route: "edit", Reason: "ask mode detected edit-oriented request with code/workspace cues"}
 	}
 
-	return "chat", "", "default conversational route"
+	return routedRequest{Route: "chat", Reason: "ask mode defaulted to chat"}
 }
 
-func handleInspectRoute(ctx context.Context, reqID, root, action string) {
+func parseSlashCommand(raw string) (string, string) {
+	trimmed := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(raw), "/"))
+	if trimmed == "" {
+		return "", ""
+	}
+	parts := strings.Fields(trimmed)
+	if len(parts) == 0 {
+		return "", ""
+	}
+	name := strings.ToLower(parts[0])
+	arg := strings.TrimSpace(strings.TrimPrefix(trimmed, parts[0]))
+	return name, strings.TrimSpace(arg)
+}
+
+func handleInspectRoute(ctx context.Context, reqID, root, action, arg string) {
 	switch action {
 	case "bundle":
 		emitEditEvent(reqID, "context_gathering", "Refreshing context bundle", 0.45, nil)
@@ -134,6 +194,65 @@ func handleInspectRoute(ctx context.Context, reqID, root, action string) {
 			"action":            "status",
 			"validation_status": "not_applicable",
 		})
+	case "test":
+		emitEditEvent(reqID, "context_gathering", "Running test workflow", 0.45, nil)
+		out, err := runRepoCommand(ctx, root, "./src/bin/dockpipe", "--workflow", "test", "--workdir", ".", "--")
+		if err != nil {
+			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Test workflow failed: %s", out), true)
+			return
+		}
+		emitEditDone(reqID, codeFence("text", nonEmpty(out, "Test workflow finished.")), map[string]any{
+			"route":             "inspect",
+			"action":            "test",
+			"validation_status": "passed",
+		})
+	case "ci":
+		emitEditEvent(reqID, "context_gathering", "Running ci-emulate workflow", 0.45, nil)
+		out, err := runRepoCommand(ctx, root, "./src/bin/dockpipe", "--workflow", "ci-emulate", "--workdir", ".", "--")
+		if err != nil {
+			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("ci-emulate failed: %s", out), true)
+			return
+		}
+		emitEditDone(reqID, codeFence("text", nonEmpty(out, "ci-emulate finished.")), map[string]any{
+			"route":             "inspect",
+			"action":            "ci",
+			"validation_status": "passed",
+		})
+	case "workflow":
+		if strings.TrimSpace(arg) == "" {
+			emitEditError(reqID, "INVALID_REQUEST", "Usage: /workflow <name>", false)
+			return
+		}
+		emitEditEvent(reqID, "context_gathering", fmt.Sprintf("Running workflow %s", arg), 0.45, map[string]any{"workflow": arg})
+		out, err := runRepoCommand(ctx, root, "./src/bin/dockpipe", "--workflow", arg, "--workdir", ".", "--")
+		if err != nil {
+			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Workflow %s failed: %s", arg, out), true)
+			return
+		}
+		emitEditDone(reqID, codeFence("text", nonEmpty(out, "Workflow finished.")), map[string]any{
+			"route":             "inspect",
+			"action":            "workflow",
+			"workflow":          arg,
+			"validation_status": "passed",
+		})
+	case "validate", "workflow-validate":
+		target := strings.TrimSpace(arg)
+		if target == "" {
+			emitEditError(reqID, "INVALID_REQUEST", fmt.Sprintf("Usage: /%s <path-to-config.yml>", action), false)
+			return
+		}
+		emitEditEvent(reqID, "context_gathering", fmt.Sprintf("Validating workflow %s", target), 0.45, map[string]any{"target": target})
+		out, err := runRepoCommand(ctx, root, "./src/bin/dockpipe", "workflow", "validate", target)
+		if err != nil {
+			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Workflow validation failed: %s", out), true)
+			return
+		}
+		emitEditDone(reqID, codeFence("text", nonEmpty(out, "Workflow validation finished.")), map[string]any{
+			"route":             "inspect",
+			"action":            action,
+			"target":            target,
+			"validation_status": "passed",
+		})
 	default:
 		emitEditEvent(reqID, "context_gathering", "Reading context bundle", 0.45, nil)
 		rel, text := readEditContextBundle(root)
@@ -147,6 +266,7 @@ func handleInspectRoute(ctx context.Context, reqID, root, action string) {
 		emitEditDone(reqID, fmt.Sprintf("Context bundle: `%s`\n\n%s", rel, codeFence("markdown", text)), map[string]any{
 			"route":  "inspect",
 			"action": "context",
+			"context_path": rel,
 		})
 	}
 }
@@ -180,8 +300,9 @@ func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		// Child already emitted error event; only emit here if it crashed before that.
-		emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Edit route failed: %v", err), false)
+		// The child edit flow emits structured error events for expected failures.
+		// Avoid layering a generic exit-status wrapper on top of the real cause.
+		return
 	}
 }
 
@@ -190,8 +311,9 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	contextPath, contextText := readEditContextBundle(root)
 	prompt := buildChatPrompt(root, req, contextText)
 	emitEditEvent(reqID, "routed", fmt.Sprintf("Streaming from %s", model), 0.55, map[string]any{
-		"route": "chat",
-		"model": model,
+		"route":        "chat",
+		"model":        model,
+		"context_path": contextPath,
 	})
 	answer, err := runChatModelStream(ctx, host, model, prompt, func(piece string) {
 		writeEvent(editEvent{
@@ -210,7 +332,9 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	status := map[string]any{
 		"route":             "chat",
 		"model":             model,
+		"mode":              normalizeRequestMode(req.Mode),
 		"validation_status": "not_applicable",
+		"active_file":       req.ActiveFile,
 	}
 	if contextPath != "" {
 		status["context_path"] = contextPath
@@ -241,6 +365,7 @@ var (
 	editCodeTargetPattern  = regexp.MustCompile(`\b(file|code|function|component|extension|readme|workflow|config|script|test|panel|ui|chat|router|prompt|validation)\b`)
 	editImperativePattern  = regexp.MustCompile(`^(update|change|modify|fix|rewrite|refactor|rename|add|remove|delete|implement|wire up|hook up|patch)\b`)
 	editRequestVerbPattern = regexp.MustCompile(`\b(can you|please|could you|i want|we should|let'?s)\b`)
+	chatIntentPattern      = regexp.MustCompile(`\b(how are you|hello|hi|hey|thanks|thank you|what do you think|explain|summarize|why|how does|what is|who are you|help me understand)\b`)
 )
 
 func isEditIntent(msg string, hasActiveFile, hasSelection bool) bool {
@@ -262,12 +387,32 @@ func isEditIntent(msg string, hasActiveFile, hasSelection bool) bool {
 	return false
 }
 
+func isChatIntent(msg string) bool {
+	if chatIntentPattern.MatchString(msg) {
+		return true
+	}
+	return strings.HasSuffix(msg, "?") &&
+		(strings.Contains(msg, "what ") || strings.Contains(msg, "how ") || strings.Contains(msg, "why ") || strings.Contains(msg, "who "))
+}
+
 func buildChatPrompt(root string, req routeRequest, contextText string) string {
 	opening := []string{
 		"You are DorkPipe, a local-first repo-aware coding assistant.",
 		"Ground your answer in the provided workspace context when relevant.",
 		"If you provide code, use fenced code blocks with a language tag when possible.",
 		"Be concise, practical, and explicit about uncertainty.",
+	}
+	switch normalizeRequestMode(req.Mode) {
+	case "plan":
+		opening = append(opening,
+			"Mode: Plan.",
+			"Do not make or imply code changes. Give a concrete implementation plan, likely files, and validation steps.")
+	case "agent":
+		opening = append(opening,
+			"Mode: Agent.",
+			"Assume the user wants action-oriented help and bias toward concrete next steps over broad explanation.")
+	default:
+		opening = append(opening, "Mode: Ask.")
 	}
 	if req.ActiveFile != "" {
 		opening = append(opening, fmt.Sprintf("Active file: %s", req.ActiveFile))
@@ -280,6 +425,17 @@ func buildChatPrompt(root string, req routeRequest, contextText string) string {
 	}
 	opening = append(opening, fmt.Sprintf("User request:\n%s", req.Message))
 	return strings.Join(opening, "\n\n")
+}
+
+func normalizeRequestMode(mode string) string {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "agent":
+		return "agent"
+	case "plan":
+		return "plan"
+	default:
+		return "ask"
+	}
 }
 
 func runChatModelStream(ctx context.Context, host, model, prompt string, onToken func(string)) (string, error) {

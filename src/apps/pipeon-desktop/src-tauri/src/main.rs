@@ -25,13 +25,60 @@ const CLIPBOARD_BRIDGE_JS: &str = r#"
     return;
   }
   window.__PIPEON_CLIPBOARD_PATCHED__ = true;
+  const nativeClipboard =
+    navigator.clipboard &&
+    typeof navigator.clipboard.readText === 'function' &&
+    typeof navigator.clipboard.writeText === 'function'
+      ? {
+          readText: navigator.clipboard.readText.bind(navigator.clipboard),
+          writeText: navigator.clipboard.writeText.bind(navigator.clipboard),
+        }
+      : null;
+  let lastHostClipboardText = '';
+
+  const selectedTextFromActiveElement = () => {
+    const active = document.activeElement;
+    if (
+      active &&
+      typeof active.value === 'string' &&
+      typeof active.selectionStart === 'number' &&
+      typeof active.selectionEnd === 'number'
+    ) {
+      const start = Math.min(active.selectionStart, active.selectionEnd);
+      const end = Math.max(active.selectionStart, active.selectionEnd);
+      if (end > start) {
+        return active.value.slice(start, end);
+      }
+    }
+
+    if (active && active.isContentEditable) {
+      const text = String(window.getSelection ? window.getSelection().toString() : '').trimEnd();
+      if (text) {
+        return text;
+      }
+    }
+
+    return '';
+  };
+
+  const selectedTextFromPage = () => {
+    const activeText = selectedTextFromActiveElement();
+    if (activeText) {
+      return activeText;
+    }
+
+    const selection = window.getSelection ? window.getSelection().toString() : '';
+    return String(selection || '').trimEnd();
+  };
 
   const bridge = {
     async readText() {
       return await invoke('read_clipboard_text');
     },
     async writeText(text) {
-      await invoke('write_clipboard_text', { text: String(text ?? '') });
+      const next = String(text ?? '');
+      lastHostClipboardText = next;
+      await invoke('write_clipboard_text', { text: next });
     }
   };
 
@@ -57,6 +104,56 @@ const CLIPBOARD_BRIDGE_JS: &str = r#"
   window.__PIPEON_HOST__ = Object.assign({}, window.__PIPEON_HOST__, {
     clipboard: bridge
   });
+
+  const syncCopyToHost = () => {
+    const text = selectedTextFromPage();
+    if (!text) {
+      return;
+    }
+    void bridge.writeText(text);
+  };
+
+  const mirrorBrowserClipboardToHost = async () => {
+    if (!nativeClipboard) {
+      return;
+    }
+    try {
+      const text = String((await nativeClipboard.readText()) ?? '');
+      if (!text || text === lastHostClipboardText) {
+        return;
+      }
+      await bridge.writeText(text);
+    } catch (_) {}
+  };
+
+  const scheduleBrowserClipboardMirror = () => {
+    for (const delay of [80, 220, 500, 900]) {
+      setTimeout(() => {
+        void mirrorBrowserClipboardToHost();
+      }, delay);
+    }
+  };
+
+  let selectionSyncTimer = null;
+  const syncSelectionSoon = () => {
+    if (selectionSyncTimer) {
+      clearTimeout(selectionSyncTimer);
+    }
+    selectionSyncTimer = setTimeout(() => {
+      selectionSyncTimer = null;
+      syncCopyToHost();
+    }, 20);
+  };
+
+  window.addEventListener('copy', syncCopyToHost, true);
+  window.addEventListener('cut', syncCopyToHost, true);
+  window.addEventListener('contextmenu', () => {
+    syncSelectionSoon();
+    scheduleBrowserClipboardMirror();
+  }, true);
+  window.addEventListener('mouseup', syncSelectionSoon, true);
+  window.addEventListener('keyup', syncSelectionSoon, true);
+  document.addEventListener('selectionchange', syncSelectionSoon, true);
 })();
 "#;
 

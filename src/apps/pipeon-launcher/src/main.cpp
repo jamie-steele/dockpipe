@@ -29,9 +29,10 @@ int main(int argc, char *argv[])
 
     app.setQuitOnLastWindowClosed(false);
 
+    const bool startHome = app.arguments().contains(QStringLiteral("--start-home"));
     const bool allowSecond = allowSecondInstance(argc, argv);
     SingleInstanceGuard singleGuard;
-    if (!allowSecond && !singleGuard.tryRunPrimaryInstance())
+    if (!allowSecond && !singleGuard.tryRunPrimaryInstance(startHome))
         return 0;
 
     MainWindow w;

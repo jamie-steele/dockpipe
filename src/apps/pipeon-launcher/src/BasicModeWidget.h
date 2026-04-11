@@ -35,8 +35,6 @@ signals:
     void backToHomeRequested();
     void recentProjectSelected(const QString &absPath);
     void continueLastRequested();
-    void setupMcpRequested();
-
 private slots:
     void onBrowse();
     void onRefresh();
@@ -59,7 +57,6 @@ private:
     QLabel *m_projectLabel = nullptr;
     QPushButton *m_browse = nullptr;
     QPushButton *m_refresh = nullptr;
-    QPushButton *m_setupMcp = nullptr;
     QListWidget *m_list = nullptr;
 
     QStringList m_recentPaths;

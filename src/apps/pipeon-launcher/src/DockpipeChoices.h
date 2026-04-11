@@ -10,6 +10,9 @@ public:
     /// Walk upward from workdir (or DOCKPIPE_REPO_ROOT) to find a dockpipe repo root.
     static QString findRepoRoot(const QString &hintWorkdir);
 
+    /// Prefer the repo checkout binary when available; otherwise fall back to plain `dockpipe`.
+    static QString preferredDockpipeBinary(const QString &hintWorkdir);
+
     /// Path to `cursor-dev` resolver's `cursor-prep.sh` when `hintWorkdir` is inside a dockpipe checkout; empty if not found.
     static QString cursorPrepScriptPath(const QString &hintWorkdir);
 

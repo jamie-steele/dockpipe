@@ -179,6 +179,10 @@ func applyEditCmd(argv []string) {
 }
 
 func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, selectionText, host, chosenModel, artifactsDir string) (*editModelArtifact, string, string, error) {
+	if artifact, patchPath, ok, err := tryDeterministicEditPrimitive(reqID, root, message, activeFile, artifactsDir); ok {
+		return artifact, patchPath, artifactsDir, err
+	}
+
 	candidates, err := collectEditCandidates(ctx, root, activeFile, message, artifactsDir)
 	if err != nil {
 		emitEditError(reqID, "CONTEXT_GATHER_FAILED", fmt.Sprintf("Could not collect candidate files: %v", err), true)
@@ -671,4 +675,135 @@ func emptyFallback(s, fallback string) string {
 		return fallback
 	}
 	return s
+}
+
+func tryDeterministicEditPrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
+	targetFile, lineText, ok := deterministicReadmeAppend(root, message, activeFile)
+	if !ok {
+		return nil, "", false, nil
+	}
+	emitEditEvent(reqID, "context_gathering", "Using deterministic README edit primitive", 0.18, map[string]any{
+		"target_file": targetFile,
+	})
+	beforeBytes, err := os.ReadFile(filepath.Join(root, targetFile))
+	if err != nil {
+		emitEditError(reqID, "CONTEXT_GATHER_FAILED", fmt.Sprintf("Could not read %s: %v", targetFile, err), false)
+		return nil, "", true, err
+	}
+	before := string(beforeBytes)
+	if strings.Contains(before, lineText) {
+		artifact := &editModelArtifact{
+			Summary:     fmt.Sprintf("`%s` already contains the requested proof text.", targetFile),
+			TargetFiles: []string{targetFile},
+			Patch:       buildNoopPatch(targetFile),
+			Validations: []string{"No change was needed."},
+		}
+		patchPath := filepath.Join(artifactsDir, "patch.diff")
+		if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
+			return nil, "", true, err
+		}
+		writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
+		_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte("No patch generated; requested text already present."), 0o644)
+		return artifact, patchPath, true, nil
+	}
+
+	artifact := &editModelArtifact{
+		Summary:     fmt.Sprintf("Append the requested proof text to `%s`.", targetFile),
+		TargetFiles: []string{targetFile},
+		Patch:       buildAppendLinePatch(targetFile, before, lineText),
+		Validations: []string{"Verify the README now includes the requested proof text."},
+	}
+	if err := validateEditArtifact(artifact); err != nil {
+		emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Deterministic edit artifact validation failed: %v", err), false)
+		return nil, "", true, err
+	}
+	writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
+	patchPath := filepath.Join(artifactsDir, "patch.diff")
+	if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
+		return nil, "", true, err
+	}
+	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte("Deterministic README append primitive selected."), 0o644)
+	return artifact, patchPath, true, nil
+}
+
+func deterministicReadmeAppend(root, message, activeFile string) (string, string, bool) {
+	msg := strings.TrimSpace(message)
+	lower := strings.ToLower(msg)
+	targetFile := ""
+	switch {
+	case strings.EqualFold(activeFile, "README.md"):
+		targetFile = "README.md"
+	case strings.Contains(strings.ToLower(activeFile), "readme"):
+		targetFile = activeFile
+	case strings.Contains(lower, "main project readme"), strings.Contains(lower, "main repo readme"), strings.Contains(lower, "project readme"):
+		targetFile = "README.md"
+	case strings.Contains(lower, "readme"):
+		targetFile = "README.md"
+	}
+	if targetFile == "" {
+		return "", "", false
+	}
+	if _, err := os.Stat(filepath.Join(root, targetFile)); err != nil {
+		return "", "", false
+	}
+
+	lineText := ""
+	if idx := strings.LastIndex(lower, " like "); idx >= 0 {
+		lineText = strings.TrimSpace(msg[idx+6:])
+	}
+	if lineText == "" {
+		if idx := strings.LastIndex(lower, " saying "); idx >= 0 {
+			lineText = strings.TrimSpace(msg[idx+8:])
+		}
+	}
+	if lineText == "" {
+		lineText = extractQuotedText(msg)
+	}
+	if lineText == "" {
+		return "", "", false
+	}
+	lineText = strings.TrimSpace(strings.Trim(lineText, "`\"'"))
+	if lineText == "" {
+		return "", "", false
+	}
+	return targetFile, lineText, true
+}
+
+func extractQuotedText(message string) string {
+	for _, quote := range []string{`"`, `'`, "`"} {
+		start := strings.Index(message, quote)
+		end := strings.LastIndex(message, quote)
+		if start >= 0 && end > start {
+			return message[start+1 : end]
+		}
+	}
+	return ""
+}
+
+func buildAppendLinePatch(targetFile, before, lineText string) string {
+	lines := strings.Split(before, "\n")
+	oldCount := len(lines)
+	if before == "" {
+		oldCount = 0
+		lines = nil
+	}
+	newLines := append(append([]string{}, lines...), "", lineText)
+	newCount := len(newLines)
+	var b strings.Builder
+	fmt.Fprintf(&b, "diff --git a/%s b/%s\n", targetFile, targetFile)
+	fmt.Fprintf(&b, "--- a/%s\n", targetFile)
+	fmt.Fprintf(&b, "+++ b/%s\n", targetFile)
+	fmt.Fprintf(&b, "@@ -%d,%d +%d,%d @@\n", oldCount+1, 0, oldCount+1, 2)
+	b.WriteString("+\n")
+	b.WriteString("+")
+	b.WriteString(lineText)
+	b.WriteString("\n")
+	_ = newCount
+	return b.String()
+}
+
+func buildNoopPatch(targetFile string) string {
+	return fmt.Sprintf("diff --git a/%s b/%s\n", targetFile, targetFile) +
+		fmt.Sprintf("--- a/%s\n", targetFile) +
+		fmt.Sprintf("+++ b/%s\n", targetFile)
 }

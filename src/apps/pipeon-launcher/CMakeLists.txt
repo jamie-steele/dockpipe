@@ -27,6 +27,8 @@ set(PIPEON_LAUNCHER_SOURCES
     src/WorkflowCatalog.cpp
     src/LauncherSettings.cpp
     src/BasicModeWidget.cpp
+    src/PackageManagerDialog.cpp
+    src/SettingsDialog.cpp
     src/ContextRowWidget.cpp
     src/EditContextDialog.cpp
     src/MainWindow.cpp

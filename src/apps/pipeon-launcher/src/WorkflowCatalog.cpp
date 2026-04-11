@@ -1,5 +1,7 @@
 #include "WorkflowCatalog.h"
 
+#include "LauncherSettings.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -28,9 +30,13 @@ QStringList extraWorkflowRootDirsCatalog(const QString &repoRoot)
 {
     QStringList out;
     const QString raw = QProcessEnvironment::systemEnvironment().value(QStringLiteral("DOCKPIPE_EXTRA_WORKFLOW_ROOTS"));
-    if (raw.isEmpty())
-        return out;
-    for (const QString &part : raw.split(QLatin1Char(':'), Qt::SkipEmptyParts)) {
+    QStringList parts;
+    if (!raw.isEmpty()) {
+        parts = raw.split(QLatin1Char(':'), Qt::SkipEmptyParts);
+    } else {
+        parts = LauncherSettings::current().extraWorkflowRoots;
+    }
+    for (const QString &part : parts) {
         const QString p = QDir::cleanPath(QDir(repoRoot).filePath(part.trimmed()));
         if (QFileInfo(p).isDir())
             out.append(p);
@@ -65,8 +71,11 @@ QString globalPackagesRoot()
 {
     const QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     const QString overrideRoot = env.value(QStringLiteral("DOCKPIPE_GLOBAL_ROOT")).trimmed();
-    if (!overrideRoot.isEmpty())
-        return QDir::cleanPath(overrideRoot + QStringLiteral("/packages"));
+    QString rootOverride = overrideRoot;
+    if (rootOverride.isEmpty())
+        rootOverride = LauncherSettings::current().globalRootOverride.trimmed();
+    if (!rootOverride.isEmpty())
+        return QDir::cleanPath(rootOverride + QStringLiteral("/packages"));
 #ifdef Q_OS_WIN
     QString base = env.value(QStringLiteral("LOCALAPPDATA")).trimmed();
     if (base.isEmpty())

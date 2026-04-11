@@ -112,6 +112,10 @@ pipeon_stack_runtime_env() {
   printf '%s/runtime.env\n' "$(pipeon_stack_state_dir)"
 }
 
+pipeon_stack_image_stamp_file() {
+  printf '%s/code-server-image.stamp\n' "$(pipeon_stack_state_dir)"
+}
+
 pipeon_stack_pid_file() {
   printf '%s/mcpd.pid\n' "$(pipeon_stack_state_dir)"
 }

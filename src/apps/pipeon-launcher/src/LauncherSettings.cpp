@@ -17,6 +17,12 @@ bool LauncherSettings::load()
     uiMode = QStringLiteral("basic");
     basicView = QStringLiteral("icons");
     projectFolder.clear();
+    repoRootOverride.clear();
+    globalRootOverride.clear();
+    extraWorkflowRoots.clear();
+    packageRemotes.clear();
+    thirdPartyDisclaimerDismissed = false;
+    recentProjectFolders.clear();
 
     QFile f(filePath());
     if (!f.exists() || !f.open(QIODevice::ReadOnly))
@@ -33,8 +39,26 @@ bool LauncherSettings::load()
     if (bv == QStringLiteral("icons") || bv == QStringLiteral("list"))
         basicView = bv;
     projectFolder = o.value(QStringLiteral("projectFolder")).toString();
+    repoRootOverride = o.value(QStringLiteral("repoRootOverride")).toString();
+    globalRootOverride = o.value(QStringLiteral("globalRootOverride")).toString();
     if (o.contains(QStringLiteral("thirdPartyDisclaimerDismissed")))
         thirdPartyDisclaimerDismissed = o.value(QStringLiteral("thirdPartyDisclaimerDismissed")).toBool();
+    if (o.contains(QStringLiteral("extraWorkflowRoots")) && o.value(QStringLiteral("extraWorkflowRoots")).isArray()) {
+        const QJsonArray a = o.value(QStringLiteral("extraWorkflowRoots")).toArray();
+        for (const QJsonValue &v : a) {
+            const QString p = v.toString().trimmed();
+            if (!p.isEmpty())
+                extraWorkflowRoots.append(p);
+        }
+    }
+    if (o.contains(QStringLiteral("packageRemotes")) && o.value(QStringLiteral("packageRemotes")).isArray()) {
+        const QJsonArray a = o.value(QStringLiteral("packageRemotes")).toArray();
+        for (const QJsonValue &v : a) {
+            const QString p = v.toString().trimmed();
+            if (!p.isEmpty())
+                packageRemotes.append(p);
+        }
+    }
     if (o.contains(QStringLiteral("recentProjectFolders")) && o.value(QStringLiteral("recentProjectFolders")).isArray()) {
         const QJsonArray a = o.value(QStringLiteral("recentProjectFolders")).toArray();
         for (const QJsonValue &v : a) {
@@ -69,7 +93,21 @@ bool LauncherSettings::save() const
     o.insert(QStringLiteral("uiMode"), uiMode);
     o.insert(QStringLiteral("basicView"), basicView);
     o.insert(QStringLiteral("projectFolder"), projectFolder);
+    o.insert(QStringLiteral("repoRootOverride"), repoRootOverride);
+    o.insert(QStringLiteral("globalRootOverride"), globalRootOverride);
     o.insert(QStringLiteral("thirdPartyDisclaimerDismissed"), thirdPartyDisclaimerDismissed);
+    {
+        QJsonArray a;
+        for (const QString &p : extraWorkflowRoots)
+            a.append(p);
+        o.insert(QStringLiteral("extraWorkflowRoots"), a);
+    }
+    {
+        QJsonArray a;
+        for (const QString &p : packageRemotes)
+            a.append(p);
+        o.insert(QStringLiteral("packageRemotes"), a);
+    }
     {
         QJsonArray a;
         for (const QString &p : recentProjectFolders)
@@ -83,4 +121,11 @@ bool LauncherSettings::save() const
     f.write(QJsonDocument(o).toJson(QJsonDocument::Indented));
     f.close();
     return true;
+}
+
+LauncherSettings LauncherSettings::current()
+{
+    LauncherSettings s;
+    s.load();
+    return s;
 }
