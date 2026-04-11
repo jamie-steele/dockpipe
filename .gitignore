@@ -11,7 +11,7 @@ tmp/
 # Built Go binaries under src/bin (launchers stay as shell scripts; see Makefile / src/Makefile)
 # Maintainer packages — built ELF artifacts (not under src/bin/)
 packages/dorkpipe/bin/dorkpipe
-packages/dockpipe-mcp/bin/mcpd
+packages/dorkpipe-mcp/bin/mcpd
 
 # Local Cursor / remote server / IDE (binaries, keys, workspace state — do not commit)
 .cache/
@@ -23,6 +23,8 @@ packages/dockpipe-mcp/bin/mcpd
 # Build output
 # Pipeon Launcher CMake build (DockPipe GUI under src/apps/)
 src/apps/pipeon-launcher/build/
+# Pipeon Desktop Tauri/Rust build output
+src/apps/pipeon-desktop/src-tauri/target/
 build-pipeon-launcher/
 release/packaging/build/
 *.deb
