@@ -904,6 +904,15 @@ async function readPatchPreview(root, readyToApply) {
   return "";
 }
 
+function looksLikeShellCommand(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed || /\n/.test(trimmed)) {
+    return false;
+  }
+  const lower = trimmed.toLowerCase();
+  return /^(make|npm|pnpm|yarn|bun|go|cargo|git|docker|docker-compose|podman|node|npx|python|python3|bash|sh|cmake|dockpipe|dorkpipe|ollama)\b/.test(lower);
+}
+
 function getCliConfirmationRequest(text, mode = "ask") {
   const trimmed = String(text || "").trim();
   const lower = trimmed.toLowerCase();
@@ -925,6 +934,9 @@ function getCliConfirmationRequest(text, mode = "ask") {
     } else if (deterministic?.command === "/ci") {
       title = "Run the `ci-emulate` workflow?";
     }
+  }
+  if (!title && looksLikeShellCommand(trimmed)) {
+    title = `Run \`${trimmed}\` in a terminal?`;
   }
   if (!title) {
     return null;
@@ -964,6 +976,15 @@ function launchTerminalCommand(root, name, command, extraEnv = {}) {
   });
   terminal.show(true);
   terminal.sendText(command, true);
+}
+
+function summarizeCommandTitle(text) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed) {
+    return "DorkPipe command";
+  }
+  const parts = trimmed.split(/\s+/).slice(0, 3);
+  return `DorkPipe: ${parts.join(" ")}`;
 }
 
 async function handleLocalCommand(root, rawText) {
@@ -2342,22 +2363,13 @@ class PipeonChatViewProvider {
         assistantMessage.liveStatus = "Running the command";
         assistantMessage.liveTrace = ["Running confirmed command"];
         this.refresh();
-        const result = await executeDorkpipeRequest(root, session, pending.requestText, {
-          onEvent: (label) => {
-            this.pushTrace(label);
-            assistantMessage.liveStatus = summarizeRequestActivity(label, pending.mode);
-            assistantMessage.liveTrace = [...(assistantMessage.liveTrace || []), label].slice(-5);
-            this.refresh();
-          },
-          channel: this.channel,
-          mode: pending.mode,
-        });
+        launchTerminalCommand(root, summarizeCommandTitle(pending.requestText), pending.requestText);
         assistantMessage.liveStatus = "";
         assistantMessage.liveTrace = [];
-        assistantMessage.text = result.text;
-        assistantMessage.format = result.format || "markdown";
+        assistantMessage.text = `Started \`${pending.requestText}\` in a terminal.`;
+        assistantMessage.format = "markdown";
         assistantMessage.pendingAction = null;
-        this.state.status = result.status;
+        this.state.status = "Command started in terminal";
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

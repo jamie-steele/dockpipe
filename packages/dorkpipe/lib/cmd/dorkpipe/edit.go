@@ -228,12 +228,18 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 
 	artifact, err := parseEditArtifact(modelText)
 	if err != nil {
-		emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Model output was not a valid edit artifact: %v", err), true)
-		return nil, "", "", err
+		artifact, modelText, err = retryInvalidEditArtifact(ctx, reqID, host, chosenModel, prompt, modelText, fmt.Sprintf("Model output was not valid JSON: %v", err), artifactsDir)
+		if err != nil {
+			emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Model output was not a valid edit artifact: %v", err), true)
+			return nil, "", "", err
+		}
 	}
 	if err := validateEditArtifact(artifact); err != nil {
-		emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Edit artifact validation failed: %v", err), true)
-		return nil, "", "", err
+		artifact, modelText, err = retryInvalidEditArtifact(ctx, reqID, host, chosenModel, prompt, modelText, fmt.Sprintf("Edit artifact validation failed: %v", err), artifactsDir)
+		if err != nil {
+			emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Edit artifact validation failed: %v", err), true)
+			return nil, "", "", err
+		}
 	}
 	writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
 
@@ -548,6 +554,41 @@ func parseEditArtifact(text string) (*editModelArtifact, error) {
 		return nil, err
 	}
 	return &artifact, nil
+}
+
+func retryInvalidEditArtifact(ctx context.Context, reqID, host, model, originalPrompt, previousOutput, reason, artifactsDir string) (*editModelArtifact, string, error) {
+	emitEditEvent(reqID, "routed", "Repairing invalid patch artifact", 0.4, map[string]any{
+		"model": model,
+	})
+	retryPrompt := buildEditArtifactRepairPrompt(originalPrompt, previousOutput, reason)
+	modelText, err := runEditModel(ctx, host, model, retryPrompt)
+	if err != nil {
+		return nil, "", err
+	}
+	_ = os.WriteFile(filepath.Join(artifactsDir, "model-response-repair.txt"), []byte(modelText), 0o644)
+	artifact, err := parseEditArtifact(modelText)
+	if err != nil {
+		return nil, modelText, err
+	}
+	if err := validateEditArtifact(artifact); err != nil {
+		return nil, modelText, err
+	}
+	return artifact, modelText, nil
+}
+
+func buildEditArtifactRepairPrompt(originalPrompt, previousOutput, reason string) string {
+	return strings.TrimSpace(fmt.Sprintf(`%s
+
+Your previous response was invalid.
+
+Problem:
+%s
+
+Previous response:
+%s
+
+Return JSON only. No markdown fences. Do not truncate the JSON. The "patch" field must contain a valid unified diff beginning with "diff --git".
+`, originalPrompt, reason, emptyFallback(previousOutput, "(empty response)")))
 }
 
 func validateEditArtifact(artifact *editModelArtifact) error {
