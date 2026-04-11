@@ -5,12 +5,22 @@ QLabel#hintText,
 QLabel#contextPath,
 QLabel#contextMeta,
 QLabel#consoleMeta,
-QLabel#emptyBody {
+QLabel#emptyBody,
+QLabel#logViewerStatus,
+QLabel#logViewerPath {
     color: #c8c8c8;
+}
+
+QLabel#logViewerCommand {
+    color: #e4e8ef;
 }
 
 QLabel#emptyTitle {
     color: #f2f2f2;
+}
+
+QDialog {
+    color: #e7ebf2;
 }
 
 QLabel#statusBadge[status="running"] {
@@ -37,6 +47,16 @@ QPushButton#secondaryButton:hover {
     color: #ffffff;
 }
 
+QPushButton#primaryButton {
+    background-color: #1f7dd9;
+    border-color: #1f7dd9;
+}
+
+QPushButton#primaryButton:hover {
+    background-color: #2b8cf0;
+    border-color: #2b8cf0;
+}
+
 QPushButton#dangerButton {
     color: #ffcdd2;
     border: 1px solid rgba(248, 81, 73, 0.55);
@@ -61,8 +81,118 @@ QFrame#inlineConsolePanel {
     border: 1px solid #343841;
 }
 
+QFrame#headerBar,
+QFrame#listPanel,
+QFrame#emptyState {
+    border: 1px solid #343841;
+}
+
+QWidget#launchOverlay {
+    background-color: rgba(15, 18, 23, 0.72);
+}
+
+QFrame#launchOverlayCard {
+    background-color: #20242b;
+    border: 1px solid #343841;
+}
+
 QPlainTextEdit#inlineConsole {
     background-color: #111317;
     color: #d7dde7;
     border-color: #343841;
+}
+
+QPlainTextEdit#detailConsole,
+QTextBrowser#detailBrowser,
+QLineEdit,
+QComboBox {
+    background-color: #171a1f;
+    color: #d7dde7;
+    border-color: #343841;
+}
+
+QFrame#dockerHero {
+    background-color: #26282c;
+    border: 1px solid #343841;
+    border-radius: 14px;
+}
+
+QLabel#dockerMetric {
+    padding: 8px 12px;
+    border-radius: 999px;
+    background-color: #2f333b;
+    border: 1px solid #3a404a;
+    color: #e7ebf2;
+    font-weight: 600;
+}
+
+QTableWidget#dockerTable {
+    background-color: #1c1f24;
+    alternate-background-color: #20242a;
+    border: 1px solid #343841;
+    gridline-color: transparent;
+}
+
+QTableWidget {
+    background-color: #1c1f24;
+    alternate-background-color: #20242a;
+    border: 1px solid #343841;
+    gridline-color: transparent;
+}
+
+QTableWidget#dockerTable::item {
+    padding: 8px 10px;
+}
+
+QTableWidget::item:selected {
+    background-color: rgba(31, 125, 217, 0.24);
+}
+
+QHeaderView::section {
+    background-color: #2a2e35;
+    color: #d7dde7;
+    border: 0;
+    border-bottom: 1px solid #3a404a;
+    padding: 8px 10px;
+}
+
+QLabel#dockerStatusPill {
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-weight: 700;
+}
+
+QLabel#dockerStatusPill[state="healthy"] {
+    background-color: rgba(46, 160, 67, 0.24);
+    color: #8ef0b0;
+}
+
+QLabel#dockerStatusPill[state="running"] {
+    background-color: rgba(27, 153, 255, 0.20);
+    color: #7ed0ff;
+}
+
+QLabel#dockerStatusPill[state="other"] {
+    background-color: #353941;
+    color: #d0d6df;
+}
+
+QTabWidget::pane,
+QTabWidget#surfaceTabs::pane {
+    border-color: #343841;
+    background-color: #1c1f24;
+}
+
+QTabBar::tab {
+    background-color: #252930;
+    color: #d7dde7;
+}
+
+QTabBar::tab:selected {
+    background-color: #1f7dd9;
+    color: #ffffff;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #323741;
 }

@@ -2,6 +2,8 @@
 
 #include <QDialog>
 
+class QLabel;
+class QLineEdit;
 class QTabWidget;
 class QTableWidget;
 class QTextBrowser;
@@ -14,17 +16,20 @@ public:
 private slots:
     void onInstalledSelectionChanged();
     void onMarketplaceSelectionChanged();
-    void onAuthoringSelectionChanged();
+    void onSearchChanged(const QString &text);
 
 private:
     void buildUi();
     void loadPackages();
     void refreshDetails(QTableWidget *table);
+    void applyFilter();
 
     QString m_hintWorkdir;
+    QLineEdit *m_search = nullptr;
+    QLabel *m_installedCount = nullptr;
+    QLabel *m_marketplaceCount = nullptr;
     QTabWidget *m_tabs = nullptr;
     QTableWidget *m_installedTable = nullptr;
     QTableWidget *m_marketplaceTable = nullptr;
-    QTableWidget *m_authoringTable = nullptr;
     QTextBrowser *m_details = nullptr;
 };

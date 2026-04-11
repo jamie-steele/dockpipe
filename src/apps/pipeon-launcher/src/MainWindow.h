@@ -21,6 +21,8 @@ class QStackedWidget;
 class QAction;
 class QActionGroup;
 class BasicModeWidget;
+class QTabWidget;
+class DockerObservabilityWidget;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -58,7 +60,7 @@ private slots:
     void onBasicOpenRecent(const QString &absPath);
     void onBasicContinueLast();
     void activateHome();
-    void onSetupMcp();
+    void onAbout();
     void onDismissThirdPartyDisclaimer();
     void onRestoreThirdPartyDisclaimer();
     void onAdvancedSearchChanged(const QString &text);
@@ -90,6 +92,8 @@ private:
     QStackedWidget *m_stack = nullptr;
     BasicModeWidget *m_basicWidget = nullptr;
     QWidget *m_advancedPage = nullptr;
+    QTabWidget *m_advancedTabs = nullptr;
+    DockerObservabilityWidget *m_advancedDocker = nullptr;
 
     QListWidget *m_list = nullptr;
     QLabel *m_hint = nullptr;

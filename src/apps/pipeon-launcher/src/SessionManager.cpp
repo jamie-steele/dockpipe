@@ -24,10 +24,20 @@ SessionInfo SessionManager::info(const QString &contextId) const
     return m_info.value(contextId);
 }
 
+bool SessionManager::isReady(const QString &contextId) const
+{
+    return m_info.value(contextId).ready;
+}
+
 bool SessionManager::isRunning(const QString &contextId) const
 {
     const QPointer<QProcess> p = m_processes.value(contextId);
     return p && p->state() != QProcess::NotRunning;
+}
+
+QString SessionManager::readinessMarker()
+{
+    return QStringLiteral("[dockpipe-ready]");
 }
 
 QStringList SessionManager::dockpipeArguments(const Context &ctx)
@@ -111,6 +121,7 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
     si.logPath = logPath;
     si.program = program;
     si.arguments = proc->arguments();
+    si.ready = false;
     m_info[ctx.id] = si;
 
     auto flushOutput = [this, ctx, proc, logFile]() {
@@ -119,7 +130,13 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
             return;
         logFile->write(chunk);
         logFile->flush();
-        emit sessionOutput(ctx.id, QString::fromLocal8Bit(chunk));
+        const QString text = QString::fromLocal8Bit(chunk);
+        SessionInfo &session = m_info[ctx.id];
+        if (!session.ready && text.contains(readinessMarker())) {
+            session.ready = true;
+            emit sessionReady(ctx.id);
+        }
+        emit sessionOutput(ctx.id, text);
     };
 
     connect(proc, &QProcess::readyRead, this, flushOutput);
@@ -133,6 +150,7 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
                 SessionInfo &s = m_info[ctx.id];
                 s.status = SessionStatus::Stopped;
                 s.pid = 0;
+                s.ready = false;
                 emit sessionStopped(ctx.id, exitCode, st);
             });
 
@@ -145,6 +163,7 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
             SessionInfo &s = m_info[ctx.id];
             s.status = SessionStatus::Failed;
             s.errorString = proc->errorString();
+            s.ready = false;
             emit sessionFailed(ctx.id, proc->errorString());
         }
     });
@@ -156,11 +175,13 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
         logFile->deleteLater();
         proc->deleteLater();
         m_info[ctx.id].status = SessionStatus::Failed;
+        m_info[ctx.id].ready = false;
         return false;
     }
 
     m_info[ctx.id].status = SessionStatus::Running;
     m_info[ctx.id].pid = proc->processId();
+    m_info[ctx.id].ready = false;
     m_processes[ctx.id] = proc;
     emit sessionStarted(ctx.id);
     return true;

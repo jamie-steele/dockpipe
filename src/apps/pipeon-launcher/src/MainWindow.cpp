@@ -4,6 +4,7 @@
 #include "ContextDiscovery.h"
 #include "ContextRowWidget.h"
 #include "DockpipeChoices.h"
+#include "DockerObservabilityWidget.h"
 #include "EditContextDialog.h"
 #include "GitHelper.h"
 #include "LogViewerDialog.h"
@@ -135,6 +136,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     rebuildUi();
 
     connect(&m_sessions, &SessionManager::sessionStarted, this, &MainWindow::onSessionChanged);
+    connect(&m_sessions, &SessionManager::sessionReady, this, &MainWindow::onSessionChanged);
     connect(&m_sessions, &SessionManager::sessionStopped, this, &MainWindow::onSessionChanged);
     connect(&m_sessions, &SessionManager::sessionFailed, this, &MainWindow::onSessionChanged);
     connect(&m_sessions, &SessionManager::sessionOutput, this, &MainWindow::onSessionOutput);
@@ -222,8 +224,9 @@ void MainWindow::setupMenuBar()
     packagesMenu->addAction(tr("Manage Packages…"), this, &MainWindow::onManagePackages);
 
     QMenu *help = menuBar()->addMenu(tr("Help"));
+    help->addAction(tr("About Pipeon…"), this, &MainWindow::onAbout);
+    help->addSeparator();
     help->addAction(tr("Show notice in status bar again"), this, &MainWindow::onRestoreThirdPartyDisclaimer);
-    help->addAction(tr("Set up Cursor MCP…"), this, &MainWindow::onSetupMcp);
     help->addAction(tr("Third-party software notice…"), this, [this]() {
         QMessageBox::information(
             this, tr("Third-party software"),
@@ -243,6 +246,22 @@ void MainWindow::setupMenuBar()
     viewGroup->addAction(m_actList);
     connect(m_actIcons, &QAction::triggered, this, &MainWindow::onViewIconGrid);
     connect(m_actList, &QAction::triggered, this, &MainWindow::onViewCompactList);
+}
+
+void MainWindow::onAbout()
+{
+    QMessageBox box(this);
+    box.setWindowTitle(tr("About Pipeon"));
+    box.setIcon(QMessageBox::Information);
+    box.setTextFormat(Qt::RichText);
+    box.setTextInteractionFlags(Qt::TextBrowserInteraction);
+    box.setText(
+        tr("<h3>Pipeon</h3>"
+           "<p>Pipeon is the launcher and local-first workspace shell for DockPipe workflows.</p>"
+           "<p><a href=\"https://pipeon.dev\">pipeon.dev</a><br>"
+           "<a href=\"https://dockpipe.com\">dockpipe.com</a></p>"));
+    box.setStandardButtons(QMessageBox::Ok);
+    box.exec();
 }
 
 void MainWindow::setupAdvancedPage(QWidget *page)
@@ -298,17 +317,24 @@ void MainWindow::setupAdvancedPage(QWidget *page)
     headLay->addLayout(secondaryRow);
 
     root->addWidget(header);
+    m_advancedTabs = new QTabWidget(page);
+    m_advancedTabs->setObjectName(QStringLiteral("surfaceTabs"));
+
+    auto *contextsPage = new QWidget(m_advancedTabs);
+    auto *contextsRoot = new QVBoxLayout(contextsPage);
+    contextsRoot->setContentsMargins(0, 0, 0, 0);
+    contextsRoot->setSpacing(14);
 
     m_hint = new QLabel(tr("Saved workflow rows appear below. Add folder scans workflows from this checkout. Right-click a row for actions."));
     m_hint->setObjectName(QStringLiteral("hintText"));
     m_hint->setWordWrap(true);
-    root->addWidget(m_hint);
+    contextsRoot->addWidget(m_hint);
 
     m_search = new QLineEdit(page);
     m_search->setClearButtonEnabled(true);
     m_search->setPlaceholderText(tr("Search saved rows by label, folder, workflow, resolver…"));
     connect(m_search, &QLineEdit::textChanged, this, &MainWindow::onAdvancedSearchChanged);
-    root->addWidget(m_search);
+    contextsRoot->addWidget(m_search);
 
     auto *splitter = new QSplitter(Qt::Vertical, page);
     splitter->setChildrenCollapsible(false);
@@ -375,7 +401,17 @@ void MainWindow::setupAdvancedPage(QWidget *page)
     splitter->setStretchFactor(0, 3);
     splitter->setStretchFactor(1, 2);
     splitter->setSizes({360, 240});
-    root->addWidget(splitter, 1);
+    contextsRoot->addWidget(splitter, 1);
+
+    m_advancedDocker = new DockerObservabilityWidget(m_advancedTabs);
+    m_advancedTabs->addTab(contextsPage, tr("Contexts"));
+    m_advancedTabs->addTab(m_advancedDocker, tr("Docker"));
+    connect(m_advancedTabs, &QTabWidget::currentChanged, this, [this](int index) {
+        if (m_advancedDocker)
+            m_advancedDocker->setActive(index == 1);
+    });
+
+    root->addWidget(m_advancedTabs, 1);
 
     connect(m_list, &QListWidget::customContextMenuRequested, this, [this](const QPoint &p) {
         if (QListWidgetItem *it = m_list->itemAt(p))
@@ -532,50 +568,6 @@ void MainWindow::activateHome()
         showNormal();
     raise();
     activateWindow();
-}
-
-void MainWindow::onSetupMcp()
-{
-    QString wd = m_settings.projectFolder;
-    if (wd.isEmpty()) {
-        QMessageBox::information(this, tr("Pipeon"),
-                                 tr("Open or select a project folder first (home screen or File → Open project folder)."));
-        return;
-    }
-    wd = QDir::cleanPath(wd);
-    const QString script = DockpipeChoices::cursorPrepScriptPath(wd);
-    if (script.isEmpty()) {
-        QMessageBox::information(
-            this, tr("Cursor MCP"),
-            tr("Could not find cursor-prep.sh next to a DockPipe checkout.\n"
-               "Open a folder inside the dockpipe repository, or set DOCKPIPE_REPO_ROOT to the repo root, then try again."));
-        return;
-    }
-    QProcess proc;
-    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
-    env.insert(QStringLiteral("DOCKPIPE_WORKDIR"), wd);
-    const QString repo = DockpipeChoices::findRepoRoot(wd);
-    if (!repo.isEmpty())
-        env.insert(QStringLiteral("DOCKPIPE_REPO_ROOT"), repo);
-    proc.setProcessEnvironment(env);
-    proc.setWorkingDirectory(wd);
-    proc.start(QStringLiteral("bash"), QStringList{script});
-    if (!proc.waitForFinished(60000)) {
-        proc.kill();
-        proc.waitForFinished(3000);
-        QMessageBox::warning(this, tr("Cursor MCP"), tr("cursor-prep.sh timed out or could not be run."));
-        return;
-    }
-    if (proc.exitCode() != 0) {
-        const QString err = QString::fromUtf8(proc.readAllStandardError() + proc.readAllStandardOutput());
-        QMessageBox::warning(this, tr("Cursor MCP"),
-                             tr("cursor-prep.sh exited with an error:\n\n%1").arg(err.isEmpty() ? tr("(no output)") : err));
-        return;
-    }
-    QMessageBox::information(
-        this, tr("Cursor MCP"),
-        tr("Prepared bin/.dockpipe/packages/cursor-dev/ (see AGENT-MCP.md and mcp.json.example).\n"
-           "Follow AGENT-MCP.md in Cursor to enable MCP."));
 }
 
 void MainWindow::onRefreshAppList()
@@ -781,7 +773,7 @@ void MainWindow::onSessionChanged()
 {
     if (!m_basicLaunchingContextId.isEmpty()) {
         const SessionInfo si = m_sessions.info(m_basicLaunchingContextId);
-        if (si.status == SessionStatus::Running || si.status == SessionStatus::Failed || si.status == SessionStatus::Stopped) {
+        if (si.ready || si.status == SessionStatus::Failed || si.status == SessionStatus::Stopped) {
             m_basicLaunchingContextId.clear();
             m_basicLaunchingWorkflowId.clear();
         }
@@ -801,11 +793,6 @@ void MainWindow::onAdvancedSelectionChanged()
 
 void MainWindow::onSessionOutput(const QString &contextId, const QString &text)
 {
-    if (!m_basicLaunchingContextId.isEmpty() && contextId == m_basicLaunchingContextId) {
-        m_basicLaunchingContextId.clear();
-        m_basicLaunchingWorkflowId.clear();
-        updateBasicPage();
-    }
     if (contextId != m_consoleContextId)
         return;
     appendInlineConsole(text);

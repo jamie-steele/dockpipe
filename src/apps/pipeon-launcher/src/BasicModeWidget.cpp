@@ -2,6 +2,7 @@
 #include "DockerObservabilityWidget.h"
 
 #include <QAbstractItemView>
+#include <QFrame>
 #include <QWidget>
 #include <QDir>
 #include <QFileInfo>
@@ -10,6 +11,7 @@
 #include <QListWidget>
 #include <QListWidgetItem>
 #include <QPushButton>
+#include <QResizeEvent>
 #include <QSizePolicy>
 #include <QStackedWidget>
 #include <QTabWidget>
@@ -147,11 +149,11 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
 
     m_workspaceTabs = new QTabWidget(m_workspacePage);
 
-    auto *appsPage = new QWidget(m_workspaceTabs);
-    auto *appsLay = new QVBoxLayout(appsPage);
+    m_appsPage = new QWidget(m_workspaceTabs);
+    auto *appsLay = new QVBoxLayout(m_appsPage);
     appsLay->setContentsMargins(0, 0, 0, 0);
 
-    m_list = new QListWidget(appsPage);
+    m_list = new QListWidget(m_appsPage);
     m_list->setObjectName(QStringLiteral("basicAppList"));
     m_list->setMovement(QListWidget::Static);
     m_list->setResizeMode(QListWidget::Adjust);
@@ -170,11 +172,47 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
 
     appsLay->addWidget(m_list, 1);
 
+    m_launchOverlay = new QWidget(m_appsPage);
+    m_launchOverlay->setObjectName(QStringLiteral("launchOverlay"));
+    m_launchOverlay->setVisible(false);
+
+    auto *overlayLay = new QVBoxLayout(m_launchOverlay);
+    overlayLay->setContentsMargins(24, 24, 24, 24);
+    overlayLay->addStretch(1);
+
+    m_launchOverlayCard = new QFrame(m_launchOverlay);
+    m_launchOverlayCard->setObjectName(QStringLiteral("launchOverlayCard"));
+    m_launchOverlayCard->setMaximumWidth(520);
+    auto *cardLay = new QVBoxLayout(m_launchOverlayCard);
+    cardLay->setContentsMargins(28, 28, 28, 28);
+    cardLay->setSpacing(10);
+
+    m_launchOverlayGlyph = new QLabel(m_launchOverlayCard);
+    m_launchOverlayGlyph->setObjectName(QStringLiteral("launchOverlayGlyph"));
+    m_launchOverlayGlyph->setAlignment(Qt::AlignCenter);
+
+    m_launchOverlayTitle = new QLabel(tr("Launching"));
+    m_launchOverlayTitle->setObjectName(QStringLiteral("launchOverlayTitle"));
+    m_launchOverlayTitle->setAlignment(Qt::AlignCenter);
+
+    m_launchOverlayBody = new QLabel;
+    m_launchOverlayBody->setObjectName(QStringLiteral("launchOverlayBody"));
+    m_launchOverlayBody->setWordWrap(true);
+    m_launchOverlayBody->setAlignment(Qt::AlignCenter);
+
+    cardLay->addWidget(m_launchOverlayGlyph);
+    cardLay->addWidget(m_launchOverlayTitle);
+    cardLay->addWidget(m_launchOverlayBody);
+
+    overlayLay->addWidget(m_launchOverlayCard, 0, Qt::AlignHCenter);
+    overlayLay->addStretch(1);
+
     m_docker = new DockerObservabilityWidget(m_workspaceTabs);
-    m_workspaceTabs->addTab(appsPage, tr("Applications"));
+    m_workspaceTabs->addTab(m_appsPage, tr("Applications"));
     m_workspaceTabs->addTab(m_docker, tr("Docker"));
     connect(m_workspaceTabs, &QTabWidget::currentChanged, this, [this](int index) {
         setDockerTabActive(index == 1);
+        updateLaunchOverlayGeometry();
     });
 
     root->addWidget(title);
@@ -199,6 +237,7 @@ void BasicModeWidget::showWorkspacePage()
 {
     m_stack->setCurrentWidget(m_workspacePage);
     setDockerTabActive(m_workspaceTabs && m_workspaceTabs->currentIndex() == 1);
+    updateLaunchOverlayGeometry();
 }
 
 void BasicModeWidget::setRecentProjects(const QStringList &paths)
@@ -341,7 +380,12 @@ void BasicModeWidget::setLaunchingWorkflow(const QString &workflowId, const QStr
     m_launchingWorkflowName = displayName;
     m_loadingFrame = 0;
     updateLoadingBanner();
-    m_loadingBanner->setVisible(true);
+    m_loadingBanner->setVisible(false);
+    if (m_launchOverlay) {
+        m_launchOverlay->setVisible(true);
+        m_launchOverlay->raise();
+        updateLaunchOverlayGeometry();
+    }
     if (m_loadingTimer)
         m_loadingTimer->start();
     rebuildItemTexts();
@@ -357,12 +401,14 @@ void BasicModeWidget::clearLaunchingWorkflow()
         m_loadingBanner->clear();
         m_loadingBanner->setVisible(false);
     }
+    if (m_launchOverlay)
+        m_launchOverlay->setVisible(false);
     rebuildItemTexts();
 }
 
 void BasicModeWidget::updateLoadingBanner()
 {
-    if (!m_loadingBanner || m_launchingWorkflowId.isEmpty()) {
+    if (m_launchingWorkflowId.isEmpty()) {
         return;
     }
     static const QStringList frames = {
@@ -372,6 +418,30 @@ void BasicModeWidget::updateLoadingBanner()
         QStringLiteral("▗▖▘▝"),
     };
     const QString name = m_launchingWorkflowName.isEmpty() ? tr("workflow") : m_launchingWorkflowName;
-    m_loadingBanner->setText(tr("Launching %1  %2").arg(name, frames[m_loadingFrame % frames.size()]));
+    const QString frame = frames[m_loadingFrame % frames.size()];
+    if (m_loadingBanner)
+        m_loadingBanner->setText(tr("Launching %1  %2").arg(name, frame));
+    if (m_launchOverlayGlyph)
+        m_launchOverlayGlyph->setText(frame);
+    if (m_launchOverlayTitle)
+        m_launchOverlayTitle->setText(tr("Launching %1").arg(name));
+    if (m_launchOverlayBody) {
+        m_launchOverlayBody->setText(
+            tr("DockPipe is preparing the workflow, warming the session, and opening the app shell."));
+    }
     m_loadingFrame += 1;
+}
+
+void BasicModeWidget::updateLaunchOverlayGeometry()
+{
+    if (!m_launchOverlay || !m_appsPage)
+        return;
+    const QRect r = m_appsPage->rect();
+    m_launchOverlay->setGeometry(r.adjusted(12, 12, -12, -12));
+}
+
+void BasicModeWidget::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateLaunchOverlayGeometry();
 }

@@ -105,6 +105,26 @@ wait_for_ollama_ready() {
   return 1
 }
 
+wait_for_mcp_ready() {
+  local api_key="$1"
+  local attempts="${2:-40}"
+  local i code
+  for ((i = 0; i < attempts; i++)); do
+    code="$(
+      curl -sS -o /dev/null -w '%{http_code}' \
+        -H "Authorization: Bearer $api_key" \
+        "$MCP_URL" 2>/dev/null || true
+    )"
+    case "$code" in
+      200|204|400|401|405)
+        return 0
+        ;;
+    esac
+    sleep 0.25
+  done
+  return 1
+}
+
 ensure_pipeon_stack_state_dir
 ensure_pipeon_stack_api_key
 
@@ -204,6 +224,10 @@ if [[ ! -f "$PID_FILE" ]]; then
     echo "pipeon-dev-stack: mcpd failed to start; see $LOG_FILE" >&2
     exit 1
   fi
+  if ! wait_for_mcp_ready "$MCP_API_KEY" 40; then
+    echo "pipeon-dev-stack: mcpd did not become reachable at $MCP_URL; see $LOG_FILE" >&2
+    exit 1
+  fi
 fi
 
 export DATABASE_URL="${DATABASE_URL:-postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe}"
@@ -245,6 +269,7 @@ fi
 write_pipeon_stack_runtime_env
 
 cat >&2 <<EOF
+[dockpipe-ready] pipeon-dev-stack
 [pipeon-dev-stack] ready
   workdir:      $WORKDIR
   ide:          Pipeon

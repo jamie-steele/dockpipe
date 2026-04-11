@@ -4,9 +4,13 @@ QWidget#mainCentral {
     background-color: palette(base);
 }
 
+QDialog {
+    background-color: palette(base);
+}
+
 QLabel#appTitle {
-    font-size: 18px;
-    font-weight: 600;
+    font-size: 20px;
+    font-weight: 700;
     color: palette(window-text);
 }
 
@@ -14,6 +18,7 @@ QLabel#appTitle {
 
 QLabel#appSubtitle {
     font-size: 12px;
+    line-height: 1.45;
 }
 
 QLabel#hintText {
@@ -35,20 +40,50 @@ QPushButton#disclaimerDismiss {
 QFrame#headerBar {
     background-color: palette(alternate-base);
     border: none;
-    border-radius: 8px;
-    padding: 4px;
+    border-radius: 14px;
+    padding: 8px;
+}
+
+QWidget#launchOverlay {
+    border-radius: 18px;
+}
+
+QFrame#launchOverlayCard {
+    background-color: palette(alternate-base);
+    border: 1px solid palette(midlight);
+    border-radius: 18px;
+}
+
+QLabel#launchOverlayGlyph {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: palette(highlight);
+    padding: 2px 0 6px 0;
+}
+
+QLabel#launchOverlayTitle {
+    font-size: 20px;
+    font-weight: 700;
+    color: palette(window-text);
+}
+
+QLabel#launchOverlayBody {
+    font-size: 12px;
+    line-height: 1.45;
+    color: palette(window-text);
 }
 
 QFrame#listPanel {
     background-color: palette(base);
     border: none;
-    border-radius: 8px;
+    border-radius: 14px;
 }
 
 QFrame#inlineConsolePanel {
     background-color: palette(base);
     border: none;
-    border-radius: 8px;
+    border-radius: 14px;
 }
 
 QSplitter::handle {
@@ -73,7 +108,7 @@ QListWidget {
 
 QListWidget::item {
     border: none;
-    border-radius: 8px;
+    border-radius: 12px;
     margin: 2px 4px;
     padding: 0px;
     background: transparent;
@@ -104,6 +139,7 @@ QListWidget#basicRecentList::item {
 
 QWidget#contextRow {
     background-color: transparent;
+    border-radius: 12px;
 }
 
 QLabel#contextTitle {
@@ -113,7 +149,7 @@ QLabel#contextTitle {
 }
 
 QLabel#consoleTitle {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     color: palette(window-text);
 }
@@ -134,9 +170,9 @@ QLabel#consoleMeta {
 QLabel#statusBadge {
     min-width: 72px;
     padding: 4px 10px;
-    border-radius: 10px;
+    border-radius: 999px;
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 700;
 }
 
 /* Badge fill/text: theme companion QSS */
@@ -159,10 +195,10 @@ QGroupBox::title {
 }
 
 QPushButton#primaryButton {
-    padding: 8px 16px;
-    min-height: 22px;
+    padding: 9px 16px;
+    min-height: 24px;
     font-weight: 600;
-    border-radius: 6px;
+    border-radius: 10px;
     border: 1px solid palette(highlight);
     background-color: palette(highlight);
     color: palette(highlighted-text);
@@ -179,29 +215,29 @@ QPushButton#primaryButton:pressed {
 }
 
 QPushButton#secondaryButton {
-    padding: 8px 14px;
-    min-height: 22px;
-    border-radius: 6px;
+    padding: 9px 14px;
+    min-height: 24px;
+    border-radius: 10px;
     border: 1px solid palette(midlight);
     background-color: palette(button);
 }
 
 QPushButton#dangerButton {
-    padding: 8px 14px;
-    min-height: 22px;
-    border-radius: 6px;
+    padding: 9px 14px;
+    min-height: 24px;
+    border-radius: 10px;
 }
 
-QLineEdit, QComboBox {
-    padding: 6px 10px;
-    border-radius: 6px;
+QLineEdit, QComboBox, QTextBrowser, QPlainTextEdit {
+    padding: 7px 10px;
+    border-radius: 10px;
     border: 1px solid palette(midlight);
     background-color: palette(base);
     color: palette(text);
     min-height: 18px;
 }
 
-QLineEdit:focus, QComboBox:focus {
+QLineEdit:focus, QComboBox:focus, QTextBrowser:focus, QPlainTextEdit:focus {
     border: 1px solid palette(highlight);
 }
 
@@ -218,9 +254,16 @@ QPlainTextEdit#inlineConsole {
     font-size: 12px;
 }
 
+QPlainTextEdit#detailConsole,
+QTextBrowser#detailBrowser {
+    border-radius: 12px;
+    padding: 12px 14px;
+    selection-background-color: palette(highlight);
+}
+
 QFrame#emptyState {
     background-color: palette(alternate-base);
-    border-radius: 10px;
+    border-radius: 14px;
     border: none;
 }
 
@@ -231,4 +274,34 @@ QLabel#emptyTitle {
 
 QLabel#emptyBody {
     font-size: 12px;
+}
+
+QTabWidget#surfaceTabs::pane,
+QTabWidget::pane {
+    border: 1px solid palette(midlight);
+    border-radius: 14px;
+    top: -1px;
+    background: palette(base);
+}
+
+QTabBar::tab {
+    padding: 8px 14px;
+    margin-right: 6px;
+    border-radius: 10px;
+    background: palette(alternate-base);
+    color: palette(window-text);
+}
+
+QTabBar::tab:selected {
+    background: palette(highlight);
+    color: palette(highlighted-text);
+}
+
+QTabBar::tab:hover:!selected {
+    background: palette(button);
+}
+
+QTableWidget {
+    border-radius: 12px;
+    selection-background-color: palette(highlight);
 }

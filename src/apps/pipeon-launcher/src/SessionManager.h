@@ -18,6 +18,7 @@ struct SessionInfo {
     QStringList arguments;
     qint64 pid = 0;
     QString errorString;
+    bool ready = false;
 };
 
 class SessionManager : public QObject {
@@ -27,15 +28,18 @@ public:
 
     SessionInfo info(const QString &contextId) const;
     bool isRunning(const QString &contextId) const;
+    bool isReady(const QString &contextId) const;
 
     /// Build dockpipe argv (program + args) for a context.
     static QStringList dockpipeArguments(const Context &ctx);
+    static QString readinessMarker();
 
     bool launch(const Context &ctx, const QString &logsDir);
     void stop(const QString &contextId);
 
 signals:
     void sessionStarted(const QString &contextId);
+    void sessionReady(const QString &contextId);
     void sessionStopped(const QString &contextId, int exitCode, QProcess::ExitStatus);
     void sessionFailed(const QString &contextId, const QString &error);
     void sessionOutput(const QString &contextId, const QString &text);

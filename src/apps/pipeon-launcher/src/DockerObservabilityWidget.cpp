@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QPushButton>
@@ -14,6 +15,7 @@
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
+#include <QFrame>
 
 namespace {
 
@@ -42,6 +44,27 @@ QString firstIdFromInspect(const QString &inspectJson)
     return doc.array().first().toObject().value(QStringLiteral("Id")).toString();
 }
 
+QLabel *makeMetricPill(const QString &title)
+{
+    auto *label = new QLabel(title);
+    label->setObjectName(QStringLiteral("dockerMetric"));
+    label->setAlignment(Qt::AlignCenter);
+    return label;
+}
+
+QTableWidgetItem *statusItem(const QString &text)
+{
+    auto *item = roItem(text);
+    const QString lower = text.toLower();
+    if (lower.contains(QStringLiteral("healthy")))
+        item->setData(Qt::UserRole + 1, QStringLiteral("healthy"));
+    else if (lower.contains(QStringLiteral("running")))
+        item->setData(Qt::UserRole + 1, QStringLiteral("running"));
+    else
+        item->setData(Qt::UserRole + 1, QStringLiteral("other"));
+    return item;
+}
+
 } // namespace
 
 DockerObservabilityWidget::DockerObservabilityWidget(QWidget *parent) : QWidget(parent)
@@ -53,19 +76,51 @@ void DockerObservabilityWidget::buildUi()
 {
     auto *outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
-    outer->setSpacing(10);
+    outer->setSpacing(12);
+
+    auto *hero = new QFrame(this);
+    hero->setObjectName(QStringLiteral("dockerHero"));
+    auto *heroLay = new QVBoxLayout(hero);
+    heroLay->setContentsMargins(14, 14, 14, 14);
+    heroLay->setSpacing(10);
+
+    auto *title = new QLabel(tr("Docker observability"));
+    title->setObjectName(QStringLiteral("appTitle"));
+    auto *subtitle = new QLabel(tr("Readonly containers, logs, bindings, networks, and volumes. Refreshes only when you land here."));
+    subtitle->setObjectName(QStringLiteral("appSubtitle"));
+    subtitle->setWordWrap(true);
+    heroLay->addWidget(title);
+    heroLay->addWidget(subtitle);
 
     auto *topRow = new QHBoxLayout;
     m_status = new QLabel(tr("Readonly Docker observability. Opens cold and refreshes on demand."));
     m_status->setWordWrap(true);
+    m_search = new QLineEdit(this);
+    m_search->setPlaceholderText(tr("Search containers…"));
+    connect(m_search, &QLineEdit::textChanged, this, &DockerObservabilityWidget::onContainerSearchChanged);
     auto *refreshButton = new QPushButton(tr("Refresh"));
     refreshButton->setObjectName(QStringLiteral("secondaryButton"));
     connect(refreshButton, &QPushButton::clicked, this, &DockerObservabilityWidget::refresh);
     topRow->addWidget(m_status, 1);
+    topRow->addWidget(m_search);
     topRow->addWidget(refreshButton);
-    outer->addLayout(topRow);
+    heroLay->addLayout(topRow);
+
+    auto *metrics = new QHBoxLayout;
+    metrics->setSpacing(8);
+    m_containerCount = makeMetricPill(tr("Containers 0"));
+    m_networkCount = makeMetricPill(tr("Networks 0"));
+    m_volumeCount = makeMetricPill(tr("Volumes 0"));
+    metrics->addWidget(m_containerCount);
+    metrics->addWidget(m_networkCount);
+    metrics->addWidget(m_volumeCount);
+    metrics->addStretch(1);
+    heroLay->addLayout(metrics);
+
+    outer->addWidget(hero);
 
     m_tabs = new QTabWidget(this);
+    m_tabs->setObjectName(QStringLiteral("surfaceTabs"));
     m_tabs->addTab(buildContainersPage(), tr("Containers"));
     m_tabs->addTab(buildNetworksPage(), tr("Networks"));
     m_tabs->addTab(buildVolumesPage(), tr("Volumes"));
@@ -82,20 +137,30 @@ QWidget *DockerObservabilityWidget::buildContainersPage()
     splitter->setChildrenCollapsible(false);
 
     m_containers = new QTableWidget(splitter);
-    m_containers->setColumnCount(4);
-    m_containers->setHorizontalHeaderLabels({tr("Name"), tr("Status"), tr("Image"), tr("Ports")});
-    m_containers->horizontalHeader()->setStretchLastSection(true);
-    m_containers->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
+    m_containers->setObjectName(QStringLiteral("dockerTable"));
+    m_containers->setColumnCount(5);
+    m_containers->setHorizontalHeaderLabels({tr("Name"), tr("State"), tr("Image"), tr("Ports"), tr("Created")});
+    m_containers->horizontalHeader()->setStretchLastSection(false);
+    m_containers->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    m_containers->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    m_containers->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    m_containers->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    m_containers->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
     m_containers->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_containers->setSelectionMode(QAbstractItemView::SingleSelection);
     m_containers->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_containers->setAlternatingRowColors(true);
+    m_containers->setShowGrid(false);
+    m_containers->verticalHeader()->setVisible(false);
 
     auto *detailSplitter = new QSplitter(Qt::Horizontal, splitter);
     detailSplitter->setChildrenCollapsible(false);
     m_containerDetails = new QPlainTextEdit(detailSplitter);
+    m_containerDetails->setObjectName(QStringLiteral("detailConsole"));
     m_containerDetails->setReadOnly(true);
     m_containerDetails->setPlaceholderText(tr("Select a container to inspect bindings, mounts, networks, and config."));
     m_containerLogs = new QPlainTextEdit(detailSplitter);
+    m_containerLogs->setObjectName(QStringLiteral("detailConsole"));
     m_containerLogs->setReadOnly(true);
     m_containerLogs->setPlaceholderText(tr("Recent docker logs appear here."));
 
@@ -117,6 +182,7 @@ QWidget *DockerObservabilityWidget::buildNetworksPage()
     splitter->setChildrenCollapsible(false);
 
     m_networks = new QTableWidget(splitter);
+    m_networks->setObjectName(QStringLiteral("dockerTable"));
     m_networks->setColumnCount(3);
     m_networks->setHorizontalHeaderLabels({tr("Name"), tr("Driver"), tr("Scope")});
     m_networks->horizontalHeader()->setStretchLastSection(true);
@@ -124,8 +190,12 @@ QWidget *DockerObservabilityWidget::buildNetworksPage()
     m_networks->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_networks->setSelectionMode(QAbstractItemView::SingleSelection);
     m_networks->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_networks->setAlternatingRowColors(true);
+    m_networks->setShowGrid(false);
+    m_networks->verticalHeader()->setVisible(false);
 
     m_networkDetails = new QPlainTextEdit(splitter);
+    m_networkDetails->setObjectName(QStringLiteral("detailConsole"));
     m_networkDetails->setReadOnly(true);
     m_networkDetails->setPlaceholderText(tr("Select a network to inspect attached containers and configuration."));
 
@@ -147,6 +217,7 @@ QWidget *DockerObservabilityWidget::buildVolumesPage()
     splitter->setChildrenCollapsible(false);
 
     m_volumes = new QTableWidget(splitter);
+    m_volumes->setObjectName(QStringLiteral("dockerTable"));
     m_volumes->setColumnCount(3);
     m_volumes->setHorizontalHeaderLabels({tr("Name"), tr("Driver"), tr("Mountpoint")});
     m_volumes->horizontalHeader()->setStretchLastSection(true);
@@ -154,8 +225,12 @@ QWidget *DockerObservabilityWidget::buildVolumesPage()
     m_volumes->setSelectionBehavior(QAbstractItemView::SelectRows);
     m_volumes->setSelectionMode(QAbstractItemView::SingleSelection);
     m_volumes->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_volumes->setAlternatingRowColors(true);
+    m_volumes->setShowGrid(false);
+    m_volumes->verticalHeader()->setVisible(false);
 
     m_volumeDetails = new QPlainTextEdit(splitter);
+    m_volumeDetails->setObjectName(QStringLiteral("detailConsole"));
     m_volumeDetails->setReadOnly(true);
     m_volumeDetails->setPlaceholderText(tr("Select a volume to inspect usage details."));
 
@@ -193,6 +268,7 @@ void DockerObservabilityWidget::refresh()
     loadContainers();
     loadNetworks();
     loadVolumes();
+    updateSummary();
     setStatus(tr("Readonly Docker observability refreshed."));
 }
 
@@ -212,6 +288,32 @@ void DockerObservabilityWidget::setActive(bool active)
     if (m_volumeDetails)
         m_volumeDetails->clear();
     setStatus(tr("Readonly Docker observability. Opens cold and refreshes on demand."));
+}
+
+void DockerObservabilityWidget::updateSummary()
+{
+    if (m_containerCount)
+        m_containerCount->setText(tr("Containers %1").arg(m_containers ? m_containers->rowCount() : 0));
+    if (m_networkCount)
+        m_networkCount->setText(tr("Networks %1").arg(m_networks ? m_networks->rowCount() : 0));
+    if (m_volumeCount)
+        m_volumeCount->setText(tr("Volumes %1").arg(m_volumes ? m_volumes->rowCount() : 0));
+}
+
+void DockerObservabilityWidget::applyContainerFilter()
+{
+    if (!m_containers)
+        return;
+    const QString needle = m_search ? m_search->text().trimmed().toCaseFolded() : QString();
+    for (int row = 0; row < m_containers->rowCount(); ++row) {
+        QStringList values;
+        for (int col = 0; col < m_containers->columnCount(); ++col) {
+            if (auto *item = m_containers->item(row, col))
+                values << item->text();
+        }
+        const bool hidden = !needle.isEmpty() && !values.join(QLatin1Char(' ')).toCaseFolded().contains(needle);
+        m_containers->setRowHidden(row, hidden);
+    }
 }
 
 void DockerObservabilityWidget::loadContainers()
@@ -235,10 +337,12 @@ void DockerObservabilityWidget::loadContainers()
         m_containers->insertRow(row);
         m_containers->setItem(row, 0, roItem(o.value(QStringLiteral("Names")).toString(),
                                              o.value(QStringLiteral("ID")).toString()));
-        m_containers->setItem(row, 1, roItem(o.value(QStringLiteral("Status")).toString()));
+        m_containers->setItem(row, 1, statusItem(o.value(QStringLiteral("Status")).toString()));
         m_containers->setItem(row, 2, roItem(o.value(QStringLiteral("Image")).toString()));
         m_containers->setItem(row, 3, roItem(o.value(QStringLiteral("Ports")).toString()));
+        m_containers->setItem(row, 4, roItem(o.value(QStringLiteral("RunningFor")).toString()));
     }
+    applyContainerFilter();
 }
 
 void DockerObservabilityWidget::loadNetworks()
@@ -367,4 +471,9 @@ void DockerObservabilityWidget::onVolumesSelectionChanged()
     const QString volumeName = selected.first()->data(Qt::UserRole).toString();
     if (!volumeName.isEmpty())
         renderVolumeDetails(volumeName);
+}
+
+void DockerObservabilityWidget::onContainerSearchChanged(const QString &)
+{
+    applyContainerFilter();
 }

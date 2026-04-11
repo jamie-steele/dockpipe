@@ -8,7 +8,9 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QHeaderView>
+#include <QLineEdit>
 #include <QLabel>
+#include <QFrame>
 #include <QSplitter>
 #include <QTabWidget>
 #include <QTableWidget>
@@ -291,35 +293,79 @@ QString listLine(const QString &label, const QStringList &values)
 {
     if (values.isEmpty())
         return {};
-    return QStringLiteral("<p><b>%1:</b> %2</p>").arg(label.toHtmlEscaped(), values.join(QStringLiteral(", ")).toHtmlEscaped());
+    QStringList pills;
+    for (const QString &value : values)
+        pills << QStringLiteral("<span style=\"display:inline-block;margin-right:6px;margin-bottom:6px;padding:3px 9px;border-radius:999px;background:#2f333b;border:1px solid #3a404a;\">%1</span>")
+                     .arg(value.toHtmlEscaped());
+    return QStringLiteral("<p><b>%1</b></p><p>%2</p>").arg(label.toHtmlEscaped(), pills.join(QStringLiteral(" ")));
 }
 
 QString detailsHtml(const PackageRow &row)
 {
     QString html;
-    html += QStringLiteral("<h2>%1</h2>").arg(row.title.toHtmlEscaped());
-    html += QStringLiteral("<p><b>Name:</b> %1</p>").arg(row.name.toHtmlEscaped());
+    html += QStringLiteral("<div style=\"font-family:sans-serif;line-height:1.5;\">");
+    html += QStringLiteral("<h2 style=\"margin:0 0 6px;\">%1</h2>").arg(row.title.toHtmlEscaped());
+    html += QStringLiteral("<p style=\"margin:0 0 12px;color:#b9c0cb;\">%1</p>").arg(row.name.toHtmlEscaped());
+    html += QStringLiteral("<p>");
     if (!row.version.isEmpty())
-        html += QStringLiteral("<p><b>Version:</b> %1</p>").arg(row.version.toHtmlEscaped());
+        html += QStringLiteral("<span style=\"display:inline-block;margin-right:6px;margin-bottom:6px;padding:4px 10px;border-radius:999px;background:#2f333b;border:1px solid #3a404a;\"><b>Version</b> %1</span> ").arg(row.version.toHtmlEscaped());
     if (!row.kind.isEmpty())
-        html += QStringLiteral("<p><b>Kind:</b> %1</p>").arg(row.kind.toHtmlEscaped());
-    if (!row.author.isEmpty())
-        html += QStringLiteral("<p><b>Author:</b> %1</p>").arg(row.author.toHtmlEscaped());
-    if (!row.provider.isEmpty())
-        html += QStringLiteral("<p><b>Provider:</b> %1</p>").arg(row.provider.toHtmlEscaped());
-    if (!row.capability.isEmpty())
-        html += QStringLiteral("<p><b>Capability:</b> %1</p>").arg(row.capability.toHtmlEscaped());
+        html += QStringLiteral("<span style=\"display:inline-block;margin-right:6px;margin-bottom:6px;padding:4px 10px;border-radius:999px;background:#2f333b;border:1px solid #3a404a;\"><b>Kind</b> %1</span> ").arg(row.kind.toHtmlEscaped());
+    if (row.authoring)
+        html += QStringLiteral("<span style=\"display:inline-block;margin-right:6px;margin-bottom:6px;padding:4px 10px;border-radius:999px;background:rgba(27,153,255,0.16);border:1px solid rgba(27,153,255,0.32);\"><b>Authoring</b></span> ");
+    if (row.installed)
+        html += QStringLiteral("<span style=\"display:inline-block;margin-right:6px;margin-bottom:6px;padding:4px 10px;border-radius:999px;background:rgba(46,160,67,0.16);border:1px solid rgba(46,160,67,0.32);\"><b>Installed</b></span> ");
+    html += QStringLiteral("</p>");
     if (!row.description.isEmpty())
-        html += QStringLiteral("<p>%1</p>").arg(row.description.toHtmlEscaped());
+        html += QStringLiteral("<p style=\"margin:0 0 14px;\">%1</p>").arg(row.description.toHtmlEscaped());
+    html += QStringLiteral("<p><b>Manifest</b><br><code>%1</code></p>").arg(row.packagePath.toHtmlEscaped());
+    if (!row.author.isEmpty())
+        html += QStringLiteral("<p><b>Author</b><br>%1</p>").arg(row.author.toHtmlEscaped());
+    if (!row.provider.isEmpty())
+        html += QStringLiteral("<p><b>Provider</b><br>%1</p>").arg(row.provider.toHtmlEscaped());
+    if (!row.capability.isEmpty())
+        html += QStringLiteral("<p><b>Capability</b><br>%1</p>").arg(row.capability.toHtmlEscaped());
     html += listLine(QObject::tr("Tags"), row.tags);
     html += listLine(QObject::tr("Depends"), row.depends);
     html += listLine(QObject::tr("Includes Resolvers"), row.includesResolvers);
     if (!row.repository.isEmpty()) {
         const QString repo = row.repository.toHtmlEscaped();
-        html += QStringLiteral("<p><b>Repository:</b> <a href=\"%1\">%1</a></p>").arg(repo);
+        html += QStringLiteral("<p><b>Repository</b><br><a href=\"%1\">%1</a></p>").arg(repo);
     }
-    html += QStringLiteral("<p><b>Manifest:</b> %1</p>").arg(row.packagePath.toHtmlEscaped());
+    html += QStringLiteral("</div>");
     return html;
+}
+
+bool packageMatchesFilter(const PackageRow &row, const QString &filter)
+{
+    const QString needle = filter.trimmed().toCaseFolded();
+    if (needle.isEmpty())
+        return true;
+    const QString haystack = QStringList{row.name,
+                                         row.title,
+                                         row.version,
+                                         row.kind,
+                                         row.provider,
+                                         row.capability,
+                                         row.description,
+                                         row.author,
+                                         row.repository,
+                                         row.packagePath,
+                                         row.source,
+                                         row.tags.join(QLatin1Char(' ')),
+                                         row.depends.join(QLatin1Char(' ')),
+                                         row.includesResolvers.join(QLatin1Char(' '))}
+                                 .join(QLatin1Char('\n'))
+                                 .toCaseFolded();
+    return haystack.contains(needle);
+}
+
+QLabel *metricPill(const QString &text)
+{
+    auto *label = new QLabel(text);
+    label->setObjectName(QStringLiteral("dockerMetric"));
+    label->setAlignment(Qt::AlignCenter);
+    return label;
 }
 
 } // namespace
@@ -337,30 +383,60 @@ void PackageManagerDialog::buildUi()
 {
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(14, 14, 14, 14);
-    layout->setSpacing(10);
+    layout->setSpacing(12);
 
-    auto *title = new QLabel(
-        tr("Browse packages for this checkout. Installed reflects the local packages already present here, Marketplace is reserved for a future remote store, and Authoring shows the package trees you are working on in this repo."));
-    title->setWordWrap(true);
-    layout->addWidget(title);
+    auto *hero = new QFrame(this);
+    hero->setObjectName(QStringLiteral("dockerHero"));
+    auto *heroLay = new QVBoxLayout(hero);
+    heroLay->setContentsMargins(14, 14, 14, 14);
+    heroLay->setSpacing(10);
+
+    auto *title = new QLabel(tr("Packages"));
+    title->setObjectName(QStringLiteral("appTitle"));
+    auto *subtitle = new QLabel(
+        tr("Installed shows the local packages already present here. Marketplace is reserved for the future remote store."));
+    subtitle->setObjectName(QStringLiteral("appSubtitle"));
+    subtitle->setWordWrap(true);
+    heroLay->addWidget(title);
+    heroLay->addWidget(subtitle);
+
+    auto *topRow = new QHBoxLayout;
+    m_search = new QLineEdit(this);
+    m_search->setPlaceholderText(tr("Search packages…"));
+    connect(m_search, &QLineEdit::textChanged, this, &PackageManagerDialog::onSearchChanged);
+    topRow->addWidget(m_search, 1);
+    heroLay->addLayout(topRow);
+
+    auto *metrics = new QHBoxLayout;
+    metrics->setSpacing(8);
+    m_installedCount = metricPill(tr("Installed 0"));
+    m_marketplaceCount = metricPill(tr("Marketplace 0"));
+    metrics->addWidget(m_installedCount);
+    metrics->addWidget(m_marketplaceCount);
+    metrics->addStretch(1);
+    heroLay->addLayout(metrics);
+
+    layout->addWidget(hero);
 
     auto *splitter = new QSplitter(this);
     splitter->setOrientation(Qt::Horizontal);
 
     m_tabs = new QTabWidget(splitter);
+    m_tabs->setObjectName(QStringLiteral("surfaceTabs"));
     m_installedTable = new QTableWidget(m_tabs);
     m_marketplaceTable = new QTableWidget(m_tabs);
-    m_authoringTable = new QTableWidget(m_tabs);
+    m_installedTable->setObjectName(QStringLiteral("dockerTable"));
+    m_marketplaceTable->setObjectName(QStringLiteral("dockerTable"));
     configureTable(m_installedTable);
     configureTable(m_marketplaceTable);
-    configureTable(m_authoringTable);
     m_tabs->addTab(m_installedTable, tr("Installed"));
     m_tabs->addTab(m_marketplaceTable, tr("Marketplace"));
-    m_tabs->addTab(m_authoringTable, tr("Authoring"));
 
     m_details = new QTextBrowser(splitter);
+    m_details->setObjectName(QStringLiteral("detailBrowser"));
     m_details->setOpenExternalLinks(true);
     m_details->setPlaceholderText(tr("Select a package to inspect its metadata."));
+    m_details->setOpenLinks(false);
 
     splitter->addWidget(m_tabs);
     splitter->addWidget(m_details);
@@ -371,24 +447,35 @@ void PackageManagerDialog::buildUi()
 
     connect(m_installedTable, &QTableWidget::itemSelectionChanged, this, &PackageManagerDialog::onInstalledSelectionChanged);
     connect(m_marketplaceTable, &QTableWidget::itemSelectionChanged, this, &PackageManagerDialog::onMarketplaceSelectionChanged);
-    connect(m_authoringTable, &QTableWidget::itemSelectionChanged, this, &PackageManagerDialog::onAuthoringSelectionChanged);
     connect(m_tabs, &QTabWidget::currentChanged, this, [this](int) {
         if (m_tabs->currentWidget() == m_installedTable)
             refreshDetails(m_installedTable);
         else if (m_tabs->currentWidget() == m_marketplaceTable)
             refreshDetails(m_marketplaceTable);
-        else if (m_tabs->currentWidget() == m_authoringTable)
-            refreshDetails(m_authoringTable);
     });
 }
 
 void PackageManagerDialog::loadPackages()
 {
-    const QVector<PackageRow> all = discoverPackages(m_hintWorkdir);
-    populateTable(m_installedTable, selectedRows(all, true, false), tr("Installed"));
-    populateTable(m_marketplaceTable, {}, tr("Available"));
-    populateTable(m_authoringTable, selectedRows(all, false, true), tr("Authoring"));
+    applyFilter();
     onInstalledSelectionChanged();
+}
+
+void PackageManagerDialog::applyFilter()
+{
+    const QVector<PackageRow> all = discoverPackages(m_hintWorkdir);
+    QVector<PackageRow> filtered;
+    for (const PackageRow &row : all) {
+        if (packageMatchesFilter(row, m_search ? m_search->text() : QString()))
+            filtered.append(row);
+    }
+    const QVector<PackageRow> installed = selectedRows(filtered, true, false);
+    populateTable(m_installedTable, installed, tr("Installed"));
+    populateTable(m_marketplaceTable, {}, tr("Available"));
+    if (m_installedCount)
+        m_installedCount->setText(tr("Installed %1").arg(installed.size()));
+    if (m_marketplaceCount)
+        m_marketplaceCount->setText(tr("Marketplace 0"));
 }
 
 void PackageManagerDialog::refreshDetails(QTableWidget *table)
@@ -396,7 +483,7 @@ void PackageManagerDialog::refreshDetails(QTableWidget *table)
     const QVector<PackageRow> all = discoverPackages(m_hintWorkdir);
     const int rowIndex = table->currentRow();
     if (rowIndex < 0 || !table->item(rowIndex, 0)) {
-        m_details->setHtml(tr("<p>Select a package to inspect it.</p>"));
+        m_details->setHtml(tr("<div style=\"font-family:sans-serif;\"><h2>Package details</h2><p>Select a package to inspect it.</p></div>"));
         return;
     }
     const QString packagePath = table->item(rowIndex, 0)->data(Qt::UserRole).toString();
@@ -406,7 +493,7 @@ void PackageManagerDialog::refreshDetails(QTableWidget *table)
             return;
         }
     }
-    m_details->setHtml(tr("<p>Package metadata could not be loaded.</p>"));
+    m_details->setHtml(tr("<div style=\"font-family:sans-serif;\"><p>Package metadata could not be loaded.</p></div>"));
 }
 
 void PackageManagerDialog::onInstalledSelectionChanged()
@@ -419,15 +506,18 @@ void PackageManagerDialog::onMarketplaceSelectionChanged()
 {
     if (m_tabs->currentWidget() == m_marketplaceTable) {
         if (m_marketplaceTable->rowCount() == 0) {
-            m_details->setHtml(tr("<h2>Marketplace</h2><p>No remote package store is connected yet.</p>"));
+            m_details->setHtml(tr("<div style=\"font-family:sans-serif;\"><h2>Marketplace</h2><p>No remote package store is connected yet.</p><p>This tab is intentionally empty until a remote catalog is wired in.</p></div>"));
             return;
         }
         refreshDetails(m_marketplaceTable);
     }
 }
 
-void PackageManagerDialog::onAuthoringSelectionChanged()
+void PackageManagerDialog::onSearchChanged(const QString &)
 {
-    if (m_tabs->currentWidget() == m_authoringTable)
-        refreshDetails(m_authoringTable);
+    applyFilter();
+    if (m_tabs->currentWidget() == m_marketplaceTable)
+        onMarketplaceSelectionChanged();
+    else
+        onInstalledSelectionChanged();
 }

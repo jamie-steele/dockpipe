@@ -49,6 +49,7 @@ LogViewerDialog::LogViewerDialog(const QString &title,
     m_path->setTextInteractionFlags(Qt::TextSelectableByMouse);
 
     m_output = new QPlainTextEdit(this);
+    m_output->setObjectName(QStringLiteral("detailConsole"));
     m_output->setReadOnly(true);
     m_output->setLineWrapMode(QPlainTextEdit::NoWrap);
     m_output->setPlaceholderText(tr("No log output yet."));

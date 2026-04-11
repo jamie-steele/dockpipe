@@ -3,10 +3,12 @@
 #include <QWidget>
 
 class QLabel;
+class QLineEdit;
 class QPlainTextEdit;
 class QSplitter;
 class QTabWidget;
 class QTableWidget;
+class QWidget;
 
 class DockerObservabilityWidget : public QWidget {
     Q_OBJECT
@@ -21,6 +23,7 @@ private slots:
     void onContainersSelectionChanged();
     void onNetworksSelectionChanged();
     void onVolumesSelectionChanged();
+    void onContainerSearchChanged(const QString &text);
 
 private:
     struct CommandResult {
@@ -36,6 +39,8 @@ private:
 
     static CommandResult runDocker(const QStringList &args);
     void setStatus(const QString &text);
+    void updateSummary();
+    void applyContainerFilter();
 
     void loadContainers();
     void loadNetworks();
@@ -46,6 +51,10 @@ private:
     void renderVolumeDetails(const QString &volumeName);
 
     QLabel *m_status = nullptr;
+    QLabel *m_containerCount = nullptr;
+    QLabel *m_networkCount = nullptr;
+    QLabel *m_volumeCount = nullptr;
+    QLineEdit *m_search = nullptr;
     QTabWidget *m_tabs = nullptr;
 
     QTableWidget *m_containers = nullptr;

@@ -12,6 +12,7 @@ class QStackedWidget;
 class QTabWidget;
 class DockerObservabilityWidget;
 class QTimer;
+class QFrame;
 
 /// IDE-style flow: home (recent projects) → workspace (apps for the selected folder).
 class BasicModeWidget : public QWidget {
@@ -50,6 +51,10 @@ private:
     void rebuildRecentList();
     void setDockerTabActive(bool active);
     void updateLoadingBanner();
+    void updateLaunchOverlayGeometry();
+
+protected:
+    void resizeEvent(QResizeEvent *event) override;
 
     QStackedWidget *m_stack = nullptr;
     QWidget *m_homePage = nullptr;
@@ -63,6 +68,12 @@ private:
     QPushButton *m_backHome = nullptr;
     QLabel *m_projectLabel = nullptr;
     QLabel *m_loadingBanner = nullptr;
+    QWidget *m_appsPage = nullptr;
+    QWidget *m_launchOverlay = nullptr;
+    QFrame *m_launchOverlayCard = nullptr;
+    QLabel *m_launchOverlayGlyph = nullptr;
+    QLabel *m_launchOverlayTitle = nullptr;
+    QLabel *m_launchOverlayBody = nullptr;
     QPushButton *m_browse = nullptr;
     QPushButton *m_refresh = nullptr;
     QTabWidget *m_workspaceTabs = nullptr;
