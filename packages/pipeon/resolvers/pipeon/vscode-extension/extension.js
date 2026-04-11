@@ -49,6 +49,93 @@ function clampText(text, maxChars) {
   return `${value.slice(0, maxChars)}\n\n[truncated]`;
 }
 
+function summarizeDiffPreview(text) {
+  const raw = String(text || "").replace(/\r\n/g, "\n");
+  if (!raw.trim()) return "";
+  const lines = raw.split("\n");
+  const sections = [];
+  let current = null;
+  for (const line of lines) {
+    if (line.startsWith("diff --git ")) {
+      if (current) sections.push(current);
+      current = { file: "", adds: 0, removes: 0, body: [] };
+      continue;
+    }
+    if (!current) continue;
+    if (line.startsWith("+++ b/")) {
+      current.file = line.slice(6).trim();
+      continue;
+    }
+    if (
+      line.startsWith("--- ") ||
+      line.startsWith("index ") ||
+      line.startsWith("new file mode ") ||
+      line.startsWith("@@")
+    ) {
+      continue;
+    }
+    if (line.startsWith("+") && !line.startsWith("+++")) {
+      current.adds += 1;
+      current.body.push(line);
+      continue;
+    }
+    if (line.startsWith("-") && !line.startsWith("---")) {
+      current.removes += 1;
+      current.body.push(line);
+      continue;
+    }
+  }
+  if (current) sections.push(current);
+  const compact = sections.slice(0, 3).map((section) => {
+    const header = `# ${section.file || "file"}  +${section.adds} -${section.removes}`;
+    const body = section.body.slice(0, 20).join("\n");
+    return [header, body].filter(Boolean).join("\n");
+  });
+  return clampText(compact.join("\n\n"), 8000);
+}
+
+function summarizeTargetFiles(files) {
+  const items = Array.isArray(files) ? files.filter(Boolean).map((item) => String(item)) : [];
+  if (!items.length) return "";
+  if (items.length === 1) return items[0];
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items[0]}, ${items[1]}, +${items.length - 2} more`;
+}
+
+function pushRecentUnique(items, next, max = 4) {
+  const normalized = String(next || "").trim();
+  const list = Array.isArray(items) ? items.map((item) => String(item || "")) : [];
+  if (!normalized) {
+    return list.slice(-max);
+  }
+  if (list[list.length - 1] === normalized) {
+    return list.slice(-max);
+  }
+  const deduped = [...list.filter((item) => item !== normalized), normalized];
+  return deduped.slice(-max);
+}
+
+function buildPreparedEditMessage(readyToApply, pendingAction) {
+  const count = Array.isArray(readyToApply?.target_files) ? readyToApply.target_files.length : Array.isArray(pendingAction?.targetFiles) ? pendingAction.targetFiles.length : 0;
+  const fileSummary = summarizeTargetFiles(readyToApply?.target_files || pendingAction?.targetFiles || []);
+  const parts = [];
+  if (count > 0) {
+    parts.push(`Prepared an edit touching ${count} file${count === 1 ? "" : "s"}.`);
+  } else {
+    parts.push("Prepared an edit for review.");
+  }
+  if (fileSummary) {
+    parts.push(`Files: \`${fileSummary}\`.`);
+  }
+  if (pendingAction?.helperScriptRuntime) {
+    parts.push(`Path: bounded sidecar (${pendingAction.helperScriptRuntime}).`);
+  } else {
+    parts.push("Path: primitive or model-assisted edit.");
+  }
+  parts.push("Review the diff below.");
+  return parts.join(" ");
+}
+
 function relativeToRoot(root, target) {
   if (!root || !target) return null;
   const rel = path.relative(root, target);
@@ -139,7 +226,7 @@ function sanitizePendingAction(value) {
     title: String(value.title || ""),
     artifactDir: value.artifactDir ? String(value.artifactDir) : "",
     patchPath: value.patchPath ? String(value.patchPath) : "",
-    diffPreview: value.diffPreview ? clampText(String(value.diffPreview), 12000) : "",
+    diffPreview: value.diffPreview ? summarizeDiffPreview(String(value.diffPreview)) : "",
     helperScriptPath: value.helperScriptPath ? String(value.helperScriptPath) : "",
     helperScriptPurpose: value.helperScriptPurpose ? String(value.helperScriptPurpose) : "",
     helperScriptRuntime: value.helperScriptRuntime ? String(value.helperScriptRuntime) : "",
@@ -158,7 +245,7 @@ function sanitizeMessage(message) {
     format: message?.format === "plain" ? "plain" : "markdown",
     createdAt: String(message?.createdAt || nowIso()),
     pendingAction: sanitizePendingAction(message?.pendingAction),
-    diffPreview: message?.diffPreview ? clampText(String(message.diffPreview), 12000) : "",
+    diffPreview: message?.diffPreview ? summarizeDiffPreview(String(message.diffPreview)) : "",
     liveStatus: message?.liveStatus ? String(message.liveStatus) : "",
     liveTrace: Array.isArray(message?.liveTrace) ? message.liveTrace.map((item) => String(item)).slice(-5) : [],
   };
@@ -1411,8 +1498,8 @@ function renderChatHtml(webview, state) {
         font-family: var(--vscode-font-family);
         margin: 0;
         background:
-          radial-gradient(circle at top, color-mix(in srgb, var(--vscode-button-background) 12%, transparent) 0%, transparent 40%),
-          linear-gradient(180deg, color-mix(in srgb, var(--vscode-sideBar-background) 95%, transparent), var(--vscode-editor-background));
+          radial-gradient(circle at top, color-mix(in srgb, var(--vscode-button-background) 7%, transparent) 0%, transparent 34%),
+          linear-gradient(180deg, color-mix(in srgb, var(--vscode-sideBar-background) 98%, transparent), var(--vscode-editor-background));
         color: var(--vscode-editor-foreground);
       }
       .wrap {
@@ -1421,17 +1508,12 @@ function renderChatHtml(webview, state) {
         height: 100vh;
       }
       .header {
-        padding: 14px 16px 12px;
+        padding: 8px 12px;
         border-bottom: 1px solid var(--vscode-panel-border);
-        background: color-mix(in srgb, var(--vscode-sideBar-background) 92%, transparent);
-        backdrop-filter: blur(10px);
+        background: color-mix(in srgb, var(--vscode-sideBar-background) 96%, transparent);
       }
       .eyebrow {
-        font-size: 11px;
-        letter-spacing: 0.12em;
-        text-transform: uppercase;
-        color: var(--vscode-descriptionForeground);
-        margin-bottom: 6px;
+        display: none;
       }
       .titleRow {
         display: flex;
@@ -1439,16 +1521,53 @@ function renderChatHtml(webview, state) {
         justify-content: space-between;
         gap: 12px;
       }
+      .titleBlock {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+      .titleIcon {
+        color: var(--vscode-descriptionForeground);
+        font-size: 14px;
+        line-height: 1;
+      }
       .title {
-        font-size: 18px;
-        font-weight: 700;
-        margin: 0 0 4px;
+        font-size: 13px;
+        font-weight: 600;
+        margin: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
       .sub {
-        font-size: 12px;
+        display: none;
+      }
+      .sessionPicker {
+        min-width: 160px;
+        max-width: 260px;
+      }
+      .headerSpacer {
+        flex: 1;
+      }
+      .headerSelect {
+        min-width: 170px;
+        max-width: 240px;
+      }
+      .iconBtn {
+        min-width: 34px;
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+      }
+      .headerHint {
         color: var(--vscode-descriptionForeground);
-        line-height: 1.45;
-        margin-top: 2px;
+        font-size: 11px;
       }
       .headerActions {
         display: flex;
@@ -1459,7 +1578,7 @@ function renderChatHtml(webview, state) {
         font: inherit;
       }
       select {
-        min-width: 176px;
+        min-width: 120px;
         max-width: 240px;
         background: var(--vscode-dropdown-background, var(--vscode-input-background));
         color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
@@ -1471,7 +1590,7 @@ function renderChatHtml(webview, state) {
         border: 0;
         border-radius: 10px;
         padding: 9px 13px;
-        min-width: 88px;
+        min-width: 80px;
         background: var(--vscode-button-background);
         color: var(--vscode-button-foreground);
         font-weight: 600;
@@ -1484,10 +1603,7 @@ function renderChatHtml(webview, state) {
       }
       .btn:disabled { opacity: 0.6; cursor: default; }
       .trace {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 10px;
+        display: none;
       }
       .traceItem {
         padding: 5px 9px;
@@ -1498,31 +1614,34 @@ function renderChatHtml(webview, state) {
         color: var(--vscode-descriptionForeground);
       }
       .transcript {
-        padding: 18px 16px 24px;
+        padding: 10px 12px 18px;
         overflow-y: auto;
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 8px;
       }
       .msg {
-        max-width: 100%;
-        padding: 12px 14px;
-        border-radius: 16px;
+        max-width: min(860px, 100%);
+        padding: 10px 12px;
+        border-radius: 14px;
         border: 1px solid var(--vscode-panel-border);
-        box-shadow: 0 10px 24px rgba(0,0,0,0.08);
+        box-shadow: none;
       }
       .msg.user {
         background: linear-gradient(180deg, color-mix(in srgb, var(--vscode-button-background) 18%, transparent), color-mix(in srgb, var(--vscode-button-background) 9%, transparent));
         border-bottom-right-radius: 6px;
+        align-self: flex-end;
+        width: min(860px, 100%);
       }
       .msg.assistant {
         background: linear-gradient(180deg, color-mix(in srgb, var(--vscode-editorWidget-background) 96%, transparent), color-mix(in srgb, var(--vscode-editorWidget-background) 84%, transparent));
         border-bottom-left-radius: 6px;
+        align-self: stretch;
       }
       .role {
         font-size: 11px;
         opacity: 0.82;
-        margin-bottom: 8px;
+        margin-bottom: 6px;
         text-transform: uppercase;
         letter-spacing: 0.08em;
       }
@@ -1569,8 +1688,8 @@ function renderChatHtml(webview, state) {
         color: var(--vscode-textLink-foreground);
       }
       .pendingCard {
-        margin-top: 12px;
-        padding: 12px;
+        margin-top: 10px;
+        padding: 10px;
         border-radius: 12px;
         border: 1px solid var(--vscode-panel-border);
         background: color-mix(in srgb, var(--vscode-editorWidget-background) 92%, transparent);
@@ -1585,8 +1704,22 @@ function renderChatHtml(webview, state) {
         color: var(--vscode-descriptionForeground);
         margin-bottom: 8px;
       }
+      .pendingFiles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 0 0 8px;
+      }
+      .pendingFile {
+        padding: 3px 8px;
+        border-radius: 999px;
+        font-size: 11px;
+        border: 1px solid var(--vscode-panel-border);
+        color: var(--vscode-descriptionForeground);
+        background: color-mix(in srgb, var(--vscode-sideBar-background) 94%, transparent);
+      }
       .diffPreview {
-        margin: 10px 0 0;
+        margin: 8px 0 0;
         padding: 10px;
         overflow-x: auto;
         border-radius: 10px;
@@ -1595,7 +1728,48 @@ function renderChatHtml(webview, state) {
         font-family: var(--vscode-editor-font-family, monospace);
         font-size: 12px;
         line-height: 1.45;
-        white-space: pre;
+        white-space: pre-wrap;
+      }
+      .diffFiles {
+        display: grid;
+        gap: 10px;
+        margin-top: 8px;
+      }
+      .diffFile {
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 10px;
+        overflow: hidden;
+        background: color-mix(in srgb, var(--vscode-sideBar-background) 94%, transparent);
+      }
+      .diffFileHead {
+        display: flex;
+        justify-content: space-between;
+        gap: 8px;
+        padding: 8px 10px;
+        font-size: 11px;
+        color: var(--vscode-descriptionForeground);
+        border-bottom: 1px solid var(--vscode-panel-border);
+      }
+      .diffFileName {
+        font-weight: 700;
+        color: var(--vscode-foreground);
+      }
+      .diffLines {
+        font-family: var(--vscode-editor-font-family, monospace);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .diffLine {
+        padding: 2px 10px;
+        white-space: pre-wrap;
+      }
+      .diffLine.add {
+        color: #8fd19e;
+        background: rgba(46, 160, 67, 0.12);
+      }
+      .diffLine.remove {
+        color: #f5a5a5;
+        background: rgba(248, 81, 73, 0.12);
       }
       .pendingActions {
         display: flex;
@@ -1603,8 +1777,8 @@ function renderChatHtml(webview, state) {
         margin-top: 10px;
       }
       .liveCard {
-        margin-top: 12px;
-        padding: 12px;
+        margin-top: 8px;
+        padding: 10px;
         border-radius: 12px;
         border: 1px solid var(--vscode-panel-border);
         background: color-mix(in srgb, var(--vscode-editorWidget-background) 94%, transparent);
@@ -1627,15 +1801,11 @@ function renderChatHtml(webview, state) {
         font-size: 12px;
         font-weight: 700;
       }
-      .liveMeta {
-        font-size: 11px;
-        color: var(--vscode-descriptionForeground);
-      }
       .liveTrace {
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
-        margin-top: 8px;
+        margin-top: 4px;
       }
       .liveChip {
         padding: 4px 8px;
@@ -1662,44 +1832,60 @@ function renderChatHtml(webview, state) {
       }
       .composerWrap {
         border-top: 1px solid var(--vscode-panel-border);
-        background: color-mix(in srgb, var(--vscode-sideBar-background) 92%, transparent);
-        padding: 12px 14px 14px;
+        background: color-mix(in srgb, var(--vscode-sideBar-background) 96%, transparent);
+        padding: 10px 12px 12px;
       }
       .status {
-        padding: 0 2px 10px;
+        padding: 0 2px 8px;
         font-size: 11px;
         color: var(--vscode-descriptionForeground);
       }
       .composer {
         display: grid;
         grid-template-columns: 1fr;
-        gap: 10px;
+        gap: 8px;
       }
       textarea {
         resize: vertical;
-        min-height: 108px;
-        max-height: 240px;
+        min-height: 124px;
+        max-height: 280px;
         width: 100%;
-        background: var(--vscode-input-background);
+        background: color-mix(in srgb, var(--vscode-input-background) 88%, var(--vscode-editor-background));
         color: var(--vscode-input-foreground);
         border: 1px solid var(--vscode-input-border);
-        border-radius: 14px;
-        padding: 12px 14px;
+        border-radius: 16px;
+        padding: 14px 14px;
         line-height: 1.45;
       }
       .actions {
         display: flex;
         justify-content: space-between;
         gap: 10px;
-        align-items: center;
+        align-items: flex-end;
+      }
+      .controlsMeta {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        min-width: 0;
       }
       .hint {
         font-size: 11px;
         color: var(--vscode-descriptionForeground);
+        max-width: 320px;
+        line-height: 1.35;
+      }
+      .toolRow {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
       }
       .sendWrap {
         display: flex;
         gap: 8px;
+        align-items: center;
+        flex-wrap: wrap;
       }
       @media (max-width: 520px) {
         .titleRow, .actions {
@@ -1723,16 +1909,16 @@ function renderChatHtml(webview, state) {
   <body>
     <div class="wrap">
       <header class="header">
-        <div class="eyebrow">DorkPipe</div>
         <div class="titleRow">
-          <div>
+          <div class="titleBlock">
+            <div class="titleIcon">←</div>
             <h1 class="title">Workspace Chat</h1>
-            <div class="sub">Persistent chats, repo context, safe local actions, and streamed model responses.</div>
           </div>
+          <div class="headerSpacer"></div>
           <div class="headerActions">
-            <select id="sessionSelect" aria-label="Chat session"></select>
-            <button class="btn ghost" id="clearBtn" type="button">Clear</button>
-            <button class="btn" id="newChatBtn" type="button">New chat</button>
+            <select id="sessionSelect" class="headerSelect" aria-label="Chat session"></select>
+            <button class="btn ghost iconBtn" id="clearBtn" type="button" title="Clear chat">↺</button>
+            <button class="btn ghost iconBtn" id="newChatBtn" type="button" title="New chat">✎</button>
           </div>
         </div>
         <div class="trace" id="trace"></div>
@@ -1743,20 +1929,24 @@ function renderChatHtml(webview, state) {
         <form class="composer" id="composer">
           <textarea id="prompt" placeholder="Ask DorkPipe about this repo... or use /help for local commands"></textarea>
           <div class="actions">
-            <div class="hint">Uses the workspace bundle when available. Safe local routing can skip the model for obvious actions.</div>
+            <div class="controlsMeta">
+              <div class="toolRow">
+                <label class="toggleWrap"><input id="autoApplyEdits" type="checkbox" /> Auto</label>
+                <select id="modelProfileSelect" aria-label="Model profile">
+                  <option value="fast">Fast</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="deep">Deep</option>
+                  <option value="max">Max</option>
+                </select>
+                <select id="modeSelect" aria-label="Request mode">
+                  <option value="ask">Ask</option>
+                  <option value="agent">Agent</option>
+                  <option value="plan">Plan</option>
+                </select>
+              </div>
+              <div class="hint">Local-first routing with safe primitives, bounded tools, and streamed model steps.</div>
+            </div>
             <div class="sendWrap">
-              <label class="toggleWrap"><input id="autoApplyEdits" type="checkbox" /> Auto-apply edits</label>
-              <select id="modelProfileSelect" aria-label="Model profile">
-                <option value="fast">Fast</option>
-                <option value="balanced">Balanced</option>
-                <option value="deep">Deep</option>
-                <option value="max">Max</option>
-              </select>
-              <select id="modeSelect" aria-label="Request mode">
-                <option value="ask">Ask</option>
-                <option value="agent">Agent</option>
-                <option value="plan">Plan</option>
-              </select>
               <button class="btn ghost" id="newFromComposer" type="button">New</button>
               <button class="btn" id="send" type="submit">Send</button>
             </div>
@@ -1792,6 +1982,35 @@ function renderChatHtml(webview, state) {
           .replace(/'/g, "&#39;");
       }
 
+      function renderCompactDiff(diffText) {
+        const raw = String(diffText || "").trim();
+        if (!raw) {
+          return "";
+        }
+        const sections = raw.split(/\n{2,}/).map((block) => block.trim()).filter(Boolean);
+        const cards = sections.map((section) => {
+          const lines = section.split("\n");
+          const header = lines.shift() || "";
+          const fileMatch = header.match(/^#\s+(.+?)\s+\+(\d+)\s+\-(\d+)$/);
+          const fileName = fileMatch ? fileMatch[1] : header.replace(/^#\s+/, "");
+          const adds = fileMatch ? fileMatch[2] : "0";
+          const removes = fileMatch ? fileMatch[3] : "0";
+          const body = lines
+            .map((line) => {
+              const cls = line.startsWith("+") ? " add" : line.startsWith("-") ? " remove" : "";
+              return '<div class="diffLine' + cls + '">' + escapeHtml(line) + '</div>';
+            })
+            .join("");
+          return [
+            '<div class="diffFile">',
+            '<div class="diffFileHead"><div class="diffFileName">' + escapeHtml(fileName || "file") + '</div><div>+' + adds + ' -' + removes + '</div></div>',
+            '<div class="diffLines">' + body + '</div>',
+            '</div>',
+          ].join("");
+        });
+        return '<div class="diffFiles">' + cards.join("") + '</div>';
+      }
+
       function renderPendingAction(message) {
         const pending = message.pendingAction;
         if (!pending) {
@@ -1799,7 +2018,7 @@ function renderChatHtml(webview, state) {
         }
         const meta = [];
         if (pending.kind === "edit" && Array.isArray(pending.targetFiles) && pending.targetFiles.length) {
-          meta.push("Files: " + pending.targetFiles.join(", "));
+          meta.push(pending.targetFiles.length + " file" + (pending.targetFiles.length === 1 ? "" : "s"));
         }
         if (pending.kind === "edit" && pending.helperScriptRuntime) {
           meta.push("Sidecar: " + pending.helperScriptRuntime);
@@ -1807,20 +2026,22 @@ function renderChatHtml(webview, state) {
         if (pending.kind === "command" && pending.requestText) {
           meta.push("Command: " + pending.requestText);
         }
+        const files = pending.kind === "edit" && Array.isArray(pending.targetFiles) && pending.targetFiles.length
+          ? '<div class="pendingFiles">' + pending.targetFiles.slice(0, 3).map((file) => '<div class="pendingFile">' + escapeHtml(file) + '</div>').join("") + '</div>'
+          : "";
         const helper = pending.helperScriptPreview
           ? [
-              '<div class="pendingTitle">Bounded helper script</div>',
-              pending.helperScriptPurpose ? '<div class="pendingMeta">' + escapeHtml(pending.helperScriptPurpose) + "</div>" : "",
-              '<pre class="diffPreview">' + escapeHtml(pending.helperScriptPreview) + "</pre>",
+              '<div class="pendingMeta">Uses bounded helper' + (pending.helperScriptPurpose ? ": " + escapeHtml(pending.helperScriptPurpose) : "") + "</div>",
             ].join("")
           : "";
         const diff = pending.diffPreview
-          ? '<pre class="diffPreview">' + escapeHtml(pending.diffPreview) + "</pre>"
+          ? renderCompactDiff(pending.diffPreview)
           : "";
         return [
           '<div class="pendingCard">',
           '<div class="pendingTitle">' + escapeHtml(pending.title || (pending.kind === "edit" ? "Review edit" : "Confirm command")) + "</div>",
           meta.length ? '<div class="pendingMeta">' + escapeHtml(meta.join("  |  ")) + "</div>" : "",
+          files,
           helper,
           diff,
           '<div class="pendingActions">',
@@ -1832,13 +2053,13 @@ function renderChatHtml(webview, state) {
       }
 
       function renderDiffPreview(message) {
-        if (!message.diffPreview) {
+        if (!message.diffPreview || (message.pendingAction && message.pendingAction.kind === "edit")) {
           return "";
         }
         return [
           '<div class="pendingCard">',
           '<div class="pendingTitle">Diff preview</div>',
-          '<pre class="diffPreview">' + escapeHtml(message.diffPreview) + "</pre>",
+          renderCompactDiff(message.diffPreview),
           "</div>",
         ].join("");
       }
@@ -1853,7 +2074,6 @@ function renderChatHtml(webview, state) {
         return [
           '<div class="liveCard">',
           '<div class="liveRow"><div class="liveDot"></div><div class="liveTitle">' + escapeHtml(message.liveStatus) + "</div></div>",
-          '<div class="liveMeta">DorkPipe is routing, gathering context, and deciding the safest next step.</div>',
           chips,
           "</div>",
         ].join("");
@@ -2456,7 +2676,7 @@ class PipeonChatViewProvider {
         onEvent: (label) => {
           this.pushTrace(label);
           assistantMessage.liveStatus = summarizeRequestActivity(label, normalizedMode);
-          assistantMessage.liveTrace = [...(assistantMessage.liveTrace || []), label].slice(-5);
+          assistantMessage.liveTrace = pushRecentUnique(assistantMessage.liveTrace || [], label, 4);
           this.refresh();
         },
         onToken: (_piece, fullText) => {
@@ -2478,9 +2698,9 @@ class PipeonChatViewProvider {
           const diffPreview = await readPatchPreview(root, result.readyToApply);
           const helperScriptPreview = await readHelperScriptPreview(root, result.readyToApply);
           assistantMessage.diffPreview = diffPreview;
-          assistantMessage.pendingAction = sanitizePendingAction({
+          const pendingAction = sanitizePendingAction({
             kind: "edit",
-            title: "Review this code edit",
+            title: "Review edit",
             artifactDir: result.readyToApply.artifact_dir,
             patchPath: result.readyToApply.patch_path,
             diffPreview,
@@ -2490,10 +2710,12 @@ class PipeonChatViewProvider {
             helperScriptPreview,
             targetFiles: result.readyToApply.target_files,
           });
+          assistantMessage.pendingAction = pendingAction;
+          assistantMessage.text = buildPreparedEditMessage(result.readyToApply, pendingAction);
         if (this.chatStore.autoApplyEdits) {
           this.pushTrace("Applying confirmed edit");
           assistantMessage.liveStatus = "Applying the change";
-          assistantMessage.liveTrace = ["Prepared a validated patch artifact", "Applying confirmed edit"];
+          assistantMessage.liveTrace = ["Prepared the edit", "Applying confirmed edit"];
           this.refresh();
         const applied = await applyPreparedEdit(root, result.readyToApply.artifact_dir, {
             onEvent: (label) => this.pushTrace(label),
@@ -2555,7 +2777,7 @@ class PipeonChatViewProvider {
           onEvent: (label) => {
             this.pushTrace(label);
             assistantMessage.liveStatus = summarizeRequestActivity(label, pending.mode);
-            assistantMessage.liveTrace = [...(assistantMessage.liveTrace || []), label].slice(-5);
+            assistantMessage.liveTrace = pushRecentUnique(assistantMessage.liveTrace || [], label, 4);
             this.refresh();
           },
           channel: this.channel,

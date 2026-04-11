@@ -102,6 +102,8 @@ type packageScaffoldSpec struct {
 	TargetFiles   []string
 	Summary       string
 	ValidationMsg string
+	Confidence    float64
+	Reason        string
 }
 
 type boundedMCPRetrieval struct {
@@ -2009,9 +2011,13 @@ func tryDeterministicCollectionScaffoldPrimitive(reqID, root, message, artifacts
 	if !ok {
 		return nil, "", false, nil
 	}
+	if spec.Confidence < 0.85 {
+		return nil, "", false, nil
+	}
 	emitEditEvent(reqID, "context_gathering", "Using deterministic scaffold primitive", 0.18, map[string]any{
 		"package_root": spec.PackageRoot,
 		"package_name": spec.PackageName,
+		"confidence":   spec.Confidence,
 	})
 	if _, err := os.Stat(filepath.Join(root, spec.ManifestPath)); err == nil {
 		return nil, "", false, nil
@@ -2057,13 +2063,24 @@ func inferPackageScaffoldSpec(root, message string) (*packageScaffoldSpec, bool)
 	if len(packageRoots) == 0 {
 		return nil, false
 	}
-	packageRoot := selectPackageRootForMessage(lower, packageRoots)
+	packageRoot, rootExplicit := selectPackageRootForMessage(lower, packageRoots)
 	if packageRoot == "" {
 		return nil, false
 	}
+	purpose := inferRequestedPackagePurpose(message)
 	packageName := inferRequestedPackageName(lower)
+	nameSource := "explicit"
 	if packageName == "" {
-		packageName = pickAvailablePackageName(root, packageRoot)
+		packageName = inferPackageNameFromPurpose(purpose)
+		if packageName != "" {
+			nameSource = "purpose"
+		}
+	}
+	if packageName == "" {
+		nameSource = "fallback"
+		packageName = pickAvailablePackageName(root, packageRoot, "")
+	} else {
+		packageName = pickAvailablePackageName(root, packageRoot, packageName)
 	}
 	if packageName == "" {
 		return nil, false
@@ -2076,29 +2093,36 @@ func inferPackageScaffoldSpec(root, message string) (*packageScaffoldSpec, bool)
 		version = "0.1.0"
 	}
 	titleName := humanizePackageName(packageName)
+	description := "A generated package scaffold created through a primitive-first edit lane."
+	readmeLead := "This package was scaffolded as a fast local authoring starting point."
+	if purpose != "" {
+		description = fmt.Sprintf("A generated package scaffold focused on %s.", purpose)
+		readmeLead = fmt.Sprintf("This package is focused on %s.", purpose)
+	}
 	manifestBody := strings.TrimSpace(fmt.Sprintf(`schema: 1
 kind: package
 name: %s
 version: %s
 title: %s
 description: |
-  A generated package scaffold created through a primitive-first edit lane.
+  %s
   This package is intended as a lightweight authoring starting point that can grow into real
   workflows, resolvers, or assets.
 author: Generated
 license: Apache-2.0
 repository: https://github.com/dockpipe/dockpipe
 tags: [experimental, authoring, generated]
-`, packageName, version, titleName)) + "\n"
+`, packageName, version, titleName, description)) + "\n"
 	readmeBody := strings.TrimSpace(fmt.Sprintf(`# %s
 
-This package was scaffolded as a fast local authoring starting point.
+%s
 
 Ideas to extend it:
 - add a workflow under a nested package/resolver tree
 - add assets or scripts beside the package manifest
 - tighten the title, description, and tags once the package direction is clear
-`, titleName)) + "\n"
+`, titleName, readmeLead)) + "\n"
+	confidence, reason := assessPackageScaffoldConfidence(lower, packageRoots, rootExplicit, purpose, nameSource)
 	return &packageScaffoldSpec{
 		PackageRoot:   packageRoot,
 		PackageName:   packageName,
@@ -2108,8 +2132,10 @@ Ideas to extend it:
 		ManifestBody:  manifestBody,
 		ReadmeBody:    readmeBody,
 		TargetFiles:   []string{manifestPath, readmePath},
-		Summary:       fmt.Sprintf("Scaffold a new `%s` collection item under `%s` using a local scaffold primitive.", packageName, packageRoot),
-		ValidationMsg: "Verify the new package manifest and README reflect the intended package direction.",
+		Summary:       fmt.Sprintf("Scaffold a new `%s` package under `%s` using a local scaffold primitive.", packageName, packageRoot),
+		ValidationMsg: "Verify the new package manifest and README reflect the intended package purpose.",
+		Confidence:    confidence,
+		Reason:        reason,
 	}, true
 }
 
@@ -2160,25 +2186,28 @@ func discoverPackageRoots(root string) []string {
 	return uniqueNonEmpty(roots)
 }
 
-func selectPackageRootForMessage(lower string, roots []string) string {
+func selectPackageRootForMessage(lower string, roots []string) (string, bool) {
 	sort.SliceStable(roots, func(i, j int) bool {
 		return len(roots[i]) > len(roots[j])
 	})
 	for _, root := range roots {
 		if strings.Contains(lower, strings.ToLower(root)) {
-			return root
+			return root, true
 		}
 		base := pathBase(root)
 		if base != "" && strings.Contains(lower, base) {
-			return root
+			return root, true
 		}
+	}
+	if len(roots) == 1 {
+		return roots[0], false
 	}
 	for _, root := range roots {
 		if strings.Contains(root, "/") {
-			return root
+			return root, false
 		}
 	}
-	return roots[0]
+	return roots[0], false
 }
 
 func inferRequestedPackageName(lower string) string {
@@ -2194,14 +2223,100 @@ func inferRequestedPackageName(lower string) string {
 	return ""
 }
 
-func pickAvailablePackageName(root, packageRoot string) string {
-	for _, candidate := range []string{"playground", "spark", "arcade", "lab", "pixel"} {
+func pickAvailablePackageName(root, packageRoot, preferred string) string {
+	var candidates []string
+	if preferred != "" {
+		candidates = append(candidates, preferred)
+		candidates = append(candidates, preferred+"-kit", preferred+"-package", preferred+"-demo")
+	}
+	candidates = append(candidates, "playground", "spark", "arcade", "lab", "pixel")
+	for _, candidate := range uniqueNonEmpty(candidates) {
 		manifestPath := filepath.Join(root, packageRoot, candidate, "package.yml")
 		if _, err := os.Stat(manifestPath); errors.Is(err, os.ErrNotExist) {
 			return candidate
 		}
 	}
 	return fmt.Sprintf("package-%d", time.Now().Unix()%10000)
+}
+
+func inferRequestedPackagePurpose(message string) string {
+	msg := strings.TrimSpace(message)
+	lower := strings.ToLower(msg)
+	for _, marker := range []string{"make it just ", "make it ", "that just ", "that "} {
+		if idx := strings.LastIndex(lower, marker); idx >= 0 {
+			tail := strings.TrimSpace(msg[idx+len(marker):])
+			tail = strings.Trim(tail, " .,!?:;")
+			if len(tail) >= 4 {
+				return tail
+			}
+		}
+	}
+	if idx := strings.LastIndex(lower, " to "); idx >= 0 {
+		tail := strings.TrimSpace(msg[idx+4:])
+		tail = strings.Trim(tail, " .,!?:;")
+		if len(tail) >= 8 {
+			return tail
+		}
+	}
+	return ""
+}
+
+func inferPackageNameFromPurpose(purpose string) string {
+	purpose = strings.TrimSpace(strings.ToLower(purpose))
+	if purpose == "" {
+		return ""
+	}
+	for _, marker := range []string{"calculate ", "build ", "create ", "generate "} {
+		if strings.HasPrefix(purpose, marker) {
+			purpose = strings.TrimSpace(strings.TrimPrefix(purpose, marker))
+			break
+		}
+	}
+	purpose = strings.TrimPrefix(purpose, "just ")
+	purpose = strings.TrimPrefix(purpose, "a ")
+	purpose = strings.TrimPrefix(purpose, "an ")
+	tokens := extractSearchTerms(purpose)
+	if len(tokens) == 0 {
+		return ""
+	}
+	return normalizePackageNameToken(tokens[0])
+}
+
+func assessPackageScaffoldConfidence(lower string, packageRoots []string, rootExplicit bool, purpose, nameSource string) (float64, string) {
+	score := 0.0
+	var reasons []string
+	if rootExplicit || len(packageRoots) == 1 {
+		score += 0.35
+		reasons = append(reasons, "root clear")
+	}
+	if purpose != "" {
+		score += 0.35
+		reasons = append(reasons, "purpose clear")
+	}
+	switch nameSource {
+	case "explicit":
+		score += 0.25
+		reasons = append(reasons, "name explicit")
+	case "purpose":
+		score += 0.2
+		reasons = append(reasons, "name derived from purpose")
+	default:
+		if strings.Contains(lower, "of your choosing") || strings.Contains(lower, "fun") {
+			score += 0.1
+			reasons = append(reasons, "open-ended request")
+		}
+	}
+	if strings.Contains(lower, " just ") || strings.Contains(lower, " only ") {
+		if purpose == "" {
+			score -= 0.4
+			reasons = append(reasons, "behavior constrained but purpose unclear")
+		}
+	}
+	if len(packageRoots) > 1 && !rootExplicit {
+		score -= 0.15
+		reasons = append(reasons, "multiple roots")
+	}
+	return score, strings.Join(reasons, ", ")
 }
 
 func normalizePackageNameToken(token string) string {
