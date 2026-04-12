@@ -56,6 +56,8 @@ install-pipeon-launcher-global: install-pipeon-launcher
 # Reuses the locally installed vsce from dockpipe-language-support to avoid network fetches.
 package-pipeon-vscode-extension: package-dockpipe-language-support
 	mkdir -p bin/.dockpipe/extensions
+	npm --prefix packages/pipeon/resolvers/pipeon/vscode-extension run build
+	npm --prefix packages/pipeon/resolvers/pipeon/vscode-extension run test:webview
 	cd packages/pipeon/resolvers/pipeon/vscode-extension && node ../../../../dockpipe-language-support/node_modules/@vscode/vsce/vsce package --no-dependencies -o ../../../../../bin/.dockpipe/extensions/pipeon-$$(node -p "require('./package.json').version").vsix
 
 # Build + install Pipeon extension into Cursor (fallback: VS Code CLI).
@@ -79,7 +81,7 @@ install-pipeon-vscode-extension: package-pipeon-vscode-extension
 # Package DockPipe language support extension (.vsix).
 package-dockpipe-language-support:
 	mkdir -p bin/.dockpipe/extensions
-	cd packages/dockpipe-language-support && NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache npm ci --no-audit --no-fund && NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache npx --yes @vscode/vsce package --no-dependencies -o ../../bin/.dockpipe/extensions/dockpipe-language-support-$$(node -p "require('./package.json').version").vsix
+	cd packages/dockpipe-language-support && if [ ! -x node_modules/.bin/vsce ]; then NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache npm ci --no-audit --no-fund; fi && NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache node node_modules/@vscode/vsce/vsce package --no-dependencies -o ../../bin/.dockpipe/extensions/dockpipe-language-support-$$(node -p "require('./package.json').version").vsix
 
 # Back-compat alias.
 package-vscode-language-support: package-dockpipe-language-support

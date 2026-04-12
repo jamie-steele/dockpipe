@@ -153,7 +153,7 @@ select {
   top: 58px;
   right: 12px;
   bottom: 162px;
-  width: min(980px, calc(100vw - 32px));
+  width: min(640px, calc(100vw - 32px));
   border: 1px solid var(--vscode-panel-border);
   border-radius: 18px;
   background: color-mix(in srgb, var(--vscode-editorWidget-background) 97%, transparent);
@@ -218,6 +218,30 @@ select {
   border-radius: 16px;
   padding: 14px;
   background: color-mix(in srgb, var(--vscode-sideBar-background) 94%, transparent);
+}
+.settingsOverview {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--vscode-button-background) 12%, transparent), color-mix(in srgb, var(--vscode-sideBar-background) 94%, transparent));
+}
+.settingsSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.summaryCard {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 14px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--vscode-editorWidget-background) 92%, transparent);
+}
+.summaryLabel {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+.summaryValue {
+  margin-top: 6px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.35;
 }
 .sectionHead {
   display: flex;
@@ -286,11 +310,22 @@ select {
 .designerPalette,
 .designerCanvasWrap,
 .designerInspector,
-.modelEditor {
+.modelEditor,
+.modelStudioListPanel {
   border: 1px solid var(--vscode-panel-border);
   border-radius: 14px;
   padding: 12px;
   background: color-mix(in srgb, var(--vscode-editorWidget-background) 94%, transparent);
+}
+.modelStudioLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+  gap: 12px;
+  align-items: start;
+}
+.modelStudioListPanel {
+  display: grid;
+  gap: 12px;
 }
 .paletteLabel,
 .canvasLabel {
@@ -760,6 +795,10 @@ textarea {
     width: auto;
   }
   .designerLayout {
+    grid-template-columns: 1fr;
+  }
+  .modelStudioLayout,
+  .settingsSummaryGrid {
     grid-template-columns: 1fr;
   }
   .studioHeader,

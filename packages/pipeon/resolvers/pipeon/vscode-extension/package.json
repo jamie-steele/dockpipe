@@ -12,7 +12,9 @@
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
+  "categories": [
+    "Other"
+  ],
   "files": [
     "extension.js",
     "webview/**",
@@ -22,6 +24,9 @@
     "package.json"
   ],
   "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "pretest:webview": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:webview": "node scripts/webview-smoke.js"
   },
   "main": "extension.js",
@@ -83,5 +88,10 @@
       }
     ]
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/vscode": "1.85.0",
+    "typescript": "^6.0.2"
+  }
 }

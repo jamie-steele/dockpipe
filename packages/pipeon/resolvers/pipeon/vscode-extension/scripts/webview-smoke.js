@@ -109,6 +109,18 @@ const context = {
     getElementById(id) {
       return getElement(id);
     },
+    querySelector(selector) {
+      if (selector === ".composerWrap") {
+        return getElement("composerWrap");
+      }
+      if (selector === ".header") {
+        return getElement("header");
+      }
+      if (selector === ".headerActions") {
+        return getElement("headerActions");
+      }
+      return null;
+    },
     querySelectorAll(selector) {
       if (selector === ".primitiveTile") {
         const dockpipe = getElement("primitive-dockpipe");
@@ -209,19 +221,55 @@ if (!askMessage) {
 }
 
 const settingsBtn = getElement("settingsBtn");
-const settingsDrawer = getElement("settingsDrawer");
+const header = getElement("header");
 const studioSurface = getElement("studioSurface");
+const settingsStudio = getElement("settingsStudio");
+const openModelManagerBtn = getElement("openModelManagerBtn");
+const studioBackBtn = getElement("studioBackBtn");
+const headerActions = getElement("headerActions");
 if (!settingsBtn.listeners.has("click")) {
   throw new Error("Settings button did not attach a click handler.");
 }
 for (const handler of settingsBtn.listeners.get("click") || []) {
   handler({});
 }
-if (settingsDrawer.className.includes("hidden")) {
-  throw new Error("Settings click did not open the settings drawer.");
+const openStudioMessage = posted.find((item) => item && item.type === "openReasoningStudio");
+if (!openStudioMessage || openStudioMessage.mode !== "settings") {
+  throw new Error(`Settings click did not request the main settings studio. Got: ${JSON.stringify(openStudioMessage)}`);
+}
+const messageHandlers = windowListeners.get("message") || [];
+for (const handler of messageHandlers) {
+  handler({ data: { type: "forceOpenSettings", mode: "settings" } });
 }
 if (studioSurface.className.includes("hidden")) {
-  throw new Error("Settings click did not switch into the studio surface.");
+  throw new Error("Force-opening settings did not reveal the main studio surface.");
+}
+if (settingsStudio.className.includes("hidden")) {
+  throw new Error("Force-opening settings did not reveal the settings summary surface.");
+}
+if (!header.className.includes("hidden")) {
+  throw new Error("Settings mode should hide the top chat header.");
+}
+if (!headerActions.className.includes("hidden")) {
+  throw new Error("Settings mode should hide the chat header actions.");
+}
+if (!studioBackBtn.className.includes("hidden")) {
+  throw new Error("Settings mode should hide the back button.");
+}
+if (!openModelManagerBtn.listeners.has("click")) {
+  throw new Error("Model manager button did not attach a click handler.");
+}
+for (const handler of openModelManagerBtn.listeners.get("click") || []) {
+  handler({});
+}
+if (studioSurface.className.includes("hidden")) {
+  throw new Error("Model manager action did not switch into the studio surface.");
+}
+if (!settingsStudio.className.includes("hidden")) {
+  throw new Error("Opening the model manager should switch away from the settings summary surface.");
+}
+if (studioBackBtn.className.includes("hidden")) {
+  throw new Error("Model manager view should show the back button.");
 }
 
 console.log("webview smoke passed");

@@ -49,6 +49,20 @@ make install-pipeon-vscode-extension
 
 Open this folder in VS Code and press **F5** (Extension Development Host).
 
+The extension source now lives in **`src/`** as TypeScript and compiles back into the runtime entrypoints under this package.
+
+Build the runtime files after edits:
+
+```bash
+npm run build
+```
+
+Run the package-local TypeScript checks before packaging or larger refactors:
+
+```bash
+npm run typecheck
+```
+
 ## Note
 
 This extension now carries a meaningful in-editor chat surface, but the long-term product boundary is still the same: Pipeon owns UX, DorkPipe should become the server-authoritative orchestration layer, and DockPipe remains the mutation boundary.
