@@ -23,6 +23,239 @@ const MAX_CONTEXT_CHARS = 18000;
 const MAX_SELECTION_CHARS = 2400;
 const MAX_MESSAGE_CHARS = 32000;
 const MODEL_PROFILES = ["fast", "balanced", "deep", "max"];
+const CHAT_WEBVIEW_SHELL_VERSION = "reasoning-templates-v1";
+const REASONING_TEMPLATE_SCHEMA = 1;
+const BUILTIN_TEMPLATE_ID = "dockpipe.default";
+const MAX_REASONING_TEMPLATES = 16;
+const MAX_TEMPLATE_NODES = 48;
+const MAX_LOOP_ITERATIONS = 8;
+
+function deepClone(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return value;
+  }
+}
+
+function createDefaultModelEntries() {
+  return [
+    {
+      id: "ollama.default",
+      label: "Ollama Default",
+      provider: "ollama",
+      model: DEFAULT_MODEL,
+      builtIn: true,
+      locked: true,
+      installState: "available",
+      capabilities: ["chat", "edit", "reasoning"],
+      contextWindow: 8192,
+      notes: "Safe local default used by the built-in DockPipe template.",
+    },
+    {
+      id: "ollama.qwen2.5-coder",
+      label: "Qwen 2.5 Coder",
+      provider: "ollama",
+      model: "qwen2.5-coder:14b",
+      builtIn: true,
+      locked: true,
+      installState: "optional",
+      capabilities: ["chat", "edit", "code"],
+      contextWindow: 16384,
+      notes: "Good fit for code-focused model nodes in custom reasoning templates.",
+    },
+    {
+      id: "ollama.deepseek-r1",
+      label: "DeepSeek R1",
+      provider: "ollama",
+      model: "deepseek-r1:14b",
+      builtIn: true,
+      locked: true,
+      installState: "optional",
+      capabilities: ["reasoning", "analysis"],
+      contextWindow: 16384,
+      notes: "Reasoning-heavy option for slower, more deliberate template nodes.",
+    },
+  ];
+}
+
+function firstModelEntryId(modelStore) {
+  const entries = Array.isArray(modelStore?.entries) ? modelStore.entries : [];
+  return entries[0]?.id || "ollama.default";
+}
+
+function defaultGlobalModifiers() {
+  return {
+    safetyRules: "Prefer deterministic DockPipe paths before model handoff. Fall back safely when validation fails.",
+    outputRequirements: "Return inspectable artifacts and preserve current DockPipe artifact validation guarantees.",
+    confidenceThreshold: 0.72,
+    executionConstraints: "Keep loops bounded and avoid unvalidated side effects.",
+    routingPreference: "local-first",
+  };
+}
+
+function defaultTemplateGuidance() {
+  return {
+    orchestration: "Route obvious work locally, use models when interpretation is needed, and keep validation first-class.",
+    model: "When a model node is used, return structured, parseable output that DockPipe can validate or normalize.",
+  };
+}
+
+function createDefaultReasoningTemplate(modelStore) {
+  const defaultModelId = firstModelEntryId(modelStore);
+  return {
+    id: BUILTIN_TEMPLATE_ID,
+    schema: REASONING_TEMPLATE_SCHEMA,
+    name: "DockPipe Default",
+    description: "Locked baseline template that mirrors the current DockPipe local-first orchestration flow.",
+    builtIn: true,
+    locked: true,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    globalModifiers: defaultGlobalModifiers(),
+    guidance: defaultTemplateGuidance(),
+    nodes: [
+      {
+        id: "dockpipe-intake",
+        type: "dockpipe",
+        label: "DockPipe Intake",
+        notes: "Performs routing, deterministic primitives, MCP retrieval, and artifact validation.",
+        decision: "Prefer local deterministic paths when confidence is high and scope is explicit.",
+        guidance: {
+          orchestration: "Build a bounded execution plan and keep artifact generation inspectable.",
+          model: "",
+        },
+        config: {
+          phase: "route-and-prepare",
+          localFirst: true,
+          artifactMode: "strict",
+        },
+      },
+      {
+        id: "model-primary",
+        type: "model",
+        label: "Primary Model",
+        notes: "Handles reasoning or patch generation when DockPipe primitives alone are insufficient.",
+        decision: "Only run after DockPipe has assembled the necessary workspace context and routing metadata.",
+        guidance: {
+          orchestration: "",
+          model: "Return structured, reliable artifacts suitable for DockPipe validation.",
+        },
+        config: {
+          modelId: defaultModelId,
+          task: "reason-and-generate",
+          output: "artifact-or-answer",
+        },
+      },
+      {
+        id: "loop-repair",
+        type: "loop",
+        label: "Repair Loop",
+        notes: "Bounded repair loop for invalid artifacts or failed validations.",
+        decision: "Stop early when the artifact validates cleanly.",
+        guidance: {
+          orchestration: "Keep this loop tight and bounded.",
+          model: "",
+        },
+        config: {
+          maxIterations: 2,
+          stopCondition: "artifact-valid",
+        },
+        children: [
+          {
+            id: "dockpipe-validate",
+            type: "dockpipe",
+            label: "DockPipe Validate",
+            notes: "Re-check the artifact, normalize it, and decide if repair is still needed.",
+            decision: "Only continue the loop when the artifact is still invalid.",
+            guidance: {
+              orchestration: "Capture diagnostics and keep the failure path inspectable.",
+              model: "",
+            },
+            config: {
+              phase: "validate",
+              localFirst: true,
+              artifactMode: "strict",
+            },
+          },
+          {
+            id: "model-repair",
+            type: "model",
+            label: "Model Repair",
+            notes: "Attempts a bounded repair when validation still fails.",
+            decision: "Repair only the artifact issues surfaced by DockPipe diagnostics.",
+            guidance: {
+              orchestration: "",
+              model: "Return corrected structured output only.",
+            },
+            config: {
+              modelId: defaultModelId,
+              task: "repair",
+              output: "artifact",
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function createBlankReasoningTemplate(modelStore, name = "Custom Template") {
+  const defaultModelId = firstModelEntryId(modelStore);
+  return {
+    id: makeId("template"),
+    schema: REASONING_TEMPLATE_SCHEMA,
+    name,
+    description: "Custom reasoning template.",
+    builtIn: false,
+    locked: false,
+    createdAt: nowIso(),
+    updatedAt: nowIso(),
+    globalModifiers: defaultGlobalModifiers(),
+    guidance: defaultTemplateGuidance(),
+    nodes: [
+      {
+        id: makeId("node"),
+        type: "dockpipe",
+        label: "DockPipe Step",
+        notes: "Starting point for a custom template.",
+        decision: "",
+        guidance: { orchestration: "", model: "" },
+        config: {
+          phase: "route-and-prepare",
+          localFirst: true,
+          artifactMode: "strict",
+        },
+      },
+      {
+        id: makeId("node"),
+        type: "model",
+        label: "Model Step",
+        notes: "Primary model step.",
+        decision: "",
+        guidance: { orchestration: "", model: "" },
+        config: {
+          modelId: defaultModelId,
+          task: "reason",
+          output: "artifact-or-answer",
+        },
+      },
+    ],
+  };
+}
+
+function summarizeTemplate(template) {
+  if (!template || typeof template !== "object") {
+    return null;
+  }
+  return {
+    id: String(template.id || ""),
+    name: String(template.name || "Template"),
+    builtIn: !!template.builtIn,
+    locked: !!template.locked,
+    nodeCount: countTemplateNodes(template.nodes || []),
+  };
+}
 
 async function ensureDir(dir) {
   await fs.mkdir(dir, { recursive: true });
@@ -172,18 +405,214 @@ function createSession(seedText = "") {
 
 function createInitialChatState() {
   const session = createSession();
+  const modelStore = normalizeModelStore(null);
+  const reasoningTemplates = normalizeReasoningTemplates([], modelStore);
   return {
     activeSessionId: session.id,
     sessions: [session],
     composerMode: "ask",
     autoApplyEdits: false,
     modelProfile: "balanced",
+    activeTemplateId: BUILTIN_TEMPLATE_ID,
+    reasoningTemplates,
+    modelStore,
   };
 }
 
 function normalizeModelProfile(value) {
   const next = String(value || "").toLowerCase();
   return MODEL_PROFILES.includes(next) ? next : "balanced";
+}
+
+function normalizeModelEntry(entry) {
+  const id = String(entry?.id || makeId("model")).trim() || makeId("model");
+  const label = String(entry?.label || id).trim() || id;
+  const provider = String(entry?.provider || "ollama").trim() || "ollama";
+  const model = String(entry?.model || DEFAULT_MODEL).trim() || DEFAULT_MODEL;
+  const capabilities = Array.isArray(entry?.capabilities)
+    ? [...new Set(entry.capabilities.map((item) => String(item || "").trim()).filter(Boolean))].slice(0, 8)
+    : [];
+  const installState = ["available", "optional", "installed", "custom"].includes(String(entry?.installState || "").toLowerCase())
+    ? String(entry.installState).toLowerCase()
+    : (entry?.builtIn ? "available" : "custom");
+  return {
+    id,
+    label,
+    provider,
+    model,
+    builtIn: !!entry?.builtIn,
+    locked: !!entry?.locked || !!entry?.builtIn,
+    installState,
+    capabilities,
+    contextWindow: Number.isFinite(Number(entry?.contextWindow)) ? Math.max(1024, Number(entry.contextWindow)) : 8192,
+    notes: clampText(entry?.notes || "", 600),
+  };
+}
+
+function normalizeModelStore(raw) {
+  const source = Array.isArray(raw?.entries) && raw.entries.length ? raw.entries : createDefaultModelEntries();
+  const entries = [];
+  const seen = new Set();
+  for (const item of source) {
+    const normalized = normalizeModelEntry(item);
+    if (seen.has(normalized.id)) {
+      continue;
+    }
+    seen.add(normalized.id);
+    entries.push(normalized);
+  }
+  if (!entries.length) {
+    entries.push(...createDefaultModelEntries().map(normalizeModelEntry));
+  }
+  return {
+    entries: entries.slice(0, 32),
+    updatedAt: String(raw?.updatedAt || nowIso()),
+  };
+}
+
+function countTemplateNodes(nodes) {
+  if (!Array.isArray(nodes)) return 0;
+  return nodes.reduce((sum, node) => sum + 1 + countTemplateNodes(node?.children), 0);
+}
+
+function coerceGuidance(value) {
+  return {
+    orchestration: clampText(value?.orchestration || "", 1200),
+    model: clampText(value?.model || "", 1200),
+  };
+}
+
+function coerceGlobalModifiers(value) {
+  const confidence = Number(value?.confidenceThreshold);
+  return {
+    safetyRules: clampText(value?.safetyRules || defaultGlobalModifiers().safetyRules, 1200),
+    outputRequirements: clampText(value?.outputRequirements || defaultGlobalModifiers().outputRequirements, 1200),
+    confidenceThreshold: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : defaultGlobalModifiers().confidenceThreshold,
+    executionConstraints: clampText(value?.executionConstraints || defaultGlobalModifiers().executionConstraints, 1200),
+    routingPreference: clampText(value?.routingPreference || defaultGlobalModifiers().routingPreference, 160),
+  };
+}
+
+function makeDefaultNodeForType(type, modelStore) {
+  const modelId = firstModelEntryId(modelStore);
+  if (type === "model") {
+    return {
+      id: makeId("node"),
+      type: "model",
+      label: "Model Step",
+      notes: "",
+      decision: "",
+      guidance: { orchestration: "", model: "" },
+      config: { modelId, task: "reason", output: "artifact-or-answer" },
+    };
+  }
+  if (type === "loop") {
+    return {
+      id: makeId("node"),
+      type: "loop",
+      label: "Loop Control",
+      notes: "",
+      decision: "",
+      guidance: { orchestration: "", model: "" },
+      config: { maxIterations: 2, stopCondition: "artifact-valid" },
+      children: [],
+    };
+  }
+  return {
+    id: makeId("node"),
+    type: "dockpipe",
+    label: "DockPipe Step",
+    notes: "",
+    decision: "",
+    guidance: { orchestration: "", model: "" },
+    config: { phase: "route-and-prepare", localFirst: true, artifactMode: "strict" },
+  };
+}
+
+function normalizeTemplateNode(node, modelStore) {
+  const rawType = String(node?.type || "dockpipe").toLowerCase();
+  const type = ["dockpipe", "model", "loop"].includes(rawType) ? rawType : "dockpipe";
+  const fallback = makeDefaultNodeForType(type, modelStore);
+  const normalized = {
+    ...fallback,
+    id: String(node?.id || fallback.id),
+    label: clampText(node?.label || fallback.label, 80),
+    notes: clampText(node?.notes || "", 400),
+    decision: clampText(node?.decision || "", 400),
+    guidance: coerceGuidance(node?.guidance),
+  };
+  if (type === "dockpipe") {
+    normalized.config = {
+      phase: clampText(node?.config?.phase || fallback.config.phase, 80),
+      localFirst: node?.config?.localFirst !== false,
+      artifactMode: clampText(node?.config?.artifactMode || fallback.config.artifactMode, 80),
+    };
+    return normalized;
+  }
+  if (type === "model") {
+    const available = new Set(normalizeModelStore(modelStore).entries.map((item) => item.id));
+    const requestedModelId = String(node?.config?.modelId || fallback.config.modelId);
+    normalized.config = {
+      modelId: available.has(requestedModelId) ? requestedModelId : firstModelEntryId(modelStore),
+      task: clampText(node?.config?.task || fallback.config.task, 80),
+      output: clampText(node?.config?.output || fallback.config.output, 80),
+    };
+    return normalized;
+  }
+  normalized.config = {
+    maxIterations: Math.min(MAX_LOOP_ITERATIONS, Math.max(1, Number(node?.config?.maxIterations || fallback.config.maxIterations) || fallback.config.maxIterations)),
+    stopCondition: clampText(node?.config?.stopCondition || fallback.config.stopCondition, 80),
+  };
+  const rawChildren = Array.isArray(node?.children) ? node.children : [];
+  normalized.children = rawChildren.slice(0, MAX_TEMPLATE_NODES).map((child) => normalizeTemplateNode(child, modelStore));
+  return normalized;
+}
+
+function normalizeReasoningTemplate(template, modelStore, fallbackTemplate) {
+  const fallback = fallbackTemplate || createBlankReasoningTemplate(modelStore);
+  const id = String(template?.id || fallback.id || makeId("template"));
+  const builtIn = id === BUILTIN_TEMPLATE_ID || !!template?.builtIn || !!fallback.builtIn;
+  const locked = builtIn || !!template?.locked || !!fallback.locked;
+  const nodes = Array.isArray(template?.nodes) && template.nodes.length ? template.nodes : fallback.nodes;
+  const normalizedNodes = nodes.slice(0, MAX_TEMPLATE_NODES).map((node) => normalizeTemplateNode(node, modelStore));
+  return {
+    id,
+    schema: REASONING_TEMPLATE_SCHEMA,
+    name: clampText(template?.name || fallback.name || "Template", 80),
+    description: clampText(template?.description || fallback.description || "", 400),
+    builtIn,
+    locked,
+    createdAt: String(template?.createdAt || fallback.createdAt || nowIso()),
+    updatedAt: String(template?.updatedAt || nowIso()),
+    globalModifiers: coerceGlobalModifiers(template?.globalModifiers || fallback.globalModifiers),
+    guidance: coerceGuidance(template?.guidance || fallback.guidance),
+    nodes: normalizedNodes.length ? normalizedNodes : fallback.nodes.map((node) => normalizeTemplateNode(node, modelStore)),
+  };
+}
+
+function normalizeReasoningTemplates(rawTemplates, modelStore) {
+  const defaults = [createDefaultReasoningTemplate(modelStore)];
+  const source = Array.isArray(rawTemplates) ? rawTemplates : [];
+  const templates = [];
+  const seen = new Set();
+  for (const item of [...defaults, ...source]) {
+    const normalized = normalizeReasoningTemplate(item, modelStore, item?.id === BUILTIN_TEMPLATE_ID ? defaults[0] : undefined);
+    if (seen.has(normalized.id)) {
+      continue;
+    }
+    seen.add(normalized.id);
+    if (normalized.id === BUILTIN_TEMPLATE_ID) {
+      templates.unshift(normalized);
+    } else {
+      templates.push(normalized);
+    }
+  }
+  return templates.slice(0, MAX_REASONING_TEMPLATES);
+}
+
+function templateById(templates, templateId) {
+  const items = Array.isArray(templates) ? templates : [];
+  return items.find((template) => template.id === templateId) || items.find((template) => template.id === BUILTIN_TEMPLATE_ID) || items[0] || null;
 }
 
 function resolveNumCtxForProfile(profile) {
@@ -392,10 +821,13 @@ function buildRequestErrorStatus(message) {
 
 function normalizeStoredChatState(raw) {
   try {
+    const base = createInitialChatState();
     if (!raw || !Array.isArray(raw.sessions) || raw.sessions.length === 0) {
-      return createInitialChatState();
+      return base;
     }
 
+    const modelStore = normalizeModelStore(raw.modelStore || base.modelStore);
+    const reasoningTemplates = normalizeReasoningTemplates(raw.reasoningTemplates, modelStore);
     const sessions = raw.sessions
       .map((session) => ({
         id: String(session?.id || makeId("chat")),
@@ -415,6 +847,9 @@ function normalizeStoredChatState(raw) {
         : "ask",
       autoApplyEdits: !!raw.autoApplyEdits,
       modelProfile: normalizeModelProfile(raw.modelProfile),
+      activeTemplateId: templateById(reasoningTemplates, raw.activeTemplateId)?.id || BUILTIN_TEMPLATE_ID,
+      reasoningTemplates,
+      modelStore,
     };
   } catch {
     return createInitialChatState();
@@ -440,6 +875,12 @@ function ensureValidChatStore(chatStore) {
     ...chatStore,
     sessions,
     activeSessionId,
+    modelStore: normalizeModelStore(chatStore.modelStore),
+    reasoningTemplates: normalizeReasoningTemplates(chatStore.reasoningTemplates, normalizeModelStore(chatStore.modelStore)),
+    activeTemplateId: templateById(
+      normalizeReasoningTemplates(chatStore.reasoningTemplates, normalizeModelStore(chatStore.modelStore)),
+      chatStore.activeTemplateId
+    )?.id || BUILTIN_TEMPLATE_ID,
   };
 }
 
@@ -484,6 +925,25 @@ function compactChatStoreForPersistence(chatStore) {
       : "ask",
     autoApplyEdits: !!safe.autoApplyEdits,
     modelProfile: normalizeModelProfile(safe.modelProfile),
+    activeTemplateId: templateById(safe.reasoningTemplates, safe.activeTemplateId)?.id || BUILTIN_TEMPLATE_ID,
+    modelStore: {
+      updatedAt: safe.modelStore?.updatedAt || nowIso(),
+      entries: normalizeModelStore(safe.modelStore).entries.map((entry) => ({
+        id: entry.id,
+        label: entry.label,
+        provider: entry.provider,
+        model: entry.model,
+        builtIn: entry.builtIn,
+        locked: entry.locked,
+        installState: entry.installState,
+        capabilities: entry.capabilities,
+        contextWindow: entry.contextWindow,
+        notes: entry.notes,
+      })),
+    },
+    reasoningTemplates: normalizeReasoningTemplates(safe.reasoningTemplates, safe.modelStore).map((template) => ({
+      ...deepClone(template),
+    })),
     sessions: safe.sessions.slice(0, MAX_SAVED_SESSIONS).map((session) => ({
       id: String(session.id || makeId("chat")),
       title: summarizeSessionTitle(session.title || "New chat"),
@@ -1531,6 +1991,9 @@ async function executeDorkpipeRequest(root, session, text, options = {}) {
     : "ask";
   const modelProfile = normalizeModelProfile(options.modelProfile);
   const numCtx = resolveNumCtxForProfile(modelProfile);
+  const reasoningTemplate = options.reasoningTemplate && typeof options.reasoningTemplate === "object"
+    ? options.reasoningTemplate
+    : null;
 
   const emitEvent = (label) => {
     if (onEvent) {
@@ -1539,6 +2002,9 @@ async function executeDorkpipeRequest(root, session, text, options = {}) {
   };
 
   emitEvent("Received request");
+  if (reasoningTemplate?.name) {
+    emitEvent(`Reasoning template: ${reasoningTemplate.name}`);
+  }
   const signals = await collectWorkspaceSignals(root);
 
   if (!text.trim().startsWith("/") || shouldDelegateSlashToDorkpipe(text)) {
@@ -1548,6 +2014,7 @@ async function executeDorkpipeRequest(root, session, text, options = {}) {
       onToken,
       mode,
       modelProfile,
+      reasoningTemplate,
     });
   }
 
@@ -1615,14 +2082,14 @@ async function executeDorkpipeRequest(root, session, text, options = {}) {
     format: "markdown",
     contextPath: signals.contextPath,
     status: signals.contextPath
-      ? `Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Profile: ${modelProfileLabel(modelProfile)}  |  num_ctx: ${numCtx}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  Context: ${path.relative(root, signals.contextPath)}`
-      : `Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Profile: ${modelProfileLabel(modelProfile)}  |  num_ctx: ${numCtx}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  No context bundle found`,
+      ? `Template: ${reasoningTemplate?.name || "DockPipe Default"}  |  Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Profile: ${modelProfileLabel(modelProfile)}  |  num_ctx: ${numCtx}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  Context: ${path.relative(root, signals.contextPath)}`
+      : `Template: ${reasoningTemplate?.name || "DockPipe Default"}  |  Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Profile: ${modelProfileLabel(modelProfile)}  |  num_ctx: ${numCtx}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  No context bundle found`,
   };
 }
 
 function renderChatHtml(webview, state) {
   const nonce = String(Date.now());
-  const initialStateJson = serializeForInlineScript(JSON.stringify(state || {}));
+  const initialStateJson = serializeForInlineScript(state || {});
   return `<!doctype html>
 <html>
   <head>
@@ -2060,11 +2527,15 @@ function renderChatHtml(webview, state) {
         <div class="titleRow">
           <div class="titleBlock">
             <div class="titleIcon">←</div>
-            <h1 class="title">Workspace Chat</h1>
+            <div class="titleStack">
+              <h1 class="title">Workspace Chat</h1>
+              <div class="headerMeta" id="headerMeta"></div>
+            </div>
           </div>
           <div class="headerSpacer"></div>
           <div class="headerActions">
             <select id="sessionSelect" class="headerSelect" aria-label="Chat session"></select>
+            <button class="btn ghost iconBtn" id="settingsBtn" type="button" title="Reasoning templates and models">⚙</button>
             <button class="btn ghost iconBtn" id="clearBtn" type="button" title="Clear chat">↺</button>
             <button class="btn ghost iconBtn" id="newChatBtn" type="button" title="New chat">✎</button>
           </div>
@@ -2073,6 +2544,179 @@ function renderChatHtml(webview, state) {
       </header>
       <div class="bootSentinel" id="bootSentinel">DorkPipe UI is waiting for client-side boot. If this stays visible, the webview script did not start.</div>
       <main class="transcript" id="transcript"></main>
+      <aside class="settingsDrawer hidden" id="settingsDrawer" aria-hidden="true">
+        <div class="settingsHeader">
+          <div>
+            <div class="settingsEyebrow">DockPipe</div>
+            <h2>Reasoning Templates</h2>
+          </div>
+          <button class="btn ghost iconBtn" id="settingsCloseBtn" type="button" title="Close settings">×</button>
+        </div>
+        <div class="settingsBody">
+          <section class="settingsSection">
+            <div class="sectionHead">
+              <div>
+                <h3>Template Selection</h3>
+                <p>Choose the orchestration surface that DockPipe should use for this workspace chat.</p>
+              </div>
+            </div>
+            <div class="formGrid">
+              <label class="field">
+                <span>Active template</span>
+                <select id="templateSelect"></select>
+              </label>
+            </div>
+            <div class="toolbarRow">
+              <button class="btn ghost" id="copyTemplateBtn" type="button">Copy active</button>
+              <button class="btn ghost" id="newTemplateBtn" type="button">New blank</button>
+              <button class="btn ghost danger" id="deleteTemplateBtn" type="button">Delete</button>
+              <button class="btn" id="saveTemplateBtn" type="button">Save template</button>
+            </div>
+          </section>
+          <section class="settingsSection">
+            <div class="sectionHead">
+              <div>
+                <h3>Visual Designer</h3>
+                <p>Drag primitives into the canvas, inspect them, and keep the flow explicit.</p>
+              </div>
+            </div>
+            <div class="designerLayout">
+              <div class="designerPalette">
+                <div class="paletteLabel">Primitives</div>
+                <button class="primitiveTile" type="button" draggable="true" data-primitive-type="dockpipe">DockPipe</button>
+                <button class="primitiveTile" type="button" draggable="true" data-primitive-type="model">Model</button>
+                <button class="primitiveTile" type="button" draggable="true" data-primitive-type="loop">Loop Control</button>
+              </div>
+              <div class="designerCanvasWrap">
+                <div class="canvasToolbar">
+                  <span class="canvasLabel">Canvas</span>
+                  <span class="canvasHint">Drop a primitive onto the root canvas or into a loop body.</span>
+                </div>
+                <div class="designerCanvas" id="designerCanvas"></div>
+              </div>
+              <div class="designerInspector">
+                <div class="inspectorHeader">
+                  <div class="paletteLabel">Inspector</div>
+                  <div class="canvasHint" id="inspectorTarget">Template</div>
+                </div>
+                <div class="inspectorScroll">
+                  <div class="inspectorGroup">
+                    <label class="field">
+                      <span>Template name</span>
+                      <input id="templateNameInput" type="text" />
+                    </label>
+                    <label class="field">
+                      <span>Description</span>
+                      <textarea id="templateDescriptionInput" rows="3"></textarea>
+                    </label>
+                  </div>
+                  <div class="inspectorGroup">
+                    <h4>Global modifiers</h4>
+                    <label class="field">
+                      <span>Safety rules</span>
+                      <textarea id="templateSafetyRulesInput" rows="3"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Output requirements</span>
+                      <textarea id="templateOutputRequirementsInput" rows="3"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Confidence threshold</span>
+                      <input id="templateConfidenceInput" type="number" min="0" max="1" step="0.01" />
+                    </label>
+                    <label class="field">
+                      <span>Execution constraints</span>
+                      <textarea id="templateExecutionConstraintsInput" rows="3"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Routing preference</span>
+                      <input id="templateRoutingPreferenceInput" type="text" />
+                    </label>
+                  </div>
+                  <div class="inspectorGroup">
+                    <h4>Decision and guidance</h4>
+                    <label class="field">
+                      <span>Template orchestration guidance</span>
+                      <textarea id="templateOrchestrationGuidanceInput" rows="3"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Template model guidance</span>
+                      <textarea id="templateModelGuidanceInput" rows="3"></textarea>
+                    </label>
+                  </div>
+                  <div class="inspectorGroup">
+                    <h4>Selected node</h4>
+                    <label class="field">
+                      <span>Label</span>
+                      <input id="nodeLabelInput" type="text" />
+                    </label>
+                    <label class="field">
+                      <span>Notes</span>
+                      <textarea id="nodeNotesInput" rows="2"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Decision metadata</span>
+                      <textarea id="nodeDecisionInput" rows="2"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Node orchestration guidance</span>
+                      <textarea id="nodeOrchestrationInput" rows="2"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Node model guidance</span>
+                      <textarea id="nodeModelInput" rows="2"></textarea>
+                    </label>
+                    <label class="field" id="nodeModelField">
+                      <span>Model</span>
+                      <select id="nodeModelSelect"></select>
+                    </label>
+                    <label class="field" id="nodeTaskField">
+                      <span>Task / phase</span>
+                      <input id="nodeTaskInput" type="text" />
+                    </label>
+                    <label class="field" id="nodeOutputField">
+                      <span>Output mode</span>
+                      <input id="nodeOutputInput" type="text" />
+                    </label>
+                    <label class="field" id="nodeLoopIterationsField">
+                      <span>Loop iterations</span>
+                      <input id="nodeLoopIterationsInput" type="number" min="1" max="8" step="1" />
+                    </label>
+                    <div class="toolbarRow">
+                      <button class="btn ghost danger" id="removeNodeBtn" type="button">Remove node</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="settingsSection">
+            <div class="sectionHead">
+              <div>
+                <h3>Model Store</h3>
+                <p>Reasoning templates reference registered models from this local store rather than raw strings.</p>
+              </div>
+            </div>
+            <div class="modelStoreSummary" id="modelStoreSummary"></div>
+            <div class="modelStoreList" id="modelStoreList"></div>
+            <div class="modelEditor">
+              <div class="paletteLabel">Register custom model</div>
+              <div class="formGrid">
+                <label class="field"><span>Model id</span><input id="modelEntryIdInput" type="text" /></label>
+                <label class="field"><span>Label</span><input id="modelEntryLabelInput" type="text" /></label>
+                <label class="field"><span>Provider</span><input id="modelEntryProviderInput" type="text" value="ollama" /></label>
+                <label class="field"><span>Model name</span><input id="modelEntryModelInput" type="text" /></label>
+                <label class="field"><span>Capabilities</span><input id="modelEntryCapabilitiesInput" type="text" placeholder="chat, edit, reasoning" /></label>
+                <label class="field"><span>Context window</span><input id="modelEntryContextWindowInput" type="number" min="1024" step="1024" value="8192" /></label>
+                <label class="field fieldWide"><span>Notes</span><textarea id="modelEntryNotesInput" rows="2"></textarea></label>
+              </div>
+              <div class="toolbarRow">
+                <button class="btn" id="saveModelEntryBtn" type="button">Save model</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </aside>
       <div class="composerWrap">
         <div class="status" id="status"></div>
         <form class="composer" id="composer">
@@ -2493,7 +3137,10 @@ function getWebviewAssetUri(webview, extensionUri, ...segments) {
 
 function renderChatHtmlExternal(webview, extensionUri, state) {
   const nonce = String(Date.now());
-  const initialStateJson = serializeForInlineScript(JSON.stringify(state || {}));
+  const initialStateJson = serializeForInlineScript({
+    ...(state || {}),
+    shellVersion: CHAT_WEBVIEW_SHELL_VERSION,
+  });
   const styleUri = getWebviewAssetUri(webview, extensionUri, "webview", "chat.css");
   const scriptUri = getWebviewAssetUri(webview, extensionUri, "webview", "chat.js");
   return `<!doctype html>
@@ -2513,11 +3160,15 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
         <div class="titleRow">
           <div class="titleBlock">
             <div class="titleIcon">←</div>
-            <h1 class="title">Workspace Chat</h1>
+            <div class="titleStack">
+              <h1 class="title">Workspace Chat</h1>
+              <div class="headerMeta" id="headerMeta"></div>
+            </div>
           </div>
           <div class="headerSpacer"></div>
           <div class="headerActions">
             <select id="sessionSelect" class="headerSelect" aria-label="Chat session"></select>
+            <button class="btn ghost iconBtn" id="settingsBtn" type="button" title="Reasoning templates and models">⚙</button>
             <button class="btn ghost iconBtn" id="clearBtn" type="button" title="Clear chat">↺</button>
             <button class="btn ghost iconBtn" id="newChatBtn" type="button" title="New chat">✎</button>
           </div>
@@ -2526,6 +3177,179 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
       </header>
       <div class="bootSentinel" id="bootSentinel">DorkPipe UI is waiting for client-side boot. If this stays visible, the webview script did not start.</div>
       <main class="transcript" id="transcript"></main>
+      <aside class="settingsDrawer hidden" id="settingsDrawer" aria-hidden="true">
+        <div class="settingsHeader">
+          <div>
+            <div class="settingsEyebrow">DockPipe</div>
+            <h2>Reasoning Templates</h2>
+          </div>
+          <button class="btn ghost iconBtn" id="settingsCloseBtn" type="button" title="Close settings">×</button>
+        </div>
+        <div class="settingsBody">
+          <section class="settingsSection">
+            <div class="sectionHead">
+              <div>
+                <h3>Template Selection</h3>
+                <p>Choose the orchestration surface that DockPipe should use for this workspace chat.</p>
+              </div>
+            </div>
+            <div class="formGrid">
+              <label class="field">
+                <span>Active template</span>
+                <select id="templateSelect"></select>
+              </label>
+            </div>
+            <div class="toolbarRow">
+              <button class="btn ghost" id="copyTemplateBtn" type="button">Copy active</button>
+              <button class="btn ghost" id="newTemplateBtn" type="button">New blank</button>
+              <button class="btn ghost danger" id="deleteTemplateBtn" type="button">Delete</button>
+              <button class="btn" id="saveTemplateBtn" type="button">Save template</button>
+            </div>
+          </section>
+          <section class="settingsSection">
+            <div class="sectionHead">
+              <div>
+                <h3>Visual Designer</h3>
+                <p>Drag primitives into the canvas, inspect them, and keep the flow explicit.</p>
+              </div>
+            </div>
+            <div class="designerLayout">
+              <div class="designerPalette">
+                <div class="paletteLabel">Primitives</div>
+                <button class="primitiveTile" type="button" draggable="true" data-primitive-type="dockpipe">DockPipe</button>
+                <button class="primitiveTile" type="button" draggable="true" data-primitive-type="model">Model</button>
+                <button class="primitiveTile" type="button" draggable="true" data-primitive-type="loop">Loop Control</button>
+              </div>
+              <div class="designerCanvasWrap">
+                <div class="canvasToolbar">
+                  <span class="canvasLabel">Canvas</span>
+                  <span class="canvasHint">Drop a primitive onto the root canvas or into a loop body.</span>
+                </div>
+                <div class="designerCanvas" id="designerCanvas"></div>
+              </div>
+              <div class="designerInspector">
+                <div class="inspectorHeader">
+                  <div class="paletteLabel">Inspector</div>
+                  <div class="canvasHint" id="inspectorTarget">Template</div>
+                </div>
+                <div class="inspectorScroll">
+                  <div class="inspectorGroup">
+                    <label class="field">
+                      <span>Template name</span>
+                      <input id="templateNameInput" type="text" />
+                    </label>
+                    <label class="field">
+                      <span>Description</span>
+                      <textarea id="templateDescriptionInput" rows="3"></textarea>
+                    </label>
+                  </div>
+                  <div class="inspectorGroup">
+                    <h4>Global modifiers</h4>
+                    <label class="field">
+                      <span>Safety rules</span>
+                      <textarea id="templateSafetyRulesInput" rows="3"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Output requirements</span>
+                      <textarea id="templateOutputRequirementsInput" rows="3"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Confidence threshold</span>
+                      <input id="templateConfidenceInput" type="number" min="0" max="1" step="0.01" />
+                    </label>
+                    <label class="field">
+                      <span>Execution constraints</span>
+                      <textarea id="templateExecutionConstraintsInput" rows="3"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Routing preference</span>
+                      <input id="templateRoutingPreferenceInput" type="text" />
+                    </label>
+                  </div>
+                  <div class="inspectorGroup">
+                    <h4>Decision and guidance</h4>
+                    <label class="field">
+                      <span>Template orchestration guidance</span>
+                      <textarea id="templateOrchestrationGuidanceInput" rows="3"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Template model guidance</span>
+                      <textarea id="templateModelGuidanceInput" rows="3"></textarea>
+                    </label>
+                  </div>
+                  <div class="inspectorGroup">
+                    <h4>Selected node</h4>
+                    <label class="field">
+                      <span>Label</span>
+                      <input id="nodeLabelInput" type="text" />
+                    </label>
+                    <label class="field">
+                      <span>Notes</span>
+                      <textarea id="nodeNotesInput" rows="2"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Decision metadata</span>
+                      <textarea id="nodeDecisionInput" rows="2"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Node orchestration guidance</span>
+                      <textarea id="nodeOrchestrationInput" rows="2"></textarea>
+                    </label>
+                    <label class="field">
+                      <span>Node model guidance</span>
+                      <textarea id="nodeModelInput" rows="2"></textarea>
+                    </label>
+                    <label class="field" id="nodeModelField">
+                      <span>Model</span>
+                      <select id="nodeModelSelect"></select>
+                    </label>
+                    <label class="field" id="nodeTaskField">
+                      <span>Task / phase</span>
+                      <input id="nodeTaskInput" type="text" />
+                    </label>
+                    <label class="field" id="nodeOutputField">
+                      <span>Output mode</span>
+                      <input id="nodeOutputInput" type="text" />
+                    </label>
+                    <label class="field" id="nodeLoopIterationsField">
+                      <span>Loop iterations</span>
+                      <input id="nodeLoopIterationsInput" type="number" min="1" max="8" step="1" />
+                    </label>
+                    <div class="toolbarRow">
+                      <button class="btn ghost danger" id="removeNodeBtn" type="button">Remove node</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <section class="settingsSection">
+            <div class="sectionHead">
+              <div>
+                <h3>Model Store</h3>
+                <p>Reasoning templates reference registered models from this local store rather than raw strings.</p>
+              </div>
+            </div>
+            <div class="modelStoreSummary" id="modelStoreSummary"></div>
+            <div class="modelStoreList" id="modelStoreList"></div>
+            <div class="modelEditor">
+              <div class="paletteLabel">Register custom model</div>
+              <div class="formGrid">
+                <label class="field"><span>Model id</span><input id="modelEntryIdInput" type="text" /></label>
+                <label class="field"><span>Label</span><input id="modelEntryLabelInput" type="text" /></label>
+                <label class="field"><span>Provider</span><input id="modelEntryProviderInput" type="text" value="ollama" /></label>
+                <label class="field"><span>Model name</span><input id="modelEntryModelInput" type="text" /></label>
+                <label class="field"><span>Capabilities</span><input id="modelEntryCapabilitiesInput" type="text" placeholder="chat, edit, reasoning" /></label>
+                <label class="field"><span>Context window</span><input id="modelEntryContextWindowInput" type="number" min="1024" step="1024" value="8192" /></label>
+                <label class="field fieldWide"><span>Notes</span><textarea id="modelEntryNotesInput" rows="2"></textarea></label>
+              </div>
+              <div class="toolbarRow">
+                <button class="btn" id="saveModelEntryBtn" type="button">Save model</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </aside>
       <div class="composerWrap">
         <div class="status" id="status"></div>
         <form class="composer" id="composer">
@@ -2859,6 +3683,16 @@ async function revealDorkpipePanel() {
   await vscode.commands.executeCommand(`${CHAT_VIEW_ID}.focus`);
 }
 
+function configureChatWebview(webview, extensionUri) {
+  webview.options = {
+    enableScripts: true,
+    localResourceRoots: [
+      vscode.Uri.joinPath(extensionUri, "webview"),
+      vscode.Uri.joinPath(extensionUri, "images"),
+    ],
+  };
+}
+
 async function resetPanelToBottomOnce(context) {
   if (context.globalState.get(PANEL_BOTTOM_MIGRATION_KEY)) {
     return;
@@ -2879,7 +3713,8 @@ class PipeonChatViewProvider {
     this.context = context;
     this.channel = channel;
     this.view = null;
-    this.rendered = false;
+    this.surfaces = new Map();
+    this.detachedPanel = null;
     logChannelInfo(this.channel, "Pipeon chat provider constructing");
     try {
       this.chatStore = normalizeStoredChatState(this.context.workspaceState.get(CHAT_STATE_KEY));
@@ -2898,12 +3733,27 @@ class PipeonChatViewProvider {
       composerMode: this.chatStore.composerMode || "ask",
       autoApplyEdits: !!this.chatStore.autoApplyEdits,
       modelProfile: normalizeModelProfile(this.chatStore.modelProfile),
+      activeTemplateId: this.chatStore.activeTemplateId || BUILTIN_TEMPLATE_ID,
+      activeTemplate: null,
+      reasoningTemplates: [],
+      modelStore: { entries: [], updatedAt: nowIso() },
       messages: [],
       trace: [],
       status: "Waiting for workspace...",
       isBusy: false,
+      shellVersion: CHAT_WEBVIEW_SHELL_VERSION,
     };
     this.syncViewState();
+  }
+
+  postToSurfaces(message) {
+    for (const surface of this.surfaces.values()) {
+      try {
+        surface.webview.postMessage(message);
+      } catch {
+        // Best-effort broadcast.
+      }
+    }
   }
 
   get activeSession() {
@@ -2937,10 +3787,15 @@ class PipeonChatViewProvider {
   syncViewState() {
     this.chatStore = ensureValidChatStore(this.chatStore);
     const session = this.activeSession || createSession();
+    const activeTemplate = templateById(this.chatStore.reasoningTemplates, this.chatStore.activeTemplateId);
     this.state.activeSessionId = session.id;
     this.state.composerMode = this.chatStore.composerMode || "ask";
     this.state.autoApplyEdits = !!this.chatStore.autoApplyEdits;
     this.state.modelProfile = normalizeModelProfile(this.chatStore.modelProfile);
+    this.state.activeTemplateId = activeTemplate?.id || BUILTIN_TEMPLATE_ID;
+    this.state.activeTemplate = activeTemplate ? summarizeTemplate(activeTemplate) : null;
+    this.state.reasoningTemplates = normalizeReasoningTemplates(this.chatStore.reasoningTemplates, this.chatStore.modelStore).map((template) => deepClone(template));
+    this.state.modelStore = deepClone(normalizeModelStore(this.chatStore.modelStore));
     this.state.sessionList = sortSessionsByUpdate(this.chatStore.sessions).map((item) => ({
       id: item.id,
       title: item.title || "New chat",
@@ -2957,34 +3812,40 @@ class PipeonChatViewProvider {
 
   refresh() {
     this.syncViewState();
-    if (this.view) {
+    for (const [surfaceId, surface] of this.surfaces.entries()) {
       try {
-        if (!this.rendered) {
+        if (!surface.rendered) {
           logChannelInfo(this.channel, "Rendering chat webview shell", {
+            surfaceId,
             activeSessionId: this.state.activeSessionId,
             messages: Array.isArray(this.state.messages) ? this.state.messages.length : 0,
+            shellVersion: CHAT_WEBVIEW_SHELL_VERSION,
           });
-          this.view.webview.html = renderChatHtmlExternal(this.view.webview, this.context.extensionUri, this.state);
-          this.rendered = true;
+          surface.webview.html = renderChatHtmlExternal(surface.webview, this.context.extensionUri, this.state);
+          surface.rendered = true;
+          surface.shellVersion = "";
         } else {
           logChannelInfo(this.channel, "Posting state to chat webview", {
+            surfaceId,
             activeSessionId: this.state.activeSessionId,
             messages: Array.isArray(this.state.messages) ? this.state.messages.length : 0,
             isBusy: !!this.state.isBusy,
+            shellVersion: surface.shellVersion || "unknown",
           });
-          this.view.webview.postMessage({ type: "state", state: this.state });
+          surface.webview.postMessage({ type: "state", state: this.state });
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        this.channel.error(`Webview refresh failed: ${message}`);
+        this.channel.error(`Webview refresh failed (${surfaceId}): ${message}`);
         try {
-          logChannelInfo(this.channel, "Attempting full webview reload after refresh failure");
-          this.view.webview.html = renderChatHtmlExternal(this.view.webview, this.context.extensionUri, this.state);
-          this.rendered = true;
+          logChannelInfo(this.channel, "Attempting full webview reload after refresh failure", { surfaceId });
+          surface.webview.html = renderChatHtmlExternal(surface.webview, this.context.extensionUri, this.state);
+          surface.rendered = true;
+          surface.shellVersion = "";
         } catch (reloadError) {
           const reloadMessage = reloadError instanceof Error ? reloadError.message : String(reloadError);
-          this.channel.error(`Webview reload failed: ${reloadMessage}`);
-          this.rendered = false;
+          this.channel.error(`Webview reload failed (${surfaceId}): ${reloadMessage}`);
+          surface.rendered = false;
         }
       }
     }
@@ -3046,6 +3907,118 @@ class PipeonChatViewProvider {
     await this.saveAndRefresh();
   }
 
+  async resetWebviewShell(reason = "Manual reset") {
+    for (const surface of this.surfaces.values()) {
+      surface.rendered = false;
+      surface.shellVersion = "";
+    }
+    this.state.trace = [];
+    this.state.isBusy = false;
+    this.state.status = `Rebuilding DorkPipe chat shell (${reason})`;
+    this.refresh();
+  }
+
+  sidebarShellLooksStale() {
+    const surface = this.surfaces.get("sidebar");
+    if (!surface) {
+      return false;
+    }
+    return !!surface.shellVersion && surface.shellVersion !== CHAT_WEBVIEW_SHELL_VERSION;
+  }
+
+  async setActiveTemplate(templateId) {
+    const next = templateById(this.chatStore.reasoningTemplates, templateId);
+    if (!next) {
+      return;
+    }
+    this.chatStore.activeTemplateId = next.id;
+    this.state.status = `Using reasoning template: ${next.name}`;
+    await this.saveAndRefresh();
+  }
+
+  async createTemplate(seedTemplateId) {
+    const clone = seedTemplateId === "__blank__"
+      ? normalizeReasoningTemplate(createBlankReasoningTemplate(this.chatStore.modelStore, "Blank Template"), this.chatStore.modelStore)
+      : normalizeReasoningTemplate({
+          ...deepClone(
+            templateById(this.chatStore.reasoningTemplates, seedTemplateId || this.chatStore.activeTemplateId)
+              || createDefaultReasoningTemplate(this.chatStore.modelStore)
+          ),
+          id: makeId("template"),
+          name: `${(templateById(this.chatStore.reasoningTemplates, seedTemplateId || this.chatStore.activeTemplateId)?.name || "Template")} Copy`,
+          description: templateById(this.chatStore.reasoningTemplates, seedTemplateId || this.chatStore.activeTemplateId)?.description || "Custom reasoning template.",
+          builtIn: false,
+          locked: false,
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        }, this.chatStore.modelStore);
+    this.chatStore.reasoningTemplates = [templateById(this.chatStore.reasoningTemplates, BUILTIN_TEMPLATE_ID), ...this.chatStore.reasoningTemplates.filter((item) => item.id !== BUILTIN_TEMPLATE_ID), clone]
+      .filter(Boolean)
+      .slice(0, MAX_REASONING_TEMPLATES);
+    this.chatStore.activeTemplateId = clone.id;
+    this.state.status = `Created reasoning template: ${clone.name}`;
+    await this.saveAndRefresh();
+  }
+
+  async saveTemplate(template) {
+    const existing = templateById(this.chatStore.reasoningTemplates, template?.id);
+    if (existing?.locked) {
+      return;
+    }
+    const normalized = normalizeReasoningTemplate(template, this.chatStore.modelStore, existing || createBlankReasoningTemplate(this.chatStore.modelStore));
+    const templates = this.chatStore.reasoningTemplates.filter((item) => item.id !== normalized.id);
+    this.chatStore.reasoningTemplates = normalizeReasoningTemplates([...templates, normalized], this.chatStore.modelStore);
+    this.chatStore.activeTemplateId = normalized.id;
+    this.state.status = `Saved reasoning template: ${normalized.name}`;
+    await this.saveAndRefresh();
+  }
+
+  async deleteTemplate(templateId) {
+    const existing = templateById(this.chatStore.reasoningTemplates, templateId);
+    if (!existing || existing.locked) {
+      return;
+    }
+    this.chatStore.reasoningTemplates = normalizeReasoningTemplates(
+      this.chatStore.reasoningTemplates.filter((item) => item.id !== existing.id),
+      this.chatStore.modelStore
+    );
+    this.chatStore.activeTemplateId = BUILTIN_TEMPLATE_ID;
+    this.state.status = `Deleted reasoning template: ${existing.name}`;
+    await this.saveAndRefresh();
+  }
+
+  async upsertModelEntry(entry) {
+    const existing = normalizeModelStore(this.chatStore.modelStore).entries.find((item) => item.id === entry?.id);
+    if (existing?.locked) {
+      return;
+    }
+    const normalized = normalizeModelEntry({
+      ...entry,
+      builtIn: false,
+      locked: false,
+      installState: "custom",
+    });
+    const entries = normalizeModelStore(this.chatStore.modelStore).entries.filter((item) => item.id !== normalized.id);
+    this.chatStore.modelStore = normalizeModelStore({ entries: [...entries, normalized], updatedAt: nowIso() });
+    this.chatStore.reasoningTemplates = normalizeReasoningTemplates(this.chatStore.reasoningTemplates, this.chatStore.modelStore);
+    this.state.status = `Saved model entry: ${normalized.label}`;
+    await this.saveAndRefresh();
+  }
+
+  async deleteModelEntry(modelId) {
+    const existing = normalizeModelStore(this.chatStore.modelStore).entries.find((item) => item.id === modelId);
+    if (!existing || existing.locked) {
+      return;
+    }
+    this.chatStore.modelStore = normalizeModelStore({
+      entries: normalizeModelStore(this.chatStore.modelStore).entries.filter((item) => item.id !== modelId),
+      updatedAt: nowIso(),
+    });
+    this.chatStore.reasoningTemplates = normalizeReasoningTemplates(this.chatStore.reasoningTemplates, this.chatStore.modelStore);
+    this.state.status = `Removed model entry: ${existing.label}`;
+    await this.saveAndRefresh();
+  }
+
   pushTrace(label) {
     const items = [...this.state.trace, label].slice(-6);
     this.state.trace = items;
@@ -3098,7 +4071,7 @@ class PipeonChatViewProvider {
       this.state.status = "Awaiting command confirmation";
       this.state.isBusy = false;
       await this.saveAndRefresh();
-      this.view?.webview.postMessage({ type: "done" });
+      this.postToSurfaces({ type: "done" });
       return;
     }
 
@@ -3120,6 +4093,7 @@ class PipeonChatViewProvider {
     await this.saveAndRefresh();
 
     try {
+      const reasoningTemplate = templateById(this.chatStore.reasoningTemplates, this.chatStore.activeTemplateId);
       const result = await executeDorkpipeRequest(root, session, text, {
         onEvent: (label) => {
           this.pushTrace(label);
@@ -3145,6 +4119,7 @@ class PipeonChatViewProvider {
         channel: this.channel,
         mode: normalizedMode,
         modelProfile: normalizedProfile,
+        reasoningTemplate,
       });
       assistantMessage.liveStatus = "";
       assistantMessage.liveTrace = [];
@@ -3202,7 +4177,7 @@ class PipeonChatViewProvider {
     session.messages = session.messages.slice(-MAX_HISTORY_MESSAGES * 4);
     this.state.isBusy = false;
     await this.saveAndRefresh();
-    this.view?.webview.postMessage({ type: "done" });
+    this.postToSurfaces({ type: "done" });
   }
 
   async resolvePendingAction(root, messageId, decision) {
@@ -3273,23 +4248,15 @@ class PipeonChatViewProvider {
     session.updatedAt = nowIso();
     this.state.isBusy = false;
     await this.saveAndRefresh();
-    this.view?.webview.postMessage({ type: "done" });
+    this.postToSurfaces({ type: "done" });
   }
 
-  resolveWebviewView(webviewView) {
-    this.view = webviewView;
-    this.rendered = false;
-    logChannelInfo(this.channel, "resolveWebviewView called");
-    webviewView.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [
-        vscode.Uri.joinPath(this.context.extensionUri, "webview"),
-        vscode.Uri.joinPath(this.context.extensionUri, "images"),
-      ],
-    };
-    webviewView.webview.onDidReceiveMessage(async (msg) => {
+  bindWebviewSurface(surfaceId, webview) {
+    configureChatWebview(webview, this.context.extensionUri);
+    webview.onDidReceiveMessage(async (msg) => {
       try {
         logChannelInfo(this.channel, "Webview message received", {
+          surfaceId,
           type: msg?.type || "",
           hasText: !!msg?.text,
           messageId: msg?.messageId || "",
@@ -3319,6 +4286,30 @@ class PipeonChatViewProvider {
           await this.setModelProfile(msg.value);
           return;
         }
+        if (msg?.type === "setActiveTemplate") {
+          await this.setActiveTemplate(msg.templateId);
+          return;
+        }
+        if (msg?.type === "createTemplate") {
+          await this.createTemplate(msg.templateId);
+          return;
+        }
+        if (msg?.type === "saveTemplate" && msg.template) {
+          await this.saveTemplate(msg.template);
+          return;
+        }
+        if (msg?.type === "deleteTemplate" && msg.templateId) {
+          await this.deleteTemplate(msg.templateId);
+          return;
+        }
+        if (msg?.type === "upsertModelEntry" && msg.entry) {
+          await this.upsertModelEntry(msg.entry);
+          return;
+        }
+        if (msg?.type === "deleteModelEntry" && msg.modelId) {
+          await this.deleteModelEntry(msg.modelId);
+          return;
+        }
         if (msg?.type === "clientError") {
           const detail = msg.message ? ` (${msg.message})` : "";
           this.channel.error(`Pipeon webview ${msg.kind || "error"}${detail}`);
@@ -3332,18 +4323,35 @@ class PipeonChatViewProvider {
           return;
         }
         if (msg?.type === "webviewReady") {
-          logChannelInfo(this.channel, "Webview reported ready");
+          const surface = this.surfaces.get(surfaceId);
+          if (surface) {
+            surface.shellVersion = String(msg.shellVersion || "");
+          }
+          logChannelInfo(this.channel, "Webview reported ready", {
+            surfaceId,
+            shellVersion: surface?.shellVersion || "unknown",
+          });
+          if ((surface?.shellVersion || "") !== CHAT_WEBVIEW_SHELL_VERSION) {
+            logChannelInfo(this.channel, "Webview shell version mismatch detected", {
+              surfaceId,
+              expected: CHAT_WEBVIEW_SHELL_VERSION,
+              actual: surface?.shellVersion || "missing",
+            });
+            this.state.status = "DorkPipe is using a stale chat shell. Settings may be unavailable until the shell is reset, but chat state will continue loading.";
+            this.state.trace = [];
+            this.state.isBusy = false;
+          }
           this.refresh();
           return;
         }
         if (msg?.type === "canaryReady") {
           logChannelInfo(this.channel, "Webview canary reported ready");
-          this.view?.webview.postMessage({ type: "pong" });
+          webview.postMessage({ type: "pong" });
           return;
         }
         if (msg?.type === "ping") {
           logChannelInfo(this.channel, "Webview canary ping received");
-          this.view?.webview.postMessage({ type: "pong" });
+          webview.postMessage({ type: "pong" });
           return;
         }
         if (!workspaceRoot) {
@@ -3367,6 +4375,57 @@ class PipeonChatViewProvider {
         vscode.window.showErrorMessage(`DorkPipe: ${message}`);
       }
     });
+  }
+
+  attachWebviewSurface(surfaceId, webview) {
+    this.surfaces.set(surfaceId, {
+      webview,
+      rendered: false,
+      shellVersion: "",
+    });
+    this.bindWebviewSurface(surfaceId, webview);
+  }
+
+  openDetachedChatPanel() {
+    if (this.detachedPanel) {
+      try {
+        this.detachedPanel.reveal(vscode.ViewColumn.Beside, true);
+        return this.detachedPanel;
+      } catch {
+        this.detachedPanel = null;
+      }
+    }
+    const panel = vscode.window.createWebviewPanel(
+      "pipeon.chatPanel",
+      "DorkPipe Chat",
+      vscode.ViewColumn.Beside,
+      {
+        enableScripts: true,
+        retainContextWhenHidden: true,
+        localResourceRoots: [
+          vscode.Uri.joinPath(this.context.extensionUri, "webview"),
+          vscode.Uri.joinPath(this.context.extensionUri, "images"),
+        ],
+      }
+    );
+    const surfaceId = `panel:${Date.now().toString(36)}`;
+    this.detachedPanel = panel;
+    this.attachWebviewSurface(surfaceId, panel.webview);
+    this.refresh();
+    panel.onDidDispose(() => {
+      logChannelInfo(this.channel, "Detached chat panel disposed", { surfaceId });
+      this.surfaces.delete(surfaceId);
+      if (this.detachedPanel === panel) {
+        this.detachedPanel = null;
+      }
+    });
+    return panel;
+  }
+
+  resolveWebviewView(webviewView) {
+    this.view = webviewView;
+    logChannelInfo(this.channel, "resolveWebviewView called");
+    this.attachWebviewSurface("sidebar", webviewView.webview);
     const root = getWorkspaceRoot();
     if (root) {
       const host = process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST;
@@ -3381,7 +4440,7 @@ class PipeonChatViewProvider {
     webviewView.onDidDispose(() => {
       logChannelInfo(this.channel, "Chat webview disposed");
       this.view = null;
-      this.rendered = false;
+      this.surfaces.delete("sidebar");
     });
   }
 }
@@ -3400,21 +4459,34 @@ function activate(context) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("pipeon.openChat", async () => {
-      await revealDorkpipePanel();
+      chatProvider.openDetachedChatPanel();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pipeon.openDetachedChat", async () => {
+      chatProvider.openDetachedChatPanel();
     })
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("pipeon.newChat", async () => {
       await chatProvider.newSession();
-      await revealDorkpipePanel();
+      chatProvider.openDetachedChatPanel();
     })
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand("pipeon.clearChat", async () => {
       await chatProvider.clearActiveSession();
-      await revealDorkpipePanel();
+      chatProvider.openDetachedChatPanel();
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pipeon.resetChatShell", async () => {
+      await chatProvider.resetWebviewShell();
+      chatProvider.openDetachedChatPanel();
     })
   );
 

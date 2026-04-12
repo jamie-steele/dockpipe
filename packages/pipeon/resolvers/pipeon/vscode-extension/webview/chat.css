@@ -14,6 +14,7 @@ body {
   display: grid;
   grid-template-rows: auto 1fr auto;
   height: 100vh;
+  position: relative;
 }
 .header {
   padding: 8px 12px;
@@ -35,6 +36,9 @@ body {
   gap: 8px;
   min-width: 0;
 }
+.titleStack {
+  min-width: 0;
+}
 .titleIcon {
   color: var(--vscode-descriptionForeground);
   font-size: 14px;
@@ -44,6 +48,14 @@ body {
   font-size: 13px;
   font-weight: 600;
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.headerMeta {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -129,6 +141,283 @@ select {
   background: color-mix(in srgb, var(--vscode-editorWidget-background) 92%, transparent);
   font-size: 11px;
   color: var(--vscode-descriptionForeground);
+}
+.settingsDrawer {
+  position: absolute;
+  top: 58px;
+  right: 12px;
+  bottom: 162px;
+  width: min(980px, calc(100vw - 32px));
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--vscode-editorWidget-background) 97%, transparent);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.28);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  z-index: 10;
+}
+.settingsDrawer.hidden {
+  display: none;
+}
+.settingsHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--vscode-panel-border);
+}
+.settingsEyebrow {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+  margin-bottom: 4px;
+}
+.settingsHeader h2,
+.sectionHead h3,
+.inspectorGroup h4 {
+  margin: 0;
+}
+.settingsBody {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  display: grid;
+  gap: 16px;
+}
+.settingsSection {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 16px;
+  padding: 14px;
+  background: color-mix(in srgb, var(--vscode-sideBar-background) 94%, transparent);
+}
+.sectionHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.sectionHead p,
+.canvasHint,
+.modelMeta,
+.emptyBlock,
+.loopEmpty {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  line-height: 1.45;
+}
+.toolbarRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.btn.compact {
+  min-width: 0;
+  padding: 6px 10px;
+  font-size: 11px;
+}
+.btn.danger,
+.btn.ghost.danger {
+  border-color: color-mix(in srgb, #d96d6d 35%, var(--vscode-panel-border));
+  color: #f2b7b7;
+}
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.field span {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+.fieldWide {
+  grid-column: 1 / -1;
+}
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+}
+.designerLayout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1.15fr) minmax(260px, 0.9fr);
+  gap: 12px;
+  align-items: start;
+}
+.designerPalette,
+.designerCanvasWrap,
+.designerInspector,
+.modelEditor {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 14px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--vscode-editorWidget-background) 94%, transparent);
+}
+.paletteLabel,
+.canvasLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--vscode-descriptionForeground);
+}
+.primitiveTile {
+  width: 100%;
+  text-align: left;
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--vscode-button-background) 46%, var(--vscode-panel-border));
+  background: color-mix(in srgb, var(--vscode-button-background) 10%, transparent);
+  color: var(--vscode-editor-foreground);
+  cursor: grab;
+}
+.canvasToolbar,
+.inspectorHeader,
+.modelCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.designerCanvas {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+.dropZone {
+  border: 1px dashed color-mix(in srgb, var(--vscode-button-background) 48%, var(--vscode-panel-border));
+  border-radius: 12px;
+  padding: 10px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  background: color-mix(in srgb, var(--vscode-button-background) 7%, transparent);
+}
+.dropZone.root {
+  margin-bottom: 2px;
+}
+.designerNode {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 14px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--vscode-sideBar-background) 96%, transparent);
+}
+.designerNode.selected {
+  border-color: color-mix(in srgb, var(--vscode-button-background) 65%, var(--vscode-panel-border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vscode-button-background) 24%, transparent);
+}
+.designerNodeHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+.nodeMain {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.nodeType {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--vscode-descriptionForeground);
+}
+.nodeLabel {
+  font-size: 13px;
+  font-weight: 700;
+}
+.nodeActions {
+  display: flex;
+  gap: 6px;
+}
+.nodeAction {
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid var(--vscode-panel-border);
+  background: color-mix(in srgb, var(--vscode-button-background) 10%, transparent);
+  color: var(--vscode-editor-foreground);
+  cursor: pointer;
+}
+.nodeNotes {
+  margin-top: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+.nodeBadges,
+.modelCapabilities {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.nodeBadge {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--vscode-panel-border);
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+.loopBody {
+  margin-top: 10px;
+  margin-left: 14px;
+  padding-left: 12px;
+  border-left: 1px solid color-mix(in srgb, var(--vscode-button-background) 26%, var(--vscode-panel-border));
+  display: grid;
+  gap: 10px;
+}
+.inspectorScroll {
+  margin-top: 12px;
+  max-height: 560px;
+  overflow: auto;
+  display: grid;
+  gap: 14px;
+}
+.inspectorGroup {
+  display: grid;
+  gap: 10px;
+}
+.hidden {
+  display: none !important;
+}
+.modelStoreSummary {
+  margin-bottom: 10px;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+.modelStoreList {
+  display: grid;
+  gap: 10px;
+}
+.modelCard {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 14px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--vscode-editorWidget-background) 94%, transparent);
+}
+.modelLabel {
+  font-size: 13px;
+  font-weight: 700;
+}
+.muted {
+  opacity: 0.8;
 }
 .transcript {
   padding: 10px 12px 18px;
@@ -414,6 +703,15 @@ textarea {
   }
   select {
     max-width: none;
+  }
+}
+@media (max-width: 1180px) {
+  .settingsDrawer {
+    left: 12px;
+    width: auto;
+  }
+  .designerLayout {
+    grid-template-columns: 1fr;
   }
 }
 @keyframes pulse {

@@ -19,7 +19,14 @@ class FakeElement {
     this.scrollTop = 0;
     this.clientHeight = 80;
     this.dataset = {};
+    this.className = "";
     this.listeners = new Map();
+    this.attributes = new Map();
+    this.classList = {
+      add() {},
+      remove() {},
+      toggle() {},
+    };
   }
 
   addEventListener(type, handler) {
@@ -36,7 +43,11 @@ class FakeElement {
   }
 
   getAttribute(name) {
-    return this[name] || null;
+    return this.attributes.get(name) || this[name] || null;
+  }
+
+  setAttribute(name, value) {
+    this.attributes.set(name, value);
   }
 }
 
@@ -68,6 +79,18 @@ const context = {
     getElementById(id) {
       return getElement(id);
     },
+    querySelectorAll(selector) {
+      if (selector === ".primitiveTile") {
+        const dockpipe = getElement("primitive-dockpipe");
+        dockpipe.setAttribute("data-primitive-type", "dockpipe");
+        const model = getElement("primitive-model");
+        model.setAttribute("data-primitive-type", "model");
+        const loop = getElement("primitive-loop");
+        loop.setAttribute("data-primitive-type", "loop");
+        return [dockpipe, model, loop];
+      }
+      return [];
+    },
     body: new FakeElement("body"),
   },
   window: {
@@ -82,6 +105,14 @@ const context = {
 };
 
 vm.createContext(context);
+getElement("pipeon-initial-state").textContent = JSON.stringify({
+  shellVersion: "reasoning-templates-v1",
+  messages: [{ id: "m1", role: "assistant", html: "<p>hi</p>" }],
+  reasoningTemplates: [{ id: "dockpipe.default", name: "DockPipe Default", locked: true, builtIn: true }],
+  activeTemplate: { id: "dockpipe.default", name: "DockPipe Default" },
+  activeTemplateId: "dockpipe.default",
+  modelStore: { entries: [{ id: "ollama.default", label: "Ollama Default" }] },
+});
 new vm.Script(scriptText, { filename: "pipeon-webview-inline.js" }).runInContext(context);
 
 const stages = posted.filter((item) => item && item.type === "diag").map((item) => item.stage);
@@ -110,6 +141,16 @@ for (const stage of requiredStages) {
   if (!stages.includes(stage)) {
     throw new Error(`Missing diag stage: ${stage}. Seen: ${stages.join(", ")}`);
   }
+}
+
+const initialStateDiag = posted.find((item) => item && item.type === "diag" && item.stage === "initial-state-parsed");
+if (!initialStateDiag || !initialStateDiag.extra || initialStateDiag.extra.messages !== 1 || initialStateDiag.extra.templates !== 1) {
+  throw new Error(`Initial state was not parsed as the expected object. Diag: ${JSON.stringify(initialStateDiag)}`);
+}
+
+const readyMessage = posted.find((item) => item && item.type === "webviewReady");
+if (!readyMessage || readyMessage.shellVersion !== "reasoning-templates-v1") {
+  throw new Error(`Webview ready message did not carry the expected shell version. Got: ${JSON.stringify(readyMessage)}`);
 }
 
 const prompt = getElement("prompt");

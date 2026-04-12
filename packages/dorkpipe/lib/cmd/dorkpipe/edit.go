@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"sort"
 	"strings"
 	"time"
@@ -92,6 +93,16 @@ type editHelperScript struct {
 type editHelperResponse struct {
 	Summary      string            `json:"summary"`
 	HelperScript *editHelperScript `json:"helper_script"`
+}
+
+type artifactParseDiagnostics struct {
+	AppliedRepairs     []string `json:"applied_repairs,omitempty"`
+	PatchSource        string   `json:"patch_source,omitempty"`
+	TargetFilesSource  string   `json:"target_files_source,omitempty"`
+	ValidationsSource  string   `json:"validations_source,omitempty"`
+	HelperScriptSource string   `json:"helper_script_source,omitempty"`
+	CreatedFilesSource string   `json:"created_files_source,omitempty"`
+	NormalizedPatch    bool     `json:"normalized_patch,omitempty"`
 }
 
 type packageScaffoldSpec struct {
@@ -361,13 +372,14 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		return nil, "", "", err
 	}
 
-	artifact, err := parseEditArtifact(modelText)
+	artifact, parseDiag, err := parseEditArtifact(modelText)
 	if err != nil {
 		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("Model output was not valid JSON: %v", err), artifactsDir)
 		if err != nil {
 			emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Model output was not a valid edit artifact: %v", err), true)
 			return nil, "", "", err
 		}
+		parseDiag = nil
 	}
 	if err := validateEditArtifact(artifact); err != nil {
 		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("Edit artifact validation failed: %v", err), artifactsDir)
@@ -375,9 +387,17 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 			emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Edit artifact validation failed: %v", err), true)
 			return nil, "", "", err
 		}
+		parseDiag = nil
 	}
-	artifact.Patch = normalizeGeneratedPatch(artifact.Patch)
+	normalizedPatch := normalizeGeneratedPatch(artifact.Patch)
+	if parseDiag != nil && normalizedPatch != artifact.Patch {
+		parseDiag.NormalizedPatch = true
+	}
+	artifact.Patch = normalizedPatch
 	writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
+	if parseDiag != nil {
+		writeJSON(filepath.Join(artifactsDir, "artifact-parse.json"), parseDiag)
+	}
 
 	patchPath := filepath.Join(artifactsDir, "patch.diff")
 	if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
@@ -1404,7 +1424,8 @@ func buildOllamaChatURL(rawBase string) (*url.URL, error) {
 	return &url.URL{Scheme: u.Scheme, Host: u.Host, Path: "/api/chat"}, nil
 }
 
-func parseEditArtifact(text string) (*editModelArtifact, error) {
+func parseEditArtifact(text string) (*editModelArtifact, *artifactParseDiagnostics, error) {
+	diag := &artifactParseDiagnostics{}
 	clean := strings.TrimSpace(text)
 	clean = strings.TrimPrefix(clean, "```json")
 	clean = strings.TrimPrefix(clean, "```")
@@ -1415,11 +1436,214 @@ func parseEditArtifact(text string) (*editModelArtifact, error) {
 	if start >= 0 && end > start {
 		clean = clean[start : end+1]
 	}
-	var artifact editModelArtifact
-	if err := json.Unmarshal([]byte(clean), &artifact); err != nil {
-		return nil, err
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(clean), &raw); err != nil {
+		repaired := repairMultilineArtifactJSON(clean)
+		if repaired == clean {
+			return nil, diag, err
+		}
+		diag.AppliedRepairs = append(diag.AppliedRepairs, "escaped_multiline_json_strings")
+		if err2 := json.Unmarshal([]byte(repaired), &raw); err2 != nil {
+			return nil, diag, err
+		}
 	}
-	return &artifact, nil
+	summary, _ := parseJSONStringField(raw, "summary", "title", "message")
+	targetFiles, targetSource, err := parseJSONStringSliceField(raw, "target_files", "targetFiles", "files", "targets")
+	if err != nil {
+		return nil, diag, err
+	}
+	diag.TargetFilesSource = targetSource
+	patch, patchSource, err := parseArtifactPatch(firstJSONField(raw, "patch", "diff", "unified_diff"))
+	if err != nil {
+		return nil, diag, err
+	}
+	diag.PatchSource = patchSource
+	validations, validationsSource, err := parseJSONStringSliceField(raw, "validations", "validation", "checks")
+	if err != nil {
+		return nil, diag, err
+	}
+	diag.ValidationsSource = validationsSource
+	helperScript, helperSource, err := parseJSONHelperScriptField(raw, "helper_script", "helperScript")
+	if err != nil {
+		return nil, diag, err
+	}
+	diag.HelperScriptSource = helperSource
+	createdFiles, createdSource, err := parseJSONStringMapField(raw, "created_files", "createdFiles")
+	if err != nil {
+		return nil, diag, err
+	}
+	diag.CreatedFilesSource = createdSource
+	return &editModelArtifact{
+		Summary:      summary,
+		TargetFiles:  targetFiles,
+		Patch:        patch,
+		Validations:  validations,
+		HelperScript: helperScript,
+		CreatedFiles: createdFiles,
+	}, diag, nil
+}
+
+func firstJSONField(raw map[string]json.RawMessage, keys ...string) json.RawMessage {
+	for _, key := range keys {
+		if v, ok := raw[key]; ok {
+			return v
+		}
+	}
+	return nil
+}
+
+func parseJSONStringField(raw map[string]json.RawMessage, keys ...string) (string, string) {
+	for _, key := range keys {
+		v, ok := raw[key]
+		if !ok {
+			continue
+		}
+		var s string
+		if err := json.Unmarshal(v, &s); err == nil && strings.TrimSpace(s) != "" {
+			return s, key
+		}
+	}
+	return "", ""
+}
+
+func parseJSONStringSliceField(raw map[string]json.RawMessage, keys ...string) ([]string, string, error) {
+	for _, key := range keys {
+		v, ok := raw[key]
+		if !ok {
+			continue
+		}
+		var items []string
+		if err := json.Unmarshal(v, &items); err == nil {
+			return uniqueNonEmpty(items), key, nil
+		}
+		var single string
+		if err := json.Unmarshal(v, &single); err == nil {
+			if strings.TrimSpace(single) == "" {
+				return nil, key, nil
+			}
+			parts := strings.Split(single, "\n")
+			if len(parts) == 1 && strings.Contains(single, ",") {
+				parts = strings.Split(single, ",")
+			}
+			return uniqueNonEmpty(parts), key, nil
+		}
+		return nil, key, fmt.Errorf("field %q was not a string or string array", key)
+	}
+	return nil, "", nil
+}
+
+func parseJSONStringMapField(raw map[string]json.RawMessage, keys ...string) (map[string]string, string, error) {
+	for _, key := range keys {
+		v, ok := raw[key]
+		if !ok {
+			continue
+		}
+		var out map[string]string
+		if err := json.Unmarshal(v, &out); err == nil {
+			return out, key, nil
+		}
+		return nil, key, fmt.Errorf("field %q was not a string map", key)
+	}
+	return nil, "", nil
+}
+
+func parseJSONHelperScriptField(raw map[string]json.RawMessage, keys ...string) (*editHelperScript, string, error) {
+	for _, key := range keys {
+		v, ok := raw[key]
+		if !ok {
+			continue
+		}
+		var helper editHelperScript
+		if err := json.Unmarshal(v, &helper); err == nil {
+			return &helper, key, nil
+		}
+		return nil, key, fmt.Errorf("field %q was not a helper_script object", key)
+	}
+	return nil, "", nil
+}
+
+func repairMultilineArtifactJSON(doc string) string {
+	repaired := doc
+	for _, key := range []string{`"patch"`, `"content"`, `"text"`, `"diff"`, `"unified_diff"`} {
+		repaired = escapeRawMultilineStringValue(repaired, key)
+	}
+	return repaired
+}
+
+func escapeRawMultilineStringValue(doc, key string) string {
+	idx := strings.Index(doc, key)
+	if idx < 0 {
+		return doc
+	}
+	colon := strings.Index(doc[idx+len(key):], ":")
+	if colon < 0 {
+		return doc
+	}
+	pos := idx + len(key) + colon + 1
+	for pos < len(doc) && (doc[pos] == ' ' || doc[pos] == '\n' || doc[pos] == '\r' || doc[pos] == '\t') {
+		pos++
+	}
+	if pos >= len(doc) || doc[pos] != '"' {
+		return doc
+	}
+	start := pos + 1
+	end := findJSONishStringEnd(doc, start)
+	if end <= start {
+		return doc
+	}
+	value := doc[start:end]
+	if !strings.Contains(value, "\n") && !strings.Contains(value, "\r") {
+		return doc
+	}
+	quoted := strconv.Quote(value)
+	return doc[:start] + quoted[1:len(quoted)-1] + doc[end:]
+}
+
+func findJSONishStringEnd(doc string, start int) int {
+	escaped := false
+	for i := start; i < len(doc); i++ {
+		switch {
+		case escaped:
+			escaped = false
+		case doc[i] == '\\':
+			escaped = true
+		case doc[i] == '"':
+			j := i + 1
+			for j < len(doc) && (doc[j] == ' ' || doc[j] == '\n' || doc[j] == '\r' || doc[j] == '\t') {
+				j++
+			}
+			if j >= len(doc) || doc[j] == ',' || doc[j] == '}' || doc[j] == ']' {
+				return i
+			}
+		}
+	}
+	return -1
+}
+
+func parseArtifactPatch(raw json.RawMessage) (string, string, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return "", "", fmt.Errorf("edit artifact patch is missing")
+	}
+	var patch string
+	if err := json.Unmarshal(raw, &patch); err == nil {
+		return patch, "string", nil
+	}
+	var lines []string
+	if err := json.Unmarshal(raw, &lines); err == nil {
+		return strings.Join(lines, "\n"), "string_array", nil
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return "", "", err
+	}
+	for _, key := range []string{"content", "text", "diff", "patch", "unified_diff"} {
+		if v, ok := obj[key]; ok {
+			if s, ok := v.(string); ok && strings.TrimSpace(s) != "" {
+				return s, "object:" + key, nil
+			}
+		}
+	}
+	return "", "", fmt.Errorf("edit artifact patch object did not contain a supported diff string field")
 }
 
 func parseHelperSidecarResponse(text string) (*editHelperResponse, error) {
@@ -1527,9 +1751,12 @@ func retryInvalidEditArtifact(ctx context.Context, reqID, host, model string, nu
 		suffix = fmt.Sprintf("-%d", attempt)
 	}
 	_ = os.WriteFile(filepath.Join(artifactsDir, "model-response-repair"+suffix+".txt"), []byte(modelText), 0o644)
-	artifact, err := parseEditArtifact(modelText)
+	artifact, parseDiag, err := parseEditArtifact(modelText)
 	if err != nil {
 		return nil, modelText, err
+	}
+	if parseDiag != nil {
+		writeJSON(filepath.Join(artifactsDir, "artifact-parse-repair"+suffix+".json"), parseDiag)
 	}
 	if err := validateEditArtifact(artifact); err != nil {
 		return nil, modelText, err
