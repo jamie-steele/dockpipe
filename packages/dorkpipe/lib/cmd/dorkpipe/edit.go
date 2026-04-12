@@ -259,7 +259,11 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		return artifact, patchPath, artifactsDir, err
 	}
 
-	candidates, err := collectEditCandidates(ctx, root, activeFile, message, artifactsDir)
+	effectiveActiveFile := strings.TrimSpace(activeFile)
+	if explicit := explicitRepoFileMentions(root, message); len(explicit) > 0 {
+		effectiveActiveFile = explicit[0]
+	}
+	candidates, err := collectEditCandidates(ctx, root, effectiveActiveFile, message, artifactsDir)
 	if err != nil {
 		emitEditError(reqID, "CONTEXT_GATHER_FAILED", fmt.Sprintf("Could not collect candidate files: %v", err), true)
 		return nil, "", "", err
@@ -280,7 +284,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		RequestID:       reqID,
 		WorkspaceRoot:   root,
 		UserMessage:     message,
-		ActiveFile:      activeFile,
+		ActiveFile:      effectiveActiveFile,
 		SelectionText:   clampString(selectionText, maxEditSelectionChars),
 		Apply:           false,
 		CandidateFiles:  candidates,
@@ -288,7 +292,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		MCPSummary:      mcpText,
 	}
 	plan := buildDefaultEditPlan(root, baseRequest)
-	if shouldUseComplexEditFlow(message, activeFile, selectionText) {
+	if shouldUseComplexEditFlow(root, message, effectiveActiveFile, selectionText) {
 		emitEditEvent(reqID, "planning", "Planning edit strategy", 0.24, map[string]any{"candidate_count": len(candidates)})
 		if len(plan.TargetFiles) >= 3 {
 			emitEditEvent(reqID, "planning", "Using heuristic edit plan", 0.28, map[string]any{
@@ -335,7 +339,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		RequestID:       reqID,
 		WorkspaceRoot:   root,
 		UserMessage:     message,
-		ActiveFile:      activeFile,
+		ActiveFile:      effectiveActiveFile,
 		SelectionText:   clampString(selectionText, maxEditSelectionChars),
 		Apply:           false,
 		CandidateFiles:  rankedCandidates,
@@ -390,10 +394,24 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		parseDiag = nil
 	}
 	if err := validateEditArtifact(artifact); err != nil {
-		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("Edit artifact validation failed: %v", err), artifactsDir)
-		if err != nil {
-			emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Edit artifact validation failed: %v", err), true)
-			return nil, "", "", err
+		if repaired, repairErr := repairPatchFromStructuredEdits(root, artifact); repaired && repairErr == nil {
+			emitEditEvent(reqID, "validating", "Materialized patch from structured edits", 0.57, map[string]any{
+				"structured_edit_count": len(artifact.StructuredEdits),
+			})
+			if err := validateEditArtifact(artifact); err != nil {
+				emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Edit artifact validation failed: %v", err), true)
+				return nil, "", "", err
+			}
+		} else {
+			artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("Edit artifact validation failed: %v", err), artifactsDir)
+			if err != nil {
+				emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Edit artifact validation failed: %v", err), true)
+				return nil, "", "", err
+			}
+			if err := validateEditArtifact(artifact); err != nil {
+				emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Edit artifact validation failed: %v", err), true)
+				return nil, "", "", err
+			}
 		}
 		parseDiag = nil
 	}
@@ -414,10 +432,18 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 	verifyOutput, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
 	if err != nil {
 		_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
-		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("The generated patch did not apply cleanly.\n\nVerifier output:\n%s", emptyFallback(verifyOutput, "(no verifier output)")), artifactsDir)
-		if err != nil {
-			emitEditError(reqID, "VALIDATION_FAILED", "The generated patch did not apply cleanly.", true)
-			return nil, "", "", err
+		repairedFromStructured := false
+		if repaired, repairErr := repairPatchFromStructuredEdits(root, artifact); repaired && repairErr == nil {
+			repairedFromStructured = true
+			emitEditEvent(reqID, "validating", "Rebuilt patch from structured edits after verifier failure", 0.68, map[string]any{
+				"structured_edit_count": len(artifact.StructuredEdits),
+			})
+		} else {
+			artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("The generated patch did not apply cleanly.\n\nVerifier output:\n%s", emptyFallback(verifyOutput, "(no verifier output)")), artifactsDir)
+			if err != nil {
+				emitEditError(reqID, "VALIDATION_FAILED", "The generated patch did not apply cleanly.", true)
+				return nil, "", "", err
+			}
 		}
 		preparedArtifact, preparedPatchPath, persistErr := writePreparedArtifactBundle(root, artifactsDir, artifact, "")
 		if persistErr != nil {
@@ -426,7 +452,11 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		}
 		artifact = preparedArtifact
 		patchPath = preparedPatchPath
-		emitEditEvent(reqID, "validating", "Re-checking repaired patch", 0.7, nil)
+		recheckLabel := "Re-checking repaired patch"
+		if repairedFromStructured {
+			recheckLabel = "Re-checking structured patch"
+		}
+		emitEditEvent(reqID, "validating", recheckLabel, 0.7, nil)
 		verifyOutput, err = runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
 		if err != nil {
 			_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
@@ -631,6 +661,16 @@ func writeEvent(ev editEvent) {
 }
 
 func collectEditCandidates(ctx context.Context, root, activeFile, message, artifactsDir string) ([]string, error) {
+	if explicit := explicitRepoFileMentions(root, message); len(explicit) > 0 {
+		lines := explicit
+		if len(lines) > maxEditCandidateCount {
+			lines = lines[:maxEditCandidateCount]
+		}
+		if err := os.WriteFile(filepath.Join(artifactsDir, "candidates.txt"), []byte(strings.Join(lines, "\n")), 0o644); err != nil {
+			return nil, err
+		}
+		return lines, nil
+	}
 	candidateScript := filepath.Join(root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/edit-collect-candidates.sh")
 	args := []string{candidateScript, root}
 	if strings.TrimSpace(activeFile) != "" {
@@ -699,7 +739,10 @@ func readCandidateSnippets(ctx context.Context, root string, candidates []string
 	return strings.Join(parts, "\n\n")
 }
 
-func shouldUseComplexEditFlow(message, activeFile, selectionText string) bool {
+func shouldUseComplexEditFlow(root, message, activeFile, selectionText string) bool {
+	if len(explicitRepoFileMentions(root, message)) > 0 {
+		return false
+	}
 	lower := strings.ToLower(strings.TrimSpace(message))
 	if lower == "" {
 		return false
@@ -720,6 +763,16 @@ func shouldUseComplexEditFlow(message, activeFile, selectionText string) bool {
 }
 
 func buildDefaultEditPlan(root string, req editRequestRecord) *editPlan {
+	explicitTargets := explicitRepoFileMentions(root, req.UserMessage)
+	if len(explicitTargets) > 0 {
+		return &editPlan{
+			Summary:        "Edit the explicit file requested by the user and keep the change narrowly scoped.",
+			TargetFiles:    explicitTargets,
+			SearchTerms:    extractSearchTerms(req.UserMessage),
+			Complexity:     "simple",
+			RetrievalStyle: "local_search",
+		}
+	}
 	heuristicTargets := heuristicTargetsForRequest(root, req.UserMessage)
 	plan := &editPlan{
 		Summary:        "Use nearby workspace context and keep the edit narrowly scoped.",
@@ -728,7 +781,7 @@ func buildDefaultEditPlan(root string, req editRequestRecord) *editPlan {
 		Complexity:     "simple",
 		RetrievalStyle: "local_search",
 	}
-	if shouldUseComplexEditFlow(req.UserMessage, req.ActiveFile, req.SelectionText) {
+	if shouldUseComplexEditFlow(root, req.UserMessage, req.ActiveFile, req.SelectionText) {
 		plan.Complexity = "complex"
 		plan.AllowNewFiles = true
 		plan.RetrievalStyle = "ranked_search"
@@ -737,6 +790,9 @@ func buildDefaultEditPlan(root string, req editRequestRecord) *editPlan {
 }
 
 func heuristicTargetsForRequest(root, message string) []string {
+	if explicit := explicitRepoFileMentions(root, message); len(explicit) > 0 {
+		return explicit
+	}
 	lower := strings.ToLower(strings.TrimSpace(message))
 	var out []string
 	if strings.Contains(lower, ".staging") || strings.Contains(lower, "staging") {
@@ -1146,6 +1202,9 @@ func minInt(a, b int) int {
 }
 
 func shouldTryHelperSidecar(reqID string, req editRequestRecord, plan *editPlan) bool {
+	if explicit := explicitRepoFileMentions(req.WorkspaceRoot, req.UserMessage); len(explicit) > 0 {
+		return false
+	}
 	lower := strings.ToLower(req.UserMessage)
 	if plan != nil && strings.EqualFold(plan.Complexity, "complex") && plan.AllowNewFiles {
 		return true
@@ -1156,6 +1215,29 @@ func shouldTryHelperSidecar(reqID string, req editRequestRecord, plan *editPlan)
 		}
 	}
 	return false
+}
+
+func explicitRepoFileMentions(root, message string) []string {
+	if strings.TrimSpace(root) == "" || strings.TrimSpace(message) == "" {
+		return nil
+	}
+	var out []string
+	for _, token := range strings.Fields(message) {
+		token = strings.TrimSpace(strings.Trim(token, ".,:;!?()[]{}<>\"'`"))
+		if token == "" {
+			continue
+		}
+		token = filepath.ToSlash(strings.TrimPrefix(token, "./"))
+		if strings.HasPrefix(token, "/") || strings.Contains(token, "..") || !strings.Contains(token, "/") {
+			continue
+		}
+		info, err := os.Stat(filepath.Join(root, token))
+		if err != nil || info.IsDir() {
+			continue
+		}
+		out = append(out, token)
+	}
+	return uniqueNonEmpty(out)
 }
 
 func formatEditPlan(plan *editPlan) string {
@@ -1218,6 +1300,8 @@ Rules:
 - Patch must be a valid unified diff that can be applied with git apply.
 - When you can describe the change precisely, include structured_edits. Otherwise omit it.
 - Do not use backslash line continuations or comments outside JSON strings.
+- Never use placeholder values like "before text", "after text", "old text", "new text", or invented helper variables not grounded in the provided snippets.
+- For existing-file edits, structured_edits.old_text and structured_edits.new_text must use the real code or prose from the candidate snippets.
 - Use repo-relative paths in target_files.
 - Do not invent files not supported by the provided context unless the request clearly needs a new file.
 - Prefer editing the active file when it is relevant.
@@ -1795,6 +1879,34 @@ func normalizeGeneratedPatch(patch string) string {
 	return strings.TrimSpace(strings.Join(lines, "\n")) + "\n"
 }
 
+func validateArtifactPatchShape(patch string) error {
+	if strings.TrimSpace(patch) == "" {
+		return errors.New("patch is empty")
+	}
+	if !strings.Contains(patch, "diff --git ") {
+		return errors.New("patch does not look like a unified diff")
+	}
+	if !(strings.Contains(patch, "\n--- a/") || strings.Contains(patch, "\n--- /dev/null")) || !strings.Contains(patch, "\n+++ b/") {
+		return errors.New("patch is missing unified diff file headers")
+	}
+	return nil
+}
+
+func repairPatchFromStructuredEdits(root string, artifact *editModelArtifact) (bool, error) {
+	if artifact == nil || len(artifact.StructuredEdits) == 0 {
+		return false, nil
+	}
+	if err := validateStructuredEdits(artifact.StructuredEdits); err != nil {
+		return false, err
+	}
+	patch, err := materializeStructuredPatch(root, artifact)
+	if err != nil {
+		return false, err
+	}
+	artifact.Patch = patch
+	return true, nil
+}
+
 func validateHelperSidecarResponse(resp *editHelperResponse) error {
 	if resp == nil {
 		return errors.New("helper response is empty")
@@ -1888,6 +2000,7 @@ Return JSON only. No markdown fences. Do not truncate the JSON.
 The "patch" field must contain a valid unified diff. Metadata lines are not file deletions.
 If you include structured_edits, they must be a valid JSON array.
 Do not use backslash line continuations or comments outside JSON strings.
+Never use placeholder strings like "before text", "after text", "old text", or "new text".
 Every edited file must look like this:
 
 diff --git a/path/to/file b/path/to/file
@@ -1910,14 +2023,8 @@ func validateEditArtifact(artifact *editModelArtifact) error {
 	if strings.TrimSpace(artifact.Summary) == "" {
 		return errors.New("summary is empty")
 	}
-	if strings.TrimSpace(artifact.Patch) == "" {
-		return errors.New("patch is empty")
-	}
-	if !strings.Contains(artifact.Patch, "diff --git ") {
-		return errors.New("patch does not look like a unified diff")
-	}
-	if !(strings.Contains(artifact.Patch, "\n--- a/") || strings.Contains(artifact.Patch, "\n--- /dev/null")) || !strings.Contains(artifact.Patch, "\n+++ b/") {
-		return errors.New("patch is missing unified diff file headers")
+	if err := validateArtifactPatchShape(artifact.Patch); err != nil {
+		return err
 	}
 	if len(artifact.TargetFiles) == 0 {
 		return errors.New("target_files is empty")
@@ -2839,6 +2946,26 @@ func buildReplaceFilePatch(targetFile, before, after string) string {
 	}
 	for _, line := range afterLines {
 		b.WriteString("+")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
+func buildDeleteFilePatch(targetFile, before string) string {
+	beforeLines := strings.Split(strings.ReplaceAll(before, "\r\n", "\n"), "\n")
+	if len(beforeLines) > 0 && beforeLines[len(beforeLines)-1] == "" {
+		beforeLines = beforeLines[:len(beforeLines)-1]
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "diff --git a/%s b/%s\n", targetFile, targetFile)
+	b.WriteString("deleted file mode 100644\n")
+	b.WriteString("index 1111111..0000000 100644\n")
+	fmt.Fprintf(&b, "--- a/%s\n", targetFile)
+	b.WriteString("+++ /dev/null\n")
+	fmt.Fprintf(&b, "@@ -1,%d +0,0 @@\n", len(beforeLines))
+	for _, line := range beforeLines {
+		b.WriteString("-")
 		b.WriteString(line)
 		b.WriteString("\n")
 	}

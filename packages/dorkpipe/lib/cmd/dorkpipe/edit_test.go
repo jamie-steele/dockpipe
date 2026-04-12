@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -266,5 +267,127 @@ func TestPrepareArtifactForStorage_DerivesStructuredEditsFromCreatedFiles(t *tes
 	}
 	if !json.Valid(body) {
 		t.Fatalf("prepared artifact should marshal as valid JSON")
+	}
+}
+
+func TestValidateStructuredEdits_RejectsPlaceholderRangeText(t *testing.T) {
+	t.Parallel()
+	err := validateStructuredEdits([]editStructuredEdit{
+		{
+			Op:         "replace_range",
+			TargetFile: "src/index.ts",
+			Range: &editStructuredRange{
+				StartLine:    3,
+				OldLineCount: 1,
+				NewLineCount: 1,
+			},
+			OldText: "before text\n",
+			NewText: "after text\n",
+		},
+	})
+	if err == nil {
+		t.Fatalf("expected placeholder structured edit text to be rejected")
+	}
+}
+
+func TestRepairPatchFromStructuredEdits_RebuildsMalformedPatch(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	target := filepath.Join(root, "src", "index.ts")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	before := "const value = 1;\nconsole.log(value);\n"
+	if err := os.WriteFile(target, []byte(before), 0o644); err != nil {
+		t.Fatalf("write before: %v", err)
+	}
+	artifact := &editModelArtifact{
+		Summary:     "update console line",
+		TargetFiles: []string{"src/index.ts"},
+		Patch:       "diff --git garbage",
+		StructuredEdits: []editStructuredEdit{
+			{
+				Op:         "replace_range",
+				TargetFile: "src/index.ts",
+				Range: &editStructuredRange{
+					StartLine:    2,
+					OldLineCount: 1,
+					NewLineCount: 1,
+				},
+				OldText: "console.log(value);\n",
+				NewText: "console.log('done');\n",
+			},
+		},
+	}
+	repaired, err := repairPatchFromStructuredEdits(root, artifact)
+	if err != nil {
+		t.Fatalf("repairPatchFromStructuredEdits() error = %v", err)
+	}
+	if !repaired {
+		t.Fatalf("expected patch to be rebuilt from structured edits")
+	}
+	if err := validateArtifactPatchShape(artifact.Patch); err != nil {
+		t.Fatalf("rebuilt patch should validate: %v", err)
+	}
+	if !strings.Contains(artifact.Patch, "console.log('done');") {
+		t.Fatalf("rebuilt patch did not contain replacement text: %q", artifact.Patch)
+	}
+}
+
+func TestExplicitRepoFileMentions_FindsLiteralPath(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	target := filepath.Join(root, "packages", "pipeon", "resolvers", "pipeon", "vscode-extension", "src", "webview", "chat.ts")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatalf("mkdir target dir: %v", err)
+	}
+	if err := os.WriteFile(target, []byte("content\n"), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+
+	got := explicitRepoFileMentions(root, "In packages/pipeon/resolvers/pipeon/vscode-extension/src/webview/chat.ts, update the empty-state assistant message.")
+	if len(got) != 1 || got[0] != "packages/pipeon/resolvers/pipeon/vscode-extension/src/webview/chat.ts" {
+		t.Fatalf("explicitRepoFileMentions() = %#v", got)
+	}
+}
+
+func TestBuildDefaultEditPlan_PrefersExplicitFileMentions(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	target := filepath.Join(root, "packages", "pipeon", "resolvers", "pipeon", "vscode-extension", "src", "webview", "chat.ts")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatalf("mkdir target dir: %v", err)
+	}
+	if err := os.WriteFile(target, []byte("content\n"), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+
+	plan := buildDefaultEditPlan(root, editRequestRecord{
+		WorkspaceRoot:  root,
+		UserMessage:    "In packages/pipeon/resolvers/pipeon/vscode-extension/src/webview/chat.ts, update the empty-state assistant message so it mentions the run inspector.",
+		ActiveFile:     "dockpipe.config.json",
+		CandidateFiles: []string{"dockpipe.config.json", "packages/dorkpipe/lib/cmd/dorkpipe/edit.go"},
+	})
+	if plan.Complexity != "simple" {
+		t.Fatalf("Complexity = %q, want simple", plan.Complexity)
+	}
+	if len(plan.TargetFiles) != 1 || plan.TargetFiles[0] != "packages/pipeon/resolvers/pipeon/vscode-extension/src/webview/chat.ts" {
+		t.Fatalf("TargetFiles = %#v", plan.TargetFiles)
+	}
+}
+
+func TestShouldUseComplexEditFlow_FalseForExplicitFilePrompt(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	target := filepath.Join(root, "packages", "pipeon", "resolvers", "pipeon", "vscode-extension", "src", "webview", "chat.ts")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatalf("mkdir target dir: %v", err)
+	}
+	if err := os.WriteFile(target, []byte("content\n"), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+
+	if shouldUseComplexEditFlow(root, "In packages/pipeon/resolvers/pipeon/vscode-extension/src/webview/chat.ts, update the empty-state assistant message.", "dockpipe.config.json", "") {
+		t.Fatalf("expected explicit file prompt to stay on simple edit flow")
 	}
 }

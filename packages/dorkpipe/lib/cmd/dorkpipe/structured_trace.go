@@ -584,9 +584,18 @@ func validateStructuredEdits(edits []editStructuredEdit) error {
 			if item.Range.StartLine < 0 {
 				return fmt.Errorf("replace_range for %s has invalid start line", item.TargetFile)
 			}
+			if strings.TrimSpace(item.OldText) == "" || strings.TrimSpace(item.NewText) == "" {
+				return fmt.Errorf("replace_range for %s must include concrete old_text and new_text", item.TargetFile)
+			}
+			if looksLikePlaceholderStructuredText(item.OldText) || looksLikePlaceholderStructuredText(item.NewText) {
+				return fmt.Errorf("replace_range for %s contains placeholder text", item.TargetFile)
+			}
 		case "create_file":
 			if item.Content == "" && item.NewText == "" {
 				return fmt.Errorf("create_file for %s is missing content", item.TargetFile)
+			}
+			if looksLikePlaceholderStructuredText(item.Content) || looksLikePlaceholderStructuredText(item.NewText) {
+				return fmt.Errorf("create_file for %s contains placeholder text", item.TargetFile)
 			}
 		case "delete_file":
 		default:
@@ -594,6 +603,26 @@ func validateStructuredEdits(edits []editStructuredEdit) error {
 		}
 	}
 	return nil
+}
+
+func looksLikePlaceholderStructuredText(text string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(text))
+	if normalized == "" {
+		return false
+	}
+	for _, placeholder := range []string{
+		"before text",
+		"after text",
+		"old text",
+		"new text",
+		"replace this",
+		"updated text here",
+	} {
+		if normalized == placeholder || normalized == placeholder+`\n` {
+			return true
+		}
+	}
+	return false
 }
 
 func applyStructuredEdits(root string, artifact *editModelArtifact) (string, error) {
@@ -680,6 +709,56 @@ func applyStructuredEdits(root string, artifact *editModelArtifact) (string, err
 	return strings.Join(applied, "\n"), nil
 }
 
+func materializeStructuredPatch(root string, artifact *editModelArtifact) (string, error) {
+	if artifact == nil || len(artifact.StructuredEdits) == 0 {
+		return "", fmt.Errorf("no structured edits are available")
+	}
+	grouped := map[string][]editStructuredEdit{}
+	createOps := map[string]editStructuredEdit{}
+	deleteOps := map[string]editStructuredEdit{}
+	for _, item := range artifact.StructuredEdits {
+		switch item.Op {
+		case "create_file":
+			createOps[item.TargetFile] = item
+		case "delete_file":
+			deleteOps[item.TargetFile] = item
+		case "replace_range":
+			grouped[item.TargetFile] = append(grouped[item.TargetFile], item)
+		}
+	}
+	parts := []string{}
+	for _, rel := range sortedStructuredTargets(createOps) {
+		item := createOps[rel]
+		content := item.Content
+		if content == "" {
+			content = item.NewText
+		}
+		parts = append(parts, buildCreateFilePatch(rel, content))
+	}
+	for _, rel := range sortedGroupedTargets(grouped) {
+		beforeBytes, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			return "", err
+		}
+		after, err := applyStructuredEditsToText(string(beforeBytes), grouped[rel])
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, buildReplaceFilePatch(rel, string(beforeBytes), after))
+	}
+	for _, rel := range sortedStructuredTargets(deleteOps) {
+		beforeBytes, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, buildDeleteFilePatch(rel, string(beforeBytes)))
+	}
+	if len(parts) == 0 {
+		return "", fmt.Errorf("no structured edits could be materialized into a patch")
+	}
+	return strings.TrimSpace(strings.Join(parts, "\n")) + "\n", nil
+}
+
 func applyReplaceRangeEdit(text string, item editStructuredEdit) (string, error) {
 	if item.Range == nil {
 		return "", fmt.Errorf("structured replace_range for %s is missing range metadata", item.TargetFile)
@@ -698,6 +777,30 @@ func applyReplaceRangeEdit(text string, item editStructuredEdit) (string, error)
 		start, end = altStart, altEnd
 	}
 	return text[:start] + item.NewText + text[end:], nil
+}
+
+func applyStructuredEditsToText(text string, ops []editStructuredEdit) (string, error) {
+	sorted := append([]editStructuredEdit{}, ops...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		left := sorted[i].Range
+		right := sorted[j].Range
+		if left == nil || right == nil {
+			return i < j
+		}
+		if left.StartLine == right.StartLine {
+			return left.OldLineCount > right.OldLineCount
+		}
+		return left.StartLine > right.StartLine
+	})
+	current := text
+	for _, item := range sorted {
+		next, err := applyReplaceRangeEdit(current, item)
+		if err != nil {
+			return "", err
+		}
+		current = next
+	}
+	return current, nil
 }
 
 func rangeOffsetsForText(text string, startLine, oldLineCount int) (int, int, error) {
@@ -818,4 +921,22 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func sortedStructuredTargets(items map[string]editStructuredEdit) []string {
+	out := make([]string, 0, len(items))
+	for rel := range items {
+		out = append(out, rel)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func sortedGroupedTargets(items map[string][]editStructuredEdit) []string {
+	out := make([]string, 0, len(items))
+	for rel := range items {
+		out = append(out, rel)
+	}
+	sort.Strings(out)
+	return out
 }
