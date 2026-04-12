@@ -111,6 +111,25 @@ func TestParseEditArtifact_RepairsMultilinePatchString(t *testing.T) {
 	}
 }
 
+func TestParseEditArtifact_StripsDanglingLineContinuations(t *testing.T) {
+	t.Parallel()
+	text := "{\n" +
+		`"summary":"update thing",\` + "\n" +
+		`"target_files":["src/index.ts"],\` + "\n" +
+		`"patch":"diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1 +1 @@\n-old\n+new\n"` + "\n" +
+		"}"
+	artifact, diag, err := parseEditArtifact(text)
+	if err != nil {
+		t.Fatalf("parseEditArtifact() error = %v", err)
+	}
+	if diag == nil || len(diag.AppliedRepairs) == 0 {
+		t.Fatalf("expected repair diagnostics, got %#v", diag)
+	}
+	if artifact.Summary != "update thing" {
+		t.Fatalf("unexpected artifact summary: %#v", artifact)
+	}
+}
+
 func TestParseEditArtifact_AcceptsStringTargetsAndChecks(t *testing.T) {
 	t.Parallel()
 	text := `{

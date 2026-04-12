@@ -1199,12 +1199,25 @@ Return JSON only. No markdown fences. The JSON shape must be:
   "summary": "short user-facing summary",
   "target_files": ["path/one", "path/two"],
   "patch": "unified diff patch",
+  "structured_edits": [
+    {
+      "op": "replace_range",
+      "language": "typescript",
+      "target_file": "src/example.ts",
+      "description": "short edit description",
+      "range": { "start_line": 12, "old_line_count": 2, "new_line_count": 3 },
+      "old_text": "before text\n",
+      "new_text": "after text\n"
+    }
+  ],
   "validations": ["short validation note"]
 }
 
 Rules:
 - Keep changes minimal and directly tied to the request.
 - Patch must be a valid unified diff that can be applied with git apply.
+- When you can describe the change precisely, include structured_edits. Otherwise omit it.
+- Do not use backslash line continuations or comments outside JSON strings.
 - Use repo-relative paths in target_files.
 - Do not invent files not supported by the provided context unless the request clearly needs a new file.
 - Prefer editing the active file when it is relevant.
@@ -1485,11 +1498,11 @@ func parseEditArtifact(text string) (*editModelArtifact, *artifactParseDiagnosti
 	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(clean), &raw); err != nil {
-		repaired := repairMultilineArtifactJSON(clean)
+		repaired, appliedRepairs := repairMultilineArtifactJSON(clean)
 		if repaired == clean {
 			return nil, diag, err
 		}
-		diag.AppliedRepairs = append(diag.AppliedRepairs, "escaped_multiline_json_strings")
+		diag.AppliedRepairs = append(diag.AppliedRepairs, appliedRepairs...)
 		if err2 := json.Unmarshal([]byte(repaired), &raw); err2 != nil {
 			return nil, diag, err
 		}
@@ -1631,41 +1644,67 @@ func parseJSONStructuredEditsField(raw map[string]json.RawMessage, keys ...strin
 	return nil, "", nil
 }
 
-func repairMultilineArtifactJSON(doc string) string {
+func repairMultilineArtifactJSON(doc string) (string, []string) {
 	repaired := doc
-	for _, key := range []string{`"patch"`, `"content"`, `"text"`, `"diff"`, `"unified_diff"`} {
-		repaired = escapeRawMultilineStringValue(repaired, key)
+	repairs := []string{}
+	var changed bool
+	repaired, changed = stripDanglingJSONLineContinuations(repaired)
+	if changed {
+		repairs = append(repairs, "stripped_dangling_line_continuations")
 	}
-	return repaired
+	for _, key := range []string{`"patch"`, `"content"`, `"text"`, `"diff"`, `"unified_diff"`} {
+		var keyChanged bool
+		repaired, keyChanged = escapeRawMultilineStringValue(repaired, key)
+		if keyChanged {
+			repairs = append(repairs, "escaped_multiline_json_strings")
+		}
+	}
+	return repaired, uniqueNonEmpty(repairs)
 }
 
-func escapeRawMultilineStringValue(doc, key string) string {
+func stripDanglingJSONLineContinuations(doc string) (string, bool) {
+	lines := strings.Split(doc, "\n")
+	changed := false
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasSuffix(trimmed, `\`) && !strings.HasSuffix(trimmed, `\\`) {
+			lines[i] = strings.TrimRight(line, " \t\\")
+			changed = true
+		}
+	}
+	if !changed {
+		return doc, false
+	}
+	return strings.Join(lines, "\n"), true
+}
+
+func escapeRawMultilineStringValue(doc, key string) (string, bool) {
 	idx := strings.Index(doc, key)
 	if idx < 0 {
-		return doc
+		return doc, false
 	}
 	colon := strings.Index(doc[idx+len(key):], ":")
 	if colon < 0 {
-		return doc
+		return doc, false
 	}
 	pos := idx + len(key) + colon + 1
 	for pos < len(doc) && (doc[pos] == ' ' || doc[pos] == '\n' || doc[pos] == '\r' || doc[pos] == '\t') {
 		pos++
 	}
 	if pos >= len(doc) || doc[pos] != '"' {
-		return doc
+		return doc, false
 	}
 	start := pos + 1
 	end := findJSONishStringEnd(doc, start)
 	if end <= start {
-		return doc
+		return doc, false
 	}
 	value := doc[start:end]
 	if !strings.Contains(value, "\n") && !strings.Contains(value, "\r") {
-		return doc
+		return doc, false
 	}
 	quoted := strconv.Quote(value)
-	return doc[:start] + quoted[1:len(quoted)-1] + doc[end:]
+	return doc[:start] + quoted[1:len(quoted)-1] + doc[end:], true
 }
 
 func findJSONishStringEnd(doc string, start int) int {
@@ -1847,6 +1886,8 @@ Previous response:
 Return JSON only. No markdown fences. Do not truncate the JSON.
 
 The "patch" field must contain a valid unified diff. Metadata lines are not file deletions.
+If you include structured_edits, they must be a valid JSON array.
+Do not use backslash line continuations or comments outside JSON strings.
 Every edited file must look like this:
 
 diff --git a/path/to/file b/path/to/file
