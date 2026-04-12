@@ -23,6 +23,7 @@
    * @property {boolean} settingsOpen
    * @property {string} selectedNodeId
    * @property {string} workspaceMode
+   * @property {string} selectedRunMessageId
    */
 
   function escapeHtml(value) {
@@ -134,6 +135,9 @@
     if (pending.kind === "edit" && pending.helperScriptRuntime) {
       meta.push("Sidecar: " + pending.helperScriptRuntime);
     }
+    if (pending.kind === "edit" && pending.structuredEditCount) {
+      meta.push(pending.structuredEditCount + " structured op" + (pending.structuredEditCount === 1 ? "" : "s"));
+    }
     if (pending.kind === "command" && pending.requestText) {
       meta.push("Command: " + pending.requestText);
     }
@@ -176,14 +180,104 @@
     return '<div class="liveCard"><div class="liveRow"><div class="liveDot"></div><div class="liveTitle">' + escapeHtml(message.liveStatus) + "</div></div>" + chips + "</div>";
   }
 
+  function renderRunCard(message) {
+    const run = message.run;
+    if (!run || !run.artifactDir) {
+      return "";
+    }
+    const meta = [];
+    if (run.state) {
+      meta.push("State: " + run.state);
+    }
+    if (run.validationStatus) {
+      meta.push("Validation: " + run.validationStatus);
+    }
+    if (run.applyMode) {
+      meta.push("Apply: " + run.applyMode);
+    }
+    if (run.structuredEditCount) {
+      meta.push(run.structuredEditCount + " structured op" + (run.structuredEditCount === 1 ? "" : "s"));
+    }
+    return [
+      '<div class="pendingCard runCard">',
+      '<div class="pendingTitle">Run inspector</div>',
+      meta.length ? '<div class="pendingMeta">' + escapeHtml(meta.join("  |  ")) + "</div>" : "",
+      run.targetFiles && run.targetFiles.length ? '<div class="pendingFiles">' + run.targetFiles.slice(0, 4).map((file) => '<div class="pendingFile">' + escapeHtml(file) + "</div>").join("") + "</div>" : "",
+      '<div class="pendingActions">',
+      '<button class="btn ghost" type="button" data-run-inspect="' + escapeHtml(message.id) + '">Inspect run</button>',
+      "</div>",
+      "</div>",
+    ].join("");
+  }
+
   function renderMessages(messages) {
     if (!messages.length) {
       return '<article class="msg assistant"><div class="role">DorkPipe</div><div class="body"><p>Ask about this workspace. DorkPipe will use the local context bundle when available, keep chat history per workspace, and route obvious safe actions locally first.</p></div></article>';
     }
     return messages.map((message) => {
       const role = message.role === "assistant" ? "DorkPipe" : "You";
-      return '<article class="msg ' + message.role + '"><div class="role">' + role + '</div><div class="body">' + (message.html || "") + renderLiveCard(message) + renderDiffPreview(message) + renderPendingAction(message) + "</div></article>";
+      return '<article class="msg ' + message.role + '"><div class="role">' + role + '</div><div class="body">' + (message.html || "") + renderLiveCard(message) + renderDiffPreview(message) + renderPendingAction(message) + renderRunCard(message) + "</div></article>";
     }).join("");
+  }
+
+  function selectedRunMessage(messages, messageId) {
+    const items = Array.isArray(messages) ? messages : [];
+    return items.find((message) => message.id === messageId && message.run && message.run.artifactDir) || items.slice().reverse().find((message) => message.run && message.run.artifactDir) || null;
+  }
+
+  function renderRunInspector(messages, messageId) {
+    const message = selectedRunMessage(messages, messageId);
+    if (!message || !message.run) {
+      return '<div class="emptyBlock">Pick an assistant run from the chat transcript to inspect it here.</div>';
+    }
+    const run = message.run;
+    const timeline = Array.isArray(run.traceEvents) && run.traceEvents.length
+      ? '<div class="runTimeline">' + run.traceEvents.map((event) => {
+          const meta = event.metadata && typeof event.metadata === "object"
+            ? '<pre class="runMeta">' + escapeHtml(JSON.stringify(event.metadata, null, 2)) + "</pre>"
+            : "";
+          return '<article class="runEvent"><div class="runEventHead"><div class="runEventLabel">' + escapeHtml(event.label || event.eventType || "event") + '</div><div class="runEventMeta">' + escapeHtml([event.phase, event.status].filter(Boolean).join(" • ")) + '</div></div>' + meta + "</article>";
+        }).join("") + "</div>"
+      : '<div class="emptyBlock">No structured trace data was captured for this run.</div>';
+    const structured = Array.isArray(run.structuredEdits) && run.structuredEdits.length
+      ? '<div class="runStructuredList">' + run.structuredEdits.map((edit) => {
+          const targetBits = [];
+          if (edit.targetFile) {
+            targetBits.push(edit.targetFile);
+          }
+          if (edit.target?.symbolName) {
+            targetBits.push(edit.target.symbolName);
+          }
+          if (edit.range?.startLine) {
+            targetBits.push("line " + edit.range.startLine);
+          }
+          const notes = []
+            .concat(Array.isArray(edit.preconditions) ? edit.preconditions : [])
+            .concat(Array.isArray(edit.postconditions) ? edit.postconditions : [])
+            .concat(Array.isArray(edit.fallbackNotes) ? edit.fallbackNotes : []);
+          return '<article class="runStructuredItem"><div class="runStructuredHead"><div class="runStructuredTitle">' + escapeHtml(edit.description || edit.op || "structured edit") + '</div><div class="runEventMeta">' + escapeHtml([edit.language, edit.op].filter(Boolean).join(" • ")) + '</div></div>' + (targetBits.length ? '<div class="pendingMeta">' + escapeHtml(targetBits.join(" • ")) + '</div>' : "") + (notes.length ? '<div class="runBulletList">' + notes.slice(0, 4).map((note) => '<div class="runBullet">' + escapeHtml(note) + "</div>").join("") + "</div>" : "") + '</article>';
+        }).join("") + "</div>"
+      : '<div class="emptyBlock">This run does not expose structured edit operations.</div>';
+    const logs = [];
+    if (run.applyLog) {
+      logs.push('<div class="runLogBlock"><div class="paletteLabel">Apply log</div><pre class="runMeta">' + escapeHtml(run.applyLog) + "</pre></div>");
+    }
+    if (run.validationLog) {
+      logs.push('<div class="runLogBlock"><div class="paletteLabel">Validation log</div><pre class="runMeta">' + escapeHtml(run.validationLog) + "</pre></div>");
+    }
+    return [
+      '<div class="runSummaryGrid">',
+      '<article class="summaryCard"><div class="summaryLabel">Artifact</div><div class="summaryValue">' + escapeHtml(run.artifactVersion || "v1") + "</div></article>",
+      '<article class="summaryCard"><div class="summaryLabel">Validation</div><div class="summaryValue">' + escapeHtml(run.validationStatus || run.state || "prepared") + "</div></article>",
+      '<article class="summaryCard"><div class="summaryLabel">Structured ops</div><div class="summaryValue">' + escapeHtml(String(run.structuredEditCount || 0)) + "</div></article>",
+      "</div>",
+      '<div class="runInspectorLayout">',
+      '<div class="runInspectorPrimary"><div class="paletteLabel">Execution timeline</div>' + timeline + "</div>",
+      '<div class="runInspectorSide"><div class="paletteLabel">Structured edit plan</div>' + structured + "</div>",
+      "</div>",
+      message.diffPreview ? '<div class="runLogBlock"><div class="paletteLabel">Diff preview</div>' + renderCompactDiff(message.diffPreview) + "</div>" : "",
+      logs.join(""),
+    ].join("");
   }
 
   function renderTrace(items) {
@@ -458,6 +552,10 @@
     const templateStudio = getRequiredElement("templateStudio");
     /** @type {HTMLElement} */
     const modelStudio = getRequiredElement("modelStudio");
+    /** @type {HTMLElement} */
+    const runStudio = getRequiredElement("runStudio");
+    /** @type {HTMLElement} */
+    const runInspectorBody = getRequiredElement("runInspectorBody");
     /** @type {HTMLElement | null} */
     const composerWrap = typeof document.querySelector === "function" ? /** @type {HTMLElement | null} */ (document.querySelector(".composerWrap")) : null;
     /** @type {HTMLElement | null} */
@@ -575,7 +673,9 @@
       modelStoreList &&
       studioSurface &&
       templateStudio &&
-      modelStudio
+      modelStudio &&
+      runStudio &&
+      runInspectorBody
     );
 
     if (bootSentinel) {
@@ -608,6 +708,7 @@
           settingsOpen: false,
           selectedNodeId: "",
           workspaceMode: "chat",
+          selectedRunMessageId: "",
         };
       }
       return {
@@ -617,9 +718,10 @@
         modelProfile: ["fast", "balanced", "deep", "max"].includes(String(raw.modelProfile || "").toLowerCase()) ? String(raw.modelProfile).toLowerCase() : "balanced",
         settingsOpen: !!raw.settingsOpen,
         selectedNodeId: typeof raw.selectedNodeId === "string" ? raw.selectedNodeId : "",
-        workspaceMode: ["chat", "settings", "template", "models"].includes(String(raw.workspaceMode || "").toLowerCase())
+        workspaceMode: ["chat", "settings", "template", "models", "run"].includes(String(raw.workspaceMode || "").toLowerCase())
           ? String(raw.workspaceMode).toLowerCase()
           : "chat",
+        selectedRunMessageId: typeof raw.selectedRunMessageId === "string" ? raw.selectedRunMessageId : "",
       };
     })();
 
@@ -650,7 +752,7 @@
     }
 
     function setWorkspaceMode(mode) {
-      const nextMode = ["chat", "settings", "template", "models"].includes(String(mode || "").toLowerCase())
+      const nextMode = ["chat", "settings", "template", "models", "run"].includes(String(mode || "").toLowerCase())
         ? String(mode).toLowerCase()
         : "chat";
       saveViewState({ workspaceMode: nextMode });
@@ -681,9 +783,14 @@
       if (modelStudio) {
         modelStudio.classList.toggle("hidden", nextMode !== "models");
       }
+      if (runStudio) {
+        runStudio.classList.toggle("hidden", nextMode !== "run");
+      }
       if (studioTitle) {
         studioTitle.textContent = nextMode === "models"
           ? "Model Manager"
+          : nextMode === "run"
+            ? "Run Inspector"
           : nextMode === "settings"
             ? "Workspace Settings"
             : "Template Designer";
@@ -691,14 +798,16 @@
       if (studioMeta) {
         studioMeta.textContent = nextMode === "models"
           ? "Manage registered models and keep template references explicit."
+          : nextMode === "run"
+            ? "Inspect the structured edit plan, execution trace, and validation details for this run."
           : nextMode === "settings"
             ? "Review templates, choose the active surface, and jump into the dedicated editors."
             : "Inspect and shape the active DockPipe reasoning surface.";
       }
       if (studioBackBtn) {
-        const showBackButton = nextMode === "template" || nextMode === "models";
+        const showBackButton = nextMode === "template" || nextMode === "models" || nextMode === "run";
         studioBackBtn.classList.toggle("hidden", !showBackButton);
-        studioBackBtn.textContent = showBackButton ? "Back to settings" : "Back to chat";
+        studioBackBtn.textContent = nextMode === "template" || nextMode === "models" ? "Back to settings" : "Back to chat";
       }
     }
 
@@ -801,6 +910,7 @@
           : "No models registered yet.";
       }
       modelStoreList.innerHTML = renderModelStore(nextState.modelStore || { entries: [] });
+      runInspectorBody.innerHTML = renderRunInspector(nextState.messages || [], viewState.selectedRunMessageId || "");
 
       if (!node) {
         inspectorTarget.textContent = locked ? "Locked template" : "Template";
@@ -1229,6 +1339,13 @@
       }
 
       transcript.addEventListener("click", (event) => {
+        const runTarget = event.target instanceof HTMLElement ? event.target.closest("[data-run-inspect]") : null;
+        if (runTarget) {
+          saveViewState({ selectedRunMessageId: runTarget.getAttribute("data-run-inspect") || "", workspaceMode: "run" });
+          renderSettings(currentState);
+          setWorkspaceMode("run");
+          return;
+        }
         const target = event.target instanceof HTMLElement ? event.target.closest("[data-pending-action]") : null;
         if (!target) {
           return;
@@ -1248,6 +1365,11 @@
         }
         if (msg.type === "forceOpenSettings") {
           openStudio(msg.mode === "models" ? "models" : msg.mode === "template" ? "template" : "settings");
+        }
+        if (msg.type === "focusRunInspector" && msg.messageId) {
+          saveViewState({ selectedRunMessageId: String(msg.messageId), workspaceMode: "run" });
+          renderSettings(currentState);
+          setWorkspaceMode("run");
         }
         if (msg.type === "done") {
           prompt.value = "";

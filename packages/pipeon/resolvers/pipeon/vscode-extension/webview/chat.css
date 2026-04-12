@@ -777,6 +777,78 @@ textarea {
   align-items: center;
   flex-wrap: wrap;
 }
+.runInspectorBody {
+  display: grid;
+  gap: 12px;
+}
+.runSummaryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.runInspectorLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);
+  gap: 12px;
+}
+.runInspectorPrimary,
+.runInspectorSide,
+.runLogBlock,
+.runEvent,
+.runStructuredItem {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--vscode-editorWidget-background) 94%, transparent);
+}
+.runInspectorPrimary,
+.runInspectorSide,
+.runLogBlock {
+  padding: 12px;
+}
+.runTimeline,
+.runStructuredList,
+.runBulletList {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+.runEvent,
+.runStructuredItem {
+  padding: 10px;
+}
+.runEventHead,
+.runStructuredHead {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-start;
+}
+.runEventLabel,
+.runStructuredTitle {
+  font-size: 12px;
+  font-weight: 700;
+}
+.runEventMeta {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+.runMeta {
+  margin: 8px 0 0;
+  padding: 10px;
+  overflow: auto;
+  border-radius: 10px;
+  border: 1px solid var(--vscode-panel-border);
+  background: color-mix(in srgb, var(--vscode-textCodeBlock-background, #111) 92%, transparent);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+.runBullet {
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+  line-height: 1.45;
+}
 @media (max-width: 520px) {
   .titleRow, .actions {
     flex-direction: column;
@@ -797,7 +869,9 @@ textarea {
   .designerLayout {
     grid-template-columns: 1fr;
   }
+  .runSummaryGrid,
   .modelStudioLayout,
+  .runInspectorLayout,
   .settingsSummaryGrid {
     grid-template-columns: 1fr;
   }

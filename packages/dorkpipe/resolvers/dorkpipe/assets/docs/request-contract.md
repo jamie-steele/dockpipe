@@ -1,6 +1,6 @@
 # DorkPipe Request Contract
 
-First-pass request/stream contract for `dorkpipe request`.
+Structured request/stream contract for `dorkpipe request`.
 
 ## Request
 
@@ -29,7 +29,7 @@ Each line on stdout is JSON:
 
 ```json
 {
-  "contract_version": "v1",
+  "contract_version": "v2",
   "request_id": "req_123",
   "type": "routed",
   "display_text": "Route: edit",
@@ -72,6 +72,10 @@ Allowed metadata examples:
 - `validation_status`
 - `artifact_dir`
 - `patch_path`
+- `trace_path`
+- `artifact_version`
+- `structured_edit_count`
+- `structured_edit_types`
 - `ready_to_apply`
 
 Not allowed in normal UI mode:
@@ -93,9 +97,11 @@ Typical contents:
 
 - `request.json`
 - `prompt.md`
+- `plan.json`
 - `model-response.txt`
 - `artifact.json`
 - `patch.diff`
+- `trace.jsonl`
 - `verify-patch.log`
 - `apply.log`
 - `post-apply-validation.log`
@@ -103,7 +109,7 @@ Typical contents:
 ## Confirmation Flow
 
 1. `dorkpipe request --execute` routes to `edit`
-2. DorkPipe prepares and validates a patch
+2. DorkPipe prepares and validates a structured artifact plus a patch preview
 3. DorkPipe emits `ready_to_apply` with safe metadata only
 4. Pipeon asks the user for confirmation
 5. Pipeon calls:
@@ -112,4 +118,4 @@ Typical contents:
 dorkpipe apply-edit --workdir /repo --artifact-dir bin/.dockpipe/packages/dorkpipe/edit/<request-id>
 ```
 
-6. DorkPipe applies and validates the prepared artifact
+6. DorkPipe applies structured edits when safe, otherwise falls back to the prepared patch, then validates the result

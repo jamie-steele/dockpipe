@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -130,5 +131,121 @@ func TestParseEditArtifact_AcceptsStringTargetsAndChecks(t *testing.T) {
 	}
 	if len(artifact.Validations) != 2 {
 		t.Fatalf("unexpected validations: %#v", artifact.Validations)
+	}
+}
+
+func TestParseEditArtifact_AcceptsStructuredEdits(t *testing.T) {
+	t.Parallel()
+	text := `{
+  "summary": "update settings renderer",
+  "target_files": ["src/index.ts"],
+  "patch": "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1 +1 @@\n-old\n+new\n",
+  "structured_edits": [
+    {
+      "id": "replace_range-src-index-ts-1",
+      "op": "replace_range",
+      "language": "typescript",
+      "target_file": "src/index.ts",
+      "description": "Update function renderSettings in src/index.ts.",
+      "target": {
+        "kind": "function",
+        "symbol_name": "renderSettings",
+        "symbol_kind": "function"
+      },
+      "range": {
+        "start_line": 1,
+        "old_line_count": 1,
+        "new_line_count": 1
+      },
+      "old_text": "old\n",
+      "new_text": "new\n"
+    }
+  ]
+}`
+	artifact, diag, err := parseEditArtifact(text)
+	if err != nil {
+		t.Fatalf("parseEditArtifact() error = %v", err)
+	}
+	if diag == nil || diag.StructuredEditsSource != "structured_edits" {
+		t.Fatalf("unexpected diagnostics: %#v", diag)
+	}
+	if len(artifact.StructuredEdits) != 1 {
+		t.Fatalf("expected structured edit, got %#v", artifact.StructuredEdits)
+	}
+	if artifact.StructuredEdits[0].Target.SymbolName != "renderSettings" {
+		t.Fatalf("unexpected structured target: %#v", artifact.StructuredEdits[0].Target)
+	}
+}
+
+func TestApplyStructuredEdits_ReplaceRange(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	target := filepath.Join(root, "src", "index.ts")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(target, []byte("const value = 1;\nconsole.log(value);\n"), 0o644); err != nil {
+		t.Fatalf("write before: %v", err)
+	}
+	artifact := &editModelArtifact{
+		ArtifactVersion: editArtifactVersion,
+		Summary:         "update console line",
+		TargetFiles:     []string{"src/index.ts"},
+		Patch:           "diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -2 +2 @@\n-console.log(value);\n+console.log('done');\n",
+		StructuredEdits: []editStructuredEdit{
+			{
+				ID:         "replace_range-src-index-ts-1",
+				Op:         "replace_range",
+				Language:   "typescript",
+				TargetFile: "src/index.ts",
+				Range: &editStructuredRange{
+					StartLine:    2,
+					OldLineCount: 1,
+					NewLineCount: 1,
+				},
+				OldText: "console.log(value);\n",
+				NewText: "console.log('done');\n",
+			},
+		},
+	}
+	output, err := applyStructuredEdits(root, artifact)
+	if err != nil {
+		t.Fatalf("applyStructuredEdits() error = %v", err)
+	}
+	if output == "" {
+		t.Fatalf("expected apply output")
+	}
+	got, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read after: %v", err)
+	}
+	if string(got) != "const value = 1;\nconsole.log('done');\n" {
+		t.Fatalf("unexpected file contents: %q", string(got))
+	}
+}
+
+func TestPrepareArtifactForStorage_DerivesStructuredEditsFromCreatedFiles(t *testing.T) {
+	t.Parallel()
+	artifact := &editModelArtifact{
+		Summary:     "create readme",
+		TargetFiles: []string{"README.md"},
+		Patch:       "diff --git a/README.md b/README.md\nnew file mode 100644\n--- /dev/null\n+++ b/README.md\n@@ -0,0 +1 @@\n+hello\n",
+		CreatedFiles: map[string]string{
+			"README.md": "hello\n",
+		},
+	}
+	prepared := prepareArtifactForStorage("", artifact)
+	if prepared.ArtifactVersion != editArtifactVersion {
+		t.Fatalf("ArtifactVersion = %q, want %q", prepared.ArtifactVersion, editArtifactVersion)
+	}
+	if len(prepared.StructuredEdits) == 0 {
+		t.Fatalf("expected structured edits to be derived")
+	}
+	body, err := json.Marshal(prepared)
+	if err != nil {
+		t.Fatalf("marshal prepared artifact: %v", err)
+	}
+	if !json.Valid(body) {
+		t.Fatalf("prepared artifact should marshal as valid JSON")
 	}
 }

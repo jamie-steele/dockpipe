@@ -149,7 +149,34 @@ const context = {
 vm.createContext(context);
 getElement("pipeon-initial-state").textContent = JSON.stringify({
   shellVersion: "reasoning-templates-v1",
-  messages: [{ id: "m1", role: "assistant", html: "<p>hi</p>" }],
+  messages: [{
+    id: "m1",
+    role: "assistant",
+    html: "<p>hi</p>",
+    run: {
+      artifactDir: "bin/.dockpipe/packages/dorkpipe/edit/req_123",
+      artifactVersion: "v2",
+      state: "prepared",
+      validationStatus: "patch_applies",
+      structuredEditCount: 1,
+      structuredEdits: [{
+        id: "replace_range-src-index-ts-1",
+        op: "replace_range",
+        language: "typescript",
+        targetFile: "src/index.ts",
+        description: "Update function renderSettings in src/index.ts.",
+        target: { kind: "function", symbolName: "renderSettings", symbolKind: "function" },
+        range: { startLine: 10, oldLineCount: 3, newLineCount: 4 },
+      }],
+      traceEvents: [{
+        requestId: "req_123",
+        phase: "edit",
+        eventType: "planning",
+        label: "Planning edit strategy",
+        metadata: { candidate_count: 2 },
+      }],
+    },
+  }],
   reasoningTemplates: [{ id: "dockpipe.default", name: "DockPipe Default", locked: true, builtIn: true }],
   activeTemplate: { id: "dockpipe.default", name: "DockPipe Default" },
   activeTemplateId: "dockpipe.default",
@@ -227,6 +254,7 @@ const settingsStudio = getElement("settingsStudio");
 const openModelManagerBtn = getElement("openModelManagerBtn");
 const studioBackBtn = getElement("studioBackBtn");
 const headerActions = getElement("headerActions");
+const runStudio = getElement("runStudio");
 if (!settingsBtn.listeners.has("click")) {
   throw new Error("Settings button did not attach a click handler.");
 }
@@ -270,6 +298,16 @@ if (!settingsStudio.className.includes("hidden")) {
 }
 if (studioBackBtn.className.includes("hidden")) {
   throw new Error("Model manager view should show the back button.");
+}
+
+for (const handler of messageHandlers) {
+  handler({ data: { type: "focusRunInspector", messageId: "m1" } });
+}
+if (runStudio.className.includes("hidden")) {
+  throw new Error("Focusing the run inspector did not reveal the run studio surface.");
+}
+if (studioBackBtn.className.includes("hidden")) {
+  throw new Error("Run inspector should show the back button.");
 }
 
 console.log("webview smoke passed");

@@ -331,6 +331,9 @@ func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	if numCtx > 0 {
 		args = append(args, "--num-ctx", fmt.Sprintf("%d", numCtx))
 	}
+	if strings.TrimSpace(reqID) != "" {
+		args = append(args, "--parent-request-id", reqID)
+	}
 	cmd := exec.CommandContext(ctx, exe, args...)
 	cmd.Dir = root
 	cmd.Env = os.Environ()

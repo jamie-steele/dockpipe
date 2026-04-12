@@ -13,8 +13,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -27,7 +27,7 @@ const (
 	maxEditSelectionChars = 2400
 	maxEditSnippetPerFile = 1200
 	maxEditCandidateCount = 4
-	editContractVersion   = "v1"
+	editContractVersion   = "v2"
 	maxArtifactRepairPass = 2
 	maxEditPromptChars    = 12000
 	maxEditPlanChars      = 1600
@@ -54,12 +54,14 @@ type editError struct {
 }
 
 type editModelArtifact struct {
-	Summary      string            `json:"summary"`
-	TargetFiles  []string          `json:"target_files"`
-	Patch        string            `json:"patch"`
-	Validations  []string          `json:"validations,omitempty"`
-	HelperScript *editHelperScript `json:"helper_script,omitempty"`
-	CreatedFiles map[string]string `json:"created_files,omitempty"`
+	ArtifactVersion string               `json:"artifact_version,omitempty"`
+	Summary         string               `json:"summary"`
+	TargetFiles     []string             `json:"target_files"`
+	Patch           string               `json:"patch"`
+	StructuredEdits []editStructuredEdit `json:"structured_edits,omitempty"`
+	Validations     []string             `json:"validations,omitempty"`
+	HelperScript    *editHelperScript    `json:"helper_script,omitempty"`
+	CreatedFiles    map[string]string    `json:"created_files,omitempty"`
 }
 
 type editRequestRecord struct {
@@ -96,13 +98,14 @@ type editHelperResponse struct {
 }
 
 type artifactParseDiagnostics struct {
-	AppliedRepairs     []string `json:"applied_repairs,omitempty"`
-	PatchSource        string   `json:"patch_source,omitempty"`
-	TargetFilesSource  string   `json:"target_files_source,omitempty"`
-	ValidationsSource  string   `json:"validations_source,omitempty"`
-	HelperScriptSource string   `json:"helper_script_source,omitempty"`
-	CreatedFilesSource string   `json:"created_files_source,omitempty"`
-	NormalizedPatch    bool     `json:"normalized_patch,omitempty"`
+	AppliedRepairs        []string `json:"applied_repairs,omitempty"`
+	StructuredEditsSource string   `json:"structured_edits_source,omitempty"`
+	PatchSource           string   `json:"patch_source,omitempty"`
+	TargetFilesSource     string   `json:"target_files_source,omitempty"`
+	ValidationsSource     string   `json:"validations_source,omitempty"`
+	HelperScriptSource    string   `json:"helper_script_source,omitempty"`
+	CreatedFilesSource    string   `json:"created_files_source,omitempty"`
+	NormalizedPatch       bool     `json:"normalized_patch,omitempty"`
 }
 
 type packageScaffoldSpec struct {
@@ -139,6 +142,7 @@ func editCmd(argv []string) {
 	model := fs.String("model", "", "Ollama model override")
 	ollamaHost := fs.String("ollama-host", "", "Ollama host override")
 	numCtx := fs.Int("num-ctx", 0, "Ollama context window override")
+	parentRequestID := fs.String("parent-request-id", "", "parent request id when request delegates into edit")
 	_ = fs.Parse(argv)
 	if strings.TrimSpace(*message) == "" {
 		fmt.Fprintln(os.Stderr, "edit: --message is required")
@@ -185,6 +189,8 @@ func editCmd(argv []string) {
 		emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Could not create artifact directory: %v", err), false)
 		os.Exit(1)
 	}
+	beginArtifactTrace(absWd, artifactsDir, "edit", strings.TrimSpace(*parentRequestID))
+	defer endArtifactTrace()
 
 	ctx := context.Background()
 	emitEditEvent(reqID, "received", "Received edit request", 0.05, nil)
@@ -234,6 +240,8 @@ func applyEditCmd(argv []string) {
 	}
 	reqID := fmt.Sprintf("req_%d", time.Now().UnixNano())
 	ctx := context.Background()
+	beginArtifactTrace(absWd, absArtifactDir, "apply", "")
+	defer endArtifactTrace()
 	emitEditEvent(reqID, "received", "Received apply request", 0.05, nil)
 	artifact, patchPath, err := loadPreparedArtifact(absArtifactDir)
 	if err != nil {
@@ -389,20 +397,17 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		}
 		parseDiag = nil
 	}
-	normalizedPatch := normalizeGeneratedPatch(artifact.Patch)
-	if parseDiag != nil && normalizedPatch != artifact.Patch {
+	if parseDiag != nil && normalizeGeneratedPatch(artifact.Patch) != artifact.Patch {
 		parseDiag.NormalizedPatch = true
 	}
-	artifact.Patch = normalizedPatch
-	writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
+	preparedArtifact, patchPath, err := writePreparedArtifactBundle(root, artifactsDir, artifact, "")
+	if err != nil {
+		emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Could not persist patch artifact: %v", err), false)
+		return nil, "", "", err
+	}
+	artifact = preparedArtifact
 	if parseDiag != nil {
 		writeJSON(filepath.Join(artifactsDir, "artifact-parse.json"), parseDiag)
-	}
-
-	patchPath := filepath.Join(artifactsDir, "patch.diff")
-	if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
-		emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Could not write patch artifact: %v", err), false)
-		return nil, "", "", err
 	}
 
 	emitEditEvent(reqID, "validating", "Checking patch applicability", 0.62, nil)
@@ -414,12 +419,13 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 			emitEditError(reqID, "VALIDATION_FAILED", "The generated patch did not apply cleanly.", true)
 			return nil, "", "", err
 		}
-		writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
-		patchPath = filepath.Join(artifactsDir, "patch.diff")
-		if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
-			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Could not write repaired patch artifact: %v", err), false)
+		preparedArtifact, preparedPatchPath, persistErr := writePreparedArtifactBundle(root, artifactsDir, artifact, "")
+		if persistErr != nil {
+			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Could not write repaired patch artifact: %v", persistErr), false)
 			return nil, "", "", err
 		}
+		artifact = preparedArtifact
+		patchPath = preparedPatchPath
 		emitEditEvent(reqID, "validating", "Re-checking repaired patch", 0.7, nil)
 		verifyOutput, err = runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
 		if err != nil {
@@ -434,9 +440,15 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 
 func emitReadyToApply(reqID, root, artifactsDir, patchPath string, artifact *editModelArtifact) {
 	metadata := map[string]any{
-		"artifact_dir": relativeTo(root, artifactsDir),
-		"patch_path":   relativeTo(root, patchPath),
-		"target_files": artifact.TargetFiles,
+		"artifact_dir":          relativeTo(root, artifactsDir),
+		"patch_path":            relativeTo(root, patchPath),
+		"target_files":          artifact.TargetFiles,
+		"trace_path":            relativeTo(root, filepath.Join(artifactsDir, "trace.jsonl")),
+		"artifact_version":      emptyFallback(artifact.ArtifactVersion, editArtifactVersion),
+		"structured_edit_count": len(artifact.StructuredEdits),
+	}
+	if len(artifact.StructuredEdits) > 0 {
+		metadata["structured_edit_types"] = uniqueStructuredEditOps(artifact.StructuredEdits)
 	}
 	if artifact.HelperScript != nil {
 		helperPath := filepath.Join(artifactsDir, "sidecar", "helper.sh")
@@ -447,13 +459,16 @@ func emitReadyToApply(reqID, root, artifactsDir, patchPath string, artifact *edi
 	}
 	emitEditEvent(reqID, "ready_to_apply", "Prepared a validated patch artifact", 0.8, metadata)
 	emitEditDone(reqID, fmt.Sprintf("%s\n\nPrepared patch artifact at `%s`.", strings.TrimSpace(artifact.Summary), relativeTo(root, patchPath)), map[string]any{
-		"route":              "edit",
-		"files_touched":      len(artifact.TargetFiles),
-		"validation_status":  "patch_applies",
-		"artifact_dir":       relativeTo(root, artifactsDir),
-		"patch_path":         relativeTo(root, patchPath),
-		"ready_to_apply":     true,
-		"helper_script_used": artifact.HelperScript != nil,
+		"route":                 "edit",
+		"files_touched":         len(artifact.TargetFiles),
+		"validation_status":     "patch_applies",
+		"artifact_dir":          relativeTo(root, artifactsDir),
+		"patch_path":            relativeTo(root, patchPath),
+		"trace_path":            relativeTo(root, filepath.Join(artifactsDir, "trace.jsonl")),
+		"artifact_version":      emptyFallback(artifact.ArtifactVersion, editArtifactVersion),
+		"structured_edit_count": len(artifact.StructuredEdits),
+		"ready_to_apply":        true,
+		"helper_script_used":    artifact.HelperScript != nil,
 	})
 }
 
@@ -468,6 +483,9 @@ func loadPreparedArtifact(artifactDir string) (*editModelArtifact, string, error
 	if err := json.Unmarshal(b, &artifact); err != nil {
 		return nil, "", err
 	}
+	if strings.TrimSpace(artifact.ArtifactVersion) == "" {
+		artifact.ArtifactVersion = "v1"
+	}
 	if err := validateEditArtifact(&artifact); err != nil {
 		return nil, "", err
 	}
@@ -475,6 +493,29 @@ func loadPreparedArtifact(artifactDir string) (*editModelArtifact, string, error
 }
 
 func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patchPath string, artifact *editModelArtifact) error {
+	if len(artifact.StructuredEdits) > 0 {
+		emitEditEvent(reqID, "applying", "Applying structured edits", 0.84, map[string]any{
+			"structured_edit_count": len(artifact.StructuredEdits),
+		})
+		structuredOutput, structuredErr := applyStructuredEdits(root, artifact)
+		if structuredErr == nil {
+			_ = os.WriteFile(filepath.Join(artifactsDir, "apply.log"), []byte(structuredOutput), 0o644)
+			validationOutput, validationStatus := runPostApplyValidation(ctx, root, artifact.TargetFiles)
+			_ = os.WriteFile(filepath.Join(artifactsDir, "post-apply-validation.log"), []byte(validationOutput), 0o644)
+			emitEditDone(reqID, buildAppliedSummary(artifact, root, artifactsDir, validationStatus), map[string]any{
+				"route":                 "edit",
+				"files_touched":         len(artifact.TargetFiles),
+				"validation_status":     validationStatus,
+				"artifact_dir":          relativeTo(root, artifactsDir),
+				"apply_mode":            "structured",
+				"structured_edit_count": len(artifact.StructuredEdits),
+			})
+			return nil
+		}
+		emitEditEvent(reqID, "applying", "Structured apply fell back to unified diff", 0.86, map[string]any{
+			"reason": structuredErr.Error(),
+		})
+	}
 	emitEditEvent(reqID, "applying", "Applying verified patch", 0.88, nil)
 	applyOutput, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/apply-unified-patch.sh", patchPath, root)
 	if err != nil {
@@ -486,11 +527,12 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 			_ = os.WriteFile(filepath.Join(artifactsDir, "post-apply-validation.log"), []byte(validationOutput), 0o644)
 
 			emitEditDone(reqID, buildAppliedSummary(artifact, root, artifactsDir, validationStatus), map[string]any{
-				"route":             "edit",
-				"files_touched":     len(artifact.TargetFiles),
-				"validation_status": validationStatus,
-				"artifact_dir":      relativeTo(root, artifactsDir),
-				"apply_mode":        "deterministic-create-fallback",
+				"route":                 "edit",
+				"files_touched":         len(artifact.TargetFiles),
+				"validation_status":     validationStatus,
+				"artifact_dir":          relativeTo(root, artifactsDir),
+				"apply_mode":            "deterministic-create-fallback",
+				"structured_edit_count": len(artifact.StructuredEdits),
 			})
 			return nil
 		}
@@ -504,10 +546,12 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 	_ = os.WriteFile(filepath.Join(artifactsDir, "post-apply-validation.log"), []byte(validationOutput), 0o644)
 
 	emitEditDone(reqID, buildAppliedSummary(artifact, root, artifactsDir, validationStatus), map[string]any{
-		"route":             "edit",
-		"files_touched":     len(artifact.TargetFiles),
-		"validation_status": validationStatus,
-		"artifact_dir":      relativeTo(root, artifactsDir),
+		"route":                 "edit",
+		"files_touched":         len(artifact.TargetFiles),
+		"validation_status":     validationStatus,
+		"artifact_dir":          relativeTo(root, artifactsDir),
+		"apply_mode":            "patch",
+		"structured_edit_count": len(artifact.StructuredEdits),
 	})
 	return nil
 }
@@ -548,6 +592,7 @@ func emitEditEvent(requestID, typ, text string, progress float64, metadata map[s
 		Metadata:        metadata,
 	}
 	writeEvent(ev)
+	recordTraceEvent(ev)
 }
 
 func emitEditDone(requestID, userMessage string, metadata map[string]any) {
@@ -560,6 +605,7 @@ func emitEditDone(requestID, userMessage string, metadata map[string]any) {
 		Metadata:        metadata,
 	}
 	writeEvent(ev)
+	recordTraceEvent(ev)
 }
 
 func emitEditError(requestID, code, message string, retryable bool) {
@@ -576,6 +622,7 @@ func emitEditError(requestID, code, message string, retryable bool) {
 		},
 	}
 	writeEvent(ev)
+	recordTraceEvent(ev)
 }
 
 func writeEvent(ev editEvent) {
@@ -1473,13 +1520,20 @@ func parseEditArtifact(text string) (*editModelArtifact, *artifactParseDiagnosti
 		return nil, diag, err
 	}
 	diag.CreatedFilesSource = createdSource
+	structuredEdits, structuredSource, err := parseJSONStructuredEditsField(raw, "structured_edits", "structuredEdits")
+	if err != nil {
+		return nil, diag, err
+	}
+	diag.StructuredEditsSource = structuredSource
 	return &editModelArtifact{
-		Summary:      summary,
-		TargetFiles:  targetFiles,
-		Patch:        patch,
-		Validations:  validations,
-		HelperScript: helperScript,
-		CreatedFiles: createdFiles,
+		ArtifactVersion: editArtifactVersion,
+		Summary:         summary,
+		TargetFiles:     targetFiles,
+		Patch:           patch,
+		StructuredEdits: structuredEdits,
+		Validations:     validations,
+		HelperScript:    helperScript,
+		CreatedFiles:    createdFiles,
 	}, diag, nil
 }
 
@@ -1558,6 +1612,21 @@ func parseJSONHelperScriptField(raw map[string]json.RawMessage, keys ...string) 
 			return &helper, key, nil
 		}
 		return nil, key, fmt.Errorf("field %q was not a helper_script object", key)
+	}
+	return nil, "", nil
+}
+
+func parseJSONStructuredEditsField(raw map[string]json.RawMessage, keys ...string) ([]editStructuredEdit, string, error) {
+	for _, key := range keys {
+		v, ok := raw[key]
+		if !ok {
+			continue
+		}
+		var edits []editStructuredEdit
+		if err := json.Unmarshal(v, &edits); err == nil {
+			return edits, key, nil
+		}
+		return nil, key, fmt.Errorf("field %q was not a structured_edits array", key)
 	}
 	return nil, "", nil
 }
@@ -1820,6 +1889,11 @@ func validateEditArtifact(artifact *editModelArtifact) error {
 			return fmt.Errorf("unsafe target file %q", file)
 		}
 	}
+	if len(artifact.StructuredEdits) > 0 {
+		if err := validateStructuredEdits(artifact.StructuredEdits); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -1974,13 +2048,11 @@ func tryDeterministicEditPrimitive(reqID, root, message, activeFile, artifactsDi
 			Patch:       buildNoopPatch(targetFile),
 			Validations: []string{"No change was needed."},
 		}
-		patchPath := filepath.Join(artifactsDir, "patch.diff")
-		if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
+		prepared, patchPath, err := writePreparedArtifactBundle(root, artifactsDir, artifact, "No patch generated; requested text already present.")
+		if err != nil {
 			return nil, "", true, err
 		}
-		writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
-		_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte("No patch generated; requested text already present."), 0o644)
-		return artifact, patchPath, true, nil
+		return prepared, patchPath, true, nil
 	}
 
 	artifact := &editModelArtifact{
@@ -2071,7 +2143,7 @@ func tryDeterministicFileCreatePrimitive(reqID, root, message, artifactsDir stri
 	if err := validateEditArtifact(artifact); err != nil {
 		return nil, "", true, err
 	}
-	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic file creation primitive selected.")
+	return writePreparedDeterministicArtifact(root, artifactsDir, artifact, "Deterministic file creation primitive selected.")
 }
 
 func tryDeterministicAnchorInsertPrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
@@ -2105,7 +2177,7 @@ func tryDeterministicAnchorInsertPrimitive(reqID, root, message, activeFile, art
 	if err := validateEditArtifact(artifact); err != nil {
 		return nil, "", true, err
 	}
-	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic anchor insert primitive selected.")
+	return writePreparedDeterministicArtifact(root, artifactsDir, artifact, "Deterministic anchor insert primitive selected.")
 }
 
 func tryDeterministicScopedRenamePrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
@@ -2140,7 +2212,7 @@ func tryDeterministicScopedRenamePrimitive(reqID, root, message, activeFile, art
 	if err := validateEditArtifact(artifact); err != nil {
 		return nil, "", true, err
 	}
-	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic scoped rename primitive selected.")
+	return writePreparedDeterministicArtifact(root, artifactsDir, artifact, "Deterministic scoped rename primitive selected.")
 }
 
 func tryDeterministicLiteralReplacePrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
@@ -2176,7 +2248,7 @@ func tryDeterministicLiteralReplacePrimitive(reqID, root, message, activeFile, a
 	if err := validateEditArtifact(artifact); err != nil {
 		return nil, "", true, err
 	}
-	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic replace primitive selected.")
+	return writePreparedDeterministicArtifact(root, artifactsDir, artifact, "Deterministic replace primitive selected.")
 }
 
 func tryDeterministicYAMLScalarUpdatePrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
@@ -2210,7 +2282,7 @@ func tryDeterministicYAMLScalarUpdatePrimitive(reqID, root, message, activeFile,
 	if err := validateEditArtifact(artifact); err != nil {
 		return nil, "", true, err
 	}
-	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic YAML field update primitive selected.")
+	return writePreparedDeterministicArtifact(root, artifactsDir, artifact, "Deterministic YAML field update primitive selected.")
 }
 
 func tryDeterministicYAMLListAddPrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
@@ -2244,7 +2316,7 @@ func tryDeterministicYAMLListAddPrimitive(reqID, root, message, activeFile, arti
 	if err := validateEditArtifact(artifact); err != nil {
 		return nil, "", true, err
 	}
-	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic YAML list primitive selected.")
+	return writePreparedDeterministicArtifact(root, artifactsDir, artifact, "Deterministic YAML list primitive selected.")
 }
 
 func tryDeterministicMarkdownSectionPrimitive(reqID, root, message, activeFile, artifactsDir string) (*editModelArtifact, string, bool, error) {
@@ -2278,7 +2350,7 @@ func tryDeterministicMarkdownSectionPrimitive(reqID, root, message, activeFile, 
 	if err := validateEditArtifact(artifact); err != nil {
 		return nil, "", true, err
 	}
-	return writePreparedDeterministicArtifact(artifactsDir, artifact, "Deterministic markdown section primitive selected.")
+	return writePreparedDeterministicArtifact(root, artifactsDir, artifact, "Deterministic markdown section primitive selected.")
 }
 
 func tryDeterministicCollectionScaffoldPrimitive(reqID, root, message, artifactsDir string) (*editModelArtifact, string, bool, error) {
@@ -2337,14 +2409,12 @@ func tryDeterministicCollectionScaffoldPrimitive(reqID, root, message, artifacts
 	return artifact, patchPath, true, nil
 }
 
-func writePreparedDeterministicArtifact(artifactsDir string, artifact *editModelArtifact, verifyText string) (*editModelArtifact, string, bool, error) {
-	writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
-	patchPath := filepath.Join(artifactsDir, "patch.diff")
-	if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
+func writePreparedDeterministicArtifact(root, artifactsDir string, artifact *editModelArtifact, verifyText string) (*editModelArtifact, string, bool, error) {
+	prepared, patchPath, err := writePreparedArtifactBundle(root, artifactsDir, artifact, verifyText)
+	if err != nil {
 		return nil, "", true, err
 	}
-	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyText), 0o644)
-	return artifact, patchPath, true, nil
+	return prepared, patchPath, true, nil
 }
 
 func inferPackageScaffoldSpec(root, message string) (*packageScaffoldSpec, bool) {
@@ -2741,7 +2811,6 @@ func pathBase(value string) string {
 	}
 	return value
 }
-
 
 func extractQuotedText(message string) string {
 	for _, quote := range []string{`"`, `'`, "`"} {

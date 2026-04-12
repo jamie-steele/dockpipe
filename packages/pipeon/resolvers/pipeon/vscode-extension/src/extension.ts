@@ -418,6 +418,15 @@ function buildPreparedEditMessage(readyToApply, pendingAction) {
   if (fileSummary) {
     parts.push(`Files: \`${fileSummary}\`.`);
   }
+  const structuredEditCount = Number(pendingAction?.structuredEditCount || readyToApply?.structured_edit_count || 0);
+  if (structuredEditCount > 0) {
+    const structuredEditTypes = Array.isArray(pendingAction?.structuredEditTypes) && pendingAction.structuredEditTypes.length
+      ? pendingAction.structuredEditTypes
+      : Array.isArray(readyToApply?.structured_edit_types)
+        ? readyToApply.structured_edit_types
+        : [];
+    parts.push(`Structured plan: ${structuredEditCount} op${structuredEditCount === 1 ? "" : "s"}${structuredEditTypes.length ? ` (${structuredEditTypes.join(", ")})` : ""}.`);
+  }
   if (pendingAction?.helperScriptRuntime) {
     parts.push(`Path: bounded sidecar (${pendingAction.helperScriptRuntime}).`);
   } else {
@@ -713,6 +722,10 @@ function sanitizePendingAction(value) {
     title: String(value.title || ""),
     artifactDir: value.artifactDir ? String(value.artifactDir) : "",
     patchPath: value.patchPath ? String(value.patchPath) : "",
+    tracePath: value.tracePath ? String(value.tracePath) : "",
+    artifactVersion: value.artifactVersion ? String(value.artifactVersion) : "",
+    structuredEditCount: Number.isFinite(Number(value.structuredEditCount)) ? Math.max(0, Number(value.structuredEditCount)) : 0,
+    structuredEditTypes: Array.isArray(value.structuredEditTypes) ? value.structuredEditTypes.map((item) => String(item)).slice(0, 8) : [],
     diffPreview: value.diffPreview ? summarizeDiffPreview(String(value.diffPreview)) : "",
     helperScriptPath: value.helperScriptPath ? String(value.helperScriptPath) : "",
     helperScriptPurpose: value.helperScriptPurpose ? String(value.helperScriptPurpose) : "",
@@ -724,6 +737,66 @@ function sanitizePendingAction(value) {
   };
 }
 
+function sanitizeRunRecord(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  return {
+    artifactDir: value.artifactDir ? String(value.artifactDir) : "",
+    patchPath: value.patchPath ? String(value.patchPath) : "",
+    tracePath: value.tracePath ? String(value.tracePath) : "",
+    artifactVersion: value.artifactVersion ? String(value.artifactVersion) : "",
+    summary: value.summary ? clampText(String(value.summary), 1200) : "",
+    state: value.state ? String(value.state) : "",
+    validationStatus: value.validationStatus ? String(value.validationStatus) : "",
+    applyMode: value.applyMode ? String(value.applyMode) : "",
+    targetFiles: Array.isArray(value.targetFiles) ? value.targetFiles.map((item) => String(item)).slice(0, 16) : [],
+    structuredEditCount: Number.isFinite(Number(value.structuredEditCount)) ? Math.max(0, Number(value.structuredEditCount)) : 0,
+    structuredEditTypes: Array.isArray(value.structuredEditTypes) ? value.structuredEditTypes.map((item) => String(item)).slice(0, 8) : [],
+    structuredEdits: Array.isArray(value.structuredEdits)
+      ? value.structuredEdits.map((item) => ({
+          id: item?.id ? String(item.id) : "",
+          op: item?.op ? String(item.op) : "",
+          language: item?.language ? String(item.language) : "",
+          targetFile: item?.targetFile ? String(item.targetFile) : "",
+          description: item?.description ? clampText(String(item.description), 400) : "",
+          target: item?.target && typeof item.target === "object"
+            ? {
+                kind: item.target.kind ? String(item.target.kind) : "",
+                symbolName: item.target.symbolName ? String(item.target.symbolName) : "",
+                symbolKind: item.target.symbolKind ? String(item.target.symbolKind) : "",
+              }
+            : null,
+          range: item?.range && typeof item.range === "object"
+            ? {
+                startLine: Number.isFinite(Number(item.range.startLine)) ? Number(item.range.startLine) : 0,
+                oldLineCount: Number.isFinite(Number(item.range.oldLineCount)) ? Number(item.range.oldLineCount) : 0,
+                newLineCount: Number.isFinite(Number(item.range.newLineCount)) ? Number(item.range.newLineCount) : 0,
+              }
+            : null,
+          preconditions: Array.isArray(item?.preconditions) ? item.preconditions.map((entry) => clampText(String(entry), 180)).slice(0, 4) : [],
+          postconditions: Array.isArray(item?.postconditions) ? item.postconditions.map((entry) => clampText(String(entry), 180)).slice(0, 4) : [],
+          fallbackNotes: Array.isArray(item?.fallbackNotes) ? item.fallbackNotes.map((entry) => clampText(String(entry), 180)).slice(0, 4) : [],
+        })).slice(0, 32)
+      : [],
+    traceEvents: Array.isArray(value.traceEvents)
+      ? value.traceEvents.map((item) => ({
+          requestId: item?.requestId ? String(item.requestId) : "",
+          parentRequestId: item?.parentRequestId ? String(item.parentRequestId) : "",
+          phase: item?.phase ? String(item.phase) : "",
+          eventType: item?.eventType ? String(item.eventType) : "",
+          label: item?.label ? clampText(String(item.label), 240) : "",
+          status: item?.status ? String(item.status) : "",
+          progress: Number.isFinite(Number(item?.progress)) ? Number(item.progress) : 0,
+          metadata: item?.metadata && typeof item.metadata === "object" ? item.metadata : null,
+          timestamp: item?.timestamp ? String(item.timestamp) : "",
+        })).slice(-80)
+      : [],
+    applyLog: value.applyLog ? clampText(String(value.applyLog), 4000) : "",
+    validationLog: value.validationLog ? clampText(String(value.validationLog), 4000) : "",
+  };
+}
+
 function sanitizeMessage(message) {
   return {
     id: String(message?.id || makeId("msg")),
@@ -732,6 +805,7 @@ function sanitizeMessage(message) {
     format: message?.format === "plain" ? "plain" : "markdown",
     createdAt: String(message?.createdAt || nowIso()),
     pendingAction: sanitizePendingAction(message?.pendingAction),
+    run: sanitizeRunRecord(message?.run),
     diffPreview: message?.diffPreview ? summarizeDiffPreview(String(message.diffPreview)) : "",
     liveStatus: message?.liveStatus ? String(message.liveStatus) : "",
     liveTrace: Array.isArray(message?.liveTrace) ? message.liveTrace.map((item) => String(item)).slice(-5) : [],
@@ -952,6 +1026,10 @@ function compactPendingActionForStorage(value) {
     title: pending.title,
     artifactDir: pending.artifactDir,
     patchPath: pending.patchPath,
+    tracePath: pending.tracePath,
+    artifactVersion: pending.artifactVersion,
+    structuredEditCount: pending.structuredEditCount,
+    structuredEditTypes: pending.structuredEditTypes,
     helperScriptPath: pending.helperScriptPath,
     helperScriptPurpose: pending.helperScriptPurpose,
     helperScriptRuntime: pending.helperScriptRuntime,
@@ -970,6 +1048,7 @@ function compactMessageForStorage(message) {
     format: safe.format,
     createdAt: safe.createdAt,
     pendingAction: compactPendingActionForStorage(safe.pendingAction),
+    run: sanitizeRunRecord(safe.run),
     diffPreview: safe.diffPreview ? clampText(safe.diffPreview, 3000) : "",
   };
 }
@@ -1768,6 +1847,7 @@ async function applyPreparedEdit(root, artifactDir, options: ApplyPreparedEditOp
     text: finalEvent?.user_message || "Applied prepared edit.",
     format: "markdown",
     status: "Structured edit applied",
+    metadata: finalEvent?.metadata || {},
   };
 }
 
@@ -1805,6 +1885,125 @@ async function readHelperScriptPreview(root, readyToApply) {
   } catch {
     return "";
   }
+}
+
+async function readJsonIfPresent(target) {
+  try {
+    const text = await fs.readFile(target, "utf8");
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+async function readTextIfPresent(target, limit = 4000) {
+  try {
+    const text = await fs.readFile(target, "utf8");
+    return clampText(text, limit);
+  } catch {
+    return "";
+  }
+}
+
+async function readTraceEvents(tracePath) {
+  if (!tracePath) {
+    return [];
+  }
+  try {
+    const text = await fs.readFile(tracePath, "utf8");
+    return text
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch {
+          return null;
+        }
+      })
+      .filter(Boolean)
+      .slice(-80)
+      .map((entry) => ({
+        requestId: entry.request_id ? String(entry.request_id) : "",
+        parentRequestId: entry.parent_request_id ? String(entry.parent_request_id) : "",
+        phase: entry.phase ? String(entry.phase) : "",
+        eventType: entry.event_type ? String(entry.event_type) : "",
+        label: entry.label ? String(entry.label) : "",
+        status: entry.status ? String(entry.status) : "",
+        progress: Number.isFinite(Number(entry.progress)) ? Number(entry.progress) : 0,
+        metadata: entry.metadata && typeof entry.metadata === "object" ? entry.metadata : null,
+        timestamp: entry.timestamp ? String(entry.timestamp) : "",
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function summarizeStructuredEditForRun(item) {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+  return {
+    id: item.id ? String(item.id) : "",
+    op: item.op ? String(item.op) : "",
+    language: item.language ? String(item.language) : "",
+    targetFile: item.target_file ? String(item.target_file) : "",
+    description: item.description ? String(item.description) : "",
+    target: item.target && typeof item.target === "object" ? {
+      kind: item.target.kind ? String(item.target.kind) : "",
+      symbolName: item.target.symbol_name ? String(item.target.symbol_name) : "",
+      symbolKind: item.target.symbol_kind ? String(item.target.symbol_kind) : "",
+    } : null,
+    range: item.range && typeof item.range === "object" ? {
+      startLine: Number.isFinite(Number(item.range.start_line)) ? Number(item.range.start_line) : 0,
+      oldLineCount: Number.isFinite(Number(item.range.old_line_count)) ? Number(item.range.old_line_count) : 0,
+      newLineCount: Number.isFinite(Number(item.range.new_line_count)) ? Number(item.range.new_line_count) : 0,
+    } : null,
+    preconditions: Array.isArray(item.preconditions) ? item.preconditions.map((entry) => String(entry)).slice(0, 4) : [],
+    postconditions: Array.isArray(item.postconditions) ? item.postconditions.map((entry) => String(entry)).slice(0, 4) : [],
+    fallbackNotes: Array.isArray(item.fallback_notes) ? item.fallback_notes.map((entry) => String(entry)).slice(0, 4) : [],
+  };
+}
+
+async function readRunInspectionData(root, ref, options: AnyRecord = {}) {
+  const relArtifact = String(ref?.artifact_dir || ref?.artifactDir || "").trim();
+  if (!relArtifact) {
+    return null;
+  }
+  const artifactDir = path.isAbsolute(relArtifact) ? relArtifact : path.join(root, relArtifact);
+  const relPatch = String(ref?.patch_path || ref?.patchPath || "").trim();
+  const patchPath = relPatch ? (path.isAbsolute(relPatch) ? relPatch : path.join(root, relPatch)) : path.join(artifactDir, "patch.diff");
+  const relTrace = String(ref?.trace_path || ref?.tracePath || "").trim();
+  const tracePath = relTrace ? (path.isAbsolute(relTrace) ? relTrace : path.join(root, relTrace)) : path.join(artifactDir, "trace.jsonl");
+  const artifact = await readJsonIfPresent(path.join(artifactDir, "artifact.json"));
+  const traceEvents = await readTraceEvents(tracePath);
+  const applyLog = await readTextIfPresent(path.join(artifactDir, "apply.log"));
+  const validationLog = await readTextIfPresent(path.join(artifactDir, "post-apply-validation.log"));
+  const structuredEdits = Array.isArray(artifact?.structured_edits)
+    ? artifact.structured_edits.map(summarizeStructuredEditForRun).filter(Boolean).slice(0, 32)
+    : [];
+  const structuredEditTypes = [...new Set(structuredEdits.map((item) => item.op).filter(Boolean))];
+  const tailEvent = traceEvents[traceEvents.length - 1] || null;
+  const validationStatus = options.validationStatus || tailEvent?.metadata?.validation_status || "";
+  const applyMode = options.applyMode || tailEvent?.metadata?.apply_mode || "";
+  return sanitizeRunRecord({
+    artifactDir: relArtifact,
+    patchPath: relPatch || path.relative(root, patchPath),
+    tracePath: path.relative(root, tracePath),
+    artifactVersion: artifact?.artifact_version || ref?.artifact_version || ref?.artifactVersion || "",
+    summary: artifact?.summary || "",
+    state: options.state || (validationStatus ? "applied" : "prepared"),
+    validationStatus,
+    applyMode,
+    targetFiles: Array.isArray(artifact?.target_files) ? artifact.target_files : (Array.isArray(ref?.target_files) ? ref.target_files : ref?.targetFiles),
+    structuredEditCount: structuredEdits.length,
+    structuredEditTypes,
+    structuredEdits,
+    traceEvents,
+    applyLog,
+    validationLog,
+  });
 }
 
 function looksLikeShellCommand(text) {
@@ -2830,6 +3029,17 @@ function renderChatHtml(webview, state) {
               </div>
             </div>
           </section>
+          <section class="settingsSection hidden" id="runStudio">
+            <div class="sectionHead">
+              <div>
+                <h3>Run Inspector</h3>
+                <p>Inspect the structured edit plan, execution trace, and validation results for a prepared or applied run.</p>
+              </div>
+            </div>
+            <div class="runInspectorBody" id="runInspectorBody">
+              <div class="emptyBlock">Pick an assistant run from the chat transcript to inspect it here.</div>
+            </div>
+          </section>
         </div>
       </section>
       <div class="composerWrap">
@@ -3497,6 +3707,17 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
               <div class="toolbarRow">
                 <button class="btn" id="saveModelEntryBtn" type="button">Save model</button>
               </div>
+            </div>
+          </section>
+          <section class="settingsSection hidden" id="runStudio">
+            <div class="sectionHead">
+              <div>
+                <h3>Run Inspector</h3>
+                <p>Inspect the structured edit plan, execution trace, and validation results for a prepared or applied run.</p>
+              </div>
+            </div>
+            <div class="runInspectorBody" id="runInspectorBody">
+              <div class="emptyBlock">Pick an assistant run from the chat transcript to inspect it here.</div>
             </div>
           </section>
         </div>
@@ -4300,26 +4521,36 @@ class PipeonChatViewProvider {
       assistantMessage.liveTrace = [];
       assistantMessage.text = result.text;
       assistantMessage.format = result.format || "markdown";
+      assistantMessage.run = null;
       session.updatedAt = nowIso();
       this.state.status = result.status;
-        if (result.readyToApply?.artifact_dir) {
-          const diffPreview = await readPatchPreview(root, result.readyToApply);
-          const helperScriptPreview = await readHelperScriptPreview(root, result.readyToApply);
-          assistantMessage.diffPreview = diffPreview;
-          const pendingAction = sanitizePendingAction({
-            kind: "edit",
-            title: "Review edit",
-            artifactDir: result.readyToApply.artifact_dir,
-            patchPath: result.readyToApply.patch_path,
-            diffPreview,
-            helperScriptPath: result.readyToApply.helper_script_path,
-            helperScriptPurpose: result.readyToApply.helper_script_purpose,
-            helperScriptRuntime: result.readyToApply.helper_script_runtime,
-            helperScriptPreview,
-            targetFiles: result.readyToApply.target_files,
-          });
-          assistantMessage.pendingAction = pendingAction;
-          assistantMessage.text = buildPreparedEditMessage(result.readyToApply, pendingAction);
+      if (result.readyToApply?.artifact_dir) {
+        const diffPreview = await readPatchPreview(root, result.readyToApply);
+        const helperScriptPreview = await readHelperScriptPreview(root, result.readyToApply);
+        const runDetails = await readRunInspectionData(root, result.readyToApply, {
+          state: "prepared",
+          validationStatus: result.metadata?.validation_status || "patch_applies",
+        });
+        assistantMessage.diffPreview = diffPreview;
+        assistantMessage.run = runDetails;
+        const pendingAction = sanitizePendingAction({
+          kind: "edit",
+          title: "Review edit",
+          artifactDir: result.readyToApply.artifact_dir,
+          patchPath: result.readyToApply.patch_path,
+          tracePath: result.readyToApply.trace_path,
+          artifactVersion: result.readyToApply.artifact_version,
+          structuredEditCount: result.readyToApply.structured_edit_count,
+          structuredEditTypes: result.readyToApply.structured_edit_types,
+          diffPreview,
+          helperScriptPath: result.readyToApply.helper_script_path,
+          helperScriptPurpose: result.readyToApply.helper_script_purpose,
+          helperScriptRuntime: result.readyToApply.helper_script_runtime,
+          helperScriptPreview,
+          targetFiles: result.readyToApply.target_files,
+        });
+        assistantMessage.pendingAction = pendingAction;
+        assistantMessage.text = buildPreparedEditMessage(result.readyToApply, pendingAction);
         if (this.chatStore.autoApplyEdits) {
           this.pushTrace("Applying confirmed edit");
           assistantMessage.liveStatus = "Applying the change";
@@ -4334,6 +4565,11 @@ class PipeonChatViewProvider {
           assistantMessage.text = `${result.text}\n\n---\n\n${applied.text}`;
           assistantMessage.format = applied.format || "markdown";
           assistantMessage.pendingAction = null;
+          assistantMessage.run = await readRunInspectionData(root, result.readyToApply, {
+            state: "applied",
+            validationStatus: applied.metadata?.validation_status,
+            applyMode: applied.metadata?.apply_mode,
+          });
           this.state.status = applied.status;
         } else {
           this.state.status = "Edit prepared; review diff below";
@@ -4364,6 +4600,9 @@ class PipeonChatViewProvider {
     const pending = assistantMessage.pendingAction;
     if (decision !== "approve") {
       assistantMessage.pendingAction = null;
+      if (assistantMessage.run) {
+        assistantMessage.run.state = "dismissed";
+      }
       assistantMessage.text = `${assistantMessage.text}\n\n_${pending.kind === "edit" ? "Edit" : "Command"} dismissed._`;
       this.state.status = pending.kind === "edit" ? "Edit dismissed" : "Command dismissed";
       await this.saveAndRefresh();
@@ -4395,6 +4634,11 @@ class PipeonChatViewProvider {
         assistantMessage.text = `${assistantMessage.text}\n\n---\n\n${applied.text}`;
         assistantMessage.format = applied.format || "markdown";
         assistantMessage.pendingAction = null;
+        assistantMessage.run = await readRunInspectionData(root, pending, {
+          state: "applied",
+          validationStatus: applied.metadata?.validation_status,
+          applyMode: applied.metadata?.apply_mode,
+        });
         this.state.status = applied.status;
       } else {
         this.pushTrace("Running confirmed command");
