@@ -165,11 +165,26 @@ func usageWidth() int {
 		if f == nil {
 			continue
 		}
-		if w, _, err := term.GetSize(int(f.Fd())); err == nil && w > 0 {
+		fd, ok := terminalFDForUsage(f)
+		if !ok {
+			continue
+		}
+		if w, _, err := term.GetSize(fd); err == nil && w > 0 {
 			return w
 		}
 	}
 	return 100
+}
+
+func terminalFDForUsage(f *os.File) (int, bool) {
+	switch f {
+	case os.Stdout:
+		return 1, true
+	case os.Stderr:
+		return 2, true
+	default:
+		return 0, false
+	}
 }
 
 func renderUsageSections(sections []usageSection, width int) string {
