@@ -326,6 +326,37 @@
     }).join("");
   }
 
+  function renderTemplateManager(templates, activeTemplateId) {
+    const items = Array.isArray(templates) ? templates : [];
+    if (!items.length) {
+      return '<div class="emptyBlock">No reasoning templates are available yet.</div>';
+    }
+    return items.map((template) => {
+      const isActive = template.id === activeTemplateId;
+      const stateBits = [];
+      if (isActive) stateBits.push("Active");
+      if (template.locked) stateBits.push("Locked");
+      if (template.builtIn) stateBits.push("Built-in");
+      return [
+        '<article class="templateCard' + (isActive ? " active" : "") + '">',
+        '<div class="templateCardHead">',
+        '<div>',
+        '<div class="modelLabel">' + escapeHtml(template.name || "Template") + "</div>",
+        '<div class="modelMeta">' + escapeHtml(stateBits.join("  •  ") || "Custom") + "</div>",
+        "</div>",
+        '<div class="toolbarRow compactRow">',
+        isActive
+          ? '<span class="nodeBadge">Active</span>'
+          : '<button class="btn ghost compact" type="button" data-template-activate="' + escapeHtml(template.id) + '">Use</button>',
+        '<button class="btn compact" type="button" data-template-open="' + escapeHtml(template.id) + '">Open</button>',
+        "</div>",
+        "</div>",
+        template.description ? '<div class="modelMeta">' + escapeHtml(template.description) + "</div>" : "",
+        "</article>",
+      ].join("");
+    }).join("");
+  }
+
   function readCapabilities(value) {
     return String(value || "")
       .split(",")
@@ -368,6 +399,13 @@
     const autoApplyEdits = document.getElementById("autoApplyEdits");
     const modelProfileSelect = document.getElementById("modelProfileSelect");
     const transcript = document.getElementById("transcript");
+    const studioSurface = document.getElementById("studioSurface");
+    const studioBackBtn = document.getElementById("studioBackBtn");
+    const studioTitle = document.getElementById("studioTitle");
+    const studioMeta = document.getElementById("studioMeta");
+    const templateStudio = document.getElementById("templateStudio");
+    const modelStudio = document.getElementById("modelStudio");
+    const composerWrap = typeof document.querySelector === "function" ? document.querySelector(".composerWrap") : null;
     const status = document.getElementById("status");
     const trace = document.getElementById("trace");
     const bootSentinel = document.getElementById("bootSentinel");
@@ -376,9 +414,11 @@
     const settingsDrawer = document.getElementById("settingsDrawer");
     const settingsCloseBtn = document.getElementById("settingsCloseBtn");
     const templateSelect = document.getElementById("templateSelect");
+    const templateManagerList = document.getElementById("templateManagerList");
     const copyTemplateBtn = document.getElementById("copyTemplateBtn");
     const newTemplateBtn = document.getElementById("newTemplateBtn");
     const deleteTemplateBtn = document.getElementById("deleteTemplateBtn");
+    const openTemplateDesignerBtn = document.getElementById("openTemplateDesignerBtn");
     const saveTemplateBtn = document.getElementById("saveTemplateBtn");
     const designerCanvas = document.getElementById("designerCanvas");
     const inspectorTarget = document.getElementById("inspectorTarget");
@@ -406,7 +446,9 @@
     const nodeLoopIterationsField = document.getElementById("nodeLoopIterationsField");
     const removeNodeBtn = document.getElementById("removeNodeBtn");
     const modelStoreSummary = document.getElementById("modelStoreSummary");
+    const modelStoreSummaryStudio = document.getElementById("modelStoreSummaryStudio");
     const modelStoreList = document.getElementById("modelStoreList");
+    const openModelManagerBtn = document.getElementById("openModelManagerBtn");
     const modelEntryIdInput = document.getElementById("modelEntryIdInput");
     const modelEntryLabelInput = document.getElementById("modelEntryLabelInput");
     const modelEntryProviderInput = document.getElementById("modelEntryProviderInput");
@@ -420,8 +462,12 @@
       settingsDrawer &&
       settingsCloseBtn &&
       templateSelect &&
+      templateManagerList &&
       designerCanvas &&
-      modelStoreList
+      modelStoreList &&
+      studioSurface &&
+      templateStudio &&
+      modelStudio
     );
 
     if (bootSentinel) {
@@ -452,6 +498,7 @@
           modelProfile: "balanced",
           settingsOpen: false,
           selectedNodeId: "",
+          workspaceMode: "chat",
         };
       }
       return {
@@ -461,6 +508,9 @@
         modelProfile: ["fast", "balanced", "deep", "max"].includes(String(raw.modelProfile || "").toLowerCase()) ? String(raw.modelProfile).toLowerCase() : "balanced",
         settingsOpen: !!raw.settingsOpen,
         selectedNodeId: typeof raw.selectedNodeId === "string" ? raw.selectedNodeId : "",
+        workspaceMode: ["chat", "template", "models"].includes(String(raw.workspaceMode || "").toLowerCase())
+          ? String(raw.workspaceMode).toLowerCase()
+          : "chat",
       };
     })();
 
@@ -496,6 +546,43 @@
       settingsBtn.classList.toggle("active", !!open);
     }
 
+    function openSettingsExperience(mode = "template") {
+      setSettingsOpen(true);
+      setWorkspaceMode(mode);
+    }
+
+    function setWorkspaceMode(mode) {
+      const nextMode = ["chat", "template", "models"].includes(String(mode || "").toLowerCase())
+        ? String(mode).toLowerCase()
+        : "chat";
+      saveViewState({ workspaceMode: nextMode });
+      if (studioSurface) {
+        const inStudio = nextMode !== "chat";
+        studioSurface.classList.toggle("hidden", !inStudio);
+        studioSurface.setAttribute("aria-hidden", inStudio ? "false" : "true");
+      }
+      if (transcript) {
+        transcript.classList.toggle("hidden", nextMode !== "chat");
+      }
+      if (composerWrap) {
+        composerWrap.classList.toggle("hidden", nextMode !== "chat");
+      }
+      if (templateStudio) {
+        templateStudio.classList.toggle("hidden", nextMode !== "template");
+      }
+      if (modelStudio) {
+        modelStudio.classList.toggle("hidden", nextMode !== "models");
+      }
+      if (studioTitle) {
+        studioTitle.textContent = nextMode === "models" ? "Model Manager" : "Template Designer";
+      }
+      if (studioMeta) {
+        studioMeta.textContent = nextMode === "models"
+          ? "Manage registered models and keep template references explicit."
+          : "Inspect and shape the active DockPipe reasoning surface.";
+      }
+    }
+
     function syncTemplateFromState() {
       workingTemplate = currentTemplate();
       if (!workingTemplate) {
@@ -522,7 +609,8 @@
         if (headerMeta) {
           const templatePart = nextState.activeTemplate ? `Template: ${nextState.activeTemplate.name}` : "";
           const shellPart = nextState.shellVersion ? `Shell: ${nextState.shellVersion}` : "";
-          headerMeta.textContent = [templatePart, shellPart].filter(Boolean).join("  •  ");
+          const versionPart = nextState.extensionVersion ? `v${nextState.extensionVersion}` : "";
+          headerMeta.textContent = [templatePart, shellPart, versionPart].filter(Boolean).join("  •  ");
         }
         return;
       }
@@ -534,9 +622,11 @@
       {
         const templatePart = nextState.activeTemplate ? `Template: ${nextState.activeTemplate.name}` : "Template: DockPipe Default";
         const shellPart = nextState.shellVersion ? `Shell: ${nextState.shellVersion}` : "";
-        headerMeta.textContent = [templatePart, shellPart].filter(Boolean).join("  •  ");
+        const versionPart = nextState.extensionVersion ? `v${nextState.extensionVersion}` : "";
+        headerMeta.textContent = [templatePart, shellPart, versionPart].filter(Boolean).join("  •  ");
       }
       templateSelect.innerHTML = renderTemplateOptions(nextState.reasoningTemplates || [], nextState.activeTemplateId);
+      templateManagerList.innerHTML = renderTemplateManager(nextState.reasoningTemplates || [], nextState.activeTemplateId);
       deleteTemplateBtn.disabled = locked;
       saveTemplateBtn.disabled = locked || !template;
       copyTemplateBtn.disabled = !template;
@@ -576,6 +666,9 @@
       modelStoreSummary.textContent = entries.length
         ? `${entries.length} registered models · active template uses ${template.name}`
         : "No models registered yet.";
+      if (modelStoreSummaryStudio) {
+        modelStoreSummaryStudio.textContent = modelStoreSummary.textContent;
+      }
       modelStoreList.innerHTML = renderModelStore(nextState.modelStore || { entries: [] });
 
       if (!node) {
@@ -662,6 +755,7 @@
           transcript.scrollTop = Math.max(0, transcript.scrollHeight - previousBottomOffset);
         }
         saveViewState({ pinnedToBottom: stickToBottom });
+        setWorkspaceMode(viewState.workspaceMode || "chat");
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         transcript.innerHTML = '<article class="msg assistant"><div class="role">DorkPipe</div><div class="body"><p>UI render failed.</p><p><code>' + escapeHtml(message) + "</code></p></div></article>";
@@ -783,20 +877,50 @@
 
       if (hasSettingsSurface) {
         settingsBtn.addEventListener("click", () => {
-          setSettingsOpen(!viewState.settingsOpen);
+          if (viewState.settingsOpen) {
+            setSettingsOpen(false);
+            return;
+          }
+          postDiag("settings-click", { mode: "template" });
+          vscode.postMessage({ type: "openReasoningStudio", mode: "template" });
+          openSettingsExperience("template");
         });
         settingsCloseBtn.addEventListener("click", () => {
           setSettingsOpen(false);
         });
+        if (studioBackBtn) {
+          studioBackBtn.addEventListener("click", () => {
+            setWorkspaceMode("chat");
+          });
+        }
         templateSelect.addEventListener("change", () => {
           vscode.postMessage({ type: "setActiveTemplate", templateId: templateSelect.value });
           saveViewState({ selectedNodeId: "" });
+        });
+        templateManagerList.addEventListener("click", (event) => {
+          const target = event.target instanceof HTMLElement ? event.target : null;
+          if (!target) return;
+          const activateButton = target.closest("[data-template-activate]");
+          if (activateButton) {
+            const templateId = activateButton.getAttribute("data-template-activate") || "";
+            vscode.postMessage({ type: "setActiveTemplate", templateId });
+            saveViewState({ selectedNodeId: "" });
+            return;
+          }
+          const openButton = target.closest("[data-template-open]");
+          if (openButton) {
+            const templateId = openButton.getAttribute("data-template-open") || "";
+            vscode.postMessage({ type: "setActiveTemplate", templateId });
+            saveViewState({ selectedNodeId: "" });
+            openSettingsExperience("template");
+          }
         });
         copyTemplateBtn.addEventListener("click", () => {
           vscode.postMessage({ type: "createTemplate", templateId: templateSelect.value });
         });
         newTemplateBtn.addEventListener("click", () => {
           vscode.postMessage({ type: "createTemplate", templateId: "__blank__" });
+          openSettingsExperience("template");
         });
         deleteTemplateBtn.addEventListener("click", () => {
           if (!workingTemplate || workingTemplate.locked) {
@@ -808,6 +932,16 @@
         saveTemplateBtn.addEventListener("click", () => {
           persistWorkingTemplate();
         });
+        if (openTemplateDesignerBtn) {
+          openTemplateDesignerBtn.addEventListener("click", () => {
+            openSettingsExperience("template");
+          });
+        }
+        if (openModelManagerBtn) {
+          openModelManagerBtn.addEventListener("click", () => {
+            openSettingsExperience("models");
+          });
+        }
 
         designerCanvas.addEventListener("click", (event) => {
           const target = event.target instanceof HTMLElement ? event.target : null;
@@ -987,6 +1121,9 @@
         if (msg.type === "state" && msg.state) {
           render(msg.state);
         }
+        if (msg.type === "forceOpenSettings") {
+          openSettingsExperience(msg.mode === "models" ? "models" : "template");
+        }
         if (msg.type === "done") {
           prompt.value = "";
           saveViewState({ draft: "", pinnedToBottom: true });
@@ -998,6 +1135,7 @@
       postDiag("listeners-attached");
       render(currentState);
       setSettingsOpen(!!viewState.settingsOpen);
+      setWorkspaceMode(viewState.workspaceMode || "chat");
       postDiag("initial-render-complete", {
         messages: Array.isArray(currentState?.messages) ? currentState.messages.length : 0,
       });

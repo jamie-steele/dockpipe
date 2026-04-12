@@ -22,10 +22,40 @@ class FakeElement {
     this.className = "";
     this.listeners = new Map();
     this.attributes = new Map();
+    const syncClassName = (set) => {
+      this.className = Array.from(set).join(" ");
+    };
+    const classSet = new Set();
     this.classList = {
-      add() {},
-      remove() {},
-      toggle() {},
+      add: (...tokens) => {
+        for (const token of tokens) {
+          if (token) classSet.add(token);
+        }
+        syncClassName(classSet);
+      },
+      remove: (...tokens) => {
+        for (const token of tokens) {
+          classSet.delete(token);
+        }
+        syncClassName(classSet);
+      },
+      toggle: (token, force) => {
+        if (!token) return false;
+        let present = classSet.has(token);
+        if (typeof force === "boolean") {
+          if (force) classSet.add(token);
+          else classSet.delete(token);
+          present = force;
+        } else if (present) {
+          classSet.delete(token);
+          present = false;
+        } else {
+          classSet.add(token);
+          present = true;
+        }
+        syncClassName(classSet);
+        return present;
+      },
     };
   }
 
@@ -176,6 +206,22 @@ for (const handler of promptKeydown) {
 const askMessage = posted.find((item) => item && item.type === "ask");
 if (!askMessage) {
   throw new Error("Enter key path did not emit an ask message.");
+}
+
+const settingsBtn = getElement("settingsBtn");
+const settingsDrawer = getElement("settingsDrawer");
+const studioSurface = getElement("studioSurface");
+if (!settingsBtn.listeners.has("click")) {
+  throw new Error("Settings button did not attach a click handler.");
+}
+for (const handler of settingsBtn.listeners.get("click") || []) {
+  handler({});
+}
+if (settingsDrawer.className.includes("hidden")) {
+  throw new Error("Settings click did not open the settings drawer.");
+}
+if (studioSurface.className.includes("hidden")) {
+  throw new Error("Settings click did not switch into the studio surface.");
 }
 
 console.log("webview smoke passed");

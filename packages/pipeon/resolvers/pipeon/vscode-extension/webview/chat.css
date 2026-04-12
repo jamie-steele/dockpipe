@@ -85,6 +85,12 @@ body {
   justify-content: center;
   font-size: 14px;
 }
+.headerFeatureBtn {
+  min-width: 104px;
+  padding: 0 14px;
+  height: 34px;
+  border-radius: 999px;
+}
 .headerHint {
   color: var(--vscode-descriptionForeground);
   font-size: 11px;
@@ -160,6 +166,26 @@ select {
 .settingsDrawer.hidden {
   display: none;
 }
+.studioSurface {
+  padding: 10px 12px 18px;
+  overflow: auto;
+  display: grid;
+  gap: 12px;
+}
+.studioHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--vscode-editorWidget-background) 96%, transparent);
+}
+.studioScroll {
+  display: grid;
+  gap: 12px;
+}
 .settingsHeader {
   display: flex;
   align-items: center;
@@ -214,6 +240,9 @@ select {
   gap: 8px;
   flex-wrap: wrap;
   margin-top: 12px;
+}
+.compactRow {
+  margin-top: 0;
 }
 .btn.compact {
   min-width: 0;
@@ -401,6 +430,26 @@ select {
   margin-bottom: 10px;
   font-size: 11px;
   color: var(--vscode-descriptionForeground);
+}
+.templateManagerList {
+  display: grid;
+  gap: 10px;
+}
+.templateCard {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 14px;
+  padding: 12px;
+  background: color-mix(in srgb, var(--vscode-editorWidget-background) 94%, transparent);
+}
+.templateCard.active {
+  border-color: color-mix(in srgb, var(--vscode-button-background) 55%, var(--vscode-panel-border));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--vscode-button-background) 18%, transparent);
+}
+.templateCardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 .modelStoreList {
   display: grid;
@@ -712,6 +761,11 @@ textarea {
   }
   .designerLayout {
     grid-template-columns: 1fr;
+  }
+  .studioHeader,
+  .templateCardHead {
+    flex-direction: column;
+    align-items: stretch;
   }
 }
 @keyframes pulse {

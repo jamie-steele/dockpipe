@@ -2543,7 +2543,6 @@ function renderChatHtml(webview, state) {
         <div class="trace" id="trace"></div>
       </header>
       <div class="bootSentinel" id="bootSentinel">DorkPipe UI is waiting for client-side boot. If this stays visible, the webview script did not start.</div>
-      <main class="transcript" id="transcript"></main>
       <aside class="settingsDrawer hidden" id="settingsDrawer" aria-hidden="true">
         <div class="settingsHeader">
           <div>
@@ -2556,24 +2555,47 @@ function renderChatHtml(webview, state) {
           <section class="settingsSection">
             <div class="sectionHead">
               <div>
-                <h3>Template Selection</h3>
-                <p>Choose the orchestration surface that DockPipe should use for this workspace chat.</p>
+                <h3>Templates</h3>
+                <p>Select, copy, create, or remove templates here. Open one in the main studio to edit it properly.</p>
               </div>
             </div>
-            <div class="formGrid">
-              <label class="field">
-                <span>Active template</span>
-                <select id="templateSelect"></select>
-              </label>
-            </div>
+            <select id="templateSelect" class="hidden" aria-label="Active template"></select>
+            <div class="templateManagerList" id="templateManagerList"></div>
             <div class="toolbarRow">
               <button class="btn ghost" id="copyTemplateBtn" type="button">Copy active</button>
               <button class="btn ghost" id="newTemplateBtn" type="button">New blank</button>
               <button class="btn ghost danger" id="deleteTemplateBtn" type="button">Delete</button>
-              <button class="btn" id="saveTemplateBtn" type="button">Save template</button>
+              <button class="btn" id="openTemplateDesignerBtn" type="button">Open designer</button>
             </div>
           </section>
           <section class="settingsSection">
+            <div class="sectionHead">
+              <div>
+                <h3>Models</h3>
+                <p>Keep the drawer simple. Open the full model manager in the main area when you need richer editing.</p>
+              </div>
+            </div>
+            <div class="modelStoreSummary" id="modelStoreSummary"></div>
+            <div class="toolbarRow">
+              <button class="btn" id="openModelManagerBtn" type="button">Open model manager</button>
+            </div>
+          </section>
+        </div>
+      </aside>
+      <main class="transcript" id="transcript"></main>
+      <section class="studioSurface hidden" id="studioSurface" aria-hidden="true">
+        <div class="studioHeader">
+          <div>
+            <div class="settingsEyebrow">DockPipe Studio</div>
+            <h2 id="studioTitle">Template Designer</h2>
+            <div class="canvasHint" id="studioMeta">Inspect and shape the active DockPipe reasoning surface.</div>
+          </div>
+          <div class="toolbarRow">
+            <button class="btn ghost" id="studioBackBtn" type="button">Back to chat</button>
+          </div>
+        </div>
+        <div class="studioScroll">
+          <section class="settingsSection" id="templateStudio">
             <div class="sectionHead">
               <div>
                 <h3>Visual Designer</h3>
@@ -2684,20 +2706,21 @@ function renderChatHtml(webview, state) {
                     </label>
                     <div class="toolbarRow">
                       <button class="btn ghost danger" id="removeNodeBtn" type="button">Remove node</button>
+                      <button class="btn" id="saveTemplateBtn" type="button">Save template</button>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
           </section>
-          <section class="settingsSection">
+          <section class="settingsSection hidden" id="modelStudio">
             <div class="sectionHead">
               <div>
                 <h3>Model Store</h3>
                 <p>Reasoning templates reference registered models from this local store rather than raw strings.</p>
               </div>
             </div>
-            <div class="modelStoreSummary" id="modelStoreSummary"></div>
+            <div class="modelStoreSummary" id="modelStoreSummaryStudio"></div>
             <div class="modelStoreList" id="modelStoreList"></div>
             <div class="modelEditor">
               <div class="paletteLabel">Register custom model</div>
@@ -2716,7 +2739,7 @@ function renderChatHtml(webview, state) {
             </div>
           </section>
         </div>
-      </aside>
+      </section>
       <div class="composerWrap">
         <div class="status" id="status"></div>
         <form class="composer" id="composer">
@@ -3168,7 +3191,7 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
           <div class="headerSpacer"></div>
           <div class="headerActions">
             <select id="sessionSelect" class="headerSelect" aria-label="Chat session"></select>
-            <button class="btn ghost iconBtn" id="settingsBtn" type="button" title="Reasoning templates and models">⚙</button>
+            <button class="btn ghost headerFeatureBtn" id="settingsBtn" type="button" title="Reasoning templates and models">Templates</button>
             <button class="btn ghost iconBtn" id="clearBtn" type="button" title="Clear chat">↺</button>
             <button class="btn ghost iconBtn" id="newChatBtn" type="button" title="New chat">✎</button>
           </div>
@@ -3709,9 +3732,10 @@ async function resetPanelToBottomOnce(context) {
 
 class PipeonChatViewProvider {
   /** @param {vscode.ExtensionContext} context */
-  constructor(context, channel) {
+  constructor(context, channel, extensionVersion) {
     this.context = context;
     this.channel = channel;
+    this.extensionVersion = extensionVersion || "unknown";
     this.view = null;
     this.surfaces = new Map();
     this.detachedPanel = null;
@@ -3742,6 +3766,7 @@ class PipeonChatViewProvider {
       status: "Waiting for workspace...",
       isBusy: false,
       shellVersion: CHAT_WEBVIEW_SHELL_VERSION,
+      extensionVersion: this.extensionVersion,
     };
     this.syncViewState();
   }
@@ -4344,6 +4369,18 @@ class PipeonChatViewProvider {
           this.refresh();
           return;
         }
+        if (msg?.type === "openReasoningStudio") {
+          logChannelInfo(this.channel, "Opening reasoning studio", {
+            surfaceId,
+            mode: msg.mode || "template",
+          });
+          this.openDetachedChatPanel();
+          this.postToSurfaces({
+            type: "forceOpenSettings",
+            mode: msg.mode === "models" ? "models" : "template",
+          });
+          return;
+        }
         if (msg?.type === "canaryReady") {
           logChannelInfo(this.channel, "Webview canary reported ready");
           webview.postMessage({ type: "pong" });
@@ -4401,7 +4438,7 @@ class PipeonChatViewProvider {
       vscode.ViewColumn.Beside,
       {
         enableScripts: true,
-        retainContextWhenHidden: true,
+        retainContextWhenHidden: false,
         localResourceRoots: [
           vscode.Uri.joinPath(this.context.extensionUri, "webview"),
           vscode.Uri.joinPath(this.context.extensionUri, "images"),
@@ -4449,7 +4486,9 @@ class PipeonChatViewProvider {
 function activate(context) {
   const channel = vscode.window.createOutputChannel("DorkPipe", { log: true });
   logChannelInfo(channel, "Activating Pipeon VS Code extension");
-  const chatProvider = new PipeonChatViewProvider(context, channel);
+  const extensionVersion = context.extension?.packageJSON?.version || "unknown";
+  logChannelInfo(channel, "Pipeon extension version", { version: extensionVersion });
+  const chatProvider = new PipeonChatViewProvider(context, channel, extensionVersion);
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(CHAT_VIEW_ID, chatProvider, {

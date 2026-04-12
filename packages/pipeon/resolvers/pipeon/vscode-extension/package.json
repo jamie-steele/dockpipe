@@ -2,7 +2,7 @@
   "name": "pipeon",
   "displayName": "DorkPipe",
   "description": "DorkPipe editor companion: local-first chat, workflow actions, and workspace context from .dockpipe.",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "publisher": "dorkpipe",
   "repository": {
     "type": "git",
@@ -13,16 +13,6 @@
     "vscode": "^1.85.0"
   },
   "categories": ["Other"],
-  "activationEvents": [
-    "onStartupFinished",
-    "onView:pipeon.chatView",
-    "onCommand:pipeon.openChat",
-    "onCommand:pipeon.openDetachedChat",
-    "onCommand:pipeon.newChat",
-    "onCommand:pipeon.clearChat",
-    "onCommand:pipeon.resetChatShell",
-    "onCommand:pipeon.openWebviewCanary"
-  ],
   "files": [
     "extension.js",
     "webview/**",
