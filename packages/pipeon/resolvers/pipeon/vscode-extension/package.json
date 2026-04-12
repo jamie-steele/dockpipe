@@ -2,7 +2,7 @@
   "name": "pipeon",
   "displayName": "DorkPipe",
   "description": "DorkPipe editor companion: local-first chat, workflow actions, and workspace context from .dockpipe.",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "publisher": "dorkpipe",
   "repository": {
     "type": "git",
@@ -18,15 +18,20 @@
     "onView:pipeon.chatView",
     "onCommand:pipeon.openChat",
     "onCommand:pipeon.newChat",
-    "onCommand:pipeon.clearChat"
+    "onCommand:pipeon.clearChat",
+    "onCommand:pipeon.openWebviewCanary"
   ],
   "files": [
     "extension.js",
+    "webview/**",
     "images/**",
     "README.md",
     "LICENSE",
     "package.json"
   ],
+  "scripts": {
+    "test:webview": "node scripts/webview-smoke.js"
+  },
   "main": "extension.js",
   "contributes": {
     "viewsContainers": {
@@ -71,6 +76,10 @@
       {
         "command": "pipeon.showReadme",
         "title": "DorkPipe: Open docs"
+      },
+      {
+        "command": "pipeon.openWebviewCanary",
+        "title": "DorkPipe: Open webview canary"
       }
     ]
   },

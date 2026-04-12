@@ -1585,11 +1585,11 @@ async function executeDorkpipeRequest(root, session, text, options = {}) {
 
 function renderChatHtml(webview, state) {
   const nonce = String(Date.now());
+  const initialStateJson = serializeForInlineScript(JSON.stringify(state || {}));
   return `<!doctype html>
 <html>
   <head>
     <meta charset="UTF-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
       :root {
@@ -1706,6 +1706,15 @@ function renderChatHtml(webview, state) {
       .btn:disabled { opacity: 0.6; cursor: default; }
       .trace {
         display: none;
+      }
+      .bootSentinel {
+        margin: 10px 12px 0;
+        padding: 8px 10px;
+        border-radius: 10px;
+        border: 1px solid rgba(255, 170, 0, 0.35);
+        background: rgba(255, 170, 0, 0.08);
+        color: #f6d28b;
+        font-size: 11px;
       }
       .traceItem {
         padding: 5px 9px;
@@ -2025,6 +2034,7 @@ function renderChatHtml(webview, state) {
         </div>
         <div class="trace" id="trace"></div>
       </header>
+      <div class="bootSentinel" id="bootSentinel">DorkPipe UI is waiting for client-side boot. If this stays visible, the webview script did not start.</div>
       <main class="transcript" id="transcript"></main>
       <div class="composerWrap">
         <div class="status" id="status"></div>
@@ -2088,9 +2098,20 @@ function renderChatHtml(webview, state) {
         renderFatalError(message);
       }
 
+      function postDiag(stage, extra) {
+        try {
+          vscode.postMessage({ type: "diag", stage, extra: extra || null });
+        } catch {
+          // Ignore bridge failures while emitting diagnostics.
+        }
+      }
+
+      postDiag("script-start");
+
       if (typeof acquireVsCodeApi !== "function") {
         reportClientError("boot", "acquireVsCodeApi is unavailable in this webview");
       }
+      postDiag("vscode-api-ready", { hasBridge: typeof acquireVsCodeApi === "function" });
 
       window.addEventListener("error", (event) => {
         reportClientError("error", event?.error || event?.message || "Unknown webview error");
@@ -2113,6 +2134,26 @@ function renderChatHtml(webview, state) {
       const transcript = document.getElementById("transcript");
       const status = document.getElementById("status");
       const trace = document.getElementById("trace");
+      const bootSentinel = document.getElementById("bootSentinel");
+      if (bootSentinel) {
+        bootSentinel.style.display = "none";
+      }
+      postDiag("dom-ready", {
+        hasForm: !!form,
+        hasPrompt: !!prompt,
+        hasTranscript: !!transcript,
+      });
+      const initialState = (() => {
+        try {
+          return JSON.parse(${initialStateJson});
+        } catch {
+          return {};
+        }
+      })();
+      postDiag("initial-state-parsed", {
+        keys: Object.keys(initialState || {}),
+        messages: Array.isArray(initialState?.messages) ? initialState.messages.length : 0,
+      });
       let viewState = (() => {
         const raw = vscode.getState();
         if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
@@ -2127,7 +2168,7 @@ function renderChatHtml(webview, state) {
             : "balanced",
         };
       })();
-      let currentState = {};
+      let currentState = initialState && typeof initialState === "object" ? initialState : {};
 
       function escapeHtml(value) {
         return String(value || "")
@@ -2267,6 +2308,7 @@ function renderChatHtml(webview, state) {
 
       function submitPrompt() {
         const text = prompt.value.trim();
+        postDiag("submit-attempt", { chars: text.length, mode: modeSelect.value, profile: modelProfileSelect.value });
         if (!text) return;
         prompt.value = "";
         saveViewState({ draft: "", pinnedToBottom: true, mode: modeSelect.value, modelProfile: modelProfileSelect.value });
@@ -2379,6 +2421,7 @@ function renderChatHtml(webview, state) {
 
         window.addEventListener("message", (event) => {
           const msg = event.data || {};
+          postDiag("host-message", { type: msg.type || "" });
           if (msg.type === "state" && msg.state) {
             render(msg.state);
           }
@@ -2390,13 +2433,146 @@ function renderChatHtml(webview, state) {
           }
         });
 
+        postDiag("listeners-attached");
         render(currentState);
+        postDiag("initial-render-complete", {
+          messages: Array.isArray(currentState?.messages) ? currentState.messages.length : 0,
+        });
         vscode.postMessage({ type: "webviewReady" });
+        postDiag("ready-sent");
         prompt.focus();
+        postDiag("focus-complete");
       } catch (error) {
         reportClientError("boot", error);
       }
     </script>
+  </body>
+</html>`;
+}
+
+function getWebviewAssetUri(webview, extensionUri, ...segments) {
+  return webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, ...segments));
+}
+
+function renderChatHtmlExternal(webview, extensionUri, state) {
+  const nonce = String(Date.now());
+  const initialStateJson = serializeForInlineScript(JSON.stringify(state || {}));
+  const styleUri = getWebviewAssetUri(webview, extensionUri, "webview", "chat.css");
+  const scriptUri = getWebviewAssetUri(webview, extensionUri, "webview", "chat.js");
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src ${webview.cspSource} https: data:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource};"
+    />
+    <link rel="stylesheet" href="${styleUri}" />
+  </head>
+  <body>
+    <div class="wrap">
+      <header class="header">
+        <div class="titleRow">
+          <div class="titleBlock">
+            <div class="titleIcon">←</div>
+            <h1 class="title">Workspace Chat</h1>
+          </div>
+          <div class="headerSpacer"></div>
+          <div class="headerActions">
+            <select id="sessionSelect" class="headerSelect" aria-label="Chat session"></select>
+            <button class="btn ghost iconBtn" id="clearBtn" type="button" title="Clear chat">↺</button>
+            <button class="btn ghost iconBtn" id="newChatBtn" type="button" title="New chat">✎</button>
+          </div>
+        </div>
+        <div class="trace" id="trace"></div>
+      </header>
+      <div class="bootSentinel" id="bootSentinel">DorkPipe UI is waiting for client-side boot. If this stays visible, the webview script did not start.</div>
+      <main class="transcript" id="transcript"></main>
+      <div class="composerWrap">
+        <div class="status" id="status"></div>
+        <form class="composer" id="composer">
+          <textarea id="prompt" placeholder="Ask DorkPipe about this repo... or use /help for local commands"></textarea>
+          <div class="actions">
+            <div class="controlsMeta">
+              <div class="toolRow">
+                <label class="toggleWrap"><input id="autoApplyEdits" type="checkbox" /> Auto</label>
+                <select id="modelProfileSelect" aria-label="Model profile">
+                  <option value="fast">Fast</option>
+                  <option value="balanced">Balanced</option>
+                  <option value="deep">Deep</option>
+                  <option value="max">Max</option>
+                </select>
+                <select id="modeSelect" aria-label="Request mode">
+                  <option value="ask">Ask</option>
+                  <option value="agent">Agent</option>
+                  <option value="plan">Plan</option>
+                </select>
+              </div>
+              <div class="hint">Local-first routing with safe primitives, bounded tools, and streamed model steps.</div>
+            </div>
+            <div class="sendWrap">
+              <button class="btn ghost" id="newFromComposer" type="button">New</button>
+              <button class="btn" id="send" type="submit">Send</button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+    <script type="application/json" id="pipeon-initial-state">${initialStateJson}</script>
+    <script nonce="${nonce}" src="${scriptUri}"></script>
+  </body>
+</html>`;
+}
+
+function renderCanaryHtml(webview, extensionUri) {
+  const nonce = String(Date.now());
+  const scriptUri = getWebviewAssetUri(webview, extensionUri, "webview", "canary.js");
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}' ${webview.cspSource};"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style>
+      body {
+        margin: 0;
+        padding: 16px;
+        font-family: var(--vscode-font-family);
+        color: var(--vscode-editor-foreground);
+        background: var(--vscode-editor-background);
+      }
+      .card {
+        border: 1px solid var(--vscode-panel-border);
+        border-radius: 14px;
+        padding: 16px;
+        background: color-mix(in srgb, var(--vscode-editorWidget-background) 94%, transparent);
+      }
+      .status {
+        margin: 0 0 12px;
+        font-size: 13px;
+      }
+      button {
+        border: 0;
+        border-radius: 10px;
+        padding: 10px 14px;
+        background: var(--vscode-button-background);
+        color: var(--vscode-button-foreground);
+        font: inherit;
+        font-weight: 600;
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <p id="status" class="status">canary: shell</p>
+      <button id="ping" type="button">Ping host</button>
+    </div>
+    <script nonce="${nonce}" src="${scriptUri}"></script>
   </body>
 </html>`;
 }
@@ -2751,7 +2927,7 @@ class PipeonChatViewProvider {
             activeSessionId: this.state.activeSessionId,
             messages: Array.isArray(this.state.messages) ? this.state.messages.length : 0,
           });
-          this.view.webview.html = renderChatHtml(this.view.webview, this.state);
+          this.view.webview.html = renderChatHtmlExternal(this.view.webview, this.context.extensionUri, this.state);
           this.rendered = true;
         } else {
           logChannelInfo(this.channel, "Posting state to chat webview", {
@@ -2766,7 +2942,7 @@ class PipeonChatViewProvider {
         this.channel.error(`Webview refresh failed: ${message}`);
         try {
           logChannelInfo(this.channel, "Attempting full webview reload after refresh failure");
-          this.view.webview.html = renderChatHtml(this.view.webview, this.state);
+          this.view.webview.html = renderChatHtmlExternal(this.view.webview, this.context.extensionUri, this.state);
           this.rendered = true;
         } catch (reloadError) {
           const reloadMessage = reloadError instanceof Error ? reloadError.message : String(reloadError);
@@ -3057,7 +3233,13 @@ class PipeonChatViewProvider {
     this.view = webviewView;
     this.rendered = false;
     logChannelInfo(this.channel, "resolveWebviewView called");
-    webviewView.webview.options = { enableScripts: true };
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [
+        vscode.Uri.joinPath(this.context.extensionUri, "webview"),
+        vscode.Uri.joinPath(this.context.extensionUri, "images"),
+      ],
+    };
     webviewView.webview.onDidReceiveMessage(async (msg) => {
       try {
         logChannelInfo(this.channel, "Webview message received", {
@@ -3098,9 +3280,23 @@ class PipeonChatViewProvider {
           this.state.trace = [];
           return;
         }
+        if (msg?.type === "diag") {
+          logChannelInfo(this.channel, `Webview diag: ${msg.stage || "unknown"}`, msg.extra || undefined);
+          return;
+        }
         if (msg?.type === "webviewReady") {
           logChannelInfo(this.channel, "Webview reported ready");
           this.refresh();
+          return;
+        }
+        if (msg?.type === "canaryReady") {
+          logChannelInfo(this.channel, "Webview canary reported ready");
+          this.view?.webview.postMessage({ type: "pong" });
+          return;
+        }
+        if (msg?.type === "ping") {
+          logChannelInfo(this.channel, "Webview canary ping received");
+          this.view?.webview.postMessage({ type: "pong" });
           return;
         }
         if (!workspaceRoot) {
@@ -3200,6 +3396,33 @@ function activate(context) {
       } catch {
         vscode.window.showInformationMessage("DorkPipe: no pipeon-context bundle found — run `pipeon bundle` first.");
       }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand("pipeon.openWebviewCanary", async () => {
+      const panel = vscode.window.createWebviewPanel(
+        "pipeon.webviewCanary",
+        "Pipeon Webview Canary",
+        vscode.ViewColumn.Active,
+        {
+          enableScripts: true,
+          localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, "webview")],
+          retainContextWhenHidden: true,
+        }
+      );
+      panel.webview.html = renderCanaryHtml(panel.webview, context.extensionUri);
+      panel.webview.onDidReceiveMessage((msg) => {
+        if (msg?.type === "canaryReady") {
+          logChannelInfo(channel, "Canary webview reported ready");
+          panel.webview.postMessage({ type: "pong" });
+          return;
+        }
+        if (msg?.type === "ping") {
+          logChannelInfo(channel, "Canary webview ping received");
+          panel.webview.postMessage({ type: "pong" });
+        }
+      });
     })
   );
 
