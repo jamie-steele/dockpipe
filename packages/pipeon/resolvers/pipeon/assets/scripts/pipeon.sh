@@ -21,7 +21,7 @@ Pipeon (local IDE assistant helper)
 
 Commands:
   bundle          Write bin/.dockpipe/pipeon-context.md from repo artifacts
-  chat [text]     Ask Ollama (requires bundle + ollama serve). Or: pipeon chat < file.txt
+  chat [text]     Ask Ollama (compatibility snapshot optional; requires ollama serve). Or: pipeon chat < file.txt
   status          Show enablement, version gate, and artifact presence
 
 Environment:
@@ -37,9 +37,6 @@ bundle)
 	;;
 chat)
 	pipeon_check_enabled "$ROOT" || exit $?
-	if [[ ! -f "$ROOT/bin/.dockpipe/pipeon-context.md" ]]; then
-		bash "$SCRIPT_DIR/bundle-context.sh"
-	fi
 	bash "$SCRIPT_DIR/chat.sh" "$@"
 	;;
 status)

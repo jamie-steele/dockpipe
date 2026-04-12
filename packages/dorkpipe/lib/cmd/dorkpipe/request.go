@@ -288,20 +288,18 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 			"validation_status": "not_applicable",
 		})
 	default:
-		emitEditEvent(reqID, "context_gathering", "Reading context bundle", 0.45, nil)
-		rel, text := readEditContextBundle(root)
+		emitEditEvent(reqID, "context_gathering", "Collecting focused workspace context", 0.45, nil)
+		text, meta := buildWorkspaceChatContext(root, req)
 		if strings.TrimSpace(text) == "" {
-			emitEditDone(reqID, "No DorkPipe context bundle found yet. Run a context refresh first.", map[string]any{
+			emitEditDone(reqID, "No focused workspace context was collected for this request.", map[string]any{
 				"route":  "inspect",
 				"action": "context",
 			})
 			return
 		}
-		emitEditDone(reqID, fmt.Sprintf("Context bundle: `%s`\n\n%s", rel, codeFence("markdown", text)), map[string]any{
-			"route":        "inspect",
-			"action":       "context",
-			"context_path": rel,
-		})
+		meta["route"] = "inspect"
+		meta["action"] = "context"
+		emitEditDone(reqID, fmt.Sprintf("Focused workspace context:\n\n%s", codeFence("markdown", text)), meta)
 	}
 }
 
@@ -348,7 +346,7 @@ func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, 
 
 func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, host, model string, numCtx int) {
 	emitEditEvent(reqID, "context_gathering", "Inspecting workspace context", 0.35, nil)
-	contextPath, contextText := readEditContextBundle(root)
+	contextText, contextMeta := buildWorkspaceChatContext(root, req)
 	var mcpText string
 	var mcpLoop *boundedMCPContextResult
 	mcpDisc, mcpErr := discoverMCPContext(ctx)
@@ -374,10 +372,9 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	}
 	prompt := buildChatPrompt(root, req, contextText, mcpText, mcpLoop)
 	emitEditEvent(reqID, "routed", fmt.Sprintf("Streaming from %s", model), 0.55, map[string]any{
-		"route":        "chat",
-		"model":        model,
-		"context_path": contextPath,
-		"num_ctx":      numCtx,
+		"route":   "chat",
+		"model":   model,
+		"num_ctx": numCtx,
 	})
 	answer, err := runChatModelStream(ctx, host, model, numCtx, prompt, func(piece string) {
 		writeEvent(editEvent{
@@ -401,8 +398,8 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 		"validation_status": "not_applicable",
 		"active_file":       req.ActiveFile,
 	}
-	if contextPath != "" {
-		status["context_path"] = contextPath
+	for key, value := range contextMeta {
+		status[key] = value
 	}
 	for key, value := range mcpMetadata(mcpDisc) {
 		status[key] = value
@@ -478,7 +475,9 @@ func isChatIntent(msg string) bool {
 func buildChatPrompt(root string, req routeRequest, contextText, mcpText string, mcpLoop *boundedMCPContextResult) string {
 	opening := []string{
 		"You are DorkPipe, a local-first repo-aware coding assistant.",
-		"Ground your answer in the provided workspace context when relevant.",
+		"Ground your answer in focused workspace context when relevant.",
+		"Use active-file snippets, explicit file references, and bounded MCP retrieval as primary grounding.",
+		"Only factor scan findings, user guidance, or other artifact-backed signals into the answer when the user explicitly asks for them or the request is clearly about those topics.",
 		"When MCP discovery data is provided, treat it as typed control-plane context and prefer it over guessing about workflows or tool availability.",
 		"When a bounded MCP context loop is provided, use it as curated retrieval context rather than asking for broad extra context.",
 		"If you provide code, use fenced code blocks with a language tag when possible.",
@@ -503,7 +502,7 @@ func buildChatPrompt(root string, req routeRequest, contextText, mcpText string,
 		opening = append(opening, fmt.Sprintf("Selected text:\n%s", clampString(req.SelectionText, maxEditSelectionChars)))
 	}
 	if strings.TrimSpace(contextText) != "" {
-		opening = append(opening, fmt.Sprintf("Repository context bundle:\n\n%s", contextText))
+		opening = append(opening, fmt.Sprintf("Focused workspace context:\n\n%s", contextText))
 	}
 	if strings.TrimSpace(mcpText) != "" {
 		opening = append(opening, fmt.Sprintf("MCP discovery context:\n\n%s", mcpText))
@@ -513,6 +512,167 @@ func buildChatPrompt(root string, req routeRequest, contextText, mcpText string,
 	}
 	opening = append(opening, fmt.Sprintf("User request:\n%s", req.Message))
 	return strings.Join(opening, "\n\n")
+}
+
+func buildWorkspaceChatContext(root string, req routeRequest) (string, map[string]any) {
+	sections := []string{}
+	meta := map[string]any{}
+	searchTerms := extractSearchTerms(req.Message)
+	targets := []string{}
+	if strings.TrimSpace(req.ActiveFile) != "" {
+		targets = append(targets, strings.TrimSpace(req.ActiveFile))
+	}
+	targets = append(targets, explicitRepoFileMentions(root, req.Message)...)
+	targets = uniqueNonEmpty(targets)
+	if len(targets) > 3 {
+		targets = targets[:3]
+	}
+	if len(targets) > 0 {
+		meta["context_files"] = len(targets)
+	}
+	for _, rel := range targets {
+		snippet, err := readWorkspaceSnippet(root, rel, searchTerms)
+		if err != nil || strings.TrimSpace(snippet) == "" {
+			continue
+		}
+		sections = append(sections, fmt.Sprintf("Relevant file: %s\n\n```text\n%s\n```", rel, snippet))
+	}
+	if wantsScanSignals(req.Message) {
+		if summary := summarizeScanSignals(root); strings.TrimSpace(summary) != "" {
+			sections = append(sections, "Scan signals:\n\n"+summary)
+			meta["scan_signals_used"] = true
+		}
+	}
+	if wantsGuidanceSignals(req.Message) {
+		if summary := summarizeGuidanceSignals(root); strings.TrimSpace(summary) != "" {
+			sections = append(sections, "User guidance signals:\n\n"+summary)
+			meta["guidance_signals_used"] = true
+		}
+	}
+	return strings.Join(sections, "\n\n"), meta
+}
+
+func readWorkspaceSnippet(root, rel string, searchTerms []string) (string, error) {
+	if strings.TrimSpace(rel) == "" {
+		return "", nil
+	}
+	abs := filepath.Join(root, rel)
+	b, err := os.ReadFile(abs)
+	if err != nil {
+		return "", err
+	}
+	text := focusSnippetText(string(b), searchTerms, 1800)
+	if strings.TrimSpace(text) == "" {
+		text = clampString(string(b), 1800)
+	}
+	return text, nil
+}
+
+func wantsScanSignals(message string) bool {
+	lower := strings.ToLower(message)
+	for _, token := range []string{"scan", "finding", "findings", "security", "compliance", "vuln", "vulnerability", "gosec", "govuln", "cve", "audit", "risk"} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func wantsGuidanceSignals(message string) bool {
+	lower := strings.ToLower(message)
+	for _, token := range []string{"insight", "guidance", "preference", "convention", "policy", "rule", "guideline", "style"} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func summarizeScanSignals(root string) string {
+	for _, rel := range []string{
+		filepath.Join("bin", ".dockpipe", "ci-analysis", "findings.json"),
+		filepath.Join(".dockpipe", "ci-analysis", "findings.json"),
+	} {
+		abs := filepath.Join(root, rel)
+		b, err := os.ReadFile(abs)
+		if err != nil {
+			continue
+		}
+		var parsed struct {
+			Provenance struct {
+				Commit string `json:"commit"`
+				Source string `json:"source"`
+			} `json:"provenance"`
+			Findings []struct {
+				Tool     string `json:"tool"`
+				RuleID   string `json:"rule_id"`
+				Title    string `json:"title"`
+				File     string `json:"file"`
+				Severity string `json:"severity"`
+			} `json:"findings"`
+		}
+		if err := json.Unmarshal(b, &parsed); err != nil {
+			continue
+		}
+		lines := []string{
+			fmt.Sprintf("- file: %s", filepath.ToSlash(rel)),
+			fmt.Sprintf("- findings: %d", len(parsed.Findings)),
+		}
+		if strings.TrimSpace(parsed.Provenance.Commit) != "" {
+			lines = append(lines, fmt.Sprintf("- provenance commit: %s", parsed.Provenance.Commit))
+		}
+		if strings.TrimSpace(parsed.Provenance.Source) != "" {
+			lines = append(lines, fmt.Sprintf("- source: %s", parsed.Provenance.Source))
+		}
+		for _, finding := range parsed.Findings {
+			title := strings.TrimSpace(finding.Title)
+			if title == "" {
+				title = finding.RuleID
+			}
+			lines = append(lines, fmt.Sprintf("- [%s] %s %s %s", emptyFallback(finding.Severity, "?"), emptyFallback(finding.Tool, "?"), emptyFallback(finding.File, "?"), strings.TrimSpace(title)))
+			if len(lines) >= 7 {
+				break
+			}
+		}
+		return strings.Join(lines, "\n")
+	}
+	return ""
+}
+
+func summarizeGuidanceSignals(root string) string {
+	for _, rel := range []string{
+		filepath.Join("bin", ".dockpipe", "analysis", "insights.json"),
+		filepath.Join(".dockpipe", "analysis", "insights.json"),
+	} {
+		abs := filepath.Join(root, rel)
+		b, err := os.ReadFile(abs)
+		if err != nil {
+			continue
+		}
+		var parsed struct {
+			Insights []struct {
+				Status         string `json:"status"`
+				Category       string `json:"category"`
+				NormalizedText string `json:"normalized_text"`
+			} `json:"insights"`
+		}
+		if err := json.Unmarshal(b, &parsed); err != nil {
+			continue
+		}
+		lines := []string{
+			fmt.Sprintf("- file: %s", filepath.ToSlash(rel)),
+			fmt.Sprintf("- insights: %d", len(parsed.Insights)),
+		}
+		for _, insight := range parsed.Insights {
+			text := clampString(strings.TrimSpace(insight.NormalizedText), 120)
+			lines = append(lines, fmt.Sprintf("- [%s] %s: %s", emptyFallback(insight.Status, "?"), emptyFallback(insight.Category, "general"), text))
+			if len(lines) >= 7 {
+				break
+			}
+		}
+		return strings.Join(lines, "\n")
+	}
+	return ""
 }
 
 func normalizeRequestMode(mode string) string {

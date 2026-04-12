@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Send one user message to local Ollama with Pipeon system prompt + context bundle.
+# Send one user message to local Ollama with Pipeon system prompt and optional compatibility snapshot.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,27 +23,26 @@ if [[ -z "${QUESTION// }" ]]; then
 	QUESTION="$(cat)"
 fi
 
-CTX_FILE="$ROOT/bin/.dockpipe/pipeon-context.md"
 SYS_FILE="$SCRIPT_DIR/prompts/system.md"
-if [[ ! -f "$CTX_FILE" ]]; then
-	echo "pipeon: missing $CTX_FILE — run: pipeon bundle" >&2
-	exit 1
-fi
 if [[ ! -f "$SYS_FILE" ]]; then
 	echo "pipeon: missing system prompt $SYS_FILE" >&2
 	exit 1
 fi
 
 SYS="$(cat "$SYS_FILE")"
-CTX="$(cat "$CTX_FILE")"
 # Keep JSON safe: escape backslashes and quotes in user content for jq --arg
 COMBINED="$SYS
+CTX_FILE="$ROOT/bin/.dockpipe/pipeon-context.md"
+if [[ -f "$CTX_FILE" ]]; then
+	CTX="$(cat "$CTX_FILE")"
+	COMBINED="$COMBINED
 
 ---
 
-## Context bundle (repository)
+## Compatibility snapshot (optional)
 
 $CTX"
+fi
 
 if ! command -v jq >/dev/null 2>&1; then
 	echo "pipeon chat: jq is required" >&2

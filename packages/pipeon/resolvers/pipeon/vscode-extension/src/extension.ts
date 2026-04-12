@@ -1349,31 +1349,26 @@ async function collectWorkspaceSignals(root) {
     }
   }
 
-  const context = await readContextBundle(root);
   return {
     rootName: path.basename(root),
     activeFile: activePath ? relativeToRoot(root, activePath) : null,
     languageId: editor?.document?.languageId || null,
     selectionText,
     openFiles: [...new Set(openFiles)].slice(0, 8).filter(Boolean),
-    contextText: context.text,
-    contextPath: context.path,
-    contextMtime: context.mtime,
   };
 }
 
 function buildSystemPrompt(signals) {
   return [
     "You are DorkPipe, a local-first repo-aware IDE assistant inside VS Code.",
-    "Ground your answers in the provided workspace context when relevant.",
+    "Ground your answers in the active file, selected text, recent conversation, and explicit repo paths from the user request.",
+    "Treat scan artifacts, user-guidance artifacts, and compatibility snapshots as secondary context that only matters when the request is clearly about them.",
     "If you provide code, use fenced code blocks with a language tag when possible.",
     "Prefer concise, practical guidance and state uncertainty plainly.",
     signals.activeFile ? `Active file: ${signals.activeFile}` : "Active file: none",
     signals.selectionText ? `Selected text:\n${signals.selectionText}` : "Selected text: none",
     signals.openFiles.length ? `Open files:\n- ${signals.openFiles.join("\n- ")}` : "Open files: none",
-    signals.contextPath
-      ? `Repository context bundle (${signals.contextMtime || "unknown time"}):\n\n${signals.contextText}`
-      : "Repository context bundle: unavailable. Say so if grounding would help.",
+    "Compatibility snapshots such as pipeon-context are optional and should not dominate reasoning.",
   ].join("\n\n");
 }
 
@@ -2150,8 +2145,10 @@ async function handleLocalCommand(root, rawText) {
       const ctxPath = await resolveContextBundlePath(root);
       return {
         kind: "local",
-        text: ctxPath ? `Current context bundle: \`${path.relative(root, ctxPath)}\`` : "No DorkPipe context bundle found yet. Run `/bundle` first.",
-        status: ctxPath ? "Context bundle available" : "No context bundle found",
+        text: ctxPath
+          ? `Legacy compatibility snapshot: \`${path.relative(root, ctxPath)}\``
+          : "No legacy compatibility snapshot found.",
+        status: ctxPath ? "Compatibility snapshot available" : "No compatibility snapshot found",
       };
     }
     case "/workflow": {
@@ -2294,7 +2291,6 @@ async function executeDorkpipeRequest(root, session, text, options: ExecuteNatur
   }
 
   emitEvent("Inspecting workspace context");
-  emitEvent(signals.contextPath ? `Loaded ${path.relative(root, signals.contextPath)}` : "No context bundle found");
   if (signals.activeFile) {
     emitEvent(`Active file: ${signals.activeFile}`);
   }
@@ -2309,7 +2305,7 @@ async function executeDorkpipeRequest(root, session, text, options: ExecuteNatur
         text: `${orchestrated.text}\n\n_Handled locally without calling the model._`,
         format: "markdown",
         status: orchestrated.status || "Handled locally",
-        contextPath: signals.contextPath,
+        contextPath: null,
       };
     }
   }
@@ -2343,10 +2339,8 @@ async function executeDorkpipeRequest(root, session, text, options: ExecuteNatur
     kind: "model",
     text: answer || "(No response text returned.)",
     format: "markdown",
-    contextPath: signals.contextPath,
-    status: signals.contextPath
-      ? `Template: ${reasoningTemplate?.name || "DockPipe Default"}  |  Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Profile: ${modelProfileLabel(modelProfile)}  |  num_ctx: ${numCtx}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  Context: ${path.relative(root, signals.contextPath)}`
-      : `Template: ${reasoningTemplate?.name || "DockPipe Default"}  |  Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Profile: ${modelProfileLabel(modelProfile)}  |  num_ctx: ${numCtx}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  No context bundle found`,
+    contextPath: null,
+    status: `Template: ${reasoningTemplate?.name || "DockPipe Default"}  |  Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Profile: ${modelProfileLabel(modelProfile)}  |  num_ctx: ${numCtx}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  Workspace cues: ${signals.activeFile || "repo-wide"}`,
   };
 }
 
@@ -4955,7 +4949,7 @@ function activate(context) {
         channel.appendLine(text);
         channel.show(true);
       } catch {
-        vscode.window.showInformationMessage("DorkPipe: no pipeon-context bundle found — run `pipeon bundle` first.");
+        vscode.window.showInformationMessage("DorkPipe: no legacy compatibility snapshot found.");
       }
     })
   );

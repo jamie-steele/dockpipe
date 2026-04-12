@@ -212,7 +212,7 @@
 
   function renderMessages(messages) {
     if (!messages.length) {
-      return '<article class="msg assistant"><div class="role">DorkPipe</div><div class="body"><p>Ask about this workspace. DorkPipe will use the local context bundle when available, keep chat history per workspace, surface prepared edits in the run inspector, and route obvious safe actions locally first.</p></div></article>';
+      return '<article class="msg assistant"><div class="role">DorkPipe</div><div class="body"><p>Ask about this workspace. DorkPipe will use focused workspace context, keep chat history per workspace, surface prepared edits in the run inspector, and route obvious safe actions locally first.</p></div></article>';
     }
     return messages.map((message) => {
       const role = message.role === "assistant" ? "DorkPipe" : "You";
