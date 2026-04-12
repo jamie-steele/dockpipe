@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Concatenate node outputs under .dorkpipe/nodes/ into one file for downstream prompts.
+# Concatenate node outputs under bin/.dockpipe/packages/dorkpipe/nodes/ into one file for downstream prompts.
 set -euo pipefail
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 cd "$ROOT"
-NODES="${ROOT}/.dorkpipe/nodes"
-OUT="${ROOT}/.dorkpipe/merged-nodes.txt"
+NODES="${ROOT}/bin/.dockpipe/packages/dorkpipe/nodes"
+OUT="${ROOT}/bin/.dockpipe/packages/dorkpipe/merged-nodes.txt"
 mkdir -p "$(dirname "$OUT")"
 if [[ ! -d "$NODES" ]]; then
 	echo "(no nodes yet)" >"$OUT"

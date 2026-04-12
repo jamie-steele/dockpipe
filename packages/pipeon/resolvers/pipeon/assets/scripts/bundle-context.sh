@@ -28,7 +28,7 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo ""
 	echo "| Lane | Meaning |"
 	echo "|------|---------|"
-	echo "| Repo / analysis facts | e.g. \`.dorkpipe/self-analysis/\` |"
+	echo "| Repo / analysis facts | e.g. \`bin/.dockpipe/packages/dorkpipe/self-analysis/\` |"
 	echo "| Scan signals | e.g. \`bin/.dockpipe/ci-analysis/findings.json\` |"
 	echo "| User guidance | e.g. \`bin/.dockpipe/analysis/insights.json\` (signal, not truth) |"
 	echo ""
@@ -67,19 +67,19 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	fi
 
 	echo ""
-	echo "## Orchestrator / run metadata (\`.dorkpipe/\`)"
+	echo "## Orchestrator / run metadata (\`bin/.dockpipe/packages/dorkpipe/\`)"
 	echo ""
-	if [[ -f "$ROOT/.dorkpipe/run.json" ]] && have_jq; then
-		jq '{name, ts, policy}' "$ROOT/.dorkpipe/run.json" 2>/dev/null | sed 's/^/    /' || true
+	if [[ -f "$ROOT/bin/.dockpipe/packages/dorkpipe/run.json" ]] && have_jq; then
+		jq '{name, ts, policy}' "$ROOT/bin/.dockpipe/packages/dorkpipe/run.json" 2>/dev/null | sed 's/^/    /' || true
 	else
 		echo "- **run.json:** not present"
 	fi
 
 	echo ""
-	echo "## Self-analysis bundle (\`.dorkpipe/self-analysis/\`)"
+	echo "## Self-analysis bundle (\`bin/.dockpipe/packages/dorkpipe/self-analysis/\`)"
 	echo ""
-	if [[ -d "$ROOT/.dorkpipe/self-analysis" ]] && [[ -n "$(ls -A "$ROOT/.dorkpipe/self-analysis" 2>/dev/null)" ]]; then
-		ls -1 "$ROOT/.dorkpipe/self-analysis" 2>/dev/null | head -30 | sed 's/^/- /'
+	if [[ -d "$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis" ]] && [[ -n "$(ls -A "$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis" 2>/dev/null)" ]]; then
+		ls -1 "$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis" 2>/dev/null | head -30 | sed 's/^/- /'
 	else
 		echo "- Directory missing or empty — run maintainer self-analysis workflows if you use DorkPipe signals."
 	fi

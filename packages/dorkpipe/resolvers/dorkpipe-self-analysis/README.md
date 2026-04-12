@@ -6,7 +6,7 @@
 |--------|---------|
 | `bin/.dockpipe/orchestrator-cursor-prompt.md` | Full handoff (sections 1–9) |
 | **`bin/.dockpipe/paste-this-prompt.txt`** | **Single block to paste into an AI assistant** — also **printed to stdout** at end of `run-self-analysis.sh` |
-| `.dorkpipe/self-analysis/*.txt` | Raw facts (git, package counts, ripgrep hits) — auditable |
+| `bin/.dockpipe/packages/dorkpipe/self-analysis/*.txt` | Raw facts (git, package counts, ripgrep hits) — auditable |
 | `bin/.dockpipe/orchestrator-cursor-prompt.refined.md` | Only with **`spec.combined.yaml`**: Ollama refine; merged into `paste-this-prompt.txt` |
 
 The workflow **`cmd`** runs in **`golang:1.25-bookworm`** (git and curl from the image; no **`apt-get`** — DockPipe runs the container as your host uid, so package installs as root are not available). It builds **`bin/dorkpipe`** inside the container if missing, then runs **`scripts/dorkpipe/run-self-analysis.sh`** (signals use **`rg`** when present, else **`grep`**).

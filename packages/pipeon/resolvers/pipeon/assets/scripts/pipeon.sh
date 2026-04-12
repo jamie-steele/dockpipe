@@ -60,7 +60,7 @@ status)
 	else
 		echo "gate: version ok for Pipeon"
 	fi
-	for p in "$ROOT/bin/.dockpipe/pipeon-context.md" "$ROOT/bin/.dockpipe/ci-analysis/findings.json" "$ROOT/bin/.dockpipe/analysis/insights.json" "$ROOT/.dorkpipe/run.json"; do
+	for p in "$ROOT/bin/.dockpipe/pipeon-context.md" "$ROOT/bin/.dockpipe/ci-analysis/findings.json" "$ROOT/bin/.dockpipe/analysis/insights.json" "$ROOT/bin/.dockpipe/packages/dorkpipe/run.json"; do
 		if [[ -f "$p" ]]; then
 			echo "present: $p"
 		else

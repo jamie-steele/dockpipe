@@ -3,7 +3,7 @@
 set -euo pipefail
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 cd "$ROOT"
-OUT="${ROOT}/.dorkpipe"
+OUT="${ROOT}/bin/.dockpipe/packages/dorkpipe"
 mkdir -p "$OUT"
 {
 	echo "# task signals $(date -u +%Y-%m-%dT%H:%M:%SZ)"

@@ -31,19 +31,19 @@ if [[ -f "$ROOT/bin/.dockpipe/ci-analysis/SUMMARY.md" ]]; then
 	head -15 "$ROOT/bin/.dockpipe/ci-analysis/SUMMARY.md"
 fi
 
-if [[ -d "$ROOT/.dorkpipe/self-analysis" ]] && [[ -n "$(ls -A "$ROOT/.dorkpipe/self-analysis" 2>/dev/null)" ]]; then
+if [[ -d "$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis" ]] && [[ -n "$(ls -A "$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis" 2>/dev/null)" ]]; then
 	echo ""
-	echo "--- .dorkpipe/self-analysis/ (present) ---"
-	ls -la "$ROOT/.dorkpipe/self-analysis" | head -20
+	echo "--- bin/.dockpipe/packages/dorkpipe/self-analysis/ (present) ---"
+	ls -la "$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis" | head -20
 fi
 
-if [[ -f "$ROOT/.dorkpipe/run.json" ]]; then
+if [[ -f "$ROOT/bin/.dockpipe/packages/dorkpipe/run.json" ]]; then
 	echo ""
-	echo "--- .dorkpipe/run.json ---"
+	echo "--- bin/.dockpipe/packages/dorkpipe/run.json ---"
 	if have_jq; then
-		jq '{name, ts, policy}' "$ROOT/.dorkpipe/run.json" 2>/dev/null || true
+		jq '{name, ts, policy}' "$ROOT/bin/.dockpipe/packages/dorkpipe/run.json" 2>/dev/null || true
 	else
-		head -5 "$ROOT/.dorkpipe/run.json"
+		head -5 "$ROOT/bin/.dockpipe/packages/dorkpipe/run.json"
 	fi
 fi
 

@@ -11,8 +11,8 @@ nodes:
     kind: shell
     script: |
       set -euo pipefail
-      mkdir -p .dorkpipe
-      echo "prep ok" > .dorkpipe/prep.txt
+      mkdir -p bin/.dockpipe/packages/dorkpipe
+      echo "prep ok" > bin/.dockpipe/packages/dorkpipe/prep.txt
 
   - id: local_reason
     kind: ollama

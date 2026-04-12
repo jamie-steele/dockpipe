@@ -9,7 +9,7 @@ Go module **`dorkpipe.orchestrator`** — local-first orchestration **on top of*
 - **`scheduler/`** — parallel batches + escalation ordering  
 - **`workers/`** — real execution (no stubs)  
 - **`aggregator/`** — harmonic per dimension + weighted `calibrated` + escalation policy  
-- **`eval/`** — summarize `.dorkpipe/metrics.jsonl`  
+- **`eval/`** — summarize `bin/.dockpipe/packages/dorkpipe/metrics.jsonl`  
 - **`promotion/`** — heuristic promotion hints from metrics + last `run.json`  
 - **`composegen/`** — Postgres+pgvector (+ optional Ollama) compose file  
 - **`engine/`** — wires planner → scheduler → workers → aggregator  
@@ -22,6 +22,6 @@ Does **not** replace DockPipe’s workflow engine; it **invokes** the `dockpipe`
 
 **Orchestration:** `policy.branch_judge` + `branch_required` on nodes (JSON `{"winner":"…"}` from judge); `retrieve_if_calibrated_below`; `policy.early_stop_calibrated_above`; `parallel_group` agreement within a level; `kind: verifier` (Ollama transport, `verifier` score in JSON). CLI: **`dorkpipe eval`**, **`dorkpipe promote`**.
 
-Artifacts: **`.dorkpipe/run.json`**, **`.dorkpipe/metrics.jsonl`** (schema v2). Example DAG: **`examples/full-bar.yaml`** in this directory.
+Artifacts: **`bin/.dockpipe/packages/dorkpipe/run.json`**, **`bin/.dockpipe/packages/dorkpipe/metrics.jsonl`** (schema v2). Example DAG: **`examples/full-bar.yaml`** in this directory.
 
-**DockPipe self-analysis:** **`dockpipe/dorkpipe/resolvers/dorkpipe-self-analysis/`** runs the script **in a container** (isolated). Optional **Compose** sidecar: **`scripts/dorkpipe/dev-stack.sh`**. Writes **`.dockpipe/`** + **`.dorkpipe/`** artifacts.
+**DockPipe self-analysis:** **`dockpipe/dorkpipe/resolvers/dorkpipe-self-analysis/`** runs the script **in a container** (isolated). Optional **Compose** sidecar: **`scripts/dorkpipe/dev-stack.sh`**. Writes **`.dockpipe/`** + **`bin/.dockpipe/packages/dorkpipe/`** artifacts.

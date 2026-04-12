@@ -4,7 +4,7 @@
 name: compliance-handoff
 description: >-
   Host-only: run scripts/dorkpipe/compliance-handoff.sh. Points AI at docs/artifacts.md and
-  bin/.dockpipe/ci-analysis/, .dorkpipe/self-analysis/, .dorkpipe/run.json when present.
+  bin/.dockpipe/ci-analysis/, bin/.dockpipe/packages/dorkpipe/self-analysis/, bin/.dockpipe/packages/dorkpipe/run.json when present.
 
 docker_preflight: false
 resolver: codex

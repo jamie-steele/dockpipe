@@ -1,4 +1,4 @@
-# Maintainer artifacts (`.dockpipe/` / `.dorkpipe/`)
+# Maintainer artifacts (`.dockpipe/` / `bin/.dockpipe/packages/dorkpipe/`)
 
 Generated files used as **context** for humans and AI — not a second orchestrator. Refresh via workflows / **`make ci`** / **`make self-analysis*`** when you need current data.
 
@@ -7,7 +7,7 @@ Generated files used as **context** for humans and AI — not a second orchestra
 When asked *“compliance issues?”* or *“security posture?”*:
 
 1. Read **`AGENTS.md`**.
-2. If present, load **`.dockpipe/ci-analysis/findings.json`**, **`SUMMARY.md`**, **`.dorkpipe/self-analysis/`**, **`.dorkpipe/run.json`**. Do **not** invent scan output.
+2. If present, load **`.dockpipe/ci-analysis/findings.json`**, **`SUMMARY.md`**, **`bin/.dockpipe/packages/dorkpipe/run.json`**. Do **not** invent scan output.
 3. If artifacts are missing or stale vs `HEAD`, say so — do **not** claim “clean” without evidence.
 4. This is **not** a certified compliance verdict (SOC2, ISO, etc.).
 

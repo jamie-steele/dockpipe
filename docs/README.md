@@ -19,7 +19,7 @@
 | Maintainer / integrations | |
 |-----------------------------|--|
 | [core-tools.md](core-tools.md) | DockPipe vs maintainer packages under **`.staging/packages/`** |
-| [artifacts.md](artifacts.md) | `.dockpipe/` / `.dorkpipe/` signals, CI bundle, governance Q&A |
+| [artifacts.md](artifacts.md) | `.dockpipe/` / `bin/.dockpipe/packages/dorkpipe/` signals, CI bundle, governance Q&A |
 | MCP (`mcpd`) | **[`packages/dorkpipe-mcp/README.md`](../packages/dorkpipe-mcp/README.md)** (package — not under `docs/`) |
 
 **QA:** [qa/manual-qa.md](qa/manual-qa.md) · **Messaging (About copy):** [messaging.md](messaging.md)

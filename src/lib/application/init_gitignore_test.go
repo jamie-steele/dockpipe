@@ -84,7 +84,10 @@ func TestCmdInitGitignore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(b), ".dorkpipe/") {
-		t.Fatalf("expected .dorkpipe/ in .gitignore, got:\n%s", b)
+	if !strings.Contains(string(b), "bin/.dockpipe/") {
+		t.Fatalf("expected bin/.dockpipe/ in .gitignore, got:\n%s", b)
+	}
+	if strings.Contains(string(b), ".dorkpipe/") {
+		t.Fatalf("did not expect legacy .dorkpipe/ entry in .gitignore, got:\n%s", b)
 	}
 }

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Deterministic repo facts for DorkPipe self-analysis (no LLM). Writes .dorkpipe/self-analysis/
+# Deterministic repo facts for DorkPipe self-analysis (no LLM). Writes bin/.dockpipe/packages/dorkpipe/self-analysis/
 set -euo pipefail
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
-OUT="$ROOT/.dorkpipe/self-analysis"
+OUT="$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis"
 mkdir -p "$OUT"
 
 {

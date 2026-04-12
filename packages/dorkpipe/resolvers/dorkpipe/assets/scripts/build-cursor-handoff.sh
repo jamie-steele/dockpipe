@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Assemble Cursor handoff prompt from .dorkpipe/self-analysis/* (facts only + structured guidance).
+# Assemble Cursor handoff prompt from bin/.dockpipe/packages/dorkpipe/self-analysis/* (facts only + structured guidance).
 # Optional: DORKPIPE_SELF_ANALYSIS_USE_OLLAMA=1 DORKPIPE_SELF_ANALYSIS_MODEL=llama3.2
 set -euo pipefail
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
-OUT="$ROOT/.dorkpipe/self-analysis"
+OUT="$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis"
 DEST="$ROOT/bin/.dockpipe/orchestrator-cursor-prompt.md"
 mkdir -p "$ROOT/bin/.dockpipe"
 
@@ -13,7 +13,7 @@ if [[ ! -d "$OUT" ]]; then
 	exit 1
 fi
 
-GO_N=$(cat "$ROOT/.dorkpipe/self-analysis/dorkpipe_go_files.count" 2>/dev/null || echo 0)
+GO_N=$(cat "$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis/dorkpipe_go_files.count" 2>/dev/null || echo 0)
 SPEC="$ROOT/packages/dorkpipe/resolvers/dorkpipe-orchestrator/spec.example.yaml"
 HAS_VERIFIER=0
 if [[ -f "$SPEC" ]] && grep -q 'kind:.*verifier' "$SPEC"; then
@@ -40,7 +40,7 @@ EOF
 
 	echo "## 2. Current state summary (from this checkout)"
 	echo "- **Go files in \`lib/dorkpipe\`**: ${GO_N}"
-	echo "- **Git HEAD / branch** (see \`.dorkpipe/self-analysis/git.txt\` for full):"
+	echo "- **Git HEAD / branch** (see \`bin/.dockpipe/packages/dorkpipe/self-analysis/git.txt\` for full):"
 	head -3 "$OUT/git.txt" 2>/dev/null | sed 's/^/  /' || true
 	echo "- **DorkPipe packages (file counts)**:"
 	if [[ -f "$OUT/dorkpipe_packages.tsv" ]]; then
@@ -63,11 +63,11 @@ EOF
 		echo "- **Independent verifier in the default orchestrator spec** (\`packages/dorkpipe/resolvers/dorkpipe-orchestrator/spec.example.yaml\`): add a \`kind: verifier\` node after local LLM output so \`Vector.Verifier\` is populated before escalation (implementation in \`lib/dorkpipe/workers/workers.go\`, \`parseVerifierScore\`)."
 	fi
 	echo "- **Surface engine features in shipped examples**: \`lib/dorkpipe/examples/full-bar.yaml\` demonstrates \`branch_judge\`, \`retrieve_if_calibrated_below\`, and skips — mirror one pattern into \`spec.example.yaml\` so dogfood exercises the same code paths operators will rely on."
-	echo "- **Metrics loop**: standardize \`bin/dorkpipe eval\` / \`promote\` after CI or nightly runs; extend \`.dorkpipe/metrics.jsonl\` consumers if new dimensions are added (\`lib/dorkpipe/engine/provenance.go\`)."
+	echo "- **Metrics loop**: standardize \`bin/dorkpipe eval\` / \`promote\` after CI or nightly runs; extend \`bin/.dockpipe/packages/dorkpipe/metrics.jsonl\` consumers if new dimensions are added (\`lib/dorkpipe/engine/provenance.go\`)."
 	echo "- **Asset promotion**: scripts under \`templates/core/bundles/dorkpipe/\` should stay referenced from workflows/docs when they become part of a supported path (collect/merge/verify-*)."
-	echo "- **TODO/FIXME triage**: review hits in \`.dorkpipe/self-analysis/signals_todo.txt\`; convert stable items into issues or small PRs."
-	if [[ -f "$ROOT/.dorkpipe/metrics.jsonl" ]] && [[ -f "$OUT/signals_metrics_tail.txt" ]]; then
-		echo "- **Existing \`.dorkpipe/metrics.jsonl\`**: tail captured in \`.dorkpipe/self-analysis/signals_metrics_tail.txt\` — use for escalation / early-stop rates."
+	echo "- **TODO/FIXME triage**: review hits in \`bin/.dockpipe/packages/dorkpipe/self-analysis/signals_todo.txt\`; convert stable items into issues or small PRs."
+	if [[ -f "$ROOT/bin/.dockpipe/packages/dorkpipe/metrics.jsonl" ]] && [[ -f "$OUT/signals_metrics_tail.txt" ]]; then
+		echo "- **Existing \`bin/.dockpipe/packages/dorkpipe/metrics.jsonl\`**: tail captured in \`bin/.dockpipe/packages/dorkpipe/self-analysis/signals_metrics_tail.txt\` — use for escalation / early-stop rates."
 	fi
 	echo ""
 	echo "### Search hits (files touching orchestration keywords)"
@@ -125,7 +125,7 @@ EOF
 	echo "The **plain, copy-paste-ready** implementation prompt (no extra narrative) is in **\`bin/.dockpipe/paste-this-prompt.txt\`**. Running \`./packages/dorkpipe/resolvers/dorkpipe/assets/scripts/run-self-analysis.sh\` **prints that file to stdout** at the end. With \`spec.combined.yaml\`, Ollama output is merged into the same file after the base prompt."
 	echo ""
 	echo "---"
-	echo "_Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)_ · _Facts under \`.dorkpipe/self-analysis/\`_"
+	echo "_Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)_ · _Facts under \`bin/.dockpipe/packages/dorkpipe/self-analysis/\`_"
 } >"$DEST"
 
 # Optional Ollama appendix (facts-grounded; set DORKPIPE_SELF_ANALYSIS_USE_OLLAMA=1)

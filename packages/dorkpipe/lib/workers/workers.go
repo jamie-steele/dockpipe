@@ -20,6 +20,7 @@ import (
 
 	"dorkpipe.orchestrator/confidence"
 	"dorkpipe.orchestrator/spec"
+	"dorkpipe.orchestrator/statepaths"
 )
 
 // Result is one node's outcome.
@@ -390,9 +391,12 @@ func (e *Executor) runPGVector(ctx context.Context, n *spec.Node) *Result {
 	return r
 }
 
-// WriteOutputs writes node stdout to .dorkpipe/nodes/<id>.txt under workdir (for downstream subst).
+// WriteOutputs writes node stdout to the package-scoped runtime nodes dir under workdir (for downstream subst).
 func WriteOutputs(workdir, nodeID, stdout string) error {
-	dir := filepath.Join(workdir, ".dorkpipe", "nodes")
+	dir, err := statepaths.NodesDir(workdir)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}

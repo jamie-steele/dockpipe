@@ -8,7 +8,7 @@ def doc_default:
       kind: "dockpipe_user_insights",
       separation: {
         user_insights: "This file — structured human guidance; not verified facts.",
-        repo_facts: ".dorkpipe/self-analysis/ (example layout)",
+        repo_facts: "bin/.dockpipe/packages/dorkpipe/self-analysis/ (example layout)",
         system_findings: "bin/.dockpipe/ci-analysis/findings.json"
       },
       insights: []

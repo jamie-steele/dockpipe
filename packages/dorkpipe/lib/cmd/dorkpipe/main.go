@@ -15,6 +15,7 @@ import (
 	"dorkpipe.orchestrator/eval"
 	"dorkpipe.orchestrator/promotion"
 	"dorkpipe.orchestrator/spec"
+	"dorkpipe.orchestrator/statepaths"
 	"dorkpipe.orchestrator/workers"
 )
 
@@ -146,7 +147,7 @@ func validateCmd(argv []string) {
 
 func evalCmd(argv []string) {
 	fs := flag.NewFlagSet("eval", flag.ExitOnError)
-	workdir := fs.String("workdir", "", "directory containing .dorkpipe/metrics.jsonl (default cwd)")
+	workdir := fs.String("workdir", "", "directory containing bin/.dockpipe/packages/dorkpipe/metrics.jsonl (default cwd)")
 	_ = fs.Parse(argv)
 	wd := *workdir
 	if wd == "" {
@@ -157,7 +158,11 @@ func evalCmd(argv []string) {
 			os.Exit(1)
 		}
 	}
-	path := filepath.Join(wd, ".dorkpipe", "metrics.jsonl")
+	path, err := statepaths.MetricsPath(wd)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	st, err := eval.SummarizeFile(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "eval: %v\n", err)
@@ -170,7 +175,7 @@ func evalCmd(argv []string) {
 
 func promoteCmd(argv []string) {
 	fs := flag.NewFlagSet("promote", flag.ExitOnError)
-	workdir := fs.String("workdir", "", "directory containing .dorkpipe/ (default cwd)")
+	workdir := fs.String("workdir", "", "directory containing bin/.dockpipe/packages/dorkpipe/ (default cwd)")
 	_ = fs.Parse(argv)
 	wd := *workdir
 	if wd == "" {

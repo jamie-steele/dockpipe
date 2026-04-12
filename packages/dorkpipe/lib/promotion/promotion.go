@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"dorkpipe.orchestrator/eval"
+	"dorkpipe.orchestrator/statepaths"
 )
 
 // Suggestion is a human-readable promotion hint.
@@ -17,10 +17,12 @@ type Suggestion struct {
 	Detail string `json:"detail"`
 }
 
-// Analyze inspects .dorkpipe under workdir and returns suggestions.
+// Analyze inspects the package-scoped DorkPipe runtime dir under workdir and returns suggestions.
 func Analyze(workdir string) ([]Suggestion, error) {
-	dir := filepath.Join(workdir, ".dorkpipe")
-	metricsPath := filepath.Join(dir, "metrics.jsonl")
+	metricsPath, err := statepaths.MetricsPath(workdir)
+	if err != nil {
+		return nil, err
+	}
 	var out []Suggestion
 	st, err := eval.SummarizeFile(metricsPath)
 	if err == nil && st.Lines > 0 {
@@ -43,7 +45,10 @@ func Analyze(workdir string) ([]Suggestion, error) {
 			})
 		}
 	}
-	runPath := filepath.Join(dir, "run.json")
+	runPath, err := statepaths.RunPath(workdir)
+	if err != nil {
+		return nil, err
+	}
 	b, err := os.ReadFile(runPath)
 	if err == nil {
 		var doc struct {

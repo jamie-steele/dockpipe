@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"dorkpipe.orchestrator/statepaths"
 )
 
 const (
@@ -166,7 +168,7 @@ func editCmd(argv []string) {
 	chosenNumCtx := resolveNumCtx(*numCtx)
 
 	reqID := fmt.Sprintf("req_%d", time.Now().UnixNano())
-	artifactsDir := filepath.Join(absWd, ".dorkpipe", "edit", reqID)
+	artifactsDir, err := statepaths.EditArtifactsDir(absWd, reqID)
 	if err := os.MkdirAll(artifactsDir, 0o755); err != nil {
 		emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Could not create artifact directory: %v", err), false)
 		os.Exit(1)
@@ -2019,8 +2021,15 @@ func tryDeterministicCollectionScaffoldPrimitive(reqID, root, message, artifacts
 		"package_name": spec.PackageName,
 		"confidence":   spec.Confidence,
 	})
-	if _, err := os.Stat(filepath.Join(root, spec.ManifestPath)); err == nil {
-		return nil, "", false, nil
+	for _, target := range spec.TargetFiles {
+		abs := filepath.Join(root, target)
+		if _, err := os.Stat(abs); err == nil {
+			emitEditError(reqID, "CONTEXT_GATHER_FAILED", fmt.Sprintf("Deterministic scaffold target already exists: %s", target), false)
+			return nil, "", true, fmt.Errorf("deterministic scaffold target already exists: %s", target)
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			emitEditError(reqID, "CONTEXT_GATHER_FAILED", fmt.Sprintf("Could not inspect scaffold target %s: %v", target, err), false)
+			return nil, "", true, err
+		}
 	}
 	var patchParts []string
 	patchParts = append(patchParts, buildCreateFilePatch(spec.ManifestPath, spec.ManifestBody))
@@ -2040,7 +2049,14 @@ func tryDeterministicCollectionScaffoldPrimitive(reqID, root, message, artifacts
 	if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
 		return nil, "", true, err
 	}
-	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte("Deterministic scaffold primitive selected."), 0o644)
+	verifyCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	verifyOutput, err := runRepoScript(verifyCtx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
+	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(emptyFallback(verifyOutput, "Deterministic scaffold primitive selected.")), 0o644)
+	if err != nil {
+		emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Deterministic scaffold patch did not apply cleanly.\n\nVerifier output:\n%s", emptyFallback(verifyOutput, "(no verifier output)")), false)
+		return nil, "", true, fmt.Errorf("deterministic scaffold patch did not apply cleanly: %w", err)
+	}
 	return artifact, patchPath, true, nil
 }
 
@@ -2145,6 +2161,11 @@ func looksLikePackageCreation(lower string) bool {
 	}
 	for _, verb := range []string{"make", "create", "new", "scaffold", "author", "build"} {
 		if strings.Contains(lower, verb) {
+			return true
+		}
+	}
+	for _, phrase := range []string{"try your hand at", "put together", "spin up"} {
+		if strings.Contains(lower, phrase) {
 			return true
 		}
 	}
@@ -2256,6 +2277,35 @@ func inferRequestedPackagePurpose(message string) string {
 		tail = strings.Trim(tail, " .,!?:;")
 		if len(tail) >= 8 {
 			return tail
+		}
+	}
+	if idx := strings.Index(lower, " package"); idx > 0 {
+		head := strings.TrimSpace(msg[:idx])
+		headLower := strings.ToLower(head)
+		for _, prefix := range []string{
+			"try your hand at ",
+			"put together ",
+			"spin up ",
+			"make ",
+			"create ",
+			"build ",
+			"author ",
+			"scaffold ",
+			"new ",
+			"a ",
+			"an ",
+		} {
+			if strings.HasPrefix(headLower, prefix) {
+				head = strings.TrimSpace(head[len(prefix):])
+				headLower = strings.ToLower(head)
+				break
+			}
+		}
+		head = strings.TrimSpace(strings.TrimSuffix(head, " dockpipe"))
+		head = strings.TrimSpace(strings.TrimSuffix(head, " DockPipe"))
+		head = strings.Trim(head, " .,!?:;")
+		if len(head) >= 4 {
+			return head
 		}
 	}
 	return ""
@@ -2414,6 +2464,7 @@ func pathBase(value string) string {
 	}
 	return value
 }
+
 
 func extractQuotedText(message string) string {
 	for _, quote := range []string{`"`, `'`, "`"} {

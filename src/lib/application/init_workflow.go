@@ -26,10 +26,10 @@ const agentsSelfAnalysisMarker = "<!-- dockpipe: self-analysis handoff -->"
 
 func agentsSelfAnalysisSection() string {
 	return agentsSelfAnalysisMarker + "\n\n## Self-analysis handoff\n\n" +
-		"Generated outputs: **`bin/.dockpipe/paste-this-prompt.txt`**, **`bin/.dockpipe/orchestrator-cursor-prompt.md`**, **`.dorkpipe/self-analysis/`**, and optionally **`.dorkpipe/run.json`**.\n\n" +
+		"Generated outputs: **`bin/.dockpipe/paste-this-prompt.txt`**, **`bin/.dockpipe/orchestrator-cursor-prompt.md`**, **`bin/.dockpipe/packages/dorkpipe/self-analysis/`**, and optionally **`bin/.dockpipe/packages/dorkpipe/run.json`**.\n\n" +
 		"### Agent workflow (read before repo-wide work)\n\n" +
 		"1. **Discover:** Read **AGENTS.md** and load these paths if present.\n" +
-		"2. **Freshness:** Compare to **git HEAD**, file dates, **VERSION**, or **`.dorkpipe/run.json`**.\n" +
+		"2. **Freshness:** Compare to **git HEAD**, file dates, **VERSION**, or **`bin/.dockpipe/packages/dorkpipe/run.json`**.\n" +
 		"3. **Use** current analysis as primary context; if **stale**, tell the user refresh is recommended before big changes; **do not** auto-refresh.\n" +
 		"4. **Refresh** only when the user asks; then run **`make self-analysis`**, **`make self-analysis-host`**, or **`make self-analysis-stack`** (or **`dockpipe --workflow dorkpipe-self-analysis --workdir . --`**).\n" +
 		"5. **Isolation:** Analysis runs in a **Docker** isolate (see workflow **isolate:** image). **`dorkpipe-self-analysis-stack`** uses **docker compose** on the host for Postgres/Ollama, then the same isolate step.\n\n" +

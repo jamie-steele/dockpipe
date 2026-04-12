@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Search-based signals (grounded). Writes .dorkpipe/self-analysis/signals_*.txt
+# Search-based signals (grounded). Writes bin/.dockpipe/packages/dorkpipe/self-analysis/signals_*.txt
 set -euo pipefail
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
-OUT="$ROOT/.dorkpipe/self-analysis"
+OUT="$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis"
 mkdir -p "$OUT"
 
 todo_hits() {
@@ -53,10 +53,10 @@ engine_files() {
 	fi
 } >"$OUT/signals_go_list.txt"
 
-if [[ -f "$ROOT/.dorkpipe/metrics.jsonl" ]]; then
-	tail -5 "$ROOT/.dorkpipe/metrics.jsonl" >"$OUT/signals_metrics_tail.txt" || true
+if [[ -f "$ROOT/bin/.dockpipe/packages/dorkpipe/metrics.jsonl" ]]; then
+	tail -5 "$ROOT/bin/.dockpipe/packages/dorkpipe/metrics.jsonl" >"$OUT/signals_metrics_tail.txt" || true
 else
-	echo "(no .dorkpipe/metrics.jsonl yet — run dorkpipe eval after orchestrator runs)" >"$OUT/signals_metrics_tail.txt"
+	echo "(no bin/.dockpipe/packages/dorkpipe/metrics.jsonl yet — run dorkpipe eval after orchestrator runs)" >"$OUT/signals_metrics_tail.txt"
 fi
 
 echo "self-analysis-signals: wrote $OUT/signals_*.txt"

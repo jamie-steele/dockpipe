@@ -9,7 +9,7 @@
 | **Host / Ollama** | Default **Llama** inference stays on the **host** (fast, private, no cloud required for core use). |
 | **Docker (backend)** | Used for **isolation** and for **DockPipe-class work** (containers, reproducible steps)—not as the thing the user manually drives for every chat turn. The app orchestrates it; the user does not live in `docker run` for daily chat. |
 | **Safe host mapping** | The user **opens directories** (projects, worktrees) **in the app**; Pipeon maps them into the isolated side **safely** (bounded mounts, clear labels, no silent exfiltration)—**like a native “add folder” workflow**, not manual volume flags. |
-| **Intelligence** | Everything we added—**`.dockpipe/`**, **`.dorkpipe/`**, insights queue, CI normalization, workflows—is **ingested** so the model and UI can **hint** what’s available and **ground** answers. |
+| **Intelligence** | Everything we added—**`.dockpipe/`**, **`bin/.dockpipe/packages/dorkpipe/`**, insights queue, CI normalization, workflows—is **ingested** so the model and UI can **hint** what’s available and **ground** answers. |
 
 ### Boot and conversation (product UX)
 
@@ -43,7 +43,7 @@ At session start and when the user’s question is **repo-scoped**, the runtime 
 1. **Repository facts** — e.g. layout, recent changes, key paths (from self-analysis or lightweight indexing if present).
 2. **CI / scan signals** — e.g. normalized findings under `.dockpipe/ci-analysis/` when available.
 3. **Structured user guidance** — e.g. `.dockpipe/analysis/insights.json` (accepted/pending items, scoped by path or topic).
-4. **Workflow / orchestration metadata** — e.g. `.dorkpipe/run.json`, metrics tails, when relevant to “why did X happen” or “what ran last.”
+4. **Workflow / orchestration metadata** — e.g. `bin/.dockpipe/packages/dorkpipe/run.json`, metrics tails, when relevant to “why did X happen” or “what ran last.”
 5. **Handoff text** — optional short blocks (e.g. paste prompts) only when they add signal density, not as a second UI.
 
 **Rule:** Discovery is **best-effort**. If something is missing, the system says so briefly and continues—no blocking modal.
@@ -69,7 +69,7 @@ At session start and when the user’s question is **repo-scoped**, the runtime 
 
 Short prefix or footnote (pick one style per product skin; keep under two lines):
 
-- *“Using: repo summary (`.dorkpipe/self-analysis`), CI findings (`.dockpipe/ci-analysis`, 12 items), 3 user insights (accepted).”*
+- *“Using: repo summary (`bin/.dockpipe/packages/dorkpipe/self-analysis`), CI findings (`.dockpipe/ci-analysis`, 12 items), 3 user insights (accepted).”*
 - *“Context: local analysis bundle + 2 insight records; CI bundle not present.”*
 
 ### 4.2 When analysis is **stale**
@@ -175,7 +175,7 @@ I won’t run destructive Docker commands for you. If that’s what you want, ru
 
 This repo already separates:
 
-- **Facts** (e.g. `.dorkpipe/self-analysis/`)
+- **Facts** (e.g. `bin/.dockpipe/packages/dorkpipe/self-analysis/`)
 - **Scans** (e.g. `.dockpipe/ci-analysis/findings.json`)
 - **User guidance** (e.g. `.dockpipe/analysis/insights.json`)
 
@@ -199,7 +199,7 @@ The **shipping** Pipeon experience is a **desktop (or equivalent) application** 
 
 | Piece | Purpose |
 |-------|---------|
-| **Artifact lanes** | **`.dockpipe/`**, **`.dorkpipe/`**, insights, CI bundle—documented across **`docs/`** |
+| **Artifact lanes** | **`.dockpipe/`**, **`bin/.dockpipe/packages/dorkpipe/`**, insights, CI bundle—documented across **`docs/`** |
 | **`../scripts/bundle-context.sh`** | Builds **`pipeon-context.md`** — same **aggregate** the app should load (harness + future UI) |
 | **`packages/pipeon/resolvers/pipeon/bin/pipeon`** / **`chat.sh`** | **Dev-only:** one-shot Ollama call to validate prompts + bundle (**not** the user-facing UX) |
 | **`../scripts/lib/enable.sh`** | Feature gate for harness (**`DOCKPIPE_PIPEON`**, min version **0.6.5**, **`DOCKPIPE_PIPEON_ALLOW_PRERELEASE`**) |

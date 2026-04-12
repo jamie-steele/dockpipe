@@ -1,4 +1,4 @@
-// Package eval summarizes DorkPipe metrics from .dorkpipe/metrics.jsonl (evaluation harness).
+// Package eval summarizes DorkPipe metrics from the package-scoped runtime metrics.jsonl (evaluation harness).
 package eval
 
 import (

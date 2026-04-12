@@ -344,6 +344,41 @@ function summarizeRequestActivity(label, mode) {
   return normalizedMode === "agent" ? "Working through the request" : "Thinking";
 }
 
+function describeRequestEvent(label, metadata = {}) {
+  const raw = String(label || "").trim();
+  const lower = raw.toLowerCase();
+  if (!raw) {
+    return "";
+  }
+  if (lower.includes("using deterministic scaffold primitive")) {
+    const name = metadata.package_name ? String(metadata.package_name) : "";
+    const root = metadata.package_root ? String(metadata.package_root) : "";
+    if (name && root) {
+      return `Scaffolding ${name} in ${root}`;
+    }
+    if (name) {
+      return `Scaffolding ${name}`;
+    }
+  }
+  if (lower.includes("collected candidate files") && metadata.candidate_count) {
+    return `Collected ${metadata.candidate_count} candidate files`;
+  }
+  if (lower.includes("routing to planner model") && metadata.model) {
+    return `Planner model: ${metadata.model}`;
+  }
+  if (lower.includes("generating patch artifact") && metadata.model) {
+    return `Generating patch with ${metadata.model}`;
+  }
+  if (lower.includes("running bounded mcp retrieval loop")) {
+    const budget = metadata.step_budget ? ` (${metadata.step_budget} steps)` : "";
+    return `Running bounded MCP retrieval${budget}`;
+  }
+  if (lower.includes("refining mcp retrieval focus") && metadata.refined_term_count) {
+    return `Refining retrieval focus (${metadata.refined_term_count} terms)`;
+  }
+  return raw;
+}
+
 function buildRequestErrorStatus(message) {
   const lower = String(message || "").toLowerCase();
   if (lower.includes("ollama")) {
@@ -1015,7 +1050,9 @@ async function executeNaturalLanguageRequest(root, text, signals, options = {}) 
       if (!trimmed) return;
       try {
         const event = JSON.parse(trimmed);
-        if (event.display_text && options.onEvent) {
+        if (options.onEventDetail) {
+          options.onEventDetail(event);
+        } else if (event.display_text && options.onEvent) {
           options.onEvent(event.display_text);
         }
         if (event.type === "model_stream") {
@@ -3087,6 +3124,16 @@ class PipeonChatViewProvider {
         onEvent: (label) => {
           this.pushTrace(label);
           assistantMessage.liveStatus = summarizeRequestActivity(label, normalizedMode);
+          assistantMessage.liveTrace = pushRecentUnique(assistantMessage.liveTrace || [], label, 4);
+          this.refresh();
+        },
+        onEventDetail: (event) => {
+          const label = describeRequestEvent(event?.display_text, event?.metadata || {});
+          if (!label) {
+            return;
+          }
+          this.pushTrace(label);
+          assistantMessage.liveStatus = summarizeRequestActivity(event?.display_text || label, normalizedMode);
           assistantMessage.liveTrace = pushRecentUnique(assistantMessage.liveTrace || [], label, 4);
           this.refresh();
         },

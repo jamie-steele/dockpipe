@@ -57,11 +57,11 @@ nodes:
     needs: [refine]
     script: |
       set -euo pipefail
-      if [[ ! -f .dorkpipe/nodes/refine.txt ]]; then
-        echo "save_refine: expected .dorkpipe/nodes/refine.txt from refine node" >&2
+      if [[ ! -f bin/.dockpipe/packages/dorkpipe/nodes/refine.txt ]]; then
+        echo "save_refine: expected bin/.dockpipe/packages/dorkpipe/nodes/refine.txt from refine node" >&2
         exit 1
       fi
-      cp .dorkpipe/nodes/refine.txt bin/.dockpipe/orchestrator-cursor-prompt.refined.md
+      cp bin/.dockpipe/packages/dorkpipe/nodes/refine.txt bin/.dockpipe/orchestrator-cursor-prompt.refined.md
       echo "save_refine: wrote bin/.dockpipe/orchestrator-cursor-prompt.refined.md ($(wc -c < bin/.dockpipe/orchestrator-cursor-prompt.refined.md) bytes)"
 
   - id: merge_paste

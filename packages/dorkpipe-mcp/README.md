@@ -37,7 +37,7 @@ flowchart LR
 | **DorkPipe** | DAG / policy; still shells **`dockpipe`** for tool steps. |
 | **MCP** | Discovery + typed calls → same CLIs a human would run. |
 
-**Three different things:** (1) **`.dockpipe/` / `.dorkpipe/`** = generated context — read-only for agents unless the user refreshes. (2) **MCP** = named tools + **tiered IAM**. (3) **DockPipe/DorkPipe** = real execution — outside MCP unless tier **`exec`**.
+**Three different things:** (1) **`.dockpipe/` / `bin/.dockpipe/packages/dorkpipe/`** = generated context — read-only for agents unless the user refreshes. (2) **MCP** = named tools + **tiered IAM**. (3) **DockPipe/DorkPipe** = real execution — outside MCP unless tier **`exec`**.
 
 ## Tools and tiers
 

@@ -3,11 +3,11 @@ package engine
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"time"
 
 	"dorkpipe.orchestrator/confidence"
 	"dorkpipe.orchestrator/spec"
+	"dorkpipe.orchestrator/statepaths"
 	"dorkpipe.orchestrator/workers"
 )
 
@@ -43,7 +43,10 @@ type nodeOut struct {
 }
 
 func writeProvenance(workdir string, d *spec.Doc, phase1, esc []*workers.Result, sum confidence.Vector, escalRan bool, subst map[string]string, earlyStop bool) error {
-	dir := filepath.Join(workdir, ".dorkpipe")
+	dir, err := statepaths.PackageStateDir(workdir)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -69,7 +72,11 @@ func writeProvenance(workdir string, d *spec.Doc, phase1, esc []*workers.Result,
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "run.json"), b, 0o644)
+	runPath, err := statepaths.RunPath(workdir)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(runPath, b, 0o644)
 }
 
 func toNodes(rs []*workers.Result) []nodeOut {
@@ -98,7 +105,10 @@ func toNodes(rs []*workers.Result) []nodeOut {
 }
 
 func appendMetricsJSONL(workdir string, name string, calibrated float64, escalated bool, earlyStop bool, results []*workers.Result) error {
-	dir := filepath.Join(workdir, ".dorkpipe")
+	dir, err := statepaths.PackageStateDir(workdir)
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -122,7 +132,11 @@ func appendMetricsJSONL(workdir string, name string, calibrated float64, escalat
 	if err != nil {
 		return err
 	}
-	f, err := os.OpenFile(filepath.Join(dir, "metrics.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	metricsPath, err := statepaths.MetricsPath(workdir)
+	if err != nil {
+		return err
+	}
+	f, err := os.OpenFile(metricsPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}

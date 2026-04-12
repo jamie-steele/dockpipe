@@ -86,7 +86,7 @@ Not allowed in normal UI mode:
 Prepared edit requests write a directory under:
 
 ```text
-.dorkpipe/edit/<request-id>/
+bin/.dockpipe/packages/dorkpipe/edit/<request-id>/
 ```
 
 Typical contents:
@@ -109,7 +109,7 @@ Typical contents:
 5. Pipeon calls:
 
 ```bash
-dorkpipe apply-edit --workdir /repo --artifact-dir .dorkpipe/edit/<request-id>
+dorkpipe apply-edit --workdir /repo --artifact-dir bin/.dockpipe/packages/dorkpipe/edit/<request-id>
 ```
 
 6. DorkPipe applies and validates the prepared artifact
