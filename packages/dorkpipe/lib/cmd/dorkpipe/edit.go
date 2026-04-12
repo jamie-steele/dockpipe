@@ -58,6 +58,7 @@ type editModelArtifact struct {
 	Patch        string            `json:"patch"`
 	Validations  []string          `json:"validations,omitempty"`
 	HelperScript *editHelperScript `json:"helper_script,omitempty"`
+	CreatedFiles map[string]string `json:"created_files,omitempty"`
 }
 
 type editRequestRecord struct {
@@ -457,6 +458,22 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 	emitEditEvent(reqID, "applying", "Applying verified patch", 0.88, nil)
 	applyOutput, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/apply-unified-patch.sh", patchPath, root)
 	if err != nil {
+		if fallbackOutput, fallbackErr := applyCreatedFilesFallback(root, artifact); fallbackErr == nil {
+			combined := strings.TrimSpace(strings.Join(uniqueNonEmpty([]string{applyOutput, fallbackOutput}), "\n"))
+			_ = os.WriteFile(filepath.Join(artifactsDir, "apply.log"), []byte(combined), 0o644)
+
+			validationOutput, validationStatus := runPostApplyValidation(ctx, root, artifact.TargetFiles)
+			_ = os.WriteFile(filepath.Join(artifactsDir, "post-apply-validation.log"), []byte(validationOutput), 0o644)
+
+			emitEditDone(reqID, buildAppliedSummary(artifact, root, artifactsDir, validationStatus), map[string]any{
+				"route":             "edit",
+				"files_touched":     len(artifact.TargetFiles),
+				"validation_status": validationStatus,
+				"artifact_dir":      relativeTo(root, artifactsDir),
+				"apply_mode":        "deterministic-create-fallback",
+			})
+			return nil
+		}
 		_ = os.WriteFile(filepath.Join(artifactsDir, "apply.log"), []byte(applyOutput), 0o644)
 		emitEditError(reqID, "APPLY_FAILED", "The patch was validated but could not be applied.", false)
 		return err
@@ -473,6 +490,32 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 		"artifact_dir":      relativeTo(root, artifactsDir),
 	})
 	return nil
+}
+
+func applyCreatedFilesFallback(root string, artifact *editModelArtifact) (string, error) {
+	if artifact == nil || len(artifact.CreatedFiles) == 0 {
+		return "", fmt.Errorf("no deterministic create-file fallback is available")
+	}
+	for _, rel := range artifact.TargetFiles {
+		if _, ok := artifact.CreatedFiles[rel]; !ok {
+			return "", fmt.Errorf("missing deterministic fallback content for %s", rel)
+		}
+	}
+	for rel, body := range artifact.CreatedFiles {
+		abs := filepath.Join(root, rel)
+		if _, err := os.Stat(abs); err == nil {
+			return "", fmt.Errorf("fallback target already exists: %s", rel)
+		} else if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return "", err
+		}
+		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+			return "", err
+		}
+		if err := os.WriteFile(abs, []byte(body), 0o644); err != nil {
+			return "", err
+		}
+	}
+	return "Applied deterministic create-file fallback.", nil
 }
 
 func emitEditEvent(requestID, typ, text string, progress float64, metadata map[string]any) {
@@ -1794,6 +1837,9 @@ func tryDeterministicFileCreatePrimitive(reqID, root, message, artifactsDir stri
 		TargetFiles: []string{targetFile},
 		Patch:       buildCreateFilePatch(targetFile, content),
 		Validations: []string{"Verify the new file content matches the requested intent."},
+		CreatedFiles: map[string]string{
+			targetFile: content,
+		},
 	}
 	if err := validateEditArtifact(artifact); err != nil {
 		return nil, "", true, err
@@ -2039,6 +2085,10 @@ func tryDeterministicCollectionScaffoldPrimitive(reqID, root, message, artifacts
 		TargetFiles: spec.TargetFiles,
 		Patch:       strings.Join(patchParts, "\n"),
 		Validations: []string{spec.ValidationMsg},
+		CreatedFiles: map[string]string{
+			spec.ManifestPath: spec.ManifestBody,
+			spec.ReadmePath:   spec.ReadmeBody,
+		},
 	}
 	if err := validateEditArtifact(artifact); err != nil {
 		emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Deterministic scaffold validation failed: %v", err), false)
