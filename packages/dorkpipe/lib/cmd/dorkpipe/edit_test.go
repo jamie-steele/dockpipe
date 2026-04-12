@@ -131,6 +131,27 @@ func TestParseEditArtifact_StripsDanglingLineContinuations(t *testing.T) {
 	}
 }
 
+func TestParseEditArtifact_RepairsPatchStringWithEmbeddedQuotes(t *testing.T) {
+	t.Parallel()
+	text := "{\n" +
+		`"summary":"update thing",` + "\n" +
+		`"target_files":["src/index.ts"],` + "\n" +
+		`"patch":"diff --git a/src/index.ts b/src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1 +1 @@\n-const label = \"old\";\n+const label = "new";\n",` + "\n" +
+		`"structured_edits":[{"op":"replace_range","target_file":"src/index.ts","range":{"start_line":1,"old_line_count":1,"new_line_count":1},"old_text":"const label = \"old\";\n","new_text":"const label = \"new\";\n"}],` + "\n" +
+		`"validations":["check it"]` + "\n" +
+		"}"
+	artifact, diag, err := parseEditArtifact(text)
+	if err != nil {
+		t.Fatalf("parseEditArtifact() error = %v", err)
+	}
+	if diag == nil || len(diag.AppliedRepairs) == 0 {
+		t.Fatalf("expected repair diagnostics, got %#v", diag)
+	}
+	if !strings.Contains(artifact.Patch, `+const label = "new";`) {
+		t.Fatalf("unexpected repaired patch: %q", artifact.Patch)
+	}
+}
+
 func TestParseEditArtifact_AcceptsStringTargetsAndChecks(t *testing.T) {
 	t.Parallel()
 	text := `{
@@ -389,5 +410,34 @@ func TestShouldUseComplexEditFlow_FalseForExplicitFilePrompt(t *testing.T) {
 
 	if shouldUseComplexEditFlow(root, "In packages/pipeon/resolvers/pipeon/vscode-extension/src/webview/chat.ts, update the empty-state assistant message.", "dockpipe.config.json", "") {
 		t.Fatalf("expected explicit file prompt to stay on simple edit flow")
+	}
+}
+
+func TestFocusSnippetText_PrefersMatchingRegion(t *testing.T) {
+	t.Parallel()
+	text := strings.Join([]string{
+		"(function () {",
+		"  function renderFatalError(message) {",
+		`    const safe = String(message || "Unknown webview error");`,
+		"  }",
+		"  const a = 1;",
+		"  const b = 2;",
+		"  const c = 3;",
+		"  const d = 4;",
+		"  const e = 5;",
+		"  function renderMessages(messages) {",
+		"    if (!messages.length) {",
+		`      return '<p>Ask about this workspace. DorkPipe will surface prepared edits in the run inspector.</p>';`,
+		"    }",
+		"  }",
+		"})();",
+	}, "\n")
+
+	got := focusSnippetText(text, []string{"update", "message", "prepared", "inspector"}, 400)
+	if !strings.Contains(got, "surface prepared edits in the run inspector") {
+		t.Fatalf("focused snippet missing matched region: %q", got)
+	}
+	if strings.Contains(got, "renderFatalError") && !strings.Contains(got, "renderMessages") {
+		t.Fatalf("focused snippet should prefer the stronger prepared/inspector match: %q", got)
 	}
 }

@@ -332,7 +332,11 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 			})
 		}
 	}
-	snippets := readCandidateSnippets(ctx, root, rankedCandidates, mcpDisc, bounded)
+	searchTerms := extractSearchTerms(message)
+	if plan != nil && len(plan.SearchTerms) > 0 {
+		searchTerms = uniqueNonEmpty(append(plan.SearchTerms, searchTerms...))
+	}
+	snippets := readCandidateSnippets(ctx, root, rankedCandidates, searchTerms, mcpDisc, bounded)
 	retrievalBundle := collectRetrievalBundle(ctx, root, message, plan, rankedCandidates, mcpDisc, bounded)
 	requestRecord := editRequestRecord{
 		ContractVersion: editContractVersion,
@@ -714,7 +718,7 @@ func readEditContextBundle(root string) (string, string) {
 	return "", ""
 }
 
-func readCandidateSnippets(ctx context.Context, root string, candidates []string, mcpDisc *mcpDiscovery, bounded *boundedMCPRetrieval) string {
+func readCandidateSnippets(ctx context.Context, root string, candidates, searchTerms []string, mcpDisc *mcpDiscovery, bounded *boundedMCPRetrieval) string {
 	var parts []string
 	for _, rel := range candidates {
 		text := ""
@@ -732,11 +736,113 @@ func readCandidateSnippets(ctx context.Context, root string, candidates []string
 			if err != nil {
 				continue
 			}
-			text = clampString(string(b), maxEditSnippetPerFile)
+			text = string(b)
 		}
+		text = focusSnippetText(text, searchTerms, maxEditSnippetPerFile)
 		parts = append(parts, fmt.Sprintf("## %s\n\n```text\n%s\n```", rel, text))
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+func focusSnippetText(text string, searchTerms []string, budget int) string {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	if strings.TrimSpace(text) == "" {
+		return ""
+	}
+	if budget <= 0 {
+		return text
+	}
+	lowerText := strings.ToLower(text)
+	var loweredTerms []string
+	for _, term := range uniqueNonEmpty(searchTerms) {
+		term = strings.ToLower(strings.TrimSpace(term))
+		if len(term) < 4 {
+			continue
+		}
+		if strings.Contains(lowerText, term) {
+			loweredTerms = append(loweredTerms, term)
+		}
+	}
+	if len(loweredTerms) == 0 {
+		return clampString(text, budget)
+	}
+	lines := strings.Split(text, "\n")
+	type lineWindow struct {
+		start int
+		end   int
+		score int
+	}
+	var windows []lineWindow
+	for idx := range lines {
+		start := idx - 4
+		if start < 0 {
+			start = 0
+		}
+		end := idx + 5
+		if end > len(lines) {
+			end = len(lines)
+		}
+		windowText := strings.ToLower(strings.Join(lines[start:end], "\n"))
+		score := 0
+		for _, term := range loweredTerms {
+			if strings.Contains(windowText, term) {
+				score += len(term) * 10
+			}
+		}
+		if score == 0 {
+			continue
+		}
+		windows = append(windows, lineWindow{start: start, end: end, score: score})
+	}
+	if len(windows) == 0 {
+		return clampString(text, budget)
+	}
+	sort.SliceStable(windows, func(i, j int) bool {
+		if windows[i].score == windows[j].score {
+			if windows[i].start == windows[j].start {
+				return windows[i].end-windows[i].start > windows[j].end-windows[j].start
+			}
+			return windows[i].start < windows[j].start
+		}
+		return windows[i].score > windows[j].score
+	})
+	var selected []lineWindow
+	for _, window := range windows {
+		overlaps := false
+		for idx := range selected {
+			if window.start <= selected[idx].end && window.end >= selected[idx].start {
+				if window.start < selected[idx].start {
+					selected[idx].start = window.start
+				}
+				if window.end > selected[idx].end {
+					selected[idx].end = window.end
+				}
+				if window.score > selected[idx].score {
+					selected[idx].score = window.score
+				}
+				overlaps = true
+				break
+			}
+		}
+		if overlaps {
+			continue
+		}
+		selected = append(selected, window)
+		if len(selected) >= 4 {
+			break
+		}
+	}
+	sort.SliceStable(selected, func(i, j int) bool {
+		return selected[i].start < selected[j].start
+	})
+	var parts []string
+	for idx, window := range selected {
+		if idx > 0 {
+			parts = append(parts, "...")
+		}
+		parts = append(parts, strings.Join(lines[window.start:window.end], "\n"))
+	}
+	return clampString(strings.Join(parts, "\n"), budget)
 }
 
 func shouldUseComplexEditFlow(root, message, activeFile, selectionText string) bool {
@@ -1738,6 +1844,10 @@ func repairMultilineArtifactJSON(doc string) (string, []string) {
 	}
 	for _, key := range []string{`"patch"`, `"content"`, `"text"`, `"diff"`, `"unified_diff"`} {
 		var keyChanged bool
+		repaired, keyChanged = repairArtifactStringFieldByBoundary(repaired, key)
+		if keyChanged {
+			repairs = append(repairs, "requoted_artifact_string_field")
+		}
 		repaired, keyChanged = escapeRawMultilineStringValue(repaired, key)
 		if keyChanged {
 			repairs = append(repairs, "escaped_multiline_json_strings")
@@ -1789,6 +1899,71 @@ func escapeRawMultilineStringValue(doc, key string) (string, bool) {
 	}
 	quoted := strconv.Quote(value)
 	return doc[:start] + quoted[1:len(quoted)-1] + doc[end:], true
+}
+
+func repairArtifactStringFieldByBoundary(doc, key string) (string, bool) {
+	idx := strings.Index(doc, key)
+	if idx < 0 {
+		return doc, false
+	}
+	colon := strings.Index(doc[idx+len(key):], ":")
+	if colon < 0 {
+		return doc, false
+	}
+	pos := idx + len(key) + colon + 1
+	for pos < len(doc) && (doc[pos] == ' ' || doc[pos] == '\n' || doc[pos] == '\r' || doc[pos] == '\t') {
+		pos++
+	}
+	if pos >= len(doc) || doc[pos] != '"' {
+		return doc, false
+	}
+	start := pos + 1
+	end := findArtifactStringFieldBoundary(doc, start)
+	if end <= start {
+		return doc, false
+	}
+	value := doc[start:end]
+	quoted := strconv.Quote(value)
+	return doc[:pos] + quoted + doc[end+1:], true
+}
+
+func findArtifactStringFieldBoundary(doc string, start int) int {
+	fieldNames := []string{
+		`"summary"`,
+		`"target_files"`,
+		`"patch"`,
+		`"diff"`,
+		`"unified_diff"`,
+		`"structured_edits"`,
+		`"validations"`,
+		`"helper_script"`,
+		`"created_files"`,
+	}
+	for i := start; i < len(doc); i++ {
+		if doc[i] != '"' {
+			continue
+		}
+		j := i + 1
+		for j < len(doc) && (doc[j] == ' ' || doc[j] == '\n' || doc[j] == '\r' || doc[j] == '\t') {
+			j++
+		}
+		if j < len(doc) && doc[j] == '}' {
+			return i
+		}
+		if i+1 >= len(doc) || doc[i+1] != ',' {
+			continue
+		}
+		j = i + 2
+		for j < len(doc) && (doc[j] == ' ' || doc[j] == '\n' || doc[j] == '\r' || doc[j] == '\t') {
+			j++
+		}
+		for _, field := range fieldNames {
+			if strings.HasPrefix(doc[j:], field) {
+				return i
+			}
+		}
+	}
+	return -1
 }
 
 func findJSONishStringEnd(doc string, start int) int {
