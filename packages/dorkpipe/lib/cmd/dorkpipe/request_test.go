@@ -227,7 +227,7 @@ func TestValidateChatAnswer_AcceptsEvidenceAnchoredAnswer(t *testing.T) {
 		},
 		Evidence: buildChatEvidenceGraph(req, []string{"src/request.go"}, map[string]string{
 			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n",
-		}),
+		}, extractChatSearchTerms(req.Message)),
 	}
 	answer := "## Confirmed\n- Ask mode routes conversational requests through `chooseRoute`. Evidence: `src/request.go` :: `chooseRoute`\n- Chat execution runs through `handleChatRoute`. Evidence: `src/request.go` :: `handleChatRoute`\n\n## Uncertain\n- Anything beyond the retrieved snippet."
 	got := validateChatAnswer(answer, req, ctx)
@@ -250,7 +250,7 @@ func TestValidateChatAnswer_RejectsUnsupportedClaims(t *testing.T) {
 		},
 		Evidence: buildChatEvidenceGraph(req, []string{"src/request.go"}, map[string]string{
 			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\n",
-		}),
+		}, extractChatSearchTerms(req.Message)),
 	}
 	answer := "Ask mode falls back through req.Route and then calls handleChatRoute(req)."
 	got := validateChatAnswer(answer, req, ctx)
@@ -270,7 +270,7 @@ func TestBuildChatEvidenceGraph_IncludesFileAndSymbolNodes(t *testing.T) {
 	}
 	graph := buildChatEvidenceGraph(req, []string{"src/request.go"}, map[string]string{
 		"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n",
-	})
+	}, extractChatSearchTerms(req.Message))
 	if countEvidenceNodesByKind(graph, "file") != 1 {
 		t.Fatalf("expected one file node, got %#v", graph)
 	}
@@ -290,7 +290,7 @@ func TestBuildChatEvidenceGraph_FiltersTestSymbolsForArchitectureQuery(t *testin
 	}
 	graph := buildChatEvidenceGraph(req, []string{"src/request_test.go"}, map[string]string{
 		"src/request_test.go": "func TestChooseRoute(t *testing.T) {}\nfunc helperFixture() {}\n",
-	})
+	}, extractChatSearchTerms(req.Message))
 	for _, node := range graph.Nodes {
 		if node.Kind == "symbol" {
 			t.Fatalf("expected test-only symbols to be filtered, got %#v", graph)
@@ -309,5 +309,19 @@ interface routePlanner {}
 	got := extractLikelySnippetSymbols(snippet)
 	if len(got) != 2 || got[0] != "chooseRoute" || got[1] != "routePlanner" {
 		t.Fatalf("extractLikelySnippetSymbols() = %#v", got)
+	}
+}
+
+func TestExtractLikelySnippetSymbolsNearTerms_FocusesNearbyDeclarations(t *testing.T) {
+	t.Parallel()
+	snippet := `func unrelatedOne() {}
+// route flow discussion
+func chooseRoute(req routeRequest) routedRequest { return routedRequest{} }
+func handleChatRoute(ctx context.Context) {}
+func unrelatedTwo() {}
+`
+	got := extractLikelySnippetSymbolsNearTerms(snippet, []string{"route", "flow"})
+	if len(got) == 0 || got[0] != "chooseRoute" {
+		t.Fatalf("extractLikelySnippetSymbolsNearTerms() = %#v", got)
 	}
 }

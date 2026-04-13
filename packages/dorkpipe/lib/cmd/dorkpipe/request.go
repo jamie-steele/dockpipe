@@ -663,21 +663,32 @@ func buildWorkspaceChatContext(root string, req routeRequest) workspaceChatConte
 	sections := []string{}
 	meta := map[string]any{}
 	snippets := map[string]string{}
-	searchTerms := extractSearchTerms(req.Message)
+	searchTerms := extractChatSearchTerms(req.Message)
 	targets := inferWorkspaceChatTargets(root, req)
 	if len(targets) > 3 {
 		targets = targets[:3]
 	}
-	if len(targets) > 0 {
-		meta["context_files"] = len(targets)
+	architectureQuery := isArchitectureChatQuery(req.Message)
+	evidenceTerms := searchTerms
+	if architectureQuery {
+		evidenceTerms = extractStrongArchitectureTerms(searchTerms)
 	}
+	var keptTargets []string
 	for _, rel := range targets {
 		snippet, err := readWorkspaceSnippet(root, rel, searchTerms)
 		if err != nil || strings.TrimSpace(snippet) == "" {
 			continue
 		}
+		if architectureQuery && !shouldKeepArchitectureSnippet(rel, snippet, evidenceTerms) {
+			continue
+		}
 		snippets[rel] = snippet
+		keptTargets = append(keptTargets, rel)
 		sections = append(sections, fmt.Sprintf("Relevant file: %s\n\n```text\n%s\n```", rel, snippet))
+	}
+	targets = uniqueNonEmpty(keptTargets)
+	if len(targets) > 0 {
+		meta["context_files"] = len(targets)
 	}
 	if wantsScanSignals(req.Message) {
 		if summary := summarizeScanSignals(root); strings.TrimSpace(summary) != "" {
@@ -691,7 +702,7 @@ func buildWorkspaceChatContext(root string, req routeRequest) workspaceChatConte
 			meta["guidance_signals_used"] = true
 		}
 	}
-	evidence := buildChatEvidenceGraph(req, targets, snippets)
+	evidence := buildChatEvidenceGraph(req, targets, snippets, evidenceTerms)
 	if len(evidence.Nodes) > 0 {
 		meta["evidence_nodes"] = len(evidence.Nodes)
 		meta["evidence_edges"] = len(evidence.Edges)
@@ -1037,6 +1048,15 @@ func isWeakArchitectureTerm(term string) bool {
 	}
 }
 
+func isGenericArchitectureTerm(term string) bool {
+	switch strings.ToLower(strings.TrimSpace(term)) {
+	case "explain", "question", "plain", "english", "latest", "changes", "change", "works", "working", "current", "currently":
+		return true
+	default:
+		return false
+	}
+}
+
 func normalizeChatSearchTermVariants(term string) []string {
 	term = strings.ToLower(strings.TrimSpace(term))
 	if term == "" {
@@ -1057,6 +1077,20 @@ func normalizeChatSearchTermVariants(term string) []string {
 	}
 	if strings.HasSuffix(term, "ed") && len(term) > 5 {
 		out = append(out, strings.TrimSuffix(term, "ed"))
+	}
+	return uniqueNonEmpty(out)
+}
+
+func extractStrongArchitectureTerms(terms []string) []string {
+	var out []string
+	for _, term := range uniqueNonEmpty(terms) {
+		if isWeakArchitectureTerm(term) || isGenericArchitectureTerm(term) {
+			continue
+		}
+		out = append(out, term)
+	}
+	if len(out) == 0 {
+		return uniqueNonEmpty(terms)
 	}
 	return uniqueNonEmpty(out)
 }
@@ -1429,7 +1463,31 @@ func extractLikelySnippetSymbolsForFile(rel, snippet string, architectureQuery b
 	return symbols
 }
 
-func buildChatEvidenceGraph(req routeRequest, targets []string, snippets map[string]string) chatEvidenceGraph {
+func extractLikelySnippetSymbolsForFileWithTerms(rel, snippet string, searchTerms []string, architectureQuery bool) []string {
+	symbols := extractLikelySnippetSymbolsNearTerms(snippet, searchTerms)
+	if len(symbols) == 0 && !architectureQuery {
+		symbols = extractLikelySnippetSymbols(snippet)
+	}
+	if len(symbols) == 0 {
+		return nil
+	}
+	if !architectureQuery {
+		return symbols
+	}
+	if isTestLikePath(rel) {
+		var filtered []string
+		for _, symbol := range symbols {
+			if looksLikeTestSymbol(symbol) {
+				continue
+			}
+			filtered = append(filtered, symbol)
+		}
+		return filtered
+	}
+	return symbols
+}
+
+func buildChatEvidenceGraph(req routeRequest, targets []string, snippets map[string]string, searchTerms []string) chatEvidenceGraph {
 	architectureQuery := isArchitectureChatQuery(req.Message)
 	nodes := []chatEvidenceNode{{
 		ID:      "request",
@@ -1454,7 +1512,7 @@ func buildChatEvidenceGraph(req routeRequest, targets []string, snippets map[str
 			seenNodes[fileID] = struct{}{}
 		}
 		edges = append(edges, chatEvidenceEdge{From: "request", To: fileID, Kind: "grounds"})
-		for _, symbol := range extractLikelySnippetSymbolsForFile(rel, snippet, architectureQuery) {
+		for _, symbol := range extractLikelySnippetSymbolsForFileWithTerms(rel, snippet, searchTerms, architectureQuery) {
 			symbolID := "symbol:" + rel + ":" + symbol
 			if _, ok := seenNodes[symbolID]; !ok {
 				nodes = append(nodes, chatEvidenceNode{
@@ -1473,6 +1531,94 @@ func buildChatEvidenceGraph(req routeRequest, targets []string, snippets map[str
 		Nodes: uniqueChatEvidenceNodes(nodes),
 		Edges: uniqueChatEvidenceEdges(edges),
 	}
+}
+
+func shouldKeepArchitectureSnippet(rel, snippet string, searchTerms []string) bool {
+	if strings.TrimSpace(snippet) == "" {
+		return false
+	}
+	if filepath.Base(rel) == strings.ToLower(filepath.Base(rel)) && strings.Contains(filepath.Base(rel), "request.go") {
+		return true
+	}
+	if len(extractLikelySnippetSymbolsNearTerms(snippet, searchTerms)) > 0 {
+		return true
+	}
+	lower := strings.ToLower(snippet)
+	pathMatches := 0
+	contentMatches := 0
+	strongMatches := 0
+	for _, term := range uniqueNonEmpty(searchTerms) {
+		if strings.Contains(strings.ToLower(rel), term) {
+			pathMatches++
+			if !isWeakArchitectureTerm(term) {
+				strongMatches++
+			}
+		}
+		if strings.Contains(lower, term) {
+			contentMatches++
+			if !isWeakArchitectureTerm(term) {
+				strongMatches++
+			}
+		}
+	}
+	return isDenseArchitectureMatch(false, pathMatches, contentMatches, strongMatches, 0)
+}
+
+func extractLikelySnippetSymbolsNearTerms(snippet string, searchTerms []string) []string {
+	if strings.TrimSpace(snippet) == "" {
+		return nil
+	}
+	lines := strings.Split(snippet, "\n")
+	var matched []int
+	for i, line := range lines {
+		lower := strings.ToLower(line)
+		for _, term := range uniqueNonEmpty(searchTerms) {
+			if term != "" && strings.Contains(lower, term) {
+				matched = append(matched, i)
+				break
+			}
+		}
+	}
+	if len(matched) == 0 {
+		return nil
+	}
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`^\s*func\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`^\s*function\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`^\s*interface\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`^\s*type\s+([A-Za-z_][A-Za-z0-9_]*)`),
+	}
+	var out []string
+	for i, line := range lines {
+		if !isWithinMatchedDeclarationWindow(i, matched) {
+			continue
+		}
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "*") || strings.HasPrefix(trimmed, "/*") {
+			continue
+		}
+		for _, pattern := range patterns {
+			match := pattern.FindStringSubmatch(line)
+			if len(match) > 1 {
+				out = append(out, match[1])
+			}
+		}
+	}
+	out = uniqueNonEmpty(out)
+	if len(out) > 3 {
+		return out[:3]
+	}
+	return out
+}
+
+func isWithinMatchedDeclarationWindow(idx int, matched []int) bool {
+	for _, m := range matched {
+		if idx >= m && idx-m <= 4 {
+			return true
+		}
+	}
+	return false
 }
 
 func summarizeSnippetEvidence(snippet string) string {
