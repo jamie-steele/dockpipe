@@ -466,6 +466,7 @@ func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, 
 func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, host, model string, numCtx int, reasoningArtifactDir string) {
 	emitEditEvent(reqID, "context_gathering", "Inspecting workspace context", 0.35, nil)
 	chatContext := buildWorkspaceChatContext(root, req)
+	policy := resolveRuntimePolicy("chat", req.Message, req.ActiveFile, req.SelectionText, len(chatContext.Targets), len(req.OpenFiles))
 	if len(chatContext.Evidence.Nodes) > 0 {
 		emitEditEvent(reqID, "decomposing", "Built evidence graph from retrieved context", 0.4, map[string]any{
 			"evidence_nodes": len(chatContext.Evidence.Nodes),
@@ -500,60 +501,177 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	}
 	prompt := buildChatPrompt(root, req, chatContext, mcpText, mcpLoop)
 	emitEditEvent(reqID, "routed", fmt.Sprintf("Streaming from %s", model), 0.55, map[string]any{
-		"route":   "chat",
-		"model":   model,
-		"num_ctx": numCtx,
+		"route":            "chat",
+		"model":            model,
+		"num_ctx":          numCtx,
+		"branching_active": policy.BranchingActive && strictValidation,
 	})
-	var buffered strings.Builder
-	answer, err := runChatModelStream(ctx, host, model, numCtx, prompt, func(piece string) {
-		if strictValidation {
-			buffered.WriteString(piece)
-			return
-		}
-		writeEvent(editEvent{
-			ContractVersion: editContractVersion,
-			RequestID:       reqID,
-			Type:            "model_stream",
-			Metadata: map[string]any{
-				"text": piece,
-			},
-		})
-	})
-	if err != nil {
-		emitEditError(reqID, "MODEL_UNAVAILABLE", fmt.Sprintf("Chat model failed: %v", err), true)
-		return
-	}
-	if strictValidation {
-		answer = buffered.String()
-	}
+	attempts := []reasoning.AttemptRecord{}
+	repairMemory := []string{}
+	decision := reasoning.DecisionRecord{}
+	answer := ""
 	validationStatus := "not_applicable"
 	validation := chatAnswerValidation{}
-	if strictValidation {
-		emitEditEvent(reqID, "validating", "Validating code-anchored answer", 0.72, map[string]any{
-			"context_files": len(chatContext.Targets),
-		})
-		validation = validateChatAnswer(answer, req, chatContext)
-		if validation.Passed {
-			validationStatus = "passed"
-		} else {
-			emitEditEvent(reqID, "validating", "Repairing unsupported answer", 0.76, map[string]any{
-				"issues": validation.Issues,
+	runAttempt := func(attemptID, label, promptText string) (chatAttemptResult, error) {
+		var buffered strings.Builder
+		answerText, err := runChatModelStream(ctx, host, model, numCtx, promptText, func(piece string) {
+			if strictValidation || policy.BranchingActive {
+				buffered.WriteString(piece)
+				return
+			}
+			writeEvent(editEvent{
+				ContractVersion: editContractVersion,
+				RequestID:       reqID,
+				Type:            "model_stream",
+				Metadata: map[string]any{
+					"text": piece,
+				},
 			})
-			repaired, repairErr := runChatModelStream(ctx, host, model, numCtx, buildChatAnswerRepairPrompt(req, answer, chatContext, mcpText, mcpLoop, validation), nil)
-			if repairErr == nil {
-				repairedValidation := validateChatAnswer(repaired, req, chatContext)
-				if repairedValidation.Passed {
-					answer = repaired
-					validationStatus = "repaired"
+		})
+		if err != nil {
+			return chatAttemptResult{
+				Attempt: reasoning.AttemptRecord{
+					ID:             attemptID,
+					Label:          label,
+					Kind:           "candidate",
+					Status:         "model_failed",
+					FailureSummary: err.Error(),
+				},
+			}, err
+		}
+		if strictValidation || policy.BranchingActive {
+			answerText = buffered.String()
+		}
+		validationStatus := "not_applicable"
+		attemptValidation := chatAnswerValidation{}
+		if strictValidation {
+			emitEditEvent(reqID, "validating", "Validating code-anchored answer", 0.72, map[string]any{
+				"context_files": len(chatContext.Targets),
+				"attempt_id":    attemptID,
+			})
+			attemptValidation = validateChatAnswer(answerText, req, chatContext)
+			if attemptValidation.Passed {
+				validationStatus = "passed"
+			} else {
+				emitEditEvent(reqID, "validating", "Repairing unsupported answer", 0.76, map[string]any{
+					"issues":     attemptValidation.Issues,
+					"attempt_id": attemptID,
+				})
+				repairPrompt := buildChatAnswerRepairPrompt(req, answerText, chatContext, mcpText, mcpLoop, attemptValidation)
+				if policy.RepairMemory && len(repairMemory) > 0 {
+					repairPrompt += "\n\nPrior repair memory:\n- " + strings.Join(repairMemory, "\n- ")
+				}
+				repaired, repairErr := runChatModelStream(ctx, host, model, numCtx, repairPrompt, nil)
+				if repairErr == nil {
+					repairedValidation := validateChatAnswer(repaired, req, chatContext)
+					if repairedValidation.Passed {
+						answerText = repaired
+						attemptValidation = repairedValidation
+						validationStatus = "repaired"
+					} else {
+						answerText = buildEvidenceOnlyChatFallback(chatContext, repairedValidation)
+						attemptValidation = repairedValidation
+						validationStatus = "fallback_evidence_only"
+					}
 				} else {
-					answer = buildEvidenceOnlyChatFallback(chatContext, repairedValidation)
+					answerText = buildEvidenceOnlyChatFallback(chatContext, attemptValidation)
 					validationStatus = "fallback_evidence_only"
 				}
-			} else {
-				answer = buildEvidenceOnlyChatFallback(chatContext, validation)
-				validationStatus = "fallback_evidence_only"
 			}
 		}
+		failureSummary := summarizeChatAttemptFailure(attemptValidation)
+		attempt := reasoning.AttemptRecord{
+			ID:               attemptID,
+			Label:            label,
+			Kind:             "candidate",
+			Status:           validationStatus,
+			Score:            scoreChatAttempt(answerText, attemptValidation, chatContext),
+			Summary:          clampString(answerText, 400),
+			ValidationStatus: validationStatus,
+			FailureSummary:   failureSummary,
+		}
+		if failureSummary != "" && policy.RepairMemory {
+			repairMemory = append(repairMemory, failureSummary)
+		}
+		return chatAttemptResult{
+			Attempt:        attempt,
+			Answer:         answerText,
+			Validation:     attemptValidation,
+			FailureSummary: failureSummary,
+		}, nil
+	}
+	if policy.BranchingActive && strictValidation {
+		branchAttempts := buildChatBranchPrompts(policy)
+		emitEditEvent(reqID, "branching", "Evaluating competing reasoning candidates", 0.58, map[string]any{
+			"best_of_n":     policy.BestOfN,
+			"max_branches":  policy.MaxBranches,
+			"ambiguity":     policy.AmbiguityReason,
+			"branch_count":  len(branchAttempts),
+			"repair_memory": policy.RepairMemory,
+		})
+		var best chatAttemptResult
+		best.Attempt.Score = -1
+		decision.BranchesConsidered = len(branchAttempts)
+		for idx, branch := range branchAttempts {
+			promptText := prompt
+			if hint, _ := branch.Metadata["branch_hint"].(string); strings.TrimSpace(hint) != "" {
+				promptText += "\n\nBranch strategy: " + hint
+			}
+			if policy.RepairMemory && len(repairMemory) > 0 {
+				promptText += "\n\nPrior attempt failures:\n- " + strings.Join(repairMemory, "\n- ")
+			}
+			result, attemptErr := runAttempt(branch.ID, branch.Label, promptText)
+			if attemptErr != nil {
+				result.Attempt.Score = 0
+				result.Attempt.Pruned = true
+				result.Attempt.PrunedReason = "model_failed"
+			}
+			attempts = append(attempts, result.Attempt)
+			if result.Attempt.Score > best.Attempt.Score {
+				best = result
+			}
+			if idx < len(branchAttempts)-1 {
+				emitEditEvent(reqID, "branching", "Recorded branch candidate", 0.6, map[string]any{
+					"attempt_id": branch.ID,
+					"score":      result.Attempt.Score,
+					"status":     result.Attempt.ValidationStatus,
+				})
+			}
+		}
+		for idx := range attempts {
+			if attempts[idx].ID == best.Attempt.ID {
+				attempts[idx].Selected = true
+				attempts[idx].Status = nonEmpty(attempts[idx].Status, "selected")
+			} else {
+				attempts[idx].Pruned = true
+				attempts[idx].PrunedReason = "lower_scoring_branch"
+			}
+		}
+		decision.SelectedAttemptID = best.Attempt.ID
+		decision.BranchesPruned = maxInt(len(attempts)-1, 0)
+		answer = best.Answer
+		validation = best.Validation
+		validationStatus = best.Attempt.ValidationStatus
+		if best.Attempt.Score < policy.AbstainThreshold {
+			decision.Abstained = true
+			decision.Escalated = true
+			decision.EscalationReason = "low_confidence_after_branching"
+			answer = buildEvidenceOnlyChatFallback(chatContext, best.Validation)
+			validationStatus = "abstained_low_confidence"
+		}
+	} else {
+		result, err := runAttempt("attempt-1", "default", prompt)
+		if err != nil {
+			emitEditError(reqID, "MODEL_UNAVAILABLE", fmt.Sprintf("Chat model failed: %v", err), true)
+			return
+		}
+		result.Attempt.Selected = true
+		attempts = append(attempts, result.Attempt)
+		decision.SelectedAttemptID = result.Attempt.ID
+		decision.BranchesConsidered = 1
+		answer = result.Answer
+		validation = result.Validation
+		validationStatus = result.Attempt.ValidationStatus
 	}
 	status := map[string]any{
 		"route":             "chat",
@@ -562,6 +680,12 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 		"mode":              normalizeRequestMode(req.Mode),
 		"validation_status": validationStatus,
 		"active_file":       req.ActiveFile,
+		"best_of_n":         policy.BestOfN,
+		"max_branches":      policy.MaxBranches,
+		"abstain_threshold": policy.AbstainThreshold,
+		"repair_memory":     policy.RepairMemory,
+		"high_ambiguity":    policy.HighAmbiguity,
+		"ambiguity_reason":  policy.AmbiguityReason,
 	}
 	for key, value := range chatContext.Meta {
 		status[key] = value
@@ -581,7 +705,7 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 		status["evidence_symbols"] = countEvidenceNodesByKind(chatContext.Evidence, "symbol")
 	}
 	if strings.TrimSpace(reasoningArtifactDir) != "" {
-		writeReasoningRunArtifact(reasoningArtifactDir, buildChatRunArtifact(reqID, "chat", nonEmpty(answer, "(No response text returned.)"), req, chatContext, validationStatus, validation))
+		writeReasoningRunArtifact(reasoningArtifactDir, buildChatRunArtifact(reqID, "chat", nonEmpty(answer, "(No response text returned.)"), req, chatContext, validationStatus, validation, policy, attempts, decision, repairMemory))
 		status["artifact_dir"] = relativeTo(root, reasoningArtifactDir)
 		status["trace_path"] = relativeTo(root, filepath.Join(reasoningArtifactDir, "trace.jsonl"))
 		status["reasoning_path"] = relativeTo(root, filepath.Join(reasoningArtifactDir, "reasoning.json"))

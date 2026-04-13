@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"dorkpipe.orchestrator/reasoning"
 	"dorkpipe.orchestrator/statepaths"
 )
 
@@ -317,6 +318,24 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		"candidate_count": len(candidates),
 	})
 	rankedCandidates := rankCandidates(root, candidates, message)
+	policy := resolveRuntimePolicy("edit", message, effectiveActiveFile, selectionText, len(rankedCandidates), 0)
+	branchAttempts := []reasoning.AttemptRecord{}
+	decision := reasoning.DecisionRecord{}
+	repairMemory := []string{}
+	if policy.BranchingActive {
+		branchAttempts, decision = buildEditBranchAttempts(rankedCandidates, plan, policy)
+		if len(branchAttempts) > 0 {
+			if selectedTargets, ok := branchAttempts[0].Metadata["target_files"].([]string); ok && len(selectedTargets) > 0 {
+				rankedCandidates = selectedTargets
+			}
+		}
+		emitEditEvent(reqID, "branching", "Selecting edit branch candidates", 0.36, map[string]any{
+			"best_of_n":        policy.BestOfN,
+			"max_branches":     policy.MaxBranches,
+			"ambiguity_reason": policy.AmbiguityReason,
+			"selected_count":   len(rankedCandidates),
+		})
+	}
 	emitEditEvent(reqID, "retrieving", "Building retrieval bundle", 0.4, map[string]any{
 		"ranked_candidate_count": len(rankedCandidates),
 	})
@@ -390,6 +409,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 
 	artifact, parseDiag, err := parseEditArtifact(modelText)
 	if err != nil {
+		repairMemory = append(repairMemory, fmt.Sprintf("artifact_parse_failed: %v", err))
 		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("Model output was not valid JSON: %v", err), artifactsDir)
 		if err != nil {
 			emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Model output was not a valid edit artifact: %v", err), true)
@@ -398,6 +418,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		parseDiag = nil
 	}
 	if err := validateEditArtifact(artifact); err != nil {
+		repairMemory = append(repairMemory, fmt.Sprintf("artifact_validation_failed: %v", err))
 		if repaired, repairErr := repairPatchFromStructuredEdits(root, artifact); repaired && repairErr == nil {
 			emitEditEvent(reqID, "validating", "Materialized patch from structured edits", 0.57, map[string]any{
 				"structured_edit_count": len(artifact.StructuredEdits),
@@ -435,6 +456,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 	emitEditEvent(reqID, "validating", "Checking patch applicability", 0.62, nil)
 	verifyOutput, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
 	if err != nil {
+		repairMemory = append(repairMemory, "patch_verifier_failed")
 		_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
 		repairedFromStructured := false
 		if repaired, repairErr := repairPatchFromStructuredEdits(root, artifact); repaired && repairErr == nil {
@@ -469,7 +491,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		}
 	}
 	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
-	writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, message, effectiveActiveFile, selectionText, plan, rankedCandidates, artifact, "patch_applies"))
+	writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, message, effectiveActiveFile, selectionText, plan, rankedCandidates, artifact, "patch_applies", policy, branchAttempts, decision, repairMemory))
 	return artifact, patchPath, artifactsDir, nil
 }
 
@@ -528,6 +550,25 @@ func loadPreparedArtifact(artifactDir string) (*editModelArtifact, string, error
 }
 
 func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patchPath string, artifact *editModelArtifact) error {
+	existingReasoning := readReasoningRunArtifact(artifactsDir)
+	policy := runtimePolicy{}
+	attempts := []reasoning.AttemptRecord{}
+	decision := reasoning.DecisionRecord{}
+	repairMemory := []string{}
+	if existingReasoning != nil {
+		policy = runtimePolicy{
+			BestOfN:          existingReasoning.Policy.BestOfN,
+			MaxBranches:      existingReasoning.Policy.MaxBranches,
+			AbstainThreshold: existingReasoning.Policy.AbstainThreshold,
+			RepairMemory:     existingReasoning.Policy.RepairMemory,
+			HighAmbiguity:    existingReasoning.Policy.HighAmbiguity,
+			AmbiguityReason:  existingReasoning.Policy.AmbiguityReason,
+			BranchingActive:  existingReasoning.Policy.BranchingActive,
+		}
+		attempts = append(attempts, existingReasoning.Attempts...)
+		decision = existingReasoning.Decision
+		repairMemory = append(repairMemory, existingReasoning.RepairMemory...)
+	}
 	if len(artifact.StructuredEdits) > 0 {
 		emitEditEvent(reqID, "applying", "Applying structured edits", 0.84, map[string]any{
 			"structured_edit_count": len(artifact.StructuredEdits),
@@ -537,7 +578,7 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 			_ = os.WriteFile(filepath.Join(artifactsDir, "apply.log"), []byte(structuredOutput), 0o644)
 			validationOutput, validationStatus := runPostApplyValidation(ctx, root, artifact.TargetFiles)
 			_ = os.WriteFile(filepath.Join(artifactsDir, "post-apply-validation.log"), []byte(validationOutput), 0o644)
-			writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus))
+			writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus, policy, attempts, decision, repairMemory))
 			emitEditDone(reqID, buildAppliedSummary(artifact, root, artifactsDir, validationStatus), map[string]any{
 				"route":                 "edit",
 				"files_touched":         len(artifact.TargetFiles),
@@ -561,7 +602,7 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 
 			validationOutput, validationStatus := runPostApplyValidation(ctx, root, artifact.TargetFiles)
 			_ = os.WriteFile(filepath.Join(artifactsDir, "post-apply-validation.log"), []byte(validationOutput), 0o644)
-			writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus))
+			writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus, policy, attempts, decision, repairMemory))
 
 			emitEditDone(reqID, buildAppliedSummary(artifact, root, artifactsDir, validationStatus), map[string]any{
 				"route":                 "edit",
@@ -581,7 +622,7 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 
 	validationOutput, validationStatus := runPostApplyValidation(ctx, root, artifact.TargetFiles)
 	_ = os.WriteFile(filepath.Join(artifactsDir, "post-apply-validation.log"), []byte(validationOutput), 0o644)
-	writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus))
+	writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus, policy, attempts, decision, repairMemory))
 
 	emitEditDone(reqID, buildAppliedSummary(artifact, root, artifactsDir, validationStatus), map[string]any{
 		"route":                 "edit",

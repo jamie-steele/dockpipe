@@ -666,6 +666,17 @@ function sanitizeRunRecord(value) {
         applyMode: value.applyMode ? String(value.applyMode) : "",
         targetFiles: Array.isArray(value.targetFiles) ? value.targetFiles.map((item) => String(item)).slice(0, 16) : [],
         reasoningKind: value.reasoningKind ? String(value.reasoningKind) : "",
+        policy: value.policy && typeof value.policy === "object"
+            ? {
+                bestOfN: Number.isFinite(Number(value.policy.bestOfN ?? value.policy.best_of_n)) ? Number(value.policy.bestOfN ?? value.policy.best_of_n) : 0,
+                maxBranches: Number.isFinite(Number(value.policy.maxBranches ?? value.policy.max_branches)) ? Number(value.policy.maxBranches ?? value.policy.max_branches) : 0,
+                abstainThreshold: Number.isFinite(Number(value.policy.abstainThreshold ?? value.policy.abstain_threshold)) ? Number(value.policy.abstainThreshold ?? value.policy.abstain_threshold) : 0,
+                repairMemory: !!(value.policy.repairMemory ?? value.policy.repair_memory),
+                highAmbiguity: !!(value.policy.highAmbiguity ?? value.policy.high_ambiguity),
+                ambiguityReason: value.policy.ambiguityReason || value.policy.ambiguity_reason ? clampText(String(value.policy.ambiguityReason || value.policy.ambiguity_reason), 240) : "",
+                branchingActive: !!(value.policy.branchingActive ?? value.policy.branching_active),
+            }
+            : null,
         structuredEditCount: Number.isFinite(Number(value.structuredEditCount)) ? Math.max(0, Number(value.structuredEditCount)) : 0,
         structuredEditTypes: Array.isArray(value.structuredEditTypes) ? value.structuredEditTypes.map((item) => String(item)).slice(0, 8) : [],
         structuredEdits: Array.isArray(value.structuredEdits)
@@ -748,6 +759,34 @@ function sanitizeRunRecord(value) {
                 symbol: item?.symbol ? String(item.symbol) : "",
             })).slice(0, 24)
             : [],
+        attempts: Array.isArray(value.attempts)
+            ? value.attempts.map((item) => ({
+                id: item?.id ? String(item.id) : "",
+                label: item?.label ? String(item.label) : "",
+                kind: item?.kind ? String(item.kind) : "",
+                status: item?.status ? String(item.status) : "",
+                score: Number.isFinite(Number(item?.score)) ? Number(item.score) : 0,
+                summary: item?.summary ? clampText(String(item.summary), 320) : "",
+                validationStatus: item?.validationStatus || item?.validation_status ? String(item.validationStatus || item.validation_status) : "",
+                failureSummary: item?.failureSummary || item?.failure_summary ? clampText(String(item.failureSummary || item.failure_summary), 240) : "",
+                selected: !!item?.selected,
+                pruned: !!item?.pruned,
+                prunedReason: item?.prunedReason || item?.pruned_reason ? clampText(String(item.prunedReason || item.pruned_reason), 180) : "",
+                escalate: !!item?.escalate,
+                metadata: item?.metadata && typeof item.metadata === "object" ? item.metadata : null,
+            })).slice(0, 16)
+            : [],
+        decision: value.decision && typeof value.decision === "object"
+            ? {
+                selectedAttemptId: value.decision.selectedAttemptId || value.decision.selected_attempt_id ? String(value.decision.selectedAttemptId || value.decision.selected_attempt_id) : "",
+                abstained: !!value.decision.abstained,
+                escalated: !!value.decision.escalated,
+                escalationReason: value.decision.escalationReason || value.decision.escalation_reason ? clampText(String(value.decision.escalationReason || value.decision.escalation_reason), 180) : "",
+                branchesConsidered: Number.isFinite(Number(value.decision.branchesConsidered ?? value.decision.branches_considered)) ? Number(value.decision.branchesConsidered ?? value.decision.branches_considered) : 0,
+                branchesPruned: Number.isFinite(Number(value.decision.branchesPruned ?? value.decision.branches_pruned)) ? Number(value.decision.branchesPruned ?? value.decision.branches_pruned) : 0,
+            }
+            : null,
+        repairMemory: Array.isArray(value.repairMemory) ? value.repairMemory.map((item) => clampText(String(item), 220)).slice(0, 12) : [],
         applyLog: value.applyLog ? clampText(String(value.applyLog), 4000) : "",
         validationLog: value.validationLog ? clampText(String(value.validationLog), 4000) : "",
     };
@@ -1893,6 +1932,8 @@ async function readRunInspectionData(root, ref, options = {}) {
     const evidenceEdges = Array.isArray(reasoningArtifact?.evidence?.edges) ? reasoningArtifact.evidence.edges : [];
     const validationFindings = Array.isArray(reasoningArtifact?.validation?.findings) ? reasoningArtifact.validation.findings : [];
     const citations = Array.isArray(reasoningArtifact?.output?.citations) ? reasoningArtifact.output.citations : [];
+    const attempts = Array.isArray(reasoningArtifact?.attempts) ? reasoningArtifact.attempts : [];
+    const repairMemory = Array.isArray(reasoningArtifact?.repair_memory) ? reasoningArtifact.repair_memory : [];
     return sanitizeRunRecord({
         artifactDir: relArtifact,
         patchPath: relPatch || path.relative(root, patchPath),
@@ -1915,6 +1956,10 @@ async function readRunInspectionData(root, ref, options = {}) {
         evidenceEdges,
         validationFindings,
         citations,
+        attempts,
+        decision: reasoningArtifact?.decision || null,
+        policy: reasoningArtifact?.policy || null,
+        repairMemory,
         applyLog,
         validationLog,
     });

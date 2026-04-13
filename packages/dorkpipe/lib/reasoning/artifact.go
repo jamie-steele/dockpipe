@@ -27,6 +27,16 @@ type RetrievalRecord struct {
 	Selected    []string             `json:"selected,omitempty"`
 }
 
+type PolicyRecord struct {
+	BestOfN          int     `json:"best_of_n,omitempty"`
+	MaxBranches      int     `json:"max_branches,omitempty"`
+	AbstainThreshold float64 `json:"abstain_threshold,omitempty"`
+	RepairMemory     bool    `json:"repair_memory,omitempty"`
+	HighAmbiguity    bool    `json:"high_ambiguity,omitempty"`
+	AmbiguityReason  string  `json:"ambiguity_reason,omitempty"`
+	BranchingActive  bool    `json:"branching_active,omitempty"`
+}
+
 type EvidenceNode struct {
 	ID        string   `json:"id"`
 	Kind      string   `json:"kind"`
@@ -62,6 +72,31 @@ type ValidationRecord struct {
 	Findings []ValidationFinding `json:"findings,omitempty"`
 }
 
+type AttemptRecord struct {
+	ID               string         `json:"id"`
+	Label            string         `json:"label,omitempty"`
+	Kind             string         `json:"kind,omitempty"`
+	Status           string         `json:"status,omitempty"`
+	Score            float64        `json:"score,omitempty"`
+	Summary          string         `json:"summary,omitempty"`
+	ValidationStatus string         `json:"validation_status,omitempty"`
+	FailureSummary   string         `json:"failure_summary,omitempty"`
+	Selected         bool           `json:"selected,omitempty"`
+	Pruned           bool           `json:"pruned,omitempty"`
+	PrunedReason     string         `json:"pruned_reason,omitempty"`
+	Escalate         bool           `json:"escalate,omitempty"`
+	Metadata         map[string]any `json:"metadata,omitempty"`
+}
+
+type DecisionRecord struct {
+	SelectedAttemptID string `json:"selected_attempt_id,omitempty"`
+	Abstained         bool   `json:"abstained,omitempty"`
+	Escalated         bool   `json:"escalated,omitempty"`
+	EscalationReason  string `json:"escalation_reason,omitempty"`
+	BranchesConsidered int   `json:"branches_considered,omitempty"`
+	BranchesPruned    int    `json:"branches_pruned,omitempty"`
+}
+
 type OutputCitation struct {
 	NodeID string `json:"node_id,omitempty"`
 	File   string `json:"file,omitempty"`
@@ -81,8 +116,12 @@ type RunArtifact struct {
 	ArtifactVersion string           `json:"artifact_version"`
 	Kind            string           `json:"kind"`
 	Request         RequestRecord    `json:"request"`
+	Policy          PolicyRecord     `json:"policy,omitempty"`
 	Retrieval       RetrievalRecord  `json:"retrieval,omitempty"`
 	Evidence        EvidenceRecord   `json:"evidence,omitempty"`
 	Validation      ValidationRecord `json:"validation,omitempty"`
+	Attempts        []AttemptRecord  `json:"attempts,omitempty"`
+	Decision        DecisionRecord   `json:"decision,omitempty"`
+	RepairMemory    []string         `json:"repair_memory,omitempty"`
 	Output          OutputRecord     `json:"output,omitempty"`
 }

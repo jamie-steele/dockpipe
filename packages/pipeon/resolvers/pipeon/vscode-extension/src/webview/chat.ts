@@ -282,6 +282,31 @@
     const citations = Array.isArray(run.citations) && run.citations.length
       ? '<div class="runBulletList">' + run.citations.map((citation) => '<div class="runBullet">' + escapeHtml([citation.nodeId, citation.file, citation.symbol].filter(Boolean).join(" • ")) + "</div>").join("") + "</div>"
       : '<div class="emptyBlock">No final citations were recorded for this run.</div>';
+    const policy = run.policy
+      ? '<div class="runBulletList">' + [
+          'best_of_n • ' + String(run.policy.bestOfN || 0),
+          'max_branches • ' + String(run.policy.maxBranches || 0),
+          'abstain_threshold • ' + String(run.policy.abstainThreshold || 0),
+          'repair_memory • ' + String(!!run.policy.repairMemory),
+          run.policy.highAmbiguity ? 'high_ambiguity • ' + (run.policy.ambiguityReason || 'true') : '',
+          run.policy.branchingActive ? 'branching_active • true' : '',
+        ].filter(Boolean).map((item) => '<div class="runBullet">' + escapeHtml(item) + "</div>").join("") + "</div>"
+      : '<div class="emptyBlock">No runtime policy was recorded for this run.</div>';
+    const attempts = Array.isArray(run.attempts) && run.attempts.length
+      ? '<div class="runStructuredList">' + run.attempts.map((attempt) => '<article class="runStructuredItem"><div class="runStructuredHead"><div class="runStructuredTitle">' + escapeHtml(attempt.label || attempt.id || 'attempt') + '</div><div class="runEventMeta">' + escapeHtml([attempt.status, attempt.selected ? 'selected' : '', attempt.pruned ? 'pruned' : '', Number.isFinite(Number(attempt.score)) ? `score ${Number(attempt.score).toFixed(2)}` : ''].filter(Boolean).join(' • ')) + '</div></div>' + (attempt.summary ? '<div class="pendingMeta">' + escapeHtml(attempt.summary) + '</div>' : '') + (attempt.failureSummary ? '<div class="runBulletList"><div class="runBullet">' + escapeHtml('failure • ' + attempt.failureSummary) + '</div></div>' : '') + (attempt.prunedReason ? '<div class="runBulletList"><div class="runBullet">' + escapeHtml('pruned • ' + attempt.prunedReason) + '</div></div>' : '') + '</article>').join("") + "</div>"
+      : '<div class="emptyBlock">No competing attempts were recorded for this run.</div>';
+    const decision = run.decision
+      ? '<div class="runBulletList">' + [
+          run.decision.selectedAttemptId ? 'selected • ' + run.decision.selectedAttemptId : '',
+          Number.isFinite(Number(run.decision.branchesConsidered)) ? 'branches_considered • ' + String(run.decision.branchesConsidered) : '',
+          Number.isFinite(Number(run.decision.branchesPruned)) ? 'branches_pruned • ' + String(run.decision.branchesPruned) : '',
+          run.decision.abstained ? 'abstained • true' : '',
+          run.decision.escalated ? 'escalated • ' + (run.decision.escalationReason || 'true') : '',
+        ].filter(Boolean).map((item) => '<div class="runBullet">' + escapeHtml(item) + "</div>").join("") + "</div>"
+      : '<div class="emptyBlock">No selection decision was recorded for this run.</div>';
+    const repairMemory = Array.isArray(run.repairMemory) && run.repairMemory.length
+      ? '<div class="runBulletList">' + run.repairMemory.map((entry) => '<div class="runBullet">' + escapeHtml(entry) + "</div>").join("") + "</div>"
+      : '<div class="emptyBlock">No repair memory was captured for this run.</div>';
     const logs = [];
     if (run.applyLog) {
       logs.push('<div class="runLogBlock"><div class="paletteLabel">Apply log</div><pre class="runMeta">' + escapeHtml(run.applyLog) + "</pre></div>");
@@ -307,6 +332,14 @@
       '<div class="runInspectorLayout">',
       '<div class="runInspectorPrimary"><div class="paletteLabel">Validator findings</div>' + findings + "</div>",
       '<div class="runInspectorSide"><div class="paletteLabel">Final citations</div>' + citations + "</div>",
+      "</div>",
+      '<div class="runInspectorLayout">',
+      '<div class="runInspectorPrimary"><div class="paletteLabel">Runtime policy</div>' + policy + "</div>",
+      '<div class="runInspectorSide"><div class="paletteLabel">Selection decision</div>' + decision + "</div>",
+      "</div>",
+      '<div class="runInspectorLayout">',
+      '<div class="runInspectorPrimary"><div class="paletteLabel">Competing candidates</div>' + attempts + "</div>",
+      '<div class="runInspectorSide"><div class="paletteLabel">Repair memory</div>' + repairMemory + "</div>",
       "</div>",
       message.diffPreview ? '<div class="runLogBlock"><div class="paletteLabel">Diff preview</div>' + renderCompactDiff(message.diffPreview) + "</div>" : "",
       logs.join(""),
