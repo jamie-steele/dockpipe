@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -521,6 +522,7 @@ func buildChatPrompt(root string, req routeRequest, contextText, mcpText string,
 		"Only factor scan findings, user guidance, or other artifact-backed signals into the answer when the user explicitly asks for them or the request is clearly about those topics.",
 		"When explaining internals, architecture, or runtime behavior, anchor each substantive claim to concrete file and function names from the provided context.",
 		"Do not infer behavior that is not shown in the current code context; if something is uncertain, say so explicitly.",
+		"If the available context is insufficient, say what is missing and limit the answer to what the retrieved files actually support.",
 		"When MCP discovery data is provided, treat it as typed control-plane context and prefer it over guessing about workflows or tool availability.",
 		"When a bounded MCP context loop is provided, use it as curated retrieval context rather than asking for broad extra context.",
 		"If you provide code, use fenced code blocks with a language tag when possible.",
@@ -598,15 +600,13 @@ func inferWorkspaceChatTargets(root string, req routeRequest) []string {
 	if strings.TrimSpace(req.ActiveFile) != "" {
 		targets = append(targets, strings.TrimSpace(req.ActiveFile))
 	}
-	targets = append(targets, req.OpenFiles...)
 	targets = append(targets, explicitRepoFileMentions(root, req.Message)...)
-	if looksLikeInternalArchitectureQuestion(req.Message) {
-		targets = append(targets,
-			"packages/dorkpipe/lib/cmd/dorkpipe/request.go",
-			"packages/pipeon/resolvers/pipeon/vscode-extension/src/extension.ts",
-			"packages/pipeon/resolvers/pipeon/assets/scripts/prompts/system.md",
-			"packages/pipeon/resolvers/pipeon/vscode-extension/src/webview/chat.ts",
-		)
+	targets = append(targets, req.OpenFiles...)
+	if len(targets) < 3 {
+		targets = append(targets, inferMentionedBasenameTargets(root, req.Message)...)
+	}
+	if len(targets) < 3 {
+		targets = append(targets, searchWorkspaceFilesForChatQuery(root, req.Message, 6)...)
 	}
 	var existing []string
 	for _, rel := range uniqueNonEmpty(targets) {
@@ -620,30 +620,194 @@ func inferWorkspaceChatTargets(root string, req routeRequest) []string {
 	return uniqueNonEmpty(existing)
 }
 
-func looksLikeInternalArchitectureQuestion(message string) bool {
-	lower := strings.ToLower(strings.TrimSpace(message))
-	for _, token := range []string{
-		"how does",
-		"how do",
-		"internal flow",
-		"internally",
-		"on the inside",
-		"current flow",
-		"ask mode",
-		"edit mode",
-		"extension flow",
-		"request.go",
-		"extension.ts",
-		"architecture",
-		"runtime behavior",
-		"what changed",
-		"what role",
-	} {
-		if strings.Contains(lower, token) {
-			return true
+func inferMentionedBasenameTargets(root, message string) []string {
+	basenames := extractMentionedBasenames(message)
+	if len(basenames) == 0 {
+		return nil
+	}
+	seenBase := map[string]struct{}{}
+	for _, base := range basenames {
+		seenBase[strings.ToLower(base)] = struct{}{}
+	}
+	var out []string
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if shouldSkipChatSearchDir(d.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		base := strings.ToLower(filepath.Base(path))
+		if _, ok := seenBase[base]; !ok {
+			return nil
+		}
+		out = append(out, filepath.ToSlash(relativeTo(root, path)))
+		if len(out) >= 6 {
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return uniqueNonEmpty(out)
+}
+
+func extractMentionedBasenames(message string) []string {
+	var out []string
+	for _, token := range strings.Fields(message) {
+		token = strings.TrimSpace(strings.Trim(token, ".,:;!?()[]{}<>\"'`"))
+		token = filepath.ToSlash(strings.TrimPrefix(token, "./"))
+		if token == "" || strings.Contains(token, "/") || !strings.Contains(token, ".") {
+			continue
+		}
+		base := filepath.Base(token)
+		if strings.HasPrefix(base, ".") || strings.Count(base, ".") == 0 {
+			continue
+		}
+		out = append(out, base)
+	}
+	return uniqueNonEmpty(out)
+}
+
+func searchWorkspaceFilesForChatQuery(root, message string, maxResults int) []string {
+	if maxResults <= 0 {
+		return nil
+	}
+	terms := extractChatSearchTerms(message)
+	phrases := extractChatSearchPhrases(message)
+	basenames := extractMentionedBasenames(message)
+	if len(terms) == 0 && len(phrases) == 0 && len(basenames) == 0 {
+		return nil
+	}
+	type scoredFile struct {
+		rel   string
+		score int
+	}
+	var scored []scoredFile
+	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			if shouldSkipChatSearchDir(d.Name()) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		rel := filepath.ToSlash(relativeTo(root, path))
+		if rel == "." || rel == "" || !shouldConsiderChatSearchFile(rel) {
+			return nil
+		}
+		info, infoErr := d.Info()
+		if infoErr == nil && info.Size() > 256*1024 {
+			return nil
+		}
+		lowerRel := strings.ToLower(rel)
+		score := 0
+		for _, base := range basenames {
+			lowerBase := strings.ToLower(base)
+			if filepath.Base(lowerRel) == lowerBase {
+				score += 8
+			}
+		}
+		matchedPathTerms := 0
+		for _, term := range terms {
+			if strings.Contains(lowerRel, term) {
+				matchedPathTerms++
+			}
+		}
+		score += matchedPathTerms * 3
+
+		b, readErr := os.ReadFile(path)
+		if readErr == nil {
+			text := strings.ToLower(clampString(string(b), 12000))
+			matchedContentTerms := 0
+			for _, phrase := range phrases {
+				if strings.Contains(text, phrase) {
+					score += 4
+				}
+			}
+			for _, term := range terms {
+				if strings.Contains(text, term) {
+					matchedContentTerms++
+				}
+			}
+			score += matchedContentTerms
+		}
+		if score > 0 {
+			scored = append(scored, scoredFile{rel: rel, score: score})
+		}
+		return nil
+	})
+	sort.SliceStable(scored, func(i, j int) bool {
+		if scored[i].score == scored[j].score {
+			if len(scored[i].rel) == len(scored[j].rel) {
+				return scored[i].rel < scored[j].rel
+			}
+			return len(scored[i].rel) < len(scored[j].rel)
+		}
+		return scored[i].score > scored[j].score
+	})
+	var out []string
+	for _, item := range scored {
+		out = append(out, item.rel)
+		if len(out) >= maxResults {
+			break
 		}
 	}
-	return false
+	return uniqueNonEmpty(out)
+}
+
+func extractChatSearchTerms(message string) []string {
+	return extractSearchTerms(message)
+}
+
+func extractChatSearchPhrases(message string) []string {
+	raw := strings.Fields(strings.ToLower(message))
+	var words []string
+	for _, token := range raw {
+		token = strings.Trim(token, ".,:;!?()[]{}<>\"'`")
+		if len(token) < 3 {
+			continue
+		}
+		words = append(words, token)
+	}
+	var phrases []string
+	for i := 0; i < len(words)-1; i++ {
+		phrase := strings.TrimSpace(words[i] + " " + words[i+1])
+		if len(phrase) < 8 {
+			continue
+		}
+		phrases = append(phrases, phrase)
+	}
+	if len(phrases) > 6 {
+		phrases = phrases[:6]
+	}
+	return uniqueNonEmpty(phrases)
+}
+
+func shouldSkipChatSearchDir(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case ".git", ".hg", ".svn", "node_modules":
+		return true
+	default:
+		return false
+	}
+}
+
+func shouldConsiderChatSearchFile(rel string) bool {
+	base := strings.ToLower(filepath.Base(rel))
+	switch base {
+	case "readme", "readme.md", "makefile", "dockerfile", "compose.yml", "compose.yaml":
+		return true
+	}
+	switch strings.ToLower(filepath.Ext(rel)) {
+	case ".go", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".md", ".txt", ".yaml", ".yml", ".toml", ".sh", ".bash", ".zsh", ".py", ".rs", ".java", ".c", ".cc", ".cpp", ".h", ".hpp", ".cs", ".rb", ".php", ".swift", ".kt", ".kts", ".sql":
+		return true
+	default:
+		return false
+	}
 }
 
 func readWorkspaceSnippet(root, rel string, searchTerms []string) (string, error) {

@@ -6,43 +6,54 @@ import (
 	"testing"
 )
 
-func TestLooksLikeInternalArchitectureQuestion(t *testing.T) {
+func TestInferWorkspaceChatTargets_FindsMentionedBasename(t *testing.T) {
 	t.Parallel()
-	if !looksLikeInternalArchitectureQuestion("Explain how Ask mode works internally in the extension flow.") {
-		t.Fatalf("expected architecture question to be detected")
+	root := t.TempDir()
+	target := filepath.Join(root, "src", "request.go")
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
 	}
-	if looksLikeInternalArchitectureQuestion("rename this function to better match the UI") {
-		t.Fatalf("did not expect ordinary edit request to be detected as architecture question")
+	if err := os.WriteFile(target, []byte("package main\n"), 0o644); err != nil {
+		t.Fatalf("write target: %v", err)
+	}
+
+	got := inferWorkspaceChatTargets(root, routeRequest{
+		Message: "Explain how request.go currently works.",
+	})
+	if len(got) == 0 || got[0] != "src/request.go" {
+		t.Fatalf("inferWorkspaceChatTargets() = %#v", got)
 	}
 }
 
-func TestInferWorkspaceChatTargets_IncludesArchitectureFiles(t *testing.T) {
+func TestInferWorkspaceChatTargets_UsesGenericWorkspaceSearch(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	files := []string{
-		"packages/dorkpipe/lib/cmd/dorkpipe/request.go",
-		"packages/pipeon/resolvers/pipeon/vscode-extension/src/extension.ts",
-		"packages/pipeon/resolvers/pipeon/assets/scripts/prompts/system.md",
-		"packages/pipeon/resolvers/pipeon/vscode-extension/src/webview/chat.ts",
+	files := map[string]string{
+		"docs/notes.md":                        "General notes.\n",
+		"src/router/chat_flow.go":             "package flow\n\nfunc chooseRoute() {}\n// ask mode chat route context gathering\n",
+		"src/web/extension_bridge.ts":         "export function collectWorkspaceSignals() {}\n",
+		"src/other/unrelated.go":              "package other\n",
+		"src/router/secondary_handler.go":     "package flow\n// mode route\n",
+		"src/infra/generated.json":            "{\"route\":\"chat\"}\n",
 	}
-	for _, rel := range files {
+	for rel, body := range files {
 		path := filepath.Join(root, rel)
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatalf("mkdir %s: %v", rel, err)
 		}
-		if err := os.WriteFile(path, []byte("content\n"), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 			t.Fatalf("write %s: %v", rel, err)
 		}
 	}
 
 	got := inferWorkspaceChatTargets(root, routeRequest{
-		Message: "Explain the current internal flow for ask mode and extension.ts after the refactor.",
+		Message: "Explain the current chat route and context gathering flow.",
 	})
 	if len(got) == 0 {
 		t.Fatalf("expected inferred targets, got none")
 	}
-	if got[0] != "packages/dorkpipe/lib/cmd/dorkpipe/request.go" {
-		t.Fatalf("expected request.go first, got %#v", got)
+	if got[0] != "src/router/chat_flow.go" {
+		t.Fatalf("expected generic search to prioritize chat_flow.go, got %#v", got)
 	}
 }
 
