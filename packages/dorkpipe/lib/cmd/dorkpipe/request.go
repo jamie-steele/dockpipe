@@ -145,10 +145,6 @@ func chooseRoute(req routeRequest) routedRequest {
 		}
 	}
 
-	if isInspectIntent(msg) {
-		return routedRequest{Route: "inspect", Action: inspectAction(msg), Reason: "natural-language inspect request"}
-	}
-
 	switch mode {
 	case "plan":
 		if isEditIntent(msg, req.ActiveFile != "", req.SelectionText != "") {
@@ -480,45 +476,6 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 		status["mcp_files_read"] = len(uniqueNonEmpty(mcpLoop.ReadFiles))
 	}
 	emitEditDone(reqID, nonEmpty(answer, "(No response text returned.)"), status)
-}
-
-func isInspectIntent(msg string) bool {
-	return strings.Contains(msg, "context bundle") ||
-		(strings.Contains(msg, "what context") || strings.Contains(msg, "show context")) ||
-		(strings.Contains(msg, "status") && (strings.Contains(msg, "show") || strings.Contains(msg, "check") || msg == "status")) ||
-		(strings.Contains(msg, "bundle context") || strings.Contains(msg, "refresh context")) ||
-		strings.Contains(msg, "callstack") ||
-		strings.Contains(msg, "stack trace") ||
-		(strings.Contains(msg, "symbol") && (strings.Contains(msg, "inspect") || strings.Contains(msg, "show") || strings.Contains(msg, "find"))) ||
-		(strings.Contains(msg, "definition") && (strings.Contains(msg, "show") || strings.Contains(msg, "find") || strings.Contains(msg, "where"))) ||
-		strings.Contains(msg, "references") ||
-		(strings.Contains(msg, "where is") && strings.Contains(msg, "used")) ||
-		strings.Contains(msg, "callers") ||
-		strings.Contains(msg, "who calls") ||
-		strings.Contains(msg, "call sites") ||
-		(strings.Contains(msg, "heap") && (strings.Contains(msg, "inspect") || strings.Contains(msg, "show") || strings.Contains(msg, "profile") || strings.Contains(msg, "memory")))
-}
-
-func inspectAction(msg string) string {
-	switch {
-	case strings.Contains(msg, "callstack") || strings.Contains(msg, "stack trace"):
-		return "callstack"
-	case strings.Contains(msg, "heap") || strings.Contains(msg, "memory profile"):
-		return "heap"
-	case strings.Contains(msg, "callers") || strings.Contains(msg, "who calls") || strings.Contains(msg, "call sites"):
-		return "callers"
-	case strings.Contains(msg, "references") || (strings.Contains(msg, "where is") && strings.Contains(msg, "used")):
-		return "references"
-	case (strings.Contains(msg, "symbol") && (strings.Contains(msg, "inspect") || strings.Contains(msg, "show") || strings.Contains(msg, "find"))) ||
-		(strings.Contains(msg, "definition") && (strings.Contains(msg, "show") || strings.Contains(msg, "find") || strings.Contains(msg, "where"))):
-		return "symbol"
-	case strings.Contains(msg, "bundle context") || strings.Contains(msg, "refresh context"):
-		return "bundle"
-	case strings.Contains(msg, "status") && (strings.Contains(msg, "show") || strings.Contains(msg, "check") || msg == "status"):
-		return "status"
-	default:
-		return "context"
-	}
 }
 
 var (

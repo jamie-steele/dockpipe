@@ -2027,13 +2027,6 @@ function getCliConfirmationRequest(text, mode = "ask") {
     title = `Validate ${trimmed.slice("/validate ".length).trim()}?`;
   } else if (lower.startsWith("/workflow-validate ")) {
     title = `Validate ${trimmed.slice("/workflow-validate ".length).trim()}?`;
-  } else {
-    const deterministic = getDeterministicIntent(trimmed);
-    if (deterministic?.command === "/test") {
-      title = "Run the `test` workflow?";
-    } else if (deterministic?.command === "/ci") {
-      title = "Run the `ci-emulate` workflow?";
-    }
   }
   if (!title && looksLikeShellCommand(trimmed)) {
     title = `Run \`${trimmed}\` in a terminal?`;
@@ -2219,33 +2212,6 @@ async function handleLocalCommand(root, rawText) {
   }
 }
 
-function getDeterministicIntent(text) {
-  const value = text.trim().toLowerCase();
-  if (!value) return null;
-  if (/^(show|open|what is).*(context bundle|context)\??$/.test(value) || /\bwhat context\b/.test(value)) {
-    return { command: "/context", reason: "workspace context question" };
-  }
-  if (/\b(refresh|rebuild|bundle)\b.*\bcontext\b/.test(value)) {
-    return { command: "/bundle", reason: "context refresh request" };
-  }
-  if (/^(show|check|what is).*\bstatus\b/.test(value) || value === "status") {
-    return { command: "/status", reason: "status request" };
-  }
-  if (/\b(callstack|stack trace)\b/.test(value)) {
-    return { command: "/callstack", reason: "callstack inspection request" };
-  }
-  if (/\b(heap|memory profile|heap profile)\b/.test(value)) {
-    return { command: "/heap", reason: "heap inspection request" };
-  }
-  if (/\b(run|start)\b.*\btests?\b/.test(value)) {
-    return { command: "/test", reason: "test workflow request" };
-  }
-  if (/\b(run|start)\b.*\bci\b/.test(value)) {
-    return { command: "/ci", reason: "ci workflow request" };
-  }
-  return null;
-}
-
 async function executeDorkpipeRequest(root, session, text, options: ExecuteNaturalLanguageRequestOptions = {}): Promise<any> {
   const onToken = typeof options.onToken === "function" ? options.onToken : null;
   const onEvent = typeof options.onEvent === "function" ? options.onEvent : null;
@@ -2296,21 +2262,6 @@ async function executeDorkpipeRequest(root, session, text, options: ExecuteNatur
   emitEvent("Inspecting workspace context");
   if (signals.activeFile) {
     emitEvent(`Active file: ${signals.activeFile}`);
-  }
-
-  const deterministicIntent = getDeterministicIntent(text);
-  if (deterministicIntent) {
-    emitEvent(`Confident route: ${deterministicIntent.reason}`);
-    const orchestrated = await handleLocalCommand(root, deterministicIntent.command);
-    if (orchestrated) {
-      return {
-        kind: "local",
-        text: `${orchestrated.text}\n\n_Handled locally without calling the model._`,
-        format: "markdown",
-        status: orchestrated.status || "Handled locally",
-        contextPath: null,
-      };
-    }
   }
 
   emitEvent("Routing to model");

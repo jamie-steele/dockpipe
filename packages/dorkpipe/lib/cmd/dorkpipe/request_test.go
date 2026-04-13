@@ -63,21 +63,19 @@ func TestChooseRoute_SlashInspectPrimitives(t *testing.T) {
 	}
 }
 
-func TestInspectAction_NaturalLanguageInspectPrimitives(t *testing.T) {
+func TestChooseRoute_DoesNotInferInspectFromPlainText(t *testing.T) {
 	t.Parallel()
-	for _, tc := range []struct {
-		message string
-		action  string
-	}{
-		{message: "show definition for renderMessages", action: "symbol"},
-		{message: "where is renderMessages used", action: "references"},
-		{message: "who calls renderMessages", action: "callers"},
+	for _, message := range []string{
+		"show definition for renderMessages",
+		"where is renderMessages used",
+		"who calls renderMessages",
+		"show context",
+		"status",
+		"explain /callers renderMessages and how it works",
 	} {
-		if !isInspectIntent(tc.message) {
-			t.Fatalf("expected inspect intent for %q", tc.message)
-		}
-		if got := inspectAction(tc.message); got != tc.action {
-			t.Fatalf("inspectAction(%q) = %q, want %q", tc.message, got, tc.action)
+		got := chooseRoute(routeRequest{Message: message, Mode: "ask"})
+		if got.Route != "chat" {
+			t.Fatalf("chooseRoute(%q) = %#v, want chat route", message, got)
 		}
 	}
 }
