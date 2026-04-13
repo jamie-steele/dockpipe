@@ -469,6 +469,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		}
 	}
 	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
+	writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, message, effectiveActiveFile, selectionText, plan, rankedCandidates, artifact, "patch_applies"))
 	return artifact, patchPath, artifactsDir, nil
 }
 
@@ -536,6 +537,7 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 			_ = os.WriteFile(filepath.Join(artifactsDir, "apply.log"), []byte(structuredOutput), 0o644)
 			validationOutput, validationStatus := runPostApplyValidation(ctx, root, artifact.TargetFiles)
 			_ = os.WriteFile(filepath.Join(artifactsDir, "post-apply-validation.log"), []byte(validationOutput), 0o644)
+			writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus))
 			emitEditDone(reqID, buildAppliedSummary(artifact, root, artifactsDir, validationStatus), map[string]any{
 				"route":                 "edit",
 				"files_touched":         len(artifact.TargetFiles),
@@ -559,6 +561,7 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 
 			validationOutput, validationStatus := runPostApplyValidation(ctx, root, artifact.TargetFiles)
 			_ = os.WriteFile(filepath.Join(artifactsDir, "post-apply-validation.log"), []byte(validationOutput), 0o644)
+			writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus))
 
 			emitEditDone(reqID, buildAppliedSummary(artifact, root, artifactsDir, validationStatus), map[string]any{
 				"route":                 "edit",
@@ -578,6 +581,7 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 
 	validationOutput, validationStatus := runPostApplyValidation(ctx, root, artifact.TargetFiles)
 	_ = os.WriteFile(filepath.Join(artifactsDir, "post-apply-validation.log"), []byte(validationOutput), 0o644)
+	writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus))
 
 	emitEditDone(reqID, buildAppliedSummary(artifact, root, artifactsDir, validationStatus), map[string]any{
 		"route":                 "edit",

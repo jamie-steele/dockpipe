@@ -14,6 +14,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"dorkpipe.orchestrator/reasoning"
 )
 
 type routeRequest struct {
@@ -156,6 +158,13 @@ func requestCmd(argv []string) {
 	ctx := context.Background()
 	host, chosenModel := resolveModelConfig(strings.TrimSpace(*ollamaHost), strings.TrimSpace(*model))
 	chosenNumCtx := resolveNumCtx(*numCtx)
+	reasoningArtifactDir := ""
+	if routed.Route == "chat" {
+		if artifactDir, runErr := beginReasoningRun(absWd, reqID, "chat", ""); runErr == nil {
+			reasoningArtifactDir = artifactDir
+			defer endArtifactTrace()
+		}
+	}
 	switch routed.Route {
 	case "inspect":
 		handleInspectRoute(ctx, reqID, absWd, req, routed.Action, routed.Arg)
@@ -165,7 +174,7 @@ func requestCmd(argv []string) {
 		}
 		handleEditRoute(ctx, reqID, absWd, req, host, chosenModel, chosenNumCtx)
 	default:
-		handleChatRoute(ctx, reqID, absWd, req, host, chosenModel, chosenNumCtx)
+		handleChatRoute(ctx, reqID, absWd, req, host, chosenModel, chosenNumCtx, reasoningArtifactDir)
 	}
 }
 
@@ -454,7 +463,7 @@ func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	}
 }
 
-func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, host, model string, numCtx int) {
+func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, host, model string, numCtx int, reasoningArtifactDir string) {
 	emitEditEvent(reqID, "context_gathering", "Inspecting workspace context", 0.35, nil)
 	chatContext := buildWorkspaceChatContext(root, req)
 	if len(chatContext.Evidence.Nodes) > 0 {
@@ -518,11 +527,12 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 		answer = buffered.String()
 	}
 	validationStatus := "not_applicable"
+	validation := chatAnswerValidation{}
 	if strictValidation {
 		emitEditEvent(reqID, "validating", "Validating code-anchored answer", 0.72, map[string]any{
 			"context_files": len(chatContext.Targets),
 		})
-		validation := validateChatAnswer(answer, req, chatContext)
+		validation = validateChatAnswer(answer, req, chatContext)
 		if validation.Passed {
 			validationStatus = "passed"
 		} else {
@@ -569,6 +579,12 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 		status["evidence_edges"] = len(chatContext.Evidence.Edges)
 		status["evidence_files"] = countEvidenceNodesByKind(chatContext.Evidence, "file")
 		status["evidence_symbols"] = countEvidenceNodesByKind(chatContext.Evidence, "symbol")
+	}
+	if strings.TrimSpace(reasoningArtifactDir) != "" {
+		writeReasoningRunArtifact(reasoningArtifactDir, buildChatRunArtifact(reqID, "chat", nonEmpty(answer, "(No response text returned.)"), req, chatContext, validationStatus, validation))
+		status["artifact_dir"] = relativeTo(root, reasoningArtifactDir)
+		status["trace_path"] = relativeTo(root, filepath.Join(reasoningArtifactDir, "trace.jsonl"))
+		status["reasoning_path"] = relativeTo(root, filepath.Join(reasoningArtifactDir, "reasoning.json"))
 	}
 	emitEditDone(reqID, nonEmpty(answer, "(No response text returned.)"), status)
 }
@@ -702,7 +718,7 @@ func buildWorkspaceChatContext(root string, req routeRequest) workspaceChatConte
 			meta["guidance_signals_used"] = true
 		}
 	}
-	evidence := buildChatEvidenceGraph(req, targets, snippets, evidenceTerms)
+	evidence := buildChatEvidenceGraph(root, req, targets, snippets, evidenceTerms)
 	if len(evidence.Nodes) > 0 {
 		meta["evidence_nodes"] = len(evidence.Nodes)
 		meta["evidence_edges"] = len(evidence.Edges)
@@ -1487,7 +1503,7 @@ func extractLikelySnippetSymbolsForFileWithTerms(rel, snippet string, searchTerm
 	return symbols
 }
 
-func buildChatEvidenceGraph(req routeRequest, targets []string, snippets map[string]string, searchTerms []string) chatEvidenceGraph {
+func buildChatEvidenceGraph(root string, req routeRequest, targets []string, snippets map[string]string, searchTerms []string) chatEvidenceGraph {
 	architectureQuery := isArchitectureChatQuery(req.Message)
 	nodes := []chatEvidenceNode{{
 		ID:      "request",
@@ -1496,35 +1512,43 @@ func buildChatEvidenceGraph(req routeRequest, targets []string, snippets map[str
 	}}
 	edges := []chatEvidenceEdge{}
 	seenNodes := map[string]struct{}{"request": {}}
+	extractor := reasoning.EvidenceExtractor{}
 	for _, rel := range uniqueNonEmpty(targets) {
 		snippet := strings.TrimSpace(snippets[rel])
 		if rel == "" || snippet == "" {
 			continue
 		}
+		evidenceRecord, evidenceErr := extractor.Extract(root, rel, searchTerms)
+		if evidenceErr != nil {
+			evidenceRecord = reasoning.EvidenceRecord{
+				Nodes: []reasoning.EvidenceNode{{
+					ID:      "file:" + rel,
+					Kind:    "file",
+					File:    rel,
+					Summary: summarizeSnippetEvidence(snippet),
+				}},
+			}
+		}
 		fileID := "file:" + rel
-		if _, ok := seenNodes[fileID]; !ok {
+		for _, node := range evidenceRecord.Nodes {
+			if architectureQuery && isTestLikePath(rel) && node.Kind == "symbol" && looksLikeTestSymbol(node.Symbol) {
+				continue
+			}
+			if _, ok := seenNodes[node.ID]; ok {
+				continue
+			}
 			nodes = append(nodes, chatEvidenceNode{
-				ID:      fileID,
-				Kind:    "file",
-				File:    rel,
-				Summary: summarizeSnippetEvidence(snippet),
+				ID:      node.ID,
+				Kind:    node.Kind,
+				File:    node.File,
+				Symbol:  node.Symbol,
+				Summary: node.Summary,
 			})
-			seenNodes[fileID] = struct{}{}
+			seenNodes[node.ID] = struct{}{}
 		}
 		edges = append(edges, chatEvidenceEdge{From: "request", To: fileID, Kind: "grounds"})
-		for _, symbol := range extractLikelySnippetSymbolsForFileWithTerms(rel, snippet, searchTerms, architectureQuery) {
-			symbolID := "symbol:" + rel + ":" + symbol
-			if _, ok := seenNodes[symbolID]; !ok {
-				nodes = append(nodes, chatEvidenceNode{
-					ID:      symbolID,
-					Kind:    "symbol",
-					File:    rel,
-					Symbol:  symbol,
-					Summary: "Symbol appears in retrieved snippet.",
-				})
-				seenNodes[symbolID] = struct{}{}
-			}
-			edges = append(edges, chatEvidenceEdge{From: fileID, To: symbolID, Kind: "contains"})
+		for _, edge := range evidenceRecord.Edges {
+			edges = append(edges, chatEvidenceEdge{From: edge.From, To: edge.To, Kind: edge.Kind})
 		}
 	}
 	return chatEvidenceGraph{

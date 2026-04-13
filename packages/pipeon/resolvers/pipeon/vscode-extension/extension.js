@@ -665,6 +665,7 @@ function sanitizeRunRecord(value) {
         validationStatus: value.validationStatus ? String(value.validationStatus) : "",
         applyMode: value.applyMode ? String(value.applyMode) : "",
         targetFiles: Array.isArray(value.targetFiles) ? value.targetFiles.map((item) => String(item)).slice(0, 16) : [],
+        reasoningKind: value.reasoningKind ? String(value.reasoningKind) : "",
         structuredEditCount: Number.isFinite(Number(value.structuredEditCount)) ? Math.max(0, Number(value.structuredEditCount)) : 0,
         structuredEditTypes: Array.isArray(value.structuredEditTypes) ? value.structuredEditTypes.map((item) => String(item)).slice(0, 8) : [],
         structuredEdits: Array.isArray(value.structuredEdits)
@@ -705,6 +706,47 @@ function sanitizeRunRecord(value) {
                 metadata: item?.metadata && typeof item.metadata === "object" ? item.metadata : null,
                 timestamp: item?.timestamp ? String(item.timestamp) : "",
             })).slice(-80)
+            : [],
+        retrievalCandidates: Array.isArray(value.retrievalCandidates)
+            ? value.retrievalCandidates.map((item) => ({
+                path: item?.path ? String(item.path) : "",
+                source: item?.source ? String(item.source) : "",
+                selected: !!item?.selected,
+                reason: item?.reason ? clampText(String(item.reason), 180) : "",
+            })).slice(0, 32)
+            : [],
+        evidenceNodes: Array.isArray(value.evidenceNodes)
+            ? value.evidenceNodes.map((item) => ({
+                id: item?.id ? String(item.id) : "",
+                kind: item?.kind ? String(item.kind) : "",
+                file: item?.file ? String(item.file) : "",
+                symbol: item?.symbol ? String(item.symbol) : "",
+                summary: item?.summary ? clampText(String(item.summary), 240) : "",
+                startLine: Number.isFinite(Number(item?.startLine)) ? Number(item.startLine) : 0,
+                endLine: Number.isFinite(Number(item?.endLine)) ? Number(item.endLine) : 0,
+            })).slice(0, 48)
+            : [],
+        evidenceEdges: Array.isArray(value.evidenceEdges)
+            ? value.evidenceEdges.map((item) => ({
+                from: item?.from ? String(item.from) : "",
+                to: item?.to ? String(item.to) : "",
+                kind: item?.kind ? String(item.kind) : "",
+            })).slice(0, 64)
+            : [],
+        validationFindings: Array.isArray(value.validationFindings)
+            ? value.validationFindings.map((item) => ({
+                severity: item?.severity ? String(item.severity) : "",
+                code: item?.code ? String(item.code) : "",
+                message: item?.message ? clampText(String(item.message), 240) : "",
+                nodeIds: Array.isArray(item?.nodeIds) ? item.nodeIds.map((entry) => String(entry)).slice(0, 6) : [],
+            })).slice(0, 24)
+            : [],
+        citations: Array.isArray(value.citations)
+            ? value.citations.map((item) => ({
+                nodeId: item?.nodeId ? String(item.nodeId) : "",
+                file: item?.file ? String(item.file) : "",
+                symbol: item?.symbol ? String(item.symbol) : "",
+            })).slice(0, 24)
             : [],
         applyLog: value.applyLog ? clampText(String(value.applyLog), 4000) : "",
         validationLog: value.validationLog ? clampText(String(value.validationLog), 4000) : "",
@@ -1835,6 +1877,7 @@ async function readRunInspectionData(root, ref, options = {}) {
     const relTrace = String(ref?.trace_path || ref?.tracePath || "").trim();
     const tracePath = relTrace ? (path.isAbsolute(relTrace) ? relTrace : path.join(root, relTrace)) : path.join(artifactDir, "trace.jsonl");
     const artifact = await readJsonIfPresent(path.join(artifactDir, "artifact.json"));
+    const reasoningArtifact = await readJsonIfPresent(path.join(artifactDir, "reasoning.json"));
     const traceEvents = await readTraceEvents(tracePath);
     const applyLog = await readTextIfPresent(path.join(artifactDir, "apply.log"));
     const validationLog = await readTextIfPresent(path.join(artifactDir, "post-apply-validation.log"));
@@ -1845,20 +1888,33 @@ async function readRunInspectionData(root, ref, options = {}) {
     const tailEvent = traceEvents[traceEvents.length - 1] || null;
     const validationStatus = options.validationStatus || tailEvent?.metadata?.validation_status || "";
     const applyMode = options.applyMode || tailEvent?.metadata?.apply_mode || "";
+    const retrievalCandidates = Array.isArray(reasoningArtifact?.retrieval?.candidates) ? reasoningArtifact.retrieval.candidates : [];
+    const evidenceNodes = Array.isArray(reasoningArtifact?.evidence?.nodes) ? reasoningArtifact.evidence.nodes : [];
+    const evidenceEdges = Array.isArray(reasoningArtifact?.evidence?.edges) ? reasoningArtifact.evidence.edges : [];
+    const validationFindings = Array.isArray(reasoningArtifact?.validation?.findings) ? reasoningArtifact.validation.findings : [];
+    const citations = Array.isArray(reasoningArtifact?.output?.citations) ? reasoningArtifact.output.citations : [];
     return sanitizeRunRecord({
         artifactDir: relArtifact,
         patchPath: relPatch || path.relative(root, patchPath),
         tracePath: path.relative(root, tracePath),
-        artifactVersion: artifact?.artifact_version || ref?.artifact_version || ref?.artifactVersion || "",
-        summary: artifact?.summary || "",
+        artifactVersion: reasoningArtifact?.artifact_version || artifact?.artifact_version || ref?.artifact_version || ref?.artifactVersion || "",
+        summary: reasoningArtifact?.output?.summary || artifact?.summary || "",
         state: options.state || (validationStatus ? "applied" : "prepared"),
         validationStatus,
         applyMode,
-        targetFiles: Array.isArray(artifact?.target_files) ? artifact.target_files : (Array.isArray(ref?.target_files) ? ref.target_files : ref?.targetFiles),
+        targetFiles: Array.isArray(reasoningArtifact?.output?.target_files)
+            ? reasoningArtifact.output.target_files
+            : (Array.isArray(artifact?.target_files) ? artifact.target_files : (Array.isArray(ref?.target_files) ? ref.target_files : ref?.targetFiles)),
+        reasoningKind: reasoningArtifact?.kind || "",
         structuredEditCount: structuredEdits.length,
         structuredEditTypes,
         structuredEdits,
         traceEvents,
+        retrievalCandidates,
+        evidenceNodes,
+        evidenceEdges,
+        validationFindings,
+        citations,
         applyLog,
         validationLog,
     });
@@ -4265,6 +4321,7 @@ class PipeonChatViewProvider {
             assistantMessage.text = result.text;
             assistantMessage.format = result.format || "markdown";
             assistantMessage.run = null;
+            assistantMessage.diffPreview = "";
             session.updatedAt = nowIso();
             this.state.status = result.status;
             if (result.readyToApply?.artifact_dir) {
@@ -4318,6 +4375,12 @@ class PipeonChatViewProvider {
                 else {
                     this.state.status = "Edit prepared; review diff below";
                 }
+            }
+            if (!assistantMessage.run && result.metadata?.artifact_dir) {
+                assistantMessage.run = await readRunInspectionData(root, result.metadata, {
+                    state: result.metadata?.route === "chat" ? "completed" : "prepared",
+                    validationStatus: result.metadata?.validation_status,
+                });
             }
         }
         catch (err) {

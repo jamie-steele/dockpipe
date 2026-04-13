@@ -245,7 +245,31 @@
                     .concat(Array.isArray(edit.fallbackNotes) ? edit.fallbackNotes : []);
                 return '<article class="runStructuredItem"><div class="runStructuredHead"><div class="runStructuredTitle">' + escapeHtml(edit.description || edit.op || "structured edit") + '</div><div class="runEventMeta">' + escapeHtml([edit.language, edit.op].filter(Boolean).join(" • ")) + '</div></div>' + (targetBits.length ? '<div class="pendingMeta">' + escapeHtml(targetBits.join(" • ")) + '</div>' : "") + (notes.length ? '<div class="runBulletList">' + notes.slice(0, 4).map((note) => '<div class="runBullet">' + escapeHtml(note) + "</div>").join("") + "</div>" : "") + '</article>';
             }).join("") + "</div>"
-            : '<div class="emptyBlock">This run does not expose structured edit operations.</div>';
+            : '<div class="emptyBlock">' + escapeHtml(run.reasoningKind === "chat" ? "This run captured reasoning evidence rather than structured edit operations." : "This run does not expose structured edit operations.") + "</div>";
+        const retrieval = Array.isArray(run.retrievalCandidates) && run.retrievalCandidates.length
+            ? '<div class="runBulletList">' + run.retrievalCandidates.map((candidate) => '<div class="runBullet">' + escapeHtml([candidate.selected ? "selected" : "candidate", candidate.path, candidate.reason].filter(Boolean).join(" • ")) + "</div>").join("") + "</div>"
+            : '<div class="emptyBlock">No retrieval candidate data was recorded for this run.</div>';
+        const evidence = Array.isArray(run.evidenceNodes) && run.evidenceNodes.length
+            ? '<div class="runStructuredList">' + run.evidenceNodes.map((node) => {
+                const parts = [];
+                if (node.file) {
+                    parts.push(node.file);
+                }
+                if (node.symbol) {
+                    parts.push(node.symbol);
+                }
+                if (node.startLine) {
+                    parts.push("line " + node.startLine);
+                }
+                return '<article class="runStructuredItem"><div class="runStructuredHead"><div class="runStructuredTitle">' + escapeHtml(node.summary || node.symbol || node.kind || "evidence") + '</div><div class="runEventMeta">' + escapeHtml([node.kind, parts.join(" • ")].filter(Boolean).join(" • ")) + '</div></div></article>';
+            }).join("") + "</div>"
+            : '<div class="emptyBlock">No evidence graph nodes were recorded for this run.</div>';
+        const findings = Array.isArray(run.validationFindings) && run.validationFindings.length
+            ? '<div class="runBulletList">' + run.validationFindings.map((finding) => '<div class="runBullet">' + escapeHtml([finding.severity, finding.code, finding.message].filter(Boolean).join(" • ")) + "</div>").join("") + "</div>"
+            : '<div class="emptyBlock">No validator findings were recorded for this run.</div>';
+        const citations = Array.isArray(run.citations) && run.citations.length
+            ? '<div class="runBulletList">' + run.citations.map((citation) => '<div class="runBullet">' + escapeHtml([citation.nodeId, citation.file, citation.symbol].filter(Boolean).join(" • ")) + "</div>").join("") + "</div>"
+            : '<div class="emptyBlock">No final citations were recorded for this run.</div>';
         const logs = [];
         if (run.applyLog) {
             logs.push('<div class="runLogBlock"><div class="paletteLabel">Apply log</div><pre class="runMeta">' + escapeHtml(run.applyLog) + "</pre></div>");
@@ -258,10 +282,19 @@
             '<article class="summaryCard"><div class="summaryLabel">Artifact</div><div class="summaryValue">' + escapeHtml(run.artifactVersion || "v1") + "</div></article>",
             '<article class="summaryCard"><div class="summaryLabel">Validation</div><div class="summaryValue">' + escapeHtml(run.validationStatus || run.state || "prepared") + "</div></article>",
             '<article class="summaryCard"><div class="summaryLabel">Structured ops</div><div class="summaryValue">' + escapeHtml(String(run.structuredEditCount || 0)) + "</div></article>",
+            '<article class="summaryCard"><div class="summaryLabel">Evidence nodes</div><div class="summaryValue">' + escapeHtml(String(Array.isArray(run.evidenceNodes) ? run.evidenceNodes.length : 0)) + "</div></article>",
             "</div>",
             '<div class="runInspectorLayout">',
             '<div class="runInspectorPrimary"><div class="paletteLabel">Execution timeline</div>' + timeline + "</div>",
             '<div class="runInspectorSide"><div class="paletteLabel">Structured edit plan</div>' + structured + "</div>",
+            "</div>",
+            '<div class="runInspectorLayout">',
+            '<div class="runInspectorPrimary"><div class="paletteLabel">Retrieval DAG</div>' + retrieval + "</div>",
+            '<div class="runInspectorSide"><div class="paletteLabel">Evidence graph</div>' + evidence + "</div>",
+            "</div>",
+            '<div class="runInspectorLayout">',
+            '<div class="runInspectorPrimary"><div class="paletteLabel">Validator findings</div>' + findings + "</div>",
+            '<div class="runInspectorSide"><div class="paletteLabel">Final citations</div>' + citations + "</div>",
             "</div>",
             message.diffPreview ? '<div class="runLogBlock"><div class="paletteLabel">Diff preview</div>' + renderCompactDiff(message.diffPreview) + "</div>" : "",
             logs.join(""),

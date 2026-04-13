@@ -20,6 +20,14 @@ func EditArtifactsDir(workdir, requestID string) (string, error) {
 	return filepath.Join(root, "edit", requestID), nil
 }
 
+func ReasoningArtifactsDir(workdir, requestID string) (string, error) {
+	root, err := PackageStateDir(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "reasoning", requestID), nil
+}
+
 func MetricsPath(workdir string) (string, error) {
 	root, err := PackageStateDir(workdir)
 	if err != nil {

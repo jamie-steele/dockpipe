@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"dorkpipe.orchestrator/reasoning"
 )
 
 const editArtifactVersion = "v2"
@@ -46,20 +48,7 @@ type editStructuredEdit struct {
 	FallbackNotes  []string              `json:"fallback_notes,omitempty"`
 }
 
-type editTraceEvent struct {
-	ContractVersion string         `json:"contract_version"`
-	ArtifactVersion string         `json:"artifact_version"`
-	RequestID       string         `json:"request_id"`
-	ParentRequestID string         `json:"parent_request_id,omitempty"`
-	Phase           string         `json:"phase,omitempty"`
-	EventType       string         `json:"event_type,omitempty"`
-	Label           string         `json:"label,omitempty"`
-	Status          string         `json:"status,omitempty"`
-	Progress        float64        `json:"progress,omitempty"`
-	Metadata        map[string]any `json:"metadata,omitempty"`
-	ArtifactDir     string         `json:"artifact_dir,omitempty"`
-	Timestamp       string         `json:"timestamp"`
-}
+type editTraceEvent = reasoning.TraceEvent
 
 type activeTraceRecorder struct {
 	root            string
@@ -119,6 +108,7 @@ func recordTraceEvent(ev editEvent) {
 		ArtifactVersion: editArtifactVersion,
 		RequestID:       ev.RequestID,
 		ParentRequestID: currentTraceRecorder.parentRequestID,
+		Route:           currentTraceRecorder.phase,
 		Phase:           currentTraceRecorder.phase,
 		EventType:       ev.Type,
 		Label:           label,

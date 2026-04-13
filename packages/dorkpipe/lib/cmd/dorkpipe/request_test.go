@@ -215,6 +215,8 @@ func TestChooseRoute_DoesNotInferInspectFromPlainText(t *testing.T) {
 
 func TestValidateChatAnswer_AcceptsEvidenceAnchoredAnswer(t *testing.T) {
 	t.Parallel()
+	root := t.TempDir()
+	writeTestFile(t, root, "src/request.go", "package main\n\nfunc chooseRoute(req routeRequest) routedRequest { return routedRequest{} }\nfunc handleChatRoute(ctx context.Context) {}\n")
 	req := routeRequest{
 		Message: "Explain how the chat route works internally.",
 		Mode:    "ask",
@@ -225,7 +227,7 @@ func TestValidateChatAnswer_AcceptsEvidenceAnchoredAnswer(t *testing.T) {
 		Snippets: map[string]string{
 			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n",
 		},
-		Evidence: buildChatEvidenceGraph(req, []string{"src/request.go"}, map[string]string{
+		Evidence: buildChatEvidenceGraph(root, req, []string{"src/request.go"}, map[string]string{
 			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n",
 		}, extractChatSearchTerms(req.Message)),
 	}
@@ -238,6 +240,8 @@ func TestValidateChatAnswer_AcceptsEvidenceAnchoredAnswer(t *testing.T) {
 
 func TestValidateChatAnswer_RejectsUnsupportedClaims(t *testing.T) {
 	t.Parallel()
+	root := t.TempDir()
+	writeTestFile(t, root, "src/request.go", "package main\n\nfunc chooseRoute(req routeRequest) routedRequest { return routedRequest{} }\n")
 	req := routeRequest{
 		Message: "Explain how the chat route works internally.",
 		Mode:    "ask",
@@ -248,7 +252,7 @@ func TestValidateChatAnswer_RejectsUnsupportedClaims(t *testing.T) {
 		Snippets: map[string]string{
 			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\n",
 		},
-		Evidence: buildChatEvidenceGraph(req, []string{"src/request.go"}, map[string]string{
+		Evidence: buildChatEvidenceGraph(root, req, []string{"src/request.go"}, map[string]string{
 			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\n",
 		}, extractChatSearchTerms(req.Message)),
 	}
@@ -264,11 +268,13 @@ func TestValidateChatAnswer_RejectsUnsupportedClaims(t *testing.T) {
 
 func TestBuildChatEvidenceGraph_IncludesFileAndSymbolNodes(t *testing.T) {
 	t.Parallel()
+	root := t.TempDir()
+	writeTestFile(t, root, "src/request.go", "package main\n\nfunc chooseRoute(req routeRequest) routedRequest { return routedRequest{} }\nfunc handleChatRoute(ctx context.Context) {}\n")
 	req := routeRequest{
 		Message: "Explain the ask route.",
 		Mode:    "ask",
 	}
-	graph := buildChatEvidenceGraph(req, []string{"src/request.go"}, map[string]string{
+	graph := buildChatEvidenceGraph(root, req, []string{"src/request.go"}, map[string]string{
 		"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n",
 	}, extractChatSearchTerms(req.Message))
 	if countEvidenceNodesByKind(graph, "file") != 1 {
@@ -284,17 +290,30 @@ func TestBuildChatEvidenceGraph_IncludesFileAndSymbolNodes(t *testing.T) {
 
 func TestBuildChatEvidenceGraph_FiltersTestSymbolsForArchitectureQuery(t *testing.T) {
 	t.Parallel()
+	root := t.TempDir()
+	writeTestFile(t, root, "src/request_test.go", "package main\n\nfunc TestChooseRoute(t *testing.T) {}\nfunc helperFixture() {}\n")
 	req := routeRequest{
 		Message: "Explain the internal route flow.",
 		Mode:    "ask",
 	}
-	graph := buildChatEvidenceGraph(req, []string{"src/request_test.go"}, map[string]string{
+	graph := buildChatEvidenceGraph(root, req, []string{"src/request_test.go"}, map[string]string{
 		"src/request_test.go": "func TestChooseRoute(t *testing.T) {}\nfunc helperFixture() {}\n",
 	}, extractChatSearchTerms(req.Message))
 	for _, node := range graph.Nodes {
 		if node.Kind == "symbol" {
 			t.Fatalf("expected test-only symbols to be filtered, got %#v", graph)
 		}
+	}
+}
+
+func writeTestFile(t *testing.T, root, rel, body string) {
+	t.Helper()
+	target := filepath.Join(root, rel)
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", rel, err)
+	}
+	if err := os.WriteFile(target, []byte(body), 0o644); err != nil {
+		t.Fatalf("write %s: %v", rel, err)
 	}
 }
 
