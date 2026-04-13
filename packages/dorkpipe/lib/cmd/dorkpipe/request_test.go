@@ -567,6 +567,36 @@ func TestBuildEvidenceOnlyChatFallback_PrefersQuestionFocusedRouteHandler(t *tes
 	}
 }
 
+func TestBuildEvidenceOnlyChatFallback_ProducesValidatorPassingAnswer(t *testing.T) {
+	t.Parallel()
+	req := routeRequest{
+		Message: "Explain how Ask mode now handles a plain-English architecture question after the v2 reasoning runtime changes.",
+		Mode:    "ask",
+	}
+	ctx := workspaceChatContext{
+		Targets: []string{
+			"packages/dorkpipe/lib/cmd/dorkpipe/request.go",
+			"packages/dorkpipe/lib/cmd/dorkpipe/reasoning_runtime.go",
+		},
+		Evidence: chatEvidenceGraph{
+			Nodes: []chatEvidenceNode{
+				{ID: "request", Kind: "request", Summary: req.Message},
+				{ID: "file:request", Kind: "file", File: "packages/dorkpipe/lib/cmd/dorkpipe/request.go"},
+				{ID: "file:runtime", Kind: "file", File: "packages/dorkpipe/lib/cmd/dorkpipe/reasoning_runtime.go"},
+				{ID: "symbol:request:handleChatRoute", Kind: "symbol", File: "packages/dorkpipe/lib/cmd/dorkpipe/request.go", Symbol: "handleChatRoute", Score: 18},
+				{ID: "symbol:runtime:resolveRuntimePolicy", Kind: "symbol", File: "packages/dorkpipe/lib/cmd/dorkpipe/reasoning_runtime.go", Symbol: "resolveRuntimePolicy", Score: 16},
+			},
+		},
+	}
+	answer := buildEvidenceOnlyChatFallback(req, ctx, chatAnswerValidation{
+		Issues: []string{"insufficient evidence citations to retrieved file/symbol nodes: got 0, need at least 2"},
+	})
+	got := validateChatAnswer(answer, req, ctx)
+	if !got.Passed {
+		t.Fatalf("fallback should validate once emitted, got %#v with answer %q", got, answer)
+	}
+}
+
 func writeTestFile(t *testing.T, root, rel, body string) {
 	t.Helper()
 	target := filepath.Join(root, rel)

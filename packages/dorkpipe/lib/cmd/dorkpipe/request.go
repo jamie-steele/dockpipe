@@ -571,11 +571,12 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 						validationStatus = "repaired"
 					} else {
 						answerText = buildEvidenceOnlyChatFallback(req, chatContext, repairedValidation)
-						attemptValidation = repairedValidation
+						attemptValidation = validateChatAnswer(answerText, req, chatContext)
 						validationStatus = "fallback_evidence_only"
 					}
 				} else {
 					answerText = buildEvidenceOnlyChatFallback(req, chatContext, attemptValidation)
+					attemptValidation = validateChatAnswer(answerText, req, chatContext)
 					validationStatus = "fallback_evidence_only"
 				}
 			}
@@ -1764,6 +1765,9 @@ func buildChatAnswerRepairPrompt(req routeRequest, answer string, chatContext wo
 		"- <anything not proven by the retrieved files>",
 		"Do not mention fields, functions, routes, or files unless they appear in the retrieved context.",
 		"Do not restate response instructions, citation policy, or abstain policy as if they were repository behavior.",
+	}
+	if required := requiredEvidenceCitationCount(req, chatContext); required > 1 {
+		sections = append(sections, fmt.Sprintf("Include at least %d confirmed bullets with supported evidence citations when that many evidence-backed symbols are available.", required))
 	}
 	if len(validation.Issues) > 0 {
 		sections = append(sections, "Validation issues:\n- "+strings.Join(validation.Issues, "\n- "))
