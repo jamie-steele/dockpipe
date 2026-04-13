@@ -45,3 +45,39 @@ func TestInferWorkspaceChatTargets_IncludesArchitectureFiles(t *testing.T) {
 		t.Fatalf("expected request.go first, got %#v", got)
 	}
 }
+
+func TestChooseRoute_SlashInspectPrimitives(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		message string
+		action  string
+	}{
+		{message: "/symbol renderMessages", action: "symbol"},
+		{message: "/references renderMessages", action: "references"},
+		{message: "/callers renderMessages", action: "callers"},
+	} {
+		got := chooseRoute(routeRequest{Message: tc.message, Mode: "ask"})
+		if got.Route != "inspect" || got.Action != tc.action {
+			t.Fatalf("chooseRoute(%q) = %#v", tc.message, got)
+		}
+	}
+}
+
+func TestInspectAction_NaturalLanguageInspectPrimitives(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		message string
+		action  string
+	}{
+		{message: "show definition for renderMessages", action: "symbol"},
+		{message: "where is renderMessages used", action: "references"},
+		{message: "who calls renderMessages", action: "callers"},
+	} {
+		if !isInspectIntent(tc.message) {
+			t.Fatalf("expected inspect intent for %q", tc.message)
+		}
+		if got := inspectAction(tc.message); got != tc.action {
+			t.Fatalf("inspectAction(%q) = %q, want %q", tc.message, got, tc.action)
+		}
+	}
+}

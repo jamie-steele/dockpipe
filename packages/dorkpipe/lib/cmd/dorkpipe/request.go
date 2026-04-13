@@ -138,7 +138,7 @@ func chooseRoute(req routeRequest) routedRequest {
 		switch name {
 		case "edit":
 			return routedRequest{Route: "edit", Action: "edit", Arg: arg, Reason: "explicit slash edit"}
-		case "context", "status", "bundle", "test", "ci", "workflow", "validate", "workflow-validate", "callstack", "heap":
+		case "context", "status", "bundle", "test", "ci", "workflow", "validate", "workflow-validate", "callstack", "heap", "symbol", "references", "callers":
 			return routedRequest{Route: "inspect", Action: name, Arg: arg, Reason: "explicit slash command"}
 		default:
 			return routedRequest{Route: "inspect", Action: "slash", Arg: raw, Reason: "explicit slash command"}
@@ -306,6 +306,57 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 			"target":            arg,
 			"validation_status": "not_applicable",
 		})
+	case "symbol":
+		emitEditEvent(reqID, "context_gathering", "Inspecting symbol definition", 0.45, map[string]any{
+			"target":      arg,
+			"active_file": req.ActiveFile,
+		})
+		out, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/inspect-symbol.sh", root, arg, req.ActiveFile, req.SelectionText)
+		if err != nil {
+			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Symbol inspection failed: %s", out), true)
+			return
+		}
+		emitEditDone(reqID, codeFence("text", nonEmpty(out, "No symbol details found.")), map[string]any{
+			"route":             "inspect",
+			"action":            "symbol",
+			"target":            arg,
+			"validation_status": "not_applicable",
+			"active_file":       req.ActiveFile,
+		})
+	case "references":
+		emitEditEvent(reqID, "context_gathering", "Inspecting symbol references", 0.45, map[string]any{
+			"target":      arg,
+			"active_file": req.ActiveFile,
+		})
+		out, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/inspect-references.sh", root, arg, req.ActiveFile, req.SelectionText)
+		if err != nil {
+			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Reference inspection failed: %s", out), true)
+			return
+		}
+		emitEditDone(reqID, codeFence("text", nonEmpty(out, "No references found.")), map[string]any{
+			"route":             "inspect",
+			"action":            "references",
+			"target":            arg,
+			"validation_status": "not_applicable",
+			"active_file":       req.ActiveFile,
+		})
+	case "callers":
+		emitEditEvent(reqID, "context_gathering", "Inspecting callable usages", 0.45, map[string]any{
+			"target":      arg,
+			"active_file": req.ActiveFile,
+		})
+		out, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/inspect-callers.sh", root, arg, req.ActiveFile, req.SelectionText)
+		if err != nil {
+			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Caller inspection failed: %s", out), true)
+			return
+		}
+		emitEditDone(reqID, codeFence("text", nonEmpty(out, "No callers found.")), map[string]any{
+			"route":             "inspect",
+			"action":            "callers",
+			"target":            arg,
+			"validation_status": "not_applicable",
+			"active_file":       req.ActiveFile,
+		})
 	default:
 		emitEditEvent(reqID, "context_gathering", "Collecting focused workspace context", 0.45, nil)
 		text, meta := buildWorkspaceChatContext(root, req)
@@ -438,6 +489,13 @@ func isInspectIntent(msg string) bool {
 		(strings.Contains(msg, "bundle context") || strings.Contains(msg, "refresh context")) ||
 		strings.Contains(msg, "callstack") ||
 		strings.Contains(msg, "stack trace") ||
+		(strings.Contains(msg, "symbol") && (strings.Contains(msg, "inspect") || strings.Contains(msg, "show") || strings.Contains(msg, "find"))) ||
+		(strings.Contains(msg, "definition") && (strings.Contains(msg, "show") || strings.Contains(msg, "find") || strings.Contains(msg, "where"))) ||
+		strings.Contains(msg, "references") ||
+		(strings.Contains(msg, "where is") && strings.Contains(msg, "used")) ||
+		strings.Contains(msg, "callers") ||
+		strings.Contains(msg, "who calls") ||
+		strings.Contains(msg, "call sites") ||
 		(strings.Contains(msg, "heap") && (strings.Contains(msg, "inspect") || strings.Contains(msg, "show") || strings.Contains(msg, "profile") || strings.Contains(msg, "memory")))
 }
 
@@ -447,6 +505,13 @@ func inspectAction(msg string) string {
 		return "callstack"
 	case strings.Contains(msg, "heap") || strings.Contains(msg, "memory profile"):
 		return "heap"
+	case strings.Contains(msg, "callers") || strings.Contains(msg, "who calls") || strings.Contains(msg, "call sites"):
+		return "callers"
+	case strings.Contains(msg, "references") || (strings.Contains(msg, "where is") && strings.Contains(msg, "used")):
+		return "references"
+	case (strings.Contains(msg, "symbol") && (strings.Contains(msg, "inspect") || strings.Contains(msg, "show") || strings.Contains(msg, "find"))) ||
+		(strings.Contains(msg, "definition") && (strings.Contains(msg, "show") || strings.Contains(msg, "find") || strings.Contains(msg, "where"))):
+		return "symbol"
 	case strings.Contains(msg, "bundle context") || strings.Contains(msg, "refresh context"):
 		return "bundle"
 	case strings.Contains(msg, "status") && (strings.Contains(msg, "show") || strings.Contains(msg, "check") || msg == "status"):
