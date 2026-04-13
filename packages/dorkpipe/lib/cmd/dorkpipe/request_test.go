@@ -639,7 +639,10 @@ func TestBuildEvidenceOnlyChatFallback_ProducesValidatorPassingAnswer(t *testing
 				{ID: "request", Kind: "request", Summary: req.Message},
 				{ID: "file:request", Kind: "file", File: "packages/dorkpipe/lib/cmd/dorkpipe/request.go"},
 				{ID: "file:runtime", Kind: "file", File: "packages/dorkpipe/lib/cmd/dorkpipe/reasoning_runtime.go"},
+				{ID: "symbol:request:chooseRoute", Kind: "symbol", File: "packages/dorkpipe/lib/cmd/dorkpipe/request.go", Symbol: "chooseRoute", Score: 19},
+				{ID: "symbol:request:buildWorkspaceChatContext", Kind: "symbol", File: "packages/dorkpipe/lib/cmd/dorkpipe/request.go", Symbol: "buildWorkspaceChatContext", Score: 17},
 				{ID: "symbol:request:handleChatRoute", Kind: "symbol", File: "packages/dorkpipe/lib/cmd/dorkpipe/request.go", Symbol: "handleChatRoute", Score: 18},
+				{ID: "symbol:request:validateChatAnswer", Kind: "symbol", File: "packages/dorkpipe/lib/cmd/dorkpipe/request.go", Symbol: "validateChatAnswer", Score: 16},
 				{ID: "symbol:runtime:resolveRuntimePolicy", Kind: "symbol", File: "packages/dorkpipe/lib/cmd/dorkpipe/reasoning_runtime.go", Symbol: "resolveRuntimePolicy", Score: 16},
 			},
 		},
@@ -650,6 +653,14 @@ func TestBuildEvidenceOnlyChatFallback_ProducesValidatorPassingAnswer(t *testing
 	got := validateChatAnswer(answer, req, ctx)
 	if !got.Passed {
 		t.Fatalf("fallback should validate once emitted, got %#v with answer %q", got, answer)
+	}
+	for _, symbol := range []string{"chooseRoute", "buildWorkspaceChatContext", "handleChatRoute", "validateChatAnswer"} {
+		if !strings.Contains(answer, "`"+symbol+"`") {
+			t.Fatalf("fallback should synthesize architecture flow symbol %s, got %q", symbol, answer)
+		}
+	}
+	if strings.Contains(answer, "Retained flow handler") {
+		t.Fatalf("fallback should use flow-oriented wording, got %q", answer)
 	}
 }
 

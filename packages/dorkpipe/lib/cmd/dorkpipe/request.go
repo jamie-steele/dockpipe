@@ -1825,11 +1825,17 @@ func finalizeEvidenceOnlyChatFallback(req routeRequest, chatContext workspaceCha
 
 func summarizeStrictEvidenceGraph(req routeRequest, graph chatEvidenceGraph) []string {
 	var lines []string
-	for _, node := range preferredChatEvidenceNodes(req, graph) {
-		if node.Kind != "symbol" || node.File == "" || node.Symbol == "" {
-			continue
+	preferred := preferredChatEvidenceNodes(req, graph)
+	if isArchitectureChatQuery(req.Message) {
+		lines = summarizeArchitectureFlowEvidence(preferred)
+	}
+	if len(lines) == 0 {
+		for _, node := range preferred {
+			if node.Kind != "symbol" || node.File == "" || node.Symbol == "" {
+				continue
+			}
+			lines = append(lines, summarizePreferredEvidenceNode(node))
 		}
-		lines = append(lines, summarizePreferredEvidenceNode(node))
 	}
 	if len(lines) > 0 {
 		return uniqueNonEmpty(lines)
@@ -1883,6 +1889,11 @@ func preferredChatEvidenceNodes(req routeRequest, graph chatEvidenceGraph) []cha
 			symbols = positive
 		}
 	}
+	if isArchitectureChatQuery(req.Message) {
+		if ordered := preferredArchitectureFlowNodes(symbols, focusTerms); len(ordered) > 0 {
+			return ordered
+		}
+	}
 	selected := make([]chatEvidenceNode, 0, minStructuredInt(len(symbols), 4))
 	seenRouteRepresentative := map[string]bool{}
 	for _, node := range symbols {
@@ -1901,6 +1912,92 @@ func preferredChatEvidenceNodes(req routeRequest, graph chatEvidenceGraph) []cha
 		}
 	}
 	return selected
+}
+
+func preferredArchitectureFlowNodes(symbols []chatEvidenceNode, focusTerms []string) []chatEvidenceNode {
+	preferredFiles := map[string]struct{}{}
+	for _, node := range symbols {
+		if isRouteHandlerLikeSymbol(node.Symbol) && matchesRouteFocus(node.Symbol, focusTerms) && node.File != "" {
+			preferredFiles[node.File] = struct{}{}
+		}
+	}
+	var selected []chatEvidenceNode
+	seen := map[string]struct{}{}
+	for _, family := range []string{"routing", "context", "focused-route-handler", "validation", "policy"} {
+		if node, ok := pickArchitectureFlowNode(symbols, focusTerms, family, preferredFiles, seen); ok {
+			selected = append(selected, node)
+			seen[node.ID] = struct{}{}
+		}
+	}
+	for _, node := range symbols {
+		if len(selected) >= 5 {
+			break
+		}
+		family := architectureEvidenceFamily(node.Symbol, focusTerms)
+		if family == "helper" || family == "other-route-handler" {
+			continue
+		}
+		if _, ok := seen[node.ID]; ok {
+			continue
+		}
+		selected = append(selected, node)
+		seen[node.ID] = struct{}{}
+	}
+	return selected
+}
+
+func pickArchitectureFlowNode(symbols []chatEvidenceNode, focusTerms []string, family string, preferredFiles map[string]struct{}, seen map[string]struct{}) (chatEvidenceNode, bool) {
+	for _, preferFocusedFile := range []bool{true, false} {
+		for _, node := range symbols {
+			if _, ok := seen[node.ID]; ok {
+				continue
+			}
+			if architectureEvidenceFamily(node.Symbol, focusTerms) != family {
+				continue
+			}
+			if preferFocusedFile && len(preferredFiles) > 0 && family != "policy" {
+				if _, ok := preferredFiles[node.File]; !ok {
+					continue
+				}
+			}
+			return node, true
+		}
+	}
+	return chatEvidenceNode{}, false
+}
+
+func summarizeArchitectureFlowEvidence(nodes []chatEvidenceNode) []string {
+	var lines []string
+	for _, node := range nodes {
+		if node.Kind != "symbol" || node.File == "" || node.Symbol == "" {
+			continue
+		}
+		if item := summarizeArchitectureFlowNode(node); item != "" {
+			lines = append(lines, item)
+		}
+	}
+	return uniqueNonEmpty(lines)
+}
+
+func summarizeArchitectureFlowNode(node chatEvidenceNode) string {
+	lower := strings.ToLower(strings.TrimSpace(node.Symbol))
+	claim := ""
+	switch {
+	case strings.Contains(lower, "choose") || strings.Contains(lower, "select"):
+		claim = fmt.Sprintf("`%s` performs the Ask/chat routing decision in `%s`.", node.Symbol, node.File)
+	case strings.Contains(lower, "context") || strings.Contains(lower, "retrieve"):
+		claim = fmt.Sprintf("`%s` gathers the focused workspace context before answer generation in `%s`.", node.Symbol, node.File)
+	case isRouteHandlerLikeSymbol(node.Symbol):
+		claim = fmt.Sprintf("`%s` drives the Ask/chat execution path in `%s`.", node.Symbol, node.File)
+	case strings.Contains(lower, "validate") || strings.Contains(lower, "repair"):
+		claim = fmt.Sprintf("`%s` checks the answer against retrieved evidence in `%s`.", node.Symbol, node.File)
+	case strings.Contains(lower, "resolve") || strings.Contains(lower, "policy") || strings.Contains(lower, "branch"):
+		claim = fmt.Sprintf("`%s` decides the runtime branching and abstain policy in `%s`.", node.Symbol, node.File)
+	}
+	if claim == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s Evidence: `%s` :: `%s`", claim, node.File, node.Symbol)
 }
 
 func summarizePreferredEvidenceNode(node chatEvidenceNode) string {
