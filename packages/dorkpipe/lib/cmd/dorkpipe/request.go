@@ -1813,14 +1813,11 @@ func buildEvidenceOnlyChatFallback(chatContext workspaceChatContext, validation 
 
 func summarizeStrictEvidenceGraph(graph chatEvidenceGraph) []string {
 	var lines []string
-	for _, node := range graph.Nodes {
-		switch node.Kind {
-		case "symbol":
-			if node.File == "" || node.Symbol == "" {
-				continue
-			}
-			lines = append(lines, fmt.Sprintf("Confirmed support for `%s` in `%s`. Evidence: `%s` :: `%s`", node.Symbol, node.File, node.File, node.Symbol))
+	for _, node := range preferredChatEvidenceNodes(graph) {
+		if node.Kind != "symbol" || node.File == "" || node.Symbol == "" {
+			continue
 		}
+		lines = append(lines, summarizePreferredEvidenceNode(node))
 	}
 	if len(lines) > 0 {
 		return uniqueNonEmpty(lines)
@@ -1832,6 +1829,70 @@ func summarizeStrictEvidenceGraph(graph chatEvidenceGraph) []string {
 		lines = append(lines, fmt.Sprintf("Retrieved `%s` as relevant code context.", node.File))
 	}
 	return uniqueNonEmpty(lines)
+}
+
+func preferredChatEvidenceNodes(graph chatEvidenceGraph) []chatEvidenceNode {
+	var symbols []chatEvidenceNode
+	for _, node := range graph.Nodes {
+		if node.Kind == "symbol" && node.File != "" && node.Symbol != "" {
+			symbols = append(symbols, node)
+		}
+	}
+	if len(symbols) == 0 {
+		return nil
+	}
+	sort.SliceStable(symbols, func(i, j int) bool {
+		if symbols[i].Score == symbols[j].Score {
+			if symbols[i].File == symbols[j].File {
+				return symbols[i].Symbol < symbols[j].Symbol
+			}
+			return symbols[i].File < symbols[j].File
+		}
+		return symbols[i].Score > symbols[j].Score
+	})
+	hasPositive := false
+	for _, node := range symbols {
+		if node.Score > 0 {
+			hasPositive = true
+			break
+		}
+	}
+	if hasPositive {
+		var positive []chatEvidenceNode
+		for _, node := range symbols {
+			if node.Score > 0 {
+				positive = append(positive, node)
+			}
+		}
+		symbols = positive
+	}
+	if len(symbols) > 4 {
+		symbols = symbols[:4]
+	}
+	return symbols
+}
+
+func summarizePreferredEvidenceNode(node chatEvidenceNode) string {
+	role := describeEvidenceRole(node.Symbol)
+	return fmt.Sprintf("%s `%s` in `%s`. Evidence: `%s` :: `%s`", role, node.Symbol, node.File, node.File, node.Symbol)
+}
+
+func describeEvidenceRole(symbol string) string {
+	lower := strings.ToLower(strings.TrimSpace(symbol))
+	switch {
+	case strings.Contains(lower, "handle") || strings.Contains(lower, "route"):
+		return "Retained flow handler"
+	case strings.Contains(lower, "resolve") || strings.Contains(lower, "select") || strings.Contains(lower, "policy"):
+		return "Retained decision or policy stage"
+	case strings.Contains(lower, "build") || strings.Contains(lower, "collect") || strings.Contains(lower, "retrieve") || strings.Contains(lower, "context"):
+		return "Retained context or planning stage"
+	case strings.Contains(lower, "validate") || strings.Contains(lower, "repair"):
+		return "Retained validation or repair stage"
+	case strings.Contains(lower, "begin") || strings.Contains(lower, "write") || strings.Contains(lower, "persist") || strings.Contains(lower, "emit"):
+		return "Retained artifact or trace stage"
+	default:
+		return "Retained execution symbol"
+	}
 }
 
 func extractLikelySnippetSymbols(snippet string) []string {

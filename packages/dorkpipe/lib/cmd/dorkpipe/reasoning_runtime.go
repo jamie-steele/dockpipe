@@ -245,10 +245,7 @@ func buildChatRunArtifact(reqID, route, summary string, req routeRequest, chatCo
 
 func buildChatOutputCitations(graph chatEvidenceGraph) []reasoning.OutputCitation {
 	var out []reasoning.OutputCitation
-	for _, node := range graph.Nodes {
-		if node.Kind != "symbol" {
-			continue
-		}
+	for _, node := range preferredChatEvidenceNodes(graph) {
 		out = append(out, reasoning.OutputCitation{
 			NodeID: node.ID,
 			File:   node.File,

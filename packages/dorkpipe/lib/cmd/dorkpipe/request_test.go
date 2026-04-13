@@ -501,6 +501,26 @@ func TestBuildEvidenceOnlyChatFallback_UsesStrictEvidenceCitations(t *testing.T)
 	}
 }
 
+func TestBuildEvidenceOnlyChatFallback_PrefersTopScoredFlowSymbols(t *testing.T) {
+	t.Parallel()
+	graph := chatEvidenceGraph{
+		Nodes: []chatEvidenceNode{
+			{ID: "request", Kind: "request", Summary: "Explain ask flow."},
+			{ID: "file:src/request.go", Kind: "file", File: "src/request.go", Summary: "request handlers"},
+			{ID: "symbol:src/request.go:handleChatRoute", Kind: "symbol", File: "src/request.go", Symbol: "handleChatRoute", Summary: "chat handler", Score: 20},
+			{ID: "symbol:src/request.go:resolveRuntimePolicy", Kind: "symbol", File: "src/request.go", Symbol: "resolveRuntimePolicy", Summary: "runtime policy", Score: 16},
+			{ID: "symbol:src/request.go:citationSupportsClaim", Kind: "symbol", File: "src/request.go", Symbol: "citationSupportsClaim", Summary: "binding helper", Score: -3},
+		},
+	}
+	out := buildEvidenceOnlyChatFallback(workspaceChatContext{Evidence: graph}, chatAnswerValidation{})
+	if strings.Contains(out, "citationSupportsClaim") {
+		t.Fatalf("fallback should prefer top scored flow symbols, got %q", out)
+	}
+	if !strings.Contains(out, "handleChatRoute") || !strings.Contains(out, "resolveRuntimePolicy") {
+		t.Fatalf("fallback missing preferred flow symbols: %q", out)
+	}
+}
+
 func writeTestFile(t *testing.T, root, rel, body string) {
 	t.Helper()
 	target := filepath.Join(root, rel)
