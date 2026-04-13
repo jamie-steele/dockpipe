@@ -1523,8 +1523,14 @@ function spawnStreamingCommand(command, args, options = {}) {
     });
 }
 async function resolveDorkpipeInvocation(root) {
-    const binary = path.join(root, "packages", "dorkpipe", "bin", "dorkpipe");
-    if (await fileExists(binary)) {
+    const binaries = [
+        path.join(root, "src", "bin", "dorkpipe"),
+        path.join(root, "packages", "dorkpipe", "bin", "dorkpipe"),
+    ];
+    for (const binary of binaries) {
+        if (!(await fileExists(binary))) {
+            continue;
+        }
         const probe = await runCommand(`${shellQuote(binary)} --help`, root);
         const helpText = `${probe.stdout}\n${probe.stderr}`;
         if (probe.ok && /\brequest\b/.test(helpText) && /\bapply-edit\b/.test(helpText)) {
