@@ -138,6 +138,45 @@ func TestInferWorkspaceChatTargets_PrefersImplementationOverTests(t *testing.T) 
 	if got[0] != "packages/dorkpipe/lib/cmd/dorkpipe/request.go" {
 		t.Fatalf("expected implementation file first, got %#v", got)
 	}
+	for _, rel := range got {
+		if rel == "packages/dorkpipe/lib/cmd/dorkpipe/request_test.go" {
+			t.Fatalf("expected test file to be pruned when implementation exists, got %#v", got)
+		}
+	}
+}
+
+func TestInferWorkspaceChatTargets_RequiresDenseArchitectureMatches(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	files := map[string]string{
+		"packages/dorkpipe/lib/cmd/dorkpipe/request.go":           "package main\n\nfunc chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\nfunc buildWorkspaceChatContext(root string, req routeRequest) workspaceChatContext {}\n",
+		"packages/dorkpipe/lib/cmd/dorkpipe/structured_trace.go":  "package main\n\nfunc writePreparedArtifactBundle() {}\nfunc deriveStructuredEdits() {}\n// validation status for artifacts\n",
+		"src/apps/pipeon-launcher/src/BasicModeWidget.cpp":        "namespace pipeon { class BasicModeWidget {}; }\n",
+	}
+	for rel, body := range files {
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", rel, err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	got := inferWorkspaceChatTargets(root, routeRequest{
+		Message: "Explain how Ask mode routes and grounds an architecture question after the latest validation changes.",
+	})
+	if len(got) == 0 {
+		t.Fatalf("expected inferred targets, got none")
+	}
+	if got[0] != "packages/dorkpipe/lib/cmd/dorkpipe/request.go" {
+		t.Fatalf("expected request.go first, got %#v", got)
+	}
+	for _, rel := range got {
+		if rel == "packages/dorkpipe/lib/cmd/dorkpipe/structured_trace.go" || rel == "src/apps/pipeon-launcher/src/BasicModeWidget.cpp" {
+			t.Fatalf("expected loose architecture overlaps to be filtered, got %#v", got)
+		}
+	}
 }
 
 func TestChooseRoute_SlashInspectPrimitives(t *testing.T) {
@@ -256,5 +295,19 @@ func TestBuildChatEvidenceGraph_FiltersTestSymbolsForArchitectureQuery(t *testin
 		if node.Kind == "symbol" {
 			t.Fatalf("expected test-only symbols to be filtered, got %#v", graph)
 		}
+	}
+}
+
+func TestExtractLikelySnippetSymbols_IgnoresCommentsAndProse(t *testing.T) {
+	t.Parallel()
+	snippet := `// evidence graph includes symbol names
+/* type names should not count */
+func chooseRoute(req routeRequest) routedRequest { return routedRequest{} }
+# function fakeShellShouldNotCount
+interface routePlanner {}
+`
+	got := extractLikelySnippetSymbols(snippet)
+	if len(got) != 2 || got[0] != "chooseRoute" || got[1] != "routePlanner" {
+		t.Fatalf("extractLikelySnippetSymbols() = %#v", got)
 	}
 }

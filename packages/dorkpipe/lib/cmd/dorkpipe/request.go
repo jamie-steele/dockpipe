@@ -57,6 +57,16 @@ type chatEvidenceGraph struct {
 	Edges []chatEvidenceEdge
 }
 
+type chatScoredFile struct {
+	rel            string
+	score          int
+	pathMatches    int
+	contentMatches int
+	strongMatches  int
+	phraseMatches  int
+	basenameMatch  bool
+}
+
 type stringListFlag []string
 
 func (s *stringListFlag) String() string {
@@ -719,6 +729,7 @@ func inferWorkspaceChatTargets(root string, req routeRequest) []string {
 	}
 	if isArchitectureChatQuery(req.Message) {
 		existing = prioritizeImplementationTargets(existing)
+		existing = pruneNonImplementationTargets(existing)
 	}
 	return uniqueNonEmpty(existing)
 }
@@ -762,6 +773,30 @@ func implementationTargetScore(rel string) int {
 		score -= 2
 	}
 	return score
+}
+
+func pruneNonImplementationTargets(items []string) []string {
+	all := uniqueNonEmpty(items)
+	hasImplementation := false
+	for _, rel := range all {
+		if isImplementationLikePath(rel) {
+			hasImplementation = true
+			break
+		}
+	}
+	if !hasImplementation {
+		return all
+	}
+	var out []string
+	for _, rel := range all {
+		if isImplementationLikePath(rel) {
+			out = append(out, rel)
+		}
+	}
+	if len(out) == 0 {
+		return all
+	}
+	return out
 }
 
 func inferMentionedBasenameTargets(root, message string) []string {
@@ -829,11 +864,7 @@ func searchWorkspaceFilesForChatQuery(root, message string, maxResults int) []st
 	if len(terms) == 0 && len(phrases) == 0 && len(basenames) == 0 {
 		return nil
 	}
-	type scoredFile struct {
-		rel   string
-		score int
-	}
-	var scored []scoredFile
+	var scored []chatScoredFile
 	_ = filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -854,42 +885,66 @@ func searchWorkspaceFilesForChatQuery(root, message string, maxResults int) []st
 		}
 		lowerRel := strings.ToLower(rel)
 		score := 0
+		basenameMatch := false
 		for _, base := range basenames {
 			lowerBase := strings.ToLower(base)
 			if filepath.Base(lowerRel) == lowerBase {
 				score += 8
+				basenameMatch = true
 			}
 		}
 		matchedPathTerms := 0
+		strongMatches := 0
 		for _, term := range terms {
 			if strings.Contains(lowerRel, term) {
 				matchedPathTerms++
+				if !isWeakArchitectureTerm(term) {
+					strongMatches++
+				}
+				score += chatSearchTermMatchWeight(term, architectureQuery)
 			}
 		}
-		score += matchedPathTerms * 3
 		score += scoreChatSearchPath(lowerRel, architectureQuery)
 
 		b, readErr := os.ReadFile(path)
 		if readErr == nil {
 			text := strings.ToLower(clampString(string(b), 12000))
 			matchedContentTerms := 0
+			matchedPhrases := 0
 			for _, phrase := range phrases {
 				if strings.Contains(text, phrase) {
 					score += 4
+					matchedPhrases++
 				}
 			}
 			for _, term := range terms {
 				if strings.Contains(text, term) {
 					matchedContentTerms++
+					if !isWeakArchitectureTerm(term) {
+						strongMatches++
+					}
+					score += chatSearchTermMatchWeight(term, architectureQuery)
 				}
 			}
-			score += matchedContentTerms
+			scored = append(scored, chatScoredFile{
+				rel:            rel,
+				score:          score,
+				pathMatches:    matchedPathTerms,
+				contentMatches: matchedContentTerms,
+				strongMatches:  strongMatches,
+				phraseMatches:  matchedPhrases,
+				basenameMatch:  basenameMatch,
+			})
+			return nil
 		}
 		if score > 0 {
-			scored = append(scored, scoredFile{rel: rel, score: score})
+			scored = append(scored, chatScoredFile{rel: rel, score: score, pathMatches: matchedPathTerms, strongMatches: strongMatches, basenameMatch: basenameMatch})
 		}
 		return nil
 	})
+	if architectureQuery {
+		scored = filterArchitectureScoredFiles(scored)
+	}
 	sort.SliceStable(scored, func(i, j int) bool {
 		if scored[i].score == scored[j].score {
 			if len(scored[i].rel) == len(scored[j].rel) {
@@ -910,7 +965,17 @@ func searchWorkspaceFilesForChatQuery(root, message string, maxResults int) []st
 }
 
 func extractChatSearchTerms(message string) []string {
-	return extractSearchTerms(message)
+	raw := extractSearchTerms(message)
+	var out []string
+	for _, term := range raw {
+		for _, candidate := range normalizeChatSearchTermVariants(term) {
+			if isLowSignalChatTerm(candidate) {
+				continue
+			}
+			out = append(out, candidate)
+		}
+	}
+	return uniqueNonEmpty(out)
 }
 
 func extractChatSearchPhrases(message string) []string {
@@ -935,6 +1000,90 @@ func extractChatSearchPhrases(message string) []string {
 		phrases = phrases[:6]
 	}
 	return uniqueNonEmpty(phrases)
+}
+
+func isDenseArchitectureMatch(basenameMatch bool, pathMatches, contentMatches, strongMatches, phraseMatches int) bool {
+	if basenameMatch {
+		return true
+	}
+	if phraseMatches > 0 {
+		return true
+	}
+	return strongMatches >= 1 && pathMatches+contentMatches >= 2
+}
+
+func isLowSignalChatTerm(term string) bool {
+	switch strings.ToLower(strings.TrimSpace(term)) {
+	case "current", "currently", "latest", "changes", "change", "question", "plain", "english", "architecture", "internally", "internal", "runtime", "behavior", "works", "working", "ground", "grounds", "grounding", "repo", "repository":
+		return true
+	default:
+		return false
+	}
+}
+
+func chatSearchTermMatchWeight(term string, architectureQuery bool) int {
+	if architectureQuery && isWeakArchitectureTerm(term) {
+		return 1
+	}
+	return 2
+}
+
+func isWeakArchitectureTerm(term string) bool {
+	switch strings.ToLower(strings.TrimSpace(term)) {
+	case "mode", "validation", "validations":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeChatSearchTermVariants(term string) []string {
+	term = strings.ToLower(strings.TrimSpace(term))
+	if term == "" {
+		return nil
+	}
+	out := []string{term}
+	if strings.HasSuffix(term, "ies") && len(term) > 4 {
+		out = append(out, strings.TrimSuffix(term, "ies")+"y")
+	}
+	if strings.HasSuffix(term, "es") && len(term) > 4 {
+		out = append(out, strings.TrimSuffix(term, "es"))
+	}
+	if strings.HasSuffix(term, "s") && len(term) > 4 {
+		out = append(out, strings.TrimSuffix(term, "s"))
+	}
+	if strings.HasSuffix(term, "ing") && len(term) > 6 {
+		out = append(out, strings.TrimSuffix(term, "ing"))
+	}
+	if strings.HasSuffix(term, "ed") && len(term) > 5 {
+		out = append(out, strings.TrimSuffix(term, "ed"))
+	}
+	return uniqueNonEmpty(out)
+}
+
+func filterArchitectureScoredFiles(items []chatScoredFile) []chatScoredFile {
+	if len(items) == 0 {
+		return nil
+	}
+	var dense []chatScoredFile
+	for _, item := range items {
+		if isDenseArchitectureMatch(item.basenameMatch, item.pathMatches, item.contentMatches, item.strongMatches, item.phraseMatches) {
+			dense = append(dense, item)
+		}
+	}
+	if len(dense) > 0 {
+		return dense
+	}
+	var implementation []chatScoredFile
+	for _, item := range items {
+		if isImplementationLikePath(item.rel) {
+			implementation = append(implementation, item)
+		}
+	}
+	if len(implementation) > 0 {
+		return implementation
+	}
+	return items
 }
 
 func shouldSkipChatSearchDir(name string) bool {
@@ -1230,16 +1379,23 @@ func extractLikelySnippetSymbols(snippet string) []string {
 		return nil
 	}
 	patterns := []*regexp.Regexp{
-		regexp.MustCompile(`\bfunc\s+([A-Za-z_][A-Za-z0-9_]*)`),
-		regexp.MustCompile(`\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)`),
-		regexp.MustCompile(`\bclass\s+([A-Za-z_][A-Za-z0-9_]*)`),
-		regexp.MustCompile(`\binterface\s+([A-Za-z_][A-Za-z0-9_]*)`),
-		regexp.MustCompile(`\btype\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`^\s*func\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`^\s*function\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`^\s*class\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`^\s*interface\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`^\s*type\s+([A-Za-z_][A-Za-z0-9_]*)`),
 	}
 	var out []string
-	for _, pattern := range patterns {
-		matches := pattern.FindAllStringSubmatch(snippet, 4)
-		for _, match := range matches {
+	for _, line := range strings.Split(snippet, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "*") || strings.HasPrefix(trimmed, "/*") {
+			continue
+		}
+		for _, pattern := range patterns {
+			match := pattern.FindStringSubmatch(line)
 			if len(match) > 1 {
 				out = append(out, match[1])
 			}
@@ -1339,6 +1495,19 @@ func isTestLikePath(rel string) bool {
 		strings.Contains(lower, "/test/") ||
 		strings.Contains(lower, "/tests/") ||
 		strings.Contains(lower, "/testdata/")
+}
+
+func isImplementationLikePath(rel string) bool {
+	lower := strings.ToLower(filepath.ToSlash(rel))
+	if isTestLikePath(lower) || isDocLikePath(lower) || isScriptLikePath(lower) {
+		return false
+	}
+	switch strings.ToLower(filepath.Ext(lower)) {
+	case ".go", ".ts", ".tsx", ".js", ".jsx", ".py", ".rs", ".java", ".c", ".cc", ".cpp", ".h", ".hpp", ".cs", ".rb", ".php", ".swift", ".kt", ".kts":
+		return true
+	default:
+		return false
+	}
 }
 
 func isDocLikePath(rel string) bool {
