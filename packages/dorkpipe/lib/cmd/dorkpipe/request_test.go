@@ -457,13 +457,13 @@ func TestBuildChatEvidenceGraph_FiltersTestSymbolsForArchitectureQuery(t *testin
 func TestBuildChatEvidenceGraph_PrioritizesExecutionSymbolsForArchitectureQuery(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	writeTestFile(t, root, "src/request.go", "package main\n\nfunc buildChatOutputCitations() {}\nfunc handleChatRoute(ctx context.Context) {}\nfunc resolveRuntimePolicy() {}\n")
+	writeTestFile(t, root, "src/request.go", "package main\n\nfunc chooseRoute(req routeRequest) routedRequest { return routedRequest{} }\nfunc handleChatRoute(ctx context.Context) {}\nfunc handleInspectRoute(ctx context.Context) {}\nfunc buildWorkspaceChatContext(root string, req routeRequest) workspaceChatContext { return workspaceChatContext{} }\nfunc validateChatAnswer(answer string, req routeRequest, chatContext workspaceChatContext) chatAnswerValidation { return chatAnswerValidation{} }\nfunc resolveRuntimePolicy() {}\nfunc citationSupportsClaim() bool { return false }\n")
 	req := routeRequest{
 		Message: "Explain how Ask mode handles architecture questions internally.",
 		Mode:    "ask",
 	}
 	graph := buildChatEvidenceGraph(root, req, []string{"src/request.go"}, map[string]string{
-		"src/request.go": "func buildChatOutputCitations() {}\nfunc handleChatRoute(ctx context.Context) {}\nfunc resolveRuntimePolicy() {}\n",
+		"src/request.go": "func chooseRoute(req routeRequest) routedRequest { return routedRequest{} }\nfunc handleChatRoute(ctx context.Context) {}\nfunc handleInspectRoute(ctx context.Context) {}\nfunc buildWorkspaceChatContext(root string, req routeRequest) workspaceChatContext { return workspaceChatContext{} }\nfunc validateChatAnswer(answer string, req routeRequest, chatContext workspaceChatContext) chatAnswerValidation { return chatAnswerValidation{} }\nfunc resolveRuntimePolicy() {}\nfunc citationSupportsClaim() bool { return false }\n",
 	}, extractChatSearchTerms(req.Message))
 	var symbols []chatEvidenceNode
 	for _, node := range graph.Nodes {
@@ -471,11 +471,20 @@ func TestBuildChatEvidenceGraph_PrioritizesExecutionSymbolsForArchitectureQuery(
 			symbols = append(symbols, node)
 		}
 	}
-	if len(symbols) < 2 {
+	if len(symbols) < 4 {
 		t.Fatalf("expected multiple symbols, got %#v", graph)
 	}
-	if symbols[0].Symbol != "handleChatRoute" && symbols[0].Symbol != "resolveRuntimePolicy" {
-		t.Fatalf("expected execution-path symbol first, got %#v", symbols)
+	got := map[string]bool{}
+	for _, node := range symbols {
+		got[node.Symbol] = true
+	}
+	for _, expected := range []string{"handleChatRoute", "chooseRoute", "buildWorkspaceChatContext", "validateChatAnswer", "resolveRuntimePolicy"} {
+		if !got[expected] {
+			t.Fatalf("expected architecture graph to retain %s, got %#v", expected, symbols)
+		}
+	}
+	if got["handleInspectRoute"] || got["citationSupportsClaim"] {
+		t.Fatalf("expected architecture graph to suppress sibling/helper symbols, got %#v", symbols)
 	}
 }
 

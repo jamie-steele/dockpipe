@@ -2093,6 +2093,7 @@ func extractLikelySnippetSymbolsForFileWithTerms(rel, snippet string, searchTerm
 
 func buildChatEvidenceGraph(root string, req routeRequest, targets []string, snippets map[string]string, searchTerms []string) chatEvidenceGraph {
 	architectureQuery := isArchitectureChatQuery(req.Message)
+	evidenceTerms := expandArchitectureEvidenceTerms(req, searchTerms)
 	nodes := []chatEvidenceNode{{
 		ID:      "request",
 		Kind:    "request",
@@ -2106,7 +2107,7 @@ func buildChatEvidenceGraph(root string, req routeRequest, targets []string, sni
 		if rel == "" || snippet == "" {
 			continue
 		}
-		evidenceRecord, evidenceErr := extractor.Extract(root, rel, searchTerms)
+		evidenceRecord, evidenceErr := extractor.Extract(root, rel, evidenceTerms)
 		if evidenceErr != nil {
 			evidenceRecord = reasoning.EvidenceRecord{
 				Nodes: []reasoning.EvidenceNode{{
@@ -2131,7 +2132,7 @@ func buildChatEvidenceGraph(root string, req routeRequest, targets []string, sni
 				File:    node.File,
 				Symbol:  node.Symbol,
 				Summary: node.Summary,
-				Score:   scoreArchitectureEvidenceNode(node, rel, evidenceRecord.Edges, architectureQuery, searchTerms),
+				Score:   scoreArchitectureEvidenceNode(node, rel, evidenceRecord.Edges, architectureQuery, evidenceTerms),
 			})
 			seenNodes[node.ID] = struct{}{}
 		}
@@ -2142,12 +2143,36 @@ func buildChatEvidenceGraph(root string, req routeRequest, targets []string, sni
 	}
 	uniqueNodes := uniqueChatEvidenceNodes(nodes)
 	if architectureQuery {
-		uniqueNodes = prioritizeArchitectureEvidenceNodes(uniqueNodes)
+		uniqueNodes = prioritizeArchitectureEvidenceNodes(req, uniqueNodes)
 	}
 	return chatEvidenceGraph{
 		Nodes: uniqueNodes,
 		Edges: uniqueChatEvidenceEdges(edges),
 	}
+}
+
+func expandArchitectureEvidenceTerms(req routeRequest, searchTerms []string) []string {
+	out := append([]string{}, searchTerms...)
+	if !isArchitectureChatQuery(req.Message) {
+		return uniqueNonEmpty(out)
+	}
+	lower := strings.ToLower(req.Message)
+	if containsAnyToken(lower, []string{"ask", "chat"}) {
+		out = append(out, "ask", "chat", "choose", "route", "context", "validate")
+	}
+	if containsAnyToken(lower, []string{"route", "routing"}) {
+		out = append(out, "choose", "route", "handle")
+	}
+	if containsAnyToken(lower, []string{"context", "ground", "grounding", "evidence"}) {
+		out = append(out, "context", "retrieve", "evidence")
+	}
+	if containsAnyToken(lower, []string{"validate", "validation", "repair", "unsupported"}) {
+		out = append(out, "validate", "repair")
+	}
+	if containsAnyToken(lower, []string{"policy", "runtime", "branch", "reasoning"}) {
+		out = append(out, "resolve", "policy", "branch", "reasoning")
+	}
+	return uniqueNonEmpty(out)
 }
 
 func shouldKeepArchitectureSnippet(rel, snippet string, searchTerms []string) bool {
@@ -2238,13 +2263,14 @@ func isWithinMatchedDeclarationWindow(idx int, matched []int) bool {
 	return false
 }
 
-func prioritizeArchitectureEvidenceNodes(nodes []chatEvidenceNode) []chatEvidenceNode {
+func prioritizeArchitectureEvidenceNodes(req routeRequest, nodes []chatEvidenceNode) []chatEvidenceNode {
 	if len(nodes) == 0 {
 		return nil
 	}
 	var requestNodes []chatEvidenceNode
 	var fileNodes []chatEvidenceNode
 	var symbolNodes []chatEvidenceNode
+	focusTerms := fallbackFocusTerms(req.Message)
 	for _, node := range nodes {
 		switch node.Kind {
 		case "request":
@@ -2264,10 +2290,42 @@ func prioritizeArchitectureEvidenceNodes(nodes []chatEvidenceNode) []chatEvidenc
 		}
 		return symbolNodes[i].Score > symbolNodes[j].Score
 	})
-	if len(symbolNodes) > 6 {
-		symbolNodes = symbolNodes[:6]
+	var selected []chatEvidenceNode
+	seenIDs := map[string]struct{}{}
+	for _, family := range []string{"focused-route-handler", "routing", "context", "validation", "policy"} {
+		for _, node := range symbolNodes {
+			if architectureEvidenceFamily(node.Symbol, focusTerms) != family {
+				continue
+			}
+			if _, ok := seenIDs[node.ID]; ok {
+				continue
+			}
+			selected = append(selected, node)
+			seenIDs[node.ID] = struct{}{}
+			break
+		}
 	}
-	return append(append(requestNodes, fileNodes...), symbolNodes...)
+	for _, node := range symbolNodes {
+		if len(selected) >= 6 {
+			break
+		}
+		family := architectureEvidenceFamily(node.Symbol, focusTerms)
+		if family == "helper" || family == "other-route-handler" {
+			continue
+		}
+		if _, ok := seenIDs[node.ID]; ok {
+			continue
+		}
+		selected = append(selected, node)
+		seenIDs[node.ID] = struct{}{}
+	}
+	if len(selected) == 0 && len(symbolNodes) > 0 {
+		if len(symbolNodes) > 6 {
+			symbolNodes = symbolNodes[:6]
+		}
+		selected = symbolNodes
+	}
+	return append(append(requestNodes, fileNodes...), selected...)
 }
 
 func scoreArchitectureEvidenceNode(node reasoning.EvidenceNode, rel string, edges []reasoning.EvidenceEdge, architectureQuery bool, searchTerms []string) int {
@@ -2278,7 +2336,7 @@ func scoreArchitectureEvidenceNode(node reasoning.EvidenceNode, rel string, edge
 	if node.Kind != "symbol" {
 		return score
 	}
-	score += scoreSymbolForArchitecture(node.Symbol)
+	score += scoreSymbolForArchitecture(node.Symbol, searchTerms)
 	for _, edge := range edges {
 		if edge.From == node.ID || edge.To == node.ID {
 			score += 2
@@ -2295,7 +2353,7 @@ func scoreArchitectureEvidenceNode(node reasoning.EvidenceNode, rel string, edge
 	return score
 }
 
-func scoreSymbolForArchitecture(symbol string) int {
+func scoreSymbolForArchitecture(symbol string, searchTerms []string) int {
 	lower := strings.ToLower(strings.TrimSpace(symbol))
 	score := 0
 	for _, token := range []string{"handle", "route", "run", "execute", "apply", "validate", "inspect", "resolve", "plan", "retrieve", "emit", "select", "decide", "branch", "repair", "collect", "buildcontext", "gather"} {
@@ -2308,10 +2366,50 @@ func scoreSymbolForArchitecture(symbol string) int {
 			score -= 6
 		}
 	}
+	for _, token := range []string{"choose", "context", "evidence", "prompt", "policy"} {
+		if strings.Contains(lower, token) {
+			score += 6
+		}
+	}
+	if isFallbackHelperSymbol(symbol) {
+		score -= 12
+	}
+	if isRouteHandlerLikeSymbol(symbol) {
+		if matchesRouteFocus(symbol, searchTerms) {
+			score += 10
+		} else {
+			score -= 10
+		}
+	}
 	if strings.HasPrefix(lower, "build") && score <= 0 {
 		score -= 2
 	}
 	return score
+}
+
+func architectureEvidenceFamily(symbol string, focusTerms []string) string {
+	switch {
+	case isFallbackHelperSymbol(symbol):
+		return "helper"
+	case isRouteHandlerLikeSymbol(symbol):
+		if matchesRouteFocus(symbol, focusTerms) {
+			return "focused-route-handler"
+		}
+		return "other-route-handler"
+	}
+	lower := strings.ToLower(strings.TrimSpace(symbol))
+	switch {
+	case strings.Contains(lower, "choose") || strings.Contains(lower, "select"):
+		return "routing"
+	case strings.Contains(lower, "context") || strings.Contains(lower, "retrieve") || strings.Contains(lower, "evidence"):
+		return "context"
+	case strings.Contains(lower, "validate") || strings.Contains(lower, "repair"):
+		return "validation"
+	case strings.Contains(lower, "resolve") || strings.Contains(lower, "policy") || strings.Contains(lower, "branch"):
+		return "policy"
+	default:
+		return "other"
+	}
 }
 
 func looksLikeMetaPolicyAnswer(answer string, req routeRequest, chatContext workspaceChatContext) bool {
