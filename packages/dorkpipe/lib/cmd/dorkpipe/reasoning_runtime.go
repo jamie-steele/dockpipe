@@ -211,7 +211,7 @@ func buildChatRunArtifact(reqID, route, summary string, req routeRequest, chatCo
 		Text:             summary,
 		ValidationStatus: validationStatus,
 		TargetFiles:      append([]string{}, chatContext.Targets...),
-		Citations:        buildChatOutputCitations(chatContext.Evidence),
+		Citations:        buildChatOutputCitations(req, chatContext.Evidence),
 	}
 	return &reasoning.RunArtifact{
 		ArtifactVersion: reasoningArtifactVersion,
@@ -243,9 +243,9 @@ func buildChatRunArtifact(reqID, route, summary string, req routeRequest, chatCo
 	}
 }
 
-func buildChatOutputCitations(graph chatEvidenceGraph) []reasoning.OutputCitation {
+func buildChatOutputCitations(req routeRequest, graph chatEvidenceGraph) []reasoning.OutputCitation {
 	var out []reasoning.OutputCitation
-	for _, node := range preferredChatEvidenceNodes(graph) {
+	for _, node := range preferredChatEvidenceNodes(req, graph) {
 		out = append(out, reasoning.OutputCitation{
 			NodeID: node.ID,
 			File:   node.File,

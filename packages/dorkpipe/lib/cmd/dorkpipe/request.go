@@ -570,12 +570,12 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 						attemptValidation = repairedValidation
 						validationStatus = "repaired"
 					} else {
-						answerText = buildEvidenceOnlyChatFallback(chatContext, repairedValidation)
+						answerText = buildEvidenceOnlyChatFallback(req, chatContext, repairedValidation)
 						attemptValidation = repairedValidation
 						validationStatus = "fallback_evidence_only"
 					}
 				} else {
-					answerText = buildEvidenceOnlyChatFallback(chatContext, attemptValidation)
+					answerText = buildEvidenceOnlyChatFallback(req, chatContext, attemptValidation)
 					validationStatus = "fallback_evidence_only"
 				}
 			}
@@ -657,7 +657,7 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 			decision.Abstained = true
 			decision.Escalated = true
 			decision.EscalationReason = "low_confidence_after_branching"
-			answer = buildEvidenceOnlyChatFallback(chatContext, best.Validation)
+			answer = buildEvidenceOnlyChatFallback(req, chatContext, best.Validation)
 			validationStatus = "abstained_low_confidence"
 		}
 	} else {
@@ -1790,13 +1790,13 @@ func buildChatAnswerRepairPrompt(req routeRequest, answer string, chatContext wo
 	return strings.Join(sections, "\n\n")
 }
 
-func buildEvidenceOnlyChatFallback(chatContext workspaceChatContext, validation chatAnswerValidation) string {
+func buildEvidenceOnlyChatFallback(req routeRequest, chatContext workspaceChatContext, validation chatAnswerValidation) string {
 	lines := []string{
 		"I couldn't verify a fully code-anchored answer from the retrieved context, so I'm limiting this to confirmed evidence.",
 		"",
 		"## Confirmed",
 	}
-	confirmed := summarizeStrictEvidenceGraph(chatContext.Evidence)
+	confirmed := summarizeStrictEvidenceGraph(req, chatContext.Evidence)
 	if len(confirmed) == 0 {
 		lines = append(lines, "- No repo files were retrieved with enough confidence to support stronger claims.")
 	} else {
@@ -1811,9 +1811,9 @@ func buildEvidenceOnlyChatFallback(chatContext workspaceChatContext, validation 
 	return strings.Join(lines, "\n")
 }
 
-func summarizeStrictEvidenceGraph(graph chatEvidenceGraph) []string {
+func summarizeStrictEvidenceGraph(req routeRequest, graph chatEvidenceGraph) []string {
 	var lines []string
-	for _, node := range preferredChatEvidenceNodes(graph) {
+	for _, node := range preferredChatEvidenceNodes(req, graph) {
 		if node.Kind != "symbol" || node.File == "" || node.Symbol == "" {
 			continue
 		}
@@ -1831,7 +1831,7 @@ func summarizeStrictEvidenceGraph(graph chatEvidenceGraph) []string {
 	return uniqueNonEmpty(lines)
 }
 
-func preferredChatEvidenceNodes(graph chatEvidenceGraph) []chatEvidenceNode {
+func preferredChatEvidenceNodes(req routeRequest, graph chatEvidenceGraph) []chatEvidenceNode {
 	var symbols []chatEvidenceNode
 	for _, node := range graph.Nodes {
 		if node.Kind == "symbol" && node.File != "" && node.Symbol != "" {
@@ -1841,18 +1841,21 @@ func preferredChatEvidenceNodes(graph chatEvidenceGraph) []chatEvidenceNode {
 	if len(symbols) == 0 {
 		return nil
 	}
+	focusTerms := fallbackFocusTerms(req.Message)
 	sort.SliceStable(symbols, func(i, j int) bool {
-		if symbols[i].Score == symbols[j].Score {
+		si := fallbackEvidenceScore(symbols[i], focusTerms)
+		sj := fallbackEvidenceScore(symbols[j], focusTerms)
+		if si == sj {
 			if symbols[i].File == symbols[j].File {
 				return symbols[i].Symbol < symbols[j].Symbol
 			}
 			return symbols[i].File < symbols[j].File
 		}
-		return symbols[i].Score > symbols[j].Score
+		return si > sj
 	})
 	hasPositive := false
 	for _, node := range symbols {
-		if node.Score > 0 {
+		if fallbackEvidenceScore(node, focusTerms) > 0 {
 			hasPositive = true
 			break
 		}
@@ -1860,7 +1863,7 @@ func preferredChatEvidenceNodes(graph chatEvidenceGraph) []chatEvidenceNode {
 	if hasPositive {
 		var positive []chatEvidenceNode
 		for _, node := range symbols {
-			if node.Score > 0 && !isFallbackHelperSymbol(node.Symbol) {
+			if fallbackEvidenceScore(node, focusTerms) > 0 && !isFallbackHelperSymbol(node.Symbol) {
 				positive = append(positive, node)
 			}
 		}
@@ -1872,6 +1875,9 @@ func preferredChatEvidenceNodes(graph chatEvidenceGraph) []chatEvidenceNode {
 	seenRouteRepresentative := map[string]bool{}
 	for _, node := range symbols {
 		if isRouteHandlerLikeSymbol(node.Symbol) {
+			if !matchesRouteFocus(node.Symbol, focusTerms) {
+				continue
+			}
 			if seenRouteRepresentative[node.File] {
 				continue
 			}
@@ -1893,7 +1899,7 @@ func summarizePreferredEvidenceNode(node chatEvidenceNode) string {
 func describeEvidenceRole(symbol string) string {
 	lower := strings.ToLower(strings.TrimSpace(symbol))
 	switch {
-	case strings.Contains(lower, "handle") || strings.Contains(lower, "route"):
+	case isRouteHandlerLikeSymbol(symbol):
 		return "Retained flow handler"
 	case strings.Contains(lower, "resolve") || strings.Contains(lower, "select") || strings.Contains(lower, "policy"):
 		return "Retained decision or policy stage"
@@ -1917,6 +1923,85 @@ func isFallbackHelperSymbol(symbol string) bool {
 	lower := strings.ToLower(strings.TrimSpace(symbol))
 	for _, token := range []string{"citation", "claim", "binding", "preferred", "fallback", "summary", "sanitize", "normalize", "clone"} {
 		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	for _, prefix := range []string{"is", "has", "should", "can", "looks", "describe", "summarize", "score", "count", "find", "extract", "parse"} {
+		if strings.HasPrefix(lower, prefix) && (strings.Contains(lower, "symbol") || strings.Contains(lower, "helper") || !containsAnyToken(lower, []string{"route", "chat", "ask", "edit", "inspect", "validate", "repair", "context", "policy"})) {
+			return true
+		}
+	}
+	return false
+}
+
+func fallbackFocusTerms(message string) []string {
+	lower := strings.ToLower(message)
+	var out []string
+	for _, token := range []string{"ask", "chat", "route", "context", "policy", "validate", "repair", "branch", "retrieve"} {
+		if strings.Contains(lower, token) {
+			out = append(out, token)
+		}
+	}
+	if containsAnyToken(lower, []string{"ask", "chat"}) {
+		out = append(out, "ask", "chat")
+	}
+	if len(out) == 0 {
+		return extractStrongArchitectureTerms(extractChatSearchTerms(message))
+	}
+	return uniqueNonEmpty(out)
+}
+
+func fallbackEvidenceScore(node chatEvidenceNode, focusTerms []string) int {
+	score := node.Score
+	lowerSymbol := strings.ToLower(node.Symbol)
+	if isFallbackHelperSymbol(node.Symbol) {
+		score -= 10
+	}
+	if isRouteHandlerLikeSymbol(node.Symbol) && matchesRouteFocus(node.Symbol, focusTerms) {
+		score += 12
+	}
+	for _, term := range focusTerms {
+		if strings.Contains(lowerSymbol, term) {
+			score += 4
+		}
+	}
+	return score
+}
+
+func matchesRouteFocus(symbol string, focusTerms []string) bool {
+	lower := strings.ToLower(strings.TrimSpace(symbol))
+	groups := [][]string{
+		{"ask", "chat"},
+		{"edit"},
+		{"inspect"},
+		{"plan"},
+	}
+	hasSpecificFocus := false
+	for _, group := range groups {
+		groupHit := false
+		for _, focus := range focusTerms {
+			for _, item := range group {
+				if focus == item {
+					groupHit = true
+					hasSpecificFocus = true
+				}
+			}
+		}
+		if !groupHit {
+			continue
+		}
+		for _, item := range group {
+			if strings.Contains(lower, item) {
+				return true
+			}
+		}
+	}
+	return !hasSpecificFocus
+}
+
+func containsAnyToken(text string, tokens []string) bool {
+	for _, token := range tokens {
+		if strings.Contains(text, token) {
 			return true
 		}
 	}

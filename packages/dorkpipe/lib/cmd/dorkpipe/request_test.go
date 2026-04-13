@@ -492,7 +492,7 @@ func TestBuildEvidenceOnlyChatFallback_UsesStrictEvidenceCitations(t *testing.T)
 			{From: "file:src/request.go", To: "symbol:src/request.go:handleChatRoute", Kind: "contains"},
 		},
 	}
-	out := buildEvidenceOnlyChatFallback(workspaceChatContext{Evidence: graph}, chatAnswerValidation{Issues: []string{"missing evidence citations to retrieved file/symbol nodes"}})
+	out := buildEvidenceOnlyChatFallback(routeRequest{Message: "Explain ask mode flow."}, workspaceChatContext{Evidence: graph}, chatAnswerValidation{Issues: []string{"missing evidence citations to retrieved file/symbol nodes"}})
 	if !strings.Contains(out, "Evidence: `src/request.go` :: `handleChatRoute`") {
 		t.Fatalf("fallback missing strict evidence citation: %q", out)
 	}
@@ -512,7 +512,7 @@ func TestBuildEvidenceOnlyChatFallback_PrefersTopScoredFlowSymbols(t *testing.T)
 			{ID: "symbol:src/request.go:citationSupportsClaim", Kind: "symbol", File: "src/request.go", Symbol: "citationSupportsClaim", Summary: "binding helper", Score: -3},
 		},
 	}
-	out := buildEvidenceOnlyChatFallback(workspaceChatContext{Evidence: graph}, chatAnswerValidation{})
+	out := buildEvidenceOnlyChatFallback(routeRequest{Message: "Explain ask mode flow."}, workspaceChatContext{Evidence: graph}, chatAnswerValidation{})
 	if strings.Contains(out, "citationSupportsClaim") {
 		t.Fatalf("fallback should prefer top scored flow symbols, got %q", out)
 	}
@@ -534,7 +534,7 @@ func TestBuildEvidenceOnlyChatFallback_SuppressesSiblingRouteHandlersAndHelpers(
 			{ID: "symbol:src/request.go:resolveRuntimePolicy", Kind: "symbol", File: "src/request.go", Symbol: "resolveRuntimePolicy", Score: 14},
 		},
 	}
-	out := buildEvidenceOnlyChatFallback(workspaceChatContext{Evidence: graph}, chatAnswerValidation{})
+	out := buildEvidenceOnlyChatFallback(routeRequest{Message: "Explain ask mode flow."}, workspaceChatContext{Evidence: graph}, chatAnswerValidation{})
 	if strings.Contains(out, "handleInspectRoute") || strings.Contains(out, "handleEditRoute") {
 		t.Fatalf("fallback should keep only one route handler representative, got %q", out)
 	}
@@ -543,6 +543,27 @@ func TestBuildEvidenceOnlyChatFallback_SuppressesSiblingRouteHandlersAndHelpers(
 	}
 	if !strings.Contains(out, "handleChatRoute") || !strings.Contains(out, "resolveRuntimePolicy") {
 		t.Fatalf("fallback missing expected flow symbols, got %q", out)
+	}
+}
+
+func TestBuildEvidenceOnlyChatFallback_PrefersQuestionFocusedRouteHandler(t *testing.T) {
+	t.Parallel()
+	graph := chatEvidenceGraph{
+		Nodes: []chatEvidenceNode{
+			{ID: "request", Kind: "request", Summary: "Explain ask/chat flow."},
+			{ID: "file:src/request.go", Kind: "file", File: "src/request.go"},
+			{ID: "symbol:src/request.go:handleChatRoute", Kind: "symbol", File: "src/request.go", Symbol: "handleChatRoute", Score: 18},
+			{ID: "symbol:src/request.go:handleInspectRoute", Kind: "symbol", File: "src/request.go", Symbol: "handleInspectRoute", Score: 20},
+			{ID: "symbol:src/request.go:isRouteHandlerLikeSymbol", Kind: "symbol", File: "src/request.go", Symbol: "isRouteHandlerLikeSymbol", Score: 19},
+			{ID: "symbol:src/request.go:resolveRuntimePolicy", Kind: "symbol", File: "src/request.go", Symbol: "resolveRuntimePolicy", Score: 14},
+		},
+	}
+	out := buildEvidenceOnlyChatFallback(routeRequest{Message: "Explain how Ask mode now handles a plain-English architecture question."}, workspaceChatContext{Evidence: graph}, chatAnswerValidation{})
+	if !strings.Contains(out, "handleChatRoute") {
+		t.Fatalf("fallback should include chat-focused route handler, got %q", out)
+	}
+	if strings.Contains(out, "handleInspectRoute") || strings.Contains(out, "isRouteHandlerLikeSymbol") {
+		t.Fatalf("fallback should suppress non-focused route/helper symbol, got %q", out)
 	}
 }
 
