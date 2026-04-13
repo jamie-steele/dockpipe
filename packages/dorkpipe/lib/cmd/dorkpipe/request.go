@@ -1860,16 +1860,29 @@ func preferredChatEvidenceNodes(graph chatEvidenceGraph) []chatEvidenceNode {
 	if hasPositive {
 		var positive []chatEvidenceNode
 		for _, node := range symbols {
-			if node.Score > 0 {
+			if node.Score > 0 && !isFallbackHelperSymbol(node.Symbol) {
 				positive = append(positive, node)
 			}
 		}
-		symbols = positive
+		if len(positive) > 0 {
+			symbols = positive
+		}
 	}
-	if len(symbols) > 4 {
-		symbols = symbols[:4]
+	selected := make([]chatEvidenceNode, 0, minStructuredInt(len(symbols), 4))
+	seenRouteRepresentative := map[string]bool{}
+	for _, node := range symbols {
+		if isRouteHandlerLikeSymbol(node.Symbol) {
+			if seenRouteRepresentative[node.File] {
+				continue
+			}
+			seenRouteRepresentative[node.File] = true
+		}
+		selected = append(selected, node)
+		if len(selected) >= 4 {
+			break
+		}
 	}
-	return symbols
+	return selected
 }
 
 func summarizePreferredEvidenceNode(node chatEvidenceNode) string {
@@ -1893,6 +1906,21 @@ func describeEvidenceRole(symbol string) string {
 	default:
 		return "Retained execution symbol"
 	}
+}
+
+func isRouteHandlerLikeSymbol(symbol string) bool {
+	lower := strings.ToLower(strings.TrimSpace(symbol))
+	return strings.HasPrefix(lower, "handle") && strings.Contains(lower, "route")
+}
+
+func isFallbackHelperSymbol(symbol string) bool {
+	lower := strings.ToLower(strings.TrimSpace(symbol))
+	for _, token := range []string{"citation", "claim", "binding", "preferred", "fallback", "summary", "sanitize", "normalize", "clone"} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func extractLikelySnippetSymbols(snippet string) []string {

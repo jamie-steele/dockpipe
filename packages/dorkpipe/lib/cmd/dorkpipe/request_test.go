@@ -521,6 +521,31 @@ func TestBuildEvidenceOnlyChatFallback_PrefersTopScoredFlowSymbols(t *testing.T)
 	}
 }
 
+func TestBuildEvidenceOnlyChatFallback_SuppressesSiblingRouteHandlersAndHelpers(t *testing.T) {
+	t.Parallel()
+	graph := chatEvidenceGraph{
+		Nodes: []chatEvidenceNode{
+			{ID: "request", Kind: "request", Summary: "Explain ask flow."},
+			{ID: "file:src/request.go", Kind: "file", File: "src/request.go", Summary: "request handlers"},
+			{ID: "symbol:src/request.go:handleChatRoute", Kind: "symbol", File: "src/request.go", Symbol: "handleChatRoute", Score: 20},
+			{ID: "symbol:src/request.go:handleInspectRoute", Kind: "symbol", File: "src/request.go", Symbol: "handleInspectRoute", Score: 18},
+			{ID: "symbol:src/request.go:handleEditRoute", Kind: "symbol", File: "src/request.go", Symbol: "handleEditRoute", Score: 17},
+			{ID: "symbol:src/request.go:citationSupportsClaim", Kind: "symbol", File: "src/request.go", Symbol: "citationSupportsClaim", Score: 15},
+			{ID: "symbol:src/request.go:resolveRuntimePolicy", Kind: "symbol", File: "src/request.go", Symbol: "resolveRuntimePolicy", Score: 14},
+		},
+	}
+	out := buildEvidenceOnlyChatFallback(workspaceChatContext{Evidence: graph}, chatAnswerValidation{})
+	if strings.Contains(out, "handleInspectRoute") || strings.Contains(out, "handleEditRoute") {
+		t.Fatalf("fallback should keep only one route handler representative, got %q", out)
+	}
+	if strings.Contains(out, "citationSupportsClaim") {
+		t.Fatalf("fallback should suppress helper symbol, got %q", out)
+	}
+	if !strings.Contains(out, "handleChatRoute") || !strings.Contains(out, "resolveRuntimePolicy") {
+		t.Fatalf("fallback missing expected flow symbols, got %q", out)
+	}
+}
+
 func writeTestFile(t *testing.T, root, rel, body string) {
 	t.Helper()
 	target := filepath.Join(root, rel)
