@@ -18,7 +18,7 @@ The workflow **`cmd`** runs in **`golang:1.25-bookworm`** (git and curl from the
 ```bash
 # From repo root — use the repo launcher (not bare `dockpipe` unless installed on PATH)
 make build
-./src/bin/dockpipe --workflow dorkpipe-self-analysis --workdir . --
+dockpipe --workflow dorkpipe-self-analysis --workdir . --
 ```
 
 Direct script (still uses **host** — no container):
@@ -47,7 +47,7 @@ Compose file: **`templates/core/bundles/dorkpipe/assets/compose/docker-compose.y
 Use **`dorkpipe-self-analysis-host`** when Docker isn’t available or you want the fastest iteration on the host:
 
 ```bash
-./src/bin/dockpipe --workflow dorkpipe-self-analysis-host --workdir . --
+dockpipe --workflow dorkpipe-self-analysis-host --workdir . --
 ```
 
 ## Combined spec (Ollama refine inside DorkPipe)

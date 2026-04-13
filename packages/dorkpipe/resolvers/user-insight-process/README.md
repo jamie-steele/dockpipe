@@ -6,7 +6,7 @@
 
 ```bash
 bash scripts/dorkpipe/user-insight-enqueue.sh -m 'Your guidance here.'
-./src/bin/dockpipe --workflow user-insight-process --workdir . --
+dockpipe --workflow user-insight-process --workdir . --
 ```
 
 ## Layout (under `.dockpipe/analysis/`)

@@ -59,7 +59,7 @@ Use **`vars`** in **`config.yml`** (or **`dockpipe.yml`**), shell env, or **`.en
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | **`CURSOR_DEV_LAUNCH`** | **`cli`** | **`cli`** — try **`cursor`** in `PATH`, then common install paths. **`none`** — only print instructions (container still runs until stopped). |
-| **`CURSOR_DEV_SESSION_IMAGE`** | **`dockpipe-base-dev:latest`** | Image for the session container. Must exist (run any dockpipe **`--isolate base-dev`** once, or let the script build from **`DOCKPIPE_REPO_ROOT`**). |
+| **`CURSOR_DEV_SESSION_IMAGE`** | **`dockpipe-base-dev:latest`** | Image for the session container. Must exist locally; set this to another image tag if you do not use `dockpipe-base-dev`. |
 | **`CURSOR_DEV_REMOTE_URI`** | **`1`** | **`1`** (default) — after the session container is running, launch Cursor with **`--folder-uri vscode-remote://dev-container+…/work`** so it attaches and opens **`/work`** (avoids manually using the bottom-left remote menu). **`0`** — open the host repo folder only (previous behavior). |
 | **`CURSOR_DEV_SESSION_SHUTDOWN`** | **`both`** | **`both`** (default) — stop when **Cursor on the host** exits **or** the **in-container remote** session goes idle. Runs **`cursor_dev_wait_dual_session_end`** for the session container (**does not** require **`CURSOR_DEV_FOLDER_URI`** — attach can be manual or URI build can fail). **`host`** — host exit only. |
 | **`CURSOR_DEV_REMOTE_SERVER_IDLE_POLLS`** | **`3`** | With **`CURSOR_DEV_SESSION_SHUTDOWN=both`**, require this many consecutive polls with no remote “up” signal after one was seen, before treating the remote session as ended. |
@@ -100,7 +100,7 @@ Use **`--workdir`** if you are not already in the project root.
 - **Not** affiliated with Cursor or Anysphere.
 - Does **not** configure Remote SSH or WSL automatically. It **can** launch Cursor already attached to the session container (Dev Containers URI — **`CURSOR_DEV_REMOTE_URI`**).
 - Launcher detection is best-effort; if nothing matches, use **File → Open Folder** with the printed path.
-- **`dockpipe-base-dev`** must be available locally (bundled first run, or build via **`DOCKPIPE_REPO_ROOT`**). Rebuild the image after upgrades (**`docker rmi dockpipe-base-dev:latest`** then run **`cursor-dev`** or **`dockpipe --isolate base-dev -- echo ok`**) so the container has a valid **`HOME`** under **`bin/.dockpipe/packages/cursor-dev/home`** (Cursor/VS Code remote server installs to **`$HOME/.cursor-server`**; without **`HOME`**, **`docker run -u uid:gid`** can yield permission errors) and the GNU **`base64`** shim (install scripts may call **`base64 -D`**).
+- **`dockpipe-base-dev`** must be available locally unless you override **`CURSOR_DEV_SESSION_IMAGE`**. Rebuild the image after upgrades (**`docker rmi dockpipe-base-dev:latest`** then run **`cursor-dev`** or **`dockpipe --isolate base-dev -- echo ok`**) so the container has a valid **`HOME`** under **`bin/.dockpipe/packages/cursor-dev/home`** (Cursor/VS Code remote server installs to **`$HOME/.cursor-server`**; without **`HOME`**, **`docker run -u uid:gid`** can yield permission errors) and the GNU **`base64`** shim (install scripts may call **`base64 -D`**).
 - **Git Bash on Windows:** MSYS can rewrite **`/work`** in **`docker run`**. The session sets **`MSYS2_ARG_CONV_EXCL=*`** for **`docker`** so container paths stay **`/work`**. Launches use **`cygpath -w`** for the folder when available.
 
 ## AI agent + MCP (“basic mode” for Cursor and any agent UI)
@@ -110,7 +110,7 @@ Use **`--workdir`** if you are not already in the project root.
 | File | Purpose |
 |------|---------|
 | **`README.txt`** | Short pointer to the folder and **AGENT-MCP.md**. |
-| **`AGENT-MCP.md`** | **Repo root**, **`DOCKPIPE_REPO_ROOT`**, how **MCP / `mcpd`** connect to Cursor, links to **`docs/mcp-agent-trust.md`**, **`docs/mcp-host-hardening.md`**, **`AGENTS.md`**. |
+| **`AGENT-MCP.md`** | Project root, **`DOCKPIPE_WORKDIR`**, how **MCP / `mcpd`** connect to Cursor, links to **`docs/mcp-agent-trust.md`**, **`docs/mcp-host-hardening.md`**, **`AGENTS.md`**. |
 | **`mcp.json.example`** | Drop-in MCP server block with **absolute** paths to **`src/bin/mcpd`**, **`dockpipe`**, **`dorkpipe`** when this tree is the **dockpipe** checkout (or a generic template otherwise). |
 
 After prep, the session prints the path to **`AGENT-MCP.md`** — open it in Cursor (or `@` it) so the agent knows repo layout and MCP setup for demos.

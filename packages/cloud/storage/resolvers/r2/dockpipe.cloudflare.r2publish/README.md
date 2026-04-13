@@ -57,7 +57,7 @@ Terraform module: [Cloudflare provider + R2](https://developers.cloudflare.com/r
 export R2_BUCKET=your-bucket
 export CLOUDFLARE_ACCOUNT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 export CLOUDFLARE_API_TOKEN=...
-./src/bin/dockpipe --workflow dockpipe.cloudflare.r2infra
+dockpipe --workflow dockpipe.cloudflare.r2infra
 ```
 
 ### 2) Upload tarball only (S3 keys — bucket must exist)
@@ -68,7 +68,7 @@ export R2_BUCKET=your-bucket
 export CLOUDFLARE_ACCOUNT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
-./src/bin/dockpipe --workflow dockpipe.cloudflare.r2upload
+dockpipe --workflow dockpipe.cloudflare.r2upload
 ```
 
 ### 2) Upload only (API token + Wrangler)
@@ -77,13 +77,13 @@ export AWS_SECRET_ACCESS_KEY=...
 export R2_BUCKET=your-bucket
 export CLOUDFLARE_ACCOUNT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 export CLOUDFLARE_API_TOKEN=...
-./src/bin/dockpipe --workflow dockpipe.cloudflare.r2upload
+dockpipe --workflow dockpipe.cloudflare.r2upload
 ```
 
 Dry run upload (no object put):
 
 ```bash
-R2_PUBLISH_DRY_RUN=1 ./src/bin/dockpipe --workflow dockpipe.cloudflare.r2upload
+R2_PUBLISH_DRY_RUN=1 dockpipe --workflow dockpipe.cloudflare.r2upload
 ```
 
 ## Environment variables
@@ -112,8 +112,8 @@ R2_PUBLISH_DRY_RUN=1 ./src/bin/dockpipe --workflow dockpipe.cloudflare.r2upload
 
 ```bash
 # From the repo root (usual case): --workdir is optional — default is the current directory.
-./src/bin/dockpipe --workflow dockpipe.cloudflare.r2infra --tf plan
-./src/bin/dockpipe --workflow dockpipe.cloudflare.r2infra --tf apply
+dockpipe --workflow dockpipe.cloudflare.r2infra --tf plan
+dockpipe --workflow dockpipe.cloudflare.r2infra --tf apply
 ```
 
 Use **`--workdir /path/to/project`** when the shell is not already in that directory (CI, scripts, **`make`**). Also **`--tf-dry-run`**, **`--tf-no-auto-approve`**, and **`--tf=plan`**. Standalone helper: **`dockpipe terraform plan`** (see **`dockpipe terraform --help`**). Workflows that never source **`terraform-pipeline.sh`** ignore these env vars.
@@ -141,10 +141,10 @@ If `apply` is **not** in `R2_TERRAFORM_COMMANDS`, the script **skips** creating 
 ```bash
 # Plan only (init auto-prepended)
 export R2_TERRAFORM_COMMANDS=plan
-./src/bin/dockpipe --workflow dockpipe.cloudflare.r2infra
+dockpipe --workflow dockpipe.cloudflare.r2infra
 
 # Init + apply (default commands)
-./src/bin/dockpipe --workflow dockpipe.cloudflare.r2infra
+dockpipe --workflow dockpipe.cloudflare.r2infra
 ```
 
 ### Terraform: public hostname, WAF, CDN (optional)

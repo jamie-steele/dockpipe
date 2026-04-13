@@ -64,7 +64,7 @@ func TestParseEditArtifact_PatchObjectContent(t *testing.T) {
 	t.Parallel()
 	text := `{
   "summary": "create files",
-  "files": [".staging/packages/fibonacci/package.yml"],
+  "files": ["packages/fibonacci/package.yml"],
   "patch": {
     "content": "diff --git a/a b/a\n--- /dev/null\n+++ b/a\n@@ -0,0 +1 @@\n+hi\n"
   },
@@ -80,7 +80,7 @@ func TestParseEditArtifact_PatchObjectContent(t *testing.T) {
 	if artifact.Patch == "" {
 		t.Fatalf("expected normalized patch content")
 	}
-	if len(artifact.TargetFiles) != 1 || artifact.TargetFiles[0] != ".staging/packages/fibonacci/package.yml" {
+	if len(artifact.TargetFiles) != 1 || artifact.TargetFiles[0] != "packages/fibonacci/package.yml" {
 		t.Fatalf("unexpected target files: %#v", artifact.TargetFiles)
 	}
 	if len(artifact.Validations) != 1 || artifact.Validations[0] != "check it" {
@@ -92,10 +92,10 @@ func TestParseEditArtifact_RepairsMultilinePatchString(t *testing.T) {
 	t.Parallel()
 	text := "{\n" +
 		`"summary":"create files",` + "\n" +
-		`"target_files":[".staging/packages/fibonacci/package.yml"],` + "\n" +
-		`"patch":"diff --git a/.staging/packages/fibonacci/package.yml b/.staging/packages/fibonacci/package.yml` + "\n" +
+		`"target_files":["packages/fibonacci/package.yml"],` + "\n" +
+		`"patch":"diff --git a/packages/fibonacci/package.yml b/packages/fibonacci/package.yml` + "\n" +
 		`--- /dev/null` + "\n" +
-		`+++ b/.staging/packages/fibonacci/package.yml` + "\n" +
+		`+++ b/packages/fibonacci/package.yml` + "\n" +
 		`@@ -0,0 +1 @@` + "\n" +
 		`+schema: 1",` + "\n" +
 		`"validations":["check it"]` + "\n" +
@@ -156,7 +156,7 @@ func TestParseEditArtifact_AcceptsStringTargetsAndChecks(t *testing.T) {
 	t.Parallel()
 	text := `{
   "summary": "update thing",
-  "targets": ".staging/packages/fibonacci/package.yml, .staging/packages/fibonacci/README.md",
+  "targets": "packages/fibonacci/package.yml, packages/fibonacci/README.md",
   "diff": "diff --git a/a b/a\n--- /dev/null\n+++ b/a\n@@ -0,0 +1 @@\n+hi\n",
   "checks": "verify file content\nverify readme"
 }`

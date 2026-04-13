@@ -24,7 +24,7 @@ Typical use from the repo root:
 make maintainer-tools
 make build-pipeon-desktop
 PATH="$PWD/packages/dorkpipe/bin:$PWD/packages/dorkpipe-mcp/bin:$PATH" \
-./src/bin/dockpipe --workflow pipeon-dev-stack --workdir . --
+dockpipe --workflow pipeon-dev-stack --workdir . --
 ```
 
 The stack now prefers the dedicated Tauri desktop shell at

@@ -24,9 +24,9 @@ flows can treat Pipeon as the top-level product surface rather than a disconnect
 ```bash
 export DOCKPIPE_PIPEON=1
 export DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1   # until VERSION >= min gate
-./packages/pipeon/resolvers/pipeon/bin/pipeon status
-./packages/pipeon/resolvers/pipeon/bin/pipeon bundle
-./packages/pipeon/resolvers/pipeon/bin/pipeon chat "Summarize security posture from available signals."
+pipeon status
+pipeon bundle
+pipeon chat "Summarize security posture from available signals."
 ```
 
 See **`assets/docs/pipeon-ide-experience.md`**, **`assets/docs/pipeon-shortcuts.md`**, and **`assets/docs/pipeon-refresh.md`**.

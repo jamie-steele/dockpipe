@@ -4,7 +4,7 @@ Use this when Pipeon is running against this repository and local code changes a
 
 ## Which binary does what
 
-- `make build` updates `src/bin/dockpipe`
+- `make build` updates the local `dockpipe` launcher binary
 - `make maintainer-tools` updates `packages/dorkpipe/bin/dorkpipe` and `packages/dorkpipe-mcp/bin/mcpd`
 - `npm --prefix packages/pipeon/resolvers/pipeon/vscode-extension run build` updates the checked-in Pipeon extension output
 - `make build-pipeon-desktop` updates the Tauri desktop shell at `packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop`
@@ -18,7 +18,7 @@ Use this when Pipeon is running against this repository and local code changes a
 make build
 ```
 
-Use this when you are testing `src/bin/dockpipe` directly.
+Use this when you are testing a freshly built local `dockpipe` binary directly.
 
 ### DorkPipe / MCP sidecars
 
@@ -65,7 +65,7 @@ Then fully restart the running surface:
 Typical restart:
 
 ```bash
-./src/bin/dockpipe --workflow pipeon-dev-stack --workdir . --
+dockpipe --workflow pipeon-dev-stack --workdir . --
 ```
 
 ## Common gotcha
@@ -74,7 +74,7 @@ If Ask mode in Pipeon still shows old behavior after `make build`, you probably 
 
 Pipeon dev-stack uses:
 
-- `src/bin/dockpipe`
+- `dockpipe`
 - `packages/dorkpipe/bin/dorkpipe`
 - `packages/dorkpipe-mcp/bin/mcpd`
 

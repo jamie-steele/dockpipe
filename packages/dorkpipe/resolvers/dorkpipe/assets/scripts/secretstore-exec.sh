@@ -15,7 +15,7 @@ case "$PROVIDER" in
     ENV_FILE="${SECRETSTORE_ENV_FILE:-.env.secretstore}"
     [[ -f "$ENV_FILE" ]] || die "missing $ENV_FILE — copy src/core/workflows/secretstore/.env.secretstore.example (see README)"
     CMD="${SECRETSTORE_COMMAND:-}"
-    [[ -n "$CMD" ]] || die "set SECRETSTORE_COMMAND (shell command to run with loaded env, e.g. ./src/bin/dockpipe --workflow mywf --workdir . --)"
+    [[ -n "$CMD" ]] || die "set SECRETSTORE_COMMAND (shell command to run with loaded env, e.g. dockpipe --workflow mywf --workdir . --)"
     set -a
     # shellcheck disable=SC1090
     . "$ENV_FILE"

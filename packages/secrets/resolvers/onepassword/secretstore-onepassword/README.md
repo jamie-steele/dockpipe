@@ -7,6 +7,6 @@ Maintainer-only **`workflow_type: secretstore`** flow using the **1Password CLI*
 3. Run with **`SECRETSTORE_COMMAND`** set (or pass after **`--`** per **`secretstore`** docs).
 
 ```bash
-export SECRETSTORE_COMMAND='./src/bin/dockpipe --workflow dockpipe.cloudflare.r2publish --workdir . --'
+export SECRETSTORE_COMMAND='dockpipe --workflow dockpipe.cloudflare.r2publish --workdir . --'
 dockpipe --workflow secretstore-onepassword --workdir . --
 ```

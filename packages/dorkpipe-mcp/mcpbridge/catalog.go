@@ -18,7 +18,7 @@ func mcpToolCatalog() []mcpToolMeta {
 		},
 		{
 			Name:        "capabilities.workflows",
-			Description: "List workflow names (DOCKPIPE_REPO_ROOT / bundled cache). Tier: readonly+.",
+			Description: "List workflow names for the current project or bundled cache. Tier: readonly+.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 		},
 		{

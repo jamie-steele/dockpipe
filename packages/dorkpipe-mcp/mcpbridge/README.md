@@ -44,7 +44,7 @@ Every request must authenticate with the same secret via **`Authorization: Beare
 
 ### Trying it in Cursor
 
-Run **`make build`** then **`make maintainer-tools`** from repo root ( **`dockpipe.bin`** / launcher, then **`mcpd`** + **`dorkpipe`**). Use **`.cursor/mcp.json`** — set **`"type": "stdio"`**, **`command`** to **`packages/dorkpipe-mcp/bin/mcpd`** (absolute path), **`DOCKPIPE_BIN`** to **`src/bin/dockpipe`** (DockPipe launcher), **`DORKPIPE_BIN`** to **`packages/dorkpipe/bin/dorkpipe`**. If **`${workspaceFolder}`** is not expanded in **`env`**, set those paths to absolute. Cursor speaks Content-Length JSON-RPC over stdin/stdout; **`initialize`** echoes the client’s **`protocolVersion`** (e.g. **`2025-11-25`**) so the handshake completes with current Cursor hosts.
+Run **`make build`** then **`make maintainer-tools`** from repo root. Use **`.cursor/mcp.json`** — set **`"type": "stdio"`**, **`command`** to the absolute **`mcpd`** binary, and set **`DOCKPIPE_BIN`** / **`DORKPIPE_BIN`** to the absolute executables you want the bridge to launch. In this checkout that is typically **`packages/dorkpipe-mcp/bin/mcpd`**, **`src/bin/dockpipe`**, and **`packages/dorkpipe/bin/dorkpipe`**. If **`${workspaceFolder}`** is not expanded in **`env`**, set those paths to absolute. Cursor speaks Content-Length JSON-RPC over stdin/stdout; **`initialize`** echoes the client’s **`protocolVersion`** (e.g. **`2025-11-25`**) so the handshake completes with current Cursor hosts.
 
 ## See also
 

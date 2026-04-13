@@ -30,7 +30,7 @@ cp packages/secrets/resolvers/onepassword/.env.op.template.example .env.op.templ
 # Edit .env.op.template with real op:// fields for your vault items.
 mkdir -p release/artifacts && echo test >release/artifacts/README.txt
 R2_PUBLISH_DRY_RUN=1 R2_TF_BACKEND=local \
-  ./src/bin/dockpipe --workflow-file workflows/secretstore-r2-publish-test/config.yml --workdir . --
+  dockpipe --workflow-file workflows/secretstore-r2-publish-test/config.yml --workdir . --
 ```
 
 Use **`R2_TF_BACKEND=local`** until R2 state keys are in your template. Drop **`R2_PUBLISH_DRY_RUN`** when you want a real upload.

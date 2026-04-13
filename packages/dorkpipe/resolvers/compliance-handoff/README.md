@@ -7,7 +7,7 @@
 ```bash
 make compliance-handoff
 # or
-./src/bin/dockpipe --workflow compliance-handoff --workdir . --
+dockpipe --workflow compliance-handoff --workdir . --
 ```
 
 **Reads:** **`docs/artifacts.md`** (governance / artifact contract).

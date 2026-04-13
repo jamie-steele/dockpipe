@@ -77,7 +77,7 @@ Qt is available under **LGPL** and commercially. If you **ship binaries**, compl
 
 ## Add folder (Advanced)
 
-Choosing **Add folder…** resolves a dockpipe **repo root** from the path (`DOCKPIPE_REPO_ROOT` or by walking upward for project markers such as `dockpipe.config.json`, `workflows`, or package roots). The launcher then asks DockPipe for the available workflow catalog for that project and adds **one context** per discovered workflow name with that **workdir**. If no DockPipe project is found, it adds a single context with workflow `vscode`. Existing `(workdir, workflow, workflow file)` combinations are skipped.
+Choosing **Add folder…** resolves a DockPipe project root by walking upward for project markers such as `dockpipe.config.json`, `workflows`, or package roots. The launcher then asks DockPipe for the available workflow catalog for that project and adds **one context** per discovered workflow name with that **workdir**. If no DockPipe project is found, it adds a single context with workflow `vscode`. Existing `(workdir, workflow, workflow file)` combinations are skipped.
 
 ## Data locations
 

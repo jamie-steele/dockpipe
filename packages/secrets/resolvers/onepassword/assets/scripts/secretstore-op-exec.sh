@@ -15,7 +15,7 @@ case "$PROVIDER" in
     OP_ENV_FILE="${OP_ENV_FILE:-.env.op.template}"
     [[ -f "$OP_ENV_FILE" ]] || die "missing $OP_ENV_FILE — copy packages/secrets/resolvers/onepassword/.env.op.template.example to .env.op.template and add op:// lines"
     CMD="${SECRETSTORE_COMMAND:-}"
-    [[ -n "$CMD" ]] || die "set SECRETSTORE_COMMAND (shell command to run with injected env, e.g. ./src/bin/dockpipe --workflow mywf --workdir . --)"
+    [[ -n "$CMD" ]] || die "set SECRETSTORE_COMMAND (shell command to run with injected env, e.g. dockpipe --workflow mywf --workdir . --)"
     exec op run --env-file="$OP_ENV_FILE" -- bash -c "$CMD"
     ;;
   *)

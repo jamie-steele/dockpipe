@@ -10,7 +10,7 @@ import (
 )
 
 // ResolvePathUnderRepoRoot resolves user-supplied paths for specs and validation targets.
-// Absolute paths must still lie under the resolved repo root (same as DOCKPIPE_REPO_ROOT semantics).
+// Absolute paths must still lie under the resolved project root.
 func ResolvePathUnderRepoRoot(userPath string) (string, error) {
 	userPath = strings.TrimSpace(userPath)
 	if userPath == "" {

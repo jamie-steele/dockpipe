@@ -11,7 +11,7 @@
 #   cp packages/secrets/resolvers/onepassword/.env.op.template.example .env.op.template
 #   # edit with real op:// references for R2_* / CLOUDFLARE_* etc.
 #   mkdir -p release/artifacts && touch release/artifacts/.keep
-#   ./src/bin/dockpipe --workflow-file workflows/secretstore-r2-publish-test/config.yml --workdir . \
+#   dockpipe --workflow-file workflows/secretstore-r2-publish-test/config.yml --workdir . \
 #     --var R2_TF_BACKEND=local --   # optional: skip remote TF state while testing
 #
 # Step 1 uses resolver onepassword (profile: packages/secrets/resolvers/onepassword/profile).

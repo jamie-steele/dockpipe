@@ -58,7 +58,7 @@ HTTP: **`MCP_HTTP_API_KEY`** or **`MCP_HTTP_KEY_TIERS_FILE`** (per-key tiers). S
 | **`DOCKPIPE_MCP_RESTRICT_WORKDIR`** | Exec tools keep workdir under repo root (default **on**). |
 | **`DOCKPIPE_MCP_REQUIRE_ABSOLUTE_BIN`** | Require absolute **`DOCKPIPE_BIN`** / **`DORKPIPE_BIN`** (default **on**). |
 
-Set **`DOCKPIPE_BIN`** to **`src/bin/dockpipe`**, **`DORKPIPE_BIN`** to the **`dorkpipe`** binary from **`make maintainer-tools`** (see **`dorkpipe/lib/README.md`** or **`.cursor/mcp.json`**).
+Set **`DOCKPIPE_BIN`** and **`DORKPIPE_BIN`** to the absolute executables you want MCP to launch. In this repo after **`make build`** + **`make maintainer-tools`**, that is typically **`src/bin/dockpipe`** and **`packages/dorkpipe/bin/dorkpipe`**.
 
 **`mcpbridge`** may import **`dockpipe/.../infrastructure`** for **read-only** discovery only; execution stays subprocess-based.
 
