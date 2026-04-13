@@ -88,6 +88,9 @@ func Run(argv []string, baseEnviron []string) error {
 	if argv[0] == "workflow" {
 		return cmdWorkflow(argv[1:])
 	}
+	if argv[0] == "catalog" {
+		return cmdCatalog(argv[1:])
+	}
 	if argv[0] == "pipelang" {
 		return cmdPipeLang(argv[1:])
 	}

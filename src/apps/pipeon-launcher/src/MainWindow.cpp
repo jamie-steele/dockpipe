@@ -623,13 +623,11 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
     QString effectiveWorkflowId = workflowId;
     if (effectiveWorkflowId == QStringLiteral("pipeon") || effectiveWorkflowId == QStringLiteral("Pipeon"))
         effectiveWorkflowId = QStringLiteral("pipeon-dev-stack");
-    QString effectiveWorkflowFile;
     for (const WorkflowMeta &meta : m_basicApps) {
         QString metaWorkflowId = meta.workflowId;
         if (metaWorkflowId == QStringLiteral("pipeon") || metaWorkflowId == QStringLiteral("Pipeon"))
             metaWorkflowId = QStringLiteral("pipeon-dev-stack");
         if (metaWorkflowId == effectiveWorkflowId) {
-            effectiveWorkflowFile = meta.configPath;
             m_basicLaunchingWorkflowId = effectiveWorkflowId;
             break;
         }
@@ -638,18 +636,12 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
         m_basicLaunchingWorkflowId = effectiveWorkflowId;
     updateBasicPage();
 
-    QTimer::singleShot(0, this, [this, effectiveWorkflowId, effectiveWorkflowFile]() {
-    const QString basicWorkflowFileKey =
-        (!effectiveWorkflowFile.isEmpty() && !effectiveWorkflowFile.startsWith(QStringLiteral("tar://")))
-            ? effectiveWorkflowFile
-            : QString();
-    Context *c = findContext(m_settings.projectFolder, effectiveWorkflowId, basicWorkflowFileKey);
+    QTimer::singleShot(0, this, [this, effectiveWorkflowId]() {
+    Context *c = findContext(m_settings.projectFolder, effectiveWorkflowId, QString());
     if (!c) {
         Context nc = Context::createNew();
         nc.workdir = m_settings.projectFolder;
         nc.workflow = effectiveWorkflowId;
-        if (!effectiveWorkflowFile.startsWith(QStringLiteral("tar://")))
-            nc.workflowFile = effectiveWorkflowFile;
         nc.dockpipeBinary = DockpipeChoices::preferredDockpipeBinary(m_settings.projectFolder);
         nc.label = QFileInfo(m_settings.projectFolder).fileName() + QStringLiteral(" — ") + effectiveWorkflowId;
         m_store.contexts.append(nc);
@@ -657,8 +649,6 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
         c = &m_store.contexts.last();
     } else if (c->dockpipeBinary.trimmed().isEmpty() || c->dockpipeBinary.trimmed() == QStringLiteral("dockpipe")) {
         c->dockpipeBinary = DockpipeChoices::preferredDockpipeBinary(m_settings.projectFolder);
-        if (!effectiveWorkflowFile.isEmpty() && !effectiveWorkflowFile.startsWith(QStringLiteral("tar://")))
-            c->workflowFile = effectiveWorkflowFile;
         m_store.save();
     }
     m_basicLaunchingContextId = c->id;

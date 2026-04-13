@@ -4,21 +4,11 @@
 #include "WorkflowCatalog.h"
 
 #include <QDir>
-#include <QDirIterator>
 #include <QFileInfo>
 #include <QProcessEnvironment>
 #include <algorithm>
 
 namespace {
-
-QString coreCategoriesRoot(const QString &repoRoot)
-{
-    const QDir r(repoRoot);
-    const QString srcCore = r.filePath(QStringLiteral("src/core"));
-    if (QFileInfo(srcCore + QStringLiteral("/runtimes")).isDir())
-        return srcCore;
-    return r.filePath(QStringLiteral("templates/core"));
-}
 
 bool looksLikeRepoRoot(const QString &absPath)
 {
@@ -44,20 +34,6 @@ void appendStaticFallbacks(DockpipeChoices &c)
                               QStringLiteral("cursor-dev")};
     c.strategies = QStringList{QStringLiteral("commit"), QStringLiteral("worktree")};
     c.runtimes = QStringList{QStringLiteral("dockerimage"), QStringLiteral("dockerfile"), QStringLiteral("package")};
-}
-
-QString findCursorPrepUnderPackages(const QString &repoRoot)
-{
-    const QDir pkg(QDir(repoRoot).filePath(QStringLiteral("packages")));
-    if (!pkg.exists())
-        return {};
-    QDirIterator it(pkg.path(), QStringList{QStringLiteral("cursor-prep.sh")}, QDir::Files,
-                    QDirIterator::Subdirectories);
-    while (it.hasNext()) {
-        it.next();
-        return QDir::cleanPath(it.filePath());
-    }
-    return {};
 }
 
 } // namespace
@@ -103,39 +79,17 @@ QString DockpipeChoices::preferredDockpipeBinary(const QString &hintWorkdir)
     return QStringLiteral("dockpipe");
 }
 
-QString DockpipeChoices::cursorPrepScriptPath(const QString &hintWorkdir)
-{
-    const QString root = findRepoRoot(hintWorkdir);
-    if (root.isEmpty())
-        return {};
-    const QString envPrep =
-        QProcessEnvironment::systemEnvironment().value(QStringLiteral("DOCKPIPE_CURSOR_PREP_SCRIPT")).trimmed();
-    if (!envPrep.isEmpty() && QFileInfo(envPrep).exists())
-        return QDir::cleanPath(envPrep);
-    const QString srcCore =
-        QDir::cleanPath(root + QStringLiteral("/src/core/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
-    if (QFileInfo::exists(srcCore))
-        return srcCore;
-    const QString legacy =
-        QDir::cleanPath(root + QStringLiteral("/templates/core/resolvers/cursor-dev/assets/scripts/cursor-prep.sh"));
-    if (QFileInfo::exists(legacy))
-        return legacy;
-    const QString underPkg = findCursorPrepUnderPackages(root);
-    if (!underPkg.isEmpty())
-        return underPkg;
-    return {};
-}
-
 void DockpipeChoices::scan(const QString &repoRoot, const QString &hintWorkdir)
 {
+    Q_UNUSED(repoRoot);
     workflowNames.clear();
     workflowConfigPaths.clear();
     resolvers.clear();
     strategies.clear();
     runtimes.clear();
 
-    const QVector<WorkflowMeta> workflows = WorkflowCatalog::discoverAll(repoRoot, hintWorkdir);
-    for (const WorkflowMeta &wf : workflows) {
+    const WorkflowCatalogData catalog = WorkflowCatalog::discoverCatalog(hintWorkdir);
+    for (const WorkflowMeta &wf : catalog.workflows) {
         const QString id = wf.workflowId.trimmed();
         if (!id.isEmpty())
             workflowNames.append(id);
@@ -143,46 +97,9 @@ void DockpipeChoices::scan(const QString &repoRoot, const QString &hintWorkdir)
         if (!cfg.isEmpty() && !cfg.startsWith(QStringLiteral("tar://")))
             workflowConfigPaths.append(QDir::cleanPath(cfg));
     }
-
-    if (!repoRoot.isEmpty()) {
-        const QString cc = coreCategoriesRoot(repoRoot);
-
-        {
-            const QDir res(cc + QStringLiteral("/resolvers"));
-            if (res.exists()) {
-                const auto dirs = res.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-                for (const QFileInfo &fi : dirs) {
-                    const QString cfg = fi.filePath() + QStringLiteral("/config.yml");
-                    if (QFileInfo::exists(cfg))
-                        resolvers.append(fi.fileName());
-                }
-            }
-        }
-
-        {
-            const QDir strat(cc + QStringLiteral("/strategies"));
-            if (strat.exists()) {
-                const auto files = strat.entryInfoList(QDir::Files | QDir::NoDotAndDotDot, QDir::Name);
-                for (const QFileInfo &fi : files) {
-                    if (fi.fileName() == QStringLiteral("README.md"))
-                        continue;
-                    strategies.append(fi.fileName());
-                }
-            }
-        }
-
-        {
-            const QDir rt(cc + QStringLiteral("/runtimes"));
-            if (rt.exists()) {
-                const auto dirs = rt.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
-                for (const QFileInfo &fi : dirs) {
-                    if (fi.fileName().endsWith(QStringLiteral(".md"), Qt::CaseInsensitive))
-                        continue;
-                    runtimes.append(fi.fileName());
-                }
-            }
-        }
-    }
+    resolvers = catalog.resolvers;
+    strategies = catalog.strategies;
+    runtimes = catalog.runtimes;
 
     if (workflowNames.isEmpty() && resolvers.isEmpty()) {
         appendStaticFallbacks(*this);

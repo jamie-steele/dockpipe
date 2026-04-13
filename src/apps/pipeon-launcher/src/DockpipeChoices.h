@@ -3,8 +3,8 @@
 #include <QString>
 #include <QStringList>
 
-/// Discovers dockpipe workflow / resolver / strategy / runtime names from a repo checkout
-/// (same layout as dockpipe's workflow_dirs). Falls back to static lists when no repo is found.
+/// Launcher-facing DockPipe choice lists sourced from the DockPipe CLI contract.
+/// Falls back to static lists when no usable DockPipe catalog is available.
 class DockpipeChoices {
 public:
     /// Walk upward from workdir (or DOCKPIPE_REPO_ROOT) to find a dockpipe repo root.
@@ -12,9 +12,6 @@ public:
 
     /// Prefer the repo checkout binary when available; otherwise fall back to plain `dockpipe`.
     static QString preferredDockpipeBinary(const QString &hintWorkdir);
-
-    /// Path to `cursor-dev` resolver's `cursor-prep.sh` when `hintWorkdir` is inside a dockpipe checkout; empty if not found.
-    static QString cursorPrepScriptPath(const QString &hintWorkdir);
 
     void scan(const QString &repoRoot, const QString &hintWorkdir = QString());
 
