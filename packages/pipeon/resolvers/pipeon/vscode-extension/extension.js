@@ -1485,6 +1485,9 @@ async function executeNaturalLanguageRequest(root, text, signals, options = {}) 
     if (signals.activeFile) {
         args.push("--active-file", signals.activeFile);
     }
+    for (const openFile of signals.openFiles || []) {
+        args.push("--open-file", openFile);
+    }
     if (signals.selectionText) {
         args.push("--selection-text", signals.selectionText);
     }

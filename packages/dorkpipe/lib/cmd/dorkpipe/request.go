@@ -18,8 +18,24 @@ import (
 type routeRequest struct {
 	Message       string
 	ActiveFile    string
+	OpenFiles     []string
 	SelectionText string
 	Mode          string
+}
+
+type stringListFlag []string
+
+func (s *stringListFlag) String() string {
+	return strings.Join(*s, ",")
+}
+
+func (s *stringListFlag) Set(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	*s = append(*s, value)
+	return nil
 }
 
 type routedRequest struct {
@@ -34,6 +50,8 @@ func requestCmd(argv []string) {
 	workdir := fs.String("workdir", "", "working directory (default cwd)")
 	message := fs.String("message", "", "request text")
 	activeFile := fs.String("active-file", "", "repo-relative active file hint")
+	var openFiles stringListFlag
+	fs.Var(&openFiles, "open-file", "repo-relative open file hint (repeatable)")
 	selectionText := fs.String("selection-text", "", "selection hint")
 	mode := fs.String("mode", "ask", "request mode: ask, agent, or plan")
 	executeRoute := fs.Bool("execute", false, "execute the routed request and stream events")
@@ -66,6 +84,7 @@ func requestCmd(argv []string) {
 	req := routeRequest{
 		Message:       strings.TrimSpace(*message),
 		ActiveFile:    strings.TrimSpace(*activeFile),
+		OpenFiles:     uniqueNonEmpty(openFiles),
 		SelectionText: strings.TrimSpace(*selectionText),
 		Mode:          normalizeRequestMode(*mode),
 	}
@@ -478,6 +497,8 @@ func buildChatPrompt(root string, req routeRequest, contextText, mcpText string,
 		"Ground your answer in focused workspace context when relevant.",
 		"Use active-file snippets, explicit file references, and bounded MCP retrieval as primary grounding.",
 		"Only factor scan findings, user guidance, or other artifact-backed signals into the answer when the user explicitly asks for them or the request is clearly about those topics.",
+		"When explaining internals, architecture, or runtime behavior, anchor each substantive claim to concrete file and function names from the provided context.",
+		"Do not infer behavior that is not shown in the current code context; if something is uncertain, say so explicitly.",
 		"When MCP discovery data is provided, treat it as typed control-plane context and prefer it over guessing about workflows or tool availability.",
 		"When a bounded MCP context loop is provided, use it as curated retrieval context rather than asking for broad extra context.",
 		"If you provide code, use fenced code blocks with a language tag when possible.",
@@ -501,6 +522,9 @@ func buildChatPrompt(root string, req routeRequest, contextText, mcpText string,
 	if req.SelectionText != "" {
 		opening = append(opening, fmt.Sprintf("Selected text:\n%s", clampString(req.SelectionText, maxEditSelectionChars)))
 	}
+	if len(req.OpenFiles) > 0 {
+		opening = append(opening, "Open files:\n- "+strings.Join(req.OpenFiles, "\n- "))
+	}
 	if strings.TrimSpace(contextText) != "" {
 		opening = append(opening, fmt.Sprintf("Focused workspace context:\n\n%s", contextText))
 	}
@@ -518,12 +542,7 @@ func buildWorkspaceChatContext(root string, req routeRequest) (string, map[strin
 	sections := []string{}
 	meta := map[string]any{}
 	searchTerms := extractSearchTerms(req.Message)
-	targets := []string{}
-	if strings.TrimSpace(req.ActiveFile) != "" {
-		targets = append(targets, strings.TrimSpace(req.ActiveFile))
-	}
-	targets = append(targets, explicitRepoFileMentions(root, req.Message)...)
-	targets = uniqueNonEmpty(targets)
+	targets := inferWorkspaceChatTargets(root, req)
 	if len(targets) > 3 {
 		targets = targets[:3]
 	}
@@ -550,6 +569,59 @@ func buildWorkspaceChatContext(root string, req routeRequest) (string, map[strin
 		}
 	}
 	return strings.Join(sections, "\n\n"), meta
+}
+
+func inferWorkspaceChatTargets(root string, req routeRequest) []string {
+	targets := []string{}
+	if strings.TrimSpace(req.ActiveFile) != "" {
+		targets = append(targets, strings.TrimSpace(req.ActiveFile))
+	}
+	targets = append(targets, req.OpenFiles...)
+	targets = append(targets, explicitRepoFileMentions(root, req.Message)...)
+	if looksLikeInternalArchitectureQuestion(req.Message) {
+		targets = append(targets,
+			"packages/dorkpipe/lib/cmd/dorkpipe/request.go",
+			"packages/pipeon/resolvers/pipeon/vscode-extension/src/extension.ts",
+			"packages/pipeon/resolvers/pipeon/assets/scripts/prompts/system.md",
+			"packages/pipeon/resolvers/pipeon/vscode-extension/src/webview/chat.ts",
+		)
+	}
+	var existing []string
+	for _, rel := range uniqueNonEmpty(targets) {
+		if strings.TrimSpace(rel) == "" {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(root, rel)); err == nil {
+			existing = append(existing, rel)
+		}
+	}
+	return uniqueNonEmpty(existing)
+}
+
+func looksLikeInternalArchitectureQuestion(message string) bool {
+	lower := strings.ToLower(strings.TrimSpace(message))
+	for _, token := range []string{
+		"how does",
+		"how do",
+		"internal flow",
+		"internally",
+		"on the inside",
+		"current flow",
+		"ask mode",
+		"edit mode",
+		"extension flow",
+		"request.go",
+		"extension.ts",
+		"architecture",
+		"runtime behavior",
+		"what changed",
+		"what role",
+	} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func readWorkspaceSnippet(root, rel string, searchTerms []string) (string, error) {
