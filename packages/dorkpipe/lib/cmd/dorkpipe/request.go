@@ -774,6 +774,12 @@ func buildChatPrompt(root string, req routeRequest, chatContext workspaceChatCon
 	default:
 		opening = append(opening, "Mode: Ask.")
 	}
+	if shouldStrictlyValidateChatAnswer(req) {
+		opening = append(opening,
+			"For every substantive claim, cite exact evidence using this format: Evidence: `<repo/path>` :: `<symbol>`.",
+			"If the retrieved evidence is insufficient, put the point under `## Uncertain` instead of guessing.",
+		)
+	}
 	if req.ActiveFile != "" {
 		opening = append(opening, fmt.Sprintf("Active file: %s", req.ActiveFile))
 	}
@@ -1486,11 +1492,27 @@ func findUnsupportedAnswerReferences(answer string, req routeRequest, chatContex
 	}
 	for _, match := range pathPattern.FindAllString(answer, -1) {
 		lower := strings.ToLower(filepath.ToSlash(match))
-		if _, ok := allowedPaths[lower]; !ok && !strings.Contains(support, lower) {
+		if !isAllowedAnswerPath(lower, allowedPaths) && !strings.Contains(support, lower) {
 			unsupported = append(unsupported, match)
 		}
 	}
 	return uniqueNonEmpty(unsupported)
+}
+
+func isAllowedAnswerPath(candidate string, allowedPaths map[string]struct{}) bool {
+	candidate = strings.Trim(strings.ToLower(filepath.ToSlash(candidate)), " _*`\"'")
+	if candidate == "" {
+		return false
+	}
+	if _, ok := allowedPaths[candidate]; ok {
+		return true
+	}
+	for allowed := range allowedPaths {
+		if strings.HasSuffix(candidate, allowed) || strings.HasSuffix(allowed, candidate) {
+			return true
+		}
+	}
+	return false
 }
 
 func buildChatAnswerRepairPrompt(req routeRequest, answer string, chatContext workspaceChatContext, mcpText string, mcpLoop *boundedMCPContextResult, validation chatAnswerValidation) string {
@@ -1534,10 +1556,11 @@ func buildEvidenceOnlyChatFallback(chatContext workspaceChatContext, validation 
 		"",
 		"## Confirmed",
 	}
-	if len(chatContext.Evidence.Nodes) == 0 {
+	confirmed := summarizeStrictEvidenceGraph(chatContext.Evidence)
+	if len(confirmed) == 0 {
 		lines = append(lines, "- No repo files were retrieved with enough confidence to support stronger claims.")
 	} else {
-		for _, item := range summarizeChatEvidenceGraph(chatContext.Evidence) {
+		for _, item := range confirmed {
 			lines = append(lines, "- "+item)
 		}
 	}
@@ -1546,6 +1569,29 @@ func buildEvidenceOnlyChatFallback(chatContext workspaceChatContext, validation 
 		lines = append(lines, "", "Suppressed unsupported claims:", "- "+strings.Join(validation.Issues, "\n- "))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func summarizeStrictEvidenceGraph(graph chatEvidenceGraph) []string {
+	var lines []string
+	for _, node := range graph.Nodes {
+		switch node.Kind {
+		case "symbol":
+			if node.File == "" || node.Symbol == "" {
+				continue
+			}
+			lines = append(lines, fmt.Sprintf("Confirmed support for `%s` in `%s`. Evidence: `%s` :: `%s`", node.Symbol, node.File, node.File, node.Symbol))
+		}
+	}
+	if len(lines) > 0 {
+		return uniqueNonEmpty(lines)
+	}
+	for _, node := range graph.Nodes {
+		if node.Kind != "file" || node.File == "" {
+			continue
+		}
+		lines = append(lines, fmt.Sprintf("Retrieved `%s` as relevant code context.", node.File))
+	}
+	return uniqueNonEmpty(lines)
 }
 
 func extractLikelySnippetSymbols(snippet string) []string {

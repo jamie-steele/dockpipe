@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -303,6 +304,28 @@ func TestBuildChatEvidenceGraph_FiltersTestSymbolsForArchitectureQuery(t *testin
 		if node.Kind == "symbol" {
 			t.Fatalf("expected test-only symbols to be filtered, got %#v", graph)
 		}
+	}
+}
+
+func TestBuildEvidenceOnlyChatFallback_UsesStrictEvidenceCitations(t *testing.T) {
+	t.Parallel()
+	graph := chatEvidenceGraph{
+		Nodes: []chatEvidenceNode{
+			{ID: "request", Kind: "request", Summary: "Explain ask mode."},
+			{ID: "file:src/request.go", Kind: "file", File: "src/request.go", Summary: "request handlers"},
+			{ID: "symbol:src/request.go:handleChatRoute", Kind: "symbol", File: "src/request.go", Symbol: "handleChatRoute", Summary: "chat handler"},
+		},
+		Edges: []chatEvidenceEdge{
+			{From: "request", To: "file:src/request.go", Kind: "grounds"},
+			{From: "file:src/request.go", To: "symbol:src/request.go:handleChatRoute", Kind: "contains"},
+		},
+	}
+	out := buildEvidenceOnlyChatFallback(workspaceChatContext{Evidence: graph}, chatAnswerValidation{Issues: []string{"missing evidence citations to retrieved file/symbol nodes"}})
+	if !strings.Contains(out, "Evidence: `src/request.go` :: `handleChatRoute`") {
+		t.Fatalf("fallback missing strict evidence citation: %q", out)
+	}
+	if strings.Contains(out, "evidence graph includes symbol") {
+		t.Fatalf("fallback leaked internal graph phrasing: %q", out)
 	}
 }
 
