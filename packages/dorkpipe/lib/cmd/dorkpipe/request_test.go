@@ -358,6 +358,62 @@ func TestValidateChatAnswer_RejectsMetaPolicyArchitectureAnswer(t *testing.T) {
 	}
 }
 
+func TestValidateChatAnswer_RejectsWrongNearbySymbolCitation(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeTestFile(t, root, "src/request.go", "package main\n\nfunc beginReasoningRun() {}\nfunc handleChatRoute(ctx context.Context) {}\n")
+	req := routeRequest{
+		Message: "Explain how Ask mode handles architecture questions internally.",
+		Mode:    "ask",
+	}
+	ctx := workspaceChatContext{
+		Text: "Relevant file: src/request.go\n\n```text\nfunc beginReasoningRun() {}\nfunc handleChatRoute(ctx context.Context) {}\n```",
+		Targets: []string{"src/request.go"},
+		Snippets: map[string]string{
+			"src/request.go": "func beginReasoningRun() {}\nfunc handleChatRoute(ctx context.Context) {}\n",
+		},
+		Evidence: buildChatEvidenceGraph(root, req, []string{"src/request.go"}, map[string]string{
+			"src/request.go": "func beginReasoningRun() {}\nfunc handleChatRoute(ctx context.Context) {}\n",
+		}, extractChatSearchTerms(req.Message)),
+	}
+	answer := "## Confirmed\n- Ask mode handles architecture questions through chat routing. Evidence: `src/request.go` :: `beginReasoningRun`\n- Ask mode runs through `handleChatRoute`. Evidence: `src/request.go` :: `handleChatRoute`\n\n## Uncertain\n- More detail is unclear."
+	got := validateChatAnswer(answer, req, ctx)
+	if got.Passed {
+		t.Fatalf("expected wrong nearby citation to fail, got %#v", got)
+	}
+	if !strings.Contains(strings.Join(got.Issues, " "), "weak evidence bindings") {
+		t.Fatalf("expected weak binding issue, got %#v", got)
+	}
+}
+
+func TestValidateChatAnswer_RejectsRouteMismatchedCitation(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeTestFile(t, root, "src/request.go", "package main\n\nfunc handleEditRoute(ctx context.Context) {}\nfunc buildChatAnswerRepairPrompt() {}\n")
+	req := routeRequest{
+		Message: "Explain how Ask mode repairs architecture answers internally.",
+		Mode:    "ask",
+	}
+	ctx := workspaceChatContext{
+		Text: "Relevant file: src/request.go\n\n```text\nfunc handleEditRoute(ctx context.Context) {}\nfunc buildChatAnswerRepairPrompt() {}\n```",
+		Targets: []string{"src/request.go"},
+		Snippets: map[string]string{
+			"src/request.go": "func handleEditRoute(ctx context.Context) {}\nfunc buildChatAnswerRepairPrompt() {}\n",
+		},
+		Evidence: buildChatEvidenceGraph(root, req, []string{"src/request.go"}, map[string]string{
+			"src/request.go": "func handleEditRoute(ctx context.Context) {}\nfunc buildChatAnswerRepairPrompt() {}\n",
+		}, extractChatSearchTerms(req.Message)),
+	}
+	answer := "## Confirmed\n- Ask mode repairs unsupported architecture answers with `buildChatAnswerRepairPrompt`. Evidence: `src/request.go` :: `handleEditRoute`\n- Repair prompting is built by `buildChatAnswerRepairPrompt`. Evidence: `src/request.go` :: `buildChatAnswerRepairPrompt`\n\n## Uncertain\n- More detail is unclear."
+	got := validateChatAnswer(answer, req, ctx)
+	if got.Passed {
+		t.Fatalf("expected route-mismatched citation to fail, got %#v", got)
+	}
+	if !strings.Contains(strings.Join(got.Issues, " "), "weak evidence bindings") {
+		t.Fatalf("expected weak binding issue, got %#v", got)
+	}
+}
+
 func TestBuildChatEvidenceGraph_IncludesFileAndSymbolNodes(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()

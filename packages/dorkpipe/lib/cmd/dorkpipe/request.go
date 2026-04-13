@@ -1441,6 +1441,10 @@ func validateChatAnswer(answer string, req routeRequest, chatContext workspaceCh
 		result.Passed = false
 		result.Issues = append(result.Issues, "unsupported references: "+strings.Join(unsupported, ", "))
 	}
+	if weakBindings := findWeakEvidenceBindings(answer, req, chatContext); len(weakBindings) > 0 {
+		result.Passed = false
+		result.Issues = append(result.Issues, "weak evidence bindings: "+strings.Join(weakBindings, "; "))
+	}
 	if isArchitectureChatQuery(req.Message) && looksLikeMetaPolicyAnswer(answer, req, chatContext) {
 		result.Passed = false
 		result.Issues = append(result.Issues, "answer restates response policy more than code behavior")
@@ -1492,6 +1496,211 @@ func countSupportedEvidenceCitations(answer string, evidence chatEvidenceGraph) 
 		}
 	}
 	return count
+}
+
+type answerCitationBinding struct {
+	claim  string
+	file   string
+	symbol string
+}
+
+func findWeakEvidenceBindings(answer string, req routeRequest, chatContext workspaceChatContext) []string {
+	bindings := parseAnswerCitationBindings(answer)
+	if len(bindings) == 0 {
+		return nil
+	}
+	knownSymbols := knownEvidenceSymbols(chatContext.Evidence)
+	var issues []string
+	for _, binding := range bindings {
+		if ok, reason := citationSupportsClaim(binding, req, chatContext, knownSymbols); !ok {
+			issues = append(issues, fmt.Sprintf("%s :: %s (%s)", binding.file, binding.symbol, reason))
+		}
+	}
+	return uniqueNonEmpty(issues)
+}
+
+func parseAnswerCitationBindings(answer string) []answerCitationBinding {
+	var out []answerCitationBinding
+	for _, line := range strings.Split(answer, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.Contains(trimmed, "Evidence:") {
+			continue
+		}
+		claim := strings.TrimSpace(trimmed)
+		if idx := strings.Index(claim, "Evidence:"); idx >= 0 {
+			claim = strings.TrimSpace(claim[:idx])
+		}
+		claim = strings.TrimSpace(strings.TrimLeft(claim, "-*0123456789. "))
+		for _, match := range evidenceCitationPattern.FindAllStringSubmatch(trimmed, -1) {
+			if len(match) < 3 {
+				continue
+			}
+			out = append(out, answerCitationBinding{
+				claim:  claim,
+				file:   strings.TrimSpace(match[1]),
+				symbol: strings.TrimSpace(match[2]),
+			})
+		}
+	}
+	return out
+}
+
+func citationSupportsClaim(binding answerCitationBinding, req routeRequest, chatContext workspaceChatContext, knownSymbols []string) (bool, string) {
+	claim := strings.ToLower(strings.TrimSpace(binding.claim))
+	if claim == "" {
+		return false, "empty_claim"
+	}
+	symbol := strings.TrimSpace(binding.symbol)
+	lowerSymbol := strings.ToLower(symbol)
+	if lowerSymbol == "" {
+		return false, "empty_symbol"
+	}
+	if strings.Contains(claim, lowerSymbol) {
+		return true, ""
+	}
+	explicitSymbols := explicitMentionedEvidenceSymbols(claim, knownSymbols)
+	if len(explicitSymbols) > 0 {
+		for _, item := range explicitSymbols {
+			if item == lowerSymbol {
+				return true, ""
+			}
+		}
+		return false, "claim_mentions_different_symbol"
+	}
+	codeIdentifiers := extractCodeLikeIdentifiers(binding.claim)
+	for _, identifier := range codeIdentifiers {
+		if strings.EqualFold(identifier, symbol) {
+			return true, ""
+		}
+	}
+	symbolTokens := significantIdentifierTokens(symbol)
+	claimTokens := significantClaimTokens(binding.claim)
+	overlap := intersectTokenCount(claimTokens, symbolTokens)
+	fileTokens := significantPathTokens(binding.file)
+	fileOverlap := intersectTokenCount(claimTokens, fileTokens)
+	if overlap >= 1 && overlap+fileOverlap >= 2 {
+		return true, ""
+	}
+	if !isArchitectureChatQuery(req.Message) && overlap >= 1 {
+		return true, ""
+	}
+	return false, "claim_not_supported_by_cited_symbol"
+}
+
+func knownEvidenceSymbols(graph chatEvidenceGraph) []string {
+	var out []string
+	for _, node := range graph.Nodes {
+		if node.Kind == "symbol" && node.Symbol != "" {
+			out = append(out, strings.ToLower(node.Symbol))
+		}
+	}
+	return uniqueNonEmpty(out)
+}
+
+func explicitMentionedEvidenceSymbols(claim string, knownSymbols []string) []string {
+	lower := strings.ToLower(claim)
+	var out []string
+	for _, symbol := range knownSymbols {
+		if symbol != "" && strings.Contains(lower, symbol) {
+			out = append(out, symbol)
+		}
+	}
+	return uniqueNonEmpty(out)
+}
+
+func extractCodeLikeIdentifiers(text string) []string {
+	pattern := regexp.MustCompile(`\b[A-Za-z_][A-Za-z0-9_]{4,}\b`)
+	var out []string
+	for _, match := range pattern.FindAllString(text, -1) {
+		if looksLikeNaturalWord(match) {
+			continue
+		}
+		out = append(out, match)
+	}
+	return uniqueNonEmpty(out)
+}
+
+func looksLikeNaturalWord(token string) bool {
+	lower := strings.ToLower(strings.TrimSpace(token))
+	if lower == "" {
+		return true
+	}
+	if lower == token && !strings.ContainsAny(token, "_") {
+		switch lower {
+		case "after", "plain", "english", "architecture", "question", "changes", "current", "behavior", "confidence", "confirmed", "uncertain", "evidence", "citations", "substantive", "claim", "claims", "anchored", "exact", "specific", "handles", "handling":
+			return true
+		}
+	}
+	return false
+}
+
+func significantIdentifierTokens(value string) []string {
+	replacer := strings.NewReplacer("-", " ", "_", " ", ".", " ", "/", " ")
+	normalized := replacer.Replace(camelCaseToSpaces(value))
+	var out []string
+	for _, token := range strings.Fields(strings.ToLower(normalized)) {
+		if isWeakBindingToken(token) {
+			continue
+		}
+		out = append(out, token)
+	}
+	return uniqueNonEmpty(out)
+}
+
+func significantClaimTokens(value string) []string {
+	pattern := regexp.MustCompile(`[A-Za-z][A-Za-z0-9_/-]*`)
+	var out []string
+	for _, token := range pattern.FindAllString(strings.ToLower(value), -1) {
+		for _, part := range significantIdentifierTokens(token) {
+			if isWeakBindingToken(part) {
+				continue
+			}
+			out = append(out, part)
+		}
+	}
+	return uniqueNonEmpty(out)
+}
+
+func significantPathTokens(path string) []string {
+	base := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+	return significantIdentifierTokens(base + " " + path)
+}
+
+func isWeakBindingToken(token string) bool {
+	switch strings.ToLower(strings.TrimSpace(token)) {
+	case "", "the", "and", "for", "with", "from", "into", "after", "before", "mode", "question", "questions", "plain", "english", "architecture", "current", "changes", "change", "behavior", "handling", "handles", "internal", "internally", "exact", "evidence", "claim", "claims", "confirmed", "uncertain", "confidence", "file", "files", "code", "anchored":
+		return true
+	default:
+		return false
+	}
+}
+
+func intersectTokenCount(left, right []string) int {
+	seen := map[string]struct{}{}
+	for _, item := range left {
+		seen[item] = struct{}{}
+	}
+	count := 0
+	for _, item := range right {
+		if _, ok := seen[item]; ok {
+			count++
+		}
+	}
+	return count
+}
+
+func camelCaseToSpaces(value string) string {
+	var out []rune
+	for i, r := range value {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			prev := rune(value[i-1])
+			if (prev >= 'a' && prev <= 'z') || (prev >= '0' && prev <= '9') {
+				out = append(out, ' ')
+			}
+		}
+		out = append(out, r)
+	}
+	return string(out)
 }
 
 func findUnsupportedAnswerReferences(answer string, req routeRequest, chatContext workspaceChatContext) []string {
