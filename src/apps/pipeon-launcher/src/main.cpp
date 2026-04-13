@@ -3,6 +3,7 @@
 #include "Theme.h"
 
 #include <QApplication>
+#include <QIcon>
 #include <QStyleFactory>
 #include <cstring>
 
@@ -18,9 +19,11 @@ static bool allowSecondInstance(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    QApplication::setApplicationName(QStringLiteral("Pipeon"));
-    QApplication::setApplicationDisplayName(QStringLiteral("Pipeon"));
+    QApplication::setApplicationName(QStringLiteral("pipeon-launcher"));
+    QApplication::setApplicationDisplayName(QStringLiteral("Pipeon Launcher"));
     QApplication::setOrganizationName(QStringLiteral("pipeon"));
+    app.setDesktopFileName(QStringLiteral("pipeon-launcher"));
+    app.setWindowIcon(QIcon(QStringLiteral(":/icon.png")));
 
     app.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
 

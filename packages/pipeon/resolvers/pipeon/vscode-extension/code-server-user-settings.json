@@ -5,6 +5,9 @@
   "workbench.secondarySideBar.defaultVisibility": "visibleInWorkspace",
   "workbench.startupEditor": "none",
   "workbench.welcome.enabled": false,
+  "files.watcherExclude": {
+    "**/bin/**": true
+  },
   "window.title": "Pipeon — ${rootName}",
   "window.autoDetectColorScheme": true,
   "workbench.preferredDarkColorTheme": "Default Dark+",

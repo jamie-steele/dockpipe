@@ -27,6 +27,12 @@ That writes the canonical binary to:
 
 `src/apps/pipeon-desktop/bin/pipeon-desktop`
 
+To install a desktop entry and icon for Linux app launchers (for example Pop OS / GNOME):
+
+```bash
+make install-pipeon-desktop-global
+```
+
 ## Run directly
 
 ```bash

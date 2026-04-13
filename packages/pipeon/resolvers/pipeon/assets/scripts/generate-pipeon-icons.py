@@ -37,6 +37,23 @@ def _repo_root() -> str:
 
 
 REPO_ROOT = _repo_root()
+EXT_IMG = os.path.join(
+    REPO_ROOT,
+    "packages",
+    "pipeon",
+    "resolvers",
+    "pipeon",
+    "vscode-extension",
+    "images",
+)
+TAURI_ICON_DIR = os.path.join(
+    REPO_ROOT,
+    "src",
+    "apps",
+    "pipeon-desktop",
+    "src-tauri",
+    "icons",
+)
 
 # Pipeon mark: deep blue tile + light "P"
 BG = (20, 50, 82, 255)
@@ -86,40 +103,48 @@ def write_svgs(out_dir: str, png_path: str) -> None:
         print("wrote", path)
 
 
-def main() -> int:
-    # Single canonical tree for Pipeon branding + code-server favicons (shortcuts, Docker image, extension).
-    ext_img = os.path.join(
-        REPO_ROOT,
-        "packages",
-        "pipeon",
-        "resolvers",
-        "pipeon",
-        "vscode-extension",
-        "images",
-    )
-    os.makedirs(ext_img, exist_ok=True)
+def write_png(path: str, image: Image.Image, size: int) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    image.resize((size, size), RESAMPLE_LANCZOS).save(path)
+    print("wrote", path)
 
-    png_path = os.path.join(ext_img, "icon.png")
-    if os.path.exists(png_path):
-        src = Image.open(png_path).convert("RGBA")
-        print("using existing", png_path)
-    else:
-        src = render_p(256)
-        src.save(png_path)
-        print("wrote", png_path)
 
-    sizes = [16, 32, 48]
-    ico_imgs = [src.resize((s, s), RESAMPLE_LANCZOS) for s in sizes]
-    ico_path = os.path.join(ext_img, "favicon.ico")
+def write_ico(path: str, source: Image.Image, sizes: list[int]) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    ico_imgs = [source.resize((s, s), RESAMPLE_LANCZOS) for s in sizes]
     ico_imgs[0].save(
-        ico_path,
+        path,
         format="ICO",
         sizes=[(s, s) for s in sizes],
         append_images=ico_imgs[1:],
     )
-    print("wrote", ico_path)
+    print("wrote", path)
 
-    write_svgs(ext_img, png_path)
+
+def main() -> int:
+    # Single canonical tree for Pipeon branding + code-server favicons (shortcuts, Docker image, extension).
+    os.makedirs(EXT_IMG, exist_ok=True)
+    os.makedirs(TAURI_ICON_DIR, exist_ok=True)
+
+    png_path = os.path.join(EXT_IMG, "icon.png")
+    if os.path.exists(png_path):
+        src = Image.open(png_path).convert("RGBA")
+        print("using existing", png_path)
+    else:
+        src = render_p(512)
+        src.save(png_path)
+        print("wrote", png_path)
+
+    write_png(os.path.join(EXT_IMG, "icon.png"), src, 512)
+    write_png(os.path.join(EXT_IMG, "pipeon-192.png"), src, 192)
+    write_png(os.path.join(EXT_IMG, "pipeon-512.png"), src, 512)
+    write_ico(os.path.join(EXT_IMG, "favicon.ico"), src, [16, 32, 48])
+    write_svgs(EXT_IMG, os.path.join(EXT_IMG, "icon.png"))
+
+    write_png(os.path.join(TAURI_ICON_DIR, "32x32.png"), src, 32)
+    write_png(os.path.join(TAURI_ICON_DIR, "128x128.png"), src, 128)
+    write_png(os.path.join(TAURI_ICON_DIR, "icon.png"), src, 512)
+    write_ico(os.path.join(TAURI_ICON_DIR, "icon.ico"), src, [16, 32, 48, 64, 128, 256])
     return 0
 
 

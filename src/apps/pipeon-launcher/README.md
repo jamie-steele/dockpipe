@@ -37,6 +37,12 @@ cmake --build build
 ./build/pipeon-launcher
 ```
 
+To install a Linux desktop entry and icon for app launchers / docks (for example Pop OS / GNOME):
+
+```bash
+make install-pipeon-launcher-global
+```
+
 If you use the **Qt Online Installer** instead of distro packages, point CMake at that kit (replace with your real path):
 
 ```bash

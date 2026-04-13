@@ -8,7 +8,7 @@
 # Qt launcher: cmake -S src/apps/pipeon-launcher -B src/apps/pipeon-launcher/build && cmake --build ...
 include src/Makefile
 
-.PHONY: pipeon-icons build-code-server-image build-pipeon-desktop build-pipeon-launcher install-pipeon-desktop install-pipeon-launcher install-pipeon-launcher-global install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci package-templates-core package-dockpipe-language-support package-vscode-language-support install-dockpipe-language-support package-pipeon-vscode-extension install-pipeon-vscode-extension
+.PHONY: pipeon-icons build-code-server-image build-pipeon-desktop build-pipeon-launcher install-pipeon-desktop install-pipeon-desktop-global install-pipeon-launcher install-pipeon-launcher-global install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci package-templates-core package-dockpipe-language-support package-vscode-language-support install-dockpipe-language-support package-pipeon-vscode-extension install-pipeon-vscode-extension
 
 pipeon-icons:
 	python3 packages/pipeon/resolvers/pipeon/assets/scripts/generate-pipeon-icons.py
@@ -30,6 +30,25 @@ install-pipeon-desktop: build-pipeon-desktop
 	mkdir -p bin/.dockpipe/packages/pipeon/bin
 	install -m 755 src/apps/pipeon-desktop/bin/pipeon-desktop bin/.dockpipe/packages/pipeon/bin/pipeon-desktop
 
+install-pipeon-desktop-global: install-pipeon-desktop
+	mkdir -p "$$HOME/.local/share/pipeon/bin"
+	mkdir -p "$$HOME/.local/share/pipeon/icons"
+	mkdir -p "$$HOME/.local/share/applications"
+	install -m 755 bin/.dockpipe/packages/pipeon/bin/pipeon-desktop "$$HOME/.local/share/pipeon/bin/pipeon-desktop"
+	install -m 644 src/apps/pipeon-desktop/src-tauri/icons/icon.png "$$HOME/.local/share/pipeon/icons/pipeon.png"
+	rm -f "$$HOME/.local/share/applications/com.dockpipe.pipeon.desktop"
+	printf '%s\n' \
+		'[Desktop Entry]' \
+		'Type=Application' \
+		'Name=Pipeon' \
+		'Exec='"$$HOME"'/.local/share/pipeon/bin/pipeon-desktop' \
+		'Icon='"$$HOME"'/.local/share/pipeon/icons/pipeon.png' \
+		'Terminal=false' \
+		'Categories=Development;' \
+		'StartupNotify=true' \
+		'StartupWMClass=com.dockpipe.pipeon' \
+		> "$$HOME/.local/share/applications/com.dockpipe.pipeon.desktop"
+
 install-pipeon-launcher: build-pipeon-launcher
 	mkdir -p bin/.dockpipe/packages/pipeon/bin
 	install -m 755 src/apps/pipeon-launcher/build/pipeon-launcher bin/.dockpipe/packages/pipeon/bin/pipeon-launcher
@@ -41,6 +60,7 @@ install-pipeon-launcher-global: install-pipeon-launcher
 	install -m 755 bin/.dockpipe/packages/pipeon/bin/pipeon-launcher "$$HOME/.local/share/pipeon/bin/pipeon-launcher"
 	install -m 644 packages/pipeon/resolvers/pipeon/vscode-extension/images/icon.png "$$HOME/.local/share/pipeon/icons/icon.png"
 	rm -f "$$HOME/.local/share/applications/pipeon-launcher.desktop"
+	rm -f "$$HOME/.local/share/applications/pipeon-launcher-global.desktop"
 	printf '%s\n' \
 		'[Desktop Entry]' \
 		'Type=Application' \
@@ -50,7 +70,8 @@ install-pipeon-launcher-global: install-pipeon-launcher
 		'Terminal=false' \
 		'Categories=Development;' \
 		'StartupNotify=true' \
-		> "$$HOME/.local/share/applications/pipeon-launcher-global.desktop"
+		'StartupWMClass=pipeon-launcher' \
+		> "$$HOME/.local/share/applications/pipeon-launcher.desktop"
 
 # Package Pipeon VS Code extension (.vsix) into bin/.dockpipe/extensions.
 # Reuses the locally installed vsce from dockpipe-language-support to avoid network fetches.
