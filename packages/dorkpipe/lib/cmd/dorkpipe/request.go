@@ -701,7 +701,11 @@ func inferMentionedBasenameTargets(root, message string) []string {
 		if _, ok := seenBase[base]; !ok {
 			return nil
 		}
-		out = append(out, filepath.ToSlash(relativeTo(root, path)))
+		rel := filepath.ToSlash(relativeTo(root, path))
+		if shouldSkipChatSearchPath(rel) {
+			return nil
+		}
+		out = append(out, rel)
 		if len(out) >= 6 {
 			return filepath.SkipAll
 		}
@@ -734,6 +738,7 @@ func searchWorkspaceFilesForChatQuery(root, message string, maxResults int) []st
 	terms := extractChatSearchTerms(message)
 	phrases := extractChatSearchPhrases(message)
 	basenames := extractMentionedBasenames(message)
+	architectureQuery := isArchitectureChatQuery(message)
 	if len(terms) == 0 && len(phrases) == 0 && len(basenames) == 0 {
 		return nil
 	}
@@ -753,7 +758,7 @@ func searchWorkspaceFilesForChatQuery(root, message string, maxResults int) []st
 			return nil
 		}
 		rel := filepath.ToSlash(relativeTo(root, path))
-		if rel == "." || rel == "" || !shouldConsiderChatSearchFile(rel) {
+		if rel == "." || rel == "" || shouldSkipChatSearchPath(rel) || !shouldConsiderChatSearchFile(rel) {
 			return nil
 		}
 		info, infoErr := d.Info()
@@ -775,6 +780,7 @@ func searchWorkspaceFilesForChatQuery(root, message string, maxResults int) []st
 			}
 		}
 		score += matchedPathTerms * 3
+		score += scoreChatSearchPath(lowerRel, architectureQuery)
 
 		b, readErr := os.ReadFile(path)
 		if readErr == nil {
@@ -846,11 +852,38 @@ func extractChatSearchPhrases(message string) []string {
 
 func shouldSkipChatSearchDir(name string) bool {
 	switch strings.ToLower(strings.TrimSpace(name)) {
-	case ".git", ".hg", ".svn", "node_modules":
+	case ".git", ".hg", ".svn", "node_modules", ".dockpipe", ".dorkpipe", "dist", "build", "coverage", ".next", ".turbo", "vendor", "target":
 		return true
 	default:
 		return false
 	}
+}
+
+func shouldSkipChatSearchPath(rel string) bool {
+	lower := strings.ToLower(filepath.ToSlash(rel))
+	if lower == "." || lower == "" {
+		return true
+	}
+	segments := strings.Split(lower, "/")
+	for _, segment := range segments {
+		if shouldSkipChatSearchDir(segment) {
+			return true
+		}
+	}
+	for _, token := range []string{
+		"/.dockpipe/internal/",
+		"/.dorkpipe/",
+		"/cache/",
+		"/tmp/",
+		"/temp/",
+		"/artifacts/",
+		"/generated/",
+	} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func shouldConsiderChatSearchFile(rel string) bool {
@@ -865,6 +898,66 @@ func shouldConsiderChatSearchFile(rel string) bool {
 	default:
 		return false
 	}
+}
+
+func isArchitectureChatQuery(message string) bool {
+	lower := strings.ToLower(strings.TrimSpace(message))
+	for _, token := range []string{
+		"explain",
+		"summarize",
+		"walk me through",
+		"how does",
+		"how do",
+		"what is",
+		"what are",
+		"internally",
+		"internal",
+		"architecture",
+		"flow",
+		"pipeline",
+		"runtime behavior",
+		"current behavior",
+		"currently work",
+		"how it works",
+		"how this works",
+		"what changed",
+		"what role",
+		"route",
+	} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func scoreChatSearchPath(lowerRel string, architectureQuery bool) int {
+	score := 0
+	ext := strings.ToLower(filepath.Ext(lowerRel))
+	if architectureQuery {
+		switch ext {
+		case ".go", ".ts", ".tsx", ".js", ".jsx", ".py", ".rs", ".java", ".c", ".cc", ".cpp", ".h", ".hpp", ".cs", ".rb", ".php", ".swift", ".kt", ".kts", ".sh":
+			score += 6
+		case ".json", ".yaml", ".yml", ".toml", ".sql":
+			score += 2
+		case ".md", ".txt":
+			score -= 2
+		}
+		for _, token := range []string{"/src/", "/lib/", "/cmd/", "/internal/", "/pkg/", "/app/", "/apps/"} {
+			if strings.Contains(lowerRel, token) {
+				score += 4
+			}
+		}
+		for _, token := range []string{"readme", "/docs/", "/doc/"} {
+			if strings.Contains(lowerRel, token) {
+				score -= 3
+			}
+		}
+	}
+	if strings.HasSuffix(lowerRel, "readme.md") {
+		score -= 1
+	}
+	return score
 }
 
 func shouldStrictlyValidateChatAnswer(req routeRequest) bool {

@@ -57,6 +57,61 @@ func TestInferWorkspaceChatTargets_UsesGenericWorkspaceSearch(t *testing.T) {
 	}
 }
 
+func TestInferWorkspaceChatTargets_PrefersSourceOverDocsForArchitectureQuery(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	files := map[string]string{
+		"docs/pipeon-ide-experience.md": "This document describes the IDE experience and routing at a high level.\n",
+		"src/runtime/ask_mode.go":       "package runtime\n\nfunc handleChatRoute() {}\nfunc buildWorkspaceChatContext() {}\n",
+	}
+	for rel, body := range files {
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", rel, err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	got := inferWorkspaceChatTargets(root, routeRequest{
+		Message: "Explain the ask mode routing and context flow.",
+	})
+	if len(got) == 0 {
+		t.Fatalf("expected inferred targets, got none")
+	}
+	if got[0] != "src/runtime/ask_mode.go" {
+		t.Fatalf("expected source file to outrank docs, got %#v", got)
+	}
+}
+
+func TestInferWorkspaceChatTargets_SkipsCacheArtifacts(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	files := map[string]string{
+		"bin/.dockpipe/internal/cache/tarball/abc/resolvers/pipeon/assets/docs/pipeon-ide-experience.md": "cached doc copy\n",
+		"src/runtime/ask_mode.go": "package runtime\n\nfunc chooseRoute() {}\nfunc handleChatRoute() {}\n",
+	}
+	for rel, body := range files {
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", rel, err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	got := inferWorkspaceChatTargets(root, routeRequest{
+		Message: "Explain the current ask route.",
+	})
+	for _, rel := range got {
+		if filepath.ToSlash(rel) == "bin/.dockpipe/internal/cache/tarball/abc/resolvers/pipeon/assets/docs/pipeon-ide-experience.md" {
+			t.Fatalf("expected cache artifact to be skipped, got %#v", got)
+		}
+	}
+}
+
 func TestChooseRoute_SlashInspectPrimitives(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
