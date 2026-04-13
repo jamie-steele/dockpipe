@@ -6,9 +6,9 @@ There is **no** separate “mapping table” in DockPipe. **You define names and
 
 | What you want | Where to look / what to edit |
 |---------------|------------------------------|
-| **Vault item → environment variable name** (e.g. `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`) | **`--workdir` / `.env.op.template`** — each line is `VAR_NAME=op://Vault/Item/field`. Example: **`.staging/workflows/dockpipe/packages/secrets/resolvers/onepassword/.env.op.template.example`**. In this repo, copy that file to **`.env.op.template`** at the repo root (gitignored). |
-| **Hint list** of common var names (documentation only) | **`.staging/workflows/dockpipe/packages/secrets/resolvers/onepassword/profile`** → `DOCKPIPE_RESOLVER_ENV=...` (resolver = 1Password; **`runtime: dockerimage`** + **`skip_container`**) |
-| **Which script reads the template and where it writes** | This workflow’s **`vars:`** → `OP_ENV_FILE` (input) and `SECRET_ENV_OUT` (must match step 1 **`outputs:`**). Script: **`scripts/dockpipe/secretstore-op-inject-outputs.sh`** (maintainer staging under **`.staging/workflows/dockpipe/assets/scripts/`**). |
+| **Vault item → environment variable name** (e.g. `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`) | **`--workdir` / `.env.op.template`** — each line is `VAR_NAME=op://Vault/Item/field`. Example: **`packages/secrets/resolvers/onepassword/.env.op.template.example`**. In this repo, copy that file to **`.env.op.template`** at the repo root (gitignored). |
+| **Hint list** of common var names (documentation only) | **`packages/secrets/resolvers/onepassword/profile`** → `DOCKPIPE_RESOLVER_ENV=...` (resolver = 1Password; **`runtime: dockerimage`** + **`skip_container`**) |
+| **Which script reads the template and where it writes** | This workflow’s **`vars:`** → `OP_ENV_FILE` (input) and `SECRET_ENV_OUT` (must match step 1 **`outputs:`**). Script: **`scripts/onepassword/secretstore-op-inject-outputs.sh`** from the onepassword package. |
 | **What step 2 consumes** | **`scripts/dockpipe/r2-publish.sh`** and **`workflows/r2-publish/README.md`** — same variable names as in your `.env.op.template` after `op inject`. |
 
 **Flow:** `op inject` turns `op://…` into values but **keeps your left-hand names** (`VAR_NAME=`). DockPipe then loads that file as **`KEY=VAL`** into the process environment for step 2 — **no rename step**.
@@ -26,7 +26,7 @@ DockPipe merges the first step’s **`outputs:`** file into the environment **af
 From a dockpipe git checkout (repo root):
 
 ```bash
-cp .staging/workflows/dockpipe/packages/secrets/resolvers/onepassword/.env.op.template.example .env.op.template
+cp packages/secrets/resolvers/onepassword/.env.op.template.example .env.op.template
 # Edit .env.op.template with real op:// fields for your vault items.
 mkdir -p release/artifacts && echo test >release/artifacts/README.txt
 R2_PUBLISH_DRY_RUN=1 R2_TF_BACKEND=local \
@@ -37,7 +37,7 @@ Use **`R2_TF_BACKEND=local`** until R2 state keys are in your template. Drop **`
 
 ## Resolver
 
-**`resolver: onepassword`** loads **`.staging/workflows/dockpipe/packages/secrets/resolvers/onepassword/profile`** (env hints for `op`-injected keys). It does not replace the 1Password app or CLI.
+**`resolver: onepassword`** loads **`packages/secrets/resolvers/onepassword/profile`** (env hints for `op`-injected keys). It does not replace the 1Password app or CLI.
 
 ## Troubleshooting
 

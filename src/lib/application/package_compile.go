@@ -552,15 +552,9 @@ func readResolverNamespaceYAML(dir string) (string, error) {
 	return strings.TrimSpace(aux.Namespace), nil
 }
 
-// collectResolverPackRoots returns directories whose immediate children are resolver profile dirs
-// (each child has profile/). Order: top-level resolvers/, packages/*/resolvers/, dockpipe/packages/*/resolvers/
-// (legacy), then dockpipe/<package>/resolvers/ (maintainer: agent, ide, secrets — package roots with resolver "plugins").
-//
-// When compile.workflows includes "packages/" as a root, srcRoot is that directory itself — patterns like
-// "<srcRoot>/packages/*/resolvers" look for packages/packages/... and miss "<srcRoot>/dorkpipe/resolvers".
-// Monorepo suite layouts are covered by "<srcRoot>/*/resolvers", "<srcRoot>/*/*/resolvers", and
-// "<srcRoot>/*/*/resolvers/*" (e.g. cloud/storage/resolvers/r2).
-// Each resolver child still becomes its own dockpipe-resolver-<name>-*.tar.gz for the store.
+// collectResolverPackRoots returns every directory named resolvers under srcRoot, plus the flat
+// srcRoot/resolvers tree when present. The caller's compile roots define the search space; no
+// repository-specific layout assumptions are baked into src/lib.
 func collectResolverPackRoots(srcRoot string) []string {
 	seen := map[string]struct{}{}
 	var out []string
@@ -575,19 +569,31 @@ func collectResolverPackRoots(srcRoot string) []string {
 		out = append(out, p)
 	}
 	add(filepath.Join(srcRoot, "resolvers"))
-	for _, pat := range []string{
-		filepath.Join(srcRoot, "packages", "*", "resolvers"),
-		filepath.Join(srcRoot, "dockpipe", "packages", "*", "resolvers"),
-		filepath.Join(srcRoot, "dockpipe", "*", "resolvers"),
-		filepath.Join(srcRoot, "*", "resolvers"),
-		filepath.Join(srcRoot, "*", "*", "resolvers"),
-		filepath.Join(srcRoot, "*", "*", "resolvers", "*"),
-	} {
-		matches, _ := filepath.Glob(pat)
-		for _, m := range matches {
-			add(m)
+	_ = filepath.WalkDir(srcRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
 		}
-	}
+		if !d.IsDir() {
+			return nil
+		}
+		if path != srcRoot {
+			switch d.Name() {
+			case ".git", ".dockpipe", ".dorkpipe", "node_modules", "target":
+				return filepath.SkipDir
+			}
+			if strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
+		}
+		if path != srcRoot && d.Name() == "resolvers" {
+			add(path)
+			return filepath.SkipDir
+		}
+		return nil
+	})
 	return out
 }
 
@@ -613,12 +619,7 @@ func hasNestedResolverPackLayout(dir string) bool {
 // dockpipe-resolver-<name>-<ver>.tar.gz under destRoot (no expanded trees).
 // For resolvers, when the tree is grouped (child dirs without profile/), we descend until profile/ is found.
 //
-// Resolver authoring: one or more pack roots are collected (see collectResolverPackRoots):
-//   - srcRoot/resolvers/ — flat vendor tree
-//   - srcRoot/packages/<group>/resolvers/ — per-package groups (each group is its own folder; same
-//     resolver names must not appear twice across groups)
-//   - srcRoot/dockpipe/<package>/resolvers/ — DockPipe official packages (e.g. agent → codex, ide → vscode)
-//
+// Resolver authoring can be flat (srcRoot/resolvers) or nested under any compile root-provided tree.
 // Each resolver child still becomes its own dockpipe-resolver-<name>-*.tar.gz for the store.
 func mergeChildPackages(srcRoot, destRoot string, kind string, defaultNamespace string, defaultVersion string, force bool) (int, error) {
 	if kind == "resolver" {
@@ -1044,11 +1045,10 @@ Defaults: same roots as compile.workflows (plus legacy compile.bundles merged in
 templates/core/resolvers when those directories exist. Deprecated compile.resolvers entries are merged if present.
 Dirs with profile/ under each root become resolver tarballs.
 
-Pack roots (each immediate child with profile/ becomes one store tarball):
-  - <from>/resolvers/...                    (flat vendor tree)
-  - <from>/packages/<group>/resolvers/...  (per-package groups, e.g. ides, agents)
-  - <from>/dockpipe/packages/<group>/resolvers/...  (DockPipe official maintainer layout)
-src/core/resolvers has no nested resolvers/ — unchanged.
+Pack roots:
+  - <from>/resolvers/... for a flat vendor tree
+  - Any nested directory named resolvers/ under a declared compile root
+Each immediate child with profile/ becomes one store tarball.
 
 Optional resolver.yaml next to each profile may set namespace: <label> (same rules as workflow namespace).
 

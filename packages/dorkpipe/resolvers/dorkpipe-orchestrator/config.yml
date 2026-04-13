@@ -2,7 +2,7 @@
 # This repo: orchestration is a separate binary that still calls `dockpipe` for tool steps.
 name: dorkpipe-orchestrator
 description: >-
-  Host step runs scripts/dorkpipe/run-orchestrator.sh (requires `make build` for bin/dorkpipe).
+  Host step runs scripts/dorkpipe-orchestrator/run-orchestrator.sh (requires `make build` for bin/dorkpipe).
 
 resolver: codex
 runtimes: [dockerimage]
@@ -11,4 +11,4 @@ steps:
   - id: orchestrate
     skip_container: true
     run:
-      - scripts/dorkpipe/run-orchestrator.sh
+      - scripts/dorkpipe-orchestrator/run-orchestrator.sh

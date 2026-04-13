@@ -30,14 +30,6 @@ list_repo_files() {
     -type f -print
 }
 
-list_staging_files() {
-  if command -v rg >/dev/null 2>&1; then
-    rg --files --hidden -g '.staging/**' "$ROOT"
-    return 0
-  fi
-  find "$ROOT/.staging" -type f -print 2>/dev/null || true
-}
-
 emit "$ACTIVE_FILE"
 
 lower_message="$(printf '%s\n' "$MESSAGE" | tr '[:upper:]' '[:lower:]')"
@@ -70,12 +62,6 @@ fi \
   | while IFS= read -r path; do
       emit "$path"
     done
-
-if printf '%s' "$lower_message" | grep -q '\.staging\|staging'; then
-  list_staging_files | sed -n '1,8p' | while IFS= read -r path; do
-    emit "$path"
-  done
-fi
 
 if printf '%s' "$lower_message" | grep -q 'package'; then
   list_repo_files \

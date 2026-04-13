@@ -1,0 +1,28 @@
+# Dev stack for Pipeon local dogfood: DorkPipe pgvector + Ollama sidecars.
+# Used by pipeon-dev-stack/assets/scripts/*.sh so the package stays self-contained.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: dorkpipe
+      POSTGRES_PASSWORD: dorkpipe
+      POSTGRES_DB: dorkpipe
+    ports:
+      - "15432:5432"
+    volumes:
+      - dorkpipe_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dorkpipe -d dorkpipe"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - dorkpipe_ollama:/root/.ollama
+
+volumes:
+  dorkpipe_pgdata:
+  dorkpipe_ollama:

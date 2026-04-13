@@ -7,7 +7,7 @@ companion stop workflow exists only as a manual recovery path if a session is le
 
 What it does:
 
-- ensures **`src/bin/dockpipe`**, **`packages/dorkpipe/bin/dorkpipe`**, and **`packages/dorkpipe-mcp/bin/mcpd`**
+- ensures local **`dockpipe`**, **`dorkpipe`**, and **`mcpd`** binaries are available (prefers explicit env / `PATH`, falls back to repo-local builds)
 - brings up the DorkPipe sidecars (**Ollama** + **Postgres/pgvector**)
 - starts **`mcpd`** on loopback HTTP with a generated API key
 - refreshes the Pipeon context bundle

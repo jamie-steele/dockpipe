@@ -23,9 +23,9 @@ var errStopScriptWalk = errors.New("stop script walk")
 // directory (--workdir or cwd). Pass projectRoot == "" to treat project as repoRoot.
 //
 // Namespace: scripts/core.<dot.segments> maps to paths under core/ by turning dots into path segments
-// (e.g. scripts/core.assets.scripts.foo.sh → core/assets/scripts/foo.sh). Resolution order for that path:
-// bin/.dockpipe/core/…, bin/.dockpipe/internal/packages/core/…, then templates/core/… (compiled core spine).
-// Resolver tarballs under packages/resolvers/; workflow tarballs under packages/workflows/ (see resolveScriptsPrefixedPath).
+// (e.g. scripts/core.assets.scripts.foo.sh → core/assets/scripts/foo.sh). Resolution prefers compiled
+// core overlays, then any workflow/package asset that provides the same asset path via declared compile
+// roots or installed workflow tarballs, then the core spine itself.
 // Uses forward slashes so YAML paths match Linux/container expectations.
 func ResolveWorkflowScript(rel, workflowRoot, repoRoot, projectRoot string) string {
 	if strings.HasPrefix(rel, "scripts/") {
@@ -164,31 +164,69 @@ func commonExtSegment(s string) bool {
 	}
 }
 
-// terraformPackCoreAssetPath resolves core assets/scripts/terraform-{pipeline,run}.sh to the
-// dockpipe.terraform.core pack (packages/terraform/resolvers/terraform-core) before the compiled
-// core spine — keeps Terraform out of src/core while preserving scripts/core.assets.scripts.* YAML.
-// projectRoot is the user's project/checkout (where packages/ lives); repoRoot is the layout root (often the materialized bundle cache).
-func terraformPackCoreAssetPath(repoRoot, projectRoot, rel string) (string, bool) {
-	want1 := filepath.Join("assets", "scripts", "terraform-pipeline.sh")
-	want2 := filepath.Join("assets", "scripts", "terraform-run.sh")
-	if rel != want1 && rel != want2 {
+// workflowAssetPathFromRoots finds the first workflow-owned asset whose path ends with rel under the
+// provided roots (authoring trees such as compile.workflows or bundled bundle/workflows).
+func workflowAssetPathFromRoots(rel string, roots []string) (string, bool) {
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	if rel == "." || rel == "" {
 		return "", false
 	}
+	wantSuffix := "/" + rel
+	for _, root := range roots {
+		var hit string
+		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				if os.IsNotExist(err) {
+					return nil
+				}
+				return err
+			}
+			if d.IsDir() {
+				return nil
+			}
+			if strings.HasSuffix(filepath.ToSlash(path), wantSuffix) && scriptFileExists(path) {
+				hit = path
+				return errStopScriptWalk
+			}
+			return nil
+		})
+		if err != nil && !errors.Is(err, errStopScriptWalk) {
+			continue
+		}
+		if hit != "" {
+			return hit, true
+		}
+	}
+	return "", false
+}
+
+func workflowAssetPathFromWorkflowTarballs(projectRoot, pkgDir, rel string) (string, bool) {
 	if projectRoot == "" {
-		projectRoot = repoRoot
+		return "", false
 	}
-	// Git checkout: packages/terraform/resolvers/terraform-core/... — embedded bundle: bundle/workflows/terraform-core/...
-	// (see mapEmbeddedStagingWorkflowRel in bundled_extract.go).
-	candidates := []string{
-		filepath.Join(projectRoot, "packages", "terraform", "resolvers", "terraform-core", rel),
-		filepath.Join(repoRoot, BundledLayoutDir, "workflows", "terraform-core", rel),
-	}
-	for _, p := range candidates {
-		if scriptFileExists(p) {
+	pattern := filepath.Join(pkgDir, "dockpipe-workflow-*.tar.gz")
+	matches, _ := filepath.Glob(pattern)
+	for _, tgz := range matches {
+		root, err := packagebuild.EnsureTarballExtractedCache(tgz, TarballExtractCacheRoot(projectRoot))
+		if err != nil {
+			continue
+		}
+		if p, ok := workflowAssetPathFromRoots(rel, []string{root}); ok {
 			return p, true
 		}
 	}
 	return "", false
+}
+
+func workflowAssetPathForLogicalScript(rest string, roots []string) (string, bool) {
+	if !strings.Contains(rest, "/") {
+		return "", false
+	}
+	_, after, ok := strings.Cut(rest, "/")
+	if !ok || after == "" {
+		return "", false
+	}
+	return workflowAssetPathFromRoots(filepath.Join("assets", "scripts", after), roots)
 }
 
 // resolveCoreNamespacedAsset resolves scripts/core.* to a file under core/ (compiled overlays first).
@@ -201,12 +239,26 @@ func resolveCoreNamespacedAsset(repoRoot, projectRoot, rest string) (string, boo
 	if !ok {
 		return "", false
 	}
-	if p, ok := terraformPackCoreAssetPath(repoRoot, projectRoot, rel); ok {
-		return p, true
-	}
 	candidates := []string{
 		filepath.Join(projectRoot, DockpipeDirRel, "core", rel),
 		filepath.Join(projectRoot, DockpipeDirRel, "internal", "packages", "core", rel),
+	}
+	pkgWf := filepath.Join(projectRoot, DockpipeDirRel, "internal", "packages", "workflows")
+	if p, ok := workflowAssetPathFromWorkflowTarballs(projectRoot, pkgWf, rel); ok {
+		return p, true
+	}
+	if gw, err := GlobalPackagesWorkflowsDir(); err == nil {
+		if p, ok := workflowAssetPathFromWorkflowTarballs(projectRoot, gw, rel); ok {
+			return p, true
+		}
+	}
+	var wfAssetRoots []string
+	if st, err := os.Stat(filepath.Join(repoRoot, BundledLayoutDir, "workflows")); err == nil && st.IsDir() {
+		wfAssetRoots = append(wfAssetRoots, filepath.Join(repoRoot, BundledLayoutDir, "workflows"))
+	}
+	wfAssetRoots = append(wfAssetRoots, WorkflowCompileRootsCached(projectRoot)...)
+	if p, ok := workflowAssetPathFromRoots(rel, wfAssetRoots); ok {
+		return p, true
 	}
 	if tarPath, err := FindLatestCoreTarball(projectRoot); err == nil && tarPath != "" {
 		if root, err := packagebuild.EnsureTarballExtractedCache(tarPath, TarballExtractCacheRoot(projectRoot)); err == nil {
@@ -304,27 +356,6 @@ func tryBundleRootsAssetsScripts(rest string, bundleRoots []string) (string, boo
 	return "", false
 }
 
-// tryLogicalScriptsDockpipe maps scripts/dockpipe/<tail> to the single on-disk copy under
-// packages/dorkpipe/resolvers/dorkpipe/assets/scripts/<tail>. Workflow YAML uses scripts/dockpipe/…;
-// the resolver tree is the canonical location (no second copy under src/core/assets/scripts/).
-func tryLogicalScriptsDockpipe(projectRoot, rest string) (string, bool) {
-	if projectRoot == "" {
-		return "", false
-	}
-	if !strings.HasPrefix(rest, "dockpipe/") {
-		return "", false
-	}
-	tail := strings.TrimPrefix(rest, "dockpipe/")
-	if tail == "" {
-		return "", false
-	}
-	p := filepath.Join(projectRoot, "packages", "dorkpipe", "resolvers", "dorkpipe", "assets", "scripts", tail)
-	if scriptFileExists(p) {
-		return p, true
-	}
-	return "", false
-}
-
 func resolveScriptsPrefixedPath(repoRoot, projectRoot, rel string) string {
 	if projectRoot == "" {
 		projectRoot = repoRoot
@@ -339,11 +370,6 @@ func resolveScriptsPrefixedPath(repoRoot, projectRoot, rel string) string {
 		return srcScripts
 	}
 	if p, ok := resolveCoreNamespacedAsset(repoRoot, projectRoot, rest); ok {
-		return p
-	}
-	// Logical scripts/dockpipe/<tail> → packages/dorkpipe/resolvers/dorkpipe/assets/scripts/<tail>
-	// (single copy; do not duplicate under src/core/assets/scripts/dockpipe/ — see AGENTS.md).
-	if p, ok := tryLogicalScriptsDockpipe(projectRoot, rest); ok {
 		return p
 	}
 	pkgRes := filepath.Join(projectRoot, DockpipeDirRel, "internal", "packages", "resolvers")
@@ -395,6 +421,9 @@ func resolveScriptsPrefixedPath(repoRoot, projectRoot, rel string) string {
 		}
 	}
 	if p, ok := tryNestedWorkflowScripts(rest, wfRoots); ok {
+		return p
+	}
+	if p, ok := workflowAssetPathForLogicalScript(rest, wfRoots); ok {
 		return p
 	}
 	if p, ok := tryBundleRootsAssetsScripts(rest, bundleRoots); ok {

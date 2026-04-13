@@ -20,8 +20,8 @@ Or **`--var SECRETSTORE_COMMAND=...`**.
 
 ## 1Password CLI (`op`)
 
-Not bundled in core. In this repository use **`--workflow secretstore-onepassword`** (see **`.staging/workflows/dockpipe/packages/secrets/resolvers/onepassword/secretstore-onepassword/README.md`**) and copy **`.staging/workflows/dockpipe/packages/secrets/resolvers/onepassword/.env.op.template.example`** to **`.env.op.template`**.
+Not bundled in core. In this repository use **`--workflow secretstore-onepassword`** (see **`packages/secrets/resolvers/onepassword/secretstore-onepassword/README.md`**) and copy **`packages/secrets/resolvers/onepassword/.env.op.template.example`** to **`.env.op.template`**.
 
 ## Adding another vault
 
-Add a **resolver profile** under **`.staging/workflows/…`** or **`templates/core/resolvers/`**, and a **host script** beside it or under **`assets/scripts/`** — keep **`workflow_type: secretstore`** in YAML so downstream tools stay generic.
+Add a **resolver profile** under a declared package/compile root or **`templates/core/resolvers/`**, and a **host script** beside it or under **`assets/scripts/`** — keep **`workflow_type: secretstore`** in YAML so downstream tools stay generic.

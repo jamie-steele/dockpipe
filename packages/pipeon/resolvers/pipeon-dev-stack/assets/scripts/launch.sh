@@ -17,12 +17,8 @@ LOG_FILE="$(pipeon_stack_log_file)"
 AUTODOWN="${PIPEON_DEV_STACK_AUTODOWN:-1}"
 BUILD_MODE="${PIPEON_DEV_STACK_BUILD:-auto}"
 MODEL_NAME="${PIPEON_OLLAMA_MODEL:-${DOCKPIPE_OLLAMA_MODEL:-llama3.2}}"
-DOCKPIPE_BIN="$REPO_ROOT/src/bin/dockpipe"
-DORKPIPE_BIN="$REPO_ROOT/packages/dorkpipe/bin/dorkpipe"
-MCPD_BIN="$REPO_ROOT/packages/dorkpipe-mcp/bin/mcpd"
 PIPEON_DESKTOP_BIN="${PIPEON_DESKTOP_BIN:-$(pipeon_stack_desktop_bin)}"
 PIPEON_DESKTOP_SCRIPT="$SCRIPT_DIR/desktop.sh"
-PIPEON_BIN="$REPO_ROOT/packages/pipeon/resolvers/pipeon/bin/pipeon"
 STACK_STARTED_BY_ME=0
 MCP_STARTED_BY_ME=0
 
@@ -33,6 +29,21 @@ go_build_in_dir() {
     cd "$dir"
     env GOCACHE=/tmp/dockpipe-go-build-cache go build "$@"
   )
+}
+
+resolve_tool_bin() {
+  local configured="${1:-}"
+  local command_name="$2"
+  local repo_fallback="$3"
+  if [[ -n "$configured" ]]; then
+    printf '%s\n' "$configured"
+    return 0
+  fi
+  if command -v "$command_name" >/dev/null 2>&1; then
+    command -v "$command_name"
+    return 0
+  fi
+  printf '%s\n' "$repo_fallback"
 }
 
 try_rebuild_or_keep_existing() {
@@ -124,6 +135,11 @@ wait_for_mcp_ready() {
   done
   return 1
 }
+
+DOCKPIPE_BIN="$(resolve_tool_bin "${DOCKPIPE_BIN:-}" dockpipe "$REPO_ROOT/src/bin/dockpipe")"
+DORKPIPE_BIN="$(resolve_tool_bin "${DORKPIPE_BIN:-}" dorkpipe "$REPO_ROOT/packages/dorkpipe/bin/dorkpipe")"
+MCPD_BIN="$(resolve_tool_bin "${MCPD_BIN:-}" mcpd "$REPO_ROOT/packages/dorkpipe-mcp/bin/mcpd")"
+PIPEON_BIN="$(resolve_tool_bin "${PIPEON_BIN:-}" pipeon "$REPO_ROOT/packages/pipeon/resolvers/pipeon/bin/pipeon")"
 
 ensure_pipeon_stack_state_dir
 ensure_pipeon_stack_api_key

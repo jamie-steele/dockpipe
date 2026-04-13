@@ -39,9 +39,9 @@ pipeon_stack_state_dir() {
 }
 
 pipeon_stack_compose_file() {
-  local repo_root
-  repo_root="$(pipeon_stack_repo_root)"
-  printf '%s/packages/dorkpipe/resolvers/dorkpipe/assets/compose/docker-compose.yml\n' "$repo_root"
+  local script_dir
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  printf '%s/../compose/docker-compose.yml\n' "$script_dir"
 }
 
 pipeon_stack_compose_project() {

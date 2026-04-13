@@ -108,6 +108,10 @@ func TestResolveCoreNamespacedScriptPath(t *testing.T) {
 
 func TestResolveWorkflowScriptResolvesScriptsDockpipeToPackagesResolver(t *testing.T) {
 	repo := t.TempDir()
+	cfg := `{"schema":1,"compile":{"workflows":["packages"]}}`
+	if err := os.WriteFile(filepath.Join(repo, "dockpipe.config.json"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	p := filepath.Join(repo, "packages", "dorkpipe", "resolvers", "dorkpipe", "assets", "scripts", "r2-publish.sh")
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
@@ -123,6 +127,10 @@ func TestResolveWorkflowScriptResolvesScriptsDockpipeToPackagesResolver(t *testi
 
 func TestResolveWorkflowScriptResolvesCoreTerraformRun(t *testing.T) {
 	repo := t.TempDir()
+	cfg := `{"schema":1,"compile":{"workflows":["packages"]}}`
+	if err := os.WriteFile(filepath.Join(repo, "dockpipe.config.json"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	p := filepath.Join(repo, "packages", "terraform", "resolvers", "terraform-core", "assets", "scripts", "terraform-run.sh")
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
 		t.Fatal(err)
