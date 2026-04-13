@@ -158,6 +158,9 @@ func TestValidateChatAnswer_AcceptsEvidenceAnchoredAnswer(t *testing.T) {
 		Snippets: map[string]string{
 			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n",
 		},
+		Evidence: buildChatEvidenceGraph(req, []string{"src/request.go"}, map[string]string{
+			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n",
+		}),
 	}
 	answer := "## Confirmed\n- Ask mode routes conversational requests through `chooseRoute`. Evidence: `src/request.go` :: `chooseRoute`\n- Chat execution runs through `handleChatRoute`. Evidence: `src/request.go` :: `handleChatRoute`\n\n## Uncertain\n- Anything beyond the retrieved snippet."
 	got := validateChatAnswer(answer, req, ctx)
@@ -178,6 +181,9 @@ func TestValidateChatAnswer_RejectsUnsupportedClaims(t *testing.T) {
 		Snippets: map[string]string{
 			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\n",
 		},
+		Evidence: buildChatEvidenceGraph(req, []string{"src/request.go"}, map[string]string{
+			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\n",
+		}),
 	}
 	answer := "Ask mode falls back through req.Route and then calls handleChatRoute(req)."
 	got := validateChatAnswer(answer, req, ctx)
@@ -186,5 +192,25 @@ func TestValidateChatAnswer_RejectsUnsupportedClaims(t *testing.T) {
 	}
 	if len(got.Issues) == 0 {
 		t.Fatalf("expected validation issues, got %#v", got)
+	}
+}
+
+func TestBuildChatEvidenceGraph_IncludesFileAndSymbolNodes(t *testing.T) {
+	t.Parallel()
+	req := routeRequest{
+		Message: "Explain the ask route.",
+		Mode:    "ask",
+	}
+	graph := buildChatEvidenceGraph(req, []string{"src/request.go"}, map[string]string{
+		"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n",
+	})
+	if countEvidenceNodesByKind(graph, "file") != 1 {
+		t.Fatalf("expected one file node, got %#v", graph)
+	}
+	if countEvidenceNodesByKind(graph, "symbol") < 2 {
+		t.Fatalf("expected symbol nodes, got %#v", graph)
+	}
+	if got := countSupportedEvidenceCitations("Evidence: `src/request.go` :: `chooseRoute`", graph); got != 1 {
+		t.Fatalf("countSupportedEvidenceCitations() = %d", got)
 	}
 }

@@ -25,16 +25,36 @@ type routeRequest struct {
 }
 
 type workspaceChatContext struct {
-	Text    string
-	Meta    map[string]any
-	Targets []string
+	Text     string
+	Meta     map[string]any
+	Targets  []string
 	Snippets map[string]string
+	Evidence chatEvidenceGraph
 }
 
 type chatAnswerValidation struct {
 	Required bool
 	Passed   bool
 	Issues   []string
+}
+
+type chatEvidenceNode struct {
+	ID      string
+	Kind    string
+	File    string
+	Symbol  string
+	Summary string
+}
+
+type chatEvidenceEdge struct {
+	From string
+	To   string
+	Kind string
+}
+
+type chatEvidenceGraph struct {
+	Nodes []chatEvidenceNode
+	Edges []chatEvidenceEdge
 }
 
 type stringListFlag []string
@@ -427,6 +447,14 @@ func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, 
 func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, host, model string, numCtx int) {
 	emitEditEvent(reqID, "context_gathering", "Inspecting workspace context", 0.35, nil)
 	chatContext := buildWorkspaceChatContext(root, req)
+	if len(chatContext.Evidence.Nodes) > 0 {
+		emitEditEvent(reqID, "decomposing", "Built evidence graph from retrieved context", 0.4, map[string]any{
+			"evidence_nodes": len(chatContext.Evidence.Nodes),
+			"evidence_edges": len(chatContext.Evidence.Edges),
+			"evidence_files": countEvidenceNodesByKind(chatContext.Evidence, "file"),
+			"evidence_symbols": countEvidenceNodesByKind(chatContext.Evidence, "symbol"),
+		})
+	}
 	var mcpText string
 	var mcpLoop *boundedMCPContextResult
 	strictValidation := shouldStrictlyValidateChatAnswer(req)
@@ -451,7 +479,7 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 			})
 		}
 	}
-	prompt := buildChatPrompt(root, req, chatContext.Text, mcpText, mcpLoop)
+	prompt := buildChatPrompt(root, req, chatContext, mcpText, mcpLoop)
 	emitEditEvent(reqID, "routed", fmt.Sprintf("Streaming from %s", model), 0.55, map[string]any{
 		"route":   "chat",
 		"model":   model,
@@ -526,6 +554,12 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 		status["mcp_search_hits"] = len(uniqueNonEmpty(mcpLoop.SearchHits))
 		status["mcp_files_read"] = len(uniqueNonEmpty(mcpLoop.ReadFiles))
 	}
+	if len(chatContext.Evidence.Nodes) > 0 {
+		status["evidence_nodes"] = len(chatContext.Evidence.Nodes)
+		status["evidence_edges"] = len(chatContext.Evidence.Edges)
+		status["evidence_files"] = countEvidenceNodesByKind(chatContext.Evidence, "file")
+		status["evidence_symbols"] = countEvidenceNodesByKind(chatContext.Evidence, "symbol")
+	}
 	emitEditDone(reqID, nonEmpty(answer, "(No response text returned.)"), status)
 }
 
@@ -564,11 +598,11 @@ func isChatIntent(msg string) bool {
 		(strings.Contains(msg, "what ") || strings.Contains(msg, "how ") || strings.Contains(msg, "why ") || strings.Contains(msg, "who "))
 }
 
-func buildChatPrompt(root string, req routeRequest, contextText, mcpText string, mcpLoop *boundedMCPContextResult) string {
+func buildChatPrompt(root string, req routeRequest, chatContext workspaceChatContext, mcpText string, mcpLoop *boundedMCPContextResult) string {
 	opening := []string{
 		"You are DorkPipe, a local-first repo-aware coding assistant.",
 		"Ground your answer in focused workspace context when relevant.",
-		"Use active-file snippets, explicit file references, and bounded MCP retrieval as primary grounding.",
+		"Use the evidence DAG, active-file snippets, explicit file references, and bounded MCP retrieval as primary grounding.",
 		"Only factor scan findings, user guidance, or other artifact-backed signals into the answer when the user explicitly asks for them or the request is clearly about those topics.",
 		"When explaining internals, architecture, or runtime behavior, anchor each substantive claim to concrete file and function names from the provided context.",
 		"Do not infer behavior that is not shown in the current code context; if something is uncertain, say so explicitly.",
@@ -599,8 +633,11 @@ func buildChatPrompt(root string, req routeRequest, contextText, mcpText string,
 	if len(req.OpenFiles) > 0 {
 		opening = append(opening, "Open files:\n- "+strings.Join(req.OpenFiles, "\n- "))
 	}
-	if strings.TrimSpace(contextText) != "" {
-		opening = append(opening, fmt.Sprintf("Focused workspace context:\n\n%s", contextText))
+	if evidenceText := formatChatEvidenceGraph(chatContext.Evidence); strings.TrimSpace(evidenceText) != "" {
+		opening = append(opening, fmt.Sprintf("Evidence DAG:\n\n%s", evidenceText))
+	}
+	if strings.TrimSpace(chatContext.Text) != "" {
+		opening = append(opening, fmt.Sprintf("Focused workspace context:\n\n%s", chatContext.Text))
 	}
 	if strings.TrimSpace(mcpText) != "" {
 		opening = append(opening, fmt.Sprintf("MCP discovery context:\n\n%s", mcpText))
@@ -644,11 +681,17 @@ func buildWorkspaceChatContext(root string, req routeRequest) workspaceChatConte
 			meta["guidance_signals_used"] = true
 		}
 	}
+	evidence := buildChatEvidenceGraph(req, targets, snippets)
+	if len(evidence.Nodes) > 0 {
+		meta["evidence_nodes"] = len(evidence.Nodes)
+		meta["evidence_edges"] = len(evidence.Edges)
+	}
 	return workspaceChatContext{
 		Text:     strings.Join(sections, "\n\n"),
 		Meta:     meta,
 		Targets:  targets,
 		Snippets: snippets,
+		Evidence: evidence,
 	}
 }
 
@@ -1001,9 +1044,9 @@ func validateChatAnswer(answer string, req routeRequest, chatContext workspaceCh
 	if !result.Required {
 		return result
 	}
-	if countBacktickedEvidencePaths(answer, chatContext.Targets) == 0 {
+	if countSupportedEvidenceCitations(answer, chatContext.Evidence) == 0 {
 		result.Passed = false
-		result.Issues = append(result.Issues, "missing evidence citations to retrieved files")
+		result.Issues = append(result.Issues, "missing evidence citations to retrieved file/symbol nodes")
 	}
 	if unsupported := findUnsupportedAnswerReferences(answer, req, chatContext); len(unsupported) > 0 {
 		result.Passed = false
@@ -1012,16 +1055,31 @@ func validateChatAnswer(answer string, req routeRequest, chatContext workspaceCh
 	return result
 }
 
-func countBacktickedEvidencePaths(answer string, targets []string) int {
-	lower := strings.ToLower(answer)
-	count := 0
-	for _, rel := range uniqueNonEmpty(targets) {
-		if rel == "" {
+var evidenceCitationPattern = regexp.MustCompile("Evidence:\\s*`([^`]+)`\\s*::\\s*`([^`]+)`")
+
+func countSupportedEvidenceCitations(answer string, evidence chatEvidenceGraph) int {
+	fileSymbols := map[string]map[string]struct{}{}
+	for _, node := range evidence.Nodes {
+		if node.Kind != "symbol" || node.File == "" || node.Symbol == "" {
 			continue
 		}
-		token := "`" + strings.ToLower(rel) + "`"
-		if strings.Contains(lower, token) {
-			count++
+		file := strings.ToLower(node.File)
+		if _, ok := fileSymbols[file]; !ok {
+			fileSymbols[file] = map[string]struct{}{}
+		}
+		fileSymbols[file][strings.ToLower(node.Symbol)] = struct{}{}
+	}
+	count := 0
+	for _, match := range evidenceCitationPattern.FindAllStringSubmatch(answer, -1) {
+		if len(match) < 3 {
+			continue
+		}
+		file := strings.ToLower(strings.TrimSpace(match[1]))
+		symbol := strings.ToLower(strings.TrimSpace(match[2]))
+		if symbols, ok := fileSymbols[file]; ok {
+			if _, ok := symbols[symbol]; ok {
+				count++
+			}
 		}
 	}
 	return count
@@ -1064,7 +1122,7 @@ func findUnsupportedAnswerReferences(answer string, req routeRequest, chatContex
 
 func buildChatAnswerRepairPrompt(req routeRequest, answer string, chatContext workspaceChatContext, mcpText string, mcpLoop *boundedMCPContextResult, validation chatAnswerValidation) string {
 	sections := []string{
-		"Rewrite the answer so every substantive claim is supported only by the retrieved files below.",
+		"Rewrite the answer so every substantive claim is supported only by the evidence DAG and retrieved files below.",
 		"Required output format:",
 		"## Confirmed",
 		"- <claim>. Evidence: `<repo/path>` :: `<symbol-or-area>`",
@@ -1077,6 +1135,9 @@ func buildChatAnswerRepairPrompt(req routeRequest, answer string, chatContext wo
 	}
 	if len(chatContext.Targets) > 0 {
 		sections = append(sections, "Retrieved files:\n- "+strings.Join(chatContext.Targets, "\n- "))
+	}
+	if graphText := formatChatEvidenceGraph(chatContext.Evidence); strings.TrimSpace(graphText) != "" {
+		sections = append(sections, "Evidence DAG:\n\n"+graphText)
 	}
 	if strings.TrimSpace(chatContext.Text) != "" {
 		sections = append(sections, "Retrieved workspace context:\n\n"+clampString(chatContext.Text, 5000))
@@ -1100,16 +1161,11 @@ func buildEvidenceOnlyChatFallback(chatContext workspaceChatContext, validation 
 		"",
 		"## Confirmed",
 	}
-	if len(chatContext.Targets) == 0 {
+	if len(chatContext.Evidence.Nodes) == 0 {
 		lines = append(lines, "- No repo files were retrieved with enough confidence to support stronger claims.")
 	} else {
-		for _, rel := range chatContext.Targets {
-			symbols := extractLikelySnippetSymbols(chatContext.Snippets[rel])
-			if len(symbols) > 0 {
-				lines = append(lines, fmt.Sprintf("- `%s`: retrieved snippet includes `%s`.", rel, strings.Join(symbols, "`, `")))
-			} else {
-				lines = append(lines, fmt.Sprintf("- `%s`: retrieved as relevant workspace context.", rel))
-			}
+		for _, item := range summarizeChatEvidenceGraph(chatContext.Evidence) {
+			lines = append(lines, "- "+item)
 		}
 	}
 	lines = append(lines, "", "## Uncertain", "- I can't confirm additional behavior beyond the retrieved snippets.")
@@ -1146,6 +1202,149 @@ func extractLikelySnippetSymbols(snippet string) []string {
 		return out[:3]
 	}
 	return out
+}
+
+func buildChatEvidenceGraph(req routeRequest, targets []string, snippets map[string]string) chatEvidenceGraph {
+	nodes := []chatEvidenceNode{{
+		ID:      "request",
+		Kind:    "request",
+		Summary: strings.TrimSpace(req.Message),
+	}}
+	edges := []chatEvidenceEdge{}
+	seenNodes := map[string]struct{}{"request": {}}
+	for _, rel := range uniqueNonEmpty(targets) {
+		snippet := strings.TrimSpace(snippets[rel])
+		if rel == "" || snippet == "" {
+			continue
+		}
+		fileID := "file:" + rel
+		if _, ok := seenNodes[fileID]; !ok {
+			nodes = append(nodes, chatEvidenceNode{
+				ID:      fileID,
+				Kind:    "file",
+				File:    rel,
+				Summary: summarizeSnippetEvidence(snippet),
+			})
+			seenNodes[fileID] = struct{}{}
+		}
+		edges = append(edges, chatEvidenceEdge{From: "request", To: fileID, Kind: "grounds"})
+		for _, symbol := range extractLikelySnippetSymbols(snippet) {
+			symbolID := "symbol:" + rel + ":" + symbol
+			if _, ok := seenNodes[symbolID]; !ok {
+				nodes = append(nodes, chatEvidenceNode{
+					ID:      symbolID,
+					Kind:    "symbol",
+					File:    rel,
+					Symbol:  symbol,
+					Summary: "Symbol appears in retrieved snippet.",
+				})
+				seenNodes[symbolID] = struct{}{}
+			}
+			edges = append(edges, chatEvidenceEdge{From: fileID, To: symbolID, Kind: "contains"})
+		}
+	}
+	return chatEvidenceGraph{
+		Nodes: uniqueChatEvidenceNodes(nodes),
+		Edges: uniqueChatEvidenceEdges(edges),
+	}
+}
+
+func summarizeSnippetEvidence(snippet string) string {
+	text := strings.TrimSpace(snippet)
+	if text == "" {
+		return ""
+	}
+	lines := strings.Split(text, "\n")
+	if len(lines) > 3 {
+		lines = lines[:3]
+	}
+	return clampString(strings.Join(lines, " "), 180)
+}
+
+func uniqueChatEvidenceNodes(nodes []chatEvidenceNode) []chatEvidenceNode {
+	seen := map[string]struct{}{}
+	var out []chatEvidenceNode
+	for _, node := range nodes {
+		if node.ID == "" {
+			continue
+		}
+		if _, ok := seen[node.ID]; ok {
+			continue
+		}
+		seen[node.ID] = struct{}{}
+		out = append(out, node)
+	}
+	return out
+}
+
+func uniqueChatEvidenceEdges(edges []chatEvidenceEdge) []chatEvidenceEdge {
+	seen := map[string]struct{}{}
+	var out []chatEvidenceEdge
+	for _, edge := range edges {
+		key := edge.From + "|" + edge.Kind + "|" + edge.To
+		if edge.From == "" || edge.To == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, edge)
+	}
+	return out
+}
+
+func countEvidenceNodesByKind(graph chatEvidenceGraph, kind string) int {
+	count := 0
+	for _, node := range graph.Nodes {
+		if node.Kind == kind {
+			count++
+		}
+	}
+	return count
+}
+
+func formatChatEvidenceGraph(graph chatEvidenceGraph) string {
+	if len(graph.Nodes) == 0 {
+		return ""
+	}
+	var lines []string
+	for _, edge := range graph.Edges {
+		from := findChatEvidenceNode(graph, edge.From)
+		to := findChatEvidenceNode(graph, edge.To)
+		if from == nil || to == nil {
+			continue
+		}
+		switch {
+		case from.Kind == "request" && to.Kind == "file":
+			lines = append(lines, fmt.Sprintf("- request -> file `%s` (%s)", to.File, emptyFallback(to.Summary, "retrieved context")))
+		case from.Kind == "file" && to.Kind == "symbol":
+			lines = append(lines, fmt.Sprintf("- file `%s` -> symbol `%s`", from.File, to.Symbol))
+		}
+	}
+	return strings.Join(uniqueNonEmpty(lines), "\n")
+}
+
+func summarizeChatEvidenceGraph(graph chatEvidenceGraph) []string {
+	var lines []string
+	for _, node := range graph.Nodes {
+		switch node.Kind {
+		case "file":
+			lines = append(lines, fmt.Sprintf("`%s`: %s", node.File, emptyFallback(node.Summary, "retrieved as relevant workspace context.")))
+		case "symbol":
+			lines = append(lines, fmt.Sprintf("`%s`: evidence graph includes symbol `%s`.", node.File, node.Symbol))
+		}
+	}
+	return uniqueNonEmpty(lines)
+}
+
+func findChatEvidenceNode(graph chatEvidenceGraph, id string) *chatEvidenceNode {
+	for i := range graph.Nodes {
+		if graph.Nodes[i].ID == id {
+			return &graph.Nodes[i]
+		}
+	}
+	return nil
 }
 
 func readWorkspaceSnippet(root, rel string, searchTerms []string) (string, error) {
