@@ -90,3 +90,46 @@ func TestChooseRoute_DoesNotInferInspectFromPlainText(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateChatAnswer_AcceptsEvidenceAnchoredAnswer(t *testing.T) {
+	t.Parallel()
+	req := routeRequest{
+		Message: "Explain how the chat route works internally.",
+		Mode:    "ask",
+	}
+	ctx := workspaceChatContext{
+		Text: "Relevant file: src/request.go\n\n```text\nfunc chooseRoute(req routeRequest) routedRequest {\n}\nfunc handleChatRoute(ctx context.Context) {\n}\n```",
+		Targets: []string{"src/request.go"},
+		Snippets: map[string]string{
+			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n",
+		},
+	}
+	answer := "## Confirmed\n- Ask mode routes conversational requests through `chooseRoute`. Evidence: `src/request.go` :: `chooseRoute`\n- Chat execution runs through `handleChatRoute`. Evidence: `src/request.go` :: `handleChatRoute`\n\n## Uncertain\n- Anything beyond the retrieved snippet."
+	got := validateChatAnswer(answer, req, ctx)
+	if !got.Passed {
+		t.Fatalf("validateChatAnswer() = %#v", got)
+	}
+}
+
+func TestValidateChatAnswer_RejectsUnsupportedClaims(t *testing.T) {
+	t.Parallel()
+	req := routeRequest{
+		Message: "Explain how the chat route works internally.",
+		Mode:    "ask",
+	}
+	ctx := workspaceChatContext{
+		Text: "Relevant file: src/request.go\n\n```text\nfunc chooseRoute(req routeRequest) routedRequest {\n}\n```",
+		Targets: []string{"src/request.go"},
+		Snippets: map[string]string{
+			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\n",
+		},
+	}
+	answer := "Ask mode falls back through req.Route and then calls handleChatRoute(req)."
+	got := validateChatAnswer(answer, req, ctx)
+	if got.Passed {
+		t.Fatalf("expected validation failure, got %#v", got)
+	}
+	if len(got.Issues) == 0 {
+		t.Fatalf("expected validation issues, got %#v", got)
+	}
+}

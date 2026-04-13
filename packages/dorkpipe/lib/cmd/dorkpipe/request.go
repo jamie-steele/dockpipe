@@ -24,6 +24,19 @@ type routeRequest struct {
 	Mode          string
 }
 
+type workspaceChatContext struct {
+	Text    string
+	Meta    map[string]any
+	Targets []string
+	Snippets map[string]string
+}
+
+type chatAnswerValidation struct {
+	Required bool
+	Passed   bool
+	Issues   []string
+}
+
 type stringListFlag []string
 
 func (s *stringListFlag) String() string {
@@ -356,17 +369,17 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 		})
 	default:
 		emitEditEvent(reqID, "context_gathering", "Collecting focused workspace context", 0.45, nil)
-		text, meta := buildWorkspaceChatContext(root, req)
-		if strings.TrimSpace(text) == "" {
+		chatContext := buildWorkspaceChatContext(root, req)
+		if strings.TrimSpace(chatContext.Text) == "" {
 			emitEditDone(reqID, "No focused workspace context was collected for this request.", map[string]any{
 				"route":  "inspect",
 				"action": "context",
 			})
 			return
 		}
-		meta["route"] = "inspect"
-		meta["action"] = "context"
-		emitEditDone(reqID, fmt.Sprintf("Focused workspace context:\n\n%s", codeFence("markdown", text)), meta)
+		chatContext.Meta["route"] = "inspect"
+		chatContext.Meta["action"] = "context"
+		emitEditDone(reqID, fmt.Sprintf("Focused workspace context:\n\n%s", codeFence("markdown", chatContext.Text)), chatContext.Meta)
 	}
 }
 
@@ -413,9 +426,10 @@ func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, 
 
 func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, host, model string, numCtx int) {
 	emitEditEvent(reqID, "context_gathering", "Inspecting workspace context", 0.35, nil)
-	contextText, contextMeta := buildWorkspaceChatContext(root, req)
+	chatContext := buildWorkspaceChatContext(root, req)
 	var mcpText string
 	var mcpLoop *boundedMCPContextResult
+	strictValidation := shouldStrictlyValidateChatAnswer(req)
 	mcpDisc, mcpErr := discoverMCPContext(ctx)
 	if mcpErr == nil && mcpDisc != nil {
 		emitEditEvent(reqID, "context_gathering", "Consulting MCP bridge", 0.42, mcpMetadata(mcpDisc))
@@ -437,13 +451,18 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 			})
 		}
 	}
-	prompt := buildChatPrompt(root, req, contextText, mcpText, mcpLoop)
+	prompt := buildChatPrompt(root, req, chatContext.Text, mcpText, mcpLoop)
 	emitEditEvent(reqID, "routed", fmt.Sprintf("Streaming from %s", model), 0.55, map[string]any{
 		"route":   "chat",
 		"model":   model,
 		"num_ctx": numCtx,
 	})
+	var buffered strings.Builder
 	answer, err := runChatModelStream(ctx, host, model, numCtx, prompt, func(piece string) {
+		if strictValidation {
+			buffered.WriteString(piece)
+			return
+		}
 		writeEvent(editEvent{
 			ContractVersion: editContractVersion,
 			RequestID:       reqID,
@@ -457,15 +476,46 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 		emitEditError(reqID, "MODEL_UNAVAILABLE", fmt.Sprintf("Chat model failed: %v", err), true)
 		return
 	}
+	if strictValidation {
+		answer = buffered.String()
+	}
+	validationStatus := "not_applicable"
+	if strictValidation {
+		emitEditEvent(reqID, "validating", "Validating code-anchored answer", 0.72, map[string]any{
+			"context_files": len(chatContext.Targets),
+		})
+		validation := validateChatAnswer(answer, req, chatContext)
+		if validation.Passed {
+			validationStatus = "passed"
+		} else {
+			emitEditEvent(reqID, "validating", "Repairing unsupported answer", 0.76, map[string]any{
+				"issues": validation.Issues,
+			})
+			repaired, repairErr := runChatModelStream(ctx, host, model, numCtx, buildChatAnswerRepairPrompt(req, answer, chatContext, mcpText, mcpLoop, validation), nil)
+			if repairErr == nil {
+				repairedValidation := validateChatAnswer(repaired, req, chatContext)
+				if repairedValidation.Passed {
+					answer = repaired
+					validationStatus = "repaired"
+				} else {
+					answer = buildEvidenceOnlyChatFallback(chatContext, repairedValidation)
+					validationStatus = "fallback_evidence_only"
+				}
+			} else {
+				answer = buildEvidenceOnlyChatFallback(chatContext, validation)
+				validationStatus = "fallback_evidence_only"
+			}
+		}
+	}
 	status := map[string]any{
 		"route":             "chat",
 		"model":             model,
 		"num_ctx":           numCtx,
 		"mode":              normalizeRequestMode(req.Mode),
-		"validation_status": "not_applicable",
+		"validation_status": validationStatus,
 		"active_file":       req.ActiveFile,
 	}
-	for key, value := range contextMeta {
+	for key, value := range chatContext.Meta {
 		status[key] = value
 	}
 	for key, value := range mcpMetadata(mcpDisc) {
@@ -562,9 +612,10 @@ func buildChatPrompt(root string, req routeRequest, contextText, mcpText string,
 	return strings.Join(opening, "\n\n")
 }
 
-func buildWorkspaceChatContext(root string, req routeRequest) (string, map[string]any) {
+func buildWorkspaceChatContext(root string, req routeRequest) workspaceChatContext {
 	sections := []string{}
 	meta := map[string]any{}
+	snippets := map[string]string{}
 	searchTerms := extractSearchTerms(req.Message)
 	targets := inferWorkspaceChatTargets(root, req)
 	if len(targets) > 3 {
@@ -578,6 +629,7 @@ func buildWorkspaceChatContext(root string, req routeRequest) (string, map[strin
 		if err != nil || strings.TrimSpace(snippet) == "" {
 			continue
 		}
+		snippets[rel] = snippet
 		sections = append(sections, fmt.Sprintf("Relevant file: %s\n\n```text\n%s\n```", rel, snippet))
 	}
 	if wantsScanSignals(req.Message) {
@@ -592,7 +644,12 @@ func buildWorkspaceChatContext(root string, req routeRequest) (string, map[strin
 			meta["guidance_signals_used"] = true
 		}
 	}
-	return strings.Join(sections, "\n\n"), meta
+	return workspaceChatContext{
+		Text:     strings.Join(sections, "\n\n"),
+		Meta:     meta,
+		Targets:  targets,
+		Snippets: snippets,
+	}
 }
 
 func inferWorkspaceChatTargets(root string, req routeRequest) []string {
@@ -808,6 +865,194 @@ func shouldConsiderChatSearchFile(rel string) bool {
 	default:
 		return false
 	}
+}
+
+func shouldStrictlyValidateChatAnswer(req routeRequest) bool {
+	if normalizeRequestMode(req.Mode) != "ask" {
+		return false
+	}
+	lower := strings.ToLower(strings.TrimSpace(req.Message))
+	for _, token := range []string{
+		"explain",
+		"summarize",
+		"walk me through",
+		"how does",
+		"how do",
+		"what is",
+		"what are",
+		"internally",
+		"internal",
+		"architecture",
+		"flow",
+		"pipeline",
+		"runtime behavior",
+		"current behavior",
+		"currently work",
+		"how it works",
+		"how this works",
+		"what changed",
+		"what role",
+	} {
+		if strings.Contains(lower, token) {
+			return true
+		}
+	}
+	return false
+}
+
+func validateChatAnswer(answer string, req routeRequest, chatContext workspaceChatContext) chatAnswerValidation {
+	result := chatAnswerValidation{
+		Required: shouldStrictlyValidateChatAnswer(req),
+		Passed:   true,
+	}
+	if !result.Required {
+		return result
+	}
+	if countBacktickedEvidencePaths(answer, chatContext.Targets) == 0 {
+		result.Passed = false
+		result.Issues = append(result.Issues, "missing evidence citations to retrieved files")
+	}
+	if unsupported := findUnsupportedAnswerReferences(answer, req, chatContext); len(unsupported) > 0 {
+		result.Passed = false
+		result.Issues = append(result.Issues, "unsupported references: "+strings.Join(unsupported, ", "))
+	}
+	return result
+}
+
+func countBacktickedEvidencePaths(answer string, targets []string) int {
+	lower := strings.ToLower(answer)
+	count := 0
+	for _, rel := range uniqueNonEmpty(targets) {
+		if rel == "" {
+			continue
+		}
+		token := "`" + strings.ToLower(rel) + "`"
+		if strings.Contains(lower, token) {
+			count++
+		}
+	}
+	return count
+}
+
+func findUnsupportedAnswerReferences(answer string, req routeRequest, chatContext workspaceChatContext) []string {
+	support := strings.ToLower(strings.Join([]string{
+		req.Message,
+		chatContext.Text,
+		strings.Join(chatContext.Targets, "\n"),
+	}, "\n"))
+	common := map[string]struct{}{
+		"e.g": {},
+		"i.e": {},
+	}
+	refPattern := regexp.MustCompile(`\b[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+\b|\b[A-Za-z_][A-Za-z0-9_]*\(\)`)
+	pathPattern := regexp.MustCompile(`(?:[A-Za-z0-9._-]+/)+[A-Za-z0-9._-]+\.[A-Za-z0-9._-]+`)
+	var unsupported []string
+	for _, match := range refPattern.FindAllString(answer, -1) {
+		normalized := strings.ToLower(strings.TrimSuffix(match, "()"))
+		if _, skip := common[normalized]; skip {
+			continue
+		}
+		if !strings.Contains(support, normalized) {
+			unsupported = append(unsupported, match)
+		}
+	}
+	allowedPaths := map[string]struct{}{}
+	for _, rel := range uniqueNonEmpty(append(chatContext.Targets, explicitRepoFileMentions("", req.Message)...)) {
+		allowedPaths[strings.ToLower(rel)] = struct{}{}
+	}
+	for _, match := range pathPattern.FindAllString(answer, -1) {
+		lower := strings.ToLower(filepath.ToSlash(match))
+		if _, ok := allowedPaths[lower]; !ok && !strings.Contains(support, lower) {
+			unsupported = append(unsupported, match)
+		}
+	}
+	return uniqueNonEmpty(unsupported)
+}
+
+func buildChatAnswerRepairPrompt(req routeRequest, answer string, chatContext workspaceChatContext, mcpText string, mcpLoop *boundedMCPContextResult, validation chatAnswerValidation) string {
+	sections := []string{
+		"Rewrite the answer so every substantive claim is supported only by the retrieved files below.",
+		"Required output format:",
+		"## Confirmed",
+		"- <claim>. Evidence: `<repo/path>` :: `<symbol-or-area>`",
+		"## Uncertain",
+		"- <anything not proven by the retrieved files>",
+		"Do not mention fields, functions, routes, or files unless they appear in the retrieved context.",
+	}
+	if len(validation.Issues) > 0 {
+		sections = append(sections, "Validation issues:\n- "+strings.Join(validation.Issues, "\n- "))
+	}
+	if len(chatContext.Targets) > 0 {
+		sections = append(sections, "Retrieved files:\n- "+strings.Join(chatContext.Targets, "\n- "))
+	}
+	if strings.TrimSpace(chatContext.Text) != "" {
+		sections = append(sections, "Retrieved workspace context:\n\n"+clampString(chatContext.Text, 5000))
+	}
+	if strings.TrimSpace(mcpText) != "" {
+		sections = append(sections, "MCP discovery context:\n\n"+clampString(mcpText, 1200))
+	}
+	if mcpLoop != nil && strings.TrimSpace(mcpLoop.Summary) != "" {
+		sections = append(sections, "MCP bounded context loop:\n\n"+clampString(mcpLoop.Summary, 1800))
+	}
+	sections = append(sections,
+		fmt.Sprintf("User request:\n%s", req.Message),
+		fmt.Sprintf("Original answer to repair:\n%s", clampString(answer, 4000)),
+	)
+	return strings.Join(sections, "\n\n")
+}
+
+func buildEvidenceOnlyChatFallback(chatContext workspaceChatContext, validation chatAnswerValidation) string {
+	lines := []string{
+		"I couldn't verify a fully code-anchored answer from the retrieved context, so I'm limiting this to confirmed evidence.",
+		"",
+		"## Confirmed",
+	}
+	if len(chatContext.Targets) == 0 {
+		lines = append(lines, "- No repo files were retrieved with enough confidence to support stronger claims.")
+	} else {
+		for _, rel := range chatContext.Targets {
+			symbols := extractLikelySnippetSymbols(chatContext.Snippets[rel])
+			if len(symbols) > 0 {
+				lines = append(lines, fmt.Sprintf("- `%s`: retrieved snippet includes `%s`.", rel, strings.Join(symbols, "`, `")))
+			} else {
+				lines = append(lines, fmt.Sprintf("- `%s`: retrieved as relevant workspace context.", rel))
+			}
+		}
+	}
+	lines = append(lines, "", "## Uncertain", "- I can't confirm additional behavior beyond the retrieved snippets.")
+	if len(validation.Issues) > 0 {
+		lines = append(lines, "", "Suppressed unsupported claims:", "- "+strings.Join(validation.Issues, "\n- "))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func extractLikelySnippetSymbols(snippet string) []string {
+	if strings.TrimSpace(snippet) == "" {
+		return nil
+	}
+	patterns := []*regexp.Regexp{
+		regexp.MustCompile(`\bfunc\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`\bclass\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`\binterface\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`\btype\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`\bconst\s+([A-Za-z_][A-Za-z0-9_]*)`),
+		regexp.MustCompile(`\bvar\s+([A-Za-z_][A-Za-z0-9_]*)`),
+	}
+	var out []string
+	for _, pattern := range patterns {
+		matches := pattern.FindAllStringSubmatch(snippet, 4)
+		for _, match := range matches {
+			if len(match) > 1 {
+				out = append(out, match[1])
+			}
+		}
+	}
+	out = uniqueNonEmpty(out)
+	if len(out) > 3 {
+		return out[:3]
+	}
+	return out
 }
 
 func readWorkspaceSnippet(root, rel string, searchTerms []string) (string, error) {
