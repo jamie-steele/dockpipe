@@ -570,13 +570,11 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 						attemptValidation = repairedValidation
 						validationStatus = "repaired"
 					} else {
-						answerText = buildEvidenceOnlyChatFallback(req, chatContext, repairedValidation)
-						attemptValidation = validateChatAnswer(answerText, req, chatContext)
+						answerText, attemptValidation = finalizeEvidenceOnlyChatFallback(req, chatContext, repairedValidation)
 						validationStatus = "fallback_evidence_only"
 					}
 				} else {
-					answerText = buildEvidenceOnlyChatFallback(req, chatContext, attemptValidation)
-					attemptValidation = validateChatAnswer(answerText, req, chatContext)
+					answerText, attemptValidation = finalizeEvidenceOnlyChatFallback(req, chatContext, attemptValidation)
 					validationStatus = "fallback_evidence_only"
 				}
 			}
@@ -1813,6 +1811,16 @@ func buildEvidenceOnlyChatFallback(req routeRequest, chatContext workspaceChatCo
 		lines = append(lines, "", "Suppressed unsupported claims:", "- "+strings.Join(validation.Issues, "\n- "))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func finalizeEvidenceOnlyChatFallback(req routeRequest, chatContext workspaceChatContext, priorValidation chatAnswerValidation) (string, chatAnswerValidation) {
+	answer := buildEvidenceOnlyChatFallback(req, chatContext, priorValidation)
+	validation := validateChatAnswer(answer, req, chatContext)
+	if validation.Passed {
+		answer = buildEvidenceOnlyChatFallback(req, chatContext, chatAnswerValidation{})
+		validation = validateChatAnswer(answer, req, chatContext)
+	}
+	return answer, validation
 }
 
 func summarizeStrictEvidenceGraph(req routeRequest, graph chatEvidenceGraph) []string {

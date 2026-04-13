@@ -653,6 +653,40 @@ func TestBuildEvidenceOnlyChatFallback_ProducesValidatorPassingAnswer(t *testing
 	}
 }
 
+func TestFinalizeEvidenceOnlyChatFallback_StripsStaleSuppressedIssuesAfterPassing(t *testing.T) {
+	t.Parallel()
+	req := routeRequest{
+		Message: "Explain how Ask mode now handles a plain-English architecture question after the v2 reasoning runtime changes.",
+		Mode:    "ask",
+	}
+	ctx := workspaceChatContext{
+		Targets: []string{
+			"packages/dorkpipe/lib/cmd/dorkpipe/request.go",
+			"packages/dorkpipe/lib/cmd/dorkpipe/reasoning_runtime.go",
+		},
+		Evidence: chatEvidenceGraph{
+			Nodes: []chatEvidenceNode{
+				{ID: "request", Kind: "request", Summary: req.Message},
+				{ID: "file:request", Kind: "file", File: "packages/dorkpipe/lib/cmd/dorkpipe/request.go"},
+				{ID: "file:runtime", Kind: "file", File: "packages/dorkpipe/lib/cmd/dorkpipe/reasoning_runtime.go"},
+				{ID: "symbol:request:handleChatRoute", Kind: "symbol", File: "packages/dorkpipe/lib/cmd/dorkpipe/request.go", Symbol: "handleChatRoute", Score: 18},
+				{ID: "symbol:request:buildWorkspaceChatContext", Kind: "symbol", File: "packages/dorkpipe/lib/cmd/dorkpipe/request.go", Symbol: "buildWorkspaceChatContext", Score: 17},
+				{ID: "symbol:request:validateChatAnswer", Kind: "symbol", File: "packages/dorkpipe/lib/cmd/dorkpipe/request.go", Symbol: "validateChatAnswer", Score: 16},
+				{ID: "symbol:runtime:resolveRuntimePolicy", Kind: "symbol", File: "packages/dorkpipe/lib/cmd/dorkpipe/reasoning_runtime.go", Symbol: "resolveRuntimePolicy", Score: 15},
+			},
+		},
+	}
+	answer, validation := finalizeEvidenceOnlyChatFallback(req, ctx, chatAnswerValidation{
+		Issues: []string{"insufficient evidence citations to retrieved file/symbol nodes: got 0, need at least 2"},
+	})
+	if !validation.Passed {
+		t.Fatalf("expected finalized fallback to pass validation, got %#v with answer %q", validation, answer)
+	}
+	if strings.Contains(answer, "Suppressed unsupported claims:") {
+		t.Fatalf("expected stale suppressed issues to be stripped from passing fallback, got %q", answer)
+	}
+}
+
 func writeTestFile(t *testing.T, root, rel, body string) {
 	t.Helper()
 	target := filepath.Join(root, rel)
