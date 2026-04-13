@@ -93,7 +93,7 @@ pipeon_stack_code_server_home() {
 pipeon_stack_desktop_bin() {
   local repo_root
   repo_root="$(pipeon_stack_repo_root)"
-  printf '%s/src/apps/pipeon-desktop/bin/pipeon-desktop\n' "$repo_root"
+  printf '%s/packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop\n' "$repo_root"
 }
 
 pipeon_stack_mcp_port() {

@@ -7,7 +7,7 @@ Use this when Pipeon is running against this repository and local code changes a
 - `make build` updates `src/bin/dockpipe`
 - `make maintainer-tools` updates `packages/dorkpipe/bin/dorkpipe` and `packages/dorkpipe-mcp/bin/mcpd`
 - `npm --prefix packages/pipeon/resolvers/pipeon/vscode-extension run build` updates the checked-in Pipeon extension output
-- `make build-pipeon-desktop` updates the Tauri desktop shell at `src/apps/pipeon-desktop/bin/pipeon-desktop`
+- `make build-pipeon-desktop` updates the Tauri desktop shell at `packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop`
 - `make build-code-server-image` rebuilds the branded Pipeon code-server image with fresh extension assets
 
 ## Refresh matrix
@@ -42,7 +42,7 @@ Use this when you changed `packages/pipeon/resolvers/pipeon/vscode-extension/src
 make build-pipeon-desktop
 ```
 
-Use this when you changed the Tauri desktop host under `src/apps/pipeon-desktop/`.
+Use this when you changed the Tauri desktop host under `packages/pipeon/apps/pipeon-desktop/`.
 
 ### Full Pipeon IDE / dev-stack refresh
 

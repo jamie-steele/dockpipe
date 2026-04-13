@@ -34,7 +34,7 @@ go_build_in_dir() {
 resolve_tool_bin() {
   local configured="${1:-}"
   local command_name="$2"
-  local repo_fallback="$3"
+  local repo_fallback="${3:-}"
   if [[ -n "$configured" ]]; then
     printf '%s\n' "$configured"
     return 0
@@ -43,7 +43,9 @@ resolve_tool_bin() {
     command -v "$command_name"
     return 0
   fi
-  printf '%s\n' "$repo_fallback"
+  if [[ -n "$repo_fallback" ]]; then
+    printf '%s\n' "$repo_fallback"
+  fi
 }
 
 try_rebuild_or_keep_existing() {
@@ -137,8 +139,8 @@ wait_for_mcp_ready() {
 }
 
 DOCKPIPE_BIN="$(resolve_tool_bin "${DOCKPIPE_BIN:-}" dockpipe "$REPO_ROOT/src/bin/dockpipe")"
-DORKPIPE_BIN="$(resolve_tool_bin "${DORKPIPE_BIN:-}" dorkpipe "$REPO_ROOT/packages/dorkpipe/bin/dorkpipe")"
-MCPD_BIN="$(resolve_tool_bin "${MCPD_BIN:-}" mcpd "$REPO_ROOT/packages/dorkpipe-mcp/bin/mcpd")"
+DORKPIPE_BIN="$(resolve_tool_bin "${DORKPIPE_BIN:-}" dorkpipe)"
+MCPD_BIN="$(resolve_tool_bin "${MCPD_BIN:-}" mcpd)"
 PIPEON_BIN="$(resolve_tool_bin "${PIPEON_BIN:-}" pipeon "$REPO_ROOT/packages/pipeon/resolvers/pipeon/bin/pipeon")"
 
 ensure_pipeon_stack_state_dir
@@ -165,25 +167,13 @@ fi
 case "$BUILD_MODE" in
   always)
     try_rebuild_or_keep_existing "$DOCKPIPE_BIN" dockpipe env GOCACHE=/tmp/dockpipe-go-build-cache make build
-    try_rebuild_or_keep_existing "$DORKPIPE_BIN" dorkpipe \
-      go_build_in_dir "$REPO_ROOT/packages/dorkpipe/lib" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o ../bin/dorkpipe ./cmd/dorkpipe
-    try_rebuild_or_keep_existing "$MCPD_BIN" mcpd \
-      go_build_in_dir "$REPO_ROOT/packages/dorkpipe-mcp" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o bin/mcpd ./cmd/mcpd
     make build-pipeon-desktop
     ;;
   auto)
     if [[ ! -x "$DOCKPIPE_BIN" ]] || paths_newer_than "$DOCKPIPE_BIN" "$REPO_ROOT/src" "$REPO_ROOT/src/Makefile" "$REPO_ROOT/VERSION"; then
       try_rebuild_or_keep_existing "$DOCKPIPE_BIN" dockpipe env GOCACHE=/tmp/dockpipe-go-build-cache make build
     fi
-    if [[ ! -x "$DORKPIPE_BIN" ]] || paths_newer_than "$DORKPIPE_BIN" "$REPO_ROOT/packages/dorkpipe/lib" "$REPO_ROOT/VERSION"; then
-      try_rebuild_or_keep_existing "$DORKPIPE_BIN" dorkpipe \
-        go_build_in_dir "$REPO_ROOT/packages/dorkpipe/lib" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o ../bin/dorkpipe ./cmd/dorkpipe
-    fi
-    if [[ ! -x "$MCPD_BIN" ]] || paths_newer_than "$MCPD_BIN" "$REPO_ROOT/packages/dorkpipe-mcp" "$REPO_ROOT/VERSION"; then
-      try_rebuild_or_keep_existing "$MCPD_BIN" mcpd \
-        go_build_in_dir "$REPO_ROOT/packages/dorkpipe-mcp" -trimpath -ldflags "-s -w -X main.Version=$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")" -o bin/mcpd ./cmd/mcpd
-    fi
-    if [[ ! -x "$PIPEON_DESKTOP_BIN" ]] || paths_newer_than "$PIPEON_DESKTOP_BIN" "$REPO_ROOT/src/apps/pipeon-desktop" "$REPO_ROOT/VERSION"; then
+    if [[ ! -x "$PIPEON_DESKTOP_BIN" ]] || paths_newer_than "$PIPEON_DESKTOP_BIN" "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop" "$REPO_ROOT/VERSION"; then
       if command -v cargo >/dev/null 2>&1; then
         make build-pipeon-desktop
       fi
@@ -200,6 +190,9 @@ esac
 
 if [[ ! -x "$DOCKPIPE_BIN" || ! -x "$DORKPIPE_BIN" || ! -x "$MCPD_BIN" ]]; then
   echo "pipeon-dev-stack: required binaries are missing after build step" >&2
+  echo "  dockpipe: ${DOCKPIPE_BIN:-<unset>}" >&2
+  echo "  dorkpipe: ${DORKPIPE_BIN:-<unset>} (set DORKPIPE_BIN or add dorkpipe to PATH)" >&2
+  echo "  mcpd:     ${MCPD_BIN:-<unset>} (set MCPD_BIN or add mcpd to PATH)" >&2
   exit 1
 fi
 

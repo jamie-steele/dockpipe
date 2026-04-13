@@ -5,7 +5,7 @@
 #
 # Optional: `make maintainer-tools` — dorkpipe + mcpd binaries under packages/
 # Optional Pipeon: `make pipeon-icons` | `make build-code-server-image` (see packages/pipeon/resolvers/pipeon/vscode-extension/)
-# Qt launcher: cmake -S src/apps/pipeon-launcher -B src/apps/pipeon-launcher/build && cmake --build ...
+# Qt launcher: cmake -S packages/pipeon/apps/pipeon-launcher -B packages/pipeon/apps/pipeon-launcher/build && cmake --build ...
 include src/Makefile
 
 .PHONY: pipeon-icons build-code-server-image build-pipeon-desktop build-pipeon-launcher install-pipeon-desktop install-pipeon-desktop-global install-pipeon-launcher install-pipeon-launcher-global install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci package-templates-core package-dockpipe-language-support package-vscode-language-support install-dockpipe-language-support package-pipeon-vscode-extension install-pipeon-vscode-extension
@@ -17,25 +17,26 @@ build-code-server-image:
 	docker build -t dockpipe-code-server:latest -f packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server .
 
 build-pipeon-desktop:
-	cargo build --manifest-path src/apps/pipeon-desktop/src-tauri/Cargo.toml --release
-	mkdir -p src/apps/pipeon-desktop/bin
-	cp -f src/apps/pipeon-desktop/src-tauri/target/release/pipeon-desktop src/apps/pipeon-desktop/bin/pipeon-desktop
-	chmod +x src/apps/pipeon-desktop/bin/pipeon-desktop
+	cargo build --manifest-path packages/pipeon/apps/pipeon-desktop/src-tauri/Cargo.toml --release
+	mkdir -p packages/pipeon/apps/pipeon-desktop/bin
+	cp -f packages/pipeon/apps/pipeon-desktop/src-tauri/target/release/pipeon-desktop packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop
+	chmod +x packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop
 
 build-pipeon-launcher:
-	cmake -S src/apps/pipeon-launcher -B src/apps/pipeon-launcher/build
-	cmake --build src/apps/pipeon-launcher/build
+	rm -rf packages/pipeon/apps/pipeon-launcher/build
+	cmake -S packages/pipeon/apps/pipeon-launcher -B packages/pipeon/apps/pipeon-launcher/build
+	cmake --build packages/pipeon/apps/pipeon-launcher/build
 
 install-pipeon-desktop: build-pipeon-desktop
 	mkdir -p bin/.dockpipe/packages/pipeon/bin
-	install -m 755 src/apps/pipeon-desktop/bin/pipeon-desktop bin/.dockpipe/packages/pipeon/bin/pipeon-desktop
+	install -m 755 packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop bin/.dockpipe/packages/pipeon/bin/pipeon-desktop
 
 install-pipeon-desktop-global: install-pipeon-desktop
 	mkdir -p "$$HOME/.local/share/pipeon/bin"
 	mkdir -p "$$HOME/.local/share/pipeon/icons"
 	mkdir -p "$$HOME/.local/share/applications"
 	install -m 755 bin/.dockpipe/packages/pipeon/bin/pipeon-desktop "$$HOME/.local/share/pipeon/bin/pipeon-desktop"
-	install -m 644 src/apps/pipeon-desktop/src-tauri/icons/icon.png "$$HOME/.local/share/pipeon/icons/pipeon.png"
+	install -m 644 packages/pipeon/apps/pipeon-desktop/src-tauri/icons/icon.png "$$HOME/.local/share/pipeon/icons/pipeon.png"
 	rm -f "$$HOME/.local/share/applications/com.dockpipe.pipeon.desktop"
 	printf '%s\n' \
 		'[Desktop Entry]' \
@@ -51,7 +52,7 @@ install-pipeon-desktop-global: install-pipeon-desktop
 
 install-pipeon-launcher: build-pipeon-launcher
 	mkdir -p bin/.dockpipe/packages/pipeon/bin
-	install -m 755 src/apps/pipeon-launcher/build/pipeon-launcher bin/.dockpipe/packages/pipeon/bin/pipeon-launcher
+	install -m 755 packages/pipeon/apps/pipeon-launcher/build/pipeon-launcher bin/.dockpipe/packages/pipeon/bin/pipeon-launcher
 
 install-pipeon-launcher-global: install-pipeon-launcher
 	mkdir -p "$$HOME/.local/share/pipeon/bin"

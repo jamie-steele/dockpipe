@@ -7,7 +7,7 @@ companion stop workflow exists only as a manual recovery path if a session is le
 
 What it does:
 
-- ensures local **`dockpipe`**, **`dorkpipe`**, and **`mcpd`** binaries are available (prefers explicit env / `PATH`, falls back to repo-local builds)
+- ensures **`dockpipe`** is built locally and uses explicit env / `PATH` for **`dorkpipe`** and **`mcpd`**
 - brings up the DorkPipe sidecars (**Ollama** + **Postgres/pgvector**)
 - starts **`mcpd`** on loopback HTTP with a generated API key
 - refreshes the Pipeon context bundle
@@ -21,12 +21,14 @@ Companion workflows:
 Typical use from the repo root:
 
 ```bash
+make maintainer-tools
 make build-pipeon-desktop
+PATH="$PWD/packages/dorkpipe/bin:$PWD/packages/dorkpipe-mcp/bin:$PATH" \
 ./src/bin/dockpipe --workflow pipeon-dev-stack --workdir . --
 ```
 
 The stack now prefers the dedicated Tauri desktop shell at
-**`src/apps/pipeon-desktop/bin/pipeon-desktop`** instead of opening a normal
+**`packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop`** instead of opening a normal
 browser window.
 
 For the full rebuild / refresh sequence when local changes are not showing up, see

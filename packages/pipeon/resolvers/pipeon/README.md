@@ -43,4 +43,4 @@ The checked-in extension (browser tab, context command) lives under **`vscode-ex
 
 ## Qt launcher
 
-The native tray app is **`src/apps/pipeon-launcher/`** (separate binary; not this resolver).
+The native tray app is **`packages/pipeon/apps/pipeon-launcher/`** (separate binary; not this resolver).

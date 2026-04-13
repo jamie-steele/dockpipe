@@ -21,10 +21,10 @@ packages/dorkpipe-mcp/bin/mcpd
 .ssh/
 
 # Build output
-# Pipeon Launcher CMake build (DockPipe GUI under src/apps/)
-src/apps/pipeon-launcher/build/
+# Pipeon Launcher CMake build
+packages/pipeon/apps/pipeon-launcher/build/
 # Pipeon Desktop Tauri/Rust build output
-src/apps/pipeon-desktop/src-tauri/target/
+packages/pipeon/apps/pipeon-desktop/src-tauri/target/
 build-pipeon-launcher/
 release/packaging/build/
 *.deb

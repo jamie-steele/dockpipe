@@ -48,7 +48,8 @@ EXT_IMG = os.path.join(
 )
 TAURI_ICON_DIR = os.path.join(
     REPO_ROOT,
-    "src",
+    "packages",
+    "pipeon",
     "apps",
     "pipeon-desktop",
     "src-tauri",

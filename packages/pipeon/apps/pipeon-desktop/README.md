@@ -25,7 +25,7 @@ make build-pipeon-desktop
 
 That writes the canonical binary to:
 
-`src/apps/pipeon-desktop/bin/pipeon-desktop`
+`packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop`
 
 To install a desktop entry and icon for Linux app launchers (for example Pop OS / GNOME):
 
@@ -38,7 +38,7 @@ make install-pipeon-desktop-global
 ```bash
 PIPEON_URL=http://127.0.0.1:38421/ \
 PIPEON_WINDOW_TITLE=Pipeon \
-./src/apps/pipeon-desktop/bin/pipeon-desktop
+./packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop
 ```
 
 The Pipeon dev stack uses this automatically when present.
