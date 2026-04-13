@@ -46,6 +46,7 @@ type chatEvidenceNode struct {
 	File    string
 	Symbol  string
 	Summary string
+	Score   int
 }
 
 type chatEvidenceEdge struct {
@@ -1440,6 +1441,10 @@ func validateChatAnswer(answer string, req routeRequest, chatContext workspaceCh
 		result.Passed = false
 		result.Issues = append(result.Issues, "unsupported references: "+strings.Join(unsupported, ", "))
 	}
+	if isArchitectureChatQuery(req.Message) && looksLikeMetaPolicyAnswer(answer, req, chatContext) {
+		result.Passed = false
+		result.Issues = append(result.Issues, "answer restates response policy more than code behavior")
+	}
 	return result
 }
 
@@ -1549,6 +1554,7 @@ func buildChatAnswerRepairPrompt(req routeRequest, answer string, chatContext wo
 		"## Uncertain",
 		"- <anything not proven by the retrieved files>",
 		"Do not mention fields, functions, routes, or files unless they appear in the retrieved context.",
+		"Do not restate response instructions, citation policy, or abstain policy as if they were repository behavior.",
 	}
 	if len(validation.Issues) > 0 {
 		sections = append(sections, "Validation issues:\n- "+strings.Join(validation.Issues, "\n- "))
@@ -1738,6 +1744,7 @@ func buildChatEvidenceGraph(root string, req routeRequest, targets []string, sni
 				File:    node.File,
 				Symbol:  node.Symbol,
 				Summary: node.Summary,
+				Score:   scoreArchitectureEvidenceNode(node, rel, evidenceRecord.Edges, architectureQuery, searchTerms),
 			})
 			seenNodes[node.ID] = struct{}{}
 		}
@@ -1746,8 +1753,12 @@ func buildChatEvidenceGraph(root string, req routeRequest, targets []string, sni
 			edges = append(edges, chatEvidenceEdge{From: edge.From, To: edge.To, Kind: edge.Kind})
 		}
 	}
+	uniqueNodes := uniqueChatEvidenceNodes(nodes)
+	if architectureQuery {
+		uniqueNodes = prioritizeArchitectureEvidenceNodes(uniqueNodes)
+	}
 	return chatEvidenceGraph{
-		Nodes: uniqueChatEvidenceNodes(nodes),
+		Nodes: uniqueNodes,
 		Edges: uniqueChatEvidenceEdges(edges),
 	}
 }
@@ -1838,6 +1849,122 @@ func isWithinMatchedDeclarationWindow(idx int, matched []int) bool {
 		}
 	}
 	return false
+}
+
+func prioritizeArchitectureEvidenceNodes(nodes []chatEvidenceNode) []chatEvidenceNode {
+	if len(nodes) == 0 {
+		return nil
+	}
+	var requestNodes []chatEvidenceNode
+	var fileNodes []chatEvidenceNode
+	var symbolNodes []chatEvidenceNode
+	for _, node := range nodes {
+		switch node.Kind {
+		case "request":
+			requestNodes = append(requestNodes, node)
+		case "file":
+			fileNodes = append(fileNodes, node)
+		case "symbol":
+			symbolNodes = append(symbolNodes, node)
+		}
+	}
+	sort.SliceStable(symbolNodes, func(i, j int) bool {
+		if symbolNodes[i].Score == symbolNodes[j].Score {
+			if symbolNodes[i].File == symbolNodes[j].File {
+				return symbolNodes[i].Symbol < symbolNodes[j].Symbol
+			}
+			return symbolNodes[i].File < symbolNodes[j].File
+		}
+		return symbolNodes[i].Score > symbolNodes[j].Score
+	})
+	if len(symbolNodes) > 6 {
+		symbolNodes = symbolNodes[:6]
+	}
+	return append(append(requestNodes, fileNodes...), symbolNodes...)
+}
+
+func scoreArchitectureEvidenceNode(node reasoning.EvidenceNode, rel string, edges []reasoning.EvidenceEdge, architectureQuery bool, searchTerms []string) int {
+	score := 0
+	if node.Kind == "file" {
+		score += implementationTargetScore(rel)
+	}
+	if node.Kind != "symbol" {
+		return score
+	}
+	score += scoreSymbolForArchitecture(node.Symbol)
+	for _, edge := range edges {
+		if edge.From == node.ID || edge.To == node.ID {
+			score += 2
+		}
+	}
+	if architectureQuery {
+		for _, term := range searchTerms {
+			lowerTerm := strings.ToLower(strings.TrimSpace(term))
+			if lowerTerm != "" && strings.Contains(strings.ToLower(node.Symbol), lowerTerm) {
+				score += 4
+			}
+		}
+	}
+	return score
+}
+
+func scoreSymbolForArchitecture(symbol string) int {
+	lower := strings.ToLower(strings.TrimSpace(symbol))
+	score := 0
+	for _, token := range []string{"handle", "route", "run", "execute", "apply", "validate", "inspect", "resolve", "plan", "retrieve", "emit", "select", "decide", "branch", "repair", "collect", "buildcontext", "gather"} {
+		if strings.Contains(lower, token) {
+			score += 8
+		}
+	}
+	for _, token := range []string{"format", "summary", "citation", "output", "clone", "normalize", "fallback", "sanitize"} {
+		if strings.Contains(lower, token) {
+			score -= 6
+		}
+	}
+	if strings.HasPrefix(lower, "build") && score <= 0 {
+		score -= 2
+	}
+	return score
+}
+
+func looksLikeMetaPolicyAnswer(answer string, req routeRequest, chatContext workspaceChatContext) bool {
+	lower := strings.ToLower(answer)
+	metaTerms := []string{
+		"every substantive claim",
+		"code-anchored",
+		"exact citations",
+		"do not guess",
+		"if confidence is low",
+		"abstain",
+		"confirmed evidence",
+		"citing evidence",
+		"list only confirmed evidence",
+	}
+	metaHits := 0
+	for _, term := range metaTerms {
+		if strings.Contains(lower, term) {
+			metaHits++
+		}
+	}
+	if metaHits == 0 {
+		return false
+	}
+	behaviorTerms := []string{
+		"route", "retrieve", "gather", "validate", "repair", "select", "branch", "persist", "write", "emit", "score", "filter", "rank", "inspect",
+	}
+	behaviorHits := 0
+	for _, term := range behaviorTerms {
+		if strings.Contains(lower, term) {
+			behaviorHits++
+		}
+	}
+	symbolMentions := 0
+	for _, node := range chatContext.Evidence.Nodes {
+		if node.Kind == "symbol" && node.Symbol != "" && strings.Contains(lower, strings.ToLower(node.Symbol)) {
+			symbolMentions++
+		}
+	}
+	return metaHits >= 2 && symbolMentions == 0 && behaviorHits < 3
 }
 
 func summarizeSnippetEvidence(snippet string) string {

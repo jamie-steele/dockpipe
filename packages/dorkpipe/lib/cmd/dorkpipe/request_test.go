@@ -330,6 +330,34 @@ func TestValidateChatAnswer_RequiresMultipleCitationsForArchitectureWhenEvidence
 	}
 }
 
+func TestValidateChatAnswer_RejectsMetaPolicyArchitectureAnswer(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeTestFile(t, root, "src/request.go", "package main\n\nfunc handleChatRoute(ctx context.Context) {}\nfunc resolveRuntimePolicy() {}\n")
+	req := routeRequest{
+		Message: "Explain how Ask mode handles architecture questions internally.",
+		Mode:    "ask",
+	}
+	ctx := workspaceChatContext{
+		Text: "Relevant file: src/request.go\n\n```text\nfunc handleChatRoute(ctx context.Context) {}\nfunc resolveRuntimePolicy() {}\n```",
+		Targets: []string{"src/request.go"},
+		Snippets: map[string]string{
+			"src/request.go": "func handleChatRoute(ctx context.Context) {}\nfunc resolveRuntimePolicy() {}\n",
+		},
+		Evidence: buildChatEvidenceGraph(root, req, []string{"src/request.go"}, map[string]string{
+			"src/request.go": "func handleChatRoute(ctx context.Context) {}\nfunc resolveRuntimePolicy() {}\n",
+		}, extractChatSearchTerms(req.Message)),
+	}
+	answer := "## Confirmed\n- Every substantive claim should be code-anchored with exact citations.\n- If confidence is low, abstain and list only confirmed evidence.\n\n## Uncertain\n- More detail is unclear."
+	got := validateChatAnswer(answer, req, ctx)
+	if got.Passed {
+		t.Fatalf("expected meta-policy answer to fail, got %#v", got)
+	}
+	if len(got.Issues) == 0 || !strings.Contains(strings.Join(got.Issues, " "), "response policy") {
+		t.Fatalf("expected meta-policy validation issue, got %#v", got)
+	}
+}
+
 func TestBuildChatEvidenceGraph_IncludesFileAndSymbolNodes(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -367,6 +395,31 @@ func TestBuildChatEvidenceGraph_FiltersTestSymbolsForArchitectureQuery(t *testin
 		if node.Kind == "symbol" {
 			t.Fatalf("expected test-only symbols to be filtered, got %#v", graph)
 		}
+	}
+}
+
+func TestBuildChatEvidenceGraph_PrioritizesExecutionSymbolsForArchitectureQuery(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeTestFile(t, root, "src/request.go", "package main\n\nfunc buildChatOutputCitations() {}\nfunc handleChatRoute(ctx context.Context) {}\nfunc resolveRuntimePolicy() {}\n")
+	req := routeRequest{
+		Message: "Explain how Ask mode handles architecture questions internally.",
+		Mode:    "ask",
+	}
+	graph := buildChatEvidenceGraph(root, req, []string{"src/request.go"}, map[string]string{
+		"src/request.go": "func buildChatOutputCitations() {}\nfunc handleChatRoute(ctx context.Context) {}\nfunc resolveRuntimePolicy() {}\n",
+	}, extractChatSearchTerms(req.Message))
+	var symbols []chatEvidenceNode
+	for _, node := range graph.Nodes {
+		if node.Kind == "symbol" {
+			symbols = append(symbols, node)
+		}
+	}
+	if len(symbols) < 2 {
+		t.Fatalf("expected multiple symbols, got %#v", graph)
+	}
+	if symbols[0].Symbol != "handleChatRoute" && symbols[0].Symbol != "resolveRuntimePolicy" {
+		t.Fatalf("expected execution-path symbol first, got %#v", symbols)
 	}
 }
 
