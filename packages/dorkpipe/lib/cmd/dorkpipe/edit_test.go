@@ -10,7 +10,7 @@ import (
 
 func TestLooksLikePackageCreation_TryYourHandPrompt(t *testing.T) {
 	t.Parallel()
-	prompt := "try your hand at fibonacci number sequence dockpipe package in .staging/packages"
+	prompt := "try your hand at fibonacci number sequence dockpipe package in packages"
 	if !looksLikePackageCreation(prompt) {
 		t.Fatalf("expected prompt to route through package creation heuristic")
 	}
@@ -18,17 +18,17 @@ func TestLooksLikePackageCreation_TryYourHandPrompt(t *testing.T) {
 
 func TestInferRequestedPackagePurpose_TryYourHandPrompt(t *testing.T) {
 	t.Parallel()
-	got := inferRequestedPackagePurpose("Try your hand at fibonacci number sequence dockpipe package in .staging/packages make sure it is new")
+	got := inferRequestedPackagePurpose("Try your hand at fibonacci number sequence dockpipe package in packages make sure it is new")
 	want := "fibonacci number sequence"
 	if got != want {
 		t.Fatalf("inferRequestedPackagePurpose() = %q, want %q", got, want)
 	}
 }
 
-func TestInferPackageScaffoldSpec_StagingFibonacciPrompt(t *testing.T) {
+func TestInferPackageScaffoldSpec_PackagesFibonacciPrompt(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	seedDir := filepath.Join(root, ".staging", "packages", "existing")
+	seedDir := filepath.Join(root, "packages", "existing")
 	if err := os.MkdirAll(seedDir, 0o755); err != nil {
 		t.Fatalf("mkdir seed dir: %v", err)
 	}
@@ -39,20 +39,20 @@ func TestInferPackageScaffoldSpec_StagingFibonacciPrompt(t *testing.T) {
 		t.Fatalf("write version: %v", err)
 	}
 
-	spec, ok := inferPackageScaffoldSpec(root, "Try your hand at fibonacci number sequence dockpipe package in .staging/packages make sure you respect AGENTS.md ensure its a new package for this")
+	spec, ok := inferPackageScaffoldSpec(root, "Try your hand at fibonacci number sequence dockpipe package in packages make sure you respect AGENTS.md ensure its a new package for this")
 	if !ok {
 		t.Fatalf("expected scaffold spec")
 	}
-	if spec.PackageRoot != ".staging/packages" {
-		t.Fatalf("PackageRoot = %q, want %q", spec.PackageRoot, ".staging/packages")
+	if spec.PackageRoot != "packages" {
+		t.Fatalf("PackageRoot = %q, want %q", spec.PackageRoot, "packages")
 	}
 	if spec.PackageName != "fibonacci" {
 		t.Fatalf("PackageName = %q, want %q", spec.PackageName, "fibonacci")
 	}
-	if spec.ManifestPath != ".staging/packages/fibonacci/package.yml" {
+	if spec.ManifestPath != "packages/fibonacci/package.yml" {
 		t.Fatalf("ManifestPath = %q", spec.ManifestPath)
 	}
-	if spec.ReadmePath != ".staging/packages/fibonacci/README.md" {
+	if spec.ReadmePath != "packages/fibonacci/README.md" {
 		t.Fatalf("ReadmePath = %q", spec.ReadmePath)
 	}
 	if spec.Confidence < 0.85 {

@@ -243,7 +243,7 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 	switch action {
 	case "bundle":
 		emitEditEvent(reqID, "context_gathering", "Refreshing context bundle", 0.45, nil)
-		out, err := runRepoCommand(ctx, root, "./packages/pipeon/resolvers/pipeon/bin/pipeon", "bundle")
+		out, err := runRepoCommand(ctx, root, "pipeon", "bundle")
 		if err != nil {
 			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Context refresh failed: %s", out), true)
 			return
@@ -255,7 +255,7 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 		})
 	case "status":
 		emitEditEvent(reqID, "context_gathering", "Checking local status", 0.45, nil)
-		out, err := runRepoCommand(ctx, root, "./packages/pipeon/resolvers/pipeon/bin/pipeon", "status")
+		out, err := runRepoCommand(ctx, root, "pipeon", "status")
 		if err != nil {
 			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Status failed: %s", out), true)
 			return
@@ -267,7 +267,7 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 		})
 	case "test":
 		emitEditEvent(reqID, "context_gathering", "Running test workflow", 0.45, nil)
-		out, err := runRepoCommand(ctx, root, "./src/bin/dockpipe", "--workflow", "test", "--workdir", ".", "--")
+		out, err := runRepoCommand(ctx, root, "dockpipe", "--workflow", "test", "--workdir", ".", "--")
 		if err != nil {
 			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Test workflow failed: %s", out), true)
 			return
@@ -279,7 +279,7 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 		})
 	case "ci":
 		emitEditEvent(reqID, "context_gathering", "Running ci-emulate workflow", 0.45, nil)
-		out, err := runRepoCommand(ctx, root, "./src/bin/dockpipe", "--workflow", "ci-emulate", "--workdir", ".", "--")
+		out, err := runRepoCommand(ctx, root, "dockpipe", "--workflow", "ci-emulate", "--workdir", ".", "--")
 		if err != nil {
 			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("ci-emulate failed: %s", out), true)
 			return
@@ -295,7 +295,7 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 			return
 		}
 		emitEditEvent(reqID, "context_gathering", fmt.Sprintf("Running workflow %s", arg), 0.45, map[string]any{"workflow": arg})
-		out, err := runRepoCommand(ctx, root, "./src/bin/dockpipe", "--workflow", arg, "--workdir", ".", "--")
+		out, err := runRepoCommand(ctx, root, "dockpipe", "--workflow", arg, "--workdir", ".", "--")
 		if err != nil {
 			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Workflow %s failed: %s", arg, out), true)
 			return
@@ -313,7 +313,7 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 			return
 		}
 		emitEditEvent(reqID, "context_gathering", fmt.Sprintf("Validating workflow %s", target), 0.45, map[string]any{"target": target})
-		out, err := runRepoCommand(ctx, root, "./src/bin/dockpipe", "workflow", "validate", target)
+		out, err := runRepoCommand(ctx, root, "dockpipe", "workflow", "validate", target)
 		if err != nil {
 			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Workflow validation failed: %s", out), true)
 			return
@@ -329,7 +329,7 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 			"target":      arg,
 			"active_file": req.ActiveFile,
 		})
-		out, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/inspect-callstack.sh", root, arg, req.ActiveFile, req.SelectionText)
+		out, err := runRepoScript(ctx, root, "inspect-callstack.sh", root, arg, req.ActiveFile, req.SelectionText)
 		if err != nil {
 			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Callstack inspection failed: %s", out), true)
 			return
@@ -345,7 +345,7 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 		emitEditEvent(reqID, "context_gathering", "Inspecting heap or memory profile", 0.45, map[string]any{
 			"target": arg,
 		})
-		out, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/inspect-heap.sh", root, arg)
+		out, err := runRepoScript(ctx, root, "inspect-heap.sh", root, arg)
 		if err != nil {
 			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Heap inspection failed: %s", out), true)
 			return
@@ -361,7 +361,7 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 			"target":      arg,
 			"active_file": req.ActiveFile,
 		})
-		out, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/inspect-symbol.sh", root, arg, req.ActiveFile, req.SelectionText)
+		out, err := runRepoScript(ctx, root, "inspect-symbol.sh", root, arg, req.ActiveFile, req.SelectionText)
 		if err != nil {
 			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Symbol inspection failed: %s", out), true)
 			return
@@ -378,7 +378,7 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 			"target":      arg,
 			"active_file": req.ActiveFile,
 		})
-		out, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/inspect-references.sh", root, arg, req.ActiveFile, req.SelectionText)
+		out, err := runRepoScript(ctx, root, "inspect-references.sh", root, arg, req.ActiveFile, req.SelectionText)
 		if err != nil {
 			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Reference inspection failed: %s", out), true)
 			return
@@ -395,7 +395,7 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 			"target":      arg,
 			"active_file": req.ActiveFile,
 		})
-		out, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/inspect-callers.sh", root, arg, req.ActiveFile, req.SelectionText)
+		out, err := runRepoScript(ctx, root, "inspect-callers.sh", root, arg, req.ActiveFile, req.SelectionText)
 		if err != nil {
 			emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Caller inspection failed: %s", out), true)
 			return
@@ -3002,13 +3002,24 @@ func resolveNumCtx(flagValue int) int {
 }
 
 func runRepoCommand(ctx context.Context, root, command string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, command, args...)
+	exe := command
+	var err error
+	switch command {
+	case "dockpipe":
+		exe, err = resolveDockpipeExecutable()
+	case "pipeon":
+		exe, err = resolvePipeonExecutable()
+	}
+	if err != nil {
+		return "", err
+	}
+	cmd := exec.CommandContext(ctx, exe, args...)
 	cmd.Dir = root
 	cmd.Env = append(os.Environ(), "DOCKPIPE_WORKDIR="+root)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := cmd.Run()
+	err = cmd.Run()
 	text := strings.TrimSpace(stdout.String())
 	if strings.TrimSpace(stderr.String()) != "" {
 		if text != "" {

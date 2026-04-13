@@ -191,7 +191,7 @@ website: https://example.com
 license: Apache-2.0
 # Optional: workflow | resolver | core | assets | bundle | package
 kind: workflow
-# kind: package — umbrella at e.g. .staging/packages/agent/package.yml (metadata only; resolvers are under resolvers/):
+# kind: package — umbrella at e.g. packages/agent/package.yml (metadata only; resolvers are under resolvers/):
 # includes_resolvers: [codex, claude, ollama]
 # kind: resolver — set capability to the dotted id this package provides (see docs/capabilities.md):
 # capability: cli.codex

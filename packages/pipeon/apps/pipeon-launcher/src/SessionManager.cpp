@@ -96,15 +96,10 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
 #endif
 
     // Force project workdir for dockpipe and host scripts. Inherited DOCKPIPE_* from the desktop/shell
-    // can be wrong (e.g. repo root). Dockpipe replaces duplicate keys when injecting explicit values,
-    // but we still set DOCKPIPE_WORKDIR and DOCKPIPE_REPO_ROOT so the child matches the chosen context.
-    // Host scripts (e.g. vscode-code-server.sh) use DOCKPIPE_WORKDIR or fall back to $PWD — set both explicitly.
+    // can be wrong, so set DOCKPIPE_WORKDIR explicitly to match the chosen context.
     const QString wd = QDir::cleanPath(ctx.workdir);
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert(QStringLiteral("DOCKPIPE_WORKDIR"), wd);
-    const QString repoRoot = DockpipeChoices::findRepoRoot(wd);
-    if (!repoRoot.isEmpty())
-        env.insert(QStringLiteral("DOCKPIPE_REPO_ROOT"), repoRoot);
     proc->setProcessEnvironment(env);
     proc->setWorkingDirectory(wd);
 

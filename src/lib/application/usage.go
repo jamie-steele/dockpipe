@@ -57,7 +57,7 @@ var mainUsageSections = []usageSection{
 			{"--workflow-file, --run, --act, --strategy, --repo, --branch, --mount", ""},
 			{"--workflows-dir <path>", "Repo-relative or absolute root for named workflows (default: workflows/; env: DOCKPIPE_WORKFLOWS_DIR)"},
 			{"--env, --env-file, --var, --no-op-inject", "Skip vault op inject; env: DOCKPIPE_OP_INJECT=0"},
-			{"--tf <cmds>", "Terraform pipeline: set DOCKPIPE_TF_COMMANDS (e.g. plan, apply). Workflows that run terraform-pipeline.sh use it (e.g. dockpipe.cloudflare.r2infra, package-store-infra when set). Also: --tf-dry-run, --tf-no-auto-approve"},
+			{"--tf <cmds>", "Terraform pipeline: set DOCKPIPE_TF_COMMANDS (e.g. plan, apply). Workflows that run terraform-pipeline.sh use it. Also: --tf-dry-run, --tf-no-auto-approve"},
 			{"--data-dir, --data-vol, --no-data, --reinit, -f, -d/--detach", ""},
 		},
 	},

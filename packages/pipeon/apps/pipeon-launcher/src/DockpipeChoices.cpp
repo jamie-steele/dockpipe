@@ -40,13 +40,6 @@ void appendStaticFallbacks(DockpipeChoices &c)
 
 QString DockpipeChoices::findRepoRoot(const QString &hintWorkdir)
 {
-    const QString env = QProcessEnvironment::systemEnvironment().value(QStringLiteral("DOCKPIPE_REPO_ROOT"));
-    if (!env.isEmpty()) {
-        const QString clean = QDir::cleanPath(env);
-        if (looksLikeRepoRoot(clean))
-            return clean;
-    }
-
     if (!hintWorkdir.isEmpty()) {
         QDir d(QFileInfo(hintWorkdir).absoluteFilePath());
         if (!d.exists())
@@ -70,12 +63,10 @@ QString DockpipeChoices::findRepoRoot(const QString &hintWorkdir)
 
 QString DockpipeChoices::preferredDockpipeBinary(const QString &hintWorkdir)
 {
-    const QString root = findRepoRoot(hintWorkdir);
-    if (!root.isEmpty()) {
-        const QString repoBin = QDir(root).filePath(QStringLiteral("src/bin/dockpipe"));
-        if (QFileInfo(repoBin).isFile() && QFileInfo(repoBin).isExecutable())
-            return QDir::cleanPath(repoBin);
-    }
+    Q_UNUSED(hintWorkdir);
+    const QString configured = QProcessEnvironment::systemEnvironment().value(QStringLiteral("DOCKPIPE_BIN")).trimmed();
+    if (!configured.isEmpty())
+        return configured;
     return QStringLiteral("dockpipe");
 }
 

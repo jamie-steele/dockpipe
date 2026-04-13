@@ -81,39 +81,6 @@ func TestCmdInitBareCreatesStarterWorkflow(t *testing.T) {
 	}
 }
 
-// TestCmdInitFromSelfAnalysisWorkflowAppendsAgentsPointer ensures init --from dorkpipe-self-analysis updates AGENTS.md once.
-func TestCmdInitFromSelfAnalysisWorkflowAppendsAgentsPointer(t *testing.T) {
-	repoRoot := mkRepoRootForSubcmdTests(t)
-	writeFile(t, filepath.Join(repoRoot, "templates", "dorkpipe-self-analysis", "config.yml"), "name: dorkpipe-self-analysis\nsteps: []\n", 0o644)
-	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
-	project := t.TempDir()
-	oldWd, _ := os.Getwd()
-	if err := os.Chdir(project); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(oldWd) })
-
-	if err := cmdInit([]string{"myself", "--from", "dorkpipe-self-analysis"}); err != nil {
-		t.Fatalf("cmdInit: %v", err)
-	}
-	agentsPath := filepath.Join(project, "AGENTS.md")
-	b, err := os.ReadFile(agentsPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s := string(b)
-	if !strings.Contains(s, agentsSelfAnalysisMarker) {
-		t.Fatalf("expected self-analysis marker in AGENTS.md, got:\n%s", s)
-	}
-	changed, err := ensureAgentsSelfAnalysisPointer(project)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if changed {
-		t.Fatal("second ensureAgentsSelfAnalysisPointer should be no-op")
-	}
-}
-
 // TestCmdInitFromRunTemplate copies an existing bundled workflow template by name.
 func TestCmdInitFromRunTemplate(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)

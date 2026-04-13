@@ -7,10 +7,10 @@
 /// Falls back to static lists when no usable DockPipe catalog is available.
 class DockpipeChoices {
 public:
-    /// Walk upward from workdir (or DOCKPIPE_REPO_ROOT) to find a dockpipe repo root.
+    /// Walk upward from workdir to find a dockpipe project root.
     static QString findRepoRoot(const QString &hintWorkdir);
 
-    /// Prefer the repo checkout binary when available; otherwise fall back to plain `dockpipe`.
+    /// Prefer DOCKPIPE_BIN when set; otherwise fall back to plain `dockpipe`.
     static QString preferredDockpipeBinary(const QString &hintWorkdir);
 
     void scan(const QString &repoRoot, const QString &hintWorkdir = QString());

@@ -14,7 +14,7 @@
 #   2) Single Cloudflare API token — CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID:
 #      Terraform creates the bucket (optional; default for this mode), Wrangler uploads the object.
 #
-# Terraform: packages/terraform/resolvers/terraform-core/assets/scripts/terraform-pipeline.sh (DOCKPIPE_TF_* / R2_TF_*).
+# Terraform runs through the dockpipe.cloudflare.r2infra workflow when enabled.
 set -euo pipefail
 
 # Workflow id (matches workflows/*/config.yml name)
@@ -46,27 +46,15 @@ dockpipe_r2_normalize_account_id() {
   echo "$raw"
 }
 
-find_terraform_dir() {
-  if [[ -n "${R2_TERRAFORM_DIR:-}" ]]; then
-    local d="$R2_TERRAFORM_DIR"
-    if [[ "$d" != /* ]]; then
-      d="$ROOT/$d"
-    fi
-    if [[ -d "$d" ]]; then
-      echo "$d"
-      return 0
-    fi
-    return 1
+resolve_dockpipe_bin() {
+  if [[ -n "${DOCKPIPE_BIN:-}" ]]; then
+    printf '%s\n' "$DOCKPIPE_BIN"
+    return 0
   fi
-  for d in \
-    "packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/terraform" \
-    "templates/dockpipe.cloudflare.r2publish/terraform" \
-    "templates/r2-publish/terraform"; do
-    if [[ -d "$ROOT/$d" ]]; then
-      echo "$ROOT/$d"
-      return 0
-    fi
-  done
+  if command -v dockpipe >/dev/null 2>&1; then
+    command -v dockpipe
+    return 0
+  fi
   return 1
 }
 
@@ -87,9 +75,9 @@ should_run_terraform() {
 }
 
 run_terraform_pipeline() {
-  local tf_dir="$1"
-  local backend_hcl="$2"
-  command -v terraform >/dev/null 2>&1 || die "install Terraform (https://developer.hashicorp.com/terraform/downloads)"
+  local backend_hcl="$1"
+  local dockpipe_bin
+  dockpipe_bin="$(resolve_dockpipe_bin)" || die "dockpipe not found; set DOCKPIPE_BIN or add dockpipe to PATH"
   if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
     :
   elif [[ -n "${CLOUDFLARE_EMAIL:-}" && -n "${CLOUDFLARE_GLOBAL_API_KEY:-}" ]]; then
@@ -98,29 +86,11 @@ run_terraform_pipeline() {
     die "Terraform auth: set CLOUDFLARE_API_TOKEN or (CLOUDFLARE_EMAIL + CLOUDFLARE_GLOBAL_API_KEY)"
   fi
   [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || die "CLOUDFLARE_ACCOUNT_ID required for Terraform"
-
-  export DOCKPIPE_TF_MODULE_DIR="$tf_dir"
   export DOCKPIPE_TF_BACKEND_HCL_PATH="$backend_hcl"
-  export DOCKPIPE_TF_USE_R2_PUBLISH_MAP=1
   export DOCKPIPE_TF_ATTACH_CLOUDFLARE_PROVIDER=1
   export DOCKPIPE_TF_LOG_PREFIX="${DOCKPIPE_TF_LOG_PREFIX:-${WF_NS}}"
   export DOCKPIPE_TF_PIPELINE_HINT="would skip tarball upload after Terraform (no apply step; R2_PUBLISH_ALWAYS_UPLOAD=1 to force upload)"
-  local _tr
-  _tr="$(dockpipe_resolve_terraform_cloudflare_r2_run)" || die "terraform-cloudflare-r2-run.sh not found — expected packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/assets/scripts/"
-  bash "$_tr"
-}
-
-# Resolves the Cloudflare R2 Terraform host script (not core terraform-run.sh). Canonical copy lives with dockpipe.cloudflare.r2infra.
-dockpipe_resolve_terraform_cloudflare_r2_run() {
-  local c
-  for c in \
-    "$ROOT/packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/assets/scripts/terraform-cloudflare-r2-run.sh" \
-    "$ROOT/templates/dockpipe.cloudflare.r2infra/assets/scripts/terraform-cloudflare-r2-run.sh" \
-    "$ROOT/packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/assets/scripts/terraform-cloudflare-r2-run.sh" \
-    "$ROOT/templates/dockpipe.cloudflare.r2publish/assets/scripts/terraform-cloudflare-r2-run.sh"; do
-    [[ -f "$c" ]] && echo "$c" && return 0
-  done
-  return 1
+  "$dockpipe_bin" --workflow dockpipe.cloudflare.r2infra --workdir "$ROOT" --
 }
 
 # --- Infra only: Terraform then exit (no source dir, no tarball, no upload) -----------------
@@ -151,12 +121,7 @@ if [[ "${R2_INFRA_ONLY:-0}" == "1" ]]; then
   WORK="$(mktemp -d "${TMPDIR}/dockpipe-cf-r2infra.XXXXXX")"
   cleanup() { rm -rf "$WORK"; }
   trap cleanup EXIT
-  export DOCKPIPE_TF_BACKEND_HCL_PATH="$WORK/r2-tf-backend.hcl"
-  export DOCKPIPE_TF_USE_R2_PUBLISH_MAP=1
-  export DOCKPIPE_TF_ATTACH_CLOUDFLARE_PROVIDER=1
-  export DOCKPIPE_TF_LOG_PREFIX="${DOCKPIPE_TF_LOG_PREFIX:-${WF_NS}}"
-  _tr="$(dockpipe_resolve_terraform_cloudflare_r2_run)" || die "terraform-cloudflare-r2-run.sh not found — expected packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/assets/scripts/"
-  bash "$_tr"
+  run_terraform_pipeline "$WORK/r2-tf-backend.hcl"
   echo "${WF_NS}: infra-only done — no package tarball upload (use dockpipe.cloudflare.r2upload for that)."
   echo "${WF_NS}: Terraform remote state → s3 backend bucket=${DOCKPIPE_TF_STATE_BUCKET:-dockpipe} key=${DOCKPIPE_TF_STATE_KEY:-state/terraform.tfstate}; object appears in R2 after terraform apply (plan/init do not write the state blob)."
   exit 0
@@ -208,8 +173,10 @@ TERRAFORM_RAN=false
 TF_PIPELINE_HAS_APPLY=0
 
 if should_run_terraform; then
-  TF_DIR="$(find_terraform_dir)" || die "Terraform is required for this run but no module directory found. Copy packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/terraform into your project, set R2_TERRAFORM_DIR, or set R2_SKIP_TERRAFORM=1 if the bucket already exists."
-  run_terraform_pipeline "$TF_DIR" "$WORK/r2-tf-backend.hcl"
+  case ",${DOCKPIPE_TF_COMMANDS:-${R2_TERRAFORM_COMMANDS:-init,apply}}," in
+    *,apply,*) TF_PIPELINE_HAS_APPLY=1 ;;
+  esac
+  run_terraform_pipeline "$WORK/r2-tf-backend.hcl"
   TERRAFORM_RAN=true
 fi
 

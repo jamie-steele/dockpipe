@@ -5,7 +5,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 WORKDIR="$(pipeon_stack_workdir)"
-REPO_ROOT="$(pipeon_stack_repo_root)"
 CODE_SERVER_CONTAINER_NAME="${CODE_SERVER_CONTAINER_NAME:-$(pipeon_stack_code_server_name)}"
 CODE_SERVER_PORT="$(pipeon_stack_code_server_port)"
 CODE_SERVER_URL="${CODE_SERVER_URL:-$(pipeon_stack_code_server_url)}"
@@ -33,11 +32,10 @@ pipeon_wait_for_http() {
 pipeon_seed_code_server_settings() {
   local target_dir="$CODE_SERVER_HOME/.local/share/code-server/User"
   local target_path="$target_dir/settings.json"
-  local defaults_rel="packages/pipeon/resolvers/pipeon/vscode-extension/code-server-user-settings.json"
-  local defaults_path="$REPO_ROOT/$defaults_rel"
+  local defaults_path="${PIPEON_CODE_SERVER_SETTINGS_FILE:-}"
 
   mkdir -p "$target_dir"
-  if [[ ! -f "$defaults_path" ]]; then
+  if [[ -z "$defaults_path" ]] || [[ ! -f "$defaults_path" ]]; then
     return 0
   fi
 

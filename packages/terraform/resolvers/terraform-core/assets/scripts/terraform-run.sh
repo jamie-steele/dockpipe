@@ -8,23 +8,15 @@ WF_NS="${DOCKPIPE_WORKFLOW_NAME:-dockpipe.terraform.core}"
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
 cd "$ROOT"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 die() { echo "${WF_NS}: $*" >&2; exit 1; }
 
 source_terraform_pipeline_lib() {
-  local candidate
-  for candidate in \
-    "$ROOT/packages/terraform/resolvers/terraform-core/assets/scripts/terraform-pipeline.sh" \
-    "$ROOT/templates/core/assets/scripts/terraform-pipeline.sh" \
-    "$ROOT/src/core/assets/scripts/terraform-pipeline.sh"
-  do
-    if [[ -f "$candidate" ]]; then
-      # shellcheck source=/dev/null
-      source "$candidate"
-      return 0
-    fi
-  done
-  die "terraform-pipeline.sh not found — install dockpipe.terraform.core (packages/terraform) or templates/core from dockpipe init"
+  local candidate="${SCRIPT_DIR}/terraform-pipeline.sh"
+  [[ -f "$candidate" ]] || die "terraform-pipeline.sh not found next to terraform-run.sh"
+  # shellcheck source=/dev/null
+  source "$candidate"
 }
 
 if [[ "${DOCKPIPE_TF_OPTIONAL_WHEN_UNSET:-0}" == "1" ]]; then

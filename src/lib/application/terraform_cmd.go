@@ -27,16 +27,12 @@ Usage (standalone helper — same effect as --tf on dockpipe run):
              Examples: plan | apply | init,plan | init plan
 
 Flags (for run / shorthand):
-  --workflow <name>   Workflow that runs Terraform (default: dockpipe.cloudflare.r2infra)
+  --workflow <name>   Workflow that runs Terraform (required unless DOCKPIPE_TERRAFORM_WORKFLOW is set)
   --workdir <path>    Project root (default: current directory)
   --dry-run           Set DOCKPIPE_TF_DRY_RUN=1 (print pipeline steps only)
   --no-auto-approve   Set DOCKPIPE_TF_APPLY_AUTO_APPROVE=0 for apply (interactive confirm)
 
-pipeline-path prints the absolute path to terraform-pipeline.sh (dockpipe.terraform.core package).
-
-See src/core/assets/scripts/README.md (DOCKPIPE_TF_* reference),
-packages/terraform/resolvers/terraform-core/README.md (workflow dockpipe.terraform.core), and
-packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/README.md (Terraform module) and dockpipe.cloudflare.r2infra (workflow + host script).
+pipeline-path prints the absolute path to terraform-pipeline.sh for the installed terraform helper package.
 
 `
 
@@ -73,7 +69,7 @@ func cmdTerraform(args []string) error {
 }
 
 func cmdTerraformRun(args []string) error {
-	wf := "dockpipe.cloudflare.r2infra"
+	wf := strings.TrimSpace(os.Getenv("DOCKPIPE_TERRAFORM_WORKFLOW"))
 	wd := ""
 	dryRun := false
 	noAutoApprove := false
@@ -113,6 +109,9 @@ func cmdTerraformRun(args []string) error {
 positional:
 	if i >= len(args) {
 		return fmt.Errorf("terraform run: expected commands (e.g. plan, apply, init,plan) — try: dockpipe terraform plan")
+	}
+	if wf == "" {
+		return fmt.Errorf("terraform run: set --workflow <name> (or DOCKPIPE_TERRAFORM_WORKFLOW) so dockpipe knows which workflow owns your Terraform execution")
 	}
 	cmdList := joinTerraformCommands(args[i:])
 	if err := validateTerraformCommands(cmdList); err != nil {

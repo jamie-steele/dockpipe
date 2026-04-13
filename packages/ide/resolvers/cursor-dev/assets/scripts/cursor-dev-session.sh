@@ -22,33 +22,15 @@ if ! cursor_dev_require_docker_for_session; then
   exit 1
 fi
 
-# Resolve materialized dockpipe root for docker build. DOCKPIPE_REPO_ROOT from the Go binary may be a
-# Windows path that breaks [[ -f ... ]] in Git Bash; script lives under templates/core/resolvers/cursor-dev/assets/scripts/.
-cursor_dev_repo_root() {
-  local r=""
-  if [[ -n "${DOCKPIPE_REPO_ROOT:-}" ]]; then
-    r="$(cd "$DOCKPIPE_REPO_ROOT" 2>/dev/null && pwd || true)"
-  fi
-  if [[ -z "$r" ]] || [[ ! -f "$r/templates/core/assets/images/base-dev/Dockerfile" ]]; then
-    r="$(cd "$SCRIPT_DIR/../../../../../../" 2>/dev/null && pwd || true)"
-  fi
-  printf '%s' "$r"
-}
-REPO_ROOT="$(cursor_dev_repo_root)"
-
 IMAGE="${CURSOR_DEV_SESSION_IMAGE:-dockpipe-base-dev:latest}"
 if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   if docker image inspect dockpipe-base-dev:latest >/dev/null 2>&1; then
     IMAGE=dockpipe-base-dev:latest
   elif docker image inspect dockpipe-base-dev >/dev/null 2>&1; then
     IMAGE=dockpipe-base-dev
-  elif [[ -n "$REPO_ROOT" ]] && [[ -f "$REPO_ROOT/templates/core/assets/images/base-dev/Dockerfile" ]]; then
-    printf '[dockpipe] Building dockpipe-base-dev image…\n' >&2
-    docker build -q -t dockpipe-base-dev -f "$REPO_ROOT/templates/core/assets/images/base-dev/Dockerfile" "$REPO_ROOT"
-    IMAGE=dockpipe-base-dev:latest
   else
-    printf '[dockpipe] Image dockpipe-base-dev not found and could not build (no templates/core/assets/images/base-dev in %s).\n' "${REPO_ROOT:-<unknown>}" >&2
-    printf '  Run: dockpipe --isolate base-dev -- echo ok   or set DOCKPIPE_REPO_ROOT to a full dockpipe layout.\n' >&2
+    printf '[dockpipe] Image %s not found.\n' "$IMAGE" >&2
+    printf '  Set CURSOR_DEV_SESSION_IMAGE to an available image, or build/pull dockpipe-base-dev first.\n' >&2
     exit 1
   fi
 fi

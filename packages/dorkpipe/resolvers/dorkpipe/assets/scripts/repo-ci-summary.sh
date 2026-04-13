@@ -2,7 +2,7 @@
 # Host-only: print what is in bin/.dockpipe/ci-analysis/ after govulncheck + gosec + normalize-ci-scans
 # (same spirit as the Linux CI job). Run: dockpipe --workflow dockpipe-repo-quality --workdir . --
 set -euo pipefail
-ROOT="${DOCKPIPE_REPO_ROOT:-${DOCKPIPE_WORKDIR:-.}}"
+ROOT="${DOCKPIPE_WORKDIR:-.}"
 cd "$ROOT"
 if [[ -d bin/.dockpipe/ci-analysis ]]; then
 	echo "=== DockPipe CI analysis (bin/.dockpipe/ci-analysis/) ==="

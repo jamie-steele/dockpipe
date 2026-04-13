@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # dockpipe.cloudflare.r2infra — thin host: Cloudflare/R2 env + bundled Terraform module path, then
 # terraform-core's terraform-pipeline.sh (DOCKPIPE_TF_* / R2_* mapping). Not provider-agnostic terraform-run.sh.
-# Terraform module (.tf) lives under dockpipe.cloudflare.r2publish/terraform (historical name); this script lives with the infra workflow resolver.
-# Invoked by dockpipe.cloudflare.r2infra and by scripts/dockpipe/r2-publish.sh.
+# Terraform module (.tf) lives with this infra workflow resolver.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WF_NS="${DOCKPIPE_WORKFLOW_NAME:-dockpipe.cloudflare.r2infra}"
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
@@ -24,17 +24,12 @@ set_if_unset_from_pipelang() {
 }
 
 source_pipelang_defaults_if_present() {
-  local script_dir
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   local p=""
   local candidate
   for candidate in \
-    "$script_dir/../../models/.pipelang/IR2InfraConfig.R2InfraConfig.bindings.env" \
-    "$ROOT/packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/models/.pipelang/IR2InfraConfig.R2InfraConfig.bindings.env" \
-    "$script_dir/../../models/.pipelang/R2InfraConfig.R2InfraConfig.bindings.env" \
-    "$ROOT/packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/models/.pipelang/R2InfraConfig.R2InfraConfig.bindings.env" \
-    "$script_dir/../../models/.pipelang/r2-infra-config.R2InfraConfig.bindings.env" \
-    "$ROOT/packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/models/.pipelang/r2-infra-config.R2InfraConfig.bindings.env"
+    "$SCRIPT_DIR/../../models/.pipelang/IR2InfraConfig.R2InfraConfig.bindings.env" \
+    "$SCRIPT_DIR/../../models/.pipelang/R2InfraConfig.R2InfraConfig.bindings.env" \
+    "$SCRIPT_DIR/../../models/.pipelang/r2-infra-config.R2InfraConfig.bindings.env"
   do
     if [[ -f "$candidate" ]]; then
       p="$candidate"
@@ -72,19 +67,16 @@ dockpipe_r2_normalize_account_id() {
 }
 
 source_terraform_pipeline_lib() {
-  local candidate
-  for candidate in \
-    "$ROOT/packages/terraform/resolvers/terraform-core/assets/scripts/terraform-pipeline.sh" \
-    "$ROOT/templates/core/assets/scripts/terraform-pipeline.sh" \
-    "$ROOT/src/core/assets/scripts/terraform-pipeline.sh"
-  do
-    if [[ -f "$candidate" ]]; then
-      # shellcheck source=/dev/null
-      source "$candidate"
-      return 0
-    fi
-  done
-  die "terraform-pipeline.sh not found — install dockpipe.terraform.core (packages/terraform) or templates/core from dockpipe init"
+  local dockpipe_bin="${DOCKPIPE_BIN:-}"
+  if [[ -z "$dockpipe_bin" ]]; then
+    dockpipe_bin="$(command -v dockpipe 2>/dev/null || true)"
+  fi
+  [[ -n "$dockpipe_bin" ]] || die "dockpipe not found; set DOCKPIPE_BIN or add dockpipe to PATH"
+  local pipeline_sh
+  pipeline_sh="$("$dockpipe_bin" terraform pipeline-path 2>/dev/null)" || die "could not resolve terraform pipeline path via dockpipe terraform pipeline-path"
+  [[ -f "$pipeline_sh" ]] || die "terraform pipeline script not found at ${pipeline_sh:-<empty>}"
+  # shellcheck source=/dev/null
+  source "$pipeline_sh"
 }
 
 find_terraform_dir() {
@@ -106,16 +98,10 @@ find_terraform_dir() {
     fi
     return 1
   fi
-  if [[ "${DOCKPIPE_TF_USE_R2_PUBLISH_MAP:-0}" == "1" ]]; then
-    for d in \
-      "packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/terraform" \
-      "templates/dockpipe.cloudflare.r2publish/terraform" \
-      "templates/r2-publish/terraform"; do
-      if [[ -d "$ROOT/$d" ]]; then
-        echo "$ROOT/$d"
-        return 0
-      fi
-    done
+  local bundled="${SCRIPT_DIR}/../../terraform"
+  if [[ -d "$bundled" ]]; then
+    echo "$bundled"
+    return 0
   fi
   return 1
 }
@@ -178,16 +164,12 @@ attach_cloudflare_provider() {
 
 attach_cloudflare_provider
 
-TF_DIR="$(find_terraform_dir)" || die "Terraform module not found — set DOCKPIPE_TF_MODULE_DIR or R2_TERRAFORM_DIR, or rely on bundled dockpipe.cloudflare.r2publish/terraform when DOCKPIPE_TF_USE_R2_PUBLISH_MAP=1"
+TF_DIR="$(find_terraform_dir)" || die "Terraform module not found — set DOCKPIPE_TF_MODULE_DIR or R2_TERRAFORM_DIR, or keep the bundled module in this package"
 
 source_terraform_pipeline_lib
 export DOCKPIPE_TF_LOG_PREFIX="${DOCKPIPE_TF_LOG_PREFIX:-${WF_NS}}"
 
-if [[ "${DOCKPIPE_TF_USE_R2_PUBLISH_MAP:-0}" == "1" ]]; then
-  dockpipe_tf_map_r2_publish_env
-else
-  dockpipe_tf_map_generic_env
-fi
+dockpipe_tf_map_r2_publish_env
 
 tf_backend="${DOCKPIPE_TF_BACKEND:-local}"
 backend_arg="${DOCKPIPE_TF_BACKEND_HCL_PATH:-}"

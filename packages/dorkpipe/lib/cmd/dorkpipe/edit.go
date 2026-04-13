@@ -454,7 +454,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 	}
 
 	emitEditEvent(reqID, "validating", "Checking patch applicability", 0.62, nil)
-	verifyOutput, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
+	verifyOutput, err := runRepoScript(ctx, root, "verify-patch-applies.sh", patchPath, root)
 	if err != nil {
 		repairMemory = append(repairMemory, "patch_verifier_failed")
 		_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
@@ -483,7 +483,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 			recheckLabel = "Re-checking structured patch"
 		}
 		emitEditEvent(reqID, "validating", recheckLabel, 0.7, nil)
-		verifyOutput, err = runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
+		verifyOutput, err = runRepoScript(ctx, root, "verify-patch-applies.sh", patchPath, root)
 		if err != nil {
 			_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
 			emitEditError(reqID, "VALIDATION_FAILED", "The generated patch did not apply cleanly.", true)
@@ -594,7 +594,7 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 		})
 	}
 	emitEditEvent(reqID, "applying", "Applying verified patch", 0.88, nil)
-	applyOutput, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/apply-unified-patch.sh", patchPath, root)
+	applyOutput, err := runRepoScript(ctx, root, "apply-unified-patch.sh", patchPath, root)
 	if err != nil {
 		if fallbackOutput, fallbackErr := applyCreatedFilesFallback(root, artifact); fallbackErr == nil {
 			combined := strings.TrimSpace(strings.Join(uniqueNonEmpty([]string{applyOutput, fallbackOutput}), "\n"))
@@ -720,7 +720,10 @@ func collectEditCandidates(ctx context.Context, root, activeFile, message, artif
 		}
 		return lines, nil
 	}
-	candidateScript := filepath.Join(root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/edit-collect-candidates.sh")
+	candidateScript, err := resolveDorkpipeScriptPath("edit-collect-candidates.sh")
+	if err != nil {
+		return nil, err
+	}
 	args := []string{candidateScript, root}
 	if strings.TrimSpace(activeFile) != "" {
 		args = append(args, strings.TrimSpace(activeFile))
@@ -952,7 +955,6 @@ func heuristicTargetsForRequest(root, message string) []string {
 				out = append(out, relativeTo(root, match))
 			}
 		}
-		out = append(out, ".staging/packages/README.md")
 	}
 	if strings.Contains(lower, "package") {
 		if matches, _ := filepath.Glob(filepath.Join(root, "packages", "*", "package.yml")); len(matches) > 0 {
@@ -1082,7 +1084,10 @@ func rankCandidates(root string, candidates []string, message string) []string {
 	sort.SliceStable(scored, func(i, j int) bool {
 		return candidatePathScore(message, scored[i]) > candidatePathScore(message, scored[j])
 	})
-	rankScript := filepath.Join(root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/rank-candidate-files.sh")
+	rankScript, err := resolveDorkpipeScriptPath("rank-candidate-files.sh")
+	if err != nil {
+		return scored
+	}
 	cmd := exec.Command("bash", rankScript)
 	cmd.Dir = root
 	cmd.Stdin = strings.NewReader(strings.Join(scored, "\n"))
@@ -1638,7 +1643,7 @@ func tryHelperSidecarPatch(ctx context.Context, reqID, root, host, model string,
 	if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
 		return nil, "", true, err
 	}
-	verifyOutput, err := runRepoScript(ctx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
+	verifyOutput, err := runRepoScript(ctx, root, "verify-patch-applies.sh", patchPath, root)
 	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
 	if err != nil {
 		return nil, "", true, err
@@ -2266,14 +2271,17 @@ func validateEditArtifact(artifact *editModelArtifact) error {
 }
 
 func runRepoScript(ctx context.Context, root, relScript string, args ...string) (string, error) {
-	script := filepath.Join(root, relScript)
+	script, err := resolveDorkpipeScriptPath(relScript)
+	if err != nil {
+		return "", err
+	}
 	cmdArgs := append([]string{script}, args...)
 	cmd := exec.CommandContext(ctx, "bash", cmdArgs...)
 	cmd.Dir = root
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := cmd.Run()
+	err = cmd.Run()
 	text := strings.TrimSpace(stdout.String())
 	if strings.TrimSpace(stderr.String()) != "" {
 		if text != "" {
@@ -2289,8 +2297,12 @@ func runPostApplyValidation(ctx context.Context, root string, targetFiles []stri
 	if len(relFiles) == 0 {
 		return "No post-apply validation requested.", "not_run"
 	}
+	validateScript, err := resolveDorkpipeScriptPath("edit-validate-applied.sh")
+	if err != nil {
+		return err.Error(), "failed"
+	}
 	args := append([]string{
-		filepath.Join(root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/edit-validate-applied.sh"),
+		validateScript,
 		root,
 	}, relFiles...)
 	cmd := exec.CommandContext(ctx, "bash", args...)
@@ -2298,7 +2310,7 @@ func runPostApplyValidation(ctx context.Context, root string, targetFiles []stri
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := cmd.Run()
+	err = cmd.Run()
 	text := strings.TrimSpace(strings.TrimSpace(stdout.String()) + "\n" + strings.TrimSpace(stderr.String()))
 	if err != nil {
 		if text == "" {
@@ -2768,7 +2780,7 @@ func tryDeterministicCollectionScaffoldPrimitive(reqID, root, message, artifacts
 	}
 	verifyCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	verifyOutput, err := runRepoScript(verifyCtx, root, "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/verify-patch-applies.sh", patchPath, root)
+	verifyOutput, err := runRepoScript(verifyCtx, root, "verify-patch-applies.sh", patchPath, root)
 	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(emptyFallback(verifyOutput, "Deterministic scaffold primitive selected.")), 0o644)
 	if err != nil {
 		emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Deterministic scaffold patch did not apply cleanly.\n\nVerifier output:\n%s", emptyFallback(verifyOutput, "(no verifier output)")), false)
@@ -2914,7 +2926,7 @@ func discoverPackageRoots(root string) []string {
 		if rel == "." || rel == "" {
 			return nil
 		}
-		if rel == "packages" || strings.HasPrefix(rel, "packages/") || rel == ".staging/packages" || strings.HasPrefix(rel, ".staging/packages/") {
+		if rel == "packages" || strings.HasPrefix(rel, "packages/") {
 			roots = append(roots, rel)
 		}
 		return nil

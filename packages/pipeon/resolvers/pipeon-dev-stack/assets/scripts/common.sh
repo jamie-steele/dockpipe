@@ -7,18 +7,11 @@ pipeon_stack_workdir() {
 }
 
 pipeon_stack_repo_root() {
-  local workdir
-  workdir="$(pipeon_stack_workdir)"
-  if git -C "$workdir" rev-parse --show-toplevel >/dev/null 2>&1; then
-    git -C "$workdir" rev-parse --show-toplevel
+  if [[ -n "${PIPEON_DEV_STACK_PROJECT_DIR:-}" ]]; then
+    cd "$PIPEON_DEV_STACK_PROJECT_DIR" && pwd
     return 0
   fi
-  if [[ -f "$workdir/VERSION" && -d "$workdir/packages" && -d "$workdir/src" ]]; then
-    printf '%s\n' "$workdir"
-    return 0
-  fi
-  printf 'pipeon-dev-stack: could not determine repo root from %s\n' "$workdir" >&2
-  exit 1
+  pipeon_stack_workdir
 }
 
 pipeon_stack_slug() {
@@ -91,9 +84,7 @@ pipeon_stack_code_server_home() {
 }
 
 pipeon_stack_desktop_bin() {
-  local repo_root
-  repo_root="$(pipeon_stack_repo_root)"
-  printf '%s/packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop\n' "$repo_root"
+  command -v pipeon-desktop 2>/dev/null || true
 }
 
 pipeon_stack_mcp_port() {

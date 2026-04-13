@@ -1,7 +1,15 @@
 #!/usr/bin/env bash
 # Launched by the Pipeon desktop shortcut. Starts workflow vscode (code-server + Pipeon image).
 set -euo pipefail
-REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
-export DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$REPO}"
+
+DOCKPIPE_BIN="${DOCKPIPE_BIN:-}"
+if [[ -z "$DOCKPIPE_BIN" ]]; then
+  DOCKPIPE_BIN="$(command -v dockpipe 2>/dev/null || true)"
+fi
+[[ -n "$DOCKPIPE_BIN" ]] || {
+  echo "pipeon-code-server-launch: dockpipe not found; set DOCKPIPE_BIN or add dockpipe to PATH" >&2
+  exit 1
+}
+
 cd "${PIPEON_WORKDIR:-$HOME}"
-exec "$REPO/src/bin/dockpipe" --workflow vscode --workdir .
+exec "$DOCKPIPE_BIN" --workflow vscode --workdir .

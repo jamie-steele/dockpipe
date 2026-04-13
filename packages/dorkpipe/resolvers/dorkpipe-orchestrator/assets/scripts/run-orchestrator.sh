@@ -7,7 +7,14 @@ ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 
 cd "$ROOT"
 
-BIN="${DORKPIPE_BIN:-$ROOT/packages/dorkpipe/bin/dorkpipe}"
+BIN="${DORKPIPE_BIN:-}"
+if [[ -z "$BIN" ]]; then
+  if command -v dorkpipe >/dev/null 2>&1; then
+    BIN="$(command -v dorkpipe)"
+  else
+    BIN="${SCRIPT_DIR}/../../../../bin/dorkpipe"
+  fi
+fi
 SPEC="${DORKPIPE_SPEC:-$WORKFLOW_ROOT/spec.example.yaml}"
 
 if [[ ! -x "$BIN" ]]; then

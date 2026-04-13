@@ -2,13 +2,5 @@
 # Pipeon CLI entry — canonical path: packages/pipeon/resolvers/pipeon/bin/pipeon.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$HERE"
-while [ "$ROOT" != / ]; do
-	if [ -f "$ROOT/dockpipe.config.json" ] || [ -d "$ROOT/.git" ]; then
-		break
-	fi
-	ROOT="$(dirname "$ROOT")"
-done
-export DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$ROOT}"
-export DOCKPIPE_WORKDIR="${DOCKPIPE_WORKDIR:-$ROOT}"
-exec bash "$ROOT/packages/pipeon/resolvers/pipeon/assets/scripts/pipeon.sh" "$@"
+export DOCKPIPE_WORKDIR="${DOCKPIPE_WORKDIR:-$PWD}"
+exec bash "$HERE/../assets/scripts/pipeon.sh" "$@"

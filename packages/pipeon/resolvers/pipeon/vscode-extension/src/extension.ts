@@ -1691,6 +1691,14 @@ async function resolveDorkpipeInvocation(root) {
   };
 }
 
+function resolveDockpipeCommand() {
+  return (process.env.DOCKPIPE_BIN || "").trim() || "dockpipe";
+}
+
+function resolvePipeonCommand() {
+  return (process.env.PIPEON_BIN || "").trim() || "pipeon";
+}
+
 async function executeNaturalLanguageRequest(root, text, signals, options: ExecuteNaturalLanguageRequestOptions = {}): Promise<any> {
   const invocation = await resolveDorkpipeInvocation(root);
   const requestMode = ["ask", "agent", "plan"].includes(String(options.mode || "").toLowerCase())
@@ -2221,7 +2229,7 @@ async function handleLocalCommand(root, rawText) {
         status: "Local command help",
       };
     case "/status": {
-      const result = await runCommand("./packages/pipeon/resolvers/pipeon/bin/pipeon status", root, {
+      const result = await runCommand(`${shellQuote(resolvePipeonCommand())} status`, root, {
         DOCKPIPE_WORKDIR: root,
         DOCKPIPE_PIPEON: process.env.DOCKPIPE_PIPEON || "1",
         DOCKPIPE_PIPEON_ALLOW_PRERELEASE: process.env.DOCKPIPE_PIPEON_ALLOW_PRERELEASE || "1",
@@ -2233,7 +2241,7 @@ async function handleLocalCommand(root, rawText) {
       };
     }
     case "/bundle": {
-      const result = await runCommand("./packages/pipeon/resolvers/pipeon/bin/pipeon bundle", root, {
+      const result = await runCommand(`${shellQuote(resolvePipeonCommand())} bundle`, root, {
         DOCKPIPE_WORKDIR: root,
         DOCKPIPE_PIPEON: process.env.DOCKPIPE_PIPEON || "1",
         DOCKPIPE_PIPEON_ALLOW_PRERELEASE: process.env.DOCKPIPE_PIPEON_ALLOW_PRERELEASE || "1",
@@ -2259,7 +2267,7 @@ async function handleLocalCommand(root, rawText) {
         return { kind: "local", text: "Usage: `/workflow <name>`", status: "Workflow command needs a name" };
       }
       const workflow = args[0];
-      launchTerminalCommand(root, `DorkPipe workflow: ${workflow}`, `./src/bin/dockpipe --workflow ${workflow} --workdir . --`);
+      launchTerminalCommand(root, `DorkPipe workflow: ${workflow}`, `${shellQuote(resolveDockpipeCommand())} --workflow ${workflow} --workdir . --`);
       return {
         kind: "local",
         text: `Started workflow \`${workflow}\` in a terminal.`,
@@ -2267,22 +2275,22 @@ async function handleLocalCommand(root, rawText) {
       };
     }
     case "/test":
-      launchTerminalCommand(root, "DorkPipe test", "./src/bin/dockpipe --workflow test --workdir . --");
+      launchTerminalCommand(root, "DorkPipe test", `${shellQuote(resolveDockpipeCommand())} --workflow test --workdir . --`);
       return { kind: "local", text: "Started `test` workflow in a terminal.", status: "Started test workflow" };
     case "/ci":
-      launchTerminalCommand(root, "DorkPipe ci-emulate", "./src/bin/dockpipe --workflow ci-emulate --workdir . --");
+      launchTerminalCommand(root, "DorkPipe ci-emulate", `${shellQuote(resolveDockpipeCommand())} --workflow ci-emulate --workdir . --`);
       return { kind: "local", text: "Started `ci-emulate` workflow in a terminal.", status: "Started ci-emulate workflow" };
     case "/validate": {
       if (args.length > 0) {
         const target = args.join(" ");
-        const result = await runCommand(`./src/bin/dockpipe workflow validate ${shellQuote(target)}`, root);
+        const result = await runCommand(`${shellQuote(resolveDockpipeCommand())} workflow validate ${shellQuote(target)}`, root);
         return {
           kind: "local",
           text: ["```text", (result.stdout || result.stderr || "No output").trim(), "```"].join("\n"),
           status: "Workflow validation finished",
         };
       }
-      launchTerminalCommand(root, "DorkPipe validate", "./src/bin/dockpipe --workflow test --workdir . --");
+      launchTerminalCommand(root, "DorkPipe validate", `${shellQuote(resolveDockpipeCommand())} --workflow test --workdir . --`);
       return { kind: "local", text: "Started validation via the `test` workflow in a terminal.", status: "Started validation workflow" };
     }
     case "/plan": {
@@ -2303,7 +2311,7 @@ async function handleLocalCommand(root, rawText) {
       if (args.length === 0) {
         return { kind: "local", text: "Usage: `/workflow-validate <path-to-config.yml>`", status: "Workflow validation needs a path" };
       }
-      const result = await runCommand(`./src/bin/dockpipe workflow validate ${shellQuote(args.join(" "))}`, root);
+      const result = await runCommand(`${shellQuote(resolveDockpipeCommand())} workflow validate ${shellQuote(args.join(" "))}`, root);
       return {
         kind: "local",
         text: ["```text", (result.stdout || result.stderr || "No output").trim(), "```"].join("\n"),

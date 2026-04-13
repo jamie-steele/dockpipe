@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/common.sh"
 
 WORKDIR="$(pipeon_stack_workdir)"
-REPO_ROOT="$(pipeon_stack_repo_root)"
+PROJECT_DIR="$(pipeon_stack_repo_root)"
 COMPOSE_FILE="$(pipeon_stack_compose_file)"
 COMPOSE_PROJECT="$(pipeon_stack_compose_project)"
 CODE_SERVER_CONTAINER_NAME="$(pipeon_stack_code_server_name)"
@@ -22,19 +22,9 @@ PIPEON_DESKTOP_SCRIPT="$SCRIPT_DIR/desktop.sh"
 STACK_STARTED_BY_ME=0
 MCP_STARTED_BY_ME=0
 
-go_build_in_dir() {
-  local dir="$1"
-  shift
-  (
-    cd "$dir"
-    env GOCACHE=/tmp/dockpipe-go-build-cache go build "$@"
-  )
-}
-
 resolve_tool_bin() {
   local configured="${1:-}"
   local command_name="$2"
-  local repo_fallback="${3:-}"
   if [[ -n "$configured" ]]; then
     printf '%s\n' "$configured"
     return 0
@@ -43,74 +33,14 @@ resolve_tool_bin() {
     command -v "$command_name"
     return 0
   fi
-  if [[ -n "$repo_fallback" ]]; then
-    printf '%s\n' "$repo_fallback"
-  fi
-}
-
-try_rebuild_or_keep_existing() {
-  local target="$1"
-  local label="$2"
-  shift 2
-  if "$@"; then
-    return 0
-  fi
-  if [[ -x "$target" ]]; then
-    printf '[pipeon-dev-stack] warning: could not rebuild %s; using existing binary at %s\n' "$label" "$target" >&2
-    return 0
-  fi
-  printf '[pipeon-dev-stack] error: rebuild failed and no existing %s binary is available at %s\n' "$label" "$target" >&2
   return 1
-}
-
-paths_newer_than() {
-  local target="$1"
-  shift
-  if [[ ! -e "$target" ]]; then
-    return 0
-  fi
-  local path
-  for path in "$@"; do
-    [[ -e "$path" ]] || continue
-    if [[ -d "$path" ]]; then
-      if find "$path" -type f -newer "$target" -print -quit 2>/dev/null | grep -q .; then
-        return 0
-      fi
-    elif [[ "$path" -nt "$target" ]]; then
-      return 0
-    fi
-  done
-  return 1
-}
-
-code_server_image_needs_rebuild() {
-  local stamp
-  stamp="$(pipeon_stack_image_stamp_file)"
-  paths_newer_than "$stamp" \
-    "$REPO_ROOT/packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server" \
-    "$REPO_ROOT/packages/pipeon/resolvers/pipeon/vscode-extension/code-server-user-settings.json" \
-    "$REPO_ROOT/packages/pipeon/resolvers/pipeon/vscode-extension/extension.js" \
-    "$REPO_ROOT/packages/pipeon/resolvers/pipeon/vscode-extension/package.json" \
-    "$REPO_ROOT/packages/dockpipe-language-support" \
-    "$REPO_ROOT/packages/pipeon/resolvers/pipeon/vscode-extension/images"
-}
-
-build_code_server_image_if_needed() {
-  local stamp
-  stamp="$(pipeon_stack_image_stamp_file)"
-  ensure_pipeon_stack_state_dir
-  if ! docker image inspect dockpipe-code-server:latest >/dev/null 2>&1 || code_server_image_needs_rebuild; then
-    printf '[pipeon-dev-stack] rebuilding dockpipe-code-server:latest for fresh extension assets...\n' >&2
-    make build-code-server-image >&2
-    date -Iseconds > "$stamp"
-  fi
 }
 
 wait_for_ollama_ready() {
   local attempts="${1:-60}"
   local i
   for ((i = 0; i < attempts; i++)); do
-    if docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$REPO_ROOT" exec -T ollama ollama list >/dev/null 2>&1; then
+    if docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$PROJECT_DIR" exec -T ollama ollama list >/dev/null 2>&1; then
       return 0
     fi
     sleep 1
@@ -138,10 +68,10 @@ wait_for_mcp_ready() {
   return 1
 }
 
-DOCKPIPE_BIN="$(resolve_tool_bin "${DOCKPIPE_BIN:-}" dockpipe "$REPO_ROOT/src/bin/dockpipe")"
+DOCKPIPE_BIN="$(resolve_tool_bin "${DOCKPIPE_BIN:-}" dockpipe)"
 DORKPIPE_BIN="$(resolve_tool_bin "${DORKPIPE_BIN:-}" dorkpipe)"
 MCPD_BIN="$(resolve_tool_bin "${MCPD_BIN:-}" mcpd)"
-PIPEON_BIN="$(resolve_tool_bin "${PIPEON_BIN:-}" pipeon "$REPO_ROOT/packages/pipeon/resolvers/pipeon/bin/pipeon")"
+PIPEON_BIN="$(resolve_tool_bin "${PIPEON_BIN:-}" pipeon)"
 
 ensure_pipeon_stack_state_dir
 ensure_pipeon_stack_api_key
@@ -154,7 +84,7 @@ cleanup() {
     pipeon_stack_stop_mcpd
   fi
   if [[ "$AUTODOWN" == "1" ]]; then
-    docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$REPO_ROOT" down >/dev/null 2>&1 || true
+    docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$PROJECT_DIR" down >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT INT TERM
@@ -166,19 +96,10 @@ fi
 
 case "$BUILD_MODE" in
   always)
-    try_rebuild_or_keep_existing "$DOCKPIPE_BIN" dockpipe env GOCACHE=/tmp/dockpipe-go-build-cache make build
-    make build-pipeon-desktop
+    printf '[pipeon-dev-stack] PIPEON_DEV_STACK_BUILD=always no longer rebuilds sibling source trees; supply DOCKPIPE_BIN, DORKPIPE_BIN, MCPD_BIN, and PIPEON_DESKTOP_BIN explicitly if needed.\n' >&2
     ;;
   auto)
-    if [[ ! -x "$DOCKPIPE_BIN" ]] || paths_newer_than "$DOCKPIPE_BIN" "$REPO_ROOT/src" "$REPO_ROOT/src/Makefile" "$REPO_ROOT/VERSION"; then
-      try_rebuild_or_keep_existing "$DOCKPIPE_BIN" dockpipe env GOCACHE=/tmp/dockpipe-go-build-cache make build
-    fi
-    if [[ ! -x "$PIPEON_DESKTOP_BIN" ]] || paths_newer_than "$PIPEON_DESKTOP_BIN" "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop" "$REPO_ROOT/VERSION"; then
-      if command -v cargo >/dev/null 2>&1; then
-        make build-pipeon-desktop
-      fi
-    fi
-    build_code_server_image_if_needed
+    :
     ;;
   never)
     ;;
@@ -202,7 +123,7 @@ if [[ ! -f "$PIPEON_DESKTOP_SCRIPT" ]]; then
 fi
 
 if ! pipeon_stack_compose_running; then
-  docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$REPO_ROOT" up -d --remove-orphans
+  docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$PROJECT_DIR" up -d --remove-orphans
   STACK_STARTED_BY_ME=1
 fi
 
@@ -264,7 +185,7 @@ if [[ "${PIPEON_DEV_STACK_PULL_MODEL:-1}" == "1" ]]; then
     echo "pipeon-dev-stack: Ollama did not become ready in time" >&2
     exit 1
   fi
-  docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$REPO_ROOT" exec -T ollama ollama pull "$MODEL_NAME" >&2
+  docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$PROJECT_DIR" exec -T ollama ollama pull "$MODEL_NAME" >&2
 fi
 
 if [[ "${PIPEON_DEV_STACK_PIPEON_BUNDLE:-1}" == "1" && -x "$PIPEON_BIN" ]]; then
