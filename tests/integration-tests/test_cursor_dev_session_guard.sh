@@ -2,7 +2,9 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-SCRIPT="${REPO_ROOT}/.staging/packages/ide/resolvers/cursor-dev/assets/scripts/cursor-dev-session.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/helpers.sh"
+require_cursor_dev_script "$REPO_ROOT"
+SCRIPT="$REPLY"
 
 test_existing_session_guard() {
   local tmp fakebin workdir docker_log pid out rc
@@ -10,7 +12,7 @@ test_existing_session_guard() {
   fakebin="${tmp}/bin"
   workdir="${tmp}/work"
   docker_log="${tmp}/docker.log"
-  mkdir -p "${fakebin}" "${workdir}/.dockpipe/cursor-dev"
+  mkdir -p "${fakebin}" "${workdir}/bin/.dockpipe/packages/cursor-dev"
 
   cat >"${fakebin}/docker" <<'EOF'
 #!/usr/bin/env bash
@@ -44,7 +46,7 @@ EOF
 
   sleep 60 &
   pid=$!
-  cat >"${workdir}/.dockpipe/cursor-dev/active-session.env" <<EOF
+  cat >"${workdir}/bin/.dockpipe/packages/cursor-dev/active-session.env" <<EOF
 CURSOR_DEV_ACTIVE_PID=${pid}
 CURSOR_DEV_ACTIVE_CONTAINER=existing-container
 CURSOR_DEV_ACTIVE_WORKDIR=${workdir}

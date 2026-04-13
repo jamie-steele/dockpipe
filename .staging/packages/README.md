@@ -1,6 +1,6 @@
 # Maintainer packages — author workflows into store-shaped trees
 
-**Ignored in git** (local / third-party / backup-to-private-repo): experiment here when **`compile.workflows`** lists **`.staging/packages`**. First-party packs live under tracked **`packages/`** (`pipeon`, `dorkpipe`, `dockpipe-mcp`, `secrets`, `cloud`, …). Third-party **editor profiles** (**vscode**, **cursor-dev**) live here as **`ide/`** only.
+**Ignored in git** (local / third-party / backup-to-private-repo): experiment here when **`compile.workflows`** lists **`.staging/packages`**. First-party packs live under tracked **`packages/`** (`pipeon`, `dorkpipe`, `dockpipe-mcp`, `secrets`, `cloud`, `ide`, …). Use this tree for unpublished overlays and experiments, not canonical first-party package ownership.
 
 When included in **`dockpipe.config.json`**, you **edit YAML + assets here**, then **`dockpipe build`** materializes **`.dockpipe/internal/packages/`** — **`dockpipe-workflow-*.tar.gz`**, **`dockpipe-resolver-*.tar.gz`**, plus **`core`**.
 
@@ -20,8 +20,8 @@ When included in **`dockpipe.config.json`**, you **edit YAML + assets here**, th
 
 ## Layout
 
-- **`.staging/packages/<group>/`** — third-party / vendor umbrellas (**`agent/`**, **`ide/`** — vscode, cursor-dev)
-- **`packages/<group>/`** — first-party maintainer packs (**`pipeon/`**, **`dorkpipe/`**, **`dockpipe-mcp/`**, **`secrets/`**, **`cloud/`**, …)
+- **`.staging/packages/<group>/`** — unpublished / experimental umbrellas (**`agent/`**, private overlays, backups)
+- **`packages/<group>/`** — first-party maintainer packs (**`pipeon/`**, **`dorkpipe/`**, **`dockpipe-mcp/`**, **`secrets/`**, **`cloud/`**, **`ide/`**, …)
 
 Repo-root **`workflows/`** is **lean CI / dogfood**; listed compile roots are for **grouped packages** compiled into the store and embedded binary (when configured).
 

@@ -14,3 +14,15 @@ require_agent_dev_template() {
   echo "SKIP: optional agent-dev/claude template assets are not present in this checkout"
   exit 0
 }
+
+require_cursor_dev_script() {
+  local repo_root cursor_script
+  repo_root="${1:-$(integration_repo_root)}"
+  cursor_script="$repo_root/packages/ide/resolvers/cursor-dev/assets/scripts/cursor-dev-session.sh"
+  if [[ -f "$cursor_script" ]]; then
+    REPLY="$cursor_script"
+    return 0
+  fi
+  echo "FAIL: expected tracked cursor-dev package script at $cursor_script" >&2
+  exit 1
+}
