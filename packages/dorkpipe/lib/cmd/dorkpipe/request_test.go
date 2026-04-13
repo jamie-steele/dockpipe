@@ -146,6 +146,41 @@ func TestInferWorkspaceChatTargets_PrefersImplementationOverTests(t *testing.T) 
 	}
 }
 
+func TestInferWorkspaceChatTargets_PrefersCoreImplementationOverClientSurface(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	files := map[string]string{
+		"packages/dorkpipe/lib/cmd/dorkpipe/request.go":                              "package main\n\nfunc handleChatRoute(ctx context.Context) {}\nfunc buildWorkspaceChatContext(root string, req routeRequest) workspaceChatContext {}\n",
+		"packages/dorkpipe/lib/cmd/dorkpipe/reasoning_runtime.go":                    "package main\n\ntype runtimePolicy struct{}\nfunc resolveRuntimePolicy() {}\n",
+		"packages/pipeon/resolvers/pipeon/vscode-extension/src/extension.ts":         "export function resolveDorkpipeInvocation() {}\nconst localFirst = true;\n",
+		"packages/pipeon/resolvers/pipeon/vscode-extension/src/webview/chat.ts":      "export function renderRunInspector() {}\n",
+	}
+	for rel, body := range files {
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", rel, err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	got := inferWorkspaceChatTargets(root, routeRequest{
+		Message: "Explain how Ask mode now handles a plain-English architecture question after the v2 reasoning runtime changes.",
+	})
+	if len(got) == 0 {
+		t.Fatalf("expected inferred targets, got none")
+	}
+	for _, rel := range got {
+		if strings.Contains(rel, "vscode-extension") {
+			t.Fatalf("expected client surface file to be pruned when core implementation exists, got %#v", got)
+		}
+	}
+	if got[0] != "packages/dorkpipe/lib/cmd/dorkpipe/request.go" && got[0] != "packages/dorkpipe/lib/cmd/dorkpipe/reasoning_runtime.go" {
+		t.Fatalf("expected core implementation file first, got %#v", got)
+	}
+}
+
 func TestInferWorkspaceChatTargets_RequiresDenseArchitectureMatches(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -264,6 +299,34 @@ func TestValidateChatAnswer_RejectsUnsupportedClaims(t *testing.T) {
 	}
 	if len(got.Issues) == 0 {
 		t.Fatalf("expected validation issues, got %#v", got)
+	}
+}
+
+func TestValidateChatAnswer_RequiresMultipleCitationsForArchitectureWhenEvidenceSupportsIt(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeTestFile(t, root, "src/request.go", "package main\n\nfunc chooseRoute(req routeRequest) routedRequest { return routedRequest{} }\nfunc handleChatRoute(ctx context.Context) {}\n")
+	req := routeRequest{
+		Message: "Explain how Ask mode routes and validates architecture questions internally.",
+		Mode:    "ask",
+	}
+	ctx := workspaceChatContext{
+		Text: "Relevant file: src/request.go\n\n```text\nfunc chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n```",
+		Targets: []string{"src/request.go"},
+		Snippets: map[string]string{
+			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n",
+		},
+		Evidence: buildChatEvidenceGraph(root, req, []string{"src/request.go"}, map[string]string{
+			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n",
+		}, extractChatSearchTerms(req.Message)),
+	}
+	answer := "## Confirmed\n- Ask mode routes architecture requests through `chooseRoute`. Evidence: `src/request.go` :: `chooseRoute`\n\n## Uncertain\n- More detail is unclear."
+	got := validateChatAnswer(answer, req, ctx)
+	if got.Passed {
+		t.Fatalf("expected architecture answer to require more citation coverage, got %#v", got)
+	}
+	if len(got.Issues) == 0 || !strings.Contains(got.Issues[0], "need at least 2") {
+		t.Fatalf("expected multi-citation validation issue, got %#v", got)
 	}
 }
 

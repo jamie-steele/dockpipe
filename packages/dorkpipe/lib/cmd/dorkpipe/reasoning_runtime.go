@@ -346,7 +346,7 @@ func buildChatBranchPrompts(policy runtimePolicy) []reasoning.AttemptRecord {
 	return attempts
 }
 
-func scoreChatAttempt(answer string, validation chatAnswerValidation, chatContext workspaceChatContext) float64 {
+func scoreChatAttempt(answer string, validation chatAnswerValidation, chatContext workspaceChatContext, req routeRequest) float64 {
 	score := 0.2
 	if validation.Passed {
 		score += 0.45
@@ -356,7 +356,11 @@ func scoreChatAttempt(answer string, validation chatAnswerValidation, chatContex
 		score += 0.1
 	}
 	citations := countSupportedEvidenceCitations(answer, chatContext.Evidence)
-	score += float64(minStructuredInt(citations, 4)) * 0.08
+	requiredCitations := requiredEvidenceCitationCount(req, chatContext)
+	score += float64(minStructuredInt(citations, 4)) * 0.1
+	if citations >= requiredCitations {
+		score += 0.12
+	}
 	if len(validation.Issues) > 0 {
 		score -= float64(len(validation.Issues)) * 0.08
 	}

@@ -585,7 +585,7 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 			Label:            label,
 			Kind:             "candidate",
 			Status:           validationStatus,
-			Score:            scoreChatAttempt(answerText, attemptValidation, chatContext),
+			Score:            scoreChatAttempt(answerText, attemptValidation, chatContext, req),
 			Summary:          clampString(answerText, 400),
 			ValidationStatus: validationStatus,
 			FailureSummary:   failureSummary,
@@ -953,7 +953,7 @@ func pruneNonImplementationTargets(items []string) []string {
 	if len(out) == 0 {
 		return all
 	}
-	return out
+	return pruneClientSurfaceTargets(out)
 }
 
 func inferMentionedBasenameTargets(root, message string) []string {
@@ -1171,7 +1171,7 @@ func isDenseArchitectureMatch(basenameMatch bool, pathMatches, contentMatches, s
 
 func isLowSignalChatTerm(term string) bool {
 	switch strings.ToLower(strings.TrimSpace(term)) {
-	case "current", "currently", "latest", "changes", "change", "question", "plain", "english", "architecture", "internally", "internal", "runtime", "behavior", "works", "working", "ground", "grounds", "grounding", "repo", "repository":
+	case "current", "currently", "latest", "changes", "change", "question", "plain", "english", "architecture", "internally", "internal", "runtime", "behavior", "works", "working", "ground", "grounds", "grounding", "repo", "repository", "code", "anchored", "claim", "claims", "exact", "cite", "cited", "confidence", "guess", "symbol", "symbols", "path", "paths":
 		return true
 	default:
 		return false
@@ -1369,6 +1369,9 @@ func scoreChatSearchPath(lowerRel string, architectureQuery bool) int {
 				score -= 3
 			}
 		}
+		if isClientSurfaceLikePath(lowerRel) {
+			score -= 6
+		}
 		if isTestLikePath(lowerRel) {
 			score -= 12
 		}
@@ -1423,15 +1426,37 @@ func validateChatAnswer(answer string, req routeRequest, chatContext workspaceCh
 	if !result.Required {
 		return result
 	}
-	if countSupportedEvidenceCitations(answer, chatContext.Evidence) == 0 {
+	citationCount := countSupportedEvidenceCitations(answer, chatContext.Evidence)
+	requiredCitations := requiredEvidenceCitationCount(req, chatContext)
+	if citationCount < requiredCitations {
 		result.Passed = false
-		result.Issues = append(result.Issues, "missing evidence citations to retrieved file/symbol nodes")
+		if requiredCitations > 1 {
+			result.Issues = append(result.Issues, fmt.Sprintf("insufficient evidence citations to retrieved file/symbol nodes: got %d, need at least %d", citationCount, requiredCitations))
+		} else {
+			result.Issues = append(result.Issues, "missing evidence citations to retrieved file/symbol nodes")
+		}
 	}
 	if unsupported := findUnsupportedAnswerReferences(answer, req, chatContext); len(unsupported) > 0 {
 		result.Passed = false
 		result.Issues = append(result.Issues, "unsupported references: "+strings.Join(unsupported, ", "))
 	}
 	return result
+}
+
+func requiredEvidenceCitationCount(req routeRequest, chatContext workspaceChatContext) int {
+	if !isArchitectureChatQuery(req.Message) {
+		return 1
+	}
+	symbolCount := 0
+	for _, node := range chatContext.Evidence.Nodes {
+		if node.Kind == "symbol" {
+			symbolCount++
+		}
+	}
+	if symbolCount >= 2 {
+		return 2
+	}
+	return 1
 }
 
 var evidenceCitationPattern = regexp.MustCompile("Evidence:\\s*`([^`]+)`\\s*::\\s*`([^`]+)`")
@@ -1839,7 +1864,7 @@ func isTestLikePath(rel string) bool {
 
 func isImplementationLikePath(rel string) bool {
 	lower := strings.ToLower(filepath.ToSlash(rel))
-	if isTestLikePath(lower) || isDocLikePath(lower) || isScriptLikePath(lower) {
+	if isTestLikePath(lower) || isDocLikePath(lower) || isScriptLikePath(lower) || isClientSurfaceLikePath(lower) {
 		return false
 	}
 	switch strings.ToLower(filepath.Ext(lower)) {
@@ -1848,6 +1873,39 @@ func isImplementationLikePath(rel string) bool {
 	default:
 		return false
 	}
+}
+
+func isClientSurfaceLikePath(rel string) bool {
+	lower := strings.ToLower(filepath.ToSlash(rel))
+	return strings.Contains(lower, "/webview/") ||
+		strings.Contains(lower, "/vscode-extension/") ||
+		strings.Contains(lower, "/frontend/") ||
+		strings.Contains(lower, "/ui/") ||
+		strings.Contains(lower, "/client/")
+}
+
+func pruneClientSurfaceTargets(items []string) []string {
+	all := uniqueNonEmpty(items)
+	hasCoreImplementation := false
+	for _, rel := range all {
+		if !isClientSurfaceLikePath(rel) {
+			hasCoreImplementation = true
+			break
+		}
+	}
+	if !hasCoreImplementation {
+		return all
+	}
+	var out []string
+	for _, rel := range all {
+		if !isClientSurfaceLikePath(rel) {
+			out = append(out, rel)
+		}
+	}
+	if len(out) == 0 {
+		return all
+	}
+	return out
 }
 
 func isDocLikePath(rel string) bool {

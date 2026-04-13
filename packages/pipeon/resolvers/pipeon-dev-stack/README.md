@@ -29,6 +29,9 @@ The stack now prefers the dedicated Tauri desktop shell at
 **`src/apps/pipeon-desktop/bin/pipeon-desktop`** instead of opening a normal
 browser window.
 
+For the full rebuild / refresh sequence when local changes are not showing up, see
+**`../pipeon/assets/docs/pipeon-refresh.md`**.
+
 ## Boundary
 
 Pipeon is the client surface. DorkPipe is orchestration and routing. DockPipe remains the mutation

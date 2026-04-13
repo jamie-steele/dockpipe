@@ -29,7 +29,7 @@ export DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1   # until VERSION >= min gate
 ./packages/pipeon/resolvers/pipeon/bin/pipeon chat "Summarize security posture from available signals."
 ```
 
-See **`assets/docs/pipeon-ide-experience.md`** and **`assets/docs/pipeon-shortcuts.md`**.
+See **`assets/docs/pipeon-ide-experience.md`**, **`assets/docs/pipeon-shortcuts.md`**, and **`assets/docs/pipeon-refresh.md`**.
 
 ## Pipeon ↔ DorkPipe boundary
 
