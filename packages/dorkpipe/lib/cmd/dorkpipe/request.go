@@ -2271,6 +2271,7 @@ func prioritizeArchitectureEvidenceNodes(req routeRequest, nodes []chatEvidenceN
 	var fileNodes []chatEvidenceNode
 	var symbolNodes []chatEvidenceNode
 	focusTerms := fallbackFocusTerms(req.Message)
+	preferredFiles := map[string]struct{}{}
 	for _, node := range nodes {
 		switch node.Kind {
 		case "request":
@@ -2279,6 +2280,9 @@ func prioritizeArchitectureEvidenceNodes(req routeRequest, nodes []chatEvidenceN
 			fileNodes = append(fileNodes, node)
 		case "symbol":
 			symbolNodes = append(symbolNodes, node)
+			if isRouteHandlerLikeSymbol(node.Symbol) && matchesRouteFocus(node.Symbol, focusTerms) && node.File != "" {
+				preferredFiles[node.File] = struct{}{}
+			}
 		}
 	}
 	sort.SliceStable(symbolNodes, func(i, j int) bool {
@@ -2293,17 +2297,29 @@ func prioritizeArchitectureEvidenceNodes(req routeRequest, nodes []chatEvidenceN
 	var selected []chatEvidenceNode
 	seenIDs := map[string]struct{}{}
 	for _, family := range []string{"focused-route-handler", "routing", "context", "validation", "policy"} {
-		for _, node := range symbolNodes {
-			if architectureEvidenceFamily(node.Symbol, focusTerms) != family {
-				continue
+		for _, preferFocusedFile := range []bool{true, false} {
+			for _, node := range symbolNodes {
+				if architectureEvidenceFamily(node.Symbol, focusTerms) != family {
+					continue
+				}
+				if _, ok := seenIDs[node.ID]; ok {
+					continue
+				}
+				if preferFocusedFile && len(preferredFiles) > 0 {
+					if _, ok := preferredFiles[node.File]; !ok {
+						continue
+					}
+				} else if !preferFocusedFile && len(preferredFiles) > 0 {
+					if _, ok := preferredFiles[node.File]; ok && family != "policy" {
+						// Keep policy/runtime slots free to come from related helper files if needed.
+					}
+				}
+				selected = append(selected, node)
+				seenIDs[node.ID] = struct{}{}
+				goto nextFamily
 			}
-			if _, ok := seenIDs[node.ID]; ok {
-				continue
-			}
-			selected = append(selected, node)
-			seenIDs[node.ID] = struct{}{}
-			break
 		}
+	nextFamily:
 	}
 	for _, node := range symbolNodes {
 		if len(selected) >= 6 {

@@ -102,8 +102,8 @@ func extractGoEvidence(relPath, body string, searchTerms []string) (EvidenceReco
 		return nodes[i].score > nodes[j].score
 	})
 	limit := len(nodes)
-	if limit > 12 {
-		limit = 12
+	if limit > 20 {
+		limit = 20
 	}
 	selected := map[string]struct{}{}
 	for _, item := range nodes[:limit] {

@@ -488,6 +488,53 @@ func TestBuildChatEvidenceGraph_PrioritizesExecutionSymbolsForArchitectureQuery(
 	}
 }
 
+func TestBuildChatEvidenceGraph_KeepsFocusedFlowStagesInLargeFiles(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	writeTestFile(t, root, "src/request.go", `package main
+
+func handleChatRoute(ctx context.Context) {}
+func handleInspectRoute(ctx context.Context) {}
+func handleEditRoute(ctx context.Context) {}
+func chooseRoute(req routeRequest) routedRequest { return routedRequest{} }
+func buildWorkspaceChatContext(root string, req routeRequest) workspaceChatContext { return workspaceChatContext{} }
+func validateChatAnswer(answer string, req routeRequest, chatContext workspaceChatContext) chatAnswerValidation { return chatAnswerValidation{} }
+func resolveRuntimePolicy() {}
+func buildChatPrompt() {}
+func buildChatAnswerRepairPrompt() {}
+func buildChatEvidenceGraph() {}
+func summarizeStrictEvidenceGraph() {}
+func preferredChatEvidenceNodes() {}
+func citationSupportsClaim() bool { return false }
+func isRouteHandlerLikeSymbol(symbol string) bool { return false }
+func matchesRouteFocus(symbol string, focusTerms []string) bool { return false }
+func extractChatSearchTerms(message string) []string { return nil }
+func extractLikelySnippetSymbolsNearTerms(snippet string, searchTerms []string) []string { return nil }
+func parseAnswerCitationBindings(answer string) []answerCitationBinding { return nil }
+`)
+	req := routeRequest{
+		Message: "Explain how Ask mode now handles a plain-English architecture question after the v2 reasoning runtime changes.",
+		Mode:    "ask",
+	}
+	graph := buildChatEvidenceGraph(root, req, []string{"src/request.go"}, map[string]string{
+		"src/request.go": "func handleChatRoute(ctx context.Context) {}\nfunc chooseRoute(req routeRequest) routedRequest { return routedRequest{} }\nfunc buildWorkspaceChatContext(root string, req routeRequest) workspaceChatContext { return workspaceChatContext{} }\nfunc validateChatAnswer(answer string, req routeRequest, chatContext workspaceChatContext) chatAnswerValidation { return chatAnswerValidation{} }\nfunc resolveRuntimePolicy() {}\n",
+	}, extractChatSearchTerms(req.Message))
+	got := map[string]bool{}
+	for _, node := range graph.Nodes {
+		if node.Kind == "symbol" {
+			got[node.Symbol] = true
+		}
+	}
+	for _, expected := range []string{"handleChatRoute", "chooseRoute", "buildWorkspaceChatContext", "validateChatAnswer"} {
+		if !got[expected] {
+			t.Fatalf("expected graph to retain focused Ask flow stage %s, got %#v", expected, graph.Nodes)
+		}
+	}
+	if got["handleInspectRoute"] || got["handleEditRoute"] || got["citationSupportsClaim"] {
+		t.Fatalf("expected graph to suppress distracting symbols, got %#v", graph.Nodes)
+	}
+}
+
 func TestBuildEvidenceOnlyChatFallback_UsesStrictEvidenceCitations(t *testing.T) {
 	t.Parallel()
 	graph := chatEvidenceGraph{
