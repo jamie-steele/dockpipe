@@ -717,7 +717,51 @@ func inferWorkspaceChatTargets(root string, req routeRequest) []string {
 			existing = append(existing, rel)
 		}
 	}
+	if isArchitectureChatQuery(req.Message) {
+		existing = prioritizeImplementationTargets(existing)
+	}
 	return uniqueNonEmpty(existing)
+}
+
+func prioritizeImplementationTargets(items []string) []string {
+	scored := uniqueNonEmpty(items)
+	sort.SliceStable(scored, func(i, j int) bool {
+		si := implementationTargetScore(scored[i])
+		sj := implementationTargetScore(scored[j])
+		if si == sj {
+			return false
+		}
+		return si > sj
+	})
+	return scored
+}
+
+func implementationTargetScore(rel string) int {
+	lower := strings.ToLower(filepath.ToSlash(rel))
+	score := 0
+	if isTestLikePath(lower) {
+		score -= 12
+	}
+	if isDocLikePath(lower) {
+		score -= 6
+	}
+	if isScriptLikePath(lower) {
+		score -= 5
+	}
+	for _, token := range []string{"/src/", "/lib/", "/cmd/", "/internal/", "/pkg/", "/app/", "/apps/"} {
+		if strings.Contains(lower, token) {
+			score += 8
+		}
+	}
+	switch strings.ToLower(filepath.Ext(lower)) {
+	case ".go", ".ts", ".tsx", ".js", ".jsx", ".py", ".rs", ".java", ".c", ".cc", ".cpp", ".h", ".hpp", ".cs", ".rb", ".php", ".swift", ".kt", ".kts":
+		score += 6
+	case ".sh":
+		score += 1
+	case ".md", ".txt":
+		score -= 2
+	}
+	return score
 }
 
 func inferMentionedBasenameTargets(root, message string) []string {
@@ -996,6 +1040,12 @@ func scoreChatSearchPath(lowerRel string, architectureQuery bool) int {
 				score -= 3
 			}
 		}
+		if isTestLikePath(lowerRel) {
+			score -= 12
+		}
+		if isScriptLikePath(lowerRel) {
+			score -= 5
+		}
 	}
 	if strings.HasSuffix(lowerRel, "readme.md") {
 		score -= 1
@@ -1185,8 +1235,6 @@ func extractLikelySnippetSymbols(snippet string) []string {
 		regexp.MustCompile(`\bclass\s+([A-Za-z_][A-Za-z0-9_]*)`),
 		regexp.MustCompile(`\binterface\s+([A-Za-z_][A-Za-z0-9_]*)`),
 		regexp.MustCompile(`\btype\s+([A-Za-z_][A-Za-z0-9_]*)`),
-		regexp.MustCompile(`\bconst\s+([A-Za-z_][A-Za-z0-9_]*)`),
-		regexp.MustCompile(`\bvar\s+([A-Za-z_][A-Za-z0-9_]*)`),
 	}
 	var out []string
 	for _, pattern := range patterns {
@@ -1204,7 +1252,29 @@ func extractLikelySnippetSymbols(snippet string) []string {
 	return out
 }
 
+func extractLikelySnippetSymbolsForFile(rel, snippet string, architectureQuery bool) []string {
+	symbols := extractLikelySnippetSymbols(snippet)
+	if len(symbols) == 0 {
+		return nil
+	}
+	if !architectureQuery {
+		return symbols
+	}
+	if isTestLikePath(rel) {
+		var filtered []string
+		for _, symbol := range symbols {
+			if looksLikeTestSymbol(symbol) {
+				continue
+			}
+			filtered = append(filtered, symbol)
+		}
+		return filtered
+	}
+	return symbols
+}
+
 func buildChatEvidenceGraph(req routeRequest, targets []string, snippets map[string]string) chatEvidenceGraph {
+	architectureQuery := isArchitectureChatQuery(req.Message)
 	nodes := []chatEvidenceNode{{
 		ID:      "request",
 		Kind:    "request",
@@ -1228,7 +1298,7 @@ func buildChatEvidenceGraph(req routeRequest, targets []string, snippets map[str
 			seenNodes[fileID] = struct{}{}
 		}
 		edges = append(edges, chatEvidenceEdge{From: "request", To: fileID, Kind: "grounds"})
-		for _, symbol := range extractLikelySnippetSymbols(snippet) {
+		for _, symbol := range extractLikelySnippetSymbolsForFile(rel, snippet, architectureQuery) {
 			symbolID := "symbol:" + rel + ":" + symbol
 			if _, ok := seenNodes[symbolID]; !ok {
 				nodes = append(nodes, chatEvidenceNode{
@@ -1259,6 +1329,41 @@ func summarizeSnippetEvidence(snippet string) string {
 		lines = lines[:3]
 	}
 	return clampString(strings.Join(lines, " "), 180)
+}
+
+func isTestLikePath(rel string) bool {
+	lower := strings.ToLower(filepath.ToSlash(rel))
+	return strings.HasSuffix(lower, "_test.go") ||
+		strings.Contains(lower, ".test.") ||
+		strings.Contains(lower, ".spec.") ||
+		strings.Contains(lower, "/test/") ||
+		strings.Contains(lower, "/tests/") ||
+		strings.Contains(lower, "/testdata/")
+}
+
+func isDocLikePath(rel string) bool {
+	lower := strings.ToLower(filepath.ToSlash(rel))
+	return strings.Contains(lower, "/docs/") ||
+		strings.Contains(lower, "/doc/") ||
+		strings.HasSuffix(lower, ".md") ||
+		strings.HasSuffix(lower, ".txt") ||
+		strings.HasSuffix(lower, "readme")
+}
+
+func isScriptLikePath(rel string) bool {
+	lower := strings.ToLower(filepath.ToSlash(rel))
+	return strings.Contains(lower, "/scripts/") ||
+		strings.HasSuffix(lower, ".sh") ||
+		strings.HasSuffix(lower, ".bash") ||
+		strings.HasSuffix(lower, ".zsh")
+}
+
+func looksLikeTestSymbol(symbol string) bool {
+	lower := strings.ToLower(strings.TrimSpace(symbol))
+	return strings.HasPrefix(lower, "test") ||
+		strings.Contains(lower, "fixture") ||
+		strings.Contains(lower, "mock") ||
+		strings.Contains(lower, "fake")
 }
 
 func uniqueChatEvidenceNodes(nodes []chatEvidenceNode) []chatEvidenceNode {

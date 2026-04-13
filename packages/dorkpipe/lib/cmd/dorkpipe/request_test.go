@@ -112,6 +112,34 @@ func TestInferWorkspaceChatTargets_SkipsCacheArtifacts(t *testing.T) {
 	}
 }
 
+func TestInferWorkspaceChatTargets_PrefersImplementationOverTests(t *testing.T) {
+	t.Parallel()
+	root := t.TempDir()
+	files := map[string]string{
+		"packages/dorkpipe/lib/cmd/dorkpipe/request.go":      "package main\n\nfunc chooseRoute(req routeRequest) routedRequest { return routedRequest{} }\n",
+		"packages/dorkpipe/lib/cmd/dorkpipe/request_test.go": "package main\n\nfunc TestChooseRoute(t *testing.T) {}\n",
+	}
+	for rel, body := range files {
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", rel, err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatalf("write %s: %v", rel, err)
+		}
+	}
+
+	got := inferWorkspaceChatTargets(root, routeRequest{
+		Message: "Explain how chooseRoute currently works internally.",
+	})
+	if len(got) == 0 {
+		t.Fatalf("expected inferred targets, got none")
+	}
+	if got[0] != "packages/dorkpipe/lib/cmd/dorkpipe/request.go" {
+		t.Fatalf("expected implementation file first, got %#v", got)
+	}
+}
+
 func TestChooseRoute_SlashInspectPrimitives(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -212,5 +240,21 @@ func TestBuildChatEvidenceGraph_IncludesFileAndSymbolNodes(t *testing.T) {
 	}
 	if got := countSupportedEvidenceCitations("Evidence: `src/request.go` :: `chooseRoute`", graph); got != 1 {
 		t.Fatalf("countSupportedEvidenceCitations() = %d", got)
+	}
+}
+
+func TestBuildChatEvidenceGraph_FiltersTestSymbolsForArchitectureQuery(t *testing.T) {
+	t.Parallel()
+	req := routeRequest{
+		Message: "Explain the internal route flow.",
+		Mode:    "ask",
+	}
+	graph := buildChatEvidenceGraph(req, []string{"src/request_test.go"}, map[string]string{
+		"src/request_test.go": "func TestChooseRoute(t *testing.T) {}\nfunc helperFixture() {}\n",
+	})
+	for _, node := range graph.Nodes {
+		if node.Kind == "symbol" {
+			t.Fatalf("expected test-only symbols to be filtered, got %#v", graph)
+		}
 	}
 }
