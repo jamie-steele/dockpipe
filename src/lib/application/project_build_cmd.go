@@ -126,7 +126,7 @@ With --for-workflow <name>: same as dockpipe package compile for-workflow <name>
 
 Options:
   --for-workflow <name>   Dependency-scoped compile instead of compile all
-  Otherwise same as package compile all / for-workflow: --workdir, --no-staging
+  Otherwise same as package compile all / for-workflow: --workdir
   (see: dockpipe package compile all --help)
 
 `
@@ -161,7 +161,7 @@ Usage:
   dockpipe rebuild [options]
 
 Options:
-  Same as dockpipe build / package compile all (--workdir, --no-staging).
+  Same as dockpipe build / package compile all (--workdir).
   build implies --force for compile outputs. See: dockpipe package compile all --help
 
 `

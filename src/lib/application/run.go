@@ -154,7 +154,7 @@ func Run(argv []string, baseEnviron []string) error {
 
 	if compileDepsWanted(opts) && opts.Workflow != "" && opts.WorkflowFile == "" {
 		effWd := effectiveWorkdirForWorkflowOpts(opts)
-		if err := compileClosureForWorkflow(effWd, opts.Workflow, false, opts.Force); err != nil {
+		if err := compileClosureForWorkflow(effWd, opts.Workflow, opts.Force); err != nil {
 			return err
 		}
 	}

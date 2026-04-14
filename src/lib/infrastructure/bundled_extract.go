@@ -191,17 +191,17 @@ func bundledCacheBase() (string, error) {
 // embedWorkflowRoot records a workflow directory under embeddedPackageRootsPrefixes (any depth) for material
 // bundle/workflows/<name>/… mapping.
 type embedWorkflowRoot struct {
-	prefix string // e.g. ide/resolvers/vscode under packages/ or .staging/packages/ (no leading embed root)
+	prefix string // e.g. ide/resolvers/vscode under an embedded package root (no leading embed root)
 	name   string // workflow leaf basename (e.g. codex)
 }
 
 var (
-	stagingEmbedRootsOnce sync.Once
-	stagingEmbedRoots     []embedWorkflowRoot
+	embeddedWorkflowRootsOnce sync.Once
+	embeddedWorkflowRoots     []embedWorkflowRoot
 )
 
-func initStagingEmbedRoots() {
-	stagingEmbedRootsOnce.Do(func() {
+func initEmbeddedWorkflowRoots() {
+	embeddedWorkflowRootsOnce.Do(func() {
 		seen := map[string]struct{}{}
 		_ = fs.WalkDir(dockpipe.BundledFS, ".", func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
@@ -231,11 +231,11 @@ func initStagingEmbedRoots() {
 				return nil
 			}
 			seen[parent] = struct{}{}
-			stagingEmbedRoots = append(stagingEmbedRoots, embedWorkflowRoot{prefix: parent, name: name})
+			embeddedWorkflowRoots = append(embeddedWorkflowRoots, embedWorkflowRoot{prefix: parent, name: name})
 			return nil
 		})
-		sort.Slice(stagingEmbedRoots, func(i, j int) bool {
-			return len(stagingEmbedRoots[i].prefix) > len(stagingEmbedRoots[j].prefix)
+		sort.Slice(embeddedWorkflowRoots, func(i, j int) bool {
+			return len(embeddedWorkflowRoots[i].prefix) > len(embeddedWorkflowRoots[j].prefix)
 		})
 	})
 }
@@ -254,9 +254,9 @@ func embeddedPackageRootPrefixForPath(path string) (string, bool) {
 	return "", false
 }
 
-// mapEmbeddedStagingWorkflowRel maps paths under embeddedPackageRootsPrefixes to bundle/workflows/<workflow>/… using
+// mapEmbeddedWorkflowRel maps paths under embeddedPackageRootsPrefixes to bundle/workflows/<workflow>/… using
 // discovered config.yml / profile roots (namespace nesting of any depth).
-func mapEmbeddedStagingWorkflowRel(rel string) (string, bool) {
+func mapEmbeddedWorkflowRel(rel string) (string, bool) {
 	for _, pfx := range embeddedPackageRootsPrefixes {
 		if rel != pfx && !strings.HasPrefix(rel, pfx+"/") {
 			continue
@@ -266,8 +266,8 @@ func mapEmbeddedStagingWorkflowRel(rel string) (string, bool) {
 		if normalized == "" {
 			return filepath.Join(BundledLayoutDir, "workflows"), true
 		}
-		initStagingEmbedRoots()
-		for _, r := range stagingEmbedRoots {
+		initEmbeddedWorkflowRoots()
+		for _, r := range embeddedWorkflowRoots {
 			if normalized == r.prefix || strings.HasPrefix(normalized, r.prefix+"/") {
 				suffix := strings.TrimPrefix(normalized, r.prefix)
 				suffix = strings.TrimPrefix(suffix, "/")
@@ -317,7 +317,7 @@ func mapEmbeddedToMaterializedPath(rel string) string {
 	default:
 		for _, pfx := range embeddedPackageRootsPrefixes {
 			if rel == pfx || strings.HasPrefix(rel, pfx+"/") {
-				if out, ok := mapEmbeddedStagingWorkflowRel(rel); ok {
+				if out, ok := mapEmbeddedWorkflowRel(rel); ok {
 					return out
 				}
 				rest := strings.TrimPrefix(rel, pfx)

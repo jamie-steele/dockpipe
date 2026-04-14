@@ -56,7 +56,7 @@ Familiar names for the **compiled package store** under **`.dockpipe/internal/pa
 
 | Command | Purpose |
 |---------|---------|
-| `dockpipe build [options]` | Runs **`dockpipe pipelang materialize`** first (roots from effective `compile.workflows`), then same as **`dockpipe package compile all --force`**: replaces existing compiled outputs, then materializes **core → resolvers → workflows** from **`compile.workflows`** in **`dockpipe.config.json`** (legacy **`compile.bundles`** merged into workflow roots; and defaults). If **`--workdir`** is omitted, the project directory is the folder containing **`dockpipe.config.json`** (walking up from the current directory), or the current directory if that file is absent. Options: **`--workdir`**, **`--no-staging`**. |
+| `dockpipe build [options]` | Runs **`dockpipe pipelang materialize`** first (roots from effective `compile.workflows`), then same as **`dockpipe package compile all --force`**: replaces existing compiled outputs, then materializes **core → resolvers → workflows** from **`compile.workflows`** in **`dockpipe.config.json`** (legacy **`compile.bundles`** merged into workflow roots; and defaults). If **`--workdir`** is omitted, the project directory is the folder containing **`dockpipe.config.json`** (walking up from the current directory), or the current directory if that file is absent. Options: **`--workdir`**. |
 | `dockpipe clean [--workdir <path>]` | **`rm -rf`** the packages root (default **`<workdir>/.dockpipe/internal/packages`**; respects **`DOCKPIPE_PACKAGES_ROOT`**). Does not wipe other **`.dockpipe/`** files. |
 | `dockpipe rebuild [options]` | **`clean`** (only **`--workdir`** is forwarded) then **`build`** with the full option set. |
 
@@ -82,7 +82,7 @@ Optional typed authoring helper. PipeLang compiles to inspectable artifacts; wor
 |---------|---------|
 | `dockpipe pipelang compile --in <file.pipe> [--entry <Class>] [--out <dir>]` | Parse + type-check PipeLang and emit artifacts: `<Class>.workflow.yml`, `<Class>.bindings.json`, `<Class>.bindings.env` (default out: `.dockpipe/pipelang/`). |
 | `dockpipe pipelang invoke --in <file.pipe> [--class <Class>] --method <name> [--arg <value>]... [--format text|json|env]` | Invoke a PipeLang method through CLI only. No resolver/runtime execution path is used. |
-| `dockpipe pipelang materialize [--workdir <path>] [--from <root>]... [--no-staging] [--force]` | Recursively compile `.pipe` files under roots into sidecar `.pipelang/` artifacts. Default roots are resolved from `dockpipe.config.json` `compile.workflows` (plus merged `compile.bundles`). |
+| `dockpipe pipelang materialize [--workdir <path>] [--from <root>]... [--force]` | Recursively compile `.pipe` files under roots into sidecar `.pipelang/` artifacts. Default roots are resolved from `dockpipe.config.json` `compile.workflows` (plus merged `compile.bundles`). |
 
 Method support (v0.0.0.1): expression-bodied methods are parsed, type-checked, included in bindings metadata, and invocable only via `dockpipe pipelang invoke`.
 

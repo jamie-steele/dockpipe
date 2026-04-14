@@ -17,7 +17,7 @@ import (
 // for the transitive closure of workflowName: config.yml inject:, package.yml depends, requires_resolvers,
 // resolver/runtime names on the workflow and steps, and nested delegate workflows from merged isolation profiles.
 // projectRoot is the DockPipe project directory (contains bin/.dockpipe and usually dockpipe.config.json).
-func compileClosureForWorkflow(projectRoot, workflowName string, noStaging, force bool) error {
+func compileClosureForWorkflow(projectRoot, workflowName string, force bool) error {
 	repoRoot, err := infrastructure.RepoRoot()
 	if err != nil {
 		return err
@@ -36,7 +36,7 @@ func compileClosureForWorkflow(projectRoot, workflowName string, noStaging, forc
 		return fmt.Errorf("compile for-workflow: workflow %q: %w", workflowName, err)
 	}
 
-	order, resNames, err := closureWorkflowOrderAndResolvers(repoRoot, projectRoot, startDir, cfg, noStaging)
+	order, resNames, err := closureWorkflowOrderAndResolvers(repoRoot, projectRoot, startDir, cfg)
 	if err != nil {
 		return err
 	}
@@ -99,8 +99,8 @@ func ensureCoreCompiled(projectRoot string, cfg *domain.DockpipeProjectConfig, f
 // closureWorkflowOrderAndResolvers returns workflow source dirs in dependency order (dependencies first)
 // and a set of resolver profile names to compile.
 // dockpipeRepoRoot is the DockPipe engine checkout (templates/core); projectRoot is the project being compiled.
-func closureWorkflowOrderAndResolvers(dockpipeRepoRoot, projectRoot, startDir string, cfg *domain.DockpipeProjectConfig, noStaging bool) ([]string, map[string]bool, error) {
-	wfRoots := domain.EffectiveWorkflowCompileRoots(cfg, projectRoot, noStaging)
+func closureWorkflowOrderAndResolvers(dockpipeRepoRoot, projectRoot, startDir string, cfg *domain.DockpipeProjectConfig) ([]string, map[string]bool, error) {
+	wfRoots := domain.EffectiveWorkflowCompileRoots(cfg, projectRoot)
 	visited := make(map[string]bool)
 	var order []string
 	resNames := make(map[string]bool)
@@ -263,10 +263,9 @@ func cmdPackageCompileForWorkflow(args []string) error {
 		return err
 	}
 	var (
-		workdir   string
-		wfName    string
-		noStaging bool
-		force     bool
+		workdir string
+		wfName  string
+		force   bool
 	)
 	for i := 0; i < len(args); i++ {
 		switch {
@@ -276,8 +275,6 @@ func cmdPackageCompileForWorkflow(args []string) error {
 		case args[i] == "--workflow" && i+1 < len(args):
 			wfName = args[i+1]
 			i++
-		case args[i] == "--no-staging":
-			noStaging = true
 		case args[i] == "--force":
 			force = true
 		case strings.HasPrefix(args[i], "-"):
@@ -300,7 +297,7 @@ func cmdPackageCompileForWorkflow(args []string) error {
 	if strings.TrimSpace(wfName) == "" {
 		return fmt.Errorf("missing workflow name (use --workflow <name> or a positional name)")
 	}
-	return compileClosureForWorkflow(workdir, wfName, noStaging, force)
+	return compileClosureForWorkflow(workdir, wfName, force)
 }
 
 const packageCompileForWorkflowUsageText = `dockpipe package compile for-workflow <name>
@@ -315,7 +312,6 @@ Does not replace a full "package compile all" — only what this workflow needs.
 Options:
   --workdir <path>   Project directory (default: current directory)
   --workflow <name>  Workflow name (same as dockpipe run --workflow)
-  --no-staging       Omit .staging paths from compile.workflows (same as compile all)
   --force            Replace existing compiled tarballs
 
 `

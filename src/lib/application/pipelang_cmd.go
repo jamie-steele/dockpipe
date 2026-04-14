@@ -218,10 +218,9 @@ func cmdPipeLangMaterialize(args []string) error {
 		return nil
 	}
 	var (
-		workdir   string
-		from      []string
-		noStaging bool
-		force     bool
+		workdir string
+		from    []string
+		force   bool
 	)
 	for i := 0; i < len(args); i++ {
 		switch {
@@ -231,8 +230,6 @@ func cmdPipeLangMaterialize(args []string) error {
 		case args[i] == "--from" && i+1 < len(args):
 			from = append(from, args[i+1])
 			i++
-		case args[i] == "--no-staging":
-			noStaging = true
 		case args[i] == "--force":
 			force = true
 		case strings.HasPrefix(args[i], "-"):
@@ -257,7 +254,7 @@ func cmdPipeLangMaterialize(args []string) error {
 		if err != nil {
 			return err
 		}
-		from = effectiveWorkflowCompileRoots(cfg, repoRoot, noStaging)
+		from = effectiveWorkflowCompileRoots(cfg, repoRoot)
 	}
 	roots := dedupeAbsExistingDirs(from)
 	outBase := filepath.Join(repoRoot, "bin", ".dockpipe", "pipelang")
@@ -299,7 +296,7 @@ Typed authoring helpers for PipeLang (optional layer over workflow YAML).
 Usage:
   dockpipe pipelang compile --in <file.pipe> [--entry <ClassName>] [--out <dir>]
   dockpipe pipelang invoke --in <file.pipe> [--class <ClassName>] --method <name> [--arg <value>]... [--format text|json|env]
-  dockpipe pipelang materialize [--workdir <path>] [--from <root>]... [--no-staging] [--force]
+  dockpipe pipelang materialize [--workdir <path>] [--from <root>]... [--force]
 
 `
 
@@ -335,7 +332,7 @@ const pipelangMaterializeUsageText = `dockpipe pipelang materialize
 Recursively compile .pipe files under workflow/package roots into inspectable local artifacts.
 
 Usage:
-  dockpipe pipelang materialize [--workdir <path>] [--from <root>]... [--no-staging] [--force]
+  dockpipe pipelang materialize [--workdir <path>] [--from <root>]... [--force]
 
 Default roots:
   - dockpipe.config.json compile.workflows (plus merged compile.bundles)

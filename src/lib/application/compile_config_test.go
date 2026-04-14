@@ -20,7 +20,7 @@ func TestEffectiveWorkflowCompileRootsUsesConfigOnly(t *testing.T) {
 			Workflows: &[]string{"workflows"},
 		},
 	}
-	out := effectiveWorkflowCompileRoots(cfg, repo, false)
+	out := effectiveWorkflowCompileRoots(cfg, repo)
 	if len(out) != 1 {
 		t.Fatalf("want 1 root (explicit workflows only), got %d: %v", len(out), out)
 	}
@@ -44,7 +44,7 @@ func TestEffectiveWorkflowCompileRootsNoDuplicateWhenListedTwice(t *testing.T) {
 			Workflows: &[]string{"workflows", "vendor/extra-wf"},
 		},
 	}
-	out := effectiveWorkflowCompileRoots(cfg, repo, false)
+	out := effectiveWorkflowCompileRoots(cfg, repo)
 	seen := map[string]int{}
 	for _, p := range out {
 		seen[filepath.Clean(p)]++

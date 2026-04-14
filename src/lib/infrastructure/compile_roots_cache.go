@@ -29,7 +29,7 @@ func WorkflowCompileRootsCached(repoRoot string) []string {
 		return v.([]string)
 	}
 	cfg, _ := domain.LoadDockpipeProjectConfig(repoRoot)
-	out := domain.EffectiveWorkflowCompileRoots(cfg, repoRoot, false)
+	out := domain.EffectiveWorkflowCompileRoots(cfg, repoRoot)
 	wfRootsCache.Store(k, out)
 	return out
 }
@@ -41,7 +41,7 @@ func ResolverCompileRootsCached(repoRoot string) []string {
 		return v.([]string)
 	}
 	cfg, _ := domain.LoadDockpipeProjectConfig(repoRoot)
-	out := domain.EffectiveResolverCompileRoots(cfg, repoRoot, false)
+	out := domain.EffectiveResolverCompileRoots(cfg, repoRoot)
 	resRootsCache.Store(k, out)
 	return out
 }
@@ -54,7 +54,7 @@ func BundleCompileRootsCached(repoRoot string) []string {
 		return v.([]string)
 	}
 	cfg, _ := domain.LoadDockpipeProjectConfig(repoRoot)
-	out := domain.EffectiveBundleCompileRoots(cfg, repoRoot, false)
+	out := domain.EffectiveBundleCompileRoots(cfg, repoRoot)
 	bunRootsCache.Store(k, out)
 	return out
 }

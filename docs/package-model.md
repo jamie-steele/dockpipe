@@ -59,7 +59,7 @@ Materialize a **project-local** store under **`.dockpipe/internal/packages/`** w
   - **`op_inject_template`** — repo-relative or absolute path to a **mapping file** for **`op inject`** (e.g. **`.env.op.template`** with **`op://`** lines). **`dockpipe doctor`** reports whether that file exists when **`dockpipe.config.json`** is present in the current directory.
   - **`notes`** — free-text reminder (e.g. vault naming, policy).
 
-If **`dockpipe.config.json`** is **missing**, compile uses built-in defaults for each omitted key. **`dockpipe init`** seeds a starter JSON. **`--no-staging`** drops paths whose repo-relative path starts with **`.staging/`** when resolving config lists. **Maintainer trees** (e.g. **`.staging/packages`**) are **not** implied: add them explicitly under **`compile.workflows`** when you want them compiled (legacy **`compile.bundles`** is merged into **`compile.workflows`**). See **`.staging/packages/README.md`** in this repo for a typical layout.
+If **`dockpipe.config.json`** is **missing**, compile uses built-in defaults for each omitted key. **`dockpipe init`** seeds a starter JSON. **Maintainer trees** (e.g. **`.staging/packages`**) are **not** implied: add them explicitly under **`compile.workflows`** when you want them compiled (legacy **`compile.bundles`** is merged into **`compile.workflows`**). See **`.staging/packages/README.md`** in this repo for a typical layout.
 
 Compile steps:
 

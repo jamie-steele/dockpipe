@@ -16,7 +16,7 @@ func TestEffectiveResolverCompileRootsMergesWorkflowsAndCore(t *testing.T) {
 	}
 	wf := []string{"workflows"}
 	cfg := &DockpipeProjectConfig{Compile: DockpipeCompileConfig{Workflows: &wf}}
-	got := EffectiveResolverCompileRoots(cfg, repo, false)
+	got := EffectiveResolverCompileRoots(cfg, repo)
 	if len(got) != 2 {
 		t.Fatalf("want 2 roots (workflows + src/core/resolvers), got %v", got)
 	}
@@ -33,7 +33,7 @@ func TestEffectiveResolverCompileRootsLegacyResolversMerged(t *testing.T) {
 	wf := []string{"workflows"}
 	legacy := []string{"extra"}
 	cfg := &DockpipeProjectConfig{Compile: DockpipeCompileConfig{Workflows: &wf, Resolvers: &legacy}}
-	got := EffectiveResolverCompileRoots(cfg, repo, false)
+	got := EffectiveResolverCompileRoots(cfg, repo)
 	if len(got) != 2 {
 		t.Fatalf("want workflows + legacy extra root, got %d: %v", len(got), got)
 	}

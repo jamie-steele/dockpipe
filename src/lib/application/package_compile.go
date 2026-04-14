@@ -449,10 +449,9 @@ func cmdPackageCompileResolvers(args []string) error {
 		return err
 	}
 	var (
-		workdir   string
-		from      []string
-		noStaging bool
-		force     bool
+		workdir string
+		from    []string
+		force   bool
 	)
 	for i := 0; i < len(args); i++ {
 		switch {
@@ -462,8 +461,6 @@ func cmdPackageCompileResolvers(args []string) error {
 		case (args[i] == "--from" || args[i] == "--source") && i+1 < len(args):
 			from = append(from, args[i+1])
 			i++
-		case args[i] == "--no-staging":
-			noStaging = true
 		case args[i] == "--force":
 			force = true
 		case strings.HasPrefix(args[i], "-"):
@@ -492,7 +489,7 @@ func cmdPackageCompileResolvers(args []string) error {
 		if err != nil {
 			return err
 		}
-		from = effectiveResolverCompileRoots(cfg, repoRoot, noStaging)
+		from = effectiveResolverCompileRoots(cfg, repoRoot)
 	}
 	if len(from) == 0 {
 		return fmt.Errorf("no resolver source directories (set compile.workflows in %s or pass --from)", domain.DockpipeProjectConfigFileName)
@@ -810,10 +807,9 @@ func cmdPackageCompileWorkflowsBatch(args []string) error {
 		return err
 	}
 	var (
-		workdir   string
-		from      []string
-		force     bool
-		noStaging bool
+		workdir string
+		from    []string
+		force   bool
 	)
 	for i := 0; i < len(args); i++ {
 		switch {
@@ -825,8 +821,6 @@ func cmdPackageCompileWorkflowsBatch(args []string) error {
 			i++
 		case args[i] == "--force":
 			force = true
-		case args[i] == "--no-staging":
-			noStaging = true
 		case strings.HasPrefix(args[i], "-"):
 			return fmt.Errorf("unknown option %s (try: dockpipe package compile workflows --help)", args[i])
 		default:
@@ -849,7 +843,7 @@ func cmdPackageCompileWorkflowsBatch(args []string) error {
 		if err != nil {
 			return err
 		}
-		from = effectiveWorkflowCompileRoots(cfg, repoRoot, noStaging)
+		from = effectiveWorkflowCompileRoots(cfg, repoRoot)
 	}
 	seen := make(map[string]struct{})
 	total := 0
@@ -912,9 +906,8 @@ func cmdPackageCompileAll(args []string) error {
 		return err
 	}
 	var (
-		workdir   string
-		force     bool
-		noStaging bool
+		workdir string
+		force   bool
 	)
 	for i := 0; i < len(args); i++ {
 		switch {
@@ -923,8 +916,6 @@ func cmdPackageCompileAll(args []string) error {
 			i++
 		case args[i] == "--force":
 			force = true
-		case args[i] == "--no-staging":
-			noStaging = true
 		case args[i] == "--with-bundles", args[i] == "--skip-bundles":
 			// Ignored: bundle roots compile as workflows (compile.bundles merged into compile.workflows).
 		case args[i] == "--help" || args[i] == "-h":
@@ -955,7 +946,7 @@ func cmdPackageCompileAll(args []string) error {
 	if err := cmdPackageCompileCore(workdirAndForceArgs(workdir, force)); err != nil {
 		return err
 	}
-	resRoots := effectiveResolverCompileRoots(cfg, repoRoot, noStaging)
+	resRoots := effectiveResolverCompileRoots(cfg, repoRoot)
 	if len(resRoots) == 0 {
 		fmt.Fprintf(os.Stderr, "[dockpipe] compile all: skip resolver packages (no resolver source dirs)\n")
 	} else {
@@ -971,7 +962,7 @@ func cmdPackageCompileAll(args []string) error {
 		}
 	}
 	wfArgs := workdirAndForceArgs(workdir, force)
-	for _, p := range effectiveWorkflowCompileRoots(cfg, repoRoot, noStaging) {
+	for _, p := range effectiveWorkflowCompileRoots(cfg, repoRoot) {
 		wfArgs = append(wfArgs, "--from", p)
 	}
 	if err := cmdPackageCompileWorkflowsBatch(wfArgs); err != nil {
@@ -1055,7 +1046,6 @@ Optional resolver.yaml next to each profile may set namespace: <label> (same rul
 Options:
   --workdir <path>      Project directory (default: current directory)
   --from <path>         Repeatable; each root's subdirectories are resolver profiles
-  --no-staging          Skip paths under .staging/ when using defaults
 
 `
 
@@ -1068,7 +1058,6 @@ Options:
   --workdir <path>      Project directory (default: current directory)
   --from <path>         Repeatable workflow roots
   --force               Replace existing tarballs
-  --no-staging          Skip .staging paths when using defaults
 
 `
 
@@ -1082,7 +1071,6 @@ Options:
   --workdir <path>       Project directory (default: current directory)
   --from <path>          Repeatable; roots to scan for named workflow folders
   --force                Replace existing packages/workflows/<name>
-  --no-staging           Skip .staging paths when using defaults
 
 `
 
@@ -1096,7 +1084,6 @@ Note: dockpipe build runs this command with --force so existing compiled trees a
 Options:
   --workdir <path>   Project directory (default: directory with dockpipe.config.json, walking up from cwd; else cwd)
   --force            Replace existing packages/core and tarball outputs under packages/workflows/
-  --no-staging       Filter out .staging/* paths when resolving defaults or config lists
   --with-bundles, --skip-bundles   Ignored (compatibility no-ops)
 
 `

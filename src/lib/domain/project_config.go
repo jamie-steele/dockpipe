@@ -37,7 +37,7 @@ type DockpipeSecretsConfig struct {
 // Pointer slices distinguish JSON "key absent" (nil → use CLI defaults) from "empty array" (non-nil, len 0 → compile nothing from that category).
 type DockpipeCompileConfig struct {
 	CoreFrom  *string   `json:"core_from,omitempty"` // optional override for compile core --from
-	Workflows *[]string `json:"workflows,omitempty"` // roots to scan for workflow/resolver trees (e.g. workflows/, packages/, .staging/packages/); same walk for tarballs and resolver discovery (+ src/core/resolvers, templates/core/resolvers)
+	Workflows *[]string `json:"workflows,omitempty"` // roots to scan for workflow/resolver trees (e.g. workflows/, packages/, custom vendor roots); same walk for tarballs and resolver discovery (+ src/core/resolvers, templates/core/resolvers)
 	Resolvers *[]string `json:"resolvers,omitempty"` // deprecated: merged into effective resolver roots if present (prefer compile.workflows only)
 	Bundles   *[]string `json:"bundles,omitempty"`   // deprecated: merged into compile.workflows (same config.yml walk)
 }

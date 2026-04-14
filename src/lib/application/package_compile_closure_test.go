@@ -34,7 +34,7 @@ steps: []
 		t.Fatal(err)
 	}
 	start := filepath.Join(wfRoot, "top")
-	order, res, err := closureWorkflowOrderAndResolvers(repo, repo, start, nil, true)
+	order, res, err := closureWorkflowOrderAndResolvers(repo, repo, start, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ steps: []
 		t.Fatal(err)
 	}
 	start := filepath.Join(wfRoot, "solo")
-	order, res, err := closureWorkflowOrderAndResolvers(repo, repo, start, nil, true)
+	order, res, err := closureWorkflowOrderAndResolvers(repo, repo, start, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -27,10 +27,10 @@ func coreFromConfig(cfg *domain.DockpipeProjectConfig, repoRoot string) (string,
 	return filepath.Join(repoRoot, filepath.Clean(p)), nil
 }
 
-func effectiveWorkflowCompileRoots(cfg *domain.DockpipeProjectConfig, repoRoot string, noStaging bool) []string {
-	return domain.EffectiveWorkflowCompileRoots(cfg, repoRoot, noStaging)
+func effectiveWorkflowCompileRoots(cfg *domain.DockpipeProjectConfig, repoRoot string) []string {
+	return domain.EffectiveWorkflowCompileRoots(cfg, repoRoot)
 }
 
-func effectiveResolverCompileRoots(cfg *domain.DockpipeProjectConfig, repoRoot string, noStaging bool) []string {
-	return domain.EffectiveResolverCompileRoots(cfg, repoRoot, noStaging)
+func effectiveResolverCompileRoots(cfg *domain.DockpipeProjectConfig, repoRoot string) []string {
+	return domain.EffectiveResolverCompileRoots(cfg, repoRoot)
 }
