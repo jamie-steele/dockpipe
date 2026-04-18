@@ -115,7 +115,7 @@ If you attach an **R2 custom domain** (public HTTPS) to a bucket, **every object
 If the bucket named in **`R2_BUCKET`** already exists (for example you created it in the dashboard), import it before the first apply:
 
 ```bash
-cd workflows/dockpipe.cloudflare.r2publish/terraform   # or your copy under templates/dockpipe.cloudflare.r2publish/terraform
+cd packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/terraform
 terraform init    # after configuring backend (see workflow README)
 terraform import 'cloudflare_r2_bucket.publish' '<ACCOUNT_ID>/<BUCKET_NAME>'
 ```

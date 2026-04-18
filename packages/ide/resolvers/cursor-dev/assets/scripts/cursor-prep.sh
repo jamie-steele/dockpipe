@@ -2,8 +2,7 @@
 # Host prep: Cursor desktop hints + AI agent / MCP quickstart (no remote Cursor server).
 set -euo pipefail
 
-eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
-ROOT="$(dockpipe_sdk workdir)"
+ROOT="$(dockpipe get workdir)"
 STATE_ROOT="${DOCKPIPE_PACKAGE_STATE_DIR:-${DOCKPIPE_STATE_DIR:-$ROOT/bin/.dockpipe}/packages/cursor-dev}"
 DIR="$STATE_ROOT"
 mkdir -p "$DIR"

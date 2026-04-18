@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Merge node outputs under bin/.dockpipe/packages/dorkpipe/nodes into a single context block for downstream prompts.
 set -euo pipefail
-root="${DOCKPIPE_WORKDIR:-.}"
+root="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
 out="${1:-/dev/stdout}"
 {
   echo "# DorkPipe aggregated context"

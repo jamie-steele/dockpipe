@@ -3,8 +3,7 @@
 # DorkPipe package helper should resolve the package-local dorkpipe tool.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+ROOT="$(git rev-parse --show-toplevel)"
 
 # shellcheck source=/dev/null
 source "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh"

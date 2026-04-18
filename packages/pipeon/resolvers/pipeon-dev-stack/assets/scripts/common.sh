@@ -33,7 +33,7 @@ pipeon_stack_state_dir() {
 
 pipeon_stack_compose_file() {
   local script_dir
-  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  script_dir="$(dockpipe get script_dir)"
   printf '%s/../compose/docker-compose.yml\n' "$script_dir"
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Combine verifier notes + ranked evidence + aggregated node context for final synthesis.
 set -euo pipefail
-wd="${DOCKPIPE_WORKDIR:-.}"
+wd="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
 evidence="${1:-}"
 {
   echo "# Final synthesis pack"

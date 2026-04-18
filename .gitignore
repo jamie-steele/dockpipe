@@ -97,6 +97,6 @@ bin/.dockpipe/
 # VS Code extension (packed / dev)
 packages/pipeon/resolvers/pipeon/vscode-extension/node_modules/
 packages/pipeon/resolvers/pipeon/vscode-extension/*.vsix
-packages/dockpipe-language-support/node_modules/
-packages/dockpipe-language-support/*.vsix
-packages/dockpipe-language-support/dist/
+vscode-extensions/dockpipe-language-support/node_modules/
+vscode-extensions/dockpipe-language-support/*.vsix
+vscode-extensions/dockpipe-language-support/dist/

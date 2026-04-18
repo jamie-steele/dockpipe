@@ -1,6 +1,6 @@
 # cursor-dev
 
-**Scripts** (**`cursor-dev-session.sh`**, **`session-idle.sh`** (container PID 1 helper), **`cursor-prep.sh`**, **`cursor-dev-common.sh`**, **`cursor-print-next-steps.sh`**) live **in this directory** (same folder as **`config.yml`**). Workflows use **`run: scripts/cursor-dev/…`**; the runner resolves that to **`templates/core/resolvers/cursor-dev/…`** (see **`src/lib/infrastructure/paths.go`**).
+**Scripts** (**`cursor-dev-session.sh`**, **`session-idle.sh`** (container PID 1 helper), **`cursor-prep.sh`**, **`cursor-dev-common.sh`**, **`cursor-print-next-steps.sh`**) live **in this directory** (same folder as **`config.yml`**). Workflows use logical script ids like **`run: scripts/cursor-dev/…`**; DockPipe resolves those to the compiled or materialized resolver asset for this package/resolver.
 
 ## Pipeon Launcher
 

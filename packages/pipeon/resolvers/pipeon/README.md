@@ -23,7 +23,7 @@ flows can treat Pipeon as the top-level product surface rather than a disconnect
 
 When adding new Pipeon scripts, prefer the shared core SDK:
 
-- **Shell:** bootstrap with **`eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"`** and use **`dockpipe_sdk ...`**
+- **Shell:** use **`dockpipe get ...`** for plain context reads; bootstrap **`eval "$(dockpipe sdk)"`** only for shell-specific actions like **`dockpipe_sdk init-script`**
 - **`src/core/assets/scripts/lib/repo-tools.ps1`**
 - **`src/core/assets/scripts/lib/repo_tools.py`**
 - **`src/core/assets/scripts/lib/repotools/repotools.go`**

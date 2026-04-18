@@ -13,3 +13,5 @@ tags: [resolver, ide, editor]
 includes_resolvers:
   - vscode
   - cursor-dev
+script_contract:
+  inject: [workdir, workflow_name, script_dir, package_root, assets_dir, dockpipe_bin]

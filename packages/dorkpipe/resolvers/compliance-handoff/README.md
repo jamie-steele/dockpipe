@@ -16,4 +16,4 @@ dockpipe --workflow compliance-handoff --workdir . --
 
 **Touches:** **`scripts/dorkpipe/compliance-handoff.sh`** — prints artifact presence + short summaries.
 
-**Copy elsewhere:** `dockpipe init myproj --from /path/to/workflows/compliance-handoff` or copy this directory.
+**Copy elsewhere:** keep this as a packaged workflow/resolver tree or clone the directory intentionally; this is not a bundled `dockpipe init --from ...` starter template.

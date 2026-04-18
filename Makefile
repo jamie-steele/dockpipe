@@ -13,7 +13,7 @@ include src/Makefile
 pipeon-icons:
 	python3 packages/pipeon/resolvers/pipeon/assets/scripts/generate-pipeon-icons.py
 
-build-code-server-image:
+build-code-server-image: package-dockpipe-language-support package-pipeon-vscode-extension
 	docker build -t dockpipe-code-server:latest -f packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server .
 
 build-pipeon-desktop:
@@ -75,12 +75,12 @@ install-pipeon-launcher-global: install-pipeon-launcher
 		> "$$HOME/.local/share/applications/pipeon-launcher.desktop"
 
 # Package Pipeon VS Code extension (.vsix) into bin/.dockpipe/extensions.
-# Reuses the locally installed vsce from dockpipe-language-support to avoid network fetches.
+# Reuses the locally installed vsce from the DockPipe language-support extension to avoid network fetches.
 package-pipeon-vscode-extension: package-dockpipe-language-support
 	mkdir -p bin/.dockpipe/extensions
 	npm --prefix packages/pipeon/resolvers/pipeon/vscode-extension run build
 	npm --prefix packages/pipeon/resolvers/pipeon/vscode-extension run test:webview
-	cd packages/pipeon/resolvers/pipeon/vscode-extension && node ../../../../dockpipe-language-support/node_modules/@vscode/vsce/vsce package --no-dependencies -o ../../../../../bin/.dockpipe/extensions/pipeon-$$(node -p "require('./package.json').version").vsix
+	cd packages/pipeon/resolvers/pipeon/vscode-extension && node ../../../../../vscode-extensions/dockpipe-language-support/node_modules/@vscode/vsce/vsce package --no-dependencies -o ../../../../../bin/.dockpipe/extensions/pipeon-$$(node -p "require('./package.json').version").vsix
 
 # Build + install Pipeon extension into Cursor (fallback: VS Code CLI).
 install-pipeon-vscode-extension: package-pipeon-vscode-extension
@@ -103,7 +103,7 @@ install-pipeon-vscode-extension: package-pipeon-vscode-extension
 # Package DockPipe language support extension (.vsix).
 package-dockpipe-language-support:
 	mkdir -p bin/.dockpipe/extensions
-	cd packages/dockpipe-language-support && if [ ! -x node_modules/.bin/vsce ]; then NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache npm ci --no-audit --no-fund; fi && NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache node node_modules/@vscode/vsce/vsce package --no-dependencies -o ../../bin/.dockpipe/extensions/dockpipe-language-support-$$(node -p "require('./package.json').version").vsix
+	cd vscode-extensions/dockpipe-language-support && if [ ! -x node_modules/.bin/vsce ]; then NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache npm ci --no-audit --no-fund; fi && NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache node node_modules/@vscode/vsce/vsce package --no-dependencies -o ../../bin/.dockpipe/extensions/dockpipe-language-support-$$(node -p "require('./package.json').version").vsix
 
 # Back-compat alias.
 package-vscode-language-support: package-dockpipe-language-support

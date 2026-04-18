@@ -121,7 +121,7 @@ func BuildCursor(workdir string, env map[string]string) (CursorResult, error) {
 	doc.WriteString("3. **Branch / conditional**: port one pattern from `lib/dorkpipe/examples/full-bar.yaml` into a non-demo workflow.\n")
 	doc.WriteString("4. **Promotion**: act on `dorkpipe promote` suggestions or tune thresholds when noise is high.\n\n")
 	doc.WriteString("## 9. Single prompt for your AI assistant\n")
-	doc.WriteString("The **plain, copy-paste-ready** implementation prompt (no extra narrative) is in **`bin/.dockpipe/paste-this-prompt.txt`**. Running `./packages/dorkpipe/resolvers/dorkpipe/assets/scripts/run-self-analysis.sh` **prints that file to stdout** at the end. With `spec.combined.yaml`, Ollama output is merged into the same file after the base prompt.\n\n---\n")
+	doc.WriteString("The **plain, copy-paste-ready** implementation prompt (no extra narrative) is in **`bin/.dockpipe/paste-this-prompt.txt`**. Running `dockpipe --workflow dorkpipe-self-analysis-host --workdir <repo> --` **prints that file to stdout** at the end. With `spec.combined.yaml`, Ollama output is merged into the same file after the base prompt.\n\n---\n")
 	doc.WriteString(fmt.Sprintf("_Generated: %s_ · _Facts under `bin/.dockpipe/packages/dorkpipe/self-analysis/`_\n", time.Now().UTC().Format(time.RFC3339)))
 
 	if err := os.WriteFile(dest, []byte(doc.String()), 0o644); err != nil {

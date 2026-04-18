@@ -11,7 +11,7 @@ report_desktop_failure() {
 
 trap 'report_desktop_failure "$?" "${LINENO}" "${BASH_COMMAND}"' ERR
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(dockpipe get script_dir)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/common.sh"
 

@@ -3,9 +3,9 @@
 # Run from repo root: bash packages/dorkpipe/tests/test_normalize_ci_scans.sh
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)"
+ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
+export PATH="$ROOT/src/bin${PATH:+:$PATH}"
 
 if ! command -v jq >/dev/null 2>&1; then
 	echo "test_normalize_ci_scans: skip (jq not installed)"
@@ -24,7 +24,8 @@ echo 'stale-summary' >"$tmp/bin/.dockpipe/ci-analysis/SUMMARY.md"
 echo 'stale-raw' >"$tmp/bin/.dockpipe/ci-analysis/raw/gosec.json"
 
 export DOCKPIPE_WORKDIR="$tmp"
-bash "$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts/normalize-ci-scans.sh"
+export DOCKPIPE_SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
+bash "$DOCKPIPE_SCRIPT_DIR/normalize-ci-scans.sh"
 
 if ! jq -e '.schema_version == "1.0" and (.findings | type == "array")' "$tmp/bin/.dockpipe/ci-analysis/findings.json" >/dev/null; then
 	echo "test_normalize_ci_scans: findings.json shape unexpected" >&2

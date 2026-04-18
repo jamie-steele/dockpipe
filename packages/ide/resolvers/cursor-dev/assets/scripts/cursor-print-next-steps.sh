@@ -3,7 +3,7 @@
 # For a long-lived container + docker wait, use cursor-dev-session.sh (cursor-dev workflow default).
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+SCRIPT_DIR="$(dockpipe get script_dir)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/cursor-dev-common.sh"
 

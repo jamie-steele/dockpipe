@@ -190,7 +190,7 @@ When working in **`packages/`**:
 - Do **not** make maintainer/dev flows depend silently on whatever happens to be on **`PATH`**
 - When a package script needs a repo-built binary such as **`dockpipe`**, **`dorkpipe`**, **`mcpd`**, **`pipeon`**, or **`pipeon-desktop`**, prefer the **real repo-local build output first**, then fall back to `PATH`
 - Prefer the **shared core SDK** under **`src/core/assets/scripts/lib/`** rather than copying the same lookup logic into multiple packages
-- For **shell**, prefer the CLI bootstrap **`eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"`** and the **`dockpipe_sdk ...`** actions
+- For **shell**, prefer the CLI bootstrap **`eval "$(dockpipe sdk)"`** and the **`dockpipe_sdk ...`** actions
 - For **PowerShell / Python / Go**, prefer the shared SDK modules under **`src/core/assets/scripts/lib/`**
 
 Examples of repo-local binary locations in this repository:

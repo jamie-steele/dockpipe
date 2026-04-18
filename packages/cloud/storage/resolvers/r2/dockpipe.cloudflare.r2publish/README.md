@@ -1,12 +1,16 @@
 # Cloudflare R2 — Terraform module + `r2-publish.sh`
 
-This folder keeps the **Terraform module** under **`terraform/`** (paths and state keys still use the historical name **`dockpipe.cloudflare.r2publish`**). The **Cloudflare/R2 Terraform host script** (thin wrapper around **`terraform-core`**’s **`terraform-pipeline.sh`**) lives with the infra workflow resolver: **`packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/assets/scripts/terraform-cloudflare-r2-run.sh`**, referenced in YAML as **`scripts/dockpipe.cloudflare.r2infra/terraform-cloudflare-r2-run.sh`**. **Tar + upload:** **`scripts/dockpipe/r2-publish.sh`**. Provider-agnostic Terraform is **`packages/terraform/resolvers/terraform-core/assets/scripts/terraform-run.sh`** (**`dockpipe.terraform.core`** only; **`scripts/core.assets.scripts.terraform-run.sh`** resolves there).
+This folder documents the historical **`dockpipe.cloudflare.r2publish`** publish flow. The active **Terraform module** now lives under **`packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/terraform/`** and the active host scripts are referenced in workflow YAML by their **logical script ids**:
+
+- **Terraform host flow:** **`scripts/dockpipe.cloudflare.r2infra/terraform-cloudflare-r2-run.sh`**
+- **Tar + upload:** **`scripts/dockpipe/r2-publish.sh`**
+- **Provider-agnostic Terraform core:** **`scripts/core.assets.scripts.terraform-run.sh`**
 
 **Infra and object upload are separate workflows** (same script, different env):
 
 | Workflow | What runs |
 |----------|-------------|
-| **`dockpipe.cloudflare.r2infra`** | Terraform only via **`scripts/dockpipe.cloudflare.r2infra/terraform-cloudflare-r2-run.sh`** (Cloudflare/R2 host; **`r2-publish.sh`** resolves the same file). No tarball, no upload; does not require **`release/artifacts`**. |
+| **`dockpipe.cloudflare.r2infra`** | Terraform only via **`scripts/dockpipe.cloudflare.r2infra/terraform-cloudflare-r2-run.sh`**. No tarball, no upload; does not require **`release/artifacts`**. |
 | **`dockpipe.cloudflare.r2upload`** | Tar **`R2_PUBLISH_SOURCE`** and upload — **`R2_SKIP_TERRAFORM=1`**. Run after **`r2infra`** (or when the bucket already exists). |
 
 Typical order: **`r2infra`** (or **`package-store-infra`** with nested r2infra + shared vars) → **`dockpipe package build store`** when you need store tarballs → **`r2upload`**.
@@ -95,7 +99,7 @@ R2_PUBLISH_DRY_RUN=1 dockpipe --workflow dockpipe.cloudflare.r2upload
 | `R2_ARCHIVE_NAME` | `dockpipe-publish-YYYYMMDD-HHMMSS.tar.gz` | Object name in the bucket. |
 | `R2_ENDPOINT_URL` | *(from account id, S3 mode)* | Override S3 endpoint URL. |
 | `R2_CONTENT_TYPE` | `application/gzip` | Wrangler object `Content-Type` (token mode). |
-| `R2_TERRAFORM_DIR` | *(auto)* | Path to Terraform module (default: `workflows/dockpipe.cloudflare.r2publish/terraform` or `templates/dockpipe.cloudflare.r2publish/terraform` under workdir; legacy `templates/r2-publish/terraform` still searched). |
+| `R2_TERRAFORM_DIR` | *(auto)* | Path to the Terraform module. In this repo the canonical module is `packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/terraform`. |
 | `R2_TF_LOCATION` | *(omit)* | Optional `location` for `cloudflare_r2_bucket` (e.g. `WEUR`). |
 | `R2_SKIP_TERRAFORM` | `0` | Set to `1` to skip Terraform ( **`dockpipe.cloudflare.r2upload`** sets this). |
 | `R2_USE_TERRAFORM` | *(see below)* | `1` to always run Terraform; `0` to never run. |

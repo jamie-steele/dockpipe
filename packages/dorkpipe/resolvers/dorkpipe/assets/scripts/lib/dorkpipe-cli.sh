@@ -1,28 +1,35 @@
 #!/usr/bin/env bash
 
+dorkpipe_script_dir() {
+	if [[ -n "${DOCKPIPE_SCRIPT_DIR:-}" ]]; then
+		printf '%s\n' "$DOCKPIPE_SCRIPT_DIR"
+		return 0
+	fi
+	local source_path="${1:-${BASH_SOURCE[1]:-${BASH_SOURCE[0]:-$0}}}"
+	local script_dir="${source_path%/*}"
+	[[ "$script_dir" == "$source_path" ]] && script_dir="."
+	cd "$script_dir" && pwd
+}
+
 dorkpipe_script_repo_root() {
-	local script_dir="${1:?script_dir is required}"
+	local script_dir="${1:-}"
+	[[ -n "$script_dir" ]] || script_dir="$(dorkpipe_script_dir)"
 	cd "$script_dir" && git rev-parse --show-toplevel 2>/dev/null || true
 }
 
-dorkpipe_script_bootstrap() {
-	local script_dir="${1:?script_dir is required}"
-	export DOCKPIPE_WORKDIR="${DOCKPIPE_WORKDIR:-$(pwd)}"
-
-	local repo_root
-	repo_root="$(dorkpipe_script_repo_root "$script_dir")"
-	if [[ -n "$repo_root" && -f "$repo_root/src/core/assets/scripts/lib/dockpipe-sdk.sh" ]]; then
-		# shellcheck source=/dev/null
-		source "$repo_root/src/core/assets/scripts/lib/dockpipe-sdk.sh"
-		return 0
-	fi
-
-	eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+dorkpipe_script_die() {
+	echo "dorkpipe: $*" >&2
+	exit 1
 }
 
 dorkpipe_script_exec_cli() {
-	local script_dir="${1:?script_dir is required}"
-	shift
+	local script_dir="${1:-}"
+	if [[ -n "$script_dir" ]] && [[ "$script_dir" == -* ]]; then
+		script_dir=""
+	else
+		shift || true
+	fi
+	[[ -n "$script_dir" ]] || script_dir="$(dorkpipe_script_dir)"
 
 	local repo_root dorkpipe_bin
 	repo_root="$(dorkpipe_script_repo_root "$script_dir")"
@@ -31,7 +38,7 @@ dorkpipe_script_exec_cli() {
 		exec go run ./cmd/dorkpipe "$@"
 	fi
 
-	dorkpipe_bin="$(dorkpipe_script_resolve_bin "$repo_root")" || dockpipe_sdk die "dorkpipe not found; build the maintainer tool or install it on PATH"
+	dorkpipe_bin="$(dorkpipe_script_resolve_bin "$repo_root")" || dorkpipe_script_die "dorkpipe not found; build the maintainer tool or install it on PATH"
 	exec "$dorkpipe_bin" "$@"
 }
 

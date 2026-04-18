@@ -1,7 +1,7 @@
 # Host-only: normalize .dockpipe/analysis/queue.json → insights.json via the dorkpipe CLI.
 name: user-insight-process
 description: >-
-  Run scripts/dorkpipe/user-insight-process.sh and optional export-by-category.
+  Run the packaged user-insight processing host steps and optional export-by-category.
   Uses the dorkpipe CLI user-insight commands. Does not treat user text as truth —
   see docs/artifacts.md and resolvers/user-insight-process/README.md.
 

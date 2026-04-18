@@ -13,3 +13,5 @@ repository: https://github.com/dockpipe/dockpipe
 tags: [workflow, storage, cloud, r2]
 includes_resolvers:
   - r2
+script_contract:
+  inject: [workdir, workflow_name, script_dir, package_root, assets_dir, dockpipe_bin]

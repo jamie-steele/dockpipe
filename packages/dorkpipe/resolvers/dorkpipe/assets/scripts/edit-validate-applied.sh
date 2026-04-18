@@ -6,8 +6,6 @@ ROOT="${1:?repo root required}"
 shift
 
 cd "$ROOT"
-DOCKPIPE_WORKDIR="$ROOT" eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
-DOCKPIPE_VALIDATE_BIN="$(dockpipe_sdk require dockpipe-bin 2>/dev/null || true)"
 
 ran=0
 for rel in "$@"; do
@@ -27,9 +25,9 @@ for rel in "$@"; do
       fi
       ;;
     *.yml|*.yaml)
-      if [[ -n "$DOCKPIPE_VALIDATE_BIN" && "$(basename "$rel")" == "config.yml" ]]; then
+      if [[ "$(basename "$rel")" == "config.yml" ]]; then
         echo "[dockpipe workflow validate] $rel"
-        "$DOCKPIPE_VALIDATE_BIN" workflow validate "$rel" >/dev/null
+        dockpipe workflow validate "$rel" >/dev/null
         ran=1
       fi
       ;;

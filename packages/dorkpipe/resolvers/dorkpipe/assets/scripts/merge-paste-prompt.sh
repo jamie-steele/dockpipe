@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # After Ollama refine (combined spec), fold refined output into paste-this-prompt.txt.
 set -euo pipefail
-eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
-ROOT="$(dockpipe_sdk workdir)"
-dockpipe_sdk cd-workdir
+ROOT="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
+cd "$ROOT"
 PASTE="${ROOT}/bin/.dockpipe/paste-this-prompt.txt"
 REFINED="${ROOT}/bin/.dockpipe/orchestrator-cursor-prompt.refined.md"
 if [[ ! -f "$REFINED" ]]; then

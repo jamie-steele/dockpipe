@@ -33,14 +33,14 @@ steps:
     runtime: cli
     skip_container: true
     run:
-      - scripts/dockpipe/foo.sh
+      - scripts/dockpipe/r2-publish.sh
 
   # cli + container isolation (same runtime; skip_container: false).
   - id: cli-container
     runtime: cli
     skip_container: false
     run:
-      - scripts/dockpipe/foo.sh
+      - scripts/dockpipe/r2-publish.sh
 
   # Kube/Terraform: cli + scripts (resolver profile), not a kube runtime.
   - id: kube-style-cli

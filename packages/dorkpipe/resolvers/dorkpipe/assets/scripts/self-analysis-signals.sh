@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Search-based signals (grounded). Writes bin/.dockpipe/packages/dorkpipe/self-analysis/signals_*.txt
 set -euo pipefail
-eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
-ROOT="$(dockpipe_sdk workdir)"
+ROOT="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
 OUT="$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis"
 mkdir -p "$OUT"
 

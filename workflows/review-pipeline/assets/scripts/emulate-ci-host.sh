@@ -5,7 +5,7 @@
 # - skips Docker workflow recursion from src/scripts/ci-local.sh
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
+ROOT="$(dockpipe get workdir)"
 ROOT="$(cd "$ROOT" && pwd)"
 cd "$ROOT"
 
@@ -14,7 +14,7 @@ export DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$ROOT}"
 export GOCACHE="${GOCACHE:-$ROOT/bin/.dockpipe/gocache}"
 
 GOBIN="$(go env GOPATH)/bin"
-export PATH="$GOBIN:$PATH"
+export PATH="$ROOT/src/bin:$GOBIN:$PATH"
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -45,7 +45,8 @@ gosec -conf .gosec.json -fmt json -out=bin/.dockpipe/ci-raw/gosec.json -exclude-
 GC=$?
 set -e
 
-bash packages/dorkpipe/resolvers/dorkpipe/assets/scripts/normalize-ci-scans.sh
+DOCKPIPE_SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts" \
+  bash "$DOCKPIPE_SCRIPT_DIR/normalize-ci-scans.sh"
 printf '[dockpipe] ci-emulate: govulncheck raw vulns: '
 jq -r '((.vulns // .Vulns // [] | length) | tostring)' bin/.dockpipe/ci-raw/govulncheck.json 2>/dev/null || true
 printf '[dockpipe] ci-emulate: gosec raw issues: '

@@ -4,7 +4,7 @@
 # Cloudflare R2 / generated R2 state: use packages/cloud/storage/.../terraform-cloudflare-r2-run.sh (dockpipe.cloudflare.r2infra).
 set -euo pipefail
 
-eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+eval "$(dockpipe sdk)"
 dockpipe_sdk init-script
 
 if [[ "${DOCKPIPE_TF_OPTIONAL_WHEN_UNSET:-0}" == "1" ]]; then

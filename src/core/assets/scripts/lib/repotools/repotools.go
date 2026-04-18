@@ -7,9 +7,12 @@ import (
 )
 
 type SDK struct {
-	Workdir     string
-	DockpipeBin string
+	Workdir      string
+	DockpipeBin  string
 	WorkflowName string
+	ScriptDir    string
+	PackageRoot  string
+	AssetsDir    string
 }
 
 func RepoRoot(root string) (string, error) {
@@ -51,5 +54,8 @@ func Load(root string) (SDK, error) {
 		Workdir:      workdir,
 		DockpipeBin:  dockpipeBin,
 		WorkflowName: os.Getenv("DOCKPIPE_WORKFLOW_NAME"),
+		ScriptDir:    os.Getenv("DOCKPIPE_SCRIPT_DIR"),
+		PackageRoot:  os.Getenv("DOCKPIPE_PACKAGE_ROOT"),
+		AssetsDir:    os.Getenv("DOCKPIPE_ASSETS_DIR"),
 	}, nil
 }

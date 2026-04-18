@@ -24,7 +24,7 @@ CLI: **`make maintainer-tools`** (repo root) writes **`../bin/dorkpipe`** (next 
 
 When maintainer scripts in the DorkPipe package need generic DockPipe workflow context, use the shared core SDK instead of open-coding `command -v` lookups:
 
-- **Shell:** bootstrap with **`eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"`** and use **`dockpipe_sdk ...`**
+- **Shell:** use **`dockpipe get ...`** for plain context reads; bootstrap **`eval "$(dockpipe sdk)"`** only for shell-specific actions like **`dockpipe_sdk init-script`**
 - **`src/core/assets/scripts/lib/repo-tools.ps1`**
 - **`src/core/assets/scripts/lib/repo_tools.py`**
 - **`src/core/assets/scripts/lib/repotools/repotools.go`**
@@ -47,4 +47,4 @@ Does **not** replace DockPipe’s workflow engine; it **invokes** the `dockpipe`
 
 Artifacts: **`bin/.dockpipe/packages/dorkpipe/run.json`**, **`bin/.dockpipe/packages/dorkpipe/metrics.jsonl`** (schema v2). Example DAG: **`examples/full-bar.yaml`** in this directory.
 
-**DockPipe self-analysis:** **`dockpipe/dorkpipe/resolvers/dorkpipe-self-analysis/`** runs the script **in a container** (isolated). Optional **Compose** sidecar: **`scripts/dorkpipe/dev-stack.sh`**. Writes **`bin/.dockpipe/`** artifacts including **`bin/.dockpipe/packages/dorkpipe/`**.
+**DockPipe self-analysis:** the packaged workflows **`dorkpipe-self-analysis`** and **`dorkpipe-self-analysis-host`** run the analysis entrypoint in containerized or host mode. Optional local sidecar: **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/dev-stack.sh`**. Writes **`bin/.dockpipe/`** artifacts including **`bin/.dockpipe/packages/dorkpipe/`**.

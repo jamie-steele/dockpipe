@@ -16,7 +16,7 @@
 #
 # Terraform runs through the dockpipe.cloudflare.r2infra workflow when enabled.
 set -euo pipefail
-eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+eval "$(dockpipe sdk)"
 dockpipe_sdk init-script
 
 # Same as terraform-pipeline.sh: accept 32-char id or full https://<id>.r2.cloudflarestorage.com (dashboard paste).

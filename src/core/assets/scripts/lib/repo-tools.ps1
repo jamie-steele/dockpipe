@@ -43,10 +43,16 @@ function Get-DockpipeSdk {
   )
 
   $resolvedRoot = Get-DockpipeRepoRoot -Root $Root
+  $scriptDir = $env:DOCKPIPE_SCRIPT_DIR
+  $assetsDir = $env:DOCKPIPE_ASSETS_DIR
+  $packageRoot = $env:DOCKPIPE_PACKAGE_ROOT
   [pscustomobject]@{
     Workdir      = $resolvedRoot
     DockpipeBin  = Resolve-DockpipeBin -Root $resolvedRoot
     WorkflowName = $env:DOCKPIPE_WORKFLOW_NAME
+    ScriptDir    = $(if ($scriptDir) { $scriptDir } else { $null })
+    PackageRoot  = $(if ($packageRoot) { $packageRoot } else { $null })
+    AssetsDir    = $(if ($assetsDir) { $assetsDir } else { $null })
   }
 }
 

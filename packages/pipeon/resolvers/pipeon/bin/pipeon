@@ -7,4 +7,8 @@ export DOCKPIPE_WORKDIR="${DOCKPIPE_WORKDIR:-$PWD}"
 if [[ -z "${DOCKPIPE_BIN:-}" ]] && [[ -x "$REPO_ROOT/src/bin/dockpipe" ]]; then
   export DOCKPIPE_BIN="$REPO_ROOT/src/bin/dockpipe"
 fi
+if [[ -n "${DOCKPIPE_BIN:-}" ]]; then
+  export PATH="$(dirname "$DOCKPIPE_BIN")${PATH:+:$PATH}"
+fi
+export DOCKPIPE_SCRIPT_DIR="$HERE/../assets/scripts"
 exec bash "$HERE/../assets/scripts/pipeon.sh" "$@"

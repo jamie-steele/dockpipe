@@ -197,6 +197,9 @@ kind: workflow
 # capability: cli.codex
 # kind: workflow — capability dependencies:
 # requires_capabilities: [cli.codex, app.vscode]
+# Optional — generic package script context for assets/scripts/* authoring:
+# script_contract:
+#   inject: [workdir, workflow_name, script_dir, package_root, assets_dir, dockpipe_bin]
 # Optional — platform/vendor id for filtering (short label, e.g. cloudflare, aws — not a URL):
 # provider: cloudflare
 # Optional — authoring / store discovery (see docs/package-model.md):

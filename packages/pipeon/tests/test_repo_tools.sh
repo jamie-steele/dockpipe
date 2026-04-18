@@ -2,8 +2,7 @@
 # Pipeon helper resolution should prefer the repo-local dockpipe binary.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+ROOT="$(git rev-parse --show-toplevel)"
 
 expected="$ROOT/src/bin/dockpipe"
 

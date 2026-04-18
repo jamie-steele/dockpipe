@@ -133,6 +133,9 @@ func Run(argv []string, baseEnviron []string) error {
 	if argv[0] == "sdk" {
 		return cmdSDK(argv[1:])
 	}
+	if argv[0] == "get" {
+		return cmdGet(argv[1:])
+	}
 
 	repoRoot, err := repoRootAppFn()
 	if err != nil {
@@ -264,6 +267,23 @@ func Run(argv []string, baseEnviron []string) error {
 	// envSlice from envMap (run.go) and would otherwise drop DOCKPIPE_WORKDIR from appendUniqueEnv.
 	if opts.Workdir != "" {
 		envMap["DOCKPIPE_WORKDIR"] = opts.Workdir
+	}
+	if strings.TrimSpace(envMap["DOCKPIPE_BIN"]) == "" {
+		if dp, derr := resolveDockpipeBinForSDK(effWd); derr == nil && strings.TrimSpace(dp) != "" {
+			envMap["DOCKPIPE_BIN"] = dp
+		}
+	}
+	if dp := strings.TrimSpace(envMap["DOCKPIPE_BIN"]); dp != "" {
+		if filepath.IsAbs(dp) {
+			dpDir := filepath.Dir(dp)
+			curPath := strings.TrimSpace(envMap["PATH"])
+			prefix := dpDir + string(os.PathListSeparator)
+			if curPath == "" {
+				envMap["PATH"] = dpDir
+			} else if !strings.HasPrefix(curPath, prefix) && curPath != dpDir {
+				envMap["PATH"] = dpDir + string(os.PathListSeparator) + curPath
+			}
+		}
 	}
 
 	effStrat := EffectiveStrategyName(opts, wf)
@@ -692,7 +712,7 @@ func Run(argv []string, baseEnviron []string) error {
 		if commitOnHost && strings.TrimSpace(envMap["DOCKPIPE_WORKDIR"]) != "" {
 			fmt.Fprintf(os.Stderr, "[dockpipe] Mount /work ← %s\n", envMap["DOCKPIPE_WORKDIR"])
 		}
-		if err := runHostScriptAppFn(scriptAbs, envSlice); err != nil {
+		if err := runHostScriptAppFn(scriptAbs, envSliceWithScriptContext(envSlice, scriptAbs)); err != nil {
 			return err
 		}
 		if strategyHandlesCommit {

@@ -3,9 +3,9 @@
 # Run from repo root: bash packages/dorkpipe/tests/test_user_insight_queue.sh
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)"
+ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
+export PATH="$ROOT/src/bin${PATH:+:$PATH}"
 
 if ! command -v jq >/dev/null 2>&1; then
 	echo "test_user_insight_queue: skip (jq not installed)"
@@ -16,10 +16,11 @@ tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
 export DOCKPIPE_WORKDIR="$tmp"
-bash "$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts/user-insight-enqueue.sh" -m 'convention: use gofmt for Go.' >/dev/null
-bash "$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts/user-insight-enqueue.sh" -m 'SOC2 review will cover secret storage.' >/dev/null
+export DOCKPIPE_SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
+bash "$DOCKPIPE_SCRIPT_DIR/user-insight-enqueue.sh" -m 'convention: use gofmt for Go.' >/dev/null
+bash "$DOCKPIPE_SCRIPT_DIR/user-insight-enqueue.sh" -m 'SOC2 review will cover secret storage.' >/dev/null
 echo 'null' >"$tmp/bin/.dockpipe/analysis/insights.json"
-bash "$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts/user-insight-process.sh"
+bash "$DOCKPIPE_SCRIPT_DIR/user-insight-process.sh"
 
 if ! jq -e '
   .kind == "dockpipe_user_insights"
@@ -32,7 +33,7 @@ if ! jq -e '
 	exit 1
 fi
 
-bash "$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts/user-insight-export-by-category.sh"
+bash "$DOCKPIPE_SCRIPT_DIR/user-insight-export-by-category.sh"
 if ! jq -e 'length >= 1' "$tmp/bin/.dockpipe/analysis/by-category/convention.json" >/dev/null; then
 	echo "test_user_insight_queue: by-category export unexpected" >&2
 	exit 1

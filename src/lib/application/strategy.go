@@ -151,7 +151,7 @@ func RunStrategyAfterScripts(afterAbs []string, repoRoot string, envMap map[stri
 			continue
 		}
 		fmt.Fprintf(os.Stderr, "[dockpipe] Strategy after: %s\n", p)
-		if err := runHostScriptAppFn(p, envSlice); err != nil {
+		if err := runHostScriptAppFn(p, envSliceWithScriptContext(envSlice, p)); err != nil {
 			return err
 		}
 	}

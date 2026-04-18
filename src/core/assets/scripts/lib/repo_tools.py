@@ -23,12 +23,18 @@ class DockpipeSDK:
         self.workdir = repo_root(root)
         self.dockpipe_bin = resolve_dockpipe_bin(str(self.workdir))
         self.workflow_name = os.environ.get("DOCKPIPE_WORKFLOW_NAME") or None
+        self.script_dir = os.environ.get("DOCKPIPE_SCRIPT_DIR") or None
+        self.package_root = os.environ.get("DOCKPIPE_PACKAGE_ROOT") or None
+        self.assets_dir = os.environ.get("DOCKPIPE_ASSETS_DIR") or None
 
     def refresh(self, root: str | None = None) -> "DockpipeSDK":
         updated = DockpipeSDK(root)
         self.workdir = updated.workdir
         self.dockpipe_bin = updated.dockpipe_bin
         self.workflow_name = updated.workflow_name
+        self.script_dir = updated.script_dir
+        self.package_root = updated.package_root
+        self.assets_dir = updated.assets_dir
         return self
 
 

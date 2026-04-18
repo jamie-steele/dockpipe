@@ -180,7 +180,7 @@ func runStepHostIsolate(o *runStepsOpts, step domain.Step, dockerEnv map[string]
 	if strings.TrimSpace(o.envMap["DOCKPIPE_WORKDIR"]) != "" {
 		fmt.Fprintf(os.Stderr, "[dockpipe] Mount /work ← %s\n", o.envMap["DOCKPIPE_WORKDIR"])
 	}
-	if err := runHostScriptFn(scriptAbs, o.envSlice); err != nil {
+	if err := runHostScriptFn(scriptAbs, envSliceWithScriptContext(o.envSlice, scriptAbs)); err != nil {
 		return err
 	}
 	return finalizeResolverStepAfterHost(o, step, dockerEnv, ra, stepIndex)
@@ -539,12 +539,12 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 		}
 		fmt.Fprintf(os.Stderr, "[dockpipe] [parallel %d] Host setup\n", idx+1)
 		if step.SkipContainer {
-			if err := runHostScriptFn(p, envSlice); err != nil {
+			if err := runHostScriptFn(p, envSliceWithScriptContext(envSlice, p)); err != nil {
 				return err
 			}
 			continue
 		}
-		em, err := sourceHostScriptFn(p, envSlice)
+		em, err := sourceHostScriptFn(p, envSliceWithScriptContext(envSlice, p))
 		if err != nil {
 			return err
 		}
@@ -648,13 +648,13 @@ func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {
 			// skip_container run: must exec with inherited stdio — SourceHostScript sources and
 			// captures CombinedOutput(), so users would see nothing (e.g. cursor-dev step 2, vscode).
 			fmt.Fprintf(os.Stderr, "[dockpipe] Host setup\n")
-			if err := runHostScriptFn(p, o.envSlice); err != nil {
+			if err := runHostScriptFn(p, envSliceWithScriptContext(o.envSlice, p)); err != nil {
 				return err
 			}
 			continue
 		}
 		stop := infrastructure.StartLineSpinner(os.Stderr, hostSpinnerLabel(p))
-		em, err := sourceHostScriptFn(p, o.envSlice)
+		em, err := sourceHostScriptFn(p, envSliceWithScriptContext(o.envSlice, p))
 		stop()
 		if err != nil {
 			return err

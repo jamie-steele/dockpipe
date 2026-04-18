@@ -3,7 +3,7 @@
 # Host-only fallback workflow: dorkpipe-self-analysis-host
 name: dorkpipe-self-analysis
 description: >-
-  Container-isolated DorkPipe run: builds bin/dorkpipe if needed, then scripts/dorkpipe/run-self-analysis.sh.
+  Container-isolated DorkPipe run: builds bin/dorkpipe if needed, then runs the package self-analysis entrypoint.
   Artifacts land in the mounted repo (bin/.dockpipe/, bin/.dockpipe/packages/dorkpipe/). Tear down sidecars with dev-stack.sh down when done.
 
 resolver: codex
@@ -17,6 +17,7 @@ steps:
       bash -c 'set -euo pipefail
       cd /work
       export DOCKPIPE_WORKDIR=/work
+      export DOCKPIPE_SCRIPT_DIR="$DOCKPIPE_WORKDIR/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
       # No apt-get: dockpipe maps the container user to the host uid, so apt cannot run as root.
       # golang:bookworm images ship git and curl; scripts fall back to grep if ripgrep is absent.
       if [[ ! -x bin/dorkpipe ]]; then

@@ -10,14 +10,62 @@
 - **`src/core/assets/scripts/lib/repo_tools.py`**
 - **`src/core/assets/scripts/lib/repotools/repotools.go`**
 
-For shell, prefer the CLI bootstrap and dispatcher API:
+For shell, prefer direct CLI getters for plain context reads:
 
 ```bash
-eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
-dockpipe_sdk workdir
+dockpipe get workdir
 ```
 
-That bootstraps the shell SDK and avoids hard-coding source paths or manual root resolution in package scripts. The command prefers `DOCKPIPE_WORKDIR` when it is already set by a workflow and otherwise falls back to the current directory. The shared core SDK is the source of truth for authoring support in shell/PowerShell/Python/Go.
+## Injected script context
+
+When a DockPipe-managed host script is launched, the runtime injects generic package script
+context into the environment. The backing env vars are:
+
+- `DOCKPIPE_WORKDIR`
+- `DOCKPIPE_DOCKPIPE_BIN`
+- `DOCKPIPE_WORKFLOW_NAME`
+- `DOCKPIPE_SCRIPT_DIR`
+- `DOCKPIPE_PACKAGE_ROOT`
+- `DOCKPIPE_ASSETS_DIR`
+
+The public shell authoring API for reading those values is `dockpipe get ...`:
+
+```bash
+dockpipe get workdir
+dockpipe get workflow_name
+dockpipe get script_dir
+dockpipe get package_root
+dockpipe get assets_dir
+dockpipe get dockpipe_bin
+```
+
+Recommended usage:
+
+- Package scripts and examples: use `dockpipe get ...`
+- Shell-only behavior that must mutate the current shell: use `eval "$(dockpipe sdk)"` and `dockpipe_sdk ...`
+- Low-level implementation helpers may read the backing env vars directly when they are intentionally
+  avoiding subprocess overhead, but that is an internal optimization, not the default authoring style
+
+The important mapping is:
+
+- `dockpipe get script_dir` reads injected `DOCKPIPE_SCRIPT_DIR`
+- `dockpipe get package_root` reads injected `DOCKPIPE_PACKAGE_ROOT`
+- `dockpipe get assets_dir` reads injected `DOCKPIPE_ASSETS_DIR`
+- `dockpipe get workflow_name` reads injected `DOCKPIPE_WORKFLOW_NAME`
+- `dockpipe get workdir` prefers injected `DOCKPIPE_WORKDIR` and otherwise falls back to the current directory
+- `dockpipe get dockpipe_bin` resolves the active DockPipe binary for the current workdir
+
+For direct test/manual calls that bypass the normal workflow boundary, callers may export the same
+backing env vars explicitly before invoking a package script.
+
+For shell-specific actions that need to mutate the current shell, bootstrap the shell SDK:
+
+```bash
+eval "$(dockpipe sdk)"
+dockpipe_sdk init-script
+```
+
+The getter path avoids hard-coding source paths or manual root resolution in package scripts. The command prefers `DOCKPIPE_WORKDIR` when it is already set by a workflow and otherwise falls back to the current directory. The shared core SDK is the source of truth for authoring support in shell/PowerShell/Python/Go.
 
 **Resolver-specific** host scripts live **only** under **`templates/core/resolvers/<name>/`** (next to **`config.yml`**). **`ResolveWorkflowScript`** maps **`scripts/cursor-dev/…`** and **`scripts/vscode/…`** to those paths — nothing duplicate under **`assets/scripts/`** for those names.
 

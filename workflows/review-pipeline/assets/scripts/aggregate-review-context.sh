@@ -3,7 +3,7 @@
 # Expects merged workflow env (TESTS_PASS, SCAN_PASS, …) and bin/.dockpipe/review-files.txt / review-signals.txt.
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
+ROOT="$(dockpipe get workdir)"
 cd "$ROOT"
 OUT="${ROOT}/.dockpipe"
 mkdir -p "$OUT"

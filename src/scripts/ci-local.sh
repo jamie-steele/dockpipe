@@ -15,7 +15,7 @@ cd "$ROOT"
 export DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$ROOT}"
 
 GOBIN="$(go env GOPATH)/bin"
-export PATH="$GOBIN:$PATH"
+export PATH="$ROOT/src/bin:$GOBIN:$PATH"
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -47,7 +47,8 @@ gosec -conf .gosec.json -fmt json -out=bin/.dockpipe/ci-raw/gosec.json -exclude-
 GC=$?
 set -e
 export DOCKPIPE_WORKDIR="$ROOT"
-bash packages/dorkpipe/resolvers/dorkpipe/assets/scripts/normalize-ci-scans.sh
+DOCKPIPE_SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts" \
+  bash "$DOCKPIPE_SCRIPT_DIR/normalize-ci-scans.sh"
 jq -r '"govulncheck raw vulns: " + ((.vulns // .Vulns // [] | length) | tostring)' bin/.dockpipe/ci-raw/govulncheck.json 2>/dev/null || true
 jq -r '"gosec raw issues: " + ((.Stats.found // 0) | tostring)' bin/.dockpipe/ci-raw/gosec.json 2>/dev/null || true
 if [[ $VC -ne 0 ]]; then exit "$VC"; fi

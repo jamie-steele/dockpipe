@@ -2,9 +2,8 @@
 # Send one user message to local Ollama with Pipeon system prompt and optional compatibility snapshot.
 set -euo pipefail
 
-eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
-SCRIPT_DIR="$(dockpipe_sdk script-dir)"
-ROOT="$(dockpipe_sdk workdir)"
+SCRIPT_DIR="$(dockpipe get script_dir)"
+ROOT="$(dockpipe get workdir)"
 # shellcheck source=lib/enable.sh
 source "$SCRIPT_DIR/lib/enable.sh"
 

@@ -3,11 +3,10 @@
 # (same spirit as the Linux CI job). Run: dockpipe --workflow dockpipe-repo-quality --workdir . --
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="${DOCKPIPE_SCRIPT_DIR:?DOCKPIPE_SCRIPT_DIR is required}"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib/dorkpipe-cli.sh"
-dorkpipe_script_bootstrap "$SCRIPT_DIR"
-ROOT="$(dockpipe_sdk workdir)"
+ROOT="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
 
 cd "$ROOT"
 if [[ -d bin/.dockpipe/ci-analysis ]]; then

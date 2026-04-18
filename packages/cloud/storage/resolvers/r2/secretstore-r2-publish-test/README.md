@@ -9,7 +9,7 @@ There is **no** separate “mapping table” in DockPipe. **You define names and
 | **Vault item → environment variable name** (e.g. `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`) | **`--workdir` / `.env.op.template`** — each line is `VAR_NAME=op://Vault/Item/field`. Example: **`packages/secrets/resolvers/onepassword/.env.op.template.example`**. In this repo, copy that file to **`.env.op.template`** at the repo root (gitignored). |
 | **Hint list** of common var names (documentation only) | **`packages/secrets/resolvers/onepassword/profile`** → `DOCKPIPE_RESOLVER_ENV=...` (resolver = 1Password; **`runtime: dockerimage`** + **`skip_container`**) |
 | **Which script reads the template and where it writes** | This workflow’s **`vars:`** → `OP_ENV_FILE` (input) and `SECRET_ENV_OUT` (must match step 1 **`outputs:`**). Script: **`scripts/onepassword/secretstore-op-inject-outputs.sh`** from the onepassword package. |
-| **What step 2 consumes** | **`scripts/dockpipe/r2-publish.sh`** and **`workflows/r2-publish/README.md`** — same variable names as in your `.env.op.template` after `op inject`. |
+| **What step 2 consumes** | **`scripts/dockpipe/r2-publish.sh`** and **`packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/README.md`** — same variable names as in your `.env.op.template` after `op inject`. |
 
 **Flow:** `op inject` turns `op://…` into values but **keeps your left-hand names** (`VAR_NAME=`). DockPipe then loads that file as **`KEY=VAL`** into the process environment for step 2 — **no rename step**.
 
@@ -30,7 +30,7 @@ cp packages/secrets/resolvers/onepassword/.env.op.template.example .env.op.templ
 # Edit .env.op.template with real op:// fields for your vault items.
 mkdir -p release/artifacts && echo test >release/artifacts/README.txt
 R2_PUBLISH_DRY_RUN=1 R2_TF_BACKEND=local \
-  dockpipe --workflow-file workflows/secretstore-r2-publish-test/config.yml --workdir . --
+  dockpipe --workflow-file packages/cloud/storage/resolvers/r2/secretstore-r2-publish-test/config.yml --workdir . --
 ```
 
 Use **`R2_TF_BACKEND=local`** until R2 state keys are in your template. Drop **`R2_PUBLISH_DRY_RUN`** when you want a real upload.

@@ -4,7 +4,7 @@
 # Terraform module (.tf) lives with this infra workflow resolver.
 set -euo pipefail
 
-eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+eval "$(dockpipe sdk)"
 dockpipe_sdk init-script
 
 set_if_unset_from_pipelang() {

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="${DOCKPIPE_SCRIPT_DIR:?DOCKPIPE_SCRIPT_DIR is required}"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/../../dorkpipe/assets/scripts/lib/dorkpipe-cli.sh"
-dorkpipe_script_bootstrap "$SCRIPT_DIR"
-dockpipe_sdk init-script
+ROOT="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
+cd "$ROOT"
 WORKFLOW_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 BIN="$(dorkpipe_script_resolve_bin "$(dorkpipe_script_repo_root "$SCRIPT_DIR")")"

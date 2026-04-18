@@ -3,7 +3,7 @@
 # Writes under bin/.dockpipe/ — reusable from any workflow; requires bash + git or find + grep.
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
+ROOT="$(dockpipe get workdir)"
 cd "$ROOT"
 OUT="${ROOT}/bin/.dockpipe"
 mkdir -p "$OUT"

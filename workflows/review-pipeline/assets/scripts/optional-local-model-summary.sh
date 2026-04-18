@@ -4,7 +4,7 @@
 # Writes bin/.dockpipe/local-model-notes.txt, local-model.env, and outputs.env for the next step.
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
+ROOT="$(dockpipe get workdir)"
 cd "$ROOT"
 OUT="${ROOT}/bin/.dockpipe"
 mkdir -p "$OUT"

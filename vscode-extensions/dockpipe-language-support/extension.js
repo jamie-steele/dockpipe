@@ -98,7 +98,8 @@ const PACKAGE_MANIFEST_KEYS = [
   "includes_resolvers",
   "depends",
   "allow_clone",
-  "distribution"
+  "distribution",
+  "script_contract"
 ];
 
 const PACKAGE_MANIFEST_KEY_DETAILS = {
@@ -126,7 +127,23 @@ const PACKAGE_MANIFEST_KEY_DETAILS = {
   includes_resolvers: "Resolver names included under a kind: package umbrella tree.",
   depends: "Other package names this package expects in the compiled store.",
   allow_clone: "When true, dockpipe clone may copy this compiled package back into an authoring tree.",
-  distribution: "Human/tooling hint such as source or binary."
+  distribution: "Human/tooling hint such as source or binary.",
+  script_contract: "Generic package-level script context contract for assets/scripts consumers."
+};
+
+const PACKAGE_SCRIPT_CONTRACT_KEYS = ["inject"];
+
+const PACKAGE_SCRIPT_CONTRACT_KEY_DETAILS = {
+  inject: "Generic injected package script context fields such as workdir, workflow_name, script_dir, package_root, assets_dir, and dockpipe_bin."
+};
+
+const PACKAGE_SCRIPT_CONTRACT_INJECTABLES = {
+  workdir: "Effective DockPipe workdir/repo root.",
+  workflow_name: "Workflow name when the script is running inside a DockPipe workflow.",
+  script_dir: "Directory containing the current package script.",
+  package_root: "Nearest package root containing package.yml for the current script.",
+  assets_dir: "Nearest assets/ directory for the current script.",
+  dockpipe_bin: "Resolved dockpipe CLI path."
 };
 
 const DOCKPIPE_PROJECT_TOP_LEVEL_KEYS = ["schema", "compile", "packages", "secrets"];
@@ -186,16 +203,51 @@ const CORE_HELPER_PROFILES = {
   shellscript: {
     helperPath: "dockpipe sdk",
     sourceSnippet:
-      'eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"',
-    sourceLabel: 'eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"',
-    sourceDetail: "Bootstrap the canonical DockPipe shell SDK via the CLI",
+      'dockpipe get workdir',
+    sourceLabel: "dockpipe get workdir",
+    sourceDetail: "Read generic DockPipe shell context directly from the CLI",
     functions: [
       {
-        name: "dockpipe_sdk workdir",
+        name: "dockpipe get workdir",
         detail: "Print the SDK workdir/root.",
-        insertText: "dockpipe_sdk workdir",
-        filterText: "dockpipe_sdk workdir dockpipe root workdir",
-        documentation: "First-hand shell SDK action that prints the effective DockPipe workdir/repo root."
+        insertText: "dockpipe get workdir",
+        filterText: "dockpipe get workdir dockpipe root workdir",
+        documentation: "First-hand shell CLI getter that prints the effective DockPipe workdir/repo root."
+      },
+      {
+        name: "dockpipe get workflow_name",
+        detail: "Print the SDK workflow name.",
+        insertText: "dockpipe get workflow_name",
+        filterText: "dockpipe get workflow_name dockpipe workflow name",
+        documentation: "First-hand shell CLI getter that prints `DOCKPIPE_WORKFLOW_NAME` when the script is running inside a DockPipe workflow."
+      },
+      {
+        name: "dockpipe get script_dir",
+        detail: "Print the current script directory.",
+        insertText: "dockpipe get script_dir",
+        filterText: "dockpipe get script_dir dockpipe script dir",
+        documentation: "First-hand shell CLI getter that prints the current package script directory."
+      },
+      {
+        name: "dockpipe get package_root",
+        detail: "Print the nearest package root.",
+        insertText: "dockpipe get package_root",
+        filterText: "dockpipe get package_root dockpipe package root",
+        documentation: "First-hand shell CLI getter that prints the nearest package root containing `package.yml` for the current script."
+      },
+      {
+        name: "dockpipe get assets_dir",
+        detail: "Print the nearest assets directory.",
+        insertText: "dockpipe get assets_dir",
+        filterText: "dockpipe get assets_dir dockpipe assets dir",
+        documentation: "First-hand shell CLI getter that prints the nearest `assets/` directory for the current script."
+      },
+      {
+        name: "dockpipe get dockpipe_bin",
+        detail: "Print the resolved dockpipe binary path.",
+        insertText: "dockpipe get dockpipe_bin",
+        filterText: "dockpipe get dockpipe_bin dockpipe bin",
+        documentation: "First-hand shell CLI getter that prints the resolved `dockpipe` binary path."
       },
       {
         name: "dockpipe_sdk init-script",
@@ -210,13 +262,6 @@ const CORE_HELPER_PROFILES = {
         insertText: "dockpipe_sdk cd-workdir",
         filterText: "dockpipe_sdk cd-workdir dockpipe cd workdir root chdir",
         documentation: "First-hand shell SDK action that changes the current directory to the effective DockPipe workdir."
-      },
-      {
-        name: "dockpipe_sdk workflow-name",
-        detail: "Return workflow name when available.",
-        insertText: "dockpipe_sdk workflow-name",
-        filterText: "dockpipe_sdk workflow-name dockpipe workflow name",
-        documentation: "First-hand shell SDK action that prints the workflow name when the script is running inside a DockPipe workflow."
       },
       {
         name: "dockpipe_sdk require workflow-name",
@@ -278,6 +323,24 @@ const CORE_HELPER_PROFILES = {
         detail: "SDK workflow name.",
         insertText: "$dockpipe.WorkflowName",
         documentation: "Object-style PowerShell SDK field for `DOCKPIPE_WORKFLOW_NAME` when running inside a DockPipe workflow."
+      },
+      {
+        name: "$dockpipe.ScriptDir",
+        detail: "SDK script directory.",
+        insertText: "$dockpipe.ScriptDir",
+        documentation: "Object-style PowerShell SDK field for the current package script directory."
+      },
+      {
+        name: "$dockpipe.PackageRoot",
+        detail: "SDK package root.",
+        insertText: "$dockpipe.PackageRoot",
+        documentation: "Object-style PowerShell SDK field for the nearest package root containing `package.yml`."
+      },
+      {
+        name: "$dockpipe.AssetsDir",
+        detail: "SDK assets directory.",
+        insertText: "$dockpipe.AssetsDir",
+        documentation: "Object-style PowerShell SDK field for the nearest `assets/` directory for the current script."
       }
     ]
   },
@@ -305,6 +368,24 @@ const CORE_HELPER_PROFILES = {
         detail: "SDK workflow name.",
         insertText: "dockpipe.workflow_name",
         documentation: "Object-style Python SDK field for `DOCKPIPE_WORKFLOW_NAME` when running inside a DockPipe workflow."
+      },
+      {
+        name: "dockpipe.script_dir",
+        detail: "SDK script directory.",
+        insertText: "dockpipe.script_dir",
+        documentation: "Object-style Python SDK field for the current package script directory."
+      },
+      {
+        name: "dockpipe.package_root",
+        detail: "SDK package root.",
+        insertText: "dockpipe.package_root",
+        documentation: "Object-style Python SDK field for the nearest package root containing `package.yml`."
+      },
+      {
+        name: "dockpipe.assets_dir",
+        detail: "SDK assets directory.",
+        insertText: "dockpipe.assets_dir",
+        documentation: "Object-style Python SDK field for the nearest `assets/` directory for the current script."
       }
     ]
   },
@@ -331,6 +412,24 @@ const CORE_HELPER_PROFILES = {
         detail: "SDK workflow name.",
         insertText: "dockpipe.WorkflowName",
         documentation: "Object-style Go SDK field for `DOCKPIPE_WORKFLOW_NAME` when running inside a DockPipe workflow."
+      },
+      {
+        name: "dockpipe.ScriptDir",
+        detail: "SDK script directory.",
+        insertText: "dockpipe.ScriptDir",
+        documentation: "Object-style Go SDK field for the current package script directory."
+      },
+      {
+        name: "dockpipe.PackageRoot",
+        detail: "SDK package root.",
+        insertText: "dockpipe.PackageRoot",
+        documentation: "Object-style Go SDK field for the nearest package root containing `package.yml`."
+      },
+      {
+        name: "dockpipe.AssetsDir",
+        detail: "SDK assets directory.",
+        insertText: "dockpipe.AssetsDir",
+        documentation: "Object-style Go SDK field for the nearest `assets/` directory for the current script."
       }
     ]
   }
@@ -1234,6 +1333,14 @@ function activate(context) {
             if (info?.kind === "topLevelKey") {
               return hoverForWorkflowKey(word, PACKAGE_MANIFEST_KEY_DETAILS, range);
             }
+            if (info?.kind === "nestedKey" && info.parents.length === 1 && info.parents[0] === "script_contract") {
+              return hoverForWorkflowKey(word, PACKAGE_SCRIPT_CONTRACT_KEY_DETAILS, range);
+            }
+            if (info?.kind === "listValue" && info.parents.length === 2 && info.parents[0] === "script_contract" && info.parents[1] === "inject") {
+              const doc = PACKAGE_SCRIPT_CONTRACT_INJECTABLES[word];
+              if (!doc) return null;
+              return new vscode.Hover(new vscode.MarkdownString(`**${word}**\n\n${doc}`), range);
+            }
             return null;
           }
 
@@ -1315,6 +1422,28 @@ function activate(context) {
         provideCompletionItems(document, position) {
           if (!isDockpipePackageManifestFile(document)) {
             return [];
+          }
+          const structure = yamlStructureInfoAt(document, position);
+          if (structure?.kind === "nestedKey" && structure.parents.length === 1 && structure.parents[0] === "script_contract") {
+            const line = document.lineAt(position.line).text;
+            const lineToCursor = line.slice(0, position.character);
+            if (lineToCursor.includes(":")) {
+              return [];
+            }
+            return PACKAGE_SCRIPT_CONTRACT_KEYS.map((k) => {
+              const it = new vscode.CompletionItem(k, vscode.CompletionItemKind.Property);
+              it.insertText = `${k}: `;
+              it.documentation = PACKAGE_SCRIPT_CONTRACT_KEY_DETAILS[k];
+              return it;
+            });
+          }
+          if (structure?.kind === "listValue" && structure.parents.length === 2 && structure.parents[0] === "script_contract" && structure.parents[1] === "inject") {
+            return Object.entries(PACKAGE_SCRIPT_CONTRACT_INJECTABLES).map(([k, doc]) => {
+              const it = new vscode.CompletionItem(k, vscode.CompletionItemKind.EnumMember);
+              it.insertText = k;
+              it.documentation = doc;
+              return it;
+            });
           }
           const line = document.lineAt(position.line).text;
           const lineToCursor = line.slice(0, position.character);

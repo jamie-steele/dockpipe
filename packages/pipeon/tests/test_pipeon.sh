@@ -3,8 +3,7 @@
 # Run from repo root: bash packages/pipeon/tests/test_pipeon.sh
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)"
+ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 PIPEON="$ROOT/packages/pipeon/resolvers/pipeon/bin/pipeon"
 test -x "$PIPEON" || {

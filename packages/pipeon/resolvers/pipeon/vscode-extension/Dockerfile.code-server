@@ -3,21 +3,10 @@
 # Isolate runs use templates/core/resolvers/vscode/assets/images/vscode/ (dockpipe-vscode + entrypoint).
 #
 # Build from repo root:
-#   docker build -t dockpipe-code-server:latest -f packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server .
-# Or: make build-code-server-image
-
-# Pack Pipeon and DockPipe language support as .vsix
-# (code-server only accepts .vsix or marketplace IDs, not unpacked folders).
-FROM node:20-alpine AS vsix
-RUN npm install -g @vscode/vsce
-
-WORKDIR /ext/pipeon
-COPY packages/pipeon/resolvers/pipeon/vscode-extension .
-RUN vsce package --allow-missing-repository --skip-license -o /pipeon.vsix
-
-WORKDIR /ext/dockpipe-language-support
-COPY packages/dockpipe-language-support .
-RUN vsce package --allow-missing-repository --skip-license -o /dockpipe-language-support.vsix
+#   make build-code-server-image
+#
+# This Dockerfile consumes prebuilt VSIX artifacts from bin/.dockpipe/extensions/
+# instead of copying extension source trees directly into the image build.
 
 FROM codercom/code-server:latest
 
@@ -42,8 +31,8 @@ COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/pipeon-192.png /us
 COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/pipeon-512.png /usr/lib/code-server/src/browser/media/pwa-icon-512.png
 COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/pipeon-512.png /usr/lib/code-server/src/browser/media/pwa-icon-maskable-512.png
 
-COPY --from=vsix /pipeon.vsix /tmp/pipeon.vsix
-COPY --from=vsix /dockpipe-language-support.vsix /tmp/dockpipe-language-support.vsix
+COPY bin/.dockpipe/extensions/pipeon-*.vsix /tmp/pipeon.vsix
+COPY bin/.dockpipe/extensions/dockpipe-language-support-*.vsix /tmp/dockpipe-language-support.vsix
 COPY packages/pipeon/resolvers/pipeon/vscode-extension/code-server-user-settings.json /tmp/user-settings.json
 RUN cp /tmp/user-settings.json /opt/pipeon/default-user-data/User/settings.json \
   && chown -R coder:coder /opt/pipeon \

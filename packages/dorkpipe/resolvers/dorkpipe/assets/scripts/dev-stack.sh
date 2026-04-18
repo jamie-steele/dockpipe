@@ -4,7 +4,10 @@
 # Compose file: packages/dorkpipe/resolvers/dorkpipe/assets/compose/docker-compose.yml
 # When done: dev-stack.sh down — containers stop (nothing long-lived required for orchestration).
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SOURCE_PATH="${0}"
+SOURCE_DIR="${SOURCE_PATH%/*}"
+[[ "$SOURCE_DIR" == "$SOURCE_PATH" ]] && SOURCE_DIR="."
+SCRIPT_DIR="$(cd "$SOURCE_DIR" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 COMPOSE="$SCRIPT_DIR/../compose/docker-compose.yml"
 if [[ ! -f "$COMPOSE" ]]; then

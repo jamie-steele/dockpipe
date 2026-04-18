@@ -1,8 +1,8 @@
 # Example DAG for DorkPipe — tune policy/nodes for your repo.
-# Run: bin/dorkpipe run -f workflows/dorkpipe-orchestrator/spec.example.yaml --workdir .
+# Run: packages/dorkpipe/bin/dorkpipe run -f packages/dorkpipe/resolvers/dorkpipe-orchestrator/spec.example.yaml --workdir .
 #
 # Requires: Ollama reachable (OLLAMA_HOST) for local_reason; dockpipe on PATH for escalation.
-# Optional: DATABASE_URL for pgvector nodes (see templates/core/bundles/dorkpipe/assets/compose/docker-compose.yml).
+# Optional: DATABASE_URL for pgvector nodes (see packages/dorkpipe/resolvers/dorkpipe/assets/compose/docker-compose.yml).
 name: dorkpipe-orchestrator
 policy:
   escalate_confidence_below: 0.75

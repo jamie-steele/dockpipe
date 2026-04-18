@@ -60,6 +60,13 @@ type PackageManifest struct {
 	// Distribution is optional policy for humans and tooling: "source" (recoverable YAML/assets) or "binary" (no meaningful source in the artifact).
 	// Binary releases should set allow_clone: false and ship only non-recoverable artifacts if reverse-engineering must be impractical.
 	Distribution string `yaml:"distribution,omitempty"`
+	// ScriptContract declares generic package-level script context that DockPipe-aware tooling may inject for package assets.
+	// This is intentionally generic package/runtime context only, not package-specific tooling handles.
+	ScriptContract PackageScriptContract `yaml:"script_contract,omitempty"`
+}
+
+type PackageScriptContract struct {
+	Inject []string `yaml:"inject,omitempty"`
 }
 
 // ParsePackageManifest reads and parses package.yml from path.
@@ -98,6 +105,11 @@ func ValidatePackageManifest(m *PackageManifest) error {
 	}
 	for _, p := range m.RequiresCapabilities {
 		if err := ValidateCapabilityID(p); err != nil {
+			return err
+		}
+	}
+	for _, injectable := range m.ScriptContract.Inject {
+		if err := ValidateScriptContractInjectable(injectable); err != nil {
 			return err
 		}
 	}
@@ -162,4 +174,24 @@ func validateOptionalMetadataString(s, field string) error {
 		}
 	}
 	return nil
+}
+
+var validScriptContractInjectables = map[string]struct{}{
+	"workdir":       {},
+	"workflow_name": {},
+	"script_dir":    {},
+	"package_root":  {},
+	"assets_dir":    {},
+	"dockpipe_bin":  {},
+}
+
+func ValidateScriptContractInjectable(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	if _, ok := validScriptContractInjectables[s]; ok {
+		return nil
+	}
+	return fmt.Errorf("script_contract.inject: unknown injectable %q (expected one of: workdir, workflow_name, script_dir, package_root, assets_dir, dockpipe_bin)", s)
 }

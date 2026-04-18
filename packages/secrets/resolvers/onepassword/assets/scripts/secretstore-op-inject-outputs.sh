@@ -3,17 +3,18 @@
 # Requires: op, OP_ENV_FILE (default .env.op.template), SECRET_ENV_OUT (must match step outputs: path).
 set -euo pipefail
 
-eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
-ROOT="$(dockpipe_sdk workdir)"
-dockpipe_sdk cd-workdir
+ROOT="$(dockpipe get workdir)"
+cd "$ROOT"
 
-command -v op >/dev/null 2>&1 || dockpipe_sdk die "install 1Password CLI (https://developer.1password.com/docs/cli/)"
+die() { echo "secretstore-op-inject: $*" >&2; exit 1; }
+
+command -v op >/dev/null 2>&1 || die "install 1Password CLI (https://developer.1password.com/docs/cli/)"
 
 OP_SRC="${OP_ENV_FILE:-.env.op.template}"
-[[ -f "$OP_SRC" ]] || dockpipe_sdk die "missing $OP_SRC (op:// template; copy from packages/secrets/resolvers/onepassword/.env.op.template.example)"
+[[ -f "$OP_SRC" ]] || die "missing $OP_SRC (op:// template; copy from packages/secrets/resolvers/onepassword/.env.op.template.example)"
 
 OUT_REL="${SECRET_ENV_OUT:-}"
-[[ -n "$OUT_REL" ]] || dockpipe_sdk die "set SECRET_ENV_OUT to the same path as this step's outputs: in the workflow YAML"
+[[ -n "$OUT_REL" ]] || die "set SECRET_ENV_OUT to the same path as this step's outputs: in the workflow YAML"
 
 # Single file: op inject overwrites
 mkdir -p "$(dirname "$OUT_REL")"

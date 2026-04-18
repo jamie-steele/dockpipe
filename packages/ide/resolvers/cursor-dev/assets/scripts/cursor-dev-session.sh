@@ -3,7 +3,7 @@
 # Blocks until the container exits (docker stop NAME) or Ctrl+C (stops container then exits).
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+SCRIPT_DIR="$(dockpipe get script_dir)"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/cursor-dev-common.sh"
 

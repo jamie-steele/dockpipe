@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Run inside dockpipe isolate: ollama — starts `ollama serve`, waits for HTTP, then local summary.
 set -euo pipefail
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
+ROOT="$(dockpipe get workdir)"
 cd "$ROOT"
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(dockpipe get script_dir)"
 export OLLAMA_HOST="${OLLAMA_HOST:-http://127.0.0.1:11434}"
 OLLAMA_HOST="${OLLAMA_HOST%/}"
 
