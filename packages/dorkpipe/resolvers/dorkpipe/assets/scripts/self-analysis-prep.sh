@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Deterministic repo facts for DorkPipe self-analysis (no LLM). Writes bin/.dockpipe/packages/dorkpipe/self-analysis/
 set -euo pipefail
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+ROOT="$(dockpipe_sdk workdir)"
 OUT="$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis"
 mkdir -p "$OUT"
 

@@ -21,11 +21,14 @@ flows can treat Pipeon as the top-level product surface rather than a disconnect
 
 ## Authoring note
 
-When adding new Pipeon shell helpers, prefer the package-local resolver helper:
+When adding new Pipeon scripts, prefer the shared core SDK:
 
-- **`assets/scripts/lib/repo-tools.sh`**
+- **Shell:** bootstrap with **`eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"`** and use **`dockpipe_sdk ...`**
+- **`src/core/assets/scripts/lib/repo-tools.ps1`**
+- **`src/core/assets/scripts/lib/repo_tools.py`**
+- **`src/core/assets/scripts/lib/repotools/repotools.go`**
 
-It resolves the real repo-local **`dockpipe`** build first (for example **`src/bin/dockpipe`**) before falling back to `PATH`, so maintainer/dev flows do not silently depend on a stale global install.
+That shared SDK surface resolves the real repo-local **`dockpipe`** build first (for example **`src/bin/dockpipe`**) before falling back to `PATH`, so maintainer/dev flows do not silently depend on a stale global install.
 
 ## Quick start
 

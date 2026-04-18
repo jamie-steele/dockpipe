@@ -4,15 +4,8 @@
 # Terraform module (.tf) lives with this infra workflow resolver.
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/repo-tools.sh
-source "$SCRIPT_DIR/lib/repo-tools.sh"
-WF_NS="${DOCKPIPE_WORKFLOW_NAME:-dockpipe.cloudflare.r2infra}"
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
-cd "$ROOT"
-
-die() { echo "${WF_NS}: $*" >&2; exit 1; }
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+dockpipe_sdk init-script
 
 set_if_unset_from_pipelang() {
   local target="${1:-}"
@@ -68,19 +61,6 @@ dockpipe_r2_normalize_account_id() {
   echo "$raw"
 }
 
-source_terraform_pipeline_lib() {
-  local dockpipe_bin="${DOCKPIPE_BIN:-}"
-  if [[ -z "$dockpipe_bin" ]]; then
-    dockpipe_bin="$(cloud_r2infra_resolve_dockpipe_bin "$ROOT")"
-  fi
-  [[ -n "$dockpipe_bin" ]] || die "dockpipe not found; set DOCKPIPE_BIN or add dockpipe to PATH"
-  local pipeline_sh
-  pipeline_sh="$("$dockpipe_bin" terraform pipeline-path 2>/dev/null)" || die "could not resolve terraform pipeline path via dockpipe terraform pipeline-path"
-  [[ -f "$pipeline_sh" ]] || die "terraform pipeline script not found at ${pipeline_sh:-<empty>}"
-  # shellcheck source=/dev/null
-  source "$pipeline_sh"
-}
-
 find_terraform_dir() {
   if [[ -n "${DOCKPIPE_TF_MODULE_DIR:-}" ]]; then
     local d="${DOCKPIPE_TF_MODULE_DIR}"
@@ -129,14 +109,14 @@ attach_cloudflare_provider() {
   elif [[ -n "${CLOUDFLARE_EMAIL:-}" && -n "${CLOUDFLARE_GLOBAL_API_KEY:-}" ]]; then
     :
   else
-    die "Terraform auth: set CLOUDFLARE_API_TOKEN or (CLOUDFLARE_EMAIL + CLOUDFLARE_GLOBAL_API_KEY)"
+    dockpipe_sdk die "Terraform auth: set CLOUDFLARE_API_TOKEN or (CLOUDFLARE_EMAIL + CLOUDFLARE_GLOBAL_API_KEY)"
   fi
-  [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || die "CLOUDFLARE_ACCOUNT_ID required for Terraform"
-  [[ -n "${R2_BUCKET:-}" ]] || die "set R2_BUCKET (TF_VAR_bucket_name for Cloudflare R2 module)"
+  [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || dockpipe_sdk die "CLOUDFLARE_ACCOUNT_ID required for Terraform"
+  [[ -n "${R2_BUCKET:-}" ]] || dockpipe_sdk die "set R2_BUCKET (TF_VAR_bucket_name for Cloudflare R2 module)"
 
   local acct_id
   acct_id="$(dockpipe_r2_normalize_account_id "${CLOUDFLARE_ACCOUNT_ID}")"
-  [[ "$acct_id" =~ ^[a-fA-F0-9]{32}$ ]] || die "CLOUDFLARE_ACCOUNT_ID must be the 32-char account id (not https://…r2.cloudflarestorage.com). Update .env or vault template."
+  [[ "$acct_id" =~ ^[a-fA-F0-9]{32}$ ]] || dockpipe_sdk die "CLOUDFLARE_ACCOUNT_ID must be the 32-char account id (not https://…r2.cloudflarestorage.com). Update .env or vault template."
   export CLOUDFLARE_ACCOUNT_ID="${acct_id}"
 
   export TF_IN_AUTOMATION=1
@@ -166,9 +146,9 @@ attach_cloudflare_provider() {
 
 attach_cloudflare_provider
 
-TF_DIR="$(find_terraform_dir)" || die "Terraform module not found — set DOCKPIPE_TF_MODULE_DIR or R2_TERRAFORM_DIR, or keep the bundled module in this package"
+TF_DIR="$(find_terraform_dir)" || dockpipe_sdk die "Terraform module not found — set DOCKPIPE_TF_MODULE_DIR or R2_TERRAFORM_DIR, or keep the bundled module in this package"
 
-source_terraform_pipeline_lib
+dockpipe_sdk source terraform-pipeline || dockpipe_sdk die "could not source terraform pipeline via dockpipe sdk"
 export DOCKPIPE_TF_LOG_PREFIX="${DOCKPIPE_TF_LOG_PREFIX:-${WF_NS}}"
 
 dockpipe_tf_map_r2_publish_env

@@ -250,6 +250,7 @@ fi
 if [[ "${PIPEON_DEV_STACK_PIPEON_BUNDLE:-1}" == "1" && -x "$PIPEON_BIN" ]]; then
   if ! (
     cd "$WORKDIR"
+    export DOCKPIPE_BIN
     export DOCKPIPE_WORKDIR="$WORKDIR"
     "$PIPEON_BIN" bundle
   ) >&2; then

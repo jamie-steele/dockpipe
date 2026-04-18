@@ -3,11 +3,11 @@
 # Prerequisites: jq. Raw inputs: bin/.dockpipe/ci-raw/gosec.json and govulncheck.json (objects or empty {}).
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+ROOT="$(dockpipe_sdk workdir)"
 RAW="$ROOT/bin/.dockpipe/ci-raw"
 OUT="$ROOT/bin/.dockpipe/ci-analysis"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(dockpipe_sdk script-dir)"
 MERGE_JQ="$SCRIPT_DIR/jq/merge-ci-findings.jq"
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -30,7 +30,7 @@ if [[ -z "$BRANCH" ]]; then
 fi
 RUN_ID="${GITHUB_RUN_ID:-local}"
 RUN_ATT="${GITHUB_RUN_ATTEMPT:-1}"
-WF_NAME="${GITHUB_WORKFLOW:-${DOCKPIPE_WORKFLOW_NAME:-local}}"
+WF_NAME="${GITHUB_WORKFLOW:-$(dockpipe_sdk workflow-name 2>/dev/null || printf 'local')}"
 REPO="${GITHUB_REPOSITORY:-unknown}"
 TS="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 SOURCE="local"

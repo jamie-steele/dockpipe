@@ -25,6 +25,9 @@
     "onLanguage:pipelang",
     "onLanguage:yaml",
     "onLanguage:shellscript",
+    "onLanguage:powershell",
+    "onLanguage:python",
+    "onLanguage:go",
     "onLanguage:json",
     "onLanguage:jsonc"
   ],

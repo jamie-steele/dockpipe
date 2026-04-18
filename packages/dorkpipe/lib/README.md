@@ -18,12 +18,14 @@ CLI: **`make maintainer-tools`** (repo root) writes **`../bin/dorkpipe`** (next 
 
 ## Authoring note
 
-When maintainer scripts in the DorkPipe package need repo binaries, prefer the package-local shell helpers instead of open-coding `command -v` lookups:
+When maintainer scripts in the DorkPipe package need repo binaries, prefer the shared core SDK instead of open-coding `command -v` lookups:
 
-- **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/lib/repo-tools.sh`**
-- **`packages/dorkpipe/resolvers/dorkpipe-orchestrator/assets/scripts/lib/repo-tools.sh`**
+- **Shell:** bootstrap with **`eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"`** and use **`dockpipe_sdk ...`**
+- **`src/core/assets/scripts/lib/repo-tools.ps1`**
+- **`src/core/assets/scripts/lib/repo_tools.py`**
+- **`src/core/assets/scripts/lib/repotools/repotools.go`**
 
-Those helpers prefer the real repo-local builds such as:
+That shared SDK surface prefers the real repo-local builds such as:
 
 - **`packages/dorkpipe/bin/dorkpipe`**
 - **`src/bin/dockpipe`**

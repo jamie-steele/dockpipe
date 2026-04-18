@@ -182,86 +182,184 @@ const SEMANTIC_LEGEND = new vscode.SemanticTokensLegend([
   "number"
 ]);
 
-const SHELL_HELPER_PROFILES = [
-  {
-    match: /[\\\/]packages[\\\/]pipeon[\\\/]resolvers[\\\/]pipeon[\\\/]assets[\\\/]scripts[\\\/]/i,
-    helperPath: 'lib/repo-tools.sh',
+const CORE_HELPER_PROFILES = {
+  shellscript: {
+    helperPath: "dockpipe sdk",
+    sourceSnippet:
+      'eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"',
+    sourceLabel: 'eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"',
+    sourceDetail: "Bootstrap the canonical DockPipe shell SDK via the CLI",
     functions: [
       {
-        name: "pipeon_repo_root",
-        detail: "Return the effective Pipeon workdir/repo root.",
-        insertText: "pipeon_repo_root",
-        documentation: "Resolve the effective Pipeon repo root from `DOCKPIPE_WORKDIR` or the current working directory."
+        name: "dockpipe_sdk workdir",
+        detail: "Print the SDK workdir/root.",
+        insertText: "dockpipe_sdk workdir",
+        filterText: "dockpipe_sdk workdir dockpipe root workdir",
+        documentation: "First-hand shell SDK action that prints the effective DockPipe workdir/repo root."
       },
       {
-        name: "pipeon_resolve_dockpipe_bin",
-        detail: "Prefer repo-local dockpipe, then fall back to PATH.",
-        insertText: "pipeon_resolve_dockpipe_bin \"$1\"",
-        documentation: "Resolve `dockpipe` from `src/bin/dockpipe` in the current repo first, then fall back to `PATH`."
+        name: "dockpipe_sdk init-script",
+        detail: "Initialize common script vars and enter the workdir.",
+        insertText: "dockpipe_sdk init-script",
+        filterText: "dockpipe_sdk init-script dockpipe init script root wf_ns workdir",
+        documentation: "First-hand shell SDK action that initializes `ROOT` and `WF_NS` from the SDK context and changes into the DockPipe workdir."
+      },
+      {
+        name: "dockpipe_sdk cd-workdir",
+        detail: "Change directory to the SDK workdir.",
+        insertText: "dockpipe_sdk cd-workdir",
+        filterText: "dockpipe_sdk cd-workdir dockpipe cd workdir root chdir",
+        documentation: "First-hand shell SDK action that changes the current directory to the effective DockPipe workdir."
+      },
+      {
+        name: "dockpipe_sdk workflow-name",
+        detail: "Return workflow name when available.",
+        insertText: "dockpipe_sdk workflow-name",
+        filterText: "dockpipe_sdk workflow-name dockpipe workflow name",
+        documentation: "First-hand shell SDK action that prints the workflow name when the script is running inside a DockPipe workflow."
+      },
+      {
+        name: "dockpipe_sdk require workflow-name",
+        detail: "Return workflow name or fail.",
+        insertText: "dockpipe_sdk require workflow-name",
+        filterText: "dockpipe_sdk require workflow-name dockpipe require workflow name",
+        documentation: "First-hand shell SDK action that prints the workflow name and fails with a clear error if `DOCKPIPE_WORKFLOW_NAME` is unavailable."
+      },
+      {
+        name: "dockpipe_sdk require dockpipe-bin",
+        detail: "Return dockpipe binary or fail.",
+        insertText: "dockpipe_sdk require dockpipe-bin",
+        filterText: "dockpipe_sdk require dockpipe-bin dockpipe require bin",
+        documentation: "First-hand shell SDK action that prints the resolved `dockpipe` binary path and fails with a clear error if it cannot be resolved."
+      },
+      {
+        name: "dockpipe_sdk require dorkpipe-bin",
+        detail: "Return dorkpipe binary or fail.",
+        insertText: "dockpipe_sdk require dorkpipe-bin",
+        filterText: "dockpipe_sdk require dorkpipe-bin dorkpipe require bin",
+        documentation: "First-hand shell SDK action that prints the resolved `dorkpipe` binary path and fails with a clear error if it cannot be resolved."
+      },
+      {
+        name: "dockpipe_sdk die",
+        detail: "Exit with an SDK-prefixed error.",
+        insertText: 'dockpipe_sdk die "$1"',
+        filterText: "dockpipe_sdk die fail error exit",
+        documentation: "First-hand shell SDK action that prints a workflow-prefixed error and exits nonzero."
+      },
+      {
+        name: "dockpipe_sdk source terraform-pipeline",
+        detail: "Source the canonical Terraform pipeline library.",
+        insertText: "dockpipe_sdk source terraform-pipeline",
+        filterText: "dockpipe_sdk source terraform-pipeline dockpipe terraform pipeline source",
+        documentation: "First-hand shell SDK action that resolves and sources the canonical Terraform pipeline library into the current shell."
+      },
+      {
+        name: "dockpipe_sdk refresh",
+        detail: "Refresh the shell SDK object.",
+        insertText: 'dockpipe_sdk refresh "$1"',
+        documentation: "Recompute the shell SDK object when `DOCKPIPE_WORKDIR` or binary overrides change."
       }
     ]
   },
-  {
-    match: /[\\\/]packages[\\\/]dorkpipe[\\\/]resolvers[\\\/]dorkpipe[\\\/]assets[\\\/]scripts[\\\/]/i,
-    helperPath: 'lib/repo-tools.sh',
+  powershell: {
+    helperPath: "src/core/assets/scripts/lib/repo-tools.ps1",
+    sourceSnippet:
+      '. (Join-Path (if ($env:DOCKPIPE_WORKDIR) { $env:DOCKPIPE_WORKDIR } else { (Get-Location).Path }) "src/core/assets/scripts/lib/repo-tools.ps1")',
+    sourceLabel: "dockpipe sdk import",
+    sourceDetail: "Dot-source the canonical DockPipe PowerShell SDK",
     functions: [
       {
-        name: "dorkpipe_repo_root",
-        detail: "Return the effective DorkPipe workdir/repo root.",
-        insertText: "dorkpipe_repo_root",
-        documentation: "Resolve the effective DorkPipe repo root from `DOCKPIPE_WORKDIR` or the current working directory."
+        name: "$dockpipe.Workdir",
+        detail: "SDK workdir/root.",
+        insertText: "$dockpipe.Workdir",
+        documentation: "Object-style PowerShell SDK field for the effective DockPipe workdir/repo root."
       },
       {
-        name: "dorkpipe_resolve_dockpipe_bin",
-        detail: "Prefer repo-local dockpipe, then PATH.",
-        insertText: "dorkpipe_resolve_dockpipe_bin \"$1\"",
-        documentation: "Resolve `dockpipe` from `src/bin/dockpipe` in the current repo first, then fall back to `PATH`."
+        name: "$dockpipe.DockpipeBin",
+        detail: "SDK dockpipe binary path.",
+        insertText: "$dockpipe.DockpipeBin",
+        documentation: "Object-style PowerShell SDK field for the resolved `dockpipe` binary path."
       },
       {
-        name: "dorkpipe_resolve_dorkpipe_bin",
-        detail: "Prefer repo-local dorkpipe, then PATH.",
-        insertText: "dorkpipe_resolve_dorkpipe_bin \"$1\"",
-        documentation: "Resolve `dorkpipe` from `packages/dorkpipe/bin/dorkpipe` in the current repo first, then fall back to `PATH`."
+        name: "$dockpipe.DorkpipeBin",
+        detail: "SDK dorkpipe binary path.",
+        insertText: "$dockpipe.DorkpipeBin",
+        documentation: "Object-style PowerShell SDK field for the resolved `dorkpipe` binary path."
+      },
+      {
+        name: "$dockpipe.WorkflowName",
+        detail: "SDK workflow name.",
+        insertText: "$dockpipe.WorkflowName",
+        documentation: "Object-style PowerShell SDK field for `DOCKPIPE_WORKFLOW_NAME` when running inside a DockPipe workflow."
       }
     ]
   },
-  {
-    match: /[\\\/]packages[\\\/]dorkpipe[\\\/]resolvers[\\\/]dorkpipe-orchestrator[\\\/]assets[\\\/]scripts[\\\/]/i,
-    helperPath: 'lib/repo-tools.sh',
+  python: {
+    helperPath: "src.core.assets.scripts.lib.repo_tools",
+    sourceSnippet:
+      "from src.core.assets.scripts.lib.repo_tools import dockpipe",
+    sourceLabel: "dockpipe sdk import",
+    sourceDetail: "Import the canonical DockPipe Python SDK object",
     functions: [
       {
-        name: "dorkpipe_orchestrator_repo_root",
-        detail: "Return the effective orchestrator workdir/repo root.",
-        insertText: "dorkpipe_orchestrator_repo_root",
-        documentation: "Resolve the effective repo root from `DOCKPIPE_WORKDIR` or the current working directory."
+        name: "dockpipe.workdir",
+        detail: "SDK workdir/root.",
+        insertText: "dockpipe.workdir",
+        documentation: "Object-style Python SDK field for the effective DockPipe workdir/repo root."
       },
       {
-        name: "dorkpipe_orchestrator_resolve_dorkpipe_bin",
-        detail: "Prefer repo-local dorkpipe, then PATH.",
-        insertText: "dorkpipe_orchestrator_resolve_dorkpipe_bin \"$1\"",
-        documentation: "Resolve `dorkpipe` from `packages/dorkpipe/bin/dorkpipe` in the current repo first, then fall back to `PATH`."
+        name: "dockpipe.dockpipe_bin",
+        detail: "SDK dockpipe binary path.",
+        insertText: "dockpipe.dockpipe_bin",
+        documentation: "Object-style Python SDK field for the resolved `dockpipe` binary path."
+      },
+      {
+        name: "dockpipe.dorkpipe_bin",
+        detail: "SDK dorkpipe binary path.",
+        insertText: "dockpipe.dorkpipe_bin",
+        documentation: "Object-style Python SDK field for the resolved `dorkpipe` binary path."
+      },
+      {
+        name: "dockpipe.workflow_name",
+        detail: "SDK workflow name.",
+        insertText: "dockpipe.workflow_name",
+        documentation: "Object-style Python SDK field for `DOCKPIPE_WORKFLOW_NAME` when running inside a DockPipe workflow."
       }
     ]
   },
-  {
-    match: /[\\\/]packages[\\\/]cloud[\\\/]storage[\\\/]resolvers[\\\/]r2[\\\/]dockpipe\.cloudflare\.r2infra[\\\/]assets[\\\/]scripts[\\\/]/i,
-    helperPath: 'lib/repo-tools.sh',
+  go: {
+    helperPath: "dockpipe/src/core/assets/scripts/lib/repotools",
+    sourceSnippet: 'import repotools "dockpipe/src/core/assets/scripts/lib/repotools"\n\ndockpipe, err := repotools.Load("")',
+    sourceLabel: "dockpipe sdk import",
+    sourceDetail: "Import the canonical DockPipe Go SDK and load the SDK object",
     functions: [
       {
-        name: "cloud_r2infra_repo_root",
-        detail: "Return the effective Cloud/R2 workdir/repo root.",
-        insertText: "cloud_r2infra_repo_root",
-        documentation: "Resolve the effective repo root from `DOCKPIPE_WORKDIR` or the current working directory."
+        name: "dockpipe.Workdir",
+        detail: "SDK workdir/root.",
+        insertText: "dockpipe.Workdir",
+        documentation: "Object-style Go SDK field for the effective DockPipe workdir/repo root."
       },
       {
-        name: "cloud_r2infra_resolve_dockpipe_bin",
-        detail: "Prefer repo-local dockpipe, then PATH.",
-        insertText: "cloud_r2infra_resolve_dockpipe_bin \"$1\"",
-        documentation: "Resolve `dockpipe` from `src/bin/dockpipe` in the current repo first, then fall back to `PATH`."
+        name: "dockpipe.DockpipeBin",
+        detail: "SDK dockpipe binary path.",
+        insertText: "dockpipe.DockpipeBin",
+        documentation: "Object-style Go SDK field for the resolved `dockpipe` binary path."
+      },
+      {
+        name: "dockpipe.DorkpipeBin",
+        detail: "SDK dorkpipe binary path.",
+        insertText: "dockpipe.DorkpipeBin",
+        documentation: "Object-style Go SDK field for the resolved `dorkpipe` binary path."
+      },
+      {
+        name: "dockpipe.WorkflowName",
+        detail: "SDK workflow name.",
+        insertText: "dockpipe.WorkflowName",
+        documentation: "Object-style Go SDK field for `DOCKPIPE_WORKFLOW_NAME` when running inside a DockPipe workflow."
       }
     ]
   }
-];
+};
 
 /**
  * @typedef {{ doc?: string, type?: string, defaultValue?: string }} FieldInfo
@@ -296,22 +394,16 @@ function isDockpipeProjectConfigFile(doc) {
 }
 
 /** @param {vscode.TextDocument} doc */
-function isDockpipePackageShellScript(doc) {
-  const name = doc.fileName.toLowerCase();
-  if (!(name.endsWith(".sh") || name.endsWith(".bash"))) {
-    return false;
-  }
+function isDockpipePackageScriptDocument(doc) {
   return /[\\\/]packages[\\\/].+[\\\/]assets[\\\/]scripts[\\\/]/i.test(doc.fileName);
 }
 
 /** @param {vscode.TextDocument} doc */
-function shellHelperProfileForDocument(doc) {
-  for (const profile of SHELL_HELPER_PROFILES) {
-    if (profile.match.test(doc.fileName)) {
-      return profile;
-    }
+function coreHelperProfileForDocument(doc) {
+  if (!isDockpipePackageScriptDocument(doc)) {
+    return null;
   }
-  return null;
+  return CORE_HELPER_PROFILES[doc.languageId] || null;
 }
 
 /**
@@ -1378,25 +1470,28 @@ function activate(context) {
 
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(
-      { language: "shellscript", scheme: "file" },
+      [
+        { language: "shellscript", scheme: "file" },
+        { language: "powershell", scheme: "file" },
+        { language: "python", scheme: "file" },
+        { language: "go", scheme: "file" }
+      ],
       {
         provideCompletionItems(document) {
-          if (!isDockpipePackageShellScript(document)) {
-            return [];
-          }
-          const profile = shellHelperProfileForDocument(document);
+          const profile = coreHelperProfileForDocument(document);
           if (!profile) {
             return [];
           }
 
           const items = [];
 
-          const sourceItem = new vscode.CompletionItem("repo-tools source", vscode.CompletionItemKind.Snippet);
-          sourceItem.insertText = new vscode.SnippetString(
-            '# shellcheck source=' + profile.helperPath + '\nsource "$SCRIPT_DIR/' + profile.helperPath + '"'
-          );
-          sourceItem.detail = "Source the package-local repo-tools helper";
-          sourceItem.documentation = `Use the package-local \`${profile.helperPath}\` helper instead of open-coding PATH-based binary lookup.`;
+          const sourceItem = new vscode.CompletionItem(profile.sourceLabel, vscode.CompletionItemKind.Snippet);
+          sourceItem.insertText = new vscode.SnippetString(profile.sourceSnippet);
+          sourceItem.detail = profile.sourceDetail;
+          sourceItem.documentation = `Use the canonical core helper \`${profile.helperPath}\` instead of open-coding repo/PATH binary lookup.`;
+          if (document.languageId === "shellscript") {
+            sourceItem.filterText = 'eval dockpipe sdk';
+          }
           items.push(sourceItem);
 
           for (const helper of profile.functions) {
@@ -1404,29 +1499,37 @@ function activate(context) {
             item.insertText = helper.insertText;
             item.detail = helper.detail;
             item.documentation = helper.documentation;
+            if (helper.filterText) {
+              item.filterText = helper.filterText;
+            }
             items.push(item);
           }
 
           return items;
         }
-      }
+      },
+      "$",
+      "[",
+      "."
     )
   );
 
   context.subscriptions.push(
     vscode.languages.registerHoverProvider(
-      { language: "shellscript", scheme: "file" },
+      [
+        { language: "shellscript", scheme: "file" },
+        { language: "powershell", scheme: "file" },
+        { language: "python", scheme: "file" },
+        { language: "go", scheme: "file" }
+      ],
       {
         provideHover(document, position) {
-          if (!isDockpipePackageShellScript(document)) {
-            return null;
-          }
-          const profile = shellHelperProfileForDocument(document);
+          const profile = coreHelperProfileForDocument(document);
           if (!profile) {
             return null;
           }
 
-          const range = document.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_]*/);
+          const range = document.getWordRangeAtPosition(position, /[A-Za-z_$\[\].-][A-Za-z0-9_$\[\].-]*/);
           if (!range) {
             return null;
           }

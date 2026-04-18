@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Concatenate node outputs under bin/.dockpipe/packages/dorkpipe/nodes/ into one file for downstream prompts.
 set -euo pipefail
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-cd "$ROOT"
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+ROOT="$(dockpipe_sdk workdir)"
+dockpipe_sdk cd-workdir
 NODES="${ROOT}/bin/.dockpipe/packages/dorkpipe/nodes"
 OUT="${ROOT}/bin/.dockpipe/packages/dorkpipe/merged-nodes.txt"
 mkdir -p "$(dirname "$OUT")"

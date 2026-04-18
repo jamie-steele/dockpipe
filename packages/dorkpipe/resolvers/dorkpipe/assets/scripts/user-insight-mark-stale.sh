@@ -3,8 +3,8 @@
 # Usage: user-insight-mark-stale.sh <insight-or-queue-id>
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+ROOT="$(dockpipe_sdk workdir)"
 INS="$ROOT/bin/.dockpipe/analysis/insights.json"
 ID="${1:-}"
 

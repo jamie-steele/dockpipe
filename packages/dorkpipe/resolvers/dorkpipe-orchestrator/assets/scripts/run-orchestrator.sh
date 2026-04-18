@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/repo-tools.sh
-source "$SCRIPT_DIR/lib/repo-tools.sh"
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+dockpipe_sdk init-script
 WORKFLOW_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-
-cd "$ROOT"
 
 BIN="${DORKPIPE_BIN:-}"
 if [[ -z "$BIN" ]]; then
-  BIN="$(dorkpipe_orchestrator_resolve_dorkpipe_bin "$ROOT")"
+  BIN="$(dockpipe_sdk require dorkpipe-bin)"
 fi
 SPEC="${DORKPIPE_SPEC:-$WORKFLOW_ROOT/spec.example.yaml}"
 

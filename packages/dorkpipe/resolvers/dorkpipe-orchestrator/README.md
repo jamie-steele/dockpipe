@@ -12,8 +12,8 @@ Principles: deterministic prep, local-first, parallel levels, pgvector when you 
 **Self-analysis (repo → Cursor handoff):** **`workflows/dorkpipe-self-analysis/`** — **container-isolated** step; **`dorkpipe-self-analysis-host`** if you need **skip_container**. Optional **Compose** sidecar: **`scripts/dorkpipe/dev-stack.sh`**. Writes **`.dockpipe/orchestrator-cursor-prompt.md`** and **`paste-this-prompt.txt`**.
 ## Authoring note
 
-Resolver host scripts in this package should use:
+Resolver host scripts in this package should use the shared core SDK:
 
-- **`assets/scripts/lib/repo-tools.sh`**
+- **Shell:** bootstrap with **`eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"`** and use **`dockpipe_sdk ...`**
 
 to resolve the repo-local **`dorkpipe`** build before falling back to `PATH`.

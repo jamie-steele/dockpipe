@@ -2,10 +2,10 @@
 # Normalize new queue items into bin/.dockpipe/analysis/insights.json using deterministic rules (user-insight-rules.json).
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+ROOT="$(dockpipe_sdk workdir)"
 OUT="$ROOT/bin/.dockpipe/analysis"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(dockpipe_sdk script-dir)"
 JQF="$SCRIPT_DIR/jq/process-user-insight-queue.jq"
 RULES="$SCRIPT_DIR/user-insight-rules.json"
 QUEUE="$OUT/queue.json"

@@ -2,8 +2,8 @@
 # Split insights.json into bin/.dockpipe/analysis/by-category/<category>.json (arrays only; canonical file remains insights.json).
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+ROOT="$(dockpipe_sdk workdir)"
 OUT="$ROOT/bin/.dockpipe/analysis"
 INS="$OUT/insights.json"
 CATDIR="$OUT/by-category"

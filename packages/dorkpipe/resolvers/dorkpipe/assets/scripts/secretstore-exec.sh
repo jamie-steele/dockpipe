@@ -3,19 +3,17 @@
 # For 1Password (op), use workflow secretstore-onepassword (maintainer staging) and secretstore-op-exec.sh.
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
-cd "$ROOT"
-
-die() { echo "secretstore: $*" >&2; exit 1; }
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+ROOT="$(dockpipe_sdk workdir)"
+dockpipe_sdk cd-workdir
 
 PROVIDER="${SECRETSTORE_PROVIDER:-dotenv}"
 case "$PROVIDER" in
   dotenv|file)
     ENV_FILE="${SECRETSTORE_ENV_FILE:-.env.secretstore}"
-    [[ -f "$ENV_FILE" ]] || die "missing $ENV_FILE — copy src/core/workflows/secretstore/.env.secretstore.example (see README)"
+    [[ -f "$ENV_FILE" ]] || dockpipe_sdk die "missing $ENV_FILE — copy src/core/workflows/secretstore/.env.secretstore.example (see README)"
     CMD="${SECRETSTORE_COMMAND:-}"
-    [[ -n "$CMD" ]] || die "set SECRETSTORE_COMMAND (shell command to run with loaded env, e.g. dockpipe --workflow mywf --workdir . --)"
+    [[ -n "$CMD" ]] || dockpipe_sdk die "set SECRETSTORE_COMMAND (shell command to run with loaded env, e.g. dockpipe --workflow mywf --workdir . --)"
     set -a
     # shellcheck disable=SC1090
     . "$ENV_FILE"
@@ -23,6 +21,6 @@ case "$PROVIDER" in
     exec bash -c "$CMD"
     ;;
   *)
-    die "unsupported SECRETSTORE_PROVIDER=$PROVIDER — bundled core supports dotenv|file only. For op (1Password), use --workflow secretstore-onepassword in this repo."
+    dockpipe_sdk die "unsupported SECRETSTORE_PROVIDER=$PROVIDER — bundled core supports dotenv|file only. For op (1Password), use --workflow secretstore-onepassword in this repo."
     ;;
 esac

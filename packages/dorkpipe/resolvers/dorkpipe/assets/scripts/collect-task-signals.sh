@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Bounded, deterministic signals for routing (extend per repo).
 set -euo pipefail
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-cd "$ROOT"
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+ROOT="$(dockpipe_sdk workdir)"
+dockpipe_sdk cd-workdir
 OUT="${ROOT}/bin/.dockpipe/packages/dorkpipe"
 mkdir -p "$OUT"
 {

@@ -16,18 +16,8 @@
 #
 # Terraform runs through the dockpipe.cloudflare.r2infra workflow when enabled.
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# shellcheck source=lib/repo-tools.sh
-source "$SCRIPT_DIR/lib/repo-tools.sh"
-
-# Workflow id (matches workflows/*/config.yml name)
-WF_NS="${DOCKPIPE_WORKFLOW_NAME:-dockpipe.cloudflare.r2publish}"
-
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
-cd "$ROOT"
-
-die() { echo "${WF_NS}: $*" >&2; exit 1; }
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+dockpipe_sdk init-script
 
 # Same as terraform-pipeline.sh: accept 32-char id or full https://<id>.r2.cloudflarestorage.com (dashboard paste).
 dockpipe_r2_normalize_account_id() {
@@ -49,10 +39,6 @@ dockpipe_r2_normalize_account_id() {
   echo "$raw"
 }
 
-resolve_dockpipe_bin() {
-  dorkpipe_resolve_dockpipe_bin "$ROOT"
-}
-
 should_run_terraform() {
   if [[ "${R2_SKIP_TERRAFORM:-0}" == "1" ]]; then
     return 1
@@ -72,15 +58,15 @@ should_run_terraform() {
 run_terraform_pipeline() {
   local backend_hcl="$1"
   local dockpipe_bin
-  dockpipe_bin="$(resolve_dockpipe_bin)" || die "dockpipe not found; set DOCKPIPE_BIN or add dockpipe to PATH"
+  dockpipe_bin="$(dockpipe_sdk require dockpipe-bin)" || dockpipe_sdk die "dockpipe not found; set DOCKPIPE_BIN or add dockpipe to PATH"
   if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
     :
   elif [[ -n "${CLOUDFLARE_EMAIL:-}" && -n "${CLOUDFLARE_GLOBAL_API_KEY:-}" ]]; then
     :
   else
-    die "Terraform auth: set CLOUDFLARE_API_TOKEN or (CLOUDFLARE_EMAIL + CLOUDFLARE_GLOBAL_API_KEY)"
+    dockpipe_sdk die "Terraform auth: set CLOUDFLARE_API_TOKEN or (CLOUDFLARE_EMAIL + CLOUDFLARE_GLOBAL_API_KEY)"
   fi
-  [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || die "CLOUDFLARE_ACCOUNT_ID required for Terraform"
+  [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || dockpipe_sdk die "CLOUDFLARE_ACCOUNT_ID required for Terraform"
   export DOCKPIPE_TF_BACKEND_HCL_PATH="$backend_hcl"
   export DOCKPIPE_TF_ATTACH_CLOUDFLARE_PROVIDER=1
   export DOCKPIPE_TF_LOG_PREFIX="${DOCKPIPE_TF_LOG_PREFIX:-${WF_NS}}"
@@ -100,18 +86,18 @@ if [[ "${R2_INFRA_ONLY:-0}" == "1" ]]; then
     esac
   fi
   if [[ "${R2_SKIP_TERRAFORM:-0}" == "1" ]]; then
-    die "R2_INFRA_ONLY=1 conflicts with R2_SKIP_TERRAFORM=1"
+    dockpipe_sdk die "R2_INFRA_ONLY=1 conflicts with R2_SKIP_TERRAFORM=1"
   fi
   BUCKET="${R2_BUCKET:-}"
-  [[ -n "$BUCKET" ]] || die "set R2_BUCKET"
+  [[ -n "$BUCKET" ]] || dockpipe_sdk die "set R2_BUCKET"
   if [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
     :
   elif [[ -n "${CLOUDFLARE_EMAIL:-}" && -n "${CLOUDFLARE_GLOBAL_API_KEY:-}" ]]; then
     :
   else
-    die "Terraform auth: set CLOUDFLARE_API_TOKEN or (CLOUDFLARE_EMAIL + CLOUDFLARE_GLOBAL_API_KEY)"
+    dockpipe_sdk die "Terraform auth: set CLOUDFLARE_API_TOKEN or (CLOUDFLARE_EMAIL + CLOUDFLARE_GLOBAL_API_KEY)"
   fi
-  [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || die "CLOUDFLARE_ACCOUNT_ID required for Terraform"
+  [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || dockpipe_sdk die "CLOUDFLARE_ACCOUNT_ID required for Terraform"
   TMPDIR="${TMPDIR:-/tmp}"
   WORK="$(mktemp -d "${TMPDIR}/dockpipe-cf-r2infra.XXXXXX")"
   cleanup() { rm -rf "$WORK"; }
@@ -124,10 +110,10 @@ fi
 
 # --- Publish path: needs source tree to tar ---------------------------------------------------
 SRC_REL="${R2_PUBLISH_SOURCE:-release/artifacts}"
-[[ -d "$SRC_REL" ]] || die "source directory missing: $SRC_REL (set R2_PUBLISH_SOURCE or mkdir -p release/artifacts)"
+  [[ -d "$SRC_REL" ]] || dockpipe_sdk die "source directory missing: $SRC_REL (set R2_PUBLISH_SOURCE or mkdir -p release/artifacts)"
 
 BUCKET="${R2_BUCKET:-}"
-[[ -n "$BUCKET" ]] || die "set R2_BUCKET (R2 bucket name)"
+[[ -n "$BUCKET" ]] || dockpipe_sdk die "set R2_BUCKET (R2 bucket name)"
 
 UPLOAD_MODE=""
 if [[ -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
@@ -135,18 +121,18 @@ if [[ -n "${AWS_ACCESS_KEY_ID:-}" && -n "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
 elif [[ -n "${CLOUDFLARE_API_TOKEN:-}" ]]; then
   UPLOAD_MODE="wrangler"
 else
-  die "set R2 bucket credentials: either AWS_ACCESS_KEY_ID+AWS_SECRET_ACCESS_KEY (R2 S3 keys) or CLOUDFLARE_API_TOKEN (API token + Wrangler/Terraform)"
+  dockpipe_sdk die "set R2 bucket credentials: either AWS_ACCESS_KEY_ID+AWS_SECRET_ACCESS_KEY (R2 S3 keys) or CLOUDFLARE_API_TOKEN (API token + Wrangler/Terraform)"
 fi
 
 if [[ "$UPLOAD_MODE" == wrangler ]]; then
-  [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || die "set CLOUDFLARE_ACCOUNT_ID (required for CLOUDFLARE_API_TOKEN mode)"
+  [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || dockpipe_sdk die "set CLOUDFLARE_ACCOUNT_ID (required for CLOUDFLARE_API_TOKEN mode)"
 fi
 
 ENDPOINT="${R2_ENDPOINT_URL:-${AWS_ENDPOINT_URL_S3:-}}"
 if [[ "$UPLOAD_MODE" == s3 ]]; then
   if [[ -z "$ENDPOINT" ]]; then
     ACCT="${CLOUDFLARE_ACCOUNT_ID:-${R2_ACCOUNT_ID:-}}"
-    [[ -n "$ACCT" ]] || die "set R2_ENDPOINT_URL (https://<account_id>.r2.cloudflarestorage.com) or CLOUDFLARE_ACCOUNT_ID"
+    [[ -n "$ACCT" ]] || dockpipe_sdk die "set R2_ENDPOINT_URL (https://<account_id>.r2.cloudflarestorage.com) or CLOUDFLARE_ACCOUNT_ID"
     ACCT="$(dockpipe_r2_normalize_account_id "$ACCT")"
     ENDPOINT="https://${ACCT}.r2.cloudflarestorage.com"
   fi
@@ -203,7 +189,7 @@ run_wrangler_put() {
   if command -v wrangler >/dev/null 2>&1; then
     wrangler r2 object put "$object_path" --file "$file_path" --content-type "$ct"
   else
-    command -v npx >/dev/null 2>&1 || die "install wrangler or Node.js (npx) for CLOUDFLARE_API_TOKEN uploads"
+    command -v npx >/dev/null 2>&1 || dockpipe_sdk die "install wrangler or Node.js (npx) for CLOUDFLARE_API_TOKEN uploads"
     npx --yes wrangler@3 r2 object put "$object_path" --file "$file_path" --content-type "$ct"
   fi
 }

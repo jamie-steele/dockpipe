@@ -3,8 +3,8 @@
 # Bounded size; no network. Run after enabling Pipeon (see lib/enable.sh).
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+ROOT="$(dockpipe_sdk workdir)"
 OUT="$ROOT/bin/.dockpipe"
 CTX="$OUT/pipeon-context.md"
 mkdir -p "$OUT"

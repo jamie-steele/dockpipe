@@ -3,8 +3,8 @@
 # Usage: user-insight-supersede.sh <new_insight_id> <old_insight_id>
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+ROOT="$(dockpipe_sdk workdir)"
 INS="$ROOT/bin/.dockpipe/analysis/insights.json"
 NEW_ID="${1:-}"
 OLD_ID="${2:-}"

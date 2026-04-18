@@ -78,6 +78,7 @@ var mainUsageSections = []usageSection{
 			{"pipelang compile|invoke|materialize", "PipeLang typed authoring helpers"},
 			{"doctor", "Check docker, bash, and bundled assets"},
 			{"core script-path <dots>", "Print absolute path to a core asset (same as scripts/core.<dots> in YAML)"},
+			{"sdk [--workdir]", "Emit shell bootstrap for the DockPipe SDK object"},
 			{"terraform pipeline-path | terraform run <cmds>", "Terraform helpers (see dockpipe terraform --help)"},
 			{"runs list [--workdir]", "List active host-run records under bin/.dockpipe/runs/"},
 			{"windows setup|doctor", "Windows: optional WSL bridge setup"},

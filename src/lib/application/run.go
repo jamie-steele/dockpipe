@@ -130,6 +130,9 @@ func Run(argv []string, baseEnviron []string) error {
 	if argv[0] == "terraform" {
 		return cmdTerraform(argv[1:])
 	}
+	if argv[0] == "sdk" {
+		return cmdSDK(argv[1:])
+	}
 
 	repoRoot, err := repoRootAppFn()
 	if err != nil {

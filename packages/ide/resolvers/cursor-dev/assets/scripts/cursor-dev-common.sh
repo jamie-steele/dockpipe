@@ -17,8 +17,8 @@ cursor_dev_docker() {
 }
 
 cursor_dev_set_workdir() {
-  W="${DOCKPIPE_WORKDIR:-$PWD}"
-  W="$(cd "$W" && pwd)"
+  eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+  W="$(dockpipe_sdk workdir)"
   export W
 }
 

@@ -2,8 +2,8 @@
 # Assemble Cursor handoff prompt from bin/.dockpipe/packages/dorkpipe/self-analysis/* (facts only + structured guidance).
 # Optional: DORKPIPE_SELF_ANALYSIS_USE_OLLAMA=1 DORKPIPE_SELF_ANALYSIS_MODEL=llama3.2
 set -euo pipefail
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+ROOT="$(dockpipe_sdk workdir)"
 OUT="$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis"
 DEST="$ROOT/bin/.dockpipe/orchestrator-cursor-prompt.md"
 mkdir -p "$ROOT/bin/.dockpipe"

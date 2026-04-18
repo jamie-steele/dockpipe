@@ -4,20 +4,8 @@
 # Cloudflare R2 / generated R2 state: use packages/cloud/storage/.../terraform-cloudflare-r2-run.sh (dockpipe.cloudflare.r2infra).
 set -euo pipefail
 
-WF_NS="${DOCKPIPE_WORKFLOW_NAME:-dockpipe.terraform.core}"
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
-cd "$ROOT"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-die() { echo "${WF_NS}: $*" >&2; exit 1; }
-
-source_terraform_pipeline_lib() {
-  local candidate="${SCRIPT_DIR}/terraform-pipeline.sh"
-  [[ -f "$candidate" ]] || die "terraform-pipeline.sh not found next to terraform-run.sh"
-  # shellcheck source=/dev/null
-  source "$candidate"
-}
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+dockpipe_sdk init-script
 
 if [[ "${DOCKPIPE_TF_OPTIONAL_WHEN_UNSET:-0}" == "1" ]]; then
   case "${DOCKPIPE_TF_COMMANDS:-}" in
@@ -29,21 +17,21 @@ if [[ "${DOCKPIPE_TF_OPTIONAL_WHEN_UNSET:-0}" == "1" ]]; then
   esac
 fi
 
-[[ -n "${DOCKPIPE_TF_MODULE_DIR:-}" ]] || die "set DOCKPIPE_TF_MODULE_DIR to your Terraform root (repo-relative or absolute)"
+[[ -n "${DOCKPIPE_TF_MODULE_DIR:-}" ]] || dockpipe_sdk die "set DOCKPIPE_TF_MODULE_DIR to your Terraform root (repo-relative or absolute)"
 
 tf_dir="${DOCKPIPE_TF_MODULE_DIR}"
 [[ "$tf_dir" != /* ]] && tf_dir="$ROOT/$tf_dir"
-[[ -d "$tf_dir" ]] || die "not a directory: $tf_dir"
+[[ -d "$tf_dir" ]] || dockpipe_sdk die "not a directory: $tf_dir"
 
-source_terraform_pipeline_lib
+dockpipe_sdk source terraform-pipeline || dockpipe_sdk die "could not source terraform pipeline via dockpipe sdk"
 export DOCKPIPE_TF_LOG_PREFIX="${DOCKPIPE_TF_LOG_PREFIX:-${WF_NS}}"
 dockpipe_tf_map_generic_env
 
 tf_backend="${DOCKPIPE_TF_BACKEND:-local}"
 backend_arg=""
 if [[ "$tf_backend" == remote ]]; then
-  [[ -n "${DOCKPIPE_TF_REMOTE_BACKEND_FILE:-}" ]] || die "DOCKPIPE_TF_BACKEND=remote requires DOCKPIPE_TF_REMOTE_BACKEND_FILE (path to an existing backend HCL). Generated Cloudflare R2 backends are only in dockpipe.cloudflare.r2infra / terraform-cloudflare-r2-run.sh"
-  [[ -f "${DOCKPIPE_TF_REMOTE_BACKEND_FILE}" ]] || die "DOCKPIPE_TF_REMOTE_BACKEND_FILE not found: ${DOCKPIPE_TF_REMOTE_BACKEND_FILE}"
+  [[ -n "${DOCKPIPE_TF_REMOTE_BACKEND_FILE:-}" ]] || dockpipe_sdk die "DOCKPIPE_TF_BACKEND=remote requires DOCKPIPE_TF_REMOTE_BACKEND_FILE (path to an existing backend HCL). Generated Cloudflare R2 backends are only in dockpipe.cloudflare.r2infra / terraform-cloudflare-r2-run.sh"
+  [[ -f "${DOCKPIPE_TF_REMOTE_BACKEND_FILE}" ]] || dockpipe_sdk die "DOCKPIPE_TF_REMOTE_BACKEND_FILE not found: ${DOCKPIPE_TF_REMOTE_BACKEND_FILE}"
   backend_arg="unused"
 fi
 

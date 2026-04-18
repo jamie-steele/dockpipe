@@ -2,6 +2,23 @@
 
 **Agnostic** run/act helpers live **here** (root of this folder): clone/commit worktree, export patch, print summary, examples.
 
+**Shared script SDK libs** live under **`lib/`** in this folder. The canonical cross-language DockPipe SDK support now lives in:
+
+- **`src/core/assets/scripts/lib/dockpipe-sdk.sh`**
+- **`src/core/assets/scripts/lib/repo-tools.sh`**
+- **`src/core/assets/scripts/lib/repo-tools.ps1`**
+- **`src/core/assets/scripts/lib/repo_tools.py`**
+- **`src/core/assets/scripts/lib/repotools/repotools.go`**
+
+For shell, prefer the CLI bootstrap and dispatcher API:
+
+```bash
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+dockpipe_sdk workdir
+```
+
+That bootstraps the shell SDK and avoids hard-coding source paths or manual root resolution in package scripts. The command prefers `DOCKPIPE_WORKDIR` when it is already set by a workflow and otherwise falls back to the current directory. The shared core SDK is the source of truth for authoring support in shell/PowerShell/Python/Go.
+
 **Resolver-specific** host scripts live **only** under **`templates/core/resolvers/<name>/`** (next to **`config.yml`**). **`ResolveWorkflowScript`** maps **`scripts/cursor-dev/…`** and **`scripts/vscode/…`** to those paths — nothing duplicate under **`assets/scripts/`** for those names.
 
 **Domain assets** (**DorkPipe**, Pipeon, …) live under **`templates/core/bundles/<domain>/`** — see **`../bundles/README.md`**. They are **merged** with **`dockpipe init`** / the materialized **`templates/core`** bundle and referenced as **`scripts/<domain>/…`** in YAML. In **this** repository, review prep lives under **`workflows/review-pipeline/`** (same **`scripts/review-pipeline/…`** path in YAML). Do not park domain scripts next to **`resolvers/`** unless they are true **`--resolver`** profiles.

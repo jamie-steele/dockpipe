@@ -3,8 +3,8 @@
 # Framework: DockPipe runs this script; DorkPipe / assistants interpret docs/artifacts.md
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+ROOT="$(dockpipe_sdk workdir)"
 
 echo ""
 echo "=== DockPipe — compliance & security posture handoff (signals only) ==="

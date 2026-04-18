@@ -53,6 +53,10 @@ Thumbs.db
 *.swo
 .*.sw?
 
+# Python bytecode / cache
+__pycache__/
+*.pyc
+
 # SR&ED evidence and timekeeping (local only; see .local/sred/README.md)
 .local/sred/
 

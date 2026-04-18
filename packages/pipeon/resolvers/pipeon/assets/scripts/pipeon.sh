@@ -2,9 +2,9 @@
 # Pipeon — local-first, repo-aware chat helper (Ollama). Gated by DOCKPIPE_PIPEON and version; see README.md
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
-ROOT="$(cd "$ROOT" && pwd)"
+eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+SCRIPT_DIR="$(dockpipe_sdk script-dir)"
+ROOT="$(dockpipe_sdk workdir)"
 # shellcheck source=lib/enable.sh
 source "$SCRIPT_DIR/lib/enable.sh"
 

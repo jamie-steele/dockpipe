@@ -13,8 +13,7 @@ Add to `~/.bashrc` or `~/.zshrc`:
 export PIPEON_ROOT="$HOME/source/dockpipe"
 pipeon() {
   DOCKPIPE_PIPEON=1 DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1 \
-    DOCKPIPE_WORKDIR="${DOCKPIPE_WORKDIR:-$(pwd)}" \
-    "$PIPEON_ROOT/bin/pipeon" "$@"
+    "$PIPEON_ROOT/packages/pipeon/resolvers/pipeon/bin/pipeon" "$@"
 }
 ```
 
