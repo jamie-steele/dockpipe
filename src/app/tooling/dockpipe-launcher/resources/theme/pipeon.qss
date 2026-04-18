@@ -1,0 +1,309 @@
+/* Pipeon — shared layout (colors come from pipeon-light.qss / pipeon-dark.qss) */
+
+QWidget#mainCentral {
+    background-color: palette(base);
+}
+
+QDialog {
+    background-color: palette(base);
+}
+
+QLabel#appTitle {
+    font-size: 20px;
+    font-weight: 700;
+    color: palette(window-text);
+}
+
+/* Secondary / muted label colors: see theme companion QSS */
+
+QLabel#appSubtitle {
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+QLabel#hintText {
+    font-size: 12px;
+}
+
+QLabel#disclaimerWatermark {
+    font-size: 11px;
+    font-style: italic;
+    padding: 4px 10px 6px 10px;
+}
+
+QPushButton#disclaimerDismiss {
+    font-size: 11px;
+    padding: 2px 10px;
+    min-height: 22px;
+}
+
+QFrame#headerBar {
+    background-color: palette(alternate-base);
+    border: none;
+    border-radius: 14px;
+    padding: 8px;
+}
+
+QWidget#launchOverlay {
+    border-radius: 18px;
+}
+
+QFrame#launchOverlayCard {
+    background-color: palette(alternate-base);
+    border: 1px solid palette(midlight);
+    border-radius: 18px;
+}
+
+QLabel#launchOverlayGlyph {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: palette(highlight);
+    padding: 2px 0 6px 0;
+}
+
+QLabel#launchOverlayTitle {
+    font-size: 20px;
+    font-weight: 700;
+    color: palette(window-text);
+}
+
+QLabel#launchOverlayBody {
+    font-size: 13px;
+    font-weight: 500;
+    color: palette(window-text);
+    padding: 2px 8px 0 8px;
+    qproperty-wordWrap: true;
+}
+
+QFrame#listPanel {
+    background-color: palette(base);
+    border: none;
+    border-radius: 14px;
+}
+
+QFrame#inlineConsolePanel {
+    background-color: palette(base);
+    border: none;
+    border-radius: 14px;
+}
+
+QSplitter::handle {
+    background: transparent;
+}
+
+QSplitter::handle:vertical {
+    height: 10px;
+}
+
+QSplitter::handle:vertical:hover {
+    background: palette(midlight);
+    border-radius: 4px;
+}
+
+QListWidget {
+    outline: none;
+    border: none;
+    background: transparent;
+    padding: 4px;
+}
+
+QListWidget::item {
+    border: none;
+    border-radius: 12px;
+    margin: 2px 4px;
+    padding: 0px;
+    background: transparent;
+}
+
+QListWidget::item:hover {
+    background-color: palette(alternate-base);
+}
+
+QListWidget::item:selected {
+    background-color: palette(highlight);
+}
+
+QListWidget::item:selected:hover {
+    background-color: palette(highlight);
+}
+
+/* Home “recent projects” — compact rows; avoid stretching one item to fill the viewport */
+QListWidget#basicRecentList {
+    padding: 2px;
+}
+
+QListWidget#basicRecentList::item {
+    margin: 0 2px;
+    padding: 6px 10px;
+    min-height: 24px;
+}
+
+QWidget#contextRow {
+    background-color: transparent;
+    border-radius: 12px;
+}
+
+QLabel#contextTitle {
+    font-size: 13px;
+    font-weight: 600;
+    color: palette(window-text);
+}
+
+QLabel#consoleTitle {
+    font-size: 14px;
+    font-weight: 700;
+    color: palette(window-text);
+}
+
+QLabel#contextPath {
+    font-size: 11px;
+}
+
+QLabel#contextMeta {
+    font-size: 11px;
+    font-style: italic;
+}
+
+QLabel#consoleMeta {
+    font-size: 11px;
+}
+
+QLabel#statusBadge {
+    min-width: 72px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+/* Badge fill/text: theme companion QSS */
+
+QGroupBox {
+    font-weight: 600;
+    border: none;
+    border-radius: 8px;
+    margin-top: 10px;
+    padding: 12px 12px 10px 12px;
+    background-color: palette(alternate-base);
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 8px;
+    padding: 0 6px;
+    color: palette(window-text);
+}
+
+QPushButton#primaryButton {
+    padding: 9px 16px;
+    min-height: 24px;
+    font-weight: 600;
+    border-radius: 10px;
+    border: 1px solid palette(highlight);
+    background-color: palette(highlight);
+    color: palette(highlighted-text);
+}
+
+QPushButton#primaryButton:hover {
+    background-color: palette(highlight);
+    border-color: palette(highlight);
+}
+
+QPushButton#primaryButton:pressed {
+    padding-top: 9px;
+    padding-bottom: 7px;
+}
+
+QPushButton#secondaryButton {
+    padding: 9px 14px;
+    min-height: 24px;
+    border-radius: 10px;
+    border: 1px solid palette(midlight);
+    background-color: palette(button);
+}
+
+QPushButton#dangerButton {
+    padding: 9px 14px;
+    min-height: 24px;
+    border-radius: 10px;
+}
+
+QLineEdit, QComboBox, QTextBrowser, QPlainTextEdit {
+    padding: 7px 10px;
+    border-radius: 10px;
+    border: 1px solid palette(midlight);
+    background-color: palette(base);
+    color: palette(text);
+    min-height: 18px;
+}
+
+QLineEdit:focus, QComboBox:focus, QTextBrowser:focus, QPlainTextEdit:focus {
+    border: 1px solid palette(highlight);
+}
+
+QComboBox::drop-down {
+    border: none;
+    width: 22px;
+}
+
+QPlainTextEdit#inlineConsole {
+    border-radius: 8px;
+    padding: 10px 12px;
+    border: 1px solid palette(midlight);
+    selection-background-color: palette(highlight);
+    font-size: 12px;
+}
+
+QPlainTextEdit#detailConsole,
+QTextBrowser#detailBrowser {
+    border-radius: 12px;
+    padding: 12px 14px;
+    selection-background-color: palette(highlight);
+}
+
+QFrame#emptyState {
+    background-color: palette(alternate-base);
+    border-radius: 14px;
+    border: none;
+}
+
+QLabel#emptyTitle {
+    font-size: 15px;
+    font-weight: 600;
+}
+
+QLabel#emptyBody {
+    font-size: 12px;
+}
+
+QTabWidget#surfaceTabs::pane,
+QTabWidget::pane {
+    border: 1px solid palette(midlight);
+    border-radius: 14px;
+    top: -1px;
+    background: palette(base);
+}
+
+QTabBar::tab {
+    padding: 8px 14px;
+    margin-right: 6px;
+    border-radius: 10px;
+    background: palette(alternate-base);
+    color: palette(window-text);
+}
+
+QTabBar::tab:selected {
+    background: palette(highlight);
+    color: palette(highlighted-text);
+}
+
+QTabBar::tab:hover:!selected {
+    background: palette(button);
+}
+
+QTableWidget {
+    border-radius: 12px;
+    selection-background-color: palette(highlight);
+}

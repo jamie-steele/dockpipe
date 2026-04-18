@@ -1,0 +1,10 @@
+/// <summary>
+/// Contract for the staged Cursor host-session resolver workflow variables.
+/// </summary>
+public Interface ICursorDevResolverConfig
+{
+    /// <summary>Launch mode for opening Cursor from the host.</summary>
+    public string CursorDevLaunch;
+    /// <summary>Enable the session watcher so the container stops when the session ends.</summary>
+    public string CursorDevWait;
+}

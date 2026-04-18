@@ -1,0 +1,48 @@
+# Browser code-server (Coder OSS image) with Pipeon extension + baseline User settings.
+# Does NOT use assets/entrypoint.sh — this image is only for scripts/vscode/vscode-code-server.sh (workflow vscode).
+# Isolate runs use templates/core/resolvers/vscode/assets/images/vscode/ (dockpipe-vscode + entrypoint).
+#
+# Build from repo root:
+#   make build-code-server-image
+#
+# This Dockerfile consumes prebuilt VSIX artifacts from bin/.dockpipe/extensions/
+# instead of copying extension source trees directly into the image build.
+
+FROM codercom/code-server:latest
+
+USER root
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends jq \
+  && rm -rf /var/lib/apt/lists/* \
+  && mkdir -p /opt/pipeon/extensions /opt/pipeon/default-user-data/User \
+  && mkdir -p /work \
+  && chmod 777 /work
+
+# Pipeon P-mark favicon (browser tab) — replaces code-server defaults.
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon.ico /usr/lib/code-server/src/browser/media/favicon.ico
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon.svg /usr/lib/code-server/src/browser/media/favicon.svg
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon-dark-support.svg /usr/lib/code-server/src/browser/media/favicon-dark-support.svg
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon.ico /usr/lib/code-server/lib/vscode/resources/server/favicon.ico
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon.svg /usr/lib/code-server/lib/vscode/out/media/code-icon.svg
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/pipeon-192.png /usr/lib/code-server/lib/vscode/resources/server/code-192.png
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/pipeon-512.png /usr/lib/code-server/lib/vscode/resources/server/code-512.png
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/pipeon-192.png /usr/lib/code-server/src/browser/media/pwa-icon-192.png
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/pipeon-192.png /usr/lib/code-server/src/browser/media/pwa-icon-maskable-192.png
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/pipeon-512.png /usr/lib/code-server/src/browser/media/pwa-icon-512.png
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/images/pipeon-512.png /usr/lib/code-server/src/browser/media/pwa-icon-maskable-512.png
+
+COPY bin/.dockpipe/extensions/pipeon-*.vsix /tmp/pipeon.vsix
+COPY bin/.dockpipe/extensions/dockpipe-language-support-*.vsix /tmp/dockpipe-language-support.vsix
+COPY packages/pipeon/resolvers/pipeon/vscode-extension/code-server-user-settings.json /tmp/user-settings.json
+RUN cp /tmp/user-settings.json /opt/pipeon/default-user-data/User/settings.json \
+  && chown -R coder:coder /opt/pipeon \
+  && chown coder:coder /tmp/pipeon.vsix \
+  && chown coder:coder /tmp/dockpipe-language-support.vsix \
+  && rm -f /tmp/user-settings.json
+
+USER coder
+RUN code-server --extensions-dir /opt/pipeon/extensions --install-extension /tmp/pipeon.vsix \
+  && code-server --extensions-dir /opt/pipeon/extensions --install-extension /tmp/dockpipe-language-support.vsix \
+  && rm -f /tmp/pipeon.vsix /tmp/dockpipe-language-support.vsix
+
+WORKDIR /work

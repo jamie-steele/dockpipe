@@ -1,0 +1,14 @@
+schema: 1
+kind: package
+name: dorkpipe-mcp
+version: 0.6.0
+title: DorkPipe MCP bridge
+description: |
+  Model Context Protocol server (stdio or HTTPS) with tiered IAM over dockpipe/dorkpipe subprocesses.
+  Go module dorkpipe.mcp; not part of the core dockpipe engine module.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [mcp, bridge, ai]
+script_contract:
+  inject: [workdir, workflow_name, script_dir, package_root, assets_dir, dockpipe_bin]

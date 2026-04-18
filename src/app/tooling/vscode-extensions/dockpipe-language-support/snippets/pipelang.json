@@ -1,0 +1,32 @@
+{
+  "PipeLang Interface": {
+    "prefix": "pipe-interface",
+    "body": [
+      "public Interface ${1:IConfig}",
+      "{",
+      "    public string ${2:NAME};",
+      "}"
+    ],
+    "description": "Create a PipeLang interface."
+  },
+  "PipeLang Class": {
+    "prefix": "pipe-class",
+    "body": [
+      "public Class ${1:Config} : ${2:IConfig}",
+      "{",
+      "    public string ${3:NAME} = \"${4:value}\";",
+      "}"
+    ],
+    "description": "Create a PipeLang class implementing an interface."
+  },
+  "PipeLang Struct": {
+    "prefix": "pipe-struct",
+    "body": [
+      "public Struct ${1:KnownValues}",
+      "{",
+      "    public string ${2:KEY} = \"${3:value}\";",
+      "}"
+    ],
+    "description": "Create a PipeLang struct."
+  }
+}

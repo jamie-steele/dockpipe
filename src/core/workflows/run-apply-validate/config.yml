@@ -1,0 +1,14 @@
+# Pipeline: run → apply → validate (customize cmds for your stack: terraform, k8s, etc.)
+name: run-apply-validate
+description: Three sequential steps — run phase, apply phase, validate phase.
+
+steps:
+  - id: run
+    isolate: alpine
+    cmd: sh -c 'echo "[run] phase" >&2'
+  - id: apply
+    isolate: alpine
+    cmd: sh -c 'echo "[apply] phase" >&2'
+  - id: validate
+    isolate: alpine
+    cmd: sh -c 'echo "[validate] phase" >&2'

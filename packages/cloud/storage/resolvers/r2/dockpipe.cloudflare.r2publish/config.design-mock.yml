@@ -1,0 +1,53 @@
+# Design mock — illustrates multi-step pipeline shape alongside the real single-flow config.yml.
+# runtime: package + resolver (workflow name) + package (namespace) is implemented for on-disk workflows.
+# Tarball-only resolution and richer step-level overrides remain as in docs/package-model.md.
+#
+# See README.md "Design mock (pipeline shape)".
+
+name: dockpipe.cloudflare.r2publish.example
+description: >-
+  Host-only: compress R2_PUBLISH_SOURCE (default ./release/artifacts) and upload to R2.
+  Use R2 S3 keys + aws s3, or a single CLOUDFLARE_API_TOKEN (Terraform creates bucket, Wrangler uploads).
+  See README.
+
+docker_preflight: true
+strategy: commit
+
+vars:
+  R2_PUBLISH_SOURCE: "release/artifacts"
+
+steps:
+  # Invoke a packaged workflow: runtime=package, resolver names the package workflow, package=namespace.
+  - id: upload
+    runtime: package
+    resolver: dockpipe.cloudflare.r2publish
+    package: dockpipe.cloudflare
+
+  # Cloud / API work is cli + resolver — not a separate "cloud" substrate.
+  - id: non-package-example
+    runtime: cli
+    resolver: PATHTOYOURRESOLVER
+
+  # Host-only CLI step.
+  - id: cli-host
+    runtime: cli
+    skip_container: true
+    run:
+      - scripts/dockpipe/r2-publish.sh
+
+  # cli + container isolation (same runtime; skip_container: false).
+  - id: cli-container
+    runtime: cli
+    skip_container: false
+    run:
+      - scripts/dockpipe/r2-publish.sh
+
+  # Kube/Terraform: cli + scripts (resolver profile), not a kube runtime.
+  - id: kube-style-cli
+    runtime: cli
+    resolver: dockpipe.aws.kubepod
+
+  # Pre-built image + resolver profile basename.
+  - id: dockerimage-resolver
+    runtime: dockerimage
+    resolver: your-resolver-profile
