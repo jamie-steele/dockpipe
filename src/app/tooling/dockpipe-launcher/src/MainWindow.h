@@ -33,10 +33,6 @@ protected:
     void closeEvent(QCloseEvent *event) override;
 
 private slots:
-    void onAddFolder();
-    void onRefreshWorktrees();
-    void onRemoveContext();
-    void onEditContext();
     void onLaunch();
     void onRelaunch();
     void onStop();
@@ -76,6 +72,9 @@ private:
     void updateBasicPage();
     bool hasContext(const Context &c) const;
     Context *findContext(const QString &workdir, const QString &workflow, const QString &workflowFile);
+    Context *findStoredContextForDisplay(const Context &display);
+    Context *ensureStoredContextForDisplay(const Context &display);
+    Context *currentAdvancedDisplayContext();
     Context *currentContext();
     QListWidgetItem *currentItem();
     void setupTray();
@@ -114,6 +113,7 @@ private:
     QWidget *m_disclaimerContainer = nullptr;
     QString m_consoleContextId;
     QVector<WorkflowMeta> m_basicApps;
+    QVector<Context> m_advancedContexts;
     QString m_basicLaunchingContextId;
     QString m_basicLaunchingWorkflowId;
 };

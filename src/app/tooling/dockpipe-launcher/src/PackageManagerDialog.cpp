@@ -31,6 +31,7 @@ struct PackageRow {
     QString author;
     QString repository;
     QString packagePath;
+    QString iconPath;
     QString source;
     QStringList tags;
     QStringList depends;
@@ -96,6 +97,7 @@ PackageRow parsePackageManifest(const QString &path)
     bool inTags = false;
     bool inDepends = false;
     bool inIncludesResolvers = false;
+    bool inArtwork = false;
     QStringList descriptionLines;
 
     auto flushDescription = [&]() {
@@ -122,6 +124,7 @@ PackageRow parsePackageManifest(const QString &path)
             inTags = false;
             inDepends = false;
             inIncludesResolvers = false;
+            inArtwork = false;
         }
 
         if (inDescription && indented) {
@@ -138,6 +141,14 @@ PackageRow parsePackageManifest(const QString &path)
         }
         if (inIncludesResolvers && trimmed.startsWith(QLatin1Char('-'))) {
             row.includesResolvers.append(unquote(trimmed.mid(1)));
+            continue;
+        }
+        if (inArtwork && trimmed.contains(QLatin1Char(':'))) {
+            const int colon = raw.indexOf(QLatin1Char(':'));
+            const QString artworkKey = raw.left(colon).trimmed();
+            const QString artworkValue = unquote(raw.mid(colon + 1));
+            if (row.iconPath.isEmpty() && artworkKey == QStringLiteral("icon"))
+                row.iconPath = artworkValue;
             continue;
         }
 
@@ -173,6 +184,10 @@ PackageRow parsePackageManifest(const QString &path)
         }
         if (const QString v = scalarAfterKey(trimmed, raw, QStringLiteral("repository")); !v.isEmpty()) {
             row.repository = unquote(v);
+            continue;
+        }
+        if (const QString v = scalarAfterKey(trimmed, raw, QStringLiteral("icon")); !v.isEmpty()) {
+            row.iconPath = unquote(v);
             continue;
         }
         if (trimmed.startsWith(QStringLiteral("description:"))) {
@@ -211,12 +226,35 @@ PackageRow parsePackageManifest(const QString &path)
             }
             continue;
         }
+        if (trimmed.startsWith(QStringLiteral("artwork:"))) {
+            inArtwork = true;
+            continue;
+        }
     }
 
     flushDescription();
+    if (!row.iconPath.isEmpty() && !QFileInfo(row.iconPath).isAbsolute())
+        row.iconPath = QFileInfo(QFileInfo(path).absoluteDir(), row.iconPath).absoluteFilePath();
     if (row.title.trimmed().isEmpty())
         row.title = row.name;
     return row;
+}
+
+QIcon defaultPackageIcon()
+{
+    QIcon icon = QIcon::fromTheme(QStringLiteral("package-x-generic"));
+    if (icon.isNull())
+        icon = QIcon::fromTheme(QStringLiteral("applications-other"));
+    if (icon.isNull())
+        icon = QIcon::fromTheme(QStringLiteral("applications-system"));
+    return icon;
+}
+
+QIcon iconForPackageRow(const PackageRow &row)
+{
+    if (!row.iconPath.isEmpty() && QFileInfo::exists(row.iconPath))
+        return QIcon(row.iconPath);
+    return defaultPackageIcon();
 }
 
 QVector<PackageRow> discoverPackages(const QString &hintWorkdir)
@@ -264,6 +302,7 @@ void populateTable(QTableWidget *table, const QVector<PackageRow> &rows, const Q
     for (int i = 0; i < rows.size(); ++i) {
         const PackageRow &row = rows[i];
         auto *name = new QTableWidgetItem(row.title);
+        name->setIcon(iconForPackageRow(row));
         name->setData(Qt::UserRole, row.packagePath);
         name->setToolTip(row.packagePath);
         table->setItem(i, 0, name);
@@ -304,6 +343,15 @@ QString detailsHtml(const PackageRow &row)
 {
     QString html;
     html += QStringLiteral("<div style=\"font-family:sans-serif;line-height:1.5;\">");
+    if (!row.iconPath.isEmpty() && QFileInfo::exists(row.iconPath)) {
+        const QString iconUrl = QUrl::fromLocalFile(row.iconPath).toString().toHtmlEscaped();
+        html += QStringLiteral("<p style=\"margin:0 0 14px;text-align:center;\">"
+                               "<img src=\"%1\" width=\"96\" height=\"96\" style=\"border-radius:18px;\" />"
+                               "</p>")
+                    .arg(iconUrl);
+    } else {
+        html += QStringLiteral("<p style=\"margin:0 0 14px;text-align:center;font-size:64px;line-height:1;\">📦</p>");
+    }
     html += QStringLiteral("<h2 style=\"margin:0 0 6px;\">%1</h2>").arg(row.title.toHtmlEscaped());
     html += QStringLiteral("<p style=\"margin:0 0 12px;color:#b9c0cb;\">%1</p>").arg(row.name.toHtmlEscaped());
     html += QStringLiteral("<p>");

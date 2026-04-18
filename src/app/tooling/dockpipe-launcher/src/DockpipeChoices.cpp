@@ -63,10 +63,27 @@ QString DockpipeChoices::findRepoRoot(const QString &hintWorkdir)
 
 QString DockpipeChoices::preferredDockpipeBinary(const QString &hintWorkdir)
 {
-    Q_UNUSED(hintWorkdir);
-    const QString configured = QProcessEnvironment::systemEnvironment().value(QStringLiteral("DOCKPIPE_BIN")).trimmed();
+    const QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    const QString configured = env.value(QStringLiteral("DOCKPIPE_BIN")).trimmed();
     if (!configured.isEmpty())
         return configured;
+
+    const QString repoRoot = findRepoRoot(hintWorkdir);
+    if (!repoRoot.isEmpty()) {
+        const QString candidate = QDir(repoRoot).filePath(QStringLiteral("src/bin/dockpipe"));
+        const QFileInfo info(candidate);
+        if (info.isFile() && info.isExecutable())
+            return candidate;
+    }
+
+    if (!hintWorkdir.trimmed().isEmpty()) {
+        const QString cleanedHint = QDir::cleanPath(QFileInfo(hintWorkdir).absoluteFilePath());
+        const QString candidate = QDir(cleanedHint).filePath(QStringLiteral("src/bin/dockpipe"));
+        const QFileInfo info(candidate);
+        if (info.isFile() && info.isExecutable())
+            return candidate;
+    }
+
     return QStringLiteral("dockpipe");
 }
 

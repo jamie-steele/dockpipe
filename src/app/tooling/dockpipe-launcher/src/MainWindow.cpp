@@ -5,7 +5,6 @@
 #include "ContextRowWidget.h"
 #include "DockpipeChoices.h"
 #include "DockerObservabilityWidget.h"
-#include "EditContextDialog.h"
 #include "GitHelper.h"
 #include "LogViewerDialog.h"
 #include "PackageManagerDialog.h"
@@ -267,7 +266,7 @@ void MainWindow::onAbout()
     box.setText(
         tr("<h3>DockPipe Launcher</h3>"
            "<p>DockPipe Launcher is the desktop shell and local-first workspace surface for DockPipe workflows.</p>"
-           "<p><a href=\"https://github.com/dockpipe/dockpipe\">github.com/dockpipe/dockpipe</a></p>"));
+           "<p><a href=\"https://dockpipe.com\">dockpipe.com</a></p>"));
     box.setStandardButtons(QMessageBox::Ok);
     box.exec();
 }
@@ -286,7 +285,7 @@ void MainWindow::setupAdvancedPage(QWidget *page)
 
     auto *title = new QLabel(tr("Contexts (advanced)"));
     title->setObjectName(QStringLiteral("appTitle"));
-    auto *subtitle = new QLabel(tr("Full DockPipe workflow list per saved folder. Switch to Basic in View for app shortcuts."));
+    auto *subtitle = new QLabel(tr("Project workflows for the current folder. Right-click a row for launch and session actions."));
     subtitle->setObjectName(QStringLiteral("appSubtitle"));
     subtitle->setWordWrap(true);
     headLay->addWidget(title);
@@ -300,29 +299,10 @@ void MainWindow::setupAdvancedPage(QWidget *page)
         connect(b, &QPushButton::clicked, this, slot);
         primaryRow->addWidget(b);
     };
-    addPrimary(tr("Launch"), &MainWindow::onLaunch, "primaryButton");
-    addPrimary(tr("Relaunch"), &MainWindow::onRelaunch, "primaryButton");
-    addPrimary(tr("Stop"), &MainWindow::onStop, "primaryButton");
-    addPrimary(tr("Add folder…"), &MainWindow::onAddFolder, "primaryButton");
+    addPrimary(tr("Open Logs"), &MainWindow::onOpenLogs, "primaryButton");
+    addPrimary(tr("Stop All for Repo"), &MainWindow::onStopAllForRepo, "primaryButton");
     primaryRow->addStretch(1);
     headLay->addLayout(primaryRow);
-
-    auto *secondaryRow = new QHBoxLayout;
-    secondaryRow->setSpacing(8);
-    auto addSecondary = [this, secondaryRow](const QString &text, void (MainWindow::*slot)(), const char *objName) {
-        auto *b = new QPushButton(text);
-        b->setObjectName(QString::fromUtf8(objName));
-        connect(b, &QPushButton::clicked, this, slot);
-        secondaryRow->addWidget(b);
-    };
-    addSecondary(tr("Edit…"), &MainWindow::onEditContext, "secondaryButton");
-    addSecondary(tr("Refresh worktrees"), &MainWindow::onRefreshWorktrees, "secondaryButton");
-    addSecondary(tr("Open logs"), &MainWindow::onOpenLogs, "secondaryButton");
-    addSecondary(tr("Open folder"), &MainWindow::onOpenFolder, "secondaryButton");
-    addSecondary(tr("Forget saved row"), &MainWindow::onRemoveContext, "dangerButton");
-    addSecondary(tr("Stop all for repo"), &MainWindow::onStopAllForRepo, "secondaryButton");
-    secondaryRow->addStretch(1);
-    headLay->addLayout(secondaryRow);
 
     root->addWidget(header);
     m_advancedTabs = new QTabWidget(page);
@@ -333,14 +313,14 @@ void MainWindow::setupAdvancedPage(QWidget *page)
     contextsRoot->setContentsMargins(0, 0, 0, 0);
     contextsRoot->setSpacing(14);
 
-    m_hint = new QLabel(tr("Saved workflow rows appear below. Add folder scans workflows from this checkout. Right-click a row for actions."));
+    m_hint = new QLabel(tr("Workflows below are discovered from the current project folder. Right-click a row for actions."));
     m_hint->setObjectName(QStringLiteral("hintText"));
     m_hint->setWordWrap(true);
     contextsRoot->addWidget(m_hint);
 
     m_search = new QLineEdit(page);
     m_search->setClearButtonEnabled(true);
-    m_search->setPlaceholderText(tr("Search saved rows by label, folder, workflow, resolver…"));
+    m_search->setPlaceholderText(tr("Search workflows by label, folder, workflow, resolver…"));
     connect(m_search, &QLineEdit::textChanged, this, &MainWindow::onAdvancedSearchChanged);
     contextsRoot->addWidget(m_search);
 
@@ -364,11 +344,11 @@ void MainWindow::setupAdvancedPage(QWidget *page)
     auto *emptyLay = new QVBoxLayout(m_emptyState);
     emptyLay->setContentsMargins(28, 36, 28, 36);
     emptyLay->setSpacing(8);
-    m_emptyTitle = new QLabel(tr("No contexts yet"));
+    m_emptyTitle = new QLabel(tr("No workflows yet"));
     m_emptyTitle->setObjectName(QStringLiteral("emptyTitle"));
     m_emptyTitle->setAlignment(Qt::AlignCenter);
     m_emptyBody = new QLabel(
-        tr("Use Add folder… to import workflows, or use View → Basic mode and open a project folder."));
+        tr("Open a project folder in Basic mode or with File → Open project folder."));
     m_emptyBody->setObjectName(QStringLiteral("emptyBody"));
     m_emptyBody->setWordWrap(true);
     m_emptyBody->setAlignment(Qt::AlignCenter);
@@ -390,7 +370,7 @@ void MainWindow::setupAdvancedPage(QWidget *page)
 
     m_consoleTitle = new QLabel(tr("Inline CLI"));
     m_consoleTitle->setObjectName(QStringLiteral("consoleTitle"));
-    m_consoleMeta = new QLabel(tr("Select a saved row, then launch it to see output here."));
+    m_consoleMeta = new QLabel(tr("Select a workflow row, then launch it to see output here."));
     m_consoleMeta->setObjectName(QStringLiteral("consoleMeta"));
     m_consoleMeta->setWordWrap(true);
 
@@ -456,7 +436,9 @@ void MainWindow::applyUiMode()
     m_actIcons->blockSignals(false);
     m_actList->blockSignals(false);
 
+    rebuildAdvancedContextList();
     updateBasicPage();
+    refreshInlineConsole();
 }
 
 void MainWindow::onViewBasic()
@@ -519,7 +501,7 @@ void MainWindow::onFileOpenProject()
     m_basicWidget->setContinueLastVisible(true);
     m_basicWidget->setProjectFolder(m_settings.projectFolder);
     m_basicWidget->showWorkspacePage();
-    updateBasicPage();
+    rebuildUi();
 }
 
 void MainWindow::onBasicBackHome()
@@ -541,7 +523,7 @@ void MainWindow::onBasicOpenRecent(const QString &absPath)
     m_basicWidget->setContinueLastVisible(true);
     m_basicWidget->setProjectFolder(m_settings.projectFolder);
     m_basicWidget->showWorkspacePage();
-    updateBasicPage();
+    rebuildUi();
 }
 
 void MainWindow::onBasicContinueLast()
@@ -558,7 +540,7 @@ void MainWindow::onBasicContinueLast()
     m_basicWidget->setContinueLastVisible(true);
     m_basicWidget->setProjectFolder(m_settings.projectFolder);
     m_basicWidget->showWorkspacePage();
-    updateBasicPage();
+    rebuildUi();
 }
 
 void MainWindow::activateHome()
@@ -580,7 +562,9 @@ void MainWindow::activateHome()
 
 void MainWindow::onRefreshAppList()
 {
+    rebuildAdvancedContextList();
     updateBasicPage();
+    refreshInlineConsole();
 }
 
 void MainWindow::updateBasicPage()
@@ -729,33 +713,49 @@ void MainWindow::clearContextList()
 void MainWindow::rebuildAdvancedContextList()
 {
     clearContextList();
+    m_advancedContexts.clear();
 
     const QString filter = m_search ? m_search->text() : QString();
     int visibleCount = 0;
-    const bool noSavedRows = m_store.contexts.isEmpty();
+    const bool hasProject = !m_settings.projectFolder.isEmpty();
+    QVector<Context> source;
+    if (hasProject)
+        source = ContextDiscovery::contextsForWorkdir(m_settings.projectFolder);
+    const bool noProjectRows = source.isEmpty();
 
     if (m_emptyTitle && m_emptyBody) {
-        if (noSavedRows) {
-            m_emptyTitle->setText(tr("No contexts yet"));
+        if (!hasProject) {
+            m_emptyTitle->setText(tr("No project selected"));
+            m_emptyBody->setText(tr("Open a project folder in Basic mode or with File → Open project folder."));
+        } else if (noProjectRows) {
+            m_emptyTitle->setText(tr("No workflows found"));
             m_emptyBody->setText(
-                tr("Use Add folder… to import workflows, or use View → Basic mode and open a project folder."));
+                tr("No DockPipe workflows were discovered for the current project folder."));
         } else {
-            m_emptyTitle->setText(tr("No matching rows"));
-            m_emptyBody->setText(tr("Try a different search, or clear the filter to show every saved row."));
+            m_emptyTitle->setText(tr("No matching workflows"));
+            m_emptyBody->setText(tr("Try a different search, or clear the filter to show every workflow."));
         }
     }
 
-    for (const Context &c : m_store.contexts) {
+    for (Context c : source) {
+        if (Context *stored = findStoredContextForDisplay(c)) {
+            c = *stored;
+        } else if (c.dockpipeBinary.trimmed().isEmpty()) {
+            c.dockpipeBinary = DockpipeChoices::preferredDockpipeBinary(c.workdir);
+        }
         if (!contextMatchesFilter(c, filter))
             continue;
         ++visibleCount;
+        m_advancedContexts.append(c);
 
         bool running = false;
         bool failed = false;
-        const QString st = statusLabel(m_sessions, c.id, &running, &failed);
+        QString st = tr("Stopped");
+        if (Context *stored = findStoredContextForDisplay(c))
+            st = statusLabel(m_sessions, stored->id, &running, &failed);
 
         auto *item = new QListWidgetItem;
-        item->setData(Qt::UserRole, c.id);
+        item->setData(Qt::UserRole, m_advancedContexts.size() - 1);
         item->setSizeHint(QSize(0, 76));
         m_list->addItem(item);
 
@@ -824,17 +824,44 @@ Context *MainWindow::findContext(const QString &workdir, const QString &workflow
     return nullptr;
 }
 
-Context *MainWindow::currentContext()
+Context *MainWindow::findStoredContextForDisplay(const Context &display)
+{
+    return findContext(display.workdir, display.workflow, display.workflowFile);
+}
+
+Context *MainWindow::ensureStoredContextForDisplay(const Context &display)
+{
+    if (Context *existing = findStoredContextForDisplay(display))
+        return existing;
+
+    Context stored = display;
+    if (stored.id.trimmed().isEmpty())
+        stored.id = Context::createNew().id;
+    if (stored.dockpipeBinary.trimmed().isEmpty())
+        stored.dockpipeBinary = DockpipeChoices::preferredDockpipeBinary(stored.workdir);
+    m_store.contexts.append(stored);
+    m_store.save();
+    return &m_store.contexts.last();
+}
+
+Context *MainWindow::currentAdvancedDisplayContext()
 {
     QListWidgetItem *it = currentItem();
     if (!it)
         return nullptr;
-    const QString id = it->data(Qt::UserRole).toString();
-    for (Context &c : m_store.contexts) {
-        if (c.id == id)
-            return &c;
-    }
-    return nullptr;
+    bool ok = false;
+    const int index = it->data(Qt::UserRole).toInt(&ok);
+    if (!ok || index < 0 || index >= m_advancedContexts.size())
+        return nullptr;
+    return &m_advancedContexts[index];
+}
+
+Context *MainWindow::currentContext()
+{
+    Context *display = currentAdvancedDisplayContext();
+    if (!display)
+        return nullptr;
+    return findStoredContextForDisplay(*display);
 }
 
 bool MainWindow::hasContext(const Context &c) const
@@ -849,113 +876,12 @@ bool MainWindow::hasContext(const Context &c) const
     return false;
 }
 
-void MainWindow::onAddFolder()
-{
-    const QString dir = QFileDialog::getExistingDirectory(this, tr("Choose folder"));
-    if (dir.isEmpty())
-        return;
-    const QString clean = QDir::cleanPath(dir);
-    const QVector<Context> batch = ContextDiscovery::contextsForWorkdir(clean);
-    int added = 0;
-    for (const Context &c : batch) {
-        if (hasContext(c))
-            continue;
-        m_store.contexts.append(c);
-        ++added;
-    }
-    if (added == 0) {
-        QMessageBox::information(this, tr("DockPipe Launcher"),
-                                 tr("No new contexts to add — all matching workflows already exist for this folder."));
-        return;
-    }
-    m_store.save();
-    rebuildUi();
-}
-
-void MainWindow::onRefreshWorktrees()
-{
-    Context *c = currentContext();
-    QString path = c ? c->workdir : QString();
-    if (path.isEmpty()) {
-        path = QFileDialog::getExistingDirectory(this, tr("Choose repository root"));
-        if (path.isEmpty())
-            return;
-    }
-    const QString root = GitHelper::repoRoot(path);
-    if (root.isEmpty()) {
-        QMessageBox::information(this, tr("DockPipe Launcher"), tr("Not a git repository."));
-        return;
-    }
-    const QVector<WorktreeRow> rows = GitHelper::listWorktrees(root);
-    for (const WorktreeRow &r : rows) {
-        bool exists = false;
-        for (const Context &ex : m_store.contexts) {
-            if (QDir::cleanPath(ex.workdir) == QDir::cleanPath(r.path)) {
-                exists = true;
-                break;
-            }
-        }
-        if (exists)
-            continue;
-        Context nc = Context::createNew();
-        nc.workdir = r.path;
-        nc.label = QFileInfo(r.path).fileName();
-        if (!r.branch.isEmpty())
-            nc.label += QStringLiteral(" (") + r.branch + QStringLiteral(")");
-        nc.workflow = QStringLiteral("vscode");
-        m_store.contexts.append(nc);
-    }
-    m_store.save();
-    rebuildUi();
-}
-
-void MainWindow::onRemoveContext()
-{
-    Context *c = currentContext();
-    if (!c)
-        return;
-    if (m_sessions.isRunning(c->id)) {
-        QMessageBox::warning(this, tr("DockPipe Launcher"), tr("Stop this context before forgetting the saved row."));
-        return;
-    }
-    const QString label = c->label.isEmpty() ? c->workdir : c->label;
-    const auto choice = QMessageBox::question(
-        this, tr("Forget saved row"),
-        tr("Remove \"%1\" from DockPipe Launcher?\n\nThis only removes the saved launcher row. It does not delete files from disk.")
-            .arg(label));
-    if (choice != QMessageBox::Yes) {
-        return;
-    }
-    for (int i = 0; i < m_store.contexts.size(); ++i) {
-        if (m_store.contexts[i].id == c->id) {
-            m_store.contexts.removeAt(i);
-            break;
-        }
-    }
-    m_store.save();
-    rebuildUi();
-}
-
-void MainWindow::onEditContext()
-{
-    Context *c = currentContext();
-    if (!c)
-        return;
-
-    EditContextDialog dlg(*c, this);
-    if (dlg.exec() != QDialog::Accepted)
-        return;
-
-    *c = dlg.editedContext();
-    m_store.save();
-    rebuildUi();
-}
-
 void MainWindow::onLaunch()
 {
-    Context *c = currentContext();
-    if (!c)
+    Context *display = currentAdvancedDisplayContext();
+    if (!display)
         return;
+    Context *c = ensureStoredContextForDisplay(*display);
     if (m_sessions.launch(*c, ContextStore::logsDir()))
         rebuildUi();
     else if (!m_sessions.isRunning(c->id))
@@ -964,9 +890,10 @@ void MainWindow::onLaunch()
 
 void MainWindow::onRelaunch()
 {
-    Context *c = currentContext();
-    if (!c)
+    Context *display = currentAdvancedDisplayContext();
+    if (!display)
         return;
+    Context *c = ensureStoredContextForDisplay(*display);
     if (m_sessions.isRunning(c->id))
         m_sessions.stop(c->id);
     QTimer::singleShot(400, this, [this]() { onLaunch(); });
@@ -983,13 +910,17 @@ void MainWindow::onStop()
 
 void MainWindow::onStopAllForRepo()
 {
-    Context *c = currentContext();
-    if (!c)
+    QString path = m_settings.projectFolder;
+    if (path.isEmpty()) {
+        if (Context *display = currentAdvancedDisplayContext())
+            path = display->workdir;
+    }
+    if (path.isEmpty())
         return;
-    const QString root = GitHelper::repoRoot(c->workdir);
+    const QString root = GitHelper::repoRoot(path);
     if (root.isEmpty()) {
-        QMessageBox::information(this, tr("DockPipe Launcher"), tr("Not a git repository; stopping this context only."));
-        m_sessions.stop(c->id);
+        if (Context *c = currentContext())
+            m_sessions.stop(c->id);
         rebuildUi();
         return;
     }
@@ -1004,8 +935,19 @@ void MainWindow::onStopAllForRepo()
 void MainWindow::onOpenLogs()
 {
     Context *c = currentContext();
-    if (!c)
+    if (!c) {
+        const QString wd = QDir::cleanPath(m_settings.projectFolder);
+        for (int i = m_store.contexts.size() - 1; i >= 0; --i) {
+            if (QDir::cleanPath(m_store.contexts[i].workdir) == wd) {
+                c = &m_store.contexts[i];
+                break;
+            }
+        }
+    }
+    if (!c) {
+        QMessageBox::information(this, tr("DockPipe Launcher"), tr("No logs yet for this project."));
         return;
+    }
     const SessionInfo si = m_sessions.info(c->id);
     QString path = si.logPath;
     if (path.isEmpty()) {
@@ -1025,10 +967,12 @@ void MainWindow::onOpenLogs()
 
 void MainWindow::onOpenFolder()
 {
-    Context *c = currentContext();
-    if (!c)
+    const QString path = m_settings.projectFolder.isEmpty()
+                             ? (currentAdvancedDisplayContext() ? currentAdvancedDisplayContext()->workdir : QString())
+                             : m_settings.projectFolder;
+    if (path.isEmpty())
         return;
-    QDesktopServices::openUrl(QUrl::fromLocalFile(c->workdir));
+    QDesktopServices::openUrl(QUrl::fromLocalFile(path));
 }
 
 void MainWindow::applyContextMenu(QListWidgetItem *, const QPoint &globalPos)
@@ -1041,9 +985,6 @@ void MainWindow::applyContextMenu(QListWidgetItem *, const QPoint &globalPos)
     menu.addSeparator();
     menu.addAction(tr("Open logs"), this, &MainWindow::onOpenLogs);
     menu.addAction(tr("Open folder"), this, &MainWindow::onOpenFolder);
-    menu.addAction(tr("Edit settings…"), this, &MainWindow::onEditContext);
-    menu.addSeparator();
-    menu.addAction(tr("Forget saved row"), this, &MainWindow::onRemoveContext);
     menu.exec(globalPos);
 }
 
@@ -1052,20 +993,22 @@ void MainWindow::refreshInlineConsole()
     if (!m_console || !m_consoleTitle || !m_consoleMeta)
         return;
 
+    Context *display = currentAdvancedDisplayContext();
     Context *c = currentContext();
-    if (!c) {
+    if (!display && !c) {
         m_consoleContextId.clear();
         m_consoleTitle->setText(tr("Inline CLI"));
-        m_consoleMeta->setText(tr("Select a saved row, then launch it to see output here."));
+        m_consoleMeta->setText(tr("Select a workflow row, then launch it to see output here."));
         m_console->setPlainText(QString());
         return;
     }
 
-    m_consoleContextId = c->id;
-    m_consoleTitle->setText(c->label.isEmpty() ? tr("Inline CLI") : c->label);
+    const Context *metaContext = c ? c : display;
+    m_consoleContextId = c ? c->id : QString();
+    m_consoleTitle->setText(metaContext->label.isEmpty() ? tr("Inline CLI") : metaContext->label);
     m_consoleMeta->setText(currentContextCommandLine());
 
-    const SessionInfo si = m_sessions.info(c->id);
+    const SessionInfo si = c ? m_sessions.info(c->id) : SessionInfo{};
     QString text;
     if (!si.logPath.isEmpty()) {
         QFile f(si.logPath);
@@ -1094,9 +1037,12 @@ void MainWindow::appendInlineConsole(const QString &text)
 
 QString MainWindow::currentContextCommandLine() const
 {
+    Context *display = const_cast<MainWindow *>(this)->currentAdvancedDisplayContext();
+    if (!display)
+        return tr("Select a workflow row, then launch it to see output here.");
     const Context *c = const_cast<MainWindow *>(this)->currentContext();
     if (!c)
-        return tr("Select a saved row, then launch it to see output here.");
+        c = display;
 
     SessionInfo si = m_sessions.info(c->id);
     QString program = si.program;

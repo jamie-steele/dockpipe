@@ -137,7 +137,7 @@ func listCatalogWorkflows(projectRoot, workdir string) ([]catalogWorkflowRecord,
 			DisplayName: display,
 			Description: strings.TrimSpace(wf.Description),
 			Category:    strings.TrimSpace(wf.Category),
-			IconPath:    resolveCatalogWorkflowIcon(cfgPath, strings.TrimSpace(wf.Icon)),
+			IconPath:    resolveCatalogWorkflowIcon(cfgPath, strings.TrimSpace(wf.Icon), name),
 			ConfigPath:  cfgPath,
 		})
 	}
@@ -147,15 +147,58 @@ func listCatalogWorkflows(projectRoot, workdir string) ([]catalogWorkflowRecord,
 	return out, nil
 }
 
-func resolveCatalogWorkflowIcon(cfgPath, icon string) string {
+func resolveCatalogWorkflowIcon(cfgPath, icon, workflowID string) string {
 	icon = strings.TrimSpace(icon)
-	if icon == "" {
+	if icon != "" {
+		if filepath.IsAbs(icon) {
+			return icon
+		}
+		return filepath.Clean(filepath.Join(filepath.Dir(cfgPath), icon))
+	}
+
+	manifestPath := findNearestPackageManifest(cfgPath)
+	if manifestPath == "" {
 		return ""
 	}
-	if filepath.IsAbs(icon) {
-		return icon
+	pm, err := domain.ParsePackageManifest(manifestPath)
+	if err != nil || pm == nil {
+		return ""
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(cfgPath), icon))
+	manifestDir := filepath.Dir(manifestPath)
+	if artwork := strings.TrimSpace(pm.Artwork[strings.TrimSpace(workflowID)]); artwork != "" {
+		if filepath.IsAbs(artwork) {
+			return artwork
+		}
+		return filepath.Clean(filepath.Join(manifestDir, artwork))
+	}
+	if icon := strings.TrimSpace(pm.Icon); icon != "" {
+		if filepath.IsAbs(icon) {
+			return icon
+		}
+		return filepath.Clean(filepath.Join(manifestDir, icon))
+	}
+	if artwork := strings.TrimSpace(pm.Artwork["icon"]); artwork != "" {
+		if filepath.IsAbs(artwork) {
+			return artwork
+		}
+		return filepath.Clean(filepath.Join(manifestDir, artwork))
+	}
+	return ""
+}
+
+func findNearestPackageManifest(cfgPath string) string {
+	cur := filepath.Dir(filepath.Clean(cfgPath))
+	for {
+		manifest := filepath.Join(cur, infrastructure.PackageManifestFilename)
+		if info, err := os.Stat(manifest); err == nil && !info.IsDir() {
+			return manifest
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return ""
+		}
+		cur = parent
+	}
 }
 
 func listCatalogResolvers(projectRoot, workdir string) []string {

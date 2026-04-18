@@ -20,11 +20,23 @@
 
 namespace {
 
+QIcon defaultWorkflowIcon()
+{
+    QIcon icon = QIcon::fromTheme(QStringLiteral("applications-development"));
+    if (icon.isNull())
+        icon = QIcon::fromTheme(QStringLiteral("application-x-executable"));
+    if (icon.isNull())
+        icon = QIcon::fromTheme(QStringLiteral("applications-system"));
+    if (icon.isNull())
+        icon = QIcon(QStringLiteral(":/icon.png"));
+    return icon;
+}
+
 QIcon appIconForWorkflow(const WorkflowMeta &workflow)
 {
     if (!workflow.iconPath.isEmpty() && QFileInfo::exists(workflow.iconPath))
         return QIcon(workflow.iconPath);
-    return QIcon(QStringLiteral(":/icon.png"));
+    return defaultWorkflowIcon();
 }
 
 } // namespace

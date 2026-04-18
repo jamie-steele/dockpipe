@@ -73,6 +73,62 @@ func TestBuildCatalogListOutput_UsesDockpipeContracts(t *testing.T) {
 	}
 }
 
+func TestBuildCatalogListOutput_FallsBackToPackageArtworkAndIcon(t *testing.T) {
+	project := t.TempDir()
+	cfg := `{
+  "schema": 1,
+  "compile": {
+    "workflows": ["workflows", "packages", ".staging/packages"]
+  }
+}`
+	if err := os.WriteFile(filepath.Join(project, "dockpipe.config.json"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(project, "packages", "ide", "resolvers", "cursor-dev", "assets", "images"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "packages", "ide", "resolvers", "cursor-dev", "assets", "images", "icon.png"), []byte("png"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "packages", "ide", "package.yml"), []byte("schema: 1\nkind: package\nname: ide\nicon: resolvers/cursor-dev/assets/images/icon.png\nartwork:\n  cursor-dev: resolvers/cursor-dev/assets/images/icon.png\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "packages", "ide", "resolvers", "cursor-dev", "config.yml"), []byte("name: Cursor\ncategory: app\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(project, "packages", "pipeon", "resolvers", "pipeon-dev-stack", "assets", "images"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "packages", "pipeon", "resolvers", "pipeon-dev-stack", "assets", "images", "icon.png"), []byte("png"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "packages", "pipeon", "package.yml"), []byte("schema: 1\nkind: package\nname: pipeon\nicon: resolvers/pipeon-dev-stack/assets/images/icon.png\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "packages", "pipeon", "resolvers", "pipeon-dev-stack", "config.yml"), []byte("name: Pipeon\ncategory: app\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := buildCatalogListOutput(project, project)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	icons := map[string]string{}
+	for _, wf := range out.Workflows {
+		icons[wf.WorkflowID] = wf.IconPath
+	}
+
+	if got, want := icons["cursor-dev"], filepath.Join(project, "packages", "ide", "resolvers", "cursor-dev", "assets", "images", "icon.png"); got != want {
+		t.Fatalf("expected cursor-dev package artwork icon %q, got %q", want, got)
+	}
+	if got, want := icons["pipeon-dev-stack"], filepath.Join(project, "packages", "pipeon", "resolvers", "pipeon-dev-stack", "assets", "images", "icon.png"); got != want {
+		t.Fatalf("expected pipeon-dev-stack package icon %q, got %q", want, got)
+	}
+}
+
 func containsString(values []string, want string) bool {
 	for _, value := range values {
 		if value == want {
