@@ -64,6 +64,7 @@ __pycache__/
 /-
 
 # Optional local overrides (do not commit)
+.gitconfig
 .env
 .env.local
 # Vault env template (op:// or other backends; keep local — see dockpipe.config.json secrets.vault_template)
