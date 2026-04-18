@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+report_launch_failure() {
+  local exit_code="$1"
+  local line_no="$2"
+  local command="$3"
+  printf 'pipeon-dev-stack: launch.sh failed at line %s while running: %s (exit %s)\n' \
+    "$line_no" "$command" "$exit_code" >&2
+}
+
+trap 'report_launch_failure "$?" "${LINENO}" "${BASH_COMMAND}"' ERR
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/common.sh"
@@ -36,6 +47,48 @@ resolve_tool_bin() {
   return 1
 }
 
+resolve_repo_tool_bin() {
+  local configured="${1:-}"
+  local command_name="$2"
+  shift 2
+  local candidate
+
+  if [[ -n "$configured" ]]; then
+    printf '%s\n' "$configured"
+    return 0
+  fi
+
+  for candidate in "$@"; do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  resolve_tool_bin "" "$command_name"
+}
+
+resolve_pipeon_bin() {
+  local configured="${1:-}"
+  local candidate
+  if [[ -n "$configured" ]]; then
+    printf '%s\n' "$configured"
+    return 0
+  fi
+
+  for candidate in \
+    "$WORKDIR/packages/pipeon/resolvers/pipeon/bin/pipeon" \
+    "$PROJECT_DIR/packages/pipeon/resolvers/pipeon/bin/pipeon"
+  do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  resolve_tool_bin "" pipeon
+}
+
 wait_for_ollama_ready() {
   local attempts="${1:-60}"
   local i
@@ -68,10 +121,16 @@ wait_for_mcp_ready() {
   return 1
 }
 
-DOCKPIPE_BIN="$(resolve_tool_bin "${DOCKPIPE_BIN:-}" dockpipe)"
-DORKPIPE_BIN="$(resolve_tool_bin "${DORKPIPE_BIN:-}" dorkpipe)"
-MCPD_BIN="$(resolve_tool_bin "${MCPD_BIN:-}" mcpd)"
-PIPEON_BIN="$(resolve_tool_bin "${PIPEON_BIN:-}" pipeon)"
+DOCKPIPE_BIN="$(resolve_repo_tool_bin "${DOCKPIPE_BIN:-}" dockpipe \
+  "$WORKDIR/src/bin/dockpipe" \
+  "$PROJECT_DIR/src/bin/dockpipe")"
+DORKPIPE_BIN="$(resolve_repo_tool_bin "${DORKPIPE_BIN:-}" dorkpipe \
+  "$WORKDIR/packages/dorkpipe/bin/dorkpipe" \
+  "$PROJECT_DIR/packages/dorkpipe/bin/dorkpipe")"
+MCPD_BIN="$(resolve_repo_tool_bin "${MCPD_BIN:-}" mcpd \
+  "$WORKDIR/packages/dorkpipe-mcp/bin/mcpd" \
+  "$PROJECT_DIR/packages/dorkpipe-mcp/bin/mcpd")"
+PIPEON_BIN="$(resolve_pipeon_bin "${PIPEON_BIN:-}")"
 
 ensure_pipeon_stack_state_dir
 ensure_pipeon_stack_api_key
@@ -189,11 +248,14 @@ if [[ "${PIPEON_DEV_STACK_PULL_MODEL:-1}" == "1" ]]; then
 fi
 
 if [[ "${PIPEON_DEV_STACK_PIPEON_BUNDLE:-1}" == "1" && -x "$PIPEON_BIN" ]]; then
-  (
+  if ! (
     cd "$WORKDIR"
     export DOCKPIPE_WORKDIR="$WORKDIR"
     "$PIPEON_BIN" bundle
-  ) >&2
+  ) >&2; then
+    echo "pipeon-dev-stack: pipeon bundle failed using $PIPEON_BIN" >&2
+    exit 1
+  fi
 fi
 
 write_pipeon_stack_runtime_env
@@ -212,4 +274,10 @@ cat >&2 <<EOF
   log:          $LOG_FILE
 EOF
 
-bash "$PIPEON_DESKTOP_SCRIPT"
+if ! bash "$PIPEON_DESKTOP_SCRIPT"; then
+  desktop_status=$?
+  AUTODOWN=0
+  printf '[pipeon-dev-stack] Pipeon desktop shell failed to launch (exit %s)\n' "$desktop_status" >&2
+  printf '[pipeon-dev-stack] the stack is still running; open Pipeon manually at %s\n' "$CODE_SERVER_URL" >&2
+  exit 0
+fi

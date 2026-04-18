@@ -18,6 +18,10 @@ pipeon_version_from_repo() {
 		tr -d ' \t\r\n' <"$root/VERSION"
 		return
 	fi
+	if [[ -x "$root/src/bin/dockpipe" ]]; then
+		"$root/src/bin/dockpipe" --version 2>/dev/null | head -1 | tr -d ' \t\r\n'
+		return
+	fi
 	if command -v dockpipe >/dev/null 2>&1; then
 		dockpipe --version 2>/dev/null | head -1 | tr -d ' \t\r\n'
 		return

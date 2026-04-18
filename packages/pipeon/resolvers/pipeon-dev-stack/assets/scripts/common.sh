@@ -84,6 +84,20 @@ pipeon_stack_code_server_home() {
 }
 
 pipeon_stack_desktop_bin() {
+  local workdir repo_root candidate
+  workdir="$(pipeon_stack_workdir)"
+  repo_root="$(pipeon_stack_repo_root)"
+
+  for candidate in \
+    "$workdir/packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop" \
+    "$repo_root/packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop"
+  do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
   command -v pipeon-desktop 2>/dev/null || true
 }
 

@@ -51,6 +51,12 @@ Open this folder in VS Code and press **F5** (Extension Development Host).
 
 The extension source now lives in **`src/`** as TypeScript and compiles back into the runtime entrypoints under this package.
 
+Source of truth:
+
+- Edit **`src/extension.ts`** and **`src/webview/*.ts`**
+- Treat **`extension.js`** and **`webview/*.js`** as generated runtime artifacts
+- Keep generated DockPipe runtime/cache trees such as **`.dockpipe/`** and **`bin/.dockpipe/`** out of normal editor workflows; the baked Pipeon user settings exclude them so stale compiled package snapshots do not bleed into Problems or search
+
 Build the runtime files after edits:
 
 ```bash

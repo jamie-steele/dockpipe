@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
+
+report_desktop_failure() {
+  local exit_code="$1"
+  local line_no="$2"
+  local command="$3"
+  printf 'pipeon-dev-stack: desktop.sh failed at line %s while running: %s (exit %s)\n' \
+    "$line_no" "$command" "$exit_code" >&2
+}
+
+trap 'report_desktop_failure "$?" "${LINENO}" "${BASH_COMMAND}"' ERR
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/common.sh"
@@ -15,6 +26,7 @@ PIPEON_DESKTOP_BIN="${PIPEON_DESKTOP_BIN:-$(pipeon_stack_desktop_bin)}"
 PIPEON_WINDOW_TITLE="${PIPEON_WINDOW_TITLE:-Pipeon}"
 WAIT_FOR_UI="${CODE_SERVER_WAIT:-1}"
 MCP_HTTP_API_KEY="$(cat "$(pipeon_stack_api_key_file)")"
+PIPEON_DEV_STACK_OPEN="${PIPEON_DEV_STACK_OPEN:-1}"
 
 pipeon_wait_for_http() {
   local url="$1"
@@ -166,6 +178,16 @@ if [[ "$WAIT_FOR_UI" == "1" ]]; then
     docker logs "$CODE_SERVER_CONTAINER_NAME" >&2 || true
     exit 1
   fi
+fi
+
+if [[ "$PIPEON_DEV_STACK_OPEN" != "1" ]]; then
+  printf '[pipeon-dev-stack] desktop auto-open disabled; Pipeon UI remains available at %s\n' "$CODE_SERVER_URL" >&2
+  exit 0
+fi
+
+if [[ -z "${DISPLAY:-}" && -z "${WAYLAND_DISPLAY:-}" ]]; then
+  printf '[pipeon-dev-stack] no GUI display detected; Pipeon UI remains available at %s\n' "$CODE_SERVER_URL" >&2
+  exit 0
 fi
 
 printf '[pipeon-dev-stack] opening Pipeon desktop shell at %s\n' "$CODE_SERVER_URL" >&2

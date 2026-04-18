@@ -7,13 +7,28 @@ ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 
 cd "$ROOT"
 
+resolve_dorkpipe_bin() {
+  local configured="${DORKPIPE_BIN:-}"
+  local candidate
+  if [[ -n "$configured" ]]; then
+    printf '%s\n' "$configured"
+    return 0
+  fi
+  for candidate in \
+    "$ROOT/packages/dorkpipe/bin/dorkpipe" \
+    "$WORKFLOW_ROOT/../../../../packages/dorkpipe/bin/dorkpipe"
+  do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  command -v dorkpipe 2>/dev/null || true
+}
+
 BIN="${DORKPIPE_BIN:-}"
 if [[ -z "$BIN" ]]; then
-  if command -v dorkpipe >/dev/null 2>&1; then
-    BIN="$(command -v dorkpipe)"
-  else
-    BIN="${SCRIPT_DIR}/../../../../bin/dorkpipe"
-  fi
+  BIN="$(resolve_dorkpipe_bin)"
 fi
 SPEC="${DORKPIPE_SPEC:-$WORKFLOW_ROOT/spec.example.yaml}"
 

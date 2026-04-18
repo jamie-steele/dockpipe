@@ -69,7 +69,11 @@ dockpipe_r2_normalize_account_id() {
 source_terraform_pipeline_lib() {
   local dockpipe_bin="${DOCKPIPE_BIN:-}"
   if [[ -z "$dockpipe_bin" ]]; then
-    dockpipe_bin="$(command -v dockpipe 2>/dev/null || true)"
+    if [[ -x "$ROOT/src/bin/dockpipe" ]]; then
+      dockpipe_bin="$ROOT/src/bin/dockpipe"
+    else
+      dockpipe_bin="$(command -v dockpipe 2>/dev/null || true)"
+    fi
   fi
   [[ -n "$dockpipe_bin" ]] || die "dockpipe not found; set DOCKPIPE_BIN or add dockpipe to PATH"
   local pipeline_sh

@@ -5,8 +5,27 @@
   "workbench.secondarySideBar.defaultVisibility": "visibleInWorkspace",
   "workbench.startupEditor": "none",
   "workbench.welcome.enabled": false,
+  "files.exclude": {
+    "**/.dockpipe/**": true,
+    "**/bin/.dockpipe/**": true,
+    "**/release/artifacts/**": true
+  },
+  "search.exclude": {
+    "**/.dockpipe/**": true,
+    "**/bin/.dockpipe/**": true,
+    "**/release/artifacts/**": true
+  },
   "files.watcherExclude": {
-    "**/bin/**": true
+    "**/bin/**": true,
+    "**/.dockpipe/**": true,
+    "**/release/artifacts/**": true
+  },
+  "typescript.tsserver.watchOptions": {
+    "excludeDirectories": [
+      "**/.dockpipe/**",
+      "**/bin/.dockpipe/**",
+      "**/release/artifacts/**"
+    ]
   },
   "window.title": "Pipeon — ${rootName}",
   "window.autoDetectColorScheme": true,

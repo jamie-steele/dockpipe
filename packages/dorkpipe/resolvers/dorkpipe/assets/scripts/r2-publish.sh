@@ -51,6 +51,10 @@ resolve_dockpipe_bin() {
     printf '%s\n' "$DOCKPIPE_BIN"
     return 0
   fi
+  if [[ -x "$ROOT/src/bin/dockpipe" ]]; then
+    printf '%s\n' "$ROOT/src/bin/dockpipe"
+    return 0
+  fi
   if command -v dockpipe >/dev/null 2>&1; then
     command -v dockpipe
     return 0
