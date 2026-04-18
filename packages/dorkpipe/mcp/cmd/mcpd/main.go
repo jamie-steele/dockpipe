@@ -1,5 +1,5 @@
 // Command mcpd is a thin MCP (Model Context Protocol) bridge over DockPipe/DorkPipe.
-// See dorkpipe-mcp/README.md and mcpbridge/README.md.
+// See packages/dorkpipe/mcp/README.md and mcpbridge/README.md.
 package main
 
 import (
@@ -24,6 +24,7 @@ func main() {
 
 	httpListen := flag.String("http", "", "listen address for MCP over HTTPS (e.g. :8443); env MCP_HTTP_LISTEN; empty = stdio")
 	apiKey := flag.String("api-key", "", "HTTP auth when no key-tiers-file; env MCP_HTTP_API_KEY")
+	apiKeyFile := flag.String("api-key-file", "", "path to a file containing the HTTP API key; env MCP_HTTP_API_KEY_FILE")
 	keyTiersFile := flag.String("key-tiers-file", "", "JSON map of API keys to tiers (replaces -api-key); env MCP_HTTP_KEY_TIERS_FILE")
 	tlsCert := flag.String("tls-cert", "", "TLS certificate file; env MCP_TLS_CERT_FILE")
 	tlsKey := flag.String("tls-key", "", "TLS private key file; env MCP_TLS_KEY_FILE")
@@ -50,6 +51,17 @@ func main() {
 		key := strings.TrimSpace(*apiKey)
 		if key == "" {
 			key = strings.TrimSpace(os.Getenv("MCP_HTTP_API_KEY"))
+		}
+		keyFilePath := strings.TrimSpace(*apiKeyFile)
+		if keyFilePath == "" {
+			keyFilePath = strings.TrimSpace(os.Getenv("MCP_HTTP_API_KEY_FILE"))
+		}
+		if key == "" && keyFilePath != "" {
+			b, err := os.ReadFile(keyFilePath)
+			if err != nil {
+				log.Fatalf("read MCP api key file: %v", err)
+			}
+			key = strings.TrimSpace(string(b))
 		}
 		cert := strings.TrimSpace(*tlsCert)
 		if cert == "" {

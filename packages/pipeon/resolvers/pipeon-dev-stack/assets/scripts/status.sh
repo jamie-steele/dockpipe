@@ -8,27 +8,30 @@ PROJECT_DIR="$(pipeon_stack_repo_root)"
 STATE_DIR="$(pipeon_stack_state_dir)"
 COMPOSE_FILE="$(pipeon_stack_compose_file)"
 COMPOSE_PROJECT="$(pipeon_stack_compose_project)"
-PID_FILE="$(pipeon_stack_pid_file)"
 RUNTIME_ENV="$(pipeon_stack_runtime_env)"
 CODE_SERVER_CONTAINER_NAME="$(pipeon_stack_code_server_name)"
+
+compose_cmd() {
+  docker compose --env-file "$RUNTIME_ENV" -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$PROJECT_DIR" "$@"
+}
 
 echo "pipeon-dev-stack status"
 echo "  workdir: $(pipeon_stack_workdir)"
 echo "  project: $PROJECT_DIR"
 echo "  state:   $STATE_DIR"
 echo "  mcp url: $(pipeon_stack_mcp_url)"
-echo "  mcp pid: $(if [[ -f "$PID_FILE" ]]; then cat "$PID_FILE"; else echo not-running; fi)"
+echo "  mcp service: dorkpipe-stack"
 echo "  code-server container: $CODE_SERVER_CONTAINER_NAME"
 
 if [[ -f "$RUNTIME_ENV" ]]; then
   echo
   echo "runtime env"
-  cat "$RUNTIME_ENV"
+  sed -E 's/^(PIPEON_DEV_STACK_MCP_API_KEY|MCP_HTTP_API_KEY)=.*/\1=<redacted>/' "$RUNTIME_ENV"
 fi
 
 echo
 echo "compose"
-docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$PROJECT_DIR" ps || true
+compose_cmd ps || true
 
 echo
 echo "docker"

@@ -1,11 +1,11 @@
 # Pipeon Build And Refresh
 
-Use this when Pipeon is running against this repository and local code changes are not showing up.
+Use this when the local Pipeon dev stack is running against this repository and code changes are not showing up.
 
 ## Which binary does what
 
 - `make build` updates the local `dockpipe` launcher binary
-- `make maintainer-tools` updates `packages/dorkpipe/bin/dorkpipe` and `packages/dorkpipe-mcp/bin/mcpd`
+- `make maintainer-tools` updates `packages/dorkpipe/bin/dorkpipe` and `packages/dorkpipe/bin/mcpd`
 - `npm --prefix packages/pipeon/resolvers/pipeon/vscode-extension run build` updates the checked-in Pipeon extension output
 - `make build-pipeon-desktop` updates the Tauri desktop shell at `packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop`
 - `make build-code-server-image` rebuilds the branded Pipeon code-server image with fresh extension assets
@@ -20,13 +20,16 @@ make build
 
 Use this when you are testing a freshly built local `dockpipe` binary directly.
 
-### DorkPipe / MCP sidecars
+### DorkPipe / MCP control plane
 
 ```bash
 make maintainer-tools
 ```
 
-Use this when Pipeon Ask/edit behavior depends on `packages/dorkpipe/bin/dorkpipe` or `packages/dorkpipe-mcp/bin/mcpd`.
+Use this when the isolated DorkPipe control plane behavior depends on:
+
+- `packages/dorkpipe/bin/dorkpipe`
+- `packages/dorkpipe/bin/mcpd`
 
 ### Pipeon VS Code extension source
 
@@ -70,12 +73,12 @@ dockpipe --workflow pipeon-dev-stack --workdir . --
 
 ## Common gotcha
 
-If Ask mode in Pipeon still shows old behavior after `make build`, you probably rebuilt `dockpipe` but not `dorkpipe`.
+If Pipeon still shows old control-plane behavior after `make build`, you probably rebuilt `dockpipe` but not the DorkPipe/MCP binaries.
 
 Pipeon dev-stack uses:
 
 - `dockpipe`
 - `packages/dorkpipe/bin/dorkpipe`
-- `packages/dorkpipe-mcp/bin/mcpd`
+- `packages/dorkpipe/bin/mcpd`
 
-So Ask/edit/runtime changes in `packages/dorkpipe/lib/` need `make maintainer-tools`, not only `make build`.
+So DorkPipe request/apply/runtime changes in `packages/dorkpipe/lib/` need `make maintainer-tools`, not only `make build`.

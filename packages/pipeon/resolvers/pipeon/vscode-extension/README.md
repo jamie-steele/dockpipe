@@ -10,9 +10,11 @@ Install this into **stock VS Code** for development, or pack as **`.vsix`** and 
 - Explicit **`/edit ...`** requests still work as an override, but they are not the main UX
 - Safe local orchestration for obvious actions before the model call
 - Edit flows prepare and validate a patch first, then ask for confirmation before applying
-- Streaming status breadcrumbs before and during the Ollama request
+- Streaming status breadcrumbs before and during the DorkPipe request
 - Markdown-style assistant rendering for headings, lists, code fences, block quotes, and inline code
 - Workspace-aware prompts built from the current context bundle, active file, selection, and recent chat turns
+- Workspace file attachments routed through DorkPipe for read-only context enrichment
+- MCP-only request/apply flow through a local Pipeon MCP proxy; the extension refuses to execute DorkPipe locally and requires only **`MCP_HTTP_URL`**
 
 ## Commands
 
@@ -71,4 +73,10 @@ npm run typecheck
 
 ## Note
 
-This extension now carries a meaningful in-editor chat surface, but the long-term product boundary is still the same: Pipeon owns UX, DorkPipe should become the server-authoritative orchestration layer, and DockPipe remains the mutation boundary.
+This extension now carries a meaningful in-editor chat surface, but the long-term product boundary is still the same: Pipeon owns UX, DorkPipe is the server-authoritative orchestration layer, and DockPipe remains the mutation boundary.
+
+Attachment roadmap:
+
+- `File` upload is wired for local workspace files
+- `Image` upload is scaffolded but still TODO
+- `PDF` upload is scaffolded but still TODO

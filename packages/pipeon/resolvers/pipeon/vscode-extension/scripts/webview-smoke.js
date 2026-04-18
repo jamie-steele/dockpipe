@@ -177,10 +177,10 @@ getElement("pipeon-initial-state").textContent = JSON.stringify({
       }],
     },
   }],
-  reasoningTemplates: [{ id: "dockpipe.default", name: "DockPipe Default", locked: true, builtIn: true }],
-  activeTemplate: { id: "dockpipe.default", name: "DockPipe Default" },
+  reasoningTemplates: [{ id: "dockpipe.default", name: "DorkPipe Default", locked: true, builtIn: true }],
+  activeTemplate: { id: "dockpipe.default", name: "DorkPipe Default" },
   activeTemplateId: "dockpipe.default",
-  modelStore: { entries: [{ id: "ollama.default", label: "Ollama Default" }] },
+  modelStore: { entries: [{ id: "dorkpipe.default", label: "Default Local Model" }] },
 });
 new vm.Script(scriptText, { filename: "pipeon-webview-inline.js" }).runInContext(context);
 

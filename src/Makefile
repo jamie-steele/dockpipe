@@ -18,12 +18,12 @@ build:
 	@echo "Install into PATH:  make install   or   make dev-install"
 	@echo "Optional: make maintainer-tools (dorkpipe + mcpd under packages/)"
 
-# Maintainer: orchestrator + MCP (separate modules under packages/). Not required for dockpipe core.
+# Maintainer: orchestrator + DorkPipe-owned MCP control plane. Not required for dockpipe core.
 maintainer-tools:
-	@mkdir -p packages/dorkpipe/bin packages/dorkpipe-mcp/bin
+	@mkdir -p packages/dorkpipe/bin
 	go build -C packages/dorkpipe/lib -trimpath -ldflags "$(GO_LDFLAGS)" -o ../bin/dorkpipe ./cmd/dorkpipe
-	go build -C packages/dorkpipe-mcp -trimpath -ldflags "$(GO_LDFLAGS)" -o bin/mcpd ./cmd/mcpd
-	@echo "Built packages/dorkpipe/bin/dorkpipe and packages/dorkpipe-mcp/bin/mcpd"
+	go build -C packages/dorkpipe/mcp -trimpath -ldflags "$(GO_LDFLAGS)" -o ../bin/mcpd ./cmd/mcpd
+	@echo "Built packages/dorkpipe/bin/dorkpipe and packages/dorkpipe/bin/mcpd"
 
 build-windows:
 	cp VERSION src/cmd/VERSION
@@ -34,4 +34,4 @@ build-windows:
 test:
 	go test ./...
 	go test ./packages/dorkpipe/lib/...
-	go test ./packages/dorkpipe-mcp/...
+	go test ./packages/dorkpipe/mcp/...

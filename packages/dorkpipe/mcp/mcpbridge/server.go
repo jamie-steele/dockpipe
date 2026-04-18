@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -124,7 +125,7 @@ func (s *Server) handleInitialize(req *rpcRequest) *rpcResponse {
 	var r result
 	r.ProtocolVersion = ver
 	r.Capabilities.Tools = struct{}{}
-	r.ServerInfo.Name = "dorkpipe-mcp"
+	r.ServerInfo.Name = "dorkpipe"
 	r.ServerInfo.Version = s.Version
 	b, err := json.Marshal(r)
 	if err != nil {
@@ -361,6 +362,111 @@ func (s *Server) dispatchTool(ctx context.Context, name string, args json.RawMes
 		}
 		summary := fmt.Sprintf("exit_code=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
 		return []byte(summary), code != 0, nil
+
+	case "dorkpipe.request":
+		var in struct {
+			Workdir         string   `json:"workdir"`
+			Message         string   `json:"message"`
+			Mode            string   `json:"mode"`
+			ActiveFile      string   `json:"active_file"`
+			OpenFiles       []string `json:"open_files"`
+			SelectionText   string   `json:"selection_text"`
+			AttachmentFiles []string `json:"attachment_files"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, true, err
+		}
+		message := strings.TrimSpace(in.Message)
+		if message == "" {
+			return nil, true, fmt.Errorf("message required")
+		}
+		wd, err := resolveExecWorkdir(in.Workdir)
+		if err != nil {
+			return nil, true, err
+		}
+		activeFile, err := normalizeRepoHintPath(in.ActiveFile)
+		if err != nil {
+			return nil, true, err
+		}
+		openFiles, err := normalizeRepoHintPaths(in.OpenFiles)
+		if err != nil {
+			return nil, true, err
+		}
+		attachmentFiles, err := normalizeAttachmentPaths(in.AttachmentFiles)
+		if err != nil {
+			return nil, true, err
+		}
+		mode := strings.TrimSpace(in.Mode)
+		if mode == "" {
+			mode = "ask"
+		}
+		dargs := []string{"request", "--execute", "--workdir", wd, "--mode", mode, "--message", message}
+		if activeFile != "" {
+			dargs = append(dargs, "--active-file", activeFile)
+		}
+		for _, openFile := range openFiles {
+			dargs = append(dargs, "--open-file", openFile)
+		}
+		if selection := strings.TrimSpace(in.SelectionText); selection != "" {
+			dargs = append(dargs, "--selection-text", selection)
+		}
+		for _, attachment := range attachmentFiles {
+			dargs = append(dargs, "--attachment-file", attachment)
+		}
+		summary, err := runDorkpipeEventStream(ctx, dargs)
+		if err != nil {
+			return nil, true, err
+		}
+		out, err := json.MarshalIndent(summary, "", "  ")
+		if err != nil {
+			return nil, true, err
+		}
+		isError := summary.ExitCode != 0
+		if summary.FinalEvent != nil {
+			if eventType, _ := summary.FinalEvent["type"].(string); strings.TrimSpace(eventType) == "error" {
+				isError = true
+			}
+		}
+		return out, isError, nil
+
+	case "dorkpipe.apply_edit":
+		var in struct {
+			Workdir     string `json:"workdir"`
+			ArtifactDir string `json:"artifact_dir"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, true, err
+		}
+		artifactDir := strings.TrimSpace(in.ArtifactDir)
+		if artifactDir == "" {
+			return nil, true, fmt.Errorf("artifact_dir required")
+		}
+		wd, err := resolveExecWorkdir(in.Workdir)
+		if err != nil {
+			return nil, true, err
+		}
+		if !filepath.IsAbs(artifactDir) {
+			artifactDir = filepath.Join(wd, artifactDir)
+		}
+		artifactDir, err = resolveRepoBoundAbsolutePath(artifactDir)
+		if err != nil {
+			return nil, true, err
+		}
+		summary, err := runDorkpipeEventStream(ctx, []string{"apply-edit", "--workdir", wd, "--artifact-dir", artifactDir})
+		if err != nil {
+			return nil, true, err
+		}
+		out, err := json.MarshalIndent(summary, "", "  ")
+		if err != nil {
+			return nil, true, err
+		}
+		isError := summary.ExitCode != 0
+		if summary.FinalEvent != nil {
+			if eventType, _ := summary.FinalEvent["type"].(string); strings.TrimSpace(eventType) == "error" {
+				isError = true
+			}
+		}
+		return out, isError, nil
 
 	default:
 		return nil, true, fmt.Errorf("unknown tool %q", name)

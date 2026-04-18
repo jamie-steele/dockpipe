@@ -72,6 +72,7 @@ type editRequestRecord struct {
 	UserMessage     string   `json:"user_message"`
 	ActiveFile      string   `json:"active_file,omitempty"`
 	SelectionText   string   `json:"selection_text,omitempty"`
+	AttachmentFiles []string `json:"attachment_files,omitempty"`
 	Apply           bool     `json:"apply"`
 	CandidateFiles  []string `json:"candidate_files,omitempty"`
 	ContextPath     string   `json:"context_path,omitempty"`
@@ -138,6 +139,8 @@ func editCmd(argv []string) {
 	workdir := fs.String("workdir", "", "working directory (default cwd)")
 	message := fs.String("message", "", "edit request text")
 	activeFile := fs.String("active-file", "", "repo-relative active file hint")
+	var attachmentFiles stringListFlag
+	fs.Var(&attachmentFiles, "attachment-file", "workspace attachment path (repeatable)")
 	selectionText := fs.String("selection-text", "", "active selection hint")
 	apply := fs.Bool("apply", false, "apply the verified patch to the working tree")
 	model := fs.String("model", "", "Ollama model override")
@@ -196,7 +199,7 @@ func editCmd(argv []string) {
 	ctx := context.Background()
 	emitEditEvent(reqID, "received", "Received edit request", 0.05, nil)
 
-	artifact, patchPath, artifactsDir, err := prepareEditArtifact(ctx, reqID, absWd, strings.TrimSpace(*message), strings.TrimSpace(*activeFile), strings.TrimSpace(*selectionText), host, chosenModel, chosenNumCtx, artifactsDir)
+	artifact, patchPath, artifactsDir, err := prepareEditArtifact(ctx, reqID, absWd, strings.TrimSpace(*message), strings.TrimSpace(*activeFile), sanitizeAttachmentPaths(absWd, attachmentFiles), strings.TrimSpace(*selectionText), host, chosenModel, chosenNumCtx, artifactsDir)
 	if err != nil {
 		os.Exit(1)
 	}
@@ -254,7 +257,7 @@ func applyEditCmd(argv []string) {
 	}
 }
 
-func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, selectionText, host, chosenModel string, chosenNumCtx int, artifactsDir string) (*editModelArtifact, string, string, error) {
+func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile string, attachmentFiles []string, selectionText, host, chosenModel string, chosenNumCtx int, artifactsDir string) (*editModelArtifact, string, string, error) {
 	emitEditEvent(reqID, "decomposing", "Breaking the request into primitives", 0.08, nil)
 	if artifact, patchPath, ok, err := tryDeterministicEditPrimitive(reqID, root, message, activeFile, artifactsDir); ok {
 		return artifact, patchPath, artifactsDir, err
@@ -286,6 +289,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		WorkspaceRoot:   root,
 		UserMessage:     message,
 		ActiveFile:      effectiveActiveFile,
+		AttachmentFiles: sanitizeAttachmentPaths(root, attachmentFiles),
 		SelectionText:   clampString(selectionText, maxEditSelectionChars),
 		Apply:           false,
 		CandidateFiles:  candidates,
@@ -363,6 +367,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile, 
 		WorkspaceRoot:   root,
 		UserMessage:     message,
 		ActiveFile:      effectiveActiveFile,
+		AttachmentFiles: sanitizeAttachmentPaths(root, attachmentFiles),
 		SelectionText:   clampString(selectionText, maxEditSelectionChars),
 		Apply:           false,
 		CandidateFiles:  rankedCandidates,
@@ -1429,6 +1434,7 @@ func buildEditPrompt(req editRequestRecord, plan *editPlan, contextText, snippet
 	}
 	contextText = clampString(emptyFallback(contextText, "(no context bundle available)"), contextBudget)
 	mcpText := clampString(emptyFallback(req.MCPSummary, "(no MCP discovery available)"), 1400)
+	attachmentText := clampString(emptyFallback(summarizeAttachmentInputs(req.WorkspaceRoot, req.AttachmentFiles, 4, 1000), "(no file attachments)"), 1400)
 	prompt := strings.TrimSpace(fmt.Sprintf(`
 You are DorkPipe preparing a bounded edit artifact for a local repository.
 
@@ -1477,6 +1483,9 @@ Active file:
 Selection:
 %s
 
+Attached files:
+%s
+
 Context bundle:
 %s
 
@@ -1493,6 +1502,7 @@ Candidate file snippets:
 		planText,
 		emptyFallback(req.ActiveFile, "(none)"),
 		emptyFallback(req.SelectionText, "(none)"),
+		attachmentText,
 		contextText,
 		mcpText,
 		retrievalText,
@@ -1507,6 +1517,7 @@ func buildHelperSidecarPrompt(req editRequestRecord, plan *editPlan, snippets, r
 	planText := clampString(emptyFallback(formatEditPlan(plan), "(no explicit plan)"), maxEditPlanChars)
 	retrievalText := clampString(emptyFallback(retrievalBundle, "(no retrieval bundle available)"), maxEditRetrievalChars)
 	snippetText := clampString(emptyFallback(snippets, "(no candidate file snippets available)"), maxEditPromptChars/4)
+	attachmentText := clampString(emptyFallback(summarizeAttachmentInputs(req.WorkspaceRoot, req.AttachmentFiles, 4, 900), "(no file attachments)"), 1200)
 	return strings.TrimSpace(fmt.Sprintf(`
 You are DorkPipe generating a bounded helper script for a local repository edit.
 
@@ -1548,7 +1559,10 @@ Candidate file snippets:
 
 MCP discovery context:
 %s
-`, req.UserMessage, planText, emptyFallback(req.ActiveFile, "(none)"), emptyFallback(req.SelectionText, "(none)"), retrievalText, snippetText, emptyFallback(req.MCPSummary, "(no MCP discovery available)")))
+Attached files:
+%s
+
+`, req.UserMessage, planText, emptyFallback(req.ActiveFile, "(none)"), emptyFallback(req.SelectionText, "(none)"), retrievalText, snippetText, emptyFallback(req.MCPSummary, "(no MCP discovery available)"), attachmentText))
 }
 
 func runEditModel(ctx context.Context, host, model string, numCtx int, prompt string) (string, error) {

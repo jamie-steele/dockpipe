@@ -7,13 +7,11 @@ import type { ExtensionContext, LogOutputChannel, Webview, WebviewPanel, Webview
 const vscode = require("vscode");
 const fs = require("fs/promises");
 const path = require("path");
-const http = require("http");
-const https = require("https");
 const cp = require("child_process");
 const os = require("os");
 
-const DEFAULT_OLLAMA_HOST = "http://127.0.0.1:11434";
 const DEFAULT_MODEL = "llama3.2";
+const DEFAULT_MODEL_PROVIDER = "dorkpipe-mcp";
 const CHAT_VIEW_ID = "pipeon.chatView";
 const WELCOME_PANEL_ID = "pipeon.welcome";
 const PANEL_BOTTOM_MIGRATION_KEY = "pipeon.panelBottomMigrated.v1";
@@ -71,10 +69,20 @@ type ExecuteNaturalLanguageRequestOptions = {
   mode?: string;
   modelProfile?: unknown;
   reasoningTemplate?: AnyRecord | null;
+  attachments?: AttachmentRecord[];
   onEvent?: (message: string) => void;
   onEventDetail?: (event: DorkpipeRequestEvent) => void;
   onToken?: (token: string, fullText: string) => void;
   channel?: RequestChannel | null;
+};
+
+type AttachmentRecord = {
+  id: string;
+  name: string;
+  absolutePath: string;
+  relativePath: string;
+  kind: "file" | "image" | "pdf";
+  status: "ready" | "todo";
 };
 
 type ApplyPreparedEditOptions = {
@@ -99,21 +107,21 @@ function deepClone(value) {
 function createDefaultModelEntries() {
   return [
     {
-      id: "ollama.default",
-      label: "Ollama Default",
-      provider: "ollama",
+      id: "dorkpipe.default",
+      label: "Default Local Model",
+      provider: DEFAULT_MODEL_PROVIDER,
       model: DEFAULT_MODEL,
       builtIn: true,
       locked: true,
       installState: "available",
       capabilities: ["chat", "edit", "reasoning"],
       contextWindow: 8192,
-      notes: "Safe local default used by the built-in DockPipe template.",
+      notes: "Safe local default surfaced through the DorkPipe MCP control plane.",
     },
     {
-      id: "ollama.qwen2.5-coder",
+      id: "dorkpipe.qwen2.5-coder",
       label: "Qwen 2.5 Coder",
-      provider: "ollama",
+      provider: DEFAULT_MODEL_PROVIDER,
       model: "qwen2.5-coder:14b",
       builtIn: true,
       locked: true,
@@ -123,9 +131,9 @@ function createDefaultModelEntries() {
       notes: "Good fit for code-focused model nodes in custom reasoning templates.",
     },
     {
-      id: "ollama.deepseek-r1",
+      id: "dorkpipe.deepseek-r1",
       label: "DeepSeek R1",
-      provider: "ollama",
+      provider: DEFAULT_MODEL_PROVIDER,
       model: "deepseek-r1:14b",
       builtIn: true,
       locked: true,
@@ -139,13 +147,13 @@ function createDefaultModelEntries() {
 
 function firstModelEntryId(modelStore) {
   const entries = Array.isArray(modelStore?.entries) ? modelStore.entries : [];
-  return entries[0]?.id || "ollama.default";
+  return entries[0]?.id || "dorkpipe.default";
 }
 
 function defaultGlobalModifiers() {
   return {
-    safetyRules: "Prefer deterministic DockPipe paths before model handoff. Fall back safely when validation fails.",
-    outputRequirements: "Return inspectable artifacts and preserve current DockPipe artifact validation guarantees.",
+    safetyRules: "Prefer deterministic DorkPipe paths before model handoff. Fall back safely when validation fails.",
+    outputRequirements: "Return inspectable artifacts and preserve current DorkPipe artifact validation guarantees.",
     confidenceThreshold: 0.72,
     executionConstraints: "Keep loops bounded and avoid unvalidated side effects.",
     routingPreference: "local-first",
@@ -155,7 +163,7 @@ function defaultGlobalModifiers() {
 function defaultTemplateGuidance() {
   return {
     orchestration: "Route obvious work locally, use models when interpretation is needed, and keep validation first-class.",
-    model: "When a model node is used, return structured, parseable output that DockPipe can validate or normalize.",
+    model: "When a model node is used, return structured, parseable output that DorkPipe can validate or normalize.",
   };
 }
 
@@ -164,8 +172,8 @@ function createDefaultReasoningTemplate(modelStore) {
   return {
     id: BUILTIN_TEMPLATE_ID,
     schema: REASONING_TEMPLATE_SCHEMA,
-    name: "DockPipe Default",
-    description: "Locked baseline template that mirrors the current DockPipe local-first orchestration flow.",
+    name: "DorkPipe Default",
+    description: "Locked baseline template that mirrors the current DorkPipe local-first orchestration flow.",
     builtIn: true,
     locked: true,
     createdAt: nowIso(),
@@ -176,7 +184,7 @@ function createDefaultReasoningTemplate(modelStore) {
       {
         id: "dockpipe-intake",
         type: "dockpipe",
-        label: "DockPipe Intake",
+        label: "DorkPipe Intake",
         notes: "Performs routing, deterministic primitives, MCP retrieval, and artifact validation.",
         decision: "Prefer local deterministic paths when confidence is high and scope is explicit.",
         guidance: {
@@ -193,11 +201,11 @@ function createDefaultReasoningTemplate(modelStore) {
         id: "model-primary",
         type: "model",
         label: "Primary Model",
-        notes: "Handles reasoning or patch generation when DockPipe primitives alone are insufficient.",
-        decision: "Only run after DockPipe has assembled the necessary workspace context and routing metadata.",
+        notes: "Handles reasoning or patch generation when DorkPipe primitives alone are insufficient.",
+        decision: "Only run after DorkPipe has assembled the necessary workspace context and routing metadata.",
         guidance: {
           orchestration: "",
-          model: "Return structured, reliable artifacts suitable for DockPipe validation.",
+          model: "Return structured, reliable artifacts suitable for DorkPipe validation.",
         },
         config: {
           modelId: defaultModelId,
@@ -223,7 +231,7 @@ function createDefaultReasoningTemplate(modelStore) {
           {
             id: "dockpipe-validate",
             type: "dockpipe",
-            label: "DockPipe Validate",
+            label: "DorkPipe Validate",
             notes: "Re-check the artifact, normalize it, and decide if repair is still needed.",
             decision: "Only continue the loop when the artifact is still invalid.",
             guidance: {
@@ -241,7 +249,7 @@ function createDefaultReasoningTemplate(modelStore) {
             type: "model",
             label: "Model Repair",
             notes: "Attempts a bounded repair when validation still fails.",
-            decision: "Repair only the artifact issues surfaced by DockPipe diagnostics.",
+            decision: "Repair only the artifact issues surfaced by DorkPipe diagnostics.",
             guidance: {
               orchestration: "",
               model: "Return corrected structured output only.",
@@ -275,7 +283,7 @@ function createBlankReasoningTemplate(modelStore, name = "Custom Template") {
       {
         id: makeId("node"),
         type: "dockpipe",
-        label: "DockPipe Step",
+        label: "DorkPipe Step",
         notes: "Starting point for a custom template.",
         decision: "",
         guidance: { orchestration: "", model: "" },
@@ -445,6 +453,46 @@ function relativeToRoot(root, target) {
   return rel;
 }
 
+function classifyAttachmentKind(targetPath) {
+  const ext = path.extname(String(targetPath || "")).toLowerCase();
+  if (ext === ".pdf") {
+    return "pdf";
+  }
+  if ([".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"].includes(ext)) {
+    return "image";
+  }
+  return "file";
+}
+
+function normalizeAttachmentRecords(root, entries) {
+  if (!root) {
+    return [];
+  }
+  const seen = new Set();
+  const normalized = [];
+  for (const raw of Array.isArray(entries) ? entries : []) {
+    const absolutePath = String(raw?.absolutePath || raw?.path || "").trim();
+    if (!absolutePath || seen.has(absolutePath)) {
+      continue;
+    }
+    const rel = relativeToRoot(root, absolutePath);
+    if (!rel || rel === absolutePath || rel.startsWith("..")) {
+      continue;
+    }
+    seen.add(absolutePath);
+    const kind = raw?.kind === "image" || raw?.kind === "pdf" ? raw.kind : classifyAttachmentKind(absolutePath);
+    normalized.push({
+      id: String(raw?.id || makeId("attachment")),
+      name: String(raw?.name || path.basename(absolutePath) || absolutePath),
+      absolutePath,
+      relativePath: rel,
+      kind,
+      status: kind === "file" ? "ready" : "todo",
+    });
+  }
+  return normalized.slice(0, 8);
+}
+
 function summarizeSessionTitle(text) {
   const oneLine = String(text || "")
     .replace(/\s+/g, " ")
@@ -494,7 +542,7 @@ function normalizeModelProfile(value) {
 function normalizeModelEntry(entry) {
   const id = String(entry?.id || makeId("model")).trim() || makeId("model");
   const label = String(entry?.label || id).trim() || id;
-  const provider = String(entry?.provider || "ollama").trim() || "ollama";
+  const provider = DEFAULT_MODEL_PROVIDER;
   const model = String(entry?.model || DEFAULT_MODEL).trim() || DEFAULT_MODEL;
   const capabilities = Array.isArray(entry?.capabilities)
     ? [...new Set(entry.capabilities.map((item) => String(item || "").trim()).filter(Boolean))].slice(0, 8)
@@ -588,7 +636,7 @@ function makeDefaultNodeForType(type, modelStore) {
   return {
     id: makeId("node"),
     type: "dockpipe",
-    label: "DockPipe Step",
+    label: "DorkPipe Step",
     notes: "",
     decision: "",
     guidance: { orchestration: "", model: "" },
@@ -1023,8 +1071,8 @@ function describeRequestEvent(label, metadata: AnyRecord = {}) {
 
 function buildRequestErrorStatus(message) {
   const lower = String(message || "").toLowerCase();
-  if (lower.includes("ollama")) {
-    return "Error talking to Ollama";
+  if (lower.includes("model") || lower.includes("mcp")) {
+    return "DorkPipe control-plane request failed";
   }
   if (lower.includes("patch") || lower.includes("edit")) {
     return "Edit request failed";
@@ -1229,10 +1277,6 @@ async function writeTaskFile(root, kind, prompt) {
   ].join("\n");
   await fs.writeFile(file, body, "utf8");
   return file;
-}
-
-function buildOllamaUrl(host) {
-  return new URL("/api/chat", host.endsWith("/") ? host : `${host}/`);
 }
 
 function escapeHtml(text) {
@@ -1453,140 +1497,6 @@ function buildSystemPrompt(signals) {
   ].join("\n\n");
 }
 
-function buildConversationMessages(session, signals) {
-  const system = { role: "system", content: buildSystemPrompt(signals) };
-  const history = session.messages
-    .filter((message) => (message.role === "user" || message.role === "assistant") && String(message.text || "").trim())
-    .slice(-MAX_HISTORY_MESSAGES)
-    .map((message) => ({
-      role: message.role,
-      content: clampText(message.text, 6000),
-    }));
-  return [system, ...history];
-}
-
-function ollamaChat({ host, model, messages, numCtx }): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let url;
-    try {
-      url = buildOllamaUrl(host);
-    } catch {
-      reject(new Error(`Invalid OLLAMA_HOST: ${host}`));
-      return;
-    }
-    const payload = JSON.stringify({
-      model,
-      stream: false,
-      messages,
-      options: numCtx ? { num_ctx: numCtx } : undefined,
-    });
-    const transport = url.protocol === "https:" ? https : http;
-    const req = transport.request(
-      url,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(payload),
-        },
-      },
-      (res) => {
-        let body = "";
-        res.setEncoding("utf8");
-        res.on("data", (chunk) => {
-          body += chunk;
-        });
-        res.on("end", () => {
-          if (res.statusCode && res.statusCode >= 400) {
-            reject(new Error(`Ollama returned HTTP ${res.statusCode}: ${body}`));
-            return;
-          }
-          try {
-            const parsed = JSON.parse(body);
-            resolve(parsed.message?.content || parsed.response || "");
-          } catch {
-            reject(new Error(`Could not parse Ollama response: ${body}`));
-          }
-        });
-      }
-    );
-    req.on("error", (err) => reject(err));
-    req.write(payload);
-    req.end();
-  });
-}
-
-function ollamaChatStream({ host, model, messages, onToken, numCtx }): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let url;
-    try {
-      url = buildOllamaUrl(host);
-    } catch {
-      reject(new Error(`Invalid OLLAMA_HOST: ${host}`));
-      return;
-    }
-    const payload = JSON.stringify({
-      model,
-      stream: true,
-      messages,
-      options: numCtx ? { num_ctx: numCtx } : undefined,
-    });
-    const transport = url.protocol === "https:" ? https : http;
-    let buffer = "";
-    let fullText = "";
-    const req = transport.request(
-      url,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Content-Length": Buffer.byteLength(payload),
-        },
-      },
-      (res) => {
-        if (res.statusCode && res.statusCode >= 400) {
-          let body = "";
-          res.setEncoding("utf8");
-          res.on("data", (chunk) => {
-            body += chunk;
-          });
-          res.on("end", () => reject(new Error(`Ollama returned HTTP ${res.statusCode}: ${body}`)));
-          return;
-        }
-
-        res.setEncoding("utf8");
-        res.on("data", (chunk) => {
-          buffer += chunk;
-          const lines = buffer.split("\n");
-          buffer = lines.pop() || "";
-          for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed) continue;
-            try {
-              const parsed = JSON.parse(trimmed);
-              const piece = parsed.message?.content || parsed.response || "";
-              if (piece) {
-                fullText += piece;
-                onToken(piece, fullText);
-              }
-              if (parsed.done) {
-                resolve(fullText);
-                return;
-              }
-            } catch {
-              // ignore partial lines
-            }
-          }
-        });
-        res.on("end", () => resolve(fullText));
-      }
-    );
-    req.on("error", (err) => reject(err));
-    req.write(payload);
-    req.end();
-  });
-}
-
 function runCommand(command, cwd, extraEnv: NodeJS.ProcessEnv = {}): Promise<RunCommandResult> {
   return new Promise((resolve) => {
     cp.exec(command, { cwd, env: { ...process.env, ...extraEnv }, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
@@ -1598,13 +1508,6 @@ function runCommand(command, cwd, extraEnv: NodeJS.ProcessEnv = {}): Promise<Run
       });
     });
   });
-}
-
-function fileExists(target) {
-  return fs
-    .stat(target)
-    .then(() => true)
-    .catch(() => false);
 }
 
 function spawnStreamingCommand(command, args, options: StreamingCommandOptions = {}): Promise<StreamingCommandResult> {
@@ -1663,34 +1566,6 @@ function spawnStreamingCommand(command, args, options: StreamingCommandOptions =
   });
 }
 
-async function resolveDorkpipeInvocation(root) {
-  const binaries = [
-    path.join(root, "src", "bin", "dorkpipe"),
-    path.join(root, "packages", "dorkpipe", "bin", "dorkpipe"),
-  ];
-  for (const binary of binaries) {
-    if (!(await fileExists(binary))) {
-      continue;
-    }
-    const probe = await runCommand(`${shellQuote(binary)} --help`, root);
-    const helpText = `${probe.stdout}\n${probe.stderr}`;
-    if (probe.ok && /\brequest\b/.test(helpText) && /\bapply-edit\b/.test(helpText)) {
-      return {
-        command: binary,
-        argsPrefix: [],
-        cwd: root,
-        mode: "binary",
-      };
-    }
-  }
-  return {
-    command: "go",
-    argsPrefix: ["run", "./cmd/dorkpipe"],
-    cwd: path.join(root, "packages", "dorkpipe", "lib"),
-    mode: "go-run",
-  };
-}
-
 function resolveDockpipeCommand() {
   return (process.env.DOCKPIPE_BIN || "").trim() || "dockpipe";
 }
@@ -1699,102 +1574,108 @@ function resolvePipeonCommand() {
   return (process.env.PIPEON_BIN || "").trim() || "pipeon";
 }
 
+async function resolveMcpHttpConfig() {
+  const url = String(process.env.MCP_HTTP_URL || "").trim();
+  if (!url) {
+    return null;
+  }
+  return {
+    url: url.replace(/\/+$/, ""),
+  };
+}
+
+async function requireMcpHttpConfig() {
+  const config = await resolveMcpHttpConfig();
+  if (!config) {
+    throw new Error("DorkPipe MCP is required. Configure MCP_HTTP_URL for this editor session.");
+  }
+  return config;
+}
+
+async function callMcp(method, params) {
+  const config = await requireMcpHttpConfig();
+  const response = await fetch(`${config.url}/mcp`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: Date.now(),
+      method,
+      params,
+    }),
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`MCP HTTP ${response.status}: ${text.trim() || "request failed"}`);
+  }
+  const payload = JSON.parse(text || "{}");
+  if (payload?.error) {
+    throw new Error(`MCP RPC ${payload.error.code}: ${payload.error.message || "request failed"}`);
+  }
+  return payload?.result || null;
+}
+
+function flattenMcpTextContent(items) {
+  return (Array.isArray(items) ? items : [])
+    .filter((item) => String(item?.type || "").toLowerCase() === "text" && String(item?.text || "").trim())
+    .map((item) => String(item.text).trim())
+    .join("\n");
+}
+
+async function callMcpTool(toolName, args) {
+  const result = await callMcp("tools/call", {
+    name: toolName,
+    arguments: args,
+  });
+  if (!result) {
+    return null;
+  }
+  const raw = flattenMcpTextContent(result.content);
+  return raw ? JSON.parse(raw) : null;
+}
+
 async function executeNaturalLanguageRequest(root, text, signals, options: ExecuteNaturalLanguageRequestOptions = {}): Promise<any> {
-  const invocation = await resolveDorkpipeInvocation(root);
   const requestMode = ["ask", "agent", "plan"].includes(String(options.mode || "").toLowerCase())
     ? String(options.mode).toLowerCase()
     : "ask";
   const modelProfile = normalizeModelProfile(options.modelProfile);
-  const numCtx = resolveNumCtxForProfile(modelProfile);
-  const args = [
-    ...invocation.argsPrefix,
-    "request",
-    "--execute",
-    "--workdir",
-    root,
-    "--mode",
-    requestMode,
-    "--message",
-    text,
-    "--num-ctx",
-    String(numCtx),
-  ];
-  if (signals.activeFile) {
-    args.push("--active-file", signals.activeFile);
-  }
-  for (const openFile of signals.openFiles || []) {
-    args.push("--open-file", openFile);
-  }
-  if (signals.selectionText) {
-    args.push("--selection-text", signals.selectionText);
-  }
-
-  /** @type {any} */
-  let finalEvent = null;
-  /** @type {Record<string, any> | null} */
-  let readyToApply = null;
-  const stderrLines = [];
-  let streamedText = "";
-  const result = await spawnStreamingCommand(invocation.command, args, {
-    cwd: invocation.cwd,
-    env: {
-      DOCKPIPE_WORKDIR: root,
-    },
-    onStdoutLine: (line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      try {
-        const event = JSON.parse(trimmed);
-        if (options.onEventDetail) {
-          options.onEventDetail(event);
-        } else if (event.display_text && options.onEvent) {
-          options.onEvent(event.display_text);
-        }
-        if (event.type === "model_stream") {
-          const piece = event.metadata?.text || "";
-          if (piece) {
-            streamedText += piece;
-            options.onToken?.(piece, streamedText);
-          }
-        }
-        if (event.type === "ready_to_apply") {
-          readyToApply = event.metadata || {};
-        }
-        if (event.type === "done" || event.type === "error") {
-          finalEvent = event;
-        }
-      } catch {
-        if (options.onEvent) {
-          options.onEvent(trimmed);
-        }
-      }
-    },
-    onStderrLine: (line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      stderrLines.push(trimmed);
-    },
+  const payload = await callMcpTool("dorkpipe.request", {
+    workdir: root,
+    message: text,
+    mode: requestMode,
+    active_file: signals.activeFile || "",
+    open_files: Array.isArray(signals.openFiles) ? signals.openFiles : [],
+    selection_text: signals.selectionText || "",
+    attachment_files: normalizeAttachmentRecords(root, options.attachments || [])
+      .filter((item) => item.status === "ready")
+      .map((item) => item.absolutePath),
   });
-
-  if (stderrLines.length) {
-    options.channel?.appendLine(stderrLines.join("\n"));
+  if (Array.isArray(payload?.events)) {
+    for (const entry of payload.events) {
+      if (String(entry || "").trim() && options.onEvent) {
+        options.onEvent(String(entry).trim());
+      }
+    }
   }
+  if (Array.isArray(payload?.stderr) && payload.stderr.length) {
+    options.channel?.appendLine(payload.stderr.join("\n"));
+  }
+  const finalEvent = payload?.final_event || null;
   if (finalEvent?.type === "error") {
-    throw new Error(finalEvent.error?.user_message || "DorkPipe request failed.");
-  }
-  if (result.code !== 0) {
-    throw new Error(stderrLines.join("\n") || "DorkPipe request failed.");
+    throw new Error(finalEvent?.error?.user_message || "DorkPipe MCP request failed.");
   }
   if (!finalEvent) {
-    throw new Error("DorkPipe request did not return a final event.");
+    throw new Error("DorkPipe MCP request did not return a final event.");
   }
   return {
     kind: finalEvent.metadata?.route || "chat",
-    text: finalEvent.user_message || streamedText || "(No response text returned.)",
+    text: finalEvent.user_message || payload?.streamed_text || "(No response text returned.)",
     format: "markdown",
-    readyToApply,
+    readyToApply: payload?.ready_to_apply || null,
     metadata: finalEvent.metadata || {},
-    status: buildDorkpipeStatus({ ...(finalEvent.metadata || {}), model_profile: modelProfile, num_ctx: numCtx }, requestMode),
+    status: buildDorkpipeStatus({ ...(finalEvent.metadata || {}), model_profile: modelProfile }, requestMode),
   };
 }
 
@@ -1813,7 +1694,7 @@ function buildDorkpipeStatus(metadata, fallbackMode = "ask") {
       `Mode: ${String(mode).replace(/^./, (c) => c.toUpperCase())}`,
       `Model: ${metadata.model || process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}`,
       `Profile: ${profile}`,
-      `Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}`,
+      "Control: DorkPipe MCP",
     ];
     if (metadata.num_ctx) {
       parts.push(`Context: ${metadata.num_ctx}`);
@@ -1886,54 +1767,26 @@ function buildDorkpipeStatus(metadata, fallbackMode = "ask") {
 }
 
 async function applyPreparedEdit(root, artifactDir, options: ApplyPreparedEditOptions = {}) {
-  const invocation = await resolveDorkpipeInvocation(root);
-  const args = [
-    ...invocation.argsPrefix,
-    "apply-edit",
-    "--workdir",
-    root,
-    "--artifact-dir",
-    artifactDir,
-  ];
-  /** @type {any} */
-  let finalEvent = null;
-  const stderrLines = [];
-  const result = await spawnStreamingCommand(invocation.command, args, {
-    cwd: invocation.cwd,
-    env: {
-      DOCKPIPE_WORKDIR: root,
-    },
-    onStdoutLine: (line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      try {
-        const event = JSON.parse(trimmed);
-        if (event.display_text && options.onEvent) {
-          options.onEvent(event.display_text);
-        }
-        if (event.type === "done" || event.type === "error") {
-          finalEvent = event;
-        }
-      } catch {
-        if (options.onEvent) {
-          options.onEvent(trimmed);
-        }
-      }
-    },
-    onStderrLine: (line) => {
-      const trimmed = line.trim();
-      if (!trimmed) return;
-      stderrLines.push(trimmed);
-    },
+  const payload = await callMcpTool("dorkpipe.apply_edit", {
+    workdir: root,
+    artifact_dir: artifactDir,
   });
-  if (stderrLines.length) {
-    options.channel?.appendLine(stderrLines.join("\n"));
+  if (Array.isArray(payload?.events)) {
+    for (const entry of payload.events) {
+      if (String(entry || "").trim() && options.onEvent) {
+        options.onEvent(String(entry).trim());
+      }
+    }
   }
+  if (Array.isArray(payload?.stderr) && payload.stderr.length) {
+    options.channel?.appendLine(payload.stderr.join("\n"));
+  }
+  const finalEvent = payload?.final_event || null;
   if (finalEvent?.type === "error") {
-    throw new Error(finalEvent.error?.user_message || "Apply edit failed.");
+    throw new Error(finalEvent?.error?.user_message || "Apply edit failed.");
   }
-  if (result.code !== 0) {
-    throw new Error(stderrLines.join("\n") || "Apply edit failed.");
+  if (!finalEvent) {
+    throw new Error("DorkPipe MCP apply-edit did not return a final event.");
   }
   return {
     kind: "edit",
@@ -2328,13 +2181,10 @@ async function handleLocalCommand(root, rawText) {
 }
 
 async function executeDorkpipeRequest(root, session, text, options: ExecuteNaturalLanguageRequestOptions = {}): Promise<any> {
-  const onToken = typeof options.onToken === "function" ? options.onToken : null;
   const onEvent = typeof options.onEvent === "function" ? options.onEvent : null;
   const mode = ["ask", "agent", "plan"].includes(String(options.mode || "").toLowerCase())
     ? String(options.mode).toLowerCase()
     : "ask";
-  const modelProfile = normalizeModelProfile(options.modelProfile);
-  const numCtx = resolveNumCtxForProfile(modelProfile);
   const reasoningTemplate = options.reasoningTemplate && typeof options.reasoningTemplate === "object"
     ? options.reasoningTemplate
     : null;
@@ -2355,9 +2205,10 @@ async function executeDorkpipeRequest(root, session, text, options: ExecuteNatur
     return executeNaturalLanguageRequest(root, text, signals, {
       onEvent,
       channel: options.channel,
-      onToken,
+      onToken: options.onToken,
       mode,
-      modelProfile,
+      modelProfile: options.modelProfile,
+      attachments: options.attachments,
       reasoningTemplate,
     });
   }
@@ -2373,44 +2224,15 @@ async function executeDorkpipeRequest(root, session, text, options: ExecuteNatur
       contextPath: null,
     };
   }
-
-  emitEvent("Inspecting workspace context");
-  if (signals.activeFile) {
-    emitEvent(`Active file: ${signals.activeFile}`);
-  }
-
-  emitEvent("Routing to model");
-  const host = process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST;
-  const model = process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL;
-  const messages = buildConversationMessages(session, signals);
-
-  let answer = "";
-  if (onToken) {
-    emitEvent(`Streaming from ${model}`);
-    answer = await ollamaChatStream({
-      host,
-      model,
-      messages,
-      onToken,
-      numCtx,
-    });
-  } else {
-    emitEvent(`Waiting for ${model}`);
-    answer = await ollamaChat({
-      host,
-      model,
-      messages,
-      numCtx,
-    });
-  }
-
-  return {
-    kind: "model",
-    text: answer || "(No response text returned.)",
-    format: "markdown",
-    contextPath: null,
-    status: `Template: ${reasoningTemplate?.name || "DockPipe Default"}  |  Model: ${process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL}  |  Profile: ${modelProfileLabel(modelProfile)}  |  num_ctx: ${numCtx}  |  Ollama: ${process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST}  |  Workspace cues: ${signals.activeFile || "repo-wide"}`,
-  };
+  return executeNaturalLanguageRequest(root, text, signals, {
+    onEvent,
+    channel: options.channel,
+    onToken: options.onToken,
+    mode,
+    modelProfile: options.modelProfile,
+    attachments: options.attachments,
+    reasoningTemplate,
+  });
 }
 
 function getWebviewAssetUri(webview, extensionUri, ...segments) {
@@ -2451,7 +2273,7 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
           <div class="headerSpacer"></div>
           <div class="headerActions">
             <select id="sessionSelect" class="headerSelect" aria-label="Chat session"></select>
-            <button class="btn ghost iconBtn" id="settingsBtn" type="button" title="Reasoning templates and models">⚙</button>
+            <button class="btn ghost iconBtn" id="settingsBtn" type="button" title="Designer settings and models">⚙</button>
             <button class="btn ghost iconBtn" id="clearBtn" type="button" title="Clear chat">↺</button>
             <button class="btn ghost iconBtn" id="newChatBtn" type="button" title="New chat">✎</button>
           </div>
@@ -2463,9 +2285,9 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
       <section class="studioSurface hidden" id="studioSurface" aria-hidden="true">
         <div class="studioHeader">
           <div>
-            <div class="settingsEyebrow">DockPipe Studio</div>
+            <div class="settingsEyebrow">DorkPipe Studio</div>
             <h2 id="studioTitle">Template Designer</h2>
-            <div class="canvasHint" id="studioMeta">Inspect and shape the active DockPipe reasoning surface.</div>
+            <div class="canvasHint" id="studioMeta">Inspect and shape the active DorkPipe reasoning surface.</div>
           </div>
           <div class="toolbarRow">
             <button class="btn ghost" id="studioBackBtn" type="button">Back to chat</button>
@@ -2475,14 +2297,14 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
           <section class="settingsSection hidden" id="settingsStudio">
             <div class="sectionHead">
               <div>
-                <h3>Workspace Settings</h3>
-                <p>Review the active reasoning surface here, then jump into the dedicated template or model editors.</p>
+                <h3>Designer Settings</h3>
+                <p>Review the active reasoning surface here, then jump into the dedicated template or model browser views.</p>
               </div>
             </div>
             <div class="settingsSummaryGrid">
               <article class="summaryCard">
                 <div class="summaryLabel">Active template</div>
-                <div class="summaryValue" id="activeTemplateSummary">DockPipe Default</div>
+                <div class="summaryValue" id="activeTemplateSummary">DorkPipe Default</div>
               </article>
               <article class="summaryCard">
                 <div class="summaryLabel">Templates</div>
@@ -2511,12 +2333,12 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
               <div class="sectionHead">
                 <div>
                   <h3>Models</h3>
-                  <p>Open the full model manager in the main area when you need to register, review, or delete entries.</p>
+                  <p>Open the DorkPipe model browser when you need to register, review, or remove entries.</p>
                 </div>
               </div>
               <div class="modelStoreSummary" id="modelStoreSummary"></div>
               <div class="toolbarRow">
-                <button class="btn" id="openModelManagerBtn" type="button">Open model manager</button>
+                <button class="btn" id="openModelManagerBtn" type="button">Open model browser</button>
               </div>
             </div>
           </section>
@@ -2535,7 +2357,7 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
             <div class="designerLayout">
               <div class="designerPalette">
                 <div class="paletteLabel">Primitives</div>
-                <button class="primitiveTile" type="button" draggable="true" data-primitive-type="dockpipe">DockPipe</button>
+                <button class="primitiveTile" type="button" draggable="true" data-primitive-type="dockpipe">DorkPipe</button>
                 <button class="primitiveTile" type="button" draggable="true" data-primitive-type="model">Model</button>
                 <button class="primitiveTile" type="button" draggable="true" data-primitive-type="loop">Loop Control</button>
               </div>
@@ -2645,8 +2467,8 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
           <section class="settingsSection hidden" id="modelStudio">
             <div class="sectionHead">
               <div>
-                <h3>Model Store</h3>
-                <p>Reasoning templates reference registered models from this local store rather than raw strings.</p>
+                <h3>DorkPipe Model Browser</h3>
+                <p>Reasoning templates reference models from the DorkPipe registry instead of direct provider strings.</p>
               </div>
             </div>
             <div class="modelStoreSummary" id="modelStoreSummaryStudio"></div>
@@ -2656,7 +2478,6 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
               <div class="formGrid">
                 <label class="field"><span>Model id</span><input id="modelEntryIdInput" type="text" /></label>
                 <label class="field"><span>Label</span><input id="modelEntryLabelInput" type="text" /></label>
-                <label class="field"><span>Provider</span><input id="modelEntryProviderInput" type="text" value="ollama" /></label>
                 <label class="field"><span>Model name</span><input id="modelEntryModelInput" type="text" /></label>
                 <label class="field"><span>Capabilities</span><input id="modelEntryCapabilitiesInput" type="text" placeholder="chat, edit, reasoning" /></label>
                 <label class="field"><span>Context window</span><input id="modelEntryContextWindowInput" type="number" min="1024" step="1024" value="8192" /></label>
@@ -2687,6 +2508,7 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
           <div class="actions">
             <div class="controlsMeta">
               <div class="toolRow">
+                <button class="btn ghost compact" id="attachFilesBtn" type="button">Attach files</button>
                 <label class="toggleWrap"><input id="autoApplyEdits" type="checkbox" /> Auto</label>
                 <select id="modelProfileSelect" aria-label="Model profile">
                   <option value="fast">Fast</option>
@@ -2700,13 +2522,14 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
                   <option value="plan">Plan</option>
                 </select>
               </div>
-              <div class="hint">Local-first routing with safe primitives, bounded tools, and streamed model steps.</div>
+              <div class="hint">Local-first routing with safe primitives, bounded tools, MCP-backed retrieval, and streamed model steps.</div>
             </div>
             <div class="sendWrap">
               <button class="btn ghost" id="newFromComposer" type="button">New</button>
               <button class="btn" id="send" type="submit">Send</button>
             </div>
           </div>
+          <div class="attachmentTray hidden" id="attachmentTray"></div>
         </form>
       </div>
     </div>
@@ -2871,7 +2694,7 @@ function renderWelcomeHtml(webview, extensionUri) {
       <section class="copy">
         <div class="eyebrow">Pipeon</div>
         <h1>Get Started with Pipeon</h1>
-        <p>Local-first coding with a proper app shell, DorkPipe in-editor help, DockPipe workflows, and your repo context already wired in.</p>
+        <p>Local-first coding with a proper app shell, DorkPipe in-editor help, DorkPipe workflows, and your repo context already wired in.</p>
         <p>Open chat, inspect the local bundle, or jump straight into the workspace without the stock web welcome getting in the way.</p>
         <div class="actions">
           <button data-command="chat">Open DorkPipe Chat</button>
@@ -3074,6 +2897,7 @@ class PipeonChatViewProvider {
       composerMode: this.chatStore.composerMode || "ask",
       autoApplyEdits: !!this.chatStore.autoApplyEdits,
       modelProfile: normalizeModelProfile(this.chatStore.modelProfile),
+      pendingAttachments: [],
       activeTemplateId: this.chatStore.activeTemplateId || BUILTIN_TEMPLATE_ID,
       activeTemplate: null,
       reasoningTemplates: [],
@@ -3150,6 +2974,7 @@ class PipeonChatViewProvider {
     this.state.activeTemplate = activeTemplate ? summarizeTemplate(activeTemplate) : null;
     this.state.reasoningTemplates = normalizeReasoningTemplates(this.chatStore.reasoningTemplates, this.chatStore.modelStore).map((template) => deepClone(template));
     this.state.modelStore = deepClone(normalizeModelStore(this.chatStore.modelStore));
+    this.state.pendingAttachments = normalizeAttachmentRecords(getWorkspaceRoot(), this.state.pendingAttachments || []);
     this.state.sessionList = sortSessionsByUpdate(this.chatStore.sessions).map((item) => ({
       id: item.id,
       title: item.title || "New chat",
@@ -3259,6 +3084,49 @@ class PipeonChatViewProvider {
     this.chatStore.modelProfile = normalizeModelProfile(value);
     this.state.modelProfile = normalizeModelProfile(value);
     await this.saveAndRefresh();
+  }
+
+  async pickAttachmentFiles() {
+    const root = getWorkspaceRoot();
+    if (!root) {
+      vscode.window.showWarningMessage("DorkPipe: open a workspace folder first.");
+      return;
+    }
+    const picks = await vscode.window.showOpenDialog({
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: true,
+      defaultUri: vscode.Uri.file(root),
+      title: "Attach workspace files to DorkPipe",
+    });
+    if (!picks?.length) {
+      return;
+    }
+    const beforeCount = Array.isArray(this.state.pendingAttachments) ? this.state.pendingAttachments.length : 0;
+    const next = normalizeAttachmentRecords(root, [
+      ...(this.state.pendingAttachments || []),
+      ...picks.map((item) => ({ absolutePath: item.fsPath })),
+    ]);
+    const addedCount = Math.max(0, next.length - beforeCount);
+    const skipped = Math.max(0, picks.length - addedCount);
+    this.state.pendingAttachments = next;
+    const deferredKinds = next.filter((item) => item.status === "todo").map((item) => item.kind);
+    if (skipped > 0) {
+      this.state.status = "Skipped files outside the active workspace boundary.";
+    } else if (deferredKinds.length) {
+      this.state.status = "Attached files ready. Image/PDF uploads are scaffolded but still TODO.";
+    } else {
+      this.state.status = `${next.length} file attachment${next.length === 1 ? "" : "s"} ready`;
+    }
+    this.refresh();
+  }
+
+  removePendingAttachment(attachmentId) {
+    this.state.pendingAttachments = normalizeAttachmentRecords(
+      getWorkspaceRoot(),
+      (this.state.pendingAttachments || []).filter((item) => item.id !== attachmentId)
+    );
+    this.refresh();
   }
 
   async resetWebviewShell(reason = "Manual reset") {
@@ -3379,7 +3247,7 @@ class PipeonChatViewProvider {
     this.refresh();
   }
 
-  async ask(root, text, mode = "ask", modelProfile = "balanced") {
+  async ask(root, text, mode = "ask", modelProfile = "balanced", attachments = []) {
     logChannelInfo(this.channel, "Received ask request", {
       mode,
       modelProfile,
@@ -3408,6 +3276,7 @@ class PipeonChatViewProvider {
     const normalizedProfile = normalizeModelProfile(modelProfile || this.chatStore.modelProfile);
     this.chatStore.modelProfile = normalizedProfile;
     this.state.modelProfile = normalizedProfile;
+    const normalizedAttachments = normalizeAttachmentRecords(root, attachments);
 
     const commandConfirmation = getCliConfirmationRequest(text, normalizedMode);
     if (commandConfirmation) {
@@ -3473,6 +3342,7 @@ class PipeonChatViewProvider {
         channel: this.channel,
         mode: normalizedMode,
         modelProfile: normalizedProfile,
+        attachments: normalizedAttachments,
         reasoningTemplate,
       });
       assistantMessage.liveStatus = "";
@@ -3551,6 +3421,7 @@ class PipeonChatViewProvider {
     }
 
     session.messages = session.messages.slice(-MAX_HISTORY_MESSAGES * 4);
+    this.state.pendingAttachments = [];
     this.state.isBusy = false;
     await this.saveAndRefresh();
     this.postToSurfaces({ type: "done" });
@@ -3670,6 +3541,14 @@ class PipeonChatViewProvider {
           await this.setModelProfile(msg.value);
           return;
         }
+        if (msg?.type === "pickAttachmentFiles") {
+          await this.pickAttachmentFiles();
+          return;
+        }
+        if (msg?.type === "removePendingAttachment" && msg.attachmentId) {
+          this.removePendingAttachment(msg.attachmentId);
+          return;
+        }
         if (msg?.type === "setActiveTemplate") {
           await this.setActiveTemplate(msg.templateId);
           return;
@@ -3764,7 +3643,7 @@ class PipeonChatViewProvider {
           return;
         }
         if (msg?.type === "ask" && msg.text) {
-          await this.ask(workspaceRoot, msg.text, msg.mode, msg.modelProfile);
+          await this.ask(workspaceRoot, msg.text, msg.mode, msg.modelProfile, msg.attachments);
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -3833,10 +3712,8 @@ class PipeonChatViewProvider {
     this.attachWebviewSurface("sidebar", webviewView.webview);
     const root = getWorkspaceRoot();
     if (root) {
-      const host = process.env.OLLAMA_HOST || DEFAULT_OLLAMA_HOST;
-      const model = process.env.PIPEON_OLLAMA_MODEL || process.env.DOCKPIPE_OLLAMA_MODEL || DEFAULT_MODEL;
-      this.state.status = `Model: ${model}  |  Ollama: ${host}`;
-      logChannelInfo(this.channel, "Workspace root detected for chat view", { root, model, host });
+      this.state.status = "DorkPipe control plane ready for this workspace.";
+      logChannelInfo(this.channel, "Workspace root detected for chat view", { root });
     } else {
       this.state.status = "Open a workspace folder to chat with DorkPipe.";
       logChannelInfo(this.channel, "No workspace root available for chat view");

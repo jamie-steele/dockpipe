@@ -102,7 +102,7 @@ pipeon_stack_desktop_bin() {
 }
 
 pipeon_stack_mcp_port() {
-  printf '%s\n' "${PIPEON_DEV_STACK_MCP_PORT:-8765}"
+  printf '%s\n' "${PIPEON_DEV_STACK_MCP_PORT:-8766}"
 }
 
 pipeon_stack_mcp_url() {
@@ -119,14 +119,6 @@ pipeon_stack_runtime_env() {
 
 pipeon_stack_image_stamp_file() {
   printf '%s/code-server-image.stamp\n' "$(pipeon_stack_state_dir)"
-}
-
-pipeon_stack_pid_file() {
-  printf '%s/mcpd.pid\n' "$(pipeon_stack_state_dir)"
-}
-
-pipeon_stack_log_file() {
-  printf '%s/mcpd.log\n' "$(pipeon_stack_state_dir)"
 }
 
 ensure_pipeon_stack_state_dir() {
@@ -149,22 +141,28 @@ ensure_pipeon_stack_api_key() {
 }
 
 write_pipeon_stack_runtime_env() {
-  local workdir repo_root api_key_file api_key
+  local workdir repo_root api_key_file
   workdir="$(pipeon_stack_workdir)"
   repo_root="$(pipeon_stack_repo_root)"
   api_key_file="$(pipeon_stack_api_key_file)"
-  api_key="$(cat "$api_key_file")"
   cat > "$(pipeon_stack_runtime_env)" <<EOF
 WORKDIR=$workdir
 REPO_ROOT=$repo_root
+PIPEON_DEV_STACK_WORKDIR=$workdir
+PIPEON_DEV_STACK_REPO_ROOT=$repo_root
+PIPEON_DEV_STACK_MCP_PORT=$(pipeon_stack_mcp_port)
+PIPEON_DEV_STACK_MCP_API_KEY_FILE=$api_key_file
+PIPEON_DEV_STACK_DOCKPIPE_BIN=/repo/src/bin/dockpipe
+PIPEON_DEV_STACK_DORKPIPE_BIN=/repo/packages/dorkpipe/bin/dorkpipe
+PIPEON_DEV_STACK_MCPD_BIN=/repo/packages/dorkpipe/bin/mcpd
+PIPEON_DEV_STACK_DORKPIPE_WORKDIR=/work
+PIPEON_DEV_STACK_DORKPIPE_DATABASE_URL=postgresql://dorkpipe:dorkpipe@postgres:5432/dorkpipe
+PIPEON_DEV_STACK_DORKPIPE_OLLAMA_HOST=http://ollama:11434
 DORKPIPE_DEV_STACK_PROJECT=$(pipeon_stack_compose_project)
 CODE_SERVER_CONTAINER_NAME=$(pipeon_stack_code_server_name)
 CODE_SERVER_URL=$(pipeon_stack_code_server_url)
 MCP_HTTP_URL=$(pipeon_stack_mcp_url)
-MCP_HTTP_API_KEY=$api_key
 MCP_HTTP_API_KEY_FILE=$api_key_file
-OLLAMA_HOST=${OLLAMA_HOST:-http://172.17.0.1:11434}
-DATABASE_URL=${DATABASE_URL:-postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe}
 EOF
 }
 
@@ -173,18 +171,4 @@ pipeon_stack_compose_running() {
   compose_file="$(pipeon_stack_compose_file)"
   project="$(pipeon_stack_compose_project)"
   docker compose -p "$project" -f "$compose_file" ps -q 2>/dev/null | grep -q .
-}
-
-pipeon_stack_stop_mcpd() {
-  local pid_file pid
-  pid_file="$(pipeon_stack_pid_file)"
-  if [[ ! -f "$pid_file" ]]; then
-    return 0
-  fi
-  pid="$(cat "$pid_file" 2>/dev/null || true)"
-  if [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null; then
-    kill "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
-  fi
-  rm -f "$pid_file"
 }

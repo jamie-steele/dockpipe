@@ -56,5 +56,15 @@ func mcpToolCatalog() []mcpToolMeta {
 			Description: "Run dorkpipe run -f <spec>. Tier: exec only.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"spec_path":{"type":"string"},"workdir":{"type":"string"}},"required":["spec_path"],"additionalProperties":false}`),
 		},
+		{
+			Name:        "dorkpipe.request",
+			Description: "Run dorkpipe request --execute through the MCP control plane. Tier: exec only.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"workdir":{"type":"string"},"message":{"type":"string"},"mode":{"type":"string"},"active_file":{"type":"string"},"open_files":{"type":"array","items":{"type":"string"}},"selection_text":{"type":"string"},"attachment_files":{"type":"array","items":{"type":"string"}}},"required":["message"],"additionalProperties":false}`),
+		},
+		{
+			Name:        "dorkpipe.apply_edit",
+			Description: "Run dorkpipe apply-edit for a prepared artifact directory. Tier: exec only.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"workdir":{"type":"string"},"artifact_dir":{"type":"string"}},"required":["artifact_dir"],"additionalProperties":false}`),
+		},
 	}
 }

@@ -49,7 +49,12 @@ filesystem. Model output is never executed directly.
   "session_id": "sess_abc",
   "workspace_root": "/workspace",
   "user_message": "Update the README intro",
-  "attachments": [],
+  "attachments": [
+    {
+      "kind": "file",
+      "path": "docs/architecture.md"
+    }
+  ],
   "client_capabilities": {
     "streaming": true,
     "rich_status": true,
@@ -65,7 +70,8 @@ filesystem. Model output is never executed directly.
 Rules:
 
 - `workspace_root` is single-root only in `v1`
-- attachments are text-only in `v1`
+- `file` attachments are now wired for local workspace files in `v1`
+- `image` and `pdf` attachment kinds are scaffolded but remain TODO
 - hints are advisory only
 - route authority stays with DorkPipe
 
@@ -200,14 +206,17 @@ See also:
 
 ### `v1`
 
-- text only
-- read-only context
+- `file` attachments resolve to local workspace paths
+- text-like file contents become read-only context for DorkPipe
+- binary-looking files are ignored safely
+- image and pdf attachments are not executed and are not yet ingested
 
-### `v1.5` (deferred)
+### Deferred
 
-- images allowed
-- converted to text first
-- treated as untrusted input
+- `image` attachments
+- `pdf` attachments
+- converted-to-text enrichment before model use
+- still treated as untrusted input
 - must not bypass validation or directly drive execution
 
 ## Safety guarantees

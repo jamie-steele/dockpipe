@@ -2,8 +2,9 @@ name: Pipeon
 category: app
 vault: none
 description: >-
-  Pipeon product dev stack: ensure dockpipe + dorkpipe + mcpd binaries, start DorkPipe sidecars,
-  start the MCP bridge, warm the default local model, and open Pipeon against the current workdir.
+  Pipeon product dev stack: ensure dockpipe + dorkpipe + mcpd binaries, start the isolated
+  DorkPipe control-plane stack with internal Postgres + Ollama, expose MCP only, warm the default local
+  model, and open Pipeon against the current workdir.
 
 steps:
   - id: launch

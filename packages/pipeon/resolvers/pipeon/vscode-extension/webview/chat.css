@@ -367,6 +367,14 @@ select {
   color: var(--vscode-descriptionForeground);
   background: color-mix(in srgb, var(--vscode-button-background) 7%, transparent);
 }
+.designerCanvas.dragging .dropZone {
+  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+.dropZone.active {
+  border-color: color-mix(in srgb, var(--vscode-button-background) 78%, var(--vscode-panel-border));
+  background: color-mix(in srgb, var(--vscode-button-background) 18%, transparent);
+  transform: translateY(-1px);
+}
 .dropZone.root {
   margin-bottom: 2px;
 }
@@ -734,6 +742,48 @@ select {
   display: grid;
   grid-template-columns: 1fr;
   gap: 8px;
+}
+.attachmentTray {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.attachmentChip {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--vscode-panel-border);
+  background: color-mix(in srgb, var(--vscode-editorWidget-background) 94%, transparent);
+}
+.attachmentChip.todo {
+  border-color: color-mix(in srgb, #d0a25b 34%, var(--vscode-panel-border));
+}
+.attachmentChipText {
+  min-width: 0;
+}
+.attachmentChipName {
+  font-size: 12px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachmentChipMeta {
+  margin-top: 2px;
+  font-size: 10px;
+  color: var(--vscode-descriptionForeground);
+}
+.attachmentChipRemove {
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--vscode-panel-border);
+  background: color-mix(in srgb, var(--vscode-button-background) 10%, transparent);
+  color: var(--vscode-editor-foreground);
+  cursor: pointer;
 }
 textarea {
   resize: vertical;

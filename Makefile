@@ -3,7 +3,7 @@
 # Use the product: after `make build`, run workflows with DockPipe (compiled packages resolve like any project):
 #   ./src/bin/dockpipe --workflow <name> --workdir . --
 #
-# Optional: `make maintainer-tools` — dorkpipe + mcpd binaries under packages/
+# Optional: `make maintainer-tools` — dorkpipe + mcpd binaries under packages/dorkpipe/bin
 # Optional Pipeon: `make pipeon-icons` | `make build-code-server-image` (see packages/pipeon/resolvers/pipeon/vscode-extension/)
 # DockPipe Launcher: cmake -S src/app/tooling/dockpipe-launcher -B src/app/tooling/dockpipe-launcher/build && cmake --build ...
 include src/Makefile

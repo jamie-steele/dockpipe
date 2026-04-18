@@ -12,6 +12,7 @@ tmp/
 # Maintainer packages — built ELF artifacts (not under src/bin/)
 packages/dorkpipe/bin/dorkpipe
 packages/dorkpipe-mcp/bin/mcpd
+packages/dorkpipe/mcp/bin/mcpd
 
 # Local Cursor / remote server / IDE (binaries, keys, workspace state — do not commit)
 .cache/

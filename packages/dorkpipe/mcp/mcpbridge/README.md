@@ -1,6 +1,6 @@
 # `mcpbridge` — MCP stdio bridge (`dorkpipe.mcp`)
 
-Authoring tree: **`packages/dorkpipe-mcp/mcpbridge/`** — dumb interface
+Authoring tree: **`packages/dorkpipe/mcp/mcpbridge/`** — dumb interface
 
 This package implements a **minimal** JSON-RPC over stdio (Content-Length framing) server that exposes **named tools** mapping to:
 
@@ -40,11 +40,11 @@ Every request must authenticate with the same secret via **`Authorization: Beare
 
 ## Entrypoint
 
-- `dorkpipe-mcp/cmd/mcpd` — stdio MCP (default), or **HTTPS/HTTP** when `-http` / `MCP_HTTP_LISTEN` is set. **`make maintainer-tools`** (repo root) writes **`packages/dorkpipe-mcp/bin/mcpd`** (not under **`src/bin/`**).
+- `packages/dorkpipe/mcp/cmd/mcpd` — stdio MCP (default), or **HTTPS/HTTP** when `-http` / `MCP_HTTP_LISTEN` is set. **`make maintainer-tools`** (repo root) writes **`packages/dorkpipe/bin/mcpd`** (not under **`src/bin/`**).
 
 ### Trying it in Cursor
 
-Run **`make build`** then **`make maintainer-tools`** from repo root. Use **`.cursor/mcp.json`** — set **`"type": "stdio"`**, **`command`** to the absolute **`mcpd`** binary, and set **`DOCKPIPE_BIN`** / **`DORKPIPE_BIN`** to the absolute executables you want the bridge to launch. In this checkout that is typically **`packages/dorkpipe-mcp/bin/mcpd`**, **`src/bin/dockpipe`**, and **`packages/dorkpipe/bin/dorkpipe`**. If **`${workspaceFolder}`** is not expanded in **`env`**, set those paths to absolute. Cursor speaks Content-Length JSON-RPC over stdin/stdout; **`initialize`** echoes the client’s **`protocolVersion`** (e.g. **`2025-11-25`**) so the handshake completes with current Cursor hosts.
+Run **`make build`** then **`make maintainer-tools`** from repo root. Use **`.cursor/mcp.json`** — set **`"type": "stdio"`**, **`command`** to the absolute **`mcpd`** binary, and set **`DOCKPIPE_BIN`** / **`DORKPIPE_BIN`** to the absolute executables you want the bridge to launch. In this checkout that is typically **`packages/dorkpipe/bin/mcpd`**, **`src/bin/dockpipe`**, and **`packages/dorkpipe/bin/dorkpipe`**. If **`${workspaceFolder}`** is not expanded in **`env`**, set those paths to absolute. Cursor speaks Content-Length JSON-RPC over stdin/stdout; **`initialize`** echoes the client’s **`protocolVersion`** (e.g. **`2025-11-25`**) so the handshake completes with current Cursor hosts.
 
 ## See also
 

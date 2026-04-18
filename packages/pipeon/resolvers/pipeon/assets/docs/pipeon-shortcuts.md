@@ -61,10 +61,16 @@ PIPEON_OLLAMA_MODEL=llama3.2 packages/pipeon/resolvers/pipeon/bin/pipeon chat "y
 
 ---
 
-## 4. Ollama
+## 4. Local model note
 
-- Start: `ollama serve` (default `http://127.0.0.1:11434`)
-- Pull model: `ollama pull llama3.2` (or set `PIPEON_OLLAMA_MODEL`)
+For the isolated Pipeon dev stack, Ollama is managed inside the DorkPipe stack and is not meant to be driven directly from the editor client.
+
+If you are using the dev stack:
+
+- set `PIPEON_OLLAMA_MODEL` if you want a different default model
+- let `pipeon-dev-stack` warm and manage Ollama through the control plane
+
+Direct `ollama serve` / `ollama pull` commands are maintainer-only troubleshooting paths, not the normal product boundary.
 
 ---
 

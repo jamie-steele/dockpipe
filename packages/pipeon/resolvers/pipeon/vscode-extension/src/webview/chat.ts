@@ -210,6 +210,29 @@
     ].join("");
   }
 
+  function renderAttachmentTray(entries) {
+    const items = Array.isArray(entries) ? entries : [];
+    if (!items.length) {
+      return "";
+    }
+    return items.map((item) => {
+      const kind = item.kind === "pdf" ? "PDF" : item.kind === "image" ? "Image" : "File";
+      const status = item.status === "todo" ? "TODO" : "Ready";
+      const meta = item.status === "todo"
+        ? `${kind} upload scaffolded`
+        : `${kind} upload ready`;
+      return [
+        '<div class="attachmentChip' + (item.status === "todo" ? " todo" : "") + '">',
+        '<div class="attachmentChipText">',
+        '<div class="attachmentChipName">' + escapeHtml(item.relativePath || item.name || "attachment") + "</div>",
+        '<div class="attachmentChipMeta">' + escapeHtml(`${meta} • ${status}`) + "</div>",
+        "</div>",
+        '<button class="attachmentChipRemove" type="button" data-remove-attachment="' + escapeHtml(item.id) + '" aria-label="Remove attachment">×</button>',
+        "</div>",
+      ].join("");
+    }).join("");
+  }
+
   function renderMessages(messages) {
     if (!messages.length) {
       return '<article class="msg assistant"><div class="role">DorkPipe</div><div class="body"><p>Ask about this workspace. DorkPipe will use focused workspace context, keep chat history per workspace, surface prepared edits in the run inspector, and route obvious safe actions locally first.</p></div></article>';
@@ -491,9 +514,6 @@
     }
     return entries.map((entry) => {
       const details = [];
-      if (entry.provider) {
-        details.push(entry.provider);
-      }
       if (entry.model) {
         details.push(entry.model);
       }
@@ -592,6 +612,8 @@
     const newChatBtn = getRequiredElement("newChatBtn");
     /** @type {HTMLButtonElement} */
     const newFromComposer = getRequiredElement("newFromComposer");
+    /** @type {HTMLButtonElement} */
+    const attachFilesBtn = getRequiredElement("attachFilesBtn");
     /** @type {HTMLSelectElement} */
     const sessionSelect = getRequiredElement("sessionSelect");
     /** @type {HTMLSelectElement} */
@@ -628,6 +650,8 @@
     const headerActions = typeof document.querySelector === "function" ? /** @type {HTMLElement | null} */ (document.querySelector(".headerActions")) : null;
     /** @type {HTMLElement} */
     const status = getRequiredElement("status");
+    /** @type {HTMLElement} */
+    const attachmentTray = getRequiredElement("attachmentTray");
     /** @type {HTMLElement} */
     const trace = getRequiredElement("trace");
     /** @type {HTMLElement} */
@@ -719,7 +743,6 @@
     /** @type {HTMLInputElement} */
     const modelEntryLabelInput = getRequiredElement("modelEntryLabelInput");
     /** @type {HTMLInputElement} */
-    const modelEntryProviderInput = getRequiredElement("modelEntryProviderInput");
     /** @type {HTMLInputElement} */
     const modelEntryModelInput = getRequiredElement("modelEntryModelInput");
     /** @type {HTMLInputElement} */
@@ -794,6 +817,25 @@
     let currentState = initialState && typeof initialState === "object" ? initialState : {};
     let dragPayload = null;
     let workingTemplate = null;
+    let activeDropTarget = null;
+
+    function clearDesignerDropState() {
+      for (const zone of designerCanvas.querySelectorAll(".dropZone.active")) {
+        zone.classList.remove("active");
+      }
+      activeDropTarget = null;
+    }
+
+    function markDesignerDropTarget(target) {
+      if (activeDropTarget === target) {
+        return;
+      }
+      clearDesignerDropState();
+      activeDropTarget = target;
+      if (activeDropTarget) {
+        activeDropTarget.classList.add("active");
+      }
+    }
 
     function saveViewState(extra) {
       viewState = { ...viewState, ...extra };
@@ -854,21 +896,21 @@
       }
       if (studioTitle) {
         studioTitle.textContent = nextMode === "models"
-          ? "Model Manager"
+          ? "Model Browser"
           : nextMode === "run"
             ? "Run Inspector"
           : nextMode === "settings"
-            ? "Workspace Settings"
+            ? "Designer Settings"
             : "Template Designer";
       }
       if (studioMeta) {
         studioMeta.textContent = nextMode === "models"
-          ? "Manage registered models and keep template references explicit."
+          ? "Manage DorkPipe registry entries and keep template references explicit."
           : nextMode === "run"
             ? "Inspect the structured edit plan, execution trace, and validation details for this run."
           : nextMode === "settings"
             ? "Review templates, choose the active surface, and jump into the dedicated editors."
-            : "Inspect and shape the active DockPipe reasoning surface.";
+            : "Inspect and shape the active DorkPipe reasoning surface.";
       }
       if (studioBackBtn) {
         const showBackButton = nextMode === "template" || nextMode === "models" || nextMode === "run";
@@ -916,7 +958,7 @@
       const entries = Array.isArray(nextState.modelStore?.entries) ? nextState.modelStore.entries : [];
 
       {
-        const templatePart = nextState.activeTemplate ? `Template: ${nextState.activeTemplate.name}` : "Template: DockPipe Default";
+        const templatePart = nextState.activeTemplate ? `Template: ${nextState.activeTemplate.name}` : "Template: DorkPipe Default";
         const shellPart = nextState.shellVersion ? `Shell: ${nextState.shellVersion}` : "";
         const versionPart = nextState.extensionVersion ? `v${nextState.extensionVersion}` : "";
         headerMeta.textContent = [templatePart, shellPart, versionPart].filter(Boolean).join("  •  ");
@@ -924,13 +966,13 @@
       templateSelect.innerHTML = renderTemplateOptions(templates, nextState.activeTemplateId);
       templateManagerList.innerHTML = renderTemplateManager(templates, nextState.activeTemplateId);
       if (activeTemplateSummary) {
-        activeTemplateSummary.textContent = template?.name || "DockPipe Default";
+        activeTemplateSummary.textContent = template?.name || "DorkPipe Default";
       }
       if (templateCountSummary) {
         templateCountSummary.textContent = templates.length + " available";
       }
       if (modelCountSummary) {
-        modelCountSummary.textContent = entries.length + " registered";
+        modelCountSummary.textContent = entries.length + " available";
       }
       deleteTemplateBtn.disabled = locked;
       saveTemplateBtn.disabled = locked || !template;
@@ -968,12 +1010,12 @@
       designerCanvas.innerHTML = '<div class="dropZone root" data-drop-target="root">Drop on root canvas</div>' + canvasBody;
 
       modelStoreSummary.textContent = entries.length
-        ? `${entries.length} registered model${entries.length === 1 ? "" : "s"} ready for template use`
-        : "No models registered yet.";
+        ? `${entries.length} DorkPipe model${entries.length === 1 ? "" : "s"} ready for template use`
+        : "No DorkPipe models registered yet.";
       if (modelStoreSummaryStudio) {
         modelStoreSummaryStudio.textContent = entries.length
-          ? `${entries.length} registered model${entries.length === 1 ? "" : "s"} available in this workspace`
-          : "No models registered yet.";
+          ? `${entries.length} DorkPipe model${entries.length === 1 ? "" : "s"} available in this workspace`
+          : "No DorkPipe models registered yet.";
       }
       modelStoreList.innerHTML = renderModelStore(nextState.modelStore || { entries: [] });
       runInspectorBody.innerHTML = renderRunInspector(nextState.messages || [], viewState.selectedRunMessageId || "");
@@ -1044,6 +1086,9 @@
         transcript.innerHTML = renderMessages(currentState.messages || []);
         trace.innerHTML = renderTrace(currentState.trace || []);
         status.textContent = currentState.status || "";
+        const attachmentsHtml = renderAttachmentTray(currentState.pendingAttachments || []);
+        attachmentTray.innerHTML = attachmentsHtml;
+        attachmentTray.classList.toggle("hidden", !attachmentsHtml);
         renderSessions(currentState);
         renderSettings(currentState);
         modeSelect.value = currentState.composerMode || viewState.mode || "ask";
@@ -1128,7 +1173,13 @@
       if (!text) return;
       prompt.value = "";
       saveViewState({ draft: "", pinnedToBottom: true, mode: modeSelect.value, modelProfile: modelProfileSelect.value });
-      vscode.postMessage({ type: "ask", text, mode: modeSelect.value, modelProfile: modelProfileSelect.value });
+      vscode.postMessage({
+        type: "ask",
+        text,
+        mode: modeSelect.value,
+        modelProfile: modelProfileSelect.value,
+        attachments: currentState.pendingAttachments || [],
+      });
     }
 
     try {
@@ -1177,9 +1228,17 @@
       }
       newChatBtn.addEventListener("click", startNewChat);
       newFromComposer.addEventListener("click", startNewChat);
+      attachFilesBtn.addEventListener("click", () => {
+        vscode.postMessage({ type: "pickAttachmentFiles" });
+      });
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         submitPrompt();
+      });
+      attachmentTray.addEventListener("click", (event) => {
+        const target = event.target instanceof HTMLElement ? event.target.closest("[data-remove-attachment]") : null;
+        if (!target) return;
+        vscode.postMessage({ type: "removePendingAttachment", attachmentId: target.getAttribute("data-remove-attachment") || "" });
       });
 
       if (hasSettingsSurface) {
@@ -1267,20 +1326,38 @@
           const target = event.target instanceof HTMLElement ? event.target.closest("[data-node-id]") : null;
           if (!target) return;
           dragPayload = { kind: "node", nodeId: target.getAttribute("data-node-id") || "" };
+          designerCanvas.classList.add("dragging");
+        });
+        designerCanvas.addEventListener("dragend", () => {
+          dragPayload = null;
+          designerCanvas.classList.remove("dragging");
+          clearDesignerDropState();
         });
         designerCanvas.addEventListener("dragover", (event) => {
           if (!dragPayload) return;
           event.preventDefault();
+          const target = event.target instanceof HTMLElement ? event.target.closest("[data-drop-target]") : null;
+          markDesignerDropTarget(target);
+        });
+        designerCanvas.addEventListener("dragleave", (event) => {
+          const target = event.target instanceof HTMLElement ? event.target.closest("[data-drop-target]") : null;
+          if (target && target === activeDropTarget) {
+            target.classList.remove("active");
+            activeDropTarget = null;
+          }
         });
         designerCanvas.addEventListener("drop", (event) => {
           const target = event.target instanceof HTMLElement ? event.target.closest("[data-drop-target]") : null;
           if (!target) return;
           event.preventDefault();
+          designerCanvas.classList.remove("dragging");
           handleDrop(target.getAttribute("data-drop-target"));
+          clearDesignerDropState();
         });
         for (const primitive of document.querySelectorAll(".primitiveTile")) {
           primitive.addEventListener("dragstart", () => {
             const type = primitive.getAttribute("data-primitive-type") || "dockpipe";
+            designerCanvas.classList.add("dragging");
             dragPayload = {
               kind: "primitive",
               factory() {
@@ -1293,7 +1370,7 @@
                     decision: "",
                     guidance: { orchestration: "", model: "" },
                     config: {
-                      modelId: (currentState.modelStore?.entries || [])[0]?.id || "ollama.default",
+                      modelId: (currentState.modelStore?.entries || [])[0]?.id || "dorkpipe.default",
                       task: "reason",
                       output: "artifact-or-answer",
                     },
@@ -1314,7 +1391,7 @@
                 return {
                   id: "node_" + Date.now().toString(36),
                   type: "dockpipe",
-                  label: "DockPipe Step",
+                  label: "DorkPipe Step",
                   notes: "",
                   decision: "",
                   guidance: { orchestration: "", model: "" },
@@ -1322,6 +1399,11 @@
                 };
               },
             };
+          });
+          primitive.addEventListener("dragend", () => {
+            dragPayload = null;
+            designerCanvas.classList.remove("dragging");
+            clearDesignerDropState();
           });
         }
 
@@ -1334,7 +1416,6 @@
           const entry = {
             id: modelEntryIdInput.value.trim(),
             label: modelEntryLabelInput.value.trim(),
-            provider: modelEntryProviderInput.value.trim() || "ollama",
             model: modelEntryModelInput.value.trim(),
             capabilities: readCapabilities(modelEntryCapabilitiesInput.value),
             contextWindow: Number(modelEntryContextWindowInput.value || 8192),

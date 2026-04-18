@@ -25,7 +25,6 @@ CODE_SERVER_AUTH="${CODE_SERVER_AUTH:-none}"
 PIPEON_DESKTOP_BIN="${PIPEON_DESKTOP_BIN:-$(pipeon_stack_desktop_bin)}"
 PIPEON_WINDOW_TITLE="${PIPEON_WINDOW_TITLE:-Pipeon}"
 WAIT_FOR_UI="${CODE_SERVER_WAIT:-1}"
-MCP_HTTP_API_KEY="$(cat "$(pipeon_stack_api_key_file)")"
 PIPEON_DEV_STACK_OPEN="${PIPEON_DEV_STACK_OPEN:-1}"
 
 pipeon_wait_for_http() {
@@ -133,10 +132,8 @@ pipeon_start_code_server() {
     -e DOCKPIPE_PIPEON="${DOCKPIPE_PIPEON:-1}" \
     -e DOCKPIPE_PIPEON_ALLOW_PRERELEASE="${DOCKPIPE_PIPEON_ALLOW_PRERELEASE:-1}" \
     -e DOCKPIPE_WORKDIR=/work \
-    -e OLLAMA_HOST="${OLLAMA_HOST:-http://172.17.0.1:11434}" \
     -e PIPEON_OLLAMA_MODEL="${PIPEON_OLLAMA_MODEL:-llama3.2}" \
     -e MCP_HTTP_URL="${MCP_HTTP_URL:-}" \
-    -e MCP_HTTP_API_KEY="$MCP_HTTP_API_KEY" \
     -v "$WORKDIR:/work" \
     -v "$CODE_SERVER_HOME:/home/coder" \
     "$CODE_SERVER_IMAGE" \

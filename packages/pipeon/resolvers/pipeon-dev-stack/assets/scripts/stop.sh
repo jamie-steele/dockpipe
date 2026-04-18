@@ -8,9 +8,13 @@ PROJECT_DIR="$(pipeon_stack_repo_root)"
 COMPOSE_FILE="$(pipeon_stack_compose_file)"
 COMPOSE_PROJECT="$(pipeon_stack_compose_project)"
 CODE_SERVER_CONTAINER_NAME="$(pipeon_stack_code_server_name)"
+RUNTIME_ENV="$(pipeon_stack_runtime_env)"
 
-pipeon_stack_stop_mcpd
+compose_cmd() {
+  docker compose --env-file "$RUNTIME_ENV" -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$PROJECT_DIR" "$@"
+}
+
 docker rm -f "$CODE_SERVER_CONTAINER_NAME" >/dev/null 2>&1 || true
-docker compose -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$PROJECT_DIR" down >/dev/null 2>&1 || true
+compose_cmd down >/dev/null 2>&1 || true
 
-echo "pipeon-dev-stack: removed MCP, code-server, and compose sidecars for $(pipeon_stack_workdir)"
+echo "pipeon-dev-stack: removed isolated DorkPipe stack, MCP bridge, and code-server for $(pipeon_stack_workdir)"

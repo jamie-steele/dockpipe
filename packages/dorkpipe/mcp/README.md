@@ -1,11 +1,11 @@
-# `dorkpipe-mcp` (`dorkpipe.mcp`)
+# `dorkpipe.mcp` (`packages/dorkpipe/mcp`)
 
-Maintainer package: **MCP bridge** for DockPipe / DorkPipe — Go module **`dorkpipe.mcp`**, library **`mcpbridge/`**, binary **`cmd/mcpd`**.
+DorkPipe-owned **MCP bridge** for DockPipe / DorkPipe — Go module **`dorkpipe.mcp`**, library **`mcpbridge/`**, binary **`cmd/mcpd`**.
 
 - **`go.work`** at the repo root includes this module next to **`dockpipe`** and **`dorkpipe.orchestrator`**.
 - **`replace dockpipe => ../../../..`** in **`go.mod`** pins the engine for **`dockpipe/.../infrastructure`** imports.
 
-The **`mcpd`** binary is built into **`dorkpipe-mcp/bin/mcpd`** (next to this module). It is **not** copied under **`src/bin/`** — point Cursor / env at this path (see **`src/Makefile`**).
+The **`mcpd`** binary is built into **`packages/dorkpipe/bin/mcpd`**. It is **not** copied under **`src/bin/`** — point Cursor / env at this path (see **`src/Makefile`**).
 
 **Implementation detail:** **`mcpbridge/README.md`** (env, HTTP mode, Cursor).
 
@@ -68,6 +68,6 @@ Optional bootstrap manifest (repo checkout): **`docs/examples/mcp-capabilities.b
 
 ## This repo (Cursor)
 
-After **`make maintainer-tools`**, point **`command`** at **`dorkpipe-mcp/bin/mcpd`**. Default tier without env is **`validate`**; use **`DOCKPIPE_MCP_TIER=readonly`** for the smallest surface.
+After **`make maintainer-tools`**, point **`command`** at **`packages/dorkpipe/bin/mcpd`**. Default tier without env is **`validate`**; use **`DOCKPIPE_MCP_TIER=readonly`** for the smallest surface.
 
 **See also:** repo **`docs/artifacts.md`** (governance / on-disk signals).

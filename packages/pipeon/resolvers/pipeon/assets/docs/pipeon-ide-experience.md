@@ -1,12 +1,13 @@
 # Pipeon IDE — experience design
 
-**Pipeon** is the **gateway to intelligence**: a **local-first app** the user **installs and boots**. It is **not** a shell where you paste one-off prompts as the main UX. Inside the app, the user **talks to Ollama (Llama) on the host** in a normal chat surface, while Pipeon **aggregates and surfaces** the intelligence this stack already produces (repo analysis, CI signals, user insights, workflow metadata)—**on startup** and **in conversation**—without making the user learn a “platform.”
+**Pipeon** is the **gateway to intelligence**: a **local-first app** the user **installs and boots**. It is **not** a shell where you paste one-off prompts as the main UX. Inside the app, the user talks to **DorkPipe through MCP** in a normal chat surface, while Pipeon **aggregates and surfaces** the intelligence this stack already produces (repo analysis, CI signals, user insights, workflow metadata)—**on startup** and **in conversation**—without making the user learn a “platform.”
 
 ### What “gateway” means
 
 | Layer | Role |
 |--------|------|
-| **Host / Ollama** | Default **Llama** inference stays on the **host** (fast, private, no cloud required for core use). |
+| **DorkPipe control plane** | Pipeon and editor clients talk to **DorkPipe over MCP**; orchestration and model routing stay server-side. |
+| **Internal model service** | Default local inference stays **inside the isolated DorkPipe stack** (private, local-first, not a client concern). |
 | **Docker (backend)** | Used for **isolation** and for **DockPipe-class work** (containers, reproducible steps)—not as the thing the user manually drives for every chat turn. The app orchestrates it; the user does not live in `docker run` for daily chat. |
 | **Safe host mapping** | The user **opens directories** (projects, worktrees) **in the app**; Pipeon maps them into the isolated side **safely** (bounded mounts, clear labels, no silent exfiltration)—**like a native “add folder” workflow**, not manual volume flags. |
 | **Intelligence** | Everything we added—**`.dockpipe/`**, **`bin/.dockpipe/packages/dorkpipe/`**, insights queue, CI normalization, workflows—is **ingested** so the model and UI can **hint** what’s available and **ground** answers. |
@@ -20,7 +21,7 @@
 
 ### What this repo ships *today* vs the product
 
-The **shell scripts** (`packages/pipeon/resolvers/pipeon/bin/pipeon`, bundle + one-shot chat) are a **developer harness** to exercise the **same context bundle and Ollama contract** before the branded app exists. They are **not** the Pipeon user experience. The **editor** is a **fork of VS Code (Code OSS)** with Pipeon layered on—see **`pipeon-vscode-fork.md`**, **`pipeon-architecture.md`**, and **`../vscode-extension/`** (sibling of **`assets/`**). Harness: **`../assets/scripts/README.md`**.
+The **shell scripts** (`packages/pipeon/resolvers/pipeon/bin/pipeon`, bundle + one-shot chat) are a **developer harness** to exercise the same context bundle and a minimal local chat path before the branded app exists. They are **not** the Pipeon user experience. The **editor** is a **fork of VS Code (Code OSS)** with Pipeon layered on—see **`pipeon-vscode-fork.md`**, **`pipeon-architecture.md`**, and **`../vscode-extension/`** (sibling of **`assets/`**). Harness: **`../assets/scripts/README.md`**.
 
 ---
 
@@ -164,9 +165,9 @@ I won’t run destructive Docker commands for you. If that’s what you want, ru
 
 1. **One chat surface** as default; optional side panel for “context sources” later—never required on day one.
 2. **Show context in one line** when non-obvious; hide raw paths behind “details” if the UI grows.
-3. **Local model by default** in settings; cloud = advanced, same UX contract.
+3. **Local model by default** in DorkPipe settings; cloud = advanced, same UX contract.
 4. **No scoreboards** for “AI quality”—usefulness beats gamification.
-5. **Errors:** model offline → “Start Ollama / pick another local model” in one sentence + link to docs—not a stack trace in the main thread.
+5. **Errors:** model offline → “Check the DorkPipe stack / local model availability” in one sentence + link to docs—not a stack trace in the main thread.
 6. **Privacy copy** once: data stays local unless the user opts into cloud.
 
 ---
@@ -185,7 +186,7 @@ Pipeon should **treat those as distinct lanes** in prompts and in user-facing di
 
 ## 9. Experience goal (one line)
 
-**Install Pipeon, boot it, add your project folders, and talk in the app—it pulls in the intelligence we built (Ollama on the host, Docker where isolation matters) and explains what it knows, without feeling like another platform to learn.**
+**Install Pipeon, boot it, add your project folders, and talk in the app—it pulls in the intelligence we built (DorkPipe over MCP, Docker where isolation matters) and explains what it knows, without feeling like another platform to learn.**
 
 ---
 
@@ -193,7 +194,7 @@ Pipeon should **treat those as distinct lanes** in prompts and in user-facing di
 
 ### Product (Pipeon app — target UX)
 
-The **shipping** Pipeon experience is a **desktop (or equivalent) application** that implements the **gateway** model in the opening section above: boot hints, in-app chat to **host Ollama**, **Docker-backed** isolation for engine work, **safe host directory mapping**, and unified use of DockPipe/DorkPipe artifacts. That UI is **not** fully implemented in this repository yet; this repo defines the **contracts**, **artifact layout**, and a **thin harness** for developers.
+The **shipping** Pipeon experience is a **desktop (or equivalent) application** that implements the **gateway** model in the opening section above: boot hints, in-app chat to **DorkPipe over MCP**, **Docker-backed** isolation for engine work, **safe host directory mapping**, and unified use of DockPipe/DorkPipe artifacts. That UI is **not** fully implemented in this repository yet; this repo defines the **contracts**, **artifact layout**, and a **thin harness** for developers.
 
 ### Repository today (intelligence + dev harness)
 
@@ -201,10 +202,10 @@ The **shipping** Pipeon experience is a **desktop (or equivalent) application** 
 |-------|---------|
 | **Artifact lanes** | **`.dockpipe/`**, **`bin/.dockpipe/packages/dorkpipe/`**, insights, CI bundle—documented across **`docs/`** |
 | **`../scripts/bundle-context.sh`** | Builds **`pipeon-context.md`** — same **aggregate** the app should load (harness + future UI) |
-| **`packages/pipeon/resolvers/pipeon/bin/pipeon`** / **`chat.sh`** | **Dev-only:** one-shot Ollama call to validate prompts + bundle (**not** the user-facing UX) |
+| **`packages/pipeon/resolvers/pipeon/bin/pipeon`** / **`chat.sh`** | **Dev-only:** one-shot local harness to validate prompts + bundle (**not** the user-facing UX) |
 | **`../scripts/lib/enable.sh`** | Feature gate for harness (**`DOCKPIPE_PIPEON`**, min version **0.6.5**, **`DOCKPIPE_PIPEON_ALLOW_PRERELEASE`**) |
 | **`.vscode/tasks.json`** | Optional tasks for **maintainers** testing the harness |
 
 **Release plan:** keep harness gates until **`VERSION` ≥ 0.6.5** as planned; the **app** may ship on its own cadence but should consume the **same** artifact contracts.
 
-**Architecture (gateway, Ollama, Docker, mounts):** **`pipeon-architecture.md`**. Harness details: **`../scripts/README.md`**.
+**Architecture (gateway, MCP, Docker, mounts):** **`pipeon-architecture.md`**. Harness details: **`../scripts/README.md`**.

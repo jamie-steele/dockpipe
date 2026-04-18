@@ -19,11 +19,12 @@ import (
 )
 
 type routeRequest struct {
-	Message       string
-	ActiveFile    string
-	OpenFiles     []string
-	SelectionText string
-	Mode          string
+	Message         string
+	ActiveFile      string
+	OpenFiles       []string
+	SelectionText   string
+	AttachmentFiles []string
+	Mode            string
 }
 
 type workspaceChatContext struct {
@@ -99,6 +100,8 @@ func requestCmd(argv []string) {
 	activeFile := fs.String("active-file", "", "repo-relative active file hint")
 	var openFiles stringListFlag
 	fs.Var(&openFiles, "open-file", "repo-relative open file hint (repeatable)")
+	var attachmentFiles stringListFlag
+	fs.Var(&attachmentFiles, "attachment-file", "workspace attachment path (repeatable)")
 	selectionText := fs.String("selection-text", "", "selection hint")
 	mode := fs.String("mode", "ask", "request mode: ask, agent, or plan")
 	executeRoute := fs.Bool("execute", false, "execute the routed request and stream events")
@@ -129,11 +132,12 @@ func requestCmd(argv []string) {
 	reqID := fmt.Sprintf("req_%d", timeNowUnixNano())
 	emitEditEvent(reqID, "received", "Received request", 0.05, nil)
 	req := routeRequest{
-		Message:       strings.TrimSpace(*message),
-		ActiveFile:    strings.TrimSpace(*activeFile),
-		OpenFiles:     uniqueNonEmpty(openFiles),
-		SelectionText: strings.TrimSpace(*selectionText),
-		Mode:          normalizeRequestMode(*mode),
+		Message:         strings.TrimSpace(*message),
+		ActiveFile:      strings.TrimSpace(*activeFile),
+		OpenFiles:       uniqueNonEmpty(openFiles),
+		AttachmentFiles: sanitizeAttachmentPaths(absWd, attachmentFiles),
+		SelectionText:   strings.TrimSpace(*selectionText),
+		Mode:            normalizeRequestMode(*mode),
 	}
 	routed := chooseRoute(req)
 	emitEditEvent(reqID, "routed", fmt.Sprintf("Route: %s", routed.Route), 0.22, map[string]any{
@@ -440,6 +444,9 @@ func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	if req.SelectionText != "" {
 		args = append(args, "--selection-text", req.SelectionText)
 	}
+	for _, attachment := range uniqueNonEmpty(req.AttachmentFiles) {
+		args = append(args, "--attachment-file", attachment)
+	}
 	if host != "" {
 		args = append(args, "--ollama-host", host)
 	}
@@ -470,9 +477,9 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	policy := resolveRuntimePolicy("chat", req.Message, req.ActiveFile, req.SelectionText, len(chatContext.Targets), len(req.OpenFiles))
 	if len(chatContext.Evidence.Nodes) > 0 {
 		emitEditEvent(reqID, "decomposing", "Built evidence graph from retrieved context", 0.4, map[string]any{
-			"evidence_nodes": len(chatContext.Evidence.Nodes),
-			"evidence_edges": len(chatContext.Evidence.Edges),
-			"evidence_files": countEvidenceNodesByKind(chatContext.Evidence, "file"),
+			"evidence_nodes":   len(chatContext.Evidence.Nodes),
+			"evidence_edges":   len(chatContext.Evidence.Edges),
+			"evidence_files":   countEvidenceNodesByKind(chatContext.Evidence, "file"),
 			"evidence_symbols": countEvidenceNodesByKind(chatContext.Evidence, "symbol"),
 		})
 	}
@@ -789,6 +796,9 @@ func buildChatPrompt(root string, req routeRequest, chatContext workspaceChatCon
 	if len(req.OpenFiles) > 0 {
 		opening = append(opening, "Open files:\n- "+strings.Join(req.OpenFiles, "\n- "))
 	}
+	if attachmentText := summarizeAttachmentInputs(root, req.AttachmentFiles, 4, 1200); strings.TrimSpace(attachmentText) != "" {
+		opening = append(opening, fmt.Sprintf("Attached files:\n\n%s", attachmentText))
+	}
 	if evidenceText := formatChatEvidenceGraph(chatContext.Evidence); strings.TrimSpace(evidenceText) != "" {
 		opening = append(opening, fmt.Sprintf("Evidence DAG:\n\n%s", evidenceText))
 	}
@@ -889,6 +899,83 @@ func inferWorkspaceChatTargets(root string, req routeRequest) []string {
 		existing = pruneNonImplementationTargets(existing)
 	}
 	return uniqueNonEmpty(existing)
+}
+
+func summarizeAttachmentInputs(root string, attachments []string, maxFiles int, maxChars int) string {
+	items := []string{}
+	for _, raw := range sanitizeAttachmentPaths(root, attachments) {
+		target := strings.TrimSpace(raw)
+		if target == "" {
+			continue
+		}
+		abs := target
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(root, target)
+		}
+		rel := relativeTo(root, abs)
+		ext := strings.ToLower(filepath.Ext(abs))
+		switch ext {
+		case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg":
+			items = append(items, fmt.Sprintf("Attachment: %s\n(Image upload is scaffolded but still TODO.)", rel))
+			if len(items) >= maxFiles {
+				return strings.Join(items, "\n\n")
+			}
+			continue
+		case ".pdf":
+			items = append(items, fmt.Sprintf("Attachment: %s\n(PDF upload is scaffolded but still TODO.)", rel))
+			if len(items) >= maxFiles {
+				return strings.Join(items, "\n\n")
+			}
+			continue
+		}
+		b, err := os.ReadFile(abs)
+		if err != nil {
+			items = append(items, fmt.Sprintf("Attachment: %s\n(Unable to read attachment: %v)", rel, err))
+			if len(items) >= maxFiles {
+				return strings.Join(items, "\n\n")
+			}
+			continue
+		}
+		if bytes.IndexByte(b, 0) >= 0 {
+			items = append(items, fmt.Sprintf("Attachment: %s\n(Attachment looks binary and was skipped.)", rel))
+			if len(items) >= maxFiles {
+				return strings.Join(items, "\n\n")
+			}
+			continue
+		}
+		text := clampString(string(b), maxChars)
+		items = append(items, fmt.Sprintf("Attachment: %s\n\n```text\n%s\n```", rel, text))
+		if len(items) >= maxFiles {
+			break
+		}
+	}
+	return strings.Join(items, "\n\n")
+}
+
+func sanitizeAttachmentPaths(root string, attachments []string) []string {
+	safe := []string{}
+	seen := map[string]struct{}{}
+	for _, raw := range uniqueNonEmpty(attachments) {
+		target := strings.TrimSpace(raw)
+		if target == "" {
+			continue
+		}
+		abs := target
+		if !filepath.IsAbs(abs) {
+			abs = filepath.Join(root, target)
+		}
+		abs = filepath.Clean(abs)
+		rel := relativeTo(root, abs)
+		if rel == "" || rel == "." || strings.HasPrefix(rel, "..") {
+			continue
+		}
+		if _, ok := seen[abs]; ok {
+			continue
+		}
+		seen[abs] = struct{}{}
+		safe = append(safe, abs)
+	}
+	return safe
 }
 
 func prioritizeImplementationTargets(items []string) []string {

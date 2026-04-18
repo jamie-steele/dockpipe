@@ -48,7 +48,7 @@ DockPipe ships **\`mcpd\`**, a small bridge that exposes **named tools** (workfl
 ### If this checkout is the **dockpipe** repository
 
 1. From the repo root: \`make build\` then \`make maintainer-tools\`.
-   That gives you \`src/bin/dockpipe\`, \`packages/dorkpipe/bin/dorkpipe\`, and \`packages/dorkpipe-mcp/bin/mcpd\`.
+   That gives you \`src/bin/dockpipe\`, \`packages/dorkpipe/bin/dorkpipe\`, and \`packages/dorkpipe/bin/mcpd\`.
 2. In Cursor: enable **MCP** and use the project file **\`.cursor/mcp.json\`** at the repo root (or merge **\`bin/.dockpipe/packages/cursor-dev/mcp.json.example\`** from this folder if present).
 3. Restart Cursor after editing MCP config.
 4. Defaults are security-first (workdir under repo, absolute paths to CLIs) — see **\`docs/mcp-host-hardening.md\`**.
@@ -73,7 +73,7 @@ if [[ -n "$HAS_MCP" ]]; then
 {
   "mcpServers": {
     "dockpipe": {
-      "command": "${ROOT}/packages/dorkpipe-mcp/bin/mcpd",
+      "command": "${ROOT}/packages/dorkpipe/bin/mcpd",
       "args": [],
       "env": {
         "DOCKPIPE_BIN": "${ROOT}/src/bin/dockpipe",

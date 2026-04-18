@@ -7,9 +7,9 @@ companion stop workflow exists only as a manual recovery path if a session is le
 
 What it does:
 
-- ensures **`dockpipe`** is built locally and uses explicit env / `PATH` for **`dorkpipe`** and **`mcpd`**
-- brings up the DorkPipe sidecars (**Ollama** + **Postgres/pgvector**)
-- starts **`mcpd`** on loopback HTTP with a generated API key
+- resolves explicit **`dockpipe`**, **`dorkpipe`**, and **`mcpd`** binaries into the isolated stack runtime env
+- brings up an isolated DorkPipe stack container plus internal **Ollama** and **Postgres/pgvector**
+- exposes only a loopback MCP proxy on the host; the upstream DorkPipe MCP service stays internal and keeps its auth secret out of the editor container
 - refreshes the Pipeon context bundle
 - starts the branded Pipeon code-server surface and opens it in the Pipeon desktop shell
 
@@ -23,7 +23,7 @@ Typical use from the repo root:
 ```bash
 make maintainer-tools
 make build-pipeon-desktop
-PATH="$PWD/packages/dorkpipe/bin:$PWD/packages/dorkpipe-mcp/bin:$PATH" \
+PATH="$PWD/packages/dorkpipe/bin:$PATH" \
 dockpipe --workflow pipeon-dev-stack --workdir . --
 ```
 
@@ -37,4 +37,5 @@ For the full rebuild / refresh sequence when local changes are not showing up, s
 ## Boundary
 
 Pipeon is the client surface. DorkPipe is orchestration and routing. DockPipe remains the mutation
-boundary. See **`../pipeon/assets/docs/pipeon-dorkpipe-contract.md`**.
+boundary. The dev stack now keeps the DorkPipe control plane inside compose and exposes only MCP back
+to Pipeon / VS Code. See **`../pipeon/assets/docs/pipeon-dorkpipe-contract.md`**.
