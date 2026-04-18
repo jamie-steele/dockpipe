@@ -52,6 +52,6 @@ the isolated mutation boundary.
 
 The checked-in extension (browser tab, context command) lives under **`vscode-extension/`** next to this resolver — see **`vscode-extension/README.md`** for packaging and **code-server** image build.
 
-## Qt launcher
+## DockPipe Launcher
 
-The native tray app is **`packages/pipeon/apps/pipeon-launcher/`** (separate binary; not this resolver).
+The native tray app is **`src/app/tooling/dockpipe-launcher/`** (separate binary; not this resolver). Pipeon uses it for first-run setup and app-style launching, but it is DockPipe tooling rather than a Pipeon-owned app.

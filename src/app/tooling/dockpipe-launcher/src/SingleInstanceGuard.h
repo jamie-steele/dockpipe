@@ -6,7 +6,7 @@
 class QWidget;
 
 /**
- * Ensures only one Pipeon Launcher process runs. A second start notifies the first
+ * Ensures only one DockPipe Launcher process runs. A second start notifies the first
  * (via QLocalSocket) to show/raise the main window, then exits.
  *
  * Pass --allow-second-instance to skip this (debugging).

@@ -19,16 +19,16 @@ static bool allowSecondInstance(int argc, char *argv[])
 int main(int argc, char *argv[])
 {
     QApplication app(argc, argv);
-    QApplication::setApplicationName(QStringLiteral("pipeon-launcher"));
-    QApplication::setApplicationDisplayName(QStringLiteral("Pipeon Launcher"));
-    QApplication::setOrganizationName(QStringLiteral("pipeon"));
-    app.setDesktopFileName(QStringLiteral("pipeon-launcher"));
+    QApplication::setApplicationName(QStringLiteral("dockpipe-launcher"));
+    QApplication::setApplicationDisplayName(QStringLiteral("DockPipe Launcher"));
+    QApplication::setOrganizationName(QStringLiteral("dockpipe"));
+    app.setDesktopFileName(QStringLiteral("dockpipe-launcher"));
     app.setWindowIcon(QIcon(QStringLiteral(":/icon.png")));
 
     app.setStyle(QStyleFactory::create(QStringLiteral("Fusion")));
 
-    applyPipeonTheme(app);
-    connectPipeonThemeUpdates(app);
+    applyDockpipeLauncherTheme(app);
+    connectDockpipeLauncherThemeUpdates(app);
 
     app.setQuitOnLastWindowClosed(false);
 

@@ -187,7 +187,7 @@ func TestInferWorkspaceChatTargets_RequiresDenseArchitectureMatches(t *testing.T
 	files := map[string]string{
 		"packages/dorkpipe/lib/cmd/dorkpipe/request.go":           "package main\n\nfunc chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\nfunc buildWorkspaceChatContext(root string, req routeRequest) workspaceChatContext {}\n",
 		"packages/dorkpipe/lib/cmd/dorkpipe/structured_trace.go":  "package main\n\nfunc writePreparedArtifactBundle() {}\nfunc deriveStructuredEdits() {}\n// validation status for artifacts\n",
-		"packages/pipeon/apps/pipeon-launcher/src/BasicModeWidget.cpp": "namespace pipeon { class BasicModeWidget {}; }\n",
+		"src/app/tooling/dockpipe-launcher/src/BasicModeWidget.cpp": "namespace dockpipe { class BasicModeWidget {}; }\n",
 	}
 	for rel, body := range files {
 		path := filepath.Join(root, rel)
@@ -209,7 +209,7 @@ func TestInferWorkspaceChatTargets_RequiresDenseArchitectureMatches(t *testing.T
 		t.Fatalf("expected request.go first, got %#v", got)
 	}
 	for _, rel := range got {
-		if rel == "packages/dorkpipe/lib/cmd/dorkpipe/structured_trace.go" || rel == "packages/pipeon/apps/pipeon-launcher/src/BasicModeWidget.cpp" {
+		if rel == "packages/dorkpipe/lib/cmd/dorkpipe/structured_trace.go" || rel == "src/app/tooling/dockpipe-launcher/src/BasicModeWidget.cpp" {
 			t.Fatalf("expected loose architecture overlaps to be filtered, got %#v", got)
 		}
 	}

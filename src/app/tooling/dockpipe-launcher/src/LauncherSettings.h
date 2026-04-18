@@ -3,7 +3,7 @@
 #include <QString>
 #include <QStringList>
 
-/// Pipeon UI preferences (Basic vs Advanced, project folder, view mode). Stored in `launcher.json` under the app config dir.
+/// DockPipe Launcher UI preferences (Basic vs Advanced, project folder, view mode). Stored in `launcher.json` under the app config dir.
 class LauncherSettings {
 public:
     static constexpr int kMaxRecentProjects = 20;

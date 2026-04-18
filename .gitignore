@@ -21,11 +21,11 @@ packages/dorkpipe-mcp/bin/mcpd
 .ssh/
 
 # Build output
-# Pipeon Launcher CMake build
-packages/pipeon/apps/pipeon-launcher/build/
+# DockPipe Launcher CMake build
+src/app/tooling/dockpipe-launcher/build/
 # Pipeon Desktop Tauri/Rust build output
 packages/pipeon/apps/pipeon-desktop/src-tauri/target/
-build-pipeon-launcher/
+build-dockpipe-launcher/
 release/packaging/build/
 *.deb
 src/bin/
@@ -97,6 +97,6 @@ bin/.dockpipe/
 # VS Code extension (packed / dev)
 packages/pipeon/resolvers/pipeon/vscode-extension/node_modules/
 packages/pipeon/resolvers/pipeon/vscode-extension/*.vsix
-vscode-extensions/dockpipe-language-support/node_modules/
-vscode-extensions/dockpipe-language-support/*.vsix
-vscode-extensions/dockpipe-language-support/dist/
+src/app/tooling/vscode-extensions/dockpipe-language-support/node_modules/
+src/app/tooling/vscode-extensions/dockpipe-language-support/*.vsix
+src/app/tooling/vscode-extensions/dockpipe-language-support/dist/

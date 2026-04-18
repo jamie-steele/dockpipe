@@ -2,9 +2,9 @@
 
 **Scripts** (**`cursor-dev-session.sh`**, **`session-idle.sh`** (container PID 1 helper), **`cursor-prep.sh`**, **`cursor-dev-common.sh`**, **`cursor-print-next-steps.sh`**) live **in this directory** (same folder as **`config.yml`**). Workflows use logical script ids like **`run: scripts/cursor-dev/…`**; DockPipe resolves those to the compiled or materialized resolver asset for this package/resolver.
 
-## Pipeon Launcher
+## DockPipe Launcher
 
-**Pipeon’s “Set up Cursor MCP”** button runs **`cursor-prep.sh` only** (writes **`bin/.dockpipe/packages/cursor-dev/`**). It does **not** start Docker or run DockPipe. **Double-click the `cursor-dev` app** in Basic mode to run **`dockpipe --workflow cursor-dev`** (full session: container + Cursor on the host).
+**DockPipe Launcher’s “Set up Cursor MCP”** button runs **`cursor-prep.sh` only** (writes **`bin/.dockpipe/packages/cursor-dev/`**). It does **not** start Docker or run DockPipe. **Double-click the `cursor-dev` app** in Basic mode to run **`dockpipe --workflow cursor-dev`** (full session: container + Cursor on the host).
 
 ## What it does
 

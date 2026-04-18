@@ -5,4 +5,7 @@ First-party graphical host apps for Pipeon live here. They drive DockPipe and re
 | Directory | Tool |
 |-----------|------|
 | **`pipeon-desktop/`** | **Pipeon Desktop** — Tauri desktop shell for the Pipeon/code-server surface |
-| **`pipeon-launcher/`** | **Pipeon Launcher** — Qt tray app for launching DockPipe-backed sessions |
+
+Shared first-party DockPipe tooling apps live under **`src/app/tooling/`**. The launcher moved to:
+
+- **`src/app/tooling/dockpipe-launcher/`** — **DockPipe Launcher**

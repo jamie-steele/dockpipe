@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(pipeon-launcher VERSION 0.1.0 LANGUAGES CXX)
+project(dockpipe-launcher VERSION 0.1.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -14,7 +14,7 @@ endif()
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 
-set(PIPEON_LAUNCHER_SOURCES
+set(DOCKPIPE_LAUNCHER_SOURCES
     src/main.cpp
     src/SingleInstanceGuard.cpp
     src/Theme.cpp
@@ -34,14 +34,14 @@ set(PIPEON_LAUNCHER_SOURCES
     src/ContextRowWidget.cpp
     src/EditContextDialog.cpp
     src/MainWindow.cpp
-    pipeon.qrc
+    dockpipe-launcher.qrc
 )
 
-qt_add_executable(pipeon-launcher ${PIPEON_LAUNCHER_SOURCES})
+qt_add_executable(dockpipe-launcher ${DOCKPIPE_LAUNCHER_SOURCES})
 
-target_include_directories(pipeon-launcher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(pipeon-launcher PRIVATE Qt6::Widgets Qt6::Network)
+target_include_directories(dockpipe-launcher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(dockpipe-launcher PRIVATE Qt6::Widgets Qt6::Network)
 
 if(MSVC)
-    target_compile_definitions(pipeon-launcher PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_definitions(dockpipe-launcher PRIVATE _CRT_SECURE_NO_WARNINGS)
 endif()

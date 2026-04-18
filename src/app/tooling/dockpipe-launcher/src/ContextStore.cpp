@@ -11,7 +11,7 @@ QString ContextStore::configDir()
 {
     QString base = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation);
     if (base.isEmpty())
-        base = QDir::homePath() + QStringLiteral("/.config/pipeon");
+        base = QDir::homePath() + QStringLiteral("/.config/dockpipe-launcher");
     QDir().mkpath(base);
     return base;
 }

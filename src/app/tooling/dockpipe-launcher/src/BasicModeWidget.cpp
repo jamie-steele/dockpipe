@@ -51,7 +51,7 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     homeLay->setSpacing(12);
     homeLay->setContentsMargins(12, 12, 12, 12);
 
-    auto *homeTitle = new QLabel(tr("Pipeon"));
+    auto *homeTitle = new QLabel(tr("DockPipe Launcher"));
     homeTitle->setObjectName(QStringLiteral("appTitle"));
     auto *homeSub = new QLabel(
         tr("Open a project folder to see DockPipe workflows. Recent folders appear here — pick one or browse."));

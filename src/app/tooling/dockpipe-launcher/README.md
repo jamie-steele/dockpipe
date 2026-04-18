@@ -1,8 +1,8 @@
-# Pipeon host launcher (DockPipe GUI)
+# DockPipe Launcher
 
 Cross-platform **Qt 6** system-tray app: save **contexts** (folder + resolver / strategy / runtime), **launch** or **stop** `dockpipe` subprocesses, **open logs** and folders. It does **not** run workflows inside the GUI; all execution stays in **DockPipe** (and optionally **DorkPipe** later).
 
-This tree lives under **`packages/pipeon/apps/pipeon-launcher/`** as a Pipeon-owned host UI. It drives the DockPipe CLI but is not part of the engine (`src/lib/`, `src/cmd/`). Icons for the tray are generated into **`packages/pipeon/resolvers/pipeon/vscode-extension/images/`** (**`make pipeon-icons`** from repo root).
+This tree lives under **`src/app/tooling/dockpipe-launcher/`** as first-party DockPipe tooling. It drives the DockPipe CLI but is not part of the engine (**`src/lib/`**, **`src/cmd/`**). The tray/window icon uses the DockPipe logo from **`packages/dorkpipe/assets/images/icon.png`**.
 
 ## Requirements
 
@@ -14,39 +14,39 @@ This tree lives under **`packages/pipeon/apps/pipeon-launcher/`** as a Pipeon-ow
 
 ## Build
 
-`CMakeLists.txt` lives under **`packages/pipeon/apps/pipeon-launcher/`**. Run CMake with that directory as the **source** (or `cd` there first).
+`CMakeLists.txt` lives under **`src/app/tooling/dockpipe-launcher/`**. Run CMake with that directory as the **source** (or `cd` there first).
 
-**Fastest — from the repo root:** `cmake -S packages/pipeon/apps/pipeon-launcher -B packages/pipeon/apps/pipeon-launcher/build && cmake --build packages/pipeon/apps/pipeon-launcher/build` (writes **`packages/pipeon/apps/pipeon-launcher/build/`**).
+**Fastest — from the repo root:** `cmake -S src/app/tooling/dockpipe-launcher -B src/app/tooling/dockpipe-launcher/build && cmake --build src/app/tooling/dockpipe-launcher/build` (writes **`src/app/tooling/dockpipe-launcher/build/`**).
 
 **Option A — from the repo root (CMake by hand):**
 
 ```bash
 cd ~/source/dockpipe
 sudo apt install cmake build-essential qt6-base-dev   # Pop!_OS / Ubuntu: Qt 6 Widgets + dev tools
-cmake -S packages/pipeon/apps/pipeon-launcher -B packages/pipeon/apps/pipeon-launcher/build
-cmake --build packages/pipeon/apps/pipeon-launcher/build
-./packages/pipeon/apps/pipeon-launcher/build/pipeon-launcher
+cmake -S src/app/tooling/dockpipe-launcher -B src/app/tooling/dockpipe-launcher/build
+cmake --build src/app/tooling/dockpipe-launcher/build
+./src/app/tooling/dockpipe-launcher/build/dockpipe-launcher
 ```
 
 **Option B — from the launcher directory:**
 
 ```bash
-cd ~/source/dockpipe/packages/pipeon/apps/pipeon-launcher
+cd ~/source/dockpipe/src/app/tooling/dockpipe-launcher
 cmake -B build
 cmake --build build
-./build/pipeon-launcher
+./build/dockpipe-launcher
 ```
 
 To install a Linux desktop entry and icon for app launchers / docks (for example Pop OS / GNOME):
 
 ```bash
-make install-pipeon-launcher-global
+make install-dockpipe-launcher-global
 ```
 
 If you use the **Qt Online Installer** instead of distro packages, point CMake at that kit (replace with your real path):
 
 ```bash
-cmake -S packages/pipeon/apps/pipeon-launcher -B packages/pipeon/apps/pipeon-launcher/build \
+cmake -S src/app/tooling/dockpipe-launcher -B src/app/tooling/dockpipe-launcher/build \
   -DCMAKE_PREFIX_PATH="$HOME/Qt/6.8.0/gcc_64"
 ```
 
@@ -55,9 +55,9 @@ Do **not** use the placeholder `/path/to/Qt/6.x/...` literally — it must be a 
 **If configuration failed earlier** (stale cache): remove the build dir and re-run CMake after installing `libgl1-mesa-dev` / `libegl1-mesa-dev`:
 
 ```bash
-rm -rf packages/pipeon/apps/pipeon-launcher/build
-cmake -S packages/pipeon/apps/pipeon-launcher -B packages/pipeon/apps/pipeon-launcher/build
-cmake --build packages/pipeon/apps/pipeon-launcher/build
+rm -rf src/app/tooling/dockpipe-launcher/build
+cmake -S src/app/tooling/dockpipe-launcher -B src/app/tooling/dockpipe-launcher/build
+cmake --build src/app/tooling/dockpipe-launcher/build
 ```
 
 ## LGPL / Qt
@@ -83,9 +83,9 @@ Choosing **Add folder…** resolves a DockPipe project root by walking upward fo
 
 | OS      | Config / contexts                          |
 |---------|---------------------------------------------|
-| Linux   | `~/.config/pipeon/` (XDG)                  |
-| macOS   | `~/Library/Application Support/Pipeon/`  |
-| Windows | `%APPDATA%\Pipeon\`                      |
+| Linux   | `~/.config/dockpipe/` or `~/.config/dockpipe-launcher/` fallback |
+| macOS   | `~/Library/Application Support/dockpipe/` |
+| Windows | `%APPDATA%\\dockpipe\\` |
 
 - **`contexts.json`** — saved contexts.
 - **`launcher.json`** — UI mode (`basic` / `advanced`), Basic view (`icons` / `list`), last **project folder** for Basic mode.
@@ -102,7 +102,7 @@ Choosing **Add folder…** resolves a DockPipe project root by walking upward fo
 
 ## UI
 
-The window uses **Qt Fusion** plus stylesheets embedded in `pipeon.qrc`: shared `resources/theme/pipeon.qss` plus **`pipeon-light.qss`** or **`pipeon-dark.qss`**. Light/dark is chosen from **`QStyleHints::colorScheme`** when available (Qt 6.5+), and on **Linux** also from **`gsettings`** (`org.gnome.desktop.interface` color-scheme / gtk-theme), **`~/.config/gtk-3.0/settings.ini`** (`gtk-application-prefer-dark-theme`), **KDE** `~/.config/kdeglobals` `ColorScheme`, **`GTK_THEME`**, then palette luminance as a last resort. When dark is selected, the app applies a **Fusion dark palette** so backgrounds match the stylesheet (Qt often defaults to a light palette on Linux). **Light** mode uses stronger text/badge contrast. The stylesheet is **re-applied when the system color scheme changes** (Qt 6.5+). The main header groups **primary** session actions (launch, relaunch, stop, add folder) separately from **secondary** utilities (edit, refresh worktrees, logs, folder, remove, stop all for repo). The context list uses row widgets with a status badge; **Edit context** opens a grouped dialog with combo boxes populated from the dockpipe repo when `DOCKPIPE_REPO_ROOT` or the context workdir resolves to a checkout.
+The window uses **Qt Fusion** plus stylesheets embedded in **`dockpipe-launcher.qrc`**: shared `resources/theme/pipeon.qss` plus **`pipeon-light.qss`** or **`pipeon-dark.qss`**. Light/dark is chosen from **`QStyleHints::colorScheme`** when available (Qt 6.5+), and on **Linux** also from **`gsettings`** (`org.gnome.desktop.interface` color-scheme / gtk-theme), **`~/.config/gtk-3.0/settings.ini`** (`gtk-application-prefer-dark-theme`), **KDE** `~/.config/kdeglobals` `ColorScheme`, **`GTK_THEME`**, then palette luminance as a last resort. When dark is selected, the app applies a **Fusion dark palette** so backgrounds match the stylesheet (Qt often defaults to a light palette on Linux). **Light** mode uses stronger text/badge contrast. The stylesheet is **re-applied when the system color scheme changes** (Qt 6.5+). The main header groups **primary** session actions (launch, relaunch, stop, add folder) separately from **secondary** utilities (edit, refresh worktrees, logs, folder, remove, stop all for repo). The context list uses row widgets with a status badge; **Edit context** opens a grouped dialog with combo boxes populated from the dockpipe repo when `DOCKPIPE_REPO_ROOT` or the context workdir resolves to a checkout.
 
 ## Scope
 

@@ -175,7 +175,7 @@ bool isDarkUi()
 
 } // namespace
 
-void applyPipeonTheme(QApplication &app)
+void applyDockpipeLauncherTheme(QApplication &app)
 {
     QStyle *st = app.style();
     const bool dark = isDarkUi();
@@ -193,11 +193,11 @@ void applyPipeonTheme(QApplication &app)
     app.setStyleSheet(sheet);
 }
 
-void connectPipeonThemeUpdates(QApplication &app)
+void connectDockpipeLauncherThemeUpdates(QApplication &app)
 {
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0)
     QObject::connect(QGuiApplication::styleHints(), &QStyleHints::colorSchemeChanged, &app,
-                       [&app]() { applyPipeonTheme(app); });
+                       [&app]() { applyDockpipeLauncherTheme(app); });
 #else
     Q_UNUSED(app);
 #endif

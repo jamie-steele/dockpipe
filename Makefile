@@ -5,10 +5,10 @@
 #
 # Optional: `make maintainer-tools` — dorkpipe + mcpd binaries under packages/
 # Optional Pipeon: `make pipeon-icons` | `make build-code-server-image` (see packages/pipeon/resolvers/pipeon/vscode-extension/)
-# Qt launcher: cmake -S packages/pipeon/apps/pipeon-launcher -B packages/pipeon/apps/pipeon-launcher/build && cmake --build ...
+# DockPipe Launcher: cmake -S src/app/tooling/dockpipe-launcher -B src/app/tooling/dockpipe-launcher/build && cmake --build ...
 include src/Makefile
 
-.PHONY: pipeon-icons build-code-server-image build-pipeon-desktop build-pipeon-launcher install-pipeon-desktop install-pipeon-desktop-global install-pipeon-launcher install-pipeon-launcher-global install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci package-templates-core package-dockpipe-language-support package-vscode-language-support install-dockpipe-language-support package-pipeon-vscode-extension install-pipeon-vscode-extension
+.PHONY: pipeon-icons build-code-server-image build-pipeon-desktop build-dockpipe-launcher install-pipeon-desktop install-pipeon-desktop-global install-dockpipe-launcher install-dockpipe-launcher-global install dev-install test-quick check-paths deb deb-all demo-record demo-record-short demo-record-long dev-deps install-record-deps ci package-templates-core package-dockpipe-language-support package-vscode-language-support install-dockpipe-language-support package-pipeon-vscode-extension install-pipeon-vscode-extension
 
 pipeon-icons:
 	python3 packages/pipeon/resolvers/pipeon/assets/scripts/generate-pipeon-icons.py
@@ -22,10 +22,10 @@ build-pipeon-desktop:
 	cp -f packages/pipeon/apps/pipeon-desktop/src-tauri/target/release/pipeon-desktop packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop
 	chmod +x packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop
 
-build-pipeon-launcher:
-	rm -rf packages/pipeon/apps/pipeon-launcher/build
-	cmake -S packages/pipeon/apps/pipeon-launcher -B packages/pipeon/apps/pipeon-launcher/build
-	cmake --build packages/pipeon/apps/pipeon-launcher/build
+build-dockpipe-launcher:
+	rm -rf src/app/tooling/dockpipe-launcher/build
+	cmake -S src/app/tooling/dockpipe-launcher -B src/app/tooling/dockpipe-launcher/build
+	cmake --build src/app/tooling/dockpipe-launcher/build
 
 install-pipeon-desktop: build-pipeon-desktop
 	mkdir -p bin/.dockpipe/packages/pipeon/bin
@@ -50,29 +50,28 @@ install-pipeon-desktop-global: install-pipeon-desktop
 		'StartupWMClass=com.dockpipe.pipeon' \
 		> "$$HOME/.local/share/applications/com.dockpipe.pipeon.desktop"
 
-install-pipeon-launcher: build-pipeon-launcher
-	mkdir -p bin/.dockpipe/packages/pipeon/bin
-	install -m 755 packages/pipeon/apps/pipeon-launcher/build/pipeon-launcher bin/.dockpipe/packages/pipeon/bin/pipeon-launcher
+install-dockpipe-launcher: build-dockpipe-launcher
+	mkdir -p bin/.dockpipe/tooling/bin
+	install -m 755 src/app/tooling/dockpipe-launcher/build/dockpipe-launcher bin/.dockpipe/tooling/bin/dockpipe-launcher
 
-install-pipeon-launcher-global: install-pipeon-launcher
-	mkdir -p "$$HOME/.local/share/pipeon/bin"
-	mkdir -p "$$HOME/.local/share/pipeon/icons"
+install-dockpipe-launcher-global: install-dockpipe-launcher
+	mkdir -p "$$HOME/.local/share/dockpipe/bin"
+	mkdir -p "$$HOME/.local/share/dockpipe/icons"
 	mkdir -p "$$HOME/.local/share/applications"
-	install -m 755 bin/.dockpipe/packages/pipeon/bin/pipeon-launcher "$$HOME/.local/share/pipeon/bin/pipeon-launcher"
-	install -m 644 packages/pipeon/resolvers/pipeon/vscode-extension/images/icon.png "$$HOME/.local/share/pipeon/icons/icon.png"
-	rm -f "$$HOME/.local/share/applications/pipeon-launcher.desktop"
-	rm -f "$$HOME/.local/share/applications/pipeon-launcher-global.desktop"
+	install -m 755 bin/.dockpipe/tooling/bin/dockpipe-launcher "$$HOME/.local/share/dockpipe/bin/dockpipe-launcher"
+	install -m 644 packages/dorkpipe/assets/images/icon.png "$$HOME/.local/share/dockpipe/icons/dockpipe.png"
+	rm -f "$$HOME/.local/share/applications/dockpipe-launcher.desktop"
 	printf '%s\n' \
 		'[Desktop Entry]' \
 		'Type=Application' \
-		'Name=Pipeon Launcher' \
-		'Exec='"$$HOME"'/.local/share/pipeon/bin/pipeon-launcher --start-home' \
-		'Icon='"$$HOME"'/.local/share/pipeon/icons/icon.png' \
+		'Name=DockPipe Launcher' \
+		'Exec='"$$HOME"'/.local/share/dockpipe/bin/dockpipe-launcher --start-home' \
+		'Icon='"$$HOME"'/.local/share/dockpipe/icons/dockpipe.png' \
 		'Terminal=false' \
 		'Categories=Development;' \
 		'StartupNotify=true' \
-		'StartupWMClass=pipeon-launcher' \
-		> "$$HOME/.local/share/applications/pipeon-launcher.desktop"
+		'StartupWMClass=dockpipe-launcher' \
+		> "$$HOME/.local/share/applications/dockpipe-launcher.desktop"
 
 # Package Pipeon VS Code extension (.vsix) into bin/.dockpipe/extensions.
 # Reuses the locally installed vsce from the DockPipe language-support extension to avoid network fetches.
@@ -80,7 +79,7 @@ package-pipeon-vscode-extension: package-dockpipe-language-support
 	mkdir -p bin/.dockpipe/extensions
 	npm --prefix packages/pipeon/resolvers/pipeon/vscode-extension run build
 	npm --prefix packages/pipeon/resolvers/pipeon/vscode-extension run test:webview
-	cd packages/pipeon/resolvers/pipeon/vscode-extension && node ../../../../../vscode-extensions/dockpipe-language-support/node_modules/@vscode/vsce/vsce package --no-dependencies -o ../../../../../bin/.dockpipe/extensions/pipeon-$$(node -p "require('./package.json').version").vsix
+	cd packages/pipeon/resolvers/pipeon/vscode-extension && node ../../../../../src/app/tooling/vscode-extensions/dockpipe-language-support/node_modules/@vscode/vsce/vsce package --no-dependencies -o ../../../../../bin/.dockpipe/extensions/pipeon-$$(node -p "require('./package.json').version").vsix
 
 # Build + install Pipeon extension into Cursor (fallback: VS Code CLI).
 install-pipeon-vscode-extension: package-pipeon-vscode-extension
@@ -103,7 +102,7 @@ install-pipeon-vscode-extension: package-pipeon-vscode-extension
 # Package DockPipe language support extension (.vsix).
 package-dockpipe-language-support:
 	mkdir -p bin/.dockpipe/extensions
-	cd vscode-extensions/dockpipe-language-support && if [ ! -x node_modules/.bin/vsce ]; then NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache npm ci --no-audit --no-fund; fi && NPM_CONFIG_CACHE=$$(pwd)/../../tmp/npm-cache node node_modules/@vscode/vsce/vsce package --no-dependencies -o ../../bin/.dockpipe/extensions/dockpipe-language-support-$$(node -p "require('./package.json').version").vsix
+	cd src/app/tooling/vscode-extensions/dockpipe-language-support && if [ ! -x node_modules/.bin/vsce ]; then NPM_CONFIG_CACHE=$$(pwd)/../../../../tmp/npm-cache npm ci --no-audit --no-fund; fi && NPM_CONFIG_CACHE=$$(pwd)/../../../../tmp/npm-cache node node_modules/@vscode/vsce/vsce package --no-dependencies -o ../../../../bin/.dockpipe/extensions/dockpipe-language-support-$$(node -p "require('./package.json').version").vsix
 
 # Back-compat alias.
 package-vscode-language-support: package-dockpipe-language-support

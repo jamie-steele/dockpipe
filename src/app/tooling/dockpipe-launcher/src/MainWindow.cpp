@@ -98,7 +98,7 @@ QString shellQuote(QString s)
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
 {
-    setWindowTitle(tr("Pipeon"));
+    setWindowTitle(tr("DockPipe Launcher"));
     resize(800, 520);
 
     m_settings.load();
@@ -141,7 +141,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     connect(&m_sessions, &SessionManager::sessionFailed, this, &MainWindow::onSessionChanged);
     connect(&m_sessions, &SessionManager::sessionOutput, this, &MainWindow::onSessionOutput);
     connect(&m_sessions, &SessionManager::sessionFailed, this,
-            [this](const QString &, const QString &err) { QMessageBox::warning(this, tr("Pipeon"), err); });
+            [this](const QString &, const QString &err) { QMessageBox::warning(this, tr("DockPipe Launcher"), err); });
 
     setupTray();
     applyUiMode();
@@ -160,7 +160,7 @@ void MainWindow::setupDisclaimerBar()
     lay->setSpacing(8);
 
     auto *disclaimer = new QLabel(
-        tr("Notice: Pipeon does not distribute third-party applications. Dockpipe workflows run on "
+        tr("Notice: DockPipe Launcher does not distribute third-party applications. Dockpipe workflows run on "
            "your machine; install tools from official vendor or distribution channels and accept each "
            "publisher’s terms."));
     disclaimer->setObjectName(QStringLiteral("disclaimerWatermark"));
@@ -224,13 +224,13 @@ void MainWindow::setupMenuBar()
     packagesMenu->addAction(tr("Manage Packages…"), this, &MainWindow::onManagePackages);
 
     QMenu *help = menuBar()->addMenu(tr("Help"));
-    help->addAction(tr("About Pipeon…"), this, &MainWindow::onAbout);
+    help->addAction(tr("About DockPipe Launcher…"), this, &MainWindow::onAbout);
     help->addSeparator();
     help->addAction(tr("Show notice in status bar again"), this, &MainWindow::onRestoreThirdPartyDisclaimer);
     help->addAction(tr("Third-party software notice…"), this, [this]() {
         QMessageBox::information(
             this, tr("Third-party software"),
-            tr("Pipeon is a launcher for dockpipe workflows. It does not ship or bundle third-party "
+            tr("DockPipe Launcher is a launcher for dockpipe workflows. It does not ship or bundle third-party "
                "applications.\n\n"
                "If a workflow needs external tools, you install them yourself from official sources. Use of "
                "those products is subject to their respective licensors’ terms."));
@@ -251,15 +251,14 @@ void MainWindow::setupMenuBar()
 void MainWindow::onAbout()
 {
     QMessageBox box(this);
-    box.setWindowTitle(tr("About Pipeon"));
+    box.setWindowTitle(tr("About DockPipe Launcher"));
     box.setIcon(QMessageBox::Information);
     box.setTextFormat(Qt::RichText);
     box.setTextInteractionFlags(Qt::TextBrowserInteraction);
     box.setText(
-        tr("<h3>Pipeon</h3>"
-           "<p>Pipeon is the launcher and local-first workspace shell for DockPipe workflows.</p>"
-           "<p><a href=\"https://pipeon.dev\">pipeon.dev</a><br>"
-           "<a href=\"https://dockpipe.com\">dockpipe.com</a></p>"));
+        tr("<h3>DockPipe Launcher</h3>"
+           "<p>DockPipe Launcher is the desktop shell and local-first workspace surface for DockPipe workflows.</p>"
+           "<p><a href=\"https://github.com/dockpipe/dockpipe\">github.com/dockpipe/dockpipe</a></p>"));
     box.setStandardButtons(QMessageBox::Ok);
     box.exec();
 }
@@ -613,7 +612,7 @@ void MainWindow::updateBasicPage()
 void MainWindow::onBasicLaunch(const QString &workflowId)
 {
     if (m_settings.projectFolder.isEmpty()) {
-        QMessageBox::information(this, tr("Pipeon"),
+        QMessageBox::information(this, tr("DockPipe Launcher"),
                                  tr("Choose a project folder first (File → Open project folder, or Choose folder…)."));
         return;
     }
@@ -658,7 +657,7 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
         m_basicLaunchingContextId.clear();
         m_basicLaunchingWorkflowId.clear();
         updateBasicPage();
-        QMessageBox::warning(this, tr("Pipeon"), tr("Could not start dockpipe (see stderr)."));
+        QMessageBox::warning(this, tr("DockPipe Launcher"), tr("Could not start dockpipe (see stderr)."));
     }
     });
 }
@@ -666,7 +665,7 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
 void MainWindow::setupTray()
 {
     m_tray = new QSystemTrayIcon(QIcon(QStringLiteral(":/icon.png")), this);
-    m_tray->setToolTip(tr("Pipeon"));
+    m_tray->setToolTip(tr("DockPipe Launcher"));
     auto *menu = new QMenu(this);
     menu->addAction(tr("Show"), this, [this]() { show(); raise(); activateWindow(); });
     menu->addSeparator();
@@ -848,7 +847,7 @@ void MainWindow::onAddFolder()
         ++added;
     }
     if (added == 0) {
-        QMessageBox::information(this, tr("Pipeon"),
+        QMessageBox::information(this, tr("DockPipe Launcher"),
                                  tr("No new contexts to add — all matching workflows already exist for this folder."));
         return;
     }
@@ -867,7 +866,7 @@ void MainWindow::onRefreshWorktrees()
     }
     const QString root = GitHelper::repoRoot(path);
     if (root.isEmpty()) {
-        QMessageBox::information(this, tr("Pipeon"), tr("Not a git repository."));
+        QMessageBox::information(this, tr("DockPipe Launcher"), tr("Not a git repository."));
         return;
     }
     const QVector<WorktreeRow> rows = GitHelper::listWorktrees(root);
@@ -899,13 +898,13 @@ void MainWindow::onRemoveContext()
     if (!c)
         return;
     if (m_sessions.isRunning(c->id)) {
-        QMessageBox::warning(this, tr("Pipeon"), tr("Stop this context before forgetting the saved row."));
+        QMessageBox::warning(this, tr("DockPipe Launcher"), tr("Stop this context before forgetting the saved row."));
         return;
     }
     const QString label = c->label.isEmpty() ? c->workdir : c->label;
     const auto choice = QMessageBox::question(
         this, tr("Forget saved row"),
-        tr("Remove \"%1\" from Pipeon?\n\nThis only removes the saved launcher row. It does not delete files from disk.")
+        tr("Remove \"%1\" from DockPipe Launcher?\n\nThis only removes the saved launcher row. It does not delete files from disk.")
             .arg(label));
     if (choice != QMessageBox::Yes) {
         return;
@@ -943,7 +942,7 @@ void MainWindow::onLaunch()
     if (m_sessions.launch(*c, ContextStore::logsDir()))
         rebuildUi();
     else if (!m_sessions.isRunning(c->id))
-        QMessageBox::warning(this, tr("Pipeon"), tr("Could not start dockpipe (see stderr)."));
+        QMessageBox::warning(this, tr("DockPipe Launcher"), tr("Could not start dockpipe (see stderr)."));
 }
 
 void MainWindow::onRelaunch()
@@ -972,7 +971,7 @@ void MainWindow::onStopAllForRepo()
         return;
     const QString root = GitHelper::repoRoot(c->workdir);
     if (root.isEmpty()) {
-        QMessageBox::information(this, tr("Pipeon"), tr("Not a git repository; stopping this context only."));
+        QMessageBox::information(this, tr("DockPipe Launcher"), tr("Not a git repository; stopping this context only."));
         m_sessions.stop(c->id);
         rebuildUi();
         return;
