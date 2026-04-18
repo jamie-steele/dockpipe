@@ -16,6 +16,20 @@ Go module **`dorkpipe.orchestrator`** — local-first orchestration **on top of*
 
 CLI: **`make maintainer-tools`** (repo root) writes **`../bin/dorkpipe`** (next to this **`lib/`** tree). Run that path directly — it is **not** installed under **`src/bin/`**.
 
+## Authoring note
+
+When maintainer scripts in the DorkPipe package need repo binaries, prefer the package-local shell helpers instead of open-coding `command -v` lookups:
+
+- **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/lib/repo-tools.sh`**
+- **`packages/dorkpipe/resolvers/dorkpipe-orchestrator/assets/scripts/lib/repo-tools.sh`**
+
+Those helpers prefer the real repo-local builds such as:
+
+- **`packages/dorkpipe/bin/dorkpipe`**
+- **`src/bin/dockpipe`**
+
+before falling back to `PATH`.
+
 Does **not** replace DockPipe’s workflow engine; it **invokes** the `dockpipe` binary for resolver steps.
 
 **Confidence:** per-node **vectors** → harmonic mean **per dimension** across nodes → **weighted `calibrated`** (see `policy.merge_weights`). Skipped nodes (branch, `retrieve_if`, `early_stop`) are excluded from the aggregate.
@@ -24,4 +38,4 @@ Does **not** replace DockPipe’s workflow engine; it **invokes** the `dockpipe`
 
 Artifacts: **`bin/.dockpipe/packages/dorkpipe/run.json`**, **`bin/.dockpipe/packages/dorkpipe/metrics.jsonl`** (schema v2). Example DAG: **`examples/full-bar.yaml`** in this directory.
 
-**DockPipe self-analysis:** **`dockpipe/dorkpipe/resolvers/dorkpipe-self-analysis/`** runs the script **in a container** (isolated). Optional **Compose** sidecar: **`scripts/dorkpipe/dev-stack.sh`**. Writes **`.dockpipe/`** + **`bin/.dockpipe/packages/dorkpipe/`** artifacts.
+**DockPipe self-analysis:** **`dockpipe/dorkpipe/resolvers/dorkpipe-self-analysis/`** runs the script **in a container** (isolated). Optional **Compose** sidecar: **`scripts/dorkpipe/dev-stack.sh`**. Writes **`bin/.dockpipe/`** artifacts including **`bin/.dockpipe/packages/dorkpipe/`**.

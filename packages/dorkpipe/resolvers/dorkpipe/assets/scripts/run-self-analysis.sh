@@ -2,31 +2,13 @@
 # Host entry: run DorkPipe self-analysis DAG (writes bin/.dockpipe/orchestrator-cursor-prompt.md).
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/repo-tools.sh
+source "$SCRIPT_DIR/lib/repo-tools.sh"
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 ROOT="$(cd "$ROOT" && pwd)"
 cd "$ROOT"
 export DOCKPIPE_WORKDIR="$ROOT"
-
-resolve_dorkpipe_bin() {
-	local configured="${DORKPIPE_BIN:-}"
-	local candidate
-	if [[ -n "$configured" ]]; then
-		printf '%s\n' "$configured"
-		return 0
-	fi
-	for candidate in \
-		"$ROOT/packages/dorkpipe/bin/dorkpipe" \
-		"$SCRIPT_DIR/../../../../packages/dorkpipe/bin/dorkpipe"
-	do
-		if [[ -x "$candidate" ]]; then
-			printf '%s\n' "$candidate"
-			return 0
-		fi
-	done
-	command -v dorkpipe 2>/dev/null || true
-}
-
-BIN="$(resolve_dorkpipe_bin)"
+BIN="$(dorkpipe_resolve_dorkpipe_bin "$ROOT")"
 SPEC="${DORKPIPE_SELF_ANALYSIS_SPEC:-${SCRIPT_DIR}/../../dorkpipe-self-analysis/spec.yaml}"
 if [[ ! -x "$BIN" ]]; then
 	echo "dorkpipe-self-analysis: build the orchestrator first: make maintainer-tools (expected $BIN)" >&2

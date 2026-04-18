@@ -10,3 +10,10 @@
 Principles: deterministic prep, local-first, parallel levels, pgvector when you add those nodes, Codex on escalation (or explicit non-escalate codex nodes). See **`lib/README.md`** (Go module).
 
 **Self-analysis (repo → Cursor handoff):** **`workflows/dorkpipe-self-analysis/`** — **container-isolated** step; **`dorkpipe-self-analysis-host`** if you need **skip_container**. Optional **Compose** sidecar: **`scripts/dorkpipe/dev-stack.sh`**. Writes **`.dockpipe/orchestrator-cursor-prompt.md`** and **`paste-this-prompt.txt`**.
+## Authoring note
+
+Resolver host scripts in this package should use:
+
+- **`assets/scripts/lib/repo-tools.sh`**
+
+to resolve the repo-local **`dorkpipe`** build before falling back to `PATH`.

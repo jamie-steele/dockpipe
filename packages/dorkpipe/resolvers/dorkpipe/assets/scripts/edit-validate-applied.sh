@@ -1,21 +1,15 @@
 #!/usr/bin/env bash
 # Run lightweight post-apply checks for changed files.
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/repo-tools.sh
+source "$SCRIPT_DIR/lib/repo-tools.sh"
 
 ROOT="${1:?repo root required}"
 shift
 
 cd "$ROOT"
-
-resolve_dockpipe_bin() {
-  if [[ -x "$ROOT/src/bin/dockpipe" ]]; then
-    printf '%s\n' "$ROOT/src/bin/dockpipe"
-    return 0
-  fi
-  command -v dockpipe 2>/dev/null || true
-}
-
-DOCKPIPE_VALIDATE_BIN="$(resolve_dockpipe_bin)"
+DOCKPIPE_VALIDATE_BIN="$(dorkpipe_resolve_dockpipe_bin "$ROOT")"
 
 ran=0
 for rel in "$@"; do

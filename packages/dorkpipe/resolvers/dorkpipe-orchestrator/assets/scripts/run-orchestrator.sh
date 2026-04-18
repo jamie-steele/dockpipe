@@ -2,33 +2,16 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/repo-tools.sh
+source "$SCRIPT_DIR/lib/repo-tools.sh"
 WORKFLOW_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 
 cd "$ROOT"
 
-resolve_dorkpipe_bin() {
-  local configured="${DORKPIPE_BIN:-}"
-  local candidate
-  if [[ -n "$configured" ]]; then
-    printf '%s\n' "$configured"
-    return 0
-  fi
-  for candidate in \
-    "$ROOT/packages/dorkpipe/bin/dorkpipe" \
-    "$WORKFLOW_ROOT/../../../../packages/dorkpipe/bin/dorkpipe"
-  do
-    if [[ -x "$candidate" ]]; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
-  done
-  command -v dorkpipe 2>/dev/null || true
-}
-
 BIN="${DORKPIPE_BIN:-}"
 if [[ -z "$BIN" ]]; then
-  BIN="$(resolve_dorkpipe_bin)"
+  BIN="$(dorkpipe_orchestrator_resolve_dorkpipe_bin "$ROOT")"
 fi
 SPEC="${DORKPIPE_SPEC:-$WORKFLOW_ROOT/spec.example.yaml}"
 

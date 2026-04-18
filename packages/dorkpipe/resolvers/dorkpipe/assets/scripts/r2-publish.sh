@@ -16,6 +16,9 @@
 #
 # Terraform runs through the dockpipe.cloudflare.r2infra workflow when enabled.
 set -euo pipefail
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/repo-tools.sh
+source "$SCRIPT_DIR/lib/repo-tools.sh"
 
 # Workflow id (matches workflows/*/config.yml name)
 WF_NS="${DOCKPIPE_WORKFLOW_NAME:-dockpipe.cloudflare.r2publish}"
@@ -47,19 +50,7 @@ dockpipe_r2_normalize_account_id() {
 }
 
 resolve_dockpipe_bin() {
-  if [[ -n "${DOCKPIPE_BIN:-}" ]]; then
-    printf '%s\n' "$DOCKPIPE_BIN"
-    return 0
-  fi
-  if [[ -x "$ROOT/src/bin/dockpipe" ]]; then
-    printf '%s\n' "$ROOT/src/bin/dockpipe"
-    return 0
-  fi
-  if command -v dockpipe >/dev/null 2>&1; then
-    command -v dockpipe
-    return 0
-  fi
-  return 1
+  dorkpipe_resolve_dockpipe_bin "$ROOT"
 }
 
 should_run_terraform() {

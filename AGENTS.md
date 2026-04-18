@@ -182,6 +182,25 @@ If something cannot be done:
 
 → propose a **general primitive**, not a special case
 
+## Package authoring rule (IMPORTANT)
+
+When working in **`packages/`**:
+
+- Keep authoring logic inside the package tree (**YAML**, assets, package-local scripts, docs)
+- Do **not** make maintainer/dev flows depend silently on whatever happens to be on **`PATH`**
+- When a package script needs a repo-built binary such as **`dockpipe`**, **`dorkpipe`**, **`mcpd`**, **`pipeon`**, or **`pipeon-desktop`**, prefer the **real repo-local build output first**, then fall back to `PATH`
+- Prefer a **package-local helper** under **`assets/scripts/lib/`** (for example **`repo-tools.sh`**) rather than copying the same lookup logic into multiple scripts
+
+Examples of repo-local binary locations in this repository:
+
+- **`src/bin/dockpipe`**
+- **`packages/dorkpipe/bin/dorkpipe`**
+- **`packages/dorkpipe-mcp/bin/mcpd`**
+- **`packages/pipeon/resolvers/pipeon/bin/pipeon`**
+- **`packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop`**
+
+Treat this as part of the framework contract for first-party packages: make the **correct local path easy**, and reserve `PATH` as a fallback rather than the primary resolution mechanism.
+
 ---
 
 ## Internal workflows (this repository)

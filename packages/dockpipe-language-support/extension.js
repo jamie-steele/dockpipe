@@ -182,6 +182,87 @@ const SEMANTIC_LEGEND = new vscode.SemanticTokensLegend([
   "number"
 ]);
 
+const SHELL_HELPER_PROFILES = [
+  {
+    match: /[\\\/]packages[\\\/]pipeon[\\\/]resolvers[\\\/]pipeon[\\\/]assets[\\\/]scripts[\\\/]/i,
+    helperPath: 'lib/repo-tools.sh',
+    functions: [
+      {
+        name: "pipeon_repo_root",
+        detail: "Return the effective Pipeon workdir/repo root.",
+        insertText: "pipeon_repo_root",
+        documentation: "Resolve the effective Pipeon repo root from `DOCKPIPE_WORKDIR` or the current working directory."
+      },
+      {
+        name: "pipeon_resolve_dockpipe_bin",
+        detail: "Prefer repo-local dockpipe, then fall back to PATH.",
+        insertText: "pipeon_resolve_dockpipe_bin \"$1\"",
+        documentation: "Resolve `dockpipe` from `src/bin/dockpipe` in the current repo first, then fall back to `PATH`."
+      }
+    ]
+  },
+  {
+    match: /[\\\/]packages[\\\/]dorkpipe[\\\/]resolvers[\\\/]dorkpipe[\\\/]assets[\\\/]scripts[\\\/]/i,
+    helperPath: 'lib/repo-tools.sh',
+    functions: [
+      {
+        name: "dorkpipe_repo_root",
+        detail: "Return the effective DorkPipe workdir/repo root.",
+        insertText: "dorkpipe_repo_root",
+        documentation: "Resolve the effective DorkPipe repo root from `DOCKPIPE_WORKDIR` or the current working directory."
+      },
+      {
+        name: "dorkpipe_resolve_dockpipe_bin",
+        detail: "Prefer repo-local dockpipe, then PATH.",
+        insertText: "dorkpipe_resolve_dockpipe_bin \"$1\"",
+        documentation: "Resolve `dockpipe` from `src/bin/dockpipe` in the current repo first, then fall back to `PATH`."
+      },
+      {
+        name: "dorkpipe_resolve_dorkpipe_bin",
+        detail: "Prefer repo-local dorkpipe, then PATH.",
+        insertText: "dorkpipe_resolve_dorkpipe_bin \"$1\"",
+        documentation: "Resolve `dorkpipe` from `packages/dorkpipe/bin/dorkpipe` in the current repo first, then fall back to `PATH`."
+      }
+    ]
+  },
+  {
+    match: /[\\\/]packages[\\\/]dorkpipe[\\\/]resolvers[\\\/]dorkpipe-orchestrator[\\\/]assets[\\\/]scripts[\\\/]/i,
+    helperPath: 'lib/repo-tools.sh',
+    functions: [
+      {
+        name: "dorkpipe_orchestrator_repo_root",
+        detail: "Return the effective orchestrator workdir/repo root.",
+        insertText: "dorkpipe_orchestrator_repo_root",
+        documentation: "Resolve the effective repo root from `DOCKPIPE_WORKDIR` or the current working directory."
+      },
+      {
+        name: "dorkpipe_orchestrator_resolve_dorkpipe_bin",
+        detail: "Prefer repo-local dorkpipe, then PATH.",
+        insertText: "dorkpipe_orchestrator_resolve_dorkpipe_bin \"$1\"",
+        documentation: "Resolve `dorkpipe` from `packages/dorkpipe/bin/dorkpipe` in the current repo first, then fall back to `PATH`."
+      }
+    ]
+  },
+  {
+    match: /[\\\/]packages[\\\/]cloud[\\\/]storage[\\\/]resolvers[\\\/]r2[\\\/]dockpipe\.cloudflare\.r2infra[\\\/]assets[\\\/]scripts[\\\/]/i,
+    helperPath: 'lib/repo-tools.sh',
+    functions: [
+      {
+        name: "cloud_r2infra_repo_root",
+        detail: "Return the effective Cloud/R2 workdir/repo root.",
+        insertText: "cloud_r2infra_repo_root",
+        documentation: "Resolve the effective repo root from `DOCKPIPE_WORKDIR` or the current working directory."
+      },
+      {
+        name: "cloud_r2infra_resolve_dockpipe_bin",
+        detail: "Prefer repo-local dockpipe, then PATH.",
+        insertText: "cloud_r2infra_resolve_dockpipe_bin \"$1\"",
+        documentation: "Resolve `dockpipe` from `src/bin/dockpipe` in the current repo first, then fall back to `PATH`."
+      }
+    ]
+  }
+];
+
 /**
  * @typedef {{ doc?: string, type?: string, defaultValue?: string }} FieldInfo
  * @typedef {{ name: string, kind: "Interface"|"Class"|"Struct", implements?: string, doc?: string, fields: Record<string, FieldInfo> }} TypeInfo
@@ -212,6 +293,25 @@ function isDockpipePackageManifestFile(doc) {
 function isDockpipeProjectConfigFile(doc) {
   const name = doc.fileName.toLowerCase();
   return name.endsWith("/dockpipe.config.json") || name.endsWith("\\dockpipe.config.json");
+}
+
+/** @param {vscode.TextDocument} doc */
+function isDockpipePackageShellScript(doc) {
+  const name = doc.fileName.toLowerCase();
+  if (!(name.endsWith(".sh") || name.endsWith(".bash"))) {
+    return false;
+  }
+  return /[\\\/]packages[\\\/].+[\\\/]assets[\\\/]scripts[\\\/]/i.test(doc.fileName);
+}
+
+/** @param {vscode.TextDocument} doc */
+function shellHelperProfileForDocument(doc) {
+  for (const profile of SHELL_HELPER_PROFILES) {
+    if (profile.match.test(doc.fileName)) {
+      return profile;
+    }
+  }
+  return null;
 }
 
 /**
@@ -1271,6 +1371,76 @@ function activate(context) {
             "false"
           ];
           return kws.map((k) => new vscode.CompletionItem(k, vscode.CompletionItemKind.Keyword));
+        }
+      }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.languages.registerCompletionItemProvider(
+      { language: "shellscript", scheme: "file" },
+      {
+        provideCompletionItems(document) {
+          if (!isDockpipePackageShellScript(document)) {
+            return [];
+          }
+          const profile = shellHelperProfileForDocument(document);
+          if (!profile) {
+            return [];
+          }
+
+          const items = [];
+
+          const sourceItem = new vscode.CompletionItem("repo-tools source", vscode.CompletionItemKind.Snippet);
+          sourceItem.insertText = new vscode.SnippetString(
+            '# shellcheck source=' + profile.helperPath + '\nsource "$SCRIPT_DIR/' + profile.helperPath + '"'
+          );
+          sourceItem.detail = "Source the package-local repo-tools helper";
+          sourceItem.documentation = `Use the package-local \`${profile.helperPath}\` helper instead of open-coding PATH-based binary lookup.`;
+          items.push(sourceItem);
+
+          for (const helper of profile.functions) {
+            const item = new vscode.CompletionItem(helper.name, vscode.CompletionItemKind.Function);
+            item.insertText = helper.insertText;
+            item.detail = helper.detail;
+            item.documentation = helper.documentation;
+            items.push(item);
+          }
+
+          return items;
+        }
+      }
+    )
+  );
+
+  context.subscriptions.push(
+    vscode.languages.registerHoverProvider(
+      { language: "shellscript", scheme: "file" },
+      {
+        provideHover(document, position) {
+          if (!isDockpipePackageShellScript(document)) {
+            return null;
+          }
+          const profile = shellHelperProfileForDocument(document);
+          if (!profile) {
+            return null;
+          }
+
+          const range = document.getWordRangeAtPosition(position, /[A-Za-z_][A-Za-z0-9_]*/);
+          if (!range) {
+            return null;
+          }
+          const word = document.getText(range);
+          const helper = profile.functions.find((fn) => fn.name === word);
+          if (!helper) {
+            return null;
+          }
+
+          const md = new vscode.MarkdownString();
+          md.appendMarkdown(`**${helper.name}**`);
+          md.appendMarkdown(`\n\n${helper.documentation}`);
+          md.appendMarkdown(`\n\nPackage helper: \`${profile.helperPath}\``);
+          return new vscode.Hover(md, range);
         }
       }
     )

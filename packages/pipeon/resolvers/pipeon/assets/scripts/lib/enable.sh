@@ -2,6 +2,9 @@
 # Pipeon feature gate: explicit enable + minimum version (default 0.6.5) unless prerelease allowed.
 # Source from other scripts:  source "$(dirname ...)/lib/enable.sh"
 set -euo pipefail
+LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/repo-tools.sh
+source "$LIB_DIR/repo-tools.sh"
 
 # DOCKPIPE_PIPEON=1 (or "true") — required to run Pipeon commands.
 # DOCKPIPE_PIPEON_MIN_VERSION — semver string, default 0.6.5 (release when Pipeon is officially on).
@@ -18,12 +21,10 @@ pipeon_version_from_repo() {
 		tr -d ' \t\r\n' <"$root/VERSION"
 		return
 	fi
-	if [[ -x "$root/src/bin/dockpipe" ]]; then
-		"$root/src/bin/dockpipe" --version 2>/dev/null | head -1 | tr -d ' \t\r\n'
-		return
-	fi
-	if command -v dockpipe >/dev/null 2>&1; then
-		dockpipe --version 2>/dev/null | head -1 | tr -d ' \t\r\n'
+	local dockpipe_bin
+	dockpipe_bin="$(pipeon_resolve_dockpipe_bin "$root")"
+	if [[ -n "$dockpipe_bin" ]]; then
+		"$dockpipe_bin" --version 2>/dev/null | head -1 | tr -d ' \t\r\n'
 		return
 	fi
 	echo "0.0.0"

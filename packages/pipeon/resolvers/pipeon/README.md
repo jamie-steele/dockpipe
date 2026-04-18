@@ -19,6 +19,14 @@ flows can treat Pipeon as the top-level product surface rather than a disconnect
 
 **Entrypoint on PATH:** **`packages/pipeon/resolvers/pipeon/bin/pipeon`** in this repository runs **`assets/scripts/pipeon.sh`**.
 
+## Authoring note
+
+When adding new Pipeon shell helpers, prefer the package-local resolver helper:
+
+- **`assets/scripts/lib/repo-tools.sh`**
+
+It resolves the real repo-local **`dockpipe`** build first (for example **`src/bin/dockpipe`**) before falling back to `PATH`, so maintainer/dev flows do not silently depend on a stale global install.
+
 ## Quick start
 
 ```bash
