@@ -48,6 +48,9 @@ type Workflow struct {
 	Description string `yaml:"description,omitempty"`
 	// Category: optional launcher/UI hint (e.g. "app" = show in Pipeon Basic mode as a launchable GUI/tool).
 	Category string `yaml:"category,omitempty"`
+	// Icon: optional package-owned artwork path for launcher/tooling surfaces. Relative paths resolve
+	// next to this workflow config.yml.
+	Icon string `yaml:"icon,omitempty"`
 	// WorkflowType: optional classifier (e.g. secretstore). Engine ignores; scripts and UIs may use it.
 	WorkflowType string `yaml:"workflow_type,omitempty"`
 	// Namespace: optional author/org label for packages and tooling (see ValidateNamespace).
@@ -226,6 +229,7 @@ type workflowFile struct {
 	Name            string            `yaml:"name"`
 	Description     string            `yaml:"description,omitempty"`
 	Category        string            `yaml:"category,omitempty"`
+	Icon            string            `yaml:"icon,omitempty"`
 	WorkflowType    string            `yaml:"workflow_type,omitempty"`
 	Namespace                string            `yaml:"namespace,omitempty"`
 	Capability               string            `yaml:"capability,omitempty"`

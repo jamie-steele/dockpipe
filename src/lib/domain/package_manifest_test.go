@@ -81,6 +81,9 @@ repository: https://github.com/acme/resolver
 provides: [codex]
 requires_resolvers: []
 depends: [base-pack]
+icon: assets/images/icon.png
+artwork:
+  vscode: assets/images/vscode.png
 `
 	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -100,6 +103,12 @@ depends: [base-pack]
 	}
 	if len(m.Depends) != 1 || m.Depends[0] != "base-pack" {
 		t.Fatalf("depends: %+v", m)
+	}
+	if m.Icon != "assets/images/icon.png" {
+		t.Fatalf("icon: %+v", m)
+	}
+	if got := m.Artwork["vscode"]; got != "assets/images/vscode.png" {
+		t.Fatalf("artwork: %+v", m.Artwork)
 	}
 }
 

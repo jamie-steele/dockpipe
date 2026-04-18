@@ -52,26 +52,34 @@ install-pipeon-desktop-global: install-pipeon-desktop
 
 install-dockpipe-launcher: build-dockpipe-launcher
 	mkdir -p bin/.dockpipe/tooling/bin
+	mkdir -p bin/.dockpipe/tooling/share/icons/hicolor
+	mkdir -p bin/.dockpipe/tooling/share/icons
 	install -m 755 src/app/tooling/dockpipe-launcher/build/dockpipe-launcher bin/.dockpipe/tooling/bin/dockpipe-launcher
+	cp -R src/app/tooling/dockpipe-launcher/resources/icons/hicolor/. bin/.dockpipe/tooling/share/icons/hicolor/
+	install -m 644 src/app/tooling/dockpipe-launcher/resources/images/dockpipe-launcher.png bin/.dockpipe/tooling/share/icons/dockpipe-launcher.png
 
 install-dockpipe-launcher-global: install-dockpipe-launcher
 	mkdir -p "$$HOME/.local/share/dockpipe/bin"
 	mkdir -p "$$HOME/.local/share/dockpipe/icons"
+	mkdir -p "$$HOME/.local/share/icons/hicolor"
 	mkdir -p "$$HOME/.local/share/applications"
 	install -m 755 bin/.dockpipe/tooling/bin/dockpipe-launcher "$$HOME/.local/share/dockpipe/bin/dockpipe-launcher"
-	install -m 644 packages/dorkpipe/assets/images/icon.png "$$HOME/.local/share/dockpipe/icons/dockpipe.png"
+	install -m 644 bin/.dockpipe/tooling/share/icons/dockpipe-launcher.png "$$HOME/.local/share/dockpipe/icons/dockpipe-launcher.png"
+	cp -R bin/.dockpipe/tooling/share/icons/hicolor/. "$$HOME/.local/share/icons/hicolor/"
 	rm -f "$$HOME/.local/share/applications/dockpipe-launcher.desktop"
 	printf '%s\n' \
 		'[Desktop Entry]' \
 		'Type=Application' \
 		'Name=DockPipe Launcher' \
-		'Exec='"$$HOME"'/.local/share/dockpipe/bin/dockpipe-launcher --start-home' \
-		'Icon='"$$HOME"'/.local/share/dockpipe/icons/dockpipe.png' \
+		'Exec=/usr/bin/env -u DESKTOP_STARTUP_ID -u XDG_ACTIVATION_TOKEN '"$$HOME"'/.local/share/dockpipe/bin/dockpipe-launcher --start-home' \
+		'Icon=dockpipe-launcher' \
 		'Terminal=false' \
 		'Categories=Development;' \
-		'StartupNotify=true' \
+		'StartupNotify=false' \
+		'X-GNOME-WMClass=dockpipe-launcher' \
 		'StartupWMClass=dockpipe-launcher' \
 		> "$$HOME/.local/share/applications/dockpipe-launcher.desktop"
+	if command -v update-desktop-database >/dev/null 2>&1; then update-desktop-database "$$HOME/.local/share/applications" >/dev/null 2>&1 || true; fi
 
 # Package Pipeon VS Code extension (.vsix) into bin/.dockpipe/extensions.
 # Reuses the locally installed vsce from the DockPipe language-support extension to avoid network fetches.

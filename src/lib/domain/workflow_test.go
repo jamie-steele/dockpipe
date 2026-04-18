@@ -211,6 +211,7 @@ func TestParseWorkflowYAMLWorkflowTypeAndCategory(t *testing.T) {
 	y := `name: s
 workflow_type: secretstore
 category: tooling
+icon: assets/images/icon.png
 steps:
   - id: x
     skip_container: true
@@ -222,6 +223,9 @@ steps:
 	}
 	if w.WorkflowType != "secretstore" || w.Category != "tooling" {
 		t.Fatalf("got workflow_type=%q category=%q", w.WorkflowType, w.Category)
+	}
+	if w.Icon != "assets/images/icon.png" {
+		t.Fatalf("icon: %q", w.Icon)
 	}
 }
 

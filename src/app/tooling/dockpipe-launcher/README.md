@@ -2,7 +2,7 @@
 
 Cross-platform **Qt 6** system-tray app: save **contexts** (folder + resolver / strategy / runtime), **launch** or **stop** `dockpipe` subprocesses, **open logs** and folders. It does **not** run workflows inside the GUI; all execution stays in **DockPipe** (and optionally **DorkPipe** later).
 
-This tree lives under **`src/app/tooling/dockpipe-launcher/`** as first-party DockPipe tooling. It drives the DockPipe CLI but is not part of the engine (**`src/lib/`**, **`src/cmd/`**). The tray/window icon uses the DockPipe logo from **`packages/dorkpipe/assets/images/icon.png`**.
+This tree lives under **`src/app/tooling/dockpipe-launcher/`** as first-party DockPipe tooling. It drives the DockPipe CLI but is not part of the engine (**`src/lib/`**, **`src/cmd/`**). The tray/window icon comes from **`resources/images/dockpipe-launcher.png`** and Linux desktop installs use the generated **`resources/icons/hicolor/`** size set.
 
 ## Requirements
 
@@ -37,7 +37,7 @@ cmake --build build
 ./build/dockpipe-launcher
 ```
 
-To install a Linux desktop entry and icon for app launchers / docks (for example Pop OS / GNOME):
+To install a Linux desktop entry and the full icon-theme size set for app launchers / docks (for example Pop OS / GNOME):
 
 ```bash
 make install-dockpipe-launcher-global

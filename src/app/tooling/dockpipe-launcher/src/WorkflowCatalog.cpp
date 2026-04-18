@@ -55,6 +55,7 @@ WorkflowCatalogData WorkflowCatalog::discoverCatalog(const QString &hintWorkdir)
         meta.displayName = o.value(QStringLiteral("display_name")).toString().trimmed();
         meta.description = o.value(QStringLiteral("description")).toString().trimmed();
         meta.category = o.value(QStringLiteral("category")).toString().trimmed();
+        meta.iconPath = o.value(QStringLiteral("icon_path")).toString().trimmed();
         meta.configPath = o.value(QStringLiteral("config_path")).toString().trimmed();
         if (meta.displayName.isEmpty())
             meta.displayName = meta.workflowId;

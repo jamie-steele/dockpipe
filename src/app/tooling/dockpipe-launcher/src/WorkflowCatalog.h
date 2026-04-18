@@ -11,6 +11,7 @@ struct WorkflowMeta {
     QString displayName;
     QString description;
     QString category;
+    QString iconPath;
     QString configPath;
 };
 

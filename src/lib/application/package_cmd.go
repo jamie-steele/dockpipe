@@ -189,6 +189,11 @@ description: |
 author: Your name or org
 website: https://example.com
 license: Apache-2.0
+# Optional artwork metadata for package/tooling surfaces:
+# icon: assets/images/icon.png
+# artwork:
+#   vscode: assets/images/vscode.png
+#   cursor-dev: assets/images/cursor-dev.png
 # Optional: workflow | resolver | core | assets | bundle | package
 kind: workflow
 # kind: package — umbrella at e.g. packages/agent/package.yml (metadata only; resolvers are under resolvers/):

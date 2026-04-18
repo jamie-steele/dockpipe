@@ -17,6 +17,7 @@ type catalogWorkflowRecord struct {
 	DisplayName string `json:"display_name,omitempty"`
 	Description string `json:"description,omitempty"`
 	Category    string `json:"category,omitempty"`
+	IconPath    string `json:"icon_path,omitempty"`
 	ConfigPath  string `json:"config_path,omitempty"`
 }
 
@@ -136,6 +137,7 @@ func listCatalogWorkflows(projectRoot, workdir string) ([]catalogWorkflowRecord,
 			DisplayName: display,
 			Description: strings.TrimSpace(wf.Description),
 			Category:    strings.TrimSpace(wf.Category),
+			IconPath:    resolveCatalogWorkflowIcon(cfgPath, strings.TrimSpace(wf.Icon)),
 			ConfigPath:  cfgPath,
 		})
 	}
@@ -143,6 +145,17 @@ func listCatalogWorkflows(projectRoot, workdir string) ([]catalogWorkflowRecord,
 		return out[i].WorkflowID < out[j].WorkflowID
 	})
 	return out, nil
+}
+
+func resolveCatalogWorkflowIcon(cfgPath, icon string) string {
+	icon = strings.TrimSpace(icon)
+	if icon == "" {
+		return ""
+	}
+	if filepath.IsAbs(icon) {
+		return icon
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(cfgPath), icon))
 }
 
 func listCatalogResolvers(projectRoot, workdir string) []string {

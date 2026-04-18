@@ -9,6 +9,9 @@ description: |
 author: DockPipe
 license: Apache-2.0
 repository: https://github.com/dockpipe/dockpipe
+icon: resolvers/cursor-dev/assets/images/icon.png
+artwork:
+  cursor-dev: resolvers/cursor-dev/assets/images/icon.png
 tags: [resolver, ide, editor]
 includes_resolvers:
   - vscode

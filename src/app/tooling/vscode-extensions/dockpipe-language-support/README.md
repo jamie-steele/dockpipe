@@ -6,6 +6,7 @@ Language support for DockPipe authoring:
 - PipeLang snippets and keyword completion
 - DockPipe `config.yml` IntelliSense for common workflow keys
 - DockPipe `package.yml` hover/docs and top-level key completion
+- DockPipe `package.yml` `icon` / `artwork` metadata hints for package-owned launcher/tooling assets
 - DockPipe `package.yml` support for `script_contract.inject` with valid generic injectable suggestions
 - DockPipe `dockpipe.config.json` hover/docs and section-key completion
 - First-party package script IntelliSense for the shared DockPipe SDK surface in shell, PowerShell, Python, and Go
@@ -45,6 +46,7 @@ make install-dockpipe-language-support
 - `types:` suggestions support the interface entrypoint pattern, for example:
   `models/IR2InfraConfig`
 - Shared script support points authors at the canonical DockPipe SDK under `src/core/assets/scripts/lib/` and `dockpipe sdk`.
+- `package.yml` may declare package-owned artwork via `icon:` and `artwork:` paths relative to the manifest.
 - `package.yml` `script_contract.inject` declares the generic injected fields. In shell, the public
   way to read those values is `dockpipe get ...`; the backing runtime env vars are
   `DOCKPIPE_WORKDIR`, `DOCKPIPE_WORKFLOW_NAME`, `DOCKPIPE_SCRIPT_DIR`,

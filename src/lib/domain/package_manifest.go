@@ -21,6 +21,10 @@ type PackageManifest struct {
 	Author      string `yaml:"author"`
 	Website     string `yaml:"website"`
 	License     string `yaml:"license"`
+	// Icon: optional package-owned artwork path for package/tooling surfaces. Relative paths resolve next to package.yml.
+	Icon string `yaml:"icon,omitempty"`
+	// Artwork: optional named artwork variants (e.g. icon, vscode, cursor-dev) relative to package.yml.
+	Artwork map[string]string `yaml:"artwork,omitempty"`
 	// Kind hints for tooling: workflow | resolver | core | assets | bundle | package (optional).
 	// kind: package — umbrella metadata for a maintainer tree (e.g. dockpipe/agent) whose child resolvers
 	// live under resolvers/; use includes_resolvers for optional resolver profile names (store installs stay per-resolver).

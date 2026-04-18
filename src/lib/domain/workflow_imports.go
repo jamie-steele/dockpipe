@@ -29,6 +29,7 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 		Name:            f.Name,
 		Description:     f.Description,
 		Category:        f.Category,
+		Icon:            f.Icon,
 		WorkflowType:    f.WorkflowType,
 		Namespace:       f.Namespace,
 		Capability:      cap,

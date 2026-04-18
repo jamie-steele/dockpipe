@@ -20,17 +20,10 @@
 
 namespace {
 
-QIcon appIconForWorkflow(const QString &workflowId)
+QIcon appIconForWorkflow(const WorkflowMeta &workflow)
 {
-    if (workflowId == QStringLiteral("pipeon-dev-stack") || workflowId == QStringLiteral("pipeon")) {
-        return QIcon(QStringLiteral(":/icon.png"));
-    }
-    if (workflowId == QStringLiteral("vscode")) {
-        return QIcon(QStringLiteral(":/app-vscode.png"));
-    }
-    if (workflowId == QStringLiteral("cursor-dev")) {
-        return QIcon(QStringLiteral(":/app-cursor-dev.png"));
-    }
+    if (!workflow.iconPath.isEmpty() && QFileInfo::exists(workflow.iconPath))
+        return QIcon(workflow.iconPath);
     return QIcon(QStringLiteral(":/icon.png"));
 }
 
@@ -320,7 +313,7 @@ void BasicModeWidget::setApps(const QVector<WorkflowMeta> &apps)
     m_list->clear();
     for (const WorkflowMeta &m : apps) {
         auto *it = new QListWidgetItem;
-        it->setIcon(appIconForWorkflow(m.workflowId));
+        it->setIcon(appIconForWorkflow(m));
         it->setData(Qt::UserRole, m.workflowId);
         it->setToolTip(m.description.isEmpty() ? m.displayName : m.description);
         m_list->addItem(it);

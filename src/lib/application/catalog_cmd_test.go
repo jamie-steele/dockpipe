@@ -21,7 +21,13 @@ func TestBuildCatalogListOutput_UsesDockpipeContracts(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(project, "workflows", "demo"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(project, "workflows", "demo", "config.yml"), []byte("name: Demo App\ncategory: app\n"), 0o644); err != nil {
+	if err := os.MkdirAll(filepath.Join(project, "workflows", "demo", "assets", "images"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "workflows", "demo", "assets", "images", "icon.png"), []byte("png"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(project, "workflows", "demo", "config.yml"), []byte("name: Demo App\ncategory: app\nicon: assets/images/icon.png\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -52,6 +58,9 @@ func TestBuildCatalogListOutput_UsesDockpipeContracts(t *testing.T) {
 	}
 	if len(out.Workflows) != 1 || out.Workflows[0].WorkflowID != "demo" || out.Workflows[0].DisplayName != "Demo App" {
 		t.Fatalf("unexpected workflows: %#v", out.Workflows)
+	}
+	if got, want := out.Workflows[0].IconPath, filepath.Join(project, "workflows", "demo", "assets", "images", "icon.png"); got != want {
+		t.Fatalf("expected icon path %q, got %q", want, got)
 	}
 	if !containsString(out.Resolvers, "cursor-dev") {
 		t.Fatalf("expected cursor-dev resolver in %#v", out.Resolvers)

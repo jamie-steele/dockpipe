@@ -1,8 +1,15 @@
 <RCC>
   <qresource prefix="/">
-    <file alias="icon.png">../../../../packages/dorkpipe/assets/images/icon.png</file>
-    <file alias="app-vscode.png">resources/app-vscode.png</file>
-    <file alias="app-cursor-dev.png">resources/app-cursor-dev.png</file>
+    <file alias="icon.png">resources/images/dockpipe-launcher.png</file>
+    <file alias="icons/hicolor/16x16/apps/dockpipe-launcher.png">resources/icons/hicolor/16x16/apps/dockpipe-launcher.png</file>
+    <file alias="icons/hicolor/24x24/apps/dockpipe-launcher.png">resources/icons/hicolor/24x24/apps/dockpipe-launcher.png</file>
+    <file alias="icons/hicolor/32x32/apps/dockpipe-launcher.png">resources/icons/hicolor/32x32/apps/dockpipe-launcher.png</file>
+    <file alias="icons/hicolor/48x48/apps/dockpipe-launcher.png">resources/icons/hicolor/48x48/apps/dockpipe-launcher.png</file>
+    <file alias="icons/hicolor/64x64/apps/dockpipe-launcher.png">resources/icons/hicolor/64x64/apps/dockpipe-launcher.png</file>
+    <file alias="icons/hicolor/96x96/apps/dockpipe-launcher.png">resources/icons/hicolor/96x96/apps/dockpipe-launcher.png</file>
+    <file alias="icons/hicolor/128x128/apps/dockpipe-launcher.png">resources/icons/hicolor/128x128/apps/dockpipe-launcher.png</file>
+    <file alias="icons/hicolor/256x256/apps/dockpipe-launcher.png">resources/icons/hicolor/256x256/apps/dockpipe-launcher.png</file>
+    <file alias="icons/hicolor/512x512/apps/dockpipe-launcher.png">resources/icons/hicolor/512x512/apps/dockpipe-launcher.png</file>
     <file alias="theme/pipeon.qss">resources/theme/pipeon.qss</file>
     <file alias="theme/pipeon-light.qss">resources/theme/pipeon-light.qss</file>
     <file alias="theme/pipeon-dark.qss">resources/theme/pipeon-dark.qss</file>

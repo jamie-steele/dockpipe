@@ -23,6 +23,7 @@
 #include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -41,6 +42,7 @@
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QFontDatabase>
+#include <QGuiApplication>
 #include <QRegularExpression>
 
 namespace {
@@ -99,6 +101,7 @@ QString shellQuote(QString s)
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
 {
     setWindowTitle(tr("DockPipe Launcher"));
+    setWindowIcon(QGuiApplication::windowIcon());
     resize(800, 520);
 
     m_settings.load();
@@ -132,9 +135,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     connect(m_basicWidget, &BasicModeWidget::continueLastRequested, this, &MainWindow::onBasicContinueLast);
     connect(m_basicWidget, &BasicModeWidget::backToHomeRequested, this, &MainWindow::onBasicBackHome);
 
-    m_store.load();
-    rebuildUi();
-
     connect(&m_sessions, &SessionManager::sessionStarted, this, &MainWindow::onSessionChanged);
     connect(&m_sessions, &SessionManager::sessionReady, this, &MainWindow::onSessionChanged);
     connect(&m_sessions, &SessionManager::sessionStopped, this, &MainWindow::onSessionChanged);
@@ -142,11 +142,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     connect(&m_sessions, &SessionManager::sessionOutput, this, &MainWindow::onSessionOutput);
     connect(&m_sessions, &SessionManager::sessionFailed, this,
             [this](const QString &, const QString &err) { QMessageBox::warning(this, tr("DockPipe Launcher"), err); });
-
-    setupTray();
-    applyUiMode();
-    if (startHome)
-        activateHome();
+    QTimer::singleShot(0, this, [this, startHome]() {
+        m_store.load();
+        setupTray();
+        if (startHome) {
+            activateHome();
+            QTimer::singleShot(200, this, [this]() {
+                rebuildAdvancedContextList();
+                refreshInlineConsole();
+            });
+            return;
+        }
+        rebuildUi();
+        applyUiMode();
+    });
 }
 
 void MainWindow::setupDisclaimerBar()
@@ -576,6 +585,14 @@ void MainWindow::onRefreshAppList()
 
 void MainWindow::updateBasicPage()
 {
+    if (m_settings.projectFolder.isEmpty()) {
+        m_basicApps.clear();
+        m_basicWidget->setApps({});
+        m_basicWidget->setRunningByWorkflow({});
+        m_basicWidget->clearLaunchingWorkflow();
+        return;
+    }
+
     const QString repo = DockpipeChoices::findRepoRoot(m_settings.projectFolder);
     const QVector<WorkflowMeta> apps = WorkflowCatalog::discoverAppWorkflows(repo, m_settings.projectFolder);
     m_basicApps = apps;
@@ -664,7 +681,7 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
 
 void MainWindow::setupTray()
 {
-    m_tray = new QSystemTrayIcon(QIcon(QStringLiteral(":/icon.png")), this);
+    m_tray = new QSystemTrayIcon(QGuiApplication::windowIcon(), this);
     m_tray->setToolTip(tr("DockPipe Launcher"));
     auto *menu = new QMenu(this);
     menu->addAction(tr("Show"), this, [this]() { show(); raise(); activateWindow(); });
