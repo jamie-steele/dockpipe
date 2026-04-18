@@ -23,42 +23,22 @@ dockpipe_resolve_dockpipe_bin() {
   command -v dockpipe 2>/dev/null || return 1
 }
 
-dockpipe_resolve_dorkpipe_bin() {
-  local root
-  root="$(dockpipe_repo_root "${1:-}")"
-  if [[ -n "${DORKPIPE_BIN:-}" ]]; then
-    printf '%s\n' "$DORKPIPE_BIN"
-    return 0
-  fi
-  local candidate="$root/packages/dorkpipe/bin/dorkpipe"
-  if [[ -x "$candidate" ]]; then
-    printf '%s\n' "$candidate"
-    return 0
-  fi
-  command -v dorkpipe 2>/dev/null || return 1
-}
-
 dockpipe_sdk_refresh() {
   local root="${1:-}"
-  local resolved_root resolved_dockpipe resolved_dorkpipe resolved_workflow_name
+  local resolved_root resolved_dockpipe resolved_workflow_name
   resolved_root="$(dockpipe_repo_root "$root")"
   resolved_dockpipe="$(dockpipe_resolve_dockpipe_bin "$resolved_root" 2>/dev/null || true)"
-  resolved_dorkpipe="$(dockpipe_resolve_dorkpipe_bin "$resolved_root" 2>/dev/null || true)"
   resolved_workflow_name="${DOCKPIPE_WORKFLOW_NAME:-}"
 
   declare -gA dockpipe
   dockpipe=()
   dockpipe[workdir]="$resolved_root"
   dockpipe[dockpipe_bin]="$resolved_dockpipe"
-  dockpipe[dorkpipe_bin]="$resolved_dorkpipe"
   dockpipe[workflow_name]="$resolved_workflow_name"
 
   export DOCKPIPE_SDK_ROOT="$resolved_root"
   if [[ -n "$resolved_dockpipe" ]]; then
     export DOCKPIPE_BIN="$resolved_dockpipe"
-  fi
-  if [[ -n "$resolved_dorkpipe" ]]; then
-    export DORKPIPE_BIN="$resolved_dorkpipe"
   fi
 }
 
@@ -95,15 +75,6 @@ dockpipe_require_dockpipe_bin() {
   printf '%s\n' "$bin"
 }
 
-dockpipe_require_dorkpipe_bin() {
-  local bin="${DORKPIPE_BIN:-${dockpipe[dorkpipe_bin]:-}}"
-  if [[ -z "$bin" ]]; then
-    echo "dockpipe sdk: dorkpipe binary not found; set DORKPIPE_BIN or add dorkpipe to PATH" >&2
-    return 1
-  fi
-  printf '%s\n' "$bin"
-}
-
 __dockpipe_sdk_fatal() {
   local prefix="${WF_NS:-${dockpipe[workflow_name]:-dockpipe}}"
   echo "${prefix}: $*" >&2
@@ -124,7 +95,6 @@ dockpipe_sdk actions:
   die <message...>
   workflow-name
   require dockpipe-bin
-  require dorkpipe-bin
   require workflow-name
   source terraform-pipeline
   refresh [root]
@@ -163,9 +133,6 @@ EOF
       case "${1:-}" in
         dockpipe-bin)
           dockpipe_require_dockpipe_bin
-          ;;
-        dorkpipe-bin)
-          dockpipe_require_dorkpipe_bin
           ;;
         workflow-name)
           if [[ -n "${dockpipe[workflow_name]:-}" ]]; then

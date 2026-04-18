@@ -15,7 +15,7 @@ When asked *“compliance issues?”* or *“security posture?”*:
 
 ## CI scan bundle
 
-**govulncheck** / **gosec** feed **`.dockpipe/ci-raw/`** → normalized **`.dockpipe/ci-analysis/findings.json`** (schema: **`src/schemas/dockpipe-ci-findings.schema.json`**). **`normalize-ci-scans.sh`** + **`jq/merge-ci-findings.jq`** build the bundle; **`bash scripts/ci-local.sh`** reproduces locally.
+**govulncheck** / **gosec** feed **`.dockpipe/ci-raw/`** → normalized **`.dockpipe/ci-analysis/findings.json`** (schema: **`src/schemas/dockpipe-ci-findings.schema.json`**). **`dorkpipe ci normalize-scans`** is the canonical implementation; **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/normalize-ci-scans.sh`** is the compatibility wrapper. **`bash scripts/ci-local.sh`** reproduces locally.
 
 | Path | Role |
 |------|------|
@@ -27,4 +27,4 @@ When asked *“compliance issues?”* or *“security posture?”*:
 
 Structured human guidance → **`.dockpipe/analysis/`** (`queue.json`, `insights.json`, …). Schemas under **`src/schemas/dockpipe-user-insight-*.schema.json`**.
 
-**Workflow:** **`user-insight-process`** in the maintainer **`dorkpipe`** package — see **`resolvers/user-insight-process/README.md`** there.
+**Canonical implementation:** **`dorkpipe insight ...`** in the maintainer **`dorkpipe`** package; the workflow **`user-insight-process`** is a host-side entrypoint that uses the same CLI surface. See **`resolvers/user-insight-process/README.md`** there.

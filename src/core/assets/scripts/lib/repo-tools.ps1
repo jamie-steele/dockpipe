@@ -37,29 +37,6 @@ function Resolve-DockpipeBin {
   return $null
 }
 
-function Resolve-DorkpipeBin {
-  param(
-    [string]$Root
-  )
-
-  if ($env:DORKPIPE_BIN) {
-    return $env:DORKPIPE_BIN
-  }
-
-  $resolvedRoot = Get-DockpipeRepoRoot -Root $Root
-  $candidate = Join-Path $resolvedRoot "packages/dorkpipe/bin/dorkpipe"
-  if (Test-Path -LiteralPath $candidate) {
-    return $candidate
-  }
-
-  $cmd = Get-Command dorkpipe -ErrorAction SilentlyContinue
-  if ($cmd) {
-    return $cmd.Source
-  }
-
-  return $null
-}
-
 function Get-DockpipeSdk {
   param(
     [string]$Root
@@ -67,9 +44,8 @@ function Get-DockpipeSdk {
 
   $resolvedRoot = Get-DockpipeRepoRoot -Root $Root
   [pscustomobject]@{
-    Workdir     = $resolvedRoot
-    DockpipeBin = Resolve-DockpipeBin -Root $resolvedRoot
-    DorkpipeBin = Resolve-DorkpipeBin -Root $resolvedRoot
+    Workdir      = $resolvedRoot
+    DockpipeBin  = Resolve-DockpipeBin -Root $resolvedRoot
     WorkflowName = $env:DOCKPIPE_WORKFLOW_NAME
   }
 }

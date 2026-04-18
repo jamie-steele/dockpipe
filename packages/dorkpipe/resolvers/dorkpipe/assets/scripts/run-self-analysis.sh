@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 # Host entry: run DorkPipe self-analysis DAG (writes bin/.dockpipe/orchestrator-cursor-prompt.md).
 set -euo pipefail
-eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib/dorkpipe-cli.sh"
+dorkpipe_script_bootstrap "$SCRIPT_DIR"
 dockpipe_sdk init-script
 export DOCKPIPE_WORKDIR="$ROOT"
-BIN="$(dockpipe_sdk require dorkpipe-bin)"
+BIN="$(dorkpipe_script_resolve_bin "$(dorkpipe_script_repo_root "$SCRIPT_DIR")")"
 SPEC="${DORKPIPE_SELF_ANALYSIS_SPEC:-${SCRIPT_DIR}/../../dorkpipe-self-analysis/spec.yaml}"
 if [[ ! -x "$BIN" ]]; then
 	echo "dorkpipe-self-analysis: build the orchestrator first: make maintainer-tools (expected $BIN)" >&2

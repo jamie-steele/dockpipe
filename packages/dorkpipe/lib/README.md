@@ -12,25 +12,32 @@ Go module **`dorkpipe.orchestrator`** — local-first orchestration **on top of*
 - **`eval/`** — summarize `bin/.dockpipe/packages/dorkpipe/metrics.jsonl`  
 - **`promotion/`** — heuristic promotion hints from metrics + last `run.json`  
 - **`composegen/`** — Postgres+pgvector (+ optional Ollama) compose file  
+- **`cianalysis/`** — normalize CI scan outputs into DorkPipe findings artifacts  
+- **`userinsight/`** — queue / normalize / review user guidance signals  
+- **`handoff/`** — build AI-facing handoff documents and signal summaries  
+- **`statepaths/`** — canonical DorkPipe artifact layout under `bin/.dockpipe/`  
 - **`engine/`** — wires planner → scheduler → workers → aggregator  
 
 CLI: **`make maintainer-tools`** (repo root) writes **`../bin/dorkpipe`** (next to this **`lib/`** tree). Run that path directly — it is **not** installed under **`src/bin/`**.
 
 ## Authoring note
 
-When maintainer scripts in the DorkPipe package need repo binaries, prefer the shared core SDK instead of open-coding `command -v` lookups:
+When maintainer scripts in the DorkPipe package need generic DockPipe workflow context, use the shared core SDK instead of open-coding `command -v` lookups:
 
 - **Shell:** bootstrap with **`eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"`** and use **`dockpipe_sdk ...`**
 - **`src/core/assets/scripts/lib/repo-tools.ps1`**
 - **`src/core/assets/scripts/lib/repo_tools.py`**
 - **`src/core/assets/scripts/lib/repotools/repotools.go`**
 
-That shared SDK surface prefers the real repo-local builds such as:
+That shared SDK surface prefers the real repo-local DockPipe build:
 
-- **`packages/dorkpipe/bin/dorkpipe`**
 - **`src/bin/dockpipe`**
 
 before falling back to `PATH`.
+
+If a DorkPipe package script needs to invoke the DorkPipe tool itself, keep that resolution package-local via:
+
+- **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/lib/dorkpipe-cli.sh`**
 
 Does **not** replace DockPipe’s workflow engine; it **invokes** the `dockpipe` binary for resolver steps.
 

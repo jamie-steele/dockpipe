@@ -5,17 +5,21 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"dorkpipe.orchestrator/cianalysis"
 	"dorkpipe.orchestrator/composegen"
 	"dorkpipe.orchestrator/engine"
 	"dorkpipe.orchestrator/eval"
+	"dorkpipe.orchestrator/handoff"
 	"dorkpipe.orchestrator/promotion"
 	"dorkpipe.orchestrator/spec"
 	"dorkpipe.orchestrator/statepaths"
+	"dorkpipe.orchestrator/userinsight"
 	"dorkpipe.orchestrator/workers"
 )
 
@@ -35,6 +39,12 @@ func main() {
 		applyEditCmd(os.Args[2:])
 	case "compose":
 		composeCmd(os.Args[2:])
+	case "ci":
+		ciCmd(os.Args[2:])
+	case "insight":
+		insightCmd(os.Args[2:])
+	case "handoff":
+		handoffCmd(os.Args[2:])
 	case "validate":
 		validateCmd(os.Args[2:])
 	case "eval":
@@ -59,6 +69,10 @@ Usage:
   dorkpipe edit --message <text> [--workdir <dir>] [--apply]
   dorkpipe apply-edit --artifact-dir <dir> [--workdir <dir>]
   dorkpipe compose [-o <compose.yml>] [--no-ollama]
+  dorkpipe ci normalize-scans [--workdir <dir>]
+  dorkpipe insight <subcommand> [flags]
+  dorkpipe handoff build-cursor [--workdir <dir>]
+  dorkpipe handoff compliance [--workdir <dir>]
   dorkpipe validate -f <spec.yaml>
   dorkpipe eval [--workdir <dir>]
   dorkpipe promote [--workdir <dir>]
@@ -68,6 +82,246 @@ Environment:
   PATH must include dockpipe for dockpipe/codex nodes.
 
 `)
+}
+
+func handoffCmd(argv []string) {
+	if len(argv) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: dorkpipe handoff <build-cursor|compliance> [--workdir <dir>]")
+		os.Exit(2)
+	}
+	switch argv[0] {
+	case "build-cursor":
+		handoffBuildCursorCmd(argv[1:])
+	case "compliance":
+		handoffComplianceCmd(argv[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "unknown handoff subcommand %q\n", argv[0])
+		fmt.Fprintln(os.Stderr, "usage: dorkpipe handoff <build-cursor|compliance> [--workdir <dir>]")
+		os.Exit(2)
+	}
+}
+
+func handoffBuildCursorCmd(argv []string) {
+	fs := flag.NewFlagSet("handoff build-cursor", flag.ExitOnError)
+	workdir := fs.String("workdir", "", "repository root (default cwd)")
+	_ = fs.Parse(argv)
+	wd := mustWorkdir(*workdir)
+	env := map[string]string{}
+	for _, kv := range os.Environ() {
+		k, v, ok := strings.Cut(kv, "=")
+		if ok {
+			env[k] = v
+		}
+	}
+	res, err := handoff.BuildCursor(wd, env)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "build-cursor-handoff: wrote %s\n", res.DocumentPath)
+	fmt.Fprintf(os.Stderr, "build-cursor-handoff: bytes %d\n", res.Bytes)
+	fmt.Fprintf(os.Stderr, "build-cursor-handoff: wrote %s\n", res.PastePath)
+}
+
+func handoffComplianceCmd(argv []string) {
+	fs := flag.NewFlagSet("handoff compliance", flag.ExitOnError)
+	workdir := fs.String("workdir", "", "repository root (default cwd)")
+	_ = fs.Parse(argv)
+	wd := mustWorkdir(*workdir)
+	out, err := handoff.ComplianceSummary(wd)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Print(out)
+}
+
+func insightCmd(argv []string) {
+	if len(argv) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: dorkpipe insight <enqueue|process|export-by-category|mark-stale|review|supersede> [flags]")
+		os.Exit(2)
+	}
+	switch argv[0] {
+	case "enqueue":
+		insightEnqueueCmd(argv[1:])
+	case "process":
+		insightProcessCmd(argv[1:])
+	case "export-by-category":
+		insightExportByCategoryCmd(argv[1:])
+	case "mark-stale":
+		insightMarkStaleCmd(argv[1:])
+	case "review":
+		insightReviewCmd(argv[1:])
+	case "supersede":
+		insightSupersedeCmd(argv[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "unknown insight subcommand %q\n", argv[0])
+		fmt.Fprintln(os.Stderr, "usage: dorkpipe insight <enqueue|process|export-by-category|mark-stale|review|supersede> [flags]")
+		os.Exit(2)
+	}
+}
+
+func insightEnqueueCmd(argv []string) {
+	fs := flag.NewFlagSet("insight enqueue", flag.ExitOnError)
+	workdir := fs.String("workdir", "", "directory containing bin/.dockpipe/analysis (default cwd)")
+	message := fs.String("m", "", "insight text")
+	categoryHint := fs.String("category-hint", "unknown", "category hint")
+	repoPath := fs.String("repo-path", "", "repo path scope")
+	component := fs.String("component", "", "component scope")
+	workflow := fs.String("workflow", "", "workflow scope")
+	_ = fs.Parse(argv)
+	wd := mustWorkdir(*workdir)
+	raw := *message
+	if raw == "" {
+		body, err := io.ReadAll(os.Stdin)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		raw = string(body)
+	}
+	id, err := userinsight.Enqueue(wd, raw, *categoryHint, *repoPath, *component, *workflow)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Println(id)
+}
+
+func insightProcessCmd(argv []string) {
+	fs := flag.NewFlagSet("insight process", flag.ExitOnError)
+	workdir := fs.String("workdir", "", "directory containing bin/.dockpipe/analysis (default cwd)")
+	_ = fs.Parse(argv)
+	wd := mustWorkdir(*workdir)
+	res, err := userinsight.Process(wd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "user-insight-process: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "user-insight-process: wrote %s (new normalized insights this run: %d)\n", res.InsightsPath, res.NewCount)
+}
+
+func insightExportByCategoryCmd(argv []string) {
+	fs := flag.NewFlagSet("insight export-by-category", flag.ExitOnError)
+	workdir := fs.String("workdir", "", "directory containing bin/.dockpipe/analysis (default cwd)")
+	_ = fs.Parse(argv)
+	wd := mustWorkdir(*workdir)
+	outDir, err := userinsight.ExportByCategory(wd)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "user-insight-export-by-category: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "user-insight-export-by-category: wrote %s/*.json\n", outDir)
+}
+
+func insightMarkStaleCmd(argv []string) {
+	fs := flag.NewFlagSet("insight mark-stale", flag.ExitOnError)
+	workdir := fs.String("workdir", "", "directory containing bin/.dockpipe/analysis (default cwd)")
+	_ = fs.Parse(argv)
+	if fs.NArg() != 1 {
+		fmt.Fprintln(os.Stderr, "usage: dorkpipe insight mark-stale <insight-or-queue-id> [--workdir <dir>]")
+		os.Exit(2)
+	}
+	wd := mustWorkdir(*workdir)
+	id := fs.Arg(0)
+	if err := userinsight.MarkStale(wd, id); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Printf("user-insight-mark-stale: %s\n", id)
+}
+
+func insightReviewCmd(argv []string) {
+	fs := flag.NewFlagSet("insight review", flag.ExitOnError)
+	workdir := fs.String("workdir", "", "directory containing bin/.dockpipe/analysis (default cwd)")
+	reason := fs.String("reason", "", "review reason")
+	_ = fs.Parse(argv)
+	if fs.NArg() != 2 {
+		fmt.Fprintln(os.Stderr, "usage: dorkpipe insight review accept|reject <insight-or-queue-id> [--reason ...] [--workdir <dir>]")
+		os.Exit(2)
+	}
+	wd := mustWorkdir(*workdir)
+	action := fs.Arg(0)
+	id := fs.Arg(1)
+	status, err := userinsight.Review(wd, action, id, *reason)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Printf("user-insight-review: %s %s -> %s\n", action, id, status)
+}
+
+func insightSupersedeCmd(argv []string) {
+	fs := flag.NewFlagSet("insight supersede", flag.ExitOnError)
+	workdir := fs.String("workdir", "", "directory containing bin/.dockpipe/analysis (default cwd)")
+	_ = fs.Parse(argv)
+	if fs.NArg() != 2 {
+		fmt.Fprintln(os.Stderr, "usage: dorkpipe insight supersede <new_insight_id> <old_insight_id> [--workdir <dir>]")
+		os.Exit(2)
+	}
+	wd := mustWorkdir(*workdir)
+	newID := fs.Arg(0)
+	oldID := fs.Arg(1)
+	if err := userinsight.Supersede(wd, newID, oldID); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	fmt.Printf("user-insight-supersede: %s supersedes %s\n", newID, oldID)
+}
+
+func mustWorkdir(flagValue string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	wd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	return wd
+}
+
+func ciCmd(argv []string) {
+	if len(argv) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: dorkpipe ci normalize-scans [--workdir <dir>]")
+		os.Exit(2)
+	}
+	switch argv[0] {
+	case "normalize-scans":
+		ciNormalizeScansCmd(argv[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "unknown ci subcommand %q\n", argv[0])
+		fmt.Fprintln(os.Stderr, "usage: dorkpipe ci normalize-scans [--workdir <dir>]")
+		os.Exit(2)
+	}
+}
+
+func ciNormalizeScansCmd(argv []string) {
+	fs := flag.NewFlagSet("ci normalize-scans", flag.ExitOnError)
+	workdir := fs.String("workdir", "", "directory containing bin/.dockpipe/ci-raw (default cwd)")
+	_ = fs.Parse(argv)
+	wd := *workdir
+	if wd == "" {
+		var err error
+		wd, err = os.Getwd()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	}
+	env := map[string]string{}
+	for _, kv := range os.Environ() {
+		k, v, ok := strings.Cut(kv, "=")
+		if ok {
+			env[k] = v
+		}
+	}
+	res, err := cianalysis.Normalize(wd, env)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "normalize-ci-scans: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Fprintf(os.Stderr, "normalize-ci-scans: wrote %s (%d findings) and %s\n", res.FindingsPath, res.Count, res.SummaryPath)
 }
 
 func runCmd(argv []string) {

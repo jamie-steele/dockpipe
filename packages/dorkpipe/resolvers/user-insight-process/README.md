@@ -2,7 +2,7 @@
 
 **Location:** maintainer **`dockpipe`** package — **`resolvers/user-insight-process/`**. **`--workflow`** name: **`user-insight-process`**.
 
-**Purpose:** Normalize **`queue.json`** → **`insights.json`** on the host (requires **`jq`** and **`scripts/dorkpipe/user-insight-rules.json`** at repo root).
+**Purpose:** Normalize **`queue.json`** → **`insights.json`** on the host via **`dorkpipe insight process`** and export category views via **`dorkpipe insight export-by-category`**.
 
 ```bash
 bash scripts/dorkpipe/user-insight-enqueue.sh -m 'Your guidance here.'

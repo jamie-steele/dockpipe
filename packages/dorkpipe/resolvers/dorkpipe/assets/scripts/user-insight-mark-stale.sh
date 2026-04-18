@@ -1,32 +1,11 @@
 #!/usr/bin/env bash
-# Mark an insight stale (lifecycle; does not delete provenance).
-# Usage: user-insight-mark-stale.sh <insight-or-queue-id>
+# Wrapper around `dorkpipe insight mark-stale`.
 set -euo pipefail
 
-eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib/dorkpipe-cli.sh"
+dorkpipe_script_bootstrap "$SCRIPT_DIR"
 ROOT="$(dockpipe_sdk workdir)"
-INS="$ROOT/bin/.dockpipe/analysis/insights.json"
-ID="${1:-}"
 
-if [[ -z "$ID" ]] || [[ ! -f "$INS" ]]; then
-	echo "usage: user-insight-mark-stale.sh <insight-or-queue-id>" >&2
-	exit 1
-fi
-
-NOW="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-tmp="$(mktemp)"
-jq --arg id "$ID" \
-	--arg ts "$NOW" \
-	'
-  .insights |= map(
-    if (.id == $id) or (.queue_item_id == $id) then
-      . + {stale: true}
-      | .history += [{at_utc: $ts, event: "mark_stale", detail: {}}]
-    else . end
-  )
-' "$INS" >"$tmp"
-mv "$tmp" "$INS"
-
-HIST="$ROOT/bin/.dockpipe/analysis/history.jsonl"
-jq -n --arg ev "mark_stale" --arg ts "$NOW" --arg id "$ID" '{event: $ev, at_utc: $ts, insight_or_queue_id: $id}' >>"$HIST"
-echo "user-insight-mark-stale: $ID"
+dorkpipe_script_exec_cli "$SCRIPT_DIR" insight mark-stale --workdir "$ROOT" "$@"

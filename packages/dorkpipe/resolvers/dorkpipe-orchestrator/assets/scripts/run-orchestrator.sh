@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/../../dorkpipe/assets/scripts/lib/dorkpipe-cli.sh"
+dorkpipe_script_bootstrap "$SCRIPT_DIR"
 dockpipe_sdk init-script
 WORKFLOW_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-BIN="${DORKPIPE_BIN:-}"
-if [[ -z "$BIN" ]]; then
-  BIN="$(dockpipe_sdk require dorkpipe-bin)"
-fi
+BIN="$(dorkpipe_script_resolve_bin "$(dorkpipe_script_repo_root "$SCRIPT_DIR")")"
 SPEC="${DORKPIPE_SPEC:-$WORKFLOW_ROOT/spec.example.yaml}"
 
 if [[ ! -x "$BIN" ]]; then

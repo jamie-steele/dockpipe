@@ -233,13 +233,6 @@ const CORE_HELPER_PROFILES = {
         documentation: "First-hand shell SDK action that prints the resolved `dockpipe` binary path and fails with a clear error if it cannot be resolved."
       },
       {
-        name: "dockpipe_sdk require dorkpipe-bin",
-        detail: "Return dorkpipe binary or fail.",
-        insertText: "dockpipe_sdk require dorkpipe-bin",
-        filterText: "dockpipe_sdk require dorkpipe-bin dorkpipe require bin",
-        documentation: "First-hand shell SDK action that prints the resolved `dorkpipe` binary path and fails with a clear error if it cannot be resolved."
-      },
-      {
         name: "dockpipe_sdk die",
         detail: "Exit with an SDK-prefixed error.",
         insertText: 'dockpipe_sdk die "$1"',
@@ -281,12 +274,6 @@ const CORE_HELPER_PROFILES = {
         documentation: "Object-style PowerShell SDK field for the resolved `dockpipe` binary path."
       },
       {
-        name: "$dockpipe.DorkpipeBin",
-        detail: "SDK dorkpipe binary path.",
-        insertText: "$dockpipe.DorkpipeBin",
-        documentation: "Object-style PowerShell SDK field for the resolved `dorkpipe` binary path."
-      },
-      {
         name: "$dockpipe.WorkflowName",
         detail: "SDK workflow name.",
         insertText: "$dockpipe.WorkflowName",
@@ -314,12 +301,6 @@ const CORE_HELPER_PROFILES = {
         documentation: "Object-style Python SDK field for the resolved `dockpipe` binary path."
       },
       {
-        name: "dockpipe.dorkpipe_bin",
-        detail: "SDK dorkpipe binary path.",
-        insertText: "dockpipe.dorkpipe_bin",
-        documentation: "Object-style Python SDK field for the resolved `dorkpipe` binary path."
-      },
-      {
         name: "dockpipe.workflow_name",
         detail: "SDK workflow name.",
         insertText: "dockpipe.workflow_name",
@@ -344,12 +325,6 @@ const CORE_HELPER_PROFILES = {
         detail: "SDK dockpipe binary path.",
         insertText: "dockpipe.DockpipeBin",
         documentation: "Object-style Go SDK field for the resolved `dockpipe` binary path."
-      },
-      {
-        name: "dockpipe.DorkpipeBin",
-        detail: "SDK dorkpipe binary path.",
-        insertText: "dockpipe.DorkpipeBin",
-        documentation: "Object-style Go SDK field for the resolved `dorkpipe` binary path."
       },
       {
         name: "dockpipe.WorkflowName",

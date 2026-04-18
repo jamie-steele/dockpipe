@@ -9,7 +9,6 @@ import (
 type SDK struct {
 	Workdir     string
 	DockpipeBin string
-	DorkpipeBin string
 	WorkflowName string
 }
 
@@ -42,32 +41,15 @@ func ResolveDockpipeBin(root string) (string, error) {
 	return exec.LookPath("dockpipe")
 }
 
-func ResolveDorkpipeBin(root string) (string, error) {
-	if configured := os.Getenv("DORKPIPE_BIN"); configured != "" {
-		return configured, nil
-	}
-	resolvedRoot, err := RepoRoot(root)
-	if err != nil {
-		return "", err
-	}
-	candidate := filepath.Join(resolvedRoot, "packages", "dorkpipe", "bin", "dorkpipe")
-	if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-		return candidate, nil
-	}
-	return exec.LookPath("dorkpipe")
-}
-
 func Load(root string) (SDK, error) {
 	workdir, err := RepoRoot(root)
 	if err != nil {
 		return SDK{}, err
 	}
 	dockpipeBin, _ := ResolveDockpipeBin(workdir)
-	dorkpipeBin, _ := ResolveDorkpipeBin(workdir)
 	return SDK{
 		Workdir:      workdir,
 		DockpipeBin:  dockpipeBin,
-		DorkpipeBin:  dorkpipeBin,
 		WorkflowName: os.Getenv("DOCKPIPE_WORKFLOW_NAME"),
 	}, nil
 }

@@ -1,62 +1,11 @@
 #!/usr/bin/env bash
-# Host-side handoff for AI: compliance / security posture — loads artifact paths only (no scoring).
-# Framework: DockPipe runs this script; DorkPipe / assistants interpret docs/artifacts.md
+# Wrapper around `dorkpipe handoff compliance`.
 set -euo pipefail
 
-eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=/dev/null
+source "$SCRIPT_DIR/lib/dorkpipe-cli.sh"
+dorkpipe_script_bootstrap "$SCRIPT_DIR"
 ROOT="$(dockpipe_sdk workdir)"
 
-echo ""
-echo "=== DockPipe — compliance & security posture handoff (signals only) ==="
-echo "Read: docs/artifacts.md"
-echo ""
-
-have_jq() { command -v jq >/dev/null 2>&1; }
-
-if [[ -f "$ROOT/bin/.dockpipe/ci-analysis/findings.json" ]]; then
-	echo "--- bin/.dockpipe/ci-analysis/ (CI-normalized signals) ---"
-	if have_jq; then
-		jq -r '"schema: " + .schema_version + " | findings: " + (.findings|length|tostring) + " | commit: " + .provenance.commit + " | source: " + .provenance.source' "$ROOT/bin/.dockpipe/ci-analysis/findings.json"
-	else
-		echo "(install jq for JSON summary)"
-		ls -la "$ROOT/bin/.dockpipe/ci-analysis/"
-	fi
-else
-	echo "[ ] bin/.dockpipe/ci-analysis/findings.json — run: bash src/scripts/ci-local.sh (or CI) to generate"
-fi
-
-if [[ -f "$ROOT/bin/.dockpipe/ci-analysis/SUMMARY.md" ]]; then
-	echo ""
-	echo "--- SUMMARY.md (head) ---"
-	head -15 "$ROOT/bin/.dockpipe/ci-analysis/SUMMARY.md"
-fi
-
-if [[ -d "$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis" ]] && [[ -n "$(ls -A "$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis" 2>/dev/null)" ]]; then
-	echo ""
-	echo "--- bin/.dockpipe/packages/dorkpipe/self-analysis/ (present) ---"
-	ls -la "$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis" | head -20
-fi
-
-if [[ -f "$ROOT/bin/.dockpipe/packages/dorkpipe/run.json" ]]; then
-	echo ""
-	echo "--- bin/.dockpipe/packages/dorkpipe/run.json ---"
-	if have_jq; then
-		jq '{name, ts, policy}' "$ROOT/bin/.dockpipe/packages/dorkpipe/run.json" 2>/dev/null || true
-	else
-		head -5 "$ROOT/bin/.dockpipe/packages/dorkpipe/run.json"
-	fi
-fi
-
-if [[ -f "$ROOT/bin/.dockpipe/analysis/insights.json" ]]; then
-	echo ""
-	echo "--- bin/.dockpipe/analysis/insights.json (user guidance signals; not verified facts) ---"
-	if have_jq; then
-		jq '{kind, insight_count: (.insights | length), categories: [.insights[].category] | unique}' "$ROOT/bin/.dockpipe/analysis/insights.json" 2>/dev/null || true
-	else
-		head -8 "$ROOT/bin/.dockpipe/analysis/insights.json"
-	fi
-fi
-
-echo ""
-echo "AI: Answer compliance/security questions using AGENTS.md + artifacts above; do not claim certified compliance."
-echo "See docs/artifacts.md"
+dorkpipe_script_exec_cli "$SCRIPT_DIR" handoff compliance --workdir "$ROOT" "$@"

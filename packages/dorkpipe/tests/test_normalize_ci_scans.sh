@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke test for dorkpipe resolver normalize-ci-scans.sh (requires jq).
+# Smoke test for the normalize-ci-scans wrapper around `dorkpipe ci normalize-scans` (jq used for assertions).
 # Run from repo root: bash packages/dorkpipe/tests/test_normalize_ci_scans.sh
 set -euo pipefail
 

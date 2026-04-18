@@ -14,10 +14,10 @@ Language support for DockPipe authoring:
 - `vars:` value suggestions from implementing class defaults and nearby `Struct` known-values
 - Completion/hover for SDK-object patterns:
   - shell: `eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"` then shell authors use `dockpipe_sdk ...`
-    - actions: `dockpipe_sdk init-script`, `dockpipe_sdk workdir`, `dockpipe_sdk cd-workdir`, `dockpipe_sdk workflow-name`, `dockpipe_sdk require dockpipe-bin`, `dockpipe_sdk require dorkpipe-bin`, `dockpipe_sdk require workflow-name`, `dockpipe_sdk source terraform-pipeline`, `dockpipe_sdk die`
-  - PowerShell: `$dockpipe.Workdir`, `$dockpipe.DockpipeBin`, `$dockpipe.DorkpipeBin`, `$dockpipe.WorkflowName`
-  - Python: `dockpipe.workdir`, `dockpipe.dockpipe_bin`, `dockpipe.dorkpipe_bin`, `dockpipe.workflow_name`
-  - Go: `dockpipe.Workdir`, `dockpipe.DockpipeBin`, `dockpipe.DorkpipeBin`, `dockpipe.WorkflowName`
+    - actions: `dockpipe_sdk init-script`, `dockpipe_sdk workdir`, `dockpipe_sdk cd-workdir`, `dockpipe_sdk workflow-name`, `dockpipe_sdk require dockpipe-bin`, `dockpipe_sdk require workflow-name`, `dockpipe_sdk source terraform-pipeline`, `dockpipe_sdk die`
+  - PowerShell: `$dockpipe.Workdir`, `$dockpipe.DockpipeBin`, `$dockpipe.WorkflowName`
+  - Python: `dockpipe.workdir`, `dockpipe.dockpipe_bin`, `dockpipe.workflow_name`
+  - Go: `dockpipe.Workdir`, `dockpipe.DockpipeBin`, `dockpipe.WorkflowName`
 
 ## Install (dev)
 

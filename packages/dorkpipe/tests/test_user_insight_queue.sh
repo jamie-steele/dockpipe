@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Smoke test for user insight enqueue + process (requires jq).
+# Smoke test for the `dorkpipe insight ...` user-insight flow (jq only used for assertions).
 # Run from repo root: bash packages/dorkpipe/tests/test_user_insight_queue.sh
 set -euo pipefail
 

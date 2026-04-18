@@ -15,5 +15,6 @@ Principles: deterministic prep, local-first, parallel levels, pgvector when you 
 Resolver host scripts in this package should use the shared core SDK:
 
 - **Shell:** bootstrap with **`eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk)"`** and use **`dockpipe_sdk ...`**
-
-to resolve the repo-local **`dorkpipe`** build before falling back to `PATH`.
+- **DorkPipe package CLI:** use the package-local helper under
+  **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/lib/dorkpipe-cli.sh`**
+  when a script in this package needs to invoke the DorkPipe tool itself.

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "description": "Deterministic classification rules for user-insight-process.sh. Edit patterns to tune behavior; no hidden ML.",
+  "description": "Deterministic classification rules for dorkpipe insight process. Edit patterns to tune behavior; no hidden ML.",
   "default_category": "unknown",
   "auto_promote_categories": ["convention", "architecture_note", "future_work"],
   "review_required_categories": ["compliance", "risk", "constraint"],
