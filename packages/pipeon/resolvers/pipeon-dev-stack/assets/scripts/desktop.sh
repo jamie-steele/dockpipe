@@ -17,8 +17,11 @@ source "$SCRIPT_DIR/common.sh"
 
 WORKDIR="$(pipeon_stack_workdir)"
 CODE_SERVER_CONTAINER_NAME="${CODE_SERVER_CONTAINER_NAME:-$(pipeon_stack_code_server_name)}"
+DOCKER_STACK_PROJECT="${DORKPIPE_DEV_STACK_PROJECT:-$(pipeon_stack_compose_project)}"
+DOCKER_NETWORK_NAME="${DORKPIPE_DEV_STACK_NETWORK:-$(pipeon_stack_compose_network)}"
 CODE_SERVER_PORT="$(pipeon_stack_code_server_port)"
 CODE_SERVER_URL="${CODE_SERVER_URL:-$(pipeon_stack_code_server_url)}"
+MCP_HTTP_CONTAINER_URL="${MCP_HTTP_CONTAINER_URL:-$(pipeon_stack_mcp_container_url)}"
 CODE_SERVER_HOME="$(pipeon_stack_code_server_home)"
 CODE_SERVER_IMAGE="${CODE_SERVER_IMAGE:-dockpipe-code-server:latest}"
 CODE_SERVER_AUTH="${CODE_SERVER_AUTH:-none}"
@@ -119,7 +122,10 @@ pipeon_start_code_server() {
   cid="$(
     docker run -d \
     --name "$CODE_SERVER_CONTAINER_NAME" \
+    --label "com.dockpipe.stack.project=$DOCKER_STACK_PROJECT" \
+    --label "com.dockpipe.stack.role=code-server" \
     --entrypoint /bin/bash \
+    --network "$DOCKER_NETWORK_NAME" \
     --add-host=host.docker.internal:host-gateway \
     -p "127.0.0.1:${CODE_SERVER_PORT}:8080" \
     -e HOME=/home/coder \
@@ -133,7 +139,7 @@ pipeon_start_code_server() {
     -e DOCKPIPE_PIPEON_ALLOW_PRERELEASE="${DOCKPIPE_PIPEON_ALLOW_PRERELEASE:-1}" \
     -e DOCKPIPE_WORKDIR=/work \
     -e PIPEON_OLLAMA_MODEL="${PIPEON_OLLAMA_MODEL:-llama3.2}" \
-    -e MCP_HTTP_URL="${MCP_HTTP_URL:-}" \
+    -e MCP_HTTP_URL="${MCP_HTTP_CONTAINER_URL:-}" \
     -v "$WORKDIR:/work" \
     -v "$CODE_SERVER_HOME:/home/coder" \
     "$CODE_SERVER_IMAGE" \

@@ -8,8 +8,6 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
-
-	"dockpipe/src/lib/infrastructure"
 )
 
 const (
@@ -21,7 +19,7 @@ const (
 )
 
 func repoListFiles(query string, limit int) ([]string, error) {
-	root, err := infrastructure.RepoRoot()
+	root, err := effectiveRepoRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +76,7 @@ func repoReadFile(path string, maxChars int) (string, error) {
 }
 
 func repoSearchText(query string, limit int) ([]string, error) {
-	root, err := infrastructure.RepoRoot()
+	root, err := effectiveRepoRoot()
 	if err != nil {
 		return nil, err
 	}

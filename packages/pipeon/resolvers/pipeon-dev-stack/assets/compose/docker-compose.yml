@@ -19,7 +19,7 @@ services:
     volumes:
       - dorkpipe_ollama:/root/.ollama
   dorkpipe-stack:
-    image: debian:bookworm-slim
+    image: node:20-bookworm-slim
     depends_on:
       postgres:
         condition: service_healthy
@@ -38,30 +38,19 @@ services:
       PIPEON_OLLAMA_MODEL: "${PIPEON_OLLAMA_MODEL:-llama3.2}"
       MCP_HTTP_API_KEY_FILE: "/run/pipeon/mcp-api-key"
       PIPEON_DEV_STACK_MCPD_BIN: "${PIPEON_DEV_STACK_MCPD_BIN:-/repo/packages/dorkpipe/bin/mcpd}"
+      PIPEON_DEV_STACK_MCPD_LISTEN: "127.0.0.1:8765"
+      PIPEON_MCP_PROXY_PORT: "8766"
+      PIPEON_MCP_UPSTREAM_URL: "http://127.0.0.1:8765"
+      PIPEON_MCP_PROXY_SCRIPT: "/repo/packages/pipeon/resolvers/pipeon-dev-stack/assets/scripts/mcp-proxy.js"
+    ports:
+      - "127.0.0.1:${PIPEON_DEV_STACK_MCP_PORT:-8766}:8766"
     command:
-      - /bin/sh
+      - /bin/bash
       - -lc
-      - exec "$PIPEON_DEV_STACK_MCPD_BIN" -http 0.0.0.0:8765 -insecure-loopback
+      - exec /repo/packages/pipeon/resolvers/pipeon-dev-stack/assets/scripts/dorkpipe-stack-entrypoint.sh
     volumes:
       - "${PIPEON_DEV_STACK_WORKDIR:-.}:/work"
       - "${PIPEON_DEV_STACK_REPO_ROOT:-.}:/repo"
-      - "${PIPEON_DEV_STACK_MCP_API_KEY_FILE:?PIPEON_DEV_STACK_MCP_API_KEY_FILE is required}:/run/pipeon/mcp-api-key:ro"
-  pipeon-mcp-proxy:
-    image: node:20-alpine
-    depends_on:
-      dorkpipe-stack:
-        condition: service_started
-    ports:
-      - "127.0.0.1:${PIPEON_DEV_STACK_MCP_PORT:-8766}:8766"
-    environment:
-      PIPEON_MCP_PROXY_PORT: "8766"
-      PIPEON_MCP_UPSTREAM_URL: "http://dorkpipe-stack:8765"
-      MCP_HTTP_API_KEY_FILE: "/run/pipeon/mcp-api-key"
-    command:
-      - node
-      - /repo/packages/pipeon/resolvers/pipeon-dev-stack/assets/scripts/mcp-proxy.js
-    volumes:
-      - "${PIPEON_DEV_STACK_REPO_ROOT:-.}:/repo:ro"
       - "${PIPEON_DEV_STACK_MCP_API_KEY_FILE:?PIPEON_DEV_STACK_MCP_API_KEY_FILE is required}:/run/pipeon/mcp-api-key:ro"
 
 volumes:

@@ -83,6 +83,8 @@ var toolMinTier = map[string]MCPTier{
 	"dorkpipe.validate_spec":     TierValidate,
 	"dockpipe.run":               TierExec,
 	"dorkpipe.run_spec":          TierExec,
+	"dorkpipe.request":           TierExec,
+	"dorkpipe.apply_edit":        TierExec,
 }
 
 func minTierForTool(name string) (MCPTier, bool) {

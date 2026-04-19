@@ -6,8 +6,8 @@ Use this when the local Pipeon dev stack is running against this repository and 
 
 - `make build` updates the local `dockpipe` launcher binary
 - `make maintainer-tools` updates `packages/dorkpipe/bin/dorkpipe` and `packages/dorkpipe/bin/mcpd`
-- `npm --prefix packages/pipeon/resolvers/pipeon/vscode-extension run build` updates the checked-in Pipeon extension output
-- `make build-pipeon-desktop` updates the Tauri desktop shell at `packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop`
+- `make package-pipeon-vscode-extension` rebuilds the checked-in Pipeon extension output using an external build cache outside `packages/`
+- `make build-pipeon-desktop` updates the Tauri desktop shell at `packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop` using an external Cargo target dir outside `packages/`
 - `make build-code-server-image` rebuilds the branded Pipeon code-server image with fresh extension assets
 
 ## Refresh matrix
@@ -34,7 +34,7 @@ Use this when the isolated DorkPipe control plane behavior depends on:
 ### Pipeon VS Code extension source
 
 ```bash
-npm --prefix packages/pipeon/resolvers/pipeon/vscode-extension run build
+make package-pipeon-vscode-extension
 ```
 
 Use this when you changed `packages/pipeon/resolvers/pipeon/vscode-extension/src/`.
@@ -54,7 +54,7 @@ If you are running Pipeon through the Tauri desktop shell plus the local code-se
 ```bash
 make build
 make maintainer-tools
-npm --prefix packages/pipeon/resolvers/pipeon/vscode-extension run build
+make package-pipeon-vscode-extension
 make build-pipeon-desktop
 make build-code-server-image
 ```

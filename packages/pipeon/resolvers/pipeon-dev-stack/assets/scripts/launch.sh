@@ -19,7 +19,9 @@ WORKDIR="$(pipeon_stack_workdir)"
 PROJECT_DIR="$(pipeon_stack_repo_root)"
 COMPOSE_FILE="$(pipeon_stack_compose_file)"
 COMPOSE_PROJECT="$(pipeon_stack_compose_project)"
+LEGACY_COMPOSE_PROJECT="$(pipeon_stack_legacy_compose_project)"
 CODE_SERVER_CONTAINER_NAME="$(pipeon_stack_code_server_name)"
+LEGACY_CODE_SERVER_CONTAINER_NAME="$(pipeon_stack_legacy_code_server_name)"
 CODE_SERVER_URL="$(pipeon_stack_code_server_url)"
 MCP_PORT="$(pipeon_stack_mcp_port)"
 MCP_URL="$(pipeon_stack_mcp_url)"
@@ -138,9 +140,13 @@ write_pipeon_stack_runtime_env
 cleanup() {
   if [[ "$AUTODOWN" == "1" ]]; then
     docker rm -f "$CODE_SERVER_CONTAINER_NAME" >/dev/null 2>&1 || true
+    docker rm -f "$LEGACY_CODE_SERVER_CONTAINER_NAME" >/dev/null 2>&1 || true
+    docker ps -aq --filter "label=com.dockpipe.stack.project=$COMPOSE_PROJECT" | xargs -r docker rm -f >/dev/null 2>&1 || true
+    docker ps -aq --filter "label=com.dockpipe.stack.project=$LEGACY_COMPOSE_PROJECT" | xargs -r docker rm -f >/dev/null 2>&1 || true
   fi
   if [[ "$AUTODOWN" == "1" ]]; then
     compose_cmd down >/dev/null 2>&1 || true
+    docker compose --env-file "$RUNTIME_ENV" -p "$LEGACY_COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$PROJECT_DIR" down >/dev/null 2>&1 || true
   fi
 }
 trap cleanup EXIT INT TERM
@@ -182,19 +188,21 @@ compose_cmd up -d --remove-orphans
 
 if ! wait_for_mcp_ready 40; then
   echo "pipeon-dev-stack: isolated DorkPipe MCP boundary did not become reachable at $MCP_URL" >&2
-  compose_cmd logs dorkpipe-stack pipeon-mcp-proxy >&2 || true
+  compose_cmd logs dorkpipe-stack >&2 || true
   exit 1
 fi
 
 export CODE_SERVER_WAIT="${CODE_SERVER_WAIT:-1}"
 export CODE_SERVER_AUTH="${CODE_SERVER_AUTH:-none}"
 export CODE_SERVER_CONTAINER_NAME="$CODE_SERVER_CONTAINER_NAME"
+export DORKPIPE_DEV_STACK_PROJECT="$COMPOSE_PROJECT"
 export CODE_SERVER_URL="$CODE_SERVER_URL"
 export PIPEON_WINDOW_TITLE="${PIPEON_WINDOW_TITLE:-Pipeon}"
 export DOCKPIPE_PIPEON="${DOCKPIPE_PIPEON:-1}"
 export DOCKPIPE_PIPEON_ALLOW_PRERELEASE="${DOCKPIPE_PIPEON_ALLOW_PRERELEASE:-1}"
 export PIPEON_OLLAMA_MODEL="${PIPEON_OLLAMA_MODEL:-$MODEL_NAME}"
 export MCP_HTTP_URL="$MCP_URL"
+export MCP_HTTP_CONTAINER_URL="$(pipeon_stack_mcp_container_url)"
 export PIPEON_DESKTOP_BIN
 
 if [[ "${CODE_SERVER_IMAGE:-dockpipe-code-server:latest}" == "dockpipe-code-server:latest" ]] \

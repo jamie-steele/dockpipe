@@ -18,6 +18,13 @@ pipeon_stack_slug() {
   local workdir base
   workdir="$(pipeon_stack_workdir)"
   base="$(basename "$workdir")"
+  printf '%s' "$base" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-' | sed 's/^-*//; s/-*$//'
+}
+
+pipeon_stack_legacy_slug() {
+  local workdir base
+  workdir="$(pipeon_stack_workdir)"
+  base="$(basename "$workdir")"
   printf '%s\n' "$base" | tr '[:upper:]' '[:lower:]' | tr -cs 'a-z0-9' '-'
 }
 
@@ -41,8 +48,20 @@ pipeon_stack_compose_project() {
   printf 'pipeon-dev-%s\n' "$(pipeon_stack_slug)"
 }
 
+pipeon_stack_legacy_compose_project() {
+  printf 'pipeon-dev-%s\n' "$(pipeon_stack_legacy_slug)"
+}
+
+pipeon_stack_compose_network() {
+  printf '%s_default\n' "$(pipeon_stack_compose_project)"
+}
+
 pipeon_stack_code_server_name() {
   printf 'pipeon-vscode-%s\n' "$(pipeon_stack_slug)"
+}
+
+pipeon_stack_legacy_code_server_name() {
+  printf 'pipeon-vscode-%s\n' "$(pipeon_stack_legacy_slug)"
 }
 
 pipeon_stack_code_server_port_file() {
@@ -109,6 +128,23 @@ pipeon_stack_mcp_url() {
   printf 'http://127.0.0.1:%s/mcp\n' "$(pipeon_stack_mcp_port)"
 }
 
+pipeon_stack_mcp_container_url() {
+  local network project container_name container_ip
+  network="$(pipeon_stack_compose_network)"
+  project="$(pipeon_stack_compose_project)"
+  container_name="${project}-dorkpipe-stack-1"
+  container_ip="$(
+    docker inspect "$container_name" \
+      --format "{{with index .NetworkSettings.Networks \"$network\"}}{{.IPAddress}}{{end}}" \
+      2>/dev/null || true
+  )"
+  if [[ -n "$container_ip" ]]; then
+    printf 'http://%s:8766/mcp\n' "$container_ip"
+    return 0
+  fi
+  printf 'http://host.docker.internal:%s/mcp\n' "$(pipeon_stack_mcp_port)"
+}
+
 pipeon_stack_api_key_file() {
   printf '%s/api-key\n' "$(pipeon_stack_state_dir)"
 }
@@ -159,9 +195,11 @@ PIPEON_DEV_STACK_DORKPIPE_WORKDIR=/work
 PIPEON_DEV_STACK_DORKPIPE_DATABASE_URL=postgresql://dorkpipe:dorkpipe@postgres:5432/dorkpipe
 PIPEON_DEV_STACK_DORKPIPE_OLLAMA_HOST=http://ollama:11434
 DORKPIPE_DEV_STACK_PROJECT=$(pipeon_stack_compose_project)
+DORKPIPE_DEV_STACK_NETWORK=$(pipeon_stack_compose_network)
 CODE_SERVER_CONTAINER_NAME=$(pipeon_stack_code_server_name)
 CODE_SERVER_URL=$(pipeon_stack_code_server_url)
 MCP_HTTP_URL=$(pipeon_stack_mcp_url)
+MCP_HTTP_CONTAINER_URL=$(pipeon_stack_mcp_container_url)
 MCP_HTTP_API_KEY_FILE=$api_key_file
 EOF
 }

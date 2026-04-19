@@ -9,8 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"dockpipe/src/lib/infrastructure"
 )
 
 func dockpipePath() string {
@@ -108,7 +106,7 @@ func resolveExecWorkdir(inWorkdir string) (string, error) {
 	if !restrictExecWorkdirToRepo() {
 		return absWorkdir(inWorkdir)
 	}
-	rr, err := infrastructure.RepoRoot()
+	rr, err := effectiveRepoRoot()
 	if err != nil {
 		return "", err
 	}
@@ -230,7 +228,7 @@ func normalizeRepoHintPath(userPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	repoRoot, err := infrastructure.RepoRoot()
+	repoRoot, err := effectiveRepoRoot()
 	if err != nil {
 		return "", err
 	}

@@ -8,7 +8,7 @@ import (
 
 // listWorkflowNames uses the same resolution as the dockpipe CLI (bundled / authoring roots + installed packages).
 func listWorkflowNames() ([]string, error) {
-	rr, err := infrastructure.RepoRoot()
+	rr, err := effectiveRepoRoot()
 	if err != nil {
 		return nil, err
 	}

@@ -16,14 +16,14 @@ build:
 	@chmod +x src/bin/dockpipe
 	@echo "Built src/bin/dockpipe.bin — copied to src/bin/dockpipe (use either; bare \`dockpipe\` on PATH may still be an older install)"
 	@echo "Install into PATH:  make install   or   make dev-install"
-	@echo "Optional: make maintainer-tools (dorkpipe + mcpd under packages/)"
+	@echo "Optional: make maintainer-tools (dorkpipe + mcpd under bin/.dockpipe/tooling/bin with wrappers under packages/dorkpipe/bin/)"
 
 # Maintainer: orchestrator + DorkPipe-owned MCP control plane. Not required for dockpipe core.
 maintainer-tools:
-	@mkdir -p packages/dorkpipe/bin
-	go build -C packages/dorkpipe/lib -trimpath -ldflags "$(GO_LDFLAGS)" -o ../bin/dorkpipe ./cmd/dorkpipe
-	go build -C packages/dorkpipe/mcp -trimpath -ldflags "$(GO_LDFLAGS)" -o ../bin/mcpd ./cmd/mcpd
-	@echo "Built packages/dorkpipe/bin/dorkpipe and packages/dorkpipe/bin/mcpd"
+	@mkdir -p bin/.dockpipe/tooling/bin
+	go build -C packages/dorkpipe/lib -trimpath -ldflags "$(GO_LDFLAGS)" -o ../../../bin/.dockpipe/tooling/bin/dorkpipe ./cmd/dorkpipe
+	go build -C packages/dorkpipe/mcp -trimpath -ldflags "$(GO_LDFLAGS)" -o ../../../bin/.dockpipe/tooling/bin/mcpd ./cmd/mcpd
+	@echo "Built bin/.dockpipe/tooling/bin/dorkpipe and bin/.dockpipe/tooling/bin/mcpd"
 
 build-windows:
 	cp VERSION src/cmd/VERSION

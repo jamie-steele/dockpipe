@@ -9,6 +9,16 @@ import (
 	"dockpipe/src/lib/infrastructure"
 )
 
+func effectiveRepoRoot() (string, error) {
+	if v := strings.TrimSpace(os.Getenv("DOCKPIPE_MCP_REPO_ROOT")); v != "" {
+		return filepath.Abs(v)
+	}
+	if v := strings.TrimSpace(os.Getenv("DOCKPIPE_WORKDIR")); v != "" {
+		return filepath.Abs(v)
+	}
+	return infrastructure.RepoRoot()
+}
+
 // ResolvePathUnderRepoRoot resolves user-supplied paths for specs and validation targets.
 // Absolute paths must still lie under the resolved project root.
 func ResolvePathUnderRepoRoot(userPath string) (string, error) {
@@ -19,7 +29,7 @@ func ResolvePathUnderRepoRoot(userPath string) (string, error) {
 	if strings.Contains(userPath, "\x00") {
 		return "", fmt.Errorf("invalid path")
 	}
-	rr, err := infrastructure.RepoRoot()
+	rr, err := effectiveRepoRoot()
 	if err != nil {
 		return "", err
 	}
@@ -47,7 +57,7 @@ func CheckAbsolutePathUnderRepoRoot(absPath string) error {
 	if strings.Contains(absPath, "\x00") {
 		return fmt.Errorf("invalid path")
 	}
-	rr, err := infrastructure.RepoRoot()
+	rr, err := effectiveRepoRoot()
 	if err != nil {
 		return err
 	}
