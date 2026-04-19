@@ -37,21 +37,40 @@ services:
       OLLAMA_HOST: "${PIPEON_DEV_STACK_DORKPIPE_OLLAMA_HOST:-http://ollama:11434}"
       PIPEON_OLLAMA_MODEL: "${PIPEON_OLLAMA_MODEL:-llama3.2}"
       MCP_HTTP_API_KEY_FILE: "/run/pipeon/mcp-api-key"
+      MCP_TLS_CERT_FILE: "/run/pipeon/mcp-tls.crt"
+      MCP_TLS_KEY_FILE: "/run/pipeon/mcp-tls.key"
       PIPEON_DEV_STACK_MCPD_BIN: "${PIPEON_DEV_STACK_MCPD_BIN:-/repo/packages/dorkpipe/bin/mcpd}"
-      PIPEON_DEV_STACK_MCPD_LISTEN: "127.0.0.1:8765"
-      PIPEON_MCP_PROXY_PORT: "8766"
-      PIPEON_MCP_UPSTREAM_URL: "http://127.0.0.1:8765"
-      PIPEON_MCP_PROXY_SCRIPT: "/repo/packages/pipeon/resolvers/pipeon-dev-stack/assets/scripts/mcp-proxy.js"
-    ports:
-      - "127.0.0.1:${PIPEON_DEV_STACK_MCP_PORT:-8766}:8766"
+      PIPEON_DEV_STACK_MCPD_LISTEN: "0.0.0.0:8765"
     command:
       - /bin/bash
       - -lc
-      - exec /repo/packages/pipeon/resolvers/pipeon-dev-stack/assets/scripts/dorkpipe-stack-entrypoint.sh
+      - exec "$$PIPEON_DEV_STACK_MCPD_BIN" -http "$$PIPEON_DEV_STACK_MCPD_LISTEN"
     volumes:
       - "${PIPEON_DEV_STACK_WORKDIR:-.}:/work"
       - "${PIPEON_DEV_STACK_REPO_ROOT:-.}:/repo"
       - "${PIPEON_DEV_STACK_MCP_API_KEY_FILE:?PIPEON_DEV_STACK_MCP_API_KEY_FILE is required}:/run/pipeon/mcp-api-key:ro"
+      - "${PIPEON_DEV_STACK_MCP_TLS_CERT_FILE:?PIPEON_DEV_STACK_MCP_TLS_CERT_FILE is required}:/run/pipeon/mcp-tls.crt:ro"
+      - "${PIPEON_DEV_STACK_MCP_TLS_KEY_FILE:?PIPEON_DEV_STACK_MCP_TLS_KEY_FILE is required}:/run/pipeon/mcp-tls.key:ro"
+  pipeon-mcp-proxy:
+    image: node:20-alpine
+    depends_on:
+      dorkpipe-stack:
+        condition: service_started
+    environment:
+      MCP_HTTP_API_KEY_FILE: "/run/pipeon/mcp-api-key"
+      NODE_EXTRA_CA_CERTS: "/run/pipeon/mcp-tls.crt"
+      PIPEON_MCP_PROXY_PORT: "8766"
+      PIPEON_MCP_UPSTREAM_URL: "https://dorkpipe-stack:8765"
+    ports:
+      - "127.0.0.1:${PIPEON_DEV_STACK_MCP_PORT:-8766}:8766"
+    command:
+      - /bin/sh
+      - -lc
+      - exec node /repo/packages/pipeon/resolvers/pipeon-dev-stack/assets/scripts/mcp-proxy.js
+    volumes:
+      - "${PIPEON_DEV_STACK_REPO_ROOT:-.}:/repo"
+      - "${PIPEON_DEV_STACK_MCP_API_KEY_FILE:?PIPEON_DEV_STACK_MCP_API_KEY_FILE is required}:/run/pipeon/mcp-api-key:ro"
+      - "${PIPEON_DEV_STACK_MCP_TLS_CERT_FILE:?PIPEON_DEV_STACK_MCP_TLS_CERT_FILE is required}:/run/pipeon/mcp-tls.crt:ro"
 
 volumes:
   dorkpipe_pgdata:

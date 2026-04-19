@@ -132,7 +132,7 @@ pipeon_stack_mcp_container_url() {
   local network project container_name container_ip
   network="$(pipeon_stack_compose_network)"
   project="$(pipeon_stack_compose_project)"
-  container_name="${project}-dorkpipe-stack-1"
+  container_name="${project}-pipeon-mcp-proxy-1"
   container_ip="$(
     docker inspect "$container_name" \
       --format "{{with index .NetworkSettings.Networks \"$network\"}}{{.IPAddress}}{{end}}" \
@@ -147,6 +147,14 @@ pipeon_stack_mcp_container_url() {
 
 pipeon_stack_api_key_file() {
   printf '%s/api-key\n' "$(pipeon_stack_state_dir)"
+}
+
+pipeon_stack_mcp_tls_cert_file() {
+  printf '%s/mcp-tls.crt\n' "$(pipeon_stack_state_dir)"
+}
+
+pipeon_stack_mcp_tls_key_file() {
+  printf '%s/mcp-tls.key\n' "$(pipeon_stack_state_dir)"
 }
 
 pipeon_stack_runtime_env() {
@@ -176,11 +184,35 @@ ensure_pipeon_stack_api_key() {
   chmod 600 "$key_file" 2>/dev/null || true
 }
 
+ensure_pipeon_stack_mcp_tls_material() {
+  local cert_file key_file
+  cert_file="$(pipeon_stack_mcp_tls_cert_file)"
+  key_file="$(pipeon_stack_mcp_tls_key_file)"
+  ensure_pipeon_stack_state_dir
+  if [[ -s "$cert_file" && -s "$key_file" ]]; then
+    return 0
+  fi
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "pipeon-dev-stack: openssl is required to generate local MCP TLS material" >&2
+    exit 1
+  fi
+  openssl req -x509 -nodes -newkey rsa:2048 \
+    -keyout "$key_file" \
+    -out "$cert_file" \
+    -days 365 \
+    -subj "/CN=dorkpipe-stack" \
+    -addext "subjectAltName=DNS:dorkpipe-stack,DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+  chmod 600 "$key_file" 2>/dev/null || true
+  chmod 644 "$cert_file" 2>/dev/null || true
+}
+
 write_pipeon_stack_runtime_env() {
-  local workdir repo_root api_key_file
+  local workdir repo_root api_key_file tls_cert_file tls_key_file
   workdir="$(pipeon_stack_workdir)"
   repo_root="$(pipeon_stack_repo_root)"
   api_key_file="$(pipeon_stack_api_key_file)"
+  tls_cert_file="$(pipeon_stack_mcp_tls_cert_file)"
+  tls_key_file="$(pipeon_stack_mcp_tls_key_file)"
   cat > "$(pipeon_stack_runtime_env)" <<EOF
 WORKDIR=$workdir
 REPO_ROOT=$repo_root
@@ -188,6 +220,8 @@ PIPEON_DEV_STACK_WORKDIR=$workdir
 PIPEON_DEV_STACK_REPO_ROOT=$repo_root
 PIPEON_DEV_STACK_MCP_PORT=$(pipeon_stack_mcp_port)
 PIPEON_DEV_STACK_MCP_API_KEY_FILE=$api_key_file
+PIPEON_DEV_STACK_MCP_TLS_CERT_FILE=$tls_cert_file
+PIPEON_DEV_STACK_MCP_TLS_KEY_FILE=$tls_key_file
 PIPEON_DEV_STACK_DOCKPIPE_BIN=/repo/src/bin/dockpipe
 PIPEON_DEV_STACK_DORKPIPE_BIN=/repo/packages/dorkpipe/bin/dorkpipe
 PIPEON_DEV_STACK_MCPD_BIN=/repo/packages/dorkpipe/bin/mcpd

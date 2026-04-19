@@ -135,6 +135,7 @@ PIPEON_BIN="$(resolve_pipeon_bin "${PIPEON_BIN:-}")"
 
 ensure_pipeon_stack_state_dir
 ensure_pipeon_stack_api_key
+ensure_pipeon_stack_mcp_tls_material
 write_pipeon_stack_runtime_env
 
 cleanup() {
@@ -188,7 +189,7 @@ compose_cmd up -d --remove-orphans
 
 if ! wait_for_mcp_ready 40; then
   echo "pipeon-dev-stack: isolated DorkPipe MCP boundary did not become reachable at $MCP_URL" >&2
-  compose_cmd logs dorkpipe-stack >&2 || true
+  compose_cmd logs dorkpipe-stack pipeon-mcp-proxy >&2 || true
   exit 1
 fi
 

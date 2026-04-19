@@ -9,7 +9,7 @@ What it does:
 
 - resolves explicit **`dockpipe`**, **`dorkpipe`**, and **`mcpd`** binaries into the isolated stack runtime env
 - brings up an isolated DorkPipe stack container plus internal **Ollama** and **Postgres/pgvector**
-- exposes only a loopback MCP proxy on the host; the upstream DorkPipe MCP service stays bound to loopback inside the DorkPipe stack container and keeps its auth secret out of the editor container
+- exposes only a loopback MCP proxy sidecar on the host; the upstream DorkPipe MCP service stays private to the compose network over local TLS and keeps its auth secret out of the editor container
 - refreshes the Pipeon context bundle
 - starts the branded Pipeon code-server surface and opens it in the Pipeon desktop shell
 
