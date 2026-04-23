@@ -105,6 +105,38 @@ func TestCmdInitFromRunTemplate(t *testing.T) {
 	}
 }
 
+func TestCmdInitFlagsPreferRuntimeAndResolverWithoutDefaultFields(t *testing.T) {
+	repoRoot := mkRepoRootForSubcmdTests(t)
+	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
+	project := t.TempDir()
+	oldWd, _ := os.Getwd()
+	if err := os.Chdir(project); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	if err := cmdInit([]string{"simple", "--resolver", "codex", "--runtime", "dockerimage"}); err != nil {
+		t.Fatalf("cmdInit: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(project, "workflows", "simple", "config.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	if !strings.Contains(s, "resolver: codex") {
+		t.Fatalf("expected resolver field, got:\n%s", s)
+	}
+	if !strings.Contains(s, "runtime: dockerimage") {
+		t.Fatalf("expected runtime field, got:\n%s", s)
+	}
+	if strings.Contains(s, "default_resolver:") {
+		t.Fatalf("did not expect default_resolver in new init output, got:\n%s", s)
+	}
+	if strings.Contains(s, "default_runtime:") {
+		t.Fatalf("did not expect default_runtime in new init output, got:\n%s", s)
+	}
+}
+
 // TestCmdInitDoesNotCreateGitDir ensures init never bootstraps a git repository in the project tree.
 func TestCmdInitDoesNotCreateGitDir(t *testing.T) {
 	repoRoot := mkRepoRootForSubcmdTests(t)

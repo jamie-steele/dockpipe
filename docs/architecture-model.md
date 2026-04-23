@@ -26,9 +26,9 @@ This document is **FINAL**. It defines the core concepts, their relationships, a
 
 - **Running a workflow from disk** is the low-friction path: your repo holds **`workflows/…`** or **`templates/…`** and you point the CLI at it.
 
-- **Using a packaged workflow inside another workflow** is **nesting** at the **call site**: the parent step **must** use **`runtime: package`** — **that is the rule**. There is **no** alternate step shape for “call into a packaged workflow” (for example `runtime: dockerimage` plus a resolver name alone is **not** the packaged entry point). **`resolver:`** names the **nested workflow**; **`package:`** is the **namespace** matching the child’s **`namespace:`** in **`config.yml`**. The parent does **not** duplicate the child’s scripts, resolver trees, or strategy files.
+- **Using a packaged workflow inside another workflow** is **nesting** at the **call site**. The parent step uses the explicit packaged-workflow shape: **`workflow:`** names the **nested workflow** and **`package:`** is the **namespace** matching the child’s **`namespace:`** in **`config.yml`**. The parent does **not** duplicate the child’s scripts, resolver trees, or strategy files.
 
-- **Inside** the packaged workflow, **child steps** still use ordinary runtimes (**`dockerimage`**, **`dockerfile`**, **`package`**, …). **`runtime: package`** applies **only** to the **parent step** that **enters** the packaged unit — not to every step in the child.
+- **Inside** the packaged workflow, **child steps** still use ordinary runtimes (**`dockerimage`**, **`dockerfile`**, …). The packaged-workflow step form applies **only** to the **parent step** that **enters** the packaged unit — not to every step in the child.
 
 - **Specialization** is meant to stay **thin**: the **child** workflow still owns its **defaults** (names of **core** runtime / resolver / strategy profiles in its YAML). The **caller** tunes behavior with **`vars`**, **`env`**, and shared CLI-style inputs merged into the nested run; explicit **step-level** **`runtime:`** / **`resolver:`** **selection** among **core** profiles is the natural extension when you need to swap substrate or tool **without** forking the package.
 
@@ -100,7 +100,7 @@ Bundling policy and legal classification: **[templates-core-assets.md](templates
 4. **runtime.type is ONLY a classification** and must **NOT** depend on implementation (Docker, EC2, browser, etc.).
 5. **Workflows must NOT encode runtime or resolver behavior internally** (no embedding of isolation or tool choice as the only way to run).
 6. **Templates are scaffolding only** and must **NOT** define architecture, behavior, or classification. Bundled `templates/` trees are **examples and file layout** for `dockpipe init` / samples — not the **definition** of workflow, runtime, resolver, strategy, or `runtime.type`.
-7. **Packaged workflow invocation:** a parent step that runs a **packaged** (namespaced) workflow **must** use **`runtime: package`**. Do not document or imply a second nesting primitive.
+7. **Packaged workflow invocation:** a parent step that runs a **packaged** (namespaced) workflow uses the explicit **`workflow:`** + **`package:`** step form. Do not route it through **`runtime`**.
 
 ---
 

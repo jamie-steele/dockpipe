@@ -180,6 +180,8 @@ type Step struct {
 	// Resolver: legacy alias for the same shared profile (not files next to this workflow).
 	// Loads DOCKPIPE_RESOLVER_* / DOCKPIPE_RUNTIME_* when unset on the step.
 	Resolver string `yaml:"resolver,omitempty"`
+	// WorkflowName: packaged-workflow target name when runtime: package.
+	WorkflowName string `yaml:"workflow,omitempty"`
 	// Capability: optional legacy per-step field (ignored by the runner).
 	Capability string `yaml:"capability,omitempty"`
 	// Package: namespace for runtime: package — must match the nested workflow's namespace: (see ResolvePackagedWorkflowConfigPath).
@@ -187,6 +189,10 @@ type Step struct {
 	// HostBuiltin: optional engine step for skip_container workflows — runs a built-in host action instead of run:/pre_script.
 	// Allowed values: package_build_store (same as dockpipe package build store; uses PACKAGE_STORE_OUT, PACKAGE_STORE_ONLY, PACKAGE_STORE_VERSION from merged env).
 	HostBuiltin string `yaml:"host_builtin,omitempty"`
+}
+
+func (s *Step) UsesPackagedWorkflow() bool {
+	return strings.TrimSpace(s.WorkflowName) != "" || strings.TrimSpace(s.Package) != ""
 }
 
 // RuntimeProfileName returns per-step isolation profile name (runtime: or resolver:).
@@ -454,6 +460,9 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 		if err := ValidateCapabilityID(s.Capability); err != nil {
 			return fmt.Errorf("step %d: %w", i+1, err)
 		}
+		if err := ValidateStepPackageInvocation(i, s); err != nil {
+			return err
+		}
 		if err := ValidateStepHostBuiltin(i, s); err != nil {
 			return err
 		}
@@ -496,6 +505,28 @@ func ValidateWorkflowSecurityField(w *Workflow) error {
 	})
 }
 
+func ValidateStepPackageInvocation(i int, s Step) error {
+	if strings.EqualFold(strings.TrimSpace(s.Runtime), "package") {
+		return fmt.Errorf("step %d: runtime: package is no longer supported; use workflow: <name> and package: <namespace>", i+1)
+	}
+	if !s.UsesPackagedWorkflow() {
+		return nil
+	}
+	if strings.TrimSpace(s.WorkflowName) == "" {
+		return fmt.Errorf("step %d: packaged workflow step requires workflow: <name>", i+1)
+	}
+	if strings.TrimSpace(s.Package) == "" {
+		return fmt.Errorf("step %d: packaged workflow step requires package: <namespace>", i+1)
+	}
+	if strings.TrimSpace(s.Resolver) != "" {
+		return fmt.Errorf("step %d: packaged workflow step uses workflow: <name>; do not also set resolver:", i+1)
+	}
+	if strings.TrimSpace(s.Isolate) != "" {
+		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set isolate:", i+1)
+	}
+	return nil
+}
+
 // ValidateStepHostBuiltin checks host_builtin steps (see Step.HostBuiltin).
 func ValidateStepHostBuiltin(i int, s Step) error {
 	b := strings.TrimSpace(s.HostBuiltin)
@@ -505,8 +536,8 @@ func ValidateStepHostBuiltin(i int, s Step) error {
 	if !s.SkipContainer {
 		return fmt.Errorf("step %d: host_builtin %q requires skip_container: true", i+1, b)
 	}
-	if strings.EqualFold(strings.TrimSpace(s.Runtime), "package") {
-		return fmt.Errorf("step %d: host_builtin is incompatible with runtime: package", i+1)
+	if s.UsesPackagedWorkflow() {
+		return fmt.Errorf("step %d: host_builtin is incompatible with packaged workflow steps", i+1)
 	}
 	if len(s.Run) > 0 || s.PreScript != "" {
 		return fmt.Errorf("step %d: host_builtin cannot be combined with run: or pre_script", i+1)

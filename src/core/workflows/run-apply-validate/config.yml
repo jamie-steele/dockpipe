@@ -4,11 +4,14 @@ description: Three sequential steps — run phase, apply phase, validate phase.
 
 steps:
   - id: run
+    runtime: dockerimage
     isolate: alpine
     cmd: sh -c 'echo "[run] phase" >&2'
   - id: apply
+    runtime: dockerimage
     isolate: alpine
     cmd: sh -c 'echo "[apply] phase" >&2'
   - id: validate
+    runtime: dockerimage
     isolate: alpine
     cmd: sh -c 'echo "[validate] phase" >&2'

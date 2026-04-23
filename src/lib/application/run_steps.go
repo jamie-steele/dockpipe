@@ -221,16 +221,17 @@ func finalizeResolverStepAfterHost(o *runStepsOpts, step domain.Step, dockerEnv 
 	return nil
 }
 
-// runStepPackageWorkflow runs a nested workflow selected by resolver: (workflow name) and package: (namespace)
-// when runtime: package. See infrastructure.ResolvePackagedWorkflowConfigPath.
+// runStepPackageWorkflow runs a nested workflow selected by workflow: plus
+// package: (namespace).
+// See infrastructure.ResolvePackagedWorkflowConfigPath.
 func runStepPackageWorkflow(o *runStepsOpts, i, n int, step domain.Step, dockerEnv map[string]string) error {
-	wfName := strings.TrimSpace(step.Resolver)
+	wfName := strings.TrimSpace(step.WorkflowName)
 	ns := strings.TrimSpace(step.Package)
 	if wfName == "" {
-		return fmt.Errorf("step %s: runtime package requires resolver: <workflow name>", step.DisplayName(i))
+		return fmt.Errorf("step %s: packaged workflow step requires workflow: <name>", step.DisplayName(i))
 	}
 	if ns == "" {
-		return fmt.Errorf("step %s: runtime package requires package: <namespace> (must match nested workflow namespace:)", step.DisplayName(i))
+		return fmt.Errorf("step %s: packaged workflow step requires package: <namespace> (must match nested workflow namespace:)", step.DisplayName(i))
 	}
 	workdir := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
 	wfPath, err := infrastructure.ResolvePackagedWorkflowConfigPath(o.repoRoot, workdir, wfName, ns)
@@ -300,7 +301,7 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 	if err := runStepHostBuiltin(o, step); err != nil {
 		return err
 	}
-	if strings.EqualFold(strings.TrimSpace(step.Runtime), "package") {
+	if step.UsesPackagedWorkflow() {
 		return runStepPackageWorkflow(o, i, n, step, dockerEnv)
 	}
 
@@ -443,8 +444,8 @@ func validateParallelOutputPaths(wf *domain.Workflow, from, to int) error {
 func validateParallelNoResolverDelegate(o *runStepsOpts, from, to int) error {
 	for i := from; i < to; i++ {
 		step := o.wf.Steps[i]
-		if strings.EqualFold(strings.TrimSpace(step.Runtime), "package") {
-			return fmt.Errorf("parallel step %d: runtime package is not supported in async groups (use is_blocking: true)", i+1)
+		if step.UsesPackagedWorkflow() {
+			return fmt.Errorf("parallel step %d: packaged workflow steps are not supported in async groups (use is_blocking: true)", i+1)
 		}
 		ra, effRt, effRs, err := loadStepResolver(o, step, i)
 		if err != nil {
@@ -492,7 +493,7 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 		if step.SkipContainer {
 			continue
 		}
-		if strings.EqualFold(strings.TrimSpace(step.Runtime), "package") {
+		if step.UsesPackagedWorkflow() {
 			continue
 		}
 		localEnv := maps.Clone(baseEnv)
@@ -591,8 +592,8 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 		envSlice = domain.EnvMapToSlice(localEnv)
 	}
 
-	if strings.EqualFold(strings.TrimSpace(step.Runtime), "package") {
-		return fmt.Errorf("parallel step %d: runtime package is not supported in async groups (use is_blocking: true)", idx+1)
+	if step.UsesPackagedWorkflow() {
+		return fmt.Errorf("parallel step %d: packaged workflow steps are not supported in async groups (use is_blocking: true)", idx+1)
 	}
 
 	if step.SkipContainer {

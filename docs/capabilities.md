@@ -1,5 +1,10 @@
 # Capabilities and resolvers
 
+This is primarily a **package/discovery** concept, not the first thing a normal
+workflow author needs to learn. If you are just writing a workflow, start with
+**runtime** and **resolver**. Come back here when you need resolver inference,
+catalog metadata, or package-level dependency matching.
+
 DockPipe separates **what you need** (abstract) from **how it is satisfied** (concrete packages and profiles).
 
 ## Terms
@@ -29,7 +34,7 @@ Existing ecosystem-style ids (e.g. **`cli.codex`**) remain valid; **new** DockPi
 
 1. **Runtime and resolver stay separate** — see **[architecture-model.md](architecture-model.md)**. **Capability** is a third **abstract** axis, not a replacement for runtime.
 2. **`package.yml`** — **`kind: resolver`** packages set **`capability:`** to the dotted id this resolver provides. **`kind: workflow`** packages set **`requires_capabilities:`** (and **`requires_resolvers:`** for profile names when needed).
-3. **Workflow YAML** — **`capability:`** identifies the workflow (and may match a resolver **`package.yml`**). If **`resolver:`** / **`default_resolver:`** are omitted, the runner looks up **`templates/core/resolvers/<name>`** from resolver packages whose **`package.yml`** declares the same **`capability:`**. **`dockpipe.*`** capabilities can imply a default **`runtime:`** substrate name (e.g. **`dockpipe.docker`** → **`dockerimage`**) when **`runtime:`** is unset — still a **core** profile name, not a new substrate. Explicit **`runtime:`** / **`resolver:`** **take precedence** over those defaults (they **select** among existing **core** profiles).
+3. **Workflow YAML** — **`capability:`** is optional. It identifies the workflow at the package/discovery layer and may be used for resolver inference when **`resolver:`** is omitted. If **`resolver:`** / **`default_resolver:`** are omitted, the runner looks up **`templates/core/resolvers/<name>`** from resolver packages whose **`package.yml`** declares the same **`capability:`**. **`dockpipe.*`** capabilities can imply a default **`runtime:`** substrate name (e.g. **`dockpipe.docker`** → **`dockerimage`**) when **`runtime:`** is unset — still a **core** profile name, not a new substrate. Explicit **`runtime:`** / **`resolver:`** **take precedence** over those defaults.
 
 **Deprecated YAML (still accepted):** `primitive:` and `requires_primitives:` — same meaning as **`capability:`** and **`requires_capabilities:`**.
 
@@ -54,7 +59,7 @@ requires_resolvers: [codex]
 # ...
 ```
 
-**Workflow** (`config.yml`) — resolver inferred from capability (same as explicit `resolver: codex` when `package.yml` declares `capability: cli.codex`):
+**Workflow** (`config.yml`) — advanced form where resolver is inferred from capability (same as explicit `resolver: codex` when `package.yml` declares `capability: cli.codex`):
 
 ```yaml
 name: my-flow

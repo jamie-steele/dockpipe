@@ -8,6 +8,7 @@ strategy: commit
 strategies:
   - commit
 
+runtime: dockerimage
 isolate: base-dev
 
 types:

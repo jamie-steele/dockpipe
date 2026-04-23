@@ -90,6 +90,23 @@
       "items": { "type": "string" },
       "description": "Shell commands run by dockpipe package compile workflow from the workflow source dir after validation, before packaging (e.g. go build)."
     },
-    "steps": { "type": "array" }
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "runtime": { "type": "string" },
+          "resolver": { "type": "string" },
+          "workflow": { "type": "string", "description": "Packaged workflow target name for an explicit workflow/package step." },
+          "package": { "type": "string", "description": "Namespace for an explicit workflow/package step." },
+          "isolate": { "type": "string" },
+          "cmd": { "type": "string" },
+          "command": { "type": "string" },
+          "skip_container": { "type": "boolean" },
+          "host_builtin": { "type": "string" }
+        }
+      }
+    }
   }
 }

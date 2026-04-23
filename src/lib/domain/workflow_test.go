@@ -39,6 +39,38 @@ steps:
 	}
 }
 
+func TestParseWorkflowYAMLStepPackageWorkflowField(t *testing.T) {
+	y := `
+steps:
+  - workflow: nested-flow
+    package: dockpipe.demo
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Steps) != 1 || w.Steps[0].WorkflowName != "nested-flow" || w.Steps[0].Package != "dockpipe.demo" {
+		t.Fatalf("workflow/package: got %+v", w.Steps)
+	}
+}
+
+func TestParseWorkflowYAMLRejectsRuntimePackageResolverOverload(t *testing.T) {
+	y := `
+steps:
+  - runtime: package
+    resolver: old-style-name
+    package: dockpipe.demo
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatalf("unexpected parse error: %v", err)
+	}
+	err = ValidateLoadedWorkflow(w)
+	if err == nil || !strings.Contains(err.Error(), "runtime: package is no longer supported") {
+		t.Fatalf("expected runtime package validation error, got %v", err)
+	}
+}
+
 func TestParseWorkflowYAMLSecurityNetwork(t *testing.T) {
 	y := `
 security:

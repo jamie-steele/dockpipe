@@ -101,6 +101,43 @@ func TestRunBlockingStepBuildAndRun(t *testing.T) {
 	}
 }
 
+func TestRunBlockingStepPackageWorkflowUsesWorkflowField(t *testing.T) {
+	withRunStepsSeams(t)
+	repo := t.TempDir()
+	projectCfg := `{"schema":1,"compile":{"workflows":["vendor/my-workflows"]}}`
+	if err := os.WriteFile(filepath.Join(repo, "dockpipe.config.json"), []byte(projectCfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	childDir := filepath.Join(repo, "vendor", "my-workflows", "nested-flow")
+	if err := os.MkdirAll(childDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	childCfg := `name: nested-flow
+namespace: dockpipe-demo
+steps:
+  - id: nested-host
+    skip_container: true
+    cmd: echo nested
+`
+	if err := os.WriteFile(filepath.Join(childDir, "config.yml"), []byte(childCfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o := baseRunStepsOpts()
+	o.repoRoot = repo
+	o.projectRoot = repo
+	o.opts.Workdir = repo
+	o.wf.Steps = []domain.Step{{
+		Runtime:      "package",
+		WorkflowName: "nested-flow",
+		Package:      "dockpipe-demo",
+	}}
+	getwdFn = func() (string, error) { return repo, nil }
+	dockerEnv := map[string]string{}
+	if err := runBlockingStep(&o, 0, 1, dockerEnv); err != nil {
+		t.Fatalf("runBlockingStep error: %v", err)
+	}
+}
+
 func TestRunBlockingStepSkipsBuildWhenCompiledImageArtifactExists(t *testing.T) {
 	withRunStepsSeams(t)
 	wd := t.TempDir()

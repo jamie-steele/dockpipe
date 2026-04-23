@@ -4,8 +4,10 @@ description: Two sequential steps — run phase, then apply phase.
 
 steps:
   - id: run
+    runtime: dockerimage
     isolate: alpine
     cmd: sh -c 'echo "[run] phase" >&2'
   - id: apply
+    runtime: dockerimage
     isolate: alpine
     cmd: sh -c 'echo "[apply] phase" >&2'

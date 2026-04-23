@@ -123,11 +123,9 @@ func applyInitWorkflowFlags(cfgPath, resolver, runtime, strategy string) error {
 		return fmt.Errorf("parse %s: %w", cfgPath, err)
 	}
 	if resolver != "" {
-		wf.DefaultResolver = resolver
 		wf.Resolver = resolver
 	}
 	if runtime != "" {
-		wf.DefaultRuntime = runtime
 		wf.Runtime = runtime
 	}
 	if strategy != "" {
