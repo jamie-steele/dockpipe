@@ -143,3 +143,19 @@ func TestValidateImageArtifactManifestRejectsMissingFingerprint(t *testing.T) {
 		t.Fatal("expected validation error")
 	}
 }
+
+func TestRuntimeManifestPathForStep(t *testing.T) {
+	got := RuntimeManifestPathForStep("Fetch Docs / Step 1")
+	want := "steps/fetch-docs-step-1.runtime.effective.json"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestImageArtifactPathForStep(t *testing.T) {
+	got := ImageArtifactPathForStep("Fetch Docs / Step 1")
+	want := "steps/fetch-docs-step-1.image-artifact.json"
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}

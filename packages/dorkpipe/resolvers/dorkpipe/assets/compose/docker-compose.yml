@@ -26,6 +26,8 @@ services:
       - dorkpipe_ollama:/root/.ollama
   policy-proxy:
     image: node:22-bookworm-slim
+    # DockPipe injects a per-step proxy URL token; this service decodes that token
+    # and enforces the compiled allow/block policy for the current run.
     command: ["node", "/opt/dockpipe/policy-proxy.js"]
     ports:
       - "13128:3128"

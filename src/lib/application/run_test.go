@@ -1,6 +1,7 @@
 package application
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/url"
@@ -749,6 +750,44 @@ func TestApplyCompiledRuntimePolicyUsesRunEnvProxyExport(t *testing.T) {
 		if em[key] != want {
 			t.Fatalf("expected %s=%q, got %#v", key, want, em)
 		}
+	}
+}
+
+func TestPolicyProxyURLWithTokenEncodesCompiledPolicy(t *testing.T) {
+	raw := policyProxyURLWithToken("http://policy-proxy:8080", domain.CompiledNetworkPolicy{
+		Mode:  "allowlist",
+		Allow: []string{"api.openai.com", "*.anthropic.com"},
+		Block: []string{"*.facebook.com"},
+	})
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatalf("parse tokenized proxy url: %v", err)
+	}
+	if u.Host != "policy-proxy:8080" || u.User == nil {
+		t.Fatalf("unexpected tokenized proxy url: %q", raw)
+	}
+	username := u.User.Username()
+	decoded, err := base64.RawURLEncoding.DecodeString(username)
+	if err != nil {
+		t.Fatalf("decode token username: %v", err)
+	}
+	var payload struct {
+		Version string   `json:"version"`
+		Mode    string   `json:"mode"`
+		Allow   []string `json:"allow"`
+		Block   []string `json:"block"`
+	}
+	if err := json.Unmarshal(decoded, &payload); err != nil {
+		t.Fatalf("unmarshal token payload: %v", err)
+	}
+	if payload.Version != "dockpipe-proxy-v1" || payload.Mode != "allowlist" {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+	if !strings.Contains(strings.Join(payload.Allow, ","), "api.openai.com") {
+		t.Fatalf("unexpected allow payload: %+v", payload.Allow)
+	}
+	if !strings.Contains(strings.Join(payload.Block, ","), "*.facebook.com") {
+		t.Fatalf("unexpected block payload: %+v", payload.Block)
 	}
 }
 

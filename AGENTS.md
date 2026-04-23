@@ -14,7 +14,7 @@ DockPipe’s **engine** has one core **action** (spawn → run → act). Separat
 
 Everything else is built around this.
 
-**Package model (store vs tree):** Installed store artifacts are headed for **`.dockpipe/internal/packages/`** (workflows, **core** slices, assets); authoring stays under **`templates/`** and repo-root **`workflows/`**. See **`docs/package-model.md`**. **Slim core vs optional packs** (compile/embed, Terraform, untethering roadmap): **`docs/core-vs-packages-audit.md`**.
+**Package model (store vs tree):** Installed store artifacts are headed for **`.dockpipe/internal/packages/`** (workflows, **core** slices, assets); authoring stays under **`src/core/`**, repo-root **`workflows/`**, and legacy **`templates/`** where still supported. See **`docs/package-model.md`**. **Slim core vs optional packs** (compile/embed, Terraform, untethering roadmap): **`docs/core-vs-packages-audit.md`**.
 
 **`dockpipe init`** is project-local scaffolding only: without a workflow name it creates the **minimal root scaffold** in the **current directory** (**`workflows/`**, **`README.md`**, **`dockpipe.config.json`**, **`.env.vault.template.example`** when missing) and, when no DockPipe workflows exist yet, seeds **`workflows/example/config.yml`** as a starter. **`dockpipe init <name>`** adds **`workflows/<name>/config.yml`** as a **minimal empty workflow**; use **`--from <template>`** (e.g. **`init`**, **`run`**, **`run-apply`**) to copy a full bundled workflow tree. It does **not** clone Git repositories or bootstrap a remote project, and it no longer copies **`templates/core/`**, **`scripts/`**, or **`images/`** by default. See **`docs/cli-reference.md`** and **`docs/templates-core-assets.md`**.
 
@@ -74,6 +74,14 @@ Execution substrates.
 Current runtimes (substrates):
 - `dockerimage` → container from a pre-built image; host-only steps use **`kind: host`** (legacy CLI/runtime aliases such as `cli` / `powershell` / `cmd` still normalize to **`dockerimage`**)
 - `dockerfile` → container built from a Dockerfile
+
+Packaged workflow invocation is **not** a runtime. Use the explicit packaged-workflow step form:
+
+```yaml
+steps:
+  - workflow: child-name
+    package: acme-team
+```
 
 Not runtimes: Kubernetes, cloud APIs, Terraform — use **`dockerimage`** / **`dockerfile`** plus scripts and resolvers.
 
@@ -249,7 +257,7 @@ When you work **on the dockpipe project itself**, you are a **user** of the tool
 
 ### Agent guidance (this repository)
 
-**Cursor / IDE:** **`.cursor/rules/dockpipe-agents.mdc`** (**`alwaysApply: true`**) mirrors this; keep it in sync.
+**Cursor / IDE:** if a local editor-rule mirror of this file exists in the repo, keep it in sync. Do not assume a specific editor support file exists in every checkout.
 
 **Two channels — do not conflate them:**
 
@@ -293,6 +301,14 @@ DO NOT:
 - Runtime → where it runs  
 - Resolver → tool profile (**what** runs), declared in workflow YAML or added via packages  
 - Strategy → how it wraps execution  
+
+Authoring rules:
+
+- Top-level `runtime` / `resolver` set workflow defaults
+- Step-level `runtime` / `resolver` override those defaults
+- `isolate` is the advanced low-level image/template override
+- `kind: host` means host execution outside container isolation
+- `workflow` + `package` means enter a packaged child workflow
 
 ---
 
