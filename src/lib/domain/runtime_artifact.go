@@ -24,12 +24,21 @@ type CompiledRuntimeManifest struct {
 	StepID               string                 `json:"step_id,omitempty" yaml:"step_id,omitempty"`
 	RuntimeProfile       string                 `json:"runtime_profile,omitempty" yaml:"runtime_profile,omitempty"`
 	ResolverProfile      string                 `json:"resolver_profile,omitempty" yaml:"resolver_profile,omitempty"`
+	PolicyProfile        string                 `json:"policy_profile,omitempty" yaml:"policy_profile,omitempty"`
+	PolicySources        PolicySources          `json:"policy_sources,omitempty" yaml:"policy_sources,omitempty"`
 	PolicyFingerprint    string                 `json:"policy_fingerprint,omitempty" yaml:"policy_fingerprint,omitempty"`
 	ImageFingerprint     string                 `json:"image_fingerprint,omitempty" yaml:"image_fingerprint,omitempty"`
 	Security             CompiledSecurityPolicy `json:"security" yaml:"security"`
 	Image                CompiledImageSelection `json:"image" yaml:"image"`
 	EnforcementSummaries []string               `json:"enforcement_summaries,omitempty" yaml:"enforcement_summaries,omitempty"`
 	RuleIDs              []string               `json:"rule_ids,omitempty" yaml:"rule_ids,omitempty"`
+}
+
+type PolicySources struct {
+	EngineDefault    bool   `json:"engine_default,omitempty" yaml:"engine_default,omitempty"`
+	RuntimeBaseline  string `json:"runtime_baseline,omitempty" yaml:"runtime_baseline,omitempty"`
+	PolicyProfile    string `json:"policy_profile,omitempty" yaml:"policy_profile,omitempty"`
+	WorkflowOverride bool   `json:"workflow_override,omitempty" yaml:"workflow_override,omitempty"`
 }
 
 type CompiledSecurityPolicy struct {
@@ -108,6 +117,7 @@ var (
 	validProcessUsers     = map[string]struct{}{"": {}, "auto": {}, "root": {}, "non-root": {}}
 	validImageSources     = map[string]struct{}{"": {}, "auto": {}, "build": {}, "registry": {}}
 	validAutoBuildModes   = map[string]struct{}{"": {}, "if-missing": {}, "if-stale": {}, "never": {}}
+	validPolicyProfiles   = map[string]struct{}{"": {}, "secure-default": {}, "internet-client": {}, "build-online": {}, "sidecar-client": {}}
 )
 
 func ValidateCompiledRuntimeManifest(m *CompiledRuntimeManifest) error {
@@ -123,6 +133,9 @@ func ValidateCompiledRuntimeManifest(m *CompiledRuntimeManifest) error {
 	if m.Kind != RuntimeManifestKind {
 		return fmt.Errorf("kind %q must be %q", m.Kind, RuntimeManifestKind)
 	}
+	if err := validateEnum("policy_profile", m.PolicyProfile, validPolicyProfiles); err != nil {
+		return err
+	}
 	if err := ValidateCompiledSecurityPolicy(&m.Security); err != nil {
 		return err
 	}
@@ -135,6 +148,9 @@ func ValidateCompiledRuntimeManifest(m *CompiledRuntimeManifest) error {
 func ValidateCompiledSecurityPolicy(p *CompiledSecurityPolicy) error {
 	if p == nil {
 		return nil
+	}
+	if err := validateEnum("preset", p.Preset, validPolicyProfiles); err != nil {
+		return err
 	}
 	if err := validateEnum("network.mode", p.Network.Mode, validNetworkModes); err != nil {
 		return err

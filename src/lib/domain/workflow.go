@@ -54,12 +54,12 @@ type Workflow struct {
 	// WorkflowType: optional classifier (e.g. secretstore). Engine ignores; scripts and UIs may use it.
 	WorkflowType string `yaml:"workflow_type,omitempty"`
 	// Namespace: optional author/org label for packages and tooling (see ValidateNamespace).
-	Namespace string `yaml:"namespace,omitempty"`
-	Run                     RunSpec `yaml:"run,omitempty"`
-	Isolate                 string  `yaml:"isolate,omitempty"`
-	Act                     string  `yaml:"act,omitempty"`
-	Action                  string  `yaml:"action,omitempty"`
-	Resolver                string  `yaml:"resolver,omitempty"`
+	Namespace string  `yaml:"namespace,omitempty"`
+	Run       RunSpec `yaml:"run,omitempty"`
+	Isolate   string  `yaml:"isolate,omitempty"`
+	Act       string  `yaml:"act,omitempty"`
+	Action    string  `yaml:"action,omitempty"`
+	Resolver  string  `yaml:"resolver,omitempty"`
 	// Runtime: default runtime profile name (templates/core/runtimes/<name>).
 	Runtime string `yaml:"runtime,omitempty"`
 	// Strategy: default named strategy (templates/core/strategies/<name> or templates/<wf>/strategies/<name>).
@@ -97,14 +97,34 @@ type WorkflowComposeConfig struct {
 }
 
 type WorkflowSecurityConfig struct {
-	Network WorkflowNetworkConfig `yaml:"network,omitempty"`
+	Profile    string                   `yaml:"profile,omitempty"`
+	Network    WorkflowNetworkConfig    `yaml:"network,omitempty"`
+	Filesystem WorkflowFilesystemConfig `yaml:"filesystem,omitempty"`
+	Process    WorkflowProcessConfig    `yaml:"process,omitempty"`
 }
 
 type WorkflowNetworkConfig struct {
-	Mode        string   `yaml:"mode,omitempty"`
-	Enforcement string   `yaml:"enforcement,omitempty"`
-	Allow       []string `yaml:"allow,omitempty"`
-	Block       []string `yaml:"block,omitempty"`
+	Mode  string   `yaml:"mode,omitempty"`
+	Allow []string `yaml:"allow,omitempty"`
+	Block []string `yaml:"block,omitempty"`
+}
+
+type WorkflowFilesystemConfig struct {
+	Root          string   `yaml:"root,omitempty"`
+	Writes        string   `yaml:"writes,omitempty"`
+	WritablePaths []string `yaml:"writable_paths,omitempty"`
+	TempPaths     []string `yaml:"temp_paths,omitempty"`
+}
+
+type WorkflowProcessConfig struct {
+	User      string                 `yaml:"user,omitempty"`
+	PIDLimit  int                    `yaml:"pid_limit,omitempty"`
+	Resources WorkflowResourceLimits `yaml:"resources,omitempty"`
+}
+
+type WorkflowResourceLimits struct {
+	CPU    string `yaml:"cpu,omitempty"`
+	Memory string `yaml:"memory,omitempty"`
 }
 
 // AnyContainerStep reports whether any step runs inside Docker (kind defaults to container).
@@ -147,17 +167,17 @@ func (w *Workflow) NeedsDockerReachable() bool {
 // Step is one entry under steps:.
 type Step struct {
 	// ID is optional; used in logs (e.g. [merge] lines). If empty, runner uses "step N".
-	ID            string            `yaml:"id,omitempty"`
-	Kind          string            `yaml:"kind,omitempty"`
-	Run           RunSpec           `yaml:"run,omitempty"`
-	PreScript     string            `yaml:"pre_script,omitempty"`
-	Isolate       string            `yaml:"isolate,omitempty"`
-	Act           string            `yaml:"act,omitempty"`
-	Action        string            `yaml:"action,omitempty"`
-	Cmd           string            `yaml:"cmd,omitempty"`
-	Command       string            `yaml:"command,omitempty"`
-	Outputs       string            `yaml:"outputs,omitempty"`
-	Vars          map[string]string `yaml:"vars,omitempty"`
+	ID        string            `yaml:"id,omitempty"`
+	Kind      string            `yaml:"kind,omitempty"`
+	Run       RunSpec           `yaml:"run,omitempty"`
+	PreScript string            `yaml:"pre_script,omitempty"`
+	Isolate   string            `yaml:"isolate,omitempty"`
+	Act       string            `yaml:"act,omitempty"`
+	Action    string            `yaml:"action,omitempty"`
+	Cmd       string            `yaml:"cmd,omitempty"`
+	Command   string            `yaml:"command,omitempty"`
+	Outputs   string            `yaml:"outputs,omitempty"`
+	Vars      map[string]string `yaml:"vars,omitempty"`
 	// Blocking is YAML is_blocking: when false, this step joins a parallel batch with adjacent
 	// non-blocking steps. Inputs = env after last blocking step + this step’s vars/pre-scripts only;
 	// outputs merge in order after the whole batch (see src/lib/README.md).
@@ -258,30 +278,30 @@ func (s *Step) OutputsPath() string {
 
 // workflowFile is the on-disk shape: steps may mix plain steps and group wrappers.
 type workflowFile struct {
-	Name                    string                 `yaml:"name"`
-	Description             string                 `yaml:"description,omitempty"`
-	Category                string                 `yaml:"category,omitempty"`
-	Icon                    string                 `yaml:"icon,omitempty"`
-	WorkflowType            string                 `yaml:"workflow_type,omitempty"`
-	Namespace               string                 `yaml:"namespace,omitempty"`
-	Run                     RunSpec                `yaml:"run"`
-	Isolate                 string                 `yaml:"isolate"`
-	Act                     string                 `yaml:"act"`
-	Action                  string                 `yaml:"action"`
-	Resolver                string                 `yaml:"resolver"`
-	Runtime                 string                 `yaml:"runtime,omitempty"`
-	Strategy                string                 `yaml:"strategy,omitempty"`
-	Strategies              []string               `yaml:"strategies,omitempty"`
-	Vault                   string                 `yaml:"vault,omitempty"`
-	DockerPreflight         *bool                  `yaml:"docker_preflight,omitempty"`
-	CompileHooks            []string               `yaml:"compile_hooks,omitempty"`
-	Types                   []string               `yaml:"types,omitempty"`
-	Vars                    map[string]string      `yaml:"vars"`
-	Compose                 WorkflowComposeConfig  `yaml:"compose,omitempty"`
-	Security                WorkflowSecurityConfig `yaml:"security,omitempty"`
-	Imports                 []string               `yaml:"imports,omitempty"`
-	Inject                  WorkflowInjectList     `yaml:"inject,omitempty"`
-	Steps                   []stepOrGroupYAML      `yaml:"steps"`
+	Name            string                 `yaml:"name"`
+	Description     string                 `yaml:"description,omitempty"`
+	Category        string                 `yaml:"category,omitempty"`
+	Icon            string                 `yaml:"icon,omitempty"`
+	WorkflowType    string                 `yaml:"workflow_type,omitempty"`
+	Namespace       string                 `yaml:"namespace,omitempty"`
+	Run             RunSpec                `yaml:"run"`
+	Isolate         string                 `yaml:"isolate"`
+	Act             string                 `yaml:"act"`
+	Action          string                 `yaml:"action"`
+	Resolver        string                 `yaml:"resolver"`
+	Runtime         string                 `yaml:"runtime,omitempty"`
+	Strategy        string                 `yaml:"strategy,omitempty"`
+	Strategies      []string               `yaml:"strategies,omitempty"`
+	Vault           string                 `yaml:"vault,omitempty"`
+	DockerPreflight *bool                  `yaml:"docker_preflight,omitempty"`
+	CompileHooks    []string               `yaml:"compile_hooks,omitempty"`
+	Types           []string               `yaml:"types,omitempty"`
+	Vars            map[string]string      `yaml:"vars"`
+	Compose         WorkflowComposeConfig  `yaml:"compose,omitempty"`
+	Security        WorkflowSecurityConfig `yaml:"security,omitempty"`
+	Imports         []string               `yaml:"imports,omitempty"`
+	Inject          WorkflowInjectList     `yaml:"inject,omitempty"`
+	Steps           []stepOrGroupYAML      `yaml:"steps"`
 }
 
 type stepOrGroupYAML struct {
@@ -522,14 +542,31 @@ func ValidateWorkflowSecurityField(w *Workflow) error {
 	if w == nil {
 		return nil
 	}
-	return ValidateCompiledSecurityPolicy(&CompiledSecurityPolicy{
-		Network: CompiledNetworkPolicy{
-			Mode:        strings.TrimSpace(w.Security.Network.Mode),
-			Enforcement: strings.TrimSpace(w.Security.Network.Enforcement),
-			Allow:       append([]string(nil), w.Security.Network.Allow...),
-			Block:       append([]string(nil), w.Security.Network.Block...),
-		},
-	})
+	if err := validateEnum("security.profile", w.Security.Profile, validPolicyProfiles); err != nil {
+		return err
+	}
+	if err := validateEnum("security.network.mode", w.Security.Network.Mode, validNetworkModes); err != nil {
+		return err
+	}
+	if strings.TrimSpace(w.Security.Network.Mode) == "allowlist" && len(w.Security.Network.Allow) == 0 {
+		return fmt.Errorf("security.network.mode allowlist requires at least one allow rule")
+	}
+	if strings.TrimSpace(w.Security.Network.Mode) == "offline" && (len(w.Security.Network.Allow) > 0 || len(w.Security.Network.Block) > 0) {
+		return fmt.Errorf("security.network.mode offline cannot be combined with allow/block rules")
+	}
+	if err := validateEnum("security.filesystem.root", w.Security.Filesystem.Root, validFilesystemRoots); err != nil {
+		return err
+	}
+	if err := validateEnum("security.filesystem.writes", w.Security.Filesystem.Writes, validFilesystemWrites); err != nil {
+		return err
+	}
+	if err := validateEnum("security.process.user", w.Security.Process.User, validProcessUsers); err != nil {
+		return err
+	}
+	if w.Security.Process.PIDLimit < 0 {
+		return fmt.Errorf("security.process.pid_limit must be >= 0")
+	}
+	return nil
 }
 
 func ValidateStepPackageInvocation(i int, s Step) error {

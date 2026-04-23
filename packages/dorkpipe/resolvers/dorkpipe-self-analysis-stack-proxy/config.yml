@@ -14,9 +14,9 @@ description: >-
 
 resolver: codex
 security:
+  profile: sidecar-client
   network:
     mode: allowlist
-    enforcement: proxy
     allow:
       - proxy.golang.org
       - sum.golang.org

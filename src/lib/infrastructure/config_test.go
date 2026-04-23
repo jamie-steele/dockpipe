@@ -46,10 +46,10 @@ func TestLoadWorkflowRejectsAllowlistWithoutRules(t *testing.T) {
 	}
 }
 
-func TestLoadWorkflowRejectsOfflineProxyEnforcement(t *testing.T) {
+func TestLoadWorkflowRejectsUnknownSecurityProfile(t *testing.T) {
 	tmp := t.TempDir()
 	p := filepath.Join(tmp, "config.yml")
-	if err := os.WriteFile(p, []byte("name: demo\nsecurity:\n  network:\n    mode: offline\n    enforcement: proxy\n"), 0o644); err != nil {
+	if err := os.WriteFile(p, []byte("name: demo\nsecurity:\n  profile: made-up\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	wf, err := LoadWorkflow(p)
@@ -57,6 +57,6 @@ func TestLoadWorkflowRejectsOfflineProxyEnforcement(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := domain.ValidateLoadedWorkflow(wf); err == nil {
-		t.Fatal("expected validation error for offline proxy enforcement")
+		t.Fatal("expected validation error for unknown security profile")
 	}
 }

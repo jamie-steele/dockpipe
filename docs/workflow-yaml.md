@@ -94,6 +94,7 @@ If a host step starts sidecars or helper containers, the runner can clean them u
 | `category` | Optional **UI metadata** for tools like **Pipeon**: e.g. `app` marks a launchable GUI/container IDE-style workflow shown in **Basic** mode. Omit or use other values for pipelines and advanced-only flows. |
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
 | `compose` | Optional Docker Compose settings for host built-ins such as `compose_up`, `compose_down`, and `compose_ps`. Fields: `file`, `project`, `project_directory`, `autodown_env`, `exports`, `services`. Compose runs inherit DockPipe’s resolved environment and vault-injected vars directly. |
+| `security` | Optional container security policy. Select a core-owned `profile`, then apply bounded `network`, `filesystem`, and `process` overrides. This applies to container execution only; `kind: host` steps remain outside Docker policy. |
 | `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). Single-flow shorthand only; do not combine with `steps:`. |
 | `isolate` | Advanced low-level image/template override. Prefer **`runtime`** + **`resolver`** for the normal authoring path; use **`isolate`** when you need to pin the exact image/template. |
 | `act` / `action` | Action script after the container command (when not using per-step act). Single-flow shorthand only; do not combine with `steps:`. |
@@ -116,6 +117,39 @@ These two fields solve different problems:
 If you want more vars or earlier steps to become part of this workflow, use **`imports`**.
 
 If you want compile/package closure to include additional workflows, packages, or resolver profiles without changing this workflow’s authored structure, use **`inject`**.
+
+### `security`
+
+Use `security` to express container hardening intent without dropping to raw Docker flags.
+
+Recommended shape:
+
+```yaml
+security:
+  profile: secure-default
+  network:
+    mode: offline
+  filesystem:
+    root: readonly
+    writes: workspace-only
+  process:
+    user: non-root
+    pid_limit: 256
+```
+
+Public authoring fields:
+
+- `profile`: `secure-default` | `internet-client` | `build-online` | `sidecar-client`
+- `network.mode`: `offline` | `restricted` | `allowlist` | `internet`
+- `network.allow`, `network.block`: destination patterns for allowlist/restricted intent
+- `filesystem.root`: `readonly` | `writable`
+- `filesystem.writes`: `workspace-only` | `declared`
+- `filesystem.writable_paths`, `filesystem.temp_paths`
+- `process.user`: `auto` | `non-root` | `root`
+- `process.pid_limit`
+- `process.resources.cpu`, `process.resources.memory`
+
+DockPipe compiles this into an effective runtime policy manifest and derives the actual enforcement mode there. Public workflow YAML does **not** set raw Docker security options or the low-level network enforcement mechanism directly.
 
 ---
 

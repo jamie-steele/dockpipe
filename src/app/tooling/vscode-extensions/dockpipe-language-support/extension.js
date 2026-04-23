@@ -58,7 +58,7 @@ const TOP_LEVEL_KEY_DETAILS = {
   docker_preflight: "Enable or disable the Docker preflight check before running.",
   vars: "Workflow variables exported before execution unless already set in the environment.",
   compose: "Optional Docker Compose settings for host built-ins such as compose_up, compose_down, and compose_ps.",
-  security: "Optional authored runtime/security policy such as network mode and enforcement intent.",
+  security: "Optional authored container security policy. Choose a security profile, then apply bounded network/filesystem/process overrides.",
   steps: "Ordered workflow steps. Each step can run in a container or on the host.",
   resolver: "Tooling profile for this workflow. Acts as the default resolver for steps unless they override it.",
   runtime: "Execution substrate for this workflow. Acts as the default runtime for steps unless they override it.",

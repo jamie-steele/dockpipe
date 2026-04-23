@@ -180,8 +180,8 @@ steps: []
 	if rm.Kind != domain.RuntimeManifestKind || rm.Security.Preset != "secure-default" {
 		t.Fatalf("unexpected runtime manifest: %+v", rm)
 	}
-	if rm.Security.Network.Enforcement != "advisory" {
-		t.Fatalf("expected advisory enforcement, got %+v", rm.Security.Network)
+	if rm.Security.Network.Mode != "offline" || rm.Security.Network.Enforcement != "native" {
+		t.Fatalf("expected offline native enforcement, got %+v", rm.Security.Network)
 	}
 }
 
@@ -327,9 +327,9 @@ func TestCmdPackageCompileWorkflowSupportsProxyNetworkEnforcement(t *testing.T) 
 	}
 	cfg := `name: mywf
 security:
+  profile: sidecar-client
   network:
     mode: restricted
-    enforcement: proxy
 steps: []
 `
 	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
@@ -349,6 +349,9 @@ steps: []
 	}
 	if rm.Security.Network.Mode != "restricted" || rm.Security.Network.Enforcement != "proxy" {
 		t.Fatalf("expected proxy restricted policy, got %+v", rm.Security.Network)
+	}
+	if rm.PolicyProfile != "sidecar-client" {
+		t.Fatalf("expected sidecar-client policy profile, got %+v", rm)
 	}
 	if !slices.Contains(rm.EnforcementSummaries, "network policy requires a proxy-backed egress layer when this workflow runs") {
 		t.Fatalf("unexpected enforcement summaries: %+v", rm.EnforcementSummaries)

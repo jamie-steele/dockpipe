@@ -4,10 +4,11 @@ import "testing"
 
 func TestValidateCompiledRuntimeManifestValid(t *testing.T) {
 	m := &CompiledRuntimeManifest{
-		Schema: 1,
-		Kind:   RuntimeManifestKind,
+		Schema:        2,
+		Kind:          RuntimeManifestKind,
+		PolicyProfile: "sidecar-client",
 		Security: CompiledSecurityPolicy{
-			Preset: "secure-default",
+			Preset: "sidecar-client",
 			Network: CompiledNetworkPolicy{
 				Mode:        "allowlist",
 				Enforcement: "proxy",
@@ -42,7 +43,7 @@ func TestValidateCompiledRuntimeManifestValid(t *testing.T) {
 
 func TestValidateCompiledRuntimeManifestRejectsOfflineAllowlistMix(t *testing.T) {
 	m := &CompiledRuntimeManifest{
-		Schema: 1,
+		Schema: 2,
 		Kind:   RuntimeManifestKind,
 		Security: CompiledSecurityPolicy{
 			Network: CompiledNetworkPolicy{
@@ -58,7 +59,7 @@ func TestValidateCompiledRuntimeManifestRejectsOfflineAllowlistMix(t *testing.T)
 
 func TestValidateCompiledRuntimeManifestRejectsAllowlistWithoutRules(t *testing.T) {
 	m := &CompiledRuntimeManifest{
-		Schema: 1,
+		Schema: 2,
 		Kind:   RuntimeManifestKind,
 		Security: CompiledSecurityPolicy{
 			Network: CompiledNetworkPolicy{
@@ -73,7 +74,7 @@ func TestValidateCompiledRuntimeManifestRejectsAllowlistWithoutRules(t *testing.
 
 func TestValidateCompiledRuntimeManifestRejectsOfflineProxyEnforcement(t *testing.T) {
 	m := &CompiledRuntimeManifest{
-		Schema: 1,
+		Schema: 2,
 		Kind:   RuntimeManifestKind,
 		Security: CompiledSecurityPolicy{
 			Network: CompiledNetworkPolicy{
@@ -89,7 +90,7 @@ func TestValidateCompiledRuntimeManifestRejectsOfflineProxyEnforcement(t *testin
 
 func TestValidateCompiledRuntimeManifestRejectsRestrictedNativeEnforcement(t *testing.T) {
 	m := &CompiledRuntimeManifest{
-		Schema: 1,
+		Schema: 2,
 		Kind:   RuntimeManifestKind,
 		Security: CompiledSecurityPolicy{
 			Network: CompiledNetworkPolicy{
@@ -105,7 +106,7 @@ func TestValidateCompiledRuntimeManifestRejectsRestrictedNativeEnforcement(t *te
 
 func TestValidateCompiledRuntimeManifestRejectsRegistryWithoutRef(t *testing.T) {
 	m := &CompiledRuntimeManifest{
-		Schema: 1,
+		Schema: 2,
 		Kind:   RuntimeManifestKind,
 		Image: CompiledImageSelection{
 			Source: "registry",

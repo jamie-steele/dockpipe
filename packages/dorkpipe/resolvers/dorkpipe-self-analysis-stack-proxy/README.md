@@ -6,7 +6,7 @@ network policy path end to end.
 Lifecycle:
 
 1. `stack_up` starts Postgres, Ollama, and an allowlist egress proxy with DockPipe's `compose_up` builtin.
-2. `self_analysis` runs in a disposable container with `security.network.mode: allowlist` and `security.network.enforcement: proxy`.
+2. `self_analysis` runs in a disposable container with `security.profile: sidecar-client` and `security.network.mode: allowlist`, which compiles to proxy-backed enforcement.
 3. `stack_down` tears the stack down with DockPipe's `compose_down` builtin unless `DORKPIPE_DEV_STACK_AUTODOWN=0`.
 
 Run it with:

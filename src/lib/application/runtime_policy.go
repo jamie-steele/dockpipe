@@ -106,6 +106,9 @@ func summarizeCompiledRuntimeManifest(rm *domain.CompiledRuntimeManifest) string
 		return ""
 	}
 	var parts []string
+	if strings.TrimSpace(rm.PolicyProfile) != "" {
+		parts = append(parts, "profile="+strings.TrimSpace(rm.PolicyProfile))
+	}
 	if strings.TrimSpace(rm.Security.Network.Mode) != "" {
 		parts = append(parts, fmt.Sprintf("network=%s", rm.Security.Network.Mode))
 		if summary := compiledNetworkRuleSummary(rm.Security.Network); summary != "" {
@@ -258,6 +261,21 @@ func compiledRuntimePolicyLogLines(rm *domain.CompiledRuntimeManifest) []string 
 		note = strings.TrimSpace(note)
 		if note != "" {
 			lines = append(lines, "policy note: "+note)
+		}
+	}
+	if strings.TrimSpace(rm.PolicySources.RuntimeBaseline) != "" || strings.TrimSpace(rm.PolicySources.PolicyProfile) != "" {
+		var parts []string
+		if s := strings.TrimSpace(rm.PolicySources.RuntimeBaseline); s != "" {
+			parts = append(parts, "runtime-baseline="+s)
+		}
+		if s := strings.TrimSpace(rm.PolicySources.PolicyProfile); s != "" {
+			parts = append(parts, "profile="+s)
+		}
+		if rm.PolicySources.WorkflowOverride {
+			parts = append(parts, "workflow-override")
+		}
+		if len(parts) > 0 {
+			lines = append(lines, "policy source: "+strings.Join(parts, ", "))
 		}
 	}
 	if len(rm.RuleIDs) > 0 {

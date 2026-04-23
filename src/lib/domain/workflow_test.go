@@ -97,19 +97,22 @@ default_resolver: codex
 func TestParseWorkflowYAMLSecurityNetwork(t *testing.T) {
 	y := `
 security:
+  profile: sidecar-client
   network:
     mode: offline
-    enforcement: native
 `
 	w, err := ParseWorkflowYAML([]byte(y))
 	if err != nil {
 		t.Fatal(err)
 	}
+	if w.Security.Profile != "sidecar-client" {
+		t.Fatalf("security.profile: got %q", w.Security.Profile)
+	}
 	if w.Security.Network.Mode != "offline" {
 		t.Fatalf("security.network.mode: got %q", w.Security.Network.Mode)
 	}
-	if w.Security.Network.Enforcement != "native" {
-		t.Fatalf("security.network.enforcement: got %q", w.Security.Network.Enforcement)
+	if len(w.Security.Network.Allow) != 0 {
+		t.Fatalf("security.network.allow: got %#v", w.Security.Network.Allow)
 	}
 }
 

@@ -43,8 +43,8 @@ Workflows gain a higher-level `runtime.security` and `runtime.image` section.
 
 The public surface stays product-shaped:
 
+- `security.profile: secure-default | internet-client | build-online | sidecar-client`
 - `network.mode: offline | allowlist | restricted | internet`
-- `network.enforcement: advisory | proxy` for modes Docker cannot enforce natively
 - `filesystem.root: readonly | writable`
 - `process.user: auto | non-root | root`
 - `image.source: auto | build | registry`
@@ -97,9 +97,9 @@ This is intentionally higher-level than raw Docker flags:
 
 ```yaml
 security:
+  profile: sidecar-client
   network:
     mode: allowlist
-    enforcement: proxy
     allow:
       - api.openai.com
       - "*.anthropic.com"
@@ -107,7 +107,7 @@ security:
       - "*.facebook.com"
 ```
 
-DockPipe compiles this into the effective runtime manifest. `offline` and `internet` remain native Docker paths. `allowlist` / `restricted` default to `advisory` unless the workflow explicitly asks for `proxy`.
+DockPipe compiles this into the effective runtime manifest. Public YAML selects the policy profile and desired restrictions; the compiled manifest records the actual enforcement mode (`native`, `proxy`, or `advisory`).
 
 ## Security policy model
 
@@ -152,7 +152,7 @@ DockPipe should not force every container onto a sidecar/proxy path.
 - `internet` uses normal Docker networking
 - `allowlist` / `restricted` may compile as `advisory` or `proxy`
 
-When a workflow compiles with `network.enforcement: proxy`, DockPipe expects a proxy-backed egress layer at run time and injects proxy env/settings only for that run. This keeps the stronger path selective and lets higher-level tools such as DorkPipe reuse their existing sidecar/proxy patterns without making them part of every workflow.
+When a workflow compiles under a profile such as `sidecar-client`, DockPipe may derive `proxy` enforcement for `allowlist` / `restricted` modes and expect a proxy-backed egress layer at run time. This keeps the stronger path selective and lets higher-level tools such as DorkPipe reuse their existing sidecar/proxy patterns without making them part of every workflow.
 
 Compose-managed stacks can feed this path cleanly through DockPipe-owned workflow env. For example, a prior `compose_up` step may export `DOCKPIPE_POLICY_PROXY_URL` via `compose.exports`, and the later container step will consume that run-local setting when applying the compiled runtime policy.
 

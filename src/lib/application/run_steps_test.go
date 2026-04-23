@@ -41,7 +41,7 @@ func TestValidateParallelNoHostCommit(t *testing.T) {
 		},
 	}
 	err := validateParallelNoHostCommit(o, 0, 1)
-	if err == nil || !strings.Contains(err.Error(), "cannot run inside a parallel") {
+	if err == nil || !strings.Contains(err.Error(), "cannot run inside an async group") {
 		t.Fatalf("expected host-commit-in-parallel error, got %v", err)
 	}
 
