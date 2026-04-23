@@ -54,6 +54,17 @@
       "type": "object",
       "additionalProperties": { "type": "string" }
     },
+    "compose": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "file": { "type": "string" },
+        "project": { "type": "string" },
+        "project_directory": { "type": "string" },
+        "autodown_env": { "type": "string" },
+        "services": { "type": "array", "items": { "type": "string" } }
+      }
+    },
     "run": {},
     "isolate": { "type": "string" },
     "act": { "type": "string" },

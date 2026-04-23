@@ -44,6 +44,7 @@ Workflows gain a higher-level `runtime.security` and `runtime.image` section.
 The public surface stays product-shaped:
 
 - `network.mode: offline | allowlist | restricted | internet`
+- `network.enforcement: advisory | proxy` for modes Docker cannot enforce natively
 - `filesystem.root: readonly | writable`
 - `process.user: auto | non-root | root`
 - `image.source: auto | build | registry`
@@ -95,41 +96,18 @@ That makes the fast path cheap:
 This is intentionally higher-level than raw Docker flags:
 
 ```yaml
-runtime:
-  security:
-    preset: secure-default
-    explain: true
-    network:
-      mode: allowlist
-      allow:
-        domains: ["api.openai.com", "*.anthropic.com"]
-      block:
-        domains: ["*.facebook.com"]
-      allow_dns:
-        internal: true
-    filesystem:
-      root: readonly
-      writes: workspace-only
-      writable_paths: ["/tmp", "/workspace/.cache"]
-      temp_paths: ["/tmp"]
-    process:
-      user: non-root
-      no_new_privileges: true
-      drop_caps: ["ALL"]
-      pid_limit: 256
-      resources:
-        cpu: "2"
-        memory: "4g"
-  image:
-    source: build
-    build:
-      context: .
-      dockerfile: workflows/demo/Dockerfile
-      target: runtime
-      auto_build: if-stale
+security:
+  network:
+    mode: allowlist
+    enforcement: proxy
+    allow:
+      - api.openai.com
+      - "*.anthropic.com"
+    block:
+      - "*.facebook.com"
 ```
 
-Step-level overrides may use the same shape.
+DockPipe compiles this into the effective runtime manifest. `offline` and `internet` remain native Docker paths. `allowlist` / `restricted` default to `advisory` unless the workflow explicitly asks for `proxy`.
 
 ## Security policy model
 
@@ -165,6 +143,16 @@ Every compiled rule should have a stable rule id so run records can later answer
 - which rule was enforced
 - what decision was made
 - why an action was blocked
+
+### Selective proxy path
+
+DockPipe should not force every container onto a sidecar/proxy path.
+
+- `offline` uses native Docker `--network none`
+- `internet` uses normal Docker networking
+- `allowlist` / `restricted` may compile as `advisory` or `proxy`
+
+When a workflow compiles with `network.enforcement: proxy`, DockPipe expects a proxy-backed egress layer at run time and injects proxy env/settings only for that run. This keeps the stronger path selective and lets higher-level tools such as DorkPipe reuse their existing sidecar/proxy patterns without making them part of every workflow.
 
 ## Image artifact model
 
@@ -237,6 +225,9 @@ Compile examples:
 
 Run examples:
 
+- `runtime policy: network=restricted, root=readonly, tmpfs=/tmp, no-new-privileges, cap-drop=ALL, pids=256`
+- `policy enforcement: network restricted is advisory in this build; full egress filtering is not active yet`
+- `policy coverage: domain allow/block rules are compiled for inspection but are not enforced natively by Docker`
 - `using cached image artifact resolver.codex`
 - `rebuilding image artifact resolver.codex: local image missing`
 - `blocked outbound request to example.com by network.allowlist rule network.allow[0]`

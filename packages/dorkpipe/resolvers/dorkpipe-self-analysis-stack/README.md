@@ -2,9 +2,9 @@
 
 **DockPipe YAML** drives the full lifecycle:
 
-1. **`stack_up`** (host) — `docker compose up -d` for Postgres + Ollama (`scripts/dorkpipe/dev-stack.sh`).
+1. **`stack_up`** (host) — DockPipe **`compose_up`** host builtin against the DorkPipe compose file.
 2. **`self_analysis`** (container) — same as **`dorkpipe-self-analysis`**.
-3. **`stack_down`** (host) — `docker compose down` **unless** **`DORKPIPE_DEV_STACK_AUTODOWN=0`**.
+3. **`stack_down`** (host) — DockPipe **`compose_down`** host builtin, skipped when **`DORKPIPE_DEV_STACK_AUTODOWN=0`**.
 
 Use this when you want **one command** from YAML instead of running **`dev-stack.sh`** by hand.
 
@@ -22,3 +22,8 @@ DORKPIPE_DEV_STACK_AUTODOWN=0 dockpipe --workflow dorkpipe-self-analysis-stack -
 Analysis-only (no compose lifecycle): **`dorkpipe-self-analysis`**. Host-only: **`dorkpipe-self-analysis-host`**.
 
 **Isolation:** Sidecars run via compose on the **host**; **DorkPipe** still runs the analysis step in a **disposable Docker container** (same as non-stack). Agent rules: **`.cursor/rules/dockpipe-agents.mdc`**, **`AGENTS.md`** (repository analysis section).
+
+Current shape:
+
+- **compose up** uses the DockPipe-owned Compose primitive from workflow YAML
+- **compose down** also uses the DockPipe-owned Compose primitive, with keepalive controlled by **`compose.autodown_env`**

@@ -52,6 +52,7 @@ For steps with **`skip_container: true`**, **`run:`** scripts execute on the hos
 | `capability` | Dotted **capability** id (e.g. `cli.codex`, **`dockpipe.workflow.*`**). When **`resolver:`** is omitted, the runner picks **`templates/core/resolvers/<name>`** from resolver **`package.yml`** files that declare this capability. **`dockpipe.*`** ids may imply **`runtime:`** when unset (see **[capabilities.md](capabilities.md)**). Deprecated alias: **`primitive`**. |
 | `category` | Optional UI hint for tools like **Pipeon**: e.g. `app` marks a launchable GUI/container IDE-style workflow shown in **Basic** mode. Omit or use other values for pipelines and advanced-only flows. |
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
+| `compose` | Optional Docker Compose settings for host built-ins such as `compose_up`, `compose_down`, and `compose_ps`. Fields: `file`, `project`, `project_directory`, `autodown_env`, `services`. Compose runs inherit DockPipe’s resolved environment and vault-injected vars directly. |
 | `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). |
 | `isolate` | Template name or image for the container. For **resolver-driven** flows with **`strategy: worktree`**, prefer **`default_runtime`** / **`default_resolver`** to pick **core** profile names; **`isolate`** remains a **fallback** default when those are empty. |
 | `act` / `action` | Action script after the container command (when not using per-step act). |
@@ -126,8 +127,36 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `manifest` | Host path — after the step, dockpipe writes a small JSON file with **`exit_code`**, **`duration_ms`**, **`step_index`**, **`id`** (if set), and **`step_display`**. |
 | `skip_container` | If `true`, no container: only pre-scripts + merge `outputs` from disk. **`run:`** scripts are **executed** with inherited stdio (so messages and launchers are visible). Steps that use the container still **source** `run:` scripts to capture exported env (see `src/lib/infrastructure/prescript.go`). |
 | `is_blocking` | Default **`true`**. If **`false`**, this step joins an **async group** with adjacent non-blocking steps (see below). |
+| `host_builtin` | Optional engine-owned host action for `skip_container: true` steps. Supported values: `package_build_store`, `compose_up`, `compose_down`, `compose_ps`. Compose built-ins require top-level `compose.file`. |
 
 All keys use **snake_case** in YAML (e.g. `is_blocking`, not `isBlocking`).
+
+### Compose lifecycle example
+
+```yaml
+name: stack-demo
+compose:
+  file: assets/compose/docker-compose.yml
+  project: dockpipe-dev
+  project_directory: ../../..
+  autodown_env: STACK_AUTODOWN
+  services: [proxy]
+
+steps:
+  - id: stack_up
+    skip_container: true
+    host_builtin: compose_up
+
+  - id: stack_status
+    skip_container: true
+    host_builtin: compose_ps
+
+  - id: stack_down
+    skip_container: true
+    host_builtin: compose_down
+```
+
+If `compose.autodown_env` is set, `compose_down` is skipped when that env resolves to `0`, `false`, `no`, or `off`.
 
 ---
 

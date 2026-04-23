@@ -10,7 +10,7 @@ func TestValidateCompiledRuntimeManifestValid(t *testing.T) {
 			Preset: "secure-default",
 			Network: CompiledNetworkPolicy{
 				Mode:        "allowlist",
-				Enforcement: "native",
+				Enforcement: "proxy",
 				Allow:       []string{"api.openai.com"},
 				InternalDNS: true,
 			},
@@ -63,6 +63,38 @@ func TestValidateCompiledRuntimeManifestRejectsAllowlistWithoutRules(t *testing.
 		Security: CompiledSecurityPolicy{
 			Network: CompiledNetworkPolicy{
 				Mode: "allowlist",
+			},
+		},
+	}
+	if err := ValidateCompiledRuntimeManifest(m); err == nil {
+		t.Fatal("expected validation error")
+	}
+}
+
+func TestValidateCompiledRuntimeManifestRejectsOfflineProxyEnforcement(t *testing.T) {
+	m := &CompiledRuntimeManifest{
+		Schema: 1,
+		Kind:   RuntimeManifestKind,
+		Security: CompiledSecurityPolicy{
+			Network: CompiledNetworkPolicy{
+				Mode:        "offline",
+				Enforcement: "proxy",
+			},
+		},
+	}
+	if err := ValidateCompiledRuntimeManifest(m); err == nil {
+		t.Fatal("expected validation error")
+	}
+}
+
+func TestValidateCompiledRuntimeManifestRejectsRestrictedNativeEnforcement(t *testing.T) {
+	m := &CompiledRuntimeManifest{
+		Schema: 1,
+		Kind:   RuntimeManifestKind,
+		Security: CompiledSecurityPolicy{
+			Network: CompiledNetworkPolicy{
+				Mode:        "restricted",
+				Enforcement: "native",
 			},
 		},
 	}

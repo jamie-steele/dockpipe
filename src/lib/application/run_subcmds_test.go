@@ -1,12 +1,15 @@
 package application
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"dockpipe/src/lib/domain"
+	"dockpipe/src/lib/infrastructure"
 )
 
 func writeFile(t *testing.T, path, content string, mode os.FileMode) {
@@ -254,6 +257,125 @@ func TestCmdInitErrorsOnUnknownOption(t *testing.T) {
 	err := cmdInit([]string{"--nope"})
 	if err == nil || !strings.Contains(err.Error(), "unknown option") {
 		t.Fatalf("expected unknown option error, got %v", err)
+	}
+}
+
+func TestCmdRunsPolicyListsStructuredRecords(t *testing.T) {
+	project := t.TempDir()
+	_, err := infrastructure.WriteRunPolicyRecord(project, &infrastructure.RunPolicyRecord{
+		WorkflowName:        "secure",
+		StepID:              "step-1",
+		ImageRef:            "dockpipe-codex",
+		NetworkMode:         "offline",
+		NetworkEnforcement:  "native",
+		PolicySummary:       "runtime policy: network=offline",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
+	if err := cmdRuns([]string{"policy", "--workdir", project}); err != nil {
+		t.Fatalf("cmdRuns policy failed: %v", err)
+	}
+	_ = w.Close()
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{"Run policy records", "secure", "step-1", "offline", "native", "dockpipe-codex"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected output to contain %q, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestCmdRunsUnknownSubcommandMentionsPolicy(t *testing.T) {
+	err := cmdRuns([]string{"nope"})
+	if err == nil || !strings.Contains(err.Error(), "list or policy") {
+		t.Fatalf("expected runs subcommand guidance, got %v", err)
+	}
+}
+
+func TestCmdRunsPolicyJSONSupportsFilters(t *testing.T) {
+	project := t.TempDir()
+	for _, rec := range []*infrastructure.RunPolicyRecord{
+		{WorkflowName: "secure", StepID: "step-1", ImageRef: "dockpipe-codex", NetworkMode: "offline", NetworkEnforcement: "native"},
+		{WorkflowName: "secure", StepID: "step-2", ImageRef: "dockpipe-codex", NetworkMode: "restricted", NetworkEnforcement: "advisory"},
+		{WorkflowName: "other", StepID: "step-1", ImageRef: "dockpipe-other", NetworkMode: "internet", NetworkEnforcement: "native"},
+	} {
+		if _, err := infrastructure.WriteRunPolicyRecord(project, rec); err != nil {
+			t.Fatal(err)
+		}
+	}
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
+	if err := cmdRuns([]string{"policy", "--workdir", project, "--workflow", "secure", "--step", "step-1", "--json"}); err != nil {
+		t.Fatalf("cmdRuns policy json failed: %v", err)
+	}
+	_ = w.Close()
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatal(err)
+	}
+	var rows []infrastructure.RunPolicyRecord
+	if err := json.Unmarshal(buf.Bytes(), &rows); err != nil {
+		t.Fatalf("expected json output, got %q (%v)", buf.String(), err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected one filtered row, got %+v", rows)
+	}
+	if rows[0].WorkflowName != "secure" || rows[0].StepID != "step-1" || rows[0].NetworkMode != "offline" {
+		t.Fatalf("unexpected filtered row: %+v", rows[0])
+	}
+}
+
+func TestCmdRunsListRejectsDecisionFlags(t *testing.T) {
+	err := cmdRuns([]string{"list", "--json"})
+	if err == nil || !strings.Contains(err.Error(), "only valid with policy") {
+		t.Fatalf("expected list flag rejection, got %v", err)
+	}
+}
+
+func TestCmdRunsDecisionsAliasStillWorks(t *testing.T) {
+	project := t.TempDir()
+	_, err := infrastructure.WriteRunPolicyRecord(project, &infrastructure.RunPolicyRecord{
+		WorkflowName: "secure",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
+	if err := cmdRuns([]string{"decisions", "--workdir", project}); err != nil {
+		t.Fatalf("cmdRuns decisions alias failed: %v", err)
+	}
+	_ = w.Close()
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "Run policy records") {
+		t.Fatalf("expected policy output from alias, got:\n%s", buf.String())
 	}
 }
 

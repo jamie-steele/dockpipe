@@ -54,17 +54,17 @@ type Workflow struct {
 	// WorkflowType: optional classifier (e.g. secretstore). Engine ignores; scripts and UIs may use it.
 	WorkflowType string `yaml:"workflow_type,omitempty"`
 	// Namespace: optional author/org label for packages and tooling (see ValidateNamespace).
-	Namespace       string  `yaml:"namespace,omitempty"`
+	Namespace string `yaml:"namespace,omitempty"`
 	// Capability: optional legacy YAML field (ignored by validation).
 	Capability string `yaml:"capability,omitempty"`
 	// PrimitiveYAMLDeprecated is the deprecated YAML key "primitive" — merged into Capability when parsing.
-	PrimitiveYAMLDeprecated string `yaml:"primitive,omitempty"`
-	Run             RunSpec `yaml:"run,omitempty"`
-	Isolate         string  `yaml:"isolate,omitempty"`
-	Act             string  `yaml:"act,omitempty"`
-	Action          string  `yaml:"action,omitempty"`
-	Resolver        string  `yaml:"resolver,omitempty"`
-	DefaultResolver string  `yaml:"default_resolver,omitempty"`
+	PrimitiveYAMLDeprecated string  `yaml:"primitive,omitempty"`
+	Run                     RunSpec `yaml:"run,omitempty"`
+	Isolate                 string  `yaml:"isolate,omitempty"`
+	Act                     string  `yaml:"act,omitempty"`
+	Action                  string  `yaml:"action,omitempty"`
+	Resolver                string  `yaml:"resolver,omitempty"`
+	DefaultResolver         string  `yaml:"default_resolver,omitempty"`
 	// Runtime: default runtime profile name (templates/core/runtimes/<name>); preferred over default_resolver for env selection.
 	Runtime string `yaml:"runtime,omitempty"`
 	// DefaultRuntime: YAML default_runtime — same role as default_resolver when runtime is unset.
@@ -81,7 +81,7 @@ type Workflow struct {
 	Vault string `yaml:"vault,omitempty"`
 	// DockerPreflight: when false, skip EnsureDockerReachable before steps when no step uses the container runner.
 	// Use only for workflows where every step is skip_container and host run:/pre_script scripts do not invoke Docker.
-	DockerPreflight *bool             `yaml:"docker_preflight,omitempty"`
+	DockerPreflight *bool `yaml:"docker_preflight,omitempty"`
 	// CompileHooks: shell commands run by `dockpipe package compile workflow` from the workflow source directory
 	// after validation and before the package tarball is written (e.g. go build, code generation).
 	CompileHooks []string `yaml:"compile_hooks,omitempty"`
@@ -89,15 +89,39 @@ type Workflow struct {
 	Types []string `yaml:"types,omitempty"`
 	// Inject: explicit compile closure dependencies (workflow/package ids and resolver profile names).
 	// Unlike imports:, this does not merge YAML — it only guides package compile for-workflow ordering.
-	Inject WorkflowInjectList `yaml:"inject,omitempty"`
-	Vars            map[string]string `yaml:"vars,omitempty"`
-	Steps           []Step            `yaml:"steps,omitempty"`
+	Inject   WorkflowInjectList     `yaml:"inject,omitempty"`
+	Vars     map[string]string      `yaml:"vars,omitempty"`
+	Compose  WorkflowComposeConfig  `yaml:"compose,omitempty"`
+	Security WorkflowSecurityConfig `yaml:"security,omitempty"`
+	Steps    []Step                 `yaml:"steps,omitempty"`
+}
+
+type WorkflowComposeConfig struct {
+	File             string   `yaml:"file,omitempty"`
+	Project          string   `yaml:"project,omitempty"`
+	ProjectDirectory string   `yaml:"project_directory,omitempty"`
+	AutodownEnv      string   `yaml:"autodown_env,omitempty"`
+	Services         []string `yaml:"services,omitempty"`
+}
+
+type WorkflowSecurityConfig struct {
+	Network WorkflowNetworkConfig `yaml:"network,omitempty"`
+}
+
+type WorkflowNetworkConfig struct {
+	Mode        string   `yaml:"mode,omitempty"`
+	Enforcement string   `yaml:"enforcement,omitempty"`
+	Allow       []string `yaml:"allow,omitempty"`
+	Block       []string `yaml:"block,omitempty"`
 }
 
 // AnyContainerStep reports whether any step runs inside Docker (skip_container is false or omitted).
 func (w *Workflow) AnyContainerStep() bool {
 	for _, s := range w.Steps {
 		if !s.SkipContainer {
+			return true
+		}
+		if hostBuiltinNeedsDocker(strings.TrimSpace(s.HostBuiltin)) {
 			return true
 		}
 	}
@@ -226,33 +250,35 @@ func (s *Step) OutputsPath() string {
 
 // workflowFile is the on-disk shape: steps may mix plain steps and group wrappers.
 type workflowFile struct {
-	Name            string            `yaml:"name"`
-	Description     string            `yaml:"description,omitempty"`
-	Category        string            `yaml:"category,omitempty"`
-	Icon            string            `yaml:"icon,omitempty"`
-	WorkflowType    string            `yaml:"workflow_type,omitempty"`
-	Namespace                string            `yaml:"namespace,omitempty"`
-	Capability               string            `yaml:"capability,omitempty"`
-	PrimitiveYAMLDeprecated  string            `yaml:"primitive,omitempty"`
-	Run             RunSpec           `yaml:"run"`
-	Isolate         string            `yaml:"isolate"`
-	Act             string            `yaml:"act"`
-	Action          string            `yaml:"action"`
-	Resolver        string            `yaml:"resolver"`
-	DefaultResolver string            `yaml:"default_resolver"`
-	Runtime         string            `yaml:"runtime,omitempty"`
-	DefaultRuntime  string            `yaml:"default_runtime,omitempty"`
-	Runtimes        []string          `yaml:"runtimes,omitempty"`
-	Strategy        string            `yaml:"strategy,omitempty"`
-	Strategies      []string          `yaml:"strategies,omitempty"`
-	Vault           string            `yaml:"vault,omitempty"`
-	DockerPreflight *bool             `yaml:"docker_preflight,omitempty"`
-	CompileHooks    []string          `yaml:"compile_hooks,omitempty"`
-	Types           []string          `yaml:"types,omitempty"`
-	Vars            map[string]string `yaml:"vars"`
-	Imports         []string          `yaml:"imports,omitempty"`
-	Inject          WorkflowInjectList `yaml:"inject,omitempty"`
-	Steps           []stepOrGroupYAML `yaml:"steps"`
+	Name                    string                 `yaml:"name"`
+	Description             string                 `yaml:"description,omitempty"`
+	Category                string                 `yaml:"category,omitempty"`
+	Icon                    string                 `yaml:"icon,omitempty"`
+	WorkflowType            string                 `yaml:"workflow_type,omitempty"`
+	Namespace               string                 `yaml:"namespace,omitempty"`
+	Capability              string                 `yaml:"capability,omitempty"`
+	PrimitiveYAMLDeprecated string                 `yaml:"primitive,omitempty"`
+	Run                     RunSpec                `yaml:"run"`
+	Isolate                 string                 `yaml:"isolate"`
+	Act                     string                 `yaml:"act"`
+	Action                  string                 `yaml:"action"`
+	Resolver                string                 `yaml:"resolver"`
+	DefaultResolver         string                 `yaml:"default_resolver"`
+	Runtime                 string                 `yaml:"runtime,omitempty"`
+	DefaultRuntime          string                 `yaml:"default_runtime,omitempty"`
+	Runtimes                []string               `yaml:"runtimes,omitempty"`
+	Strategy                string                 `yaml:"strategy,omitempty"`
+	Strategies              []string               `yaml:"strategies,omitempty"`
+	Vault                   string                 `yaml:"vault,omitempty"`
+	DockerPreflight         *bool                  `yaml:"docker_preflight,omitempty"`
+	CompileHooks            []string               `yaml:"compile_hooks,omitempty"`
+	Types                   []string               `yaml:"types,omitempty"`
+	Vars                    map[string]string      `yaml:"vars"`
+	Compose                 WorkflowComposeConfig  `yaml:"compose,omitempty"`
+	Security                WorkflowSecurityConfig `yaml:"security,omitempty"`
+	Imports                 []string               `yaml:"imports,omitempty"`
+	Inject                  WorkflowInjectList     `yaml:"inject,omitempty"`
+	Steps                   []stepOrGroupYAML      `yaml:"steps"`
 }
 
 type stepOrGroupYAML struct {
@@ -417,6 +443,12 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 	if err := ValidateWorkflowVaultField(w); err != nil {
 		return err
 	}
+	if err := ValidateWorkflowComposeField(w); err != nil {
+		return err
+	}
+	if err := ValidateWorkflowSecurityField(w); err != nil {
+		return err
+	}
 	for i, s := range w.Steps {
 		if err := ValidateCapabilityID(s.Capability); err != nil {
 			return fmt.Errorf("step %d: %w", i+1, err)
@@ -424,8 +456,42 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 		if err := ValidateStepHostBuiltin(i, s); err != nil {
 			return err
 		}
+		if err := ValidateStepComposeBuiltin(i, s, w); err != nil {
+			return err
+		}
 	}
 	return nil
+}
+
+func ValidateWorkflowComposeField(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	c := w.Compose
+	if strings.TrimSpace(c.File) == "" &&
+		strings.TrimSpace(c.Project) == "" &&
+		strings.TrimSpace(c.ProjectDirectory) == "" &&
+		len(c.Services) == 0 {
+		return nil
+	}
+	if strings.TrimSpace(c.File) == "" {
+		return fmt.Errorf("compose.file is required when compose settings are present")
+	}
+	return nil
+}
+
+func ValidateWorkflowSecurityField(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	return ValidateCompiledSecurityPolicy(&CompiledSecurityPolicy{
+		Network: CompiledNetworkPolicy{
+			Mode:        strings.TrimSpace(w.Security.Network.Mode),
+			Enforcement: strings.TrimSpace(w.Security.Network.Enforcement),
+			Allow:       append([]string(nil), w.Security.Network.Allow...),
+			Block:       append([]string(nil), w.Security.Network.Block...),
+		},
+	})
 }
 
 // ValidateStepHostBuiltin checks host_builtin steps (see Step.HostBuiltin).
@@ -444,10 +510,33 @@ func ValidateStepHostBuiltin(i int, s Step) error {
 		return fmt.Errorf("step %d: host_builtin cannot be combined with run: or pre_script", i+1)
 	}
 	switch b {
-	case "package_build_store":
+	case "package_build_store", "compose_up", "compose_down", "compose_ps":
 		return nil
 	default:
-		return fmt.Errorf("step %d: unknown host_builtin %q (allowed: package_build_store)", i+1, b)
+		return fmt.Errorf("step %d: unknown host_builtin %q (allowed: package_build_store, compose_up, compose_down, compose_ps)", i+1, b)
+	}
+}
+
+func ValidateStepComposeBuiltin(i int, s Step, w *Workflow) error {
+	if !hostBuiltinNeedsCompose(strings.TrimSpace(s.HostBuiltin)) {
+		return nil
+	}
+	if w == nil || strings.TrimSpace(w.Compose.File) == "" {
+		return fmt.Errorf("step %d: host_builtin %q requires workflow compose.file", i+1, strings.TrimSpace(s.HostBuiltin))
+	}
+	return nil
+}
+
+func hostBuiltinNeedsDocker(b string) bool {
+	return hostBuiltinNeedsCompose(b)
+}
+
+func hostBuiltinNeedsCompose(b string) bool {
+	switch strings.TrimSpace(b) {
+	case "compose_up", "compose_down", "compose_ps":
+		return true
+	default:
+		return false
 	}
 }
 

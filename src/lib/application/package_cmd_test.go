@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -237,5 +238,119 @@ steps: []
 	}
 	if im.ImageRef != "dockpipe-codex:5.6.7" {
 		t.Fatalf("unexpected image ref: %q", im.ImageRef)
+	}
+}
+
+func TestCmdPackageCompileWorkflowUsesWorkflowSecurityNetworkMode(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "mywf")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: mywf
+security:
+  network:
+    mode: offline
+steps: []
+`
+	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-0.0.0.tar.gz")
+	rmf, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/.dockpipe/runtime.effective.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rm domain.CompiledRuntimeManifest
+	if err := json.Unmarshal(rmf, &rm); err != nil {
+		t.Fatal(err)
+	}
+	if rm.Security.Network.Mode != "offline" || rm.Security.Network.Enforcement != "native" {
+		t.Fatalf("expected native offline policy, got %+v", rm.Security.Network)
+	}
+	if !slices.Contains(rm.RuleIDs, "network.mode.offline") {
+		t.Fatalf("expected network.mode.offline rule id, got %+v", rm.RuleIDs)
+	}
+}
+
+func TestCmdPackageCompileWorkflowPreservesAllowlistRules(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "mywf")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: mywf
+security:
+  network:
+    mode: allowlist
+    allow:
+      - api.openai.com
+      - "*.anthropic.com"
+    block:
+      - "*.facebook.com"
+steps: []
+`
+	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-0.0.0.tar.gz")
+	rmf, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/.dockpipe/runtime.effective.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rm domain.CompiledRuntimeManifest
+	if err := json.Unmarshal(rmf, &rm); err != nil {
+		t.Fatal(err)
+	}
+	if rm.Security.Network.Mode != "allowlist" || rm.Security.Network.Enforcement != "advisory" {
+		t.Fatalf("expected advisory allowlist policy, got %+v", rm.Security.Network)
+	}
+	if !slices.Equal(rm.Security.Network.Allow, []string{"api.openai.com", "*.anthropic.com"}) {
+		t.Fatalf("unexpected allowlist rules: %+v", rm.Security.Network.Allow)
+	}
+	if !slices.Equal(rm.Security.Network.Block, []string{"*.facebook.com"}) {
+		t.Fatalf("unexpected block rules: %+v", rm.Security.Network.Block)
+	}
+}
+
+func TestCmdPackageCompileWorkflowSupportsProxyNetworkEnforcement(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "mywf")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: mywf
+security:
+  network:
+    mode: restricted
+    enforcement: proxy
+steps: []
+`
+	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-0.0.0.tar.gz")
+	rmf, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/.dockpipe/runtime.effective.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rm domain.CompiledRuntimeManifest
+	if err := json.Unmarshal(rmf, &rm); err != nil {
+		t.Fatal(err)
+	}
+	if rm.Security.Network.Mode != "restricted" || rm.Security.Network.Enforcement != "proxy" {
+		t.Fatalf("expected proxy restricted policy, got %+v", rm.Security.Network)
+	}
+	if !slices.Contains(rm.EnforcementSummaries, "network policy requires a proxy-backed egress layer when this workflow runs") {
+		t.Fatalf("unexpected enforcement summaries: %+v", rm.EnforcementSummaries)
 	}
 }

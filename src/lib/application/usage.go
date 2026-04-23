@@ -150,16 +150,21 @@ func printInitUsage() {
 	fmt.Print(renderUsageSections(initUsageSections, usageWidth()))
 }
 
-const runsUsageText = `dockpipe runs list — show host-run registry entries
+const runsUsageText = `dockpipe runs — inspect host-run and policy records
 
 While a skip_container workflow step runs a host script, dockpipe may write
-workdir/bin/.dockpipe/runs/<id>.json (and optional sidecars). This command lists
-those JSON files.
+workdir/bin/.dockpipe/runs/<id>.json (and optional sidecars). Containerized runs
+may also write structured policy records under
+workdir/bin/.dockpipe/runs/policy/.
 
 Usage:
   dockpipe runs list [--workdir <path>]
+  dockpipe runs policy [--workdir <path>] [--workflow <name>] [--step <id>] [--json]
 
   --workdir   Project directory (default: DOCKPIPE_WORKDIR or current directory)
+  --workflow  Filter policy records by workflow name (policy only)
+  --step      Filter policy records by step id (policy only)
+  --json      Emit policy records as JSON instead of a table (policy only)
 
 `
 

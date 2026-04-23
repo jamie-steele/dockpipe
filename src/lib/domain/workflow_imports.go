@@ -50,6 +50,8 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 		Types:           f.Types,
 		Inject:          f.Inject,
 		Vars:            f.Vars,
+		Compose:         f.Compose,
+		Security:        f.Security,
 		Steps:           steps,
 	}, nil
 }

@@ -1,6 +1,8 @@
 package application
 
 import (
+	"encoding/json"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -64,6 +66,27 @@ func withRunSeams(t *testing.T) {
 		t.Fatalf("unexpected RunHostScript call: %s", scriptAbs)
 		return nil
 	}
+}
+
+func captureRunTestStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = old
+	})
+	fn()
+	_ = w.Close()
+	b, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = r.Close()
+	return string(b)
 }
 
 // TestRunNonStepsHappyPath runs resolver-driven single-command mode with mocked docker build/run.
@@ -378,7 +401,8 @@ isolate: codex
 		Kind:   domain.RuntimeManifestKind,
 		Security: domain.CompiledSecurityPolicy{
 			Network: domain.CompiledNetworkPolicy{
-				Mode: "offline",
+				Mode:        "offline",
+				Enforcement: "native",
 			},
 			FS: domain.CompiledFilesystemPolicy{
 				Root:      "readonly",
@@ -396,6 +420,8 @@ isolate: codex
 			},
 		},
 	}
+	rm.EnforcementSummaries = []string{"filesystem and process defaults are emitted as the effective policy baseline"}
+	rm.RuleIDs = []string{"security.preset.secure-default", "network.mode.offline"}
 	rm.PolicyFingerprint, _ = domain.FingerprintJSON(rm.Security)
 	rmb, err := marshalArtifactJSON(rm)
 	if err != nil {
@@ -417,7 +443,9 @@ isolate: codex
 		return 0, nil
 	}
 
-	err = Run([]string{"--workflow", "secure", "--", "echo", "hi"}, nil)
+	stderr := captureRunTestStderr(t, func() {
+		err = Run([]string{"--workflow", "secure", "--workdir", repoRoot, "--", "echo", "hi"}, nil)
+	})
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
 	}
@@ -446,6 +474,185 @@ isolate: codex
 		if strings.HasPrefix(p, "/work/") {
 			t.Fatalf("workspace path should not be converted to tmpfs: %#v", got.TmpfsPaths)
 		}
+	}
+	for _, want := range []string{
+		"[dockpipe] runtime policy: network=offline, root=readonly, tmpfs=/tmp,/work/cache, no-new-privileges, cap-drop=ALL, pids=128, cpu=2, memory=1g",
+		"[dockpipe] policy enforcement: network offline is enforced natively by the Docker runtime",
+		"[dockpipe] policy note: filesystem and process defaults are emitted as the effective policy baseline",
+		"[dockpipe] policy rules: security.preset.secure-default, network.mode.offline",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr)
+		}
+	}
+	ents, err := os.ReadDir(infrastructure.RunPolicyRecordsDir(repoRoot))
+	if err != nil {
+		t.Fatalf("expected run policy record: %v", err)
+	}
+	if len(ents) == 0 {
+		t.Fatal("expected at least one run policy record")
+	}
+	b, err := os.ReadFile(filepath.Join(infrastructure.RunPolicyRecordsDir(repoRoot), ents[0].Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec infrastructure.RunPolicyRecord
+	if err := json.Unmarshal(b, &rec); err != nil {
+		t.Fatal(err)
+	}
+	if rec.WorkflowName != "secure" || rec.NetworkEnforcement != "native" || rec.ImageRef != "dockpipe-codex" {
+		t.Fatalf("unexpected run policy record: %+v", rec)
+	}
+	if rec.ImageArtifactDecision != "built image artifact for current run" {
+		t.Fatalf("unexpected image decision: %+v", rec)
+	}
+	if !strings.Contains(strings.Join(rec.EnforcementNotes, "\n"), "enforced natively") {
+		t.Fatalf("expected enforcement note in record, got %+v", rec)
+	}
+}
+
+func TestRunWorkflowStepsModeLogsCompiledRuntimePolicy(t *testing.T) {
+	withRunSeams(t)
+	repoRoot := t.TempDir()
+	workflowDir := filepath.Join(repoRoot, "templates", "demo")
+	if err := os.MkdirAll(filepath.Join(workflowDir, domain.RuntimeManifestDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
+	if err := os.WriteFile(filepath.Join(workflowDir, "config.yml"), []byte("name: demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loadWorkflowAppFn = func(path string) (*domain.Workflow, error) {
+		bFalse := false
+		return &domain.Workflow{
+			Resolver: "codex",
+			Steps:    []domain.Step{{Cmd: "echo hi", Blocking: &bFalse}},
+		}, nil
+	}
+	rm := &domain.CompiledRuntimeManifest{
+		Schema: 1,
+		Kind:   domain.RuntimeManifestKind,
+		Security: domain.CompiledSecurityPolicy{
+			Network: domain.CompiledNetworkPolicy{Mode: "restricted", Enforcement: "advisory"},
+			FS:      domain.CompiledFilesystemPolicy{Root: "readonly", TempPaths: []string{"/tmp"}},
+			Process: domain.CompiledProcessPolicy{NoNewPrivileges: true, DropCaps: []string{"ALL"}, PIDLimit: 256},
+		},
+		EnforcementSummaries: []string{"filesystem and process defaults are emitted as the effective policy baseline"},
+		RuleIDs:              []string{"filesystem.root.readonly", "process.no-new-privileges"},
+	}
+	rm.PolicyFingerprint, _ = domain.FingerprintJSON(rm.Security)
+	rmb, err := marshalArtifactJSON(rm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, domain.RuntimeManifestDirName, domain.RuntimeManifestFileName), rmb, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	repoRootAppFn = func() (string, error) { return repoRoot, nil }
+	loadResolverFileAppFn = func(path string) (map[string]string, error) {
+		return map[string]string{"DOCKPIPE_RESOLVER_TEMPLATE": "codex"}, nil
+	}
+	called := false
+	runStepsAppFn = func(o runStepsOpts) error {
+		called = true
+		return nil
+	}
+
+	var runErr error
+	stderr := captureRunTestStderr(t, func() {
+		runErr = Run([]string{"--workflow", "demo", "--", "echo", "x"}, nil)
+	})
+	if runErr != nil {
+		t.Fatalf("Run failed: %v", runErr)
+	}
+	if !called {
+		t.Fatal("expected runSteps delegation in steps mode")
+	}
+	for _, want := range []string{
+		"[dockpipe] runtime policy: network=restricted, root=readonly, tmpfs=/tmp, no-new-privileges, cap-drop=ALL, pids=256",
+		"[dockpipe] policy enforcement: network restricted is advisory in this build; full egress filtering is not active yet",
+		"[dockpipe] policy coverage: domain allow/block rules are compiled for inspection but are not enforced natively by Docker",
+		"[dockpipe] policy note: filesystem and process defaults are emitted as the effective policy baseline",
+		"[dockpipe] policy rules: filesystem.root.readonly, process.no-new-privileges",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr)
+		}
+	}
+}
+
+func TestCompiledRuntimePolicyLogLinesExplainAdvisoryAllowlist(t *testing.T) {
+	rm := &domain.CompiledRuntimeManifest{
+		Security: domain.CompiledSecurityPolicy{
+			Network: domain.CompiledNetworkPolicy{
+				Mode:        "allowlist",
+				Enforcement: "advisory",
+				Allow:       []string{"api.openai.com", "*.anthropic.com", "api.github.com"},
+			},
+		},
+	}
+	lines := strings.Join(compiledRuntimePolicyLogLines(rm), "\n")
+	for _, want := range []string{
+		"runtime policy: network=allowlist, allow=api.openai.com,*.anthropic.com,+1",
+		"policy enforcement: network allowlist is advisory in this build; full egress filtering is not active yet",
+		"policy coverage: domain allow/block rules are compiled for inspection but are not enforced natively by Docker",
+	} {
+		if !strings.Contains(lines, want) {
+			t.Fatalf("expected log lines to contain %q, got:\n%s", want, lines)
+		}
+	}
+}
+
+func TestApplyCompiledRuntimePolicyInjectsProxyEnv(t *testing.T) {
+	t.Setenv("DOCKPIPE_POLICY_PROXY_URL", "http://policy-proxy:8080")
+	t.Setenv("DOCKPIPE_POLICY_PROXY_NO_PROXY", "metadata.local")
+	runOpts := &infrastructure.RunOpts{
+		ExtraEnv: []string{"BASE=1"},
+	}
+	rm := &domain.CompiledRuntimeManifest{
+		Security: domain.CompiledSecurityPolicy{
+			Network: domain.CompiledNetworkPolicy{
+				Mode:        "allowlist",
+				Enforcement: "proxy",
+				Allow:       []string{"api.openai.com", "*.anthropic.com"},
+				Block:       []string{"*.facebook.com"},
+			},
+		},
+	}
+	if err := applyCompiledRuntimeManifest(runOpts, rm); err != nil {
+		t.Fatalf("applyCompiledRuntimeManifest failed: %v", err)
+	}
+	joined := strings.Join(runOpts.ExtraEnv, "\n")
+	for _, want := range []string{
+		"HTTP_PROXY=http://policy-proxy:8080",
+		"http_proxy=http://policy-proxy:8080",
+		"HTTPS_PROXY=http://policy-proxy:8080",
+		"https_proxy=http://policy-proxy:8080",
+		"NO_PROXY=metadata.local,localhost,127.0.0.1,::1",
+		"no_proxy=metadata.local,localhost,127.0.0.1,::1",
+		"DOCKPIPE_POLICY_NETWORK_MODE=allowlist",
+		"DOCKPIPE_POLICY_NETWORK_ENFORCEMENT=proxy",
+		"DOCKPIPE_POLICY_NETWORK_ALLOW=api.openai.com,*.anthropic.com",
+		"DOCKPIPE_POLICY_NETWORK_BLOCK=*.facebook.com",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected proxy env %q in run opts, got:\n%s", want, joined)
+		}
+	}
+}
+
+func TestApplyCompiledRuntimePolicyProxyRequiresProxyURL(t *testing.T) {
+	runOpts := &infrastructure.RunOpts{}
+	rm := &domain.CompiledRuntimeManifest{
+		Security: domain.CompiledSecurityPolicy{
+			Network: domain.CompiledNetworkPolicy{
+				Mode:        "restricted",
+				Enforcement: "proxy",
+			},
+		},
+	}
+	if err := applyCompiledRuntimeManifest(runOpts, rm); err == nil || !strings.Contains(err.Error(), "DOCKPIPE_POLICY_PROXY_URL") {
+		t.Fatalf("expected missing proxy URL error, got %v", err)
 	}
 }
 

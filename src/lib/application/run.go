@@ -748,6 +748,13 @@ func Run(argv []string, baseEnviron []string) error {
 	extraDocker := domain.EnvMapToSlice(dockerEnvMap)
 
 	if stepsMode {
+		if rm, err := applyCompiledRuntimePolicy(nil, wfConfig, wfRoot); err != nil {
+			return err
+		} else {
+			for _, line := range compiledRuntimePolicyLogLines(rm) {
+				fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", line)
+			}
+		}
 		if wf != nil && WorkflowNeedsDockerReachableResolved(wf, effWd, repoRoot) {
 			if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {
 				return err
@@ -790,6 +797,7 @@ func Run(argv []string, baseEnviron []string) error {
 		return err
 	}
 
+	imageDecision := ""
 	if buildDir != "" && buildCtx != "" {
 		skipBuild, msg, err := maybeSkipDockerBuildForWorkflow(effWd, wfConfig, wfRoot, image, buildDir, buildCtx)
 		if err != nil {
@@ -797,6 +805,7 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 		if skipBuild {
 			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
+			imageDecision = msg
 		} else {
 			fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
 			if err := dockerBuildAppFn(image, buildDir, buildCtx); err != nil {
@@ -810,6 +819,7 @@ func Run(argv []string, baseEnviron []string) error {
 			if artifact, err := buildImageArtifactManifest(repoRoot, wfName, "", templateName, image, buildDir, buildCtx, policyFingerprint); err == nil {
 				_ = persistCachedImageArtifactForIsolate(effWd, image, artifact)
 			}
+			imageDecision = "built image artifact for current run"
 		}
 	}
 
@@ -843,10 +853,19 @@ func Run(argv []string, baseEnviron []string) error {
 		BundleOut:     firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut),
 		BundleAll:     strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1",
 	}
-	if msg, err := applyCompiledRuntimePolicy(&runOpts, wfConfig, wfRoot); err != nil {
+	if rm, err := applyCompiledRuntimePolicy(&runOpts, wfConfig, wfRoot); err != nil {
 		return err
-	} else if strings.TrimSpace(msg) != "" {
-		fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
+	} else {
+		for _, line := range compiledRuntimePolicyLogLines(rm) {
+			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", line)
+		}
+		wfName := strings.TrimSpace(opts.Workflow)
+		if wf != nil && wfName == "" {
+			wfName = strings.TrimSpace(wf.Name)
+		}
+		if err := writeRunPolicyRecord(effWd, wfName, wfConfig, "", image, imageDecision, rm); err != nil {
+			return err
+		}
 	}
 
 	rc, err := runContainerAppFn(runOpts, rest)

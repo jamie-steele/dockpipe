@@ -39,6 +39,25 @@ steps:
 	}
 }
 
+func TestParseWorkflowYAMLSecurityNetwork(t *testing.T) {
+	y := `
+security:
+  network:
+    mode: offline
+    enforcement: native
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Security.Network.Mode != "offline" {
+		t.Fatalf("security.network.mode: got %q", w.Security.Network.Mode)
+	}
+	if w.Security.Network.Enforcement != "native" {
+		t.Fatalf("security.network.enforcement: got %q", w.Security.Network.Enforcement)
+	}
+}
+
 // TestParseWorkflowYAMLSteps checks multi-step YAML: two steps, per-step isolate override, and CmdLine.
 func TestParseWorkflowYAMLSteps(t *testing.T) {
 	dir := t.TempDir()
@@ -330,6 +349,10 @@ func TestWorkflowNeedsDockerReachable(t *testing.T) {
 	if hostOnly.NeedsDockerReachable() {
 		t.Fatal("expected false when no container and no run scripts")
 	}
+	composeHostBuiltin := &Workflow{Steps: []Step{{SkipContainer: true, HostBuiltin: "compose_up"}}}
+	if !composeHostBuiltin.NeedsDockerReachable() {
+		t.Fatal("expected NeedsDockerReachable for compose host builtin")
+	}
 	withStepResolver := &Workflow{Steps: []Step{{SkipContainer: true, Resolver: "cursor"}}}
 	if !withStepResolver.NeedsDockerReachable() {
 		t.Fatal("expected NeedsDockerReachable when a step references a runtime profile name")
@@ -344,16 +367,25 @@ func TestWorkflowNeedsDockerReachable(t *testing.T) {
 func TestParseWorkflowYAMLHostBuiltin(t *testing.T) {
 	y := `
 name: t
+compose:
+  file: assets/compose/docker-compose.yml
+  autodown_env: DORKPIPE_DEV_STACK_AUTODOWN
 steps:
   - skip_container: true
-    host_builtin: package_build_store
+    host_builtin: compose_up
 `
 	w, err := ParseWorkflowYAML([]byte(y))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(w.Steps) != 1 || w.Steps[0].HostBuiltin != "package_build_store" || !w.Steps[0].SkipContainer {
+	if len(w.Steps) != 1 || w.Steps[0].HostBuiltin != "compose_up" || !w.Steps[0].SkipContainer {
 		t.Fatalf("got %+v", w.Steps[0])
+	}
+	if w.Compose.File != "assets/compose/docker-compose.yml" {
+		t.Fatalf("unexpected compose config: %+v", w.Compose)
+	}
+	if w.Compose.AutodownEnv != "DORKPIPE_DEV_STACK_AUTODOWN" {
+		t.Fatalf("unexpected compose autodown env: %+v", w.Compose)
 	}
 	if err := ValidateLoadedWorkflow(w); err != nil {
 		t.Fatal(err)
@@ -371,5 +403,14 @@ func TestValidateStepHostBuiltinUnknown(t *testing.T) {
 	s := Step{SkipContainer: true, HostBuiltin: "nope"}
 	if err := ValidateStepHostBuiltin(0, s); err == nil {
 		t.Fatal("expected error for unknown host_builtin")
+	}
+}
+
+func TestValidateLoadedWorkflowRejectsComposeBuiltinWithoutComposeConfig(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{{SkipContainer: true, HostBuiltin: "compose_up"}},
+	}
+	if err := ValidateLoadedWorkflow(w); err == nil {
+		t.Fatal("expected compose builtin validation error")
 	}
 }

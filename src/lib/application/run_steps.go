@@ -17,6 +17,7 @@ import (
 var (
 	dockerBuildFn       = infrastructure.DockerBuild
 	dockerImageExistsFn = infrastructure.DockerImageExists
+	composeLifecycleFn  = infrastructure.RunComposeLifecycle
 	runContainerFn      = infrastructure.RunContainer
 	sourceHostScriptFn  = infrastructure.SourceHostScript
 	runHostScriptFn     = infrastructure.RunHostScript
@@ -328,6 +329,7 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 	if err != nil {
 		return err
 	}
+	imageDecision := ""
 	if buildDir != "" && buildCtx != "" {
 		skipBuild, msg, err := maybeSkipDockerBuildForStep(o.projectRoot, o.repoRoot, o.wfConfig, o.wfRoot, runOpts.Image, buildDir, buildCtx)
 		if err != nil {
@@ -335,6 +337,7 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 		}
 		if skipBuild {
 			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
+			imageDecision = msg
 		} else {
 			fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
 			if err := dockerBuildFn(runOpts.Image, buildDir, buildCtx); err != nil {
@@ -344,7 +347,14 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 			if artifact, err := buildImageArtifactManifest(o.repoRoot, strings.TrimSpace(o.wf.Name), "", branchResolverName(o, step, i), runOpts.Image, buildDir, buildCtx, policyFingerprint); err == nil {
 				_ = persistCachedImageArtifactForIsolate(o.projectRoot, runOpts.Image, artifact)
 			}
+			imageDecision = "built image artifact for current run"
 		}
+	}
+	workdir := firstNonEmpty(o.projectRoot, o.opts.Workdir, o.envMap["DOCKPIPE_WORKDIR"], o.repoRoot, mustGetwd())
+	if rm, err := applyCompiledRuntimePolicy(nil, o.wfConfig, o.wfRoot); err != nil {
+		return err
+	} else if err := writeRunPolicyRecord(workdir, strings.TrimSpace(o.wf.Name), o.wfConfig, stepRunPolicyID(step, i), runOpts.Image, imageDecision, rm); err != nil {
+		return err
 	}
 	rc, err := runContainerFn(runOpts, argv)
 	if err != nil {
@@ -600,6 +610,12 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 	if err != nil {
 		return err
 	}
+	workdir := firstNonEmpty(o.projectRoot, o.opts.Workdir, localEnv["DOCKPIPE_WORKDIR"], o.repoRoot, mustGetwd())
+	if rm, err := applyCompiledRuntimePolicy(nil, o.wfConfig, o.wfRoot); err != nil {
+		return err
+	} else if err := writeRunPolicyRecord(workdir, strings.TrimSpace(o.wf.Name), o.wfConfig, stepRunPolicyID(step, idx), runOpts.Image, "", rm); err != nil {
+		return err
+	}
 	rc, err := runContainerFn(runOpts, argv)
 	if err != nil {
 		return err
@@ -640,9 +656,64 @@ func runStepHostBuiltin(o *runStepsOpts, step domain.Step) error {
 			return err
 		}
 		return RunPackageBuildStoreFromEnv(wdAbs, o.envMap)
+	case "compose_up", "compose_down", "compose_ps":
+		return runWorkflowComposeHostBuiltin(o, b)
 	default:
 		return fmt.Errorf("unknown host_builtin %q", b)
 	}
+}
+
+func runWorkflowComposeHostBuiltin(o *runStepsOpts, builtin string) error {
+	if o == nil || o.wf == nil {
+		return fmt.Errorf("compose builtin requires a workflow")
+	}
+	cfg := o.wf.Compose
+	file := resolveWorkflowRelativePath(cfg.File, o.wfRoot)
+	projectDir := resolveWorkflowRelativePath(cfg.ProjectDirectory, o.wfRoot)
+	action := strings.TrimPrefix(strings.TrimSpace(builtin), "compose_")
+	if action == "down" && !composeAutodownEnabled(cfg, o.envMap) {
+		fmt.Fprintf(os.Stderr, "[dockpipe] Compose autodown disabled; leaving services running\n")
+		return nil
+	}
+	if err := composeLifecycleFn(infrastructure.ComposeLifecycleOpts{
+		Action:           action,
+		File:             file,
+		Project:          strings.TrimSpace(cfg.Project),
+		ProjectDirectory: projectDir,
+		Services:         append([]string(nil), cfg.Services...),
+		Env:              domain.EnvMapToSlice(o.envMap),
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func composeAutodownEnabled(cfg domain.WorkflowComposeConfig, env map[string]string) bool {
+	name := strings.TrimSpace(cfg.AutodownEnv)
+	if name == "" {
+		return true
+	}
+	value := strings.TrimSpace(env[name])
+	if value == "" {
+		value = strings.TrimSpace(os.Getenv(name))
+	}
+	switch strings.ToLower(value) {
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
+}
+
+func resolveWorkflowRelativePath(path, wfRoot string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path)
+	}
+	return filepath.Clean(filepath.Join(wfRoot, path))
 }
 
 func validateParallelNoHostBuiltin(o *runStepsOpts, from, to int) error {
@@ -819,4 +890,11 @@ func parseStepArgv(cmd string) ([]string, error) {
 		return nil, nil
 	}
 	return shellwords.Parse(cmd)
+}
+
+func stepRunPolicyID(step domain.Step, idx int) string {
+	if s := strings.TrimSpace(step.ID); s != "" {
+		return s
+	}
+	return fmt.Sprintf("step-%d", idx+1)
 }

@@ -30,6 +30,7 @@ func writeCompiledWorkflowRuntimeArtifacts(workdir, staging, pkgName string, wf 
 }
 
 func compileWorkflowRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflow) (*domain.CompiledRuntimeManifest, *domain.ImageArtifactManifest, error) {
+	network := compiledNetworkPolicyForWorkflow(wf)
 	rm := &domain.CompiledRuntimeManifest{
 		Schema:          1,
 		Kind:            domain.RuntimeManifestKind,
@@ -39,11 +40,7 @@ func compileWorkflowRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflo
 		ResolverProfile: firstNonEmptyString(strings.TrimSpace(wf.DefaultResolver), strings.TrimSpace(wf.Resolver)),
 		Security: domain.CompiledSecurityPolicy{
 			Preset: "secure-default",
-			Network: domain.CompiledNetworkPolicy{
-				Mode:        "restricted",
-				Enforcement: "advisory",
-				InternalDNS: true,
-			},
+			Network: network,
 			FS: domain.CompiledFilesystemPolicy{
 				Root:      "readonly",
 				Writes:    "workspace-only",
@@ -72,13 +69,10 @@ func compileWorkflowRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflo
 	if fp, err := domain.FingerprintJSON(rm.Image); err == nil {
 		rm.ImageFingerprint = fp
 	}
-	rm.EnforcementSummaries = []string{
-		"network policy currently compiles as advisory until full Docker egress enforcement lands",
-		"filesystem and process defaults are emitted as the effective policy baseline",
-	}
+	rm.EnforcementSummaries = compiledEnforcementSummaries(rm.Security.Network)
 	rm.RuleIDs = []string{
 		"security.preset.secure-default",
-		"network.mode.restricted",
+		"network.mode." + firstNonEmptyString(strings.TrimSpace(rm.Security.Network.Mode), "restricted"),
 		"filesystem.root.readonly",
 		"process.no-new-privileges",
 	}
@@ -91,6 +85,53 @@ func compileWorkflowRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflo
 		}
 	}
 	return rm, artifact, nil
+}
+
+func compiledNetworkPolicyForWorkflow(wf *domain.Workflow) domain.CompiledNetworkPolicy {
+	mode := "restricted"
+	enforcement := ""
+	var allow, block []string
+	if wf != nil {
+		if m := strings.TrimSpace(wf.Security.Network.Mode); m != "" {
+			mode = m
+		}
+		enforcement = strings.TrimSpace(wf.Security.Network.Enforcement)
+		allow = append([]string(nil), wf.Security.Network.Allow...)
+		block = append([]string(nil), wf.Security.Network.Block...)
+	}
+	return domain.CompiledNetworkPolicy{
+		Mode:        mode,
+		Enforcement: compiledNetworkEnforcement(mode, enforcement),
+		Allow:       allow,
+		Block:       block,
+		InternalDNS: true,
+	}
+}
+
+func compiledNetworkEnforcement(mode, explicit string) string {
+	explicit = strings.TrimSpace(explicit)
+	if explicit != "" {
+		return explicit
+	}
+	switch strings.TrimSpace(mode) {
+	case "offline", "internet":
+		return "native"
+	case "allowlist", "restricted":
+		return "advisory"
+	default:
+		return "advisory"
+	}
+}
+
+func compiledEnforcementSummaries(network domain.CompiledNetworkPolicy) []string {
+	lines := []string{"filesystem and process defaults are emitted as the effective policy baseline"}
+	switch strings.TrimSpace(network.Enforcement) {
+	case "proxy":
+		lines = append([]string{"network policy requires a proxy-backed egress layer when this workflow runs"}, lines...)
+	case "advisory":
+		lines = append([]string{"network policy currently compiles as advisory until full Docker egress enforcement lands"}, lines...)
+	}
+	return lines
 }
 
 func selectCompiledImageArtifact(workdir, pkgName string, wf *domain.Workflow, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {

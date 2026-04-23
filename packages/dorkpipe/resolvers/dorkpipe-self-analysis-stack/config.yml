@@ -7,17 +7,22 @@
 #   DORKPIPE_DEV_STACK_AUTODOWN=0 dockpipe --workflow dorkpipe-self-analysis-stack --workdir . --
 name: dorkpipe-self-analysis-stack
 description: >-
-  stack_up (host): Postgres+Ollama via docker compose.
+  stack_up (host): Postgres+Ollama via DockPipe compose builtin.
   self_analysis (container): same as dorkpipe-self-analysis.
   stack_down (host): compose down unless DORKPIPE_DEV_STACK_AUTODOWN=0.
 
 resolver: codex
 runtimes: [dockerimage]
+compose:
+  file: ../dorkpipe/assets/compose/docker-compose.yml
+  project: dorkpipe-dev
+  project_directory: ../../../../
+  autodown_env: DORKPIPE_DEV_STACK_AUTODOWN
+  services: [postgres, ollama]
 steps:
   - id: stack_up
     skip_container: true
-    run:
-      - scripts/dorkpipe/dev-stack-ensure-up.sh
+    host_builtin: compose_up
 
   - id: self_analysis
     runtime: docker
@@ -37,5 +42,4 @@ steps:
 
   - id: stack_down
     skip_container: true
-    run:
-      - scripts/dorkpipe/dev-stack-maybe-down.sh
+    host_builtin: compose_down

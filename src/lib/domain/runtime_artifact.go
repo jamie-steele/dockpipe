@@ -148,6 +148,16 @@ func ValidateCompiledSecurityPolicy(p *CompiledSecurityPolicy) error {
 	if p.Network.Mode == "allowlist" && len(p.Network.Allow) == 0 {
 		return fmt.Errorf("network.mode allowlist requires at least one allow rule")
 	}
+	switch p.Network.Mode {
+	case "offline", "internet":
+		if p.Network.Enforcement != "" && p.Network.Enforcement != "native" {
+			return fmt.Errorf("network.mode %s requires native enforcement", p.Network.Mode)
+		}
+	case "allowlist", "restricted":
+		if p.Network.Enforcement == "native" {
+			return fmt.Errorf("network.mode %s cannot use native enforcement", p.Network.Mode)
+		}
+	}
 	if err := validateEnum("filesystem.root", p.FS.Root, validFilesystemRoots); err != nil {
 		return err
 	}

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"dockpipe/src/lib/domain"
 )
 
 // TestLoadWorkflow reads a YAML file from disk and parses steps (no imports in this minimal case).
@@ -26,5 +28,35 @@ func TestLoadWorkflow(t *testing.T) {
 func TestLoadWorkflowReadError(t *testing.T) {
 	if _, err := LoadWorkflow(filepath.Join(t.TempDir(), "missing.yml")); err == nil {
 		t.Fatal("expected read error for missing workflow file")
+	}
+}
+
+func TestLoadWorkflowRejectsAllowlistWithoutRules(t *testing.T) {
+	tmp := t.TempDir()
+	p := filepath.Join(tmp, "config.yml")
+	if err := os.WriteFile(p, []byte("name: demo\nsecurity:\n  network:\n    mode: allowlist\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wf, err := LoadWorkflow(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := domain.ValidateLoadedWorkflow(wf); err == nil {
+		t.Fatal("expected validation error for allowlist without rules")
+	}
+}
+
+func TestLoadWorkflowRejectsOfflineProxyEnforcement(t *testing.T) {
+	tmp := t.TempDir()
+	p := filepath.Join(tmp, "config.yml")
+	if err := os.WriteFile(p, []byte("name: demo\nsecurity:\n  network:\n    mode: offline\n    enforcement: proxy\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wf, err := LoadWorkflow(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := domain.ValidateLoadedWorkflow(wf); err == nil {
+		t.Fatal("expected validation error for offline proxy enforcement")
 	}
 }
