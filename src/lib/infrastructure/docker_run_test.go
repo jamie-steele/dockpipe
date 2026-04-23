@@ -158,6 +158,84 @@ func TestRunContainerDetachBuildsDockerRun(t *testing.T) {
 	}
 }
 
+func TestRunContainerAppliesSecurityFlags(t *testing.T) {
+	withDockerSeams(t)
+	var mu sync.Mutex
+	var calls []call
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		mu.Lock()
+		calls = append(calls, call{name: name, args: append([]string(nil), args...)})
+		mu.Unlock()
+		return exec.Command("bash", "-c", "exit 0")
+	}
+	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
+	filepathAbsDocker = func(path string) (string, error) { return path, nil }
+	osStatDockerFn = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	mkdirAllDockerFn = func(path string, perm os.FileMode) error { return nil }
+	getuidDockerFn = func() int { return 1000 }
+	getgidDockerFn = func() int { return 1000 }
+	isTerminalDockerFn = func(fd int) bool { return false }
+	timeNowDockerFn = func() time.Time { return time.Unix(1000, 0) }
+	in, _ := os.CreateTemp(t.TempDir(), "in")
+	out, _ := os.CreateTemp(t.TempDir(), "out")
+	errf, _ := os.CreateTemp(t.TempDir(), "err")
+	defer in.Close()
+	defer out.Close()
+	defer errf.Close()
+
+	rc, err := RunContainer(RunOpts{
+		Image:          "img",
+		WorkdirHost:    "/tmp/wd",
+		ContainerUser:  "0:0",
+		ReadOnlyRootFS: true,
+		TmpfsPaths:     []string{"/tmp", "/var/tmp"},
+		SecurityOpt:    []string{"no-new-privileges"},
+		CapDrop:        []string{"ALL"},
+		CapAdd:         []string{"NET_BIND_SERVICE"},
+		PIDLimit:       64,
+		CPULimit:       "2",
+		MemoryLimit:    "1g",
+		Stdin:          in,
+		Stdout:         out,
+		Stderr:         errf,
+	}, []string{"echo", "ok"})
+	if err != nil || rc != 0 {
+		t.Fatalf("RunContainer failed rc=%d err=%v", rc, err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(calls) == 0 {
+		t.Fatal("expected docker run call")
+	}
+	joined := ""
+	for _, c := range calls {
+		if c.name == "docker" && len(c.args) > 0 && c.args[0] == "run" {
+			joined = strings.Join(c.args, " ")
+			break
+		}
+	}
+	if joined == "" {
+		t.Fatalf("expected docker run call, got %#v", calls)
+	}
+	for _, want := range []string{
+		"-u 0:0",
+		"--read-only",
+		"--tmpfs /tmp",
+		"--tmpfs /var/tmp",
+		"--security-opt no-new-privileges",
+		"--cap-drop ALL",
+		"--cap-add NET_BIND_SERVICE",
+		"--pids-limit 64",
+		"--cpus 2",
+		"--memory 1g",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected docker args to contain %q, got %s", want, joined)
+		}
+	}
+}
+
 // TestRunContainerAttachedExitCodeTriggersLogsAndRm on non-zero exit runs docker logs and rm for the container.
 func TestRunContainerAttachedExitCodeTriggersLogsAndRm(t *testing.T) {
 	withDockerSeams(t)

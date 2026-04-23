@@ -102,21 +102,6 @@ func TestRunBlockingStepSkipsBuildWhenCompiledImageArtifactExists(t *testing.T) 
 	if err := os.MkdirAll(filepath.Join(wfRoot, domain.RuntimeManifestDirName), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	artifact := `{
-  "schema": 1,
-  "kind": "docker-image-artifact",
-  "image_key": "codex",
-  "source": "build",
-  "fingerprint": "sha256:test",
-  "image_ref": "dockpipe-codex",
-  "build": {
-    "context": ".",
-    "dockerfile": "templates/core/assets/images/codex/Dockerfile"
-  }
-}`
-	if err := os.WriteFile(filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.ImageArtifactFileName), []byte(artifact), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	o := baseRunStepsOpts()
 	o.repoRoot = wd
 	o.wfRoot = wfRoot
@@ -125,6 +110,52 @@ func TestRunBlockingStepSkipsBuildWhenCompiledImageArtifactExists(t *testing.T) 
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(wd, "templates", "core", "assets", "images", "codex", "Dockerfile"), []byte("FROM alpine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	policyFingerprint, err := defaultRuntimePolicyFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := buildImageArtifactManifest(wd, "", "", "codex", "dockpipe-codex", filepath.Join(wd, "templates", "core", "assets", "images", "codex"), wd, policyFingerprint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := marshalArtifactJSON(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.ImageArtifactFileName), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rm := &domain.CompiledRuntimeManifest{
+		Schema:            1,
+		Kind:              domain.RuntimeManifestKind,
+		PolicyFingerprint: policyFingerprint,
+		Security: domain.CompiledSecurityPolicy{
+			Preset: "secure-default",
+			Network: domain.CompiledNetworkPolicy{
+				Mode:        "restricted",
+				Enforcement: "advisory",
+				InternalDNS: true,
+			},
+			FS: domain.CompiledFilesystemPolicy{
+				Root:      "readonly",
+				Writes:    "workspace-only",
+				TempPaths: []string{"/tmp"},
+			},
+			Process: domain.CompiledProcessPolicy{
+				User:            "non-root",
+				NoNewPrivileges: true,
+				DropCaps:        []string{"ALL"},
+				PIDLimit:        256,
+			},
+		},
+	}
+	rmb, err := marshalArtifactJSON(rm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.RuntimeManifestFileName), rmb, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	dockerImageExistsFn = func(image string) (bool, error) { return true, nil }
@@ -144,6 +175,74 @@ func TestRunBlockingStepSkipsBuildWhenCompiledImageArtifactExists(t *testing.T) 
 	}
 	if !ran {
 		t.Fatal("expected container run")
+	}
+}
+
+func TestMaybeSkipDockerBuildRejectsPolicyFingerprintMismatch(t *testing.T) {
+	withRunStepsSeams(t)
+	wd := t.TempDir()
+	wfRoot := filepath.Join(wd, "wf")
+	if err := os.MkdirAll(filepath.Join(wfRoot, domain.RuntimeManifestDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(wd, "templates", "core", "assets", "images", "codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wd, "templates", "core", "assets", "images", "codex", "Dockerfile"), []byte("FROM alpine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := buildImageArtifactManifest(wd, "", "", "codex", "dockpipe-codex", filepath.Join(wd, "templates", "core", "assets", "images", "codex"), wd, "sha256:oldpolicy")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := marshalArtifactJSON(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.ImageArtifactFileName), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rm := &domain.CompiledRuntimeManifest{
+		Schema: 1,
+		Kind:   domain.RuntimeManifestKind,
+		Security: domain.CompiledSecurityPolicy{
+			Preset: "secure-default",
+			Network: domain.CompiledNetworkPolicy{
+				Mode:        "restricted",
+				Enforcement: "advisory",
+				InternalDNS: true,
+			},
+			FS: domain.CompiledFilesystemPolicy{
+				Root:      "readonly",
+				Writes:    "workspace-only",
+				TempPaths: []string{"/tmp"},
+			},
+			Process: domain.CompiledProcessPolicy{
+				User:            "non-root",
+				NoNewPrivileges: true,
+				DropCaps:        []string{"ALL"},
+				PIDLimit:        999,
+			},
+		},
+	}
+	rm.PolicyFingerprint, err = domain.FingerprintJSON(rm.Security)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rmb, err := marshalArtifactJSON(rm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.RuntimeManifestFileName), rmb, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dockerImageExistsFn = func(image string) (bool, error) { return true, nil }
+	skip, _, err := maybeSkipDockerBuildForStep(wd, wd, "", wfRoot, "dockpipe-codex", filepath.Join(wd, "templates", "core", "assets", "images", "codex"), wd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if skip {
+		t.Fatal("expected policy fingerprint mismatch to disable cache reuse")
 	}
 }
 

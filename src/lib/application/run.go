@@ -791,7 +791,7 @@ func Run(argv []string, baseEnviron []string) error {
 	}
 
 	if buildDir != "" && buildCtx != "" {
-		skipBuild, msg, err := maybeSkipDockerBuildForWorkflow(repoRoot, wfConfig, wfRoot, image, buildDir, buildCtx)
+		skipBuild, msg, err := maybeSkipDockerBuildForWorkflow(effWd, wfConfig, wfRoot, image, buildDir, buildCtx)
 		if err != nil {
 			return err
 		}
@@ -801,6 +801,14 @@ func Run(argv []string, baseEnviron []string) error {
 			fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
 			if err := dockerBuildAppFn(image, buildDir, buildCtx); err != nil {
 				return err
+			}
+			wfName := strings.TrimSpace(opts.Workflow)
+			if wf != nil && wfName == "" {
+				wfName = strings.TrimSpace(wf.Name)
+			}
+			policyFingerprint, _ := runtimePolicyFingerprintForRun(wfConfig, wfRoot)
+			if artifact, err := buildImageArtifactManifest(repoRoot, wfName, "", templateName, image, buildDir, buildCtx, policyFingerprint); err == nil {
+				_ = persistCachedImageArtifactForIsolate(effWd, image, artifact)
 			}
 		}
 	}
@@ -817,7 +825,7 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 	}
 
-	rc, err := runContainerAppFn(infrastructure.RunOpts{
+	runOpts := infrastructure.RunOpts{
 		Image:         image,
 		WorkdirHost:   workHost,
 		WorkPath:      opts.WorkPath,
@@ -834,7 +842,14 @@ func Run(argv []string, baseEnviron []string) error {
 		CommitMessage: envMap["DOCKPIPE_COMMIT_MESSAGE"],
 		BundleOut:     firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut),
 		BundleAll:     strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1",
-	}, rest)
+	}
+	if msg, err := applyCompiledRuntimePolicy(&runOpts, wfConfig, wfRoot); err != nil {
+		return err
+	} else if strings.TrimSpace(msg) != "" {
+		fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
+	}
+
+	rc, err := runContainerAppFn(runOpts, rest)
 	if err != nil {
 		return err
 	}

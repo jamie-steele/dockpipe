@@ -156,6 +156,21 @@ type RunOpts struct {
 	ActionPath  string
 	ExtraMounts []string
 	ExtraEnv    []string
+	// ContainerUser overrides the default user mapping when set (for example "0:0").
+	ContainerUser string
+	// ReadOnlyRootFS enables docker --read-only for the container root filesystem.
+	ReadOnlyRootFS bool
+	// TmpfsPaths adds docker --tmpfs mounts for writable ephemeral paths.
+	TmpfsPaths []string
+	// SecurityOpt passes docker --security-opt entries such as no-new-privileges.
+	SecurityOpt []string
+	// CapDrop / CapAdd pass docker capability adjustments.
+	CapDrop []string
+	CapAdd  []string
+	// PIDLimit, CPULimit, and MemoryLimit enforce container resource restrictions when set.
+	PIDLimit    int
+	CPULimit    string
+	MemoryLimit string
 	// NetworkMode: if non-empty, passed to docker run as --network <mode> (e.g. host when bridge IPv6 is broken).
 	NetworkMode   string
 	DataVolume    string
@@ -249,14 +264,53 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	if nw := strings.TrimSpace(o.NetworkMode); nw != "" {
 		args = append(args, "--network", nw)
 	}
-	// Map container user to the host user on Unix so bind mounts have sane ownership.
-	// On Windows, optional -u via DOCKPIPE_WINDOWS_CONTAINER_USER only (see windowsDockerUserSpec).
-	if runtime.GOOS == "windows" {
+	// Map container user to the host user on Unix so bind mounts have sane ownership unless a
+	// compiled runtime policy explicitly overrides it.
+	if u := strings.TrimSpace(o.ContainerUser); u != "" {
+		args = append(args, "-u", u)
+	} else if runtime.GOOS == "windows" {
+		// On Windows, optional -u via DOCKPIPE_WINDOWS_CONTAINER_USER only (see windowsDockerUserSpec).
 		if u := windowsDockerUserSpec(); u != "" {
 			args = append(args, "-u", u)
 		}
 	} else {
 		args = append(args, "-u", unixDockerUserSpec(o.Image, stderr))
+	}
+	if o.ReadOnlyRootFS {
+		args = append(args, "--read-only")
+	}
+	for _, p := range o.TmpfsPaths {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			args = append(args, "--tmpfs", p)
+		}
+	}
+	for _, s := range o.SecurityOpt {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			args = append(args, "--security-opt", s)
+		}
+	}
+	for _, c := range o.CapDrop {
+		c = strings.TrimSpace(c)
+		if c != "" {
+			args = append(args, "--cap-drop", c)
+		}
+	}
+	for _, c := range o.CapAdd {
+		c = strings.TrimSpace(c)
+		if c != "" {
+			args = append(args, "--cap-add", c)
+		}
+	}
+	if o.PIDLimit > 0 {
+		args = append(args, "--pids-limit", strconv.Itoa(o.PIDLimit))
+	}
+	if cpu := strings.TrimSpace(o.CPULimit); cpu != "" {
+		args = append(args, "--cpus", cpu)
+	}
+	if mem := strings.TrimSpace(o.MemoryLimit); mem != "" {
+		args = append(args, "--memory", mem)
 	}
 	args = append(args,
 		"-v", workHost+":"+containerWorkMount,

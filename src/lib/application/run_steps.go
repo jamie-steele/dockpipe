@@ -329,7 +329,7 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 		return err
 	}
 	if buildDir != "" && buildCtx != "" {
-		skipBuild, msg, err := maybeSkipDockerBuildForStep(o.repoRoot, o.wfConfig, o.wfRoot, runOpts.Image, buildDir, buildCtx)
+		skipBuild, msg, err := maybeSkipDockerBuildForStep(o.projectRoot, o.repoRoot, o.wfConfig, o.wfRoot, runOpts.Image, buildDir, buildCtx)
 		if err != nil {
 			return err
 		}
@@ -339,6 +339,10 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 			fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
 			if err := dockerBuildFn(runOpts.Image, buildDir, buildCtx); err != nil {
 				return err
+			}
+			policyFingerprint, _ := runtimePolicyFingerprintForRun(o.wfConfig, o.wfRoot)
+			if artifact, err := buildImageArtifactManifest(o.repoRoot, strings.TrimSpace(o.wf.Name), "", branchResolverName(o, step, i), runOpts.Image, buildDir, buildCtx, policyFingerprint); err == nil {
+				_ = persistCachedImageArtifactForIsolate(o.projectRoot, runOpts.Image, artifact)
 			}
 		}
 	}
@@ -508,7 +512,7 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 			continue
 		}
 		done[key] = struct{}{}
-		skipBuild, msg, err := maybeSkipDockerBuildForStep(o.repoRoot, o.wfConfig, o.wfRoot, runOpts.Image, buildDir, buildCtx)
+		skipBuild, msg, err := maybeSkipDockerBuildForStep(o.projectRoot, o.repoRoot, o.wfConfig, o.wfRoot, runOpts.Image, buildDir, buildCtx)
 		if err != nil {
 			return err
 		}
@@ -522,6 +526,10 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 		}
 		if err := dockerBuildFn(runOpts.Image, buildDir, buildCtx); err != nil {
 			return err
+		}
+		policyFingerprint, _ := runtimePolicyFingerprintForRun(o.wfConfig, o.wfRoot)
+		if artifact, err := buildImageArtifactManifest(o.repoRoot, strings.TrimSpace(o.wf.Name), "", runOpts.Image, runOpts.Image, buildDir, buildCtx, policyFingerprint); err == nil {
+			_ = persistCachedImageArtifactForIsolate(o.projectRoot, runOpts.Image, artifact)
 		}
 	}
 	return nil
@@ -794,6 +802,9 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 		CommitMessage: envMap["DOCKPIPE_COMMIT_MESSAGE"],
 		BundleOut:     firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], o.opts.BundleOut),
 		BundleAll:     strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1",
+	}
+	if _, err := applyCompiledRuntimePolicy(&runOpts, o.wfConfig, o.wfRoot); err != nil {
+		return nil, runOpts, "", "", err
 	}
 	return argv, runOpts, dockerfileDir, contextDir, nil
 }

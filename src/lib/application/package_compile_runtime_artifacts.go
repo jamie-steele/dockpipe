@@ -1,7 +1,6 @@
 package application
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -109,7 +108,7 @@ func selectCompiledImageArtifact(workdir, pkgName string, wf *domain.Workflow, p
 	if image, dockerfileDir, ok := infrastructure.TemplateBuild(workdir, identity); ok {
 		ref := infrastructure.MaybeVersionTag(workdir, image)
 		buildSpec := &domain.CompiledImageBuildSpec{
-			Context:    ".",
+			Context:    relOrAbs(workdir, workdir),
 			Dockerfile: relOrAbs(workdir, filepath.Join(dockerfileDir, "Dockerfile")),
 		}
 		sel := domain.CompiledImageSelection{
@@ -118,32 +117,9 @@ func selectCompiledImageArtifact(workdir, pkgName string, wf *domain.Workflow, p
 			AutoBuild: "if-stale",
 			Build:     buildSpec,
 		}
-		fingerprint, err := domain.FingerprintJSON(struct {
-			Identity          string                         `json:"identity"`
-			Ref               string                         `json:"ref"`
-			Build             *domain.CompiledImageBuildSpec `json:"build"`
-			PolicyFingerprint string                         `json:"policy_fingerprint"`
-		}{
-			Identity:          identity,
-			Ref:               ref,
-			Build:             buildSpec,
-			PolicyFingerprint: policyFingerprint,
-		})
+		artifact, err := buildImageArtifactManifest(workdir, strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), identity, ref, dockerfileDir, workdir, policyFingerprint)
 		if err != nil {
 			return domain.CompiledImageSelection{}, nil, err
-		}
-		artifact := &domain.ImageArtifactManifest{
-			Schema:                      1,
-			Kind:                        domain.ImageArtifactManifestKind,
-			WorkflowName:                strings.TrimSpace(wf.Name),
-			PackageName:                 strings.TrimSpace(pkgName),
-			ImageKey:                    identity,
-			Source:                      "build",
-			Fingerprint:                 fingerprint,
-			SourceFingerprint:           fingerprint,
-			SecurityManifestFingerprint: policyFingerprint,
-			ImageRef:                    ref,
-			Build:                       buildSpec,
 		}
 		return sel, artifact, nil
 	}
@@ -180,11 +156,10 @@ func selectCompiledImageArtifact(workdir, pkgName string, wf *domain.Workflow, p
 }
 
 func writeJSONFile(path string, v any) error {
-	b, err := json.MarshalIndent(v, "", "  ")
+	b, err := marshalArtifactJSON(v)
 	if err != nil {
 		return err
 	}
-	b = append(b, '\n')
 	return os.WriteFile(path, b, 0o644)
 }
 

@@ -140,7 +140,8 @@ steps: []
 	tgz := filepath.Join(workdir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-0.0.0.tar.gz")
 	wfURI := "tar://" + tgz + "##workflows/mywf/config.yml"
 	dockerImageExistsAppFn = func(image string) (bool, error) { return true, nil }
-	skip, msg, err := maybeSkipDockerBuildForWorkflow(workdir, wfURI, filepath.Join(repoRoot, "workflows", "mywf"), "dockpipe-codex:0.0.0", "/unused/builddir", workdir)
+	buildDir := filepath.Join(workdir, "templates", "core", "assets", "images", "codex")
+	skip, msg, err := maybeSkipDockerBuildForWorkflow(workdir, wfURI, filepath.Join(repoRoot, "workflows", "mywf"), "dockpipe-codex:0.0.0", buildDir, workdir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -355,6 +356,96 @@ func TestRunWorkflowStepsModeCliWorkdirOverridesInheritedEnvMap(t *testing.T) {
 	err := Run([]string{"--workflow", "demo", "--workdir", wantWd, "--", "echo", "x"}, base)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
+	}
+}
+
+func TestRunWorkflowAppliesCompiledRuntimePolicy(t *testing.T) {
+	withRunSeams(t)
+	repoRoot := t.TempDir()
+	wfDir := filepath.Join(repoRoot, "templates", "secure")
+	if err := os.MkdirAll(filepath.Join(wfDir, domain.RuntimeManifestDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
+	cfg := `name: secure
+isolate: codex
+`
+	if err := os.WriteFile(filepath.Join(wfDir, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rm := &domain.CompiledRuntimeManifest{
+		Schema: 1,
+		Kind:   domain.RuntimeManifestKind,
+		Security: domain.CompiledSecurityPolicy{
+			Network: domain.CompiledNetworkPolicy{
+				Mode: "offline",
+			},
+			FS: domain.CompiledFilesystemPolicy{
+				Root:      "readonly",
+				TempPaths: []string{"/tmp", "/work/cache"},
+			},
+			Process: domain.CompiledProcessPolicy{
+				User:            "root",
+				NoNewPrivileges: true,
+				DropCaps:        []string{"ALL"},
+				PIDLimit:        128,
+				Resources: domain.CompiledResourceLimits{
+					CPU:    "2",
+					Memory: "1g",
+				},
+			},
+		},
+	}
+	rm.PolicyFingerprint, _ = domain.FingerprintJSON(rm.Security)
+	rmb, err := marshalArtifactJSON(rm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfDir, domain.RuntimeManifestDirName, domain.RuntimeManifestFileName), rmb, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	repoRootAppFn = func() (string, error) { return repoRoot, nil }
+	templateBuildAppFn = func(repoRoot, name string) (string, string, bool) {
+		return "dockpipe-codex", "/build", true
+	}
+	maybeVersionTagAppFn = func(repoRoot, image string) string { return image }
+	dockerBuildAppFn = func(image, dockerfileDir, contextDir string) error { return nil }
+	var got infrastructure.RunOpts
+	runContainerAppFn = func(o infrastructure.RunOpts, argv []string) (int, error) {
+		got = o
+		return 0, nil
+	}
+
+	err = Run([]string{"--workflow", "secure", "--", "echo", "hi"}, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if got.NetworkMode != "none" {
+		t.Fatalf("expected offline policy to set network=none, got %q", got.NetworkMode)
+	}
+	if !got.ReadOnlyRootFS {
+		t.Fatal("expected readonly root filesystem")
+	}
+	if got.ContainerUser != "0:0" {
+		t.Fatalf("expected root container user override, got %q", got.ContainerUser)
+	}
+	if got.PIDLimit != 128 || got.CPULimit != "2" || got.MemoryLimit != "1g" {
+		t.Fatalf("unexpected resource limits: %+v", got)
+	}
+	if !strings.Contains(strings.Join(got.SecurityOpt, ","), "no-new-privileges") {
+		t.Fatalf("expected no-new-privileges, got %#v", got.SecurityOpt)
+	}
+	if !strings.Contains(strings.Join(got.CapDrop, ","), "ALL") {
+		t.Fatalf("expected cap drop, got %#v", got.CapDrop)
+	}
+	if !strings.Contains(strings.Join(got.TmpfsPaths, ","), "/tmp") {
+		t.Fatalf("expected /tmp tmpfs, got %#v", got.TmpfsPaths)
+	}
+	for _, p := range got.TmpfsPaths {
+		if strings.HasPrefix(p, "/work/") {
+			t.Fatalf("workspace path should not be converted to tmpfs: %#v", got.TmpfsPaths)
+		}
 	}
 }
 
