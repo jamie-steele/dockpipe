@@ -18,6 +18,20 @@ Everything else is secondary:
 
 If you are writing a normal workflow, prefer thinking in terms of **steps + runtime + resolver** first.
 
+## Defaults and overrides
+
+DockPipe uses a simple layering rule:
+
+- top-level **`runtime`** and **`resolver`** set the **workflow default**
+- step-level **`runtime`** and **`resolver`** **override** that default for one step
+- **`isolate`** is the advanced low-level override when you need to pin the exact image/template
+
+In practice, most workflows should:
+
+1. set **`runtime`** and **`resolver`** once at the top
+2. override them only on the few steps that genuinely differ
+3. reach for **`isolate`** only when a step must pin a specific image/template rather than just a substrate/profile
+
 **Workflows vs core slices:** **Runtimes** are **core-owned** execution substrates ( **`templates/core/runtimes/<name>/`** ). Workflow YAML may only **select** a substrate by **name** (`runtime`, per-step `runtime:`) — it does **not** define new runtime types or override how substrates work. **Resolvers** and **strategies** follow the same idea: **definitions** live under **`templates/core/resolvers/`**, **`strategies/`** (or maintainer trees under **`compile.workflows`**); the workflow **references** them — see **Authoring: workflow YAML vs resolver / runtime / strategy slices** in **[package-model.md](package-model.md)** and **[architecture-model.md](architecture-model.md)**. Resolver delegate YAML also loads from **`…/core/resolvers/<name>/config.yml`** next to the authoring core root (**`src/core/resolvers/…`** or **`templates/core/…`**) or **`bundle/core/resolvers/<name>/config.yml`** (materialized bundle). Load with **`dockpipe --workflow <name>`** (plus your command after **`--`**).
 
 **Arbitrary-path workflow:** put the **same** YAML shape in any file (for example **`workflows/foo/config.yml`**) and run **`dockpipe --workflow-file <path>`** so **`run:`** / **`act:`** paths resolve relative to that file’s directory. **Resolver** profiles are **not** beside the file — they load only from **`templates/core/resolvers/`** (see below). Do not pass **`--workflow`** and **`--workflow-file`** together.
@@ -43,16 +57,25 @@ If you are writing a normal workflow, prefer thinking in terms of **steps + runt
 
 | Mode | When | `config.yml` |
 |------|------|----------------|
-| **Single flow** | No `steps:` (or empty) | Top-level **`run`**, **`runtime`** / **`resolver`** (or advanced **`isolate`**), and **`act`** / **`action`** describe one run. |
+| **Single flow** | No `steps:` (or empty) | Top-level **`run`**, **`runtime`** / **`resolver`** (or advanced **`isolate`**), and **`act`** / **`action`** describe one run. This is the compact shorthand for simple workflows. |
 | **Multi-step** | Non-empty **`steps:`** | Each list item is a **step**. A step is either a **container step** (default) or a **host step** (`kind: host`). The CLI argument after `--` can supply the **last** step’s command if that step has no `cmd`/`command`. |
 
 Variable precedence for workflows is documented in **[CLI reference](cli-reference.md)** (CLI > config > `.env` / `--env-file` / `--var`).
+
+If a workflow grows beyond one simple run, prefer moving to **`steps:`** instead of piling more meaning onto top-level **`run`** / **`act`**.
 
 ### Host steps (`kind: host`)
 
 Most steps are **container steps**. A step becomes a **host step** when you set **`kind: host`**.
 
-For host steps, **`run:`** scripts execute on the host via **`RunHostScript`**. When they start sidecars (e.g. **`docker run -d`**), templates should register what to tear down: **`workdir/.dockpipe/runs/<DOCKPIPE_RUN_ID>.container`** (one line: the Docker container name for this host run) and, for humans and older flows, **`workdir/.dockpipe/cleanup/docker-*`** (same one-line format) plus optional legacy **`.dockpipe/cursor-dev/session_container`**. After the host script exits, **`ApplyHostCleanup`** stops **only** the container recorded for **this** run id (and removes matching **`cleanup/`** markers); it does **not** sweep every file under **`cleanup/`** from other runs. If **`DOCKPIPE_RUN_ID`** is unset (no host-run registry), the runner falls back to the legacy behavior: **`docker stop`** for each name still listed under **`cleanup/docker-*`** and the session marker. This is the **core** cleanup path, not resolver-specific logic in templates.
+For host steps, **`run:`** scripts execute on the host. Use **`kind: host`** when the step genuinely needs host-side behavior, such as:
+
+- starting or stopping a local helper stack
+- calling a host-only CLI
+- launching a local GUI tool
+- preparing files before a later container step
+
+If a host step starts sidecars or helper containers, the runner can clean them up after the step. The exact marker files and cleanup internals are engine behavior; workflow authors usually only need to know that host steps may register cleanup state under **`.dockpipe/`** and that cleanup can be disabled with **`DOCKPIPE_SKIP_HOST_CLEANUP=1`** when a workflow wants to keep the sidecar alive deliberately.
 
 | Variable | Meaning |
 |----------|---------|
@@ -67,25 +90,39 @@ For host steps, **`run:`** scripts execute on the host via **`RunHostScript`**. 
 |-----|---------|
 | `name` | Optional display title for stderr (defaults to the template folder name, e.g. `run`). |
 | `description` | Optional one-line task summary printed after `name` (e.g. what this workflow is for). |
-| `category` | Optional UI hint for tools like **Pipeon**: e.g. `app` marks a launchable GUI/container IDE-style workflow shown in **Basic** mode. Omit or use other values for pipelines and advanced-only flows. |
+| `category` | Optional **UI metadata** for tools like **Pipeon**: e.g. `app` marks a launchable GUI/container IDE-style workflow shown in **Basic** mode. Omit or use other values for pipelines and advanced-only flows. |
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
 | `compose` | Optional Docker Compose settings for host built-ins such as `compose_up`, `compose_down`, and `compose_ps`. Fields: `file`, `project`, `project_directory`, `autodown_env`, `exports`, `services`. Compose runs inherit DockPipe’s resolved environment and vault-injected vars directly. |
-| `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). |
+| `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). Best for compact single-flow workflows. |
 | `isolate` | Advanced low-level image/template override. Prefer **`runtime`** + **`resolver`** for the normal authoring path; use **`isolate`** when you need to pin the exact image/template. |
-| `act` / `action` | Action script after the container command (when not using per-step act). |
-| `runtime` | Main **where does this run?** field. Names an existing **core** runtime profile under **`templates/core/runtimes/<name>`**. |
-| `resolver` | Main **which tool/profile does this use?** field. Names an existing **core** resolver profile under **`templates/core/resolvers/<name>`**. |
+| `act` / `action` | Action script after the container command (when not using per-step act). Best for compact single-flow workflows. |
+| `runtime` | Main **where does this run?** field. Names an existing **core** runtime profile under **`templates/core/runtimes/<name>`**. Also acts as the default for steps unless a step overrides it. |
+| `resolver` | Main **which tool/profile does this use?** field. Names an existing **core** resolver profile under **`templates/core/resolvers/<name>`**. Also acts as the default for steps unless a step overrides it. |
 | `steps` | List of **steps** (multi-step mode). |
-| `imports` | List of paths (relative to this file) to merge **before** this file: each imported file’s **`vars`** are merged (later files override), then **`steps`** from imports run **before** **`steps`** here. Circular imports are rejected. Requires loading from disk (not raw bytes-only parse). |
+| `imports` | List of paths (relative to this file) to merge **before** this file: each imported file’s **`vars`** are merged (later files override), then **`steps`** from imports run **before** **`steps`** here. Circular imports are rejected. Requires loading from disk (not raw bytes-only parse). Use this when you want to change the authored workflow itself. |
+| `inject` | Compile-closure dependencies only. Use this when compile needs extra workflows/packages/resolvers included, but you do **not** want to merge their YAML into this workflow. |
 | `strategy` | Default **strategy name** when the CLI does **not** pass **`--strategy <name>`**. |
 | `strategies` | Optional allowlist: if non-empty, the effective strategy (CLI **`--strategy`** or **`strategy:`**) must be one of the listed names. |
 | `docker_preflight` | Default **true**. When **false**, the runner skips the Docker reachability check before **`steps:`** if **no** step uses the container. Use for **host-only** workflows whose **`run:`** / **`pre_script`** scripts do **not** invoke Docker. If a script calls **`docker`**, keep the default or the workflow may fail later. |
+
+### `imports` vs `inject`
+
+These two fields solve different problems:
+
+- **`imports`** changes the workflow you are authoring by merging in other YAML
+- **`inject`** changes what compile must include, but does **not** merge YAML
+
+If you want more vars or earlier steps to become part of this workflow, use **`imports`**.
+
+If you want compile/package closure to include additional workflows, packages, or resolver profiles without changing this workflow’s authored structure, use **`inject`**.
 
 ---
 
 ## Named strategies
 
-**Strategies** wrap the workflow body with optional **host** scripts **before** and **after** success (same spirit as **`resolvers/`** small files). Shared definitions live under **`templates/core/strategies/`**; see **[docs/architecture-model.md](architecture-model.md)** ( **`templates/core/`** layout ).
+**Strategies** are reusable before/after wrappers for a workflow run. Use them when multiple workflows should share the same lifecycle behavior, such as worktree setup or commit-on-success.
+
+Shared definitions live under **`templates/core/strategies/`**; see **[docs/architecture-model.md](architecture-model.md)** ( **`templates/core/`** layout ).
 
 **Resolution order** for the strategy file path: **`--strategy <name>`** (overrides **`strategy:`** in YAML when both are set) → **`templates/<this-workflow>/strategies/<name>`** (beside that workflow’s `config.yml`, if present) → **`templates/core/strategies/<name>`** (see **`ResolveStrategyFilePath`** in **`src/lib/application/strategy.go`**).
 
@@ -131,17 +168,27 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `pre_script` | Single extra pre-script path (in addition to `run`). |
 | `isolate` | Template/image for this step (falls back to workflow / CLI / **core** runtime profile). |
 | `kind` | Step kind. Use **`container`** (default) for normal isolated execution, or **`host`** for host-side actions. |
-| `runtime` | Optional **core** runtime profile basename (same as CLI **`--runtime`** — must exist under **`templates/core/runtimes/`**). This is the normal step-level way to choose **where** the step runs. |
-| `resolver` | Optional **resolver** profile basename (same as CLI **`--resolver`**). This is the normal step-level way to choose **which tool/profile** the step uses. Do **not** use it for packaged workflow calls. |
-| `workflow` | Marks this as a **packaged workflow step**. Names the nested packaged workflow to run. |
-| `package` | Required for a **packaged workflow step**. **Namespace** label — must match the nested workflow’s **`namespace:`** in **`config.yml`** (resolution searches packaged / staging / **`workflows/`** trees on disk). |
+| `runtime` | Optional **core** runtime profile basename (same as CLI **`--runtime`** — must exist under **`templates/core/runtimes/`**). Overrides the workflow default for this step. |
+| `resolver` | Optional **resolver** profile basename (same as CLI **`--resolver`**). Overrides the workflow default for this step. Do **not** use it for packaged workflow calls. |
+| `workflow` | Marks this as a **packaged workflow step**. This is the **child workflow name** to run. |
+| `package` | Required for a **packaged workflow step**. This is the **child workflow namespace** and must match the nested workflow’s **`namespace:`** in **`config.yml`** (resolution searches packaged / staging / **`workflows/`** trees on disk). |
 | `act` / `action` | Action script for this step. |
 | `vars` | Per-step env map (merged for that step; `--var` keys can be “locked”). |
-| `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Default if omitted: `.dockpipe/outputs.env`. |
+| `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Default if omitted: `.dockpipe/outputs.env`. This is the normal way one step passes values forward to later steps. |
 | `capture_stdout` | Host path (relative to **`DOCKPIPE_WORKDIR`** / **`--workdir`**) — container **stdout** is also appended to this file (still printed on the terminal). |
 | `manifest` | Host path — after the step, dockpipe writes a small JSON file with **`exit_code`**, **`duration_ms`**, **`step_index`**, **`id`** (if set), and **`step_display`**. |
 | `is_blocking` | Default **`true`**. If **`false`**, this step joins an **async group** with adjacent non-blocking steps (see below). |
 | `host_builtin` | Optional engine-owned host action for `kind: host` steps. Supported values: `package_build_store`, `compose_up`, `compose_down`, `compose_ps`. Compose built-ins require top-level `compose.file`. |
+
+### Step state flow
+
+For most step-based workflows, the normal pattern is:
+
+1. a step runs
+2. it writes values to **`outputs`**
+3. later steps see those values in their environment
+
+If you are trying to pass state from one step to another, start with **`outputs`** before inventing custom temp-file or wrapper conventions.
 
 All keys use **snake_case** in YAML (e.g. `is_blocking`, not `isBlocking`).
 
@@ -182,9 +229,11 @@ If `compose.exports` is set, those `KEY=value` pairs are merged into DockPipe’
 
 **Mental model:** several steps run **concurrently**, then **one merge**, then the **next blocking** step runs with the merged env.
 
+Prefer the explicit **`group: { mode: async }`** form when authoring new workflows. It is easier to read and reason about than relying on adjacency alone.
+
 | Concept | Meaning |
 |---------|---------|
-| **Async group** | One or more **consecutive** steps with **`is_blocking: false`**, **or** a single list entry **`group: { mode: async, tasks: [...] }`** (syntactic sugar). |
+| **Async group** | Prefer a single list entry **`group: { mode: async, tasks: [...] }`**. Consecutive steps with **`is_blocking: false`** still work as the compact expert form. |
 | **Join point** | The **next** step with **`is_blocking: true`** (or default). It waits until **every** async member has finished. |
 | **Inputs** | Each async member sees env from the **last blocking barrier** only, plus its own `vars` / pre-scripts — not siblings’ live env. |
 | **Outputs** | After **all** async members finish, each member’s **`outputs:`** file is merged in **declaration order**. Same key → **later** step wins (same as sequential steps). |
@@ -196,30 +245,7 @@ If `compose.exports` is set, those `KEY=value` pairs are merged into DockPipe’
 - Host **commit-worktree** action cannot be used **inside** an async group.
 - `kind: host` steps in a group only contribute at **merge** time (their `outputs` file).
 
-### Flat async (explicit `is_blocking`)
-
-```yaml
-steps:
-  - id: setup
-    cmd: echo ready
-    is_blocking: true
-
-  - id: task_a
-    cmd: sh -c 'echo BRANCH=a > .dockpipe/out-a.env'
-    is_blocking: false
-    outputs: .dockpipe/out-a.env
-
-  - id: task_b
-    cmd: sh -c 'echo BRANCH=b > .dockpipe/out-b.env'
-    is_blocking: false
-    outputs: .dockpipe/out-b.env
-
-  - id: join
-    cmd: sh -c 'echo $BRANCH'
-    is_blocking: true   # BRANCH=b (last in group wins)
-```
-
-### `group` sugar (same runtime as above)
+### Recommended async form (`group`)
 
 The entry must contain **only** the key `group` (no `cmd` beside it).
 
@@ -248,6 +274,30 @@ Inside `tasks:`, omitting `is_blocking` means **async** (forced non-blocking). *
 
 **Do not** nest another `group` inside `tasks` — unsupported; unknown keys on a step are ignored by the YAML decoder.
 
+### Compact async form (`is_blocking: false`)
+
+This is the same runtime behavior, but less explicit:
+
+```yaml
+steps:
+  - id: setup
+    cmd: echo ready
+    is_blocking: true
+
+  - id: task_a
+    cmd: sh -c 'echo BRANCH=a > .dockpipe/out-a.env'
+    is_blocking: false
+    outputs: .dockpipe/out-a.env
+
+  - id: task_b
+    cmd: sh -c 'echo BRANCH=b > .dockpipe/out-b.env'
+    is_blocking: false
+    outputs: .dockpipe/out-b.env
+
+  - id: join
+    cmd: sh -c 'echo $BRANCH'
+    is_blocking: true   # BRANCH=b (last in group wins)
+```
 ---
 
 ## Chaining without `steps:`
@@ -267,7 +317,7 @@ Pipe stdout between runs if needed. Prefer **`steps:`** in **`config.yml`** when
 | Workflow | Purpose |
 |----------|---------|
 | **[workflows/test/](../workflows/test/)** (this repo) | CI-style **go test** + **govulncheck** + **gosec** chain via **`.dockpipe/outputs.env`** — canonical repo path is **`workflows/`**, not **`templates/`**. |
-| **[templates/run/](../templates/run/)** | Single command in a container, then optional **git** commit on the current branch (**strategy `git-commit`**). |
+| **[templates/run/](../templates/run/)** | Compact single-command shorthand in a container, then optional **git** commit on the current branch (**strategy `git-commit`**). |
 | **[templates/run-apply/](../templates/run-apply/)** | Two-step **run → apply** pipeline (replace **`cmd:`** with your tools). |
 | **[templates/run-apply-validate/](../templates/run-apply-validate/)** | Three-step **run → apply → validate** pipeline (replace **`cmd:`** with your tools). |
 

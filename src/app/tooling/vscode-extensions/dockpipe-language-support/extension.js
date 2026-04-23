@@ -60,18 +60,18 @@ const TOP_LEVEL_KEY_DETAILS = {
   compose: "Optional Docker Compose settings for host built-ins such as compose_up, compose_down, and compose_ps.",
   security: "Optional authored runtime/security policy such as network mode and enforcement intent.",
   steps: "Ordered workflow steps. Each step can run in a container or on the host.",
-  resolver: "Tooling profile for this workflow.",
-  runtime: "Execution substrate for this workflow.",
-  run: "Host pre-scripts for a single-flow workflow.",
+  resolver: "Tooling profile for this workflow. Acts as the default resolver for steps unless they override it.",
+  runtime: "Execution substrate for this workflow. Acts as the default runtime for steps unless they override it.",
+  run: "Host pre-scripts for a compact single-flow workflow.",
   isolate: "Advanced low-level image/template override. Prefer runtime + resolver first.",
-  act: "Action script after the main command for single-flow workflows.",
+  act: "Action script after the main command for compact single-flow workflows.",
   action: "Alias for act.",
   strategy: "Lifecycle wrapper that runs around the workflow.",
   strategies: "Available strategies for selection or validation.",
   vault: "Vault provider used for secret injection.",
   compile_hooks: "Shell hooks run during package compile before the tarball is written.",
-  imports: "Additional workflow material pulled in during authoring or compile.",
-  inject: "Injection rules for env/template expansion."
+  imports: "Additional workflow YAML merged into this workflow during authoring.",
+  inject: "Compile-closure dependencies that should be included without merging their YAML into this workflow."
 };
 
 const STEP_KEY_DETAILS = {
@@ -82,17 +82,17 @@ const STEP_KEY_DETAILS = {
   run: "Command or script list to execute for this step.",
   pre_script: "Host-side scripts that run before the step body.",
   vars: "Step-local variables merged for this step.",
-  outputs: "Dotenv-style outputs file merged into the environment for later steps.",
-  workflow: "Marks this as a packaged workflow step and names the nested workflow to run.",
-  package: "Package namespace for a packaged workflow step.",
-  runtime: "Override the runtime for this step.",
-  resolver: "Override the resolver for this step.",
+  outputs: "Dotenv-style outputs file merged into the environment for later steps. This is the normal way one step passes values forward.",
+  workflow: "Marks this as a packaged workflow step and names the child workflow to run.",
+  package: "Namespace of the child packaged workflow for a packaged workflow step.",
+  runtime: "Override the workflow default runtime for this step.",
+  resolver: "Override the workflow default resolver for this step.",
   act: "Action script for this step.",
   action: "Alias for act.",
   capture_stdout: "Host path that also receives this step's stdout.",
   manifest: "Host path for a JSON manifest describing this step result.",
   host_builtin: "Built-in host action for host steps such as package_build_store, compose_up, compose_down, or compose_ps.",
-  is_blocking: "When false, allows async grouping with surrounding steps."
+  is_blocking: "When false, allows async grouping with surrounding steps. Prefer explicit group: { mode: async } when authoring new workflows."
 };
 
 const PACKAGE_MANIFEST_KEYS = [
