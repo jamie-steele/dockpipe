@@ -5,6 +5,7 @@ Language support for DockPipe authoring:
 - `.pipe` PipeLang syntax highlighting
 - PipeLang snippets and keyword completion
 - DockPipe `config.yml` IntelliSense for common workflow keys
+- Up-to-date workflow help for packaged workflow steps (`workflow:` + `package:`), Compose host built-ins, and authored security/runtime policy blocks
 - DockPipe `package.yml` hover/docs and top-level key completion
 - DockPipe `package.yml` `icon` / `artwork` metadata hints for package-owned launcher/tooling assets
 - DockPipe `package.yml` support for `script_contract.inject` with valid generic injectable suggestions
@@ -43,6 +44,7 @@ make install-dockpipe-language-support
 ## Notes
 
 - YAML IntelliSense is context-aware and uses lightweight nesting analysis from the workflow document.
+- Workflow authoring help tracks the current public model: steps + runtime + resolver first, with `isolate`, `default_*`, and `runtimes` treated as advanced knobs.
 - `types:` suggestions support the interface entrypoint pattern, for example:
   `models/IR2InfraConfig`
 - Shared script support points authors at the canonical DockPipe SDK under `src/core/assets/scripts/lib/` and `dockpipe sdk`.
