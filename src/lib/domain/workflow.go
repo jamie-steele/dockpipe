@@ -452,6 +452,9 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 	if err := ValidateWorkflowSecurityField(w); err != nil {
 		return err
 	}
+	if err := ValidateWorkflowSingleFlowFields(w); err != nil {
+		return err
+	}
 	for i, s := range w.Steps {
 		if err := ValidateStepKind(i, s); err != nil {
 			return err
@@ -468,6 +471,19 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 		if err := ValidateStepComposeBuiltin(i, s, w); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func ValidateWorkflowSingleFlowFields(w *Workflow) error {
+	if w == nil || len(w.Steps) == 0 {
+		return nil
+	}
+	if len(w.Run) > 0 {
+		return fmt.Errorf("workflow with steps: uses top-level run; move those host pre-scripts onto a step with run: or pre_script:")
+	}
+	if strings.TrimSpace(w.Act) != "" || strings.TrimSpace(w.Action) != "" {
+		return fmt.Errorf("workflow with steps: uses top-level act/action; set act/action on the specific step that needs it")
 	}
 	return nil
 }

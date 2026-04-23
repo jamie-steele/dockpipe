@@ -151,10 +151,7 @@ func effActPathForStep(o *runStepsOpts, step domain.Step, ra *domain.ResolverAss
 	if o.userAct != "" {
 		return o.userAct
 	}
-	if o.wf.Act != "" {
-		return o.wf.Act
-	}
-	return o.wf.Action
+	return ""
 }
 
 // runStepResolverWorkflow runs templates/<DOCKPIPE_RESOLVER_WORKFLOW>/config.yml after pre-scripts.
@@ -474,12 +471,6 @@ func validateParallelNoHostCommit(o *runStepsOpts, from, to int) error {
 		effAct := step.ActPath()
 		if effAct == "" {
 			effAct = o.userAct
-		}
-		if effAct == "" {
-			effAct = o.wf.Act
-			if effAct == "" {
-				effAct = o.wf.Action
-			}
 		}
 		if effAct == "" {
 			continue
@@ -831,12 +822,6 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 	}
 	if effAct == "" {
 		effAct = o.userAct
-	}
-	if effAct == "" {
-		effAct = o.wf.Act
-		if effAct == "" {
-			effAct = o.wf.Action
-		}
 	}
 	var actAbs string
 	if effAct != "" {

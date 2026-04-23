@@ -219,5 +219,27 @@
         ]
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "steps": {
+            "type": "array",
+            "minItems": 1
+          }
+        },
+        "required": ["steps"]
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            { "required": ["run"] },
+            { "required": ["act"] },
+            { "required": ["action"] }
+          ]
+        }
+      }
+    }
+  ]
 }

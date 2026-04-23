@@ -44,7 +44,7 @@ make install-dockpipe-language-support
 ## Notes
 
 - YAML IntelliSense is context-aware and uses lightweight nesting analysis from the workflow document.
-- Workflow authoring help tracks the current public model: steps + runtime + resolver first, with top-level runtime/resolver as defaults, step-level runtime/resolver as overrides, and `isolate` treated as the advanced low-level override.
+- Workflow authoring help tracks the current public model: steps + runtime + resolver first, with top-level runtime/resolver as defaults, step-level runtime/resolver as overrides, `isolate` treated as the advanced low-level override, and top-level `run` / `act` treated as single-flow shorthand only.
 - `types:` suggestions support the interface entrypoint pattern, for example:
   `models/IR2InfraConfig`
 - Shared script support points authors at the canonical DockPipe SDK under `src/core/assets/scripts/lib/` and `dockpipe sdk`.

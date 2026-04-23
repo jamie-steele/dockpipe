@@ -136,3 +136,20 @@ steps:
 		t.Fatalf("expected packaged workflow package error, got %v", err)
 	}
 }
+
+func TestValidateResolvedWorkflowYAML_RejectsTopLevelSingleFlowFieldsWithSteps(t *testing.T) {
+	root := t.TempDir()
+	cfg := filepath.Join(root, "config.yml")
+	yml := `name: mixed-shape
+run: scripts/setup.sh
+steps:
+  - cmd: echo hi
+`
+	if err := os.WriteFile(cfg, []byte(yml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := ValidateResolvedWorkflowYAML(cfg)
+	if err == nil || !strings.Contains(err.Error(), "top-level run") {
+		t.Fatalf("expected top-level run with steps error, got %v", err)
+	}
+}

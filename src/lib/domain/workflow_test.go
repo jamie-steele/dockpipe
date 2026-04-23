@@ -491,3 +491,44 @@ func TestValidateLoadedWorkflowRejectsPackagedWorkflowStepCmd(t *testing.T) {
 		t.Fatalf("expected packaged workflow cmd validation error, got %v", err)
 	}
 }
+
+func TestValidateLoadedWorkflowRejectsTopLevelSingleFlowFieldsWithSteps(t *testing.T) {
+	cases := []struct {
+		name string
+		wf   *Workflow
+		want string
+	}{
+		{
+			name: "run",
+			wf: &Workflow{
+				Run:   RunSpec{"scripts/setup.sh"},
+				Steps: []Step{{Cmd: "echo hi"}},
+			},
+			want: "top-level run",
+		},
+		{
+			name: "act",
+			wf: &Workflow{
+				Act:   "scripts/after.sh",
+				Steps: []Step{{Cmd: "echo hi"}},
+			},
+			want: "top-level act/action",
+		},
+		{
+			name: "action",
+			wf: &Workflow{
+				Action: "scripts/after.sh",
+				Steps:  []Step{{Cmd: "echo hi"}},
+			},
+			want: "top-level act/action",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateLoadedWorkflow(tc.wf)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected %q validation error, got %v", tc.want, err)
+			}
+		})
+	}
+}

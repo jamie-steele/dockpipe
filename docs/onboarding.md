@@ -57,6 +57,7 @@ If you are authoring workflow YAML, the normal path is:
 2. set **`runtime`** + **`resolver`** at the top
 3. override them on a step only when that step genuinely differs
 4. use **`isolate`** only when you must pin a specific image/template
+5. treat top-level **`run`** / **`act`** as compact single-flow shorthand only, not step-workflow defaults
 
 Details: **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)**.
 

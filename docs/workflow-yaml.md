@@ -58,11 +58,12 @@ In practice, most workflows should:
 | Mode | When | `config.yml` |
 |------|------|----------------|
 | **Single flow** | No `steps:` (or empty) | Top-level **`run`**, **`runtime`** / **`resolver`** (or advanced **`isolate`**), and **`act`** / **`action`** describe one run. This is the compact shorthand for simple workflows. |
-| **Multi-step** | Non-empty **`steps:`** | Each list item is a **step**. A step is either a **container step** (default) or a **host step** (`kind: host`). The CLI argument after `--` can supply the **last** step’s command if that step has no `cmd`/`command`. |
+| **Multi-step** | Non-empty **`steps:`** | Each list item is a **step**. A step is either a **container step** (default) or a **host step** (`kind: host`). The CLI argument after `--` can supply the **last** step’s command if that step has no `cmd`/`command`. Top-level **`run`** and **`act`** / **`action`** are not used in this mode. |
 
 Variable precedence for workflows is documented in **[CLI reference](cli-reference.md)** (CLI > config > `.env` / `--env-file` / `--var`).
 
 If a workflow grows beyond one simple run, prefer moving to **`steps:`** instead of piling more meaning onto top-level **`run`** / **`act`**.
+Once you switch to **`steps:`**, move those fields onto the specific step that needs them.
 
 ### Host steps (`kind: host`)
 
@@ -93,9 +94,9 @@ If a host step starts sidecars or helper containers, the runner can clean them u
 | `category` | Optional **UI metadata** for tools like **Pipeon**: e.g. `app` marks a launchable GUI/container IDE-style workflow shown in **Basic** mode. Omit or use other values for pipelines and advanced-only flows. |
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
 | `compose` | Optional Docker Compose settings for host built-ins such as `compose_up`, `compose_down`, and `compose_ps`. Fields: `file`, `project`, `project_directory`, `autodown_env`, `exports`, `services`. Compose runs inherit DockPipe’s resolved environment and vault-injected vars directly. |
-| `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). Best for compact single-flow workflows. |
+| `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). Single-flow shorthand only; do not combine with `steps:`. |
 | `isolate` | Advanced low-level image/template override. Prefer **`runtime`** + **`resolver`** for the normal authoring path; use **`isolate`** when you need to pin the exact image/template. |
-| `act` / `action` | Action script after the container command (when not using per-step act). Best for compact single-flow workflows. |
+| `act` / `action` | Action script after the container command (when not using per-step act). Single-flow shorthand only; do not combine with `steps:`. |
 | `runtime` | Main **where does this run?** field. Names an existing **core** runtime profile under **`templates/core/runtimes/<name>`**. Also acts as the default for steps unless a step overrides it. |
 | `resolver` | Main **which tool/profile does this use?** field. Names an existing **core** resolver profile under **`templates/core/resolvers/<name>`**. Also acts as the default for steps unless a step overrides it. |
 | `steps` | List of **steps** (multi-step mode). |
