@@ -43,6 +43,66 @@
         "run": { "$ref": "#/$defs/string_or_string_array" },
         "pre_script": { "type": "string" },
         "vars": { "$ref": "#/$defs/string_map" },
+        "security": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "profile": {
+              "type": "string",
+              "enum": ["secure-default", "internet-client", "build-online", "sidecar-client"]
+            },
+            "network": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": ["offline", "restricted", "allowlist", "internet"]
+                },
+                "allow": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "block": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              }
+            },
+            "filesystem": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "root": { "type": "string", "enum": ["readonly", "writable"] },
+                "writes": { "type": "string", "enum": ["workspace-only", "declared"] },
+                "writable_paths": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "temp_paths": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              }
+            },
+            "process": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "user": { "type": "string", "enum": ["auto", "non-root", "root"] },
+                "pid_limit": { "type": "integer", "minimum": 0 },
+                "resources": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "cpu": { "type": "string" },
+                    "memory": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        },
         "outputs": { "type": "string" },
         "workflow": {
           "type": "string",

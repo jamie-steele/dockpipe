@@ -27,6 +27,67 @@ func applyCompiledRuntimePolicy(runOpts *infrastructure.RunOpts, wfConfig, wfRoo
 	return rm, nil
 }
 
+func effectiveCompiledRuntimePolicyForStep(wf *domain.Workflow, wfConfig, wfRoot string, step domain.Step, stepID string) (*domain.CompiledRuntimeManifest, error) {
+	rm, err := loadCompiledRuntimeManifestForWorkflow(wfConfig, wfRoot)
+	if err != nil {
+		return nil, err
+	}
+	if rm == nil {
+		return nil, nil
+	}
+	if domain.WorkflowSecurityConfigIsEmpty(step.Security) {
+		out := *rm
+		out.StepID = strings.TrimSpace(stepID)
+		return &out, nil
+	}
+	profile := strings.TrimSpace(rm.PolicyProfile)
+	if profile == "" {
+		profile = normalizeWorkflowPolicyProfile(wf)
+	}
+	if p := strings.TrimSpace(step.Security.Profile); p != "" {
+		profile = p
+	}
+	security, sources := compileSecurityPolicyForWorkflow(wf, profile)
+	stepOverride := applyStepSecurityOverrides(&security, step)
+	if strings.TrimSpace(step.Security.Profile) != "" {
+		stepOverride = true
+	}
+	security.Preset = profile
+	security.Network.Enforcement = compiledNetworkEnforcement(security.Network.Mode, profile)
+	security.Network.InternalDNS = true
+
+	out := *rm
+	out.StepID = strings.TrimSpace(stepID)
+	out.PolicyProfile = profile
+	sources.StepOverride = stepOverride
+	out.PolicySources = sources
+	out.Security = security
+	fp, err := domain.FingerprintJSON(out.Security)
+	if err != nil {
+		return nil, err
+	}
+	out.PolicyFingerprint = fp
+	out.EnforcementSummaries = compiledEnforcementSummaries(&out)
+	out.RuleIDs = compiledRuleIDs(&out)
+	if err := domain.ValidateCompiledRuntimeManifest(&out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+func applyCompiledRuntimePolicyForStep(runOpts *infrastructure.RunOpts, wf *domain.Workflow, wfConfig, wfRoot string, step domain.Step, stepID string) (*domain.CompiledRuntimeManifest, error) {
+	rm, err := effectiveCompiledRuntimePolicyForStep(wf, wfConfig, wfRoot, step, stepID)
+	if err != nil {
+		return nil, err
+	}
+	if runOpts != nil {
+		if err := applyCompiledRuntimeManifest(runOpts, rm); err != nil {
+			return nil, err
+		}
+	}
+	return rm, nil
+}
+
 func applyCompiledRuntimeManifest(runOpts *infrastructure.RunOpts, rm *domain.CompiledRuntimeManifest) error {
 	if runOpts == nil || rm == nil {
 		return nil
@@ -273,6 +334,9 @@ func compiledRuntimePolicyLogLines(rm *domain.CompiledRuntimeManifest) []string 
 		}
 		if rm.PolicySources.WorkflowOverride {
 			parts = append(parts, "workflow-override")
+		}
+		if rm.PolicySources.StepOverride {
+			parts = append(parts, "step-override")
 		}
 		if len(parts) > 0 {
 			lines = append(lines, "policy source: "+strings.Join(parts, ", "))

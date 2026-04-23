@@ -1,6 +1,7 @@
 package application
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -170,5 +171,78 @@ func TestBuildStepContainer_StepResolverTemplate(t *testing.T) {
 	}
 	if !strings.Contains(runOpts.Image, "vscode") {
 		t.Fatalf("expected vscode image from resolver template, got %q", runOpts.Image)
+	}
+}
+
+func TestBuildStepContainer_AppliesStepSecurityOverride(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	wfRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(wfRoot, domain.RuntimeManifestDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	rm := &domain.CompiledRuntimeManifest{
+		Schema:            2,
+		Kind:              domain.RuntimeManifestKind,
+		PolicyProfile:     "secure-default",
+		PolicySources:     domain.PolicySources{EngineDefault: true, RuntimeBaseline: "dockerimage", PolicyProfile: "secure-default"},
+		PolicyFingerprint: "sha256:test",
+		Security: domain.CompiledSecurityPolicy{
+			Preset: "secure-default",
+			Network: domain.CompiledNetworkPolicy{
+				Mode:        "offline",
+				Enforcement: "native",
+				InternalDNS: true,
+			},
+			FS: domain.CompiledFilesystemPolicy{
+				Root:      "readonly",
+				Writes:    "workspace-only",
+				TempPaths: []string{"/tmp"},
+			},
+			Process: domain.CompiledProcessPolicy{
+				User:            "non-root",
+				NoNewPrivileges: true,
+				DropCaps:        []string{"ALL"},
+				PIDLimit:        256,
+			},
+		},
+	}
+	b, err := marshalArtifactJSON(rm)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.RuntimeManifestFileName), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	o := &runStepsOpts{
+		repoRoot: repoRoot,
+		wfRoot:   wfRoot,
+		wfConfig: filepath.Join(wfRoot, "config.yml"),
+		wf: &domain.Workflow{
+			Isolate: "base-dev",
+			Security: domain.WorkflowSecurityConfig{
+				Profile: "secure-default",
+			},
+		},
+		opts: &CliOpts{},
+	}
+	step := domain.Step{
+		Cmd: "echo hi",
+		Security: domain.WorkflowSecurityConfig{
+			Profile: "internet-client",
+			Process: domain.WorkflowProcessConfig{
+				PIDLimit: 64,
+			},
+		},
+	}
+	_, runOpts, _, _, err := buildStepContainer(o, 0, 1, step, map[string]string{}, map[string]string{}, nil)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if runOpts.NetworkMode == "none" {
+		t.Fatalf("expected step override to lift offline network mode, got %q", runOpts.NetworkMode)
+	}
+	if runOpts.PIDLimit != 64 {
+		t.Fatalf("expected step pid limit override, got %d", runOpts.PIDLimit)
 	}
 }

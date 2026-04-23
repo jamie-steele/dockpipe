@@ -110,8 +110,8 @@ func defaultRuntimePolicyFingerprint() (string, error) {
 	return domain.FingerprintJSON(domain.CompiledSecurityPolicy{
 		Preset: "secure-default",
 		Network: domain.CompiledNetworkPolicy{
-			Mode:        "restricted",
-			Enforcement: "advisory",
+			Mode:        "offline",
+			Enforcement: "native",
 			InternalDNS: true,
 		},
 		FS: domain.CompiledFilesystemPolicy{

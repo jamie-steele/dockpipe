@@ -356,9 +356,16 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 		}
 	}
 	workdir := firstNonEmpty(o.projectRoot, o.opts.Workdir, o.envMap["DOCKPIPE_WORKDIR"], o.repoRoot, mustGetwd())
-	if rm, err := applyCompiledRuntimePolicy(nil, o.wfConfig, o.wfRoot); err != nil {
+	rm, err := effectiveCompiledRuntimePolicyForStep(o.wf, o.wfConfig, o.wfRoot, step, stepRunPolicyID(step, i))
+	if err != nil {
 		return err
-	} else if err := writeRunPolicyRecord(workdir, strings.TrimSpace(o.wf.Name), o.wfConfig, stepRunPolicyID(step, i), runOpts.Image, imageDecision, rm); err != nil {
+	}
+	if rm != nil && rm.PolicySources.StepOverride {
+		for _, line := range compiledRuntimePolicyLogLines(rm) {
+			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", line)
+		}
+	}
+	if err := writeRunPolicyRecord(workdir, strings.TrimSpace(o.wf.Name), o.wfConfig, stepRunPolicyID(step, i), runOpts.Image, imageDecision, rm); err != nil {
 		return err
 	}
 	rc, err := runContainerFn(runOpts, argv)
@@ -615,9 +622,16 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 		return err
 	}
 	workdir := firstNonEmpty(o.projectRoot, o.opts.Workdir, localEnv["DOCKPIPE_WORKDIR"], o.repoRoot, mustGetwd())
-	if rm, err := applyCompiledRuntimePolicy(nil, o.wfConfig, o.wfRoot); err != nil {
+	rm, err := effectiveCompiledRuntimePolicyForStep(o.wf, o.wfConfig, o.wfRoot, step, stepRunPolicyID(step, idx))
+	if err != nil {
 		return err
-	} else if err := writeRunPolicyRecord(workdir, strings.TrimSpace(o.wf.Name), o.wfConfig, stepRunPolicyID(step, idx), runOpts.Image, "", rm); err != nil {
+	}
+	if rm != nil && rm.PolicySources.StepOverride {
+		for _, line := range compiledRuntimePolicyLogLines(rm) {
+			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", line)
+		}
+	}
+	if err := writeRunPolicyRecord(workdir, strings.TrimSpace(o.wf.Name), o.wfConfig, stepRunPolicyID(step, idx), runOpts.Image, "", rm); err != nil {
 		return err
 	}
 	rc, err := runContainerFn(runOpts, argv)
@@ -890,7 +904,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 		BundleOut:     firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], o.opts.BundleOut),
 		BundleAll:     strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1",
 	}
-	if _, err := applyCompiledRuntimePolicy(&runOpts, o.wfConfig, o.wfRoot); err != nil {
+	if _, err := applyCompiledRuntimePolicyForStep(&runOpts, o.wf, o.wfConfig, o.wfRoot, step, stepRunPolicyID(step, i)); err != nil {
 		return nil, runOpts, "", "", err
 	}
 	return argv, runOpts, dockerfileDir, contextDir, nil

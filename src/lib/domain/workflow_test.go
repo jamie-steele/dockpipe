@@ -116,6 +116,28 @@ security:
 	}
 }
 
+func TestParseWorkflowYAMLStepSecurity(t *testing.T) {
+	y := `
+steps:
+  - cmd: echo hi
+    security:
+      profile: internet-client
+      network:
+        mode: allowlist
+        allow: [api.openai.com]
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := w.Steps[0].Security.Profile; got != "internet-client" {
+		t.Fatalf("step security.profile: %q", got)
+	}
+	if got := w.Steps[0].Security.Network.Mode; got != "allowlist" {
+		t.Fatalf("step security.network.mode: %q", got)
+	}
+}
+
 // TestParseWorkflowYAMLSteps checks multi-step YAML: two steps, per-step isolate override, and CmdLine.
 func TestParseWorkflowYAMLSteps(t *testing.T) {
 	dir := t.TempDir()
@@ -485,6 +507,7 @@ func TestValidateLoadedWorkflowRejectsHostStepRuntimeFields(t *testing.T) {
 		{Kind: "host", Runtime: "dockerimage"},
 		{Kind: "host", Resolver: "codex"},
 		{Kind: "host", Isolate: "alpine:3.22"},
+		{Kind: "host", Security: WorkflowSecurityConfig{Profile: "secure-default"}},
 	}
 	for _, step := range cases {
 		w := &Workflow{Steps: []Step{step}}
@@ -504,6 +527,19 @@ func TestValidateLoadedWorkflowRejectsPackagedWorkflowStepCmd(t *testing.T) {
 	}
 	if err := ValidateLoadedWorkflow(w); err == nil || !strings.Contains(err.Error(), "do not also set cmd/command") {
 		t.Fatalf("expected packaged workflow cmd validation error, got %v", err)
+	}
+}
+
+func TestValidateLoadedWorkflowRejectsPackagedWorkflowStepSecurity(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{{
+			WorkflowName: "child",
+			Package:      "acme",
+			Security:     WorkflowSecurityConfig{Profile: "sidecar-client"},
+		}},
+	}
+	if err := ValidateLoadedWorkflow(w); err == nil || !strings.Contains(err.Error(), "do not also set security") {
+		t.Fatalf("expected packaged workflow security validation error, got %v", err)
 	}
 }
 

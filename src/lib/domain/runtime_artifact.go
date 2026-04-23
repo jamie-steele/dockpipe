@@ -39,6 +39,7 @@ type PolicySources struct {
 	RuntimeBaseline  string `json:"runtime_baseline,omitempty" yaml:"runtime_baseline,omitempty"`
 	PolicyProfile    string `json:"policy_profile,omitempty" yaml:"policy_profile,omitempty"`
 	WorkflowOverride bool   `json:"workflow_override,omitempty" yaml:"workflow_override,omitempty"`
+	StepOverride     bool   `json:"step_override,omitempty" yaml:"step_override,omitempty"`
 }
 
 type CompiledSecurityPolicy struct {

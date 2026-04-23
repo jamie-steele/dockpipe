@@ -217,6 +217,58 @@ func applyWorkflowSecurityOverrides(dst *domain.CompiledSecurityPolicy, wf *doma
 	return changed
 }
 
+func applyStepSecurityOverrides(dst *domain.CompiledSecurityPolicy, step domain.Step) bool {
+	if dst == nil {
+		return false
+	}
+	changed := false
+	if v := strings.TrimSpace(step.Security.Network.Mode); v != "" {
+		dst.Network.Mode = v
+		changed = true
+	}
+	if len(step.Security.Network.Allow) > 0 {
+		dst.Network.Allow = append([]string(nil), step.Security.Network.Allow...)
+		changed = true
+	}
+	if len(step.Security.Network.Block) > 0 {
+		dst.Network.Block = append([]string(nil), step.Security.Network.Block...)
+		changed = true
+	}
+	if v := strings.TrimSpace(step.Security.Filesystem.Root); v != "" {
+		dst.FS.Root = v
+		changed = true
+	}
+	if v := strings.TrimSpace(step.Security.Filesystem.Writes); v != "" {
+		dst.FS.Writes = v
+		changed = true
+	}
+	if len(step.Security.Filesystem.WritablePaths) > 0 {
+		dst.FS.WritablePaths = append([]string(nil), step.Security.Filesystem.WritablePaths...)
+		changed = true
+	}
+	if len(step.Security.Filesystem.TempPaths) > 0 {
+		dst.FS.TempPaths = append([]string(nil), step.Security.Filesystem.TempPaths...)
+		changed = true
+	}
+	if v := strings.TrimSpace(step.Security.Process.User); v != "" {
+		dst.Process.User = v
+		changed = true
+	}
+	if step.Security.Process.PIDLimit > 0 {
+		dst.Process.PIDLimit = step.Security.Process.PIDLimit
+		changed = true
+	}
+	if v := strings.TrimSpace(step.Security.Process.Resources.CPU); v != "" {
+		dst.Process.Resources.CPU = v
+		changed = true
+	}
+	if v := strings.TrimSpace(step.Security.Process.Resources.Memory); v != "" {
+		dst.Process.Resources.Memory = v
+		changed = true
+	}
+	return changed
+}
+
 func mergeCompiledSecurityPolicy(dst *domain.CompiledSecurityPolicy, src domain.CompiledSecurityPolicy) {
 	if dst == nil {
 		return
@@ -320,6 +372,9 @@ func compiledRuleIDs(rm *domain.CompiledRuntimeManifest) []string {
 	}
 	if rm.PolicySources.WorkflowOverride {
 		rules = append(rules, "security.workflow-override")
+	}
+	if rm.PolicySources.StepOverride {
+		rules = append(rules, "security.step-override")
 	}
 	return rules
 }

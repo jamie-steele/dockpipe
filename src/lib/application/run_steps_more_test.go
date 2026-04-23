@@ -193,14 +193,15 @@ func TestRunBlockingStepSkipsBuildWhenCompiledImageArtifactExists(t *testing.T) 
 		t.Fatal(err)
 	}
 	rm := &domain.CompiledRuntimeManifest{
-		Schema:            1,
+		Schema:            2,
 		Kind:              domain.RuntimeManifestKind,
+		PolicyProfile:     "secure-default",
 		PolicyFingerprint: policyFingerprint,
 		Security: domain.CompiledSecurityPolicy{
 			Preset: "secure-default",
 			Network: domain.CompiledNetworkPolicy{
-				Mode:        "restricted",
-				Enforcement: "advisory",
+				Mode:        "offline",
+				Enforcement: "native",
 				InternalDNS: true,
 			},
 			FS: domain.CompiledFilesystemPolicy{
@@ -289,13 +290,14 @@ func TestMaybeSkipDockerBuildRejectsPolicyFingerprintMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	rm := &domain.CompiledRuntimeManifest{
-		Schema: 1,
-		Kind:   domain.RuntimeManifestKind,
+		Schema:        2,
+		Kind:          domain.RuntimeManifestKind,
+		PolicyProfile: "secure-default",
 		Security: domain.CompiledSecurityPolicy{
 			Preset: "secure-default",
 			Network: domain.CompiledNetworkPolicy{
-				Mode:        "restricted",
-				Enforcement: "advisory",
+				Mode:        "offline",
+				Enforcement: "native",
 				InternalDNS: true,
 			},
 			FS: domain.CompiledFilesystemPolicy{

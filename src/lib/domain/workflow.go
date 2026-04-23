@@ -167,17 +167,18 @@ func (w *Workflow) NeedsDockerReachable() bool {
 // Step is one entry under steps:.
 type Step struct {
 	// ID is optional; used in logs (e.g. [merge] lines). If empty, runner uses "step N".
-	ID        string            `yaml:"id,omitempty"`
-	Kind      string            `yaml:"kind,omitempty"`
-	Run       RunSpec           `yaml:"run,omitempty"`
-	PreScript string            `yaml:"pre_script,omitempty"`
-	Isolate   string            `yaml:"isolate,omitempty"`
-	Act       string            `yaml:"act,omitempty"`
-	Action    string            `yaml:"action,omitempty"`
-	Cmd       string            `yaml:"cmd,omitempty"`
-	Command   string            `yaml:"command,omitempty"`
-	Outputs   string            `yaml:"outputs,omitempty"`
-	Vars      map[string]string `yaml:"vars,omitempty"`
+	ID        string                 `yaml:"id,omitempty"`
+	Kind      string                 `yaml:"kind,omitempty"`
+	Run       RunSpec                `yaml:"run,omitempty"`
+	PreScript string                 `yaml:"pre_script,omitempty"`
+	Isolate   string                 `yaml:"isolate,omitempty"`
+	Act       string                 `yaml:"act,omitempty"`
+	Action    string                 `yaml:"action,omitempty"`
+	Cmd       string                 `yaml:"cmd,omitempty"`
+	Command   string                 `yaml:"command,omitempty"`
+	Outputs   string                 `yaml:"outputs,omitempty"`
+	Vars      map[string]string      `yaml:"vars,omitempty"`
+	Security  WorkflowSecurityConfig `yaml:"security,omitempty"`
 	// Blocking is YAML is_blocking: when false, this step joins a parallel batch with adjacent
 	// non-blocking steps. Inputs = env after last blocking step + this step’s vars/pre-scripts only;
 	// outputs merge in order after the whole batch (see src/lib/README.md).
@@ -488,6 +489,9 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 		if err := ValidateStepPackageInvocation(i, s); err != nil {
 			return err
 		}
+		if err := ValidateStepSecurityField(i, s); err != nil {
+			return err
+		}
 		if err := ValidateStepHostBuiltin(i, s); err != nil {
 			return err
 		}
@@ -542,31 +546,50 @@ func ValidateWorkflowSecurityField(w *Workflow) error {
 	if w == nil {
 		return nil
 	}
-	if err := validateEnum("security.profile", w.Security.Profile, validPolicyProfiles); err != nil {
+	return ValidateWorkflowSecurityConfig("security", w.Security)
+}
+
+func ValidateWorkflowSecurityConfig(fieldPrefix string, cfg WorkflowSecurityConfig) error {
+	if err := validateEnum(fieldPrefix+".profile", cfg.Profile, validPolicyProfiles); err != nil {
 		return err
 	}
-	if err := validateEnum("security.network.mode", w.Security.Network.Mode, validNetworkModes); err != nil {
+	if err := validateEnum(fieldPrefix+".network.mode", cfg.Network.Mode, validNetworkModes); err != nil {
 		return err
 	}
-	if strings.TrimSpace(w.Security.Network.Mode) == "allowlist" && len(w.Security.Network.Allow) == 0 {
-		return fmt.Errorf("security.network.mode allowlist requires at least one allow rule")
+	if strings.TrimSpace(cfg.Network.Mode) == "allowlist" && len(cfg.Network.Allow) == 0 {
+		return fmt.Errorf("%s.network.mode allowlist requires at least one allow rule", fieldPrefix)
 	}
-	if strings.TrimSpace(w.Security.Network.Mode) == "offline" && (len(w.Security.Network.Allow) > 0 || len(w.Security.Network.Block) > 0) {
-		return fmt.Errorf("security.network.mode offline cannot be combined with allow/block rules")
+	if strings.TrimSpace(cfg.Network.Mode) == "offline" && (len(cfg.Network.Allow) > 0 || len(cfg.Network.Block) > 0) {
+		return fmt.Errorf("%s.network.mode offline cannot be combined with allow/block rules", fieldPrefix)
 	}
-	if err := validateEnum("security.filesystem.root", w.Security.Filesystem.Root, validFilesystemRoots); err != nil {
+	if err := validateEnum(fieldPrefix+".filesystem.root", cfg.Filesystem.Root, validFilesystemRoots); err != nil {
 		return err
 	}
-	if err := validateEnum("security.filesystem.writes", w.Security.Filesystem.Writes, validFilesystemWrites); err != nil {
+	if err := validateEnum(fieldPrefix+".filesystem.writes", cfg.Filesystem.Writes, validFilesystemWrites); err != nil {
 		return err
 	}
-	if err := validateEnum("security.process.user", w.Security.Process.User, validProcessUsers); err != nil {
+	if err := validateEnum(fieldPrefix+".process.user", cfg.Process.User, validProcessUsers); err != nil {
 		return err
 	}
-	if w.Security.Process.PIDLimit < 0 {
-		return fmt.Errorf("security.process.pid_limit must be >= 0")
+	if cfg.Process.PIDLimit < 0 {
+		return fmt.Errorf("%s.process.pid_limit must be >= 0", fieldPrefix)
 	}
 	return nil
+}
+
+func WorkflowSecurityConfigIsEmpty(cfg WorkflowSecurityConfig) bool {
+	return strings.TrimSpace(cfg.Profile) == "" &&
+		strings.TrimSpace(cfg.Network.Mode) == "" &&
+		len(cfg.Network.Allow) == 0 &&
+		len(cfg.Network.Block) == 0 &&
+		strings.TrimSpace(cfg.Filesystem.Root) == "" &&
+		strings.TrimSpace(cfg.Filesystem.Writes) == "" &&
+		len(cfg.Filesystem.WritablePaths) == 0 &&
+		len(cfg.Filesystem.TempPaths) == 0 &&
+		strings.TrimSpace(cfg.Process.User) == "" &&
+		cfg.Process.PIDLimit == 0 &&
+		strings.TrimSpace(cfg.Process.Resources.CPU) == "" &&
+		strings.TrimSpace(cfg.Process.Resources.Memory) == ""
 }
 
 func ValidateStepPackageInvocation(i int, s Step) error {
@@ -597,7 +620,23 @@ func ValidateStepPackageInvocation(i int, s Step) error {
 	if s.IsHostStep() {
 		return fmt.Errorf("step %d: packaged workflow step cannot use kind: host", i+1)
 	}
+	if !WorkflowSecurityConfigIsEmpty(s.Security) {
+		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set security:", i+1)
+	}
 	return nil
+}
+
+func ValidateStepSecurityField(i int, s Step) error {
+	if WorkflowSecurityConfigIsEmpty(s.Security) {
+		return nil
+	}
+	if s.IsHostStep() {
+		return fmt.Errorf("step %d: kind: host step does not use security; remove security: or switch to a container step", i+1)
+	}
+	if s.UsesPackagedWorkflow() {
+		return fmt.Errorf("step %d: packaged workflow step does not use security; keep policy inside the child workflow", i+1)
+	}
+	return ValidateWorkflowSecurityConfig(fmt.Sprintf("steps[%d].security", i), s.Security)
 }
 
 // ValidateStepHostBuiltin checks host_builtin steps (see Step.HostBuiltin).
