@@ -3,13 +3,122 @@
   "$id": "https://dockpipe.dev/schema/workflow.schema.json",
   "title": "Dockpipe workflow",
   "type": "object",
-  "additionalProperties": true,
+  "additionalProperties": false,
+  "$defs": {
+    "string_or_string_array": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      ]
+    },
+    "string_map": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "inject_item": {
+      "oneOf": [
+        { "type": "string" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "workflow": { "type": "string" },
+            "package": { "type": "string" },
+            "resolver": { "type": "string" }
+          }
+        }
+      ]
+    },
+    "workflow_step": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "type": "string", "enum": ["host", "container"] },
+        "cmd": { "type": "string" },
+        "command": { "type": "string" },
+        "run": { "$ref": "#/$defs/string_or_string_array" },
+        "pre_script": { "type": "string" },
+        "vars": { "$ref": "#/$defs/string_map" },
+        "outputs": { "type": "string" },
+        "workflow": {
+          "type": "string",
+          "description": "Child workflow name for a packaged workflow step."
+        },
+        "package": {
+          "type": "string",
+          "description": "Child workflow namespace for a packaged workflow step."
+        },
+        "runtime": { "type": "string" },
+        "resolver": { "type": "string" },
+        "isolate": { "type": "string" },
+        "act": { "type": "string" },
+        "action": { "type": "string" },
+        "capture_stdout": { "type": "string" },
+        "manifest": { "type": "string" },
+        "host_builtin": {
+          "type": "string",
+          "enum": ["package_build_store", "compose_up", "compose_down", "compose_ps"]
+        },
+        "is_blocking": { "type": "boolean" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "anyOf": [
+              { "required": ["workflow"] },
+              { "required": ["package"] }
+            ]
+          },
+          "then": {
+            "required": ["workflow", "package"]
+          }
+        },
+        {
+          "if": { "required": ["host_builtin"] },
+          "then": {
+            "properties": {
+              "kind": { "const": "host" }
+            },
+            "required": ["kind"]
+          }
+        }
+      ]
+    },
+    "async_group": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "group": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "type": "string", "const": "async" },
+            "tasks": {
+              "type": "array",
+              "minItems": 1,
+              "items": { "$ref": "#/$defs/workflow_step" }
+            }
+          },
+          "required": ["mode", "tasks"]
+        }
+      },
+      "required": ["group"]
+    }
+  },
   "properties": {
     "name": { "type": "string" },
     "description": { "type": "string" },
     "category": {
       "type": "string",
       "description": "Optional UI hint: e.g. \"app\" = show in Pipeon Basic mode (launchable GUI/container tools)."
+    },
+    "icon": {
+      "type": "string",
+      "description": "Optional package-owned artwork path relative to the workflow config."
     },
     "workflow_type": {
       "type": "string",
@@ -27,41 +136,53 @@
     "inject": {
       "type": "array",
       "description": "Explicit compile-closure dependencies for package compile for-workflow: workflow/package ids (string or workflow:/package: maps) and resolver: profile names. Does not merge YAML — use imports for that.",
-      "items": {
-        "oneOf": [
-          { "type": "string" },
-          {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "workflow": { "type": "string" },
-              "package": { "type": "string" },
-              "resolver": { "type": "string" }
-            }
-          }
-        ]
-      }
+      "items": { "$ref": "#/$defs/inject_item" }
     },
-    "vars": {
-      "type": "object",
-      "additionalProperties": { "type": "string" }
-    },
+    "vars": { "$ref": "#/$defs/string_map" },
     "compose": {
       "type": "object",
-      "additionalProperties": true,
+      "additionalProperties": false,
       "properties": {
         "file": { "type": "string" },
         "project": { "type": "string" },
         "project_directory": { "type": "string" },
         "autodown_env": { "type": "string" },
-        "exports": {
-          "type": "object",
-          "additionalProperties": { "type": "string" }
-        },
-        "services": { "type": "array", "items": { "type": "string" } }
+        "exports": { "$ref": "#/$defs/string_map" },
+        "services": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
       }
     },
-    "run": {},
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "network": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["offline", "restricted", "allowlist", "internet"]
+            },
+            "enforcement": {
+              "type": "string",
+              "enum": ["advisory", "native", "proxy"]
+            },
+            "allow": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "block": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "run": { "$ref": "#/$defs/string_or_string_array" },
     "isolate": { "type": "string" },
     "act": { "type": "string" },
     "action": { "type": "string" },
@@ -72,29 +193,30 @@
       "description": "Vault mode for op inject (e.g. op). See docs/vault.md."
     },
     "strategy": { "type": "string" },
-    "strategies": { "type": "array", "items": { "type": "string" } },
-    "docker_preflight": { "type": "boolean", "description": "When false, skip Docker reachability preflight when no step uses the container runner (host-only workflows)." },
+    "strategies": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "docker_preflight": {
+      "type": "boolean",
+      "description": "When false, skip Docker reachability preflight when no step uses the container runner (host-only workflows)."
+    },
     "compile_hooks": {
       "type": "array",
       "items": { "type": "string" },
       "description": "Shell commands run by dockpipe package compile workflow from the workflow source dir after validation, before packaging (e.g. go build)."
     },
+    "types": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
     "steps": {
       "type": "array",
       "items": {
-        "type": "object",
-        "properties": {
-          "id": { "type": "string" },
-          "kind": { "type": "string", "enum": ["host", "container"] },
-          "runtime": { "type": "string" },
-          "resolver": { "type": "string" },
-          "workflow": { "type": "string", "description": "Packaged workflow target name for an explicit workflow/package step." },
-          "package": { "type": "string", "description": "Namespace for an explicit workflow/package step." },
-          "isolate": { "type": "string" },
-          "cmd": { "type": "string" },
-          "command": { "type": "string" },
-          "host_builtin": { "type": "string" }
-        }
+        "oneOf": [
+          { "$ref": "#/$defs/workflow_step" },
+          { "$ref": "#/$defs/async_group" }
+        ]
       }
     }
   }
