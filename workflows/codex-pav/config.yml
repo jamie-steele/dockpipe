@@ -5,7 +5,6 @@ name: codex-pav
 description: Plan, apply, validate — Docker runtime, Codex resolver (requires OPENAI_API_KEY for Codex steps).
 
 resolver: codex
-runtimes: [dockerimage]
 
 steps:
   - id: plan

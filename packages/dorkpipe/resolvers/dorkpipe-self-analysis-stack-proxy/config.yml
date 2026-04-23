@@ -13,7 +13,6 @@ description: >-
   stack_down (host): compose down unless DORKPIPE_DEV_STACK_AUTODOWN=0.
 
 resolver: codex
-runtimes: [dockerimage]
 security:
   network:
     mode: allowlist
@@ -41,7 +40,7 @@ steps:
     host_builtin: compose_up
 
   - id: self_analysis
-    runtime: docker
+    runtime: dockerimage
     isolate: golang:1.25-bookworm
     cmd: |-
       bash -c 'set -euo pipefail

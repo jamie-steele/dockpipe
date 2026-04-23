@@ -7,11 +7,10 @@ description: >-
   Artifacts land in the mounted repo (bin/.dockpipe/, bin/.dockpipe/packages/dorkpipe/). Tear down sidecars with dev-stack.sh down when done.
 
 resolver: codex
-runtimes: [dockerimage]
 
 steps:
   - id: self_analysis
-    runtime: docker
+    runtime: dockerimage
     isolate: golang:1.25-bookworm
     cmd: |-
       bash -c 'set -euo pipefail

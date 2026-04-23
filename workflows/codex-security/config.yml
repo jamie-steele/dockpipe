@@ -4,7 +4,6 @@ name: codex-security
 description: Isolated tests then Codex security review step (requires OPENAI_API_KEY for Codex).
 
 resolver: codex
-runtimes: [dockerimage]
 
 steps:
   - id: tests

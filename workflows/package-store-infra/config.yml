@@ -78,6 +78,5 @@ vars:
 
 steps:
   - id: r2infra
-    runtime: package
-    resolver: dockpipe.cloudflare.r2infra
+    workflow: dockpipe.cloudflare.r2infra
     package: dockpipe-cloudflare

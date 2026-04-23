@@ -1,5 +1,6 @@
 # Design mock — illustrates multi-step pipeline shape alongside the real single-flow config.yml.
-# runtime: package + resolver (workflow name) + package (namespace) is implemented for on-disk workflows.
+# Packaged workflow calls use workflow + package; tarball-only resolution and richer step-level
+# overrides remain as in docs/package-model.md.
 # Tarball-only resolution and richer step-level overrides remain as in docs/package-model.md.
 #
 # See README.md "Design mock (pipeline shape)".
@@ -17,10 +18,9 @@ vars:
   R2_PUBLISH_SOURCE: "release/artifacts"
 
 steps:
-  # Invoke a packaged workflow: runtime=package, resolver names the package workflow, package=namespace.
+  # Invoke a packaged workflow directly by workflow name + package namespace.
   - id: upload
-    runtime: package
-    resolver: dockpipe.cloudflare.r2publish
+    workflow: dockpipe.cloudflare.r2publish
     package: dockpipe.cloudflare
 
   # Cloud / API work is cli + resolver — not a separate "cloud" substrate.

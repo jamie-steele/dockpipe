@@ -6,7 +6,6 @@ description: >-
   Use when Docker is unavailable or for fastest local iteration.
 
 resolver: codex
-runtimes: [dockerimage]
 steps:
   - id: self_analysis
     skip_container: true

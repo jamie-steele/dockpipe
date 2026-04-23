@@ -17,7 +17,7 @@ Typical order: **`r2infra`** (or **`package-store-infra`** with nested r2infra +
 
 ### Design mock (pipeline shape)
 
-**`config.design-mock.yml`** shows **multi-step** packaging (`runtime: package` + nested workflow). See **`docs/architecture-model.md`**.
+**`config.design-mock.yml`** shows **multi-step** packaging using an explicit nested packaged workflow step (`workflow:` + `package:`). See **`docs/architecture-model.md`**.
 
 ## Two ways to authenticate
 
