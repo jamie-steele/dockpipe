@@ -8,6 +8,6 @@ resolver: codex
 
 steps:
   - id: orchestrate
-    skip_container: true
+    kind: host
     run:
       - scripts/dorkpipe-orchestrator/run-orchestrator.sh

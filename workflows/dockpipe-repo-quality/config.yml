@@ -10,6 +10,6 @@ resolver: codex
 
 steps:
   - id: summarize
-    skip_container: true
+    kind: host
     run:
       - scripts/dockpipe/repo-ci-summary.sh

@@ -28,7 +28,7 @@ Typical order: **`r2infra`** (or **`package-store-infra`** with nested r2infra +
 
 **Terraform state** defaults to **remote** on R2: bucket **`dockpipe`**, object key **`state/dockpipe.cloudflare.r2publish/terraform.tfstate`** (same account as `CLOUDFLARE_ACCOUNT_ID`). If you used **`state/r2-publish/terraform.tfstate`**, set **`R2_TF_STATE_KEY`** until you migrate. The S3-compatible backend uses **R2 access keys** (`R2_STATE_*` or `AWS_*`), not the Cloudflare API token — see [Remote R2 backend](https://developers.cloudflare.com/terraform/advanced-topics/remote-backend/). If the publish bucket already exists, **`terraform import`** before apply — see **`terraform/README.md`**.
 
-R2 is the **destination**, not a DockPipe runtime. **`cloudflare`** is not a runtime; the runtime here is **`cli`** on the host (`skip_container: true`).
+R2 is the **destination**, not a DockPipe runtime. **`cloudflare`** is not a runtime; the workflow uses **`runtime: dockerimage`** with **`kind: host`** where it needs host-side CLI work.
 
 **Consumers:** After you publish **`release/artifacts/`** (or a custom prefix), serve objects at a **public HTTPS hostname**. The Terraform module under **`terraform/`** can create an **R2 custom domain**, **WAF** (managed rules), and **cache rules** (CDN) when you set the feature flags — see **`terraform/README.md`**. Alternatively, attach a hostname in the Cloudflare dashboard or via a Worker. Downstream projects can run **`dockpipe install core --base-url https://your-cdn.example/dockpipe`** (or **`DOCKPIPE_INSTALL_BASE_URL`**) to replace **`templates/core/`** without cloning the full dockpipe repo. Build artifacts with **`make package-templates-core`** or **`dockpipe package build core`** at the repo root.
 

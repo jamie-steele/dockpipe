@@ -8,7 +8,7 @@ description: >-
 
 steps:
   - id: launch
-    skip_container: true
+    kind: host
     run: assets/scripts/launch.sh
     vars:
       # Default behavior: when the Pipeon/code-server window closes, the stack tears down automatically.

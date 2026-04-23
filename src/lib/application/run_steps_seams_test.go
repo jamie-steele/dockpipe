@@ -28,7 +28,7 @@ func withRunStepSeams(t *testing.T, fn func()) {
 	fn()
 }
 
-// TestRunSteps_ParallelBatchAggregatesOutputsInOrder merges async skip_container outputs in declaration order (last wins).
+// TestRunSteps_ParallelBatchAggregatesOutputsInOrder merges async host-step outputs in declaration order (last wins).
 func TestRunSteps_ParallelBatchAggregatesOutputsInOrder(t *testing.T) {
 	tmp := t.TempDir()
 	aPath := filepath.Join(tmp, infrastructure.DockpipeDirRel, "a.env")
@@ -46,16 +46,16 @@ func TestRunSteps_ParallelBatchAggregatesOutputsInOrder(t *testing.T) {
 	withRunStepSeams(t, func() {
 		// No containers should run in this test.
 		runContainerFn = func(infrastructure.RunOpts, []string) (int, error) {
-			t.Fatalf("runContainerFn should not be called for skip_container steps")
+			t.Fatalf("runContainerFn should not be called for host steps")
 			return 0, nil
 		}
 
 		nonBlocking := false
 		wf := &domain.Workflow{
 			Steps: []domain.Step{
-				{ID: "a", SkipContainer: true, Outputs: "bin/.dockpipe/a.env", Blocking: &nonBlocking},
-				{ID: "b", SkipContainer: true, Outputs: "bin/.dockpipe/b.env", Blocking: &nonBlocking},
-				{ID: "join", SkipContainer: true}, // default blocking
+				{ID: "a", Kind: "host", Outputs: "bin/.dockpipe/a.env", Blocking: &nonBlocking},
+				{ID: "b", Kind: "host", Outputs: "bin/.dockpipe/b.env", Blocking: &nonBlocking},
+				{ID: "join", Kind: "host"}, // default blocking
 			},
 		}
 		o := runStepsOpts{
@@ -104,8 +104,8 @@ func TestRunStepPreScripts_UsesInjectedSourceFunction(t *testing.T) {
 	})
 }
 
-// TestRunStepPreScripts_SkipContainerUsesRunHostExec runs skip_container run: via RunHostScript (not sourced).
-func TestRunStepPreScripts_SkipContainerUsesRunHostExec(t *testing.T) {
+// TestRunStepPreScripts_HostUsesRunHostExec runs kind: host run: via RunHostScript (not sourced).
+func TestRunStepPreScripts_HostUsesRunHostExec(t *testing.T) {
 	withRunStepSeams(t, func() {
 		tmp := t.TempDir()
 		script := filepath.Join(tmp, "host.sh")
@@ -129,12 +129,12 @@ func TestRunStepPreScripts_SkipContainerUsesRunHostExec(t *testing.T) {
 			envSlice: []string{},
 			opts:     &CliOpts{},
 		}
-		step := domain.Step{SkipContainer: true, Run: []string{"host.sh"}}
+		step := domain.Step{Kind: "host", Run: []string{"host.sh"}}
 		if err := runStepPreScripts(o, 0, step); err != nil {
 			t.Fatalf("runStepPreScripts: %v", err)
 		}
 		if !called {
-			t.Fatal("expected RunHostScript for skip_container")
+			t.Fatal("expected RunHostScript for kind: host")
 		}
 	})
 }

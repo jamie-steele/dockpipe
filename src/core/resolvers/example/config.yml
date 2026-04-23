@@ -6,4 +6,4 @@ description: Minimal layout demo for resolver profiles (agnostic script only).
 steps:
   - id: notice
     run: scripts/core.assets.scripts.example-resolver-notice.sh
-    skip_container: true
+    kind: host

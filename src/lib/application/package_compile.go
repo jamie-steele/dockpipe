@@ -249,7 +249,6 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 			"title":                 pkgName,
 			"description":           "Compiled from " + srcAbs,
 			"kind":                  "workflow",
-			"requires_capabilities": []string{strings.TrimSpace(wf.Capability)},
 			"allow_clone":           true,
 			"distribution":          "source",
 		}

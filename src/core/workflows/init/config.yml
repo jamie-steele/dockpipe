@@ -17,7 +17,7 @@ vars:
 steps:
   - id: prepare
     # Host step: shape values for later steps and persist them as outputs.
-    skip_container: true
+    kind: host
     cmd: |-
       bash -c 'set -euo pipefail
       mkdir -p bin/.dockpipe
@@ -37,7 +37,7 @@ steps:
 
   - id: report
     # Host step: summarize what happened and point the user at the next edit.
-    skip_container: true
+    kind: host
     cmd: |-
       bash -c 'set -euo pipefail
       echo "[example] workflow complete"

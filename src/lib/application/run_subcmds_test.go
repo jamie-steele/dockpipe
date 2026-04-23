@@ -34,14 +34,14 @@ vars:
   EXAMPLE_IMAGE: "alpine:3.22"
 steps:
   - id: prepare
-    skip_container: true
+    kind: host
     cmd: echo prepare
     outputs: bin/.dockpipe/example.env
   - id: run
     isolate: ${EXAMPLE_IMAGE}
     cmd: echo run
   - id: report
-    skip_container: true
+    kind: host
     cmd: echo report
 `, 0o644)
 	writeFile(t, filepath.Join(repoRoot, "templates", "init", "README.md"), "# init\n", 0o644)

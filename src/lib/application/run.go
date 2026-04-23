@@ -327,7 +327,6 @@ func Run(argv []string, baseEnviron []string) error {
 		return err
 	}
 	profileLabel := ProfileLabelForEnv(rtName, rsName)
-	// runtimes: allowlist names runtime substrates (cli, dockerimage, …), not resolver/tool names (codex, …).
 	if rtName != "" {
 		if err := ValidateRuntimeAllowlist(wf, rtName); err != nil {
 			return err

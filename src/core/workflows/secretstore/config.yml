@@ -20,6 +20,6 @@ steps:
   - id: exec-with-secrets
     runtime: dockerimage
     resolver: dotenv
-    skip_container: true
+    kind: host
     run:
       - scripts/dockpipe/secretstore-exec.sh

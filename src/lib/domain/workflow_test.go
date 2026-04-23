@@ -71,6 +71,29 @@ steps:
 	}
 }
 
+func TestParseWorkflowYAMLRejectsSkipContainerAlias(t *testing.T) {
+	y := `
+steps:
+  - skip_container: true
+    cmd: echo hi
+`
+	_, err := ParseWorkflowYAML([]byte(y))
+	if err == nil || !strings.Contains(err.Error(), "skip_container is no longer supported") {
+		t.Fatalf("expected skip_container rejection, got %v", err)
+	}
+}
+
+func TestParseWorkflowYAMLRejectsDefaultResolver(t *testing.T) {
+	y := `
+name: t
+default_resolver: codex
+`
+	_, err := ParseWorkflowYAML([]byte(y))
+	if err == nil || !strings.Contains(err.Error(), "default_resolver is no longer supported") {
+		t.Fatalf("expected default_resolver rejection, got %v", err)
+	}
+}
+
 func TestParseWorkflowYAMLSecurityNetwork(t *testing.T) {
 	y := `
 security:
@@ -265,7 +288,7 @@ category: tooling
 icon: assets/images/icon.png
 steps:
   - id: x
-    skip_container: true
+    kind: host
     run: [scripts/a.sh]
 `
 	w, err := ParseWorkflowYAML([]byte(y))
@@ -336,16 +359,6 @@ func TestValidateWorkflowNamespaceFieldReserved(t *testing.T) {
 	}
 }
 
-func TestValidateWorkflowCapabilityField(t *testing.T) {
-	if err := ValidateWorkflowCapabilityField(&Workflow{Capability: "cli.codex"}); err != nil {
-		t.Fatal(err)
-	}
-	long := strings.Repeat("a", 257)
-	if err := ValidateWorkflowCapabilityField(&Workflow{Capability: long}); err == nil {
-		t.Fatal("expected error for too-long capability")
-	}
-}
-
 func TestValidateWorkflowTypeField(t *testing.T) {
 	if err := ValidateWorkflowTypeField(&Workflow{WorkflowType: "secretstore"}); err != nil {
 		t.Fatal(err)
@@ -362,35 +375,35 @@ func TestValidateWorkflowTypeField(t *testing.T) {
 }
 
 func TestWorkflowAnyContainerStep(t *testing.T) {
-	w := &Workflow{Steps: []Step{{SkipContainer: true}, {Cmd: "echo x", Isolate: "alpine"}}}
+	w := &Workflow{Steps: []Step{{Kind: "host"}, {Cmd: "echo x", Isolate: "alpine"}}}
 	if !w.AnyContainerStep() {
 		t.Fatal("expected AnyContainerStep true when one step uses the container")
 	}
-	w2 := &Workflow{Steps: []Step{{SkipContainer: true}}}
+	w2 := &Workflow{Steps: []Step{{Kind: "host"}}}
 	if w2.AnyContainerStep() {
-		t.Fatal("expected AnyContainerStep false when all steps skip_container")
+		t.Fatal("expected AnyContainerStep false when all steps are host steps")
 	}
 }
 
 func TestWorkflowNeedsDockerReachable(t *testing.T) {
-	vscodeLike := &Workflow{Steps: []Step{{SkipContainer: true, Run: []string{"scripts/vscode/vscode-code-server.sh"}}}}
+	vscodeLike := &Workflow{Steps: []Step{{Kind: "host", Run: []string{"scripts/vscode/vscode-code-server.sh"}}}}
 	if !vscodeLike.NeedsDockerReachable() {
 		t.Fatal("expected NeedsDockerReachable when host run: invokes docker")
 	}
-	hostOnly := &Workflow{Steps: []Step{{SkipContainer: true}}}
+	hostOnly := &Workflow{Steps: []Step{{Kind: "host"}}}
 	if hostOnly.NeedsDockerReachable() {
 		t.Fatal("expected false when no container and no run scripts")
 	}
-	composeHostBuiltin := &Workflow{Steps: []Step{{SkipContainer: true, HostBuiltin: "compose_up"}}}
+	composeHostBuiltin := &Workflow{Steps: []Step{{Kind: "host", HostBuiltin: "compose_up"}}}
 	if !composeHostBuiltin.NeedsDockerReachable() {
 		t.Fatal("expected NeedsDockerReachable for compose host builtin")
 	}
-	withStepResolver := &Workflow{Steps: []Step{{SkipContainer: true, Resolver: "cursor"}}}
+	withStepResolver := &Workflow{Steps: []Step{{Kind: "host", Resolver: "cursor"}}}
 	if !withStepResolver.NeedsDockerReachable() {
 		t.Fatal("expected NeedsDockerReachable when a step references a runtime profile name")
 	}
 	preflightOff := false
-	hostRunNoDocker := &Workflow{DockerPreflight: &preflightOff, Steps: []Step{{SkipContainer: true, Run: []string{"scripts/print.sh"}}}}
+	hostRunNoDocker := &Workflow{DockerPreflight: &preflightOff, Steps: []Step{{Kind: "host", Run: []string{"scripts/print.sh"}}}}
 	if hostRunNoDocker.NeedsDockerReachable() {
 		t.Fatal("expected false when docker_preflight: false and no container steps")
 	}
@@ -405,14 +418,14 @@ compose:
   exports:
     OLLAMA_HOST: http://host.docker.internal:11434
 steps:
-  - skip_container: true
+  - kind: host
     host_builtin: compose_up
 `
 	w, err := ParseWorkflowYAML([]byte(y))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(w.Steps) != 1 || w.Steps[0].HostBuiltin != "compose_up" || !w.Steps[0].SkipContainer {
+	if len(w.Steps) != 1 || w.Steps[0].HostBuiltin != "compose_up" || w.Steps[0].KindName() != "host" {
 		t.Fatalf("got %+v", w.Steps[0])
 	}
 	if w.Compose.File != "assets/compose/docker-compose.yml" {
@@ -430,14 +443,14 @@ steps:
 }
 
 func TestValidateStepHostBuiltinRejectsCombinedRun(t *testing.T) {
-	s := Step{SkipContainer: true, HostBuiltin: "package_build_store", Run: []string{"x.sh"}}
+	s := Step{Kind: "host", HostBuiltin: "package_build_store", Run: []string{"x.sh"}}
 	if err := ValidateStepHostBuiltin(0, s); err == nil {
 		t.Fatal("expected error when host_builtin is combined with run:")
 	}
 }
 
 func TestValidateStepHostBuiltinUnknown(t *testing.T) {
-	s := Step{SkipContainer: true, HostBuiltin: "nope"}
+	s := Step{Kind: "host", HostBuiltin: "nope"}
 	if err := ValidateStepHostBuiltin(0, s); err == nil {
 		t.Fatal("expected error for unknown host_builtin")
 	}
@@ -445,7 +458,7 @@ func TestValidateStepHostBuiltinUnknown(t *testing.T) {
 
 func TestValidateLoadedWorkflowRejectsComposeBuiltinWithoutComposeConfig(t *testing.T) {
 	w := &Workflow{
-		Steps: []Step{{SkipContainer: true, HostBuiltin: "compose_up"}},
+		Steps: []Step{{Kind: "host", HostBuiltin: "compose_up"}},
 	}
 	if err := ValidateLoadedWorkflow(w); err == nil {
 		t.Fatal("expected compose builtin validation error")

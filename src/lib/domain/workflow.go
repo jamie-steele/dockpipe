@@ -55,22 +55,13 @@ type Workflow struct {
 	WorkflowType string `yaml:"workflow_type,omitempty"`
 	// Namespace: optional author/org label for packages and tooling (see ValidateNamespace).
 	Namespace string `yaml:"namespace,omitempty"`
-	// Capability: optional legacy YAML field (ignored by validation).
-	Capability string `yaml:"capability,omitempty"`
-	// PrimitiveYAMLDeprecated is the deprecated YAML key "primitive" — merged into Capability when parsing.
-	PrimitiveYAMLDeprecated string  `yaml:"primitive,omitempty"`
 	Run                     RunSpec `yaml:"run,omitempty"`
 	Isolate                 string  `yaml:"isolate,omitempty"`
 	Act                     string  `yaml:"act,omitempty"`
 	Action                  string  `yaml:"action,omitempty"`
 	Resolver                string  `yaml:"resolver,omitempty"`
-	DefaultResolver         string  `yaml:"default_resolver,omitempty"`
-	// Runtime: default runtime profile name (templates/core/runtimes/<name>); preferred over default_resolver for env selection.
+	// Runtime: default runtime profile name (templates/core/runtimes/<name>).
 	Runtime string `yaml:"runtime,omitempty"`
-	// DefaultRuntime: YAML default_runtime — same role as default_resolver when runtime is unset.
-	DefaultRuntime string `yaml:"default_runtime,omitempty"`
-	// Runtimes: optional explicit allowlist when more than one substrate is allowed (e.g. docker and cli). If omitted, the runner derives an allowlist from runtime / default_runtime when set.
-	Runtimes []string `yaml:"runtimes,omitempty"`
 	// Strategy: default named strategy (templates/core/strategies/<name> or templates/<wf>/strategies/<name>).
 	Strategy string `yaml:"strategy,omitempty"`
 	// Strategies: optional allowlist of strategy names; if non-empty, --strategy / workflow.strategy must be listed.
@@ -80,7 +71,7 @@ type Workflow struct {
 	// Omit to use dockpipe.config.json secrets.vault when set, else best-effort inject when the template exists.
 	Vault string `yaml:"vault,omitempty"`
 	// DockerPreflight: when false, skip EnsureDockerReachable before steps when no step uses the container runner.
-	// Use only for workflows where every step is skip_container and host run:/pre_script scripts do not invoke Docker.
+	// Use only for workflows where every step is kind: host and host run:/pre_script scripts do not invoke Docker.
 	DockerPreflight *bool `yaml:"docker_preflight,omitempty"`
 	// CompileHooks: shell commands run by `dockpipe package compile workflow` from the workflow source directory
 	// after validation and before the package tarball is written (e.g. go build, code generation).
@@ -116,10 +107,10 @@ type WorkflowNetworkConfig struct {
 	Block       []string `yaml:"block,omitempty"`
 }
 
-// AnyContainerStep reports whether any step runs inside Docker (skip_container is false or omitted).
+// AnyContainerStep reports whether any step runs inside Docker (kind defaults to container).
 func (w *Workflow) AnyContainerStep() bool {
 	for _, s := range w.Steps {
-		if !s.SkipContainer {
+		if !s.IsHostStep() {
 			return true
 		}
 		if hostBuiltinNeedsDocker(strings.TrimSpace(s.HostBuiltin)) {
@@ -131,7 +122,7 @@ func (w *Workflow) AnyContainerStep() bool {
 
 // NeedsDockerReachable reports whether we should run EnsureDockerReachable before executing steps.
 // True when any step uses the container runner, or when any step has run:/pre_script (host scripts
-// may invoke docker directly — e.g. templates/core/resolvers/vscode/config.yml is skip_container-only but runs docker on the host).
+// may invoke docker directly — e.g. templates/core/resolvers/vscode/config.yml is kind: host but runs docker on the host).
 // If docker_preflight: false is set on the workflow, this returns false when no step uses the container runner
 // (opt-out for host-only workflows; scripts under run: must not require Docker).
 func (w *Workflow) NeedsDockerReachable() bool {
@@ -157,6 +148,7 @@ func (w *Workflow) NeedsDockerReachable() bool {
 type Step struct {
 	// ID is optional; used in logs (e.g. [merge] lines). If empty, runner uses "step N".
 	ID            string            `yaml:"id,omitempty"`
+	Kind          string            `yaml:"kind,omitempty"`
 	Run           RunSpec           `yaml:"run,omitempty"`
 	PreScript     string            `yaml:"pre_script,omitempty"`
 	Isolate       string            `yaml:"isolate,omitempty"`
@@ -165,7 +157,6 @@ type Step struct {
 	Cmd           string            `yaml:"cmd,omitempty"`
 	Command       string            `yaml:"command,omitempty"`
 	Outputs       string            `yaml:"outputs,omitempty"`
-	SkipContainer bool              `yaml:"skip_container,omitempty"`
 	Vars          map[string]string `yaml:"vars,omitempty"`
 	// Blocking is YAML is_blocking: when false, this step joins a parallel batch with adjacent
 	// non-blocking steps. Inputs = env after last blocking step + this step’s vars/pre-scripts only;
@@ -180,19 +171,29 @@ type Step struct {
 	// Resolver: legacy alias for the same shared profile (not files next to this workflow).
 	// Loads DOCKPIPE_RESOLVER_* / DOCKPIPE_RUNTIME_* when unset on the step.
 	Resolver string `yaml:"resolver,omitempty"`
-	// WorkflowName: packaged-workflow target name when runtime: package.
+	// WorkflowName: packaged-workflow target name.
 	WorkflowName string `yaml:"workflow,omitempty"`
-	// Capability: optional legacy per-step field (ignored by the runner).
-	Capability string `yaml:"capability,omitempty"`
-	// Package: namespace for runtime: package — must match the nested workflow's namespace: (see ResolvePackagedWorkflowConfigPath).
+	// Package: namespace for the packaged workflow — must match the nested workflow's namespace: (see ResolvePackagedWorkflowConfigPath).
 	Package string `yaml:"package,omitempty"`
-	// HostBuiltin: optional engine step for skip_container workflows — runs a built-in host action instead of run:/pre_script.
+	// HostBuiltin: optional engine step for kind: host workflows — runs a built-in host action instead of run:/pre_script.
 	// Allowed values: package_build_store (same as dockpipe package build store; uses PACKAGE_STORE_OUT, PACKAGE_STORE_ONLY, PACKAGE_STORE_VERSION from merged env).
 	HostBuiltin string `yaml:"host_builtin,omitempty"`
 }
 
 func (s *Step) UsesPackagedWorkflow() bool {
 	return strings.TrimSpace(s.WorkflowName) != "" || strings.TrimSpace(s.Package) != ""
+}
+
+func (s *Step) KindName() string {
+	k := strings.ToLower(strings.TrimSpace(s.Kind))
+	if k != "" {
+		return k
+	}
+	return "container"
+}
+
+func (s *Step) IsHostStep() bool {
+	return s.KindName() == "host"
 }
 
 // RuntimeProfileName returns per-step isolation profile name (runtime: or resolver:).
@@ -263,17 +264,12 @@ type workflowFile struct {
 	Icon                    string                 `yaml:"icon,omitempty"`
 	WorkflowType            string                 `yaml:"workflow_type,omitempty"`
 	Namespace               string                 `yaml:"namespace,omitempty"`
-	Capability              string                 `yaml:"capability,omitempty"`
-	PrimitiveYAMLDeprecated string                 `yaml:"primitive,omitempty"`
 	Run                     RunSpec                `yaml:"run"`
 	Isolate                 string                 `yaml:"isolate"`
 	Act                     string                 `yaml:"act"`
 	Action                  string                 `yaml:"action"`
 	Resolver                string                 `yaml:"resolver"`
-	DefaultResolver         string                 `yaml:"default_resolver"`
 	Runtime                 string                 `yaml:"runtime,omitempty"`
-	DefaultRuntime          string                 `yaml:"default_runtime,omitempty"`
-	Runtimes                []string               `yaml:"runtimes,omitempty"`
 	Strategy                string                 `yaml:"strategy,omitempty"`
 	Strategies              []string               `yaml:"strategies,omitempty"`
 	Vault                   string                 `yaml:"vault,omitempty"`
@@ -296,6 +292,30 @@ type stepOrGroupYAML struct {
 type asyncGroupYAML struct {
 	Mode  string `yaml:"mode"`
 	Tasks []Step `yaml:"tasks"`
+}
+
+var bannedWorkflowTopLevelKeys = map[string]string{
+	"capability":       "top-level capability is no longer supported; choose resolver: explicitly and keep capability in package metadata only",
+	"primitive":        "top-level primitive is no longer supported; choose resolver: explicitly",
+	"default_runtime":  "default_runtime is no longer supported; use runtime:",
+	"default_resolver": "default_resolver is no longer supported; use resolver:",
+	"runtimes":         "runtimes: is no longer supported; use runtime:",
+}
+
+func rejectBannedWorkflowKeys(n *yaml.Node) error {
+	if n == nil {
+		return nil
+	}
+	if n.Kind != yaml.MappingNode || len(n.Content)%2 != 0 {
+		return nil
+	}
+	for i := 0; i < len(n.Content); i += 2 {
+		k := strings.TrimSpace(n.Content[i].Value)
+		if msg, ok := bannedWorkflowTopLevelKeys[k]; ok {
+			return fmt.Errorf("%s", msg)
+		}
+	}
+	return nil
 }
 
 func (s *stepOrGroupYAML) UnmarshalYAML(n *yaml.Node) error {
@@ -335,6 +355,11 @@ func (s *stepOrGroupYAML) UnmarshalYAML(n *yaml.Node) error {
 		}
 		s.group = &aux.Group
 		return nil
+	}
+	for _, k := range keys {
+		if k == "skip_container" {
+			return fmt.Errorf("steps: skip_container is no longer supported; use kind: host")
+		}
 	}
 	st := new(Step)
 	if err := n.Decode(st); err != nil {
@@ -407,35 +432,6 @@ func ValidateWorkflowVaultField(w *Workflow) error {
 	return ValidateVaultModeString(w.Vault)
 }
 
-// ValidateWorkflowCapabilityField checks capability when set (dotted id; see docs/capabilities.md).
-func ValidateWorkflowCapabilityField(w *Workflow) error {
-	if w == nil {
-		return nil
-	}
-	return ValidateCapabilityID(w.Capability)
-}
-
-// ValidateWorkflowPrimitiveField is deprecated: use ValidateWorkflowCapabilityField.
-func ValidateWorkflowPrimitiveField(w *Workflow) error {
-	return ValidateWorkflowCapabilityField(w)
-}
-
-// ValidateWorkflowMustDeclareCapability requires a non-empty capability id on the workflow (see docs/capabilities.md).
-func ValidateWorkflowMustDeclareCapability(w *Workflow) error {
-	if w == nil {
-		return nil
-	}
-	if strings.TrimSpace(w.Capability) == "" {
-		return fmt.Errorf("workflow must declare capability (dotted id, e.g. cli.codex — see docs/capabilities.md)")
-	}
-	return ValidateCapabilityID(w.Capability)
-}
-
-// ValidateWorkflowMustDeclarePrimitive is deprecated: use ValidateWorkflowMustDeclareCapability.
-func ValidateWorkflowMustDeclarePrimitive(w *Workflow) error {
-	return ValidateWorkflowMustDeclareCapability(w)
-}
-
 // ValidateLoadedWorkflow checks workflow fields required for run and dockpipe workflow validate.
 func ValidateLoadedWorkflow(w *Workflow) error {
 	if w == nil {
@@ -457,8 +453,8 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 		return err
 	}
 	for i, s := range w.Steps {
-		if err := ValidateCapabilityID(s.Capability); err != nil {
-			return fmt.Errorf("step %d: %w", i+1, err)
+		if err := ValidateStepKind(i, s); err != nil {
+			return err
 		}
 		if err := ValidateStepPackageInvocation(i, s); err != nil {
 			return err
@@ -471,6 +467,15 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 		}
 	}
 	return nil
+}
+
+func ValidateStepKind(i int, s Step) error {
+	switch s.KindName() {
+	case "container", "host":
+		return nil
+	default:
+		return fmt.Errorf("step %d: kind must be host or container", i+1)
+	}
 }
 
 func ValidateWorkflowComposeField(w *Workflow) error {
@@ -524,6 +529,9 @@ func ValidateStepPackageInvocation(i int, s Step) error {
 	if strings.TrimSpace(s.Isolate) != "" {
 		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set isolate:", i+1)
 	}
+	if s.IsHostStep() {
+		return fmt.Errorf("step %d: packaged workflow step cannot use kind: host", i+1)
+	}
 	return nil
 }
 
@@ -533,8 +541,8 @@ func ValidateStepHostBuiltin(i int, s Step) error {
 	if b == "" {
 		return nil
 	}
-	if !s.SkipContainer {
-		return fmt.Errorf("step %d: host_builtin %q requires skip_container: true", i+1, b)
+	if !s.IsHostStep() {
+		return fmt.Errorf("step %d: host_builtin %q requires kind: host", i+1, b)
 	}
 	if s.UsesPackagedWorkflow() {
 		return fmt.Errorf("step %d: host_builtin is incompatible with packaged workflow steps", i+1)

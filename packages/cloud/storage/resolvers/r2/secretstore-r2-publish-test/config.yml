@@ -35,12 +35,12 @@ steps:
   - id: inject-secrets
     runtime: dockerimage
     resolver: onepassword
-    skip_container: true
+    kind: host
     outputs: *SECRET_OUT
     run:
       - scripts/onepassword/secretstore-op-inject-outputs.sh
 
   - id: publish-r2
-    skip_container: true
+    kind: host
     run:
       - scripts/dockpipe/r2-publish.sh

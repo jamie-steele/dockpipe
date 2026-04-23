@@ -2,7 +2,7 @@
 
 **`workflow_type: secretstore`** marks this as a secret-injection wrapper. DockPipe does not treat it specially at runtime; the type is for classification, generators, and your own tooling.
 
-**Model:** **`runtime: dockerimage`** with **`skip_container: true`** on the step (host). **`resolver: dotenv`** documents **`SECRETSTORE_ENV_FILE`** / **`SECRETSTORE_COMMAND`**; the bundled script **`scripts/dockpipe/secretstore-exec.sh`** loads a **dotenv-style** file (POSIX **`set -a`** + **`source`**) — no third-party CLI.
+**Model:** **`runtime: dockerimage`** with **`kind: host`** on the step. **`resolver: dotenv`** documents **`SECRETSTORE_ENV_FILE`** / **`SECRETSTORE_COMMAND`**; the bundled script **`scripts/dockpipe/secretstore-exec.sh`** loads a **dotenv-style** file (POSIX **`set -a`** + **`source`**) — no third-party CLI.
 
 ## Default: plain env file
 

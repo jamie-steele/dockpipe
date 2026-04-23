@@ -309,11 +309,11 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 	if err != nil {
 		return err
 	}
-	if step.SkipContainer && stepUsesResolverDelegate(ra) {
-		return fmt.Errorf("step %d: profile %q uses DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RESOLVER_HOST_ISOLATE — remove skip_container: true", i+1, ProfileLabelForEnv(effRt, effRs))
+	if step.IsHostStep() && stepUsesResolverDelegate(ra) {
+		return fmt.Errorf("step %d: profile %q uses DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RESOLVER_HOST_ISOLATE — remove kind: host", i+1, ProfileLabelForEnv(effRt, effRs))
 	}
 
-	if step.SkipContainer {
+	if step.IsHostStep() {
 		wd := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir, mustGetwd())
 		applyOutputsFile(filepath.Join(wd, step.OutputsPath()), o.envMap, dockerEnv, o.locked, nil, "")
 		return nil
@@ -461,7 +461,7 @@ func validateParallelNoResolverDelegate(o *runStepsOpts, from, to int) error {
 func validateParallelNoHostCommit(o *runStepsOpts, from, to int) error {
 	for i := from; i < to; i++ {
 		step := o.wf.Steps[i]
-		if step.SkipContainer {
+		if step.IsHostStep() {
 			continue
 		}
 		effAct := step.ActPath()
@@ -490,7 +490,7 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 	buildAnnounced := false
 	for idx := from; idx < to; idx++ {
 		step := o.wf.Steps[idx]
-		if step.SkipContainer {
+		if step.IsHostStep() {
 			continue
 		}
 		if step.UsesPackagedWorkflow() {
@@ -576,7 +576,7 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 			return fmt.Errorf("pre-script not found: %s", p)
 		}
 		fmt.Fprintf(os.Stderr, "[dockpipe] [parallel %d] Host setup\n", idx+1)
-		if step.SkipContainer {
+		if step.IsHostStep() {
 			if err := runHostScriptFn(p, envSliceWithScriptContext(envSlice, p)); err != nil {
 				return err
 			}
@@ -596,7 +596,7 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 		return fmt.Errorf("parallel step %d: packaged workflow steps are not supported in async groups (use is_blocking: true)", idx+1)
 	}
 
-	if step.SkipContainer {
+	if step.IsHostStep() {
 		return nil
 	}
 
@@ -642,8 +642,8 @@ func runStepHostBuiltin(o *runStepsOpts, step domain.Step) error {
 	if b == "" {
 		return nil
 	}
-	if !step.SkipContainer {
-		return fmt.Errorf("internal: host_builtin without skip_container")
+	if !step.IsHostStep() {
+		return fmt.Errorf("internal: host_builtin without kind: host")
 	}
 	fmt.Fprintf(os.Stderr, "[dockpipe] Host builtin: %s\n", b)
 	switch b {
@@ -760,8 +760,8 @@ func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {
 		if _, err := osStatFn(p); err != nil {
 			return fmt.Errorf("pre-script not found: %s", p)
 		}
-		if step.SkipContainer {
-			// skip_container run: must exec with inherited stdio — SourceHostScript sources and
+		if step.IsHostStep() {
+			// host-step run: must exec with inherited stdio — SourceHostScript sources and
 			// captures CombinedOutput(), so users would see nothing (e.g. cursor-dev step 2, vscode).
 			fmt.Fprintf(os.Stderr, "[dockpipe] Host setup\n")
 			if err := runHostScriptFn(p, envSliceWithScriptContext(o.envSlice, p)); err != nil {

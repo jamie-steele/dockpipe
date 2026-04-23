@@ -72,9 +72,8 @@ Execution substrates.
 - Must NOT be confused with resolvers
 
 Current runtimes (substrates):
-- `dockerimage` → container from a pre-built image; host-only steps use **`skip_container: true`** (legacy YAML may say `cli` / `powershell` / `cmd` — those normalize to **`dockerimage`**)
+- `dockerimage` → container from a pre-built image; host-only steps use **`kind: host`** (legacy CLI/runtime aliases such as `cli` / `powershell` / `cmd` still normalize to **`dockerimage`**)
 - `dockerfile` → container built from a Dockerfile
-- `package` → nest a namespaced workflow (`resolver:` + `package:`)
 
 Not runtimes: Kubernetes, cloud APIs, Terraform — use **`dockerimage`** / **`dockerfile`** plus scripts and resolvers.
 
@@ -85,7 +84,7 @@ Not runtimes: Kubernetes, cloud APIs, Terraform — use **`dockerimage`** / **`d
 
 ### 3. Resolvers
 
-**Workflow-local tooling profiles** — **`DOCKPIPE_RESOLVER_*`** (and optional delegate **`config.yml`**) under **`…/core/resolvers/<name>/`**, or maintainer resolver trees under **`packages/…/resolvers/…`** / **`.staging/packages/…/resolvers/…`** (same layout). **`dockpipe package compile resolvers`** materializes **`dockpipe-resolver-*.tar.gz`** under **`.dockpipe/internal/packages/resolvers/`** (not the repo **`packages/`** authoring tree). You choose **`resolver:`** / **`default_resolver:`** in YAML; there is **no** separate “capability” indirection in the runner. **Packaged** workflows can pull in **additional** resolver packages (e.g. a future **`dockpipe.cloud.aws`** pack) via **`package.yml`** / store installs.
+**Workflow-local tooling profiles** — **`DOCKPIPE_RESOLVER_*`** (and optional delegate **`config.yml`**) under **`…/core/resolvers/<name>/`**, or maintainer resolver trees under **`packages/…/resolvers/…`** / **`.staging/packages/…/resolvers/…`** (same layout). **`dockpipe package compile resolvers`** materializes **`dockpipe-resolver-*.tar.gz`** under **`.dockpipe/internal/packages/resolvers/`** (not the repo **`packages/`** authoring tree). You choose **`resolver:`** in YAML; there is **no** separate workflow-level “capability” indirection in the runner. **Packaged** workflows can pull in **additional** resolver packages (e.g. a future **`dockpipe.cloud.aws`** pack) via **`package.yml`** / store installs.
 
 - Define **what performs the work** for that workflow or package slice
 - Always tool/platform-specific
@@ -181,6 +180,23 @@ NOT allowed:
 If something cannot be done:
 
 → propose a **general primitive**, not a special case
+
+## Authoring surface sync (IMPORTANT)
+
+When changing **core-authored workflow/config surfaces** — for example:
+
+- workflow YAML keys or semantics
+- package manifest keys or semantics
+- host/container step modeling
+- runtime / resolver / strategy selection behavior
+- compose / security / image authoring fields
+
+you must update the **DockPipe Language Support** extension in the same change set:
+
+- **`src/app/tooling/vscode-extensions/dockpipe-language-support/extension.js`**
+- and its nearby README/docs when the user-facing behavior changes
+
+Do not leave editor completions / hovers teaching an older model than the engine and docs.
 
 ## Package authoring rule (IMPORTANT)
 

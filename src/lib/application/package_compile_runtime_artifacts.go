@@ -37,7 +37,7 @@ func compileWorkflowRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflo
 		WorkflowName:    strings.TrimSpace(wf.Name),
 		PackageName:     strings.TrimSpace(pkgName),
 		RuntimeProfile:  strings.TrimSpace(wf.Runtime),
-		ResolverProfile: firstNonEmptyString(strings.TrimSpace(wf.DefaultResolver), strings.TrimSpace(wf.Resolver)),
+		ResolverProfile: strings.TrimSpace(wf.Resolver),
 		Security: domain.CompiledSecurityPolicy{
 			Preset: "secure-default",
 			Network: network,
@@ -137,10 +137,8 @@ func compiledEnforcementSummaries(network domain.CompiledNetworkPolicy) []string
 func selectCompiledImageArtifact(workdir, pkgName string, wf *domain.Workflow, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
 	identity := firstNonEmptyString(
 		strings.TrimSpace(wf.Isolate),
-		strings.TrimSpace(wf.DefaultResolver),
 		strings.TrimSpace(wf.Resolver),
 		strings.TrimSpace(wf.Runtime),
-		strings.TrimSpace(wf.DefaultRuntime),
 	)
 	if identity == "" {
 		return domain.CompiledImageSelection{}, nil, nil

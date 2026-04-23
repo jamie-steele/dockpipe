@@ -21,10 +21,6 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 	if err != nil {
 		return nil, err
 	}
-	cap := strings.TrimSpace(f.Capability)
-	if cap == "" {
-		cap = strings.TrimSpace(f.PrimitiveYAMLDeprecated)
-	}
 	return &Workflow{
 		Name:            f.Name,
 		Description:     f.Description,
@@ -32,16 +28,12 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 		Icon:            f.Icon,
 		WorkflowType:    f.WorkflowType,
 		Namespace:       f.Namespace,
-		Capability:      cap,
 		Run:             f.Run,
 		Isolate:         f.Isolate,
 		Act:             f.Act,
 		Action:          f.Action,
 		Resolver:        f.Resolver,
-		DefaultResolver: f.DefaultResolver,
 		Runtime:         f.Runtime,
-		DefaultRuntime:  f.DefaultRuntime,
-		Runtimes:        f.Runtimes,
 		Strategy:        f.Strategy,
 		Strategies:      f.Strategies,
 		Vault:           f.Vault,
@@ -59,6 +51,19 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 func parseWorkflowFileRecursive(data []byte, baseDir string, readFile func(string) ([]byte, error), stack []string, depth int) (*workflowFile, error) {
 	if depth > maxImportDepth {
 		return nil, fmt.Errorf("imports: max depth %d exceeded", maxImportDepth)
+	}
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return nil, err
+	}
+	var doc *yaml.Node
+	if root.Kind == yaml.DocumentNode && len(root.Content) > 0 {
+		doc = root.Content[0]
+	} else {
+		doc = &root
+	}
+	if err := rejectBannedWorkflowKeys(doc); err != nil {
+		return nil, err
 	}
 	var f workflowFile
 	if err := yaml.Unmarshal(data, &f); err != nil {

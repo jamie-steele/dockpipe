@@ -4,5 +4,5 @@ docker_preflight: false
 
 steps:
   - id: stop
-    skip_container: true
+    kind: host
     run: scripts/pipeon-dev-stack/stop.sh

@@ -152,7 +152,7 @@ func printInitUsage() {
 
 const runsUsageText = `dockpipe runs — inspect host-run and policy records
 
-While a skip_container workflow step runs a host script, dockpipe may write
+While a kind: host workflow step runs a host script, dockpipe may write
 workdir/bin/.dockpipe/runs/<id>.json (and optional sidecars). Containerized runs
 may also write structured policy records under
 workdir/bin/.dockpipe/runs/policy/.

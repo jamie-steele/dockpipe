@@ -46,9 +46,11 @@ This keeps the **mental model** one-dimensional — **template → runtime → r
 ### Runtime
 
 - Represents an **isolated execution environment**.
-- **Canonical substrate names:** **`dockerimage`**, **`dockerfile`**, **`package`** (nesting). Legacy YAML may use **`cli`** / **`powershell`** / **`cmd`** — they normalize to **`dockerimage`**. Labels like **`docker-node`** are **isolate** / image hints paired with **`dockerimage`** or **`dockerfile`**, not additional runtime kinds.
+- **Canonical authored substrate names:** **`dockerimage`** and **`dockerfile`**. Legacy YAML may use **`cli`** / **`powershell`** / **`cmd`** — they normalize to **`dockerimage`**. Labels like **`docker-node`** are **isolate** / image hints paired with **`dockerimage`** or **`dockerfile`**, not additional runtime kinds.
 - **Platform-agnostic:** the same concept applies whether the backend is Docker, EC2, a local browser sandbox, or another substrate.
 - **Must not** encode tool- or vendor-specific logic (no Claude, Cursor, Playwright behavior inside the **runtime** definition).
+
+Packaged workflow invocation is a **workflow step form**, not part of the public authored runtime model.
 
 ### Resolver
 
@@ -145,7 +147,7 @@ Each valid run is characterized by **all** of:
 
 | Field | Value |
 |-------|--------|
-| workflow | `secretstore` (or any host `skip_container` flow with env from a vault) |
+| workflow | `secretstore` (or any host `kind: host` flow with env from a vault) |
 | runtime | `cli` — host shell; secret merge is **resolver**-owned. |
 | runtime.type | `execution` |
 | resolver | e.g. bundled **`dotenv`** (plain env file) or maintainer **`onepassword`** (`op`); other vaults are **other resolver profiles**, not other runtimes. |

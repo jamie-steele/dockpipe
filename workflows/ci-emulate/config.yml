@@ -10,6 +10,6 @@ docker_preflight: false
 
 steps:
   - id: emulate
-    skip_container: true
+    kind: host
     run:
       - bash src/scripts/ci-local.sh

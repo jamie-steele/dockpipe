@@ -23,7 +23,7 @@ compose:
   services: [postgres, ollama]
 steps:
   - id: stack_up
-    skip_container: true
+    kind: host
     host_builtin: compose_up
 
   - id: self_analysis
@@ -43,5 +43,5 @@ steps:
       exec bash scripts/dorkpipe/run-self-analysis.sh'
 
   - id: stack_down
-    skip_container: true
+    kind: host
     host_builtin: compose_down

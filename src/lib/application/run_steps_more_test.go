@@ -46,8 +46,8 @@ func baseRunStepsOpts() runStepsOpts {
 	}
 }
 
-// TestRunBlockingStepSkipContainerMergesOutputs loads outputs.env into env for a blocking skip_container step.
-func TestRunBlockingStepSkipContainerMergesOutputs(t *testing.T) {
+// TestRunBlockingStepHostMergesOutputs loads outputs.env into env for a blocking host step.
+func TestRunBlockingStepHostMergesOutputs(t *testing.T) {
 	withRunStepsSeams(t)
 	wd := t.TempDir()
 	out := filepath.Join(wd, infrastructure.DockpipeDirRel, "outputs.env")
@@ -60,7 +60,7 @@ func TestRunBlockingStepSkipContainerMergesOutputs(t *testing.T) {
 
 	o := baseRunStepsOpts()
 	o.opts.Workdir = wd
-	o.wf.Steps = []domain.Step{{SkipContainer: true, Outputs: domain.DefaultOutputsEnvRel}}
+	o.wf.Steps = []domain.Step{{Kind: "host", Outputs: domain.DefaultOutputsEnvRel}}
 	dockerEnv := map[string]string{}
 	if err := runBlockingStep(&o, 0, 1, dockerEnv); err != nil {
 		t.Fatalf("runBlockingStep error: %v", err)
@@ -116,7 +116,7 @@ func TestRunBlockingStepPackageWorkflowUsesWorkflowField(t *testing.T) {
 namespace: dockpipe-demo
 steps:
   - id: nested-host
-    skip_container: true
+    kind: host
     cmd: echo nested
 `
 	if err := os.WriteFile(filepath.Join(childDir, "config.yml"), []byte(childCfg), 0o644); err != nil {
@@ -127,7 +127,6 @@ steps:
 	o.projectRoot = repo
 	o.opts.Workdir = repo
 	o.wf.Steps = []domain.Step{{
-		Runtime:      "package",
 		WorkflowName: "nested-flow",
 		Package:      "dockpipe-demo",
 	}}
@@ -358,7 +357,7 @@ func TestRunParallelStepWorkerFirstStepExtraPreScript(t *testing.T) {
 	o := baseRunStepsOpts()
 	bFalse := false
 	o.firstStepExtra = []string{pre}
-	o.wf.Steps = []domain.Step{{SkipContainer: true, Blocking: &bFalse}}
+	o.wf.Steps = []domain.Step{{Kind: "host", Blocking: &bFalse}}
 	osStatFn = func(name string) (os.FileInfo, error) {
 		return os.Stat(name)
 	}
@@ -374,7 +373,7 @@ func TestRunParallelStepWorkerFirstStepExtraPreScript(t *testing.T) {
 		t.Fatalf("runParallelStepWorker error: %v", err)
 	}
 	if !called {
-		t.Fatal("expected host exec for skip_container parallel pre-script")
+		t.Fatal("expected host exec for kind: host parallel pre-script")
 	}
 }
 
@@ -399,7 +398,7 @@ func TestRunBlockingStepComposeHostBuiltin(t *testing.T) {
 	}
 	o.envMap["MCP_HTTP_URL"] = "http://127.0.0.1:8766"
 	o.envMap["DATABASE_URL"] = "postgres://local"
-	o.wf.Steps = []domain.Step{{SkipContainer: true, HostBuiltin: "compose_up"}}
+	o.wf.Steps = []domain.Step{{Kind: "host", HostBuiltin: "compose_up"}}
 	var got infrastructure.ComposeLifecycleOpts
 	composeLifecycleFn = func(opts infrastructure.ComposeLifecycleOpts) error {
 		got = opts
@@ -438,7 +437,7 @@ func TestRunBlockingStepComposeDownSkipsWhenAutodownDisabled(t *testing.T) {
 		AutodownEnv: "DORKPIPE_DEV_STACK_AUTODOWN",
 	}
 	o.envMap["DORKPIPE_DEV_STACK_AUTODOWN"] = "0"
-	o.wf.Steps = []domain.Step{{SkipContainer: true, HostBuiltin: "compose_down"}}
+	o.wf.Steps = []domain.Step{{Kind: "host", HostBuiltin: "compose_down"}}
 	composeLifecycleFn = func(opts infrastructure.ComposeLifecycleOpts) error {
 		t.Fatalf("compose lifecycle should be skipped when autodown is disabled, got %+v", opts)
 		return nil

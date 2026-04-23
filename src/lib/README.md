@@ -53,7 +53,7 @@ Nothing is merged until **all** async members finish. Then each member’s **`ou
 Use **distinct** `outputs:` *file paths* within one async group (duplicate paths are rejected).
 
 **Restrictions**  
-Host **commit-worktree** is not allowed inside an async group. **`skip_container`** members only contribute at merge time (their `outputs:` file, in order).
+Host **commit-worktree** is not allowed inside an async group. **`kind: host`** members only contribute at merge time (their `outputs:` file, in order).
 
 **Optional `group` syntax (readability)** — compiles to consecutive `is_blocking: false` steps; runtime and merge rules are unchanged. A `group` entry must be **only** the key `group` (no sibling keys). `tasks` use the same fields as a normal step (`cmd`, `id`, `outputs`, …). **`is_blocking` inside `tasks`** is ignored except **`is_blocking: true`**, which is rejected.
 

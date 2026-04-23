@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Host-only follow-up (skip_container step). Not a Cursor product integration.
+# Host-only follow-up (kind: host step). Not a Cursor product integration.
 # For a long-lived container + docker wait, use cursor-dev-session.sh (cursor-dev workflow default).
 set -euo pipefail
 

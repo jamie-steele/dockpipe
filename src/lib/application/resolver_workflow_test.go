@@ -14,8 +14,8 @@ func TestRunEmbeddedResolverWorkflowWithLoad_CallsRunSteps(t *testing.T) {
 	if err := os.MkdirAll(wfDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	// skip_container avoids AnyContainerStep / Docker preflight in CI/sandbox.
-	yml := "name: x\nsteps:\n  - cmd: echo x\n    skip_container: true\n"
+	// kind: host avoids AnyContainerStep / Docker preflight in CI/sandbox.
+	yml := "name: x\nsteps:\n  - kind: host\n    cmd: echo x\n"
 	if err := os.WriteFile(filepath.Join(wfDir, "config.yml"), []byte(yml), 0o644); err != nil {
 		t.Fatal(err)
 	}

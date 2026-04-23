@@ -31,14 +31,14 @@ steps:
   # Host-only CLI step.
   - id: cli-host
     runtime: cli
-    skip_container: true
+    kind: host
     run:
       - scripts/dockpipe/r2-publish.sh
 
-  # cli + container isolation (same runtime; skip_container: false).
+  # host + container isolation (same runtime; kind: container).
   - id: cli-container
     runtime: cli
-    skip_container: false
+    kind: container
     run:
       - scripts/dockpipe/r2-publish.sh
 

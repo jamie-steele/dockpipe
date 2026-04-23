@@ -23,6 +23,6 @@ vars:
 
 steps:
   - id: terraform
-    skip_container: true
+    kind: host
     run:
       - scripts/dockpipe.cloudflare.r2infra/terraform-cloudflare-r2-run.sh

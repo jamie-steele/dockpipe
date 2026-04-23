@@ -7,7 +7,7 @@ There is **no** separate “mapping table” in DockPipe. **You define names and
 | What you want | Where to look / what to edit |
 |---------------|------------------------------|
 | **Vault item → environment variable name** (e.g. `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`) | **`--workdir` / `.env.op.template`** — each line is `VAR_NAME=op://Vault/Item/field`. Example: **`packages/secrets/resolvers/onepassword/.env.op.template.example`**. In this repo, copy that file to **`.env.op.template`** at the repo root (gitignored). |
-| **Hint list** of common var names (documentation only) | **`packages/secrets/resolvers/onepassword/profile`** → `DOCKPIPE_RESOLVER_ENV=...` (resolver = 1Password; **`runtime: dockerimage`** + **`skip_container`**) |
+| **Hint list** of common var names (documentation only) | **`packages/secrets/resolvers/onepassword/profile`** → `DOCKPIPE_RESOLVER_ENV=...` (resolver = 1Password; **`runtime: dockerimage`** + **`kind: host`**) |
 | **Which script reads the template and where it writes** | This workflow’s **`vars:`** → `OP_ENV_FILE` (input) and `SECRET_ENV_OUT` (must match step 1 **`outputs:`**). Script: **`scripts/onepassword/secretstore-op-inject-outputs.sh`** from the onepassword package. |
 | **What step 2 consumes** | **`scripts/dockpipe/r2-publish.sh`** and **`packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/README.md`** — same variable names as in your `.env.op.template` after `op inject`. |
 

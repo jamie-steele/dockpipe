@@ -19,14 +19,6 @@
       "type": "string",
       "description": "Optional author/org label for packages and discovery. Lowercase label (a-z, digits, hyphens); must not be a reserved word (e.g. dockpipe, core, system)."
     },
-    "capability": {
-      "type": "string",
-      "description": "Optional legacy metadata (ignored by the runner)."
-    },
-    "primitive": {
-      "type": "string",
-      "description": "Deprecated — use capability. Same meaning as capability."
-    },
     "imports": {
       "type": "array",
       "items": { "type": "string" },
@@ -74,10 +66,7 @@
     "act": { "type": "string" },
     "action": { "type": "string" },
     "resolver": { "type": "string" },
-    "default_resolver": { "type": "string" },
     "runtime": { "type": "string" },
-    "default_runtime": { "type": "string" },
-    "runtimes": { "type": "array", "items": { "type": "string" } },
     "vault": {
       "type": "string",
       "description": "Vault mode for op inject (e.g. op). See docs/vault.md."
@@ -96,6 +85,7 @@
         "type": "object",
         "properties": {
           "id": { "type": "string" },
+          "kind": { "type": "string", "enum": ["host", "container"] },
           "runtime": { "type": "string" },
           "resolver": { "type": "string" },
           "workflow": { "type": "string", "description": "Packaged workflow target name for an explicit workflow/package step." },
@@ -103,7 +93,6 @@
           "isolate": { "type": "string" },
           "cmd": { "type": "string" },
           "command": { "type": "string" },
-          "skip_container": { "type": "boolean" },
           "host_builtin": { "type": "string" }
         }
       }

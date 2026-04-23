@@ -1,6 +1,6 @@
 # Resolver profile: `onepassword`
 
-Host-only workflows that use the **1Password CLI** (`op`). Pair with **`runtime: dockerimage`** and **`skip_container: true`**.
+Host-only workflows that use the **1Password CLI** (`op`). Pair with **`runtime: dockerimage`** and **`kind: host`**.
 
 This resolver is **not** part of the lean **`src/core/resolvers/`** bundle. It lives under **`packages/secrets/resolvers/onepassword/`** in this repo and is consumed via **`dockpipe package compile resolvers`** or resolved from declared compile roots in a dockpipe checkout.
 

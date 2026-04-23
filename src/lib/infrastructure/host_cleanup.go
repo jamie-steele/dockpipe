@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Host cleanup after skip_container host scripts (RunHostScript):
+// Host cleanup after kind: host scripts (RunHostScript):
 //
 // When DOCKPIPE_RUN_ID is set (normal host run with a workdir), cleanup is run-scoped only:
 // workdir/bin/.dockpipe/runs/<runID>.container holds the Docker container name for this invocation.

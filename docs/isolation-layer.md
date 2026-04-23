@@ -76,7 +76,7 @@ When adding a new kind, prefer **one profile file** + **one clear primary key** 
 
 ## Related docs
 
-- **[workflow-yaml.md](workflow-yaml.md)** — `isolate:`, `resolver:` / `runtime:` on steps, optional `runtimes:` substrate allowlist  
+- **[workflow-yaml.md](workflow-yaml.md)** — `isolate:`, `resolver:` / `runtime:` on steps, and `kind: host` for host-side actions  
 - **[architecture.md](architecture.md)** — data flow and extension points  
 - **[architecture-model.md](architecture-model.md)** — **`templates/core/`** layout (runtimes, resolvers, strategies, assets)  
 - **Resolver KEY reference** — **`templates/core/resolvers/README.md`**

@@ -1,2 +1,2 @@
-# Runtime substrate: nested namespaced workflow (parent step uses runtime: package + resolver + package:).
+# Internal runtime substrate for packaged workflow dispatch. Public workflow YAML should use workflow: + package: steps instead.
 DOCKPIPE_RUNTIME_SUBSTRATE=package

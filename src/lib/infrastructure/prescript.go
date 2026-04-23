@@ -58,7 +58,7 @@ func SourceHostScript(scriptPath string, env []string) (map[string]string, error
 }
 
 // RunHostScript runs a bash script as a subprocess with stdin/stdout/stderr attached to this
-// process (not sourced). Use for workflow steps with skip_container: true that print messages or
+// process (not sourced). Use for workflow steps with kind: host that print messages or
 // launch programs — SourceHostScript captures all output and hides it from the user.
 func RunHostScript(scriptPath string, env []string) error {
 	bashExe, err := resolveBashExe()

@@ -38,8 +38,8 @@ A **workflow** is primarily **`config.yml`** (plus assets next to it). In that f
 
 | Concern | Where definitions usually live | What the workflow YAML does |
 |--------|--------------------------------|-----------------------------|
-| **Runtime** (substrate) | **Only in core:** **`templates/core/runtimes/<name>/`** (or bundled **`src/core/runtimes/`**) — substrates are an **engine** concept. | **`runtime`**, **`default_runtime`**, **`runtimes:`** **reference** an existing profile **name** (and optionally **constrain** CLI/workflow selection). Workflows **do not** define or override substrate types; adding a new runtime is a **core** change. |
-| **Resolver** (tool / env profile) | **`templates/core/resolvers/<name>/`** or maintainer trees listed under **`compile.workflows`** (e.g. nested **`…/resolvers/codex/`** with **`profile/`**) | **`resolver`**, **`default_resolver`**, **`capability`** name the profile or capability. |
+| **Runtime** (substrate) | **Only in core:** **`templates/core/runtimes/<name>/`** (or bundled **`src/core/runtimes/`**) — substrates are an **engine** concept. | **`runtime`** references an existing profile **name**. Workflows **do not** define or override substrate types; adding a new runtime is a **core** change. |
+| **Resolver** (tool / env profile) | **`templates/core/resolvers/<name>/`** or maintainer trees listed under **`compile.workflows`** (e.g. nested **`…/resolvers/codex/`** with **`profile/`**) | **`resolver`** names the profile. Package metadata may still declare **`capability`**, but normal workflow authoring should lead with **`resolver`**. |
 | **Strategy** (lifecycle wrapper) | **`templates/core/strategies/<name>/`** | **`strategy`**, **`strategies:`** select host before/after scripts. |
 | **Domain workflows** (under maintainer packages) | Same as workflows: **`config.yml`** under e.g. **`dockpipe/dorkpipe/`** or nested under **`dockpipe/<group>/resolvers/<name>/`** (resolver-shaped trees include **`profile/`** + workflow assets) | **`scripts/…`** resolves via compiled **`dockpipe-workflow-*`** tarballs first, then source trees. |
 

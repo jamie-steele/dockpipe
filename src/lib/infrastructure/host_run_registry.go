@@ -14,7 +14,7 @@ import (
 
 const hostRunIDBytes = 4 // 8 hex chars
 
-// HostRunRecord is written to bin/.dockpipe/runs/<id>.json while a host script (skip_container step) runs.
+// HostRunRecord is written to bin/.dockpipe/runs/<id>.json while a host script (kind: host step) runs.
 type HostRunRecord struct {
 	ID        string `json:"id"`
 	PID       int    `json:"pid"`
