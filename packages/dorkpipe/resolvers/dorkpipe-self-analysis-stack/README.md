@@ -20,6 +20,7 @@ DORKPIPE_DEV_STACK_AUTODOWN=0 dockpipe --workflow dorkpipe-self-analysis-stack -
 ```
 
 Analysis-only (no compose lifecycle): **`dorkpipe-self-analysis`**. Host-only: **`dorkpipe-self-analysis-host`**.
+Proxy-backed policy example: **`dorkpipe-self-analysis-stack-proxy`**.
 
 **Isolation:** Sidecars run via compose on the **host**; **DorkPipe** still runs the analysis step in a **disposable Docker container** (same as non-stack). Agent rules: **`.cursor/rules/dockpipe-agents.mdc`**, **`AGENTS.md`** (repository analysis section).
 

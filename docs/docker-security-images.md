@@ -156,6 +156,12 @@ When a workflow compiles with `network.enforcement: proxy`, DockPipe expects a p
 
 Compose-managed stacks can feed this path cleanly through DockPipe-owned workflow env. For example, a prior `compose_up` step may export `DOCKPIPE_POLICY_PROXY_URL` via `compose.exports`, and the later container step will consume that run-local setting when applying the compiled runtime policy.
 
+First package consumer in this repository:
+
+- `packages/dorkpipe/resolvers/dorkpipe-self-analysis-stack-proxy/`
+- compose-managed support services remain package-owned
+- DockPipe still owns lifecycle, env export, manifest compilation, and proxy env injection
+
 ## Image artifact model
 
 Docker images should be treated as compiled artifacts, not just side effects of `run`.

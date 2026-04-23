@@ -24,6 +24,12 @@ services:
       - "11434:11434"
     volumes:
       - dorkpipe_ollama:/root/.ollama
+  policy-proxy:
+    image: ubuntu/squid:latest
+    ports:
+      - "13128:3128"
+    volumes:
+      - ./squid.conf:/etc/squid/squid.conf:ro
 
 volumes:
   dorkpipe_pgdata:
