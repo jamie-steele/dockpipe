@@ -236,6 +236,9 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 	if _, err := materializePipeLangRoots([]string{staging}, true, ""); err != nil {
 		return fmt.Errorf("compile pipelang artifacts: %w", err)
 	}
+	if err := writeCompiledWorkflowRuntimeArtifacts(workdir, staging, pkgName, wf); err != nil {
+		return fmt.Errorf("write runtime artifacts: %w", err)
+	}
 	defaultVersion := authoredPackageVersion(workdir)
 	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {

@@ -14,6 +14,7 @@
 | [package-model.md](package-model.md) | Store vs authoring, `package.yml` |
 | [capabilities.md](capabilities.md) | Capability ids vs resolvers |
 | [isolation-layer.md](isolation-layer.md) | Profile files, `DOCKPIPE_*` keys |
+| [docker-security-images.md](docker-security-images.md) | Proposed compiled security policy + image artifact model |
 | [architecture.md](architecture.md) | Engine data flow (non-normative) |
 
 | Maintainer / integrations | |

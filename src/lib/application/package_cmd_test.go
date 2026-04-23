@@ -1,11 +1,13 @@
 package application
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"dockpipe/src/lib/domain"
 	"dockpipe/src/lib/infrastructure"
 	"dockpipe/src/lib/infrastructure/packagebuild"
 )
@@ -165,5 +167,75 @@ steps: []
 	}
 	if !strings.Contains(string(pyml), "version: 2.3.4") {
 		t.Fatalf("expected generated manifest version 2.3.4, got:\n%s", string(pyml))
+	}
+	rmf, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/.dockpipe/runtime.effective.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rm domain.CompiledRuntimeManifest
+	if err := json.Unmarshal(rmf, &rm); err != nil {
+		t.Fatal(err)
+	}
+	if rm.Kind != domain.RuntimeManifestKind || rm.Security.Preset != "secure-default" {
+		t.Fatalf("unexpected runtime manifest: %+v", rm)
+	}
+	if rm.Security.Network.Enforcement != "advisory" {
+		t.Fatalf("expected advisory enforcement, got %+v", rm.Security.Network)
+	}
+}
+
+func TestCmdPackageCompileWorkflowWritesImageArtifactForTemplateBuild(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "mywf")
+	img := filepath.Join(dir, "src", "core", "assets", "images", "codex")
+	runtimes := filepath.Join(dir, "src", "core", "runtimes")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(img, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(runtimes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimes, ".keep"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(img, "Dockerfile"), []byte("FROM alpine:3.20\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "VERSION"), []byte("5.6.7\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "version"), []byte("5.6.7\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: mywf
+isolate: codex
+steps: []
+`
+	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-5.6.7.tar.gz")
+	imf, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/.dockpipe/image-artifact.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var im domain.ImageArtifactManifest
+	if err := json.Unmarshal(imf, &im); err != nil {
+		t.Fatal(err)
+	}
+	if im.Kind != domain.ImageArtifactManifestKind || im.Source != "build" {
+		t.Fatalf("unexpected image artifact: %+v", im)
+	}
+	if im.Build == nil || im.Build.Dockerfile != "src/core/assets/images/codex/Dockerfile" {
+		t.Fatalf("unexpected build spec: %+v", im.Build)
+	}
+	if im.ImageRef != "dockpipe-codex:5.6.7" {
+		t.Fatalf("unexpected image ref: %q", im.ImageRef)
 	}
 }
