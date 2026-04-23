@@ -144,15 +144,23 @@ func applyCompiledProxyNetworkPolicy(runOpts *infrastructure.RunOpts, policy dom
 		return nil
 	}
 	httpProxy := firstNonEmptyString(
+		runOptEnvValue(runOpts, "DOCKPIPE_POLICY_PROXY_URL"),
+		runOptEnvValue(runOpts, "DOCKPIPE_NETWORK_PROXY_URL"),
+		runOptEnvValue(runOpts, "HTTP_PROXY"),
+		runOptEnvValue(runOpts, "http_proxy"),
 		strings.TrimSpace(os.Getenv("DOCKPIPE_POLICY_PROXY_URL")),
 		strings.TrimSpace(os.Getenv("DOCKPIPE_NETWORK_PROXY_URL")),
 		strings.TrimSpace(os.Getenv("HTTP_PROXY")),
 		strings.TrimSpace(os.Getenv("http_proxy")),
 	)
 	if httpProxy == "" {
-		return fmt.Errorf("network policy requires proxy enforcement but no proxy URL is configured (set DOCKPIPE_POLICY_PROXY_URL or DOCKPIPE_NETWORK_PROXY_URL)")
+		return fmt.Errorf("network policy requires proxy enforcement but no proxy URL is configured in the run environment (set DOCKPIPE_POLICY_PROXY_URL or DOCKPIPE_NETWORK_PROXY_URL)")
 	}
 	httpsProxy := firstNonEmptyString(
+		runOptEnvValue(runOpts, "DOCKPIPE_POLICY_PROXY_HTTPS_URL"),
+		runOptEnvValue(runOpts, "DOCKPIPE_NETWORK_PROXY_HTTPS_URL"),
+		runOptEnvValue(runOpts, "HTTPS_PROXY"),
+		runOptEnvValue(runOpts, "https_proxy"),
 		strings.TrimSpace(os.Getenv("DOCKPIPE_POLICY_PROXY_HTTPS_URL")),
 		strings.TrimSpace(os.Getenv("DOCKPIPE_NETWORK_PROXY_HTTPS_URL")),
 		strings.TrimSpace(os.Getenv("HTTPS_PROXY")),
@@ -160,6 +168,10 @@ func applyCompiledProxyNetworkPolicy(runOpts *infrastructure.RunOpts, policy dom
 		httpProxy,
 	)
 	noProxy := mergeNoProxyValues(
+		runOptEnvValue(runOpts, "DOCKPIPE_POLICY_PROXY_NO_PROXY"),
+		runOptEnvValue(runOpts, "DOCKPIPE_NETWORK_PROXY_NO_PROXY"),
+		runOptEnvValue(runOpts, "NO_PROXY"),
+		runOptEnvValue(runOpts, "no_proxy"),
 		strings.TrimSpace(os.Getenv("DOCKPIPE_POLICY_PROXY_NO_PROXY")),
 		strings.TrimSpace(os.Getenv("DOCKPIPE_NETWORK_PROXY_NO_PROXY")),
 		strings.TrimSpace(os.Getenv("NO_PROXY")),
@@ -183,6 +195,23 @@ func applyCompiledProxyNetworkPolicy(runOpts *infrastructure.RunOpts, policy dom
 		runOpts.ExtraEnv = upsertEnvPair(runOpts.ExtraEnv, "DOCKPIPE_POLICY_NETWORK_BLOCK", strings.Join(policy.Block, ","))
 	}
 	return nil
+}
+
+func runOptEnvValue(runOpts *infrastructure.RunOpts, key string) string {
+	if runOpts == nil {
+		return ""
+	}
+	prefix := strings.TrimSpace(key) + "="
+	if prefix == "=" {
+		return ""
+	}
+	for _, pair := range runOpts.ExtraEnv {
+		pair = strings.TrimSpace(pair)
+		if strings.HasPrefix(pair, prefix) {
+			return strings.TrimSpace(strings.TrimPrefix(pair, prefix))
+		}
+	}
+	return ""
 }
 
 func compiledNetworkRuleSummary(policy domain.CompiledNetworkPolicy) string {

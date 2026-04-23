@@ -154,6 +154,8 @@ DockPipe should not force every container onto a sidecar/proxy path.
 
 When a workflow compiles with `network.enforcement: proxy`, DockPipe expects a proxy-backed egress layer at run time and injects proxy env/settings only for that run. This keeps the stronger path selective and lets higher-level tools such as DorkPipe reuse their existing sidecar/proxy patterns without making them part of every workflow.
 
+Compose-managed stacks can feed this path cleanly through DockPipe-owned workflow env. For example, a prior `compose_up` step may export `DOCKPIPE_POLICY_PROXY_URL` via `compose.exports`, and the later container step will consume that run-local setting when applying the compiled runtime policy.
+
 ## Image artifact model
 
 Docker images should be treated as compiled artifacts, not just side effects of `run`.

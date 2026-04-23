@@ -97,11 +97,12 @@ type Workflow struct {
 }
 
 type WorkflowComposeConfig struct {
-	File             string   `yaml:"file,omitempty"`
-	Project          string   `yaml:"project,omitempty"`
-	ProjectDirectory string   `yaml:"project_directory,omitempty"`
-	AutodownEnv      string   `yaml:"autodown_env,omitempty"`
-	Services         []string `yaml:"services,omitempty"`
+	File             string            `yaml:"file,omitempty"`
+	Project          string            `yaml:"project,omitempty"`
+	ProjectDirectory string            `yaml:"project_directory,omitempty"`
+	AutodownEnv      string            `yaml:"autodown_env,omitempty"`
+	Exports          map[string]string `yaml:"exports,omitempty"`
+	Services         []string          `yaml:"services,omitempty"`
 }
 
 type WorkflowSecurityConfig struct {
@@ -471,6 +472,7 @@ func ValidateWorkflowComposeField(w *Workflow) error {
 	if strings.TrimSpace(c.File) == "" &&
 		strings.TrimSpace(c.Project) == "" &&
 		strings.TrimSpace(c.ProjectDirectory) == "" &&
+		len(c.Exports) == 0 &&
 		len(c.Services) == 0 {
 		return nil
 	}

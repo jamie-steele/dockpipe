@@ -685,6 +685,10 @@ func runWorkflowComposeHostBuiltin(o *runStepsOpts, builtin string) error {
 	}); err != nil {
 		return err
 	}
+	if action != "down" {
+		applyComposeExports(o.envMap, cfg.Exports)
+		o.envSlice = domain.EnvMapToSlice(o.envMap)
+	}
 	return nil
 }
 
@@ -702,6 +706,19 @@ func composeAutodownEnabled(cfg domain.WorkflowComposeConfig, env map[string]str
 		return false
 	default:
 		return true
+	}
+}
+
+func applyComposeExports(env map[string]string, exports map[string]string) {
+	if env == nil || len(exports) == 0 {
+		return
+	}
+	for key, value := range exports {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		env[key] = strings.TrimSpace(value)
 	}
 }
 
@@ -847,6 +864,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 	workHost := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
 	dockerForRun := maps.Clone(dockerEnv)
 	mergeResolverAuthEnvFromHost(dockerForRun, envMap, ra)
+	mergePolicyProxyEnvFromHost(dockerForRun, envMap)
 	mergeWorktreeGitDockerEnv(dockerForRun, workHost)
 	networkMode := infrastructure.DockerNetworkModeFromEnv(dockerForRun)
 	if networkMode == "" {

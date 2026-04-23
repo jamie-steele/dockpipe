@@ -134,6 +134,51 @@ func TestRunNonStepsHappyPath(t *testing.T) {
 	}
 }
 
+func TestRunNonStepsForwardsWorkflowPolicyProxyEnv(t *testing.T) {
+	withRunSeams(t)
+	repoRoot := t.TempDir()
+	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
+	wfDir := filepath.Join(repoRoot, "workflows", "proxydemo")
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: proxydemo
+isolate: codex
+vars:
+  DOCKPIPE_POLICY_PROXY_URL: http://proxy-sidecar:8080
+  DOCKPIPE_POLICY_PROXY_NO_PROXY: metadata.local
+`
+	if err := os.WriteFile(filepath.Join(wfDir, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	repoRootAppFn = func() (string, error) { return repoRoot, nil }
+	templateBuildAppFn = func(repoRoot, name string) (string, string, bool) {
+		if name == "codex" {
+			return "dockpipe-codex", "/build/codex", true
+		}
+		return "", "", false
+	}
+	maybeVersionTagAppFn = func(repoRoot, image string) string { return image }
+	dockerBuildAppFn = func(image, dockerfileDir, contextDir string) error { return nil }
+	var gotRunOpts infrastructure.RunOpts
+	runContainerAppFn = func(o infrastructure.RunOpts, argv []string) (int, error) {
+		gotRunOpts = o
+		return 0, nil
+	}
+
+	err := Run([]string{"--workflow", "proxydemo", "--", "echo", "hi"}, nil)
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	em := domain.EnvSliceToMap(gotRunOpts.ExtraEnv)
+	if em["DOCKPIPE_POLICY_PROXY_URL"] != "http://proxy-sidecar:8080" {
+		t.Fatalf("expected workflow proxy URL forwarded, got %#v", em)
+	}
+	if em["DOCKPIPE_POLICY_PROXY_NO_PROXY"] != "metadata.local" {
+		t.Fatalf("expected workflow proxy no_proxy forwarded, got %#v", em)
+	}
+}
+
 func TestMaybeSkipDockerBuildForWorkflowTarballArtifact(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()
@@ -653,6 +698,37 @@ func TestApplyCompiledRuntimePolicyProxyRequiresProxyURL(t *testing.T) {
 	}
 	if err := applyCompiledRuntimeManifest(runOpts, rm); err == nil || !strings.Contains(err.Error(), "DOCKPIPE_POLICY_PROXY_URL") {
 		t.Fatalf("expected missing proxy URL error, got %v", err)
+	}
+}
+
+func TestApplyCompiledRuntimePolicyUsesRunEnvProxyExport(t *testing.T) {
+	runOpts := &infrastructure.RunOpts{
+		ExtraEnv: []string{
+			"DOCKPIPE_POLICY_PROXY_URL=http://proxy-sidecar:8080",
+			"DOCKPIPE_POLICY_PROXY_NO_PROXY=metadata.local",
+		},
+	}
+	rm := &domain.CompiledRuntimeManifest{
+		Security: domain.CompiledSecurityPolicy{
+			Network: domain.CompiledNetworkPolicy{
+				Mode:        "restricted",
+				Enforcement: "proxy",
+			},
+		},
+	}
+	if err := applyCompiledRuntimeManifest(runOpts, rm); err != nil {
+		t.Fatalf("applyCompiledRuntimeManifest failed: %v", err)
+	}
+	joined := strings.Join(runOpts.ExtraEnv, "\n")
+	for _, want := range []string{
+		"HTTP_PROXY=http://proxy-sidecar:8080",
+		"HTTPS_PROXY=http://proxy-sidecar:8080",
+		"NO_PROXY=metadata.local,localhost,127.0.0.1,::1",
+		"DOCKPIPE_POLICY_NETWORK_ENFORCEMENT=proxy",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("expected proxy env %q in run opts, got:\n%s", want, joined)
+		}
 	}
 }
 

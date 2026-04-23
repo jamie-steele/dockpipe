@@ -52,7 +52,7 @@ For steps with **`skip_container: true`**, **`run:`** scripts execute on the hos
 | `capability` | Dotted **capability** id (e.g. `cli.codex`, **`dockpipe.workflow.*`**). When **`resolver:`** is omitted, the runner picks **`templates/core/resolvers/<name>`** from resolver **`package.yml`** files that declare this capability. **`dockpipe.*`** ids may imply **`runtime:`** when unset (see **[capabilities.md](capabilities.md)**). Deprecated alias: **`primitive`**. |
 | `category` | Optional UI hint for tools like **Pipeon**: e.g. `app` marks a launchable GUI/container IDE-style workflow shown in **Basic** mode. Omit or use other values for pipelines and advanced-only flows. |
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
-| `compose` | Optional Docker Compose settings for host built-ins such as `compose_up`, `compose_down`, and `compose_ps`. Fields: `file`, `project`, `project_directory`, `autodown_env`, `services`. Compose runs inherit DockPipe’s resolved environment and vault-injected vars directly. |
+| `compose` | Optional Docker Compose settings for host built-ins such as `compose_up`, `compose_down`, and `compose_ps`. Fields: `file`, `project`, `project_directory`, `autodown_env`, `exports`, `services`. Compose runs inherit DockPipe’s resolved environment and vault-injected vars directly. |
 | `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). |
 | `isolate` | Template name or image for the container. For **resolver-driven** flows with **`strategy: worktree`**, prefer **`default_runtime`** / **`default_resolver`** to pick **core** profile names; **`isolate`** remains a **fallback** default when those are empty. |
 | `act` / `action` | Action script after the container command (when not using per-step act). |
@@ -140,6 +140,8 @@ compose:
   project: dockpipe-dev
   project_directory: ../../..
   autodown_env: STACK_AUTODOWN
+  exports:
+    OLLAMA_HOST: http://host.docker.internal:11434
   services: [proxy]
 
 steps:
@@ -157,6 +159,8 @@ steps:
 ```
 
 If `compose.autodown_env` is set, `compose_down` is skipped when that env resolves to `0`, `false`, `no`, or `off`.
+
+If `compose.exports` is set, those `KEY=value` pairs are merged into DockPipe’s workflow environment after a successful `compose_up` or `compose_ps`. That makes them available to later steps without an extra env-file layer.
 
 ---
 

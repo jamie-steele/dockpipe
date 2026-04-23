@@ -62,6 +62,10 @@
         "project": { "type": "string" },
         "project_directory": { "type": "string" },
         "autodown_env": { "type": "string" },
+        "exports": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
         "services": { "type": "array", "items": { "type": "string" } }
       }
     },

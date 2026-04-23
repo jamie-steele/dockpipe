@@ -370,6 +370,8 @@ name: t
 compose:
   file: assets/compose/docker-compose.yml
   autodown_env: DORKPIPE_DEV_STACK_AUTODOWN
+  exports:
+    OLLAMA_HOST: http://host.docker.internal:11434
 steps:
   - skip_container: true
     host_builtin: compose_up
@@ -386,6 +388,9 @@ steps:
 	}
 	if w.Compose.AutodownEnv != "DORKPIPE_DEV_STACK_AUTODOWN" {
 		t.Fatalf("unexpected compose autodown env: %+v", w.Compose)
+	}
+	if w.Compose.Exports["OLLAMA_HOST"] != "http://host.docker.internal:11434" {
+		t.Fatalf("unexpected compose exports: %+v", w.Compose.Exports)
 	}
 	if err := ValidateLoadedWorkflow(w); err != nil {
 		t.Fatal(err)

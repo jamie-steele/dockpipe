@@ -355,7 +355,10 @@ func TestRunBlockingStepComposeHostBuiltin(t *testing.T) {
 		File:             "assets/compose/docker-compose.yml",
 		Project:          "dockpipe-dev",
 		ProjectDirectory: "../../..",
-		Services:         []string{"proxy"},
+		Exports: map[string]string{
+			"OLLAMA_HOST": "http://host.docker.internal:11434",
+		},
+		Services: []string{"proxy"},
 	}
 	o.envMap["MCP_HTTP_URL"] = "http://127.0.0.1:8766"
 	o.envMap["DATABASE_URL"] = "postgres://local"
@@ -384,6 +387,9 @@ func TestRunBlockingStepComposeHostBuiltin(t *testing.T) {
 	}
 	if len(got.Services) != 1 || got.Services[0] != "proxy" {
 		t.Fatalf("unexpected compose services: %+v", got.Services)
+	}
+	if o.envMap["OLLAMA_HOST"] != "http://host.docker.internal:11434" {
+		t.Fatalf("expected compose export in envMap, got %+v", o.envMap)
 	}
 }
 

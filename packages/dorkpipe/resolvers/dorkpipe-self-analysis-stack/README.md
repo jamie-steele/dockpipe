@@ -27,3 +27,9 @@ Current shape:
 
 - **compose up** uses the DockPipe-owned Compose primitive from workflow YAML
 - **compose down** also uses the DockPipe-owned Compose primitive, with keepalive controlled by **`compose.autodown_env`**
+- the stack also exports **`DATABASE_URL`** and **`OLLAMA_HOST`** into the later DockPipe steps through **`compose.exports`**
+
+Host endpoint note:
+
+- the workflow currently exports **`host.docker.internal`** endpoints for the isolated analysis container
+- on Linux engines that do not provide that alias automatically, override **`OLLAMA_HOST`** / **`DATABASE_URL`** as needed (for example the bridge IP you already use today)

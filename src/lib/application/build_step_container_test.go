@@ -123,6 +123,36 @@ func TestBuildStepContainer_ForwardsMultipleResolverEnvHints(t *testing.T) {
 	}
 }
 
+// TestBuildStepContainer_ForwardsPolicyProxyEnv copies DockPipe policy proxy settings from
+// the resolved workflow environment into the container env so compose exports can drive
+// proxy-backed network enforcement on later steps.
+func TestBuildStepContainer_ForwardsPolicyProxyEnv(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	o := &runStepsOpts{
+		repoRoot: repoRoot,
+		wfRoot:   filepath.Join(repoRoot, "templates", "test"),
+		wf:       &domain.Workflow{Isolate: "base-dev"},
+		opts:     &CliOpts{},
+	}
+	step := domain.Step{Cmd: "echo hi"}
+	envMap := map[string]string{
+		"DOCKPIPE_POLICY_PROXY_URL":      "http://proxy-sidecar:8080",
+		"DOCKPIPE_POLICY_PROXY_NO_PROXY": "metadata.local",
+	}
+	dockerEnv := map[string]string{}
+	_, runOpts, _, _, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv, nil)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	em := domain.EnvSliceToMap(runOpts.ExtraEnv)
+	if em["DOCKPIPE_POLICY_PROXY_URL"] != "http://proxy-sidecar:8080" {
+		t.Fatalf("expected policy proxy URL forwarded, got %#v", em)
+	}
+	if em["DOCKPIPE_POLICY_PROXY_NO_PROXY"] != "metadata.local" {
+		t.Fatalf("expected policy no_proxy forwarded, got %#v", em)
+	}
+}
+
 // TestBuildStepContainer_StepResolverTemplate uses DOCKPIPE_RESOLVER_TEMPLATE from a per-step resolver assignment.
 func TestBuildStepContainer_StepResolverTemplate(t *testing.T) {
 	repoRoot := testRepoRoot(t)

@@ -738,6 +738,7 @@ func Run(argv []string, baseEnviron []string) error {
 	workHostForEnv := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
 	mergeWorktreeGitDockerEnv(dockerEnvMap, workHostForEnv)
 	mergeEnvHintKeys(dockerEnvMap, envMap, resolverEnvHint)
+	mergePolicyProxyEnvFromHost(dockerEnvMap, envMap)
 	networkMode := infrastructure.DockerNetworkModeFromEnv(dockerEnvMap)
 	if networkMode == "" {
 		networkMode = strings.TrimSpace(envMap["DOCKPIPE_DOCKER_NETWORK"])
