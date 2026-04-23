@@ -19,6 +19,7 @@ func withRunStepsSeams(t *testing.T) {
 	oldRun := runContainerFn
 	oldSource := sourceHostScriptFn
 	oldRunHost := runHostScriptFn
+	oldRunHostCmd := runHostCommandFn
 	oldStat := osStatFn
 	oldGetwd := getwdFn
 	t.Cleanup(func() {
@@ -28,6 +29,7 @@ func withRunStepsSeams(t *testing.T) {
 		runContainerFn = oldRun
 		sourceHostScriptFn = oldSource
 		runHostScriptFn = oldRunHost
+		runHostCommandFn = oldRunHostCmd
 		osStatFn = oldStat
 		getwdFn = oldGetwd
 	})
@@ -67,6 +69,27 @@ func TestRunBlockingStepHostMergesOutputs(t *testing.T) {
 	}
 	if o.envMap["A"] != "1" || dockerEnv["A"] != "1" {
 		t.Fatalf("expected merged outputs, env=%#v docker=%#v", o.envMap, dockerEnv)
+	}
+}
+
+func TestRunBlockingStepHostCommandRunsOnHost(t *testing.T) {
+	withRunStepsSeams(t)
+	o := baseRunStepsOpts()
+	o.wf.Steps = []domain.Step{{Kind: "host", Cmd: "echo host"}}
+	called := false
+	runHostCommandFn = func(cmd string, env []string) error {
+		called = true
+		if cmd != "echo host" {
+			t.Fatalf("unexpected host cmd %q", cmd)
+		}
+		return nil
+	}
+	dockerEnv := map[string]string{}
+	if err := runBlockingStep(&o, 0, 1, dockerEnv); err != nil {
+		t.Fatalf("runBlockingStep error: %v", err)
+	}
+	if !called {
+		t.Fatal("expected host command execution")
 	}
 }
 

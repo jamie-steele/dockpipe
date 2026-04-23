@@ -456,6 +456,9 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 		if err := ValidateStepKind(i, s); err != nil {
 			return err
 		}
+		if err := ValidateStepHostShape(i, s); err != nil {
+			return err
+		}
 		if err := ValidateStepPackageInvocation(i, s); err != nil {
 			return err
 		}
@@ -529,6 +532,12 @@ func ValidateStepPackageInvocation(i int, s Step) error {
 	if strings.TrimSpace(s.Isolate) != "" {
 		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set isolate:", i+1)
 	}
+	if strings.TrimSpace(s.CmdLine()) != "" {
+		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set cmd/command", i+1)
+	}
+	if strings.TrimSpace(s.ActPath()) != "" {
+		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set act/action", i+1)
+	}
 	if s.IsHostStep() {
 		return fmt.Errorf("step %d: packaged workflow step cannot use kind: host", i+1)
 	}
@@ -556,6 +565,25 @@ func ValidateStepHostBuiltin(i int, s Step) error {
 	default:
 		return fmt.Errorf("step %d: unknown host_builtin %q (allowed: package_build_store, compose_up, compose_down, compose_ps)", i+1, b)
 	}
+}
+
+func ValidateStepHostShape(i int, s Step) error {
+	if !s.IsHostStep() {
+		return nil
+	}
+	if s.UsesPackagedWorkflow() {
+		return nil
+	}
+	if strings.TrimSpace(s.Runtime) != "" {
+		return fmt.Errorf("step %d: kind: host step does not use runtime; remove runtime: or switch to a container step", i+1)
+	}
+	if strings.TrimSpace(s.Resolver) != "" {
+		return fmt.Errorf("step %d: kind: host step does not use resolver; remove resolver: or switch to a container step", i+1)
+	}
+	if strings.TrimSpace(s.Isolate) != "" {
+		return fmt.Errorf("step %d: kind: host step does not use isolate; remove isolate: or switch to a container step", i+1)
+	}
+	return nil
 }
 
 func ValidateStepComposeBuiltin(i int, s Step, w *Workflow) error {

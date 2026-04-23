@@ -21,6 +21,7 @@ var (
 	runContainerFn      = infrastructure.RunContainer
 	sourceHostScriptFn  = infrastructure.SourceHostScript
 	runHostScriptFn     = infrastructure.RunHostScript
+	runHostCommandFn    = infrastructure.RunHostCommand
 	osStatFn            = os.Stat
 	getwdFn             = os.Getwd
 )
@@ -314,6 +315,12 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 	}
 
 	if step.IsHostStep() {
+		if cmd := strings.TrimSpace(step.CmdLine()); cmd != "" {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Host command\n")
+			if err := runHostCommandFn(cmd, o.envSlice); err != nil {
+				return err
+			}
+		}
 		wd := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir, mustGetwd())
 		applyOutputsFile(filepath.Join(wd, step.OutputsPath()), o.envMap, dockerEnv, o.locked, nil, "")
 		return nil
@@ -597,6 +604,11 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 	}
 
 	if step.IsHostStep() {
+		if cmd := strings.TrimSpace(step.CmdLine()); cmd != "" {
+			if err := runHostCommandFn(cmd, envSlice); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 

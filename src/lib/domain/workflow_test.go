@@ -464,3 +464,30 @@ func TestValidateLoadedWorkflowRejectsComposeBuiltinWithoutComposeConfig(t *test
 		t.Fatal("expected compose builtin validation error")
 	}
 }
+
+func TestValidateLoadedWorkflowRejectsHostStepRuntimeFields(t *testing.T) {
+	cases := []Step{
+		{Kind: "host", Runtime: "dockerimage"},
+		{Kind: "host", Resolver: "codex"},
+		{Kind: "host", Isolate: "alpine:3.22"},
+	}
+	for _, step := range cases {
+		w := &Workflow{Steps: []Step{step}}
+		if err := ValidateLoadedWorkflow(w); err == nil {
+			t.Fatalf("expected host-step validation error for %+v", step)
+		}
+	}
+}
+
+func TestValidateLoadedWorkflowRejectsPackagedWorkflowStepCmd(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{{
+			WorkflowName: "child",
+			Package:      "acme",
+			Cmd:          "echo nope",
+		}},
+	}
+	if err := ValidateLoadedWorkflow(w); err == nil || !strings.Contains(err.Error(), "do not also set cmd/command") {
+		t.Fatalf("expected packaged workflow cmd validation error, got %v", err)
+	}
+}

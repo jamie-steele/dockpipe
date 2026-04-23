@@ -101,6 +101,30 @@ func RunHostScript(scriptPath string, env []string) error {
 	return nil
 }
 
+// RunHostCommand runs an inline bash command on the host with inherited stdio.
+// It uses the same host-run registry and cleanup behavior as RunHostScript.
+func RunHostCommand(command string, env []string) error {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return nil
+	}
+	f, err := os.CreateTemp("", "dockpipe-hostcmd-*.sh")
+	if err != nil {
+		return fmt.Errorf("host command temp file: %w", err)
+	}
+	scriptPath := f.Name()
+	_ = f.Close()
+	defer func() { _ = os.Remove(scriptPath) }()
+	body := command
+	if !strings.HasSuffix(body, "\n") {
+		body += "\n"
+	}
+	if err := os.WriteFile(scriptPath, []byte(body), 0o700); err != nil {
+		return fmt.Errorf("host command temp write: %w", err)
+	}
+	return RunHostScript(scriptPath, env)
+}
+
 // bashSingleQuoted returns s as a single-quoted bash literal ('...' with ' escaped as '\”).
 func bashSingleQuoted(s string) string {
 	return `'` + strings.ReplaceAll(s, `'`, `'\''`) + `'`

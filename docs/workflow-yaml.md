@@ -163,16 +163,16 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | Key | Purpose |
 |-----|---------|
 | `id` | Optional. Used in stderr logs (e.g. `[merge]` lines). If omitted, logs use `step 1`, `step 2`, … |
-| `cmd` / `command` | Shell command line inside the container (parsed for argv). |
+| `cmd` / `command` | Shell command line for this step. In a **container** step it runs inside the container. In a **host** step it runs on the host. |
 | `run` | String or YAML list: host pre-scripts before this step’s container. |
 | `pre_script` | Single extra pre-script path (in addition to `run`). |
 | `isolate` | Template/image for this step (falls back to workflow / CLI / **core** runtime profile). |
 | `kind` | Step kind. Use **`container`** (default) for normal isolated execution, or **`host`** for host-side actions. |
-| `runtime` | Optional **core** runtime profile basename (same as CLI **`--runtime`** — must exist under **`templates/core/runtimes/`**). Overrides the workflow default for this step. |
-| `resolver` | Optional **resolver** profile basename (same as CLI **`--resolver`**). Overrides the workflow default for this step. Do **not** use it for packaged workflow calls. |
+| `runtime` | Optional **core** runtime profile basename (same as CLI **`--runtime`** — must exist under **`templates/core/runtimes/`**). Overrides the workflow default for this step. Not meaningful on `kind: host` steps. |
+| `resolver` | Optional **resolver** profile basename (same as CLI **`--resolver`**). Overrides the workflow default for this step. Not meaningful on `kind: host` steps. Do **not** use it for packaged workflow calls. |
 | `workflow` | Marks this as a **packaged workflow step**. This is the **child workflow name** to run. |
 | `package` | Required for a **packaged workflow step**. This is the **child workflow namespace** and must match the nested workflow’s **`namespace:`** in **`config.yml`** (resolution searches packaged / staging / **`workflows/`** trees on disk). |
-| `act` / `action` | Action script for this step. |
+| `act` / `action` | Action script for this step. Do not combine this with packaged workflow steps. |
 | `vars` | Per-step env map (merged for that step; `--var` keys can be “locked”). |
 | `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Default if omitted: `.dockpipe/outputs.env`. This is the normal way one step passes values forward to later steps. |
 | `capture_stdout` | Host path (relative to **`DOCKPIPE_WORKDIR`** / **`--workdir`**) — container **stdout** is also appended to this file (still printed on the terminal). |
@@ -189,6 +189,16 @@ For most step-based workflows, the normal pattern is:
 3. later steps see those values in their environment
 
 If you are trying to pass state from one step to another, start with **`outputs`** before inventing custom temp-file or wrapper conventions.
+
+### Host step shape
+
+For normal **`kind: host`** steps, keep the shape simple:
+
+- use **`cmd`** when you want a host shell command
+- use **`run`** / **`pre_script`** for host-side setup scripts
+- use **`host_builtin`** for engine-owned host actions such as Compose lifecycle or package store build
+
+Do **not** put **`runtime`**, **`resolver`**, or **`isolate`** on a host step. Those fields are for containerized execution.
 
 All keys use **snake_case** in YAML (e.g. `is_blocking`, not `isBlocking`).
 
