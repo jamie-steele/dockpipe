@@ -153,3 +153,21 @@ steps:
 		t.Fatalf("expected top-level run with steps error, got %v", err)
 	}
 }
+
+func TestValidateResolvedWorkflowYAML_RejectsPlainIsBlockingFalse(t *testing.T) {
+	root := t.TempDir()
+	cfg := filepath.Join(root, "config.yml")
+	yml := `name: mixed-async
+steps:
+  - id: a
+    cmd: echo hi
+    is_blocking: false
+`
+	if err := os.WriteFile(cfg, []byte(yml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := ValidateResolvedWorkflowYAML(cfg)
+	if err == nil || !strings.Contains(err.Error(), "is_blocking: false is no longer supported on plain steps") {
+		t.Fatalf("expected plain is_blocking false error, got %v", err)
+	}
+}

@@ -365,6 +365,9 @@ func (s *stepOrGroupYAML) UnmarshalYAML(n *yaml.Node) error {
 	if err := n.Decode(st); err != nil {
 		return fmt.Errorf("steps: %w", err)
 	}
+	if st.Blocking != nil && !*st.Blocking {
+		return fmt.Errorf("steps: is_blocking: false is no longer supported on plain steps; use group: { mode: async, tasks: [...] }")
+	}
 	s.step = st
 	return nil
 }

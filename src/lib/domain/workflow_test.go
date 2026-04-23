@@ -144,13 +144,12 @@ steps:
 	}
 }
 
-// TestParseWorkflowYAMLAsyncGroupAndID checks step id, is_blocking, and DisplayName for flat async-style steps.
-func TestParseWorkflowYAMLAsyncGroupAndID(t *testing.T) {
+// TestParseWorkflowYAMLStepIDAndDisplayName checks step id and DisplayName for plain steps.
+func TestParseWorkflowYAMLStepIDAndDisplayName(t *testing.T) {
 	y := `
 steps:
   - id: a
     cmd: echo a
-    is_blocking: false
   - id: b
     cmd: echo b
     is_blocking: true
@@ -162,7 +161,7 @@ steps:
 	if len(w.Steps) != 2 {
 		t.Fatalf("steps: %d", len(w.Steps))
 	}
-	if w.Steps[0].ID != "a" || w.Steps[0].IsBlocking() {
+	if w.Steps[0].ID != "a" || !w.Steps[0].IsBlocking() {
 		t.Fatalf("step0: id=%q blocking=%v", w.Steps[0].ID, w.Steps[0].IsBlocking())
 	}
 	if w.Steps[1].ID != "b" || !w.Steps[1].IsBlocking() {
@@ -170,6 +169,19 @@ steps:
 	}
 	if w.Steps[0].DisplayName(0) != "a" || w.Steps[1].DisplayName(1) != "b" {
 		t.Fatalf("DisplayName: %q %q", w.Steps[0].DisplayName(0), w.Steps[1].DisplayName(1))
+	}
+}
+
+func TestParseWorkflowYAMLRejectsPlainIsBlockingFalse(t *testing.T) {
+	y := `
+steps:
+  - id: a
+    cmd: echo a
+    is_blocking: false
+`
+	_, err := ParseWorkflowYAML([]byte(y))
+	if err == nil || !strings.Contains(err.Error(), "is_blocking: false is no longer supported on plain steps") {
+		t.Fatalf("expected plain is_blocking false rejection, got %v", err)
 	}
 }
 

@@ -63,7 +63,10 @@
           "type": "string",
           "enum": ["package_build_store", "compose_up", "compose_down", "compose_ps"]
         },
-        "is_blocking": { "type": "boolean" }
+        "is_blocking": {
+          "type": "boolean",
+          "description": "Blocking control for explicit async groups. Plain-step is_blocking: false is not supported; use group.mode: async."
+        }
       },
       "allOf": [
         {

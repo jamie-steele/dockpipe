@@ -49,8 +49,8 @@ type runStepsOpts struct {
 	strategyHandlesCommit bool
 }
 
-// runSteps executes workflow steps. Blocking steps run alone. Consecutive steps with
-// is_blocking: false form one parallel batch:
+// runSteps executes workflow steps. Blocking steps run alone. Explicit async groups
+// are flattened into one parallel batch:
 //   - Inputs: each step sees env from the last blocking barrier only, plus its own vars
 //     and pre-scripts (no sibling parallel mutations).
 //   - Outputs: after all parallel steps finish, outputs files are merged in YAML order
@@ -477,7 +477,7 @@ func validateParallelNoHostCommit(o *runStepsOpts, from, to int) error {
 		}
 		actAbs := infrastructure.ResolveWorkflowScript(effAct, o.wfRoot, o.repoRoot, o.projectRoot)
 		if infrastructure.IsBundledCommitWorktree(actAbs, o.repoRoot) {
-			return fmt.Errorf("step %d: host commit-worktree action cannot run inside a parallel (is_blocking: false) batch", i+1)
+			return fmt.Errorf("step %d: host commit-worktree action cannot run inside an async group", i+1)
 		}
 	}
 	return nil

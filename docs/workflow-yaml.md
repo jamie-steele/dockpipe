@@ -178,7 +178,7 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Default if omitted: `.dockpipe/outputs.env`. This is the normal way one step passes values forward to later steps. |
 | `capture_stdout` | Host path (relative to **`DOCKPIPE_WORKDIR`** / **`--workdir`**) — container **stdout** is also appended to this file (still printed on the terminal). |
 | `manifest` | Host path — after the step, dockpipe writes a small JSON file with **`exit_code`**, **`duration_ms`**, **`step_index`**, **`id`** (if set), and **`step_display`**. |
-| `is_blocking` | Default **`true`**. If **`false`**, this step joins an **async group** with adjacent non-blocking steps (see below). |
+| `is_blocking` | Default **`true`**. Keep this at its default on normal steps. Async work should use an explicit **`group: { mode: async, tasks: [...] }`** entry instead. |
 | `host_builtin` | Optional engine-owned host action for `kind: host` steps. Supported values: `package_build_store`, `compose_up`, `compose_down`, `compose_ps`. Compose built-ins require top-level `compose.file`. |
 
 ### Step state flow
@@ -244,7 +244,7 @@ Prefer the explicit **`group: { mode: async }`** form when authoring new workflo
 
 | Concept | Meaning |
 |---------|---------|
-| **Async group** | Prefer a single list entry **`group: { mode: async, tasks: [...] }`**. Consecutive steps with **`is_blocking: false`** still work as the compact expert form. |
+| **Async group** | Use a single list entry **`group: { mode: async, tasks: [...] }`**. This is the supported async authoring form. |
 | **Join point** | The **next** step with **`is_blocking: true`** (or default). It waits until **every** async member has finished. |
 | **Inputs** | Each async member sees env from the **last blocking barrier** only, plus its own `vars` / pre-scripts — not siblings’ live env. |
 | **Outputs** | After **all** async members finish, each member’s **`outputs:`** file is merged in **declaration order**. Same key → **later** step wins (same as sequential steps). |
@@ -285,30 +285,7 @@ Inside `tasks:`, omitting `is_blocking` means **async** (forced non-blocking). *
 
 **Do not** nest another `group` inside `tasks` — unsupported; unknown keys on a step are ignored by the YAML decoder.
 
-### Compact async form (`is_blocking: false`)
-
-This is the same runtime behavior, but less explicit:
-
-```yaml
-steps:
-  - id: setup
-    cmd: echo ready
-    is_blocking: true
-
-  - id: task_a
-    cmd: sh -c 'echo BRANCH=a > .dockpipe/out-a.env'
-    is_blocking: false
-    outputs: .dockpipe/out-a.env
-
-  - id: task_b
-    cmd: sh -c 'echo BRANCH=b > .dockpipe/out-b.env'
-    is_blocking: false
-    outputs: .dockpipe/out-b.env
-
-  - id: join
-    cmd: sh -c 'echo $BRANCH'
-    is_blocking: true   # BRANCH=b (last in group wins)
-```
+Plain-step **`is_blocking: false`** is no longer accepted. If you want parallelism, wrap those tasks in an explicit **`group`** entry.
 ---
 
 ## Chaining without `steps:`

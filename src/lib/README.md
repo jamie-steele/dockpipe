@@ -35,7 +35,7 @@ One-liner: **parallel steps share one merge; declaration order decides overwrite
 
 | Idea | In YAML |
 |------|---------|
-| **Async group** | One or more consecutive steps with **`is_blocking: false`**, **or** one YAML entry **`group: { mode: async, tasks: [...] }`** (sugar for the same thing). They all start after the previous **blocking** step finishes. |
+| **Async group** | One YAML entry **`group: { mode: async, tasks: [...] }`**. All tasks start after the previous **blocking** step finishes. |
 | **Join point** | The next step with **`is_blocking: true`** (or default). It runs only after **every** step in the async group has finished. |
 | **Merged inputs** | The join step sees env from **before** the async group, plus **`outputs:`** from each async step merged in **list order** (same key → **later** list entry wins). |
 | **Reset** | After a blocking step runs, the next async group starts fresh from that step’s outputs (same as sequential workflows). |
@@ -55,7 +55,7 @@ Use **distinct** `outputs:` *file paths* within one async group (duplicate paths
 **Restrictions**  
 Host **commit-worktree** is not allowed inside an async group. **`kind: host`** members only contribute at merge time (their `outputs:` file, in order).
 
-**Optional `group` syntax (readability)** — compiles to consecutive `is_blocking: false` steps; runtime and merge rules are unchanged. A `group` entry must be **only** the key `group` (no sibling keys). `tasks` use the same fields as a normal step (`cmd`, `id`, `outputs`, …). **`is_blocking` inside `tasks`** is ignored except **`is_blocking: true`**, which is rejected.
+**Async `group` syntax** — this is the supported parallel authoring form. A `group` entry must be **only** the key `group` (no sibling keys). `tasks` use the same fields as a normal step (`cmd`, `id`, `outputs`, …). **`is_blocking` inside `tasks`** is ignored except **`is_blocking: true`**, which is rejected.
 
 ```yaml
 steps:
@@ -78,22 +78,4 @@ steps:
     is_blocking: true   # join; BRANCH=b (last task in group wins on collision)
 ```
 
-Equivalent flat form (what the parser produces):
-
-```yaml
-steps:
-  - id: setup
-    cmd: echo ready
-    is_blocking: true
-  - id: task_a
-    cmd: sh -c 'echo BRANCH=a > .dockpipe/out-a.env'
-    is_blocking: false
-    outputs: .dockpipe/out-a.env
-  - id: task_b
-    cmd: sh -c 'echo BRANCH=b > .dockpipe/out-b.env'
-    is_blocking: false
-    outputs: .dockpipe/out-b.env
-  - id: aggregate
-    cmd: sh -c 'echo branch=$BRANCH'
-    is_blocking: true
-```
+Plain-step **`is_blocking: false`** is no longer accepted. Use the explicit `group` entry above instead.

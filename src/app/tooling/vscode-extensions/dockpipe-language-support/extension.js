@@ -92,7 +92,7 @@ const STEP_KEY_DETAILS = {
   capture_stdout: "Host path that also receives this step's stdout.",
   manifest: "Host path for a JSON manifest describing this step result.",
   host_builtin: "Built-in host action for host steps such as package_build_store, compose_up, compose_down, or compose_ps.",
-  is_blocking: "When false, allows async grouping with surrounding steps. Prefer explicit group: { mode: async } when authoring new workflows."
+  is_blocking: "Blocking join control for explicit async groups. For new workflow authoring, use group: { mode: async, tasks: [...] } instead of plain-step is_blocking: false."
 };
 
 const PACKAGE_MANIFEST_KEYS = [
