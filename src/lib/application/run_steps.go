@@ -330,13 +330,17 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 		return runStepHostIsolate(o, step, dockerEnv, ra, i)
 	}
 
-	argv, runOpts, buildDir, buildCtx, err := buildStepContainer(o, i, n, step, o.envMap, dockerEnv, ra)
+	argv, runOpts, buildDir, buildCtx, rm, err := buildStepContainer(o, i, n, step, o.envMap, dockerEnv, ra)
 	if err != nil {
 		return err
 	}
 	imageDecision := ""
+	policyFingerprint := ""
 	if buildDir != "" && buildCtx != "" {
-		skipBuild, msg, err := maybeSkipDockerBuildForStep(o.projectRoot, o.repoRoot, o.wfConfig, o.wfRoot, runOpts.Image, buildDir, buildCtx)
+		if rm != nil {
+			policyFingerprint = strings.TrimSpace(rm.PolicyFingerprint)
+		}
+		skipBuild, msg, err := maybeSkipDockerBuildForStep(o.projectRoot, o.repoRoot, o.wfConfig, o.wfRoot, stepRunPolicyID(step, i), policyFingerprint, runOpts.Image, buildDir, buildCtx)
 		if err != nil {
 			return err
 		}
@@ -348,18 +352,17 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 			if err := dockerBuildFn(runOpts.Image, buildDir, buildCtx); err != nil {
 				return err
 			}
-			policyFingerprint, _ := runtimePolicyFingerprintForRun(o.wfConfig, o.wfRoot)
-			if artifact, err := buildImageArtifactManifest(o.repoRoot, strings.TrimSpace(o.wf.Name), "", branchResolverName(o, step, i), runOpts.Image, buildDir, buildCtx, policyFingerprint); err == nil {
+			policyFingerprint = ""
+			if rm != nil {
+				policyFingerprint = strings.TrimSpace(rm.PolicyFingerprint)
+			}
+			if artifact, err := buildImageArtifactManifest(o.repoRoot, strings.TrimSpace(o.wf.Name), "", stepRunPolicyID(step, i), runOpts.Image, buildDir, buildCtx, policyFingerprint); err == nil {
 				_ = persistCachedImageArtifactForIsolate(o.projectRoot, runOpts.Image, artifact)
 			}
 			imageDecision = "built image artifact for current run"
 		}
 	}
 	workdir := firstNonEmpty(o.projectRoot, o.opts.Workdir, o.envMap["DOCKPIPE_WORKDIR"], o.repoRoot, mustGetwd())
-	rm, err := effectiveCompiledRuntimePolicyForStep(o.wf, o.wfConfig, o.wfRoot, step, stepRunPolicyID(step, i))
-	if err != nil {
-		return err
-	}
 	if rm != nil && rm.PolicySources.StepOverride {
 		for _, line := range compiledRuntimePolicyLogLines(rm) {
 			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", line)
@@ -516,7 +519,7 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 		if stepUsesResolverDelegate(ra) {
 			return fmt.Errorf("internal: resolver delegate in parallel batch should have been rejected")
 		}
-		_, runOpts, buildDir, buildCtx, err := buildStepContainer(o, idx, n, step, localEnv, localDocker, ra)
+		_, runOpts, buildDir, buildCtx, rm, err := buildStepContainer(o, idx, n, step, localEnv, localDocker, ra)
 		if err != nil {
 			return err
 		}
@@ -528,7 +531,11 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 			continue
 		}
 		done[key] = struct{}{}
-		skipBuild, msg, err := maybeSkipDockerBuildForStep(o.projectRoot, o.repoRoot, o.wfConfig, o.wfRoot, runOpts.Image, buildDir, buildCtx)
+		policyFingerprint := ""
+		if rm != nil {
+			policyFingerprint = strings.TrimSpace(rm.PolicyFingerprint)
+		}
+		skipBuild, msg, err := maybeSkipDockerBuildForStep(o.projectRoot, o.repoRoot, o.wfConfig, o.wfRoot, stepRunPolicyID(step, idx), policyFingerprint, runOpts.Image, buildDir, buildCtx)
 		if err != nil {
 			return err
 		}
@@ -543,8 +550,11 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 		if err := dockerBuildFn(runOpts.Image, buildDir, buildCtx); err != nil {
 			return err
 		}
-		policyFingerprint, _ := runtimePolicyFingerprintForRun(o.wfConfig, o.wfRoot)
-		if artifact, err := buildImageArtifactManifest(o.repoRoot, strings.TrimSpace(o.wf.Name), "", runOpts.Image, runOpts.Image, buildDir, buildCtx, policyFingerprint); err == nil {
+		policyFingerprint = ""
+		if rm != nil {
+			policyFingerprint = strings.TrimSpace(rm.PolicyFingerprint)
+		}
+		if artifact, err := buildImageArtifactManifest(o.repoRoot, strings.TrimSpace(o.wf.Name), "", stepRunPolicyID(step, idx), runOpts.Image, buildDir, buildCtx, policyFingerprint); err == nil {
 			_ = persistCachedImageArtifactForIsolate(o.projectRoot, runOpts.Image, artifact)
 		}
 	}
@@ -617,15 +627,11 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 	if stepUsesResolverDelegate(ra) {
 		return fmt.Errorf("internal: resolver delegate in parallel batch should have been rejected")
 	}
-	argv, runOpts, _, _, err := buildStepContainer(o, idx, n, step, localEnv, localDocker, ra)
+	argv, runOpts, _, _, rm, err := buildStepContainer(o, idx, n, step, localEnv, localDocker, ra)
 	if err != nil {
 		return err
 	}
 	workdir := firstNonEmpty(o.projectRoot, o.opts.Workdir, localEnv["DOCKPIPE_WORKDIR"], o.repoRoot, mustGetwd())
-	rm, err := effectiveCompiledRuntimePolicyForStep(o.wf, o.wfConfig, o.wfRoot, step, stepRunPolicyID(step, idx))
-	if err != nil {
-		return err
-	}
 	if rm != nil && rm.PolicySources.StepOverride {
 		for _, line := range compiledRuntimePolicyLogLines(rm) {
 			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", line)
@@ -803,17 +809,17 @@ func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {
 // buildStepContainer returns argv, docker run options, and Dockerfile build dir/context (if any).
 // ra is optional assignments from a shared core runtime profile; must not describe host isolate (handled before this).
 func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, dockerEnv map[string]string, ra *domain.ResolverAssignments) (
-	argv []string, runOpts infrastructure.RunOpts, buildDir, buildCtx string, err error,
+	argv []string, runOpts infrastructure.RunOpts, buildDir, buildCtx string, rm *domain.CompiledRuntimeManifest, err error,
 ) {
 	argv, err = parseStepArgv(step.CmdLine())
 	if err != nil {
-		return nil, runOpts, "", "", err
+		return nil, runOpts, "", "", nil, err
 	}
 	if i == n-1 && len(argv) == 0 && len(o.cliArgs) > 0 {
 		argv = append(argv, o.cliArgs...)
 	}
 	if len(argv) == 0 {
-		return nil, runOpts, "", "", fmt.Errorf("step %d has no cmd/command and no command after --", i+1)
+		return nil, runOpts, "", "", nil, fmt.Errorf("step %d has no cmd/command and no command after --", i+1)
 	}
 
 	effIso := step.Isolate
@@ -860,7 +866,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 	commitOnHost := false
 	if actionPath != "" {
 		if _, err := osStatFn(actionPath); err != nil {
-			return nil, runOpts, "", "", fmt.Errorf("action script not found: %s", actionPath)
+			return nil, runOpts, "", "", nil, fmt.Errorf("action script not found: %s", actionPath)
 		}
 		if infrastructure.IsBundledCommitWorktree(actionPath, o.repoRoot) {
 			if !o.strategyHandlesCommit {
@@ -904,10 +910,11 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 		BundleOut:     firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], o.opts.BundleOut),
 		BundleAll:     strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1",
 	}
-	if _, err := applyCompiledRuntimePolicyForStep(&runOpts, o.wf, o.wfConfig, o.wfRoot, step, stepRunPolicyID(step, i)); err != nil {
-		return nil, runOpts, "", "", err
+	rm, err = applyCompiledRuntimePolicyForStep(&runOpts, o.wf, o.wfConfig, o.wfRoot, step, stepRunPolicyID(step, i))
+	if err != nil {
+		return nil, runOpts, "", "", nil, err
 	}
-	return argv, runOpts, dockerfileDir, contextDir, nil
+	return argv, runOpts, dockerfileDir, contextDir, rm, nil
 }
 
 func mustGetwd() string {

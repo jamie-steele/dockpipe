@@ -3,6 +3,7 @@ package application
 import (
 	"encoding/json"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -667,21 +668,31 @@ func TestApplyCompiledRuntimePolicyInjectsProxyEnv(t *testing.T) {
 	if err := applyCompiledRuntimeManifest(runOpts, rm); err != nil {
 		t.Fatalf("applyCompiledRuntimeManifest failed: %v", err)
 	}
-	joined := strings.Join(runOpts.ExtraEnv, "\n")
-	for _, want := range []string{
-		"HTTP_PROXY=http://policy-proxy:8080",
-		"http_proxy=http://policy-proxy:8080",
-		"HTTPS_PROXY=http://policy-proxy:8080",
-		"https_proxy=http://policy-proxy:8080",
-		"NO_PROXY=metadata.local,localhost,127.0.0.1,::1",
-		"no_proxy=metadata.local,localhost,127.0.0.1,::1",
-		"DOCKPIPE_POLICY_NETWORK_MODE=allowlist",
-		"DOCKPIPE_POLICY_NETWORK_ENFORCEMENT=proxy",
-		"DOCKPIPE_POLICY_NETWORK_ALLOW=api.openai.com,*.anthropic.com",
-		"DOCKPIPE_POLICY_NETWORK_BLOCK=*.facebook.com",
+	em := domain.EnvSliceToMap(runOpts.ExtraEnv)
+	for _, key := range []string{"HTTP_PROXY", "http_proxy", "HTTPS_PROXY", "https_proxy"} {
+		raw := em[key]
+		if raw == "" {
+			t.Fatalf("expected %s in proxy env, got %#v", key, em)
+		}
+		u, err := url.Parse(raw)
+		if err != nil {
+			t.Fatalf("parse %s: %v", key, err)
+		}
+		if u.Host != "policy-proxy:8080" || u.User == nil || u.User.Username() == "" {
+			t.Fatalf("expected tokenized proxy URL for %s, got %q", key, raw)
+		}
+	}
+	for key, want := range map[string]string{
+		"DOCKPIPE_POLICY_PROXY_BASE_URL":      "http://policy-proxy:8080",
+		"NO_PROXY":                            "metadata.local,localhost,127.0.0.1,::1",
+		"no_proxy":                            "metadata.local,localhost,127.0.0.1,::1",
+		"DOCKPIPE_POLICY_NETWORK_MODE":        "allowlist",
+		"DOCKPIPE_POLICY_NETWORK_ENFORCEMENT": "proxy",
+		"DOCKPIPE_POLICY_NETWORK_ALLOW":       "api.openai.com,*.anthropic.com",
+		"DOCKPIPE_POLICY_NETWORK_BLOCK":       "*.facebook.com",
 	} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("expected proxy env %q in run opts, got:\n%s", want, joined)
+		if em[key] != want {
+			t.Fatalf("expected %s=%q, got %#v", key, want, em)
 		}
 	}
 }
@@ -719,15 +730,24 @@ func TestApplyCompiledRuntimePolicyUsesRunEnvProxyExport(t *testing.T) {
 	if err := applyCompiledRuntimeManifest(runOpts, rm); err != nil {
 		t.Fatalf("applyCompiledRuntimeManifest failed: %v", err)
 	}
-	joined := strings.Join(runOpts.ExtraEnv, "\n")
-	for _, want := range []string{
-		"HTTP_PROXY=http://proxy-sidecar:8080",
-		"HTTPS_PROXY=http://proxy-sidecar:8080",
-		"NO_PROXY=metadata.local,localhost,127.0.0.1,::1",
-		"DOCKPIPE_POLICY_NETWORK_ENFORCEMENT=proxy",
+	em := domain.EnvSliceToMap(runOpts.ExtraEnv)
+	for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY"} {
+		raw := em[key]
+		u, err := url.Parse(raw)
+		if err != nil {
+			t.Fatalf("parse %s: %v", key, err)
+		}
+		if u.Host != "proxy-sidecar:8080" || u.User == nil || u.User.Username() == "" {
+			t.Fatalf("expected tokenized proxy URL for %s, got %q", key, raw)
+		}
+	}
+	for key, want := range map[string]string{
+		"DOCKPIPE_POLICY_PROXY_BASE_URL":      "http://proxy-sidecar:8080",
+		"NO_PROXY":                            "metadata.local,localhost,127.0.0.1,::1",
+		"DOCKPIPE_POLICY_NETWORK_ENFORCEMENT": "proxy",
 	} {
-		if !strings.Contains(joined, want) {
-			t.Fatalf("expected proxy env %q in run opts, got:\n%s", want, joined)
+		if em[key] != want {
+			t.Fatalf("expected %s=%q, got %#v", key, want, em)
 		}
 	}
 }

@@ -14,6 +14,7 @@ const (
 	RuntimeManifestDirName    = ".dockpipe"
 	RuntimeManifestFileName   = "runtime.effective.json"
 	ImageArtifactFileName     = "image-artifact.json"
+	StepArtifactsDirName      = "steps"
 )
 
 type CompiledRuntimeManifest struct {
@@ -259,4 +260,41 @@ func FingerprintJSON(v any) (string, error) {
 	}
 	sum := sha256.Sum256(b)
 	return "sha256:" + hex.EncodeToString(sum[:]), nil
+}
+
+func RuntimeManifestPathForStep(stepID string) string {
+	return StepArtifactsDirName + "/" + sanitizeStepArtifactID(stepID) + ".runtime.effective.json"
+}
+
+func ImageArtifactPathForStep(stepID string) string {
+	return StepArtifactsDirName + "/" + sanitizeStepArtifactID(stepID) + ".image-artifact.json"
+}
+
+func sanitizeStepArtifactID(stepID string) string {
+	stepID = strings.TrimSpace(stepID)
+	if stepID == "" {
+		return "step"
+	}
+	var out []rune
+	lastDash := false
+	for _, r := range stepID {
+		ok := (r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') ||
+			r == '-' || r == '_'
+		if ok {
+			out = append(out, r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			out = append(out, '-')
+			lastDash = true
+		}
+	}
+	s := strings.Trim(strings.ToLower(string(out)), "-")
+	if s == "" {
+		return "step"
+	}
+	return s
 }

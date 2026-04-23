@@ -241,6 +241,74 @@ steps: []
 	}
 }
 
+func TestCmdPackageCompileWorkflowWritesPerStepRuntimeArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "mywf")
+	img := filepath.Join(dir, "src", "core", "assets", "images", "codex")
+	runtimes := filepath.Join(dir, "src", "core", "runtimes")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(img, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(runtimes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimes, ".keep"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(img, "Dockerfile"), []byte("FROM alpine:3.20\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: mywf
+resolver: codex
+steps:
+  - id: fetch
+    cmd: echo hi
+    security:
+      profile: sidecar-client
+      network:
+        mode: allowlist
+        allow: [api.openai.com]
+`
+	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-0.0.0.tar.gz")
+	rmf, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/.dockpipe/steps/fetch.runtime.effective.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rm domain.CompiledRuntimeManifest
+	if err := json.Unmarshal(rmf, &rm); err != nil {
+		t.Fatal(err)
+	}
+	if rm.StepID != "fetch" || rm.PolicyProfile != "sidecar-client" {
+		t.Fatalf("unexpected step manifest: %+v", rm)
+	}
+	if rm.Security.Network.Mode != "allowlist" || rm.Security.Network.Enforcement != "proxy" {
+		t.Fatalf("expected proxy allowlist step policy, got %+v", rm.Security.Network)
+	}
+	if !rm.PolicySources.StepOverride {
+		t.Fatalf("expected step override provenance, got %+v", rm.PolicySources)
+	}
+	imf, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/.dockpipe/steps/fetch.image-artifact.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var im domain.ImageArtifactManifest
+	if err := json.Unmarshal(imf, &im); err != nil {
+		t.Fatal(err)
+	}
+	if im.ImageKey != "fetch" || im.Source != "build" {
+		t.Fatalf("unexpected step image artifact: %+v", im)
+	}
+}
+
 func TestCmdPackageCompileWorkflowUsesWorkflowSecurityNetworkMode(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src", "mywf")

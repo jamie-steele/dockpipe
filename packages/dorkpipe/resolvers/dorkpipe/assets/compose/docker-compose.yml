@@ -25,11 +25,12 @@ services:
     volumes:
       - dorkpipe_ollama:/root/.ollama
   policy-proxy:
-    image: ubuntu/squid:latest
+    image: node:22-bookworm-slim
+    command: ["node", "/opt/dockpipe/policy-proxy.js"]
     ports:
       - "13128:3128"
     volumes:
-      - ./squid.conf:/etc/squid/squid.conf:ro
+      - ./policy-proxy.js:/opt/dockpipe/policy-proxy.js:ro
 
 volumes:
   dorkpipe_pgdata:

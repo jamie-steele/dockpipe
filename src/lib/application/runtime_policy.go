@@ -1,7 +1,10 @@
 package application
 
 import (
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -28,6 +31,11 @@ func applyCompiledRuntimePolicy(runOpts *infrastructure.RunOpts, wfConfig, wfRoo
 }
 
 func effectiveCompiledRuntimePolicyForStep(wf *domain.Workflow, wfConfig, wfRoot string, step domain.Step, stepID string) (*domain.CompiledRuntimeManifest, error) {
+	if rm, err := loadCompiledRuntimeManifestForStep(wfConfig, wfRoot, stepID); err != nil {
+		return nil, err
+	} else if rm != nil {
+		return rm, nil
+	}
 	rm, err := loadCompiledRuntimeManifestForWorkflow(wfConfig, wfRoot)
 	if err != nil {
 		return nil, err
@@ -220,6 +228,7 @@ func applyCompiledProxyNetworkPolicy(runOpts *infrastructure.RunOpts, policy dom
 	if httpProxy == "" {
 		return fmt.Errorf("network policy requires proxy enforcement but no proxy URL is configured in the run environment (set DOCKPIPE_POLICY_PROXY_URL or DOCKPIPE_NETWORK_PROXY_URL)")
 	}
+	tokenizedHTTPProxy := policyProxyURLWithToken(httpProxy, policy)
 	httpsProxy := firstNonEmptyString(
 		runOptEnvValue(runOpts, "DOCKPIPE_POLICY_PROXY_HTTPS_URL"),
 		runOptEnvValue(runOpts, "DOCKPIPE_NETWORK_PROXY_HTTPS_URL"),
@@ -229,8 +238,9 @@ func applyCompiledProxyNetworkPolicy(runOpts *infrastructure.RunOpts, policy dom
 		strings.TrimSpace(os.Getenv("DOCKPIPE_NETWORK_PROXY_HTTPS_URL")),
 		strings.TrimSpace(os.Getenv("HTTPS_PROXY")),
 		strings.TrimSpace(os.Getenv("https_proxy")),
-		httpProxy,
+		tokenizedHTTPProxy,
 	)
+	tokenizedHTTPSProxy := policyProxyURLWithToken(httpsProxy, policy)
 	noProxy := mergeNoProxyValues(
 		runOptEnvValue(runOpts, "DOCKPIPE_POLICY_PROXY_NO_PROXY"),
 		runOptEnvValue(runOpts, "DOCKPIPE_NETWORK_PROXY_NO_PROXY"),
@@ -242,10 +252,11 @@ func applyCompiledProxyNetworkPolicy(runOpts *infrastructure.RunOpts, policy dom
 		strings.TrimSpace(os.Getenv("no_proxy")),
 		"localhost,127.0.0.1,::1",
 	)
-	runOpts.ExtraEnv = upsertEnvPair(runOpts.ExtraEnv, "HTTP_PROXY", httpProxy)
-	runOpts.ExtraEnv = upsertEnvPair(runOpts.ExtraEnv, "http_proxy", httpProxy)
-	runOpts.ExtraEnv = upsertEnvPair(runOpts.ExtraEnv, "HTTPS_PROXY", httpsProxy)
-	runOpts.ExtraEnv = upsertEnvPair(runOpts.ExtraEnv, "https_proxy", httpsProxy)
+	runOpts.ExtraEnv = upsertEnvPair(runOpts.ExtraEnv, "HTTP_PROXY", tokenizedHTTPProxy)
+	runOpts.ExtraEnv = upsertEnvPair(runOpts.ExtraEnv, "http_proxy", tokenizedHTTPProxy)
+	runOpts.ExtraEnv = upsertEnvPair(runOpts.ExtraEnv, "HTTPS_PROXY", tokenizedHTTPSProxy)
+	runOpts.ExtraEnv = upsertEnvPair(runOpts.ExtraEnv, "https_proxy", tokenizedHTTPSProxy)
+	runOpts.ExtraEnv = upsertEnvPair(runOpts.ExtraEnv, "DOCKPIPE_POLICY_PROXY_BASE_URL", httpProxy)
 	if noProxy != "" {
 		runOpts.ExtraEnv = upsertEnvPair(runOpts.ExtraEnv, "NO_PROXY", noProxy)
 		runOpts.ExtraEnv = upsertEnvPair(runOpts.ExtraEnv, "no_proxy", noProxy)
@@ -259,6 +270,36 @@ func applyCompiledProxyNetworkPolicy(runOpts *infrastructure.RunOpts, policy dom
 		runOpts.ExtraEnv = upsertEnvPair(runOpts.ExtraEnv, "DOCKPIPE_POLICY_NETWORK_BLOCK", strings.Join(policy.Block, ","))
 	}
 	return nil
+}
+
+type proxyPolicyToken struct {
+	Version string   `json:"version"`
+	Mode    string   `json:"mode,omitempty"`
+	Allow   []string `json:"allow,omitempty"`
+	Block   []string `json:"block,omitempty"`
+}
+
+func policyProxyURLWithToken(base string, policy domain.CompiledNetworkPolicy) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return ""
+	}
+	u, err := url.Parse(base)
+	if err != nil || u.Host == "" {
+		return base
+	}
+	tokenJSON, err := json.Marshal(proxyPolicyToken{
+		Version: "dockpipe-proxy-v1",
+		Mode:    strings.TrimSpace(policy.Mode),
+		Allow:   append([]string(nil), policy.Allow...),
+		Block:   append([]string(nil), policy.Block...),
+	})
+	if err != nil {
+		return base
+	}
+	token := base64.RawURLEncoding.EncodeToString(tokenJSON)
+	u.User = url.UserPassword(token, "x")
+	return u.String()
 }
 
 func runOptEnvValue(runOpts *infrastructure.RunOpts, key string) string {

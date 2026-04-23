@@ -325,7 +325,7 @@ func TestMaybeSkipDockerBuildRejectsPolicyFingerprintMismatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	dockerImageExistsFn = func(image string) (bool, error) { return true, nil }
-	skip, _, err := maybeSkipDockerBuildForStep(wd, wd, "", wfRoot, "dockpipe-codex", filepath.Join(wd, "templates", "core", "assets", "images", "codex"), wd)
+	skip, _, err := maybeSkipDockerBuildForStep(wd, wd, "", wfRoot, "", "", "dockpipe-codex", filepath.Join(wd, "templates", "core", "assets", "images", "codex"), wd)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -24,7 +24,7 @@ func TestBuildStepContainer_UsesCliArgsForLastStep(t *testing.T) {
 	envMap := map[string]string{}
 	dockerEnv := map[string]string{}
 	step := domain.Step{} // no cmd
-	argv, runOpts, buildDir, buildCtx, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv, nil)
+	argv, runOpts, buildDir, buildCtx, _, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestBuildStepContainer_ErrorsWhenActionMissing(t *testing.T) {
 		opts:     &CliOpts{},
 	}
 	step := domain.Step{Cmd: "echo hi", Action: "scripts/does-not-exist.sh"}
-	_, _, _, _, err := buildStepContainer(o, 0, 1, step, map[string]string{}, map[string]string{}, nil)
+	_, _, _, _, _, err := buildStepContainer(o, 0, 1, step, map[string]string{}, map[string]string{}, nil)
 	if err == nil || !strings.Contains(err.Error(), "action script not found") {
 		t.Fatalf("expected missing action error, got %v", err)
 	}
@@ -63,7 +63,7 @@ func TestBuildStepContainer_CommitWorktreeTurnsIntoHostCommit(t *testing.T) {
 	}
 	envMap := map[string]string{}
 	step := domain.Step{Cmd: "echo hi", Action: "scripts/commit-worktree.sh"}
-	_, runOpts, _, _, err := buildStepContainer(o, 0, 1, step, envMap, map[string]string{}, nil)
+	_, runOpts, _, _, _, err := buildStepContainer(o, 0, 1, step, envMap, map[string]string{}, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -91,7 +91,7 @@ func TestBuildStepContainer_ForwardsResolverEnvHintFromHost(t *testing.T) {
 	envMap := map[string]string{"OPENAI_API_KEY": "sk-test"}
 	dockerEnv := map[string]string{}
 	ra := &domain.ResolverAssignments{EnvHint: "OPENAI_API_KEY"}
-	_, runOpts, _, _, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv, ra)
+	_, runOpts, _, _, _, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv, ra)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestBuildStepContainer_ForwardsMultipleResolverEnvHints(t *testing.T) {
 	envMap := map[string]string{"ANTHROPIC_API_KEY": "sk-ant", "CLAUDE_API_KEY": "ck-local"}
 	dockerEnv := map[string]string{}
 	ra := &domain.ResolverAssignments{EnvHint: "ANTHROPIC_API_KEY,CLAUDE_API_KEY"}
-	_, runOpts, _, _, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv, ra)
+	_, runOpts, _, _, _, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv, ra)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestBuildStepContainer_ForwardsPolicyProxyEnv(t *testing.T) {
 		"DOCKPIPE_POLICY_PROXY_NO_PROXY": "metadata.local",
 	}
 	dockerEnv := map[string]string{}
-	_, runOpts, _, _, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv, nil)
+	_, runOpts, _, _, _, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestBuildStepContainer_StepResolverTemplate(t *testing.T) {
 	}
 	step := domain.Step{Cmd: "echo hi"}
 	ra := &domain.ResolverAssignments{Template: "vscode"}
-	_, runOpts, _, _, err := buildStepContainer(o, 0, 1, step, map[string]string{}, map[string]string{}, ra)
+	_, runOpts, _, _, _, err := buildStepContainer(o, 0, 1, step, map[string]string{}, map[string]string{}, ra)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -235,7 +235,7 @@ func TestBuildStepContainer_AppliesStepSecurityOverride(t *testing.T) {
 			},
 		},
 	}
-	_, runOpts, _, _, err := buildStepContainer(o, 0, 1, step, map[string]string{}, map[string]string{}, nil)
+	_, runOpts, _, _, _, err := buildStepContainer(o, 0, 1, step, map[string]string{}, map[string]string{}, nil)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
@@ -244,5 +244,75 @@ func TestBuildStepContainer_AppliesStepSecurityOverride(t *testing.T) {
 	}
 	if runOpts.PIDLimit != 64 {
 		t.Fatalf("expected step pid limit override, got %d", runOpts.PIDLimit)
+	}
+}
+
+func TestBuildStepContainer_PrefersCompiledStepManifest(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	wfRoot := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.StepArtifactsDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	workflowRM := &domain.CompiledRuntimeManifest{
+		Schema:            2,
+		Kind:              domain.RuntimeManifestKind,
+		PolicyProfile:     "secure-default",
+		PolicyFingerprint: "sha256:wf",
+		Security: domain.CompiledSecurityPolicy{
+			Preset: "secure-default",
+			Network: domain.CompiledNetworkPolicy{
+				Mode:        "offline",
+				Enforcement: "native",
+				InternalDNS: true,
+			},
+		},
+	}
+	wb, _ := marshalArtifactJSON(workflowRM)
+	if err := os.WriteFile(filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.RuntimeManifestFileName), wb, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stepRM := &domain.CompiledRuntimeManifest{
+		Schema:            2,
+		Kind:              domain.RuntimeManifestKind,
+		StepID:            "fetch",
+		PolicyProfile:     "internet-client",
+		PolicyFingerprint: "sha256:step",
+		PolicySources:     domain.PolicySources{StepOverride: true},
+		Security: domain.CompiledSecurityPolicy{
+			Preset: "internet-client",
+			Network: domain.CompiledNetworkPolicy{
+				Mode:        "internet",
+				Enforcement: "native",
+				InternalDNS: true,
+			},
+			Process: domain.CompiledProcessPolicy{
+				PIDLimit: 64,
+			},
+		},
+	}
+	sb, _ := marshalArtifactJSON(stepRM)
+	if err := os.WriteFile(filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.RuntimeManifestPathForStep("fetch")), sb, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o := &runStepsOpts{
+		repoRoot: repoRoot,
+		wfRoot:   wfRoot,
+		wfConfig: filepath.Join(wfRoot, "config.yml"),
+		wf:       &domain.Workflow{Isolate: "base-dev"},
+		opts:     &CliOpts{},
+	}
+	step := domain.Step{ID: "fetch", Cmd: "echo hi"}
+	_, runOpts, _, _, rm, err := buildStepContainer(o, 0, 1, step, map[string]string{}, map[string]string{}, nil)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if runOpts.NetworkMode == "none" {
+		t.Fatalf("expected compiled step manifest to override workflow offline policy")
+	}
+	if runOpts.PIDLimit != 64 {
+		t.Fatalf("expected compiled step pid limit, got %d", runOpts.PIDLimit)
+	}
+	if rm == nil || rm.StepID != "fetch" || rm.PolicyFingerprint != "sha256:step" {
+		t.Fatalf("expected compiled step manifest, got %+v", rm)
 	}
 }

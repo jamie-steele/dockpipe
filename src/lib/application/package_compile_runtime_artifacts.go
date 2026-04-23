@@ -3,6 +3,7 @@ package application
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"dockpipe/src/lib/domain"
@@ -10,7 +11,7 @@ import (
 )
 
 func writeCompiledWorkflowRuntimeArtifacts(workdir, staging, pkgName string, wf *domain.Workflow) error {
-	rm, im, err := compileWorkflowRuntimeArtifacts(workdir, pkgName, wf)
+	rm, im, stepArtifacts, err := compileWorkflowRuntimeArtifacts(workdir, pkgName, wf)
 	if err != nil {
 		return err
 	}
@@ -26,10 +27,37 @@ func writeCompiledWorkflowRuntimeArtifacts(workdir, staging, pkgName string, wf 
 			return err
 		}
 	}
+	for _, a := range stepArtifacts {
+		if a.Manifest == nil {
+			continue
+		}
+		p := filepath.Join(manifestDir, domain.RuntimeManifestPathForStep(a.StepID))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return err
+		}
+		if err := writeJSONFile(p, a.Manifest); err != nil {
+			return err
+		}
+		if a.Image != nil {
+			ip := filepath.Join(manifestDir, domain.ImageArtifactPathForStep(a.StepID))
+			if err := os.MkdirAll(filepath.Dir(ip), 0o755); err != nil {
+				return err
+			}
+			if err := writeJSONFile(ip, a.Image); err != nil {
+				return err
+			}
+		}
+	}
 	return nil
 }
 
-func compileWorkflowRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflow) (*domain.CompiledRuntimeManifest, *domain.ImageArtifactManifest, error) {
+type compiledStepRuntimeArtifacts struct {
+	StepID   string
+	Manifest *domain.CompiledRuntimeManifest
+	Image    *domain.ImageArtifactManifest
+}
+
+func compileWorkflowRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflow) (*domain.CompiledRuntimeManifest, *domain.ImageArtifactManifest, []compiledStepRuntimeArtifacts, error) {
 	policyProfile := normalizeWorkflowPolicyProfile(wf)
 	security, policySources := compileSecurityPolicyForWorkflow(wf, policyProfile)
 	rm := &domain.CompiledRuntimeManifest{
@@ -46,11 +74,96 @@ func compileWorkflowRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflo
 
 	policyFingerprint, err := domain.FingerprintJSON(rm.Security)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	rm.PolicyFingerprint = policyFingerprint
 
 	imageSel, artifact, err := selectCompiledImageArtifact(workdir, pkgName, wf, policyFingerprint)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	rm.Image = imageSel
+	if fp, err := domain.FingerprintJSON(rm.Image); err == nil {
+		rm.ImageFingerprint = fp
+	}
+	rm.EnforcementSummaries = compiledEnforcementSummaries(rm)
+	rm.RuleIDs = compiledRuleIDs(rm)
+	if err := domain.ValidateCompiledRuntimeManifest(rm); err != nil {
+		return nil, nil, nil, err
+	}
+	if artifact != nil {
+		if err := domain.ValidateImageArtifactManifest(artifact); err != nil {
+			return nil, nil, nil, err
+		}
+	}
+	stepArtifacts, err := compileStepRuntimeArtifacts(workdir, pkgName, wf)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	return rm, artifact, stepArtifacts, nil
+}
+
+func compileStepRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflow) ([]compiledStepRuntimeArtifacts, error) {
+	if wf == nil || len(wf.Steps) == 0 {
+		return nil, nil
+	}
+	out := make([]compiledStepRuntimeArtifacts, 0, len(wf.Steps))
+	for i, step := range wf.Steps {
+		if step.IsHostStep() || step.UsesPackagedWorkflow() {
+			continue
+		}
+		stepID := compiledStepID(step, i)
+		rm, im, err := compileStepRuntimeManifest(workdir, pkgName, wf, step, stepID)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, compiledStepRuntimeArtifacts{
+			StepID:   stepID,
+			Manifest: rm,
+			Image:    im,
+		})
+	}
+	return out, nil
+}
+
+func compileStepRuntimeManifest(workdir, pkgName string, wf *domain.Workflow, step domain.Step, stepID string) (*domain.CompiledRuntimeManifest, *domain.ImageArtifactManifest, error) {
+	policyProfile := normalizeWorkflowPolicyProfile(wf)
+	if p := strings.TrimSpace(step.Security.Profile); p != "" {
+		policyProfile = p
+	}
+	security, policySources := compileSecurityPolicyForWorkflow(wf, policyProfile)
+	stepOverride := applyStepSecurityOverrides(&security, step)
+	if strings.TrimSpace(step.Security.Profile) != "" {
+		stepOverride = true
+	}
+	security.Preset = policyProfile
+	security.Network.Enforcement = compiledNetworkEnforcement(security.Network.Mode, policyProfile)
+	security.Network.InternalDNS = true
+
+	rm := &domain.CompiledRuntimeManifest{
+		Schema:          2,
+		Kind:            domain.RuntimeManifestKind,
+		WorkflowName:    strings.TrimSpace(wf.Name),
+		PackageName:     strings.TrimSpace(pkgName),
+		StepID:          stepID,
+		RuntimeProfile:  firstNonEmptyString(strings.TrimSpace(step.Runtime), strings.TrimSpace(wf.Runtime)),
+		ResolverProfile: firstNonEmptyString(strings.TrimSpace(step.Resolver), strings.TrimSpace(wf.Resolver)),
+		PolicyProfile:   policyProfile,
+		PolicySources: domain.PolicySources{
+			EngineDefault:    policySources.EngineDefault,
+			RuntimeBaseline:  firstNonEmptyString(stepBaselineName(step, wf), policySources.RuntimeBaseline),
+			PolicyProfile:    policyProfile,
+			WorkflowOverride: policySources.WorkflowOverride,
+			StepOverride:     stepOverride,
+		},
+		Security: security,
+	}
+	policyFingerprint, err := domain.FingerprintJSON(rm.Security)
+	if err != nil {
+		return nil, nil, err
+	}
+	rm.PolicyFingerprint = policyFingerprint
+	imageSel, artifact, err := selectCompiledImageArtifactForStep(workdir, pkgName, wf, step, stepID, policyFingerprint)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -69,6 +182,25 @@ func compileWorkflowRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflo
 		}
 	}
 	return rm, artifact, nil
+}
+
+func compiledStepID(step domain.Step, idx int) string {
+	if s := strings.TrimSpace(step.ID); s != "" {
+		return s
+	}
+	return "step-" + strings.TrimSpace(strconv.Itoa(idx+1))
+}
+
+func stepBaselineName(step domain.Step, wf *domain.Workflow) string {
+	return firstNonEmptyString(
+		strings.TrimSpace(step.Runtime),
+		strings.TrimSpace(step.Isolate),
+		strings.TrimSpace(step.Resolver),
+		strings.TrimSpace(wf.Runtime),
+		strings.TrimSpace(wf.Isolate),
+		strings.TrimSpace(wf.Resolver),
+		"container-default",
+	)
 }
 
 func normalizeWorkflowPolicyProfile(wf *domain.Workflow) string {
@@ -338,9 +470,11 @@ func compiledEnforcementSummaries(rm *domain.CompiledRuntimeManifest) []string {
 	if rm == nil {
 		return nil
 	}
-	lines := []string{
-		"policy ownership: engine defaults + runtime baseline + selected profile + workflow overrides",
+	ownership := "policy ownership: engine defaults + runtime baseline + selected profile + workflow overrides"
+	if rm.PolicySources.StepOverride {
+		ownership += " + step overrides"
 	}
+	lines := []string{ownership}
 	if strings.TrimSpace(rm.PolicySources.RuntimeBaseline) == "host-only" {
 		lines = append(lines, "container security policy applies only to container steps; host-only steps remain outside Docker enforcement")
 	}
@@ -430,6 +564,71 @@ func selectCompiledImageArtifact(workdir, pkgName string, wf *domain.Workflow, p
 		WorkflowName:                strings.TrimSpace(wf.Name),
 		PackageName:                 strings.TrimSpace(pkgName),
 		ImageKey:                    identity,
+		Source:                      "registry",
+		Fingerprint:                 fingerprint,
+		SourceFingerprint:           fingerprint,
+		SecurityManifestFingerprint: policyFingerprint,
+		ImageRef:                    identity,
+	}
+	return sel, artifact, nil
+}
+
+func selectCompiledImageArtifactForStep(workdir, pkgName string, wf *domain.Workflow, step domain.Step, stepID, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
+	identity := firstNonEmptyString(
+		strings.TrimSpace(step.Isolate),
+		strings.TrimSpace(step.Runtime),
+		strings.TrimSpace(step.Resolver),
+		strings.TrimSpace(wf.Isolate),
+		strings.TrimSpace(wf.Runtime),
+		strings.TrimSpace(wf.Resolver),
+	)
+	if identity == "" {
+		return domain.CompiledImageSelection{}, nil, nil
+	}
+
+	if image, dockerfileDir, ok := infrastructure.TemplateBuild(workdir, identity); ok {
+		ref := infrastructure.MaybeVersionTag(workdir, image)
+		buildSpec := &domain.CompiledImageBuildSpec{
+			Context:    relOrAbs(workdir, workdir),
+			Dockerfile: relOrAbs(workdir, filepath.Join(dockerfileDir, "Dockerfile")),
+		}
+		sel := domain.CompiledImageSelection{
+			Source:    "build",
+			Ref:       ref,
+			AutoBuild: "if-stale",
+			Build:     buildSpec,
+		}
+		artifact, err := buildImageArtifactManifest(workdir, strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, ref, dockerfileDir, workdir, policyFingerprint)
+		if err != nil {
+			return domain.CompiledImageSelection{}, nil, err
+		}
+		return sel, artifact, nil
+	}
+
+	sel := domain.CompiledImageSelection{
+		Source: "registry",
+		Ref:    identity,
+	}
+	fingerprint, err := domain.FingerprintJSON(struct {
+		StepID            string `json:"step_id"`
+		Identity          string `json:"identity"`
+		Ref               string `json:"ref"`
+		PolicyFingerprint string `json:"policy_fingerprint"`
+	}{
+		StepID:            stepID,
+		Identity:          identity,
+		Ref:               identity,
+		PolicyFingerprint: policyFingerprint,
+	})
+	if err != nil {
+		return domain.CompiledImageSelection{}, nil, err
+	}
+	artifact := &domain.ImageArtifactManifest{
+		Schema:                      1,
+		Kind:                        domain.ImageArtifactManifestKind,
+		WorkflowName:                strings.TrimSpace(wf.Name),
+		PackageName:                 strings.TrimSpace(pkgName),
+		ImageKey:                    stepID,
 		Source:                      "registry",
 		Fingerprint:                 fingerprint,
 		SourceFingerprint:           fingerprint,

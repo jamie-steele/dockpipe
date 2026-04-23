@@ -72,6 +72,8 @@ Suggested outputs per compiled workflow/package:
 
 - `runtime.effective.json`
 - `image-artifact.json`
+- `steps/<step-id>.runtime.effective.json`
+- `steps/<step-id>.image-artifact.json`
 
 These should live with other compiled workflow material under `.dockpipe/internal/`.
 
@@ -155,6 +157,8 @@ DockPipe should not force every container onto a sidecar/proxy path.
 When a workflow compiles under a profile such as `sidecar-client`, DockPipe may derive `proxy` enforcement for `allowlist` / `restricted` modes and expect a proxy-backed egress layer at run time. This keeps the stronger path selective and lets higher-level tools such as DorkPipe reuse their existing sidecar/proxy patterns without making them part of every workflow.
 
 Compose-managed stacks can feed this path cleanly through DockPipe-owned workflow env. For example, a prior `compose_up` step may export `DOCKPIPE_POLICY_PROXY_URL` via `compose.exports`, and the later container step will consume that run-local setting when applying the compiled runtime policy.
+
+In the richer proxy-backed path, DockPipe turns that base proxy URL into a per-step effective proxy URL that carries the compiled network policy token. That keeps the public YAML high-level while still letting a DockPipe-aware proxy enforce the actual per-step `allow` / `block` rules instead of a static sidecar-wide allowlist.
 
 First package consumer in this repository:
 

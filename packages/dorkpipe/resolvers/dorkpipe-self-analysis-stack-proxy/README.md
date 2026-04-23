@@ -28,12 +28,13 @@ What DockPipe owns here:
 - compose-to-workflow exports for `DOCKPIPE_POLICY_PROXY_URL`
 - compiled runtime policy
 - proxy env injection into the isolated container
+- per-step proxy URL tokenization so the proxy sees the compiled `allow` / `block` rules
 
 What stays package-specific:
 
 - which services the stack runs
 - which domains this workflow allowlists
-- the proxy implementation/config under `packages/dorkpipe/...`
+- the proxy implementation under `packages/dorkpipe/...`
 
 Host endpoint note:
 
