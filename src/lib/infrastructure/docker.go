@@ -132,6 +132,22 @@ func DockerBuild(image, dockerfileDir, contextDir string) error {
 	return cmd.Run()
 }
 
+// DockerImageExists reports whether a local docker image reference currently resolves.
+func DockerImageExists(image string) (bool, error) {
+	image = strings.TrimSpace(image)
+	if image == "" {
+		return false, fmt.Errorf("image is empty")
+	}
+	err := execCommandFn("docker", "image", "inspect", image).Run()
+	if err == nil {
+		return true, nil
+	}
+	if _, ok := err.(*exec.ExitError); ok {
+		return false, nil
+	}
+	return false, err
+}
+
 // RunOpts is passed to RunContainer.
 type RunOpts struct {
 	Image       string

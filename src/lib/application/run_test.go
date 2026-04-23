@@ -34,6 +34,7 @@ func withRunSeams(t *testing.T) {
 	oldResolveAction := resolveActionPathFn
 	oldSourceHost := sourceHostScriptAppFn
 	oldDockerBuild := dockerBuildAppFn
+	oldDockerImageExists := dockerImageExistsAppFn
 	oldRunContainer := runContainerAppFn
 	oldResolvePre := resolvePreScriptAppFn
 	oldResolveWfScript := resolveWorkflowAppFn
@@ -50,6 +51,7 @@ func withRunSeams(t *testing.T) {
 		resolveActionPathFn = oldResolveAction
 		sourceHostScriptAppFn = oldSourceHost
 		dockerBuildAppFn = oldDockerBuild
+		dockerImageExistsAppFn = oldDockerImageExists
 		runContainerAppFn = oldRunContainer
 		resolvePreScriptAppFn = oldResolvePre
 		resolveWorkflowAppFn = oldResolveWfScript
@@ -106,6 +108,47 @@ func TestRunNonStepsHappyPath(t *testing.T) {
 	}
 	if !dockerBuilt || !containerRan {
 		t.Fatalf("expected docker build and run, built=%v ran=%v", dockerBuilt, containerRan)
+	}
+}
+
+func TestMaybeSkipDockerBuildForWorkflowTarballArtifact(t *testing.T) {
+	withRunSeams(t)
+	repoRoot := t.TempDir()
+	workdir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repoRoot, "workflows", "mywf"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: mywf
+isolate: codex
+steps: []
+`
+	if err := os.WriteFile(filepath.Join(repoRoot, "workflows", "mywf", "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(workdir, "templates", "core", "assets", "images", "codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workdir, "templates", "core", "assets", "images", "codex", "Dockerfile"), []byte("FROM alpine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workdir, "version"), []byte("0.0.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "workflow", "--workdir", workdir, "--from", filepath.Join(repoRoot, "workflows", "mywf")}); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(workdir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-0.0.0.tar.gz")
+	wfURI := "tar://" + tgz + "##workflows/mywf/config.yml"
+	dockerImageExistsAppFn = func(image string) (bool, error) { return true, nil }
+	skip, msg, err := maybeSkipDockerBuildForWorkflow(workdir, wfURI, filepath.Join(repoRoot, "workflows", "mywf"), "dockpipe-codex:0.0.0", "/unused/builddir", workdir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !skip {
+		t.Fatal("expected docker build skip from compiled tarball artifact")
+	}
+	if !strings.Contains(msg, "using cached image artifact") {
+		t.Fatalf("unexpected message: %q", msg)
 	}
 }
 

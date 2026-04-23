@@ -15,17 +15,19 @@ import (
 )
 
 var (
-	dockerBuildFn      = infrastructure.DockerBuild
-	runContainerFn     = infrastructure.RunContainer
-	sourceHostScriptFn = infrastructure.SourceHostScript
-	runHostScriptFn    = infrastructure.RunHostScript
-	osStatFn           = os.Stat
-	getwdFn            = os.Getwd
+	dockerBuildFn       = infrastructure.DockerBuild
+	dockerImageExistsFn = infrastructure.DockerImageExists
+	runContainerFn      = infrastructure.RunContainer
+	sourceHostScriptFn  = infrastructure.SourceHostScript
+	runHostScriptFn     = infrastructure.RunHostScript
+	osStatFn            = os.Stat
+	getwdFn             = os.Getwd
 )
 
 type runStepsOpts struct {
 	wf             *domain.Workflow
 	wfRoot         string
+	wfConfig       string
 	repoRoot       string
 	projectRoot    string // DockPipe project dir (--workdir / cwd); script resolution for scripts/…
 	cliArgs        []string
@@ -259,6 +261,7 @@ func runStepPackageWorkflow(o *runStepsOpts, i, n int, step domain.Step, dockerE
 	if err := runSteps(runStepsOpts{
 		wf:                    subWf,
 		wfRoot:                wfRoot,
+		wfConfig:              wfPath,
 		repoRoot:              o.repoRoot,
 		projectRoot:           o.projectRoot,
 		cliArgs:               o.cliArgs,
@@ -326,9 +329,17 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 		return err
 	}
 	if buildDir != "" && buildCtx != "" {
-		fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
-		if err := dockerBuildFn(runOpts.Image, buildDir, buildCtx); err != nil {
+		skipBuild, msg, err := maybeSkipDockerBuildForStep(o.repoRoot, o.wfConfig, o.wfRoot, runOpts.Image, buildDir, buildCtx)
+		if err != nil {
 			return err
+		}
+		if skipBuild {
+			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
+		} else {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
+			if err := dockerBuildFn(runOpts.Image, buildDir, buildCtx); err != nil {
+				return err
+			}
 		}
 	}
 	rc, err := runContainerFn(runOpts, argv)
@@ -497,6 +508,14 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 			continue
 		}
 		done[key] = struct{}{}
+		skipBuild, msg, err := maybeSkipDockerBuildForStep(o.repoRoot, o.wfConfig, o.wfRoot, runOpts.Image, buildDir, buildCtx)
+		if err != nil {
+			return err
+		}
+		if skipBuild {
+			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
+			continue
+		}
 		if !buildAnnounced {
 			fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
 			buildAnnounced = true

@@ -12,21 +12,22 @@ import (
 )
 
 var (
-	repoRootAppFn         = infrastructure.RepoRoot
-	loadWorkflowAppFn     = infrastructure.LoadWorkflow
-	loadResolverFileAppFn = infrastructure.LoadResolverFile
-	templateBuildAppFn    = infrastructure.TemplateBuild
-	maybeVersionTagAppFn  = infrastructure.MaybeVersionTag
-	resolveActionPathFn   = infrastructure.ResolveActionPath
-	sourceHostScriptAppFn = infrastructure.SourceHostScript
-	runHostScriptAppFn    = infrastructure.RunHostScript
-	dockerBuildAppFn      = infrastructure.DockerBuild
-	runContainerAppFn     = infrastructure.RunContainer
-	resolvePreScriptAppFn = infrastructure.ResolvePreScriptPath
-	resolveWorkflowAppFn  = infrastructure.ResolveWorkflowScript
-	isBundledCommitAppFn  = infrastructure.IsBundledCommitWorktree
-	runStepsAppFn         = runSteps
-	osExitAppFn           = os.Exit
+	repoRootAppFn          = infrastructure.RepoRoot
+	loadWorkflowAppFn      = infrastructure.LoadWorkflow
+	loadResolverFileAppFn  = infrastructure.LoadResolverFile
+	templateBuildAppFn     = infrastructure.TemplateBuild
+	maybeVersionTagAppFn   = infrastructure.MaybeVersionTag
+	resolveActionPathFn    = infrastructure.ResolveActionPath
+	sourceHostScriptAppFn  = infrastructure.SourceHostScript
+	runHostScriptAppFn     = infrastructure.RunHostScript
+	dockerBuildAppFn       = infrastructure.DockerBuild
+	dockerImageExistsAppFn = infrastructure.DockerImageExists
+	runContainerAppFn      = infrastructure.RunContainer
+	resolvePreScriptAppFn  = infrastructure.ResolvePreScriptPath
+	resolveWorkflowAppFn   = infrastructure.ResolveWorkflowScript
+	isBundledCommitAppFn   = infrastructure.IsBundledCommitWorktree
+	runStepsAppFn          = runSteps
+	osExitAppFn            = os.Exit
 )
 
 func preScriptsIncludeCloneWorktree(paths []string) bool {
@@ -755,6 +756,7 @@ func Run(argv []string, baseEnviron []string) error {
 		if err := runStepsAppFn(runStepsOpts{
 			wf:                    wf,
 			wfRoot:                wfRoot,
+			wfConfig:              wfConfig,
 			repoRoot:              repoRoot,
 			projectRoot:           projectRoot,
 			cliArgs:               rest,
@@ -789,9 +791,17 @@ func Run(argv []string, baseEnviron []string) error {
 	}
 
 	if buildDir != "" && buildCtx != "" {
-		fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
-		if err := dockerBuildAppFn(image, buildDir, buildCtx); err != nil {
+		skipBuild, msg, err := maybeSkipDockerBuildForWorkflow(repoRoot, wfConfig, wfRoot, image, buildDir, buildCtx)
+		if err != nil {
 			return err
+		}
+		if skipBuild {
+			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
+		} else {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
+			if err := dockerBuildAppFn(image, buildDir, buildCtx); err != nil {
+				return err
+			}
 		}
 	}
 

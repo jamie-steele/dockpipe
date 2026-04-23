@@ -13,6 +13,7 @@ import (
 func withRunStepsSeams(t *testing.T) {
 	t.Helper()
 	oldBuild := dockerBuildFn
+	oldImageExists := dockerImageExistsFn
 	oldRun := runContainerFn
 	oldSource := sourceHostScriptFn
 	oldRunHost := runHostScriptFn
@@ -20,6 +21,7 @@ func withRunStepsSeams(t *testing.T) {
 	oldGetwd := getwdFn
 	t.Cleanup(func() {
 		dockerBuildFn = oldBuild
+		dockerImageExistsFn = oldImageExists
 		runContainerFn = oldRun
 		sourceHostScriptFn = oldSource
 		runHostScriptFn = oldRunHost
@@ -55,7 +57,7 @@ func TestRunBlockingStepSkipContainerMergesOutputs(t *testing.T) {
 
 	o := baseRunStepsOpts()
 	o.opts.Workdir = wd
-		o.wf.Steps = []domain.Step{{SkipContainer: true, Outputs: domain.DefaultOutputsEnvRel}}
+	o.wf.Steps = []domain.Step{{SkipContainer: true, Outputs: domain.DefaultOutputsEnvRel}}
 	dockerEnv := map[string]string{}
 	if err := runBlockingStep(&o, 0, 1, dockerEnv); err != nil {
 		t.Fatalf("runBlockingStep error: %v", err)
@@ -90,6 +92,58 @@ func TestRunBlockingStepBuildAndRun(t *testing.T) {
 	}
 	if !built || !ran {
 		t.Fatalf("expected build + run, built=%v ran=%v", built, ran)
+	}
+}
+
+func TestRunBlockingStepSkipsBuildWhenCompiledImageArtifactExists(t *testing.T) {
+	withRunStepsSeams(t)
+	wd := t.TempDir()
+	wfRoot := filepath.Join(wd, "wf")
+	if err := os.MkdirAll(filepath.Join(wfRoot, domain.RuntimeManifestDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	artifact := `{
+  "schema": 1,
+  "kind": "docker-image-artifact",
+  "image_key": "codex",
+  "source": "build",
+  "fingerprint": "sha256:test",
+  "image_ref": "dockpipe-codex",
+  "build": {
+    "context": ".",
+    "dockerfile": "templates/core/assets/images/codex/Dockerfile"
+  }
+}`
+	if err := os.WriteFile(filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.ImageArtifactFileName), []byte(artifact), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	o := baseRunStepsOpts()
+	o.repoRoot = wd
+	o.wfRoot = wfRoot
+	o.wf.Steps = []domain.Step{{Cmd: "echo hi", Isolate: "codex"}}
+	if err := os.MkdirAll(filepath.Join(wd, "templates", "core", "assets", "images", "codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wd, "templates", "core", "assets", "images", "codex", "Dockerfile"), []byte("FROM alpine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dockerImageExistsFn = func(image string) (bool, error) { return true, nil }
+	dockerBuildFn = func(image, dockerfileDir, contextDir string) error {
+		t.Fatalf("docker build should have been skipped")
+		return nil
+	}
+	ran := false
+	runContainerFn = func(ro infrastructure.RunOpts, argv []string) (int, error) {
+		ran = true
+		return 0, nil
+	}
+	getwdFn = func() (string, error) { return wd, nil }
+	dockerEnv := map[string]string{}
+	if err := runBlockingStep(&o, 0, 1, dockerEnv); err != nil {
+		t.Fatalf("runBlockingStep error: %v", err)
+	}
+	if !ran {
+		t.Fatal("expected container run")
 	}
 }
 
