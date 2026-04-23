@@ -32,7 +32,13 @@ This document is **FINAL**. It defines the core concepts, their relationships, a
 
 - **Specialization** is meant to stay **thin**: the **child** workflow still owns its **defaults** (names of **core** runtime / resolver / strategy profiles in its YAML). The **caller** tunes behavior with **`vars`**, **`env`**, and shared CLI-style inputs merged into the nested run; explicit **step-level** **`runtime:`** / **`resolver:`** **selection** among **core** profiles is the natural extension when you need to swap substrate or tool **without** forking the package.
 
-This keeps the **mental model** one-dimensional — **template → runtime → resolver → strategy** — whether the workflow is **inline** in the repo or **packaged** and **referenced**.
+This keeps the **mental model** one-dimensional — **workflow → runtime → resolver → strategy** — whether the workflow is **inline** in the repo or **packaged** and **referenced**.
+
+For authored workflow YAML, the practical rule is simple:
+
+- top-level **`runtime`** / **`resolver`** set the default
+- step-level **`runtime`** / **`resolver`** override that default when needed
+- **`isolate`** is the low-level escape hatch for pinning an exact image/template
 
 ---
 
@@ -62,6 +68,7 @@ Packaged workflow invocation is a **workflow step form**, not part of the public
 ### Strategy
 
 - Wraps the workflow run with **before/after** lifecycle (e.g. clone, commit, git worktree).
+- Best thought of as a reusable wrapper, not as another execution substrate.
 - **Not** a substitute for runtime, resolver, or `runtime.type`.
 
 ### runtime.type
@@ -121,7 +128,7 @@ Each valid run is characterized by **all** of:
 | Field | Value |
 |-------|--------|
 | workflow | `test` |
-| runtime | `docker-browser` |
+| runtime | `dockerimage` |
 | runtime.type | `execution` |
 | resolver | `playwright` |
 
@@ -130,7 +137,7 @@ Each valid run is characterized by **all** of:
 | Field | Value |
 |-------|--------|
 | workflow | `plan-apply-validate` |
-| runtime | `docker-node` |
+| runtime | `dockerimage` |
 | runtime.type | `execution` |
 | resolver | `claude` |
 
@@ -139,7 +146,7 @@ Each valid run is characterized by **all** of:
 | Field | Value |
 |-------|--------|
 | workflow | `run` |
-| runtime | `ide-local` |
+| runtime | `dockerimage` |
 | runtime.type | `ide` |
 | resolver | `cursor` |
 
@@ -148,7 +155,7 @@ Each valid run is characterized by **all** of:
 | Field | Value |
 |-------|--------|
 | workflow | `secretstore` (or any host `kind: host` flow with env from a vault) |
-| runtime | `cli` — host shell; secret merge is **resolver**-owned. |
+| runtime | `dockerimage` with host steps where needed; secret merge is **resolver**-owned. |
 | runtime.type | `execution` |
 | resolver | e.g. bundled **`dotenv`** (plain env file) or maintainer **`onepassword`** (`op`); other vaults are **other resolver profiles**, not other runtimes. |
 
@@ -157,7 +164,7 @@ Each valid run is characterized by **all** of:
 | Field | Value |
 |-------|--------|
 | workflow | `plan-apply-validate` |
-| runtime | `ec2-agent` |
+| runtime | `dockerimage` |
 | runtime.type | `agent` |
 | resolver | `codex` |
 

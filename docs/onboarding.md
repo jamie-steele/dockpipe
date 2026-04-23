@@ -46,10 +46,17 @@ To reuse **`workflows/`** presets in another tree, copy the directory or use **`
 | Term | Meaning |
 |------|---------|
 | **Workflow** | What happens — **`config.yml`**, **`--workflow <name>`**. |
-| **Runtime** | **Core** concept — **where** execution runs: profiles under **`templates/core/runtimes/<name>`** (or **`bundle/core/runtimes/`** in the cache). Workflows **select** a runtime by name; they do **not** define new substrates. |
-| **Resolver** | Which tool or platform — **`templates/core/resolvers/<name>`** (or **`bundle/core/resolvers/`**). |
+| **Runtime** | **Core** concept — **where** execution runs: profiles under **`templates/core/runtimes/<name>`** (or **`bundle/core/runtimes/`** in the cache). Top-level `runtime` sets the workflow default; a step can override it. |
+| **Resolver** | Which tool or platform — **`templates/core/resolvers/<name>`** (or **`bundle/core/resolvers/`**). Top-level `resolver` sets the workflow default; a step can override it. |
 | **Strategy** | Lifecycle wrapper — **`templates/core/strategies/<name>`**, optional **`strategy:`** in YAML. |
 | **Assets** | Support files — **`templates/core/assets/`** (`scripts/`, `images/`, `compose/`). |
+
+If you are authoring workflow YAML, the normal path is:
+
+1. use **`steps:`**
+2. set **`runtime`** + **`resolver`** at the top
+3. override them on a step only when that step genuinely differs
+4. use **`isolate`** only when you must pin a specific image/template
 
 Details: **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)**.
 
