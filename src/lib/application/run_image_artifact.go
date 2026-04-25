@@ -56,7 +56,7 @@ func maybeSkipDockerBuildForArtifact(stateWorkdir, repoRoot, wfConfig, wfRoot, s
 	if strings.TrimSpace(artifact.SecurityManifestFingerprint) != strings.TrimSpace(policyFingerprint) {
 		return false, "", nil
 	}
-	expected, err := buildImageArtifactManifest(repoRoot, "", "", artifact.ImageKey, image, buildDir, buildCtx, policyFingerprint)
+	expected, err := buildImageArtifactManifest(repoRoot, "", "", artifact.ImageKey, image, buildDir, buildCtx, policyFingerprint, artifact.Provenance)
 	if err != nil {
 		return false, "", err
 	}

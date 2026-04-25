@@ -181,7 +181,7 @@ func TestRunBlockingStepSkipsBuildWhenCompiledImageArtifactExists(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	artifact, err := buildImageArtifactManifest(wd, "", "", "codex", "dockpipe-codex", filepath.Join(wd, "templates", "core", "assets", "images", "codex"), wd, policyFingerprint)
+	artifact, err := buildImageArtifactManifest(wd, "", "", "codex", "dockpipe-codex", filepath.Join(wd, "templates", "core", "assets", "images", "codex"), wd, policyFingerprint, domain.ImageArtifactProvenance{Isolate: "codex", DockpipeVersion: authoredPackageVersion(wd)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -278,7 +278,7 @@ func TestMaybeSkipDockerBuildRejectsPolicyFingerprintMismatch(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(wd, "templates", "core", "assets", "images", "codex", "Dockerfile"), []byte("FROM alpine\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	artifact, err := buildImageArtifactManifest(wd, "", "", "codex", "dockpipe-codex", filepath.Join(wd, "templates", "core", "assets", "images", "codex"), wd, "sha256:oldpolicy")
+	artifact, err := buildImageArtifactManifest(wd, "", "", "codex", "dockpipe-codex", filepath.Join(wd, "templates", "core", "assets", "images", "codex"), wd, "sha256:oldpolicy", domain.ImageArtifactProvenance{Isolate: "codex", DockpipeVersion: authoredPackageVersion(wd)})
 	if err != nil {
 		t.Fatal(err)
 	}

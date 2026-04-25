@@ -119,13 +119,18 @@ func TestValidateCompiledRuntimeManifestRejectsRegistryWithoutRef(t *testing.T) 
 
 func TestValidateImageArtifactManifestValid(t *testing.T) {
 	m := &ImageArtifactManifest{
-		Schema:      1,
-		Kind:        ImageArtifactManifestKind,
-		Source:      "build",
-		Fingerprint: "sha256:abc",
+		Schema:        3,
+		Kind:          ImageArtifactManifestKind,
+		Source:        "build",
+		ArtifactState: "planned",
+		Fingerprint:   "sha256:abc",
 		Build: &CompiledImageBuildSpec{
 			Context:    ".",
 			Dockerfile: "Dockerfile",
+		},
+		Provenance: ImageArtifactProvenance{
+			Resolver:       "codex",
+			PackageVersion: "1.2.3",
 		},
 	}
 	if err := ValidateImageArtifactManifest(m); err != nil {

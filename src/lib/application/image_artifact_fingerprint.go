@@ -13,7 +13,8 @@ import (
 	"dockpipe/src/lib/domain"
 )
 
-func buildImageArtifactManifest(repoRoot, workflowName, packageName, imageKey, imageRef, buildDir, contextDir, policyFingerprint string) (*domain.ImageArtifactManifest, error) {
+func buildImageArtifactManifest(repoRoot, workflowName, packageName, imageKey, imageRef, buildDir, contextDir, policyFingerprint string, provenance domain.ImageArtifactProvenance) (*domain.ImageArtifactManifest, error) {
+	provenance = trimImageArtifactProvenance(provenance)
 	buildFingerprint, err := fingerprintDirTree(buildDir)
 	if err != nil {
 		return nil, err
@@ -35,29 +36,40 @@ func buildImageArtifactManifest(repoRoot, workflowName, packageName, imageKey, i
 		return nil, err
 	}
 	fingerprint, err := domain.FingerprintJSON(struct {
-		SourceFingerprint string `json:"source_fingerprint"`
-		PolicyFingerprint string `json:"policy_fingerprint"`
+		SourceFingerprint string                         `json:"source_fingerprint"`
+		Provenance        domain.ImageArtifactProvenance `json:"provenance,omitempty"`
 	}{
 		SourceFingerprint: sourceFingerprint,
-		PolicyFingerprint: policyFingerprint,
+		Provenance:        provenance,
 	})
 	if err != nil {
 		return nil, err
 	}
 	return &domain.ImageArtifactManifest{
-		Schema:                      2,
+		Schema:                      3,
 		Kind:                        domain.ImageArtifactManifestKind,
 		WorkflowName:                strings.TrimSpace(workflowName),
 		PackageName:                 strings.TrimSpace(packageName),
 		ImageKey:                    strings.TrimSpace(imageKey),
 		Source:                      "build",
-		ArtifactState:               "materialized",
+		ArtifactState:               "planned",
 		Fingerprint:                 fingerprint,
 		SourceFingerprint:           sourceFingerprint,
 		SecurityManifestFingerprint: strings.TrimSpace(policyFingerprint),
 		ImageRef:                    strings.TrimSpace(imageRef),
 		Build:                       buildSpec,
+		Provenance:                  provenance,
 	}, nil
+}
+
+func trimImageArtifactProvenance(p domain.ImageArtifactProvenance) domain.ImageArtifactProvenance {
+	return domain.ImageArtifactProvenance{
+		Runtime:         strings.TrimSpace(p.Runtime),
+		Resolver:        strings.TrimSpace(p.Resolver),
+		Isolate:         strings.TrimSpace(p.Isolate),
+		PackageVersion:  strings.TrimSpace(p.PackageVersion),
+		DockpipeVersion: strings.TrimSpace(p.DockpipeVersion),
+	}
 }
 
 func fingerprintDirTree(root string) (string, error) {

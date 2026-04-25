@@ -514,7 +514,8 @@ func compiledRuleIDs(rm *domain.CompiledRuntimeManifest) []string {
 }
 
 func selectCompiledImageArtifact(workdir, pkgName string, wf *domain.Workflow, pm *domain.PackageManifest, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
-	if sel, artifact, ok, err := selectPackageImageArtifact(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), "", packageImageKey(pm, wf), pm, policyFingerprint); ok || err != nil {
+	provenance := workflowImageArtifactProvenance(workdir, pm, wf)
+	if sel, artifact, ok, err := selectPackageImageArtifact(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), "", packageImageKey(pm, wf), pm, policyFingerprint, provenance); ok || err != nil {
 		return sel, artifact, err
 	}
 	identity := firstNonEmptyString(
@@ -538,19 +539,20 @@ func selectCompiledImageArtifact(workdir, pkgName string, wf *domain.Workflow, p
 			AutoBuild: "if-stale",
 			Build:     buildSpec,
 		}
-		artifact, err := buildImageArtifactManifest(workdir, strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), identity, ref, dockerfileDir, workdir, policyFingerprint)
+		artifact, err := buildImageArtifactManifest(workdir, strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), identity, ref, dockerfileDir, workdir, policyFingerprint, provenance)
 		if err != nil {
 			return domain.CompiledImageSelection{}, nil, err
 		}
 		return sel, artifact, nil
 	}
 
-	return registryImageSelection(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), "", identity, identity, "never", policyFingerprint)
+	return registryImageSelection(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), "", identity, identity, "never", policyFingerprint, provenance)
 }
 
 func selectCompiledImageArtifactForStep(workdir, pkgName string, wf *domain.Workflow, pm *domain.PackageManifest, step domain.Step, stepID, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
+	provenance := stepImageArtifactProvenance(workdir, pm, wf, step)
 	if !stepHasImageSelectionOverride(step) {
-		if sel, artifact, ok, err := selectPackageImageArtifact(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, stepID, pm, policyFingerprint); ok || err != nil {
+		if sel, artifact, ok, err := selectPackageImageArtifact(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, stepID, pm, policyFingerprint, provenance); ok || err != nil {
 			return sel, artifact, err
 		}
 	}
@@ -578,14 +580,14 @@ func selectCompiledImageArtifactForStep(workdir, pkgName string, wf *domain.Work
 			AutoBuild: "if-stale",
 			Build:     buildSpec,
 		}
-		artifact, err := buildImageArtifactManifest(workdir, strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, ref, dockerfileDir, workdir, policyFingerprint)
+		artifact, err := buildImageArtifactManifest(workdir, strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, ref, dockerfileDir, workdir, policyFingerprint, provenance)
 		if err != nil {
 			return domain.CompiledImageSelection{}, nil, err
 		}
 		return sel, artifact, nil
 	}
 
-	return registryImageSelection(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, stepID, identity, "never", policyFingerprint)
+	return registryImageSelection(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, stepID, identity, "never", policyFingerprint, provenance)
 }
 
 func stepHasImageSelectionOverride(step domain.Step) bool {
@@ -594,7 +596,52 @@ func stepHasImageSelectionOverride(step domain.Step) bool {
 		strings.TrimSpace(step.Resolver) != ""
 }
 
-func selectPackageImageArtifact(workflowName, packageName, stepID, imageKey string, pm *domain.PackageManifest, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, bool, error) {
+func workflowImageArtifactProvenance(workdir string, pm *domain.PackageManifest, wf *domain.Workflow) domain.ImageArtifactProvenance {
+	p := baseImageArtifactProvenance(workdir, pm)
+	if wf == nil {
+		return p
+	}
+	switch {
+	case strings.TrimSpace(wf.Isolate) != "":
+		p.Isolate = strings.TrimSpace(wf.Isolate)
+	case strings.TrimSpace(wf.Resolver) != "":
+		p.Resolver = strings.TrimSpace(wf.Resolver)
+	case strings.TrimSpace(wf.Runtime) != "":
+		p.Runtime = strings.TrimSpace(wf.Runtime)
+	}
+	return p
+}
+
+func stepImageArtifactProvenance(workdir string, pm *domain.PackageManifest, wf *domain.Workflow, step domain.Step) domain.ImageArtifactProvenance {
+	p := baseImageArtifactProvenance(workdir, pm)
+	switch {
+	case strings.TrimSpace(step.Isolate) != "":
+		p.Isolate = strings.TrimSpace(step.Isolate)
+	case strings.TrimSpace(step.Resolver) != "":
+		p.Resolver = strings.TrimSpace(step.Resolver)
+	case strings.TrimSpace(step.Runtime) != "":
+		p.Runtime = strings.TrimSpace(step.Runtime)
+	case wf != nil && strings.TrimSpace(wf.Isolate) != "":
+		p.Isolate = strings.TrimSpace(wf.Isolate)
+	case wf != nil && strings.TrimSpace(wf.Resolver) != "":
+		p.Resolver = strings.TrimSpace(wf.Resolver)
+	case wf != nil && strings.TrimSpace(wf.Runtime) != "":
+		p.Runtime = strings.TrimSpace(wf.Runtime)
+	}
+	return p
+}
+
+func baseImageArtifactProvenance(workdir string, pm *domain.PackageManifest) domain.ImageArtifactProvenance {
+	p := domain.ImageArtifactProvenance{
+		DockpipeVersion: authoredPackageVersion(workdir),
+	}
+	if pm != nil {
+		p.PackageVersion = strings.TrimSpace(pm.Version)
+	}
+	return p
+}
+
+func selectPackageImageArtifact(workflowName, packageName, stepID, imageKey string, pm *domain.PackageManifest, policyFingerprint string, provenance domain.ImageArtifactProvenance) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, bool, error) {
 	if pm == nil {
 		return domain.CompiledImageSelection{}, nil, false, nil
 	}
@@ -603,7 +650,7 @@ func selectPackageImageArtifact(workflowName, packageName, stepID, imageKey stri
 		return domain.CompiledImageSelection{}, nil, false, nil
 	}
 	pullPolicy := firstNonEmptyString(strings.TrimSpace(pm.Image.PullPolicy), "never")
-	sel, artifact, err := registryImageSelection(workflowName, packageName, stepID, imageKey, ref, pullPolicy, policyFingerprint)
+	sel, artifact, err := registryImageSelection(workflowName, packageName, stepID, imageKey, ref, pullPolicy, policyFingerprint, provenance)
 	return sel, artifact, true, err
 }
 
@@ -617,7 +664,8 @@ func packageImageKey(pm *domain.PackageManifest, wf *domain.Workflow) string {
 	return "workflow-image"
 }
 
-func registryImageSelection(workflowName, packageName, stepID, imageKey, ref, pullPolicy, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
+func registryImageSelection(workflowName, packageName, stepID, imageKey, ref, pullPolicy, policyFingerprint string, provenance domain.ImageArtifactProvenance) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
+	provenance = trimImageArtifactProvenance(provenance)
 	expectedDigest := registryExpectedDigest(ref)
 	sel := domain.CompiledImageSelection{
 		Source:         "registry",
@@ -642,17 +690,17 @@ func registryImageSelection(workflowName, packageName, stepID, imageKey, ref, pu
 		return domain.CompiledImageSelection{}, nil, err
 	}
 	fingerprint, err := domain.FingerprintJSON(struct {
-		SourceFingerprint string `json:"source_fingerprint"`
-		PolicyFingerprint string `json:"policy_fingerprint"`
+		SourceFingerprint string                         `json:"source_fingerprint"`
+		Provenance        domain.ImageArtifactProvenance `json:"provenance,omitempty"`
 	}{
 		SourceFingerprint: sourceFingerprint,
-		PolicyFingerprint: policyFingerprint,
+		Provenance:        provenance,
 	})
 	if err != nil {
 		return domain.CompiledImageSelection{}, nil, err
 	}
 	artifact := &domain.ImageArtifactManifest{
-		Schema:                      2,
+		Schema:                      3,
 		Kind:                        domain.ImageArtifactManifestKind,
 		WorkflowName:                workflowName,
 		PackageName:                 packageName,
@@ -665,6 +713,7 @@ func registryImageSelection(workflowName, packageName, stepID, imageKey, ref, pu
 		SecurityManifestFingerprint: policyFingerprint,
 		ImageRef:                    ref,
 		ExpectedDigest:              expectedDigest,
+		Provenance:                  provenance,
 	}
 	return sel, artifact, nil
 }

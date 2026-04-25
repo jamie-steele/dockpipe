@@ -193,19 +193,34 @@ Suggested manifest fields:
 
 ```json
 {
-  "schema": 1,
+  "schema": 3,
   "kind": "docker-image-artifact",
   "workflow_name": "codex-pav",
   "package_name": "dockpipe.workflow.codex-pav",
   "image_key": "resolver.codex",
   "source": "build",
+  "artifact_state": "planned",
   "fingerprint": "sha256:...",
+  "source_fingerprint": "sha256:...",
   "image_ref": "dockpipe-codex:compiled-abc123",
   "image_id": "sha256:...",
   "repo_digest": "sha256:...",
-  "security_manifest_fingerprint": "sha256:..."
+  "security_manifest_fingerprint": "sha256:...",
+  "provenance": {
+    "runtime": "dockerfile",
+    "resolver": "codex",
+    "package_version": "1.2.3",
+    "dockpipe_version": "1.2.3"
+  }
 }
 ```
+
+Artifact states:
+
+- `planned` — compile selected a Dockerfile-backed image, but DockPipe has not materialized or verified the local daemon image yet.
+- `materialized` — DockPipe built or verified a local image for this artifact.
+- `referenced` — package/runtime metadata points at an OCI image ref; Docker layers remain in the daemon or registry.
+- `cached` — a registry-backed image has been pulled/verified and recorded locally.
 
 ## What contributes to image validity
 
@@ -221,6 +236,7 @@ Image validity should include more than the tag:
 - any security/runtime setting that materially changes the build result
 
 Pure runtime-only restrictions should not force a rebuild unless they affect how the image itself is built or selected.
+The image artifact `fingerprint` should cover source inputs and provenance, while `security_manifest_fingerprint` remains a separate runtime acceptability check.
 
 ## Rebuild decision
 

@@ -822,7 +822,8 @@ func Run(argv []string, baseEnviron []string) error {
 				wfName = strings.TrimSpace(wf.Name)
 			}
 			policyFingerprint, _ := runtimePolicyFingerprintForRun(wfConfig, wfRoot)
-			if artifact, err := buildImageArtifactManifest(repoRoot, wfName, "", templateName, image, buildDir, buildCtx, policyFingerprint); err == nil {
+			if artifact, err := buildImageArtifactManifest(repoRoot, wfName, "", templateName, image, buildDir, buildCtx, policyFingerprint, domain.ImageArtifactProvenance{Isolate: templateName, DockpipeVersion: authoredPackageVersion(repoRoot)}); err == nil {
+				artifact.ArtifactState = "materialized"
 				_ = persistCachedImageArtifactForIsolate(effWd, image, artifact)
 			}
 			imageDecision = "built image artifact for current run"

@@ -114,6 +114,15 @@ type ImageArtifactManifest struct {
 	ImageID                     string                  `json:"image_id,omitempty" yaml:"image_id,omitempty"`
 	RepoDigest                  string                  `json:"repo_digest,omitempty" yaml:"repo_digest,omitempty"`
 	Build                       *CompiledImageBuildSpec `json:"build,omitempty" yaml:"build,omitempty"`
+	Provenance                  ImageArtifactProvenance `json:"provenance,omitempty" yaml:"provenance,omitempty"`
+}
+
+type ImageArtifactProvenance struct {
+	Runtime         string `json:"runtime,omitempty" yaml:"runtime,omitempty"`
+	Resolver        string `json:"resolver,omitempty" yaml:"resolver,omitempty"`
+	Isolate         string `json:"isolate,omitempty" yaml:"isolate,omitempty"`
+	PackageVersion  string `json:"package_version,omitempty" yaml:"package_version,omitempty"`
+	DockpipeVersion string `json:"dockpipe_version,omitempty" yaml:"dockpipe_version,omitempty"`
 }
 
 var (
@@ -126,7 +135,7 @@ var (
 	validAutoBuildModes   = map[string]struct{}{"": {}, "if-missing": {}, "if-stale": {}, "never": {}}
 	validPullPolicies     = map[string]struct{}{"": {}, "if-missing": {}, "never": {}}
 	validPolicyProfiles   = map[string]struct{}{"": {}, "secure-default": {}, "internet-client": {}, "build-online": {}, "sidecar-client": {}}
-	validArtifactStates   = map[string]struct{}{"": {}, "materialized": {}, "referenced": {}}
+	validArtifactStates   = map[string]struct{}{"": {}, "planned": {}, "materialized": {}, "referenced": {}, "cached": {}}
 )
 
 func ValidateCompiledRuntimeManifest(m *CompiledRuntimeManifest) error {
