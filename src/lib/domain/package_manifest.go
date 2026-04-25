@@ -1,0 +1,243 @@
+package domain
+
+import (
+	"fmt"
+	"os"
+	"regexp"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// PackageManifest is optional metadata for a DockPipe package (workflow slice, core slice, or umbrella package).
+// Stored as package.yml next to the package contents. Schema may evolve; extra YAML keys are ignored by the parser.
+// Rich fields support store discovery, authoring, and dependency hints (workflows vs resolver packs).
+type PackageManifest struct {
+	Schema      int    `yaml:"schema"`
+	Name        string `yaml:"name"`
+	Version     string `yaml:"version"`
+	Title       string `yaml:"title"`
+	Description string `yaml:"description"`
+	Author      string `yaml:"author"`
+	Website     string `yaml:"website"`
+	License     string `yaml:"license"`
+	// Icon: optional package-owned artwork path for package/tooling surfaces. Relative paths resolve next to package.yml.
+	Icon string `yaml:"icon,omitempty"`
+	// Artwork: optional named artwork variants (e.g. icon, vscode, cursor-dev) relative to package.yml.
+	Artwork map[string]string `yaml:"artwork,omitempty"`
+	// Kind hints for tooling: workflow | resolver | core | assets | bundle | package (optional).
+	// kind: package — umbrella metadata for a maintainer tree (e.g. dockpipe/agent) whose child resolvers
+	// live under resolvers/; use includes_resolvers for optional resolver profile names (store installs stay per-resolver).
+	Kind string `yaml:"kind,omitempty"`
+	// Provider: optional platform / vendor id for filtering and store facets (e.g. cloudflare, aws, github).
+	// Use a short stable label, not a URL — see docs/package-model.md.
+	Provider string `yaml:"provider,omitempty"`
+	// Capability: dotted capability id this resolver package provides (e.g. cli.codex, app.vscode). See docs/capabilities.md.
+	Capability string `yaml:"capability,omitempty"`
+	// PrimitiveYAMLDeprecated is the deprecated YAML key "primitive" — merged into Capability after parse.
+	PrimitiveYAMLDeprecated string `yaml:"primitive,omitempty"`
+	// Namespace: optional author/org label (same rules as workflow namespace; optional).
+	Namespace string `yaml:"namespace,omitempty"`
+	// Tags and keywords: search / store facets (optional).
+	Tags     []string `yaml:"tags,omitempty"`
+	Keywords []string `yaml:"keywords,omitempty"`
+	// MinDockpipeVersion is a semver constraint for the CLI/engine (optional).
+	MinDockpipeVersion string `yaml:"min_dockpipe_version,omitempty"`
+	// Repository is source URL (optional).
+	Repository string `yaml:"repository,omitempty"`
+	// Provides names capabilities for resolver-style packages (e.g. codex, claude-code).
+	Provides []string `yaml:"provides,omitempty"`
+	// RequiresCapabilities: for kind workflow — dotted capability ids this workflow expects (e.g. cli.codex).
+	// See docs/capabilities.md. Complements requires_resolvers (profile names).
+	RequiresCapabilities []string `yaml:"requires_capabilities,omitempty"`
+	// RequiresPrimitivesYAMLDeprecated is the deprecated YAML key "requires_primitives" — merged into RequiresCapabilities after parse.
+	RequiresPrimitivesYAMLDeprecated []string `yaml:"requires_primitives,omitempty"`
+	// RequiresResolvers hints default or required resolver profile names for a workflow package (optional).
+	RequiresResolvers []string `yaml:"requires_resolvers,omitempty"`
+	// IncludesResolvers lists resolver profile names under resolvers/ for kind: package (umbrella metadata only; not a single tarball).
+	IncludesResolvers []string `yaml:"includes_resolvers,omitempty"`
+	// Depends lists other package names this package expects (optional).
+	Depends []string `yaml:"depends,omitempty"`
+	// AllowClone: when true, dockpipe clone may copy this compiled package into an authoring tree (e.g. workflows/).
+	// Omitted or false: clone is refused — use for commercial/binary-only drops where the publisher does not grant source export.
+	AllowClone bool `yaml:"allow_clone,omitempty"`
+	// Distribution is optional policy for humans and tooling: "source" (recoverable YAML/assets) or "binary" (no meaningful source in the artifact).
+	// Binary releases should set allow_clone: false and ship only non-recoverable artifacts if reverse-engineering must be impractical.
+	Distribution string `yaml:"distribution,omitempty"`
+	// Image declares a package-owned runtime image reference.
+	// Keep this to normal OCI/registry refs; compile resolves it into the image artifact manifest.
+	Image PackageImageSpec `yaml:"image,omitempty"`
+	// ScriptContract declares generic package-level script context that DockPipe-aware tooling may inject for package assets.
+	// This is intentionally generic package/runtime context only, not package-specific tooling handles.
+	ScriptContract PackageScriptContract `yaml:"script_contract,omitempty"`
+}
+
+type PackageImageSpec struct {
+	Source     string `yaml:"source,omitempty"`
+	Ref        string `yaml:"ref,omitempty"`
+	PullPolicy string `yaml:"pull_policy,omitempty"`
+}
+
+type PackageScriptContract struct {
+	Inject []string `yaml:"inject,omitempty"`
+}
+
+// ParsePackageManifest reads and parses package.yml from path.
+func ParsePackageManifest(path string) (*PackageManifest, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var m PackageManifest
+	if err := yaml.Unmarshal(b, &m); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	NormalizePackageManifestYAMLAliases(&m)
+	if err := ValidatePackageManifest(&m); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return &m, nil
+}
+
+// ValidatePackageManifest checks optional fields (e.g. namespace) after YAML decode.
+func ValidatePackageManifest(m *PackageManifest) error {
+	if m == nil {
+		return nil
+	}
+	if err := ValidatePackageVersion(m.Version); err != nil {
+		return err
+	}
+	if err := ValidateNamespace(m.Namespace); err != nil {
+		return err
+	}
+	if err := ValidateProvider(m.Provider); err != nil {
+		return err
+	}
+	if err := ValidateCapabilityID(m.Capability); err != nil {
+		return err
+	}
+	for _, p := range m.RequiresCapabilities {
+		if err := ValidateCapabilityID(p); err != nil {
+			return err
+		}
+	}
+	for _, injectable := range m.ScriptContract.Inject {
+		if err := ValidateScriptContractInjectable(injectable); err != nil {
+			return err
+		}
+	}
+	if err := ValidatePackageImageSpec(&m.Image); err != nil {
+		return err
+	}
+	// kind-specific required fields kept minimal — capability / requires_capabilities are optional metadata.
+	return nil
+}
+
+// NormalizePackageManifestYAMLAliases merges deprecated primitive / requires_primitives keys into Capability / RequiresCapabilities.
+func NormalizePackageManifestYAMLAliases(m *PackageManifest) {
+	if m == nil {
+		return
+	}
+	if strings.TrimSpace(m.Capability) == "" {
+		m.Capability = strings.TrimSpace(m.PrimitiveYAMLDeprecated)
+	}
+	if len(m.RequiresCapabilities) == 0 && len(m.RequiresPrimitivesYAMLDeprecated) > 0 {
+		m.RequiresCapabilities = append([]string(nil), m.RequiresPrimitivesYAMLDeprecated...)
+	}
+}
+
+// ValidateProvider checks optional provider metadata (platform/vendor id for filtering).
+func ValidateProvider(s string) error {
+	return validateOptionalMetadataString(s, "provider")
+}
+
+// ValidateCapabilityID checks optional dotted capability id (e.g. cli.codex) — see docs/capabilities.md.
+func ValidateCapabilityID(s string) error {
+	return validateOptionalMetadataString(s, "capability")
+}
+
+// ValidatePrimitive is deprecated: use ValidateCapabilityID. Kept for transitional call sites.
+func ValidatePrimitive(s string) error {
+	return ValidateCapabilityID(s)
+}
+
+var packageVersionPattern = regexp.MustCompile(`^v?[0-9]+(?:\.[0-9]+){2}(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+var packageImageDigestPattern = regexp.MustCompile(`@sha256:[0-9a-fA-F]{64}$`)
+
+// ValidatePackageVersion checks optional package version metadata.
+// Keep this semver-shaped so tarball names and CDN paths stay predictable.
+func ValidatePackageVersion(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	if !packageVersionPattern.MatchString(s) {
+		return fmt.Errorf("version: %q is not semver-like (expected 1.2.3, 1.2.3-rc1, or v1.2.3)", s)
+	}
+	return nil
+}
+
+func ValidatePackageImageSpec(img *PackageImageSpec) error {
+	if img == nil {
+		return nil
+	}
+	source := strings.TrimSpace(img.Source)
+	ref := strings.TrimSpace(img.Ref)
+	pullPolicy := strings.TrimSpace(img.PullPolicy)
+	switch source {
+	case "", "registry":
+	default:
+		return fmt.Errorf("image.source: %q is invalid (expected registry)", source)
+	}
+	switch pullPolicy {
+	case "", "never", "if-missing":
+	default:
+		return fmt.Errorf("image.pull_policy: %q is invalid (expected never or if-missing)", pullPolicy)
+	}
+	if ref == "" {
+		if source != "" || pullPolicy != "" {
+			return fmt.Errorf("image.ref is required when image metadata is set")
+		}
+		return nil
+	}
+	if strings.Contains(ref, "@") && !packageImageDigestPattern.MatchString(ref) {
+		return fmt.Errorf("image.ref: %q has an invalid digest-pinned format", ref)
+	}
+	return nil
+}
+
+func validateOptionalMetadataString(s, field string) error {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	if len(s) > 256 {
+		return fmt.Errorf("%s: length exceeds 256", field)
+	}
+	for _, r := range s {
+		if r < 0x20 {
+			return fmt.Errorf("%s: control characters not allowed", field)
+		}
+	}
+	return nil
+}
+
+var validScriptContractInjectables = map[string]struct{}{
+	"workdir":       {},
+	"workflow_name": {},
+	"script_dir":    {},
+	"package_root":  {},
+	"assets_dir":    {},
+	"dockpipe_bin":  {},
+}
+
+func ValidateScriptContractInjectable(s string) error {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return nil
+	}
+	if _, ok := validScriptContractInjectables[s]; ok {
+		return nil
+	}
+	return fmt.Errorf("script_contract.inject: unknown injectable %q (expected one of: workdir, workflow_name, script_dir, package_root, assets_dir, dockpipe_bin)", s)
+}

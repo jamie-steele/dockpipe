@@ -1,0 +1,223 @@
+# Tests, packaging, gosec/govulncheck, and CodeQL in one workflow (one Actions run per trigger).
+# See release/docs/branching.md
+# Local: quick tests  make test-quick  |  full Linux job  make ci  (src/scripts/ci-local.sh)
+#
+# --- Optional GitHub repo configuration (Settings → Secrets and variables → Actions) ---
+#
+# Optional Codex workflows in this job:
+#   Variable  DOCKPIPE_CI_CODEX     Set to "true" to run workflows/codex-pav and workflows/codex-security in CI (pulls Codex image; needs network).
+#   Secret    OPENAI_API_KEY        OpenAI API key for Codex when DOCKPIPE_CI_CODEX is true (same as local Codex usage).
+#
+# dev.to release posts (release.yml only — not this job):
+#   Variables DEVTO_PUBLISH, DEVTO_ARTICLE_ID, optional DEVTO_TAGS, DEVTO_TITLE
+#   Secret    DEVTO_API_KEY
+#   See release/docs/devto.md
+#
+name: CI
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [master, staging]
+  push:
+    branches: [master, staging]
+  schedule:
+    - cron: "18 11 * * 1" # weekly Monday ~ UTC — CodeQL only (test job skipped)
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.8"
+
+      - name: govulncheck + gosec + DorkPipe CI signal bundle
+        env:
+          DOCKPIPE_WORKDIR: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          rm -rf bin/.dockpipe/ci-raw bin/.dockpipe/ci-analysis
+          mkdir -p bin/.dockpipe/ci-raw
+          GOBIN="$(go env GOPATH)/bin"
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          go install github.com/securego/gosec/v2/cmd/gosec@latest
+          set +e
+          "$GOBIN/govulncheck" -format json ./... > bin/.dockpipe/ci-raw/govulncheck.json
+          VC=$?
+          "$GOBIN/gosec" -conf .gosec.json -fmt json -out=bin/.dockpipe/ci-raw/gosec.json -exclude-dir=.gomodcache ./...
+          GC=$?
+          set -e
+          bash packages/dorkpipe/resolvers/dorkpipe/assets/scripts/normalize-ci-scans.sh
+          echo "::group::gosec stats (JSON)"
+          jq '.Stats // empty' bin/.dockpipe/ci-raw/gosec.json || true
+          echo "::endgroup::"
+          if [[ $VC -ne 0 ]]; then
+            echo "::error::govulncheck failed (exit $VC)"
+            exit "$VC"
+          fi
+          if [[ $GC -ne 0 ]]; then
+            echo "::error::gosec failed (exit $GC)"
+            exit "$GC"
+          fi
+
+      - name: Build CLI (Bash tests use src/bin/dockpipe)
+        run: make
+
+      - name: Go test (root + maintainer modules)
+        run: |
+          go test ./...
+          go test ./packages/dorkpipe/lib/...
+          go test ./packages/dorkpipe/mcp/...
+
+      - name: Templates/core path guard (docs + code)
+        run: bash src/scripts/check-templates-core-paths.sh
+
+      # Workflow "test" = go test + vet + govulncheck + gosec inside Docker (tools installed in-container; only mod cache mounted).
+      - name: DockPipe workflow — test
+        env:
+          DOCKPIPE_REPO_ROOT: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          ./src/bin/dockpipe --workflow test --runtime docker --workdir "${{ github.workspace }}" \
+            --mount "$(go env GOPATH)/pkg:/go/pkg:rw" \
+            --
+
+      # Optional: Codex resolver workflows (set repo variable DOCKPIPE_CI_CODEX=true and secret OPENAI_API_KEY).
+      - name: DockPipe workflows — codex-pav, codex-security (optional)
+        if: ${{ vars.DOCKPIPE_CI_CODEX == 'true' }}
+        env:
+          DOCKPIPE_REPO_ROOT: ${{ github.workspace }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${OPENAI_API_KEY:-}" ]]; then
+            echo "::error::Set repository secret OPENAI_API_KEY when vars.DOCKPIPE_CI_CODEX is true."
+            exit 1
+          fi
+          ./src/bin/dockpipe --workflow codex-pav --resolver codex --runtime docker --workdir "${{ github.workspace }}" --
+          ./src/bin/dockpipe --workflow codex-security --resolver codex --runtime docker --workdir "${{ github.workspace }}" --
+
+      # Ship PRs only: staging/integration PRs skip this (maintainer bumps VERSION when merging staging → master).
+      - name: Release notes + version bump (PRs targeting master only)
+        if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'master'
+        shell: bash
+        run: |
+          set -euo pipefail
+          V=$(tr -d ' \n\r' < VERSION)
+          if [[ ! "$V" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::VERSION must be a single line semver X.Y.Z (got '$V')"
+            exit 1
+          fi
+          notes="release/releasenotes/${V}.md"
+          if [[ ! -f "$notes" ]]; then
+            echo "::error::Missing $notes for VERSION=$V — add or bump VERSION and matching release/releasenotes/X.Y.Z.md"
+            exit 1
+          fi
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          base_v=$(git show "${base}:VERSION" 2>/dev/null | tr -d ' \n\r' || true)
+          if [[ -n "$base_v" && "$base_v" == "$V" ]]; then
+            echo "::error::VERSION is still $V (same as target branch). Bump VERSION for each release merge."
+            exit 1
+          fi
+          changed=$(git diff --name-only "$base" "$head")
+          if ! echo "$changed" | grep -qx "$notes"; then
+            echo "::error::This PR must modify $notes (current VERSION is $V)."
+            echo "Changed paths:"
+            echo "$changed"
+            exit 1
+          fi
+          echo "OK: shipping $V with updated $notes (was ${base_v:-<no VERSION on base>})"
+
+      - name: Build amd64 .deb (for test_deb_install.sh)
+        run: ./release/packaging/build-deb.sh "$(tr -d ' \t\r\n' < VERSION)" amd64
+
+      - name: Shell unit tests
+        run: bash tests/run_tests.sh
+
+      - name: Integration tests (Docker)
+        run: bash tests/integration-tests/run.sh
+
+      - name: Upload DorkPipe CI analysis bundle
+        if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: dockpipe-ci-analysis-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            bin/.dockpipe/ci-analysis/
+            bin/.dockpipe/ci-raw/
+
+  # Windows: Go + bash scripts that mirror host pre-script behavior (Git Bash on the runner).
+  # Full tests/run_tests.sh and Docker integration tests stay on Linux — Docker/Linux images
+  # are not reliable on windows-latest the same way as ubuntu-latest.
+  test-windows:
+    if: github.event_name != 'schedule'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.8"
+
+      - name: Go test (root + maintainer modules)
+        run: |
+          go test ./...
+          go test ./packages/dorkpipe/lib/...
+          go test ./packages/dorkpipe/mcp/...
+
+      - name: Templates/core path guard (docs + code)
+        run: bash src/scripts/check-templates-core-paths.sh
+
+      - name: clone-worktree include script (bash + git)
+        run: bash tests/unit-tests/test_clone_worktree_include.sh
+
+  codeql:
+    name: CodeQL (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: go
+          config-file: ./.github/codeql/codeql-config.yml
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:go"

@@ -1,0 +1,60 @@
+# Full DockPipe path: Compose sidecars up → isolated DorkPipe self-analysis with
+# proxy-backed network policy → Compose down.
+#
+#   dockpipe --workflow dorkpipe-self-analysis-stack-proxy --workdir . --
+#
+# Leave services up after the run:
+#   DORKPIPE_DEV_STACK_AUTODOWN=0 dockpipe --workflow dorkpipe-self-analysis-stack-proxy --workdir . --
+name: dorkpipe-self-analysis-stack-proxy
+description: >-
+  stack_up (host): Postgres+Ollama+policy-proxy via DockPipe compose builtin.
+  self_analysis (container): same as dorkpipe-self-analysis, but compiled with
+  proxy-backed allowlist network policy.
+  stack_down (host): compose down unless DORKPIPE_DEV_STACK_AUTODOWN=0.
+
+resolver: codex
+security:
+  profile: sidecar-client
+  network:
+    mode: allowlist
+    allow:
+      - proxy.golang.org
+      - sum.golang.org
+      - golang.org
+      - github.com
+      - "*.githubusercontent.com"
+compose:
+  file: ../dorkpipe/assets/compose/docker-compose.yml
+  project: dorkpipe-dev
+  project_directory: ../../../../
+  autodown_env: DORKPIPE_DEV_STACK_AUTODOWN
+  exports:
+    DATABASE_URL: postgresql://dorkpipe:dorkpipe@host.docker.internal:15432/dorkpipe
+    OLLAMA_HOST: http://host.docker.internal:11434
+    DOCKPIPE_POLICY_PROXY_URL: http://host.docker.internal:13128
+    DOCKPIPE_POLICY_PROXY_NO_PROXY: host.docker.internal,localhost,127.0.0.1,::1
+  services: [postgres, ollama, policy-proxy]
+steps:
+  - id: stack_up
+    kind: host
+    host_builtin: compose_up
+
+  - id: self_analysis
+    runtime: dockerimage
+    isolate: golang:1.25-bookworm
+    cmd: |-
+      bash -c 'set -euo pipefail
+      cd /work
+      export DOCKPIPE_WORKDIR=/work
+      export DOCKPIPE_SCRIPT_DIR="$DOCKPIPE_WORKDIR/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
+      # No apt-get: dockpipe maps the container user to the host uid, so apt cannot run as root.
+      # golang:bookworm images ship git and curl; scripts fall back to grep if ripgrep is absent.
+      if [[ ! -x bin/dorkpipe ]]; then
+        echo "[dorkpipe-self-analysis] building bin/dorkpipe in container..."
+        go build -C packages/dorkpipe/lib -trimpath -o /work/bin/dorkpipe ./cmd/dorkpipe
+      fi
+      exec bash scripts/dorkpipe/run-self-analysis.sh'
+
+  - id: stack_down
+    kind: host
+    host_builtin: compose_down

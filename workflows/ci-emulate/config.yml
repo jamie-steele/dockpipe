@@ -1,0 +1,15 @@
+name: ci-emulate
+vault: none
+description: >-
+  Host-only local mirror of the repo's Linux GitHub CI test job as closely as possible.
+  Runs the same maintainer path as make ci / src/scripts/ci-local.sh: scans, build, Go tests,
+  templates/core guard, DockPipe workflow test, .deb build, shell tests, and Docker integration tests.
+  CodeQL and the PR-only release-notes/version gate still stay on GitHub.
+
+docker_preflight: false
+
+steps:
+  - id: emulate
+    kind: host
+    run:
+      - bash src/scripts/ci-local.sh

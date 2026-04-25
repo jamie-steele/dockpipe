@@ -1,0 +1,23 @@
+name: Pipeon
+category: app
+vault: none
+description: >-
+  Pipeon product dev stack: ensure dockpipe + dorkpipe + mcpd binaries, start the isolated
+  DorkPipe control-plane stack with internal Postgres + Ollama, expose MCP only, warm the default local
+  model, and open Pipeon against the current workdir.
+
+steps:
+  - id: launch
+    kind: host
+    run: assets/scripts/launch.sh
+    vars:
+      # Default behavior: when the Pipeon/code-server window closes, the stack tears down automatically.
+      # Set to 0 only if you intentionally want warm backends left running.
+      PIPEON_DEV_STACK_AUTODOWN: "1"
+      PIPEON_DEV_STACK_BUILD: "auto"
+      PIPEON_DEV_STACK_PIPEON_BUNDLE: "1"
+      PIPEON_DEV_STACK_PULL_MODEL: "1"
+      DOCKPIPE_MCP_TIER: "exec"
+      CODE_SERVER_IMAGE: "dockpipe-code-server:latest"
+      CODE_SERVER_AUTH: "none"
+      CODE_SERVER_WAIT: "1"

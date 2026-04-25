@@ -1,0 +1,17 @@
+schema: 1
+kind: package
+name: cloud.storage
+version: 0.6.0
+title: DockPipe cloud storage
+description: |
+  Umbrella for cloud object storage workflows. Package id cloud.storage; resolver r2 → dotted
+  cloud.storage.r2. Resolvers under resolvers/ are optional backends (e.g. r2 for Cloudflare R2).
+  Each resolver may host one or more workflows.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [workflow, storage, cloud, r2]
+includes_resolvers:
+  - r2
+script_contract:
+  inject: [workdir, workflow_name, script_dir, package_root, assets_dir, dockpipe_bin]

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Self-contained tests for the first-party pipeon package.
+# From repo root: bash packages/pipeon/tests/run.sh
+set -euo pipefail
+ROOT="$(git rev-parse --show-toplevel)"
+DIR="$ROOT/packages/pipeon/tests"
+bash "$DIR/test_pipeon.sh"
+bash "$DIR/test_repo_tools.sh"

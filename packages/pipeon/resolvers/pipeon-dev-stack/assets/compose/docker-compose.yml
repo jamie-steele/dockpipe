@@ -1,0 +1,77 @@
+# Dev stack for Pipeon local dogfood: isolated DorkPipe control plane + Postgres + Ollama.
+# Pipeon and stock VS Code talk to the stack through MCP only.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: dorkpipe
+      POSTGRES_PASSWORD: dorkpipe
+      POSTGRES_DB: dorkpipe
+    volumes:
+      - dorkpipe_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dorkpipe -d dorkpipe"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - dorkpipe_ollama:/root/.ollama
+  dorkpipe-stack:
+    image: node:20-bookworm-slim
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    working_dir: /work
+    environment:
+      DOCKPIPE_BIN: "${PIPEON_DEV_STACK_DOCKPIPE_BIN:-/repo/src/bin/dockpipe}"
+      DORKPIPE_BIN: "${PIPEON_DEV_STACK_DORKPIPE_BIN:-/repo/packages/dorkpipe/bin/dorkpipe}"
+      DOCKPIPE_WORKDIR: "${PIPEON_DEV_STACK_DORKPIPE_WORKDIR:-/work}"
+      DOCKPIPE_MCP_TIER: "${DOCKPIPE_MCP_TIER:-exec}"
+      DOCKPIPE_MCP_RESTRICT_WORKDIR: "1"
+      DOCKPIPE_MCP_REQUIRE_ABSOLUTE_BIN: "1"
+      DATABASE_URL: "${PIPEON_DEV_STACK_DORKPIPE_DATABASE_URL:-postgresql://dorkpipe:dorkpipe@postgres:5432/dorkpipe}"
+      OLLAMA_HOST: "${PIPEON_DEV_STACK_DORKPIPE_OLLAMA_HOST:-http://ollama:11434}"
+      PIPEON_OLLAMA_MODEL: "${PIPEON_OLLAMA_MODEL:-llama3.2}"
+      MCP_HTTP_API_KEY_FILE: "/run/pipeon/mcp-api-key"
+      MCP_TLS_CERT_FILE: "/run/pipeon/mcp-tls.crt"
+      MCP_TLS_KEY_FILE: "/run/pipeon/mcp-tls.key"
+      PIPEON_DEV_STACK_MCPD_BIN: "${PIPEON_DEV_STACK_MCPD_BIN:-/repo/packages/dorkpipe/bin/mcpd}"
+      PIPEON_DEV_STACK_MCPD_LISTEN: "0.0.0.0:8765"
+    command:
+      - /bin/bash
+      - -lc
+      - exec "$$PIPEON_DEV_STACK_MCPD_BIN" -http "$$PIPEON_DEV_STACK_MCPD_LISTEN"
+    volumes:
+      - "${PIPEON_DEV_STACK_WORKDIR:-.}:/work"
+      - "${PIPEON_DEV_STACK_REPO_ROOT:-.}:/repo"
+      - "${PIPEON_DEV_STACK_MCP_API_KEY_FILE:?PIPEON_DEV_STACK_MCP_API_KEY_FILE is required}:/run/pipeon/mcp-api-key:ro"
+      - "${PIPEON_DEV_STACK_MCP_TLS_CERT_FILE:?PIPEON_DEV_STACK_MCP_TLS_CERT_FILE is required}:/run/pipeon/mcp-tls.crt:ro"
+      - "${PIPEON_DEV_STACK_MCP_TLS_KEY_FILE:?PIPEON_DEV_STACK_MCP_TLS_KEY_FILE is required}:/run/pipeon/mcp-tls.key:ro"
+  pipeon-mcp-proxy:
+    image: node:20-alpine
+    depends_on:
+      dorkpipe-stack:
+        condition: service_started
+    environment:
+      MCP_HTTP_API_KEY_FILE: "/run/pipeon/mcp-api-key"
+      NODE_EXTRA_CA_CERTS: "/run/pipeon/mcp-tls.crt"
+      PIPEON_MCP_PROXY_PORT: "8766"
+      PIPEON_MCP_UPSTREAM_URL: "https://dorkpipe-stack:8765"
+    ports:
+      - "127.0.0.1:${PIPEON_DEV_STACK_MCP_PORT:-8766}:8766"
+    command:
+      - /bin/sh
+      - -lc
+      - exec node /repo/packages/pipeon/resolvers/pipeon-dev-stack/assets/scripts/mcp-proxy.js
+    volumes:
+      - "${PIPEON_DEV_STACK_REPO_ROOT:-.}:/repo"
+      - "${PIPEON_DEV_STACK_MCP_API_KEY_FILE:?PIPEON_DEV_STACK_MCP_API_KEY_FILE is required}:/run/pipeon/mcp-api-key:ro"
+      - "${PIPEON_DEV_STACK_MCP_TLS_CERT_FILE:?PIPEON_DEV_STACK_MCP_TLS_CERT_FILE is required}:/run/pipeon/mcp-tls.crt:ro"
+
+volumes:
+  dorkpipe_pgdata:
+  dorkpipe_ollama:

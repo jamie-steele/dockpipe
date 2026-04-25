@@ -1,0 +1,153 @@
+/* Light UI — high contrast for secondary text and badges (WCAG-friendly on white/near-white) */
+
+QLabel#appSubtitle,
+QLabel#hintText,
+QLabel#contextPath,
+QLabel#contextMeta,
+QLabel#consoleMeta,
+QLabel#emptyBody,
+QLabel#logViewerStatus,
+QLabel#logViewerPath {
+    color: #2d2d2d;
+}
+
+QLabel#logViewerCommand {
+    color: #141414;
+}
+
+QLabel#emptyTitle {
+    color: #141414;
+}
+
+QDialog {
+    color: #1e2430;
+}
+
+QLabel#statusBadge[status="running"] {
+    background-color: #a5d6a7;
+    color: #0a3d14;
+}
+
+QLabel#statusBadge[status="stopped"] {
+    background-color: #cfcfcf;
+    color: #1a1a1a;
+}
+
+QLabel#statusBadge[status="failed"] {
+    background-color: #ffcdd2;
+    color: #5c0000;
+}
+
+QPushButton#secondaryButton {
+    color: #1f1f1f;
+    border: 1px solid #9a9a9a;
+}
+
+QPushButton#secondaryButton:hover {
+    background-color: #dedede;
+    color: #0a0a0a;
+}
+
+QPushButton#primaryButton {
+    background-color: #0d6fd1;
+    border-color: #0d6fd1;
+}
+
+QPushButton#primaryButton:hover {
+    background-color: #1b7fe3;
+    border-color: #1b7fe3;
+}
+
+QPushButton#dangerButton {
+    color: #5c0a0a;
+    border: 1px solid #b71c1c;
+    background-color: rgba(183, 28, 28, 0.1);
+}
+
+QPushButton#dangerButton:hover {
+    background-color: rgba(183, 28, 28, 0.18);
+    color: #3d0606;
+}
+
+QLabel#disclaimerWatermark {
+    color: #5c5c5c;
+}
+
+QStatusBar {
+    border-top: 1px solid #c8c8c8;
+}
+
+QFrame#inlineConsolePanel {
+    background-color: #f5f6f8;
+    border: 1px solid #d3d7de;
+}
+
+QFrame#headerBar,
+QFrame#listPanel,
+QFrame#emptyState,
+QFrame#dockerHero {
+    border: 1px solid #d3d7de;
+}
+
+QWidget#launchOverlay {
+    background-color: rgba(244, 247, 251, 0.78);
+}
+
+QFrame#launchOverlayCard {
+    background-color: #ffffff;
+    border: 1px solid #d3d7de;
+}
+
+QPlainTextEdit#inlineConsole {
+    background-color: #fbfcfe;
+    color: #1b2230;
+    border-color: #c4cad4;
+}
+
+QPlainTextEdit#detailConsole,
+QTextBrowser#detailBrowser,
+QLineEdit,
+QComboBox {
+    background-color: #fbfcfe;
+    color: #1b2230;
+    border-color: #c4cad4;
+}
+
+QTableWidget {
+    background-color: #ffffff;
+    alternate-background-color: #f5f7fb;
+    border: 1px solid #d3d7de;
+    gridline-color: transparent;
+}
+
+QTableWidget::item:selected {
+    background-color: rgba(13, 111, 209, 0.16);
+}
+
+QHeaderView::section {
+    background-color: #eef2f7;
+    color: #1b2230;
+    border: 0;
+    border-bottom: 1px solid #d3d7de;
+    padding: 8px 10px;
+}
+
+QTabWidget::pane,
+QTabWidget#surfaceTabs::pane {
+    border-color: #d3d7de;
+    background-color: #ffffff;
+}
+
+QTabBar::tab {
+    background-color: #eef2f7;
+    color: #1b2230;
+}
+
+QTabBar::tab:selected {
+    background-color: #0d6fd1;
+    color: #ffffff;
+}
+
+QTabBar::tab:hover:!selected {
+    background-color: #dde5ef;
+}

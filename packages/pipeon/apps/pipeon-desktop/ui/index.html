@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pipeon</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #10131a;
+        --panel: #18202b;
+        --text: #e7edf7;
+        --muted: #9cb0c9;
+        --accent: #3ba1ff;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(circle at top, rgba(59, 161, 255, 0.18), transparent 35%),
+          linear-gradient(180deg, #121722 0%, var(--bg) 100%);
+        color: var(--text);
+        font: 16px/1.45 "Segoe UI", "Noto Sans", sans-serif;
+      }
+      .card {
+        width: min(560px, calc(100vw - 48px));
+        padding: 28px 30px;
+        border-radius: 18px;
+        background: rgba(24, 32, 43, 0.94);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow: 0 20px 80px rgba(0, 0, 0, 0.35);
+      }
+      h1 {
+        margin: 0 0 10px;
+        font-size: 28px;
+      }
+      p {
+        margin: 0;
+        color: var(--muted);
+      }
+      .accent {
+        color: var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Pipeon</h1>
+      <p>
+        Starting the <span class="accent">local Pipeon workspace</span>...
+        If this screen stays open, the desktop host was launched without a
+        target <code>PIPEON_URL</code>.
+      </p>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,97 @@
+{
+  "name": "pipeon",
+  "displayName": "DorkPipe",
+  "description": "DorkPipe editor companion: local-first chat, workflow actions, and workspace context from .dockpipe.",
+  "version": "0.0.6",
+  "publisher": "dorkpipe",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jamie-steele/dockpipe.git"
+  },
+  "icon": "images/dorkpipe-icon.png",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "files": [
+    "extension.js",
+    "webview/**",
+    "images/**",
+    "README.md",
+    "LICENSE",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "pretest:webview": "npm run build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:webview": "node scripts/webview-smoke.js"
+  },
+  "main": "extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "panel": [
+        {
+          "id": "dorkpipe-panel",
+          "title": "DorkPipe",
+          "icon": "images/dorkpipe-activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "dorkpipe-panel": [
+        {
+          "id": "pipeon.chatView",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "pipeon.openChat",
+        "title": "DorkPipe: Open chat"
+      },
+      {
+        "command": "pipeon.openDetachedChat",
+        "title": "DorkPipe: Open detached chat"
+      },
+      {
+        "command": "pipeon.newChat",
+        "title": "DorkPipe: New chat"
+      },
+      {
+        "command": "pipeon.clearChat",
+        "title": "DorkPipe: Clear current chat"
+      },
+      {
+        "command": "pipeon.resetChatShell",
+        "title": "DorkPipe: Reset chat shell"
+      },
+      {
+        "command": "pipeon.openWelcome",
+        "title": "Pipeon: Open welcome"
+      },
+      {
+        "command": "pipeon.openContextBundle",
+        "title": "DorkPipe: Open context bundle (bin/.dockpipe/pipeon-context.md)"
+      },
+      {
+        "command": "pipeon.showReadme",
+        "title": "DorkPipe: Open docs"
+      },
+      {
+        "command": "pipeon.openWebviewCanary",
+        "title": "DorkPipe: Open webview canary"
+      }
+    ]
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "@types/vscode": "1.85.0",
+    "typescript": "^6.0.2"
+  }
+}

@@ -1,0 +1,368 @@
+name: Release
+
+# Merging to master ships a release: version comes from repo-root VERSION + release/releasenotes/X.Y.Z.md.
+# workflow_dispatch is for dry-runs or manual runs (optional version override).
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g. 0.6.0). Leave empty to use VERSION file from the branch."
+        required: false
+        type: string
+      dry_run:
+        description: "Build artifacts and checksums without creating GitHub release"
+        required: false
+        default: false
+        type: boolean
+      build_msi:
+        description: "Build Windows MSI (WiX). On push to master, use committed file release/packaging/msi/SHIP_MSI instead."
+        required: false
+        default: true
+        type: boolean
+
+concurrency:
+  group: dockpipe-release
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  meta:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.m.outputs.version }}
+      tag: ${{ steps.m.outputs.tag }}
+      dry_run: ${{ steps.m.outputs.dry_run }}
+      build_msi: ${{ steps.m.outputs.build_msi }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - id: m
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+          INPUT_BUILD_MSI: ${{ inputs.build_msi }}
+        run: |
+          set -euo pipefail
+          dry_run="false"
+          build_msi="false"
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            raw="${INPUT_VERSION:-}"
+            if [[ -z "${raw}" ]]; then
+              raw="$(tr -d ' \n\r' < VERSION)"
+            fi
+            if [[ "${INPUT_DRY_RUN:-false}" == "true" ]]; then
+              dry_run="true"
+            fi
+            case "${INPUT_BUILD_MSI:-true}" in
+              true|True) build_msi="true" ;;
+              *) build_msi="false" ;;
+            esac
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            raw="$(tr -d ' \n\r' < VERSION)"
+            if [[ -f release/packaging/msi/SHIP_MSI ]]; then
+              build_msi="true"
+            fi
+          else
+            echo "Unsupported event: ${GITHUB_EVENT_NAME}" >&2
+            exit 1
+          fi
+          raw="${raw#v}"
+          if [[ ! "$raw" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid semver in VERSION / input: '${raw}'" >&2
+            exit 1
+          fi
+          if [[ ! -f "release/releasenotes/${raw}.md" ]]; then
+            echo "Missing release/releasenotes/${raw}.md" >&2
+            exit 1
+          fi
+          tag="v${raw}"
+          echo "version=${raw}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "dry_run=${dry_run}" >> "$GITHUB_OUTPUT"
+          echo "build_msi=${build_msi}" >> "$GITHUB_OUTPUT"
+
+  build-ubuntu:
+    needs: [meta]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.8"
+
+      - name: Run tests
+        run: |
+          go test ./...
+          go test ./packages/dorkpipe/lib/...
+          go test ./packages/dorkpipe/mcp/...
+
+      - name: Build release artifacts (Linux, macOS, zip, debs)
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.meta.outputs.version }}"
+          mkdir -p release/artifacts
+          LDFLAGS="-s -w -X main.Version=${VERSION}"
+
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd
+          tar -C release/artifacts -czf "release/artifacts/dockpipe_${VERSION}_linux_amd64.tar.gz" dockpipe
+          rm -f release/artifacts/dockpipe
+
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd
+          tar -C release/artifacts -czf "release/artifacts/dockpipe_${VERSION}_linux_arm64.tar.gz" dockpipe
+          rm -f release/artifacts/dockpipe
+
+          GOOS=darwin GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd
+          tar -C release/artifacts -czf "release/artifacts/dockpipe_${VERSION}_darwin_amd64.tar.gz" dockpipe
+          rm -f release/artifacts/dockpipe
+
+          GOOS=darwin GOARCH=arm64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe" ./src/cmd
+          tar -C release/artifacts -czf "release/artifacts/dockpipe_${VERSION}_darwin_arm64.tar.gz" dockpipe
+          rm -f release/artifacts/dockpipe
+
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "release/artifacts/dockpipe.exe" ./src/cmd
+          (cd release/artifacts && zip -q "dockpipe_${VERSION}_windows_amd64.zip" dockpipe.exe)
+          rm -f release/artifacts/dockpipe.exe
+
+          ./release/packaging/build-deb.sh "${VERSION}" amd64
+          ./release/packaging/build-deb.sh "${VERSION}" arm64
+          cp "release/packaging/build/dockpipe_${VERSION}_amd64.deb" release/artifacts/
+          cp "release/packaging/build/dockpipe_${VERSION}_arm64.deb" release/artifacts/
+
+          ./release/packaging/build-nfpm.sh "${VERSION}" release/artifacts
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-dist-linux
+          path: release/artifacts/*
+
+  build-msi:
+    needs: [meta]
+    if: needs.meta.outputs.build_msi == 'true'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.25.8"
+
+      - name: Run tests
+        run: |
+          go test ./...
+          go test ./packages/dorkpipe/lib/...
+          go test ./packages/dorkpipe/mcp/...
+
+      # One pwsh step: GITHUB_ENV mangles/truncates Windows paths for WIX — pass -WixRoot into build.ps1 instead.
+      - name: Install WiX and build MSI
+        shell: pwsh
+        run: |
+          $ProgressPreference = 'SilentlyContinue'
+          $zip = Join-Path $env:TEMP "wix314.zip"
+          Invoke-WebRequest -Uri "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip" -OutFile $zip
+          $dest = Join-Path $env:RUNNER_TEMP "wix314-expand"
+          if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+          New-Item -ItemType Directory -Force -Path $dest | Out-Null
+          Expand-Archive -Path $zip -DestinationPath $dest -Force
+          $destFull = (Resolve-Path -LiteralPath $dest).Path.TrimEnd('\')
+          # wix314-binaries.zip puts candle.exe + light.exe at the extract root (not bin\). build.ps1 supports both layouts.
+          $rootCandle = Join-Path $destFull "candle.exe"
+          $binCandle = Join-Path $destFull "bin\candle.exe"
+          if (-not ((Test-Path -LiteralPath $rootCandle) -or (Test-Path -LiteralPath $binCandle))) {
+            throw "candle.exe not found at WiX zip root or under bin\ at $destFull"
+          }
+          $wixRoot = $destFull
+          $v = "${{ needs.meta.outputs.version }}"
+          go build -trimpath -ldflags "-s -w -X main.Version=$v" -o dockpipe.exe ./src/cmd
+          New-Item -ItemType Directory -Force -Path msi-dist | Out-Null
+          & (Join-Path $PWD "release\packaging\msi\build.ps1") `
+            -Version $v `
+            -SourceExe (Join-Path $PWD "dockpipe.exe") `
+            -OutDir (Join-Path $PWD "msi-dist") `
+            -WixRoot $wixRoot
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-msi
+          path: msi-dist/*.msi
+
+  publish:
+    needs: [meta, build-ubuntu, build-msi]
+    if: always() && needs.meta.result == 'success' && needs.build-ubuntu.result == 'success' && (needs.build-msi.result == 'success' || needs.build-msi.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-dist-linux
+          path: release/artifacts
+
+      - uses: actions/download-artifact@v8
+        if: needs.meta.outputs.build_msi == 'true'
+        with:
+          name: release-msi
+          path: release/artifacts
+
+      - name: Prepare release notes body
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.meta.outputs.version }}"
+          NOTES_FILE="release/releasenotes/${VERSION}.md"
+          if [[ ! -f "${NOTES_FILE}" ]]; then
+            echo "Missing required release notes file: ${NOTES_FILE}" >&2
+            exit 1
+          fi
+          cp "${NOTES_FILE}" release/artifacts/RELEASE_NOTES.md
+
+      - name: Build checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release/artifacts
+          shopt -s nullglob
+          files=( *.tar.gz *.zip *.deb *.msi )
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "No release files in release/artifacts/" >&2
+            exit 1
+          fi
+          sha256sum "${files[@]}" > SHA256SUMS.txt
+
+      - name: Upload dry-run artifacts
+        if: needs.meta.outputs.dry_run == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: dockpipe-release-dry-run-${{ needs.meta.outputs.version }}
+          path: release/artifacts/*
+
+      - name: Create GitHub release
+        if: needs.meta.outputs.dry_run != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          name: ${{ needs.meta.outputs.tag }}
+          body_path: release/artifacts/RELEASE_NOTES.md
+          # MSI is optional (build-msi may be skipped); do not fail when artifacts dir has no .msi
+          fail_on_unmatched_files: false
+          files: |
+            release/artifacts/*.tar.gz
+            release/artifacts/*.zip
+            release/artifacts/*.deb
+            release/artifacts/*.msi
+            release/artifacts/*.apk
+            release/artifacts/*.rpm
+            release/artifacts/*.pkg.tar.zst
+            release/artifacts/SHA256SUMS.txt
+
+  # Optional: dev.to — PUT main article (DEVTO_ARTICLE_ID) + optional one-time POST per release (DEVTO_ONE_TIME_POST).
+  # See release/docs/devto.md
+  devto:
+    needs: [meta, publish]
+    runs-on: ubuntu-latest
+    environment: release
+    if: ${{ needs.meta.outputs.dry_run != 'true' && vars.DEVTO_PUBLISH == 'true' && (vars.DEVTO_ARTICLE_ID != '' || vars.DEVTO_ONE_TIME_POST == 'true') }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Publish to dev.to (main PUT + optional one-time POST)
+        shell: bash
+        env:
+          DEVTO_API_KEY: ${{ secrets.DEVTO_API_KEY }}
+          DEVTO_ARTICLE_ID: ${{ vars.DEVTO_ARTICLE_ID }}
+          DEVTO_ONE_TIME_POST: ${{ vars.DEVTO_ONE_TIME_POST }}
+          DEVTO_TAGS: ${{ vars.DEVTO_TAGS }}
+          DEVTO_TITLE: ${{ vars.DEVTO_TITLE }}
+          DEVTO_ONE_TIME_TITLE: ${{ vars.DEVTO_ONE_TIME_TITLE }}
+          VERSION: ${{ needs.meta.outputs.version }}
+          TAG: ${{ needs.meta.outputs.tag }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${DEVTO_API_KEY:-}" ]]; then
+            echo "::error::Set secret DEVTO_API_KEY when DEVTO_PUBLISH is true."
+            exit 1
+          fi
+          NOTES="release/releasenotes/${VERSION}.md"
+          if [[ ! -f "${NOTES}" ]]; then
+            echo "::error::Missing ${NOTES}" >&2
+            exit 1
+          fi
+          RELEASE_URL="${REPO_URL}/releases/tag/${TAG}"
+          TITLE_MAIN="${DEVTO_TITLE:-dockpipe ${TAG} released}"
+          TITLE_ONETIME="${DEVTO_ONE_TIME_TITLE:-dockpipe ${TAG} released}"
+          {
+            printf '**[%s](%s)** — [GitHub release →](%s)\n\n' "${TAG}" "${RELEASE_URL}" "${RELEASE_URL}"
+            echo "---"
+            echo ""
+            cat "${NOTES}"
+          } > /tmp/devto-body.md
+          TAGS_JSON=$(python3 <<'PY'
+          import json, os
+          raw = os.environ.get("DEVTO_TAGS") or "dockpipe,cli,golang"
+          tags = [t.strip() for t in raw.split(",") if t.strip()]
+          print(json.dumps(tags))
+          PY
+          )
+
+          build_payload() {
+            local title="$1"
+            local out="$2"
+            jq -n \
+              --arg title "$title" \
+              --rawfile body /tmp/devto-body.md \
+              --arg canonical "$RELEASE_URL" \
+              --argjson tags "$TAGS_JSON" \
+              '{
+                article: {
+                  title: $title,
+                  body_markdown: ($body | rtrimstr("\n")),
+                  published: true,
+                  canonical_url: $canonical,
+                  tags: $tags
+                }
+              }' > "$out"
+          }
+
+          if [[ -n "${DEVTO_ARTICLE_ID:-}" ]]; then
+            build_payload "$TITLE_MAIN" /tmp/devto-payload-main.json
+            code=$(curl -sS -o /tmp/devto-resp.json -w "%{http_code}" \
+              -X PUT "https://dev.to/api/articles/${DEVTO_ARTICLE_ID}" \
+              -H "api-key: ${DEVTO_API_KEY}" \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json" \
+              --data-binary @/tmp/devto-payload-main.json)
+            if [[ "$code" != "200" && "$code" != "201" ]]; then
+              echo "::error::dev.to PUT (main) HTTP ${code}"
+              cat /tmp/devto-resp.json >&2 || true
+              exit 1
+            fi
+            echo "dev.to main article ${DEVTO_ARTICLE_ID} updated (HTTP ${code})."
+          fi
+
+          if [[ "${DEVTO_ONE_TIME_POST:-}" == "true" ]]; then
+            build_payload "$TITLE_ONETIME" /tmp/devto-payload-onetime.json
+            code=$(curl -sS -o /tmp/devto-resp-onetime.json -w "%{http_code}" \
+              -X POST "https://dev.to/api/articles" \
+              -H "api-key: ${DEVTO_API_KEY}" \
+              -H "Content-Type: application/json" \
+              -H "Accept: application/json" \
+              --data-binary @/tmp/devto-payload-onetime.json)
+            if [[ "$code" != "200" && "$code" != "201" ]]; then
+              echo "::error::dev.to POST (one-time) HTTP ${code}"
+              cat /tmp/devto-resp-onetime.json >&2 || true
+              exit 1
+            fi
+            ot_id=$(jq -r '.id // .article.id // empty' /tmp/devto-resp-onetime.json)
+            ot_url=$(jq -r '.url // .article.url // empty' /tmp/devto-resp-onetime.json)
+            echo "dev.to one-time post created (HTTP ${code}). id=${ot_id} url=${ot_url}"
+          fi
