@@ -67,7 +67,7 @@ var mainUsageSections = []usageSection{
 			{"init", "Add DockPipe to the current project"},
 			{"install", "Fetch templates/core from HTTPS (e.g. Cloudflare R2); see install core --help"},
 			{"clone <name>", "Copy a compiled workflow package to workflows/ when allow_clone is true (see package manifest)"},
-			{"build", "Compile packages into bin/.dockpipe/internal (same as package compile all --force; replaces existing outputs)"},
+			{"build", "Compile packages into bin/.dockpipe/internal and prebuild Dockerfile image artifacts"},
 			{"clean", "Remove compiled package store (bin/.dockpipe/internal/packages)"},
 			{"rebuild", "clean then build"},
 			{"package list|manifest|build|compile", "Packages: list, manifest, author core tarball, or compile into bin/.dockpipe/internal"},

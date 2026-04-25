@@ -16,23 +16,73 @@ func cmdBuild(args []string) error {
 		fmt.Print(buildUsageText)
 		return nil
 	}
-	var wfName string
+	var (
+		wfName      string
+		buildImages = true
+	)
 	forward := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
-		if args[i] == "--for-workflow" {
+		switch args[i] {
+		case "--for-workflow":
 			if i+1 >= len(args) {
 				return fmt.Errorf("--for-workflow requires a workflow name")
 			}
 			wfName = args[i+1]
 			i++
 			continue
+		case "--images":
+			buildImages = true
+			continue
+		case "--no-images":
+			buildImages = false
+			continue
 		}
 		forward = append(forward, args[i])
 	}
-	if wfName != "" {
-		return cmdPackage(append([]string{"compile", "for-workflow", wfName, "--force"}, forward...))
+	workdir, err := parseBuildWorkdir(forward)
+	if err != nil {
+		return err
 	}
-	return cmdPackage(append([]string{"compile", "all", "--force"}, args...))
+	if wfName != "" {
+		if err := cmdPackage(append([]string{"compile", "for-workflow", wfName, "--force"}, forward...)); err != nil {
+			return err
+		}
+	} else if err := cmdPackage(append([]string{"compile", "all", "--force"}, forward...)); err != nil {
+		return err
+	}
+	if !buildImages {
+		return nil
+	}
+	n, err := prebuildCompiledImageArtifacts(workdir)
+	if err != nil {
+		return err
+	}
+	if n > 0 {
+		fmt.Fprintf(os.Stderr, "[dockpipe] image: prebuilt %d image artifact(s)\n", n)
+	}
+	return nil
+}
+
+func parseBuildWorkdir(args []string) (string, error) {
+	var workdir string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--workdir" && i+1 < len(args) {
+			workdir = args[i+1]
+			i++
+		}
+	}
+	if workdir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return "", err
+		}
+		root, err := domain.FindProjectRootWithDockpipeConfig(wd)
+		if err != nil {
+			return "", err
+		}
+		return filepath.Abs(root)
+	}
+	return filepath.Abs(workdir)
 }
 
 func cmdClean(args []string) error {
@@ -120,12 +170,15 @@ const buildUsageText = `dockpipe build [--for-workflow <name>] [options]
 
 Without --for-workflow: same as dockpipe package compile all --force (full store).
 PipeLang sources are compiled during package staging and included in package tarballs.
+Dockerfile-backed image artifacts are prebuilt by default after compile.
 
 With --for-workflow <name>: same as dockpipe package compile for-workflow <name> --force
 (transitive core + resolver + workflow closure only).
 
 Options:
   --for-workflow <name>   Dependency-scoped compile instead of compile all
+  --images                Prebuild Dockerfile-backed image artifacts after compile (default)
+  --no-images             Only compile package/runtime/image manifests; do not run docker build
   Otherwise same as package compile all / for-workflow: --workdir
   (see: dockpipe package compile all --help)
 

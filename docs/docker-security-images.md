@@ -222,6 +222,8 @@ Artifact states:
 - `referenced` — package/runtime metadata points at an OCI image ref; Docker layers remain in the daemon or registry.
 - `cached` — a registry-backed image has been pulled/verified and recorded locally.
 
+`dockpipe package compile` emits `planned` image artifacts only. `dockpipe build` prebuilds Dockerfile-backed `planned` artifacts by default and writes materialized image metadata under `bin/.dockpipe/internal/images/by-fingerprint/`. Use `dockpipe build --no-images` to keep the command manifest-only.
+
 ## What contributes to image validity
 
 Image validity should include more than the tag:
