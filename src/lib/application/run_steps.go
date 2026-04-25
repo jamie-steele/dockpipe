@@ -360,6 +360,7 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 			if artifact, err := buildImageArtifactManifest(o.repoRoot, strings.TrimSpace(o.wf.Name), "", stepRunPolicyID(step, i), runOpts.Image, buildDir, buildCtx, policyFingerprint, runStepImageArtifactProvenance(o.repoRoot, step)); err == nil {
 				artifact.ArtifactState = "materialized"
 				_ = persistCachedImageArtifactForIsolate(o.projectRoot, runOpts.Image, artifact)
+				_ = persistImageArtifactIndexRecord(o.projectRoot, artifact)
 			}
 			imageDecision = "built image artifact for current run"
 		}
@@ -577,6 +578,7 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 		if artifact, err := buildImageArtifactManifest(o.repoRoot, strings.TrimSpace(o.wf.Name), "", stepRunPolicyID(step, idx), runOpts.Image, buildDir, buildCtx, policyFingerprint, runStepImageArtifactProvenance(o.repoRoot, step)); err == nil {
 			artifact.ArtifactState = "materialized"
 			_ = persistCachedImageArtifactForIsolate(o.projectRoot, runOpts.Image, artifact)
+			_ = persistImageArtifactIndexRecord(o.projectRoot, artifact)
 		}
 	}
 	return nil

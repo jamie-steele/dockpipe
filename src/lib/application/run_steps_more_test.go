@@ -334,6 +334,58 @@ func TestMaybeSkipDockerBuildRejectsPolicyFingerprintMismatch(t *testing.T) {
 	}
 }
 
+func TestMaybeSkipDockerBuildUsesMaterializedImageIndex(t *testing.T) {
+	withRunStepsSeams(t)
+	wd := t.TempDir()
+	wfRoot := filepath.Join(wd, "wf")
+	if err := os.MkdirAll(filepath.Join(wfRoot, domain.RuntimeManifestDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	buildDir := filepath.Join(wd, "templates", "core", "assets", "images", "codex")
+	if err := os.MkdirAll(buildDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte("FROM alpine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	policyFingerprint, err := defaultRuntimePolicyFingerprint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := buildImageArtifactManifest(wd, "", "", "codex", "dockpipe-codex", buildDir, wd, policyFingerprint, domain.ImageArtifactProvenance{Isolate: "codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := marshalArtifactJSON(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.ImageArtifactFileName), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	indexed := *artifact
+	indexed.ArtifactState = "materialized"
+	if err := persistImageArtifactIndexRecord(wd, &indexed); err != nil {
+		t.Fatal(err)
+	}
+	dockerImageExistsFn = func(image string) (bool, error) {
+		if image != "dockpipe-codex" {
+			t.Fatalf("unexpected image exists check %q", image)
+		}
+		return true, nil
+	}
+	skip, msg, err := maybeSkipDockerBuildForStep(wd, wd, "", wfRoot, "", policyFingerprint, "dockpipe-codex", buildDir, wd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !skip {
+		t.Fatal("expected materialized image index to skip docker build")
+	}
+	if !strings.Contains(msg, "using materialized image artifact") {
+		t.Fatalf("expected materialized image decision, got %q", msg)
+	}
+}
+
 // TestPrefetchDockerBuildsForBatchDedupes builds each distinct isolate image once per async batch.
 func TestPrefetchDockerBuildsForBatchDedupes(t *testing.T) {
 	withRunStepsSeams(t)

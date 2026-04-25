@@ -63,6 +63,18 @@ func maybeSkipDockerBuildForArtifact(stateWorkdir, repoRoot, wfConfig, wfRoot, s
 	if strings.TrimSpace(artifact.ImageRef) != strings.TrimSpace(image) || strings.TrimSpace(artifact.Fingerprint) != strings.TrimSpace(expected.Fingerprint) {
 		return false, "", nil
 	}
+	if indexed, err := loadImageArtifactIndexRecordByFingerprint(stateWorkdir, expected.Fingerprint); err != nil {
+		return false, "", err
+	} else if indexed != nil && imageArtifactIndexMatchesExpected(indexed, expected, image) {
+		ok, err := imageExistsFn(image)
+		if err != nil {
+			return false, "", err
+		}
+		if !ok {
+			return false, "materialized image artifact found but local image is missing", nil
+		}
+		return true, fmt.Sprintf("using materialized image artifact %s", firstNonEmptyString(strings.TrimSpace(indexed.ImageKey), strings.TrimSpace(artifact.ImageKey))), nil
+	}
 	ok, err := imageExistsFn(image)
 	if err != nil {
 		return false, "", err
@@ -71,6 +83,44 @@ func maybeSkipDockerBuildForArtifact(stateWorkdir, repoRoot, wfConfig, wfRoot, s
 		return false, "compiled image artifact found but local image is missing", nil
 	}
 	return true, fmt.Sprintf("using cached image artifact %s", artifact.ImageKey), nil
+}
+
+func loadImageArtifactIndexRecordByFingerprint(workdir, fingerprint string) (*domain.ImageArtifactManifest, error) {
+	fingerprint = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(fingerprint), "sha256:"))
+	if fingerprint == "" {
+		return nil, nil
+	}
+	root, err := infrastructure.ImageArtifactIndexDir(workdir)
+	if err != nil {
+		return nil, err
+	}
+	p := filepath.Join(root, "by-fingerprint", infrastructure.SanitizePackageStateScope(fingerprint)+".json")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var m domain.ImageArtifactManifest
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+func imageArtifactIndexMatchesExpected(indexed, expected *domain.ImageArtifactManifest, image string) bool {
+	if indexed == nil || expected == nil {
+		return false
+	}
+	state := strings.TrimSpace(indexed.ArtifactState)
+	if state != "materialized" && state != "cached" {
+		return false
+	}
+	return strings.TrimSpace(indexed.Source) == strings.TrimSpace(expected.Source) &&
+		strings.TrimSpace(indexed.ImageRef) == strings.TrimSpace(image) &&
+		strings.TrimSpace(indexed.Fingerprint) == strings.TrimSpace(expected.Fingerprint) &&
+		strings.TrimSpace(indexed.SourceFingerprint) == strings.TrimSpace(expected.SourceFingerprint)
 }
 
 func runtimePolicyFingerprintForRun(wfConfig, wfRoot string) (string, error) {
