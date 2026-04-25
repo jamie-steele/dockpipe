@@ -30,6 +30,20 @@ func TestGlobalDockpipeDataDirOverride(t *testing.T) {
 	if want := filepath.Join(tmp, "templates", "core"); tc != want {
 		t.Fatalf("templates core: got %q want %q", tc, want)
 	}
+	img, err := GlobalImageArtifactByFingerprintDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(tmp, "images", "by-fingerprint"); img != want {
+		t.Fatalf("image artifacts: got %q want %q", img, want)
+	}
+	cache, err := GlobalCacheRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(tmp, "cache"); cache != want {
+		t.Fatalf("cache root: got %q want %q", cache, want)
+	}
 }
 
 func TestGlobalDockpipeDataDirNoOverrideHasSep(t *testing.T) {

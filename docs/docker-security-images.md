@@ -15,7 +15,7 @@ Both concerns live at the same boundary:
 
 - DockPipe already owns compile/materialization.
 - DockPipe already owns `docker build` / `docker run`.
-- DockPipe already has a package/artifact model under `bin/.dockpipe/internal/packages/`.
+- DockPipe already has a project-local package/artifact model under `bin/.dockpipe/internal/` and a separate global install root via `GlobalDockpipeDataDir()`.
 
 So the right shape is:
 
@@ -68,14 +68,14 @@ Compile then:
 - computes fingerprints
 - emits inspectable manifests
 
-Suggested outputs per compiled workflow/package:
+Suggested outputs inside each compiled workflow/package:
 
 - `runtime.effective.json`
 - `image-artifact.json`
 - `steps/<step-id>.runtime.effective.json`
 - `steps/<step-id>.image-artifact.json`
 
-These should live with other compiled workflow material under `bin/.dockpipe/internal/`.
+These should live with the compiled workflow material. Project-local materialization uses `bin/.dockpipe/internal/packages/`; global installs use the global package root. Local/global image indexes should live outside `packages/`, under `internal/images/` for project-local state and `images/` for global state.
 
 ### Run layer
 
@@ -180,6 +180,14 @@ First package consumer in this repository:
 ## Image artifact model
 
 Docker images should be treated as compiled artifacts, not just side effects of `run`.
+
+Image artifacts are related to packages, but they are not packages:
+
+- package tarballs carry workflow/resolver/core metadata and may include compiled image manifests for inspectability
+- project-local image artifact indexes live under `bin/.dockpipe/internal/images/`
+- project-local cached image records live under `bin/.dockpipe/internal/cache/images/`
+- global image artifact indexes live under `<global-root>/images/`
+- Docker image layers stay in the Docker daemon or OCI registry, not in DockPipe package tarballs
 
 Suggested manifest fields:
 
@@ -298,6 +306,7 @@ Internal:
 - cache key layout
 - local tag naming conventions
 - manifest storage layout inside `bin/.dockpipe/internal/`
+- global install/cache layout
 
 ## Recommended first step
 

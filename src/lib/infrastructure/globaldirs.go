@@ -87,3 +87,36 @@ func GlobalPackagesResolversDir() (string, error) {
 	}
 	return filepath.Join(root, "resolvers"), nil
 }
+
+// GlobalImagesRoot holds user-wide image artifact records and indexes.
+// Docker layers still live in the Docker daemon/registry; this directory is DockPipe metadata only.
+func GlobalImagesRoot() (string, error) {
+	root, err := GlobalDockpipeDataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "images"), nil
+}
+
+// GlobalImageArtifactIndexDir holds global image artifact index files.
+func GlobalImageArtifactIndexDir() (string, error) {
+	return GlobalImagesRoot()
+}
+
+// GlobalImageArtifactByFingerprintDir holds global image artifact records keyed by fingerprint.
+func GlobalImageArtifactByFingerprintDir() (string, error) {
+	root, err := GlobalImagesRoot()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "by-fingerprint"), nil
+}
+
+// GlobalCacheRoot holds user-wide cache metadata such as downloaded tarballs.
+func GlobalCacheRoot() (string, error) {
+	root, err := GlobalDockpipeDataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "cache"), nil
+}
