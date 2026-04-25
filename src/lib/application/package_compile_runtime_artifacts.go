@@ -10,8 +10,8 @@ import (
 	"dockpipe/src/lib/infrastructure"
 )
 
-func writeCompiledWorkflowRuntimeArtifacts(workdir, staging, pkgName string, wf *domain.Workflow) error {
-	rm, im, stepArtifacts, err := compileWorkflowRuntimeArtifacts(workdir, pkgName, wf)
+func writeCompiledWorkflowRuntimeArtifacts(workdir, staging, pkgName string, wf *domain.Workflow, pm *domain.PackageManifest) error {
+	rm, im, stepArtifacts, err := compileWorkflowRuntimeArtifacts(workdir, pkgName, wf, pm)
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ type compiledStepRuntimeArtifacts struct {
 	Image    *domain.ImageArtifactManifest
 }
 
-func compileWorkflowRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflow) (*domain.CompiledRuntimeManifest, *domain.ImageArtifactManifest, []compiledStepRuntimeArtifacts, error) {
+func compileWorkflowRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflow, pm *domain.PackageManifest) (*domain.CompiledRuntimeManifest, *domain.ImageArtifactManifest, []compiledStepRuntimeArtifacts, error) {
 	policyProfile := normalizeWorkflowPolicyProfile(wf)
 	security, policySources := compileSecurityPolicyForWorkflow(wf, policyProfile)
 	rm := &domain.CompiledRuntimeManifest{
@@ -78,7 +78,7 @@ func compileWorkflowRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflo
 	}
 	rm.PolicyFingerprint = policyFingerprint
 
-	imageSel, artifact, err := selectCompiledImageArtifact(workdir, pkgName, wf, policyFingerprint)
+	imageSel, artifact, err := selectCompiledImageArtifact(workdir, pkgName, wf, pm, policyFingerprint)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -96,14 +96,14 @@ func compileWorkflowRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflo
 			return nil, nil, nil, err
 		}
 	}
-	stepArtifacts, err := compileStepRuntimeArtifacts(workdir, pkgName, wf)
+	stepArtifacts, err := compileStepRuntimeArtifacts(workdir, pkgName, wf, pm)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	return rm, artifact, stepArtifacts, nil
 }
 
-func compileStepRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflow) ([]compiledStepRuntimeArtifacts, error) {
+func compileStepRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflow, pm *domain.PackageManifest) ([]compiledStepRuntimeArtifacts, error) {
 	if wf == nil || len(wf.Steps) == 0 {
 		return nil, nil
 	}
@@ -113,7 +113,7 @@ func compileStepRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflow) (
 			continue
 		}
 		stepID := compiledStepID(step, i)
-		rm, im, err := compileStepRuntimeManifest(workdir, pkgName, wf, step, stepID)
+		rm, im, err := compileStepRuntimeManifest(workdir, pkgName, wf, pm, step, stepID)
 		if err != nil {
 			return nil, err
 		}
@@ -126,7 +126,7 @@ func compileStepRuntimeArtifacts(workdir, pkgName string, wf *domain.Workflow) (
 	return out, nil
 }
 
-func compileStepRuntimeManifest(workdir, pkgName string, wf *domain.Workflow, step domain.Step, stepID string) (*domain.CompiledRuntimeManifest, *domain.ImageArtifactManifest, error) {
+func compileStepRuntimeManifest(workdir, pkgName string, wf *domain.Workflow, pm *domain.PackageManifest, step domain.Step, stepID string) (*domain.CompiledRuntimeManifest, *domain.ImageArtifactManifest, error) {
 	policyProfile := normalizeWorkflowPolicyProfile(wf)
 	if p := strings.TrimSpace(step.Security.Profile); p != "" {
 		policyProfile = p
@@ -163,7 +163,7 @@ func compileStepRuntimeManifest(workdir, pkgName string, wf *domain.Workflow, st
 		return nil, nil, err
 	}
 	rm.PolicyFingerprint = policyFingerprint
-	imageSel, artifact, err := selectCompiledImageArtifactForStep(workdir, pkgName, wf, step, stepID, policyFingerprint)
+	imageSel, artifact, err := selectCompiledImageArtifactForStep(workdir, pkgName, wf, pm, step, stepID, policyFingerprint)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -513,7 +513,10 @@ func compiledRuleIDs(rm *domain.CompiledRuntimeManifest) []string {
 	return rules
 }
 
-func selectCompiledImageArtifact(workdir, pkgName string, wf *domain.Workflow, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
+func selectCompiledImageArtifact(workdir, pkgName string, wf *domain.Workflow, pm *domain.PackageManifest, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
+	if sel, artifact, ok, err := selectPackageImageArtifact(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), "", packageImageKey(pm, wf), pm, policyFingerprint); ok || err != nil {
+		return sel, artifact, err
+	}
 	identity := firstNonEmptyString(
 		strings.TrimSpace(wf.Isolate),
 		strings.TrimSpace(wf.Resolver),
@@ -542,38 +545,15 @@ func selectCompiledImageArtifact(workdir, pkgName string, wf *domain.Workflow, p
 		return sel, artifact, nil
 	}
 
-	sel := domain.CompiledImageSelection{
-		Source: "registry",
-		Ref:    identity,
-	}
-	fingerprint, err := domain.FingerprintJSON(struct {
-		Identity          string `json:"identity"`
-		Ref               string `json:"ref"`
-		PolicyFingerprint string `json:"policy_fingerprint"`
-	}{
-		Identity:          identity,
-		Ref:               identity,
-		PolicyFingerprint: policyFingerprint,
-	})
-	if err != nil {
-		return domain.CompiledImageSelection{}, nil, err
-	}
-	artifact := &domain.ImageArtifactManifest{
-		Schema:                      1,
-		Kind:                        domain.ImageArtifactManifestKind,
-		WorkflowName:                strings.TrimSpace(wf.Name),
-		PackageName:                 strings.TrimSpace(pkgName),
-		ImageKey:                    identity,
-		Source:                      "registry",
-		Fingerprint:                 fingerprint,
-		SourceFingerprint:           fingerprint,
-		SecurityManifestFingerprint: policyFingerprint,
-		ImageRef:                    identity,
-	}
-	return sel, artifact, nil
+	return registryImageSelection(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), "", identity, identity, "never", policyFingerprint)
 }
 
-func selectCompiledImageArtifactForStep(workdir, pkgName string, wf *domain.Workflow, step domain.Step, stepID, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
+func selectCompiledImageArtifactForStep(workdir, pkgName string, wf *domain.Workflow, pm *domain.PackageManifest, step domain.Step, stepID, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
+	if strings.TrimSpace(step.Isolate) == "" {
+		if sel, artifact, ok, err := selectPackageImageArtifact(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, stepID, pm, policyFingerprint); ok || err != nil {
+			return sel, artifact, err
+		}
+	}
 	identity := firstNonEmptyString(
 		strings.TrimSpace(step.Isolate),
 		strings.TrimSpace(step.Runtime),
@@ -605,37 +585,91 @@ func selectCompiledImageArtifactForStep(workdir, pkgName string, wf *domain.Work
 		return sel, artifact, nil
 	}
 
+	return registryImageSelection(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, stepID, identity, "never", policyFingerprint)
+}
+
+func selectPackageImageArtifact(workflowName, packageName, stepID, imageKey string, pm *domain.PackageManifest, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, bool, error) {
+	if pm == nil {
+		return domain.CompiledImageSelection{}, nil, false, nil
+	}
+	ref := strings.TrimSpace(pm.Image.Ref)
+	if ref == "" {
+		return domain.CompiledImageSelection{}, nil, false, nil
+	}
+	pullPolicy := firstNonEmptyString(strings.TrimSpace(pm.Image.PullPolicy), "never")
+	sel, artifact, err := registryImageSelection(workflowName, packageName, stepID, imageKey, ref, pullPolicy, policyFingerprint)
+	return sel, artifact, true, err
+}
+
+func packageImageKey(pm *domain.PackageManifest, wf *domain.Workflow) string {
+	if pm != nil && strings.TrimSpace(pm.Name) != "" {
+		return strings.TrimSpace(pm.Name)
+	}
+	if wf != nil && strings.TrimSpace(wf.Name) != "" {
+		return strings.TrimSpace(wf.Name)
+	}
+	return "workflow-image"
+}
+
+func registryImageSelection(workflowName, packageName, stepID, imageKey, ref, pullPolicy, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
+	expectedDigest := registryExpectedDigest(ref)
 	sel := domain.CompiledImageSelection{
-		Source: "registry",
-		Ref:    identity,
+		Source:         "registry",
+		Ref:            ref,
+		PullPolicy:     pullPolicy,
+		ExpectedDigest: expectedDigest,
+	}
+	sourceFingerprint, err := domain.FingerprintJSON(struct {
+		StepID         string `json:"step_id,omitempty"`
+		ImageKey       string `json:"image_key"`
+		Ref            string `json:"ref"`
+		PullPolicy     string `json:"pull_policy"`
+		ExpectedDigest string `json:"expected_digest"`
+	}{
+		StepID:         stepID,
+		ImageKey:       imageKey,
+		Ref:            ref,
+		PullPolicy:     pullPolicy,
+		ExpectedDigest: expectedDigest,
+	})
+	if err != nil {
+		return domain.CompiledImageSelection{}, nil, err
 	}
 	fingerprint, err := domain.FingerprintJSON(struct {
-		StepID            string `json:"step_id"`
-		Identity          string `json:"identity"`
-		Ref               string `json:"ref"`
+		SourceFingerprint string `json:"source_fingerprint"`
 		PolicyFingerprint string `json:"policy_fingerprint"`
 	}{
-		StepID:            stepID,
-		Identity:          identity,
-		Ref:               identity,
+		SourceFingerprint: sourceFingerprint,
 		PolicyFingerprint: policyFingerprint,
 	})
 	if err != nil {
 		return domain.CompiledImageSelection{}, nil, err
 	}
 	artifact := &domain.ImageArtifactManifest{
-		Schema:                      1,
+		Schema:                      2,
 		Kind:                        domain.ImageArtifactManifestKind,
-		WorkflowName:                strings.TrimSpace(wf.Name),
-		PackageName:                 strings.TrimSpace(pkgName),
-		ImageKey:                    stepID,
+		WorkflowName:                workflowName,
+		PackageName:                 packageName,
+		StepID:                      stepID,
+		ImageKey:                    imageKey,
 		Source:                      "registry",
+		ArtifactState:               "referenced",
 		Fingerprint:                 fingerprint,
-		SourceFingerprint:           fingerprint,
+		SourceFingerprint:           sourceFingerprint,
 		SecurityManifestFingerprint: policyFingerprint,
-		ImageRef:                    identity,
+		RuntimeManifestFingerprint:  policyFingerprint,
+		ImageRef:                    ref,
+		ExpectedDigest:              expectedDigest,
 	}
 	return sel, artifact, nil
+}
+
+func registryExpectedDigest(ref string) string {
+	ref = strings.TrimSpace(ref)
+	if i := strings.LastIndex(ref, "@sha256:"); i >= 0 {
+		return ref[i+1:]
+	}
+	return ""
 }
 
 func writeJSONFile(path string, v any) error {

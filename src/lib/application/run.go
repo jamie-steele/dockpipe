@@ -22,6 +22,7 @@ var (
 	runHostScriptAppFn     = infrastructure.RunHostScript
 	dockerBuildAppFn       = infrastructure.DockerBuild
 	dockerImageExistsAppFn = infrastructure.DockerImageExists
+	dockerPullAppFn        = infrastructure.DockerPull
 	runContainerAppFn      = infrastructure.RunContainer
 	resolvePreScriptAppFn  = infrastructure.ResolvePreScriptPath
 	resolveWorkflowAppFn   = infrastructure.ResolveWorkflowScript
@@ -500,6 +501,11 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 		}
 	}
+	compiledWorkflowManifest, err := loadCompiledRuntimeManifestForWorkflow(wfConfig, wfRoot)
+	if err != nil {
+		return err
+	}
+	image, buildDir, buildCtx = applyCompiledImageSelectionInputs(repoRoot, compiledWorkflowManifest, image, buildDir, buildCtx)
 
 	dataVol := opts.DataVolume
 	dataDir := opts.DataDir
@@ -820,6 +826,15 @@ func Run(argv []string, baseEnviron []string) error {
 				_ = persistCachedImageArtifactForIsolate(effWd, image, artifact)
 			}
 			imageDecision = "built image artifact for current run"
+		}
+	} else if compiledWorkflowManifest != nil {
+		msg, err := ensureCompiledRegistryImageForWorkflow(compiledWorkflowManifest)
+		if err != nil {
+			return err
+		}
+		if msg != "" {
+			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
+			imageDecision = msg
 		}
 	}
 

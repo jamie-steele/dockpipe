@@ -83,6 +83,7 @@ type CompiledImageSelection struct {
 	Source         string                  `json:"source,omitempty" yaml:"source,omitempty"`
 	Ref            string                  `json:"ref,omitempty" yaml:"ref,omitempty"`
 	AutoBuild      string                  `json:"auto_build,omitempty" yaml:"auto_build,omitempty"`
+	PullPolicy     string                  `json:"pull_policy,omitempty" yaml:"pull_policy,omitempty"`
 	Build          *CompiledImageBuildSpec `json:"build,omitempty" yaml:"build,omitempty"`
 	ExpectedDigest string                  `json:"expected_digest,omitempty" yaml:"expected_digest,omitempty"`
 }
@@ -100,12 +101,17 @@ type ImageArtifactManifest struct {
 	Kind                        string                  `json:"kind" yaml:"kind"`
 	WorkflowName                string                  `json:"workflow_name,omitempty" yaml:"workflow_name,omitempty"`
 	PackageName                 string                  `json:"package_name,omitempty" yaml:"package_name,omitempty"`
+	StepID                      string                  `json:"step_id,omitempty" yaml:"step_id,omitempty"`
 	ImageKey                    string                  `json:"image_key,omitempty" yaml:"image_key,omitempty"`
 	Source                      string                  `json:"source,omitempty" yaml:"source,omitempty"`
+	ArtifactState               string                  `json:"artifact_state,omitempty" yaml:"artifact_state,omitempty"`
 	Fingerprint                 string                  `json:"fingerprint,omitempty" yaml:"fingerprint,omitempty"`
 	SourceFingerprint           string                  `json:"source_fingerprint,omitempty" yaml:"source_fingerprint,omitempty"`
 	SecurityManifestFingerprint string                  `json:"security_manifest_fingerprint,omitempty" yaml:"security_manifest_fingerprint,omitempty"`
+	RuntimeManifestFingerprint  string                  `json:"runtime_manifest_fingerprint,omitempty" yaml:"runtime_manifest_fingerprint,omitempty"`
 	ImageRef                    string                  `json:"image_ref,omitempty" yaml:"image_ref,omitempty"`
+	ExpectedDigest              string                  `json:"expected_digest,omitempty" yaml:"expected_digest,omitempty"`
+	ResolvedRef                 string                  `json:"resolved_ref,omitempty" yaml:"resolved_ref,omitempty"`
 	ImageID                     string                  `json:"image_id,omitempty" yaml:"image_id,omitempty"`
 	RepoDigest                  string                  `json:"repo_digest,omitempty" yaml:"repo_digest,omitempty"`
 	Build                       *CompiledImageBuildSpec `json:"build,omitempty" yaml:"build,omitempty"`
@@ -119,7 +125,9 @@ var (
 	validProcessUsers     = map[string]struct{}{"": {}, "auto": {}, "root": {}, "non-root": {}}
 	validImageSources     = map[string]struct{}{"": {}, "auto": {}, "build": {}, "registry": {}}
 	validAutoBuildModes   = map[string]struct{}{"": {}, "if-missing": {}, "if-stale": {}, "never": {}}
+	validPullPolicies     = map[string]struct{}{"": {}, "if-missing": {}, "never": {}}
 	validPolicyProfiles   = map[string]struct{}{"": {}, "secure-default": {}, "internet-client": {}, "build-online": {}, "sidecar-client": {}}
+	validArtifactStates   = map[string]struct{}{"": {}, "materialized": {}, "referenced": {}}
 )
 
 func ValidateCompiledRuntimeManifest(m *CompiledRuntimeManifest) error {
@@ -201,6 +209,9 @@ func ValidateCompiledImageSelection(i *CompiledImageSelection) error {
 	if err := validateEnum("image.auto_build", i.AutoBuild, validAutoBuildModes); err != nil {
 		return err
 	}
+	if err := validateEnum("image.pull_policy", i.PullPolicy, validPullPolicies); err != nil {
+		return err
+	}
 	switch i.Source {
 	case "build":
 		if i.Build == nil {
@@ -215,6 +226,9 @@ func ValidateCompiledImageSelection(i *CompiledImageSelection) error {
 	case "registry":
 		if strings.TrimSpace(i.Ref) == "" {
 			return fmt.Errorf("image.source registry requires ref")
+		}
+		if i.AutoBuild != "" {
+			return fmt.Errorf("image.source registry cannot use auto_build")
 		}
 	}
 	return nil
@@ -236,8 +250,14 @@ func ValidateImageArtifactManifest(m *ImageArtifactManifest) error {
 	if err := validateEnum("source", m.Source, validImageSources); err != nil {
 		return err
 	}
+	if err := validateEnum("artifact_state", m.ArtifactState, validArtifactStates); err != nil {
+		return err
+	}
 	if m.Source == "build" && m.Build == nil {
 		return fmt.Errorf("build source requires build settings")
+	}
+	if m.Source == "registry" && strings.TrimSpace(m.ImageRef) == "" {
+		return fmt.Errorf("registry source requires image_ref")
 	}
 	if strings.TrimSpace(m.Fingerprint) == "" {
 		return fmt.Errorf("fingerprint is required")

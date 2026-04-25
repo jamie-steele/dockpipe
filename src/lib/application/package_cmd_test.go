@@ -309,6 +309,63 @@ steps:
 	}
 }
 
+func TestCmdPackageCompileWorkflowUsesPackageImageRegistryMetadata(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "mywf")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: mywf
+steps: []
+`
+	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `schema: 1
+name: mywf
+version: 1.2.3
+title: Mywf
+description: d
+author: a
+website: https://example.com
+license: Apache-2.0
+kind: workflow
+image:
+  source: registry
+  ref: ghcr.io/acme/mywf@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  pull_policy: if-missing
+`
+	if err := os.WriteFile(filepath.Join(src, "package.yml"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-1.2.3.tar.gz")
+	rmf, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/.dockpipe/runtime.effective.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rm domain.CompiledRuntimeManifest
+	if err := json.Unmarshal(rmf, &rm); err != nil {
+		t.Fatal(err)
+	}
+	if rm.Image.Source != "registry" || rm.Image.Ref == "" || rm.Image.PullPolicy != "if-missing" {
+		t.Fatalf("unexpected compiled image selection: %+v", rm.Image)
+	}
+	imf, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/.dockpipe/image-artifact.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var im domain.ImageArtifactManifest
+	if err := json.Unmarshal(imf, &im); err != nil {
+		t.Fatal(err)
+	}
+	if im.Source != "registry" || im.ArtifactState != "referenced" || im.ExpectedDigest == "" {
+		t.Fatalf("unexpected registry image artifact: %+v", im)
+	}
+}
+
 func TestCmdPackageCompileWorkflowUsesWorkflowSecurityNetworkMode(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src", "mywf")

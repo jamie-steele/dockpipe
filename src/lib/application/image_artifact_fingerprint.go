@@ -45,15 +45,17 @@ func buildImageArtifactManifest(repoRoot, workflowName, packageName, imageKey, i
 		return nil, err
 	}
 	return &domain.ImageArtifactManifest{
-		Schema:                      1,
+		Schema:                      2,
 		Kind:                        domain.ImageArtifactManifestKind,
 		WorkflowName:                strings.TrimSpace(workflowName),
 		PackageName:                 strings.TrimSpace(packageName),
 		ImageKey:                    strings.TrimSpace(imageKey),
 		Source:                      "build",
+		ArtifactState:               "materialized",
 		Fingerprint:                 fingerprint,
 		SourceFingerprint:           sourceFingerprint,
 		SecurityManifestFingerprint: strings.TrimSpace(policyFingerprint),
+		RuntimeManifestFingerprint:  strings.TrimSpace(policyFingerprint),
 		ImageRef:                    strings.TrimSpace(imageRef),
 		Build:                       buildSpec,
 	}, nil

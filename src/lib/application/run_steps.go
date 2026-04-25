@@ -17,6 +17,7 @@ import (
 var (
 	dockerBuildFn       = infrastructure.DockerBuild
 	dockerImageExistsFn = infrastructure.DockerImageExists
+	dockerPullFn        = infrastructure.DockerPull
 	composeLifecycleFn  = infrastructure.RunComposeLifecycle
 	runContainerFn      = infrastructure.RunContainer
 	sourceHostScriptFn  = infrastructure.SourceHostScript
@@ -361,6 +362,15 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 			}
 			imageDecision = "built image artifact for current run"
 		}
+	} else if rm != nil {
+		msg, err := ensureCompiledRegistryImageForStep(rm)
+		if err != nil {
+			return err
+		}
+		if msg != "" {
+			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
+			imageDecision = msg
+		}
 	}
 	workdir := firstNonEmpty(o.projectRoot, o.opts.Workdir, o.envMap["DOCKPIPE_WORKDIR"], o.repoRoot, mustGetwd())
 	if rm != nil && rm.PolicySources.StepOverride {
@@ -524,6 +534,15 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 			return err
 		}
 		if buildDir == "" || buildCtx == "" {
+			if rm != nil {
+				msg, err := ensureCompiledRegistryImageForStep(rm)
+				if err != nil {
+					return err
+				}
+				if msg != "" {
+					fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
+				}
+			}
 			continue
 		}
 		key := runOpts.Image + "\x00" + buildDir + "\x00" + buildCtx
@@ -914,6 +933,8 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 	if err != nil {
 		return nil, runOpts, "", "", nil, err
 	}
+	image, dockerfileDir, contextDir = applyCompiledImageSelectionInputs(o.repoRoot, rm, image, dockerfileDir, contextDir)
+	runOpts.Image = image
 	return argv, runOpts, dockerfileDir, contextDir, rm, nil
 }
 

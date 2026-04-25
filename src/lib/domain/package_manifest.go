@@ -64,9 +64,18 @@ type PackageManifest struct {
 	// Distribution is optional policy for humans and tooling: "source" (recoverable YAML/assets) or "binary" (no meaningful source in the artifact).
 	// Binary releases should set allow_clone: false and ship only non-recoverable artifacts if reverse-engineering must be impractical.
 	Distribution string `yaml:"distribution,omitempty"`
+	// Image declares a package-owned runtime image reference.
+	// Keep this to normal OCI/registry refs; compile resolves it into the image artifact manifest.
+	Image PackageImageSpec `yaml:"image,omitempty"`
 	// ScriptContract declares generic package-level script context that DockPipe-aware tooling may inject for package assets.
 	// This is intentionally generic package/runtime context only, not package-specific tooling handles.
 	ScriptContract PackageScriptContract `yaml:"script_contract,omitempty"`
+}
+
+type PackageImageSpec struct {
+	Source     string `yaml:"source,omitempty"`
+	Ref        string `yaml:"ref,omitempty"`
+	PullPolicy string `yaml:"pull_policy,omitempty"`
 }
 
 type PackageScriptContract struct {
@@ -117,6 +126,9 @@ func ValidatePackageManifest(m *PackageManifest) error {
 			return err
 		}
 	}
+	if err := ValidatePackageImageSpec(&m.Image); err != nil {
+		return err
+	}
 	// kind-specific required fields kept minimal — capability / requires_capabilities are optional metadata.
 	return nil
 }
@@ -150,6 +162,7 @@ func ValidatePrimitive(s string) error {
 }
 
 var packageVersionPattern = regexp.MustCompile(`^v?[0-9]+(?:\.[0-9]+){2}(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$`)
+var packageImageDigestPattern = regexp.MustCompile(`@sha256:[0-9a-fA-F]{64}$`)
 
 // ValidatePackageVersion checks optional package version metadata.
 // Keep this semver-shaped so tarball names and CDN paths stay predictable.
@@ -160,6 +173,35 @@ func ValidatePackageVersion(s string) error {
 	}
 	if !packageVersionPattern.MatchString(s) {
 		return fmt.Errorf("version: %q is not semver-like (expected 1.2.3, 1.2.3-rc1, or v1.2.3)", s)
+	}
+	return nil
+}
+
+func ValidatePackageImageSpec(img *PackageImageSpec) error {
+	if img == nil {
+		return nil
+	}
+	source := strings.TrimSpace(img.Source)
+	ref := strings.TrimSpace(img.Ref)
+	pullPolicy := strings.TrimSpace(img.PullPolicy)
+	switch source {
+	case "", "registry":
+	default:
+		return fmt.Errorf("image.source: %q is invalid (expected registry)", source)
+	}
+	switch pullPolicy {
+	case "", "never", "if-missing":
+	default:
+		return fmt.Errorf("image.pull_policy: %q is invalid (expected never or if-missing)", pullPolicy)
+	}
+	if ref == "" {
+		if source != "" || pullPolicy != "" {
+			return fmt.Errorf("image.ref is required when image metadata is set")
+		}
+		return nil
+	}
+	if strings.Contains(ref, "@") && !packageImageDigestPattern.MatchString(ref) {
+		return fmt.Errorf("image.ref: %q has an invalid digest-pinned format", ref)
 	}
 	return nil
 }

@@ -301,6 +301,62 @@ distribution: binary
 	}
 }
 
+func TestParsePackageManifestImageRegistry(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	body := `schema: 1
+name: x
+version: 1.0.0
+title: X
+description: d
+author: a
+website: https://example.com
+license: Apache-2.0
+kind: workflow
+image:
+  source: registry
+  ref: ghcr.io/acme/tool@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  pull_policy: if-missing
+`
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := ParsePackageManifest(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Image.Ref == "" || m.Image.PullPolicy != "if-missing" {
+		t.Fatalf("unexpected image metadata: %+v", m.Image)
+	}
+}
+
+func TestParsePackageManifestRejectsInvalidImagePullPolicy(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	body := `schema: 1
+name: x
+version: 1.0.0
+title: X
+description: d
+author: a
+website: https://example.com
+license: Apache-2.0
+kind: workflow
+image:
+  ref: ghcr.io/acme/tool:latest
+  pull_policy: always
+`
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ParsePackageManifest(p)
+	if err == nil || !strings.Contains(err.Error(), "pull_policy") {
+		t.Fatalf("expected pull_policy validation error, got %v", err)
+	}
+}
+
 func TestParsePackageManifestRejectsInvalidVersion(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

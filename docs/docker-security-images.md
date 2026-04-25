@@ -93,6 +93,17 @@ That makes the fast path cheap:
 - no rebuild
 - launch immediately
 
+Workflow package metadata may also point at a normal OCI image reference:
+
+```yaml
+image:
+  source: registry
+  ref: ghcr.io/acme/tool@sha256:...
+  pull_policy: if-missing
+```
+
+Compile folds that package metadata into the effective image artifact manifest. Run then decides whether to reuse a valid local image, pull it when the compiled pull policy explicitly allows `if-missing`, or fail clearly when the image is missing and pulling is not allowed.
+
 ## YAML schema direction
 
 This is intentionally higher-level than raw Docker flags:
@@ -221,6 +232,7 @@ The model should support both:
 
 - locally built images from workflow/resolver Dockerfiles
 - registry-backed images referenced by digest
+- workflow package metadata that points at a normal OCI image ref
 
 Suggested rule:
 

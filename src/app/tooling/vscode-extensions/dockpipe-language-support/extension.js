@@ -125,6 +125,7 @@ const PACKAGE_MANIFEST_KEYS = [
   "depends",
   "allow_clone",
   "distribution",
+  "image",
   "script_contract"
 ];
 
@@ -156,6 +157,7 @@ const PACKAGE_MANIFEST_KEY_DETAILS = {
   depends: "Other package names this package expects in the compiled store.",
   allow_clone: "When true, dockpipe clone may copy this compiled package back into an authoring tree.",
   distribution: "Human/tooling hint such as source or binary.",
+  image: "Optional package-owned runtime image reference. Use a normal OCI/registry ref; DockPipe compiles it into the effective image artifact manifest.",
   script_contract: "Generic package-level script context contract for assets/scripts consumers."
 };
 

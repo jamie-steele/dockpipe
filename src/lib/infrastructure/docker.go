@@ -148,6 +148,18 @@ func DockerImageExists(image string) (bool, error) {
 	return false, err
 }
 
+// DockerPull pulls a normal OCI image reference into the local daemon.
+func DockerPull(image string) error {
+	image = strings.TrimSpace(image)
+	if image == "" {
+		return fmt.Errorf("image is empty")
+	}
+	cmd := execCommandFn("docker", "pull", image)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
 // RunOpts is passed to RunContainer.
 type RunOpts struct {
 	Image       string

@@ -39,6 +39,7 @@ func withRunSeams(t *testing.T) {
 	oldSourceHost := sourceHostScriptAppFn
 	oldDockerBuild := dockerBuildAppFn
 	oldDockerImageExists := dockerImageExistsAppFn
+	oldDockerPull := dockerPullAppFn
 	oldRunContainer := runContainerAppFn
 	oldResolvePre := resolvePreScriptAppFn
 	oldResolveWfScript := resolveWorkflowAppFn
@@ -56,6 +57,7 @@ func withRunSeams(t *testing.T) {
 		sourceHostScriptAppFn = oldSourceHost
 		dockerBuildAppFn = oldDockerBuild
 		dockerImageExistsAppFn = oldDockerImageExists
+		dockerPullAppFn = oldDockerPull
 		runContainerAppFn = oldRunContainer
 		resolvePreScriptAppFn = oldResolvePre
 		resolveWorkflowAppFn = oldResolveWfScript
@@ -220,6 +222,62 @@ steps: []
 	}
 	if !strings.Contains(msg, "using cached image artifact") {
 		t.Fatalf("unexpected message: %q", msg)
+	}
+}
+
+func TestRunWorkflowPullsCompiledRegistryImageWhenAllowed(t *testing.T) {
+	withRunSeams(t)
+	repoRoot := t.TempDir()
+	wfDir := filepath.Join(repoRoot, "workflows", "mywf")
+	if err := os.MkdirAll(filepath.Join(wfDir, domain.RuntimeManifestDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfDir, "config.yml"), []byte("name: mywf\nsteps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rm := domain.CompiledRuntimeManifest{
+		Schema: 2,
+		Kind:   domain.RuntimeManifestKind,
+		Image: domain.CompiledImageSelection{
+			Source:         "registry",
+			Ref:            "ghcr.io/acme/tool@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			PullPolicy:     "if-missing",
+			ExpectedDigest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		},
+		Security: domain.CompiledSecurityPolicy{
+			Preset: "secure-default",
+			Network: domain.CompiledNetworkPolicy{
+				Mode:        "offline",
+				Enforcement: "native",
+				InternalDNS: true,
+			},
+		},
+	}
+	b, err := json.MarshalIndent(rm, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfDir, domain.RuntimeManifestDirName, domain.RuntimeManifestFileName), append(b, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	repoRootAppFn = func() (string, error) { return repoRoot, nil }
+	dockerImageExistsAppFn = func(image string) (bool, error) { return false, nil }
+	pulled := ""
+	dockerPullAppFn = func(image string) error {
+		pulled = image
+		return nil
+	}
+	runContainerAppFn = func(o infrastructure.RunOpts, argv []string) (int, error) {
+		if o.Image != rm.Image.Ref {
+			t.Fatalf("expected compiled registry image, got %q", o.Image)
+		}
+		return 0, nil
+	}
+	if err := Run([]string{"--workflow", "mywf", "--", "echo", "hi"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if pulled != rm.Image.Ref {
+		t.Fatalf("expected docker pull for %q, got %q", rm.Image.Ref, pulled)
 	}
 }
 

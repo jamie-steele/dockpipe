@@ -136,6 +136,7 @@ Suggested subdirectories (mirror authoring concepts; not all are required):
 | **`namespace`** | Author/org label for discovery and future namespaced installs (validated; see **`domain.ValidateNamespace`**) |
 | **`allow_clone`** | If **`true`**, **`dockpipe clone`** may export the compiled tree to **`workflows/`**; if false or omitted, clone is refused. |
 | **`distribution`** | Optional hint: **`source`** or **`binary`** (documentation for store pages). |
+| **`image`** | Optional normal OCI image reference for a workflow package. Compile records it into the effective runtime/image manifests; `run` may reuse or pull it according to compiled pull policy. |
 
 The Go type **`domain.PackageManifest`** parses these keys; see **`src/lib/domain/package_manifest.go`**.
 

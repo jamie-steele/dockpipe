@@ -236,21 +236,25 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 	if _, err := materializePipeLangRoots([]string{staging}, true, ""); err != nil {
 		return fmt.Errorf("compile pipelang artifacts: %w", err)
 	}
-	if err := writeCompiledWorkflowRuntimeArtifacts(workdir, staging, pkgName, wf); err != nil {
+	authoredManifest, err := readAuthoredPackageManifest(srcAbs)
+	if err != nil {
+		return fmt.Errorf("package manifest: %w", err)
+	}
+	if err := writeCompiledWorkflowRuntimeArtifacts(workdir, staging, pkgName, wf, authoredManifest); err != nil {
 		return fmt.Errorf("write runtime artifacts: %w", err)
 	}
 	defaultVersion := authoredPackageVersion(workdir)
 	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
 	if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
 		pm := map[string]any{
-			"schema":                1,
-			"name":                  pkgName,
-			"version":               defaultVersion,
-			"title":                 pkgName,
-			"description":           "Compiled from " + srcAbs,
-			"kind":                  "workflow",
-			"allow_clone":           true,
-			"distribution":          "source",
+			"schema":       1,
+			"name":         pkgName,
+			"version":      defaultVersion,
+			"title":        pkgName,
+			"description":  "Compiled from " + srcAbs,
+			"kind":         "workflow",
+			"allow_clone":  true,
+			"distribution": "source",
 		}
 		repoRoot, err := filepath.Abs(workdir)
 		if err != nil {
@@ -285,6 +289,17 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 	}
 	fmt.Fprintf(os.Stderr, "[dockpipe] compiled workflow package → %s\n", outPath)
 	return nil
+}
+
+func readAuthoredPackageManifest(root string) (*domain.PackageManifest, error) {
+	manifestPath := filepath.Join(root, infrastructure.PackageManifestFilename)
+	if _, err := os.Stat(manifestPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return domain.ParsePackageManifest(manifestPath)
 }
 
 func cmdPackageCompileCore(args []string) error {
