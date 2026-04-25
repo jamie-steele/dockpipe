@@ -21,6 +21,8 @@ func cmdPackage(args []string) error {
 	switch args[0] {
 	case "list":
 		return cmdPackageList(args[1:])
+	case "images":
+		return cmdPackageImages(args[1:])
 	case "manifest":
 		return cmdPackageManifest(args[1:])
 	case "build":
@@ -234,11 +236,13 @@ bin/.dockpipe/internal/packages/ by default (see docs/package-model.md).
 
 Usage:
   dockpipe package list [--workdir <path>]
+  dockpipe package images [--workdir <path>]
   dockpipe package manifest
   dockpipe package build core|store [options]
   dockpipe package compile core|resolvers|bundles|workflows|all|for-workflow|workflow [options]  (bundles = alias for workflows)
 
   list      Find package.yml under bin/.dockpipe/internal/packages and print rel path, name, version, provider, capability, requires_capabilities (comma-separated), description.
+  images    List compiled/planned and materialized Docker image artifacts.
   manifest  Print an example package.yml schema to stdout.
   build     core: templates-core tarball + install-manifest; store: gzip tar per compiled package + packages-store-manifest.json.
   compile   Materialize core / resolvers / workflows into bin/.dockpipe/internal/packages/ (see compile --help).

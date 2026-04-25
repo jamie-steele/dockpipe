@@ -42,6 +42,58 @@ description: hello
 	// stderr printed to os.Stderr; we only assert command succeeds.
 }
 
+func TestCmdPackageImagesMergesPlannedAndMaterializedArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	buildDir := filepath.Join(dir, "src", "core", "assets", "images", "codex")
+	if err := os.MkdirAll(buildDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte("FROM alpine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := buildImageArtifactManifest(dir, "mywf", "mywf", "codex", "dockpipe-codex:test", buildDir, dir, "sha256:policy", domain.ImageArtifactProvenance{Resolver: "codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage := filepath.Join(dir, "stage")
+	manifestDir := filepath.Join(stage, domain.RuntimeManifestDirName)
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(manifestDir, domain.ImageArtifactFileName), artifact); err != nil {
+		t.Fatal(err)
+	}
+	pkgDir, err := infrastructure.PackagesWorkflowsDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(pkgDir, "dockpipe-workflow-mywf-1.2.3.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(stage, tgz, "workflows/mywf"); err != nil {
+		t.Fatal(err)
+	}
+	indexed := *artifact
+	indexed.ArtifactState = "materialized"
+	if err := persistImageArtifactIndexRecord(dir, &indexed); err != nil {
+		t.Fatal(err)
+	}
+	records, err := collectPackageImageArtifacts(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected one merged image artifact, got %d", len(records))
+	}
+	if records[0].ArtifactState != "materialized" || records[0].ImageRef != "dockpipe-codex:test" {
+		t.Fatalf("unexpected merged image artifact: %+v", records[0])
+	}
+	if err := cmdPackage([]string{"images", "--workdir", dir}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestCmdPackageManifest(t *testing.T) {
 	if err := cmdPackage([]string{"manifest"}); err != nil {
 		t.Fatal(err)

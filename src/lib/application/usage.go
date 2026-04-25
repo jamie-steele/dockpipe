@@ -70,7 +70,7 @@ var mainUsageSections = []usageSection{
 			{"build", "Compile packages into bin/.dockpipe/internal and prebuild Dockerfile image artifacts"},
 			{"clean", "Remove compiled package store (bin/.dockpipe/internal/packages)"},
 			{"rebuild", "clean then build"},
-			{"package list|manifest|build|compile", "Packages: list, manifest, author core tarball, or compile into bin/.dockpipe/internal"},
+			{"package list|images|manifest|build|compile", "Packages: list metadata, inspect image artifacts, author tarballs, or compile into bin/.dockpipe/internal"},
 			{"compile", "Same as dockpipe package compile (core, resolvers, workflows)"},
 			{"release upload", "Upload a file to S3-compatible storage (self-hosted; uses aws CLI)"},
 			{"workflow validate|list", "Validate YAML or print the DockPipe-resolved workflow catalog"},

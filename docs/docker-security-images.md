@@ -224,6 +224,8 @@ Artifact states:
 
 `dockpipe package compile` emits `planned` image artifacts only. `dockpipe build` prebuilds Dockerfile-backed `planned` artifacts by default and writes materialized image metadata under `bin/.dockpipe/internal/images/by-fingerprint/`. `dockpipe run` checks that fingerprint index before falling back to Docker daemon state, so a valid prebuilt image is reused without rebuilding. Use `dockpipe build --no-images` to keep the command manifest-only.
 
+Use `dockpipe package images` to inspect the merged image view DockPipe sees: planned artifacts from compiled workflow tarballs plus materialized/cached fingerprint receipts.
+
 ## What contributes to image validity
 
 Image validity should include more than the tag:
