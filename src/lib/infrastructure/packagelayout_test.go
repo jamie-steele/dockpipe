@@ -59,6 +59,31 @@ func TestStateRootDefault(t *testing.T) {
 	}
 }
 
+func TestInternalArtifactDirsUseDockpipeDirRel(t *testing.T) {
+	dir := t.TempDir()
+	internalDir, err := StateInternalDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, DockpipeDirRel, "internal"); internalDir != want {
+		t.Fatalf("internal dir got %q want %q", internalDir, want)
+	}
+	cacheDir, err := ImageArtifactCacheDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, DockpipeDirRel, "internal", "cache", "images"); cacheDir != want {
+		t.Fatalf("image cache dir got %q want %q", cacheDir, want)
+	}
+	indexDir, err := ImageArtifactIndexDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(dir, DockpipeDirRel, "internal", "images"); indexDir != want {
+		t.Fatalf("image index dir got %q want %q", indexDir, want)
+	}
+}
+
 func TestPackageStateDirDefault(t *testing.T) {
 	dir := t.TempDir()
 	got, err := PackageStateDir(dir, "pipeon-dev-stack")

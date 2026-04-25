@@ -54,6 +54,33 @@ func TestCmdPipeLangCompileAndInvoke(t *testing.T) {
 	}
 }
 
+func TestCmdPipeLangCompileDefaultOutputUsesDockpipeStateRoot(t *testing.T) {
+	wd := t.TempDir()
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(wd); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	in := filepath.Join(wd, "demo.pipe")
+	if err := os.WriteFile(in, []byte(samplePipeLang), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPipeLang([]string{"compile", "--in", in, "--entry", "DefaultDeployConfig"}); err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	want := filepath.Join(wd, "bin", ".dockpipe", "pipelang", "DefaultDeployConfig.workflow.yml")
+	if _, err := os.Stat(want); err != nil {
+		t.Fatalf("missing default output %s: %v", want, err)
+	}
+	if _, err := os.Stat(filepath.Join(wd, ".dockpipe", "pipelang", "DefaultDeployConfig.workflow.yml")); !os.IsNotExist(err) {
+		t.Fatalf("did not expect legacy .dockpipe output, stat err=%v", err)
+	}
+}
+
 func TestPipeLangBindingsEnvConsumableByScript(t *testing.T) {
 	wd := t.TempDir()
 	in := filepath.Join(wd, "demo.pipe")

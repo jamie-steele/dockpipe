@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"dockpipe/src/lib/infrastructure"
 	"dockpipe/src/lib/pipelang"
 )
 
@@ -68,7 +69,7 @@ func cmdPipeLangCompile(args []string) error {
 		return fmt.Errorf("missing input file (use --in <file.pipe>)")
 	}
 	if outDir == "" {
-		outDir = filepath.Join(".dockpipe", "pipelang")
+		outDir = filepath.Join(infrastructure.DockpipeDirRel, "pipelang")
 	}
 	src, err := os.ReadFile(inPath)
 	if err != nil {
@@ -257,7 +258,7 @@ func cmdPipeLangMaterialize(args []string) error {
 		from = effectiveWorkflowCompileRoots(cfg, repoRoot)
 	}
 	roots := dedupeAbsExistingDirs(from)
-	outBase := filepath.Join(repoRoot, "bin", ".dockpipe", "pipelang")
+	outBase := filepath.Join(repoRoot, infrastructure.DockpipeDirRel, "pipelang")
 	n, err := materializePipeLangRoots(roots, force, outBase)
 	if err != nil {
 		return err

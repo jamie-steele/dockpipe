@@ -183,11 +183,10 @@ func persistCachedImageArtifactForIsolate(stateWorkdir, image string, artifact *
 	if artifact == nil {
 		return nil
 	}
-	root, err := infrastructure.StateRoot(stateWorkdir)
+	dir, err := infrastructure.ImageArtifactCacheDir(stateWorkdir)
 	if err != nil {
 		return err
 	}
-	dir := filepath.Join(root, "internal", "cache", "images")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
@@ -200,11 +199,11 @@ func persistCachedImageArtifactForIsolate(stateWorkdir, image string, artifact *
 }
 
 func loadCachedImageArtifactForIsolate(stateWorkdir, image string) (*domain.ImageArtifactManifest, error) {
-	root, err := infrastructure.StateRoot(stateWorkdir)
+	dir, err := infrastructure.ImageArtifactCacheDir(stateWorkdir)
 	if err != nil {
 		return nil, err
 	}
-	p := filepath.Join(root, "internal", "cache", "images", infrastructure.SanitizePackageStateScope(image)+".json")
+	p := filepath.Join(dir, infrastructure.SanitizePackageStateScope(image)+".json")
 	b, err := os.ReadFile(p)
 	if err != nil {
 		if os.IsNotExist(err) {

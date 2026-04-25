@@ -302,7 +302,7 @@ func TestResolveWorkflowScriptResolvesPipeonFromNestedCompileRoot(t *testing.T) 
 }
 
 // TestResolveWorkflowScriptPrefersCompiledResolverTarball verifies scripts/dorkpipe/… resolves from
-// dockpipe-resolver-*.tar.gz under .dockpipe/internal/packages/resolvers/ (extracted cache), not only
+// dockpipe-resolver-*.tar.gz under bin/.dockpipe/internal/packages/resolvers/ (extracted cache), not only
 // from a flat extracted tree or .staging authoring paths.
 func TestResolveWorkflowScriptPrefersCompiledResolverTarball(t *testing.T) {
 	repo := t.TempDir()
@@ -326,7 +326,7 @@ func TestResolveWorkflowScriptPrefersCompiledResolverTarball(t *testing.T) {
 	// No flat pkgRes/dorkpipe/assets/scripts/ — only the tarball should satisfy resolution.
 	got := ResolveWorkflowScript("scripts/dorkpipe/tarball-only.sh", "/wf", repo, "")
 	if !strings.Contains(filepath.ToSlash(got), "/.dockpipe/") {
-		t.Fatalf("expected path under .dockpipe (tarball extract cache), got %q", got)
+		t.Fatalf("expected path under bin/.dockpipe (tarball extract cache), got %q", got)
 	}
 	b, err := os.ReadFile(got)
 	if err != nil {

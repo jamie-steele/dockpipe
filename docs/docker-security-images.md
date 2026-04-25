@@ -15,7 +15,7 @@ Both concerns live at the same boundary:
 
 - DockPipe already owns compile/materialization.
 - DockPipe already owns `docker build` / `docker run`.
-- DockPipe already has a package/artifact model under `.dockpipe/internal/packages/`.
+- DockPipe already has a package/artifact model under `bin/.dockpipe/internal/packages/`.
 
 So the right shape is:
 
@@ -75,7 +75,7 @@ Suggested outputs per compiled workflow/package:
 - `steps/<step-id>.runtime.effective.json`
 - `steps/<step-id>.image-artifact.json`
 
-These should live with other compiled workflow material under `.dockpipe/internal/`.
+These should live with other compiled workflow material under `bin/.dockpipe/internal/`.
 
 ### Run layer
 
@@ -297,7 +297,7 @@ Internal:
 - low-level network plumbing
 - cache key layout
 - local tag naming conventions
-- manifest storage layout inside `.dockpipe/internal/`
+- manifest storage layout inside `bin/.dockpipe/internal/`
 
 ## Recommended first step
 

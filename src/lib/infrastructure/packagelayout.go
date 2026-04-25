@@ -32,10 +32,10 @@ var (
 
 // envPackagesRoot is the optional override for the packages root directory.
 const (
-	envPackagesRoot      = "DOCKPIPE_PACKAGES_ROOT"
-	EnvStateDir          = "DOCKPIPE_STATE_DIR"
-	EnvPackageID         = "DOCKPIPE_PACKAGE_ID"
-	EnvPackageStateDir   = "DOCKPIPE_PACKAGE_STATE_DIR"
+	envPackagesRoot    = "DOCKPIPE_PACKAGES_ROOT"
+	EnvStateDir        = "DOCKPIPE_STATE_DIR"
+	EnvPackageID       = "DOCKPIPE_PACKAGE_ID"
+	EnvPackageStateDir = "DOCKPIPE_PACKAGE_STATE_DIR"
 )
 
 // StateRoot returns the absolute project-local DockPipe state root (default: workdir/bin/.dockpipe).
@@ -45,6 +45,47 @@ func StateRoot(workdir string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(wd, DockpipeDirRel), nil
+}
+
+// StateInternalDir returns the absolute root for DockPipe-owned internal state
+// (default: workdir/bin/.dockpipe/internal). New internal artifact families should
+// derive from this helper instead of spelling ".dockpipe" paths by hand.
+func StateInternalDir(workdir string) (string, error) {
+	root, err := StateRoot(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "internal"), nil
+}
+
+// StateInternalCacheDir returns the absolute root for internal caches
+// (default: workdir/bin/.dockpipe/internal/cache).
+func StateInternalCacheDir(workdir string) (string, error) {
+	root, err := StateInternalDir(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "cache"), nil
+}
+
+// ImageArtifactCacheDir returns the absolute root for cached image artifact records
+// (default: workdir/bin/.dockpipe/internal/cache/images).
+func ImageArtifactCacheDir(workdir string) (string, error) {
+	root, err := StateInternalCacheDir(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "images"), nil
+}
+
+// ImageArtifactIndexDir returns the absolute root for future image artifact indexes
+// (default: workdir/bin/.dockpipe/internal/images).
+func ImageArtifactIndexDir(workdir string) (string, error) {
+	root, err := StateInternalDir(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "images"), nil
 }
 
 // SanitizePackageStateScope reduces package/workflow/resolver ids into a stable filesystem segment.

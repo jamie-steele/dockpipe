@@ -3,7 +3,7 @@
 | Layer | Package | Responsibility |
 |-------|---------|----------------|
 | **Domain** | `dockpipe/src/lib/domain` | Workflow/step model, YAML parse from **bytes** (`ParseWorkflowYAML`), env merge helpers, **resolver** key semantics, branch-prefix rules. No `docker` / subprocess / file I/O in non-test code. |
-| **Infrastructure** | `dockpipe/src/lib/infrastructure` | Filesystem, `docker`, `bash` pre-scripts, git commit-on-host, repo root discovery, `.env` files, template→image paths, version tags. Subpackage **`fetchinstall`**: HTTPS fetch + **`dockpipe install core`**. **`RunHostScript`** defer: **`ApplyHostCleanup`** (run-scoped: **`.dockpipe/runs/<id>.container`** when **`DOCKPIPE_RUN_ID`** is set; legacy sweep of **`.dockpipe/cleanup/docker-*`** only when the run id is absent) and **`RemoveHostRunArtifacts`** for the host-run registry. |
+| **Infrastructure** | `dockpipe/src/lib/infrastructure` | Filesystem, `docker`, `bash` pre-scripts, git commit-on-host, repo root discovery, `.env` files, template→image paths, version tags. Subpackage **`fetchinstall`**: HTTPS fetch + **`dockpipe install core`**. **`RunHostScript`** defer: **`ApplyHostCleanup`** (run-scoped: **`bin/.dockpipe/runs/<id>.container`** when **`DOCKPIPE_RUN_ID`** is set; legacy sweep of **`bin/.dockpipe/cleanup/docker-*`** only when the run id is absent) and **`RemoveHostRunArtifacts`** for the host-run registry. |
 | **Application** | `dockpipe/src/lib/application` | CLI flags, subcommands (`init`, `template`, …), and the **run** use-case that wires domain + infrastructure. |
 
 `src/cmd` is a thin entrypoint that calls `application.Run`.
@@ -20,7 +20,7 @@ Keep new orchestration in the right file so `run.go` stays the single-command pa
 | `flags.go` | `CliOpts`, `ParseFlags` |
 | `subcmds.go` | `init`, `action`, `pre`, `template` |
 | `install.go` | `install core` (remote **templates/core** via **`fetchinstall`**) |
-| `package_cmd.go` | `package list` / `package manifest` — **`.dockpipe/internal/packages/`** + **`package.yml`** |
+| `package_cmd.go` | `package list` / `package manifest` — **`bin/.dockpipe/internal/packages/`** + **`package.yml`** |
 | `usage.go` | `--help` text |
 
 Shell assets (`assets/entrypoint.sh` at repo root, etc.) stay outside **`src/`**; only **Go** lives under `src/lib/`.

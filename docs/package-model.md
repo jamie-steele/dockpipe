@@ -4,7 +4,7 @@ DockPipe distinguishes **what you author** (source trees) from **what you ship**
 
 ## Canonical layout (mental model)
 
-1. **Local build output** lives under **`.dockpipe/internal/`** (default package root: **`.dockpipe/internal/packages/`**, or **`DOCKPIPE_PACKAGES_ROOT`**). **`dockpipe package compile`** materializes **tarballs** here: **`core/`**, **`resolvers/`**, **`workflows/`** (**`dockpipe-workflow-*`** only). This is the **working** store — not the long-term transport format.
+1. **Local build output** lives under **`bin/.dockpipe/internal/`** (default package root: **`bin/.dockpipe/internal/packages/`**, or **`DOCKPIPE_PACKAGES_ROOT`**). **`dockpipe package compile`** materializes **tarballs** here: **`core/`**, **`resolvers/`**, **`workflows/`** (**`dockpipe-workflow-*`** only). This is the **working** store — not the long-term transport format.
 
 2. **Published / pulled-in packages** outside that internal compile flow are **categorized** as **`core`**, **`resolvers`**, or **`workflows`**. **Each installable unit from a registry or artifact bucket is a tarball** (e.g. **`dockpipe-workflow-<name>-<ver>.tar.gz`**, **`dockpipe-resolver-…`**, **`dockpipe-core-…`**). The engine **loads these by reading the archive** (e.g. **`tar://`** paths); it does not require an unpacked tree on disk for **that** path.
 
@@ -15,7 +15,7 @@ DockPipe distinguishes **what you author** (source trees) from **what you ship**
    - each **workflow** and **resolver** package resolves a **valid `namespace`** (from **`package.yml`**, **`config.yml` / `resolver.yaml`**, or repo-root **`dockpipe.config.json`** **`packages.namespace`** as a default),
    - every **`depends`** entry in **`package.yml`** names a package **already present** in the compiled store (names from **`package.yml`** under **`core/`**, **`resolvers/`**, **`workflows/`**).
 
-**Runtime** may still resolve workflows from **tarballs** under **`.dockpipe/internal/packages/workflows/`** or **`packages.tarball_dir`** / **`release/artifacts`** when no on-disk workflow config wins; optional **`packages.namespace`** filters tarball choice when set.
+**Runtime** may still resolve workflows from **tarballs** under **`bin/.dockpipe/internal/packages/workflows/`** or **`packages.tarball_dir`** / **`release/artifacts`** when no on-disk workflow config wins; optional **`packages.namespace`** filters tarball choice when set.
 
 ## Official reference vs repo-local trees
 
@@ -28,7 +28,7 @@ DockPipe distinguishes **what you author** (source trees) from **what you ship**
 | Mode | What you run | Friction | Notes |
 |------|----------------|----------|--------|
 | **Source / today** | Workflow YAML from **`workflows/`**, legacy **`templates/<name>/`**, etc. | **Low** for day-to-day editing — no compile step required. | **`scripts/…`** resolves per **`paths.go`** (project **`scripts/`** first, then bundled **resolvers** / **bundles** / **`assets/scripts/`**). Users can keep scripts wherever those rules allow. |
-| **Compiled / packaged** | **`packages/workflows/`** (tarballs), **`packages/resolvers/`**, **`packages/core/`**, from **`compile all`** under **`.dockpipe/internal/packages/`**. | **One** compile (or CI) before run. | **Cleaner** tree: optional **`package.yml`** per slice; resolver search prefers **`packages/resolvers/`** when present. |
+| **Compiled / packaged** | **`packages/workflows/`** (tarballs), **`packages/resolvers/`**, **`packages/core/`**, from **`compile all`** under **`bin/.dockpipe/internal/packages/`**. | **One** compile (or CI) before run. | **Cleaner** tree: optional **`package.yml`** per slice; resolver search prefers **`packages/resolvers/`** when present. |
 
 **Authors are not forced to pick one path:** keep editing and running from source for low friction; use **compile → package → release** when you want a **self-contained** published artifact.
 
@@ -48,7 +48,7 @@ So **one repo** can ship **workflows**, **resolvers**, and **runtimes** / **stra
 
 ### Local compile (`dockpipe build` / `dockpipe package compile` / `dockpipe compile`)
 
-Materialize a **project-local** store under **`.dockpipe/internal/packages/`** without moving authoring trees.
+Materialize a **project-local** store under **`bin/.dockpipe/internal/packages/`** without moving authoring trees.
 
 **Repo-root `dockpipe.config.json` (optional)** — JSON with a **`compile`** object:
 
@@ -95,7 +95,7 @@ When **`dockpipe install`** (workflow package) exists end-to-end, installing a *
 | **Strategies** | **Repo / bundled `templates/core/strategies/`** | Thin lifecycle wiring — same as runtimes: **keep in tree**. |
 | **Compiled core** | **HTTPS/S3 (e.g. R2)** + **`dockpipe install core`** | **Tight `templates/core` tarball** so installs stay small; refresh without cloning the whole upstream repo. |
 | **Resolvers** | **Bundled** and/or **store packages** | **Plugin adapters** — shared across workflows; extended catalogs ship as packages with rich **`package.yml`**. |
-| **Workflows** | **Authoring tree**, **`.dockpipe/internal/packages/workflows/`**, or **store** | **Primary rich-metadata** packages for authoring and discovery (`kind: workflow`). |
+| **Workflows** | **Authoring tree**, **`bin/.dockpipe/internal/packages/workflows/`**, or **store** | **Primary rich-metadata** packages for authoring and discovery (`kind: workflow`). |
 
 **Mental model:** the **CLI + slim core** in git or from S3 gives you a **lightweight spine**; **workflows** and **resolver** packs are what you **browse, version, and install** from a registry or internal bucket (the “plugin store” layer).
 
@@ -103,18 +103,18 @@ When **`dockpipe install`** (workflow package) exists end-to-end, installing a *
 
 **Packages** are **self-contained** artifacts you fetch from an object store (e.g. **Cloudflare R2** behind HTTPS) or another registry. They are **building blocks** for YAML workflows: full workflows, slices of **`templates/core`** (resolvers, runtimes, strategies, assets), or extra workflow tarballs from package installs.
 
-- **Default layout on disk:** **`<workdir>/.dockpipe/internal/packages/`** — kept under **`internal/`** so user-created and installable packages stay separate from other **`.dockpipe/`** state (runs, handoffs, CI).  
+- **Default layout on disk:** **`<workdir>/bin/.dockpipe/internal/packages/`** — kept under **`internal/`** so user-created and installable packages stay separate from other **`bin/.dockpipe/`** state (runs, handoffs, CI).  
   Override with **`DOCKPIPE_PACKAGES_ROOT`** (absolute path, or relative to workdir), e.g. **`vendor/dockpipe-packages`** if you want packages **versioned in git** without fighting a blanket **`.dockpipe/`** ignore.
 
 Suggested subdirectories (mirror authoring concepts; not all are required):
 
 | Path | Role |
 |------|------|
-| **`.dockpipe/internal/packages/workflows/<name>/`** | Workflow-shaped trees (`config.yml`, steps, …). |
-| **`.dockpipe/internal/packages/core/`** | Compiled **spine** only: **`runtimes/`**, **`strategies/`**, **`assets/`**, etc. — not resolver/bundle/workflow packages. |
-| **`.dockpipe/internal/packages/resolvers/<name>/`** | One resolver package per profile (same shape as **`templates/core/resolvers/<name>/`**). |
-| **`.dockpipe/internal/packages/workflows/`** | Workflow packages (**`dockpipe-workflow-*`**). |
-| **`.dockpipe/internal/packages/assets/`** | Optional top-level packs (e.g. large binaries) that are not folded under **`core/`**. |
+| **`bin/.dockpipe/internal/packages/workflows/<name>/`** | Workflow-shaped trees (`config.yml`, steps, …). |
+| **`bin/.dockpipe/internal/packages/core/`** | Compiled **spine** only: **`runtimes/`**, **`strategies/`**, **`assets/`**, etc. — not resolver/bundle/workflow packages. |
+| **`bin/.dockpipe/internal/packages/resolvers/<name>/`** | One resolver package per profile (same shape as **`templates/core/resolvers/<name>/`**). |
+| **`bin/.dockpipe/internal/packages/workflows/`** | Workflow packages (**`dockpipe-workflow-*`**). |
+| **`bin/.dockpipe/internal/packages/assets/`** | Optional top-level packs (e.g. large binaries) that are not folded under **`core/`**. |
 
 **Metadata:** each installable unit should include **`package.yml`** next to its payload (see **`dockpipe package manifest`**). Core fields: **`name`**, **`version`**, **`title`**, **`description`**, **`author`**, **`website`**, **`license`**, **`kind`** (`workflow` \| `resolver` \| `core` \| `assets` \| `bundle`). Optional **`namespace`** — same rules as workflow **`config.yml`** **`namespace:`** (lowercase label; reserved words like **`dockpipe`**, **`core`**, **`system`** are rejected).
 
@@ -142,11 +142,11 @@ The Go type **`domain.PackageManifest`** parses these keys; see **`src/lib/domai
 
 **Compression:** store objects are typically **`.tar.gz`** (or **`.tar.zst`** later) to keep bandwidth and R2 storage small; the CLI unpacks into the layout above. **Binary-only** packs are possible for asset-only packages if you add a small unpack step later.
 
-**CLI today:** **`dockpipe install core`** pulls **`templates/core`** into **`templates/core`** (bootstrap path). **`dockpipe package compile workflow`** validates YAML and copies a workflow tree into **`.dockpipe/internal/packages/workflows/<name>/`** (see **`docs/cli-reference.md`**). Future **`dockpipe install package …`** will unpack registry artifacts and extend resolution order (project **`workflows/`** + **installed packages** + embedded bundle).
+**CLI today:** **`dockpipe install core`** pulls **`templates/core`** into **`templates/core`** (bootstrap path). **`dockpipe package compile workflow`** validates YAML and copies a workflow tree into **`bin/.dockpipe/internal/packages/workflows/<name>/`** (see **`docs/cli-reference.md`**). Future **`dockpipe install package …`** will unpack registry artifacts and extend resolution order (project **`workflows/`** + **installed packages** + embedded bundle).
 
 ### Clone, education, and commercial packages
 
-- **`package.yml`** may set **`allow_clone: true`** so **`dockpipe clone <name>`** can copy a compiled workflow package from **`.dockpipe/internal/packages/workflows/<name>/`** into **`workflows/<name>/`** (or **`--to`**). This supports **education** and **forking** when the author opts in.
+- **`package.yml`** may set **`allow_clone: true`** so **`dockpipe clone <name>`** can copy a compiled workflow package from **`bin/.dockpipe/internal/packages/workflows/<name>/`** into **`workflows/<name>/`** (or **`--to`**). This supports **education** and **forking** when the author opts in.
 - **`allow_clone: false`** or omitting **`allow_clone`** means **`dockpipe clone`** refuses — appropriate for **commercial** or **binary-only** releases where the publisher does not grant a recoverable source tree.
 - Optional **`distribution: binary`** documents that the published artifact is not meant for source recovery; publishers who need **strong** protection should ship **only** non-recoverable binaries (obfuscation, native modules, etc.) — DockPipe cannot cryptographically enforce that; **`allow_clone`** is the explicit license bit for **`dockpipe clone`**.
 - **`dockpipe package compile workflow`** writes **`allow_clone: true`** and **`distribution: source`** into a generated **`package.yml`** so local compiles stay cloneable unless you edit the manifest before release.
@@ -158,11 +158,11 @@ The Go type **`domain.PackageManifest`** parses these keys; see **`src/lib/domai
 - **`workflows/`** (default project root), **`src/core/workflows/<name>/`** (bundled examples in the dockpipe repo), legacy **`templates/<name>/`** — YAML and assets you **build or clone**, commit, and run with **`--workflow`** as today.
 - No **`package.yml`** required; this is normal development.
 
-## 3. Project-local state (`.dockpipe/`) and isolation
+## 3. Project-local state (`bin/.dockpipe/`) and isolation
 
-**`.dockpipe/`** is the **project-local** tree for generated state: host run records (**`.dockpipe/runs/`**), step outputs (**`.dockpipe/outputs.env`**), handoffs, optional demo stubs, and **installed package material** under **`.dockpipe/internal/`**. That keeps **transient and tool-owned** files out of the main authoring trees and the repo root.
+**`bin/.dockpipe/`** is the **project-local** tree for generated state: host run records (**`bin/.dockpipe/runs/`**), step outputs (**`bin/.dockpipe/outputs.env`**), handoffs, optional demo stubs, and **installed package material** under **`bin/.dockpipe/internal/`**. That keeps **transient and tool-owned** files out of the main authoring trees and the repo root.
 
-**`.dockpipe/internal/packages/`** is the default store for **fetched or compiled** package trees (workflows, core slices, assets) — the same conceptual layout whether content arrived as a **`.tar.gz`** or from **`dockpipe package compile workflow`**. **Uncompressed** authoring under **`workflows/`** remains normal; **compile** validates and **materializes** into **`.dockpipe/internal/...`** when you opt into the packaged path. Resolution order for **`--workflow`** is implemented in **`workflow_dirs.go`** (**`workflows/`** → **packages** → legacy **`templates/`** paths, etc.).
+**`bin/.dockpipe/internal/packages/`** is the default store for **fetched or compiled** package trees (workflows, core slices, assets) — the same conceptual layout whether content arrived as a **`.tar.gz`** or from **`dockpipe package compile workflow`**. **Uncompressed** authoring under **`workflows/`** remains normal; **compile** validates and **materializes** into **`bin/.dockpipe/internal/...`** when you opt into the packaged path. Resolution order for **`--workflow`** is implemented in **`workflow_dirs.go`** (**`workflows/`** → **packages** → legacy **`templates/`** paths, etc.).
 
 **Publish outputs** (templates-core tarball, checksums, GitHub release binaries in CI) live under **`release/artifacts/`** (gitignored), not the project workflow tree — see **`release/README.md`**.
 
@@ -170,8 +170,8 @@ The Go type **`domain.PackageManifest`** parses these keys; see **`src/lib/domai
 
 ## Resolution order (directional)
 
-**`--workflow`** resolution (see **`workflow_dirs.go`**) already checks **`.dockpipe/internal/packages/workflows/<name>/`** (after **`workflows/`** and before legacy **`templates/<name>/`**) when **`dockpipe run`** uses **`--workdir`** or the current directory; **`dockpipe doctor`** and **`ResolveWorkflowConfigPath(repoRoot, name)`** without a workdir skip the packages store.
+**`--workflow`** resolution (see **`workflow_dirs.go`**) already checks **`bin/.dockpipe/internal/packages/workflows/<name>/`** (after **`workflows/`** and before legacy **`templates/<name>/`**) when **`dockpipe run`** uses **`--workdir`** or the current directory; **`dockpipe doctor`** and **`ResolveWorkflowConfigPath(repoRoot, name)`** without a workdir skip the packages store.
 
-When fully wired end-to-end, workflow name resolution will **prefer** project **`workflows/`**, then **installed** **`.dockpipe/internal/packages/workflows/`**, then legacy **`templates/`** paths and the embedded bundle — same four concepts (**workflow**, **runtime**, **resolver**, **strategy**), extended by **packages** from the store.
+When fully wired end-to-end, workflow name resolution will **prefer** project **`workflows/`**, then **installed** **`bin/.dockpipe/internal/packages/workflows/`**, then legacy **`templates/`** paths and the embedded bundle — same four concepts (**workflow**, **runtime**, **resolver**, **strategy**), extended by **packages** from the store.
 
 See also **[architecture-model.md](architecture-model.md)** and **[cli-reference.md](cli-reference.md)** (`dockpipe package`, `dockpipe install`). For **core vs optional packages** and an untethering roadmap (slim core, explicit `depends`), see **[core-vs-packages-audit.md](core-vs-packages-audit.md)**.

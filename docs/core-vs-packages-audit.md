@@ -7,7 +7,7 @@ This doc aligns with the **compile → package → optional install** direction:
 | Surface | What it is | What it contains today |
 |--------|------------|-------------------------|
 | **Embedded FS** (`embed.go`) | Files baked into the `dockpipe` binary | `src/core/**`, `workflows/**`, `packages/**`, etc. — **full trees** |
-| **`dockpipe package compile core`** | Tarball under **`.dockpipe/internal/packages/core/`** | Copy of **`src/core`** (or `templates/core`) **excluding** top-level **`resolvers/`**, **`bundles/`**, **`workflows/`** — see `copyDirExcludingTopLevel` in **`src/lib/application/package_compile.go`** |
+| **`dockpipe package compile core`** | Tarball under **`bin/.dockpipe/internal/packages/core/`** | Copy of **`src/core`** (or `templates/core`) **excluding** top-level **`resolvers/`**, **`bundles/`**, **`workflows/`** — see `copyDirExcludingTopLevel` in **`src/lib/application/package_compile.go`** |
 
 So: **example workflows** and **`src/core/resolvers/*`** are **not** in the **compiled core tarball**, but they **are** still in the **embedded checkout** for a full clone. Untethering is partly about **embed** and partly about **where** scripts live on disk.
 
