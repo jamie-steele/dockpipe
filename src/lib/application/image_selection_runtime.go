@@ -36,14 +36,14 @@ func applyCompiledImageSelectionInputs(repoRoot string, rm *domain.CompiledRunti
 }
 
 func ensureCompiledRegistryImageForWorkflow(rm *domain.CompiledRuntimeManifest) (string, error) {
-	return ensureCompiledRegistryImage(rm.Image, dockerImageExistsAppFn, dockerPullAppFn)
+	return ensureCompiledRegistryImage(rm.Image, rm.Security.Network, dockerImageExistsAppFn, dockerPullAppFn)
 }
 
 func ensureCompiledRegistryImageForStep(rm *domain.CompiledRuntimeManifest) (string, error) {
-	return ensureCompiledRegistryImage(rm.Image, dockerImageExistsFn, dockerPullFn)
+	return ensureCompiledRegistryImage(rm.Image, rm.Security.Network, dockerImageExistsFn, dockerPullFn)
 }
 
-func ensureCompiledRegistryImage(sel domain.CompiledImageSelection, existsFn func(string) (bool, error), pullFn func(string) error) (string, error) {
+func ensureCompiledRegistryImage(sel domain.CompiledImageSelection, network domain.CompiledNetworkPolicy, existsFn func(string) (bool, error), pullFn func(string) error) (string, error) {
 	if strings.TrimSpace(sel.Source) != "registry" || strings.TrimSpace(sel.Ref) == "" {
 		return "", nil
 	}
@@ -60,6 +60,9 @@ func ensureCompiledRegistryImage(sel domain.CompiledImageSelection, existsFn fun
 	}
 	if strings.TrimSpace(sel.PullPolicy) != "if-missing" {
 		return "", fmt.Errorf("registry image %s is not present locally and pull_policy=%q does not allow pulling during run", ref, firstNonEmptyString(strings.TrimSpace(sel.PullPolicy), "never"))
+	}
+	if strings.TrimSpace(network.Mode) != "internet" {
+		return "", fmt.Errorf("registry image %s is not present locally and compiled network policy %q does not allow pulling during run", ref, firstNonEmptyString(strings.TrimSpace(network.Mode), "offline"))
 	}
 	if err := pullFn(ref); err != nil {
 		return "", fmt.Errorf("pull registry image %s: %w", ref, err)

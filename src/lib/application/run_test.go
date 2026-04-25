@@ -245,9 +245,9 @@ func TestRunWorkflowPullsCompiledRegistryImageWhenAllowed(t *testing.T) {
 			ExpectedDigest: "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		},
 		Security: domain.CompiledSecurityPolicy{
-			Preset: "secure-default",
+			Preset: "internet-client",
 			Network: domain.CompiledNetworkPolicy{
-				Mode:        "offline",
+				Mode:        "internet",
 				Enforcement: "native",
 				InternalDNS: true,
 			},
@@ -278,6 +278,52 @@ func TestRunWorkflowPullsCompiledRegistryImageWhenAllowed(t *testing.T) {
 	}
 	if pulled != rm.Image.Ref {
 		t.Fatalf("expected docker pull for %q, got %q", rm.Image.Ref, pulled)
+	}
+}
+
+func TestRunWorkflowBlocksCompiledRegistryPullWhenOffline(t *testing.T) {
+	withRunSeams(t)
+	repoRoot := t.TempDir()
+	wfDir := filepath.Join(repoRoot, "workflows", "mywf")
+	if err := os.MkdirAll(filepath.Join(wfDir, domain.RuntimeManifestDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfDir, "config.yml"), []byte("name: mywf\nsteps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rm := domain.CompiledRuntimeManifest{
+		Schema: 2,
+		Kind:   domain.RuntimeManifestKind,
+		Image: domain.CompiledImageSelection{
+			Source:     "registry",
+			Ref:        "ghcr.io/acme/tool:1.2.3",
+			PullPolicy: "if-missing",
+		},
+		Security: domain.CompiledSecurityPolicy{
+			Preset: "secure-default",
+			Network: domain.CompiledNetworkPolicy{
+				Mode:        "offline",
+				Enforcement: "native",
+				InternalDNS: true,
+			},
+		},
+	}
+	b, err := json.MarshalIndent(rm, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfDir, domain.RuntimeManifestDirName, domain.RuntimeManifestFileName), append(b, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	repoRootAppFn = func() (string, error) { return repoRoot, nil }
+	dockerImageExistsAppFn = func(image string) (bool, error) { return false, nil }
+	dockerPullAppFn = func(image string) error {
+		t.Fatalf("docker pull should not be called for offline registry image")
+		return nil
+	}
+	err = Run([]string{"--workflow", "mywf", "--", "echo", "hi"}, nil)
+	if err == nil || !strings.Contains(err.Error(), `compiled network policy "offline" does not allow pulling`) {
+		t.Fatalf("expected offline pull error, got %v", err)
 	}
 }
 

@@ -102,7 +102,7 @@ image:
   pull_policy: if-missing
 ```
 
-Compile folds that package metadata into the effective image artifact manifest. Run then decides whether to reuse a valid local image, pull it when the compiled pull policy explicitly allows `if-missing`, or fail clearly when the image is missing and pulling is not allowed.
+Compile folds that package metadata into the effective image artifact manifest. Run then decides whether to reuse a valid local image, pull it when the compiled pull policy explicitly allows `if-missing` and the compiled network policy allows ordinary outbound access, or fail clearly when the image is missing and pulling is not allowed.
 
 ## YAML schema direction
 
