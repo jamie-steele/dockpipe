@@ -108,7 +108,6 @@ type ImageArtifactManifest struct {
 	Fingerprint                 string                  `json:"fingerprint,omitempty" yaml:"fingerprint,omitempty"`
 	SourceFingerprint           string                  `json:"source_fingerprint,omitempty" yaml:"source_fingerprint,omitempty"`
 	SecurityManifestFingerprint string                  `json:"security_manifest_fingerprint,omitempty" yaml:"security_manifest_fingerprint,omitempty"`
-	RuntimeManifestFingerprint  string                  `json:"runtime_manifest_fingerprint,omitempty" yaml:"runtime_manifest_fingerprint,omitempty"`
 	ImageRef                    string                  `json:"image_ref,omitempty" yaml:"image_ref,omitempty"`
 	ExpectedDigest              string                  `json:"expected_digest,omitempty" yaml:"expected_digest,omitempty"`
 	ResolvedRef                 string                  `json:"resolved_ref,omitempty" yaml:"resolved_ref,omitempty"`

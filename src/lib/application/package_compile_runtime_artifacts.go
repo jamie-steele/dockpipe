@@ -549,7 +549,7 @@ func selectCompiledImageArtifact(workdir, pkgName string, wf *domain.Workflow, p
 }
 
 func selectCompiledImageArtifactForStep(workdir, pkgName string, wf *domain.Workflow, pm *domain.PackageManifest, step domain.Step, stepID, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
-	if strings.TrimSpace(step.Isolate) == "" {
+	if !stepHasImageSelectionOverride(step) {
 		if sel, artifact, ok, err := selectPackageImageArtifact(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, stepID, pm, policyFingerprint); ok || err != nil {
 			return sel, artifact, err
 		}
@@ -586,6 +586,12 @@ func selectCompiledImageArtifactForStep(workdir, pkgName string, wf *domain.Work
 	}
 
 	return registryImageSelection(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, stepID, identity, "never", policyFingerprint)
+}
+
+func stepHasImageSelectionOverride(step domain.Step) bool {
+	return strings.TrimSpace(step.Isolate) != "" ||
+		strings.TrimSpace(step.Runtime) != "" ||
+		strings.TrimSpace(step.Resolver) != ""
 }
 
 func selectPackageImageArtifact(workflowName, packageName, stepID, imageKey string, pm *domain.PackageManifest, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, bool, error) {
@@ -657,7 +663,6 @@ func registryImageSelection(workflowName, packageName, stepID, imageKey, ref, pu
 		Fingerprint:                 fingerprint,
 		SourceFingerprint:           sourceFingerprint,
 		SecurityManifestFingerprint: policyFingerprint,
-		RuntimeManifestFingerprint:  policyFingerprint,
 		ImageRef:                    ref,
 		ExpectedDigest:              expectedDigest,
 	}

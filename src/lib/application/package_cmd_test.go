@@ -366,6 +366,76 @@ image:
 	}
 }
 
+func TestCmdPackageCompileWorkflowStepRuntimeOverridesPackageImageRegistryMetadata(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "mywf")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	img := filepath.Join(dir, "src", "core", "assets", "images", "codex")
+	if err := os.MkdirAll(img, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "src", "core", "runtimes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(img, "Dockerfile"), []byte("FROM alpine:3.20\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: mywf
+steps:
+  - id: custom
+    runtime: codex
+    cmd: echo custom
+`
+	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `schema: 1
+name: mywf
+version: 1.2.3
+title: Mywf
+description: d
+author: a
+website: https://example.com
+license: Apache-2.0
+kind: workflow
+image:
+  source: registry
+  ref: ghcr.io/acme/mywf@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  pull_policy: if-missing
+`
+	if err := os.WriteFile(filepath.Join(src, "package.yml"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-1.2.3.tar.gz")
+	rmf, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/.dockpipe/steps/custom.runtime.effective.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rm domain.CompiledRuntimeManifest
+	if err := json.Unmarshal(rmf, &rm); err != nil {
+		t.Fatal(err)
+	}
+	if rm.Image.Source != "build" || rm.Image.PullPolicy != "" {
+		t.Fatalf("expected step runtime to override package registry image, got %+v", rm.Image)
+	}
+	imf, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/.dockpipe/steps/custom.image-artifact.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var im domain.ImageArtifactManifest
+	if err := json.Unmarshal(imf, &im); err != nil {
+		t.Fatal(err)
+	}
+	if im.ImageKey != "custom" || im.Source != "build" || im.ImageRef == "" {
+		t.Fatalf("unexpected step image artifact: %+v", im)
+	}
+}
+
 func TestCmdPackageCompileWorkflowUsesWorkflowSecurityNetworkMode(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src", "mywf")

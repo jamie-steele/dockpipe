@@ -55,7 +55,6 @@ func buildImageArtifactManifest(repoRoot, workflowName, packageName, imageKey, i
 		Fingerprint:                 fingerprint,
 		SourceFingerprint:           sourceFingerprint,
 		SecurityManifestFingerprint: strings.TrimSpace(policyFingerprint),
-		RuntimeManifestFingerprint:  strings.TrimSpace(policyFingerprint),
 		ImageRef:                    strings.TrimSpace(imageRef),
 		Build:                       buildSpec,
 	}, nil
