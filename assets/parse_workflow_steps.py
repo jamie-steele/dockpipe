@@ -8,7 +8,7 @@ Writes a staging directory layout for bash:
   step_<i>/isolate — template/image name or empty (inherit)
   step_<i>/act     — act script path or empty
   step_<i>/cmd     — shell command string for container (optional)
-  step_<i>/skip_container — "0" or "1"
+  step_<i>/kind    — "container" or "host"
   step_<i>/outputs — path relative to workdir for outputs.env (default .dockpipe/outputs.env)
   step_<i>/vars.env — KEY=VAL lines for step-local exports
 """
@@ -111,7 +111,7 @@ def parse_step_block(raw_lines: list[str]) -> dict:
         "isolate": "",
         "act": "",
         "cmd": "",
-        "skip_container": False,
+        "kind": "container",
         "outputs": ".dockpipe/outputs.env",
         "vars": {},
     }
@@ -152,8 +152,8 @@ def parse_step_block(raw_lines: list[str]) -> dict:
             d["act"] = val
         elif key in ("cmd", "command"):
             d["cmd"] = val
-        elif key == "skip_container":
-            d["skip_container"] = val.lower() in ("1", "true", "yes")
+        elif key == "kind":
+            d["kind"] = (val or "container").lower()
         elif key == "outputs":
             d["outputs"] = val or ".dockpipe/outputs.env"
         else:
@@ -176,6 +176,7 @@ def write_staging(out_dir: str, steps: list[dict]) -> None:
             ("isolate", st.get("isolate") or ""),
             ("act", st.get("act") or ""),
             ("cmd", st.get("cmd") or ""),
+            ("kind", st.get("kind") or "container"),
             ("outputs", st.get("outputs") or ".dockpipe/outputs.env"),
         ):
             with open(os.path.join(sdir, name), "w", encoding="utf-8") as f:
@@ -183,9 +184,6 @@ def write_staging(out_dir: str, steps: list[dict]) -> None:
         parts = shlex.split(st.get("cmd") or "", posix=True)
         with open(os.path.join(sdir, "argv"), "wb") as af:
             af.write(b"\0".join(p.encode("utf-8") for p in parts))
-        sc = "1" if st.get("skip_container") else "0"
-        with open(os.path.join(sdir, "skip_container"), "w", encoding="utf-8") as f:
-            f.write(sc)
         vpath = os.path.join(sdir, "vars.env")
         with open(vpath, "w", encoding="utf-8") as f:
             for k, v in (st.get("vars") or {}).items():

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"dockpipe/src/lib/domain"
 	"dockpipe/src/lib/infrastructure"
@@ -296,6 +297,99 @@ steps: []
 	}
 	if rm.Security.Network.Mode != "offline" || rm.Security.Network.Enforcement != "native" {
 		t.Fatalf("expected offline native enforcement, got %+v", rm.Security.Network)
+	}
+}
+
+func TestCmdPackageCompileWorkflowRebuildsInvalidStoreTarball(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "mywf")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "VERSION"), []byte("1.0.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "name: mywf\nsteps:\n  - kind: host\n    cmd: echo ok\n"
+	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pkgDir, err := infrastructure.PackagesWorkflowsDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	oldStage := filepath.Join(dir, "old")
+	if err := os.MkdirAll(oldStage, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oldCfg := "name: mywf\nsteps:\n  - skip_container: true\n    cmd: echo old\n"
+	if err := os.WriteFile(filepath.Join(oldStage, "config.yml"), []byte(oldCfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(pkgDir, "dockpipe-workflow-mywf-1.0.0.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(oldStage, tgz, "workflows/mywf"); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().Add(time.Hour)
+	if err := os.Chtimes(tgz, future, future); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/config.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "skip_container") || !strings.Contains(string(got), "kind: host") {
+		t.Fatalf("expected rebuilt workflow config, got:\n%s", string(got))
+	}
+}
+
+func TestCompileSingleResolverRebuildsInvalidStoreTarball(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "resolvers", "alpha")
+	dest, err := infrastructure.PackagesResolversDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "profile"), []byte("DOCKPIPE_RESOLVER_IMAGE=alpine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := "name: alpha\nsteps:\n  - kind: host\n    cmd: echo ok\n"
+	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldStage := filepath.Join(dir, "old-resolver")
+	if err := os.MkdirAll(oldStage, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(oldStage, "profile"), []byte("DOCKPIPE_RESOLVER_IMAGE=alpine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldCfg := "name: alpha\nsteps:\n  - skip_container: true\n    cmd: echo old\n"
+	if err := os.WriteFile(filepath.Join(oldStage, "config.yml"), []byte(oldCfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(dest, "dockpipe-resolver-alpha-1.0.0.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(oldStage, tgz, "resolvers/alpha"); err != nil {
+		t.Fatal(err)
+	}
+	future := time.Now().Add(time.Hour)
+	if err := os.Chtimes(tgz, future, future); err != nil {
+		t.Fatal(err)
+	}
+	if err := compileSingleResolverDir(dest, src, "alpha", "acme", "1.0.0", false); err != nil {
+		t.Fatal(err)
+	}
+	got, err := packagebuild.ReadFileFromTarGz(tgz, "resolvers/alpha/config.yml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(got), "skip_container") || !strings.Contains(string(got), "kind: host") {
+		t.Fatalf("expected rebuilt resolver config, got:\n%s", string(got))
 	}
 }
 

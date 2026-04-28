@@ -185,16 +185,22 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 			if latestTar == "" {
 				rebuild = true
 			} else {
-				stale, err := infrastructure.SourceDirNewerThanPath(srcAbs, latestTar)
-				if err != nil {
-					return err
+				if ok, reason := compiledPackageWorkflowConfigsValid(latestTar); !ok {
+					fmt.Fprintf(os.Stderr, "[dockpipe] recompiling workflow %q (existing store tarball is no longer valid: %s)\n", pkgName, reason)
+					rebuild = true
 				}
-				if !stale {
-					fmt.Fprintf(os.Stderr, "[dockpipe] skip workflow compile (store tarball up to date): %s\n", latestTar)
-					return nil
+				if !rebuild {
+					stale, err := infrastructure.SourceDirNewerThanPath(srcAbs, latestTar)
+					if err != nil {
+						return err
+					}
+					if !stale {
+						fmt.Fprintf(os.Stderr, "[dockpipe] skip workflow compile (store tarball up to date): %s\n", latestTar)
+						return nil
+					}
+					fmt.Fprintf(os.Stderr, "[dockpipe] recompiling workflow %q (sources newer than %s)\n", pkgName, filepath.Base(latestTar))
+					rebuild = true
 				}
-				fmt.Fprintf(os.Stderr, "[dockpipe] recompiling workflow %q (sources newer than %s)\n", pkgName, filepath.Base(latestTar))
-				rebuild = true
 			}
 		} else if _, err := os.Stat(legacyDir); err == nil {
 			refMax, err := infrastructure.MaxModTimeFilesUnder(legacyDir)
@@ -300,6 +306,81 @@ func readAuthoredPackageManifest(root string) (*domain.PackageManifest, error) {
 		return nil, err
 	}
 	return domain.ParsePackageManifest(manifestPath)
+}
+
+func validateWorkflowConfigsUnderDir(root string) error {
+	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", ".dockpipe", ".dorkpipe", "node_modules":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Name() != "config.yml" {
+			return nil
+		}
+		if err := infrastructure.ValidateResolvedWorkflowYAML(path); err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		return nil
+	})
+}
+
+func compiledPackageWorkflowConfigsValid(tgz string) (bool, string) {
+	members, err := packagebuild.ListTarGzMemberPaths(tgz)
+	if err != nil {
+		return false, err.Error()
+	}
+	for _, entry := range members {
+		if !compiledPackageWorkflowConfigEntry(entry) {
+			continue
+		}
+		if err := validateWorkflowConfigInTarball(tgz, entry); err != nil {
+			return false, fmt.Sprintf("%s: %v", entry, err)
+		}
+	}
+	return true, ""
+}
+
+func compiledPackageWorkflowConfigEntry(entry string) bool {
+	parts := strings.Split(filepath.ToSlash(entry), "/")
+	if len(parts) < 3 || parts[len(parts)-1] != "config.yml" {
+		return false
+	}
+	switch parts[0] {
+	case "workflows":
+		return len(parts) == 3
+	case "resolvers":
+		// Resolver packages may include a resolver-shaped workflow at
+		// resolvers/<name>/config.yml or embedded child workflows one level down.
+		return len(parts) == 3 || len(parts) == 4
+	default:
+		return false
+	}
+}
+
+func validateWorkflowConfigInTarball(tgz, entry string) error {
+	entry = filepath.ToSlash(entry)
+	b, err := packagebuild.ReadFileFromTarGz(tgz, entry)
+	if err != nil {
+		return err
+	}
+	baseDir := filepath.ToSlash(filepath.Dir(entry))
+	readFile := func(p string) ([]byte, error) {
+		return packagebuild.ReadFileFromTarGz(tgz, filepath.ToSlash(filepath.Clean(p)))
+	}
+	wf, err := domain.ParseWorkflowFromDisk(b, baseDir, readFile)
+	if err != nil {
+		return fmt.Errorf("parse workflow: %w", err)
+	}
+	if err := domain.ValidateLoadedWorkflow(wf); err != nil {
+		return err
+	}
+	return nil
 }
 
 func cmdPackageCompileCore(args []string) error {
@@ -669,6 +750,9 @@ func filterExistingResolverRoots(roots []string) []string {
 // dockpipe-resolver-<name>-<ver>.tar.gz under destRoot.
 func compileSingleResolverDir(destRoot, from, name string, defaultNamespace string, defaultVersion string, force bool) error {
 	kind := "resolver"
+	if err := validateWorkflowConfigsUnderDir(from); err != nil {
+		return fmt.Errorf("validate resolver %s: %w", name, err)
+	}
 	tarGlob := filepath.Join(destRoot, fmt.Sprintf("dockpipe-resolver-%s-*.tar.gz", packagebuild.SafeTarballToken(name)))
 	legacyDir := filepath.Join(destRoot, name)
 	rebuild := force
@@ -679,16 +763,22 @@ func compileSingleResolverDir(destRoot, from, name string, defaultNamespace stri
 			if latestTar == "" {
 				rebuild = true
 			} else {
-				stale, err := infrastructure.SourceDirNewerThanPath(from, latestTar)
-				if err != nil {
-					return err
+				if ok, reason := compiledPackageWorkflowConfigsValid(latestTar); !ok {
+					fmt.Fprintf(os.Stderr, "[dockpipe] recompiling %s %q (existing store tarball is no longer valid: %s)\n", kind, name, reason)
+					rebuild = true
 				}
-				if !stale {
-					fmt.Fprintf(os.Stderr, "[dockpipe] skip %s compile %q (store tarball up to date): %s\n", kind, name, latestTar)
-					return nil
+				if !rebuild {
+					stale, err := infrastructure.SourceDirNewerThanPath(from, latestTar)
+					if err != nil {
+						return err
+					}
+					if !stale {
+						fmt.Fprintf(os.Stderr, "[dockpipe] skip %s compile %q (store tarball up to date): %s\n", kind, name, latestTar)
+						return nil
+					}
+					fmt.Fprintf(os.Stderr, "[dockpipe] recompiling %s %q (sources newer than %s)\n", kind, name, filepath.Base(latestTar))
+					rebuild = true
 				}
-				fmt.Fprintf(os.Stderr, "[dockpipe] recompiling %s %q (sources newer than %s)\n", kind, name, filepath.Base(latestTar))
-				rebuild = true
 			}
 		} else if _, err := os.Stat(legacyDir); err == nil {
 			refMax, err := infrastructure.MaxModTimeFilesUnder(legacyDir)

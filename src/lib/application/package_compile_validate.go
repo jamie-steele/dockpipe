@@ -62,8 +62,19 @@ func validateCompileOutputs(workdir string) error {
 				if err != nil {
 					return fmt.Errorf("validate %s: %w", tgz, err)
 				}
+				if err := validateWorkflowConfigInTarball(tgz, cfgPath); err != nil {
+					return fmt.Errorf("validate %s: %w", tgz, err)
+				}
 				ns = effectiveWorkflowNamespace(pm, b, cfg)
 			case "resolvers":
+				for _, m := range members {
+					if !compiledPackageWorkflowConfigEntry(m) {
+						continue
+					}
+					if err := validateWorkflowConfigInTarball(tgz, m); err != nil {
+						return fmt.Errorf("validate %s: %w", tgz, err)
+					}
+				}
 				ns, err = effectiveResolverNamespaceFromTar(pm, tgz, members, cfg)
 				if err != nil {
 					return fmt.Errorf("validate %s: %w", tgz, err)

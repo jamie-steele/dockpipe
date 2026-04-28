@@ -14,29 +14,23 @@
 #   dockpipe --workflow-file packages/cloud/storage/resolvers/r2/secretstore-r2-publish-test/config.yml --workdir . \
 #     --var R2_TF_BACKEND=local --   # optional: skip remote TF state while testing
 #
-# Step 1 uses resolver onepassword (profile: packages/secrets/resolvers/onepassword/profile).
-x-secret-out: &SECRET_OUT .dockpipe/secretstore-r2.env
-
 name: secretstore-r2-publish-test
 workflow_type: secretstore
 description: >-
   Test pipeline: op inject secrets into an outputs file, DockPipe merges into env, then r2-publish.
 
 docker_preflight: false
-# Secrets: resolver-driven op scripts (not workflow-level vault: merge).
-resolver: onepassword
+# Secrets: package-provided op scripts (not workflow-level vault: merge).
 types:
   - models/ISecretstoreR2PublishTestConfig
 vars:
   OP_ENV_FILE: ".env.op.template"
-  SECRET_ENV_OUT: *SECRET_OUT
+  SECRET_ENV_OUT: ".dockpipe/secretstore-r2.env"
 
 steps:
   - id: inject-secrets
-    runtime: dockerimage
-    resolver: onepassword
     kind: host
-    outputs: *SECRET_OUT
+    outputs: ".dockpipe/secretstore-r2.env"
     run:
       - scripts/onepassword/secretstore-op-inject-outputs.sh
 
