@@ -224,7 +224,7 @@ Artifact states:
 
 `dockpipe package compile` emits `planned` image artifacts only. `dockpipe build` prebuilds Dockerfile-backed `planned` artifacts by default and writes materialized image metadata under `bin/.dockpipe/internal/images/by-fingerprint/`. `dockpipe run` checks that fingerprint index before falling back to Docker daemon state, so a valid prebuilt image is reused without rebuilding. Use `dockpipe build --no-images` to keep the command manifest-only.
 
-Use `dockpipe package images` to inspect the merged image view DockPipe sees: planned artifacts from compiled workflow tarballs plus materialized/cached fingerprint receipts.
+Use `dockpipe package images` to inspect the merged image view DockPipe sees: planned artifacts from compiled workflow tarballs plus materialized/cached fingerprint receipts. The status column calls out `ready`, `missing`, `stale`, `planned`, `referenced`, and `docker-error` so rebuild/pull behavior is explainable before run.
 
 ## What contributes to image validity
 
@@ -280,8 +280,9 @@ Run examples:
 - `runtime policy: network=restricted, root=readonly, tmpfs=/tmp, no-new-privileges, cap-drop=ALL, pids=256`
 - `policy enforcement: network restricted is advisory in this build; full egress filtering is not active yet`
 - `policy coverage: domain allow/block rules are compiled for inspection but are not enforced natively by Docker`
-- `using cached image artifact resolver.codex`
-- `rebuilding image artifact resolver.codex: local image missing`
+- `image: ready cached image artifact resolver.codex`
+- `image: missing materialized image artifact resolver.codex: local image is missing`
+- `image: materializing image artifact resolver.codex`
 - `blocked outbound request to example.com by network.allowlist rule network.allow[0]`
 
 ## Risks and edge cases

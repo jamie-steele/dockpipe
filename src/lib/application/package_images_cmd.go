@@ -22,25 +22,24 @@ func cmdPackageImages(args []string) error {
 	if err != nil {
 		return err
 	}
-	records, err := collectPackageImageArtifacts(workdir)
+	rows, err := collectPackageImageArtifactRows(workdir, dockerImageExistsAppFn)
 	if err != nil {
 		return err
 	}
-	if len(records) == 0 {
+	if len(rows) == 0 {
 		root, _ := infrastructure.ImageArtifactIndexDir(workdir)
 		fmt.Fprintf(os.Stderr, "[dockpipe] no image artifacts found (%s)\n", root)
 		return nil
 	}
-	for _, r := range records {
-		fmt.Fprintf(os.Stdout, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+	for _, row := range rows {
+		r := row.Artifact
+		fmt.Fprintf(os.Stdout, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			trimDigestPrefix(r.Fingerprint),
+			row.Status,
 			firstNonEmptyString(strings.TrimSpace(r.ArtifactState), "planned"),
-			strings.TrimSpace(r.Source),
-			strings.TrimSpace(r.ImageRef),
-			strings.TrimSpace(r.WorkflowName),
-			strings.TrimSpace(r.PackageName),
-			strings.TrimSpace(r.StepID),
-			strings.TrimSpace(r.ImageKey),
+			strings.TrimSpace(r.Source), strings.TrimSpace(r.ImageRef),
+			strings.TrimSpace(r.WorkflowName), strings.TrimSpace(r.PackageName),
+			strings.TrimSpace(r.StepID), strings.TrimSpace(r.ImageKey),
 		)
 	}
 	return nil
@@ -107,6 +106,99 @@ func collectPackageImageArtifacts(workdir string) ([]domain.ImageArtifactManifes
 		return false
 	})
 	return out, nil
+}
+
+type packageImageArtifactRow struct {
+	Artifact domain.ImageArtifactManifest
+	Status   string
+}
+
+func collectPackageImageArtifactRows(workdir string, existsFn func(string) (bool, error)) ([]packageImageArtifactRow, error) {
+	planned, err := collectPlannedImageArtifactsFromPackages(workdir)
+	if err != nil {
+		return nil, err
+	}
+	indexed, err := collectIndexedImageArtifacts(workdir)
+	if err != nil {
+		return nil, err
+	}
+	indexByLogicalKey := map[string]domain.ImageArtifactManifest{}
+	for _, r := range indexed {
+		indexByLogicalKey[imageArtifactLogicalKey(r)] = r
+	}
+	rows := make([]packageImageArtifactRow, 0, len(planned)+len(indexed))
+	seenLogicalKeys := map[string]struct{}{}
+	for _, p := range planned {
+		key := imageArtifactLogicalKey(p)
+		seenLogicalKeys[key] = struct{}{}
+		indexed, ok := indexByLogicalKey[key]
+		switch {
+		case ok && strings.TrimSpace(indexed.Fingerprint) == strings.TrimSpace(p.Fingerprint):
+			rows = append(rows, packageImageArtifactRow{Artifact: indexed, Status: imageArtifactAvailabilityStatus(indexed, existsFn)})
+		case ok:
+			rows = append(rows, packageImageArtifactRow{Artifact: p, Status: "stale"})
+		default:
+			rows = append(rows, packageImageArtifactRow{Artifact: p, Status: imageArtifactAvailabilityStatus(p, existsFn)})
+		}
+	}
+	for _, r := range indexed {
+		if _, ok := seenLogicalKeys[imageArtifactLogicalKey(r)]; ok {
+			continue
+		}
+		rows = append(rows, packageImageArtifactRow{Artifact: r, Status: firstNonEmptyString(imageArtifactAvailabilityStatus(r, existsFn), "orphaned")})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		a := rows[i].Artifact
+		b := rows[j].Artifact
+		for _, cmp := range []struct{ x, y string }{
+			{a.WorkflowName, b.WorkflowName},
+			{a.PackageName, b.PackageName},
+			{a.StepID, b.StepID},
+			{a.ImageKey, b.ImageKey},
+			{a.ImageRef, b.ImageRef},
+			{a.Fingerprint, b.Fingerprint},
+		} {
+			if cmp.x != cmp.y {
+				return cmp.x < cmp.y
+			}
+		}
+		return rows[i].Status < rows[j].Status
+	})
+	return rows, nil
+}
+
+func imageArtifactLogicalKey(r domain.ImageArtifactManifest) string {
+	return strings.Join([]string{
+		strings.TrimSpace(r.WorkflowName),
+		strings.TrimSpace(r.PackageName),
+		strings.TrimSpace(r.StepID),
+		strings.TrimSpace(r.ImageKey),
+		strings.TrimSpace(r.Source),
+		strings.TrimSpace(r.ImageRef),
+	}, "\x00")
+}
+
+func imageArtifactAvailabilityStatus(r domain.ImageArtifactManifest, existsFn func(string) (bool, error)) string {
+	state := strings.TrimSpace(r.ArtifactState)
+	switch {
+	case state == "planned":
+		return "planned"
+	case state == "referenced":
+		return "referenced"
+	case state != "materialized" && state != "cached":
+		return firstNonEmptyString(state, "unknown")
+	}
+	if strings.TrimSpace(r.ImageRef) == "" || existsFn == nil {
+		return "unknown"
+	}
+	ok, err := existsFn(strings.TrimSpace(r.ImageRef))
+	if err != nil {
+		return "docker-error"
+	}
+	if !ok {
+		return "missing"
+	}
+	return "ready"
 }
 
 func putImageArtifactRecord(records map[string]domain.ImageArtifactManifest, r domain.ImageArtifactManifest) {
@@ -212,6 +304,9 @@ artifacts from compiled workflow tarballs with materialized/cached receipts unde
 bin/.dockpipe/internal/images/by-fingerprint.
 
 Output columns (tab-separated):
-  fingerprint, state, source, image_ref, workflow, package, step_id, image_key
+  fingerprint, status, state, source, image_ref, workflow, package, step_id, image_key
+
+Statuses:
+  ready, missing, stale, planned, referenced, docker-error
 
 `

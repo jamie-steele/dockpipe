@@ -220,7 +220,7 @@ steps: []
 	if !skip {
 		t.Fatal("expected docker build skip from compiled tarball artifact")
 	}
-	if !strings.Contains(msg, "using cached image artifact") {
+	if !strings.Contains(msg, "image: ready cached image artifact") {
 		t.Fatalf("unexpected message: %q", msg)
 	}
 }
@@ -654,7 +654,7 @@ isolate: codex
 	if rec.WorkflowName != "secure" || rec.NetworkEnforcement != "native" || rec.ImageRef != "dockpipe-codex" {
 		t.Fatalf("unexpected run policy record: %+v", rec)
 	}
-	if rec.ImageArtifactDecision != "built image artifact for current run" {
+	if rec.ImageArtifactDecision != "image: materialized image artifact for current run" {
 		t.Fatalf("unexpected image decision: %+v", rec)
 	}
 	if !strings.Contains(strings.Join(rec.EnforcementNotes, "\n"), "enforced natively") {

@@ -58,7 +58,7 @@ func cmdBuild(args []string) error {
 		return err
 	}
 	if n > 0 {
-		fmt.Fprintf(os.Stderr, "[dockpipe] image: prebuilt %d image artifact(s)\n", n)
+		fmt.Fprintf(os.Stderr, "[dockpipe] image: materialized %d image artifact(s)\n", n)
 	}
 	return nil
 }

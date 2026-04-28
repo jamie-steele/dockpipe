@@ -349,7 +349,10 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
 			imageDecision = msg
 		} else {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
+			if strings.TrimSpace(msg) != "" {
+				fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
+			}
+			fmt.Fprintf(os.Stderr, "[dockpipe] image: materializing image artifact (docker)…\n")
 			if err := dockerBuildFn(runOpts.Image, buildDir, buildCtx); err != nil {
 				return err
 			}
@@ -362,7 +365,7 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 				_ = persistCachedImageArtifactForIsolate(o.projectRoot, runOpts.Image, artifact)
 				_ = persistImageArtifactIndexRecord(o.projectRoot, artifact)
 			}
-			imageDecision = "built image artifact for current run"
+			imageDecision = "image: materialized image artifact for current run"
 		}
 	} else if rm != nil {
 		msg, err := ensureCompiledRegistryImageForStep(rm)
@@ -564,8 +567,11 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
 			continue
 		}
+		if strings.TrimSpace(msg) != "" {
+			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
+		}
 		if !buildAnnounced {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
+			fmt.Fprintf(os.Stderr, "[dockpipe] image: materializing image artifact (docker)…\n")
 			buildAnnounced = true
 		}
 		if err := dockerBuildFn(runOpts.Image, buildDir, buildCtx); err != nil {

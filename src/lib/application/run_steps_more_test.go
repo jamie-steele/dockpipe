@@ -260,7 +260,7 @@ func TestRunBlockingStepSkipsBuildWhenCompiledImageArtifactExists(t *testing.T) 
 	if rec.StepID != "step-1" || rec.ImageArtifactDecision == "" {
 		t.Fatalf("unexpected step run policy record: %+v", rec)
 	}
-	if !strings.Contains(rec.ImageArtifactDecision, "using cached image artifact") {
+	if !strings.Contains(rec.ImageArtifactDecision, "image: ready cached image artifact") {
 		t.Fatalf("expected cached image decision, got %+v", rec)
 	}
 }
@@ -381,7 +381,7 @@ func TestMaybeSkipDockerBuildUsesMaterializedImageIndex(t *testing.T) {
 	if !skip {
 		t.Fatal("expected materialized image index to skip docker build")
 	}
-	if !strings.Contains(msg, "using materialized image artifact") {
+	if !strings.Contains(msg, "image: ready materialized image artifact") {
 		t.Fatalf("expected materialized image decision, got %q", msg)
 	}
 }

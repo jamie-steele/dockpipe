@@ -813,7 +813,10 @@ func Run(argv []string, baseEnviron []string) error {
 			fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
 			imageDecision = msg
 		} else {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Building image (docker)…\n")
+			if strings.TrimSpace(msg) != "" {
+				fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", msg)
+			}
+			fmt.Fprintf(os.Stderr, "[dockpipe] image: materializing image artifact (docker)…\n")
 			if err := dockerBuildAppFn(image, buildDir, buildCtx); err != nil {
 				return err
 			}
@@ -827,7 +830,7 @@ func Run(argv []string, baseEnviron []string) error {
 				_ = persistCachedImageArtifactForIsolate(effWd, image, artifact)
 				_ = persistImageArtifactIndexRecord(effWd, artifact)
 			}
-			imageDecision = "built image artifact for current run"
+			imageDecision = "image: materialized image artifact for current run"
 		}
 	} else if compiledWorkflowManifest != nil {
 		msg, err := ensureCompiledRegistryImageForWorkflow(compiledWorkflowManifest)

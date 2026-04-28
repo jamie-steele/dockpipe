@@ -89,8 +89,70 @@ func TestCmdPackageImagesMergesPlannedAndMaterializedArtifacts(t *testing.T) {
 	if records[0].ArtifactState != "materialized" || records[0].ImageRef != "dockpipe-codex:test" {
 		t.Fatalf("unexpected merged image artifact: %+v", records[0])
 	}
+	rows, err := collectPackageImageArtifactRows(dir, func(image string) (bool, error) {
+		if image != "dockpipe-codex:test" {
+			t.Fatalf("unexpected image check %q", image)
+		}
+		return true, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Status != "ready" || rows[0].Artifact.ArtifactState != "materialized" {
+		t.Fatalf("unexpected image artifact rows: %+v", rows)
+	}
+	oldExists := dockerImageExistsAppFn
+	t.Cleanup(func() { dockerImageExistsAppFn = oldExists })
+	dockerImageExistsAppFn = func(string) (bool, error) { return true, nil }
 	if err := cmdPackage([]string{"images", "--workdir", dir}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestCollectPackageImageArtifactRowsDetectsStaleIndex(t *testing.T) {
+	dir := t.TempDir()
+	buildDir := filepath.Join(dir, "src", "core", "assets", "images", "codex")
+	if err := os.MkdirAll(buildDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte("FROM alpine\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	planned, err := buildImageArtifactManifest(dir, "mywf", "mywf", "codex", "dockpipe-codex:test", buildDir, dir, "sha256:policy", domain.ImageArtifactProvenance{Resolver: "codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage := filepath.Join(dir, "stage")
+	manifestDir := filepath.Join(stage, domain.RuntimeManifestDirName)
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(manifestDir, domain.ImageArtifactFileName), planned); err != nil {
+		t.Fatal(err)
+	}
+	pkgDir, err := infrastructure.PackagesWorkflowsDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(pkgDir, "dockpipe-workflow-mywf-1.2.3.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(stage, tgz, "workflows/mywf"); err != nil {
+		t.Fatal(err)
+	}
+	stale := *planned
+	stale.ArtifactState = "materialized"
+	stale.Fingerprint = "sha256:stale"
+	if err := persistImageArtifactIndexRecord(dir, &stale); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := collectPackageImageArtifactRows(dir, func(string) (bool, error) { return true, nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Status != "stale" {
+		t.Fatalf("expected stale row, got %+v", rows)
 	}
 }
 

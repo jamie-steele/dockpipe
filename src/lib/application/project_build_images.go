@@ -84,7 +84,7 @@ func prebuildCompiledImageArtifact(workdir string, artifact *domain.ImageArtifac
 		if err := persistImageArtifactIndexRecord(workdir, artifact); err != nil {
 			return false, err
 		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] image: using local image artifact %s (%s)\n", firstNonEmptyString(strings.TrimSpace(artifact.ImageKey), ref), ref)
+		fmt.Fprintf(os.Stderr, "[dockpipe] image: ready materialized image artifact %s (%s)\n", firstNonEmptyString(strings.TrimSpace(artifact.ImageKey), ref), ref)
 		return false, nil
 	}
 	dockerfilePath := absFromRepoRoot(workdir, strings.TrimSpace(artifact.Build.Dockerfile))
@@ -92,7 +92,7 @@ func prebuildCompiledImageArtifact(workdir string, artifact *domain.ImageArtifac
 	if strings.TrimSpace(dockerfilePath) == "" || strings.TrimSpace(contextPath) == "" {
 		return false, fmt.Errorf("build image artifact %s is missing dockerfile/context", firstNonEmptyString(strings.TrimSpace(artifact.ImageKey), ref))
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] image: building %s (%s)\n", firstNonEmptyString(strings.TrimSpace(artifact.ImageKey), ref), ref)
+	fmt.Fprintf(os.Stderr, "[dockpipe] image: materializing image artifact %s (%s)\n", firstNonEmptyString(strings.TrimSpace(artifact.ImageKey), ref), ref)
 	if err := dockerBuildAppFn(ref, filepath.Dir(dockerfilePath), contextPath); err != nil {
 		return false, err
 	}

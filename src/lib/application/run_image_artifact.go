@@ -71,18 +71,18 @@ func maybeSkipDockerBuildForArtifact(stateWorkdir, repoRoot, wfConfig, wfRoot, s
 			return false, "", err
 		}
 		if !ok {
-			return false, "materialized image artifact found but local image is missing", nil
+			return false, fmt.Sprintf("image: missing materialized image artifact %s: local image is missing", firstNonEmptyString(strings.TrimSpace(indexed.ImageKey), strings.TrimSpace(artifact.ImageKey))), nil
 		}
-		return true, fmt.Sprintf("using materialized image artifact %s", firstNonEmptyString(strings.TrimSpace(indexed.ImageKey), strings.TrimSpace(artifact.ImageKey))), nil
+		return true, fmt.Sprintf("image: ready materialized image artifact %s", firstNonEmptyString(strings.TrimSpace(indexed.ImageKey), strings.TrimSpace(artifact.ImageKey))), nil
 	}
 	ok, err := imageExistsFn(image)
 	if err != nil {
 		return false, "", err
 	}
 	if !ok {
-		return false, "compiled image artifact found but local image is missing", nil
+		return false, fmt.Sprintf("image: missing compiled image artifact %s: local image is missing", strings.TrimSpace(artifact.ImageKey)), nil
 	}
-	return true, fmt.Sprintf("using cached image artifact %s", artifact.ImageKey), nil
+	return true, fmt.Sprintf("image: ready cached image artifact %s", artifact.ImageKey), nil
 }
 
 func loadImageArtifactIndexRecordByFingerprint(workdir, fingerprint string) (*domain.ImageArtifactManifest, error) {
