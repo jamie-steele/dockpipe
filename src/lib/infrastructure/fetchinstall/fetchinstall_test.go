@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -226,6 +227,9 @@ func newIPv4TestServer(t *testing.T, h http.Handler) *httptest.Server {
 	t.Helper()
 	ln, err := net.Listen("tcp4", "127.0.0.1:0")
 	if err != nil {
+		if errors.Is(err, os.ErrPermission) {
+			t.Skipf("loopback listener unavailable in this sandbox: %v", err)
+		}
 		t.Fatal(err)
 	}
 	srv := httptest.NewUnstartedServer(h)

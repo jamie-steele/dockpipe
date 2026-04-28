@@ -68,6 +68,9 @@ func setUserRepoRootForWorktree(env map[string]string, opts *CliOpts, repoURL st
 
 // Run is the CLI entry (after stripping os.Args[0]).
 func Run(argv []string, baseEnviron []string) error {
+	if baseEnviron == nil {
+		baseEnviron = os.Environ()
+	}
 	if len(argv) == 0 {
 		printUsage()
 		return nil
