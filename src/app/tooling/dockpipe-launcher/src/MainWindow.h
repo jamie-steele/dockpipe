@@ -23,6 +23,7 @@ class QActionGroup;
 class BasicModeWidget;
 class QTabWidget;
 class DockerObservabilityWidget;
+class QTimer;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -69,6 +70,7 @@ private:
     void applyUiMode();
     void clearContextList();
     void rebuildAdvancedContextList();
+    void applyAdvancedContextFilter();
     void updateBasicPage();
     bool hasContext(const Context &c) const;
     Context *findContext(const QString &workdir, const QString &workflow, const QString &workflowFile);
@@ -97,6 +99,7 @@ private:
     QListWidget *m_list = nullptr;
     QLabel *m_hint = nullptr;
     QLineEdit *m_search = nullptr;
+    QTimer *m_advancedSearchTimer = nullptr;
     QLabel *m_consoleTitle = nullptr;
     QLabel *m_consoleMeta = nullptr;
     QPlainTextEdit *m_console = nullptr;
@@ -113,6 +116,7 @@ private:
     QWidget *m_disclaimerContainer = nullptr;
     QString m_consoleContextId;
     QVector<WorkflowMeta> m_basicApps;
+    QVector<Context> m_advancedSourceContexts;
     QVector<Context> m_advancedContexts;
     QString m_basicLaunchingContextId;
     QString m_basicLaunchingWorkflowId;

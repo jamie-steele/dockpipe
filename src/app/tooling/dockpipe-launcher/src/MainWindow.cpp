@@ -85,6 +85,18 @@ bool contextMatchesFilter(const Context &c, const QString &filter)
     return haystack.contains(needle);
 }
 
+QString contextDisplayKey(const Context &c)
+{
+    return QStringList{
+        QDir::cleanPath(c.workdir),
+        c.workflow,
+        c.workflowFile,
+        c.label,
+        c.resolver,
+        c.runtime,
+    }.join(QLatin1Char('\x1f'));
+}
+
 QString shellQuote(QString s)
 {
     if (s.isEmpty())
@@ -323,6 +335,11 @@ void MainWindow::setupAdvancedPage(QWidget *page)
     m_search->setPlaceholderText(tr("Search workflows by label, folder, workflow, resolver…"));
     connect(m_search, &QLineEdit::textChanged, this, &MainWindow::onAdvancedSearchChanged);
     contextsRoot->addWidget(m_search);
+
+    m_advancedSearchTimer = new QTimer(this);
+    m_advancedSearchTimer->setSingleShot(true);
+    m_advancedSearchTimer->setInterval(120);
+    connect(m_advancedSearchTimer, &QTimer::timeout, this, &MainWindow::applyAdvancedContextFilter);
 
     auto *splitter = new QSplitter(Qt::Vertical, page);
     splitter->setChildrenCollapsible(false);
@@ -712,16 +729,26 @@ void MainWindow::clearContextList()
 
 void MainWindow::rebuildAdvancedContextList()
 {
+    const bool hasProject = !m_settings.projectFolder.isEmpty();
+    m_advancedSourceContexts.clear();
+    if (hasProject)
+        m_advancedSourceContexts = ContextDiscovery::contextsForWorkdir(m_settings.projectFolder);
+    applyAdvancedContextFilter();
+}
+
+void MainWindow::applyAdvancedContextFilter()
+{
+    QString selectedKey;
+    if (Context *current = currentAdvancedDisplayContext())
+        selectedKey = contextDisplayKey(*current);
+
     clearContextList();
     m_advancedContexts.clear();
 
     const QString filter = m_search ? m_search->text() : QString();
     int visibleCount = 0;
     const bool hasProject = !m_settings.projectFolder.isEmpty();
-    QVector<Context> source;
-    if (hasProject)
-        source = ContextDiscovery::contextsForWorkdir(m_settings.projectFolder);
-    const bool noProjectRows = source.isEmpty();
+    const bool noProjectRows = m_advancedSourceContexts.isEmpty();
 
     if (m_emptyTitle && m_emptyBody) {
         if (!hasProject) {
@@ -737,7 +764,8 @@ void MainWindow::rebuildAdvancedContextList()
         }
     }
 
-    for (Context c : source) {
+    int restoreRow = -1;
+    for (Context c : m_advancedSourceContexts) {
         if (Context *stored = findStoredContextForDisplay(c)) {
             c = *stored;
         } else if (c.dockpipeBinary.trimmed().isEmpty()) {
@@ -758,6 +786,8 @@ void MainWindow::rebuildAdvancedContextList()
         item->setData(Qt::UserRole, m_advancedContexts.size() - 1);
         item->setSizeHint(QSize(0, 76));
         m_list->addItem(item);
+        if (!selectedKey.isEmpty() && contextDisplayKey(c) == selectedKey)
+            restoreRow = m_list->count() - 1;
 
         auto *row = new ContextRowWidget(c, st, running, failed, m_list);
         m_list->setItemWidget(item, row);
@@ -766,6 +796,8 @@ void MainWindow::rebuildAdvancedContextList()
     const bool empty = visibleCount == 0;
     m_emptyState->setVisible(empty);
     m_list->setVisible(!empty);
+    if (restoreRow >= 0)
+        m_list->setCurrentRow(restoreRow);
 }
 
 void MainWindow::rebuildUi()
@@ -789,7 +821,10 @@ void MainWindow::onSessionChanged()
 
 void MainWindow::onAdvancedSearchChanged(const QString &)
 {
-    rebuildAdvancedContextList();
+    if (m_advancedSearchTimer)
+        m_advancedSearchTimer->start();
+    else
+        applyAdvancedContextFilter();
 }
 
 void MainWindow::onAdvancedSelectionChanged()
