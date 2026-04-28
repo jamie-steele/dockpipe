@@ -69,6 +69,10 @@ Details: **[architecture-model.md](architecture-model.md)** · **[isolation-laye
 | Doc | Use when |
 |-----|----------|
 | [workflow-yaml.md](workflow-yaml.md) | Editing **`config.yml`**, **`steps:`**, **`resolver`**, **`strategy`**, **`runtime`** |
+| [workflow-authoring.md](workflow-authoring.md) | Short workflow authoring path before the full reference |
+| [package-quickstart.md](package-quickstart.md) | Compile/package/reuse flow |
+| [security-policy.md](security-policy.md) | Container security profiles and effective policy |
+| [image-artifacts.md](image-artifacts.md) | Docker image build/reuse artifacts |
 | [package-model.md](package-model.md) | Authoring vs packages, **`compile.*`** in **`dockpipe.config.json`**, how workflows relate to resolver/runtime/strategy slices |
 | [cli-reference.md](cli-reference.md) | Flags and precedence |
 | [workflow-yaml.md](workflow-yaml.md) § Chaining | Multiple **`dockpipe`** runs, same workdir |

@@ -2,6 +2,10 @@
 
 DockPipe distinguishes **what you author** (source trees) from **what you ship** (tarballs and the local compile store). This doc describes that split and how **`dockpipe package compile`** / **`dockpipe build`** validate packages.
 
+If you only need the common workflow, start with
+**[package-quickstart.md](package-quickstart.md)**. This file is the detailed
+package/store reference.
+
 ## Canonical layout (mental model)
 
 DockPipe has **three** package/artifact roots. Do not collapse them into one path.
@@ -200,7 +204,8 @@ The Go type **`domain.PackageManifest`** parses these keys; see **`src/lib/domai
 
 **`bin/.dockpipe/internal/packages/`** is the default store for **fetched or compiled** package trees (workflows, core slices, assets) — the same conceptual layout whether content arrived as a **`.tar.gz`** or from **`dockpipe package compile workflow`**. **Uncompressed** authoring under **`workflows/`** remains normal; **compile** validates and **materializes** into **`bin/.dockpipe/internal/...`** when you opt into the packaged path. Resolution order for **`--workflow`** is implemented in **`workflow_dirs.go`** (**`workflows/`** → **packages** → legacy **`templates/`** paths, etc.).
 
-Image artifact metadata is **not** a package payload by default. Use:
+Image artifact metadata is **not** a package payload by default. See
+**[image-artifacts.md](image-artifacts.md)** for the user-facing lifecycle. Use:
 
 - **`bin/.dockpipe/internal/images/`** for project-local image artifact indexes.
 - **`bin/.dockpipe/internal/cache/images/`** for project-local cached image artifact records.

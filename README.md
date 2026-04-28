@@ -1,54 +1,71 @@
 # DockPipe
 
-DockPipe runs anything, anywhere, in isolation.
+DockPipe runs commands and workflows in disposable isolated environments.
 
-## Quick start
+Start with a command. Turn repeatable commands into workflows. Compile/package when
+you want reusable artifacts. Security policy and Docker image artifacts are
+available when you need stricter or faster runs, but they do not have to be the
+first thing you learn.
+
+## Quick Start
 
 ```bash
 make dev-install
 dockpipe init
-dockpipe --workflow test --runtime docker
+dockpipe -- pwd
 ```
 
-Requires **Docker** and **bash**. Use a [release binary](https://github.com/jamie-steele/dockpipe/releases) instead of `make dev-install` when you are not in a clone. **`dockpipe doctor`** checks your setup.
+Requires **Docker** and **bash**. Use a
+[release binary](https://github.com/jamie-steele/dockpipe/releases) instead of
+`make dev-install` when you are not in a clone. `dockpipe doctor` checks your
+setup.
 
-Your project is mounted at **`/work`** in a disposable container; when the command exits, the container is gone.
+Your project is mounted at `/work` in a disposable container. When the command
+exits, the container is gone.
 
-## Core tools in this repo
+## Product Story
 
-The **DockPipe** CLI is **`src/cmd/`** (entry) and **`src/lib/`**. **Pipeon** host apps live under **`packages/pipeon/apps/`**. **Pipeon**, **DorkPipe**, and **MCP** are first-party under **`packages/`** (`pipeon`, `dorkpipe`, `dorkpipe-mcp`). Optional **IDE** resolver trees may live under **`packages/`** or maintainer-only dirs — see **[docs/core-tools.md](docs/core-tools.md)**. **`make build`** produces **`src/bin/dockpipe.bin`** (launcher **`src/bin/dockpipe`**). **`make maintainer-tools`** builds **`packages/dorkpipe/bin/dorkpipe`** and **`packages/dorkpipe-mcp/bin/mcpd`**. Running this repo on itself is **`./src/bin/dockpipe --workflow <name> --workdir . --`** once packages are compiled into **`.dockpipe/`** like any project. See also **[packages/pipeon/apps/README.md](packages/pipeon/apps/README.md)**.
+| Need | Start here |
+|------|------------|
+| Run one command in isolation | `dockpipe -- <command>` |
+| Reuse a sequence of commands | `workflows/<name>/config.yml` |
+| Pick where/how it runs | `runtime` + `resolver` |
+| Run something on the host | `kind: host` |
+| Reuse/share workflows | `dockpipe build` and package metadata |
+| Harden or speed up container runs | `security` and image artifacts |
 
-## Concepts
+## Tiny Workflow
 
-| Term | Meaning |
-|------|---------|
-| **Workflow** | What happens — steps and structure in `config.yml`. |
-| **Runtime** | Where execution runs. |
-| **Resolver** | Which tool or platform. |
-| **Strategy** | Optional before/after hooks on the host. |
-| **Assets** | Shared scripts, images, and compose (bundled with DockPipe). |
+```yaml
+name: test
+runtime: dockerimage
+resolver: codex
 
-Single command: **`dockpipe -- <command>`**. Add **`--workflow`**, **`--runtime`**, or **`--resolver`** when you use named presets.
+steps:
+  - cmd: npm test
+```
 
-## Example
+Run it with:
 
 ```bash
-dockpipe --isolate agent-dev -- npm test
+dockpipe --workflow test --
 ```
 
 ## Docs
 
-**Index:** [docs/README.md](docs/README.md)
+| Goal | Doc |
+|------|-----|
+| First run | [docs/onboarding.md](docs/onboarding.md) |
+| Write workflow YAML | [docs/workflow-authoring.md](docs/workflow-authoring.md) |
+| Full workflow reference | [docs/workflow-yaml.md](docs/workflow-yaml.md) |
+| Compile/package reusable artifacts | [docs/package-quickstart.md](docs/package-quickstart.md) |
+| Package/store model | [docs/package-model.md](docs/package-model.md) |
+| Security policy | [docs/security-policy.md](docs/security-policy.md) |
+| Docker image artifacts | [docs/image-artifacts.md](docs/image-artifacts.md) |
+| CLI reference | [docs/cli-reference.md](docs/cli-reference.md) |
+| Architecture terms | [docs/architecture-model.md](docs/architecture-model.md) |
 
-| | |
-|--|--|
-| Install | [docs/install.md](docs/install.md) |
-| Workflow YAML | [docs/workflow-yaml.md](docs/workflow-yaml.md) |
-| CLI | [docs/cli-reference.md](docs/cli-reference.md) |
-| Terms (full definitions) | [docs/architecture-model.md](docs/architecture-model.md) |
-| Capabilities & resolver packages | [docs/capabilities.md](docs/capabilities.md) |
-| Onboarding | [docs/onboarding.md](docs/onboarding.md) |
-| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
+Full index: [docs/README.md](docs/README.md).
 
 ## Development
 
@@ -56,31 +73,22 @@ dockpipe --isolate agent-dev -- npm test
 make dev-deps
 make dev-install
 make test        # fastest: Go tests only
-make test-quick  # Go + path guard + bash unit tests (no Docker)
-make ci          # full Linux CI mirror (govulncheck, gosec, Docker, integration — see src/scripts/ci-local.sh)
-# same thing via DockPipe:
-./src/bin/dockpipe --workflow ci-emulate --workdir . --
+make test-quick  # Go + path guard + bash unit tests
+make ci          # full Linux CI mirror
 ```
 
-**Accelerator (this repo):** same as any DockPipe project — compile what you need into **`.dockpipe/`**, then run by workflow name. After **`make build`**:
-
-| Workflow | Example |
-|----------|---------|
-| **`dorkpipe-self-analysis`** | `./src/bin/dockpipe --workflow dorkpipe-self-analysis --workdir . --` |
-| **`dorkpipe-self-analysis-stack`** | Compose sidecars (set **`DORKPIPE_DEV_STACK_AUTODOWN=0`** to leave Postgres+Ollama up) |
-| **`dorkpipe-self-analysis-host`** | Host-only, no Docker |
-| **`compliance-handoff`** | Print CI + self-analysis **signal paths** — **`docs/artifacts.md`** |
-
-See the **`dorkpipe`** maintainer package **`README.md`** (resolver **`dorkpipe-self-analysis`**).
+After `make build`, this repo can dogfood DockPipe like any project:
 
 ```bash
-./src/bin/dockpipe --workflow dorkpipe-self-analysis --workdir . --
+./src/bin/dockpipe --workflow <name> --workdir . --
 ```
 
-Contributors: **`make dev-deps`** installs **govulncheck** and **gosec** (CI parity) and tries **user-level** installs for **asciinema** + **agg** (for **`make demo-record`**). None of this is required to use DockPipe. For demo tools only: **`make install-record-deps`**.
-
-Optional **Codex** workflows in CI (when **`DOCKPIPE_CI_CODEX=true`**): `DOCKPIPE_CI_CODEX=true OPENAI_API_KEY=... make ci`.
+Maintainer-specific tools such as DorkPipe, Pipeon, and MCP live under
+`packages/`; see [docs/core-tools.md](docs/core-tools.md) when working on those
+first-party packages.
 
 ## Disclaimer
 
-DockPipe is **open-source** (Apache-2.0). It runs **commands in containers** and can run **scripts on the host**; review what you execute. **Pre-1.0:** flags and behavior may change between releases.
+DockPipe is open-source (Apache-2.0). It runs commands in containers and can run
+scripts on the host; review what you execute. Pre-1.0: flags and behavior may
+change between releases.

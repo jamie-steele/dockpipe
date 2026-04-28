@@ -2,6 +2,10 @@
 
 **Workflow YAML** for **`--workflow <name>`** resolves to **`workflows/<name>/config.yml`** (when present), then **nested** **`config.yml`** under any directory listed in **`dockpipe.config.json` `compile.workflows`** (same roots **`dockpipe package compile workflows`** uses), then **`src/core/workflows/<name>/config.yml`** (bundled examples in a dockpipe checkout), or **`templates/<name>/config.yml`** (legacy project layout). The **materialized bundle cache** still uses a **`bundle/workflows/`** layout on disk (see **[install.md](install.md#bundled-templates-no-extra-install-tree)**).
 
+If you are new to authoring workflows, start with
+**[workflow-authoring.md](workflow-authoring.md)**. This file is the fuller YAML
+reference.
+
 ## Recommended mental model
 
 For most users, the main concepts are:
@@ -149,7 +153,7 @@ Public authoring fields:
 - `process.pid_limit`
 - `process.resources.cpu`, `process.resources.memory`
 
-DockPipe compiles this into an effective runtime policy manifest and derives the actual enforcement mode there. Public workflow YAML does **not** set raw Docker security options or the low-level network enforcement mechanism directly.
+DockPipe compiles this into an effective runtime policy manifest and derives the actual enforcement mode there. Public workflow YAML does **not** set raw Docker security options or the low-level network enforcement mechanism directly. See **[security-policy.md](security-policy.md)** for the policy model.
 
 ---
 

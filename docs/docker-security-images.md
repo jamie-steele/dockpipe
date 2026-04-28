@@ -1,6 +1,7 @@
-# Docker Security Policy and Image Artifacts
+# Docker Security Policy and Image Artifacts Design Notes
 
-Status: proposed maintainer design for DockPipe engine work.
+Status: advanced design/history notes. For reader-facing docs, start with
+[security-policy.md](security-policy.md) and [image-artifacts.md](image-artifacts.md).
 
 This document describes two linked enhancements:
 
@@ -39,7 +40,9 @@ That keeps the system inspectable, cacheable, and explainable.
 
 ### Authoring layer
 
-Workflows gain a higher-level `runtime.security` and `runtime.image` section.
+Workflows use top-level or step-level `security` policy. Package metadata may
+declare an OCI `image` reference. Compile folds both into effective runtime/image
+manifests.
 
 The public surface stays product-shaped:
 

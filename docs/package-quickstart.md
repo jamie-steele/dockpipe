@@ -1,0 +1,95 @@
+# Package Quickstart
+
+You do not need packages to use DockPipe. Source workflows under `workflows/`
+are the low-friction authoring path.
+
+Use package/build commands when you want reusable, inspectable artifacts:
+
+1. **Source mode** — edit `workflows/<name>/config.yml` and run it directly.
+2. **Compile** — validate and emit package/runtime/security/image manifests.
+3. **Build** — compile, then materialize Dockerfile-backed image artifacts.
+4. **Run** — consume local artifacts; rebuild/pull only when policy allows and
+   the artifact is missing or stale.
+
+For the full store layout, see [package-model.md](package-model.md).
+
+## Compile A Workflow Package
+
+```bash
+dockpipe package compile workflow workflows/test --workdir .
+```
+
+Compiled workflow tarballs land under:
+
+```text
+bin/.dockpipe/internal/packages/workflows/
+```
+
+Compile emits planned runtime/security/image manifests, but it does not run
+Docker builds.
+
+## Build Local Artifacts
+
+```bash
+dockpipe build
+```
+
+`dockpipe build` runs `compile all --force`, then prebuilds Dockerfile-backed
+image artifacts by default. Materialized image receipts land under:
+
+```text
+bin/.dockpipe/internal/images/by-fingerprint/
+```
+
+Use this when you want later runs to skip rebuilding valid images:
+
+```bash
+dockpipe --workflow test --
+```
+
+If you only want manifests/package materialization:
+
+```bash
+dockpipe build --no-images
+```
+
+## Inspect Packages And Images
+
+```bash
+dockpipe package list
+dockpipe package images
+```
+
+`dockpipe package images` merges planned image artifacts from compiled workflow
+tarballs with materialized/cached fingerprint receipts.
+
+Status meanings:
+
+| Status | Meaning |
+|--------|---------|
+| `ready` | Receipt exists and Docker has the image. |
+| `missing` | Receipt exists, but the Docker image is gone. |
+| `stale` | Compiled planned artifact no longer matches the receipt. |
+| `planned` | Compile selected an image artifact, but it is not materialized. |
+| `referenced` | Registry image reference; layers live in Docker/OCI. |
+| `docker-error` | Docker check failed; the inspect command stays non-fatal. |
+
+## Install/Publish Network Boundary
+
+Normal runs should not need network after artifacts are local unless the workflow
+itself needs network. Network-facing operations should be explicit:
+
+- `dockpipe install core`
+- future package install commands
+- `dockpipe release upload`
+- workflow commands that intentionally call APIs or registries
+
+Package metadata can point at a normal OCI image reference, but compile folds
+that into runtime/image manifests. Run then reuses local images, pulls only when
+the compiled pull policy and network policy allow it, or fails clearly.
+
+## What Stays Advanced
+
+The package model also covers global installs, published tarballs, namespace
+resolution, dependency hints, and exact store layout. Keep those details in
+[package-model.md](package-model.md) unless you are building package tooling.

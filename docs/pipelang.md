@@ -26,7 +26,7 @@ Not supported in this version:
 Compile artifacts:
 
 ```bash
-dockpipe pipelang compile --in workflows/mywf/model.pipe --entry DefaultDeployConfig --out .dockpipe/pipelang
+dockpipe pipelang compile --in workflows/mywf/model.pipe --entry DefaultDeployConfig --out bin/.dockpipe/pipelang
 ```
 
 Invoke method via CLI:
@@ -51,7 +51,7 @@ Compile emits:
 `bindings.env` is intended for direct script consumption:
 
 ```bash
-source .dockpipe/pipelang/DefaultDeployConfig.bindings.env
+source bin/.dockpipe/pipelang/DefaultDeployConfig.bindings.env
 echo "$PIPELANG_IMAGE"
 ```
 
