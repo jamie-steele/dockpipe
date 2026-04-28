@@ -2,6 +2,8 @@ package infrastructure
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io/fs"
 	"os"
@@ -147,10 +149,17 @@ func extractBundledToCache() (string, error) {
 	dest := filepath.Join(cacheBase, BundledCacheParentDir, "bundled-"+ver)
 	cfgPath := filepath.Join(dest, BundledLayoutDir, "workflows", "run", "config.yml")
 	formatPath := filepath.Join(dest, ".bundled-format")
+	fingerprintPath := filepath.Join(dest, ".bundled-fingerprint")
+	fingerprint, err := embeddedBundleFingerprint()
+	if err != nil {
+		return "", err
+	}
 	if st, err := os.Stat(cfgPath); err == nil && !st.IsDir() {
 		if b, err := os.ReadFile(filepath.Join(dest, "version")); err == nil && strings.TrimSpace(string(b)) == ver {
 			if fb, err := os.ReadFile(formatPath); err == nil && strings.TrimSpace(string(fb)) == bundledFormatVersion {
-				return dest, nil
+				if fpb, err := os.ReadFile(fingerprintPath); err == nil && strings.TrimSpace(string(fpb)) == fingerprint {
+					return dest, nil
+				}
 			}
 		}
 	}
@@ -172,7 +181,39 @@ func extractBundledToCache() (string, error) {
 	if err := os.WriteFile(formatPath, []byte(bundledFormatVersion+"\n"), 0o644); err != nil {
 		return "", err
 	}
+	if err := os.WriteFile(fingerprintPath, []byte(fingerprint+"\n"), 0o644); err != nil {
+		return "", err
+	}
 	return dest, nil
+}
+
+func embeddedBundleFingerprint() (string, error) {
+	var paths []string
+	if err := fs.WalkDir(dockpipe.BundledFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		paths = append(paths, path)
+		return nil
+	}); err != nil {
+		return "", fmt.Errorf("walk embedded bundle: %w", err)
+	}
+	sort.Strings(paths)
+	h := sha256.New()
+	for _, path := range paths {
+		b, err := fs.ReadFile(dockpipe.BundledFS, path)
+		if err != nil {
+			return "", fmt.Errorf("read embedded bundle %s: %w", path, err)
+		}
+		_, _ = h.Write([]byte(path))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(b)
+		_, _ = h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // bundledCacheBase is the parent directory for <cache>/<BundledCacheParentDir>/bundled-<version> (default: user cache dir).
