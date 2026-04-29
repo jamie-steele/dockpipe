@@ -22,6 +22,16 @@ if ! grep -Fq '::dockpipe-prompt::{"type":"confirm","id":"gpu_setup"' "$confirm_
   exit 1
 fi
 
+system_change_out="$(
+  DOCKPIPE_APPROVE_PROMPTS=1 bash -lc \
+    'source "$1"; dockpipe_sdk prompt confirm --id host_mutation --title "Host change" --message "Mutate host?" --intent host-mutation --automation-group system-changes --allow-auto-approve --auto-approve-value yes' \
+    _ "$SDK"
+)"
+if [[ "$system_change_out" != "yes" ]]; then
+  echo "test_sdk_prompt: expected prompt confirm to auto-approve under DOCKPIPE_APPROVE_PROMPTS=1" >&2
+  exit 1
+fi
+
 input_stderr="$TMPDIR/input.stderr"
 input_out="$(
   printf 'super-secret token\n' | DOCKPIPE_SDK_PROMPT_MODE=json bash -lc \

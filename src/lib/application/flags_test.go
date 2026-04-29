@@ -139,6 +139,16 @@ func TestParseFlagsTf(t *testing.T) {
 	}
 }
 
+func TestParseFlagsApproveSystemChanges(t *testing.T) {
+	_, o, err := ParseFlags("/tmp/repo", []string{"--workflow", "demo", "--yes"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !o.ApproveSystemChanges {
+		t.Fatalf("ApproveSystemChanges not set: %+v", o)
+	}
+}
+
 // TestParseFlagsUnknownOption errors on unrecognized flags.
 func TestParseFlagsUnknownOption(t *testing.T) {
 	_, _, err := ParseFlags("/tmp/repo", []string{"--def-not-real"})

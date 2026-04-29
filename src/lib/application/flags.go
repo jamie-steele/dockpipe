@@ -18,34 +18,35 @@ func isPosixAbsPath(p string) bool {
 
 // CliOpts holds parsed CLI flags (before --).
 type CliOpts struct {
-	Help          bool
-	Detach        bool
-	Force         bool
-	Reinit        bool
-	DataVolume    string
-	DataDir       string
-	NoData        bool
-	PreScripts    []string
-	Isolate       string
-	Action        string
-	Workflow      string
-	WorkflowFile  string
-	WorkflowsDir  string
-	Workdir       string
-	RepoURL       string
-	RepoBranch    string
-	WorkPath      string
-	WorkBranch    string
-	BundleOut     string
-	Runtime       string
-	Resolver      string
-	Strategy      string
-	ExtraMounts   []string
-	ExtraEnvLines []string
-	EnvFiles      []string
-	VarOverrides  []string
-	NoOpInject    bool // skip vault env resolution via op inject (when dockpipe.config.json sets op_inject_template)
-	BuildPath     string
+	Help                 bool
+	Detach               bool
+	ApproveSystemChanges bool
+	Force                bool
+	Reinit               bool
+	DataVolume           string
+	DataDir              string
+	NoData               bool
+	PreScripts           []string
+	Isolate              string
+	Action               string
+	Workflow             string
+	WorkflowFile         string
+	WorkflowsDir         string
+	Workdir              string
+	RepoURL              string
+	RepoBranch           string
+	WorkPath             string
+	WorkBranch           string
+	BundleOut            string
+	Runtime              string
+	Resolver             string
+	Strategy             string
+	ExtraMounts          []string
+	ExtraEnvLines        []string
+	EnvFiles             []string
+	VarOverrides         []string
+	NoOpInject           bool // skip vault env resolution via op inject (when dockpipe.config.json sets op_inject_template)
+	BuildPath            string
 	// CompileDeps is legacy: transitive compile for --workflow is on by default when env is unset.
 	CompileDeps bool
 	// NoCompileDeps skips the default pre-run package compile for-workflow (see compileDepsWanted).
@@ -70,6 +71,9 @@ func ParseFlags(repoRoot string, argv []string) ([]string, *CliOpts, error) {
 			i++
 		case "-d", "--detach":
 			o.Detach = true
+			i++
+		case "-y", "--yes", "--approve-system-changes":
+			o.ApproveSystemChanges = true
 			i++
 		case "-f", "--force":
 			o.Force = true

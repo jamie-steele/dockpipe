@@ -51,7 +51,20 @@ PromptDialog::PromptDialog(const Spec &spec, QWidget *parent)
     cardLay->setContentsMargins(20, 20, 20, 20);
     cardLay->setSpacing(12);
 
-    auto *eyebrow = new QLabel(tr("Action Required"), card);
+    QString eyebrowText = tr("Action Required");
+    QString hintText;
+    if (spec.intent == QStringLiteral("host-mutation")) {
+        eyebrowText = tr("System Change");
+        hintText = tr("This action may install software, change local configuration, or restart services.");
+    } else if (spec.intent == QStringLiteral("destructive")) {
+        eyebrowText = tr("Review Carefully");
+        hintText = tr("This action may overwrite or remove existing state.");
+    } else if (spec.intent == QStringLiteral("credential-use")) {
+        eyebrowText = tr("Credential Use");
+        hintText = tr("This action will use configured credentials to access an external service.");
+    }
+
+    auto *eyebrow = new QLabel(eyebrowText, card);
     eyebrow->setObjectName(QStringLiteral("promptEyebrow"));
 
     auto *title = new QLabel(spec.title.isEmpty() ? tr("DockPipe Prompt") : spec.title, card);
@@ -65,6 +78,12 @@ PromptDialog::PromptDialog(const Spec &spec, QWidget *parent)
     cardLay->addWidget(eyebrow);
     cardLay->addWidget(title);
     cardLay->addWidget(body);
+    if (!hintText.isEmpty()) {
+        auto *hint = new QLabel(hintText, card);
+        hint->setObjectName(QStringLiteral("promptHint"));
+        hint->setWordWrap(true);
+        cardLay->addWidget(hint);
+    }
 
     outer->addWidget(card);
 

@@ -151,6 +151,15 @@ __dockpipe_sdk_json_escape() {
   printf '%s' "$value"
 }
 
+__dockpipe_sdk_truthy() {
+  case "${1:-}" in
+    1|true|TRUE|True|yes|YES|Yes|y|Y|on|ON|On)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 __dockpipe_sdk_prompt_mode() {
   if [[ "${DOCKPIPE_SDK_PROMPT_MODE:-}" == "json" ]]; then
     printf 'json\n'
@@ -170,7 +179,11 @@ __dockpipe_sdk_emit_prompt_event() {
   local message="$4"
   local default_value="$5"
   local sensitive="$6"
-  shift 6 || true
+  local intent="$7"
+  local automation_group="$8"
+  local allow_auto_approve="$9"
+  local auto_approve_value="${10}"
+  shift 10 || true
   local options=("$@")
   local options_json="" opt
   for opt in "${options[@]}"; do
@@ -180,13 +193,17 @@ __dockpipe_sdk_emit_prompt_event() {
     options_json+="\"$(__dockpipe_sdk_json_escape "$opt")\""
   done
 
-  printf '::dockpipe-prompt::{"type":"%s","id":"%s","title":"%s","message":"%s","default":"%s","sensitive":%s,"options":[%s]}\n' \
+  printf '::dockpipe-prompt::{"type":"%s","id":"%s","title":"%s","message":"%s","default":"%s","sensitive":%s,"intent":"%s","automation_group":"%s","allow_auto_approve":%s,"auto_approve_value":"%s","options":[%s]}\n' \
     "$(__dockpipe_sdk_json_escape "$prompt_type")" \
     "$(__dockpipe_sdk_json_escape "$prompt_id")" \
     "$(__dockpipe_sdk_json_escape "$title")" \
     "$(__dockpipe_sdk_json_escape "$message")" \
     "$(__dockpipe_sdk_json_escape "$default_value")" \
     "$sensitive" \
+    "$(__dockpipe_sdk_json_escape "$intent")" \
+    "$(__dockpipe_sdk_json_escape "$automation_group")" \
+    "$allow_auto_approve" \
+    "$(__dockpipe_sdk_json_escape "$auto_approve_value")" \
     "$options_json" >&2
 }
 
@@ -277,6 +294,7 @@ __dockpipe_sdk_prompt() {
   shift || true
 
   local prompt_id="" title="" message="" default_value="" sensitive="false"
+  local intent="" automation_group="" allow_auto_approve="false" auto_approve_value=""
   local options=()
 
   while [[ $# -gt 0 ]]; do
@@ -301,6 +319,22 @@ __dockpipe_sdk_prompt() {
         options+=("${2:-}")
         shift 2 || true
         ;;
+      --intent)
+        intent="${2:-}"
+        shift 2 || true
+        ;;
+      --automation-group)
+        automation_group="${2:-}"
+        shift 2 || true
+        ;;
+      --allow-auto-approve)
+        allow_auto_approve="true"
+        shift
+        ;;
+      --auto-approve-value)
+        auto_approve_value="${2:-}"
+        shift 2 || true
+        ;;
       --secret|--sensitive)
         sensitive="true"
         shift
@@ -319,9 +353,32 @@ __dockpipe_sdk_prompt() {
     message="$title"
   fi
 
+  if [[ "$allow_auto_approve" == "true" ]] && __dockpipe_sdk_truthy "${DOCKPIPE_APPROVE_PROMPTS:-}"; then
+    if [[ -n "$auto_approve_value" ]]; then
+      printf '%s\n' "$auto_approve_value"
+      return 0
+    fi
+    if [[ -n "$default_value" ]]; then
+      printf '%s\n' "$default_value"
+      return 0
+    fi
+    case "$prompt_type" in
+      confirm)
+        printf 'yes\n'
+        return 0
+        ;;
+      choice)
+        if [[ ${#options[@]} -gt 0 ]]; then
+          printf '%s\n' "${options[0]}"
+          return 0
+        fi
+        ;;
+    esac
+  fi
+
   case "$(__dockpipe_sdk_prompt_mode)" in
     json)
-      __dockpipe_sdk_emit_prompt_event "$prompt_type" "$prompt_id" "$title" "$message" "$default_value" "$sensitive" "${options[@]}"
+      __dockpipe_sdk_emit_prompt_event "$prompt_type" "$prompt_id" "$title" "$message" "$default_value" "$sensitive" "$intent" "$automation_group" "$allow_auto_approve" "$auto_approve_value" "${options[@]}"
       __dockpipe_sdk_prompt_read_json_response
       ;;
     terminal)

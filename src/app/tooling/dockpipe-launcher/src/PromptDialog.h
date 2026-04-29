@@ -13,6 +13,8 @@ public:
         QString title;
         QString message;
         QString defaultValue;
+        QString intent;
+        QString automationGroup;
         QStringList options;
         bool sensitive = false;
     };

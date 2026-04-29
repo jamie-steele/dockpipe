@@ -310,6 +310,22 @@ dorkpipe_stack_configure_gpu() {
             )" || return 1
             case "$gpu_choice" in
               "Enable Docker GPU access")
+                local gpu_approval
+                gpu_approval="$(
+                  dockpipe_sdk prompt confirm \
+                    --id dorkpipe_enable_docker_gpu_access_confirm \
+                    --title "Allow Docker GPU Setup?" \
+                    --message "DockPipe will try to change this system by installing GPU container support, updating Docker runtime configuration, and restarting Docker. Continue?" \
+                    --default no \
+                    --intent host-mutation \
+                    --automation-group system-changes \
+                    --allow-auto-approve \
+                    --auto-approve-value yes
+                )" || return 1
+                if [[ "$gpu_approval" != "yes" ]]; then
+                  DORKPIPE_DEV_STACK_PROMPT_RESULT="cancelled"
+                  return 0
+                fi
                 printf '[dorkpipe-dev-stack] Ollama GPU: attempting to enable Docker GPU access...\n' >&2
                 if dorkpipe_stack_try_enable_docker_gpu_access; then
                   dorkpipe_stack_write_gpu_override

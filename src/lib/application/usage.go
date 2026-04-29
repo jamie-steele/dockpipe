@@ -39,6 +39,7 @@ var mainUsageSections = []usageSection{
 			{"--workflow <name>", "Workflow to run (e.g. test)"},
 			{"--no-compile-deps", "Skip the default pre-run transitive compile (package compile for-workflow). Env: DOCKPIPE_COMPILE_DEPS=0"},
 			{"--compile-deps", "No-op (kept for compatibility); transitive compile is default when env is unset"},
+			{"-y, --yes", "Approve package/SDK auto-approvable prompts for automation (sets DOCKPIPE_APPROVE_PROMPTS=1)"},
 			{"--runtime <name>", "Runtime profile (e.g. docker)"},
 			{"--resolver <name>", "Resolver profile (optional)"},
 		},

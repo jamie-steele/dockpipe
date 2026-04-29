@@ -65,7 +65,10 @@ eval "$(dockpipe sdk)"
 dockpipe_sdk init-script
 ```
 
-The shell SDK also exposes a small prompt primitive for package-owned setup and remediation flows:
+The SDK prompt contract is shared across shell, PowerShell, Python, and Go helpers. Shell exposes it
+through `dockpipe_sdk ...`, while the other helper libraries expose matching prompt functions.
+
+The shell SDK exposes a small prompt primitive for package-owned setup and remediation flows:
 
 ```bash
 answer="$(dockpipe_sdk prompt confirm \
@@ -80,6 +83,10 @@ Prompt behavior:
 - In a normal terminal, `dockpipe_sdk prompt ...` renders an interactive CLI prompt and returns the answer on stdout.
 - Under the DockPipe Launcher, the shell SDK emits a structured prompt event (`DOCKPIPE_SDK_PROMPT_MODE=json`), the launcher renders native UI, and the selected answer is written back to the running workflow.
 - Supported prompt kinds today: `confirm`, `choice`, `input`.
+- Prompt metadata can classify author intent with options like `--intent`, `--automation-group`,
+  `--allow-auto-approve`, and `--auto-approve-value`.
+- Automation can bypass prompts that explicitly opt in to auto-approval with `dockpipe --yes` or
+  `DOCKPIPE_APPROVE_PROMPTS=1`.
 
 The getter path avoids hard-coding source paths or manual root resolution in package scripts. The command prefers `DOCKPIPE_WORKDIR` when it is already set by a workflow and otherwise falls back to the current directory. The shared core SDK is the source of truth for authoring support in shell/PowerShell/Python/Go.
 

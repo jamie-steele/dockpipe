@@ -262,6 +262,7 @@ func Run(argv []string, baseEnviron []string) error {
 			domain.MergeIfUnset(envMap, map[string]string{"DOCKPIPE_WORKFLOW_NAME": wn})
 		}
 	}
+	mergePromptSafetyCLIIntoEnv(envMap, opts)
 	if err := mergeTerraformCLIIntoEnv(envMap, opts); err != nil {
 		return fmt.Errorf("terraform flags: %w", err)
 	}

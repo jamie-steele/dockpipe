@@ -858,6 +858,8 @@ void MainWindow::onSessionPrompt(const QString &contextId, const QString &payloa
     const QString title = obj.value(QStringLiteral("title")).toString(tr("DockPipe Prompt"));
     const QString message = obj.value(QStringLiteral("message")).toString();
     const QString defaultValue = obj.value(QStringLiteral("default")).toString();
+    const QString intent = obj.value(QStringLiteral("intent")).toString();
+    const QString automationGroup = obj.value(QStringLiteral("automation_group")).toString();
     const bool sensitive = obj.value(QStringLiteral("sensitive")).toBool(false);
 
     QStringList items;
@@ -870,7 +872,7 @@ void MainWindow::onSessionPrompt(const QString &contextId, const QString &payloa
 
     QString response = defaultValue;
     if (type == QStringLiteral("confirm") || type == QStringLiteral("input") || type == QStringLiteral("choice")) {
-        PromptDialog dialog({type, title, message, defaultValue, items, sensitive}, this);
+        PromptDialog dialog({type, title, message, defaultValue, intent, automationGroup, items, sensitive}, this);
         dialog.exec();
         response = dialog.response();
     } else {
