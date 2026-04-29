@@ -93,3 +93,41 @@ the compiled pull policy and network policy allow it, or fails clearly.
 The package model also covers global installs, published tarballs, namespace
 resolution, dependency hints, and exact store layout. Keep those details in
 [package-model.md](package-model.md) unless you are building package tooling.
+
+## Package Author Safety
+
+When a package script may change the user’s machine or local tool state, prefer
+an explicit DockPipe prompt before doing it.
+
+Examples:
+
+- installing software or host dependencies
+- changing Docker or other daemon configuration
+- restarting services
+- updating WSL / Docker Desktop prerequisites
+- writing local credential state such as `docker login`
+
+Use the SDK prompt primitive and classify the prompt with metadata so the
+launcher can present it clearly and automation can bypass it deliberately:
+
+```bash
+dockpipe_sdk prompt confirm \
+  --id enable_gpu_setup \
+  --title "Allow Docker GPU Setup?" \
+  --message "DockPipe will install GPU container support, update Docker config, and restart Docker. Continue?" \
+  --default no \
+  --intent host-mutation \
+  --automation-group system-changes \
+  --allow-auto-approve \
+  --auto-approve-value yes
+```
+
+Guidance:
+
+- prompt before the mutation, not after detection
+- keep the message explicit about what will change
+- use `--intent` / `--automation-group` metadata for transparency
+- only opt into `--allow-auto-approve` when the workflow is safe to run under explicit automation approval such as `dockpipe --yes`
+
+DockPipe can provide the prompt path and the automation override, but package
+authors still need to choose to use it in the flows they own.

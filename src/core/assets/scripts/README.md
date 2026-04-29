@@ -88,6 +88,10 @@ Prompt behavior:
 - Automation can bypass prompts that explicitly opt in to auto-approval with `dockpipe --yes` or
   `DOCKPIPE_APPROVE_PROMPTS=1`.
 
+For package authors: use prompts before host-mutating actions or local credential writes that are not
+already obvious from the command itself. The framework can surface and auto-approve those prompts,
+but it cannot force a package author to emit them.
+
 The getter path avoids hard-coding source paths or manual root resolution in package scripts. The command prefers `DOCKPIPE_WORKDIR` when it is already set by a workflow and otherwise falls back to the current directory. The shared core SDK is the source of truth for authoring support in shell/PowerShell/Python/Go.
 
 **Resolver-specific** host scripts live **only** under **`templates/core/resolvers/<name>/`** (next to **`config.yml`**). **`ResolveWorkflowScript`** maps **`scripts/cursor-dev/…`** and **`scripts/vscode/…`** to those paths — nothing duplicate under **`assets/scripts/`** for those names.

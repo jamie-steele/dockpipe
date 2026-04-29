@@ -102,6 +102,21 @@ if [[ "$DRY_RUN" == "1" ]]; then
 fi
 
 if [[ "$LOGIN_SKIP" != "1" ]]; then
+  login_approval="$(
+    dockpipe_sdk prompt confirm \
+      --id ghcr_registry_login \
+      --title "Allow Registry Login?" \
+      --message "DockPipe will log into ${REGISTRY} with ${CONTAINER_CLI}, which may update local registry credentials on this machine. Continue?" \
+      --default no \
+      --intent credential-use \
+      --automation-group registry-login \
+      --allow-auto-approve \
+      --auto-approve-value yes
+  )" || exit 1
+  if [[ "$login_approval" != "yes" ]]; then
+    echo "${WF_NS}: cancelled before registry login" >&2
+    exit 0
+  fi
   printf '%s\n' "$TOKEN" | "$CONTAINER_CLI" login "$REGISTRY" -u "$USERNAME" --password-stdin
 fi
 

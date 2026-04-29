@@ -8,6 +8,10 @@ This workflow does **not** build the image. It expects a local source image to a
 - retags the local image for the target GHCR repository
 - pushes one or more tags
 
+When login is enabled, DockPipe now prompts before calling the container CLI login path because that
+may update the local credential store. Automation can explicitly bypass that prompt with
+**`dockpipe --yes`**.
+
 Implementation lives beside this workflow as the logical script id:
 
 - **`scripts/dockpipe.github.ghcrpush/ghcr-push.sh`**
@@ -22,6 +26,12 @@ export GHCR_USERNAME="$GITHUB_ACTOR"
 export GHCR_TOKEN="$GITHUB_TOKEN"
 
 dockpipe --workflow dockpipe.github.ghcrpush
+```
+
+For CI / automation:
+
+```bash
+dockpipe --yes --workflow dockpipe.github.ghcrpush
 ```
 
 ## Single fully tagged push
