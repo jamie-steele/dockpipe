@@ -1,0 +1,28 @@
+name: dockpipe.github.ghcrpush
+namespace: dockpipe-github
+description: >-
+  Retag a local OCI/container image and push it to GitHub Container Registry via
+  scripts/dockpipe.github.ghcrpush/ghcr-push.sh. Build happens elsewhere; this workflow owns
+  login, tag, dry-run, and push behavior.
+
+docker_preflight: false
+
+types:
+  - models/IGHCRPushConfig
+
+vars:
+  GHCR_CONTAINER_CLI: "docker"  # docker or podman-compatible cli used for login/tag/push
+  GHCR_IMAGE_SOURCE: ""  # required; local source image reference to retag/push
+  GHCR_IMAGE_TARGET: ""  # required; target repo or full ref (for example ghcr.io/owner/app or ghcr.io/owner/app:v1)
+  GHCR_LOGIN_SKIP: "0"  # 1 = skip registry login (use existing docker/podman auth)
+  GHCR_PUSH_DRY_RUN: "0"  # 1 = print the planned login/tag/push steps only
+  GHCR_REGISTRY: "ghcr.io"  # registry host; defaults to GitHub Container Registry
+  GHCR_TAGS: ""  # optional comma/space/newline separated tags; empty uses GHCR_IMAGE_TARGET tag or latest
+  GHCR_TOKEN: ""  # required unless GHCR_LOGIN_SKIP=1; defaults from GITHUB_TOKEN when unset
+  GHCR_USERNAME: ""  # required unless GHCR_LOGIN_SKIP=1; defaults from GITHUB_ACTOR when unset
+
+steps:
+  - id: push
+    kind: host
+    run:
+      - scripts/dockpipe.github.ghcrpush/ghcr-push.sh
