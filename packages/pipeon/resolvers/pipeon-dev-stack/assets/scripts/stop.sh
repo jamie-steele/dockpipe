@@ -13,7 +13,9 @@ LEGACY_CODE_SERVER_CONTAINER_NAME="$(pipeon_stack_legacy_code_server_name)"
 RUNTIME_ENV="$(pipeon_stack_runtime_env)"
 
 compose_cmd() {
-  docker compose --env-file "$RUNTIME_ENV" -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$PROJECT_DIR" "$@"
+  local args=()
+  mapfile -t args < <(pipeon_stack_compose_base_args)
+  docker compose "${args[@]}" "$@"
 }
 
 docker rm -f "$CODE_SERVER_CONTAINER_NAME" >/dev/null 2>&1 || true

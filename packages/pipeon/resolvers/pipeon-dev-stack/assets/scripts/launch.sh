@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+eval "$(dockpipe sdk)"
+dockpipe_sdk init-script
+
 report_launch_failure() {
   local exit_code="$1"
   local line_no="$2"
@@ -10,8 +13,6 @@ report_launch_failure() {
 }
 
 trap 'report_launch_failure "$?" "${LINENO}" "${BASH_COMMAND}"' ERR
-
-SCRIPT_DIR="$(dockpipe get script_dir)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/common.sh"
 
@@ -89,7 +90,9 @@ resolve_pipeon_bin() {
 }
 
 compose_cmd() {
-  docker compose --env-file "$RUNTIME_ENV" -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$PROJECT_DIR" "$@"
+  local args=()
+  mapfile -t args < <(pipeon_stack_compose_base_args)
+  docker compose "${args[@]}" "$@"
 }
 
 wait_for_ollama_ready() {
@@ -157,6 +160,19 @@ if ! docker version >/dev/null 2>&1; then
   exit 1
 fi
 
+configure_pipeon_stack_gpu
+
+case "${PIPEON_DEV_STACK_PROMPT_RESULT:-}" in
+  gpu-setup)
+    echo "pipeon-dev-stack: launch paused before starting services so Docker GPU access can be enabled" >&2
+    exit 0
+    ;;
+  cancelled)
+    echo "pipeon-dev-stack: launch cancelled before starting services" >&2
+    exit 0
+    ;;
+esac
+
 case "$BUILD_MODE" in
   always)
     printf '[pipeon-dev-stack] PIPEON_DEV_STACK_BUILD=always no longer rebuilds sibling source trees; supply DOCKPIPE_BIN, DORKPIPE_BIN, MCPD_BIN, and PIPEON_DESKTOP_BIN explicitly if needed.\n' >&2
@@ -186,6 +202,11 @@ if [[ ! -f "$PIPEON_DESKTOP_SCRIPT" ]]; then
 fi
 
 compose_cmd up -d --remove-orphans
+
+if ! verify_pipeon_stack_ollama_gpu; then
+  compose_cmd logs ollama >&2 || true
+  exit 1
+fi
 
 if ! wait_for_mcp_ready 40; then
   echo "pipeon-dev-stack: isolated DorkPipe MCP boundary did not become reachable at $MCP_URL" >&2
@@ -244,6 +265,8 @@ cat >&2 <<EOF
   dorkpipe:     isolated compose service
   state:        $(pipeon_stack_state_dir)
   control:      isolated compose service dorkpipe-stack
+  ollama gpu:   $(pipeon_stack_gpu_mode)
+  gpu status:   $(pipeon_stack_gpu_status)
 EOF
 
 if ! bash "$PIPEON_DESKTOP_SCRIPT"; then

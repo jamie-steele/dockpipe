@@ -68,10 +68,18 @@ type Node struct {
 	DockpipeArgs []string `yaml:"dockpipe_args,omitempty"`
 	Workdir      string   `yaml:"workdir,omitempty"`
 
-	// kind=ollama — HTTP POST /api/generate
-	Model      string `yaml:"model,omitempty"`
-	Prompt     string `yaml:"prompt,omitempty"`
-	OllamaHost string `yaml:"ollama_host,omitempty"`
+	// kind=ollama — local model request (currently Ollama-backed; interface allows additional providers).
+	Model         string         `yaml:"model,omitempty"`
+	Prompt        string         `yaml:"prompt,omitempty"`
+	ModelProvider string         `yaml:"model_provider,omitempty"`
+	ModelHost     string         `yaml:"model_host,omitempty"`
+	OllamaHost    string         `yaml:"ollama_host,omitempty"` // legacy alias for model_host
+	NumCtx        int            `yaml:"num_ctx,omitempty"`
+	KeepAlive     string         `yaml:"keep_alive,omitempty"`
+	Temperature   *float64       `yaml:"temperature,omitempty"`
+	NumPredict    int            `yaml:"num_predict,omitempty"`
+	TopP          *float64       `yaml:"top_p,omitempty"`
+	ModelOptions  map[string]any `yaml:"model_options,omitempty"`
 
 	// kind=pgvector — requires DATABASE_URL or database_url_env
 	SQL            string `yaml:"sql,omitempty"`

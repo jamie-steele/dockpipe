@@ -2,9 +2,9 @@
 
 **DockPipe YAML** drives the full lifecycle:
 
-1. **`stack_up`** (host) — DockPipe **`compose_up`** host builtin against the DorkPipe compose file.
+1. **`stack_up`** (host) — the DorkPipe host stack helper starts Postgres + Ollama and handles Ollama GPU setup when available.
 2. **`self_analysis`** (container) — same as **`dorkpipe-self-analysis`**.
-3. **`stack_down`** (host) — DockPipe **`compose_down`** host builtin, skipped when **`DORKPIPE_DEV_STACK_AUTODOWN=0`**.
+3. **`stack_down`** (host) — the DorkPipe stack helper brings compose down, skipped when **`DORKPIPE_DEV_STACK_AUTODOWN=0`**.
 
 Use this when you want **one command** from YAML instead of running **`dev-stack.sh`** by hand.
 
@@ -26,9 +26,14 @@ Proxy-backed policy example: **`dorkpipe-self-analysis-stack-proxy`**.
 
 Current shape:
 
-- **compose up** uses the DockPipe-owned Compose primitive from workflow YAML
-- **compose down** also uses the DockPipe-owned Compose primitive, with keepalive controlled by **`compose.autodown_env`**
-- the stack also exports **`DATABASE_URL`** and **`OLLAMA_HOST`** into the later DockPipe steps through **`compose.exports`**
+- **stack up** goes through the package host script so Ollama can auto-enable Docker GPU access, prompt for remediation, and write the temporary GPU compose override when available
+- **stack down** also goes through the package host script, with keepalive controlled by **`DORKPIPE_DEV_STACK_AUTODOWN`**
+- the stack still exports **`DATABASE_URL`** and **`OLLAMA_HOST`** into the later DockPipe step through workflow vars
+
+GPU note:
+
+- **`DORKPIPE_DEV_STACK_GPU=auto`** is the default and will use NVIDIA when Docker can expose it to the Ollama container
+- if the host has NVIDIA but Docker GPU access is missing, the workflow now offers the same remediation / CPU fallback prompt path used by Pipeon
 
 Host endpoint note:
 

@@ -141,6 +141,217 @@ __dockpipe_sdk_fatal() {
   exit 1
 }
 
+__dockpipe_sdk_json_escape() {
+  local value="${1-}"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/\\r}"
+  value="${value//$'\t'/\\t}"
+  printf '%s' "$value"
+}
+
+__dockpipe_sdk_prompt_mode() {
+  if [[ "${DOCKPIPE_SDK_PROMPT_MODE:-}" == "json" ]]; then
+    printf 'json\n'
+    return 0
+  fi
+  if [[ -t 0 && -t 2 ]]; then
+    printf 'terminal\n'
+    return 0
+  fi
+  printf 'noninteractive\n'
+}
+
+__dockpipe_sdk_emit_prompt_event() {
+  local prompt_type="$1"
+  local prompt_id="$2"
+  local title="$3"
+  local message="$4"
+  local default_value="$5"
+  local sensitive="$6"
+  shift 6 || true
+  local options=("$@")
+  local options_json="" opt
+  for opt in "${options[@]}"; do
+    if [[ -n "$options_json" ]]; then
+      options_json+=","
+    fi
+    options_json+="\"$(__dockpipe_sdk_json_escape "$opt")\""
+  done
+
+  printf '::dockpipe-prompt::{"type":"%s","id":"%s","title":"%s","message":"%s","default":"%s","sensitive":%s,"options":[%s]}\n' \
+    "$(__dockpipe_sdk_json_escape "$prompt_type")" \
+    "$(__dockpipe_sdk_json_escape "$prompt_id")" \
+    "$(__dockpipe_sdk_json_escape "$title")" \
+    "$(__dockpipe_sdk_json_escape "$message")" \
+    "$(__dockpipe_sdk_json_escape "$default_value")" \
+    "$sensitive" \
+    "$options_json" >&2
+}
+
+__dockpipe_sdk_prompt_read_json_response() {
+  local response
+  if ! IFS= read -r response; then
+    return 1
+  fi
+  printf '%s\n' "$response"
+}
+
+__dockpipe_sdk_prompt_confirm_terminal() {
+  local title="$1" message="$2" default_value="$3"
+  local suffix choice normalized
+  case "$default_value" in
+    yes|y|true|1) suffix=" [Y/n] " ; default_value="yes" ;;
+    no|n|false|0|"") suffix=" [y/N] " ; default_value="no" ;;
+    *) suffix=" [y/N] " ; default_value="no" ;;
+  esac
+  while true; do
+    if [[ -n "$title" ]]; then
+      printf '%s\n' "$title" >&2
+    fi
+    printf '%s%s' "$message" "$suffix" >&2
+    IFS= read -r choice || return 1
+    normalized="$(printf '%s' "${choice:-$default_value}" | tr '[:upper:]' '[:lower:]')"
+    case "$normalized" in
+      y|yes|true|1) printf 'yes\n'; return 0 ;;
+      n|no|false|0) printf 'no\n'; return 0 ;;
+    esac
+    printf 'Please answer yes or no.\n' >&2
+  done
+}
+
+__dockpipe_sdk_prompt_input_terminal() {
+  local title="$1" message="$2" default_value="$3" sensitive="$4"
+  local response
+  if [[ -n "$title" ]]; then
+    printf '%s\n' "$title" >&2
+  fi
+  printf '%s' "$message" >&2
+  if [[ -n "$default_value" ]]; then
+    printf ' [%s]' "$default_value" >&2
+  fi
+  printf ': ' >&2
+  if [[ "$sensitive" == "true" ]]; then
+    IFS= read -r -s response || return 1
+    printf '\n' >&2
+  else
+    IFS= read -r response || return 1
+  fi
+  printf '%s\n' "${response:-$default_value}"
+}
+
+__dockpipe_sdk_prompt_choice_terminal() {
+  local title="$1" message="$2" default_value="$3"
+  shift 3 || true
+  local options=("$@")
+  local i response idx default_index=1
+  if [[ ${#options[@]} -eq 0 ]]; then
+    echo "dockpipe sdk: choice prompt requires at least one option" >&2
+    return 1
+  fi
+  if [[ -n "$title" ]]; then
+    printf '%s\n' "$title" >&2
+  fi
+  printf '%s\n' "$message" >&2
+  for ((i = 0; i < ${#options[@]}; i++)); do
+    if [[ "${options[$i]}" == "$default_value" ]]; then
+      default_index=$((i + 1))
+    fi
+    printf '  %d. %s\n' "$((i + 1))" "${options[$i]}" >&2
+  done
+  while true; do
+    printf 'Choose an option [%d]: ' "$default_index" >&2
+    IFS= read -r response || return 1
+    idx="${response:-$default_index}"
+    if [[ "$idx" =~ ^[0-9]+$ ]] && ((idx >= 1 && idx <= ${#options[@]})); then
+      printf '%s\n' "${options[$((idx - 1))]}"
+      return 0
+    fi
+    printf 'Enter a number between 1 and %d.\n' "${#options[@]}" >&2
+  done
+}
+
+__dockpipe_sdk_prompt() {
+  local prompt_type="${1:-}"
+  shift || true
+
+  local prompt_id="" title="" message="" default_value="" sensitive="false"
+  local options=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --id)
+        prompt_id="${2:-}"
+        shift 2 || true
+        ;;
+      --title)
+        title="${2:-}"
+        shift 2 || true
+        ;;
+      --message)
+        message="${2:-}"
+        shift 2 || true
+        ;;
+      --default)
+        default_value="${2:-}"
+        shift 2 || true
+        ;;
+      --option)
+        options+=("${2:-}")
+        shift 2 || true
+        ;;
+      --secret|--sensitive)
+        sensitive="true"
+        shift
+        ;;
+      *)
+        echo "dockpipe sdk: unknown prompt option $1" >&2
+        return 1
+        ;;
+    esac
+  done
+
+  if [[ -z "$prompt_id" ]]; then
+    prompt_id="prompt.$RANDOM.$RANDOM"
+  fi
+  if [[ -z "$message" ]]; then
+    message="$title"
+  fi
+
+  case "$(__dockpipe_sdk_prompt_mode)" in
+    json)
+      __dockpipe_sdk_emit_prompt_event "$prompt_type" "$prompt_id" "$title" "$message" "$default_value" "$sensitive" "${options[@]}"
+      __dockpipe_sdk_prompt_read_json_response
+      ;;
+    terminal)
+      case "$prompt_type" in
+        confirm)
+          __dockpipe_sdk_prompt_confirm_terminal "$title" "$message" "$default_value"
+          ;;
+        input)
+          __dockpipe_sdk_prompt_input_terminal "$title" "$message" "$default_value" "$sensitive"
+          ;;
+        choice)
+          __dockpipe_sdk_prompt_choice_terminal "$title" "$message" "$default_value" "${options[@]}"
+          ;;
+        *)
+          echo "dockpipe sdk: unknown prompt type $prompt_type" >&2
+          return 1
+          ;;
+      esac
+      ;;
+    *)
+      if [[ -n "$default_value" ]]; then
+        printf '%s\n' "$default_value"
+        return 0
+      fi
+      echo "dockpipe sdk: prompt requires a terminal or DOCKPIPE_SDK_PROMPT_MODE=json" >&2
+      return 1
+      ;;
+  esac
+}
+
 dockpipe_sdk() {
   local action="${1:-}"
   shift || true
@@ -152,6 +363,7 @@ dockpipe_sdk actions:
   get <workdir|workflow_name|script_dir|package_root|assets_dir|dockpipe_bin>
   cd-workdir
   die <message...>
+  prompt <confirm|choice|input> [options]
   require dockpipe-bin
   require workflow-name
   source terraform-pipeline
@@ -183,6 +395,9 @@ EOF
       ;;
     die)
       __dockpipe_sdk_fatal "$@"
+      ;;
+    prompt)
+      __dockpipe_sdk_prompt "$@"
       ;;
     require)
       case "${1:-}" in

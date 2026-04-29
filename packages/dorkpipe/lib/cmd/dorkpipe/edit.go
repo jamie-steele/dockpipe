@@ -7,9 +7,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"dorkpipe.orchestrator/modelclient"
 	"dorkpipe.orchestrator/reasoning"
 	"dorkpipe.orchestrator/statepaths"
 )
@@ -144,6 +142,7 @@ func editCmd(argv []string) {
 	selectionText := fs.String("selection-text", "", "active selection hint")
 	apply := fs.Bool("apply", false, "apply the verified patch to the working tree")
 	model := fs.String("model", "", "Ollama model override")
+	modelProvider := fs.String("model-provider", "", "model provider override (default ollama)")
 	ollamaHost := fs.String("ollama-host", "", "Ollama host override")
 	numCtx := fs.Int("num-ctx", 0, "Ollama context window override")
 	parentRequestID := fs.String("parent-request-id", "", "parent request id when request delegates into edit")
@@ -168,23 +167,7 @@ func editCmd(argv []string) {
 		os.Exit(1)
 	}
 
-	host := strings.TrimSpace(*ollamaHost)
-	if host == "" {
-		host = strings.TrimSpace(os.Getenv("OLLAMA_HOST"))
-	}
-	if host == "" {
-		host = "http://127.0.0.1:11434"
-	}
-	chosenModel := strings.TrimSpace(*model)
-	if chosenModel == "" {
-		chosenModel = strings.TrimSpace(os.Getenv("PIPEON_OLLAMA_MODEL"))
-	}
-	if chosenModel == "" {
-		chosenModel = strings.TrimSpace(os.Getenv("DOCKPIPE_OLLAMA_MODEL"))
-	}
-	if chosenModel == "" {
-		chosenModel = defaultEditModel
-	}
+	provider, host, chosenModel := resolveModelConfig(strings.TrimSpace(*modelProvider), strings.TrimSpace(*ollamaHost), strings.TrimSpace(*model))
 	chosenNumCtx := resolveNumCtx(*numCtx)
 
 	reqID := fmt.Sprintf("req_%d", time.Now().UnixNano())
@@ -199,7 +182,7 @@ func editCmd(argv []string) {
 	ctx := context.Background()
 	emitEditEvent(reqID, "received", "Received edit request", 0.05, nil)
 
-	artifact, patchPath, artifactsDir, err := prepareEditArtifact(ctx, reqID, absWd, strings.TrimSpace(*message), strings.TrimSpace(*activeFile), sanitizeAttachmentPaths(absWd, attachmentFiles), strings.TrimSpace(*selectionText), host, chosenModel, chosenNumCtx, artifactsDir)
+	artifact, patchPath, artifactsDir, err := prepareEditArtifact(ctx, reqID, absWd, strings.TrimSpace(*message), strings.TrimSpace(*activeFile), sanitizeAttachmentPaths(absWd, attachmentFiles), strings.TrimSpace(*selectionText), provider, host, chosenModel, chosenNumCtx, artifactsDir)
 	if err != nil {
 		os.Exit(1)
 	}
@@ -257,7 +240,7 @@ func applyEditCmd(argv []string) {
 	}
 }
 
-func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile string, attachmentFiles []string, selectionText, host, chosenModel string, chosenNumCtx int, artifactsDir string) (*editModelArtifact, string, string, error) {
+func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile string, attachmentFiles []string, selectionText, provider, host, chosenModel string, chosenNumCtx int, artifactsDir string) (*editModelArtifact, string, string, error) {
 	emitEditEvent(reqID, "decomposing", "Breaking the request into primitives", 0.08, nil)
 	if artifact, patchPath, ok, err := tryDeterministicEditPrimitive(reqID, root, message, activeFile, artifactsDir); ok {
 		return artifact, patchPath, artifactsDir, err
@@ -297,6 +280,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile s
 		MCPSummary:      mcpText,
 	}
 	plan := buildDefaultEditPlan(root, baseRequest)
+	modelCalls := []*modelclient.CallRecord{}
 	if shouldUseComplexEditFlow(root, message, effectiveActiveFile, selectionText) {
 		emitEditEvent(reqID, "planning", "Planning edit strategy", 0.24, map[string]any{"candidate_count": len(candidates)})
 		if len(plan.TargetFiles) >= 3 {
@@ -305,7 +289,10 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile s
 			})
 		} else {
 			emitEditEvent(reqID, "planning", "Routing to planner model", 0.27, map[string]any{"model": chosenModel, "num_ctx": chosenNumCtx})
-			if planned, planErr := buildEditPlan(ctx, host, chosenModel, chosenNumCtx, baseRequest, contextText, candidates); planErr == nil && planned != nil {
+			if planned, planCall, planErr := buildEditPlan(ctx, provider, host, chosenModel, chosenNumCtx, baseRequest, contextText, candidates); planErr == nil && planned != nil {
+				if planCall != nil {
+					modelCalls = append(modelCalls, planCall)
+				}
 				plan = planned
 				emitEditEvent(reqID, "planning", "Planner selected edit targets", 0.3, map[string]any{
 					"planned_target_count": len(plan.TargetFiles),
@@ -382,8 +369,12 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile s
 			"model":   chosenModel,
 			"num_ctx": chosenNumCtx,
 		})
-		if artifact, patchPath, used, sidecarErr := tryHelperSidecarPatch(ctx, reqID, root, host, chosenModel, chosenNumCtx, requestRecord, plan, snippets, retrievalBundle, artifactsDir); used {
+		if artifact, patchPath, used, sidecarCall, sidecarErr := tryHelperSidecarPatch(ctx, reqID, root, provider, host, chosenModel, chosenNumCtx, requestRecord, plan, snippets, retrievalBundle, artifactsDir); used {
+			if sidecarCall != nil {
+				modelCalls = append(modelCalls, sidecarCall)
+			}
 			if sidecarErr == nil {
+				writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, message, effectiveActiveFile, selectionText, plan, rankedCandidates, artifact, "patch_applies", policy, branchAttempts, decision, repairMemory, modelCalls))
 				return artifact, patchPath, artifactsDir, nil
 			}
 			emitEditEvent(reqID, "scripting", "Helper script fell back to patch generation", 0.46, map[string]any{
@@ -402,7 +393,10 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile s
 		"num_ctx": chosenNumCtx,
 	})
 
-	modelText, err := runEditModel(ctx, host, chosenModel, chosenNumCtx, prompt)
+	modelText, modelCall, err := runEditModel(ctx, provider, host, chosenModel, chosenNumCtx, prompt)
+	if modelCall != nil {
+		modelCalls = append(modelCalls, modelCall)
+	}
 	if err != nil {
 		emitEditError(reqID, "MODEL_UNAVAILABLE", fmt.Sprintf("Ollama request failed: %v", err), true)
 		return nil, "", "", err
@@ -415,7 +409,9 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile s
 	artifact, parseDiag, err := parseEditArtifact(modelText)
 	if err != nil {
 		repairMemory = append(repairMemory, fmt.Sprintf("artifact_parse_failed: %v", err))
-		artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("Model output was not valid JSON: %v", err), artifactsDir)
+		var repairCalls []*modelclient.CallRecord
+		artifact, modelText, repairCalls, err = repairInvalidArtifactLoop(ctx, reqID, provider, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("Model output was not valid JSON: %v", err), artifactsDir)
+		modelCalls = append(modelCalls, repairCalls...)
 		if err != nil {
 			emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Model output was not a valid edit artifact: %v", err), true)
 			return nil, "", "", err
@@ -433,7 +429,9 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile s
 				return nil, "", "", err
 			}
 		} else {
-			artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("Edit artifact validation failed: %v", err), artifactsDir)
+			var repairCalls []*modelclient.CallRecord
+			artifact, modelText, repairCalls, err = repairInvalidArtifactLoop(ctx, reqID, provider, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("Edit artifact validation failed: %v", err), artifactsDir)
+			modelCalls = append(modelCalls, repairCalls...)
 			if err != nil {
 				emitEditError(reqID, "MODEL_OUTPUT_INVALID", fmt.Sprintf("Edit artifact validation failed: %v", err), true)
 				return nil, "", "", err
@@ -470,7 +468,9 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile s
 				"structured_edit_count": len(artifact.StructuredEdits),
 			})
 		} else {
-			artifact, modelText, err = repairInvalidArtifactLoop(ctx, reqID, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("The generated patch did not apply cleanly.\n\nVerifier output:\n%s", emptyFallback(verifyOutput, "(no verifier output)")), artifactsDir)
+			var repairCalls []*modelclient.CallRecord
+			artifact, modelText, repairCalls, err = repairInvalidArtifactLoop(ctx, reqID, provider, host, chosenModel, chosenNumCtx, prompt, modelText, fmt.Sprintf("The generated patch did not apply cleanly.\n\nVerifier output:\n%s", emptyFallback(verifyOutput, "(no verifier output)")), artifactsDir)
+			modelCalls = append(modelCalls, repairCalls...)
 			if err != nil {
 				emitEditError(reqID, "VALIDATION_FAILED", "The generated patch did not apply cleanly.", true)
 				return nil, "", "", err
@@ -496,7 +496,7 @@ func prepareEditArtifact(ctx context.Context, reqID, root, message, activeFile s
 		}
 	}
 	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
-	writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, message, effectiveActiveFile, selectionText, plan, rankedCandidates, artifact, "patch_applies", policy, branchAttempts, decision, repairMemory))
+	writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, message, effectiveActiveFile, selectionText, plan, rankedCandidates, artifact, "patch_applies", policy, branchAttempts, decision, repairMemory, modelCalls))
 	return artifact, patchPath, artifactsDir, nil
 }
 
@@ -583,7 +583,7 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 			_ = os.WriteFile(filepath.Join(artifactsDir, "apply.log"), []byte(structuredOutput), 0o644)
 			validationOutput, validationStatus := runPostApplyValidation(ctx, root, artifact.TargetFiles)
 			_ = os.WriteFile(filepath.Join(artifactsDir, "post-apply-validation.log"), []byte(validationOutput), 0o644)
-			writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus, policy, attempts, decision, repairMemory))
+			writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus, policy, attempts, decision, repairMemory, nil))
 			emitEditDone(reqID, buildAppliedSummary(artifact, root, artifactsDir, validationStatus), map[string]any{
 				"route":                 "edit",
 				"files_touched":         len(artifact.TargetFiles),
@@ -607,7 +607,7 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 
 			validationOutput, validationStatus := runPostApplyValidation(ctx, root, artifact.TargetFiles)
 			_ = os.WriteFile(filepath.Join(artifactsDir, "post-apply-validation.log"), []byte(validationOutput), 0o644)
-			writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus, policy, attempts, decision, repairMemory))
+			writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus, policy, attempts, decision, repairMemory, nil))
 
 			emitEditDone(reqID, buildAppliedSummary(artifact, root, artifactsDir, validationStatus), map[string]any{
 				"route":                 "edit",
@@ -627,7 +627,7 @@ func applyPreparedArtifact(ctx context.Context, reqID, root, artifactsDir, patch
 
 	validationOutput, validationStatus := runPostApplyValidation(ctx, root, artifact.TargetFiles)
 	_ = os.WriteFile(filepath.Join(artifactsDir, "post-apply-validation.log"), []byte(validationOutput), 0o644)
-	writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus, policy, attempts, decision, repairMemory))
+	writeReasoningRunArtifact(artifactsDir, buildEditRunArtifact(reqID, artifact.Summary, "", "", nil, artifact.TargetFiles, artifact, validationStatus, policy, attempts, decision, repairMemory, nil))
 
 	emitEditDone(reqID, buildAppliedSummary(artifact, root, artifactsDir, validationStatus), map[string]any{
 		"route":                 "edit",
@@ -978,13 +978,14 @@ func heuristicTargetsForRequest(root, message string) []string {
 	return uniqueNonEmpty(out)
 }
 
-func buildEditPlan(ctx context.Context, host, model string, numCtx int, req editRequestRecord, contextText string, candidates []string) (*editPlan, error) {
+func buildEditPlan(ctx context.Context, provider, host, model string, numCtx int, req editRequestRecord, contextText string, candidates []string) (*editPlan, *modelclient.CallRecord, error) {
 	prompt := buildEditPlanPrompt(req, contextText, candidates)
-	text, err := runEditModel(ctx, host, model, numCtx, prompt)
+	text, call, err := runEditModel(ctx, provider, host, model, numCtx, prompt)
 	if err != nil {
-		return nil, err
+		return nil, call, err
 	}
-	return parseEditPlan(text)
+	plan, err := parseEditPlan(text)
+	return plan, call, err
 }
 
 func buildEditPlanPrompt(req editRequestRecord, contextText string, candidates []string) string {
@@ -1565,72 +1566,36 @@ Attached files:
 `, req.UserMessage, planText, emptyFallback(req.ActiveFile, "(none)"), emptyFallback(req.SelectionText, "(none)"), retrievalText, snippetText, emptyFallback(req.MCPSummary, "(no MCP discovery available)"), attachmentText))
 }
 
-func runEditModel(ctx context.Context, host, model string, numCtx int, prompt string) (string, error) {
-	u, err := buildOllamaChatURL(host)
+func runEditModel(ctx context.Context, provider, host, model string, numCtx int, prompt string) (string, *modelclient.CallRecord, error) {
+	client, err := modelclient.New(provider, host)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	payload := map[string]any{
-		"model":  model,
-		"stream": false,
-		"messages": []map[string]string{
-			{
-				"role":    "system",
-				"content": "You produce structured edit artifacts for a local coding assistant.",
-			},
-			{
-				"role":    "user",
-				"content": prompt,
-			},
+	resp, err := client.Chat(ctx, modelclient.Request{
+		Model:  model,
+		Stream: false,
+		Messages: []modelclient.Message{
+			{Role: "system", Content: "You produce structured edit artifacts for a local coding assistant."},
+			{Role: "user", Content: prompt},
 		},
-	}
-	if numCtx > 0 {
-		payload["options"] = map[string]any{"num_ctx": numCtx}
-	}
-	b, err := json.Marshal(payload)
+		Options: modelclient.Options{NumCtx: numCtx},
+	}, nil)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(b))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 15 * time.Minute}
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	out, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(out))
-	}
-	var parsed struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-		Response string `json:"response"`
-	}
-	if err := json.Unmarshal(out, &parsed); err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(parsed.Message.Content) != "" {
-		return parsed.Message.Content, nil
-	}
-	return parsed.Response, nil
+	return resp.Text, resp.Call, nil
 }
 
-func tryHelperSidecarPatch(ctx context.Context, reqID, root, host, model string, numCtx int, req editRequestRecord, plan *editPlan, snippets, retrievalBundle, artifactsDir string) (*editModelArtifact, string, bool, error) {
+func tryHelperSidecarPatch(ctx context.Context, reqID, root, provider, host, model string, numCtx int, req editRequestRecord, plan *editPlan, snippets, retrievalBundle, artifactsDir string) (*editModelArtifact, string, bool, *modelclient.CallRecord, error) {
 	prompt := buildHelperSidecarPrompt(req, plan, snippets, retrievalBundle)
-	modelText, err := runEditModel(ctx, host, model, numCtx, prompt)
+	modelText, call, err := runEditModel(ctx, provider, host, model, numCtx, prompt)
 	if err != nil {
-		return nil, "", true, err
+		return nil, "", true, call, err
 	}
 	_ = os.WriteFile(filepath.Join(artifactsDir, "helper-response.txt"), []byte(modelText), 0o644)
 	resp, err := parseHelperSidecarResponse(modelText)
 	if err != nil {
-		return nil, "", true, err
+		return nil, "", true, call, err
 	}
 	emitEditEvent(reqID, "scripting", "Running bounded helper script", 0.5, map[string]any{
 		"runtime": resp.HelperScript.Runtime,
@@ -1638,7 +1603,7 @@ func tryHelperSidecarPatch(ctx context.Context, reqID, root, host, model string,
 	})
 	patchText, helperPath, err := runHelperSidecarScript(ctx, root, artifactsDir, req, resp.HelperScript)
 	if err != nil {
-		return nil, "", true, err
+		return nil, "", true, call, err
 	}
 	patchText = normalizeGeneratedPatch(patchText)
 	targetFiles := targetFilesFromPatch(patchText)
@@ -1650,22 +1615,22 @@ func tryHelperSidecarPatch(ctx context.Context, reqID, root, host, model string,
 		HelperScript: resp.HelperScript,
 	}
 	if err := validateEditArtifact(artifact); err != nil {
-		return nil, "", true, err
+		return nil, "", true, call, err
 	}
 	writeJSON(filepath.Join(artifactsDir, "artifact.json"), artifact)
 	patchPath := filepath.Join(artifactsDir, "patch.diff")
 	if err := os.WriteFile(patchPath, []byte(artifact.Patch), 0o644); err != nil {
-		return nil, "", true, err
+		return nil, "", true, call, err
 	}
 	verifyOutput, err := runRepoScript(ctx, root, "verify-patch-applies.sh", patchPath, root)
 	_ = os.WriteFile(filepath.Join(artifactsDir, "verify-patch.log"), []byte(verifyOutput), 0o644)
 	if err != nil {
-		return nil, "", true, err
+		return nil, "", true, call, err
 	}
 	emitEditEvent(reqID, "scripting", "Helper script produced a valid patch", 0.58, map[string]any{
 		"helper_path": relativeTo(root, helperPath),
 	})
-	return artifact, patchPath, true, nil
+	return artifact, patchPath, true, call, nil
 }
 
 func runHelperSidecarScript(ctx context.Context, root, artifactsDir string, req editRequestRecord, helper *editHelperScript) (string, string, error) {
@@ -1714,28 +1679,6 @@ func targetFilesFromPatch(patch string) []string {
 		}
 	}
 	return uniqueNonEmpty(out)
-}
-
-func buildOllamaChatURL(rawBase string) (*url.URL, error) {
-	s := strings.TrimSpace(rawBase)
-	s = strings.TrimSuffix(s, "/")
-	if s == "" {
-		return nil, errors.New("empty ollama host")
-	}
-	if !strings.Contains(s, "://") {
-		s = "http://" + s
-	}
-	u, err := url.Parse(s)
-	if err != nil {
-		return nil, err
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, fmt.Errorf("unsupported ollama URL scheme %q", u.Scheme)
-	}
-	if strings.TrimSpace(u.Host) == "" {
-		return nil, errors.New("ollama host is missing")
-	}
-	return &url.URL{Scheme: u.Scheme, Host: u.Host, Path: "/api/chat"}, nil
 }
 
 func parseEditArtifact(text string) (*editModelArtifact, *artifactParseDiagnostics, error) {
@@ -2180,30 +2123,34 @@ func validateHelperSidecarResponse(resp *editHelperResponse) error {
 	return nil
 }
 
-func repairInvalidArtifactLoop(ctx context.Context, reqID, host, model string, numCtx int, originalPrompt, previousOutput, reason, artifactsDir string) (*editModelArtifact, string, error) {
+func repairInvalidArtifactLoop(ctx context.Context, reqID, provider, host, model string, numCtx int, originalPrompt, previousOutput, reason, artifactsDir string) (*editModelArtifact, string, []*modelclient.CallRecord, error) {
 	var lastErr error
 	currentOutput := previousOutput
+	calls := []*modelclient.CallRecord{}
 	for attempt := 1; attempt <= maxArtifactRepairPass; attempt++ {
-		artifact, repairedOutput, err := retryInvalidEditArtifact(ctx, reqID, host, model, numCtx, originalPrompt, currentOutput, reason, artifactsDir, attempt)
+		artifact, repairedOutput, call, err := retryInvalidEditArtifact(ctx, reqID, provider, host, model, numCtx, originalPrompt, currentOutput, reason, artifactsDir, attempt)
+		if call != nil {
+			calls = append(calls, call)
+		}
 		if err == nil {
-			return artifact, repairedOutput, nil
+			return artifact, repairedOutput, calls, nil
 		}
 		lastErr = err
 		currentOutput = repairedOutput
 	}
-	return nil, currentOutput, lastErr
+	return nil, currentOutput, calls, lastErr
 }
 
-func retryInvalidEditArtifact(ctx context.Context, reqID, host, model string, numCtx int, originalPrompt, previousOutput, reason, artifactsDir string, attempt int) (*editModelArtifact, string, error) {
+func retryInvalidEditArtifact(ctx context.Context, reqID, provider, host, model string, numCtx int, originalPrompt, previousOutput, reason, artifactsDir string, attempt int) (*editModelArtifact, string, *modelclient.CallRecord, error) {
 	emitEditEvent(reqID, "repairing", fmt.Sprintf("Repairing invalid patch artifact (pass %d/%d)", attempt, maxArtifactRepairPass), 0.52, map[string]any{
 		"model":   model,
 		"attempt": attempt,
 		"num_ctx": numCtx,
 	})
 	retryPrompt := buildEditArtifactRepairPrompt(originalPrompt, previousOutput, reason)
-	modelText, err := runEditModel(ctx, host, model, numCtx, retryPrompt)
+	modelText, call, err := runEditModel(ctx, provider, host, model, numCtx, retryPrompt)
 	if err != nil {
-		return nil, previousOutput, err
+		return nil, previousOutput, call, err
 	}
 	suffix := ""
 	if attempt > 1 {
@@ -2212,15 +2159,15 @@ func retryInvalidEditArtifact(ctx context.Context, reqID, host, model string, nu
 	_ = os.WriteFile(filepath.Join(artifactsDir, "model-response-repair"+suffix+".txt"), []byte(modelText), 0o644)
 	artifact, parseDiag, err := parseEditArtifact(modelText)
 	if err != nil {
-		return nil, modelText, err
+		return nil, modelText, call, err
 	}
 	if parseDiag != nil {
 		writeJSON(filepath.Join(artifactsDir, "artifact-parse-repair"+suffix+".json"), parseDiag)
 	}
 	if err := validateEditArtifact(artifact); err != nil {
-		return nil, modelText, err
+		return nil, modelText, call, err
 	}
-	return artifact, modelText, nil
+	return artifact, modelText, call, nil
 }
 
 func buildEditArtifactRepairPrompt(originalPrompt, previousOutput, reason string) string {

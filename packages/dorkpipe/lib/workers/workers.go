@@ -7,31 +7,30 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
 
 	_ "github.com/lib/pq"
 
 	"dorkpipe.orchestrator/confidence"
+	"dorkpipe.orchestrator/modelclient"
 	"dorkpipe.orchestrator/spec"
 	"dorkpipe.orchestrator/statepaths"
 )
 
 // Result is one node's outcome.
 type Result struct {
-	NodeID   string
-	Kind     string
-	ExitCode int
-	Stdout   string
-	Stderr   string
-	Vector   confidence.Vector
-	Err      error
+	NodeID    string
+	Kind      string
+	ExitCode  int
+	Stdout    string
+	Stderr    string
+	Vector    confidence.Vector
+	Err       error
+	ModelCall *modelclient.CallRecord
 	// Skipped: node was not executed (conditional branch, early stop, etc.); excluded from harmonic aggregate.
 	Skipped    bool
 	SkipReason string
@@ -163,87 +162,45 @@ func (e *Executor) runDockpipe(ctx context.Context, n *spec.Node, subst map[stri
 	return r
 }
 
-func (e *Executor) http() *http.Client {
-	if e.HTTPClient != nil {
-		return e.HTTPClient
-	}
-	return &http.Client{Timeout: 15 * time.Minute}
-}
-
-// ollamaGenerateURL builds the /api/generate URL from OLLAMA_HOST-style config after validating
-// scheme and host so requests are not flagged as blind SSRF (gosec G704).
-func ollamaGenerateURL(rawBase string) (*url.URL, error) {
-	s := strings.TrimSpace(rawBase)
-	s = strings.TrimSuffix(s, "/")
-	if s == "" {
-		return nil, fmt.Errorf("ollama: empty base URL")
-	}
-	if !strings.Contains(s, "://") {
-		s = "http://" + s
-	}
-	u, err := url.Parse(s)
-	if err != nil {
-		return nil, fmt.Errorf("ollama: parse base URL: %w", err)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return nil, fmt.Errorf("ollama: only http and https URLs are allowed")
-	}
-	if strings.TrimSpace(u.Host) == "" {
-		return nil, fmt.Errorf("ollama: URL must include a host")
-	}
-	return &url.URL{Scheme: u.Scheme, Host: u.Host, Path: "/api/generate"}, nil
-}
-
 func (e *Executor) runOllama(ctx context.Context, n *spec.Node, subst map[string]string) *Result {
 	r := &Result{NodeID: n.ID, Kind: "ollama"}
-	host := strings.TrimSpace(n.OllamaHost)
+	host := strings.TrimSpace(n.ModelHost)
+	if host == "" {
+		host = strings.TrimSpace(n.OllamaHost)
+	}
 	if host == "" {
 		host = os.Getenv("OLLAMA_HOST")
 	}
 	if host == "" {
 		host = "http://127.0.0.1:11434"
 	}
-	genURL, err := ollamaGenerateURL(host)
+	provider := strings.TrimSpace(n.ModelProvider)
+	if provider == "" {
+		provider = modelclient.DefaultProvider()
+	}
+	client, err := modelclient.New(provider, host)
 	if err != nil {
 		r.Err = err
 		return r
 	}
-	prompt := applySubst(n.Prompt, subst)
-	body := map[string]any{
-		"model":  n.Model,
-		"prompt": prompt,
-		"stream": false,
-	}
-	b, err := json.Marshal(body)
+	resp, err := client.Generate(ctx, modelclient.Request{
+		Model:  n.Model,
+		Prompt: applySubst(n.Prompt, subst),
+		Options: modelclient.Options{
+			NumCtx:      n.NumCtx,
+			KeepAlive:   n.KeepAlive,
+			Temperature: n.Temperature,
+			NumPredict:  n.NumPredict,
+			TopP:        n.TopP,
+			Extra:       n.ModelOptions,
+		},
+	})
 	if err != nil {
 		r.Err = err
 		return r
 	}
-	// G704: taint still traces from env/spec; destination is the configured Ollama HTTP API only (validated above).
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, genURL.String(), bytes.NewReader(b)) // #nosec G704
-	if err != nil {
-		r.Err = err
-		return r
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := e.http().Do(req) // #nosec G704
-	if err != nil {
-		r.Err = err
-		return r
-	}
-	defer resp.Body.Close()
-	out, _ := io.ReadAll(resp.Body)
-	r.Stdout = string(out)
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		r.Err = fmt.Errorf("ollama: HTTP %d: %s", resp.StatusCode, r.Stdout)
-		return r
-	}
-	var parsed struct {
-		Response string `json:"response"`
-	}
-	if err := json.Unmarshal(out, &parsed); err == nil && strings.TrimSpace(parsed.Response) != "" {
-		r.Stdout = parsed.Response
-	}
+	r.Stdout = resp.Text
+	r.ModelCall = resp.Call
 	ns := ollamaNodeSelf(r.Stdout)
 	r.Vector = confidence.Vector{
 		NodeSelf:    confidence.F64(ns),
@@ -265,12 +222,6 @@ func (e *Executor) runVerifier(ctx context.Context, n *spec.Node, subst map[stri
 
 func verifierVectorFromStdout(s string) confidence.Vector {
 	text := strings.TrimSpace(s)
-	var outer struct {
-		Response string `json:"response"`
-	}
-	if json.Unmarshal([]byte(text), &outer) == nil && strings.TrimSpace(outer.Response) != "" {
-		text = strings.TrimSpace(outer.Response)
-	}
 	sc := parseVerifierScore(text)
 	return confidence.Vector{
 		NodeSelf:    confidence.F64(0.55),

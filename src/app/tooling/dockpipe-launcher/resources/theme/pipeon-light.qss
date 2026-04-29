@@ -15,6 +15,11 @@ QLabel#logViewerCommand {
     color: #141414;
 }
 
+QLabel#promptEyebrow,
+QLabel#promptHint {
+    color: #35547a;
+}
+
 QLabel#emptyTitle {
     color: #141414;
 }
@@ -98,6 +103,16 @@ QFrame#launchOverlayCard {
     border: 1px solid #d3d7de;
 }
 
+QFrame#promptDialogCard {
+    background-color: #ffffff;
+    border: 1px solid #d3d7de;
+}
+
+QFrame#promptActionPanel {
+    background-color: #f5f7fb;
+    border: 1px solid #d3d7de;
+}
+
 QPlainTextEdit#inlineConsole {
     background-color: #fbfcfe;
     color: #1b2230;
@@ -111,6 +126,12 @@ QComboBox {
     background-color: #fbfcfe;
     color: #1b2230;
     border-color: #c4cad4;
+}
+
+QLineEdit#promptInput {
+    background-color: #fbfcfe;
+    color: #1b2230;
+    border: 1px solid #c4cad4;
 }
 
 QTableWidget {

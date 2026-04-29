@@ -12,7 +12,9 @@ RUNTIME_ENV="$(pipeon_stack_runtime_env)"
 CODE_SERVER_CONTAINER_NAME="$(pipeon_stack_code_server_name)"
 
 compose_cmd() {
-  docker compose --env-file "$RUNTIME_ENV" -p "$COMPOSE_PROJECT" -f "$COMPOSE_FILE" --project-directory "$PROJECT_DIR" "$@"
+  local args=()
+  mapfile -t args < <(pipeon_stack_compose_base_args)
+  docker compose "${args[@]}" "$@"
 }
 
 echo "pipeon-dev-stack status"
@@ -22,6 +24,8 @@ echo "  state:   $STATE_DIR"
 echo "  mcp url: $(pipeon_stack_mcp_url)"
 echo "  mcp service: dorkpipe-stack"
 echo "  code-server container: $CODE_SERVER_CONTAINER_NAME"
+echo "  ollama gpu: $(pipeon_stack_gpu_mode)"
+echo "  gpu status: $(pipeon_stack_gpu_status)"
 
 if [[ -f "$RUNTIME_ENV" ]]; then
   echo

@@ -54,6 +54,43 @@ QFrame#launchOverlayCard {
     border-radius: 18px;
 }
 
+QFrame#promptDialogCard,
+QFrame#promptActionPanel {
+    background-color: palette(alternate-base);
+    border: 1px solid palette(midlight);
+    border-radius: 18px;
+}
+
+QLabel#promptEyebrow {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+}
+
+QLabel#promptTitle {
+    font-size: 22px;
+    font-weight: 700;
+    color: palette(window-text);
+}
+
+QLabel#promptBody {
+    font-size: 13px;
+    line-height: 1.5;
+    color: palette(window-text);
+}
+
+QLabel#promptHint {
+    font-size: 12px;
+}
+
+QLineEdit#promptInput {
+    min-height: 38px;
+    border-radius: 12px;
+    padding: 8px 10px;
+    font-size: 13px;
+}
+
 QLabel#launchOverlayGlyph {
     font-size: 28px;
     font-weight: 700;

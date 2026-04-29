@@ -30,6 +30,7 @@ set(DOCKPIPE_LAUNCHER_SOURCES
     src/PackageManagerDialog.cpp
     src/SettingsDialog.cpp
     src/LogViewerDialog.cpp
+    src/PromptDialog.cpp
     src/DockerObservabilityWidget.cpp
     src/ContextRowWidget.cpp
     src/EditContextDialog.cpp

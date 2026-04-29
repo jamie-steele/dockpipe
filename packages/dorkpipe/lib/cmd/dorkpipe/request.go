@@ -6,8 +6,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"dorkpipe.orchestrator/modelclient"
 	"dorkpipe.orchestrator/reasoning"
 )
 
@@ -106,6 +105,7 @@ func requestCmd(argv []string) {
 	mode := fs.String("mode", "ask", "request mode: ask, agent, or plan")
 	executeRoute := fs.Bool("execute", false, "execute the routed request and stream events")
 	model := fs.String("model", "", "Ollama model override")
+	modelProvider := fs.String("model-provider", "", "model provider override (default ollama)")
 	ollamaHost := fs.String("ollama-host", "", "Ollama host override")
 	numCtx := fs.Int("num-ctx", 0, "Ollama context window override")
 	_ = fs.Parse(argv)
@@ -161,7 +161,7 @@ func requestCmd(argv []string) {
 	}
 
 	ctx := context.Background()
-	host, chosenModel := resolveModelConfig(strings.TrimSpace(*ollamaHost), strings.TrimSpace(*model))
+	provider, host, chosenModel := resolveModelConfig(strings.TrimSpace(*modelProvider), strings.TrimSpace(*ollamaHost), strings.TrimSpace(*model))
 	chosenNumCtx := resolveNumCtx(*numCtx)
 	reasoningArtifactDir := ""
 	if routed.Route == "chat" {
@@ -177,9 +177,9 @@ func requestCmd(argv []string) {
 		if routed.Arg != "" {
 			req.Message = routed.Arg
 		}
-		handleEditRoute(ctx, reqID, absWd, req, host, chosenModel, chosenNumCtx)
+		handleEditRoute(ctx, reqID, absWd, req, provider, host, chosenModel, chosenNumCtx)
 	default:
-		handleChatRoute(ctx, reqID, absWd, req, host, chosenModel, chosenNumCtx, reasoningArtifactDir)
+		handleChatRoute(ctx, reqID, absWd, req, provider, host, chosenModel, chosenNumCtx, reasoningArtifactDir)
 	}
 }
 
@@ -427,7 +427,7 @@ func handleInspectRoute(ctx context.Context, reqID, root string, req routeReques
 	}
 }
 
-func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, host, model string, numCtx int) {
+func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, provider, host, model string, numCtx int) {
 	exe, err := os.Executable()
 	if err != nil {
 		emitEditError(reqID, "INTERNAL_ERROR", fmt.Sprintf("Could not resolve dorkpipe executable: %v", err), false)
@@ -453,6 +453,9 @@ func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	if model != "" {
 		args = append(args, "--model", model)
 	}
+	if provider != "" {
+		args = append(args, "--model-provider", provider)
+	}
 	if numCtx > 0 {
 		args = append(args, "--num-ctx", fmt.Sprintf("%d", numCtx))
 	}
@@ -471,7 +474,7 @@ func handleEditRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	}
 }
 
-func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, host, model string, numCtx int, reasoningArtifactDir string) {
+func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, provider, host, model string, numCtx int, reasoningArtifactDir string) {
 	emitEditEvent(reqID, "context_gathering", "Inspecting workspace context", 0.35, nil)
 	chatContext := buildWorkspaceChatContext(root, req)
 	policy := resolveRuntimePolicy("chat", req.Message, req.ActiveFile, req.SelectionText, len(chatContext.Targets), len(req.OpenFiles))
@@ -517,12 +520,13 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 	attempts := []reasoning.AttemptRecord{}
 	repairMemory := []string{}
 	decision := reasoning.DecisionRecord{}
+	modelCalls := []*modelclient.CallRecord{}
 	answer := ""
 	validationStatus := "not_applicable"
 	validation := chatAnswerValidation{}
 	runAttempt := func(attemptID, label, promptText string) (chatAttemptResult, error) {
 		var buffered strings.Builder
-		answerText, err := runChatModelStream(ctx, host, model, numCtx, promptText, func(piece string) {
+		answerText, call, err := runChatModelStream(ctx, provider, host, model, numCtx, promptText, func(piece string) {
 			if strictValidation || policy.BranchingActive {
 				buffered.WriteString(piece)
 				return
@@ -536,6 +540,9 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 				},
 			})
 		})
+		if call != nil {
+			modelCalls = append(modelCalls, call)
+		}
 		if err != nil {
 			return chatAttemptResult{
 				Attempt: reasoning.AttemptRecord{
@@ -569,7 +576,10 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 				if policy.RepairMemory && len(repairMemory) > 0 {
 					repairPrompt += "\n\nPrior repair memory:\n- " + strings.Join(repairMemory, "\n- ")
 				}
-				repaired, repairErr := runChatModelStream(ctx, host, model, numCtx, repairPrompt, nil)
+				repaired, repairCall, repairErr := runChatModelStream(ctx, provider, host, model, numCtx, repairPrompt, nil)
+				if repairCall != nil {
+					modelCalls = append(modelCalls, repairCall)
+				}
 				if repairErr == nil {
 					repairedValidation := validateChatAnswer(repaired, req, chatContext)
 					if repairedValidation.Passed {
@@ -712,7 +722,7 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 		status["evidence_symbols"] = countEvidenceNodesByKind(chatContext.Evidence, "symbol")
 	}
 	if strings.TrimSpace(reasoningArtifactDir) != "" {
-		writeReasoningRunArtifact(reasoningArtifactDir, buildChatRunArtifact(reqID, "chat", nonEmpty(answer, "(No response text returned.)"), req, chatContext, validationStatus, validation, policy, attempts, decision, repairMemory))
+		writeReasoningRunArtifact(reasoningArtifactDir, buildChatRunArtifact(reqID, "chat", nonEmpty(answer, "(No response text returned.)"), req, chatContext, validationStatus, validation, policy, attempts, decision, repairMemory, modelCalls))
 		status["artifact_dir"] = relativeTo(root, reasoningArtifactDir)
 		status["trace_path"] = relativeTo(root, filepath.Join(reasoningArtifactDir, "trace.jsonl"))
 		status["reasoning_path"] = relativeTo(root, filepath.Join(reasoningArtifactDir, "reasoning.json"))
@@ -2973,82 +2983,31 @@ func normalizeRequestMode(mode string) string {
 	}
 }
 
-func runChatModelStream(ctx context.Context, host, model string, numCtx int, prompt string, onToken func(string)) (string, error) {
-	u, err := buildOllamaChatURL(host)
+func runChatModelStream(ctx context.Context, provider, host, model string, numCtx int, prompt string, onToken func(string)) (string, *modelclient.CallRecord, error) {
+	client, err := modelclient.New(provider, host)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	payload := map[string]any{
-		"model":  model,
-		"stream": true,
-		"messages": []map[string]string{
-			{"role": "system", "content": "You are DorkPipe, a repo-aware coding assistant."},
-			{"role": "user", "content": prompt},
+	resp, err := client.Chat(ctx, modelclient.Request{
+		Model:  model,
+		Stream: true,
+		Messages: []modelclient.Message{
+			{Role: "system", Content: "You are DorkPipe, a repo-aware coding assistant."},
+			{Role: "user", Content: prompt},
 		},
-	}
-	if numCtx > 0 {
-		payload["options"] = map[string]any{"num_ctx": numCtx}
-	}
-	b, err := json.Marshal(payload)
+		Options: modelclient.Options{NumCtx: numCtx},
+	}, onToken)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(b))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := (&http.Client{}).Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(body))
-	}
-	decoder := json.NewDecoder(resp.Body)
-	var full strings.Builder
-	for {
-		var obj map[string]any
-		if err := decoder.Decode(&obj); err != nil {
-			if err == io.EOF {
-				break
-			}
-			return full.String(), err
-		}
-		piece := nestedString(obj, "message", "content")
-		if piece == "" {
-			piece = stringValue(obj["response"])
-		}
-		if piece != "" {
-			full.WriteString(piece)
-			if onToken != nil {
-				onToken(piece)
-			}
-		}
-	}
-	return full.String(), nil
+	return resp.Text, resp.Call, nil
 }
 
-func nestedString(obj map[string]any, outer, inner string) string {
-	v, ok := obj[outer]
-	if !ok {
-		return ""
+func resolveModelConfig(providerOverride, hostOverride, modelOverride string) (string, string, string) {
+	provider := strings.TrimSpace(providerOverride)
+	if provider == "" {
+		provider = modelclient.DefaultProvider()
 	}
-	m, ok := v.(map[string]any)
-	if !ok {
-		return ""
-	}
-	return stringValue(m[inner])
-}
-
-func stringValue(v any) string {
-	s, _ := v.(string)
-	return s
-}
-
-func resolveModelConfig(hostOverride, modelOverride string) (string, string) {
 	host := strings.TrimSpace(hostOverride)
 	if host == "" {
 		host = strings.TrimSpace(os.Getenv("OLLAMA_HOST"))
@@ -3066,7 +3025,7 @@ func resolveModelConfig(hostOverride, modelOverride string) (string, string) {
 	if model == "" {
 		model = defaultEditModel
 	}
-	return host, model
+	return provider, host, model
 }
 
 func resolveNumCtx(flagValue int) int {

@@ -65,6 +65,22 @@ eval "$(dockpipe sdk)"
 dockpipe_sdk init-script
 ```
 
+The shell SDK also exposes a small prompt primitive for package-owned setup and remediation flows:
+
+```bash
+answer="$(dockpipe_sdk prompt confirm \
+  --id gpu_setup \
+  --title "Enable Docker GPU support?" \
+  --message "Ollama found an NVIDIA GPU, but Docker is not configured for GPU containers yet." \
+  --default no)"
+```
+
+Prompt behavior:
+
+- In a normal terminal, `dockpipe_sdk prompt ...` renders an interactive CLI prompt and returns the answer on stdout.
+- Under the DockPipe Launcher, the shell SDK emits a structured prompt event (`DOCKPIPE_SDK_PROMPT_MODE=json`), the launcher renders native UI, and the selected answer is written back to the running workflow.
+- Supported prompt kinds today: `confirm`, `choice`, `input`.
+
 The getter path avoids hard-coding source paths or manual root resolution in package scripts. The command prefers `DOCKPIPE_WORKDIR` when it is already set by a workflow and otherwise falls back to the current directory. The shared core SDK is the source of truth for authoring support in shell/PowerShell/Python/Go.
 
 **Resolver-specific** host scripts live **only** under **`templates/core/resolvers/<name>/`** (next to **`config.yml`**). **`ResolveWorkflowScript`** maps **`scripts/cursor-dev/…`** and **`scripts/vscode/…`** to those paths — nothing duplicate under **`assets/scripts/`** for those names.

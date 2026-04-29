@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"dorkpipe.orchestrator/confidence"
+	"dorkpipe.orchestrator/modelclient"
 	"dorkpipe.orchestrator/spec"
 	"dorkpipe.orchestrator/statepaths"
 	"dorkpipe.orchestrator/workers"
@@ -32,14 +33,15 @@ type escSection struct {
 }
 
 type nodeOut struct {
-	ID         string            `json:"id"`
-	Kind       string            `json:"kind"`
-	ExitCode   int               `json:"exit_code"`
-	Vector     confidence.Vector `json:"vector"`
-	StdoutLen  int               `json:"stdout_len"`
-	Err        string            `json:"error,omitempty"`
-	Skipped    bool              `json:"skipped,omitempty"`
-	SkipReason string            `json:"skip_reason,omitempty"`
+	ID         string                  `json:"id"`
+	Kind       string                  `json:"kind"`
+	ExitCode   int                     `json:"exit_code"`
+	Vector     confidence.Vector       `json:"vector"`
+	StdoutLen  int                     `json:"stdout_len"`
+	Err        string                  `json:"error,omitempty"`
+	ModelCall  *modelclient.CallRecord `json:"model_call,omitempty"`
+	Skipped    bool                    `json:"skipped,omitempty"`
+	SkipReason string                  `json:"skip_reason,omitempty"`
 }
 
 func writeProvenance(workdir string, d *spec.Doc, phase1, esc []*workers.Result, sum confidence.Vector, escalRan bool, subst map[string]string, earlyStop bool) error {
@@ -91,6 +93,7 @@ func toNodes(rs []*workers.Result) []nodeOut {
 			ExitCode:  r.ExitCode,
 			Vector:    r.Vector,
 			StdoutLen: len(r.Stdout),
+			ModelCall: r.ModelCall,
 		}
 		if r.Err != nil {
 			no.Err = r.Err.Error()
@@ -113,20 +116,31 @@ func appendMetricsJSONL(workdir string, name string, calibrated float64, escalat
 		return err
 	}
 	skipped := 0
+	modelCalls := 0
+	var modelTotalDurationNS int64
+	modelEvalCount := 0
 	for _, r := range results {
 		if r != nil && r.Skipped {
 			skipped++
 		}
+		if r != nil && r.ModelCall != nil {
+			modelCalls++
+			modelTotalDurationNS += r.ModelCall.TotalDurationNS
+			modelEvalCount += r.ModelCall.EvalCount
+		}
 	}
 	line := map[string]any{
-		"ts":             time.Now().UTC().Format(time.RFC3339Nano),
-		"name":           name,
-		"calibrated":     calibrated,
-		"escalated":      escalated,
-		"early_stop":     earlyStop,
-		"skipped_nodes":  skipped,
-		"schema":         "dorkpipe.metrics.v2",
-		"schema_version": 2,
+		"ts":                      time.Now().UTC().Format(time.RFC3339Nano),
+		"name":                    name,
+		"calibrated":              calibrated,
+		"escalated":               escalated,
+		"early_stop":              earlyStop,
+		"skipped_nodes":           skipped,
+		"model_calls":             modelCalls,
+		"model_total_duration_ns": modelTotalDurationNS,
+		"model_eval_count":        modelEvalCount,
+		"schema":                  "dorkpipe.metrics.v2",
+		"schema_version":          2,
 	}
 	b, err := json.Marshal(line)
 	if err != nil {

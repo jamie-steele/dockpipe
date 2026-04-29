@@ -15,6 +15,8 @@ steps:
       # Set to 0 only if you intentionally want warm backends left running.
       PIPEON_DEV_STACK_AUTODOWN: "1"
       PIPEON_DEV_STACK_BUILD: "auto"
+      # auto enables NVIDIA GPU for Ollama when host nvidia-smi works; set cpu/none to force CPU.
+      PIPEON_DEV_STACK_GPU: "auto"
       PIPEON_DEV_STACK_PIPEON_BUNDLE: "1"
       PIPEON_DEV_STACK_PULL_MODEL: "1"
       DOCKPIPE_MCP_TIER: "exec"

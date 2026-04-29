@@ -8,6 +8,7 @@
 #include "GitHelper.h"
 #include "LogViewerDialog.h"
 #include "PackageManagerDialog.h"
+#include "PromptDialog.h"
 #include "SettingsDialog.h"
 #include "WorkflowCatalog.h"
 
@@ -23,6 +24,9 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -151,6 +155,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     connect(&m_sessions, &SessionManager::sessionStopped, this, &MainWindow::onSessionChanged);
     connect(&m_sessions, &SessionManager::sessionFailed, this, &MainWindow::onSessionChanged);
     connect(&m_sessions, &SessionManager::sessionOutput, this, &MainWindow::onSessionOutput);
+    connect(&m_sessions, &SessionManager::sessionPrompt, this, &MainWindow::onSessionPrompt);
     connect(&m_sessions, &SessionManager::sessionFailed, this,
             [this](const QString &, const QString &err) { QMessageBox::warning(this, tr("DockPipe Launcher"), err); });
     QTimer::singleShot(0, this, [this, startHome]() {
@@ -837,6 +842,43 @@ void MainWindow::onSessionOutput(const QString &contextId, const QString &text)
     if (contextId != m_consoleContextId)
         return;
     appendInlineConsole(text);
+}
+
+void MainWindow::onSessionPrompt(const QString &contextId, const QString &payload)
+{
+    const QJsonDocument doc = QJsonDocument::fromJson(payload.toUtf8());
+    if (!doc.isObject()) {
+        QMessageBox::warning(this, tr("DockPipe Launcher"), tr("Received an invalid DockPipe prompt payload."));
+        m_sessions.sendInput(contextId, QString());
+        return;
+    }
+
+    const QJsonObject obj = doc.object();
+    const QString type = obj.value(QStringLiteral("type")).toString();
+    const QString title = obj.value(QStringLiteral("title")).toString(tr("DockPipe Prompt"));
+    const QString message = obj.value(QStringLiteral("message")).toString();
+    const QString defaultValue = obj.value(QStringLiteral("default")).toString();
+    const bool sensitive = obj.value(QStringLiteral("sensitive")).toBool(false);
+
+    QStringList items;
+    const QJsonArray options = obj.value(QStringLiteral("options")).toArray();
+    for (const QJsonValue &value : options) {
+        const QString option = value.toString();
+        if (!option.isEmpty())
+            items.append(option);
+    }
+
+    QString response = defaultValue;
+    if (type == QStringLiteral("confirm") || type == QStringLiteral("input") || type == QStringLiteral("choice")) {
+        PromptDialog dialog({type, title, message, defaultValue, items, sensitive}, this);
+        dialog.exec();
+        response = dialog.response();
+    } else {
+        QMessageBox::information(this, tr("DockPipe Launcher"),
+                                 tr("Unsupported prompt type from DockPipe: %1").arg(type));
+    }
+
+    m_sessions.sendInput(contextId, response);
 }
 
 QListWidgetItem *MainWindow::currentItem()

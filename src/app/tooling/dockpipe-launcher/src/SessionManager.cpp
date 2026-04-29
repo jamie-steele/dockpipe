@@ -8,6 +8,8 @@
 #include <QProcess>
 #include <QProcessEnvironment>
 
+#include <functional>
+
 #ifdef Q_OS_WIN
 // taskkill used below
 #else
@@ -18,6 +20,13 @@
 #endif
 
 SessionManager::SessionManager(QObject *parent) : QObject(parent) {}
+
+namespace {
+QString promptEventPrefix()
+{
+    return QStringLiteral("::dockpipe-prompt::");
+}
+}
 
 SessionInfo SessionManager::info(const QString &contextId) const
 {
@@ -100,6 +109,7 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
     const QString wd = QDir::cleanPath(ctx.workdir);
     QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
     env.insert(QStringLiteral("DOCKPIPE_WORKDIR"), wd);
+    env.insert(QStringLiteral("DOCKPIPE_SDK_PROMPT_MODE"), QStringLiteral("json"));
     proc->setProcessEnvironment(env);
     proc->setWorkingDirectory(wd);
 
@@ -119,13 +129,42 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
     si.ready = false;
     m_info[ctx.id] = si;
 
-    auto flushOutput = [this, ctx, proc, logFile]() {
-        const QByteArray chunk = proc->readAll();
-        if (chunk.isEmpty())
+    std::function<void(bool)> flushOutput = [this, ctx, proc, logFile](bool drainRemainder) {
+        QByteArray &pending = m_pendingOutput[ctx.id];
+        pending += proc->readAll();
+
+        QByteArray visible;
+        auto processLine = [this, ctx, &visible](const QByteArray &rawLine) {
+            const QString line = QString::fromLocal8Bit(rawLine);
+            if (line.startsWith(promptEventPrefix())) {
+                QString payload = line.mid(promptEventPrefix().size());
+                while (payload.endsWith(QLatin1Char('\n')) || payload.endsWith(QLatin1Char('\r')))
+                    payload.chop(1);
+                emit sessionPrompt(ctx.id, payload);
+                return;
+            }
+            visible += rawLine;
+        };
+
+        while (true) {
+            const int newline = pending.indexOf('\n');
+            if (newline < 0)
+                break;
+            const QByteArray line = pending.left(newline + 1);
+            pending.remove(0, newline + 1);
+            processLine(line);
+        }
+
+        if (drainRemainder && !pending.isEmpty()) {
+            processLine(pending);
+            pending.clear();
+        }
+
+        if (visible.isEmpty())
             return;
-        logFile->write(chunk);
+        logFile->write(visible);
         logFile->flush();
-        const QString text = QString::fromLocal8Bit(chunk);
+        const QString text = QString::fromLocal8Bit(visible);
         SessionInfo &session = m_info[ctx.id];
         if (!session.ready && text.contains(readinessMarker())) {
             session.ready = true;
@@ -134,14 +173,15 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
         emit sessionOutput(ctx.id, text);
     };
 
-    connect(proc, &QProcess::readyRead, this, flushOutput);
+    connect(proc, &QProcess::readyRead, this, [flushOutput]() { flushOutput(false); });
 
     connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
             [this, ctx, proc, logFile, flushOutput](int exitCode, QProcess::ExitStatus st) {
-                flushOutput();
+                flushOutput(true);
                 logFile->close();
                 logFile->deleteLater();
                 m_processes.remove(ctx.id);
+                m_pendingOutput.remove(ctx.id);
                 SessionInfo &s = m_info[ctx.id];
                 s.status = SessionStatus::Stopped;
                 s.pid = 0;
@@ -150,11 +190,12 @@ bool SessionManager::launch(const Context &ctx, const QString &logsDir)
             });
 
     connect(proc, &QProcess::errorOccurred, this, [this, ctx, proc, logFile, flushOutput](QProcess::ProcessError) {
-        flushOutput();
+        flushOutput(true);
         if (proc->state() == QProcess::NotRunning) {
             logFile->close();
             logFile->deleteLater();
             m_processes.remove(ctx.id);
+            m_pendingOutput.remove(ctx.id);
             SessionInfo &s = m_info[ctx.id];
             s.status = SessionStatus::Failed;
             s.errorString = proc->errorString();
@@ -207,4 +248,15 @@ void SessionManager::stop(const QString &contextId)
         proc->waitForFinished(3000);
     }
 #endif
+}
+
+void SessionManager::sendInput(const QString &contextId, const QString &text)
+{
+    QPointer<QProcess> proc = m_processes.value(contextId);
+    if (!proc || proc->state() == QProcess::NotRunning)
+        return;
+    QByteArray payload = text.toUtf8();
+    payload.append('\n');
+    proc->write(payload);
+    proc->waitForBytesWritten(3000);
 }

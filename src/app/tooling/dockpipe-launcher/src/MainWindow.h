@@ -63,6 +63,7 @@ private slots:
     void onAdvancedSearchChanged(const QString &text);
     void onAdvancedSelectionChanged();
     void onSessionOutput(const QString &contextId, const QString &text);
+    void onSessionPrompt(const QString &contextId, const QString &payload);
 
 private:
     void setupMenuBar();

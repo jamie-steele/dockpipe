@@ -10,23 +10,45 @@ SOURCE_DIR="${SOURCE_PATH%/*}"
 SCRIPT_DIR="$(cd "$SOURCE_DIR" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 COMPOSE="$SCRIPT_DIR/../compose/docker-compose.yml"
+source "$SCRIPT_DIR/dev-stack-lib.sh"
 if [[ ! -f "$COMPOSE" ]]; then
 	echo "dev-stack: missing $COMPOSE" >&2
 	exit 1
 fi
 cmd="${1:-}"
 PROJECT="${DORKPIPE_DEV_STACK_PROJECT:-dorkpipe-dev}"
+GPU_PROMPT_RESULT=""
+dorkpipe_stack_bootstrap_sdk >/dev/null 2>&1 || true
+mapfile -t COMPOSE_ARGS < <(dorkpipe_stack_compose_args)
 case "$cmd" in
 up)
-	docker compose -p "$PROJECT" -f "$COMPOSE" --project-directory "$REPO_ROOT" up -d --remove-orphans
-	echo "dev-stack: up — Ollama http://127.0.0.1:11434  Postgres postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe (project $PROJECT)"
+	dorkpipe_stack_configure_gpu
+	case "${DORKPIPE_DEV_STACK_PROMPT_RESULT:-}" in
+	gpu-setup)
+		echo "dorkpipe-dev-stack: launch paused before starting services so Docker GPU access can be enabled"
+		exit 0
+		;;
+	cancelled)
+		echo "dorkpipe-dev-stack: launch cancelled before starting services"
+		exit 0
+		;;
+	esac
+	mapfile -t COMPOSE_ARGS < <(dorkpipe_stack_compose_args)
+	if [[ -n "${DORKPIPE_DEV_STACK_SERVICES:-}" ]]; then
+		# shellcheck disable=SC2206
+		SERVICES=(${DORKPIPE_DEV_STACK_SERVICES})
+	else
+		SERVICES=(postgres ollama)
+	fi
+	docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans "${SERVICES[@]}"
+	echo "dev-stack: up — Ollama http://127.0.0.1:11434  Postgres postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe (project $PROJECT; gpu ${DORKPIPE_DEV_STACK_GPU:-auto})"
 	;;
 down)
-	docker compose -p "$PROJECT" -f "$COMPOSE" --project-directory "$REPO_ROOT" down
+	docker compose "${COMPOSE_ARGS[@]}" down
 	echo "dev-stack: down — sidecar stack stopped"
 	;;
 ps | status)
-	docker compose -p "$PROJECT" -f "$COMPOSE" --project-directory "$REPO_ROOT" ps
+	docker compose "${COMPOSE_ARGS[@]}" ps
 	;;
 *)
 	echo "usage: $0 up|down|ps" >&2

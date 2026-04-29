@@ -70,6 +70,15 @@ Qt is available under **LGPL** and commercially. If you **ship binaries**, compl
 
 **`src/scripts/docker-package-cache-demo.sh`** demonstrates named Docker volumes for persistent APT caches inside containers. Add env lines your workflows read, or pass **`dockpipe --mount`** when you run from the CLI; Pipeon can supply extra env lines if your wrapper reads them.
 
+## Prompt bridge
+
+The launcher now understands the shell SDK prompt bridge from **`dockpipe_sdk prompt ...`**. Package scripts can emit a framework prompt once and get:
+
+- terminal interaction in plain CLI runs
+- native launcher dialogs when the same workflow is started from DockPipe Launcher
+
+The launcher sets **`DOCKPIPE_SDK_PROMPT_MODE=json`** for managed `dockpipe` subprocesses, watches for prompt events on process output, and writes the user’s response back to the running workflow over stdin.
+
 ## Basic vs Advanced
 
 - **Basic** (default): **File → Open project folder…** (or **Choose folder…**) sets the project directory passed to `dockpipe` as **`--workdir`** (your code is mounted in the tool’s container). The main area lists only workflows whose workflow YAML includes **`category: app`** (see `docs/workflow-yaml.md`) — GUI/IDE-style apps. Double-click an app to launch. **Set up Cursor MCP** runs the prep flow only (writes **`bin/.dockpipe/packages/cursor-dev/`** hints; **no** Docker, **no** full `dockpipe` session). For a **Docker session container + Cursor on the host**, double-click the **`cursor-dev`** app — not the MCP button. **Refresh apps** (toolbar) or **File → Refresh app list** (**F5**) reloads the DockPipe-owned workflow catalog for the selected project so new or edited workflows appear without restarting. **View → Icon grid** / **Compact list** toggles presentation. Mode and view are stored in **`launcher.json`**.

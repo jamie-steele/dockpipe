@@ -7,7 +7,7 @@
 #   DORKPIPE_DEV_STACK_AUTODOWN=0 dockpipe --workflow dorkpipe-self-analysis-stack-proxy --workdir . --
 name: dorkpipe-self-analysis-stack-proxy
 description: >-
-  stack_up (host): Postgres+Ollama+policy-proxy via DockPipe compose builtin.
+  stack_up (host): Postgres+Ollama+policy-proxy via the DorkPipe host stack script with GPU-aware Ollama setup.
   self_analysis (container): same as dorkpipe-self-analysis, but compiled with
   proxy-backed allowlist network policy.
   stack_down (host): compose down unless DORKPIPE_DEV_STACK_AUTODOWN=0.
@@ -23,25 +23,24 @@ security:
       - golang.org
       - github.com
       - "*.githubusercontent.com"
-compose:
-  file: ../dorkpipe/assets/compose/docker-compose.yml
-  project: dorkpipe-dev
-  project_directory: ../../../../
-  autodown_env: DORKPIPE_DEV_STACK_AUTODOWN
-  exports:
-    DATABASE_URL: postgresql://dorkpipe:dorkpipe@host.docker.internal:15432/dorkpipe
-    OLLAMA_HOST: http://host.docker.internal:11434
-    DOCKPIPE_POLICY_PROXY_URL: http://host.docker.internal:13128
-    DOCKPIPE_POLICY_PROXY_NO_PROXY: host.docker.internal,localhost,127.0.0.1,::1
-  services: [postgres, ollama, policy-proxy]
 steps:
   - id: stack_up
     kind: host
-    host_builtin: compose_up
+    run:
+      - scripts/dorkpipe/dev-stack.sh
+      - up
+    vars:
+      DORKPIPE_DEV_STACK_GPU: "auto"
+      DORKPIPE_DEV_STACK_SERVICES: "postgres ollama policy-proxy"
 
   - id: self_analysis
     runtime: dockerimage
     isolate: golang:1.25-bookworm
+    vars:
+      DATABASE_URL: postgresql://dorkpipe:dorkpipe@host.docker.internal:15432/dorkpipe
+      OLLAMA_HOST: http://host.docker.internal:11434
+      DOCKPIPE_POLICY_PROXY_URL: http://host.docker.internal:13128
+      DOCKPIPE_POLICY_PROXY_NO_PROXY: host.docker.internal,localhost,127.0.0.1,::1
     cmd: |-
       bash -c 'set -euo pipefail
       cd /work
@@ -57,4 +56,5 @@ steps:
 
   - id: stack_down
     kind: host
-    host_builtin: compose_down
+    run:
+      - scripts/dorkpipe/dev-stack-maybe-down.sh

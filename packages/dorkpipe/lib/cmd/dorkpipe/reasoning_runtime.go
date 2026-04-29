@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"dorkpipe.orchestrator/modelclient"
 	"dorkpipe.orchestrator/reasoning"
 	"dorkpipe.orchestrator/statepaths"
 )
@@ -195,7 +196,35 @@ func buildValidationFindings(validation chatAnswerValidation) []reasoning.Valida
 	return findings
 }
 
-func buildChatRunArtifact(reqID, route, summary string, req routeRequest, chatContext workspaceChatContext, validationStatus string, validation chatAnswerValidation, policy runtimePolicy, attempts []reasoning.AttemptRecord, decision reasoning.DecisionRecord, repairMemory []string) *reasoning.RunArtifact {
+func toReasoningModelCalls(calls []*modelclient.CallRecord) []reasoning.ModelCallRecord {
+	out := make([]reasoning.ModelCallRecord, 0, len(calls))
+	for _, call := range calls {
+		if call == nil {
+			continue
+		}
+		out = append(out, reasoning.ModelCallRecord{
+			Provider:             call.Provider,
+			BaseURL:              call.BaseURL,
+			Endpoint:             call.Endpoint,
+			Model:                call.Model,
+			Stream:               call.Stream,
+			PromptChars:          call.PromptChars,
+			MessageCount:         call.MessageCount,
+			Options:              call.Options,
+			KeepAlive:            call.KeepAlive,
+			TotalDurationNS:      call.TotalDurationNS,
+			LoadDurationNS:       call.LoadDurationNS,
+			PromptEvalCount:      call.PromptEvalCount,
+			PromptEvalDurationNS: call.PromptEvalDurationNS,
+			EvalCount:            call.EvalCount,
+			EvalDurationNS:       call.EvalDurationNS,
+			DoneReason:           call.DoneReason,
+		})
+	}
+	return out
+}
+
+func buildChatRunArtifact(reqID, route, summary string, req routeRequest, chatContext workspaceChatContext, validationStatus string, validation chatAnswerValidation, policy runtimePolicy, attempts []reasoning.AttemptRecord, decision reasoning.DecisionRecord, repairMemory []string, modelCalls []*modelclient.CallRecord) *reasoning.RunArtifact {
 	candidates := make([]reasoning.RetrievalCandidate, 0, len(chatContext.Targets))
 	for _, rel := range chatContext.Targets {
 		candidates = append(candidates, reasoning.RetrievalCandidate{
@@ -239,7 +268,8 @@ func buildChatRunArtifact(reqID, route, summary string, req routeRequest, chatCo
 		Attempts:     attempts,
 		Decision:     decision,
 		RepairMemory: append([]string{}, repairMemory...),
-		Output: output,
+		ModelCalls:   toReasoningModelCalls(modelCalls),
+		Output:       output,
 	}
 }
 
@@ -255,7 +285,7 @@ func buildChatOutputCitations(req routeRequest, graph chatEvidenceGraph) []reaso
 	return out
 }
 
-func buildEditRunArtifact(reqID, message, activeFile, selectionText string, plan *editPlan, candidates []string, artifact *editModelArtifact, validationStatus string, policy runtimePolicy, attempts []reasoning.AttemptRecord, decision reasoning.DecisionRecord, repairMemory []string) *reasoning.RunArtifact {
+func buildEditRunArtifact(reqID, message, activeFile, selectionText string, plan *editPlan, candidates []string, artifact *editModelArtifact, validationStatus string, policy runtimePolicy, attempts []reasoning.AttemptRecord, decision reasoning.DecisionRecord, repairMemory []string, modelCalls []*modelclient.CallRecord) *reasoning.RunArtifact {
 	retrievalCandidates := make([]reasoning.RetrievalCandidate, 0, len(candidates))
 	for _, rel := range candidates {
 		retrievalCandidates = append(retrievalCandidates, reasoning.RetrievalCandidate{
@@ -302,6 +332,7 @@ func buildEditRunArtifact(reqID, message, activeFile, selectionText string, plan
 		Attempts:     attempts,
 		Decision:     decision,
 		RepairMemory: append([]string{}, repairMemory...),
+		ModelCalls:   toReasoningModelCalls(modelCalls),
 		Output: reasoning.OutputRecord{
 			Summary:          summary,
 			ValidationStatus: validationStatus,

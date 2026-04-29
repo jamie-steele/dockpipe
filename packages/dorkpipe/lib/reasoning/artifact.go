@@ -89,12 +89,12 @@ type AttemptRecord struct {
 }
 
 type DecisionRecord struct {
-	SelectedAttemptID string `json:"selected_attempt_id,omitempty"`
-	Abstained         bool   `json:"abstained,omitempty"`
-	Escalated         bool   `json:"escalated,omitempty"`
-	EscalationReason  string `json:"escalation_reason,omitempty"`
-	BranchesConsidered int   `json:"branches_considered,omitempty"`
-	BranchesPruned    int    `json:"branches_pruned,omitempty"`
+	SelectedAttemptID  string `json:"selected_attempt_id,omitempty"`
+	Abstained          bool   `json:"abstained,omitempty"`
+	Escalated          bool   `json:"escalated,omitempty"`
+	EscalationReason   string `json:"escalation_reason,omitempty"`
+	BranchesConsidered int    `json:"branches_considered,omitempty"`
+	BranchesPruned     int    `json:"branches_pruned,omitempty"`
 }
 
 type OutputCitation struct {
@@ -112,16 +112,36 @@ type OutputRecord struct {
 	StructuredEditOp []string         `json:"structured_edit_ops,omitempty"`
 }
 
+type ModelCallRecord struct {
+	Provider             string         `json:"provider,omitempty"`
+	BaseURL              string         `json:"base_url,omitempty"`
+	Endpoint             string         `json:"endpoint,omitempty"`
+	Model                string         `json:"model,omitempty"`
+	Stream               bool           `json:"stream,omitempty"`
+	PromptChars          int            `json:"prompt_chars,omitempty"`
+	MessageCount         int            `json:"message_count,omitempty"`
+	Options              map[string]any `json:"options,omitempty"`
+	KeepAlive            string         `json:"keep_alive,omitempty"`
+	TotalDurationNS      int64          `json:"total_duration_ns,omitempty"`
+	LoadDurationNS       int64          `json:"load_duration_ns,omitempty"`
+	PromptEvalCount      int            `json:"prompt_eval_count,omitempty"`
+	PromptEvalDurationNS int64          `json:"prompt_eval_duration_ns,omitempty"`
+	EvalCount            int            `json:"eval_count,omitempty"`
+	EvalDurationNS       int64          `json:"eval_duration_ns,omitempty"`
+	DoneReason           string         `json:"done_reason,omitempty"`
+}
+
 type RunArtifact struct {
-	ArtifactVersion string           `json:"artifact_version"`
-	Kind            string           `json:"kind"`
-	Request         RequestRecord    `json:"request"`
-	Policy          PolicyRecord     `json:"policy,omitempty"`
-	Retrieval       RetrievalRecord  `json:"retrieval,omitempty"`
-	Evidence        EvidenceRecord   `json:"evidence,omitempty"`
-	Validation      ValidationRecord `json:"validation,omitempty"`
-	Attempts        []AttemptRecord  `json:"attempts,omitempty"`
-	Decision        DecisionRecord   `json:"decision,omitempty"`
-	RepairMemory    []string         `json:"repair_memory,omitempty"`
-	Output          OutputRecord     `json:"output,omitempty"`
+	ArtifactVersion string            `json:"artifact_version"`
+	Kind            string            `json:"kind"`
+	Request         RequestRecord     `json:"request"`
+	Policy          PolicyRecord      `json:"policy,omitempty"`
+	Retrieval       RetrievalRecord   `json:"retrieval,omitempty"`
+	Evidence        EvidenceRecord    `json:"evidence,omitempty"`
+	Validation      ValidationRecord  `json:"validation,omitempty"`
+	Attempts        []AttemptRecord   `json:"attempts,omitempty"`
+	Decision        DecisionRecord    `json:"decision,omitempty"`
+	RepairMemory    []string          `json:"repair_memory,omitempty"`
+	ModelCalls      []ModelCallRecord `json:"model_calls,omitempty"`
+	Output          OutputRecord      `json:"output,omitempty"`
 }

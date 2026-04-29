@@ -6,6 +6,7 @@
 #include <QObject>
 #include <QPointer>
 #include <QProcess>
+#include <QByteArray>
 #include <QStringList>
 
 enum class SessionStatus { Stopped, Starting, Running, Failed };
@@ -36,6 +37,7 @@ public:
 
     bool launch(const Context &ctx, const QString &logsDir);
     void stop(const QString &contextId);
+    void sendInput(const QString &contextId, const QString &text);
 
 signals:
     void sessionStarted(const QString &contextId);
@@ -43,8 +45,10 @@ signals:
     void sessionStopped(const QString &contextId, int exitCode, QProcess::ExitStatus);
     void sessionFailed(const QString &contextId, const QString &error);
     void sessionOutput(const QString &contextId, const QString &text);
+    void sessionPrompt(const QString &contextId, const QString &payload);
 
 private:
     QHash<QString, QPointer<QProcess>> m_processes;
     QHash<QString, SessionInfo> m_info;
+    QHash<QString, QByteArray> m_pendingOutput;
 };
