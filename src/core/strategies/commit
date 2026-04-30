@@ -1,0 +1,3 @@
+# Named strategy: commit on host after successful workflow (no clone).
+DOCKPIPE_STRATEGY_KIND=git
+DOCKPIPE_STRATEGY_AFTER=scripts/commit-worktree.sh

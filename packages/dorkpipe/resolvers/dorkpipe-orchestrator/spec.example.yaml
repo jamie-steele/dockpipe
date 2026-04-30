@@ -1,0 +1,30 @@
+# Example DAG for DorkPipe — tune policy/nodes for your repo.
+# Run: packages/dorkpipe/bin/dorkpipe run -f packages/dorkpipe/resolvers/dorkpipe-orchestrator/spec.example.yaml --workdir .
+#
+# Requires: Ollama reachable (OLLAMA_HOST) for local_reason; dockpipe on PATH for escalation.
+# Optional: DATABASE_URL for pgvector nodes (see packages/dorkpipe/resolvers/dorkpipe/assets/compose/docker-compose.yml).
+name: dorkpipe-orchestrator
+policy:
+  escalate_confidence_below: 0.75
+nodes:
+  - id: prep
+    kind: shell
+    script: |
+      set -euo pipefail
+      mkdir -p bin/.dockpipe/packages/dorkpipe
+      echo "prep ok" > bin/.dockpipe/packages/dorkpipe/prep.txt
+
+  - id: local_reason
+    kind: ollama
+    needs: [prep]
+    model: llama3.2
+    prompt: |
+      In under 200 words, summarize risks for a code review given this prep line: {{prep}}
+
+  # Escalation: runs only if aggregate confidence is below policy.escalate_confidence_below.
+  # Replace dockpipe_args with your real Codex workflow (e.g. test-demo review step) when OPENAI_API_KEY is set.
+  - id: final_codex
+    kind: codex
+    needs: [local_reason]
+    escalate_only: true
+    dockpipe_args: ["--isolate", "golang:1.25-bookworm", "--workdir", ".", "--", "sh", "-c", "echo DORKPIPE_ESCALATION_PLACEHOLDER"]

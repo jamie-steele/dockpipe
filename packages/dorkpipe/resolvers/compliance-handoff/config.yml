@@ -1,0 +1,15 @@
+# Internal workflow (this repo + copies): host script prints compliance/security *signal* paths for AI assistants.
+# Not a DockPipe core primitive — DockPipe is the user; workflows/scripts are the extension surface (AGENTS.md).
+# runtime: dockerimage (host steps use kind: host; docker_preflight skips socket check for run:).
+name: compliance-handoff
+description: >-
+  Host-only: run scripts/dorkpipe/compliance-handoff.sh. Points AI at docs/artifacts.md and
+  bin/.dockpipe/ci-analysis/, bin/.dockpipe/packages/dorkpipe/self-analysis/, bin/.dockpipe/packages/dorkpipe/run.json when present.
+
+docker_preflight: false
+resolver: codex
+steps:
+  - id: handoff
+    kind: host
+    run:
+      - scripts/dorkpipe/compliance-handoff.sh

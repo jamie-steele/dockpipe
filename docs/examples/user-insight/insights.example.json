@@ -1,0 +1,74 @@
+{
+  "schema_version": "1.0",
+  "kind": "dockpipe_user_insights",
+  "separation": {
+    "user_insights": "This file — structured human guidance; not verified facts.",
+    "repo_facts": "bin/.dockpipe/packages/dorkpipe/self-analysis/ (example layout)",
+    "system_findings": ".dockpipe/ci-analysis/findings.json"
+  },
+  "insights": [
+    {
+      "id": "insight-ui-20260322T120000Z-aaaaaaaaaaaaaa",
+      "queue_item_id": "ui-20260322T120000Z-aaaaaaaaaaaaaa",
+      "category": "convention",
+      "category_hint": "unknown",
+      "normalized_text": "Prefer two-space indent in YAML; keep workflows readable.",
+      "intent": "user_guidance_signal",
+      "severity": "unspecified",
+      "scope": { "repo_path": "workflows/" },
+      "provenance": {
+        "source": "user",
+        "original_text": "Prefer two-space indent in YAML; keep workflows readable.",
+        "captured_at_utc": "2026-03-22T12:00:00Z",
+        "processed_at_utc": "2026-03-22T12:05:00Z",
+        "classifier": {
+          "pattern": "(?i)(convention|naming|style guide|\\bprefer\\b|always use )",
+          "category": "convention"
+        }
+      },
+      "confidence": {
+        "role": "user_signal",
+        "score": null,
+        "note": "Not verified by automated scan; not authoritative truth."
+      },
+      "status": "accepted",
+      "supersedes": null,
+      "stale": false,
+      "history": []
+    },
+    {
+      "id": "insight-ui-20260322T120001Z-bbbbbbbbbbbbbb",
+      "queue_item_id": "ui-20260322T120001Z-bbbbbbbbbbbbbb",
+      "category": "compliance",
+      "category_hint": "unknown",
+      "normalized_text": "PCI scope: payment data must not be logged in debug traces.",
+      "intent": "user_guidance_signal",
+      "severity": "unspecified",
+      "scope": { "component": "logging" },
+      "provenance": {
+        "source": "user",
+        "original_text": "PCI scope: payment data must not be logged in debug traces.",
+        "captured_at_utc": "2026-03-22T12:00:01Z",
+        "processed_at_utc": "2026-03-22T12:05:00Z",
+        "classifier": {
+          "pattern": "(?i)(SOC\\s*2|ISO\\s*27001|HIPAA|GDPR|PCI|compliance|audit|regulator)",
+          "category": "compliance"
+        }
+      },
+      "confidence": {
+        "role": "user_signal",
+        "score": null,
+        "note": "Not verified by automated scan; not authoritative truth."
+      },
+      "status": "pending",
+      "supersedes": null,
+      "stale": false,
+      "history": []
+    }
+  ],
+  "provenance": {
+    "last_processed_at_utc": "2026-03-22T12:05:00Z",
+    "generator": "dockpipe-user-insight-process",
+    "new_insights_count": 2
+  }
+}

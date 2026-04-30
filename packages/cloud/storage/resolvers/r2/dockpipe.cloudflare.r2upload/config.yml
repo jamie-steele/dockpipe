@@ -1,0 +1,33 @@
+name: dockpipe.cloudflare.r2upload
+namespace: dockpipe-cloudflare
+description: >-
+  Tar R2_PUBLISH_SOURCE and upload to R2 via scripts/dockpipe/r2-publish.sh. Terraform skipped (R2_SKIP_TERRAFORM=1).
+  Run after dockpipe.cloudflare.r2infra when the bucket exists.
+
+docker_preflight: false
+
+types:
+  - models/IR2UploadConfig
+
+vars:
+  R2_ARCHIVE_NAME: ""  # empty = default dockpipe-publish-<timestamp>.tar.gz
+  R2_BUCKET: ""  # required; target bucket name
+  R2_CONTENT_TYPE: "application/gzip"  # uploaded object Content-Type
+  R2_ENDPOINT_URL: ""  # optional; default https://<account>.r2.cloudflarestorage.com from CLOUDFLARE_ACCOUNT_ID
+  R2_PREFIX: "packages/"  # key prefix inside bucket (often ends with /)
+  R2_PUBLISH_ALWAYS_UPLOAD: "0"  # 1 = upload even when Terraform did not run apply
+  R2_PUBLISH_DRY_RUN: "0"  # 1 = print what would be uploaded
+  R2_PUBLISH_SOURCE: "release/artifacts"  # directory to tar (relative to --workdir)
+  R2_SKIP_TERRAFORM: "1"  # must stay 1 for this workflow (upload-only path)
+  R2_USE_TERRAFORM: ""  # optional 0|1 override for r2-publish should_run_terraform
+  AWS_ACCESS_KEY_ID: ""  # S3 upload mode; paired with AWS_SECRET_ACCESS_KEY
+  AWS_SECRET_ACCESS_KEY: ""
+  AWS_ENDPOINT_URL_S3: ""  # alias for endpoint when using aws s3 cp
+  CLOUDFLARE_ACCOUNT_ID: ""  # required for wrangler token upload path
+  CLOUDFLARE_API_TOKEN: ""  # wrangler path or token-based Terraform in combined scripts
+
+steps:
+  - id: upload
+    kind: host
+    run:
+      - scripts/dockpipe/r2-publish.sh

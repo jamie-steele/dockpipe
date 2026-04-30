@@ -1,0 +1,24 @@
+/// <summary>
+/// Contract for GitHub Container Registry push workflow variables.
+/// </summary>
+public Interface IGHCRPushConfig
+{
+    /// <summary>Container CLI used for login, tag, and push operations.</summary>
+    public string GhcrContainerCli;
+    /// <summary>Local source image reference that already exists before the workflow runs.</summary>
+    public string GhcrImageSource;
+    /// <summary>Target GHCR repository or fully tagged image reference.</summary>
+    public string GhcrImageTarget;
+    /// <summary>Skip registry login and reuse the host auth state when set to 1.</summary>
+    public string GhcrLoginSkip;
+    /// <summary>Print the planned operations without mutating the registry when set to 1.</summary>
+    public string GhcrPushDryRun;
+    /// <summary>Registry host name, normally ghcr.io.</summary>
+    public string GhcrRegistry;
+    /// <summary>Optional comma, space, or newline separated tags to push.</summary>
+    public string GhcrTags;
+    /// <summary>GitHub token or classic PAT with package write scope.</summary>
+    public string GhcrToken;
+    /// <summary>GitHub username or actor used for registry login.</summary>
+    public string GhcrUsername;
+}

@@ -1,6 +1,48 @@
+# Go module / build caches (never commit — e.g. ad-hoc `go run` / tests)
+.gocache/
+.gomodcache/
+
+# Ad-hoc scratch (local experiments, packaging test output)
+tmp/
+
+# Shell footgun: `op inject ... > -` creates a repo-root file named `-` (not stdout). DockPipe never does this.
+/-
+
+# Built Go binaries under src/bin (launchers stay as shell scripts; see Makefile / src/Makefile)
+# Maintainer packages — built ELF artifacts (not under src/bin/)
+packages/dorkpipe/bin/dorkpipe
+packages/dorkpipe-mcp/bin/mcpd
+packages/dorkpipe/mcp/bin/mcpd
+
+# Local Cursor / remote server / IDE (binaries, keys, workspace state — do not commit)
+.cache/
+.cursor-server/
+.cursor/
+.devcontainer/
+.ssh/
+
 # Build output
-packaging/build/
+# DockPipe Launcher CMake build
+src/app/tooling/dockpipe-launcher/build/
+# Pipeon Desktop Tauri/Rust build output
+packages/pipeon/apps/pipeon-desktop/src-tauri/target/
+build-dockpipe-launcher/
+release/packaging/build/
 *.deb
+src/bin/
+# ad-hoc go build -o in repo root (prefer: make build-windows → src/bin/dockpipe.exe)
+/dockpipe.exe
+msi-dist/
+*.wixobj
+*.wixpdb
+# Legacy local output (prefer release/artifacts)
+dist/
+# Local publish + CI-style release binaries (templates-core tarball, nfpm, tar.gz, etc.)
+release/artifacts/
+
+# Local demo recordings (asciinema + agg)
+release/demo/dockpipe-demo*.cast
+release/demo/dockpipe-demo*.gif
 
 # OS
 .DS_Store
@@ -12,6 +54,51 @@ Thumbs.db
 *.swo
 .*.sw?
 
+# Python bytecode / cache
+__pycache__/
+*.pyc
+
+# SR&ED evidence and timekeeping (local only; see .local/sred/README.md)
+.local/sred/
+
+# Accidental shell redirect (`> -`) creates this filename — never commit
+/-
+
 # Optional local overrides (do not commit)
+.gitconfig
 .env
 .env.local
+# Vault env template (op:// or other backends; keep local — see dockpipe.config.json secrets.vault_template)
+.env.op.template
+.env.template
+.env.vault.template
+.env.secretstore
+
+# Maintainer-only trees under .staging — non-first-party experiments (ignored); optional private-repo backup.
+# Order matters: `.staging/packages/*` must come before `!.staging/packages/README.md` so the README stays tracked.
+.staging/*
+!.staging/packages/
+.staging/packages/*
+!.staging/packages/README.md
+# To stop tracking without deleting files: git rm -r --cached .staging
+
+# DockPipe project-local state (compile store, runs, caches) under `bin/.dockpipe/` — covered by `bin/` if you ignore it.
+# Legacy path (pre–bin layout): remove after migrating.
+bin/.dockpipe/
+.dockpipe/
+**/.pipelang/
+
+# DorkPipe runtime outputs (metrics, nodes, self-analysis scratch)
+.dorkpipe/
+
+# Terraform (e.g. packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2publish/terraform — keep .terraform.lock.hcl)
+.terraform/
+*.tfstate
+*.tfstate.*
+
+# VS Code extension (packed / dev)
+packages/pipeon/resolvers/pipeon/vscode-extension/node_modules/
+packages/pipeon/resolvers/pipeon/vscode-extension/*.vsix
+src/app/tooling/vscode-extensions/dockpipe-language-support/node_modules/
+src/app/tooling/vscode-extensions/dockpipe-language-support/*.vsix
+src/app/tooling/vscode-extensions/dockpipe-language-support/dist/

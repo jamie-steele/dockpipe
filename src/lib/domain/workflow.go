@@ -1,0 +1,711 @@
+// Package domain holds workflow config types and parsing — no I/O.
+package domain
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+
+	"gopkg.in/yaml.v3"
+)
+
+// Workflow type identifiers (optional YAML workflow_type). The engine does not branch on these;
+// they classify workflows for tooling, docs, and future composition. Use lowercase + hyphens.
+const (
+	WorkflowTypeSecretstore = "secretstore"
+	// DefaultOutputsEnvRel is the default step outputs path when outputs: is omitted (forward slashes for YAML).
+	DefaultOutputsEnvRel = "bin/.dockpipe/outputs.env"
+)
+
+var workflowTypePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+
+// RunSpec is a string or YAML list of strings (e.g. run: script.sh vs run: [a, b]).
+type RunSpec []string
+
+func (r *RunSpec) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		var s string
+		if err := n.Decode(&s); err != nil {
+			return err
+		}
+		*r = []string{s}
+		return nil
+	}
+	if n.Kind == yaml.SequenceNode {
+		var ss []string
+		if err := n.Decode(&ss); err != nil {
+			return err
+		}
+		*r = ss
+		return nil
+	}
+	return fmt.Errorf("expected string or sequence for run")
+}
+
+// Workflow is templates/<name>/config.yml (bundled or user project) or templates/core/resolvers/<name>/config.yml (delegate).
+type Workflow struct {
+	Name        string `yaml:"name"`
+	Description string `yaml:"description,omitempty"`
+	// Category: optional launcher/UI hint (e.g. "app" = show in Pipeon Basic mode as a launchable GUI/tool).
+	Category string `yaml:"category,omitempty"`
+	// Icon: optional package-owned artwork path for launcher/tooling surfaces. Relative paths resolve
+	// next to this workflow config.yml.
+	Icon string `yaml:"icon,omitempty"`
+	// WorkflowType: optional classifier (e.g. secretstore). Engine ignores; scripts and UIs may use it.
+	WorkflowType string `yaml:"workflow_type,omitempty"`
+	// Namespace: optional author/org label for packages and tooling (see ValidateNamespace).
+	Namespace string  `yaml:"namespace,omitempty"`
+	Run       RunSpec `yaml:"run,omitempty"`
+	Isolate   string  `yaml:"isolate,omitempty"`
+	Act       string  `yaml:"act,omitempty"`
+	Action    string  `yaml:"action,omitempty"`
+	Resolver  string  `yaml:"resolver,omitempty"`
+	// Runtime: default runtime profile name (templates/core/runtimes/<name>).
+	Runtime string `yaml:"runtime,omitempty"`
+	// Strategy: default named strategy (templates/core/strategies/<name> or templates/<wf>/strategies/<name>).
+	Strategy string `yaml:"strategy,omitempty"`
+	// Strategies: optional allowlist of strategy names; if non-empty, --strategy / workflow.strategy must be listed.
+	Strategies []string `yaml:"strategies,omitempty"`
+	// Vault names which backend runs secret→env injection for this workflow (see docs/vault.md).
+	// "op" = 1Password CLI (op inject). "none" / "off" = skip op inject for this workflow.
+	// Omit to use dockpipe.config.json secrets.vault when set, else best-effort inject when the template exists.
+	Vault string `yaml:"vault,omitempty"`
+	// DockerPreflight: when false, skip EnsureDockerReachable before steps when no step uses the container runner.
+	// Use only for workflows where every step is kind: host and host run:/pre_script scripts do not invoke Docker.
+	DockerPreflight *bool `yaml:"docker_preflight,omitempty"`
+	// CompileHooks: shell commands run by `dockpipe package compile workflow` from the workflow source directory
+	// after validation and before the package tarball is written (e.g. go build, code generation).
+	CompileHooks []string `yaml:"compile_hooks,omitempty"`
+	// Types: optional PipeLang type declarations used by tooling/materialization.
+	Types []string `yaml:"types,omitempty"`
+	// Inject: explicit compile closure dependencies (workflow/package ids and resolver profile names).
+	// Unlike imports:, this does not merge YAML — it only guides package compile for-workflow ordering.
+	Inject   WorkflowInjectList     `yaml:"inject,omitempty"`
+	Vars     map[string]string      `yaml:"vars,omitempty"`
+	Compose  WorkflowComposeConfig  `yaml:"compose,omitempty"`
+	Security WorkflowSecurityConfig `yaml:"security,omitempty"`
+	Steps    []Step                 `yaml:"steps,omitempty"`
+}
+
+type WorkflowComposeConfig struct {
+	File             string            `yaml:"file,omitempty"`
+	Project          string            `yaml:"project,omitempty"`
+	ProjectDirectory string            `yaml:"project_directory,omitempty"`
+	AutodownEnv      string            `yaml:"autodown_env,omitempty"`
+	Exports          map[string]string `yaml:"exports,omitempty"`
+	Services         []string          `yaml:"services,omitempty"`
+}
+
+type WorkflowSecurityConfig struct {
+	Profile    string                   `yaml:"profile,omitempty"`
+	Network    WorkflowNetworkConfig    `yaml:"network,omitempty"`
+	Filesystem WorkflowFilesystemConfig `yaml:"filesystem,omitempty"`
+	Process    WorkflowProcessConfig    `yaml:"process,omitempty"`
+}
+
+type WorkflowNetworkConfig struct {
+	Mode  string   `yaml:"mode,omitempty"`
+	Allow []string `yaml:"allow,omitempty"`
+	Block []string `yaml:"block,omitempty"`
+}
+
+type WorkflowFilesystemConfig struct {
+	Root          string   `yaml:"root,omitempty"`
+	Writes        string   `yaml:"writes,omitempty"`
+	WritablePaths []string `yaml:"writable_paths,omitempty"`
+	TempPaths     []string `yaml:"temp_paths,omitempty"`
+}
+
+type WorkflowProcessConfig struct {
+	User      string                 `yaml:"user,omitempty"`
+	PIDLimit  int                    `yaml:"pid_limit,omitempty"`
+	Resources WorkflowResourceLimits `yaml:"resources,omitempty"`
+}
+
+type WorkflowResourceLimits struct {
+	CPU    string `yaml:"cpu,omitempty"`
+	Memory string `yaml:"memory,omitempty"`
+}
+
+// AnyContainerStep reports whether any step runs inside Docker (kind defaults to container).
+func (w *Workflow) AnyContainerStep() bool {
+	for _, s := range w.Steps {
+		if !s.IsHostStep() {
+			return true
+		}
+		if hostBuiltinNeedsDocker(strings.TrimSpace(s.HostBuiltin)) {
+			return true
+		}
+	}
+	return false
+}
+
+// NeedsDockerReachable reports whether we should run EnsureDockerReachable before executing steps.
+// True when any step uses the container runner, or when any step has run:/pre_script (host scripts
+// may invoke docker directly — e.g. templates/core/resolvers/vscode/config.yml is kind: host but runs docker on the host).
+// If docker_preflight: false is set on the workflow, this returns false when no step uses the container runner
+// (opt-out for host-only workflows; scripts under run: must not require Docker).
+func (w *Workflow) NeedsDockerReachable() bool {
+	if w.AnyContainerStep() {
+		return true
+	}
+	if w.DockerPreflight != nil && !*w.DockerPreflight {
+		return false
+	}
+	for _, s := range w.Steps {
+		if len(s.RunPaths()) > 0 {
+			return true
+		}
+		if strings.TrimSpace(s.Resolver) != "" {
+			// May be host-isolate (docker on host) or a template name via resolver file — run preflight.
+			return true
+		}
+	}
+	return false
+}
+
+// Step is one entry under steps:.
+type Step struct {
+	// ID is optional; used in logs (e.g. [merge] lines). If empty, runner uses "step N".
+	ID        string                 `yaml:"id,omitempty"`
+	Kind      string                 `yaml:"kind,omitempty"`
+	Run       RunSpec                `yaml:"run,omitempty"`
+	PreScript string                 `yaml:"pre_script,omitempty"`
+	Isolate   string                 `yaml:"isolate,omitempty"`
+	Act       string                 `yaml:"act,omitempty"`
+	Action    string                 `yaml:"action,omitempty"`
+	Cmd       string                 `yaml:"cmd,omitempty"`
+	Command   string                 `yaml:"command,omitempty"`
+	Outputs   string                 `yaml:"outputs,omitempty"`
+	Vars      map[string]string      `yaml:"vars,omitempty"`
+	Security  WorkflowSecurityConfig `yaml:"security,omitempty"`
+	// Blocking is YAML is_blocking: when false, this step joins a parallel batch with adjacent
+	// non-blocking steps. Inputs = env after last blocking step + this step’s vars/pre-scripts only;
+	// outputs merge in order after the whole batch (see src/lib/README.md).
+	Blocking *bool `yaml:"is_blocking,omitempty"`
+	// CaptureStdout: host path (relative to DOCKPIPE_WORKDIR or cwd) to tee container stdout into.
+	CaptureStdout string `yaml:"capture_stdout,omitempty"`
+	// Manifest: host path to write a small JSON manifest after the step (exit_code, duration_ms, id).
+	Manifest string `yaml:"manifest,omitempty"`
+	// Runtime: optional runtime profile name (templates/core/runtimes/<name>); preferred over resolver for pairing.
+	Runtime string `yaml:"runtime,omitempty"`
+	// Resolver: legacy alias for the same shared profile (not files next to this workflow).
+	// Loads DOCKPIPE_RESOLVER_* / DOCKPIPE_RUNTIME_* when unset on the step.
+	Resolver string `yaml:"resolver,omitempty"`
+	// WorkflowName: packaged-workflow target name.
+	WorkflowName string `yaml:"workflow,omitempty"`
+	// Package: namespace for the packaged workflow — must match the nested workflow's namespace: (see ResolvePackagedWorkflowConfigPath).
+	Package string `yaml:"package,omitempty"`
+	// HostBuiltin: optional engine step for kind: host workflows — runs a built-in host action instead of run:/pre_script.
+	// Allowed values: package_build_store (same as dockpipe package build store; uses PACKAGE_STORE_OUT, PACKAGE_STORE_ONLY, PACKAGE_STORE_VERSION from merged env).
+	HostBuiltin string `yaml:"host_builtin,omitempty"`
+}
+
+func (s *Step) UsesPackagedWorkflow() bool {
+	return strings.TrimSpace(s.WorkflowName) != "" || strings.TrimSpace(s.Package) != ""
+}
+
+func (s *Step) KindName() string {
+	k := strings.ToLower(strings.TrimSpace(s.Kind))
+	if k != "" {
+		return k
+	}
+	return "container"
+}
+
+func (s *Step) IsHostStep() bool {
+	return s.KindName() == "host"
+}
+
+// RuntimeProfileName returns per-step isolation profile name (runtime: or resolver:).
+func (s *Step) RuntimeProfileName() string {
+	r := strings.TrimSpace(s.Runtime)
+	if r != "" {
+		return r
+	}
+	return strings.TrimSpace(s.Resolver)
+}
+
+// RuntimeProfileConflict is always false — both runtime: and resolver: may be set (merged profiles).
+func (s *Step) RuntimeProfileConflict() bool {
+	return false
+}
+
+// IsBlocking reports whether this step completes before the pipeline advances (default true).
+func (s *Step) IsBlocking() bool {
+	if s.Blocking == nil {
+		return true
+	}
+	return *s.Blocking
+}
+
+// DisplayName returns id if set, otherwise "step <1-based index>".
+func (s *Step) DisplayName(index int) string {
+	if strings.TrimSpace(s.ID) != "" {
+		return strings.TrimSpace(s.ID)
+	}
+	return fmt.Sprintf("step %d", index+1)
+}
+
+func (s *Step) RunPaths() []string {
+	var out []string
+	out = append(out, s.Run...)
+	if s.PreScript != "" {
+		out = append(out, s.PreScript)
+	}
+	return out
+}
+
+func (s *Step) ActPath() string {
+	if s.Act != "" {
+		return s.Act
+	}
+	return s.Action
+}
+
+func (s *Step) CmdLine() string {
+	if s.Cmd != "" {
+		return s.Cmd
+	}
+	return s.Command
+}
+
+func (s *Step) OutputsPath() string {
+	if s.Outputs != "" {
+		return s.Outputs
+	}
+	return DefaultOutputsEnvRel
+}
+
+// workflowFile is the on-disk shape: steps may mix plain steps and group wrappers.
+type workflowFile struct {
+	Name            string                 `yaml:"name"`
+	Description     string                 `yaml:"description,omitempty"`
+	Category        string                 `yaml:"category,omitempty"`
+	Icon            string                 `yaml:"icon,omitempty"`
+	WorkflowType    string                 `yaml:"workflow_type,omitempty"`
+	Namespace       string                 `yaml:"namespace,omitempty"`
+	Run             RunSpec                `yaml:"run"`
+	Isolate         string                 `yaml:"isolate"`
+	Act             string                 `yaml:"act"`
+	Action          string                 `yaml:"action"`
+	Resolver        string                 `yaml:"resolver"`
+	Runtime         string                 `yaml:"runtime,omitempty"`
+	Strategy        string                 `yaml:"strategy,omitempty"`
+	Strategies      []string               `yaml:"strategies,omitempty"`
+	Vault           string                 `yaml:"vault,omitempty"`
+	DockerPreflight *bool                  `yaml:"docker_preflight,omitempty"`
+	CompileHooks    []string               `yaml:"compile_hooks,omitempty"`
+	Types           []string               `yaml:"types,omitempty"`
+	Vars            map[string]string      `yaml:"vars"`
+	Compose         WorkflowComposeConfig  `yaml:"compose,omitempty"`
+	Security        WorkflowSecurityConfig `yaml:"security,omitempty"`
+	Imports         []string               `yaml:"imports,omitempty"`
+	Inject          WorkflowInjectList     `yaml:"inject,omitempty"`
+	Steps           []stepOrGroupYAML      `yaml:"steps"`
+}
+
+type stepOrGroupYAML struct {
+	group *asyncGroupYAML
+	step  *Step
+}
+
+type asyncGroupYAML struct {
+	Mode  string `yaml:"mode"`
+	Tasks []Step `yaml:"tasks"`
+}
+
+var bannedWorkflowTopLevelKeys = map[string]string{
+	"capability":       "top-level capability is no longer supported; choose resolver: explicitly and keep capability in package metadata only",
+	"primitive":        "top-level primitive is no longer supported; choose resolver: explicitly",
+	"default_runtime":  "default_runtime is no longer supported; use runtime:",
+	"default_resolver": "default_resolver is no longer supported; use resolver:",
+	"runtimes":         "runtimes: is no longer supported; use runtime:",
+}
+
+func rejectBannedWorkflowKeys(n *yaml.Node) error {
+	if n == nil {
+		return nil
+	}
+	if n.Kind != yaml.MappingNode || len(n.Content)%2 != 0 {
+		return nil
+	}
+	for i := 0; i < len(n.Content); i += 2 {
+		k := strings.TrimSpace(n.Content[i].Value)
+		if msg, ok := bannedWorkflowTopLevelKeys[k]; ok {
+			return fmt.Errorf("%s", msg)
+		}
+	}
+	return nil
+}
+
+func (s *stepOrGroupYAML) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind != yaml.MappingNode || len(n.Content)%2 != 0 {
+		return fmt.Errorf("steps: each entry must be a mapping")
+	}
+	var keys []string
+	for i := 0; i < len(n.Content); i += 2 {
+		var k string
+		if err := n.Content[i].Decode(&k); err != nil {
+			return fmt.Errorf("steps: %w", err)
+		}
+		keys = append(keys, k)
+	}
+	hasGroup := false
+	for _, k := range keys {
+		if k == "group" {
+			hasGroup = true
+			break
+		}
+	}
+	if hasGroup {
+		if len(keys) != 1 {
+			return fmt.Errorf("steps: entry with `group` must contain only the `group` key (got %v)", keys)
+		}
+		var aux struct {
+			Group asyncGroupYAML `yaml:"group"`
+		}
+		if err := n.Decode(&aux); err != nil {
+			return fmt.Errorf("steps: group: %w", err)
+		}
+		if aux.Group.Mode != "async" {
+			return fmt.Errorf("steps: group.mode must be \"async\", got %q", aux.Group.Mode)
+		}
+		if len(aux.Group.Tasks) == 0 {
+			return fmt.Errorf("steps: group.tasks must contain at least one task")
+		}
+		s.group = &aux.Group
+		return nil
+	}
+	for _, k := range keys {
+		if k == "skip_container" {
+			return fmt.Errorf("steps: skip_container is no longer supported; use kind: host")
+		}
+	}
+	st := new(Step)
+	if err := n.Decode(st); err != nil {
+		return fmt.Errorf("steps: %w", err)
+	}
+	if st.Blocking != nil && !*st.Blocking {
+		return fmt.Errorf("steps: is_blocking: false is no longer supported on plain steps; use group: { mode: async, tasks: [...] }")
+	}
+	s.step = st
+	return nil
+}
+
+func flattenSteps(items []stepOrGroupYAML) ([]Step, error) {
+	if len(items) == 0 {
+		return nil, nil
+	}
+	out := make([]Step, 0, len(items))
+	bFalse := false
+	for _, it := range items {
+		if it.group != nil {
+			for _, t := range it.group.Tasks {
+				// Default blocking is true when omitted; inside async group, omission means async.
+				if t.Blocking != nil && *t.Blocking {
+					id := strings.TrimSpace(t.ID)
+					if id == "" {
+						return nil, fmt.Errorf("steps: task inside group.mode: async cannot set is_blocking: true")
+					}
+					return nil, fmt.Errorf("steps: task %q inside group.mode: async cannot set is_blocking: true", id)
+				}
+				tt := t
+				tt.Blocking = &bFalse
+				out = append(out, tt)
+			}
+			continue
+		}
+		if it.step != nil {
+			out = append(out, *it.step)
+			continue
+		}
+		return nil, fmt.Errorf("steps: internal parse error (empty entry)")
+	}
+	return out, nil
+}
+
+// ValidateWorkflowTypeField checks workflow_type when set (lowercase identifier, hyphens allowed).
+func ValidateWorkflowTypeField(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	t := strings.TrimSpace(w.WorkflowType)
+	if t == "" {
+		return nil
+	}
+	if !workflowTypePattern.MatchString(t) {
+		return fmt.Errorf("workflow_type %q must match %s (e.g. secretstore, my-kind)", t, workflowTypePattern.String())
+	}
+	return nil
+}
+
+// ValidateWorkflowNamespaceField checks namespace when set (reserved words and pattern).
+func ValidateWorkflowNamespaceField(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	return ValidateNamespace(w.Namespace)
+}
+
+// ValidateWorkflowVaultField checks workflow vault: when set, must be a supported token (see docs/vault.md).
+func ValidateWorkflowVaultField(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	return ValidateVaultModeString(w.Vault)
+}
+
+// ValidateLoadedWorkflow checks workflow fields required for run and dockpipe workflow validate.
+func ValidateLoadedWorkflow(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	if err := ValidateWorkflowTypeField(w); err != nil {
+		return err
+	}
+	if err := ValidateWorkflowNamespaceField(w); err != nil {
+		return err
+	}
+	if err := ValidateWorkflowVaultField(w); err != nil {
+		return err
+	}
+	if err := ValidateWorkflowComposeField(w); err != nil {
+		return err
+	}
+	if err := ValidateWorkflowSecurityField(w); err != nil {
+		return err
+	}
+	if err := ValidateWorkflowSingleFlowFields(w); err != nil {
+		return err
+	}
+	for i, s := range w.Steps {
+		if err := ValidateStepKind(i, s); err != nil {
+			return err
+		}
+		if err := ValidateStepHostShape(i, s); err != nil {
+			return err
+		}
+		if err := ValidateStepPackageInvocation(i, s); err != nil {
+			return err
+		}
+		if err := ValidateStepSecurityField(i, s); err != nil {
+			return err
+		}
+		if err := ValidateStepHostBuiltin(i, s); err != nil {
+			return err
+		}
+		if err := ValidateStepComposeBuiltin(i, s, w); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ValidateWorkflowSingleFlowFields(w *Workflow) error {
+	if w == nil || len(w.Steps) == 0 {
+		return nil
+	}
+	if len(w.Run) > 0 {
+		return fmt.Errorf("workflow with steps: uses top-level run; move those host pre-scripts onto a step with run: or pre_script:")
+	}
+	if strings.TrimSpace(w.Act) != "" || strings.TrimSpace(w.Action) != "" {
+		return fmt.Errorf("workflow with steps: uses top-level act/action; set act/action on the specific step that needs it")
+	}
+	return nil
+}
+
+func ValidateStepKind(i int, s Step) error {
+	switch s.KindName() {
+	case "container", "host":
+		return nil
+	default:
+		return fmt.Errorf("step %d: kind must be host or container", i+1)
+	}
+}
+
+func ValidateWorkflowComposeField(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	c := w.Compose
+	if strings.TrimSpace(c.File) == "" &&
+		strings.TrimSpace(c.Project) == "" &&
+		strings.TrimSpace(c.ProjectDirectory) == "" &&
+		len(c.Exports) == 0 &&
+		len(c.Services) == 0 {
+		return nil
+	}
+	if strings.TrimSpace(c.File) == "" {
+		return fmt.Errorf("compose.file is required when compose settings are present")
+	}
+	return nil
+}
+
+func ValidateWorkflowSecurityField(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	return ValidateWorkflowSecurityConfig("security", w.Security)
+}
+
+func ValidateWorkflowSecurityConfig(fieldPrefix string, cfg WorkflowSecurityConfig) error {
+	if err := validateEnum(fieldPrefix+".profile", cfg.Profile, validPolicyProfiles); err != nil {
+		return err
+	}
+	if err := validateEnum(fieldPrefix+".network.mode", cfg.Network.Mode, validNetworkModes); err != nil {
+		return err
+	}
+	if strings.TrimSpace(cfg.Network.Mode) == "allowlist" && len(cfg.Network.Allow) == 0 {
+		return fmt.Errorf("%s.network.mode allowlist requires at least one allow rule", fieldPrefix)
+	}
+	if strings.TrimSpace(cfg.Network.Mode) == "offline" && (len(cfg.Network.Allow) > 0 || len(cfg.Network.Block) > 0) {
+		return fmt.Errorf("%s.network.mode offline cannot be combined with allow/block rules", fieldPrefix)
+	}
+	if err := validateEnum(fieldPrefix+".filesystem.root", cfg.Filesystem.Root, validFilesystemRoots); err != nil {
+		return err
+	}
+	if err := validateEnum(fieldPrefix+".filesystem.writes", cfg.Filesystem.Writes, validFilesystemWrites); err != nil {
+		return err
+	}
+	if err := validateEnum(fieldPrefix+".process.user", cfg.Process.User, validProcessUsers); err != nil {
+		return err
+	}
+	if cfg.Process.PIDLimit < 0 {
+		return fmt.Errorf("%s.process.pid_limit must be >= 0", fieldPrefix)
+	}
+	return nil
+}
+
+func WorkflowSecurityConfigIsEmpty(cfg WorkflowSecurityConfig) bool {
+	return strings.TrimSpace(cfg.Profile) == "" &&
+		strings.TrimSpace(cfg.Network.Mode) == "" &&
+		len(cfg.Network.Allow) == 0 &&
+		len(cfg.Network.Block) == 0 &&
+		strings.TrimSpace(cfg.Filesystem.Root) == "" &&
+		strings.TrimSpace(cfg.Filesystem.Writes) == "" &&
+		len(cfg.Filesystem.WritablePaths) == 0 &&
+		len(cfg.Filesystem.TempPaths) == 0 &&
+		strings.TrimSpace(cfg.Process.User) == "" &&
+		cfg.Process.PIDLimit == 0 &&
+		strings.TrimSpace(cfg.Process.Resources.CPU) == "" &&
+		strings.TrimSpace(cfg.Process.Resources.Memory) == ""
+}
+
+func ValidateStepPackageInvocation(i int, s Step) error {
+	if strings.EqualFold(strings.TrimSpace(s.Runtime), "package") {
+		return fmt.Errorf("step %d: runtime: package is no longer supported; use workflow: <name> and package: <namespace>", i+1)
+	}
+	if !s.UsesPackagedWorkflow() {
+		return nil
+	}
+	if strings.TrimSpace(s.WorkflowName) == "" {
+		return fmt.Errorf("step %d: packaged workflow step requires workflow: <name>", i+1)
+	}
+	if strings.TrimSpace(s.Package) == "" {
+		return fmt.Errorf("step %d: packaged workflow step requires package: <namespace>", i+1)
+	}
+	if strings.TrimSpace(s.Resolver) != "" {
+		return fmt.Errorf("step %d: packaged workflow step uses workflow: <name>; do not also set resolver:", i+1)
+	}
+	if strings.TrimSpace(s.Isolate) != "" {
+		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set isolate:", i+1)
+	}
+	if strings.TrimSpace(s.CmdLine()) != "" {
+		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set cmd/command", i+1)
+	}
+	if strings.TrimSpace(s.ActPath()) != "" {
+		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set act/action", i+1)
+	}
+	if s.IsHostStep() {
+		return fmt.Errorf("step %d: packaged workflow step cannot use kind: host", i+1)
+	}
+	if !WorkflowSecurityConfigIsEmpty(s.Security) {
+		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set security:", i+1)
+	}
+	return nil
+}
+
+func ValidateStepSecurityField(i int, s Step) error {
+	if WorkflowSecurityConfigIsEmpty(s.Security) {
+		return nil
+	}
+	if s.IsHostStep() {
+		return fmt.Errorf("step %d: kind: host step does not use security; remove security: or switch to a container step", i+1)
+	}
+	if s.UsesPackagedWorkflow() {
+		return fmt.Errorf("step %d: packaged workflow step does not use security; keep policy inside the child workflow", i+1)
+	}
+	return ValidateWorkflowSecurityConfig(fmt.Sprintf("steps[%d].security", i), s.Security)
+}
+
+// ValidateStepHostBuiltin checks host_builtin steps (see Step.HostBuiltin).
+func ValidateStepHostBuiltin(i int, s Step) error {
+	b := strings.TrimSpace(s.HostBuiltin)
+	if b == "" {
+		return nil
+	}
+	if !s.IsHostStep() {
+		return fmt.Errorf("step %d: host_builtin %q requires kind: host", i+1, b)
+	}
+	if s.UsesPackagedWorkflow() {
+		return fmt.Errorf("step %d: host_builtin is incompatible with packaged workflow steps", i+1)
+	}
+	if len(s.Run) > 0 || s.PreScript != "" {
+		return fmt.Errorf("step %d: host_builtin cannot be combined with run: or pre_script", i+1)
+	}
+	switch b {
+	case "package_build_store", "compose_up", "compose_down", "compose_ps":
+		return nil
+	default:
+		return fmt.Errorf("step %d: unknown host_builtin %q (allowed: package_build_store, compose_up, compose_down, compose_ps)", i+1, b)
+	}
+}
+
+func ValidateStepHostShape(i int, s Step) error {
+	if !s.IsHostStep() {
+		return nil
+	}
+	if s.UsesPackagedWorkflow() {
+		return nil
+	}
+	if strings.TrimSpace(s.Runtime) != "" {
+		return fmt.Errorf("step %d: kind: host step does not use runtime; remove runtime: or switch to a container step", i+1)
+	}
+	if strings.TrimSpace(s.Resolver) != "" {
+		return fmt.Errorf("step %d: kind: host step does not use resolver; remove resolver: or switch to a container step", i+1)
+	}
+	if strings.TrimSpace(s.Isolate) != "" {
+		return fmt.Errorf("step %d: kind: host step does not use isolate; remove isolate: or switch to a container step", i+1)
+	}
+	return nil
+}
+
+func ValidateStepComposeBuiltin(i int, s Step, w *Workflow) error {
+	if !hostBuiltinNeedsCompose(strings.TrimSpace(s.HostBuiltin)) {
+		return nil
+	}
+	if w == nil || strings.TrimSpace(w.Compose.File) == "" {
+		return fmt.Errorf("step %d: host_builtin %q requires workflow compose.file", i+1, strings.TrimSpace(s.HostBuiltin))
+	}
+	return nil
+}
+
+func hostBuiltinNeedsDocker(b string) bool {
+	return hostBuiltinNeedsCompose(b)
+}
+
+func hostBuiltinNeedsCompose(b string) bool {
+	switch strings.TrimSpace(b) {
+	case "compose_up", "compose_down", "compose_ps":
+		return true
+	default:
+		return false
+	}
+}
+
+// ParseWorkflowYAML unmarshals workflow config from YAML bytes (no imports).
+// If the document contains imports:, use ParseWorkflowFromDisk with a readFile callback (see LoadWorkflow in infrastructure).
+func ParseWorkflowYAML(data []byte) (*Workflow, error) {
+	return ParseWorkflowFromDisk(data, ".", nil)
+}

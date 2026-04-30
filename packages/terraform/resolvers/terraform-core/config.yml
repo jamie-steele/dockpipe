@@ -1,0 +1,37 @@
+name: dockpipe.terraform.core
+namespace: dockpipe-terraform
+description: >-
+  Provider-agnostic host: packages/terraform/resolvers/terraform-core/assets/scripts/terraform-run.sh + terraform-pipeline.sh.
+  Set DOCKPIPE_TF_MODULE_DIR. Remote: DOCKPIPE_TF_REMOTE_BACKEND_FILE only (no generated R2 backend here).
+  Cloudflare R2: dockpipe.cloudflare.r2infra resolver ships terraform-cloudflare-r2-run.sh (wraps this pipeline; module .tf under dockpipe.cloudflare.r2publish/terraform).
+
+docker_preflight: false
+
+types:
+  - models/ITerraformCoreConfig
+
+vars:
+  DOCKPIPE_TF_APPLY_ARGS: ""  # extra args passed to terraform apply
+  DOCKPIPE_TF_APPLY_AUTO_APPROVE: "1"  # 1 = -auto-approve on apply; 0 = interactive
+  DOCKPIPE_TF_BACKEND: "local"  # local | remote (remote: prefer DOCKPIPE_TF_REMOTE_BACKEND_FILE for portable backends)
+  DOCKPIPE_TF_BACKEND_HCL_PATH: ""  # optional; path for generated backend file when a wrapper passes it (advanced)
+  DOCKPIPE_TF_COMMANDS: ""  # empty = default plan (generic map); comma list: init,plan,apply,validate,fmt,import
+  DOCKPIPE_TF_DRY_RUN: "0"  # 1 = print pipeline only, no terraform
+  DOCKPIPE_TF_FMT_ARGS: ""  # extra args for terraform fmt
+  DOCKPIPE_TF_IMPORT_ARGS: ""  # single-line: resource_address resource_id...
+  DOCKPIPE_TF_IMPORT_FILE: ""  # path to file of import lines (one per line)
+  DOCKPIPE_TF_INIT_ARGS: ""  # e.g. -reconfigure; extra args for terraform init
+  DOCKPIPE_TF_MODULE_DIR: ""  # required: Terraform root (repo-relative to --workdir or absolute)
+  DOCKPIPE_TF_OPTIONAL_WHEN_UNSET: "0"  # 1 = exit 0 if DOCKPIPE_TF_COMMANDS empty (parent compose workflows)
+  DOCKPIPE_TF_PIPELINE_HINT: ""  # optional hint string for pipeline dry-run messaging
+  DOCKPIPE_TF_PLAN_ARGS: ""  # extra args for terraform plan
+  DOCKPIPE_TF_REMOTE_BACKEND_FILE: ""  # path to backend HCL for terraform init -backend-config= (any S3/GCS/etc. shape your module expects)
+  DOCKPIPE_TF_SKIP_INIT: "0"  # 1 = do not auto-prepend init before plan/apply/etc.
+  DOCKPIPE_TF_VALIDATE_ARGS: ""  # extra args for terraform validate
+  DOCKPIPE_TF_WORKSPACE: ""  # non-empty = terraform workspace select|new after init
+
+steps:
+  - id: terraform
+    kind: host
+    run:
+      - scripts/core.assets.scripts.terraform-run.sh

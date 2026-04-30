@@ -1,0 +1,342 @@
+package application
+
+import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"dockpipe/src/lib/domain"
+	"dockpipe/src/lib/infrastructure"
+	"dockpipe/src/lib/infrastructure/packagebuild"
+)
+
+func maybeSkipDockerBuildForWorkflow(repoRoot, wfConfig, wfRoot, image, buildDir, buildCtx string) (bool, string, error) {
+	return maybeSkipDockerBuildForArtifact(repoRoot, repoRoot, wfConfig, wfRoot, "", "", image, buildDir, buildCtx, dockerImageExistsAppFn)
+}
+
+func maybeSkipDockerBuildForStep(stateWorkdir, repoRoot, wfConfig, wfRoot, stepID, policyFingerprint, image, buildDir, buildCtx string) (bool, string, error) {
+	return maybeSkipDockerBuildForArtifact(stateWorkdir, repoRoot, wfConfig, wfRoot, stepID, policyFingerprint, image, buildDir, buildCtx, dockerImageExistsFn)
+}
+
+func maybeSkipDockerBuildForArtifact(stateWorkdir, repoRoot, wfConfig, wfRoot, stepID, policyFingerprint, image, buildDir, buildCtx string, imageExistsFn func(string) (bool, error)) (bool, string, error) {
+	if strings.TrimSpace(image) == "" || strings.TrimSpace(buildDir) == "" || strings.TrimSpace(buildCtx) == "" {
+		return false, "", nil
+	}
+	var err error
+	if strings.TrimSpace(policyFingerprint) == "" {
+		policyFingerprint, err = runtimePolicyFingerprintForRun(wfConfig, wfRoot)
+		if err != nil {
+			return false, "", err
+		}
+	}
+	var artifact *domain.ImageArtifactManifest
+	if strings.TrimSpace(stepID) != "" {
+		artifact, err = loadCompiledImageArtifactForStep(wfConfig, wfRoot, stepID)
+		if err != nil {
+			return false, "", err
+		}
+	}
+	if artifact == nil {
+		artifact, err = loadCompiledImageArtifactForWorkflow(wfConfig, wfRoot)
+		if err != nil {
+			return false, "", err
+		}
+	}
+	if artifact == nil {
+		artifact, err = loadCachedImageArtifactForIsolate(stateWorkdir, image)
+		if err != nil {
+			return false, "", err
+		}
+	}
+	if artifact == nil || artifact.Build == nil || artifact.Source != "build" {
+		return false, "", nil
+	}
+	if strings.TrimSpace(artifact.SecurityManifestFingerprint) != strings.TrimSpace(policyFingerprint) {
+		return false, "", nil
+	}
+	expected, err := buildImageArtifactManifest(repoRoot, "", "", artifact.ImageKey, image, buildDir, buildCtx, policyFingerprint, artifact.Provenance)
+	if err != nil {
+		return false, "", err
+	}
+	if strings.TrimSpace(artifact.ImageRef) != strings.TrimSpace(image) || strings.TrimSpace(artifact.Fingerprint) != strings.TrimSpace(expected.Fingerprint) {
+		return false, "", nil
+	}
+	if indexed, err := loadImageArtifactIndexRecordByFingerprint(stateWorkdir, expected.Fingerprint); err != nil {
+		return false, "", err
+	} else if indexed != nil && imageArtifactIndexMatchesExpected(indexed, expected, image) {
+		ok, err := imageExistsFn(image)
+		if err != nil {
+			return false, "", err
+		}
+		if !ok {
+			return false, fmt.Sprintf("image: missing materialized image artifact %s: local image is missing", firstNonEmptyString(strings.TrimSpace(indexed.ImageKey), strings.TrimSpace(artifact.ImageKey))), nil
+		}
+		return true, fmt.Sprintf("image: ready materialized image artifact %s", firstNonEmptyString(strings.TrimSpace(indexed.ImageKey), strings.TrimSpace(artifact.ImageKey))), nil
+	}
+	ok, err := imageExistsFn(image)
+	if err != nil {
+		return false, "", err
+	}
+	if !ok {
+		return false, fmt.Sprintf("image: missing compiled image artifact %s: local image is missing", strings.TrimSpace(artifact.ImageKey)), nil
+	}
+	return true, fmt.Sprintf("image: ready cached image artifact %s", artifact.ImageKey), nil
+}
+
+func loadImageArtifactIndexRecordByFingerprint(workdir, fingerprint string) (*domain.ImageArtifactManifest, error) {
+	fingerprint = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(fingerprint), "sha256:"))
+	if fingerprint == "" {
+		return nil, nil
+	}
+	root, err := infrastructure.ImageArtifactIndexDir(workdir)
+	if err != nil {
+		return nil, err
+	}
+	p := filepath.Join(root, "by-fingerprint", infrastructure.SanitizePackageStateScope(fingerprint)+".json")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var m domain.ImageArtifactManifest
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+func imageArtifactIndexMatchesExpected(indexed, expected *domain.ImageArtifactManifest, image string) bool {
+	if indexed == nil || expected == nil {
+		return false
+	}
+	state := strings.TrimSpace(indexed.ArtifactState)
+	if state != "materialized" && state != "cached" {
+		return false
+	}
+	return strings.TrimSpace(indexed.Source) == strings.TrimSpace(expected.Source) &&
+		strings.TrimSpace(indexed.ImageRef) == strings.TrimSpace(image) &&
+		strings.TrimSpace(indexed.Fingerprint) == strings.TrimSpace(expected.Fingerprint) &&
+		strings.TrimSpace(indexed.SourceFingerprint) == strings.TrimSpace(expected.SourceFingerprint)
+}
+
+func runtimePolicyFingerprintForRun(wfConfig, wfRoot string) (string, error) {
+	rm, err := loadCompiledRuntimeManifestForWorkflow(wfConfig, wfRoot)
+	if err != nil {
+		return "", err
+	}
+	if rm != nil && strings.TrimSpace(rm.PolicyFingerprint) != "" {
+		return strings.TrimSpace(rm.PolicyFingerprint), nil
+	}
+	return defaultRuntimePolicyFingerprint()
+}
+
+func loadCompiledRuntimeManifestForWorkflow(wfConfig, wfRoot string) (*domain.CompiledRuntimeManifest, error) {
+	if tarPath, entry, ok := infrastructure.SplitTarWorkflowURI(wfConfig); ok {
+		manifestEntry := filepath.ToSlash(filepath.Join(filepath.Dir(entry), domain.RuntimeManifestDirName, domain.RuntimeManifestFileName))
+		b, err := packagebuild.ReadFileFromTarGz(tarPath, manifestEntry)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				return nil, nil
+			}
+			return nil, err
+		}
+		var m domain.CompiledRuntimeManifest
+		if err := json.Unmarshal(b, &m); err != nil {
+			return nil, err
+		}
+		return &m, nil
+	}
+	if strings.TrimSpace(wfRoot) == "" {
+		return nil, nil
+	}
+	p := filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.RuntimeManifestFileName)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var m domain.CompiledRuntimeManifest
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+func loadCompiledRuntimeManifestForStep(wfConfig, wfRoot, stepID string) (*domain.CompiledRuntimeManifest, error) {
+	stepID = strings.TrimSpace(stepID)
+	if stepID == "" {
+		return nil, nil
+	}
+	relPath := domain.RuntimeManifestPathForStep(stepID)
+	if tarPath, entry, ok := infrastructure.SplitTarWorkflowURI(wfConfig); ok {
+		manifestEntry := filepath.ToSlash(filepath.Join(filepath.Dir(entry), domain.RuntimeManifestDirName, relPath))
+		b, err := packagebuild.ReadFileFromTarGz(tarPath, manifestEntry)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				return nil, nil
+			}
+			return nil, err
+		}
+		var m domain.CompiledRuntimeManifest
+		if err := json.Unmarshal(b, &m); err != nil {
+			return nil, err
+		}
+		return &m, nil
+	}
+	if strings.TrimSpace(wfRoot) == "" {
+		return nil, nil
+	}
+	p := filepath.Join(wfRoot, domain.RuntimeManifestDirName, relPath)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var m domain.CompiledRuntimeManifest
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+func defaultRuntimePolicyFingerprint() (string, error) {
+	return domain.FingerprintJSON(domain.CompiledSecurityPolicy{
+		Preset: "secure-default",
+		Network: domain.CompiledNetworkPolicy{
+			Mode:        "offline",
+			Enforcement: "native",
+			InternalDNS: true,
+		},
+		FS: domain.CompiledFilesystemPolicy{
+			Root:      "readonly",
+			Writes:    "workspace-only",
+			TempPaths: []string{"/tmp"},
+		},
+		Process: domain.CompiledProcessPolicy{
+			User:            "non-root",
+			NoNewPrivileges: true,
+			DropCaps:        []string{"ALL"},
+			PIDLimit:        256,
+		},
+	})
+}
+
+func persistCachedImageArtifactForIsolate(stateWorkdir, image string, artifact *domain.ImageArtifactManifest) error {
+	if artifact == nil {
+		return nil
+	}
+	dir, err := infrastructure.ImageArtifactCacheDir(stateWorkdir)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	name := infrastructure.SanitizePackageStateScope(image) + ".json"
+	b, err := marshalArtifactJSON(artifact)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, name), b, 0o644)
+}
+
+func loadCachedImageArtifactForIsolate(stateWorkdir, image string) (*domain.ImageArtifactManifest, error) {
+	dir, err := infrastructure.ImageArtifactCacheDir(stateWorkdir)
+	if err != nil {
+		return nil, err
+	}
+	p := filepath.Join(dir, infrastructure.SanitizePackageStateScope(image)+".json")
+	b, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var m domain.ImageArtifactManifest
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+func loadCompiledImageArtifactForWorkflow(wfConfig, wfRoot string) (*domain.ImageArtifactManifest, error) {
+	if tarPath, entry, ok := infrastructure.SplitTarWorkflowURI(wfConfig); ok {
+		artifactEntry := filepath.ToSlash(filepath.Join(filepath.Dir(entry), domain.RuntimeManifestDirName, domain.ImageArtifactFileName))
+		b, err := packagebuild.ReadFileFromTarGz(tarPath, artifactEntry)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				return nil, nil
+			}
+			return nil, err
+		}
+		var m domain.ImageArtifactManifest
+		if err := json.Unmarshal(b, &m); err != nil {
+			return nil, err
+		}
+		return &m, nil
+	}
+	if strings.TrimSpace(wfRoot) == "" {
+		return nil, nil
+	}
+	p := filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.ImageArtifactFileName)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var m domain.ImageArtifactManifest
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+func loadCompiledImageArtifactForStep(wfConfig, wfRoot, stepID string) (*domain.ImageArtifactManifest, error) {
+	stepID = strings.TrimSpace(stepID)
+	if stepID == "" {
+		return nil, nil
+	}
+	relPath := domain.ImageArtifactPathForStep(stepID)
+	if tarPath, entry, ok := infrastructure.SplitTarWorkflowURI(wfConfig); ok {
+		artifactEntry := filepath.ToSlash(filepath.Join(filepath.Dir(entry), domain.RuntimeManifestDirName, relPath))
+		b, err := packagebuild.ReadFileFromTarGz(tarPath, artifactEntry)
+		if err != nil {
+			if strings.Contains(err.Error(), "not found") {
+				return nil, nil
+			}
+			return nil, err
+		}
+		var m domain.ImageArtifactManifest
+		if err := json.Unmarshal(b, &m); err != nil {
+			return nil, err
+		}
+		return &m, nil
+	}
+	if strings.TrimSpace(wfRoot) == "" {
+		return nil, nil
+	}
+	p := filepath.Join(wfRoot, domain.RuntimeManifestDirName, relPath)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var m domain.ImageArtifactManifest
+	if err := json.Unmarshal(b, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}

@@ -1,30 +1,40 @@
 #!/usr/bin/env bash
-# Run all tests. Exit 0 if all pass.
+# Run project shell/unit tests. Exit 0 if all pass. From repo root: bash tests/run_tests.sh
+# Integration tests (Docker): bash tests/integration-tests/run.sh
+# DockPipe-owned package/workflow hooks live behind `dockpipe test`.
 set -euo pipefail
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+UNIT="$(cd "${ROOT}/tests/unit-tests" && pwd)"
+CLI="${ROOT}/src/bin/dockpipe"
 failed=0
 
-for f in test_cli.sh test_runner.sh test_repo_root.sh; do
-  if [[ -f "$DIR/$f" ]]; then
+for f in test_cli.sh test_repo_root.sh test_repo_layout.sh test_clone_worktree_include.sh; do
+  if [[ -f "$UNIT/$f" ]]; then
     echo "--- $f ---"
-    bash "$DIR/$f" || failed=1
+    bash "$UNIT/$f" || failed=1
   fi
 done
 
+echo "--- dockpipe build --no-images ---"
+"$CLI" build --workdir "$ROOT" --no-images || failed=1
+
+echo "--- dockpipe test ---"
+"$CLI" test --workdir "$ROOT" || failed=1
+
 echo "--- smoke.sh (needs Docker) ---"
-bash "$DIR/smoke.sh" || true
+bash "$UNIT/smoke.sh" || failed=1
 
 echo "--- test_deb_install.sh (needs Docker + .deb) ---"
-_deb="$(echo "$DIR/../packaging/build"/dockpipe_*_all.deb 2>/dev/null)"
+_deb="$(echo "$ROOT/release/packaging/build"/dockpipe_*_amd64.deb 2>/dev/null)"
 _can_docker=0
 if command -v docker &>/dev/null && docker run --rm debian:bookworm-slim true &>/dev/null; then
   _can_docker=1
 fi
 if [[ $_can_docker -eq 1 ]] && [[ -n "${_deb}" ]] && [[ -f "${_deb}" ]]; then
-  bash "$DIR/test_deb_install.sh" || failed=1
+  bash "$UNIT/test_deb_install.sh" || failed=1
 else
-  echo "  (Docker runnable + .deb required; run ./packaging/build-deb.sh and ensure 'docker run' works to run this test)"
+  echo "  (Docker runnable + .deb required; run ./release/packaging/build-deb.sh and ensure 'docker run' works to run this test)"
 fi
 
 if [[ $failed -eq 0 ]]; then

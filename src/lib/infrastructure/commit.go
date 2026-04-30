@@ -1,0 +1,70 @@
+package infrastructure
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+)
+
+// CommitOnHost runs git add/commit in workdir (like commit-worktree on host).
+// If bundleOut is set, bundleAll selects git's --all; otherwise only refs/heads/<current> (or HEAD if detached).
+func CommitOnHost(workdir, message, bundleOut string, bundleAll bool) error {
+	wd, err := gitDir(workdir)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "[dockpipe] Not a git repo; skipping commit.")
+		return nil
+	}
+	check := exec.Command("git", "-C", wd, "rev-parse", "--is-inside-work-tree")
+	if out, err := check.CombinedOutput(); err != nil || !strings.Contains(string(out), "true") {
+		fmt.Fprintln(os.Stderr, "[dockpipe] Not a git repo; skipping commit.")
+		return nil
+	}
+	st := exec.Command("git", "-C", wd, "status", "--porcelain")
+	porcelain, _ := st.Output()
+	if len(strings.TrimSpace(string(porcelain))) == 0 {
+		fmt.Fprintln(os.Stderr, "[dockpipe] No changes to commit.")
+		return nil
+	}
+	br := exec.Command("git", "-C", wd, "branch", "--show-current")
+	cur, _ := br.Output()
+	fmt.Fprintf(os.Stderr, "[dockpipe] Committing on branch: %s\n", strings.TrimSpace(string(cur)))
+	add := exec.Command("git", "-C", wd, "add", "-A")
+	if out, err := add.CombinedOutput(); err != nil {
+		return fmt.Errorf("git add: %w\n%s", err, out)
+	}
+	msg := message
+	if msg == "" {
+		msg = "dockpipe: automated commit"
+	}
+	cmt := exec.Command("git", "-C", wd, "commit", "-m", msg)
+	cmt.Stdout = os.Stdout
+	cmt.Stderr = os.Stderr
+	if err := cmt.Run(); err != nil {
+		return err
+	}
+	if bundleOut != "" {
+		branch := strings.TrimSpace(string(cur))
+		gitArgs := []string{"-C", wd, "bundle", "create", bundleOut}
+		if bundleAll {
+			gitArgs = append(gitArgs, "--all")
+		} else if branch != "" {
+			gitArgs = append(gitArgs, "refs/heads/"+branch)
+		} else {
+			gitArgs = append(gitArgs, "HEAD")
+		}
+		b := exec.Command("git", gitArgs...)
+		if out, err := b.CombinedOutput(); err != nil {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Failed to write bundle: %s\n", bundleOut)
+			return fmt.Errorf("git bundle: %w\n%s", err, out)
+		}
+		if bundleAll {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Bundle written (--all): %s\n", bundleOut)
+		} else if branch != "" {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Bundle written (branch %s): %s\n", branch, bundleOut)
+		} else {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Bundle written (HEAD): %s\n", bundleOut)
+		}
+	}
+	return nil
+}

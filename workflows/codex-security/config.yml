@@ -1,0 +1,17 @@
+# Run tests in isolation, then Codex-assisted security-oriented follow-up.
+# Substrate is per-step (runtime / resolver); workflow-level runtime is not used.
+name: codex-security
+description: Isolated tests then Codex security review step (requires OPENAI_API_KEY for Codex).
+
+resolver: codex
+
+steps:
+  - id: tests
+    runtime: dockerimage
+    isolate: alpine
+    cmd: "sh -c 'echo \"[tests] Replace with go test, make test, or your linter suite\" >&2'"
+  - id: codex-security
+    runtime: dockerimage
+    resolver: codex
+    isolate: codex
+    cmd: "sh -c 'echo \"[codex-security] Replace with your Codex security review command\" >&2'"

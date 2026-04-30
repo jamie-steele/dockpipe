@@ -1,0 +1,23 @@
+# user-insight-process
+
+**Location:** maintainer **`dockpipe`** package — **`resolvers/user-insight-process/`**. **`--workflow`** name: **`user-insight-process`**.
+
+**Purpose:** Normalize **`queue.json`** → **`insights.json`** on the host via **`dorkpipe insight process`** and export category views via **`dorkpipe insight export-by-category`**.
+
+```bash
+dockpipe --workflow user-insight-enqueue --workdir . -- --message 'Your guidance here.'
+dockpipe --workflow user-insight-process --workdir . --
+```
+
+## Layout (under `.dockpipe/analysis/`)
+
+| File | Role |
+|------|------|
+| `queue.json` | Incoming items |
+| `insights.json` | Normalized rows + status |
+| `history.jsonl` | Audit trail |
+| `by-category/*.json` | Optional views (generated) |
+
+**Schemas:** `src/schemas/dockpipe-user-insight-queue.schema.json`, `dockpipe-user-insights.schema.json`.
+
+**Repo overview:** **`docs/artifacts.md`** § User insight queue.

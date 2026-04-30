@@ -1,0 +1,5 @@
+[
+  {"key": "replace-with-long-random-secret-readonly", "tier": "readonly"},
+  {"key": "replace-with-long-random-secret-validate", "tier": "validate"},
+  {"key": "replace-with-long-random-secret-exec", "tier": "exec"}
+]

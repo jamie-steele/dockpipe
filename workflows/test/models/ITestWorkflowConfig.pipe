@@ -1,0 +1,8 @@
+/// <summary>
+/// Contract for the maintainer isolation test workflow variables.
+/// </summary>
+public Interface ITestWorkflowConfig
+{
+    /// <summary>Docker network mode used by the test containers.</summary>
+    public string DockpipeDockerNetwork;
+}
