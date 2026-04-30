@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Self-contained shell tests for the dorkpipe maintainer package (resolver scripts).
-# From repo root: bash packages/dorkpipe/tests/run.sh
+# From repo root: dockpipe package test --only dorkpipe
 set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 DIR="$ROOT/packages/dorkpipe/tests"

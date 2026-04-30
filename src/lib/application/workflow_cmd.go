@@ -13,6 +13,7 @@ import (
 func cmdWorkflow(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf(`usage: dockpipe workflow validate [path]
+       dockpipe workflow test [--workdir <path>] [--only <workflow>]
        dockpipe workflow list [--workdir <path>] [--format json|text]
 
   Validates workflow YAML (parse + JSON Schema). Relative paths resolve from the current directory, then from the repo root (DOCKPIPE_REPO_ROOT / materialized bundle). Omit path when exactly one workflows/*/config.yml exists under the workflows root.`)
@@ -90,7 +91,9 @@ Print the workflow catalog resolved by DockPipe for the given project/workdir.
 		default:
 			return fmt.Errorf("unknown --format %q (use json or text)", format)
 		}
+	case "test":
+		return cmdWorkflowTest(args[1:])
 	default:
-		return fmt.Errorf("unknown workflow subcommand %q (try: validate or list)", args[0])
+		return fmt.Errorf("unknown workflow subcommand %q (try: validate, test, or list)", args[0])
 	}
 }

@@ -164,7 +164,7 @@ pipeon_start_code_server() {
 
 if [[ ! -x "$PIPEON_DESKTOP_BIN" ]]; then
   echo "pipeon-dev-stack: Pipeon desktop binary not found at $PIPEON_DESKTOP_BIN" >&2
-  echo "Build it with: make build-pipeon-desktop" >&2
+  echo "Build it with: packages/pipeon/assets/scripts/build.sh desktop" >&2
   exit 1
 fi
 

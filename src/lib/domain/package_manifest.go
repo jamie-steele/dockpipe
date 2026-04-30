@@ -3,6 +3,8 @@ package domain
 import (
 	"fmt"
 	"os"
+	"path"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -70,6 +72,12 @@ type PackageManifest struct {
 	// ScriptContract declares generic package-level script context that DockPipe-aware tooling may inject for package assets.
 	// This is intentionally generic package/runtime context only, not package-specific tooling handles.
 	ScriptContract PackageScriptContract `yaml:"script_contract,omitempty"`
+	// Build declares optional package-owned authoring-tree build behavior.
+	// This is for source checkouts only; installed tarballs should already contain the artifacts they ship.
+	Build PackageBuildSpec `yaml:"build,omitempty"`
+	// Test declares optional package-owned test behavior for source checkouts and CI.
+	// Keep this generic: package authors own the script, DockPipe only executes it.
+	Test PackageTestSpec `yaml:"test,omitempty"`
 }
 
 type PackageImageSpec struct {
@@ -80,6 +88,18 @@ type PackageImageSpec struct {
 
 type PackageScriptContract struct {
 	Inject []string `yaml:"inject,omitempty"`
+}
+
+type PackageBuildSpec struct {
+	Source *PackageSourceBuildSpec `yaml:"source,omitempty"`
+}
+
+type PackageSourceBuildSpec struct {
+	Script string `yaml:"script,omitempty"`
+}
+
+type PackageTestSpec struct {
+	Script string `yaml:"script,omitempty"`
 }
 
 // ParsePackageManifest reads and parses package.yml from path.
@@ -127,6 +147,12 @@ func ValidatePackageManifest(m *PackageManifest) error {
 		}
 	}
 	if err := ValidatePackageImageSpec(&m.Image); err != nil {
+		return err
+	}
+	if err := ValidatePackageBuildSpec(&m.Build); err != nil {
+		return err
+	}
+	if err := ValidatePackageTestSpec(&m.Test); err != nil {
 		return err
 	}
 	// kind-specific required fields kept minimal — capability / requires_capabilities are optional metadata.
@@ -240,4 +266,36 @@ func ValidateScriptContractInjectable(s string) error {
 		return nil
 	}
 	return fmt.Errorf("script_contract.inject: unknown injectable %q (expected one of: workdir, workflow_name, script_dir, package_root, assets_dir, dockpipe_bin)", s)
+}
+
+func ValidatePackageBuildSpec(spec *PackageBuildSpec) error {
+	if spec == nil || spec.Source == nil {
+		return nil
+	}
+	return validateRelativePackageScriptPath(spec.Source.Script, "build.source.script")
+}
+
+func ValidatePackageTestSpec(test *PackageTestSpec) error {
+	if test == nil || strings.TrimSpace(test.Script) == "" {
+		return nil
+	}
+	return validateRelativePackageScriptPath(test.Script, "test.script")
+}
+
+func validateRelativePackageScriptPath(raw, field string) error {
+	script := strings.TrimSpace(raw)
+	if script == "" {
+		return fmt.Errorf("%s is required when %s is set", field, strings.TrimSuffix(field, ".script"))
+	}
+	if filepath.IsAbs(script) {
+		return fmt.Errorf("%s must be relative to package.yml", field)
+	}
+	if strings.Contains(script, `\`) {
+		return fmt.Errorf("%s must use forward slashes", field)
+	}
+	cleaned := path.Clean(script)
+	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return fmt.Errorf("%s must stay inside the package tree", field)
+	}
+	return nil
 }

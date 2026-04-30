@@ -7,12 +7,13 @@ require_cursor_dev_script "$REPO_ROOT"
 SCRIPT="$REPLY"
 
 test_existing_session_guard() {
-  local tmp fakebin workdir docker_log pid out rc
+  local tmp fakebin workdir docker_log pid out rc script_dir
   tmp="$(mktemp -d)"
   fakebin="${tmp}/bin"
   workdir="${tmp}/work"
   docker_log="${tmp}/docker.log"
   mkdir -p "${fakebin}" "${workdir}/bin/.dockpipe/packages/cursor-dev"
+  script_dir="$(dirname "${SCRIPT}")"
 
   cat >"${fakebin}/docker" <<'EOF'
 #!/usr/bin/env bash
@@ -54,9 +55,10 @@ EOF
 
   out="${tmp}/out.log"
   set +e
-  PATH="${fakebin}:$PATH" \
-    FAKE_DOCKER_LOG="${docker_log}" \
+  FAKE_DOCKER_LOG="${docker_log}" \
+    DOCKPIPE_SCRIPT_DIR="${script_dir}" \
     DOCKPIPE_WORKDIR="${workdir}" \
+    PATH="${fakebin}:${REPO_ROOT}/src/bin:$PATH" \
     bash "${SCRIPT}" >"${out}" 2>&1
   rc=$?
   set -e

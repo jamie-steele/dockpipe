@@ -331,6 +331,114 @@ image:
 	}
 }
 
+func TestParsePackageManifestBuildSourceScript(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	body := `schema: 1
+name: x
+version: 1.0.0
+title: X
+description: d
+author: a
+website: https://example.com
+license: Apache-2.0
+kind: package
+build:
+  source:
+    script: assets/scripts/build-source.sh
+`
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := ParsePackageManifest(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Build.Source == nil || m.Build.Source.Script != "assets/scripts/build-source.sh" {
+		t.Fatalf("unexpected build source: %+v", m.Build)
+	}
+}
+
+func TestParsePackageManifestRejectsEscapingBuildSourceScript(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	body := `schema: 1
+name: x
+version: 1.0.0
+title: X
+description: d
+author: a
+website: https://example.com
+license: Apache-2.0
+kind: package
+build:
+  source:
+    script: ../build.sh
+`
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ParsePackageManifest(p)
+	if err == nil || !strings.Contains(err.Error(), "build.source.script") {
+		t.Fatalf("expected build.source.script validation error, got %v", err)
+	}
+}
+
+func TestParsePackageManifestTestScript(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	body := `schema: 1
+name: x
+version: 1.0.0
+title: X
+description: d
+author: a
+website: https://example.com
+license: Apache-2.0
+kind: package
+test:
+  script: tests/run.sh
+`
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := ParsePackageManifest(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.Test.Script != "tests/run.sh" {
+		t.Fatalf("unexpected test script: %+v", m.Test)
+	}
+}
+
+func TestParsePackageManifestRejectsEscapingTestScript(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	body := `schema: 1
+name: x
+version: 1.0.0
+title: X
+description: d
+author: a
+website: https://example.com
+license: Apache-2.0
+kind: package
+test:
+  script: ../tests/run.sh
+`
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := ParsePackageManifest(p)
+	if err == nil || !strings.Contains(err.Error(), "test.script") {
+		t.Fatalf("expected test.script validation error, got %v", err)
+	}
+}
+
 func TestParsePackageManifestRejectsInvalidImagePullPolicy(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

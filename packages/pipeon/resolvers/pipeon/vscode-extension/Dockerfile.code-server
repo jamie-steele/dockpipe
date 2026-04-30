@@ -3,7 +3,7 @@
 # Isolate runs use templates/core/resolvers/vscode/assets/images/vscode/ (dockpipe-vscode + entrypoint).
 #
 # Build from repo root:
-#   make build-code-server-image
+#   packages/pipeon/assets/scripts/build.sh code-server-image
 #
 # This Dockerfile consumes prebuilt VSIX artifacts from bin/.dockpipe/extensions/
 # instead of copying extension source trees directly into the image build.

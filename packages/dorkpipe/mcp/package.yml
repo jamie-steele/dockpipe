@@ -12,3 +12,5 @@ repository: https://github.com/dockpipe/dockpipe
 tags: [mcp, bridge, ai]
 script_contract:
   inject: [workdir, workflow_name, script_dir, package_root, assets_dir, dockpipe_bin]
+test:
+  script: tests/run.sh

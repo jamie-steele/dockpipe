@@ -9,7 +9,7 @@ go test -C packages/dorkpipe/lib ./...
 **Shell:** resolver scripts under **`resolvers/dorkpipe/assets/scripts/`**:
 
 ```bash
-bash packages/dorkpipe/tests/run.sh
+dockpipe package test --only dorkpipe
 ```
 
 Individual scripts: `test_normalize_ci_scans.sh`, `test_user_insight_queue.sh`.

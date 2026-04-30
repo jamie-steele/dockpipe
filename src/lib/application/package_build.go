@@ -11,13 +11,21 @@ import (
 )
 
 func cmdPackageBuild(args []string) error {
-	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
+	if len(args) == 0 {
+		return cmdPackageBuildSource(nil)
+	}
+	if strings.HasPrefix(args[0], "-") {
+		return cmdPackageBuildSource(args)
+	}
+	if args[0] == "--help" || args[0] == "-h" {
 		fmt.Print(packageBuildUsageText)
 		return nil
 	}
 	switch args[0] {
 	case "core":
 		return cmdPackageBuildCore(args[1:])
+	case "source":
+		return cmdPackageBuildSource(args[1:])
 	case "store":
 		return cmdPackageBuildStore(args[1:])
 	default:
@@ -146,6 +154,44 @@ func cmdPackageBuildStore(args []string) error {
 	return RunPackageBuildStoreFromFlags(workdir, outDir, only, fallbackVersion)
 }
 
+func cmdPackageBuildSource(args []string) error {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
+		fmt.Print(packageBuildSourceUsageText)
+		return nil
+	}
+	var err error
+	args, err = injectCompileWorkdirFromProjectConfig(args)
+	if err != nil {
+		return err
+	}
+	var (
+		workdir string
+		only    string
+	)
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--workdir" && i+1 < len(args):
+			workdir = args[i+1]
+			i++
+		case args[i] == "--only" && i+1 < len(args):
+			only = args[i+1]
+			i++
+		case strings.HasPrefix(args[i], "-"):
+			return fmt.Errorf("unknown option %s (try: dockpipe package build source --help)", args[i])
+		default:
+			return fmt.Errorf("unexpected argument %q", args[i])
+		}
+	}
+	if workdir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		workdir = wd
+	}
+	return RunPackageBuildSourceFromFlags(workdir, only)
+}
+
 // RunPackageBuildStoreFromEnv runs the same logic as "dockpipe package build store" using merged workflow env.
 // Recognized keys: PACKAGE_STORE_OUT (--out), PACKAGE_STORE_ONLY (--only), PACKAGE_STORE_VERSION (--version).
 func RunPackageBuildStoreFromEnv(projectRoot string, env map[string]string) error {
@@ -230,14 +276,21 @@ func readRepoVersion(repoRoot string) (string, error) {
 
 const packageBuildUsageText = `dockpipe package build
 
-Author release artifacts (gzip tarballs + checksums) for self-hosted package sources.
+Run package-owned build flows and author release artifacts for self-hosted package sources.
 
 Usage:
+  dockpipe package build [options]
   dockpipe package build core [options]
+  dockpipe package build source [options]
   dockpipe package build store [options]
+
+Without a subtarget, dockpipe package build defaults to source.
 
   core   From templates/core (or src/core) source tree — templates-core-<ver>.tar.gz + install-manifest.json
          (same layout as dockpipe install core / release/packaging).
+
+  source Run package-owned authoring-tree build scripts declared in package.yml build.source.script.
+         Source-checkout only; installed tarballs should already include the artifacts they ship.
 
   store  From the compiled package store (bin/.dockpipe/internal/packages after dockpipe build) —
          dockpipe-{core|workflow|resolver}-<name>-<ver>.tar.gz + packages-store-manifest.json.
@@ -253,6 +306,22 @@ Options:
   --repo-root <path>   Repository root (default: DOCKPIPE_REPO_ROOT, else git top-level, else cwd)
   --out <dir>          Output directory (default: <repo-root>/release/artifacts)
   --version <ver>      Version string (default: trim contents of VERSION at repo root)
+
+`
+
+const packageBuildSourceUsageText = `dockpipe package build source
+
+Run package-owned source-checkout build scripts declared in package.yml:
+
+  build:
+    source:
+      script: assets/scripts/build-source.sh
+
+This is for authoring trees only. Installed tarballs should not require a local build step just to run.
+
+Options:
+  --workdir <path>   Project/worktree root (default: current directory, or nearest dockpipe.config.json root)
+  --only <name>      Only run the matching package name
 
 `
 

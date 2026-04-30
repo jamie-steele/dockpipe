@@ -7,6 +7,10 @@ cd "$REPO_ROOT"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 failed=0
 
+# These are source-checkout integration tests. Point the repo-built dockpipe
+# binary at this checkout instead of the materialized bundled cache.
+export DOCKPIPE_REPO_ROOT="$REPO_ROOT"
+
 if ! command -v docker &>/dev/null; then
   echo "Error: docker not in PATH. Integration tests require Docker." >&2
   exit 1

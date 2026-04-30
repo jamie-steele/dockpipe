@@ -22,8 +22,8 @@ Companion workflows:
 Typical use from the repo root:
 
 ```bash
-make maintainer-tools
-make build-pipeon-desktop
+./src/bin/dockpipe package build source --workdir . --only dorkpipe
+packages/pipeon/assets/scripts/build.sh desktop
 PATH="$PWD/packages/dorkpipe/bin:$PATH" \
 dockpipe --workflow pipeon-dev-stack --workdir . --
 ```

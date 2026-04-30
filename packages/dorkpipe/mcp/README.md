@@ -5,7 +5,7 @@ DorkPipe-owned **MCP bridge** for DockPipe / DorkPipe — Go module **`dorkpipe.
 - **`go.work`** at the repo root includes this module next to **`dockpipe`** and **`dorkpipe.orchestrator`**.
 - **`replace dockpipe => ../../../..`** in **`go.mod`** pins the engine for **`dockpipe/.../infrastructure`** imports.
 
-The **`mcpd`** binary is built into **`packages/dorkpipe/bin/mcpd`**. It is **not** copied under **`src/bin/`** — point Cursor / env at this path (see **`src/Makefile`**).
+The **`mcpd`** entrypoint lives at **`packages/dorkpipe/bin/mcpd`**. That wrapper forwards to the package-owned source build output under **`bin/.dockpipe/tooling/bin/`** and can bootstrap it through **`dockpipe package build source`** in a repo checkout. It is **not** copied under **`src/bin/`**.
 
 **Implementation detail:** **`mcpbridge/README.md`** (env, HTTP mode, Cursor).
 
@@ -58,7 +58,7 @@ HTTP: **`MCP_HTTP_API_KEY`** or **`MCP_HTTP_KEY_TIERS_FILE`** (per-key tiers). S
 | **`DOCKPIPE_MCP_RESTRICT_WORKDIR`** | Exec tools keep workdir under repo root (default **on**). |
 | **`DOCKPIPE_MCP_REQUIRE_ABSOLUTE_BIN`** | Require absolute **`DOCKPIPE_BIN`** / **`DORKPIPE_BIN`** (default **on**). |
 
-Set **`DOCKPIPE_BIN`** and **`DORKPIPE_BIN`** to the absolute executables you want MCP to launch. In this repo after **`make build`** + **`make maintainer-tools`**, that is typically **`src/bin/dockpipe`** and **`packages/dorkpipe/bin/dorkpipe`**.
+Set **`DOCKPIPE_BIN`** and **`DORKPIPE_BIN`** to the absolute executables you want MCP to launch. In this repo that is typically **`src/bin/dockpipe`** and **`packages/dorkpipe/bin/dorkpipe`**.
 
 **`mcpbridge`** may import **`dockpipe/.../infrastructure`** for **read-only** discovery only; execution stays subprocess-based.
 
@@ -68,6 +68,6 @@ Optional bootstrap manifest (repo checkout): **`docs/examples/mcp-capabilities.b
 
 ## This repo (Cursor)
 
-After **`make maintainer-tools`**, point **`command`** at **`packages/dorkpipe/bin/mcpd`**. Default tier without env is **`validate`**; use **`DOCKPIPE_MCP_TIER=readonly`** for the smallest surface.
+Point **`command`** at **`packages/dorkpipe/bin/mcpd`**. Default tier without env is **`validate`**; use **`DOCKPIPE_MCP_TIER=readonly`** for the smallest surface.
 
 **See also:** repo **`docs/artifacts.md`** (governance / on-disk signals).

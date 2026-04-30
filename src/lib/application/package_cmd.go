@@ -27,6 +27,8 @@ func cmdPackage(args []string) error {
 		return cmdPackageManifest(args[1:])
 	case "build":
 		return cmdPackageBuild(args[1:])
+	case "test":
+		return cmdPackageTest(args[1:])
 	case "compile":
 		return cmdPackageCompile(args[1:])
 	default:
@@ -207,6 +209,13 @@ kind: workflow
 # Optional — generic package script context for assets/scripts/* authoring:
 # script_contract:
 #   inject: [workdir, workflow_name, script_dir, package_root, assets_dir, dockpipe_bin]
+# Optional — source-checkout build hook (installed tarballs should already ship their built artifacts):
+# build:
+#   source:
+#     script: assets/scripts/build-source.sh
+# Optional — package-owned source-checkout / CI test hook:
+# test:
+#   script: tests/run.sh
 # Optional — platform/vendor id for filtering (short label, e.g. cloudflare, aws — not a URL):
 # provider: cloudflare
 # Optional — authoring / store discovery (see docs/package-model.md):
@@ -238,13 +247,15 @@ Usage:
   dockpipe package list [--workdir <path>]
   dockpipe package images [--workdir <path>]
   dockpipe package manifest
-  dockpipe package build core|store [options]
+  dockpipe package build core|source|store [options]
+  dockpipe package test [options]
   dockpipe package compile core|resolvers|bundles|workflows|all|for-workflow|workflow [options]  (bundles = alias for workflows)
 
   list      Find package.yml under bin/.dockpipe/internal/packages and print rel path, name, version, provider, capability, requires_capabilities (comma-separated), description.
   images    List compiled/planned and materialized Docker image artifacts.
   manifest  Print an example package.yml schema to stdout.
-  build     core: templates-core tarball + install-manifest; store: gzip tar per compiled package + packages-store-manifest.json.
+  build     core: templates-core tarball + install-manifest; source: package-owned authoring-tree builds; store: gzip tar per compiled package + packages-store-manifest.json.
+  test      Run package-owned tests declared as test.script in package.yml for source checkouts.
   compile   Materialize core / resolvers / workflows into bin/.dockpipe/internal/packages/ (see compile --help).
 
 Optional repo-root dockpipe.config.json lists compile.workflows roots (resolver discovery uses the same list plus src/core/resolvers); compile.bundles merged into workflows when set; see docs/package-model.md.

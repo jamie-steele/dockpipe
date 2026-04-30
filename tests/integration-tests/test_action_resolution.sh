@@ -9,7 +9,7 @@ tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 cd "$tmp"
 
-git init -q
+git init -q -b dockpipe-it-action-resolution
 git config user.email "test@dockpipe"
 git config user.name "Test"
 echo "initial" > initial.txt

@@ -10,7 +10,6 @@ import (
 func TestTemplateBuild(t *testing.T) {
 	repoRoot := localModuleRoot(t)
 	core := CoreDir(repoRoot)
-	stagingPkgs := filepath.Join(repoRoot, ".staging", "packages")
 	cases := []struct {
 		name  string
 		image string
@@ -19,30 +18,23 @@ func TestTemplateBuild(t *testing.T) {
 	}{
 		{"base-dev", "dockpipe-base-dev", filepath.Join(core, "assets", "images", "base-dev"), true},
 		{"dev", "dockpipe-dev", filepath.Join(core, "assets", "images", "dev"), true},
-		{"agent-dev", "dockpipe-claude", filepath.Join(stagingPkgs, "agent", "resolvers", "claude", "assets", "images", "claude"), true},
-		{"claude", "dockpipe-claude", filepath.Join(stagingPkgs, "agent", "resolvers", "claude", "assets", "images", "claude"), true},
-		{"codex", "dockpipe-codex", filepath.Join(stagingPkgs, "agent", "resolvers", "codex", "assets", "images", "codex"), true},
-		{"vscode", "dockpipe-vscode", filepath.Join(stagingPkgs, "ide", "resolvers", "vscode", "assets", "images", "vscode"), true},
-		{"ollama", "dockpipe-ollama", filepath.Join(stagingPkgs, "agent", "resolvers", "ollama", "assets", "images", "ollama"), true},
+		{"agent-dev", "dockpipe-claude", DockerfileDir(repoRoot, "claude"), true},
+		{"claude", "dockpipe-claude", DockerfileDir(repoRoot, "claude"), true},
+		{"codex", "dockpipe-codex", DockerfileDir(repoRoot, "codex"), true},
+		{"vscode", "dockpipe-vscode", DockerfileDir(repoRoot, "vscode"), true},
+		{"ollama", "dockpipe-ollama", DockerfileDir(repoRoot, "ollama"), true},
 		{"unknown", "", "", false},
 	}
-	_, errStagingIDE := os.Stat(filepath.Join(stagingPkgs, "ide", "resolvers", "vscode"))
-	_, errStagingAgent := os.Stat(filepath.Join(stagingPkgs, "agent", "resolvers", "claude"))
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			switch tc.name {
-			case "vscode":
-				if errStagingIDE != nil {
-					t.Skip("no third-party staging IDE slice in checkout")
-				}
-			case "agent-dev", "claude", "codex", "ollama":
-				if errStagingAgent != nil {
-					t.Skip("no third-party staging agent slice in checkout")
-				}
-			}
 			img, dir, ok := TemplateBuild(repoRoot, tc.name)
 			if img != tc.image || dir != tc.dir || ok != tc.ok {
 				t.Fatalf("TemplateBuild(%q) = (%q, %q, %v), want (%q, %q, %v)", tc.name, img, dir, ok, tc.image, tc.dir, tc.ok)
+			}
+			if tc.ok {
+				if st, err := os.Stat(filepath.Join(dir, "Dockerfile")); err != nil || st.IsDir() {
+					t.Fatalf("expected Dockerfile under %q, stat err=%v", dir, err)
+				}
 			}
 		})
 	}

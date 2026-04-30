@@ -45,10 +45,11 @@ gosec -conf .gosec.json -fmt json -out=bin/.dockpipe/ci-raw/gosec.json -exclude-
 GC=$?
 set -e
 
-DOCKPIPE_SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts" \
-  bash "$DOCKPIPE_SCRIPT_DIR/normalize-ci-scans.sh"
-printf '[dockpipe] ci-emulate: govulncheck raw vulns: '
-jq -r '((.vulns // .Vulns // [] | length) | tostring)' bin/.dockpipe/ci-raw/govulncheck.json 2>/dev/null || true
+CI_SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
+DOCKPIPE_SCRIPT_DIR="$CI_SCRIPT_DIR" \
+  bash "$CI_SCRIPT_DIR/normalize-ci-scans.sh"
+printf '[dockpipe] ci-emulate: govulncheck raw findings: '
+jq -sr '((([.[] | select(.finding or .Finding)] | length) + ([.[] | (.vulns // .Vulns // [])[]?] | length)) | tostring)' bin/.dockpipe/ci-raw/govulncheck.json 2>/dev/null || true
 printf '[dockpipe] ci-emulate: gosec raw issues: '
 jq -r '((.Stats.found // 0) | tostring)' bin/.dockpipe/ci-raw/gosec.json 2>/dev/null || true
 
@@ -66,9 +67,9 @@ fi
 
 printf '[dockpipe] ci-emulate: running go test ./...\n' >&2
 go test ./...
-printf '[dockpipe] ci-emulate: running go test ./packages/dorkpipe/lib/...\n' >&2
-go test ./packages/dorkpipe/lib/...
-printf '[dockpipe] ci-emulate: running go test ./packages/dorkpipe/mcp/...\n' >&2
-go test ./packages/dorkpipe/mcp/...
+printf '[dockpipe] ci-emulate: running dockpipe package test\n' >&2
+dockpipe package test --workdir "$ROOT"
+printf '[dockpipe] ci-emulate: running dockpipe workflow test\n' >&2
+dockpipe workflow test --workdir "$ROOT"
 
 printf '[dockpipe] ci-emulate: complete\n' >&2

@@ -47,7 +47,9 @@ DockPipe ships **\`mcpd\`**, a small bridge that exposes **named tools** (workfl
 
 ### If this checkout is the **dockpipe** repository
 
-1. From the repo root: \`make build\` then \`make maintainer-tools\`.
+1. From the repo root: \`make build\`.
+2. Refresh DorkPipe package-owned source artifacts when needed:
+   \`./src/bin/dockpipe package build source --workdir . --only dorkpipe\`
    That gives you \`src/bin/dockpipe\`, \`packages/dorkpipe/bin/dorkpipe\`, and \`packages/dorkpipe/bin/mcpd\`.
 2. In Cursor: enable **MCP** and use the project file **\`.cursor/mcp.json\`** at the repo root (or merge **\`bin/.dockpipe/packages/cursor-dev/mcp.json.example\`** from this folder if present).
 3. Restart Cursor after editing MCP config.

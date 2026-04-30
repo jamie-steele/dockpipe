@@ -75,11 +75,8 @@ jobs:
       - name: Build CLI (Bash tests use src/bin/dockpipe)
         run: make
 
-      - name: Go test (root + maintainer modules)
-        run: |
-          go test ./...
-          go test ./packages/dorkpipe/lib/...
-          go test ./packages/dorkpipe/mcp/...
+      - name: Go test
+        run: go test ./...
 
       - name: Templates/core path guard (docs + code)
         run: bash src/scripts/check-templates-core-paths.sh
@@ -180,11 +177,8 @@ jobs:
         with:
           go-version: "1.25.8"
 
-      - name: Go test (root + maintainer modules)
-        run: |
-          go test ./...
-          go test ./packages/dorkpipe/lib/...
-          go test ./packages/dorkpipe/mcp/...
+      - name: Go test
+        run: go test ./...
 
       - name: Templates/core path guard (docs + code)
         run: bash src/scripts/check-templates-core-paths.sh

@@ -9,7 +9,7 @@ cd "$ROOT"
 BIN="$(dorkpipe_script_resolve_bin "$(dorkpipe_script_repo_root "$SCRIPT_DIR")")"
 SPEC="${DORKPIPE_SELF_ANALYSIS_SPEC:-${SCRIPT_DIR}/../../dorkpipe-self-analysis/spec.yaml}"
 if [[ ! -x "$BIN" ]]; then
-	echo "dorkpipe-self-analysis: build the orchestrator first: make maintainer-tools (expected $BIN)" >&2
+	echo "dorkpipe-self-analysis: build the orchestrator first: ./src/bin/dockpipe package build source --workdir . --only dorkpipe (expected $BIN)" >&2
 	exit 1
 fi
 if [[ ! -f "$SPEC" ]]; then

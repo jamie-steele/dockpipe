@@ -3,5 +3,5 @@
   "description": "Optional pointer for agents; capabilities are discovered at runtime via mcpd tools/list.",
   "architecture_doc": "packages/dorkpipe/mcp/README.md",
   "server_binary": "packages/dorkpipe/bin/mcpd",
-  "notes": "Run mcpd from packages/dorkpipe/bin/mcpd after make maintainer-tools. Do not treat this file as a second registry — prefer tools/list from the running MCP server."
+  "notes": "Run mcpd from packages/dorkpipe/bin/mcpd after ./src/bin/dockpipe package build source --workdir . --only dorkpipe. Do not treat this file as a second registry — prefer tools/list from the running MCP server."
 }

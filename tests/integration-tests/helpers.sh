@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
 
+integration_use_repo_checkout() {
+  local repo_root
+  repo_root="${1:-$(integration_repo_root)}"
+  export DOCKPIPE_REPO_ROOT="$repo_root"
+}
+
 integration_repo_root() {
   cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd
 }
@@ -7,8 +13,8 @@ integration_repo_root() {
 require_agent_dev_template() {
   local repo_root claude_dockerfile
   repo_root="${1:-$(integration_repo_root)}"
-  claude_dockerfile="$repo_root/.staging/packages/agent/resolvers/claude/assets/images/claude/Dockerfile"
-  if [[ -f "$claude_dockerfile" ]]; then
+  claude_dockerfile="$(find "$repo_root" -path '*/assets/images/claude/Dockerfile' -print -quit 2>/dev/null || true)"
+  if [[ -n "$claude_dockerfile" ]] && [[ -f "$claude_dockerfile" ]]; then
     return 0
   fi
   echo "SKIP: optional agent-dev/claude template assets are not present in this checkout"
@@ -26,3 +32,8 @@ require_cursor_dev_script() {
   echo "FAIL: expected tracked cursor-dev package script at $cursor_script" >&2
   exit 1
 }
+
+# These integration tests exercise the repo checkout binary and assets, not the
+# installed bundled cache. Export the checkout root when the helper is sourced
+# so individual test files behave the same way as the full harness.
+integration_use_repo_checkout

@@ -20,7 +20,7 @@ Current host affordances:
 From the repo root:
 
 ```bash
-make build-pipeon-desktop
+packages/pipeon/assets/scripts/build.sh desktop
 ```
 
 That writes the canonical binary to:
@@ -30,7 +30,7 @@ That writes the canonical binary to:
 To install a desktop entry and icon for Linux app launchers (for example Pop OS / GNOME):
 
 ```bash
-make install-pipeon-desktop-global
+packages/pipeon/assets/scripts/build.sh install-desktop-global
 ```
 
 ## Run directly

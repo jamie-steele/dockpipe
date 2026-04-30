@@ -58,7 +58,7 @@ Install the `.vsix` into your Pipeon (or VS Code) build: **Extensions → … �
 
 For **development**, open **`packages/pipeon/resolvers/pipeon/vscode-extension`** in VS Code and **F5** (Extension Development Host).
 
-**Browser (Coder code-server):** this repo also ships **`dockpipe-code-server:latest`** — **Coder’s** `codercom/code-server` image with Pipeon pre-installed, baseline User settings, and a **Pipeon P-mark favicon** in the browser tab. Build: **`make build-code-server-image`** (Dockerfile: **`packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server`**; favicons and defaults live under **`packages/pipeon/resolvers/pipeon/vscode-extension/`**). The **vscode** workflow uses it by default (`dockpipe --workflow vscode`). Regenerate mark assets: **`make pipeon-icons`** (runs **`packages/pipeon/resolvers/pipeon/assets/scripts/generate-pipeon-icons.py`**).
+**Browser (Coder code-server):** this repo also ships **`dockpipe-code-server:latest`** — **Coder’s** `codercom/code-server` image with Pipeon pre-installed, baseline User settings, and a **Pipeon P-mark favicon** in the browser tab. Build: **`packages/pipeon/assets/scripts/build.sh code-server-image`** (Dockerfile: **`packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server`**; favicons and defaults live under **`packages/pipeon/resolvers/pipeon/vscode-extension/`**). The **vscode** workflow uses it by default (`dockpipe --workflow vscode`). Regenerate mark assets: **`packages/pipeon/assets/scripts/build.sh icons`**.
 
 ---
 

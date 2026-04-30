@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Self-contained tests for the first-party pipeon package.
-# From repo root: bash packages/pipeon/tests/run.sh
+# From repo root: dockpipe package test --only pipeon
 set -euo pipefail
 ROOT="$(git rev-parse --show-toplevel)"
 DIR="$ROOT/packages/pipeon/tests"

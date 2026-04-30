@@ -30,12 +30,28 @@ Docker builds.
 
 ## Build Local Artifacts
 
+For contributors working from a source checkout:
+
+```bash
+make build
+dockpipe package build
+dockpipe package test
+```
+
+- `make build` rebuilds DockPipe core plus the DockPipe Launcher.
+- `dockpipe package build` runs package-owned source builds for packages in this checkout that declare `build.source.script`.
+- `dockpipe package test` runs package-owned tests for packages in this checkout that declare `test.script`.
+
+If your shell `dockpipe` points at an older install, contributors can optionally run `make dev-install` to update their local PATH binary. That is a source-checkout convenience, not part of the normal package/user flow.
+
 ```bash
 dockpipe build
 ```
 
 `dockpipe build` runs `compile all --force`, then prebuilds Dockerfile-backed
-image artifacts by default. Materialized image receipts land under:
+image artifacts by default. When a source package declares `build.source.script`
+in `package.yml`, `dockpipe build` also runs that package-owned authoring-tree
+build hook before image materialization. Materialized image receipts land under:
 
 ```text
 bin/.dockpipe/internal/images/by-fingerprint/
@@ -51,6 +67,31 @@ If you only want manifests/package materialization:
 
 ```bash
 dockpipe build --no-images
+```
+
+To run only package-owned source builds without compiling images:
+
+```bash
+dockpipe package build
+```
+
+To run all DockPipe-owned package and workflow tests in the current project:
+
+```bash
+dockpipe test
+```
+
+Package authors can also run the narrower forms:
+
+```bash
+dockpipe package test
+dockpipe workflow test
+```
+
+For the explicit subtarget form:
+
+```bash
+dockpipe package build source
 ```
 
 ## Inspect Packages And Images
@@ -131,3 +172,27 @@ Guidance:
 
 DockPipe can provide the prompt path and the automation override, but package
 authors still need to choose to use it in the flows they own.
+
+## Package Author Test Hooks
+
+If a package needs source-checkout or CI tests, declare them in `package.yml`
+instead of teaching repo scripts or CI to know the package path:
+
+```yaml
+test:
+  script: tests/run.sh
+```
+
+Then contributors and CI can run:
+
+```bash
+dockpipe package test
+```
+
+Use workflow-local `tests/run.sh` when you want a workflow tree under
+`workflows/<name>/` to carry its own tests and participate in:
+
+```bash
+dockpipe workflow test
+dockpipe test
+```

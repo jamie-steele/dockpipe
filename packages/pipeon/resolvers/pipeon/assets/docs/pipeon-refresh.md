@@ -4,13 +4,30 @@ Use this when the local Pipeon dev stack is running against this repository and 
 
 ## Which binary does what
 
-- `make build` updates the local `dockpipe` launcher binary
-- `make maintainer-tools` updates `packages/dorkpipe/bin/dorkpipe` and `packages/dorkpipe/bin/mcpd`
-- `make package-pipeon-vscode-extension` rebuilds the checked-in Pipeon extension output using an external build cache outside `packages/`
-- `make build-pipeon-desktop` updates the Tauri desktop shell at `packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop` using an external Cargo target dir outside `packages/`
-- `make build-code-server-image` rebuilds the branded Pipeon code-server image with fresh extension assets
+- `make build` updates the local `dockpipe` binary and DockPipe Launcher
+- `make dev-install` is an optional maintainer convenience that updates your shell `dockpipe` to the freshly built local binary
+- `dockpipe package build` runs package-owned source builds for packages in this checkout
+- `packages/pipeon/assets/scripts/build.sh vscode-extension` rebuilds the checked-in Pipeon extension output using an external build cache outside `packages/`
+- `packages/pipeon/assets/scripts/build.sh desktop` updates the Tauri desktop shell at `packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop` using an external Cargo target dir outside `packages/`
+- `packages/pipeon/assets/scripts/build.sh code-server-image` rebuilds the branded Pipeon code-server image with fresh extension assets
 
 ## Refresh matrix
+
+### Default local dev loop
+
+```bash
+make build
+make dev-install
+dockpipe package build
+```
+
+Use this first. It gives you:
+
+- fresh `dockpipe`
+- fresh launcher
+- package-owned source builds for first-party packages that need them
+
+`make dev-install` is only for contributors/package authors working from this source checkout. It is not part of the normal end-user/package runtime flow.
 
 ### DockPipe CLI only
 
@@ -23,7 +40,7 @@ Use this when you are testing a freshly built local `dockpipe` binary directly.
 ### DorkPipe / MCP control plane
 
 ```bash
-make maintainer-tools
+dockpipe package build --only dorkpipe
 ```
 
 Use this when the isolated DorkPipe control plane behavior depends on:
@@ -34,7 +51,7 @@ Use this when the isolated DorkPipe control plane behavior depends on:
 ### Pipeon VS Code extension source
 
 ```bash
-make package-pipeon-vscode-extension
+packages/pipeon/assets/scripts/build.sh vscode-extension
 ```
 
 Use this when you changed `packages/pipeon/resolvers/pipeon/vscode-extension/src/`.
@@ -42,7 +59,7 @@ Use this when you changed `packages/pipeon/resolvers/pipeon/vscode-extension/src
 ### Pipeon desktop shell
 
 ```bash
-make build-pipeon-desktop
+packages/pipeon/assets/scripts/build.sh desktop
 ```
 
 Use this when you changed the Tauri desktop host under `packages/pipeon/apps/pipeon-desktop/`.
@@ -53,10 +70,11 @@ If you are running Pipeon through the Tauri desktop shell plus the local code-se
 
 ```bash
 make build
-make maintainer-tools
-make package-pipeon-vscode-extension
-make build-pipeon-desktop
-make build-code-server-image
+make dev-install
+dockpipe package build
+packages/pipeon/assets/scripts/build.sh vscode-extension
+packages/pipeon/assets/scripts/build.sh desktop
+packages/pipeon/assets/scripts/build.sh code-server-image
 ```
 
 Then fully restart the running surface:
@@ -73,7 +91,7 @@ dockpipe --workflow pipeon-dev-stack --workdir . --
 
 ## Common gotcha
 
-If Pipeon still shows old control-plane behavior after `make build`, you probably rebuilt `dockpipe` but not the DorkPipe/MCP binaries.
+If Pipeon still shows old control-plane behavior after `make build`, you probably rebuilt `dockpipe` but did not rerun the package-owned source builds.
 
 Pipeon dev-stack uses:
 
@@ -81,4 +99,4 @@ Pipeon dev-stack uses:
 - `packages/dorkpipe/bin/dorkpipe`
 - `packages/dorkpipe/bin/mcpd`
 
-So DorkPipe request/apply/runtime changes in `packages/dorkpipe/lib/` need `make maintainer-tools`, not only `make build`.
+So DorkPipe request/apply/runtime changes in `packages/dorkpipe/lib/` need `dockpipe package build` (or `dockpipe package build --only dorkpipe`), not only `make build`.

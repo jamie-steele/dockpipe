@@ -47,9 +47,10 @@ gosec -conf .gosec.json -fmt json -out=bin/.dockpipe/ci-raw/gosec.json -exclude-
 GC=$?
 set -e
 export DOCKPIPE_WORKDIR="$ROOT"
-DOCKPIPE_SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts" \
-  bash "$DOCKPIPE_SCRIPT_DIR/normalize-ci-scans.sh"
-jq -r '"govulncheck raw vulns: " + ((.vulns // .Vulns // [] | length) | tostring)' bin/.dockpipe/ci-raw/govulncheck.json 2>/dev/null || true
+CI_SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
+DOCKPIPE_SCRIPT_DIR="$CI_SCRIPT_DIR" \
+  bash "$CI_SCRIPT_DIR/normalize-ci-scans.sh"
+jq -sr '"govulncheck raw findings: " + ((([.[] | select(.finding or .Finding)] | length) + ([.[] | (.vulns // .Vulns // [])[]?] | length)) | tostring)' bin/.dockpipe/ci-raw/govulncheck.json 2>/dev/null || true
 jq -r '"gosec raw issues: " + ((.Stats.found // 0) | tostring)' bin/.dockpipe/ci-raw/gosec.json 2>/dev/null || true
 if [[ $VC -ne 0 ]]; then exit "$VC"; fi
 if [[ $GC -ne 0 ]]; then exit "$GC"; fi
@@ -57,10 +58,14 @@ if [[ $GC -ne 0 ]]; then exit "$GC"; fi
 step "make (build CLI)"
 make
 
-step "go test (root + maintainer modules)"
+step "go test"
 go test ./...
-go test ./packages/dorkpipe/lib/...
-go test ./packages/dorkpipe/mcp/...
+
+step "dockpipe package test"
+./src/bin/dockpipe package test --workdir "$ROOT"
+
+step "dockpipe workflow test"
+./src/bin/dockpipe workflow test --workdir "$ROOT"
 
 step "templates/core path guard"
 bash src/scripts/check-templates-core-paths.sh

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Quick checks: Go tests + template path guard + bash unit tests (no Docker, no integration).
+# Quick checks: Go tests + DockPipe package/workflow tests + template path guard + bash unit tests (no Docker integration sweep).
 # From repo root:  make test-quick
 set -euo pipefail
 
@@ -9,10 +9,14 @@ export DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$ROOT}"
 
 UNIT="$(cd "${ROOT}/tests/unit-tests" && pwd)"
 
-echo "=== go test (root + maintainer modules) ==="
+echo "=== go test ==="
 go test ./...
-go test ./packages/dorkpipe/lib/...
-go test ./packages/dorkpipe/mcp/...
+
+echo "=== dockpipe package test ==="
+go run ./src/cmd package test --workdir "$ROOT"
+
+echo "=== dockpipe workflow test ==="
+go run ./src/cmd workflow test --workdir "$ROOT"
 
 echo "=== check-templates-core-paths ==="
 bash src/scripts/check-templates-core-paths.sh

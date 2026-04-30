@@ -151,8 +151,9 @@ func TestHTTPKeyTierGateReadonlyVsExec(t *testing.T) {
 	if err := json.NewDecoder(respRO.Body).Decode(&wrapRO); err != nil {
 		t.Fatal(err)
 	}
-	if len(wrapRO.Result.Tools) != 5 {
-		t.Fatalf("readonly key: want 5 tools, got %d", len(wrapRO.Result.Tools))
+	wantRO := expectedToolNamesForTier(TierReadonly)
+	if got := toolNamesFromHTTPList(wrapRO.Result.Tools); !equalStringSlices(got, wantRO) {
+		t.Fatalf("readonly key tools mismatch: got %v want %v", got, wantRO)
 	}
 
 	reqEX, err := http.NewRequest(http.MethodPost, srv.URL, bytes.NewReader(body))
@@ -176,9 +177,43 @@ func TestHTTPKeyTierGateReadonlyVsExec(t *testing.T) {
 	if err := json.NewDecoder(respEX.Body).Decode(&wrapEX); err != nil {
 		t.Fatal(err)
 	}
-	if len(wrapEX.Result.Tools) != 9 {
-		t.Fatalf("exec key: want 9 tools, got %d", len(wrapEX.Result.Tools))
+	wantEX := expectedToolNamesForTier(TierExec)
+	if got := toolNamesFromHTTPList(wrapEX.Result.Tools); !equalStringSlices(got, wantEX) {
+		t.Fatalf("exec key tools mismatch: got %v want %v", got, wantEX)
 	}
+}
+
+func expectedToolNamesForTier(tier MCPTier) []string {
+	ctx := WithMCPTier(context.Background(), tier)
+	var out []string
+	for _, m := range mcpToolCatalog() {
+		if ToolAllowed(ctx, m.Name) {
+			out = append(out, m.Name)
+		}
+	}
+	return out
+}
+
+func toolNamesFromHTTPList(tools []struct {
+	Name string `json:"name"`
+}) []string {
+	out := make([]string, 0, len(tools))
+	for _, tool := range tools {
+		out = append(out, tool.Name)
+	}
+	return out
+}
+
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func newIPv4TestServer(t *testing.T, h http.Handler) *httptest.Server {

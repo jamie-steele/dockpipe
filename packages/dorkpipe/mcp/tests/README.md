@@ -3,5 +3,5 @@
 ```bash
 go test -C packages/dorkpipe/mcp ./...
 # or
-bash packages/dorkpipe/mcp/tests/run.sh
+dockpipe package test --only dorkpipe.mcp
 ```

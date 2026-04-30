@@ -82,8 +82,13 @@ func TestToolsListFilteredByTier(t *testing.T) {
 	if err := json.Unmarshal(resp.Result, &out); err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Tools) != 5 {
-		t.Fatalf("readonly tier: want 5 tools, got %d (%+v)", len(out.Tools), out.Tools)
+	want := expectedToolNamesForTier(TierReadonly)
+	got := make([]string, 0, len(out.Tools))
+	for _, tool := range out.Tools {
+		got = append(got, tool.Name)
+	}
+	if !equalStringSlices(got, want) {
+		t.Fatalf("readonly tier tools mismatch: got %v want %v", got, want)
 	}
 }
 

@@ -1,6 +1,6 @@
 # Manual QA (before release)
 
-CI runs **`go test ./...`**; validate installs on real machines when packaging or Docker behavior changes.
+CI runs **`go test ./...`**, **`dockpipe package test`**, and **`dockpipe workflow test`**; validate installs on real machines when packaging or Docker behavior changes.
 
 **Install / concepts:** [install.md](../install.md) · [onboarding.md](../onboarding.md)
 

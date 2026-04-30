@@ -99,8 +99,7 @@ jobs:
       - name: Run tests
         run: |
           go test ./...
-          go test ./packages/dorkpipe/lib/...
-          go test ./packages/dorkpipe/mcp/...
+          bash tests/run_tests.sh
 
       - name: Build release artifacts (Linux, macOS, zip, debs)
         shell: bash
@@ -154,10 +153,9 @@ jobs:
           go-version: "1.25.8"
 
       - name: Run tests
+        shell: bash
         run: |
           go test ./...
-          go test ./packages/dorkpipe/lib/...
-          go test ./packages/dorkpipe/mcp/...
 
       # One pwsh step: GITHUB_ENV mangles/truncates Windows paths for WIX — pass -WixRoot into build.ps1 instead.
       - name: Install WiX and build MSI

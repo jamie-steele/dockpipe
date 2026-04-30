@@ -7,11 +7,15 @@ import (
 )
 
 // DockerfileDir returns the directory that contains Dockerfile for a template isolate name.
-// Searches workflow compile roots (nested resolvers), bundle compile roots (BundleCompileRootsCached), then templates/core.
+// Searches authoring compile roots that may carry packaged resolvers, explicit resolver compile roots,
+// bundle compile roots, then core fallback locations.
 func DockerfileDir(repoRoot, name string) string {
 	core := CoreDir(repoRoot)
 	var candidates []string
 	if !UsesBundledAssetLayout(repoRoot) {
+		for _, leaf := range nestedResolverLeafDirs(name, WorkflowCompileRootsCached(repoRoot)) {
+			candidates = append(candidates, filepath.Join(leaf, "assets", "images", name))
+		}
 		for _, leaf := range nestedResolverLeafDirs(name, ResolverCompileRootsCached(repoRoot)) {
 			candidates = append(candidates, filepath.Join(leaf, "assets", "images", name))
 		}

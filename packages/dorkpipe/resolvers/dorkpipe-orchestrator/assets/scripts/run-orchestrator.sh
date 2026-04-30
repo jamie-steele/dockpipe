@@ -12,7 +12,7 @@ BIN="$(dorkpipe_script_resolve_bin "$(dorkpipe_script_repo_root "$SCRIPT_DIR")")
 SPEC="${DORKPIPE_SPEC:-$WORKFLOW_ROOT/spec.example.yaml}"
 
 if [[ ! -x "$BIN" ]]; then
-  echo "dorkpipe: build the orchestrator first: make maintainer-tools (writes packages/dorkpipe/bin/dorkpipe)" >&2
+  echo "dorkpipe: build the orchestrator first: ./src/bin/dockpipe package build source --workdir . --only dorkpipe" >&2
   exit 1
 fi
 

@@ -28,12 +28,12 @@ Install this into **stock VS Code** for development, or pack as **`.vsix`** and 
 
 The **`images/`** directory holds both the Pipeon app mark and the DorkPipe extension mark. The extension now uses **`dorkpipe-icon.png`** for its Marketplace/activity-bar identity, while Pipeon browser/app assets continue to use the Pipeon mark.
 
-**`dockpipe-code-server:latest`** (Coder code-server in the browser) is built via **`Dockerfile.code-server`** in this directory; **`code-server-user-settings.json`** is the default User settings baked into that image. The image installs the **DorkPipe** extension plus **DockPipe Language Support**. **`make build-code-server-image`** runs the Docker build from the repo root.
+**`dockpipe-code-server:latest`** (Coder code-server in the browser) is built via **`Dockerfile.code-server`** in this directory; **`code-server-user-settings.json`** is the default User settings baked into that image. The image installs the **DorkPipe** extension plus **DockPipe Language Support**. Build it from the repo root with **`packages/pipeon/assets/scripts/build.sh code-server-image`**.
 
 ## Pack
 
 ```bash
-make package-pipeon-vscode-extension
+packages/pipeon/assets/scripts/build.sh vscode-extension
 ```
 
 This writes a VSIX to:
@@ -44,7 +44,7 @@ Install the generated `.vsix`: **Extensions → … → Install from VSIX…**
 Or install via CLI:
 
 ```bash
-make install-pipeon-vscode-extension
+packages/pipeon/assets/scripts/build.sh install-vscode-extension
 ```
 
 ## Develop

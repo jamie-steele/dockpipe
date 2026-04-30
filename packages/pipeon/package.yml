@@ -21,3 +21,8 @@ depends:
   - dorkpipe
 script_contract:
   inject: [workdir, workflow_name, script_dir, package_root, assets_dir, dockpipe_bin]
+build:
+  source:
+    script: assets/scripts/build.sh
+test:
+  script: tests/run.sh

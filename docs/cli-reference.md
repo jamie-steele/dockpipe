@@ -14,7 +14,7 @@ Treat **`--isolate`** as the low-level image/template override, not the main way
 
 **Workflow YAML (`config.yml`):** single-command layout (`run` / `isolate` / `act`) or multi-step **`steps:`** (ordering, **`outputs:`**, explicit **`group.mode: async`** for parallel work). In step mode, top-level `run` / `act` are not used. Full reference: **[workflow-yaml.md](workflow-yaml.md)**.
 
-**Subcommands:** `dockpipe init`, `dockpipe install` (fetch **`templates/core`** from HTTPS — e.g. **Cloudflare R2** behind a public URL), `dockpipe clone` (copy a compiled workflow package to **`workflows/`** when **`allow_clone: true`** in **`package.yml`**), **`dockpipe build`** / **`clean`** / **`rebuild`** (compiled store under **`bin/.dockpipe/internal/packages/`**), `dockpipe package` (list, manifest, **`package build core`** / **`package build store`**, **`package compile …`**), `dockpipe release upload` (S3-compatible upload via **`aws` CLI** — self-hosted registries), `dockpipe workflow validate [path]`, `dockpipe pipelang compile|invoke|materialize` (optional typed authoring layer: compile inspectable artifacts, invoke methods via CLI, or recursively materialize `.pipe` files under configured compile roots), `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe core script-path <dotted>` (print absolute path to **`scripts/core.<dots>`** — same resolution as workflow YAML), `dockpipe terraform pipeline-path` (shortcut to **`terraform-pipeline.sh`** — **`packages/terraform/resolvers/terraform-core/`**, **`DOCKPIPE_TF_*`** in **`src/core/assets/scripts/README.md`**), `dockpipe runs list [--workdir]` (list **`bin/.dockpipe/runs/*.json`** for host **`kind: host`** steps), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
+**Subcommands:** `dockpipe init`, `dockpipe install` (fetch **`templates/core`** from HTTPS — e.g. **Cloudflare R2** behind a public URL), `dockpipe clone` (copy a compiled workflow package to **`workflows/`** when **`allow_clone: true`** in **`package.yml`**), **`dockpipe build`** / **`clean`** / **`rebuild`** (compiled store under **`bin/.dockpipe/internal/packages/`**), `dockpipe package` (list, manifest, **`package build core`** / **`package build store`**, **`package compile …`**, **`package test`**), `dockpipe workflow validate|list|test`, `dockpipe test` (run package-owned tests plus workflow-local tests for the current project/workdir), `dockpipe release upload` (S3-compatible upload via **`aws` CLI** — self-hosted registries), `dockpipe pipelang compile|invoke|materialize` (optional typed authoring layer: compile inspectable artifacts, invoke methods via CLI, or recursively materialize `.pipe` files under configured compile roots), `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe core script-path <dotted>` (print absolute path to **`scripts/core.<dots>`** — same resolution as workflow YAML), `dockpipe terraform pipeline-path` (shortcut to **`terraform-pipeline.sh`** — **`packages/terraform/resolvers/terraform-core/`**, **`DOCKPIPE_TF_*`** in **`src/core/assets/scripts/README.md`**), `dockpipe runs list [--workdir]` (list **`bin/.dockpipe/runs/*.json`** for host **`kind: host`** steps), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
 
 ## `dockpipe init`
 
@@ -78,10 +78,29 @@ Inspect **installed** package metadata. Store-backed installs are intended to la
 | `dockpipe package images [--workdir <path>]` | Merge planned image artifacts from compiled workflow tarballs with materialized/cached receipts under **`bin/.dockpipe/internal/images/by-fingerprint/`**; print **fingerprint**, **status**, **state**, **source**, **image_ref**, **workflow**, **package**, **step_id**, **image_key** (tab-separated). Status can show **`ready`**, **`missing`**, **`stale`**, **`planned`**, **`referenced`**, or **`docker-error`**. |
 | `dockpipe package manifest` | Print an example **`package.yml`** (schema: **name**, **version**, **title**, **description**, **author**, **website**, **license**, optional **kind**). |
 | `dockpipe package build core [--repo-root <path>] [--out <dir>] [--version <ver>]` | Write **`templates/core`** tarball (**`core/…`** prefix), **`.sha256`**, **`install-manifest.json`** for **`dockpipe install core`**. Default **`--out`**: **`release/artifacts/`**. |
+| `dockpipe package test [--workdir <path>] [--only <package>]` | Run package-owned tests for packages in the current source checkout that declare **`test.script`** in **`package.yml`**. |
 | `dockpipe package build store [--workdir <path>] [--out <dir>] [--only <slice>] [--version <ver>]` | Gzip tar per compiled package under **`bin/.dockpipe/internal/packages/`** (after **`dockpipe build`**), archive paths **`core/`**, **`workflows/<name>/`**, **`resolvers/<name>/`**. **`--only bundles`** adds bundle packages. **`packages-store-manifest.json`** lists artifacts. Default **`--out`**: **`release/artifacts/`**. |
 | `dockpipe package compile workflow <source-dir> [--workdir <path>] [--name <n>] [--force]` | **`workflow validate`** on **`source-dir/config.yml`**, then copy the tree to **`bin/.dockpipe/internal/packages/workflows/<name>/`** (writes **`package.yml`** if missing, with **`allow_clone: true`** and **`distribution: source`** for local round-trips). |
 
 **Environment:** **`DOCKPIPE_PACKAGES_ROOT`** — override packages root (default **`<workdir>/bin/.dockpipe/internal/packages`**).
+
+## `dockpipe workflow test` and `dockpipe test`
+
+Workflow-local tests are discovered from on-disk workflow directories that
+contain one of:
+
+- `tests/run.sh`
+- `tests/run.ps1`
+- `tests/run.cmd`
+- `tests/run.bat`
+
+Commands:
+
+| Command | Purpose |
+|---------|---------|
+| `dockpipe workflow test [--workdir <path>] [--only <workflow>]` | Run workflow-local tests for workflows discovered from the current project/workdir. |
+| `dockpipe test [--workdir <path>]` | Umbrella test command: run `dockpipe package test` plus `dockpipe workflow test`. |
+| `dockpipe test --only <name>` | Limit the umbrella run to one matching package/workflow name when applicable. |
 
 ## `dockpipe pipelang`
 

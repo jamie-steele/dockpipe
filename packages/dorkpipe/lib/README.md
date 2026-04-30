@@ -18,7 +18,7 @@ Go module **`dorkpipe.orchestrator`** — local-first orchestration **on top of*
 - **`statepaths/`** — canonical DorkPipe artifact layout under `bin/.dockpipe/`  
 - **`engine/`** — wires planner → scheduler → workers → aggregator  
 
-CLI: **`make maintainer-tools`** (repo root) writes **`../bin/dorkpipe`** (next to this **`lib/`** tree). Run that path directly — it is **not** installed under **`src/bin/`**.
+CLI: **`./src/bin/dockpipe package build source --workdir . --only dorkpipe`** (repo root) builds the package-owned source artifacts that the wrappers under **`packages/dorkpipe/bin/`** forward to. Run **`packages/dorkpipe/bin/dorkpipe`** directly — it is **not** installed under **`src/bin/`**.
 
 ## Authoring note
 

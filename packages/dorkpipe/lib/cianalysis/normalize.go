@@ -1,8 +1,10 @@
 package cianalysis
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,6 +86,25 @@ type govulnEntry struct {
 	OSVAlt *govOSV `json:"OSV"`
 }
 
+type govulnStreamMessage struct {
+	Config *struct {
+		ScannerVersion string `json:"scanner_version"`
+	} `json:"config"`
+	ScannerVersion string        `json:"ScannerVersion"`
+	Vulns          []govulnEntry `json:"vulns"`
+	VulnsAlt       []govulnEntry `json:"Vulns"`
+	OSV            *govOSV       `json:"osv"`
+	OSVAlt         *govOSV       `json:"OSV"`
+	Finding        *struct {
+		OSV          string `json:"osv"`
+		FixedVersion string `json:"fixed_version"`
+	} `json:"finding"`
+	FindingAlt *struct {
+		OSV          string `json:"OSV"`
+		FixedVersion string `json:"FixedVersion"`
+	} `json:"Finding"`
+}
+
 type govOSV struct {
 	ID       string `json:"id"`
 	Summary  string `json:"summary"`
@@ -143,8 +164,8 @@ func Normalize(workdir string, env map[string]string) (Result, error) {
 	if err := json.Unmarshal(gosecBytes, &gosec); err != nil {
 		return Result{}, fmt.Errorf("parse gosec.json: %w", err)
 	}
-	var gov govulnDoc
-	if err := json.Unmarshal(govBytes, &gov); err != nil {
+	gov, err := parseGovulnDoc(govBytes)
+	if err != nil {
 		return Result{}, fmt.Errorf("parse govulncheck.json: %w", err)
 	}
 
@@ -312,6 +333,62 @@ See **docs/artifacts.md** (CI bundle).
 		return Result{}, err
 	}
 	return Result{FindingsPath: findingsPath, SummaryPath: summaryPath, Count: len(findings)}, nil
+}
+
+func parseGovulnDoc(blob []byte) (govulnDoc, error) {
+	var doc govulnDoc
+	if err := json.Unmarshal(blob, &doc); err == nil {
+		if doc.Config != nil || strings.TrimSpace(doc.ScannerVersion) != "" || len(doc.Vulns) > 0 || len(doc.VulnsAlt) > 0 {
+			return doc, nil
+		}
+	}
+
+	dec := json.NewDecoder(bytes.NewReader(blob))
+	streamOSV := map[string]*govOSV{}
+	for {
+		var msg govulnStreamMessage
+		if err := dec.Decode(&msg); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return govulnDoc{}, err
+		}
+		if doc.Config == nil && msg.Config != nil {
+			doc.Config = msg.Config
+		}
+		if strings.TrimSpace(doc.ScannerVersion) == "" && strings.TrimSpace(msg.ScannerVersion) != "" {
+			doc.ScannerVersion = strings.TrimSpace(msg.ScannerVersion)
+		}
+		if len(msg.Vulns) > 0 {
+			doc.Vulns = append(doc.Vulns, msg.Vulns...)
+		}
+		if len(msg.VulnsAlt) > 0 {
+			doc.VulnsAlt = append(doc.VulnsAlt, msg.VulnsAlt...)
+		}
+		if msg.OSV != nil {
+			if id := strings.TrimSpace(msg.OSV.ID); id != "" {
+				streamOSV[id] = msg.OSV
+			}
+		}
+		if msg.OSVAlt != nil {
+			if id := strings.TrimSpace(msg.OSVAlt.ID); id != "" {
+				streamOSV[id] = msg.OSVAlt
+			}
+		}
+		if msg.Finding != nil {
+			id := strings.TrimSpace(msg.Finding.OSV)
+			if osv := streamOSV[id]; id != "" && osv != nil {
+				doc.VulnsAlt = append(doc.VulnsAlt, govulnEntry{OSVAlt: osv})
+			}
+		}
+		if msg.FindingAlt != nil {
+			id := strings.TrimSpace(msg.FindingAlt.OSV)
+			if osv := streamOSV[id]; id != "" && osv != nil {
+				doc.VulnsAlt = append(doc.VulnsAlt, govulnEntry{OSVAlt: osv})
+			}
+		}
+	}
+	return doc, nil
 }
 
 func ensureJSONFile(path string) error {

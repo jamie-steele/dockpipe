@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Run unit tests. Exit 0 if all pass. From repo root: bash tests/run_tests.sh
+# Run project shell/unit tests. Exit 0 if all pass. From repo root: bash tests/run_tests.sh
 # Integration tests (Docker): bash tests/integration-tests/run.sh
-# Maintainer package tests live under packages/*/tests/ (self-contained).
+# DockPipe-owned package/workflow hooks live behind `dockpipe test`.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UNIT="$(cd "${ROOT}/tests/unit-tests" && pwd)"
+CLI="${ROOT}/src/bin/dockpipe"
 failed=0
 
 for f in test_cli.sh test_repo_root.sh test_repo_layout.sh test_clone_worktree_include.sh; do
@@ -15,10 +16,11 @@ for f in test_cli.sh test_repo_root.sh test_repo_layout.sh test_clone_worktree_i
   fi
 done
 
-echo "--- maintainer package tests (pipeon, dorkpipe, dorkpipe-mcp) ---"
-bash "$ROOT/packages/pipeon/tests/run.sh" || failed=1
-bash "$ROOT/packages/dorkpipe/tests/run.sh" || failed=1
-bash "$ROOT/packages/dorkpipe-mcp/tests/run.sh" || failed=1
+echo "--- dockpipe build --no-images ---"
+"$CLI" build --workdir "$ROOT" --no-images || failed=1
+
+echo "--- dockpipe test ---"
+"$CLI" test --workdir "$ROOT" || failed=1
 
 echo "--- smoke.sh (needs Docker) ---"
 bash "$UNIT/smoke.sh" || failed=1

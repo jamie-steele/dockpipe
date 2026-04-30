@@ -5,7 +5,7 @@
 Run from repository root:
 
 ```bash
-bash packages/pipeon/tests/run.sh
+dockpipe package test --only pipeon
 # or
 bash packages/pipeon/tests/test_pipeon.sh
 ```

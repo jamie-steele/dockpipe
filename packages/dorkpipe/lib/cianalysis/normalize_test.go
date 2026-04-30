@@ -90,3 +90,54 @@ func TestNormalizeWritesFindingsAndSummary(t *testing.T) {
 		t.Fatalf("summary missing workflow name: %s", summary)
 	}
 }
+
+func TestNormalizeAcceptsGovulncheckJSONStream(t *testing.T) {
+	tmp := t.TempDir()
+	rawDir := filepath.Join(tmp, "bin", ".dockpipe", "ci-raw")
+	if err := os.MkdirAll(rawDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gosec := `{"Issues":[],"GosecVersion":"fixture-gosec"}`
+	gov := strings.Join([]string{
+		`{"config":{"scanner_version":"fixture-govuln-stream"}}`,
+		`{"SBOM":{"go_version":"go1.25.0"}}`,
+		`{"OSV":{"id":"GO-2026-0001","summary":"stream-summary","details":"stream-details","severity":[{"type":"CVSS_V3","score":"7.5"}]}}`,
+		`{"finding":{"osv":"GO-2026-0001","fixed_version":"v1.2.3"}}`,
+	}, "\n")
+	if err := os.WriteFile(filepath.Join(rawDir, "gosec.json"), []byte(gosec), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rawDir, "govulncheck.json"), []byte(gov), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Normalize(tmp, map[string]string{})
+	if err != nil {
+		t.Fatalf("Normalize() error = %v", err)
+	}
+	if res.Count != 1 {
+		t.Fatalf("Normalize() count = %d, want 1", res.Count)
+	}
+
+	findingsBytes, err := os.ReadFile(res.FindingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Provenance struct {
+			Tools struct {
+				Govulncheck string `json:"govulncheck"`
+			} `json:"tools"`
+		} `json:"provenance"`
+		Findings []Finding `json:"findings"`
+	}
+	if err := json.Unmarshal(findingsBytes, &doc); err != nil {
+		t.Fatal(err)
+	}
+	if doc.Provenance.Tools.Govulncheck != "fixture-govuln-stream" {
+		t.Fatalf("govulncheck tool version = %q", doc.Provenance.Tools.Govulncheck)
+	}
+	if len(doc.Findings) != 1 || doc.Findings[0].RuleID != "GO-2026-0001" {
+		t.Fatalf("unexpected findings: %#v", doc.Findings)
+	}
+}

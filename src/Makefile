@@ -5,10 +5,10 @@ DEB_VERSION ?= $(shell test -f VERSION && tr -d ' \t\r\n' < VERSION || echo 0.6.
 GO_LDFLAGS := -s -w -X main.Version=$(DEB_VERSION)
 WINDOWS_OUT ?= src/bin/dockpipe.exe
 
-.PHONY: build build-windows test maintainer-tools
+.PHONY: build build-core build-windows test-core
 
 # Core DockPipe CLI. Workflows + compiled packages: use ./src/bin/dockpipe --workflow … (same as downstream).
-build:
+build build-core:
 	cp VERSION src/cmd/VERSION
 	@mkdir -p src/bin
 	go build -trimpath -ldflags "$(GO_LDFLAGS)" -o src/bin/dockpipe.bin ./src/cmd
@@ -16,14 +16,6 @@ build:
 	@chmod +x src/bin/dockpipe
 	@echo "Built src/bin/dockpipe.bin — copied to src/bin/dockpipe (use either; bare \`dockpipe\` on PATH may still be an older install)"
 	@echo "Install into PATH:  make install   or   make dev-install"
-	@echo "Optional: make maintainer-tools (dorkpipe + mcpd under bin/.dockpipe/tooling/bin with wrappers under packages/dorkpipe/bin/)"
-
-# Maintainer: orchestrator + DorkPipe-owned MCP control plane. Not required for dockpipe core.
-maintainer-tools:
-	@mkdir -p bin/.dockpipe/tooling/bin
-	go build -C packages/dorkpipe/lib -trimpath -ldflags "$(GO_LDFLAGS)" -o ../../../bin/.dockpipe/tooling/bin/dorkpipe ./cmd/dorkpipe
-	go build -C packages/dorkpipe/mcp -trimpath -ldflags "$(GO_LDFLAGS)" -o ../../../bin/.dockpipe/tooling/bin/mcpd ./cmd/mcpd
-	@echo "Built bin/.dockpipe/tooling/bin/dorkpipe and bin/.dockpipe/tooling/bin/mcpd"
 
 build-windows:
 	cp VERSION src/cmd/VERSION
@@ -31,7 +23,5 @@ build-windows:
 	GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "$(GO_LDFLAGS)" -o "$(WINDOWS_OUT)" ./src/cmd
 	@echo "Built $(WINDOWS_OUT) — copy to your Windows machine or PATH"
 
-test:
+test-core:
 	go test ./...
-	go test ./packages/dorkpipe/lib/...
-	go test ./packages/dorkpipe/mcp/...

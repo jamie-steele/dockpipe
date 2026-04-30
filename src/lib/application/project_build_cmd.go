@@ -17,8 +17,9 @@ func cmdBuild(args []string) error {
 		return nil
 	}
 	var (
-		wfName      string
-		buildImages = true
+		wfName          string
+		buildImages     = true
+		buildSourcePkgs = true
 	)
 	forward := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
@@ -36,6 +37,12 @@ func cmdBuild(args []string) error {
 		case "--no-images":
 			buildImages = false
 			continue
+		case "--source-builds":
+			buildSourcePkgs = true
+			continue
+		case "--no-source-builds":
+			buildSourcePkgs = false
+			continue
 		}
 		forward = append(forward, args[i])
 	}
@@ -49,6 +56,11 @@ func cmdBuild(args []string) error {
 		}
 	} else if err := cmdPackage(append([]string{"compile", "all", "--force"}, forward...)); err != nil {
 		return err
+	}
+	if buildSourcePkgs {
+		if err := RunPackageBuildSourceFromFlags(workdir, ""); err != nil {
+			return err
+		}
 	}
 	if !buildImages {
 		return nil
@@ -177,6 +189,8 @@ With --for-workflow <name>: same as dockpipe package compile for-workflow <name>
 
 Options:
   --for-workflow <name>   Dependency-scoped compile instead of compile all
+  --source-builds         Run package.yml build.source.script hooks after compile (default)
+  --no-source-builds      Skip package-owned source-checkout build hooks
   --images                Prebuild Dockerfile-backed image artifacts after compile (default)
   --no-images             Only compile package/runtime/image manifests; do not run docker build
   Otherwise same as package compile all / for-workflow: --workdir

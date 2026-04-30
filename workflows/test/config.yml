@@ -17,7 +17,7 @@ description: >-
 
 steps:
   - id: prepare
-    isolate: golang:1.25-bookworm
+    isolate: golang:1.25.9-bookworm
     cmd: |-
       bash -c 'set -euo pipefail
       echo "[demo] ================================================================="
@@ -32,7 +32,7 @@ steps:
       echo "[demo] step 1/3 prepare — wrote demo artifact + checksum for next step"'
 
   - id: scan
-    isolate: golang:1.25-bookworm
+    isolate: golang:1.25.9-bookworm
     cmd: |-
       bash -c 'set -euo pipefail
       echo "[demo] --- Step 2: verify artifact + full Go + security scan (same spirit as CI / ci-local.sh) ---"
@@ -58,7 +58,7 @@ steps:
       printf "%s\n" "VERIFY_OK=1" "SCAN_PASS=1" "DEMO_STAGE=scan" > bin/.dockpipe/outputs.env'
 
   - id: report
-    isolate: golang:1.25-bookworm
+    isolate: golang:1.25.9-bookworm
     cmd: |-
       bash -c 'set -euo pipefail
       test "${SCAN_PASS:-0}" = "1" || { echo "[demo] FAIL SCAN_PASS not set"; exit 1; }
