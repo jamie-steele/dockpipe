@@ -93,6 +93,137 @@ func TestRunBlockingStepHostCommandRunsOnHost(t *testing.T) {
 	}
 }
 
+func TestRunBlockingStepHostIsolateGetsProfileEnvAndStepCommand(t *testing.T) {
+	withRunStepsSeams(t)
+	wd := t.TempDir()
+	repo := t.TempDir()
+	profileDir := filepath.Join(repo, "src", "core", "runtimes", "vmimage")
+	if err := os.MkdirAll(profileDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	profile := "DOCKPIPE_RUNTIME_SUBSTRATE=vmimage\nDOCKPIPE_RUNTIME_HOST_SCRIPT=scripts/core.assets.scripts.vmimage-run.sh\nDOCKPIPE_RUNTIME_HOST_REQUIRES_DOCKER=0\n"
+	if err := os.WriteFile(filepath.Join(profileDir, "profile"), []byte(profile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	scriptAbs := filepath.Join(repo, "src", "core", "assets", "scripts", "vmimage-run.sh")
+	if err := os.MkdirAll(filepath.Dir(scriptAbs), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(scriptAbs, []byte("#!/usr/bin/env bash\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	o := baseRunStepsOpts()
+	o.repoRoot = repo
+	o.projectRoot = repo
+	o.opts.Workdir = wd
+	o.wf.Steps = []domain.Step{{Runtime: "vmimage", Cmd: "echo hi"}}
+	var gotEnv []string
+	runHostScriptFn = func(scriptPath string, env []string) error {
+		gotEnv = append([]string(nil), env...)
+		return nil
+	}
+	dockerEnv := map[string]string{}
+	if err := runBlockingStep(&o, 0, 1, dockerEnv); err != nil {
+		t.Fatalf("runBlockingStep error: %v", err)
+	}
+	joined := strings.Join(gotEnv, "\n")
+	if !strings.Contains(joined, "DOCKPIPE_RUNTIME_SUBSTRATE=vmimage") {
+		t.Fatalf("expected runtime substrate in env, got %q", joined)
+	}
+	if !strings.Contains(joined, "DOCKPIPE_STEP_CMD=echo hi") {
+		t.Fatalf("expected step command in env, got %q", joined)
+	}
+	if !strings.Contains(joined, "DOCKPIPE_STEP_OUTPUTS_FILE="+filepath.Join(wd, domain.DefaultOutputsEnvRel)) {
+		t.Fatalf("expected outputs file in env, got %q", joined)
+	}
+}
+
+func TestRunBlockingStepHostIsolateAllowsRawNonShellCommandString(t *testing.T) {
+	withRunStepsSeams(t)
+	wd := t.TempDir()
+	repo := t.TempDir()
+	profileDir := filepath.Join(repo, "src", "core", "runtimes", "vmimage")
+	if err := os.MkdirAll(profileDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	profile := "DOCKPIPE_RUNTIME_SUBSTRATE=vmimage\nDOCKPIPE_RUNTIME_HOST_SCRIPT=scripts/core.assets.scripts.vmimage-run.sh\nDOCKPIPE_RUNTIME_HOST_REQUIRES_DOCKER=0\n"
+	if err := os.WriteFile(filepath.Join(profileDir, "profile"), []byte(profile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	scriptAbs := filepath.Join(repo, "src", "core", "assets", "scripts", "vmimage-run.sh")
+	if err := os.MkdirAll(filepath.Dir(scriptAbs), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(scriptAbs, []byte("#!/usr/bin/env bash\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	o := baseRunStepsOpts()
+	o.repoRoot = repo
+	o.projectRoot = repo
+	o.opts.Workdir = wd
+	o.wf.Steps = []domain.Step{{
+		Runtime: "vmimage",
+		Cmd:     `if ($env:DOCKPIPE_VM_GUEST_COMMAND) { Invoke-Expression $env:DOCKPIPE_VM_GUEST_COMMAND } else { whoami; hostname }`,
+	}}
+	var gotEnv []string
+	runHostScriptFn = func(scriptPath string, env []string) error {
+		gotEnv = append([]string(nil), env...)
+		return nil
+	}
+	dockerEnv := map[string]string{}
+	if err := runBlockingStep(&o, 0, 1, dockerEnv); err != nil {
+		t.Fatalf("runBlockingStep error: %v", err)
+	}
+	joined := strings.Join(gotEnv, "\n")
+	if !strings.Contains(joined, `DOCKPIPE_STEP_CMD=if ($env:DOCKPIPE_VM_GUEST_COMMAND) { Invoke-Expression $env:DOCKPIPE_VM_GUEST_COMMAND } else { whoami; hostname }`) {
+		t.Fatalf("expected raw step command in env, got %q", joined)
+	}
+}
+
+func TestRunBlockingStepInheritsWorkflowRuntimeForHostIsolate(t *testing.T) {
+	withRunStepsSeams(t)
+	wd := t.TempDir()
+	repo := t.TempDir()
+	profileDir := filepath.Join(repo, "src", "core", "runtimes", "vmimage")
+	if err := os.MkdirAll(profileDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	profile := "DOCKPIPE_RUNTIME_SUBSTRATE=vmimage\nDOCKPIPE_RUNTIME_HOST_SCRIPT=scripts/core.assets.scripts.vmimage-run.sh\nDOCKPIPE_RUNTIME_HOST_REQUIRES_DOCKER=0\n"
+	if err := os.WriteFile(filepath.Join(profileDir, "profile"), []byte(profile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	scriptAbs := filepath.Join(repo, "src", "core", "assets", "scripts", "vmimage-run.sh")
+	if err := os.MkdirAll(filepath.Dir(scriptAbs), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(scriptAbs, []byte("#!/usr/bin/env bash\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	o := baseRunStepsOpts()
+	o.repoRoot = repo
+	o.projectRoot = repo
+	o.opts.Workdir = wd
+	o.wf.Runtime = "vmimage"
+	o.wf.Steps = []domain.Step{{
+		Cmd: `if ($env:DOCKPIPE_VM_GUEST_COMMAND) { Invoke-Expression $env:DOCKPIPE_VM_GUEST_COMMAND } else { whoami; hostname }`,
+	}}
+	var calledHostScript bool
+	runHostScriptFn = func(scriptPath string, env []string) error {
+		calledHostScript = true
+		return nil
+	}
+	dockerEnv := map[string]string{}
+	if err := runBlockingStep(&o, 0, 1, dockerEnv); err != nil {
+		t.Fatalf("runBlockingStep error: %v", err)
+	}
+	if !calledHostScript {
+		t.Fatal("expected workflow runtime default to resolve to host isolate script")
+	}
+}
+
 // TestRunBlockingStepBuildAndRun builds the isolate image if needed and runs the container command.
 func TestRunBlockingStepBuildAndRun(t *testing.T) {
 	withRunStepsSeams(t)

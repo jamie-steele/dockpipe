@@ -82,7 +82,8 @@ Prompt behavior:
 
 - In a normal terminal, `dockpipe_sdk prompt ...` renders an interactive CLI prompt and returns the answer on stdout.
 - Under the DockPipe Launcher, the shell SDK emits a structured prompt event (`DOCKPIPE_SDK_PROMPT_MODE=json`), the launcher renders native UI, and the selected answer is written back to the running workflow.
-- Supported prompt kinds today: `confirm`, `choice`, `input`.
+- Supported prompt kinds today: `confirm`, `choice`, `input`, `file`.
+- File prompts can declare `--path-mode open-file|open-dir|save-file`, `--filter`, and `--must-exist`.
 - Prompt metadata can classify author intent with options like `--intent`, `--automation-group`,
   `--allow-auto-approve`, and `--auto-approve-value`.
 - Automation can bypass prompts that explicitly opt in to auto-approval with `dockpipe --yes` or

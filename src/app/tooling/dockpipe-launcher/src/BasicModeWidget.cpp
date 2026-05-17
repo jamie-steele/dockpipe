@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QMenu>
 #include <QPushButton>
 #include <QResizeEvent>
 #include <QSizePolicy>
@@ -19,6 +20,16 @@
 #include <QVBoxLayout>
 
 namespace {
+
+QString inputDisplayName(const WorkflowInputMeta &input)
+{
+    const QString display = input.attributes.value(QStringLiteral("displayname")).trimmed();
+    if (!display.isEmpty())
+        return display;
+    if (!input.fieldName.trimmed().isEmpty())
+        return input.fieldName.trimmed();
+    return input.envName.trimmed();
+}
 
 QIcon defaultWorkflowIcon()
 {
@@ -37,6 +48,36 @@ QIcon appIconForWorkflow(const WorkflowMeta &workflow)
     if (!workflow.iconPath.isEmpty() && QFileInfo::exists(workflow.iconPath))
         return QIcon(workflow.iconPath);
     return defaultWorkflowIcon();
+}
+
+QString workflowTooltip(const WorkflowMeta &workflow)
+{
+    QStringList lines;
+    if (!workflow.description.trimmed().isEmpty())
+        lines << workflow.description.trimmed();
+    if (!workflow.inputs.isEmpty()) {
+        lines << QString() << QObject::tr("Inputs:");
+        const int maxInputs = qMin(8, workflow.inputs.size());
+        for (int i = 0; i < maxInputs; ++i) {
+            const WorkflowInputMeta &input = workflow.inputs[i];
+            QString line = QStringLiteral("• ");
+            line += inputDisplayName(input);
+            if (!input.type.trimmed().isEmpty())
+                line += QStringLiteral(" (") + input.type.trimmed() + QStringLiteral(")");
+            if (!input.envName.trimmed().isEmpty())
+                line += QStringLiteral(" → ") + input.envName.trimmed();
+            if (!input.defaultValue.trimmed().isEmpty())
+                line += QStringLiteral(" = ") + input.defaultValue.trimmed();
+            lines << line;
+            if (!input.description.trimmed().isEmpty())
+                lines << QStringLiteral("  ") + input.description.trimmed();
+        }
+        if (workflow.inputs.size() > maxInputs)
+            lines << QObject::tr("…and %1 more").arg(workflow.inputs.size() - maxInputs);
+    }
+    if (lines.isEmpty())
+        return workflow.displayName;
+    return lines.join(QLatin1Char('\n'));
 }
 
 } // namespace
@@ -164,6 +205,7 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     m_list->setResizeMode(QListWidget::Adjust);
     m_list->setSpacing(8);
     m_list->setWordWrap(true);
+    m_list->setContextMenuPolicy(Qt::CustomContextMenu);
     auto launchItem = [this](QListWidgetItem *it) {
         if (!it)
             return;
@@ -171,9 +213,20 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
         if (!id.isEmpty())
             emit launchRequested(id);
     };
-    connect(m_list, &QListWidget::itemClicked, this, launchItem);
     connect(m_list, &QListWidget::itemDoubleClicked, this, launchItem);
     connect(m_list, &QListWidget::itemActivated, this, launchItem);
+    connect(m_list, &QListWidget::customContextMenuRequested, this, [this](const QPoint &pos) {
+        QListWidgetItem *it = m_list->itemAt(pos);
+        if (!it)
+            return;
+        const QString id = it->data(Qt::UserRole).toString();
+        if (id.isEmpty())
+            return;
+        QMenu menu(this);
+        menu.addAction(tr("Launch"), this, [this, id]() { emit launchRequested(id); });
+        menu.addAction(tr("Workflow settings…"), this, [this, id]() { emit configureRequested(id); });
+        menu.exec(m_list->mapToGlobal(pos));
+    });
 
     appsLay->addWidget(m_list, 1);
 
@@ -327,7 +380,7 @@ void BasicModeWidget::setApps(const QVector<WorkflowMeta> &apps)
         auto *it = new QListWidgetItem;
         it->setIcon(appIconForWorkflow(m));
         it->setData(Qt::UserRole, m.workflowId);
-        it->setToolTip(m.description.isEmpty() ? m.displayName : m.description);
+        it->setToolTip(workflowTooltip(m));
         m_list->addItem(it);
     }
     rebuildItemTexts();

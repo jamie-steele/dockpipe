@@ -1,24 +1,39 @@
 package application
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
 	"dockpipe/src/lib/domain"
 	"dockpipe/src/lib/infrastructure"
+	"dockpipe/src/lib/pipelang"
 )
 
 type catalogWorkflowRecord struct {
-	WorkflowID  string `json:"workflow_id"`
-	DisplayName string `json:"display_name,omitempty"`
-	Description string `json:"description,omitempty"`
-	Category    string `json:"category,omitempty"`
-	IconPath    string `json:"icon_path,omitempty"`
-	ConfigPath  string `json:"config_path,omitempty"`
+	WorkflowID  string                       `json:"workflow_id"`
+	DisplayName string                       `json:"display_name,omitempty"`
+	Description string                       `json:"description,omitempty"`
+	Category    string                       `json:"category,omitempty"`
+	IconPath    string                       `json:"icon_path,omitempty"`
+	ConfigPath  string                       `json:"config_path,omitempty"`
+	Vars        map[string]string            `json:"vars,omitempty"`
+	Inputs      []catalogWorkflowInputRecord `json:"inputs,omitempty"`
+	Types       []string                     `json:"types,omitempty"`
+}
+
+type catalogWorkflowInputRecord struct {
+	FieldName    string            `json:"field_name"`
+	EnvName      string            `json:"env_name"`
+	Type         string            `json:"type,omitempty"`
+	Description  string            `json:"description,omitempty"`
+	DefaultValue string            `json:"default_value,omitempty"`
+	Attributes   map[string]string `json:"attributes,omitempty"`
 }
 
 type catalogListOutput struct {
@@ -139,12 +154,360 @@ func listCatalogWorkflows(projectRoot, workdir string) ([]catalogWorkflowRecord,
 			Category:    strings.TrimSpace(wf.Category),
 			IconPath:    resolveCatalogWorkflowIcon(cfgPath, strings.TrimSpace(wf.Icon), name),
 			ConfigPath:  cfgPath,
+			Vars:        cloneCatalogVars(wf.Vars),
+			Inputs:      buildCatalogWorkflowInputs(cfgPath, wf),
+			Types:       append([]string(nil), wf.Types...),
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].WorkflowID < out[j].WorkflowID
 	})
 	return out, nil
+}
+
+var (
+	pipeSummaryStartRe   = regexp.MustCompile(`^\s*///\s*<summary>\s*(.*?)\s*$`)
+	pipeSummaryEndRe     = regexp.MustCompile(`^(.*?)\s*</summary>\s*$`)
+	pipeAnnotationLineRe = regexp.MustCompile(`^\s*\[\s*[A-Za-z_][A-Za-z0-9_]*\s*=.*\]\s*$`)
+	pipeFieldLineRe      = regexp.MustCompile(`^\s*public\s+([A-Za-z0-9_]+)\s+([A-Za-z0-9_]+)\s*(?:[;=].*)?$`)
+)
+
+func cloneCatalogVars(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+type catalogPipeTypeShape struct {
+	Annotations []pipelang.Annotation
+	Fields      []pipelang.FieldSig
+	ClassName   string
+}
+
+func buildCatalogWorkflowInputs(cfgPath string, wf *domain.Workflow) []catalogWorkflowInputRecord {
+	if len(wf.Types) == 0 {
+		return nil
+	}
+	moduleRoot := filepath.Dir(cfgPath)
+	defaultsByClass := map[string]map[string]string{}
+	seen := map[string]struct{}{}
+	filesByRoot := map[string]map[string][]byte{}
+	progByRoot := map[string]*pipelang.Program{}
+	var out []catalogWorkflowInputRecord
+
+	for _, raw := range wf.Types {
+		filePath, typeRef, err := parseCatalogTypeSpec(moduleRoot, raw)
+		if err != nil {
+			continue
+		}
+		typeRoot := filepath.Dir(filePath)
+		files, ok := filesByRoot[typeRoot]
+		if !ok {
+			files, _, err = readPipeFilesUnder(typeRoot)
+			if err != nil || len(files) == 0 {
+				continue
+			}
+			filesByRoot[typeRoot] = files
+		}
+		prog, ok := progByRoot[typeRoot]
+		if !ok {
+			prog, err = mergePipeLangProgram(files)
+			if err != nil {
+				continue
+			}
+			progByRoot[typeRoot] = prog
+		}
+		shape := findCatalogPipeTypeShape(prog, typeRef)
+		if shape == nil {
+			continue
+		}
+		fieldDocs := extractCatalogPipeFieldDocs(filePath)
+		className := shape.ClassName
+		if className == "" {
+			className, err = inferEntryClassFromTypeRef(files, typeRef)
+		}
+		classDefaults := map[string]string{}
+		if className != "" && err == nil {
+			if cached, ok := defaultsByClass[className]; ok {
+				classDefaults = cached
+			} else {
+				classDefaults = findCatalogClassDefaults(prog, className)
+				defaultsByClass[className] = classDefaults
+			}
+		}
+		envPrefix := catalogInferredEnvPrefix(shape.ClassName, typeRef)
+		for _, field := range shape.Fields {
+			envName := catalogFieldEnvName(field, envPrefix)
+			if envName == "" {
+				continue
+			}
+			key := strings.ToUpper(strings.TrimSpace(envName))
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			defaultValue := ""
+			if wf.Vars != nil {
+				if v, ok := wf.Vars[key]; ok {
+					defaultValue = v
+				}
+			}
+			if defaultValue == "" {
+				defaultValue = classDefaults[field.Name]
+			}
+			out = append(out, catalogWorkflowInputRecord{
+				FieldName:    field.Name,
+				EnvName:      key,
+				Type:         string(field.Type),
+				Description:  strings.TrimSpace(fieldDocs[field.Name]),
+				DefaultValue: defaultValue,
+				Attributes:   catalogAnnotationMap(field.Annotations),
+			})
+		}
+	}
+	return out
+}
+
+func catalogFieldEnvName(field pipelang.FieldSig, prefix string) string {
+	base := catalogFieldNameToEnv(field.Name)
+	if base == "" {
+		return ""
+	}
+	prefix = strings.TrimSpace(prefix)
+	if prefix == "" {
+		return base
+	}
+	return prefix + base
+}
+
+func catalogInferredEnvPrefix(className, typeRef string) string {
+	name := strings.TrimSpace(className)
+	if name == "" {
+		name = strings.TrimSpace(typeRef)
+	}
+	if strings.Contains(strings.ToLower(name), "vm") {
+		return "DOCKPIPE_VM_"
+	}
+	return ""
+}
+
+func catalogAnnotationMap(in []pipelang.Annotation) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := map[string]string{}
+	for _, ann := range in {
+		key := strings.ToLower(strings.TrimSpace(ann.Name))
+		if key == "" {
+			continue
+		}
+		out[key] = ann.Value.StringValue()
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func mergePipeLangProgram(files map[string][]byte) (*pipelang.Program, error) {
+	merged := &pipelang.Program{}
+	for name, b := range files {
+		p, err := pipelang.Parse(b)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		merged.Interfaces = append(merged.Interfaces, p.Interfaces...)
+		merged.Classes = append(merged.Classes, p.Classes...)
+	}
+	return merged, nil
+}
+
+func parseCatalogTypeSpec(moduleRoot, raw string) (string, string, error) {
+	spec := strings.TrimSpace(raw)
+	if spec == "" {
+		return "", "", fmt.Errorf("empty type spec")
+	}
+	left := spec
+	typeRef := ""
+	if i := strings.Index(spec, "<"); i >= 0 {
+		j := strings.LastIndex(spec, ">")
+		if j <= i+1 {
+			return "", "", fmt.Errorf("invalid type spec %q", spec)
+		}
+		left = strings.TrimSpace(spec[:i])
+		typeRef = strings.TrimSpace(spec[i+1 : j])
+	}
+	if filepath.Ext(left) == "" {
+		left += ".pipe"
+	}
+	abs, err := filepath.Abs(filepath.Join(moduleRoot, filepath.FromSlash(left)))
+	if err != nil {
+		return "", "", err
+	}
+	if typeRef == "" {
+		typeRef = strings.TrimSuffix(filepath.Base(left), filepath.Ext(left))
+	}
+	return abs, typeRef, nil
+}
+
+func findCatalogInterfaceDecl(prog *pipelang.Program, name string) *pipelang.InterfaceDecl {
+	for _, decl := range prog.Interfaces {
+		if strings.TrimSpace(decl.Name) == strings.TrimSpace(name) {
+			return decl
+		}
+	}
+	return nil
+}
+
+func findCatalogClassDecl(prog *pipelang.Program, name string) *pipelang.ClassDecl {
+	for _, decl := range prog.Classes {
+		if strings.TrimSpace(decl.Name) == strings.TrimSpace(name) {
+			return decl
+		}
+	}
+	return nil
+}
+
+func findCatalogPipeTypeShape(prog *pipelang.Program, name string) *catalogPipeTypeShape {
+	if decl := findCatalogInterfaceDecl(prog, name); decl != nil {
+		return &catalogPipeTypeShape{
+			Annotations: decl.Annotations,
+			Fields:      decl.Fields,
+		}
+	}
+	if decl := findCatalogClassDecl(prog, name); decl != nil {
+		fields := make([]pipelang.FieldSig, 0, len(decl.Fields))
+		for _, field := range decl.Fields {
+			fields = append(fields, pipelang.FieldSig{
+				Visibility:  field.Visibility,
+				Annotations: field.Annotations,
+				Type:        field.Type,
+				Name:        field.Name,
+			})
+		}
+		return &catalogPipeTypeShape{
+			Annotations: decl.Annotations,
+			Fields:      fields,
+			ClassName:   decl.Name,
+		}
+	}
+	return nil
+}
+
+func findCatalogClassDefaults(prog *pipelang.Program, className string) map[string]string {
+	out := map[string]string{}
+	for _, decl := range prog.Classes {
+		if strings.TrimSpace(decl.Name) != strings.TrimSpace(className) {
+			continue
+		}
+		for _, field := range decl.Fields {
+			if lit, ok := field.Default.(*pipelang.LiteralExpr); ok {
+				out[field.Name] = lit.Value.StringValue()
+			}
+		}
+		break
+	}
+	return out
+}
+
+func extractCatalogPipeFieldDocs(path string) map[string]string {
+	out := map[string]string{}
+	f, err := os.Open(path)
+	if err != nil {
+		return out
+	}
+	defer f.Close()
+
+	var pending []string
+	inSummary := false
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := sc.Text()
+		if inSummary {
+			if m := pipeSummaryEndRe.FindStringSubmatch(line); len(m) == 2 {
+				text := strings.TrimSpace(m[1])
+				if text != "" {
+					pending = append(pending, text)
+				}
+				inSummary = false
+				continue
+			}
+			text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "///"))
+			if text != "" {
+				pending = append(pending, text)
+			}
+			continue
+		}
+		if m := pipeSummaryStartRe.FindStringSubmatch(line); len(m) == 2 {
+			text := strings.TrimSpace(m[1])
+			if strings.Contains(text, "</summary>") {
+				text = strings.TrimSpace(strings.TrimSuffix(text, "</summary>"))
+				if text != "" {
+					pending = append(pending, text)
+				}
+				inSummary = false
+			} else {
+				if text != "" {
+					pending = append(pending, text)
+				}
+				inSummary = true
+			}
+			continue
+		}
+		if m := pipeFieldLineRe.FindStringSubmatch(line); len(m) == 3 {
+			fieldName := strings.TrimSpace(m[2])
+			if fieldName != "" && len(pending) > 0 {
+				out[fieldName] = strings.Join(pending, " ")
+			}
+			pending = nil
+			continue
+		}
+		if pipeAnnotationLineRe.MatchString(line) {
+			continue
+		}
+		if strings.TrimSpace(line) != "" {
+			pending = nil
+		}
+	}
+	return out
+}
+
+func catalogFieldNameToEnv(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return ""
+	}
+	var b strings.Builder
+	prevLowerOrDigit := false
+	prevUpper := false
+	for i, r := range name {
+		isUpper := r >= 'A' && r <= 'Z'
+		isLower := r >= 'a' && r <= 'z'
+		isDigit := r >= '0' && r <= '9'
+		if i > 0 && isUpper && (prevLowerOrDigit || (prevUpper && i+1 < len(name) && name[i+1] >= 'a' && name[i+1] <= 'z')) {
+			b.WriteByte('_')
+		} else if i > 0 && isDigit && !prevLowerOrDigit && !prevUpper {
+			b.WriteByte('_')
+		}
+		if r == '-' || r == ' ' {
+			b.WriteByte('_')
+			prevLowerOrDigit = false
+			prevUpper = false
+			continue
+		}
+		if isLower {
+			r = r - 'a' + 'A'
+		}
+		b.WriteRune(r)
+		prevLowerOrDigit = isLower || isDigit
+		prevUpper = isUpper
+	}
+	return b.String()
 }
 
 func resolveCatalogWorkflowIcon(cfgPath, icon, workflowID string) string {

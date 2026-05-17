@@ -49,4 +49,7 @@ func TestNormalizeRuntimeProfileName(t *testing.T) {
 	if got := NormalizeRuntimeProfileName("dockerimage"); got != "dockerimage" {
 		t.Fatalf("got %q", got)
 	}
+	if got := NormalizeRuntimeProfileName("vmimage"); got != "vmimage" {
+		t.Fatalf("got %q", got)
+	}
 }

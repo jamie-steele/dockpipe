@@ -82,7 +82,7 @@ func WriteHostRunRecord(runFile, runID string, pid int, workdir, scriptPath stri
 	return os.WriteFile(runFile, b, 0o644)
 }
 
-// RemoveHostRunArtifacts removes the run JSON and optional .container sidecar for the same id.
+// RemoveHostRunArtifacts removes the run JSON and optional sidecars for the same id.
 func RemoveHostRunArtifacts(runFile string) {
 	if runFile == "" {
 		return
@@ -97,7 +97,9 @@ func RemoveHostRunArtifacts(runFile string) {
 	if id == "" || strings.Contains(id, string(filepath.Separator)) || strings.Contains(id, "..") {
 		return
 	}
-	_ = os.Remove(filepath.Join(dir, id+".container"))
+	for _, suffix := range []string{".container", ".pid"} {
+		_ = os.Remove(filepath.Join(dir, id+suffix))
+	}
 }
 
 // ReadHostRunContainerSidecar returns the container name from runs/<id>.container if present.
@@ -119,6 +121,31 @@ func ReadHostRunContainerSidecar(runFile string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(b))
+}
+
+// ReadHostRunPIDSidecar returns the PID from runs/<id>.pid if present.
+func ReadHostRunPIDSidecar(runFile string) int {
+	if runFile == "" {
+		return 0
+	}
+	dir := filepath.Dir(runFile)
+	base := filepath.Base(runFile)
+	if !strings.HasSuffix(base, ".json") {
+		return 0
+	}
+	id := strings.TrimSuffix(base, ".json")
+	if id == "" {
+		return 0
+	}
+	b, err := os.ReadFile(filepath.Join(dir, id+".pid"))
+	if err != nil {
+		return 0
+	}
+	var pid int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(b)), "%d", &pid); err != nil || pid <= 0 {
+		return 0
+	}
+	return pid
 }
 
 // ListHostRuns prints a human-readable table of runs under workdir/bin/.dockpipe/runs/*.json

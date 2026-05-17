@@ -71,3 +71,44 @@ func TestParseStruct(t *testing.T) {
 		t.Fatalf("class=%q", prog.Classes[0].Name)
 	}
 }
+
+func TestParseAnnotations(t *testing.T) {
+	prog, err := Parse([]byte(`
+[DisplayName = "Windows VM"]
+public Interface IWindows
+{
+    [DisplayName = "CD-ROM"]
+    [Group = "Storage"]
+    public string DockpipeVmCdrom;
+
+    [Order = 20]
+    [Advanced = true]
+    public string DockpipeVmCpus;
+}
+`))
+	if err != nil {
+		t.Fatalf("parse annotations: %v", err)
+	}
+	if len(prog.Interfaces) != 1 {
+		t.Fatalf("interfaces=%d", len(prog.Interfaces))
+	}
+	if len(prog.Interfaces[0].Annotations) != 1 {
+		t.Fatalf("type annotations=%d", len(prog.Interfaces[0].Annotations))
+	}
+	fields := prog.Interfaces[0].Fields
+	if len(fields) != 2 {
+		t.Fatalf("fields=%d", len(fields))
+	}
+	if got := fields[0].Annotations[0].Name; got != "DisplayName" {
+		t.Fatalf("first field annotation name=%q", got)
+	}
+	if got := fields[0].Annotations[0].Value.StringValue(); got != "CD-ROM" {
+		t.Fatalf("first field annotation value=%q", got)
+	}
+	if got := fields[1].Annotations[0].Value.StringValue(); got != "20" {
+		t.Fatalf("second field order=%q", got)
+	}
+	if got := fields[1].Annotations[1].Value.StringValue(); got != "true" {
+		t.Fatalf("second field advanced=%q", got)
+	}
+}

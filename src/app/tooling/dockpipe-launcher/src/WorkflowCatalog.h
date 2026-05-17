@@ -2,7 +2,17 @@
 
 #include <QString>
 #include <QStringList>
+#include <QMap>
 #include <QVector>
+
+struct WorkflowInputMeta {
+    QString fieldName;
+    QString envName;
+    QString type;
+    QString description;
+    QString defaultValue;
+    QMap<QString, QString> attributes;
+};
 
 /// One workflow entry returned by DockPipe's launcher/tooling catalog contract.
 struct WorkflowMeta {
@@ -13,6 +23,8 @@ struct WorkflowMeta {
     QString category;
     QString iconPath;
     QString configPath;
+    QVector<WorkflowInputMeta> inputs;
+    QMap<QString, QString> vars;
 };
 
 struct WorkflowCatalogData {

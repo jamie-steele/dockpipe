@@ -76,7 +76,7 @@ func parseWorkflowNamespaceYAML(b []byte) (string, error) {
 }
 
 // NormalizeRuntimeProfileName maps legacy names to bundled runtime profile dirs under core/runtimes/<name>.
-// Canonical substrates: dockerimage, dockerfile, package (nested workflow entry). Legacy names
+// Canonical substrates: dockerimage, dockerfile, vmimage, package (nested workflow entry). Legacy names
 // (docker, cli, powershell, cmd, kube-pod, kubepod, cloud, keystore) normalize to dockerimage.
 func NormalizeRuntimeProfileName(name string) string {
 	s := strings.TrimSpace(name)
@@ -89,7 +89,7 @@ func NormalizeRuntimeProfileName(name string) string {
 		return "dockerimage"
 	case "cli", "powershell", "cmd", "kube-pod", "kubepod", "cloud", "keystore":
 		return "dockerimage"
-	case "dockerimage", "dockerfile", "package":
+	case "dockerimage", "dockerfile", "vmimage", "package":
 		return low
 	default:
 		return s

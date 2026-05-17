@@ -1,9 +1,13 @@
 #include "PromptDialog.h"
 
+#include <QDir>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
 
@@ -34,7 +38,8 @@ QPushButton *makeActionButton(const QString &label, QWidget *parent)
 
 PromptDialog::PromptDialog(const Spec &spec, QWidget *parent)
     : QDialog(parent), m_type(spec.type), m_defaultValue(spec.defaultValue), m_response(spec.defaultValue),
-      m_options(spec.options), m_sensitive(spec.sensitive)
+      m_options(spec.options), m_pathMode(spec.pathMode), m_fileFilter(spec.fileFilter), m_baseDir(spec.baseDir),
+      m_sensitive(spec.sensitive), m_mustExist(spec.mustExist)
 {
     setModal(true);
     setWindowTitle(spec.title.isEmpty() ? tr("DockPipe Prompt") : spec.title);
@@ -89,6 +94,8 @@ PromptDialog::PromptDialog(const Spec &spec, QWidget *parent)
 
     if (m_type == QStringLiteral("choice")) {
         buildChoiceUi();
+    } else if (m_type == QStringLiteral("file")) {
+        buildFileUi();
     } else if (m_type == QStringLiteral("input")) {
         buildInputUi();
     } else {
@@ -99,6 +106,23 @@ PromptDialog::PromptDialog(const Spec &spec, QWidget *parent)
 QString PromptDialog::response() const
 {
     return m_response;
+}
+
+void PromptDialog::chooseFilePath()
+{
+    QString current = m_input ? m_input->text() : m_defaultValue;
+    if (current.isEmpty())
+        current = m_baseDir;
+    QString selected;
+    if (m_pathMode == QStringLiteral("open-dir")) {
+        selected = QFileDialog::getExistingDirectory(this, windowTitle(), current);
+    } else if (m_pathMode == QStringLiteral("save-file")) {
+        selected = QFileDialog::getSaveFileName(this, windowTitle(), current, m_fileFilter);
+    } else {
+        selected = QFileDialog::getOpenFileName(this, windowTitle(), current, m_fileFilter);
+    }
+    if (!selected.isEmpty() && m_input)
+        m_input->setText(selected);
 }
 
 void PromptDialog::buildChoiceUi()
@@ -158,6 +182,72 @@ void PromptDialog::buildInputUi()
     });
     connect(submit, &QPushButton::clicked, this, [this]() {
         m_response = m_input ? m_input->text() : m_defaultValue;
+        accept();
+    });
+
+    outer->addWidget(inputFrame);
+    if (m_input)
+        m_input->setFocus();
+}
+
+void PromptDialog::buildFileUi()
+{
+    auto *outer = qobject_cast<QVBoxLayout *>(layout());
+    auto *inputFrame = new QFrame(this);
+    inputFrame->setObjectName(QStringLiteral("promptActionPanel"));
+    auto *inputLay = new QVBoxLayout(inputFrame);
+    inputLay->setContentsMargins(16, 16, 16, 16);
+    inputLay->setSpacing(12);
+
+    if (!m_fileFilter.isEmpty()) {
+        auto *hint = new QLabel(tr("Allowed files: %1").arg(m_fileFilter), inputFrame);
+        hint->setObjectName(QStringLiteral("promptHint"));
+        hint->setWordWrap(true);
+        inputLay->addWidget(hint);
+    }
+
+    auto *row = new QHBoxLayout;
+    row->setSpacing(10);
+    m_input = new QLineEdit(inputFrame);
+    m_input->setObjectName(QStringLiteral("promptInput"));
+    m_input->setText(m_defaultValue);
+    row->addWidget(m_input, 1);
+    auto *browse = makeActionButton(tr("Browse…"), inputFrame);
+    browse->setObjectName(QStringLiteral("secondaryButton"));
+    row->addWidget(browse);
+    inputLay->addLayout(row);
+
+    auto *buttons = new QHBoxLayout;
+    buttons->addStretch(1);
+    auto *cancel = makeActionButton(tr("Cancel"), inputFrame);
+    auto *submit = makeActionButton(tr("Continue"), inputFrame);
+    cancel->setObjectName(QStringLiteral("secondaryButton"));
+    submit->setObjectName(QStringLiteral("primaryButton"));
+    buttons->addWidget(cancel);
+    buttons->addWidget(submit);
+    inputLay->addLayout(buttons);
+
+    connect(browse, &QPushButton::clicked, this, [this]() { chooseFilePath(); });
+    connect(cancel, &QPushButton::clicked, this, [this]() {
+        m_response = m_defaultValue;
+        reject();
+    });
+    connect(submit, &QPushButton::clicked, this, [this]() {
+        const QString selected = m_input ? m_input->text().trimmed() : m_defaultValue;
+        if (m_mustExist && !selected.isEmpty()) {
+            QFileInfo info(selected);
+            if (info.isRelative() && !m_baseDir.isEmpty())
+                info = QFileInfo(QDir(m_baseDir).filePath(selected));
+            const bool ok = (m_pathMode == QStringLiteral("open-dir")) ? info.exists() && info.isDir() : info.exists();
+            if (!ok) {
+                QMessageBox::warning(this, tr("DockPipe Prompt"),
+                                     (m_pathMode == QStringLiteral("open-dir"))
+                                         ? tr("Choose an existing directory before continuing.")
+                                         : tr("Choose an existing file before continuing."));
+                return;
+            }
+        }
+        m_response = selected;
         accept();
     });
 

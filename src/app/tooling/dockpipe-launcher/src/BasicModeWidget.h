@@ -37,6 +37,7 @@ signals:
     void openProjectRequested();
     void refreshAppsRequested();
     void launchRequested(const QString &workflowId);
+    void configureRequested(const QString &workflowId);
 
     void backToHomeRequested();
     void recentProjectSelected(const QString &absPath);

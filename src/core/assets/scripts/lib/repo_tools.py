@@ -54,6 +54,9 @@ class DockpipeSDK:
         automation_group: str = "",
         allow_auto_approve: bool = False,
         auto_approve_value: str = "",
+        path_mode: str = "open-file",
+        file_filter: str = "",
+        must_exist: bool = False,
     ) -> str:
         return prompt(
             kind,
@@ -67,6 +70,9 @@ class DockpipeSDK:
             automation_group=automation_group,
             allow_auto_approve=allow_auto_approve,
             auto_approve_value=auto_approve_value,
+            path_mode=path_mode,
+            file_filter=file_filter,
+            must_exist=must_exist,
         )
 
 
@@ -84,6 +90,14 @@ def _prompt_mode() -> str:
     return "noninteractive"
 
 
+def _resolve_prompt_path(value: str) -> Path:
+    p = Path(value).expanduser()
+    if p.is_absolute():
+        return p
+    base = Path(os.environ.get("DOCKPIPE_WORKDIR") or os.getcwd())
+    return (base / p).resolve()
+
+
 def prompt(
     kind: str,
     *,
@@ -97,6 +111,9 @@ def prompt(
     automation_group: str = "",
     allow_auto_approve: bool = False,
     auto_approve_value: str = "",
+    path_mode: str = "open-file",
+    file_filter: str = "",
+    must_exist: bool = False,
 ) -> str:
     options = list(options or [])
     prompt_id = prompt_id or f"prompt.{os.getpid()}.{id(options)}"
@@ -126,6 +143,10 @@ def prompt(
                 "automation_group": automation_group,
                 "allow_auto_approve": allow_auto_approve,
                 "auto_approve_value": auto_approve_value,
+                "path_mode": path_mode,
+                "file_filter": file_filter,
+                "must_exist": must_exist,
+                "base_dir": str(repo_root()),
                 "options": options,
             },
             separators=(",", ":"),
@@ -155,6 +176,23 @@ def prompt(
             prompt_text = message if not default else f"{message} [{default}]"
             response = getpass.getpass(f"{prompt_text}: ") if sensitive else input(f"{prompt_text}: ")
             return response or default
+        if kind == "file":
+            while True:
+                prompt_text = message if not default else f"{message} [{default}]"
+                if file_filter:
+                    print(f"Filter: {file_filter}", file=sys.stderr)
+                response = input(f"{prompt_text}: ")
+                selected = response or default
+                if not selected:
+                    return selected
+                if must_exist:
+                    resolved = _resolve_prompt_path(selected)
+                    valid = resolved.is_dir() if path_mode == "open-dir" else resolved.exists()
+                    if not valid:
+                        kind_label = "Directory" if path_mode == "open-dir" else "File"
+                        print(f"{kind_label} not found: {selected}", file=sys.stderr)
+                        continue
+                return selected
         if kind == "choice":
             if not options:
                 raise RuntimeError("DockPipe choice prompt requires at least one option")

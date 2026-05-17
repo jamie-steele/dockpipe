@@ -22,19 +22,23 @@ func Parse(src []byte) (*Program, error) {
 func (p *parser) parseProgram() (*Program, error) {
 	prog := &Program{}
 	for p.peek().kind != tokEOF {
+		anns, err := p.parseAnnotations()
+		if err != nil {
+			return nil, err
+		}
 		vis, err := p.parseOptionalVisibility()
 		if err != nil {
 			return nil, err
 		}
 		switch p.peek().kind {
 		case tokInterface:
-			i, err := p.parseInterface(vis)
+			i, err := p.parseInterface(vis, anns)
 			if err != nil {
 				return nil, err
 			}
 			prog.Interfaces = append(prog.Interfaces, i)
 		case tokClass, tokStruct:
-			c, err := p.parseClass(vis)
+			c, err := p.parseClass(vis, anns)
 			if err != nil {
 				return nil, err
 			}
@@ -46,7 +50,58 @@ func (p *parser) parseProgram() (*Program, error) {
 	return prog, nil
 }
 
-func (p *parser) parseInterface(vis Visibility) (*InterfaceDecl, error) {
+func (p *parser) parseAnnotations() ([]Annotation, error) {
+	var out []Annotation
+	for p.peek().kind == tokLBracket {
+		p.next()
+		nameTok, err := p.expect(tokIdent)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokAssign); err != nil {
+			return nil, err
+		}
+		value, err := p.parseAnnotationValue()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(tokRBracket); err != nil {
+			return nil, err
+		}
+		out = append(out, Annotation{Name: nameTok.lit, Value: value})
+	}
+	return out, nil
+}
+
+func (p *parser) parseAnnotationValue() (Value, error) {
+	t := p.peek()
+	switch t.kind {
+	case tokString:
+		p.next()
+		return Value{Type: TypeString, String: t.lit}, nil
+	case tokInt:
+		p.next()
+		v, err := strconv.ParseInt(t.lit, 10, 64)
+		if err != nil {
+			return Value{}, err
+		}
+		return Value{Type: TypeInt, Int: v}, nil
+	case tokFloat:
+		p.next()
+		v, err := strconv.ParseFloat(t.lit, 64)
+		if err != nil {
+			return Value{}, err
+		}
+		return Value{Type: TypeFloat, Float: v}, nil
+	case tokBool:
+		p.next()
+		return Value{Type: TypeBool, Bool: t.lit == "true"}, nil
+	default:
+		return Value{}, p.errf("expected literal annotation value")
+	}
+}
+
+func (p *parser) parseInterface(vis Visibility, anns []Annotation) (*InterfaceDecl, error) {
 	if _, err := p.expect(tokInterface); err != nil {
 		return nil, err
 	}
@@ -57,8 +112,12 @@ func (p *parser) parseInterface(vis Visibility) (*InterfaceDecl, error) {
 	if _, err := p.expect(tokLBrace); err != nil {
 		return nil, err
 	}
-	decl := &InterfaceDecl{Name: nameTok.lit, Visibility: normalizeVisibility(vis)}
+	decl := &InterfaceDecl{Name: nameTok.lit, Visibility: normalizeVisibility(vis), Annotations: anns}
 	for p.peek().kind != tokRBrace {
+		memberAnns, err := p.parseAnnotations()
+		if err != nil {
+			return nil, err
+		}
 		memberVis, err := p.parseOptionalVisibility()
 		if err != nil {
 			return nil, err
@@ -72,10 +131,11 @@ func (p *parser) parseInterface(vis Visibility) (*InterfaceDecl, error) {
 				return nil, err
 			}
 			decl.Methods = append(decl.Methods, MethodSig{
-				Visibility: normalizeVisibility(memberVis),
-				ReturnType: t,
-				Name:       n,
-				Params:     params,
+				Visibility:  normalizeVisibility(memberVis),
+				Annotations: memberAnns,
+				ReturnType:  t,
+				Name:        n,
+				Params:      params,
 			})
 			continue
 		}
@@ -83,9 +143,10 @@ func (p *parser) parseInterface(vis Visibility) (*InterfaceDecl, error) {
 			return nil, err
 		}
 		decl.Fields = append(decl.Fields, FieldSig{
-			Visibility: normalizeVisibility(memberVis),
-			Type:       t,
-			Name:       n,
+			Visibility:  normalizeVisibility(memberVis),
+			Annotations: memberAnns,
+			Type:        t,
+			Name:        n,
 		})
 	}
 	if _, err := p.expect(tokRBrace); err != nil {
@@ -94,7 +155,7 @@ func (p *parser) parseInterface(vis Visibility) (*InterfaceDecl, error) {
 	return decl, nil
 }
 
-func (p *parser) parseClass(vis Visibility) (*ClassDecl, error) {
+func (p *parser) parseClass(vis Visibility, anns []Annotation) (*ClassDecl, error) {
 	switch p.peek().kind {
 	case tokClass, tokStruct:
 		p.next()
@@ -105,7 +166,7 @@ func (p *parser) parseClass(vis Visibility) (*ClassDecl, error) {
 	if err != nil {
 		return nil, err
 	}
-	decl := &ClassDecl{Name: nameTok.lit, Visibility: normalizeVisibility(vis)}
+	decl := &ClassDecl{Name: nameTok.lit, Visibility: normalizeVisibility(vis), Annotations: anns}
 	if p.peek().kind == tokColon {
 		p.next()
 		implTok, err := p.expect(tokIdent)
@@ -118,6 +179,10 @@ func (p *parser) parseClass(vis Visibility) (*ClassDecl, error) {
 		return nil, err
 	}
 	for p.peek().kind != tokRBrace {
+		memberAnns, err := p.parseAnnotations()
+		if err != nil {
+			return nil, err
+		}
 		memberVis, err := p.parseOptionalVisibility()
 		if err != nil {
 			return nil, err
@@ -138,15 +203,16 @@ func (p *parser) parseClass(vis Visibility) (*ClassDecl, error) {
 				return nil, err
 			}
 			decl.Methods = append(decl.Methods, MethodDecl{
-				Visibility: normalizeVisibility(memberVis),
-				ReturnType: t,
-				Name:       n,
-				Params:     params,
-				Body:       expr,
+				Visibility:  normalizeVisibility(memberVis),
+				Annotations: memberAnns,
+				ReturnType:  t,
+				Name:        n,
+				Params:      params,
+				Body:        expr,
 			})
 			continue
 		}
-		f := FieldDecl{Visibility: normalizeVisibility(memberVis), Type: t, Name: n}
+		f := FieldDecl{Visibility: normalizeVisibility(memberVis), Annotations: memberAnns, Type: t, Name: n}
 		if p.peek().kind == tokAssign {
 			p.next()
 			expr, err := p.parseExpr(1)

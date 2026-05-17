@@ -92,6 +92,10 @@ func isValidHostRunID(runID string) bool {
 }
 
 func applyRunScopedHostCleanup(ctx context.Context, wdAbs, runID string) {
+	pidSidecar := filepath.Join(HostRunsDir(wdAbs), runID+".pid")
+	if stopped := tryKillProcessAndRemoveMarker(pidSidecar); stopped {
+		fmt.Fprintf(os.Stderr, "[dockpipe] host cleanup: stopped process from %s\n", filepath.Base(pidSidecar))
+	}
 	sidecar := filepath.Join(HostRunsDir(wdAbs), runID+".container")
 	b, err := os.ReadFile(sidecar)
 	if err != nil {
@@ -107,6 +111,26 @@ func applyRunScopedHostCleanup(ctx context.Context, wdAbs, runID string) {
 		fmt.Fprintf(os.Stderr, "[dockpipe] host cleanup: stopped Docker container %s\n", cn)
 	}
 	removeCleanupMarkersForContainerName(wdAbs, cn)
+}
+
+func tryKillProcessAndRemoveMarker(marker string) bool {
+	b, err := os.ReadFile(marker)
+	if err != nil {
+		return false
+	}
+	var pid int
+	if _, err := fmt.Sscanf(strings.TrimSpace(string(b)), "%d", &pid); err != nil || pid <= 0 {
+		_ = os.Remove(marker)
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		_ = os.Remove(marker)
+		return false
+	}
+	_ = proc.Kill()
+	_ = os.Remove(marker)
+	return true
 }
 
 // removeCleanupMarkersForContainerName deletes docker-* and legacy session_container files whose

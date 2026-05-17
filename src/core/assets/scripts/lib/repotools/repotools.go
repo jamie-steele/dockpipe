@@ -32,6 +32,10 @@ type PromptSpec struct {
 	AutomationGroup  string   `json:"automation_group,omitempty"`
 	AllowAutoApprove bool     `json:"allow_auto_approve,omitempty"`
 	AutoApproveValue string   `json:"auto_approve_value,omitempty"`
+	PathMode         string   `json:"path_mode,omitempty"`
+	FileFilter       string   `json:"file_filter,omitempty"`
+	MustExist        bool     `json:"must_exist,omitempty"`
+	BaseDir          string   `json:"base_dir,omitempty"`
 	Options          []string `json:"options"`
 }
 
@@ -106,6 +110,14 @@ func Prompt(spec PromptSpec) (string, error) {
 	if strings.TrimSpace(spec.Message) == "" {
 		spec.Message = spec.Title
 	}
+	if strings.TrimSpace(spec.BaseDir) == "" {
+		spec.BaseDir = os.Getenv("DOCKPIPE_WORKDIR")
+		if strings.TrimSpace(spec.BaseDir) == "" {
+			if wd, err := os.Getwd(); err == nil {
+				spec.BaseDir = wd
+			}
+		}
+	}
 	if spec.AllowAutoApprove && truthy(os.Getenv("DOCKPIPE_APPROVE_PROMPTS")) {
 		if strings.TrimSpace(spec.AutoApproveValue) != "" {
 			return spec.AutoApproveValue, nil
@@ -119,6 +131,10 @@ func Prompt(spec PromptSpec) (string, error) {
 		case "choice":
 			if len(spec.Options) > 0 {
 				return spec.Options[0], nil
+			}
+		case "file":
+			if strings.TrimSpace(spec.Default) != "" {
+				return spec.Default, nil
 			}
 		}
 	}
@@ -225,6 +241,49 @@ func Prompt(spec PromptSpec) (string, error) {
 					return spec.Options[selected-1], nil
 				}
 				fmt.Fprintf(os.Stderr, "Enter a number between 1 and %d.\n", len(spec.Options))
+			}
+		case "file":
+			reader := bufio.NewReader(os.Stdin)
+			for {
+				if spec.FileFilter != "" {
+					fmt.Fprintf(os.Stderr, "Filter: %s\n", spec.FileFilter)
+				}
+				if spec.Default != "" {
+					fmt.Fprintf(os.Stderr, "%s [%s]: ", spec.Message, spec.Default)
+				} else {
+					fmt.Fprintf(os.Stderr, "%s: ", spec.Message)
+				}
+				line, err := reader.ReadString('\n')
+				if err != nil && len(line) == 0 {
+					return "", err
+				}
+				out := strings.TrimRight(line, "\r\n")
+				if out == "" {
+					out = spec.Default
+				}
+				if out == "" {
+					return out, nil
+				}
+				if spec.MustExist {
+					resolved := out
+					if !filepath.IsAbs(resolved) {
+						resolved = filepath.Join(spec.BaseDir, out)
+					}
+					info, err := os.Stat(resolved)
+					if err != nil {
+						label := "File"
+						if spec.PathMode == "open-dir" {
+							label = "Directory"
+						}
+						fmt.Fprintf(os.Stderr, "%s not found: %s\n", label, out)
+						continue
+					}
+					if spec.PathMode == "open-dir" && !info.IsDir() {
+						fmt.Fprintf(os.Stderr, "Directory not found: %s\n", out)
+						continue
+					}
+				}
+				return out, nil
 			}
 		default:
 			return "", fmt.Errorf("unsupported DockPipe prompt kind: %s", spec.Type)

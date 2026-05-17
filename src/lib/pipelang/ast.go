@@ -45,47 +45,58 @@ type Program struct {
 	Classes    []*ClassDecl
 }
 
+type Annotation struct {
+	Name  string
+	Value Value
+}
+
 type InterfaceDecl struct {
-	Name       string
-	Visibility Visibility
-	Fields     []FieldSig
-	Methods    []MethodSig
+	Name        string
+	Visibility  Visibility
+	Annotations []Annotation
+	Fields      []FieldSig
+	Methods     []MethodSig
 }
 
 type ClassDecl struct {
-	Name       string
-	Visibility Visibility
-	Implements string
-	Fields     []FieldDecl
-	Methods    []MethodDecl
+	Name        string
+	Visibility  Visibility
+	Annotations []Annotation
+	Implements  string
+	Fields      []FieldDecl
+	Methods     []MethodDecl
 }
 
 type FieldSig struct {
-	Visibility Visibility
-	Type       TypeName
-	Name       string
+	Visibility  Visibility
+	Annotations []Annotation
+	Type        TypeName
+	Name        string
 }
 
 type MethodSig struct {
-	Visibility Visibility
-	ReturnType TypeName
-	Name       string
-	Params     []Param
+	Visibility  Visibility
+	Annotations []Annotation
+	ReturnType  TypeName
+	Name        string
+	Params      []Param
 }
 
 type FieldDecl struct {
-	Visibility Visibility
-	Type       TypeName
-	Name       string
-	Default    Expr
+	Visibility  Visibility
+	Annotations []Annotation
+	Type        TypeName
+	Name        string
+	Default     Expr
 }
 
 type MethodDecl struct {
-	Visibility Visibility
-	ReturnType TypeName
-	Name       string
-	Params     []Param
-	Body       Expr
+	Visibility  Visibility
+	Annotations []Annotation
+	ReturnType  TypeName
+	Name        string
+	Params      []Param
+	Body        Expr
 }
 
 type Param struct {

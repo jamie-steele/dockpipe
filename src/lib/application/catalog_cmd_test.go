@@ -6,134 +6,134 @@ import (
 	"testing"
 )
 
-func TestBuildCatalogListOutput_UsesDockpipeContracts(t *testing.T) {
-	project := t.TempDir()
-	cfg := `{
-  "schema": 1,
-  "compile": {
-    "workflows": ["workflows", "packages"]
-  }
-}`
-	if err := os.WriteFile(filepath.Join(project, "dockpipe.config.json"), []byte(cfg), 0o644); err != nil {
+func TestListCatalogWorkflowsIncludesTypedInputs(t *testing.T) {
+	tmp := t.TempDir()
+	wfDir := filepath.Join(tmp, "workflows", "demo")
+	modelsDir := filepath.Join(wfDir, "models")
+	if err := os.MkdirAll(modelsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wfDir, "config.yml"), []byte(`name: demo
+description: Demo workflow
+category: app
+types:
+  - models/DemoVmWorkflowConfig.pipe
+vars:
+  DOCKPIPE_VM_BOOT_SOURCE: installer-iso
+  DOCKPIPE_VM_NET_DEVICE: e1000e
+steps: []
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(modelsDir, "DemoVmWorkflowConfig.pipe"), []byte(`/// <summary>Demo contract.</summary>
+public Class DemoVmWorkflowConfig
+{
+    /// <summary>How the VM should boot.</summary>
+    [DisplayName = "Boot Source"]
+    [Group = "General"]
+    public string BootSource = "installer-iso";
+
+    /// <summary>Preferred NIC model.</summary>
+    [DisplayName = "Network Adapter"]
+    public string NetDevice = "e1000e";
+}
+`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := os.MkdirAll(filepath.Join(project, "workflows", "demo"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(filepath.Join(project, "workflows", "demo", "assets", "images"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(project, "workflows", "demo", "assets", "images", "icon.png"), []byte("png"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(project, "workflows", "demo", "config.yml"), []byte("name: Demo App\ncategory: app\nicon: assets/images/icon.png\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.MkdirAll(filepath.Join(project, "packages", "ide", "resolvers", "cursor-dev"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(project, "packages", "ide", "resolvers", "cursor-dev", "profile"), []byte("DOCKPIPE_RESOLVER_CMD=cursor-dev\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.MkdirAll(filepath.Join(project, "templates", "core", "strategies"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(project, "templates", "core", "strategies", "commit"), []byte("DOCKPIPE_STRATEGY=commit\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.MkdirAll(filepath.Join(project, "templates", "core", "runtimes", "dockerimage"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(project, "templates", "core", "runtimes", "dockerimage", "profile"), []byte("DOCKPIPE_RUNTIME_SUBSTRATE=dockerimage\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	out, err := buildCatalogListOutput(project, project)
+	got, err := listCatalogWorkflows(tmp, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(out.Workflows) != 1 || out.Workflows[0].WorkflowID != "demo" || out.Workflows[0].DisplayName != "Demo App" {
-		t.Fatalf("unexpected workflows: %#v", out.Workflows)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 workflow, got %d", len(got))
 	}
-	if got, want := out.Workflows[0].IconPath, filepath.Join(project, "workflows", "demo", "assets", "images", "icon.png"); got != want {
-		t.Fatalf("expected icon path %q, got %q", want, got)
+	if got[0].WorkflowID != "demo" {
+		t.Fatalf("unexpected workflow id %q", got[0].WorkflowID)
 	}
-	if !containsString(out.Resolvers, "cursor-dev") {
-		t.Fatalf("expected cursor-dev resolver in %#v", out.Resolvers)
+	if len(got[0].Inputs) != 2 {
+		t.Fatalf("expected 2 typed inputs, got %#v", got[0].Inputs)
 	}
-	if !containsString(out.Strategies, "commit") {
-		t.Fatalf("expected commit strategy in %#v", out.Strategies)
+	if got[0].Inputs[0].EnvName != "DOCKPIPE_VM_BOOT_SOURCE" {
+		t.Fatalf("unexpected first env mapping %#v", got[0].Inputs[0])
 	}
-	if !containsString(out.Runtimes, "dockerimage") {
-		t.Fatalf("expected dockerimage runtime in %#v", out.Runtimes)
+	if got[0].Inputs[0].Description != "How the VM should boot." {
+		t.Fatalf("unexpected first description %#v", got[0].Inputs[0])
+	}
+	if got[0].Inputs[0].DefaultValue != "installer-iso" {
+		t.Fatalf("unexpected first default %#v", got[0].Inputs[0])
+	}
+	if got[0].Inputs[0].Attributes["displayname"] != "Boot Source" {
+		t.Fatalf("unexpected first display attribute %#v", got[0].Inputs[0])
+	}
+	if got[0].Inputs[0].Attributes["group"] != "General" {
+		t.Fatalf("unexpected first group attribute %#v", got[0].Inputs[0])
+	}
+	if got[0].Inputs[1].EnvName != "DOCKPIPE_VM_NET_DEVICE" {
+		t.Fatalf("unexpected second env mapping %#v", got[0].Inputs[1])
+	}
+	if got[0].Inputs[1].Attributes["displayname"] != "Network Adapter" {
+		t.Fatalf("unexpected second display attribute %#v", got[0].Inputs[1])
+	}
+	if got[0].Vars["DOCKPIPE_VM_NET_DEVICE"] != "e1000e" {
+		t.Fatalf("expected vars map to include network default, got %#v", got[0].Vars)
 	}
 }
 
-func TestBuildCatalogListOutput_FallsBackToPackageArtworkAndIcon(t *testing.T) {
-	project := t.TempDir()
-	cfg := `{
-  "schema": 1,
+func TestListCatalogWorkflowsIncludesExternalResolverTypes(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "dockpipe.config.json"), []byte(`{
   "compile": {
-    "workflows": ["workflows", "packages", ".staging/packages"]
+    "workflows": ["packages"]
   }
-}`
-	if err := os.WriteFile(filepath.Join(project, "dockpipe.config.json"), []byte(cfg), 0o644); err != nil {
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wfDir := filepath.Join(tmp, "packages", "vm", "workflows", "windows-vm")
+	resolverDir := filepath.Join(tmp, "packages", "vm", "resolvers", "qemu", "models")
+	if err := os.MkdirAll(wfDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(resolverDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+if err := os.WriteFile(filepath.Join(wfDir, "config.yml"), []byte(`name: windows-vm
+description: Demo workflow
+category: app
+types:
+  - ../../resolvers/qemu/models/QemuVmResolverConfig.pipe
+vars:
+  DOCKPIPE_VM_NET_DEVICE: e1000e
+  DOCKPIPE_VM_BOOT_SOURCE: installer-iso
+steps: []
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(resolverDir, "QemuVmResolverConfig.pipe"), []byte(`public Class QemuVmResolverConfig
+{
+    [DisplayName = "Network Adapter"]
+    public string NetDevice = "e1000e";
+    [DisplayName = "Boot Source"]
+    public string BootSource = "installer-iso";
+}
+`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := os.MkdirAll(filepath.Join(project, "packages", "ide", "resolvers", "cursor-dev", "assets", "images"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(project, "packages", "ide", "resolvers", "cursor-dev", "assets", "images", "icon.png"), []byte("png"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(project, "packages", "ide", "package.yml"), []byte("schema: 1\nkind: package\nname: ide\nicon: resolvers/cursor-dev/assets/images/icon.png\nartwork:\n  cursor-dev: resolvers/cursor-dev/assets/images/icon.png\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(project, "packages", "ide", "resolvers", "cursor-dev", "config.yml"), []byte("name: Cursor\ncategory: app\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := os.MkdirAll(filepath.Join(project, "packages", "pipeon", "resolvers", "pipeon-dev-stack", "assets", "images"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(project, "packages", "pipeon", "resolvers", "pipeon-dev-stack", "assets", "images", "icon.png"), []byte("png"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(project, "packages", "pipeon", "package.yml"), []byte("schema: 1\nkind: package\nname: pipeon\nicon: resolvers/pipeon-dev-stack/assets/images/icon.png\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(project, "packages", "pipeon", "resolvers", "pipeon-dev-stack", "config.yml"), []byte("name: Pipeon\ncategory: app\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	out, err := buildCatalogListOutput(project, project)
+	got, err := listCatalogWorkflows(tmp, tmp)
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	icons := map[string]string{}
-	for _, wf := range out.Workflows {
-		icons[wf.WorkflowID] = wf.IconPath
+	if len(got) != 1 {
+		t.Fatalf("expected 1 workflow, got %d", len(got))
 	}
-
-	if got, want := icons["cursor-dev"], filepath.Join(project, "packages", "ide", "resolvers", "cursor-dev", "assets", "images", "icon.png"); got != want {
-		t.Fatalf("expected cursor-dev package artwork icon %q, got %q", want, got)
+	if len(got[0].Inputs) != 2 {
+		t.Fatalf("expected 2 typed inputs, got %#v", got[0].Inputs)
 	}
-	if got, want := icons["pipeon-dev-stack"], filepath.Join(project, "packages", "pipeon", "resolvers", "pipeon-dev-stack", "assets", "images", "icon.png"); got != want {
-		t.Fatalf("expected pipeon-dev-stack package icon %q, got %q", want, got)
+	if got[0].Inputs[0].EnvName != "DOCKPIPE_VM_NET_DEVICE" {
+		t.Fatalf("unexpected first env mapping %#v", got[0].Inputs[0])
 	}
-}
-
-func containsString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
+	if got[0].Inputs[1].EnvName != "DOCKPIPE_VM_BOOT_SOURCE" {
+		t.Fatalf("unexpected second env mapping %#v", got[0].Inputs[1])
 	}
-	return false
 }

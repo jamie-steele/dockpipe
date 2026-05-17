@@ -57,6 +57,26 @@ WorkflowCatalogData WorkflowCatalog::discoverCatalog(const QString &hintWorkdir)
         meta.category = o.value(QStringLiteral("category")).toString().trimmed();
         meta.iconPath = o.value(QStringLiteral("icon_path")).toString().trimmed();
         meta.configPath = o.value(QStringLiteral("config_path")).toString().trimmed();
+        const QJsonArray inputs = o.value(QStringLiteral("inputs")).toArray();
+        for (const QJsonValue &iv : inputs) {
+            if (!iv.isObject())
+                continue;
+            const QJsonObject io = iv.toObject();
+            WorkflowInputMeta input;
+            input.fieldName = io.value(QStringLiteral("field_name")).toString().trimmed();
+            input.envName = io.value(QStringLiteral("env_name")).toString().trimmed();
+            input.type = io.value(QStringLiteral("type")).toString().trimmed();
+            input.description = io.value(QStringLiteral("description")).toString().trimmed();
+            input.defaultValue = io.value(QStringLiteral("default_value")).toString().trimmed();
+            const QJsonObject attrs = io.value(QStringLiteral("attributes")).toObject();
+            for (auto ait = attrs.begin(); ait != attrs.end(); ++ait)
+                input.attributes.insert(ait.key().trimmed().toLower(), ait.value().toString().trimmed());
+            if (!input.envName.isEmpty() || !input.fieldName.isEmpty())
+                meta.inputs.append(input);
+        }
+        const QJsonObject vars = o.value(QStringLiteral("vars")).toObject();
+        for (auto it = vars.begin(); it != vars.end(); ++it)
+            meta.vars.insert(it.key(), it.value().toString());
         if (meta.displayName.isEmpty())
             meta.displayName = meta.workflowId;
         if (!meta.workflowId.isEmpty())

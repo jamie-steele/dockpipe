@@ -183,7 +183,11 @@ __dockpipe_sdk_emit_prompt_event() {
   local automation_group="$8"
   local allow_auto_approve="$9"
   local auto_approve_value="${10}"
-  shift 10 || true
+  local path_mode="${11:-}"
+  local file_filter="${12:-}"
+  local must_exist="${13:-false}"
+  local base_dir="${14:-${DOCKPIPE_WORKDIR:-$(pwd)}}"
+  shift 14 || true
   local options=("$@")
   local options_json="" opt
   for opt in "${options[@]}"; do
@@ -193,7 +197,7 @@ __dockpipe_sdk_emit_prompt_event() {
     options_json+="\"$(__dockpipe_sdk_json_escape "$opt")\""
   done
 
-  printf '::dockpipe-prompt::{"type":"%s","id":"%s","title":"%s","message":"%s","default":"%s","sensitive":%s,"intent":"%s","automation_group":"%s","allow_auto_approve":%s,"auto_approve_value":"%s","options":[%s]}\n' \
+  printf '::dockpipe-prompt::{"type":"%s","id":"%s","title":"%s","message":"%s","default":"%s","sensitive":%s,"intent":"%s","automation_group":"%s","allow_auto_approve":%s,"auto_approve_value":"%s","path_mode":"%s","file_filter":"%s","must_exist":%s,"base_dir":"%s","options":[%s]}\n' \
     "$(__dockpipe_sdk_json_escape "$prompt_type")" \
     "$(__dockpipe_sdk_json_escape "$prompt_id")" \
     "$(__dockpipe_sdk_json_escape "$title")" \
@@ -204,6 +208,10 @@ __dockpipe_sdk_emit_prompt_event() {
     "$(__dockpipe_sdk_json_escape "$automation_group")" \
     "$allow_auto_approve" \
     "$(__dockpipe_sdk_json_escape "$auto_approve_value")" \
+    "$(__dockpipe_sdk_json_escape "$path_mode")" \
+    "$(__dockpipe_sdk_json_escape "$file_filter")" \
+    "$must_exist" \
+    "$(__dockpipe_sdk_json_escape "$base_dir")" \
     "$options_json" >&2
 }
 
@@ -258,6 +266,61 @@ __dockpipe_sdk_prompt_input_terminal() {
   printf '%s\n' "${response:-$default_value}"
 }
 
+__dockpipe_sdk_prompt_resolve_path() {
+  local raw="${1:-}"
+  [[ -n "$raw" ]] || return 0
+  if [[ "$raw" == /* ]]; then
+    printf '%s\n' "$raw"
+    return 0
+  fi
+  local base="${DOCKPIPE_WORKDIR:-$(pwd)}"
+  printf '%s\n' "${base%/}/$raw"
+}
+
+__dockpipe_sdk_prompt_file_terminal() {
+  local title="$1" message="$2" default_value="$3" path_mode="$4" must_exist="$5"
+  local file_filter="$6"
+  local response resolved
+  while true; do
+    if [[ -n "$title" ]]; then
+      printf '%s\n' "$title" >&2
+    fi
+    printf '%s' "$message" >&2
+    if [[ -n "$default_value" ]]; then
+      printf ' [%s]' "$default_value" >&2
+    fi
+    if [[ -n "$file_filter" ]]; then
+      printf '\nFilter: %s' "$file_filter" >&2
+    fi
+    printf ': ' >&2
+    IFS= read -r response || return 1
+    response="${response:-$default_value}"
+    if [[ -z "$response" ]]; then
+      printf '%s\n' ""
+      return 0
+    fi
+    if [[ "$must_exist" == "true" ]]; then
+      resolved="$(__dockpipe_sdk_prompt_resolve_path "$response")"
+      case "$path_mode" in
+        open-dir)
+          if [[ ! -d "$resolved" ]]; then
+            printf 'Directory not found: %s\n' "$response" >&2
+            continue
+          fi
+          ;;
+        *)
+          if [[ ! -e "$resolved" ]]; then
+            printf 'File not found: %s\n' "$response" >&2
+            continue
+          fi
+          ;;
+      esac
+    fi
+    printf '%s\n' "$response"
+    return 0
+  done
+}
+
 __dockpipe_sdk_prompt_choice_terminal() {
   local title="$1" message="$2" default_value="$3"
   shift 3 || true
@@ -295,6 +358,7 @@ __dockpipe_sdk_prompt() {
 
   local prompt_id="" title="" message="" default_value="" sensitive="false"
   local intent="" automation_group="" allow_auto_approve="false" auto_approve_value=""
+  local path_mode="open-file" file_filter="" must_exist="false"
   local options=()
 
   while [[ $# -gt 0 ]]; do
@@ -318,6 +382,18 @@ __dockpipe_sdk_prompt() {
       --option)
         options+=("${2:-}")
         shift 2 || true
+        ;;
+      --path-mode)
+        path_mode="${2:-}"
+        shift 2 || true
+        ;;
+      --filter)
+        file_filter="${2:-}"
+        shift 2 || true
+        ;;
+      --must-exist)
+        must_exist="true"
+        shift
         ;;
       --intent)
         intent="${2:-}"
@@ -373,12 +449,18 @@ __dockpipe_sdk_prompt() {
           return 0
         fi
         ;;
+      file)
+        if [[ -n "$default_value" ]]; then
+          printf '%s\n' "$default_value"
+          return 0
+        fi
+        ;;
     esac
   fi
 
   case "$(__dockpipe_sdk_prompt_mode)" in
     json)
-      __dockpipe_sdk_emit_prompt_event "$prompt_type" "$prompt_id" "$title" "$message" "$default_value" "$sensitive" "$intent" "$automation_group" "$allow_auto_approve" "$auto_approve_value" "${options[@]}"
+      __dockpipe_sdk_emit_prompt_event "$prompt_type" "$prompt_id" "$title" "$message" "$default_value" "$sensitive" "$intent" "$automation_group" "$allow_auto_approve" "$auto_approve_value" "$path_mode" "$file_filter" "$must_exist" "${DOCKPIPE_WORKDIR:-$(pwd)}" "${options[@]}"
       __dockpipe_sdk_prompt_read_json_response
       ;;
     terminal)
@@ -391,6 +473,9 @@ __dockpipe_sdk_prompt() {
           ;;
         choice)
           __dockpipe_sdk_prompt_choice_terminal "$title" "$message" "$default_value" "${options[@]}"
+          ;;
+        file)
+          __dockpipe_sdk_prompt_file_terminal "$title" "$message" "$default_value" "$path_mode" "$must_exist" "$file_filter"
           ;;
         *)
           echo "dockpipe sdk: unknown prompt type $prompt_type" >&2
@@ -420,7 +505,7 @@ dockpipe_sdk actions:
   get <workdir|workflow_name|script_dir|package_root|assets_dir|dockpipe_bin>
   cd-workdir
   die <message...>
-  prompt <confirm|choice|input> [options]
+  prompt <confirm|choice|input|file> [options]
   require dockpipe-bin
   require workflow-name
   source terraform-pipeline

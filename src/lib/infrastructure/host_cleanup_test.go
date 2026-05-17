@@ -2,12 +2,14 @@ package infrastructure
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestIsSafeDockerContainerName(t *testing.T) {
@@ -182,5 +184,45 @@ func TestApplyHostCleanup_InvalidRunIDDoesNothing(t *testing.T) {
 	}
 	if _, err := os.Stat(sidecar); err != nil {
 		t.Fatalf("expected sidecar untouched for invalid run id, got %v", err)
+	}
+}
+
+func TestApplyHostCleanup_RunScopedKillsTrackedPID(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	runs := HostRunsDir(root)
+	if err := os.MkdirAll(runs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", "-lc", "sleep 60")
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = cmd.Process.Kill()
+		_, _ = cmd.Process.Wait()
+	})
+
+	runID := "feedc0de"
+	pidSidecar := filepath.Join(runs, runID+".pid")
+	if err := os.WriteFile(pidSidecar, []byte((func() string { return fmt.Sprintf("%d\n", cmd.Process.Pid) })()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ApplyHostCleanup([]string{
+		"DOCKPIPE_WORKDIR=" + root,
+		"DOCKPIPE_RUN_ID=" + runID,
+	})
+
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case <-time.After(3 * time.Second):
+		t.Fatal("expected tracked process to be terminated")
+	case <-done:
+	}
+	if _, err := os.Stat(pidSidecar); !os.IsNotExist(err) {
+		t.Fatalf("expected pid sidecar removed, got %v", err)
 	}
 }

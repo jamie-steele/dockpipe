@@ -467,8 +467,8 @@ const CORE_HELPER_PROFILES = {
 };
 
 /**
- * @typedef {{ doc?: string, type?: string, defaultValue?: string }} FieldInfo
- * @typedef {{ name: string, kind: "Interface"|"Class"|"Struct", implements?: string, doc?: string, fields: Record<string, FieldInfo> }} TypeInfo
+ * @typedef {{ doc?: string, type?: string, defaultValue?: string, annotations?: Record<string,string> }} FieldInfo
+ * @typedef {{ name: string, kind: "Interface"|"Class"|"Struct", implements?: string, doc?: string, annotations?: Record<string,string>, fields: Record<string, FieldInfo> }} TypeInfo
  * @typedef {{ types: Record<string, TypeInfo>, entryInterface?: string, entryClass?: string, knownValues: Array<{name:string,value:string,doc?:string}> }} ModelContext
  */
 
@@ -605,6 +605,8 @@ function parsePipeModel(source) {
   /** @type {string[]} */
   let summaryLines = [];
   let collectingSummary = false;
+  /** @type {Record<string, string>} */
+  let pendingAnnotations = {};
 
   const lines = source.split(/\r?\n/);
   for (const line of lines) {
@@ -613,6 +615,21 @@ function parsePipeModel(source) {
       summaryLines.push(trimmed);
       if (trimmed.includes("<summary>")) collectingSummary = true;
       if (trimmed.includes("</summary>")) collectingSummary = false;
+      continue;
+    }
+    const annotationMatch = trimmed.match(/^\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"((?:[^"\\]|\\.)*)"\s*\]$/);
+    if (annotationMatch) {
+      pendingAnnotations[annotationMatch[1]] = annotationMatch[2].replace(/\\"/g, "\"");
+      continue;
+    }
+    const annotationBoolMatch = trimmed.match(/^\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(true|false)\s*\]$/i);
+    if (annotationBoolMatch) {
+      pendingAnnotations[annotationBoolMatch[1]] = annotationBoolMatch[2].toLowerCase();
+      continue;
+    }
+    const annotationNumMatch = trimmed.match(/^\[\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([0-9]+(?:\.[0-9]+)?)\s*\]$/);
+    if (annotationNumMatch) {
+      pendingAnnotations[annotationNumMatch[1]] = annotationNumMatch[2];
       continue;
     }
     const pendingSummary = summaryLines.length > 0 && !collectingSummary ? summaryFromComment(summaryLines.join("\n")) : undefined;
@@ -624,11 +641,13 @@ function parsePipeModel(source) {
         kind: /** @type {"Interface"|"Class"|"Struct"} */ (typeMatch[1]),
         implements: typeMatch[3],
         doc: pendingSummary,
+        annotations: Object.keys(pendingAnnotations).length ? pendingAnnotations : undefined,
         fields: {}
       };
       currentBodyStarted = false;
       out.push(current);
       summaryLines = [];
+      pendingAnnotations = {};
     } else if (current) {
       const fieldMatch = trimmed.match(/^(?:public|private)\s+(string|int|bool|float)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:=\s*("([^"\\]|\\.)*"|[^;]+))?\s*;/);
       if (fieldMatch) {
@@ -639,9 +658,11 @@ function parsePipeModel(source) {
         current.fields[fieldMatch[2]] = {
           doc: pendingSummary,
           type: fieldMatch[1],
-          defaultValue: def
+          defaultValue: def,
+          annotations: Object.keys(pendingAnnotations).length ? pendingAnnotations : undefined
         };
         summaryLines = [];
+        pendingAnnotations = {};
       } else if (!trimmed) {
         summaryLines = [];
       }
@@ -656,6 +677,9 @@ function parsePipeModel(source) {
     if (current && currentBodyStarted && depth <= 0) {
       current = null;
       currentBodyStarted = false;
+    }
+    if (trimmed && !trimmed.startsWith("///")) {
+      pendingAnnotations = {};
     }
   }
   return out;

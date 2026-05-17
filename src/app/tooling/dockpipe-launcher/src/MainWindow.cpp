@@ -10,6 +10,7 @@
 #include "PackageManagerDialog.h"
 #include "PromptDialog.h"
 #include "SettingsDialog.h"
+#include "WorkflowLaunchDialog.h"
 #include "WorkflowCatalog.h"
 
 #include <QActionGroup>
@@ -111,6 +112,50 @@ QString shellQuote(QString s)
     return s;
 }
 
+QMap<QString, QString> parseEnvAssignments(const QStringList &lines)
+{
+    QMap<QString, QString> out;
+    for (const QString &raw : lines) {
+        const QString line = raw.trimmed();
+        if (line.isEmpty() || line.startsWith(QLatin1Char('#')))
+            continue;
+        const int idx = line.indexOf(QLatin1Char('='));
+        if (idx <= 0)
+            continue;
+        const QString key = line.left(idx).trimmed();
+        const QString value = line.mid(idx + 1);
+        if (!key.isEmpty())
+            out.insert(key, value);
+    }
+    return out;
+}
+
+QStringList formatEnvAssignments(const QMap<QString, QString> &values)
+{
+    QStringList out;
+    for (auto it = values.begin(); it != values.end(); ++it) {
+        if (it.key().trimmed().isEmpty() || it.value().trimmed().isEmpty())
+            continue;
+        out.append(it.key() + QStringLiteral("=") + it.value());
+    }
+    return out;
+}
+
+bool workflowNeedsConfigPrompt(const WorkflowMeta &meta, const QMap<QString, QString> &currentValues)
+{
+    for (const WorkflowInputMeta &input : meta.inputs) {
+        const QString envName = input.envName.trimmed();
+        if (envName.isEmpty())
+            continue;
+        if (!currentValues.value(envName).trimmed().isEmpty())
+            continue;
+        if (!input.defaultValue.trimmed().isEmpty())
+            continue;
+        return true;
+    }
+    return false;
+}
+
 } // namespace
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
@@ -146,6 +191,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     connect(m_basicWidget, &BasicModeWidget::openProjectRequested, this, &MainWindow::onFileOpenProject);
     connect(m_basicWidget, &BasicModeWidget::refreshAppsRequested, this, &MainWindow::onRefreshAppList);
     connect(m_basicWidget, &BasicModeWidget::launchRequested, this, &MainWindow::onBasicLaunch);
+    connect(m_basicWidget, &BasicModeWidget::configureRequested, this, &MainWindow::onBasicConfigure);
     connect(m_basicWidget, &BasicModeWidget::recentProjectSelected, this, &MainWindow::onBasicOpenRecent);
     connect(m_basicWidget, &BasicModeWidget::continueLastRequested, this, &MainWindow::onBasicContinueLast);
     connect(m_basicWidget, &BasicModeWidget::backToHomeRequested, this, &MainWindow::onBasicBackHome);
@@ -345,6 +391,23 @@ void MainWindow::setupAdvancedPage(QWidget *page)
     m_advancedSearchTimer->setSingleShot(true);
     m_advancedSearchTimer->setInterval(120);
     connect(m_advancedSearchTimer, &QTimer::timeout, this, &MainWindow::applyAdvancedContextFilter);
+
+    m_basicLaunchingTimer = new QTimer(this);
+    m_basicLaunchingTimer->setInterval(1000);
+    connect(m_basicLaunchingTimer, &QTimer::timeout, this, [this]() {
+        if (m_basicLaunchingContextId.isEmpty()) {
+            m_basicLaunchingTimer->stop();
+            return;
+        }
+        const bool stillRunning = m_sessions.isRunning(m_basicLaunchingContextId);
+        const SessionInfo si = m_sessions.info(m_basicLaunchingContextId);
+        if (!stillRunning || si.ready || si.status == SessionStatus::Failed || si.status == SessionStatus::Stopped) {
+            m_basicLaunchingContextId.clear();
+            m_basicLaunchingWorkflowId.clear();
+            m_basicLaunchingTimer->stop();
+            rebuildUi();
+        }
+    });
 
     auto *splitter = new QSplitter(Qt::Vertical, page);
     splitter->setChildrenCollapsible(false);
@@ -616,6 +679,8 @@ void MainWindow::updateBasicPage()
     }
     m_basicWidget->setRunningByWorkflow(run);
     if (!m_basicLaunchingWorkflowId.isEmpty()) {
+        if (m_basicLaunchingTimer && !m_basicLaunchingTimer->isActive())
+            m_basicLaunchingTimer->start();
         QString label = m_basicLaunchingWorkflowId;
         for (const WorkflowMeta &meta : m_basicApps) {
             QString metaWorkflowId = meta.workflowId;
@@ -628,6 +693,8 @@ void MainWindow::updateBasicPage()
         }
         m_basicWidget->setLaunchingWorkflow(m_basicLaunchingWorkflowId, label);
     } else {
+        if (m_basicLaunchingTimer)
+            m_basicLaunchingTimer->stop();
         m_basicWidget->clearLaunchingWorkflow();
     }
 }
@@ -645,11 +712,13 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
     QString effectiveWorkflowId = workflowId;
     if (effectiveWorkflowId == QStringLiteral("pipeon") || effectiveWorkflowId == QStringLiteral("Pipeon"))
         effectiveWorkflowId = QStringLiteral("pipeon-dev-stack");
-    for (const WorkflowMeta &meta : m_basicApps) {
-        QString metaWorkflowId = meta.workflowId;
+    WorkflowMeta meta;
+    for (const WorkflowMeta &candidate : m_basicApps) {
+        QString metaWorkflowId = candidate.workflowId;
         if (metaWorkflowId == QStringLiteral("pipeon") || metaWorkflowId == QStringLiteral("Pipeon"))
             metaWorkflowId = QStringLiteral("pipeon-dev-stack");
         if (metaWorkflowId == effectiveWorkflowId) {
+            meta = candidate;
             m_basicLaunchingWorkflowId = effectiveWorkflowId;
             break;
         }
@@ -658,14 +727,53 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
         m_basicLaunchingWorkflowId = effectiveWorkflowId;
     updateBasicPage();
 
-    QTimer::singleShot(0, this, [this, effectiveWorkflowId]() {
-    Context *c = findContext(m_settings.projectFolder, effectiveWorkflowId, QString());
+    QTimer::singleShot(0, this, [this, effectiveWorkflowId, meta]() {
+        Context *c = ensureBasicWorkflowContext(effectiveWorkflowId);
+        if (!c) {
+            m_basicLaunchingContextId.clear();
+            m_basicLaunchingWorkflowId.clear();
+            updateBasicPage();
+            return;
+        }
+        if (!configureContextForWorkflow(*c, meta, false)) {
+            m_basicLaunchingContextId.clear();
+            m_basicLaunchingWorkflowId.clear();
+            updateBasicPage();
+            return;
+        }
+        m_basicLaunchingContextId = c->id;
+        if (m_sessions.launch(*c, ContextStore::logsDir()))
+            rebuildUi();
+        else if (!m_sessions.isRunning(c->id)) {
+            m_basicLaunchingContextId.clear();
+            m_basicLaunchingWorkflowId.clear();
+            updateBasicPage();
+            QMessageBox::warning(this, tr("DockPipe Launcher"), tr("Could not start dockpipe (see stderr)."));
+        }
+    });
+}
+
+void MainWindow::onBasicConfigure(const QString &workflowId)
+{
+    if (workflowId.trimmed().isEmpty() || m_settings.projectFolder.trimmed().isEmpty())
+        return;
+    const WorkflowMeta meta = findWorkflowMeta(m_settings.projectFolder, workflowId, QString());
+    Context *c = ensureBasicWorkflowContext(workflowId);
+    if (!c)
+        return;
+    if (configureContextForWorkflow(*c, meta, true))
+        rebuildUi();
+}
+
+Context *MainWindow::ensureBasicWorkflowContext(const QString &workflowId)
+{
+    Context *c = findContext(m_settings.projectFolder, workflowId, QString());
     if (!c) {
         Context nc = Context::createNew();
         nc.workdir = m_settings.projectFolder;
-        nc.workflow = effectiveWorkflowId;
+        nc.workflow = workflowId;
         nc.dockpipeBinary = DockpipeChoices::preferredDockpipeBinary(m_settings.projectFolder);
-        nc.label = QFileInfo(m_settings.projectFolder).fileName() + QStringLiteral(" — ") + effectiveWorkflowId;
+        nc.label = QFileInfo(m_settings.projectFolder).fileName() + QStringLiteral(" — ") + workflowId;
         m_store.contexts.append(nc);
         m_store.save();
         c = &m_store.contexts.last();
@@ -673,16 +781,52 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
         c->dockpipeBinary = DockpipeChoices::preferredDockpipeBinary(m_settings.projectFolder);
         m_store.save();
     }
-    m_basicLaunchingContextId = c->id;
-    if (m_sessions.launch(*c, ContextStore::logsDir()))
-        rebuildUi();
-    else if (!m_sessions.isRunning(c->id)) {
-        m_basicLaunchingContextId.clear();
-        m_basicLaunchingWorkflowId.clear();
-        updateBasicPage();
-        QMessageBox::warning(this, tr("DockPipe Launcher"), tr("Could not start dockpipe (see stderr)."));
+    return c;
+}
+
+WorkflowMeta MainWindow::findWorkflowMeta(const QString &workdir, const QString &workflowId, const QString &workflowFile) const
+{
+    if (!workflowId.trimmed().isEmpty()) {
+        for (const WorkflowMeta &meta : m_basicApps) {
+            QString metaWorkflowId = meta.workflowId;
+            if (metaWorkflowId == QStringLiteral("pipeon") || metaWorkflowId == QStringLiteral("Pipeon"))
+                metaWorkflowId = QStringLiteral("pipeon-dev-stack");
+            if (metaWorkflowId == workflowId)
+                return meta;
+        }
     }
-    });
+    const QString repo = DockpipeChoices::findRepoRoot(workdir);
+    const QVector<WorkflowMeta> all = WorkflowCatalog::discoverAll(repo, workdir);
+    for (const WorkflowMeta &meta : all) {
+        if (!workflowFile.trimmed().isEmpty() && QDir::cleanPath(meta.configPath) == QDir::cleanPath(workflowFile))
+            return meta;
+        if (!workflowId.trimmed().isEmpty() && meta.workflowId == workflowId)
+            return meta;
+    }
+    return WorkflowMeta{};
+}
+
+bool MainWindow::configureContextForWorkflow(Context &ctx, const WorkflowMeta &meta, bool forceDialog)
+{
+    if (meta.workflowId.trimmed().isEmpty() || meta.inputs.isEmpty())
+        return true;
+    const QMap<QString, QString> currentValues = parseEnvAssignments(ctx.extraDockpipeEnv);
+    if (!forceDialog && !workflowNeedsConfigPrompt(meta, currentValues))
+        return true;
+    WorkflowLaunchDialog dialog(meta, currentValues, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return false;
+    QMap<QString, QString> merged = currentValues;
+    const QMap<QString, QString> edited = dialog.values();
+    for (auto it = edited.begin(); it != edited.end(); ++it) {
+        if (it.value().trimmed().isEmpty())
+            merged.remove(it.key());
+        else
+            merged.insert(it.key(), it.value());
+    }
+    ctx.extraDockpipeEnv = formatEnvAssignments(merged);
+    m_store.save();
+    return true;
 }
 
 void MainWindow::setupTray()
@@ -815,8 +959,9 @@ void MainWindow::rebuildUi()
 void MainWindow::onSessionChanged()
 {
     if (!m_basicLaunchingContextId.isEmpty()) {
+        const bool stillRunning = m_sessions.isRunning(m_basicLaunchingContextId);
         const SessionInfo si = m_sessions.info(m_basicLaunchingContextId);
-        if (si.ready || si.status == SessionStatus::Failed || si.status == SessionStatus::Stopped) {
+        if (!stillRunning || si.ready || si.status == SessionStatus::Failed || si.status == SessionStatus::Stopped) {
             m_basicLaunchingContextId.clear();
             m_basicLaunchingWorkflowId.clear();
         }
@@ -860,7 +1005,11 @@ void MainWindow::onSessionPrompt(const QString &contextId, const QString &payloa
     const QString defaultValue = obj.value(QStringLiteral("default")).toString();
     const QString intent = obj.value(QStringLiteral("intent")).toString();
     const QString automationGroup = obj.value(QStringLiteral("automation_group")).toString();
+    const QString pathMode = obj.value(QStringLiteral("path_mode")).toString(QStringLiteral("open-file"));
+    const QString fileFilter = obj.value(QStringLiteral("file_filter")).toString();
+    const QString baseDir = obj.value(QStringLiteral("base_dir")).toString();
     const bool sensitive = obj.value(QStringLiteral("sensitive")).toBool(false);
+    const bool mustExist = obj.value(QStringLiteral("must_exist")).toBool(false);
 
     QStringList items;
     const QJsonArray options = obj.value(QStringLiteral("options")).toArray();
@@ -871,8 +1020,11 @@ void MainWindow::onSessionPrompt(const QString &contextId, const QString &payloa
     }
 
     QString response = defaultValue;
-    if (type == QStringLiteral("confirm") || type == QStringLiteral("input") || type == QStringLiteral("choice")) {
-        PromptDialog dialog({type, title, message, defaultValue, intent, automationGroup, items, sensitive}, this);
+    if (type == QStringLiteral("confirm") || type == QStringLiteral("input") ||
+        type == QStringLiteral("choice") || type == QStringLiteral("file")) {
+        PromptDialog dialog({type, title, message, defaultValue, intent, automationGroup, pathMode, fileFilter, baseDir,
+                             items, sensitive, mustExist},
+                            this);
         dialog.exec();
         response = dialog.response();
     } else {
@@ -961,6 +1113,9 @@ void MainWindow::onLaunch()
     if (!display)
         return;
     Context *c = ensureStoredContextForDisplay(*display);
+    const WorkflowMeta meta = findWorkflowMeta(c->workdir, c->workflow, c->workflowFile);
+    if (!configureContextForWorkflow(*c, meta, false))
+        return;
     if (m_sessions.launch(*c, ContextStore::logsDir()))
         rebuildUi();
     else if (!m_sessions.isRunning(c->id))
@@ -1058,6 +1213,15 @@ void MainWindow::applyContextMenu(QListWidgetItem *, const QPoint &globalPos)
 {
     QMenu menu(this);
     menu.addAction(tr("Launch"), this, &MainWindow::onLaunch);
+    menu.addAction(tr("Workflow settings…"), this, [this]() {
+        Context *display = currentAdvancedDisplayContext();
+        if (!display)
+            return;
+        Context *c = ensureStoredContextForDisplay(*display);
+        const WorkflowMeta meta = findWorkflowMeta(c->workdir, c->workflow, c->workflowFile);
+        if (configureContextForWorkflow(*c, meta, true))
+            rebuildUi();
+    });
     menu.addAction(tr("Relaunch"), this, &MainWindow::onRelaunch);
     menu.addAction(tr("Stop"), this, &MainWindow::onStop);
     menu.addAction(tr("Stop all for repo"), this, &MainWindow::onStopAllForRepo);

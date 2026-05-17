@@ -1,0 +1,28 @@
+name: windows-vm
+category: app
+vault: none
+types:
+  - ../../resolvers/qemu/models/QemuVmResolverConfig.pipe
+description: >-
+  Boot a user-supplied Windows guest through the generic vm runtime using the
+  packaged qemu resolver, prompt for either a bootable disk image or an
+  installer ISO, then either run a guest command over SSH or keep an interactive
+  installer VM alive until the user exits.
+
+runtime: vm
+resolver: qemu
+
+vars:
+  DOCKPIPE_VM_EXEC_MODE: powershell
+  DOCKPIPE_VM_PERSISTENCE: ephemeral
+  DOCKPIPE_VM_BOOT_SOURCE: ""
+  DOCKPIPE_VM_DISK_SIZE: ""
+  DOCKPIPE_VM_DISPLAY: ""
+  DOCKPIPE_VM_ENV_ALLOW: "DOCKPIPE_VM_GUEST_COMMAND,DOCKPIPE_VM_OUTPUTS_REMOTE_PATH"
+  DOCKPIPE_VM_GUEST_COMMAND: ""
+
+steps:
+  - id: guest-command
+    cmd: >-
+      if ($env:DOCKPIPE_VM_GUEST_COMMAND) { Invoke-Expression $env:DOCKPIPE_VM_GUEST_COMMAND }
+      else { Write-Host "[dockpipe] Connected to Windows VM over SSH."; Write-Host "[dockpipe] Set DOCKPIPE_VM_GUEST_COMMAND to run a different guest command."; whoami; hostname }

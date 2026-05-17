@@ -1,0 +1,104 @@
+/// <summary>
+/// Concrete defaults for the packaged QEMU VM resolver.
+/// </summary>
+public Class QemuVmResolverConfig
+{
+    /// <summary>Guest execution wrapper mode. Windows defaults to powershell.</summary>
+    [DisplayName = "Execution Mode"]
+    [Group = "General"]
+    public string ExecMode = "";
+    /// <summary>Persistence mode for the selected VM disk image.</summary>
+    [DisplayName = "Persistence"]
+    [Group = "Storage"]
+    public string Persistence = "";
+    /// <summary>Disk bus presented to the guest. Windows installer defaults to a built-in friendly bus.</summary>
+    [DisplayName = "Disk Bus"]
+    [Group = "Storage"]
+    public string DiskBus = "sata";
+    /// <summary>Optional display mode for interactive installer sessions.</summary>
+    [DisplayName = "Display"]
+    [Group = "Compute"]
+    public string Display = "";
+    /// <summary>Optional installer disk size; when omitted DockPipe prompts with a suggested default.</summary>
+    [DisplayName = "Disk Size"]
+    [Group = "Storage"]
+    public string DiskSize = "";
+    /// <summary>Optional boot source hint. Leave empty to let DockPipe prompt for image vs ISO.</summary>
+    [DisplayName = "Boot Source"]
+    [Group = "Storage"]
+    public string BootSource = "";
+    /// <summary>Optional path to a bootable guest disk image.</summary>
+    [DisplayName = "VM Disk Image"]
+    [Group = "Storage"]
+    [Control = "file"]
+    [FileMode = "save-file"]
+    [Placeholder = "Choose or create a VM disk image"]
+    public string Disk = "";
+    /// <summary>Optional SSH username for an already-installed guest image.</summary>
+    [DisplayName = "SSH User"]
+    [Group = "Network"]
+    public string SshUser = "";
+    /// <summary>Optional UEFI firmware code image path.</summary>
+    [DisplayName = "UEFI Firmware Code"]
+    [Group = "Firmware"]
+    [Control = "file"]
+    [FileMode = "open-file"]
+    public string FirmwareCode = "";
+    /// <summary>Optional UEFI firmware vars image path.</summary>
+    [DisplayName = "UEFI Firmware Vars"]
+    [Group = "Firmware"]
+    [Control = "file"]
+    [FileMode = "open-file"]
+    public string FirmwareVars = "";
+    /// <summary>Optional legacy BIOS image path.</summary>
+    [DisplayName = "BIOS Image"]
+    [Group = "Firmware"]
+    [Control = "file"]
+    [FileMode = "open-file"]
+    public string Bios = "";
+    /// <summary>Optional Windows installer ISO path.</summary>
+    [DisplayName = "CD-ROM"]
+    [Group = "Storage"]
+    [Control = "file"]
+    [FileMode = "open-file"]
+    [Placeholder = "Choose Windows installer ISO"]
+    public string Cdrom = "";
+    /// <summary>Optional VirtIO driver ISO path.</summary>
+    [DisplayName = "VirtIO Driver ISO"]
+    [Group = "Storage"]
+    [Control = "file"]
+    [FileMode = "open-file"]
+    public string VirtioIso = "";
+    /// <summary>Network adapter model presented to the guest. Windows installer defaults to a built-in friendly NIC.</summary>
+    [DisplayName = "Network Adapter"]
+    [Group = "Network"]
+    public string NetDevice = "e1000e";
+    /// <summary>TPM mode for the guest. Windows 11 typically requires this.</summary>
+    [DisplayName = "TPM"]
+    [Group = "Security"]
+    public string Tpm = "required";
+    /// <summary>Secure boot mode for the guest. Windows 11 typically requires this.</summary>
+    [DisplayName = "Secure Boot"]
+    [Group = "Security"]
+    public string SecureBoot = "required";
+    /// <summary>Default vCPU count for the guest.</summary>
+    [DisplayName = "CPUs"]
+    [Group = "Compute"]
+    public string Cpus = "4";
+    /// <summary>Default guest memory allocation.</summary>
+    [DisplayName = "Memory"]
+    [Group = "Compute"]
+    public string Memory = "8G";
+    /// <summary>Optional additional host port forwards, comma-separated.</summary>
+    [DisplayName = "Host Port Forwards"]
+    [Group = "Network"]
+    public string Hostfwd = "";
+    /// <summary>Comma-separated env vars forwarded into the guest wrapper.</summary>
+    [DisplayName = "Allowed Guest Env Vars"]
+    [Group = "Advanced"]
+    public string EnvAllow = "";
+    /// <summary>Optional guest command override executed instead of the default smoke command.</summary>
+    [DisplayName = "Guest Command"]
+    [Group = "Advanced"]
+    public string GuestCommand = "";
+}

@@ -5,6 +5,7 @@ import (
 	"maps"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -85,7 +86,13 @@ func runSteps(o runStepsOpts) error {
 // Empty empty empty means keep parent workflow / CLI fallbacks.
 func resolveStepIsolationNames(o *runStepsOpts, step domain.Step, stepIndex int) (rtName, rsName string, err error) {
 	rtName = strings.TrimSpace(step.Runtime)
+	if rtName == "" {
+		rtName = infrastructure.NormalizeRuntimeProfileName(strings.TrimSpace(o.wf.Runtime))
+	}
 	rsName = strings.TrimSpace(step.Resolver)
+	if rsName == "" {
+		rsName = strings.TrimSpace(o.wf.Resolver)
+	}
 	if rtName == "" && rsName == "" {
 		return "", "", nil
 	}
@@ -113,6 +120,95 @@ func loadStepResolver(o *runStepsOpts, step domain.Step, stepIndex int) (*domain
 		return nil, "", "", fmt.Errorf("step %s: profile %q: set only one of DOCKPIPE_RUNTIME_WORKFLOW / DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RUNTIME_HOST_SCRIPT / DOCKPIPE_RESOLVER_HOST_ISOLATE", step.DisplayName(stepIndex), label)
 	}
 	return &ra, rtName, rsName, nil
+}
+
+func loadStepResolverWithProfileEnv(o *runStepsOpts, step domain.Step, stepIndex int) (*domain.ResolverAssignments, string, string, map[string]string, error) {
+	rtName, rsName, err := resolveStepIsolationNames(o, step, stepIndex)
+	if err != nil {
+		return nil, "", "", nil, err
+	}
+	if rtName == "" && rsName == "" {
+		return nil, "", "", nil, nil
+	}
+	m, err := infrastructure.LoadIsolationProfile(o.repoRoot, rtName, rsName)
+	if err != nil {
+		return nil, "", "", nil, fmt.Errorf("step %s: isolation profile: %w", step.DisplayName(stepIndex), err)
+	}
+	ra := domain.FromResolverMap(m)
+	label := ProfileLabelForEnv(rtName, rsName)
+	if rk := strings.TrimSpace(ra.RuntimeKind); rk != "" {
+		fmt.Fprintf(os.Stderr, "[dockpipe] Step %s: profile %q (runtime.type: %s)\n", step.DisplayName(stepIndex), label, rk)
+	}
+	if strings.TrimSpace(ra.Workflow) != "" && strings.TrimSpace(ra.HostIsolate) != "" {
+		return nil, "", "", nil, fmt.Errorf("step %s: profile %q: set only one of DOCKPIPE_RUNTIME_WORKFLOW / DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RUNTIME_HOST_SCRIPT / DOCKPIPE_RESOLVER_HOST_ISOLATE", step.DisplayName(stepIndex), label)
+	}
+	return &ra, rtName, rsName, m, nil
+}
+
+func hostDelegateRequiresDocker(profileEnv map[string]string) bool {
+	if len(profileEnv) == 0 {
+		return true
+	}
+	for _, key := range []string{"DOCKPIPE_RUNTIME_HOST_REQUIRES_DOCKER", "DOCKPIPE_RESOLVER_HOST_REQUIRES_DOCKER"} {
+		if v := strings.TrimSpace(strings.ToLower(profileEnv[key])); v != "" {
+			return !(v == "0" || v == "false" || v == "no")
+		}
+	}
+	return true
+}
+
+func shellSingleQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
+func shellJoinArgs(args []string) string {
+	if len(args) == 0 {
+		return ""
+	}
+	quoted := make([]string, 0, len(args))
+	for _, arg := range args {
+		quoted = append(quoted, shellSingleQuote(arg))
+	}
+	return strings.Join(quoted, " ")
+}
+
+func stepEffectiveCommand(step domain.Step, cliArgs []string, stepIndex, totalSteps int) string {
+	if cmd := strings.TrimSpace(step.CmdLine()); cmd != "" {
+		return cmd
+	}
+	if stepIndex == totalSteps-1 && len(cliArgs) > 0 {
+		return shellJoinArgs(cliArgs)
+	}
+	return ""
+}
+
+func appendProfileEnv(slice []string, profileEnv map[string]string) []string {
+	if len(profileEnv) == 0 {
+		return slice
+	}
+	keys := make([]string, 0, len(profileEnv))
+	for k := range profileEnv {
+		if strings.HasPrefix(k, "DOCKPIPE_RUNTIME_") || strings.HasPrefix(k, "DOCKPIPE_RESOLVER_") {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		slice = appendUniqueEnv(slice, k+"="+profileEnv[k])
+	}
+	return slice
+}
+
+func hostDelegateEnvSlice(base []string, profileEnv map[string]string, cmdline, outputsPath string) []string {
+	out := append([]string(nil), base...)
+	out = appendProfileEnv(out, profileEnv)
+	if strings.TrimSpace(cmdline) != "" {
+		out = appendUniqueEnv(out, "DOCKPIPE_STEP_CMD="+cmdline)
+	}
+	if strings.TrimSpace(outputsPath) != "" {
+		out = appendUniqueEnv(out, "DOCKPIPE_STEP_OUTPUTS_FILE="+outputsPath)
+	}
+	return out
 }
 
 func stepUsesHostIsolate(ra *domain.ResolverAssignments) bool {
@@ -166,23 +262,30 @@ func runStepResolverWorkflow(o *runStepsOpts, step domain.Step, dockerEnv map[st
 }
 
 // runStepHostIsolate runs DOCKPIPE_RESOLVER_HOST_ISOLATE after pre-scripts (same idea as single-command run with host isolate).
-func runStepHostIsolate(o *runStepsOpts, step domain.Step, dockerEnv map[string]string, ra *domain.ResolverAssignments, stepIndex int) error {
-	if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {
-		return err
+func runStepHostIsolate(o *runStepsOpts, step domain.Step, dockerEnv map[string]string, ra *domain.ResolverAssignments, profileEnv map[string]string, stepIndex int) error {
+	if hostDelegateRequiresDocker(profileEnv) {
+		if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {
+			return err
+		}
 	}
 	rel := strings.TrimSpace(ra.HostIsolate)
 	scriptAbs := infrastructure.ResolveWorkflowScript(rel, o.wfRoot, o.repoRoot, o.projectRoot)
 	if _, err := osStatFn(scriptAbs); err != nil {
 		return fmt.Errorf("host isolate script not found: %s: %w", scriptAbs, err)
 	}
-	if _, err := parseStepArgv(step.CmdLine()); err != nil {
-		return err
-	}
 	fmt.Fprintf(os.Stderr, "[dockpipe] Host isolate: %s\n", rel)
 	if strings.TrimSpace(o.envMap["DOCKPIPE_WORKDIR"]) != "" {
 		fmt.Fprintf(os.Stderr, "[dockpipe] Mount /work ← %s\n", o.envMap["DOCKPIPE_WORKDIR"])
 	}
-	if err := runHostScriptFn(scriptAbs, envSliceWithScriptContext(o.envSlice, scriptAbs)); err != nil {
+	wd := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir, mustGetwd())
+	cmdline := stepEffectiveCommand(step, o.cliArgs, stepIndex, len(o.wf.Steps))
+	hostEnv := hostDelegateEnvSlice(
+		envSliceWithScriptContext(o.envSlice, scriptAbs),
+		profileEnv,
+		cmdline,
+		filepath.Join(wd, step.OutputsPath()),
+	)
+	if err := runHostScriptFn(scriptAbs, hostEnv); err != nil {
 		return err
 	}
 	return finalizeResolverStepAfterHost(o, step, dockerEnv, ra, stepIndex)
@@ -304,9 +407,12 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 		return runStepPackageWorkflow(o, i, n, step, dockerEnv)
 	}
 
-	ra, effRt, effRs, err := loadStepResolver(o, step, i)
+	ra, effRt, effRs, profileEnv, err := loadStepResolverWithProfileEnv(o, step, i)
 	if err != nil {
 		return err
+	}
+	if strings.EqualFold(strings.TrimSpace(effRt), "vmimage") {
+		fmt.Fprintf(os.Stderr, "[dockpipe] vmimage debug: host_isolate=%q workflow=%q template=%q\n", strings.TrimSpace(ra.HostIsolate), strings.TrimSpace(ra.Workflow), strings.TrimSpace(ra.Template))
 	}
 	if step.IsHostStep() && stepUsesResolverDelegate(ra) {
 		return fmt.Errorf("step %d: profile %q uses DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RESOLVER_HOST_ISOLATE — remove kind: host", i+1, ProfileLabelForEnv(effRt, effRs))
@@ -328,7 +434,7 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 		return runStepResolverWorkflow(o, step, dockerEnv, ra, i)
 	}
 	if stepUsesHostIsolate(ra) {
-		return runStepHostIsolate(o, step, dockerEnv, ra, i)
+		return runStepHostIsolate(o, step, dockerEnv, ra, profileEnv, i)
 	}
 
 	argv, runOpts, buildDir, buildCtx, rm, err := buildStepContainer(o, i, n, step, o.envMap, dockerEnv, ra)

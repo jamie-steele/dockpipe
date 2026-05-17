@@ -48,4 +48,20 @@ if ! grep -Fq '"sensitive":true' "$input_stderr"; then
   exit 1
 fi
 
+file_stderr="$TMPDIR/file.stderr"
+file_out="$(
+  printf '/tmp/demo.qcow2\n' | DOCKPIPE_SDK_PROMPT_MODE=json bash -lc \
+    'source "$1"; dockpipe_sdk prompt file --id vm_disk --title "VM Disk" --message "Choose disk" --path-mode open-file --filter "VM Images (*.qcow2 *.img);;All Files (*)" --must-exist' \
+    _ "$SDK" 2>"$file_stderr"
+)"
+if [[ "$file_out" != "/tmp/demo.qcow2" ]]; then
+  echo "test_sdk_prompt: expected file output to round-trip selected path" >&2
+  exit 1
+fi
+if ! grep -Fq '"type":"file"' "$file_stderr" || ! grep -Fq '"path_mode":"open-file"' "$file_stderr" || ! grep -Fq '"must_exist":true' "$file_stderr"; then
+  echo "test_sdk_prompt: file prompt event missing expected metadata" >&2
+  cat "$file_stderr" >&2
+  exit 1
+fi
+
 echo "test_sdk_prompt OK"

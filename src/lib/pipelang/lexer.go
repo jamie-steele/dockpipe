@@ -25,6 +25,8 @@ const (
 	tokRBrace
 	tokLParen
 	tokRParen
+	tokLBracket
+	tokRBracket
 	tokColon
 	tokSemi
 	tokComma
@@ -158,6 +160,12 @@ func lex(src string) ([]token, error) {
 			i++
 		case ')':
 			out = append(out, token{kind: tokRParen, lit: ")", pos: i})
+			i++
+		case '[':
+			out = append(out, token{kind: tokLBracket, lit: "[", pos: i})
+			i++
+		case ']':
+			out = append(out, token{kind: tokRBracket, lit: "]", pos: i})
 			i++
 		case ':':
 			out = append(out, token{kind: tokColon, lit: ":", pos: i})

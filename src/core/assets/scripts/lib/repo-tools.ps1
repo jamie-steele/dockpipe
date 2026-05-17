@@ -90,7 +90,7 @@ function Get-DockpipePromptMode {
 function Invoke-DockpipePrompt {
   param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("confirm", "choice", "input")]
+    [ValidateSet("confirm", "choice", "input", "file")]
     [string]$Kind,
     [string]$PromptId,
     [string]$Title,
@@ -101,7 +101,10 @@ function Invoke-DockpipePrompt {
     [string]$Intent,
     [string]$AutomationGroup,
     [switch]$AllowAutoApprove,
-    [string]$AutoApproveValue
+    [string]$AutoApproveValue,
+    [string]$PathMode = "open-file",
+    [string]$FileFilter,
+    [switch]$MustExist
   )
 
   if (-not $PromptId) {
@@ -124,6 +127,9 @@ function Invoke-DockpipePrompt {
     if ($Kind -eq "choice" -and $Options.Count -gt 0) {
       return $Options[0]
     }
+    if ($Kind -eq "file" -and $DefaultValue) {
+      return $DefaultValue
+    }
   }
 
   $mode = Get-DockpipePromptMode
@@ -140,6 +146,10 @@ function Invoke-DockpipePrompt {
         automation_group = $AutomationGroup
         allow_auto_approve = [bool]$AllowAutoApprove
         auto_approve_value = $AutoApproveValue
+        path_mode = $PathMode
+        file_filter = $FileFilter
+        must_exist = [bool]$MustExist
+        base_dir = $(if ($env:DOCKPIPE_WORKDIR) { $env:DOCKPIPE_WORKDIR } else { (Get-Location).Path })
         options   = @($Options)
       } | ConvertTo-Json -Compress
       [Console]::Error.WriteLine("::dockpipe-prompt::$payload")
@@ -208,6 +218,39 @@ function Invoke-DockpipePrompt {
               return $Options[$selected - 1]
             }
             [Console]::Error.WriteLine(("Enter a number between 1 and {0}." -f $Options.Count))
+          }
+        }
+        "file" {
+          while ($true) {
+            if ($FileFilter) {
+              [Console]::Error.WriteLine(("Filter: {0}" -f $FileFilter))
+            }
+            if ($DefaultValue) {
+              [Console]::Error.Write(("{0} [{1}]: " -f $Message, $DefaultValue))
+            } else {
+              [Console]::Error.Write(("{0}: " -f $Message))
+            }
+            $raw = [Console]::In.ReadLine()
+            if ([string]::IsNullOrEmpty($raw)) {
+              $raw = $DefaultValue
+            }
+            if (-not $raw) {
+              return $raw
+            }
+            if ($MustExist) {
+              $resolved = $raw
+              if (-not [System.IO.Path]::IsPathRooted($resolved)) {
+                $base = $(if ($env:DOCKPIPE_WORKDIR) { $env:DOCKPIPE_WORKDIR } else { (Get-Location).Path })
+                $resolved = Join-Path $base $resolved
+              }
+              $exists = $(if ($PathMode -eq "open-dir") { Test-Path -LiteralPath $resolved -PathType Container } else { Test-Path -LiteralPath $resolved -PathType Any })
+              if (-not $exists) {
+                $kindLabel = $(if ($PathMode -eq "open-dir") { "Directory" } else { "File" })
+                [Console]::Error.WriteLine(("{0} not found: {1}" -f $kindLabel, $raw))
+                continue
+              }
+            }
+            return $raw
           }
         }
       }

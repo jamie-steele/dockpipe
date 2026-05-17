@@ -15,8 +15,12 @@ public:
         QString defaultValue;
         QString intent;
         QString automationGroup;
+        QString pathMode;
+        QString fileFilter;
+        QString baseDir;
         QStringList options;
         bool sensitive = false;
+        bool mustExist = false;
     };
 
     explicit PromptDialog(const Spec &spec, QWidget *parent = nullptr);
@@ -27,11 +31,17 @@ private:
     void buildChoiceUi();
     void buildInputUi();
     void buildConfirmUi();
+    void buildFileUi();
+    void chooseFilePath();
 
     QString m_type;
     QString m_defaultValue;
     QString m_response;
     QStringList m_options;
+    QString m_pathMode;
+    QString m_fileFilter;
+    QString m_baseDir;
     bool m_sensitive = false;
+    bool m_mustExist = false;
     QLineEdit *m_input = nullptr;
 };

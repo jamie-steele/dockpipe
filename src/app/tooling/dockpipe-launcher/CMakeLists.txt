@@ -31,6 +31,7 @@ set(DOCKPIPE_LAUNCHER_SOURCES
     src/SettingsDialog.cpp
     src/LogViewerDialog.cpp
     src/PromptDialog.cpp
+    src/WorkflowLaunchDialog.cpp
     src/DockerObservabilityWidget.cpp
     src/ContextRowWidget.cpp
     src/EditContextDialog.cpp

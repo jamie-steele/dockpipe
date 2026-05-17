@@ -53,6 +53,7 @@ private slots:
     void onOpenSettings();
     void onManagePackages();
     void onBasicLaunch(const QString &workflowId);
+    void onBasicConfigure(const QString &workflowId);
     void onBasicBackHome();
     void onBasicOpenRecent(const QString &absPath);
     void onBasicContinueLast();
@@ -75,6 +76,9 @@ private:
     void updateBasicPage();
     bool hasContext(const Context &c) const;
     Context *findContext(const QString &workdir, const QString &workflow, const QString &workflowFile);
+    Context *ensureBasicWorkflowContext(const QString &workflowId);
+    WorkflowMeta findWorkflowMeta(const QString &workdir, const QString &workflowId, const QString &workflowFile) const;
+    bool configureContextForWorkflow(Context &ctx, const WorkflowMeta &meta, bool forceDialog = false);
     Context *findStoredContextForDisplay(const Context &display);
     Context *ensureStoredContextForDisplay(const Context &display);
     Context *currentAdvancedDisplayContext();
@@ -101,6 +105,7 @@ private:
     QLabel *m_hint = nullptr;
     QLineEdit *m_search = nullptr;
     QTimer *m_advancedSearchTimer = nullptr;
+    QTimer *m_basicLaunchingTimer = nullptr;
     QLabel *m_consoleTitle = nullptr;
     QLabel *m_consoleMeta = nullptr;
     QPlainTextEdit *m_console = nullptr;

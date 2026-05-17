@@ -345,12 +345,14 @@ func Run(argv []string, baseEnviron []string) error {
 	var preFromResolver, actFromResolver string
 	hostIsolate := ""
 	resolverWorkflow := ""
+	isolationProfileEnv := map[string]string(nil)
 	var resolverEnvHint string
 	if rtName != "" || rsName != "" {
 		rm, err := infrastructure.LoadIsolationProfile(repoRoot, rtName, rsName)
 		if err != nil {
 			return fmt.Errorf("isolation profile: %w", err)
 		}
+		isolationProfileEnv = rm
 		ra := domain.FromResolverMap(rm)
 		resolverEnvHint = ra.EnvHint
 		if rtName != "" && rsName != "" {
@@ -713,8 +715,10 @@ func Run(argv []string, baseEnviron []string) error {
 	}
 
 	if !stepsMode && hostIsolate != "" {
-		if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {
-			return err
+		if hostDelegateRequiresDocker(isolationProfileEnv) {
+			if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {
+				return err
+			}
 		}
 		scriptAbs := resolveWorkflowAppFn(hostIsolate, wfRoot, repoRoot, projectRoot)
 		if _, err := os.Stat(scriptAbs); err != nil {
@@ -725,9 +729,18 @@ func Run(argv []string, baseEnviron []string) error {
 		if commitOnHost && strings.TrimSpace(envMap["DOCKPIPE_WORKDIR"]) != "" {
 			fmt.Fprintf(os.Stderr, "[dockpipe] Mount /work ← %s\n", envMap["DOCKPIPE_WORKDIR"])
 		}
-		if err := runHostScriptAppFn(scriptAbs, envSliceWithScriptContext(envSlice, scriptAbs)); err != nil {
+		hostEnv := hostDelegateEnvSlice(
+			envSliceWithScriptContext(envSlice, scriptAbs),
+			isolationProfileEnv,
+			shellJoinArgs(rest),
+			filepath.Join(workHost, domain.DefaultOutputsEnvRel),
+		)
+		if err := runHostScriptAppFn(scriptAbs, hostEnv); err != nil {
 			return err
 		}
+		dockerEnvMap := domain.EnvSliceToMap(opts.ExtraEnvLines)
+		applyOutputsFile(filepath.Join(workHost, domain.DefaultOutputsEnvRel), envMap, dockerEnvMap, locked, nil, "")
+		envSlice = domain.EnvMapToSlice(envMap)
 		if strategyHandlesCommit {
 			mergeCommitEnvFromLines(envMap, opts.ExtraEnvLines)
 			applyBranchPrefix(envMap, profileLabel, effectiveTemplate)
