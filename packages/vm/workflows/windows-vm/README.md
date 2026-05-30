@@ -10,6 +10,7 @@ What it does:
 - defaults to Windows 11-friendly VM requirements with TPM and secure boot enabled
 - defaults the guest disk to `sata` so Windows setup sees the install disk without manual driver loading
 - defaults the guest network adapter to `e1000e` so Windows setup sees networking without manual driver loading
+- supports host PCI / GPU passthrough through the packaged `qemu` resolver when devices are already isolated for `vfio-pci`
 - prompts for missing disk / firmware / ISO paths through the shared prompt primitive
 - prompts to reset writable UEFI firmware vars during installer runs when DockPipe detects stale boot-state reuse for the selected disk
 - runs a guest command over SSH inside the VM when you boot an existing image
@@ -45,6 +46,9 @@ Useful variables:
 - `DOCKPIPE_VM_CDROM`
 - `DOCKPIPE_VM_VIRTIO_ISO`
 - `DOCKPIPE_VM_DISPLAY`
+- `DOCKPIPE_VM_PCI_DEVICES` (comma-separated BDFs such as `0000:01:00.0,0000:01:00.1`)
+- `DOCKPIPE_VM_GPU_PRIMARY=true|false`
+- `DOCKPIPE_VM_ALLOW_BOOT_VGA=true|false`
 - `DOCKPIPE_VM_PERSISTENCE=ephemeral|persistent`
 - `DOCKPIPE_VM_HOSTFWD`
 - `DOCKPIPE_VM_GUEST_COMMAND`
@@ -57,7 +61,16 @@ Resolver-owned defaults:
 - default network adapter: `e1000e`
 - default TPM mode: `required`
 - default secure boot mode: `required`
-- default CPUs / memory: `4` / `8G`
+- default CPUs / memory: `4` / `12G`
+- optional host PCI passthrough via `vfio-pci`
+
+GPU / PCI passthrough notes:
+
+- DockPipe does not bundle VFIO kernel support or IOMMU firmware settings for you
+- DockPipe validates that the selected devices exist and are using `vfio-pci`
+- if they are not yet on `vfio-pci`, DockPipe can now prompt to help rebind them for the current host session
+- if a selected device is the host boot/display adapter, DockPipe asks for explicit confirmation unless you set `DOCKPIPE_VM_ALLOW_BOOT_VGA=true`
+- common GPU passthrough pairs include the display function and HDMI/DP audio function, for example `0000:01:00.0,0000:01:00.1`
 
 If you want to avoid prompts entirely, set the fields you already know in YAML. For example, this suppresses the image-vs-ISO prompt and the disk-size prompt:
 
@@ -94,4 +107,11 @@ dockpipe --workflow windows-vm --var DOCKPIPE_VM_GUEST_COMMAND='Get-ComputerInfo
 dockpipe --workflow windows-vm \
   --var DOCKPIPE_VM_PERSISTENCE=persistent \
   --var DOCKPIPE_VM_HOSTFWD='tcp::3389-:3389' --
+```
+
+```bash
+dockpipe --workflow windows-vm \
+  --var DOCKPIPE_VM_MEMORY=16G \
+  --var DOCKPIPE_VM_PCI_DEVICES='0000:01:00.0,0000:01:00.1' \
+  --var DOCKPIPE_VM_GPU_PRIMARY=true --
 ```

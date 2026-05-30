@@ -230,6 +230,180 @@ vmimage_confirm_host_network_exposure() {
   [[ "$answer" == "yes" ]] || vmimage_die "stopped before exposing VM ports on the host"
 }
 
+vmimage_pci_devices_csv() {
+  vmimage_env_or_resolver "DOCKPIPE_VM_PCI_DEVICES" "DOCKPIPE_RESOLVER_VM_PCI_DEVICES"
+}
+
+vmimage_pci_primary_mode() {
+  local mode
+  mode="$(vmimage_env_or_resolver "DOCKPIPE_VM_GPU_PRIMARY" "DOCKPIPE_RESOLVER_VM_GPU_PRIMARY")"
+  if vmimage_truthy "$mode"; then
+    printf 'on\n'
+  else
+    printf 'off\n'
+  fi
+}
+
+vmimage_allow_boot_vga_passthrough() {
+  local allow
+  allow="$(vmimage_env_or_resolver "DOCKPIPE_VM_ALLOW_BOOT_VGA" "DOCKPIPE_RESOLVER_VM_ALLOW_BOOT_VGA")"
+  vmimage_truthy "$allow"
+}
+
+vmimage_normalize_pci_bdf() {
+  local raw="${1,,}"
+  raw="${raw// /}"
+  case "$raw" in
+    0000:??:??.?|[0-9a-f][0-9a-f][0-9a-f][0-9a-f]:[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f].[0-7])
+      printf '%s\n' "$raw"
+      ;;
+    ??:??.?|[0-9a-f][0-9a-f]:[0-9a-f][0-9a-f].[0-7])
+      printf '0000:%s\n' "$raw"
+      ;;
+    *)
+      vmimage_die "unsupported PCI device id ${1} (use values like 0000:01:00.0 or 01:00.0)"
+      ;;
+  esac
+}
+
+vmimage_confirm_gpu_passthrough() {
+  local devices="$1"
+  local answer
+  answer="$(
+    vmimage_prompt_confirm \
+      "vmimage.gpu-passthrough" \
+      "Attach Host PCI Devices To VM?" \
+      "This VM run is configured to pass host PCI device(s) through to the guest: ${devices}. DockPipe expects them to already be isolated for VFIO, and the host may lose access to them while the VM is running." \
+      no \
+      destructive \
+      vm-pci \
+      yes
+  )" || vmimage_die "prompt failed for GPU passthrough"
+  [[ "$answer" == "yes" ]] || vmimage_die "stopped before attaching host PCI devices to the VM"
+}
+
+vmimage_confirm_boot_vga_passthrough() {
+  local device="$1"
+  local answer
+  answer="$(
+    vmimage_prompt_confirm \
+      "vmimage.boot-vga" \
+      "Pass Through Boot VGA Device?" \
+      "PCI device ${device} appears to be a host boot/display adapter. Passing it through can blank or destabilize the host display unless you intentionally prepared an alternate GPU or console path." \
+      no \
+      destructive \
+      vm-boot-vga \
+      yes
+  )" || vmimage_die "prompt failed for boot VGA passthrough"
+  [[ "$answer" == "yes" ]] || vmimage_die "stopped before passing through host boot VGA device ${device}"
+}
+
+vmimage_prompt_prepare_pci_passthrough() {
+  local devices="$1"
+  local answer
+  answer="$(
+    vmimage_prompt_confirm \
+      "vmimage.prepare-pci" \
+      "Prepare Host PCI Devices For Passthrough?" \
+      "DockPipe found PCI device(s) that are not yet bound to vfio-pci: ${devices}. Allow DockPipe to help rebind them for passthrough now?" \
+      no \
+      host-mutation \
+      vm-pci-prepare \
+      yes
+  )" || vmimage_die "prompt failed for PCI passthrough preparation"
+  [[ "$answer" == "yes" ]]
+}
+
+vmimage_pci_prepare_script() {
+  local devices_csv="$1"
+  local script="" raw dev path vendor device
+  script+='set -euo pipefail\n'
+  script+='modprobe vfio-pci\n'
+  IFS=',' read -r -a prep_devices <<< "$devices_csv"
+  for raw in "${prep_devices[@]}"; do
+    raw="$(printf '%s' "$raw" | xargs)"
+    [[ -n "$raw" ]] || continue
+    dev="$(vmimage_normalize_pci_bdf "$raw")"
+    path="/sys/bus/pci/devices/${dev}"
+    vendor="$(cat "${path}/vendor")"
+    device="$(cat "${path}/device")"
+    script+="printf 'Preparing ${dev} for vfio-pci...\\n'\n"
+    script+="if [ -L '${path}/driver' ]; then echo '${dev}' > '${path}/driver/unbind'; fi\n"
+    script+="printf 'vfio-pci' > '${path}/driver_override'\n"
+    script+="printf '%s' '${vendor} ${device}' > /sys/bus/pci/drivers/vfio-pci/new_id 2>/dev/null || true\n"
+    script+="echo '${dev}' > /sys/bus/pci/drivers/vfio-pci/bind\n"
+  done
+  script+='printf "\\nDockPipe PCI passthrough prep complete.\\n"\n'
+  printf '%b' "$script"
+}
+
+vmimage_prepare_pci_passthrough_now() {
+  local devices_csv="$1"
+  local script
+  script="$(vmimage_pci_prepare_script "$devices_csv")"
+  if [[ "$(id -u)" == "0" ]]; then
+    bash -lc "$script"
+    return 0
+  fi
+  if [[ -t 0 && -t 1 ]]; then
+    sudo bash -lc "$script"
+    return 0
+  fi
+  if vmimage_launch_install_terminal "sudo bash -lc $(vmimage_single_quote "$script")"; then
+    vmimage_die "host PCI passthrough preparation terminal launched. After it completes, rerun windows-vm."
+  fi
+  vmimage_die "cannot prepare PCI passthrough devices without root access. Run as root or rebind the devices to vfio-pci manually."
+}
+
+vmimage_validate_pci_passthrough() {
+  local devices_csv="$1"
+  [[ -n "$devices_csv" ]] || return 0
+  [[ -d /sys/kernel/iommu_groups ]] || vmimage_die "PCI passthrough requires IOMMU support; /sys/kernel/iommu_groups is missing on this host"
+  vmimage_confirm_gpu_passthrough "$devices_csv"
+  local raw dev path driver driver_name
+  local need_prepare=()
+  IFS=',' read -r -a raw_devices <<< "$devices_csv"
+  for raw in "${raw_devices[@]}"; do
+    raw="$(printf '%s' "$raw" | xargs)"
+    [[ -n "$raw" ]] || continue
+    dev="$(vmimage_normalize_pci_bdf "$raw")"
+    path="/sys/bus/pci/devices/${dev}"
+    [[ -d "$path" ]] || vmimage_die "host PCI device not found for passthrough: ${dev}"
+    if [[ -L "${path}/driver" ]]; then
+      driver="$(readlink -f "${path}/driver")"
+      driver_name="$(basename "$driver")"
+    else
+      driver_name=""
+    fi
+    if [[ -f "${path}/boot_vga" ]] && [[ "$(cat "${path}/boot_vga")" == "1" ]] && ! vmimage_allow_boot_vga_passthrough; then
+      vmimage_confirm_boot_vga_passthrough "$dev"
+    fi
+    if [[ "$driver_name" != "vfio-pci" ]]; then
+      need_prepare+=("${dev}")
+    fi
+  done
+  if (( ${#need_prepare[@]} > 0 )); then
+    local need_prepare_csv
+    need_prepare_csv="$(IFS=','; printf '%s' "${need_prepare[*]}")"
+    if vmimage_prompt_prepare_pci_passthrough "$need_prepare_csv"; then
+      vmimage_prepare_pci_passthrough_now "$need_prepare_csv"
+    fi
+  fi
+  for raw in "${raw_devices[@]}"; do
+    raw="$(printf '%s' "$raw" | xargs)"
+    [[ -n "$raw" ]] || continue
+    dev="$(vmimage_normalize_pci_bdf "$raw")"
+    path="/sys/bus/pci/devices/${dev}"
+    if [[ -L "${path}/driver" ]]; then
+      driver="$(readlink -f "${path}/driver")"
+      driver_name="$(basename "$driver")"
+    else
+      driver_name=""
+    fi
+    [[ "$driver_name" == "vfio-pci" ]] || vmimage_die "PCI device ${dev} is not bound to vfio-pci (current driver: ${driver_name:-none}). Bind the device to vfio-pci before using DockPipe GPU passthrough."
+  done
+}
+
 vmimage_terminal_launcher() {
   if command -v x-terminal-emulator >/dev/null 2>&1; then
     printf 'x-terminal-emulator\n'
@@ -1287,6 +1461,7 @@ vmimage_run_qemu_kvm() {
   vmimage_ensure_secure_boot_firmware "$boot_source"
   vmimage_confirm_user_supplied_media_rights
   vmimage_confirm_host_network_exposure
+  vmimage_validate_pci_passthrough "$(vmimage_pci_devices_csv)"
   if [[ "$boot_source" == "image" ]]; then
     vmimage_confirm_persistent_disk_use
   else
@@ -1329,6 +1504,7 @@ vmimage_run_qemu_kvm() {
   command -v "$qemu_bin" >/dev/null 2>&1 || vmimage_die "${qemu_bin} not found"
 
   local disk disk_fmt prepared cpu mem ssh_port ssh_hostfwd state_dir pidfile monitor disk_bus net_device machine_uuid net_mac disk_serial
+  local pci_devices_csv pci_primary_mode
   disk="$(vmimage_resolve_path "$DOCKPIPE_VM_DISK")"
   if [[ "$boot_source" == "installer-iso" ]]; then
     vmimage_ensure_disk_exists_for_install "$disk"
@@ -1346,6 +1522,8 @@ vmimage_run_qemu_kvm() {
   machine_uuid="$(vmimage_machine_uuid)"
   net_mac="$(vmimage_net_mac)"
   disk_serial="$(vmimage_disk_serial)"
+  pci_devices_csv="$(vmimage_pci_devices_csv)"
+  pci_primary_mode="$(vmimage_pci_primary_mode)"
   ssh_port="$(vmimage_ssh_base)"
   state_dir="$(vmimage_state_dir)"
   pidfile="${state_dir}/qemu-${DOCKPIPE_RUN_ID:-vm}.pid"
@@ -1452,6 +1630,22 @@ vmimage_run_qemu_kvm() {
     )
   fi
 
+  if [[ -n "$pci_devices_csv" ]]; then
+    local raw_pci normalized_pci first_pci=1
+    IFS=',' read -r -a passthrough_devices <<< "$pci_devices_csv"
+    for raw_pci in "${passthrough_devices[@]}"; do
+      raw_pci="$(printf '%s' "$raw_pci" | xargs)"
+      [[ -n "$raw_pci" ]] || continue
+      normalized_pci="$(vmimage_normalize_pci_bdf "$raw_pci")"
+      if (( first_pci )) && [[ "$pci_primary_mode" == "on" ]]; then
+        qemu_args+=(-device "vfio-pci,host=${normalized_pci},x-vga=on")
+      else
+        qemu_args+=(-device "vfio-pci,host=${normalized_pci}")
+      fi
+      first_pci=0
+    done
+  fi
+
   vmimage_log "backend=${backend} qemu_bin=${qemu_bin}"
   vmimage_log "boot_source=${boot_source}"
   vmimage_log "disk_bus=${disk_bus}"
@@ -1459,6 +1653,9 @@ vmimage_run_qemu_kvm() {
   vmimage_log "machine_uuid=${machine_uuid}"
   vmimage_log "net_mac=${net_mac}"
   vmimage_log "disk_serial=${disk_serial}"
+  if [[ -n "$pci_devices_csv" ]]; then
+    vmimage_log "pci_devices=${pci_devices_csv} gpu_primary=${pci_primary_mode}"
+  fi
   vmimage_log "tpm=$(vmimage_tpm_mode) secure_boot=$(vmimage_secure_boot_mode)"
   vmimage_log "disk=${disk} disk_format=${disk_fmt} persistence=$(vmimage_env_or_resolver "DOCKPIPE_VM_PERSISTENCE" "DOCKPIPE_RESOLVER_VM_PERSISTENCE" "ephemeral")"
   vmimage_log "ssh_port=${ssh_port} cpus=${cpu} memory=${mem} accel=${DOCKPIPE_VM_ACCEL:-kvm} exec_mode=$(vmimage_env_or_resolver "DOCKPIPE_VM_EXEC_MODE" "DOCKPIPE_RESOLVER_VM_EXEC_MODE" "raw")"

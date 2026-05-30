@@ -39,6 +39,7 @@
 #include <QProcessEnvironment>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QSet>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStatusBar>
@@ -137,6 +138,53 @@ QStringList formatEnvAssignments(const QMap<QString, QString> &values)
         if (it.key().trimmed().isEmpty() || it.value().trimmed().isEmpty())
             continue;
         out.append(it.key() + QStringLiteral("=") + it.value());
+    }
+    return out;
+}
+
+QSet<QString> workflowModeledEnvNames(const WorkflowMeta &meta)
+{
+    QSet<QString> out;
+    for (const WorkflowInputMeta &input : meta.inputs) {
+        const QString envName = input.envName.trimmed().toUpper();
+        if (!envName.isEmpty())
+            out.insert(envName);
+    }
+    return out;
+}
+
+QSet<QString> workflowModeledEnvPrefixes(const WorkflowMeta &meta)
+{
+    QSet<QString> out;
+    for (const WorkflowInputMeta &input : meta.inputs) {
+        const QString envName = input.envName.trimmed().toUpper();
+        const int lastUnderscore = envName.lastIndexOf(QLatin1Char('_'));
+        if (lastUnderscore > 0)
+            out.insert(envName.left(lastUnderscore + 1));
+    }
+    return out;
+}
+
+QMap<QString, QString> pruneStaleWorkflowValues(const WorkflowMeta &meta, const QMap<QString, QString> &currentValues)
+{
+    if (meta.inputs.isEmpty())
+        return currentValues;
+    const QSet<QString> modeledNames = workflowModeledEnvNames(meta);
+    const QSet<QString> modeledPrefixes = workflowModeledEnvPrefixes(meta);
+    QMap<QString, QString> out = currentValues;
+    for (auto it = out.begin(); it != out.end();) {
+        const QString key = it.key().trimmed().toUpper();
+        bool inModeledNamespace = false;
+        for (const QString &prefix : modeledPrefixes) {
+            if (key.startsWith(prefix)) {
+                inModeledNamespace = true;
+                break;
+            }
+        }
+        if (inModeledNamespace && !modeledNames.contains(key))
+            it = out.erase(it);
+        else
+            ++it;
     }
     return out;
 }
@@ -811,12 +859,17 @@ bool MainWindow::configureContextForWorkflow(Context &ctx, const WorkflowMeta &m
     if (meta.workflowId.trimmed().isEmpty() || meta.inputs.isEmpty())
         return true;
     const QMap<QString, QString> currentValues = parseEnvAssignments(ctx.extraDockpipeEnv);
-    if (!forceDialog && !workflowNeedsConfigPrompt(meta, currentValues))
+    const QMap<QString, QString> prunedValues = pruneStaleWorkflowValues(meta, currentValues);
+    if (prunedValues != currentValues) {
+        ctx.extraDockpipeEnv = formatEnvAssignments(prunedValues);
+        m_store.save();
+    }
+    if (!forceDialog && !workflowNeedsConfigPrompt(meta, prunedValues))
         return true;
-    WorkflowLaunchDialog dialog(meta, currentValues, this);
+    WorkflowLaunchDialog dialog(meta, prunedValues, this);
     if (dialog.exec() != QDialog::Accepted)
         return false;
-    QMap<QString, QString> merged = currentValues;
+    QMap<QString, QString> merged = prunedValues;
     const QMap<QString, QString> edited = dialog.values();
     for (auto it = edited.begin(); it != edited.end(); ++it) {
         if (it.value().trimmed().isEmpty())

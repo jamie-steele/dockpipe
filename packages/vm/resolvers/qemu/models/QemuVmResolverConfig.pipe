@@ -88,7 +88,20 @@ public Class QemuVmResolverConfig
     /// <summary>Default guest memory allocation.</summary>
     [DisplayName = "Memory"]
     [Group = "Compute"]
-    public string Memory = "8G";
+    public string Memory = "12G";
+    /// <summary>Comma-separated host PCI devices to pass through with vfio-pci, such as a GPU and its audio function.</summary>
+    [DisplayName = "PCI Passthrough Devices"]
+    [Group = "Passthrough"]
+    [Placeholder = "0000:01:00.0,0000:01:00.1"]
+    public string PciDevices = "";
+    /// <summary>Set true to make the first passthrough PCI device the primary VGA device for the guest.</summary>
+    [DisplayName = "Primary GPU Passthrough"]
+    [Group = "Passthrough"]
+    public string GpuPrimary = "";
+    /// <summary>Set true only when you intentionally prepared host access without the boot/display GPU.</summary>
+    [DisplayName = "Allow Boot VGA Passthrough"]
+    [Group = "Passthrough"]
+    public string AllowBootVga = "";
     /// <summary>Optional additional host port forwards, comma-separated.</summary>
     [DisplayName = "Host Port Forwards"]
     [Group = "Network"]
