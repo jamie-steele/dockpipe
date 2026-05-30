@@ -193,9 +193,45 @@ QLabel#dockerStatusPill[state="running"] {
     color: #7ed0ff;
 }
 
+QLabel#dockerStatusPill[state="paused"] {
+    background-color: rgba(245, 158, 11, 0.22);
+    color: #f6c56a;
+}
+
+QLabel#dockerStatusPill[state="restarting"] {
+    background-color: rgba(168, 85, 247, 0.24);
+    color: #d3adff;
+}
+
+QLabel#dockerStatusPill[state="exited"],
+QLabel#dockerStatusPill[state="created"],
 QLabel#dockerStatusPill[state="other"] {
     background-color: #353941;
     color: #d0d6df;
+}
+
+QMenu#dockerContextMenu {
+    background-color: #20242b;
+    color: #e7ebf2;
+    border: 1px solid #343841;
+    border-radius: 12px;
+    padding: 8px;
+}
+
+QMenu#dockerContextMenu::item {
+    border-radius: 8px;
+    padding: 8px 16px 8px 12px;
+    margin: 2px 0;
+}
+
+QMenu#dockerContextMenu::item:selected {
+    background-color: rgba(31, 125, 217, 0.24);
+}
+
+QMenu#dockerContextMenu::separator {
+    height: 1px;
+    background: #343841;
+    margin: 8px 4px;
 }
 
 QTabWidget::pane,

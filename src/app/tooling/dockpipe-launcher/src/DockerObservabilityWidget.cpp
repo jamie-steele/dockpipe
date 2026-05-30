@@ -7,10 +7,13 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMenu>
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QPushButton>
+#include <QShowEvent>
 #include <QSplitter>
+#include <QStyle>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -65,6 +68,50 @@ QTableWidgetItem *statusItem(const QString &text)
     return item;
 }
 
+QString normalizeContainerState(QString state, const QString &statusText)
+{
+    state = state.trimmed().toLower();
+    const QString lowerStatus = statusText.toLower();
+    if (lowerStatus.contains(QStringLiteral("healthy")))
+        return QStringLiteral("healthy");
+    if (state == QStringLiteral("running"))
+        return QStringLiteral("running");
+    if (state == QStringLiteral("paused"))
+        return QStringLiteral("paused");
+    if (state == QStringLiteral("restarting"))
+        return QStringLiteral("restarting");
+    if (state == QStringLiteral("exited"))
+        return QStringLiteral("exited");
+    if (state == QStringLiteral("created"))
+        return QStringLiteral("created");
+    return QStringLiteral("other");
+}
+
+QLabel *makeStatusPill(const QString &text, const QString &state, QWidget *parent)
+{
+    auto *label = new QLabel(text, parent);
+    label->setObjectName(QStringLiteral("dockerStatusPill"));
+    label->setProperty("state", state);
+    label->setAlignment(Qt::AlignCenter);
+    return label;
+}
+
+QIcon statusIconForState(const QString &state, QWidget *widget)
+{
+    const QStyle *style = widget ? widget->style() : nullptr;
+    if (!style)
+        return {};
+    if (state == QStringLiteral("healthy") || state == QStringLiteral("running"))
+        return style->standardIcon(QStyle::SP_DialogApplyButton);
+    if (state == QStringLiteral("paused"))
+        return style->standardIcon(QStyle::SP_MediaPause);
+    if (state == QStringLiteral("restarting"))
+        return style->standardIcon(QStyle::SP_BrowserReload);
+    if (state == QStringLiteral("exited") || state == QStringLiteral("created"))
+        return style->standardIcon(QStyle::SP_MediaStop);
+    return style->standardIcon(QStyle::SP_MessageBoxInformation);
+}
+
 } // namespace
 
 DockerObservabilityWidget::DockerObservabilityWidget(QWidget *parent) : QWidget(parent)
@@ -86,14 +133,14 @@ void DockerObservabilityWidget::buildUi()
 
     auto *title = new QLabel(tr("Docker observability"));
     title->setObjectName(QStringLiteral("appTitle"));
-    auto *subtitle = new QLabel(tr("Readonly containers, logs, bindings, networks, and volumes. Refreshes only when you land here."));
+    auto *subtitle = new QLabel(tr("Inspect containers, logs, bindings, networks, and volumes. Right-click a container for quick actions."));
     subtitle->setObjectName(QStringLiteral("appSubtitle"));
     subtitle->setWordWrap(true);
     heroLay->addWidget(title);
     heroLay->addWidget(subtitle);
 
     auto *topRow = new QHBoxLayout;
-    m_status = new QLabel(tr("Readonly Docker observability. Opens cold and refreshes on demand."));
+    m_status = new QLabel(tr("Docker observability opens cold. Right-click a container row to start or stop it."));
     m_status->setWordWrap(true);
     m_search = new QLineEdit(this);
     m_search->setPlaceholderText(tr("Search containers…"));
@@ -152,6 +199,8 @@ QWidget *DockerObservabilityWidget::buildContainersPage()
     m_containers->setAlternatingRowColors(true);
     m_containers->setShowGrid(false);
     m_containers->verticalHeader()->setVisible(false);
+    m_containers->verticalHeader()->setDefaultSectionSize(36);
+    m_containers->setContextMenuPolicy(Qt::CustomContextMenu);
 
     auto *detailSplitter = new QSplitter(Qt::Horizontal, splitter);
     detailSplitter->setChildrenCollapsible(false);
@@ -169,6 +218,8 @@ QWidget *DockerObservabilityWidget::buildContainersPage()
     layout->addWidget(splitter, 1);
 
     connect(m_containers, &QTableWidget::itemSelectionChanged, this, &DockerObservabilityWidget::onContainersSelectionChanged);
+    connect(m_containers, &QWidget::customContextMenuRequested, this,
+            &DockerObservabilityWidget::onContainersContextMenuRequested);
     return page;
 }
 
@@ -269,7 +320,9 @@ void DockerObservabilityWidget::refresh()
     loadNetworks();
     loadVolumes();
     updateSummary();
-    setStatus(tr("Readonly Docker observability refreshed."));
+    updateContainerActionState();
+    m_hasLoadedOnce = true;
+    setStatus(tr("Docker observability refreshed."));
 }
 
 void DockerObservabilityWidget::setActive(bool active)
@@ -287,7 +340,15 @@ void DockerObservabilityWidget::setActive(bool active)
         m_networkDetails->clear();
     if (m_volumeDetails)
         m_volumeDetails->clear();
-    setStatus(tr("Readonly Docker observability. Opens cold and refreshes on demand."));
+    updateContainerActionState();
+    setStatus(tr("Docker observability opens cold and refreshes on demand."));
+}
+
+void DockerObservabilityWidget::showEvent(QShowEvent *event)
+{
+    QWidget::showEvent(event);
+    if (!m_hasLoadedOnce && isVisible())
+        refresh();
 }
 
 void DockerObservabilityWidget::updateSummary()
@@ -314,35 +375,87 @@ void DockerObservabilityWidget::applyContainerFilter()
         const bool hidden = !needle.isEmpty() && !values.join(QLatin1Char(' ')).toCaseFolded().contains(needle);
         m_containers->setRowHidden(row, hidden);
     }
+    updateContainerActionState();
+}
+
+void DockerObservabilityWidget::updateContainerActionState()
+{
+    const QString state = selectedContainerState();
+    Q_UNUSED(state);
+}
+
+QString DockerObservabilityWidget::selectedContainerId() const
+{
+    if (!m_containers)
+        return {};
+    const auto selected = m_containers->selectedItems();
+    if (selected.isEmpty())
+        return {};
+    return selected.first()->data(Qt::UserRole).toString();
+}
+
+QString DockerObservabilityWidget::selectedContainerName() const
+{
+    if (!m_containers)
+        return {};
+    const auto selected = m_containers->selectedItems();
+    if (selected.isEmpty())
+        return {};
+    return selected.first()->text().trimmed();
+}
+
+QString DockerObservabilityWidget::selectedContainerState() const
+{
+    if (!m_containers)
+        return {};
+    const auto selected = m_containers->selectedItems();
+    if (selected.isEmpty())
+        return {};
+    return selected.first()->data(Qt::UserRole + 1).toString();
 }
 
 void DockerObservabilityWidget::loadContainers()
 {
-    const CommandResult result = runDocker({QStringLiteral("ps"),
+    const CommandResult result = runDocker({QStringLiteral("container"),
+                                            QStringLiteral("ls"),
+                                            QStringLiteral("--all"),
                                             QStringLiteral("--format"),
                                             QStringLiteral("{{json .}}")});
     m_containers->setRowCount(0);
     if (!result.ok) {
         m_containerDetails->setPlainText(tr("Could not query docker containers.\n\n%1").arg(result.stderrText.trimmed()));
+        updateContainerActionState();
         return;
     }
 
     const QStringList lines = result.stdoutText.split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+    if (lines.isEmpty()) {
+        m_containerDetails->setPlainText(tr("No Docker containers found. This view includes stopped containers too."));
+    }
     for (const QString &line : lines) {
         const QJsonDocument doc = QJsonDocument::fromJson(line.toUtf8());
         if (!doc.isObject())
             continue;
         const QJsonObject o = doc.object();
+        const QString statusText = o.value(QStringLiteral("Status")).toString();
+        const QString state = normalizeContainerState(o.value(QStringLiteral("State")).toString(), statusText);
         const int row = m_containers->rowCount();
         m_containers->insertRow(row);
-        m_containers->setItem(row, 0, roItem(o.value(QStringLiteral("Names")).toString(),
-                                             o.value(QStringLiteral("ID")).toString()));
-        m_containers->setItem(row, 1, statusItem(o.value(QStringLiteral("Status")).toString()));
+        auto *nameItem = roItem(o.value(QStringLiteral("Names")).toString(), o.value(QStringLiteral("ID")).toString());
+        nameItem->setData(Qt::UserRole + 1, state);
+        nameItem->setIcon(statusIconForState(state, m_containers));
+        m_containers->setItem(row, 0, nameItem);
+        auto *stateItem = statusItem(QString());
+        stateItem->setData(Qt::UserRole + 1, state);
+        stateItem->setData(Qt::ToolTipRole, statusText);
+        m_containers->setItem(row, 1, stateItem);
+        m_containers->setCellWidget(row, 1, makeStatusPill(statusText, state, m_containers));
         m_containers->setItem(row, 2, roItem(o.value(QStringLiteral("Image")).toString()));
         m_containers->setItem(row, 3, roItem(o.value(QStringLiteral("Ports")).toString()));
         m_containers->setItem(row, 4, roItem(o.value(QStringLiteral("RunningFor")).toString()));
     }
     applyContainerFilter();
+    updateContainerActionState();
 }
 
 void DockerObservabilityWidget::loadNetworks()
@@ -445,12 +558,51 @@ void DockerObservabilityWidget::renderVolumeDetails(const QString &volumeName)
 
 void DockerObservabilityWidget::onContainersSelectionChanged()
 {
-    const auto selected = m_containers->selectedItems();
-    if (selected.isEmpty())
+    updateContainerActionState();
+    const QString containerId = selectedContainerId();
+    if (containerId.isEmpty())
         return;
-    const QString containerId = selected.first()->data(Qt::UserRole).toString();
-    if (!containerId.isEmpty())
+    renderContainerDetails(containerId);
+}
+
+void DockerObservabilityWidget::onContainersContextMenuRequested(const QPoint &pos)
+{
+    if (!m_containers)
+        return;
+    if (auto *item = m_containers->itemAt(pos))
+        m_containers->selectRow(item->row());
+    const QString containerId = selectedContainerId();
+    if (containerId.isEmpty())
+        return;
+
+    updateContainerActionState();
+    const QString state = selectedContainerState();
+    const QString name = selectedContainerName();
+
+    QMenu menu(this);
+    menu.setObjectName(QStringLiteral("dockerContextMenu"));
+
+    QAction *inspectAction = menu.addAction(style()->standardIcon(QStyle::SP_FileDialogDetailedView),
+                                            tr("Inspect %1").arg(name));
+    QAction *startAction = menu.addAction(style()->standardIcon(QStyle::SP_MediaPlay), tr("Start container"));
+    QAction *stopAction = menu.addAction(style()->standardIcon(QStyle::SP_MediaStop), tr("Stop container"));
+    menu.addSeparator();
+    QAction *refreshAction = menu.addAction(style()->standardIcon(QStyle::SP_BrowserReload), tr("Refresh Docker view"));
+
+    startAction->setEnabled(state != QStringLiteral("healthy") && state != QStringLiteral("running"));
+    stopAction->setEnabled(state == QStringLiteral("healthy") || state == QStringLiteral("running")
+                           || state == QStringLiteral("paused") || state == QStringLiteral("restarting"));
+
+    QAction *chosen = menu.exec(m_containers->viewport()->mapToGlobal(pos));
+    if (chosen == inspectAction) {
         renderContainerDetails(containerId);
+    } else if (chosen == startAction) {
+        onStartSelectedContainer();
+    } else if (chosen == stopAction) {
+        onStopSelectedContainer();
+    } else if (chosen == refreshAction) {
+        refresh();
+    }
 }
 
 void DockerObservabilityWidget::onNetworksSelectionChanged()
@@ -476,4 +628,44 @@ void DockerObservabilityWidget::onVolumesSelectionChanged()
 void DockerObservabilityWidget::onContainerSearchChanged(const QString &)
 {
     applyContainerFilter();
+}
+
+void DockerObservabilityWidget::onStartSelectedContainer()
+{
+    const QString containerId = selectedContainerId();
+    const QString containerName = selectedContainerName();
+    if (containerId.isEmpty())
+        return;
+
+    setStatus(tr("Starting %1…").arg(containerName.isEmpty() ? containerId : containerName));
+    const CommandResult result = runDocker({QStringLiteral("start"), containerId});
+    if (!result.ok) {
+        setStatus(tr("Could not start %1.").arg(containerName.isEmpty() ? containerId : containerName));
+        m_containerLogs->setPlainText(tr("Could not start container.\n\n%1").arg(result.stderrText.trimmed()));
+        return;
+    }
+
+    refresh();
+    renderContainerDetails(containerId);
+    setStatus(tr("Started %1.").arg(containerName.isEmpty() ? containerId : containerName));
+}
+
+void DockerObservabilityWidget::onStopSelectedContainer()
+{
+    const QString containerId = selectedContainerId();
+    const QString containerName = selectedContainerName();
+    if (containerId.isEmpty())
+        return;
+
+    setStatus(tr("Stopping %1…").arg(containerName.isEmpty() ? containerId : containerName));
+    const CommandResult result = runDocker({QStringLiteral("stop"), containerId});
+    if (!result.ok) {
+        setStatus(tr("Could not stop %1.").arg(containerName.isEmpty() ? containerId : containerName));
+        m_containerLogs->setPlainText(tr("Could not stop container.\n\n%1").arg(result.stderrText.trimmed()));
+        return;
+    }
+
+    refresh();
+    renderContainerDetails(containerId);
+    setStatus(tr("Stopped %1.").arg(containerName.isEmpty() ? containerId : containerName));
 }

@@ -19,11 +19,17 @@ public slots:
     void refresh();
     void setActive(bool active);
 
+protected:
+    void showEvent(QShowEvent *event) override;
+
 private slots:
     void onContainersSelectionChanged();
     void onNetworksSelectionChanged();
     void onVolumesSelectionChanged();
     void onContainerSearchChanged(const QString &text);
+    void onContainersContextMenuRequested(const QPoint &pos);
+    void onStartSelectedContainer();
+    void onStopSelectedContainer();
 
 private:
     struct CommandResult {
@@ -41,6 +47,10 @@ private:
     void setStatus(const QString &text);
     void updateSummary();
     void applyContainerFilter();
+    void updateContainerActionState();
+    QString selectedContainerId() const;
+    QString selectedContainerName() const;
+    QString selectedContainerState() const;
 
     void loadContainers();
     void loadNetworks();
@@ -66,4 +76,5 @@ private:
 
     QTableWidget *m_volumes = nullptr;
     QPlainTextEdit *m_volumeDetails = nullptr;
+    bool m_hasLoadedOnce = false;
 };
