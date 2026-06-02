@@ -173,6 +173,72 @@ pipeon_stack_image_stamp_file() {
   printf '%s/code-server-image.stamp\n' "$(pipeon_stack_state_dir)"
 }
 
+pipeon_stack_build_script() {
+  local repo_root
+  repo_root="$(pipeon_stack_repo_root)"
+  printf '%s/packages/pipeon/assets/scripts/build.sh\n' "$repo_root"
+}
+
+pipeon_stack_code_server_image_signature() {
+  local repo_root
+  repo_root="$(pipeon_stack_repo_root)"
+  python3 - "$repo_root" <<'PY'
+import hashlib
+import os
+import sys
+from pathlib import Path
+
+repo_root = Path(sys.argv[1]).resolve()
+
+paths = [
+    repo_root / "VERSION",
+    repo_root / "packages/pipeon/assets/scripts/build.sh",
+    repo_root / "packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server",
+    repo_root / "packages/pipeon/resolvers/pipeon/vscode-extension/code-server-user-settings.json",
+    repo_root / "packages/pipeon/resolvers/pipeon/vscode-extension/package.json",
+    repo_root / "packages/pipeon/resolvers/pipeon/vscode-extension/package-lock.json",
+    repo_root / "packages/pipeon/resolvers/pipeon/vscode-extension/tsconfig.json",
+    repo_root / "packages/pipeon/resolvers/pipeon/vscode-extension/src",
+    repo_root / "packages/pipeon/resolvers/pipeon/vscode-extension/types",
+    repo_root / "packages/pipeon/resolvers/pipeon/vscode-extension/scripts",
+    repo_root / "packages/pipeon/resolvers/pipeon/vscode-extension/images",
+    repo_root / "src/app/tooling/vscode-extensions/dockpipe-language-support",
+]
+
+exclude_parts = {"node_modules", "target", ".git", "dist", "build"}
+hasher = hashlib.sha256()
+
+def add_file(path: Path) -> None:
+    rel = path.relative_to(repo_root).as_posix()
+    hasher.update(rel.encode("utf-8"))
+    hasher.update(b"\0")
+    stat = path.stat()
+    hasher.update(str(stat.st_size).encode("utf-8"))
+    hasher.update(b"\0")
+    with path.open("rb") as fh:
+        while True:
+            chunk = fh.read(1024 * 1024)
+            if not chunk:
+                break
+            hasher.update(chunk)
+
+for path in paths:
+    if not path.exists():
+        continue
+    if path.is_file():
+        add_file(path)
+        continue
+    for child in sorted(path.rglob("*")):
+        if not child.is_file():
+            continue
+        if any(part in exclude_parts for part in child.parts):
+            continue
+        add_file(child)
+
+print(hasher.hexdigest())
+PY
+}
+
 ensure_pipeon_stack_state_dir() {
   mkdir -p "$(pipeon_stack_state_dir)"
 }

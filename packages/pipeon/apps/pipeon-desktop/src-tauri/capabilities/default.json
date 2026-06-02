@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Default Pipeon desktop capability set",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:default", "updater:default"]
 }

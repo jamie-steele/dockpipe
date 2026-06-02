@@ -44,6 +44,18 @@ Trigger options:
 5. Creates GitHub release and uploads artifacts
 6. If `dry_run=true`, uploads artifacts as workflow artifacts and skips release creation
 
+## Pipeon desktop updater boundary
+
+If/when this repo publishes `pipeon-desktop` updater artifacts, keep the updater scope narrow:
+
+- updater artifacts may replace the **Tauri desktop shell** only
+- updater artifacts must **not** bundle the Pipeon code-server image, Pipeon VSIX, stock VS Code, Cursor, or unrelated DockPipe/DorkPipe binaries
+
+Treat the Pipeon desktop shell and the Pipeon editor/runtime surface as **separate distribution lanes**:
+
+- **desktop shell** = signed Tauri updater artifacts plus a `latest.json` feed
+- **Pipeon surface** = explicit refresh/rebuild/restart flow for the code-server image, VSIX, and local first-party binaries
+
 > `release/releasenotes/<version>.md` is required. The workflow fails fast if it is missing.
 
 **Before merging to `master` (optional but recommended):** run **[manual QA](../../docs/qa/manual-qa.md)** for the platforms you changed.

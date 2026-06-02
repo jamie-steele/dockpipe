@@ -9,6 +9,7 @@ What it does:
 
 - resolves explicit **`dockpipe`**, **`dorkpipe`**, and **`mcpd`** binaries into the isolated stack runtime env
 - brings up an isolated DorkPipe stack container plus internal **Ollama** and **Postgres/pgvector**
+- refreshes the Pipeon-managed **code-server** surface when its packaged Pipeon inputs changed
 - enables NVIDIA GPU access for **Ollama** when the host can see NVIDIA devices, then verifies Docker actually attached them
 - exposes only a loopback MCP proxy sidecar on the host; the upstream DorkPipe MCP service stays private to the compose network over local TLS and keeps its auth secret out of the editor container
 - refreshes the Pipeon context bundle
@@ -48,6 +49,10 @@ the resolved mode and the last container-side verification status.
 
 For the full rebuild / refresh sequence when local changes are not showing up, see
 **`../pipeon/assets/docs/pipeon-refresh.md`**.
+
+By default, **`PIPEON_DEV_STACK_BUILD=auto`** refreshes the branded
+`dockpipe-code-server:latest` image when the relevant Pipeon-managed inputs
+changed. That update lane does not touch host VS Code or Cursor installations.
 
 ## Boundary
 

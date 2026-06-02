@@ -15,6 +15,35 @@ Current host affordances:
 - native clipboard bridge for the embedded Pipeon/code-server surface
 - file-picker behavior still depends on the browser/editor flow inside code-server
 
+## Update boundary
+
+`pipeon-desktop` updates the desktop shell only.
+
+It does **not** update:
+
+- the Pipeon code-server/editor surface
+- the Pipeon VS Code extension / VSIX
+- stock host VS Code or Cursor installs
+- unrelated DockPipe / DorkPipe binaries
+
+### Desktop updater configuration
+
+The updater stays inactive unless a release feed is configured at runtime.
+
+Environment variables:
+
+- `PIPEON_DESKTOP_UPDATER_PUBKEY` — Tauri updater public key content
+- `PIPEON_DESKTOP_UPDATER_ENDPOINTS` — comma- or newline-separated updater endpoints
+- `PIPEON_DESKTOP_UPDATER_ENDPOINT` — single-endpoint fallback
+- `PIPEON_DESKTOP_AUTO_UPDATE=0` — disable automatic startup checks
+
+If those values are absent, `pipeon-desktop` runs normally with no updater activity.
+
+### What still refreshes separately
+
+The Pipeon editor surface is handled by `pipeon-dev-stack`, which refreshes the
+Pipeon-managed code-server image when its packaged inputs change.
+
 ## Build
 
 From the repo root:

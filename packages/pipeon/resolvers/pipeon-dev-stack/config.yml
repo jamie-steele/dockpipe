@@ -14,6 +14,8 @@ steps:
       # Default behavior: when the Pipeon/code-server window closes, the stack tears down automatically.
       # Set to 0 only if you intentionally want warm backends left running.
       PIPEON_DEV_STACK_AUTODOWN: "1"
+      # auto = refresh the Pipeon-managed code-server surface when our image/VSIX inputs changed.
+      # always = force-refresh that surface every launch. never = trust the current image as-is.
       PIPEON_DEV_STACK_BUILD: "auto"
       # auto enables NVIDIA GPU for Ollama when host nvidia-smi works; set cpu/none to force CPU.
       PIPEON_DEV_STACK_GPU: "auto"

@@ -32,6 +32,7 @@ BUILD_MODE="${PIPEON_DEV_STACK_BUILD:-auto}"
 MODEL_NAME="${PIPEON_OLLAMA_MODEL:-${DOCKPIPE_OLLAMA_MODEL:-llama3.2}}"
 PIPEON_DESKTOP_BIN="${PIPEON_DESKTOP_BIN:-$(pipeon_stack_desktop_bin)}"
 PIPEON_DESKTOP_SCRIPT="$SCRIPT_DIR/desktop.sh"
+CODE_SERVER_IMAGE="${CODE_SERVER_IMAGE:-dockpipe-code-server:latest}"
 
 resolve_tool_bin() {
   local configured="${1:-}"
@@ -93,6 +94,65 @@ compose_cmd() {
   local args=()
   mapfile -t args < <(pipeon_stack_compose_base_args)
   docker compose "${args[@]}" "$@"
+}
+
+ensure_pipeon_code_server_surface() {
+  if [[ "$CODE_SERVER_IMAGE" != "dockpipe-code-server:latest" ]]; then
+    return 0
+  fi
+
+  local build_script stamp_file current_sig saved_sig have_image refresh_reason
+  build_script="$(pipeon_stack_build_script)"
+  stamp_file="$(pipeon_stack_image_stamp_file)"
+  current_sig="$(pipeon_stack_code_server_image_signature)"
+  saved_sig="$(cat "$stamp_file" 2>/dev/null || true)"
+  have_image=0
+  docker image inspect dockpipe-code-server:latest >/dev/null 2>&1 && have_image=1
+
+  case "$BUILD_MODE" in
+    always)
+      refresh_reason="forced by PIPEON_DEV_STACK_BUILD=always"
+      ;;
+    auto)
+      if [[ "$have_image" -eq 0 ]]; then
+        refresh_reason="Pipeon code-server image is missing"
+      elif [[ "$saved_sig" != "$current_sig" ]]; then
+        refresh_reason="Pipeon-managed code-server inputs changed"
+      else
+        refresh_reason=""
+      fi
+      ;;
+    never)
+      refresh_reason=""
+      ;;
+  esac
+
+  if [[ -z "$refresh_reason" ]]; then
+    return 0
+  fi
+
+  if [[ ! -x "$build_script" && ! -f "$build_script" ]]; then
+    echo "pipeon-dev-stack: missing Pipeon build helper at $build_script" >&2
+    return 1
+  fi
+
+  printf '[pipeon-dev-stack] refreshing Pipeon code-server surface: %s\n' "$refresh_reason" >&2
+  if (
+    cd "$PROJECT_DIR"
+    DOCKPIPE_WORKDIR="$WORKDIR" bash "$build_script" code-server-image
+  ); then
+    ensure_pipeon_stack_state_dir
+    printf '%s\n' "$current_sig" > "$stamp_file"
+    return 0
+  fi
+
+  if [[ "$have_image" -eq 1 ]]; then
+    printf '[pipeon-dev-stack] refresh failed; continuing with the existing dockpipe-code-server image.\n' >&2
+    return 0
+  fi
+
+  echo "pipeon-dev-stack: could not build the managed Pipeon code-server image and no existing image is available" >&2
+  return 1
 }
 
 wait_for_ollama_ready() {
@@ -175,7 +235,7 @@ esac
 
 case "$BUILD_MODE" in
   always)
-    printf '[pipeon-dev-stack] PIPEON_DEV_STACK_BUILD=always no longer rebuilds sibling source trees; supply DOCKPIPE_BIN, DORKPIPE_BIN, MCPD_BIN, and PIPEON_DESKTOP_BIN explicitly if needed.\n' >&2
+    printf '[pipeon-dev-stack] PIPEON_DEV_STACK_BUILD=always — force-refresh the Pipeon-managed code-server surface before launch.\n' >&2
     ;;
   auto)
     :
@@ -187,6 +247,10 @@ case "$BUILD_MODE" in
     exit 1
     ;;
 esac
+
+if ! ensure_pipeon_code_server_surface; then
+  exit 1
+fi
 
 if [[ ! -x "$DOCKPIPE_BIN" || ! -x "$DORKPIPE_BIN" || ! -x "$MCPD_BIN" ]]; then
   echo "pipeon-dev-stack: required binaries are missing after build step" >&2
