@@ -32,6 +32,133 @@ vmimage_env_or_resolver() {
   printf '%s\n' "$default_value"
 }
 
+vmimage_host_os() {
+  local uname_s
+  uname_s="$(uname -s 2>/dev/null || printf '')"
+  case "$uname_s" in
+    Linux) printf 'linux\n' ;;
+    MINGW*|MSYS*|CYGWIN*)
+      printf 'windows\n'
+      ;;
+    *)
+      if [[ -n "${WINDIR:-}" || -n "${OS:-}" && "${OS}" == "Windows_NT" ]]; then
+        printf 'windows\n'
+      else
+        printf 'other\n'
+      fi
+      ;;
+  esac
+}
+
+vmimage_is_windows_host() {
+  [[ "$(vmimage_host_os)" == "windows" ]]
+}
+
+vmimage_default_backend() {
+  case "$(vmimage_host_os)" in
+    linux) printf 'qemu-kvm\n' ;;
+    windows) printf 'qemu-windows\n' ;;
+    *)
+      vmimage_die "vm runtime currently supports Linux and Windows hosts only"
+      ;;
+  esac
+}
+
+vmimage_backend() {
+  local configured
+  configured="$(vmimage_env_or_resolver "DOCKPIPE_VM_BACKEND" "DOCKPIPE_RESOLVER_VM_BACKEND" "auto")"
+  case "$configured" in
+    ""|auto)
+      vmimage_default_backend
+      ;;
+    qemu-kvm|qemu-windows)
+      printf '%s\n' "$configured"
+      ;;
+    *)
+      vmimage_die "unsupported DOCKPIPE_VM_BACKEND=${configured}"
+      ;;
+  esac
+}
+
+vmimage_default_qemu_bin() {
+  if vmimage_is_windows_host; then
+    printf 'qemu-system-x86_64.exe\n'
+  else
+    printf 'qemu-system-x86_64\n'
+  fi
+}
+
+vmimage_default_qemu_img_bin() {
+  if vmimage_is_windows_host; then
+    printf 'qemu-img.exe\n'
+  else
+    printf 'qemu-img\n'
+  fi
+}
+
+vmimage_default_accel() {
+  case "$(vmimage_backend)" in
+    qemu-kvm) printf 'kvm\n' ;;
+    qemu-windows) printf 'whpx:tcg\n' ;;
+  esac
+}
+
+vmimage_default_cpu_model() {
+  case "$(vmimage_backend)" in
+    qemu-kvm) printf 'host\n' ;;
+    qemu-windows) printf 'max\n' ;;
+  esac
+}
+
+vmimage_env_value() {
+  printenv "$1" 2>/dev/null || true
+}
+
+vmimage_shell_path() {
+  local path_value="${1:-}"
+  [[ -n "$path_value" ]] || return 0
+  case "$path_value" in
+    [A-Za-z]:\\*|[A-Za-z]:/*|\\\\*)
+      if command -v cygpath >/dev/null 2>&1; then
+        cygpath -u "$path_value"
+      else
+        printf '%s\n' "$path_value"
+      fi
+      ;;
+    *)
+      printf '%s\n' "$path_value"
+      ;;
+  esac
+}
+
+vmimage_powershell_bin() {
+  if [[ -n "${DOCKPIPE_VM_PWSH_BIN:-}" ]]; then
+    printf '%s\n' "$DOCKPIPE_VM_PWSH_BIN"
+    return 0
+  fi
+  if command -v pwsh.exe >/dev/null 2>&1; then
+    printf 'pwsh.exe\n'
+    return 0
+  fi
+  if command -v pwsh >/dev/null 2>&1; then
+    printf 'pwsh\n'
+    return 0
+  fi
+  if command -v powershell.exe >/dev/null 2>&1; then
+    printf 'powershell.exe\n'
+    return 0
+  fi
+  if command -v powershell >/dev/null 2>&1; then
+    printf 'powershell\n'
+    return 0
+  fi
+  vmimage_die "PowerShell was not found on PATH; install pwsh or powershell and rerun windows-vm"
+}
+
+vmimage_windows_qemu_helper() {
+  printf '%s\n' "${SCRIPT_DIR}/vmimage-run-qemu-windows.ps1"
+}
+
 vmimage_require() {
   local name="$1"
   local value="${!name:-}"
@@ -425,6 +552,9 @@ vmimage_terminal_launcher() {
 }
 
 vmimage_install_command_for_host() {
+  if vmimage_is_windows_host; then
+    return 1
+  fi
   if command -v apt-get >/dev/null 2>&1; then
     printf 'sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils ovmf swtpm\n'
     return 0
@@ -466,8 +596,11 @@ vmimage_launch_install_terminal() {
 
 vmimage_require_host_dependencies() {
   local -a missing=()
-  command -v qemu-system-x86_64 >/dev/null 2>&1 || missing+=("qemu-system-x86_64")
-  command -v qemu-img >/dev/null 2>&1 || missing+=("qemu-img")
+  local qemu_bin qemu_img_bin
+  qemu_bin="${DOCKPIPE_VM_QEMU_BIN:-$(vmimage_default_qemu_bin)}"
+  qemu_img_bin="${DOCKPIPE_VM_QEMU_IMG_BIN:-$(vmimage_default_qemu_img_bin)}"
+  command -v "$qemu_bin" >/dev/null 2>&1 || missing+=("$qemu_bin")
+  command -v "$qemu_img_bin" >/dev/null 2>&1 || missing+=("$qemu_img_bin")
   if [[ "$(vmimage_tpm_mode)" != "off" ]]; then
     command -v swtpm >/dev/null 2>&1 || missing+=("swtpm")
   fi
@@ -499,11 +632,14 @@ vmimage_require_host_dependencies() {
 vmimage_detect_ovmf_pair() {
   local code vars
   while IFS='|' read -r code vars; do
+    code="$(vmimage_shell_path "$code")"
+    vars="$(vmimage_shell_path "$vars")"
     [[ -n "$code" && -f "$code" ]] || continue
     [[ -n "$vars" && -f "$vars" ]] || continue
     printf '%s|%s\n' "$code" "$vars"
     return 0
-  done <<'EOF'
+  done < <(
+    cat <<'EOF'
 /usr/share/OVMF/OVMF_CODE_4M.ms.fd|/usr/share/OVMF/OVMF_VARS_4M.ms.fd
 /usr/share/OVMF/OVMF_CODE_4M.secboot.fd|/usr/share/OVMF/OVMF_VARS_4M.ms.fd
 /usr/share/OVMF/OVMF_CODE.secboot.fd|/usr/share/OVMF/OVMF_VARS.ms.fd
@@ -511,6 +647,35 @@ vmimage_detect_ovmf_pair() {
 /usr/share/edk2/ovmf/OVMF_CODE_4M.ms.fd|/usr/share/edk2/ovmf/OVMF_VARS_4M.ms.fd
 /usr/share/edk2/ovmf/OVMF_CODE.secboot.fd|/usr/share/edk2/ovmf/OVMF_VARS.ms.fd
 EOF
+    if vmimage_is_windows_host; then
+      local root root_shell
+      local -a win_roots=(
+        "$(vmimage_env_value 'ProgramW6432')"
+        "$(vmimage_env_value 'PROGRAMFILES')"
+        "$(vmimage_env_value 'PROGRAMFILES(X86)')"
+        "$(vmimage_env_value 'LOCALAPPDATA')\\Programs"
+      )
+      local -a win_pairs=(
+        'qemu\\share\\edk2-x86_64-code.fd|qemu\\share\\edk2-i386-vars.fd'
+        'qemu\\share\\edk2-x86_64-secure-code.fd|qemu\\share\\edk2-i386-vars.fd'
+        'qemu\\share\\edk2\\ovmf\\OVMF_CODE_4M.ms.fd|qemu\\share\\edk2\\ovmf\\OVMF_VARS_4M.ms.fd'
+        'qemu\\share\\edk2\\ovmf\\OVMF_CODE.secboot.fd|qemu\\share\\edk2\\ovmf\\OVMF_VARS.ms.fd'
+      )
+      local pair code_rel vars_rel
+      for root in "${win_roots[@]}"; do
+        [[ -n "$root" ]] || continue
+        root_shell="$(vmimage_shell_path "$root")"
+        [[ -n "$root_shell" ]] || continue
+        for pair in "${win_pairs[@]}"; do
+          code_rel="${pair%%|*}"
+          vars_rel="${pair##*|}"
+          printf '%s|%s\n' \
+            "${root_shell}/$(printf '%s' "$code_rel" | tr '\\' '/')" \
+            "${root_shell}/$(printf '%s' "$vars_rel" | tr '\\' '/')"
+        done
+      done
+    fi
+  )
   return 1
 }
 
@@ -599,6 +764,9 @@ vmimage_ensure_secure_boot_firmware() {
 
 vmimage_start_swtpm() {
   [[ "$(vmimage_tpm_mode)" != "off" ]] || return 0
+  if vmimage_is_windows_host; then
+    vmimage_die "qemu-windows backend does not yet support TPM emulation; set DOCKPIPE_VM_TPM=off or run windows-vm from a Linux host"
+  fi
   local state_dir tpm_dir sock pid
   state_dir="$(vmimage_state_dir)"
   tpm_dir="${state_dir}/tpm-${DOCKPIPE_RUN_ID:-vm}"
@@ -1229,19 +1397,21 @@ vmimage_prepare_disk() {
     printf '%s|%s\n' "$disk" "$fmt"
     return 0
   fi
-  command -v qemu-img >/dev/null 2>&1 || vmimage_die "qemu-img is required for ephemeral vmimage disks"
+  local qemu_img_bin="${DOCKPIPE_VM_QEMU_IMG_BIN:-$(vmimage_default_qemu_img_bin)}"
+  command -v "$qemu_img_bin" >/dev/null 2>&1 || vmimage_die "${qemu_img_bin} is required for ephemeral vmimage disks"
   local state_dir overlay
   state_dir="$(vmimage_state_dir)"
   overlay="${state_dir}/overlay-${DOCKPIPE_RUN_ID:-vm}.qcow2"
   rm -f "$overlay"
-  qemu-img create -q -f qcow2 -F "$fmt" -b "$disk" "$overlay"
+  "$qemu_img_bin" create -q -f qcow2 -F "$fmt" -b "$disk" "$overlay"
   printf '%s|qcow2\n' "$overlay"
 }
 
 vmimage_ensure_disk_exists_for_install() {
   local disk="$1"
   [[ -e "$disk" ]] && return 0
-  command -v qemu-img >/dev/null 2>&1 || vmimage_die "qemu-img is required to create a VM disk image"
+  local qemu_img_bin="${DOCKPIPE_VM_QEMU_IMG_BIN:-$(vmimage_default_qemu_img_bin)}"
+  command -v "$qemu_img_bin" >/dev/null 2>&1 || vmimage_die "${qemu_img_bin} is required to create a VM disk image"
   local answer
   answer="$(
     vmimage_prompt_confirm \
@@ -1256,7 +1426,7 @@ vmimage_ensure_disk_exists_for_install() {
   [[ "$answer" == "yes" ]] || vmimage_die "stopped before creating VM disk image"
   mkdir -p "$(dirname "$disk")"
   local fmt="${DOCKPIPE_VM_DISK_CREATE_FORMAT:-qcow2}"
-  qemu-img create -f "$fmt" "$disk" "${DOCKPIPE_VM_DISK_SIZE:-64G}" >/dev/null
+  "$qemu_img_bin" create -f "$fmt" "$disk" "${DOCKPIPE_VM_DISK_SIZE:-64G}" >/dev/null
 }
 
 vmimage_write_pid_sidecar() {
@@ -1399,7 +1569,11 @@ vmimage_installer_display_mode() {
     printf '%s\n' "$display"
     return 0
   fi
-  printf 'gtk,window-close=on\n'
+  if vmimage_is_windows_host; then
+    printf 'default\n'
+  else
+    printf 'gtk,window-close=on\n'
+  fi
 }
 
 vmimage_run_installer_session() {
@@ -1449,8 +1623,62 @@ vmimage_run_automated_installer_session() {
   wait "$pid"
 }
 
-vmimage_run_qemu_kvm() {
-  [[ "$(uname -s)" == "Linux" ]] || vmimage_die "qemu-kvm backend currently requires a Linux host"
+vmimage_run_headless_guest_session() {
+  local qemu_bin="$1"
+  shift || true
+  local -a qemu_args=("$@")
+  local pid state_dir pidfile
+  vmimage_require DOCKPIPE_STEP_CMD
+  state_dir="$(vmimage_state_dir)"
+  pidfile="${state_dir}/qemu-${DOCKPIPE_RUN_ID:-vm}.pid"
+  rm -f "$pidfile"
+  vmimage_log "headless mode: launching VM in background and waiting for guest SSH readiness"
+  "$qemu_bin" "${qemu_args[@]}" &
+  pid="$!"
+  printf '%s\n' "$pid" > "$pidfile"
+  vmimage_write_pid_sidecar "$pid"
+  trap 'kill "$pid" >/dev/null 2>&1 || true; vmimage_stop_swtpm' EXIT INT TERM
+  vmimage_wait_for_guest
+  vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
+  vmimage_fetch_outputs
+  wait "$pid"
+}
+
+vmimage_windows_write_args_file() {
+  local path="$1"
+  shift || true
+  : > "$path"
+  local arg
+  for arg in "$@"; do
+    printf '%s\n' "$arg" >> "$path"
+  done
+}
+
+vmimage_windows_qemu_invoke() {
+  local action="$1" qemu_bin="$2" pidfile="$3" argsfile="$4"
+  local pwsh_bin helper
+  pwsh_bin="$(vmimage_powershell_bin)"
+  helper="$(vmimage_windows_qemu_helper)"
+  "$pwsh_bin" -NoProfile -ExecutionPolicy Bypass -File "$helper" \
+    -Action "$action" \
+    -QemuBin "$qemu_bin" \
+    -PidFile "$pidfile" \
+    -ArgsFile "$argsfile"
+}
+
+vmimage_windows_stop_qemu_if_present() {
+  local pidfile="${1:-}"
+  [[ -n "$pidfile" && -f "$pidfile" ]] || return 0
+  local pwsh_bin helper
+  pwsh_bin="$(vmimage_powershell_bin)"
+  helper="$(vmimage_windows_qemu_helper)"
+  "$pwsh_bin" -NoProfile -ExecutionPolicy Bypass -File "$helper" \
+    -Action stop \
+    -PidFile "$pidfile" >/dev/null 2>&1 || true
+}
+
+vmimage_run_qemu_common() {
+  local backend="$1"
   vmimage_require_host_dependencies
   vmimage_ensure_prompted_inputs
   local boot_source
@@ -1461,7 +1689,11 @@ vmimage_run_qemu_kvm() {
   vmimage_ensure_secure_boot_firmware "$boot_source"
   vmimage_confirm_user_supplied_media_rights
   vmimage_confirm_host_network_exposure
-  vmimage_validate_pci_passthrough "$(vmimage_pci_devices_csv)"
+  if [[ "$backend" == "qemu-windows" ]]; then
+    [[ -z "$(vmimage_pci_devices_csv)" ]] || vmimage_die "qemu-windows backend does not support host PCI passthrough; clear DOCKPIPE_VM_PCI_DEVICES or run windows-vm from a Linux host"
+  else
+    vmimage_validate_pci_passthrough "$(vmimage_pci_devices_csv)"
+  fi
   if [[ "$boot_source" == "image" ]]; then
     vmimage_confirm_persistent_disk_use
   else
@@ -1500,7 +1732,7 @@ vmimage_run_qemu_kvm() {
     "The configured VirtIO driver ISO could not be found. Choose the driver ISO." \
     "Disk Images (*.iso);;All Files (*)"
 
-  local qemu_bin="${DOCKPIPE_VM_QEMU_BIN:-qemu-system-x86_64}"
+  local qemu_bin="${DOCKPIPE_VM_QEMU_BIN:-$(vmimage_default_qemu_bin)}"
   command -v "$qemu_bin" >/dev/null 2>&1 || vmimage_die "${qemu_bin} not found"
 
   local disk disk_fmt prepared cpu mem ssh_port ssh_hostfwd state_dir pidfile monitor disk_bus net_device machine_uuid net_mac disk_serial
@@ -1543,8 +1775,8 @@ vmimage_run_qemu_kvm() {
   local -a qemu_args=(
     -name "dockpipe-vm-${DOCKPIPE_RUN_ID:-vm}"
     -uuid "$machine_uuid"
-    -machine "q35,accel=${DOCKPIPE_VM_ACCEL:-kvm}$( [[ "$(vmimage_secure_boot_mode)" != "off" ]] && printf ',smm=on' )"
-    -cpu "${DOCKPIPE_VM_CPU_MODEL:-host}"
+    -machine "q35,accel=${DOCKPIPE_VM_ACCEL:-$(vmimage_default_accel)}$( [[ "$(vmimage_secure_boot_mode)" != "off" ]] && printf ',smm=on' )"
+    -cpu "${DOCKPIPE_VM_CPU_MODEL:-$(vmimage_default_cpu_model)}"
     -smp "$cpu"
     -m "$mem"
     -netdev "user,id=net0,${ssh_hostfwd}"
@@ -1586,13 +1818,20 @@ vmimage_run_qemu_kvm() {
     )
   else
     vmimage_require DOCKPIPE_STEP_CMD
-    qemu_args+=(
-      -daemonize
-      -pidfile "$pidfile"
-      -display none
-      -serial none
-      -monitor unix:"$monitor",server,nowait
-    )
+    if [[ "$backend" == "qemu-kvm" ]]; then
+      qemu_args+=(
+        -daemonize
+        -pidfile "$pidfile"
+        -display none
+        -serial none
+        -monitor unix:"$monitor",server,nowait
+      )
+    else
+      qemu_args+=(
+        -display none
+        -serial none
+      )
+    fi
   fi
 
   if [[ "$(vmimage_secure_boot_mode)" != "off" ]]; then
@@ -1692,24 +1931,70 @@ vmimage_run_qemu_kvm() {
 
   if [[ "$boot_source" == "installer-iso" ]]; then
     if vmimage_windows_should_unattend "$boot_source"; then
-      vmimage_run_automated_installer_session "$qemu_bin" "${qemu_args[@]}"
+      if [[ "$backend" == "qemu-windows" ]]; then
+        local argsfile="${state_dir}/qemu-${DOCKPIPE_RUN_ID:-vm}.args"
+        vmimage_windows_write_args_file "$argsfile" "${qemu_args[@]}"
+        trap 'vmimage_windows_stop_qemu_if_present "$pidfile"; vmimage_stop_swtpm' EXIT INT TERM
+        vmimage_windows_qemu_invoke start "$qemu_bin" "$pidfile" "$argsfile"
+        local old_timeout="${DOCKPIPE_VM_SSH_READY_TIMEOUT:-}"
+        if [[ -z "$old_timeout" ]]; then
+          export DOCKPIPE_VM_SSH_READY_TIMEOUT=3600
+        fi
+        vmimage_wait_for_guest
+        if [[ -z "$old_timeout" ]]; then
+          unset DOCKPIPE_VM_SSH_READY_TIMEOUT || true
+        else
+          export DOCKPIPE_VM_SSH_READY_TIMEOUT="$old_timeout"
+        fi
+        vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
+        vmimage_fetch_outputs
+        vmimage_windows_qemu_invoke wait "$qemu_bin" "$pidfile" "$argsfile"
+      else
+        vmimage_run_automated_installer_session "$qemu_bin" "${qemu_args[@]}"
+      fi
     else
-      vmimage_run_installer_session "$qemu_bin" "${qemu_args[@]}"
+      if [[ "$backend" == "qemu-windows" ]]; then
+        local argsfile="${state_dir}/qemu-${DOCKPIPE_RUN_ID:-vm}.args"
+        vmimage_windows_write_args_file "$argsfile" "${qemu_args[@]}"
+        vmimage_windows_qemu_invoke start-wait "$qemu_bin" "$pidfile" "$argsfile"
+      else
+        vmimage_run_installer_session "$qemu_bin" "${qemu_args[@]}"
+      fi
     fi
   else
-    trap 'vmimage_stop_swtpm' EXIT INT TERM
-    "$qemu_bin" "${qemu_args[@]}"
-    [[ -f "$pidfile" ]] || vmimage_die "qemu-kvm did not create pidfile"
-    vmimage_write_pid_sidecar "$(cat "$pidfile")"
+    if [[ "$backend" == "qemu-kvm" ]]; then
+      trap 'vmimage_stop_swtpm' EXIT INT TERM
+      "$qemu_bin" "${qemu_args[@]}"
+      [[ -f "$pidfile" ]] || vmimage_die "qemu-kvm did not create pidfile"
+      vmimage_write_pid_sidecar "$(cat "$pidfile")"
 
-    vmimage_wait_for_guest
-    vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
-    vmimage_fetch_outputs
+      vmimage_wait_for_guest
+      vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
+      vmimage_fetch_outputs
+    else
+      local argsfile="${state_dir}/qemu-${DOCKPIPE_RUN_ID:-vm}.args"
+      vmimage_windows_write_args_file "$argsfile" "${qemu_args[@]}"
+      vmimage_windows_qemu_invoke start "$qemu_bin" "$pidfile" "$argsfile"
+      vmimage_wait_for_guest
+      vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
+      vmimage_fetch_outputs
+    fi
   fi
 }
 
-backend="$(vmimage_env_or_resolver "DOCKPIPE_VM_BACKEND" "DOCKPIPE_RESOLVER_VM_BACKEND" "qemu-kvm")"
+vmimage_run_qemu_kvm() {
+  [[ "$(vmimage_host_os)" == "linux" ]] || vmimage_die "qemu-kvm backend currently requires a Linux host"
+  vmimage_run_qemu_common qemu-kvm
+}
+
+vmimage_run_qemu_windows() {
+  vmimage_is_windows_host || vmimage_die "qemu-windows backend currently requires a Windows host"
+  vmimage_run_qemu_common qemu-windows
+}
+
+backend="$(vmimage_backend)"
 case "$backend" in
   qemu-kvm) vmimage_run_qemu_kvm ;;
+  qemu-windows) vmimage_run_qemu_windows ;;
   *) vmimage_die "unsupported DOCKPIPE_VM_BACKEND=${backend}" ;;
 esac

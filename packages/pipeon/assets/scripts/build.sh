@@ -40,6 +40,92 @@ Commands:
 EOF
 }
 
+prompt_install_host_tool() {
+  local prompt_id="$1" title="$2" message="$3" default_value="${4:-no}" intent="${5:-host-mutation}" automation_group="${6:-host-tools}" auto_approve_value="${7:-yes}"
+  if declare -F dockpipe_sdk >/dev/null 2>&1; then
+    dockpipe_sdk prompt confirm \
+      --id "$prompt_id" \
+      --title "$title" \
+      --message "$message" \
+      --default "$default_value" \
+      --intent "$intent" \
+      --automation-group "$automation_group" \
+      --allow-auto-approve \
+      --auto-approve-value "$auto_approve_value"
+    return $?
+  fi
+  printf '%s [y/N] ' "$message" >&2
+  local reply
+  IFS= read -r reply || return 1
+  case "${reply,,}" in
+    y|yes) printf 'yes\n' ;;
+    *) printf 'no\n' ;;
+  esac
+}
+
+prompt_install_cargo() {
+  prompt_install_host_tool \
+    "pipeon.install-cargo" \
+    "Install Rust Toolchain?" \
+    "Pipeon source build needs Cargo/Rust before it can build the desktop app. Allow DockPipe to launch the install command for this host?" \
+    no \
+    host-mutation \
+    pipeon-host-tools \
+    yes
+}
+
+install_cargo_windows() {
+  if command -v winget >/dev/null 2>&1; then
+    echo "[dockpipe] installing Rust via winget (Rustup)..."
+    winget install --id Rustlang.Rustup --exact
+    return $?
+  fi
+  echo "[dockpipe] winget is not available. Install Rust manually from https://rustup.rs/ and rerun." >&2
+  return 1
+}
+
+install_cargo_host() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+      install_cargo_windows
+      ;;
+    Linux)
+      if command -v apt-get >/dev/null 2>&1; then
+        echo "[dockpipe] run: curl https://sh.rustup.rs -sSf | sh" >&2
+      elif command -v dnf >/dev/null 2>&1; then
+        echo "[dockpipe] run: sudo dnf install -y cargo rustup" >&2
+      elif command -v pacman >/dev/null 2>&1; then
+        echo "[dockpipe] run: sudo pacman -S --needed rustup" >&2
+      else
+        echo "[dockpipe] install Rust manually from https://rustup.rs/ and rerun." >&2
+      fi
+      return 1
+      ;;
+    *)
+      echo "[dockpipe] install Rust manually from https://rustup.rs/ and rerun." >&2
+      return 1
+      ;;
+  esac
+}
+
+require_cargo() {
+  if command -v cargo >/dev/null 2>&1; then
+    return 0
+  fi
+  local answer
+  answer="$(prompt_install_cargo)" || answer="no"
+  if [[ "$answer" == "yes" ]]; then
+    if install_cargo_host; then
+      echo "[dockpipe] Cargo install command finished. Open a new shell if needed, then rerun the Pipeon source build." >&2
+      exit 1
+    fi
+    echo "[dockpipe] Cargo is still unavailable. Finish the Rust install, open a new shell, and rerun." >&2
+    exit 1
+  fi
+  echo "[dockpipe] Pipeon source build requires Cargo. Install Rust/Cargo and rerun." >&2
+  exit 1
+}
+
 build_source() {
   build_desktop
   package_vscode_extension
@@ -63,6 +149,7 @@ build_icons() {
 }
 
 build_desktop() {
+  require_cargo
   mkdir -p "$PIPEON_DESKTOP_TARGET_DIR"
   CARGO_TARGET_DIR="$PIPEON_DESKTOP_TARGET_DIR" \
     cargo build --manifest-path "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/src-tauri/Cargo.toml" --release

@@ -107,6 +107,7 @@ func runPackageScriptTarget(workdir string, target packageScriptTarget, env []st
 	)
 	cmd.Dir = target.PackageDir
 	cmd.Env = append(baseEnv, env...)
+	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

@@ -1,16 +1,17 @@
 # windows-vm
 
-First-party dogfood workflow for the generic `vm` runtime on a Linux host,
-using the packaged `qemu` resolver as the concrete VM product.
+First-party dogfood workflow for the generic `vm` runtime, using the packaged
+`qemu` resolver as the concrete VM product.
 
 What it does:
 
 - lets you choose between a bootable guest disk and an installer ISO
 - gets its concrete VM implementation defaults from the packaged `qemu` resolver
+- auto-detects the host backend: `qemu-kvm` on Linux, `qemu-windows` on Windows
 - defaults to Windows 11-friendly VM requirements with TPM and secure boot enabled
 - defaults the guest disk to `sata` so Windows setup sees the install disk without manual driver loading
 - defaults the guest network adapter to `e1000e` so Windows setup sees networking without manual driver loading
-- supports host PCI / GPU passthrough through the packaged `qemu` resolver when devices are already isolated for `vfio-pci`
+- supports host PCI / GPU passthrough through the packaged `qemu` resolver on Linux hosts when devices are already isolated for `vfio-pci`
 - prompts for missing disk / firmware / ISO paths through the shared prompt primitive
 - prompts to reset writable UEFI firmware vars during installer runs when DockPipe detects stale boot-state reuse for the selected disk
 - runs a guest command over SSH inside the VM when you boot an existing image
@@ -30,6 +31,7 @@ Important boundaries:
 - DockPipe does not bypass Windows 11 checks; it configures virtual TPM and secure boot instead
 - if you choose `Boot existing disk image`, the guest still needs to be reachable over SSH
 - if you choose `Install from ISO`, DockPipe keeps the installer session interactive
+- the current Windows-host backend does not support PCI passthrough, and TPM emulation still requires Linux-host tooling
 
 Useful variables:
 
@@ -56,7 +58,7 @@ Useful variables:
 Resolver-owned defaults:
 
 - packaged resolver: `qemu`
-- default backend: `qemu-kvm`
+- default backend: `auto` (`qemu-kvm` on Linux, `qemu-windows` on Windows)
 - default disk bus: `sata`
 - default network adapter: `e1000e`
 - default TPM mode: `required`
@@ -67,6 +69,7 @@ Resolver-owned defaults:
 GPU / PCI passthrough notes:
 
 - DockPipe does not bundle VFIO kernel support or IOMMU firmware settings for you
+- PCI passthrough is currently Linux-host-only
 - DockPipe validates that the selected devices exist and are using `vfio-pci`
 - if they are not yet on `vfio-pci`, DockPipe can now prompt to help rebind them for the current host session
 - if a selected device is the host boot/display adapter, DockPipe asks for explicit confirmation unless you set `DOCKPIPE_VM_ALLOW_BOOT_VGA=true`
