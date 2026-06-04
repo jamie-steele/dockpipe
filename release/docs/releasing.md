@@ -20,7 +20,7 @@ Trigger options:
 2. **Manual dispatch** (Actions UI):
    - `version`: optional — defaults to **`VERSION`** on the checked-out branch
    - `dry_run`: `true` → build + artifact upload only, **no** GitHub Release
-   - `build_msi`: optional — defaults to **`true`**. On **push** to `master`, MSI is **not** built unless you commit an empty marker file **`release/packaging/msi/SHIP_MSI`** (then the next push includes WiX/MSI).
+   - `build_msi`: optional — defaults to **`true`**. On **push** to `master`, MSI is built when the committed marker file **`release/packaging/msi/SHIP_MSI`** is present. This repo currently keeps that marker checked in, so normal releases include WiX/MSI unless you intentionally remove it.
 
 ---
 

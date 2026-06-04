@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- WiX 3.x - build on Windows: see build.ps1. Ships dockpipe.exe only; bundled assets are embedded. -->
+<!-- WiX 3.x - build on Windows: see build.ps1. Ships dockpipe.exe and optionally a staged DockPipe Launcher payload. -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Product Id="*"
            Name="dockpipe"
@@ -20,9 +20,25 @@
                   AllowSameVersionUpgrades="no" />
     <MediaTemplate EmbedCab="yes" />
 
-    <Feature Id="MainFeature" Title="dockpipe" Level="1">
-      <ComponentGroupRef Id="ProductComponents" />
+    <Feature Id="MainFeature"
+             Title="DockPipe CLI"
+             Description="Core dockpipe command-line interface."
+             Level="1"
+             Display="expand"
+             ConfigurableDirectory="INSTALLFOLDER">
+      <ComponentGroupRef Id="CoreComponents" />
     </Feature>
+<?if "$(var.DockpipeLauncherEnabled)" = "1" ?>
+    <Feature Id="LauncherFeature"
+             Title="DockPipe Launcher"
+             Description="Optional desktop launcher and Start Menu shortcut."
+             Level="1"
+             Absent="allow">
+      <ComponentGroupRef Id="LauncherComponents" />
+      <ComponentGroupRef Id="LauncherPayloadComponents" />
+    </Feature>
+    <UIRef Id="WixUI_FeatureTree" />
+<?endif?>
   </Product>
 
   <Fragment>
@@ -30,13 +46,18 @@
       <Directory Id="LocalAppDataFolder">
         <Directory Id="INSTALLFOLDER" Name="dockpipe" />
       </Directory>
+<?if "$(var.DockpipeLauncherEnabled)" = "1" ?>
+      <Directory Id="ProgramMenuFolder">
+        <Directory Id="ProgramMenuDockpipeFolder" Name="DockPipe" />
+      </Directory>
+<?endif?>
     </Directory>
   </Fragment>
 
   <Fragment>
-    <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+    <ComponentGroup Id="CoreComponents" Directory="INSTALLFOLDER">
       <!-- ICE38: per-user profile install cannot use a file as KeyPath; ICE64: profile dir needs RemoveFolder -->
-      <Component Id="cmp_dockpipe_exe" Guid="*">
+      <Component Id="cmp_dockpipe_exe" Guid="6E07E906-C5C2-4D49-8FB2-6DAFB36D3AB5">
         <RegistryValue Id="reg_dockpipe_install"
                        Root="HKCU"
                        Key="Software\dockpipe"
@@ -57,5 +78,38 @@
         <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
       </Component>
     </ComponentGroup>
+<?if "$(var.DockpipeLauncherEnabled)" = "1" ?>
+    <ComponentGroup Id="LauncherComponents">
+      <Component Id="cmp_dockpipe_launcher_feature" Guid="D25B9DAA-215E-4F19-B1AA-3E5A43A6766B" Directory="INSTALLFOLDER">
+        <RegistryValue Id="reg_dockpipe_launcher_install"
+                       Root="HKCU"
+                       Key="Software\dockpipe"
+                       Name="LauncherExe"
+                       Type="string"
+                       Value="[INSTALLFOLDER]dockpipe-launcher.exe"
+                       KeyPath="yes" />
+      </Component>
+      <Component Id="cmp_dockpipe_launcher_shortcut" Guid="8C8E1798-E040-41F3-A26F-4B9CA5C0A293" Directory="ProgramMenuDockpipeFolder">
+        <RegistryValue Id="reg_dockpipe_launcher_shortcut"
+                       Root="HKCU"
+                       Key="Software\dockpipe"
+                       Name="LauncherShortcut"
+                       Type="integer"
+                       Value="1"
+                       KeyPath="yes" />
+        <Shortcut Id="sh_dockpipe_launcher"
+                  Name="DockPipe Launcher"
+                  Description="Open DockPipe Launcher"
+                  Target="[INSTALLFOLDER]dockpipe-launcher.exe"
+                  WorkingDirectory="INSTALLFOLDER" />
+        <RemoveFile Id="RemoveDockpipeLauncherShortcut"
+                    Name="DockPipe Launcher.lnk"
+                    On="uninstall" />
+        <RemoveFolder Id="RemoveProgramMenuDockpipeFolder"
+                      Directory="ProgramMenuDockpipeFolder"
+                      On="uninstall" />
+      </Component>
+    </ComponentGroup>
+<?endif?>
   </Fragment>
 </Wix>

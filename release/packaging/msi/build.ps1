@@ -1,9 +1,11 @@
 # Build dockpipe MSI (WiX 3.x). Run on Windows.
-# Usage: .\build.ps1 -Version 0.6.0 -SourceExe C:\path\dockpipe.exe -OutDir C:\out
+# Usage: .\build.ps1 -Version 0.6.0 -SourceExe C:\path\dockpipe.exe -OutDir C:\out [-LauncherStageDir C:\path\launcher-stage]
 param(
     [Parameter(Mandatory = $true)][string]$Version,
     [Parameter(Mandatory = $true)][string]$SourceExe,
     [Parameter(Mandatory = $true)][string]$OutDir,
+    [Parameter(Mandatory = $false)][string]$LauncherStageDir = "",
+    [Parameter(Mandatory = $false)][string]$LauncherExe = "",
     # Optional: WiX root (extract folder: root candle.exe from wix314-binaries.zip, or parent of bin\candle.exe). Prefer passing this in CI — GITHUB_ENV can mangle Windows paths.
     [Parameter(Mandatory = $false)][string]$WixRoot = ""
 )
@@ -11,6 +13,12 @@ param(
 $ErrorActionPreference = "Stop"
 if (-not (Test-Path -LiteralPath $SourceExe)) {
     throw "SourceExe not found: $SourceExe"
+}
+if ($LauncherStageDir -and -not (Test-Path -LiteralPath $LauncherStageDir)) {
+    throw "LauncherStageDir not found: $LauncherStageDir"
+}
+if ($LauncherExe -and -not (Test-Path -LiteralPath $LauncherExe)) {
+    throw "LauncherExe not found: $LauncherExe"
 }
 
 # WiX requires Product/@Version as X.Y.Z.W
@@ -39,27 +47,79 @@ if (Test-Path -LiteralPath $binCandle) {
 if (-not (Test-Path -LiteralPath $light)) {
     throw "light.exe not found next to candle (expected bin\light.exe or light.exe under WiX root). Root: $wixRoot"
 }
+$heat = Join-Path $wixRoot "heat.exe"
+if (-not (Test-Path -LiteralPath $heat)) {
+    throw "heat.exe not found under WiX root: $wixRoot"
+}
 $wxs = Join-Path $PSScriptRoot "dockpipe.wxs"
 $objDir = Join-Path $OutDir "wixobj"
 New-Item -ItemType Directory -Force -Path $objDir | Out-Null
-$wixobj = Join-Path $objDir "dockpipe.wixobj"
 $msiName = "dockpipe_${Version}_windows_amd64.msi"
 $msiPath = Join-Path $OutDir $msiName
 
 $srcAbs = (Resolve-Path -LiteralPath $SourceExe).Path
+$launcherStageAbs = ""
+$tempLauncherStageDir = ""
+
+if ($LauncherStageDir) {
+    $launcherStageAbs = (Resolve-Path -LiteralPath $LauncherStageDir).Path
+} elseif ($LauncherExe) {
+    # Back-compat path: stage the single launcher exe so callers still produce a valid payload tree.
+    $tempLauncherStageDir = Join-Path $objDir "launcher-stage"
+    New-Item -ItemType Directory -Force -Path $tempLauncherStageDir | Out-Null
+    Copy-Item -LiteralPath $LauncherExe -Destination (Join-Path $tempLauncherStageDir "dockpipe-launcher.exe") -Force
+    $launcherStageAbs = (Resolve-Path -LiteralPath $tempLauncherStageDir).Path
+}
+
+$launcherEnabled = if ($launcherStageAbs) { "1" } else { "0" }
+$harvestWxs = Join-Path $objDir "launcher-payload.wxs"
+$candleInputs = @($wxs)
+
+if ($launcherStageAbs) {
+    $launcherExeFromStage = Join-Path $launcherStageAbs "dockpipe-launcher.exe"
+    if (-not (Test-Path -LiteralPath $launcherExeFromStage)) {
+        throw "LauncherStageDir must contain dockpipe-launcher.exe at its root. Got: $launcherStageAbs"
+    }
+    & $heat dir $launcherStageAbs `
+        -nologo `
+        -gg `
+        -scom `
+        -sreg `
+        -sfrag `
+        -srd `
+        -dr INSTALLFOLDER `
+        -cg LauncherPayloadComponents `
+        -var var.DockpipeLauncherStageDir `
+        -out $harvestWxs
+    if ($LASTEXITCODE -ne 0) { throw "heat failed" }
+    $candleInputs += $harvestWxs
+}
 
 & $candle -nologo -arch x64 `
     "-dProductVersion=$fourPart" `
     "-dDockpipeSource=$srcAbs" `
+    "-dDockpipeLauncherEnabled=$launcherEnabled" `
+    "-dDockpipeLauncherStageDir=$launcherStageAbs" `
     -out "$objDir\\" `
-    $wxs
+    $candleInputs
 if ($LASTEXITCODE -ne 0) { throw "candle failed" }
+
+$wixobjPaths = Get-ChildItem -LiteralPath $objDir -Filter "*.wixobj" | Sort-Object Name | Select-Object -ExpandProperty FullName
+if (-not $wixobjPaths -or $wixobjPaths.Count -eq 0) {
+    throw "No .wixobj files were generated under $objDir"
+}
 
 # WiX 3: -arch is for candle only; light treats unknown args as .wixobj paths — "x64" became a bogus Source file (LGHT0103).
 & $light -nologo `
+    -ext WixUIExtension `
     -sw1076 `
+    -sice:ICE38 `
+    -sice:ICE64 `
     -out $msiPath `
-    $wixobj
+    $wixobjPaths
 if ($LASTEXITCODE -ne 0) { throw "light failed" }
 
 Write-Host "Built: $msiPath"
+if ($launcherStageAbs) {
+    Write-Host "Included launcher payload: $launcherStageAbs"
+}

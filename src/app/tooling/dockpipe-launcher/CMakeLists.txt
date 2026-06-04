@@ -39,6 +39,10 @@ set(DOCKPIPE_LAUNCHER_SOURCES
     dockpipe-launcher.qrc
 )
 
+if(WIN32)
+    list(APPEND DOCKPIPE_LAUNCHER_SOURCES resources/windows/dockpipe-launcher.rc)
+endif()
+
 qt_add_executable(dockpipe-launcher ${DOCKPIPE_LAUNCHER_SOURCES})
 
 target_include_directories(dockpipe-launcher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

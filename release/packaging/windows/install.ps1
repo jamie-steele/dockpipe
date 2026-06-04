@@ -6,7 +6,7 @@
 .DESCRIPTION
   - Fetches the latest GitHub release (or a specific -Version).
   - Verifies SHA256 using SHA256SUMS.txt from the same release when available.
-  - Installs dockpipe.exe only (bundled templates/images unpack to the user cache on first run — no extra folders beside the exe).
+  - Installs dockpipe.exe and, when the MSI includes it for that release, dockpipe-launcher.exe.
   - MSI: per-user WiX install to %LOCALAPPDATA%\dockpipe, PATH updated. Zip fallback: %LOCALAPPDATA%\Programs\dockpipe.
 
   After install, optionally configures WSL for DOCKPIPE_USE_WSL_BRIDGE=1 (minimal Alpine + latest Linux dockpipe from GitHub). Use -SkipWSLSetup to skip. May prompt for Administrator (WSL) or require a reboot.

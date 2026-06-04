@@ -22,6 +22,9 @@ packages/dorkpipe/mcp/bin/mcpd
 .ssh/
 
 # Build output
+# Repo-root local build and packaging output
+/bin/
+/src/cmd/dockpipe_windows_amd64.syso
 # DockPipe Launcher CMake build
 src/app/tooling/dockpipe-launcher/build/
 # Pipeon Desktop Tauri/Rust build output
@@ -32,7 +35,6 @@ release/packaging/build/
 src/bin/
 # ad-hoc go build -o in repo root (prefer: make build-windows → src/bin/dockpipe.exe)
 /dockpipe.exe
-msi-dist/
 *.wixobj
 *.wixpdb
 # Legacy local output (prefer release/artifacts)
@@ -82,9 +84,8 @@ __pycache__/
 !.staging/packages/README.md
 # To stop tracking without deleting files: git rm -r --cached .staging
 
-# DockPipe project-local state (compile store, runs, caches) under `bin/.dockpipe/` — covered by `bin/` if you ignore it.
+# DockPipe project-local state (compile store, runs, caches) under `bin/.dockpipe/` is covered by `/bin/`.
 # Legacy path (pre–bin layout): remove after migrating.
-bin/.dockpipe/
 .dockpipe/
 **/.pipelang/
 
