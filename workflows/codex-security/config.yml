@@ -3,8 +3,6 @@
 name: codex-security
 description: Isolated tests then Codex security review step (requires OPENAI_API_KEY for Codex).
 
-resolver: codex
-
 steps:
   - id: tests
     runtime: dockerimage
@@ -13,5 +11,5 @@ steps:
   - id: codex-security
     runtime: dockerimage
     resolver: codex
-    isolate: codex
+    isolate: dev
     cmd: "sh -c 'echo \"[codex-security] Replace with your Codex security review command\" >&2'"

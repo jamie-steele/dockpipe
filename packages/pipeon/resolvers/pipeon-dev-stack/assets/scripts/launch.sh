@@ -1,7 +1,28 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-eval "$(dockpipe sdk)"
+resolve_sdk_dockpipe_bin() {
+  local candidate
+  for candidate in \
+    "${DOCKPIPE_BIN:-}" \
+    "${DOCKPIPE_WORKDIR:-}/src/bin/dockpipe" \
+    "$(pwd)/src/bin/dockpipe" \
+    "$(command -v dockpipe 2>/dev/null || true)"
+  do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+DOCKPIPE_SDK_BIN="$(resolve_sdk_dockpipe_bin)" || {
+  echo "pipeon-dev-stack: dockpipe binary not found for SDK bootstrap" >&2
+  exit 1
+}
+
+eval "$("$DOCKPIPE_SDK_BIN" sdk)"
 dockpipe_sdk init-script
 
 report_launch_failure() {

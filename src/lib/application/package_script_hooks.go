@@ -123,6 +123,62 @@ func dockpipeScriptCommand(scriptAbs string) (*exec.Cmd, error) {
 		}
 		return exec.Command("cmd", "/c", scriptAbs), nil
 	default:
-		return exec.Command("bash", scriptAbs), nil
+		bashExe, bashArg, err := dockpipeBashCommandParts(scriptAbs)
+		if err != nil {
+			return nil, err
+		}
+		return exec.Command(bashExe, bashArg), nil
 	}
+}
+
+func dockpipeBashCommandParts(scriptAbs string) (string, string, error) {
+	if runtime.GOOS == "windows" {
+		if bashExe := gitBashWindowsPath(); bashExe != "" {
+			return bashExe, pathForGitBash(scriptAbs), nil
+		}
+	}
+	bashExe, err := exec.LookPath("bash")
+	if err != nil {
+		return "", "", fmt.Errorf("bash not found for script %q", scriptAbs)
+	}
+	return bashExe, scriptAbs, nil
+}
+
+func gitBashWindowsPath() string {
+	candidates := []string{
+		filepath.Join(os.Getenv("ProgramFiles"), "Git", "bin", "bash.exe"),
+		filepath.Join(os.Getenv("ProgramFiles(x86)"), "Git", "bin", "bash.exe"),
+		filepath.Join(os.Getenv("LocalAppData"), "Programs", "Git", "bin", "bash.exe"),
+		`C:\Program Files\Git\bin\bash.exe`,
+		`C:\Program Files (x86)\Git\bin\bash.exe`,
+	}
+	seen := map[string]bool{}
+	for _, p := range candidates {
+		if p == "" || seen[p] {
+			continue
+		}
+		seen[p] = true
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
+
+func pathForGitBash(p string) string {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return p
+	}
+	vol := filepath.VolumeName(abs)
+	if len(vol) >= 2 && vol[1] == ':' {
+		drive := strings.ToLower(string(vol[0]))
+		rest := abs[len(vol):]
+		for len(rest) > 0 && (rest[0] == '\\' || rest[0] == '/') {
+			rest = rest[1:]
+		}
+		rest = filepath.ToSlash(rest)
+		return "/" + drive + "/" + rest
+	}
+	return filepath.ToSlash(abs)
 }

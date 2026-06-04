@@ -6,7 +6,6 @@ description: >-
   see docs/artifacts.md and resolvers/user-insight-process/README.md.
 
 docker_preflight: false
-resolver: codex
 steps:
   - id: process
     kind: host

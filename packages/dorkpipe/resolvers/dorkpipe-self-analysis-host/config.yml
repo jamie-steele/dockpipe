@@ -5,7 +5,6 @@ description: >-
   Host-only self-analysis (no container). Same outputs as dorkpipe-self-analysis.
   Use when Docker is unavailable or for fastest local iteration.
 
-resolver: codex
 steps:
   - id: self_analysis
     kind: host

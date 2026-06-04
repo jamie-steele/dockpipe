@@ -11,7 +11,6 @@ description: >-
   self_analysis (container): same as dorkpipe-self-analysis.
   stack_down (host): compose down unless DORKPIPE_DEV_STACK_AUTODOWN=0.
 
-resolver: codex
 steps:
   - id: stack_up
     kind: host

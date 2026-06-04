@@ -4,8 +4,6 @@ name: dorkpipe-orchestrator
 description: >-
   Host step runs scripts/dorkpipe-orchestrator/run-orchestrator.sh (requires `make build` for bin/dorkpipe).
 
-resolver: codex
-
 steps:
   - id: orchestrate
     kind: host

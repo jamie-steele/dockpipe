@@ -7,7 +7,6 @@ description: >-
   bin/.dockpipe/ci-analysis/, bin/.dockpipe/packages/dorkpipe/self-analysis/, bin/.dockpipe/packages/dorkpipe/run.json when present.
 
 docker_preflight: false
-resolver: codex
 steps:
   - id: handoff
     kind: host

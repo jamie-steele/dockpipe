@@ -72,7 +72,7 @@
                      Action="set"
                      Name="PATH"
                      Value="[INSTALLFOLDER]"
-                     Part="last"
+                     Part="first"
                      Permanent="no"
                      System="no" />
         <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />

@@ -2,6 +2,8 @@
 
 **Purpose:** Two-step workflow — **tests** in a generic isolated container (**`alpine`** placeholder), then a **Codex** step for security-oriented review. **`resolver: codex`** applies only to the second step; first step uses Docker only.
 
+The Codex review step uses the bundled **`dev`** isolate as a placeholder container. If you want a dedicated Codex image, set **`isolate:`** to an actual image/template available in your checkout or install.
+
 **Prerequisites:** Docker; **`OPENAI_API_KEY`** for the Codex step.
 
 ```bash
