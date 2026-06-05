@@ -9,9 +9,45 @@ struct WorkflowInputMeta {
     QString fieldName;
     QString envName;
     QString type;
+    QString elementType;
     QString description;
     QString defaultValue;
     QMap<QString, QString> attributes;
+    QVector<WorkflowInputMeta> children;
+};
+
+struct WorkflowViewSectionMeta {
+    QString id;
+    QString title;
+    QString description;
+    QStringList fields;
+};
+
+struct WorkflowViewPageMeta {
+    QString id;
+    QString title;
+    QString description;
+    QVector<WorkflowViewSectionMeta> sections;
+};
+
+struct WorkflowViewEntryOptionMeta {
+    QString value;
+    QString label;
+    QString next;
+    QStringList pages;
+};
+
+struct WorkflowViewEntryMeta {
+    QString type;
+    QString field;
+    QString title;
+    QString description;
+    QVector<WorkflowViewEntryOptionMeta> options;
+};
+
+struct WorkflowViewMeta {
+    WorkflowViewEntryMeta entry;
+    QVector<WorkflowViewPageMeta> pages;
 };
 
 /// One workflow entry returned by DockPipe's launcher/tooling catalog contract.
@@ -24,6 +60,7 @@ struct WorkflowMeta {
     QString iconPath;
     QString configPath;
     QVector<WorkflowInputMeta> inputs;
+    WorkflowViewMeta view;
     QMap<QString, QString> vars;
 };
 

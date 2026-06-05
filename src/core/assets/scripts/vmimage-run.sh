@@ -279,43 +279,76 @@ vmimage_prompt_required_input() {
   export "$name"
 }
 
-vmimage_prompt_file_value() {
+vmimage_resource_mode_from_path_mode() {
+  case "${1:-open-file}" in
+    save-file)
+      printf 'new\n'
+      ;;
+    *)
+      printf 'select\n'
+      ;;
+  esac
+}
+
+vmimage_resource_kind_from_path_mode() {
+  case "${1:-open-file}" in
+    open-dir)
+      printf 'directory\n'
+      ;;
+    *)
+      printf 'file\n'
+      ;;
+  esac
+}
+
+vmimage_prompt_resource_value() {
   local name="$1" title="$2" message="$3" path_mode="${4:-open-file}" file_filter="${5:-All Files (*)}" must_exist="${6:-true}"
   local current="${!name:-}"
+  local resource_mode resource_kind
+  resource_mode="$(vmimage_resource_mode_from_path_mode "$path_mode")"
+  resource_kind="$(vmimage_resource_kind_from_path_mode "$path_mode")"
   local -a args=(
-    prompt file
+    prompt resource
     --id "vmimage.${name,,}"
     --title "$title"
     --message "$message"
     --default "$current"
-    --path-mode "$path_mode"
-    --filter "$file_filter"
+    --mode "$resource_mode"
+    --selection single
+    --kind "$resource_kind"
   )
+  local filter old_ifs
+  local -a __vmimage_filters=()
+  old_ifs="$IFS"
+  IFS=';'
+  read -r -a __vmimage_filters <<< "${file_filter//;;/;}"
+  IFS="$old_ifs"
+  for filter in "${__vmimage_filters[@]}"; do
+    filter="${filter#"${filter%%[![:space:]]*}"}"
+    filter="${filter%"${filter##*[![:space:]]}"}"
+    [[ -n "$filter" ]] || continue
+    args+=(--filter "$filter")
+  done
   if [[ "$must_exist" == "true" ]]; then
     args+=(--must-exist)
   fi
   local response
   response="$(dockpipe_sdk "${args[@]}")" || vmimage_die "prompt failed for ${name}"
-  [[ -n "$response" ]] || vmimage_die "required file value ${name} was not provided"
   printf -v "$name" '%s' "$response"
   export "$name"
 }
 
+vmimage_prompt_file_value() {
+  local name="$1" title="$2" message="$3" path_mode="${4:-open-file}" file_filter="${5:-All Files (*)}" must_exist="${6:-true}"
+  local response=""
+  vmimage_prompt_resource_value "$name" "$title" "$message" "$path_mode" "$file_filter" "$must_exist"
+  response="${!name:-}"
+  [[ -n "$response" ]] || vmimage_die "required file value ${name} was not provided"
+}
+
 vmimage_prompt_optional_file_value() {
   local name="$1" title="$2" message="$3" path_mode="${4:-open-file}" file_filter="${5:-All Files (*)}"
-  local current="${!name:-}"
-  local response
-  response="$(
-    dockpipe_sdk prompt file \
-      --id "vmimage.${name,,}" \
-      --title "$title" \
-      --message "$message" \
-      --default "$current" \
-      --path-mode "$path_mode" \
-      --filter "$file_filter"
-  )" || vmimage_die "prompt failed for ${name}"
-  printf -v "$name" '%s' "$response"
-  export "$name"
+  vmimage_prompt_resource_value "$name" "$title" "$message" "$path_mode" "$file_filter" false
 }
 
 vmimage_tpm_mode() {
@@ -914,11 +947,9 @@ vmimage_boot_source() {
   )" || vmimage_die "prompt failed for VM boot source"
   case "$choice" in
     "Boot existing disk image")
-      export DOCKPIPE_VM_BOOT_SOURCE="image"
       printf 'image\n'
       ;;
     "Install from ISO")
-      export DOCKPIPE_VM_BOOT_SOURCE="installer-iso"
       printf 'installer-iso\n'
       ;;
     *)
@@ -1004,7 +1035,10 @@ vmimage_ensure_prompted_installer_inputs() {
 }
 
 vmimage_ensure_prompted_inputs() {
-  case "$(vmimage_boot_source)" in
+  local source
+  source="$(vmimage_boot_source)"
+  export DOCKPIPE_VM_BOOT_SOURCE="$source"
+  case "$source" in
     image)
       vmimage_ensure_prompted_image_inputs
       ;;
@@ -2167,9 +2201,15 @@ vmimage_run_qemu_kvm() {
 
 vmimage_run_qemu_windows() {
   vmimage_is_windows_host || vmimage_die "qemu-windows backend currently requires a Windows host"
+  local accel
+  accel="${DOCKPIPE_VM_ACCEL:-$(vmimage_default_accel)}"
   if [[ "$(vmimage_tpm_mode)" != "off" ]]; then
     vmimage_log "windows host detected: forcing DOCKPIPE_VM_TPM=off because TPM emulation is not supported on qemu-windows"
     export DOCKPIPE_VM_TPM=off
+  fi
+  if [[ "$accel" == *whpx* && "$(vmimage_secure_boot_mode)" != "off" ]]; then
+    vmimage_log "windows host detected: forcing DOCKPIPE_VM_SECURE_BOOT=off because WHPX does not support the SMM path required for secure boot on this backend"
+    export DOCKPIPE_VM_SECURE_BOOT=off
   fi
   vmimage_run_qemu_common qemu-windows
 }

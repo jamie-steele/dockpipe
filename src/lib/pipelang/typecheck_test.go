@@ -44,3 +44,31 @@ func TestInvokePrivateMethodDenied(t *testing.T) {
 		t.Fatalf("expected private method invoke failure, got %v", err)
 	}
 }
+
+func TestCheckCompoundTypes(t *testing.T) {
+	src := `
+Interface IImageResource { string Path; }
+Interface IImagePicker { List<string> Labels; List<IImageResource> Images; }
+Class ImagePicker : IImagePicker {
+  public List<string> Labels;
+  public List<IImageResource> Images;
+}`
+	prog, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Check(prog); err != nil {
+		t.Fatalf("check compound types: %v", err)
+	}
+}
+
+func TestCheckReservedIComparablePlumbing(t *testing.T) {
+	src := `Class ImageResource : IComparable { public string Path = "a"; }`
+	prog, err := Parse([]byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Check(prog); err != nil {
+		t.Fatalf("reserved IComparable should be accepted for now: %v", err)
+	}
+}

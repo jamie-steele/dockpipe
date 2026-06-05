@@ -22,21 +22,25 @@ type SDK struct {
 }
 
 type PromptSpec struct {
-	Type             string   `json:"type"`
-	ID               string   `json:"id"`
-	Title            string   `json:"title"`
-	Message          string   `json:"message"`
-	Default          string   `json:"default"`
-	Sensitive        bool     `json:"sensitive"`
-	Intent           string   `json:"intent,omitempty"`
-	AutomationGroup  string   `json:"automation_group,omitempty"`
-	AllowAutoApprove bool     `json:"allow_auto_approve,omitempty"`
-	AutoApproveValue string   `json:"auto_approve_value,omitempty"`
-	PathMode         string   `json:"path_mode,omitempty"`
-	FileFilter       string   `json:"file_filter,omitempty"`
-	MustExist        bool     `json:"must_exist,omitempty"`
-	BaseDir          string   `json:"base_dir,omitempty"`
-	Options          []string `json:"options"`
+	Type              string   `json:"type"`
+	ID                string   `json:"id"`
+	Title             string   `json:"title"`
+	Message           string   `json:"message"`
+	Default           string   `json:"default"`
+	Sensitive         bool     `json:"sensitive"`
+	Intent            string   `json:"intent,omitempty"`
+	AutomationGroup   string   `json:"automation_group,omitempty"`
+	AllowAutoApprove  bool     `json:"allow_auto_approve,omitempty"`
+	AutoApproveValue  string   `json:"auto_approve_value,omitempty"`
+	PathMode          string   `json:"path_mode,omitempty"`
+	FileFilter        string   `json:"file_filter,omitempty"`
+	MustExist         bool     `json:"must_exist,omitempty"`
+	BaseDir           string   `json:"base_dir,omitempty"`
+	ResourceMode      string   `json:"resource_mode,omitempty"`
+	ResourceSelection string   `json:"resource_selection,omitempty"`
+	ResourceKind      string   `json:"resource_kind,omitempty"`
+	Filters           []string `json:"filters,omitempty"`
+	Options           []string `json:"options"`
 }
 
 func RepoRoot(root string) (string, error) {
@@ -106,6 +110,40 @@ func promptMode() string {
 	return "noninteractive"
 }
 
+func normalizeResourceEntries(raw string) []string {
+	parts := strings.Split(raw, ";")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		candidate := strings.TrimSpace(part)
+		if len(candidate) >= 2 {
+			first := candidate[0]
+			last := candidate[len(candidate)-1]
+			if (first == '"' || first == '\'') && first == last {
+				candidate = strings.TrimSpace(candidate[1 : len(candidate)-1])
+			}
+		}
+		if candidate != "" {
+			out = append(out, candidate)
+		}
+	}
+	return out
+}
+
+func resourceExists(baseDir, resourceKind, value string) bool {
+	resolved := value
+	if !filepath.IsAbs(resolved) {
+		resolved = filepath.Join(baseDir, value)
+	}
+	info, err := os.Stat(resolved)
+	if err != nil {
+		return false
+	}
+	if resourceKind == "directory" {
+		return info.IsDir()
+	}
+	return true
+}
+
 func Prompt(spec PromptSpec) (string, error) {
 	if strings.TrimSpace(spec.ID) == "" {
 		spec.ID = fmt.Sprintf("prompt.%d", os.Getpid())
@@ -135,7 +173,7 @@ func Prompt(spec PromptSpec) (string, error) {
 			if len(spec.Options) > 0 {
 				return spec.Options[0], nil
 			}
-		case "file":
+		case "file", "resource":
 			if strings.TrimSpace(spec.Default) != "" {
 				return spec.Default, nil
 			}
@@ -287,6 +325,87 @@ func Prompt(spec PromptSpec) (string, error) {
 					}
 				}
 				return out, nil
+			}
+		case "resource":
+			reader := bufio.NewReader(os.Stdin)
+			filterText := spec.FileFilter
+			if len(spec.Filters) > 0 {
+				filterText = strings.Join(spec.Filters, ";;")
+			}
+			resourceSelection := spec.ResourceSelection
+			if resourceSelection == "" {
+				resourceSelection = "single"
+			}
+			resourceKind := spec.ResourceKind
+			if resourceKind == "" {
+				resourceKind = "file"
+			}
+			for {
+				if filterText != "" {
+					fmt.Fprintf(os.Stderr, "Filter: %s\n", filterText)
+				}
+				promptText := spec.Message
+				if resourceSelection == "multi" {
+					promptText += " (separate multiple paths with ;)"
+				}
+				if spec.Default != "" {
+					fmt.Fprintf(os.Stderr, "%s [%s]: ", promptText, spec.Default)
+				} else {
+					fmt.Fprintf(os.Stderr, "%s: ", promptText)
+				}
+				line, err := reader.ReadString('\n')
+				if err != nil && len(line) == 0 {
+					return "", err
+				}
+				out := strings.TrimRight(line, "\r\n")
+				if out == "" {
+					out = spec.Default
+				}
+				if out == "" {
+					return out, nil
+				}
+				if resourceSelection == "multi" {
+					entries := normalizeResourceEntries(out)
+					if len(entries) == 0 {
+						return "[]", nil
+					}
+					if spec.MustExist {
+						missing := ""
+						for _, entry := range entries {
+							if !resourceExists(spec.BaseDir, resourceKind, entry) {
+								missing = entry
+								break
+							}
+						}
+						if missing != "" {
+							label := "File"
+							if resourceKind == "directory" {
+								label = "Directory"
+							}
+							fmt.Fprintf(os.Stderr, "%s not found: %s\n", label, missing)
+							continue
+						}
+					}
+					b, err := json.Marshal(entries)
+					if err != nil {
+						return "", err
+					}
+					return string(b), nil
+				}
+				entries := normalizeResourceEntries(out)
+				if len(entries) == 0 {
+					return "", nil
+				}
+				selected := entries[0]
+				if spec.MustExist && !resourceExists(spec.BaseDir, resourceKind, selected) {
+					label := "File"
+					if resourceKind == "directory" {
+						label = "Directory"
+					}
+					fmt.Fprintf(os.Stderr, "%s not found: %s\n", label, selected)
+					continue
+				}
+				return selected, nil
 			}
 		default:
 			return "", fmt.Errorf("unsupported DockPipe prompt kind: %s", spec.Type)

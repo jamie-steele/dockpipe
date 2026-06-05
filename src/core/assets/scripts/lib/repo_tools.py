@@ -57,6 +57,10 @@ class DockpipeSDK:
         path_mode: str = "open-file",
         file_filter: str = "",
         must_exist: bool = False,
+        resource_mode: str = "select",
+        resource_selection: str = "single",
+        resource_kind: str = "file",
+        filters: list[str] | None = None,
     ) -> str:
         return prompt(
             kind,
@@ -73,6 +77,10 @@ class DockpipeSDK:
             path_mode=path_mode,
             file_filter=file_filter,
             must_exist=must_exist,
+            resource_mode=resource_mode,
+            resource_selection=resource_selection,
+            resource_kind=resource_kind,
+            filters=filters,
         )
 
 
@@ -101,6 +109,25 @@ def _resolve_prompt_path(value: str) -> Path:
     return (base / p).resolve()
 
 
+def _normalize_resource_entries(raw: str) -> list[str]:
+    values: list[str] = []
+    for part in raw.split(";"):
+        candidate = part.strip()
+        if len(candidate) >= 2 and candidate[0] == candidate[-1] and candidate[0] in {"'", '"'}:
+            candidate = candidate[1:-1]
+        candidate = candidate.strip()
+        if candidate:
+            values.append(candidate)
+    return values
+
+
+def _resource_exists(value: str, resource_kind: str) -> bool:
+    resolved = _resolve_prompt_path(value)
+    if resource_kind == "directory":
+        return resolved.is_dir()
+    return resolved.exists()
+
+
 def prompt(
     kind: str,
     *,
@@ -117,8 +144,13 @@ def prompt(
     path_mode: str = "open-file",
     file_filter: str = "",
     must_exist: bool = False,
+    resource_mode: str = "select",
+    resource_selection: str = "single",
+    resource_kind: str = "file",
+    filters: list[str] | None = None,
 ) -> str:
     options = list(options or [])
+    filters = list(filters or [])
     prompt_id = prompt_id or f"prompt.{os.getpid()}.{id(options)}"
     message = message or title
     mode = _prompt_mode()
@@ -132,6 +164,8 @@ def prompt(
             return "yes"
         if kind == "choice" and options:
             return options[0]
+        if kind == "resource" and default:
+            return default
 
     if mode == "json":
         payload = json.dumps(
@@ -150,6 +184,10 @@ def prompt(
                 "file_filter": file_filter,
                 "must_exist": must_exist,
                 "base_dir": str(repo_root()),
+                "resource_mode": resource_mode,
+                "resource_selection": resource_selection,
+                "resource_kind": resource_kind,
+                "filters": filters,
                 "options": options,
             },
             separators=(",", ":"),
@@ -214,6 +252,39 @@ def prompt(
                     if 1 <= selected <= len(options):
                         return options[selected - 1]
                 print(f"Enter a number between 1 and {len(options)}.", file=sys.stderr)
+        if kind == "resource":
+            filter_text = ";;".join(filter(None, filters)) or file_filter
+            while True:
+                prompt_text = message
+                if resource_selection == "multi":
+                    prompt_text = f"{prompt_text} (separate multiple paths with ;)"
+                prompt_text = prompt_text if not default else f"{prompt_text} [{default}]"
+                if filter_text:
+                    print(f"Filter: {filter_text}", file=sys.stderr)
+                response = input(f"{prompt_text}: ")
+                selected = response or default
+                if not selected:
+                    return selected
+                if resource_selection == "multi":
+                    entries = _normalize_resource_entries(selected)
+                    if not entries:
+                        return "[]"
+                    if must_exist:
+                        missing = next((entry for entry in entries if not _resource_exists(entry, resource_kind)), None)
+                        if missing is not None:
+                            kind_label = "Directory" if resource_kind == "directory" else "File"
+                            print(f"{kind_label} not found: {missing}", file=sys.stderr)
+                            continue
+                    return json.dumps(entries, separators=(",", ":"))
+                entries = _normalize_resource_entries(selected)
+                if not entries:
+                    return ""
+                single = entries[0]
+                if must_exist and not _resource_exists(single, resource_kind):
+                    kind_label = "Directory" if resource_kind == "directory" else "File"
+                    print(f"{kind_label} not found: {single}", file=sys.stderr)
+                    continue
+                return single
         raise RuntimeError(f"Unsupported DockPipe prompt kind: {kind}")
 
     if default:

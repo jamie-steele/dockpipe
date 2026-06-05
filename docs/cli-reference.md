@@ -106,6 +106,8 @@ Commands:
 
 Optional typed authoring helper. PipeLang compiles to inspectable artifacts; workflow execution still uses normal DockPipe YAML.
 
+When a workflow also declares `view:`, that YAML remains a launcher/tooling presentation layer over the typed model rather than a separate execution contract. See **[pipelang.md](pipelang.md)** and **[workflow-yaml.md](workflow-yaml.md)**.
+
 | Command | Purpose |
 |---------|---------|
 | `dockpipe pipelang compile --in <file.pipe> [--entry <Class>] [--out <dir>]` | Parse + type-check PipeLang and emit artifacts: `<Class>.workflow.yml`, `<Class>.bindings.json`, `<Class>.bindings.env` (default out: `bin/.dockpipe/pipelang/`). |

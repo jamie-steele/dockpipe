@@ -24,16 +24,53 @@ type catalogWorkflowRecord struct {
 	ConfigPath  string                       `json:"config_path,omitempty"`
 	Vars        map[string]string            `json:"vars,omitempty"`
 	Inputs      []catalogWorkflowInputRecord `json:"inputs,omitempty"`
+	View        *catalogWorkflowViewRecord   `json:"view,omitempty"`
 	Types       []string                     `json:"types,omitempty"`
 }
 
 type catalogWorkflowInputRecord struct {
-	FieldName    string            `json:"field_name"`
-	EnvName      string            `json:"env_name"`
-	Type         string            `json:"type,omitempty"`
-	Description  string            `json:"description,omitempty"`
-	DefaultValue string            `json:"default_value,omitempty"`
-	Attributes   map[string]string `json:"attributes,omitempty"`
+	FieldName    string                       `json:"field_name"`
+	EnvName      string                       `json:"env_name"`
+	Type         string                       `json:"type,omitempty"`
+	ElementType  string                       `json:"element_type,omitempty"`
+	Description  string                       `json:"description,omitempty"`
+	DefaultValue string                       `json:"default_value,omitempty"`
+	Attributes   map[string]string            `json:"attributes,omitempty"`
+	Children     []catalogWorkflowInputRecord `json:"children,omitempty"`
+}
+
+type catalogWorkflowViewRecord struct {
+	Entry *catalogWorkflowViewEntryRecord `json:"entry,omitempty"`
+	Pages []catalogWorkflowViewPageRecord `json:"pages,omitempty"`
+}
+
+type catalogWorkflowViewEntryRecord struct {
+	Type        string                                 `json:"type,omitempty"`
+	Field       string                                 `json:"field,omitempty"`
+	Title       string                                 `json:"title,omitempty"`
+	Description string                                 `json:"description,omitempty"`
+	Options     []catalogWorkflowViewEntryOptionRecord `json:"options,omitempty"`
+}
+
+type catalogWorkflowViewEntryOptionRecord struct {
+	Value string   `json:"value,omitempty"`
+	Label string   `json:"label,omitempty"`
+	Next  string   `json:"next,omitempty"`
+	Pages []string `json:"pages,omitempty"`
+}
+
+type catalogWorkflowViewPageRecord struct {
+	ID          string                             `json:"id,omitempty"`
+	Title       string                             `json:"title,omitempty"`
+	Description string                             `json:"description,omitempty"`
+	Sections    []catalogWorkflowViewSectionRecord `json:"sections,omitempty"`
+}
+
+type catalogWorkflowViewSectionRecord struct {
+	ID          string   `json:"id,omitempty"`
+	Title       string   `json:"title,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Fields      []string `json:"fields,omitempty"`
 }
 
 type catalogListOutput struct {
@@ -147,6 +184,7 @@ func listCatalogWorkflows(projectRoot, workdir string) ([]catalogWorkflowRecord,
 		if display == "" {
 			display = name
 		}
+		inputs := buildCatalogWorkflowInputs(cfgPath, wf)
 		out = append(out, catalogWorkflowRecord{
 			WorkflowID:  name,
 			DisplayName: display,
@@ -155,7 +193,8 @@ func listCatalogWorkflows(projectRoot, workdir string) ([]catalogWorkflowRecord,
 			IconPath:    resolveCatalogWorkflowIcon(cfgPath, strings.TrimSpace(wf.Icon), name),
 			ConfigPath:  cfgPath,
 			Vars:        cloneCatalogVars(wf.Vars),
-			Inputs:      buildCatalogWorkflowInputs(cfgPath, wf),
+			Inputs:      inputs,
+			View:        buildCatalogWorkflowView(wf.View, inputs),
 			Types:       append([]string(nil), wf.Types...),
 		})
 	}
@@ -169,7 +208,8 @@ var (
 	pipeSummaryStartRe   = regexp.MustCompile(`^\s*///\s*<summary>\s*(.*?)\s*$`)
 	pipeSummaryEndRe     = regexp.MustCompile(`^(.*?)\s*</summary>\s*$`)
 	pipeAnnotationLineRe = regexp.MustCompile(`^\s*\[\s*[A-Za-z_][A-Za-z0-9_]*\s*=.*\]\s*$`)
-	pipeFieldLineRe      = regexp.MustCompile(`^\s*public\s+([A-Za-z0-9_]+)\s+([A-Za-z0-9_]+)\s*(?:[;=].*)?$`)
+	pipeTypeLineRe       = regexp.MustCompile(`^\s*(?:public\s+|private\s+)?(?:Interface|Class|Struct)\s+([A-Za-z0-9_]+)\b`)
+	pipeFieldLineRe      = regexp.MustCompile(`^\s*public\s+([A-Za-z0-9_<>]+)\s+([A-Za-z0-9_]+)\s*(?:[;=].*)?$`)
 )
 
 func cloneCatalogVars(in map[string]string) map[string]string {
@@ -226,7 +266,7 @@ func buildCatalogWorkflowInputs(cfgPath string, wf *domain.Workflow) []catalogWo
 		if shape == nil {
 			continue
 		}
-		fieldDocs := extractCatalogPipeFieldDocs(filePath)
+		docsByType := extractCatalogPipeFieldDocsByType(files)
 		className := shape.ClassName
 		if className == "" {
 			className, err = inferEntryClassFromTypeRef(files, typeRef)
@@ -241,39 +281,287 @@ func buildCatalogWorkflowInputs(cfgPath string, wf *domain.Workflow) []catalogWo
 			}
 		}
 		envPrefix := catalogInferredEnvPrefix(shape.ClassName, typeRef)
+		shapeName := strings.TrimSpace(typeRef)
+		if strings.TrimSpace(shape.ClassName) != "" {
+			shapeName = strings.TrimSpace(shape.ClassName)
+		}
 		for _, field := range shape.Fields {
-			envName := catalogFieldEnvName(field, envPrefix)
-			if envName == "" {
+			record := buildCatalogWorkflowInputRecord(prog, field, envPrefix, shapeName, docsByType, classDefaults, wf.Vars, seen, 0)
+			if record == nil {
 				continue
 			}
-			key := strings.ToUpper(strings.TrimSpace(envName))
-			if _, ok := seen[key]; ok {
-				continue
-			}
-			seen[key] = struct{}{}
-			defaultValue := ""
-			if wf.Vars != nil {
-				if v, ok := wf.Vars[key]; ok {
-					defaultValue = v
-				}
-			}
-			if defaultValue == "" {
-				defaultValue = classDefaults[field.Name]
-			}
-			out = append(out, catalogWorkflowInputRecord{
-				FieldName:    field.Name,
-				EnvName:      key,
-				Type:         string(field.Type),
-				Description:  strings.TrimSpace(fieldDocs[field.Name]),
-				DefaultValue: defaultValue,
-				Attributes:   catalogAnnotationMap(field.Annotations),
-			})
+			out = append(out, *record)
 		}
 	}
 	return out
 }
 
+func buildCatalogWorkflowView(view domain.WorkflowView, inputs []catalogWorkflowInputRecord) *catalogWorkflowViewRecord {
+	if view.Entry == nil && len(view.Pages) == 0 {
+		return nil
+	}
+	known := map[string]struct{}{}
+	collectCatalogInputPaths(inputs, "", known)
+	out := &catalogWorkflowViewRecord{}
+	pageIDs := map[string]struct{}{}
+	for _, page := range view.Pages {
+		pageRec := catalogWorkflowViewPageRecord{
+			ID:          strings.TrimSpace(page.ID),
+			Title:       strings.TrimSpace(page.Title),
+			Description: strings.TrimSpace(page.Description),
+		}
+		for _, section := range page.Sections {
+			secRec := catalogWorkflowViewSectionRecord{
+				ID:          strings.TrimSpace(section.ID),
+				Title:       strings.TrimSpace(section.Title),
+				Description: strings.TrimSpace(section.Description),
+			}
+			for _, field := range section.Fields {
+				field = strings.TrimSpace(field)
+				if field == "" {
+					continue
+				}
+				if _, ok := known[field]; !ok {
+					continue
+				}
+				secRec.Fields = append(secRec.Fields, field)
+			}
+			if len(secRec.Fields) == 0 && secRec.Title == "" && secRec.Description == "" && secRec.ID == "" {
+				continue
+			}
+			if len(secRec.Fields) == 0 {
+				continue
+			}
+			pageRec.Sections = append(pageRec.Sections, secRec)
+		}
+		if len(pageRec.Sections) == 0 {
+			continue
+		}
+		if pageRec.ID != "" {
+			pageIDs[pageRec.ID] = struct{}{}
+		}
+		out.Pages = append(out.Pages, pageRec)
+	}
+	if view.Entry != nil {
+		entryField := strings.TrimSpace(view.Entry.Field)
+		if _, ok := known[entryField]; ok && entryField != "" {
+			entry := &catalogWorkflowViewEntryRecord{
+				Type:        strings.TrimSpace(view.Entry.Type),
+				Field:       entryField,
+				Title:       strings.TrimSpace(view.Entry.Title),
+				Description: strings.TrimSpace(view.Entry.Description),
+			}
+			for _, option := range view.Entry.Options {
+				opt := catalogWorkflowViewEntryOptionRecord{
+					Value: strings.TrimSpace(option.Value),
+					Label: strings.TrimSpace(option.Label),
+					Next:  strings.TrimSpace(option.Next),
+				}
+				if opt.Value == "" {
+					continue
+				}
+				if opt.Label == "" {
+					opt.Label = opt.Value
+				}
+				for _, pageID := range option.Pages {
+					pageID = strings.TrimSpace(pageID)
+					if pageID == "" {
+						continue
+					}
+					if _, ok := pageIDs[pageID]; !ok {
+						continue
+					}
+					opt.Pages = append(opt.Pages, pageID)
+				}
+				if opt.Next != "" {
+					if _, ok := pageIDs[opt.Next]; !ok {
+						opt.Next = ""
+					}
+				}
+				if len(opt.Pages) == 0 && opt.Next != "" {
+					opt.Pages = []string{opt.Next}
+				}
+				entry.Options = append(entry.Options, opt)
+			}
+			if len(entry.Options) > 0 {
+				out.Entry = entry
+			}
+		}
+	}
+	if out.Entry == nil && len(out.Pages) == 0 {
+		return nil
+	}
+	return out
+}
+
+func collectCatalogInputPaths(inputs []catalogWorkflowInputRecord, prefix string, out map[string]struct{}) {
+	for _, input := range inputs {
+		name := strings.TrimSpace(input.FieldName)
+		if name == "" {
+			continue
+		}
+		path := name
+		if prefix != "" {
+			path = prefix + "." + name
+		}
+		out[path] = struct{}{}
+		if len(input.Children) > 0 {
+			collectCatalogInputPaths(input.Children, path, out)
+		}
+	}
+}
+
+func buildCatalogWorkflowInputRecord(prog *pipelang.Program, field pipelang.FieldSig, envPrefix, ownerType string, docsByType map[string]map[string]string, classDefaults, workflowVars map[string]string, seen map[string]struct{}, depth int) *catalogWorkflowInputRecord {
+	if depth > 8 {
+		return nil
+	}
+	typ := pipelang.TypeName(field.Type)
+	attrs := catalogAnnotationMap(field.Annotations)
+	doc := strings.TrimSpace(catalogFieldDocForType(docsByType, ownerType, field.Name))
+	base := &catalogWorkflowInputRecord{
+		FieldName:   field.Name,
+		Type:        string(field.Type),
+		Description: doc,
+		Attributes:  attrs,
+	}
+
+	if inner, ok := typ.ListElementType(); ok {
+		base.ElementType = string(inner)
+		if inner.IsPrimitive() {
+			envName := catalogFieldEnvName(field, envPrefix)
+			if envName == "" {
+				return nil
+			}
+			key := strings.ToUpper(strings.TrimSpace(envName))
+			if _, ok := seen[key]; ok {
+				return nil
+			}
+			seen[key] = struct{}{}
+			base.EnvName = key
+			base.DefaultValue = catalogFieldDefaultValue(key, field.Name, classDefaults, workflowVars)
+			if base.Attributes == nil {
+				base.Attributes = map[string]string{}
+			}
+			if _, ok := base.Attributes["control"]; !ok {
+				base.Attributes["control"] = "list"
+			}
+			return base
+		}
+		if childShape := findCatalogPipeTypeShape(prog, string(inner)); childShape != nil {
+			childPrefix := catalogChildEnvPrefix(field, envPrefix)
+			base.Children = buildCatalogChildWorkflowInputs(prog, childShape.Fields, childPrefix, string(inner), docsByType, workflowVars, seen, depth+1)
+			if len(base.Children) == 0 {
+				return nil
+			}
+			if base.Attributes == nil {
+				base.Attributes = map[string]string{}
+			}
+			if _, ok := base.Attributes["control"]; !ok {
+				base.Attributes["control"] = "collection"
+			}
+			return base
+		}
+		return base
+	}
+
+	if typ.IsPrimitive() {
+		envName := catalogFieldEnvName(field, envPrefix)
+		if envName == "" {
+			return nil
+		}
+		key := strings.ToUpper(strings.TrimSpace(envName))
+		if _, ok := seen[key]; ok {
+			return nil
+		}
+		seen[key] = struct{}{}
+		base.EnvName = key
+		base.DefaultValue = catalogFieldDefaultValue(key, field.Name, classDefaults, workflowVars)
+		return base
+	}
+
+	if childShape := findCatalogPipeTypeShape(prog, string(typ)); childShape != nil {
+		childPrefix := catalogChildEnvPrefix(field, envPrefix)
+		nestedDefaults := catalogNestedClassDefaults(prog, string(typ))
+		base.Children = buildCatalogChildWorkflowInputsWithDefaults(prog, childShape.Fields, childPrefix, string(typ), docsByType, workflowVars, seen, nestedDefaults, depth+1)
+		if len(base.Children) == 0 {
+			return nil
+		}
+		if base.Attributes == nil {
+			base.Attributes = map[string]string{}
+		}
+		if _, ok := base.Attributes["control"]; !ok {
+			base.Attributes["control"] = "object"
+		}
+		return base
+	}
+
+	return nil
+}
+
+func buildCatalogChildWorkflowInputs(prog *pipelang.Program, fields []pipelang.FieldSig, envPrefix, ownerType string, docsByType map[string]map[string]string, workflowVars map[string]string, seen map[string]struct{}, depth int) []catalogWorkflowInputRecord {
+	return buildCatalogChildWorkflowInputsWithDefaults(prog, fields, envPrefix, ownerType, docsByType, workflowVars, seen, nil, depth)
+}
+
+func buildCatalogChildWorkflowInputsWithDefaults(prog *pipelang.Program, fields []pipelang.FieldSig, envPrefix, ownerType string, docsByType map[string]map[string]string, workflowVars map[string]string, seen map[string]struct{}, classDefaults map[string]string, depth int) []catalogWorkflowInputRecord {
+	out := make([]catalogWorkflowInputRecord, 0, len(fields))
+	for _, child := range fields {
+		record := buildCatalogWorkflowInputRecord(prog, child, envPrefix, ownerType, docsByType, classDefaults, workflowVars, seen, depth)
+		if record == nil {
+			continue
+		}
+		out = append(out, *record)
+	}
+	return out
+}
+
+func catalogNestedClassDefaults(prog *pipelang.Program, typeName string) map[string]string {
+	if decl := findCatalogClassDecl(prog, typeName); decl != nil {
+		return findCatalogClassDefaults(prog, decl.Name)
+	}
+	trimmed := strings.TrimSpace(typeName)
+	if trimmed == "" {
+		return nil
+	}
+	var implName string
+	for _, decl := range prog.Classes {
+		if strings.TrimSpace(decl.Implements) != trimmed {
+			continue
+		}
+		if implName != "" {
+			return nil
+		}
+		implName = decl.Name
+	}
+	if implName == "" {
+		return nil
+	}
+	return findCatalogClassDefaults(prog, implName)
+}
+
+func catalogFieldDefaultValue(envName, fieldName string, classDefaults, workflowVars map[string]string) string {
+	if workflowVars != nil {
+		if v, ok := workflowVars[envName]; ok {
+			return v
+		}
+	}
+	if classDefaults != nil {
+		return classDefaults[fieldName]
+	}
+	return ""
+}
+
+func catalogChildEnvPrefix(field pipelang.FieldSig, envPrefix string) string {
+	base := catalogFieldEnvName(field, envPrefix)
+	if base == "" {
+		return envPrefix
+	}
+	return strings.ToUpper(strings.TrimSpace(base)) + "_"
+}
+
 func catalogFieldEnvName(field pipelang.FieldSig, prefix string) string {
+	if explicit := catalogAnnotationString(field.Annotations, "envname"); explicit != "" {
+		return explicit
+	}
 	base := catalogFieldNameToEnv(field.Name)
 	if base == "" {
 		return ""
@@ -283,6 +571,20 @@ func catalogFieldEnvName(field pipelang.FieldSig, prefix string) string {
 		return base
 	}
 	return prefix + base
+}
+
+func catalogAnnotationString(in []pipelang.Annotation, name string) string {
+	want := strings.TrimSpace(strings.ToLower(name))
+	if want == "" {
+		return ""
+	}
+	for _, ann := range in {
+		if strings.TrimSpace(strings.ToLower(ann.Name)) != want {
+			continue
+		}
+		return strings.TrimSpace(ann.Value.StringValue())
+	}
+	return ""
 }
 
 func catalogInferredEnvPrefix(className, typeRef string) string {
@@ -475,6 +777,106 @@ func extractCatalogPipeFieldDocs(path string) map[string]string {
 		}
 	}
 	return out
+}
+
+func extractCatalogPipeFieldDocsByType(files map[string][]byte) map[string]map[string]string {
+	out := map[string]map[string]string{}
+	for _, b := range files {
+		perFile := extractCatalogPipeFieldDocsByTypeFromSource(string(b))
+		for typeName, fields := range perFile {
+			dst := out[typeName]
+			if dst == nil {
+				dst = map[string]string{}
+				out[typeName] = dst
+			}
+			for fieldName, doc := range fields {
+				if strings.TrimSpace(doc) == "" {
+					continue
+				}
+				dst[fieldName] = doc
+			}
+		}
+	}
+	return out
+}
+
+func extractCatalogPipeFieldDocsByTypeFromSource(src string) map[string]map[string]string {
+	out := map[string]map[string]string{}
+	var pending []string
+	var currentType string
+	inSummary := false
+	sc := bufio.NewScanner(strings.NewReader(src))
+	for sc.Scan() {
+		line := sc.Text()
+		if inSummary {
+			if m := pipeSummaryEndRe.FindStringSubmatch(line); len(m) == 2 {
+				text := strings.TrimSpace(m[1])
+				if text != "" {
+					pending = append(pending, text)
+				}
+				inSummary = false
+				continue
+			}
+			text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "///"))
+			if text != "" {
+				pending = append(pending, text)
+			}
+			continue
+		}
+		if m := pipeSummaryStartRe.FindStringSubmatch(line); len(m) == 2 {
+			text := strings.TrimSpace(m[1])
+			if strings.Contains(text, "</summary>") {
+				text = strings.TrimSpace(strings.TrimSuffix(text, "</summary>"))
+				if text != "" {
+					pending = append(pending, text)
+				}
+				inSummary = false
+			} else {
+				if text != "" {
+					pending = append(pending, text)
+				}
+				inSummary = true
+			}
+			continue
+		}
+		if m := pipeTypeLineRe.FindStringSubmatch(line); len(m) == 2 {
+			currentType = strings.TrimSpace(m[1])
+			pending = nil
+			continue
+		}
+		if strings.TrimSpace(line) == "}" {
+			currentType = ""
+			pending = nil
+			continue
+		}
+		if m := pipeFieldLineRe.FindStringSubmatch(line); len(m) == 3 {
+			fieldName := strings.TrimSpace(m[2])
+			if currentType != "" && fieldName != "" && len(pending) > 0 {
+				dst := out[currentType]
+				if dst == nil {
+					dst = map[string]string{}
+					out[currentType] = dst
+				}
+				dst[fieldName] = strings.Join(pending, " ")
+			}
+			pending = nil
+			continue
+		}
+		if pipeAnnotationLineRe.MatchString(line) {
+			continue
+		}
+		if strings.TrimSpace(line) != "" {
+			pending = nil
+		}
+	}
+	return out
+}
+
+func catalogFieldDocForType(docsByType map[string]map[string]string, typeName, fieldName string) string {
+	if docsByType == nil {
+		return ""
+	}
+	return docsByType[strings.TrimSpace(typeName)][fieldName]
 }
 
 func catalogFieldNameToEnv(name string) string {

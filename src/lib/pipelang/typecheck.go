@@ -180,6 +180,9 @@ func (cp *checkedProgram) validateImplements(c *ClassDecl) error {
 	if strings.TrimSpace(c.Implements) == "" {
 		return nil
 	}
+	if strings.TrimSpace(c.Implements) == "IComparable" {
+		return nil
+	}
 	i, ok := cp.interfaces[c.Implements]
 	if !ok {
 		return fmt.Errorf("class %s implements unknown interface %q", c.Name, c.Implements)
@@ -297,6 +300,9 @@ func inferBinaryType(op string, lt, rt TypeName) (TypeName, error) {
 	case "<", "<=", ">", ">=":
 		if isNumeric(lt) && isNumeric(rt) {
 			return TypeBool, nil
+		}
+		if lt == rt && !lt.IsPrimitive() {
+			return "", fmt.Errorf("IComparable is not implemented yet for type %s", lt)
 		}
 	case "==", "!=":
 		if lt == rt {

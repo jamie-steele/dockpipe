@@ -110,6 +110,8 @@ If a host step starts sidecars or helper containers, the runner can clean them u
 | `strategy` | Default **strategy name** when the CLI does **not** pass **`--strategy <name>`**. |
 | `strategies` | Optional allowlist: if non-empty, the effective strategy (CLI **`--strategy`** or **`strategy:`**) must be one of the listed names. |
 | `docker_preflight` | Default **true**. When **false**, the runner skips the Docker reachability check before **`steps:`** if **no** step uses the container. Use for **host-only** workflows whose **`run:`** / **`pre_script`** scripts do **not** invoke Docker. If a script calls **`docker`**, keep the default or the workflow may fail later. |
+| `types` | Optional PipeLang type entrypoints used by tooling/catalog/launcher surfaces. Execution still runs through normal workflow YAML and env resolution. |
+| `view` | Optional authored launcher presentation layer. Define pages, sections, and ordered field paths over the typed model while keeping the underlying env contract unchanged. |
 
 ### `imports` vs `inject`
 
@@ -121,6 +123,68 @@ These two fields solve different problems:
 If you want more vars or earlier steps to become part of this workflow, use **`imports`**.
 
 If you want compile/package closure to include additional workflows, packages, or resolver profiles without changing this workflow’s authored structure, use **`inject`**.
+
+### `types` and `view`
+
+Use `types:` when you want a workflow to expose a **typed model** to tooling.
+
+Use `view:` when you want to control **how launcher-style clients present that model**.
+
+The intended split is:
+
+- **PipeLang (`types:`)** defines data shape, nested objects, lists, defaults, and docs
+- **workflow YAML (`view:`)** defines pages, sections, ordering, and field-path layout
+- **workflow YAML (`view:`)** may also define an authored entry choice that writes to a model field and routes the user into the relevant page set
+- **`vars:` / env names** remain the runtime contract consumed by the workflow itself
+
+Minimal example:
+
+```yaml
+types:
+  - ../../resolvers/qemu/models/QemuVmResolverConfig.pipe
+
+view:
+  entry:
+    type: choice
+    field: General.BootSource
+    title: Windows VM Source
+    options:
+      - value: image
+        label: Boot existing disk image
+        pages: [image]
+      - value: installer-iso
+        label: Install from ISO
+        pages: [install]
+
+  pages:
+    - id: image
+      title: Existing Image
+      sections:
+        - id: media
+          title: Existing Image
+          fields:
+            - Storage.Disk
+    - id: install
+      title: Install Media
+      sections:
+        - id: media
+          title: Images And Media
+          fields:
+            - Storage.Cdrom
+```
+
+Rules:
+
+- `types:` is optional. Workflows without it remain plain YAML/env workflows.
+- `view:` is optional. When omitted, launchers may fall back to the older flat/tree rendering.
+- `view.entry` is optional. Use it when the launcher should ask a high-level question first and route to the relevant settings pages.
+- `view.entry.field` points at a typed model field path, and the chosen option writes that value back into the model/env contract.
+- `view.entry.options[].pages[]` and `view.entry.options[].next` describe which page ids should be shown after that choice.
+- `view.sections[].fields[]` contains **field paths** into the root typed model, such as `General.BootSource`.
+- `view:` is a **presentation** layer only. It does not replace `vars:` or create a second runtime binding mechanism.
+- Invalid field paths should be ignored/pruned by tooling rather than breaking workflow execution.
+
+For PipeLang details, see **[pipelang.md](pipelang.md)**.
 
 ### `security`
 

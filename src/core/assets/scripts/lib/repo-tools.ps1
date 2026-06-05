@@ -88,10 +88,51 @@ function Get-DockpipePromptMode {
   return "noninteractive"
 }
 
+function ConvertTo-DockpipeResourceResponse {
+  param(
+    [string[]]$Values
+  )
+
+  $normalized = @()
+  foreach ($value in $Values) {
+    if ($null -eq $value) {
+      continue
+    }
+    $trimmed = $value.Trim()
+    if ($trimmed.Length -ge 2) {
+      if (($trimmed.StartsWith('"') -and $trimmed.EndsWith('"')) -or ($trimmed.StartsWith("'") -and $trimmed.EndsWith("'"))) {
+        $trimmed = $trimmed.Substring(1, $trimmed.Length - 2)
+      }
+    }
+    if (-not [string]::IsNullOrWhiteSpace($trimmed)) {
+      $normalized += $trimmed
+    }
+  }
+  return $normalized
+}
+
+function Test-DockpipeResourceExists {
+  param(
+    [string]$Value,
+    [string]$ResourceKind,
+    [string]$BaseDir
+  )
+
+  $resolved = $Value
+  if (-not [System.IO.Path]::IsPathRooted($resolved)) {
+    $base = $(if ($BaseDir) { $BaseDir } else { (Get-Location).Path })
+    $resolved = Join-Path $base $resolved
+  }
+  if ($ResourceKind -eq "directory") {
+    return Test-Path -LiteralPath $resolved -PathType Container
+  }
+  return Test-Path -LiteralPath $resolved -PathType Any
+}
+
 function Invoke-DockpipePrompt {
   param(
     [Parameter(Mandatory = $true)]
-    [ValidateSet("confirm", "choice", "input", "file")]
+    [ValidateSet("confirm", "choice", "input", "file", "resource")]
     [string]$Kind,
     [string]$PromptId,
     [string]$Title,
@@ -105,7 +146,13 @@ function Invoke-DockpipePrompt {
     [string]$AutoApproveValue,
     [string]$PathMode = "open-file",
     [string]$FileFilter,
-    [switch]$MustExist
+    [switch]$MustExist,
+    [ValidateSet("select", "new")]
+    [string]$ResourceMode = "select",
+    [ValidateSet("single", "multi")]
+    [string]$ResourceSelection = "single",
+    [string]$ResourceKind = "file",
+    [string[]]$Filters = @()
   )
 
   if (-not $PromptId) {
@@ -128,7 +175,7 @@ function Invoke-DockpipePrompt {
     if ($Kind -eq "choice" -and $Options.Count -gt 0) {
       return $Options[0]
     }
-    if ($Kind -eq "file" -and $DefaultValue) {
+    if (($Kind -eq "file" -or $Kind -eq "resource") -and $DefaultValue) {
       return $DefaultValue
     }
   }
@@ -151,6 +198,10 @@ function Invoke-DockpipePrompt {
         file_filter = $FileFilter
         must_exist = [bool]$MustExist
         base_dir = $(if ($env:DOCKPIPE_WORKDIR) { $env:DOCKPIPE_WORKDIR } else { (Get-Location).Path })
+        resource_mode = $ResourceMode
+        resource_selection = $ResourceSelection
+        resource_kind = $ResourceKind
+        filters = @($Filters)
         options   = @($Options)
       } | ConvertTo-Json -Compress
       [Console]::Error.WriteLine("::dockpipe-prompt::$payload")
@@ -252,6 +303,65 @@ function Invoke-DockpipePrompt {
               }
             }
             return $raw
+          }
+        }
+        "resource" {
+          $resourceFilters = @($Filters | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+          $filterDisplay = if ($resourceFilters.Count -gt 0) { $resourceFilters -join ";;" } else { $FileFilter }
+          while ($true) {
+            if ($filterDisplay) {
+              [Console]::Error.WriteLine(("Filter: {0}" -f $filterDisplay))
+            }
+            if ($ResourceSelection -eq "multi") {
+              $promptText = "$Message (separate multiple paths with ;)"
+            } else {
+              $promptText = $Message
+            }
+            if ($DefaultValue) {
+              [Console]::Error.Write(("{0} [{1}]: " -f $promptText, $DefaultValue))
+            } else {
+              [Console]::Error.Write(("{0}: " -f $promptText))
+            }
+            $raw = [Console]::In.ReadLine()
+            if ([string]::IsNullOrEmpty($raw)) {
+              $raw = $DefaultValue
+            }
+            if (-not $raw) {
+              return $raw
+            }
+            if ($ResourceSelection -eq "multi") {
+              $entries = ConvertTo-DockpipeResourceResponse -Values ($raw -split ';')
+              if ($entries.Count -eq 0) {
+                return "[]"
+              }
+              if ($MustExist) {
+                $valid = $true
+                foreach ($entry in $entries) {
+                  if (-not (Test-DockpipeResourceExists -Value $entry -ResourceKind $ResourceKind -BaseDir $env:DOCKPIPE_WORKDIR)) {
+                    $label = $(if ($ResourceKind -eq "directory") { "Directory" } else { "File" })
+                    [Console]::Error.WriteLine(("{0} not found: {1}" -f $label, $entry))
+                    $valid = $false
+                    break
+                  }
+                }
+                if (-not $valid) {
+                  continue
+                }
+              }
+              return ($entries | ConvertTo-Json -Compress)
+            }
+
+            $entries = ConvertTo-DockpipeResourceResponse -Values @($raw)
+            if ($entries.Count -eq 0) {
+              return ""
+            }
+            $selected = $entries[0]
+            if ($MustExist -and -not (Test-DockpipeResourceExists -Value $selected -ResourceKind $ResourceKind -BaseDir $env:DOCKPIPE_WORKDIR)) {
+              $label = $(if ($ResourceKind -eq "directory") { "Directory" } else { "File" })
+              [Console]::Error.WriteLine(("{0} not found: {1}" -f $label, $selected))
+              continue
+            }
+            return $selected
           }
         }
       }

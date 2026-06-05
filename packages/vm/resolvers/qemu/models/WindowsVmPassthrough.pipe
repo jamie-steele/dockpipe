@@ -1,0 +1,28 @@
+/// <summary>
+/// Host device passthrough settings for advanced guest hardware mapping.
+/// </summary>
+public Interface IWindowsVmPassthrough
+{
+    /// <summary>Comma-separated host PCI devices to pass through with vfio-pci, such as a GPU and its audio function.</summary>
+    [DisplayName = "PCI Passthrough Devices"]
+    [EnvName = "DOCKPIPE_VM_PCI_DEVICES"]
+    [Placeholder = "0000:01:00.0,0000:01:00.1"]
+    public string PciDevices;
+
+    /// <summary>Set true to make the first passthrough PCI device the primary VGA device for the guest.</summary>
+    [DisplayName = "Primary GPU Passthrough"]
+    [EnvName = "DOCKPIPE_VM_GPU_PRIMARY"]
+    public string GpuPrimary;
+
+    /// <summary>Set true only when you intentionally prepared host access without the boot/display GPU.</summary>
+    [DisplayName = "Allow Boot VGA Passthrough"]
+    [EnvName = "DOCKPIPE_VM_ALLOW_BOOT_VGA"]
+    public string AllowBootVga;
+}
+
+public Class WindowsVmPassthrough : IWindowsVmPassthrough
+{
+    public string PciDevices = "";
+    public string GpuPrimary = "";
+    public string AllowBootVga = "";
+}

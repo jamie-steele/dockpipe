@@ -1,0 +1,21 @@
+/// <summary>
+/// Guest security settings such as TPM and secure boot.
+/// </summary>
+public Interface IWindowsVmSecurity
+{
+    /// <summary>TPM mode for the guest. Windows 11 typically requires this.</summary>
+    [DisplayName = "TPM"]
+    [EnvName = "DOCKPIPE_VM_TPM"]
+    public string Tpm;
+
+    /// <summary>Secure boot mode for the guest. Windows 11 typically requires this.</summary>
+    [DisplayName = "Secure Boot"]
+    [EnvName = "DOCKPIPE_VM_SECURE_BOOT"]
+    public string SecureBoot;
+}
+
+public Class WindowsVmSecurity : IWindowsVmSecurity
+{
+    public string Tpm = "required";
+    public string SecureBoot = "required";
+}

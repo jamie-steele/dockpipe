@@ -5,6 +5,8 @@
 #include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -39,7 +41,9 @@ QPushButton *makeActionButton(const QString &label, QWidget *parent)
 PromptDialog::PromptDialog(const Spec &spec, QWidget *parent)
     : QDialog(parent), m_type(spec.type), m_defaultValue(spec.defaultValue), m_response(spec.defaultValue),
       m_options(spec.options), m_pathMode(spec.pathMode), m_fileFilter(spec.fileFilter), m_baseDir(spec.baseDir),
-      m_sensitive(spec.sensitive), m_mustExist(spec.mustExist)
+      m_resourceMode(spec.resourceMode), m_resourceSelection(spec.resourceSelection),
+      m_resourceKind(spec.resourceKind), m_filters(spec.filters), m_sensitive(spec.sensitive),
+      m_mustExist(spec.mustExist)
 {
     setModal(true);
     setWindowTitle(spec.title.isEmpty() ? tr("DockPipe Prompt") : spec.title);
@@ -94,6 +98,8 @@ PromptDialog::PromptDialog(const Spec &spec, QWidget *parent)
 
     if (m_type == QStringLiteral("choice")) {
         buildChoiceUi();
+    } else if (m_type == QStringLiteral("resource")) {
+        buildResourceUi();
     } else if (m_type == QStringLiteral("file")) {
         buildFileUi();
     } else if (m_type == QStringLiteral("input")) {
@@ -114,15 +120,68 @@ void PromptDialog::chooseFilePath()
     if (current.isEmpty())
         current = m_baseDir;
     QString selected;
-    if (m_pathMode == QStringLiteral("open-dir")) {
-        selected = QFileDialog::getExistingDirectory(this, windowTitle(), current);
-    } else if (m_pathMode == QStringLiteral("save-file")) {
-        selected = QFileDialog::getSaveFileName(this, windowTitle(), current, m_fileFilter);
+    QStringList selectedPaths;
+    const QString effectiveFilter = !m_filters.isEmpty() ? m_filters.join(QStringLiteral(";;")) : m_fileFilter;
+
+    if (m_type == QStringLiteral("resource")) {
+        const bool multi = (m_resourceSelection == QStringLiteral("multi"));
+        const bool directory = (m_resourceKind == QStringLiteral("directory"));
+        const bool createNew = (m_resourceMode == QStringLiteral("new"));
+        if (directory) {
+            selected = QFileDialog::getExistingDirectory(this, windowTitle(), current);
+        } else if (multi) {
+            selectedPaths = QFileDialog::getOpenFileNames(this, windowTitle(), current, effectiveFilter);
+        } else if (createNew) {
+            selected = QFileDialog::getSaveFileName(this, windowTitle(), current, effectiveFilter);
+        } else {
+            selected = QFileDialog::getOpenFileName(this, windowTitle(), current, effectiveFilter);
+        }
     } else {
-        selected = QFileDialog::getOpenFileName(this, windowTitle(), current, m_fileFilter);
+        if (m_pathMode == QStringLiteral("open-dir")) {
+            selected = QFileDialog::getExistingDirectory(this, windowTitle(), current);
+        } else if (m_pathMode == QStringLiteral("save-file")) {
+            selected = QFileDialog::getSaveFileName(this, windowTitle(), current, m_fileFilter);
+        } else {
+            selected = QFileDialog::getOpenFileName(this, windowTitle(), current, m_fileFilter);
+        }
     }
-    if (!selected.isEmpty() && m_input)
+
+    if (!selectedPaths.isEmpty() && m_input) {
+        m_input->setText(selectedPaths.join(QStringLiteral("; ")));
+    } else if (!selected.isEmpty() && m_input) {
         m_input->setText(selected);
+    }
+}
+
+QStringList PromptDialog::resourceEntries() const
+{
+    const QString raw = m_input ? m_input->text() : m_defaultValue;
+    QStringList out;
+    const QStringList parts = raw.split(QLatin1Char(';'), Qt::SkipEmptyParts);
+    for (QString part : parts) {
+        part = part.trimmed();
+        if (part.size() >= 2 && ((part.startsWith(QLatin1Char('"')) && part.endsWith(QLatin1Char('"'))) ||
+                                 (part.startsWith(QLatin1Char('\'')) && part.endsWith(QLatin1Char('\''))))) {
+            part = part.mid(1, part.size() - 2).trimmed();
+        }
+        if (!part.isEmpty())
+            out.append(part);
+    }
+    return out;
+}
+
+QString PromptDialog::resourceResponse() const
+{
+    const QStringList entries = resourceEntries();
+    if (m_resourceSelection == QStringLiteral("multi")) {
+        QJsonArray values;
+        for (const QString &entry : entries)
+            values.append(entry);
+        return QString::fromUtf8(QJsonDocument(values).toJson(QJsonDocument::Compact));
+    }
+    if (entries.isEmpty())
+        return QString();
+    return entries.first();
 }
 
 void PromptDialog::buildChoiceUi()
@@ -248,6 +307,79 @@ void PromptDialog::buildFileUi()
             }
         }
         m_response = selected;
+        accept();
+    });
+
+    outer->addWidget(inputFrame);
+    if (m_input)
+        m_input->setFocus();
+}
+
+void PromptDialog::buildResourceUi()
+{
+    auto *outer = qobject_cast<QVBoxLayout *>(layout());
+    auto *inputFrame = new QFrame(this);
+    inputFrame->setObjectName(QStringLiteral("promptActionPanel"));
+    auto *inputLay = new QVBoxLayout(inputFrame);
+    inputLay->setContentsMargins(16, 16, 16, 16);
+    inputLay->setSpacing(12);
+
+    QStringList hints;
+    if (!m_filters.isEmpty())
+        hints.append(tr("Allowed files: %1").arg(m_filters.join(QStringLiteral(";;"))));
+    if (m_resourceSelection == QStringLiteral("multi"))
+        hints.append(tr("Separate multiple paths with ';' or use Browse…"));
+    if (!hints.isEmpty()) {
+        auto *hint = new QLabel(hints.join(QStringLiteral("\n")), inputFrame);
+        hint->setObjectName(QStringLiteral("promptHint"));
+        hint->setWordWrap(true);
+        inputLay->addWidget(hint);
+    }
+
+    auto *row = new QHBoxLayout;
+    row->setSpacing(10);
+    m_input = new QLineEdit(inputFrame);
+    m_input->setObjectName(QStringLiteral("promptInput"));
+    m_input->setText(m_defaultValue);
+    row->addWidget(m_input, 1);
+    auto *browse = makeActionButton(tr("Browse…"), inputFrame);
+    browse->setObjectName(QStringLiteral("secondaryButton"));
+    row->addWidget(browse);
+    inputLay->addLayout(row);
+
+    auto *buttons = new QHBoxLayout;
+    buttons->addStretch(1);
+    auto *cancel = makeActionButton(tr("Cancel"), inputFrame);
+    auto *submit = makeActionButton(tr("Continue"), inputFrame);
+    cancel->setObjectName(QStringLiteral("secondaryButton"));
+    submit->setObjectName(QStringLiteral("primaryButton"));
+    buttons->addWidget(cancel);
+    buttons->addWidget(submit);
+    inputLay->addLayout(buttons);
+
+    connect(browse, &QPushButton::clicked, this, [this]() { chooseFilePath(); });
+    connect(cancel, &QPushButton::clicked, this, [this]() {
+        m_response = m_defaultValue;
+        reject();
+    });
+    connect(submit, &QPushButton::clicked, this, [this]() {
+        const QStringList entries = resourceEntries();
+        if (m_mustExist) {
+            for (const QString &entry : entries) {
+                QFileInfo info(entry);
+                if (info.isRelative() && !m_baseDir.isEmpty())
+                    info = QFileInfo(QDir(m_baseDir).filePath(entry));
+                const bool ok = (m_resourceKind == QStringLiteral("directory")) ? info.exists() && info.isDir() : info.exists();
+                if (!ok) {
+                    QMessageBox::warning(this, tr("DockPipe Prompt"),
+                                         (m_resourceKind == QStringLiteral("directory"))
+                                             ? tr("Choose an existing directory before continuing.")
+                                             : tr("Choose an existing file before continuing."));
+                    return;
+                }
+            }
+        }
+        m_response = resourceResponse();
         accept();
     });
 

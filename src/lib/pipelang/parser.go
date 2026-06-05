@@ -288,9 +288,21 @@ func (p *parser) parseTypeName() (TypeName, error) {
 	if err != nil {
 		return "", err
 	}
-	t := TypeName(tok.lit)
+	typeName := tok.lit
+	if tok.lit == "List" && p.peek().kind == tokLT {
+		p.next()
+		inner, err := p.parseTypeName()
+		if err != nil {
+			return "", err
+		}
+		if _, err := p.expect(tokGT); err != nil {
+			return "", err
+		}
+		typeName = fmt.Sprintf("List<%s>", inner)
+	}
+	t := TypeName(typeName)
 	if !t.IsValid() {
-		return "", p.errf("unknown type %q", tok.lit)
+		return "", p.errf("unknown type %q", typeName)
 	}
 	return t, nil
 }

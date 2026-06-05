@@ -1,0 +1,27 @@
+/// <summary>
+/// Guest networking and SSH connection settings.
+/// </summary>
+public Interface IWindowsVmNetwork
+{
+    /// <summary>Network adapter model presented to the guest. Windows installer defaults to a built-in friendly NIC.</summary>
+    [DisplayName = "Network Adapter"]
+    [EnvName = "DOCKPIPE_VM_NET_DEVICE"]
+    public string NetDevice;
+
+    /// <summary>Optional SSH username for an already-installed guest image.</summary>
+    [DisplayName = "SSH User"]
+    [EnvName = "DOCKPIPE_VM_SSH_USER"]
+    public string SshUser;
+
+    /// <summary>Optional additional host port forwards, comma-separated.</summary>
+    [DisplayName = "Host Port Forwards"]
+    [EnvName = "DOCKPIPE_VM_HOSTFWD"]
+    public string Hostfwd;
+}
+
+public Class WindowsVmNetwork : IWindowsVmNetwork
+{
+    public string NetDevice = "e1000e";
+    public string SshUser = "";
+    public string Hostfwd = "";
+}

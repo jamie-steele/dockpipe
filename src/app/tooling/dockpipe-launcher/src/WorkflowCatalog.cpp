@@ -17,6 +17,88 @@ QStringList sortedUnique(QStringList values)
     return values;
 }
 
+WorkflowInputMeta parseWorkflowInputMeta(const QJsonObject &io)
+{
+    WorkflowInputMeta input;
+    input.fieldName = io.value(QStringLiteral("field_name")).toString().trimmed();
+    input.envName = io.value(QStringLiteral("env_name")).toString().trimmed();
+    input.type = io.value(QStringLiteral("type")).toString().trimmed();
+    input.elementType = io.value(QStringLiteral("element_type")).toString().trimmed();
+    input.description = io.value(QStringLiteral("description")).toString().trimmed();
+    input.defaultValue = io.value(QStringLiteral("default_value")).toString().trimmed();
+    const QJsonObject attrs = io.value(QStringLiteral("attributes")).toObject();
+    for (auto ait = attrs.begin(); ait != attrs.end(); ++ait)
+        input.attributes.insert(ait.key().trimmed().toLower(), ait.value().toString().trimmed());
+    const QJsonArray children = io.value(QStringLiteral("children")).toArray();
+    for (const QJsonValue &childValue : children) {
+        if (!childValue.isObject())
+            continue;
+        const WorkflowInputMeta child = parseWorkflowInputMeta(childValue.toObject());
+        if (!child.envName.isEmpty() || !child.fieldName.isEmpty() || !child.children.isEmpty())
+            input.children.append(child);
+    }
+    return input;
+}
+
+WorkflowViewMeta parseWorkflowViewMeta(const QJsonObject &io)
+{
+    WorkflowViewMeta view;
+    const QJsonObject entryObject = io.value(QStringLiteral("entry")).toObject();
+    view.entry.type = entryObject.value(QStringLiteral("type")).toString().trimmed();
+    view.entry.field = entryObject.value(QStringLiteral("field")).toString().trimmed();
+    view.entry.title = entryObject.value(QStringLiteral("title")).toString().trimmed();
+    view.entry.description = entryObject.value(QStringLiteral("description")).toString().trimmed();
+    const QJsonArray options = entryObject.value(QStringLiteral("options")).toArray();
+    for (const QJsonValue &optionValue : options) {
+        if (!optionValue.isObject())
+            continue;
+        const QJsonObject optionObject = optionValue.toObject();
+        WorkflowViewEntryOptionMeta option;
+        option.value = optionObject.value(QStringLiteral("value")).toString().trimmed();
+        option.label = optionObject.value(QStringLiteral("label")).toString().trimmed();
+        option.next = optionObject.value(QStringLiteral("next")).toString().trimmed();
+        const QJsonArray pagesArray = optionObject.value(QStringLiteral("pages")).toArray();
+        for (const QJsonValue &pageValue : pagesArray) {
+            const QString page = pageValue.toString().trimmed();
+            if (!page.isEmpty())
+                option.pages.append(page);
+        }
+        if (!option.value.isEmpty())
+            view.entry.options.append(option);
+    }
+    const QJsonArray pages = io.value(QStringLiteral("pages")).toArray();
+    for (const QJsonValue &pageValue : pages) {
+        if (!pageValue.isObject())
+            continue;
+        const QJsonObject pageObject = pageValue.toObject();
+        WorkflowViewPageMeta page;
+        page.id = pageObject.value(QStringLiteral("id")).toString().trimmed();
+        page.title = pageObject.value(QStringLiteral("title")).toString().trimmed();
+        page.description = pageObject.value(QStringLiteral("description")).toString().trimmed();
+        const QJsonArray sections = pageObject.value(QStringLiteral("sections")).toArray();
+        for (const QJsonValue &sectionValue : sections) {
+            if (!sectionValue.isObject())
+                continue;
+            const QJsonObject sectionObject = sectionValue.toObject();
+            WorkflowViewSectionMeta section;
+            section.id = sectionObject.value(QStringLiteral("id")).toString().trimmed();
+            section.title = sectionObject.value(QStringLiteral("title")).toString().trimmed();
+            section.description = sectionObject.value(QStringLiteral("description")).toString().trimmed();
+            const QJsonArray fields = sectionObject.value(QStringLiteral("fields")).toArray();
+            for (const QJsonValue &fieldValue : fields) {
+                const QString field = fieldValue.toString().trimmed();
+                if (!field.isEmpty())
+                    section.fields.append(field);
+            }
+            if (!section.fields.isEmpty())
+                page.sections.append(section);
+        }
+        if (!page.sections.isEmpty())
+            view.pages.append(page);
+    }
+    return view;
+}
+
 } // namespace
 
 WorkflowCatalogData WorkflowCatalog::discoverCatalog(const QString &hintWorkdir)
@@ -61,19 +143,11 @@ WorkflowCatalogData WorkflowCatalog::discoverCatalog(const QString &hintWorkdir)
         for (const QJsonValue &iv : inputs) {
             if (!iv.isObject())
                 continue;
-            const QJsonObject io = iv.toObject();
-            WorkflowInputMeta input;
-            input.fieldName = io.value(QStringLiteral("field_name")).toString().trimmed();
-            input.envName = io.value(QStringLiteral("env_name")).toString().trimmed();
-            input.type = io.value(QStringLiteral("type")).toString().trimmed();
-            input.description = io.value(QStringLiteral("description")).toString().trimmed();
-            input.defaultValue = io.value(QStringLiteral("default_value")).toString().trimmed();
-            const QJsonObject attrs = io.value(QStringLiteral("attributes")).toObject();
-            for (auto ait = attrs.begin(); ait != attrs.end(); ++ait)
-                input.attributes.insert(ait.key().trimmed().toLower(), ait.value().toString().trimmed());
-            if (!input.envName.isEmpty() || !input.fieldName.isEmpty())
+            const WorkflowInputMeta input = parseWorkflowInputMeta(iv.toObject());
+            if (!input.envName.isEmpty() || !input.fieldName.isEmpty() || !input.children.isEmpty())
                 meta.inputs.append(input);
         }
+        meta.view = parseWorkflowViewMeta(o.value(QStringLiteral("view")).toObject());
         const QJsonObject vars = o.value(QStringLiteral("vars")).toObject();
         for (auto it = vars.begin(); it != vars.end(); ++it)
             meta.vars.insert(it.key(), it.value().toString());

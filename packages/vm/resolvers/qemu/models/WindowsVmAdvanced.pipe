@@ -1,0 +1,21 @@
+/// <summary>
+/// Advanced guest wrapper behavior and env forwarding.
+/// </summary>
+public Interface IWindowsVmAdvanced
+{
+    /// <summary>Comma-separated env vars forwarded into the guest wrapper.</summary>
+    [DisplayName = "Allowed Guest Env Vars"]
+    [EnvName = "DOCKPIPE_VM_ENV_ALLOW"]
+    public string EnvAllow;
+
+    /// <summary>Optional guest command override executed instead of the default smoke command.</summary>
+    [DisplayName = "Guest Command"]
+    [EnvName = "DOCKPIPE_VM_GUEST_COMMAND"]
+    public string GuestCommand;
+}
+
+public Class WindowsVmAdvanced : IWindowsVmAdvanced
+{
+    public string EnvAllow = "";
+    public string GuestCommand = "";
+}

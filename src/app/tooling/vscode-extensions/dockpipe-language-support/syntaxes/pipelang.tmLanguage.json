@@ -25,6 +25,10 @@
           "match": "\\b(public|private|Interface|Class|Struct)\\b"
         },
         {
+          "name": "storage.modifier.interface.pipelang",
+          "match": "\\bIComparable\\b"
+        },
+        {
           "name": "constant.language.boolean.pipelang",
           "match": "\\b(true|false)\\b"
         }
@@ -34,7 +38,7 @@
       "patterns": [
         {
           "name": "storage.type.pipelang",
-          "match": "\\b(string|int|bool|float)\\b"
+          "match": "\\b(string|int|bool|float|List|[A-Z][A-Za-z0-9_]*)\\b"
         }
       ]
     },

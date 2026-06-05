@@ -9,6 +9,7 @@ const DOCKPIPE_TOP_LEVEL_KEYS = [
   "category",
   "namespace",
   "types",
+  "view",
   "docker_preflight",
   "vars",
   "compose",
@@ -56,6 +57,7 @@ const TOP_LEVEL_KEY_DETAILS = {
   category: "Optional UI hint for control surfaces such as Pipeon or Launcher.",
   namespace: "Package namespace used for compiled workflow material.",
   types: "PipeLang entrypoint list used to drive model-backed vars help.",
+  view: "Optional authored launcher form layout. Define pages, sections, and field paths while older workflows can keep using the default flat/tree rendering.",
   docker_preflight: "Enable or disable the Docker preflight check before running.",
   vars: "Workflow variables exported before execution unless already set in the environment.",
   compose: "Optional Docker Compose settings for host built-ins such as compose_up, compose_down, and compose_ps.",
@@ -209,6 +211,7 @@ const VAR_KEY_FALLBACK_DETAIL = "Workflow variable override. This key exports an
 
 const CONTAINER_KEYS = new Set([
   "types",
+  "view",
   "vars",
   "steps",
   "run",
@@ -229,6 +232,40 @@ const SEMANTIC_LEGEND = new vscode.SemanticTokensLegend([
   "string",
   "number"
 ]);
+
+const WORKFLOW_VIEW_KEY_DETAILS = {
+  entry: "Optional authored entry routing choice. Bind a high-level selection to a model field before showing the rest of the workflow settings.",
+  pages: "Ordered launcher pages for this workflow's authored settings experience."
+};
+
+const WORKFLOW_VIEW_ENTRY_KEY_DETAILS = {
+  type: "Entry interaction type. Start with choice for a simple preflight selection screen.",
+  field: "Typed model field path that receives the chosen value, such as General.BootSource.",
+  title: "User-facing title for the entry choice screen.",
+  description: "Optional help text shown above the entry selector.",
+  options: "Ordered entry routing options."
+};
+
+const WORKFLOW_VIEW_ENTRY_OPTION_KEY_DETAILS = {
+  value: "Value written back into the bound model field when this option is chosen.",
+  label: "User-facing option label in the launcher.",
+  next: "Optional primary page id to route to after this option is chosen.",
+  pages: "Optional ordered page ids to show after this option is chosen."
+};
+
+const WORKFLOW_VIEW_PAGE_KEY_DETAILS = {
+  id: "Stable internal page id.",
+  title: "User-facing page title in the launcher.",
+  description: "Optional page help text shown above the page content.",
+  sections: "Ordered sections rendered inside this page."
+};
+
+const WORKFLOW_VIEW_SECTION_KEY_DETAILS = {
+  id: "Stable internal section id.",
+  title: "User-facing section title in the launcher.",
+  description: "Optional section help text shown above the section controls.",
+  fields: "Ordered field paths from the typed model, such as General.BootSource or Storage.Disk."
+};
 
 const CORE_HELPER_PROFILES = {
   shellscript: {
@@ -649,15 +686,15 @@ function parsePipeModel(source) {
       summaryLines = [];
       pendingAnnotations = {};
     } else if (current) {
-      const fieldMatch = trimmed.match(/^(?:public|private)\s+(string|int|bool|float)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:=\s*("([^"\\]|\\.)*"|[^;]+))?\s*;/);
-      if (fieldMatch) {
-        let def = fieldMatch[3]?.trim();
+      const fieldInfo = parsePipeFieldLine(trimmed);
+      if (fieldInfo) {
+        let def = fieldInfo.defaultValue?.trim();
         if (typeof def === "string" && def.startsWith("\"") && def.endsWith("\"")) {
           def = def.slice(1, -1);
         }
-        current.fields[fieldMatch[2]] = {
+        current.fields[fieldInfo.name] = {
           doc: pendingSummary,
-          type: fieldMatch[1],
+          type: fieldInfo.type,
           defaultValue: def,
           annotations: Object.keys(pendingAnnotations).length ? pendingAnnotations : undefined
         };
@@ -683,6 +720,48 @@ function parsePipeModel(source) {
     }
   }
   return out;
+}
+
+/**
+ * @param {string} line
+ * @returns {{ type: string, name: string, defaultValue?: string } | null}
+ */
+function parsePipeFieldLine(line) {
+  if (!/^(?:public|private)\b/.test(line)) {
+    return null;
+  }
+  const withoutVisibility = line.replace(/^(?:public|private)\s+/, "");
+  let depth = 0;
+  let splitAt = -1;
+  for (let i = 0; i < withoutVisibility.length; i++) {
+    const ch = withoutVisibility[i];
+    if (ch === "<") {
+      depth++;
+      continue;
+    }
+    if (ch === ">") {
+      if (depth > 0) depth--;
+      continue;
+    }
+    if (/\s/.test(ch) && depth === 0) {
+      splitAt = i;
+      break;
+    }
+  }
+  if (splitAt <= 0) {
+    return null;
+  }
+  const type = withoutVisibility.slice(0, splitAt).trim();
+  const rest = withoutVisibility.slice(splitAt).trim();
+  const fieldMatch = rest.match(/^([A-Za-z_][A-Za-z0-9_]*)\s*(?:=\s*("([^"\\]|\\.)*"|[^;]+))?\s*;$/);
+  if (!fieldMatch) {
+    return null;
+  }
+  return {
+    type,
+    name: fieldMatch[1],
+    defaultValue: fieldMatch[2]
+  };
 }
 
 async function readIfExists(filePath) {
@@ -1291,6 +1370,31 @@ function activate(context) {
           const lineToCursor = line.slice(0, position.character);
           const items = [];
 
+          if (!lineToCursor.includes(":") && info?.kind === "nestedKey") {
+            const parentChain = info.parents || [];
+            let docs = null;
+            if (parentChain.length === 1 && parentChain[0] === "view") {
+              docs = WORKFLOW_VIEW_KEY_DETAILS;
+            } else if (parentChain.length === 3 && parentChain[0] === "view" && parentChain[1] === "entry") {
+              docs = WORKFLOW_VIEW_ENTRY_KEY_DETAILS;
+            } else if (parentChain.length === 5 && parentChain[0] === "view" && parentChain[1] === "entry" && parentChain[3] === "options") {
+              docs = WORKFLOW_VIEW_ENTRY_OPTION_KEY_DETAILS;
+            } else if (parentChain.length === 3 && parentChain[0] === "view" && parentChain[1] === "pages") {
+              docs = WORKFLOW_VIEW_PAGE_KEY_DETAILS;
+            } else if (parentChain.length === 5 && parentChain[0] === "view" && parentChain[1] === "pages" && parentChain[3] === "sections") {
+              docs = WORKFLOW_VIEW_SECTION_KEY_DETAILS;
+            }
+            if (docs) {
+              for (const [k, doc] of Object.entries(docs)) {
+                const it = new vscode.CompletionItem(k, vscode.CompletionItemKind.Property);
+                it.insertText = `${k}: `;
+                it.documentation = doc;
+                items.push(it);
+              }
+              return items;
+            }
+          }
+
           if (!lineToCursor.includes(":")) {
             if (leading.length === 0) {
               const seen = existingTopLevelKeys(document);
@@ -1419,6 +1523,25 @@ function activate(context) {
               return hoverForVarsContainer(range, modelCtx, STEP_KEY_DETAILS.vars);
             }
             return hoverForWorkflowKey(word, STEP_KEY_DETAILS, range);
+          }
+
+          if (info?.kind === "nestedKey") {
+            const parentChain = info.parents || [];
+            if (parentChain.length === 1 && parentChain[0] === "view") {
+              return hoverForWorkflowKey(word, WORKFLOW_VIEW_KEY_DETAILS, range);
+            }
+            if (parentChain.length === 3 && parentChain[0] === "view" && parentChain[1] === "entry") {
+              return hoverForWorkflowKey(word, WORKFLOW_VIEW_ENTRY_KEY_DETAILS, range);
+            }
+            if (parentChain.length === 5 && parentChain[0] === "view" && parentChain[1] === "entry" && parentChain[3] === "options") {
+              return hoverForWorkflowKey(word, WORKFLOW_VIEW_ENTRY_OPTION_KEY_DETAILS, range);
+            }
+            if (parentChain.length === 3 && parentChain[0] === "view" && parentChain[1] === "pages") {
+              return hoverForWorkflowKey(word, WORKFLOW_VIEW_PAGE_KEY_DETAILS, range);
+            }
+            if (parentChain.length === 5 && parentChain[0] === "view" && parentChain[1] === "pages" && parentChain[3] === "sections") {
+              return hoverForWorkflowKey(word, WORKFLOW_VIEW_SECTION_KEY_DETAILS, range);
+            }
           }
 
           if (info?.kind === "typeEntry") {
@@ -1614,6 +1737,8 @@ function activate(context) {
             "Interface",
             "Class",
             "Struct",
+            "List",
+            "IComparable",
             "string",
             "int",
             "bool",

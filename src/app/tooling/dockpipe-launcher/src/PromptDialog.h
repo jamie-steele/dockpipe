@@ -18,6 +18,10 @@ public:
         QString pathMode;
         QString fileFilter;
         QString baseDir;
+        QString resourceMode;
+        QString resourceSelection;
+        QString resourceKind;
+        QStringList filters;
         QStringList options;
         bool sensitive = false;
         bool mustExist = false;
@@ -32,7 +36,10 @@ private:
     void buildInputUi();
     void buildConfirmUi();
     void buildFileUi();
+    void buildResourceUi();
     void chooseFilePath();
+    QString resourceResponse() const;
+    QStringList resourceEntries() const;
 
     QString m_type;
     QString m_defaultValue;
@@ -41,6 +48,10 @@ private:
     QString m_pathMode;
     QString m_fileFilter;
     QString m_baseDir;
+    QString m_resourceMode;
+    QString m_resourceSelection;
+    QString m_resourceKind;
+    QStringList m_filters;
     bool m_sensitive = false;
     bool m_mustExist = false;
     QLineEdit *m_input = nullptr;

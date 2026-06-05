@@ -40,6 +40,7 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 		DockerPreflight: f.DockerPreflight,
 		CompileHooks:    f.CompileHooks,
 		Types:           f.Types,
+		View:            f.View,
 		Inject:          f.Inject,
 		Vars:            f.Vars,
 		Compose:         f.Compose,

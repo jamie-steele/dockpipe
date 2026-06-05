@@ -1,6 +1,9 @@
 package pipelang
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 // TypeName is a primitive type in PipeLang v0.0.0.1.
 type TypeName string
@@ -32,12 +35,57 @@ const (
 )
 
 func (t TypeName) IsValid() bool {
-	switch t {
+	switch TypeName(strings.TrimSpace(string(t))) {
+	case TypeString, TypeInt, TypeBool, TypeFloat:
+		return true
+	}
+	name := strings.TrimSpace(string(t))
+	if name == "" {
+		return false
+	}
+	if inner, ok := t.ListElementType(); ok {
+		return inner.IsValid()
+	}
+	return isTypeIdentifier(name)
+}
+
+func (t TypeName) ListElementType() (TypeName, bool) {
+	name := strings.TrimSpace(string(t))
+	if !strings.HasPrefix(name, "List<") || !strings.HasSuffix(name, ">") {
+		return "", false
+	}
+	inner := strings.TrimSpace(name[len("List<") : len(name)-1])
+	if inner == "" {
+		return "", false
+	}
+	return TypeName(inner), true
+}
+
+func (t TypeName) IsPrimitive() bool {
+	switch TypeName(strings.TrimSpace(string(t))) {
 	case TypeString, TypeInt, TypeBool, TypeFloat:
 		return true
 	default:
 		return false
 	}
+}
+
+func isTypeIdentifier(name string) bool {
+	if name == "" {
+		return false
+	}
+	for i, r := range name {
+		if i == 0 {
+			if !(r == '_' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z')) {
+				return false
+			}
+			continue
+		}
+		if !(r == '_' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+			return false
+		}
+	}
+	return true
 }
 
 type Program struct {

@@ -32,6 +32,70 @@
         }
       ]
     },
+    "workflow_view_section": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "fields": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "workflow_view_page": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "sections": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/workflow_view_section" }
+        }
+      }
+    },
+    "workflow_view_entry_option": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "string" },
+        "label": { "type": "string" },
+        "next": { "type": "string" },
+        "pages": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "workflow_view_entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": { "type": "string" },
+        "field": { "type": "string" },
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "options": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/workflow_view_entry_option" }
+        }
+      }
+    },
+    "workflow_view": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "entry": { "$ref": "#/$defs/workflow_view_entry" },
+        "pages": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/workflow_view_page" }
+        }
+      }
+    },
     "workflow_step": {
       "type": "object",
       "additionalProperties": false,
@@ -305,6 +369,7 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "view": { "$ref": "#/$defs/workflow_view" },
     "steps": {
       "type": "array",
       "items": {

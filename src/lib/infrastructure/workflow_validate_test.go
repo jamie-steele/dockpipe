@@ -86,6 +86,50 @@ steps:
 	}
 }
 
+func TestValidateResolvedWorkflowYAML_AcceptsWorkflowView(t *testing.T) {
+	root := t.TempDir()
+	cfg := filepath.Join(root, "config.yml")
+	yml := `name: view-demo
+types:
+  - ./models/ViewDemo.pipe
+view:
+  entry:
+    type: choice
+    field: General.Mode
+    title: Demo Mode
+    options:
+      - value: existing
+        label: Use Existing
+        pages: [existing]
+      - value: create
+        label: Create New
+        next: create
+  pages:
+    - id: existing
+      title: Existing
+      sections:
+        - id: image
+          title: Image
+          fields:
+            - Storage.Disk
+    - id: create
+      title: Create
+      sections:
+        - id: create-image
+          title: New Image
+          fields:
+            - Storage.Disk
+            - Storage.DiskSize
+steps: []
+`
+	if err := os.WriteFile(cfg, []byte(yml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateResolvedWorkflowYAML(cfg); err != nil {
+		t.Fatalf("expected view contract to validate, got %v", err)
+	}
+}
+
 func TestValidateResolvedWorkflowYAML_RejectsUnknownStepKey(t *testing.T) {
 	root := t.TempDir()
 	cfg := filepath.Join(root, "config.yml")
@@ -100,6 +144,26 @@ steps:
 	err := ValidateResolvedWorkflowYAML(cfg)
 	if err == nil || !strings.Contains(err.Error(), "additionalProperties") {
 		t.Fatalf("expected schema additionalProperties error, got %v", err)
+	}
+}
+
+func TestValidateResolvedWorkflowYAML_RejectsUnknownViewKey(t *testing.T) {
+	root := t.TempDir()
+	cfg := filepath.Join(root, "config.yml")
+	yml := `name: bad-view
+view:
+  pages:
+    - id: source
+      title: Source
+      weird: nope
+steps: []
+`
+	if err := os.WriteFile(cfg, []byte(yml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := ValidateResolvedWorkflowYAML(cfg)
+	if err == nil || !strings.Contains(err.Error(), "additionalProperties") {
+		t.Fatalf("expected schema additionalProperties error for bad view key, got %v", err)
 	}
 }
 

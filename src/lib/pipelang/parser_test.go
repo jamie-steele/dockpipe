@@ -112,3 +112,37 @@ public Interface IWindows
 		t.Fatalf("second field advanced=%q", got)
 	}
 }
+
+func TestParseCompoundTypes(t *testing.T) {
+	prog, err := Parse([]byte(`
+public Interface IImageResource
+{
+    public string Path;
+}
+
+public Interface IImageCollection
+{
+    public List<string> Labels;
+    public List<IImageResource> Images;
+}
+
+public Struct ImageCollection : IImageCollection
+{
+    public List<string> Labels;
+    public List<IImageResource> Images;
+}
+`))
+	if err != nil {
+		t.Fatalf("parse compound types: %v", err)
+	}
+	if len(prog.Interfaces) != 2 {
+		t.Fatalf("interfaces=%d", len(prog.Interfaces))
+	}
+	fields := prog.Interfaces[1].Fields
+	if got := string(fields[0].Type); got != "List<string>" {
+		t.Fatalf("labels type=%q", got)
+	}
+	if got := string(fields[1].Type); got != "List<IImageResource>" {
+		t.Fatalf("images type=%q", got)
+	}
+}

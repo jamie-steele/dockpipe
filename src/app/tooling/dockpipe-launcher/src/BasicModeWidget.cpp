@@ -31,6 +31,31 @@ QString inputDisplayName(const WorkflowInputMeta &input)
     return input.envName.trimmed();
 }
 
+void appendInputTooltipLines(QStringList &lines, const WorkflowInputMeta &input, int depth, int &count, int maxCount)
+{
+    if (count >= maxCount)
+        return;
+    const QString indent(depth * 2, QLatin1Char(' '));
+    QString line = indent + QStringLiteral("• ") + inputDisplayName(input);
+    if (!input.type.trimmed().isEmpty())
+        line += QStringLiteral(" (") + input.type.trimmed() + QStringLiteral(")");
+    if (!input.envName.trimmed().isEmpty())
+        line += QStringLiteral(" → ") + input.envName.trimmed();
+    if (!input.defaultValue.trimmed().isEmpty())
+        line += QStringLiteral(" = ") + input.defaultValue.trimmed();
+    lines << line;
+    ++count;
+    if (!input.description.trimmed().isEmpty() && count < maxCount) {
+        lines << indent + QStringLiteral("  ") + input.description.trimmed();
+        ++count;
+    }
+    for (const WorkflowInputMeta &child : input.children) {
+        if (count >= maxCount)
+            break;
+        appendInputTooltipLines(lines, child, depth + 1, count, maxCount);
+    }
+}
+
 QIcon defaultWorkflowIcon()
 {
     QIcon icon = QIcon::fromTheme(QStringLiteral("applications-development"));
@@ -57,23 +82,15 @@ QString workflowTooltip(const WorkflowMeta &workflow)
         lines << workflow.description.trimmed();
     if (!workflow.inputs.isEmpty()) {
         lines << QString() << QObject::tr("Inputs:");
-        const int maxInputs = qMin(8, workflow.inputs.size());
-        for (int i = 0; i < maxInputs; ++i) {
-            const WorkflowInputMeta &input = workflow.inputs[i];
-            QString line = QStringLiteral("• ");
-            line += inputDisplayName(input);
-            if (!input.type.trimmed().isEmpty())
-                line += QStringLiteral(" (") + input.type.trimmed() + QStringLiteral(")");
-            if (!input.envName.trimmed().isEmpty())
-                line += QStringLiteral(" → ") + input.envName.trimmed();
-            if (!input.defaultValue.trimmed().isEmpty())
-                line += QStringLiteral(" = ") + input.defaultValue.trimmed();
-            lines << line;
-            if (!input.description.trimmed().isEmpty())
-                lines << QStringLiteral("  ") + input.description.trimmed();
+        int count = 0;
+        const int maxInputs = 8;
+        for (const WorkflowInputMeta &input : workflow.inputs) {
+            if (count >= maxInputs)
+                break;
+            appendInputTooltipLines(lines, input, 0, count, maxInputs);
         }
-        if (workflow.inputs.size() > maxInputs)
-            lines << QObject::tr("…and %1 more").arg(workflow.inputs.size() - maxInputs);
+        if (count >= maxInputs)
+            lines << QObject::tr("…and more");
     }
     if (lines.isEmpty())
         return workflow.displayName;

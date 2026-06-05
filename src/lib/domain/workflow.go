@@ -78,6 +78,8 @@ type Workflow struct {
 	CompileHooks []string `yaml:"compile_hooks,omitempty"`
 	// Types: optional PipeLang type declarations used by tooling/materialization.
 	Types []string `yaml:"types,omitempty"`
+	// View: optional authored launcher form layout. When omitted, tools fall back to the typed/flat input tree.
+	View WorkflowView `yaml:"view,omitempty"`
 	// Inject: explicit compile closure dependencies (workflow/package ids and resolver profile names).
 	// Unlike imports:, this does not merge YAML — it only guides package compile for-workflow ordering.
 	Inject   WorkflowInjectList     `yaml:"inject,omitempty"`
@@ -94,6 +96,40 @@ type WorkflowComposeConfig struct {
 	AutodownEnv      string            `yaml:"autodown_env,omitempty"`
 	Exports          map[string]string `yaml:"exports,omitempty"`
 	Services         []string          `yaml:"services,omitempty"`
+}
+
+type WorkflowView struct {
+	Entry *WorkflowViewEntry `yaml:"entry,omitempty"`
+	Pages []WorkflowViewPage `yaml:"pages,omitempty"`
+}
+
+type WorkflowViewEntry struct {
+	Type        string                    `yaml:"type,omitempty"`
+	Field       string                    `yaml:"field,omitempty"`
+	Title       string                    `yaml:"title,omitempty"`
+	Description string                    `yaml:"description,omitempty"`
+	Options     []WorkflowViewEntryOption `yaml:"options,omitempty"`
+}
+
+type WorkflowViewEntryOption struct {
+	Value string   `yaml:"value,omitempty"`
+	Label string   `yaml:"label,omitempty"`
+	Next  string   `yaml:"next,omitempty"`
+	Pages []string `yaml:"pages,omitempty"`
+}
+
+type WorkflowViewPage struct {
+	ID          string                `yaml:"id,omitempty"`
+	Title       string                `yaml:"title,omitempty"`
+	Description string                `yaml:"description,omitempty"`
+	Sections    []WorkflowViewSection `yaml:"sections,omitempty"`
+}
+
+type WorkflowViewSection struct {
+	ID          string   `yaml:"id,omitempty"`
+	Title       string   `yaml:"title,omitempty"`
+	Description string   `yaml:"description,omitempty"`
+	Fields      []string `yaml:"fields,omitempty"`
 }
 
 type WorkflowSecurityConfig struct {
@@ -297,6 +333,7 @@ type workflowFile struct {
 	DockerPreflight *bool                  `yaml:"docker_preflight,omitempty"`
 	CompileHooks    []string               `yaml:"compile_hooks,omitempty"`
 	Types           []string               `yaml:"types,omitempty"`
+	View            WorkflowView           `yaml:"view,omitempty"`
 	Vars            map[string]string      `yaml:"vars"`
 	Compose         WorkflowComposeConfig  `yaml:"compose,omitempty"`
 	Security        WorkflowSecurityConfig `yaml:"security,omitempty"`

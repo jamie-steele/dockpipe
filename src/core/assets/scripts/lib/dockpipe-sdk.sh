@@ -193,9 +193,27 @@ __dockpipe_sdk_emit_prompt_event() {
   local file_filter="${12:-}"
   local must_exist="${13:-false}"
   local base_dir="${14:-${DOCKPIPE_WORKDIR:-$(pwd)}}"
-  shift 14 || true
+  local resource_mode="${15:-select}"
+  local resource_selection="${16:-single}"
+  local resource_kind="${17:-file}"
+  local filters_raw="${18:-}"
+  shift 18 || true
   local options=("$@")
-  local options_json="" opt
+  local options_json="" opt filters_json=""
+  local -a filters=()
+  if [[ -n "$filters_raw" ]]; then
+    while IFS= read -r opt; do
+      [[ -n "$opt" ]] || continue
+      filters+=("$opt")
+    done < <(printf '%s\n' "$filters_raw")
+  fi
+  for opt in "${filters[@]}"; do
+    [[ -n "$opt" ]] || continue
+    if [[ -n "$filters_json" ]]; then
+      filters_json+=","
+    fi
+    filters_json+="\"$(__dockpipe_sdk_json_escape "$opt")\""
+  done
   for opt in "${options[@]}"; do
     if [[ -n "$options_json" ]]; then
       options_json+=","
@@ -203,7 +221,7 @@ __dockpipe_sdk_emit_prompt_event() {
     options_json+="\"$(__dockpipe_sdk_json_escape "$opt")\""
   done
 
-  printf '::dockpipe-prompt::{"type":"%s","id":"%s","title":"%s","message":"%s","default":"%s","sensitive":%s,"intent":"%s","automation_group":"%s","allow_auto_approve":%s,"auto_approve_value":"%s","path_mode":"%s","file_filter":"%s","must_exist":%s,"base_dir":"%s","options":[%s]}\n' \
+  printf '::dockpipe-prompt::{"type":"%s","id":"%s","title":"%s","message":"%s","default":"%s","sensitive":%s,"intent":"%s","automation_group":"%s","allow_auto_approve":%s,"auto_approve_value":"%s","path_mode":"%s","file_filter":"%s","must_exist":%s,"base_dir":"%s","resource_mode":"%s","resource_selection":"%s","resource_kind":"%s","filters":[%s],"options":[%s]}\n' \
     "$(__dockpipe_sdk_json_escape "$prompt_type")" \
     "$(__dockpipe_sdk_json_escape "$prompt_id")" \
     "$(__dockpipe_sdk_json_escape "$title")" \
@@ -218,6 +236,10 @@ __dockpipe_sdk_emit_prompt_event() {
     "$(__dockpipe_sdk_json_escape "$file_filter")" \
     "$must_exist" \
     "$(__dockpipe_sdk_json_escape "$base_dir")" \
+    "$(__dockpipe_sdk_json_escape "$resource_mode")" \
+    "$(__dockpipe_sdk_json_escape "$resource_selection")" \
+    "$(__dockpipe_sdk_json_escape "$resource_kind")" \
+    "$filters_json" \
     "$options_json" >&2
 }
 
@@ -227,6 +249,29 @@ __dockpipe_sdk_prompt_read_json_response() {
     return 1
   fi
   printf '%s\n' "$response"
+}
+
+__dockpipe_sdk_json_array() {
+  local json="" value
+  for value in "$@"; do
+    if [[ -n "$json" ]]; then
+      json+=","
+    fi
+    json+="\"$(__dockpipe_sdk_json_escape "$value")\""
+  done
+  printf '[%s]' "$json"
+}
+
+__dockpipe_sdk_join_filters() {
+  local joined="" filter
+  for filter in "$@"; do
+    [[ -n "$filter" ]] || continue
+    if [[ -n "$joined" ]]; then
+      joined+=";;"
+    fi
+    joined+="$filter"
+  done
+  printf '%s' "$joined"
 }
 
 __dockpipe_sdk_prompt_confirm_terminal() {
@@ -364,6 +409,100 @@ __dockpipe_sdk_prompt_file_terminal() {
   done
 }
 
+__dockpipe_sdk_prompt_parse_resource_entries() {
+  local raw="${1:-}"
+  local -a entries=()
+  local -a parts=()
+  local part normalized
+  IFS=';' read -r -a parts <<< "$raw"
+  for part in "${parts[@]}"; do
+    normalized="$(__dockpipe_sdk_prompt_normalize_path_input "$part")"
+    [[ -n "$normalized" ]] || continue
+    entries+=("$normalized")
+  done
+  printf '%s\n' "${entries[@]}"
+}
+
+__dockpipe_sdk_prompt_validate_resource_entry() {
+  local entry="${1:-}" resource_kind="${2:-file}" must_exist="${3:-false}"
+  [[ "$must_exist" == "true" ]] || return 0
+  local resolved
+  resolved="$(__dockpipe_sdk_prompt_resolve_path "$entry")"
+  case "$resource_kind" in
+    directory)
+      if [[ ! -d "$resolved" ]]; then
+        printf 'Directory not found: %s\n' "$entry" >&2
+        return 1
+      fi
+      ;;
+    *)
+      if [[ ! -e "$resolved" ]]; then
+        printf 'File not found: %s\n' "$entry" >&2
+        return 1
+      fi
+      ;;
+  esac
+  return 0
+}
+
+__dockpipe_sdk_prompt_resource_terminal() {
+  local title="$1" message="$2" default_value="$3" resource_mode="$4" resource_selection="$5" resource_kind="$6" must_exist="$7"
+  shift 7 || true
+  local -a filters=("$@")
+  local filter_text response normalized
+  filter_text="$(__dockpipe_sdk_join_filters "${filters[@]}")"
+  while true; do
+    if [[ -n "$title" ]]; then
+      printf '%s\n' "$title" >&2
+    fi
+    printf '%s' "$message" >&2
+    if [[ -n "$default_value" ]]; then
+      printf ' [%s]' "$default_value" >&2
+    fi
+    if [[ -n "$filter_text" ]]; then
+      printf '\nFilter: %s' "$filter_text" >&2
+    fi
+    if [[ "$resource_selection" == "multi" ]]; then
+      printf '\nEnter one or more paths separated by ;' >&2
+    fi
+    printf ': ' >&2
+    IFS= read -r response || return 1
+    response="${response:-$default_value}"
+    if [[ "$resource_selection" == "multi" ]]; then
+      local -a entries=()
+      local entry
+      while IFS= read -r entry; do
+        [[ -n "$entry" ]] || continue
+        entries+=("$entry")
+      done < <(__dockpipe_sdk_prompt_parse_resource_entries "$response")
+      if (( ${#entries[@]} == 0 )); then
+        printf '%s\n' "${default_value:-[]}"
+        return 0
+      fi
+      local valid="true"
+      for entry in "${entries[@]}"; do
+        if ! __dockpipe_sdk_prompt_validate_resource_entry "$entry" "$resource_kind" "$must_exist"; then
+          valid="false"
+          break
+        fi
+      done
+      [[ "$valid" == "true" ]] || continue
+      __dockpipe_sdk_json_array "${entries[@]}"
+      printf '\n'
+      return 0
+    fi
+
+    normalized="$(__dockpipe_sdk_prompt_normalize_path_input "$response")"
+    if [[ -z "$normalized" ]]; then
+      printf '%s\n' ""
+      return 0
+    fi
+    __dockpipe_sdk_prompt_validate_resource_entry "$normalized" "$resource_kind" "$must_exist" || continue
+    printf '%s\n' "$normalized"
+    return 0
+  done
+}
+
 __dockpipe_sdk_prompt_choice_terminal() {
   local title="$1" message="$2" default_value="$3"
   shift 3 || true
@@ -402,7 +541,9 @@ __dockpipe_sdk_prompt() {
   local prompt_id="" title="" message="" default_value="" sensitive="false"
   local intent="" automation_group="" allow_auto_approve="false" auto_approve_value=""
   local path_mode="open-file" file_filter="" must_exist="false"
+  local resource_mode="select" resource_selection="single" resource_kind="file"
   local options=()
+  local filters=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -432,6 +573,19 @@ __dockpipe_sdk_prompt() {
         ;;
       --filter)
         file_filter="${2:-}"
+        filters+=("${2:-}")
+        shift 2 || true
+        ;;
+      --mode)
+        resource_mode="${2:-}"
+        shift 2 || true
+        ;;
+      --selection)
+        resource_selection="${2:-}"
+        shift 2 || true
+        ;;
+      --kind)
+        resource_kind="${2:-}"
         shift 2 || true
         ;;
       --must-exist)
@@ -492,7 +646,7 @@ __dockpipe_sdk_prompt() {
           return 0
         fi
         ;;
-      file)
+      file|resource)
         if [[ -n "$default_value" ]]; then
           printf '%s\n' "$default_value"
           return 0
@@ -503,7 +657,15 @@ __dockpipe_sdk_prompt() {
 
   case "$(__dockpipe_sdk_prompt_mode)" in
     json)
-      __dockpipe_sdk_emit_prompt_event "$prompt_type" "$prompt_id" "$title" "$message" "$default_value" "$sensitive" "$intent" "$automation_group" "$allow_auto_approve" "$auto_approve_value" "$path_mode" "$file_filter" "$must_exist" "${DOCKPIPE_WORKDIR:-$(pwd)}" "${options[@]}"
+      if [[ "$prompt_type" == "resource" && ${#filters[@]} -gt 0 ]]; then
+        file_filter="$(__dockpipe_sdk_join_filters "${filters[@]}")"
+      fi
+      local filters_blob=""
+      if (( ${#filters[@]} > 0 )); then
+        printf -v filters_blob '%s\n' "${filters[@]}"
+        filters_blob="${filters_blob%$'\n'}"
+      fi
+      __dockpipe_sdk_emit_prompt_event "$prompt_type" "$prompt_id" "$title" "$message" "$default_value" "$sensitive" "$intent" "$automation_group" "$allow_auto_approve" "$auto_approve_value" "$path_mode" "$file_filter" "$must_exist" "${DOCKPIPE_WORKDIR:-$(pwd)}" "$resource_mode" "$resource_selection" "$resource_kind" "$filters_blob" "${options[@]}"
       __dockpipe_sdk_prompt_read_json_response
       ;;
     terminal)
@@ -519,6 +681,9 @@ __dockpipe_sdk_prompt() {
           ;;
         file)
           __dockpipe_sdk_prompt_file_terminal "$title" "$message" "$default_value" "$path_mode" "$must_exist" "$file_filter"
+          ;;
+        resource)
+          __dockpipe_sdk_prompt_resource_terminal "$title" "$message" "$default_value" "$resource_mode" "$resource_selection" "$resource_kind" "$must_exist" "${filters[@]}"
           ;;
         *)
           echo "dockpipe sdk: unknown prompt type $prompt_type" >&2
@@ -548,7 +713,7 @@ dockpipe_sdk actions:
   get <workdir|workflow_name|script_dir|package_root|assets_dir|dockpipe_bin>
   cd-workdir
   die <message...>
-  prompt <confirm|choice|input|file> [options]
+  prompt <confirm|choice|input|file|resource> [options]
   require dockpipe-bin
   require workflow-name
   source terraform-pipeline

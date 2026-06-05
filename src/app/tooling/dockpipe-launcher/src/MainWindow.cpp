@@ -50,6 +50,8 @@
 #include <QGuiApplication>
 #include <QRegularExpression>
 
+#include <functional>
+
 namespace {
 
 QString statusLabel(SessionManager &sm, const QString &id, bool *runningOut, bool *failedOut)
@@ -145,24 +147,51 @@ QStringList formatEnvAssignments(const QMap<QString, QString> &values)
 QSet<QString> workflowModeledEnvNames(const WorkflowMeta &meta)
 {
     QSet<QString> out;
-    for (const WorkflowInputMeta &input : meta.inputs) {
-        const QString envName = input.envName.trimmed().toUpper();
-        if (!envName.isEmpty())
-            out.insert(envName);
-    }
+    std::function<void(const QVector<WorkflowInputMeta> &)> walk = [&](const QVector<WorkflowInputMeta> &inputs) {
+        for (const WorkflowInputMeta &input : inputs) {
+            const QString envName = input.envName.trimmed().toUpper();
+            if (!envName.isEmpty())
+                out.insert(envName);
+            if (!input.children.isEmpty())
+                walk(input.children);
+        }
+    };
+    walk(meta.inputs);
     return out;
 }
 
 QSet<QString> workflowModeledEnvPrefixes(const WorkflowMeta &meta)
 {
     QSet<QString> out;
-    for (const WorkflowInputMeta &input : meta.inputs) {
-        const QString envName = input.envName.trimmed().toUpper();
-        const int lastUnderscore = envName.lastIndexOf(QLatin1Char('_'));
-        if (lastUnderscore > 0)
-            out.insert(envName.left(lastUnderscore + 1));
-    }
+    std::function<void(const QVector<WorkflowInputMeta> &)> walk = [&](const QVector<WorkflowInputMeta> &inputs) {
+        for (const WorkflowInputMeta &input : inputs) {
+            const QString envName = input.envName.trimmed().toUpper();
+            const int lastUnderscore = envName.lastIndexOf(QLatin1Char('_'));
+            if (lastUnderscore > 0)
+                out.insert(envName.left(lastUnderscore + 1));
+            if (!input.children.isEmpty())
+                walk(input.children);
+        }
+    };
+    walk(meta.inputs);
     return out;
+}
+
+bool workflowNeedsConfigPromptInputs(const QVector<WorkflowInputMeta> &inputs, const QMap<QString, QString> &currentValues)
+{
+    for (const WorkflowInputMeta &input : inputs) {
+        const QString envName = input.envName.trimmed().toUpper();
+        if (!envName.isEmpty()) {
+            if (!currentValues.value(envName).trimmed().isEmpty())
+                continue;
+            if (!input.defaultValue.trimmed().isEmpty())
+                continue;
+            return true;
+        }
+        if (!input.children.isEmpty() && workflowNeedsConfigPromptInputs(input.children, currentValues))
+            return true;
+    }
+    return false;
 }
 
 QMap<QString, QString> pruneStaleWorkflowValues(const WorkflowMeta &meta, const QMap<QString, QString> &currentValues)
@@ -191,17 +220,7 @@ QMap<QString, QString> pruneStaleWorkflowValues(const WorkflowMeta &meta, const 
 
 bool workflowNeedsConfigPrompt(const WorkflowMeta &meta, const QMap<QString, QString> &currentValues)
 {
-    for (const WorkflowInputMeta &input : meta.inputs) {
-        const QString envName = input.envName.trimmed();
-        if (envName.isEmpty())
-            continue;
-        if (!currentValues.value(envName).trimmed().isEmpty())
-            continue;
-        if (!input.defaultValue.trimmed().isEmpty())
-            continue;
-        return true;
-    }
-    return false;
+    return workflowNeedsConfigPromptInputs(meta.inputs, currentValues);
 }
 
 } // namespace
@@ -1061,6 +1080,9 @@ void MainWindow::onSessionPrompt(const QString &contextId, const QString &payloa
     const QString pathMode = obj.value(QStringLiteral("path_mode")).toString(QStringLiteral("open-file"));
     const QString fileFilter = obj.value(QStringLiteral("file_filter")).toString();
     const QString baseDir = obj.value(QStringLiteral("base_dir")).toString();
+    const QString resourceMode = obj.value(QStringLiteral("resource_mode")).toString(QStringLiteral("select"));
+    const QString resourceSelection = obj.value(QStringLiteral("resource_selection")).toString(QStringLiteral("single"));
+    const QString resourceKind = obj.value(QStringLiteral("resource_kind")).toString(QStringLiteral("file"));
     const bool sensitive = obj.value(QStringLiteral("sensitive")).toBool(false);
     const bool mustExist = obj.value(QStringLiteral("must_exist")).toBool(false);
 
@@ -1071,12 +1093,21 @@ void MainWindow::onSessionPrompt(const QString &contextId, const QString &payloa
         if (!option.isEmpty())
             items.append(option);
     }
+    QStringList filters;
+    const QJsonArray filterValues = obj.value(QStringLiteral("filters")).toArray();
+    for (const QJsonValue &value : filterValues) {
+        const QString filter = value.toString();
+        if (!filter.isEmpty())
+            filters.append(filter);
+    }
+    if (filters.isEmpty() && !fileFilter.isEmpty())
+        filters = fileFilter.split(QStringLiteral(";;"), Qt::SkipEmptyParts);
 
     QString response = defaultValue;
     if (type == QStringLiteral("confirm") || type == QStringLiteral("input") ||
-        type == QStringLiteral("choice") || type == QStringLiteral("file")) {
+        type == QStringLiteral("choice") || type == QStringLiteral("file") || type == QStringLiteral("resource")) {
         PromptDialog dialog({type, title, message, defaultValue, intent, automationGroup, pathMode, fileFilter, baseDir,
-                             items, sensitive, mustExist},
+                             resourceMode, resourceSelection, resourceKind, filters, items, sensitive, mustExist},
                             this);
         dialog.exec();
         response = dialog.response();

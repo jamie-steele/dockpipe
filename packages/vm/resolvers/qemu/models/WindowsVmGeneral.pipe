@@ -1,0 +1,21 @@
+/// <summary>
+/// General Windows VM execution settings.
+/// </summary>
+public Interface IWindowsVmGeneral
+{
+    /// <summary>Guest execution wrapper mode. Windows defaults to powershell.</summary>
+    [DisplayName = "Execution Mode"]
+    [EnvName = "DOCKPIPE_VM_EXEC_MODE"]
+    public string ExecMode;
+
+    /// <summary>Optional boot source hint. Leave empty to let DockPipe prompt for image vs ISO.</summary>
+    [DisplayName = "Boot Source"]
+    [EnvName = "DOCKPIPE_VM_BOOT_SOURCE"]
+    public string BootSource;
+}
+
+public Class WindowsVmGeneral : IWindowsVmGeneral
+{
+    public string ExecMode = "";
+    public string BootSource = "";
+}

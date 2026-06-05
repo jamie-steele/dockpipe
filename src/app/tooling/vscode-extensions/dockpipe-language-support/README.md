@@ -4,7 +4,9 @@ Language support for DockPipe authoring:
 
 - `.pipe` PipeLang syntax highlighting
 - PipeLang snippets and keyword completion
+- PipeLang model awareness for primitive, object/interface, and `List<T>` field types
 - DockPipe `config.yml` IntelliSense for common workflow keys
+- DockPipe `config.yml` support for optional authored `view:` metadata (entry routing, pages, sections, and field-path driven launcher layouts)
 - Up-to-date workflow help for packaged workflow steps (`workflow:` + `package:`), Compose host built-ins, and authored security/runtime policy blocks
 - DockPipe `package.yml` hover/docs and top-level key completion
 - DockPipe `package.yml` `icon` / `artwork` metadata hints for package-owned launcher/tooling assets
@@ -46,8 +48,10 @@ make install-dockpipe-language-support
 
 - YAML IntelliSense is context-aware and uses lightweight nesting analysis from the workflow document.
 - Workflow authoring help tracks the current public model: steps + runtime + resolver first, with top-level runtime/resolver as defaults, step-level runtime/resolver as overrides, step-level `security` supported for container-only policy tightening, `isolate` treated as the advanced low-level override, top-level `run` / `act` treated as single-flow shorthand only, and async authoring expressed through explicit `group: { mode: async, tasks: [...] }`.
+- When present, workflow `view:` stays a declarative launcher presentation layer over the typed model rather than replacing `vars:` / env mappings.
 - `types:` suggestions support the interface entrypoint pattern, for example:
   `models/IR2InfraConfig`
+- PipeLang editor support understands interface/object field types and generic list shapes such as `List<string>` and `List<IImageResource>`.
 - Shared script support points authors at the canonical DockPipe SDK under `src/core/assets/scripts/lib/` and `dockpipe sdk`.
 - `package.yml` may declare package-owned artwork via `icon:` and `artwork:` paths relative to the manifest.
 - `package.yml` may also declare a package-owned OCI image reference via `image:`; DockPipe compiles that into the effective runtime/image artifact manifests.
