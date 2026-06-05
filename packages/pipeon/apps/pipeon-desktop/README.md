@@ -56,6 +56,10 @@ That writes the canonical binary to:
 
 `packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop`
 
+On Windows hosts the built binary is:
+
+`packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop.exe`
+
 To install a desktop entry and icon for Linux app launchers (for example Pop OS / GNOME):
 
 ```bash

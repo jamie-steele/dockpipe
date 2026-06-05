@@ -78,8 +78,9 @@ function Test-DockpipeTruthy {
 }
 
 function Get-DockpipePromptMode {
-  if ($env:DOCKPIPE_SDK_PROMPT_MODE -eq "json") {
-    return "json"
+  switch ($env:DOCKPIPE_SDK_PROMPT_MODE) {
+    "json" { return "json" }
+    "terminal" { return "terminal" }
   }
   if (-not [Console]::IsInputRedirected -and -not [Console]::IsErrorRedirected) {
     return "terminal"

@@ -5,7 +5,9 @@ param(
 
   [string]$QemuBin,
   [string]$PidFile,
-  [string]$ArgsFile
+  [string]$ArgsFile,
+  [string]$StdOutFile,
+  [string]$StdErrFile
 )
 
 Set-StrictMode -Version Latest
@@ -17,6 +19,40 @@ function Read-QemuArgs {
     return @()
   }
   return @(Get-Content -LiteralPath $Path)
+}
+
+function Start-QemuProcess {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$FilePath,
+    [string[]]$ArgumentList = @(),
+    [string]$StdOutPath,
+    [string]$StdErrPath,
+    [switch]$CaptureOutput
+  )
+
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = $FilePath
+  $psi.UseShellExecute = $false
+
+  foreach ($arg in @($ArgumentList)) {
+    [void]$psi.ArgumentList.Add($arg)
+  }
+
+  if ($CaptureOutput -and -not [string]::IsNullOrWhiteSpace($StdOutPath)) {
+    $psi.RedirectStandardOutput = $true
+  }
+  if ($CaptureOutput -and -not [string]::IsNullOrWhiteSpace($StdErrPath)) {
+    $psi.RedirectStandardError = $true
+  }
+
+  $process = [System.Diagnostics.Process]::new()
+  $process.StartInfo = $psi
+  if (-not $process.Start()) {
+    throw "Failed to start QEMU process."
+  }
+
+  return $process
 }
 
 function Get-QemuProcess {
@@ -40,7 +76,7 @@ switch ($Action) {
     if ([string]::IsNullOrWhiteSpace($QemuBin)) { throw 'QemuBin is required for start' }
     if ([string]::IsNullOrWhiteSpace($PidFile)) { throw 'PidFile is required for start' }
     $args = Read-QemuArgs -Path $ArgsFile
-    $process = Start-Process -FilePath $QemuBin -ArgumentList $args -PassThru
+    $process = Start-QemuProcess -FilePath $QemuBin -ArgumentList $args
     Set-Content -LiteralPath $PidFile -Value $process.Id -NoNewline
     break
   }
@@ -48,9 +84,15 @@ switch ($Action) {
     if ([string]::IsNullOrWhiteSpace($QemuBin)) { throw 'QemuBin is required for start-wait' }
     if ([string]::IsNullOrWhiteSpace($PidFile)) { throw 'PidFile is required for start-wait' }
     $args = Read-QemuArgs -Path $ArgsFile
-    $process = Start-Process -FilePath $QemuBin -ArgumentList $args -PassThru
+    $process = Start-QemuProcess -FilePath $QemuBin -ArgumentList $args -StdOutPath $StdOutFile -StdErrPath $StdErrFile -CaptureOutput
     Set-Content -LiteralPath $PidFile -Value $process.Id -NoNewline
-    Wait-Process -Id $process.Id
+    $process.WaitForExit()
+    if (-not [string]::IsNullOrWhiteSpace($StdOutFile)) {
+      [System.IO.File]::WriteAllText($StdOutFile, $process.StandardOutput.ReadToEnd())
+    }
+    if (-not [string]::IsNullOrWhiteSpace($StdErrFile)) {
+      [System.IO.File]::WriteAllText($StdErrFile, $process.StandardError.ReadToEnd())
+    }
     break
   }
   'wait' {

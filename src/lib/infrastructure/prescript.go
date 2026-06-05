@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"golang.org/x/term"
 )
 
 // SourceHostScript runs a bash script with set -a (export all) and returns the resulting environment as a map.
@@ -78,6 +80,7 @@ func RunHostScript(scriptPath string, env []string) error {
 	if err != nil {
 		return fmt.Errorf("host run registry: %w", err)
 	}
+	env = applyInteractivePromptMode(env)
 	cmd := exec.Command(bashExe, bashPath)
 	cmd.Env = env
 	cmd.Stdin = os.Stdin
@@ -99,6 +102,21 @@ func RunHostScript(scriptPath string, env []string) error {
 		return fmt.Errorf("host script %s: %w", scriptPath, err)
 	}
 	return nil
+}
+
+func applyInteractivePromptMode(env []string) []string {
+	if strings.TrimSpace(envGet(env, "DOCKPIPE_SDK_PROMPT_MODE")) != "" {
+		return env
+	}
+	inFd, inOK := fdInt(os.Stdin)
+	errFd, errOK := fdInt(os.Stderr)
+	if !inOK || !errOK {
+		return env
+	}
+	if !term.IsTerminal(inFd) || !term.IsTerminal(errFd) {
+		return env
+	}
+	return append(env, "DOCKPIPE_SDK_PROMPT_MODE=terminal")
 }
 
 // RunHostCommand runs an inline bash command on the host with inherited stdio.

@@ -41,9 +41,10 @@ set(DOCKPIPE_LAUNCHER_SOURCES
 
 if(WIN32)
     list(APPEND DOCKPIPE_LAUNCHER_SOURCES resources/windows/dockpipe-launcher.rc)
+    qt_add_executable(dockpipe-launcher WIN32 ${DOCKPIPE_LAUNCHER_SOURCES})
+else()
+    qt_add_executable(dockpipe-launcher ${DOCKPIPE_LAUNCHER_SOURCES})
 endif()
-
-qt_add_executable(dockpipe-launcher ${DOCKPIPE_LAUNCHER_SOURCES})
 
 target_include_directories(dockpipe-launcher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 target_link_libraries(dockpipe-launcher PRIVATE Qt6::Widgets Qt6::Network)

@@ -94,8 +94,11 @@ func truthy(v string) bool {
 }
 
 func promptMode() string {
-	if os.Getenv("DOCKPIPE_SDK_PROMPT_MODE") == "json" {
+	switch os.Getenv("DOCKPIPE_SDK_PROMPT_MODE") {
+	case "json":
 		return "json"
+	case "terminal":
+		return "terminal"
 	}
 	if term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stderr.Fd())) {
 		return "terminal"

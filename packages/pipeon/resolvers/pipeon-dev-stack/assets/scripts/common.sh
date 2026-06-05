@@ -108,7 +108,9 @@ pipeon_stack_desktop_bin() {
   repo_root="$(pipeon_stack_repo_root)"
 
   for candidate in \
+    "$workdir/packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop.exe" \
     "$workdir/packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop" \
+    "$repo_root/packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop.exe" \
     "$repo_root/packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop"
   do
     if [[ -x "$candidate" ]]; then

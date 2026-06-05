@@ -83,8 +83,11 @@ def _truthy(value: str | None) -> bool:
 
 
 def _prompt_mode() -> str:
-    if os.environ.get("DOCKPIPE_SDK_PROMPT_MODE") == "json":
+    mode = os.environ.get("DOCKPIPE_SDK_PROMPT_MODE")
+    if mode == "json":
         return "json"
+    if mode == "terminal":
+        return "terminal"
     if sys.stdin.isatty() and sys.stderr.isatty():
         return "terminal"
     return "noninteractive"

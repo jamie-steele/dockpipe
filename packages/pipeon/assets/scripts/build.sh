@@ -20,6 +20,7 @@ PIPEON_VSCODE_EXT_BUILD_DIR="${PIPEON_VSCODE_EXT_BUILD_DIR:-$REPO_ROOT/bin/.dock
 PIPEON_VSCODE_EXT_NPM_CACHE="${PIPEON_VSCODE_EXT_NPM_CACHE:-$REPO_ROOT/bin/.dockpipe/build/npm-cache}"
 DOCKPIPE_VSCODE_EXT_DIR="$REPO_ROOT/src/app/tooling/vscode-extensions/dockpipe-language-support"
 DOCKPIPE_VSCODE_TMP_CACHE="$REPO_ROOT/tmp/npm-cache"
+PIPEON_WINDOWS_BUILD_HELPER="$REPO_ROOT/packages/pipeon/assets/scripts/build-desktop-windows.ps1"
 
 usage() {
   cat <<'EOF'
@@ -84,6 +85,97 @@ install_cargo_windows() {
   return 1
 }
 
+refresh_cargo_path() {
+  if command -v cargo >/dev/null 2>&1; then
+    return 0
+  fi
+  local cargo_bin=""
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+      if [[ -n "${HOME:-}" && -x "$HOME/.cargo/bin/cargo.exe" ]]; then
+        cargo_bin="$HOME/.cargo/bin"
+      elif [[ -n "${USERPROFILE:-}" ]]; then
+        local userprofile_unix=""
+        if command -v cygpath >/dev/null 2>&1; then
+          userprofile_unix="$(cygpath -u "$USERPROFILE" 2>/dev/null || true)"
+        fi
+        if [[ -n "$userprofile_unix" && -x "$userprofile_unix/.cargo/bin/cargo.exe" ]]; then
+          cargo_bin="$userprofile_unix/.cargo/bin"
+        elif [[ -x "${USERPROFILE//\\//}/.cargo/bin/cargo.exe" ]]; then
+          cargo_bin="${USERPROFILE//\\//}/.cargo/bin"
+        fi
+      fi
+      ;;
+    *)
+      if [[ -n "${HOME:-}" && -x "$HOME/.cargo/bin/cargo" ]]; then
+        cargo_bin="$HOME/.cargo/bin"
+      fi
+      ;;
+  esac
+  if [[ -n "$cargo_bin" ]]; then
+    export PATH="$cargo_bin:$PATH"
+  fi
+  command -v cargo >/dev/null 2>&1
+}
+
+pipeon_powershell_bin() {
+  if command -v pwsh.exe >/dev/null 2>&1; then
+    printf 'pwsh.exe\n'
+    return 0
+  fi
+  if command -v pwsh >/dev/null 2>&1; then
+    printf 'pwsh\n'
+    return 0
+  fi
+  if command -v powershell.exe >/dev/null 2>&1; then
+    printf 'powershell.exe\n'
+    return 0
+  fi
+  if command -v powershell >/dev/null 2>&1; then
+    printf 'powershell\n'
+    return 0
+  fi
+  echo "[dockpipe] PowerShell was not found on PATH." >&2
+  return 1
+}
+
+pipeon_windows_path() {
+  local path_value="$1"
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$path_value"
+  else
+    printf '%s\n' "$path_value"
+  fi
+}
+
+cargo_is_installed_but_unbound() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+      if [[ -n "${HOME:-}" && -x "$HOME/.cargo/bin/cargo.exe" ]]; then
+        return 0
+      fi
+      if [[ -n "${USERPROFILE:-}" ]]; then
+        local userprofile_unix=""
+        if command -v cygpath >/dev/null 2>&1; then
+          userprofile_unix="$(cygpath -u "$USERPROFILE" 2>/dev/null || true)"
+        fi
+        if [[ -n "$userprofile_unix" && -x "$userprofile_unix/.cargo/bin/cargo.exe" ]]; then
+          return 0
+        fi
+        if [[ -x "${USERPROFILE//\\//}/.cargo/bin/cargo.exe" ]]; then
+          return 0
+        fi
+      fi
+      ;;
+    *)
+      if [[ -n "${HOME:-}" && -x "$HOME/.cargo/bin/cargo" ]]; then
+        return 0
+      fi
+      ;;
+  esac
+  return 1
+}
+
 install_cargo_host() {
   case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
@@ -109,14 +201,22 @@ install_cargo_host() {
 }
 
 require_cargo() {
-  if command -v cargo >/dev/null 2>&1; then
+  if refresh_cargo_path; then
     return 0
+  fi
+  if cargo_is_installed_but_unbound; then
+    echo "[dockpipe] Rust appears installed, but Cargo is not visible in the current shell. Open a new terminal and rerun." >&2
+    exit 1
   fi
   local answer
   answer="$(prompt_install_cargo)" || answer="no"
   if [[ "$answer" == "yes" ]]; then
     if install_cargo_host; then
-      echo "[dockpipe] Cargo install command finished. Open a new shell if needed, then rerun the Pipeon source build." >&2
+      if refresh_cargo_path; then
+        echo "[dockpipe] Cargo is now available in the current shell. Continuing Pipeon source build..."
+        return 0
+      fi
+      echo "[dockpipe] Cargo install command finished, but the current shell still cannot see Cargo. Open a new shell if needed, then rerun the Pipeon source build." >&2
       exit 1
     fi
     echo "[dockpipe] Cargo is still unavailable. Finish the Rust install, open a new shell, and rerun." >&2
@@ -148,7 +248,22 @@ build_icons() {
   python3 "$REPO_ROOT/packages/pipeon/resolvers/pipeon/assets/scripts/generate-pipeon-icons.py"
 }
 
+build_desktop_windows() {
+  require_cargo
+  local powershell_bin
+  powershell_bin="$(pipeon_powershell_bin)" || return 1
+  "$powershell_bin" -NoProfile -ExecutionPolicy Bypass -File "$(pipeon_windows_path "$PIPEON_WINDOWS_BUILD_HELPER")" \
+    -RepoRoot "$(pipeon_windows_path "$REPO_ROOT")" \
+    -TargetDir "$(pipeon_windows_path "$PIPEON_DESKTOP_TARGET_DIR")"
+}
+
 build_desktop() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+      build_desktop_windows
+      return 0
+      ;;
+  esac
   require_cargo
   mkdir -p "$PIPEON_DESKTOP_TARGET_DIR"
   CARGO_TARGET_DIR="$PIPEON_DESKTOP_TARGET_DIR" \

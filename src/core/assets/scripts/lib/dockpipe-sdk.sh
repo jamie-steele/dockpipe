@@ -161,10 +161,16 @@ __dockpipe_sdk_truthy() {
 }
 
 __dockpipe_sdk_prompt_mode() {
-  if [[ "${DOCKPIPE_SDK_PROMPT_MODE:-}" == "json" ]]; then
-    printf 'json\n'
-    return 0
-  fi
+  case "${DOCKPIPE_SDK_PROMPT_MODE:-}" in
+    json)
+      printf 'json\n'
+      return 0
+      ;;
+    terminal)
+      printf 'terminal\n'
+      return 0
+      ;;
+  esac
   if [[ -t 0 && -t 2 ]]; then
     printf 'terminal\n'
     return 0
@@ -269,12 +275,48 @@ __dockpipe_sdk_prompt_input_terminal() {
 __dockpipe_sdk_prompt_resolve_path() {
   local raw="${1:-}"
   [[ -n "$raw" ]] || return 0
-  if [[ "$raw" == /* ]]; then
-    printf '%s\n' "$raw"
-    return 0
-  fi
+  case "$raw" in
+    /*)
+      printf '%s\n' "$raw"
+      return 0
+      ;;
+    [A-Za-z]:\\*|[A-Za-z]:/*|\\\\*)
+      if command -v cygpath >/dev/null 2>&1; then
+        cygpath -u "$raw"
+      else
+        printf '%s\n' "$raw"
+      fi
+      return 0
+      ;;
+  esac
   local base="${DOCKPIPE_WORKDIR:-$(pwd)}"
   printf '%s\n' "${base%/}/$raw"
+}
+
+__dockpipe_sdk_prompt_trim() {
+  local value="${1:-}"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+__dockpipe_sdk_prompt_strip_wrapping_quotes() {
+  local value="${1:-}"
+  case "$value" in
+    \"*\"|\'*\')
+      if [[ "${#value}" -ge 2 && "${value:0:1}" == "${value: -1}" ]]; then
+        value="${value:1:${#value}-2}"
+      fi
+      ;;
+  esac
+  printf '%s' "$value"
+}
+
+__dockpipe_sdk_prompt_normalize_path_input() {
+  local value
+  value="$(__dockpipe_sdk_prompt_trim "${1:-}")"
+  value="$(__dockpipe_sdk_prompt_strip_wrapping_quotes "$value")"
+  printf '%s\n' "$value"
 }
 
 __dockpipe_sdk_prompt_file_terminal() {
@@ -295,6 +337,7 @@ __dockpipe_sdk_prompt_file_terminal() {
     printf ': ' >&2
     IFS= read -r response || return 1
     response="${response:-$default_value}"
+    response="$(__dockpipe_sdk_prompt_normalize_path_input "$response")"
     if [[ -z "$response" ]]; then
       printf '%s\n' ""
       return 0
