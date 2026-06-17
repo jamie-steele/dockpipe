@@ -18,6 +18,48 @@
       "type": "object",
       "additionalProperties": { "type": "string" }
     },
+    "input_scalar": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "boolean" },
+        { "type": "integer" },
+        { "type": "number" }
+      ]
+    },
+    "input_binding": {
+      "oneOf": [
+        { "$ref": "#/$defs/input_scalar" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "from": { "type": "string" },
+            "value": { "$ref": "#/$defs/input_scalar" }
+          }
+        }
+      ]
+    },
+    "input_map": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/input_binding" }
+    },
+    "step_vm": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host_context": { "type": "string" },
+        "guest_path": { "type": "string" },
+        "interactive_debug": { "type": "boolean" },
+        "keepalive": { "type": "boolean" },
+        "keepalive_seconds": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "integer" }
+          ]
+        },
+        "hostfwd": { "type": "string" }
+      }
+    },
     "inject_item": {
       "oneOf": [
         { "type": "string" },
@@ -106,7 +148,9 @@
         "command": { "type": "string" },
         "run": { "$ref": "#/$defs/string_or_string_array" },
         "pre_script": { "type": "string" },
+        "inputs": { "$ref": "#/$defs/input_map" },
         "vars": { "$ref": "#/$defs/string_map" },
+        "vm": { "$ref": "#/$defs/step_vm" },
         "security": {
           "type": "object",
           "additionalProperties": false,
@@ -369,6 +413,7 @@
       "type": "array",
       "items": { "type": "string" }
     },
+    "inputs": { "$ref": "#/$defs/input_map" },
     "view": { "$ref": "#/$defs/workflow_view" },
     "steps": {
       "type": "array",

@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory = $true)][string]$Version,
     [Parameter(Mandatory = $true)][string]$SourceExe,
     [Parameter(Mandatory = $true)][string]$OutDir,
+    [Parameter(Mandatory = $false)][string]$CoreStageDir = "",
     [Parameter(Mandatory = $false)][string]$LauncherStageDir = "",
     [Parameter(Mandatory = $false)][string]$LauncherExe = "",
     # Optional: WiX root (extract folder: root candle.exe from wix314-binaries.zip, or parent of bin\candle.exe). Prefer passing this in CI — GITHUB_ENV can mangle Windows paths.
@@ -13,6 +14,9 @@ param(
 $ErrorActionPreference = "Stop"
 if (-not (Test-Path -LiteralPath $SourceExe)) {
     throw "SourceExe not found: $SourceExe"
+}
+if ($CoreStageDir -and -not (Test-Path -LiteralPath $CoreStageDir)) {
+    throw "CoreStageDir not found: $CoreStageDir"
 }
 if ($LauncherStageDir -and -not (Test-Path -LiteralPath $LauncherStageDir)) {
     throw "LauncherStageDir not found: $LauncherStageDir"
@@ -58,8 +62,13 @@ $msiName = "dockpipe_${Version}_windows_amd64.msi"
 $msiPath = Join-Path $OutDir $msiName
 
 $srcAbs = (Resolve-Path -LiteralPath $SourceExe).Path
+$coreStageAbs = ""
 $launcherStageAbs = ""
 $tempLauncherStageDir = ""
+
+if ($CoreStageDir) {
+    $coreStageAbs = (Resolve-Path -LiteralPath $CoreStageDir).Path
+}
 
 if ($LauncherStageDir) {
     $launcherStageAbs = (Resolve-Path -LiteralPath $LauncherStageDir).Path
@@ -72,8 +81,29 @@ if ($LauncherStageDir) {
 }
 
 $launcherEnabled = if ($launcherStageAbs) { "1" } else { "0" }
+$coreEnabled = if ($coreStageAbs) { "1" } else { "0" }
+$coreHarvestWxs = Join-Path $objDir "core-payload.wxs"
 $harvestWxs = Join-Path $objDir "launcher-payload.wxs"
 $candleInputs = @($wxs)
+
+if ($coreStageAbs) {
+    if (-not (Get-ChildItem -LiteralPath $coreStageAbs -Filter "dockpipe-core-*.tar.gz" -File -ErrorAction SilentlyContinue)) {
+        throw "CoreStageDir must contain dockpipe-core-*.tar.gz at its root. Got: $coreStageAbs"
+    }
+    & $heat dir $coreStageAbs `
+        -nologo `
+        -gg `
+        -scom `
+        -sreg `
+        -sfrag `
+        -srd `
+        -dr COREPACKAGESDIR `
+        -cg CorePayloadComponents `
+        -var var.DockpipeCoreStageDir `
+        -out $coreHarvestWxs
+    if ($LASTEXITCODE -ne 0) { throw "heat failed" }
+    $candleInputs += $coreHarvestWxs
+}
 
 if ($launcherStageAbs) {
     $launcherExeFromStage = Join-Path $launcherStageAbs "dockpipe-launcher.exe"
@@ -98,6 +128,8 @@ if ($launcherStageAbs) {
 & $candle -nologo -arch x64 `
     "-dProductVersion=$fourPart" `
     "-dDockpipeSource=$srcAbs" `
+    "-dDockpipeCoreEnabled=$coreEnabled" `
+    "-dDockpipeCoreStageDir=$coreStageAbs" `
     "-dDockpipeLauncherEnabled=$launcherEnabled" `
     "-dDockpipeLauncherStageDir=$launcherStageAbs" `
     -out "$objDir\\" `
@@ -120,6 +152,9 @@ if (-not $wixobjPaths -or $wixobjPaths.Count -eq 0) {
 if ($LASTEXITCODE -ne 0) { throw "light failed" }
 
 Write-Host "Built: $msiPath"
+if ($coreStageAbs) {
+    Write-Host "Included core payload: $coreStageAbs"
+}
 if ($launcherStageAbs) {
     Write-Host "Included launcher payload: $launcherStageAbs"
 }

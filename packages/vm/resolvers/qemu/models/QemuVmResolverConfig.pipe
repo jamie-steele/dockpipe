@@ -5,33 +5,33 @@ public Class QemuVmResolverConfig
 {
     /// <summary>General VM execution settings.</summary>
     [DisplayName = "General"]
-    public IWindowsVmGeneral General;
+    public WindowsVmGeneral General;
 
     /// <summary>Disk image, persistence, and installer media settings.</summary>
     [DisplayName = "Storage"]
-    public IWindowsVmStorage Storage;
+    public WindowsVmStorage Storage;
 
     /// <summary>Firmware images and BIOS/UEFI boot files.</summary>
     [DisplayName = "Firmware"]
-    public IWindowsVmFirmware Firmware;
+    public WindowsVmFirmware Firmware;
 
     /// <summary>Guest networking and SSH connection settings.</summary>
     [DisplayName = "Network"]
-    public IWindowsVmNetwork Network;
+    public WindowsVmNetwork Network;
 
     /// <summary>TPM and secure boot controls.</summary>
     [DisplayName = "Security"]
-    public IWindowsVmSecurity Security;
+    public WindowsVmSecurity Security;
 
     /// <summary>CPU, memory, and interactive display settings.</summary>
     [DisplayName = "Compute"]
-    public IWindowsVmCompute Compute;
+    public WindowsVmCompute Compute;
 
     /// <summary>Optional host PCI passthrough controls.</summary>
     [DisplayName = "Passthrough"]
-    public IWindowsVmPassthrough Passthrough;
+    public WindowsVmPassthrough Passthrough;
 
     /// <summary>Advanced guest wrapper overrides.</summary>
     [DisplayName = "Advanced"]
-    public IWindowsVmAdvanced Advanced;
+    public WindowsVmAdvanced Advanced;
 }

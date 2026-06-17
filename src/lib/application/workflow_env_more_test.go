@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"dockpipe/src/lib/domain"
+	"dockpipe/src/lib/infrastructure"
+	"dockpipe/src/lib/infrastructure/packagebuild"
 )
 
 // TestBuildWorkflowEnvIntoPrecedenceAndOverrides merges wf .env, repo .env, --env-file, DOCKPIPE_ENV_FILE, vars, --var.
@@ -40,7 +42,7 @@ func TestBuildWorkflowEnvIntoPrecedenceAndOverrides(t *testing.T) {
 		EnvFiles:     []string{custom},
 		VarOverrides: []string{"SHARED=override", "CLI=ok"},
 	}
-	if err := buildWorkflowEnvInto(env, wf, wfRoot, repoRoot, opts); err != nil {
+	if err := buildWorkflowEnvInto(env, wf, filepath.Join(wfRoot, "config.yml"), wfRoot, repoRoot, opts); err != nil {
 		t.Fatal(err)
 	}
 
@@ -52,6 +54,228 @@ func TestBuildWorkflowEnvIntoPrecedenceAndOverrides(t *testing.T) {
 	}
 	if env["CLI"] != "ok" {
 		t.Fatalf("missing CLI var override: %#v", env)
+	}
+}
+
+func TestBuildWorkflowEnvIntoResolvesTypedInputsFromWorkflowEnv(t *testing.T) {
+	tmp := t.TempDir()
+	wfRoot := filepath.Join(tmp, "wf")
+	repoRoot := filepath.Join(tmp, "repo")
+	modelsDir := filepath.Join(wfRoot, "models")
+	for _, dir := range []string{wfRoot, repoRoot, modelsDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(p, s string) {
+		t.Helper()
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(wfRoot, ".env"), "UH_VM_KEEPALIVE=true\n")
+	write(filepath.Join(modelsDir, "QemuVmResolverConfig.pipe"), `public Class QemuVmResolverConfig
+{
+    public WindowsVmGeneral General;
+    public WindowsVmAdvanced Advanced;
+}
+`)
+	write(filepath.Join(modelsDir, "WindowsVmGeneral.pipe"), `public Class WindowsVmGeneral
+{
+    [EnvName = "DOCKPIPE_VM_EXEC_MODE"]
+    public string ExecMode = "powershell";
+}
+`)
+	write(filepath.Join(modelsDir, "WindowsVmAdvanced.pipe"), `public Class WindowsVmAdvanced
+{
+    [EnvName = "DOCKPIPE_VM_KEEPALIVE"]
+    public string KeepAlive = "";
+}
+`)
+	write(filepath.Join(wfRoot, "config.yml"), "name: demo\n")
+
+	env := map[string]string{}
+	wf := &domain.Workflow{
+		Types: []string{"models/QemuVmResolverConfig.pipe"},
+		Inputs: map[string]domain.InputBinding{
+			"General.ExecMode":   {Value: "powershell"},
+			"Advanced.KeepAlive": {From: "UH_VM_KEEPALIVE", Value: "false"},
+		},
+	}
+	if err := buildWorkflowEnvInto(env, wf, filepath.Join(wfRoot, "config.yml"), wfRoot, repoRoot, &CliOpts{Workdir: repoRoot}); err != nil {
+		t.Fatal(err)
+	}
+	if env["DOCKPIPE_VM_EXEC_MODE"] != "powershell" {
+		t.Fatalf("DOCKPIPE_VM_EXEC_MODE=%q", env["DOCKPIPE_VM_EXEC_MODE"])
+	}
+	if env["DOCKPIPE_VM_KEEPALIVE"] != "true" {
+		t.Fatalf("DOCKPIPE_VM_KEEPALIVE=%q", env["DOCKPIPE_VM_KEEPALIVE"])
+	}
+}
+
+func TestBuildWorkflowEnvIntoInfersTypedInputsFromResolverConfig(t *testing.T) {
+	tmp := t.TempDir()
+	repoRoot := filepath.Join(tmp, "repo")
+	wfRoot := filepath.Join(repoRoot, "workflows", "demo")
+	resolverRoot := filepath.Join(repoRoot, "packages", "vm", "resolvers", "qemu")
+	modelsDir := filepath.Join(resolverRoot, "models")
+	for _, dir := range []string{wfRoot, modelsDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(p, s string) {
+		t.Helper()
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(repoRoot, "dockpipe.config.json"), `{
+  "compile": {
+    "workflows": ["workflows", "packages"]
+  }
+}`)
+	write(filepath.Join(resolverRoot, "profile"), "DOCKPIPE_RESOLVER_WORKFLOW=scripts/qemu.sh\n")
+	write(filepath.Join(resolverRoot, "types.yml"), "types:\n  - models/QemuVmResolverConfig\n")
+	write(filepath.Join(modelsDir, "QemuVmResolverConfig.pipe"), `public Class QemuVmResolverConfig
+{
+    public WindowsVmGeneral General;
+}
+`)
+	write(filepath.Join(modelsDir, "WindowsVmGeneral.pipe"), `public Class WindowsVmGeneral
+{
+    [EnvName = "DOCKPIPE_VM_EXEC_MODE"]
+    public string ExecMode = "powershell";
+}
+`)
+	write(filepath.Join(wfRoot, "config.yml"), "name: demo\nresolver: qemu\n")
+
+	env := map[string]string{}
+	wf := &domain.Workflow{
+		Resolver: "qemu",
+		Inputs: map[string]domain.InputBinding{
+			"General.ExecMode": {Value: "powershell"},
+		},
+	}
+	if err := buildWorkflowEnvInto(env, wf, filepath.Join(wfRoot, "config.yml"), wfRoot, repoRoot, &CliOpts{Workdir: repoRoot}); err != nil {
+		t.Fatal(err)
+	}
+	if env["DOCKPIPE_VM_EXEC_MODE"] != "powershell" {
+		t.Fatalf("DOCKPIPE_VM_EXEC_MODE=%q", env["DOCKPIPE_VM_EXEC_MODE"])
+	}
+}
+
+func TestBuildWorkflowEnvIntoResolvesTypedInputsFromTarWorkflowConfig(t *testing.T) {
+	tmp := t.TempDir()
+	projectRoot := filepath.Join(tmp, "project")
+	storeRoot := filepath.Join(projectRoot, "bin", ".dockpipe", "internal", "packages", "workflows")
+	stageRoot := filepath.Join(tmp, "stage", "demo")
+	modelsDir := filepath.Join(stageRoot, "models")
+	for _, dir := range []string{projectRoot, storeRoot, modelsDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(p, s string) {
+		t.Helper()
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(projectRoot, "dockpipe.config.json"), "{}")
+	write(filepath.Join(stageRoot, "config.yml"), "name: demo\n")
+	write(filepath.Join(modelsDir, "QemuVmResolverConfig.pipe"), `public Class QemuVmResolverConfig
+{
+    public WindowsVmGeneral General;
+}
+`)
+	write(filepath.Join(modelsDir, "WindowsVmGeneral.pipe"), `public Class WindowsVmGeneral
+{
+    [EnvName = "DOCKPIPE_VM_EXEC_MODE"]
+    public string ExecMode = "powershell";
+}
+`)
+	tgz := filepath.Join(storeRoot, "dockpipe-workflow-demo-0.0.0.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(stageRoot, tgz, "workflows/demo"); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{}
+	wf := &domain.Workflow{
+		Types: []string{"models/QemuVmResolverConfig.pipe"},
+		Inputs: map[string]domain.InputBinding{
+			"General.ExecMode": {Value: "powershell"},
+		},
+	}
+	wfConfig, err := infrastructure.ResolveWorkflowConfigPathWithWorkdir(projectRoot, projectRoot, "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := buildWorkflowEnvInto(env, wf, wfConfig, stageRoot, projectRoot, &CliOpts{Workdir: projectRoot}); err != nil {
+		t.Fatal(err)
+	}
+	if env["DOCKPIPE_VM_EXEC_MODE"] != "powershell" {
+		t.Fatalf("DOCKPIPE_VM_EXEC_MODE=%q", env["DOCKPIPE_VM_EXEC_MODE"])
+	}
+}
+
+func TestBuildWorkflowEnvIntoInfersTypedInputsFromResolverConfigForTarWorkflow(t *testing.T) {
+	tmp := t.TempDir()
+	projectRoot := filepath.Join(tmp, "project")
+	storeRoot := filepath.Join(projectRoot, "bin", ".dockpipe", "internal", "packages", "workflows")
+	stageRoot := filepath.Join(tmp, "stage", "demo")
+	resolverRoot := filepath.Join(projectRoot, "packages", "vm", "resolvers", "qemu")
+	modelsDir := filepath.Join(resolverRoot, "models")
+	for _, dir := range []string{projectRoot, storeRoot, stageRoot, modelsDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(p, s string) {
+		t.Helper()
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(projectRoot, "dockpipe.config.json"), `{
+  "compile": {
+    "workflows": ["workflows", "packages/vm"]
+  }
+}`)
+	write(filepath.Join(stageRoot, "config.yml"), "name: demo\nresolver: qemu\nruntime: vm\n")
+	write(filepath.Join(resolverRoot, "profile"), "DOCKPIPE_RESOLVER_WORKFLOW=scripts/qemu.sh\n")
+	write(filepath.Join(resolverRoot, "types.yml"), "types:\n  - models/QemuVmResolverConfig\n")
+	write(filepath.Join(modelsDir, "QemuVmResolverConfig.pipe"), `public Class QemuVmResolverConfig
+{
+    public WindowsVmGeneral General;
+}
+`)
+	write(filepath.Join(modelsDir, "WindowsVmGeneral.pipe"), `public Class WindowsVmGeneral
+{
+    [EnvName = "DOCKPIPE_VM_EXEC_MODE"]
+    public string ExecMode = "powershell";
+}
+`)
+	tgz := filepath.Join(storeRoot, "dockpipe-workflow-demo-0.0.0.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(stageRoot, tgz, "workflows/demo"); err != nil {
+		t.Fatal(err)
+	}
+	env := map[string]string{}
+	wf := &domain.Workflow{
+		Resolver: "qemu",
+		Runtime:  "vm",
+		Inputs: map[string]domain.InputBinding{
+			"General.ExecMode": {Value: "powershell"},
+		},
+	}
+	wfConfig, err := infrastructure.ResolveWorkflowConfigPathWithWorkdir(projectRoot, projectRoot, "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := buildWorkflowEnvInto(env, wf, wfConfig, stageRoot, projectRoot, &CliOpts{Workdir: projectRoot}); err != nil {
+		t.Fatal(err)
+	}
+	if env["DOCKPIPE_VM_EXEC_MODE"] != "powershell" {
+		t.Fatalf("DOCKPIPE_VM_EXEC_MODE=%q", env["DOCKPIPE_VM_EXEC_MODE"])
 	}
 }
 

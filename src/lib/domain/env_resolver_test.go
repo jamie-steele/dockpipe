@@ -25,6 +25,15 @@ func TestMergeIfUnset(t *testing.T) {
 	}
 }
 
+func TestMergeIfUnsetTreatsBlankAsUnset(t *testing.T) {
+	dst := map[string]string{"A": "", "B": "   ", "C": "keep"}
+	src := map[string]string{"A": "one", "B": "two", "C": "override", "D": "four"}
+	MergeIfUnset(dst, src)
+	if dst["A"] != "one" || dst["B"] != "two" || dst["C"] != "keep" || dst["D"] != "four" {
+		t.Fatalf("unexpected merge result: %#v", dst)
+	}
+}
+
 // TestEnvHelpers covers EnvSliceToMap, EnvironToMap, and EnvMapToSlice round-trips and edge cases.
 func TestEnvHelpers(t *testing.T) {
 	m := EnvSliceToMap([]string{" A = x ", "", "B=y", "BROKEN"})

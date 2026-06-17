@@ -11,6 +11,7 @@ const DOCKPIPE_TOP_LEVEL_KEYS = [
   "types",
   "view",
   "docker_preflight",
+  "inputs",
   "vars",
   "compose",
   "security",
@@ -36,7 +37,9 @@ const DOCKPIPE_STEP_KEYS = [
   "command",
   "run",
   "pre_script",
+  "inputs",
   "vars",
+  "vm",
   "security",
   "outputs",
   "workflow",
@@ -59,6 +62,7 @@ const TOP_LEVEL_KEY_DETAILS = {
   types: "PipeLang entrypoint list used to drive model-backed vars help.",
   view: "Optional authored launcher form layout. Define pages, sections, and field paths while older workflows can keep using the default flat/tree rendering.",
   docker_preflight: "Enable or disable the Docker preflight check before running.",
+  inputs: "Typed workflow inputs backed by the workflow's PipeLang types. Use field paths such as General.ExecMode instead of raw DOCKPIPE_* env names.",
   vars: "Workflow variables exported before execution unless already set in the environment.",
   compose: "Optional Docker Compose settings for host built-ins such as compose_up, compose_down, and compose_ps.",
   security: "Optional authored container security policy. Choose a security profile, then apply bounded network/filesystem/process overrides.",
@@ -84,7 +88,9 @@ const STEP_KEY_DETAILS = {
   command: "Alias for cmd.",
   run: "Command or script list to execute for this step.",
   pre_script: "Host-side scripts that run before the step body.",
+  inputs: "Typed step-local inputs backed by the workflow's PipeLang types. Use field paths such as Advanced.KeepAlive and optional from/value bindings instead of raw env names.",
   vars: "Step-local variables merged for this step.",
+  vm: "Declarative VM step settings. Use this to set guest path sync, interactive debug mode, keepalive, and host port forwarding without hand-writing DOCKPIPE_VM_* variables or host prep steps.",
   security: "Optional step-level container security override. Use this to tighten or specialize policy for one container step.",
   outputs: "Dotenv-style outputs file merged into the environment for later steps. This is the normal way one step passes values forward.",
   workflow: "Marks this as a packaged workflow step and names the child workflow to run.",
@@ -207,12 +213,18 @@ const DOCKPIPE_PROJECT_SECTION_KEY_DETAILS = {
   }
 };
 
-const VAR_KEY_FALLBACK_DETAIL = "Workflow variable override. This key exports an environment variable for the workflow or step.";
+const VAR_KEY_FALLBACK_DETAIL = "Workflow variable. This key exports an environment variable for the workflow or step.";
+const INPUT_BINDING_KEY_DETAILS = {
+  from: "Read this typed input from another env var after DockPipe has merged workflow vars, env files, and vault injection.",
+  value: "Literal fallback value for this typed input when from: is unset or resolves empty."
+};
 
 const CONTAINER_KEYS = new Set([
   "types",
   "view",
+  "inputs",
   "vars",
+  "vm",
   "steps",
   "run",
   "compose",
@@ -265,6 +277,15 @@ const WORKFLOW_VIEW_SECTION_KEY_DETAILS = {
   title: "User-facing section title in the launcher.",
   description: "Optional section help text shown above the section controls.",
   fields: "Ordered field paths from the typed model, such as General.BootSource or Storage.Disk."
+};
+
+const STEP_VM_KEY_DETAILS = {
+  host_context: "Optional host path to sync into the guest. When guest_path is set and host_context is omitted, DockPipe uses the effective DOCKPIPE_WORKDIR/workdir by default.",
+  guest_path: "Guest destination path for host-to-guest sync before the VM guest command runs.",
+  interactive_debug: "Launch the VM with a visible window and skip guest-command automation so you can inspect or configure the guest manually.",
+  keepalive: "Keep the VM alive after the guest command exits so you can continue setup work manually.",
+  keepalive_seconds: "Maximum keepalive window in seconds before DockPipe tears the VM down.",
+  hostfwd: "Additional QEMU host forward string such as tcp::3389-:3389."
 };
 
 const CORE_HELPER_PROFILES = {
@@ -618,6 +639,153 @@ function extractTypesEntries(doc) {
   return out;
 }
 
+async function resolveWorkflowTypeEntries(doc) {
+  const explicit = extractTypesEntries(doc).map((spec) => ({ spec, baseDir: path.dirname(doc.fileName) }));
+  if (explicit.length > 0) {
+    return explicit;
+  }
+  const workflowDir = path.dirname(doc.fileName);
+  const runtimeName = extractTopLevelScalarValue(doc, "runtime");
+  const resolverName = extractTopLevelScalarValue(doc, "resolver");
+  const inferred = [];
+  if (runtimeName) {
+    inferred.push(...await inferTypeEntriesForProfile(workflowDir, runtimeName));
+  }
+  if (resolverName) {
+    inferred.push(...await inferTypeEntriesForProfile(workflowDir, resolverName));
+  }
+  return dedupeTypeEntries(inferred);
+}
+
+function extractTopLevelScalarValue(doc, key) {
+  const lines = doc.getText().split(/\r?\n/);
+  for (const line of lines) {
+    const m = line.match(/^([ \t]*)([A-Za-z_][A-Za-z0-9_.-]*)\s*:\s*(.+?)\s*$/);
+    if (!m || (m[1] || "").length !== 0 || m[2] !== key) {
+      continue;
+    }
+    return yamlScalarValue(m[3]) || "";
+  }
+  return "";
+}
+
+async function inferTypeEntriesForProfile(startDir, leafName) {
+  const roots = await workflowCompileRootsForDoc(startDir);
+  const candidates = [];
+  for (const root of roots) {
+    candidates.push(...await findNamedProfileDirs(root, leafName));
+  }
+  const out = [];
+  for (const dirPath of candidates) {
+    for (const fileName of ["types.yml", "config.yml"]) {
+      const src = await readIfExists(path.join(dirPath, fileName));
+      if (!src) continue;
+      for (const spec of extractTypesEntriesFromSource(src)) {
+        out.push({ spec, baseDir: dirPath });
+      }
+      break;
+    }
+  }
+  return out;
+}
+
+async function workflowCompileRootsForDoc(startDir) {
+  const projectRoot = await findProjectRoot(startDir);
+  const configSrc = await readIfExists(path.join(projectRoot, "dockpipe.config.json"));
+  if (!configSrc) {
+    return [path.join(projectRoot, "workflows")];
+  }
+  try {
+    const parsed = JSON.parse(configSrc);
+    const roots = Array.isArray(parsed?.compile?.workflows) ? parsed.compile.workflows : ["workflows"];
+    return roots
+      .map((root) => String(root || "").trim())
+      .filter(Boolean)
+      .map((root) => (path.isAbsolute(root) ? root : path.join(projectRoot, root)));
+  } catch {
+    return [path.join(projectRoot, "workflows")];
+  }
+}
+
+async function findProjectRoot(startDir) {
+  let current = path.resolve(startDir);
+  while (true) {
+    try {
+      await fs.access(path.join(current, "dockpipe.config.json"));
+      return current;
+    } catch {}
+    const parent = path.dirname(current);
+    if (parent === current) {
+      return path.resolve(startDir);
+    }
+    current = parent;
+  }
+}
+
+async function findNamedProfileDirs(root, leafName) {
+  /** @type {string[]} */
+  const out = [];
+  const visit = async (dirPath) => {
+    let entries = [];
+    try {
+      entries = await fs.readdir(dirPath, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const child = path.join(dirPath, entry.name);
+      if (entry.name === leafName) {
+        try {
+          await fs.access(path.join(child, "profile"));
+          out.push(child);
+        } catch {}
+      }
+      await visit(child);
+    }
+  };
+  await visit(root);
+  return out;
+}
+
+function extractTypesEntriesFromSource(src) {
+  const out = [];
+  const lines = String(src || "").split(/\r?\n/);
+  let inTypes = false;
+  let typesIndent = -1;
+  for (const line of lines) {
+    if (!inTypes) {
+      const m = line.match(/^(\s*)types:\s*$/);
+      if (m) {
+        inTypes = true;
+        typesIndent = m[1].length;
+      }
+      continue;
+    }
+    if (!line.trim()) continue;
+    const indent = (line.match(/^\s*/) || [""])[0].length;
+    if (indent <= typesIndent) break;
+    const m = line.match(/^\s*-\s*(.+?)\s*$/);
+    if (m) out.push(m[1]);
+  }
+  return out;
+}
+
+function dedupeTypeEntries(entries) {
+  const seen = new Set();
+  const out = [];
+  for (const entry of entries) {
+    const spec = String(entry?.spec || "").trim();
+    const baseDir = String(entry?.baseDir || "").trim();
+    if (!spec || !baseDir) continue;
+    const key = `${baseDir}\u0000${spec}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ spec, baseDir });
+  }
+  return out;
+}
+
 function summaryFromComment(raw) {
   const s = raw.replace(/^\s*\/\/\/\s*/gm, "").trim();
   const m = s.match(/<summary>([\s\S]*?)<\/summary>/i);
@@ -777,7 +945,7 @@ async function readIfExists(filePath) {
  * @returns {Promise<ModelContext>}
  */
 async function buildModelContext(doc) {
-  const typeEntries = extractTypesEntries(doc);
+  const typeEntries = await resolveWorkflowTypeEntries(doc);
   if (typeEntries.length === 0) {
     return { types: {}, knownValues: [] };
   }
@@ -786,9 +954,26 @@ async function buildModelContext(doc) {
 
   /** @type {ModelContext} */
   const ctx = { types: {}, knownValues: [] };
+  const loadedModelFiles = new Set();
+
+  async function loadPipeDir(dirPath) {
+    const entries = await fs.readdir(dirPath).catch(() => []);
+    for (const name of entries.filter((n) => n.endsWith(".pipe"))) {
+      const abs = path.join(dirPath, name);
+      if (loadedModelFiles.has(abs)) continue;
+      loadedModelFiles.add(abs);
+      const src = await readIfExists(abs);
+      if (!src) continue;
+      for (const t of parsePipeModel(src)) {
+        ctx.types[t.name] = t;
+      }
+    }
+  }
+
   for (const entry of typeEntries) {
-    const spec = String(entry).trim();
+    const spec = String(entry.spec || "").trim();
     if (!spec) continue;
+    const baseDir = entry.baseDir || wfDir;
     let left = spec;
     let explicitRef = "";
     const i = spec.indexOf("<");
@@ -799,20 +984,11 @@ async function buildModelContext(doc) {
     }
     let rel = left;
     if (!rel.endsWith(".pipe")) rel += ".pipe";
-    const primaryFile = path.join(wfDir, rel);
+    const primaryFile = path.isAbsolute(rel) ? rel : path.join(baseDir, rel);
     const primarySrc = await readIfExists(primaryFile);
     if (!primarySrc) continue;
-
-    const allModelFiles = (await fs.readdir(modelsDir).catch(() => []))
-      .filter((f) => f.endsWith(".pipe"))
-      .map((f) => path.join(modelsDir, f));
-
-    for (const mf of allModelFiles) {
-      const src = await readIfExists(mf);
-      for (const t of parsePipeModel(src)) {
-        ctx.types[t.name] = t;
-      }
-    }
+    await loadPipeDir(modelsDir);
+    await loadPipeDir(path.dirname(primaryFile));
 
     const primaryTypes = parsePipeModel(primarySrc);
     const primaryName = primaryTypes[0]?.name;
@@ -856,7 +1032,7 @@ function leadingSpaces(text) {
 }
 
 function parseYamlLine(text) {
-  const mapMatch = text.match(/^(\s*)([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/);
+  const mapMatch = text.match(/^(\s*)([A-Za-z_][A-Za-z0-9_.-]*)\s*:\s*(.*)$/);
   if (mapMatch) {
     const indent = mapMatch[1].length;
     const key = mapMatch[2];
@@ -876,7 +1052,7 @@ function parseYamlLine(text) {
     };
   }
 
-  const listKeyMatch = text.match(/^(\s*)-\s+([A-Za-z_][A-Za-z0-9_-]*)\s*:\s*(.*)$/);
+  const listKeyMatch = text.match(/^(\s*)-\s+([A-Za-z_][A-Za-z0-9_.-]*)\s*:\s*(.*)$/);
   if (listKeyMatch) {
     const indent = listKeyMatch[1].length;
     const key = listKeyMatch[2];
@@ -933,6 +1109,7 @@ function analyzeYamlStructure(document) {
       trimmed,
       parents,
       inVars: parents.includes("vars"),
+      inInputs: parents.includes("inputs"),
       inSteps: parents.includes("steps"),
       inTypes: parents.includes("types")
     };
@@ -1081,6 +1258,20 @@ function findVarsBlockInfo(document, position) {
   return null;
 }
 
+function findInputsBlockInfo(document, position) {
+  const info = structureInfoAt(document, position);
+  if (!info) return null;
+  if (info.inInputs) {
+    return info;
+  }
+  return null;
+}
+
+function isDirectChildOfInputs(info) {
+  if (!info?.parents) return false;
+  return info.parents[info.parents.length - 1] === "inputs";
+}
+
 function rangeContains(range, position) {
   if (!range) return false;
   return range.contains(position);
@@ -1142,9 +1333,27 @@ function hoverForVarsContainer(range, modelCtx, fallbackDoc) {
   md.appendMarkdown("\n\nPossible variables:");
   for (const name of names) {
     const field = iface.fields[name];
-    const exportName = exportedVarName(name);
+    const exportNames = fieldExportNames(name, field);
     const detail = field?.doc ? ` - ${field.doc}` : "";
-    md.appendMarkdown(`\n- \`${exportName}\`${detail}`);
+    for (const exportName of exportNames) {
+      md.appendMarkdown(`\n- \`${exportName}\`${detail}`);
+    }
+  }
+  return new vscode.Hover(md);
+}
+
+function hoverForInputsContainer(range, modelCtx, fallbackDoc) {
+  const fields = modelInputFields(modelCtx);
+  const md = new vscode.MarkdownString();
+  md.appendMarkdown("**inputs**");
+  md.appendMarkdown(`\n\n${fallbackDoc || TOP_LEVEL_KEY_DETAILS.inputs}`);
+  if (fields.length === 0) {
+    return new vscode.Hover(md);
+  }
+  md.appendMarkdown("\n\nPossible typed inputs:");
+  for (const field of fields) {
+    const detail = field.doc ? ` - ${field.doc}` : "";
+    md.appendMarkdown(`\n- \`${field.path}\`${detail}`);
   }
   return new vscode.Hover(md);
 }
@@ -1188,6 +1397,19 @@ function exportedVarName(name) {
   return parts.join("_").toUpperCase();
 }
 
+function fieldExportNames(sourceName, fieldInfo) {
+  const out = new Set();
+  const derived = exportedVarName(sourceName);
+  if (derived) {
+    out.add(derived);
+  }
+  const annotated = String(fieldInfo?.annotations?.EnvName || "").trim();
+  if (annotated) {
+    out.add(annotated);
+  }
+  return Array.from(out);
+}
+
 function modelFieldInfo(modelCtx, fieldName) {
   if (!fieldName) return null;
   const iface = modelCtx.entryInterface ? modelCtx.types[modelCtx.entryInterface] : undefined;
@@ -1196,7 +1418,7 @@ function modelFieldInfo(modelCtx, fieldName) {
   let ifaceField = iface?.fields[fieldName];
   if (!ifaceField && iface) {
     for (const name of Object.keys(iface.fields)) {
-      if (exportedVarName(name) === fieldName) {
+      if (fieldExportNames(name, iface.fields[name]).includes(fieldName)) {
         sourceName = name;
         ifaceField = iface.fields[name];
         break;
@@ -1207,11 +1429,89 @@ function modelFieldInfo(modelCtx, fieldName) {
   if (!ifaceField && !implField) return null;
   return {
     sourceName,
-    exportedName: exportedVarName(sourceName),
+    exportedName: String(ifaceField?.annotations?.EnvName || implField?.annotations?.EnvName || exportedVarName(sourceName)),
     type: ifaceField?.type || implField?.type || "string",
     doc: ifaceField?.doc || implField?.doc,
     defaultValue: implField?.defaultValue
   };
+}
+
+function resolveModelTypeSurface(modelCtx, typeName) {
+  const exact = modelCtx.types[typeName];
+  if (!exact) {
+    return { iface: undefined, impl: undefined };
+  }
+  if (exact.kind === "Interface") {
+    const impls = Object.values(modelCtx.types).filter((t) => t.implements === typeName);
+    return {
+      iface: exact,
+      impl: impls.length === 1 ? impls[0] : undefined
+    };
+  }
+  const ifaceName = `I${typeName}`;
+  const iface = modelCtx.types[ifaceName]?.kind === "Interface" ? modelCtx.types[ifaceName] : undefined;
+  return {
+    iface,
+    impl: exact
+  };
+}
+
+function isPrimitiveLikeType(typeName) {
+  const t = String(typeName || "").trim();
+  return t === "string" || t === "int" || t === "bool" || t === "float";
+}
+
+function listElementType(typeName) {
+  const t = String(typeName || "").trim();
+  const match = t.match(/^List<\s*([^>]+)\s*>$/);
+  return match ? match[1].trim() : "";
+}
+
+function modelInputFields(modelCtx) {
+  const start = modelCtx.entryClass || modelCtx.entryInterface;
+  if (!start) return [];
+  const out = [];
+  const seen = new Set();
+
+  function visit(typeName, prefix) {
+    const { iface, impl } = resolveModelTypeSurface(modelCtx, typeName);
+    const typeInfo = iface || impl;
+    if (!typeInfo) return;
+    const visitKey = `${typeName}:${prefix}`;
+    if (seen.has(visitKey)) return;
+    seen.add(visitKey);
+    const fieldNames = new Set([
+      ...Object.keys(iface?.fields || {}),
+      ...Object.keys(impl?.fields || {})
+    ]);
+    for (const fieldName of fieldNames) {
+      const ifaceField = iface?.fields?.[fieldName];
+      const implField = impl?.fields?.[fieldName];
+      const field = ifaceField || implField;
+      if (!field) continue;
+      const pathName = prefix ? `${prefix}.${fieldName}` : fieldName;
+      const elementType = listElementType(field.type);
+      if (isPrimitiveLikeType(field.type) || (elementType && isPrimitiveLikeType(elementType))) {
+        out.push({
+          path: pathName,
+          sourceName: fieldName,
+          type: ifaceField?.type || implField?.type || "string",
+          doc: ifaceField?.doc || implField?.doc,
+          defaultValue: implField?.defaultValue,
+          exportedName: String(ifaceField?.annotations?.EnvName || implField?.annotations?.EnvName || "").trim()
+        });
+        continue;
+      }
+      visit(implField?.type || ifaceField?.type, pathName);
+    }
+  }
+
+  visit(start, "");
+  return out;
+}
+
+function modelInputFieldInfo(modelCtx, fieldPath) {
+  return modelInputFields(modelCtx).find((field) => field.path === fieldPath) || null;
 }
 
 function hoverForModelField(fieldName, fieldInfo, range, currentValue) {
@@ -1383,6 +1683,8 @@ function activate(context) {
               docs = WORKFLOW_VIEW_PAGE_KEY_DETAILS;
             } else if (parentChain.length === 5 && parentChain[0] === "view" && parentChain[1] === "pages" && parentChain[3] === "sections") {
               docs = WORKFLOW_VIEW_SECTION_KEY_DETAILS;
+            } else if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "vm") {
+              docs = STEP_VM_KEY_DETAILS;
             }
             if (docs) {
               for (const [k, doc] of Object.entries(docs)) {
@@ -1436,16 +1738,18 @@ function activate(context) {
               const iface = modelCtx.entryInterface ? modelCtx.types[modelCtx.entryInterface] : undefined;
               if (iface) {
                 for (const [fieldName, fi] of Object.entries(iface.fields)) {
-                  const exportName = exportedVarName(fieldName);
-                  const it = new vscode.CompletionItem(exportName, vscode.CompletionItemKind.Variable);
-                  it.insertText = `${exportName}: `;
-                  it.detail = `${fi.type || "string"} (from ${iface.name}.${fieldName})`;
-                  if (fi.doc) it.documentation = fi.doc;
+                  const exportNames = fieldExportNames(fieldName, fi);
                   const implDefault = modelCtx.entryClass ? modelCtx.types[modelCtx.entryClass]?.fields[fieldName]?.defaultValue : undefined;
-                  if (implDefault) {
-                    it.documentation = new vscode.MarkdownString(`${fi.doc || ""}\n\nDefault: \`${implDefault}\``);
+                  for (const exportName of exportNames) {
+                    const it = new vscode.CompletionItem(exportName, vscode.CompletionItemKind.Variable);
+                    it.insertText = `${exportName}: `;
+                    it.detail = `${fi.type || "string"} (from ${iface.name}.${fieldName})`;
+                    if (fi.doc) it.documentation = fi.doc;
+                    if (implDefault) {
+                      it.documentation = new vscode.MarkdownString(`${fi.doc || ""}\n\nDefault: \`${implDefault}\``);
+                    }
+                    items.push(it);
                   }
-                  items.push(it);
                 }
                 return items;
               }
@@ -1467,6 +1771,46 @@ function activate(context) {
                 it.detail = kv.name;
                 it.sortText = `${score}-${kv.name}`;
                 if (kv.doc) it.documentation = kv.doc;
+                items.push(it);
+              }
+              if (items.length > 0) return items;
+            }
+          }
+          const inputsInfo = findInputsBlockInfo(document, position);
+          if (inputsInfo) {
+            const before = lineToCursor;
+            const colonIdx = before.indexOf(":");
+            if (colonIdx < 0) {
+              if (inputsInfo.parents.length >= 2 && inputsInfo.parents.includes("inputs")) {
+                for (const [k, doc] of Object.entries(INPUT_BINDING_KEY_DETAILS)) {
+                  const it = new vscode.CompletionItem(k, vscode.CompletionItemKind.Property);
+                  it.insertText = `${k}: `;
+                  it.documentation = doc;
+                  items.push(it);
+                }
+                return items;
+              }
+              for (const field of modelInputFields(modelCtx)) {
+                const it = new vscode.CompletionItem(field.path, vscode.CompletionItemKind.Variable);
+                it.insertText = `${field.path}: `;
+                it.detail = `${field.type || "string"}${field.exportedName ? ` → ${field.exportedName}` : ""}`;
+                if (field.doc || field.defaultValue || field.exportedName) {
+                  const md = new vscode.MarkdownString();
+                  if (field.doc) md.appendMarkdown(field.doc);
+                  if (field.defaultValue) md.appendMarkdown(`\n\nDefault: \`${field.defaultValue}\``);
+                  if (field.exportedName) md.appendMarkdown(`\n\nEnv: \`${field.exportedName}\``);
+                  it.documentation = md;
+                }
+                items.push(it);
+              }
+              return items;
+            } else {
+              const key = before.slice(0, colonIdx).trim().replace(/^- /, "");
+              const fieldInfo = modelInputFieldInfo(modelCtx, key);
+              if (fieldInfo?.defaultValue) {
+                const it = new vscode.CompletionItem(fieldInfo.defaultValue, vscode.CompletionItemKind.Value);
+                it.insertText = quoted(fieldInfo.defaultValue);
+                it.detail = `${key} default from typed model`;
                 items.push(it);
               }
               if (items.length > 0) return items;
@@ -1512,6 +1856,9 @@ function activate(context) {
           const modelCtx = await buildModelContext(document);
 
           if (info?.kind === "topLevelKey") {
+            if (word === "inputs") {
+              return hoverForInputsContainer(range, modelCtx, TOP_LEVEL_KEY_DETAILS.inputs);
+            }
             if (word === "vars") {
               return hoverForVarsContainer(range, modelCtx, TOP_LEVEL_KEY_DETAILS.vars);
             }
@@ -1519,6 +1866,9 @@ function activate(context) {
           }
 
           if (info?.kind === "stepKey") {
+            if (word === "inputs") {
+              return hoverForInputsContainer(range, modelCtx, STEP_KEY_DETAILS.inputs);
+            }
             if (word === "vars") {
               return hoverForVarsContainer(range, modelCtx, STEP_KEY_DETAILS.vars);
             }
@@ -1529,6 +1879,12 @@ function activate(context) {
             const parentChain = info.parents || [];
             if (parentChain.length === 1 && parentChain[0] === "view") {
               return hoverForWorkflowKey(word, WORKFLOW_VIEW_KEY_DETAILS, range);
+            }
+            if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "vm") {
+              return hoverForWorkflowKey(word, STEP_VM_KEY_DETAILS, range);
+            }
+            if (parentChain.includes("inputs") && INPUT_BINDING_KEY_DETAILS[word]) {
+              return hoverForWorkflowKey(word, INPUT_BINDING_KEY_DETAILS, range);
             }
             if (parentChain.length === 3 && parentChain[0] === "view" && parentChain[1] === "entry") {
               return hoverForWorkflowKey(word, WORKFLOW_VIEW_ENTRY_KEY_DETAILS, range);
@@ -1561,32 +1917,41 @@ function activate(context) {
           }
 
           const varsInfo = findVarsBlockInfo(document, position);
-          if (!varsInfo) return null;
-
-          const lineKey = varsInfo.kind === "varKey" ? varsInfo.key : null;
-          const lineField = modelFieldInfo(modelCtx, lineKey);
-          if (lineKey && rangeContains(info?.keyRange, position)) {
-            return hoverForModelField(lineKey, lineField || { type: "string", doc: VAR_KEY_FALLBACK_DETAIL }, info.keyRange, yamlScalarValue(info.valueText));
-          }
-
-          const kv = modelCtx.knownValues.find((k) => k.value === word || k.name.endsWith("." + word));
-          if (kv) {
-            return hoverForKnownValue(lineKey, kv.value, lineField, kv, range);
-          }
-
-          if (lineKey && rangeContains(info?.valueRange, position)) {
-            const rawValue = yamlScalarValue(info.valueText);
-            const matchedKnownValue = modelCtx.knownValues.find((k) => k.value === rawValue || k.name.endsWith("." + rawValue));
-            if (lineField || matchedKnownValue) {
-              return hoverForKnownValue(lineKey, rawValue, lineField, matchedKnownValue, range);
+          if (varsInfo) {
+            const lineKey = varsInfo.kind === "varKey" ? varsInfo.key : null;
+            const lineField = modelFieldInfo(modelCtx, lineKey);
+            if (lineKey && rangeContains(info?.keyRange, position)) {
+              return hoverForModelField(lineKey, lineField || { type: "string", doc: VAR_KEY_FALLBACK_DETAIL }, info.keyRange, yamlScalarValue(info.valueText));
             }
-            return hoverForKnownValue(lineKey, rawValue, { type: "string", doc: VAR_KEY_FALLBACK_DETAIL }, matchedKnownValue, range);
+
+            const kv = modelCtx.knownValues.find((k) => k.value === word || k.name.endsWith("." + word));
+            if (kv) {
+              return hoverForKnownValue(lineKey, kv.value, lineField, kv, range);
+            }
+
+            if (lineKey && rangeContains(info?.valueRange, position)) {
+              const rawValue = yamlScalarValue(info.valueText);
+              const matchedKnownValue = modelCtx.knownValues.find((k) => k.value === rawValue || k.name.endsWith("." + rawValue));
+              if (lineField || matchedKnownValue) {
+                return hoverForKnownValue(lineKey, rawValue, lineField, matchedKnownValue, range);
+              }
+              return hoverForKnownValue(lineKey, rawValue, { type: "string", doc: VAR_KEY_FALLBACK_DETAIL }, matchedKnownValue, range);
+            }
+
+            if (lineKey && lineField) {
+              return hoverForModelField(lineKey, lineField, range, word);
+            }
           }
 
-          if (lineKey && lineField) {
-            return hoverForModelField(lineKey, lineField, range, word);
+          const inputsInfo = findInputsBlockInfo(document, position);
+          if (!inputsInfo) return null;
+          const inputField = modelInputFieldInfo(modelCtx, inputsInfo.key);
+          if (isDirectChildOfInputs(inputsInfo) && inputField && rangeContains(info?.keyRange, position)) {
+            return hoverForModelField(inputsInfo.key, inputField, info.keyRange, yamlScalarValue(info.valueText));
           }
-
+          if (isDirectChildOfInputs(inputsInfo) && inputField && rangeContains(info?.valueRange, position)) {
+            return hoverForKnownValue(inputsInfo.key, yamlScalarValue(info.valueText), inputField, null, range);
+          }
           return null;
         }
       }

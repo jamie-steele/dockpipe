@@ -27,6 +27,10 @@
              Display="expand"
              ConfigurableDirectory="INSTALLFOLDER">
       <ComponentGroupRef Id="CoreComponents" />
+<?if "$(var.DockpipeCoreEnabled)" = "1" ?>
+      <ComponentGroupRef Id="CorePayloadDirectoryComponents" />
+      <ComponentGroupRef Id="CorePayloadComponents" />
+<?endif?>
     </Feature>
 <?if "$(var.DockpipeLauncherEnabled)" = "1" ?>
     <Feature Id="LauncherFeature"
@@ -44,7 +48,11 @@
   <Fragment>
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="LocalAppDataFolder">
-        <Directory Id="INSTALLFOLDER" Name="dockpipe" />
+        <Directory Id="INSTALLFOLDER" Name="dockpipe">
+          <Directory Id="PACKAGESDIR" Name="packages">
+            <Directory Id="COREPACKAGESDIR" Name="core" />
+          </Directory>
+        </Directory>
       </Directory>
 <?if "$(var.DockpipeLauncherEnabled)" = "1" ?>
       <Directory Id="ProgramMenuFolder">
@@ -78,6 +86,21 @@
         <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
       </Component>
     </ComponentGroup>
+<?if "$(var.DockpipeCoreEnabled)" = "1" ?>
+    <ComponentGroup Id="CorePayloadDirectoryComponents" Directory="COREPACKAGESDIR">
+      <Component Id="cmp_dockpipe_core_payload_dir" Guid="0F13B804-7D89-4EA8-B332-A9567B05B516">
+        <RegistryValue Id="reg_dockpipe_core_payload"
+                       Root="HKCU"
+                       Key="Software\dockpipe"
+                       Name="CorePayloadDir"
+                       Type="string"
+                       Value="[COREPACKAGESDIR]"
+                       KeyPath="yes" />
+        <RemoveFolder Id="RemoveCorePackagesDir" On="uninstall" />
+        <RemoveFolder Id="RemovePackagesDir" Directory="PACKAGESDIR" On="uninstall" />
+      </Component>
+    </ComponentGroup>
+<?endif?>
 <?if "$(var.DockpipeLauncherEnabled)" = "1" ?>
     <ComponentGroup Id="LauncherComponents">
       <Component Id="cmp_dockpipe_launcher_feature" Guid="D25B9DAA-215E-4F19-B1AA-3E5A43A6766B" Directory="INSTALLFOLDER">

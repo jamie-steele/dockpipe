@@ -55,3 +55,32 @@ func TestGlobalDockpipeDataDirNoOverrideHasSep(t *testing.T) {
 		t.Fatalf("expected path segment dockpipe, got %q", got)
 	}
 }
+
+func TestSystemDockpipeDataDirsOverride(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("DOCKPIPE_SYSTEM_ROOT", tmp)
+
+	dirs := SystemDockpipeDataDirs()
+	if len(dirs) != 1 {
+		t.Fatalf("expected 1 system dir, got %d (%v)", len(dirs), dirs)
+	}
+	if filepath.Clean(dirs[0]) != filepath.Clean(tmp) {
+		t.Fatalf("got %q want %q", dirs[0], tmp)
+	}
+
+	coreDirs := SystemPackagesCoreDirs()
+	if len(coreDirs) != 1 {
+		t.Fatalf("expected 1 core dir, got %d (%v)", len(coreDirs), coreDirs)
+	}
+	if want := filepath.Join(tmp, "packages", "core"); filepath.Clean(coreDirs[0]) != filepath.Clean(want) {
+		t.Fatalf("got %q want %q", coreDirs[0], want)
+	}
+
+	templatesDirs := SystemTemplatesCoreDirs()
+	if len(templatesDirs) != 1 {
+		t.Fatalf("expected 1 templates/core dir, got %d (%v)", len(templatesDirs), templatesDirs)
+	}
+	if want := filepath.Join(tmp, "templates", "core"); filepath.Clean(templatesDirs[0]) != filepath.Clean(want) {
+		t.Fatalf("got %q want %q", templatesDirs[0], want)
+	}
+}

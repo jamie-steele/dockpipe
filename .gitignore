@@ -4,6 +4,7 @@
 
 # Ad-hoc scratch (local experiments, packaging test output)
 tmp/
+.codex-tmp/
 
 # Shell footgun: `op inject ... > -` creates a repo-root file named `-` (not stdout). DockPipe never does this.
 /-

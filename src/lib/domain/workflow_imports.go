@@ -42,6 +42,7 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 		Types:           f.Types,
 		View:            f.View,
 		Inject:          f.Inject,
+		Inputs:          f.Inputs,
 		Vars:            f.Vars,
 		Compose:         f.Compose,
 		Security:        f.Security,
@@ -81,6 +82,7 @@ func parseWorkflowFileRecursive(data []byte, baseDir string, readFile func(strin
 		baseDir = "."
 	}
 	mergedVars := map[string]string{}
+	mergedInputs := map[string]InputBinding{}
 	var mergedInject []WorkflowInjectEntry
 	var stepParts []stepOrGroupYAML
 	for _, imp := range f.Imports {
@@ -111,13 +113,22 @@ func parseWorkflowFileRecursive(data []byte, baseDir string, readFile func(strin
 				mergedVars[k] = v
 			}
 		}
+		if sub.Inputs != nil {
+			for k, v := range sub.Inputs {
+				mergedInputs[k] = v
+			}
+		}
 		mergedInject = append(mergedInject, sub.Inject...)
 		stepParts = append(stepParts, sub.Steps...)
+	}
+	for k, v := range f.Inputs {
+		mergedInputs[k] = v
 	}
 	for k, v := range f.Vars {
 		mergedVars[k] = v
 	}
 	out := f
+	out.Inputs = mergedInputs
 	out.Vars = mergedVars
 	out.Inject = append(mergedInject, f.Inject...)
 	out.Steps = append(stepParts, f.Steps...)

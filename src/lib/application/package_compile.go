@@ -2,6 +2,7 @@ package application
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -443,6 +444,9 @@ func cmdPackageCompileCore(args []string) error {
 	if strings.TrimSpace(src) == "" {
 		src, err = defaultCoreSource(repoRoot)
 		if err != nil {
+			if seeded, seedErr := seedCompiledCoreFromInstalledTarball(workdir, force); seedErr == nil && seeded {
+				return nil
+			}
 			return err
 		}
 	}
@@ -534,6 +538,92 @@ func defaultCoreSource(repoRoot string) (string, error) {
 		return filepath.Abs(tc)
 	}
 	return "", fmt.Errorf("no default core tree (expected src/core/runtimes or templates/core/runtimes); use --from <dir>")
+}
+
+func seedCompiledCoreFromInstalledTarball(workdir string, force bool) (bool, error) {
+	coreDir, err := infrastructure.PackagesCoreDir(workdir)
+	if err != nil {
+		return false, err
+	}
+	if err := os.MkdirAll(coreDir, 0o755); err != nil {
+		return false, err
+	}
+	coreTarGlob := filepath.Join(coreDir, "dockpipe-core-*.tar.gz")
+	if !force {
+		if matches, _ := filepath.Glob(coreTarGlob); len(matches) > 0 {
+			fmt.Fprintf(os.Stderr, "[dockpipe] skip core compile (already exists): %s (--force to refresh from installed core)\n", matches[0])
+			return true, nil
+		}
+	}
+	sourceTarball := ""
+	if gp, err := infrastructure.GlobalPackagesRoot(); err == nil {
+		if p, err := latestGlob(filepath.Join(gp, "core", "dockpipe-core-*.tar.gz")); err != nil {
+			return false, err
+		} else if p != "" {
+			sourceTarball = p
+		}
+	}
+	if sourceTarball == "" {
+		for _, dir := range infrastructure.SystemPackagesCoreDirs() {
+			if p, err := latestGlob(filepath.Join(dir, "dockpipe-core-*.tar.gz")); err != nil {
+				return false, err
+			} else if p != "" {
+				sourceTarball = p
+				break
+			}
+		}
+	}
+	if sourceTarball == "" {
+		return false, nil
+	}
+	if force {
+		_ = infrastructure.RemoveGlob(coreTarGlob)
+		_ = infrastructure.RemoveLegacyPackageSubdirs(coreDir)
+	}
+	destTarball := filepath.Join(coreDir, filepath.Base(sourceTarball))
+	if err := copyFileWithMode(sourceTarball, destTarball, 0o644); err != nil {
+		return false, err
+	}
+	if sum := sourceTarball + ".sha256"; fileExists(sum) {
+		if err := copyFileWithMode(sum, destTarball+".sha256", 0o644); err != nil {
+			return false, err
+		}
+	}
+	fmt.Fprintf(os.Stderr, "[dockpipe] seeded core package from installed core → %s\n", destTarball)
+	return true, nil
+}
+
+func latestGlob(pattern string) (string, error) {
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return "", err
+	}
+	if len(matches) == 0 {
+		return "", nil
+	}
+	return infrastructure.PickLatestModTimePath(matches), nil
+}
+
+func copyFileWithMode(src, dst string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
+}
+
+func fileExists(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && !st.IsDir()
 }
 
 func cmdPackageCompileResolvers(args []string) error {

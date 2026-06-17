@@ -269,6 +269,9 @@ func resolveCoreNamespacedAsset(repoRoot, projectRoot, rest string) (string, boo
 	if gd, err := GlobalTemplatesCoreDir(); err == nil {
 		candidates = append(candidates, filepath.Join(gd, rel))
 	}
+	for _, sd := range SystemTemplatesCoreDirs() {
+		candidates = append(candidates, filepath.Join(sd, rel))
+	}
 	for _, p := range candidates {
 		if scriptFileExists(p) {
 			return p, true
@@ -519,6 +522,12 @@ func ResolveResolverFilePath(repoRoot, resolverName string) (string, error) {
 		candidates = append(candidates,
 			filepath.Join(gr, resolverName),
 			filepath.Join(gr, resolverName, "profile"),
+		)
+	}
+	for _, sr := range SystemPackagesResolversDirs() {
+		candidates = append(candidates,
+			filepath.Join(sr, resolverName),
+			filepath.Join(sr, resolverName, "profile"),
 		)
 	}
 	if tgz, err := FindLatestResolverTarball(repoRoot, resolverName); err == nil && tgz != "" {

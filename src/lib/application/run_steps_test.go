@@ -83,7 +83,9 @@ func TestMergeStepVarsRespectsLocks(t *testing.T) {
 			"FREE":   "new",
 		},
 	}
-	mergeStepVars(o, step, dockerEnv)
+	if err := mergeStepVars(o, step, dockerEnv); err != nil {
+		t.Fatal(err)
+	}
 
 	if got := o.envMap["LOCKED"]; got != "old" {
 		t.Fatalf("locked key mutated: %q", got)

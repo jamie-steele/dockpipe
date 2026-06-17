@@ -296,8 +296,8 @@ func TestResolveWorkflowConfigPathDoesNotSearchLegacyCoreWorkflowsDir(t *testing
 }
 
 // Materialized bundle as repoRoot + project with both a package tarball and workflows/<name>/:
-// run resolution prefers tar:// (stream from store) before project authoring; compile uses OnDiskWorkflowConfigPath.
-func TestResolveWorkflowConfigPathWithWorkdirPrefersTarballOverProjectWorkflows(t *testing.T) {
+// local run resolution should prefer the authored project workflow over the cached tarball.
+func TestResolveWorkflowConfigPathWithWorkdirPrefersProjectWorkflowsOverTarball(t *testing.T) {
 	bundle := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(bundle, BundledLayoutDir, "workflows", "demo"), 0o755); err != nil {
 		t.Fatal(err)
@@ -329,8 +329,8 @@ func TestResolveWorkflowConfigPathWithWorkdirPrefersTarballOverProjectWorkflows(
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(got, "tar://") {
-		t.Fatalf("want tar workflow URI when store tarball exists, got %s", got)
+	if got != onDisk {
+		t.Fatalf("want project workflow config when both project and tarball exist, got %s", got)
 	}
 	if got := OnDiskWorkflowConfigPath(project, "demo"); got != onDisk {
 		t.Fatalf("compile path should still see project workflows: got %q want %s", got, onDisk)

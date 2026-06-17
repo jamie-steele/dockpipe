@@ -18,6 +18,9 @@ func SatisfiedCapabilityIDs(workdir, repoRoot string) map[string]struct{} {
 	if gr, err := GlobalPackagesRoot(); err == nil {
 		mergeResolverCapabilitiesFromDir(filepath.Join(gr, "resolvers"), out)
 	}
+	for _, sr := range SystemPackagesResolversDirs() {
+		mergeResolverCapabilitiesFromDir(sr, out)
+	}
 	cd := CoreDir(repoRoot)
 	mergeResolverCapabilitiesFromDir(filepath.Join(cd, "resolvers"), out)
 	return out

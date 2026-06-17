@@ -15,6 +15,11 @@ What it does:
 - prompts for missing disk / firmware / ISO paths through the shared prompt primitive
 - prompts to reset writable UEFI firmware vars during installer runs when DockPipe detects stale boot-state reuse for the selected disk
 - runs a guest command over SSH inside the VM when you boot an existing image
+- can optionally copy a host file tree into the guest over SCP before the guest command runs
+- automatically attaches guest-readable bootstrap media containing the built-in `provision-windows-ssh.ps1` helper before the VM starts
+- supports an experimental best-effort host clipboard path for visible VM sessions when you explicitly enable it
+- can optionally merge extra host-provided bootstrap files into that media before the guest starts
+- can optionally keep the VM running after the guest command completes for manual SSH setup work
 - keeps an interactive installer VM session alive when you install from ISO
 - tears the VM down when the DockPipe run exits
 
@@ -22,7 +27,15 @@ Prompting behavior:
 
 - every VM prompt is overrideable from workflow YAML or `--var`
 - DockPipe only prompts for a value when the corresponding `DOCKPIPE_VM_*` field is still empty
-- if you fully specify the VM in YAML, the workflow can run without any configuration prompts except explicit safety confirmations
+- DockPipe infers `DOCKPIPE_VM_BOOT_SOURCE=image` when `DOCKPIPE_VM_DISK` is already set, and infers `installer-iso` when `DOCKPIPE_VM_CDROM` is set
+- if you fully specify the VM in YAML, the workflow can run without configuration prompts or repeat safety confirmations
+
+Authoring surfaces:
+
+- use `inputs:` when you want to set typed package fields such as `General.ExecMode` or `Advanced.KeepAlive`
+- use `inputs.<field>.from` when you want to map your own env or vault-backed variable into a package field without renaming it to `DOCKPIPE_VM_*`
+- keep `vars:` for raw workflow-global env that is not package-specific
+- you do not need to add a local `types:` entry just to consume the packaged `qemu` field model
 
 Important boundaries:
 
@@ -32,6 +45,60 @@ Important boundaries:
 - if you choose `Boot existing disk image`, the guest still needs to be reachable over SSH
 - if you choose `Install from ISO`, DockPipe keeps the installer session interactive
 - the current Windows-host backend does not support PCI passthrough, and TPM emulation still requires Linux-host tooling
+
+Workflow contract:
+
+- this workflow intentionally uses `runtime: vm` with `resolver: qemu`
+- the resolver owns the host-side VM bridge and guest SSH handoff
+- steps in workflows built on this pattern should not add `kind: host`
+
+Minimal example shape:
+
+```yaml
+runtime: vm
+resolver: qemu
+
+steps:
+  - id: guest-command
+    vm:
+      guest_path: C:\uh
+      keepalive: true
+    cmd: Set-Location C:\uh; whoami; hostname
+```
+
+Do not do this:
+
+```yaml
+steps:
+  - id: guest-command
+    kind: host
+    cmd: echo wrong-shape
+```
+
+If you need a plain host step, make it a separate host-oriented workflow step that does not use or inherit the `qemu` resolver.
+
+Mixed host + guest example:
+
+```yaml
+steps:
+  - id: prep
+    kind: host
+    cmd: Write-Host "prepare local state"
+
+  - id: guest-command
+    runtime: vm
+    resolver: qemu
+    vm:
+      guest_path: C:\uh
+      keepalive: true
+    cmd: Set-Location C:\uh; whoami; hostname
+
+  - id: report
+    kind: host
+    cmd: Write-Host "print connection info"
+```
+
+`vm.guest_path` uses the current DockPipe workdir as the default host sync source. Set `vm.host_context` only when you want to mount a different host folder into the guest.
 
 Useful variables:
 
@@ -43,6 +110,8 @@ Useful variables:
 - `DOCKPIPE_VM_TPM=required|optional|off`
 - `DOCKPIPE_VM_SECURE_BOOT=required|optional|off`
 - `DOCKPIPE_VM_SSH_USER`
+- `DOCKPIPE_VM_SSH_PASSWORD`
+- `DOCKPIPE_VM_SSH_PORT`
 - `DOCKPIPE_VM_FIRMWARE_CODE`
 - `DOCKPIPE_VM_FIRMWARE_VARS`
 - `DOCKPIPE_VM_CDROM`
@@ -53,7 +122,68 @@ Useful variables:
 - `DOCKPIPE_VM_ALLOW_BOOT_VGA=true|false`
 - `DOCKPIPE_VM_PERSISTENCE=ephemeral|persistent`
 - `DOCKPIPE_VM_HOSTFWD`
+- `DOCKPIPE_VM_CONFIRM_PROMPTS`
+- `DOCKPIPE_VM_BOOTSTRAP_PATH`
+- `DOCKPIPE_VM_CLIPBOARD=true|false`
+- `DOCKPIPE_VM_SYNC_HOST_PATH`
+- `DOCKPIPE_VM_SYNC_GUEST_PATH`
+- `DOCKPIPE_VM_KEEPALIVE=true|false`
+- `DOCKPIPE_VM_KEEPALIVE_SECONDS`
 - `DOCKPIPE_VM_GUEST_COMMAND`
+
+Preparing a Windows guest for SSH:
+
+- use `vm.interactive_debug: true` for the first manual boot when the image is not yet automation-ready
+- once you are inside the guest, open an elevated PowerShell session
+- the DockPipe VM runner itself now stages `provision-windows-ssh.ps1` and `README.txt` onto guest-readable bootstrap media
+- if you want extra files available on that same media, point `Advanced.BootstrapPath` / `DOCKPIPE_VM_BOOTSTRAP_PATH` at a host file or directory and DockPipe will merge it into the staged bootstrap payload
+- the script installs OpenSSH Server, enables the firewall rule for TCP 22, configures `sshd` to start automatically, and can create or update a local `dockpipe` user
+
+Example bootstrap path:
+
+```yaml
+inputs:
+  Advanced.BootstrapPath: C:\vm\bootstrap
+```
+
+If `C:\vm\bootstrap` contains extra provisioning files, DockPipe merges them into the same guest-readable media that already includes `provision-windows-ssh.ps1`.
+
+If you do not set `Advanced.BootstrapPath`, DockPipe still attaches the built-in provisioning script automatically.
+
+Clipboard notes:
+
+- DockPipe leaves clipboard sharing off by default so visible sessions keep the known-good input baseline
+- set `Advanced.Clipboard: true` or `DOCKPIPE_VM_CLIPBOARD=true` only when you explicitly want to test the experimental clipboard path
+- clipboard sharing depends on guest support and display backend behavior, so treat it as a convenience layer rather than a hard guarantee
+
+Display notes:
+
+- visible Windows-host sessions now default to `gtk,grab-on-hover=on,window-close=on` because that behaves better than the plain QEMU window default for pointer capture
+- override `Compute.Display` or `DOCKPIPE_VM_DISPLAY` if you want a different backend or GTK tuning
+
+Example from an elevated PowerShell session inside the guest:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\provision-windows-ssh.ps1 -UserName dockpipe -PasswordPlain 'ChangeMe123!' -GrantAdministrators $true
+```
+
+If you prefer key-based auth:
+
+```powershell
+Set-ExecutionPolicy -Scope Process Bypass
+.\provision-windows-ssh.ps1 `
+  -UserName dockpipe `
+  -PasswordPlain 'ChangeMe123!' `
+  -AuthorizedKey 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA... your-key-comment' `
+  -GrantAdministrators $true
+```
+
+After the script succeeds:
+
+- reboot once and verify `sshd` still starts automatically
+- test locally inside the guest with `Get-Service sshd`
+- test through DockPipe with `ssh -p 2222 dockpipe@localhost`
 
 Resolver-owned defaults:
 
@@ -78,15 +208,31 @@ GPU / PCI passthrough notes:
 If you want to avoid prompts entirely, set the fields you already know in YAML. For example, this suppresses the image-vs-ISO prompt and the disk-size prompt:
 
 ```yaml
+inputs:
+  General.BootSource: installer-iso
+  Storage.Cdrom: /home/jamie/Downloads/windows.iso
+  Storage.Disk: /home/jamie/VMs/windows11.qcow2
+  Storage.DiskSize: 96G
+  Security.Tpm: required
+  Security.SecureBoot: required
+  Firmware.FirmwareCode: /usr/share/OVMF/OVMF_CODE_4M.fd
+  Firmware.FirmwareVars: /home/jamie/VMs/OVMF_VARS_windows.fd
+```
+
+If you want to keep your own global or vault-fed names and map them cleanly into the package contract:
+
+```yaml
 vars:
-  DOCKPIPE_VM_BOOT_SOURCE: installer-iso
-  DOCKPIPE_VM_CDROM: /home/jamie/Downloads/windows.iso
-  DOCKPIPE_VM_DISK: /home/jamie/VMs/windows11.qcow2
-  DOCKPIPE_VM_DISK_SIZE: 96G
-  DOCKPIPE_VM_TPM: required
-  DOCKPIPE_VM_SECURE_BOOT: required
-  DOCKPIPE_VM_FIRMWARE_CODE: /usr/share/OVMF/OVMF_CODE_4M.fd
-  DOCKPIPE_VM_FIRMWARE_VARS: /home/jamie/VMs/OVMF_VARS_windows.fd
+  UH_VM_KEEPALIVE: op://uh/windows-vm/keepalive
+  UH_VM_SYNC_ROOT: /home/jamie/src/app
+
+inputs:
+  Advanced.KeepAlive:
+    from: UH_VM_KEEPALIVE
+    value: false
+  Advanced.SyncHostPath:
+    from: UH_VM_SYNC_ROOT
+  Advanced.SyncGuestPath: C:\app
 ```
 
 Examples:
@@ -108,6 +254,20 @@ dockpipe --workflow windows-vm --var DOCKPIPE_VM_GUEST_COMMAND='Get-ComputerInfo
 
 ```bash
 dockpipe --workflow windows-vm \
+  --var DOCKPIPE_VM_SYNC_HOST_PATH=/home/jamie/src/app \
+  --var DOCKPIPE_VM_SYNC_GUEST_PATH='C:\app' \
+  --var DOCKPIPE_VM_GUEST_COMMAND='Get-ChildItem C:\app' --
+```
+
+```bash
+dockpipe --workflow windows-vm \
+  --var DOCKPIPE_VM_KEEPALIVE=true \
+  --var DOCKPIPE_VM_KEEPALIVE_SECONDS=28800 --
+```
+
+```bash
+dockpipe --workflow windows-vm \
+  --var DOCKPIPE_VM_CONFIRM_PROMPTS=true \
   --var DOCKPIPE_VM_PERSISTENCE=persistent \
   --var DOCKPIPE_VM_HOSTFWD='tcp::3389-:3389' --
 ```

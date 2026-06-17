@@ -18,14 +18,16 @@ func ResolveWorkflowConfigPath(repoRoot, name string) (string, error) {
 }
 
 // ResolveWorkflowConfigPathWithWorkdir is like ResolveWorkflowConfigPath but when workdir is non-empty also checks
-// <workdir>/bin/.dockpipe/internal/packages/workflows/<name>/config.yml after WorkflowsRootDir and before legacy templates/.
+// the project's authored workflows tree before package tarballs, so live project workflows win over
+// their cached compiled store artifacts during normal local development.
 func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", fmt.Errorf("workflow name is empty")
 	}
-	// Order: (1) engine workflows tree + nested compile roots, (2) dockpipe-workflow-*.tar.gz as tar://
-	// (read from archive — no duplicate tree), (3) project <workdir>/<workflowsRel>/ authoring, (4) legacy templates, (5) resolver delegate.
+	// Order: (1) engine workflows tree + nested compile roots, (2) project <workdir>/<workflowsRel>/ authoring,
+	// (3) dockpipe-workflow-*.tar.gz as tar:// (read from archive — no duplicate tree), (4) legacy templates,
+	// (5) resolver delegate.
 	// compile for-workflow uses ProjectWorkflowConfigPath first so closure compile still sees on-disk sources when present.
 	var batch []string
 	batch = append(batch, filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"))
@@ -36,11 +38,6 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
 			return p, nil
 		}
-	}
-	if u, err := tryResolveWorkflowTarballURI(repoRoot, workdir, name); err != nil {
-		return "", err
-	} else if u != "" {
-		return u, nil
 	}
 	if wd := strings.TrimSpace(workdir); wd != "" {
 		absWd, err := filepath.Abs(filepath.Clean(wd))
@@ -60,6 +57,11 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 		if st, err := os.Stat(projPath); err == nil && !st.IsDir() {
 			return projPath, nil
 		}
+	}
+	if u, err := tryResolveWorkflowTarballURI(repoRoot, workdir, name); err != nil {
+		return "", err
+	} else if u != "" {
+		return u, nil
 	}
 	if !UsesBundledAssetLayout(repoRoot) && !DockpipeAuthoringSourceTree(repoRoot) {
 		tmpl := filepath.Join(repoRoot, "templates", name, "config.yml")

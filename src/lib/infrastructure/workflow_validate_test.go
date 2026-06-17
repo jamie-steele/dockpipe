@@ -130,6 +130,34 @@ steps: []
 	}
 }
 
+func TestValidateResolvedWorkflowYAML_AcceptsVMInputsShape(t *testing.T) {
+	root := t.TempDir()
+	cfg := filepath.Join(root, "config.yml")
+	yml := `name: vm-demo
+runtime: vm
+resolver: qemu
+inputs:
+  General.ExecMode: powershell
+  Advanced.KeepAlive: true
+  Advanced.SyncHostPath:
+    from: DOCKPIPE_UH_HOST_CONTEXT
+steps:
+  - id: guest-session
+    vm:
+      guest_path: C:\uh
+      interactive_debug: true
+      keepalive: true
+      keepalive_seconds: "28800"
+    cmd: hostname
+`
+	if err := os.WriteFile(cfg, []byte(yml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateResolvedWorkflowYAML(cfg); err != nil {
+		t.Fatalf("expected vm + inputs shape to validate, got %v", err)
+	}
+}
+
 func TestValidateResolvedWorkflowYAML_RejectsUnknownStepKey(t *testing.T) {
 	root := t.TempDir()
 	cfg := filepath.Join(root, "config.yml")

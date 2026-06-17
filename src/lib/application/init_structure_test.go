@@ -1,11 +1,14 @@
 package application
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"dockpipe/src/lib/domain"
 )
 
 func captureStderr(t *testing.T, fn func()) string {
@@ -156,6 +159,36 @@ func TestCmdInitDoesNotCreateGitDir(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(project, ".env.vault.template.example")); err != nil {
 		t.Fatalf("expected .env.vault.template.example from init scaffold: %v", err)
+	}
+}
+
+func TestCmdInitSeedsDerivedPackagesNamespace(t *testing.T) {
+	repoRoot := mkRepoRootForSubcmdTests(t)
+	t.Setenv("DOCKPIPE_REPO_ROOT", repoRoot)
+	parent := t.TempDir()
+	project := filepath.Join(parent, "uh-workflows")
+	if err := os.MkdirAll(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oldWd, _ := os.Getwd()
+	if err := os.Chdir(project); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	if err := cmdInit([]string{}); err != nil {
+		t.Fatalf("cmdInit: %v", err)
+	}
+	b, err := os.ReadFile(filepath.Join(project, domain.DockpipeProjectConfigFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cfg domain.DockpipeProjectConfig
+	if err := json.Unmarshal(b, &cfg); err != nil {
+		t.Fatalf("parse project config: %v\n%s", err, string(b))
+	}
+	if cfg.Packages.Namespace == nil || *cfg.Packages.Namespace != "uh-workflows" {
+		t.Fatalf("expected derived packages.namespace uh-workflows, got %+v", cfg.Packages.Namespace)
 	}
 }
 

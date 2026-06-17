@@ -137,6 +137,8 @@ $windowsMsiRoot = Split-Path -Parent $outDirResolved
 $dockpipeExe = Join-Path $windowsMsiRoot "dockpipe.exe"
 $dockpipeSyso = Resolve-RepoPath "src/cmd/dockpipe_windows_amd64.syso"
 $dockpipeIcon = Resolve-RepoPath "src/app/tooling/dockpipe-launcher/resources/images/dockpipe-launcher.ico"
+$coreBuildDir = Join-Path $windowsMsiRoot "core-build"
+$coreStageDir = Join-Path $windowsMsiRoot "core-stage"
 $launcherBuildDir = Join-Path $windowsMsiRoot "launcher-build"
 $launcherStageDir = Join-Path $windowsMsiRoot "launcher-stage"
 $launcherExe = ""
@@ -149,6 +151,12 @@ if (-not (Test-Path -LiteralPath $windeployqt)) {
 if (Test-Path -LiteralPath $launcherBuildDir) {
     Remove-Item -LiteralPath $launcherBuildDir -Recurse -Force
 }
+if (Test-Path -LiteralPath $coreBuildDir) {
+    Remove-Item -LiteralPath $coreBuildDir -Recurse -Force
+}
+if (Test-Path -LiteralPath $coreStageDir) {
+    Remove-Item -LiteralPath $coreStageDir -Recurse -Force
+}
 if (Test-Path -LiteralPath $launcherStageDir) {
     Remove-Item -LiteralPath $launcherStageDir -Recurse -Force
 }
@@ -158,6 +166,8 @@ if (Test-Path -LiteralPath $outDirResolved) {
 
 New-Item -ItemType Directory -Force -Path $windowsMsiRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $outDirResolved | Out-Null
+New-Item -ItemType Directory -Force -Path $coreBuildDir | Out-Null
+New-Item -ItemType Directory -Force -Path $coreStageDir | Out-Null
 New-Item -ItemType Directory -Force -Path $launcherStageDir | Out-Null
 
 try {
@@ -166,6 +176,14 @@ try {
 
     & $goExe build -trimpath -ldflags "-s -w -X main.Version=$Version" -o $dockpipeExe .\src\cmd
     if ($LASTEXITCODE -ne 0) { throw "go build failed" }
+
+    & $dockpipeExe package compile core --workdir $coreBuildDir --from (Resolve-RepoPath "src/core") --force
+    if ($LASTEXITCODE -ne 0) { throw "dockpipe package compile core failed" }
+    & $dockpipeExe package build store --workdir $coreBuildDir --out $coreBuildDir --only core --version $Version
+    if ($LASTEXITCODE -ne 0) { throw "dockpipe package build store --only core failed" }
+    $coreTarball = Get-ChildItem -LiteralPath $coreBuildDir -Filter "dockpipe-core-*.tar.gz" -File | Select-Object -First 1
+    if (-not $coreTarball) { throw "dockpipe core tarball was not produced under $coreBuildDir" }
+    Copy-Item -LiteralPath $coreTarball.FullName -Destination (Join-Path $coreStageDir $coreTarball.Name) -Force
 
     & $cmakeExe -S src/app/tooling/dockpipe-launcher -B $launcherBuildDir -G "NMake Makefiles" "-DCMAKE_PREFIX_PATH=$QtRoot" "-DCMAKE_BUILD_TYPE=Release" "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW" "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreadedDLL"
     if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
@@ -195,6 +213,7 @@ try {
     & (Resolve-RepoPath "release/packaging/msi/build.ps1") `
         -Version $Version `
         -SourceExe $dockpipeExe `
+        -CoreStageDir $coreStageDir `
         -LauncherStageDir $launcherStageDir `
         -OutDir $outDirResolved `
         -WixRoot $wixRootResolved

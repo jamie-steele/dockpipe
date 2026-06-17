@@ -129,6 +129,8 @@ jobs:
           (cd release/artifacts && zip -q "dockpipe_${VERSION}_windows_amd64.zip" dockpipe.exe)
           rm -f release/artifacts/dockpipe.exe
 
+          ./release/packaging/build-core-package.sh "${VERSION}" release/artifacts
+
           ./release/packaging/build-deb.sh "${VERSION}" amd64
           ./release/packaging/build-deb.sh "${VERSION}" arm64
           cp "release/packaging/build/dockpipe_${VERSION}_amd64.deb" release/artifacts/
@@ -178,11 +180,26 @@ jobs:
           $wixRoot = $destFull
           $v = "${{ needs.meta.outputs.version }}"
           $dockpipeSyso = Join-Path $PWD "src\cmd\dockpipe_windows_amd64.syso"
+          $coreBuildDir = Join-Path $PWD "bin\msi-core-build"
+          $coreStageDir = Join-Path $PWD "bin\msi-core"
           try {
             & (Join-Path $PWD "release\packaging\windows\new-go-icon-resource.ps1") `
               -IconPath (Join-Path $PWD "src\app\tooling\dockpipe-launcher\resources\images\dockpipe-launcher.ico") `
               -OutFile $dockpipeSyso
             go build -trimpath -ldflags "-s -w -X main.Version=$v" -o dockpipe.exe ./src/cmd
+            if (Test-Path -LiteralPath $coreBuildDir) {
+              Remove-Item -LiteralPath $coreBuildDir -Recurse -Force
+            }
+            if (Test-Path -LiteralPath $coreStageDir) {
+              Remove-Item -LiteralPath $coreStageDir -Recurse -Force
+            }
+            New-Item -ItemType Directory -Force -Path $coreBuildDir | Out-Null
+            New-Item -ItemType Directory -Force -Path $coreStageDir | Out-Null
+            & (Join-Path $PWD "dockpipe.exe") package compile core --workdir $coreBuildDir --from (Join-Path $PWD "src\core") --force
+            & (Join-Path $PWD "dockpipe.exe") package build store --workdir $coreBuildDir --out $coreBuildDir --only core --version $v
+            $coreTarball = Get-ChildItem -LiteralPath $coreBuildDir -Filter "dockpipe-core-*.tar.gz" -File | Select-Object -First 1
+            if (-not $coreTarball) { throw "dockpipe core tarball was not produced under $coreBuildDir" }
+            Copy-Item -LiteralPath $coreTarball.FullName -Destination (Join-Path $coreStageDir $coreTarball.Name) -Force
           } finally {
             if (Test-Path -LiteralPath $dockpipeSyso) {
               Remove-Item -LiteralPath $dockpipeSyso -Force
@@ -197,6 +214,7 @@ jobs:
           $buildArgs = @(
             "-Version", $v,
             "-SourceExe", (Join-Path $PWD "dockpipe.exe"),
+            "-CoreStageDir", $coreStageDir,
             "-OutDir", (Join-Path $PWD "bin\msi-dist"),
             "-WixRoot", $wixRoot
           )

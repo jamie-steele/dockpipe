@@ -3,6 +3,7 @@
 | Script / file | Output |
 |---------------|--------|
 | **[package-templates-core.sh](package-templates-core.sh)** | **`templates-core-<VERSION>.tar.gz`** + **`.sha256`** + **`install-manifest.json`** → **`release/artifacts/`** (same layout as **`dockpipe package build core`**; **`make package-templates-core`**) |
+| **[build-core-package.sh](build-core-package.sh)** | **`dockpipe-core-<VERSION>.tar.gz`** + **packages-store-manifest.json** → compiled core package used by MSI / Linux installers |
 | **[build-deb.sh](build-deb.sh)** | Debian **`.deb`** (amd64, arm64) → `release/packaging/build/` |
 | **[build-nfpm.sh](build-nfpm.sh)** | **Alpine `.apk`**, **RPM `.rpm`**, **Arch Linux `.pkg.tar.zst`** (amd64, arm64) → `release/artifacts/` in CI |
 | **[nfpm.yaml.in](nfpm.yaml.in)** | Template for [nfpm](https://github.com/goreleaser/nfpm) (substituted by `build-nfpm.sh`) |

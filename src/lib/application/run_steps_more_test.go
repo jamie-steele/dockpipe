@@ -224,6 +224,228 @@ func TestRunBlockingStepInheritsWorkflowRuntimeForHostIsolate(t *testing.T) {
 	}
 }
 
+func TestMergeStepVarsAppliesVMOverrides(t *testing.T) {
+	o := baseRunStepsOpts()
+	o.repoRoot = `C:\repo`
+	o.projectRoot = `C:\repo`
+	o.opts.Workdir = `C:\repo`
+	o.envMap["DOCKPIPE_WORKDIR"] = `C:\repo`
+	step := domain.Step{
+		VM: domain.StepVMConfig{
+			GuestPath:        `C:\uh`,
+			InteractiveDebug: func() *bool {
+				v := true
+				return &v
+			}(),
+			KeepAliveSeconds: "28800",
+			HostFwd:          "tcp::3389-:3389",
+			KeepAlive: func() *bool {
+				v := true
+				return &v
+			}(),
+		},
+	}
+	dockerEnv := map[string]string{}
+	if err := mergeStepVars(&o, step, dockerEnv); err != nil {
+		t.Fatal(err)
+	}
+	if got := o.envMap["DOCKPIPE_VM_SYNC_HOST_PATH"]; got != `C:\repo` {
+		t.Fatalf("DOCKPIPE_VM_SYNC_HOST_PATH=%q", got)
+	}
+	if got := o.envMap["DOCKPIPE_VM_SYNC_GUEST_PATH"]; got != `C:\uh` {
+		t.Fatalf("DOCKPIPE_VM_SYNC_GUEST_PATH=%q", got)
+	}
+	if got := o.envMap["DOCKPIPE_VM_INTERACTIVE"]; got != "true" {
+		t.Fatalf("DOCKPIPE_VM_INTERACTIVE=%q", got)
+	}
+	if got := o.envMap["DOCKPIPE_VM_KEEPALIVE"]; got != "true" {
+		t.Fatalf("DOCKPIPE_VM_KEEPALIVE=%q", got)
+	}
+	if got := o.envMap["DOCKPIPE_VM_KEEPALIVE_SECONDS"]; got != "28800" {
+		t.Fatalf("DOCKPIPE_VM_KEEPALIVE_SECONDS=%q", got)
+	}
+	if got := o.envMap["DOCKPIPE_VM_HOSTFWD"]; got != "tcp::3389-:3389" {
+		t.Fatalf("DOCKPIPE_VM_HOSTFWD=%q", got)
+	}
+	if dockerEnv["DOCKPIPE_VM_SYNC_GUEST_PATH"] != `C:\uh` {
+		t.Fatalf("docker env missing guest path: %#v", dockerEnv)
+	}
+}
+
+func TestMergeStepVarsVMHostContextOverrideWins(t *testing.T) {
+	o := baseRunStepsOpts()
+	o.repoRoot = `C:\repo`
+	o.projectRoot = `C:\repo`
+	o.opts.Workdir = `C:\repo`
+	o.envMap["DOCKPIPE_WORKDIR"] = `C:\repo`
+	step := domain.Step{
+		VM: domain.StepVMConfig{
+			HostContext: `C:\other`,
+			GuestPath:   `C:\uh`,
+		},
+	}
+	dockerEnv := map[string]string{}
+	if err := mergeStepVars(&o, step, dockerEnv); err != nil {
+		t.Fatal(err)
+	}
+	if got := o.envMap["DOCKPIPE_VM_SYNC_HOST_PATH"]; got != `C:\other` {
+		t.Fatalf("DOCKPIPE_VM_SYNC_HOST_PATH=%q", got)
+	}
+}
+
+func TestMergeStepVarsAppliesTypedInputs(t *testing.T) {
+	wfRoot := t.TempDir()
+	modelsDir := filepath.Join(wfRoot, "models")
+	if err := os.MkdirAll(modelsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(p, s string) {
+		t.Helper()
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(wfRoot, "config.yml"), "name: demo\n")
+	write(filepath.Join(modelsDir, "QemuVmResolverConfig.pipe"), `public Class QemuVmResolverConfig
+{
+    public WindowsVmGeneral General;
+    public WindowsVmAdvanced Advanced;
+}
+`)
+	write(filepath.Join(modelsDir, "WindowsVmGeneral.pipe"), `public Class WindowsVmGeneral
+{
+    [EnvName = "DOCKPIPE_VM_EXEC_MODE"]
+    public string ExecMode = "raw";
+}
+`)
+	write(filepath.Join(modelsDir, "WindowsVmAdvanced.pipe"), `public Class WindowsVmAdvanced
+{
+    [EnvName = "DOCKPIPE_VM_KEEPALIVE"]
+    public string KeepAlive = "";
+}
+`)
+	o := baseRunStepsOpts()
+	o.wfRoot = wfRoot
+	o.wf.Types = []string{"models/QemuVmResolverConfig.pipe"}
+	o.envMap["UH_VM_KEEPALIVE"] = "true"
+	step := domain.Step{
+		Inputs: map[string]domain.InputBinding{
+			"General.ExecMode":   {Value: "powershell"},
+			"Advanced.KeepAlive": {From: "UH_VM_KEEPALIVE", Value: "false"},
+		},
+	}
+	dockerEnv := map[string]string{}
+	if err := mergeStepVars(&o, step, dockerEnv); err != nil {
+		t.Fatal(err)
+	}
+	if got := o.envMap["DOCKPIPE_VM_EXEC_MODE"]; got != "powershell" {
+		t.Fatalf("DOCKPIPE_VM_EXEC_MODE=%q", got)
+	}
+	if got := o.envMap["DOCKPIPE_VM_KEEPALIVE"]; got != "true" {
+		t.Fatalf("DOCKPIPE_VM_KEEPALIVE=%q", got)
+	}
+}
+
+func TestRunBlockingStepHostIsolateReappliesWorkflowInputsFromWorkflowVars(t *testing.T) {
+	withRunStepsSeams(t)
+	wd := t.TempDir()
+	repo := t.TempDir()
+	profileDir := filepath.Join(repo, "src", "core", "runtimes", "vm")
+	if err := os.MkdirAll(profileDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	profile := "DOCKPIPE_RUNTIME_SUBSTRATE=vmimage\nDOCKPIPE_RUNTIME_HOST_SCRIPT=scripts/core.assets.scripts.vmimage-run.sh\nDOCKPIPE_RUNTIME_HOST_REQUIRES_DOCKER=0\n"
+	if err := os.WriteFile(filepath.Join(profileDir, "profile"), []byte(profile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	scriptAbs := filepath.Join(repo, "src", "core", "assets", "scripts", "vmimage-run.sh")
+	if err := os.MkdirAll(filepath.Dir(scriptAbs), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(scriptAbs, []byte("#!/usr/bin/env bash\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	wfRoot := filepath.Join(repo, "workflows", "uh-vm")
+	modelsDir := filepath.Join(repo, "packages", "vm", "resolvers", "qemu", "models")
+	for _, dir := range []string{wfRoot, modelsDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(p, s string) {
+		t.Helper()
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(repo, "dockpipe.config.json"), `{
+  "compile": {
+    "workflows": ["workflows", "packages/vm"]
+  }
+}`)
+	write(filepath.Join(repo, "packages", "vm", "resolvers", "qemu", "profile"), "DOCKPIPE_RESOLVER_VM_BACKEND=auto\n")
+	write(filepath.Join(repo, "packages", "vm", "resolvers", "qemu", "types.yml"), "types:\n  - models/QemuVmResolverConfig.pipe\n")
+	write(filepath.Join(modelsDir, "QemuVmResolverConfig.pipe"), `public Class QemuVmResolverConfig
+{
+    public WindowsVmGeneral General;
+    public WindowsVmStorage Storage;
+}
+`)
+	write(filepath.Join(modelsDir, "WindowsVmGeneral.pipe"), `public Class WindowsVmGeneral
+{
+    [EnvName = "DOCKPIPE_VM_BOOT_SOURCE"]
+    public string BootSource = "";
+}
+`)
+	write(filepath.Join(modelsDir, "WindowsVmStorage.pipe"), `public Class WindowsVmStorage
+{
+    [EnvName = "DOCKPIPE_VM_DISK"]
+    public string Disk = "";
+}
+`)
+	write(filepath.Join(wfRoot, "config.yml"), "name: uh-vm\nruntime: vm\nresolver: qemu\n")
+
+	o := baseRunStepsOpts()
+	o.repoRoot = repo
+	o.projectRoot = repo
+	o.wfRoot = wfRoot
+	o.wfConfig = filepath.Join(wfRoot, "config.yml")
+	o.opts.Workdir = wd
+	o.wf.Runtime = "vm"
+	o.wf.Resolver = "qemu"
+	o.wf.Vars = map[string]string{
+		"DOCKPIPE_UH_VM_DISK": `C:\vm\win10.qcow2`,
+	}
+	o.wf.Inputs = map[string]domain.InputBinding{
+		"General.BootSource": {Value: "image"},
+		"Storage.Disk":       {From: "DOCKPIPE_UH_VM_DISK"},
+	}
+	o.wf.Steps = []domain.Step{{Cmd: "hostname"}}
+
+	if err := buildWorkflowEnvInto(o.envMap, o.wf, o.wfConfig, o.wfRoot, o.repoRoot, &CliOpts{Workdir: repo}); err != nil {
+		t.Fatal(err)
+	}
+	o.envSlice = domain.EnvMapToSlice(o.envMap)
+
+	var gotEnv []string
+	runHostScriptFn = func(scriptPath string, env []string) error {
+		gotEnv = append([]string(nil), env...)
+		return nil
+	}
+	dockerEnv := map[string]string{}
+	if err := runBlockingStep(&o, 0, 1, dockerEnv); err != nil {
+		t.Fatalf("runBlockingStep error: %v", err)
+	}
+	joined := strings.Join(gotEnv, "\n")
+	if !strings.Contains(joined, "DOCKPIPE_VM_BOOT_SOURCE=image") {
+		t.Fatalf("expected DOCKPIPE_VM_BOOT_SOURCE in host isolate env, got %q", joined)
+	}
+	if !strings.Contains(joined, `DOCKPIPE_VM_DISK=C:\vm\win10.qcow2`) {
+		t.Fatalf("expected DOCKPIPE_VM_DISK in host isolate env, got %q", joined)
+	}
+}
+
 // TestRunBlockingStepBuildAndRun builds the isolate image if needed and runs the container command.
 func TestRunBlockingStepBuildAndRun(t *testing.T) {
 	withRunStepsSeams(t)

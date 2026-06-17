@@ -2,10 +2,12 @@ package domain
 
 import "strings"
 
-// MergeIfUnset adds keys from src into dst only when dst does not already have the key.
+// MergeIfUnset adds keys from src into dst only when dst does not already have the key,
+// or when the existing value is blank. Empty inherited env vars should not block workflow
+// defaults, .env values, or typed input source mappings.
 func MergeIfUnset(dst map[string]string, src map[string]string) {
 	for k, v := range src {
-		if _, ok := dst[k]; !ok {
+		if cur, ok := dst[k]; !ok || strings.TrimSpace(cur) == "" {
 			dst[k] = v
 		}
 	}

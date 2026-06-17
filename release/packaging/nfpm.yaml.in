@@ -18,3 +18,7 @@ contents:
     dst: /usr/bin/dockpipe
     file_info:
       mode: 0755
+  - src: "__CORE_TARBALL__"
+    dst: /usr/share/dockpipe/packages/core/__CORE_TARBALL_BASENAME__
+    file_info:
+      mode: 0644

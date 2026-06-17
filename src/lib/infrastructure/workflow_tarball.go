@@ -165,3 +165,29 @@ func WorkflowCompileStartDir(repoRoot, projectRoot, workflowName string) (string
 	}
 	return filepath.Dir(wfPath), nil
 }
+
+// WorkflowConfigOnDiskPath returns a filesystem path for a workflow config resolved by the CLI.
+// Plain paths are returned unchanged. Tarball-backed workflows are extracted into the standard
+// tarball cache under projectRoot and the extracted config.yml path is returned.
+func WorkflowConfigOnDiskPath(projectRoot, wfConfig string) (string, error) {
+	wfConfig = strings.TrimSpace(wfConfig)
+	if wfConfig == "" {
+		return "", fmt.Errorf("workflow config path is empty")
+	}
+	if !strings.HasPrefix(wfConfig, "tar://") {
+		return wfConfig, nil
+	}
+	tarPath, entry, ok := SplitTarWorkflowURI(wfConfig)
+	if !ok {
+		return "", fmt.Errorf("invalid tar workflow path %q", wfConfig)
+	}
+	root, err := packagebuild.EnsureTarballExtractedCache(tarPath, TarballExtractCacheRoot(projectRoot))
+	if err != nil {
+		return "", fmt.Errorf("extract workflow tarball: %w", err)
+	}
+	cfg := filepath.Join(root, filepath.FromSlash(filepath.ToSlash(entry)))
+	if st, err := os.Stat(cfg); err != nil || st.IsDir() {
+		return "", fmt.Errorf("extracted workflow config missing %s", cfg)
+	}
+	return filepath.Clean(cfg), nil
+}

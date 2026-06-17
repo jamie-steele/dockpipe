@@ -23,6 +23,16 @@ STAGE="${REPO_ROOT}/release/packaging/build/nfpm-stage"
 rm -rf "${STAGE}"
 mkdir -p "${STAGE}"
 
+CORE_STAGE="${STAGE}/core-artifacts"
+mkdir -p "${CORE_STAGE}"
+"${REPO_ROOT}/release/packaging/build-core-package.sh" "${VERSION}" "${CORE_STAGE}"
+CORE_TARBALL="$(find "${CORE_STAGE}" -maxdepth 1 -type f -name 'dockpipe-core-*.tar.gz' | sort | tail -n 1)"
+if [[ -z "${CORE_TARBALL}" ]]; then
+  echo "failed to build dockpipe-core tarball" >&2
+  exit 1
+fi
+CORE_TARBALL_BASENAME="$(basename "${CORE_TARBALL}")"
+
 # Pin nfpm for reproducible CI (bump when upgrading).
 NFPM_VER="${NFPM_VERSION:-v2.41.0}"
 NFPM=(go run "github.com/goreleaser/nfpm/v2/cmd/nfpm@${NFPM_VER}")
@@ -33,6 +43,8 @@ for goarch in amd64 arm64; do
   GOOS=linux GOARCH="${goarch}" CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "${BIN}" ./src/cmd
 
   sed -e "s|__VERSION__|${VERSION}|g" -e "s|__GOARCH__|${goarch}|g" -e "s|__BINARY__|${BIN}|g" \
+    -e "s|__CORE_TARBALL__|${CORE_TARBALL}|g" \
+    -e "s|__CORE_TARBALL_BASENAME__|${CORE_TARBALL_BASENAME}|g" \
     "${REPO_ROOT}/release/packaging/nfpm.yaml.in" > "${STAGE}/nfpm.yaml"
 
   "${NFPM[@]}" package -f "${STAGE}/nfpm.yaml" -p apk -t "${OUT_DIR}/dockpipe_${VERSION}_linux_${goarch}.apk"

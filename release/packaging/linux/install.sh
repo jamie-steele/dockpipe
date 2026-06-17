@@ -85,10 +85,13 @@ case "$id" in
   *)
     echo "Unrecognized distro ID '${id:-unknown}' — installing portable tarball to ~/.local/bin"
     tgz="dockpipe_${VERSION}_linux_${goarch}.tar.gz"
+    core_tgz="dockpipe-core-${VERSION}.tar.gz"
     fetch "${base}/${tgz}" >"$TMP/$tgz"
     mkdir -p "${HOME}/.local/bin"
     tar -xzf "$TMP/$tgz" -C "${HOME}/.local/bin" dockpipe
     chmod +x "${HOME}/.local/bin/dockpipe"
+    mkdir -p "${HOME}/.local/share/dockpipe/packages/core"
+    fetch "${base}/${core_tgz}" > "${HOME}/.local/share/dockpipe/packages/core/${core_tgz}"
     shell="${SHELL:-/bin/sh}"
     case "$shell" in
       */bash | */zsh) rc="${HOME}/.bashrc" ;;

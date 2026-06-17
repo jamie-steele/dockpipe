@@ -3,9 +3,11 @@ package application
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"dockpipe/src/lib/domain"
+	"dockpipe/src/lib/infrastructure/packagebuild"
 )
 
 func TestClosureWorkflowOrderInject(t *testing.T) {
@@ -117,5 +119,43 @@ steps: []
 	}
 	if len(w.Inject) != 1 || w.Inject[0].Workflow != "base" {
 		t.Fatalf("merged inject: %+v", w.Inject)
+	}
+}
+
+func TestValidateCompileOutputsScopedIgnoresUnrelatedResolverTarballs(t *testing.T) {
+	repo := t.TempDir()
+	resRoot := filepath.Join(repo, "bin", ".dockpipe", "internal", "packages", "resolvers")
+	if err := os.MkdirAll(resRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeResolver := func(name, ns string) {
+		t.Helper()
+		dir := filepath.Join(repo, "tmp-"+name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "profile"), []byte("DOCKPIPE_RESOLVER_WORKFLOW=x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		pm := "schema: 1\nname: " + name + "\nversion: 0.0.0\nkind: resolver\n"
+		if strings.TrimSpace(ns) != "" {
+			pm += "namespace: " + ns + "\n"
+		}
+		if err := os.WriteFile(filepath.Join(dir, "package.yml"), []byte(pm), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		out := filepath.Join(resRoot, "dockpipe-resolver-"+name+"-0.0.0.tar.gz")
+		if _, err := packagebuild.WriteDirTarGzWithPrefix(dir, out, "resolvers/"+name); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeResolver("qemu", "dockpipe-vm")
+	writeResolver("onepassword", "")
+
+	if err := validateCompileOutputsScoped(repo, false, nil, map[string]bool{"qemu": true}); err != nil {
+		t.Fatalf("expected scoped validation to ignore unrelated resolver tarballs, got %v", err)
+	}
+	if err := validateCompileOutputsScoped(repo, false, nil, nil); err == nil || !strings.Contains(err.Error(), "dockpipe-resolver-onepassword-0.0.0.tar.gz") {
+		t.Fatalf("expected full validation to catch unrelated missing namespace, got %v", err)
 	}
 }

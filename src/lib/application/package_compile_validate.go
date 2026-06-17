@@ -14,8 +14,13 @@ import (
 )
 
 // validateCompileOutputs checks workflow and resolver tarballs under the compiled store for namespace
-// and depends closure (compile order: core → resolvers → workflows).
-func validateCompileOutputs(workdir string) error {
+// and depends closure (compile order: core → resolvers → workflows). Local compiled workflows may omit
+// namespace unless requireWorkflowNamespace is true (store/export path).
+func validateCompileOutputsForMode(workdir string, requireWorkflowNamespace bool) error {
+	return validateCompileOutputsScoped(workdir, requireWorkflowNamespace, nil, nil)
+}
+
+func validateCompileOutputsScoped(workdir string, requireWorkflowNamespace bool, workflowNames map[string]bool, resolverNames map[string]bool) error {
 	repoRoot, err := filepath.Abs(workdir)
 	if err != nil {
 		return err
@@ -42,6 +47,9 @@ func validateCompileOutputs(workdir string) error {
 			return err
 		}
 		for _, tgz := range matches {
+			if !shouldValidateCompiledTarball(kind, tgz, workflowNames, resolverNames) {
+				continue
+			}
 			members, err := packagebuild.ListTarGzMemberPaths(tgz)
 			if err != nil {
 				return fmt.Errorf("validate %s: %w", tgz, err)
@@ -80,10 +88,15 @@ func validateCompileOutputs(workdir string) error {
 					return fmt.Errorf("validate %s: %w", tgz, err)
 				}
 			}
-			if strings.TrimSpace(ns) == "" {
-				return fmt.Errorf("compiled %s package in %s must set namespace — see %s and docs/package-model.md", kind, filepath.Base(tgz), pmPathInTar)
-			}
-			if err := domain.ValidateNamespace(ns); err != nil {
+			ns = strings.TrimSpace(ns)
+			if ns == "" {
+				if kind == "workflows" && !requireWorkflowNamespace {
+					// Local compiled workflow tarballs are allowed to omit namespace.
+					// Namespace remains relevant for store-facing resolution and packaged workflow selection.
+				} else {
+					return fmt.Errorf("compiled %s package in %s must set namespace — see %s and docs/package-model.md", kind, filepath.Base(tgz), pmPathInTar)
+				}
+			} else if err := domain.ValidateNamespace(ns); err != nil {
 				return fmt.Errorf("%s: %w", tgz, err)
 			}
 			for _, dep := range pm.Depends {
@@ -98,6 +111,36 @@ func validateCompileOutputs(workdir string) error {
 		}
 	}
 	return nil
+}
+
+func shouldValidateCompiledTarball(kind, tgz string, workflowNames, resolverNames map[string]bool) bool {
+	base := filepath.Base(tgz)
+	switch kind {
+	case "workflows":
+		if len(workflowNames) == 0 {
+			return true
+		}
+		name := strings.TrimSuffix(strings.TrimPrefix(base, "dockpipe-workflow-"), ".tar.gz")
+		if idx := strings.LastIndex(name, "-"); idx > 0 {
+			name = name[:idx]
+		}
+		return workflowNames[name]
+	case "resolvers":
+		if len(resolverNames) == 0 {
+			return true
+		}
+		name := strings.TrimSuffix(strings.TrimPrefix(base, "dockpipe-resolver-"), ".tar.gz")
+		if idx := strings.LastIndex(name, "-"); idx > 0 {
+			name = name[:idx]
+		}
+		return resolverNames[name]
+	default:
+		return true
+	}
+}
+
+func validateCompileOutputs(workdir string) error {
+	return validateCompileOutputsForMode(workdir, false)
 }
 
 func readPackageManifestFromTarballMembers(kind string, members []string, tgz string) (pathInTar string, pm *domain.PackageManifest, err error) {

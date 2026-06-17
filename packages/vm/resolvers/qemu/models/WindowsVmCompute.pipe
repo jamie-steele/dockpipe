@@ -13,7 +13,7 @@ public Interface IWindowsVmCompute
     [EnvName = "DOCKPIPE_VM_MEMORY"]
     public string Memory;
 
-    /// <summary>Optional display mode for interactive installer sessions.</summary>
+    /// <summary>Optional display mode for visible VM sessions. On Windows hosts DockPipe defaults interactive sessions to gtk,grab-on-hover=on,window-close=on unless you override it.</summary>
     [DisplayName = "Display"]
     [EnvName = "DOCKPIPE_VM_DISPLAY"]
     public string Display;

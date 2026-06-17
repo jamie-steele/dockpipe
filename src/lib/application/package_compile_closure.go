@@ -75,7 +75,11 @@ func compileClosureForWorkflow(projectRoot, workflowName string, force bool) err
 			return fmt.Errorf("workflow %s: %w", wfDir, err)
 		}
 	}
-	return validateCompileOutputs(projectRoot)
+	workflowNames, err := compiledWorkflowNamesForDirs(order)
+	if err != nil {
+		return err
+	}
+	return validateCompileOutputsScoped(projectRoot, false, workflowNames, resNames)
 }
 
 func ensureCoreCompiled(projectRoot string, cfg *domain.DockpipeProjectConfig, force bool) error {
@@ -84,9 +88,10 @@ func ensureCoreCompiled(projectRoot string, cfg *domain.DockpipeProjectConfig, f
 		return err
 	}
 	coreDir := filepath.Join(pkgs, "core")
-	matches, _ := filepath.Glob(filepath.Join(coreDir, "dockpipe-core-*.tar.gz"))
-	if len(matches) > 0 && !force {
-		return nil
+	if !force {
+		if tgz, err := infrastructure.FindLatestCoreTarball(projectRoot); err == nil && strings.TrimSpace(tgz) != "" {
+			return nil
+		}
 	}
 	fmt.Fprintf(os.Stderr, "[dockpipe] compile for-workflow: compiling core spine (missing under %s)\n", coreDir)
 	args := []string{"--workdir", projectRoot}
@@ -211,6 +216,38 @@ func addResolverName(set map[string]bool, name string) {
 		return
 	}
 	set[name] = true
+}
+
+func compiledWorkflowNamesForDirs(dirs []string) (map[string]bool, error) {
+	out := make(map[string]bool, len(dirs))
+	for _, dir := range dirs {
+		name, err := compiledWorkflowNameForDir(dir)
+		if err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(name) == "" {
+			continue
+		}
+		out[name] = true
+	}
+	return out, nil
+}
+
+func compiledWorkflowNameForDir(dir string) (string, error) {
+	cfgPath := filepath.Join(dir, "config.yml")
+	b, err := os.ReadFile(cfgPath)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", cfgPath, err)
+	}
+	var wf domain.Workflow
+	if err := yaml.Unmarshal(b, &wf); err != nil {
+		return "", fmt.Errorf("parse %s: %w", cfgPath, err)
+	}
+	name := strings.TrimSpace(wf.Name)
+	if name == "" {
+		name = filepath.Base(dir)
+	}
+	return name, nil
 }
 
 func findWorkflowSourceDir(projectRoot, ref string, wfRoots []string) string {

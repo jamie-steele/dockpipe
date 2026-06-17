@@ -42,6 +42,9 @@ func ResolverProfileNameForCapability(workdir, repoRoot, capability string) (str
 	if gr, err := GlobalPackagesRoot(); err == nil {
 		add(filepath.Join(gr, "resolvers"))
 	}
+	for _, sr := range SystemPackagesResolversDirs() {
+		add(sr)
+	}
 	cd := CoreDir(repoRoot)
 	add(filepath.Join(cd, "resolvers"))
 

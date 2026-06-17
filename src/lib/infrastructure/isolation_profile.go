@@ -25,6 +25,19 @@ func tryResolveRuntime(repoRoot, name string) string {
 	return ""
 }
 
+// ResolveRuntimeFilePath returns the path to a runtime profile file by name.
+func ResolveRuntimeFilePath(repoRoot, runtimeName string) (string, error) {
+	runtimeName = NormalizeRuntimeProfileName(strings.TrimSpace(runtimeName))
+	if runtimeName == "" {
+		return "", fmt.Errorf("runtime profile name is empty")
+	}
+	p := tryResolveRuntime(repoRoot, runtimeName)
+	if p == "" {
+		return "", fmt.Errorf("runtime profile not found for %q", runtimeName)
+	}
+	return p, nil
+}
+
 // tryResolveResolver returns the path to a resolver profile file if it exists.
 func tryResolveResolver(repoRoot, name string) string {
 	name = strings.TrimSpace(name)

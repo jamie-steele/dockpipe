@@ -78,7 +78,7 @@ func runEmbeddedResolverWorkflowWithLoad(
 		envMap[infrastructure.EnvPackageID] = prevPackageID
 		envMap[infrastructure.EnvPackageStateDir] = prevPackageStateDir
 	}()
-	if err := buildWorkflowEnvInto(envMap, subWf, wfRoot, repoRoot, opts); err != nil {
+	if err := buildWorkflowEnvInto(envMap, subWf, wfPath, wfRoot, repoRoot, opts); err != nil {
 		return err
 	}
 	envSlice := domain.EnvMapToSlice(envMap)

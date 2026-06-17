@@ -24,6 +24,7 @@ esac
 GOARCH="${DEB_ARCH}"
 PACKAGE="dockpipe_${VERSION}_${DEB_ARCH}"
 BUILD_DIR="${PKG_ROOT}/build/${PACKAGE}"
+CORE_STAGE="${PKG_ROOT}/build/core-stage-${VERSION}-${DEB_ARCH}"
 
 # Single binary in /usr/bin — templates/scripts/images are embedded (see embed.go).
 mkdir -p "${BUILD_DIR}/usr/bin"
@@ -32,6 +33,12 @@ mkdir -p "${BUILD_DIR}/usr/bin"
   GOOS=linux GOARCH="${GOARCH}" CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.Version=${VERSION}" -o "${BUILD_DIR}/usr/bin/dockpipe" ./src/cmd
 )
 chmod 755 "${BUILD_DIR}/usr/bin/dockpipe"
+
+rm -rf "${CORE_STAGE}"
+mkdir -p "${CORE_STAGE}"
+"${REPO_ROOT}/release/packaging/build-core-package.sh" "${VERSION}" "${CORE_STAGE}"
+mkdir -p "${BUILD_DIR}/usr/share/dockpipe/packages/core"
+cp "${CORE_STAGE}"/dockpipe-core-*.tar.gz "${BUILD_DIR}/usr/share/dockpipe/packages/core/"
 
 # Doc
 mkdir -p "${BUILD_DIR}/usr/share/doc/dockpipe"
@@ -46,3 +53,4 @@ mkdir -p "${PKG_ROOT}/build"
 dpkg-deb --root-owner-group --build "${BUILD_DIR}" "${PKG_ROOT}/build/${PACKAGE}.deb"
 echo "Built: release/packaging/build/${PACKAGE}.deb"
 rm -rf "${BUILD_DIR}"
+rm -rf "${CORE_STAGE}"

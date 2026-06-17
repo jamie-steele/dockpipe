@@ -76,6 +76,7 @@ $sums = Get-Sha256Map -Release $rel
 
 $msi = $rel.assets | Where-Object { $_.name -match "dockpipe_.*_windows_amd64\.msi$" } | Select-Object -First 1
 $zip = $rel.assets | Where-Object { $_.name -match "dockpipe_.*_windows_amd64\.zip$" } | Select-Object -First 1
+$core = $rel.assets | Where-Object { $_.name -match "^dockpipe-core-.*\.tar\.gz$" } | Select-Object -First 1
 
 if ($msi) {
     $dl = Join-Path $env:TEMP $msi.name
@@ -124,6 +125,19 @@ $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($userPath -notlike "*$dest*") {
     [Environment]::SetEnvironmentVariable("Path", "$userPath;$dest", "User")
     $env:Path = "$env:Path;$dest"
+}
+if ($core) {
+    $coreDir = Join-Path $env:LOCALAPPDATA "dockpipe\packages\core"
+    New-Item -ItemType Directory -Force -Path $coreDir | Out-Null
+    $corePath = Join-Path $coreDir $core.name
+    Write-Host "Downloading $($core.name) ..."
+    Invoke-WebRequest -Uri $core.browser_download_url -OutFile $corePath -UseBasicParsing
+    if ($sums.ContainsKey($core.name)) {
+        $h = (Get-FileHash -Algorithm SHA256 -LiteralPath $corePath).Hash.ToLowerInvariant()
+        if ($h -ne $sums[$core.name]) {
+            throw "SHA256 mismatch for $($core.name)."
+        }
+    }
 }
 Invoke-DockpipeWslSetup -DockpipeExe $exe
 Write-Host "Installed dockpipe $verTag to $dest (user PATH updated). Open a new terminal, then: dockpipe --help"

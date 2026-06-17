@@ -227,6 +227,9 @@ func RunPackageBuildStoreFromFlags(workdir, outDir, only, fallbackVersion string
 			fallbackVersion = v
 		}
 	}
+	if err := validateCompileOutputsForMode(repoRoot, true); err != nil {
+		return fmt.Errorf("package build store: %w", err)
+	}
 	m, err := packagebuild.BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only)
 	if err != nil {
 		return err
@@ -333,6 +336,8 @@ Writes packages-store-manifest.json listing every artifact with sha256. Each tar
 
 Requires a prior dockpipe build (or package compile all) so the store is populated.
 Version in each tarball name comes from that package's package.yml, or --version, or 0.0.0.
+Workflow tarballs exported here must set namespace: (workflow config.yml, package.yml, or dockpipe.config.json packages.namespace),
+because store-facing package resolution uses namespace as part of the package contract.
 
 Options:
   --workdir <path>   Project root (default: directory with dockpipe.config.json, else cwd)

@@ -1,6 +1,7 @@
 package application
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -35,6 +36,17 @@ func ensureProjectScaffold(repoRoot, projectDir string) error {
 		if err != nil {
 			return fmt.Errorf("%s: %w", domain.DockpipeProjectConfigFileName, err)
 		}
+		if derived := deriveInitNamespace(projectDir); derived != "" {
+			var cfg domain.DockpipeProjectConfig
+			if err := json.Unmarshal(b, &cfg); err != nil {
+				return fmt.Errorf("%s: parse default scaffold: %w", domain.DockpipeProjectConfigFileName, err)
+			}
+			cfg.Packages.Namespace = &derived
+			b, err = json.MarshalIndent(cfg, "", "  ")
+			if err != nil {
+				return fmt.Errorf("%s: write default scaffold: %w", domain.DockpipeProjectConfigFileName, err)
+			}
+		}
 		if err := os.WriteFile(dc, append(b, '\n'), 0o644); err != nil {
 			return err
 		}
@@ -43,6 +55,36 @@ func ensureProjectScaffold(repoRoot, projectDir string) error {
 		return fmt.Errorf("vault template example: %w", err)
 	}
 	return nil
+}
+
+func deriveInitNamespace(projectDir string) string {
+	name := strings.TrimSpace(filepath.Base(projectDir))
+	if name == "" || name == "." || name == string(filepath.Separator) {
+		return ""
+	}
+	name = strings.ToLower(name)
+	var b strings.Builder
+	lastDash := false
+	for _, r := range name {
+		keep := (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')
+		if keep {
+			if b.Len() == 0 && r >= '0' && r <= '9' {
+				continue
+			}
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash && b.Len() > 0 {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if err := domain.ValidateNamespace(out); err != nil {
+		return ""
+	}
+	return out
 }
 
 // bundledWorkflowSourceDir resolves a bundled workflow by name for init --from / template init.

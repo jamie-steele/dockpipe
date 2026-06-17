@@ -12,6 +12,7 @@ import (
 
 	"dockpipe/src/lib/domain"
 	"dockpipe/src/lib/infrastructure"
+	"dockpipe/src/lib/infrastructure/packagebuild"
 	"dockpipe/src/lib/pipelang"
 )
 
@@ -229,19 +230,36 @@ type catalogPipeTypeShape struct {
 	ClassName   string
 }
 
+type catalogWorkflowTypeEntry struct {
+	Spec       string
+	ModuleRoot string
+}
+
 func buildCatalogWorkflowInputs(cfgPath string, wf *domain.Workflow) []catalogWorkflowInputRecord {
-	if len(wf.Types) == 0 {
+	return buildCatalogWorkflowInputsForStepWithProjectRoot(cfgPath, "", wf, nil)
+}
+
+func buildCatalogWorkflowInputsForStep(cfgPath string, wf *domain.Workflow, step *domain.Step) []catalogWorkflowInputRecord {
+	return buildCatalogWorkflowInputsForStepWithProjectRoot(cfgPath, "", wf, step)
+}
+
+func buildCatalogWorkflowInputsForStepWithProjectRoot(cfgPath, projectRoot string, wf *domain.Workflow, step *domain.Step) []catalogWorkflowInputRecord {
+	entries, err := catalogWorkflowTypeEntries(cfgPath, projectRoot, wf, step)
+	if err != nil || len(entries) == 0 {
 		return nil
 	}
-	moduleRoot := filepath.Dir(cfgPath)
+	return buildCatalogWorkflowInputsFromTypeEntries(entries, wf.Vars)
+}
+
+func buildCatalogWorkflowInputsFromTypeEntries(entries []catalogWorkflowTypeEntry, workflowVars map[string]string) []catalogWorkflowInputRecord {
 	defaultsByClass := map[string]map[string]string{}
 	seen := map[string]struct{}{}
 	filesByRoot := map[string]map[string][]byte{}
 	progByRoot := map[string]*pipelang.Program{}
 	var out []catalogWorkflowInputRecord
 
-	for _, raw := range wf.Types {
-		filePath, typeRef, err := parseCatalogTypeSpec(moduleRoot, raw)
+	for _, entry := range entries {
+		filePath, typeRef, err := parseCatalogTypeSpec(entry.ModuleRoot, entry.Spec)
 		if err != nil {
 			continue
 		}
@@ -286,7 +304,7 @@ func buildCatalogWorkflowInputs(cfgPath string, wf *domain.Workflow) []catalogWo
 			shapeName = strings.TrimSpace(shape.ClassName)
 		}
 		for _, field := range shape.Fields {
-			record := buildCatalogWorkflowInputRecord(prog, field, envPrefix, shapeName, docsByType, classDefaults, wf.Vars, seen, 0)
+			record := buildCatalogWorkflowInputRecord(prog, field, envPrefix, shapeName, docsByType, classDefaults, workflowVars, seen, 0)
 			if record == nil {
 				continue
 			}
@@ -683,6 +701,15 @@ func findCatalogPipeTypeShape(prog *pipelang.Program, name string) *catalogPipeT
 		}
 	}
 	if decl := findCatalogClassDecl(prog, name); decl != nil {
+		if ifaceName := strings.TrimSpace(decl.Implements); ifaceName != "" {
+			if iface := findCatalogInterfaceDecl(prog, ifaceName); iface != nil {
+				return &catalogPipeTypeShape{
+					Annotations: iface.Annotations,
+					Fields:      iface.Fields,
+					ClassName:   decl.Name,
+				}
+			}
+		}
 		fields := make([]pipelang.FieldSig, 0, len(decl.Fields))
 		for _, field := range decl.Fields {
 			fields = append(fields, pipelang.FieldSig{
@@ -1002,6 +1029,9 @@ func listCatalogResolvers(projectRoot, workdir string) []string {
 	if globalResolvers, err := infrastructure.GlobalPackagesResolversDir(); err == nil {
 		collectTarballLeafNames(globalResolvers, "dockpipe-resolver-*.tar.gz", "dockpipe-resolver-", add)
 	}
+	for _, systemResolvers := range infrastructure.SystemPackagesResolversDirs() {
+		collectTarballLeafNames(systemResolvers, "dockpipe-resolver-*.tar.gz", "dockpipe-resolver-", add)
+	}
 	return sortedCatalogSet(set)
 }
 
@@ -1018,8 +1048,16 @@ func listCatalogCoreCategoryNames(projectRoot, workdir, category string) []strin
 	if localCore, err := infrastructure.PackagesCoreDir(workdir); err == nil {
 		collectCoreCategory(filepath.Join(localCore, category), add)
 	}
+	if tgz, err := infrastructure.FindLatestCoreTarball(workdir); err == nil && tgz != "" {
+		if root, err := packagebuild.EnsureTarballExtractedCache(tgz, infrastructure.TarballExtractCacheRoot(workdir)); err == nil {
+			collectCoreCategory(filepath.Join(root, "core", category), add)
+		}
+	}
 	if globalCore, err := infrastructure.GlobalTemplatesCoreDir(); err == nil {
 		collectCoreCategory(filepath.Join(globalCore, category), add)
+	}
+	for _, systemCore := range infrastructure.SystemTemplatesCoreDirs() {
+		collectCoreCategory(filepath.Join(systemCore, category), add)
 	}
 	return sortedCatalogSet(set)
 }

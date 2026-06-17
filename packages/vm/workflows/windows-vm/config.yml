@@ -1,8 +1,6 @@
 name: windows-vm
 category: app
 vault: none
-types:
-  - ../../resolvers/qemu/models/QemuVmResolverConfig.pipe
 view:
   entry:
     type: choice
@@ -77,6 +75,7 @@ view:
           title: Network
           fields:
             - Network.NetDevice
+            - Network.SshPort
             - Network.Hostfwd
         - id: security
           title: Security
@@ -96,7 +95,14 @@ view:
         - id: guest
           title: Guest Overrides
           fields:
+            - Advanced.ConfirmPrompts
             - Advanced.EnvAllow
+            - Advanced.BootstrapPath
+            - Advanced.Clipboard
+            - Advanced.SyncHostPath
+            - Advanced.SyncGuestPath
+            - Advanced.KeepAlive
+            - Advanced.KeepAliveSeconds
             - Advanced.GuestCommand
 description: >-
   Boot a user-supplied Windows guest through the generic vm runtime using the
@@ -107,14 +113,10 @@ description: >-
 runtime: vm
 resolver: qemu
 
-vars:
-  DOCKPIPE_VM_EXEC_MODE: powershell
-  DOCKPIPE_VM_PERSISTENCE: ephemeral
-  DOCKPIPE_VM_BOOT_SOURCE: ""
-  DOCKPIPE_VM_DISK_SIZE: ""
-  DOCKPIPE_VM_DISPLAY: ""
-  DOCKPIPE_VM_ENV_ALLOW: "DOCKPIPE_VM_GUEST_COMMAND,DOCKPIPE_VM_OUTPUTS_REMOTE_PATH"
-  DOCKPIPE_VM_GUEST_COMMAND: ""
+inputs:
+  General.ExecMode: powershell
+  Storage.Persistence: ephemeral
+  Advanced.EnvAllow: DOCKPIPE_VM_GUEST_COMMAND,DOCKPIPE_VM_OUTPUTS_REMOTE_PATH
 
 steps:
   - id: guest-command

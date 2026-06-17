@@ -30,7 +30,19 @@ func FindLatestCoreTarball(workdir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return findLatestGlob(filepath.Join(gp, "core", "dockpipe-core-*.tar.gz"))
+	if p, err := findLatestGlob(filepath.Join(gp, "core", "dockpipe-core-*.tar.gz")); err != nil {
+		return "", err
+	} else if p != "" {
+		return p, nil
+	}
+	for _, root := range SystemPackagesCoreDirs() {
+		if p, err := findLatestGlob(filepath.Join(root, "dockpipe-core-*.tar.gz")); err != nil {
+			return "", err
+		} else if p != "" {
+			return p, nil
+		}
+	}
+	return "", nil
 }
 
 // FindLatestWorkflowTarball returns the newest dockpipe-workflow-<name>-*.tar.gz under packages/workflows (then global).
@@ -50,7 +62,19 @@ func FindLatestWorkflowTarball(workdir, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return findLatestGlob(filepath.Join(gp, "workflows", fmt.Sprintf("dockpipe-workflow-%s-*.tar.gz", tok)))
+	if p, err := findLatestGlob(filepath.Join(gp, "workflows", fmt.Sprintf("dockpipe-workflow-%s-*.tar.gz", tok))); err != nil {
+		return "", err
+	} else if p != "" {
+		return p, nil
+	}
+	for _, root := range SystemPackagesWorkflowsDirs() {
+		if p, err := findLatestGlob(filepath.Join(root, fmt.Sprintf("dockpipe-workflow-%s-*.tar.gz", tok))); err != nil {
+			return "", err
+		} else if p != "" {
+			return p, nil
+		}
+	}
+	return "", nil
 }
 
 // FindLatestResolverTarball returns the newest dockpipe-resolver-<name>-*.tar.gz under packages/resolvers (then global).
@@ -70,7 +94,19 @@ func FindLatestResolverTarball(workdir, name string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return findLatestGlob(filepath.Join(gp, "resolvers", fmt.Sprintf("dockpipe-resolver-%s-*.tar.gz", tok)))
+	if p, err := findLatestGlob(filepath.Join(gp, "resolvers", fmt.Sprintf("dockpipe-resolver-%s-*.tar.gz", tok))); err != nil {
+		return "", err
+	} else if p != "" {
+		return p, nil
+	}
+	for _, root := range SystemPackagesResolversDirs() {
+		if p, err := findLatestGlob(filepath.Join(root, fmt.Sprintf("dockpipe-resolver-%s-*.tar.gz", tok))); err != nil {
+			return "", err
+		} else if p != "" {
+			return p, nil
+		}
+	}
+	return "", nil
 }
 
 func findLatestGlob(pattern string) (string, error) {

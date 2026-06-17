@@ -254,7 +254,7 @@ func Run(argv []string, baseEnviron []string) error {
 
 	envMap := domain.EnvironToMap(baseEnviron)
 	if wf != nil {
-		if err := buildWorkflowEnvInto(envMap, wf, wfRoot, repoRoot, opts); err != nil {
+		if err := buildWorkflowEnvInto(envMap, wf, wfConfig, wfRoot, repoRoot, opts); err != nil {
 			return err
 		}
 		wn := strings.TrimSpace(wf.Name)

@@ -39,6 +39,58 @@ steps:
 	}
 }
 
+func TestParseWorkflowYAMLStepVM(t *testing.T) {
+	y := `
+steps:
+  - runtime: vm
+    resolver: qemu
+    vm:
+      guest_path: C:\uh
+      host_context: C:\src\repo
+      interactive_debug: true
+      keepalive: true
+      keepalive_seconds: "28800"
+      hostfwd: tcp::3389-:3389
+    cmd: hostname
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Steps) != 1 {
+		t.Fatalf("steps: got %d", len(w.Steps))
+	}
+	got := w.Steps[0].VM
+	if got.GuestPath != `C:\uh` || got.HostContext != `C:\src\repo` || got.InteractiveDebug == nil || !*got.InteractiveDebug || got.KeepAlive == nil || !*got.KeepAlive || got.KeepAliveSeconds != "28800" || got.HostFwd != "tcp::3389-:3389" {
+		t.Fatalf("vm: got %+v", got)
+	}
+}
+
+func TestParseWorkflowYAMLInputs(t *testing.T) {
+	y := `
+types:
+  - models/QemuVmResolverConfig.pipe
+inputs:
+  Advanced.KeepAlive:
+    from: UH_VM_KEEPALIVE
+    value: false
+steps:
+  - inputs:
+      General.ExecMode: powershell
+    cmd: hostname
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := w.Inputs["Advanced.KeepAlive"]; got.From != "UH_VM_KEEPALIVE" || got.Value != "false" {
+		t.Fatalf("workflow inputs: %+v", got)
+	}
+	if got := w.Steps[0].Inputs["General.ExecMode"]; got.Value != "powershell" {
+		t.Fatalf("step inputs: %+v", got)
+	}
+}
+
 func TestParseWorkflowYAMLStepPackageWorkflowField(t *testing.T) {
 	y := `
 steps:
@@ -508,12 +560,27 @@ func TestValidateLoadedWorkflowRejectsHostStepRuntimeFields(t *testing.T) {
 		{Kind: "host", Resolver: "codex"},
 		{Kind: "host", Isolate: "alpine:3.22"},
 		{Kind: "host", Security: WorkflowSecurityConfig{Profile: "secure-default"}},
+		{Kind: "host", VM: StepVMConfig{GuestPath: `C:\uh`}},
 	}
 	for _, step := range cases {
 		w := &Workflow{Steps: []Step{step}}
 		if err := ValidateLoadedWorkflow(w); err == nil {
 			t.Fatalf("expected host-step validation error for %+v", step)
 		}
+	}
+}
+
+func TestValidateLoadedWorkflowRejectsVMHostContextWithoutGuestPath(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{{
+			Runtime:  "vm",
+			Resolver: "qemu",
+			VM:       StepVMConfig{HostContext: `C:\src\repo`},
+			Cmd:      "hostname",
+		}},
+	}
+	if err := ValidateLoadedWorkflow(w); err == nil || !strings.Contains(err.Error(), "vm.host_context requires vm.guest_path") {
+		t.Fatalf("expected vm.host_context validation error, got %v", err)
 	}
 }
 

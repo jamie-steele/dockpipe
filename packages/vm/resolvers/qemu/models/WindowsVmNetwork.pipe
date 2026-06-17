@@ -13,6 +13,16 @@ public Interface IWindowsVmNetwork
     [EnvName = "DOCKPIPE_VM_SSH_USER"]
     public string SshUser;
 
+    /// <summary>Optional SSH password for non-interactive Windows-host guest automation. Prefer a vault-backed mapping when used.</summary>
+    [DisplayName = "SSH Password"]
+    [EnvName = "DOCKPIPE_VM_SSH_PASSWORD"]
+    public string SshPassword;
+
+    /// <summary>Host SSH port forwarded to the guest. Leave empty to let the runner choose automatically.</summary>
+    [DisplayName = "SSH Port"]
+    [EnvName = "DOCKPIPE_VM_SSH_PORT"]
+    public string SshPort;
+
     /// <summary>Optional additional host port forwards, comma-separated.</summary>
     [DisplayName = "Host Port Forwards"]
     [EnvName = "DOCKPIPE_VM_HOSTFWD"]
@@ -23,5 +33,7 @@ public Class WindowsVmNetwork : IWindowsVmNetwork
 {
     public string NetDevice = "e1000e";
     public string SshUser = "";
+    public string SshPassword = "";
+    public string SshPort = "";
     public string Hostfwd = "";
 }

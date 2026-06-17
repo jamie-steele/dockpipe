@@ -351,7 +351,7 @@ func runStepPackageWorkflow(o *runStepsOpts, i, n int, step domain.Step, dockerE
 		return fmt.Errorf("step %s: %w", step.DisplayName(i), err)
 	}
 	wfRoot := filepath.Dir(wfPath)
-	if err := buildWorkflowEnvInto(o.envMap, subWf, wfRoot, o.repoRoot, o.opts); err != nil {
+	if err := buildWorkflowEnvInto(o.envMap, subWf, wfPath, wfRoot, o.repoRoot, o.opts); err != nil {
 		return fmt.Errorf("step %s: %w", step.DisplayName(i), err)
 	}
 	o.envSlice = domain.EnvMapToSlice(o.envMap)
@@ -396,7 +396,9 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 	step := o.wf.Steps[i]
 	fmt.Fprintf(os.Stderr, "[dockpipe] --- Step %d/%d ---\n", i+1, n)
 
-	mergeStepVars(o, step, dockerEnv)
+	if err := mergeStepVars(o, step, dockerEnv); err != nil {
+		return err
+	}
 	if err := runStepPreScripts(o, i, step); err != nil {
 		return err
 	}
@@ -410,9 +412,6 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 	ra, effRt, effRs, profileEnv, err := loadStepResolverWithProfileEnv(o, step, i)
 	if err != nil {
 		return err
-	}
-	if strings.EqualFold(strings.TrimSpace(effRt), "vmimage") {
-		fmt.Fprintf(os.Stderr, "[dockpipe] vmimage debug: host_isolate=%q workflow=%q template=%q\n", strings.TrimSpace(ra.HostIsolate), strings.TrimSpace(ra.Workflow), strings.TrimSpace(ra.Template))
 	}
 	if step.IsHostStep() && stepUsesResolverDelegate(ra) {
 		return fmt.Errorf("step %d: profile %q uses DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RESOLVER_HOST_ISOLATE — remove kind: host", i+1, ProfileLabelForEnv(effRt, effRs))
@@ -627,11 +626,8 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 		}
 		localEnv := maps.Clone(baseEnv)
 		localDocker := maps.Clone(baseDocker)
-		for k, v := range step.Vars {
-			if !o.locked[k] {
-				localEnv[k] = v
-				localDocker[k] = v
-			}
+		if err := applyStepEnvOverrides(o, step, localEnv, localDocker); err != nil {
+			return err
 		}
 		ra, _, _, err := loadStepResolver(o, step, idx)
 		if err != nil {
@@ -701,11 +697,8 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 	localEnv := maps.Clone(baseEnv)
 	localDocker := maps.Clone(baseDocker)
 
-	for k, v := range step.Vars {
-		if !o.locked[k] {
-			localEnv[k] = v
-			localDocker[k] = v
-		}
+	if err := applyStepEnvOverrides(o, step, localEnv, localDocker); err != nil {
+		return err
 	}
 	envSlice := domain.EnvMapToSlice(localEnv)
 
@@ -785,14 +778,96 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 	return nil
 }
 
-func mergeStepVars(o *runStepsOpts, step domain.Step, dockerEnv map[string]string) {
-	for k, v := range step.Vars {
+func mergeStepVars(o *runStepsOpts, step domain.Step, dockerEnv map[string]string) error {
+	if err := applyStepEnvOverrides(o, step, o.envMap, dockerEnv); err != nil {
+		return err
+	}
+	o.envSlice = domain.EnvMapToSlice(o.envMap)
+	return nil
+}
+
+func applyStepEnvOverrides(o *runStepsOpts, step domain.Step, envMap, dockerEnv map[string]string) error {
+	inputsConfigPath := strings.TrimSpace(o.wfConfig)
+	if inputsConfigPath == "" && strings.TrimSpace(o.wfRoot) != "" {
+		inputsConfigPath = filepath.Join(o.wfRoot, "config.yml")
+	}
+	workflowInputsEnv, err := resolveWorkflowInputsEnv(o.wf, inputsConfigPath, o.projectRoot, envMap)
+	if err != nil {
+		return err
+	}
+	for k, v := range workflowInputsEnv {
 		if !o.locked[k] {
-			o.envMap[k] = v
+			envMap[k] = v
 			dockerEnv[k] = v
 		}
 	}
-	o.envSlice = domain.EnvMapToSlice(o.envMap)
+	inputsEnv, err := resolveStepInputsEnv(o.wf, inputsConfigPath, o.projectRoot, step, envMap)
+	if err != nil {
+		return err
+	}
+	for k, v := range inputsEnv {
+		if !o.locked[k] {
+			envMap[k] = v
+			dockerEnv[k] = v
+		}
+	}
+	for k, v := range step.Vars {
+		if !o.locked[k] {
+			envMap[k] = v
+			dockerEnv[k] = v
+		}
+	}
+	for k, v := range stepVMEnvOverrides(o, step) {
+		if !o.locked[k] {
+			envMap[k] = v
+			dockerEnv[k] = v
+		}
+	}
+	return nil
+}
+
+func stepVMEnvOverrides(o *runStepsOpts, step domain.Step) map[string]string {
+	if step.VM.IsEmpty() {
+		return nil
+	}
+	out := map[string]string{}
+	if guestPath := strings.TrimSpace(step.VM.GuestPath); guestPath != "" {
+		out["DOCKPIPE_VM_SYNC_GUEST_PATH"] = guestPath
+		hostContext := strings.TrimSpace(step.VM.HostContext)
+		if hostContext == "" {
+			hostContext = firstNonEmpty(
+				strings.TrimSpace(o.envMap["DOCKPIPE_WORKDIR"]),
+				strings.TrimSpace(o.opts.Workdir),
+				strings.TrimSpace(o.projectRoot),
+				strings.TrimSpace(o.repoRoot),
+				mustGetwd(),
+			)
+		}
+		if hostContext != "" {
+			out["DOCKPIPE_VM_SYNC_HOST_PATH"] = hostContext
+		}
+	}
+	if step.VM.InteractiveDebug != nil {
+		if *step.VM.InteractiveDebug {
+			out["DOCKPIPE_VM_INTERACTIVE"] = "true"
+		} else {
+			delete(out, "DOCKPIPE_VM_INTERACTIVE")
+		}
+	}
+	if step.VM.KeepAlive != nil {
+		if *step.VM.KeepAlive {
+			out["DOCKPIPE_VM_KEEPALIVE"] = "true"
+		} else {
+			out["DOCKPIPE_VM_KEEPALIVE"] = "false"
+		}
+	}
+	if keepAliveSeconds := strings.TrimSpace(step.VM.KeepAliveSeconds); keepAliveSeconds != "" {
+		out["DOCKPIPE_VM_KEEPALIVE_SECONDS"] = keepAliveSeconds
+	}
+	if hostFwd := strings.TrimSpace(step.VM.HostFwd); hostFwd != "" {
+		out["DOCKPIPE_VM_HOSTFWD"] = hostFwd
+	}
+	return out
 }
 
 func runStepHostBuiltin(o *runStepsOpts, step domain.Step) error {

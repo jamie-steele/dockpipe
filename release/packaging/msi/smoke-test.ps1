@@ -12,6 +12,7 @@ if (-not (Test-Path -LiteralPath $MsiPath)) {
 
 $installDir = Join-Path $env:LOCALAPPDATA "dockpipe"
 $exePath = Join-Path $installDir "dockpipe.exe"
+$corePackageDir = Join-Path $installDir "packages\core"
 $launcherPath = Join-Path $installDir "dockpipe-launcher.exe"
 $launcherPlatformPlugin = Join-Path $installDir "platforms\qwindows.dll"
 $launcherCoreDll = Join-Path $installDir "Qt6Core.dll"
@@ -43,6 +44,9 @@ if ($install.ExitCode -ne 0 -and $install.ExitCode -ne 3010) {
 
 if (-not (Test-Path -LiteralPath $exePath)) {
     throw "Installed dockpipe.exe not found at $exePath"
+}
+if (-not (Get-ChildItem -LiteralPath $corePackageDir -Filter "dockpipe-core-*.tar.gz" -File -ErrorAction SilentlyContinue | Select-Object -First 1)) {
+    throw "Installed dockpipe core package not found under $corePackageDir"
 }
 if ($ExpectLauncher) {
     if (-not (Test-Path -LiteralPath $launcherPath)) {
@@ -78,6 +82,9 @@ if ($uninstall.ExitCode -ne 0 -and $uninstall.ExitCode -ne 3010) {
 
 if (Test-Path -LiteralPath $exePath) {
     throw "Installed dockpipe.exe still exists after uninstall: $exePath"
+}
+if (Test-Path -LiteralPath $corePackageDir) {
+    throw "Installed dockpipe core package directory still exists after uninstall: $corePackageDir"
 }
 if ($ExpectLauncher -and (Test-Path -LiteralPath $launcherPath)) {
     throw "Installed dockpipe-launcher.exe still exists after uninstall: $launcherPath"

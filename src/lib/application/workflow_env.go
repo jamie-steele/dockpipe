@@ -10,7 +10,7 @@ import (
 	"dockpipe/src/lib/infrastructure"
 )
 
-func buildWorkflowEnvInto(env map[string]string, wf *domain.Workflow, wfRoot, repoRoot string, opts *CliOpts) error {
+func buildWorkflowEnvInto(env map[string]string, wf *domain.Workflow, wfConfig, wfRoot, repoRoot string, opts *CliOpts) error {
 	if opts == nil {
 		opts = &CliOpts{}
 	}
@@ -37,6 +37,13 @@ func buildWorkflowEnvInto(env map[string]string, wf *domain.Workflow, wfRoot, re
 		if err == nil {
 			domain.MergeIfUnset(env, m)
 		}
+	}
+	inputsEnv, err := resolveWorkflowInputsEnv(wf, wfConfig, effectiveWorkdirForWorkflowOpts(opts), env)
+	if err != nil {
+		return err
+	}
+	for k, v := range inputsEnv {
+		env[k] = v
 	}
 	for _, vo := range opts.VarOverrides {
 		k, val, _ := strings.Cut(vo, "=")

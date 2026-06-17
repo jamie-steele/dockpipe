@@ -138,6 +138,152 @@ steps: []
 	}
 }
 
+func TestListCatalogWorkflowsInfersResolverTypesWithoutWorkflowTypes(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "dockpipe.config.json"), []byte(`{
+  "compile": {
+    "workflows": ["workflows", "packages"]
+  }
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wfDir := filepath.Join(tmp, "workflows", "windows-vm")
+	resolverDir := filepath.Join(tmp, "packages", "vm", "resolvers", "qemu")
+	modelsDir := filepath.Join(resolverDir, "models")
+	for _, dir := range []string{wfDir, modelsDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(wfDir, "config.yml"), []byte(`name: windows-vm
+description: Demo workflow
+category: app
+resolver: qemu
+vars:
+  DOCKPIPE_VM_EXEC_MODE: powershell
+steps: []
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(resolverDir, "profile"), []byte("DOCKPIPE_RESOLVER_WORKFLOW=scripts/qemu.sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(resolverDir, "types.yml"), []byte(`types:
+  - models/QemuVmResolverConfig
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(modelsDir, "QemuVmResolverConfig.pipe"), []byte(`public Class QemuVmResolverConfig
+{
+    [EnvName = "DOCKPIPE_VM_EXEC_MODE"]
+    public string ExecMode = "powershell";
+}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := listCatalogWorkflows(tmp, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var target *catalogWorkflowRecord
+	for i := range got {
+		if got[i].WorkflowID == "windows-vm" {
+			target = &got[i]
+			break
+		}
+	}
+	if target == nil {
+		t.Fatalf("expected windows-vm workflow in catalog, got %#v", got)
+	}
+	if len(target.Inputs) != 1 {
+		t.Fatalf("expected inferred typed inputs, got %#v", target.Inputs)
+	}
+	if target.Inputs[0].EnvName != "DOCKPIPE_VM_EXEC_MODE" {
+		t.Fatalf("unexpected inferred env mapping %#v", target.Inputs[0])
+	}
+}
+
+func TestListCatalogWorkflowsUsesImplementedInterfaceFieldAnnotations(t *testing.T) {
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "dockpipe.config.json"), []byte(`{
+  "compile": {
+    "workflows": ["workflows", "packages"]
+  }
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wfDir := filepath.Join(tmp, "workflows", "windows-vm")
+	resolverDir := filepath.Join(tmp, "packages", "vm", "resolvers", "qemu")
+	modelsDir := filepath.Join(resolverDir, "models")
+	for _, dir := range []string{wfDir, modelsDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(wfDir, "config.yml"), []byte(`name: windows-vm
+description: Demo workflow
+category: app
+resolver: qemu
+runtime: vm
+steps: []
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(resolverDir, "profile"), []byte("DOCKPIPE_RESOLVER_WORKFLOW=scripts/qemu.sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(resolverDir, "types.yml"), []byte(`types:
+  - models/QemuVmResolverConfig.pipe
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(modelsDir, "QemuVmResolverConfig.pipe"), []byte(`public Class QemuVmResolverConfig
+{
+    public WindowsVmGeneral General;
+}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(modelsDir, "WindowsVmGeneral.pipe"), []byte(`public Interface IWindowsVmGeneral
+{
+    [EnvName = "DOCKPIPE_VM_BOOT_SOURCE"]
+    public string BootSource;
+}
+
+public Class WindowsVmGeneral : IWindowsVmGeneral
+{
+    public string BootSource = "";
+}
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := listCatalogWorkflows(tmp, tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var target *catalogWorkflowRecord
+	for i := range got {
+		if got[i].WorkflowID == "windows-vm" {
+			target = &got[i]
+			break
+		}
+	}
+	if target == nil {
+		t.Fatalf("expected windows-vm workflow in catalog, got %#v", got)
+	}
+	if len(target.Inputs) != 1 {
+		t.Fatalf("expected one inferred typed input, got %#v", target.Inputs)
+	}
+	if target.Inputs[0].FieldName != "General" || len(target.Inputs[0].Children) != 1 {
+		t.Fatalf("expected nested general input, got %#v", target.Inputs[0])
+	}
+	if target.Inputs[0].Children[0].EnvName != "DOCKPIPE_VM_BOOT_SOURCE" {
+		t.Fatalf("unexpected nested env mapping %#v", target.Inputs[0].Children[0])
+	}
+}
+
 func TestListCatalogWorkflowsBuildsStructuredTypedInputs(t *testing.T) {
 	tmp := t.TempDir()
 	wfDir := filepath.Join(tmp, "workflows", "demo")

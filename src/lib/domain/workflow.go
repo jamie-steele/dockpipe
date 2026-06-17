@@ -82,11 +82,12 @@ type Workflow struct {
 	View WorkflowView `yaml:"view,omitempty"`
 	// Inject: explicit compile closure dependencies (workflow/package ids and resolver profile names).
 	// Unlike imports:, this does not merge YAML — it only guides package compile for-workflow ordering.
-	Inject   WorkflowInjectList     `yaml:"inject,omitempty"`
-	Vars     map[string]string      `yaml:"vars,omitempty"`
-	Compose  WorkflowComposeConfig  `yaml:"compose,omitempty"`
-	Security WorkflowSecurityConfig `yaml:"security,omitempty"`
-	Steps    []Step                 `yaml:"steps,omitempty"`
+	Inject   WorkflowInjectList      `yaml:"inject,omitempty"`
+	Inputs   map[string]InputBinding `yaml:"inputs,omitempty"`
+	Vars     map[string]string       `yaml:"vars,omitempty"`
+	Compose  WorkflowComposeConfig   `yaml:"compose,omitempty"`
+	Security WorkflowSecurityConfig  `yaml:"security,omitempty"`
+	Steps    []Step                  `yaml:"steps,omitempty"`
 }
 
 type WorkflowComposeConfig struct {
@@ -203,18 +204,20 @@ func (w *Workflow) NeedsDockerReachable() bool {
 // Step is one entry under steps:.
 type Step struct {
 	// ID is optional; used in logs (e.g. [merge] lines). If empty, runner uses "step N".
-	ID        string                 `yaml:"id,omitempty"`
-	Kind      string                 `yaml:"kind,omitempty"`
-	Run       RunSpec                `yaml:"run,omitempty"`
-	PreScript string                 `yaml:"pre_script,omitempty"`
-	Isolate   string                 `yaml:"isolate,omitempty"`
-	Act       string                 `yaml:"act,omitempty"`
-	Action    string                 `yaml:"action,omitempty"`
-	Cmd       string                 `yaml:"cmd,omitempty"`
-	Command   string                 `yaml:"command,omitempty"`
-	Outputs   string                 `yaml:"outputs,omitempty"`
-	Vars      map[string]string      `yaml:"vars,omitempty"`
-	Security  WorkflowSecurityConfig `yaml:"security,omitempty"`
+	ID        string                  `yaml:"id,omitempty"`
+	Kind      string                  `yaml:"kind,omitempty"`
+	Run       RunSpec                 `yaml:"run,omitempty"`
+	PreScript string                  `yaml:"pre_script,omitempty"`
+	Isolate   string                  `yaml:"isolate,omitempty"`
+	Act       string                  `yaml:"act,omitempty"`
+	Action    string                  `yaml:"action,omitempty"`
+	Cmd       string                  `yaml:"cmd,omitempty"`
+	Command   string                  `yaml:"command,omitempty"`
+	Outputs   string                  `yaml:"outputs,omitempty"`
+	Inputs    map[string]InputBinding `yaml:"inputs,omitempty"`
+	Vars      map[string]string       `yaml:"vars,omitempty"`
+	VM        StepVMConfig            `yaml:"vm,omitempty"`
+	Security  WorkflowSecurityConfig  `yaml:"security,omitempty"`
 	// Blocking is YAML is_blocking: when false, this step joins a parallel batch with adjacent
 	// non-blocking steps. Inputs = env after last blocking step + this step’s vars/pre-scripts only;
 	// outputs merge in order after the whole batch (see src/lib/README.md).
@@ -235,6 +238,61 @@ type Step struct {
 	// HostBuiltin: optional engine step for kind: host workflows — runs a built-in host action instead of run:/pre_script.
 	// Allowed values: package_build_store (same as dockpipe package build store; uses PACKAGE_STORE_OUT, PACKAGE_STORE_ONLY, PACKAGE_STORE_VERSION from merged env).
 	HostBuiltin string `yaml:"host_builtin,omitempty"`
+}
+
+// InputBinding maps a typed workflow input field onto either a literal value or another env var.
+// YAML shorthand:
+//
+//	inputs:
+//	  Advanced.KeepAlive: true
+//
+// Expanded binding:
+//
+//	inputs:
+//	  Advanced.KeepAlive:
+//	    from: UH_VM_KEEPALIVE
+//	    value: false
+type InputBinding struct {
+	Value string `yaml:"value,omitempty"`
+	From  string `yaml:"from,omitempty"`
+}
+
+func (b *InputBinding) UnmarshalYAML(n *yaml.Node) error {
+	if n.Kind == yaml.ScalarNode {
+		var s string
+		if err := n.Decode(&s); err != nil {
+			return err
+		}
+		*b = InputBinding{Value: s}
+		return nil
+	}
+	type alias InputBinding
+	var v alias
+	if err := n.Decode(&v); err != nil {
+		return err
+	}
+	*b = InputBinding(v)
+	return nil
+}
+
+// StepVMConfig is authored workflow sugar for common VM runtime settings.
+// The runner lowers this into the existing DOCKPIPE_VM_* environment contract.
+type StepVMConfig struct {
+	HostContext      string `yaml:"host_context,omitempty"`
+	GuestPath        string `yaml:"guest_path,omitempty"`
+	InteractiveDebug *bool  `yaml:"interactive_debug,omitempty"`
+	KeepAlive        *bool  `yaml:"keepalive,omitempty"`
+	KeepAliveSeconds string `yaml:"keepalive_seconds,omitempty"`
+	HostFwd          string `yaml:"hostfwd,omitempty"`
+}
+
+func (c StepVMConfig) IsEmpty() bool {
+	return strings.TrimSpace(c.HostContext) == "" &&
+		strings.TrimSpace(c.GuestPath) == "" &&
+		c.InteractiveDebug == nil &&
+		c.KeepAlive == nil &&
+		strings.TrimSpace(c.KeepAliveSeconds) == "" &&
+		strings.TrimSpace(c.HostFwd) == ""
 }
 
 func (s *Step) UsesPackagedWorkflow() bool {
@@ -315,31 +373,32 @@ func (s *Step) OutputsPath() string {
 
 // workflowFile is the on-disk shape: steps may mix plain steps and group wrappers.
 type workflowFile struct {
-	Name            string                 `yaml:"name"`
-	Description     string                 `yaml:"description,omitempty"`
-	Category        string                 `yaml:"category,omitempty"`
-	Icon            string                 `yaml:"icon,omitempty"`
-	WorkflowType    string                 `yaml:"workflow_type,omitempty"`
-	Namespace       string                 `yaml:"namespace,omitempty"`
-	Run             RunSpec                `yaml:"run"`
-	Isolate         string                 `yaml:"isolate"`
-	Act             string                 `yaml:"act"`
-	Action          string                 `yaml:"action"`
-	Resolver        string                 `yaml:"resolver"`
-	Runtime         string                 `yaml:"runtime,omitempty"`
-	Strategy        string                 `yaml:"strategy,omitempty"`
-	Strategies      []string               `yaml:"strategies,omitempty"`
-	Vault           string                 `yaml:"vault,omitempty"`
-	DockerPreflight *bool                  `yaml:"docker_preflight,omitempty"`
-	CompileHooks    []string               `yaml:"compile_hooks,omitempty"`
-	Types           []string               `yaml:"types,omitempty"`
-	View            WorkflowView           `yaml:"view,omitempty"`
-	Vars            map[string]string      `yaml:"vars"`
-	Compose         WorkflowComposeConfig  `yaml:"compose,omitempty"`
-	Security        WorkflowSecurityConfig `yaml:"security,omitempty"`
-	Imports         []string               `yaml:"imports,omitempty"`
-	Inject          WorkflowInjectList     `yaml:"inject,omitempty"`
-	Steps           []stepOrGroupYAML      `yaml:"steps"`
+	Name            string                  `yaml:"name"`
+	Description     string                  `yaml:"description,omitempty"`
+	Category        string                  `yaml:"category,omitempty"`
+	Icon            string                  `yaml:"icon,omitempty"`
+	WorkflowType    string                  `yaml:"workflow_type,omitempty"`
+	Namespace       string                  `yaml:"namespace,omitempty"`
+	Run             RunSpec                 `yaml:"run"`
+	Isolate         string                  `yaml:"isolate"`
+	Act             string                  `yaml:"act"`
+	Action          string                  `yaml:"action"`
+	Resolver        string                  `yaml:"resolver"`
+	Runtime         string                  `yaml:"runtime,omitempty"`
+	Strategy        string                  `yaml:"strategy,omitempty"`
+	Strategies      []string                `yaml:"strategies,omitempty"`
+	Vault           string                  `yaml:"vault,omitempty"`
+	DockerPreflight *bool                   `yaml:"docker_preflight,omitempty"`
+	CompileHooks    []string                `yaml:"compile_hooks,omitempty"`
+	Types           []string                `yaml:"types,omitempty"`
+	View            WorkflowView            `yaml:"view,omitempty"`
+	Inputs          map[string]InputBinding `yaml:"inputs,omitempty"`
+	Vars            map[string]string       `yaml:"vars"`
+	Compose         WorkflowComposeConfig   `yaml:"compose,omitempty"`
+	Security        WorkflowSecurityConfig  `yaml:"security,omitempty"`
+	Imports         []string                `yaml:"imports,omitempty"`
+	Inject          WorkflowInjectList      `yaml:"inject,omitempty"`
+	Steps           []stepOrGroupYAML       `yaml:"steps"`
 }
 
 type stepOrGroupYAML struct {
@@ -529,6 +588,9 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 		if err := ValidateStepSecurityField(i, s); err != nil {
 			return err
 		}
+		if err := ValidateStepVMField(i, s); err != nil {
+			return err
+		}
 		if err := ValidateStepHostBuiltin(i, s); err != nil {
 			return err
 		}
@@ -674,6 +736,22 @@ func ValidateStepSecurityField(i int, s Step) error {
 		return fmt.Errorf("step %d: packaged workflow step does not use security; keep policy inside the child workflow", i+1)
 	}
 	return ValidateWorkflowSecurityConfig(fmt.Sprintf("steps[%d].security", i), s.Security)
+}
+
+func ValidateStepVMField(i int, s Step) error {
+	if s.VM.IsEmpty() {
+		return nil
+	}
+	if s.IsHostStep() {
+		return fmt.Errorf("step %d: kind: host step does not use vm; remove vm: or switch to a VM/container step", i+1)
+	}
+	if s.UsesPackagedWorkflow() {
+		return fmt.Errorf("step %d: packaged workflow step does not use vm; keep VM settings inside the child workflow", i+1)
+	}
+	if strings.TrimSpace(s.VM.HostContext) != "" && strings.TrimSpace(s.VM.GuestPath) == "" {
+		return fmt.Errorf("step %d: vm.host_context requires vm.guest_path", i+1)
+	}
+	return nil
 }
 
 // ValidateStepHostBuiltin checks host_builtin steps (see Step.HostBuiltin).

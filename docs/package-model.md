@@ -8,17 +8,19 @@ package/store reference.
 
 ## Canonical layout (mental model)
 
-DockPipe has **three** package/artifact roots. Do not collapse them into one path.
+DockPipe has **four** package/artifact roots. Do not collapse them into one path.
 
 1. **Project-local build output** lives under **`<workdir>/bin/.dockpipe/`**. The default project package root is **`<workdir>/bin/.dockpipe/internal/packages/`**, or **`DOCKPIPE_PACKAGES_ROOT`** when explicitly overridden. **`dockpipe package compile`** materializes **tarballs** here: **`core/`**, **`resolvers/`**, **`workflows/`** (**`dockpipe-workflow-*`** only). This is a **working** store for the project, not the global install root.
 
 2. **Global installs** live under **`DOCKPIPE_GLOBAL_ROOT`** when set, otherwise the OS data dir from **`GlobalDockpipeDataDir()`** (for example **`~/.local/share/dockpipe`** on Linux). Global packages use **`<global-root>/packages/`** and global core uses **`<global-root>/templates/core/`**. There is no **`bin/`** segment in the global root.
 
-3. **Published / remote packages** are versioned tarballs on a static origin or registry-like store. Each installable unit is a tarball (for example **`dockpipe-workflow-<name>-<ver>.tar.gz`**, **`dockpipe-resolver-…`**, **`dockpipe-core-…`**). The engine can load package tarballs directly when appropriate; it does not need every remote package unpacked into an authoring tree.
+3. **System installs** may also ship package tarballs under a shared root (override with **`DOCKPIPE_SYSTEM_ROOT`**). Linux packages install compiled tarballs under **`/usr/share/dockpipe/packages/`**; runtime resolution checks project-local first, then per-user global roots, then system-shared roots.
 
-4. **Source-level** resolution applies when you point at **authoring** trees: repo **`workflows/`**, **`templates/`**, **`src/core/…`**, etc. — normal edit/run **without** packaging.
+4. **Published / remote packages** are versioned tarballs on a static origin or registry-like store. Each installable unit is a tarball (for example **`dockpipe-workflow-<name>-<ver>.tar.gz`**, **`dockpipe-resolver-…`**, **`dockpipe-core-…`**). The engine can load package tarballs directly when appropriate; it does not need every remote package unpacked into an authoring tree.
 
-5. **Build (`dockpipe build` / `compile all`)** is considered successful only if:
+5. **Source-level** resolution applies when you point at **authoring** trees: repo **`workflows/`**, **`templates/`**, **`src/core/…`**, etc. — normal edit/run **without** packaging.
+
+6. **Build (`dockpipe build` / `compile all`)** is considered successful only if:
    - **`compile`** order is **core → resolvers → workflows** (legacy **`compile.bundles`** paths are merged into workflow roots),
    - each **workflow** and **resolver** package resolves a **valid `namespace`** (from **`package.yml`**, **`config.yml` / `resolver.yaml`**, or repo-root **`dockpipe.config.json`** **`packages.namespace`** as a default),
    - every **`depends`** entry in **`package.yml`** names a package **already present** in the compiled store (names from **`package.yml`** under **`core/`**, **`resolvers/`**, **`workflows/`**).

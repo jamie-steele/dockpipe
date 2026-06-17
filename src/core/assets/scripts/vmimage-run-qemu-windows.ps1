@@ -55,6 +55,31 @@ function Start-QemuProcess {
   return $process
 }
 
+function Wait-QemuProcess {
+  param(
+    [Parameter(Mandatory = $true)]
+    [System.Diagnostics.Process]$Process
+  )
+
+  $cancelHandler = [ConsoleCancelEventHandler]{
+    param($sender, $eventArgs)
+    $eventArgs.Cancel = $true
+    try {
+      if (-not $Process.HasExited) {
+        Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+      }
+    } catch {
+    }
+  }
+
+  [Console]::add_CancelKeyPress($cancelHandler)
+  try {
+    $Process.WaitForExit()
+  } finally {
+    [Console]::remove_CancelKeyPress($cancelHandler)
+  }
+}
+
 function Get-QemuProcess {
   param([string]$Path)
   if ([string]::IsNullOrWhiteSpace($Path) -or -not (Test-Path -LiteralPath $Path)) {
@@ -86,7 +111,7 @@ switch ($Action) {
     $args = Read-QemuArgs -Path $ArgsFile
     $process = Start-QemuProcess -FilePath $QemuBin -ArgumentList $args -StdOutPath $StdOutFile -StdErrPath $StdErrFile -CaptureOutput
     Set-Content -LiteralPath $PidFile -Value $process.Id -NoNewline
-    $process.WaitForExit()
+    Wait-QemuProcess -Process $process
     if (-not [string]::IsNullOrWhiteSpace($StdOutFile)) {
       [System.IO.File]::WriteAllText($StdOutFile, $process.StandardOutput.ReadToEnd())
     }
@@ -98,7 +123,7 @@ switch ($Action) {
   'wait' {
     $process = Get-QemuProcess -Path $PidFile
     if ($null -ne $process) {
-      Wait-Process -Id $process.Id
+      Wait-QemuProcess -Process $process
     }
     break
   }
