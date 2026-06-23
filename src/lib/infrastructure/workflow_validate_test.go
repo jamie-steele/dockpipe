@@ -144,6 +144,11 @@ inputs:
 steps:
   - id: guest-session
     vm:
+      mounts:
+        - host: C:\src\repo
+          guest: C:\uh
+        - host: C:\tmp\artifacts
+          guest: C:\artifacts
       guest_path: C:\uh
       interactive_debug: true
       keepalive: true
@@ -155,6 +160,27 @@ steps:
 	}
 	if err := ValidateResolvedWorkflowYAML(cfg); err != nil {
 		t.Fatalf("expected vm + inputs shape to validate, got %v", err)
+	}
+}
+
+func TestValidateResolvedWorkflowYAML_RejectsConflictingVMInteractiveModes(t *testing.T) {
+	root := t.TempDir()
+	cfg := filepath.Join(root, "config.yml")
+	yml := `name: bad-vm
+steps:
+  - runtime: vm
+    resolver: qemu
+    vm:
+      interactive_debug: true
+      interactive_ssh: true
+    cmd: hostname
+`
+	if err := os.WriteFile(cfg, []byte(yml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := ValidateResolvedWorkflowYAML(cfg)
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("expected mutually exclusive vm interactive mode error, got %v", err)
 	}
 }
 

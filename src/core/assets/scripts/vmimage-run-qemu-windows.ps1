@@ -96,6 +96,34 @@ function Get-QemuProcess {
   }
 }
 
+function Stop-QemuProcessGracefully {
+  param(
+    [Parameter(Mandatory = $true)]
+    [System.Diagnostics.Process]$Process,
+    [int]$WaitMilliseconds = 15000
+  )
+
+  try {
+    if ($Process.HasExited) {
+      return
+    }
+  } catch {
+    return
+  }
+
+  try {
+    if ($Process.MainWindowHandle -ne 0) {
+      $null = $Process.CloseMainWindow()
+      if ($Process.WaitForExit($WaitMilliseconds)) {
+        return
+      }
+    }
+  } catch {
+  }
+
+  Stop-Process -Id $Process.Id -Force
+}
+
 switch ($Action) {
   'start' {
     if ([string]::IsNullOrWhiteSpace($QemuBin)) { throw 'QemuBin is required for start' }
@@ -130,7 +158,7 @@ switch ($Action) {
   'stop' {
     $process = Get-QemuProcess -Path $PidFile
     if ($null -ne $process) {
-      Stop-Process -Id $process.Id -Force
+      Stop-QemuProcessGracefully -Process $process
     }
     break
   }

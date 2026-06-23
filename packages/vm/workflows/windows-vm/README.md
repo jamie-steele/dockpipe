@@ -15,9 +15,11 @@ What it does:
 - prompts for missing disk / firmware / ISO paths through the shared prompt primitive
 - prompts to reset writable UEFI firmware vars during installer runs when DockPipe detects stale boot-state reuse for the selected disk
 - runs a guest command over SSH inside the VM when you boot an existing image
+- can use a DockPipe-owned guest agent service for structured readiness, observability, and graceful shutdown after the guest is provisioned
+- can optionally open an interactive authenticated SSH shell instead of running a one-shot guest command
 - can optionally copy a host file tree into the guest over SCP before the guest command runs
 - automatically attaches guest-readable bootstrap media containing the built-in `provision-windows-ssh.ps1` helper before the VM starts
-- supports an experimental best-effort host clipboard path for visible VM sessions when you explicitly enable it
+- supports an agent-backed best-effort plain-text clipboard bridge for Windows-host visible VM sessions once the guest agent is provisioned
 - can optionally merge extra host-provided bootstrap files into that media before the guest starts
 - can optionally keep the VM running after the guest command completes for manual SSH setup work
 - keeps an interactive installer VM session alive when you install from ISO
@@ -66,6 +68,38 @@ steps:
     cmd: Set-Location C:\uh; whoami; hostname
 ```
 
+Multiple mount pattern:
+
+```yaml
+runtime: vm
+resolver: qemu
+
+steps:
+  - id: guest-command
+    vm:
+      mounts:
+        - host: C:\Source\worktrees\uh1
+          guest: C:\uh
+        - host: C:\tmp\artifacts
+          guest: C:\artifacts
+      keepalive: true
+    cmd: Set-Location C:\uh; whoami; hostname
+```
+
+Interactive SSH pattern:
+
+```yaml
+runtime: vm
+resolver: qemu
+
+steps:
+  - id: guest-shell
+    vm:
+      interactive_ssh: true
+      guest_path: C:\uh
+      keepalive: true
+```
+
 Do not do this:
 
 ```yaml
@@ -100,6 +134,8 @@ steps:
 
 `vm.guest_path` uses the current DockPipe workdir as the default host sync source. Set `vm.host_context` only when you want to mount a different host folder into the guest.
 
+When you need more than one host-to-guest mapping, use `vm.mounts`. Each `host` -> `guest` pair is applied in order before the guest command runs. The older `vm.host_context` + `vm.guest_path` shape remains as sugar for one default mapping.
+
 Useful variables:
 
 - `DOCKPIPE_VM_BOOT_SOURCE=image|installer-iso`
@@ -124,7 +160,8 @@ Useful variables:
 - `DOCKPIPE_VM_HOSTFWD`
 - `DOCKPIPE_VM_CONFIRM_PROMPTS`
 - `DOCKPIPE_VM_BOOTSTRAP_PATH`
-- `DOCKPIPE_VM_CLIPBOARD=true|false`
+- `DOCKPIPE_VM_AGENT=true|false`
+- `DOCKPIPE_VM_AGENT_PORT`
 - `DOCKPIPE_VM_SYNC_HOST_PATH`
 - `DOCKPIPE_VM_SYNC_GUEST_PATH`
 - `DOCKPIPE_VM_KEEPALIVE=true|false`
@@ -134,9 +171,12 @@ Useful variables:
 Preparing a Windows guest for SSH:
 
 - use `vm.interactive_debug: true` for the first manual boot when the image is not yet automation-ready
+- use `vm.interactive_ssh: true` when the guest is SSH-ready and you want DockPipe to log you into a live shell instead of running a single scripted command
 - once you are inside the guest, open an elevated PowerShell session
 - the DockPipe VM runner itself now stages `provision-windows-ssh.ps1` and `README.txt` onto guest-readable bootstrap media
+- that same bootstrap media also carries `dockpipe-guest-agent.exe`, and `provision-windows-ssh.ps1` installs it as a LocalSystem startup task by default
 - if you want extra files available on that same media, point `Advanced.BootstrapPath` / `DOCKPIPE_VM_BOOTSTRAP_PATH` at a host file or directory and DockPipe will merge it into the staged bootstrap payload
+- `provision-windows-ssh.ps1`, `dockpipe-guest-agent.exe`, `dockpipe-guest-agent.ps1`, and `README.txt` are reserved bootstrap filenames; DockPipe always restages its built-in copies last so a custom payload cannot replace them by accident
 - the script installs OpenSSH Server, enables the firewall rule for TCP 22, configures `sshd` to start automatically, and can create or update a local `dockpipe` user
 
 Example bootstrap path:
@@ -150,11 +190,17 @@ If `C:\vm\bootstrap` contains extra provisioning files, DockPipe merges them int
 
 If you do not set `Advanced.BootstrapPath`, DockPipe still attaches the built-in provisioning script automatically.
 
+Guest agent notes:
+
+- `Advanced.Agent: true` enables the host-side forward and allows DockPipe to use the guest agent when it is available
+- the guest agent gives DockPipe a better status/control path than raw SSH alone
+- after provisioning, DockPipe can use the agent for readiness checks and graceful shutdown even when SSH is flaky
+
 Clipboard notes:
 
-- DockPipe leaves clipboard sharing off by default so visible sessions keep the known-good input baseline
-- set `Advanced.Clipboard: true` or `DOCKPIPE_VM_CLIPBOARD=true` only when you explicitly want to test the experimental clipboard path
-- clipboard sharing depends on guest support and display backend behavior, so treat it as a convenience layer rather than a hard guarantee
+- once `provision-windows-ssh.ps1` installs the DockPipe guest agent, DockPipe automatically bridges plain-text clipboard contents between the Windows host and guest during visible sessions
+- that agent-backed clipboard path does not require SPICE guest tools or a workflow flag
+- clipboard sharing still depends on guest support and display/backend timing, so treat it as a convenience layer rather than a hard guarantee
 
 Display notes:
 

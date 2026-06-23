@@ -6,7 +6,9 @@ param(
   [bool]$GrantAdministrators = $false,
   [bool]$EnablePasswordAuth = $true,
   [bool]$EnablePublicKeyAuth = $true,
-  [string]$DefaultShell = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+  [string]$DefaultShell = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+  [bool]$InstallDockPipeAgent = $true,
+  [int]$AgentPort = 47831
 )
 
 Set-StrictMode -Version Latest
@@ -173,6 +175,97 @@ function Ensure-SshFirewallRule {
   }
 }
 
+function Resolve-DockPipeAgentSourcePath {
+  $searchRoots = @()
+  if ($PSCommandPath) {
+    $searchRoots += (Split-Path -Parent $PSCommandPath)
+  }
+  $searchRoots += (Get-Location).Path
+  $searchRoots = $searchRoots | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+
+  foreach ($root in $searchRoots) {
+    $candidate = Join-Path $root "dockpipe-guest-agent.exe"
+    if (Test-Path -LiteralPath $candidate) {
+      return (Resolve-Path -LiteralPath $candidate).Path
+    }
+    $candidate = Join-Path $root "dockpipe-guest-agent.ps1"
+    if (Test-Path -LiteralPath $candidate) {
+      return (Resolve-Path -LiteralPath $candidate).Path
+    }
+  }
+
+  throw "dockpipe-guest-agent.exe or dockpipe-guest-agent.ps1 was not found beside the provisioning script or in the current directory."
+}
+
+function Ensure-DockPipeAgent {
+  param(
+    [int]$Port
+  )
+
+  $agentRoot = Join-Path $env:ProgramData "DockPipe\GuestAgent"
+  $agentExe = Join-Path $agentRoot "dockpipe-guest-agent.exe"
+  $agentScript = Join-Path $agentRoot "dockpipe-guest-agent.ps1"
+  $configPath = Join-Path $agentRoot "config.json"
+  $sourceAgent = Resolve-DockPipeAgentSourcePath
+  New-Item -ItemType Directory -Force -Path $agentRoot | Out-Null
+  $agentExtension = [IO.Path]::GetExtension($sourceAgent)
+  if ($agentExtension -ieq ".exe") {
+    Copy-Item -LiteralPath $sourceAgent -Destination $agentExe -Force
+    if (Test-Path -LiteralPath $agentScript) {
+      Remove-Item -LiteralPath $agentScript -Force -ErrorAction SilentlyContinue
+    }
+  } else {
+    Copy-Item -LiteralPath $sourceAgent -Destination $agentScript -Force
+  }
+
+  @{
+    port = $Port
+    bind_address = "127.0.0.1"
+    state_path = (Join-Path $agentRoot "state.json")
+    service_account = "LocalSystem"
+  } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $configPath
+
+  $taskName = "DockPipeGuestAgent"
+  $pwshPath = Join-Path $env:WINDIR "System32\WindowsPowerShell\v1.0\powershell.exe"
+  $existingTask = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+  if ($existingTask) {
+    Write-Step "Removing existing DockPipe guest agent scheduled task"
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+  }
+
+  Get-CimInstance Win32_Process -Filter "Name = 'dockpipe-guest-agent.exe'" -ErrorAction SilentlyContinue |
+    ForEach-Object {
+      Write-Step "Stopping existing DockPipe guest agent process $($_.ProcessId)"
+      Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+
+  Get-CimInstance Win32_Process -Filter "Name = 'powershell.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -like "*dockpipe-guest-agent.ps1*" } |
+    ForEach-Object {
+      Write-Step "Stopping existing DockPipe guest agent process $($_.ProcessId)"
+      Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    }
+
+  if (Test-Path -LiteralPath $agentExe) {
+    $action = New-ScheduledTaskAction -Execute $agentExe -Argument ('-service -ConfigPath "{0}"' -f $configPath)
+    Write-Step "Installing DockPipe guest agent startup task as LocalSystem (native executable)"
+  } else {
+    $action = New-ScheduledTaskAction -Execute $pwshPath -Argument ('-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}" -Service -ConfigPath "{1}"' -f $agentScript, $configPath)
+    Write-Step "Installing DockPipe guest agent startup task as LocalSystem (PowerShell fallback)"
+  }
+  $trigger = New-ScheduledTaskTrigger -AtStartup
+  $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+  $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -StartWhenAvailable
+
+  Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings | Out-Null
+
+  Write-Step "Starting DockPipe guest agent startup task"
+  Start-ScheduledTask -TaskName $taskName
+  Start-Sleep -Seconds 2
+  $task = Get-ScheduledTask -TaskName $taskName
+  Write-Step "DockPipe guest agent task state: $($task.State) on port $Port"
+}
+
 Assert-Administrator
 Ensure-OpenSSHServer
 
@@ -194,6 +287,10 @@ Ensure-SshFirewallRule
 
 if ($EnablePublicKeyAuth -and -not [string]::IsNullOrWhiteSpace($AuthorizedKey)) {
   Ensure-AuthorizedKey -Name $UserName -Key $AuthorizedKey
+}
+
+if ($InstallDockPipeAgent) {
+  Ensure-DockPipeAgent -Port $AgentPort
 }
 
 Write-Step "Configuring sshd service startup"

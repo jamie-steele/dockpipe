@@ -95,10 +95,11 @@ view:
         - id: guest
           title: Guest Overrides
           fields:
+            - Advanced.Agent
+            - Advanced.AgentPort
             - Advanced.ConfirmPrompts
             - Advanced.EnvAllow
             - Advanced.BootstrapPath
-            - Advanced.Clipboard
             - Advanced.SyncHostPath
             - Advanced.SyncGuestPath
             - Advanced.KeepAlive
@@ -116,6 +117,7 @@ resolver: qemu
 inputs:
   General.ExecMode: powershell
   Storage.Persistence: ephemeral
+  Advanced.Agent: true
   Advanced.EnvAllow: DOCKPIPE_VM_GUEST_COMMAND,DOCKPIPE_VM_OUTPUTS_REMOTE_PATH
 
 steps:

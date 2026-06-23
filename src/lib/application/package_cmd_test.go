@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -204,6 +205,64 @@ func TestCmdPackageCompileCore(t *testing.T) {
 	}
 	if filepath.Base(matches[0]) != "dockpipe-core-9.8.7.tar.gz" {
 		t.Fatalf("expected repo VERSION in core tarball name, got %s", filepath.Base(matches[0]))
+	}
+}
+
+func TestCmdPackageCompileCoreRunsSourceBuildScript(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "core")
+	if err := os.MkdirAll(filepath.Join(src, "runtimes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(src, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "runtimes", ".keep"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifestScript := "assets/build-source.sh"
+	scriptPath := filepath.Join(src, "assets", "build-source.sh")
+	scriptMode := os.FileMode(0o755)
+	scriptBody := "#!/usr/bin/env bash\nset -e\necho built > assets/generated.txt\n"
+	if runtime.GOOS == "windows" {
+		manifestScript = "assets/build-source.cmd"
+		scriptPath = filepath.Join(src, "assets", "build-source.cmd")
+		scriptMode = 0o644
+		scriptBody = "@echo off\r\necho built>assets\\generated.txt\r\n"
+	}
+	manifest := "schema: 1\nname: dockpipe.core\nkind: core\nbuild:\n  source:\n    script: " + manifestScript + "\n"
+	if err := os.WriteFile(filepath.Join(src, "package.yml"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(scriptPath, []byte(scriptBody), scriptMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "VERSION"), []byte("1.2.3\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	oldWd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(oldWd) })
+
+	if err := cmdPackage([]string{"compile", "core", "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	coreDir := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "core")
+	matches, err := filepath.Glob(filepath.Join(coreDir, "dockpipe-core-*.tar.gz"))
+	if err != nil || len(matches) != 1 {
+		t.Fatalf("expected one core tarball under %s: matches=%v err=%v", coreDir, matches, err)
+	}
+	generated, err := packagebuild.ReadFileFromTarGz(matches[0], "core/assets/generated.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(generated)) != "built" {
+		t.Fatalf("expected generated asset from build.source.script, got %q", string(generated))
 	}
 }
 

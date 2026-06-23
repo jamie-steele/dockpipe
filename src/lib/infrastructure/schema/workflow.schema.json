@@ -47,9 +47,21 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "mounts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "host": { "type": "string" },
+              "guest": { "type": "string" }
+            }
+          }
+        },
         "host_context": { "type": "string" },
         "guest_path": { "type": "string" },
         "interactive_debug": { "type": "boolean" },
+        "interactive_ssh": { "type": "boolean" },
         "keepalive": { "type": "boolean" },
         "keepalive_seconds": {
           "oneOf": [

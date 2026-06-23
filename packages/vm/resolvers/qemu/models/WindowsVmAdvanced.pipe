@@ -3,6 +3,16 @@
 /// </summary>
 public Interface IWindowsVmAdvanced
 {
+    /// <summary>Enable the DockPipe guest agent service path for structured readiness, observability, and graceful shutdown on provisioned Windows guests.</summary>
+    [DisplayName = "DockPipe Guest Agent"]
+    [EnvName = "DOCKPIPE_VM_AGENT"]
+    public string Agent;
+
+    /// <summary>Host and guest port used for the DockPipe guest agent HTTP control plane.</summary>
+    [DisplayName = "Guest Agent Port"]
+    [EnvName = "DOCKPIPE_VM_AGENT_PORT"]
+    public string AgentPort;
+
     /// <summary>Opt in to VM safety confirmations for runs that should pause before persistent disk, host exposure, or similar mutations.</summary>
     [DisplayName = "Confirm VM Prompts"]
     [EnvName = "DOCKPIPE_VM_CONFIRM_PROMPTS"]
@@ -28,11 +38,6 @@ public Interface IWindowsVmAdvanced
     [EnvName = "DOCKPIPE_VM_BOOTSTRAP_PATH"]
     public string BootstrapPath;
 
-    /// <summary>Enable best-effort host clipboard sharing for visible VM sessions. Leave empty unless you explicitly want to try the experimental clipboard path.</summary>
-    [DisplayName = "Clipboard Sharing"]
-    [EnvName = "DOCKPIPE_VM_CLIPBOARD"]
-    public string Clipboard;
-
     /// <summary>Keep the VM running after the guest command finishes so you can SSH in for manual setup work.</summary>
     [DisplayName = "Keep VM Alive"]
     [EnvName = "DOCKPIPE_VM_KEEPALIVE"]
@@ -51,12 +56,13 @@ public Interface IWindowsVmAdvanced
 
 public Class WindowsVmAdvanced : IWindowsVmAdvanced
 {
+    public string Agent = "";
+    public string AgentPort = "47831";
     public string ConfirmPrompts = "";
     public string EnvAllow = "";
     public string SyncHostPath = "";
     public string SyncGuestPath = "";
     public string BootstrapPath = "";
-    public string Clipboard = "";
     public string KeepAlive = "";
     public string KeepAliveSeconds = "";
     public string GuestCommand = "";

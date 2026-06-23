@@ -831,6 +831,7 @@ func stepVMEnvOverrides(o *runStepsOpts, step domain.Step) map[string]string {
 		return nil
 	}
 	out := map[string]string{}
+	var mounts []string
 	if guestPath := strings.TrimSpace(step.VM.GuestPath); guestPath != "" {
 		out["DOCKPIPE_VM_SYNC_GUEST_PATH"] = guestPath
 		hostContext := strings.TrimSpace(step.VM.HostContext)
@@ -845,13 +846,32 @@ func stepVMEnvOverrides(o *runStepsOpts, step domain.Step) map[string]string {
 		}
 		if hostContext != "" {
 			out["DOCKPIPE_VM_SYNC_HOST_PATH"] = hostContext
+			mounts = append(mounts, hostContext+"\t"+guestPath)
 		}
+	}
+	for _, mount := range step.VM.Mounts {
+		hostPath := strings.TrimSpace(mount.Host)
+		guestPath := strings.TrimSpace(mount.Guest)
+		if hostPath == "" || guestPath == "" {
+			continue
+		}
+		mounts = append(mounts, hostPath+"\t"+guestPath)
+	}
+	if len(mounts) > 0 {
+		out["DOCKPIPE_VM_MOUNTS"] = strings.Join(mounts, "\n")
 	}
 	if step.VM.InteractiveDebug != nil {
 		if *step.VM.InteractiveDebug {
 			out["DOCKPIPE_VM_INTERACTIVE"] = "true"
 		} else {
 			delete(out, "DOCKPIPE_VM_INTERACTIVE")
+		}
+	}
+	if step.VM.InteractiveSSH != nil {
+		if *step.VM.InteractiveSSH {
+			out["DOCKPIPE_VM_INTERACTIVE_SSH"] = "true"
+		} else {
+			out["DOCKPIPE_VM_INTERACTIVE_SSH"] = "false"
 		}
 	}
 	if step.VM.KeepAlive != nil {

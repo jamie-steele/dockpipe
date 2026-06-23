@@ -308,6 +308,13 @@ vmimage_powershell_bin() {
   vmimage_die "PowerShell was not found on PATH; install pwsh or powershell and rerun windows-vm"
 }
 
+vmimage_run_local_powershell_script() {
+  local script="$1"
+  local pwsh_bin
+  pwsh_bin="$(vmimage_powershell_bin)"
+  "$pwsh_bin" -NoProfile -ExecutionPolicy Bypass -Command "$script"
+}
+
 vmimage_windows_qemu_helper() {
   printf '%s\n' "${SCRIPT_DIR}/vmimage-run-qemu-windows.ps1"
 }
@@ -345,6 +352,242 @@ vmimage_confirm_prompts_enabled() {
 
 vmimage_ssh_password() {
   vmimage_env_or_resolver "DOCKPIPE_VM_SSH_PASSWORD" "DOCKPIPE_RESOLVER_VM_SSH_PASSWORD"
+}
+
+vmimage_agent_enabled() {
+  local configured port
+  configured="$(vmimage_env_or_resolver "DOCKPIPE_VM_AGENT" "DOCKPIPE_RESOLVER_VM_AGENT")"
+  port="$(vmimage_env_or_resolver "DOCKPIPE_VM_AGENT_PORT" "DOCKPIPE_RESOLVER_VM_AGENT_PORT")"
+  if [[ -n "$port" ]]; then
+    return 0
+  fi
+  vmimage_truthy "$configured"
+}
+
+vmimage_agent_port() {
+  vmimage_env_or_resolver "DOCKPIPE_VM_AGENT_PORT" "DOCKPIPE_RESOLVER_VM_AGENT_PORT" "47831"
+}
+
+vmimage_agent_url() {
+  printf 'http://127.0.0.1:%s\n' "$(vmimage_agent_port)"
+}
+
+vmimage_agent_probe_windows() {
+  local url script
+  url="$(vmimage_agent_url)"
+  script="$(cat <<'EOF'
+$ProgressPreference = "SilentlyContinue"
+try {
+  $response = Invoke-RestMethod -Uri ($env:DOCKPIPE_VM_AGENT_URL + "/health") -Method Get -TimeoutSec 3
+  "{0} account={1} machine={2}" -f $response.status, $response.service_account, $response.machine_name
+  exit 0
+} catch {
+  exit 1
+}
+EOF
+)"
+  DOCKPIPE_VM_AGENT_URL="$url" vmimage_run_local_powershell_script "$script"
+}
+
+vmimage_agent_run_windows() {
+  local cmd="$1"
+  local url script
+  url="$(vmimage_agent_url)"
+  script="$(cat <<'EOF'
+$ProgressPreference = "SilentlyContinue"
+try {
+  $body = @{ command = $env:DOCKPIPE_VM_AGENT_COMMAND } | ConvertTo-Json -Compress
+  $response = Invoke-RestMethod -Uri ($env:DOCKPIPE_VM_AGENT_URL + "/run") -Method Post -ContentType "application/json" -Body $body -TimeoutSec 600
+  if ($null -ne $response.stdout -and [string]$response.stdout -ne "") {
+    [Console]::Out.Write([string]$response.stdout)
+  }
+  if ($null -ne $response.stderr -and [string]$response.stderr -ne "") {
+    [Console]::Error.Write([string]$response.stderr)
+  }
+  exit ([int]$response.exit_code)
+} catch {
+  Write-Error $_.Exception.Message
+  exit 1
+}
+EOF
+)"
+  DOCKPIPE_VM_AGENT_URL="$url" DOCKPIPE_VM_AGENT_COMMAND="$cmd" vmimage_run_local_powershell_script "$script"
+}
+
+vmimage_agent_shutdown_windows() {
+  local url script
+  url="$(vmimage_agent_url)"
+  script="$(cat <<'EOF'
+$ProgressPreference = "SilentlyContinue"
+try {
+  Invoke-RestMethod -Uri ($env:DOCKPIPE_VM_AGENT_URL + "/shutdown") -Method Post -ContentType "application/json" -Body "{}" -TimeoutSec 10 | Out-Null
+  exit 0
+} catch {
+  exit 1
+}
+EOF
+)"
+  DOCKPIPE_VM_AGENT_URL="$url" vmimage_run_local_powershell_script "$script"
+}
+
+vmimage_agent_clipboard_get_windows() {
+  local url script
+  url="$(vmimage_agent_url)"
+  script="$(cat <<'EOF'
+$ProgressPreference = "SilentlyContinue"
+try {
+  $response = Invoke-RestMethod -Uri ($env:DOCKPIPE_VM_AGENT_URL + "/clipboard") -Method Get -TimeoutSec 5
+  $text = if ($null -eq $response.text) { "" } else { [string]$response.text }
+  $bytes = [Text.Encoding]::UTF8.GetBytes($text)
+  [Console]::Out.Write([Convert]::ToBase64String($bytes))
+  exit 0
+} catch {
+  exit 1
+}
+EOF
+)"
+  DOCKPIPE_VM_AGENT_URL="$url" vmimage_run_local_powershell_script "$script"
+}
+
+vmimage_agent_clipboard_set_windows() {
+  local text="$1"
+  local url encoded script
+  url="$(vmimage_agent_url)"
+  encoded="$(printf '%s' "$text" | vmimage_windows_base64)"
+  script="$(cat <<'EOF'
+$ProgressPreference = "SilentlyContinue"
+try {
+  $bytes = [Convert]::FromBase64String($env:DOCKPIPE_VM_CLIPBOARD_TEXT_B64)
+  $body = @{ text = [Text.Encoding]::UTF8.GetString($bytes) } | ConvertTo-Json -Compress
+  Invoke-RestMethod -Uri ($env:DOCKPIPE_VM_AGENT_URL + "/clipboard") -Method Post -ContentType "application/json" -Body $body -TimeoutSec 5 | Out-Null
+  exit 0
+} catch {
+  exit 1
+}
+EOF
+)"
+  DOCKPIPE_VM_AGENT_URL="$url" DOCKPIPE_VM_CLIPBOARD_TEXT_B64="$encoded" vmimage_run_local_powershell_script "$script"
+}
+
+vmimage_host_clipboard_get_windows() {
+  local script
+  script="$(cat <<'EOF'
+$ProgressPreference = "SilentlyContinue"
+try {
+  $text = Get-Clipboard -Raw -Format Text -ErrorAction Stop
+} catch {
+  $text = ""
+}
+if ($null -eq $text) {
+  $text = ""
+}
+$bytes = [Text.Encoding]::UTF8.GetBytes([string]$text)
+[Console]::Out.Write([Convert]::ToBase64String($bytes))
+EOF
+)"
+  vmimage_run_local_powershell_script "$script"
+}
+
+vmimage_host_clipboard_set_windows() {
+  local text="$1"
+  local encoded script
+  encoded="$(printf '%s' "$text" | vmimage_windows_base64)"
+  script="$(cat <<'EOF'
+$ProgressPreference = "SilentlyContinue"
+$bytes = [Convert]::FromBase64String($env:DOCKPIPE_VM_CLIPBOARD_TEXT_B64)
+$text = [Text.Encoding]::UTF8.GetString($bytes)
+Set-Clipboard -Value $text
+EOF
+)"
+  DOCKPIPE_VM_CLIPBOARD_TEXT_B64="$encoded" vmimage_run_local_powershell_script "$script"
+}
+
+vmimage_decode_clipboard_payload() {
+  local encoded="${1:-}"
+  [[ -n "$encoded" ]] || return 0
+  printf '%s' "$encoded" | vmimage_windows_base64_decode
+}
+
+vmimage_clipboard_bridge_mode() {
+  local configured
+  configured="$(vmimage_env_or_resolver "DOCKPIPE_VM_CLIPBOARD" "DOCKPIPE_RESOLVER_VM_CLIPBOARD" "")"
+  case "${configured,,}" in
+    ""|auto)
+      if vmimage_agent_enabled && vmimage_is_windows_host; then
+        printf 'agent\n'
+      else
+        printf 'off\n'
+      fi
+      ;;
+    agent)
+      printf 'agent\n'
+      ;;
+    1|true|yes|on|spice|qemu|0|false|no|off)
+      vmimage_log "DOCKPIPE_VM_CLIPBOARD is deprecated and ignored; DockPipe now uses the guest-agent clipboard path when available"
+      if vmimage_agent_enabled && vmimage_is_windows_host; then
+        printf 'agent\n'
+      else
+        printf 'off\n'
+      fi
+      ;;
+    *)
+      vmimage_log "DOCKPIPE_VM_CLIPBOARD=${configured} is unsupported and ignored; DockPipe now uses the guest-agent clipboard path when available"
+      if vmimage_agent_enabled && vmimage_is_windows_host; then
+        printf 'agent\n'
+      else
+        printf 'off\n'
+      fi
+      ;;
+  esac
+}
+
+vmimage_clipboard_bridge_loop_windows() {
+  local last_host="" last_guest="" host_encoded guest_encoded host_text guest_text
+  while true; do
+    host_encoded="$(vmimage_host_clipboard_get_windows 2>/dev/null || true)"
+    guest_encoded="$(vmimage_agent_clipboard_get_windows 2>/dev/null || true)"
+    host_text="$(vmimage_decode_clipboard_payload "$host_encoded")"
+    guest_text="$(vmimage_decode_clipboard_payload "$guest_encoded")"
+
+    if [[ "$host_text" != "$last_host" && "$host_text" != "$guest_text" ]]; then
+      vmimage_agent_clipboard_set_windows "$host_text" >/dev/null 2>&1 || true
+      last_host="$host_text"
+      last_guest="$host_text"
+      sleep 1
+      continue
+    fi
+
+    if [[ "$guest_text" != "$last_guest" && "$guest_text" != "$host_text" ]]; then
+      vmimage_host_clipboard_set_windows "$guest_text" >/dev/null 2>&1 || true
+      last_host="$guest_text"
+      last_guest="$guest_text"
+      sleep 1
+      continue
+    fi
+
+    last_host="$host_text"
+    last_guest="$guest_text"
+    sleep 1
+  done
+}
+
+vmimage_maybe_start_clipboard_bridge() {
+  [[ "$(vmimage_clipboard_bridge_mode)" == "agent" ]] || return 0
+  vmimage_is_windows_host || return 0
+  [[ -n "${DOCKPIPE_VM_AGENT_READY:-}" ]] || return 0
+  [[ -z "${DOCKPIPE_VM_CLIPBOARD_BRIDGE_PID:-}" ]] || return 0
+  vmimage_log "starting DockPipe clipboard bridge"
+  vmimage_clipboard_bridge_loop_windows &
+  export DOCKPIPE_VM_CLIPBOARD_BRIDGE_PID="$!"
+}
+
+vmimage_stop_clipboard_bridge() {
+  local pid="${DOCKPIPE_VM_CLIPBOARD_BRIDGE_PID:-}"
+  [[ -n "$pid" ]] || return 0
+  vmimage_log "stopping DockPipe clipboard bridge"
+  kill "$pid" >/dev/null 2>&1 || true
+  wait "$pid" >/dev/null 2>&1 || true
+  unset DOCKPIPE_VM_CLIPBOARD_BRIDGE_PID || true
 }
 
 vmimage_prompt_choice() {
@@ -1102,7 +1345,7 @@ vmimage_ensure_prompted_image_inputs() {
       open-file \
       "VM Images (*.qcow2 *.img *.raw *.vhdx *.vmdk);;All Files (*)"
   fi
-  if [[ -z "${DOCKPIPE_VM_INTERACTIVE:-}" && -z "${DOCKPIPE_VM_SSH_USER:-}" ]]; then
+  if [[ -z "${DOCKPIPE_VM_INTERACTIVE:-}" && -z "${DOCKPIPE_VM_SSH_USER:-}" ]] && ! vmimage_interactive_ssh_enabled; then
     local image_mode
     image_mode="$(
       vmimage_prompt_choice \
@@ -1126,7 +1369,7 @@ vmimage_ensure_prompted_image_inputs() {
         ;;
     esac
   fi
-  if [[ -z "${DOCKPIPE_VM_INTERACTIVE:-}" && -z "${DOCKPIPE_VM_SSH_USER:-}" ]]; then
+  if [[ -z "${DOCKPIPE_VM_SSH_USER:-}" ]] && { [[ -z "${DOCKPIPE_VM_INTERACTIVE:-}" ]] || vmimage_interactive_ssh_enabled; }; then
     vmimage_prompt_required_input \
       DOCKPIPE_VM_SSH_USER \
       "Guest SSH User" \
@@ -1399,6 +1642,14 @@ vmimage_windows_base64() {
   fi
 }
 
+vmimage_windows_base64_decode() {
+  if base64 --help 2>/dev/null | grep -q -- "-d"; then
+    base64 -d
+  else
+    base64 --decode
+  fi
+}
+
 vmimage_windows_random_password() {
   local hex
   hex="$(od -An -N8 -tx1 /dev/urandom | tr -d ' \n')"
@@ -1427,10 +1678,19 @@ vmimage_windows_unattend_dir() {
 }
 
 vmimage_windows_bootstrap_dir() {
-  local state_dir disk_name
+  local state_dir disk_name run_id
   state_dir="$(vmimage_state_dir)"
   disk_name="$(vmimage_windows_disk_name)"
-  printf '%s\n' "${state_dir}/windows-bootstrap-${disk_name}"
+  run_id="${DOCKPIPE_RUN_ID:-vm}"
+  printf '%s\n' "${state_dir}/windows-bootstrap-${disk_name}-${run_id}"
+}
+
+vmimage_bootstrap_serial() {
+  local run_id serial
+  run_id="${DOCKPIPE_RUN_ID:-vm}"
+  serial="dockpipe-bootstrap-${run_id}"
+  serial="${serial//[^a-zA-Z0-9_-]/-}"
+  printf '%.20s\n' "$serial"
 }
 
 vmimage_builtin_bootstrap_script() {
@@ -1466,6 +1726,35 @@ vmimage_copy_tree_contents() {
   vmimage_die "copy support unavailable while preparing bootstrap media"
 }
 
+vmimage_builtin_bootstrap_reserved_names() {
+  printf '%s\n' \
+    "provision-windows-ssh.ps1" \
+    "dockpipe-guest-agent.exe" \
+    "dockpipe-guest-agent.ps1" \
+    "README.txt"
+}
+
+vmimage_warn_reserved_bootstrap_overrides() {
+  local source_path="$1"
+  local shell_source reserved candidate_name
+  shell_source="$(vmimage_shell_path "$source_path")"
+  [[ -e "$shell_source" ]] || return 0
+
+  while IFS= read -r reserved; do
+    [[ -n "$reserved" ]] || continue
+    if [[ -d "$shell_source" ]]; then
+      if [[ -e "${shell_source}/${reserved}" ]]; then
+        vmimage_log "bootstrap payload includes reserved file ${reserved}; DockPipe will keep the built-in version"
+      fi
+    else
+      candidate_name="$(basename "$shell_source")"
+      if [[ "$candidate_name" == "$reserved" ]]; then
+        vmimage_log "bootstrap payload file ${reserved} is reserved; DockPipe will keep the built-in version"
+      fi
+    fi
+  done < <(vmimage_builtin_bootstrap_reserved_names)
+}
+
 vmimage_prepare_bootstrap_media() {
   local source configured shell_source bootstrap_dir shell_bootstrap builtin_script
   configured="$(vmimage_bootstrap_source_path)"
@@ -1478,32 +1767,47 @@ vmimage_prepare_bootstrap_media() {
   rm -rf "$shell_bootstrap"
   mkdir -p "$shell_bootstrap"
 
+  if [[ -n "$configured" ]]; then
+    source="$(vmimage_resolve_path "$configured")"
+    shell_source="$(vmimage_shell_path "$source")"
+    [[ -e "$shell_source" ]] || vmimage_die "configured DOCKPIPE_VM_BOOTSTRAP_PATH does not exist: $source"
+    vmimage_warn_reserved_bootstrap_overrides "$source"
+    if [[ -d "$shell_source" ]]; then
+      vmimage_copy_tree_contents "$shell_source" "$shell_bootstrap"
+    else
+      cp "$shell_source" "${shell_bootstrap}/"
+    fi
+  fi
+
   if vmimage_should_prepare_builtin_bootstrap; then
     builtin_script="$(vmimage_builtin_bootstrap_script)"
     [[ -f "$builtin_script" ]] || vmimage_die "built-in windows bootstrap helper not found: $builtin_script"
     cp "$builtin_script" "${shell_bootstrap}/"
+    if [[ -f "${SCRIPT_DIR}/dockpipe-guest-agent.exe" ]]; then
+      cp "${SCRIPT_DIR}/dockpipe-guest-agent.exe" "${shell_bootstrap}/"
+    fi
+    if [[ -f "${SCRIPT_DIR}/dockpipe-guest-agent.ps1" ]]; then
+      cp "${SCRIPT_DIR}/dockpipe-guest-agent.ps1" "${shell_bootstrap}/"
+    fi
     cat > "${shell_bootstrap}/README.txt" <<'EOF'
 DockPipe Windows VM bootstrap media
 
 This media is attached automatically by the DockPipe VM runner.
 Run provision-windows-ssh.ps1 from an elevated PowerShell session inside the guest
 to install and configure OpenSSH before DockPipe SSH automation is available.
+The same bootstrap media includes dockpipe-guest-agent.exe, which the
+provisioning script installs as a LocalSystem startup task by default.
+DockPipe also keeps a PowerShell fallback copy beside it for recovery/debugging.
+
+Once the DockPipe guest agent is provisioned, DockPipe can bridge plain-text
+clipboard contents between the host and guest automatically on Windows hosts.
+Clipboard bridging is provided by the DockPipe guest agent when it is
+provisioned and reachable.
 
 Example:
   Set-ExecutionPolicy -Scope Process Bypass
   .\provision-windows-ssh.ps1 -UserName dockpipe -PasswordPlain 'ChangeMe123!' -GrantAdministrators $true
 EOF
-  fi
-
-  if [[ -n "$configured" ]]; then
-    source="$(vmimage_resolve_path "$configured")"
-    shell_source="$(vmimage_shell_path "$source")"
-    [[ -e "$shell_source" ]] || vmimage_die "configured DOCKPIPE_VM_BOOTSTRAP_PATH does not exist: $source"
-    if [[ -d "$shell_source" ]]; then
-      vmimage_copy_tree_contents "$shell_source" "$shell_bootstrap"
-    else
-      cp "$shell_source" "${shell_bootstrap}/"
-    fi
   fi
 
   printf '%s\n' "$bootstrap_dir"
@@ -1909,16 +2213,17 @@ vmimage_windows_hostkeys() {
   scan="$(ssh-keyscan -p "$port" "$host" 2>/dev/null | tr -d '\r')" || true
   [[ -n "$scan" ]] || return 1
   out="$(
-    printf '%s\n' "$scan" | awk '
-      NF >= 3 && (
-        $2 ~ /^ssh-/ ||
-        $2 ~ /^ecdsa-/ ||
-        $2 ~ /^sk-/
-      ) { print }
-    ' | while IFS= read -r keyline; do
+    printf '%s\n' "$scan" | while IFS= read -r keyline; do
       [[ -n "$keyline" ]] || continue
       local key_type bits fingerprint
       key_type="$(printf '%s\n' "$keyline" | awk '{ print $2 }')"
+      case "$key_type" in
+        ssh-*|ecdsa-*|sk-*)
+          ;;
+        *)
+          continue
+          ;;
+      esac
       read -r bits fingerprint _ < <(printf '%s\n' "$keyline" | ssh-keygen -lf - -E sha256 2>/dev/null) || true
       [[ -n "${key_type:-}" && -n "${bits:-}" && -n "${fingerprint:-}" ]] || continue
       printf '%s %s %s\n' "$key_type" "$bits" "$fingerprint"
@@ -1935,7 +2240,7 @@ vmimage_plink_common_args() {
   password="$(vmimage_ssh_password)"
   printf '%s\n' -batch -no-antispoof -P "$port" -l "$user" -pw "$password"
   local hostkeys hostkey
-  hostkeys="$(vmimage_windows_hostkeys)" || vmimage_die "failed to derive SSH host key for ${DOCKPIPE_VM_SSH_HOST:-127.0.0.1}:$port; set DOCKPIPE_VM_SSH_HOSTKEY or ensure ssh-keyscan is available"
+  hostkeys="$(vmimage_windows_hostkeys)" || return 1
   while IFS= read -r hostkey; do
     [[ -n "$hostkey" ]] || continue
     printf '%s\n' -hostkey "$hostkey"
@@ -1949,7 +2254,7 @@ vmimage_pscp_common_args() {
   password="$(vmimage_ssh_password)"
   printf '%s\n' -batch -P "$port" -l "$user" -pw "$password"
   local hostkeys hostkey
-  hostkeys="$(vmimage_windows_hostkeys)" || vmimage_die "failed to derive SSH host key for ${DOCKPIPE_VM_SSH_HOST:-127.0.0.1}:$port; set DOCKPIPE_VM_SSH_HOSTKEY or ensure ssh-keyscan is available"
+  hostkeys="$(vmimage_windows_hostkeys)" || return 1
   while IFS= read -r hostkey; do
     [[ -n "$hostkey" ]] || continue
     printf '%s\n' -hostkey "$hostkey"
@@ -1966,8 +2271,8 @@ vmimage_remote_run_windows_password() {
   local -a args=()
   while IFS= read -r arg; do
     args+=("$arg")
-  done < <(vmimage_plink_common_args)
-  [[ ${#args[@]} -gt 0 ]] || vmimage_die "failed to build plink arguments for ${host}:$(vmimage_ssh_base)"
+  done < <(vmimage_plink_common_args) || return 1
+  [[ ${#args[@]} -gt 0 ]] || return 1
   mode="$(vmimage_env_or_resolver "DOCKPIPE_VM_EXEC_MODE" "DOCKPIPE_RESOLVER_VM_EXEC_MODE" "raw")"
   case "$mode" in
     bash)
@@ -1989,6 +2294,23 @@ vmimage_remote_run_windows_password() {
   "$plink_bin" "${args[@]}"
 }
 
+vmimage_remote_run_windows_password_powershell() {
+  local script="$1"
+  local user host plink_bin encoded
+  user="${DOCKPIPE_VM_SSH_USER:-}"
+  host="${DOCKPIPE_VM_SSH_HOST:-127.0.0.1}"
+  plink_bin="$(vmimage_plink_bin || true)"
+  [[ -n "$plink_bin" ]] || vmimage_die "plink.exe is required when DOCKPIPE_VM_SSH_PASSWORD is set on a Windows host"
+  local -a args=()
+  while IFS= read -r arg; do
+    args+=("$arg")
+  done < <(vmimage_plink_common_args) || return 1
+  [[ ${#args[@]} -gt 0 ]] || return 1
+  encoded="$(printf '%s' "$script" | iconv -f UTF-8 -t UTF-16LE | vmimage_windows_base64)"
+  args+=("${user}@${host}" "powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ${encoded}")
+  "$plink_bin" "${args[@]}"
+}
+
 vmimage_copy_windows_password() {
   local source_path="$1" remote_path="$2" recursive="${3:-false}"
   local user host pscp_bin native_source
@@ -2000,8 +2322,8 @@ vmimage_copy_windows_password() {
   local -a args=()
   while IFS= read -r arg; do
     args+=("$arg")
-  done < <(vmimage_pscp_common_args)
-  [[ ${#args[@]} -gt 0 ]] || vmimage_die "failed to build pscp arguments for ${host}:$(vmimage_ssh_base)"
+  done < <(vmimage_pscp_common_args) || vmimage_die "failed to derive SSH host key for ${host}:$(vmimage_ssh_base); set DOCKPIPE_VM_SSH_HOSTKEY or ensure ssh-keyscan is available"
+  [[ ${#args[@]} -gt 0 ]] || vmimage_die "failed to derive SSH host key for ${host}:$(vmimage_ssh_base); set DOCKPIPE_VM_SSH_HOSTKEY or ensure ssh-keyscan is available"
   if [[ "$recursive" == "true" ]]; then
     args+=(-r)
   fi
@@ -2009,10 +2331,78 @@ vmimage_copy_windows_password() {
   "$pscp_bin" "${args[@]}"
 }
 
+vmimage_windows_sync_archive_local_path() {
+  local state_dir run_id
+  state_dir="$(vmimage_state_dir)"
+  run_id="${DOCKPIPE_RUN_ID:-vm}"
+  printf '%s\n' "${state_dir}/sync-${run_id}.zip"
+}
+
+vmimage_windows_sync_archive_remote_path() {
+  local guest_path="$1"
+  local archive_name
+  archive_name=".dockpipe-sync-${DOCKPIPE_RUN_ID:-vm}.zip"
+  printf '%s\\%s\n' "$guest_path" "$archive_name"
+}
+
+vmimage_create_windows_sync_archive() {
+  local source_dir="$1" archive_path="$2"
+  local native_source native_archive script
+  native_source="$(vmimage_native_host_path "$source_dir")"
+  native_archive="$(vmimage_native_host_path "$archive_path")"
+  script="$(cat <<'EOF'
+$ErrorActionPreference = "Stop"
+$source = $env:DOCKPIPE_VM_SYNC_SOURCE
+$archive = $env:DOCKPIPE_VM_SYNC_ARCHIVE
+if (Test-Path -LiteralPath $archive) {
+  Remove-Item -LiteralPath $archive -Force
+}
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($archive)) | Out-Null
+$zip = [System.IO.Compression.ZipFile]::Open($archive, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+  $root = (Resolve-Path -LiteralPath $source).Path
+  Get-ChildItem -LiteralPath $root -Force | ForEach-Object {
+    if ($_.PSIsContainer) {
+      Get-ChildItem -LiteralPath $_.FullName -Recurse -Force -File | ForEach-Object {
+        $entryName = [IO.Path]::GetRelativePath($root, $_.FullName)
+        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+      }
+      $hasChildEntries = Get-ChildItem -LiteralPath $_.FullName -Recurse -Force | Select-Object -First 1
+      if (-not $hasChildEntries) {
+        $entryName = [IO.Path]::GetRelativePath($root, $_.FullName).TrimEnd([char]92) + [char]47
+        $zip.CreateEntry($entryName) | Out-Null
+      }
+    } else {
+      $entryName = [IO.Path]::GetRelativePath($root, $_.FullName)
+      [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $_.FullName, $entryName, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+    }
+  }
+} finally {
+  $zip.Dispose()
+}
+EOF
+)"
+  DOCKPIPE_VM_SYNC_SOURCE="$native_source" DOCKPIPE_VM_SYNC_ARCHIVE="$native_archive" vmimage_run_local_powershell_script "$script"
+}
+
 vmimage_sync_host_path() {
   local path="${DOCKPIPE_VM_SYNC_HOST_PATH:-}"
   [[ -n "$path" ]] || return 0
   vmimage_resolve_path "$path"
+}
+
+vmimage_mount_lines() {
+  local raw="${DOCKPIPE_VM_MOUNTS:-}"
+  if [[ -n "$raw" ]]; then
+    printf '%s\n' "$raw"
+    return 0
+  fi
+  local host_path guest_path
+  host_path="$(vmimage_sync_host_path)"
+  guest_path="$(vmimage_sync_guest_path)"
+  [[ -n "$host_path" && -n "$guest_path" ]] || return 0
+  printf '%s\t%s\n' "$host_path" "$guest_path"
 }
 
 vmimage_sync_guest_path() {
@@ -2059,11 +2449,9 @@ vmimage_prepare_sync_target() {
   esac
 }
 
-vmimage_sync_host_to_guest() {
-  local host_path guest_path user host scp_opts remote_path
-  host_path="$(vmimage_sync_host_path)"
-  guest_path="$(vmimage_sync_guest_path)"
-  [[ -n "$host_path" && -n "$guest_path" ]] || return 0
+vmimage_sync_one_host_path_to_guest() {
+  local host_path="$1" guest_path="$2"
+  local user host scp_opts remote_path
   [[ -e "$host_path" ]] || vmimage_die "configured DOCKPIPE_VM_SYNC_HOST_PATH does not exist: $host_path"
 
   user="${DOCKPIPE_VM_SSH_USER:-}"
@@ -2076,8 +2464,27 @@ vmimage_sync_host_to_guest() {
 
   if vmimage_has_password_auth && vmimage_is_windows_host; then
     if [[ -d "$host_path" ]]; then
-      vmimage_log "starting guest sync via pscp (directory contents)"
-      vmimage_copy_windows_password "$(vmimage_native_host_path "${host_path}/.")" "$remote_path" true
+      local archive_local archive_remote archive_remote_scp guest_path_escaped archive_remote_escaped
+      archive_local="$(vmimage_windows_sync_archive_local_path)"
+      archive_remote="$(vmimage_windows_sync_archive_remote_path "$guest_path")"
+      archive_remote_scp="$(vmimage_scp_remote_path "$archive_remote")"
+      guest_path_escaped="${guest_path//\'/\'\'}"
+      archive_remote_escaped="${archive_remote//\'/\'\'}"
+      vmimage_log "starting guest sync via zip + pscp archive"
+      rm -f "$archive_local"
+      vmimage_create_windows_sync_archive "$host_path" "$archive_local"
+      vmimage_copy_windows_password "$archive_local" "$archive_remote_scp" false
+      vmimage_remote_run_windows_password_powershell "
+\$ErrorActionPreference = 'Stop'
+if (Test-Path -LiteralPath '$guest_path_escaped') {
+  Get-ChildItem -LiteralPath '$guest_path_escaped' -Force |
+    Where-Object { \$_.FullName -ne '$archive_remote_escaped' } |
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+}
+Expand-Archive -LiteralPath '$archive_remote_escaped' -DestinationPath '$guest_path_escaped' -Force
+Remove-Item -LiteralPath '$archive_remote_escaped' -Force
+"
+      rm -f "$archive_local"
     else
       vmimage_log "starting guest sync via pscp (single file)"
       vmimage_copy_windows_password "$host_path" "$remote_path" false
@@ -2099,6 +2506,14 @@ vmimage_sync_host_to_guest() {
   fi
 }
 
+vmimage_sync_host_to_guest() {
+  local line host_path guest_path
+  while IFS=$'\t' read -r host_path guest_path; do
+    [[ -n "${host_path:-}" && -n "${guest_path:-}" ]] || continue
+    vmimage_sync_one_host_path_to_guest "$host_path" "$guest_path"
+  done < <(vmimage_mount_lines)
+}
+
 vmimage_keepalive_enabled() {
   vmimage_truthy "$(vmimage_env_or_resolver "DOCKPIPE_VM_KEEPALIVE" "DOCKPIPE_RESOLVER_VM_KEEPALIVE")"
 }
@@ -2109,12 +2524,97 @@ vmimage_keepalive_seconds() {
   printf '%s\n' "$value"
 }
 
+vmimage_spinner_enabled() {
+  [[ -t 2 ]]
+}
+
+vmimage_spinner_frame() {
+  local tick="$1"
+  local -a frames=('|' '/' '-' '\')
+  printf '%s\n' "${frames[$(( tick % ${#frames[@]} ))]}"
+}
+
+vmimage_spinner_render() {
+  local tick="$1" message="$2"
+  vmimage_spinner_enabled || return 0
+  printf '\r[dockpipe vmimage] %s %s' "$(vmimage_spinner_frame "$tick")" "$message" >&2
+}
+
+vmimage_spinner_clear() {
+  local message="${1:-}"
+  vmimage_spinner_enabled || return 0
+  printf '\r[dockpipe vmimage] %s%*s\r' "$message" 40 '' >&2
+}
+
 vmimage_keepalive_wait() {
   vmimage_keepalive_enabled || return 0
-  local seconds
+  local seconds elapsed remaining
   seconds="$(vmimage_keepalive_seconds)"
   vmimage_log "keepalive enabled; holding VM open for ${seconds} seconds (interrupt DockPipe to stop early)"
-  sleep "$seconds"
+  elapsed=0
+  while (( elapsed < seconds )); do
+    remaining=$(( seconds - elapsed ))
+    vmimage_spinner_render "$elapsed" "keepalive active; ${remaining}s remaining (Ctrl+C to stop)"
+    sleep 1
+    elapsed=$(( elapsed + 1 ))
+  done
+  vmimage_spinner_clear "keepalive finished"
+  printf '\n' >&2
+}
+
+vmimage_guest_shutdown_command() {
+  case "$(vmimage_env_or_resolver "DOCKPIPE_VM_EXEC_MODE" "DOCKPIPE_RESOLVER_VM_EXEC_MODE" "raw")" in
+    powershell|raw)
+      printf '%s\n' 'shutdown.exe /s /t 0 /f'
+      ;;
+    bash)
+      printf '%s\n' 'shutdown -h now || poweroff || halt'
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+vmimage_try_guest_shutdown() {
+  vmimage_stop_clipboard_bridge
+  if [[ -n "${DOCKPIPE_VM_AGENT_READY:-}" ]] && vmimage_agent_enabled && vmimage_is_windows_host; then
+    vmimage_log "requesting guest OS shutdown over DockPipe guest agent"
+    vmimage_agent_shutdown_windows >/dev/null 2>&1 || true
+    return 0
+  fi
+  [[ -n "${DOCKPIPE_VM_SSH_USER:-}" ]] || return 0
+  local shutdown_cmd
+  shutdown_cmd="$(vmimage_guest_shutdown_command)" || return 0
+  vmimage_log "requesting guest OS shutdown over SSH"
+  vmimage_remote_run_internal "$shutdown_cmd" >/dev/null 2>&1 || true
+}
+
+vmimage_begin_cleanup() {
+  [[ -n "${DOCKPIPE_VM_CLEANING_UP:-}" ]] && return 1
+  export DOCKPIPE_VM_CLEANING_UP=1
+  return 0
+}
+
+vmimage_cleanup_windows_qemu() {
+  local pidfile="${1:-}"
+  vmimage_begin_cleanup || return 0
+  vmimage_try_guest_shutdown
+  vmimage_log "waiting briefly for guest shutdown to begin"
+  sleep 5
+  vmimage_log "stopping QEMU process on the host"
+  vmimage_windows_stop_qemu_if_present "$pidfile"
+  vmimage_log "stopping supporting VM services"
+  vmimage_stop_swtpm
+}
+
+vmimage_interrupt_windows_qemu() {
+  local pidfile="${1:-}" signal_name="${2:-INT}" exit_code="${3:-130}"
+  vmimage_log "received ${signal_name}; starting VM shutdown"
+  trap - EXIT INT TERM
+  vmimage_cleanup_windows_qemu "$pidfile"
+  vmimage_log "VM shutdown sequence finished"
+  exit "$exit_code"
 }
 
 vmimage_ready_probe_cmd() {
@@ -2138,16 +2638,59 @@ vmimage_wait_for_guest() {
   local user="${DOCKPIPE_VM_SSH_USER:-}"
   local host="${DOCKPIPE_VM_SSH_HOST:-127.0.0.1}"
   local timeout="${DOCKPIPE_VM_SSH_READY_TIMEOUT:-300}"
-  local start now
+  local stable_probes="${DOCKPIPE_VM_SSH_READY_STABLE_PROBES:-2}"
+  local start now elapsed agent_summary agent_logged can_use_agent
+  local probe_successes=0
+  can_use_agent=false
+  if vmimage_agent_enabled && vmimage_is_windows_host; then
+    if [[ -z "${DOCKPIPE_VM_SSH_USER:-}" ]] || { [[ -z "$(vmimage_sync_host_path)" ]] && ! vmimage_interactive_ssh_enabled; }; then
+      can_use_agent=true
+    fi
+  fi
   start="$(date +%s)"
   while true; do
+    if vmimage_agent_enabled && vmimage_is_windows_host; then
+      if agent_summary="$(vmimage_agent_probe_windows 2>/dev/null)"; then
+        if $can_use_agent; then
+          export DOCKPIPE_VM_AGENT_READY=1
+          vmimage_spinner_clear "guest agent ready at $(vmimage_agent_url)"
+          printf '\n' >&2
+          vmimage_log "guest agent: ${agent_summary}"
+          return 0
+        fi
+        if [[ -z "${agent_logged:-}" ]]; then
+          vmimage_log "guest agent available: ${agent_summary}"
+          agent_logged=1
+        fi
+      fi
+    fi
     if vmimage_remote_run_internal "$(vmimage_ready_probe_cmd)" >/dev/null 2>&1; then
+      probe_successes=$(( probe_successes + 1 ))
+      if (( probe_successes < stable_probes )); then
+        now="$(date +%s)"
+        elapsed=$(( now - start ))
+        vmimage_spinner_render "$elapsed" "guest SSH responded once; waiting for stable readiness (${probe_successes}/${stable_probes})"
+        sleep 2
+        continue
+      fi
+      if vmimage_agent_enabled && vmimage_is_windows_host; then
+        if agent_summary="$(vmimage_agent_probe_windows 2>/dev/null)"; then
+          export DOCKPIPE_VM_AGENT_READY=1
+        fi
+      fi
+      vmimage_spinner_clear "guest SSH ready at ${user}@${host}:$(vmimage_ssh_base)"
+      printf '\n' >&2
       return 0
     fi
+    probe_successes=0
     now="$(date +%s)"
+    elapsed=$(( now - start ))
     if (( now - start >= timeout )); then
+      vmimage_spinner_clear
+      printf '\n' >&2
       vmimage_die "timed out waiting for guest SSH readiness at ${user}@${host}:$(vmimage_ssh_base)"
     fi
+    vmimage_spinner_render "$elapsed" "waiting for guest SSH at ${user}@${host}:$(vmimage_ssh_base) (${elapsed}s elapsed)"
     sleep 3
   done
 }
@@ -2158,6 +2701,11 @@ vmimage_remote_run_internal() {
   local user="${DOCKPIPE_VM_SSH_USER:-}"
   local host="${DOCKPIPE_VM_SSH_HOST:-127.0.0.1}"
   local cmd="$1"
+  if [[ -n "${DOCKPIPE_VM_AGENT_READY:-}" ]] && vmimage_agent_enabled && vmimage_is_windows_host && ! vmimage_interactive_ssh_enabled; then
+    vmimage_log "running guest command via dockpipe guest agent"
+    vmimage_agent_run_windows "$cmd"
+    return 0
+  fi
   if vmimage_has_password_auth; then
     if vmimage_is_windows_host; then
       vmimage_log "running guest command via plink"
@@ -2236,25 +2784,70 @@ vmimage_guest_display_mode() {
 }
 
 vmimage_clipboard_mode() {
-  local configured
-  configured="$(vmimage_env_or_resolver "DOCKPIPE_VM_CLIPBOARD" "DOCKPIPE_RESOLVER_VM_CLIPBOARD" "")"
-  case "${configured,,}" in
-    1|true|yes|on)
-      printf 'on\n'
-      return 0
-      ;;
-    ""|0|false|no|off|auto)
-      printf 'off\n'
-      return 0
-      ;;
-    *)
-      vmimage_die "unsupported DOCKPIPE_VM_CLIPBOARD=${configured} (use true or false)"
-      ;;
-  esac
+  vmimage_clipboard_bridge_mode
 }
 
 vmimage_has_guest_automation() {
   [[ -z "${DOCKPIPE_VM_INTERACTIVE:-}" && -n "${DOCKPIPE_STEP_CMD:-}" && -n "${DOCKPIPE_VM_SSH_USER:-}" ]]
+}
+
+vmimage_interactive_ssh_enabled() {
+  vmimage_truthy "$(vmimage_env_or_resolver "DOCKPIPE_VM_INTERACTIVE_SSH" "DOCKPIPE_RESOLVER_VM_INTERACTIVE_SSH")"
+}
+
+vmimage_interactive_shell_command() {
+  local mode
+  mode="$(vmimage_env_or_resolver "DOCKPIPE_VM_EXEC_MODE" "DOCKPIPE_RESOLVER_VM_EXEC_MODE" "raw")"
+  case "$mode" in
+    powershell)
+      printf '%s\n' 'cmd.exe /d /q /k prompt $P$G'
+      ;;
+    bash)
+      printf '%s\n' 'bash -li'
+      ;;
+    raw)
+      printf '%s\n' 'cmd.exe /d /q /k prompt $P$G'
+      ;;
+    *)
+      vmimage_die "unsupported DOCKPIPE_VM_EXEC_MODE=${mode} (use raw, bash, or powershell)"
+      ;;
+  esac
+}
+
+vmimage_open_interactive_guest_shell_windows_password() {
+  local user host plink_bin hostkeys hostkey shell_cmd
+  user="${DOCKPIPE_VM_SSH_USER:-}"
+  host="${DOCKPIPE_VM_SSH_HOST:-127.0.0.1}"
+  plink_bin="$(vmimage_plink_bin || true)"
+  [[ -n "$plink_bin" ]] || vmimage_die "plink.exe is required when DOCKPIPE_VM_SSH_PASSWORD is set on a Windows host"
+  local -a args=(-t -no-antispoof -P "$(vmimage_ssh_base)" -l "$user" -pw "$(vmimage_ssh_password)")
+  hostkeys="$(vmimage_windows_hostkeys)" || vmimage_die "failed to derive SSH host key for ${host}:$(vmimage_ssh_base); set DOCKPIPE_VM_SSH_HOSTKEY or ensure ssh-keyscan is available"
+  while IFS= read -r hostkey; do
+    [[ -n "$hostkey" ]] || continue
+    args+=(-hostkey "$hostkey")
+  done <<< "$hostkeys"
+  shell_cmd="$(vmimage_interactive_shell_command)"
+  vmimage_log "opening interactive guest shell via plink (${shell_cmd})"
+  "$plink_bin" "${args[@]}" "${user}@${host}" "$shell_cmd"
+}
+
+vmimage_open_interactive_guest_shell() {
+  local user host ssh_opts shell_cmd
+  user="${DOCKPIPE_VM_SSH_USER:-}"
+  host="${DOCKPIPE_VM_SSH_HOST:-127.0.0.1}"
+  [[ -n "$user" ]] || vmimage_die "DOCKPIPE_VM_SSH_USER is required when vm.interactive_ssh is enabled"
+  if vmimage_has_password_auth; then
+    if vmimage_is_windows_host; then
+      vmimage_open_interactive_guest_shell_windows_password
+      return 0
+    fi
+    vmimage_die "DOCKPIPE_VM_SSH_PASSWORD is currently supported only on Windows hosts; use SSH key auth on this host or add sshpass support"
+  fi
+  ssh_opts="$(vmimage_ssh_opts)"
+  shell_cmd="$(vmimage_interactive_shell_command)"
+  vmimage_log "opening interactive guest shell via ssh (${shell_cmd})"
+  # shellcheck disable=SC2086
+  ssh $ssh_opts -tt "${user}@${host}" "$shell_cmd"
 }
 
 vmimage_run_installer_session() {
@@ -2294,14 +2887,19 @@ vmimage_run_automated_installer_session() {
     export DOCKPIPE_VM_SSH_READY_TIMEOUT=3600
   fi
   vmimage_wait_for_guest
+  vmimage_maybe_start_clipboard_bridge
   if [[ -z "$old_timeout" ]]; then
     unset DOCKPIPE_VM_SSH_READY_TIMEOUT || true
   else
     export DOCKPIPE_VM_SSH_READY_TIMEOUT="$old_timeout"
   fi
   vmimage_sync_host_to_guest
-  vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
-  vmimage_fetch_outputs
+  if vmimage_interactive_ssh_enabled; then
+    vmimage_open_interactive_guest_shell
+  else
+    vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
+    vmimage_fetch_outputs
+  fi
   vmimage_keepalive_wait
   wait "$pid"
 }
@@ -2311,7 +2909,6 @@ vmimage_run_headless_guest_session() {
   shift || true
   local -a qemu_args=("$@")
   local pid state_dir pidfile
-  vmimage_require DOCKPIPE_STEP_CMD
   state_dir="$(vmimage_state_dir)"
   pidfile="${state_dir}/qemu-${DOCKPIPE_RUN_ID:-vm}.pid"
   rm -f "$pidfile"
@@ -2322,9 +2919,15 @@ vmimage_run_headless_guest_session() {
   vmimage_write_pid_sidecar "$pid"
   trap 'kill "$pid" >/dev/null 2>&1 || true; vmimage_stop_swtpm' EXIT INT TERM
   vmimage_wait_for_guest
+  vmimage_maybe_start_clipboard_bridge
   vmimage_sync_host_to_guest
-  vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
-  vmimage_fetch_outputs
+  if vmimage_interactive_ssh_enabled; then
+    vmimage_open_interactive_guest_shell
+  else
+    vmimage_require DOCKPIPE_STEP_CMD
+    vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
+    vmimage_fetch_outputs
+  fi
   vmimage_keepalive_wait
   wait "$pid"
 }
@@ -2359,6 +2962,7 @@ vmimage_windows_stop_qemu_if_present() {
   local pwsh_bin helper
   pwsh_bin="$(vmimage_powershell_bin)"
   helper="$(vmimage_windows_qemu_helper)"
+  vmimage_log "invoking Windows QEMU stop helper"
   "$pwsh_bin" -NoProfile -ExecutionPolicy Bypass -File "$helper" \
     -Action stop \
     -PidFile "$pidfile" >/dev/null 2>&1 || true
@@ -2368,7 +2972,9 @@ vmimage_set_windows_cleanup_trap() {
   local pidfile="${1:-}"
   local quoted_pidfile
   quoted_pidfile="$(printf '%q' "$pidfile")"
-  trap "vmimage_windows_stop_qemu_if_present ${quoted_pidfile}; vmimage_stop_swtpm" EXIT INT TERM
+  trap "vmimage_cleanup_windows_qemu ${quoted_pidfile}" EXIT
+  trap "vmimage_interrupt_windows_qemu ${quoted_pidfile} INT 130" INT
+  trap "vmimage_interrupt_windows_qemu ${quoted_pidfile} TERM 143" TERM
 }
 
 vmimage_apply_windows_installer_compat_defaults() {
@@ -2466,7 +3072,7 @@ vmimage_run_qemu_common() {
   qemu_bin="$(vmimage_qemu_bin || true)"
   [[ -n "$qemu_bin" ]] || vmimage_die "$(vmimage_default_qemu_bin) not found"
 
-  local disk disk_fmt prepared cpu mem ssh_port ssh_hostfwd state_dir pidfile monitor disk_bus net_device machine_uuid net_mac disk_serial
+  local disk disk_fmt prepared cpu mem ssh_port ssh_hostfwd state_dir pidfile monitor disk_bus net_device machine_uuid net_mac disk_serial agent_port
   local qemu_stdout_log qemu_stderr_log clipboard_mode
   local pci_devices_csv pci_primary_mode
   disk="$(vmimage_resolve_path "$DOCKPIPE_VM_DISK")"
@@ -2499,6 +3105,10 @@ vmimage_run_qemu_common() {
   : > "$qemu_stdout_log"
   : > "$qemu_stderr_log"
   ssh_hostfwd="hostfwd=tcp::${ssh_port}-:22"
+  if vmimage_agent_enabled; then
+    agent_port="$(vmimage_agent_port)"
+    ssh_hostfwd+=",hostfwd=tcp::${agent_port}-:${agent_port}"
+  fi
   if [[ -n "${DOCKPIPE_VM_HOSTFWD:-}" ]]; then
     local item
     IFS=',' read -r -a extra_forwards <<< "${DOCKPIPE_VM_HOSTFWD}"
@@ -2576,14 +3186,6 @@ vmimage_run_qemu_common() {
     fi
   fi
 
-  if [[ "$clipboard_mode" == "on" ]]; then
-    qemu_args+=(
-      -chardev "qemu-vdagent,id=vdagent0,name=vdagent,clipboard=on,mouse=on"
-      -device "virtio-serial-pci"
-      -device "virtserialport,chardev=vdagent0,name=com.redhat.spice.0"
-    )
-  fi
-
   if [[ "$(vmimage_secure_boot_mode)" != "off" ]]; then
     qemu_args+=(-global driver=cfi.pflash01,property=secure,value=on)
   fi
@@ -2614,7 +3216,7 @@ vmimage_run_qemu_common() {
     qemu_args+=(
       -device "ich9-ahci,id=sata-bootstrap0"
       -drive "if=none,id=vbootstrap,file=fat:rw:${bootstrap_attachment_dir},format=raw"
-      -device "ide-hd,drive=vbootstrap,bus=sata-bootstrap0.0,serial=dockpipe-bootstrap"
+      -device "ide-hd,drive=vbootstrap,bus=sata-bootstrap0.0,serial=$(vmimage_bootstrap_serial)"
     )
   fi
 
@@ -2656,6 +3258,9 @@ vmimage_run_qemu_common() {
   vmimage_log "tpm=$(vmimage_tpm_mode) secure_boot=$(vmimage_secure_boot_mode)"
   vmimage_log "disk=${disk} disk_format=${disk_fmt} persistence=$(vmimage_env_or_resolver "DOCKPIPE_VM_PERSISTENCE" "DOCKPIPE_RESOLVER_VM_PERSISTENCE" "ephemeral")"
   vmimage_log "ssh_port=${ssh_port} cpus=${cpu} memory=${mem} accel=${DOCKPIPE_VM_ACCEL:-$(vmimage_default_accel)} exec_mode=$(vmimage_env_or_resolver "DOCKPIPE_VM_EXEC_MODE" "DOCKPIPE_RESOLVER_VM_EXEC_MODE" "raw")"
+  if vmimage_agent_enabled; then
+    vmimage_log "guest_agent=on agent_port=$(vmimage_agent_port)"
+  fi
   vmimage_log "clipboard=${clipboard_mode}"
   if [[ -n "${DOCKPIPE_VM_FIRMWARE_CODE:-}" ]]; then
     vmimage_log "firmware_code=$(vmimage_resolve_path "$DOCKPIPE_VM_FIRMWARE_CODE")"
@@ -2713,8 +3318,12 @@ vmimage_run_qemu_common() {
           export DOCKPIPE_VM_SSH_READY_TIMEOUT="$old_timeout"
         fi
         vmimage_sync_host_to_guest
-        vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
-        vmimage_fetch_outputs
+        if vmimage_interactive_ssh_enabled; then
+          vmimage_open_interactive_guest_shell
+        else
+          vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
+          vmimage_fetch_outputs
+        fi
         vmimage_keepalive_wait
         vmimage_windows_qemu_invoke wait "$qemu_bin" "$pidfile" "$argsfile" "$qemu_stdout_log" "$qemu_stderr_log"
       else
@@ -2730,7 +3339,7 @@ vmimage_run_qemu_common() {
       fi
     fi
   else
-    if vmimage_has_guest_automation; then
+    if vmimage_has_guest_automation || vmimage_interactive_ssh_enabled; then
       if [[ "$backend" == "qemu-kvm" ]]; then
         trap 'vmimage_stop_swtpm' EXIT INT TERM
         "$qemu_bin" "${qemu_args[@]}"
@@ -2738,9 +3347,14 @@ vmimage_run_qemu_common() {
         vmimage_write_pid_sidecar "$(cat "$pidfile")"
 
         vmimage_wait_for_guest
+        vmimage_maybe_start_clipboard_bridge
         vmimage_sync_host_to_guest
-        vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
-        vmimage_fetch_outputs
+        if vmimage_interactive_ssh_enabled; then
+          vmimage_open_interactive_guest_shell
+        else
+          vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
+          vmimage_fetch_outputs
+        fi
         vmimage_keepalive_wait
       else
         local argsfile="${state_dir}/qemu-${DOCKPIPE_RUN_ID:-vm}.args"
@@ -2748,9 +3362,14 @@ vmimage_run_qemu_common() {
         vmimage_set_windows_cleanup_trap "$pidfile"
         vmimage_windows_qemu_invoke start "$qemu_bin" "$pidfile" "$argsfile" "$qemu_stdout_log" "$qemu_stderr_log"
         vmimage_wait_for_guest
+        vmimage_maybe_start_clipboard_bridge
         vmimage_sync_host_to_guest
-        vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
-        vmimage_fetch_outputs
+        if vmimage_interactive_ssh_enabled; then
+          vmimage_open_interactive_guest_shell
+        else
+          vmimage_remote_run_internal "${DOCKPIPE_STEP_CMD}"
+          vmimage_fetch_outputs
+        fi
         vmimage_keepalive_wait
       fi
     else

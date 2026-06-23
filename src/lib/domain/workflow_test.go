@@ -45,9 +45,15 @@ steps:
   - runtime: vm
     resolver: qemu
     vm:
+      mounts:
+        - host: C:\src\repo
+          guest: C:\uh
+        - host: C:\tmp\artifacts
+          guest: C:\artifacts
       guest_path: C:\uh
       host_context: C:\src\repo
       interactive_debug: true
+      interactive_ssh: false
       keepalive: true
       keepalive_seconds: "28800"
       hostfwd: tcp::3389-:3389
@@ -61,8 +67,30 @@ steps:
 		t.Fatalf("steps: got %d", len(w.Steps))
 	}
 	got := w.Steps[0].VM
-	if got.GuestPath != `C:\uh` || got.HostContext != `C:\src\repo` || got.InteractiveDebug == nil || !*got.InteractiveDebug || got.KeepAlive == nil || !*got.KeepAlive || got.KeepAliveSeconds != "28800" || got.HostFwd != "tcp::3389-:3389" {
+	if got.GuestPath != `C:\uh` || got.HostContext != `C:\src\repo` || got.InteractiveDebug == nil || !*got.InteractiveDebug || got.InteractiveSSH == nil || *got.InteractiveSSH || got.KeepAlive == nil || !*got.KeepAlive || got.KeepAliveSeconds != "28800" || got.HostFwd != "tcp::3389-:3389" {
 		t.Fatalf("vm: got %+v", got)
+	}
+	if len(got.Mounts) != 2 || got.Mounts[0].Host != `C:\src\repo` || got.Mounts[0].Guest != `C:\uh` || got.Mounts[1].Host != `C:\tmp\artifacts` || got.Mounts[1].Guest != `C:\artifacts` {
+		t.Fatalf("vm.mounts: got %+v", got.Mounts)
+	}
+}
+
+func TestValidateStepVMFieldRejectsConflictingInteractiveModes(t *testing.T) {
+	step := Step{
+		VM: StepVMConfig{
+			InteractiveDebug: func() *bool {
+				v := true
+				return &v
+			}(),
+			InteractiveSSH: func() *bool {
+				v := true
+				return &v
+			}(),
+		},
+	}
+	err := ValidateStepVMField(0, step)
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("expected mutually exclusive vm interactive mode error, got %v", err)
 	}
 }
 
@@ -581,6 +609,22 @@ func TestValidateLoadedWorkflowRejectsVMHostContextWithoutGuestPath(t *testing.T
 	}
 	if err := ValidateLoadedWorkflow(w); err == nil || !strings.Contains(err.Error(), "vm.host_context requires vm.guest_path") {
 		t.Fatalf("expected vm.host_context validation error, got %v", err)
+	}
+}
+
+func TestValidateLoadedWorkflowRejectsIncompleteVMMount(t *testing.T) {
+	w := &Workflow{
+		Steps: []Step{{
+			Runtime:  "vm",
+			Resolver: "qemu",
+			VM: StepVMConfig{
+				Mounts: []StepVMMount{{Host: `C:\src\repo`}},
+			},
+			Cmd: "hostname",
+		}},
+	}
+	if err := ValidateLoadedWorkflow(w); err == nil || !strings.Contains(err.Error(), "vm.mounts[0] requires both host and guest") {
+		t.Fatalf("expected vm.mounts validation error, got %v", err)
 	}
 }
 

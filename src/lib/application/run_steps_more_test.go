@@ -232,8 +232,12 @@ func TestMergeStepVarsAppliesVMOverrides(t *testing.T) {
 	o.envMap["DOCKPIPE_WORKDIR"] = `C:\repo`
 	step := domain.Step{
 		VM: domain.StepVMConfig{
-			GuestPath:        `C:\uh`,
+			GuestPath: `C:\uh`,
 			InteractiveDebug: func() *bool {
+				v := true
+				return &v
+			}(),
+			InteractiveSSH: func() *bool {
 				v := true
 				return &v
 			}(),
@@ -255,8 +259,14 @@ func TestMergeStepVarsAppliesVMOverrides(t *testing.T) {
 	if got := o.envMap["DOCKPIPE_VM_SYNC_GUEST_PATH"]; got != `C:\uh` {
 		t.Fatalf("DOCKPIPE_VM_SYNC_GUEST_PATH=%q", got)
 	}
+	if got := o.envMap["DOCKPIPE_VM_MOUNTS"]; got != "C:\\repo\tC:\\uh" {
+		t.Fatalf("DOCKPIPE_VM_MOUNTS=%q", got)
+	}
 	if got := o.envMap["DOCKPIPE_VM_INTERACTIVE"]; got != "true" {
 		t.Fatalf("DOCKPIPE_VM_INTERACTIVE=%q", got)
+	}
+	if got := o.envMap["DOCKPIPE_VM_INTERACTIVE_SSH"]; got != "true" {
+		t.Fatalf("DOCKPIPE_VM_INTERACTIVE_SSH=%q", got)
 	}
 	if got := o.envMap["DOCKPIPE_VM_KEEPALIVE"]; got != "true" {
 		t.Fatalf("DOCKPIPE_VM_KEEPALIVE=%q", got)
@@ -269,6 +279,29 @@ func TestMergeStepVarsAppliesVMOverrides(t *testing.T) {
 	}
 	if dockerEnv["DOCKPIPE_VM_SYNC_GUEST_PATH"] != `C:\uh` {
 		t.Fatalf("docker env missing guest path: %#v", dockerEnv)
+	}
+}
+
+func TestMergeStepVarsVMMultipleMounts(t *testing.T) {
+	o := baseRunStepsOpts()
+	step := domain.Step{
+		VM: domain.StepVMConfig{
+			Mounts: []domain.StepVMMount{
+				{Host: `C:\src\repo`, Guest: `C:\uh`},
+				{Host: `C:\tmp\artifacts`, Guest: `C:\artifacts`},
+			},
+		},
+	}
+	dockerEnv := map[string]string{}
+	if err := mergeStepVars(&o, step, dockerEnv); err != nil {
+		t.Fatal(err)
+	}
+	want := "C:\\src\\repo\tC:\\uh\nC:\\tmp\\artifacts\tC:\\artifacts"
+	if got := o.envMap["DOCKPIPE_VM_MOUNTS"]; got != want {
+		t.Fatalf("DOCKPIPE_VM_MOUNTS=%q want %q", got, want)
+	}
+	if dockerEnv["DOCKPIPE_VM_MOUNTS"] != want {
+		t.Fatalf("docker env missing mounts: %#v", dockerEnv)
 	}
 }
 

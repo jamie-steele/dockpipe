@@ -1,0 +1,8 @@
+schema: 1
+name: dockpipe.core
+title: DockPipe Core
+description: Core runtime assets shipped with DockPipe.
+kind: core
+build:
+  source:
+    script: assets/scripts/build-dockpipe-guest-agent.sh

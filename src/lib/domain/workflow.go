@@ -278,18 +278,27 @@ func (b *InputBinding) UnmarshalYAML(n *yaml.Node) error {
 // StepVMConfig is authored workflow sugar for common VM runtime settings.
 // The runner lowers this into the existing DOCKPIPE_VM_* environment contract.
 type StepVMConfig struct {
+	Mounts           []StepVMMount `yaml:"mounts,omitempty"`
 	HostContext      string `yaml:"host_context,omitempty"`
 	GuestPath        string `yaml:"guest_path,omitempty"`
 	InteractiveDebug *bool  `yaml:"interactive_debug,omitempty"`
+	InteractiveSSH   *bool  `yaml:"interactive_ssh,omitempty"`
 	KeepAlive        *bool  `yaml:"keepalive,omitempty"`
 	KeepAliveSeconds string `yaml:"keepalive_seconds,omitempty"`
 	HostFwd          string `yaml:"hostfwd,omitempty"`
 }
 
+type StepVMMount struct {
+	Host  string `yaml:"host,omitempty"`
+	Guest string `yaml:"guest,omitempty"`
+}
+
 func (c StepVMConfig) IsEmpty() bool {
-	return strings.TrimSpace(c.HostContext) == "" &&
+	return len(c.Mounts) == 0 &&
+		strings.TrimSpace(c.HostContext) == "" &&
 		strings.TrimSpace(c.GuestPath) == "" &&
 		c.InteractiveDebug == nil &&
+		c.InteractiveSSH == nil &&
 		c.KeepAlive == nil &&
 		strings.TrimSpace(c.KeepAliveSeconds) == "" &&
 		strings.TrimSpace(c.HostFwd) == ""
@@ -750,6 +759,15 @@ func ValidateStepVMField(i int, s Step) error {
 	}
 	if strings.TrimSpace(s.VM.HostContext) != "" && strings.TrimSpace(s.VM.GuestPath) == "" {
 		return fmt.Errorf("step %d: vm.host_context requires vm.guest_path", i+1)
+	}
+	for mountIdx, mount := range s.VM.Mounts {
+		if strings.TrimSpace(mount.Host) == "" || strings.TrimSpace(mount.Guest) == "" {
+			return fmt.Errorf("step %d: vm.mounts[%d] requires both host and guest", i+1, mountIdx)
+		}
+	}
+	if s.VM.InteractiveDebug != nil && *s.VM.InteractiveDebug &&
+		s.VM.InteractiveSSH != nil && *s.VM.InteractiveSSH {
+		return fmt.Errorf("step %d: vm.interactive_debug and vm.interactive_ssh are mutually exclusive", i+1)
 	}
 	return nil
 }

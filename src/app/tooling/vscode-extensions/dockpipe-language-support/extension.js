@@ -90,7 +90,7 @@ const STEP_KEY_DETAILS = {
   pre_script: "Host-side scripts that run before the step body.",
   inputs: "Typed step-local inputs backed by the workflow's PipeLang types. Use field paths such as Advanced.KeepAlive and optional from/value bindings instead of raw env names.",
   vars: "Step-local variables merged for this step.",
-  vm: "Declarative VM step settings. Use this to set guest path sync, interactive debug mode, keepalive, and host port forwarding without hand-writing DOCKPIPE_VM_* variables or host prep steps.",
+  vm: "Declarative VM step settings. Use this to set guest path sync, interactive desktop or SSH session behavior, keepalive, and host port forwarding without hand-writing DOCKPIPE_VM_* variables or host prep steps.",
   security: "Optional step-level container security override. Use this to tighten or specialize policy for one container step.",
   outputs: "Dotenv-style outputs file merged into the environment for later steps. This is the normal way one step passes values forward.",
   workflow: "Marks this as a packaged workflow step and names the child workflow to run.",
@@ -280,12 +280,19 @@ const WORKFLOW_VIEW_SECTION_KEY_DETAILS = {
 };
 
 const STEP_VM_KEY_DETAILS = {
+  mounts: "Optional list of host-to-guest mappings applied before the guest command runs. Use this when you want more than one synced path, or when you want the mapping to be explicit instead of relying on guest_path sugar.",
   host_context: "Optional host path to sync into the guest. When guest_path is set and host_context is omitted, DockPipe uses the effective DOCKPIPE_WORKDIR/workdir by default.",
   guest_path: "Guest destination path for host-to-guest sync before the VM guest command runs.",
   interactive_debug: "Launch the VM with a visible window and skip guest-command automation so you can inspect or configure the guest manually.",
+  interactive_ssh: "Boot the VM, wait for SSH readiness, then open an authenticated interactive guest shell instead of running a one-shot guest command.",
   keepalive: "Keep the VM alive after the guest command exits so you can continue setup work manually.",
   keepalive_seconds: "Maximum keepalive window in seconds before DockPipe tears the VM down.",
   hostfwd: "Additional QEMU host forward string such as tcp::3389-:3389."
+};
+
+const STEP_VM_MOUNT_KEY_DETAILS = {
+  host: "Host path to stage or mount into the guest before the guest command runs.",
+  guest: "Guest destination path for this host mapping."
 };
 
 const CORE_HELPER_PROFILES = {
@@ -1685,6 +1692,8 @@ function activate(context) {
               docs = WORKFLOW_VIEW_SECTION_KEY_DETAILS;
             } else if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "vm") {
               docs = STEP_VM_KEY_DETAILS;
+            } else if (info?.inSteps && parentChain.length === 3 && parentChain[0] === "vm" && parentChain[1] === "mounts") {
+              docs = STEP_VM_MOUNT_KEY_DETAILS;
             }
             if (docs) {
               for (const [k, doc] of Object.entries(docs)) {
@@ -1882,6 +1891,9 @@ function activate(context) {
             }
             if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "vm") {
               return hoverForWorkflowKey(word, STEP_VM_KEY_DETAILS, range);
+            }
+            if (info?.inSteps && parentChain.length === 3 && parentChain[0] === "vm" && parentChain[1] === "mounts") {
+              return hoverForWorkflowKey(word, STEP_VM_MOUNT_KEY_DETAILS, range);
             }
             if (parentChain.includes("inputs") && INPUT_BINDING_KEY_DETAILS[word]) {
               return hoverForWorkflowKey(word, INPUT_BINDING_KEY_DETAILS, range);

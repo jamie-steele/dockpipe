@@ -487,6 +487,9 @@ func cmdPackageCompileCore(args []string) error {
 	if err := copyDirExcludingTopLevel(srcAbs, staging, exclude); err != nil {
 		return fmt.Errorf("copy core: %w", err)
 	}
+	if err := runCoreSourceBuildTarget(workdir, staging); err != nil {
+		return err
+	}
 	if _, err := materializePipeLangRoots([]string{staging}, true, ""); err != nil {
 		return fmt.Errorf("compile pipelang artifacts: %w", err)
 	}
@@ -525,6 +528,35 @@ func cmdPackageCompileCore(args []string) error {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "[dockpipe] compiled core package → %s\n", outPath)
+	return nil
+}
+
+func runCoreSourceBuildTarget(workdir, staging string) error {
+	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
+	if _, err := os.Stat(manifestPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	manifest, err := domain.ParsePackageManifest(manifestPath)
+	if err != nil {
+		return fmt.Errorf("package manifest: %w", err)
+	}
+	if manifest.Build.Source == nil || strings.TrimSpace(manifest.Build.Source.Script) == "" {
+		return nil
+	}
+	target := packageScriptTarget{
+		Name:       strings.TrimSpace(manifest.Name),
+		Manifest:   manifestPath,
+		PackageDir: staging,
+		ScriptRel:  filepath.Clean(manifest.Build.Source.Script),
+		ScriptAbs:  filepath.Join(staging, filepath.FromSlash(manifest.Build.Source.Script)),
+	}
+	fmt.Fprintf(os.Stderr, "[dockpipe] core source build: %s (%s)\n", target.Name, target.ScriptRel)
+	if err := runPackageScriptTarget(workdir, target, packageSourceBuildEnv(workdir, target), "build.source.script"); err != nil {
+		return fmt.Errorf("core source build: %w", err)
+	}
 	return nil
 }
 
