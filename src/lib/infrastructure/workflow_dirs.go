@@ -28,7 +28,17 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 	// Order: (1) engine workflows tree + nested compile roots, (2) project <workdir>/<workflowsRel>/ authoring,
 	// (3) dockpipe-workflow-*.tar.gz as tar:// (read from archive — no duplicate tree), (4) legacy templates,
 	// (5) resolver delegate.
+	// When repoRoot is the bundled/materialized cache and a project workdir is present, prefer the
+	// project's compiled workflow tarball before the embedded bundled workflow so maintainer/dev runs
+	// see freshly compiled package changes without requiring a rebuilt dockpipe binary.
 	// compile for-workflow uses ProjectWorkflowConfigPath first so closure compile still sees on-disk sources when present.
+	if wd := strings.TrimSpace(workdir); wd != "" && UsesBundledAssetLayout(repoRoot) {
+		if u, err := tryResolveWorkflowTarballURI(repoRoot, wd, name); err != nil {
+			return "", err
+		} else if u != "" {
+			return u, nil
+		}
+	}
 	var batch []string
 	batch = append(batch, filepath.Join(WorkflowsRootDir(repoRoot), name, "config.yml"))
 	if !UsesBundledAssetLayout(repoRoot) {

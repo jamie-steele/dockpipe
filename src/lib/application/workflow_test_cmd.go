@@ -152,7 +152,7 @@ func resolveWorkflowTestScript(workflowDir string) (string, string) {
 }
 
 func runWorkflowTestTarget(workdir string, target workflowTestTarget, exe string) error {
-	cmd, err := dockpipeScriptCommand(target.ScriptAbs)
+	cmd, bashExe, err := dockpipeScriptCommand(target.ScriptAbs)
 	if err != nil {
 		return err
 	}
@@ -166,6 +166,9 @@ func runWorkflowTestTarget(workdir string, target workflowTestTarget, exe string
 		"DOCKPIPE_WORKFLOW_TEST_SCRIPT="+target.ScriptRel,
 		"DOCKPIPE_BIN="+exe,
 	)
+	if bashExe != "" {
+		cmd.Env = upsertEnvLocal(cmd.Env, "DOCKPIPE_HOST_BASH_BIN", bashExe)
+	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

@@ -24,9 +24,11 @@ function Resolve-DockpipeBin {
   }
 
   $resolvedRoot = Get-DockpipeRepoRoot -Root $Root
-  $candidate = Join-Path $resolvedRoot "src/bin/dockpipe"
-  if (Test-Path -LiteralPath $candidate) {
-    return $candidate
+  foreach ($relative in @("src/bin/dockpipe.exe", "src/bin/dockpipe")) {
+    $candidate = Join-Path $resolvedRoot $relative
+    if (Test-Path -LiteralPath $candidate) {
+      return $candidate
+    }
   }
 
   $cmd = Get-Command dockpipe -ErrorAction SilentlyContinue

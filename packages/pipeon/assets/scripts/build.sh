@@ -21,6 +21,44 @@ PIPEON_VSCODE_EXT_NPM_CACHE="${PIPEON_VSCODE_EXT_NPM_CACHE:-$REPO_ROOT/bin/.dock
 DOCKPIPE_VSCODE_EXT_DIR="$REPO_ROOT/src/app/tooling/vscode-extensions/dockpipe-language-support"
 DOCKPIPE_VSCODE_TMP_CACHE="$REPO_ROOT/tmp/npm-cache"
 PIPEON_WINDOWS_BUILD_HELPER="$REPO_ROOT/packages/pipeon/assets/scripts/build-desktop-windows.ps1"
+PIPEON_WINDOWS_VSIX_HELPER="$REPO_ROOT/packages/pipeon/assets/scripts/package-vsix-windows.ps1"
+
+build_log() {
+  printf '[pipeon-build] %s\n' "$*" >&2
+}
+
+run_with_progress() {
+  local label="$1"
+  shift
+
+  local interval="${PIPEON_BUILD_PROGRESS_INTERVAL:-15}"
+  local cmd_pid=""
+  set +e
+  "$@" &
+  cmd_pid=$!
+  local heartbeat_pid=""
+  if [[ "$interval" =~ ^[0-9]+$ ]] && (( interval > 0 )); then
+    (
+      while kill -0 "$cmd_pid" >/dev/null 2>&1; do
+        sleep "$interval" || exit 0
+        kill -0 "$cmd_pid" >/dev/null 2>&1 || exit 0
+        build_log "$label still running..."
+      done
+    ) &
+    heartbeat_pid=$!
+  fi
+
+  local status=0
+  wait "$cmd_pid"
+  status=$?
+  if [[ -n "$heartbeat_pid" ]]; then
+    kill "$heartbeat_pid" >/dev/null 2>&1 || true
+    wait "$heartbeat_pid" >/dev/null 2>&1 || true
+  fi
+  set -e
+
+  return "$status"
+}
 
 usage() {
   cat <<'EOF'
@@ -139,6 +177,15 @@ pipeon_powershell_bin() {
   return 1
 }
 
+pipeon_is_windows_host() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 pipeon_windows_path() {
   local path_value="$1"
   if command -v cygpath >/dev/null 2>&1; then
@@ -146,6 +193,30 @@ pipeon_windows_path() {
   else
     printf '%s\n' "$path_value"
   fi
+}
+
+package_vsix_windows() {
+  local extension_dir="$1"
+  local output_file="$2"
+  local npm_cache="${3:-}"
+  local vsce_entrypoint="${4:-}"
+  local powershell_bin
+  powershell_bin="$(pipeon_powershell_bin)" || return 1
+
+  local args=(
+    -NoProfile
+    -ExecutionPolicy Bypass
+    -File "$(pipeon_windows_path "$PIPEON_WINDOWS_VSIX_HELPER")"
+    -ExtensionDir "$(pipeon_windows_path "$extension_dir")"
+    -OutputFile "$(pipeon_windows_path "$output_file")"
+  )
+  if [[ -n "$npm_cache" ]]; then
+    args+=(-NpmCache "$(pipeon_windows_path "$npm_cache")")
+  fi
+  if [[ -n "$vsce_entrypoint" ]]; then
+    args+=(-VsceEntrypoint "$(pipeon_windows_path "$vsce_entrypoint")")
+  fi
+  "$powershell_bin" "${args[@]}"
 }
 
 cargo_is_installed_but_unbound() {
@@ -232,15 +303,27 @@ build_source() {
 }
 
 package_dockpipe_language_support() {
+  build_log "Packaging DockPipe language support VSIX"
   mkdir -p "$REPO_ROOT/bin/.dockpipe/extensions"
   (
+    local version output_file
     cd "$DOCKPIPE_VSCODE_EXT_DIR"
     if [[ ! -x node_modules/.bin/vsce ]]; then
-      NPM_CONFIG_CACHE="$DOCKPIPE_VSCODE_TMP_CACHE" npm ci --no-audit --no-fund
+      build_log "Installing DockPipe language support npm dependencies"
+      run_with_progress "DockPipe language support npm install" \
+        env NPM_CONFIG_CACHE="$DOCKPIPE_VSCODE_TMP_CACHE" npm ci --no-audit --no-fund
     fi
-    NPM_CONFIG_CACHE="$DOCKPIPE_VSCODE_TMP_CACHE" \
-      node node_modules/@vscode/vsce/vsce package --no-dependencies \
-      -o "$REPO_ROOT/bin/.dockpipe/extensions/dockpipe-language-support-$(node -p "require('./package.json').version").vsix"
+    version="$(node -p "require('./package.json').version")"
+    output_file="$REPO_ROOT/bin/.dockpipe/extensions/dockpipe-language-support-$version.vsix"
+    build_log "Running vsce package for DockPipe language support"
+    if pipeon_is_windows_host; then
+      package_vsix_windows "$DOCKPIPE_VSCODE_EXT_DIR" "$output_file" "$DOCKPIPE_VSCODE_TMP_CACHE"
+    else
+      env NPM_CONFIG_CACHE="$DOCKPIPE_VSCODE_TMP_CACHE" \
+        node node_modules/@vscode/vsce/vsce package --no-dependencies \
+        -o "$output_file"
+    fi
+    build_log "DockPipe language support VSIX packaging returned"
   )
 }
 
@@ -249,12 +332,14 @@ build_icons() {
 }
 
 build_desktop_windows() {
+  build_log "Building Pipeon desktop shell for Windows"
   require_cargo
   local powershell_bin
   powershell_bin="$(pipeon_powershell_bin)" || return 1
-  "$powershell_bin" -NoProfile -ExecutionPolicy Bypass -File "$(pipeon_windows_path "$PIPEON_WINDOWS_BUILD_HELPER")" \
-    -RepoRoot "$(pipeon_windows_path "$REPO_ROOT")" \
-    -TargetDir "$(pipeon_windows_path "$PIPEON_DESKTOP_TARGET_DIR")"
+  run_with_progress "Pipeon desktop Windows build" \
+    "$powershell_bin" -NoProfile -ExecutionPolicy Bypass -File "$(pipeon_windows_path "$PIPEON_WINDOWS_BUILD_HELPER")" \
+      -RepoRoot "$(pipeon_windows_path "$REPO_ROOT")" \
+      -TargetDir "$(pipeon_windows_path "$PIPEON_DESKTOP_TARGET_DIR")"
 }
 
 build_desktop() {
@@ -266,7 +351,8 @@ build_desktop() {
   esac
   require_cargo
   mkdir -p "$PIPEON_DESKTOP_TARGET_DIR"
-  CARGO_TARGET_DIR="$PIPEON_DESKTOP_TARGET_DIR" \
+  run_with_progress "Pipeon desktop Cargo build" \
+    env CARGO_TARGET_DIR="$PIPEON_DESKTOP_TARGET_DIR" \
     cargo build --manifest-path "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/src-tauri/Cargo.toml" --release
   mkdir -p "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/bin"
   cp -f "$PIPEON_DESKTOP_TARGET_DIR/release/pipeon-desktop" "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop"
@@ -296,6 +382,7 @@ install_desktop_global() {
 
 package_vscode_extension() {
   package_dockpipe_language_support
+  build_log "Preparing Pipeon VS Code extension build workspace"
   mkdir -p "$REPO_ROOT/bin/.dockpipe/extensions"
   rm -rf "$PIPEON_VSCODE_EXT_BUILD_DIR"
   mkdir -p "$PIPEON_VSCODE_EXT_BUILD_DIR"
@@ -305,17 +392,34 @@ package_vscode_extension() {
   cp -R "$PIPEON_VSCODE_EXT_SRC/src" "$PIPEON_VSCODE_EXT_BUILD_DIR/src"
   cp -R "$PIPEON_VSCODE_EXT_SRC/types" "$PIPEON_VSCODE_EXT_BUILD_DIR/types"
   cp -R "$PIPEON_VSCODE_EXT_SRC/scripts" "$PIPEON_VSCODE_EXT_BUILD_DIR/scripts"
-  NPM_CONFIG_CACHE="$PIPEON_VSCODE_EXT_NPM_CACHE" npm --prefix "$PIPEON_VSCODE_EXT_BUILD_DIR" ci --no-audit --no-fund
-  npm --prefix "$PIPEON_VSCODE_EXT_BUILD_DIR" run build
-  node "$PIPEON_VSCODE_EXT_BUILD_DIR/scripts/webview-smoke.js"
+  build_log "Installing Pipeon VS Code extension npm dependencies"
+  run_with_progress "Pipeon VS Code extension npm install" \
+    env NPM_CONFIG_CACHE="$PIPEON_VSCODE_EXT_NPM_CACHE" npm --prefix "$PIPEON_VSCODE_EXT_BUILD_DIR" ci --no-audit --no-fund --loglevel=notice
+  build_log "Compiling Pipeon VS Code extension"
+  run_with_progress "Pipeon VS Code extension compile" \
+    npm --prefix "$PIPEON_VSCODE_EXT_BUILD_DIR" run build
+  build_log "Running Pipeon webview smoke test"
+  run_with_progress "Pipeon webview smoke test" \
+    node "$PIPEON_VSCODE_EXT_BUILD_DIR/scripts/webview-smoke.js"
+  build_log "Copying built Pipeon extension assets back into source tree"
   install -m 644 "$PIPEON_VSCODE_EXT_BUILD_DIR/extension.js" "$PIPEON_VSCODE_EXT_SRC/extension.js"
   install -m 644 "$PIPEON_VSCODE_EXT_BUILD_DIR/webview/canary.js" "$PIPEON_VSCODE_EXT_SRC/webview/canary.js"
   install -m 644 "$PIPEON_VSCODE_EXT_BUILD_DIR/webview/chat.js" "$PIPEON_VSCODE_EXT_SRC/webview/chat.js"
   (
+    local version output_file vsce_entrypoint
     cd "$PIPEON_VSCODE_EXT_SRC"
-    node ../../../../../src/app/tooling/vscode-extensions/dockpipe-language-support/node_modules/@vscode/vsce/vsce \
-      package --no-dependencies \
-      -o "$REPO_ROOT/bin/.dockpipe/extensions/pipeon-$(node -p "require('./package.json').version").vsix"
+    build_log "Packaging Pipeon VSIX"
+    version="$(node -p "require('./package.json').version")"
+    output_file="$REPO_ROOT/bin/.dockpipe/extensions/pipeon-$version.vsix"
+    vsce_entrypoint="$REPO_ROOT/src/app/tooling/vscode-extensions/dockpipe-language-support/node_modules/@vscode/vsce/vsce"
+    if pipeon_is_windows_host; then
+      package_vsix_windows "$PIPEON_VSCODE_EXT_SRC" "$output_file" "" "$vsce_entrypoint"
+    else
+      node "$vsce_entrypoint" \
+        package --no-dependencies \
+        -o "$output_file"
+    fi
+    build_log "Pipeon VSIX packaging returned"
   )
 }
 
@@ -341,7 +445,9 @@ install_vscode_extension() {
 
 build_code_server_image() {
   package_vscode_extension
-  docker build -t dockpipe-code-server:latest -f "$PIPEON_VSCODE_EXT_SRC/Dockerfile.code-server" "$REPO_ROOT"
+  build_log "Building docker image dockpipe-code-server:latest"
+  run_with_progress "dockpipe-code-server docker build" \
+    docker build -t dockpipe-code-server:latest -f "$PIPEON_VSCODE_EXT_SRC/Dockerfile.code-server" "$REPO_ROOT"
 }
 
 main() {

@@ -10,14 +10,14 @@ source "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh"
 # shellcheck source=/dev/null
 source "$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts/lib/dorkpipe-cli.sh"
 
-expected_dockpipe="$ROOT/src/bin/dockpipe"
+expected_dockpipe="$(dockpipe_resolve_dockpipe_bin "$ROOT")"
 actual_dockpipe="$(dockpipe_sdk require dockpipe-bin)"
 if [[ "$actual_dockpipe" != "$expected_dockpipe" ]]; then
   echo "test_repo_tools: expected dockpipe $expected_dockpipe, got $actual_dockpipe" >&2
   exit 1
 fi
 
-expected_dorkpipe="$ROOT/packages/dorkpipe/bin/dorkpipe"
+expected_dorkpipe="$(dorkpipe_script_resolve_bin "$ROOT")"
 actual_dorkpipe="$(dorkpipe_script_resolve_bin "$ROOT")"
 if [[ "$actual_dorkpipe" != "$expected_dorkpipe" ]]; then
   echo "test_repo_tools: expected dorkpipe $expected_dorkpipe, got $actual_dorkpipe" >&2

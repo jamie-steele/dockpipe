@@ -1,8 +1,5 @@
 use std::env;
-use tauri::{AppHandle, LogicalSize, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-use tauri_plugin_updater::UpdaterExt;
-use url::Url;
+use tauri::{LogicalSize, WebviewUrl, WebviewWindowBuilder};
 
 #[tauri::command]
 fn read_clipboard_text() -> Result<String, String> {
@@ -167,7 +164,7 @@ const LAYOUT_SEED_JS: &str = r#"
   }
   window.__PIPEON_LAYOUT_SEED_STARTED__ = true;
 
-  const SEED_VERSION = 'pipeon-layout-v3';
+  const SEED_VERSION = 'pipeon-layout-v4';
   const SEED_KEY = 'pipeon.layoutSeedVersion';
   const RELOAD_KEY = `${SEED_KEY}.reloaded`;
   const DORKPIPE_CONTAINER = 'workbench.view.extension.dorkpipe-panel';
@@ -402,147 +399,8 @@ const LAYOUT_SEED_JS: &str = r#"
 })();
 "#;
 
-#[derive(Clone)]
-struct DesktopUpdaterConfig {
-    pubkey: String,
-    endpoints: Vec<Url>,
-}
-
-fn desktop_updater_config_from_env() -> Option<DesktopUpdaterConfig> {
-    let pubkey = env::var("PIPEON_DESKTOP_UPDATER_PUBKEY")
-        .ok()
-        .map(|v| v.trim().to_string())
-        .filter(|v| !v.is_empty())?;
-
-    let raw_endpoints = env::var("PIPEON_DESKTOP_UPDATER_ENDPOINTS")
-        .ok()
-        .or_else(|| env::var("PIPEON_DESKTOP_UPDATER_ENDPOINT").ok())?;
-
-    let endpoints = raw_endpoints
-        .split(|c| c == ',' || c == '\n')
-        .filter_map(|part| {
-            let trimmed = part.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Url::parse(trimmed).ok()
-            }
-        })
-        .collect::<Vec<_>>();
-
-    if endpoints.is_empty() {
-        return None;
-    }
-
-    Some(DesktopUpdaterConfig { pubkey, endpoints })
-}
-
-fn desktop_auto_update_enabled() -> bool {
-    !matches!(
-        env::var("PIPEON_DESKTOP_AUTO_UPDATE")
-            .ok()
-            .map(|v| v.trim().to_ascii_lowercase()),
-        Some(v) if v == "0" || v == "false" || v == "no" || v == "off"
-    )
-}
-
-fn schedule_desktop_update_check(app: AppHandle, window: WebviewWindow) {
-    let Some(config) = desktop_updater_config_from_env() else {
-        return;
-    };
-    if !desktop_auto_update_enabled() {
-        return;
-    }
-
-    tauri::async_runtime::spawn(async move {
-        let updater = match app
-            .updater_builder()
-            .pubkey(config.pubkey.clone())
-            .endpoints(config.endpoints.clone())
-        {
-            Ok(builder) => match builder.build() {
-                Ok(updater) => updater,
-                Err(error) => {
-                    eprintln!("[pipeon-desktop] updater build failed: {error}");
-                    return;
-                }
-            },
-            Err(error) => {
-                eprintln!("[pipeon-desktop] updater endpoint config failed: {error}");
-                return;
-            }
-        };
-
-        let Some(update) = (match updater.check().await {
-            Ok(update) => update,
-            Err(error) => {
-                eprintln!("[pipeon-desktop] updater check failed: {error}");
-                return;
-            }
-        }) else {
-            return;
-        };
-
-        let summary = match update.body.as_deref().map(str::trim) {
-            Some(body) if !body.is_empty() => body.to_string(),
-            _ => "A new Pipeon desktop shell is available.".to_string(),
-        };
-        let prompt = format!(
-            "Pipeon desktop {} is available.\n\n{}\n\nThis updates only the Pipeon desktop shell. It does not bundle or replace the Pipeon code-server surface, VSIX, or any host editor binaries.\n\nInstall now?",
-            update.version, summary
-        );
-
-        let app_for_prompt = app.clone();
-        let window_for_prompt = window.clone();
-        app.dialog()
-            .message(prompt)
-            .title("Pipeon update available")
-            .kind(MessageDialogKind::Info)
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                "Install now".to_string(),
-                "Later".to_string(),
-            ))
-            .parent(&window)
-            .show(move |install_now| {
-                if !install_now {
-                    return;
-                }
-
-                let app_after = app_for_prompt.clone();
-                let window_after = window_for_prompt.clone();
-                let update = update.clone();
-                tauri::async_runtime::spawn(async move {
-                    let result = update.download_and_install(|_, _| {}, || {}).await;
-                    if let Err(error) = result {
-                        app_after
-                            .dialog()
-                            .message(format!("Pipeon desktop update failed:\n\n{error}"))
-                            .title("Update failed")
-                            .kind(MessageDialogKind::Error)
-                            .buttons(MessageDialogButtons::Ok)
-                            .parent(&window_after)
-                            .show(|_| {});
-                        return;
-                    }
-
-                    #[cfg(not(target_os = "windows"))]
-                    app_after
-                        .dialog()
-                        .message("Pipeon desktop was updated. Restart Pipeon to use the new version.")
-                        .title("Update installed")
-                        .kind(MessageDialogKind::Info)
-                        .buttons(MessageDialogButtons::Ok)
-                        .parent(&window_after)
-                        .show(|_| {});
-                });
-            });
-    });
-}
-
 fn main() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             read_clipboard_text,
             write_clipboard_text
@@ -572,7 +430,6 @@ fn main() {
             let _ = window.eval(LAYOUT_SEED_JS);
             let _ = window.eval(CLIPBOARD_BRIDGE_JS);
             let _ = window.show();
-            schedule_desktop_update_check(app.handle().clone(), window.clone());
             Ok(())
         })
         .run(tauri::generate_context!())

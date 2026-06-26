@@ -19,7 +19,10 @@ services:
     volumes:
       - dorkpipe_ollama:/root/.ollama
   dorkpipe-stack:
-    image: node:20-bookworm-slim
+    image: dockpipe-dorkpipe-stack:latest
+    build:
+      context: .
+      dockerfile: packages/pipeon/resolvers/pipeon-dev-stack/assets/compose/Dockerfile.dorkpipe-stack
     depends_on:
       postgres:
         condition: service_healthy
@@ -27,8 +30,8 @@ services:
         condition: service_started
     working_dir: /work
     environment:
-      DOCKPIPE_BIN: "${PIPEON_DEV_STACK_DOCKPIPE_BIN:-/repo/src/bin/dockpipe}"
-      DORKPIPE_BIN: "${PIPEON_DEV_STACK_DORKPIPE_BIN:-/repo/packages/dorkpipe/bin/dorkpipe}"
+      DOCKPIPE_BIN: "/usr/local/bin/dockpipe"
+      DORKPIPE_BIN: "/usr/local/bin/dorkpipe"
       DOCKPIPE_WORKDIR: "${PIPEON_DEV_STACK_DORKPIPE_WORKDIR:-/work}"
       DOCKPIPE_MCP_TIER: "${DOCKPIPE_MCP_TIER:-exec}"
       DOCKPIPE_MCP_RESTRICT_WORKDIR: "1"
@@ -39,11 +42,9 @@ services:
       MCP_HTTP_API_KEY_FILE: "/run/pipeon/mcp-api-key"
       MCP_TLS_CERT_FILE: "/run/pipeon/mcp-tls.crt"
       MCP_TLS_KEY_FILE: "/run/pipeon/mcp-tls.key"
-      PIPEON_DEV_STACK_MCPD_BIN: "${PIPEON_DEV_STACK_MCPD_BIN:-/repo/packages/dorkpipe/bin/mcpd}"
+      PIPEON_DEV_STACK_MCPD_BIN: "/usr/local/bin/mcpd"
       PIPEON_DEV_STACK_MCPD_LISTEN: "0.0.0.0:8765"
     command:
-      - /bin/bash
-      - -lc
       - exec "$$PIPEON_DEV_STACK_MCPD_BIN" -http "$$PIPEON_DEV_STACK_MCPD_LISTEN"
     volumes:
       - "${PIPEON_DEV_STACK_WORKDIR:-.}:/work"

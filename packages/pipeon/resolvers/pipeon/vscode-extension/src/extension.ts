@@ -14,7 +14,6 @@ const DEFAULT_MODEL = "llama3.2";
 const DEFAULT_MODEL_PROVIDER = "dorkpipe-mcp";
 const CHAT_VIEW_ID = "pipeon.chatView";
 const WELCOME_PANEL_ID = "pipeon.welcome";
-const PANEL_BOTTOM_MIGRATION_KEY = "pipeon.panelBottomMigrated.v1";
 const CHAT_STATE_KEY = "pipeon.chatState.v2";
 const MAX_SAVED_SESSIONS = 20;
 const MAX_HISTORY_MESSAGES = 14;
@@ -2846,20 +2845,6 @@ function configureChatWebview(webview, extensionUri) {
   };
 }
 
-async function resetPanelToBottomOnce(context) {
-  if (context.globalState.get(PANEL_BOTTOM_MIGRATION_KEY)) {
-    return;
-  }
-
-  await context.globalState.update(PANEL_BOTTOM_MIGRATION_KEY, true);
-
-  try {
-    await vscode.commands.executeCommand("workbench.action.positionPanelBottom");
-  } catch {
-    // Best-effort cleanup for the old broken layout migration.
-  }
-}
-
 class PipeonChatViewProvider {
   context: ExtensionContext;
   channel: LogOutputChannel;
@@ -3743,7 +3728,7 @@ function activate(context) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("pipeon.openChat", async () => {
-      chatProvider.openDetachedChatPanel();
+      await revealDorkpipePanel();
     })
   );
 
@@ -3868,7 +3853,7 @@ function activate(context) {
 
   setTimeout(() => {
     void replaceStockWelcomeWithPipeon(context);
-    void resetPanelToBottomOnce(context);
+    void revealDorkpipePanel();
   }, 400);
 }
 

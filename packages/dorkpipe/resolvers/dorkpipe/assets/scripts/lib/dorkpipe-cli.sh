@@ -45,11 +45,17 @@ dorkpipe_script_exec_cli() {
 dorkpipe_script_resolve_bin() {
 	local repo_root="${1:-}"
 	if [[ -n "$repo_root" ]]; then
-		local built_bin="$repo_root/packages/dorkpipe/bin/dorkpipe"
-		if [[ -x "$built_bin" ]]; then
-			printf '%s\n' "$built_bin"
-			return 0
-		fi
+		local candidate
+		for candidate in \
+			"$repo_root/packages/dorkpipe/bin/dorkpipe" \
+			"$repo_root/bin/.dockpipe/tooling/bin/dorkpipe" \
+			"$repo_root/bin/.dockpipe/tooling/bin/dorkpipe.exe"
+		do
+			if [[ -x "$candidate" ]]; then
+				printf '%s\n' "$candidate"
+				return 0
+			fi
+		done
 	fi
 
 	if command -v dorkpipe >/dev/null 2>&1; then
@@ -79,7 +85,7 @@ dorkpipe_script_should_use_go_run() {
 	[[ -n "$repo_root" ]] || return 1
 	[[ -f "$repo_root/packages/dorkpipe/lib/go.mod" ]] || return 1
 
-	local built_bin="$repo_root/packages/dorkpipe/bin/dorkpipe"
+	local built_bin="$repo_root/bin/.dockpipe/tooling/bin/dorkpipe"
 	if [[ ! -x "$built_bin" ]]; then
 		return 0
 	fi

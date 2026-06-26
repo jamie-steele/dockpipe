@@ -8,6 +8,30 @@ dockpipe_repo_root() {
   (cd "$root" && pwd)
 }
 
+dockpipe_is_windows_host() {
+  case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in
+    Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+dockpipe_repo_binary_candidate() {
+  local root="$1"
+  local relative="$2"
+  local candidate="$root/$relative"
+  if [[ -x "$candidate" ]]; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  if dockpipe_is_windows_host && [[ -f "$candidate.exe" ]]; then
+    printf '%s\n' "$candidate.exe"
+    return 0
+  fi
+  return 1
+}
+
 dockpipe_resolve_dockpipe_bin() {
   local root
   root="$(dockpipe_repo_root "${1:-}")"
@@ -15,8 +39,8 @@ dockpipe_resolve_dockpipe_bin() {
     printf '%s\n' "$DOCKPIPE_BIN"
     return 0
   fi
-  local candidate="$root/src/bin/dockpipe"
-  if [[ -x "$candidate" ]]; then
+  local candidate
+  if candidate="$(dockpipe_repo_binary_candidate "$root" "src/bin/dockpipe" 2>/dev/null)"; then
     printf '%s\n' "$candidate"
     return 0
   fi

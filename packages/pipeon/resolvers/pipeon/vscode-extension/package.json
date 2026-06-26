@@ -29,10 +29,16 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test:webview": "node scripts/webview-smoke.js"
   },
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:pipeon.chatView",
+    "onCommand:pipeon.openChat",
+    "onCommand:pipeon.openWelcome"
+  ],
   "main": "extension.js",
   "contributes": {
     "viewsContainers": {
-      "panel": [
+      "activitybar": [
         {
           "id": "dorkpipe-panel",
           "title": "DorkPipe",

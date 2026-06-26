@@ -112,13 +112,7 @@ def write_png(path: str, image: Image.Image, size: int) -> None:
 
 def write_ico(path: str, source: Image.Image, sizes: list[int]) -> None:
     os.makedirs(os.path.dirname(path), exist_ok=True)
-    ico_imgs = [source.resize((s, s), RESAMPLE_LANCZOS) for s in sizes]
-    ico_imgs[0].save(
-        path,
-        format="ICO",
-        sizes=[(s, s) for s in sizes],
-        append_images=ico_imgs[1:],
-    )
+    source.save(path, format="ICO", sizes=[(s, s) for s in sizes])
     print("wrote", path)
 
 

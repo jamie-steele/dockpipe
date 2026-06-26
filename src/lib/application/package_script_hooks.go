@@ -96,7 +96,7 @@ func runPackageScriptTarget(workdir string, target packageScriptTarget, env []st
 	if _, err := os.Stat(target.ScriptAbs); err != nil {
 		return fmt.Errorf("%s %q not found (%s)", missingLabel, target.ScriptRel, target.ScriptAbs)
 	}
-	cmd, err := dockpipeScriptCommand(target.ScriptAbs)
+	cmd, bashExe, err := dockpipeScriptCommand(target.ScriptAbs)
 	if err != nil {
 		return err
 	}
@@ -107,28 +107,51 @@ func runPackageScriptTarget(workdir string, target packageScriptTarget, env []st
 	)
 	cmd.Dir = target.PackageDir
 	cmd.Env = append(baseEnv, env...)
+	if bashExe != "" {
+		cmd.Env = upsertEnvLocal(cmd.Env, "DOCKPIPE_HOST_BASH_BIN", bashExe)
+	}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-func dockpipeScriptCommand(scriptAbs string) (*exec.Cmd, error) {
+func upsertEnvLocal(env []string, key, value string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env)+1)
+	replaced := false
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			if !replaced {
+				out = append(out, prefix+value)
+				replaced = true
+			}
+			continue
+		}
+		out = append(out, entry)
+	}
+	if !replaced {
+		out = append(out, prefix+value)
+	}
+	return out
+}
+
+func dockpipeScriptCommand(scriptAbs string) (*exec.Cmd, string, error) {
 	lower := strings.ToLower(scriptAbs)
 	switch {
 	case strings.HasSuffix(lower, ".ps1"):
-		return exec.Command("pwsh", "-File", scriptAbs), nil
+		return exec.Command("pwsh", "-File", scriptAbs), "", nil
 	case strings.HasSuffix(lower, ".cmd"), strings.HasSuffix(lower, ".bat"):
 		if runtime.GOOS != "windows" {
-			return nil, fmt.Errorf("script %q requires cmd.exe on Windows", scriptAbs)
+			return nil, "", fmt.Errorf("script %q requires cmd.exe on Windows", scriptAbs)
 		}
-		return exec.Command("cmd", "/c", scriptAbs), nil
+		return exec.Command("cmd", "/c", scriptAbs), "", nil
 	default:
 		bashExe, bashArg, err := dockpipeBashCommandParts(scriptAbs)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
-		return exec.Command(bashExe, bashArg), nil
+		return exec.Command(bashExe, bashArg), bashExe, nil
 	}
 }
 

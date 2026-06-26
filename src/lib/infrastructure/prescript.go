@@ -50,7 +50,7 @@ func SourceHostScript(scriptPath string, env []string) (map[string]string, error
 		return nil, fmt.Errorf("pre-script wrapper path: %w", err)
 	}
 	cmd := exec.Command(bashExe, wrapperForBash)
-	cmd.Env = env
+	cmd.Env = upsertEnv(env, "DOCKPIPE_HOST_BASH_BIN", bashExe)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("pre-script %s: %w\n%s", scriptPath, err, out)
@@ -81,6 +81,7 @@ func RunHostScript(scriptPath string, env []string) error {
 		return fmt.Errorf("host run registry: %w", err)
 	}
 	env = applyInteractivePromptMode(env)
+	env = upsertEnv(env, "DOCKPIPE_HOST_BASH_BIN", bashExe)
 	cmd := exec.Command(bashExe, bashPath)
 	cmd.Env = env
 	cmd.Stdin = os.Stdin
@@ -250,4 +251,24 @@ func parseEnv0(data []byte) map[string]string {
 		}
 	}
 	return m
+}
+
+func upsertEnv(env []string, key, value string) []string {
+	prefix := key + "="
+	out := make([]string, 0, len(env)+1)
+	replaced := false
+	for _, entry := range env {
+		if strings.HasPrefix(entry, prefix) {
+			if !replaced {
+				out = append(out, prefix+value)
+				replaced = true
+			}
+			continue
+		}
+		out = append(out, entry)
+	}
+	if !replaced {
+		out = append(out, prefix+value)
+	}
+	return out
 }

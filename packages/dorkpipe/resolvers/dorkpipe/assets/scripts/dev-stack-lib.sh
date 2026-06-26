@@ -40,6 +40,21 @@ dorkpipe_stack_bootstrap_sdk() {
   return 1
 }
 
+dorkpipe_stack_host_bash_bin() {
+  local candidate
+  for candidate in \
+    "${DOCKPIPE_HOST_BASH_BIN:-}" \
+    "${BASH:-}" \
+    "$(command -v bash 2>/dev/null || true)"
+  do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
 dorkpipe_stack_detect_nvidia_gpu() {
   command -v nvidia-smi >/dev/null 2>&1 || return 1
   nvidia-smi -L >/dev/null 2>&1 || return 1
@@ -220,13 +235,18 @@ EOF
 
 dorkpipe_stack_run_gpu_setup_script() {
   local script_path="$1"
+  local bash_bin
+  bash_bin="$(dorkpipe_stack_host_bash_bin)" || {
+    echo "dorkpipe-dev-stack: bash executable not found for GPU setup helper" >&2
+    return 1
+  }
   if [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] && command -v pkexec >/dev/null 2>&1; then
-    pkexec env PATH="$PATH" bash "$script_path"
+    pkexec env PATH="$PATH" DOCKPIPE_HOST_BASH_BIN="$bash_bin" "$bash_bin" "$script_path"
     return $?
   fi
   if command -v sudo >/dev/null 2>&1; then
     sudo -v || return $?
-    bash "$script_path"
+    "$bash_bin" "$script_path"
     return $?
   fi
   echo "dorkpipe-dev-stack: automatic Docker GPU setup requires pkexec or sudo" >&2

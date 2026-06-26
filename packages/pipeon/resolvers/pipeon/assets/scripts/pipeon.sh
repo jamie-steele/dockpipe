@@ -7,6 +7,26 @@ ROOT="$(dockpipe get workdir)"
 # shellcheck source=lib/enable.sh
 source "$SCRIPT_DIR/lib/enable.sh"
 
+pipeon_bash_bin() {
+	local candidate
+	for candidate in \
+		"${DOCKPIPE_HOST_BASH_BIN:-}" \
+		"${BASH:-}" \
+		"$(command -v bash 2>/dev/null || true)"
+	do
+		if [[ -n "$candidate" && -x "$candidate" ]]; then
+			printf '%s\n' "$candidate"
+			return 0
+		fi
+	done
+	return 1
+}
+
+PIPEON_BASH_BIN="$(pipeon_bash_bin)" || {
+	echo "pipeon: bash executable not found for nested helper scripts" >&2
+	exit 1
+}
+
 cmd="${1:-help}"
 shift || true
 
@@ -32,11 +52,11 @@ EOF
 	;;
 bundle)
 	pipeon_check_enabled "$ROOT" || exit $?
-	bash "$SCRIPT_DIR/bundle-context.sh"
+	"$PIPEON_BASH_BIN" "$SCRIPT_DIR/bundle-context.sh"
 	;;
 chat)
 	pipeon_check_enabled "$ROOT" || exit $?
-	bash "$SCRIPT_DIR/chat.sh" "$@"
+	"$PIPEON_BASH_BIN" "$SCRIPT_DIR/chat.sh" "$@"
 	;;
 status)
 	echo "DOCKPIPE_PIPEON=${DOCKPIPE_PIPEON:-<unset>}"

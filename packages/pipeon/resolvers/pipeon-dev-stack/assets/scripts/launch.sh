@@ -6,7 +6,9 @@ resolve_sdk_dockpipe_bin() {
   for candidate in \
     "${DOCKPIPE_BIN:-}" \
     "${DOCKPIPE_WORKDIR:-}/src/bin/dockpipe" \
+    "${DOCKPIPE_WORKDIR:-}/src/bin/dockpipe.exe" \
     "$(pwd)/src/bin/dockpipe" \
+    "$(pwd)/src/bin/dockpipe.exe" \
     "$(command -v dockpipe 2>/dev/null || true)"
   do
     if [[ -n "$candidate" && -x "$candidate" ]]; then
@@ -24,6 +26,27 @@ DOCKPIPE_SDK_BIN="$(resolve_sdk_dockpipe_bin)" || {
 
 eval "$("$DOCKPIPE_SDK_BIN" sdk)"
 dockpipe_sdk init-script
+
+resolve_host_bash_bin() {
+  local candidate
+  for candidate in \
+    "${DOCKPIPE_HOST_BASH_BIN:-}" \
+    "${BASH:-}" \
+    "$(command -v bash 2>/dev/null || true)"
+  do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+DOCKPIPE_HOST_BASH_BIN="$(resolve_host_bash_bin)" || {
+  echo "pipeon-dev-stack: host bash executable not found after SDK bootstrap" >&2
+  exit 1
+}
+export DOCKPIPE_HOST_BASH_BIN
 
 report_launch_failure() {
   local exit_code="$1"
@@ -55,6 +78,10 @@ PIPEON_DESKTOP_BIN="${PIPEON_DESKTOP_BIN:-$(pipeon_stack_desktop_bin)}"
 PIPEON_DESKTOP_SCRIPT="$SCRIPT_DIR/desktop.sh"
 CODE_SERVER_IMAGE="${CODE_SERVER_IMAGE:-dockpipe-code-server:latest}"
 
+is_windows_host() {
+  pipeon_stack_is_windows_host
+}
+
 resolve_tool_bin() {
   local configured="${1:-}"
   local command_name="$2"
@@ -83,6 +110,10 @@ resolve_repo_tool_bin() {
   for candidate in "$@"; do
     if [[ -x "$candidate" ]]; then
       printf '%s\n' "$candidate"
+      return 0
+    fi
+    if is_windows_host && [[ -f "$candidate.exe" ]]; then
+      printf '%s\n' "$candidate.exe"
       return 0
     fi
   done
@@ -115,6 +146,30 @@ compose_cmd() {
   local args=()
   mapfile -t args < <(pipeon_stack_compose_base_args)
   docker compose "${args[@]}" "$@"
+}
+
+retry_with_backoff() {
+  local label="$1"
+  local attempts="$2"
+  local delay_seconds="$3"
+  shift 3
+
+  local attempt=1
+  local status=0
+  while true; do
+    if "$@"; then
+      return 0
+    fi
+    status=$?
+    if (( attempt >= attempts )); then
+      printf '[pipeon-dev-stack] %s failed after %s attempt(s)\n' "$label" "$attempt" >&2
+      return "$status"
+    fi
+    printf '[pipeon-dev-stack] %s failed on attempt %s/%s; retrying in %ss\n' \
+      "$label" "$attempt" "$attempts" "$delay_seconds" >&2
+    sleep "$delay_seconds"
+    attempt=$((attempt + 1))
+  done
 }
 
 ensure_pipeon_code_server_surface() {
@@ -158,14 +213,20 @@ ensure_pipeon_code_server_surface() {
   fi
 
   printf '[pipeon-dev-stack] refreshing Pipeon code-server surface: %s\n' "$refresh_reason" >&2
-  if (
+  printf '[pipeon-dev-stack] invoking build helper: %s code-server-image\n' "$build_script" >&2
+  local build_status=0
+  (
     cd "$PROJECT_DIR"
-    DOCKPIPE_WORKDIR="$WORKDIR" bash "$build_script" code-server-image
-  ); then
+    DOCKPIPE_WORKDIR="$WORKDIR" "$DOCKPIPE_HOST_BASH_BIN" "$build_script" code-server-image
+  )
+  build_status=$?
+  if [[ "$build_status" -eq 0 ]]; then
+    printf '[pipeon-dev-stack] build helper returned successfully\n' >&2
     ensure_pipeon_stack_state_dir
     printf '%s\n' "$current_sig" > "$stamp_file"
     return 0
   fi
+  printf '[pipeon-dev-stack] build helper exited with status %s\n' "$build_status" >&2
 
   if [[ "$have_image" -eq 1 ]]; then
     printf '[pipeon-dev-stack] refresh failed; continuing with the existing dockpipe-code-server image.\n' >&2
@@ -206,15 +267,24 @@ wait_for_mcp_ready() {
   return 1
 }
 
+if ! docker version >/dev/null 2>&1; then
+  echo "pipeon-dev-stack: Docker is not reachable" >&2
+  exit 1
+fi
+
 DOCKPIPE_BIN="$(resolve_repo_tool_bin "${DOCKPIPE_BIN:-}" dockpipe \
   "$WORKDIR/src/bin/dockpipe" \
   "$PROJECT_DIR/src/bin/dockpipe")"
 DORKPIPE_BIN="$(resolve_repo_tool_bin "${DORKPIPE_BIN:-}" dorkpipe \
   "$WORKDIR/packages/dorkpipe/bin/dorkpipe" \
-  "$PROJECT_DIR/packages/dorkpipe/bin/dorkpipe")"
+  "$PROJECT_DIR/packages/dorkpipe/bin/dorkpipe" \
+  "$WORKDIR/bin/.dockpipe/tooling/bin/dorkpipe" \
+  "$PROJECT_DIR/bin/.dockpipe/tooling/bin/dorkpipe")"
 MCPD_BIN="$(resolve_repo_tool_bin "${MCPD_BIN:-}" mcpd \
   "$WORKDIR/packages/dorkpipe/bin/mcpd" \
-  "$PROJECT_DIR/packages/dorkpipe/bin/mcpd")"
+  "$PROJECT_DIR/packages/dorkpipe/bin/mcpd" \
+  "$WORKDIR/bin/.dockpipe/tooling/bin/mcpd" \
+  "$PROJECT_DIR/bin/.dockpipe/tooling/bin/mcpd")"
 PIPEON_BIN="$(resolve_pipeon_bin "${PIPEON_BIN:-}")"
 
 ensure_pipeon_stack_state_dir
@@ -235,11 +305,6 @@ cleanup() {
   fi
 }
 trap cleanup EXIT INT TERM
-
-if ! docker version >/dev/null 2>&1; then
-  echo "pipeon-dev-stack: Docker is not reachable" >&2
-  exit 1
-fi
 
 configure_pipeon_stack_gpu
 
@@ -286,7 +351,13 @@ if [[ ! -f "$PIPEON_DESKTOP_SCRIPT" ]]; then
   exit 1
 fi
 
-compose_cmd up -d --remove-orphans
+if ! retry_with_backoff \
+  "docker compose up" \
+  "${PIPEON_DEV_STACK_COMPOSE_UP_ATTEMPTS:-3}" \
+  "${PIPEON_DEV_STACK_COMPOSE_UP_RETRY_DELAY:-5}" \
+  compose_cmd up -d --remove-orphans --force-recreate --build; then
+  exit 1
+fi
 
 if ! verify_pipeon_stack_ollama_gpu; then
   compose_cmd logs ollama >&2 || true
@@ -324,7 +395,11 @@ if [[ "${PIPEON_DEV_STACK_PULL_MODEL:-1}" == "1" ]]; then
     echo "pipeon-dev-stack: Ollama did not become ready in time" >&2
     exit 1
   fi
-  compose_cmd exec -T ollama ollama pull "$MODEL_NAME" >&2
+  retry_with_backoff \
+    "ollama model pull ($MODEL_NAME)" \
+    "${PIPEON_DEV_STACK_OLLAMA_PULL_ATTEMPTS:-3}" \
+    "${PIPEON_DEV_STACK_OLLAMA_PULL_RETRY_DELAY:-5}" \
+    compose_cmd exec -T ollama ollama pull "$MODEL_NAME" >&2
 fi
 
 if [[ "${PIPEON_DEV_STACK_PIPEON_BUNDLE:-1}" == "1" && -x "$PIPEON_BIN" ]]; then
@@ -354,7 +429,7 @@ cat >&2 <<EOF
   gpu status:   $(pipeon_stack_gpu_status)
 EOF
 
-if ! bash "$PIPEON_DESKTOP_SCRIPT"; then
+if ! "$DOCKPIPE_HOST_BASH_BIN" "$PIPEON_DESKTOP_SCRIPT"; then
   desktop_status=$?
   AUTODOWN=0
   printf '[pipeon-dev-stack] Pipeon desktop shell failed to launch (exit %s)\n' "$desktop_status" >&2

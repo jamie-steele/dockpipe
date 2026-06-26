@@ -14,6 +14,47 @@ pipeon_stack_repo_root() {
   pipeon_stack_workdir
 }
 
+pipeon_stack_is_windows_host() {
+  case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in
+    Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+pipeon_stack_python_bin() {
+  local candidate
+  for candidate in \
+    "${PIPEON_PYTHON_BIN:-}" \
+    "$(command -v python3 2>/dev/null || true)" \
+    "$(command -v python 2>/dev/null || true)"
+  do
+    if [[ -n "$candidate" ]] && "$candidate" --version >/dev/null 2>&1; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+pipeon_stack_powershell_bin() {
+  local candidate
+  for candidate in \
+    "${PIPEON_PWSH_BIN:-}" \
+    "$(command -v pwsh.exe 2>/dev/null || true)" \
+    "$(command -v pwsh 2>/dev/null || true)" \
+    "$(command -v powershell.exe 2>/dev/null || true)" \
+    "$(command -v powershell 2>/dev/null || true)"
+  do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
 pipeon_stack_slug() {
   local workdir base
   workdir="$(pipeon_stack_workdir)"
@@ -69,13 +110,28 @@ pipeon_stack_code_server_port_file() {
 }
 
 pipeon_stack_pick_free_port() {
-  python3 - <<'PY'
+  local python_bin
+  python_bin="$(pipeon_stack_python_bin 2>/dev/null || true)"
+  if [[ -n "$python_bin" ]]; then
+    "$python_bin" - <<'PY'
 import socket
 s = socket.socket()
 s.bind(("127.0.0.1", 0))
 print(s.getsockname()[1])
 s.close()
 PY
+    return 0
+  fi
+
+  local powershell_bin
+  powershell_bin="$(pipeon_stack_powershell_bin 2>/dev/null || true)"
+  if [[ -n "$powershell_bin" ]]; then
+    "$powershell_bin" -NoProfile -Command '$listener=[System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback,0); $listener.Start(); try { $listener.LocalEndpoint.Port } finally { $listener.Stop() }'
+    return 0
+  fi
+
+  echo "pipeon-dev-stack: neither python nor PowerShell was available to pick a free local port" >&2
+  return 1
 }
 
 ensure_pipeon_stack_code_server_port() {
@@ -100,6 +156,48 @@ pipeon_stack_code_server_url() {
 
 pipeon_stack_code_server_home() {
   printf '%s/code-server-home\n' "$(pipeon_stack_state_dir)"
+}
+
+pipeon_stack_windows_docker_host_path() {
+  local path_value="$1"
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -m "$path_value"
+    return 0
+  fi
+  case "$path_value" in
+    /[a-zA-Z]/*)
+      printf '%s\n' "${path_value:1:1}:${path_value:2}"
+      return 0
+      ;;
+  esac
+  printf '%s\n' "$path_value"
+}
+
+pipeon_stack_docker_host_path() {
+  local path_value="$1"
+  if pipeon_stack_is_windows_host; then
+    pipeon_stack_windows_docker_host_path "$path_value"
+    return 0
+  fi
+  printf '%s\n' "$path_value"
+}
+
+pipeon_stack_host_theme() {
+  if ! pipeon_stack_is_windows_host; then
+    return 1
+  fi
+
+  local powershell_bin
+  powershell_bin="$(pipeon_stack_powershell_bin 2>/dev/null || true)"
+  if [[ -z "$powershell_bin" ]]; then
+    return 1
+  fi
+
+  "$powershell_bin" -NoProfile -Command '
+    $value = (Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name AppsUseLightTheme -ErrorAction SilentlyContinue).AppsUseLightTheme
+    if ($null -eq $value) { return }
+    if ([int]$value -eq 0) { "dark" } else { "light" }
+  ' 2>/dev/null | tr -d '\r\n'
 }
 
 pipeon_stack_desktop_bin() {
@@ -184,7 +282,10 @@ pipeon_stack_build_script() {
 pipeon_stack_code_server_image_signature() {
   local repo_root
   repo_root="$(pipeon_stack_repo_root)"
-  python3 - "$repo_root" <<'PY'
+  local python_bin
+  python_bin="$(pipeon_stack_python_bin 2>/dev/null || true)"
+  if [[ -n "$python_bin" ]]; then
+    "$python_bin" - "$repo_root" <<'PY'
 import hashlib
 import os
 import sys
@@ -239,6 +340,66 @@ for path in paths:
 
 print(hasher.hexdigest())
 PY
+    return 0
+  fi
+
+  local powershell_bin
+  powershell_bin="$(pipeon_stack_powershell_bin 2>/dev/null || true)"
+  if [[ -n "$powershell_bin" ]]; then
+    "$powershell_bin" -NoProfile -Command '
+      $repo = $args[0]
+      $paths = @(
+        (Join-Path $repo "VERSION"),
+        (Join-Path $repo "packages/pipeon/assets/scripts/build.sh"),
+        (Join-Path $repo "packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server"),
+        (Join-Path $repo "packages/pipeon/resolvers/pipeon/vscode-extension/code-server-user-settings.json"),
+        (Join-Path $repo "packages/pipeon/resolvers/pipeon/vscode-extension/package.json"),
+        (Join-Path $repo "packages/pipeon/resolvers/pipeon/vscode-extension/package-lock.json"),
+        (Join-Path $repo "packages/pipeon/resolvers/pipeon/vscode-extension/tsconfig.json"),
+        (Join-Path $repo "packages/pipeon/resolvers/pipeon/vscode-extension/src"),
+        (Join-Path $repo "packages/pipeon/resolvers/pipeon/vscode-extension/types"),
+        (Join-Path $repo "packages/pipeon/resolvers/pipeon/vscode-extension/scripts"),
+        (Join-Path $repo "packages/pipeon/resolvers/pipeon/vscode-extension/images"),
+        (Join-Path $repo "src/app/tooling/vscode-extensions/dockpipe-language-support")
+      )
+      $exclude = @("node_modules","target",".git","dist","build")
+      $repoPrefix = ($repo.TrimEnd("\") + "\")
+      $lines = New-Object System.Collections.Generic.List[string]
+      foreach ($path in $paths) {
+        if (!(Test-Path -LiteralPath $path)) { continue }
+        $item = Get-Item -LiteralPath $path
+        $files = if ($item.PSIsContainer) {
+          Get-ChildItem -LiteralPath $path -Recurse -File | Where-Object {
+            $parts = $_.FullName -split "[\\/]"
+            -not ($parts | Where-Object { $exclude -contains $_ })
+          } | Sort-Object FullName
+        } else {
+          @($item)
+        }
+        foreach ($file in $files) {
+          $full = $file.FullName
+          $rel = if ($full.StartsWith($repoPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+            $full.Substring($repoPrefix.Length).Replace("\","/")
+          } else {
+            $full.Replace("\","/")
+          }
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $full).Hash.ToLowerInvariant()
+          $lines.Add("$rel`t$hash")
+        }
+      }
+      $tmp = [System.IO.Path]::GetTempFileName()
+      try {
+        [System.IO.File]::WriteAllLines($tmp, $lines)
+        (Get-FileHash -Algorithm SHA256 -LiteralPath $tmp).Hash.ToLowerInvariant()
+      } finally {
+        Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+      }
+    ' "$repo_root"
+    return 0
+  fi
+
+  echo "pipeon-dev-stack: neither python nor PowerShell was available to compute the code-server image signature" >&2
+  return 1
 }
 
 ensure_pipeon_stack_state_dir() {
@@ -272,12 +433,21 @@ ensure_pipeon_stack_mcp_tls_material() {
     echo "pipeon-dev-stack: openssl is required to generate local MCP TLS material" >&2
     exit 1
   fi
-  openssl req -x509 -nodes -newkey rsa:2048 \
-    -keyout "$key_file" \
-    -out "$cert_file" \
-    -days 365 \
-    -subj "/CN=dorkpipe-stack" \
-    -addext "subjectAltName=DNS:dorkpipe-stack,DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+  if pipeon_stack_is_windows_host; then
+    MSYS2_ARG_CONV_EXCL='*' openssl req -x509 -nodes -newkey rsa:2048 \
+      -keyout "$key_file" \
+      -out "$cert_file" \
+      -days 365 \
+      -subj "/CN=dorkpipe-stack" \
+      -addext "subjectAltName=DNS:dorkpipe-stack,DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+  else
+    openssl req -x509 -nodes -newkey rsa:2048 \
+      -keyout "$key_file" \
+      -out "$cert_file" \
+      -days 365 \
+      -subj "/CN=dorkpipe-stack" \
+      -addext "subjectAltName=DNS:dorkpipe-stack,DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+  fi
   chmod 600 "$key_file" 2>/dev/null || true
   chmod 644 "$cert_file" 2>/dev/null || true
 }
@@ -297,6 +467,10 @@ pipeon_stack_docker_supports_nvidia_gpu() {
   printf '%s' "$docker_runtimes" | grep -qi '"nvidia"'
 }
 
+pipeon_stack_can_run_nvidia_sample() {
+  docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi >/dev/null 2>&1
+}
+
 pipeon_stack_explain_docker_gpu_setup() {
   if pipeon_stack_is_windows_host; then
     cat >&2 <<'EOF'
@@ -307,7 +481,7 @@ pipeon-dev-stack: Docker GPU access is not enabled yet on this Windows host.
     2. Run: wsl.exe --update
     3. In Docker Desktop, enable "Use WSL 2 based engine".
     4. Make sure Docker Desktop is using Linux containers.
-  Check: docker run --rm --gpus all ubuntu nvidia-smi
+  Check: docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
 EOF
     return
   fi
@@ -335,7 +509,7 @@ pipeon_stack_try_enable_windows_docker_gpu_access() {
     echo "pipeon-dev-stack: Docker did not respond after the WSL update" >&2
     return 1
   fi
-  if ! docker run --rm --gpus all ubuntu nvidia-smi >/dev/null 2>&1; then
+  if ! pipeon_stack_can_run_nvidia_sample; then
     echo "pipeon-dev-stack: Docker Desktop still cannot run a GPU container after the WSL update" >&2
     echo "pipeon-dev-stack: open Docker Desktop Settings and enable the WSL 2 engine, then ensure Linux containers are active" >&2
     return 1
@@ -499,7 +673,7 @@ pipeon_stack_try_enable_docker_gpu_access() {
     return 1
   fi
   printf '[pipeon-dev-stack] Ollama GPU: verifying Docker GPU access with a sample container...\n' >&2
-  if ! docker run --rm --gpus all ubuntu nvidia-smi >/dev/null 2>&1; then
+  if ! pipeon_stack_can_run_nvidia_sample; then
     echo "pipeon-dev-stack: Docker reports an nvidia runtime, but a sample GPU container still failed" >&2
     return 1
   fi
@@ -643,14 +817,29 @@ pipeon_stack_gpu_status() {
 }
 
 verify_pipeon_stack_ollama_gpu() {
-  local mode status_file
+  local mode status_file attempts i
   mode="$(pipeon_stack_gpu_mode)"
   status_file="$(pipeon_stack_gpu_status_file)"
   case "$mode" in
     nvidia)
-      if compose_cmd exec -T ollama sh -lc 'test -e /dev/nvidiactl || test -e /dev/nvidia0 || test -d /proc/driver/nvidia' >/dev/null 2>&1; then
-        printf 'nvidia-attached\n' > "$status_file"
-        printf '[pipeon-dev-stack] Ollama GPU: NVIDIA devices attached to container\n' >&2
+      attempts="${PIPEON_DEV_STACK_GPU_VERIFY_ATTEMPTS:-24}"
+      for ((i = 0; i < attempts; i++)); do
+        if compose_cmd exec -T ollama sh -lc 'test -e /dev/nvidiactl || test -e /dev/nvidia0 || test -d /proc/driver/nvidia || test -e /dev/dxg' >/dev/null 2>&1; then
+          printf 'nvidia-attached\n' > "$status_file"
+          printf '[pipeon-dev-stack] Ollama GPU: NVIDIA devices attached to container\n' >&2
+          return 0
+        fi
+        if compose_cmd logs ollama 2>/dev/null | grep -q 'inference compute.*CUDA'; then
+          printf 'nvidia-discovered-via-ollama\n' > "$status_file"
+          printf '[pipeon-dev-stack] Ollama GPU: CUDA reported by Ollama during startup\n' >&2
+          return 0
+        fi
+        sleep 1
+      done
+      if pipeon_stack_is_windows_host; then
+        printf 'nvidia-requested-windows-fallback-cpu\n' > "$status_file"
+        printf '[pipeon-dev-stack] Ollama GPU: Docker started without visible GPU devices or CUDA confirmation inside the Ollama container on Windows; continuing on CPU\n' >&2
+        printf '[pipeon-dev-stack] Ollama GPU: verify separately with: docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi\n' >&2
         return 0
       fi
       printf 'nvidia-requested-but-not-attached\n' > "$status_file"
@@ -694,9 +883,9 @@ PIPEON_DEV_STACK_MCP_PORT=$(pipeon_stack_mcp_port)
 PIPEON_DEV_STACK_MCP_API_KEY_FILE=$api_key_file
 PIPEON_DEV_STACK_MCP_TLS_CERT_FILE=$tls_cert_file
 PIPEON_DEV_STACK_MCP_TLS_KEY_FILE=$tls_key_file
-PIPEON_DEV_STACK_DOCKPIPE_BIN=/repo/src/bin/dockpipe
-PIPEON_DEV_STACK_DORKPIPE_BIN=/repo/packages/dorkpipe/bin/dorkpipe
-PIPEON_DEV_STACK_MCPD_BIN=/repo/packages/dorkpipe/bin/mcpd
+PIPEON_DEV_STACK_DOCKPIPE_BIN=/usr/local/bin/dockpipe
+PIPEON_DEV_STACK_DORKPIPE_BIN=/usr/local/bin/dorkpipe
+PIPEON_DEV_STACK_MCPD_BIN=/usr/local/bin/mcpd
 PIPEON_DEV_STACK_DORKPIPE_WORKDIR=/work
 PIPEON_DEV_STACK_DORKPIPE_DATABASE_URL=postgresql://dorkpipe:dorkpipe@postgres:5432/dorkpipe
 PIPEON_DEV_STACK_DORKPIPE_OLLAMA_HOST=http://ollama:11434
