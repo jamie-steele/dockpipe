@@ -10,6 +10,6 @@ author: DockPipe
 license: Apache-2.0
 repository: https://github.com/dockpipe/dockpipe
 tags: [workflow, docs, orchestration, dorkpipe, ai]
-depends: [agent, dorkpipe]
+depends: [dorkpipe]
 allow_clone: true
 distribution: source

@@ -5,10 +5,14 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 
+unset DOCKPIPE_BIN DOCKPIPE_WORKDIR DOCKPIPE_SDK_ROOT
+
 # shellcheck source=/dev/null
 source "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh"
 # shellcheck source=/dev/null
 source "$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts/lib/dorkpipe-cli.sh"
+
+dockpipe_sdk refresh "$ROOT"
 
 expected_dockpipe="$(dockpipe_resolve_dockpipe_bin "$ROOT")"
 actual_dockpipe="$(dockpipe_sdk require dockpipe-bin)"
