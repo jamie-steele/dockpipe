@@ -38,7 +38,7 @@ lanes:
     local: false
     cloud: true
     free: false
-    model: cli
+    model: "${DORKPIPE_ORCH_CODEX_MODEL:-cli}"
     context_window: 128000
     capabilities:
       - chat
@@ -67,7 +67,7 @@ lanes:
     local: false
     cloud: true
     free: false
-    model: cli
+    model: "${DORKPIPE_ORCH_CLAUDE_MODEL:-cli}"
     context_window: 200000
     capabilities:
       - chat

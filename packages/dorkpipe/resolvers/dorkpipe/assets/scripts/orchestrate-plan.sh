@@ -135,6 +135,7 @@ def load_model_lanes():
     return normalized
 
 model_lanes = load_model_lanes()
+lanes_by_provider = {str(lane.get("provider", "")): lane for lane in model_lanes}
 
 def load_baseline_policy():
     if not baseline_policy_path.exists():
@@ -438,8 +439,11 @@ plan_payload = {
 }
 if compare_providers:
     compare_width = len(compare_providers)
-    plan_payload["concurrency"]["max_workers"] = max(plan_payload["concurrency"]["max_workers"], compare_width)
-    plan_payload["concurrency"]["max_cloud_workers"] = max(plan_payload["concurrency"]["max_cloud_workers"], compare_width)
+    cloud_compare_width = sum(1 for provider in compare_providers if (lanes_by_provider.get(provider) or {}).get("cloud"))
+    local_compare_width = compare_width - cloud_compare_width
+    plan_payload["concurrency"]["max_workers"] = max(plan_payload["concurrency"]["max_workers"], compare_width + 1)
+    plan_payload["concurrency"]["max_local_workers"] = max(plan_payload["concurrency"]["max_local_workers"], local_compare_width + 1)
+    plan_payload["concurrency"]["max_cloud_workers"] = max(plan_payload["concurrency"]["max_cloud_workers"], cloud_compare_width)
 plan_json.write_text(json.dumps(plan_payload, indent=2) + "\n")
 
 graph_tasks = []
@@ -595,8 +599,29 @@ for task in tasks:
                     "Comparison mode:",
                     f"- You are the {variant['compare_provider']} fork for base task `{variant['base_task_id']}`.",
                     "- Produce an independent answer for later side-by-side evaluation.",
-                ])
+            ])
             prompt = "\n".join(lines) + "\n"
+
+        output_contract = []
+        if os.environ.get("DORKPIPE_ORCH_STRICT_OUTPUT_CONTRACT", "true").lower() in {"1", "true", "yes", "on"}:
+            output_contract.extend([
+                "DorkPipe worker output contract:",
+                "- Return only the requested markdown artifact content.",
+                "- Do not describe files you wrote, commands you ran, validation steps, source-control status, or container behavior.",
+                "- Do not say you completed the task; produce the task answer itself.",
+                "- Do not write or modify source files unless the task explicitly asks for edits.",
+                "- Use the same output standard regardless of provider or model lane.",
+            ])
+        if variant["compare_provider"]:
+            output_contract.extend([
+                "",
+                "Comparison mode:",
+                f"- You are the {variant['compare_provider']} fork for base task `{variant['base_task_id']}`.",
+                "- Produce an independent answer for side-by-side evaluation.",
+                "- Do not mention that you are in a competition or compare yourself to other lanes.",
+            ])
+        if output_contract:
+            prompt = "\n".join(output_contract).rstrip() + "\n\n" + prompt.lstrip()
 
         prefix = []
         if startup_prompt:
@@ -616,10 +641,13 @@ for task in tasks:
 
         graph_tasks.append({
             "id": task_id,
+            "base_task_id": variant["base_task_id"],
+            "comparison": lane_selection.get("comparison", {"enabled": False}),
             "depends_on": task_payload["depends_on"],
             "resolver_hint": task_payload["resolver_hint"],
             "lane_id": lane_selection.get("lane_id", ""),
             "provider": lane_selection.get("provider", ""),
+            "model": lane_selection.get("model", ""),
             "worker_type": task_payload["worker_type"],
         })
 

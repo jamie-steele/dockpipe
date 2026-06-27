@@ -85,9 +85,12 @@ echo "test_orchestration_force_codex OK"
 export DORKPIPE_ORCH_WORKFLOW="test.docs.orchestrate.compare"
 export DORKPIPE_ORCH_ROOT="${TMPDIR:-/tmp}/dorkpipe-orch-compare-${RANDOM}-${RANDOM}"
 export DORKPIPE_ORCH_FORCE_PROVIDER=""
-export DORKPIPE_ORCH_COMPARE_PROVIDERS="codex,claude"
+export DORKPIPE_ORCH_COMPARE_PROVIDERS="ollama,codex,claude"
 export DORKPIPE_ORCH_COMPARE_SCOPE="auto"
 export DORKPIPE_ORCH_CLOUD_LANES="true"
+export DORKPIPE_ORCH_CODEX_MODEL="test-codex-model"
+export DORKPIPE_ORCH_CLAUDE_MODEL="test-claude-model"
+export DORKPIPE_ORCH_OLLAMA_MODEL="test-ollama-model"
 
 bash "$DOCKPIPE_SCRIPT_DIR/orchestrate-plan.sh" >/dev/null
 
@@ -101,8 +104,10 @@ lane_plan = json.loads((root / "lanes" / "plan.json").read_text())
 tasks = {task["task_id"]: task for task in lane_plan.get("tasks", [])}
 expected = {
     "repo_shape": "ollama",
+    "package_contracts__ollama": "ollama",
     "package_contracts__codex": "codex",
     "package_contracts__claude": "claude",
+    "safety_model__ollama": "ollama",
     "safety_model__codex": "codex",
     "safety_model__claude": "claude",
 }
@@ -118,9 +123,24 @@ graph = json.loads((root / "task-graph.json").read_text())
 graph_tasks = {task["id"]: task for task in graph["tasks"]}
 for task_id, provider in expected.items():
     assert graph_tasks[task_id]["provider"] == provider, graph_tasks[task_id]
+    assert graph_tasks[task_id].get("model"), graph_tasks[task_id]
+    if provider == "codex":
+        assert graph_tasks[task_id]["model"] == "test-codex-model", graph_tasks[task_id]
+    if provider == "claude":
+        assert graph_tasks[task_id]["model"] == "test-claude-model", graph_tasks[task_id]
+    if provider == "ollama":
+        if task_id == "repo_shape":
+            assert graph_tasks[task_id]["model"] == "llama3.2", graph_tasks[task_id]
+        else:
+            assert graph_tasks[task_id]["model"] == "test-ollama-model", graph_tasks[task_id]
+    prompt = (root / "tasks" / task_id / "prompt.md").read_text()
+    assert "DorkPipe worker output contract:" in prompt, prompt
+    assert "Return only the requested markdown artifact content." in prompt, prompt
+assert graph["concurrency"]["max_workers"] >= 4, graph["concurrency"]
+assert graph["concurrency"]["max_local_workers"] >= 2, graph["concurrency"]
 assert graph["concurrency"]["max_cloud_workers"] >= 2, graph["concurrency"]
 request = json.loads((root / "request.json").read_text())
-assert request["compare_providers"] == ["codex", "claude"], request
+assert request["compare_providers"] == ["ollama", "codex", "claude"], request
 assert request["compare_scope"] == "auto", request
 PY
 

@@ -33,6 +33,10 @@ dorkpipe_orchestrate_init() {
   export DORKPIPE_ORCH_FORCE_PROVIDER_SCOPE="${DORKPIPE_ORCH_FORCE_PROVIDER_SCOPE:-auto}"
   export DORKPIPE_ORCH_COMPARE_PROVIDERS="${DORKPIPE_ORCH_COMPARE_PROVIDERS:-}"
   export DORKPIPE_ORCH_COMPARE_SCOPE="${DORKPIPE_ORCH_COMPARE_SCOPE:-auto}"
+  export DORKPIPE_ORCH_COMPARE_ANIMATION="${DORKPIPE_ORCH_COMPARE_ANIMATION:-auto}"
+  export DORKPIPE_ORCH_COMPARE_RENDERER="${DORKPIPE_ORCH_COMPARE_RENDERER:-clear}"
+  export DORKPIPE_ORCH_COMPARE_WORKER_LOGS="${DORKPIPE_ORCH_COMPARE_WORKER_LOGS:-artifact}"
+  export DORKPIPE_ORCH_STRICT_OUTPUT_CONTRACT="${DORKPIPE_ORCH_STRICT_OUTPUT_CONTRACT:-true}"
   export DORKPIPE_ORCH_CONTAINERIZE_CLOUD="${DORKPIPE_ORCH_CONTAINERIZE_CLOUD:-true}"
   export DORKPIPE_ORCH_AUTH_MOUNT_MODE="${DORKPIPE_ORCH_AUTH_MOUNT_MODE:-rw}"
   export DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS="${DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS:-120000}"
@@ -180,6 +184,7 @@ dorkpipe_orchestrate_run_container_worker() {
   local provider="${1:?provider}"
   local prompt_path="${2:?prompt path}"
   local response_path="${3:?response path}"
+  local selected_model="${4:-}"
   local dockpipe_bin auth_mount raw_response_path
   dockpipe_bin="$(dorkpipe_orchestrate_dockpipe_bin)" || return 1
   raw_response_path="${response_path}.raw"
@@ -202,8 +207,16 @@ dorkpipe_orchestrate_run_container_worker() {
 
   case "${provider}" in
     codex)
+      local codex_args=(
+        "codex" "exec"
+        "--dangerously-bypass-approvals-and-sandbox"
+      )
+      if [[ -n "${selected_model}" && "${selected_model}" != "cli" ]]; then
+        codex_args+=("--model" "${selected_model}")
+      fi
+      codex_args+=("$(cat "${prompt_path}")")
       "${dockpipe_bin}" "${args[@]}" -- \
-        codex exec --dangerously-bypass-approvals-and-sandbox "$(cat "${prompt_path}")" > "${raw_response_path}"
+        "${codex_args[@]}" > "${raw_response_path}"
       ;;
     claude)
       "${dockpipe_bin}" "${args[@]}" -- \
@@ -215,8 +228,12 @@ dorkpipe_orchestrate_run_container_worker() {
               cp "${latest}" /home/node/.claude.json
             fi
           fi
-          claude --dangerously-skip-permissions -p "$1"
-        ' _ "$(cat "${prompt_path}")" > "${raw_response_path}"
+          if [[ -n "${2:-}" && "${2:-}" != "cli" ]]; then
+            claude --dangerously-skip-permissions --model "$2" -p "$1"
+          else
+            claude --dangerously-skip-permissions -p "$1"
+          fi
+        ' _ "$(cat "${prompt_path}")" "${selected_model}" > "${raw_response_path}"
       ;;
     *)
       return 1

@@ -72,6 +72,19 @@ budget_halt="false"
 estimated_input_tokens="$(dorkpipe_orchestrate_estimate_tokens_for_file "${prompt_md}")"
 estimated_output_tokens="0"
 estimated_total_tokens="${estimated_input_tokens}"
+selected_model="$(
+  python3 - <<'PY'
+import json
+import os
+
+model = ""
+try:
+    model = (json.loads(os.environ.get("TASK_MODEL_JSON", "{}")) or {}).get("model", "") or ""
+except Exception:
+    model = ""
+print(model)
+PY
+)"
 
 live_response_is_valid() {
   local path="${1:?response path}"
@@ -125,7 +138,7 @@ if [[ "${budget_halt}" != "true" ]]; then
     case "${provider}" in
       codex)
         if [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_CONTAINERIZE_CLOUD}")" == "true" ]]; then
-          if dorkpipe_orchestrate_run_container_worker codex "${prompt_md}" "${response_md}" && live_response_is_valid "${response_md}"; then
+          if dorkpipe_orchestrate_run_container_worker codex "${prompt_md}" "${response_md}" "${selected_model}" && live_response_is_valid "${response_md}"; then
             used_live_model="true"
             summary="Live Codex worker output captured in response.md from the codex resolver container"
             confidence="0.72"
@@ -135,7 +148,12 @@ if [[ "${budget_halt}" != "true" ]]; then
             issues_json='["codex resolver container failed, host Codex auth was unavailable, or output was not a model response"]'
           fi
         elif command -v codex >/dev/null 2>&1; then
-          if codex exec --dangerously-bypass-approvals-and-sandbox "$(cat "${prompt_md}")" > "${response_md}" && live_response_is_valid "${response_md}"; then
+          codex_args=("exec" "--dangerously-bypass-approvals-and-sandbox")
+          if [[ -n "${selected_model}" && "${selected_model}" != "cli" ]]; then
+            codex_args+=("--model" "${selected_model}")
+          fi
+          codex_args+=("$(cat "${prompt_md}")")
+          if codex "${codex_args[@]}" > "${response_md}" && live_response_is_valid "${response_md}"; then
             used_live_model="true"
             summary="Live Codex worker output captured in response.md from the host CLI"
             confidence="0.72"
@@ -148,7 +166,7 @@ if [[ "${budget_halt}" != "true" ]]; then
         ;;
       claude)
         if [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_CONTAINERIZE_CLOUD}")" == "true" ]]; then
-          if dorkpipe_orchestrate_run_container_worker claude "${prompt_md}" "${response_md}" && live_response_is_valid "${response_md}"; then
+          if dorkpipe_orchestrate_run_container_worker claude "${prompt_md}" "${response_md}" "${selected_model}" && live_response_is_valid "${response_md}"; then
             used_live_model="true"
             summary="Live Claude worker output captured in response.md from the claude resolver container"
             confidence="0.72"
@@ -158,7 +176,12 @@ if [[ "${budget_halt}" != "true" ]]; then
             issues_json='["claude resolver container failed, host Claude auth was unavailable, or output was not a model response"]'
           fi
         elif command -v claude >/dev/null 2>&1; then
-          if claude -p "$(cat "${prompt_md}")" > "${response_md}" && live_response_is_valid "${response_md}"; then
+          claude_args=()
+          if [[ -n "${selected_model}" && "${selected_model}" != "cli" ]]; then
+            claude_args+=("--model" "${selected_model}")
+          fi
+          claude_args+=("-p" "$(cat "${prompt_md}")")
+          if claude "${claude_args[@]}" > "${response_md}" && live_response_is_valid "${response_md}"; then
             used_live_model="true"
             summary="Live Claude worker output captured in response.md from the host CLI"
             confidence="0.72"
@@ -173,19 +196,7 @@ if [[ "${budget_halt}" != "true" ]]; then
         if command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
           ollama_host="${OLLAMA_HOST:-http://host.docker.internal:11434}"
           ollama_host="${ollama_host%/}"
-          ollama_model="$(
-            python3 - <<'PY'
-import json
-import os
-
-model = ""
-try:
-    model = (json.loads(os.environ.get("TASK_MODEL_JSON", "{}")) or {}).get("model", "") or ""
-except Exception:
-    model = ""
-print(model)
-PY
-          )"
+          ollama_model="${selected_model}"
           if [[ -z "${ollama_model}" ]]; then
             ollama_model="${DORKPIPE_ORCH_OLLAMA_MODEL:-llama3.2}"
           fi
@@ -229,7 +240,7 @@ fi
 
 dorkpipe_orchestrate_record_training_metric "${task_id}" "${lane_id}" "${provider}" "${status}" "${confidence}" "${estimated_input_tokens}" "${estimated_output_tokens}" "${used_live_model}" "${budget_halt}" "${task_started_at}" "${task_finished_at}" "${duration_ms}"
 
-export task_id status resolver_hint provider lane_id used_live_model budget_halt estimated_input_tokens estimated_output_tokens estimated_total_tokens task_started_at task_finished_at duration_ms summary confidence issues_json next_actions_json TASK_BASE_ID TASK_COMPARISON_JSON TASK_LANE_JSON TASK_CLAIMS_JSON TASK_CITATIONS_JSON
+export task_id status resolver_hint provider lane_id selected_model used_live_model budget_halt estimated_input_tokens estimated_output_tokens estimated_total_tokens task_started_at task_finished_at duration_ms summary confidence issues_json next_actions_json TASK_BASE_ID TASK_COMPARISON_JSON TASK_LANE_JSON TASK_CLAIMS_JSON TASK_CITATIONS_JSON
 python3 - "${result_json}" <<'PY'
 import json
 import os
@@ -248,6 +259,7 @@ payload = {
     "status": os.environ["status"],
     "provider_requested": os.environ.get("resolver_hint", "auto"),
     "provider_actual": os.environ["provider"],
+    "model": os.environ.get("selected_model", ""),
     "lane_id": os.environ.get("lane_id", ""),
     "lane_selection": loads_env("TASK_LANE_JSON", {}),
     "used_live_model": os.environ.get("used_live_model") == "true",
