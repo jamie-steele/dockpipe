@@ -70,6 +70,12 @@ training_mode = os.environ.get("DORKPIPE_ORCH_TRAINING_MODE", "observe")
 cloud_lanes_enabled = os.environ.get("DORKPIPE_ORCH_CLOUD_LANES", "false").lower() in {"1", "true", "yes", "on"}
 force_provider = (os.environ.get("DORKPIPE_ORCH_FORCE_PROVIDER") or os.environ.get("DORKPIPE_ORCH_TASK_PROVIDER") or "").strip().lower()
 force_provider_scope = (os.environ.get("DORKPIPE_ORCH_FORCE_PROVIDER_SCOPE") or "auto").strip().lower()
+compare_providers = [
+    item.strip().lower()
+    for item in (os.environ.get("DORKPIPE_ORCH_COMPARE_PROVIDERS") or "").split(",")
+    if item.strip()
+]
+compare_scope = (os.environ.get("DORKPIPE_ORCH_COMPARE_SCOPE") or "auto").strip().lower()
 
 workflow = yaml.safe_load(workflow_config.read_text()) or {}
 workflow_model_policy = workflow.get("model_policy", {}) or {}
@@ -249,9 +255,11 @@ def high_risk_task(task):
     ]).lower()
     return words_in_text(text, selection_policy.get("high_risk_keywords", []))
 
-def select_lane(task, policy):
+def select_lane(task, policy, requested_override=""):
     requested = str(task.get("resolver_hint", "auto") or "auto")
-    if force_provider and (force_provider_scope == "all" or requested == "auto"):
+    if requested_override:
+        requested = requested_override
+    elif force_provider and (force_provider_scope == "all" or requested == "auto"):
         requested = force_provider
     candidates = []
     for lane in model_lanes:
@@ -319,6 +327,18 @@ def select_lane(task, policy):
         "baseline_gate_reason": baseline_gate_reason,
         "training": selected.get("training", {}),
     }
+
+def comparison_enabled_for_task(task):
+    if not compare_providers:
+        return False
+    requested = str(task.get("resolver_hint", "auto") or "auto")
+    if compare_scope == "all":
+        return True
+    return requested == "auto"
+
+def comparison_task_id(task_id, provider):
+    safe = re.sub(r"[^A-Za-z0-9_]+", "_", str(provider)).strip("_") or "lane"
+    return f"{task_id}__{safe}"
 
 def run_text(*args: str) -> str:
     try:
@@ -390,6 +410,8 @@ request_payload = {
     "training_mode": training_mode,
     "force_provider": force_provider,
     "force_provider_scope": force_provider_scope,
+    "compare_providers": compare_providers,
+    "compare_scope": compare_scope,
 }
 request_json.write_text(json.dumps(request_payload, indent=2) + "\n")
 
@@ -414,6 +436,10 @@ plan_payload = {
         "outputs": apply.get("outputs", []),
     },
 }
+if compare_providers:
+    compare_width = len(compare_providers)
+    plan_payload["concurrency"]["max_workers"] = max(plan_payload["concurrency"]["max_workers"], compare_width)
+    plan_payload["concurrency"]["max_cloud_workers"] = max(plan_payload["concurrency"]["max_cloud_workers"], compare_width)
 plan_json.write_text(json.dumps(plan_payload, indent=2) + "\n")
 
 graph_tasks = []
@@ -424,6 +450,8 @@ lane_plan = {
     "training_mode": training_mode,
     "force_provider": force_provider,
     "force_provider_scope": force_provider_scope,
+    "compare_providers": compare_providers,
+    "compare_scope": compare_scope,
     "cloud_lanes_enabled": cloud_lanes_enabled,
     "global_training_metrics": str(global_training_metrics_path),
     "policy": agent_model_policy,
@@ -451,95 +479,149 @@ lane_plan = {
 }
 
 for task in tasks:
-    task_id = task.get("id")
-    if not task_id:
+    base_task_id = task.get("id")
+    if not base_task_id:
         raise SystemExit(f"{workflow_config}: each task needs id:")
-    worker_ids.append(task_id)
-    task_dir = tasks_dir / task_id
-    task_dir.mkdir(parents=True, exist_ok=True)
-    task_model = task.get("model", {}) or agent.get("model", {}) or {}
-    task_policy = task.get("model_policy", agent_model_policy)
-    lane_selection = select_lane(task, task_policy)
-    (task_dir / "lane-selection.json").write_text(json.dumps(lane_selection, indent=2) + "\n")
-    lane_plan["tasks"].append(lane_selection)
-    accessible_paths = list(workflow_accessible_paths)
-    for path in task.get("accessible_paths", []) or []:
-        if path not in accessible_paths:
-            accessible_paths.append(path)
-    task_access = {
-        "read": list(workflow_access.get("read", []) or []),
-        "write": list(workflow_access.get("write", []) or []),
-        "deny": list(workflow_access.get("deny", []) or []),
-    }
-    for mode in ("read", "write", "deny"):
-        for path in (task.get("access", {}) or {}).get(mode, []) or []:
-            if path not in task_access[mode]:
-                task_access[mode].append(path)
-    task_payload = {
-        "id": task_id,
-        "goal": task.get("goal", ""),
-        "inputs": task.get("inputs", []),
-        "constraints": task.get("constraints", []),
-        "expected_output": task.get("expected_output", ""),
-        "worker_type": task.get("worker_type", "analysis"),
-        "resolver_hint": lane_selection.get("resolver_hint") or task.get("resolver_hint", "auto"),
-        "requested_resolver_hint": task.get("resolver_hint", "auto"),
-        "lane": lane_selection,
-        "max_cloud_tokens": int(task.get("max_cloud_tokens", lane_selection.get("max_task_tokens") or max_task_cloud_tokens)),
-        "depends_on": task.get("depends_on", []),
-        "claims": task.get("claims", []),
-        "citations": task.get("citations", task.get("inputs", [])),
-        "startup_prompt": startup_prompt,
-        "include_agents_md": include_agents_md,
-        "accessible_paths": accessible_paths,
-        "access": task_access,
-        "model": task_model or {
-            "provider": lane_selection.get("provider", ""),
-            "model": lane_selection.get("model", ""),
-            "num_ctx": lane_selection.get("context_window", 0),
-        },
-        "model_policy": task_policy,
-    }
-    (task_dir / "task.json").write_text(json.dumps(task_payload, indent=2) + "\n")
-    prompt = task.get("prompt")
-    if not prompt:
-        lines = [
-            "You are one worker in a DorkPipe orchestration graph.",
-            "",
-            f"Task id: {task_id}",
-            f"Goal: {task_payload['goal']}",
-            f"Expected output: {task_payload['expected_output']}",
-            "",
-            "Rules:",
-            "- Treat this as one bounded task, not the whole request.",
-            "- Ground claims in the referenced inputs.",
-            "- Return concise markdown suitable for downstream merge.",
-            "- Call out uncertainty explicitly.",
+
+    if comparison_enabled_for_task(task):
+        task_variants = [
+            {
+                "task_id": comparison_task_id(base_task_id, provider),
+                "base_task_id": base_task_id,
+                "compare_provider": provider,
+                "requested_override": provider,
+            }
+            for provider in compare_providers
         ]
-        prompt = "\n".join(lines) + "\n"
-    prefix = []
-    if startup_prompt:
-        prefix.append(startup_prompt.rstrip())
-    if accessible_paths:
-        prefix.extend(["", "Accessible paths:", *[f"- {path}" for path in accessible_paths]])
-    if any(task_access.values()):
-        prefix.extend(["", "Access policy:"])
+    else:
+        task_variants = [{
+            "task_id": base_task_id,
+            "base_task_id": base_task_id,
+            "compare_provider": "",
+            "requested_override": "",
+        }]
+
+    for variant in task_variants:
+        task_id = variant["task_id"]
+        worker_ids.append(task_id)
+
+        task_dir = tasks_dir / task_id
+        task_dir.mkdir(parents=True, exist_ok=True)
+        task_model = task.get("model", {}) or agent.get("model", {}) or {}
+        task_policy = task.get("model_policy", agent_model_policy)
+        lane_selection = select_lane(task, task_policy, variant["requested_override"])
+        lane_selection["task_id"] = task_id
+        lane_selection["base_task_id"] = variant["base_task_id"]
+        if variant["compare_provider"]:
+            lane_selection["comparison"] = {
+                "enabled": True,
+                "base_task_id": variant["base_task_id"],
+                "provider": variant["compare_provider"],
+                "providers": compare_providers,
+            }
+        else:
+            lane_selection["comparison"] = {"enabled": False}
+        (task_dir / "lane-selection.json").write_text(json.dumps(lane_selection, indent=2) + "\n")
+        lane_plan["tasks"].append(lane_selection)
+
+        accessible_paths = list(workflow_accessible_paths)
+        for path in task.get("accessible_paths", []) or []:
+            if path not in accessible_paths:
+                accessible_paths.append(path)
+        task_access = {
+            "read": list(workflow_access.get("read", []) or []),
+            "write": list(workflow_access.get("write", []) or []),
+            "deny": list(workflow_access.get("deny", []) or []),
+        }
         for mode in ("read", "write", "deny"):
-            if task_access[mode]:
-                prefix.extend([f"{mode}:", *[f"- {path}" for path in task_access[mode]]])
-    if include_agents_md and (root / "AGENTS.md").exists():
-        prefix.extend(["", "AGENTS.md context:", "", (root / "AGENTS.md").read_text().rstrip()])
-    if prefix:
-        prompt = "\n".join(prefix).rstrip() + "\n\n" + prompt.lstrip()
-    (task_dir / "prompt.md").write_text(prompt)
-    graph_tasks.append({
-        "id": task_id,
-        "depends_on": task_payload["depends_on"],
-        "resolver_hint": task_payload["resolver_hint"],
-        "lane_id": lane_selection.get("lane_id", ""),
-        "provider": lane_selection.get("provider", ""),
-        "worker_type": task_payload["worker_type"],
-    })
+            for path in (task.get("access", {}) or {}).get(mode, []) or []:
+                if path not in task_access[mode]:
+                    task_access[mode].append(path)
+
+        task_payload = {
+            "id": task_id,
+            "base_id": variant["base_task_id"],
+            "comparison": lane_selection.get("comparison", {"enabled": False}),
+            "goal": task.get("goal", ""),
+            "inputs": task.get("inputs", []),
+            "constraints": task.get("constraints", []),
+            "expected_output": task.get("expected_output", ""),
+            "worker_type": task.get("worker_type", "analysis"),
+            "resolver_hint": lane_selection.get("resolver_hint") or task.get("resolver_hint", "auto"),
+            "requested_resolver_hint": task.get("resolver_hint", "auto"),
+            "lane": lane_selection,
+            "max_cloud_tokens": int(task.get("max_cloud_tokens", lane_selection.get("max_task_tokens") or max_task_cloud_tokens)),
+            "depends_on": [
+                comparison_task_id(dep, variant["compare_provider"])
+                if variant["compare_provider"] and any(t.get("id") == dep and comparison_enabled_for_task(t) for t in tasks)
+                else dep
+                for dep in task.get("depends_on", [])
+            ],
+            "claims": task.get("claims", []),
+            "citations": task.get("citations", task.get("inputs", [])),
+            "startup_prompt": startup_prompt,
+            "include_agents_md": include_agents_md,
+            "accessible_paths": accessible_paths,
+            "access": task_access,
+            "model": task_model or {
+                "provider": lane_selection.get("provider", ""),
+                "model": lane_selection.get("model", ""),
+                "num_ctx": lane_selection.get("context_window", 0),
+            },
+            "model_policy": task_policy,
+        }
+        (task_dir / "task.json").write_text(json.dumps(task_payload, indent=2) + "\n")
+
+        prompt = task.get("prompt")
+        if not prompt:
+            lines = [
+                "You are one worker in a DorkPipe orchestration graph.",
+                "",
+                f"Task id: {task_id}",
+                f"Base task id: {variant['base_task_id']}",
+                f"Goal: {task_payload['goal']}",
+                f"Expected output: {task_payload['expected_output']}",
+                "",
+                "Rules:",
+                "- Treat this as one bounded task, not the whole request.",
+                "- Ground claims in the referenced inputs.",
+                "- Return concise markdown suitable for downstream merge.",
+                "- Return the requested artifact content directly; do not narrate your tool workflow.",
+                "- Call out uncertainty explicitly.",
+            ]
+            if variant["compare_provider"]:
+                lines.extend([
+                    "",
+                    "Comparison mode:",
+                    f"- You are the {variant['compare_provider']} fork for base task `{variant['base_task_id']}`.",
+                    "- Produce an independent answer for later side-by-side evaluation.",
+                ])
+            prompt = "\n".join(lines) + "\n"
+
+        prefix = []
+        if startup_prompt:
+            prefix.append(startup_prompt.rstrip())
+        if accessible_paths:
+            prefix.extend(["", "Accessible paths:", *[f"- {path}" for path in accessible_paths]])
+        if any(task_access.values()):
+            prefix.extend(["", "Access policy:"])
+            for mode in ("read", "write", "deny"):
+                if task_access[mode]:
+                    prefix.extend([f"{mode}:", *[f"- {path}" for path in task_access[mode]]])
+        if include_agents_md and (root / "AGENTS.md").exists():
+            prefix.extend(["", "AGENTS.md context:", "", (root / "AGENTS.md").read_text().rstrip()])
+        if prefix:
+            prompt = "\n".join(prefix).rstrip() + "\n\n" + prompt.lstrip()
+        (task_dir / "prompt.md").write_text(prompt)
+
+        graph_tasks.append({
+            "id": task_id,
+            "depends_on": task_payload["depends_on"],
+            "resolver_hint": task_payload["resolver_hint"],
+            "lane_id": lane_selection.get("lane_id", ""),
+            "provider": lane_selection.get("provider", ""),
+            "worker_type": task_payload["worker_type"],
+        })
 
 merge_id = merge.get("id", "merge_final")
 verify_id = verify.get("id", "verify_final")

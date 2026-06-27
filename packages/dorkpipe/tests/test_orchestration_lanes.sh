@@ -82,8 +82,53 @@ PY
 
 echo "test_orchestration_force_codex OK"
 
+export DORKPIPE_ORCH_WORKFLOW="test.docs.orchestrate.compare"
+export DORKPIPE_ORCH_ROOT="${TMPDIR:-/tmp}/dorkpipe-orch-compare-${RANDOM}-${RANDOM}"
+export DORKPIPE_ORCH_FORCE_PROVIDER=""
+export DORKPIPE_ORCH_COMPARE_PROVIDERS="codex,claude"
+export DORKPIPE_ORCH_COMPARE_SCOPE="auto"
+export DORKPIPE_ORCH_CLOUD_LANES="true"
+
+bash "$DOCKPIPE_SCRIPT_DIR/orchestrate-plan.sh" >/dev/null
+
+python3 - "$DORKPIPE_ORCH_ROOT" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+lane_plan = json.loads((root / "lanes" / "plan.json").read_text())
+tasks = {task["task_id"]: task for task in lane_plan.get("tasks", [])}
+expected = {
+    "repo_shape": "ollama",
+    "package_contracts__codex": "codex",
+    "package_contracts__claude": "claude",
+    "safety_model__codex": "codex",
+    "safety_model__claude": "claude",
+}
+assert {key: tasks[key]["provider"] for key in expected} == expected, tasks
+assert tasks["repo_shape"]["comparison"]["enabled"] is False, tasks["repo_shape"]
+for task_id in expected:
+    task = tasks[task_id]
+    if task_id == "repo_shape":
+        continue
+    assert task["comparison"]["enabled"] is True, task
+    assert task["base_task_id"] in {"package_contracts", "safety_model"}, task
+graph = json.loads((root / "task-graph.json").read_text())
+graph_tasks = {task["id"]: task for task in graph["tasks"]}
+for task_id, provider in expected.items():
+    assert graph_tasks[task_id]["provider"] == provider, graph_tasks[task_id]
+assert graph["concurrency"]["max_cloud_workers"] >= 2, graph["concurrency"]
+request = json.loads((root / "request.json").read_text())
+assert request["compare_providers"] == ["codex", "claude"], request
+assert request["compare_scope"] == "auto", request
+PY
+
+echo "test_orchestration_compare_lanes OK"
+
 export DORKPIPE_ORCH_WORKFLOW="test.docs.orchestrate.cloud-usage"
 export DORKPIPE_ORCH_ROOT="${TMPDIR:-/tmp}/dorkpipe-orch-cloud-usage-${RANDOM}-${RANDOM}"
+export DORKPIPE_ORCH_COMPARE_PROVIDERS=""
 
 # shellcheck source=/dev/null
 source "$DOCKPIPE_SCRIPT_DIR/orchestrate-common.sh"

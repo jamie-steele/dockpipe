@@ -41,6 +41,8 @@ import sys
 
 task = json.load(open(sys.argv[1], "r", encoding="utf-8"))
 mapping = {
+    "TASK_BASE_ID": task.get("base_id", task.get("id", "")),
+    "TASK_COMPARISON_JSON": json.dumps(task.get("comparison", {"enabled": False})),
     "TASK_RESOLVER_HINT": task.get("resolver_hint", "auto"),
     "TASK_REQUESTED_RESOLVER_HINT": task.get("requested_resolver_hint", task.get("resolver_hint", "auto")),
     "TASK_LANE_JSON": json.dumps(task.get("lane", {})),
@@ -227,7 +229,7 @@ fi
 
 dorkpipe_orchestrate_record_training_metric "${task_id}" "${lane_id}" "${provider}" "${status}" "${confidence}" "${estimated_input_tokens}" "${estimated_output_tokens}" "${used_live_model}" "${budget_halt}" "${task_started_at}" "${task_finished_at}" "${duration_ms}"
 
-export task_id status resolver_hint provider lane_id used_live_model budget_halt estimated_input_tokens estimated_output_tokens estimated_total_tokens task_started_at task_finished_at duration_ms summary confidence issues_json next_actions_json TASK_LANE_JSON TASK_CLAIMS_JSON TASK_CITATIONS_JSON
+export task_id status resolver_hint provider lane_id used_live_model budget_halt estimated_input_tokens estimated_output_tokens estimated_total_tokens task_started_at task_finished_at duration_ms summary confidence issues_json next_actions_json TASK_BASE_ID TASK_COMPARISON_JSON TASK_LANE_JSON TASK_CLAIMS_JSON TASK_CITATIONS_JSON
 python3 - "${result_json}" <<'PY'
 import json
 import os
@@ -241,6 +243,8 @@ def loads_env(name, fallback):
 
 payload = {
     "task_id": os.environ["task_id"],
+    "base_task_id": os.environ.get("TASK_BASE_ID", os.environ["task_id"]),
+    "comparison": loads_env("TASK_COMPARISON_JSON", {"enabled": False}),
     "status": os.environ["status"],
     "provider_requested": os.environ.get("resolver_hint", "auto"),
     "provider_actual": os.environ["provider"],
