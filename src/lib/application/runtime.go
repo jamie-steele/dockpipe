@@ -1,9 +1,12 @@
 package application
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 
 	"dockpipe/src/lib/domain"
+	"dockpipe/src/lib/infrastructure"
 )
 
 // EffectiveRuntimeProfileName returns the isolation **runtime** profile name (templates/core/runtimes/<name>).
@@ -49,6 +52,49 @@ func ProfileLabelForEnv(runtimeName, resolverName string) string {
 		return s
 	}
 	return strings.TrimSpace(runtimeName)
+}
+
+func loadMergedIsolationProfile(repoRoot, projectRoot, runtimeName, resolverName string) (map[string]string, error) {
+	base, baseErr := infrastructure.LoadIsolationProfile(repoRoot, runtimeName, resolverName)
+	projectRoot = strings.TrimSpace(projectRoot)
+	if projectRoot == "" {
+		return base, baseErr
+	}
+	repoAbs, _ := filepath.Abs(repoRoot)
+	projectAbs, _ := filepath.Abs(projectRoot)
+	if filepath.Clean(repoAbs) == filepath.Clean(projectAbs) {
+		return base, baseErr
+	}
+	project, projectErr := infrastructure.LoadIsolationProfile(projectRoot, runtimeName, resolverName)
+	if projectErr != nil {
+		return base, baseErr
+	}
+	if baseErr != nil {
+		return project, nil
+	}
+	for k, v := range project {
+		base[k] = v
+	}
+	return base, nil
+}
+
+func templateBuildForRun(repoRoot, projectRoot, name string) (image, dockerfileDir, contextDir string, ok bool) {
+	projectRoot = strings.TrimSpace(projectRoot)
+	if projectRoot != "" {
+		if im, dir, found := templateBuildAppFn(projectRoot, name); found && dockerfileExists(dir) {
+			return im, dir, projectRoot, true
+		}
+	}
+	im, dir, found := templateBuildAppFn(repoRoot, name)
+	return im, dir, repoRoot, found
+}
+
+func dockerfileExists(dir string) bool {
+	if strings.TrimSpace(dir) == "" {
+		return false
+	}
+	st, err := os.Stat(filepath.Join(dir, "Dockerfile"))
+	return err == nil && !st.IsDir()
 }
 
 // ValidateRuntimeAllowlist is a no-op in the simplified authored workflow model.

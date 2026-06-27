@@ -1162,7 +1162,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 	if err != nil {
 		return nil, runOpts, "", "", nil, err
 	}
-	image, dockerfileDir, contextDir = applyCompiledImageSelectionInputs(o.repoRoot, rm, image, dockerfileDir, contextDir)
+	image, dockerfileDir, contextDir = applyCompiledImageSelectionInputs(o.repoRoot, o.wfRoot, rm, image, dockerfileDir, contextDir)
 	runOpts.Image = image
 	return argv, runOpts, dockerfileDir, contextDir, rm, nil
 }

@@ -157,6 +157,7 @@ dorkpipe_orchestrate_run_container_worker() {
     "--resolver" "${provider}"
     "--no-data"
     "--env" "HOME=/home/node"
+    "--env" "PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games"
   )
   if auth_mount="$(dorkpipe_orchestrate_container_auth_mount "${provider}" 2>/dev/null)"; then
     args+=("--mount" "${auth_mount}")

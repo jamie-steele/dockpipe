@@ -370,7 +370,7 @@ func Run(argv []string, baseEnviron []string) error {
 	isolationProfileEnv := map[string]string(nil)
 	var resolverEnvHint string
 	if rtName != "" || rsName != "" {
-		rm, err := infrastructure.LoadIsolationProfile(repoRoot, rtName, rsName)
+		rm, err := loadMergedIsolationProfile(repoRoot, projectRoot, rtName, rsName)
 		if err != nil {
 			return fmt.Errorf("isolation profile: %w", err)
 		}
@@ -490,16 +490,16 @@ func Run(argv []string, baseEnviron []string) error {
 			// Host script or embedded workflow replaces docker isolate (e.g. cursor-dev / vscode templates).
 			image, buildDir, buildCtx = "", "", ""
 		} else if opts.Isolate != "" {
-			if im, dir, ok := templateBuildAppFn(repoRoot, opts.Isolate); ok {
+			if im, dir, ctx, ok := templateBuildForRun(repoRoot, projectRoot, opts.Isolate); ok {
 				effectiveTemplate = opts.Isolate
-				image, buildDir, buildCtx = im, dir, repoRoot
+				image, buildDir, buildCtx = im, dir, ctx
 			} else {
 				image = opts.Isolate
 			}
 		} else if templateName != "" {
 			effectiveTemplate = templateName
-			if im, dir, ok := templateBuildAppFn(repoRoot, templateName); ok {
-				image, buildDir, buildCtx = im, dir, repoRoot
+			if im, dir, ctx, ok := templateBuildForRun(repoRoot, projectRoot, templateName); ok {
+				image, buildDir, buildCtx = im, dir, ctx
 			}
 		}
 		if hostIsolate == "" && resolverWorkflow == "" {
@@ -536,7 +536,7 @@ func Run(argv []string, baseEnviron []string) error {
 	if err != nil {
 		return err
 	}
-	image, buildDir, buildCtx = applyCompiledImageSelectionInputs(repoRoot, compiledWorkflowManifest, image, buildDir, buildCtx)
+	image, buildDir, buildCtx = applyCompiledImageSelectionInputs(repoRoot, wfRoot, compiledWorkflowManifest, image, buildDir, buildCtx)
 
 	dataVol := opts.DataVolume
 	dataDir := opts.DataDir

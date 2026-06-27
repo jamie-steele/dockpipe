@@ -1,4 +1,5 @@
 # Resolver: OpenAI Codex CLI (pairs with runtimes/codex).
+DOCKPIPE_RESOLVER_TEMPLATE=codex
 DOCKPIPE_RESOLVER_CMD=codex
 # Codex exec / HTTPS fallback often reads CODEX_API_KEY; OPENAI_API_KEY is the usual export — forward both into Docker.
 DOCKPIPE_RESOLVER_ENV=OPENAI_API_KEY,CODEX_API_KEY

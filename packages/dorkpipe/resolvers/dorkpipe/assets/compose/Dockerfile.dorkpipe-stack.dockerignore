@@ -1,0 +1,12 @@
+**
+
+!src/
+!src/bin/
+!src/bin/dockpipe
+
+!bin/
+!bin/.dockpipe/
+!bin/.dockpipe/tooling/
+!bin/.dockpipe/tooling/bin/
+!bin/.dockpipe/tooling/bin/dorkpipe
+!bin/.dockpipe/tooling/bin/mcpd

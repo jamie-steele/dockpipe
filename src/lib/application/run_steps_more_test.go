@@ -555,6 +555,7 @@ func TestRunBlockingStepSkipsBuildWhenCompiledImageArtifactExists(t *testing.T) 
 	}
 	o := baseRunStepsOpts()
 	o.repoRoot = wd
+	o.projectRoot = wd
 	o.wfRoot = wfRoot
 	o.wf.Steps = []domain.Step{{Cmd: "echo hi", Isolate: "codex"}}
 	if err := os.MkdirAll(filepath.Join(wd, "templates", "core", "assets", "images", "codex"), 0o755); err != nil {
@@ -576,6 +577,11 @@ func TestRunBlockingStepSkipsBuildWhenCompiledImageArtifactExists(t *testing.T) 
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(wfRoot, domain.RuntimeManifestDirName, domain.ImageArtifactFileName), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	indexed := *artifact
+	indexed.ArtifactState = "materialized"
+	if err := persistImageArtifactIndexRecord(wd, &indexed); err != nil {
 		t.Fatal(err)
 	}
 	rm := &domain.CompiledRuntimeManifest{
@@ -646,8 +652,8 @@ func TestRunBlockingStepSkipsBuildWhenCompiledImageArtifactExists(t *testing.T) 
 	if rec.StepID != "step-1" || rec.ImageArtifactDecision == "" {
 		t.Fatalf("unexpected step run policy record: %+v", rec)
 	}
-	if !strings.Contains(rec.ImageArtifactDecision, "image: ready cached image artifact") {
-		t.Fatalf("expected cached image decision, got %+v", rec)
+	if !strings.Contains(rec.ImageArtifactDecision, "image: ready materialized image artifact") {
+		t.Fatalf("expected materialized image decision, got %+v", rec)
 	}
 }
 

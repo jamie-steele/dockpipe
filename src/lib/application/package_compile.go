@@ -245,6 +245,9 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 	if err := copyDir(srcAbs, staging); err != nil {
 		return fmt.Errorf("copy workflow: %w", err)
 	}
+	if err := ensureWorkflowImageEntrypoint(workdir, staging); err != nil {
+		return fmt.Errorf("stage workflow image entrypoint: %w", err)
+	}
 	if _, err := materializePipeLangRoots([]string{staging}, true, ""); err != nil {
 		return fmt.Errorf("compile pipelang artifacts: %w", err)
 	}
@@ -387,6 +390,45 @@ func validateWorkflowConfigInTarball(tgz, entry string) error {
 		return err
 	}
 	return nil
+}
+
+func ensureWorkflowImageEntrypoint(workdir, staging string) error {
+	imagesDir := filepath.Join(staging, "assets", "images")
+	if st, err := os.Stat(imagesDir); err != nil || !st.IsDir() {
+		return nil
+	}
+	needsEntrypoint := false
+	if err := filepath.WalkDir(imagesDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && d.Name() == "Dockerfile" {
+			needsEntrypoint = true
+			return filepath.SkipAll
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if !needsEntrypoint {
+		return nil
+	}
+	dst := filepath.Join(staging, "assets", "entrypoint.sh")
+	if st, err := os.Stat(dst); err == nil && !st.IsDir() {
+		return nil
+	}
+	src := filepath.Join(workdir, "assets", "entrypoint.sh")
+	b, err := os.ReadFile(src)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(dst, b, 0o755)
 }
 
 func cmdPackageCompileCore(args []string) error {

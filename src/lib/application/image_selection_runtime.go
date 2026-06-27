@@ -2,13 +2,14 @@ package application
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"dockpipe/src/lib/domain"
 )
 
-func applyCompiledImageSelectionInputs(repoRoot string, rm *domain.CompiledRuntimeManifest, image, buildDir, buildCtx string) (string, string, string) {
+func applyCompiledImageSelectionInputs(repoRoot, wfRoot string, rm *domain.CompiledRuntimeManifest, image, buildDir, buildCtx string) (string, string, string) {
 	if rm == nil {
 		return image, buildDir, buildCtx
 	}
@@ -19,10 +20,10 @@ func applyCompiledImageSelectionInputs(repoRoot string, rm *domain.CompiledRunti
 		}
 		if rm.Image.Build != nil {
 			if dockerfilePath := strings.TrimSpace(rm.Image.Build.Dockerfile); dockerfilePath != "" {
-				buildDir = filepath.Dir(absFromRepoRoot(repoRoot, dockerfilePath))
+				buildDir = filepath.Dir(absRuntimeBuildPath(repoRoot, wfRoot, dockerfilePath))
 			}
 			if contextPath := strings.TrimSpace(rm.Image.Build.Context); contextPath != "" {
-				buildCtx = absFromRepoRoot(repoRoot, contextPath)
+				buildCtx = absRuntimeBuildPath(repoRoot, wfRoot, contextPath)
 			}
 		}
 	case "registry":
@@ -33,6 +34,20 @@ func applyCompiledImageSelectionInputs(repoRoot string, rm *domain.CompiledRunti
 		}
 	}
 	return image, buildDir, buildCtx
+}
+
+func absRuntimeBuildPath(repoRoot, wfRoot, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" || filepath.IsAbs(path) {
+		return path
+	}
+	if strings.TrimSpace(wfRoot) != "" {
+		candidate := filepath.Join(wfRoot, path)
+		if _, err := os.Stat(candidate); err == nil {
+			return candidate
+		}
+	}
+	return absFromRepoRoot(repoRoot, path)
 }
 
 func ensureCompiledRegistryImageForWorkflow(rm *domain.CompiledRuntimeManifest) (string, error) {

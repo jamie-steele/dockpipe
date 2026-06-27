@@ -8,18 +8,61 @@ SOURCE_PATH="${0}"
 SOURCE_DIR="${SOURCE_PATH%/*}"
 [[ "$SOURCE_DIR" == "$SOURCE_PATH" ]] && SOURCE_DIR="."
 SCRIPT_DIR="$(cd "$SOURCE_DIR" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+INFERRED_REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+PWD_REPO_ROOT="$(pwd)"
+GIT_REPO_ROOT="$(git -C "$PWD_REPO_ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
+REPO_ROOT=""
+for candidate in \
+	"${DORKPIPE_DEV_STACK_REPO_ROOT:-}" \
+	"${DOCKPIPE_REPO_ROOT:-}" \
+	"${DOCKPIPE_WORKDIR:-}" \
+	"$GIT_REPO_ROOT" \
+	"$PWD_REPO_ROOT" \
+	"$INFERRED_REPO_ROOT"
+do
+	if [[ -n "$candidate" && -f "$candidate/packages/dorkpipe/resolvers/dorkpipe/assets/compose/Dockerfile.dorkpipe-stack" ]]; then
+		REPO_ROOT="$(cd "$candidate" && pwd)"
+		break
+	fi
+done
+if [[ -z "$REPO_ROOT" ]]; then
+	echo "dev-stack: could not find DockPipe repo root for dorkpipe-stack build context" >&2
+	exit 1
+fi
 COMPOSE="$SCRIPT_DIR/../compose/docker-compose.yml"
 source "$SCRIPT_DIR/dev-stack-lib.sh"
 if [[ ! -f "$COMPOSE" ]]; then
 	echo "dev-stack: missing $COMPOSE" >&2
 	exit 1
 fi
+export DORKPIPE_DEV_STACK_REPO_ROOT="${DORKPIPE_DEV_STACK_REPO_ROOT:-$REPO_ROOT}"
+export DORKPIPE_DEV_STACK_WORKDIR="${DORKPIPE_DEV_STACK_WORKDIR:-$REPO_ROOT}"
 cmd="${1:-}"
 PROJECT="${DORKPIPE_DEV_STACK_PROJECT:-dorkpipe-dev}"
 GPU_PROMPT_RESULT=""
 dorkpipe_stack_bootstrap_sdk >/dev/null 2>&1 || true
 mapfile -t COMPOSE_ARGS < <(dorkpipe_stack_compose_args)
+
+dorkpipe_stack_require_local_binaries() {
+	local missing=()
+	for path in \
+		"$REPO_ROOT/src/bin/dockpipe" \
+		"$REPO_ROOT/bin/.dockpipe/tooling/bin/dorkpipe" \
+		"$REPO_ROOT/bin/.dockpipe/tooling/bin/mcpd"
+	do
+		if [[ ! -x "$path" ]]; then
+			missing+=("$path")
+		fi
+	done
+	if [[ "${#missing[@]}" -eq 0 ]]; then
+		return 0
+	fi
+	echo "dev-stack: dorkpipe-stack image needs local built binaries:" >&2
+	printf '  missing: %s\n' "${missing[@]}" >&2
+	echo "dev-stack: run: make build && ./src/bin/dockpipe package build source --workdir . --only dorkpipe" >&2
+	return 1
+}
+
 case "$cmd" in
 up)
 	dorkpipe_stack_configure_gpu
@@ -39,6 +82,9 @@ up)
 		SERVICES=(${DORKPIPE_DEV_STACK_SERVICES})
 	else
 		SERVICES=(postgres ollama dorkpipe-stack dorkpipe-mcp-proxy)
+	fi
+	if dorkpipe_stack_service_enabled dorkpipe-stack; then
+		dorkpipe_stack_require_local_binaries
 	fi
 	if dorkpipe_stack_service_enabled dorkpipe-stack || dorkpipe_stack_service_enabled dorkpipe-mcp-proxy; then
 		dorkpipe_stack_prepare_mcp_material

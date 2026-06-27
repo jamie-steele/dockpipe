@@ -211,6 +211,17 @@ steps: []
 	}
 	tgz := filepath.Join(workdir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-0.0.0.tar.gz")
 	wfURI := "tar://" + tgz + "##workflows/mywf/config.yml"
+	artifact, err := loadCompiledImageArtifactForWorkflow(wfURI, filepath.Join(repoRoot, "workflows", "mywf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if artifact == nil {
+		t.Fatal("expected compiled image artifact")
+	}
+	artifact.ArtifactState = "materialized"
+	if err := persistImageArtifactIndexRecord(workdir, artifact); err != nil {
+		t.Fatal(err)
+	}
 	dockerImageExistsAppFn = func(image string) (bool, error) { return true, nil }
 	buildDir := filepath.Join(workdir, "templates", "core", "assets", "images", "codex")
 	skip, msg, err := maybeSkipDockerBuildForWorkflow(workdir, wfURI, filepath.Join(repoRoot, "workflows", "mywf"), "dockpipe-codex:0.0.0", buildDir, workdir)
@@ -220,7 +231,7 @@ steps: []
 	if !skip {
 		t.Fatal("expected docker build skip from compiled tarball artifact")
 	}
-	if !strings.Contains(msg, "image: ready cached image artifact") {
+	if !strings.Contains(msg, "image: ready materialized image artifact") {
 		t.Fatalf("unexpected message: %q", msg)
 	}
 }

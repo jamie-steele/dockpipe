@@ -1,4 +1,5 @@
 # Resolver: Claude Code CLI (tool adapter profile for this staged package).
+DOCKPIPE_RESOLVER_TEMPLATE=claude
 DOCKPIPE_RESOLVER_CMD=claude
 # Claude Code accepts ANTHROPIC_API_KEY; some setups use CLAUDE_API_KEY — forward both into Docker.
 DOCKPIPE_RESOLVER_ENV=ANTHROPIC_API_KEY,CLAUDE_API_KEY
