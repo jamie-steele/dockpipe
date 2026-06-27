@@ -396,9 +396,10 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 	step := o.wf.Steps[i]
 	fmt.Fprintf(os.Stderr, "[dockpipe] --- Step %d/%d ---\n", i+1, n)
 
-	if err := mergeStepVars(o, step, dockerEnv); err != nil {
+	if err := applyStepEnvOverrides(o, step, i, o.envMap, dockerEnv); err != nil {
 		return err
 	}
+	o.envSlice = domain.EnvMapToSlice(o.envMap)
 	if err := runStepPreScripts(o, i, step); err != nil {
 		return err
 	}
@@ -626,7 +627,7 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 		}
 		localEnv := maps.Clone(baseEnv)
 		localDocker := maps.Clone(baseDocker)
-		if err := applyStepEnvOverrides(o, step, localEnv, localDocker); err != nil {
+		if err := applyStepEnvOverrides(o, step, idx, localEnv, localDocker); err != nil {
 			return err
 		}
 		ra, _, _, err := loadStepResolver(o, step, idx)
@@ -697,7 +698,7 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 	localEnv := maps.Clone(baseEnv)
 	localDocker := maps.Clone(baseDocker)
 
-	if err := applyStepEnvOverrides(o, step, localEnv, localDocker); err != nil {
+	if err := applyStepEnvOverrides(o, step, idx, localEnv, localDocker); err != nil {
 		return err
 	}
 	envSlice := domain.EnvMapToSlice(localEnv)
@@ -779,14 +780,31 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 }
 
 func mergeStepVars(o *runStepsOpts, step domain.Step, dockerEnv map[string]string) error {
-	if err := applyStepEnvOverrides(o, step, o.envMap, dockerEnv); err != nil {
+	if err := applyStepEnvOverrides(o, step, 0, o.envMap, dockerEnv); err != nil {
 		return err
 	}
 	o.envSlice = domain.EnvMapToSlice(o.envMap)
 	return nil
 }
 
-func applyStepEnvOverrides(o *runStepsOpts, step domain.Step, envMap, dockerEnv map[string]string) error {
+func applyStepRuntimeContext(step domain.Step, stepIndex int, envMap, dockerEnv map[string]string, locked map[string]bool) {
+	ctx := map[string]string{
+		"DOCKPIPE_STEP_ID":      strings.TrimSpace(step.ID),
+		"DOCKPIPE_STEP_DISPLAY": step.DisplayName(stepIndex),
+		"DOCKPIPE_STEP_INDEX":   fmt.Sprintf("%d", stepIndex+1),
+		"DOCKPIPE_STEP_KIND":    step.KindName(),
+	}
+	for k, v := range ctx {
+		if locked[k] {
+			continue
+		}
+		envMap[k] = v
+		dockerEnv[k] = v
+	}
+}
+
+func applyStepEnvOverrides(o *runStepsOpts, step domain.Step, stepIndex int, envMap, dockerEnv map[string]string) error {
+	applyStepRuntimeContext(step, stepIndex, envMap, dockerEnv, o.locked)
 	inputsConfigPath := strings.TrimSpace(o.wfConfig)
 	if inputsConfigPath == "" && strings.TrimSpace(o.wfRoot) != "" {
 		inputsConfigPath = filepath.Join(o.wfRoot, "config.yml")

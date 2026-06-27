@@ -80,6 +80,8 @@ type Workflow struct {
 	Types []string `yaml:"types,omitempty"`
 	// View: optional authored launcher form layout. When omitted, tools fall back to the typed/flat input tree.
 	View WorkflowView `yaml:"view,omitempty"`
+	// ModelPolicy: optional AI model attempt/validation/escalation policy for DorkPipe harnesses.
+	ModelPolicy StepAgentModelPolicyConfig `yaml:"model_policy,omitempty"`
 	// Inject: explicit compile closure dependencies (workflow/package ids and resolver profile names).
 	// Unlike imports:, this does not merge YAML — it only guides package compile for-workflow ordering.
 	Inject   WorkflowInjectList      `yaml:"inject,omitempty"`
@@ -138,6 +140,117 @@ type WorkflowSecurityConfig struct {
 	Network    WorkflowNetworkConfig    `yaml:"network,omitempty"`
 	Filesystem WorkflowFilesystemConfig `yaml:"filesystem,omitempty"`
 	Process    WorkflowProcessConfig    `yaml:"process,omitempty"`
+}
+
+// StepAgentConfig exposes agentic execution intent directly in workflow YAML.
+// The engine keeps this as declarative data; DorkPipe-owned scripts and tooling can
+// consume it using injected workflow and step context.
+type StepAgentConfig struct {
+	StartupPrompt   string                        `yaml:"startup_prompt,omitempty"`
+	IncludeAgentsMD *bool                         `yaml:"include_agents_md,omitempty"`
+	AccessiblePaths []string                      `yaml:"accessible_paths,omitempty"`
+	Access          StepAgentAccessConfig         `yaml:"access,omitempty"`
+	TaskID          string                        `yaml:"task_id,omitempty"`
+	Model           StepAgentModelConfig          `yaml:"model,omitempty"`
+	ModelPolicy     StepAgentModelPolicyConfig    `yaml:"model_policy,omitempty"`
+	Orchestration   *StepAgentOrchestrationConfig `yaml:"orchestration,omitempty"`
+}
+
+type StepAgentAccessConfig struct {
+	Read  []string `yaml:"read,omitempty"`
+	Write []string `yaml:"write,omitempty"`
+	Deny  []string `yaml:"deny,omitempty"`
+}
+
+type StepAgentModelPolicyConfig struct {
+	Mode       string                         `yaml:"mode,omitempty"`
+	Attempt    StepAgentModelAttemptPolicy    `yaml:"attempt,omitempty"`
+	Validate   StepAgentModelValidatePolicy   `yaml:"validate,omitempty"`
+	Escalation StepAgentModelEscalationPolicy `yaml:"escalation,omitempty"`
+}
+
+type StepAgentModelAttemptPolicy struct {
+	Preference  string `yaml:"preference,omitempty"`
+	MaxAttempts int    `yaml:"max_attempts,omitempty"`
+}
+
+type StepAgentModelValidatePolicy struct {
+	Preference  string   `yaml:"preference,omitempty"`
+	RequiredFor []string `yaml:"required_for,omitempty"`
+}
+
+type StepAgentModelEscalationPolicy struct {
+	Enabled                 *bool    `yaml:"enabled,omitempty"`
+	On                      []string `yaml:"on,omitempty"`
+	RequireApprovalOverCost *bool    `yaml:"require_approval_over_cost,omitempty"`
+}
+
+type StepAgentModelConfig struct {
+	Provider           string   `yaml:"provider,omitempty"`
+	Model              string   `yaml:"model,omitempty"`
+	Temperature        *float64 `yaml:"temperature,omitempty"`
+	TopP               *float64 `yaml:"top_p,omitempty"`
+	NumPredict         int      `yaml:"num_predict,omitempty"`
+	NumCtx             int      `yaml:"num_ctx,omitempty"`
+	KeepAlive          string   `yaml:"keep_alive,omitempty"`
+	EscalationProvider string   `yaml:"escalation_provider,omitempty"`
+	EscalationModel    string   `yaml:"escalation_model,omitempty"`
+}
+
+type StepAgentOrchestrationConfig struct {
+	Request StepAgentRequestConfig    `yaml:"request,omitempty"`
+	Plan    StepAgentPlanConfig       `yaml:"plan,omitempty"`
+	Shared  []StepAgentSharedArtifact `yaml:"shared,omitempty"`
+	Tasks   []StepAgentTaskConfig     `yaml:"tasks,omitempty"`
+	Merge   StepAgentMergeConfig      `yaml:"merge,omitempty"`
+	Verify  StepAgentVerifyConfig     `yaml:"verify,omitempty"`
+}
+
+type StepAgentRequestConfig struct {
+	Text string `yaml:"text,omitempty"`
+}
+
+type StepAgentPlanConfig struct {
+	Goal  string   `yaml:"goal,omitempty"`
+	Steps []string `yaml:"steps,omitempty"`
+}
+
+type StepAgentSharedArtifact struct {
+	Path      string   `yaml:"path,omitempty"`
+	Collector string   `yaml:"collector,omitempty"`
+	Text      string   `yaml:"text,omitempty"`
+	Focus     string   `yaml:"focus,omitempty"`
+	Paths     []string `yaml:"paths,omitempty"`
+}
+
+type StepAgentTaskConfig struct {
+	ID              string                     `yaml:"id,omitempty"`
+	ResolverHint    string                     `yaml:"resolver_hint,omitempty"`
+	Goal            string                     `yaml:"goal,omitempty"`
+	ExpectedOutput  string                     `yaml:"expected_output,omitempty"`
+	WorkerType      string                     `yaml:"worker_type,omitempty"`
+	Prompt          string                     `yaml:"prompt,omitempty"`
+	Inputs          []string                   `yaml:"inputs,omitempty"`
+	Constraints     []string                   `yaml:"constraints,omitempty"`
+	DependsOn       []string                   `yaml:"depends_on,omitempty"`
+	Claims          []string                   `yaml:"claims,omitempty"`
+	Citations       []string                   `yaml:"citations,omitempty"`
+	AccessiblePaths []string                   `yaml:"accessible_paths,omitempty"`
+	Access          StepAgentAccessConfig      `yaml:"access,omitempty"`
+	MaxCloudTokens  int                        `yaml:"max_cloud_tokens,omitempty"`
+	Model           StepAgentModelConfig       `yaml:"model,omitempty"`
+	ModelPolicy     StepAgentModelPolicyConfig `yaml:"model_policy,omitempty"`
+}
+
+type StepAgentMergeConfig struct {
+	ID            string   `yaml:"id,omitempty"`
+	Title         string   `yaml:"title,omitempty"`
+	SummaryPoints []string `yaml:"summary_points,omitempty"`
+}
+
+type StepAgentVerifyConfig struct {
+	ID                string `yaml:"id,omitempty"`
+	NextActionDefault string `yaml:"next_action_default,omitempty"`
 }
 
 type WorkflowNetworkConfig struct {
@@ -218,6 +331,7 @@ type Step struct {
 	Vars      map[string]string       `yaml:"vars,omitempty"`
 	VM        StepVMConfig            `yaml:"vm,omitempty"`
 	Security  WorkflowSecurityConfig  `yaml:"security,omitempty"`
+	Agent     StepAgentConfig         `yaml:"agent,omitempty"`
 	// Blocking is YAML is_blocking: when false, this step joins a parallel batch with adjacent
 	// non-blocking steps. Inputs = env after last blocking step + this step’s vars/pre-scripts only;
 	// outputs merge in order after the whole batch (see src/lib/README.md).
@@ -279,13 +393,13 @@ func (b *InputBinding) UnmarshalYAML(n *yaml.Node) error {
 // The runner lowers this into the existing DOCKPIPE_VM_* environment contract.
 type StepVMConfig struct {
 	Mounts           []StepVMMount `yaml:"mounts,omitempty"`
-	HostContext      string `yaml:"host_context,omitempty"`
-	GuestPath        string `yaml:"guest_path,omitempty"`
-	InteractiveDebug *bool  `yaml:"interactive_debug,omitempty"`
-	InteractiveSSH   *bool  `yaml:"interactive_ssh,omitempty"`
-	KeepAlive        *bool  `yaml:"keepalive,omitempty"`
-	KeepAliveSeconds string `yaml:"keepalive_seconds,omitempty"`
-	HostFwd          string `yaml:"hostfwd,omitempty"`
+	HostContext      string        `yaml:"host_context,omitempty"`
+	GuestPath        string        `yaml:"guest_path,omitempty"`
+	InteractiveDebug *bool         `yaml:"interactive_debug,omitempty"`
+	InteractiveSSH   *bool         `yaml:"interactive_ssh,omitempty"`
+	KeepAlive        *bool         `yaml:"keepalive,omitempty"`
+	KeepAliveSeconds string        `yaml:"keepalive_seconds,omitempty"`
+	HostFwd          string        `yaml:"hostfwd,omitempty"`
 }
 
 type StepVMMount struct {
@@ -382,32 +496,34 @@ func (s *Step) OutputsPath() string {
 
 // workflowFile is the on-disk shape: steps may mix plain steps and group wrappers.
 type workflowFile struct {
-	Name            string                  `yaml:"name"`
-	Description     string                  `yaml:"description,omitempty"`
-	Category        string                  `yaml:"category,omitempty"`
-	Icon            string                  `yaml:"icon,omitempty"`
-	WorkflowType    string                  `yaml:"workflow_type,omitempty"`
-	Namespace       string                  `yaml:"namespace,omitempty"`
-	Run             RunSpec                 `yaml:"run"`
-	Isolate         string                  `yaml:"isolate"`
-	Act             string                  `yaml:"act"`
-	Action          string                  `yaml:"action"`
-	Resolver        string                  `yaml:"resolver"`
-	Runtime         string                  `yaml:"runtime,omitempty"`
-	Strategy        string                  `yaml:"strategy,omitempty"`
-	Strategies      []string                `yaml:"strategies,omitempty"`
-	Vault           string                  `yaml:"vault,omitempty"`
-	DockerPreflight *bool                   `yaml:"docker_preflight,omitempty"`
-	CompileHooks    []string                `yaml:"compile_hooks,omitempty"`
-	Types           []string                `yaml:"types,omitempty"`
-	View            WorkflowView            `yaml:"view,omitempty"`
-	Inputs          map[string]InputBinding `yaml:"inputs,omitempty"`
-	Vars            map[string]string       `yaml:"vars"`
-	Compose         WorkflowComposeConfig   `yaml:"compose,omitempty"`
-	Security        WorkflowSecurityConfig  `yaml:"security,omitempty"`
-	Imports         []string                `yaml:"imports,omitempty"`
-	Inject          WorkflowInjectList      `yaml:"inject,omitempty"`
-	Steps           []stepOrGroupYAML       `yaml:"steps"`
+	Name            string                     `yaml:"name"`
+	Description     string                     `yaml:"description,omitempty"`
+	Category        string                     `yaml:"category,omitempty"`
+	Icon            string                     `yaml:"icon,omitempty"`
+	WorkflowType    string                     `yaml:"workflow_type,omitempty"`
+	Namespace       string                     `yaml:"namespace,omitempty"`
+	Run             RunSpec                    `yaml:"run"`
+	Isolate         string                     `yaml:"isolate"`
+	Act             string                     `yaml:"act"`
+	Action          string                     `yaml:"action"`
+	Resolver        string                     `yaml:"resolver"`
+	Runtime         string                     `yaml:"runtime,omitempty"`
+	Strategy        string                     `yaml:"strategy,omitempty"`
+	Strategies      []string                   `yaml:"strategies,omitempty"`
+	Vault           string                     `yaml:"vault,omitempty"`
+	DockerPreflight *bool                      `yaml:"docker_preflight,omitempty"`
+	CompileHooks    []string                   `yaml:"compile_hooks,omitempty"`
+	Types           []string                   `yaml:"types,omitempty"`
+	View            WorkflowView               `yaml:"view,omitempty"`
+	ModelPolicy     StepAgentModelPolicyConfig `yaml:"model_policy,omitempty"`
+	Inputs          map[string]InputBinding    `yaml:"inputs,omitempty"`
+	Vars            map[string]string          `yaml:"vars"`
+	Compose         WorkflowComposeConfig      `yaml:"compose,omitempty"`
+	Security        WorkflowSecurityConfig     `yaml:"security,omitempty"`
+	Agent           StepAgentConfig            `yaml:"agent,omitempty"`
+	Imports         []string                   `yaml:"imports,omitempty"`
+	Inject          WorkflowInjectList         `yaml:"inject,omitempty"`
+	Steps           []stepOrGroupYAML          `yaml:"steps"`
 }
 
 type stepOrGroupYAML struct {

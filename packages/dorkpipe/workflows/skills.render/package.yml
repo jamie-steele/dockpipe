@@ -1,0 +1,15 @@
+schema: 1
+kind: workflow
+name: skills.render
+version: 0.6.0
+title: Render DorkPipe Skills
+description: |
+  Render curated DorkPipe skill sources from package assets to target-specific local formats such
+  as Codex SKILL.md folders or Claude adapter exports.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [workflow, dorkpipe, skills, codex, claude]
+depends: [dorkpipe]
+allow_clone: true
+distribution: source

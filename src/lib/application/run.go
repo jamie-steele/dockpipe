@@ -1,6 +1,7 @@
 package application
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -166,7 +167,7 @@ func Run(argv []string, baseEnviron []string) error {
 		return err
 	}
 
-	if compileDepsWanted(opts) && opts.Workflow != "" && opts.WorkflowFile == "" {
+	if compileDepsWanted(opts) && opts.Workflow != "" && opts.WorkflowFile == "" && strings.TrimSpace(opts.Package) == "" {
 		effWd := effectiveWorkdirForWorkflowOpts(opts)
 		if err := compileClosureForWorkflow(effWd, opts.Workflow, opts.Force); err != nil {
 			return err
@@ -178,6 +179,12 @@ func Run(argv []string, baseEnviron []string) error {
 	stepsMode := false
 	if opts.Workflow != "" && opts.WorkflowFile != "" {
 		return fmt.Errorf("use only one of --workflow and --workflow-file")
+	}
+	if strings.TrimSpace(opts.Package) != "" && opts.Workflow == "" {
+		return fmt.Errorf("--package requires --workflow")
+	}
+	if strings.TrimSpace(opts.Package) != "" && opts.WorkflowFile != "" {
+		return fmt.Errorf("--package cannot be used with --workflow-file")
 	}
 	if opts.WorkflowFile != "" {
 		wfPath, err := filepath.Abs(opts.WorkflowFile)
@@ -199,9 +206,13 @@ func Run(argv []string, baseEnviron []string) error {
 	} else if opts.Workflow != "" {
 		var statErr error
 		effWd := effectiveWorkdirForWorkflowOpts(opts)
-		wfConfig, statErr = infrastructure.ResolveWorkflowConfigPathWithWorkdir(repoRoot, effWd, opts.Workflow)
+		if strings.TrimSpace(opts.Package) != "" {
+			wfConfig, statErr = infrastructure.ResolvePackageWorkflowConfigPath(repoRoot, effWd, opts.Workflow, opts.Package)
+		} else {
+			wfConfig, statErr = infrastructure.ResolveWorkflowConfigPathWithWorkdir(repoRoot, effWd, opts.Workflow)
+		}
 		if statErr != nil {
-			if os.Getenv("DOCKPIPE_REPO_ROOT") == "" && infrastructure.EmbeddedWorkflowConfigExists(opts.Workflow) {
+			if strings.TrimSpace(opts.Package) == "" && os.Getenv("DOCKPIPE_REPO_ROOT") == "" && infrastructure.EmbeddedWorkflowConfigExists(opts.Workflow) {
 				if invErr := infrastructure.InvalidateBundledCache(); invErr == nil {
 					repoRoot, err = repoRootAppFn()
 					if err != nil {
@@ -213,10 +224,15 @@ func Run(argv []string, baseEnviron []string) error {
 			if statErr != nil {
 				names, _ := infrastructure.ListWorkflowNamesInRepoRootAndPackages(repoRoot, effWd)
 				msg := fmt.Sprintf("workflow %q not found — tried workflows/ (or DOCKPIPE_WORKFLOWS_DIR), extra roots from dockpipe.config.json compile.workflows, installed workflow packages under bin/.dockpipe/internal/packages/workflows/, built-in bundled workflows for this dockpipe build, and namespaced workflow tarballs (dockpipe-workflow-%[1]s-*.tar.gz under release/artifacts or packages.tarball_dir when config.yml inside the archive sets namespace:)", opts.Workflow)
+				if strings.TrimSpace(opts.Package) != "" {
+					msg = fmt.Sprintf("workflow %q in package %q not found — tried unpacked packaged workflows and configured workflow roots", opts.Workflow, opts.Package)
+				}
 				if len(names) > 0 {
 					msg += fmt.Sprintf(" (available in this install: %s)", strings.Join(names, ", "))
 				}
-				if !infrastructure.EmbeddedWorkflowConfigExists(opts.Workflow) {
+				if strings.TrimSpace(opts.Package) != "" {
+					msg += ". Ensure the nearest package.yml sets name: to the requested package."
+				} else if !infrastructure.EmbeddedWorkflowConfigExists(opts.Workflow) {
 					msg += ". This dockpipe build does not include that workflow; install a newer release or use --workflow-file path/to/config.yml."
 				} else {
 					msg += ". Try deleting the bundled cache folder under your user cache (dockpipe/bundled-*) or set DOCKPIPE_REPO_ROOT to a full git checkout."
@@ -253,6 +269,12 @@ func Run(argv []string, baseEnviron []string) error {
 	}
 
 	envMap := domain.EnvironToMap(baseEnviron)
+	if len(rest) > 0 {
+		if b, err := json.Marshal(rest); err == nil {
+			envMap["DOCKPIPE_ARGS_JSON"] = string(b)
+		}
+		envMap["DOCKPIPE_ARGS"] = shellJoinArgs(rest)
+	}
 	if wf != nil {
 		if err := buildWorkflowEnvInto(envMap, wf, wfConfig, wfRoot, repoRoot, opts); err != nil {
 			return err

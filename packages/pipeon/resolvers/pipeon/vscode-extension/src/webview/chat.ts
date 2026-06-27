@@ -671,6 +671,8 @@
     /** @type {HTMLButtonElement} */
     const deleteTemplateBtn = getRequiredElement("deleteTemplateBtn");
     /** @type {HTMLButtonElement} */
+    const exportTemplateYamlBtn = getRequiredElement("exportTemplateYamlBtn");
+    /** @type {HTMLButtonElement} */
     const openTemplateDesignerBtn = getRequiredElement("openTemplateDesignerBtn");
     /** @type {HTMLButtonElement} */
     const saveTemplateBtn = getRequiredElement("saveTemplateBtn");
@@ -1291,6 +1293,12 @@
         });
         saveTemplateBtn.addEventListener("click", () => {
           persistWorkingTemplate();
+        });
+        exportTemplateYamlBtn.addEventListener("click", () => {
+          if (workingTemplate && !workingTemplate.locked) {
+            persistWorkingTemplate();
+          }
+          vscode.postMessage({ type: "exportTemplateYaml", template: workingTemplate || currentTemplate() });
         });
         if (openTemplateDesignerBtn) {
           openTemplateDesignerBtn.addEventListener("click", () => {

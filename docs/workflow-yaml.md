@@ -111,6 +111,7 @@ If a host step starts sidecars or helper containers, the runner can clean them u
 | `strategies` | Optional allowlist: if non-empty, the effective strategy (CLI **`--strategy`** or **`strategy:`**) must be one of the listed names. |
 | `docker_preflight` | Default **true**. When **false**, the runner skips the Docker reachability check before **`steps:`** if **no** step uses the container. Use for **host-only** workflows whose **`run:`** / **`pre_script`** scripts do **not** invoke Docker. If a script calls **`docker`**, keep the default or the workflow may fail later. |
 | `types` | Optional PipeLang type entrypoints used by tooling/catalog/launcher surfaces. Execution still runs through normal workflow YAML and env resolution. |
+| `model_policy` | Optional AI model attempt, validation, and escalation policy for DorkPipe harnesses. Use this to express cheap/local attempts, stronger validation, and approval-on-cost escalation intent. |
 | `view` | Optional authored launcher presentation layer. Define pages, sections, and ordered field paths over the typed model while keeping the underlying env contract unchanged. |
 
 ### `imports` vs `inject`
@@ -277,6 +278,7 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `package` | Required for a **packaged workflow step**. This is the **child workflow namespace** and must match the nested workflow’s **`namespace:`** in **`config.yml`** (resolution searches packaged / staging / **`workflows/`** trees on disk). |
 | `act` / `action` | Action script for this step. Do not combine this with packaged workflow steps. |
 | `vars` | Per-step env map (merged for that step; `--var` keys can be “locked”). |
+| `agent` | Optional agentic step declaration consumed by DorkPipe-owned scripts/tooling. Use this to declare startup prompt, accessible paths, model knobs, and orchestration fanout directly in `config.yml`. |
 | `security` | Optional step-level container security override. Use this only on container steps when one step needs a different profile or tighter `network` / `filesystem` / `process` settings than the workflow default. |
 | `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Default if omitted: `.dockpipe/outputs.env`. This is the normal way one step passes values forward to later steps. |
 | `capture_stdout` | Host path (relative to **`DOCKPIPE_WORKDIR`** / **`--workdir`**) — container **stdout** is also appended to this file (still printed on the terminal). |
@@ -285,6 +287,29 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `host_builtin` | Optional engine-owned host action for `kind: host` steps. Supported values: `package_build_store`, `compose_up`, `compose_down`, `compose_ps`. Compose built-ins require top-level `compose.file`. |
 
 Step-level `security` follows the same shape as top-level `security`, but it applies only to that one container step. It is not meaningful on `kind: host` steps, and packaged workflow steps should keep their policy inside the child workflow instead of trying to override it from the parent.
+
+### Agentic steps (`agent`)
+
+Use `agent:` when a step should declare agent behavior directly in workflow YAML while still letting
+shared DorkPipe scripts act as the harness.
+
+Typical uses:
+
+- startup prompt text
+- whether to include `AGENTS.md` context
+- access policy (`read`, `write`, `deny`) plus lightweight accessible path hints
+- model/provider knobs that affect generation
+- model policy overrides for attempt, validation, and escalation
+- orchestration fanout data such as request, tasks, merge, and verify policy
+- task-level `model_policy` overrides so DorkPipe can choose local/cloud lanes per task without
+  hardcoding provider-specific workflow steps
+
+This keeps user intent in `config.yml` and lets shared scripts materialize the contract instead of
+forcing one shell file per workflow shape.
+
+`accessible_paths` is a compatibility/simple-hint field. Prefer `access.read`, `access.write`, and
+`access.deny` when the workflow needs a real contract that DorkPipe tooling can materialize into
+artifacts and, later, stronger runtime policy.
 
 ### Step state flow
 

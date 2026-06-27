@@ -55,6 +55,12 @@ func TestBuildWorkflowEnvIntoPrecedenceAndOverrides(t *testing.T) {
 	if env["CLI"] != "ok" {
 		t.Fatalf("missing CLI var override: %#v", env)
 	}
+	if env["DOCKPIPE_WORKFLOW_CONFIG"] != filepath.Join(wfRoot, "config.yml") {
+		t.Fatalf("missing workflow config injection: %#v", env)
+	}
+	if env["DOCKPIPE_WORKFLOW_DIR"] != wfRoot {
+		t.Fatalf("missing workflow dir injection: %#v", env)
+	}
 }
 
 func TestBuildWorkflowEnvIntoResolvesTypedInputsFromWorkflowEnv(t *testing.T) {

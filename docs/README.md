@@ -20,6 +20,7 @@ with the task you are doing, then drop into reference docs only when needed.
 | Terms: workflow, runtime, resolver, strategy | [architecture-model.md](architecture-model.md) |
 | Isolation layer and profile files | [isolation-layer.md](isolation-layer.md) |
 | Capability ids and resolver packages | [capabilities.md](capabilities.md) |
+| Governed AI/documentation workflows | [agentic-workflows.md](agentic-workflows.md) |
 | Optional typed authoring layer | [pipelang.md](pipelang.md) |
 
 ## Packages, Security, And Images
@@ -38,6 +39,7 @@ with the task you are doing, then drop into reference docs only when needed.
 | Engine data flow | [architecture.md](architecture.md) |
 | DockPipe vs first-party maintainer packages | [core-tools.md](core-tools.md) |
 | Generated maintainer artifacts | [artifacts.md](artifacts.md) |
+| Agent routing and focused maintainer rules | [agents/index.yaml](agents/index.yaml), [agents/](agents/) |
 | Core-vs-packages audit | [core-vs-packages-audit.md](core-vs-packages-audit.md) |
 | Manual QA | [qa/manual-qa.md](qa/manual-qa.md) |
 | Messaging / about copy | [messaging.md](messaging.md) |

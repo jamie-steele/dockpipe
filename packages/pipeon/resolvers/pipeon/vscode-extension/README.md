@@ -75,6 +75,19 @@ npm run typecheck
 
 This extension now carries a meaningful in-editor chat surface, but the long-term product boundary is still the same: Pipeon owns UX, DorkPipe is the server-authoritative orchestration layer, and DockPipe remains the mutation boundary.
 
+The model browser and template designer are UX projections over the DockPipe/DorkPipe contract, not
+an alternate workflow system:
+
+- workflow YAML remains the durable source of truth for `model_policy`, `steps[].agent`, access,
+  verification, and approval gates
+- user-created GUI templates and model-browser entries live in VS Code user/global extension storage,
+  while chat sessions remain workspace-local
+- extension state may hold drafts, caches, active selections, and UI preferences
+- model entries should map to DorkPipe escalation lanes backed by workflow/package metadata, not
+  private provider strings that only this extension understands
+- export/import should round-trip designer state through `config.yml` and package-owned
+  catalogs so DockPipe CLI, DockPipe Language Support, DorkPipe, and Pipeon all share one UX path
+
 Attachment roadmap:
 
 - `File` upload is wired for local workspace files

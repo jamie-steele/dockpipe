@@ -1,0 +1,232 @@
+schema: 1
+description: Machine-readable routing map for DockPipe agent guidance. Skill ids are target-independent; renderers decide Codex, Claude, or generic format.
+
+skills:
+  installed_codex:
+    - dorkpipe-agentic-yaml
+    - dorkpipe-core-review
+    - dorkpipe-package-authoring
+    - dorkpipe-token-optimization
+    - dorkpipe-yaml-workflows
+  render:
+    list: ./src/bin/dockpipe --package dorkpipe --workflow skills.render -- --list
+    codex: ./src/bin/dockpipe --package dorkpipe --workflow skills.render -- --target codex
+    claude: ./src/bin/dockpipe --package dorkpipe --workflow skills.render -- --target claude --output <path>
+
+tasks:
+  orientation:
+    read:
+      - AGENTS.md
+      - docs/agents/repo-map.md
+      - docs/agents/architecture.md
+    optional:
+      - docs/README.md
+    skills:
+      - dorkpipe-token-optimization
+
+  engine_change:
+    read:
+      - AGENTS.md
+      - docs/agents/engine-boundary.md
+      - docs/agents/architecture.md
+      - docs/agents/core-package-model.md
+      - docs/agents/validation-commands.md
+    optional:
+      - docs/package-model.md
+      - docs/architecture-model.md
+      - docs/capabilities.md
+    skills:
+      - dorkpipe-core-review
+      - dorkpipe-token-optimization
+    escalate:
+      required_for:
+        - public CLI behavior
+        - engine boundary changes
+        - path/package resolution changes
+        - security-sensitive behavior
+    validation:
+      - go test ./src/lib/...
+      - make build
+
+  yaml_workflow_change:
+    read:
+      - AGENTS.md
+      - docs/agents/yaml-workflows.md
+      - docs/agents/architecture.md
+      - docs/agents/safety-guardrails.md
+      - docs/agents/validation-commands.md
+    optional:
+      - docs/workflow-yaml.md
+      - src/lib/infrastructure/schema/workflow.schema.json
+      - src/app/tooling/vscode-extensions/dockpipe-language-support/extension.js
+    skills:
+      - dorkpipe-yaml-workflows
+      - dorkpipe-token-optimization
+    validation:
+      - ./src/bin/dockpipe workflow validate <config.yml>
+      - go test ./src/lib/...
+
+  package_authoring:
+    read:
+      - AGENTS.md
+      - docs/agents/package-authoring.md
+      - docs/agents/core-package-model.md
+      - docs/agents/safety-guardrails.md
+      - docs/agents/validation-commands.md
+    optional:
+      - docs/package-model.md
+      - docs/package-quickstart.md
+    skills:
+      - dorkpipe-package-authoring
+      - dorkpipe-token-optimization
+    validation:
+      - ./src/bin/dockpipe package test --workdir . --only <package>
+      - ./src/bin/dockpipe package compile workflows --workdir . --from packages/<package> --force
+      - ./src/bin/dockpipe package compile resolvers --workdir . --from packages/<package> --force
+
+  package_promotion:
+    read:
+      - AGENTS.md
+      - docs/agents/package-promotion.md
+      - docs/agents/package-authoring.md
+      - docs/agents/core-package-model.md
+      - docs/agents/safety-guardrails.md
+      - docs/agents/validation-commands.md
+    optional:
+      - docs/package-model.md
+    skills:
+      - dorkpipe-package-authoring
+      - dorkpipe-core-review
+      - dorkpipe-token-optimization
+    validation:
+      - find packages/<package> -type f | sort
+      - rg -n "<old-name>|<old-script>" packages docs src workflows .github -S
+      - ./src/bin/dockpipe package test --workdir . --only <package>
+      - ./src/bin/dockpipe package compile workflows --workdir . --from packages/<package> --force
+      - ./src/bin/dockpipe package compile resolvers --workdir . --from packages/<package> --force
+
+  agentic_ai_workflow:
+    read:
+      - AGENTS.md
+      - docs/agents/yaml-workflows.md
+      - docs/agents/model-escalation.md
+      - docs/agents/docs-generation.md
+      - docs/agents/safety-guardrails.md
+      - docs/agents/validation-commands.md
+    optional:
+      - docs/agentic-workflows.md
+      - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
+    skills:
+      - dorkpipe-agentic-yaml
+      - dorkpipe-yaml-workflows
+      - dorkpipe-token-optimization
+    escalate:
+      required_for:
+        - cloud spend policy
+        - destructive actions
+        - autonomous overnight behavior
+        - approval gates
+    validation:
+      - ./src/bin/dockpipe workflow validate <config.yml>
+      - ./src/bin/dockpipe package test --workdir . --only dorkpipe
+
+  tooling_surface_change:
+    read:
+      - AGENTS.md
+      - docs/agents/tooling-surfaces.md
+      - docs/agents/yaml-workflows.md
+      - docs/agents/model-escalation.md
+      - docs/agents/validation-commands.md
+    optional:
+      - docs/agentic-workflows.md
+      - docs/workflow-yaml.md
+      - src/app/tooling/vscode-extensions/dockpipe-language-support/extension.js
+      - packages/pipeon/resolvers/pipeon/vscode-extension/README.md
+      - packages/pipeon/resolvers/pipeon/vscode-extension/src/extension.ts
+      - packages/pipeon/resolvers/pipeon/vscode-extension/src/webview/chat.ts
+    skills:
+      - dorkpipe-agentic-yaml
+      - dorkpipe-yaml-workflows
+      - dorkpipe-token-optimization
+    validation:
+      - ./src/bin/dockpipe workflow validate <config.yml>
+      - npm run typecheck
+
+  docs_generation:
+    read:
+      - AGENTS.md
+      - docs/agents/docs-generation.md
+      - docs/agents/token-optimization.md
+      - docs/agents/safety-guardrails.md
+      - docs/agents/validation-commands.md
+    optional:
+      - docs/agentic-workflows.md
+      - docs/workflow-yaml.md
+    skills:
+      - dorkpipe-agentic-yaml
+      - dorkpipe-token-optimization
+    validation:
+      - ./src/bin/dockpipe workflow validate <config.yml>
+      - rg -n "<old-name>|<old-script>" packages docs src workflows .github -S
+
+  artifacts_or_mcp:
+    read:
+      - AGENTS.md
+      - docs/agents/artifacts-and-mcp.md
+      - docs/agents/safety-guardrails.md
+    optional:
+      - docs/artifacts.md
+      - packages/dorkpipe-mcp/README.md
+      - packages/dorkpipe-mcp/mcpbridge/README.md
+    skills:
+      - dorkpipe-core-review
+    escalate:
+      required_for:
+        - MCP exec tier
+        - artifact regeneration
+    validation:
+      - git status --short
+
+  docs_or_agent_guidance:
+    read:
+      - AGENTS.md
+      - docs/agents/token-optimization.md
+      - docs/agents/skills.md
+      - docs/agents/index.yaml
+    skills:
+      - dorkpipe-token-optimization
+      - dorkpipe-core-review
+    validation:
+      - ./src/bin/dockpipe --package dorkpipe --workflow skills.render -- --list
+
+  skills_render:
+    read:
+      - AGENTS.md
+      - docs/agents/skills.md
+      - docs/agents/package-authoring.md
+      - packages/dorkpipe/workflows/skills.render/config.yml
+    skills:
+      - dorkpipe-package-authoring
+      - dorkpipe-token-optimization
+    validation:
+      - ./src/bin/dockpipe --package dorkpipe --workflow skills.render -- --list
+      - ./src/bin/dockpipe --package dorkpipe --workflow skills.render -- --target codex --dry-run
+      - ./src/bin/dockpipe --package dorkpipe --workflow skills.render -- --target claude --output /tmp/dorkpipe-claude-skills --dry-run
+
+  safety_or_secrets:
+    read:
+      - AGENTS.md
+      - docs/agents/safety-guardrails.md
+      - docs/agents/artifacts-and-mcp.md
+    optional:
+      - docs/vault.md
+    skills:
+      - dorkpipe-core-review
+      - dorkpipe-token-optimization
+    escalate:
+      required_for:
+        - secret handling
+        - destructive cleanup
+        - permission changes
+    validation:
+      - git status --short

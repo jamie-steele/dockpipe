@@ -41,6 +41,7 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 		CompileHooks:    f.CompileHooks,
 		Types:           f.Types,
 		View:            f.View,
+		ModelPolicy:     f.ModelPolicy,
 		Inject:          f.Inject,
 		Inputs:          f.Inputs,
 		Vars:            f.Vars,

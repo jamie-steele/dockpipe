@@ -31,6 +31,7 @@ type CliOpts struct {
 	Action               string
 	Workflow             string
 	WorkflowFile         string
+	Package              string
 	WorkflowsDir         string
 	Workdir              string
 	RepoURL              string
@@ -128,6 +129,12 @@ func ParseFlags(repoRoot string, argv []string) ([]string, *CliOpts, error) {
 				return nil, nil, fmt.Errorf("--workflow-file requires a path to a YAML file (e.g. workflows/test/config.yml)")
 			}
 			o.WorkflowFile = argv[i+1]
+			i += 2
+		case "--package":
+			if i+1 >= len(argv) {
+				return nil, nil, fmt.Errorf("--package requires a package name")
+			}
+			o.Package = argv[i+1]
 			i += 2
 		case "--workflows-dir":
 			if i+1 >= len(argv) {

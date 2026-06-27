@@ -1,0 +1,3 @@
+name: dorkpipe-token-optimization
+description: Use when compressing AGENTS.md, docs/agents guidance, handoff files, skill instructions, or any agent-facing context that should route tasks without loading the whole repository policy.
+short_description: Compress agent context safely

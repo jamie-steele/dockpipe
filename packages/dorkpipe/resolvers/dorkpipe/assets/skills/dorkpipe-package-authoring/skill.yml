@@ -1,0 +1,3 @@
+name: dorkpipe-package-authoring
+description: Use for first-party DockPipe package authoring, package.yml metadata, resolver assets, package-owned workflows, package tests, and repo-local binary lookup rules.
+short_description: Author DockPipe packages

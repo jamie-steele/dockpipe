@@ -1,0 +1,15 @@
+schema: 1
+kind: workflow
+name: docs.orchestrate
+version: 0.6.0
+title: Orchestrated documentation task graph
+description: |
+  Multi-worker orchestration workflow that splits a docs task into bounded artifacts, runs multiple
+  specialized workers, merges results, verifies them, and requires approval.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [workflow, docs, orchestration, dorkpipe, ai]
+depends: [agent, dorkpipe]
+allow_clone: true
+distribution: source

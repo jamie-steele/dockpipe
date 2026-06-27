@@ -79,6 +79,10 @@ Packaged workflow invocation is a **workflow step form**, not part of the public
   - **`ide`** — interactive development environment
   - **`agent`** — autonomous task execution
 
+`runtime.type: agent` classifies the behavior of a run. It does not create a separate DockPipe
+product model. In DockPipe, AI workers still run as governed workflow/package stages with explicit
+resolver choice, artifact outputs, verification, and approval boundaries.
+
 In configuration, **`DOCKPIPE_RUNTIME_TYPE`** is the field that carries **`runtime.type`** (see `src/lib/domain/runtime_kind.go`). The field classifies **behavior intent**, not the substrate.
 
 ---

@@ -14,6 +14,12 @@ func buildWorkflowEnvInto(env map[string]string, wf *domain.Workflow, wfConfig, 
 	if opts == nil {
 		opts = &CliOpts{}
 	}
+	if strings.TrimSpace(wfConfig) != "" {
+		domain.MergeIfUnset(env, map[string]string{"DOCKPIPE_WORKFLOW_CONFIG": wfConfig})
+	}
+	if strings.TrimSpace(wfRoot) != "" {
+		domain.MergeIfUnset(env, map[string]string{"DOCKPIPE_WORKFLOW_DIR": wfRoot})
+	}
 	if wf.Vars != nil {
 		domain.MergeIfUnset(env, wf.Vars)
 	}

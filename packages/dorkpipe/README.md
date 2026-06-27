@@ -11,7 +11,34 @@ All DorkPipe **maintainer** workflows for this repo live here under **`resolvers
 | **`dorkpipe-self-analysis-stack/`** | Compose sidecar + analysis |
 | **`dorkpipe/`** | Small domain **`config.yml`** pack (namespace wiring) |
 | **`user-insight-process/`** | Host workflow: queue → **`insights.json`** — **`resolvers/user-insight-process/README.md`** |
+| **`workflows/skills.render/`** | Package workflow that renders curated DorkPipe skills to target-specific local formats |
 
 Go code for the orchestrator lives in **`lib/`** (module **`dorkpipe.orchestrator`**) — this tree is **YAML + assets** only (not the Go module).
+
+## Skills Renderer
+
+Curated DorkPipe skill sources live under **`resolvers/dorkpipe/assets/skills/`**. Render them
+through the package workflow:
+
+```bash
+dockpipe --package dorkpipe --workflow skills.render -- --target codex
+dockpipe --package dorkpipe --workflow skills.render -- --target claude
+```
+
+Codex defaults to **`~/.codex/skills/<skill-name>/SKILL.md`**. Claude defaults to
+**`~/.claude/skills/<skill-name>/SKILL.md`**. Target names are adapters; skill ids in
+**`AGENTS.md`** and **`docs/agents/index.yaml`** stay target-independent.
+
+## Agentic Orchestration Lanes
+
+DorkPipe owns the agentic model-lane catalog under
+**`resolvers/dorkpipe/assets/model-lanes/catalog.yml`**. The planner materializes lane choices to
+**`lanes/plan.json`** and **`tasks/<task-id>/lane-selection.json`**, then worker execution records
+outcome metrics in **`training/metrics.jsonl`**. This keeps model escalation package-owned and
+YAML-driven: Ollama can be the cheap local lane, while Codex CLI and Claude CLI remain governed
+cloud lanes behind budget/halt policy.
+
+Set **`DORKPIPE_ORCH_LIVE_MODELS=false`** for dry runs and tests that should exercise the full
+artifact graph without calling live model backends.
 
 **Detail:** **`lib/README.md`** (Go module); this tree is YAML + assets.

@@ -1,0 +1,194 @@
+name: docs.orchestrate
+description: >-
+  DorkPipe task-graph workflow: plan, split into bounded worker tasks, merge results, verify, and
+  require approval before manual promotion.
+
+model_policy:
+  mode: auto
+  attempt:
+    preference: local
+    max_attempts: 2
+  validate:
+    preference: strongest_available
+    required_for:
+      - architecture
+      - security
+      - package_promotion
+      - destructive_changes
+  escalation:
+    enabled: true
+    "on":
+      - failed_contract
+      - low_confidence
+      - test_failure
+      - verifier_disagreement
+      - dangerous_capability_requested
+    require_approval_over_cost: true
+
+vars:
+  DORKPIPE_ORCH_WORKFLOW: docs.orchestrate
+  DORKPIPE_ORCH_ROOT: bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
+  DORKPIPE_ORCH_OLLAMA_MODEL: llama3.2
+  DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS: "120000"
+  DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS: "40000"
+  DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED: "true"
+  OLLAMA_HOST: http://host.docker.internal:11434
+
+steps:
+  - id: plan
+    kind: host
+    run: scripts/dorkpipe/orchestrate-plan.sh
+    agent:
+      startup_prompt: >-
+        Treat this as a bounded DorkPipe orchestration run. Use the repository contract and keep
+        claims grounded in accessible files.
+      include_agents_md: true
+      accessible_paths:
+        - docs
+        - packages
+        - workflows
+        - src/app/tooling/vscode-extensions/dockpipe-language-support
+      access:
+        read:
+          - AGENTS.md
+          - docs
+          - packages
+          - workflows
+          - src
+        write:
+          - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
+        deny:
+          - .env
+          - .env.*
+          - "**/*secret*"
+          - "**/*token*"
+      orchestration:
+        request:
+          text: Assess whether orchestration adds value for governed documentation generation in DockPipe.
+        plan:
+          goal: Evaluate orchestration as a real primitive using bounded multi-worker tasks.
+          steps:
+            - collect shared repo and package context
+            - split the request into bounded task artifacts
+            - run specialized workers under resolver hints
+            - merge results into a final synthesis
+            - verify coverage and risk before approval
+        shared:
+          - path: repo-map.md
+            collector: repo_map
+            focus: DorkPipe orchestration primitive, task graph, and agent package workflows
+            paths:
+              - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
+              - packages/dorkpipe/resolvers/dorkpipe/assets/docs/request-contract.md
+              - packages/agent/workflows/docs.orchestrate/config.yml
+          - path: cli-inspect.md
+            collector: dockpipe_cli_inspect
+        tasks:
+          - id: repo_shape
+            resolver_hint: ollama
+            goal: Explain the task-graph artifact primitive and why it is stronger than generic agent branding.
+            expected_output: A short markdown explanation of the orchestration primitive.
+            inputs:
+              - shared/repo-map.md
+              - shared/cli-inspect.md
+              - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
+            constraints:
+              - ground claims in repository files
+              - keep output bounded and reviewable
+              - treat DorkPipe as the contract layer
+            model:
+              model: llama3.2
+            prompt: |
+              You are one worker in a DorkPipe orchestration graph.
+
+              Task id: repo_shape
+              Goal: Explain the task-graph artifact primitive and why it is stronger than generic agent branding.
+              Expected output: A short markdown explanation of the orchestration primitive.
+
+              Rules:
+              - Treat this as one bounded task, not the whole request.
+              - Ground claims in the referenced files.
+              - Return concise markdown suitable for downstream merge.
+              - Call out uncertainty explicitly.
+          - id: package_contracts
+            resolver_hint: auto
+            goal: Summarize how packages/agent and packages/dorkpipe should divide workflow surface vs contract surface.
+            expected_output: A short markdown summary of package boundaries.
+            model_policy:
+              attempt:
+                preference: strong
+              validate:
+                preference: strongest_available
+            inputs:
+              - shared/repo-map.md
+              - shared/cli-inspect.md
+              - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
+            constraints:
+              - ground claims in repository files
+              - keep output bounded and reviewable
+              - keep workflow specifics out of the shared primitive
+            prompt: |
+              You are one worker in a DorkPipe orchestration graph.
+
+              Task id: package_contracts
+              Goal: Summarize how packages/agent and packages/dorkpipe should divide workflow surface vs contract surface.
+              Expected output: A short markdown summary of package boundaries.
+
+              Rules:
+              - Treat this as one bounded task, not the whole request.
+              - Ground claims in the referenced files.
+              - Return concise markdown suitable for downstream merge.
+              - Call out uncertainty explicitly.
+          - id: safety_model
+            resolver_hint: auto
+            goal: Summarize the safety and approval model for multi-worker orchestration.
+            expected_output: A short markdown summary of verification and approval needs.
+            model_policy:
+              attempt:
+                preference: strong
+              validate:
+                preference: strongest_available
+            inputs:
+              - shared/repo-map.md
+              - shared/cli-inspect.md
+              - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
+            constraints:
+              - ground claims in repository files
+              - keep output bounded and reviewable
+              - keep human approval explicit
+            prompt: |
+              You are one worker in a DorkPipe orchestration graph.
+
+              Task id: safety_model
+              Goal: Summarize the safety and approval model for multi-worker orchestration.
+              Expected output: A short markdown summary of verification and approval needs.
+
+              Rules:
+              - Treat this as one bounded task, not the whole request.
+              - Ground claims in the referenced files.
+              - Return concise markdown suitable for downstream merge.
+              - Call out uncertainty explicitly.
+        merge:
+          title: DorkPipe Orchestration Synthesis
+          summary_points:
+            - The primitive is artifact graph execution, not generic agent branding.
+            - DorkPipe should own task, result, merge, and verifier contracts.
+            - Resolvers such as codex, claude, and ollama should remain interchangeable worker backends.
+        verify:
+          next_action_default: human approval before treating orchestration output as final
+
+  - id: run-workers
+    kind: host
+    run: scripts/dorkpipe/orchestrate-run-tasks.sh
+
+  - id: merge
+    kind: host
+    run: scripts/dorkpipe/orchestrate-merge-results.sh
+
+  - id: verify
+    kind: host
+    run: scripts/dorkpipe/orchestrate-verify-results.sh
+
+  - id: approval
+    kind: host
+    run: scripts/dorkpipe/orchestrate-approve.sh

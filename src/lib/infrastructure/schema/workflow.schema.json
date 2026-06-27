@@ -72,6 +72,204 @@
         "hostfwd": { "type": "string" }
       }
     },
+    "agent_model": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "type": "string" },
+        "model": { "type": "string" },
+        "temperature": { "type": "number" },
+        "top_p": { "type": "number" },
+        "num_predict": { "type": "integer" },
+        "num_ctx": { "type": "integer" },
+        "keep_alive": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "integer" }
+          ]
+        },
+        "escalation_provider": { "type": "string" },
+        "escalation_model": { "type": "string" }
+      }
+    },
+    "agent_access": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "read": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "write": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "deny": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "model_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": { "type": "string" },
+        "attempt": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "preference": { "type": "string" },
+            "max_attempts": { "type": "integer" }
+          }
+        },
+        "validate": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "preference": { "type": "string" },
+            "required_for": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "escalation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": { "type": "boolean" },
+            "on": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "require_approval_over_cost": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "agent_shared_item": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path": { "type": "string" },
+        "collector": { "type": "string" },
+        "text": { "type": "string" },
+        "focus": { "type": "string" },
+        "paths": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "agent_task": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "resolver_hint": { "type": "string" },
+        "goal": { "type": "string" },
+        "expected_output": { "type": "string" },
+        "worker_type": { "type": "string" },
+        "prompt": { "type": "string" },
+        "inputs": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "constraints": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "depends_on": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "claims": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "citations": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "accessible_paths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "access": { "$ref": "#/$defs/agent_access" },
+        "max_cloud_tokens": { "type": "integer" },
+        "model": { "$ref": "#/$defs/agent_model" },
+        "model_policy": { "$ref": "#/$defs/model_policy" }
+      }
+    },
+    "step_agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "startup_prompt": { "type": "string" },
+        "include_agents_md": { "type": "boolean" },
+        "accessible_paths": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "access": { "$ref": "#/$defs/agent_access" },
+        "task_id": { "type": "string" },
+        "model": { "$ref": "#/$defs/agent_model" },
+        "model_policy": { "$ref": "#/$defs/model_policy" },
+        "orchestration": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "request": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "text": { "type": "string" }
+              }
+            },
+            "plan": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "goal": { "type": "string" },
+                "steps": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              }
+            },
+            "shared": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/agent_shared_item" }
+            },
+            "tasks": {
+              "type": "array",
+              "items": { "$ref": "#/$defs/agent_task" }
+            },
+            "merge": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string" },
+                "title": { "type": "string" },
+                "summary_points": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                }
+              }
+            },
+            "verify": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "id": { "type": "string" },
+                "next_action_default": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
     "inject_item": {
       "oneOf": [
         { "type": "string" },
@@ -163,6 +361,7 @@
         "inputs": { "$ref": "#/$defs/input_map" },
         "vars": { "$ref": "#/$defs/string_map" },
         "vm": { "$ref": "#/$defs/step_vm" },
+        "agent": { "$ref": "#/$defs/step_agent" },
         "security": {
           "type": "object",
           "additionalProperties": false,
@@ -427,6 +626,7 @@
     },
     "inputs": { "$ref": "#/$defs/input_map" },
     "view": { "$ref": "#/$defs/workflow_view" },
+    "model_policy": { "$ref": "#/$defs/model_policy" },
     "steps": {
       "type": "array",
       "items": {

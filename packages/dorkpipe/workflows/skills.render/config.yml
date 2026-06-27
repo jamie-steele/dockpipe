@@ -1,0 +1,9 @@
+name: skills.render
+namespace: dockpipeproject
+description: Render curated DorkPipe skills to assistant-specific local formats.
+docker_preflight: false
+
+steps:
+  - id: render
+    kind: host
+    run: scripts/dorkpipe/skills-render.sh

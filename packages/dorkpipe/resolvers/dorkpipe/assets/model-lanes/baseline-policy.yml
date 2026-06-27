@@ -1,0 +1,72 @@
+schema: 1
+description: >-
+  Conservative DorkPipe baseline for model-lane routing before enough local training metrics exist.
+  The defaults implement a cheap-first cascade with explicit cloud gates.
+
+references:
+  - id: frugalgpt
+    title: "FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance"
+    url: https://arxiv.org/abs/2305.05176
+    rationale: Use cascades to reduce cost while preserving quality.
+  - id: routellm
+    title: "RouteLLM: Learning to Route LLMs with Preference Data"
+    url: https://arxiv.org/abs/2406.18665
+    rationale: Route between cheaper and stronger models using learned/preference-informed policy.
+  - id: self-consistency
+    title: "Self-Consistency Improves Chain of Thought Reasoning in Language Models"
+    url: https://arxiv.org/abs/2203.11171
+    rationale: Escalate/verify when reasoning confidence or agreement is weak.
+  - id: calibration
+    title: "Language Models (Mostly) Know What They Know"
+    url: https://arxiv.org/abs/2207.05221
+    rationale: Use uncertainty/abstention thresholds instead of unconditional answers.
+
+selection:
+  local_first: true
+  cloud_lanes_enabled_default: false
+  explicit_hint_bypasses_cloud_gate: true
+  cloud_score_threshold: 14.0
+  high_risk_cloud_score_threshold: 10.0
+  unavailable_penalty: 25.0
+  cloud_cost_penalty: 2.0
+  local_first_bonus: 15.0
+  strong_validation_bonus: 8.0
+  code_task_bonus: 4.0
+  safety_review_bonus: 4.0
+  high_risk_keywords:
+    - approval
+    - auth
+    - budget
+    - cloud
+    - credential
+    - destructive
+    - permission
+    - publish
+    - release
+    - secret
+    - security
+    - spend
+    - token
+  code_keywords:
+    - code
+    - edit
+    - implementation
+    - patch
+    - refactor
+  safety_keywords:
+    - approval
+    - risk
+    - safety
+    - security
+    - threat
+
+confidence:
+  accept_local_min: 0.72
+  escalate_below: 0.62
+  abstain_below: 0.45
+
+training:
+  min_samples_before_adjustment: 20
+  score_adjustment_weight: 6.0
+  max_score_adjustment: 4.0
+  target_confidence: 0.72
