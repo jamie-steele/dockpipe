@@ -15,6 +15,29 @@ It treats the useful core as:
 The workflow is sequential today, but the contract is DAG-shaped so later parallel execution can
 reuse the same task, result, merge, and verifier artifacts.
 
+## Stack lifecycle
+
+The workflow brings up the DorkPipe dev stack before planning and tears it down after approval:
+
+1. Postgres + pgvector
+2. Ollama
+3. orchestration planning/workers/merge/verify/approval
+4. stack down
+
+By default, this workflow leaves the sidecars running after approval so iterative CLI/app testing can
+reuse the same reasoning stack. Override `DORKPIPE_DEV_STACK_AUTODOWN=1` when you want the workflow
+to stop the stack at the end. The default local endpoints are:
+
+- `OLLAMA_HOST=http://127.0.0.1:11434`
+- `DATABASE_URL=postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe`
+
+The stack helper waits for Ollama and pulls the declared local model by default. Override
+`DORKPIPE_DEV_STACK_PULL_MODEL=0` to skip model bootstrap, or set `DORKPIPE_DEV_STACK_OLLAMA_MODEL`
+to use a different local model.
+
+Cloud-backed Codex/Claude lanes are enabled by the workflow's governed policy and remain bounded by
+the declared token budgets, halt marker, and approval gate.
+
 ## YAML-driven setup
 
 The example is driven directly by `config.yml`.

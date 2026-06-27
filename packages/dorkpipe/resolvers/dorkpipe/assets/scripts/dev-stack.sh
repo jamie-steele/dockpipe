@@ -41,6 +41,7 @@ up)
 		SERVICES=(postgres ollama)
 	fi
 	docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans "${SERVICES[@]}"
+	dorkpipe_stack_ensure_ollama_model
 	echo "dev-stack: up — Ollama http://127.0.0.1:11434  Postgres postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe (project $PROJECT; gpu ${DORKPIPE_DEV_STACK_GPU:-auto})"
 	;;
 down)

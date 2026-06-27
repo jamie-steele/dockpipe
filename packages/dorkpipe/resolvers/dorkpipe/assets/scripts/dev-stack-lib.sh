@@ -403,3 +403,46 @@ dorkpipe_stack_compose_args() {
   fi
   printf '%s\n' --project-directory "$REPO_ROOT"
 }
+
+dorkpipe_stack_service_enabled() {
+  local needle="$1"
+  local service
+  if [[ -z "${DORKPIPE_DEV_STACK_SERVICES:-}" ]]; then
+    [[ "$needle" == "postgres" || "$needle" == "ollama" ]]
+    return $?
+  fi
+  for service in ${DORKPIPE_DEV_STACK_SERVICES}; do
+    if [[ "$service" == "$needle" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+dorkpipe_stack_wait_for_ollama_ready() {
+  local attempts="${1:-90}"
+  local i
+  for ((i = 0; i < attempts; i++)); do
+    if docker compose "${COMPOSE_ARGS[@]}" exec -T ollama ollama list >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+dorkpipe_stack_ensure_ollama_model() {
+  local model
+  if [[ "${DORKPIPE_DEV_STACK_PULL_MODEL:-1}" != "1" ]]; then
+    return 0
+  fi
+  dorkpipe_stack_service_enabled ollama || return 0
+  model="${DORKPIPE_DEV_STACK_OLLAMA_MODEL:-${PIPEON_OLLAMA_MODEL:-${DOCKPIPE_OLLAMA_MODEL:-${DORKPIPE_ORCH_OLLAMA_MODEL:-llama3.2}}}}"
+  [[ -n "$model" ]] || return 0
+  printf '[dorkpipe-dev-stack] ensuring Ollama model %s is available...\n' "$model" >&2
+  if ! dorkpipe_stack_wait_for_ollama_ready "${DORKPIPE_DEV_STACK_OLLAMA_READY_ATTEMPTS:-90}"; then
+    echo "dorkpipe-dev-stack: Ollama did not become ready in time" >&2
+    return 1
+  fi
+  docker compose "${COMPOSE_ARGS[@]}" exec -T ollama ollama pull "$model" >&2
+}

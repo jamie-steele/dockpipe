@@ -7,4 +7,4 @@ if [[ "${DORKPIPE_DEV_STACK_AUTODOWN:-1}" == "0" ]]; then
 	echo "dev-stack-maybe-down: DORKPIPE_DEV_STACK_AUTODOWN=0 — leaving sidecars up"
 	exit 0
 fi
-exec "$SCRIPT_DIR/dev-stack.sh" down
+exec bash "$SCRIPT_DIR/dev-stack.sh" down
