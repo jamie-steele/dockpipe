@@ -833,6 +833,43 @@ vmimage_normalize_pci_bdf() {
   esac
 }
 
+vmimage_csv_has_pci_device() {
+  local devices_csv="$1" dev="$2" raw normalized
+  IFS=',' read -r -a csv_devices <<< "$devices_csv"
+  for raw in "${csv_devices[@]}"; do
+    raw="$(printf '%s' "$raw" | xargs)"
+    [[ -n "$raw" ]] || continue
+    normalized="$(vmimage_normalize_pci_bdf "$raw")"
+    [[ "$normalized" == "$dev" ]] && return 0
+  done
+  return 1
+}
+
+vmimage_validate_iommu_group_membership() {
+  local devices_csv="$1" dev="$2"
+  local group_link group_path group_id member member_path unexpected_csv="" full_group_csv=""
+  group_link="/sys/bus/pci/devices/${dev}/iommu_group"
+  [[ -L "$group_link" ]] || vmimage_die "host PCI device ${dev} does not expose an IOMMU group; passthrough requires IOMMU isolation on this host"
+  group_path="$(readlink -f "$group_link")"
+  group_id="$(basename "$group_path")"
+  for member_path in "${group_path}/devices/"*; do
+    member="$(basename "$member_path")"
+    if [[ -n "$full_group_csv" ]]; then
+      full_group_csv+=","
+    fi
+    full_group_csv+="$member"
+    [[ "$member" == "$dev" ]] && continue
+    if ! vmimage_csv_has_pci_device "$devices_csv" "$member"; then
+      if [[ -n "$unexpected_csv" ]]; then
+        unexpected_csv+=","
+      fi
+      unexpected_csv+="$member"
+    fi
+  done
+  [[ -z "$unexpected_csv" ]] && return 0
+  vmimage_die "PCI device ${dev} is in IOMMU group ${group_id} with other device(s) not selected for passthrough: ${unexpected_csv}. Full group: ${full_group_csv}. DockPipe cannot safely detach just part of that group. To continue, change the host topology or firmware so the GPU lands in a cleaner group, deliberately pass the whole group if you accept losing those devices on the host too, or use an ACS override only if you explicitly accept the host-security and stability tradeoffs."
+}
+
 vmimage_confirm_gpu_passthrough() {
   vmimage_confirm_prompts_enabled || return 0
   local devices="$1"
@@ -931,6 +968,7 @@ vmimage_validate_pci_passthrough() {
   [[ -d /sys/kernel/iommu_groups ]] || vmimage_die "PCI passthrough requires IOMMU support; /sys/kernel/iommu_groups is missing on this host"
   vmimage_confirm_gpu_passthrough "$devices_csv"
   local raw dev path driver driver_name
+  local -A checked_groups=()
   local need_prepare=()
   IFS=',' read -r -a raw_devices <<< "$devices_csv"
   for raw in "${raw_devices[@]}"; do
@@ -939,6 +977,14 @@ vmimage_validate_pci_passthrough() {
     dev="$(vmimage_normalize_pci_bdf "$raw")"
     path="/sys/bus/pci/devices/${dev}"
     [[ -d "$path" ]] || vmimage_die "host PCI device not found for passthrough: ${dev}"
+    if [[ -L "${path}/iommu_group" ]]; then
+      local group_id
+      group_id="$(basename "$(readlink -f "${path}/iommu_group")")"
+      if [[ -z "${checked_groups[$group_id]:-}" ]]; then
+        vmimage_validate_iommu_group_membership "$devices_csv" "$dev"
+        checked_groups[$group_id]=1
+      fi
+    fi
     if [[ -L "${path}/driver" ]]; then
       driver="$(readlink -f "${path}/driver")"
       driver_name="$(basename "$driver")"

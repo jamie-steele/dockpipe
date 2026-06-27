@@ -247,9 +247,11 @@ GPU / PCI passthrough notes:
 - DockPipe does not bundle VFIO kernel support or IOMMU firmware settings for you
 - PCI passthrough is currently Linux-host-only
 - DockPipe validates that the selected devices exist and are using `vfio-pci`
+- DockPipe also validates that each selected device is isolated in its IOMMU group, or that you deliberately selected the whole group
 - if they are not yet on `vfio-pci`, DockPipe can now prompt to help rebind them for the current host session
 - if a selected device is the host boot/display adapter, DockPipe asks for explicit confirmation unless you set `DOCKPIPE_VM_ALLOW_BOOT_VGA=true`
 - common GPU passthrough pairs include the display function and HDMI/DP audio function, for example `0000:01:00.0,0000:01:00.1`
+- if your GPU shares an IOMMU group with unrelated hardware, passthrough usually needs a different PCIe slot, different firmware settings, or an ACS override that you explicitly accept
 
 If you want to avoid prompts entirely, set the fields you already know in YAML. For example, this suppresses the image-vs-ISO prompt and the disk-size prompt:
 
