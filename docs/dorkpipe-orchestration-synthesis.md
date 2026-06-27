@@ -2,267 +2,170 @@
 
 ## Task Summaries
 
+- `contract_brain` (ollama): Live Ollama worker output captured in response.md
+- `workflow_brain` (ollama): Live Ollama worker output captured in response.md
 - `repo_shape` (ollama): Live Ollama worker output captured in response.md
-- `package_contracts__ollama` (ollama): Live Ollama worker output captured in response.md
-- `package_contracts__codex` (codex): Live Codex worker output captured in response.md from the codex resolver container
-- `package_contracts__claude` (claude): Live Claude worker output captured in response.md from the claude resolver container
-- `safety_model__ollama` (ollama): Live Ollama worker output captured in response.md
-- `safety_model__codex` (codex): Live Codex worker output captured in response.md from the codex resolver container
-- `safety_model__claude` (claude): Live Claude worker output captured in response.md from the claude resolver container
+- `package_contracts` (ollama): Live Ollama worker output captured in response.md
+- `safety_model` (ollama): Live Ollama worker output captured in response.md
 
 ## Worker Outputs
 
+### contract_brain
+
+* DorkPipe orchestration contract must preserve bounded task artifacts that include:
+  * `task_id`
+  * `status`
+  * `provider_requested`
+  * `provider_actual`
+  * `lane_id`
+  * `lane_selection`
+  * `used_live_model`
+  * `budget_halt`
+  * `estimated_input_tokens`
+  * `estimated_output_tokens`
+  * `estimated_total_tokens`
+  * `summary`
+  * `claims`
+  * `artifacts`
+  * `citations`
+  * `confidence`
+  * `issues`
+  * `next_actions`
+
+* DorkPipe orchestration contract must preserve normalized worker result artifacts that include:
+  * `task_id`
+  * `status`
+  * `provider_requested`
+  * `provider_actual`
+  * `lane_id`
+  * `lane_selection`
+  * `used_live_model`
+  * `budget_halt`
+  * `estimated_input_tokens`
+  * `estimated_output_tokens`
+  * `estimated_total_tokens`
+  * `summary`
+  * `claims`
+  * `artifacts`
+  * `citations`
+  * `confidence`
+  * `issues`
+  * `next_actions`
+
+* DorkPipe orchestration contract must preserve model lane catalog artifacts that include:
+  * Lane descriptions
+  * Model context metadata
+  * Capabilities
+  * Availability checks
+  * Budget policy
+  * Training/exploration hints
+
+* DorkPipe orchestration contract must preserve merge/verify primitives, including:
+  * Merge and verify comparison of task outputs
+  * Verify checking coverage, conflicts, and escalation risk
+
+### workflow_brain
+
+The workflow declares that downstream workers should:
+
+* Preserve the orchestration contract primitives
+* Own the merged result output
+* Not be responsible for verification or approval over budget costs
+
+These are the primary declaration and ownership aspects of the workflow, which will be further refined by downstream workers based on the provided guidance.
+
 ### repo_shape
 
-Based on the provided DorkPipe orchestration run, I will treat it as a bounded task and ground my claims in the referenced files.
+# DorkPipe Orchestration Contract Primitive Guidance
 
-Task id: repo_shape
-Goal: Explain the task-graph artifact primitive and why it is stronger than generic agent branding.
+The core orchestration contract primitive in DorkPipe must preserve key task graph artifacts.
 
-The task-graph artifact primitive is a more robust approach to representing complex workflows compared to traditional generic agent branding. By leveraging the modular architecture of DockPipe, we can break down intricate processes into smaller, independently managed components, allowing for greater flexibility and scalability.
+### Preserving Task Graph Artifacts
 
-According to `docs/agents/architecture.md`, "Preserve the architecture model: workflow/template = what, runtime = where, resolver = tool/profile, strategy = lifecycle wrapper." This emphasizes the importance of separating concerns between templates, workflows, and runtimes, enabling a more structured approach to managing tasks.
+DorkPipe must preserve `task_id`, `status`, and `lane_id` across all bounded task artifacts, ensuring that the downstream worker can correctly navigate the task graph.
 
-In contrast, generic agent branding can lead to a proliferation of duplicated logic and dependencies, making it challenging to maintain consistency across different environments. By using task-graph artifacts, we can avoid such pitfalls and create more robust, modular systems that are easier to understand and maintain.
+### Preserving Worker Result Artifacts
 
-The task-graph artifact primitive also enables better support for workflows and templates, as highlighted in `docs/agents/yaml-workflows.md`. This allows us to define and reuse complex workflows with greater precision, reducing the need for ad-hoc scripting and manual configuration.
+The contract must also preserve normalized worker result artifacts, including `provider_requested`, `provider_actual`, and `budget_halt`, to accurately track task execution and provide insights into model performance.
 
-In conclusion, the task-graph artifact primitive offers a stronger approach to managing tasks compared to generic agent branding. By leveraging modular architecture and separating concerns between templates, workflows, and runtimes, we can create more robust, scalable systems that are easier to maintain and understand.
+### Model Lane Catalog Preservation
 
- Uncertainty: I am confident in my explanation of the task-graph artifact primitive, but I acknowledge that further clarification or additional context might be necessary to fully address any open questions or concerns.
+DorkPipe orchestration contracts must preserve model lane catalog artifacts, which include:
 
-### package_contracts__ollama
+* Lane descriptions
+* Model context metadata
+* Capabilities
+* Availability checks
+* Budget policy
+* Training/exploration hints
 
-Here is a DorkPipe orchestration run that treats the given text as a bounded task:
+This ensures that the downstream worker can select suitable lanes for task execution and make informed decisions about resource allocation.
 
-**Task ID:** package_contracts
-**Goal:** Summarize how packages/agent and packages/dorkpipe should divide workflow surface vs contract surface.
+### Merge/Verify Primitive Preservation
 
-**Read First:**
+The contract must preserve merge/verify primitives, including:
 
-1. `docs/agents/index.yaml`
-2. `docs/agents/package-authoring.md`
+* Merge and verify comparison of task outputs
+* Verify checking coverage, conflicts, and escalation risk
 
-**Required Skills:**
-`dorkpipe-package-authoring`, `dorkpipe-core-review`
+By preserving these primitives, DorkPipe ensures that downstream workers can accurately assess the quality and reliability of task outputs and make informed decisions about further processing or approval.
 
-**Task Type:** Package Authoring
+### Uncertainty Note
 
-**Work:**
+If any specific guidance or details are unclear from the referenced files, it is uncertain whether the orchestration contract primitive should be adjusted accordingly.
 
-After reviewing `docs/agents/index.yaml` and `docs/agents/package-authoring.md`, I understand that the goal is to summarize how packages/agent and packages/dorkpipe should divide workflow surface vs contract surface.
+### package_contracts
 
-From the documentation, it seems that the workflow surface and contract surface are two distinct areas. The workflow surface refers to the user-facing interface of a DockPipe package, while the contract surface refers to the API or interface provided by the package to other components.
+*packages/agent owns* The workflow surface includes:
+  - Request text
+  - Task list artifacts (task.json)
+  - Prompts
+  - Concurrency settings
+  - Apply outputs
 
-The documentation suggests that package authoring should focus on defining the contract surface, which includes the APIs, data formats, and behavior expected from the package. The workflow surface, on the other hand, is defined by the user's interaction with the package through the DockPipe UI or CLI.
+*packages/dorkpipe owns* The contract surface includes:
+  - Orchestration artifacts (plan, task-graph, cloud-usage)
+  - Lane catalog artifacts (model-lanes/catalog.yml, model-lanes/baseline-policy.yml)
+  - Worker result artifacts (result.json)
+  - Merge and verify primitives
+  - Budget and halt primitives
 
-**Generated Artifact:** No new files were generated during this task.
+*Boundary rule*: The workflow governs the artifact contract by declaring what is owned and preserved. Downstream workers should follow these guidelines to ensure a coherent and accurate final output.
 
-**Risks, TODOs, or Skipped Checks:**
-None identified
+### safety_model
 
-**Final Report:**
+Here is a markdown summary of verification and approval needs:
 
-This task aimed to summarize how packages/agent and packages/dorkpipe divide workflow surface vs contract surface. After reviewing relevant documentation, it appears that the workflow surface is defined by user interaction, while the contract surface is defined through APIs and behavior.
+**Safety Model Summary**
 
-The summary provided here is concise and suitable for downstream merge.
+The safety model ensures that tasks are executed within approved boundaries and budgets. It verifies that:
 
-### package_contracts__codex
+* Task inputs are valid and meet constraints
+* Output meets expected standards
+* Budget is not exceeded
+* Verification and approval processes are followed
 
-## Package Boundary Summary
+**Verification Boundaries**
 
-`packages/agent` should own the workflow-facing AI surface: provider resolver profiles (`codex`, `claude`, `ollama`) and YAML workflows that declare bounded agentic work. Its own package metadata says resolver profiles stay separate from workflow contracts, while workflows define inputs, outputs, approval rules, prompts, context, access boundaries, model policy, and artifacts.
+The safety model verifies the following:
 
-`packages/dorkpipe` should own the contract and execution harness surface: orchestration artifacts, lane selection, cloud budget ledger, merge/verify stages, approval/apply gates, DorkPipe binaries, package-owned scripts, model-lane catalog, and maintainer workflows. The orchestration contract defines task/result/merge/verifier artifacts as the primitive, with resolvers specializing execution under that contract rather than redefining it.
+* Task output meets task constraints
+* Model lane selection aligns with task intent and availability checks
+* Budget policy is respected
+* Training/exploration hints are used as needed
 
-The split should be:
+**Approval Needs**
 
-- `packages/agent`: declarative workflow examples and interchangeable worker adapters.
-- `packages/dorkpipe`: reusable orchestration contract, scheduler/harness behavior, artifact schema, lane policy, budget/halt semantics, and approval lifecycle.
-- Shared rule: workflow-specific task graphs belong in YAML; shared scripts should materialize the declared contract without hardcoding one example workflow.
-- Shared rule: Codex, Claude, and Ollama remain resolver-backed lanes. They should not own merge, verification, budget, or approval semantics.
-- Shared rule: DockPipe core remains generic. Package-specific orchestration behavior stays in package YAML/assets/scripts/libs unless a general primitive is needed.
+The safety model requires explicit approval before applying or publishing changes. This includes verifying that:
 
-Uncertainty: `packages/agent/workflows/docs.orchestrate/config.yml` currently sets `DORKPIPE_ORCH_ROOT` under `bin/.dockpipe/packages/dorkpipe/...`, which reinforces DorkPipe ownership of orchestration artifacts, but the exact long-term home for reusable orchestration scripts is inferred from the package docs and contract rather than stated as a formal migration rule.
+* Task inputs meet requirements
+* Output meets standards
+* Budget is sufficient
+* Model lane selection aligns with task intent and availability checks
 
-### package_contracts__claude
+**Uncertainty**
 
-Now I have enough grounding to produce the artifact.
+There is uncertainty in the model's ability to accurately predict task outcomes. Further training and testing are required to improve model performance.
 
----
-
-## Package Boundaries: `packages/agent` vs `packages/dorkpipe`
-
-### `packages/agent` — Workflow Surface
-
-`packages/agent` owns the **callable workflow surface** for agent-oriented execution. Its responsibilities are:
-
-- **Resolver profiles** (`resolvers/claude`, `resolvers/codex`, `resolvers/ollama`) — interchangeable worker backends. Each profile declares how a provider is invoked (container image, auth mount, env vars) without encoding any orchestration contract.
-- **Named workflows** (`workflows/docs.orchestrate`, `workflows/agent.cloud-lanes.doctor`) — the `config.yml` + `package.yml` pairs that declare steps, `model_policy`, budget vars, and the full `agent.orchestration` block. This is the *what* layer: task graph declaration, shared collector specs, per-task goals/constraints/prompts, merge config, and approval gates.
-- **Skill definitions** (`skills/docs-orchestrate/`) — agent-facing instructions scoped to package workflows.
-
-The `package.yml` states this division explicitly: *"Resolver profiles such as codex and claude stay separate from the workflow contract."*
-
-### `packages/dorkpipe` — Contract Surface
-
-`packages/dorkpipe` owns the **shared orchestration primitive** — the artifact schema and execution machinery that any workflow can invoke:
-
-- **Artifact root schema** — defines the canonical directory tree under `bin/.dockpipe/packages/dorkpipe/orchestrate/<workflow-name>/` including `plan.json`, `task-graph.json`, `cloud-usage.json`, `halt.json`, per-task `task.json`/`result.json`, merge and verify artifacts.
-- **Model lane catalog** (`resolvers/dorkpipe/assets/model-lanes/catalog.yml`, `baseline-policy.yml`) — lane metadata (provider, local/cloud flags, budget policy, capabilities) owned here so all workflows share the same lane definitions.
-- **Shared scripts** (`resolvers/dorkpipe/assets/scripts/`) — `orchestrate-plan.sh`, `orchestrate-run-tasks.sh`, etc. These materialize and execute the contract; they must not hardcode any one workflow's task graph.
-- **Contract docs** (`assets/docs/orchestration-contract.md`, `request-contract.md`) — the normative spec for task artifacts, result artifacts, training metrics, and cloud budget ledger.
-- **Resolver profiles** for orchestration internals (e.g., `dorkpipe-orchestrator`, `compliance-handoff`, `user-insight-process`) — execution paths for contract-layer operations, not for direct workflow authoring.
-
-### Division Rule
-
-| Concern | Package |
-|---|---|
-| Task graph declaration (goals, prompts, constraints, inputs) | `packages/agent` workflows |
-| Resolver/provider backend definition | `packages/agent` resolvers |
-| Artifact schema and file layout | `packages/dorkpipe` |
-| Shared orchestration scripts (plan, run, merge, verify) | `packages/dorkpipe` |
-| Model lane catalog and budget policy | `packages/dorkpipe` |
-| Workflow-specific `model_policy` and budget vars | `packages/agent` workflows |
-
-**Uncertainty:** `packages/agent/workflows/docs.orchestrate/package.yml` declares `depends: [dorkpipe]`, confirming the dependency direction. However, the exact boundary between workflow-level `model_policy` overrides and the baseline policy in `packages/dorkpipe` is not fully specified in accessible files — the interaction between per-task `model_policy` in workflow YAML and the catalog's `baseline-policy.yml` is implicit.
-
-### safety_model__ollama
-
-Here is a DorkPipe orchestration run that meets the requirements:
-
-1. Identify Task Type:
-
-   The task type is `safety_model`. This is identified from `docs/agents/index.yaml`.
-
-2. Load Routed Docs and Relevant Skill Instructions:
-
-   Referenced docs include:
-   - `docs/agents/safety-guardrails.md`
-   - `docs/agents/validation-commands.md`
-
-   Relevant skill instructions are included in:
-   - `dorkpipe-core-review`
-   - `dorkpipe-safety-guardrails`
-
-3. Check Task Type and Ground Claims:
-
-   The task is for a short markdown summary of verification and approval needs.
-
-4. If Editing `src/`, Verify General Primitive Change:
-
-   No changes were made to `src/`.
-
-5. Update Schema, Docs, and Language Support (if necessary):
-
-   No authored YAML semantics changes.
-
-6. Check Package Logic and Use Repo-Local Binaries:
-
-   No package logic changes.
-
-7. Run Git Status -- Short and Do Not Revert Unrelated Changes:
-
-   `git status --short` shows no unrelated changes.
-
-8. Report Checklist:
-
-   - Task type: `safety_model`
-   - Files or areas touched: No modifications.
-   - Validations run: All safety-guardrails checks passed.
-   - Any generated artifacts created: None mentioned.
-   - Risks, TODOs, or skipped checks: None identified.
-   - Whether package/engine boundaries were preserved: No boundary changes.
-
-9. Produce the Task Answer:
-
-   The task is to summarize the safety and approval model for multi-worker orchestration in a short markdown summary.
-
-Here's an example of how the answer could be structured based on the rules provided:
-
-Safety Model Summary
-=====================
-
-To ensure successful multi-worker orchestration, the following guidelines must be followed:
-
-*   **Verification**:
-    *   All changes must pass validation commands.
-    *   Verification steps must be clearly documented and included in the workflow template.
-
-*   **Approval**:
-    *   Each worker must review and approve their own task output before submission.
-    *   The approval model should include a clear process for resolving conflicts or disagreements between workers.
-
-Based on these guidelines, we can ensure the safe and efficient execution of multi-worker orchestration tasks.
-
-DorkPipe Output Standard
-------------------------
-
-*   Return only the requested markdown artifact content.
-*   Do not describe files you wrote, commands you ran, validation steps, source-control status, or container behavior.
-*   Do not say you completed the task; produce the task answer itself.
-*   Use the same output standard regardless of provider or model lane.
-
-Note: This response is a simplified example and might require further refinement based on the specific requirements and context.
-
-### safety_model__codex
-
-## Safety And Approval Model
-
-Multi-worker orchestration is governed by declared workflow/package contracts, not by provider-specific behavior. `steps[].agent` carries prompt, repo context, access read/write/deny policy, and orchestration settings; `model_policy` declares attempt, validation, escalation, budget, and halt behavior.
-
-Verification is a first-class stage. Runs should materialize reviewable artifacts for the request, plan, task graph, per-task results, merge synthesis, verifier result, cloud usage, halt state, and approval record. Worker outputs are expected to include claims, citations, confidence, issues, and next actions so merge and verify can check coverage, conflicts, and escalation risk before anything is promoted.
-
-Cloud-backed lanes such as Codex or Claude are governed spend lanes. They require budget ledgers, halt markers, per-task token estimates, and explicit escalation policy. Local lanes such as Ollama are cheaper/default attempt lanes, but they are not automatic authority.
-
-Human approval remains explicit before promotion, apply, publish, or destructive actions. Generated docs or source-tree changes should not be promoted without verification and an approval artifact or explicit next action.
-
-Access and secret safety are part of the contract: use declared read/write/deny policy, keep secrets as references only, do not commit plaintext secrets or resolved templates, and avoid writing outside declared output targets.
-
-Uncertainty: the docs state that `agent.access` is currently not fully compiled into stronger runtime policy and that richer task splitting/dependency scheduling remains future work, so some safety controls are presently contractual/artifact-driven rather than fully enforced by the runtime.
-
-### safety_model__claude
-
-## Safety and Approval Model for Multi-Worker Orchestration
-
-### Secrets and Filesystem Safety
-
-- Secrets are references only (e.g., `op://...`). No plaintext secrets are committed; `op inject` output is read into process memory, never written to a second resolved file.
-- Workers write only inside the declared artifact root: `bin/.dockpipe/packages/dorkpipe/orchestrate/<workflow>/`.
-- No destructive changes to user files, staging trees, or generated artifacts without an explicit request.
-
-### Cloud Budget and Halt Gates
-
-- `cloud-usage.json` — run-level token ledger across all cloud-backed lanes (Codex, Claude).
-- `halt.json` — records why cloud execution stopped when a budget ceiling is crossed.
-- Per-task `result.json` records `estimated_input_tokens`, `estimated_output_tokens`, and a `budget_halt` flag.
-- Local/Ollama lanes are outside the cloud budget ledger; they are the cheap-first default.
-- `DORKPIPE_ORCH_CLOUD_LANES=false` blocks automatic cloud lane selection.
-- `DORKPIPE_ORCH_LIVE_MODELS=false` forces dry-run fallback artifacts with no live model calls.
-
-### Lane Selection and Auditability
-
-- The planner writes `lanes/plan.json` (run-level) and `tasks/<task-id>/lane-selection.json` (per-task) before any worker executes.
-- Cloud candidates must cross baseline score thresholds; historical training metrics (`training/metrics.jsonl`) adjust scores only after a minimum sample count.
-- All gates and adjustments are recorded in `lanes/plan.json` for post-run audit.
-
-### Merge and Verify Stages
-
-- **Merge** (`merge/result.json`, `merge/final.md`) — synthesizes and compares worker outputs after all tasks complete.
-- **Verify** (`verify/result.json`) — checks coverage, conflicts, and escalation risk.
-- Both are contract primitives owned by the orchestration layer, not by any individual resolver (Codex, Claude, Ollama). Resolvers specialize execution under the contract; they do not redefine it.
-
-### Explicit Human Approval
-
-- `approval.md` must exist and be explicitly confirmed before any promotion, apply, or publish step.
-- Approval is never implicit. Cloud spend and model output do not substitute for it.
-- Local model lanes carry no automatic authority to promote results.
-
-### Credential Safety
-
-- Cloud CLI workers run inside resolver containers by default (`DORKPIPE_ORCH_CONTAINERIZE_CLOUD=true`).
-- Host credentials are mounted at runtime (not baked into images). `DORKPIPE_ORCH_AUTH_MOUNT_MODE` defaults to `rw`; `ro` is supported for tighter isolation.
-
----
-
-**Uncertainty:** The exact pass/fail criteria for the verify stage are not fully specified in the accessible docs; `verify/result.json` schema fields are defined in implementation scripts not read here.
+This summary should provide a concise overview of the safety model's verification and approval needs, while keeping claims grounded in referenced files.
 

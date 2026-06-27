@@ -26,14 +26,17 @@ import sys
 root = pathlib.Path(sys.argv[1])
 lane_plan = json.loads((root / "lanes" / "plan.json").read_text())
 tasks = lane_plan.get("tasks", [])
-assert len(tasks) == 3, f"expected 3 planned tasks, got {len(tasks)}"
+assert len(tasks) == 5, f"expected 5 planned tasks, got {len(tasks)}"
 providers = {task["task_id"]: task["provider"] for task in tasks}
+assert providers["contract_brain"] == "ollama", providers
+assert providers["workflow_brain"] == "ollama", providers
 assert providers["repo_shape"] == "ollama", providers
 assert providers["package_contracts"] == "ollama", providers
 assert providers["safety_model"] == "ollama", providers
-assert all(task.get("gated_by_baseline") or task["task_id"] == "repo_shape" for task in tasks), tasks
+explicit_local_tasks = {"contract_brain", "workflow_brain", "repo_shape"}
+assert all(task.get("gated_by_baseline") or task["task_id"] in explicit_local_tasks for task in tasks), tasks
 metrics = (root / "training" / "metrics.jsonl").read_text().strip().splitlines()
-assert len(metrics) == 3, f"expected 3 training metrics, got {len(metrics)}"
+assert len(metrics) == 5, f"expected 5 training metrics, got {len(metrics)}"
 for line in metrics:
     metric = json.loads(line)
     assert metric["used_live_model"] is False
@@ -49,6 +52,14 @@ for task_id in providers:
     assert "started_at" in result and result["started_at"], result
     assert "finished_at" in result and result["finished_at"], result
     assert isinstance(result.get("duration_ms"), int), result
+prompt = (root / "tasks" / "package_contracts" / "prompt.md").read_text()
+assert "Dependency context from completed upstream tasks:" in prompt, prompt
+assert "### contract_brain" in prompt, prompt
+assert "### workflow_brain" in prompt, prompt
+graph = json.loads((root / "task-graph.json").read_text())
+graph_tasks = {task["id"]: task for task in graph["tasks"]}
+assert graph_tasks["contract_brain"]["worker_type"] == "planning", graph_tasks["contract_brain"]
+assert graph_tasks["workflow_brain"]["worker_type"] == "planning", graph_tasks["workflow_brain"]
 PY
 
 echo "test_orchestration_lanes OK"
@@ -68,6 +79,8 @@ import sys
 root = pathlib.Path(sys.argv[1])
 lane_plan = json.loads((root / "lanes" / "plan.json").read_text())
 tasks = {task["task_id"]: task for task in lane_plan.get("tasks", [])}
+assert tasks["contract_brain"]["provider"] == "ollama", tasks
+assert tasks["workflow_brain"]["provider"] == "ollama", tasks
 assert tasks["repo_shape"]["provider"] == "ollama", tasks
 assert tasks["repo_shape"]["requested"] == "ollama", tasks
 for task_id in ("package_contracts", "safety_model"):
@@ -103,6 +116,8 @@ root = pathlib.Path(sys.argv[1])
 lane_plan = json.loads((root / "lanes" / "plan.json").read_text())
 tasks = {task["task_id"]: task for task in lane_plan.get("tasks", [])}
 expected = {
+    "contract_brain": "ollama",
+    "workflow_brain": "ollama",
     "repo_shape": "ollama",
     "package_contracts__ollama": "ollama",
     "package_contracts__codex": "codex",
@@ -115,7 +130,7 @@ assert {key: tasks[key]["provider"] for key in expected} == expected, tasks
 assert tasks["repo_shape"]["comparison"]["enabled"] is False, tasks["repo_shape"]
 for task_id in expected:
     task = tasks[task_id]
-    if task_id == "repo_shape":
+    if task_id in {"contract_brain", "workflow_brain", "repo_shape"}:
         continue
     assert task["comparison"]["enabled"] is True, task
     assert task["base_task_id"] in {"package_contracts", "safety_model"}, task
@@ -129,13 +144,19 @@ for task_id, provider in expected.items():
     if provider == "claude":
         assert graph_tasks[task_id]["model"] == "test-claude-model", graph_tasks[task_id]
     if provider == "ollama":
-        if task_id == "repo_shape":
+        if task_id in {"contract_brain", "workflow_brain", "repo_shape"}:
             assert graph_tasks[task_id]["model"] == "llama3.2", graph_tasks[task_id]
         else:
             assert graph_tasks[task_id]["model"] == "test-ollama-model", graph_tasks[task_id]
     prompt = (root / "tasks" / task_id / "prompt.md").read_text()
     assert "DorkPipe worker output contract:" in prompt, prompt
     assert "Return only the requested markdown artifact content." in prompt, prompt
+    assert "Do not create or describe task.json" in prompt, prompt
+    assert "Input context excerpts:" in prompt, prompt
+    assert "shared/repo-map.md" in prompt, prompt
+    if provider == "ollama":
+        assert prompt.startswith("DorkPipe worker output contract:"), prompt
+        assert "Local model lane guidance:" in prompt, prompt
 assert graph["concurrency"]["max_workers"] >= 4, graph["concurrency"]
 assert graph["concurrency"]["max_local_workers"] >= 2, graph["concurrency"]
 assert graph["concurrency"]["max_cloud_workers"] >= 2, graph["concurrency"]

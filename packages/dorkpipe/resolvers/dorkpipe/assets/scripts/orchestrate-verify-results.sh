@@ -36,6 +36,55 @@ if command -v jq >/dev/null 2>&1; then
   fi
 fi
 
+eval "$(
+  python3 - "${merge_json}" "${DORKPIPE_ORCH_TASKS_DIR}" "${issues}" <<'PY'
+import json
+import pathlib
+import re
+import shlex
+import sys
+
+merge = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+tasks_dir = pathlib.Path(sys.argv[2])
+try:
+    issues = json.loads(sys.argv[3])
+except Exception:
+    issues = []
+
+bad_patterns = [
+    (re.compile(r"\bI will (outline|create|write|complete)\b", re.I), "worker narrated a plan instead of returning the requested artifact"),
+    (re.compile(r"(?im)^\s*(#{1,6}\s*)?(Task Artifact|Lane Selection|Worker Result Artifact|Merge Result|Final Report Checklist)\s*:"), "worker imitated orchestration artifacts instead of answering the task"),
+    (re.compile(r"```json\s*\{", re.I), "worker returned sample JSON artifacts instead of concise markdown"),
+    (re.compile(r"\b(files? (were|modified|touched)|validations? run|generated artifacts?)\b", re.I), "worker included implementation/reporting chatter"),
+]
+
+for task in merge.get("tasks", []):
+    task_id = task.get("task_id")
+    if not task_id:
+        continue
+    response_path = tasks_dir / task_id / "response.md"
+    if not response_path.exists():
+        issues.append(f"{task_id}: response artifact is missing")
+        continue
+    text = response_path.read_text(encoding="utf-8", errors="replace")
+    for pattern, message in bad_patterns:
+        if pattern.search(text):
+            issues.append(f"{task_id}: {message}")
+            break
+
+status = "pass"
+if issues:
+    status = "review"
+print(f"VERIFY_HEURISTIC_STATUS={shlex.quote(status)}")
+print(f"VERIFY_HEURISTIC_ISSUES={shlex.quote(json.dumps(issues))}")
+PY
+)"
+if [[ "${VERIFY_HEURISTIC_STATUS:-pass}" != "pass" ]]; then
+  status="${VERIFY_HEURISTIC_STATUS}"
+  issues="${VERIFY_HEURISTIC_ISSUES:-${issues}}"
+  next_action="human review: worker output appears to miss the requested artifact shape"
+fi
+
 if [[ -f "${DORKPIPE_ORCH_HALT_JSON}" ]]; then
   status="review"
   issues='["cloud budget halt triggered during orchestration; review cloud-usage.json and halt.json before resuming cloud workers"]'

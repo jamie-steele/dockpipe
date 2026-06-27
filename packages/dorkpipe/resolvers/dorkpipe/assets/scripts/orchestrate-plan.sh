@@ -6,6 +6,9 @@ SCRIPT_DIR="${DOCKPIPE_SCRIPT_DIR:?DOCKPIPE_SCRIPT_DIR is required}"
 source "$SCRIPT_DIR/orchestrate-common.sh"
 
 dorkpipe_orchestrate_init
+find "${DORKPIPE_ORCH_TASKS_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+find "${DORKPIPE_ORCH_SHARED_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+find "${DORKPIPE_ORCH_LANES_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
 rm -f "${DORKPIPE_ORCH_HALT_JSON}"
 cat > "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" <<EOF
 {
@@ -76,6 +79,9 @@ compare_providers = [
     if item.strip()
 ]
 compare_scope = (os.environ.get("DORKPIPE_ORCH_COMPARE_SCOPE") or "auto").strip().lower()
+inline_input_context = os.environ.get("DORKPIPE_ORCH_INLINE_INPUT_CONTEXT", "true").lower() in {"1", "true", "yes", "on"}
+inline_input_max_bytes = int(os.environ.get("DORKPIPE_ORCH_INLINE_INPUT_MAX_BYTES") or 6000)
+inline_input_total_max_bytes = int(os.environ.get("DORKPIPE_ORCH_INLINE_INPUT_TOTAL_MAX_BYTES") or 18000)
 
 workflow = yaml.safe_load(workflow_config.read_text()) or {}
 workflow_model_policy = workflow.get("model_policy", {}) or {}
@@ -385,6 +391,96 @@ def render_shared(entry: dict) -> str:
         ])
     raise SystemExit(f"{workflow_config}: unknown shared collector '{collector}'")
 
+def resolve_input_path(rel):
+    rel_path = pathlib.Path(str(rel))
+    candidates = []
+    if rel_path.is_absolute():
+        candidates.append(rel_path)
+    else:
+        candidates.extend([
+            pathlib.Path(artifact_root) / rel_path,
+            shared_dir.parent / rel_path,
+            root / rel_path,
+        ])
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except Exception:
+            continue
+        try:
+            resolved.relative_to(root.resolve())
+            inside_repo = True
+        except ValueError:
+            inside_repo = False
+        try:
+            resolved.relative_to(pathlib.Path(artifact_root).resolve())
+            inside_artifact = True
+        except ValueError:
+            inside_artifact = False
+        if candidate.exists() and candidate.is_file() and (inside_repo or inside_artifact):
+            return candidate
+    return None
+
+def render_input_context(input_paths, provider):
+    if not inline_input_context or not input_paths:
+        return ""
+    remaining = max(0, inline_input_total_max_bytes)
+    if remaining <= 0:
+        return ""
+    sections = [
+        "Input context excerpts:",
+        "",
+        "Use these excerpts as the primary source of truth for this task. Cite paths in prose when useful, but keep the final answer compact.",
+    ]
+    included = 0
+    ordered_inputs = sorted(
+        [str(item) for item in input_paths],
+        key=lambda item: (
+            1 if item.startswith("shared/cli-inspect") else 0,
+            0 if item.endswith(".md") else 1,
+            item,
+        ),
+    )
+    for rel in ordered_inputs:
+        if remaining <= 0:
+            break
+        path = resolve_input_path(str(rel))
+        if path is None:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            continue
+        max_bytes = min(inline_input_max_bytes, remaining)
+        encoded = text.encode("utf-8", errors="replace")
+        truncated = len(encoded) > max_bytes
+        snippet = encoded[:max_bytes].decode("utf-8", errors="replace").rstrip()
+        if not snippet:
+            continue
+        included += 1
+        remaining -= len(snippet.encode("utf-8", errors="replace"))
+        sections.extend([
+            "",
+            f"### {rel}",
+            "",
+            "```text",
+            snippet,
+        ])
+        if truncated:
+            sections.append("[truncated]")
+        sections.append("```")
+    if included == 0:
+        return ""
+    if provider == "ollama":
+        sections.extend([
+            "",
+            "Local model lane guidance:",
+            "- Prefer direct claims from the excerpts over broad background knowledge.",
+            "- If the excerpts do not prove a point, mark it as uncertain instead of filling the gap.",
+            "- Keep the answer short and concrete so the merge step can compare it against stronger lanes.",
+        ])
+    return "\n".join(sections).rstrip() + "\n"
+
 for entry in shared:
     rel = entry.get("path")
     if not rel:
@@ -607,8 +703,11 @@ for task in tasks:
             output_contract.extend([
                 "DorkPipe worker output contract:",
                 "- Return only the requested markdown artifact content.",
+                "- Answer the task directly in final markdown.",
                 "- Do not describe files you wrote, commands you ran, validation steps, source-control status, or container behavior.",
                 "- Do not say you completed the task; produce the task answer itself.",
+                "- Do not create or describe task.json, lane-selection.json, result.json, merge artifacts, or example artifacts in the response.",
+                "- Do not write an execution plan, checklist, final report, or sample output unless the task explicitly asks for one.",
                 "- Do not write or modify source files unless the task explicitly asks for edits.",
                 "- Use the same output standard regardless of provider or model lane.",
             ])
@@ -623,6 +722,7 @@ for task in tasks:
         if output_contract:
             prompt = "\n".join(output_contract).rstrip() + "\n\n" + prompt.lstrip()
 
+        local_lane = bool(lane_selection.get("local"))
         prefix = []
         if startup_prompt:
             prefix.append(startup_prompt.rstrip())
@@ -633,10 +733,22 @@ for task in tasks:
             for mode in ("read", "write", "deny"):
                 if task_access[mode]:
                     prefix.extend([f"{mode}:", *[f"- {path}" for path in task_access[mode]]])
-        if include_agents_md and (root / "AGENTS.md").exists():
+        include_agents_for_task = include_agents_md and (
+            not local_lane
+            or os.environ.get("DORKPIPE_ORCH_LOCAL_INCLUDE_AGENTS_MD", "false").lower() in {"1", "true", "yes", "on"}
+        )
+        if include_agents_for_task and (root / "AGENTS.md").exists():
             prefix.extend(["", "AGENTS.md context:", "", (root / "AGENTS.md").read_text().rstrip()])
+        input_context = render_input_context(task_payload["inputs"], lane_selection.get("provider", ""))
+        if input_context and not local_lane:
+            prefix.extend(["", input_context.rstrip()])
         if prefix:
-            prompt = "\n".join(prefix).rstrip() + "\n\n" + prompt.lstrip()
+            if local_lane:
+                prompt = prompt.rstrip() + "\n\n" + "\n".join(prefix).strip() + "\n"
+            else:
+                prompt = "\n".join(prefix).rstrip() + "\n\n" + prompt.lstrip()
+        if input_context and local_lane:
+            prompt = prompt.rstrip() + "\n\nReference context excerpts:\n\n" + input_context.rstrip() + "\n"
         (task_dir / "prompt.md").write_text(prompt)
 
         graph_tasks.append({

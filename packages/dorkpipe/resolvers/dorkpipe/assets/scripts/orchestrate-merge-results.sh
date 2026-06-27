@@ -22,6 +22,37 @@ for task in graph.get("tasks", []):
 PY
 )
 
+mapfile -t main_result_paths < <(
+  python3 - "${DORKPIPE_ORCH_GRAPH_JSON}" "${DORKPIPE_ORCH_TASKS_DIR}" <<'PY'
+import json
+import pathlib
+import sys
+
+graph = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+tasks_dir = pathlib.Path(sys.argv[2])
+for task in graph.get("tasks", []):
+    worker_type = task.get("worker_type", "analysis")
+    if worker_type in {"merge", "verify", "planning", "scout"}:
+        continue
+    print(tasks_dir / task["id"] / "result.json")
+PY
+)
+
+mapfile -t planning_result_paths < <(
+  python3 - "${DORKPIPE_ORCH_GRAPH_JSON}" "${DORKPIPE_ORCH_TASKS_DIR}" <<'PY'
+import json
+import pathlib
+import sys
+
+graph = json.load(open(sys.argv[1], "r", encoding="utf-8"))
+tasks_dir = pathlib.Path(sys.argv[2])
+for task in graph.get("tasks", []):
+    worker_type = task.get("worker_type", "analysis")
+    if worker_type in {"planning", "scout"}:
+        print(tasks_dir / task["id"] / "result.json")
+PY
+)
+
 missing=0
 for path in "${result_paths[@]}"; do
   [[ -f "$path" ]] || missing=1
@@ -54,7 +85,14 @@ if command -v jq >/dev/null 2>&1; then
     total_estimated_task_tokens: (map(.estimated_total_tokens // 0) | add),
     total_duration_ms: (map(.duration_ms // 0) | add),
     max_task_duration_ms: (map(.duration_ms // 0) | max)
-  }' "${result_paths[@]}" > "${DORKPIPE_ORCH_MERGE_DIR}/result.json"
+  }' "${main_result_paths[@]}" > "${DORKPIPE_ORCH_MERGE_DIR}/result.json"
+  if [[ "${#planning_result_paths[@]}" -gt 0 ]]; then
+    tmp_result="${DORKPIPE_ORCH_MERGE_DIR}/result.tmp.json"
+    jq -s --slurpfile planning <(jq -s 'map({task_id, base_task_id, provider_actual, used_live_model, estimated_input_tokens, estimated_output_tokens, estimated_total_tokens, started_at, finished_at, duration_ms, summary, confidence})' "${planning_result_paths[@]}") \
+      '.[0] + {planning_tasks: ($planning[0] // [])}' \
+      "${DORKPIPE_ORCH_MERGE_DIR}/result.json" > "${tmp_result}"
+    mv "${tmp_result}" "${DORKPIPE_ORCH_MERGE_DIR}/result.json"
+  fi
 else
   cat > "${DORKPIPE_ORCH_MERGE_DIR}/result.json" <<EOF
 {"status":"ok","tasks":["repo_shape","package_contracts","safety_model"],"average_confidence":0.6}
@@ -79,6 +117,11 @@ if summary_points:
     lines.extend(["", "## Synthesis", ""])
     for point in summary_points:
         lines.append(f"- {point}")
+planning_tasks = merge_result.get("planning_tasks", [])
+if planning_tasks:
+    lines.extend(["", "## Planning Scouts", ""])
+    for task in planning_tasks:
+        lines.append(f"- `{task['task_id']}` ({task.get('provider_actual', 'unknown')}): {task.get('summary', '')}")
 lines.extend(["", "## Worker Outputs", ""])
 for task in merge_result.get("tasks", []):
     task_id = task["task_id"]

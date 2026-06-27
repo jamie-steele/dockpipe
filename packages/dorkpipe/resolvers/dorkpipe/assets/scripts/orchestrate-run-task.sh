@@ -54,6 +54,7 @@ mapping = {
     "TASK_CITATIONS_JSON": json.dumps(task.get("citations", task.get("inputs", []))),
     "TASK_MAX_CLOUD_TOKENS": str(task.get("max_cloud_tokens", "")),
     "TASK_MODEL_JSON": json.dumps(task.get("model", {})),
+    "TASK_DEPENDS_ON_JSON": json.dumps(task.get("depends_on", [])),
 }
 for key, value in mapping.items():
     print(f"{key}={shlex.quote(value)}")
@@ -69,9 +70,7 @@ confidence="0.55"
 issues_json='["live worker backend unavailable for this task"]'
 next_actions_json='["review merged output before treating it as final"]'
 budget_halt="false"
-estimated_input_tokens="$(dorkpipe_orchestrate_estimate_tokens_for_file "${prompt_md}")"
 estimated_output_tokens="0"
-estimated_total_tokens="${estimated_input_tokens}"
 selected_model="$(
   python3 - <<'PY'
 import json
@@ -85,6 +84,72 @@ except Exception:
 print(model)
 PY
 )"
+
+append_dependency_context() {
+  [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_APPEND_DEPENDENCY_CONTEXT}")" == "true" ]] || return 0
+  python3 - "${prompt_md}" "${DORKPIPE_ORCH_TASKS_DIR}" "${TASK_DEPENDS_ON_JSON:-[]}" "${DORKPIPE_ORCH_DEPENDENCY_CONTEXT_MAX_BYTES}" "${DORKPIPE_ORCH_DEPENDENCY_CONTEXT_TOTAL_MAX_BYTES}" <<'PY'
+import json
+import pathlib
+import sys
+
+prompt_path = pathlib.Path(sys.argv[1])
+tasks_dir = pathlib.Path(sys.argv[2])
+try:
+    depends_on = json.loads(sys.argv[3]) or []
+except Exception:
+    depends_on = []
+max_bytes = int(sys.argv[4] or 5000)
+total_max_bytes = int(sys.argv[5] or 12000)
+
+if not depends_on or not prompt_path.exists():
+    raise SystemExit(0)
+
+prompt = prompt_path.read_text(encoding="utf-8", errors="replace")
+marker = "Dependency context from completed upstream tasks:"
+if marker in prompt:
+    raise SystemExit(0)
+
+remaining = max(0, total_max_bytes)
+sections = []
+for dep in depends_on:
+    if remaining <= 0:
+        break
+    response_path = tasks_dir / str(dep) / "response.md"
+    if not response_path.exists():
+        continue
+    text = response_path.read_text(encoding="utf-8", errors="replace").strip()
+    if not text:
+        continue
+    encoded = text.encode("utf-8", errors="replace")
+    snippet_bytes = encoded[: min(max_bytes, remaining)]
+    snippet = snippet_bytes.decode("utf-8", errors="replace").rstrip()
+    if not snippet:
+        continue
+    remaining -= len(snippet.encode("utf-8", errors="replace"))
+    sections.extend([
+        f"### {dep}",
+        "",
+        snippet,
+    ])
+    if len(encoded) > len(snippet_bytes):
+        sections.append("[truncated]")
+    sections.append("")
+
+if not sections:
+    raise SystemExit(0)
+
+addition = "\n\n".join([
+    marker,
+    "Use this as planning guidance from earlier bounded workers. Do not repeat it verbatim.",
+    "\n".join(sections).rstrip(),
+])
+prompt_path.write_text(prompt.rstrip() + "\n\n" + addition.rstrip() + "\n", encoding="utf-8")
+PY
+}
+
+append_dependency_context
+estimated_input_tokens="$(dorkpipe_orchestrate_estimate_tokens_for_file "${prompt_md}")"
+estimated_total_tokens="${estimated_input_tokens}"
 
 live_response_is_valid() {
   local path="${1:?response path}"
