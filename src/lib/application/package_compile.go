@@ -229,6 +229,11 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 		}
 	}
 	if rebuild {
+		if n, err := infrastructure.InvalidateTarballExtractCacheForPackage(workdir, "workflow", pkgName); err != nil {
+			return err
+		} else if n > 0 {
+			fmt.Fprintf(os.Stderr, "[dockpipe] invalidated %d extracted workflow cache entrie(s) for %q\n", n, pkgName)
+		}
 		_ = infrastructure.RemoveGlob(tarGlob)
 		_ = os.RemoveAll(legacyDir)
 	}
@@ -735,7 +740,7 @@ func cmdPackageCompileResolvers(args []string) error {
 			fmt.Fprintf(os.Stderr, "[dockpipe] skip missing resolvers root: %s\n", srcAbs)
 			continue
 		}
-		n, err := mergeChildPackages(srcAbs, destRes, "resolver", defResolverNamespace, authoredPackageVersion(repoRoot), force)
+		n, err := mergeChildPackages(workdir, srcAbs, destRes, "resolver", defResolverNamespace, authoredPackageVersion(repoRoot), force)
 		if err != nil {
 			return err
 		}
@@ -838,7 +843,7 @@ func hasNestedResolverPackLayout(dir string) bool {
 //
 // Resolver authoring can be flat (srcRoot/resolvers) or nested under any compile root-provided tree.
 // Each resolver child still becomes its own dockpipe-resolver-<name>-*.tar.gz for the store.
-func mergeChildPackages(srcRoot, destRoot string, kind string, defaultNamespace string, defaultVersion string, force bool) (int, error) {
+func mergeChildPackages(workdir, srcRoot, destRoot string, kind string, defaultNamespace string, defaultVersion string, force bool) (int, error) {
 	if kind == "resolver" {
 		roots := collectResolverPackRoots(srcRoot)
 		// Drop top-level resolvers/ if it does not exist (collectResolverPackRoots still added it — fix)
@@ -846,7 +851,7 @@ func mergeChildPackages(srcRoot, destRoot string, kind string, defaultNamespace 
 		if len(roots) > 0 {
 			total := 0
 			for _, root := range roots {
-				n, err := mergeChildPackagesWalk(root, destRoot, kind, defaultNamespace, defaultVersion, force)
+				n, err := mergeChildPackagesWalk(workdir, root, destRoot, kind, defaultNamespace, defaultVersion, force)
 				total += n
 				if err != nil {
 					return total, err
@@ -855,7 +860,7 @@ func mergeChildPackages(srcRoot, destRoot string, kind string, defaultNamespace 
 			return total, nil
 		}
 	}
-	return mergeChildPackagesWalk(srcRoot, destRoot, kind, defaultNamespace, defaultVersion, force)
+	return mergeChildPackagesWalk(workdir, srcRoot, destRoot, kind, defaultNamespace, defaultVersion, force)
 }
 
 func filterExistingResolverRoots(roots []string) []string {
@@ -870,7 +875,7 @@ func filterExistingResolverRoots(roots []string) []string {
 
 // compileSingleResolverDir packs one resolver profile directory (contains profile) into
 // dockpipe-resolver-<name>-<ver>.tar.gz under destRoot.
-func compileSingleResolverDir(destRoot, from, name string, defaultNamespace string, defaultVersion string, force bool) error {
+func compileSingleResolverDir(workdir, destRoot, from, name string, defaultNamespace string, defaultVersion string, force bool) error {
 	kind := "resolver"
 	if err := validateWorkflowConfigsUnderDir(from); err != nil {
 		return fmt.Errorf("validate resolver %s: %w", name, err)
@@ -928,6 +933,11 @@ func compileSingleResolverDir(destRoot, from, name string, defaultNamespace stri
 		}
 	}
 	if rebuild {
+		if n, err := infrastructure.InvalidateTarballExtractCacheForPackage(workdir, "resolver", name); err != nil {
+			return err
+		} else if n > 0 {
+			fmt.Fprintf(os.Stderr, "[dockpipe] invalidated %d extracted resolver cache entrie(s) for %q\n", n, name)
+		}
 		_ = infrastructure.RemoveGlob(tarGlob)
 		_ = os.RemoveAll(legacyDir)
 	}
@@ -988,7 +998,7 @@ func compileSingleResolverDir(destRoot, from, name string, defaultNamespace stri
 	return nil
 }
 
-func mergeChildPackagesWalk(srcRoot, destRoot string, kind string, defaultNamespace string, defaultVersion string, force bool) (int, error) {
+func mergeChildPackagesWalk(workdir, srcRoot, destRoot string, kind string, defaultNamespace string, defaultVersion string, force bool) (int, error) {
 	entries, err := os.ReadDir(srcRoot)
 	if err != nil {
 		return 0, err
@@ -1006,7 +1016,7 @@ func mergeChildPackagesWalk(srcRoot, destRoot string, kind string, defaultNamesp
 		from := filepath.Join(srcRoot, name)
 		if nestedPack {
 			if _, err := os.Stat(filepath.Join(from, "profile")); err != nil {
-				sub, err := mergeChildPackagesWalk(from, destRoot, kind, defaultNamespace, defaultVersion, force)
+				sub, err := mergeChildPackagesWalk(workdir, from, destRoot, kind, defaultNamespace, defaultVersion, force)
 				if err != nil {
 					return n, err
 				}
@@ -1017,7 +1027,7 @@ func mergeChildPackagesWalk(srcRoot, destRoot string, kind string, defaultNamesp
 		if kind != "resolver" {
 			return n, fmt.Errorf("mergeChildPackages: unknown kind %q", kind)
 		}
-		if err := compileSingleResolverDir(destRoot, from, name, defaultNamespace, defaultVersion, force); err != nil {
+		if err := compileSingleResolverDir(workdir, destRoot, from, name, defaultNamespace, defaultVersion, force); err != nil {
 			return n, err
 		}
 		n++
@@ -1036,9 +1046,10 @@ func cmdPackageCompileWorkflowsBatch(args []string) error {
 		return err
 	}
 	var (
-		workdir string
-		from    []string
-		force   bool
+		workdir    string
+		from       []string
+		force      bool
+		pruneStale bool
 	)
 	for i := 0; i < len(args); i++ {
 		switch {
@@ -1050,6 +1061,8 @@ func cmdPackageCompileWorkflowsBatch(args []string) error {
 			i++
 		case args[i] == "--force":
 			force = true
+		case args[i] == "--prune-stale":
+			pruneStale = true
 		case strings.HasPrefix(args[i], "-"):
 			return fmt.Errorf("unknown option %s (try: dockpipe package compile workflows --help)", args[i])
 		default:
@@ -1120,8 +1133,52 @@ func cmdPackageCompileWorkflowsBatch(args []string) error {
 			return err
 		}
 	}
+	if pruneStale {
+		n, err := pruneStaleWorkflowTarballs(workdir, seen)
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			fmt.Fprintf(os.Stderr, "[dockpipe] pruned %d stale workflow package tarball(s)\n", n)
+		}
+	}
 	fmt.Fprintf(os.Stderr, "[dockpipe] workflow packages: compiled %d tarball(s) under bin/.dockpipe/internal/packages/workflows/\n", total)
 	return nil
+}
+
+func pruneStaleWorkflowTarballs(workdir string, seen map[string]struct{}) (int, error) {
+	pw, err := infrastructure.PackagesWorkflowsDir(workdir)
+	if err != nil {
+		return 0, err
+	}
+	all, err := filepath.Glob(filepath.Join(pw, "dockpipe-workflow-*.tar.gz"))
+	if err != nil {
+		return 0, err
+	}
+	keep := map[string]struct{}{}
+	for name := range seen {
+		pattern := filepath.Join(pw, fmt.Sprintf("dockpipe-workflow-%s-*.tar.gz", packagebuild.SafeTarballToken(name)))
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			return 0, err
+		}
+		for _, path := range matches {
+			keep[filepath.Clean(path)] = struct{}{}
+		}
+	}
+	removed := 0
+	for _, path := range all {
+		clean := filepath.Clean(path)
+		if _, ok := keep[clean]; ok {
+			continue
+		}
+		if err := os.Remove(clean); err != nil && !os.IsNotExist(err) {
+			return removed, err
+		}
+		_ = os.Remove(clean + ".sha256")
+		removed++
+	}
+	return removed, nil
 }
 
 func cmdPackageCompileAll(args []string) error {
@@ -1191,6 +1248,9 @@ func cmdPackageCompileAll(args []string) error {
 		}
 	}
 	wfArgs := workdirAndForceArgs(workdir, force)
+	if force {
+		wfArgs = append(wfArgs, "--prune-stale")
+	}
 	for _, p := range effectiveWorkflowCompileRoots(cfg, repoRoot) {
 		wfArgs = append(wfArgs, "--from", p)
 	}
@@ -1300,6 +1360,7 @@ Options:
   --workdir <path>       Project directory (default: current directory)
   --from <path>          Repeatable; roots to scan for named workflow folders
   --force                Replace existing packages/workflows/<name>
+  --prune-stale          Remove workflow tarballs not produced by this compile pass
 
 `
 

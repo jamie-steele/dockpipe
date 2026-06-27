@@ -1,6 +1,7 @@
 package infrastructure
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,6 +14,64 @@ import (
 // TarballExtractCacheRoot is where full tarballs are extracted for tools that need real paths (scripts, resolver profiles).
 func TarballExtractCacheRoot(repoRoot string) string {
 	return filepath.Join(repoRoot, DockpipeDirRel, "internal", "cache", "tarball")
+}
+
+type tarballExtractCacheMarker struct {
+	Tarball string `json:"tarball"`
+}
+
+// InvalidateTarballExtractCacheForPackage removes extracted tarball caches for a rebuilt package.
+// Newer cache entries carry a tarball marker. Older cache entries are matched by the archive root
+// they contain, so a rebuild also clears stale pre-marker extractions.
+func InvalidateTarballExtractCacheForPackage(workdir, kind, name string) (int, error) {
+	token := packagebuild.SafeTarballToken(name)
+	var tarPrefix, archiveRoot string
+	switch kind {
+	case "workflow":
+		tarPrefix = "dockpipe-workflow-" + token + "-"
+		archiveRoot = filepath.Join("workflows", name)
+	case "resolver":
+		tarPrefix = "dockpipe-resolver-" + token + "-"
+		archiveRoot = filepath.Join("resolvers", name)
+	default:
+		return 0, fmt.Errorf("unknown package cache kind %q", kind)
+	}
+	cacheRoot := TarballExtractCacheRoot(workdir)
+	entries, err := os.ReadDir(cacheRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	removed := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		dir := filepath.Join(cacheRoot, entry.Name())
+		if tarballCacheEntryMatchesPackage(dir, tarPrefix, archiveRoot) {
+			if err := os.RemoveAll(dir); err != nil {
+				return removed, err
+			}
+			removed++
+		}
+	}
+	return removed, nil
+}
+
+func tarballCacheEntryMatchesPackage(dir, tarPrefix, archiveRoot string) bool {
+	markerPath := filepath.Join(dir, ".dockpipe-extracted-package.json")
+	if b, err := os.ReadFile(markerPath); err == nil {
+		var marker tarballExtractCacheMarker
+		if json.Unmarshal(b, &marker) == nil && strings.HasPrefix(filepath.Base(marker.Tarball), tarPrefix) {
+			return true
+		}
+	}
+	if st, err := os.Stat(filepath.Join(dir, archiveRoot)); err == nil && st.IsDir() {
+		return true
+	}
+	return false
 }
 
 // FindLatestCoreTarball returns the newest matching dockpipe-core-*.tar.gz under packages/core (then global packages/core), or "" if none.
