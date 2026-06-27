@@ -69,6 +69,24 @@ estimated_input_tokens="$(dorkpipe_orchestrate_estimate_tokens_for_file "${promp
 estimated_output_tokens="0"
 estimated_total_tokens="${estimated_input_tokens}"
 
+live_response_is_valid() {
+  local path="${1:?response path}"
+  [[ -s "${path}" ]] || return 1
+  python3 - "${path}" <<'PY'
+import pathlib
+import re
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace").strip()
+if len(text) < 40:
+    raise SystemExit(1)
+if re.fullmatch(r"sha256:[0-9a-f]{64}", text):
+    raise SystemExit(1)
+if re.search(r"\b(exec|command): .* not found\b", text, flags=re.IGNORECASE):
+    raise SystemExit(1)
+PY
+}
+
 if dorkpipe_orchestrate_is_cloud_provider "${provider}"; then
   if [[ -f "${DORKPIPE_ORCH_HALT_JSON}" ]]; then
     budget_halt="true"
@@ -103,17 +121,17 @@ if [[ "${budget_halt}" != "true" ]]; then
     case "${provider}" in
       codex)
         if [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_CONTAINERIZE_CLOUD}")" == "true" ]]; then
-          if dorkpipe_orchestrate_run_container_worker codex "${prompt_md}" "${response_md}"; then
+          if dorkpipe_orchestrate_run_container_worker codex "${prompt_md}" "${response_md}" && live_response_is_valid "${response_md}"; then
             used_live_model="true"
             summary="Live Codex worker output captured in response.md from the codex resolver container"
             confidence="0.72"
             issues_json='[]'
             next_actions_json='["merge this task with sibling worker outputs"]'
           else
-            issues_json='["codex resolver container failed or host Codex auth was unavailable"]'
+            issues_json='["codex resolver container failed, host Codex auth was unavailable, or output was not a model response"]'
           fi
         elif command -v codex >/dev/null 2>&1; then
-          if codex exec --dangerously-bypass-approvals-and-sandbox "$(cat "${prompt_md}")" > "${response_md}"; then
+          if codex exec --dangerously-bypass-approvals-and-sandbox "$(cat "${prompt_md}")" > "${response_md}" && live_response_is_valid "${response_md}"; then
             used_live_model="true"
             summary="Live Codex worker output captured in response.md from the host CLI"
             confidence="0.72"
@@ -126,17 +144,17 @@ if [[ "${budget_halt}" != "true" ]]; then
         ;;
       claude)
         if [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_CONTAINERIZE_CLOUD}")" == "true" ]]; then
-          if dorkpipe_orchestrate_run_container_worker claude "${prompt_md}" "${response_md}"; then
+          if dorkpipe_orchestrate_run_container_worker claude "${prompt_md}" "${response_md}" && live_response_is_valid "${response_md}"; then
             used_live_model="true"
             summary="Live Claude worker output captured in response.md from the claude resolver container"
             confidence="0.72"
             issues_json='[]'
             next_actions_json='["merge this task with sibling worker outputs"]'
           else
-            issues_json='["claude resolver container failed or host Claude auth was unavailable"]'
+            issues_json='["claude resolver container failed, host Claude auth was unavailable, or output was not a model response"]'
           fi
         elif command -v claude >/dev/null 2>&1; then
-          if claude -p "$(cat "${prompt_md}")" > "${response_md}"; then
+          if claude -p "$(cat "${prompt_md}")" > "${response_md}" && live_response_is_valid "${response_md}"; then
             used_live_model="true"
             summary="Live Claude worker output captured in response.md from the host CLI"
             confidence="0.72"
