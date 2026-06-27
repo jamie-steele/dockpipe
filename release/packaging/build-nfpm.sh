@@ -25,7 +25,7 @@ mkdir -p "${STAGE}"
 
 CORE_STAGE="${STAGE}/core-artifacts"
 mkdir -p "${CORE_STAGE}"
-"${REPO_ROOT}/release/packaging/build-core-package.sh" "${VERSION}" "${CORE_STAGE}"
+bash "${REPO_ROOT}/release/packaging/build-core-package.sh" "${VERSION}" "${CORE_STAGE}"
 CORE_TARBALL="$(find "${CORE_STAGE}" -maxdepth 1 -type f -name 'dockpipe-core-*.tar.gz' | sort | tail -n 1)"
 if [[ -z "${CORE_TARBALL}" ]]; then
   echo "failed to build dockpipe-core tarball" >&2

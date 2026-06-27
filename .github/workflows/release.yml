@@ -129,7 +129,7 @@ jobs:
           (cd release/artifacts && zip -q "dockpipe_${VERSION}_windows_amd64.zip" dockpipe.exe)
           rm -f release/artifacts/dockpipe.exe
 
-          ./release/packaging/build-core-package.sh "${VERSION}" release/artifacts
+          bash ./release/packaging/build-core-package.sh "${VERSION}" release/artifacts
 
           ./release/packaging/build-deb.sh "${VERSION}" amd64
           ./release/packaging/build-deb.sh "${VERSION}" arm64

@@ -36,7 +36,7 @@ chmod 755 "${BUILD_DIR}/usr/bin/dockpipe"
 
 rm -rf "${CORE_STAGE}"
 mkdir -p "${CORE_STAGE}"
-"${REPO_ROOT}/release/packaging/build-core-package.sh" "${VERSION}" "${CORE_STAGE}"
+bash "${REPO_ROOT}/release/packaging/build-core-package.sh" "${VERSION}" "${CORE_STAGE}"
 mkdir -p "${BUILD_DIR}/usr/share/dockpipe/packages/core"
 cp "${CORE_STAGE}"/dockpipe-core-*.tar.gz "${BUILD_DIR}/usr/share/dockpipe/packages/core/"
 
