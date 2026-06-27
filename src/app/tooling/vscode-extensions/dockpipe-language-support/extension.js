@@ -94,7 +94,7 @@ const STEP_KEY_DETAILS = {
   inputs: "Typed step-local inputs backed by the workflow's PipeLang types. Use field paths such as Advanced.KeepAlive and optional from/value bindings instead of raw env names.",
   vars: "Step-local variables merged for this step.",
   vm: "Declarative VM step settings. Use this to set guest path sync, interactive desktop or SSH session behavior, keepalive, and host port forwarding without hand-writing DOCKPIPE_VM_* variables or host prep steps.",
-  agent: "Declarative agentic step settings. Put startup prompt, access.read/write/deny policy, model knobs, DorkPipe orchestration fanout data, and task-level model_policy here so shared scripts can drive agent behavior directly from workflow YAML.",
+  agent: "Declarative agentic step settings. Put startup prompt, access.read/write/deny policy, model knobs, DorkPipe orchestration fanout/concurrency/apply data, and task-level model_policy here so shared scripts can drive agent behavior directly from workflow YAML.",
   security: "Optional step-level container security override. Use this to tighten or specialize policy for one container step.",
   outputs: "Dotenv-style outputs file merged into the environment for later steps. This is the normal way one step passes values forward.",
   workflow: "Marks this as a packaged workflow step and names the child workflow to run.",

@@ -83,6 +83,10 @@ steps:
             - run specialized workers under resolver hints
             - merge results into a final synthesis
             - verify coverage and risk before approval
+        concurrency:
+          max_workers: 3
+          max_local_workers: 2
+          max_cloud_workers: 1
         shared:
           - path: repo-map.md
             collector: repo_map
@@ -186,6 +190,11 @@ steps:
             - Resolvers such as codex, claude, and ollama should remain interchangeable worker backends.
         verify:
           next_action_default: human approval before treating orchestration output as final
+        apply:
+          require_approval: true
+          outputs:
+            - source: merge/final.md
+              path: docs/dorkpipe-orchestration-synthesis.md
 
   - id: run-workers
     kind: host
@@ -202,6 +211,10 @@ steps:
   - id: approval
     kind: host
     run: scripts/dorkpipe/orchestrate-approve.sh
+
+  - id: apply
+    kind: host
+    run: scripts/dorkpipe/orchestrate-apply-results.sh
 
   - id: stack_down
     kind: host

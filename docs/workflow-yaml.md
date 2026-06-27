@@ -300,7 +300,7 @@ Typical uses:
 - access policy (`read`, `write`, `deny`) plus lightweight accessible path hints
 - model/provider knobs that affect generation
 - model policy overrides for attempt, validation, and escalation
-- orchestration fanout data such as request, tasks, merge, and verify policy
+- orchestration fanout data such as request, tasks, concurrency, merge, verify, and apply policy
 - task-level `model_policy` overrides so DorkPipe can choose local/cloud lanes per task without
   hardcoding provider-specific workflow steps
 
@@ -310,6 +310,14 @@ forcing one shell file per workflow shape.
 `accessible_paths` is a compatibility/simple-hint field. Prefer `access.read`, `access.write`, and
 `access.deny` when the workflow needs a real contract that DorkPipe tooling can materialize into
 artifacts and, later, stronger runtime policy.
+
+`agent.orchestration.concurrency` lets DorkPipe-owned harnesses cap worker fanout without hiding
+scheduling rules in scripts. `max_workers` caps total runnable workers, while `max_local_workers`
+and `max_cloud_workers` cap local and cloud-backed lanes separately.
+
+`agent.orchestration.apply` declares approved artifact-to-worktree outputs. DorkPipe harnesses should
+write reviewable artifacts first, verify them, require approval when configured, and only then copy
+declared outputs into the checkout as normal uncommitted changes.
 
 ### Step state flow
 

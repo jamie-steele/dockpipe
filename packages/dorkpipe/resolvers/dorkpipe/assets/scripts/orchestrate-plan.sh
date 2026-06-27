@@ -6,6 +6,24 @@ SCRIPT_DIR="${DOCKPIPE_SCRIPT_DIR:?DOCKPIPE_SCRIPT_DIR is required}"
 source "$SCRIPT_DIR/orchestrate-common.sh"
 
 dorkpipe_orchestrate_init
+rm -f "${DORKPIPE_ORCH_HALT_JSON}"
+cat > "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" <<EOF
+{
+  "max_total_cloud_tokens": ${DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS},
+  "max_task_cloud_tokens": ${DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS},
+  "stop_on_budget_exceeded": ${DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED},
+  "total_estimated_input_tokens": 0,
+  "total_estimated_output_tokens": 0,
+  "total_estimated_tokens": 0,
+  "cloud_task_count": 0,
+  "budget_exceeded": false,
+  "halted": false,
+  "providers": {
+    "codex": {"task_count": 0, "estimated_tokens": 0},
+    "claude": {"task_count": 0, "estimated_tokens": 0}
+  }
+}
+EOF
 [[ -n "${DOCKPIPE_WORKFLOW_CONFIG:-}" ]] || {
   echo "DOCKPIPE_WORKFLOW_CONFIG is required" >&2
   exit 1
@@ -69,6 +87,8 @@ shared = orchestration.get("shared", [])
 tasks = orchestration.get("tasks", [])
 merge = orchestration.get("merge", {})
 verify = orchestration.get("verify", {})
+concurrency = orchestration.get("concurrency", {}) or {}
+apply = orchestration.get("apply", {}) or {}
 startup_prompt = agent.get("startup_prompt", "")
 include_agents_md = bool(agent.get("include_agents_md"))
 workflow_accessible_paths = agent.get("accessible_paths", [])
@@ -370,12 +390,21 @@ plan_payload = {
     "goal": plan.get("goal", request.get("text", "")),
     "steps": plan.get("steps", []),
     "cloud_budget": request_payload["cloud_budget"],
+    "concurrency": {
+        "max_workers": int(concurrency.get("max_workers", 1) or 1),
+        "max_local_workers": int(concurrency.get("max_local_workers", concurrency.get("max_workers", 1)) or 1),
+        "max_cloud_workers": int(concurrency.get("max_cloud_workers", 1) or 1),
+    },
     "merge": {
         "title": merge.get("title", "DorkPipe Orchestration Synthesis"),
         "summary_points": merge.get("summary_points", []),
     },
     "verify": {
         "next_action_default": verify.get("next_action_default", "human approval before treating orchestration output as final"),
+    },
+    "apply": {
+        "require_approval": bool(apply.get("require_approval", True)),
+        "outputs": apply.get("outputs", []),
     },
 }
 plan_json.write_text(json.dumps(plan_payload, indent=2) + "\n")
@@ -515,7 +544,7 @@ graph_tasks.append({
     "depends_on": [merge_id],
     "worker_type": "verify",
 })
-graph_json.write_text(json.dumps({"tasks": graph_tasks}, indent=2) + "\n")
+graph_json.write_text(json.dumps({"concurrency": plan_payload["concurrency"], "tasks": graph_tasks}, indent=2) + "\n")
 lane_plan_json.parent.mkdir(parents=True, exist_ok=True)
 lane_plan_json.write_text(json.dumps(lane_plan, indent=2) + "\n")
 PY

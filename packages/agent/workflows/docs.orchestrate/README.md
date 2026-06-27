@@ -38,6 +38,15 @@ to use a different local model.
 Cloud-backed Codex/Claude lanes are enabled by the workflow's governed policy and remain bounded by
 the declared token budgets, halt marker, and approval gate.
 
+## Apply behavior
+
+After approval, the workflow copies the merged synthesis into the checkout as:
+
+`docs/dorkpipe-orchestration-synthesis.md`
+
+This is intentionally an uncommitted source-tree change. It lets CLI-first orchestration prove the
+write path without creating commits or hiding changes in generated artifact directories.
+
 ## YAML-driven setup
 
 The example is driven directly by `config.yml`.

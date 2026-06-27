@@ -198,12 +198,14 @@ type StepAgentModelConfig struct {
 }
 
 type StepAgentOrchestrationConfig struct {
-	Request StepAgentRequestConfig    `yaml:"request,omitempty"`
-	Plan    StepAgentPlanConfig       `yaml:"plan,omitempty"`
-	Shared  []StepAgentSharedArtifact `yaml:"shared,omitempty"`
-	Tasks   []StepAgentTaskConfig     `yaml:"tasks,omitempty"`
-	Merge   StepAgentMergeConfig      `yaml:"merge,omitempty"`
-	Verify  StepAgentVerifyConfig     `yaml:"verify,omitempty"`
+	Request     StepAgentRequestConfig     `yaml:"request,omitempty"`
+	Plan        StepAgentPlanConfig        `yaml:"plan,omitempty"`
+	Concurrency StepAgentConcurrencyConfig `yaml:"concurrency,omitempty"`
+	Shared      []StepAgentSharedArtifact  `yaml:"shared,omitempty"`
+	Tasks       []StepAgentTaskConfig      `yaml:"tasks,omitempty"`
+	Merge       StepAgentMergeConfig       `yaml:"merge,omitempty"`
+	Verify      StepAgentVerifyConfig      `yaml:"verify,omitempty"`
+	Apply       StepAgentApplyConfig       `yaml:"apply,omitempty"`
 }
 
 type StepAgentRequestConfig struct {
@@ -213,6 +215,12 @@ type StepAgentRequestConfig struct {
 type StepAgentPlanConfig struct {
 	Goal  string   `yaml:"goal,omitempty"`
 	Steps []string `yaml:"steps,omitempty"`
+}
+
+type StepAgentConcurrencyConfig struct {
+	MaxWorkers      int `yaml:"max_workers,omitempty"`
+	MaxLocalWorkers int `yaml:"max_local_workers,omitempty"`
+	MaxCloudWorkers int `yaml:"max_cloud_workers,omitempty"`
 }
 
 type StepAgentSharedArtifact struct {
@@ -251,6 +259,16 @@ type StepAgentMergeConfig struct {
 type StepAgentVerifyConfig struct {
 	ID                string `yaml:"id,omitempty"`
 	NextActionDefault string `yaml:"next_action_default,omitempty"`
+}
+
+type StepAgentApplyConfig struct {
+	RequireApproval *bool                  `yaml:"require_approval,omitempty"`
+	Outputs         []StepAgentApplyOutput `yaml:"outputs,omitempty"`
+}
+
+type StepAgentApplyOutput struct {
+	Source string `yaml:"source,omitempty"`
+	Path   string `yaml:"path,omitempty"`
 }
 
 type WorkflowNetworkConfig struct {

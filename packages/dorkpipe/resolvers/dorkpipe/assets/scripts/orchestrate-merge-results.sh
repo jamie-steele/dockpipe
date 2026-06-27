@@ -57,7 +57,7 @@ else
 EOF
 fi
 
-python3 - "${DORKPIPE_ORCH_MERGE_DIR}/result.json" "${DORKPIPE_ORCH_MERGE_DIR}/final.md" <<'PY'
+python3 - "${DORKPIPE_ORCH_MERGE_DIR}/result.json" "${DORKPIPE_ORCH_MERGE_DIR}/final.md" "${DORKPIPE_ORCH_TASKS_DIR}" <<'PY'
 import json
 import os
 import pathlib
@@ -65,6 +65,7 @@ import sys
 
 merge_result = json.load(open(sys.argv[1], "r", encoding="utf-8"))
 dest = pathlib.Path(sys.argv[2])
+tasks_dir = pathlib.Path(sys.argv[3])
 title = os.environ.get("MERGE_TITLE", "DorkPipe Orchestration Synthesis")
 summary_points = json.loads(os.environ.get("MERGE_SUMMARY_POINTS_JSON", "[]"))
 lines = [f"# {title}", "", "## Task Summaries", ""]
@@ -74,6 +75,16 @@ if summary_points:
     lines.extend(["", "## Synthesis", ""])
     for point in summary_points:
         lines.append(f"- {point}")
+lines.extend(["", "## Worker Outputs", ""])
+for task in merge_result.get("tasks", []):
+    task_id = task["task_id"]
+    response = tasks_dir / task_id / "response.md"
+    lines.extend([f"### {task_id}", ""])
+    if response.exists():
+        lines.append(response.read_text(encoding="utf-8").strip())
+    else:
+        lines.append("_No response artifact was written._")
+    lines.append("")
 if os.path.exists(os.environ["DORKPIPE_ORCH_HALT_JSON"]):
     lines.extend(["", "## Budget Halt", "", "- This run triggered the cloud budget halt, so later cloud tasks were intentionally skipped."])
 dest.write_text("\n".join(lines) + "\n")

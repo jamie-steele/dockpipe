@@ -238,6 +238,24 @@
                 }
               }
             },
+            "concurrency": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "max_workers": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "max_local_workers": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "max_cloud_workers": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
             "shared": {
               "type": "array",
               "items": { "$ref": "#/$defs/agent_shared_item" }
@@ -264,6 +282,24 @@
               "properties": {
                 "id": { "type": "string" },
                 "next_action_default": { "type": "string" }
+              }
+            },
+            "apply": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "require_approval": { "type": "boolean" },
+                "outputs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "source": { "type": "string" },
+                      "path": { "type": "string" }
+                    }
+                  }
+                }
               }
             }
           }
