@@ -27,6 +27,55 @@ build_log() {
   printf '[pipeon-build] %s\n' "$*" >&2
 }
 
+pipeon_linux_desktop_pkg_config_deps=(
+  "glib-2.0 >= 2.70"
+  "gio-2.0 >= 2.70"
+  "gtk+-3.0"
+  "webkit2gtk-4.1"
+  "javascriptcoregtk-4.1"
+  "libsoup-3.0"
+)
+
+pipeon_linux_desktop_deps_available() {
+  command -v pkg-config >/dev/null 2>&1 || return 1
+  pkg-config --exists "${pipeon_linux_desktop_pkg_config_deps[@]}"
+}
+
+pipeon_linux_desktop_deps_message() {
+  cat >&2 <<'EOF'
+[pipeon-build] Pipeon desktop build requires Linux GUI development packages:
+[pipeon-build]   glib-2.0 >= 2.70, gio-2.0 >= 2.70, gtk+-3.0, webkit2gtk-4.1,
+[pipeon-build]   javascriptcoregtk-4.1, and libsoup-3.0.
+EOF
+}
+
+pipeon_should_build_desktop_for_source() {
+  case "${PIPEON_BUILD_DESKTOP:-auto}" in
+    0|false|FALSE|False|no|NO|No|off|OFF|Off)
+      build_log "Skipping Pipeon desktop build because PIPEON_BUILD_DESKTOP=${PIPEON_BUILD_DESKTOP}."
+      return 1
+      ;;
+    1|true|TRUE|True|yes|YES|Yes|on|ON|On)
+      return 0
+      ;;
+  esac
+
+  case "$(uname -s)" in
+    Linux)
+      if pipeon_linux_desktop_deps_available; then
+        return 0
+      fi
+      build_log "Skipping Pipeon desktop build during source build: Linux GUI development packages are not available."
+      pipeon_linux_desktop_deps_message
+      build_log "Set PIPEON_BUILD_DESKTOP=1 after installing those packages to require the desktop build."
+      return 1
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
 run_with_progress() {
   local label="$1"
   shift
@@ -298,7 +347,9 @@ require_cargo() {
 }
 
 build_source() {
-  build_desktop
+  if pipeon_should_build_desktop_for_source; then
+    build_desktop
+  fi
   package_vscode_extension
 }
 
@@ -347,6 +398,13 @@ build_desktop() {
     MINGW*|MSYS*|CYGWIN*)
       build_desktop_windows
       return 0
+      ;;
+    Linux)
+      if ! pipeon_linux_desktop_deps_available; then
+        pipeon_linux_desktop_deps_message
+        echo "[pipeon-build] Install the missing packages or run the default source build with PIPEON_BUILD_DESKTOP=0." >&2
+        return 1
+      fi
       ;;
   esac
   require_cargo
