@@ -371,7 +371,7 @@ func readWindowsClipboard() (string, error) {
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if stderr.Len() > 0 {
-			return "", fmt.Errorf(strings.TrimSpace(stderr.String()))
+			return "", fmt.Errorf("%s", strings.TrimSpace(stderr.String()))
 		}
 		return "", err
 	}
@@ -392,7 +392,7 @@ func writeWindowsClipboard(text string) error {
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if stderr.Len() > 0 {
-			return fmt.Errorf(strings.TrimSpace(stderr.String()))
+			return fmt.Errorf("%s", strings.TrimSpace(stderr.String()))
 		}
 		return err
 	}

@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"context"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -74,7 +75,8 @@ func TestRunComposeLifecycleDefaultsProjectDirectoryFromFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(gotArgs, " ")
-	if !strings.Contains(joined, "--project-directory /wf/assets/compose") {
+	wantProjectDir := "--project-directory " + filepath.FromSlash("/wf/assets/compose")
+	if !strings.Contains(joined, wantProjectDir) {
 		t.Fatalf("expected default project directory from compose file, got %s", joined)
 	}
 	if !strings.Contains(joined, " ps") {

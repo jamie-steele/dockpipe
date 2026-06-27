@@ -11,19 +11,20 @@ func TestTemplateBuild(t *testing.T) {
 	repoRoot := localModuleRoot(t)
 	core := CoreDir(repoRoot)
 	cases := []struct {
-		name  string
-		image string
-		dir   string
-		ok    bool
+		name              string
+		image             string
+		dir               string
+		ok                bool
+		requireDockerfile bool
 	}{
-		{"base-dev", "dockpipe-base-dev", filepath.Join(core, "assets", "images", "base-dev"), true},
-		{"dev", "dockpipe-dev", filepath.Join(core, "assets", "images", "dev"), true},
-		{"agent-dev", "dockpipe-claude", DockerfileDir(repoRoot, "claude"), true},
-		{"claude", "dockpipe-claude", DockerfileDir(repoRoot, "claude"), true},
-		{"codex", "dockpipe-codex", DockerfileDir(repoRoot, "codex"), true},
-		{"vscode", "dockpipe-vscode", DockerfileDir(repoRoot, "vscode"), true},
-		{"ollama", "dockpipe-ollama", DockerfileDir(repoRoot, "ollama"), true},
-		{"unknown", "", "", false},
+		{"base-dev", "dockpipe-base-dev", filepath.Join(core, "assets", "images", "base-dev"), true, true},
+		{"dev", "dockpipe-dev", filepath.Join(core, "assets", "images", "dev"), true, true},
+		{"agent-dev", "dockpipe-claude", DockerfileDir(repoRoot, "claude"), true, true},
+		{"claude", "dockpipe-claude", DockerfileDir(repoRoot, "claude"), true, true},
+		{"codex", "dockpipe-codex", DockerfileDir(repoRoot, "codex"), true, true},
+		{"vscode", "dockpipe-vscode", DockerfileDir(repoRoot, "vscode"), true, false},
+		{"ollama", "dockpipe-ollama", DockerfileDir(repoRoot, "ollama"), true, true},
+		{"unknown", "", "", false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -31,7 +32,7 @@ func TestTemplateBuild(t *testing.T) {
 			if img != tc.image || dir != tc.dir || ok != tc.ok {
 				t.Fatalf("TemplateBuild(%q) = (%q, %q, %v), want (%q, %q, %v)", tc.name, img, dir, ok, tc.image, tc.dir, tc.ok)
 			}
-			if tc.ok {
+			if tc.requireDockerfile {
 				if st, err := os.Stat(filepath.Join(dir, "Dockerfile")); err != nil || st.IsDir() {
 					t.Fatalf("expected Dockerfile under %q, stat err=%v", dir, err)
 				}
