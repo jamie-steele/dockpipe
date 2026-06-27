@@ -3,8 +3,8 @@ package main
 
 import (
 	"bufio"
-	"errors"
 	_ "embed"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"dockpipe/src/lib/application"
+
 	"golang.org/x/term"
 )
 
