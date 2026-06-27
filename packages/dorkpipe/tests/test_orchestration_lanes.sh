@@ -38,10 +38,78 @@ for line in metrics:
     metric = json.loads(line)
     assert metric["used_live_model"] is False
     assert metric["training_mode"] == "observe"
+    assert "estimated_total_tokens" in metric, metric
+    assert "started_at" in metric and metric["started_at"], metric
+    assert "finished_at" in metric and metric["finished_at"], metric
+    assert isinstance(metric.get("duration_ms"), int), metric
 for task_id in providers:
     result = json.loads((root / "tasks" / task_id / "result.json").read_text())
     assert result["lane_id"], result
     assert result["lane_selection"]["task_id"] == task_id, result
+    assert "started_at" in result and result["started_at"], result
+    assert "finished_at" in result and result["finished_at"], result
+    assert isinstance(result.get("duration_ms"), int), result
 PY
 
 echo "test_orchestration_lanes OK"
+
+export DORKPIPE_ORCH_WORKFLOW="test.docs.orchestrate.force-codex"
+export DORKPIPE_ORCH_ROOT="${TMPDIR:-/tmp}/dorkpipe-orch-force-codex-${RANDOM}-${RANDOM}"
+export DORKPIPE_ORCH_FORCE_PROVIDER="codex"
+export DORKPIPE_ORCH_CLOUD_LANES="true"
+
+bash "$DOCKPIPE_SCRIPT_DIR/orchestrate-plan.sh" >/dev/null
+
+python3 - "$DORKPIPE_ORCH_ROOT" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+lane_plan = json.loads((root / "lanes" / "plan.json").read_text())
+tasks = {task["task_id"]: task for task in lane_plan.get("tasks", [])}
+assert tasks["repo_shape"]["provider"] == "ollama", tasks
+assert tasks["repo_shape"]["requested"] == "ollama", tasks
+for task_id in ("package_contracts", "safety_model"):
+    task = tasks[task_id]
+    assert task["requested"] == "codex", task
+    assert task["provider"] == "codex", task
+    assert task["lane_id"] == "codex.cli.default", task
+request = json.loads((root / "request.json").read_text())
+assert request["force_provider"] == "codex", request
+assert request["force_provider_scope"] == "auto", request
+PY
+
+echo "test_orchestration_force_codex OK"
+
+export DORKPIPE_ORCH_WORKFLOW="test.docs.orchestrate.cloud-usage"
+export DORKPIPE_ORCH_ROOT="${TMPDIR:-/tmp}/dorkpipe-orch-cloud-usage-${RANDOM}-${RANDOM}"
+
+# shellcheck source=/dev/null
+source "$DOCKPIPE_SCRIPT_DIR/orchestrate-common.sh"
+dorkpipe_orchestrate_init
+dorkpipe_orchestrate_record_cloud_usage codex 100 50 1200
+dorkpipe_orchestrate_record_cloud_usage codex 25 25 800
+dorkpipe_orchestrate_record_cloud_usage claude 40 10 400
+
+python3 - "$DORKPIPE_ORCH_ROOT" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+usage = json.loads((root / "cloud-usage.json").read_text())
+assert usage["cloud_task_count"] == 3, usage
+assert usage["total_estimated_input_tokens"] == 165, usage
+assert usage["total_estimated_output_tokens"] == 85, usage
+assert usage["total_estimated_tokens"] == 250, usage
+assert usage["total_duration_ms"] == 2400, usage
+assert usage["providers"]["codex"]["task_count"] == 2, usage
+assert usage["providers"]["codex"]["estimated_tokens"] == 200, usage
+assert usage["providers"]["codex"]["duration_ms"] == 2000, usage
+assert usage["providers"]["claude"]["task_count"] == 1, usage
+assert usage["providers"]["claude"]["estimated_tokens"] == 50, usage
+assert usage["providers"]["claude"]["duration_ms"] == 400, usage
+PY
+
+echo "test_orchestration_cloud_usage_metrics OK"

@@ -3,89 +3,78 @@
 ## Task Summaries
 
 - `repo_shape` (ollama): Live Ollama worker output captured in response.md
-- `package_contracts` (ollama): Live Ollama worker output captured in response.md
-- `safety_model` (claude): Fallback worker output for safety_model
+- `package_contracts` (codex): Live Codex worker output captured in response.md from the codex resolver container
+- `safety_model` (codex): Live Codex worker output captured in response.md from the codex resolver container
 
 ## Worker Outputs
 
 ### repo_shape
 
-## Task Graph Artifact Primitive Explanation
+Based on the provided AGENTS.md context and the task routing guidelines, I will explain the task-graph artifact primitive.
 
-The task graph artifact primitive is a stronger approach than generic agent branding because it encapsulates the orchestration logic within the artifacts themselves, rather than relying on separate agents or workflows.
+Task id: repo_shape
+Goal: Explain the task-graph artifact primitive and why it is stronger than generic agent branding.
 
-**Definition**: A task graph artifact is a self-contained, directed graph representing the relationships between tasks and their dependencies. This graph can be used to define the execution order of tasks, ensuring that each task completes before its successors.
+### Task Graph Artifact Primitive
 
-**Advantages over Generic Agent Branding**
+The task graph artifact primitive represents a self-contained unit of work in the DorkPipe orchestration graph. It provides a clear and concise way to define the scope, behavior, and dependencies of each task.
 
-1.  **Decoupling**: By encapsulating orchestration logic within artifacts, we decouple the worker's behavior from specific agent or workflow implementations.
-2.  **Composability**: Task graph artifacts enable easy combination and reuse of workflows across different environments and workers.
-3.  **Readability and Maintenance**: The task graph provides a clear and concise representation of the execution flow, making it easier to understand and maintain.
+Unlike generic agent branding, which relies on proprietary logos or branding elements, the task graph artifact primitive is grounded in language support files (e.g., docs/agents/index.yaml). This approach ensures that the work is easily reproducible and maintainable by anyone with access to these language resources.
 
-**Example**
+### Key Benefits
 
-Consider an orchestration that runs a Docker container for a web server with a specific application. Instead of defining separate agents or workflows for each task, we can create a single task graph artifact that represents the entire process:
+1. **Self-Containment**: The task graph artifact primitive allows for self-contained units of work, which makes it easier to manage and reproduce tasks.
+2. **Language Support**: By grounding claims in language support files, we ensure that the work is accessible to anyone with a basic understanding of YAML and documentation.
+3. **Composability**: The task graph artifact primitive promotes composability by providing a clear way to define dependencies between tasks.
 
-*   `web-server-run` (task)
-    *   `docker-run` (dependency)
-        *   `image-pull` (dependency)
-            *   `registry-auth` (dependency)
+### Uncertainty
 
-In this example, the task graph artifact defines a clear execution order: first, pull the image from the registry, then authenticate with the registry, and finally run the Docker container.
+While the task graph artifact primitive offers several benefits, there is uncertainty surrounding its adoption and standardization within the DorkPipe community. As the orchestration graph evolves, it's essential to monitor and adapt this approach to ensure it remains effective and maintainable.
 
-**Conclusion**
+### Markdown Explanation
 
-By leveraging task graph artifacts, we can create more composable, maintainable, and readable orchestration graphs. This approach provides a stronger foundation for building modular, scalable, and flexible workflows.
+Task Graph Artifact Primitive
+================================
+
+The task graph artifact primitive represents a self-contained unit of work in the DorkPipe orchestration graph. It provides a clear and concise way to define the scope, behavior, and dependencies of each task.
+
+Benefits:
+- Self-containment for easy management and reproduction
+- Grounded in language support files for accessibility
+- Promotes composability through clear dependency definitions
+
+Uncertainty: Adoption and standardization within the DorkPipe community
 
 ### package_contracts
 
-To orchestrate a DorkPipe run for summarizing how packages/agent and packages/dorkpipe should divide workflow surface vs contract surface, we will follow these steps:
+Completed the bounded `package_contracts` worker output.
 
-1. Load the relevant docs:
-   - `docs/agents/index.yaml`
-   - `docs/agents/repo-map.md`
-   - `docs/agents/core-package-model.md`
-2. Identify task type in `docs/agents/index.yaml`.
-3. Check whether the work is engine, workflow, package, resolver, strategy, or generated artifact.
-4. Determine how packages/agent and packages/dorkpipe divide workflow surface vs contract surface.
+Wrote the grounded markdown summary to [response.md](/work/bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/tasks/package_contracts/response.md) and updated the normalized [result.json](/work/bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/tasks/package_contracts/result.json).
 
-**Doc Loading**: Loaded from accessible files, including:
-
-- docs/agents/index.yaml
-- docs/agents/repo-map.md
-- docs/agents/core-package-model.md
-
-**Task Type Identification**: Task type is identified as `package_contracts` in `docs/agents/index.yaml`.
-
-**Work Classification**: Work is classified as a workflow modification, specifically focusing on package boundaries.
-
-**Boundary Summary**: Package boundaries should divide workflow surface and contract surface as follows:
-
-- Workflow Surface: Reserved for general workflow management and orchestration. Packages can use this surface to interact with the engine or CLI.
-- Contract Surface: Dedicated to package-specific behavior and interactions. This includes package metadata, commands, and APIs.
-
-**Uncertainty Note**: There is some uncertainty regarding how packages/agent and packages/dorkpipe should handle specific cases, such as resolved vault templates or cache builds. Further clarification from relevant stakeholders would be beneficial.
-
-**Expected Output**: A concise markdown summary of the package boundaries:
-
-```markdown
-Package Boundaries Summary
-
-* Workflow Surface:
-  Reserved for general workflow management and orchestration.
-* Contract Surface:
-  Dedicated to package-specific behavior and interactions, including metadata, commands, and APIs.
-```
-
-This output will serve as a clear starting point for further development and refinement of package boundaries in the DorkPipe orchestration graph.
+Validation run: `jq` parsed `result.json` successfully, and I read back the markdown artifact. No source files were edited; existing unrelated worktree changes were left untouched. Package/engine boundaries were preserved: this only updated generated orchestration artifacts under the allowed DorkPipe run directory.
 
 ### safety_model
 
-# safety_model
+Wrote the bounded worker output to:
 
-Fallback worker output for provider `claude`.
+[bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/tasks/safety_model/result.md](/work/bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/tasks/safety_model/result.md)
 
-- Goal: Summarize the safety and approval model for multi-worker orchestration.
-- Expected output: A short markdown summary of verification and approval needs.
-- Task stayed bounded and artifact-driven.
+Key output:
+
+```markdown
+# Safety and Approval Model
+
+- Multi-worker orchestration is governed through declared artifacts: `task-graph.json`, per-task `task.json`/`result.json`, `merge/result.json`, `verify/result.json`, `cloud-usage.json`, optional `halt.json`, and `approval.md`.
+- Worker tasks stay bounded by explicit goals, inputs, constraints, expected outputs, resolver/lane metadata, cloud token limits, dependencies, and access policy.
+- Verification happens after merge and checks coverage, conflicts, and escalation risk before output is treated as final.
+- Cloud-backed lanes are governed spend lanes with budgets, usage ledgers, and halt behavior.
+- Human approval remains explicit before apply, publish, promotion, or source-tree changes.
+
+## Uncertainty
+
+- `agent.access` is not yet fully compiled into stronger runtime policy.
+- Lane learning metrics are currently observation data, not a mature safety control.
+```
+
+Validation: read back the artifact and ran `git status --short`. Existing unrelated modified tracked files were left untouched. No source/package/engine boundary changes were made.
 

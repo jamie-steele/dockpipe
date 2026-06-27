@@ -47,9 +47,13 @@ PY
 if command -v jq >/dev/null 2>&1; then
   jq -s '{
     status:"ok",
-    tasks: map({task_id, provider_actual, used_live_model, budget_halt, estimated_total_tokens, summary, confidence}),
+    tasks: map({task_id, provider_actual, used_live_model, budget_halt, estimated_input_tokens, estimated_output_tokens, estimated_total_tokens, started_at, finished_at, duration_ms, summary, confidence}),
     average_confidence: ((map(.confidence) | add) / length),
-    total_estimated_task_tokens: (map(.estimated_total_tokens // 0) | add)
+    total_estimated_input_tokens: (map(.estimated_input_tokens // 0) | add),
+    total_estimated_output_tokens: (map(.estimated_output_tokens // 0) | add),
+    total_estimated_task_tokens: (map(.estimated_total_tokens // 0) | add),
+    total_duration_ms: (map(.duration_ms // 0) | add),
+    max_task_duration_ms: (map(.duration_ms // 0) | max)
   }' "${result_paths[@]}" > "${DORKPIPE_ORCH_MERGE_DIR}/result.json"
 else
   cat > "${DORKPIPE_ORCH_MERGE_DIR}/result.json" <<EOF

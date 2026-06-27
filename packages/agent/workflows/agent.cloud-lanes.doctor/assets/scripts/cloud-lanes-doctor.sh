@@ -52,6 +52,20 @@ provider_container_auth_dir() {
   esac
 }
 
+provider_host_config_file() {
+  case "$1" in
+    claude) printf '%s\n' "${DORKPIPE_ORCH_CLAUDE_CONFIG_FILE:-${HOME:-}/.claude.json}" ;;
+    *) printf '\n' ;;
+  esac
+}
+
+provider_container_config_file() {
+  case "$1" in
+    claude) printf '%s\n' "${DORKPIPE_ORCH_CLAUDE_CONTAINER_CONFIG_FILE:-/home/node/.claude.json}" ;;
+    *) printf '\n' ;;
+  esac
+}
+
 provider_cli() {
   case "$1" in
     codex) printf 'codex\n' ;;
@@ -82,19 +96,23 @@ run_provider() {
   local stdout_file="$provider_dir/stdout.txt"
   local stderr_file="$provider_dir/stderr.txt"
   local result_file="$provider_dir/result.json"
-  local host_auth container_auth cli live timeout_s mount_mode live_cmd
+  local host_auth container_auth host_config container_config cli live timeout_s mount_mode live_cmd
   local host_auth_exists="false"
+  local host_config_exists="false"
   local exit_code=0
 
   mkdir -p "$provider_dir"
   host_auth="$(provider_auth_dir "$provider")"
   container_auth="$(provider_container_auth_dir "$provider")"
+  host_config="$(provider_host_config_file "$provider")"
+  container_config="$(provider_container_config_file "$provider")"
   cli="$(provider_cli "$provider")"
   live="$(doctor_bool "${DORKPIPE_AGENT_DOCTOR_LIVE:-true}")"
   timeout_s="${DORKPIPE_AGENT_DOCTOR_TIMEOUT_SECONDS:-90}"
   mount_mode="${DORKPIPE_ORCH_AUTH_MOUNT_MODE:-rw}"
   case "$mount_mode" in ro|rw) ;; *) mount_mode="rw" ;; esac
   [[ -d "$host_auth" ]] && host_auth_exists="true"
+  [[ -n "$host_config" && -f "$host_config" ]] && host_config_exists="true"
 
   local args=(
     "--workdir" "$ROOT"
@@ -106,11 +124,15 @@ run_provider() {
     "--env" "DORKPIPE_AGENT_DOCTOR_PROVIDER=$provider"
     "--env" "DORKPIPE_AGENT_DOCTOR_CLI=$cli"
     "--env" "DORKPIPE_AGENT_DOCTOR_AUTH_DIR=$container_auth"
+    "--env" "DORKPIPE_AGENT_DOCTOR_CONFIG_FILE=$container_config"
     "--env" "DORKPIPE_AGENT_DOCTOR_LIVE=$live"
     "--env" "DORKPIPE_AGENT_DOCTOR_TIMEOUT_SECONDS=$timeout_s"
   )
   if [[ "$host_auth_exists" == "true" ]]; then
     args+=("--mount" "$host_auth:$container_auth:$mount_mode")
+  fi
+  if [[ "$host_config_exists" == "true" ]]; then
+    args+=("--mount" "$host_config:$container_config:$mount_mode")
   fi
 
   live_cmd="$(provider_live_command "$provider")"
@@ -122,9 +144,17 @@ set -u
 provider="${DORKPIPE_AGENT_DOCTOR_PROVIDER:?provider}"
 cli="${DORKPIPE_AGENT_DOCTOR_CLI:?cli}"
 auth_dir="${DORKPIPE_AGENT_DOCTOR_AUTH_DIR:?auth dir}"
+config_file="${DORKPIPE_AGENT_DOCTOR_CONFIG_FILE:-}"
 live="${DORKPIPE_AGENT_DOCTOR_LIVE:-false}"
 timeout_s="${DORKPIPE_AGENT_DOCTOR_TIMEOUT_SECONDS:-90}"
 skills_dir="${auth_dir}/skills"
+
+if [[ "${provider}" == "claude" && -n "${config_file}" && ! -f "${config_file}" && -d "${auth_dir}/backups" ]]; then
+  latest="$(find "${auth_dir}/backups" -maxdepth 1 -type f -name ".claude.json.backup.*" -printf "%T@ %p\n" 2>/dev/null | sort -nr | head -1 | cut -d" " -f2-)"
+  if [[ -n "${latest:-}" ]]; then
+    cp "${latest}" "${config_file}"
+  fi
+fi
 
 echo "provider=${provider}"
 echo "cli=${cli}"
@@ -151,6 +181,16 @@ else
   echo "skills_dir_present=false"
 fi
 
+if [[ "${provider}" == "claude" && -n "${config_file}" ]]; then
+  if [[ -f "${config_file}" ]]; then
+    echo "config_file_present=true"
+    echo "config_file=${config_file}"
+  else
+    echo "config_file_present=false"
+    echo "config_file=${config_file}"
+  fi
+fi
+
 if [[ "${live}" == "true" ]]; then
   echo "live_prompt=true"
   timeout "${timeout_s}" bash -lc "${DORKPIPE_AGENT_DOCTOR_LIVE_CMD}" 2>&1 | sed 's/^/live_output: /'
@@ -165,13 +205,13 @@ SH
   exit_code=$?
   set -e
 
-  python3 - "$provider" "$host_auth" "$host_auth_exists" "$container_auth" "$stdout_file" "$stderr_file" "$exit_code" "$live" "$result_file" <<'PY'
+  python3 - "$provider" "$host_auth" "$host_auth_exists" "$host_config" "$host_config_exists" "$container_auth" "$container_config" "$stdout_file" "$stderr_file" "$exit_code" "$live" "$result_file" <<'PY'
 import json
 import pathlib
 import re
 import sys
 
-provider, host_auth, host_auth_exists, container_auth, stdout_path, stderr_path, exit_code, live, result_path = sys.argv[1:]
+provider, host_auth, host_auth_exists, host_config, host_config_exists, container_auth, container_config, stdout_path, stderr_path, exit_code, live, result_path = sys.argv[1:]
 stdout = pathlib.Path(stdout_path).read_text(encoding="utf-8", errors="replace")
 stderr = pathlib.Path(stderr_path).read_text(encoding="utf-8", errors="replace")
 
@@ -184,13 +224,15 @@ live_text = "\n".join(live_outputs).strip()
 live_ok = live != "true" or "DORKPIPE_AGENT_OK" in live_text
 checks = {
     "host_auth_dir_present": host_auth_exists == "true",
+    "host_config_file_present": host_config_exists == "true",
     "container_cli_present": has_line("cli_present"),
     "container_auth_dir_present": has_line("auth_dir_present"),
+    "container_config_file_present": provider != "claude" or has_line("config_file_present"),
     "container_skills_dir_present": has_line("skills_dir_present"),
     "live_prompt_requested": live == "true",
     "live_prompt_ok": live_ok,
 }
-status = "pass" if all(v for k, v in checks.items() if k != "live_prompt_requested") and int(exit_code) == 0 else "fail"
+status = "pass" if all(v for k, v in checks.items() if k not in {"live_prompt_requested", "host_config_file_present"}) and int(exit_code) == 0 else "fail"
 issues = []
 if not checks["host_auth_dir_present"]:
     issues.append(f"host auth directory is missing: {host_auth}")
@@ -198,6 +240,8 @@ if not checks["container_cli_present"]:
     issues.append(f"{provider} CLI is not present in the resolver container")
 if not checks["container_auth_dir_present"]:
     issues.append(f"auth directory was not visible inside container: {container_auth}")
+if provider == "claude" and not checks["container_config_file_present"]:
+    issues.append(f"Claude config file was not visible or restored inside container: {container_config}")
 if not checks["container_skills_dir_present"]:
     issues.append(f"skills directory was not visible inside container: {container_auth}/skills")
 if live == "true" and not live_ok:
@@ -210,7 +254,9 @@ pathlib.Path(result_path).write_text(json.dumps({
     "status": status,
     "exit_code": int(exit_code),
     "host_auth_dir": host_auth,
+    "host_config_file": host_config,
     "container_auth_dir": container_auth,
+    "container_config_file": container_config,
     "checks": checks,
     "skill_file_count": len(skill_files),
     "skill_files_sample": skill_files[:20],

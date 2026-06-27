@@ -6,6 +6,8 @@ SCRIPT_DIR="${DOCKPIPE_SCRIPT_DIR:?DOCKPIPE_SCRIPT_DIR is required}"
 source "$SCRIPT_DIR/orchestrate-common.sh"
 
 dorkpipe_orchestrate_init
+task_started_at_ms="$(dorkpipe_orchestrate_now_ms)"
+task_started_at="$(dorkpipe_orchestrate_now_iso)"
 task_id="${1:-}"
 if [[ -z "${task_id}" ]]; then
   [[ -n "${DOCKPIPE_WORKFLOW_CONFIG:-}" ]] || { echo "DOCKPIPE_WORKFLOW_CONFIG is required when task id is omitted" >&2; exit 1; }
@@ -103,7 +105,7 @@ if dorkpipe_orchestrate_is_cloud_provider "${provider}"; then
     issues_json='["estimated prompt tokens exceeded the per-task cloud token budget"]'
     next_actions_json='["shrink the task scope or raise DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS intentionally"]'
     dorkpipe_orchestrate_halt_run "${provider}" "Prompt estimate for ${task_id} exceeded the per-task cloud token budget (${estimated_input_tokens}/${TASK_MAX_CLOUD_TOKENS:-$DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS})."
-  elif (( $(sed -n 's/.*"total_estimated_tokens": \([0-9][0-9]*\).*/\1/p' "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" | head -1 || echo 0) + estimated_input_tokens > DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS )) && [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED}")" == "true" ]]; then
+  elif (( $(dorkpipe_orchestrate_read_usage_number "total_estimated_tokens") + estimated_input_tokens > DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS )) && [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED}")" == "true" ]]; then
     budget_halt="true"
     status="skipped"
     summary="Skipped live ${provider} worker because starting it would exceed the orchestration cloud token budget."
@@ -215,14 +217,17 @@ fi
 
 estimated_output_tokens="$(dorkpipe_orchestrate_estimate_tokens_for_file "${response_md}")"
 estimated_total_tokens="$(( estimated_input_tokens + estimated_output_tokens ))"
+task_finished_at_ms="$(dorkpipe_orchestrate_now_ms)"
+task_finished_at="$(dorkpipe_orchestrate_now_iso)"
+duration_ms="$(( task_finished_at_ms - task_started_at_ms ))"
 
 if [[ "${used_live_model}" == "true" ]] && dorkpipe_orchestrate_is_cloud_provider "${provider}"; then
-  dorkpipe_orchestrate_record_cloud_usage "${provider}" "${estimated_input_tokens}" "${estimated_output_tokens}"
+  dorkpipe_orchestrate_record_cloud_usage "${provider}" "${estimated_input_tokens}" "${estimated_output_tokens}" "${duration_ms}"
 fi
 
-dorkpipe_orchestrate_record_training_metric "${task_id}" "${lane_id}" "${provider}" "${status}" "${confidence}" "${estimated_input_tokens}" "${estimated_output_tokens}" "${used_live_model}" "${budget_halt}"
+dorkpipe_orchestrate_record_training_metric "${task_id}" "${lane_id}" "${provider}" "${status}" "${confidence}" "${estimated_input_tokens}" "${estimated_output_tokens}" "${used_live_model}" "${budget_halt}" "${task_started_at}" "${task_finished_at}" "${duration_ms}"
 
-export task_id status resolver_hint provider lane_id used_live_model budget_halt estimated_input_tokens estimated_output_tokens estimated_total_tokens summary confidence issues_json next_actions_json TASK_LANE_JSON TASK_CLAIMS_JSON TASK_CITATIONS_JSON
+export task_id status resolver_hint provider lane_id used_live_model budget_halt estimated_input_tokens estimated_output_tokens estimated_total_tokens task_started_at task_finished_at duration_ms summary confidence issues_json next_actions_json TASK_LANE_JSON TASK_CLAIMS_JSON TASK_CITATIONS_JSON
 python3 - "${result_json}" <<'PY'
 import json
 import os
@@ -246,6 +251,9 @@ payload = {
     "estimated_input_tokens": int(os.environ.get("estimated_input_tokens", "0")),
     "estimated_output_tokens": int(os.environ.get("estimated_output_tokens", "0")),
     "estimated_total_tokens": int(os.environ.get("estimated_total_tokens", "0")),
+    "started_at": os.environ.get("task_started_at", ""),
+    "finished_at": os.environ.get("task_finished_at", ""),
+    "duration_ms": int(os.environ.get("duration_ms", "0")),
     "summary": os.environ.get("summary", ""),
     "claims": loads_env("TASK_CLAIMS_JSON", []),
     "artifacts": [

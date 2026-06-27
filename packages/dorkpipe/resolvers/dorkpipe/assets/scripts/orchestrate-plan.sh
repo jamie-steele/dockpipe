@@ -15,12 +15,13 @@ cat > "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" <<EOF
   "total_estimated_input_tokens": 0,
   "total_estimated_output_tokens": 0,
   "total_estimated_tokens": 0,
+  "total_duration_ms": 0,
   "cloud_task_count": 0,
   "budget_exceeded": false,
   "halted": false,
   "providers": {
-    "codex": {"task_count": 0, "estimated_tokens": 0},
-    "claude": {"task_count": 0, "estimated_tokens": 0}
+    "codex": {"task_count": 0, "estimated_tokens": 0, "duration_ms": 0},
+    "claude": {"task_count": 0, "estimated_tokens": 0, "duration_ms": 0}
   }
 }
 EOF
@@ -67,6 +68,8 @@ max_task_cloud_tokens = int(os.environ["DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS"])
 stop_on_budget_exceeded = os.environ["DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED"].lower() in {"1", "true", "yes", "on"}
 training_mode = os.environ.get("DORKPIPE_ORCH_TRAINING_MODE", "observe")
 cloud_lanes_enabled = os.environ.get("DORKPIPE_ORCH_CLOUD_LANES", "false").lower() in {"1", "true", "yes", "on"}
+force_provider = (os.environ.get("DORKPIPE_ORCH_FORCE_PROVIDER") or os.environ.get("DORKPIPE_ORCH_TASK_PROVIDER") or "").strip().lower()
+force_provider_scope = (os.environ.get("DORKPIPE_ORCH_FORCE_PROVIDER_SCOPE") or "auto").strip().lower()
 
 workflow = yaml.safe_load(workflow_config.read_text()) or {}
 workflow_model_policy = workflow.get("model_policy", {}) or {}
@@ -248,6 +251,8 @@ def high_risk_task(task):
 
 def select_lane(task, policy):
     requested = str(task.get("resolver_hint", "auto") or "auto")
+    if force_provider and (force_provider_scope == "all" or requested == "auto"):
+        requested = force_provider
     candidates = []
     for lane in model_lanes:
         score, reason, training_detail = lane_score(lane, task, policy, requested)
@@ -383,6 +388,8 @@ request_payload = {
     "model_policy": agent_model_policy,
     "model_catalog": str(model_catalog_path),
     "training_mode": training_mode,
+    "force_provider": force_provider,
+    "force_provider_scope": force_provider_scope,
 }
 request_json.write_text(json.dumps(request_payload, indent=2) + "\n")
 
@@ -415,6 +422,8 @@ lane_plan = {
     "catalog": str(model_catalog_path),
     "baseline_policy": str(baseline_policy_path),
     "training_mode": training_mode,
+    "force_provider": force_provider,
+    "force_provider_scope": force_provider_scope,
     "cloud_lanes_enabled": cloud_lanes_enabled,
     "global_training_metrics": str(global_training_metrics_path),
     "policy": agent_model_policy,
