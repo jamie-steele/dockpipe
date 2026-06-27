@@ -404,6 +404,49 @@ func TestCmdPackageCompileWorkflowRebuildsInvalidStoreTarball(t *testing.T) {
 	}
 }
 
+func TestCmdPackageCompileWorkflowsBatchPrunesStaleTarballs(t *testing.T) {
+	dir := t.TempDir()
+	root := filepath.Join(dir, "workflows")
+	current := filepath.Join(root, "current")
+	if err := os.MkdirAll(current, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(current, "config.yml"), []byte("name: current\nsteps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	staleStage := filepath.Join(dir, "stale-stage")
+	if err := os.MkdirAll(staleStage, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(staleStage, "config.yml"), []byte("name: stale\nsteps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	staleTar := filepath.Join(dest, "dockpipe-workflow-stale-1.0.0.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(staleStage, staleTar, "workflows/stale"); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := cmdPackageCompileWorkflowsBatch([]string{"--workdir", dir, "--from", root, "--force", "--prune-stale"}); err != nil {
+		t.Fatalf("compile workflows: %v", err)
+	}
+	if _, err := os.Stat(staleTar); !os.IsNotExist(err) {
+		t.Fatalf("stale tarball still exists or stat failed unexpectedly: %v", err)
+	}
+	currentGlob := filepath.Join(dest, "dockpipe-workflow-current-*.tar.gz")
+	matches, err := filepath.Glob(currentGlob)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("expected current workflow tarball at %s, got %v", currentGlob, matches)
+	}
+}
+
 func TestCompileSingleResolverRebuildsInvalidStoreTarball(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src", "resolvers", "alpha")
@@ -440,7 +483,7 @@ func TestCompileSingleResolverRebuildsInvalidStoreTarball(t *testing.T) {
 	if err := os.Chtimes(tgz, future, future); err != nil {
 		t.Fatal(err)
 	}
-	if err := compileSingleResolverDir(dest, src, "alpha", "acme", "1.0.0", false); err != nil {
+	if err := compileSingleResolverDir(dir, dest, src, "alpha", "acme", "1.0.0", false); err != nil {
 		t.Fatal(err)
 	}
 	got, err := packagebuild.ReadFileFromTarGz(tgz, "resolvers/alpha/config.yml")

@@ -3,6 +3,7 @@ package packagebuild
 import (
 	"archive/tar"
 	"compress/gzip"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -71,6 +72,12 @@ func ExtractTarGzToDir(tarGzPath, destDir string) error {
 }
 
 const extractMarkerFile = ".dockpipe-extracted"
+const extractPackageMarkerFile = ".dockpipe-extracted-package.json"
+
+type extractedPackageMarker struct {
+	SHA256  string `json:"sha256"`
+	Tarball string `json:"tarball"`
+}
 
 // EnsureTarballExtractedCache extracts tarGzPath into cacheRoot/<sha256(tar file)> if not already present.
 // The cache directory is keyed by the tarball file digest so content changes invalidate the cache.
@@ -98,6 +105,13 @@ func EnsureTarballExtractedCache(tarGzPath, cacheRoot string) (string, error) {
 	}
 	if err := os.WriteFile(marker, []byte(sum+"\n"), 0o644); err != nil {
 		return "", err
+	}
+	meta := extractedPackageMarker{
+		SHA256:  sum,
+		Tarball: filepath.Base(tarGzPath),
+	}
+	if b, err := json.MarshalIndent(meta, "", "  "); err == nil {
+		_ = os.WriteFile(filepath.Join(dest, extractPackageMarkerFile), append(b, '\n'), 0o644)
 	}
 	return dest, nil
 }

@@ -64,7 +64,7 @@ func compileClosureForWorkflow(projectRoot, workflowName string, force bool) err
 			continue
 		}
 		from := leaves[0]
-		if err := compileSingleResolverDir(destRes, from, filepath.Base(from), defResolverNS, authoredPackageVersion(projectRoot), force); err != nil {
+		if err := compileSingleResolverDir(projectRoot, destRes, from, filepath.Base(from), defResolverNS, authoredPackageVersion(projectRoot), force); err != nil {
 			return fmt.Errorf("resolver %q: %w", name, err)
 		}
 		fmt.Fprintf(os.Stderr, "[dockpipe] compiled resolver %q → %s\n", name, destRes)
