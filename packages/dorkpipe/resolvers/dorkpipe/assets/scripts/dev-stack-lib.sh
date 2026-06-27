@@ -21,6 +21,80 @@ dorkpipe_stack_gpu_mode_file() {
   printf '%s/gpu.mode\n' "$(dorkpipe_stack_state_dir)"
 }
 
+dorkpipe_stack_api_key_file() {
+  printf '%s/api-key\n' "$(dorkpipe_stack_state_dir)"
+}
+
+dorkpipe_stack_mcp_tls_cert_file() {
+  printf '%s/mcp-tls.crt\n' "$(dorkpipe_stack_state_dir)"
+}
+
+dorkpipe_stack_mcp_tls_key_file() {
+  printf '%s/mcp-tls.key\n' "$(dorkpipe_stack_state_dir)"
+}
+
+dorkpipe_stack_mcp_port() {
+  printf '%s\n' "${DORKPIPE_DEV_STACK_MCP_PORT:-8766}"
+}
+
+dorkpipe_stack_mcp_url() {
+  printf 'http://127.0.0.1:%s/mcp\n' "$(dorkpipe_stack_mcp_port)"
+}
+
+dorkpipe_stack_ensure_api_key() {
+  local key_file
+  key_file="${DORKPIPE_DEV_STACK_MCP_API_KEY_FILE:-$(dorkpipe_stack_api_key_file)}"
+  dorkpipe_stack_ensure_state_dir
+  if [[ -s "$key_file" ]]; then
+    return 0
+  fi
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 24 > "$key_file"
+  else
+    date +%s%N | sha256sum | cut -d' ' -f1 > "$key_file"
+  fi
+  chmod 600 "$key_file" 2>/dev/null || true
+}
+
+dorkpipe_stack_ensure_mcp_tls_material() {
+  local cert_file key_file
+  cert_file="${DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE:-$(dorkpipe_stack_mcp_tls_cert_file)}"
+  key_file="${DORKPIPE_DEV_STACK_MCP_TLS_KEY_FILE:-$(dorkpipe_stack_mcp_tls_key_file)}"
+  dorkpipe_stack_ensure_state_dir
+  if [[ -s "$cert_file" && -s "$key_file" ]]; then
+    return 0
+  fi
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "dorkpipe-dev-stack: openssl is required to generate local MCP TLS material" >&2
+    return 1
+  fi
+  if dorkpipe_stack_is_windows_host; then
+    MSYS2_ARG_CONV_EXCL='*' openssl req -x509 -nodes -newkey rsa:2048 \
+      -keyout "$key_file" \
+      -out "$cert_file" \
+      -days 365 \
+      -subj "/CN=dorkpipe-stack" \
+      -addext "subjectAltName=DNS:dorkpipe-stack,DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+  else
+    openssl req -x509 -nodes -newkey rsa:2048 \
+      -keyout "$key_file" \
+      -out "$cert_file" \
+      -days 365 \
+      -subj "/CN=dorkpipe-stack" \
+      -addext "subjectAltName=DNS:dorkpipe-stack,DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+  fi
+  chmod 600 "$key_file" 2>/dev/null || true
+  chmod 644 "$cert_file" 2>/dev/null || true
+}
+
+dorkpipe_stack_prepare_mcp_material() {
+  export DORKPIPE_DEV_STACK_MCP_API_KEY_FILE="${DORKPIPE_DEV_STACK_MCP_API_KEY_FILE:-$(dorkpipe_stack_api_key_file)}"
+  export DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE="${DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE:-$(dorkpipe_stack_mcp_tls_cert_file)}"
+  export DORKPIPE_DEV_STACK_MCP_TLS_KEY_FILE="${DORKPIPE_DEV_STACK_MCP_TLS_KEY_FILE:-$(dorkpipe_stack_mcp_tls_key_file)}"
+  dorkpipe_stack_ensure_api_key
+  dorkpipe_stack_ensure_mcp_tls_material
+}
+
 dorkpipe_stack_bootstrap_sdk() {
   local dockpipe_bin
   for dockpipe_bin in \
@@ -408,7 +482,7 @@ dorkpipe_stack_service_enabled() {
   local needle="$1"
   local service
   if [[ -z "${DORKPIPE_DEV_STACK_SERVICES:-}" ]]; then
-    [[ "$needle" == "postgres" || "$needle" == "ollama" ]]
+    [[ "$needle" == "postgres" || "$needle" == "ollama" || "$needle" == "dorkpipe-stack" || "$needle" == "dorkpipe-mcp-proxy" ]]
     return $?
   fi
   for service in ${DORKPIPE_DEV_STACK_SERVICES}; do
@@ -416,6 +490,22 @@ dorkpipe_stack_service_enabled() {
       return 0
     fi
   done
+  return 1
+}
+
+dorkpipe_stack_wait_for_mcp_ready() {
+  local attempts="${1:-60}"
+  local url status i
+  dorkpipe_stack_service_enabled dorkpipe-mcp-proxy || return 0
+  url="$(dorkpipe_stack_mcp_url)"
+  for ((i = 0; i < attempts; i++)); do
+    status="$(curl -sS -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || true)"
+    if [[ "$status" == "401" || "$status" == "400" || "$status" == "405" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "dorkpipe-dev-stack: MCP proxy did not become ready at $url" >&2
   return 1
 }
 

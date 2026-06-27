@@ -50,7 +50,7 @@ Its useful primitive is:
    approval artifacts.
 5. Resolver profiles specialize worker execution for `ollama`, `codex`, and `claude`.
 6. Cloud-backed workers share a budget ledger and halt marker.
-7. Human approval remains explicit before any manual promotion.
+7. Human approval remains explicit before any source-tree apply or manual promotion.
 
 The contract lives under the DorkPipe artifact root:
 
@@ -58,6 +58,11 @@ The contract lives under the DorkPipe artifact root:
 
 Resolvers still specialize execution, but the core enabling primitive is the declared graph and its
 typed artifacts, not generic "agent" language.
+
+The local dev stack is the shared control-plane layer: `dorkpipe-stack` runs MCP/DorkPipe tooling,
+Postgres stores pgvector-backed state, and Ollama provides local model lanes. Codex and Claude are
+not persistent services in that stack; they stay isolated as ephemeral resolver workers for bounded
+tasks.
 
 ## Current limits
 
@@ -67,8 +72,8 @@ has TODOs before it fully hides physical execution planning:
 - escalation currently selects lanes and records training metrics, but outcome-weighted learning is
   still future work
 - `agent.access` should be compiled into stronger runtime policy, not just prompt/context artifacts
-- internal fanout now has a package-owned runner, but richer dependency scheduling is still future
-  work
+- internal fanout now has a package-owned runner, but richer task splitting and dependency
+  scheduling are still future work
 
 ## Tooling Surfaces
 

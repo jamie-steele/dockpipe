@@ -11,23 +11,28 @@ It treats the useful core as:
 4. merge
 5. verify
 6. approve
+7. apply approved source-tree changes
 
-The workflow is sequential today, but the contract is DAG-shaped so later parallel execution can
-reuse the same task, result, merge, and verifier artifacts.
+The workflow runs bounded worker tasks through the package-owned scheduler. The contract remains
+DAG-shaped so dependency handling, richer splitters, and additional worker lanes can reuse the same
+task, result, merge, and verifier artifacts.
 
 ## Stack lifecycle
 
 The workflow brings up the DorkPipe dev stack before planning and tears it down after approval:
 
-1. Postgres + pgvector
-2. Ollama
-3. orchestration planning/workers/merge/verify/approval
-4. stack down
+1. Postgres + pgvector for persistent orchestration memory
+2. Ollama for local model lanes
+3. `dorkpipe-stack` for the MCP/control-plane process
+4. `dorkpipe-mcp-proxy` for a loopback-only local MCP endpoint
+5. orchestration planning/workers/merge/verify/approval/apply
+6. stack down
 
 By default, this workflow leaves the sidecars running after approval so iterative CLI/app testing can
 reuse the same reasoning stack. Override `DORKPIPE_DEV_STACK_AUTODOWN=1` when you want the workflow
 to stop the stack at the end. The default local endpoints are:
 
+- `MCP_HTTP_URL=http://127.0.0.1:8766/mcp`
 - `OLLAMA_HOST=http://127.0.0.1:11434`
 - `DATABASE_URL=postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe`
 
@@ -37,6 +42,9 @@ to use a different local model.
 
 Cloud-backed Codex/Claude lanes are enabled by the workflow's governed policy and remain bounded by
 the declared token budgets, halt marker, and approval gate.
+
+Codex and Claude are not long-lived stack services. They remain ephemeral resolver lanes: DorkPipe
+starts them for bounded worker tasks, captures their artifacts, and lets their containers exit.
 
 ## Apply behavior
 

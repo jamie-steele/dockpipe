@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local sidecar stack for DorkPipe: Postgres+pgvector + Ollama (docker compose).
+# Local sidecar stack for DorkPipe: control plane + Postgres+pgvector + Ollama (docker compose).
 # Usage: scripts/dorkpipe/dev-stack.sh up|down|ps
 # Compose file: packages/dorkpipe/resolvers/dorkpipe/assets/compose/docker-compose.yml
 # When done: dev-stack.sh down — containers stop (nothing long-lived required for orchestration).
@@ -38,11 +38,19 @@ up)
 		# shellcheck disable=SC2206
 		SERVICES=(${DORKPIPE_DEV_STACK_SERVICES})
 	else
-		SERVICES=(postgres ollama)
+		SERVICES=(postgres ollama dorkpipe-stack dorkpipe-mcp-proxy)
+	fi
+	if dorkpipe_stack_service_enabled dorkpipe-stack || dorkpipe_stack_service_enabled dorkpipe-mcp-proxy; then
+		dorkpipe_stack_prepare_mcp_material
 	fi
 	docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans "${SERVICES[@]}"
 	dorkpipe_stack_ensure_ollama_model
-	echo "dev-stack: up — Ollama http://127.0.0.1:11434  Postgres postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe (project $PROJECT; gpu ${DORKPIPE_DEV_STACK_GPU:-auto})"
+	dorkpipe_stack_wait_for_mcp_ready "${DORKPIPE_DEV_STACK_MCP_READY_ATTEMPTS:-60}"
+	if dorkpipe_stack_service_enabled dorkpipe-mcp-proxy; then
+		echo "dev-stack: up — MCP $(dorkpipe_stack_mcp_url)  Ollama http://127.0.0.1:11434  Postgres postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe (project $PROJECT; gpu ${DORKPIPE_DEV_STACK_GPU:-auto})"
+	else
+		echo "dev-stack: up — Ollama http://127.0.0.1:11434  Postgres postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe (project $PROJECT; gpu ${DORKPIPE_DEV_STACK_GPU:-auto})"
+	fi
 	;;
 down)
 	docker compose "${COMPOSE_ARGS[@]}" down
@@ -53,7 +61,7 @@ ps | status)
 	;;
 *)
 	echo "usage: $0 up|down|ps" >&2
-	echo "  Brings Postgres+pgvector and Ollama up for local DAG nodes (DATABASE_URL, OLLAMA_HOST)." >&2
+	echo "  Brings the DorkPipe MCP control plane, Postgres+pgvector, and Ollama up for local DAG nodes." >&2
 	exit 1
 	;;
 esac

@@ -1,0 +1,24 @@
+FROM golang:1.25-bookworm AS build
+
+WORKDIR /src
+COPY . .
+
+RUN set -eux; \
+    version="$(tr -d ' \t\r\n' < VERSION)"; \
+    ldflags="-s -w -X main.Version=${version}"; \
+    CGO_ENABLED=0 go build -trimpath -ldflags "$ldflags" -o /out/dockpipe ./src/cmd; \
+    CGO_ENABLED=0 go build -C ./packages/dorkpipe/lib -trimpath -ldflags "$ldflags" -o /out/dorkpipe ./cmd/dorkpipe; \
+    CGO_ENABLED=0 go build -C ./packages/dorkpipe/mcp -trimpath -ldflags "$ldflags" -o /out/mcpd ./cmd/mcpd
+
+FROM debian:bookworm-slim
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends bash ca-certificates git openssh-client ripgrep; \
+    rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /out/dockpipe /usr/local/bin/dockpipe
+COPY --from=build /out/dorkpipe /usr/local/bin/dorkpipe
+COPY --from=build /out/mcpd /usr/local/bin/mcpd
+
+ENTRYPOINT ["/bin/bash", "-lc"]
