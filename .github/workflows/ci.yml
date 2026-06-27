@@ -43,6 +43,17 @@ jobs:
         with:
           go-version: "1.25.8"
 
+      - name: Install DockPipe Launcher build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake \
+            build-essential \
+            qt6-base-dev \
+            libgl1-mesa-dev \
+            libegl1-mesa-dev
+
       - name: govulncheck + gosec + DorkPipe CI signal bundle
         env:
           DOCKPIPE_WORKDIR: ${{ github.workspace }}
