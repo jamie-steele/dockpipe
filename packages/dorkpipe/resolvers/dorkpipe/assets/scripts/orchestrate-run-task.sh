@@ -87,7 +87,7 @@ PY
 
 append_dependency_context() {
   [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_APPEND_DEPENDENCY_CONTEXT}")" == "true" ]] || return 0
-  python3 - "${prompt_md}" "${DORKPIPE_ORCH_TASKS_DIR}" "${TASK_DEPENDS_ON_JSON:-[]}" "${DORKPIPE_ORCH_DEPENDENCY_CONTEXT_MAX_BYTES}" "${DORKPIPE_ORCH_DEPENDENCY_CONTEXT_TOTAL_MAX_BYTES}" <<'PY'
+  python3 - "${prompt_md}" "${DORKPIPE_ORCH_TASKS_DIR}" "${TASK_DEPENDS_ON_JSON:-[]}" "${DORKPIPE_ORCH_DEPENDENCY_CONTEXT_MAX_BYTES}" "${DORKPIPE_ORCH_DEPENDENCY_CONTEXT_TOTAL_MAX_BYTES}" "${DORKPIPE_ORCH_PREFER_PLANNER_CONTEXT}" <<'PY'
 import json
 import pathlib
 import sys
@@ -100,9 +100,12 @@ except Exception:
     depends_on = []
 max_bytes = int(sys.argv[4] or 5000)
 total_max_bytes = int(sys.argv[5] or 12000)
+prefer_planner = str(sys.argv[6]).lower() in {"1", "true", "yes", "on"}
 
 if not depends_on or not prompt_path.exists():
     raise SystemExit(0)
+if prefer_planner and "planner_brain" in depends_on:
+    depends_on = ["planner_brain"]
 
 prompt = prompt_path.read_text(encoding="utf-8", errors="replace")
 marker = "Dependency context from completed upstream tasks:"

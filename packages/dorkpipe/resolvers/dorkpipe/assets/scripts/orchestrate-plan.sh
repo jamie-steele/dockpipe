@@ -263,11 +263,16 @@ def high_risk_task(task):
     return words_in_text(text, selection_policy.get("high_risk_keywords", []))
 
 def select_lane(task, policy, requested_override=""):
-    requested = str(task.get("resolver_hint", "auto") or "auto")
+    requested = expand_env(task.get("resolver_hint", "auto") or "auto")
     if requested_override:
         requested = requested_override
     elif force_provider and (force_provider_scope == "all" or requested == "auto"):
         requested = force_provider
+    elif requested == "auto" and "planner_brain" in [str(dep) for dep in task.get("depends_on", []) or []]:
+        brain_provider = expand_env(os.environ.get("DORKPIPE_ORCH_BRAIN_PROVIDER", ""))
+        fanout_provider = expand_env(os.environ.get("DORKPIPE_ORCH_FANOUT_PROVIDER", ""))
+        if brain_provider:
+            requested = fanout_provider or "ollama"
     candidates = []
     for lane in model_lanes:
         score, reason, training_detail = lane_score(lane, task, policy, requested)
@@ -338,7 +343,7 @@ def select_lane(task, policy, requested_override=""):
 def comparison_enabled_for_task(task):
     if not compare_providers:
         return False
-    requested = str(task.get("resolver_hint", "auto") or "auto")
+    requested = expand_env(task.get("resolver_hint", "auto") or "auto")
     if compare_scope == "all":
         return True
     return requested == "auto"
@@ -647,8 +652,8 @@ for task in tasks:
             "constraints": task.get("constraints", []),
             "expected_output": task.get("expected_output", ""),
             "worker_type": task.get("worker_type", "analysis"),
-            "resolver_hint": lane_selection.get("resolver_hint") or task.get("resolver_hint", "auto"),
-            "requested_resolver_hint": task.get("resolver_hint", "auto"),
+            "resolver_hint": lane_selection.get("resolver_hint") or expand_env(task.get("resolver_hint", "auto")),
+            "requested_resolver_hint": expand_env(task.get("resolver_hint", "auto")),
             "lane": lane_selection,
             "max_cloud_tokens": int(task.get("max_cloud_tokens", lane_selection.get("max_task_tokens") or max_task_cloud_tokens)),
             "depends_on": [

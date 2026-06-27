@@ -58,7 +58,20 @@ bad_patterns = [
     (re.compile(r"\b(files? (were|modified|touched)|validations? run|generated artifacts?)\b", re.I), "worker included implementation/reporting chatter"),
 ]
 
-for task in merge.get("tasks", []):
+boundary_patterns = [
+    (re.compile(r"\bworkflow declares (?:its )?limitations in concurrency control\b", re.I), "worker incorrectly said workflow does not own concurrency declaration"),
+    (re.compile(r"\bworkflow (?:does not|should not|is not responsible to) own concurrency\b", re.I), "worker incorrectly said workflow does not own concurrency declaration"),
+    (re.compile(r"\bconcurrency (?:is|should be) (?:owned|managed) by worker results\b", re.I), "worker incorrectly assigned concurrency declaration to worker results"),
+]
+
+shape_patterns = [
+    (re.compile(r"(?im)^\s*Here (?:are|is)\b"), "worker included preamble instead of direct artifact content"),
+    (re.compile(r"(?im)^###\s+repo_shape\s*$"), "worker repeated task id as a heading"),
+    (re.compile(r"\buncertainties remain\b", re.I), "worker added generic uncertainty instead of bounded uncertainty"),
+    (re.compile(r"\b(?:lane scores|confidence values) should be cited\b", re.I), "worker invented lane score citation guidance"),
+]
+
+for task in list(merge.get("planning_tasks", [])) + list(merge.get("tasks", [])):
     task_id = task.get("task_id")
     if not task_id:
         continue
@@ -68,6 +81,14 @@ for task in merge.get("tasks", []):
         continue
     text = response_path.read_text(encoding="utf-8", errors="replace")
     for pattern, message in bad_patterns:
+        if pattern.search(text):
+            issues.append(f"{task_id}: {message}")
+            break
+    for pattern, message in boundary_patterns:
+        if pattern.search(text):
+            issues.append(f"{task_id}: {message}")
+            break
+    for pattern, message in shape_patterns:
         if pattern.search(text):
             issues.append(f"{task_id}: {message}")
             break

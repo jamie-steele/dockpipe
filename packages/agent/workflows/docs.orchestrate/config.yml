@@ -38,6 +38,7 @@ vars:
   MCP_HTTP_URL: http://127.0.0.1:8766/mcp
   DATABASE_URL: postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe
   OLLAMA_HOST: http://127.0.0.1:11434
+  DORKPIPE_ORCH_BRAIN_PROVIDER: ollama
 
 steps:
   - id: stack_up
@@ -131,7 +132,7 @@ steps:
             resolver_hint: ollama
             worker_type: planning
             goal: Distill the docs.orchestrate workflow surface into guidance for downstream documentation workers.
-            expected_output: Three terse markdown bullets about what the workflow declares and what it should not own.
+            expected_output: Three terse markdown bullets about what the workflow declares and what DorkPipe owns.
             inputs:
               - shared/repo-map.md
               - packages/agent/workflows/docs.orchestrate/config.yml
@@ -146,20 +147,59 @@ steps:
 
               Task id: workflow_brain
               Goal: Distill the docs.orchestrate workflow surface into guidance for downstream documentation workers.
-              Expected output: Three terse markdown bullets about what the workflow declares and what it should not own.
+              Expected output: Three terse markdown bullets about what the workflow declares and what DorkPipe owns.
 
               Rules:
               - Return exactly three bullets and no headings.
               - Each bullet must be one line.
-              - Focus on request text, task list, prompts, concurrency, shared inputs, and apply outputs.
-              - Say clearly that the workflow declares intent while DorkPipe owns the reusable orchestration contract.
+              - Bullet 1 must say the workflow declares request text, task list, prompts, concurrency limits, shared inputs, and apply outputs.
+              - Bullet 2 must say DorkPipe owns the reusable orchestration contract and materialized artifacts.
+              - Bullet 3 must say the workflow declares intent while DorkPipe materializes and governs execution artifacts.
+              - Do not say the workflow should not own request text, task list, prompts, concurrency, shared inputs, or apply outputs.
+              - Do not say concurrency is owned by worker results.
               - Do not write an execution plan.
               - Do not answer the final documentation request.
+          - id: planner_brain
+            resolver_hint: "${DORKPIPE_ORCH_BRAIN_PROVIDER:-ollama}"
+            worker_type: planning
+            depends_on:
+              - contract_brain
+              - workflow_brain
+            goal: Plan the downstream bounded documentation workers from the contract and workflow scout outputs.
+            expected_output: A compact markdown work order for repo_shape, package_contracts, and safety_model.
+            inputs:
+              - shared/repo-map.md
+              - packages/agent/workflows/docs.orchestrate/config.yml
+              - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
+            constraints:
+              - use scout outputs as planning guidance
+              - keep Ollama fanout tasks cheap and bounded
+              - do not answer the final documentation request
+            model_policy:
+              attempt:
+                preference: strong
+              validate:
+                preference: strongest_available
+            prompt: |
+              You are the DorkPipe planner brain for a later cheap worker fanout.
+
+              Task id: planner_brain
+              Goal: Plan the downstream bounded documentation workers from the contract and workflow scout outputs.
+              Expected output: A compact markdown work order for repo_shape, package_contracts, and safety_model.
+
+              Rules:
+              - Return exactly three bullets and no headings.
+              - Bullet 1 must start with "repo_shape:" and say what the worker should emphasize.
+              - Bullet 2 must start with "package_contracts:" and say packages/agent owns request, tasks, prompts, concurrency, and apply outputs while packages/dorkpipe owns artifacts, lanes, merge, verify, budget, and halt.
+              - Bullet 3 must start with "safety_model:" and say what verification, budget, and approval facts the worker must preserve.
+              - Do not answer the final documentation request.
+              - Do not write an execution plan beyond this three-bullet work order.
           - id: repo_shape
             resolver_hint: ollama
             depends_on:
               - contract_brain
               - workflow_brain
+              - planner_brain
             goal: Explain the task-graph artifact primitive and why it is stronger than generic agent branding.
             expected_output: A short markdown explanation of the orchestration primitive.
             inputs:
@@ -183,6 +223,9 @@ steps:
               - Treat this as one bounded task, not the whole request.
               - Ground claims in the referenced files.
               - Explain the artifact graph primitive; do not propose code, files, or lane-weight changes.
+              - Do not repeat planning scout bullets; synthesize the answer in your own concise paragraph or bullets.
+              - Return exactly two bullets and no headings.
+              - Do not mention packages/agent ownership; this task is about why artifact graphs are stronger than branding.
               - Return concise markdown suitable for downstream merge.
               - Call out uncertainty explicitly.
           - id: package_contracts
@@ -190,6 +233,7 @@ steps:
             depends_on:
               - contract_brain
               - workflow_brain
+              - planner_brain
             goal: Summarize how packages/agent and packages/dorkpipe should divide workflow surface vs contract surface.
             expected_output: A short markdown summary of package boundaries.
             model_policy:
@@ -220,6 +264,7 @@ steps:
               - Bullet 1 must start with "packages/agent owns" and describe the workflow surface: request, task list, prompts, concurrency, apply outputs.
               - Bullet 2 must start with "packages/dorkpipe owns" and describe the contract surface: orchestration artifacts, lane catalog, worker result, merge, verify, budget/halt.
               - Bullet 3 must start with "Boundary rule" and say workflows declare what while DorkPipe materializes and governs the artifact contract.
+              - Do not add preamble, headings, examples, or an uncertainty footer unless a referenced file is missing.
               - Return concise markdown suitable for downstream merge.
               - Call out uncertainty explicitly.
           - id: safety_model
@@ -227,6 +272,7 @@ steps:
             depends_on:
               - contract_brain
               - workflow_brain
+              - planner_brain
             goal: Summarize the safety and approval model for multi-worker orchestration.
             expected_output: A short markdown summary of verification and approval needs.
             model_policy:
@@ -252,6 +298,12 @@ steps:
               - Treat this as one bounded task, not the whole request.
               - Ground claims in the referenced files.
               - Summarize verification, budget halt, and approval boundaries; do not invent lane scores.
+              - Do not list the full worker result schema.
+              - Return exactly three bullets and no headings.
+              - Bullet 1 must start with "Verification".
+              - Bullet 2 must start with "Budget halt".
+              - Bullet 3 must start with "Approval".
+              - Do not say lane scores or confidence values should be cited.
               - Return concise markdown suitable for downstream merge.
               - Call out uncertainty explicitly.
         merge:

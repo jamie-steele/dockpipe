@@ -26,17 +26,18 @@ import sys
 root = pathlib.Path(sys.argv[1])
 lane_plan = json.loads((root / "lanes" / "plan.json").read_text())
 tasks = lane_plan.get("tasks", [])
-assert len(tasks) == 5, f"expected 5 planned tasks, got {len(tasks)}"
+assert len(tasks) == 6, f"expected 6 planned tasks, got {len(tasks)}"
 providers = {task["task_id"]: task["provider"] for task in tasks}
 assert providers["contract_brain"] == "ollama", providers
 assert providers["workflow_brain"] == "ollama", providers
+assert providers["planner_brain"] == "ollama", providers
 assert providers["repo_shape"] == "ollama", providers
 assert providers["package_contracts"] == "ollama", providers
 assert providers["safety_model"] == "ollama", providers
-explicit_local_tasks = {"contract_brain", "workflow_brain", "repo_shape"}
+explicit_local_tasks = {"contract_brain", "workflow_brain", "planner_brain", "repo_shape"}
 assert all(task.get("gated_by_baseline") or task["task_id"] in explicit_local_tasks for task in tasks), tasks
 metrics = (root / "training" / "metrics.jsonl").read_text().strip().splitlines()
-assert len(metrics) == 5, f"expected 5 training metrics, got {len(metrics)}"
+assert len(metrics) == 6, f"expected 6 training metrics, got {len(metrics)}"
 for line in metrics:
     metric = json.loads(line)
     assert metric["used_live_model"] is False
@@ -54,12 +55,16 @@ for task_id in providers:
     assert isinstance(result.get("duration_ms"), int), result
 prompt = (root / "tasks" / "package_contracts" / "prompt.md").read_text()
 assert "Dependency context from completed upstream tasks:" in prompt, prompt
-assert "### contract_brain" in prompt, prompt
-assert "### workflow_brain" in prompt, prompt
+assert "### planner_brain" in prompt, prompt
+assert "### contract_brain" not in prompt, prompt
+assert "### workflow_brain" not in prompt, prompt
 graph = json.loads((root / "task-graph.json").read_text())
 graph_tasks = {task["id"]: task for task in graph["tasks"]}
 assert graph_tasks["contract_brain"]["worker_type"] == "planning", graph_tasks["contract_brain"]
 assert graph_tasks["workflow_brain"]["worker_type"] == "planning", graph_tasks["workflow_brain"]
+assert graph_tasks["planner_brain"]["worker_type"] == "planning", graph_tasks["planner_brain"]
+assert graph_tasks["planner_brain"]["depends_on"] == ["contract_brain", "workflow_brain"], graph_tasks["planner_brain"]
+assert "planner_brain" in graph_tasks["package_contracts"]["depends_on"], graph_tasks["package_contracts"]
 PY
 
 echo "test_orchestration_lanes OK"
@@ -81,6 +86,7 @@ lane_plan = json.loads((root / "lanes" / "plan.json").read_text())
 tasks = {task["task_id"]: task for task in lane_plan.get("tasks", [])}
 assert tasks["contract_brain"]["provider"] == "ollama", tasks
 assert tasks["workflow_brain"]["provider"] == "ollama", tasks
+assert tasks["planner_brain"]["provider"] == "ollama", tasks
 assert tasks["repo_shape"]["provider"] == "ollama", tasks
 assert tasks["repo_shape"]["requested"] == "ollama", tasks
 for task_id in ("package_contracts", "safety_model"):
@@ -95,9 +101,39 @@ PY
 
 echo "test_orchestration_force_codex OK"
 
+export DORKPIPE_ORCH_WORKFLOW="test.docs.orchestrate.brain-codex"
+export DORKPIPE_ORCH_ROOT="${TMPDIR:-/tmp}/dorkpipe-orch-brain-codex-${RANDOM}-${RANDOM}"
+export DORKPIPE_ORCH_FORCE_PROVIDER=""
+export DORKPIPE_ORCH_BRAIN_PROVIDER="codex"
+export DORKPIPE_ORCH_CLOUD_LANES="true"
+
+bash "$DOCKPIPE_SCRIPT_DIR/orchestrate-plan.sh" >/dev/null
+
+python3 - "$DORKPIPE_ORCH_ROOT" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+graph = json.loads((root / "task-graph.json").read_text())
+tasks = {task["id"]: task for task in graph["tasks"]}
+assert tasks["contract_brain"]["provider"] == "ollama", tasks["contract_brain"]
+assert tasks["workflow_brain"]["provider"] == "ollama", tasks["workflow_brain"]
+assert tasks["planner_brain"]["provider"] == "codex", tasks["planner_brain"]
+assert tasks["repo_shape"]["provider"] == "ollama", tasks["repo_shape"]
+assert tasks["package_contracts"]["provider"] == "ollama", tasks["package_contracts"]
+assert tasks["safety_model"]["provider"] == "ollama", tasks["safety_model"]
+assert tasks["planner_brain"]["depends_on"] == ["contract_brain", "workflow_brain"], tasks["planner_brain"]
+for task_id in ("repo_shape", "package_contracts", "safety_model"):
+    assert "planner_brain" in tasks[task_id]["depends_on"], tasks[task_id]
+PY
+
+echo "test_orchestration_brain_provider_codex OK"
+
 export DORKPIPE_ORCH_WORKFLOW="test.docs.orchestrate.compare"
 export DORKPIPE_ORCH_ROOT="${TMPDIR:-/tmp}/dorkpipe-orch-compare-${RANDOM}-${RANDOM}"
 export DORKPIPE_ORCH_FORCE_PROVIDER=""
+export DORKPIPE_ORCH_BRAIN_PROVIDER=""
 export DORKPIPE_ORCH_COMPARE_PROVIDERS="ollama,codex,claude"
 export DORKPIPE_ORCH_COMPARE_SCOPE="auto"
 export DORKPIPE_ORCH_CLOUD_LANES="true"
@@ -118,6 +154,7 @@ tasks = {task["task_id"]: task for task in lane_plan.get("tasks", [])}
 expected = {
     "contract_brain": "ollama",
     "workflow_brain": "ollama",
+    "planner_brain": "ollama",
     "repo_shape": "ollama",
     "package_contracts__ollama": "ollama",
     "package_contracts__codex": "codex",
@@ -130,7 +167,7 @@ assert {key: tasks[key]["provider"] for key in expected} == expected, tasks
 assert tasks["repo_shape"]["comparison"]["enabled"] is False, tasks["repo_shape"]
 for task_id in expected:
     task = tasks[task_id]
-    if task_id in {"contract_brain", "workflow_brain", "repo_shape"}:
+    if task_id in {"contract_brain", "workflow_brain", "planner_brain", "repo_shape"}:
         continue
     assert task["comparison"]["enabled"] is True, task
     assert task["base_task_id"] in {"package_contracts", "safety_model"}, task
