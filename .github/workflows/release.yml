@@ -94,7 +94,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.8"
+          go-version: "1.25.11"
 
       - name: Run tests
         run: |
@@ -152,7 +152,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.25.8"
+          go-version: "1.25.11"
 
       - name: Run tests
         shell: bash
