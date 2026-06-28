@@ -73,7 +73,7 @@ install-dockpipe-launcher-global: install-dockpipe-launcher
 # Package DockPipe language support extension (.vsix).
 package-dockpipe-language-support:
 	mkdir -p bin/.dockpipe/extensions
-	cd src/app/tooling/vscode-extensions/dockpipe-language-support && if [ ! -x node_modules/.bin/vsce ]; then NPM_CONFIG_CACHE=$$(pwd)/../../../../tmp/npm-cache npm ci --no-audit --no-fund; fi && NPM_CONFIG_CACHE=$$(pwd)/../../../../tmp/npm-cache node node_modules/@vscode/vsce/vsce package --no-dependencies -o ../../../../../bin/.dockpipe/extensions/dockpipe-language-support-$$(node -p "require('./package.json').version").vsix
+	cd src/app/tooling/vscode-extensions/dockpipe-language-support && if [ ! -x node_modules/.bin/vsce ]; then NPM_CONFIG_CACHE=$$(pwd)/../../../../../bin/.dockpipe/build/npm-cache npm ci --no-audit --no-fund; fi && NPM_CONFIG_CACHE=$$(pwd)/../../../../../bin/.dockpipe/build/npm-cache node node_modules/@vscode/vsce/vsce package --no-dependencies -o ../../../../../bin/.dockpipe/extensions/dockpipe-language-support-$$(node -p "require('./package.json').version").vsix
 
 # Back-compat alias.
 package-vscode-language-support: package-dockpipe-language-support

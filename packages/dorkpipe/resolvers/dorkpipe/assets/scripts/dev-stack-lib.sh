@@ -2,11 +2,19 @@
 set -euo pipefail
 
 dorkpipe_stack_state_dir() {
-  if [[ -n "${DOCKPIPE_PACKAGE_STATE_DIR:-}" ]]; then
-    printf '%s\n' "$DOCKPIPE_PACKAGE_STATE_DIR"
+  if [[ -n "${DORKPIPE_DEV_STACK_STATE_DIR:-}" ]]; then
+    printf '%s\n' "$DORKPIPE_DEV_STACK_STATE_DIR"
     return 0
   fi
-  printf '%s/bin/.dockpipe/packages/dorkpipe-dev-stack\n' "$REPO_ROOT"
+  if declare -F dockpipe_sdk >/dev/null 2>&1; then
+    dockpipe_sdk path package dorkpipe dev-stack
+    return 0
+  fi
+  if [[ -n "${DOCKPIPE_STATE_DIR:-}" ]]; then
+    printf '%s/packages/dorkpipe/dev-stack\n' "$DOCKPIPE_STATE_DIR"
+    return 0
+  fi
+  printf '%s/bin/.dockpipe/packages/dorkpipe/dev-stack\n' "$REPO_ROOT"
 }
 
 dorkpipe_stack_ensure_state_dir() {

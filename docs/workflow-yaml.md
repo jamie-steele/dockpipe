@@ -113,6 +113,32 @@ If a host step starts sidecars or helper containers, the runner can clean them u
 | **`DOCKPIPE_LAUNCH_MODE`** | Optional hint for **`vars:`** / templates — e.g. **`gui`** means the step opens a **GUI** on the host (desktop app, not a detached “server” process). Scripts can print clearer messaging; dockpipe still **waits on the host script** until it exits unless the script itself returns early. |
 | **`DOCKPIPE_SKIP_HOST_CLEANUP`** | If **`1`** or **`true`**, the runner **skips** **`ApplyHostCleanup`** after the host script exits (escape hatch: you stop containers yourself). |
 
+### Step working directory
+
+Steps run from the source workdir by default. When a step writes generated files with simple
+relative paths, set **`cwd: artifacts`**:
+
+```yaml
+steps:
+  - id: normalize
+    kind: host
+    cwd: artifacts
+    run:
+      - scripts/dorkpipe/normalize-ci-scans.sh
+```
+
+DockPipe creates the workflow artifact root under
+**`bin/.dockpipe/workflows/<workflow>/artifacts`** and starts the step there. Scripts can write
+ordinary relative paths such as **`ci-analysis/findings.json`** without polluting source control.
+
+DockPipe also injects these variables for every step:
+
+| Variable | Meaning |
+|----------|---------|
+| **`DOCKPIPE_SOURCE_ROOT`** | Absolute source workdir/repo root. Same intent as **`DOCKPIPE_WORKDIR`**, kept explicit for scripts running elsewhere. |
+| **`DOCKPIPE_ARTIFACT_ROOT`** | Absolute generated artifact root for this workflow. |
+| **`DOCKPIPE_STEP_CWD`** | Absolute directory DockPipe uses as the process working directory for the step. |
+
 ---
 
 ## Top-level keys
@@ -298,6 +324,7 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `pre_script` | Single extra pre-script path (in addition to `run`). |
 | `isolate` | Template/image for this step (falls back to workflow / CLI / **core** runtime profile). |
 | `kind` | Step kind. Use **`container`** (default) for normal isolated execution, or **`host`** for host-side actions. |
+| `cwd` | Step working directory. Omit or use **`source`** for the source workdir; use **`artifacts`** for this workflow's generated artifact root. |
 | `runtime` | Optional **core** runtime profile basename (same as CLI **`--runtime`** — must exist under **`templates/core/runtimes/`**). Overrides the workflow default for this step. Not meaningful on `kind: host` steps. |
 | `resolver` | Optional **resolver** profile basename (same as CLI **`--resolver`**). Overrides the workflow default for this step. Not meaningful on `kind: host` steps. Do **not** use it for packaged workflow calls. |
 | `workflow` | Marks this as a **packaged workflow step**. This is the **child workflow name** to run. |

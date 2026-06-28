@@ -13,9 +13,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 
 export DOCKPIPE_REPO_ROOT="${DOCKPIPE_REPO_ROOT:-$ROOT}"
+export DOCKPIPE_WORKFLOW_NAME="${DOCKPIPE_WORKFLOW_NAME:-ci}"
 
 GOBIN="$(go env GOPATH)/bin"
 export PATH="$ROOT/src/bin:$GOBIN:$PATH"
+eval "$("$ROOT/src/bin/dockpipe" sdk --workdir "$ROOT")"
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
@@ -37,21 +39,24 @@ if ! have jq; then
 	exit 1
 fi
 
-step "govulncheck + gosec + DorkPipe signal bundle (bin/.dockpipe/ci-analysis/)"
-rm -rf bin/.dockpipe/ci-raw bin/.dockpipe/ci-analysis
-mkdir -p bin/.dockpipe/ci-raw
+CI_RAW_DIR="${DOCKPIPE_CI_RAW_DIR:?DOCKPIPE_CI_RAW_DIR is required}"
+CI_ANALYSIS_DIR="${DOCKPIPE_CI_ANALYSIS_DIR:?DOCKPIPE_CI_ANALYSIS_DIR is required}"
+
+step "govulncheck + gosec + DorkPipe signal bundle ($CI_ANALYSIS_DIR/)"
+rm -rf "$CI_RAW_DIR" "$CI_ANALYSIS_DIR"
+mkdir -p "$CI_RAW_DIR"
 set +e
-govulncheck -format json ./... > bin/.dockpipe/ci-raw/govulncheck.json
+govulncheck -format json ./... > "$CI_RAW_DIR/govulncheck.json"
 VC=$?
-gosec -conf .gosec.json -fmt json -out=bin/.dockpipe/ci-raw/gosec.json -exclude-dir=.gomodcache ./...
+gosec -conf .gosec.json -fmt json -out="$CI_RAW_DIR/gosec.json" -exclude-dir=.gomodcache ./...
 GC=$?
 set -e
 export DOCKPIPE_WORKDIR="$ROOT"
 CI_SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
 DOCKPIPE_SCRIPT_DIR="$CI_SCRIPT_DIR" \
   bash "$CI_SCRIPT_DIR/normalize-ci-scans.sh"
-jq -sr '"govulncheck raw findings: " + ((([.[] | select(.finding or .Finding)] | length) + ([.[] | (.vulns // .Vulns // [])[]?] | length)) | tostring)' bin/.dockpipe/ci-raw/govulncheck.json 2>/dev/null || true
-jq -r '"gosec raw issues: " + ((.Stats.found // 0) | tostring)' bin/.dockpipe/ci-raw/gosec.json 2>/dev/null || true
+jq -sr '"govulncheck raw findings: " + ((([.[] | select(.finding or .Finding)] | length) + ([.[] | (.vulns // .Vulns // [])[]?] | length)) | tostring)' "$CI_RAW_DIR/govulncheck.json" 2>/dev/null || true
+jq -r '"gosec raw issues: " + ((.Stats.found // 0) | tostring)' "$CI_RAW_DIR/gosec.json" 2>/dev/null || true
 if [[ $VC -ne 0 ]]; then exit "$VC"; fi
 if [[ $GC -ne 0 ]]; then exit "$GC"; fi
 

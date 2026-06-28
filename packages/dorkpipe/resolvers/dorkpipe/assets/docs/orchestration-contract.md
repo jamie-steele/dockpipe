@@ -20,7 +20,7 @@ task graph.
 ## Artifact root
 
 ```text
-bin/.dockpipe/packages/dorkpipe/orchestrate/<workflow-name>/
+bin/.dockpipe/workflows/<workflow-name>/dorkpipe/orchestrate/
 ```
 
 ## Core files

@@ -15,23 +15,26 @@ fi
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
-mkdir -p "$tmp/bin/.dockpipe/ci-raw"
-echo '{"Issues":[],"Stats":{"found":0},"GosecVersion":"fixture"}' >"$tmp/bin/.dockpipe/ci-raw/gosec.json"
-echo '{"config":{"scanner_version":"fixture"},"vulns":[]}' >"$tmp/bin/.dockpipe/ci-raw/govulncheck.json"
-mkdir -p "$tmp/bin/.dockpipe/ci-analysis/raw"
-echo 'stale-findings' >"$tmp/bin/.dockpipe/ci-analysis/findings.json"
-echo 'stale-summary' >"$tmp/bin/.dockpipe/ci-analysis/SUMMARY.md"
-echo 'stale-raw' >"$tmp/bin/.dockpipe/ci-analysis/raw/gosec.json"
+ci_root="$tmp/ci-artifacts"
+mkdir -p "$ci_root/ci-raw"
+echo '{"Issues":[],"Stats":{"found":0},"GosecVersion":"fixture"}' >"$ci_root/ci-raw/gosec.json"
+echo '{"config":{"scanner_version":"fixture"},"vulns":[]}' >"$ci_root/ci-raw/govulncheck.json"
+mkdir -p "$ci_root/ci-analysis/raw"
+echo 'stale-findings' >"$ci_root/ci-analysis/findings.json"
+echo 'stale-summary' >"$ci_root/ci-analysis/SUMMARY.md"
+echo 'stale-raw' >"$ci_root/ci-analysis/raw/gosec.json"
 
 export DOCKPIPE_WORKDIR="$tmp"
+export DOCKPIPE_CI_RAW_DIR="$ci_root/ci-raw"
+export DOCKPIPE_CI_ANALYSIS_DIR="$ci_root/ci-analysis"
 export DOCKPIPE_SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
 bash "$DOCKPIPE_SCRIPT_DIR/normalize-ci-scans.sh"
 
-if ! jq -e '.schema_version == "1.0" and (.findings | type == "array")' "$tmp/bin/.dockpipe/ci-analysis/findings.json" >/dev/null; then
+if ! jq -e '.schema_version == "1.0" and (.findings | type == "array")' "$ci_root/ci-analysis/findings.json" >/dev/null; then
 	echo "test_normalize_ci_scans: findings.json shape unexpected" >&2
 	exit 1
 fi
-if ! jq -e '.Issues | type == "array"' "$tmp/bin/.dockpipe/ci-analysis/raw/gosec.json" >/dev/null; then
+if ! jq -e '.Issues | type == "array"' "$ci_root/ci-analysis/raw/gosec.json" >/dev/null; then
 	echo "test_normalize_ci_scans: raw/gosec.json was not refreshed" >&2
 	exit 1
 fi

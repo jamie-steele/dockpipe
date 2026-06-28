@@ -356,6 +356,12 @@ func Run(argv []string, baseEnviron []string) error {
 	if err := applyDockpipeStateEnv(envMap, effWd, workflowStateScopeHint(opts, wfRoot, wf, rtName, rsName)); err != nil {
 		return err
 	}
+	if err := applyCIArtifactEnv(envMap, effWd); err != nil {
+		return err
+	}
+	if err := applyWorkflowArtifactEnv(envMap, effWd, workflowStateScopeHint(opts, wfRoot, wf, rtName, rsName)); err != nil {
+		return err
+	}
 	profileLabel := ProfileLabelForEnv(rtName, rsName)
 	if rtName != "" {
 		if err := ValidateRuntimeAllowlist(wf, rtName); err != nil {

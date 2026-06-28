@@ -20,15 +20,19 @@ steps:
     isolate: golang:1.25.11-bookworm
     cmd: |-
       bash -c 'set -euo pipefail
+      export DOCKPIPE_WORKDIR="${DOCKPIPE_WORKDIR:-$(pwd)}"
+      source src/core/assets/scripts/lib/dockpipe-sdk.sh
+      DEMO_DIR="$(dockpipe_sdk path workflow test demo)"
+      DEMO_FILE="$DEMO_DIR/main.go"
       echo "[demo] ================================================================="
       echo "[demo] Isolation — each step runs in a fresh container; your repo is mounted"
       echo "[demo] at /work with your UID/GID mapped. Containers are removed after each step."
       echo "[demo] ================================================================="
-      mkdir -p bin/.dockpipe/demo
-      printf "%s\n" "package main" "func main() {}" > bin/.dockpipe/demo/main.go
-      SHA=$(sha256sum bin/.dockpipe/demo/main.go | cut -b1-64)
+      mkdir -p "$DEMO_DIR"
+      printf "%s\n" "package main" "func main() {}" > "$DEMO_FILE"
+      SHA=$(sha256sum "$DEMO_FILE" | cut -b1-64)
       mkdir -p bin/.dockpipe
-      printf "%s\n" "ARTIFACT_SHA256=$SHA" "DEMO_FILE=bin/.dockpipe/demo/main.go" "DEMO_STAGE=prepare" > bin/.dockpipe/outputs.env
+      printf "%s\n" "ARTIFACT_SHA256=$SHA" "DEMO_FILE=$DEMO_FILE" "DEMO_STAGE=prepare" > bin/.dockpipe/outputs.env
       echo "[demo] step 1/3 prepare — wrote demo artifact + checksum for next step"'
 
   - id: scan

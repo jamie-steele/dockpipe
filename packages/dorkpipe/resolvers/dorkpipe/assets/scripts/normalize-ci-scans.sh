@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Normalize gosec + govulncheck JSON into bin/.dockpipe/ci-analysis/ for DorkPipe downstream reasoning.
+# Normalize gosec + govulncheck JSON into DorkPipe CI artifact state.
+# for DorkPipe downstream reasoning.
 # Thin wrapper around `dorkpipe ci normalize-scans`.
 set -euo pipefail
 

@@ -42,7 +42,7 @@ The **shell scripts** (`packages/pipeon/resolvers/pipeon/bin/pipeon`, bundle + o
 At session start and when the user’s question is **repo-scoped**, the runtime should **attempt** to discover and attach (in order of relevance):
 
 1. **Repository facts** — e.g. layout, recent changes, key paths (from self-analysis or lightweight indexing if present).
-2. **CI / scan signals** — e.g. normalized findings under `.dockpipe/ci-analysis/` when available.
+2. **CI / scan signals** — e.g. normalized findings from DorkPipe CI artifact state when available.
 3. **Structured user guidance** — e.g. `.dockpipe/analysis/insights.json` (accepted/pending items, scoped by path or topic).
 4. **Workflow / orchestration metadata** — e.g. `bin/.dockpipe/packages/dorkpipe/run.json`, metrics tails, when relevant to “why did X happen” or “what ran last.”
 5. **Handoff text** — optional short blocks (e.g. paste prompts) only when they add signal density, not as a second UI.
@@ -70,7 +70,7 @@ At session start and when the user’s question is **repo-scoped**, the runtime 
 
 Short prefix or footnote (pick one style per product skin; keep under two lines):
 
-- *“Using: repo summary (`bin/.dockpipe/packages/dorkpipe/self-analysis`), CI findings (`.dockpipe/ci-analysis`, 12 items), 3 user insights (accepted).”*
+- *“Using: DorkPipe self-analysis artifacts, CI findings (12 items), 3 user insights (accepted).”*
 - *“Context: local analysis bundle + 2 insight records; CI bundle not present.”*
 
 ### 4.2 When analysis is **stale**
@@ -143,7 +143,7 @@ From **signals**: 3 TODOs in `signals_todo.txt`, and CI is clean. **User insight
 
 **System:**  
 **Findings on disk** are from an older commit (`abc1234` vs current `HEAD`). I’ll summarize those 4 items, but treat them as **possibly stale**.  
-**Optional:** regenerate `.dockpipe/ci-analysis/` locally, then ask again for a scan-aligned answer.
+**Optional:** regenerate the DorkPipe CI artifact state locally, then ask again for a scan-aligned answer.
 
 ### Flow D — No analysis
 
@@ -177,7 +177,7 @@ I won’t run destructive Docker commands for you. If that’s what you want, ru
 This repo already separates:
 
 - **Facts** (e.g. `bin/.dockpipe/packages/dorkpipe/self-analysis/`)
-- **Scans** (e.g. `.dockpipe/ci-analysis/findings.json`)
+- **Scans** (normalized DorkPipe CI findings)
 - **User guidance** (e.g. `.dockpipe/analysis/insights.json`)
 
 Pipeon should **treat those as distinct lanes** in prompts and in user-facing disclosure, matching the contracts in **`../../docs/compliance-ai-handoff.md`**, **`../../docs/dorkpipe-ci-signals.md`**, and **`../../docs/user-insight-queue.md`**.

@@ -35,6 +35,7 @@ const DOCKPIPE_TOP_LEVEL_KEYS = [
 const DOCKPIPE_STEP_KEYS = [
   "id",
   "kind",
+  "cwd",
   "cmd",
   "command",
   "run",
@@ -90,6 +91,7 @@ const TOP_LEVEL_KEY_DETAILS = {
 const STEP_KEY_DETAILS = {
   id: "Stable step label used in logs and outputs.",
   kind: "Step kind. Use host for host actions and container for normal isolated execution.",
+  cwd: "Working directory for this step. Use artifacts to run from generated workflow state while keeping source mounted and available.",
   cmd: "Shell command line for this step. Runs inside the container by default, or on the host for kind: host steps.",
   command: "Alias for cmd.",
   run: "Command or script list to execute for this step.",

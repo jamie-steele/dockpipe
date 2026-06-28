@@ -277,13 +277,12 @@ func runStepHostIsolate(o *runStepsOpts, step domain.Step, dockerEnv map[string]
 	if strings.TrimSpace(o.envMap["DOCKPIPE_WORKDIR"]) != "" {
 		fmt.Fprintf(os.Stderr, "[dockpipe] Mount /work ← %s\n", o.envMap["DOCKPIPE_WORKDIR"])
 	}
-	wd := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir, mustGetwd())
 	cmdline := stepEffectiveCommand(step, o.cliArgs, stepIndex, len(o.wf.Steps))
 	hostEnv := hostDelegateEnvSlice(
 		envSliceWithScriptContext(o.envSlice, scriptAbs),
 		profileEnv,
 		cmdline,
-		filepath.Join(wd, step.OutputsPath()),
+		stepOutputsAbsPath(o, step, o.envMap),
 	)
 	if err := runHostScriptFn(scriptAbs, hostEnv); err != nil {
 		return err
@@ -315,11 +314,7 @@ func finalizeResolverStepAfterHost(o *runStepsOpts, step domain.Step, dockerEnv 
 			}
 		}
 	}
-	wd := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
-	if wd == "" {
-		wd, _ = getwdFn()
-	}
-	applyOutputsFile(filepath.Join(wd, step.OutputsPath()), o.envMap, dockerEnv, o.locked, nil, "")
+	applyOutputsFile(stepOutputsAbsPath(o, step, o.envMap), o.envMap, dockerEnv, o.locked, nil, "")
 	return nil
 }
 
@@ -384,11 +379,7 @@ func runStepPackageWorkflow(o *runStepsOpts, i, n int, step domain.Step, dockerE
 	}); err != nil {
 		return err
 	}
-	wd := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
-	if wd == "" {
-		wd, _ = getwdFn()
-	}
-	applyOutputsFile(filepath.Join(wd, step.OutputsPath()), o.envMap, dockerEnv, o.locked, nil, "")
+	applyOutputsFile(stepOutputsAbsPath(o, step, o.envMap), o.envMap, dockerEnv, o.locked, nil, "")
 	return nil
 }
 
@@ -425,8 +416,7 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 				return err
 			}
 		}
-		wd := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir, mustGetwd())
-		applyOutputsFile(filepath.Join(wd, step.OutputsPath()), o.envMap, dockerEnv, o.locked, nil, "")
+		applyOutputsFile(stepOutputsAbsPath(o, step, o.envMap), o.envMap, dockerEnv, o.locked, nil, "")
 		return nil
 	}
 
@@ -500,11 +490,7 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 		fmt.Fprintf(os.Stderr, "[dockpipe] Step %d failed with exit code %d\n", i+1, rc)
 		os.Exit(rc)
 	}
-	wd := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
-	if wd == "" {
-		wd, _ = getwdFn()
-	}
-	applyOutputsFile(filepath.Join(wd, step.OutputsPath()), o.envMap, dockerEnv, o.locked, nil, "")
+	applyOutputsFile(stepOutputsAbsPath(o, step, o.envMap), o.envMap, dockerEnv, o.locked, nil, "")
 	return nil
 }
 
@@ -553,12 +539,8 @@ func runParallelBatch(o *runStepsOpts, from, to, n int, dockerEnv map[string]str
 	mergeLog := newParallelMergeState()
 	for idx := from; idx < to; idx++ {
 		step := o.wf.Steps[idx]
-		wd := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
-		if wd == "" {
-			wd, _ = getwdFn()
-		}
 		src := step.DisplayName(idx)
-		applyOutputsFile(filepath.Join(wd, step.OutputsPath()), o.envMap, dockerEnv, o.locked, mergeLog, src)
+		applyOutputsFile(stepOutputsAbsPath(o, step, o.envMap), o.envMap, dockerEnv, o.locked, mergeLog, src)
 	}
 	o.envSlice = domain.EnvMapToSlice(o.envMap)
 	return nil
@@ -805,6 +787,9 @@ func applyStepRuntimeContext(step domain.Step, stepIndex int, envMap, dockerEnv 
 
 func applyStepEnvOverrides(o *runStepsOpts, step domain.Step, stepIndex int, envMap, dockerEnv map[string]string) error {
 	applyStepRuntimeContext(step, stepIndex, envMap, dockerEnv, o.locked)
+	if err := applyStepCWDEnv(o, step, envMap, dockerEnv); err != nil {
+		return err
+	}
 	inputsConfigPath := strings.TrimSpace(o.wfConfig)
 	if inputsConfigPath == "" && strings.TrimSpace(o.wfRoot) != "" {
 		inputsConfigPath = filepath.Join(o.wfRoot, "config.yml")
@@ -842,6 +827,58 @@ func applyStepEnvOverrides(o *runStepsOpts, step domain.Step, stepIndex int, env
 		}
 	}
 	return nil
+}
+
+func applyStepCWDEnv(o *runStepsOpts, step domain.Step, envMap, dockerEnv map[string]string) error {
+	sourceRoot := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], runStepsWorkdir(o), o.projectRoot, o.repoRoot, mustGetwd())
+	if strings.TrimSpace(sourceRoot) == "" {
+		return nil
+	}
+	if err := applyWorkflowArtifactEnv(envMap, sourceRoot, firstNonEmpty(envMap["DOCKPIPE_WORKFLOW_NAME"], workflowStateScopeHint(o.opts, o.wfRoot, o.wf, "", ""))); err != nil {
+		return err
+	}
+	sourceRoot = envMap["DOCKPIPE_SOURCE_ROOT"]
+	artifactRoot := envMap["DOCKPIPE_ARTIFACT_ROOT"]
+	stepCWD := sourceRoot
+	if step.CWDMode() == "artifacts" {
+		stepCWD = artifactRoot
+		if err := os.MkdirAll(stepCWD, 0o755); err != nil {
+			return err
+		}
+	}
+	for k, v := range map[string]string{
+		"DOCKPIPE_SOURCE_ROOT":   sourceRoot,
+		"DOCKPIPE_ARTIFACT_ROOT": artifactRoot,
+		"DOCKPIPE_STEP_CWD":      stepCWD,
+	} {
+		if !o.locked[k] {
+			envMap[k] = v
+			dockerEnv[k] = v
+		}
+	}
+	return nil
+}
+
+func stepOutputsAbsPath(o *runStepsOpts, step domain.Step, envMap map[string]string) string {
+	base := firstNonEmpty(envMap["DOCKPIPE_STEP_CWD"], envMap["DOCKPIPE_WORKDIR"], runStepsWorkdir(o))
+	if base == "" {
+		base = mustGetwd()
+	}
+	return filepath.Join(base, step.OutputsPath())
+}
+
+func runStepsWorkdir(o *runStepsOpts) string {
+	if o == nil || o.opts == nil {
+		return ""
+	}
+	return o.opts.Workdir
+}
+
+func runStepsWorkPath(o *runStepsOpts) string {
+	if o == nil || o.opts == nil {
+		return ""
+	}
+	return o.opts.WorkPath
 }
 
 func stepVMEnvOverrides(o *runStepsOpts, step domain.Step) map[string]string {
@@ -1127,7 +1164,16 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 		}
 	}
 
-	workHost := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
+	workHost := firstNonEmpty(envMap["DOCKPIPE_SOURCE_ROOT"], envMap["DOCKPIPE_WORKDIR"], runStepsWorkdir(o))
+	workPath := strings.TrimSpace(runStepsWorkPath(o))
+	if strings.TrimSpace(envMap["DOCKPIPE_STEP_CWD"]) != "" && strings.TrimSpace(envMap["DOCKPIPE_STEP_CWD"]) != strings.TrimSpace(workHost) {
+		if rel, relErr := filepath.Rel(workHost, envMap["DOCKPIPE_STEP_CWD"]); relErr == nil && rel != "." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && rel != ".." {
+			workPath = filepath.ToSlash(rel)
+		} else {
+			workHost = envMap["DOCKPIPE_STEP_CWD"]
+			workPath = ""
+		}
+	}
 	dockerForRun := maps.Clone(dockerEnv)
 	mergeResolverAuthEnvFromHost(dockerForRun, envMap, ra)
 	mergePolicyProxyEnvFromHost(dockerForRun, envMap)
@@ -1143,7 +1189,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 	runOpts = infrastructure.RunOpts{
 		Image:         image,
 		WorkdirHost:   workHost,
-		WorkPath:      o.opts.WorkPath,
+		WorkPath:      workPath,
 		ActionPath:    actionPath,
 		ExtraMounts:   o.opts.ExtraMounts,
 		NetworkMode:   networkMode,

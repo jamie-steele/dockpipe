@@ -51,6 +51,9 @@ func SourceHostScript(scriptPath string, env []string) (map[string]string, error
 	}
 	cmd := exec.Command(bashExe, wrapperForBash)
 	cmd.Env = upsertEnv(env, "DOCKPIPE_HOST_BASH_BIN", bashExe)
+	if cwd := strings.TrimSpace(envGet(cmd.Env, "DOCKPIPE_STEP_CWD")); cwd != "" {
+		cmd.Dir = cwd
+	}
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("pre-script %s: %w\n%s", scriptPath, err, out)
@@ -84,6 +87,9 @@ func RunHostScript(scriptPath string, env []string) error {
 	env = upsertEnv(env, "DOCKPIPE_HOST_BASH_BIN", bashExe)
 	cmd := exec.Command(bashExe, bashPath)
 	cmd.Env = env
+	if cwd := strings.TrimSpace(envGet(cmd.Env, "DOCKPIPE_STEP_CWD")); cwd != "" {
+		cmd.Dir = cwd
+	}
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

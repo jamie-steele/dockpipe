@@ -57,7 +57,7 @@ Its useful primitive is:
 
 The contract lives under the DorkPipe artifact root:
 
-`bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/`
+`bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate/`
 
 Resolvers still specialize execution, but the core enabling primitive is the declared graph and its
 typed artifacts, not generic "agent" language.

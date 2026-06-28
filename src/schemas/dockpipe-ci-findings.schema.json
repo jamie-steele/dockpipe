@@ -36,7 +36,7 @@
     },
     "raw_paths": {
       "type": "object",
-      "description": "Relative paths under .dockpipe/ci-analysis/raw/ for traceability.",
+      "description": "Relative paths under the normalized CI analysis raw/ directory for traceability.",
       "additionalProperties": { "type": "string" }
     }
   },

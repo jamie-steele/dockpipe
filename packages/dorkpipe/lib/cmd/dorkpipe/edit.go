@@ -759,8 +759,7 @@ func collectEditCandidates(ctx context.Context, root, activeFile, message, artif
 
 func readEditContextBundle(root string) (string, string) {
 	candidates := []string{
-		filepath.Join(root, "bin", ".dockpipe", "pipeon-context.md"),
-		filepath.Join(root, ".dockpipe", "pipeon-context.md"),
+		filepath.Join(root, "bin", ".dockpipe", "packages", "pipeon", "pipeon-context.md"),
 	}
 	for _, p := range candidates {
 		b, err := os.ReadFile(p)

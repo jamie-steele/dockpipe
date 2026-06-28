@@ -40,19 +40,19 @@ promoting docs.
 Artifacts are written under:
 
 ```text
-bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/
+bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize/
 ```
 
 Each run snapshots the previous optimizer proposal under:
 
 ```text
-bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/
+bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize/history/
 ```
 
 Repeated-run snapshots are written under:
 
 ```text
-bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/iterations/
+bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize/iterations/
 ```
 
 That handoff is included in the next Codex decision so repeated runs can build on earlier proposals
@@ -61,7 +61,7 @@ instead of starting cold.
 The proposed patch is:
 
 ```text
-bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/proposed.patch
+bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize/proposed.patch
 ```
 
 The workflow may propose changes only inside the optimizer workflow, the docs orchestration workflow,

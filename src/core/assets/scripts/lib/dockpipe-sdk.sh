@@ -49,13 +49,20 @@ dockpipe_resolve_dockpipe_bin() {
 
 dockpipe_sdk_refresh() {
   local root="${1:-}"
-  local resolved_root resolved_dockpipe resolved_workflow_name resolved_script_dir resolved_assets_dir resolved_package_root
+  local resolved_root resolved_dockpipe resolved_workflow_name resolved_script_dir resolved_assets_dir resolved_package_root resolved_state_dir resolved_package_id resolved_package_state_dir
   resolved_root="$(dockpipe_repo_root "$root")"
   resolved_dockpipe="$(dockpipe_resolve_dockpipe_bin "$resolved_root" 2>/dev/null || true)"
   resolved_workflow_name="${DOCKPIPE_WORKFLOW_NAME:-}"
   resolved_script_dir="$(dockpipe_script_dir)"
   resolved_assets_dir="$(dockpipe_find_assets_dir "$resolved_script_dir")"
   resolved_package_root="$(dockpipe_find_package_root "$resolved_script_dir")"
+  resolved_state_dir="${DOCKPIPE_STATE_DIR:-$resolved_root/bin/.dockpipe}"
+  resolved_package_id="${DOCKPIPE_PACKAGE_ID:-}"
+  if [[ -z "$resolved_package_id" && -n "$resolved_package_root" ]]; then
+    resolved_package_id="$(basename "$resolved_package_root")"
+  fi
+  resolved_package_id="$(__dockpipe_sdk_sanitize_scope "${resolved_package_id:-default}")"
+  resolved_package_state_dir="${DOCKPIPE_PACKAGE_STATE_DIR:-$resolved_state_dir/packages/$resolved_package_id}"
 
   declare -gA dockpipe
   dockpipe=()
@@ -65,6 +72,9 @@ dockpipe_sdk_refresh() {
   dockpipe[script_dir]="$resolved_script_dir"
   dockpipe[assets_dir]="$resolved_assets_dir"
   dockpipe[package_root]="$resolved_package_root"
+  dockpipe[state_dir]="$resolved_state_dir"
+  dockpipe[package_id]="$resolved_package_id"
+  dockpipe[package_state_dir]="$resolved_package_state_dir"
 
   export DOCKPIPE_SDK_ROOT="$resolved_root"
   export DOCKPIPE_WORKDIR="$resolved_root"
@@ -83,6 +93,16 @@ dockpipe_sdk_refresh() {
   if [[ -n "$resolved_package_root" ]]; then
     export DOCKPIPE_PACKAGE_ROOT="$resolved_package_root"
   fi
+  if [[ -n "$resolved_state_dir" ]]; then
+    export DOCKPIPE_STATE_DIR="$resolved_state_dir"
+  fi
+  if [[ -n "$resolved_package_id" ]]; then
+    export DOCKPIPE_PACKAGE_ID="$resolved_package_id"
+  fi
+  if [[ -n "$resolved_package_state_dir" ]]; then
+    export DOCKPIPE_PACKAGE_STATE_DIR="$resolved_package_state_dir"
+  fi
+  dockpipe_sdk_apply_artifact_bindings
 }
 
 dockpipe_script_dir() {
@@ -132,7 +152,7 @@ dockpipe_find_package_root() {
 dockpipe_sdk_get() {
   local field="${1:-}"
   case "$field" in
-    workdir|dockpipe_bin|workflow_name|script_dir|package_root|assets_dir)
+    workdir|dockpipe_bin|workflow_name|script_dir|package_root|assets_dir|state_dir|package_id|package_state_dir)
       printf '%s\n' "${dockpipe[$field]:-}"
       ;;
     *)
@@ -140,6 +160,178 @@ dockpipe_sdk_get() {
       return 1
       ;;
   esac
+}
+
+__dockpipe_sdk_sanitize_scope() {
+  local scope="${1:-}"
+  scope="${scope,,}"
+  local out="" ch last_dash=0 i
+  for ((i = 0; i < ${#scope}; i++)); do
+    ch="${scope:i:1}"
+    case "$ch" in
+      [a-z0-9])
+        out+="$ch"
+        last_dash=0
+        ;;
+      [._/\ -])
+        if [[ "$last_dash" -eq 0 ]]; then
+          out+="-"
+          last_dash=1
+        fi
+        ;;
+      *)
+        if [[ "$last_dash" -eq 0 ]]; then
+          out+="-"
+          last_dash=1
+        fi
+        ;;
+    esac
+  done
+  out="${out#-}"
+  out="${out%-}"
+  printf '%s\n' "${out:-default}"
+}
+
+__dockpipe_sdk_sanitize_workflow_scope() {
+  local scope="${1:-}"
+  local out="" ch last_dash=0 i
+  for ((i = 0; i < ${#scope}; i++)); do
+    ch="${scope:i:1}"
+    case "$ch" in
+      [A-Za-z0-9._-])
+        out+="$ch"
+        last_dash=0
+        ;;
+      [/\ ])
+        if [[ "$last_dash" -eq 0 ]]; then
+          out+="-"
+          last_dash=1
+        fi
+        ;;
+      *)
+        if [[ "$last_dash" -eq 0 ]]; then
+          out+="-"
+          last_dash=1
+        fi
+        ;;
+    esac
+  done
+  out="${out#-}"
+  out="${out%-}"
+  printf '%s\n' "${out:-default}"
+}
+
+__dockpipe_sdk_join_path() {
+  local base="${1:?base path}"
+  shift || true
+  local part
+  printf '%s' "$base"
+  for part in "$@"; do
+    [[ -n "$part" ]] || continue
+    printf '/%s' "${part#/}"
+  done
+  printf '\n'
+}
+
+dockpipe_sdk_state_dir() {
+  if [[ -n "${DOCKPIPE_STATE_DIR:-}" ]]; then
+    printf '%s\n' "$DOCKPIPE_STATE_DIR"
+    return 0
+  fi
+  printf '%s/bin/.dockpipe\n' "$(dockpipe_sdk_get workdir)"
+}
+
+dockpipe_sdk_build_dir() {
+  __dockpipe_sdk_join_path "$(dockpipe_sdk_state_dir)/build" "$@"
+}
+
+dockpipe_sdk_package_state_dir() {
+  local scope="${1:-}"
+  shift || true
+  if [[ -z "$scope" && -n "${DOCKPIPE_PACKAGE_STATE_DIR:-}" ]]; then
+    __dockpipe_sdk_join_path "$DOCKPIPE_PACKAGE_STATE_DIR" "$@"
+    return 0
+  fi
+  if [[ -z "$scope" ]]; then
+    scope="${DOCKPIPE_PACKAGE_ID:-${dockpipe[package_id]:-}}"
+  fi
+  if [[ -z "$scope" && -n "${dockpipe[package_root]:-}" ]]; then
+    scope="$(basename "${dockpipe[package_root]}")"
+  fi
+  scope="$(__dockpipe_sdk_sanitize_scope "${scope:-default}")"
+  __dockpipe_sdk_join_path "$(dockpipe_sdk_state_dir)/packages/$scope" "$@"
+}
+
+dockpipe_sdk_workflow_state_dir() {
+  local scope="${1:-}"
+  shift || true
+  if [[ -z "$scope" ]]; then
+    scope="${DOCKPIPE_WORKFLOW_NAME:-${dockpipe[workflow_name]:-default}}"
+  fi
+  scope="$(__dockpipe_sdk_sanitize_workflow_scope "${scope:-default}")"
+  __dockpipe_sdk_join_path "$(dockpipe_sdk_state_dir)/workflows/$scope" "$@"
+}
+
+dockpipe_sdk_ci_artifact_dir() {
+  local kind="${1:-}"
+  local binding="${2:-${DOCKPIPE_CI_ARTIFACT_SCOPE:-}}"
+  if [[ -z "$binding" && -n "${DOCKPIPE_WORKFLOW_NAME:-${dockpipe[workflow_name]:-}}" ]]; then
+    binding="workflow"
+  fi
+  local env_name="" package_suffix="" workflow_suffix=""
+  case "$kind" in
+    raw)
+      env_name="DOCKPIPE_CI_RAW_DIR"
+      package_suffix="raw"
+      workflow_suffix="ci-raw"
+      ;;
+    analysis)
+      env_name="DOCKPIPE_CI_ANALYSIS_DIR"
+      package_suffix="analysis"
+      workflow_suffix="ci-analysis"
+      ;;
+    *)
+      echo "dockpipe sdk: unknown ci artifact kind ${kind:-<empty>}" >&2
+      return 1
+      ;;
+  esac
+
+  local configured="${!env_name:-}"
+  if [[ -n "$configured" ]]; then
+    printf '%s\n' "$configured"
+    return 0
+  fi
+
+  case "$binding" in
+    workflow)
+      dockpipe_sdk_workflow_state_dir "${DOCKPIPE_WORKFLOW_NAME:-${dockpipe[workflow_name]:-default}}" dorkpipe "$workflow_suffix"
+      ;;
+    workflow:*)
+      dockpipe_sdk_workflow_state_dir "${binding#workflow:}" dorkpipe "$workflow_suffix"
+      ;;
+    package|package:dorkpipe|"")
+      dockpipe_sdk_package_state_dir dorkpipe ci "$package_suffix"
+      ;;
+    package:*)
+      dockpipe_sdk_package_state_dir "${binding#package:}" ci "$package_suffix"
+      ;;
+    *)
+      dockpipe_sdk_workflow_state_dir "$binding" dorkpipe "$workflow_suffix"
+      ;;
+  esac
+}
+
+dockpipe_sdk_bind_ci_artifacts() {
+  local binding="${1:-${DOCKPIPE_CI_ARTIFACT_SCOPE:-}}"
+  export DOCKPIPE_CI_RAW_DIR
+  export DOCKPIPE_CI_ANALYSIS_DIR
+  DOCKPIPE_CI_RAW_DIR="$(dockpipe_sdk_ci_artifact_dir raw "$binding")"
+  DOCKPIPE_CI_ANALYSIS_DIR="$(dockpipe_sdk_ci_artifact_dir analysis "$binding")"
+}
+
+dockpipe_sdk_apply_artifact_bindings() {
+  export DOCKPIPE_CI_RAW_DIR="${DOCKPIPE_CI_RAW_DIR:-$(dockpipe_sdk_ci_artifact_dir raw)}"
+  export DOCKPIPE_CI_ANALYSIS_DIR="${DOCKPIPE_CI_ANALYSIS_DIR:-$(dockpipe_sdk_ci_artifact_dir analysis)}"
 }
 
 dockpipe_workflow_name() {
@@ -734,7 +926,9 @@ dockpipe_sdk() {
       cat <<'EOF'
 dockpipe_sdk actions:
   init-script
-  get <workdir|workflow_name|script_dir|package_root|assets_dir|dockpipe_bin>
+  get <workdir|workflow_name|script_dir|package_root|assets_dir|dockpipe_bin|state_dir|package_id|package_state_dir>
+  path <state|build|package|workflow|ci> [scope] [suffix...]
+  ci <raw|analysis> [suffix...]
   cd-workdir
   die <message...>
   prompt <confirm|choice|input|file|resource> [options]
@@ -763,6 +957,53 @@ EOF
       ;;
     get)
       dockpipe_sdk_get "${1:-}"
+      ;;
+    path)
+      case "${1:-}" in
+        state)
+          shift || true
+          __dockpipe_sdk_join_path "$(dockpipe_sdk_state_dir)" "$@"
+          ;;
+        build)
+          shift || true
+          dockpipe_sdk_build_dir "$@"
+          ;;
+        package)
+          shift || true
+          dockpipe_sdk_package_state_dir "$@"
+          ;;
+        workflow)
+          shift || true
+          dockpipe_sdk_workflow_state_dir "$@"
+          ;;
+        ci)
+          shift || true
+          local kind="${1:-}"
+          shift || true
+          __dockpipe_sdk_join_path "$(dockpipe_sdk_ci_artifact_dir "$kind")" "$@"
+          ;;
+        *)
+          echo "dockpipe sdk: unknown path target ${1:-<empty>}" >&2
+          return 1
+          ;;
+      esac
+      ;;
+    ci)
+      local kind="${1:-}"
+      shift || true
+      __dockpipe_sdk_join_path "$(dockpipe_sdk_ci_artifact_dir "$kind")" "$@"
+      ;;
+    bind)
+      case "${1:-}" in
+        ci-artifacts)
+          shift || true
+          dockpipe_sdk_bind_ci_artifacts "${1:-}"
+          ;;
+        *)
+          echo "dockpipe sdk: unknown bind target ${1:-<empty>}" >&2
+          return 1
+          ;;
+      esac
       ;;
     cd-workdir)
       cd "$(dockpipe_sdk_get workdir)"

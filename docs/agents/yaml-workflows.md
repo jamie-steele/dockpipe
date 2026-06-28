@@ -15,6 +15,7 @@ Read when editing workflow YAML, schema, runner semantics, or examples.
 | Field | Rule |
 | --- | --- |
 | `kind: host` | Runs on host. Do not set runtime/resolver/isolate on host steps. |
+| `cwd` | Step working directory. Use `artifacts` when relative generated outputs should land under workflow state, not source control. |
 | `runtime` | Execution substrate profile. |
 | `resolver` | Tool/profile selection. |
 | `isolate` | Low-level image/template override. Prefer runtime/resolver first. |

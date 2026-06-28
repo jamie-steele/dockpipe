@@ -21,7 +21,7 @@ decomposition.
 
 1. Read the orchestration contract at `packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md`.
 2. Check the current workflow wrapper at `workflows/agent/docs.orchestrate/`.
-3. Inspect or generate artifacts under `bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/`.
+3. Inspect or generate artifacts under `bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate/`.
 4. Treat `codex`, `claude`, and `ollama` as worker specializations under the same contract.
 5. Prefer declarative `steps[].agent` YAML over workflow-specific shell scripts.
 6. Change the shared contract scripts only when the primitive itself needs a new generic behavior.

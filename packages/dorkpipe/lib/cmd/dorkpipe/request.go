@@ -15,6 +15,7 @@ import (
 
 	"dorkpipe.orchestrator/modelclient"
 	"dorkpipe.orchestrator/reasoning"
+	"dorkpipe.orchestrator/statepaths"
 )
 
 type routeRequest struct {
@@ -2886,11 +2887,11 @@ func wantsGuidanceSignals(message string) bool {
 }
 
 func summarizeScanSignals(root string) string {
-	for _, rel := range []string{
-		filepath.Join("bin", ".dockpipe", "ci-analysis", "findings.json"),
-		filepath.Join(".dockpipe", "ci-analysis", "findings.json"),
-	} {
-		abs := filepath.Join(root, rel)
+	findingsPath, err := statepaths.PackageCIFindingsPath(root)
+	if err != nil {
+		return ""
+	}
+	for _, abs := range []string{findingsPath} {
 		b, err := os.ReadFile(abs)
 		if err != nil {
 			continue
@@ -2912,7 +2913,7 @@ func summarizeScanSignals(root string) string {
 			continue
 		}
 		lines := []string{
-			fmt.Sprintf("- file: %s", filepath.ToSlash(rel)),
+			fmt.Sprintf("- file: %s", filepath.ToSlash(relativeTo(root, abs))),
 			fmt.Sprintf("- findings: %d", len(parsed.Findings)),
 		}
 		if strings.TrimSpace(parsed.Provenance.Commit) != "" {

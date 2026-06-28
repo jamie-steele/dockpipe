@@ -9,8 +9,8 @@ dorkpipe_orchestrate_init
 
 action="${DORKPIPE_OPTIMIZER_ACTION:-prepare}"
 target_workflow="${DORKPIPE_OPTIMIZER_TARGET_WORKFLOW:-docs.orchestrate}"
-target_root="${DORKPIPE_OPTIMIZER_TARGET_ROOT:-bin/.dockpipe/packages/dorkpipe/orchestrate/${target_workflow}}"
-optimizer_root="${DORKPIPE_OPTIMIZER_ROOT:-bin/.dockpipe/packages/dorkpipe/optimize/${target_workflow}}"
+target_root="${DORKPIPE_OPTIMIZER_TARGET_ROOT:-$(dockpipe_sdk path workflow "${target_workflow}" dorkpipe orchestrate)}"
+optimizer_root="${DORKPIPE_OPTIMIZER_ROOT:-$(dockpipe_sdk path workflow "${target_workflow}" dorkpipe optimize)}"
 
 resolve_path() {
   local path="${1:?path}"
@@ -40,7 +40,7 @@ if [[ "${action}" == "iterate" ]]; then
   child_package="${DORKPIPE_OPTIMIZER_CHILD_PACKAGE:-}"
   child_workflow="${DORKPIPE_OPTIMIZER_CHILD_WORKFLOW:-docs.optimize-orchestrate}"
   target_package="${DORKPIPE_OPTIMIZER_TARGET_PACKAGE:-}"
-  iteration_root="${DORKPIPE_OPTIMIZER_ITERATION_ROOT:-bin/.dockpipe/packages/dorkpipe/optimize/${target_workflow}/iterations}"
+  iteration_root="${DORKPIPE_OPTIMIZER_ITERATION_ROOT:-$(dockpipe_sdk path workflow "${target_workflow}" dorkpipe optimize iterations)}"
   stop_on_invalid_patch="${DORKPIPE_OPTIMIZER_STOP_ON_INVALID_PATCH:-1}"
   refresh_target_after_apply="${DORKPIPE_OPTIMIZER_REFRESH_TARGET_AFTER_APPLY:-0}"
   case "${iterations}" in

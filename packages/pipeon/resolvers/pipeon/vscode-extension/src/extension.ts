@@ -1419,8 +1419,7 @@ function compactUserStudioStateForPersistence(chatStore) {
 
 async function resolveContextBundlePath(root) {
   const candidates = [
-    path.join(root, "bin", ".dockpipe", "pipeon-context.md"),
-    path.join(root, ".dockpipe", "pipeon-context.md"),
+    path.join(root, "bin", ".dockpipe", "packages", "pipeon", "pipeon-context.md"),
   ];
   for (const p of candidates) {
     try {

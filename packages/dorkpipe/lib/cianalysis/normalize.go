@@ -126,8 +126,14 @@ func Normalize(workdir string, env map[string]string) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	rawDir := statepaths.CIRawDir(root)
-	outDir := statepaths.CIAnalysisDir(root)
+	rawDir, err := ciRawDir(root, env)
+	if err != nil {
+		return Result{}, err
+	}
+	outDir, err := ciAnalysisDir(root, env)
+	if err != nil {
+		return Result{}, err
+	}
 	rawOutDir := filepath.Join(outDir, "raw")
 	gosecPath := filepath.Join(rawDir, "gosec.json")
 	govPath := filepath.Join(rawDir, "govulncheck.json")
@@ -237,8 +243,8 @@ func Normalize(workdir string, env map[string]string) (Result, error) {
 		findings = append(findings, f)
 	}
 
-	findingsPath := statepaths.CIFindingsPath(root)
-	summaryPath := statepaths.CISummaryPath(root)
+	findingsPath := filepath.Join(outDir, "findings.json")
+	summaryPath := filepath.Join(outDir, "SUMMARY.md")
 	now := time.Now().UTC().Format(time.RFC3339)
 	commit := gitOutput(root, "rev-parse", "HEAD")
 	branch := strings.TrimSpace(env["GITHUB_REF_NAME"])
@@ -326,13 +332,42 @@ See **docs/artifacts.md** (CI bundle).
 		govCount,
 		backtick("findings.json"),
 		backtick("raw/"),
-		backtick("bin/.dockpipe/ci-analysis/findings.json"),
+		backtick(filepath.ToSlash(relativeTo(root, findingsPath))),
 		backtick("findings[].id"),
 	)
 	if err := os.WriteFile(summaryPath, []byte(summary), 0o644); err != nil {
 		return Result{}, err
 	}
 	return Result{FindingsPath: findingsPath, SummaryPath: summaryPath, Count: len(findings)}, nil
+}
+
+func ciRawDir(root string, env map[string]string) (string, error) {
+	if configured := strings.TrimSpace(env["DOCKPIPE_CI_RAW_DIR"]); configured != "" {
+		return resolveArtifactDir(root, configured), nil
+	}
+	return statepaths.PackageCIRawDir(root)
+}
+
+func ciAnalysisDir(root string, env map[string]string) (string, error) {
+	if configured := strings.TrimSpace(env["DOCKPIPE_CI_ANALYSIS_DIR"]); configured != "" {
+		return resolveArtifactDir(root, configured), nil
+	}
+	return statepaths.PackageCIAnalysisDir(root)
+}
+
+func resolveArtifactDir(root, path string) string {
+	if filepath.IsAbs(path) {
+		return filepath.Clean(path)
+	}
+	return filepath.Join(root, path)
+}
+
+func relativeTo(root, path string) string {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return path
+	}
+	return rel
 }
 
 func parseGovulnDoc(blob []byte) (govulnDoc, error) {

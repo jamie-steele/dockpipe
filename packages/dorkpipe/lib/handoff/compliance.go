@@ -21,17 +21,21 @@ func ComplianceSummary(workdir string) (string, error) {
 	b.WriteString("\n=== DockPipe — compliance & security posture handoff (signals only) ===\n")
 	b.WriteString("Read: docs/artifacts.md\n\n")
 
-	findingsPath := statepaths.CIFindingsPath(root)
-	if fileExists(findingsPath) {
-		b.WriteString("--- bin/.dockpipe/ci-analysis/ (CI-normalized signals) ---\n")
+	findingsPath, findingsErr := statepaths.PackageCIFindingsPath(root)
+	if findingsErr == nil && fileExists(findingsPath) {
+		b.WriteString(fmt.Sprintf("--- %s (CI-normalized signals) ---\n", filepath.ToSlash(relativeTo(root, filepath.Dir(findingsPath)))))
 		b.WriteString(findingsSummary(findingsPath))
 		b.WriteString("\n")
 	} else {
-		b.WriteString("[ ] bin/.dockpipe/ci-analysis/findings.json — run: bash src/scripts/ci-local.sh (or CI) to generate\n")
+		target := "DorkPipe package CI analysis findings"
+		if findingsErr == nil {
+			target = filepath.ToSlash(relativeTo(root, findingsPath))
+		}
+		b.WriteString(fmt.Sprintf("[ ] %s — run: dorkpipe ci normalize-scans after writing raw scanner JSON, or pass explicit CI artifact paths\n", target))
 	}
 
-	summaryPath := statepaths.CISummaryPath(root)
-	if fileExists(summaryPath) {
+	summaryPath, summaryErr := statepaths.PackageCISummaryPath(root)
+	if summaryErr == nil && fileExists(summaryPath) {
 		b.WriteString("\n--- SUMMARY.md (head) ---\n")
 		for _, line := range headLines(summaryPath, 15) {
 			b.WriteString(line + "\n")
@@ -80,6 +84,14 @@ func findingsSummary(path string) string {
 		return ""
 	}
 	return strings.Join(lines, "\n") + "\n"
+}
+
+func relativeTo(root, path string) string {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return path
+	}
+	return rel
 }
 
 func runSummary(path string) string {

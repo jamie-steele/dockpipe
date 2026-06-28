@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
-# Build bin/.dockpipe/pipeon-context.md from repo signals (CI, insights, self-analysis pointers).
+# Build bin/.dockpipe/packages/pipeon/pipeon-context.md from repo signals (CI, insights, self-analysis pointers).
 # Bounded size; no network. Run after enabling Pipeon (see lib/enable.sh).
 set -euo pipefail
 
 ROOT="$(dockpipe get workdir)"
-OUT="$ROOT/bin/.dockpipe"
+if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
+	# shellcheck source=/dev/null
+	source "$DOCKPIPE_SDK_SH"
+	dockpipe_sdk_refresh "$ROOT"
+else
+	eval "$(dockpipe sdk --workdir "$ROOT")"
+fi
+OUT="$(dockpipe_sdk path package pipeon)"
 CTX="$OUT/pipeon-context.md"
 mkdir -p "$OUT"
 
@@ -27,14 +34,17 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo ""
 	echo "| Lane | Meaning |"
 	echo "|------|---------|"
-	echo "| Repo / analysis facts | e.g. \`bin/.dockpipe/packages/dorkpipe/self-analysis/\` |"
-	echo "| Scan signals | e.g. \`bin/.dockpipe/ci-analysis/findings.json\` |"
+	echo "| Repo / analysis facts | DorkPipe package self-analysis artifacts |"
+	echo "| Scan signals | DorkPipe CI artifact state, or \`DOCKPIPE_CI_ANALYSIS_DIR\` when supplied |"
 	echo "| User guidance | e.g. \`bin/.dockpipe/analysis/insights.json\` (signal, not truth) |"
 	echo ""
-	echo "## CI / scans (\`bin/.dockpipe/ci-analysis/\`)"
+	echo "## CI / scans"
 	echo ""
 
-	FIND="$ROOT/bin/.dockpipe/ci-analysis/findings.json"
+	CI_ANALYSIS_DIR="${DOCKPIPE_CI_ANALYSIS_DIR:?DOCKPIPE_CI_ANALYSIS_DIR is required}"
+	echo ""
+	echo "- **analysis dir:** \`$CI_ANALYSIS_DIR\`"
+	FIND="$CI_ANALYSIS_DIR/findings.json"
 	if [[ -f "$FIND" ]] && have_jq; then
 		FC="$(jq '.findings | length' "$FIND" 2>/dev/null || echo 0)"
 		SC="$(jq -r '.schema_version // "?"' "$FIND")"
@@ -43,11 +53,11 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 		if [[ "$FCOMMIT" != "unknown" && "$FCOMMIT" != "$COMMIT" ]]; then
 			echo "- **Staleness:** findings commit differs from current HEAD — refresh recommended for scan-aligned answers."
 		fi
-		if [[ -f "$ROOT/bin/.dockpipe/ci-analysis/SUMMARY.md" ]]; then
+		if [[ -f "$CI_ANALYSIS_DIR/SUMMARY.md" ]]; then
 			echo ""
 			echo "### SUMMARY.md (excerpt)"
 			echo ""
-			head -25 "$ROOT/bin/.dockpipe/ci-analysis/SUMMARY.md" | sed 's/^/    /'
+			head -25 "$CI_ANALYSIS_DIR/SUMMARY.md" | sed 's/^/    /'
 		fi
 	else
 		echo "- **findings.json:** not present — run \`make ci\` (dockpipe repo) or CI to generate (see docs/dorkpipe-ci-signals.md)."
@@ -68,8 +78,9 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo ""
 	echo "## Orchestrator / run metadata (\`bin/.dockpipe/packages/dorkpipe/\`)"
 	echo ""
-	if [[ -f "$ROOT/bin/.dockpipe/packages/dorkpipe/run.json" ]] && have_jq; then
-		jq '{name, ts, policy}' "$ROOT/bin/.dockpipe/packages/dorkpipe/run.json" 2>/dev/null | sed 's/^/    /' || true
+	DORKPIPE_STATE_DIR="$(dockpipe_sdk path package dorkpipe)"
+	if [[ -f "$DORKPIPE_STATE_DIR/run.json" ]] && have_jq; then
+		jq '{name, ts, policy}' "$DORKPIPE_STATE_DIR/run.json" 2>/dev/null | sed 's/^/    /' || true
 	else
 		echo "- **run.json:** not present"
 	fi
@@ -77,8 +88,9 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo ""
 	echo "## Self-analysis bundle (\`bin/.dockpipe/packages/dorkpipe/self-analysis/\`)"
 	echo ""
-	if [[ -d "$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis" ]] && [[ -n "$(ls -A "$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis" 2>/dev/null)" ]]; then
-		ls -1 "$ROOT/bin/.dockpipe/packages/dorkpipe/self-analysis" 2>/dev/null | head -30 | sed 's/^/- /'
+	DORKPIPE_SELF_ANALYSIS_DIR="$DORKPIPE_STATE_DIR/self-analysis"
+	if [[ -d "$DORKPIPE_SELF_ANALYSIS_DIR" ]] && [[ -n "$(ls -A "$DORKPIPE_SELF_ANALYSIS_DIR" 2>/dev/null)" ]]; then
+		ls -1 "$DORKPIPE_SELF_ANALYSIS_DIR" 2>/dev/null | head -30 | sed 's/^/- /'
 	else
 		echo "- Directory missing or empty — run maintainer self-analysis workflows if you use DorkPipe signals."
 	fi

@@ -74,13 +74,25 @@ func TestRunBlockingStepHostMergesOutputs(t *testing.T) {
 
 func TestRunBlockingStepHostCommandRunsOnHost(t *testing.T) {
 	withRunStepsSeams(t)
+	wd := t.TempDir()
 	o := baseRunStepsOpts()
-	o.wf.Steps = []domain.Step{{Kind: "host", Cmd: "echo host"}}
+	o.opts.Workdir = wd
+	o.envMap["DOCKPIPE_WORKFLOW_NAME"] = "ci"
+	o.wf.Name = "ci"
+	o.wf.Steps = []domain.Step{{Kind: "host", CWD: "artifacts", Cmd: "echo host"}}
 	called := false
 	runHostCommandFn = func(cmd string, env []string) error {
 		called = true
 		if cmd != "echo host" {
 			t.Fatalf("unexpected host cmd %q", cmd)
+		}
+		joined := strings.Join(env, "\n")
+		wantArtifact := filepath.Join(wd, "bin", ".dockpipe", "workflows", "ci", "artifacts")
+		if !strings.Contains(joined, "DOCKPIPE_SOURCE_ROOT="+wd) {
+			t.Fatalf("missing source root in env:\n%s", joined)
+		}
+		if !strings.Contains(joined, "DOCKPIPE_ARTIFACT_ROOT="+wantArtifact) || !strings.Contains(joined, "DOCKPIPE_STEP_CWD="+wantArtifact) {
+			t.Fatalf("missing artifact cwd env %q in:\n%s", wantArtifact, joined)
 		}
 		return nil
 	}
@@ -90,6 +102,39 @@ func TestRunBlockingStepHostCommandRunsOnHost(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("expected host command execution")
+	}
+}
+
+func TestRunBlockingStepContainerArtifactsCWDUsesWorkPath(t *testing.T) {
+	withRunStepsSeams(t)
+	wd := t.TempDir()
+	o := baseRunStepsOpts()
+	o.projectRoot = wd
+	o.repoRoot = wd
+	o.opts.Workdir = wd
+	o.envMap["DOCKPIPE_WORKFLOW_NAME"] = "ci"
+	o.wf.Name = "ci"
+	o.wf.Steps = []domain.Step{{CWD: "artifacts", Isolate: "alpine", Cmd: "true"}}
+
+	var got infrastructure.RunOpts
+	runContainerFn = func(opts infrastructure.RunOpts, argv []string) (int, error) {
+		got = opts
+		if len(argv) != 1 || argv[0] != "true" {
+			t.Fatalf("argv = %#v", argv)
+		}
+		return 0, nil
+	}
+
+	dockerEnv := map[string]string{}
+	if err := runBlockingStep(&o, 0, 1, dockerEnv); err != nil {
+		t.Fatalf("runBlockingStep error: %v", err)
+	}
+	if got.WorkdirHost != wd {
+		t.Fatalf("WorkdirHost = %q want %q", got.WorkdirHost, wd)
+	}
+	wantWorkPath := filepath.ToSlash(filepath.Join("bin", ".dockpipe", "workflows", "ci", "artifacts"))
+	if got.WorkPath != wantWorkPath {
+		t.Fatalf("WorkPath = %q want %q", got.WorkPath, wantWorkPath)
 	}
 }
 

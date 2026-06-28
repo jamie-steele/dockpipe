@@ -347,6 +347,7 @@ type Step struct {
 	// ID is optional; used in logs (e.g. [merge] lines). If empty, runner uses "step N".
 	ID        string                  `yaml:"id,omitempty"`
 	Kind      string                  `yaml:"kind,omitempty"`
+	CWD       string                  `yaml:"cwd,omitempty"`
 	Run       RunSpec                 `yaml:"run,omitempty"`
 	PreScript string                  `yaml:"pre_script,omitempty"`
 	Isolate   string                  `yaml:"isolate,omitempty"`
@@ -457,6 +458,17 @@ func (s *Step) KindName() string {
 		return k
 	}
 	return "container"
+}
+
+func (s *Step) CWDMode() string {
+	switch strings.ToLower(strings.TrimSpace(s.CWD)) {
+	case "", "source", "workdir":
+		return "source"
+	case "artifacts", "artifact":
+		return "artifacts"
+	default:
+		return strings.ToLower(strings.TrimSpace(s.CWD))
+	}
 }
 
 func (s *Step) IsHostStep() bool {
@@ -734,6 +746,9 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 		if err := ValidateStepKind(i, s); err != nil {
 			return err
 		}
+		if err := ValidateStepCWD(i, s); err != nil {
+			return err
+		}
 		if err := ValidateStepHostShape(i, s); err != nil {
 			return err
 		}
@@ -775,6 +790,15 @@ func ValidateStepKind(i int, s Step) error {
 		return nil
 	default:
 		return fmt.Errorf("step %d: kind must be host or container", i+1)
+	}
+}
+
+func ValidateStepCWD(i int, s Step) error {
+	switch s.CWDMode() {
+	case "source", "artifacts":
+		return nil
+	default:
+		return fmt.Errorf("step %d: cwd must be source or artifacts", i+1)
 	}
 }
 

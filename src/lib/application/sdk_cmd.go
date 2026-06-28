@@ -38,6 +38,9 @@ Fields:
   script_dir
   package_root
   assets_dir
+  state_dir
+  package_id
+  package_state_dir
 
 When --workdir is omitted, get prefers DOCKPIPE_WORKDIR from the
 environment and otherwise falls back to the current working directory.
@@ -111,6 +114,49 @@ func cmdGet(args []string) error {
 		v := strings.TrimSpace(os.Getenv("DOCKPIPE_ASSETS_DIR"))
 		if v == "" {
 			return fmt.Errorf("DOCKPIPE_ASSETS_DIR is not set")
+		}
+		fmt.Println(v)
+		return nil
+	case "state_dir":
+		v := strings.TrimSpace(os.Getenv(infrastructure.EnvStateDir))
+		if v == "" {
+			v, err = infrastructure.StateRoot(workdir)
+			if err != nil {
+				return err
+			}
+		}
+		fmt.Println(v)
+		return nil
+	case "package_id":
+		v := strings.TrimSpace(os.Getenv(infrastructure.EnvPackageID))
+		if v == "" {
+			root := strings.TrimSpace(os.Getenv("DOCKPIPE_PACKAGE_ROOT"))
+			if root != "" {
+				v = filepath.Base(root)
+			}
+		}
+		if v == "" {
+			return fmt.Errorf("DOCKPIPE_PACKAGE_ID is not set")
+		}
+		fmt.Println(infrastructure.SanitizePackageStateScope(v))
+		return nil
+	case "package_state_dir":
+		v := strings.TrimSpace(os.Getenv(infrastructure.EnvPackageStateDir))
+		if v == "" {
+			scope := strings.TrimSpace(os.Getenv(infrastructure.EnvPackageID))
+			if scope == "" {
+				root := strings.TrimSpace(os.Getenv("DOCKPIPE_PACKAGE_ROOT"))
+				if root != "" {
+					scope = filepath.Base(root)
+				}
+			}
+			if scope == "" {
+				return fmt.Errorf("DOCKPIPE_PACKAGE_STATE_DIR is not set")
+			}
+			v, err = infrastructure.PackageStateDir(workdir, scope)
+			if err != nil {
+				return err
+			}
 		}
 		fmt.Println(v)
 		return nil

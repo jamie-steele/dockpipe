@@ -492,8 +492,8 @@ func defaultInsightsDoc() InsightsDoc {
 		Kind:          "dockpipe_user_insights",
 		Separation: map[string]string{
 			"user_insights":   "This file — structured human guidance; not verified facts.",
-			"repo_facts":      "bin/.dockpipe/packages/dorkpipe/self-analysis/ (example layout)",
-			"system_findings": "bin/.dockpipe/ci-analysis/findings.json",
+			"repo_facts":      "DorkPipe package self-analysis artifacts, when present.",
+			"system_findings": "DorkPipe CI analysis artifacts, when present.",
 		},
 		Insights: []Insight{},
 	}

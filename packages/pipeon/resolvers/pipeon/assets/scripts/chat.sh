@@ -4,6 +4,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(dockpipe get script_dir)"
 ROOT="$(dockpipe get workdir)"
+if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
+	# shellcheck source=/dev/null
+	source "$DOCKPIPE_SDK_SH"
+	dockpipe_sdk_refresh "$ROOT"
+else
+	eval "$(dockpipe sdk --workdir "$ROOT")"
+fi
 # shellcheck source=lib/enable.sh
 source "$SCRIPT_DIR/lib/enable.sh"
 
@@ -31,7 +38,7 @@ fi
 SYS="$(cat "$SYS_FILE")"
 # Keep JSON safe: escape backslashes and quotes in user content for jq --arg
 COMBINED="$SYS
-CTX_FILE="$ROOT/bin/.dockpipe/pipeon-context.md"
+CTX_FILE="$(dockpipe_sdk path package pipeon pipeon-context.md)"
 if [[ -f "$CTX_FILE" ]]; then
 	CTX="$(cat "$CTX_FILE")"
 	COMBINED="$COMBINED

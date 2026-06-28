@@ -298,7 +298,7 @@ func ciCmd(argv []string) {
 
 func ciNormalizeScansCmd(argv []string) {
 	fs := flag.NewFlagSet("ci normalize-scans", flag.ExitOnError)
-	workdir := fs.String("workdir", "", "directory containing bin/.dockpipe/ci-raw (default cwd)")
+	workdir := fs.String("workdir", "", "working directory (default cwd); set DOCKPIPE_CI_RAW_DIR/DOCKPIPE_CI_ANALYSIS_DIR to override package-owned defaults")
 	_ = fs.Parse(argv)
 	wd := *workdir
 	if wd == "" {

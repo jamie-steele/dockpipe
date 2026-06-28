@@ -6,11 +6,16 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"dorkpipe.orchestrator/statepaths"
 )
 
 func TestNormalizeWritesFindingsAndSummary(t *testing.T) {
 	tmp := t.TempDir()
-	rawDir := filepath.Join(tmp, "bin", ".dockpipe", "ci-raw")
+	rawDir, err := statepaths.PackageCIRawDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(rawDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +98,10 @@ func TestNormalizeWritesFindingsAndSummary(t *testing.T) {
 
 func TestNormalizeAcceptsGovulncheckJSONStream(t *testing.T) {
 	tmp := t.TempDir()
-	rawDir := filepath.Join(tmp, "bin", ".dockpipe", "ci-raw")
+	rawDir, err := statepaths.PackageCIRawDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(rawDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

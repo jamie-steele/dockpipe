@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"dockpipe/src/lib/domain"
+	"dockpipe/src/lib/infrastructure"
 )
 
 type packageScriptTarget struct {
@@ -105,6 +106,25 @@ func runPackageScriptTarget(workdir string, target packageScriptTarget, env []st
 		"DOCKPIPE_PACKAGE_ROOT="+target.PackageDir,
 		"DOCKPIPE_PACKAGE_MANIFEST="+target.Manifest,
 	)
+	if sdkPath := filepath.Join(infrastructure.CoreDir(workdir), "assets", "scripts", "lib", "dockpipe-sdk.sh"); fileExists(sdkPath) {
+		baseEnv = append(baseEnv, "DOCKPIPE_SDK_SH="+sdkPath)
+	}
+	if stateDir, err := infrastructure.StateRoot(workdir); err == nil {
+		baseEnv = append(baseEnv, infrastructure.EnvStateDir+"="+stateDir)
+	}
+	scope := infrastructure.SanitizePackageStateScope(target.Name)
+	baseEnv = append(baseEnv, infrastructure.EnvPackageID+"="+scope)
+	if packageStateDir, err := infrastructure.PackageStateDir(workdir, scope); err == nil {
+		baseEnv = append(baseEnv, infrastructure.EnvPackageStateDir+"="+packageStateDir)
+	}
+	if rawDir, analysisDir, err := ciArtifactDirs(workdir, ""); err == nil {
+		if strings.TrimSpace(os.Getenv("DOCKPIPE_CI_RAW_DIR")) == "" {
+			baseEnv = append(baseEnv, "DOCKPIPE_CI_RAW_DIR="+rawDir)
+		}
+		if strings.TrimSpace(os.Getenv("DOCKPIPE_CI_ANALYSIS_DIR")) == "" {
+			baseEnv = append(baseEnv, "DOCKPIPE_CI_ANALYSIS_DIR="+analysisDir)
+		}
+	}
 	cmd.Dir = target.PackageDir
 	cmd.Env = append(baseEnv, env...)
 	if bashExe != "" {

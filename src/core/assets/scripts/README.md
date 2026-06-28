@@ -27,6 +27,9 @@ context into the environment. The backing env vars are:
 - `DOCKPIPE_SCRIPT_DIR`
 - `DOCKPIPE_PACKAGE_ROOT`
 - `DOCKPIPE_ASSETS_DIR`
+- `DOCKPIPE_STATE_DIR`
+- `DOCKPIPE_PACKAGE_ID`
+- `DOCKPIPE_PACKAGE_STATE_DIR`
 
 The public shell authoring API for reading those values is `dockpipe get ...`:
 
@@ -37,6 +40,9 @@ dockpipe get script_dir
 dockpipe get package_root
 dockpipe get assets_dir
 dockpipe get dockpipe_bin
+dockpipe get state_dir
+dockpipe get package_id
+dockpipe get package_state_dir
 ```
 
 Recommended usage:
@@ -54,6 +60,39 @@ The important mapping is:
 - `dockpipe get workflow_name` reads injected `DOCKPIPE_WORKFLOW_NAME`
 - `dockpipe get workdir` prefers injected `DOCKPIPE_WORKDIR` and otherwise falls back to the current directory
 - `dockpipe get dockpipe_bin` resolves the active DockPipe binary for the current workdir
+- `dockpipe get state_dir` reads `DOCKPIPE_STATE_DIR` or defaults to `<workdir>/bin/.dockpipe`
+- `dockpipe get package_state_dir` reads `DOCKPIPE_PACKAGE_STATE_DIR` or defaults to `<state_dir>/packages/<package_id>`
+
+For generated artifacts, prefer the shell SDK path helper instead of hand-writing `tmp/`,
+`.dockpipe/`, or package/workflow state paths:
+
+```bash
+eval "$(dockpipe sdk)"
+dockpipe_sdk path build npm-cache
+dockpipe_sdk path package dorkpipe training metrics.jsonl
+dockpipe_sdk path workflow docs.orchestrate dorkpipe orchestrate
+```
+
+Use package paths for package-owned service state, credentials, caches, and shared metrics.
+Use workflow paths for workflow-run artifacts such as orchestration task graphs, worker outputs,
+optimizer assessments, and proposed patches.
+
+When DockPipe runs a workflow, SDK bootstrap uses the injected workflow name to place workflow-owned
+artifacts under that workflow's state. External scripts that mirror a workflow can set
+`DOCKPIPE_WORKFLOW_NAME` before SDK bootstrap:
+
+```bash
+export DOCKPIPE_WORKFLOW_NAME=ci
+eval "$(dockpipe sdk)"
+govulncheck -format json ./... > "$DOCKPIPE_CI_RAW_DIR/govulncheck.json"
+printf '%s\n' "$DOCKPIPE_CI_ANALYSIS_DIR/findings.json"
+```
+
+Package scripts should consume the injected `DOCKPIPE_CI_RAW_DIR` / `DOCKPIPE_CI_ANALYSIS_DIR`
+variables and then append their own relative filenames, for example
+`"$DOCKPIPE_CI_ANALYSIS_DIR/findings.json"`. Package authors should not need to care whether the
+active workflow keeps that artifact lane in package state, workflow state, or an explicit
+caller-provided directory.
 
 For direct test/manual calls that bypass the normal workflow boundary, callers may export the same
 backing env vars explicitly before invoking a package script.

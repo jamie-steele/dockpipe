@@ -3,7 +3,44 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_ROOT="$(cd "${DOCKPIPE_PACKAGE_ROOT:-$SCRIPT_DIR/../..}" && pwd)"
-REPO_ROOT="$(cd "${DOCKPIPE_WORKDIR:-$PACKAGE_ROOT/../..}" && pwd)"
+
+pipeon_abs_dir() {
+  local path="${1:-}"
+  [[ -n "$path" ]] || return 1
+  (cd "$path" 2>/dev/null && pwd)
+}
+
+pipeon_is_repo_root() {
+  local root="${1:-}"
+  [[ -n "$root" ]] || return 1
+  [[ -f "$root/packages/pipeon/package.yml" ]] || return 1
+  [[ -f "$root/src/core/assets/scripts/lib/dockpipe-sdk.sh" ]] || return 1
+}
+
+pipeon_resolve_repo_root() {
+  local candidate
+  for candidate in "${DOCKPIPE_REPO_ROOT:-}" "${DOCKPIPE_SDK_ROOT:-}" "${DOCKPIPE_WORKDIR:-}"; do
+    candidate="$(pipeon_abs_dir "$candidate" 2>/dev/null || true)"
+    if pipeon_is_repo_root "$candidate"; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  candidate="$(git -C "$PACKAGE_ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
+  candidate="$(pipeon_abs_dir "$candidate" 2>/dev/null || true)"
+  if pipeon_is_repo_root "$candidate"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  candidate="$(pipeon_abs_dir "$PACKAGE_ROOT/../.." 2>/dev/null || true)"
+  if pipeon_is_repo_root "$candidate"; then
+    printf '%s\n' "$candidate"
+    return 0
+  fi
+  printf '%s\n' "$(pipeon_abs_dir "${DOCKPIPE_WORKDIR:-$PACKAGE_ROOT/../..}")"
+}
+
+REPO_ROOT="$(pipeon_resolve_repo_root)"
 SDK_SH="$REPO_ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh"
 
 if [[ -f "$SDK_SH" ]]; then
@@ -11,15 +48,18 @@ if [[ -f "$SDK_SH" ]]; then
   source "$SDK_SH"
   dockpipe_sdk_refresh "$REPO_ROOT"
   PACKAGE_ROOT="$(dockpipe get package_root 2>/dev/null || printf '%s\n' "$PACKAGE_ROOT")"
-  REPO_ROOT="$(dockpipe get workdir 2>/dev/null || printf '%s\n' "$REPO_ROOT")"
+  SDK_WORKDIR="$(dockpipe get workdir 2>/dev/null || true)"
+  if pipeon_is_repo_root "$SDK_WORKDIR"; then
+    REPO_ROOT="$SDK_WORKDIR"
+  fi
 fi
 
-PIPEON_DESKTOP_TARGET_DIR="${PIPEON_DESKTOP_TARGET_DIR:-$REPO_ROOT/bin/.dockpipe/build/pipeon-desktop-target}"
+PIPEON_DESKTOP_TARGET_DIR="${PIPEON_DESKTOP_TARGET_DIR:-$(dockpipe_sdk path build pipeon-desktop-target)}"
 PIPEON_VSCODE_EXT_SRC="$REPO_ROOT/packages/pipeon/resolvers/pipeon/vscode-extension"
-PIPEON_VSCODE_EXT_BUILD_DIR="${PIPEON_VSCODE_EXT_BUILD_DIR:-$REPO_ROOT/bin/.dockpipe/build/pipeon-vscode-extension}"
-PIPEON_VSCODE_EXT_NPM_CACHE="${PIPEON_VSCODE_EXT_NPM_CACHE:-$REPO_ROOT/bin/.dockpipe/build/npm-cache}"
+PIPEON_VSCODE_EXT_BUILD_DIR="${PIPEON_VSCODE_EXT_BUILD_DIR:-$(dockpipe_sdk path build pipeon-vscode-extension)}"
+PIPEON_VSCODE_EXT_NPM_CACHE="${PIPEON_VSCODE_EXT_NPM_CACHE:-$(dockpipe_sdk path build npm-cache)}"
 DOCKPIPE_VSCODE_EXT_DIR="$REPO_ROOT/src/app/tooling/vscode-extensions/dockpipe-language-support"
-DOCKPIPE_VSCODE_TMP_CACHE="$REPO_ROOT/tmp/npm-cache"
+DOCKPIPE_VSCODE_TMP_CACHE="$(dockpipe_sdk path build npm-cache)"
 PIPEON_WINDOWS_BUILD_HELPER="$REPO_ROOT/packages/pipeon/assets/scripts/build-desktop-windows.ps1"
 PIPEON_WINDOWS_VSIX_HELPER="$REPO_ROOT/packages/pipeon/assets/scripts/package-vsix-windows.ps1"
 

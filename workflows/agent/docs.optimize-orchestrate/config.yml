@@ -19,15 +19,15 @@ model_policy:
 
 vars:
   DORKPIPE_ORCH_WORKFLOW: docs.optimize-orchestrate
-  DORKPIPE_ORCH_ROOT: bin/.dockpipe/packages/dorkpipe/orchestrate/docs.optimize-orchestrate
-  DORKPIPE_OPTIMIZER_ROOT: bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate
+  DORKPIPE_ORCH_ROOT: bin/.dockpipe/workflows/docs.optimize-orchestrate/dorkpipe/orchestrate
+  DORKPIPE_OPTIMIZER_ROOT: bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize
   DORKPIPE_OPTIMIZER_TARGET_WORKFLOW: docs.orchestrate
-  DORKPIPE_OPTIMIZER_TARGET_ROOT: bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
+  DORKPIPE_OPTIMIZER_TARGET_ROOT: bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate
   DORKPIPE_OPTIMIZER_ITERATIONS: "1"
   DORKPIPE_OPTIMIZER_CHILD_WORKFLOW: docs.optimize-orchestrate
   DORKPIPE_OPTIMIZER_REFRESH_TARGET_AFTER_APPLY: "0"
   DORKPIPE_OPTIMIZER_STOP_ON_INVALID_PATCH: "1"
-  DORKPIPE_OPTIMIZER_ITERATION_ROOT: bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/iterations
+  DORKPIPE_OPTIMIZER_ITERATION_ROOT: bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize/iterations
   DORKPIPE_ORCH_OLLAMA_MODEL: llama3.2
   DORKPIPE_ORCH_LIVE_MODELS: "true"
   DORKPIPE_ORCH_CLOUD_LANES: "true"
@@ -72,8 +72,8 @@ steps:
         AGENTS.md, routed agent docs, package boundaries, and engineering judgment before proposing a patch.
       include_agents_md: true
       accessible_paths:
-        - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
-        - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate
+        - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate
+        - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize
         - workflows/agent/docs.orchestrate
         - workflows/agent/docs.optimize-orchestrate
         - packages/dorkpipe/resolvers/dorkpipe/assets/scripts
@@ -82,11 +82,11 @@ steps:
           - AGENTS.md
           - docs
           - packages
-          - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
-          - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate
+          - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate
+          - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize
         write:
-          - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.optimize-orchestrate
-          - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate
+          - bin/.dockpipe/workflows/docs.optimize-orchestrate/dorkpipe/orchestrate
+          - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize
         deny:
           - .env
           - .env.*
@@ -114,9 +114,9 @@ steps:
               # Optimizer Input
 
               Target workflow: `docs.orchestrate`
-              Target artifacts: `bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate`
-              Optimizer artifacts: `bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate`
-              Previous optimizer handoff: `bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history`
+              Target artifacts: `bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate`
+              Optimizer artifacts: `bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize`
+              Previous optimizer handoff: `bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize/history`
 
               Optimize local Ollama worker quality, but Codex must make the code-change decision.
               This workflow is proposal-only: do not apply patches to the working tree.
@@ -135,12 +135,12 @@ steps:
             expected_output: Three terse bullets naming concrete failures and affected task ids.
             inputs:
               - shared/optimizer-request.md
-              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/assessment.md
-              - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/verify/result.json
-              - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/tasks/planner_brain/response.md
-              - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/tasks/repo_shape/response.md
-              - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/tasks/package_contracts/response.md
-              - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/tasks/safety_model/response.md
+              - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize/assessment.md
+              - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate/verify/result.json
+              - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate/tasks/planner_brain/response.md
+              - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate/tasks/repo_shape/response.md
+              - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate/tasks/package_contracts/response.md
+              - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate/tasks/safety_model/response.md
             constraints:
               - local Ollama only
               - ground findings in target artifacts
@@ -175,13 +175,13 @@ steps:
               - docs/agents/docs-generation.md
               - docs/agents/safety-guardrails.md
               - shared/optimizer-request.md
-              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/assessment.md
-              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/previous-run-summary.md
-              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/previous-recommendation.md
-              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/previous-proposed.patch
-              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/previous-propose-result.json
-              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/previous-codex-response.md
-              - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.optimize-orchestrate/tasks/latest_run_audit/response.md
+              - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize/assessment.md
+              - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize/history/previous-run-summary.md
+              - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize/history/previous-recommendation.md
+              - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize/history/previous-proposed.patch
+              - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize/history/previous-propose-result.json
+              - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/optimize/history/previous-codex-response.md
+              - bin/.dockpipe/workflows/docs.optimize-orchestrate/dorkpipe/orchestrate/tasks/latest_run_audit/response.md
               - workflows/agent/docs.optimize-orchestrate/config.yml
               - workflows/agent/docs.optimize-orchestrate/README.md
               - workflows/agent/docs.orchestrate/config.yml

@@ -82,7 +82,7 @@
       },
       {
         "command": "pipeon.openContextBundle",
-        "title": "DorkPipe: Open context bundle (bin/.dockpipe/pipeon-context.md)"
+        "title": "DorkPipe: Open context bundle (bin/.dockpipe/packages/pipeon/pipeon-context.md)"
       },
       {
         "command": "pipeon.showReadme",

@@ -410,6 +410,7 @@
       "properties": {
         "id": { "type": "string" },
         "kind": { "type": "string", "enum": ["host", "container"] },
+        "cwd": { "type": "string", "enum": ["source", "workdir", "artifacts", "artifact"] },
         "cmd": { "type": "string" },
         "command": { "type": "string" },
         "run": { "$ref": "#/$defs/string_or_string_array" },

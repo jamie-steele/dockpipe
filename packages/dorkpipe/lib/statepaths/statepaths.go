@@ -72,20 +72,44 @@ func InsightsByCategoryDir(workdir string) string {
 	return filepath.Join(AnalysisDir(workdir), "by-category")
 }
 
-func CIRawDir(workdir string) string {
-	return filepath.Join(workdir, "bin", ".dockpipe", "ci-raw")
+func PackageCIDir(workdir string) (string, error) {
+	root, err := PackageStateDir(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "ci"), nil
 }
 
-func CIAnalysisDir(workdir string) string {
-	return filepath.Join(workdir, "bin", ".dockpipe", "ci-analysis")
+func PackageCIRawDir(workdir string) (string, error) {
+	root, err := PackageCIDir(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "raw"), nil
 }
 
-func CIFindingsPath(workdir string) string {
-	return filepath.Join(CIAnalysisDir(workdir), "findings.json")
+func PackageCIAnalysisDir(workdir string) (string, error) {
+	root, err := PackageCIDir(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "analysis"), nil
 }
 
-func CISummaryPath(workdir string) string {
-	return filepath.Join(CIAnalysisDir(workdir), "SUMMARY.md")
+func PackageCIFindingsPath(workdir string) (string, error) {
+	root, err := PackageCIAnalysisDir(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "findings.json"), nil
+}
+
+func PackageCISummaryPath(workdir string) (string, error) {
+	root, err := PackageCIAnalysisDir(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "SUMMARY.md"), nil
 }
 
 func SelfAnalysisDir(workdir string) (string, error) {
