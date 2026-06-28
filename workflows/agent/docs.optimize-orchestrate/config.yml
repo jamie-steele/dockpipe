@@ -24,9 +24,7 @@ vars:
   DORKPIPE_OPTIMIZER_TARGET_WORKFLOW: docs.orchestrate
   DORKPIPE_OPTIMIZER_TARGET_ROOT: bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
   DORKPIPE_OPTIMIZER_ITERATIONS: "1"
-  DORKPIPE_OPTIMIZER_CHILD_PACKAGE: agent
   DORKPIPE_OPTIMIZER_CHILD_WORKFLOW: docs.optimize-orchestrate
-  DORKPIPE_OPTIMIZER_TARGET_PACKAGE: agent
   DORKPIPE_OPTIMIZER_REFRESH_TARGET_AFTER_APPLY: "0"
   DORKPIPE_OPTIMIZER_STOP_ON_INVALID_PATCH: "1"
   DORKPIPE_OPTIMIZER_ITERATION_ROOT: bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/iterations
@@ -76,7 +74,8 @@ steps:
       accessible_paths:
         - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
         - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate
-        - packages/agent/workflows/docs.orchestrate
+        - workflows/agent/docs.orchestrate
+        - workflows/agent/docs.optimize-orchestrate
         - packages/dorkpipe/resolvers/dorkpipe/assets/scripts
       access:
         read:
@@ -123,9 +122,9 @@ steps:
               This workflow is proposal-only: do not apply patches to the working tree.
               Any proposed edit must stay inside:
 
-              - `packages/agent/workflows/docs.optimize-orchestrate/README.md`
-              - `packages/agent/workflows/docs.optimize-orchestrate/config.yml`
-              - `packages/agent/workflows/docs.orchestrate/config.yml`
+              - `workflows/agent/docs.optimize-orchestrate/README.md`
+              - `workflows/agent/docs.optimize-orchestrate/config.yml`
+              - `workflows/agent/docs.orchestrate/config.yml`
               - `packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-optimize.sh`
               - `packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh`
         tasks:
@@ -183,9 +182,9 @@ steps:
               - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/previous-propose-result.json
               - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/previous-codex-response.md
               - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.optimize-orchestrate/tasks/latest_run_audit/response.md
-              - packages/agent/workflows/docs.optimize-orchestrate/config.yml
-              - packages/agent/workflows/docs.optimize-orchestrate/README.md
-              - packages/agent/workflows/docs.orchestrate/config.yml
+              - workflows/agent/docs.optimize-orchestrate/config.yml
+              - workflows/agent/docs.optimize-orchestrate/README.md
+              - workflows/agent/docs.orchestrate/config.yml
               - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-optimize.sh
               - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh
             constraints:
@@ -193,7 +192,7 @@ steps:
               - use AGENTS.md and routed docs as operating instructions
               - treat Ollama output as scout context, not authority
               - use previous optimizer handoff to avoid repeating a rejected or already-applied idea
-              - keep edits small and package-scoped
+              - keep edits small and repo-workflow-scoped
               - write a proposed patch only
               - do not apply the patch
               - never commit
@@ -213,9 +212,9 @@ steps:
               - Do not repeat the previous proposed patch unless the latest artifacts still prove it is the best next change.
               - The diff must be a valid unified diff that applies with `git apply --check`.
               - The diff may touch only:
-                - packages/agent/workflows/docs.optimize-orchestrate/README.md
-                - packages/agent/workflows/docs.optimize-orchestrate/config.yml
-                - packages/agent/workflows/docs.orchestrate/config.yml
+                - workflows/agent/docs.optimize-orchestrate/README.md
+                - workflows/agent/docs.optimize-orchestrate/config.yml
+                - workflows/agent/docs.orchestrate/config.yml
                 - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-optimize.sh
                 - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh
               - Prefer a higher-leverage fix over patching one symptom.

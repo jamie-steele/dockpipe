@@ -7,7 +7,7 @@ What lives here:
 - `resolvers/claude/` — promoted from `.staging/packages/agent/resolvers/claude/`
 - `resolvers/codex/` — promoted from `.staging/packages/agent/resolvers/codex/`
 - `resolvers/ollama/` — promoted from `.staging/packages/agent/resolvers/ollama/`
-- `workflows/docs.orchestrate/` — YAML-first governed documentation orchestration example
+- `workflows/agent.cloud-lanes.doctor/` — portable diagnostic for cloud-backed agent lanes
 
 This package keeps DockPipe's separation of concerns intact:
 
@@ -34,14 +34,10 @@ The promoted `claude`, `codex`, and `ollama` resolver trees preserve their exist
 No binaries, caches, vendor trees, local environment files, or build outputs were copied during
 promotion.
 
-## First workflow
+## Package workflow
 
-`workflows/docs.orchestrate/` demonstrates the next layer:
+`workflows/agent.cloud-lanes.doctor/` checks whether the Codex and Claude resolver containers have
+the expected auth mounts, skills, and optional live prompt behavior.
 
-1. declare agentic intent in `config.yml`
-2. materialize DorkPipe request, plan, task, merge, verify, and approval artifacts
-3. run workers through normal resolver profiles (`ollama`, `codex`, `claude`)
-4. track cloud model budget and halt when policy requires it
-5. require explicit human approval before treating generated output as promotable
-
-See [workflows/docs.orchestrate/README.md](./workflows/docs.orchestrate/README.md).
+Repo-specific docs orchestration dogfood now lives under the repository root `workflows/` tree
+instead of being published as part of this package.

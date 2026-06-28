@@ -40,7 +40,7 @@ In practice, most workflows should:
 
 **Arbitrary-path workflow:** put the **same** YAML shape in any file (for example **`workflows/foo/config.yml`**) and run **`dockpipe --workflow-file <path>`** so **`run:`** / **`act:`** paths resolve relative to that file’s directory. **Resolver** profiles are **not** beside the file — they load only from **`templates/core/resolvers/`** (see below). Do not pass **`--workflow`** and **`--workflow-file`** together.
 
-**Lint:** **`dockpipe workflow validate [path]`** — parses the workflow (including **`imports:`**) and checks against a small embedded JSON Schema. **`path`** is optional when exactly one **`workflows/*/config.yml`** exists under the workflows root. Otherwise pass a **relative** path (resolved from the current directory first, then from **DOCKPIPE_REPO_ROOT** / the materialized bundle root), for example **`workflows/test/config.yml`**.
+**Lint:** **`dockpipe workflow validate [path]`** — parses the workflow (including **`imports:`**) and checks against a small embedded JSON Schema. **`path`** is optional only for the simple flat single-workflow case; organized or multi-workflow trees should pass a **relative** path (resolved from the current directory first, then from **DOCKPIPE_REPO_ROOT** / the materialized bundle root), for example **`workflows/ci/test/config.yml`**.
 
 **Terminology (same as the CLI):**
 
@@ -468,7 +468,7 @@ Pipe stdout between runs if needed. Prefer **`steps:`** in **`config.yml`** when
 
 | Workflow | Purpose |
 |----------|---------|
-| **[workflows/test/](../workflows/test/)** (this repo) | CI-style **go test** + **govulncheck** + **gosec** chain via **`.dockpipe/outputs.env`** — canonical repo path is **`workflows/`**, not **`templates/`**. |
+| **[workflows/ci/test/](../workflows/ci/test/)** (this repo) | CI-style **go test** + **govulncheck** + **gosec** chain via **`.dockpipe/outputs.env`** — canonical repo path is **`workflows/`**, not **`templates/`**. |
 | **[templates/run/](../templates/run/)** | Compact single-command shorthand in a container, then optional **git** commit on the current branch (**strategy `git-commit`**). |
 | **[templates/run-apply/](../templates/run-apply/)** | Two-step **run → apply** pipeline (replace **`cmd:`** with your tools). |
 | **[templates/run-apply-validate/](../templates/run-apply-validate/)** | Three-step **run → apply → validate** pipeline (replace **`cmd:`** with your tools). |

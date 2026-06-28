@@ -97,7 +97,7 @@ steps:
             paths:
               - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
               - packages/dorkpipe/resolvers/dorkpipe/assets/docs/request-contract.md
-              - packages/agent/workflows/docs.orchestrate/config.yml
+              - workflows/agent/docs.orchestrate/config.yml
           - path: cli-inspect.md
             collector: dockpipe_cli_inspect
         tasks:
@@ -135,7 +135,7 @@ steps:
             expected_output: Three terse markdown bullets about what the workflow declares and what DorkPipe owns.
             inputs:
               - shared/repo-map.md
-              - packages/agent/workflows/docs.orchestrate/config.yml
+              - workflows/agent/docs.orchestrate/config.yml
             constraints:
               - ground claims in repository files
               - keep output short enough to prepend to later workers
@@ -169,7 +169,7 @@ steps:
             expected_output: A compact markdown work order for repo_shape, package_contracts, and safety_model.
             inputs:
               - shared/repo-map.md
-              - packages/agent/workflows/docs.orchestrate/config.yml
+              - workflows/agent/docs.orchestrate/config.yml
               - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
             constraints:
               - use scout outputs as planning guidance
@@ -206,7 +206,7 @@ steps:
             expected_output: A short markdown explanation of the orchestration primitive.
             inputs:
               - shared/repo-map.md
-              - packages/agent/workflows/docs.orchestrate/config.yml
+              - workflows/agent/docs.orchestrate/config.yml
               - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
             constraints:
               - ground claims in repository files
@@ -247,7 +247,7 @@ steps:
                 preference: strongest_available
             inputs:
               - shared/repo-map.md
-              - packages/agent/workflows/docs.orchestrate/config.yml
+              - workflows/agent/docs.orchestrate/config.yml
               - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
             constraints:
               - ground claims in repository files

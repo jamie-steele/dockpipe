@@ -1,5 +1,5 @@
 # Same checks as the Linux CI job, but this multi-step workflow runs them inside Docker.
-# Canonical path in this repo: workflows/test. Host job still runs govulncheck/gosec/go test first for fast signal; this workflow mirrors the stack in isolation.
+# Canonical path in this repo: workflows/ci/test. Host job still runs govulncheck/gosec/go test first for fast signal; this workflow mirrors the stack in isolation.
 # Mount only $(go env GOPATH)/pkg:/go/pkg — do NOT mount host GOBIN: govulncheck/gosec must be built with the
 # container Go (e.g. 1.25); a host-built binary often mismatches and breaks vulncheck.
 # Images: golang official (pulls from Docker Hub on first use).

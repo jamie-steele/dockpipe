@@ -4,13 +4,13 @@ name: agent
 version: 0.6.0
 title: DockPipe agent workflows and resolvers
 description: |
-  First-party agent-oriented package family for governed AI stages. Resolver profiles such as codex
-  and claude stay separate from the workflow contract; workflows under workflows/ define the bounded
-  inputs, outputs, and approval rules for specific tasks such as documentation generation.
+  First-party agent-oriented package family for governed AI stages. Resolver profiles such as
+  codex, claude, and ollama stay separate from workflow contracts; package workflows provide
+  portable diagnostics and examples rather than repository-specific automation.
 author: DockPipe
 license: Apache-2.0
 repository: https://github.com/dockpipe/dockpipe
-tags: [resolver, workflow, agents, ai, docs]
+tags: [resolver, workflow, agents, ai]
 includes_resolvers:
   - claude
   - codex

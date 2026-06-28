@@ -10,4 +10,4 @@ This example uses the bundled **`dev`** isolate as a placeholder container. If y
 dockpipe --workflow codex-pav --resolver codex --runtime docker --
 ```
 
-This workflow ships with the dockpipe **source tree** under **`workflows/codex-pav/`**. To reuse it elsewhere, copy the directory or run **`dockpipe init yourflow --from /path/to/workflows/codex-pav`**. See **[AGENTS.md](../../AGENTS.md)**.
+This workflow ships with the dockpipe **source tree** under **`workflows/agent/codex-pav/`**. To reuse it elsewhere, copy the directory or run **`dockpipe init yourflow --from /path/to/workflows/agent/codex-pav`**. See **[AGENTS.md](../../../AGENTS.md)**.

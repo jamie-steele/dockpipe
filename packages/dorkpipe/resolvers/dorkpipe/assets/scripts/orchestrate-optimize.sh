@@ -37,9 +37,9 @@ esac
 
 if [[ "${action}" == "iterate" ]]; then
   iterations="${DORKPIPE_OPTIMIZER_ITERATIONS:-1}"
-  child_package="${DORKPIPE_OPTIMIZER_CHILD_PACKAGE:-agent}"
+  child_package="${DORKPIPE_OPTIMIZER_CHILD_PACKAGE:-}"
   child_workflow="${DORKPIPE_OPTIMIZER_CHILD_WORKFLOW:-docs.optimize-orchestrate}"
-  target_package="${DORKPIPE_OPTIMIZER_TARGET_PACKAGE:-agent}"
+  target_package="${DORKPIPE_OPTIMIZER_TARGET_PACKAGE:-}"
   iteration_root="${DORKPIPE_OPTIMIZER_ITERATION_ROOT:-bin/.dockpipe/packages/dorkpipe/optimize/${target_workflow}/iterations}"
   stop_on_invalid_patch="${DORKPIPE_OPTIMIZER_STOP_ON_INVALID_PATCH:-1}"
   refresh_target_after_apply="${DORKPIPE_OPTIMIZER_REFRESH_TARGET_AFTER_APPLY:-0}"
@@ -81,17 +81,29 @@ EOF
   cat > "${run_dir}/summary.md" <<EOF
 # Optimizer Iteration Run
 
-- Child workflow: \`${child_package}/${child_workflow}\`
+- Child workflow: \`${child_workflow}\`
 - Iterations requested: ${iterations}
 - Apply enabled: ${DORKPIPE_OPTIMIZER_APPLY:-0}
 
 EOF
 
+  child_args=()
+  if [[ -n "${child_package}" ]]; then
+    child_args+=(--package "${child_package}")
+  fi
+  child_args+=(--workflow "${child_workflow}")
+
+  target_args=()
+  if [[ -n "${target_package}" ]]; then
+    target_args+=(--package "${target_package}")
+  fi
+  target_args+=(--workflow "${target_workflow}")
+
   for i in $(seq 1 "$((iterations - 1))"); do
     printf '\n[dorkpipe] optimizer iteration %02d/%02d\n' "${i}" "${iterations}" >&2
     DORKPIPE_OPTIMIZER_ITERATIONS=1 \
       DORKPIPE_OPTIMIZER_ITERATION="${i}" \
-      "${dockpipe_bin}" --package "${child_package}" --workflow "${child_workflow}" --
+      "${dockpipe_bin}" "${child_args[@]}" --
 
     iter_dir="${run_dir}/iter-${i}"
     mkdir -p "${iter_dir}"
@@ -147,13 +159,13 @@ EOF
     fi
 
     if [[ "${apply_status}" == "applied" && "${refresh_target_after_apply}" =~ ^(1|true|yes|on)$ ]]; then
-      printf '[dorkpipe] optimizer iteration %02d/%02d refreshing target workflow %s/%s\n' "${i}" "${iterations}" "${target_package}" "${target_workflow}" >&2
+      printf '[dorkpipe] optimizer iteration %02d/%02d refreshing target workflow %s\n' "${i}" "${iterations}" "${target_workflow}" >&2
       DORKPIPE_ORCH_WORKFLOW="${target_workflow}" \
         DORKPIPE_ORCH_ROOT="${target_root}" \
         DORKPIPE_ORCH_APPROVAL_MODE=auto-no \
         DORKPIPE_ORCH_SKIP_APPLY=1 \
         DORKPIPE_DEV_STACK_RELOAD=1 \
-        "${dockpipe_bin}" --package "${target_package}" --workflow "${target_workflow}" --
+        "${dockpipe_bin}" "${target_args[@]}" --
     fi
   done
 
@@ -187,7 +199,7 @@ orch_root = pathlib.Path(sys.argv[5]).resolve()
 approval_path = pathlib.Path(sys.argv[6]).resolve()
 result_path = pathlib.Path(sys.argv[7]).resolve()
 
-target_workflow_config = root / "packages/agent/workflows/docs.orchestrate/config.yml"
+target_workflow_config = root / "workflows/agent/docs.orchestrate/config.yml"
 verifier_script = root / "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh"
 patch_path = optimizer_dir / "proposed.patch"
 assessment_md = optimizer_dir / "assessment.md"
@@ -195,8 +207,8 @@ recommendation_md = optimizer_dir / "recommendation.md"
 history_dir = optimizer_dir / "history"
 
 allowed_files = [
-    root / "packages/agent/workflows/docs.optimize-orchestrate/README.md",
-    root / "packages/agent/workflows/docs.optimize-orchestrate/config.yml",
+    root / "workflows/agent/docs.optimize-orchestrate/README.md",
+    root / "workflows/agent/docs.optimize-orchestrate/config.yml",
     target_workflow_config,
     root / "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-optimize.sh",
     verifier_script,
@@ -440,8 +452,8 @@ def apply_enabled():
 
 def validate():
     commands = [
-        ["./src/bin/dockpipe", "workflow", "validate", "packages/agent/workflows/docs.optimize-orchestrate/config.yml"],
-        ["./src/bin/dockpipe", "workflow", "validate", "packages/agent/workflows/docs.orchestrate/config.yml"],
+        ["./src/bin/dockpipe", "workflow", "validate", "workflows/agent/docs.optimize-orchestrate/config.yml"],
+        ["./src/bin/dockpipe", "workflow", "validate", "workflows/agent/docs.orchestrate/config.yml"],
     ]
     results = []
     ok = True

@@ -8,19 +8,19 @@ and writes reviewable proposal artifacts. It does not touch the working tree.
 Run it after a `docs.orchestrate` attempt:
 
 ```bash
-./src/bin/dockpipe --package agent --workflow docs.optimize-orchestrate --
+./src/bin/dockpipe --workflow docs.optimize-orchestrate --
 ```
 
 Apply the validated Codex proposal to the working tree without committing:
 
 ```bash
-DORKPIPE_OPTIMIZER_APPLY=1 ./src/bin/dockpipe --package agent --workflow docs.optimize-orchestrate --
+DORKPIPE_OPTIMIZER_APPLY=1 ./src/bin/dockpipe --workflow docs.optimize-orchestrate --
 ```
 
 Run repeated optimizer passes through the same workflow:
 
 ```bash
-DORKPIPE_OPTIMIZER_ITERATIONS=15 ./src/bin/dockpipe --package agent --workflow docs.optimize-orchestrate --
+DORKPIPE_OPTIMIZER_ITERATIONS=15 ./src/bin/dockpipe --workflow docs.optimize-orchestrate --
 ```
 
 The iteration count is declared in workflow YAML as `DORKPIPE_OPTIMIZER_ITERATIONS`. The default is

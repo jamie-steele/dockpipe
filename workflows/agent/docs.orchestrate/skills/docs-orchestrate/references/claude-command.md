@@ -3,7 +3,7 @@ Use the DorkPipe orchestration contract instead of a single-worker flow.
 Follow this sequence:
 
 1. Read `packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md`.
-2. Inspect `packages/agent/workflows/docs.orchestrate/`.
+2. Inspect `workflows/agent/docs.orchestrate/`.
 3. Treat the work as:
    - plan
    - task graph
@@ -17,8 +17,8 @@ Follow this sequence:
 
 Primary files:
 
-- `packages/agent/workflows/docs.orchestrate/config.yml`
-- `packages/agent/workflows/docs.orchestrate/README.md`
+- `workflows/agent/docs.orchestrate/config.yml`
+- `workflows/agent/docs.orchestrate/README.md`
 - `packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-plan.sh`
 - `packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-run-task.sh`
 - `packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-merge-results.sh`

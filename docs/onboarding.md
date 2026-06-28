@@ -33,7 +33,7 @@ dockpipe --workflow test --runtime dockerimage
 ```
 
 - **`--workflow test`** — **This repo’s CI** uses **`go vet`** in Docker only (no `go test`); **govulncheck** / **gosec** run on the **host** in the same job.  
-- **`--workflow test-demo`** — **Recording**: **`go test`** → **`go vet`** → **review prep bundle** → **local-summary** (**`isolate: ollama`**, dockpipe-built **`dockpipe-ollama`**) → **Codex** final review (`make demo-record`; needs **`OPENAI_API_KEY`** for the last step). Prep scripts: **`workflows/review-pipeline/`** in this repo (referenced as **`scripts/review-pipeline/…`** — not a resolver).
+- **`--workflow docs.orchestrate`** — Agentic docs dogfood: declarative task graph, local/cloud lanes, merge, verification, and approval artifacts.
 
 Mount **`--mount "$(go env GOPATH)/pkg:/go/pkg:rw"`** so module data is visible in the container. Workflows load from the **materialized bundle** or **`workflows/`** / **`templates/`** in a checkout.
 

@@ -96,7 +96,7 @@ Under the repository (and in materialized bundles), **`templates/core/`** contai
 | **`runtimes/`** | Runtime profiles (**where** execution runs). |
 | **`resolvers/`** | Resolver profiles (**which** tool/platform). |
 | **`strategies/`** | Strategy **KEY=value** files (lifecycle before/after). |
-| **`bundles/`** | **Domain** script/asset trees (**dorkpipe**, **pipeon**, …) — not resolvers; see **`paths.go`** resolution order. (This repo’s review prep scripts live under **`workflows/review-pipeline/`**.) |
+| **`bundles/`** | **Domain** script/asset trees (**dorkpipe**, **pipeon**, …) — not resolvers; see **`paths.go`** resolution order. |
 | **`assets/`** | Reusable **support files** — **`assets/scripts/`** (agnostic shell only), **`assets/images/`** (agnostic Dockerfiles only: **base-dev**, **dev**, **example**, **minimal**), **`assets/compose/README.md`** + agnostic **`minimal/`** / **`multi-service/`** demos. Per-domain images and compose live under **`resolvers/…/assets/`** or **`bundles/…/assets/`**. Not additional primitives. |
 
 Workflows continue to reference scripts in YAML as **`scripts/…`**; the runner resolves **`repo/scripts/…`** first, then **`templates/core/resolvers/…`** (resolver-owned), **`templates/core/bundles/…`** (domain script trees), then **`templates/core/assets/scripts/…`** in the bundled tree.

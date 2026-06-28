@@ -263,18 +263,18 @@ func TestResolveWorkflowScriptUsesSrcScriptsWhenTopLevelScriptsMissing(t *testin
 	}
 }
 
-// TestResolveWorkflowScriptResolvesReviewPipelineFromWorkflowsRoot verifies logical scripts/review-pipeline/…
-// resolves to workflows/review-pipeline/assets/scripts/ via compile workflow roots (no src/scripts/review symlink).
-func TestResolveWorkflowScriptResolvesReviewPipelineFromWorkflowsRoot(t *testing.T) {
+// TestResolveWorkflowScriptResolvesAssetsFromWorkflowRoot verifies logical scripts/<domain>/…
+// resolves to workflows/<domain>/assets/scripts/ via compile workflow roots.
+func TestResolveWorkflowScriptResolvesAssetsFromWorkflowRoot(t *testing.T) {
 	repo := t.TempDir()
-	script := filepath.Join(repo, "workflows", "review-pipeline", "assets", "scripts", "hello.sh")
+	script := filepath.Join(repo, "workflows", "tooling", "assets", "scripts", "hello.sh")
 	if err := os.MkdirAll(filepath.Dir(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(script, []byte("#!/bin/sh\n# review-pipeline\n"), 0o644); err != nil {
+	if err := os.WriteFile(script, []byte("#!/bin/sh\n# tooling\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := ResolveWorkflowScript("scripts/review-pipeline/hello.sh", "/wf", repo, "")
+	got := ResolveWorkflowScript("scripts/tooling/hello.sh", "/wf", repo, "")
 	if filepath.ToSlash(got) != filepath.ToSlash(script) {
 		t.Fatalf("got %q want %q", got, script)
 	}

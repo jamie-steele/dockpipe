@@ -8,9 +8,9 @@ make install-record-deps
 
 (`make dev-deps` runs this after CI tools — see repo README → Development.)
 
-Recordings use **`--workflow test-demo`**: **`go test`** → **`go vet`** → **prep bundle** (`.dockpipe/review-context.md`) → **local-summary** (**`isolate: ollama`** — dockpipe builds/runs **`dockpipe-ollama`**) → **Codex final review** (`make demo-record`). Set **`OPENAI_API_KEY`** (or repo-root **`.env`**); **`CODEX_API_KEY`** mirrored when needed. Final prompt: **`prompts/codex-final-review.md`**. See **`templates/core/resolvers/codex/README.md`** (sandbox) and **`workflows/review-pipeline/README.md`** (prep scripts in this repo). **This repo’s CI** uses **`--workflow test`** (**`go vet`** in Docker only; **govulncheck**/**gosec** on the host). The **long** variant also runs **`dockpipe --version`** first.
+The checked-in recordings are historical demo artifacts. Regenerate them against the current workflow surface before publishing new release media. **This repo’s CI** uses **`--workflow test`** (**`go vet`** in Docker only; **govulncheck**/**gosec** on the host). The **long** variant also runs **`dockpipe --version`** first.
 
-**What you see (`test-demo`):** **prepare** → **`go test ./...`** → **`go vet ./...`** → **collect-signals** → **aggregate-context** → **local-summary** (**`dockpipe-ollama`** image; **`ollama serve`** inside the step) → **Codex**. **`make demo-record`** mounts **`$(go env GOPATH)/pkg` → `/go/pkg`** for module reuse.
+**Historical recording:** the existing casts show the old `test-demo` review flow. Treat them as archived material until the demo script is refreshed for the current workflows.
 
 ## One command (builds both GIFs)
 

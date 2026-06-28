@@ -19,6 +19,8 @@ packages/dorkpipe/mcp/bin/mcpd
 .cache/
 .cursor-server/
 .cursor/
+.codex
+.codex/
 .devcontainer/
 .ssh/
 

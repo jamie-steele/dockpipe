@@ -30,7 +30,10 @@ It currently contains:
 
 - promoted `claude` and `codex` resolver profiles from `.staging/packages/agent/`
 - promoted `ollama` resolver profile for local-model use from `.staging/packages/agent/`
-- a YAML-first workflow package at `packages/agent/workflows/docs.orchestrate/`
+- portable cloud-lane diagnostics under `packages/agent/workflows/agent.cloud-lanes.doctor/`
+
+The YAML-first docs orchestration dogfood now lives under root `workflows/` because it is specific
+to this repository's docs, agent guidance, and DorkPipe artifact paths.
 
 The staging copies remain in place for a separate reviewed cleanup step. Promotion makes the
 resolvers discoverable from the main `packages/` compile root without changing the engine model.
@@ -107,11 +110,11 @@ The intended user story is:
 This repository now carries native provider-facing guidance over the same orchestration contract:
 
 - Codex skill source:
-  `packages/agent/skills/docs-orchestrate/SKILL.md`
+  `workflows/agent/docs.orchestrate/skills/docs-orchestrate/SKILL.md`
 - Codex UI metadata:
-  `packages/agent/skills/docs-orchestrate/agents/openai.yaml`
+  `workflows/agent/docs.orchestrate/skills/docs-orchestrate/agents/openai.yaml`
 - Claude-oriented guidance source:
-  `packages/agent/skills/docs-orchestrate/references/claude-command.md`
+  `workflows/agent/docs.orchestrate/skills/docs-orchestrate/references/claude-command.md`
 
 These are thin onboarding/discovery layers over the DorkPipe contract. The contract remains the
 source of truth; skills should not become a second control plane.

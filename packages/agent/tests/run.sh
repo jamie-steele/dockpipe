@@ -10,9 +10,7 @@ if [[ ! -x "${DOCKPIPE_BIN}" ]]; then
 fi
 
 for workflow_path in \
-  "workflows/agent.cloud-lanes.doctor/config.yml" \
-  "workflows/docs.orchestrate/config.yml" \
-  "workflows/docs.optimize-orchestrate/config.yml"; do
+  "workflows/agent.cloud-lanes.doctor/config.yml"; do
   echo "--- validate ${workflow_path} ---"
   "${DOCKPIPE_BIN}" workflow validate "${workflow_path}"
 done

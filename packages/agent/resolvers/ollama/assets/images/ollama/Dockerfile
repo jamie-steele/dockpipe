@@ -1,6 +1,6 @@
 # Local model pass: official Ollama binary + dockpipe entrypoint.
 # Build from repo root: docker build -t dockpipe-ollama -f .staging/packages/agent/resolvers/ollama/assets/images/ollama/Dockerfile .
-# Runtime: workflow starts `ollama serve` then calls scripts/review-pipeline/optional-local-model-summary.sh.
+# Runtime: workflow starts `ollama serve`, then runs package- or workflow-owned model steps.
 FROM ollama/ollama:latest
 USER root
 ENV DEBIAN_FRONTEND=noninteractive

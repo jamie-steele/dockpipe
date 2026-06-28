@@ -16,7 +16,7 @@ For the full store layout, see [package-model.md](package-model.md).
 ## Compile A Workflow Package
 
 ```bash
-dockpipe package compile workflow workflows/test --workdir .
+dockpipe package compile workflow workflows/ci/test --workdir .
 ```
 
 Compiled workflow tarballs land under:
