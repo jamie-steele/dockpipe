@@ -39,7 +39,10 @@ if [[ "${action}" == "iterate" ]]; then
   iterations="${DORKPIPE_OPTIMIZER_ITERATIONS:-1}"
   child_package="${DORKPIPE_OPTIMIZER_CHILD_PACKAGE:-agent}"
   child_workflow="${DORKPIPE_OPTIMIZER_CHILD_WORKFLOW:-docs.optimize-orchestrate}"
+  target_package="${DORKPIPE_OPTIMIZER_TARGET_PACKAGE:-agent}"
   iteration_root="${DORKPIPE_OPTIMIZER_ITERATION_ROOT:-bin/.dockpipe/packages/dorkpipe/optimize/${target_workflow}/iterations}"
+  stop_on_invalid_patch="${DORKPIPE_OPTIMIZER_STOP_ON_INVALID_PATCH:-1}"
+  refresh_target_after_apply="${DORKPIPE_OPTIMIZER_REFRESH_TARGET_AFTER_APPLY:-0}"
   case "${iterations}" in
     ''|*[!0-9]*)
       echo "orchestrate-optimize: DORKPIPE_OPTIMIZER_ITERATIONS must be a positive integer" >&2
@@ -107,6 +110,51 @@ EOF
     fi
     git -C "${ROOT}" status --short > "${iter_dir}/git-status.txt" || true
     printf -- '- iter-%02d: `%s`\n' "${i}" "${iter_dir}" >> "${run_dir}/summary.md"
+
+    apply_status="$(
+      python3 - "${optimizer_dir}/apply-if-enabled/result.json" <<'PY' 2>/dev/null || true
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+if path.exists():
+    print((json.loads(path.read_text()).get("status") or "").strip())
+PY
+    )"
+    propose_invalid="$(
+      python3 - "${optimizer_dir}/propose/result.json" <<'PY' 2>/dev/null || true
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+if not path.exists():
+    print("false")
+    raise SystemExit
+data = json.loads(path.read_text())
+print("true" if data.get("status") == "review" and data.get("validation_error") and data.get("changed_files") else "false")
+PY
+    )"
+    if [[ "${propose_invalid}" == "true" ]]; then
+      printf '[dorkpipe] optimizer iteration %02d stopped: Codex proposed an invalid patch\n' "${i}" >&2
+      cat > "${result_json}" <<EOF
+{
+  "status": "stopped",
+  "reason": "invalid_patch",
+  "iterations": ${iterations},
+  "completed_child_iterations": ${i},
+  "run_dir": "${run_dir}"
+}
+EOF
+      if [[ "${stop_on_invalid_patch}" =~ ^(1|true|yes|on)$ ]]; then
+        exit 1
+      fi
+    fi
+
+    if [[ "${apply_status}" == "applied" && "${refresh_target_after_apply}" =~ ^(1|true|yes|on)$ ]]; then
+      printf '[dorkpipe] optimizer iteration %02d/%02d refreshing target workflow %s/%s\n' "${i}" "${iterations}" "${target_package}" "${target_workflow}" >&2
+      DORKPIPE_ORCH_WORKFLOW="${target_workflow}" \
+        DORKPIPE_ORCH_ROOT="${target_root}" \
+        DORKPIPE_ORCH_APPROVAL_MODE=auto-no \
+        DORKPIPE_ORCH_SKIP_APPLY=1 \
+        DORKPIPE_DEV_STACK_RELOAD=1 \
+        "${dockpipe_bin}" --package "${target_package}" --workflow "${target_workflow}" --
+    fi
   done
 
   cat > "${result_json}" <<EOF
@@ -266,7 +314,7 @@ def validate_patch_text(text):
         touched.append(path)
     if not touched:
         return False, "patch did not declare any allowlisted file paths"
-    check = subprocess.run(["git", "apply", "--check", "-"], cwd=root, text=True, input=text, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    check = subprocess.run(["git", "apply", "--recount", "--check", "-"], cwd=root, text=True, input=text, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     if check.returncode != 0:
         return False, check.stdout.strip() or "git apply --check failed"
     return True, ""
@@ -377,8 +425,8 @@ def apply_patch():
     if not patch_path.read_text(encoding="utf-8").strip():
         write_json({"status": "noop", "reason": "proposed patch is empty"})
         return
-    subprocess.run(["git", "apply", "--check", str(patch_path)], cwd=root, check=True)
-    subprocess.run(["git", "apply", str(patch_path)], cwd=root, check=True)
+    subprocess.run(["git", "apply", "--recount", "--check", str(patch_path)], cwd=root, check=True)
+    subprocess.run(["git", "apply", "--recount", str(patch_path)], cwd=root, check=True)
     write_json({
         "status": "applied",
         "patch": display_path(patch_path),

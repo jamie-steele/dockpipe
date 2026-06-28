@@ -32,6 +32,11 @@ The optimizer workflow also sets `DORKPIPE_DEV_STACK_RELOAD=1` for its stack ste
 pass rebuilds and recreates the requested Compose services so the DorkPipe MCP container sees the
 latest local binaries and package-owned scripts instead of serving a stale stack.
 
+Set `DORKPIPE_OPTIMIZER_REFRESH_TARGET_AFTER_APPLY=1` when you want each applied optimizer patch to
+rerun the target `docs.orchestrate` workflow before the next optimizer pass. Target refresh runs
+artifact-only with approval set to `auto-no` and apply skipped, so it regenerates evidence without
+promoting docs.
+
 Artifacts are written under:
 
 ```text

@@ -103,7 +103,7 @@ for task in list(merge.get("planning_tasks", [])) + list(merge.get("tasks", []))
     if 'The first character of the response must be "-".' in prompt_text and not stripped_text.startswith("-"):
         issues.append(f"{task_id}: worker did not start with the required dash bullet")
         continue
-    bullet_count_match = re.search(r"Return exactly (\w+) bullets? and no headings\.", prompt_text, re.I)
+    bullet_count_match = re.search(r"Return exactly (\w+) bullets? and no headings?\.", prompt_text, re.I)
     bullet_marker = re.compile(r"^\s*(?:[-*+]\s+|•\s*)")
     bullet_lines = [line for line in text.splitlines() if bullet_marker.match(line)]
     bullet_prefix_matches = re.findall(r"Bullet\s+(\d+)\s+must\s+start\s+with\s+\"([^\"\n]+)\"", prompt_text, re.I)
