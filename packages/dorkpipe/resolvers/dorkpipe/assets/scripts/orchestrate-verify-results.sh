@@ -83,6 +83,11 @@ for task in list(merge.get("planning_tasks", [])) + list(merge.get("tasks", []))
         issues.append(f"{task_id}: response artifact is missing")
         continue
     text = response_path.read_text(encoding="utf-8", errors="replace")
+    prompt_path = tasks_dir / task_id / "prompt.md"
+    prompt_text = ""
+    if prompt_path.exists():
+        prompt_text = prompt_path.read_text(encoding="utf-8", errors="replace")
+    stripped_text = text.lstrip()
     for pattern, message in bad_patterns:
         if pattern.search(text):
             issues.append(f"{task_id}: {message}")
@@ -95,6 +100,9 @@ for task in list(merge.get("planning_tasks", [])) + list(merge.get("tasks", []))
         if pattern.search(text):
             issues.append(f"{task_id}: {message}")
             break
+    if 'The first character of the response must be "-".' in prompt_text and not stripped_text.startswith("-"):
+        issues.append(f"{task_id}: worker did not start with the required dash bullet")
+        continue
 
 status = "pass"
 if issues:
