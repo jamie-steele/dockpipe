@@ -304,6 +304,63 @@ func TestCmdPackageCompileResolversVendorResolversSubdir(t *testing.T) {
 	}
 }
 
+func TestCmdPackageCompileResolverMaterializesAuthoredAptPackages(t *testing.T) {
+	dir := t.TempDir()
+	pack := filepath.Join(dir, "my-vendor")
+	resRoot := filepath.Join(pack, "resolvers", "codex")
+	img := filepath.Join(dir, "src", "core", "assets", "images", "codex")
+	if err := os.MkdirAll(resRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(img, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "src", "core", "runtimes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(img, "Dockerfile"), []byte("FROM debian:bookworm-slim\nUSER node\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(resRoot, "profile"), []byte("DOCKPIPE_RESOLVER_WORKFLOW=codex\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: codex
+image:
+  packages:
+    apt:
+      - python3
+      - golang-go
+steps:
+  - id: codex
+    isolate: codex
+`
+	if err := os.WriteFile(filepath.Join(resRoot, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "resolvers", "--workdir", dir, "--from", pack, "--force"}); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "resolvers", "dockpipe-resolver-codex-0.0.0.tar.gz")
+	imf, err := packagebuild.ReadFileFromTarGz(tgz, "resolvers/codex/.dockpipe/steps/codex.image-artifact.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var im domain.ImageArtifactManifest
+	if err := json.Unmarshal(imf, &im); err != nil {
+		t.Fatal(err)
+	}
+	if im.Source != "build" || !strings.Contains(im.ImageRef, "-tools:") || im.Build == nil {
+		t.Fatalf("expected derived tools image artifact, got %+v", im)
+	}
+	df, err := packagebuild.ReadFileFromTarGz(tgz, filepath.ToSlash(filepath.Join("resolvers/codex", im.Build.Dockerfile)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(df), "apt-get install -y --no-install-recommends golang-go python3") {
+		t.Fatalf("generated Dockerfile missing apt install:\n%s", string(df))
+	}
+}
+
 func TestRunCompileAliasHelp(t *testing.T) {
 	if err := Run([]string{"compile", "core", "--help"}, nil); err != nil {
 		t.Fatal(err)

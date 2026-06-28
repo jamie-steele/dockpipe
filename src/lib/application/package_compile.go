@@ -991,6 +991,9 @@ func compileSingleResolverDir(workdir, destRoot, from, name string, defaultNames
 	if err := copyDir(from, staging); err != nil {
 		return fmt.Errorf("copy %s %s: %w", kind, name, err)
 	}
+	if err := ensureWorkflowImageEntrypoint(workdir, staging); err != nil {
+		return fmt.Errorf("stage resolver image entrypoint: %w", err)
+	}
 	if _, err := materializePipeLangRoots([]string{staging}, true, ""); err != nil {
 		return fmt.Errorf("compile pipelang artifacts for %s %s: %w", kind, name, err)
 	}
@@ -1026,6 +1029,18 @@ func compileSingleResolverDir(workdir, destRoot, from, name string, defaultNames
 	pmParsed, err := domain.ParsePackageManifest(manifestPath)
 	if err != nil {
 		return fmt.Errorf("%s %s: %w", kind, name, err)
+	}
+	cfgPath := filepath.Join(staging, "config.yml")
+	if b, err := os.ReadFile(cfgPath); err == nil {
+		wf, err := domain.ParseWorkflowYAML(b)
+		if err != nil {
+			return fmt.Errorf("%s %s: parse workflow: %w", kind, name, err)
+		}
+		if err := writeCompiledWorkflowRuntimeArtifacts(workdir, staging, name, wf, pmParsed); err != nil {
+			return fmt.Errorf("%s %s: write runtime artifacts: %w", kind, name, err)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("%s %s: read config.yml: %w", kind, name, err)
 	}
 	ver := strings.TrimSpace(pmParsed.Version)
 	if ver == "" {
