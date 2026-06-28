@@ -1,0 +1,214 @@
+name: docs.optimize-orchestrate
+description: >-
+  Local-first Ollama + DorkPipe optimizer for docs.orchestrate. It reviews the latest target
+  artifacts, runs bounded optimizer workers, proposes a constrained patch, requires approval, and
+  applies to the working tree without committing.
+
+model_policy:
+  mode: auto
+  attempt:
+    preference: local
+    max_attempts: 1
+  validate:
+    preference: local
+    required_for:
+      - docs_orchestration_optimizer
+  escalation:
+    enabled: false
+    require_approval_over_cost: true
+
+vars:
+  DORKPIPE_ORCH_WORKFLOW: docs.optimize-orchestrate
+  DORKPIPE_ORCH_ROOT: bin/.dockpipe/packages/dorkpipe/orchestrate/docs.optimize-orchestrate
+  DORKPIPE_OPTIMIZER_ROOT: bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate
+  DORKPIPE_OPTIMIZER_TARGET_WORKFLOW: docs.orchestrate
+  DORKPIPE_OPTIMIZER_TARGET_ROOT: bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
+  DORKPIPE_ORCH_OLLAMA_MODEL: llama3.2
+  DORKPIPE_ORCH_LIVE_MODELS: "true"
+  DORKPIPE_ORCH_CLOUD_LANES: "false"
+  DORKPIPE_ORCH_CONTAINERIZE_CLOUD: "true"
+  DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS: "0"
+  DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS: "0"
+  DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED: "true"
+  DORKPIPE_DEV_STACK_AUTODOWN: "0"
+  DORKPIPE_DEV_STACK_MCP_PORT: "8766"
+  MCP_HTTP_URL: http://127.0.0.1:8766/mcp
+  DATABASE_URL: postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe
+  OLLAMA_HOST: http://127.0.0.1:11434
+
+steps:
+  - id: stack_up
+    kind: host
+    run: scripts/dorkpipe/dev-stack-ensure-up.sh
+    vars:
+      DORKPIPE_DEV_STACK_GPU: "auto"
+      DORKPIPE_DEV_STACK_SERVICES: "postgres ollama dorkpipe-stack dorkpipe-mcp-proxy"
+
+  - id: prepare
+    kind: host
+    run: scripts/dorkpipe/orchestrate-optimize.sh
+    vars:
+      DORKPIPE_OPTIMIZER_ACTION: prepare
+
+  - id: plan
+    kind: host
+    run: scripts/dorkpipe/orchestrate-plan.sh
+    agent:
+      startup_prompt: >-
+        Treat this as a bounded DorkPipe optimizer run. Stay local-first, use latest target artifacts
+        as evidence, and recommend only scoped changes that improve Ollama worker quality.
+      include_agents_md: true
+      accessible_paths:
+        - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
+        - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate
+        - packages/agent/workflows/docs.orchestrate
+        - packages/dorkpipe/resolvers/dorkpipe/assets/scripts
+      access:
+        read:
+          - AGENTS.md
+          - docs
+          - packages
+          - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
+          - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate
+        write:
+          - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.optimize-orchestrate
+          - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate
+        deny:
+          - .env
+          - .env.*
+          - "**/*secret*"
+          - "**/*token*"
+      orchestration:
+        request:
+          text: Optimize the Ollama-only docs.orchestrate loop using the latest DorkPipe artifacts.
+        plan:
+          goal: Diagnose local worker quality issues and produce scoped guidance for a constrained optimizer patch.
+          steps:
+            - inspect latest docs.orchestrate worker artifacts
+            - identify prompt and verifier gaps that hurt Ollama output shape
+            - recommend small package-scoped changes
+            - require approval before applying to the working tree
+        concurrency:
+          max_workers: 2
+          max_local_workers: 2
+          max_cloud_workers: 1
+        shared:
+          - path: optimizer-request.md
+            collector: literal
+            text: |
+              # Optimizer Input
+
+              Target workflow: `docs.orchestrate`
+              Target artifacts: `bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate`
+              Optimizer artifacts: `bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate`
+
+              Optimize for local Ollama worker quality first. Do not recommend cloud escalation.
+              Any proposed edit must stay inside:
+
+              - `packages/agent/workflows/docs.orchestrate/config.yml`
+              - `packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh`
+        tasks:
+          - id: latest_run_audit
+            resolver_hint: ollama
+            worker_type: analysis
+            goal: Audit the latest docs.orchestrate artifacts for Ollama worker shape failures.
+            expected_output: Three terse bullets naming concrete failures and affected task ids.
+            inputs:
+              - shared/optimizer-request.md
+              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/assessment.md
+              - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/verify/result.json
+              - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/tasks/planner_brain/response.md
+              - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/tasks/repo_shape/response.md
+              - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/tasks/package_contracts/response.md
+              - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate/tasks/safety_model/response.md
+            constraints:
+              - local Ollama only
+              - ground findings in target artifacts
+              - do not propose edits outside the allowlist
+            model:
+              model: llama3.2
+            prompt: |
+              You are the local DorkPipe optimizer audit worker.
+
+              Return exactly three bullets and no heading.
+              Each bullet must name a concrete artifact-shape failure and the task id if visible.
+              Focus on preambles, Note/Please note footers, false uncertainty, and verifier misses.
+              Do not recommend cloud escalation.
+          - id: patch_guidance
+            resolver_hint: ollama
+            worker_type: planning
+            depends_on:
+              - latest_run_audit
+            goal: Convert the audit into constrained patch guidance for prompts and verifier heuristics.
+            expected_output: Four terse bullets describing the patch boundaries and validation plan.
+            inputs:
+              - shared/optimizer-request.md
+              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/assessment.md
+              - packages/agent/workflows/docs.orchestrate/config.yml
+              - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh
+            constraints:
+              - local Ollama only
+              - keep edits small and package-scoped
+              - require approval before apply
+              - never commit
+            model:
+              model: llama3.2
+            prompt: |
+              You are the DorkPipe optimizer planning worker.
+
+              Return exactly four bullets and no heading.
+              Bullet 1: prompt rule to improve direct artifact shape.
+              Bullet 2: verifier heuristic to catch note or preamble failures.
+              Bullet 3: allowlist boundary.
+              Bullet 4: validation command or artifact to inspect.
+              Do not write a full patch.
+        merge:
+          title: DorkPipe Ollama Optimizer Synthesis
+          summary_points:
+            - The optimizer is local-first and uses Ollama workers for cheap iteration.
+            - The apply stage is constrained to prompt and verifier improvements.
+            - Approval is required before working-tree changes, and commits are never created.
+        verify:
+          next_action_default: review proposed patch before applying optimizer changes
+        apply:
+          require_approval: true
+          outputs: []
+
+  - id: run-workers
+    kind: host
+    run: scripts/dorkpipe/orchestrate-run-tasks.sh
+
+  - id: merge
+    kind: host
+    run: scripts/dorkpipe/orchestrate-merge-results.sh
+
+  - id: verify
+    kind: host
+    run: scripts/dorkpipe/orchestrate-verify-results.sh
+
+  - id: propose
+    kind: host
+    run: scripts/dorkpipe/orchestrate-optimize.sh
+    vars:
+      DORKPIPE_OPTIMIZER_ACTION: propose
+
+  - id: approval
+    kind: host
+    run: scripts/dorkpipe/orchestrate-approve.sh
+
+  - id: apply
+    kind: host
+    run: scripts/dorkpipe/orchestrate-optimize.sh
+    vars:
+      DORKPIPE_OPTIMIZER_ACTION: apply
+
+  - id: validate
+    kind: host
+    run: scripts/dorkpipe/orchestrate-optimize.sh
+    vars:
+      DORKPIPE_OPTIMIZER_ACTION: validate
+
+  - id: stack_down
+    kind: host
+    run:
+      - scripts/dorkpipe/dev-stack-maybe-down.sh

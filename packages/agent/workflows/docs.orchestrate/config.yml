@@ -189,6 +189,8 @@ steps:
 
               Rules:
               - Return exactly three bullets and no headings.
+              - The first character of the response must be "-".
+              - Do not add preamble, explanation, Note, Please note, or formatting commentary.
               - Bullet 1 must start with "repo_shape:" and say what the worker should emphasize.
               - Bullet 2 must start with "package_contracts:" and say packages/agent owns request, tasks, prompts, concurrency, and apply outputs while packages/dorkpipe owns artifacts, lanes, merge, verify, budget, and halt.
               - Bullet 3 must start with "safety_model:" and say what verification, budget, and approval facts the worker must preserve.
@@ -225,9 +227,11 @@ steps:
               - Explain the artifact graph primitive; do not propose code, files, or lane-weight changes.
               - Do not repeat planning scout bullets; synthesize the answer in your own concise paragraph or bullets.
               - Return exactly two bullets and no headings.
+              - The first character of the response must be "-".
+              - Do not add preamble, explanation, Note, Please note, or formatting commentary.
               - Do not mention packages/agent ownership; this task is about why artifact graphs are stronger than branding.
               - Return concise markdown suitable for downstream merge.
-              - Call out uncertainty explicitly.
+              - Only call out uncertainty if a required referenced file is missing; do not add an uncertainty footer.
           - id: package_contracts
             resolver_hint: auto
             depends_on:
@@ -261,12 +265,14 @@ steps:
               - Ground claims in the referenced files.
               - Summarize package boundaries; do not write an execution plan.
               - Return exactly three bullets and no headings.
+              - The first character of the response must be "-".
+              - Do not add preamble, explanation, Note, Please note, or formatting commentary.
               - Bullet 1 must start with "packages/agent owns" and describe the workflow surface: request, task list, prompts, concurrency, apply outputs.
               - Bullet 2 must start with "packages/dorkpipe owns" and describe the contract surface: orchestration artifacts, lane catalog, worker result, merge, verify, budget/halt.
               - Bullet 3 must start with "Boundary rule" and say workflows declare what while DorkPipe materializes and governs the artifact contract.
-              - Do not add preamble, headings, examples, or an uncertainty footer unless a referenced file is missing.
+              - Do not add preamble, headings, examples, Note, Please note, formatting commentary, or an uncertainty footer unless a referenced file is missing.
               - Return concise markdown suitable for downstream merge.
-              - Call out uncertainty explicitly.
+              - Only call out uncertainty if a required referenced file is missing; do not add an uncertainty footer.
           - id: safety_model
             resolver_hint: auto
             depends_on:
@@ -300,12 +306,14 @@ steps:
               - Summarize verification, budget halt, and approval boundaries; do not invent lane scores.
               - Do not list the full worker result schema.
               - Return exactly three bullets and no headings.
+              - The first character of the response must be "-".
+              - Do not add preamble, explanation, Note, Please note, or formatting commentary.
               - Bullet 1 must start with "Verification".
               - Bullet 2 must start with "Budget halt".
               - Bullet 3 must start with "Approval".
               - Do not say lane scores or confidence values should be cited.
               - Return concise markdown suitable for downstream merge.
-              - Call out uncertainty explicitly.
+              - Only call out uncertainty if a required referenced file is missing; do not add an uncertainty footer.
         merge:
           title: DorkPipe Orchestration Synthesis
           summary_points:

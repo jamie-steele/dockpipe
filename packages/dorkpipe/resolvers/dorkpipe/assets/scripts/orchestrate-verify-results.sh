@@ -66,6 +66,9 @@ boundary_patterns = [
 
 shape_patterns = [
     (re.compile(r"(?im)^\s*Here (?:are|is)\b"), "worker included preamble instead of direct artifact content"),
+    (re.compile(r"(?im)^\s*(?:Note|Please note)\s*:"), "worker added a note/footer instead of direct artifact content"),
+    (re.compile(r"\bcould not be completed due to lack of information\b", re.I), "worker added a false missing-information footer"),
+    (re.compile(r"\badheres to (?:the )?(?:specified )?formatting\b", re.I), "worker added formatting commentary instead of direct artifact content"),
     (re.compile(r"(?im)^###\s+repo_shape\s*$"), "worker repeated task id as a heading"),
     (re.compile(r"\buncertainties remain\b", re.I), "worker added generic uncertainty instead of bounded uncertainty"),
     (re.compile(r"\b(?:lane scores|confidence values) should be cited\b", re.I), "worker invented lane score citation guidance"),
