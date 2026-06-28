@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"dockpipe/src/lib/domain"
@@ -69,9 +70,10 @@ func vaultModeRequiresOp(v string) bool {
 // mergeOpInjectFromProjectIfEnabled resolves vault references via `op inject` when project config
 // sets secrets.vault_template or secrets.op_inject_template and the template file exists.
 // Effective vault mode: workflow YAML vault: wins when set; else secrets.vault in dockpipe.config.json;
-// else best-effort inject when template exists. Strict op mode (workflow or project) requires template + file.
+// else best-effort inject when template exists and the selected workflow references one of its keys.
+// Strict op mode (workflow or project) requires template + file.
 // Resolved KEY=VAL pairs overwrite env (vault over workflow .env for those keys).
-func mergeOpInjectFromProjectIfEnabled(env map[string]string, opts *CliOpts, wfRoot string, wf *domain.Workflow) error {
+func mergeOpInjectFromProjectIfEnabled(env map[string]string, opts *CliOpts, wfConfig, wfRoot string, wf *domain.Workflow) error {
 	start := ""
 	if opts != nil {
 		start = strings.TrimSpace(opts.Workdir)
@@ -120,6 +122,9 @@ func mergeOpInjectFromProjectIfEnabled(env map[string]string, opts *CliOpts, wfR
 		}
 		return nil
 	}
+	if !vaultModeRequiresOp(mode) && !workflowReferencesVaultTemplateKey(wfConfig, wf, tmplPath) {
+		return nil
+	}
 	if _, err := opLookPathFn("op"); err != nil {
 		return fmt.Errorf("vault inject: `op` not in PATH (install 1Password CLI — it provides op inject) or set DOCKPIPE_OP_INJECT=0 to skip (template %s)", tmplPath)
 	}
@@ -138,6 +143,57 @@ func mergeOpInjectFromProjectIfEnabled(env map[string]string, opts *CliOpts, wfR
 		fmt.Fprintf(os.Stderr, "[dockpipe] vault: merged %d key(s) via op inject (%s)\n", len(m), tmplPath)
 	}
 	return nil
+}
+
+func workflowReferencesVaultTemplateKey(wfConfig string, wf *domain.Workflow, tmplPath string) bool {
+	keys, err := vaultTemplateKeys(tmplPath)
+	if err != nil || len(keys) == 0 {
+		return false
+	}
+	haystack := strings.Builder{}
+	if strings.TrimSpace(wfConfig) != "" {
+		if b, err := os.ReadFile(wfConfig); err == nil {
+			haystack.Write(b)
+			haystack.WriteByte('\n')
+		}
+	}
+	if wf != nil {
+		for k, v := range wf.Vars {
+			haystack.WriteString(k)
+			haystack.WriteByte('\n')
+			haystack.WriteString(v)
+			haystack.WriteByte('\n')
+		}
+		if strings.TrimSpace(wf.Vault) != "" {
+			haystack.WriteString(wf.Vault)
+			haystack.WriteByte('\n')
+		}
+	}
+	text := haystack.String()
+	if text == "" {
+		return false
+	}
+	for key := range keys {
+		if regexp.MustCompile(`\b`+regexp.QuoteMeta(key)+`\b`).FindStringIndex(text) != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func vaultTemplateKeys(tmplPath string) (map[string]struct{}, error) {
+	m, err := infrastructure.ParseEnvFile(tmplPath)
+	if err != nil {
+		return nil, err
+	}
+	keys := make(map[string]struct{}, len(m))
+	for k := range m {
+		k = strings.TrimSpace(k)
+		if k != "" {
+			keys[k] = struct{}{}
+		}
+	}
+	return keys, nil
 }
 
 // maybeRemoveStrayDashInjectFile deletes repo-root "-" when it looks like accidental `op inject ... > -`

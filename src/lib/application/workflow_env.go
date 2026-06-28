@@ -29,7 +29,7 @@ func buildWorkflowEnvInto(env map[string]string, wf *domain.Workflow, wfConfig, 
 			domain.MergeIfUnset(env, m)
 		}
 	}
-	if err := mergeOpInjectFromProjectIfEnabled(env, opts, wfRoot, wf); err != nil {
+	if err := mergeOpInjectFromProjectIfEnabled(env, opts, wfConfig, wfRoot, wf); err != nil {
 		return err
 	}
 	for _, ef := range opts.EnvFiles {
