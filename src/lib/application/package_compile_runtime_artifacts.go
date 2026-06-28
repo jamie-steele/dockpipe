@@ -1,13 +1,17 @@
 package application
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
 	"dockpipe/src/lib/domain"
 	"dockpipe/src/lib/infrastructure"
+	"dockpipe/src/lib/infrastructure/packagebuild"
 )
 
 func writeCompiledWorkflowRuntimeArtifacts(workdir, staging, pkgName string, wf *domain.Workflow, pm *domain.PackageManifest) error {
@@ -515,8 +519,34 @@ func compiledRuleIDs(rm *domain.CompiledRuntimeManifest) []string {
 
 func selectCompiledImageArtifact(workdir, sourceRoot, pkgName string, wf *domain.Workflow, pm *domain.PackageManifest, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
 	provenance := workflowImageArtifactProvenance(workdir, pm, wf)
-	if sel, artifact, ok, err := selectPackageImageArtifact(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), "", packageImageKey(pm, wf), pm, policyFingerprint, provenance); ok || err != nil {
-		return sel, artifact, err
+	packages := normalizeAptPackages(wf.Image.Packages.Apt)
+	if pm != nil && strings.TrimSpace(pm.Image.Ref) != "" {
+		imageKey := packageImageKey(pm, wf)
+		if len(packages) == 0 {
+			sel, artifact, _, err := selectPackageImageArtifact(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), "", imageKey, pm, policyFingerprint, provenance)
+			return sel, artifact, err
+		}
+		baseRef := strings.TrimSpace(pm.Image.Ref)
+		derived, err := writeDerivedRegistryAptImageBuild(sourceRoot, "workflow", baseRef, packages)
+		if err != nil {
+			return domain.CompiledImageSelection{}, nil, err
+		}
+		ref := derivedImageRef(baseRef, packages)
+		buildSpec := &domain.CompiledImageBuildSpec{
+			Context:    relOrAbs(sourceRoot, sourceRoot),
+			Dockerfile: relOrAbs(sourceRoot, filepath.Join(derived, "Dockerfile")),
+		}
+		sel := domain.CompiledImageSelection{
+			Source:    "build",
+			Ref:       ref,
+			AutoBuild: "if-stale",
+			Build:     buildSpec,
+		}
+		artifact, err := buildImageArtifactManifest(sourceRoot, strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), imageKey, ref, derived, sourceRoot, policyFingerprint, provenance)
+		if err != nil {
+			return domain.CompiledImageSelection{}, nil, err
+		}
+		return sel, artifact, nil
 	}
 	identity := firstNonEmptyString(
 		strings.TrimSpace(wf.Isolate),
@@ -536,6 +566,16 @@ func selectCompiledImageArtifact(workdir, sourceRoot, pkgName string, wf *domain
 			dockerfileDir = localDir
 		}
 		ref := infrastructure.MaybeVersionTag(workdir, image)
+		if len(packages) > 0 {
+			derived, err := writeDerivedAptImageBuild(sourceRoot, "workflow", ref, dockerfileDir, packages)
+			if err != nil {
+				return domain.CompiledImageSelection{}, nil, err
+			}
+			manifestRoot = sourceRoot
+			contextDir = sourceRoot
+			dockerfileDir = derived
+			ref = derivedImageRef(ref, packages)
+		}
 		buildSpec := &domain.CompiledImageBuildSpec{
 			Context:    relOrAbs(manifestRoot, contextDir),
 			Dockerfile: relOrAbs(manifestRoot, filepath.Join(dockerfileDir, "Dockerfile")),
@@ -553,14 +593,61 @@ func selectCompiledImageArtifact(workdir, sourceRoot, pkgName string, wf *domain
 		return sel, artifact, nil
 	}
 
+	if len(packages) > 0 {
+		derived, err := writeDerivedRegistryAptImageBuild(sourceRoot, "workflow", identity, packages)
+		if err != nil {
+			return domain.CompiledImageSelection{}, nil, err
+		}
+		ref := derivedImageRef(identity, packages)
+		buildSpec := &domain.CompiledImageBuildSpec{
+			Context:    relOrAbs(sourceRoot, sourceRoot),
+			Dockerfile: relOrAbs(sourceRoot, filepath.Join(derived, "Dockerfile")),
+		}
+		sel := domain.CompiledImageSelection{
+			Source:    "build",
+			Ref:       ref,
+			AutoBuild: "if-stale",
+			Build:     buildSpec,
+		}
+		artifact, err := buildImageArtifactManifest(sourceRoot, strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), identity, ref, derived, sourceRoot, policyFingerprint, provenance)
+		if err != nil {
+			return domain.CompiledImageSelection{}, nil, err
+		}
+		return sel, artifact, nil
+	}
 	return registryImageSelection(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), "", identity, identity, "never", policyFingerprint, provenance)
 }
 
 func selectCompiledImageArtifactForStep(workdir, sourceRoot, pkgName string, wf *domain.Workflow, pm *domain.PackageManifest, step domain.Step, stepID, policyFingerprint string) (domain.CompiledImageSelection, *domain.ImageArtifactManifest, error) {
 	provenance := stepImageArtifactProvenance(workdir, pm, wf, step)
+	packages := normalizeAptPackages(append(append([]string{}, wf.Image.Packages.Apt...), step.Image.Packages.Apt...))
 	if !stepHasImageSelectionOverride(step) {
-		if sel, artifact, ok, err := selectPackageImageArtifact(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, stepID, pm, policyFingerprint, provenance); ok || err != nil {
-			return sel, artifact, err
+		if pm != nil && strings.TrimSpace(pm.Image.Ref) != "" {
+			if len(packages) == 0 {
+				sel, artifact, _, err := selectPackageImageArtifact(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, stepID, pm, policyFingerprint, provenance)
+				return sel, artifact, err
+			}
+			baseRef := strings.TrimSpace(pm.Image.Ref)
+			derived, err := writeDerivedRegistryAptImageBuild(sourceRoot, stepID, baseRef, packages)
+			if err != nil {
+				return domain.CompiledImageSelection{}, nil, err
+			}
+			ref := derivedImageRef(baseRef, packages)
+			buildSpec := &domain.CompiledImageBuildSpec{
+				Context:    relOrAbs(sourceRoot, sourceRoot),
+				Dockerfile: relOrAbs(sourceRoot, filepath.Join(derived, "Dockerfile")),
+			}
+			sel := domain.CompiledImageSelection{
+				Source:    "build",
+				Ref:       ref,
+				AutoBuild: "if-stale",
+				Build:     buildSpec,
+			}
+			artifact, err := buildImageArtifactManifest(sourceRoot, strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, ref, derived, sourceRoot, policyFingerprint, provenance)
+			if err != nil {
+				return domain.CompiledImageSelection{}, nil, err
+			}
+			return sel, artifact, nil
 		}
 	}
 	identity := firstNonEmptyString(
@@ -584,6 +671,16 @@ func selectCompiledImageArtifactForStep(workdir, sourceRoot, pkgName string, wf 
 			dockerfileDir = localDir
 		}
 		ref := infrastructure.MaybeVersionTag(workdir, image)
+		if len(packages) > 0 {
+			derived, err := writeDerivedAptImageBuild(sourceRoot, stepID, ref, dockerfileDir, packages)
+			if err != nil {
+				return domain.CompiledImageSelection{}, nil, err
+			}
+			manifestRoot = sourceRoot
+			contextDir = sourceRoot
+			dockerfileDir = derived
+			ref = derivedImageRef(ref, packages)
+		}
 		buildSpec := &domain.CompiledImageBuildSpec{
 			Context:    relOrAbs(manifestRoot, contextDir),
 			Dockerfile: relOrAbs(manifestRoot, filepath.Join(dockerfileDir, "Dockerfile")),
@@ -601,6 +698,28 @@ func selectCompiledImageArtifactForStep(workdir, sourceRoot, pkgName string, wf 
 		return sel, artifact, nil
 	}
 
+	if len(packages) > 0 {
+		derived, err := writeDerivedRegistryAptImageBuild(sourceRoot, stepID, identity, packages)
+		if err != nil {
+			return domain.CompiledImageSelection{}, nil, err
+		}
+		ref := derivedImageRef(identity, packages)
+		buildSpec := &domain.CompiledImageBuildSpec{
+			Context:    relOrAbs(sourceRoot, sourceRoot),
+			Dockerfile: relOrAbs(sourceRoot, filepath.Join(derived, "Dockerfile")),
+		}
+		sel := domain.CompiledImageSelection{
+			Source:    "build",
+			Ref:       ref,
+			AutoBuild: "if-stale",
+			Build:     buildSpec,
+		}
+		artifact, err := buildImageArtifactManifest(sourceRoot, strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, ref, derived, sourceRoot, policyFingerprint, provenance)
+		if err != nil {
+			return domain.CompiledImageSelection{}, nil, err
+		}
+		return sel, artifact, nil
+	}
 	return registryImageSelection(strings.TrimSpace(wf.Name), strings.TrimSpace(pkgName), stepID, stepID, identity, "never", policyFingerprint, provenance)
 }
 
@@ -621,6 +740,134 @@ func workflowLocalImageDir(sourceRoot, identity string) string {
 		return dir
 	}
 	return ""
+}
+
+var aptPackageNamePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9+._:-]*$`)
+
+func normalizeAptPackages(pkgs []string) []string {
+	seen := map[string]bool{}
+	out := make([]string, 0, len(pkgs))
+	for _, pkg := range pkgs {
+		pkg = strings.TrimSpace(pkg)
+		if pkg == "" || seen[pkg] {
+			continue
+		}
+		seen[pkg] = true
+		out = append(out, pkg)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func validateAptPackages(pkgs []string) error {
+	for _, pkg := range pkgs {
+		if !aptPackageNamePattern.MatchString(pkg) {
+			return fmt.Errorf("image.packages.apt contains invalid package name %q", pkg)
+		}
+	}
+	return nil
+}
+
+func writeDerivedAptImageBuild(sourceRoot, key, baseRef, baseDockerfileDir string, pkgs []string) (string, error) {
+	if err := validateAptPackages(pkgs); err != nil {
+		return "", err
+	}
+	baseDockerfile := filepath.Join(baseDockerfileDir, "Dockerfile")
+	b, err := os.ReadFile(baseDockerfile)
+	if err != nil {
+		return "", fmt.Errorf("read base Dockerfile for image.packages: %w", err)
+	}
+	body := insertAptInstallBeforeFinalUser(string(b), pkgs)
+	return writeDerivedImageDockerfile(sourceRoot, key, body)
+}
+
+func writeDerivedRegistryAptImageBuild(sourceRoot, key, baseRef string, pkgs []string) (string, error) {
+	if err := validateAptPackages(pkgs); err != nil {
+		return "", err
+	}
+	body := strings.Join([]string{
+		"FROM " + strings.TrimSpace(baseRef),
+		"",
+		aptInstallDockerfileRun(pkgs),
+		"",
+	}, "\n")
+	return writeDerivedImageDockerfile(sourceRoot, key, body)
+}
+
+func writeDerivedImageDockerfile(sourceRoot, key, body string) (string, error) {
+	key = packagebuild.SafeTarballToken(firstNonEmptyString(strings.TrimSpace(key), "workflow"))
+	dir := filepath.Join(sourceRoot, domain.RuntimeManifestDirName, "images", key)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Dockerfile"), []byte(body), 0o644); err != nil {
+		return "", err
+	}
+	return dir, nil
+}
+
+func insertAptInstallBeforeFinalUser(dockerfile string, pkgs []string) string {
+	lines := strings.Split(strings.ReplaceAll(dockerfile, "\r\n", "\n"), "\n")
+	insertAt := len(lines)
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), "USER ") {
+			insertAt = i
+			break
+		}
+	}
+	block := []string{
+		"",
+		"# DockPipe workflow-authored image packages.",
+		"USER root",
+		aptInstallDockerfileRun(pkgs),
+		"",
+	}
+	out := make([]string, 0, len(lines)+len(block))
+	out = append(out, lines[:insertAt]...)
+	out = append(out, block...)
+	out = append(out, lines[insertAt:]...)
+	return strings.TrimRight(strings.Join(out, "\n"), "\n") + "\n"
+}
+
+func aptInstallDockerfileRun(pkgs []string) string {
+	return "RUN apt-get update && apt-get install -y --no-install-recommends " + strings.Join(pkgs, " ") + " && rm -rf /var/lib/apt/lists/*"
+}
+
+func derivedImageRef(baseRef string, pkgs []string) string {
+	fp, err := domain.FingerprintJSON(struct {
+		Base string   `json:"base"`
+		Apt  []string `json:"apt"`
+	}{Base: strings.TrimSpace(baseRef), Apt: pkgs})
+	token := "tools"
+	if err == nil && strings.HasPrefix(fp, "sha256:") && len(fp) >= len("sha256:")+12 {
+		token = fp[len("sha256:") : len("sha256:")+12]
+	}
+	return fmt.Sprintf("dockpipe-%s-tools:%s", imageRefSlug(baseRef), token)
+}
+
+func imageRefSlug(ref string) string {
+	ref = strings.ToLower(strings.TrimSpace(ref))
+	var b strings.Builder
+	lastDash := false
+	for _, r := range ref {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	out := strings.Trim(b.String(), "-")
+	if out == "" {
+		return "image"
+	}
+	if len(out) > 64 {
+		return out[:64]
+	}
+	return out
 }
 
 func workflowImageArtifactProvenance(workdir string, pm *domain.PackageManifest, wf *domain.Workflow) domain.ImageArtifactProvenance {

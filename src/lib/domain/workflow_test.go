@@ -453,6 +453,25 @@ compile_hooks:
 	}
 }
 
+func TestParseWorkflowYAMLImagePackages(t *testing.T) {
+	y := `name: demo
+image:
+  packages:
+    apt:
+      - golang-go
+      - cargo
+run: echo hi
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := w.Image.Packages.Apt
+	if len(got) != 2 || got[0] != "golang-go" || got[1] != "cargo" {
+		t.Fatalf("image.packages.apt: %#v", got)
+	}
+}
+
 func TestParseWorkflowYAMLVault(t *testing.T) {
 	y := `name: demo
 vault: none

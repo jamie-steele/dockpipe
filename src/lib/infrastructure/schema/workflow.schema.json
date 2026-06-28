@@ -384,6 +384,26 @@
         }
       }
     },
+    "image_customization": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "packages": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "apt": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9+._:-]*$"
+              },
+              "description": "Debian apt packages to install into a derived Docker image for this workflow or step."
+            }
+          }
+        }
+      }
+    },
     "workflow_step": {
       "type": "object",
       "additionalProperties": false,
@@ -458,6 +478,7 @@
             }
           }
         },
+        "image": { "$ref": "#/$defs/image_customization" },
         "outputs": { "type": "string" },
         "workflow": {
           "type": "string",
@@ -663,6 +684,7 @@
     "inputs": { "$ref": "#/$defs/input_map" },
     "view": { "$ref": "#/$defs/workflow_view" },
     "model_policy": { "$ref": "#/$defs/model_policy" },
+    "image": { "$ref": "#/$defs/image_customization" },
     "steps": {
       "type": "array",
       "items": {

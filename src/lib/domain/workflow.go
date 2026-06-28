@@ -82,6 +82,8 @@ type Workflow struct {
 	View WorkflowView `yaml:"view,omitempty"`
 	// ModelPolicy: optional AI model attempt/validation/escalation policy for DorkPipe harnesses.
 	ModelPolicy StepAgentModelPolicyConfig `yaml:"model_policy,omitempty"`
+	// Image: optional workflow-level image customizations materialized during package compile.
+	Image WorkflowImageConfig `yaml:"image,omitempty"`
 	// Inject: explicit compile closure dependencies (workflow/package ids and resolver profile names).
 	// Unlike imports:, this does not merge YAML — it only guides package compile for-workflow ordering.
 	Inject   WorkflowInjectList      `yaml:"inject,omitempty"`
@@ -99,6 +101,14 @@ type WorkflowComposeConfig struct {
 	AutodownEnv      string            `yaml:"autodown_env,omitempty"`
 	Exports          map[string]string `yaml:"exports,omitempty"`
 	Services         []string          `yaml:"services,omitempty"`
+}
+
+type WorkflowImageConfig struct {
+	Packages WorkflowImagePackagesConfig `yaml:"packages,omitempty"`
+}
+
+type WorkflowImagePackagesConfig struct {
+	Apt []string `yaml:"apt,omitempty"`
 }
 
 type WorkflowView struct {
@@ -349,6 +359,7 @@ type Step struct {
 	Vars      map[string]string       `yaml:"vars,omitempty"`
 	VM        StepVMConfig            `yaml:"vm,omitempty"`
 	Security  WorkflowSecurityConfig  `yaml:"security,omitempty"`
+	Image     WorkflowImageConfig     `yaml:"image,omitempty"`
 	Agent     StepAgentConfig         `yaml:"agent,omitempty"`
 	// Blocking is YAML is_blocking: when false, this step joins a parallel batch with adjacent
 	// non-blocking steps. Inputs = env after last blocking step + this step’s vars/pre-scripts only;
@@ -534,6 +545,7 @@ type workflowFile struct {
 	Types           []string                   `yaml:"types,omitempty"`
 	View            WorkflowView               `yaml:"view,omitempty"`
 	ModelPolicy     StepAgentModelPolicyConfig `yaml:"model_policy,omitempty"`
+	Image           WorkflowImageConfig        `yaml:"image,omitempty"`
 	Inputs          map[string]InputBinding    `yaml:"inputs,omitempty"`
 	Vars            map[string]string          `yaml:"vars"`
 	Compose         WorkflowComposeConfig      `yaml:"compose,omitempty"`

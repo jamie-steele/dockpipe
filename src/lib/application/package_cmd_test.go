@@ -551,6 +551,69 @@ steps: []
 	}
 }
 
+func TestCmdPackageCompileWorkflowMaterializesAuthoredAptPackages(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "mywf")
+	img := filepath.Join(dir, "src", "core", "assets", "images", "codex")
+	runtimes := filepath.Join(dir, "src", "core", "runtimes")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(img, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(runtimes, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(runtimes, ".keep"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(img, "Dockerfile"), []byte("FROM debian:bookworm-slim\nUSER node\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: mywf
+isolate: codex
+image:
+  packages:
+    apt:
+      - golang-go
+      - cargo
+steps: []
+`
+	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-0.0.0.tar.gz")
+	imf, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/.dockpipe/image-artifact.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var im domain.ImageArtifactManifest
+	if err := json.Unmarshal(imf, &im); err != nil {
+		t.Fatal(err)
+	}
+	if im.Source != "build" || im.Build == nil {
+		t.Fatalf("expected build image artifact, got %+v", im)
+	}
+	if !strings.HasPrefix(im.ImageRef, "dockpipe-dockpipe-codex-") || !strings.Contains(im.ImageRef, "-tools:") {
+		t.Fatalf("expected derived tools image ref, got %q", im.ImageRef)
+	}
+	df, err := packagebuild.ReadFileFromTarGz(tgz, filepath.ToSlash(filepath.Join("workflows/mywf", im.Build.Dockerfile)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(df)
+	if !strings.Contains(got, "apt-get install -y --no-install-recommends cargo golang-go") {
+		t.Fatalf("generated Dockerfile missing apt install:\n%s", got)
+	}
+	if strings.Index(got, "apt-get install") > strings.Index(got, "USER node") {
+		t.Fatalf("expected apt install before final USER:\n%s", got)
+	}
+}
+
 func TestCmdPackageCompileWorkflowWritesPerStepRuntimeArtifacts(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src", "mywf")

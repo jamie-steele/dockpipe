@@ -48,6 +48,7 @@ In practice, most workflows should:
 |------|---------|
 | **run** | Host scripts *before* the container (paths under `run:`). |
 | **isolate** | Low-level image or template override. Most workflows should start with **`runtime`** + **`resolver`** and only set **`isolate`** when they want to pin the exact image/template. |
+| **image** | Optional image customization for Dockerfile-backed runs. Use **`image.packages.apt`** to declare Debian packages that DockPipe installs into a derived image during package compile/build, instead of bloating every resolver image. Step-level **`image`** adds packages for that step only. |
 | **act** | Follow-up after the main command (usually a **host** script; see **[architecture.md](architecture.md)** for in-container `DOCKPIPE_ACTION`). |
 | **workflow** | This file: a named preset selected with **`--workflow <name>`**. |
 | **strategy** | Optional **named lifecycle** wrapper: small **`KEY=value`** files under **`templates/<workflow>/strategies/<name>`** (optional) or **`templates/core/strategies/<name>`** define host scripts to run **before** and **after** the workflow body. See [Named strategies](#named-strategies) below. |
@@ -65,6 +66,31 @@ In practice, most workflows should:
 | **Multi-step** | Non-empty **`steps:`** | Each list item is a **step**. A step is either a **container step** (default) or a **host step** (`kind: host`). The CLI argument after `--` can supply the **last** step’s command if that step has no `cmd`/`command`. Top-level **`run`** and **`act`** / **`action`** are not used in this mode. |
 
 Variable precedence for workflows is documented in **[CLI reference](cli-reference.md)** (CLI > config > `.env` / `--env-file` / `--var`).
+
+### Image Packages
+
+Workflow authors can declare extra Debian packages for container steps without changing the base
+runtime or resolver image:
+
+```yaml
+resolver: codex
+image:
+  packages:
+    apt:
+      - golang-go
+      - cargo
+
+steps:
+  - id: rust-check
+    cmd: cargo test
+    image:
+      packages:
+        apt:
+          - rustc
+```
+
+DockPipe materializes these declarations as a derived Docker image at package compile/build time.
+Keep common inspection tools in resolver images; declare heavier project-specific toolchains here.
 
 If a workflow grows beyond one simple run, prefer moving to **`steps:`** instead of piling more meaning onto top-level **`run`** / **`act`**.
 Once you switch to **`steps:`**, move those fields onto the specific step that needs them.

@@ -8,6 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     git \
     jq \
+    python3 \
     ripgrep \
     && rm -rf /var/lib/apt/lists/*
 

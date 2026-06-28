@@ -2,7 +2,7 @@ FROM debian:bookworm-slim
 
 RUN set -eux; \
     apt-get update; \
-    apt-get install -y --no-install-recommends bash ca-certificates git openssh-client ripgrep; \
+    apt-get install -y --no-install-recommends bash ca-certificates git jq openssh-client python3 ripgrep; \
     rm -rf /var/lib/apt/lists/*
 
 COPY src/bin/dockpipe /usr/local/bin/dockpipe
