@@ -56,7 +56,8 @@ steps:
     agent:
       startup_prompt: >-
         Treat this as a bounded DorkPipe optimizer run. Use latest target artifacts as evidence.
-        Ollama may audit cheaply, but Codex owns the code-change decision and patch proposal.
+        Ollama may audit cheaply, but the Codex lane is the senior coding agent for the repo: apply
+        AGENTS.md, routed agent docs, package boundaries, and engineering judgment before proposing a patch.
       include_agents_md: true
       accessible_paths:
         - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
@@ -107,7 +108,10 @@ steps:
               This workflow is proposal-only: do not apply patches to the working tree.
               Any proposed edit must stay inside:
 
+              - `packages/agent/workflows/docs.optimize-orchestrate/README.md`
+              - `packages/agent/workflows/docs.optimize-orchestrate/config.yml`
               - `packages/agent/workflows/docs.orchestrate/config.yml`
+              - `packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-optimize.sh`
               - `packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh`
         tasks:
           - id: latest_run_audit
@@ -149,29 +153,51 @@ steps:
               validate:
                 preference: strongest_available
             inputs:
+              - AGENTS.md
+              - docs/agents/index.yaml
+              - docs/agents/yaml-workflows.md
+              - docs/agents/package-authoring.md
+              - docs/agents/model-escalation.md
+              - docs/agents/docs-generation.md
+              - docs/agents/safety-guardrails.md
               - shared/optimizer-request.md
               - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/assessment.md
               - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.optimize-orchestrate/tasks/latest_run_audit/response.md
+              - packages/agent/workflows/docs.optimize-orchestrate/config.yml
+              - packages/agent/workflows/docs.optimize-orchestrate/README.md
               - packages/agent/workflows/docs.orchestrate/config.yml
+              - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-optimize.sh
               - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh
             constraints:
               - Codex must make the patch decision
+              - use AGENTS.md and routed docs as operating instructions
+              - treat Ollama output as scout context, not authority
               - keep edits small and package-scoped
               - write a proposed patch only
               - do not apply the patch
               - never commit
             prompt: |
-              You are the Codex patch-decision worker for a DorkPipe optimizer run.
+              You are Codex inside a DorkPipe optimizer run: a senior coding agent operating from
+              the same repo instructions the outer Codex uses. Treat AGENTS.md and the included
+              routed docs as binding project guidance. Treat the Ollama audit as cheap scout context,
+              not as authority.
 
-              Decide whether the latest docs.orchestrate artifacts justify a small code change.
+              Decide whether the latest docs.orchestrate and docs.optimize-orchestrate artifacts
+              justify a code or workflow change. You may improve the optimizer itself if that is the
+              higher-leverage fix.
 
               Rules:
               - If no change is warranted, return "Decision: defer" and a short reason.
               - If a change is warranted, return "Decision: propose" followed by exactly one fenced diff block.
               - The diff must be a valid unified diff that applies with `git apply --check`.
               - The diff may touch only:
+                - packages/agent/workflows/docs.optimize-orchestrate/README.md
+                - packages/agent/workflows/docs.optimize-orchestrate/config.yml
                 - packages/agent/workflows/docs.orchestrate/config.yml
+                - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-optimize.sh
                 - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh
+              - Prefer a higher-leverage fix over patching one symptom.
+              - Preserve package boundaries; do not move DorkPipe-specific behavior into src/lib or src/cmd.
               - Do not include changes to generated artifacts.
               - Do not apply the patch.
               - Do not commit.

@@ -105,7 +105,11 @@ verify = orchestration.get("verify", {})
 concurrency = orchestration.get("concurrency", {}) or {}
 apply = orchestration.get("apply", {}) or {}
 startup_prompt = agent.get("startup_prompt", "")
-include_agents_md = bool(agent.get("include_agents_md"))
+include_agents_md = agent.get("include_agents_md")
+if include_agents_md is None:
+    include_agents_md = True
+else:
+    include_agents_md = bool(include_agents_md)
 workflow_accessible_paths = agent.get("accessible_paths", [])
 workflow_access = agent.get("access", {}) or {}
 agent_model_policy = agent.get("model_policy", {}) or workflow_model_policy
@@ -738,10 +742,7 @@ for task in tasks:
             for mode in ("read", "write", "deny"):
                 if task_access[mode]:
                     prefix.extend([f"{mode}:", *[f"- {path}" for path in task_access[mode]]])
-        include_agents_for_task = include_agents_md and (
-            not local_lane
-            or os.environ.get("DORKPIPE_ORCH_LOCAL_INCLUDE_AGENTS_MD", "false").lower() in {"1", "true", "yes", "on"}
-        )
+        include_agents_for_task = include_agents_md
         if include_agents_for_task and (root / "AGENTS.md").exists():
             prefix.extend(["", "AGENTS.md context:", "", (root / "AGENTS.md").read_text().rstrip()])
         input_context = render_input_context(task_payload["inputs"], lane_selection.get("provider", ""))

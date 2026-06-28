@@ -57,7 +57,10 @@ assessment_md = optimizer_dir / "assessment.md"
 recommendation_md = optimizer_dir / "recommendation.md"
 
 allowed_files = [
+    root / "packages/agent/workflows/docs.optimize-orchestrate/README.md",
+    root / "packages/agent/workflows/docs.optimize-orchestrate/config.yml",
     target_workflow_config,
+    root / "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-optimize.sh",
     verifier_script,
 ]
 

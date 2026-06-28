@@ -58,6 +58,8 @@ assert "Dependency context from completed upstream tasks:" in prompt, prompt
 assert "### planner_brain" in prompt, prompt
 assert "### contract_brain" not in prompt, prompt
 assert "### workflow_brain" not in prompt, prompt
+assert "AGENTS.md context:" in prompt, prompt
+assert "DockPipe Root Router" in prompt, prompt
 graph = json.loads((root / "task-graph.json").read_text())
 graph_tasks = {task["id"]: task for task in graph["tasks"]}
 assert graph_tasks["contract_brain"]["worker_type"] == "planning", graph_tasks["contract_brain"]
@@ -189,6 +191,8 @@ for task_id, provider in expected.items():
     assert "DorkPipe worker output contract:" in prompt, prompt
     assert "Return only the requested markdown artifact content." in prompt, prompt
     assert "Do not create or describe task.json" in prompt, prompt
+    assert "AGENTS.md context:" in prompt, prompt
+    assert "DockPipe Root Router" in prompt, prompt
     assert "Input context excerpts:" in prompt, prompt
     assert "shared/repo-map.md" in prompt, prompt
     if provider == "ollama":
