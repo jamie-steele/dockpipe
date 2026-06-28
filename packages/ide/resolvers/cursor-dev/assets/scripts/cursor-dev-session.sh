@@ -58,6 +58,8 @@ fi
 # So the container can write remote_active before first poll; same paths as cleanup markers.
 mkdir -p "${GLOBAL_STATE_ROOT}/cleanup" "$STATE_ROOT"
 ACTIVE_SESSION_FILE="${STATE_ROOT}/active-session.env"
+CONTAINER_STATE_ROOT="$(cursor_dev_container_state_root)"
+CONTAINER_HOME="${CONTAINER_STATE_ROOT}/home"
 
 cursor_dev_is_running_container() {
   local name="${1:-}"
@@ -97,16 +99,16 @@ run_args=(
   -w /work
   -v "${SESSION_IDLE}:/dockpipe-session-idle.sh:ro"
   -v "${COMMON_SH}:/dockpipe-cursor-dev-common.sh:ro"
-  -e "HOME=/work/bin/.dockpipe/packages/cursor-dev/home"
+  -e "HOME=${CONTAINER_HOME}"
   -e "DOCKPIPE_STATE_DIR=/work/bin/.dockpipe"
-  -e "DOCKPIPE_PACKAGE_STATE_DIR=/work/bin/.dockpipe/packages/cursor-dev"
+  -e "DOCKPIPE_PACKAGE_STATE_DIR=${CONTAINER_STATE_ROOT}"
   -e "DOCKPIPE_CONTAINER_WORKDIR=/work"
   -e "W=/work"
   -e "IS_SANDBOX=1"
-  -e "XDG_CACHE_HOME=/work/bin/.dockpipe/packages/cursor-dev/xdg-cache"
-  -e "XDG_CONFIG_HOME=/work/bin/.dockpipe/packages/cursor-dev/xdg-config"
-  -e "XDG_DATA_HOME=/work/bin/.dockpipe/packages/cursor-dev/xdg-data"
-  -e "GOCACHE=/work/bin/.dockpipe/packages/cursor-dev/gocache"
+  -e "XDG_CACHE_HOME=${CONTAINER_STATE_ROOT}/xdg-cache"
+  -e "XDG_CONFIG_HOME=${CONTAINER_STATE_ROOT}/xdg-config"
+  -e "XDG_DATA_HOME=${CONTAINER_STATE_ROOT}/xdg-data"
+  -e "GOCACHE=${CONTAINER_STATE_ROOT}/gocache"
   -e "CURSOR_DEV_SESSION_POLL_SEC=${CURSOR_DEV_SESSION_POLL_SEC:-2}"
   -e "CURSOR_DEV_CONTAINER_MONITOR=${CURSOR_DEV_CONTAINER_MONITOR:-1}"
   -e "CURSOR_DEV_REMOTE_FS_SIGNAL=${CURSOR_DEV_REMOTE_FS_SIGNAL:-1}"
@@ -118,7 +120,7 @@ case "${OSTYPE:-}" in
     run_args+=(-u "$(id -u):$(id -g)")
     ;;
 esac
-# session-idle.sh: bootstrap, optional monitor (stdout + bin/.dockpipe/packages/cursor-dev/remote_active), sleep infinity.
+# session-idle.sh: bootstrap, optional monitor (stdout + package-state remote_active), sleep infinity.
 run_args+=(--entrypoint /bin/bash "$IMAGE" /dockpipe-session-idle.sh)
 
 cursor_dev_docker_no_pathconv "${run_args[@]}" >/dev/null

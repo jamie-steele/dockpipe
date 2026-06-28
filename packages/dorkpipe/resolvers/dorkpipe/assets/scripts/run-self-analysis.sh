@@ -34,7 +34,7 @@ fi
 "$BIN" run -f "$SPEC" --workdir "$ROOT"
 echo ""
 echo "dorkpipe-self-analysis: full handoff → ${ROOT}/bin/.dockpipe/orchestrator-cursor-prompt.md"
-echo "dorkpipe-self-analysis: raw facts → ${ROOT}/bin/.dockpipe/packages/dorkpipe/self-analysis/"
+echo "dorkpipe-self-analysis: raw facts → $(dockpipe scope --package dorkpipe self-analysis --workdir "$ROOT")"
 if [[ -f "${ROOT}/bin/.dockpipe/orchestrator-cursor-prompt.refined.md" ]]; then
 	echo "dorkpipe-self-analysis: Ollama refine → ${ROOT}/bin/.dockpipe/orchestrator-cursor-prompt.refined.md"
 fi

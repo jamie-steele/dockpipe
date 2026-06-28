@@ -10,11 +10,11 @@ dorkpipe_stack_state_dir() {
     dockpipe_sdk scope --package dorkpipe dev-stack
     return 0
   fi
-  if [[ -n "${DOCKPIPE_STATE_DIR:-}" ]]; then
-    printf '%s/packages/dorkpipe/dev-stack\n' "$DOCKPIPE_STATE_DIR"
+  if [[ -x "${REPO_ROOT}/src/bin/dockpipe" ]]; then
+    "${REPO_ROOT}/src/bin/dockpipe" scope --package dorkpipe dev-stack --workdir "$REPO_ROOT"
     return 0
   fi
-  printf '%s/bin/.dockpipe/packages/dorkpipe/dev-stack\n' "$REPO_ROOT"
+  dockpipe scope --package dorkpipe dev-stack --workdir "$REPO_ROOT"
 }
 
 dorkpipe_stack_ensure_state_dir() {

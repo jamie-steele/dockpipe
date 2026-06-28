@@ -24,13 +24,22 @@ dockpipe_sdk() {
     printf '%s\n' "$fake_dockpipe"
     return 0
   fi
+  if [[ "${1:-}" == "scope" && "${2:-}" == "resolver" && "${3:-}" == "codex" ]]; then
+    case "${4:-}" in
+      auth-dir) printf '%s\n' "$HOME/.codex" ;;
+      container-auth-dir) printf '%s\n' "/home/node/.codex" ;;
+      auth-mount-mode) printf '%s\n' "ro" ;;
+      config-file|container-config-file) printf '\n' ;;
+      *) return 1 ;;
+    esac
+    return 0
+  fi
   return 1
 }
 
 export ROOT
 export HOME="$tmp/home"
 export FAKE_DOCKPIPE_ARGS="$fake_args"
-export DORKPIPE_ORCH_AUTH_MOUNT_MODE=ro
 mkdir -p "$HOME/.codex"
 
 prompt="$tmp/prompt.md"

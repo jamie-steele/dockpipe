@@ -43,6 +43,14 @@ func BuildCursor(workdir string, env map[string]string) (CursorResult, error) {
 	spec := filepath.Join(root, "packages", "dorkpipe", "resolvers", "dorkpipe-orchestrator", "spec.example.yaml")
 	hasVerifier := fileContains(spec, "kind: verifier")
 	_ = fileExists(filepath.Join(root, "packages", "dorkpipe", "lib", "examples", "full-bar.yaml"))
+	selfAnalysisRel := filepath.ToSlash(relativeTo(root, out))
+	metricsPath, _ := statepaths.MetricsPath(root)
+	metricsRel := filepath.ToSlash(relativeTo(root, metricsPath))
+	metricsTailRel := filepath.ToSlash(relativeTo(root, filepath.Join(out, "signals_metrics_tail.txt")))
+	todoRel := filepath.ToSlash(relativeTo(root, filepath.Join(out, "signals_todo.txt")))
+	gitRel := filepath.ToSlash(relativeTo(root, filepath.Join(out, "git.txt")))
+	promptRel := filepath.ToSlash(relativeTo(root, dest))
+	pasteRel := filepath.ToSlash(relativeTo(root, paste))
 
 	var doc strings.Builder
 	doc.WriteString("# Cursor implementation handoff — DockPipe + DorkPipe orchestration\n\n")
@@ -51,7 +59,7 @@ func BuildCursor(workdir string, env map[string]string) (CursorResult, error) {
 	doc.WriteString("Advance **DockPipe** (workflow execution fabric) and **DorkPipe** (`lib/dorkpipe/`, `bin/dorkpipe`) toward stronger **orchestrated reasoning**: multi-signal confidence, conditional retrieval/work, independent verifiers, bounded branch competition, evaluation (`dorkpipe eval`), and promotion of reusable assets — **without** replacing DockPipe’s core primitive or inventing a second engine.\n\n")
 	doc.WriteString("## 2. Current state summary (from this checkout)\n")
 	doc.WriteString(fmt.Sprintf("- **Go files in `lib/dorkpipe`**: %s\n", goCount))
-	doc.WriteString("- **Git HEAD / branch** (see `bin/.dockpipe/packages/dorkpipe/self-analysis/git.txt` for full):\n")
+	doc.WriteString(fmt.Sprintf("- **Git HEAD / branch** (see `%s` for full):\n", gitRel))
 	for _, line := range headLines(filepath.Join(out, "git.txt"), 3) {
 		doc.WriteString("  " + line + "\n")
 	}
@@ -73,11 +81,11 @@ func BuildCursor(workdir string, env map[string]string) (CursorResult, error) {
 		doc.WriteString("- **Independent verifier in the default orchestrator spec** (`packages/dorkpipe/resolvers/dorkpipe-orchestrator/spec.example.yaml`): add a `kind: verifier` node after local LLM output so `Vector.Verifier` is populated before escalation (implementation in `lib/dorkpipe/workers/workers.go`, `parseVerifierScore`).\n")
 	}
 	doc.WriteString("- **Surface engine features in shipped examples**: `lib/dorkpipe/examples/full-bar.yaml` demonstrates `branch_judge`, `retrieve_if_calibrated_below`, and skips — mirror one pattern into `spec.example.yaml` so dogfood exercises the same code paths operators will rely on.\n")
-	doc.WriteString("- **Metrics loop**: standardize `bin/dorkpipe eval` / `promote` after CI or nightly runs; extend `bin/.dockpipe/packages/dorkpipe/metrics.jsonl` consumers if new dimensions are added (`lib/dorkpipe/engine/provenance.go`).\n")
+	doc.WriteString(fmt.Sprintf("- **Metrics loop**: standardize `bin/dorkpipe eval` / `promote` after CI or nightly runs; extend `%s` consumers if new dimensions are added (`lib/dorkpipe/engine/provenance.go`).\n", metricsRel))
 	doc.WriteString("- **Asset promotion**: scripts under `templates/core/bundles/dorkpipe/` should stay referenced from workflows/docs when they become part of a supported path (collect/merge/verify-*).\n")
-	doc.WriteString("- **TODO/FIXME triage**: review hits in `bin/.dockpipe/packages/dorkpipe/self-analysis/signals_todo.txt`; convert stable items into issues or small PRs.\n")
-	if fileExists(filepath.Join(root, "bin", ".dockpipe", "packages", "dorkpipe", "metrics.jsonl")) && fileExists(filepath.Join(out, "signals_metrics_tail.txt")) {
-		doc.WriteString("- **Existing `bin/.dockpipe/packages/dorkpipe/metrics.jsonl`**: tail captured in `bin/.dockpipe/packages/dorkpipe/self-analysis/signals_metrics_tail.txt` — use for escalation / early-stop rates.\n")
+	doc.WriteString(fmt.Sprintf("- **TODO/FIXME triage**: review hits in `%s`; convert stable items into issues or small PRs.\n", todoRel))
+	if fileExists(metricsPath) && fileExists(filepath.Join(out, "signals_metrics_tail.txt")) {
+		doc.WriteString(fmt.Sprintf("- **Existing `%s`**: tail captured in `%s` — use for escalation / early-stop rates.\n", metricsRel, metricsTailRel))
 	}
 	doc.WriteString("\n### Search hits (files touching orchestration keywords)\n")
 	for _, line := range fileLines(filepath.Join(out, "signals_engine_files.txt")) {
@@ -113,7 +121,7 @@ func BuildCursor(workdir string, env map[string]string) (CursorResult, error) {
 	doc.WriteString("## 7. Acceptance criteria\n")
 	doc.WriteString("- [ ] `make build` and `go test ./...` pass.\n")
 	doc.WriteString("- [ ] `bin/dorkpipe validate -f packages/dorkpipe/resolvers/dorkpipe-self-analysis/spec.yaml` passes.\n")
-	doc.WriteString("- [ ] Running `dockpipe --workflow dorkpipe-self-analysis --workdir <repo> --` writes `bin/.dockpipe/orchestrator-cursor-prompt.md`.\n")
+	doc.WriteString(fmt.Sprintf("- [ ] Running `dockpipe --workflow dorkpipe-self-analysis --workdir <repo> --` writes `%s`.\n", promptRel))
 	doc.WriteString("- [ ] The handoff references **real** paths present in this repo (verify sections 2–4 against your checkout).\n\n")
 	doc.WriteString("## 8. Suggested phased order\n")
 	doc.WriteString("1. **Instrument**: ensure metrics + eval are part of your local/CI habit.\n")
@@ -121,8 +129,8 @@ func BuildCursor(workdir string, env map[string]string) (CursorResult, error) {
 	doc.WriteString("3. **Branch / conditional**: port one pattern from `lib/dorkpipe/examples/full-bar.yaml` into a non-demo workflow.\n")
 	doc.WriteString("4. **Promotion**: act on `dorkpipe promote` suggestions or tune thresholds when noise is high.\n\n")
 	doc.WriteString("## 9. Single prompt for your AI assistant\n")
-	doc.WriteString("The **plain, copy-paste-ready** implementation prompt (no extra narrative) is in **`bin/.dockpipe/paste-this-prompt.txt`**. Running `dockpipe --workflow dorkpipe-self-analysis-host --workdir <repo> --` **prints that file to stdout** at the end. With `spec.combined.yaml`, Ollama output is merged into the same file after the base prompt.\n\n---\n")
-	doc.WriteString(fmt.Sprintf("_Generated: %s_ · _Facts under `bin/.dockpipe/packages/dorkpipe/self-analysis/`_\n", time.Now().UTC().Format(time.RFC3339)))
+	doc.WriteString(fmt.Sprintf("The **plain, copy-paste-ready** implementation prompt (no extra narrative) is in **`%s`**. Running `dockpipe --workflow dorkpipe-self-analysis-host --workdir <repo> --` **prints that file to stdout** at the end. With `spec.combined.yaml`, Ollama output is merged into the same file after the base prompt.\n\n---\n", pasteRel))
+	doc.WriteString(fmt.Sprintf("_Generated: %s_ · _Facts under `%s`_\n", time.Now().UTC().Format(time.RFC3339), selfAnalysisRel))
 
 	if err := os.WriteFile(dest, []byte(doc.String()), 0o644); err != nil {
 		return CursorResult{}, err

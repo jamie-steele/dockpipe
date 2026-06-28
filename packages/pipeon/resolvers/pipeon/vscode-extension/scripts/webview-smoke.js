@@ -154,7 +154,7 @@ getElement("pipeon-initial-state").textContent = JSON.stringify({
     role: "assistant",
     html: "<p>hi</p>",
     run: {
-      artifactDir: "bin/.dockpipe/packages/dorkpipe/edit/req_123",
+      artifactDir: "scope:package:dorkpipe:edit/req_123",
       artifactVersion: "v2",
       state: "prepared",
       validationStatus: "patch_applies",

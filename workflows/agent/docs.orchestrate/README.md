@@ -67,7 +67,7 @@ request, plan, task, merge, and verify artifacts without needing a workflow-spec
 
 All orchestration artifacts land under:
 
-`bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate/`
+`dockpipe scope workflow docs.orchestrate dorkpipe/orchestrate`
 
 Key files:
 

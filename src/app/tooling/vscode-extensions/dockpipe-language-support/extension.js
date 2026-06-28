@@ -129,6 +129,24 @@ const STEP_SCOPE_KEY_DETAILS = {
   artifacts: "Artifact/output-facing scope. Use artifacts to bind generated output to workflow state."
 };
 
+const DORKPIPE_AGENT_SCOPE_REF_DETAILS = {
+  "scope:artifacts": {
+    insertText: "scope:artifacts:${1:path/to/artifact}",
+    detail: "Current workflow artifact path",
+    documentation: "DorkPipe agent path reference resolved by orchestration before prompts/task JSON are written."
+  },
+  "scope:workflow": {
+    insertText: "scope:workflow:${1:workflow.name}:${2:path/to/artifact}",
+    detail: "Another workflow's artifact path",
+    documentation: "DorkPipe agent path reference resolved through `dockpipe scope workflow <name> <path>`."
+  },
+  "scope:package": {
+    insertText: "scope:package:${1:package-name}:${2:path/to/state}",
+    detail: "Package state path",
+    documentation: "DorkPipe agent path reference resolved through `dockpipe scope --package <name> <path>`."
+  }
+};
+
 const DOCKPIPE_RUNTIME_ENV_DETAILS = {
   DOCKPIPE_SOURCE_ROOT: "Absolute source checkout/repo root. Use this when a script running elsewhere needs to read project files.",
   DOCKPIPE_ARTIFACT_ROOT: "Absolute generated artifact root for the current workflow.",
@@ -392,11 +410,18 @@ const CORE_HELPER_PROFILES = {
         documentation: "First-hand CLI command that prints a package scope object as JSON, or resolves a package path when suffix segments are provided."
       },
       {
+        name: "dockpipe scope workflow",
+        detail: "Resolve another workflow's artifact path.",
+        insertText: 'dockpipe scope workflow "$1" "$2"',
+        filterText: "dockpipe scope workflow artifact path",
+        documentation: "First-hand CLI command that resolves a path under a named workflow's artifact root."
+      },
+      {
         name: "dockpipe scope resolver",
         detail: "Resolve resolver-owned scope fields.",
         insertText: 'dockpipe scope resolver "$1" auth-dir',
         filterText: "dockpipe scope resolver auth dir container config",
-        documentation: "First-hand CLI command that resolves resolver profile fields such as `auth-dir`, `container-auth-dir`, `config-file`, and `container-config-file`."
+        documentation: "First-hand CLI command that resolves resolver profile fields such as `auth-dir`, `container-auth-dir`, `auth-mount-mode`, `config-file`, and `container-config-file`."
       },
       {
         name: "dockpipe_sdk scope",
@@ -1786,6 +1811,17 @@ function activate(context) {
           const leading = line.match(/^\s*/)?.[0] || "";
           const lineToCursor = line.slice(0, position.character);
           const items = [];
+
+          if (/^\s*-\s*["']?scope/.test(lineToCursor)) {
+            for (const [label, meta] of Object.entries(DORKPIPE_AGENT_SCOPE_REF_DETAILS)) {
+              const it = new vscode.CompletionItem(label, vscode.CompletionItemKind.Reference);
+              it.insertText = new vscode.SnippetString(meta.insertText);
+              it.detail = meta.detail;
+              it.documentation = meta.documentation;
+              items.push(it);
+            }
+            return items;
+          }
 
           if (info?.kind === "stepKey" && info.key === "cwd" && lineToCursor.includes(":")) {
             return Object.entries(STEP_CWD_VALUE_DETAILS).map(([value, doc]) => {

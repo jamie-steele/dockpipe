@@ -81,10 +81,10 @@ run_provider() {
     "--no-data"
     "--env" "HOME=/home/node"
     "--env" "PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games"
-    "--env" "DORKPIPE_AGENT_DOCTOR_PROVIDER=$provider"
-    "--env" "DORKPIPE_AGENT_DOCTOR_CLI=$cli"
-    "--env" "DORKPIPE_AGENT_DOCTOR_AUTH_DIR=$container_auth"
-    "--env" "DORKPIPE_AGENT_DOCTOR_CONFIG_FILE=$container_config"
+    "--env" "DOCKPIPE_RESOLVER_NAME=$provider"
+    "--env" "DOCKPIPE_RESOLVER_CLI=$cli"
+    "--env" "DOCKPIPE_RESOLVER_AUTH_DIR=$container_auth"
+    "--env" "DOCKPIPE_RESOLVER_CONFIG_FILE=$container_config"
     "--env" "DORKPIPE_AGENT_DOCTOR_LIVE=$live"
     "--env" "DORKPIPE_AGENT_DOCTOR_TIMEOUT_SECONDS=$timeout_s"
   )
@@ -101,10 +101,10 @@ run_provider() {
   set +e
   dockpipe "${args[@]}" -- bash -lc "$(cat <<'SH'
 set -u
-provider="${DORKPIPE_AGENT_DOCTOR_PROVIDER:?provider}"
-cli="${DORKPIPE_AGENT_DOCTOR_CLI:?cli}"
-auth_dir="${DORKPIPE_AGENT_DOCTOR_AUTH_DIR:?auth dir}"
-config_file="${DORKPIPE_AGENT_DOCTOR_CONFIG_FILE:-}"
+provider="${DOCKPIPE_RESOLVER_NAME:?provider}"
+cli="${DOCKPIPE_RESOLVER_CLI:?cli}"
+auth_dir="${DOCKPIPE_RESOLVER_AUTH_DIR:?auth dir}"
+config_file="${DOCKPIPE_RESOLVER_CONFIG_FILE:-}"
 live="${DORKPIPE_AGENT_DOCTOR_LIVE:-false}"
 timeout_s="${DORKPIPE_AGENT_DOCTOR_TIMEOUT_SECONDS:-90}"
 skills_dir="${auth_dir}/skills"

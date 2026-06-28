@@ -4,10 +4,11 @@ set -uo pipefail
 
 poll="${VSCODE_SESSION_POLL_SEC:-2}"
 monitor="${VSCODE_CONTAINER_MONITOR:-1}"
+MARKER_DIR="${DOCKPIPE_PACKAGE_STATE_DIR:?DOCKPIPE_PACKAGE_STATE_DIR is required}"
+remote_server_dir="${HOME:?HOME is required}/.vscode-server"
 
-printf '%s\n' "[dockpipe] vscode: idle @ /work — remote state lives under bin/.dockpipe/packages/vscode/"
+printf '%s\n' "[dockpipe] vscode: idle @ /work — remote state lives under package state"
 
-MARKER_DIR="/work/bin/.dockpipe/packages/vscode"
 mkdir -p "$MARKER_DIR" 2>/dev/null || true
 
 if [[ -f /dockpipe-vscode-common.sh ]]; then
@@ -15,8 +16,7 @@ if [[ -f /dockpipe-vscode-common.sh ]]; then
   source /dockpipe-vscode-common.sh
 fi
 
-remote_server_dir="/work/bin/.dockpipe/packages/vscode/home/.vscode-server"
-printf '%s\n' "[dockpipe] vscode: remote state root: /work/bin/.dockpipe/packages/vscode"
+printf '%s\n' "[dockpipe] vscode: remote state root: ${MARKER_DIR}"
 
 vscode_compute_active_process() {
   if command -v pgrep >/dev/null 2>&1; then

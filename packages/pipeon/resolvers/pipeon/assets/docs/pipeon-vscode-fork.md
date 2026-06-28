@@ -42,7 +42,7 @@ This document is the **maintainer playbook**. It is not legal advice; respect **
 | **Default settings / welcome** | Point users at Ollama, workspace folders, link to Pipeon docs. |
 | **Update server** | When you ship Pipeon binaries, host your own update JSON or use a static download page first. |
 
-**Backend:** The long-running backend should be the **DorkPipe control plane** reached through a local MCP proxy, whether it lives beside the editor for local dogfood or in another service/repo for a fuller product deployment. It reuses the same artifact contracts as **`packages/pipeon/resolvers/pipeon/bin/pipeon`** / **`bin/.dockpipe/packages/pipeon/pipeon-context.md`**.
+**Backend:** The long-running backend should be the **DorkPipe control plane** reached through a local MCP proxy, whether it lives beside the editor for local dogfood or in another service/repo for a fuller product deployment. It reuses the same artifact contracts as **`packages/pipeon/resolvers/pipeon/bin/pipeon`** / **`dockpipe scope --package pipeon pipeon-context.md`**.
 
 ---
 

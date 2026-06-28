@@ -90,7 +90,7 @@ Not allowed in normal UI mode:
 Prepared edit requests write a directory under:
 
 ```text
-bin/.dockpipe/packages/dorkpipe/edit/<request-id>/
+dockpipe scope --package dorkpipe edit/<request-id>
 ```
 
 Typical contents:
@@ -115,7 +115,7 @@ Typical contents:
 5. Pipeon calls:
 
 ```bash
-dorkpipe apply-edit --workdir /repo --artifact-dir bin/.dockpipe/packages/dorkpipe/edit/<request-id>
+dorkpipe apply-edit --workdir /repo --artifact-dir "$(dockpipe scope --package dorkpipe edit/<request-id> --workdir /repo)"
 ```
 
 6. DorkPipe applies structured edits when safe, otherwise falls back to the prepared patch, then validates the result

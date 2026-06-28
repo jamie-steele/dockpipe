@@ -69,6 +69,16 @@ func TestCmdScopeWorkflowAndPackageObjects(t *testing.T) {
 		t.Fatalf("named scope = %q want %q", gotNamed, want)
 	}
 
+	gotOtherWorkflow, err := captureStdout(t, func() error {
+		return cmdScope([]string{"workflow", "docs.orchestrate", "dorkpipe", "orchestrate"})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(wd, "bin", ".dockpipe", "workflows", "docs.orchestrate", "artifacts", "dorkpipe", "orchestrate"); gotOtherWorkflow != want {
+		t.Fatalf("workflow scope path = %q want %q", gotOtherWorkflow, want)
+	}
+
 	gotPackage, err := captureStdout(t, func() error {
 		return cmdScope([]string{"--package", "MyPackage"})
 	})
@@ -176,6 +186,7 @@ func TestCmdScopeResolverAuthFields(t *testing.T) {
 		"DOCKPIPE_RESOLVER_AUTH_DIR_ENV=CODEX_HOME",
 		"DOCKPIPE_RESOLVER_AUTH_DIR=.codex",
 		"DOCKPIPE_RESOLVER_CONTAINER_AUTH_DIR=/home/node/.codex",
+		"DOCKPIPE_RESOLVER_AUTH_MOUNT_MODE=ro",
 	}, "\n") + "\n"
 	if err := os.WriteFile(filepath.Join(wd, "packages", "agent", "resolvers", "codex", "profile"), []byte(profile), 0o644); err != nil {
 		t.Fatal(err)
@@ -210,5 +221,15 @@ func TestCmdScopeResolverAuthFields(t *testing.T) {
 	}
 	if gotContainer != "/home/node/.codex" {
 		t.Fatalf("container-auth-dir = %q", gotContainer)
+	}
+
+	gotMode, err := captureStdout(t, func() error {
+		return cmdScope([]string{"resolver", "codex", "auth-mount-mode"})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotMode != "ro" {
+		t.Fatalf("auth-mount-mode = %q", gotMode)
 	}
 }

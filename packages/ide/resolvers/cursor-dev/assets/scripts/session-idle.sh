@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # PID 1 replacement for cursor-dev: bootstrap line, optional remote-session monitor, then sleep forever.
-# Writes /work/bin/.dockpipe/packages/cursor-dev/remote_active (0|1) on each poll so the host can read state without docker exec.
+# Writes package-state remote_active (0|1) on each poll so the host can read state without docker exec.
 # Emits connect/disconnect lines to stdout → docker logs.
 set -uo pipefail
 
 poll="${CURSOR_DEV_SESSION_POLL_SEC:-2}"
 monitor="${CURSOR_DEV_CONTAINER_MONITOR:-1}"
+MARKER_DIR="${DOCKPIPE_PACKAGE_STATE_DIR:?DOCKPIPE_PACKAGE_STATE_DIR is required}"
+remote_server_dir="${HOME:?HOME is required}/.cursor-server"
 
 printf '%s\n' "[dockpipe] cursor-dev: idle @ /work — remote logs: .cursor-server/ (docker logs: bootstrap + session events)"
 printf '%s\n' "[dockpipe] cursor-dev: monitor polling every ${poll}s — started/ended using PIDs + (after first TCP connect) established sockets so disconnect can log \"ended\" even when server PIDs linger."
@@ -13,7 +15,6 @@ if [[ "${CURSOR_DEV_SESSION_TCP_GATE:-1}" == "1" ]] && ! command -v lsof >/dev/n
   printf '%s\n' "[dockpipe] cursor-dev: warning: lsof missing — TCP disconnect detection often fails (ss hides pid= in containers). Rebuild dockpipe-base-dev (templates/core/assets/images/base-dev/Dockerfile adds lsof+iproute2)."
 fi
 
-MARKER_DIR="/work/bin/.dockpipe/packages/cursor-dev"
 mkdir -p "$MARKER_DIR" 2>/dev/null || true
 
 if [[ -f /dockpipe-cursor-dev-common.sh ]]; then
@@ -119,7 +120,7 @@ monitor_loop() {
     # FS bootstrap only when we never saw remote processes: stale .cursor-server mtimes after disconnect
     # were keeping active=1 forever, so we never printed "remote session ended".
     if [[ "$proc" -eq 0 ]] && [[ "$seen_proc_ever" -eq 0 ]] && declare -F cursor_dev_fs_remote_active >/dev/null 2>&1; then
-      cursor_dev_fs_remote_active "/work/bin/.dockpipe/packages/cursor-dev/home/.cursor-server" && active=1
+      cursor_dev_fs_remote_active "$remote_server_dir" && active=1
     fi
 
     # After we've seen at least one ESTAB socket for the server, require tcp=1 for active=1. Disconnect clears

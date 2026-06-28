@@ -202,7 +202,7 @@ The Go type **`domain.PackageManifest`** parses these keys; see **`src/lib/domai
 
 ## 3. Project-local state (`bin/.dockpipe/`) and isolation
 
-**`bin/.dockpipe/`** is the **project-local** tree for generated state: host run records (**`bin/.dockpipe/runs/`**), step outputs (**`bin/.dockpipe/outputs.env`**), handoffs, optional demo stubs, and **installed package material** under **`bin/.dockpipe/internal/`**. That keeps **transient and tool-owned** files out of the main authoring trees and the repo root.
+**`bin/.dockpipe/`** is the **project-local** tree for generated state: host run records (**`bin/.dockpipe/runs/`**), workflow artifact roots, package-scoped state, handoffs, optional demo stubs, and **installed package material** under **`bin/.dockpipe/internal/`**. Step `outputs:` files are resolved under the selected workflow output/artifact scope. That keeps **transient and tool-owned** files out of the main authoring trees and the repo root.
 
 **`bin/.dockpipe/internal/packages/`** is the default store for **fetched or compiled** package trees (workflows, core slices, assets) — the same conceptual layout whether content arrived as a **`.tar.gz`** or from **`dockpipe package compile workflow`**. **Uncompressed** authoring under **`workflows/`** remains normal; **compile** validates and **materializes** into **`bin/.dockpipe/internal/...`** when you opt into the packaged path. Resolution order for **`--workflow`** is implemented in **`workflow_dirs.go`** (**`workflows/`** → **packages** → legacy **`templates/`** paths, etc.).
 

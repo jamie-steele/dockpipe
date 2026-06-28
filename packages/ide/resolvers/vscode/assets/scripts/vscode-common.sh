@@ -19,19 +19,20 @@ vscode_set_workdir() {
 }
 
 vscode_global_state_root() {
-  if [[ -n "${DOCKPIPE_STATE_DIR:-}" ]]; then
-    printf '%s' "$DOCKPIPE_STATE_DIR"
-  else
-    printf '%s/bin/.dockpipe' "$W"
-  fi
+  dockpipe get state_dir
 }
 
 vscode_state_root() {
-  if [[ -n "${DOCKPIPE_PACKAGE_STATE_DIR:-}" ]]; then
-    printf '%s' "$DOCKPIPE_PACKAGE_STATE_DIR"
-  else
-    printf '%s/packages/vscode' "$(vscode_global_state_root)"
-  fi
+  dockpipe scope --package vscode .
+}
+
+vscode_container_state_root() {
+  local state_root
+  state_root="$(vscode_state_root)"
+  case "$state_root" in
+    "$W"/*) printf '/work/%s' "${state_root#"$W"/}" ;;
+    *) printf '%s' "$state_root" ;;
+  esac
 }
 
 vscode_home_dir() {

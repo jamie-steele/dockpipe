@@ -7,7 +7,7 @@ if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
 	source "$DOCKPIPE_SDK_SH"
 	dockpipe_sdk_refresh "$ROOT"
 else
-	eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk --workdir "$ROOT")"
+	eval "$(dockpipe sdk --workdir "$ROOT")"
 fi
 cd "$ROOT"
 OUT="$(dockpipe_sdk scope --package dorkpipe .)"

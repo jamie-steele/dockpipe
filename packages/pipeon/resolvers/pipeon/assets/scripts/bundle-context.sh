@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build bin/.dockpipe/packages/pipeon/pipeon-context.md from repo signals (CI, insights, self-analysis pointers).
+# Build the package-scoped Pipeon context bundle from repo signals (CI, insights, self-analysis pointers).
 # Bounded size; no network. Run after enabling Pipeon (see lib/enable.sh).
 set -euo pipefail
 
@@ -11,7 +11,7 @@ if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
 else
 	eval "$(dockpipe sdk --workdir "$ROOT")"
 fi
-OUT="$(dockpipe_sdk path package pipeon)"
+OUT="$(dockpipe_sdk scope --package pipeon .)"
 CTX="$OUT/pipeon-context.md"
 mkdir -p "$OUT"
 
@@ -36,7 +36,7 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo "|------|---------|"
 	echo "| Repo / analysis facts | DorkPipe package self-analysis artifacts |"
 	echo "| Scan signals | DorkPipe CI artifact state, or \`DOCKPIPE_CI_ANALYSIS_DIR\` when supplied |"
-	echo "| User guidance | e.g. \`bin/.dockpipe/analysis/insights.json\` (signal, not truth) |"
+	echo "| User guidance | DockPipe analysis insights under project state (signal, not truth) |"
 	echo ""
 	echo "## CI / scans"
 	echo ""
@@ -64,9 +64,9 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	fi
 
 	echo ""
-	echo "## User insights (\`bin/.dockpipe/analysis/\`)"
+	echo "## User insights (DockPipe analysis scope)"
 	echo ""
-	INS="$ROOT/bin/.dockpipe/analysis/insights.json"
+	INS="$(dockpipe get state_dir --workdir "$ROOT")/analysis/insights.json"
 	if [[ -f "$INS" ]] && have_jq; then
 		echo "- **file:** present"
 		jq -r '"- count: " + ((.insights // []) | length | tostring)' "$INS" 2>/dev/null || true
@@ -76,9 +76,9 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	fi
 
 	echo ""
-	echo "## Orchestrator / run metadata (\`bin/.dockpipe/packages/dorkpipe/\`)"
+	echo "## Orchestrator / run metadata (DorkPipe package scope)"
 	echo ""
-	DORKPIPE_STATE_DIR="$(dockpipe_sdk path package dorkpipe)"
+	DORKPIPE_STATE_DIR="$(dockpipe_sdk scope --package dorkpipe .)"
 	if [[ -f "$DORKPIPE_STATE_DIR/run.json" ]] && have_jq; then
 		jq '{name, ts, policy}' "$DORKPIPE_STATE_DIR/run.json" 2>/dev/null | sed 's/^/    /' || true
 	else
@@ -86,7 +86,7 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	fi
 
 	echo ""
-	echo "## Self-analysis bundle (\`bin/.dockpipe/packages/dorkpipe/self-analysis/\`)"
+	echo "## Self-analysis bundle (DorkPipe package scope)"
 	echo ""
 	DORKPIPE_SELF_ANALYSIS_DIR="$DORKPIPE_STATE_DIR/self-analysis"
 	if [[ -d "$DORKPIPE_SELF_ANALYSIS_DIR" ]] && [[ -n "$(ls -A "$DORKPIPE_SELF_ANALYSIS_DIR" 2>/dev/null)" ]]; then

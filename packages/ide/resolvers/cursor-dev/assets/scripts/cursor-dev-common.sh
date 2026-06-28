@@ -22,19 +22,20 @@ cursor_dev_set_workdir() {
 }
 
 cursor_dev_global_state_root() {
-  if [[ -n "${DOCKPIPE_STATE_DIR:-}" ]]; then
-    printf '%s' "$DOCKPIPE_STATE_DIR"
-  else
-    printf '%s/bin/.dockpipe' "$W"
-  fi
+  dockpipe get state_dir
 }
 
 cursor_dev_state_root() {
-  if [[ -n "${DOCKPIPE_PACKAGE_STATE_DIR:-}" ]]; then
-    printf '%s' "$DOCKPIPE_PACKAGE_STATE_DIR"
-  else
-    printf '%s/packages/cursor-dev' "$(cursor_dev_global_state_root)"
-  fi
+  dockpipe scope --package cursor-dev .
+}
+
+cursor_dev_container_state_root() {
+  local state_root
+  state_root="$(cursor_dev_state_root)"
+  case "$state_root" in
+    "$W"/*) printf '/work/%s' "${state_root#"$W"/}" ;;
+    *) printf '%s' "$state_root" ;;
+  esac
 }
 
 # Optional: set CURSOR_DEV_SKIP_DOCKER_CHECK=1 if your workflow has no container step (custom YAML).

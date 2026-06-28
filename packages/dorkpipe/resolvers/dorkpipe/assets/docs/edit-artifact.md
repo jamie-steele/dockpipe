@@ -76,7 +76,7 @@ Prepared edit runs also write `trace.jsonl` beside the artifact files. Each line
   "metadata": {
     "candidate_count": 4
   },
-  "artifact_dir": "bin/.dockpipe/packages/dorkpipe/edit/req_123",
+  "artifact_dir": "scope:package:dorkpipe:edit/req_123",
   "timestamp": "2026-04-12T18:00:00Z"
 }
 ```

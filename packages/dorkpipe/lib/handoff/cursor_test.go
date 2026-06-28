@@ -5,16 +5,20 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"dorkpipe.orchestrator/statepaths"
 )
 
 func TestBuildCursor(t *testing.T) {
 	root := t.TempDir()
-	out := filepath.Join(root, "bin", ".dockpipe", "packages", "dorkpipe", "self-analysis")
+	out, err := statepaths.SelfAnalysisDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(out, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	write := func(rel, body string) {
-		path := filepath.Join(root, rel)
+	writeAbs := func(path, body string) {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
 		}
@@ -22,17 +26,24 @@ func TestBuildCursor(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	write("bin/.dockpipe/packages/dorkpipe/self-analysis/dorkpipe_go_files.count", "12\n")
-	write("bin/.dockpipe/packages/dorkpipe/self-analysis/git.txt", "commit abcdef\nAuthor: test\nDate: now\nextra\n")
-	write("bin/.dockpipe/packages/dorkpipe/self-analysis/dorkpipe_packages.tsv", "pkg\t3\n")
-	write("bin/.dockpipe/packages/dorkpipe/self-analysis/workflow_configs.txt", "workflow-a\n")
-	write("bin/.dockpipe/packages/dorkpipe/self-analysis/signals_git_log.txt", "fix thing\n")
-	write("bin/.dockpipe/packages/dorkpipe/self-analysis/signals_engine_files.txt", "packages/dorkpipe/lib/engine/run.go\n")
-	write("bin/.dockpipe/packages/dorkpipe/self-analysis/key_file_wc.txt", "120 packages/dorkpipe/lib/engine/run.go\n")
-	write("bin/.dockpipe/packages/dorkpipe/self-analysis/signals_metrics_tail.txt", "metric\n")
-	write("bin/.dockpipe/packages/dorkpipe/metrics.jsonl", "{}\n")
-	write("packages/dorkpipe/resolvers/dorkpipe-orchestrator/spec.example.yaml", "nodes:\n  - kind: worker\n")
-	write("packages/dorkpipe/lib/examples/full-bar.yaml", "name: demo\n")
+	writeRel := func(rel, body string) {
+		writeAbs(filepath.Join(root, rel), body)
+	}
+	writeAbs(filepath.Join(out, "dorkpipe_go_files.count"), "12\n")
+	writeAbs(filepath.Join(out, "git.txt"), "commit abcdef\nAuthor: test\nDate: now\nextra\n")
+	writeAbs(filepath.Join(out, "dorkpipe_packages.tsv"), "pkg\t3\n")
+	writeAbs(filepath.Join(out, "workflow_configs.txt"), "workflow-a\n")
+	writeAbs(filepath.Join(out, "signals_git_log.txt"), "fix thing\n")
+	writeAbs(filepath.Join(out, "signals_engine_files.txt"), "packages/dorkpipe/lib/engine/run.go\n")
+	writeAbs(filepath.Join(out, "key_file_wc.txt"), "120 packages/dorkpipe/lib/engine/run.go\n")
+	writeAbs(filepath.Join(out, "signals_metrics_tail.txt"), "metric\n")
+	metricsPath, err := statepaths.MetricsPath(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeAbs(metricsPath, "{}\n")
+	writeRel("packages/dorkpipe/resolvers/dorkpipe-orchestrator/spec.example.yaml", "nodes:\n  - kind: worker\n")
+	writeRel("packages/dorkpipe/lib/examples/full-bar.yaml", "name: demo\n")
 
 	res, err := BuildCursor(root, map[string]string{})
 	if err != nil {

@@ -20,7 +20,7 @@ task graph.
 ## Artifact root
 
 ```text
-bin/.dockpipe/workflows/<workflow-name>/dorkpipe/orchestrate/
+dockpipe scope workflow <workflow-name> dorkpipe/orchestrate
 ```
 
 ## Core files
@@ -152,9 +152,8 @@ the artifact graph without spending cloud tokens.
 Cloud CLI workers run inside their resolver containers by default (`DORKPIPE_ORCH_CONTAINERIZE_CLOUD=true`).
 Users sign in normally on the host; DorkPipe passes that auth into the container at runtime:
 
-- Codex mounts `DORKPIPE_ORCH_CODEX_AUTH_DIR`, or `CODEX_HOME`, or `~/.codex` to `/home/node/.codex`
-- Claude mounts `DORKPIPE_ORCH_CLAUDE_AUTH_DIR`, or `CLAUDE_HOME`, or `~/.claude` to `/home/node/.claude`
-- `DORKPIPE_ORCH_AUTH_MOUNT_MODE` controls mount mode (`rw` default, `ro` supported)
+- Codex and Claude auth mounts come from resolver scope fields such as `auth-dir`, `container-auth-dir`, and `auth-mount-mode`
+- Workflows read those fields with `dockpipe scope resolver <name> <field>` instead of hardcoding provider auth paths
 - API-key env vars declared by resolver profiles are still forwarded by the DockPipe runner
 
 Do not bake credentials into images or require a separate container login as the normal path.
@@ -165,7 +164,7 @@ DorkPipe records lane outcome metrics as JSONL:
 
 ```text
 training/metrics.jsonl
-bin/.dockpipe/packages/dorkpipe/training/metrics.jsonl
+dockpipe scope --package dorkpipe training/metrics.jsonl
 ```
 
 Each line captures task id, selected lane, provider, status, confidence, token estimates, whether a

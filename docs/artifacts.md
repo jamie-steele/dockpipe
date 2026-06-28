@@ -1,4 +1,4 @@
-# Maintainer artifacts (`.dockpipe/` / `bin/.dockpipe/packages/dorkpipe/`)
+# Maintainer Artifacts
 
 Generated files used as **context** for humans and AI — not a second orchestrator. Refresh via workflows / **`make ci`** / **`make self-analysis*`** when you need current data.
 
@@ -7,7 +7,7 @@ Generated files used as **context** for humans and AI — not a second orchestra
 When asked *“compliance issues?”* or *“security posture?”*:
 
 1. Read **`AGENTS.md`**.
-2. If present, load **`bin/.dockpipe/workflows/ci/dorkpipe/ci-analysis/findings.json`**, **`SUMMARY.md`**, **`bin/.dockpipe/packages/dorkpipe/run.json`**. Do **not** invent scan output.
+2. If present, load CI findings from `dockpipe scope workflow ci dorkpipe/ci-analysis/findings.json` and DorkPipe run metadata from `dockpipe scope --package dorkpipe run.json`. Do **not** invent scan output.
 3. If artifacts are missing or stale vs `HEAD`, say so — do **not** claim “clean” without evidence.
 4. This is **not** a certified compliance verdict (SOC2, ISO, etc.).
 
@@ -15,13 +15,13 @@ When asked *“compliance issues?”* or *“security posture?”*:
 
 ## CI scan bundle
 
-**govulncheck** / **gosec** feed **`bin/.dockpipe/workflows/ci/dorkpipe/ci-raw/`** → normalized **`bin/.dockpipe/workflows/ci/dorkpipe/ci-analysis/findings.json`** (schema: **`src/schemas/dockpipe-ci-findings.schema.json`**). **`dorkpipe ci normalize-scans`** is the canonical implementation; **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/normalize-ci-scans.sh`** is the compatibility wrapper. **`bash scripts/ci-local.sh`** reproduces locally.
+**govulncheck** / **gosec** feed workflow-scoped `dorkpipe/ci-raw/` artifacts → normalized `dorkpipe/ci-analysis/findings.json` (schema: **`src/schemas/dockpipe-ci-findings.schema.json`**). **`dorkpipe ci normalize-scans`** is the canonical implementation; **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/normalize-ci-scans.sh`** is the compatibility wrapper. **`bash scripts/ci-local.sh`** reproduces locally.
 
 | Path | Role |
 |------|------|
-| **`bin/.dockpipe/workflows/ci/dorkpipe/ci-analysis/findings.json`** | Canonical merged findings |
-| **`bin/.dockpipe/workflows/ci/dorkpipe/ci-analysis/SUMMARY.md`** | Short counts / provenance |
-| **`bin/.dockpipe/workflows/ci/dorkpipe/ci-raw/*.json`** | Original tool JSON |
+| `dockpipe scope workflow ci dorkpipe/ci-analysis/findings.json` | Canonical merged findings |
+| `dockpipe scope workflow ci dorkpipe/ci-analysis/SUMMARY.md` | Short counts / provenance |
+| `dockpipe scope workflow ci dorkpipe/ci-raw` | Original tool JSON directory |
 
 ## User insight queue
 

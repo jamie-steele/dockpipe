@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Deterministic repo facts for DorkPipe self-analysis (no LLM). Writes bin/.dockpipe/packages/dorkpipe/self-analysis/
+# Deterministic repo facts for DorkPipe self-analysis (no LLM).
 set -euo pipefail
 ROOT="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
 if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
@@ -7,7 +7,7 @@ if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
 	source "$DOCKPIPE_SDK_SH"
 	dockpipe_sdk_refresh "$ROOT"
 else
-	eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk --workdir "$ROOT")"
+	eval "$(dockpipe sdk --workdir "$ROOT")"
 fi
 OUT="$(dockpipe_sdk scope --package dorkpipe self-analysis)"
 mkdir -p "$OUT"

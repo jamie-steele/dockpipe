@@ -58,6 +58,7 @@ Usage:
   dockpipe scope [--workdir <path>]
   dockpipe scope <scope> [path ...] [--workdir <path>]
   dockpipe scope --package <name> [path ...] [--workdir <path>]
+  dockpipe scope workflow <name> [path ...] [--workdir <path>]
   dockpipe scope resolver <name> <field> [--workdir <path>]
 
 Built-in scopes:
@@ -71,14 +72,18 @@ Custom scope names resolve under the current workflow output root:
 With --package and no path, prints the package scope object as JSON. With path
 segments, prints a path under that package scope.
 
+Workflow scope paths resolve under a named workflow artifact root. Use this when a
+workflow needs to read artifacts from another workflow.
+
 Resolver scope fields are read from the resolver profile:
-  auth-dir, container-auth-dir, config-file, container-config-file
+  auth-dir, container-auth-dir, auth-mount-mode, config-file, container-config-file
 
 Examples:
   dockpipe scope
   dockpipe scope source src
   dockpipe scope artifacts providers/codex/result.json
   dockpipe scope name.123213
+  dockpipe scope workflow docs.orchestrate dorkpipe/orchestrate
   dockpipe scope --package dorkpipe
   dockpipe scope --package dorkpipe training metrics.jsonl
   dockpipe scope resolver codex auth-dir
@@ -253,6 +258,14 @@ func cmdScope(args []string) error {
 	}
 	if normalizeGetField(parsed.scope) == "resolver" {
 		value, err := resolverScopeValue(parsed.workdir, parsed.suffix)
+		if err != nil {
+			return err
+		}
+		fmt.Println(value)
+		return nil
+	}
+	if normalizeGetField(parsed.scope) == "workflow" {
+		value, err := workflowScopePath(parsed.workdir, parsed.suffix)
 		if err != nil {
 			return err
 		}
@@ -467,7 +480,7 @@ func resolveScopeRoot(scope, workdir string) (string, error) {
 
 func resolverScopeValue(workdir string, args []string) (string, error) {
 	if len(args) < 2 {
-		return "", fmt.Errorf("usage: dockpipe scope resolver <name> <auth-dir|container-auth-dir|config-file|container-config-file>")
+		return "", fmt.Errorf("usage: dockpipe scope resolver <name> <auth-dir|container-auth-dir|auth-mount-mode|config-file|container-config-file>")
 	}
 	resolverName := strings.TrimSpace(args[0])
 	field := normalizeGetField(args[1])
@@ -484,6 +497,8 @@ func resolverScopeValue(workdir string, args []string) (string, error) {
 		return resolveResolverHostPath(profile, "DOCKPIPE_RESOLVER_AUTH_DIR_ENV", "DOCKPIPE_RESOLVER_AUTH_DIR")
 	case "container_auth_dir":
 		return strings.TrimSpace(profile["DOCKPIPE_RESOLVER_CONTAINER_AUTH_DIR"]), nil
+	case "auth_mount_mode":
+		return firstNonEmpty(strings.TrimSpace(profile["DOCKPIPE_RESOLVER_AUTH_MOUNT_MODE"]), "rw"), nil
 	case "config_file":
 		return resolveResolverHostPath(profile, "DOCKPIPE_RESOLVER_CONFIG_FILE_ENV", "DOCKPIPE_RESOLVER_CONFIG_FILE")
 	case "container_config_file":
@@ -491,6 +506,19 @@ func resolverScopeValue(workdir string, args []string) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown resolver scope field %q", args[1])
 	}
+}
+
+func workflowScopePath(workdir string, args []string) (string, error) {
+	if len(args) < 1 {
+		return "", fmt.Errorf("usage: dockpipe scope workflow <name> [path ...]")
+	}
+	workflowName := strings.TrimSpace(args[0])
+	root, err := workflowArtifactRoot(workdir, workflowName)
+	if err != nil {
+		return "", err
+	}
+	parts := append([]string{root}, args[1:]...)
+	return filepath.Clean(filepath.Join(parts...)), nil
 }
 
 func resolveResolverHostPath(profile map[string]string, envKey, defaultKey string) (string, error) {

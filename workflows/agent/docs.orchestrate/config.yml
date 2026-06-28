@@ -26,8 +26,6 @@ model_policy:
     require_approval_over_cost: true
 
 vars:
-  DORKPIPE_ORCH_WORKFLOW: docs.orchestrate
-  DORKPIPE_ORCH_ROOT: bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate
   DORKPIPE_ORCH_OLLAMA_MODEL: llama3.2
   DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS: "120000"
   DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS: "40000"
@@ -69,7 +67,7 @@ steps:
           - workflows
           - src
         write:
-          - bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate
+          - scope:artifacts:dorkpipe/orchestrate
         deny:
           - .env
           - .env.*

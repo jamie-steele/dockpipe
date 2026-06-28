@@ -9,8 +9,8 @@ dorkpipe_orchestrate_init
 
 action="${DORKPIPE_OPTIMIZER_ACTION:-prepare}"
 target_workflow="${DORKPIPE_OPTIMIZER_TARGET_WORKFLOW:-docs.orchestrate}"
-target_root="${DORKPIPE_OPTIMIZER_TARGET_ROOT:-$(dockpipe_sdk path workflow "${target_workflow}" dorkpipe orchestrate)}"
-optimizer_root="${DORKPIPE_OPTIMIZER_ROOT:-$(dockpipe_sdk path workflow "${target_workflow}" dorkpipe optimize)}"
+target_root="$(dockpipe_sdk scope workflow "${target_workflow}" dorkpipe orchestrate)"
+optimizer_root="$(dockpipe_sdk scope workflow "${target_workflow}" dorkpipe optimize)"
 
 resolve_path() {
   local path="${1:?path}"
@@ -40,7 +40,7 @@ if [[ "${action}" == "iterate" ]]; then
   child_package="${DORKPIPE_OPTIMIZER_CHILD_PACKAGE:-}"
   child_workflow="${DORKPIPE_OPTIMIZER_CHILD_WORKFLOW:-docs.optimize-orchestrate}"
   target_package="${DORKPIPE_OPTIMIZER_TARGET_PACKAGE:-}"
-  iteration_root="${DORKPIPE_OPTIMIZER_ITERATION_ROOT:-$(dockpipe_sdk path workflow "${target_workflow}" dorkpipe optimize iterations)}"
+  iteration_root="$(dockpipe_sdk scope workflow "${target_workflow}" dorkpipe optimize iterations)"
   stop_on_invalid_patch="${DORKPIPE_OPTIMIZER_STOP_ON_INVALID_PATCH:-1}"
   refresh_target_after_apply="${DORKPIPE_OPTIMIZER_REFRESH_TARGET_AFTER_APPLY:-0}"
   case "${iterations}" in
@@ -64,15 +64,6 @@ if [[ "${action}" == "iterate" ]]; then
 EOF
     printf '[dorkpipe] optimizer %s result ready at %s\n' "${action}" "${result_json}" >&2
     exit 0
-  fi
-
-  dockpipe_bin="${DOCKPIPE_BIN:-}"
-  if [[ -z "${dockpipe_bin}" ]]; then
-    if [[ -x "${ROOT}/src/bin/dockpipe" ]]; then
-      dockpipe_bin="${ROOT}/src/bin/dockpipe"
-    else
-      dockpipe_bin="dockpipe"
-    fi
   fi
 
   run_id="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -103,7 +94,7 @@ EOF
     printf '\n[dorkpipe] optimizer iteration %02d/%02d\n' "${i}" "${iterations}" >&2
     DORKPIPE_OPTIMIZER_ITERATIONS=1 \
       DORKPIPE_OPTIMIZER_ITERATION="${i}" \
-      "${dockpipe_bin}" "${child_args[@]}" --
+      dockpipe "${child_args[@]}" --
 
     iter_dir="${run_dir}/iter-${i}"
     mkdir -p "${iter_dir}"
@@ -160,12 +151,10 @@ EOF
 
     if [[ "${apply_status}" == "applied" && "${refresh_target_after_apply}" =~ ^(1|true|yes|on)$ ]]; then
       printf '[dorkpipe] optimizer iteration %02d/%02d refreshing target workflow %s\n' "${i}" "${iterations}" "${target_workflow}" >&2
-      DORKPIPE_ORCH_WORKFLOW="${target_workflow}" \
-        DORKPIPE_ORCH_ROOT="${target_root}" \
-        DORKPIPE_ORCH_APPROVAL_MODE=auto-no \
+      DORKPIPE_ORCH_APPROVAL_MODE=auto-no \
         DORKPIPE_ORCH_SKIP_APPLY=1 \
         DORKPIPE_DEV_STACK_RELOAD=1 \
-        "${dockpipe_bin}" "${target_args[@]}" --
+        dockpipe "${target_args[@]}" --
     fi
   done
 

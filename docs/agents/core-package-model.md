@@ -7,7 +7,7 @@ Read when touching package resolution, compile/install flows, state paths, or bi
 | Store | Path | Meaning |
 | --- | --- | --- |
 | Project-local compiled store | `bin/.dockpipe/internal/packages/` | Workflows, resolvers, core slices built for this project. |
-| Project runtime state | `bin/.dockpipe/packages/` | Package-scoped run artifacts and state. |
+| Project runtime state | `dockpipe scope --package <name> ...` | Package-scoped run artifacts and state. |
 | Global install | `GlobalDockpipeDataDir()` / `DOCKPIPE_GLOBAL_ROOT` | User/machine shared package/core installs. |
 | Authoring trees | `src/core/`, `workflows/`, `packages/`, legacy `templates/` | Editable source trees. |
 

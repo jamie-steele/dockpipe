@@ -44,7 +44,7 @@ func ComplianceSummary(workdir string) (string, error) {
 
 	selfAnalysisDir, err := statepaths.SelfAnalysisDir(root)
 	if err == nil && dirHasEntries(selfAnalysisDir) {
-		b.WriteString("\n--- bin/.dockpipe/packages/dorkpipe/self-analysis/ (present) ---\n")
+		b.WriteString(fmt.Sprintf("\n--- %s (present) ---\n", filepath.ToSlash(relativeTo(root, selfAnalysisDir))))
 		for _, line := range dirSummary(selfAnalysisDir, 20) {
 			b.WriteString(line + "\n")
 		}
@@ -52,13 +52,13 @@ func ComplianceSummary(workdir string) (string, error) {
 
 	runPath, err := statepaths.RunPath(root)
 	if err == nil && fileExists(runPath) {
-		b.WriteString("\n--- bin/.dockpipe/packages/dorkpipe/run.json ---\n")
+		b.WriteString(fmt.Sprintf("\n--- %s ---\n", filepath.ToSlash(relativeTo(root, runPath))))
 		b.WriteString(runSummary(runPath))
 	}
 
 	insightsPath := statepaths.InsightsPath(root)
 	if fileExists(insightsPath) {
-		b.WriteString("\n--- bin/.dockpipe/analysis/insights.json (user guidance signals; not verified facts) ---\n")
+		b.WriteString(fmt.Sprintf("\n--- %s (user guidance signals; not verified facts) ---\n", filepath.ToSlash(relativeTo(root, insightsPath))))
 		b.WriteString(insightsSummary(insightsPath))
 	}
 

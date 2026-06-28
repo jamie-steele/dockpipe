@@ -11,8 +11,9 @@ nodes:
     kind: shell
     script: |
       set -euo pipefail
-      mkdir -p bin/.dockpipe/packages/dorkpipe
-      echo "prep ok" > bin/.dockpipe/packages/dorkpipe/prep.txt
+      out="$(dockpipe scope --package dorkpipe .)"
+      mkdir -p "$out"
+      echo "prep ok" > "$out/prep.txt"
 
   - id: local_reason
     kind: ollama

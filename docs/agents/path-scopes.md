@@ -11,8 +11,21 @@ changing `cwd`, `scopes`, `outputs`, or `dockpipe scope` behavior.
 | Step must inspect/edit the checkout and write generated files | `cwd: repo` plus `scopes: { source: repo, artifacts: artifacts }`; use `dockpipe scope artifacts ...` for generated files. |
 | Step needs checkout path explicitly | `dockpipe scope source ...`. |
 | Workflow-run artifacts | `dockpipe scope artifacts ...`; do not write to repo-root `tmp/`, `.dockpipe/`, or package state. |
+| Artifacts from another workflow | `dockpipe scope workflow <name> ...`. |
 | Package-owned long-lived state | `dockpipe scope --package <name> ...`. |
 | Resolver-owned auth/config paths | Declare them in the resolver profile and read with `dockpipe scope resolver <name> <field>`. |
+
+## DorkPipe Agent YAML
+
+DorkPipe agent orchestration resolves full-string scope references in path lists before it writes
+task prompts and task JSON:
+
+- `scope:artifacts:<path>` -> current workflow artifact path
+- `scope:workflow:<name>:<path>` -> another workflow's artifact path
+- `scope:package:<name>:<path>` -> package-owned state path
+
+Use these in `accessible_paths`, `access.read/write/deny`, and task `inputs` when a worker needs a
+generated file path. Keep normal repository files as plain relative paths.
 
 ## Migration Rules
 

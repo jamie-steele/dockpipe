@@ -5,8 +5,8 @@ dorkpipe_orchestrate_init() {
   eval "$(dockpipe sdk)"
   dockpipe_sdk init-script
   export ROOT="${ROOT:-${DOCKPIPE_WORKDIR:-$(pwd)}}"
-  export DORKPIPE_ORCH_WORKFLOW="${DORKPIPE_ORCH_WORKFLOW:-docs.orchestrate}"
-  default_orch_root="$(dockpipe_sdk path workflow "${DORKPIPE_ORCH_WORKFLOW}" dorkpipe orchestrate)"
+  export DORKPIPE_ORCH_WORKFLOW="${DORKPIPE_ORCH_WORKFLOW:-${DOCKPIPE_WORKFLOW_NAME:-docs.orchestrate}}"
+  default_orch_root="$(dockpipe_sdk scope artifacts dorkpipe orchestrate)"
   export DORKPIPE_ORCH_ROOT="${DORKPIPE_ORCH_ROOT:-${default_orch_root}}"
   mkdir -p "${DORKPIPE_ORCH_ROOT}"
   export DORKPIPE_ORCH_REQUEST_JSON="${DORKPIPE_ORCH_REQUEST_JSON:-${DORKPIPE_ORCH_ROOT}/request.json}"
@@ -48,7 +48,6 @@ dorkpipe_orchestrate_init() {
   export DORKPIPE_ORCH_DEPENDENCY_CONTEXT_TOTAL_MAX_BYTES="${DORKPIPE_ORCH_DEPENDENCY_CONTEXT_TOTAL_MAX_BYTES:-12000}"
   export DORKPIPE_ORCH_FANOUT_PROVIDER="${DORKPIPE_ORCH_FANOUT_PROVIDER:-}"
   export DORKPIPE_ORCH_CONTAINERIZE_CLOUD="${DORKPIPE_ORCH_CONTAINERIZE_CLOUD:-true}"
-  export DORKPIPE_ORCH_AUTH_MOUNT_MODE="${DORKPIPE_ORCH_AUTH_MOUNT_MODE:-rw}"
   export DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS="${DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS:-120000}"
   export DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS="${DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS:-40000}"
   export DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED="${DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED:-true}"
@@ -140,17 +139,7 @@ dorkpipe_orchestrate_dockpipe_bin() {
 
 dorkpipe_orchestrate_container_auth_dir() {
   local provider="${1:?provider}"
-  case "${provider}" in
-    codex)
-      printf '%s\n' "${DORKPIPE_ORCH_CODEX_AUTH_DIR:-${CODEX_HOME:-${HOME:-}/.codex}}"
-      ;;
-    claude)
-      printf '%s\n' "${DORKPIPE_ORCH_CLAUDE_AUTH_DIR:-${CLAUDE_HOME:-${HOME:-}/.claude}}"
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  dockpipe_sdk scope resolver "${provider}" auth-dir
 }
 
 dorkpipe_orchestrate_container_auth_mount() {
@@ -158,12 +147,9 @@ dorkpipe_orchestrate_container_auth_mount() {
   local host_dir container_dir mode
   host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}")" || return 1
   [[ -n "${host_dir}" && -d "${host_dir}" ]] || return 1
-  case "${provider}" in
-    codex) container_dir="${DORKPIPE_ORCH_CODEX_CONTAINER_AUTH_DIR:-/home/node/.codex}" ;;
-    claude) container_dir="${DORKPIPE_ORCH_CLAUDE_CONTAINER_AUTH_DIR:-/home/node/.claude}" ;;
-    *) return 1 ;;
-  esac
-  mode="${DORKPIPE_ORCH_AUTH_MOUNT_MODE:-rw}"
+  container_dir="$(dockpipe_sdk scope resolver "${provider}" container-auth-dir)" || return 1
+  [[ -n "${container_dir}" ]] || return 1
+  mode="$(dockpipe_sdk scope resolver "${provider}" auth-mount-mode)"
   case "${mode}" in
     ro|rw) ;;
     *) mode="rw" ;;
@@ -174,15 +160,15 @@ dorkpipe_orchestrate_container_auth_mount() {
 dorkpipe_orchestrate_container_extra_auth_mounts() {
   local provider="${1:?provider}"
   local mode host_file container_file
-  mode="${DORKPIPE_ORCH_AUTH_MOUNT_MODE:-rw}"
+  mode="$(dockpipe_sdk scope resolver "${provider}" auth-mount-mode)"
   case "${mode}" in
     ro|rw) ;;
     *) mode="rw" ;;
   esac
   case "${provider}" in
     claude)
-      host_file="${DORKPIPE_ORCH_CLAUDE_CONFIG_FILE:-${HOME:-}/.claude.json}"
-      container_file="${DORKPIPE_ORCH_CLAUDE_CONTAINER_CONFIG_FILE:-/home/node/.claude.json}"
+      host_file="$(dockpipe_sdk scope resolver "${provider}" config-file)"
+      container_file="$(dockpipe_sdk scope resolver "${provider}" container-config-file)"
       if [[ -n "${host_file}" && -f "${host_file}" ]]; then
         printf '%s:%s:%s\n' "${host_file}" "${container_file}" "${mode}"
       fi

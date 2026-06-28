@@ -110,8 +110,8 @@ if include_agents_md is None:
     include_agents_md = True
 else:
     include_agents_md = bool(include_agents_md)
-workflow_accessible_paths = agent.get("accessible_paths", [])
-workflow_access = agent.get("access", {}) or {}
+workflow_accessible_paths_raw = agent.get("accessible_paths", [])
+workflow_access_raw = agent.get("access", {}) or {}
 agent_model_policy = agent.get("model_policy", {}) or workflow_model_policy
 
 if not tasks:
@@ -125,6 +125,56 @@ def expand_env(value):
         default = match.group(3) or ""
         return os.environ.get(key, default)
     return pattern.sub(replace, text)
+
+scope_cache = {}
+
+def resolve_scope_ref(value):
+    text = str(value)
+    if not text.startswith("scope:"):
+        return value
+    if text in scope_cache:
+        return scope_cache[text]
+    parts = text.split(":", 3)
+    if len(parts) < 2 or not parts[1]:
+        raise SystemExit(f"{workflow_config}: invalid scope reference {text!r}")
+    kind = parts[1]
+    args = ["dockpipe", "scope"]
+    if kind in {"source", "repo", "workdir", "artifacts", "artifact", "output"}:
+        args.append(kind)
+        if len(parts) >= 3 and parts[2]:
+            args.append(parts[2])
+    elif kind in {"workflow", "package"}:
+        if len(parts) < 3 or not parts[2]:
+            raise SystemExit(f"{workflow_config}: scope:{kind}: requires a name")
+        if kind == "workflow":
+            args.extend(["workflow", parts[2]])
+        else:
+            args.extend(["--package", parts[2]])
+        if len(parts) == 4 and parts[3]:
+            args.append(parts[3])
+    else:
+        raise SystemExit(f"{workflow_config}: unsupported scope reference {text!r}")
+    args.extend(["--workdir", str(root)])
+    try:
+        resolved = subprocess.check_output(args, text=True).strip()
+    except (OSError, subprocess.CalledProcessError) as err:
+        raise SystemExit(f"{workflow_config}: could not resolve {text!r}: {err}") from err
+    scope_cache[text] = resolved
+    return resolved
+
+def resolve_scope_list(values):
+    return [resolve_scope_ref(item) for item in values or []]
+
+def resolve_access_block(access):
+    access = access or {}
+    return {
+        "read": resolve_scope_list(access.get("read", []) or []),
+        "write": resolve_scope_list(access.get("write", []) or []),
+        "deny": resolve_scope_list(access.get("deny", []) or []),
+    }
+
+workflow_accessible_paths = resolve_scope_list(workflow_accessible_paths_raw)
+workflow_access = resolve_access_block(workflow_access_raw)
 
 def load_model_lanes():
     if not model_catalog_path.exists():
@@ -634,7 +684,7 @@ for task in tasks:
         lane_plan["tasks"].append(lane_selection)
 
         accessible_paths = list(workflow_accessible_paths)
-        for path in task.get("accessible_paths", []) or []:
+        for path in resolve_scope_list(task.get("accessible_paths", []) or []):
             if path not in accessible_paths:
                 accessible_paths.append(path)
         task_access = {
@@ -642,17 +692,19 @@ for task in tasks:
             "write": list(workflow_access.get("write", []) or []),
             "deny": list(workflow_access.get("deny", []) or []),
         }
+        task_access_raw = task.get("access", {}) or {}
         for mode in ("read", "write", "deny"):
-            for path in (task.get("access", {}) or {}).get(mode, []) or []:
+            for path in resolve_scope_list(task_access_raw.get(mode, []) or []):
                 if path not in task_access[mode]:
                     task_access[mode].append(path)
+        task_inputs = resolve_scope_list(task.get("inputs", []))
 
         task_payload = {
             "id": task_id,
             "base_id": variant["base_task_id"],
             "comparison": lane_selection.get("comparison", {"enabled": False}),
             "goal": task.get("goal", ""),
-            "inputs": task.get("inputs", []),
+            "inputs": task_inputs,
             "constraints": task.get("constraints", []),
             "expected_output": task.get("expected_output", ""),
             "worker_type": task.get("worker_type", "analysis"),
@@ -667,7 +719,7 @@ for task in tasks:
                 for dep in task.get("depends_on", [])
             ],
             "claims": task.get("claims", []),
-            "citations": task.get("citations", task.get("inputs", [])),
+            "citations": resolve_scope_list(task.get("citations", task_inputs)),
             "startup_prompt": startup_prompt,
             "include_agents_md": include_agents_md,
             "accessible_paths": accessible_paths,

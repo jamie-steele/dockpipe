@@ -2938,12 +2938,11 @@ func summarizeScanSignals(root string) string {
 }
 
 func summarizeGuidanceSignals(root string) string {
-	for _, rel := range []string{
-		filepath.Join("bin", ".dockpipe", "analysis", "insights.json"),
-		filepath.Join(".dockpipe", "analysis", "insights.json"),
+	for _, candidate := range []string{
+		statepaths.InsightsPath(root),
+		filepath.Join(root, ".dockpipe", "analysis", "insights.json"),
 	} {
-		abs := filepath.Join(root, rel)
-		b, err := os.ReadFile(abs)
+		b, err := os.ReadFile(candidate)
 		if err != nil {
 			continue
 		}
@@ -2957,8 +2956,9 @@ func summarizeGuidanceSignals(root string) string {
 		if err := json.Unmarshal(b, &parsed); err != nil {
 			continue
 		}
+		rel := filepath.ToSlash(relativeTo(root, candidate))
 		lines := []string{
-			fmt.Sprintf("- file: %s", filepath.ToSlash(rel)),
+			fmt.Sprintf("- file: %s", rel),
 			fmt.Sprintf("- insights: %d", len(parsed.Insights)),
 		}
 		for _, insight := range parsed.Insights {

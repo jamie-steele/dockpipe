@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Search-based signals (grounded). Writes bin/.dockpipe/packages/dorkpipe/self-analysis/signals_*.txt
+# Search-based signals (grounded).
 set -euo pipefail
 ROOT="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
 if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
@@ -7,7 +7,7 @@ if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
 	source "$DOCKPIPE_SDK_SH"
 	dockpipe_sdk_refresh "$ROOT"
 else
-	eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk --workdir "$ROOT")"
+	eval "$(dockpipe sdk --workdir "$ROOT")"
 fi
 DORKPIPE_STATE_DIR="$(dockpipe_sdk scope --package dorkpipe .)"
 OUT="$DORKPIPE_STATE_DIR/self-analysis"
@@ -63,7 +63,7 @@ engine_files() {
 if [[ -f "$DORKPIPE_STATE_DIR/metrics.jsonl" ]]; then
 	tail -5 "$DORKPIPE_STATE_DIR/metrics.jsonl" >"$OUT/signals_metrics_tail.txt" || true
 else
-	echo "(no bin/.dockpipe/packages/dorkpipe/metrics.jsonl yet — run dorkpipe eval after orchestrator runs)" >"$OUT/signals_metrics_tail.txt"
+	echo "(no DorkPipe package metrics.jsonl yet — run dorkpipe eval after orchestrator runs)" >"$OUT/signals_metrics_tail.txt"
 fi
 
 echo "self-analysis-signals: wrote $OUT/signals_*.txt"

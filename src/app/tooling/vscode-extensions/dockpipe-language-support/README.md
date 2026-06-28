@@ -6,6 +6,7 @@ Language support for DockPipe authoring:
 - PipeLang snippets and keyword completion
 - PipeLang model awareness for primitive, object/interface, and `List<T>` field types
 - DockPipe `config.yml` IntelliSense for common workflow keys, including `cwd` and `scopes` value suggestions (`repo`, `source`, `artifacts`)
+- DorkPipe agent path snippets for `scope:artifacts:...`, `scope:workflow:<name>:...`, and `scope:package:<name>:...` references
 - DockPipe `config.yml` support for optional authored `view:` metadata (entry routing, pages, sections, and field-path driven launcher layouts)
 - Up-to-date workflow help for packaged workflow steps (`workflow:` + `package:`), Compose host built-ins, and authored security/runtime policy blocks
 - DockPipe `package.yml` hover/docs and top-level key completion
@@ -22,7 +23,7 @@ Language support for DockPipe authoring:
 - Completion/hover for SDK-object patterns:
   - shell:
     - getters: `dockpipe get workdir`, `dockpipe get workflow_name`, `dockpipe get script_dir`, `dockpipe get package_root`, `dockpipe get assets_dir`, `dockpipe get dockpipe_bin`
-    - scopes: `dockpipe scope`, `dockpipe scope --package <name>`, `dockpipe scope resolver <name> auth-dir`, `dockpipe_sdk scope ...`
+    - scopes: `dockpipe scope`, `dockpipe scope workflow <name> <path>`, `dockpipe scope --package <name>`, `dockpipe scope resolver <name> auth-dir`, `dockpipe_sdk scope ...`
     - shell-only actions: `eval "$(dockpipe sdk)"` then `dockpipe_sdk init-script`, `dockpipe_sdk cd-workdir`, `dockpipe_sdk require dockpipe-bin`, `dockpipe_sdk require workflow-name`, `dockpipe_sdk source terraform-pipeline`, `dockpipe_sdk die`
   - PowerShell: `$dockpipe.Workdir`, `$dockpipe.DockpipeBin`, `$dockpipe.WorkflowName`, `$dockpipe.ScriptDir`, `$dockpipe.PackageRoot`, `$dockpipe.AssetsDir`, `Invoke-DockpipeScope`
   - Python: `dockpipe.workdir`, `dockpipe.dockpipe_bin`, `dockpipe.workflow_name`, `dockpipe.script_dir`, `dockpipe.package_root`, `dockpipe.assets_dir`, `dockpipe.scope(...)`
@@ -56,6 +57,7 @@ make install-dockpipe-language-support
 - PipeLang editor support understands interface/object field types and generic list shapes such as `List<string>` and `List<IImageResource>`.
 - Shared script support points authors at the canonical DockPipe SDK under `src/core/assets/scripts/lib/` and `dockpipe sdk`.
 - Workflow scripts can use `dockpipe scope` / SDK scope helpers for checkout, workflow artifact, and package state paths. Runtime env such as `DOCKPIPE_SOURCE_ROOT`, `DOCKPIPE_STEP_CWD`, `DOCKPIPE_OUTPUT_ROOT`, and `DOCKPIPE_ARTIFACT_ROOT` remains available for low-level integrations.
+- DorkPipe agent workflow path lists can use `scope:...` references; the orchestration planner resolves them through `dockpipe scope` before writing prompts and task JSON.
 - `package.yml` may declare package-owned artwork via `icon:` and `artwork:` paths relative to the manifest.
 - `package.yml` may also declare a package-owned OCI image reference via `image:`; DockPipe compiles that into the effective runtime/image artifact manifests.
 - `package.yml` `script_contract.inject` declares the generic injected fields. In shell, the public

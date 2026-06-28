@@ -157,6 +157,7 @@ Package state uses the same primitive:
 ```bash
 dockpipe scope --package dorkpipe
 dockpipe scope --package dorkpipe training metrics.jsonl
+dockpipe scope workflow docs.orchestrate dorkpipe/orchestrate
 ```
 
 The package scope object includes `root`, `state_root`, `workdir`, and `dockpipe_bin`.
@@ -167,7 +168,20 @@ without hardcoding provider-specific environment names:
 ```bash
 dockpipe scope resolver codex auth-dir
 dockpipe scope resolver codex container-auth-dir
+dockpipe scope resolver codex auth-mount-mode
 ```
+
+DorkPipe agent orchestration also accepts full-string scope references in path lists such as
+`agent.accessible_paths`, `agent.access.read/write/deny`, and task `inputs`:
+
+```yaml
+inputs:
+  - scope:workflow:docs.orchestrate:dorkpipe/orchestrate/verify/result.json
+  - scope:artifacts:dorkpipe/orchestrate/tasks/latest_run_audit/response.md
+```
+
+Those references are resolved through the same `dockpipe scope` CLI before prompts and task JSON are
+written. Use plain relative paths for normal checkout files.
 
 DockPipe also injects these variables for every step:
 

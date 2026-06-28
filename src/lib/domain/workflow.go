@@ -14,7 +14,7 @@ import (
 const (
 	WorkflowTypeSecretstore = "secretstore"
 	// DefaultOutputsEnvRel is the default step outputs path when outputs: is omitted (forward slashes for YAML).
-	DefaultOutputsEnvRel = "bin/.dockpipe/outputs.env"
+	DefaultOutputsEnvRel = "outputs.env"
 )
 
 var workflowTypePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)

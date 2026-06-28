@@ -55,6 +55,7 @@ if [[ -f "$SDK_SH" ]]; then
 fi
 
 PIPEON_DESKTOP_TARGET_DIR="${PIPEON_DESKTOP_TARGET_DIR:-$(dockpipe_sdk path build pipeon-desktop-target)}"
+PIPEON_EXTENSIONS_DIR="${PIPEON_EXTENSIONS_DIR:-$(dockpipe_sdk scope --package pipeon extensions)}"
 PIPEON_VSCODE_EXT_SRC="$REPO_ROOT/packages/pipeon/resolvers/pipeon/vscode-extension"
 PIPEON_VSCODE_EXT_BUILD_DIR="${PIPEON_VSCODE_EXT_BUILD_DIR:-$(dockpipe_sdk path build pipeon-vscode-extension)}"
 PIPEON_VSCODE_EXT_NPM_CACHE="${PIPEON_VSCODE_EXT_NPM_CACHE:-$(dockpipe_sdk path build npm-cache)}"
@@ -395,7 +396,7 @@ build_source() {
 
 package_dockpipe_language_support() {
   build_log "Packaging DockPipe language support VSIX"
-  mkdir -p "$REPO_ROOT/bin/.dockpipe/extensions"
+  mkdir -p "$PIPEON_EXTENSIONS_DIR"
   (
     local version output_file
     cd "$DOCKPIPE_VSCODE_EXT_DIR"
@@ -405,7 +406,7 @@ package_dockpipe_language_support() {
         env NPM_CONFIG_CACHE="$DOCKPIPE_VSCODE_TMP_CACHE" npm ci --no-audit --no-fund
     fi
     version="$(node -p "require('./package.json').version")"
-    output_file="$REPO_ROOT/bin/.dockpipe/extensions/dockpipe-language-support-$version.vsix"
+    output_file="$PIPEON_EXTENSIONS_DIR/dockpipe-language-support-$version.vsix"
     build_log "Running vsce package for DockPipe language support"
     if pipeon_is_windows_host; then
       package_vsix_windows "$DOCKPIPE_VSCODE_EXT_DIR" "$output_file" "$DOCKPIPE_VSCODE_TMP_CACHE"
@@ -481,7 +482,7 @@ install_desktop_global() {
 package_vscode_extension() {
   package_dockpipe_language_support
   build_log "Preparing Pipeon VS Code extension build workspace"
-  mkdir -p "$REPO_ROOT/bin/.dockpipe/extensions"
+  mkdir -p "$PIPEON_EXTENSIONS_DIR"
   rm -rf "$PIPEON_VSCODE_EXT_BUILD_DIR"
   mkdir -p "$PIPEON_VSCODE_EXT_BUILD_DIR"
   cp "$PIPEON_VSCODE_EXT_SRC/package.json" "$PIPEON_VSCODE_EXT_BUILD_DIR/package.json"
@@ -508,7 +509,7 @@ package_vscode_extension() {
     cd "$PIPEON_VSCODE_EXT_SRC"
     build_log "Packaging Pipeon VSIX"
     version="$(node -p "require('./package.json').version")"
-    output_file="$REPO_ROOT/bin/.dockpipe/extensions/pipeon-$version.vsix"
+    output_file="$PIPEON_EXTENSIONS_DIR/pipeon-$version.vsix"
     vsce_entrypoint="$REPO_ROOT/src/app/tooling/vscode-extensions/dockpipe-language-support/node_modules/@vscode/vsce/vsce"
     if pipeon_is_windows_host; then
       package_vsix_windows "$PIPEON_VSCODE_EXT_SRC" "$output_file" "" "$vsce_entrypoint"
@@ -524,7 +525,7 @@ package_vscode_extension() {
 install_vscode_extension() {
   package_vscode_extension
   local vsix
-  vsix="$(ls -1t "$REPO_ROOT"/bin/.dockpipe/extensions/pipeon-*.vsix | head -n1)"
+  vsix="$(ls -1t "$PIPEON_EXTENSIONS_DIR"/pipeon-*.vsix | head -n1)"
   local installed=0
   if command -v cursor >/dev/null 2>&1; then
     echo "[dockpipe] installing Pipeon into Cursor: $vsix"

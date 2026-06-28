@@ -70,13 +70,7 @@ pipeon_stack_legacy_slug() {
 }
 
 pipeon_stack_state_dir() {
-  if [[ -n "${DOCKPIPE_PACKAGE_STATE_DIR:-}" ]]; then
-    printf '%s\n' "$DOCKPIPE_PACKAGE_STATE_DIR"
-    return 0
-  fi
-  local workdir
-  workdir="$(pipeon_stack_workdir)"
-  printf '%s/bin/.dockpipe/packages/pipeon-dev-stack\n' "$workdir"
+  dockpipe scope --package pipeon-dev-stack .
 }
 
 pipeon_stack_compose_file() {

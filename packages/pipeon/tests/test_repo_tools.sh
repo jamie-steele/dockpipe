@@ -21,15 +21,17 @@ if [[ "$build_cache" != "$ROOT/bin/.dockpipe/build/npm-cache" ]]; then
   exit 1
 fi
 
-package_state="$(DOCKPIPE_WORKDIR="$ROOT" bash -lc 'source "$1"; dockpipe_sdk path package dorkpipe dev-stack' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
-if [[ "$package_state" != "$ROOT/bin/.dockpipe/packages/dorkpipe/dev-stack" ]]; then
-  echo "test_repo_tools: expected package state under bin/.dockpipe/packages/dorkpipe/dev-stack, got $package_state" >&2
+package_state="$(DOCKPIPE_WORKDIR="$ROOT" bash -lc 'source "$1"; dockpipe_sdk scope --package dorkpipe dev-stack' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
+expected_package_state="$("$ROOT/src/bin/dockpipe" scope --package dorkpipe dev-stack --workdir "$ROOT")"
+if [[ "$package_state" != "$expected_package_state" ]]; then
+  echo "test_repo_tools: expected package state $expected_package_state, got $package_state" >&2
   exit 1
 fi
 
-workflow_state="$(DOCKPIPE_WORKDIR="$ROOT" bash -lc 'source "$1"; dockpipe_sdk path workflow docs.orchestrate dorkpipe orchestrate' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
-if [[ "$workflow_state" != "$ROOT/bin/.dockpipe/workflows/docs.orchestrate/dorkpipe/orchestrate" ]]; then
-  echo "test_repo_tools: expected workflow state under bin/.dockpipe/workflows, got $workflow_state" >&2
+workflow_state="$(DOCKPIPE_WORKDIR="$ROOT" bash -lc 'source "$1"; dockpipe_sdk scope workflow docs.orchestrate dorkpipe orchestrate' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
+expected_workflow_state="$("$ROOT/src/bin/dockpipe" scope workflow docs.orchestrate dorkpipe orchestrate --workdir "$ROOT")"
+if [[ "$workflow_state" != "$expected_workflow_state" ]]; then
+  echo "test_repo_tools: expected workflow state $expected_workflow_state, got $workflow_state" >&2
   exit 1
 fi
 
@@ -47,15 +49,15 @@ if [[ "$ci_default_injected" != "$expected_ci_default" ]]; then
   exit 1
 fi
 
-ci_bound="$(env -u DOCKPIPE_CI_RAW_DIR -u DOCKPIPE_CI_ANALYSIS_DIR DOCKPIPE_WORKDIR="$ROOT" DOCKPIPE_WORKFLOW_NAME=ci bash -lc 'source "$1"; printf "%s\n" "$(dockpipe_sdk ci raw)" "$(dockpipe_sdk ci analysis)"' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
-expected_ci_bound="$state_root/workflows/ci/dorkpipe/ci-raw
-$state_root/workflows/ci/dorkpipe/ci-analysis"
+ci_bound="$(env -u DOCKPIPE_CI_RAW_DIR -u DOCKPIPE_CI_ANALYSIS_DIR -u DOCKPIPE_ARTIFACT_ROOT -u DOCKPIPE_OUTPUT_ROOT DOCKPIPE_WORKDIR="$ROOT" DOCKPIPE_WORKFLOW_NAME=ci bash -lc 'source "$1"; printf "%s\n" "$(dockpipe_sdk ci raw)" "$(dockpipe_sdk ci analysis)"' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
+expected_ci_bound="$state_root/workflows/ci/artifacts/dorkpipe/ci-raw
+$state_root/workflows/ci/artifacts/dorkpipe/ci-analysis"
 if [[ "$ci_bound" != "$expected_ci_bound" ]]; then
   echo "test_repo_tools: expected workflow-bound CI artifacts, got $ci_bound" >&2
   exit 1
 fi
 
-ci_injected="$(env -u DOCKPIPE_CI_RAW_DIR -u DOCKPIPE_CI_ANALYSIS_DIR DOCKPIPE_WORKDIR="$ROOT" DOCKPIPE_WORKFLOW_NAME=ci bash -lc 'source "$1"; printf "%s\n" "$DOCKPIPE_CI_RAW_DIR" "$DOCKPIPE_CI_ANALYSIS_DIR"' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
+ci_injected="$(env -u DOCKPIPE_CI_RAW_DIR -u DOCKPIPE_CI_ANALYSIS_DIR -u DOCKPIPE_ARTIFACT_ROOT -u DOCKPIPE_OUTPUT_ROOT DOCKPIPE_WORKDIR="$ROOT" DOCKPIPE_WORKFLOW_NAME=ci bash -lc 'source "$1"; printf "%s\n" "$DOCKPIPE_CI_RAW_DIR" "$DOCKPIPE_CI_ANALYSIS_DIR"' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
 if [[ "$ci_injected" != "$expected_ci_bound" ]]; then
   echo "test_repo_tools: expected SDK refresh to inject workflow-bound CI dirs, got $ci_injected" >&2
   exit 1

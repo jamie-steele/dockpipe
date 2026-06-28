@@ -23,7 +23,7 @@ Use generated artifacts as read-only grounding unless the user asks to refresh t
 | Generated path | Notes |
 | --- | --- |
 | `bin/.dockpipe/internal/packages/` | Project-local compiled package store. |
-| `bin/.dockpipe/packages/` | Package runtime state/artifacts. |
+| package scope (`dockpipe scope --package <name> ...`) | Package runtime state/artifacts. |
 | `bin/.dockpipe/runs/` | Host step run records. |
 | `.dorkpipe/` | Optional DorkPipe analysis/handoff state. |
 

@@ -11,15 +11,6 @@ import (
 
 func TestComplianceSummary(t *testing.T) {
 	root := t.TempDir()
-	write := func(rel, body string) {
-		path := filepath.Join(root, rel)
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
-		}
-		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
 
 	findingsPath, err := statepaths.PackageCIFindingsPath(root)
 	if err != nil {
@@ -39,9 +30,17 @@ func TestComplianceSummary(t *testing.T) {
 	}
 	writeAbs(findingsPath, `{"schema_version":"1.0","provenance":{"commit":"abc123","source":"ci"},"findings":[{},{}]}`)
 	writeAbs(summaryPath, "# Summary\nline2\n")
-	write("bin/.dockpipe/packages/dorkpipe/self-analysis/git.txt", "commit abc\n")
-	write("bin/.dockpipe/packages/dorkpipe/run.json", `{"name":"demo","ts":"now","policy":{"mode":"strict"},"extra":"x"}`)
-	write("bin/.dockpipe/analysis/insights.json", `{"kind":"dockpipe_user_insights","insights":[{"category":"risk"},{"category":"compliance"},{"category":"risk"}]}`)
+	selfAnalysisDir, err := statepaths.SelfAnalysisDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runPath, err := statepaths.RunPath(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeAbs(filepath.Join(selfAnalysisDir, "git.txt"), "commit abc\n")
+	writeAbs(runPath, `{"name":"demo","ts":"now","policy":{"mode":"strict"},"extra":"x"}`)
+	writeAbs(statepaths.InsightsPath(root), `{"kind":"dockpipe_user_insights","insights":[{"category":"risk"},{"category":"compliance"},{"category":"risk"}]}`)
 
 	out, err := ComplianceSummary(root)
 	if err != nil {

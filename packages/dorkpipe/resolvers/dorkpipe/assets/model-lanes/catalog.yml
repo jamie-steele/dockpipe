@@ -49,7 +49,7 @@ lanes:
     availability:
       commands:
         - docker
-      auth_hint: host Codex account state mounted from DORKPIPE_ORCH_CODEX_AUTH_DIR/CODEX_HOME/~/.codex
+      auth_hint: resolver scope provides Codex auth mount fields
     budget:
       max_task_tokens: 40000
       require_approval_over_cost: true
@@ -78,7 +78,7 @@ lanes:
     availability:
       commands:
         - docker
-      auth_hint: host Claude account state mounted from DORKPIPE_ORCH_CLAUDE_AUTH_DIR/CLAUDE_HOME/~/.claude
+      auth_hint: resolver scope provides Claude auth mount fields
     budget:
       max_task_tokens: 40000
       require_approval_over_cost: true

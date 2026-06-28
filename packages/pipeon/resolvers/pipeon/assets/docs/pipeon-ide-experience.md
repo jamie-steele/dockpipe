@@ -10,7 +10,7 @@
 | **Internal model service** | Default local inference stays **inside the isolated DorkPipe stack** (private, local-first, not a client concern). |
 | **Docker (backend)** | Used for **isolation** and for **DockPipe-class work** (containers, reproducible steps)—not as the thing the user manually drives for every chat turn. The app orchestrates it; the user does not live in `docker run` for daily chat. |
 | **Safe host mapping** | The user **opens directories** (projects, worktrees) **in the app**; Pipeon maps them into the isolated side **safely** (bounded mounts, clear labels, no silent exfiltration)—**like a native “add folder” workflow**, not manual volume flags. |
-| **Intelligence** | Everything we added—**`.dockpipe/`**, **`bin/.dockpipe/packages/dorkpipe/`**, insights queue, CI normalization, workflows—is **ingested** so the model and UI can **hint** what’s available and **ground** answers. |
+| **Intelligence** | Everything we added—DockPipe state, DorkPipe package facts, insights queue, CI normalization, workflows—is **ingested** so the model and UI can **hint** what’s available and **ground** answers. |
 
 ### Boot and conversation (product UX)
 
@@ -44,7 +44,7 @@ At session start and when the user’s question is **repo-scoped**, the runtime 
 1. **Repository facts** — e.g. layout, recent changes, key paths (from self-analysis or lightweight indexing if present).
 2. **CI / scan signals** — e.g. normalized findings from DorkPipe CI artifact state when available.
 3. **Structured user guidance** — e.g. `.dockpipe/analysis/insights.json` (accepted/pending items, scoped by path or topic).
-4. **Workflow / orchestration metadata** — e.g. `bin/.dockpipe/packages/dorkpipe/run.json`, metrics tails, when relevant to “why did X happen” or “what ran last.”
+4. **Workflow / orchestration metadata** — e.g. `dockpipe scope --package dorkpipe run.json`, metrics tails, when relevant to “why did X happen” or “what ran last.”
 5. **Handoff text** — optional short blocks (e.g. paste prompts) only when they add signal density, not as a second UI.
 
 **Rule:** Discovery is **best-effort**. If something is missing, the system says so briefly and continues—no blocking modal.
@@ -176,7 +176,7 @@ I won’t run destructive Docker commands for you. If that’s what you want, ru
 
 This repo already separates:
 
-- **Facts** (e.g. `bin/.dockpipe/packages/dorkpipe/self-analysis/`)
+- **Facts** (e.g. `dockpipe scope --package dorkpipe self-analysis`)
 - **Scans** (normalized DorkPipe CI findings)
 - **User guidance** (e.g. `.dockpipe/analysis/insights.json`)
 
@@ -200,7 +200,7 @@ The **shipping** Pipeon experience is a **desktop (or equivalent) application** 
 
 | Piece | Purpose |
 |-------|---------|
-| **Artifact lanes** | **`.dockpipe/`**, **`bin/.dockpipe/packages/dorkpipe/`**, insights, CI bundle—documented across **`docs/`** |
+| **Artifact lanes** | DockPipe state, DorkPipe package facts, insights, CI bundle—documented across **`docs/`** |
 | **`../scripts/bundle-context.sh`** | Builds **`pipeon-context.md`** — same **aggregate** the app should load (harness + future UI) |
 | **`packages/pipeon/resolvers/pipeon/bin/pipeon`** / **`chat.sh`** | **Dev-only:** one-shot local harness to validate prompts + bundle (**not** the user-facing UX) |
 | **`../scripts/lib/enable.sh`** | Feature gate for harness (**`DOCKPIPE_PIPEON`**, min version **0.6.5**, **`DOCKPIPE_PIPEON_ALLOW_PRERELEASE`**) |

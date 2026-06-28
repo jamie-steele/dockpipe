@@ -4,11 +4,11 @@
 
 ## DockPipe Launcher
 
-**DockPipe Launcher’s “Set up Cursor MCP”** button runs **`cursor-prep.sh` only** (writes **`bin/.dockpipe/packages/cursor-dev/`**). It does **not** start Docker or run DockPipe. **Double-click the `cursor-dev` app** in Basic mode to run **`dockpipe --workflow cursor-dev`** (full session: container + Cursor on the host).
+**DockPipe Launcher’s “Set up Cursor MCP”** button runs **`cursor-prep.sh` only** (writes cursor-dev package state). It does **not** start Docker or run DockPipe. **Double-click the `cursor-dev` app** in Basic mode to run **`dockpipe --workflow cursor-dev`** (full session: container + Cursor on the host).
 
 ## What it does
 
-1. **Host (`run`):** **`cursor-dev-session.sh`** starts a **long-lived `dockpipe-base-dev` container** with your project at **`/work`**. **`session-idle.sh`** runs inside the container: bootstrap line, a **background monitor** that polls for remote-server processes, writes **`0`/`1`** to **`bin/.dockpipe/packages/cursor-dev/remote_active`** on the bind mount (so the **host** can read session state without **`docker exec`**), prints **remote session started / ended** lines to container stdout (visible with **`docker logs`**), then **`sleep infinity`** (main shell stays alive so the monitor keeps running). See **§ Why docker logs** and **§ No official “remote attached” API** below.
+1. **Host (`run`):** **`cursor-dev-session.sh`** starts a **long-lived `dockpipe-base-dev` container** with your project at **`/work`**. **`session-idle.sh`** runs inside the container: bootstrap line, a **background monitor** that polls for remote-server processes, writes **`0`/`1`** to **`dockpipe scope --package cursor-dev remote_active`** on the bind mount (so the **host** can read session state without **`docker exec`**), prints **remote session started / ended** lines to container stdout (visible with **`docker logs`**), then **`sleep infinity`** (main shell stays alive so the monitor keeps running). See **§ Why docker logs** and **§ No official “remote attached” API** below.
 2. **Waits on Docker:** **`docker wait`** blocks until the container exits — same *session* idea as **`vscode`**. **Ctrl+C** runs **`docker stop`** so the session ends cleanly.
 3. **Cursor on the host:** Waits until the session container is **running**, then **optionally launches Cursor** attached to that container with workspace **`/work`** ( **`--folder-uri`** Dev Containers style — **`CURSOR_DEV_REMOTE_URI`**, default on) or opens the host folder if disabled.
 
@@ -22,9 +22,9 @@ There is **no** supported headless “Cursor server” in this template. For a *
 - **`[dockpipe] cursor-dev: remote session started`** when the monitor first sees remote-server processes.
 - **`[dockpipe] cursor-dev: remote session ended`** when those processes go away.
 
-**Reliable shutdown on the host** combines the marker with the same *ideas* as the **`vscode`** desktop-session resolver (counting live sessions): **(1)** **ESTABLISHED TCP** on the host that references the **container’s IP** (host ↔ remote traffic), **(2)** **recent writes** under **`.cursor-server/`** inside the package-scoped home (like “something is still talking”), **(3)** **`pgrep` / `docker exec`** if needed. **`bin/.dockpipe/packages/cursor-dev/remote_active`** is **`0`** or **`1`**, rewritten every **`CURSOR_DEV_SESSION_POLL_SEC`** (default **2**). If the marker is **fresh** (mtime within **`CURSOR_DEV_MARKER_MAX_AGE_SEC`**, default **60s**) and **`1`**, the host trusts it immediately; if it is **`0`**, the host **still** checks TCP / **`.cursor-server`** / **`docker exec`** so a missed **`pgrep`** in the monitor does not block detection.
+**Reliable shutdown on the host** combines the marker with the same *ideas* as the **`vscode`** desktop-session resolver (counting live sessions): **(1)** **ESTABLISHED TCP** on the host that references the **container’s IP** (host ↔ remote traffic), **(2)** **recent writes** under **`.cursor-server/`** inside the package-scoped home (like “something is still talking”), **(3)** **`pgrep` / `docker exec`** if needed. **`dockpipe scope --package cursor-dev remote_active`** is **`0`** or **`1`**, rewritten every **`CURSOR_DEV_SESSION_POLL_SEC`** (default **2**). If the marker is **fresh** (mtime within **`CURSOR_DEV_MARKER_MAX_AGE_SEC`**, default **60s**) and **`1`**, the host trusts it immediately; if it is **`0`**, the host **still** checks TCP / **`.cursor-server`** / **`docker exec`** so a missed **`pgrep`** in the monitor does not block detection.
 
-**Where to look for deep logs:** **`/work/bin/.dockpipe/packages/cursor-dev/home/.cursor-server/`** in the container = **`bin/.dockpipe/packages/cursor-dev/home/.cursor-server/`** on the host.
+**Where to look for deep logs:** **`$HOME/.cursor-server/`** in the container = **`dockpipe scope --package cursor-dev home/.cursor-server`** on the host.
 
 To inspect manually: **`docker exec -it <container> ps aux`** or files under **`<repo>/.cursor-server/`**.
 
@@ -34,7 +34,7 @@ To inspect manually: **`docker exec -it <container> ps aux`** or files under **`
 
 So **`cursor-dev`** layers **best-effort heuristics**: **TCP to the container IP**, **localhost TCP** from Cursor, **`.cursor-server/`** file activity in the package-scoped home, bind-mounted **`remote_active`**, then **`pgrep` / full `ps` / `/proc/…/cmdline`** / **`docker exec`**. **Default** **`CURSOR_DEV_SESSION_SHUTDOWN=both`** stops the session when **you quit Cursor on the host** *or* when the **in-container remote** session goes idle (e.g. you closed only the remote window). Set **`CURSOR_DEV_SESSION_SHUTDOWN=host`** if remote detection misbehaves and you only care about **quit Cursor entirely**.
 
-**Host cleanup (core):** After **`docker run`**, the script writes the container name to **`bin/.dockpipe/cleanup/docker-session`** (one line) for **`ApplyHostCleanup`** in **`RunHostScript`** (see **`docs/workflow-yaml.md`** — **Host `kind: host` lifecycle**). It also writes **`bin/.dockpipe/packages/cursor-dev/session_container`**. If **`DOCKPIPE_RUN_ID`** is set, **`bin/.dockpipe/runs/<id>.container`** is written for **`dockpipe runs list`**. The session script registers **`trap … EXIT`** so **`set -e`** failures after **`docker run`** still run **`docker stop`**. When the host script exits, the Go runner applies **host cleanup** if markers remain (e.g. **`kill -9`** on bash).
+**Host cleanup (core):** After **`docker run`**, the script writes the container name to DockPipe cleanup state for **`ApplyHostCleanup`** in **`RunHostScript`** (see **`docs/workflow-yaml.md`** — **Host `kind: host` lifecycle**). It also writes **`dockpipe scope --package cursor-dev session_container`**. If **`DOCKPIPE_RUN_ID`** is set, run-scoped cleanup state is written for **`dockpipe runs list`**. The session script registers **`trap … EXIT`** so **`set -e`** failures after **`docker run`** still run **`docker stop`**. When the host script exits, the Go runner applies **host cleanup** if markers remain (e.g. **`kill -9`** on bash).
 
 **GUI hint:** Set **`DOCKPIPE_LAUNCH_MODE=gui`** in **`vars`** so the script prints that this flow opens the **desktop app** (not a remote Cursor server); dockpipe still **waits on this host script** until **`docker wait`** returns or you interrupt **`dockpipe`**.
 
@@ -66,7 +66,7 @@ Use **`vars`** in **`config.yml`** (or **`dockpipe.yml`**), shell env, or **`.en
 | **`CURSOR_DEV_SESSION_POLL_SEC`** | **`2`** | **Inside the container** (`session-idle.sh`): seconds between polls for remote-server PIDs; also how often **`remote_active`** is rewritten. |
 | **`CURSOR_DEV_SESSION_LOG_HEARTBEAT_SEC`** | **`0`** | If **> 0**, print a **`monitor heartbeat`** line to **`docker logs`** every N seconds (**`active`**, **`proc`**, **`seen_proc_ever`**) so you can tell the monitor is alive. |
 | **`CURSOR_DEV_CONTAINER_MONITOR`** | **`1`** | **`1`** — run the in-container monitor (extra **`docker logs`** lines + **`remote_active`**). **`0`** — bootstrap and **`sleep`** only (no marker file updates). |
-| **`CURSOR_DEV_MARKER_MAX_AGE_SEC`** | **`60`** | On the **host**, trust **`bin/.dockpipe/packages/cursor-dev/remote_active`** only if its mtime is newer than this many seconds; otherwise fall back to **`docker exec`** (stale = monitor dead or old session). |
+| **`CURSOR_DEV_MARKER_MAX_AGE_SEC`** | **`60`** | On the **host**, trust **`dockpipe scope --package cursor-dev remote_active`** only if its mtime is newer than this many seconds; otherwise fall back to **`docker exec`** (stale = monitor dead or old session). |
 | **`CURSOR_DEV_REMOTE_TCP_SIGNAL`** | **`1`** | Host: **ESTABLISHED** TCP involving the **container bridge IP** (`docker inspect` …). **`0`** disables. |
 | **`CURSOR_DEV_REMOTE_HOST_LOCALHOST_TCP`** | **`1`** | Host: **ESTABLISHED** TCP from a **Cursor** process (`pgrep` …) to **`127.0.0.1`** / **`::1`** (Dev Containers port-forward path — same *idea* as **`vscode`**’s **`127.0.0.1:PORT`**). Set **`0`** if this stays true after you disconnect (e.g. other localhost connections) and the container will not stop. |
 | **`CURSOR_DEV_REMOTE_FS_SIGNAL`** | **`1`** | Host + container: treat as **up** if **any** file under **`.cursor-server/`** was modified within **`CURSOR_DEV_REMOTE_FS_QUIET_SEC`**. **`0`** disables. |
@@ -101,12 +101,12 @@ Use **`--workdir`** if you are not already in the project root.
 - DockPipe does not ship Cursor, Cursor logos, Anysphere services, credentials, or editor auth state in this package.
 - Does **not** configure Remote SSH or WSL automatically. It **can** launch Cursor already attached to the session container (Dev Containers URI — **`CURSOR_DEV_REMOTE_URI`**).
 - Launcher detection is best-effort; if nothing matches, use **File → Open Folder** with the printed path.
-- **`dockpipe-base-dev`** must be available locally unless you override **`CURSOR_DEV_SESSION_IMAGE`**. Rebuild the image after upgrades (**`docker rmi dockpipe-base-dev:latest`** then run **`cursor-dev`** or **`dockpipe --isolate base-dev -- echo ok`**) so the container has a valid **`HOME`** under **`bin/.dockpipe/packages/cursor-dev/home`** (Cursor/VS Code remote server installs to **`$HOME/.cursor-server`**; without **`HOME`**, **`docker run -u uid:gid`** can yield permission errors) and the GNU **`base64`** shim (install scripts may call **`base64 -D`**).
+- **`dockpipe-base-dev`** must be available locally unless you override **`CURSOR_DEV_SESSION_IMAGE`**. Rebuild the image after upgrades (**`docker rmi dockpipe-base-dev:latest`** then run **`cursor-dev`** or **`dockpipe --isolate base-dev -- echo ok`**) so the container has a valid package-scoped **`HOME`** (Cursor/VS Code remote server installs to **`$HOME/.cursor-server`**; without **`HOME`**, **`docker run -u uid:gid`** can yield permission errors) and the GNU **`base64`** shim (install scripts may call **`base64 -D`**).
 - **Git Bash on Windows:** MSYS can rewrite **`/work`** in **`docker run`**. The session sets **`MSYS2_ARG_CONV_EXCL=*`** for **`docker`** so container paths stay **`/work`**. Launches use **`cygpath -w`** for the folder when available.
 
 ## AI agent + MCP (“basic mode” for Cursor and any agent UI)
 
-**`cursor-prep.sh`** runs at the start of **`cursor-dev-session.sh`** and **`cursor-print-next-steps.sh`**. It writes **`bin/.dockpipe/packages/cursor-dev/`**:
+**`cursor-prep.sh`** runs at the start of **`cursor-dev-session.sh`** and **`cursor-print-next-steps.sh`**. It writes cursor-dev package state:
 
 | File | Purpose |
 |------|---------|
@@ -120,5 +120,5 @@ For the **dockpipe** repository itself, prefer the committed **`.cursor/mcp.json
 
 ## What persists
 
-- Files under **`bin/.dockpipe/packages/cursor-dev/`** from **`cursor-prep.sh`** (session start or print-next-steps).
+- Files under cursor-dev package state from **`cursor-prep.sh`** (session start or print-next-steps).
 - Stopping the container does not remove your repo; only the disposable container goes away (`--rm`).

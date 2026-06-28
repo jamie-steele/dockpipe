@@ -72,15 +72,16 @@ For generated artifacts, prefer the shell SDK path helper instead of hand-writin
 eval "$(dockpipe sdk)"
 dockpipe_sdk path build npm-cache
 dockpipe_sdk scope artifacts providers/codex/result.json
+dockpipe_sdk scope workflow docs.orchestrate dorkpipe/orchestrate
 dockpipe_sdk scope --package dorkpipe training metrics.jsonl
-dockpipe_sdk path workflow docs.orchestrate dorkpipe orchestrate
 ```
 
 `dockpipe scope` prints the current workflow scope object with `source_root`, `output_root`, and
 `dockpipe_bin`. `dockpipe scope --package <name>` prints the package scope object with `root`,
 `state_root`, `workdir`, and `dockpipe_bin`.
+`dockpipe scope workflow <name> <path>` resolves paths under another workflow's artifact root.
 `dockpipe scope resolver <name> <field>` resolves resolver-owned fields such as `auth-dir`,
-`container-auth-dir`, `config-file`, and `container-config-file` from the resolver profile.
+`container-auth-dir`, `auth-mount-mode`, `config-file`, and `container-config-file` from the resolver profile.
 
 Use workflow scopes for files produced by the current step or workflow. `scopes.artifacts`
 controls that root, so a step can run with `cwd: repo` while generated files still land in artifact

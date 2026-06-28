@@ -23,7 +23,7 @@ Install this into **stock VS Code** for development, or pack as **`.vsix`** and 
 | **DorkPipe: Open chat** | Reveal the DorkPipe chat panel. |
 | **DorkPipe: New chat** | Start a fresh persisted chat session in the current workspace. |
 | **DorkPipe: Clear current chat** | Clear the active session without deleting other saved chats. |
-| **DorkPipe: Open context bundle** | Shows **`bin/.dockpipe/packages/pipeon/pipeon-context.md`** in an output channel (run `packages/pipeon/resolvers/pipeon/bin/pipeon bundle` in the repo first). |
+| **DorkPipe: Open context bundle** | Shows **`dockpipe scope --package pipeon pipeon-context.md`** in an output channel (run `packages/pipeon/resolvers/pipeon/bin/pipeon bundle` in the repo first). |
 | **DorkPipe: Open docs** | Opens the extension doc from the **`pipeon`** resolver when the workspace is this repository. |
 
 The **`images/`** directory holds both the Pipeon app mark and the DorkPipe extension mark. The extension now uses **`dorkpipe-icon.png`** for its Marketplace/activity-bar identity, while Pipeon browser/app assets continue to use the Pipeon mark.
@@ -37,7 +37,7 @@ packages/pipeon/assets/scripts/build.sh vscode-extension
 ```
 
 This writes a VSIX to:
-`bin/.dockpipe/extensions/pipeon-<version>.vsix`
+`dockpipe scope --package pipeon extensions/pipeon-<version>.vsix`
 
 Install the generated `.vsix`: **Extensions → … → Install from VSIX…**
 

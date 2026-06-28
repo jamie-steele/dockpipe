@@ -39,12 +39,13 @@ if ! "$PIPEON" bundle >/dev/null; then
 	exit 1
 fi
 
-if [[ ! -f "$tmp/bin/.dockpipe/packages/pipeon/pipeon-context.md" ]]; then
+pipeon_context="$(DOCKPIPE_WORKDIR="$tmp" "$ROOT/src/bin/dockpipe" scope --package pipeon pipeon-context.md)"
+if [[ ! -f "$pipeon_context" ]]; then
 	echo "test_pipeon: missing pipeon-context.md" >&2
 	exit 1
 fi
 
-if ! grep -q 'Pipeon context bundle' "$tmp/bin/.dockpipe/packages/pipeon/pipeon-context.md"; then
+if ! grep -q 'Pipeon context bundle' "$pipeon_context"; then
 	echo "test_pipeon: unexpected bundle content" >&2
 	exit 1
 fi

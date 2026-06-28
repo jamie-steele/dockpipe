@@ -9,13 +9,13 @@ Go module **`dorkpipe.orchestrator`** — local-first orchestration **on top of*
 - **`scheduler/`** — parallel batches + escalation ordering  
 - **`workers/`** — real execution (no stubs)  
 - **`aggregator/`** — harmonic per dimension + weighted `calibrated` + escalation policy  
-- **`eval/`** — summarize `bin/.dockpipe/packages/dorkpipe/metrics.jsonl`  
+- **`eval/`** — summarize DorkPipe package metrics (`dockpipe scope --package dorkpipe metrics.jsonl`)
 - **`promotion/`** — heuristic promotion hints from metrics + last `run.json`  
 - **`composegen/`** — Postgres+pgvector (+ optional Ollama) compose file  
 - **`cianalysis/`** — normalize CI scan outputs into DorkPipe findings artifacts  
 - **`userinsight/`** — queue / normalize / review user guidance signals  
 - **`handoff/`** — build AI-facing handoff documents and signal summaries  
-- **`statepaths/`** — canonical DorkPipe artifact layout under `bin/.dockpipe/`  
+- **`statepaths/`** — canonical DorkPipe artifact layout backed by DockPipe package/state scopes
 - **`engine/`** — wires planner → scheduler → workers → aggregator  
 
 CLI: **`./src/bin/dockpipe package build source --workdir . --only dorkpipe`** (repo root) builds the package-owned source artifacts that the wrappers under **`packages/dorkpipe/bin/`** forward to. Run **`packages/dorkpipe/bin/dorkpipe`** directly — it is **not** installed under **`src/bin/`**.
@@ -45,6 +45,6 @@ Does **not** replace DockPipe’s workflow engine; it **invokes** the `dockpipe`
 
 **Orchestration:** `policy.branch_judge` + `branch_required` on nodes (JSON `{"winner":"…"}` from judge); `retrieve_if_calibrated_below`; `policy.early_stop_calibrated_above`; `parallel_group` agreement within a level; `kind: verifier` (Ollama transport, `verifier` score in JSON). CLI: **`dorkpipe eval`**, **`dorkpipe promote`**.
 
-Artifacts: **`bin/.dockpipe/packages/dorkpipe/run.json`**, **`bin/.dockpipe/packages/dorkpipe/metrics.jsonl`** (schema v2). Example DAG: **`examples/full-bar.yaml`** in this directory.
+Artifacts: **`dockpipe scope --package dorkpipe run.json`**, **`dockpipe scope --package dorkpipe metrics.jsonl`** (schema v2). Example DAG: **`examples/full-bar.yaml`** in this directory.
 
-**DockPipe self-analysis:** the packaged workflows **`dorkpipe-self-analysis`** and **`dorkpipe-self-analysis-host`** run the analysis entrypoint in containerized or host mode. Optional local sidecar: **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/dev-stack.sh`**. Writes **`bin/.dockpipe/`** artifacts including **`bin/.dockpipe/packages/dorkpipe/`**.
+**DockPipe self-analysis:** the packaged workflows **`dorkpipe-self-analysis`** and **`dorkpipe-self-analysis-host`** run the analysis entrypoint in containerized or host mode. Optional local sidecar: **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/dev-stack.sh`**. Writes DockPipe state artifacts and DorkPipe package-scope facts.

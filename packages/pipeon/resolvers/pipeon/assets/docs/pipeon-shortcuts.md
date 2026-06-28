@@ -32,7 +32,7 @@ pipeon chat "What CI signals do we have?"
 This repo ships **`.vscode/tasks.json`**:
 
 - **Pipeon: status** — check flags and artifacts
-- **Pipeon: bundle context** — regenerate `bin/.dockpipe/packages/pipeon/pipeon-context.md`
+- **Pipeon: bundle context** — regenerate `dockpipe scope --package pipeon pipeon-context.md`
 - **Pipeon: chat** — ask a question (prompt input)
 
 Run via **Terminal → Run Task…** or Command Palette → **Tasks: Run Task**.

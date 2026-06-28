@@ -7,12 +7,13 @@ require_cursor_dev_script "$REPO_ROOT"
 SCRIPT="$REPLY"
 
 test_existing_session_guard() {
-  local tmp fakebin workdir docker_log pid out rc script_dir
+  local tmp fakebin workdir docker_log pid out rc script_dir cursor_state
   tmp="$(mktemp -d)"
   fakebin="${tmp}/bin"
   workdir="${tmp}/work"
   docker_log="${tmp}/docker.log"
-  mkdir -p "${fakebin}" "${workdir}/bin/.dockpipe/packages/cursor-dev"
+  cursor_state="$("${REPO_ROOT}/src/bin/dockpipe" scope --package cursor-dev . --workdir "$workdir")"
+  mkdir -p "${fakebin}" "${cursor_state}"
   script_dir="$(dirname "${SCRIPT}")"
 
   cat >"${fakebin}/docker" <<'EOF'
@@ -47,7 +48,7 @@ EOF
 
   sleep 60 &
   pid=$!
-  cat >"${workdir}/bin/.dockpipe/packages/cursor-dev/active-session.env" <<EOF
+  cat >"${cursor_state}/active-session.env" <<EOF
 CURSOR_DEV_ACTIVE_PID=${pid}
 CURSOR_DEV_ACTIVE_CONTAINER=existing-container
 CURSOR_DEV_ACTIVE_WORKDIR=${workdir}
