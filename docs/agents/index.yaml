@@ -52,6 +52,7 @@ tasks:
     read:
       - AGENTS.md
       - docs/agents/yaml-workflows.md
+      - docs/agents/path-scopes.md
       - docs/agents/architecture.md
       - docs/agents/safety-guardrails.md
       - docs/agents/validation-commands.md
@@ -66,10 +67,36 @@ tasks:
       - ./src/bin/dockpipe workflow validate <config.yml>
       - go test ./src/lib/...
 
+  path_scope_migration:
+    read:
+      - AGENTS.md
+      - docs/agents/path-scopes.md
+      - docs/agents/yaml-workflows.md
+      - docs/agents/core-package-model.md
+      - docs/agents/package-authoring.md
+      - docs/agents/validation-commands.md
+    optional:
+      - docs/workflow-yaml.md
+      - src/core/assets/scripts/README.md
+      - src/lib/application/sdk_cmd.go
+      - src/lib/infrastructure/schema/workflow.schema.json
+      - src/app/tooling/vscode-extensions/dockpipe-language-support/extension.js
+    skills:
+      - dorkpipe-yaml-workflows
+      - dorkpipe-package-authoring
+      - dorkpipe-core-review
+      - dorkpipe-token-optimization
+    validation:
+      - ./src/bin/dockpipe workflow validate <config.yml>
+      - ./src/bin/dockpipe package test --workdir . --only <package>
+      - ./src/bin/dockpipe package compile workflows --workdir . --from packages/<package> --force
+      - go test ./src/lib/domain ./src/lib/application
+
   package_authoring:
     read:
       - AGENTS.md
       - docs/agents/package-authoring.md
+      - docs/agents/path-scopes.md
       - docs/agents/core-package-model.md
       - docs/agents/safety-guardrails.md
       - docs/agents/validation-commands.md

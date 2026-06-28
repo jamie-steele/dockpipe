@@ -1,27 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:-}"
-if [[ -z "$ROOT" ]]; then
-  ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-fi
-ROOT="$(cd "$ROOT" && pwd)"
-
-OUT_ROOT="${DORKPIPE_AGENT_DOCTOR_ROOT:-bin/.dockpipe/packages/agent/cloud-lanes-doctor}"
-case "$OUT_ROOT" in
-  /*) ;;
-  *) OUT_ROOT="$ROOT/$OUT_ROOT" ;;
-esac
-mkdir -p "$OUT_ROOT/providers"
-
-DOCKPIPE_BIN="${DOCKPIPE_BIN:-$ROOT/src/bin/dockpipe}"
-if [[ ! -x "$DOCKPIPE_BIN" ]]; then
-  DOCKPIPE_BIN="$(command -v dockpipe 2>/dev/null || true)"
-fi
-if [[ -z "$DOCKPIPE_BIN" || ! -x "$DOCKPIPE_BIN" ]]; then
-  echo "agent.cloud-lanes.doctor: dockpipe binary not found" >&2
-  exit 1
-fi
+mkdir -p "$(dockpipe scope artifacts providers)"
 
 doctor_bool() {
   case "${1:-}" in
@@ -31,39 +11,19 @@ doctor_bool() {
 }
 
 provider_auth_dir() {
-  case "$1" in
-    codex)
-      printf '%s\n' "${DORKPIPE_ORCH_CODEX_AUTH_DIR:-${CODEX_HOME:-${HOME:-}/.codex}}"
-      ;;
-    claude)
-      printf '%s\n' "${DORKPIPE_ORCH_CLAUDE_AUTH_DIR:-${CLAUDE_HOME:-${HOME:-}/.claude}}"
-      ;;
-    *)
-      return 1
-      ;;
-  esac
+  dockpipe scope resolver "$1" auth-dir
 }
 
 provider_container_auth_dir() {
-  case "$1" in
-    codex) printf '%s\n' "${DORKPIPE_ORCH_CODEX_CONTAINER_AUTH_DIR:-/home/node/.codex}" ;;
-    claude) printf '%s\n' "${DORKPIPE_ORCH_CLAUDE_CONTAINER_AUTH_DIR:-/home/node/.claude}" ;;
-    *) return 1 ;;
-  esac
+  dockpipe scope resolver "$1" container-auth-dir
 }
 
 provider_host_config_file() {
-  case "$1" in
-    claude) printf '%s\n' "${DORKPIPE_ORCH_CLAUDE_CONFIG_FILE:-${HOME:-}/.claude.json}" ;;
-    *) printf '\n' ;;
-  esac
+  dockpipe scope resolver "$1" config-file
 }
 
 provider_container_config_file() {
-  case "$1" in
-    claude) printf '%s\n' "${DORKPIPE_ORCH_CLAUDE_CONTAINER_CONFIG_FILE:-/home/node/.claude.json}" ;;
-    *) printf '\n' ;;
-  esac
+  dockpipe scope resolver "$1" container-config-file
 }
 
 provider_cli() {
@@ -92,7 +52,8 @@ provider_live_command() {
 
 run_provider() {
   local provider="$1"
-  local provider_dir="$OUT_ROOT/providers/$provider"
+  local provider_dir
+  provider_dir="$(dockpipe scope artifacts providers "$provider")"
   local stdout_file="$provider_dir/stdout.txt"
   local stderr_file="$provider_dir/stderr.txt"
   local result_file="$provider_dir/result.json"
@@ -109,13 +70,12 @@ run_provider() {
   cli="$(provider_cli "$provider")"
   live="$(doctor_bool "${DORKPIPE_AGENT_DOCTOR_LIVE:-true}")"
   timeout_s="${DORKPIPE_AGENT_DOCTOR_TIMEOUT_SECONDS:-90}"
-  mount_mode="${DORKPIPE_ORCH_AUTH_MOUNT_MODE:-rw}"
-  case "$mount_mode" in ro|rw) ;; *) mount_mode="rw" ;; esac
+  mount_mode="rw"
   [[ -d "$host_auth" ]] && host_auth_exists="true"
   [[ -n "$host_config" && -f "$host_config" ]] && host_config_exists="true"
 
   local args=(
-    "--workdir" "$ROOT"
+    "--workdir" "$(dockpipe scope source)"
     "--runtime" "dockerimage"
     "--resolver" "$provider"
     "--no-data"
@@ -139,7 +99,7 @@ run_provider() {
   args+=("--env" "DORKPIPE_AGENT_DOCTOR_LIVE_CMD=$live_cmd")
 
   set +e
-  "$DOCKPIPE_BIN" "${args[@]}" -- bash -lc "$(cat <<'SH'
+  dockpipe "${args[@]}" -- bash -lc "$(cat <<'SH'
 set -u
 provider="${DORKPIPE_AGENT_DOCTOR_PROVIDER:?provider}"
 cli="${DORKPIPE_AGENT_DOCTOR_CLI:?cli}"
@@ -274,7 +234,7 @@ for provider in "${providers[@]}"; do
   run_provider "$provider"
 done
 
-python3 - "$OUT_ROOT" "${providers[@]}" <<'PY'
+python3 - "$(dockpipe scope artifacts)" "${providers[@]}" <<'PY'
 import json
 import pathlib
 import sys

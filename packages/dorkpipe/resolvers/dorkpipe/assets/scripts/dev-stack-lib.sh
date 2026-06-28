@@ -7,7 +7,7 @@ dorkpipe_stack_state_dir() {
     return 0
   fi
   if declare -F dockpipe_sdk >/dev/null 2>&1; then
-    dockpipe_sdk path package dorkpipe dev-stack
+    dockpipe_sdk scope --package dorkpipe dev-stack
     return 0
   fi
   if [[ -n "${DOCKPIPE_STATE_DIR:-}" ]]; then

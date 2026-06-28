@@ -9,7 +9,7 @@ if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
 else
 	eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk --workdir "$ROOT")"
 fi
-OUT="$(dockpipe_sdk path package dorkpipe self-analysis)"
+OUT="$(dockpipe_sdk scope --package dorkpipe self-analysis)"
 mkdir -p "$OUT"
 
 {

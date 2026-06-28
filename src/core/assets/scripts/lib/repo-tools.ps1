@@ -24,7 +24,11 @@ function Resolve-DockpipeBin {
   }
 
   $resolvedRoot = Get-DockpipeRepoRoot -Root $Root
-  foreach ($relative in @("src/bin/dockpipe.exe", "src/bin/dockpipe")) {
+  $candidates = @("src/bin/dockpipe", "src/bin/dockpipe.exe")
+  if ($IsWindows) {
+    $candidates = @("src/bin/dockpipe.exe", "src/bin/dockpipe")
+  }
+  foreach ($relative in $candidates) {
     $candidate = Join-Path $resolvedRoot $relative
     if (Test-Path -LiteralPath $candidate) {
       return $candidate
@@ -59,6 +63,39 @@ function Get-DockpipeSdk {
 }
 
 $script:dockpipe = Get-DockpipeSdk -Root $env:DOCKPIPE_WORKDIR
+
+function Invoke-DockpipeScope {
+  param(
+    [string]$Scope,
+    [string]$Package,
+    [Parameter(ValueFromRemainingArguments = $true)]
+    [string[]]$Path = @(),
+    [string]$Root
+  )
+
+  $sdk = Get-DockpipeSdk -Root $Root
+  if (-not $sdk.DockpipeBin) {
+    throw "dockpipe binary not found; set DOCKPIPE_BIN or add dockpipe to PATH"
+  }
+  $argv = @("scope", "--workdir", $sdk.Workdir)
+  if ($Package) {
+    $argv += @("--package", $Package)
+  }
+  if ($Scope) {
+    $argv += $Scope
+  }
+  foreach ($part in $Path) {
+    $argv += $part
+  }
+  $out = & $sdk.DockpipeBin @argv
+  if ($LASTEXITCODE -ne 0) {
+    throw "dockpipe scope failed"
+  }
+  if (-not $Scope -and $Path.Count -eq 0) {
+    return ($out | ConvertFrom-Json)
+  }
+  return $out
+}
 
 function Test-DockpipeTruthy {
   param(

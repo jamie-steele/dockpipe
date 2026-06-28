@@ -113,10 +113,11 @@ If a host step starts sidecars or helper containers, the runner can clean them u
 | **`DOCKPIPE_LAUNCH_MODE`** | Optional hint for **`vars:`** / templates — e.g. **`gui`** means the step opens a **GUI** on the host (desktop app, not a detached “server” process). Scripts can print clearer messaging; dockpipe still **waits on the host script** until it exits unless the script itself returns early. |
 | **`DOCKPIPE_SKIP_HOST_CLEANUP`** | If **`1`** or **`true`**, the runner **skips** **`ApplyHostCleanup`** after the host script exits (escape hatch: you stop containers yourself). |
 
-### Step working directory
+### Step working directory and scopes
 
-Steps run from the source workdir by default. When a step writes generated files with simple
-relative paths, set **`cwd: artifacts`**:
+Steps run from the source workdir by default. Use **`cwd: repo`** or **`cwd: source`** when
+the step should start in the checkout. When a step writes generated files with simple relative
+paths, set **`cwd: artifacts`**:
 
 ```yaml
 steps:
@@ -130,13 +131,51 @@ steps:
 DockPipe creates the workflow artifact root under
 **`bin/.dockpipe/workflows/<workflow>/artifacts`** and starts the step there. Scripts can write
 ordinary relative paths such as **`ci-analysis/findings.json`** without polluting source control.
+Scripts should resolve generated paths with **`dockpipe scope`** or **`dockpipe_sdk scope`**. If a
+path must point back into the checkout, make that explicit with **`dockpipe scope source`**.
+
+When a step needs both worlds, keep **`cwd: repo`** and bind source/artifact scopes explicitly:
+
+```yaml
+steps:
+  - id: doctor
+    kind: host
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
+    run: assets/scripts/cloud-lanes-doctor.sh
+```
+
+In that form the process starts in the checkout, while `dockpipe scope` returns the current workflow
+scope object, including `source_root`, `output_root`, and `dockpipe_bin`. Use
+`dockpipe scope artifacts <path>` to resolve under the workflow artifact root.
+Relative **`outputs:`** files resolve under the output/artifact scope, not the process cwd.
+
+Package state uses the same primitive:
+
+```bash
+dockpipe scope --package dorkpipe
+dockpipe scope --package dorkpipe training metrics.jsonl
+```
+
+The package scope object includes `root`, `state_root`, `workdir`, and `dockpipe_bin`.
+
+Resolver packages can expose resolver-owned paths through their profile, then scripts can read them
+without hardcoding provider-specific environment names:
+
+```bash
+dockpipe scope resolver codex auth-dir
+dockpipe scope resolver codex container-auth-dir
+```
 
 DockPipe also injects these variables for every step:
 
 | Variable | Meaning |
 |----------|---------|
-| **`DOCKPIPE_SOURCE_ROOT`** | Absolute source workdir/repo root. Same intent as **`DOCKPIPE_WORKDIR`**, kept explicit for scripts running elsewhere. |
-| **`DOCKPIPE_ARTIFACT_ROOT`** | Absolute generated artifact root for this workflow. |
+| **`DOCKPIPE_SOURCE_ROOT`** | Absolute source workdir/repo root. Use this when a script running from artifacts needs to read project files. |
+| **`DOCKPIPE_ARTIFACT_ROOT`** | Absolute generated artifact root selected by **`scopes.artifacts`**. |
+| **`DOCKPIPE_OUTPUT_ROOT`** | Alias for the output/artifact scope used by `dockpipe scope`. |
 | **`DOCKPIPE_STEP_CWD`** | Absolute directory DockPipe uses as the process working directory for the step. |
 
 ---
@@ -324,7 +363,8 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `pre_script` | Single extra pre-script path (in addition to `run`). |
 | `isolate` | Template/image for this step (falls back to workflow / CLI / **core** runtime profile). |
 | `kind` | Step kind. Use **`container`** (default) for normal isolated execution, or **`host`** for host-side actions. |
-| `cwd` | Step working directory. Omit or use **`source`** for the source workdir; use **`artifacts`** for this workflow's generated artifact root. |
+| `cwd` | Step working directory. Omit or use **`source`** / **`repo`** for the checkout; use **`artifacts`** for this workflow's generated artifact root. |
+| `scopes` | Optional `{ source, artifacts }` binding for path roots. Use `source: repo` plus `artifacts: artifacts` when the process should run in the checkout but generated output should stay in workflow state. |
 | `runtime` | Optional **core** runtime profile basename (same as CLI **`--runtime`** — must exist under **`templates/core/runtimes/`**). Overrides the workflow default for this step. Not meaningful on `kind: host` steps. |
 | `resolver` | Optional **resolver** profile basename (same as CLI **`--resolver`**). Overrides the workflow default for this step. Not meaningful on `kind: host` steps. Do **not** use it for packaged workflow calls. |
 | `workflow` | Marks this as a **packaged workflow step**. This is the **child workflow name** to run. |
@@ -333,7 +373,7 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `vars` | Per-step env map (merged for that step; `--var` keys can be “locked”). |
 | `agent` | Optional agentic step declaration consumed by DorkPipe-owned scripts/tooling. Use this to declare startup prompt, accessible paths, model knobs, and orchestration fanout directly in `config.yml`. |
 | `security` | Optional step-level container security override. Use this only on container steps when one step needs a different profile or tighter `network` / `filesystem` / `process` settings than the workflow default. |
-| `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Default if omitted: `.dockpipe/outputs.env`. This is the normal way one step passes values forward to later steps. |
+| `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Relative paths resolve under `DOCKPIPE_OUTPUT_ROOT`, not the process cwd. This is the normal way one step passes values forward to later steps. |
 | `capture_stdout` | Host path (relative to **`DOCKPIPE_WORKDIR`** / **`--workdir`**) — container **stdout** is also appended to this file (still printed on the terminal). |
 | `manifest` | Host path — after the step, dockpipe writes a small JSON file with **`exit_code`**, **`duration_ms`**, **`step_index`**, **`id`** (if set), and **`step_display`**. |
 | `is_blocking` | Default **`true`**. Keep this at its default on normal steps. Async work should use an explicit **`group: { mode: async, tasks: [...] }`** entry instead. |

@@ -9,7 +9,7 @@ if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
 else
   eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk --workdir "$wd")"
 fi
-DORKPIPE_STATE_DIR="$(dockpipe_sdk path package dorkpipe)"
+DORKPIPE_STATE_DIR="$(dockpipe_sdk scope --package dorkpipe .)"
 evidence="${1:-}"
 {
   echo "# Final synthesis pack"

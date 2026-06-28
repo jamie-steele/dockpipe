@@ -2,11 +2,14 @@ name: agent.cloud-lanes.doctor
 description: Validate Codex and Claude CLI resolver containers, auth mounts, skills, and optional live prompts.
 
 vars:
-  DORKPIPE_AGENT_DOCTOR_ROOT: bin/.dockpipe/packages/agent/cloud-lanes-doctor
   DORKPIPE_AGENT_DOCTOR_LIVE: "true"
   DORKPIPE_AGENT_DOCTOR_TIMEOUT_SECONDS: "90"
 
 steps:
   - id: doctor
     kind: host
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
     run: assets/scripts/cloud-lanes-doctor.sh

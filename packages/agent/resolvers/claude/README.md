@@ -15,7 +15,5 @@ Bundled **workflow** for the **Claude Code** stack (`dockpipe-claude` image).
 - **Non-interactive** one-shot commands often need **`claude --dangerously-skip-permissions -p "…"`** (or **`$(cat)`** from a pipe). That is a Claude Code permission model, not a second Linux namespace sandbox like Codex’s optional bubblewrap stack — see **codex** resolver README for the **Codex**-specific nested-**bwrap** topic.
 
 For DorkPipe orchestration cloud lanes, Claude runs in this resolver container by default. Sign in on
-the host as usual; the worker runner mounts **`DORKPIPE_ORCH_CLAUDE_AUTH_DIR`**, or **`CLAUDE_HOME`**,
-or **`~/.claude`** into **`/home/node/.claude`** at runtime. Set
-**`DORKPIPE_ORCH_AUTH_MOUNT_MODE=ro`** if you want read-only account state instead of the default
-read/write mount.
+the host as usual; the resolver profile declares its auth scope, and workflows resolve it with
+**`dockpipe scope resolver claude auth-dir`** / **`container-auth-dir`** at runtime.

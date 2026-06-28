@@ -16,6 +16,7 @@ Read when touching package resolution, compile/install flows, state paths, or bi
 - In Go, derive project paths from `infrastructure.DockpipeDirRel`, `StateRoot`, `PackagesRoot`, and related helpers.
 - In Go, derive global paths from `GlobalDockpipeDataDir` and global helper functions.
 - Do not hand-write bare `.dockpipe/internal` paths.
+- Use `dockpipe scope artifacts ...` for workflow-run artifacts and `dockpipe scope --package <name> ...` for package-owned state.
 - Runtime resolution uses compiled packages and configured roots, not hardcoded checkout paths.
 - Published compiled artifacts are the official versioned reference for external consumers.
 

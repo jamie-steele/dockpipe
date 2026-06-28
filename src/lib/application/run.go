@@ -145,6 +145,9 @@ func Run(argv []string, baseEnviron []string) error {
 	if argv[0] == "get" {
 		return cmdGet(argv[1:])
 	}
+	if argv[0] == "scope" {
+		return cmdScope(argv[1:])
+	}
 
 	repoRoot, err := repoRootAppFn()
 	if err != nil {

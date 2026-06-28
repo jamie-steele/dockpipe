@@ -61,6 +61,56 @@ func TestStepHelpers(t *testing.T) {
 	}
 }
 
+func TestStepCWDMode(t *testing.T) {
+	cases := map[string]string{
+		"":          "source",
+		"source":    "source",
+		"repo":      "source",
+		"workdir":   "source",
+		"artifacts": "artifacts",
+		"artifact":  "artifacts",
+	}
+	for input, want := range cases {
+		s := Step{CWD: input}
+		if got := s.CWDMode(); got != want {
+			t.Fatalf("CWDMode(%q) = %q want %q", input, got, want)
+		}
+		if err := ValidateStepCWD(0, s); err != nil {
+			t.Fatalf("ValidateStepCWD(%q): %v", input, err)
+		}
+	}
+	if err := ValidateStepCWD(0, Step{CWD: "elsewhere"}); err == nil {
+		t.Fatal("expected invalid cwd mode to fail")
+	}
+}
+
+func TestStepScopesModes(t *testing.T) {
+	s := Step{Scopes: StepScopes{Source: "repo", Artifacts: "artifacts"}}
+	if got := s.SourceScopeMode(); got != "source" {
+		t.Fatalf("SourceScopeMode = %q want source", got)
+	}
+	if got := s.ArtifactsScopeMode(); got != "artifacts" {
+		t.Fatalf("ArtifactsScopeMode = %q want artifacts", got)
+	}
+	if err := ValidateStepScopes(0, s); err != nil {
+		t.Fatalf("ValidateStepScopes: %v", err)
+	}
+	defaults := Step{}
+	if got := defaults.SourceScopeMode(); got != "source" {
+		t.Fatalf("default SourceScopeMode = %q want source", got)
+	}
+	if got := defaults.ArtifactsScopeMode(); got != "artifacts" {
+		t.Fatalf("default ArtifactsScopeMode = %q want artifacts", got)
+	}
+	repoArtifacts := Step{Scopes: StepScopes{Artifacts: "repo"}}
+	if got := repoArtifacts.ArtifactsScopeMode(); got != "source" {
+		t.Fatalf("repo ArtifactsScopeMode = %q want source", got)
+	}
+	if err := ValidateStepScopes(0, Step{Scopes: StepScopes{Artifacts: "elsewhere"}}); err == nil {
+		t.Fatal("expected invalid artifacts scope to fail")
+	}
+}
+
 // TestRunSpecInvalidNodeType rejects YAML where run: is not a string or string list.
 func TestRunSpecInvalidNodeType(t *testing.T) {
 	_, err := ParseWorkflowYAML([]byte("run:\n  nested: x\n"))

@@ -5,6 +5,7 @@ import shutil
 import sys
 import json
 import getpass
+import subprocess
 from pathlib import Path
 
 
@@ -39,6 +40,18 @@ class DockpipeSDK:
         self.package_root = updated.package_root
         self.assets_dir = updated.assets_dir
         return self
+
+    def scope(self, *args: str, package: str | None = None) -> str | dict[str, object]:
+        if not self.dockpipe_bin:
+            raise RuntimeError("dockpipe binary not found; set DOCKPIPE_BIN or add dockpipe to PATH")
+        argv = [self.dockpipe_bin, "scope", "--workdir", str(self.workdir)]
+        if package:
+            argv.extend(["--package", package])
+        argv.extend(str(arg) for arg in args)
+        out = subprocess.check_output(argv, text=True).strip()
+        if not args:
+            return json.loads(out)
+        return out
 
     def prompt(
         self,

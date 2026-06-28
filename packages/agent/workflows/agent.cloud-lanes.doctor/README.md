@@ -16,4 +16,11 @@ Run:
 dockpipe --package agent --workflow agent.cloud-lanes.doctor --
 ```
 
+The workflow runs from the repo root because it shells back into the DockPipe CLI with the
+current checkout as `--workdir`. Its `scopes` bind source reads to the repo and generated
+output to this workflow's artifact root.
+
+Each provider check writes `stdout.txt`, `stderr.txt`, and `result.json` under
+`providers/<name>/`.
+
 Set `DORKPIPE_AGENT_DOCTOR_LIVE=false` to skip live model calls and only validate container/auth/skills plumbing.

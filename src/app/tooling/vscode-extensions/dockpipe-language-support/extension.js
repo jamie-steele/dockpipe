@@ -36,6 +36,7 @@ const DOCKPIPE_STEP_KEYS = [
   "id",
   "kind",
   "cwd",
+  "scopes",
   "cmd",
   "command",
   "run",
@@ -91,7 +92,8 @@ const TOP_LEVEL_KEY_DETAILS = {
 const STEP_KEY_DETAILS = {
   id: "Stable step label used in logs and outputs.",
   kind: "Step kind. Use host for host actions and container for normal isolated execution.",
-  cwd: "Working directory for this step. Use artifacts to run from generated workflow state while keeping source mounted and available.",
+  cwd: "Working directory for this step. Use repo/source to run from the checkout, or artifacts to run from generated workflow state while keeping source mounted and available.",
+  scopes: "Optional path-scope bindings. Use source: repo with artifacts: artifacts when a step runs from the checkout but generated outputs should stay in workflow artifact state.",
   cmd: "Shell command line for this step. Runs inside the container by default, or on the host for kind: host steps.",
   command: "Alias for cmd.",
   run: "Command or script list to execute for this step.",
@@ -113,6 +115,25 @@ const STEP_KEY_DETAILS = {
   manifest: "Host path for a JSON manifest describing this step result.",
   host_builtin: "Built-in host action for host steps such as package_build_store, compose_up, compose_down, or compose_ps.",
   is_blocking: "Blocking join control for explicit async groups. For new workflow authoring, use group: { mode: async, tasks: [...] } instead of plain-step is_blocking: false."
+};
+
+const STEP_CWD_VALUE_DETAILS = {
+  artifacts: "Run the step from this workflow's generated artifact root. Relative output paths stay out of source control.",
+  repo: "Run the step from the source checkout/repo root. Alias for source.",
+  source: "Run the step from the source checkout/repo root. This is the default.",
+  workdir: "Run the step from the source checkout/workdir. Compatibility alias for source."
+};
+
+const STEP_SCOPE_KEY_DETAILS = {
+  source: "Source-facing scope. Use repo/source for the checkout, or artifacts for generated workflow state.",
+  artifacts: "Artifact/output-facing scope. Use artifacts to bind generated output to workflow state."
+};
+
+const DOCKPIPE_RUNTIME_ENV_DETAILS = {
+  DOCKPIPE_SOURCE_ROOT: "Absolute source checkout/repo root. Use this when a script running elsewhere needs to read project files.",
+  DOCKPIPE_ARTIFACT_ROOT: "Absolute generated artifact root for the current workflow.",
+  DOCKPIPE_OUTPUT_ROOT: "Absolute output root selected by scopes.artifacts. Relative outputs files are resolved here.",
+  DOCKPIPE_STEP_CWD: "Absolute process working directory selected by the step's cwd setting."
 };
 
 const PACKAGE_MANIFEST_KEYS = [
@@ -357,6 +378,34 @@ const CORE_HELPER_PROFILES = {
         documentation: "First-hand shell CLI getter that prints the resolved `dockpipe` binary path."
       },
       {
+        name: "dockpipe scope",
+        detail: "Print the current workflow scope object.",
+        insertText: "dockpipe scope",
+        filterText: "dockpipe scope workflow artifact output source json",
+        documentation: "First-hand CLI command that prints the current workflow scope object as JSON."
+      },
+      {
+        name: "dockpipe scope --package",
+        detail: "Print a package scope object.",
+        insertText: 'dockpipe scope --package "$1"',
+        filterText: "dockpipe scope package json package state",
+        documentation: "First-hand CLI command that prints a package scope object as JSON, or resolves a package path when suffix segments are provided."
+      },
+      {
+        name: "dockpipe scope resolver",
+        detail: "Resolve resolver-owned scope fields.",
+        insertText: 'dockpipe scope resolver "$1" auth-dir',
+        filterText: "dockpipe scope resolver auth dir container config",
+        documentation: "First-hand CLI command that resolves resolver profile fields such as `auth-dir`, `container-auth-dir`, `config-file`, and `container-config-file`."
+      },
+      {
+        name: "dockpipe_sdk scope",
+        detail: "Resolve workflow/package scope objects or paths.",
+        insertText: 'dockpipe_sdk scope "$1"',
+        filterText: "dockpipe_sdk scope workflow package artifact output path",
+        documentation: "First-hand shell SDK action for `dockpipe scope`: no arguments returns the current workflow scope object; `--package <name>` returns a package scope object; suffixes resolve paths."
+      },
+      {
         name: "dockpipe_sdk init-script",
         detail: "Initialize common script vars and enter the workdir.",
         insertText: "dockpipe_sdk init-script",
@@ -448,6 +497,12 @@ const CORE_HELPER_PROFILES = {
         detail: "SDK assets directory.",
         insertText: "$dockpipe.AssetsDir",
         documentation: "Object-style PowerShell SDK field for the nearest `assets/` directory for the current script."
+      },
+      {
+        name: "Invoke-DockpipeScope",
+        detail: "Resolve workflow/package scope objects or paths.",
+        insertText: "Invoke-DockpipeScope",
+        documentation: "PowerShell SDK function for `dockpipe scope`. No scope returns the current workflow object; `-Package <name>` returns a package object; path args resolve paths."
       }
     ]
   },
@@ -493,6 +548,12 @@ const CORE_HELPER_PROFILES = {
         detail: "SDK assets directory.",
         insertText: "dockpipe.assets_dir",
         documentation: "Object-style Python SDK field for the nearest `assets/` directory for the current script."
+      },
+      {
+        name: "dockpipe.scope",
+        detail: "Resolve workflow/package scope objects or paths.",
+        insertText: "dockpipe.scope($1)",
+        documentation: "Python SDK method for `dockpipe scope`. No args returns the current workflow object; `package=\"name\"` returns a package object; args resolve paths."
       }
     ]
   },
@@ -537,6 +598,18 @@ const CORE_HELPER_PROFILES = {
         detail: "SDK assets directory.",
         insertText: "dockpipe.AssetsDir",
         documentation: "Object-style Go SDK field for the nearest `assets/` directory for the current script."
+      },
+      {
+        name: "dockpipe.WorkflowScope",
+        detail: "Load current workflow scope object.",
+        insertText: "dockpipe.WorkflowScope()",
+        documentation: "Go SDK method for `dockpipe scope` with no positional scope."
+      },
+      {
+        name: "dockpipe.PackageScope",
+        detail: "Load package scope object.",
+        insertText: 'dockpipe.PackageScope("$1")',
+        documentation: "Go SDK method for `dockpipe scope --package <name>`."
       }
     ]
   }
@@ -1195,6 +1268,32 @@ function packageManifestListTokenType(parentKey) {
   return "string";
 }
 
+function runtimeEnvCompletionItems(languageId) {
+  return Object.entries(DOCKPIPE_RUNTIME_ENV_DETAILS).map(([name, doc]) => {
+    const item = new vscode.CompletionItem(name, vscode.CompletionItemKind.Variable);
+    item.detail = "DockPipe runtime path";
+    item.documentation = doc;
+    switch (languageId) {
+      case "powershell":
+        item.insertText = `$env:${name}`;
+        break;
+      case "python":
+        item.insertText = `os.environ.get("${name}", "")`;
+        item.filterText = `${name} os.environ`;
+        break;
+      case "go":
+        item.insertText = `os.Getenv("${name}")`;
+        item.filterText = `${name} os.Getenv`;
+        break;
+      default:
+        item.insertText = `$${name}`;
+        item.filterText = `${name} dockpipe runtime path source artifact cwd`;
+        break;
+    }
+    return item;
+  });
+}
+
 function parseJsonLine(text) {
   const keyMatch = text.match(/^(\s*)"([^"]+)"\s*:\s*(.*)$/);
   if (!keyMatch) {
@@ -1688,6 +1787,25 @@ function activate(context) {
           const lineToCursor = line.slice(0, position.character);
           const items = [];
 
+          if (info?.kind === "stepKey" && info.key === "cwd" && lineToCursor.includes(":")) {
+            return Object.entries(STEP_CWD_VALUE_DETAILS).map(([value, doc]) => {
+              const it = new vscode.CompletionItem(value, vscode.CompletionItemKind.EnumMember);
+              it.insertText = value;
+              it.detail = "DockPipe step cwd";
+              it.documentation = doc;
+              return it;
+            });
+          }
+          if (info?.kind === "nestedKey" && (info.key === "source" || info.key === "artifacts") && (info.parents || []).includes("scopes") && lineToCursor.includes(":")) {
+            return Object.entries(STEP_CWD_VALUE_DETAILS).map(([value, doc]) => {
+              const it = new vscode.CompletionItem(value, vscode.CompletionItemKind.EnumMember);
+              it.insertText = value;
+              it.detail = "DockPipe step scope";
+              it.documentation = doc;
+              return it;
+            });
+          }
+
           if (!lineToCursor.includes(":") && info?.kind === "nestedKey") {
             const parentChain = info.parents || [];
             let docs = null;
@@ -1703,6 +1821,8 @@ function activate(context) {
               docs = WORKFLOW_VIEW_SECTION_KEY_DETAILS;
             } else if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "vm") {
               docs = STEP_VM_KEY_DETAILS;
+            } else if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "scopes") {
+              docs = STEP_SCOPE_KEY_DETAILS;
             } else if (info?.inSteps && parentChain.length === 3 && parentChain[0] === "vm" && parentChain[1] === "mounts") {
               docs = STEP_VM_MOUNT_KEY_DETAILS;
             }
@@ -1902,6 +2022,9 @@ function activate(context) {
             }
             if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "vm") {
               return hoverForWorkflowKey(word, STEP_VM_KEY_DETAILS, range);
+            }
+            if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "scopes") {
+              return hoverForWorkflowKey(word, STEP_SCOPE_KEY_DETAILS, range);
             }
             if (info?.inSteps && parentChain.length === 3 && parentChain[0] === "vm" && parentChain[1] === "mounts") {
               return hoverForWorkflowKey(word, STEP_VM_MOUNT_KEY_DETAILS, range);
@@ -2156,6 +2279,7 @@ function activate(context) {
           }
 
           const items = [];
+          items.push(...runtimeEnvCompletionItems(document.languageId));
 
           const sourceItem = new vscode.CompletionItem(profile.sourceLabel, vscode.CompletionItemKind.Snippet);
           sourceItem.insertText = new vscode.SnippetString(profile.sourceSnippet);

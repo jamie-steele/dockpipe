@@ -21,6 +21,19 @@ type SDK struct {
 	AssetsDir    string
 }
 
+type ScopeObject struct {
+	Kind         string `json:"kind"`
+	Name         string `json:"name,omitempty"`
+	Scope        string `json:"scope"`
+	Root         string `json:"root"`
+	DockpipeBin  string `json:"dockpipe_bin,omitempty"`
+	SourceRoot   string `json:"source_root,omitempty"`
+	ArtifactRoot string `json:"artifact_root,omitempty"`
+	OutputRoot   string `json:"output_root,omitempty"`
+	StateRoot    string `json:"state_root,omitempty"`
+	Workdir      string `json:"workdir"`
+}
+
 type PromptSpec struct {
 	Type              string   `json:"type"`
 	ID                string   `json:"id"`
@@ -86,6 +99,57 @@ func Load(root string) (SDK, error) {
 		PackageRoot:  os.Getenv("DOCKPIPE_PACKAGE_ROOT"),
 		AssetsDir:    os.Getenv("DOCKPIPE_ASSETS_DIR"),
 	}, nil
+}
+
+func (s SDK) scopeOutput(args ...string) ([]byte, error) {
+	if strings.TrimSpace(s.DockpipeBin) == "" {
+		return nil, fmt.Errorf("dockpipe binary not found; set DOCKPIPE_BIN or add dockpipe to PATH")
+	}
+	argv := []string{"scope", "--workdir", s.Workdir}
+	argv = append(argv, args...)
+	return exec.Command(s.DockpipeBin, argv...).Output()
+}
+
+func (s SDK) WorkflowScope() (ScopeObject, error) {
+	out, err := s.scopeOutput()
+	if err != nil {
+		return ScopeObject{}, err
+	}
+	var obj ScopeObject
+	if err := json.Unmarshal(out, &obj); err != nil {
+		return ScopeObject{}, err
+	}
+	return obj, nil
+}
+
+func (s SDK) PackageScope(name string) (ScopeObject, error) {
+	out, err := s.scopeOutput("--package", name)
+	if err != nil {
+		return ScopeObject{}, err
+	}
+	var obj ScopeObject
+	if err := json.Unmarshal(out, &obj); err != nil {
+		return ScopeObject{}, err
+	}
+	return obj, nil
+}
+
+func (s SDK) ScopePath(scope string, parts ...string) (string, error) {
+	args := append([]string{scope}, parts...)
+	out, err := s.scopeOutput(args...)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func (s SDK) PackageScopePath(name string, parts ...string) (string, error) {
+	args := append([]string{"--package", name}, parts...)
+	out, err := s.scopeOutput(args...)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func truthy(v string) bool {

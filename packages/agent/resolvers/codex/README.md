@@ -19,9 +19,7 @@ Codex’s **`--sandbox workspace-write`** (and similar) runs **bubblewrap** insi
 - Keep **`OPENAI_API_KEY`** / **`CODEX_API_KEY`** in the environment (resolver **`DOCKPIPE_RESOLVER_ENV`** forwards them into the container).
 
 For DorkPipe orchestration cloud lanes, Codex runs in this resolver container by default. Sign in on
-the host as usual; the worker runner mounts **`DORKPIPE_ORCH_CODEX_AUTH_DIR`**, or **`CODEX_HOME`**,
-or **`~/.codex`** into **`/home/node/.codex`** at runtime. Set
-**`DORKPIPE_ORCH_AUTH_MOUNT_MODE=ro`** if you want read-only account state instead of the default
-read/write mount.
+the host as usual; the resolver profile declares its auth scope, and workflows resolve it with
+**`dockpipe scope resolver codex auth-dir`** / **`container-auth-dir`** at runtime.
 
 This is **workflow/resolver configuration**, not a dockpipe core special case. Example: **`workflows/test-demo`** review step.

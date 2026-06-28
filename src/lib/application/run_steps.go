@@ -837,11 +837,12 @@ func applyStepCWDEnv(o *runStepsOpts, step domain.Step, envMap, dockerEnv map[st
 	if err := applyWorkflowArtifactEnv(envMap, sourceRoot, firstNonEmpty(envMap["DOCKPIPE_WORKFLOW_NAME"], workflowStateScopeHint(o.opts, o.wfRoot, o.wf, "", ""))); err != nil {
 		return err
 	}
-	sourceRoot = envMap["DOCKPIPE_SOURCE_ROOT"]
-	artifactRoot := envMap["DOCKPIPE_ARTIFACT_ROOT"]
-	stepCWD := sourceRoot
+	defaultSourceRoot := envMap["DOCKPIPE_SOURCE_ROOT"]
+	defaultArtifactRoot := envMap["DOCKPIPE_ARTIFACT_ROOT"]
+	sourceRoot = stepScopeRoot(step.SourceScopeMode(), defaultSourceRoot, defaultArtifactRoot)
+	artifactRoot := stepScopeRoot(step.ArtifactsScopeMode(), defaultSourceRoot, defaultArtifactRoot)
+	stepCWD := stepScopeRoot(step.CWDMode(), defaultSourceRoot, defaultArtifactRoot)
 	if step.CWDMode() == "artifacts" {
-		stepCWD = artifactRoot
 		if err := os.MkdirAll(stepCWD, 0o755); err != nil {
 			return err
 		}
@@ -849,6 +850,7 @@ func applyStepCWDEnv(o *runStepsOpts, step domain.Step, envMap, dockerEnv map[st
 	for k, v := range map[string]string{
 		"DOCKPIPE_SOURCE_ROOT":   sourceRoot,
 		"DOCKPIPE_ARTIFACT_ROOT": artifactRoot,
+		"DOCKPIPE_OUTPUT_ROOT":   artifactRoot,
 		"DOCKPIPE_STEP_CWD":      stepCWD,
 	} {
 		if !o.locked[k] {
@@ -859,12 +861,25 @@ func applyStepCWDEnv(o *runStepsOpts, step domain.Step, envMap, dockerEnv map[st
 	return nil
 }
 
+func stepScopeRoot(mode, sourceRoot, artifactRoot string) string {
+	switch mode {
+	case "artifacts":
+		return artifactRoot
+	default:
+		return sourceRoot
+	}
+}
+
 func stepOutputsAbsPath(o *runStepsOpts, step domain.Step, envMap map[string]string) string {
-	base := firstNonEmpty(envMap["DOCKPIPE_STEP_CWD"], envMap["DOCKPIPE_WORKDIR"], runStepsWorkdir(o))
+	outputsPath := step.OutputsPath()
+	if filepath.IsAbs(outputsPath) {
+		return filepath.Clean(outputsPath)
+	}
+	base := firstNonEmpty(envMap["DOCKPIPE_OUTPUT_ROOT"], envMap["DOCKPIPE_ARTIFACT_ROOT"], envMap["DOCKPIPE_STEP_CWD"], envMap["DOCKPIPE_WORKDIR"], runStepsWorkdir(o))
 	if base == "" {
 		base = mustGetwd()
 	}
-	return filepath.Join(base, step.OutputsPath())
+	return filepath.Join(base, outputsPath)
 }
 
 func runStepsWorkdir(o *runStepsOpts) string {

@@ -348,6 +348,7 @@ type Step struct {
 	ID        string                  `yaml:"id,omitempty"`
 	Kind      string                  `yaml:"kind,omitempty"`
 	CWD       string                  `yaml:"cwd,omitempty"`
+	Scopes    StepScopes              `yaml:"scopes,omitempty"`
 	Run       RunSpec                 `yaml:"run,omitempty"`
 	PreScript string                  `yaml:"pre_script,omitempty"`
 	Isolate   string                  `yaml:"isolate,omitempty"`
@@ -382,6 +383,14 @@ type Step struct {
 	// HostBuiltin: optional engine step for kind: host workflows — runs a built-in host action instead of run:/pre_script.
 	// Allowed values: package_build_store (same as dockpipe package build store; uses PACKAGE_STORE_OUT, PACKAGE_STORE_ONLY, PACKAGE_STORE_VERSION from merged env).
 	HostBuiltin string `yaml:"host_builtin,omitempty"`
+}
+
+// StepScopes binds source-facing and artifact-facing paths independently from
+// the process cwd. This lets a step run in the repo while DockPipe-managed
+// outputs still land in generated state.
+type StepScopes struct {
+	Source    string `yaml:"source,omitempty"`
+	Artifacts string `yaml:"artifacts,omitempty"`
 }
 
 // InputBinding maps a typed workflow input field onto either a literal value or another env var.
@@ -461,13 +470,29 @@ func (s *Step) KindName() string {
 }
 
 func (s *Step) CWDMode() string {
-	switch strings.ToLower(strings.TrimSpace(s.CWD)) {
-	case "", "source", "workdir":
+	return normalizeStepPathScope(s.CWD, "source")
+}
+
+func (s *Step) SourceScopeMode() string {
+	return normalizeStepPathScope(s.Scopes.Source, "source")
+}
+
+func (s *Step) ArtifactsScopeMode() string {
+	return normalizeStepPathScope(s.Scopes.Artifacts, "artifacts")
+}
+
+func normalizeStepPathScope(value, emptyDefault string) string {
+	v := strings.ToLower(strings.TrimSpace(value))
+	if v == "" {
+		return emptyDefault
+	}
+	switch v {
+	case "source", "repo", "workdir":
 		return "source"
 	case "artifacts", "artifact":
 		return "artifacts"
 	default:
-		return strings.ToLower(strings.TrimSpace(s.CWD))
+		return v
 	}
 }
 
@@ -749,6 +774,9 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 		if err := ValidateStepCWD(i, s); err != nil {
 			return err
 		}
+		if err := ValidateStepScopes(i, s); err != nil {
+			return err
+		}
 		if err := ValidateStepHostShape(i, s); err != nil {
 			return err
 		}
@@ -798,8 +826,22 @@ func ValidateStepCWD(i int, s Step) error {
 	case "source", "artifacts":
 		return nil
 	default:
-		return fmt.Errorf("step %d: cwd must be source or artifacts", i+1)
+		return fmt.Errorf("step %d: cwd must be source, repo, or artifacts", i+1)
 	}
+}
+
+func ValidateStepScopes(i int, s Step) error {
+	for name, mode := range map[string]string{
+		"source":    s.SourceScopeMode(),
+		"artifacts": s.ArtifactsScopeMode(),
+	} {
+		switch mode {
+		case "source", "artifacts":
+		default:
+			return fmt.Errorf("step %d: scopes.%s must be source, repo, or artifacts", i+1, name)
+		}
+	}
+	return nil
 }
 
 func ValidateWorkflowComposeField(w *Workflow) error {

@@ -49,7 +49,7 @@ dockpipe_resolve_dockpipe_bin() {
 
 dockpipe_sdk_refresh() {
   local root="${1:-}"
-  local resolved_root resolved_dockpipe resolved_workflow_name resolved_script_dir resolved_assets_dir resolved_package_root resolved_state_dir resolved_package_id resolved_package_state_dir
+  local resolved_root resolved_dockpipe resolved_workflow_name resolved_script_dir resolved_assets_dir resolved_package_root resolved_state_dir resolved_package_id resolved_package_state_dir resolved_artifact_root resolved_output_root
   resolved_root="$(dockpipe_repo_root "$root")"
   resolved_dockpipe="$(dockpipe_resolve_dockpipe_bin "$resolved_root" 2>/dev/null || true)"
   resolved_workflow_name="${DOCKPIPE_WORKFLOW_NAME:-}"
@@ -57,6 +57,11 @@ dockpipe_sdk_refresh() {
   resolved_assets_dir="$(dockpipe_find_assets_dir "$resolved_script_dir")"
   resolved_package_root="$(dockpipe_find_package_root "$resolved_script_dir")"
   resolved_state_dir="${DOCKPIPE_STATE_DIR:-$resolved_root/bin/.dockpipe}"
+  resolved_artifact_root="${DOCKPIPE_ARTIFACT_ROOT:-}"
+  if [[ -z "$resolved_artifact_root" ]]; then
+    resolved_artifact_root="$resolved_state_dir/workflows/$(__dockpipe_sdk_sanitize_workflow_scope "${resolved_workflow_name:-default}")/artifacts"
+  fi
+  resolved_output_root="${DOCKPIPE_OUTPUT_ROOT:-$resolved_artifact_root}"
   resolved_package_id="${DOCKPIPE_PACKAGE_ID:-}"
   if [[ -z "$resolved_package_id" && -n "$resolved_package_root" ]]; then
     resolved_package_id="$(basename "$resolved_package_root")"
@@ -73,6 +78,8 @@ dockpipe_sdk_refresh() {
   dockpipe[assets_dir]="$resolved_assets_dir"
   dockpipe[package_root]="$resolved_package_root"
   dockpipe[state_dir]="$resolved_state_dir"
+  dockpipe[artifact_root]="$resolved_artifact_root"
+  dockpipe[output_root]="$resolved_output_root"
   dockpipe[package_id]="$resolved_package_id"
   dockpipe[package_state_dir]="$resolved_package_state_dir"
 
@@ -95,6 +102,12 @@ dockpipe_sdk_refresh() {
   fi
   if [[ -n "$resolved_state_dir" ]]; then
     export DOCKPIPE_STATE_DIR="$resolved_state_dir"
+  fi
+  if [[ -n "$resolved_artifact_root" ]]; then
+    export DOCKPIPE_ARTIFACT_ROOT="$resolved_artifact_root"
+  fi
+  if [[ -n "$resolved_output_root" ]]; then
+    export DOCKPIPE_OUTPUT_ROOT="$resolved_output_root"
   fi
   if [[ -n "$resolved_package_id" ]]; then
     export DOCKPIPE_PACKAGE_ID="$resolved_package_id"
@@ -152,7 +165,7 @@ dockpipe_find_package_root() {
 dockpipe_sdk_get() {
   local field="${1:-}"
   case "$field" in
-    workdir|dockpipe_bin|workflow_name|script_dir|package_root|assets_dir|state_dir|package_id|package_state_dir)
+    workdir|dockpipe_bin|workflow_name|script_dir|package_root|assets_dir|state_dir|artifact_root|output_root|package_id|package_state_dir)
       printf '%s\n' "${dockpipe[$field]:-}"
       ;;
     *)
@@ -270,6 +283,16 @@ dockpipe_sdk_workflow_state_dir() {
   fi
   scope="$(__dockpipe_sdk_sanitize_workflow_scope "${scope:-default}")"
   __dockpipe_sdk_join_path "$(dockpipe_sdk_state_dir)/workflows/$scope" "$@"
+}
+
+dockpipe_sdk_scope() {
+  local bin
+  bin="$(dockpipe_sdk_get dockpipe_bin)"
+  if [[ -z "$bin" ]]; then
+    echo "dockpipe sdk: dockpipe binary not found; set DOCKPIPE_BIN or add dockpipe to PATH" >&2
+    return 1
+  fi
+  "$bin" scope --workdir "$(dockpipe_sdk_get workdir)" "$@"
 }
 
 dockpipe_sdk_ci_artifact_dir() {
@@ -926,8 +949,9 @@ dockpipe_sdk() {
       cat <<'EOF'
 dockpipe_sdk actions:
   init-script
-  get <workdir|workflow_name|script_dir|package_root|assets_dir|dockpipe_bin|state_dir|package_id|package_state_dir>
-  path <state|build|package|workflow|ci> [scope] [suffix...]
+  get <workdir|workflow_name|script_dir|package_root|assets_dir|dockpipe_bin|state_dir|artifact_root|output_root|package_id|package_state_dir>
+  path <state|build|package|workflow|output|ci> [scope] [suffix...]
+  scope [scope|--package name] [suffix...]
   ci <raw|analysis> [suffix...]
   cd-workdir
   die <message...>
@@ -958,6 +982,9 @@ EOF
     get)
       dockpipe_sdk_get "${1:-}"
       ;;
+    scope)
+      dockpipe_sdk_scope "$@"
+      ;;
     path)
       case "${1:-}" in
         state)
@@ -975,6 +1002,10 @@ EOF
         workflow)
           shift || true
           dockpipe_sdk_workflow_state_dir "$@"
+          ;;
+        output)
+          shift || true
+          __dockpipe_sdk_join_path "$(dockpipe_sdk_get output_root)" "$@"
           ;;
         ci)
           shift || true

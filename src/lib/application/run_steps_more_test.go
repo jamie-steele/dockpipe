@@ -52,7 +52,7 @@ func baseRunStepsOpts() runStepsOpts {
 func TestRunBlockingStepHostMergesOutputs(t *testing.T) {
 	withRunStepsSeams(t)
 	wd := t.TempDir()
-	out := filepath.Join(wd, infrastructure.DockpipeDirRel, "outputs.env")
+	out := filepath.Join(wd, infrastructure.DockpipeDirRel, "workflows", "ci", "artifacts", domain.DefaultOutputsEnvRel)
 	if err := os.MkdirAll(filepath.Dir(out), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -62,6 +62,8 @@ func TestRunBlockingStepHostMergesOutputs(t *testing.T) {
 
 	o := baseRunStepsOpts()
 	o.opts.Workdir = wd
+	o.envMap["DOCKPIPE_WORKFLOW_NAME"] = "ci"
+	o.wf.Name = "ci"
 	o.wf.Steps = []domain.Step{{Kind: "host", Outputs: domain.DefaultOutputsEnvRel}}
 	dockerEnv := map[string]string{}
 	if err := runBlockingStep(&o, 0, 1, dockerEnv); err != nil {
@@ -93,6 +95,9 @@ func TestRunBlockingStepHostCommandRunsOnHost(t *testing.T) {
 		}
 		if !strings.Contains(joined, "DOCKPIPE_ARTIFACT_ROOT="+wantArtifact) || !strings.Contains(joined, "DOCKPIPE_STEP_CWD="+wantArtifact) {
 			t.Fatalf("missing artifact cwd env %q in:\n%s", wantArtifact, joined)
+		}
+		if !strings.Contains(joined, "DOCKPIPE_OUTPUT_ROOT="+wantArtifact) {
+			t.Fatalf("missing output root env %q in:\n%s", wantArtifact, joined)
 		}
 		return nil
 	}
@@ -162,6 +167,8 @@ func TestRunBlockingStepHostIsolateGetsProfileEnvAndStepCommand(t *testing.T) {
 	o.repoRoot = repo
 	o.projectRoot = repo
 	o.opts.Workdir = wd
+	o.envMap["DOCKPIPE_WORKFLOW_NAME"] = "vm"
+	o.wf.Name = "vm"
 	o.wf.Steps = []domain.Step{{Runtime: "vmimage", Cmd: "echo hi"}}
 	var gotEnv []string
 	runHostScriptFn = func(scriptPath string, env []string) error {
@@ -179,8 +186,55 @@ func TestRunBlockingStepHostIsolateGetsProfileEnvAndStepCommand(t *testing.T) {
 	if !strings.Contains(joined, "DOCKPIPE_STEP_CMD=echo hi") {
 		t.Fatalf("expected step command in env, got %q", joined)
 	}
-	if !strings.Contains(joined, "DOCKPIPE_STEP_OUTPUTS_FILE="+filepath.Join(wd, domain.DefaultOutputsEnvRel)) {
+	wantOutputs := filepath.Join(wd, infrastructure.DockpipeDirRel, "workflows", "vm", "artifacts", domain.DefaultOutputsEnvRel)
+	if !strings.Contains(joined, "DOCKPIPE_STEP_OUTPUTS_FILE="+wantOutputs) {
 		t.Fatalf("expected outputs file in env, got %q", joined)
+	}
+}
+
+func TestRunBlockingStepScopesKeepRepoCWDAndArtifactOutputs(t *testing.T) {
+	withRunStepsSeams(t)
+	wd := t.TempDir()
+	o := baseRunStepsOpts()
+	o.projectRoot = wd
+	o.repoRoot = wd
+	o.opts.Workdir = wd
+	o.envMap["DOCKPIPE_WORKFLOW_NAME"] = "doctor"
+	o.wf.Name = "doctor"
+	o.wf.Steps = []domain.Step{{
+		Kind:    "host",
+		CWD:     "repo",
+		Scopes:  domain.StepScopes{Source: "repo", Artifacts: "artifacts"},
+		Outputs: "doctor.env",
+		Cmd:     "echo host",
+	}}
+
+	called := false
+	runHostCommandFn = func(cmd string, env []string) error {
+		called = true
+		joined := strings.Join(env, "\n")
+		wantArtifact := filepath.Join(wd, infrastructure.DockpipeDirRel, "workflows", "doctor", "artifacts")
+		if !strings.Contains(joined, "DOCKPIPE_SOURCE_ROOT="+wd) {
+			t.Fatalf("missing source root in env:\n%s", joined)
+		}
+		if !strings.Contains(joined, "DOCKPIPE_STEP_CWD="+wd) {
+			t.Fatalf("missing repo step cwd in env:\n%s", joined)
+		}
+		if !strings.Contains(joined, "DOCKPIPE_ARTIFACT_ROOT="+wantArtifact) || !strings.Contains(joined, "DOCKPIPE_OUTPUT_ROOT="+wantArtifact) {
+			t.Fatalf("missing artifact/output root %q in env:\n%s", wantArtifact, joined)
+		}
+		return nil
+	}
+	dockerEnv := map[string]string{}
+	if err := runBlockingStep(&o, 0, 1, dockerEnv); err != nil {
+		t.Fatalf("runBlockingStep error: %v", err)
+	}
+	if !called {
+		t.Fatal("expected host command execution")
+	}
+	wantOutputs := filepath.Join(wd, infrastructure.DockpipeDirRel, "workflows", "doctor", "artifacts", "doctor.env")
+	if got := stepOutputsAbsPath(&o, o.wf.Steps[0], o.envMap); got != wantOutputs {
+		t.Fatalf("outputs path = %q want %q", got, wantOutputs)
 	}
 }
 

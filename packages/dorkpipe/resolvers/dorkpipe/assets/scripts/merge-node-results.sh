@@ -10,7 +10,7 @@ else
 	eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk --workdir "$ROOT")"
 fi
 cd "$ROOT"
-DORKPIPE_STATE_DIR="$(dockpipe_sdk path package dorkpipe)"
+DORKPIPE_STATE_DIR="$(dockpipe_sdk scope --package dorkpipe .)"
 NODES="$DORKPIPE_STATE_DIR/nodes"
 OUT="$DORKPIPE_STATE_DIR/merged-nodes.txt"
 mkdir -p "$(dirname "$OUT")"

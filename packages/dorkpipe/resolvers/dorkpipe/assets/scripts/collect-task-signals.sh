@@ -10,7 +10,7 @@ else
 	eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk --workdir "$ROOT")"
 fi
 cd "$ROOT"
-OUT="$(dockpipe_sdk path package dorkpipe)"
+OUT="$(dockpipe_sdk scope --package dorkpipe .)"
 mkdir -p "$OUT"
 {
 	echo "# task signals $(date -u +%Y-%m-%dT%H:%M:%SZ)"

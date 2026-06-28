@@ -14,6 +14,7 @@ Machine-readable routing: `docs/agents/index.yaml`.
 | Keep `src/lib/` and `src/cmd/` generic. No repo-specific package/workflow/staging knowledge in engine code. | `docs/agents/engine-boundary.md` |
 | Preserve the architecture model: workflow/template = what, runtime = where, resolver = tool/profile, strategy = lifecycle wrapper. | `docs/agents/architecture.md` |
 | Use package/store helpers for project/global paths. Do not hand-write bare `.dockpipe/internal` paths. | `docs/agents/core-package-model.md` |
+| Prefer the scope model for generated paths: `cwd: artifacts` for simple producers, `cwd: repo` plus `scopes` only when checkout cwd is required. | `docs/agents/path-scopes.md` |
 | Template/workflow work should stay in YAML/assets/scripts unless a general primitive is needed. | `docs/agents/yaml-workflows.md` |
 | Package-specific behavior belongs inside package YAML/assets/scripts/docs/tests. | `docs/agents/package-authoring.md` |
 | Keep authored YAML/schema/editor docs in sync when changing workflow/config surfaces. | `docs/agents/yaml-workflows.md` |
@@ -26,6 +27,7 @@ Machine-readable routing: `docs/agents/index.yaml`.
 | --- | --- | --- |
 | Engine or CLI behavior | `docs/agents/engine-boundary.md`, `docs/agents/architecture.md`, `docs/agents/validation-commands.md` | `dorkpipe-core-review` |
 | Workflow YAML or authored surface | `docs/agents/yaml-workflows.md`, `docs/agents/safety-guardrails.md` | `dorkpipe-yaml-workflows` |
+| Path/scope/artifact migration | `docs/agents/path-scopes.md`, `docs/agents/yaml-workflows.md`, `docs/agents/core-package-model.md` | `dorkpipe-yaml-workflows`, `dorkpipe-package-authoring` |
 | Package authoring | `docs/agents/package-authoring.md`, `docs/agents/core-package-model.md` | `dorkpipe-package-authoring` |
 | Package promotion | `docs/agents/package-promotion.md`, `docs/agents/validation-commands.md` | `dorkpipe-package-authoring`, `dorkpipe-core-review` |
 | Agentic/DorkPipe workflows | `docs/agents/model-escalation.md`, `docs/agents/docs-generation.md`, `docs/agents/yaml-workflows.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
@@ -68,7 +70,8 @@ Do not add or commit:
 4. If editing `src/`, verify the change is a general primitive.
 5. If changing authored YAML semantics, update schema, docs, and language support together.
 6. If touching packages, keep logic inside package assets and prefer repo-local binaries over `PATH`.
-7. Check `git status --short` and do not revert unrelated user changes.
+7. If moving generated paths, decide first whether the file is workflow artifact, package state, resolver scope, or source.
+8. Check `git status --short` and do not revert unrelated user changes.
 
 ## Final Report Checklist
 
@@ -88,6 +91,7 @@ Report:
 - `docs/agents/architecture.md`
 - `docs/agents/engine-boundary.md`
 - `docs/agents/core-package-model.md`
+- `docs/agents/path-scopes.md`
 - `docs/agents/yaml-workflows.md`
 - `docs/agents/package-authoring.md`
 - `docs/agents/package-promotion.md`

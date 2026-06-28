@@ -61,6 +61,8 @@ The important mapping is:
 - `dockpipe get workdir` prefers injected `DOCKPIPE_WORKDIR` and otherwise falls back to the current directory
 - `dockpipe get dockpipe_bin` resolves the active DockPipe binary for the current workdir
 - `dockpipe get state_dir` reads `DOCKPIPE_STATE_DIR` or defaults to `<workdir>/bin/.dockpipe`
+- `dockpipe get artifact_root` reads `DOCKPIPE_ARTIFACT_ROOT` or defaults to the current workflow artifact root
+- `dockpipe get output_root` reads `DOCKPIPE_OUTPUT_ROOT` or falls back to the artifact root
 - `dockpipe get package_state_dir` reads `DOCKPIPE_PACKAGE_STATE_DIR` or defaults to `<state_dir>/packages/<package_id>`
 
 For generated artifacts, prefer the shell SDK path helper instead of hand-writing `tmp/`,
@@ -69,11 +71,20 @@ For generated artifacts, prefer the shell SDK path helper instead of hand-writin
 ```bash
 eval "$(dockpipe sdk)"
 dockpipe_sdk path build npm-cache
-dockpipe_sdk path package dorkpipe training metrics.jsonl
+dockpipe_sdk scope artifacts providers/codex/result.json
+dockpipe_sdk scope --package dorkpipe training metrics.jsonl
 dockpipe_sdk path workflow docs.orchestrate dorkpipe orchestrate
 ```
 
-Use package paths for package-owned service state, credentials, caches, and shared metrics.
+`dockpipe scope` prints the current workflow scope object with `source_root`, `output_root`, and
+`dockpipe_bin`. `dockpipe scope --package <name>` prints the package scope object with `root`,
+`state_root`, `workdir`, and `dockpipe_bin`.
+`dockpipe scope resolver <name> <field>` resolves resolver-owned fields such as `auth-dir`,
+`container-auth-dir`, `config-file`, and `container-config-file` from the resolver profile.
+
+Use workflow scopes for files produced by the current step or workflow. `scopes.artifacts`
+controls that root, so a step can run with `cwd: repo` while generated files still land in artifact
+state. Use package scopes for package-owned service state, credentials, caches, and shared metrics.
 Use workflow paths for workflow-run artifacts such as orchestration task graphs, worker outputs,
 optimizer assessments, and proposed patches.
 

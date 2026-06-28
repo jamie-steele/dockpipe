@@ -9,7 +9,7 @@ if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
 else
   eval "$("${DOCKPIPE_BIN:-dockpipe}" sdk --workdir "$root")"
 fi
-DORKPIPE_NODES_DIR="$(dockpipe_sdk path package dorkpipe nodes)"
+DORKPIPE_NODES_DIR="$(dockpipe_sdk scope --package dorkpipe nodes)"
 out="${1:-/dev/stdout}"
 {
   echo "# DorkPipe aggregated context"

@@ -14,6 +14,8 @@ Read when using generated context, self-analysis artifacts, or DorkPipe MCP tool
 - Say whether artifacts look current vs `HEAD` when relevant.
 - If missing or stale, suggest refresh instead of silently regenerating.
 - Refresh only when the user asks.
+- Authored workflows should write generated files through `cwd: artifacts` or `dockpipe scope artifacts ...`.
+- Package state belongs under `dockpipe scope --package <name> ...`; workflow-run outputs do not.
 - Pipeon binary: `packages/pipeon/resolvers/pipeon/bin/pipeon`.
 - Pipeon host apps: `packages/pipeon/apps/`.
 

@@ -15,7 +15,8 @@ Read when editing workflow YAML, schema, runner semantics, or examples.
 | Field | Rule |
 | --- | --- |
 | `kind: host` | Runs on host. Do not set runtime/resolver/isolate on host steps. |
-| `cwd` | Step working directory. Use `artifacts` when relative generated outputs should land under workflow state, not source control. |
+| `cwd` | Step working directory. Prefer `artifacts` for simple producers; use `repo`/`source` only when the process must start in the checkout. |
+| `scopes` | Optional source/artifact binding. Use `cwd: repo` with `scopes: { source: repo, artifacts: artifacts }` when a step needs repo cwd but generated outputs must stay under workflow artifacts. See `docs/agents/path-scopes.md`. |
 | `runtime` | Execution substrate profile. |
 | `resolver` | Tool/profile selection. |
 | `isolate` | Low-level image/template override. Prefer runtime/resolver first. |
@@ -41,6 +42,7 @@ When working on templates/workflows, act as a DockPipe user:
 - allowed: YAML, scripts, images, docs
 - not allowed: template-specific core logic
 - if blocked: propose a general primitive
+- generated files should use `cwd: artifacts` or `dockpipe scope artifacts ...`, not repo-root `tmp/` or hand-written `bin/.dockpipe/...`
 
 ## Checks
 
