@@ -103,6 +103,27 @@ for task in list(merge.get("planning_tasks", [])) + list(merge.get("tasks", []))
     if 'The first character of the response must be "-".' in prompt_text and not stripped_text.startswith("-"):
         issues.append(f"{task_id}: worker did not start with the required dash bullet")
         continue
+    bullet_count_match = re.search(r"Return exactly (\w+) bullets? and no headings\.", prompt_text, re.I)
+    bullet_marker = re.compile(r"^\s*(?:[-*+]\s+|•\s*)")
+    bullet_lines = [line for line in text.splitlines() if bullet_marker.match(line)]
+    bullet_prefix_matches = re.findall(r"Bullet\s+(\d+)\s+must\s+start\s+with\s+\"([^\"\n]+)\"", prompt_text, re.I)
+    for bullet_number, required_prefix in bullet_prefix_matches:
+        index = int(bullet_number) - 1
+        if index >= len(bullet_lines) or not bullet_marker.sub("", bullet_lines[index], count=1).startswith(required_prefix):
+            issues.append(f"{task_id}: bullet {bullet_number} did not start with {required_prefix!r}")
+    if bullet_count_match:
+        number_words = {
+            "one": 1,
+            "two": 2,
+            "three": 3,
+            "four": 4,
+            "five": 5,
+        }
+        expected_count = number_words.get(bullet_count_match.group(1).lower())
+        lines = [line for line in text.splitlines() if line.strip()]
+        if expected_count is not None and (len(lines) != expected_count or any(not bullet_marker.match(line) for line in lines)):
+            issues.append(f"{task_id}: worker did not return exactly {expected_count} markdown bullets")
+            continue
 
 status = "pass"
 if issues:

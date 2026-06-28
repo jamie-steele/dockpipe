@@ -28,6 +28,10 @@ one pass so normal optimizer runs do not unexpectedly spend cloud budget. Settin
 the first step run earlier passes through the same workflow, then the current workflow completes the
 final pass.
 
+The optimizer workflow also sets `DORKPIPE_DEV_STACK_RELOAD=1` for its stack step. Each optimizer
+pass rebuilds and recreates the requested Compose services so the DorkPipe MCP container sees the
+latest local binaries and package-owned scripts instead of serving a stale stack.
+
 Artifacts are written under:
 
 ```text

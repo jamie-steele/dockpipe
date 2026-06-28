@@ -52,6 +52,7 @@ steps:
     run: scripts/dorkpipe/dev-stack-ensure-up.sh
     vars:
       DORKPIPE_DEV_STACK_GPU: "auto"
+      DORKPIPE_DEV_STACK_RELOAD: "1"
       DORKPIPE_DEV_STACK_SERVICES: "postgres ollama dorkpipe-stack dorkpipe-mcp-proxy"
 
   - id: prepare

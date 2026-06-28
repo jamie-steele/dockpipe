@@ -89,7 +89,14 @@ up)
 	if dorkpipe_stack_service_enabled dorkpipe-stack || dorkpipe_stack_service_enabled dorkpipe-mcp-proxy; then
 		dorkpipe_stack_prepare_mcp_material
 	fi
-	docker compose "${COMPOSE_ARGS[@]}" up -d --remove-orphans "${SERVICES[@]}"
+	UP_ARGS=(up -d --remove-orphans)
+	case "${DORKPIPE_DEV_STACK_RELOAD:-0}" in
+	1 | true | yes | on)
+		echo "dev-stack: reload requested — rebuilding images and recreating requested services" >&2
+		UP_ARGS+=(--build --force-recreate)
+		;;
+	esac
+	docker compose "${COMPOSE_ARGS[@]}" "${UP_ARGS[@]}" "${SERVICES[@]}"
 	dorkpipe_stack_ensure_ollama_model
 	dorkpipe_stack_wait_for_mcp_ready "${DORKPIPE_DEV_STACK_MCP_READY_ATTEMPTS:-60}"
 	if dorkpipe_stack_service_enabled dorkpipe-mcp-proxy; then
