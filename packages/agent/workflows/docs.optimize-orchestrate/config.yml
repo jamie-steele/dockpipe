@@ -23,6 +23,10 @@ vars:
   DORKPIPE_OPTIMIZER_ROOT: bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate
   DORKPIPE_OPTIMIZER_TARGET_WORKFLOW: docs.orchestrate
   DORKPIPE_OPTIMIZER_TARGET_ROOT: bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
+  DORKPIPE_OPTIMIZER_ITERATIONS: "1"
+  DORKPIPE_OPTIMIZER_CHILD_PACKAGE: agent
+  DORKPIPE_OPTIMIZER_CHILD_WORKFLOW: docs.optimize-orchestrate
+  DORKPIPE_OPTIMIZER_ITERATION_ROOT: bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/iterations
   DORKPIPE_ORCH_OLLAMA_MODEL: llama3.2
   DORKPIPE_ORCH_LIVE_MODELS: "true"
   DORKPIPE_ORCH_CLOUD_LANES: "true"
@@ -37,6 +41,12 @@ vars:
   OLLAMA_HOST: http://127.0.0.1:11434
 
 steps:
+  - id: iterate
+    kind: host
+    run: scripts/dorkpipe/orchestrate-optimize.sh
+    vars:
+      DORKPIPE_OPTIMIZER_ACTION: iterate
+
   - id: stack_up
     kind: host
     run: scripts/dorkpipe/dev-stack-ensure-up.sh

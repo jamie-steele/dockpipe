@@ -17,6 +17,17 @@ Apply the validated Codex proposal to the working tree without committing:
 DORKPIPE_OPTIMIZER_APPLY=1 ./src/bin/dockpipe --package agent --workflow docs.optimize-orchestrate --
 ```
 
+Run repeated optimizer passes through the same workflow:
+
+```bash
+DORKPIPE_OPTIMIZER_ITERATIONS=15 ./src/bin/dockpipe --package agent --workflow docs.optimize-orchestrate --
+```
+
+The iteration count is declared in workflow YAML as `DORKPIPE_OPTIMIZER_ITERATIONS`. The default is
+one pass so normal optimizer runs do not unexpectedly spend cloud budget. Setting it above one makes
+the first step run earlier passes through the same workflow, then the current workflow completes the
+final pass.
+
 Artifacts are written under:
 
 ```text
@@ -27,6 +38,12 @@ Each run snapshots the previous optimizer proposal under:
 
 ```text
 bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/
+```
+
+Repeated-run snapshots are written under:
+
+```text
+bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/iterations/
 ```
 
 That handoff is included in the next Codex decision so repeated runs can build on earlier proposals
