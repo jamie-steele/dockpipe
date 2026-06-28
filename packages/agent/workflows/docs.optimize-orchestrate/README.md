@@ -1,8 +1,9 @@
 # docs.optimize-orchestrate
 
-`docs.optimize-orchestrate` is a local-first optimizer loop for the `docs.orchestrate` workflow.
-It uses the DorkPipe orchestration harness, keeps workers on Ollama by default, writes reviewable
-artifacts, asks for approval, then applies a constrained patch to the working tree without committing.
+`docs.optimize-orchestrate` is a Codex-led optimizer loop for the `docs.orchestrate` workflow.
+It uses the DorkPipe orchestration harness, uses Ollama for cheap artifact-shape auditing, lets Codex
+make the code-change decision, and writes reviewable proposal artifacts. It does not touch the working
+tree.
 
 Run it after a `docs.orchestrate` attempt:
 
@@ -23,4 +24,4 @@ bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/proposed.patch
 ```
 
 The workflow may edit only the docs orchestration workflow and the DorkPipe verifier heuristics. It
-does not create commits.
+does not apply the patch and does not create commits.

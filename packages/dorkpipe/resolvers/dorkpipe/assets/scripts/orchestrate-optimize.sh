@@ -36,11 +36,9 @@ case "${action}" in
 esac
 
 python3 - "${action}" "${ROOT}" "${target_dir}" "${optimizer_dir}" "${DORKPIPE_ORCH_ROOT}" "${DORKPIPE_ORCH_APPROVAL_MD}" "${result_json}" <<'PY'
-import difflib
 import json
 import pathlib
 import re
-import shutil
 import subprocess
 import sys
 
@@ -120,6 +118,40 @@ def collect_issues():
                 break
     return issues, verify, responses
 
+def codex_response_path():
+    return orch_root / "tasks" / "codex_patch_decision" / "response.md"
+
+def extract_unified_diff(text):
+    fences = re.findall(r"```(?:diff|patch)?\s*\n(.*?)```", text, flags=re.I | re.S)
+    candidates = fences if fences else [text]
+    for candidate in candidates:
+        candidate = candidate.strip() + "\n"
+        if "--- a/" in candidate and "+++ b/" in candidate and "@@" in candidate:
+            return candidate
+    return ""
+
+def validate_patch_text(text):
+    if not text.strip():
+        return False, "codex response did not include a unified diff"
+    allowed = {p.resolve() for p in allowed_files}
+    touched = []
+    for line in text.splitlines():
+        if not line.startswith(("--- a/", "+++ b/")):
+            continue
+        path = line[6:]
+        if path == "/dev/null":
+            continue
+        candidate = (root / path).resolve()
+        if candidate not in allowed:
+            return False, f"patch touches non-allowlisted path: {path}"
+        touched.append(path)
+    if not touched:
+        return False, "patch did not declare any allowlisted file paths"
+    check = subprocess.run(["git", "apply", "--check", "-"], cwd=root, text=True, input=text, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    if check.returncode != 0:
+        return False, check.stdout.strip() or "git apply --check failed"
+    return True, ""
+
 def write_assessment():
     issues, verify, responses = collect_issues()
     lines = [
@@ -142,8 +174,8 @@ def write_assessment():
         "## Optimizer Policy",
         "",
         "- Keep this loop local-first with Ollama workers.",
-        "- Apply only after approval.",
-        "- Write into the working tree only; never commit.",
+        "- Let Codex make the code-change decision.",
+        "- Write proposed patch artifacts only; never modify the working tree in proposal mode.",
         "- Restrict edits to the docs orchestration workflow and DorkPipe verifier heuristics.",
         "",
     ])
@@ -155,108 +187,50 @@ def write_assessment():
         "assessment": display_path(assessment_md),
     })
 
-def improve_workflow_config(text):
-    text = text.replace(
-        '              - Return exactly three bullets and no headings.\n'
-        '              - Bullet 1 must start with "repo_shape:"',
-        '              - Return exactly three bullets and no headings.\n'
-        '              - The first character of the response must be "-".\n'
-        '              - Do not add preamble, explanation, Note, Please note, or formatting commentary.\n'
-        '              - Bullet 1 must start with "repo_shape:"',
-    )
-    text = text.replace(
-        '              - Return exactly two bullets and no headings.\n'
-        '              - Do not mention packages/agent ownership',
-        '              - Return exactly two bullets and no headings.\n'
-        '              - The first character of the response must be "-".\n'
-        '              - Do not add preamble, explanation, Note, Please note, or formatting commentary.\n'
-        '              - Do not mention packages/agent ownership',
-    )
-    text = text.replace(
-        '              - Return exactly three bullets and no headings.\n'
-        '              - Bullet 1 must start with "packages/agent owns"',
-        '              - Return exactly three bullets and no headings.\n'
-        '              - The first character of the response must be "-".\n'
-        '              - Do not add preamble, explanation, Note, Please note, or formatting commentary.\n'
-        '              - Bullet 1 must start with "packages/agent owns"',
-    )
-    text = text.replace(
-        '              - Return exactly three bullets and no headings.\n'
-        '              - Bullet 1 must start with "Verification".',
-        '              - Return exactly three bullets and no headings.\n'
-        '              - The first character of the response must be "-".\n'
-        '              - Do not add preamble, explanation, Note, Please note, or formatting commentary.\n'
-        '              - Bullet 1 must start with "Verification".',
-    )
-    text = text.replace(
-        '              - Call out uncertainty explicitly.',
-        '              - Only call out uncertainty if a required referenced file is missing; do not add an uncertainty footer.',
-    )
-    text = text.replace(
-        '              - Do not add preamble, headings, examples, or an uncertainty footer unless a referenced file is missing.',
-        '              - Do not add preamble, headings, examples, Note, Please note, formatting commentary, or an uncertainty footer unless a referenced file is missing.',
-    )
-    return text
-
-def improve_verifier(text):
-    needle = '    (re.compile(r"(?im)^\\s*Here (?:are|is)\\b"), "worker included preamble instead of direct artifact content"),\n'
-    insert = (
-        needle
-        + '    (re.compile(r"(?im)^\\s*(?:Note|Please note)\\s*:"), "worker added a note/footer instead of direct artifact content"),\n'
-        + '    (re.compile(r"\\bcould not be completed due to lack of information\\b", re.I), "worker added a false missing-information footer"),\n'
-        + '    (re.compile(r"\\badheres to (?:the )?(?:specified )?formatting\\b", re.I), "worker added formatting commentary instead of direct artifact content"),\n'
-    )
-    if "worker added a note/footer instead of direct artifact content" not in text:
-        text = text.replace(needle, insert)
-    return text
-
-def proposed_contents():
-    changes = {}
-    changes[target_workflow_config] = improve_workflow_config(read_text(target_workflow_config))
-    changes[verifier_script] = improve_verifier(read_text(verifier_script))
-    return changes
-
 def write_patch():
     write_assessment()
-    changes = proposed_contents()
-    diff_lines = []
+    response_path = codex_response_path()
+    response_text = read_text(response_path)
+    patch_text = extract_unified_diff(response_text)
+    valid, validation_error = validate_patch_text(patch_text)
+    if valid:
+        patch_path.write_text(patch_text, encoding="utf-8")
+    else:
+        patch_path.write_text("", encoding="utf-8")
     changed_files = []
-    for path, new_text in changes.items():
-        old_text = read_text(path)
-        if old_text == new_text:
-            continue
-        changed_files.append(rel(path))
-        diff_lines.extend(difflib.unified_diff(
-            old_text.splitlines(keepends=True),
-            new_text.splitlines(keepends=True),
-            fromfile=f"a/{rel(path)}",
-            tofile=f"b/{rel(path)}",
-        ))
-    patch_path.write_text("".join(diff_lines), encoding="utf-8")
+    for line in patch_text.splitlines():
+        if line.startswith("+++ b/"):
+            path = line[6:]
+            if path != "/dev/null" and path not in changed_files:
+                changed_files.append(path)
+    scope_lines = [f"- `{item}`" for item in changed_files] if changed_files else ["- No valid patch proposed."]
     recommendation_md.write_text(
         "\n".join([
-            "# DorkPipe Ollama Optimizer Recommendation",
+            "# DorkPipe Codex Optimizer Recommendation",
             "",
-            "Apply the proposed patch after reviewing the latest optimizer synthesis and target run artifacts.",
+            "Codex-authored patch proposal. Review this artifact before applying anything to the working tree.",
             "",
             "## Proposed Scope",
             "",
-            *(f"- `{item}`" for item in changed_files),
+            *scope_lines,
             "",
             "## Why",
             "",
-            "- Tightens worker prompts so local Ollama workers return direct bounded artifacts.",
-            "- Tightens verifier heuristics so preambles, note footers, false missing-information footers, and formatting commentary route to review.",
-            "- Leaves commits to the human operator.",
+            "- Codex owns the code-change decision in this workflow.",
+            "- DorkPipe validates the diff path allowlist and `git apply --check` only.",
+            "- Proposal mode never modifies the working tree and never commits.",
             "",
         ]),
         encoding="utf-8",
     )
     write_json({
-        "status": "ready" if diff_lines else "noop",
+        "status": "ready" if valid else "review",
         "patch": display_path(patch_path),
         "recommendation": display_path(recommendation_md),
+        "codex_response": display_path(response_path),
         "changed_files": changed_files,
+        "validation_error": validation_error,
+        "applied": False,
     })
 
 def check_patch_paths():

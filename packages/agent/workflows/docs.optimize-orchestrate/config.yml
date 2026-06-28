@@ -1,20 +1,20 @@
 name: docs.optimize-orchestrate
 description: >-
-  Local-first Ollama + DorkPipe optimizer for docs.orchestrate. It reviews the latest target
-  artifacts, runs bounded optimizer workers, proposes a constrained patch, requires approval, and
-  applies to the working tree without committing.
+  Codex-led DorkPipe optimizer for docs.orchestrate. It reviews the latest target artifacts, lets
+  Codex make the code-change decision, writes a constrained patch proposal, and does not touch the
+  working tree.
 
 model_policy:
   mode: auto
   attempt:
-    preference: local
+    preference: strong
     max_attempts: 1
   validate:
-    preference: local
+    preference: strongest_available
     required_for:
       - docs_orchestration_optimizer
   escalation:
-    enabled: false
+    enabled: true
     require_approval_over_cost: true
 
 vars:
@@ -25,10 +25,10 @@ vars:
   DORKPIPE_OPTIMIZER_TARGET_ROOT: bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
   DORKPIPE_ORCH_OLLAMA_MODEL: llama3.2
   DORKPIPE_ORCH_LIVE_MODELS: "true"
-  DORKPIPE_ORCH_CLOUD_LANES: "false"
+  DORKPIPE_ORCH_CLOUD_LANES: "true"
   DORKPIPE_ORCH_CONTAINERIZE_CLOUD: "true"
-  DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS: "0"
-  DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS: "0"
+  DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS: "60000"
+  DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS: "30000"
   DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED: "true"
   DORKPIPE_DEV_STACK_AUTODOWN: "0"
   DORKPIPE_DEV_STACK_MCP_PORT: "8766"
@@ -55,8 +55,8 @@ steps:
     run: scripts/dorkpipe/orchestrate-plan.sh
     agent:
       startup_prompt: >-
-        Treat this as a bounded DorkPipe optimizer run. Stay local-first, use latest target artifacts
-        as evidence, and recommend only scoped changes that improve Ollama worker quality.
+        Treat this as a bounded DorkPipe optimizer run. Use latest target artifacts as evidence.
+        Ollama may audit cheaply, but Codex owns the code-change decision and patch proposal.
       include_agents_md: true
       accessible_paths:
         - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate
@@ -80,14 +80,15 @@ steps:
           - "**/*token*"
       orchestration:
         request:
-          text: Optimize the Ollama-only docs.orchestrate loop using the latest DorkPipe artifacts.
+          text: Use Codex to decide whether and how to improve docs.orchestrate from the latest DorkPipe artifacts.
         plan:
-          goal: Diagnose local worker quality issues and produce scoped guidance for a constrained optimizer patch.
+          goal: Diagnose local worker quality issues and produce a Codex-authored constrained patch proposal.
           steps:
             - inspect latest docs.orchestrate worker artifacts
-            - identify prompt and verifier gaps that hurt Ollama output shape
-            - recommend small package-scoped changes
-            - require approval before applying to the working tree
+            - use Ollama for cheap artifact-shape audit
+            - use Codex to decide whether a code change is warranted
+            - write a proposed patch artifact only
+            - leave the working tree untouched
         concurrency:
           max_workers: 2
           max_local_workers: 2
@@ -102,7 +103,8 @@ steps:
               Target artifacts: `bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate`
               Optimizer artifacts: `bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate`
 
-              Optimize for local Ollama worker quality first. Do not recommend cloud escalation.
+              Optimize local Ollama worker quality, but Codex must make the code-change decision.
+              This workflow is proposal-only: do not apply patches to the working tree.
               Any proposed edit must stay inside:
 
               - `packages/agent/workflows/docs.orchestrate/config.yml`
@@ -134,42 +136,53 @@ steps:
               Each bullet must name a concrete artifact-shape failure and the task id if visible.
               Focus on preambles, Note/Please note footers, false uncertainty, and verifier misses.
               Do not recommend cloud escalation.
-          - id: patch_guidance
-            resolver_hint: ollama
-            worker_type: planning
+          - id: codex_patch_decision
+            resolver_hint: codex
+            worker_type: patch_decision
             depends_on:
               - latest_run_audit
-            goal: Convert the audit into constrained patch guidance for prompts and verifier heuristics.
-            expected_output: Four terse bullets describing the patch boundaries and validation plan.
+            goal: Decide whether a scoped code change is warranted and, if so, author a unified diff proposal.
+            expected_output: A short decision note followed by one fenced diff block containing a valid unified diff, or a defer decision with no diff.
+            model_policy:
+              attempt:
+                preference: strong
+              validate:
+                preference: strongest_available
             inputs:
               - shared/optimizer-request.md
               - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/assessment.md
+              - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.optimize-orchestrate/tasks/latest_run_audit/response.md
               - packages/agent/workflows/docs.orchestrate/config.yml
               - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh
             constraints:
-              - local Ollama only
+              - Codex must make the patch decision
               - keep edits small and package-scoped
-              - require approval before apply
+              - write a proposed patch only
+              - do not apply the patch
               - never commit
-            model:
-              model: llama3.2
             prompt: |
-              You are the DorkPipe optimizer planning worker.
+              You are the Codex patch-decision worker for a DorkPipe optimizer run.
 
-              Return exactly four bullets and no heading.
-              Bullet 1: prompt rule to improve direct artifact shape.
-              Bullet 2: verifier heuristic to catch note or preamble failures.
-              Bullet 3: allowlist boundary.
-              Bullet 4: validation command or artifact to inspect.
-              Do not write a full patch.
+              Decide whether the latest docs.orchestrate artifacts justify a small code change.
+
+              Rules:
+              - If no change is warranted, return "Decision: defer" and a short reason.
+              - If a change is warranted, return "Decision: propose" followed by exactly one fenced diff block.
+              - The diff must be a valid unified diff that applies with `git apply --check`.
+              - The diff may touch only:
+                - packages/agent/workflows/docs.orchestrate/config.yml
+                - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh
+              - Do not include changes to generated artifacts.
+              - Do not apply the patch.
+              - Do not commit.
         merge:
-          title: DorkPipe Ollama Optimizer Synthesis
+          title: DorkPipe Codex Optimizer Synthesis
           summary_points:
-            - The optimizer is local-first and uses Ollama workers for cheap iteration.
-            - The apply stage is constrained to prompt and verifier improvements.
-            - Approval is required before working-tree changes, and commits are never created.
+            - Ollama performs cheap artifact-shape auditing.
+            - Codex makes the code-change decision and authors any proposed patch.
+            - Proposal mode writes artifacts only; it does not modify the working tree.
         verify:
-          next_action_default: review proposed patch before applying optimizer changes
+          next_action_default: review Codex patch proposal; run an explicit apply workflow only when ready
         apply:
           require_approval: true
           outputs: []
@@ -191,16 +204,6 @@ steps:
     run: scripts/dorkpipe/orchestrate-optimize.sh
     vars:
       DORKPIPE_OPTIMIZER_ACTION: propose
-
-  - id: approval
-    kind: host
-    run: scripts/dorkpipe/orchestrate-approve.sh
-
-  - id: apply
-    kind: host
-    run: scripts/dorkpipe/orchestrate-optimize.sh
-    vars:
-      DORKPIPE_OPTIMIZER_ACTION: apply
 
   - id: validate
     kind: host
