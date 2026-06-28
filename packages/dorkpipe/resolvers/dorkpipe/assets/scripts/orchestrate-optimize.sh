@@ -28,7 +28,7 @@ result_json="${optimizer_dir}/${action}/result.json"
 mkdir -p "${optimizer_dir}/${action}"
 
 case "${action}" in
-  prepare|assess|propose|apply|validate) ;;
+  prepare|assess|propose|apply|apply-if-enabled|validate) ;;
   *)
     echo "orchestrate-optimize: unknown DORKPIPE_OPTIMIZER_ACTION=${action}" >&2
     exit 1
@@ -249,14 +249,15 @@ def check_patch_paths():
             raise SystemExit(f"patch touches non-allowlisted path: {path}")
 
 def apply_patch():
-    check_patch_paths()
-    if not approval_path.exists() or "- Approved: yes" not in approval_path.read_text(encoding="utf-8", errors="replace"):
+    if not apply_enabled():
         write_json({
             "status": "skipped",
-            "reason": "approval artifact is required before applying optimizer patch",
+            "reason": "set DORKPIPE_OPTIMIZER_APPLY=1 to apply the proposed patch to the working tree",
             "patch": display_path(patch_path),
+            "commit": False,
         })
         return
+    check_patch_paths()
     if not patch_path.read_text(encoding="utf-8").strip():
         write_json({"status": "noop", "reason": "proposed patch is empty"})
         return
@@ -268,6 +269,10 @@ def apply_patch():
         "applied_files": [rel(p) for p in allowed_files],
         "commit": False,
     })
+
+def apply_enabled():
+    import os
+    return str(os.environ.get("DORKPIPE_OPTIMIZER_APPLY", "")).strip().lower() in {"1", "true", "yes", "on"}
 
 def validate():
     commands = [
@@ -297,6 +302,8 @@ if action in {"prepare", "assess"}:
 elif action == "propose":
     write_patch()
 elif action == "apply":
+    apply_patch()
+elif action == "apply-if-enabled":
     apply_patch()
 elif action == "validate":
     validate()

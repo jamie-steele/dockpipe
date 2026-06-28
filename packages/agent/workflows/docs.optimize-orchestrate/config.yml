@@ -231,6 +231,12 @@ steps:
     vars:
       DORKPIPE_OPTIMIZER_ACTION: propose
 
+  - id: apply_if_enabled
+    kind: host
+    run: scripts/dorkpipe/orchestrate-optimize.sh
+    vars:
+      DORKPIPE_OPTIMIZER_ACTION: apply-if-enabled
+
   - id: validate
     kind: host
     run: scripts/dorkpipe/orchestrate-optimize.sh

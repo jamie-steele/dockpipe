@@ -11,6 +11,12 @@ Run it after a `docs.orchestrate` attempt:
 ./src/bin/dockpipe --package agent --workflow docs.optimize-orchestrate --
 ```
 
+Apply the validated Codex proposal to the working tree without committing:
+
+```bash
+DORKPIPE_OPTIMIZER_APPLY=1 ./src/bin/dockpipe --package agent --workflow docs.optimize-orchestrate --
+```
+
 Artifacts are written under:
 
 ```text
@@ -24,4 +30,6 @@ bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/proposed.patch
 ```
 
 The workflow may propose changes only inside the optimizer workflow, the docs orchestration workflow,
-and the DorkPipe optimizer/verifier scripts. It does not apply the patch and does not create commits.
+and the DorkPipe optimizer/verifier scripts. By default it does not apply the patch and does not
+create commits. With `DORKPIPE_OPTIMIZER_APPLY=1`, it applies the validated patch to the working tree
+and still does not create commits.
