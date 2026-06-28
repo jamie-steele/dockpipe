@@ -9,6 +9,8 @@ cd "$REPO_ROOT"
 
 PKG_ROOT="${REPO_ROOT}/release/packaging"
 
+source "${PKG_ROOT}/lib/status.sh"
+
 _default_ver="$(tr -d ' \t\r\n' < "${REPO_ROOT}/VERSION" 2>/dev/null || true)"
 [[ -z "${_default_ver}" ]] && _default_ver="0.6.0"
 VERSION="${1:-${_default_ver}}"
@@ -50,7 +52,8 @@ mkdir -p "${BUILD_DIR}/DEBIAN"
 sed -e "s/^Version: .*/Version: ${VERSION}/" -e "s/^Architecture: .*/Architecture: ${DEB_ARCH}/" "${PKG_ROOT}/control" > "${BUILD_DIR}/DEBIAN/control"
 
 mkdir -p "${PKG_ROOT}/build"
-dpkg-deb --root-owner-group --build "${BUILD_DIR}" "${PKG_ROOT}/build/${PACKAGE}.deb"
+run_with_elapsed_status "Building Debian package ${PACKAGE}.deb" \
+  dpkg-deb --root-owner-group --build "${BUILD_DIR}" "${PKG_ROOT}/build/${PACKAGE}.deb"
 echo "Built: release/packaging/build/${PACKAGE}.deb"
 rm -rf "${BUILD_DIR}"
 rm -rf "${CORE_STAGE}"

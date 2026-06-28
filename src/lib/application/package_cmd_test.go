@@ -356,8 +356,16 @@ steps:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(df), "apt-get install -y --no-install-recommends golang-go python3") {
+	gotDockerfile := string(df)
+	if !strings.Contains(gotDockerfile, "--mount=type=cache,target=/var/cache/apt") ||
+		!strings.Contains(gotDockerfile, "apt-get install -y --no-install-recommends golang-go python3") {
 		t.Fatalf("generated Dockerfile missing apt install:\n%s", string(df))
+	}
+	if strings.Contains(gotDockerfile, "RUN npm install") && strings.Index(gotDockerfile, "apt-get install") > strings.Index(gotDockerfile, "RUN npm install") {
+		t.Fatalf("expected workflow-authored apt install before npm install:\n%s", gotDockerfile)
+	}
+	if strings.Index(gotDockerfile, "apt-get install") > strings.LastIndex(gotDockerfile, "USER node") {
+		t.Fatalf("expected workflow-authored apt install before final USER:\n%s", gotDockerfile)
 	}
 }
 
@@ -663,11 +671,12 @@ steps: []
 		t.Fatal(err)
 	}
 	got := string(df)
-	if !strings.Contains(got, "apt-get install -y --no-install-recommends cargo golang-go") {
+	if !strings.Contains(got, "--mount=type=cache,target=/var/cache/apt") ||
+		!strings.Contains(got, "apt-get install -y --no-install-recommends cargo golang-go") {
 		t.Fatalf("generated Dockerfile missing apt install:\n%s", got)
 	}
-	if strings.Index(got, "apt-get install") > strings.Index(got, "USER node") {
-		t.Fatalf("expected apt install before final USER:\n%s", got)
+	if strings.Index(got, "apt-get install") > strings.LastIndex(got, "USER node") {
+		t.Fatalf("expected workflow-authored apt install before final USER:\n%s", got)
 	}
 }
 

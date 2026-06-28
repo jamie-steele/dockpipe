@@ -127,9 +127,19 @@ func DockerBuild(image, dockerfileDir, contextDir string) error {
 		}
 	}
 	cmd := execCommandFn("docker", "build", "-q", "-t", image, "-f", df, contextDir)
+	cmd.Env = dockerBuildEnv(os.Environ())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func dockerBuildEnv(env []string) []string {
+	for _, entry := range env {
+		if strings.HasPrefix(entry, "DOCKER_BUILDKIT=") {
+			return env
+		}
+	}
+	return append(env, "DOCKER_BUILDKIT=1")
 }
 
 // DockerImageExists reports whether a local docker image reference currently resolves.

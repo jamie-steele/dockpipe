@@ -441,6 +441,26 @@ func TestDockerBuildPaths(t *testing.T) {
 	}
 }
 
+func TestDockerBuildEnvEnablesBuildKitByDefault(t *testing.T) {
+	got := dockerBuildEnv([]string{"PATH=/usr/bin"})
+	if !containsEnv(got, "DOCKER_BUILDKIT=1") {
+		t.Fatalf("expected DOCKER_BUILDKIT=1, got %#v", got)
+	}
+	got = dockerBuildEnv([]string{"DOCKER_BUILDKIT=0"})
+	if len(got) != 1 || got[0] != "DOCKER_BUILDKIT=0" {
+		t.Fatalf("expected existing DOCKER_BUILDKIT to be preserved, got %#v", got)
+	}
+}
+
+func containsEnv(env []string, want string) bool {
+	for _, entry := range env {
+		if entry == want {
+			return true
+		}
+	}
+	return false
+}
+
 func flattenCalls(calls []call) []string {
 	out := make([]string, 0, len(calls))
 	for _, c := range calls {

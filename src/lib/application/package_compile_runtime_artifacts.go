@@ -777,7 +777,7 @@ func writeDerivedAptImageBuild(sourceRoot, key, baseRef, baseDockerfileDir strin
 	if err != nil {
 		return "", fmt.Errorf("read base Dockerfile for image.packages: %w", err)
 	}
-	body := insertAptInstallBeforeFinalUser(string(b), pkgs)
+	body := insertAptInstallAfterBaseImage(string(b), pkgs)
 	return writeDerivedImageDockerfile(sourceRoot, key, body)
 }
 
@@ -786,6 +786,7 @@ func writeDerivedRegistryAptImageBuild(sourceRoot, key, baseRef string, pkgs []s
 		return "", err
 	}
 	body := strings.Join([]string{
+		"# syntax=docker/dockerfile:1.7",
 		"FROM " + strings.TrimSpace(baseRef),
 		"",
 		aptInstallDockerfileRun(pkgs),
@@ -806,12 +807,13 @@ func writeDerivedImageDockerfile(sourceRoot, key, body string) (string, error) {
 	return dir, nil
 }
 
-func insertAptInstallBeforeFinalUser(dockerfile string, pkgs []string) string {
+func insertAptInstallAfterBaseImage(dockerfile string, pkgs []string) string {
 	lines := strings.Split(strings.ReplaceAll(dockerfile, "\r\n", "\n"), "\n")
-	insertAt := len(lines)
-	for i := len(lines) - 1; i >= 0; i-- {
-		if strings.HasPrefix(strings.TrimSpace(lines[i]), "USER ") {
-			insertAt = i
+	lines = ensureDockerfileSyntax(lines)
+	insertAt := 0
+	for i, line := range lines {
+		if strings.HasPrefix(strings.TrimSpace(line), "FROM ") {
+			insertAt = i + 1
 			break
 		}
 	}
@@ -829,8 +831,18 @@ func insertAptInstallBeforeFinalUser(dockerfile string, pkgs []string) string {
 	return strings.TrimRight(strings.Join(out, "\n"), "\n") + "\n"
 }
 
+func ensureDockerfileSyntax(lines []string) []string {
+	if len(lines) > 0 && strings.HasPrefix(strings.TrimSpace(lines[0]), "# syntax=") {
+		return lines
+	}
+	out := make([]string, 0, len(lines)+1)
+	out = append(out, "# syntax=docker/dockerfile:1.7")
+	out = append(out, lines...)
+	return out
+}
+
 func aptInstallDockerfileRun(pkgs []string) string {
-	return "RUN apt-get update && apt-get install -y --no-install-recommends " + strings.Join(pkgs, " ") + " && rm -rf /var/lib/apt/lists/*"
+	return "RUN --mount=type=cache,target=/var/cache/apt,sharing=locked --mount=type=cache,target=/var/lib/apt,sharing=locked apt-get update && apt-get install -y --no-install-recommends " + strings.Join(pkgs, " ") + " && rm -rf /var/lib/apt/lists/*"
 }
 
 func derivedImageRef(baseRef string, pkgs []string) string {

@@ -7,6 +7,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
+source "${REPO_ROOT}/release/packaging/lib/status.sh"
+
 _default_ver="$(tr -d ' \t\r\n' < "${REPO_ROOT}/VERSION" 2>/dev/null || true)"
 [[ -z "${_default_ver}" ]] && _default_ver="0.0.0"
 VERSION="${1:-${_default_ver}}"
@@ -22,12 +24,14 @@ mkdir -p "${OUT_DIR}"
 WORKDIR="$(mktemp -d "${TMPDIR:-/tmp}/dockpipe-core-build-XXXXXX")"
 trap 'rm -rf "${WORKDIR}"' EXIT INT TERM
 
-go run -trimpath -ldflags "-s -w -X main.Version=${VERSION}" ./src/cmd package compile core \
+run_with_elapsed_status "Compiling core package" \
+  go run -trimpath -ldflags "-s -w -X main.Version=${VERSION}" ./src/cmd package compile core \
   --workdir "${WORKDIR}" \
   --from "${REPO_ROOT}/src/core" \
   --force
 
-go run -trimpath -ldflags "-s -w -X main.Version=${VERSION}" ./src/cmd package build store \
+run_with_elapsed_status "Exporting core package store" \
+  go run -trimpath -ldflags "-s -w -X main.Version=${VERSION}" ./src/cmd package build store \
   --workdir "${WORKDIR}" \
   --out "${OUT_DIR}" \
   --only core \
