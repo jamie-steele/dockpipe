@@ -55,6 +55,7 @@ verifier_script = root / "packages/dorkpipe/resolvers/dorkpipe/assets/scripts/or
 patch_path = optimizer_dir / "proposed.patch"
 assessment_md = optimizer_dir / "assessment.md"
 recommendation_md = optimizer_dir / "recommendation.md"
+history_dir = optimizer_dir / "history"
 
 allowed_files = [
     root / "packages/agent/workflows/docs.optimize-orchestrate/README.md",
@@ -82,6 +83,32 @@ def read_text(path):
     if not path.exists():
         return ""
     return path.read_text(encoding="utf-8", errors="replace")
+
+def snapshot_previous_optimizer_run():
+    history_dir.mkdir(parents=True, exist_ok=True)
+    copies = [
+        (recommendation_md, history_dir / "previous-recommendation.md"),
+        (patch_path, history_dir / "previous-proposed.patch"),
+        (optimizer_dir / "propose" / "result.json", history_dir / "previous-propose-result.json"),
+        (orch_root / "tasks" / "codex_patch_decision" / "response.md", history_dir / "previous-codex-response.md"),
+        (orch_root / "merge" / "final.md", history_dir / "previous-merge-final.md"),
+        (orch_root / "verify" / "result.json", history_dir / "previous-verify-result.json"),
+    ]
+    snapshot = []
+    for src, dst in copies:
+        if src.exists() and src.is_file():
+            dst.write_text(src.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+            snapshot.append(display_path(dst))
+    snapshot_lines = [f"- `{item}`" for item in snapshot] if snapshot else ["- No previous optimizer artifacts were available."]
+    (history_dir / "previous-run-summary.md").write_text(
+        "\n".join([
+            "# Previous Optimizer Run",
+            "",
+            *snapshot_lines,
+            "",
+        ]),
+        encoding="utf-8",
+    )
 
 def latest_target_snapshot():
     files = {
@@ -298,6 +325,7 @@ def validate():
         raise SystemExit("optimizer validation failed")
 
 if action in {"prepare", "assess"}:
+    snapshot_previous_optimizer_run()
     write_assessment()
 elif action == "propose":
     write_patch()

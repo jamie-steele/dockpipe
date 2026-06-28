@@ -103,6 +103,7 @@ steps:
               Target workflow: `docs.orchestrate`
               Target artifacts: `bin/.dockpipe/packages/dorkpipe/orchestrate/docs.orchestrate`
               Optimizer artifacts: `bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate`
+              Previous optimizer handoff: `bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history`
 
               Optimize local Ollama worker quality, but Codex must make the code-change decision.
               This workflow is proposal-only: do not apply patches to the working tree.
@@ -162,6 +163,11 @@ steps:
               - docs/agents/safety-guardrails.md
               - shared/optimizer-request.md
               - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/assessment.md
+              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/previous-run-summary.md
+              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/previous-recommendation.md
+              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/previous-proposed.patch
+              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/previous-propose-result.json
+              - bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/previous-codex-response.md
               - bin/.dockpipe/packages/dorkpipe/orchestrate/docs.optimize-orchestrate/tasks/latest_run_audit/response.md
               - packages/agent/workflows/docs.optimize-orchestrate/config.yml
               - packages/agent/workflows/docs.optimize-orchestrate/README.md
@@ -172,6 +178,7 @@ steps:
               - Codex must make the patch decision
               - use AGENTS.md and routed docs as operating instructions
               - treat Ollama output as scout context, not authority
+              - use previous optimizer handoff to avoid repeating a rejected or already-applied idea
               - keep edits small and package-scoped
               - write a proposed patch only
               - do not apply the patch
@@ -180,7 +187,7 @@ steps:
               You are Codex inside a DorkPipe optimizer run: a senior coding agent operating from
               the same repo instructions the outer Codex uses. Treat AGENTS.md and the included
               routed docs as binding project guidance. Treat the Ollama audit as cheap scout context,
-              not as authority.
+              not as authority. Use previous optimizer handoff files as iteration memory.
 
               Decide whether the latest docs.orchestrate and docs.optimize-orchestrate artifacts
               justify a code or workflow change. You may improve the optimizer itself if that is the
@@ -189,6 +196,7 @@ steps:
               Rules:
               - If no change is warranted, return "Decision: defer" and a short reason.
               - If a change is warranted, return "Decision: propose" followed by exactly one fenced diff block.
+              - Do not repeat the previous proposed patch unless the latest artifacts still prove it is the best next change.
               - The diff must be a valid unified diff that applies with `git apply --check`.
               - The diff may touch only:
                 - packages/agent/workflows/docs.optimize-orchestrate/README.md

@@ -23,6 +23,15 @@ Artifacts are written under:
 bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/
 ```
 
+Each run snapshots the previous optimizer proposal under:
+
+```text
+bin/.dockpipe/packages/dorkpipe/optimize/docs.orchestrate/history/
+```
+
+That handoff is included in the next Codex decision so repeated runs can build on earlier proposals
+instead of starting cold.
+
 The proposed patch is:
 
 ```text
