@@ -22,7 +22,7 @@ There is **no** supported headless “Cursor server” in this template. For a *
 - **`[dockpipe] cursor-dev: remote session started`** when the monitor first sees remote-server processes.
 - **`[dockpipe] cursor-dev: remote session ended`** when those processes go away.
 
-**Reliable shutdown on the host** combines the marker with the same *ideas* as **`vscode-code-server.sh`** (counting live sessions): **(1)** **ESTABLISHED TCP** on the host that references the **container’s IP** (host ↔ remote traffic), **(2)** **recent writes** under **`.cursor-server/`** inside the package-scoped home (like “something is still talking”), **(3)** **`pgrep` / `docker exec`** if needed. **`bin/.dockpipe/packages/cursor-dev/remote_active`** is **`0`** or **`1`**, rewritten every **`CURSOR_DEV_SESSION_POLL_SEC`** (default **2**). If the marker is **fresh** (mtime within **`CURSOR_DEV_MARKER_MAX_AGE_SEC`**, default **60s**) and **`1`**, the host trusts it immediately; if it is **`0`**, the host **still** checks TCP / **`.cursor-server`** / **`docker exec`** so a missed **`pgrep`** in the monitor does not block detection.
+**Reliable shutdown on the host** combines the marker with the same *ideas* as the **`vscode`** desktop-session resolver (counting live sessions): **(1)** **ESTABLISHED TCP** on the host that references the **container’s IP** (host ↔ remote traffic), **(2)** **recent writes** under **`.cursor-server/`** inside the package-scoped home (like “something is still talking”), **(3)** **`pgrep` / `docker exec`** if needed. **`bin/.dockpipe/packages/cursor-dev/remote_active`** is **`0`** or **`1`**, rewritten every **`CURSOR_DEV_SESSION_POLL_SEC`** (default **2**). If the marker is **fresh** (mtime within **`CURSOR_DEV_MARKER_MAX_AGE_SEC`**, default **60s**) and **`1`**, the host trusts it immediately; if it is **`0`**, the host **still** checks TCP / **`.cursor-server`** / **`docker exec`** so a missed **`pgrep`** in the monitor does not block detection.
 
 **Where to look for deep logs:** **`/work/bin/.dockpipe/packages/cursor-dev/home/.cursor-server/`** in the container = **`bin/.dockpipe/packages/cursor-dev/home/.cursor-server/`** on the host.
 
@@ -97,7 +97,8 @@ Use **`--workdir`** if you are not already in the project root.
 
 ## Experimental / caveats
 
-- **Not** affiliated with Cursor or Anysphere.
+- This compatibility resolver is DockPipe-authored and is **not** affiliated with, sponsored by, or endorsed by Cursor or Anysphere.
+- DockPipe does not ship Cursor, Cursor logos, Anysphere services, credentials, or editor auth state in this package.
 - Does **not** configure Remote SSH or WSL automatically. It **can** launch Cursor already attached to the session container (Dev Containers URI — **`CURSOR_DEV_REMOTE_URI`**).
 - Launcher detection is best-effort; if nothing matches, use **File → Open Folder** with the printed path.
 - **`dockpipe-base-dev`** must be available locally unless you override **`CURSOR_DEV_SESSION_IMAGE`**. Rebuild the image after upgrades (**`docker rmi dockpipe-base-dev:latest`** then run **`cursor-dev`** or **`dockpipe --isolate base-dev -- echo ok`**) so the container has a valid **`HOME`** under **`bin/.dockpipe/packages/cursor-dev/home`** (Cursor/VS Code remote server installs to **`$HOME/.cursor-server`**; without **`HOME`**, **`docker run -u uid:gid`** can yield permission errors) and the GNU **`base64`** shim (install scripts may call **`base64 -D`**).

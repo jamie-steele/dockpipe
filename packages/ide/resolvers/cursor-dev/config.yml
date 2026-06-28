@@ -1,8 +1,8 @@
-# Experimental: long-lived base-dev container (docker wait) + Cursor on the host — same session idea as vscode.
+# Experimental: long-lived base-dev container (docker wait) + user-installed Cursor on the host.
 name: cursor-dev
 category: app
 icon: assets/images/icon.png
-description: Experimental — base-dev session container until you stop it; open Cursor on the host (no remote server).
+description: Experimental — base-dev session container until you stop it; open a user-installed Cursor desktop app on the host (no remote server).
 
 types:
   - models/ICursorDevResolverConfig

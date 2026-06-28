@@ -4,14 +4,15 @@ name: ide
 version: 0.6.0
 title: DockPipe IDE resolvers
 description: |
-  Third-party editor profiles (vscode, cursor-dev). First-party Pipeon lives under
-  packages/pipeon/ in this repo.
+  Compatibility resolvers for user-installed desktop editors (vscode,
+  cursor-dev). First-party Pipeon lives under packages/pipeon/ in this repo.
 author: DockPipe
 license: Apache-2.0
 repository: https://github.com/dockpipe/dockpipe
 icon: resolvers/cursor-dev/assets/images/icon.png
 artwork:
   cursor-dev: resolvers/cursor-dev/assets/images/icon.png
+  vscode: resolvers/vscode/assets/images/icon.png
 tags: [resolver, ide, editor]
 includes_resolvers:
   - vscode

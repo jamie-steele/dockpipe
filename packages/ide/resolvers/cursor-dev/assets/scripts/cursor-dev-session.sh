@@ -37,7 +37,7 @@ fi
 
 # Git Bash / MSYS maps "/work" to C:/Program Files/Git/work when invoking docker.exe. The "//work"
 # trick is not reliable on all setups; MSYS2_ARG_CONV_EXCL=* disables path conversion for the whole
-# docker invocation (see also vscode-code-server.sh comments).
+# docker invocation (same desktop-session shape as the vscode resolver).
 cursor_dev_docker_no_pathconv() {
   cursor_dev_docker "$@"
 }

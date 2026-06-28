@@ -1,0 +1,26 @@
+# Experimental: long-lived base-dev container + user-installed VS Code on the host attached via Dev Containers.
+name: vscode
+category: app
+icon: assets/images/icon.png
+description: Base-dev session container plus a user-installed VS Code desktop app on the host, attached to /work as a remote window.
+
+vault: none
+
+types:
+  - models/IVscodeResolverConfig
+
+steps:
+  - id: session
+    kind: host
+    run: scripts/vscode/vscode-session.sh
+    vars:
+      # Optional: gui = host opens the desktop app (see DOCKPIPE_LAUNCH_MODE in docs/workflow-yaml.md).
+      # DOCKPIPE_LAUNCH_MODE: gui
+      VSCODE_WAIT: "1"
+      VSCODE_POLL_SEC: "0.5"
+      # Default both = host quit OR close remote window.
+      # VSCODE_SESSION_SHUTDOWN: "both"
+      # Optional: pin image (default dockpipe-base-dev:latest after first dockpipe build).
+      # VSCODE_SESSION_IMAGE: "dockpipe-base-dev:latest"
+      # VSCODE_CONTAINER_NAME: dockpipe-vscode-dev-mine
+      # VSCODE_SKIP_DOCKER_CHECK: "0"

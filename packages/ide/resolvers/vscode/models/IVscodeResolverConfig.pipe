@@ -1,0 +1,12 @@
+/// <summary>
+/// Contract for the VS Code desktop compatibility resolver variables.
+/// </summary>
+public Interface IVscodeResolverConfig
+{
+    /// <summary>Launch mode hint for opening the desktop app from the host.</summary>
+    public string DockpipeLaunchMode;
+    /// <summary>Whether DockPipe waits for the desktop or remote session to end.</summary>
+    public string VscodeWait;
+    /// <summary>Image used for the session container.</summary>
+    public string VscodeSessionImage;
+}

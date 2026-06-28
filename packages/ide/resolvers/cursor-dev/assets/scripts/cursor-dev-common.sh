@@ -350,7 +350,7 @@ cursor_dev_fs_remote_active() {
 }
 
 # Host has an established TCP session involving the container's bridge IP (Cursor ↔ remote server traffic).
-# Mirrors vscode-code-server.sh counting ESTABLISHED to 127.0.0.1:PORT — here we key off the container address.
+# Mirrors the vscode desktop-session resolver's TCP checks; here we key off the container address.
 cursor_dev_tcp_session_to_container() {
   local name="$1"
   [[ "${CURSOR_DEV_REMOTE_TCP_SIGNAL:-1}" == "1" ]] || return 1
