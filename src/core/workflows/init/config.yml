@@ -18,22 +18,23 @@ steps:
   - id: prepare
     # Host step: shape values for later steps and persist them as outputs.
     kind: host
+    cwd: artifacts
     cmd: |-
       bash -c 'set -euo pipefail
-      mkdir -p bin/.dockpipe
-      printf "%s\n" "EXAMPLE_MESSAGE=$EXAMPLE_MESSAGE" "EXAMPLE_STAGE=prepare" > bin/.dockpipe/example.env
-      echo "[example] prepared bin/.dockpipe/example.env for the next step"'
-    outputs: bin/.dockpipe/example.env
+      printf "%s\n" "EXAMPLE_MESSAGE=$EXAMPLE_MESSAGE" "EXAMPLE_STAGE=prepare" > example.env
+      echo "[example] prepared example.env for the next step"'
+    outputs: example.env
 
   - id: run
     # Container step: this is where your real tool or build would run.
+    cwd: artifacts
     isolate: ${EXAMPLE_IMAGE}
     cmd: |-
       sh -c 'set -eu
       echo "[example] container step"
       echo "[example] message: ${EXAMPLE_MESSAGE:-unset}"
-      printf "%s\n" "EXAMPLE_STAGE=run" > bin/.dockpipe/example.env'
-    outputs: bin/.dockpipe/example.env
+      printf "%s\n" "EXAMPLE_STAGE=run" > example.env'
+    outputs: example.env
 
   - id: report
     # Host step: summarize what happened and point the user at the next edit.

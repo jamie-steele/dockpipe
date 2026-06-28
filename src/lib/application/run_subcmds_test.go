@@ -35,9 +35,11 @@ vars:
 steps:
   - id: prepare
     kind: host
+    cwd: artifacts
     cmd: echo prepare
-    outputs: bin/.dockpipe/example.env
+    outputs: example.env
   - id: run
+    cwd: artifacts
     isolate: ${EXAMPLE_IMAGE}
     cmd: echo run
   - id: report
@@ -263,12 +265,12 @@ func TestCmdInitErrorsOnUnknownOption(t *testing.T) {
 func TestCmdRunsPolicyListsStructuredRecords(t *testing.T) {
 	project := t.TempDir()
 	_, err := infrastructure.WriteRunPolicyRecord(project, &infrastructure.RunPolicyRecord{
-		WorkflowName:        "secure",
-		StepID:              "step-1",
-		ImageRef:            "dockpipe-codex",
-		NetworkMode:         "offline",
-		NetworkEnforcement:  "native",
-		PolicySummary:       "runtime policy: network=offline",
+		WorkflowName:       "secure",
+		StepID:             "step-1",
+		ImageRef:           "dockpipe-codex",
+		NetworkMode:        "offline",
+		NetworkEnforcement: "native",
+		PolicySummary:      "runtime policy: network=offline",
 	})
 	if err != nil {
 		t.Fatal(err)
