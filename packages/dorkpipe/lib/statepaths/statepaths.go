@@ -53,7 +53,7 @@ func NodesDir(workdir string) (string, error) {
 }
 
 func AnalysisDir(workdir string) string {
-	return filepath.Join(workdir, "bin", ".dockpipe", "analysis")
+	return packageStatePath(workdir, "analysis")
 }
 
 func QueuePath(workdir string) string {
@@ -120,14 +120,23 @@ func SelfAnalysisDir(workdir string) (string, error) {
 	return filepath.Join(root, "self-analysis"), nil
 }
 
+func packageStatePath(workdir string, parts ...string) string {
+	root, err := PackageStateDir(workdir)
+	if err != nil {
+		root = filepath.Join(workdir, infrastructure.DockpipeDirRel, "packages", dorkpipeScope)
+	}
+	all := append([]string{root}, parts...)
+	return filepath.Join(all...)
+}
+
 func CursorPromptPath(workdir string) string {
-	return filepath.Join(workdir, "bin", ".dockpipe", "orchestrator-cursor-prompt.md")
+	return packageStatePath(workdir, "handoff", "orchestrator-cursor-prompt.md")
 }
 
 func CursorRefinedPromptPath(workdir string) string {
-	return filepath.Join(workdir, "bin", ".dockpipe", "orchestrator-cursor-prompt.refined.md")
+	return packageStatePath(workdir, "handoff", "orchestrator-cursor-prompt.refined.md")
 }
 
 func PastePromptPath(workdir string) string {
-	return filepath.Join(workdir, "bin", ".dockpipe", "paste-this-prompt.txt")
+	return packageStatePath(workdir, "handoff", "paste-this-prompt.txt")
 }

@@ -98,8 +98,9 @@ if [[ "${R2_INFRA_ONLY:-0}" == "1" ]]; then
     dockpipe_sdk die "Terraform auth: set CLOUDFLARE_API_TOKEN or (CLOUDFLARE_EMAIL + CLOUDFLARE_GLOBAL_API_KEY)"
   fi
   [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || dockpipe_sdk die "CLOUDFLARE_ACCOUNT_ID required for Terraform"
-  TMPDIR="${TMPDIR:-/tmp}"
-  WORK="$(mktemp -d "${TMPDIR}/dockpipe-cf-r2infra.XXXXXX")"
+  WORK_PARENT="$(dockpipe_sdk scope artifacts r2-publish tmp)"
+  mkdir -p "$WORK_PARENT"
+  WORK="$(mktemp -d "${WORK_PARENT}/r2infra.XXXXXX")"
   cleanup() { rm -rf "$WORK"; }
   trap cleanup EXIT
   run_terraform_pipeline "$WORK/r2-tf-backend.hcl"
@@ -143,8 +144,9 @@ PREFIX="${R2_PREFIX:-}"
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
 ARCHIVE_NAME="${R2_ARCHIVE_NAME:-dockpipe-publish-${STAMP}.tar.gz}"
-TMPDIR="${TMPDIR:-/tmp}"
-WORK="$(mktemp -d "${TMPDIR}/dockpipe-cf-r2publish.XXXXXX")"
+WORK_PARENT="$(dockpipe_sdk scope artifacts r2-publish tmp)"
+mkdir -p "$WORK_PARENT"
+WORK="$(mktemp -d "${WORK_PARENT}/upload.XXXXXX")"
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
 

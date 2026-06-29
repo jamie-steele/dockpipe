@@ -20,7 +20,7 @@ task graph.
 ## Artifact root
 
 ```text
-dockpipe scope workflow <workflow-name> dorkpipe/orchestrate
+dockpipe scope workflow <workflow-name> orchestrate
 ```
 
 ## Core files

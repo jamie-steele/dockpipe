@@ -18,4 +18,4 @@ templates/core/bundles/<domain>/ # domain trees (dorkpipe, …)
 
 **Script details:** **`src/core/assets/scripts/README.md`** (**`DOCKPIPE_TF_*`**; Terraform library lives under **`packages/terraform/resolvers/terraform-core/`**). **Image search order:** resolver **`assets/images/<name>`** → bundle → **`assets/images/<name>`**.
 
-**Maintainer-only script trees** (e.g. **`scripts/dorkpipe/`**) live in **`.staging/packages/…`** per **`dockpipe.config.json`** — not duplicated as fake repo-root stubs.
+**Maintainer-only script trees** (e.g. **`scripts/dorkpipe/`**) live in first-party package assets under **`packages/…`** per **`dockpipe.config.json`** — not duplicated as fake repo-root stubs.

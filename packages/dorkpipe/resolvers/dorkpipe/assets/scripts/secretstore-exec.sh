@@ -3,7 +3,7 @@
 # For 1Password (op), use workflow secretstore-onepassword (maintainer staging) and secretstore-op-exec.sh.
 set -euo pipefail
 
-ROOT="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
+ROOT="$(dockpipe get workdir)"
 cd "$ROOT"
 
 die() { echo "dorkpipe: $*" >&2; exit 1; }

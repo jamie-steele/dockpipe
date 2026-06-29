@@ -25,4 +25,4 @@ steps:
   - id: terraform
     kind: host
     run:
-      - scripts/dockpipe.cloudflare.r2infra/terraform-cloudflare-r2-run.sh
+      - assets/scripts/terraform-cloudflare-r2-run.sh

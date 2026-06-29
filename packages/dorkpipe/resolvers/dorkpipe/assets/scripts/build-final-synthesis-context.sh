@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Combine verifier notes + ranked evidence + aggregated node context for final synthesis.
 set -euo pipefail
-wd="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
+wd="$(dockpipe get workdir)"
 if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
   # shellcheck source=/dev/null
   source "$DOCKPIPE_SDK_SH"

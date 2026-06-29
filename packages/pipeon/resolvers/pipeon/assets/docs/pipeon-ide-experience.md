@@ -43,7 +43,7 @@ At session start and when the user’s question is **repo-scoped**, the runtime 
 
 1. **Repository facts** — e.g. layout, recent changes, key paths (from self-analysis or lightweight indexing if present).
 2. **CI / scan signals** — e.g. normalized findings from DorkPipe CI artifact state when available.
-3. **Structured user guidance** — e.g. `.dockpipe/analysis/insights.json` (accepted/pending items, scoped by path or topic).
+3. **Structured user guidance** — e.g. `dockpipe scope --package dorkpipe analysis/insights.json` (accepted/pending items, scoped by path or topic).
 4. **Workflow / orchestration metadata** — e.g. `dockpipe scope --package dorkpipe run.json`, metrics tails, when relevant to “why did X happen” or “what ran last.”
 5. **Handoff text** — optional short blocks (e.g. paste prompts) only when they add signal density, not as a second UI.
 
@@ -178,7 +178,7 @@ This repo already separates:
 
 - **Facts** (e.g. `dockpipe scope --package dorkpipe self-analysis`)
 - **Scans** (normalized DorkPipe CI findings)
-- **User guidance** (e.g. `.dockpipe/analysis/insights.json`)
+- **User guidance** (e.g. `dockpipe scope --package dorkpipe analysis/insights.json`)
 
 Pipeon should **treat those as distinct lanes** in prompts and in user-facing disclosure, matching the contracts in **`../../docs/compliance-ai-handoff.md`**, **`../../docs/dorkpipe-ci-signals.md`**, and **`../../docs/user-insight-queue.md`**.
 
@@ -201,11 +201,11 @@ The **shipping** Pipeon experience is a **desktop (or equivalent) application** 
 | Piece | Purpose |
 |-------|---------|
 | **Artifact lanes** | DockPipe state, DorkPipe package facts, insights, CI bundle—documented across **`docs/`** |
-| **`../scripts/bundle-context.sh`** | Builds **`pipeon-context.md`** — same **aggregate** the app should load (harness + future UI) |
+| **`../assets/scripts/bundle-context.sh`** | Builds **`pipeon-context.md`** — same **aggregate** the app should load (harness + future UI) |
 | **`packages/pipeon/resolvers/pipeon/bin/pipeon`** / **`chat.sh`** | **Dev-only:** one-shot local harness to validate prompts + bundle (**not** the user-facing UX) |
-| **`../scripts/lib/enable.sh`** | Feature gate for harness (**`DOCKPIPE_PIPEON`**, min version **0.6.5**, **`DOCKPIPE_PIPEON_ALLOW_PRERELEASE`**) |
+| **`../assets/scripts/lib/enable.sh`** | Feature gate for harness (**`DOCKPIPE_PIPEON`**, min version **0.6.5**, **`DOCKPIPE_PIPEON_ALLOW_PRERELEASE`**) |
 | **`.vscode/tasks.json`** | Optional tasks for **maintainers** testing the harness |
 
 **Release plan:** keep harness gates until **`VERSION` ≥ 0.6.5** as planned; the **app** may ship on its own cadence but should consume the **same** artifact contracts.
 
-**Architecture (gateway, MCP, Docker, mounts):** **`pipeon-architecture.md`**. Harness details: **`../scripts/README.md`**.
+**Architecture (gateway, MCP, Docker, mounts):** **`pipeon-architecture.md`**. Harness details: **`../assets/scripts/README.md`**.

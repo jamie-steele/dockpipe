@@ -5,4 +5,4 @@ docker_preflight: false
 steps:
   - id: stop
     kind: host
-    run: scripts/pipeon-dev-stack/stop.sh
+    run: ../../resolvers/pipeon-dev-stack/assets/scripts/stop.sh

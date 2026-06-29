@@ -161,6 +161,15 @@ func truthy(v string) bool {
 	}
 }
 
+func fileDescriptorInt(file *os.File) (int, error) {
+	fd := file.Fd()
+	maxInt := int(^uint(0) >> 1)
+	if fd > uintptr(maxInt) {
+		return 0, fmt.Errorf("file descriptor %d overflows int", fd)
+	}
+	return int(fd), nil // #nosec G115 -- fd is checked against max int before conversion.
+}
+
 func promptMode() string {
 	switch os.Getenv("DOCKPIPE_SDK_PROMPT_MODE") {
 	case "json":
@@ -168,7 +177,9 @@ func promptMode() string {
 	case "terminal":
 		return "terminal"
 	}
-	if term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stderr.Fd())) {
+	stdinFD, stdinErr := fileDescriptorInt(os.Stdin)
+	stderrFD, stderrErr := fileDescriptorInt(os.Stderr)
+	if stdinErr == nil && stderrErr == nil && term.IsTerminal(stdinFD) && term.IsTerminal(stderrFD) {
 		return "terminal"
 	}
 	return "noninteractive"
@@ -298,7 +309,11 @@ func Prompt(spec PromptSpec) (string, error) {
 				fmt.Fprintf(os.Stderr, "%s: ", spec.Message)
 			}
 			if spec.Sensitive {
-				b, err := term.ReadPassword(int(os.Stdin.Fd()))
+				stdinFD, err := fileDescriptorInt(os.Stdin)
+				if err != nil {
+					return "", err
+				}
+				b, err := term.ReadPassword(stdinFD)
 				fmt.Fprintln(os.Stderr)
 				if err != nil {
 					return "", err

@@ -1,4 +1,4 @@
-# Host-only: normalize .dockpipe/analysis/queue.json → insights.json via the dorkpipe CLI.
+# Host-only: normalize DorkPipe package-scope analysis/queue.json → insights.json via the dorkpipe CLI.
 name: user-insight-process
 description: >-
   Run the packaged user-insight processing host steps and optional export-by-category.

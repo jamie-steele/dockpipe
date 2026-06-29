@@ -2,15 +2,15 @@
 
 This folder documents the historical **`dockpipe.cloudflare.r2publish`** publish flow. The active **Terraform module** now lives under **`packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/terraform/`** and the active host scripts are referenced in workflow YAML by their **logical script ids**:
 
-- **Terraform host flow:** **`scripts/dockpipe.cloudflare.r2infra/terraform-cloudflare-r2-run.sh`**
+- **Terraform host flow:** **`assets/scripts/terraform-cloudflare-r2-run.sh`** in the `dockpipe.cloudflare.r2infra` resolver
 - **Tar + upload:** **`scripts/dockpipe/r2-publish.sh`**
-- **Provider-agnostic Terraform core:** **`scripts/core.assets.scripts.terraform-run.sh`**
+- **Provider-agnostic Terraform core:** **`assets/scripts/terraform-run.sh`** in the `dockpipe.terraform.core` resolver
 
 **Infra and object upload are separate workflows** (same script, different env):
 
 | Workflow | What runs |
 |----------|-------------|
-| **`dockpipe.cloudflare.r2infra`** | Terraform only via **`scripts/dockpipe.cloudflare.r2infra/terraform-cloudflare-r2-run.sh`**. No tarball, no upload; does not require **`release/artifacts`**. |
+| **`dockpipe.cloudflare.r2infra`** | Terraform only via its local **`assets/scripts/terraform-cloudflare-r2-run.sh`**. No tarball, no upload; does not require **`release/artifacts`**. |
 | **`dockpipe.cloudflare.r2upload`** | Tar **`R2_PUBLISH_SOURCE`** and upload — **`R2_SKIP_TERRAFORM=1`**. Run after **`r2infra`** (or when the bucket already exists). |
 
 Typical order: **`r2infra`** (or **`package-store-infra`** with nested r2infra + shared vars) → **`dockpipe package build store`** when you need store tarballs → **`r2upload`**.
@@ -163,7 +163,7 @@ export TF_VAR_public_hostname="cdn.example.com"
 export TF_VAR_enable_r2_custom_domain=true
 export TF_VAR_enable_waf_baseline=true
 export TF_VAR_enable_cache_rules=true
-cd .staging/workflows/dockpipe.storage.cloudflare.r2/dockpipe.cloudflare.r2publish/terraform   # or your copy
+cd packages/cloud/storage/resolvers/r2/dockpipe.cloudflare.r2infra/terraform   # or your copy
 terraform init    # configure backend per terraform/README.md
 terraform apply
 ```

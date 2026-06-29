@@ -2,9 +2,9 @@
 # Wrapper around `dorkpipe handoff build-cursor`.
 set -euo pipefail
 
-SCRIPT_DIR="${DOCKPIPE_SCRIPT_DIR:?DOCKPIPE_SCRIPT_DIR is required}"
+SCRIPT_DIR="$(dockpipe get script_dir)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib/dorkpipe-cli.sh"
-ROOT="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
+ROOT="$(dockpipe get workdir)"
 
 dorkpipe_script_exec_cli "$SCRIPT_DIR" handoff build-cursor --workdir "$ROOT" "$@"

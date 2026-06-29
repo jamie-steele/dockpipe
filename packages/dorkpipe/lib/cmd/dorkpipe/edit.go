@@ -968,9 +968,21 @@ func heuristicTargetsForRequest(root, message string) []string {
 		}
 	}
 	if strings.Contains(lower, "resolver") {
-		if matches, _ := filepath.Glob(filepath.Join(root, ".staging", "packages", "*", "resolvers", "*", "config.yml")); len(matches) > 0 {
+		if matches, _ := filepath.Glob(filepath.Join(root, "packages", "*", "resolvers", "*", "config.yml")); len(matches) > 0 {
 			for _, match := range matches {
 				out = append(out, relativeTo(root, match))
+			}
+		}
+		if matches, _ := filepath.Glob(filepath.Join(root, "packages", "*", "*", "resolvers", "*", "config.yml")); len(matches) > 0 {
+			for _, match := range matches {
+				out = append(out, relativeTo(root, match))
+			}
+		}
+		if strings.Contains(lower, ".staging") || strings.Contains(lower, "staging") {
+			if matches, _ := filepath.Glob(filepath.Join(root, ".staging", "packages", "*", "resolvers", "*", "config.yml")); len(matches) > 0 {
+				for _, match := range matches {
+					out = append(out, relativeTo(root, match))
+				}
 			}
 		}
 	}

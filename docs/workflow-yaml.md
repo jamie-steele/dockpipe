@@ -157,7 +157,7 @@ Package state uses the same primitive:
 ```bash
 dockpipe scope --package dorkpipe
 dockpipe scope --package dorkpipe training metrics.jsonl
-dockpipe scope workflow docs.orchestrate dorkpipe/orchestrate
+dockpipe scope workflow docs.orchestrate orchestrate
 ```
 
 The package scope object includes `root`, `state_root`, `workdir`, and `dockpipe_bin`.
@@ -176,8 +176,8 @@ DorkPipe agent orchestration also accepts full-string scope references in path l
 
 ```yaml
 inputs:
-  - scope:workflow:docs.orchestrate:dorkpipe/orchestrate/verify/result.json
-  - scope:artifacts:dorkpipe/orchestrate/tasks/latest_run_audit/response.md
+  - scope:workflow:docs.orchestrate:orchestrate/verify/result.json
+  - scope:artifacts:orchestrate/tasks/latest_run_audit/response.md
 ```
 
 Those references are resolved through the same `dockpipe scope` CLI before prompts and task JSON are
@@ -515,11 +515,11 @@ steps:
       mode: async
       tasks:
         - id: task_a
-          cmd: sh -c 'echo BRANCH=a > .dockpipe/out-a.env'
-          outputs: .dockpipe/out-a.env
+          cmd: sh -c 'echo BRANCH=a > out-a.env'
+          outputs: out-a.env
         - id: task_b
-          cmd: sh -c 'echo BRANCH=b > .dockpipe/out-b.env'
-          outputs: .dockpipe/out-b.env
+          cmd: sh -c 'echo BRANCH=b > out-b.env'
+          outputs: out-b.env
 
   - id: join
     cmd: sh -c 'echo $BRANCH'
@@ -549,7 +549,7 @@ Pipe stdout between runs if needed. Prefer **`steps:`** in **`config.yml`** when
 
 | Workflow | Purpose |
 |----------|---------|
-| **[workflows/ci/test/](../workflows/ci/test/)** (this repo) | CI-style **go test** + **govulncheck** + **gosec** chain via **`.dockpipe/outputs.env`** — canonical repo path is **`workflows/`**, not **`templates/`**. |
+| **[workflows/ci/test/](../workflows/ci/test/)** (this repo) | CI-style **go test** + **govulncheck** + **gosec** chain via step `outputs` under the workflow artifact root — canonical repo path is **`workflows/`**, not **`templates/`**. |
 | **[templates/run/](../templates/run/)** | Compact single-command shorthand in a container, then optional **git** commit on the current branch (**strategy `git-commit`**). |
 | **[templates/run-apply/](../templates/run-apply/)** | Two-step **run → apply** pipeline (replace **`cmd:`** with your tools). |
 | **[templates/run-apply-validate/](../templates/run-apply-validate/)** | Three-step **run → apply → validate** pipeline (replace **`cmd:`** with your tools). |

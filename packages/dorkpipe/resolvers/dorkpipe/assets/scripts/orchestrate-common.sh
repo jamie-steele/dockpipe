@@ -6,7 +6,7 @@ dorkpipe_orchestrate_init() {
   dockpipe_sdk init-script
   export ROOT="${ROOT:-${DOCKPIPE_WORKDIR:-$(pwd)}}"
   export DORKPIPE_ORCH_WORKFLOW="${DORKPIPE_ORCH_WORKFLOW:-${DOCKPIPE_WORKFLOW_NAME:-docs.orchestrate}}"
-  default_orch_root="$(dockpipe_sdk scope artifacts dorkpipe orchestrate)"
+  default_orch_root="$(dockpipe_sdk scope artifacts orchestrate)"
   export DORKPIPE_ORCH_ROOT="${DORKPIPE_ORCH_ROOT:-${default_orch_root}}"
   mkdir -p "${DORKPIPE_ORCH_ROOT}"
   export DORKPIPE_ORCH_REQUEST_JSON="${DORKPIPE_ORCH_REQUEST_JSON:-${DORKPIPE_ORCH_ROOT}/request.json}"

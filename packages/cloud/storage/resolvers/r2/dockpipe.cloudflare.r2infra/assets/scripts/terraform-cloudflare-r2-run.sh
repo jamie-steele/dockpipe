@@ -159,7 +159,8 @@ if [[ "$tf_backend" == remote ]]; then
   if [[ -n "${DOCKPIPE_TF_REMOTE_BACKEND_FILE:-}" ]]; then
     backend_arg="unused"
   elif [[ -z "$backend_arg" ]]; then
-    backend_arg="$(mktemp "${TMPDIR:-/tmp}/dockpipe-tf-backend.XXXXXX")"
+    backend_arg="$(dockpipe_sdk scope artifacts terraform backend.hcl)"
+    mkdir -p "$(dirname "$backend_arg")"
     cleanup_backend() { rm -f "$backend_arg"; }
     trap cleanup_backend EXIT
   fi

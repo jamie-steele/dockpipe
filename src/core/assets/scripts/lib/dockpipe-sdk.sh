@@ -327,10 +327,10 @@ dockpipe_sdk_ci_artifact_dir() {
 
   case "$binding" in
     workflow)
-      dockpipe_sdk_scope artifacts dorkpipe "$workflow_suffix"
+      dockpipe_sdk_scope artifacts "$workflow_suffix"
       ;;
     workflow:*)
-      dockpipe_sdk_scope workflow "${binding#workflow:}" dorkpipe "$workflow_suffix"
+      dockpipe_sdk_scope workflow "${binding#workflow:}" "$workflow_suffix"
       ;;
     package|package:dorkpipe|"")
       dockpipe_sdk_package_state_dir dorkpipe ci "$package_suffix"
@@ -339,7 +339,7 @@ dockpipe_sdk_ci_artifact_dir() {
       dockpipe_sdk_package_state_dir "${binding#package:}" ci "$package_suffix"
       ;;
     *)
-      dockpipe_sdk_scope workflow "$binding" dorkpipe "$workflow_suffix"
+      dockpipe_sdk_scope workflow "$binding" "$workflow_suffix"
       ;;
   esac
 }

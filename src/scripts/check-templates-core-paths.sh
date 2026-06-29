@@ -10,7 +10,7 @@ cd "$root"
 OBSOLETE_SCRIPTS_IMAGES='(src/core|src/templates|templates)/core/(scripts|images)/'
 OBSOLETE_LEGACY_DIRS='(src/core|src/templates|templates)/core/workflows/|(src/templates|templates)/run-worktree/'
 GENERATED_STATE_ROOT='bin/[.]dockpipe'
-DORKPIPE_CI_STATE_PATHS="${GENERATED_STATE_ROOT}/(workflows/ci/dorkpipe|packages/dorkpipe/ci|ci-analysis|ci-raw)"
+DORKPIPE_CI_STATE_PATHS="${GENERATED_STATE_ROOT}/(workflows/[^/]+/(dorkpipe|ci-raw|ci-analysis)|packages/dorkpipe/ci)"
 DORKPIPE_CI_WORKFLOW_SDK='dockpipe_sdk[[:space:]]+path[[:space:]]+workflow[[:space:]]+ci[[:space:]]+dorkpipe'
 DORKPIPE_CI_PACKAGE_SDK='dockpipe_sdk[[:space:]]+path[[:space:]]+package[[:space:]]+dorkpipe[[:space:]]+ci'
 
@@ -65,7 +65,7 @@ if [[ -n "$package_sdk_hits" ]]; then
 fi
 if [[ -n "$package_hits" ]]; then
   printf '%s\n' "$package_hits" >&2
-  fail 'package-owned files must not hardcode DorkPipe CI generated-state paths; use injected DOCKPIPE_CI_RAW_DIR / DOCKPIPE_CI_ANALYSIS_DIR, Go statepath helpers, or explicit DOCKPIPE_CI_* env inputs'
+  fail 'package-owned files must not hardcode DorkPipe CI generated-state paths; use dockpipe_sdk ci raw/analysis, Go statepath helpers, or explicit DOCKPIPE_CI_* user inputs'
 fi
 
 exit 0

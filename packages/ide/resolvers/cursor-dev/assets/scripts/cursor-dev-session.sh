@@ -58,6 +58,7 @@ fi
 # So the container can write remote_active before first poll; same paths as cleanup markers.
 mkdir -p "${GLOBAL_STATE_ROOT}/cleanup" "$STATE_ROOT"
 ACTIVE_SESSION_FILE="${STATE_ROOT}/active-session.env"
+CONTAINER_GLOBAL_STATE_ROOT="$(cursor_dev_container_global_state_root)"
 CONTAINER_STATE_ROOT="$(cursor_dev_container_state_root)"
 CONTAINER_HOME="${CONTAINER_STATE_ROOT}/home"
 
@@ -100,7 +101,7 @@ run_args=(
   -v "${SESSION_IDLE}:/dockpipe-session-idle.sh:ro"
   -v "${COMMON_SH}:/dockpipe-cursor-dev-common.sh:ro"
   -e "HOME=${CONTAINER_HOME}"
-  -e "DOCKPIPE_STATE_DIR=/work/bin/.dockpipe"
+  -e "DOCKPIPE_STATE_DIR=${CONTAINER_GLOBAL_STATE_ROOT}"
   -e "DOCKPIPE_PACKAGE_STATE_DIR=${CONTAINER_STATE_ROOT}"
   -e "DOCKPIPE_CONTAINER_WORKDIR=/work"
   -e "W=/work"

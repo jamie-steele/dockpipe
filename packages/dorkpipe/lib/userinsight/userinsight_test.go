@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"dorkpipe.orchestrator/statepaths"
 )
 
 func TestEnqueueProcessExportFlow(t *testing.T) {
@@ -22,7 +24,7 @@ func TestEnqueueProcessExportFlow(t *testing.T) {
 		t.Fatalf("enqueue 2: %v", err)
 	}
 
-	insightsPath := filepath.Join(workdir, "bin", ".dockpipe", "analysis", "insights.json")
+	insightsPath := statepaths.InsightsPath(workdir)
 	if err := os.MkdirAll(filepath.Dir(insightsPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -91,7 +93,7 @@ func TestInsightLifecycleMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	insightsPath := filepath.Join(workdir, "bin", ".dockpipe", "analysis", "insights.json")
+	insightsPath := statepaths.InsightsPath(workdir)
 	var doc InsightsDoc
 	body, err := os.ReadFile(insightsPath)
 	if err != nil {

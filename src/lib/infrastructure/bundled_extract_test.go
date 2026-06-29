@@ -22,8 +22,7 @@ func TestEmbeddedWorkflowConfigExists(t *testing.T) {
 	if !EmbeddedWorkflowConfigExists("init") {
 		t.Fatal("expected init")
 	}
-	// Optional third-party slices under .staging/ are gitignored in this repo, so CI/fresh clones
-	// should only assert tracked bundled maintainer packages here.
+	// CI/fresh clones should only assert tracked bundled maintainer packages here.
 	for _, name := range []string{"pipeon", "dorkpipe"} {
 		if !EmbeddedWorkflowConfigExists(name) {
 			t.Fatalf("expected resolver delegate %s", name)

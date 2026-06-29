@@ -39,8 +39,8 @@ if ! have jq; then
 	exit 1
 fi
 
-CI_RAW_DIR="${DOCKPIPE_CI_RAW_DIR:?DOCKPIPE_CI_RAW_DIR is required}"
-CI_ANALYSIS_DIR="${DOCKPIPE_CI_ANALYSIS_DIR:?DOCKPIPE_CI_ANALYSIS_DIR is required}"
+CI_RAW_DIR="$(dockpipe_sdk ci raw)"
+CI_ANALYSIS_DIR="$(dockpipe_sdk ci analysis)"
 
 step "govulncheck + gosec + DorkPipe signal bundle ($CI_ANALYSIS_DIR/)"
 rm -rf "$CI_RAW_DIR" "$CI_ANALYSIS_DIR"
@@ -48,13 +48,12 @@ mkdir -p "$CI_RAW_DIR"
 set +e
 govulncheck -format json ./... > "$CI_RAW_DIR/govulncheck.json"
 VC=$?
-gosec -conf .gosec.json -fmt json -out="$CI_RAW_DIR/gosec.json" -exclude-dir=.gomodcache ./...
+gosec -conf .gosec.json -fmt json -out="$CI_RAW_DIR/gosec.json" -exclude-dir=.gomodcache -exclude-dir=bin/.dockpipe ./...
 GC=$?
 set -e
 export DOCKPIPE_WORKDIR="$ROOT"
 CI_SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
-DOCKPIPE_SCRIPT_DIR="$CI_SCRIPT_DIR" \
-  bash "$CI_SCRIPT_DIR/normalize-ci-scans.sh"
+bash "$CI_SCRIPT_DIR/normalize-ci-scans.sh"
 jq -sr '"govulncheck raw findings: " + ((([.[] | select(.finding or .Finding)] | length) + ([.[] | (.vulns // .Vulns // [])[]?] | length)) | tostring)' "$CI_RAW_DIR/govulncheck.json" 2>/dev/null || true
 jq -r '"gosec raw issues: " + ((.Stats.found // 0) | tostring)' "$CI_RAW_DIR/gosec.json" 2>/dev/null || true
 if [[ $VC -ne 0 ]]; then exit "$VC"; fi

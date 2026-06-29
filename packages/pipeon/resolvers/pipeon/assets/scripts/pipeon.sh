@@ -84,8 +84,8 @@ status)
 		echo "gate: version ok for Pipeon"
 	fi
 	PIPEON_STATE_DIR="$(dockpipe_sdk scope --package pipeon .)"
-	CI_FINDINGS="${DOCKPIPE_CI_ANALYSIS_DIR:?DOCKPIPE_CI_ANALYSIS_DIR is required}/findings.json"
-	INSIGHTS="$(dockpipe_sdk path state analysis insights.json)"
+	CI_FINDINGS="$(dockpipe_sdk ci analysis findings.json)"
+	INSIGHTS="$(dockpipe_sdk scope --package dorkpipe analysis/insights.json)"
 	DORKPIPE_RUN="$(dockpipe_sdk scope --package dorkpipe run.json)"
 	for p in "$PIPEON_STATE_DIR/pipeon-context.md" "$CI_FINDINGS" "$INSIGHTS" "$DORKPIPE_RUN"; do
 		if [[ -f "$p" ]]; then

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Host entry: run DorkPipe self-analysis DAG (writes bin/.dockpipe/orchestrator-cursor-prompt.md).
+# Host entry: run DorkPipe self-analysis DAG (writes package-scoped handoff artifacts).
 set -euo pipefail
-SCRIPT_DIR="${DOCKPIPE_SCRIPT_DIR:?DOCKPIPE_SCRIPT_DIR is required}"
+SCRIPT_DIR="${DOCKPIPE_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib/dorkpipe-cli.sh"
-ROOT="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
+ROOT="${DOCKPIPE_WORKDIR:-$(pwd)}"
 cd "$ROOT"
 BIN="$(dorkpipe_script_resolve_bin "$(dorkpipe_script_repo_root "$SCRIPT_DIR")")"
 SPEC="${DORKPIPE_SELF_ANALYSIS_SPEC:-${SCRIPT_DIR}/../../dorkpipe-self-analysis/spec.yaml}"
@@ -33,13 +33,24 @@ if [[ "$SPEC" == *spec.combined.yaml ]]; then
 fi
 "$BIN" run -f "$SPEC" --workdir "$ROOT"
 echo ""
-echo "dorkpipe-self-analysis: full handoff → ${ROOT}/bin/.dockpipe/orchestrator-cursor-prompt.md"
-echo "dorkpipe-self-analysis: raw facts → $(dockpipe scope --package dorkpipe self-analysis --workdir "$ROOT")"
-if [[ -f "${ROOT}/bin/.dockpipe/orchestrator-cursor-prompt.refined.md" ]]; then
-	echo "dorkpipe-self-analysis: Ollama refine → ${ROOT}/bin/.dockpipe/orchestrator-cursor-prompt.refined.md"
+DOCKPIPE_CLI="${DOCKPIPE_BIN:-${ROOT}/src/bin/dockpipe}"
+if [[ -x "$DOCKPIPE_CLI" ]]; then
+	HANDOFF_PATH="$("$DOCKPIPE_CLI" scope --package dorkpipe handoff/orchestrator-cursor-prompt.md --workdir "$ROOT")"
+	REFINED_PATH="$("$DOCKPIPE_CLI" scope --package dorkpipe handoff/orchestrator-cursor-prompt.refined.md --workdir "$ROOT")"
+	PASTE="$("$DOCKPIPE_CLI" scope --package dorkpipe handoff/paste-this-prompt.txt --workdir "$ROOT")"
+	echo "dorkpipe-self-analysis: full handoff → ${HANDOFF_PATH}"
+	echo "dorkpipe-self-analysis: raw facts → $("$DOCKPIPE_CLI" scope --package dorkpipe self-analysis --workdir "$ROOT")"
+else
+	HANDOFF_PATH=""
+	REFINED_PATH=""
+	PASTE=""
+	echo "dorkpipe-self-analysis: full handoff → run 'dockpipe scope --package dorkpipe handoff/orchestrator-cursor-prompt.md --workdir \"$ROOT\"'"
+	echo "dorkpipe-self-analysis: raw facts → run 'dockpipe scope --package dorkpipe self-analysis --workdir \"$ROOT\"'"
 fi
-PASTE="${ROOT}/bin/.dockpipe/paste-this-prompt.txt"
-if [[ -f "$PASTE" ]]; then
+if [[ -n "$REFINED_PATH" && -f "$REFINED_PATH" ]]; then
+	echo "dorkpipe-self-analysis: Ollama refine → ${REFINED_PATH}"
+fi
+if [[ -n "$PASTE" && -f "$PASTE" ]]; then
 	echo ""
 	echo "========================================================================"
 	echo "  COPY-PASTE FOR YOUR AI ASSISTANT (same text in ${PASTE})"
@@ -50,6 +61,6 @@ if [[ -f "$PASTE" ]]; then
 	echo "========================================================================"
 	echo "  (end of paste-this-prompt)"
 	echo "========================================================================"
-else
+elif [[ -n "$PASTE" ]]; then
 	echo "dorkpipe-self-analysis: warning: missing $PASTE" >&2
 fi

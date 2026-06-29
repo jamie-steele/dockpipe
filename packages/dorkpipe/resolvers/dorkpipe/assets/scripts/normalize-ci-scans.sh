@@ -4,12 +4,7 @@
 # Thin wrapper around `dorkpipe ci normalize-scans`.
 set -euo pipefail
 
-if [[ -n "${DOCKPIPE_SCRIPT_DIR:-}" ]]; then
-	SCRIPT_DIR="$DOCKPIPE_SCRIPT_DIR"
-else
-	SOURCE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-	SCRIPT_DIR="$SOURCE_DIR"
-fi
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib/dorkpipe-cli.sh"
 ROOT="${DOCKPIPE_WORKDIR:-}"

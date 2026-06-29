@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Merge package-scoped node outputs into a single context block for downstream prompts.
 set -euo pipefail
-root="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
+root="$(dockpipe get workdir)"
 if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
   # shellcheck source=/dev/null
   source "$DOCKPIPE_SDK_SH"

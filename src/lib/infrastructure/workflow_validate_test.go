@@ -73,10 +73,10 @@ steps:
       tasks:
         - id: a
           cmd: echo a
-          outputs: bin/.dockpipe/a.env
+          outputs: a.env
         - id: b
           cmd: echo b
-          outputs: bin/.dockpipe/b.env
+          outputs: b.env
 `
 	if err := os.WriteFile(cfg, []byte(yml), 0o644); err != nil {
 		t.Fatal(err)

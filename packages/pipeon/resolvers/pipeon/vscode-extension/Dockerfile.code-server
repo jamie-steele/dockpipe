@@ -1,5 +1,5 @@
 # Browser code-server (Coder OSS image) with Pipeon extension + baseline User settings.
-# Does NOT use assets/entrypoint.sh — this image is only for scripts/vscode/vscode-code-server.sh (workflow vscode).
+# Does NOT use assets/entrypoint.sh — this image is built for the Pipeon code-server browser flow.
 # Isolate runs use templates/core/resolvers/vscode/assets/images/vscode/ (dockpipe-vscode + entrypoint).
 #
 # Build from repo root:

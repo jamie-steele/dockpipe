@@ -4,9 +4,9 @@ Tracked first-party package family for governed AI stages in DockPipe.
 
 What lives here:
 
-- `resolvers/claude/` — promoted from `.staging/packages/agent/resolvers/claude/`
-- `resolvers/codex/` — promoted from `.staging/packages/agent/resolvers/codex/`
-- `resolvers/ollama/` — promoted from `.staging/packages/agent/resolvers/ollama/`
+- `resolvers/claude/` — Claude resolver profile
+- `resolvers/codex/` — Codex resolver profile
+- `resolvers/ollama/` — local Ollama resolver profile
 - `workflows/agent.cloud-lanes.doctor/` — portable diagnostic for cloud-backed agent lanes
 
 This package keeps DockPipe's separation of concerns intact:
@@ -18,8 +18,7 @@ This package keeps DockPipe's separation of concerns intact:
 - DorkPipe is the preferred harness when those stages need model execution, verifier artifacts,
   escalation, and approval handling.
 
-The original staging copies remain under `.staging/packages/agent/` for reviewed cleanup in a
-separate change. This tracked package is the canonical first-party location going forward.
+This tracked package is the canonical first-party location going forward.
 
 ## Promoted resolvers
 

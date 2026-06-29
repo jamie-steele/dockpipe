@@ -1,5 +1,7 @@
 # Combined: fast deterministic prep → handoff → local Ollama refinement (requires Ollama).
-# Produces: bin/.dockpipe/orchestrator-cursor-prompt.md (facts) + bin/.dockpipe/orchestrator-cursor-prompt.refined.md (model layer).
+# Produces package-scoped handoff artifacts:
+#   dockpipe scope --package dorkpipe handoff/orchestrator-cursor-prompt.md
+#   dockpipe scope --package dorkpipe handoff/orchestrator-cursor-prompt.refined.md
 #
 # Run:
 #   DORKPIPE_SELF_ANALYSIS_SPEC=packages/dorkpipe/resolvers/dorkpipe-self-analysis/spec.combined.yaml \
@@ -35,7 +37,8 @@ nodes:
     needs: [handoff]
     script: |
       set -euo pipefail
-      head -c 48000 bin/.dockpipe/orchestrator-cursor-prompt.md
+      handoff="$(dockpipe scope --package dorkpipe handoff/orchestrator-cursor-prompt.md)"
+      head -c 48000 "$handoff"
 
   - id: refine
     kind: ollama
@@ -59,13 +62,15 @@ nodes:
     script: |
       set -euo pipefail
       node_dir="$(dockpipe scope --package dorkpipe nodes)"
+      refined="$(dockpipe scope --package dorkpipe handoff/orchestrator-cursor-prompt.refined.md)"
       refine_txt="$node_dir/refine.txt"
       if [[ ! -f "$refine_txt" ]]; then
         echo "save_refine: expected refine.txt from DorkPipe package nodes scope" >&2
         exit 1
       fi
-      cp "$refine_txt" bin/.dockpipe/orchestrator-cursor-prompt.refined.md
-      echo "save_refine: wrote bin/.dockpipe/orchestrator-cursor-prompt.refined.md ($(wc -c < bin/.dockpipe/orchestrator-cursor-prompt.refined.md) bytes)"
+      mkdir -p "$(dirname "$refined")"
+      cp "$refine_txt" "$refined"
+      echo "save_refine: wrote $refined ($(wc -c < "$refined") bytes)"
 
   - id: merge_paste
     kind: shell

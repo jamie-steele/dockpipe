@@ -25,12 +25,12 @@ types:
   - models/ISecretstoreR2PublishTestConfig
 vars:
   OP_ENV_FILE: ".env.op.template"
-  SECRET_ENV_OUT: ".dockpipe/secretstore-r2.env"
+  SECRET_ENV_OUT: "secretstore-r2.env"
 
 steps:
   - id: inject-secrets
     kind: host
-    outputs: ".dockpipe/secretstore-r2.env"
+    outputs: "secretstore-r2.env"
     run:
       - scripts/onepassword/secretstore-op-inject-outputs.sh
 

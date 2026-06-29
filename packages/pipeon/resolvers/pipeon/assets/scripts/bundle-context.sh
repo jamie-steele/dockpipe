@@ -35,13 +35,13 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo "| Lane | Meaning |"
 	echo "|------|---------|"
 	echo "| Repo / analysis facts | DorkPipe package self-analysis artifacts |"
-	echo "| Scan signals | DorkPipe CI artifact state, or \`DOCKPIPE_CI_ANALYSIS_DIR\` when supplied |"
-	echo "| User guidance | DockPipe analysis insights under project state (signal, not truth) |"
+	echo "| Scan signals | DockPipe CI analysis scope for the active workflow |"
+	echo "| User guidance | DorkPipe package-scoped analysis insights (signal, not truth) |"
 	echo ""
 	echo "## CI / scans"
 	echo ""
 
-	CI_ANALYSIS_DIR="${DOCKPIPE_CI_ANALYSIS_DIR:?DOCKPIPE_CI_ANALYSIS_DIR is required}"
+	CI_ANALYSIS_DIR="$(dockpipe_sdk ci analysis)"
 	echo ""
 	echo "- **analysis dir:** \`$CI_ANALYSIS_DIR\`"
 	FIND="$CI_ANALYSIS_DIR/findings.json"
@@ -66,7 +66,7 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo ""
 	echo "## User insights (DockPipe analysis scope)"
 	echo ""
-	INS="$(dockpipe get state_dir --workdir "$ROOT")/analysis/insights.json"
+	INS="$(dockpipe_sdk scope --package dorkpipe analysis/insights.json)"
 	if [[ -f "$INS" ]] && have_jq; then
 		echo "- **file:** present"
 		jq -r '"- count: " + ((.insights // []) | length | tostring)' "$INS" 2>/dev/null || true

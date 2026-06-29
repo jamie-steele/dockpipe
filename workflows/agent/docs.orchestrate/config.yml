@@ -67,7 +67,7 @@ steps:
           - workflows
           - src
         write:
-          - scope:artifacts:dorkpipe/orchestrate
+          - scope:artifacts:orchestrate
         deny:
           - .env
           - .env.*

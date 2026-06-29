@@ -34,4 +34,4 @@ steps:
   - id: terraform
     kind: host
     run:
-      - scripts/core.assets.scripts.terraform-run.sh
+      - assets/scripts/terraform-run.sh

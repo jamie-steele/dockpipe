@@ -9,7 +9,7 @@ types:
 
 steps:
   - id: session
-    run: scripts/cursor-dev/cursor-dev-session.sh
+    run: assets/scripts/cursor-dev-session.sh
     kind: host
     vars:
       # Optional: gui = hint that this workflow opens the desktop app (see DOCKPIPE_LAUNCH_MODE in docs/workflow-yaml.md).

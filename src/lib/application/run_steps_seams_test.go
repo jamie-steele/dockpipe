@@ -31,8 +31,8 @@ func withRunStepSeams(t *testing.T, fn func()) {
 // TestRunSteps_ParallelBatchAggregatesOutputsInOrder merges async host-step outputs in declaration order (last wins).
 func TestRunSteps_ParallelBatchAggregatesOutputsInOrder(t *testing.T) {
 	tmp := t.TempDir()
-	aPath := filepath.Join(tmp, infrastructure.DockpipeDirRel, "a.env")
-	bPath := filepath.Join(tmp, infrastructure.DockpipeDirRel, "b.env")
+	aPath := filepath.Join(tmp, "a.env")
+	bPath := filepath.Join(tmp, "b.env")
 	if err := os.MkdirAll(filepath.Dir(aPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -53,8 +53,8 @@ func TestRunSteps_ParallelBatchAggregatesOutputsInOrder(t *testing.T) {
 		nonBlocking := false
 		wf := &domain.Workflow{
 			Steps: []domain.Step{
-				{ID: "a", Kind: "host", Outputs: "bin/.dockpipe/a.env", Blocking: &nonBlocking},
-				{ID: "b", Kind: "host", Outputs: "bin/.dockpipe/b.env", Blocking: &nonBlocking},
+				{ID: "a", Kind: "host", Outputs: "a.env", Blocking: &nonBlocking},
+				{ID: "b", Kind: "host", Outputs: "b.env", Blocking: &nonBlocking},
 				{ID: "join", Kind: "host"}, // default blocking
 			},
 		}

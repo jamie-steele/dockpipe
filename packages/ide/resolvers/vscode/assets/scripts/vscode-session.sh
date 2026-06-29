@@ -53,6 +53,7 @@ STATE_DATA="${STATE_ROOT}/xdg-data"
 STATE_DOTNET="${STATE_ROOT}/dotnet"
 STATE_GOCACHE="${STATE_ROOT}/gocache"
 STATE_SERVER="$(vscode_remote_server_dir)"
+CONTAINER_GLOBAL_STATE_ROOT="$(vscode_container_global_state_root)"
 CONTAINER_STATE_ROOT="$(vscode_container_state_root)"
 CONTAINER_HOME="${CONTAINER_STATE_ROOT}/home"
 mkdir -p \
@@ -121,7 +122,7 @@ run_args=(
   -v "${SESSION_IDLE}:/dockpipe-session-idle.sh:ro"
   -v "${COMMON_SH}:/dockpipe-vscode-common.sh:ro"
   -e "HOME=${CONTAINER_HOME}"
-  -e "DOCKPIPE_STATE_DIR=/work/bin/.dockpipe"
+  -e "DOCKPIPE_STATE_DIR=${CONTAINER_GLOBAL_STATE_ROOT}"
   -e "DOCKPIPE_PACKAGE_STATE_DIR=${CONTAINER_STATE_ROOT}"
   -e "DOCKPIPE_CONTAINER_WORKDIR=/work"
   -e "W=/work"
@@ -149,11 +150,11 @@ cat >"$ACTIVE_SESSION_FILE" <<EOF
 VSCODE_ACTIVE_PID=$$
 VSCODE_ACTIVE_CONTAINER=$NAME
 EOF
-printf '%s' "$NAME" > "$W/bin/.dockpipe/cleanup/docker-session"
+printf '%s' "$NAME" > "${GLOBAL_STATE_ROOT}/cleanup/docker-session"
 printf '%s' "$NAME" > "${STATE_ROOT}/session_container"
 if [[ -n "${DOCKPIPE_RUN_ID:-}" ]]; then
-  mkdir -p "$W/bin/.dockpipe/runs"
-  printf '%s' "$NAME" > "$W/bin/.dockpipe/runs/${DOCKPIPE_RUN_ID}.container"
+  mkdir -p "${GLOBAL_STATE_ROOT}/runs"
+  printf '%s' "$NAME" > "${GLOBAL_STATE_ROOT}/runs/${DOCKPIPE_RUN_ID}.container"
 fi
 
 cleanup_session() {
@@ -169,7 +170,7 @@ cleanup_session() {
   fi
   rm -f "${GLOBAL_STATE_ROOT}/cleanup/docker-session" "${STATE_ROOT}/session_container"
   if [[ -n "${DOCKPIPE_RUN_ID:-}" ]]; then
-    rm -f "$W/bin/.dockpipe/runs/${DOCKPIPE_RUN_ID}.container"
+    rm -f "${GLOBAL_STATE_ROOT}/runs/${DOCKPIPE_RUN_ID}.container"
   fi
 }
 trap cleanup_session INT TERM HUP EXIT

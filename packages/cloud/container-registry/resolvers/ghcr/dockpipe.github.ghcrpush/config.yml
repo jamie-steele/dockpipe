@@ -2,7 +2,7 @@ name: dockpipe.github.ghcrpush
 namespace: dockpipe-github
 description: >-
   Retag a local OCI/container image and push it to GitHub Container Registry via
-  scripts/dockpipe.github.ghcrpush/ghcr-push.sh. Build happens elsewhere; this workflow owns
+  assets/scripts/ghcr-push.sh. Build happens elsewhere; this workflow owns
   login, tag, dry-run, and push behavior.
 
 docker_preflight: false
@@ -25,4 +25,4 @@ steps:
   - id: push
     kind: host
     run:
-      - scripts/dockpipe.github.ghcrpush/ghcr-push.sh
+      - assets/scripts/ghcr-push.sh

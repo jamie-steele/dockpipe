@@ -35,7 +35,7 @@ func BuildCursor(workdir string, env map[string]string) (CursorResult, error) {
 	if fi, err := os.Stat(out); err != nil || !fi.IsDir() {
 		return CursorResult{}, fmt.Errorf("build-cursor-handoff: missing %s — run self-analysis-prep.sh and self-analysis-signals.sh first", out)
 	}
-	if err := os.MkdirAll(filepath.Join(root, "bin", ".dockpipe"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		return CursorResult{}, err
 	}
 

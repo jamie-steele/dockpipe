@@ -3,8 +3,7 @@
   "compile": {
     "workflows": [
       "workflows",
-      "packages",
-      ".staging/packages"
+      "packages"
     ]
   },
   "packages": {

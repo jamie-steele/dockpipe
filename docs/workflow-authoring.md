@@ -117,8 +117,9 @@ Steps pass values forward with dotenv-style output files:
 ```yaml
 steps:
   - id: compute
-    cmd: sh -c 'echo VERSION=1.2.3 > bin/.dockpipe/version.env'
-    outputs: bin/.dockpipe/version.env
+    cwd: artifacts
+    cmd: sh -c 'echo VERSION=1.2.3 > version.env'
+    outputs: version.env
 
   - id: use
     cmd: echo "$VERSION"

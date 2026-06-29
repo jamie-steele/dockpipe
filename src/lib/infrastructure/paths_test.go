@@ -303,7 +303,7 @@ func TestResolveWorkflowScriptResolvesPipeonFromNestedCompileRoot(t *testing.T) 
 
 // TestResolveWorkflowScriptPrefersCompiledResolverTarball verifies scripts/dorkpipe/… resolves from
 // dockpipe-resolver-*.tar.gz under bin/.dockpipe/internal/packages/resolvers/ (extracted cache), not only
-// from a flat extracted tree or .staging authoring paths.
+// from a flat extracted tree or authoring paths.
 func TestResolveWorkflowScriptPrefersCompiledResolverTarball(t *testing.T) {
 	repo := t.TempDir()
 	pkgRes := filepath.Join(repo, DockpipeDirRel, "internal", "packages", "resolvers")

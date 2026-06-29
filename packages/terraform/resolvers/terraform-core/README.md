@@ -1,6 +1,6 @@
 # `dockpipe.terraform.core`
 
-**Provider-agnostic** host workflow: **`assets/scripts/terraform-pipeline.sh`** + **`assets/scripts/terraform-run.sh`** in this resolver tree. In YAML use **`scripts/core.assets.scripts.terraform-run.sh`** (resolution maps to this package).
+**Provider-agnostic** host workflow: **`assets/scripts/terraform-pipeline.sh`** + **`assets/scripts/terraform-run.sh`** in this resolver tree. In this package's YAML, use the visible local path **`assets/scripts/terraform-run.sh`**.
 
 ## Required
 

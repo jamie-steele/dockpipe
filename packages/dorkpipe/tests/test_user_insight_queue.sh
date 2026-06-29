@@ -17,9 +17,8 @@ trap 'rm -rf "$tmp"' EXIT
 
 export DOCKPIPE_WORKDIR="$tmp"
 export DOCKPIPE_SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
-STATE_DIR="$(env -u DOCKPIPE_STATE_DIR "$ROOT/src/bin/dockpipe" get state_dir --workdir "$tmp")"
-INSIGHTS_PATH="$STATE_DIR/analysis/insights.json"
-INSIGHTS_BY_CATEGORY="$STATE_DIR/analysis/by-category"
+INSIGHTS_PATH="$("$ROOT/src/bin/dockpipe" scope --package dorkpipe analysis/insights.json --workdir "$tmp")"
+INSIGHTS_BY_CATEGORY="$("$ROOT/src/bin/dockpipe" scope --package dorkpipe analysis/by-category --workdir "$tmp")"
 bash "$DOCKPIPE_SCRIPT_DIR/user-insight-enqueue.sh" -m 'convention: use gofmt for Go.' >/dev/null
 bash "$DOCKPIPE_SCRIPT_DIR/user-insight-enqueue.sh" -m 'SOC2 review will cover secret storage.' >/dev/null
 mkdir -p "$(dirname "$INSIGHTS_PATH")"

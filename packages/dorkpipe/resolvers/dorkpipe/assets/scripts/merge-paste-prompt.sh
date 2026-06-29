@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # After Ollama refine (combined spec), fold refined output into paste-this-prompt.txt.
 set -euo pipefail
-ROOT="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
+ROOT="$(dockpipe get workdir)"
 cd "$ROOT"
-PASTE="${ROOT}/bin/.dockpipe/paste-this-prompt.txt"
-REFINED="${ROOT}/bin/.dockpipe/orchestrator-cursor-prompt.refined.md"
+PASTE="$(dockpipe scope --package dorkpipe handoff/paste-this-prompt.txt --workdir "$ROOT")"
+REFINED="$(dockpipe scope --package dorkpipe handoff/orchestrator-cursor-prompt.refined.md --workdir "$ROOT")"
 if [[ ! -f "$REFINED" ]]; then
 	echo "merge-paste-prompt: no $REFINED; leaving $PASTE unchanged" >&2
 	exit 0
@@ -13,6 +13,7 @@ if [[ ! -f "$PASTE" ]]; then
 	echo "merge-paste-prompt: missing $PASTE" >&2
 	exit 1
 fi
+mkdir -p "$(dirname "$PASTE")"
 {
 	echo "You are working in the DockPipe repository. Follow AGENTS.md."
 	echo "Below: base implementation prompt, then Ollama-refined priorities from this checkout."

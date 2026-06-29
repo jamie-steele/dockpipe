@@ -15,9 +15,7 @@ Workflows are grouped by purpose while retaining their leaf workflow names for `
 | **`agent/docs.orchestrate`** / **`agent/docs.optimize-orchestrate`** | DorkPipe docs-orchestration dogfood for this checkout; keeps repo-specific AI task graphs out of published package examples. |
 | **`ci/test`** | Multi-step Docker chain: go test → vet → govulncheck → gosec → security brief (mirrors the spirit of `.github/workflows/ci.yml`’s DockPipe workflow step). |
 | **`ci/ci-emulate`** | Host-only local mirror of the Linux GitHub CI test job; wraps **`src/scripts/ci-local.sh`** so **`dockpipe --workflow ci-emulate`**, **`make ci`**, and the script stay aligned. |
-| **`ci/dockpipe-repo-quality`** | Host-only: lists the CI analysis artifact directory from `dockpipe scope workflow ci dorkpipe/ci-analysis` after you run **`bash src/scripts/ci-local.sh`** (or the govulncheck + gosec + normalize steps from CI). |
+| **`ci/dockpipe-repo-quality`** | Host-only: lists the CI analysis artifact directory from `dockpipe scope workflow ci ci-analysis` after you run **`bash src/scripts/ci-local.sh`** (or the govulncheck + gosec + normalize steps from CI). |
 | **`package/package-store-infra`** | Thin composer: shared **`vars`** + nested packaged workflow **`dockpipe.cloudflare.r2infra`** (`workflow:` + `package:`); optional **`--tf`**. Store tarballs: run **`dockpipe package build store`** separately when needed. |
 
 **Suggested local “full stack”:** run **`make ci`** or **`./src/bin/dockpipe --workflow ci-emulate --workdir . --`** for the best local mirror of the Linux CI job. Optionally follow with **`./src/bin/dockpipe --workflow dockpipe-repo-quality --workdir . --`** to inspect normalized findings. For Cloudflare R2 infra with repo **`vars`**: **`./src/bin/dockpipe --workflow package-store-infra --workdir . --`**. For store tarballs: **`dockpipe package build store`** after compile.
-
-**`.staging/workflows/`** mirrors this tree for packaging experiments (edit in-tree; no separate sync step).

@@ -2,7 +2,7 @@
 
 **Model:** **`vscode`** is a **resolver** bundle (**profile** + **`config.yml`**) that sets **`DOCKPIPE_RESOLVER_WORKFLOW=vscode`** — this folder holds the **delegate YAML** the runner loads (also addressable via **`--workflow vscode`** as a convenience to the same file).
 
-**Scripts:** **`vscode-session.sh`**, **`session-idle.sh`**, and **`vscode-common.sh`** live in this directory. Workflows use **`run: scripts/vscode/vscode-session.sh`**.
+**Scripts:** **`vscode-session.sh`**, **`session-idle.sh`**, and **`vscode-common.sh`** live in this directory. Workflows use **`run: assets/scripts/vscode-session.sh`**.
 
 ## What it does
 

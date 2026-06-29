@@ -44,11 +44,11 @@ func TestCrosscutStrategyWorktreeAndCommitResolveFromCore(t *testing.T) {
 	}
 }
 
-// TestCrosscutRuntimeResolverDockerimageClaudeAgainstBundledTree merges real runtimes/dockerimage + resolvers/claude profiles.
-func TestCrosscutRuntimeResolverDockerimageClaudeAgainstBundledTree(t *testing.T) {
+// TestCrosscutRuntimeResolverDockerimageClaudeAgainstPackageTree merges real runtimes/dockerimage + resolvers/claude profiles.
+func TestCrosscutRuntimeResolverDockerimageClaudeAgainstPackageTree(t *testing.T) {
 	repo := testRepoRoot(t)
-	if _, err := os.Stat(filepath.Join(repo, ".staging", "packages", "agent", "resolvers", "claude")); err != nil {
-		t.Skip("no third-party staging agent slice in checkout")
+	if _, err := os.Stat(filepath.Join(repo, "packages", "agent", "resolvers", "claude")); err != nil {
+		t.Skip("no tracked agent resolver slice in checkout")
 	}
 	m, err := infrastructure.LoadIsolationProfile(repo, "dockerimage", "claude")
 	if err != nil {

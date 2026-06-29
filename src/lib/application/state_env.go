@@ -112,7 +112,7 @@ func ciArtifactDirs(workdir, workflowName string) (string, string, error) {
 	}
 	if strings.TrimSpace(workflowName) != "" {
 		scope := sanitizeWorkflowStateScope(workflowName)
-		root := filepath.Join(stateDir, "workflows", scope, "dorkpipe")
+		root := filepath.Join(stateDir, "workflows", scope, "artifacts")
 		return filepath.Join(root, "ci-raw"), filepath.Join(root, "ci-analysis"), nil
 	}
 	root, err := infrastructure.PackageStateDir(workdir, "dorkpipe")

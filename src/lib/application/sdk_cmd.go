@@ -83,7 +83,7 @@ Examples:
   dockpipe scope source src
   dockpipe scope artifacts providers/codex/result.json
   dockpipe scope name.123213
-  dockpipe scope workflow docs.orchestrate dorkpipe/orchestrate
+  dockpipe scope workflow docs.orchestrate orchestrate
   dockpipe scope --package dorkpipe
   dockpipe scope --package dorkpipe training metrics.jsonl
   dockpipe scope resolver codex auth-dir

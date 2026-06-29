@@ -43,15 +43,13 @@ steps:
     cmd: |-
       bash -c 'set -euo pipefail
       cd /work
-      export DOCKPIPE_WORKDIR=/work
-      export DOCKPIPE_SCRIPT_DIR="$DOCKPIPE_WORKDIR/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
       # No apt-get: dockpipe maps the container user to the host uid, so apt cannot run as root.
       # golang:bookworm images ship git and curl; scripts fall back to grep if ripgrep is absent.
       if [[ ! -x bin/dorkpipe ]]; then
         echo "[dorkpipe-self-analysis] building bin/dorkpipe in container..."
         go build -C packages/dorkpipe/lib -trimpath -o /work/bin/dorkpipe ./cmd/dorkpipe
       fi
-      exec bash scripts/dorkpipe/run-self-analysis.sh'
+      exec bash packages/dorkpipe/resolvers/dorkpipe/assets/scripts/run-self-analysis.sh'
 
   - id: stack_down
     kind: host

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="${DOCKPIPE_SCRIPT_DIR:?DOCKPIPE_SCRIPT_DIR is required}"
+SCRIPT_DIR="$(dockpipe get script_dir)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/orchestrate-common.sh"
 

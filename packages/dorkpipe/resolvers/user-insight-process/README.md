@@ -9,7 +9,7 @@ dockpipe --workflow user-insight-enqueue --workdir . -- --message 'Your guidance
 dockpipe --workflow user-insight-process --workdir . --
 ```
 
-## Layout (under `.dockpipe/analysis/`)
+## Layout (under `dockpipe scope --package dorkpipe analysis`)
 
 | File | Role |
 |------|------|

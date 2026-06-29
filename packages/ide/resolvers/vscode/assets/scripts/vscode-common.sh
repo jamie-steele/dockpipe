@@ -35,6 +35,15 @@ vscode_container_state_root() {
   esac
 }
 
+vscode_container_global_state_root() {
+  local state_root
+  state_root="$(vscode_global_state_root)"
+  case "$state_root" in
+    "$W"/*) printf '/work/%s' "${state_root#"$W"/}" ;;
+    *) printf '%s' "$state_root" ;;
+  esac
+}
+
 vscode_home_dir() {
   printf '%s/home' "$(vscode_state_root)"
 }

@@ -19,8 +19,12 @@ steps:
   - id: prepare
     isolate: golang:1.25.11-bookworm
     outputs: prepare.env
+    vars:
+      HOME: /tmp/dockpipe-home
     cmd: |-
       bash -c 'set -euo pipefail
+      export HOME=/tmp/dockpipe-home
+      mkdir -p "$HOME"
       export DOCKPIPE_WORKDIR="${DOCKPIPE_WORKDIR:-$(pwd)}"
       source src/core/assets/scripts/lib/dockpipe-sdk.sh
       DEMO_DIR="$(dockpipe_sdk scope artifacts demo)"
@@ -38,15 +42,26 @@ steps:
   - id: scan
     isolate: golang:1.25.11-bookworm
     outputs: scan.env
+    vars:
+      HOME: /tmp/dockpipe-home
     cmd: |-
       bash -c 'set -euo pipefail
+      export HOME=/tmp/dockpipe-home
+      mkdir -p "$HOME"
+      source src/core/assets/scripts/lib/dockpipe-sdk.sh
+      GO_ARTIFACT_DIR="$(dockpipe_sdk scope artifacts go)"
+      export TMPDIR="$GO_ARTIFACT_DIR/tmp"
+      export GOTMPDIR="$GO_ARTIFACT_DIR/gotmp"
+      export GOCACHE="$GO_ARTIFACT_DIR/gocache"
+      export GOBIN="$GO_ARTIFACT_DIR/bin"
+      mkdir -p "$TMPDIR" "$GOTMPDIR" "$GOCACHE" "$GOBIN"
       echo "[demo] --- Step 2: verify artifact + full Go + security scan (same spirit as CI / ci-local.sh) ---"
       test -n "${ARTIFACT_SHA256:-}" || { echo "[demo] FAIL missing ARTIFACT_SHA256"; exit 1; }
       test -f "$DEMO_FILE" || { echo "[demo] FAIL missing $DEMO_FILE"; exit 1; }
       GOT=$(sha256sum "$DEMO_FILE" | cut -b1-64)
       test "$GOT" = "$ARTIFACT_SHA256" || { echo "[demo] FAIL checksum mismatch"; exit 1; }
       echo "[demo] Checksum OK — same bytes on disk as in step 1."
-      export PATH="$(go env GOPATH)/bin:$PATH"
+      export PATH="$GOBIN:$(go env GOPATH)/bin:$PATH"
       echo "[demo] Running: go test ./..."
       go test ./...
       echo "[demo] Running: go vet ./..."
@@ -63,8 +78,12 @@ steps:
 
   - id: report
     isolate: golang:1.25.11-bookworm
+    vars:
+      HOME: /tmp/dockpipe-home
     cmd: |-
       bash -c 'set -euo pipefail
+      export HOME=/tmp/dockpipe-home
+      mkdir -p "$HOME"
       test "${SCAN_PASS:-0}" = "1" || { echo "[demo] FAIL SCAN_PASS not set"; exit 1; }
       echo "[demo] step 3/3 report — SCAN_PASS=$SCAN_PASS VERIFY_OK=$VERIFY_OK"
       echo "[demo] --- Security brief (bundled demo narrative — not a live LLM call) ---"

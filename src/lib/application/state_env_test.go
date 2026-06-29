@@ -30,10 +30,10 @@ func TestApplyCIArtifactEnvWorkflow(t *testing.T) {
 	if err := applyCIArtifactEnv(envMap, wd); err != nil {
 		t.Fatal(err)
 	}
-	if got, want := envMap["DOCKPIPE_CI_RAW_DIR"], filepath.Join(wd, "bin", ".dockpipe", "workflows", "docs.orchestrate", "dorkpipe", "ci-raw"); got != want {
+	if got, want := envMap["DOCKPIPE_CI_RAW_DIR"], filepath.Join(wd, "bin", ".dockpipe", "workflows", "docs.orchestrate", "artifacts", "ci-raw"); got != want {
 		t.Fatalf("raw dir = %q want %q", got, want)
 	}
-	if got, want := envMap["DOCKPIPE_CI_ANALYSIS_DIR"], filepath.Join(wd, "bin", ".dockpipe", "workflows", "docs.orchestrate", "dorkpipe", "ci-analysis"); got != want {
+	if got, want := envMap["DOCKPIPE_CI_ANALYSIS_DIR"], filepath.Join(wd, "bin", ".dockpipe", "workflows", "docs.orchestrate", "artifacts", "ci-analysis"); got != want {
 		t.Fatalf("analysis dir = %q want %q", got, want)
 	}
 }

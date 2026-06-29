@@ -1193,6 +1193,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 	mergeResolverAuthEnvFromHost(dockerForRun, envMap, ra)
 	mergePolicyProxyEnvFromHost(dockerForRun, envMap)
 	mergeWorktreeGitDockerEnv(dockerForRun, workHost)
+	applyContainerPathEnv(dockerForRun, workHost, stepOutputsAbsPath(o, step, envMap))
 	networkMode := infrastructure.DockerNetworkModeFromEnv(dockerForRun)
 	if networkMode == "" {
 		networkMode = strings.TrimSpace(envMap["DOCKPIPE_DOCKER_NETWORK"])
@@ -1226,6 +1227,39 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 	image, dockerfileDir, contextDir = applyCompiledImageSelectionInputs(o.repoRoot, o.wfRoot, rm, image, dockerfileDir, contextDir)
 	runOpts.Image = image
 	return argv, runOpts, dockerfileDir, contextDir, rm, nil
+}
+
+func applyContainerPathEnv(env map[string]string, workHost, outputsPath string) {
+	for _, key := range []string{
+		"DOCKPIPE_SOURCE_ROOT",
+		"DOCKPIPE_WORKDIR",
+		"DOCKPIPE_ARTIFACT_ROOT",
+		"DOCKPIPE_OUTPUT_ROOT",
+		"DOCKPIPE_STEP_CWD",
+	} {
+		if v := containerWorktreePath(env[key], workHost); v != "" {
+			env[key] = v
+		}
+	}
+	if v := containerWorktreePath(outputsPath, workHost); v != "" {
+		env["DOCKPIPE_STEP_OUTPUTS_FILE"] = v
+	}
+}
+
+func containerWorktreePath(path, workHost string) string {
+	path = strings.TrimSpace(path)
+	workHost = strings.TrimSpace(workHost)
+	if path == "" || workHost == "" {
+		return ""
+	}
+	rel, err := filepath.Rel(workHost, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	if rel == "." {
+		return "/work"
+	}
+	return filepath.ToSlash(filepath.Join("/work", rel))
 }
 
 func mustGetwd() string {

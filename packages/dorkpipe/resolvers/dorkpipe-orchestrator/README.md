@@ -5,11 +5,11 @@
 - **Spec:** `spec.example.yaml` (nodes: shell → Ollama → optional Codex escalation).
 - **Compose:** `packages/dorkpipe/resolvers/dorkpipe/assets/compose/docker-compose.yml` for Postgres+pgvector and Ollama.
 - **Run directly:** `packages/dorkpipe/bin/dorkpipe run -f packages/dorkpipe/resolvers/dorkpipe-orchestrator/spec.example.yaml --workdir .`
-- **Run via DockPipe workflow:** `dockpipe --workflow dorkpipe-orchestrator --workdir . --` (host script `scripts/dorkpipe-orchestrator/run-orchestrator.sh` invokes `bin/dorkpipe`).
+- **Run via DockPipe workflow:** `dockpipe --workflow dorkpipe-orchestrator --workdir . --` (host script `assets/scripts/run-orchestrator.sh` invokes `bin/dorkpipe`).
 
 Principles: deterministic prep, local-first, parallel levels, pgvector when you add those nodes, Codex on escalation (or explicit non-escalate codex nodes). See **`lib/README.md`** (Go module).
 
-**Self-analysis (repo → Cursor handoff):** use the packaged workflows **`dorkpipe-self-analysis`** or **`dorkpipe-self-analysis-host`**. Optional local sidecar: **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/dev-stack.sh`**. Writes **`bin/.dockpipe/orchestrator-cursor-prompt.md`** and **`bin/.dockpipe/paste-this-prompt.txt`**.
+**Self-analysis (repo → Cursor handoff):** use the packaged workflows **`dorkpipe-self-analysis`** or **`dorkpipe-self-analysis-host`**. Optional local sidecar: **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/dev-stack.sh`**. Writes package-scoped handoff artifacts such as **`dockpipe scope --package dorkpipe handoff/orchestrator-cursor-prompt.md`** and **`dockpipe scope --package dorkpipe handoff/paste-this-prompt.txt`**.
 ## Authoring note
 
 Resolver host scripts in this package should use the shared core SDK:

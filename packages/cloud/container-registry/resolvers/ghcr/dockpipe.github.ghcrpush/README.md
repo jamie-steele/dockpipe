@@ -14,7 +14,7 @@ may update the local credential store. Automation can explicitly bypass that pro
 
 Implementation lives beside this workflow as the logical script id:
 
-- **`scripts/dockpipe.github.ghcrpush/ghcr-push.sh`**
+- **`assets/scripts/ghcr-push.sh`**
 
 ## Typical use
 

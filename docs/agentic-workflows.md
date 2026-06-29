@@ -28,15 +28,15 @@ The repository now has a tracked first-party `packages/agent/` package.
 
 It currently contains:
 
-- promoted `claude` and `codex` resolver profiles from `.staging/packages/agent/`
-- promoted `ollama` resolver profile for local-model use from `.staging/packages/agent/`
+- `claude` and `codex` resolver profiles
+- `ollama` resolver profile for local-model use
 - portable cloud-lane diagnostics under `packages/agent/workflows/agent.cloud-lanes.doctor/`
 
 The YAML-first docs orchestration dogfood now lives under root `workflows/` because it is specific
 to this repository's docs, agent guidance, and DorkPipe artifact paths.
 
-The staging copies remain in place for a separate reviewed cleanup step. Promotion makes the
-resolvers discoverable from the main `packages/` compile root without changing the engine model.
+The package keeps the resolvers discoverable from the main `packages/` compile root without
+changing the engine model.
 
 ## `docs.orchestrate`
 
@@ -57,7 +57,7 @@ Its useful primitive is:
 
 The contract lives under the DorkPipe artifact root:
 
-`dockpipe scope workflow docs.orchestrate dorkpipe/orchestrate`
+`dockpipe scope workflow docs.orchestrate orchestrate`
 
 Resolvers still specialize execution, but the core enabling primitive is the declared graph and its
 typed artifacts, not generic "agent" language.

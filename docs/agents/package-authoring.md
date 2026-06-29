@@ -12,6 +12,9 @@ Packages are self-contained YAML plus assets plus resolver/runtime wiring. They 
 - Do not make maintainer/dev flows depend silently on whatever happens to be on `PATH`.
 - Prefer real repo-local build outputs first, then fall back to `PATH`.
 - Prefer shared SDK helpers under `src/core/assets/scripts/lib/` instead of copying lookup logic.
+- In package workflow YAML, reference local package files by the path the author sees, such as
+  `assets/scripts/run.sh` or `../assets/scripts/run.sh`. Use `scripts/<name>/...` only when
+  intentionally calling a shared/cross-package script namespace.
 - For workflow scripts, prefer direct `dockpipe scope ...` calls for source/artifact/package/resolver paths.
 - For reusable shell libraries, prefer `eval "$(dockpipe sdk)"` and `dockpipe_sdk ...` actions.
 - Keep resolver-owned auth/config defaults in resolver profiles and read them with `dockpipe scope resolver <name> <field>`.

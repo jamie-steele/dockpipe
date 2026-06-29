@@ -154,6 +154,49 @@ func TestBuildStepContainer_ForwardsPolicyProxyEnv(t *testing.T) {
 	}
 }
 
+func TestBuildStepContainer_MapsScopePathsForContainer(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	o := &runStepsOpts{
+		projectRoot: repoRoot,
+		repoRoot:    repoRoot,
+		wfRoot:      filepath.Join(repoRoot, "workflows", "ci"),
+		wf:          &domain.Workflow{Name: "ci", Isolate: "base-dev"},
+		opts:        &CliOpts{Workdir: repoRoot},
+	}
+	step := domain.Step{Cmd: "echo hi", Outputs: "prepare.env"}
+	envMap := map[string]string{
+		"DOCKPIPE_WORKFLOW_NAME": "ci",
+		"DOCKPIPE_SOURCE_ROOT":   repoRoot,
+		"DOCKPIPE_WORKDIR":       repoRoot,
+		"DOCKPIPE_ARTIFACT_ROOT": filepath.Join(repoRoot, "bin", ".dockpipe", "workflows", "ci", "artifacts"),
+		"DOCKPIPE_OUTPUT_ROOT":   filepath.Join(repoRoot, "bin", ".dockpipe", "workflows", "ci", "artifacts"),
+		"DOCKPIPE_STEP_CWD":      repoRoot,
+	}
+	dockerEnv := map[string]string{
+		"DOCKPIPE_SOURCE_ROOT":   envMap["DOCKPIPE_SOURCE_ROOT"],
+		"DOCKPIPE_WORKDIR":       envMap["DOCKPIPE_WORKDIR"],
+		"DOCKPIPE_ARTIFACT_ROOT": envMap["DOCKPIPE_ARTIFACT_ROOT"],
+		"DOCKPIPE_OUTPUT_ROOT":   envMap["DOCKPIPE_OUTPUT_ROOT"],
+		"DOCKPIPE_STEP_CWD":      envMap["DOCKPIPE_STEP_CWD"],
+	}
+
+	_, runOpts, _, _, _, err := buildStepContainer(o, 0, 1, step, envMap, dockerEnv, nil)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	em := domain.EnvSliceToMap(runOpts.ExtraEnv)
+	wantArtifact := "/work/bin/.dockpipe/workflows/ci/artifacts"
+	if em["DOCKPIPE_SOURCE_ROOT"] != "/work" || em["DOCKPIPE_WORKDIR"] != "/work" || em["DOCKPIPE_STEP_CWD"] != "/work" {
+		t.Fatalf("expected worktree roots mapped to /work, got %#v", em)
+	}
+	if em["DOCKPIPE_ARTIFACT_ROOT"] != wantArtifact || em["DOCKPIPE_OUTPUT_ROOT"] != wantArtifact {
+		t.Fatalf("expected artifact roots mapped to %q, got %#v", wantArtifact, em)
+	}
+	if em["DOCKPIPE_STEP_OUTPUTS_FILE"] != wantArtifact+"/prepare.env" {
+		t.Fatalf("expected container outputs file path, got %#v", em)
+	}
+}
+
 // TestBuildStepContainer_StepResolverTemplate uses DOCKPIPE_RESOLVER_TEMPLATE from a per-step resolver assignment.
 func TestBuildStepContainer_StepResolverTemplate(t *testing.T) {
 	repoRoot := testRepoRoot(t)

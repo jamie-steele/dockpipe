@@ -72,7 +72,7 @@ For generated artifacts, prefer the shell SDK path helper instead of hand-writin
 eval "$(dockpipe sdk)"
 dockpipe_sdk path build npm-cache
 dockpipe_sdk scope artifacts providers/codex/result.json
-dockpipe_sdk scope workflow docs.orchestrate dorkpipe/orchestrate
+dockpipe_sdk scope workflow docs.orchestrate orchestrate
 dockpipe_sdk scope --package dorkpipe training metrics.jsonl
 ```
 
@@ -96,15 +96,14 @@ artifacts under that workflow's state. External scripts that mirror a workflow c
 ```bash
 export DOCKPIPE_WORKFLOW_NAME=ci
 eval "$(dockpipe sdk)"
-govulncheck -format json ./... > "$DOCKPIPE_CI_RAW_DIR/govulncheck.json"
-printf '%s\n' "$DOCKPIPE_CI_ANALYSIS_DIR/findings.json"
+govulncheck -format json ./... > "$(dockpipe_sdk ci raw govulncheck.json)"
+printf '%s\n' "$(dockpipe_sdk ci analysis findings.json)"
 ```
 
-Package scripts should consume the injected `DOCKPIPE_CI_RAW_DIR` / `DOCKPIPE_CI_ANALYSIS_DIR`
-variables and then append their own relative filenames, for example
-`"$DOCKPIPE_CI_ANALYSIS_DIR/findings.json"`. Package authors should not need to care whether the
-active workflow keeps that artifact lane in package state, workflow state, or an explicit
-caller-provided directory.
+Package scripts should use `dockpipe_sdk ci raw ...` and `dockpipe_sdk ci analysis ...` instead of
+appending filenames to injected environment variables. Package authors should not need to care
+whether the active workflow keeps that artifact lane in package state, workflow state, or an
+explicit caller-provided directory.
 
 For direct test/manual calls that bypass the normal workflow boundary, callers may export the same
 backing env vars explicitly before invoking a package script.
@@ -152,8 +151,8 @@ The getter path avoids hard-coding source paths or manual root resolution in pac
 
 | Script | Type | What it does |
 |--------|------|--------------|
-| **`terraform-pipeline.sh` / `terraform-run.sh`** | (moved) | **Provider-agnostic Terraform** ships with **`packages/terraform/resolvers/terraform-core/`** (`dockpipe.terraform.core`), not this folder. Workflow YAML still uses **`scripts/core.assets.scripts.terraform-run.sh`** — resolution finds the package first. |
-| **`packages/cloud/storage/.../terraform-cloudflare-r2-run.sh`** | host | Cloudflare R2 + bundled infra-local Terraform module: **`scripts/dockpipe.cloudflare.r2infra/terraform-cloudflare-r2-run.sh`** (resolver **`dockpipe.cloudflare.r2infra`**). Used by **`r2-publish.sh`** too (not **`terraform-run.sh`**). |
+| **`terraform-pipeline.sh` / `terraform-run.sh`** | (moved) | **Provider-agnostic Terraform** ships with **`packages/terraform/resolvers/terraform-core/`** (`dockpipe.terraform.core`), not this folder. That package's YAML uses its local **`assets/scripts/terraform-run.sh`**. |
+| **`packages/cloud/storage/.../terraform-cloudflare-r2-run.sh`** | host | Cloudflare R2 + bundled infra-local Terraform module: local **`assets/scripts/terraform-cloudflare-r2-run.sh`** in resolver **`dockpipe.cloudflare.r2infra`**. Used by **`r2-publish.sh`** too (not **`terraform-run.sh`**). |
 | `clone-worktree.sh` | pre | Create worktree and export `DOCKPIPE_WORKDIR` + `DOCKPIPE_COMMIT_ON_HOST`. If `DOCKPIPE_USER_REPO_ROOT` is set (same `origin` as `DOCKPIPE_REPO_URL`), uses **`git worktree add` from that checkout** (new branch from **your current HEAD**). Uncommitted work is **copied** into the worktree (`git diff` + apply + untracked files); your main checkout is unchanged. **Gitignored** local files can be listed in **`.dockpipe-worktreeinclude`** or **`.worktreeinclude`** (see **[docs/worktree-include.md](../../../docs/worktree-include.md)**). Set `DOCKPIPE_STASH_UNCOMMITTED=1` for the **git stash** flow instead. Otherwise clones/fetches into `DOCKPIPE_DATA_DIR` and bases the worktree on **origin/HEAD** (mirror mode). |
 | `commit-worktree.sh` | action | Triggers commit-on-host after container exit (commit runs on host). |
 | `export-patch.sh` | action | Write uncommitted changes to a patch file. |

@@ -67,11 +67,11 @@ steps:
       mode: async
       tasks:
         - id: task_a
-          cmd: sh -c 'echo BRANCH=a > .dockpipe/out-a.env'
-          outputs: .dockpipe/out-a.env
+          cmd: sh -c 'echo BRANCH=a > out-a.env'
+          outputs: out-a.env
         - id: task_b
-          cmd: sh -c 'echo BRANCH=b > .dockpipe/out-b.env'
-          outputs: .dockpipe/out-b.env
+          cmd: sh -c 'echo BRANCH=b > out-b.env'
+          outputs: out-b.env
 
   - id: aggregate
     cmd: sh -c 'echo branch=$BRANCH'

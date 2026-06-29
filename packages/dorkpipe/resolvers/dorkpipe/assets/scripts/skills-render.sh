@@ -3,7 +3,7 @@ set -euo pipefail
 
 ASSETS_DIR="${DOCKPIPE_ASSETS_DIR:-}"
 if [[ -z "$ASSETS_DIR" ]]; then
-  SCRIPT_DIR="${DOCKPIPE_SCRIPT_DIR:?DOCKPIPE_SCRIPT_DIR is required}"
+  SCRIPT_DIR="$(dockpipe get script_dir)"
   ASSETS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 fi
 

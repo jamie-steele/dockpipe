@@ -67,8 +67,8 @@ steps:
         AGENTS.md, routed agent docs, package boundaries, and engineering judgment before proposing a patch.
       include_agents_md: true
       accessible_paths:
-        - scope:workflow:docs.orchestrate:dorkpipe/orchestrate
-        - scope:workflow:docs.orchestrate:dorkpipe/optimize
+        - scope:workflow:docs.orchestrate:orchestrate
+        - scope:workflow:docs.orchestrate:optimize
         - workflows/agent/docs.orchestrate
         - workflows/agent/docs.optimize-orchestrate
         - packages/dorkpipe/resolvers/dorkpipe/assets/scripts
@@ -77,11 +77,11 @@ steps:
           - AGENTS.md
           - docs
           - packages
-          - scope:workflow:docs.orchestrate:dorkpipe/orchestrate
-          - scope:workflow:docs.orchestrate:dorkpipe/optimize
+          - scope:workflow:docs.orchestrate:orchestrate
+          - scope:workflow:docs.orchestrate:optimize
         write:
-          - scope:artifacts:dorkpipe/orchestrate
-          - scope:workflow:docs.orchestrate:dorkpipe/optimize
+          - scope:artifacts:orchestrate
+          - scope:workflow:docs.orchestrate:optimize
         deny:
           - .env
           - .env.*
@@ -109,9 +109,9 @@ steps:
               # Optimizer Input
 
               Target workflow: `docs.orchestrate`
-              Target artifacts: `scope:workflow:docs.orchestrate:dorkpipe/orchestrate`
-              Optimizer artifacts: `scope:workflow:docs.orchestrate:dorkpipe/optimize`
-              Previous optimizer handoff: `scope:workflow:docs.orchestrate:dorkpipe/optimize/history`
+              Target artifacts: `scope:workflow:docs.orchestrate:orchestrate`
+              Optimizer artifacts: `scope:workflow:docs.orchestrate:optimize`
+              Previous optimizer handoff: `scope:workflow:docs.orchestrate:optimize/history`
 
               Optimize local Ollama worker quality, but Codex must make the code-change decision.
               This workflow is proposal-only: do not apply patches to the working tree.
@@ -130,12 +130,12 @@ steps:
             expected_output: Three terse bullets naming concrete failures and affected task ids.
             inputs:
               - shared/optimizer-request.md
-              - scope:workflow:docs.orchestrate:dorkpipe/optimize/assessment.md
-              - scope:workflow:docs.orchestrate:dorkpipe/orchestrate/verify/result.json
-              - scope:workflow:docs.orchestrate:dorkpipe/orchestrate/tasks/planner_brain/response.md
-              - scope:workflow:docs.orchestrate:dorkpipe/orchestrate/tasks/repo_shape/response.md
-              - scope:workflow:docs.orchestrate:dorkpipe/orchestrate/tasks/package_contracts/response.md
-              - scope:workflow:docs.orchestrate:dorkpipe/orchestrate/tasks/safety_model/response.md
+              - scope:workflow:docs.orchestrate:optimize/assessment.md
+              - scope:workflow:docs.orchestrate:orchestrate/verify/result.json
+              - scope:workflow:docs.orchestrate:orchestrate/tasks/planner_brain/response.md
+              - scope:workflow:docs.orchestrate:orchestrate/tasks/repo_shape/response.md
+              - scope:workflow:docs.orchestrate:orchestrate/tasks/package_contracts/response.md
+              - scope:workflow:docs.orchestrate:orchestrate/tasks/safety_model/response.md
             constraints:
               - local Ollama only
               - ground findings in target artifacts
@@ -170,13 +170,13 @@ steps:
               - docs/agents/docs-generation.md
               - docs/agents/safety-guardrails.md
               - shared/optimizer-request.md
-              - scope:workflow:docs.orchestrate:dorkpipe/optimize/assessment.md
-              - scope:workflow:docs.orchestrate:dorkpipe/optimize/history/previous-run-summary.md
-              - scope:workflow:docs.orchestrate:dorkpipe/optimize/history/previous-recommendation.md
-              - scope:workflow:docs.orchestrate:dorkpipe/optimize/history/previous-proposed.patch
-              - scope:workflow:docs.orchestrate:dorkpipe/optimize/history/previous-propose-result.json
-              - scope:workflow:docs.orchestrate:dorkpipe/optimize/history/previous-codex-response.md
-              - scope:artifacts:dorkpipe/orchestrate/tasks/latest_run_audit/response.md
+              - scope:workflow:docs.orchestrate:optimize/assessment.md
+              - scope:workflow:docs.orchestrate:optimize/history/previous-run-summary.md
+              - scope:workflow:docs.orchestrate:optimize/history/previous-recommendation.md
+              - scope:workflow:docs.orchestrate:optimize/history/previous-proposed.patch
+              - scope:workflow:docs.orchestrate:optimize/history/previous-propose-result.json
+              - scope:workflow:docs.orchestrate:optimize/history/previous-codex-response.md
+              - scope:artifacts:orchestrate/tasks/latest_run_audit/response.md
               - workflows/agent/docs.optimize-orchestrate/config.yml
               - workflows/agent/docs.optimize-orchestrate/README.md
               - workflows/agent/docs.orchestrate/config.yml

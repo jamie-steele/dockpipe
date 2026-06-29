@@ -38,6 +38,15 @@ cursor_dev_container_state_root() {
   esac
 }
 
+cursor_dev_container_global_state_root() {
+  local state_root
+  state_root="$(cursor_dev_global_state_root)"
+  case "$state_root" in
+    "$W"/*) printf '/work/%s' "${state_root#"$W"/}" ;;
+    *) printf '%s' "$state_root" ;;
+  esac
+}
+
 # Optional: set CURSOR_DEV_SKIP_DOCKER_CHECK=1 if your workflow has no container step (custom YAML).
 # Loose check: used by cursor-print-next-steps.sh — if docker is missing from PATH, still returns 0
 # so host-only hints can run; if docker exists but the daemon is down, fail.

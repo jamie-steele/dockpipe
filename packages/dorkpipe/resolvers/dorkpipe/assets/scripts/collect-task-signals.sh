@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Bounded, deterministic signals for routing (extend per repo).
 set -euo pipefail
-ROOT="${DOCKPIPE_WORKDIR:?DOCKPIPE_WORKDIR is required}"
+ROOT="$(dockpipe get workdir)"
 if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
 	# shellcheck source=/dev/null
 	source "$DOCKPIPE_SDK_SH"
