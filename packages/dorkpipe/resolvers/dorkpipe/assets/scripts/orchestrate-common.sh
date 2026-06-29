@@ -4,7 +4,7 @@ set -euo pipefail
 dorkpipe_orchestrate_init() {
   eval "$(dockpipe sdk)"
   dockpipe_sdk init-script
-  export ROOT="${ROOT:-${DOCKPIPE_WORKDIR:-$(pwd)}}"
+  export ROOT="${ROOT:-$(dockpipe_sdk get workdir)}"
   export DORKPIPE_ORCH_WORKFLOW="${DORKPIPE_ORCH_WORKFLOW:-${DOCKPIPE_WORKFLOW_NAME:-docs.orchestrate}}"
   default_orch_root="$(dockpipe scope artifacts orchestrate)"
   export DORKPIPE_ORCH_ROOT="${DORKPIPE_ORCH_ROOT:-${default_orch_root}}"
@@ -79,29 +79,29 @@ dorkpipe_orchestrate_helper_bin() {
     printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
     return 0
   fi
-  local assets_dir package_root repo_root
-  assets_dir="${DOCKPIPE_ASSETS_DIR:-}"
-  if [[ -z "${assets_dir}" ]]; then
-    assets_dir="$(cd "${SCRIPT_DIR}/.." && pwd)"
+  local repo_root dockpipe_bin
+  repo_root="${ROOT:-$(dockpipe_sdk get workdir)}"
+  DORKPIPE_ORCH_HELPER_BIN="$(dockpipe_sdk require tooling-bin orchestrate-helper || true)"
+  if [[ -n "${DORKPIPE_ORCH_HELPER_BIN}" ]]; then
+    export DORKPIPE_ORCH_HELPER_BIN
+    printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
+    return 0
   fi
-  package_root="${DOCKPIPE_PACKAGE_ROOT:-}"
-  if [[ -z "${package_root}" ]]; then
-    package_root="$(cd "${assets_dir}/../../.." && pwd)"
+  dockpipe_bin="${DOCKPIPE_BIN:-}"
+  if [[ -z "${dockpipe_bin}" ]]; then
+    dockpipe_bin="$(dockpipe_sdk require dockpipe-bin || true)"
   fi
-  repo_root="$(cd "${package_root}/../.." && pwd)"
-  local candidate
-  for candidate in \
-    "${repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper" \
-    "${repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper.exe"
-  do
-    if [[ -x "${candidate}" ]]; then
-      DORKPIPE_ORCH_HELPER_BIN="${candidate}"
+  if [[ -x "${dockpipe_bin:-}" ]]; then
+    "${dockpipe_bin}" package build source --workdir "${repo_root}" --only dorkpipe
+    DORKPIPE_ORCH_HELPER_BIN="$(dockpipe_sdk require tooling-bin orchestrate-helper || true)"
+    if [[ -n "${DORKPIPE_ORCH_HELPER_BIN}" ]]; then
       export DORKPIPE_ORCH_HELPER_BIN
       printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
       return 0
     fi
-  done
-  echo "orchestrate-helper: compiled helper not found. Run dockpipe package build source --only dorkpipe" >&2
+  fi
+  echo "orchestrate-helper: compiled helper not found at ${repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper(.exe)" >&2
+  echo "Run: ${dockpipe_bin:-dockpipe} package build source --workdir ${repo_root} --only dorkpipe" >&2
   return 1
 }
 

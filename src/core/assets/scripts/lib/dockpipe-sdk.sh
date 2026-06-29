@@ -1,10 +1,27 @@
 #!/usr/bin/env bash
 
+__dockpipe_sdk_normalize_host_path() {
+  local raw="${1:-}"
+  [[ -n "$raw" ]] || return 0
+  case "$raw" in
+    [A-Za-z]:\\*|[A-Za-z]:/*|\\\\*)
+      if command -v cygpath >/dev/null 2>&1; then
+        cygpath -u "$raw"
+      else
+        printf '%s\n' "$raw"
+      fi
+      return 0
+      ;;
+  esac
+  printf '%s\n' "$raw"
+}
+
 dockpipe_repo_root() {
   local root="${1:-}"
   if [[ -z "$root" ]]; then
     root="${DOCKPIPE_WORKDIR:-$(pwd)}"
   fi
+  root="$(__dockpipe_sdk_normalize_host_path "$root")"
   (cd "$root" && pwd)
 }
 
@@ -36,7 +53,7 @@ dockpipe_resolve_dockpipe_bin() {
   local root
   root="$(dockpipe_repo_root "${1:-}")"
   if [[ -n "${DOCKPIPE_BIN:-}" ]]; then
-    printf '%s\n' "$DOCKPIPE_BIN"
+    __dockpipe_sdk_normalize_host_path "$DOCKPIPE_BIN"
     return 0
   fi
   local candidate
@@ -53,21 +70,21 @@ dockpipe_sdk_refresh() {
   resolved_root="$(dockpipe_repo_root "$root")"
   resolved_dockpipe="$(dockpipe_resolve_dockpipe_bin "$resolved_root" 2>/dev/null || true)"
   resolved_workflow_name="${DOCKPIPE_WORKFLOW_NAME:-}"
-  resolved_script_dir="$(dockpipe_script_dir)"
-  resolved_assets_dir="$(dockpipe_find_assets_dir "$resolved_script_dir")"
-  resolved_package_root="$(dockpipe_find_package_root "$resolved_script_dir")"
-  resolved_state_dir="${DOCKPIPE_STATE_DIR:-$resolved_root/bin/.dockpipe}"
-  resolved_artifact_root="${DOCKPIPE_ARTIFACT_ROOT:-}"
+  resolved_script_dir="$(__dockpipe_sdk_normalize_host_path "$(dockpipe_script_dir)")"
+  resolved_assets_dir="$(__dockpipe_sdk_normalize_host_path "${DOCKPIPE_ASSETS_DIR:-$(dockpipe_find_assets_dir "$resolved_script_dir")}")"
+  resolved_package_root="$(__dockpipe_sdk_normalize_host_path "${DOCKPIPE_PACKAGE_ROOT:-$(dockpipe_find_package_root "$resolved_script_dir")}")"
+  resolved_state_dir="$(__dockpipe_sdk_normalize_host_path "${DOCKPIPE_STATE_DIR:-$resolved_root/bin/.dockpipe}")"
+  resolved_artifact_root="$(__dockpipe_sdk_normalize_host_path "${DOCKPIPE_ARTIFACT_ROOT:-}")"
   if [[ -z "$resolved_artifact_root" ]]; then
     resolved_artifact_root="$resolved_state_dir/workflows/$(__dockpipe_sdk_sanitize_workflow_scope "${resolved_workflow_name:-default}")/artifacts"
   fi
-  resolved_output_root="${DOCKPIPE_OUTPUT_ROOT:-$resolved_artifact_root}"
+  resolved_output_root="$(__dockpipe_sdk_normalize_host_path "${DOCKPIPE_OUTPUT_ROOT:-$resolved_artifact_root}")"
   resolved_package_id="${DOCKPIPE_PACKAGE_ID:-}"
   if [[ -z "$resolved_package_id" && -n "$resolved_package_root" ]]; then
     resolved_package_id="$(basename "$resolved_package_root")"
   fi
   resolved_package_id="$(__dockpipe_sdk_sanitize_scope "${resolved_package_id:-default}")"
-  resolved_package_state_dir="${DOCKPIPE_PACKAGE_STATE_DIR:-$resolved_state_dir/packages/$resolved_package_id}"
+  resolved_package_state_dir="$(__dockpipe_sdk_normalize_host_path "${DOCKPIPE_PACKAGE_STATE_DIR:-$resolved_state_dir/packages/$resolved_package_id}")"
 
   declare -gA dockpipe
   dockpipe=()
@@ -372,6 +389,26 @@ dockpipe_require_dockpipe_bin() {
     return 1
   fi
   printf '%s\n' "$bin"
+}
+
+dockpipe_sdk_tooling_bin() {
+  local name="${1:-}"
+  if [[ -z "$name" ]]; then
+    echo "dockpipe sdk: tooling-bin requires a binary name" >&2
+    return 1
+  fi
+  local root candidate
+  root="$(dockpipe_sdk_get workdir)"
+  for candidate in \
+    "$root/bin/.dockpipe/tooling/bin/$name" \
+    "$root/bin/.dockpipe/tooling/bin/$name.exe"
+  do
+    if [[ -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
 }
 
 __dockpipe_sdk_fatal() {
@@ -957,6 +994,7 @@ dockpipe_sdk actions:
   die <message...>
   prompt <confirm|choice|input|file|resource> [options]
   require dockpipe-bin
+  require tooling-bin <name>
   require workflow-name
   source terraform-pipeline
   refresh [root]
@@ -1049,6 +1087,10 @@ EOF
       case "${1:-}" in
         dockpipe-bin)
           dockpipe_require_dockpipe_bin
+          ;;
+        tooling-bin)
+          shift || true
+          dockpipe_sdk_tooling_bin "${1:-}"
           ;;
         workflow-name)
           if [[ -n "${dockpipe[workflow_name]:-}" ]]; then
