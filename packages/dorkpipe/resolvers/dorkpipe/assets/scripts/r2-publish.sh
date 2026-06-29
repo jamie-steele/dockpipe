@@ -98,7 +98,7 @@ if [[ "${R2_INFRA_ONLY:-0}" == "1" ]]; then
     dockpipe_sdk die "Terraform auth: set CLOUDFLARE_API_TOKEN or (CLOUDFLARE_EMAIL + CLOUDFLARE_GLOBAL_API_KEY)"
   fi
   [[ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]] || dockpipe_sdk die "CLOUDFLARE_ACCOUNT_ID required for Terraform"
-  WORK_PARENT="$(dockpipe_sdk scope artifacts r2-publish tmp)"
+  WORK_PARENT="$(dockpipe scope artifacts r2-publish tmp)"
   mkdir -p "$WORK_PARENT"
   WORK="$(mktemp -d "${WORK_PARENT}/r2infra.XXXXXX")"
   cleanup() { rm -rf "$WORK"; }
@@ -111,7 +111,7 @@ fi
 
 # --- Publish path: needs source tree to tar ---------------------------------------------------
 SRC_REL="${R2_PUBLISH_SOURCE:-release/artifacts}"
-  [[ -d "$SRC_REL" ]] || dockpipe_sdk die "source directory missing: $SRC_REL (set R2_PUBLISH_SOURCE or mkdir -p release/artifacts)"
+[[ -d "$SRC_REL" ]] || dockpipe_sdk die "source directory missing: $SRC_REL (set R2_PUBLISH_SOURCE or mkdir -p release/artifacts)"
 
 BUCKET="${R2_BUCKET:-}"
 [[ -n "$BUCKET" ]] || dockpipe_sdk die "set R2_BUCKET (R2 bucket name)"
@@ -144,7 +144,7 @@ PREFIX="${R2_PREFIX:-}"
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
 ARCHIVE_NAME="${R2_ARCHIVE_NAME:-dockpipe-publish-${STAMP}.tar.gz}"
-WORK_PARENT="$(dockpipe_sdk scope artifacts r2-publish tmp)"
+WORK_PARENT="$(dockpipe scope artifacts r2-publish tmp)"
 mkdir -p "$WORK_PARENT"
 WORK="$(mktemp -d "${WORK_PARENT}/upload.XXXXXX")"
 cleanup() { rm -rf "$WORK"; }

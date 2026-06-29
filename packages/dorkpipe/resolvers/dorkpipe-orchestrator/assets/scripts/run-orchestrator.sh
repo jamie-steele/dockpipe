@@ -4,8 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(dockpipe get script_dir)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/../../dorkpipe/assets/scripts/lib/dorkpipe-cli.sh"
-ROOT="$(dockpipe get workdir)"
-cd "$ROOT"
+ROOT="$(pwd)"
 WORKFLOW_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 BIN="$(dorkpipe_script_resolve_bin "$(dorkpipe_script_repo_root "$SCRIPT_DIR")")"

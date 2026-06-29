@@ -14,7 +14,7 @@ vscode_docker() {
 }
 
 vscode_set_workdir() {
-  W="$(dockpipe get workdir)"
+  W="$(pwd)"
   export W
 }
 

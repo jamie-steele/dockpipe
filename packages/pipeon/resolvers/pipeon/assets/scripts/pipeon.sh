@@ -3,14 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(dockpipe get script_dir)"
-ROOT="$(dockpipe get workdir)"
-if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
-	# shellcheck source=/dev/null
-	source "$DOCKPIPE_SDK_SH"
-	dockpipe_sdk_refresh "$ROOT"
-else
-	eval "$(dockpipe sdk --workdir "$ROOT")"
-fi
+ROOT="$(pwd)"
 # shellcheck source=lib/enable.sh
 source "$SCRIPT_DIR/lib/enable.sh"
 
@@ -83,10 +76,10 @@ status)
 	else
 		echo "gate: version ok for Pipeon"
 	fi
-	PIPEON_STATE_DIR="$(dockpipe_sdk scope --package pipeon .)"
-	CI_FINDINGS="$(dockpipe_sdk ci analysis findings.json)"
-	INSIGHTS="$(dockpipe_sdk scope --package dorkpipe analysis/insights.json)"
-	DORKPIPE_RUN="$(dockpipe_sdk scope --package dorkpipe run.json)"
+	PIPEON_STATE_DIR="$(dockpipe scope --package pipeon .)"
+	CI_FINDINGS="$(dockpipe scope artifacts ci-analysis findings.json)"
+	INSIGHTS="$(dockpipe scope --package dorkpipe analysis/insights.json)"
+	DORKPIPE_RUN="$(dockpipe scope --package dorkpipe run.json)"
 	for p in "$PIPEON_STATE_DIR/pipeon-context.md" "$CI_FINDINGS" "$INSIGHTS" "$DORKPIPE_RUN"; do
 		if [[ -f "$p" ]]; then
 			echo "present: $p"

@@ -349,16 +349,16 @@ const CORE_HELPER_PROFILES = {
   shellscript: {
     helperPath: "dockpipe sdk",
     sourceSnippet:
-      'dockpipe get workdir',
-    sourceLabel: "dockpipe get workdir",
-    sourceDetail: "Read generic DockPipe shell context directly from the CLI",
+      'dockpipe scope source',
+    sourceLabel: "dockpipe scope source",
+    sourceDetail: "Resolve DockPipe source/artifact paths through the CLI",
     functions: [
       {
-        name: "dockpipe get workdir",
-        detail: "Print the SDK workdir/root.",
-        insertText: "dockpipe get workdir",
-        filterText: "dockpipe get workdir dockpipe root workdir",
-        documentation: "First-hand shell CLI getter that prints the effective DockPipe workdir/repo root."
+        name: "dockpipe scope source",
+        detail: "Resolve the active source checkout path.",
+        insertText: 'dockpipe scope source "$1"',
+        filterText: "dockpipe scope source repo checkout root path",
+        documentation: "First-hand CLI command that resolves a path under the active source root. Prefer `pwd` when workflow `cwd` already points at the source checkout."
       },
       {
         name: "dockpipe get workflow_name",
@@ -410,6 +410,13 @@ const CORE_HELPER_PROFILES = {
         documentation: "First-hand CLI command that prints a package scope object as JSON, or resolves a package path when suffix segments are provided."
       },
       {
+        name: "dockpipe scope artifacts",
+        detail: "Resolve a path under the active artifact root.",
+        insertText: 'dockpipe scope artifacts "$1"',
+        filterText: "dockpipe scope artifacts output generated path",
+        documentation: "First-hand CLI command that resolves a path under the current workflow artifact root."
+      },
+      {
         name: "dockpipe scope workflow",
         detail: "Resolve another workflow's artifact path.",
         insertText: 'dockpipe scope workflow "$1" "$2"',
@@ -424,25 +431,11 @@ const CORE_HELPER_PROFILES = {
         documentation: "First-hand CLI command that resolves resolver profile fields such as `auth-dir`, `container-auth-dir`, `auth-mount-mode`, `config-file`, and `container-config-file`."
       },
       {
-        name: "dockpipe_sdk scope",
-        detail: "Resolve workflow/package scope objects or paths.",
-        insertText: 'dockpipe_sdk scope "$1"',
-        filterText: "dockpipe_sdk scope workflow package artifact output path",
-        documentation: "First-hand shell SDK action for `dockpipe scope`: no arguments returns the current workflow scope object; `--package <name>` returns a package scope object; suffixes resolve paths."
-      },
-      {
         name: "dockpipe_sdk init-script",
         detail: "Initialize common script vars and enter the workdir.",
         insertText: "dockpipe_sdk init-script",
         filterText: "dockpipe_sdk init-script dockpipe init script root wf_ns workdir",
         documentation: "First-hand shell SDK action that initializes `ROOT` and `WF_NS` from the SDK context and changes into the DockPipe workdir."
-      },
-      {
-        name: "dockpipe_sdk cd-workdir",
-        detail: "Change directory to the SDK workdir.",
-        insertText: "dockpipe_sdk cd-workdir",
-        filterText: "dockpipe_sdk cd-workdir dockpipe cd workdir root chdir",
-        documentation: "First-hand shell SDK action that changes the current directory to the effective DockPipe workdir."
       },
       {
         name: "dockpipe_sdk require workflow-name",

@@ -4,15 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PACKAGE_ROOT="$(cd "${DOCKPIPE_PACKAGE_ROOT:-$SCRIPT_DIR/../..}" && pwd)"
 REPO_ROOT="$(cd "$PACKAGE_ROOT/../.." && pwd)"
-SDK_SH="$REPO_ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh"
-
-if [[ -f "$SDK_SH" ]]; then
-  # shellcheck source=/dev/null
-  source "$SDK_SH"
-  dockpipe_sdk_refresh "$REPO_ROOT"
-  PACKAGE_ROOT="$(dockpipe get package_root 2>/dev/null || printf '%s\n' "$PACKAGE_ROOT")"
-  REPO_ROOT="$(dockpipe get workdir 2>/dev/null || printf '%s\n' "$REPO_ROOT")"
-fi
 
 OUT_DIR="$REPO_ROOT/bin/.dockpipe/tooling/bin"
 BUILD_DIR="$REPO_ROOT/bin/.dockpipe/build"

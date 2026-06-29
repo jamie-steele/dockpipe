@@ -24,10 +24,10 @@ type StoreBuildManifest struct {
 
 // StoreArtifact names one gzip tarball built from a compiled package directory.
 type StoreArtifact struct {
-	Name               string   `json:"name"`
-	Version            string   `json:"version"`
-	Tarball            string   `json:"tarball"`
-	SHA256             string   `json:"sha256"`
+	Name                 string   `json:"name"`
+	Version              string   `json:"version"`
+	Tarball              string   `json:"tarball"`
+	SHA256               string   `json:"sha256"`
 	Provider             string   `json:"provider,omitempty"`
 	Capability           string   `json:"capability,omitempty"`
 	RequiresCapabilities []string `json:"requires_capabilities,omitempty"`
@@ -131,10 +131,6 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 		return nil, err
 	}
 	return m, nil
-}
-
-func readPackageVersion(dir, fallback string) string {
-	return readPackageManifestMeta(dir, fallback).Version
 }
 
 // packageManifestMeta aggregates package.yml fields for store manifests and tooling.

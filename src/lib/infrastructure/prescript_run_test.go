@@ -40,3 +40,10 @@ func TestRunHostCommandUsesStepCWD(t *testing.T) {
 		t.Fatalf("pwd = %q want %q", got, cwd)
 	}
 }
+
+func TestEnvGetUsesLastDuplicate(t *testing.T) {
+	env := []string{"A=old", "B=1", "A=new"}
+	if got := envGet(env, "A"); got != "new" {
+		t.Fatalf("envGet duplicate = %q want new", got)
+	}
+}

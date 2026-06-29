@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Contributors only: installs govulncheck + gosec (same as .github/workflows/ci.yml).
+# Contributors only: installs Go-based CI tools (same as .github/workflows/ci.yml).
 # golangci-lint is not used in this repo — omitted on purpose.
-# Does not install Docker. See README → Development.
+# Does not install Docker or OS packages. See README → Development.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -51,6 +51,14 @@ install_go_tool() {
 
 install_go_tool govulncheck golang.org/x/vuln/cmd/govulncheck@latest
 install_go_tool gosec github.com/securego/gosec/v2/cmd/gosec@latest
+install_go_tool staticcheck honnef.co/go/tools/cmd/staticcheck@latest
+
+echo "checking shellcheck..."
+if command -v shellcheck >/dev/null 2>&1; then
+	echo "shellcheck: already installed ($(command -v shellcheck))"
+else
+	echo "shellcheck: not found. Install with your OS package manager, e.g. sudo apt-get install -y shellcheck" >&2
+fi
 
 if [[ ":$PATH:" != *":$GOBIN:"* ]]; then
 	echo ""

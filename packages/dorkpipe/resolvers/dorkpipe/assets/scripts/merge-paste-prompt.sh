@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 # After Ollama refine (combined spec), fold refined output into paste-this-prompt.txt.
 set -euo pipefail
-ROOT="$(dockpipe get workdir)"
-cd "$ROOT"
-PASTE="$(dockpipe scope --package dorkpipe handoff/paste-this-prompt.txt --workdir "$ROOT")"
-REFINED="$(dockpipe scope --package dorkpipe handoff/orchestrator-cursor-prompt.refined.md --workdir "$ROOT")"
+PASTE="$(dockpipe scope --package dorkpipe handoff/paste-this-prompt.txt)"
+REFINED="$(dockpipe scope --package dorkpipe handoff/orchestrator-cursor-prompt.refined.md)"
 if [[ ! -f "$REFINED" ]]; then
 	echo "merge-paste-prompt: no $REFINED; leaving $PASTE unchanged" >&2
 	exit 0

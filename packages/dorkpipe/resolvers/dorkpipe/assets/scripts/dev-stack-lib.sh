@@ -6,10 +6,6 @@ dorkpipe_stack_state_dir() {
     printf '%s\n' "$DORKPIPE_DEV_STACK_STATE_DIR"
     return 0
   fi
-  if declare -F dockpipe_sdk >/dev/null 2>&1; then
-    dockpipe_sdk scope --package dorkpipe dev-stack
-    return 0
-  fi
   if [[ -x "${REPO_ROOT}/src/bin/dockpipe" ]]; then
     "${REPO_ROOT}/src/bin/dockpipe" scope --package dorkpipe dev-stack --workdir "$REPO_ROOT"
     return 0

@@ -6,7 +6,7 @@ dorkpipe_orchestrate_init() {
   dockpipe_sdk init-script
   export ROOT="${ROOT:-${DOCKPIPE_WORKDIR:-$(pwd)}}"
   export DORKPIPE_ORCH_WORKFLOW="${DORKPIPE_ORCH_WORKFLOW:-${DOCKPIPE_WORKFLOW_NAME:-docs.orchestrate}}"
-  default_orch_root="$(dockpipe_sdk scope artifacts orchestrate)"
+  default_orch_root="$(dockpipe scope artifacts orchestrate)"
   export DORKPIPE_ORCH_ROOT="${DORKPIPE_ORCH_ROOT:-${default_orch_root}}"
   mkdir -p "${DORKPIPE_ORCH_ROOT}"
   export DORKPIPE_ORCH_REQUEST_JSON="${DORKPIPE_ORCH_REQUEST_JSON:-${DORKPIPE_ORCH_ROOT}/request.json}"
@@ -26,7 +26,7 @@ dorkpipe_orchestrate_init() {
   export DORKPIPE_ORCH_BASELINE_POLICY="${DORKPIPE_ORCH_BASELINE_POLICY:-${DOCKPIPE_ASSETS_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)}/model-lanes/baseline-policy.yml}"
   export DORKPIPE_ORCH_LANE_PLAN_JSON="${DORKPIPE_ORCH_LANE_PLAN_JSON:-${DORKPIPE_ORCH_LANES_DIR}/plan.json}"
   export DORKPIPE_ORCH_TRAINING_METRICS_JSONL="${DORKPIPE_ORCH_TRAINING_METRICS_JSONL:-${DORKPIPE_ORCH_TRAINING_DIR}/metrics.jsonl}"
-  export DORKPIPE_ORCH_GLOBAL_TRAINING_METRICS="${DORKPIPE_ORCH_GLOBAL_TRAINING_METRICS:-$(dockpipe_sdk scope --package dorkpipe training metrics.jsonl)}"
+  export DORKPIPE_ORCH_GLOBAL_TRAINING_METRICS="${DORKPIPE_ORCH_GLOBAL_TRAINING_METRICS:-$(dockpipe scope --package dorkpipe training metrics.jsonl)}"
   export DORKPIPE_ORCH_TRAINING_MODE="${DORKPIPE_ORCH_TRAINING_MODE:-observe}"
   export DORKPIPE_ORCH_LIVE_MODELS="${DORKPIPE_ORCH_LIVE_MODELS:-true}"
   export DORKPIPE_ORCH_CLOUD_LANES="${DORKPIPE_ORCH_CLOUD_LANES:-false}"
@@ -139,7 +139,7 @@ dorkpipe_orchestrate_dockpipe_bin() {
 
 dorkpipe_orchestrate_container_auth_dir() {
   local provider="${1:?provider}"
-  dockpipe_sdk scope resolver "${provider}" auth-dir
+  dockpipe scope resolver "${provider}" auth-dir
 }
 
 dorkpipe_orchestrate_container_auth_mount() {
@@ -147,9 +147,9 @@ dorkpipe_orchestrate_container_auth_mount() {
   local host_dir container_dir mode
   host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}")" || return 1
   [[ -n "${host_dir}" && -d "${host_dir}" ]] || return 1
-  container_dir="$(dockpipe_sdk scope resolver "${provider}" container-auth-dir)" || return 1
+  container_dir="$(dockpipe scope resolver "${provider}" container-auth-dir)" || return 1
   [[ -n "${container_dir}" ]] || return 1
-  mode="$(dockpipe_sdk scope resolver "${provider}" auth-mount-mode)"
+  mode="$(dockpipe scope resolver "${provider}" auth-mount-mode)"
   case "${mode}" in
     ro|rw) ;;
     *) mode="rw" ;;
@@ -160,15 +160,15 @@ dorkpipe_orchestrate_container_auth_mount() {
 dorkpipe_orchestrate_container_extra_auth_mounts() {
   local provider="${1:?provider}"
   local mode host_file container_file
-  mode="$(dockpipe_sdk scope resolver "${provider}" auth-mount-mode)"
+  mode="$(dockpipe scope resolver "${provider}" auth-mount-mode)"
   case "${mode}" in
     ro|rw) ;;
     *) mode="rw" ;;
   esac
   case "${provider}" in
     claude)
-      host_file="$(dockpipe_sdk scope resolver "${provider}" config-file)"
-      container_file="$(dockpipe_sdk scope resolver "${provider}" container-config-file)"
+      host_file="$(dockpipe scope resolver "${provider}" config-file)"
+      container_file="$(dockpipe scope resolver "${provider}" container-config-file)"
       if [[ -n "${host_file}" && -f "${host_file}" ]]; then
         printf '%s:%s:%s\n' "${host_file}" "${container_file}" "${mode}"
       fi

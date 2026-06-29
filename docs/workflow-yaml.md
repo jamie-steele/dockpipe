@@ -131,8 +131,9 @@ steps:
 DockPipe creates the workflow artifact root under
 **`bin/.dockpipe/workflows/<workflow>/artifacts`** and starts the step there. Scripts can write
 ordinary relative paths such as **`ci-analysis/findings.json`** without polluting source control.
-Scripts should resolve generated paths with **`dockpipe scope`** or **`dockpipe_sdk scope`**. If a
-path must point back into the checkout, make that explicit with **`dockpipe scope source`**.
+Scripts should write ordinary relative paths whenever `cwd` already puts them in the right root.
+When a script needs an explicit generated path, use **`dockpipe scope`**. If a path must point back
+into the checkout, make that explicit with **`dockpipe scope source`**.
 
 When a step needs both worlds, keep **`cwd: repo`** and bind source/artifact scopes explicitly:
 

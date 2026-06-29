@@ -690,9 +690,7 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 		pre = append(pre, infrastructure.ResolveWorkflowScript(r, o.wfRoot, o.repoRoot, o.projectRoot))
 	}
 	if idx == batchStart && idx == 0 {
-		for _, p := range o.firstStepExtra {
-			pre = append(pre, p)
-		}
+		pre = append(pre, o.firstStepExtra...)
 	}
 	for _, p := range pre {
 		if p == "" {
@@ -1057,24 +1055,13 @@ func resolveWorkflowRelativePath(path, wfRoot string) string {
 	return filepath.Clean(filepath.Join(wfRoot, path))
 }
 
-func validateParallelNoHostBuiltin(o *runStepsOpts, from, to int) error {
-	for i := from; i < to; i++ {
-		if strings.TrimSpace(o.wf.Steps[i].HostBuiltin) != "" {
-			return fmt.Errorf("parallel step %d: host_builtin is not supported in non-blocking batches", i+1)
-		}
-	}
-	return nil
-}
-
 func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {
 	var pre []string
 	for _, r := range step.RunPaths() {
 		pre = append(pre, infrastructure.ResolveWorkflowScript(r, o.wfRoot, o.repoRoot, o.projectRoot))
 	}
 	if i == 0 {
-		for _, p := range o.firstStepExtra {
-			pre = append(pre, p)
-		}
+		pre = append(pre, o.firstStepExtra...)
 	}
 	for _, p := range pre {
 		if p == "" {

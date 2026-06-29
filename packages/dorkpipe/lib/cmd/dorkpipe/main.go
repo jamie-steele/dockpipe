@@ -273,6 +273,12 @@ func mustWorkdir(flagValue string) string {
 	if flagValue != "" {
 		return flagValue
 	}
+	if wd := strings.TrimSpace(os.Getenv("DOCKPIPE_SOURCE_ROOT")); wd != "" {
+		return wd
+	}
+	if wd := strings.TrimSpace(os.Getenv("DOCKPIPE_WORKDIR")); wd != "" {
+		return wd
+	}
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -300,15 +306,7 @@ func ciNormalizeScansCmd(argv []string) {
 	fs := flag.NewFlagSet("ci normalize-scans", flag.ExitOnError)
 	workdir := fs.String("workdir", "", "working directory (default cwd); CI paths resolve from workflow scope, with DOCKPIPE_CI_* accepted as advanced overrides")
 	_ = fs.Parse(argv)
-	wd := *workdir
-	if wd == "" {
-		var err error
-		wd, err = os.Getwd()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-	}
+	wd := mustWorkdir(*workdir)
 	env := map[string]string{}
 	for _, kv := range os.Environ() {
 		k, v, ok := strings.Cut(kv, "=")

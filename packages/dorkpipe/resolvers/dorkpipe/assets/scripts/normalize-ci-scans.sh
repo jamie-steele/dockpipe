@@ -7,10 +7,5 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/lib/dorkpipe-cli.sh"
-ROOT="${DOCKPIPE_WORKDIR:-}"
-if [[ -z "$ROOT" ]]; then
-	ROOT="$(dorkpipe_script_repo_root "$SCRIPT_DIR")"
-fi
-[[ -n "$ROOT" ]] || dorkpipe_script_die "DOCKPIPE_WORKDIR is required when repo root cannot be inferred"
 
-dorkpipe_script_exec_cli "$SCRIPT_DIR" ci normalize-scans --workdir "$ROOT"
+dorkpipe_script_exec_cli "$SCRIPT_DIR" ci normalize-scans

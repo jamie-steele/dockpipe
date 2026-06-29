@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # Run script: create/reuse a worktree for DOCKPIPE_REPO_BRANCH and export DOCKPIPE_WORKDIR.
 # Exports DOCKPIPE_COMMIT_ON_HOST=1 so commit-worktree runs on the host after exit.
 #

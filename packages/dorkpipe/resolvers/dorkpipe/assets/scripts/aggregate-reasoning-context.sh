@@ -1,15 +1,7 @@
 #!/usr/bin/env bash
 # Merge package-scoped node outputs into a single context block for downstream prompts.
 set -euo pipefail
-root="$(dockpipe get workdir)"
-if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
-  # shellcheck source=/dev/null
-  source "$DOCKPIPE_SDK_SH"
-  dockpipe_sdk_refresh "$root"
-else
-  eval "$(dockpipe sdk --workdir "$root")"
-fi
-DORKPIPE_NODES_DIR="$(dockpipe_sdk scope --package dorkpipe nodes)"
+DORKPIPE_NODES_DIR="$(dockpipe scope --package dorkpipe nodes)"
 out="${1:-/dev/stdout}"
 {
   echo "# DorkPipe aggregated context"

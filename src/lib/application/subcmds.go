@@ -82,7 +82,7 @@ func cmdInit(args []string) error {
 	}
 
 	if (resolver != "" || runtime != "" || strategy != "") && name == "" {
-		return fmt.Errorf("--resolver, --runtime, and --strategy require a workflow name: dockpipe init <name> ...")
+		return fmt.Errorf("--resolver, --runtime, and --strategy require a workflow name: dockpipe init <name>")
 	}
 	if strings.TrimSpace(from) != "" && name == "" {
 		return fmt.Errorf("--from requires a workflow name: dockpipe init <name> --from <source>")
@@ -275,13 +275,6 @@ func copyFile(src, dst string) error {
 	}
 	_ = os.MkdirAll(filepath.Dir(dst), 0o755)
 	return os.WriteFile(dst, b, 0o644)
-}
-
-func copyFileMaybe(src, dst string) error {
-	if _, err := os.Stat(src); err != nil {
-		return nil
-	}
-	return copyFile(src, dst)
 }
 
 func copyDirMaybe(src, dst string) error {

@@ -5,8 +5,8 @@
 # Optional Codex workflows (same as CI when vars.DOCKPIPE_CI_CODEX=true):
 #   DOCKPIPE_CI_CODEX=true OPENAI_API_KEY=... bash src/scripts/ci-local.sh
 #
-# Requires: Go, make, Docker (for workflow + integration tests), dpkg-deb (for .deb build), jq.
-# govulncheck / gosec: install with  make dev-deps  or  bash src/scripts/install-deps.sh
+# Requires: Go, make, Docker (for workflow + integration tests), dpkg-deb (for .deb build), jq, shellcheck.
+# govulncheck / gosec / staticcheck: install with  make dev-deps  or  bash src/scripts/install-deps.sh
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -32,6 +32,14 @@ if ! have govulncheck; then
 fi
 if ! have gosec; then
 	echo "ci-local: gosec not found. Run:  make dev-deps  or  bash src/scripts/install-deps.sh" >&2
+	exit 1
+fi
+if ! have staticcheck; then
+	echo "ci-local: staticcheck not found. Run:  make dev-deps  or  bash src/scripts/install-deps.sh" >&2
+	exit 1
+fi
+if ! have shellcheck; then
+	echo "ci-local: shellcheck not found. Install shellcheck with your OS package manager." >&2
 	exit 1
 fi
 if ! have jq; then
@@ -64,6 +72,19 @@ make
 
 step "go test"
 go test ./...
+
+step "staticcheck"
+staticcheck ./...
+
+step "shellcheck (syntax errors)"
+mapfile -t shell_scripts < <(git ls-files '*.sh' ':!:src/app/tooling/vscode-extensions/**/node_modules/**' ':!:bin/**')
+existing_shell_scripts=()
+for script in "${shell_scripts[@]}"; do
+	[[ -f "$script" ]] && existing_shell_scripts+=("$script")
+done
+if ((${#existing_shell_scripts[@]})); then
+	shellcheck -S error "${existing_shell_scripts[@]}"
+fi
 
 step "dockpipe package test"
 ./src/bin/dockpipe package test --workdir "$ROOT"

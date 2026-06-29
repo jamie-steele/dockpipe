@@ -10,5 +10,9 @@ docker_preflight: false
 steps:
   - id: handoff
     kind: host
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
     run:
       - scripts/dorkpipe/compliance-handoff.sh

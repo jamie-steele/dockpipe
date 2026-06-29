@@ -31,7 +31,8 @@ var (
 
 func envGet(env []string, key string) string {
 	prefix := key + "="
-	for _, e := range env {
+	for i := len(env) - 1; i >= 0; i-- {
+		e := env[i]
 		if strings.HasPrefix(e, prefix) {
 			return strings.TrimPrefix(e, prefix)
 		}

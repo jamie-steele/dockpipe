@@ -389,7 +389,7 @@ func extractTarGzCore(gz []byte, destCore string) error {
 				if err := os.MkdirAll(target, 0o755); err != nil {
 					return err
 				}
-			case tar.TypeReg, tar.TypeRegA:
+			case tar.TypeReg, 0:
 				if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 					return err
 				}
@@ -463,7 +463,7 @@ func verifyExtractedTreeMatchesTarGz(gz []byte, destCore string) error {
 				if !st.IsDir() {
 					return fmt.Errorf("not a directory %s", target)
 				}
-			case tar.TypeReg, tar.TypeRegA:
+			case tar.TypeReg, 0:
 				if hdr.Size < 0 {
 					return fmt.Errorf("invalid size for %q", hdr.Name)
 				}

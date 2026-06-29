@@ -3,15 +3,8 @@
 # Bounded size; no network. Run after enabling Pipeon (see lib/enable.sh).
 set -euo pipefail
 
-ROOT="$(dockpipe get workdir)"
-if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
-	# shellcheck source=/dev/null
-	source "$DOCKPIPE_SDK_SH"
-	dockpipe_sdk_refresh "$ROOT"
-else
-	eval "$(dockpipe sdk --workdir "$ROOT")"
-fi
-OUT="$(dockpipe_sdk scope --package pipeon .)"
+ROOT="$(pwd)"
+OUT="$(dockpipe scope --package pipeon .)"
 CTX="$OUT/pipeon-context.md"
 mkdir -p "$OUT"
 
@@ -41,7 +34,7 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo "## CI / scans"
 	echo ""
 
-	CI_ANALYSIS_DIR="$(dockpipe_sdk ci analysis)"
+	CI_ANALYSIS_DIR="$(dockpipe scope artifacts ci-analysis)"
 	echo ""
 	echo "- **analysis dir:** \`$CI_ANALYSIS_DIR\`"
 	FIND="$CI_ANALYSIS_DIR/findings.json"
@@ -66,7 +59,7 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo ""
 	echo "## User insights (DockPipe analysis scope)"
 	echo ""
-	INS="$(dockpipe_sdk scope --package dorkpipe analysis/insights.json)"
+	INS="$(dockpipe scope --package dorkpipe analysis/insights.json)"
 	if [[ -f "$INS" ]] && have_jq; then
 		echo "- **file:** present"
 		jq -r '"- count: " + ((.insights // []) | length | tostring)' "$INS" 2>/dev/null || true
@@ -78,9 +71,9 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo ""
 	echo "## Orchestrator / run metadata (DorkPipe package scope)"
 	echo ""
-	DORKPIPE_STATE_DIR="$(dockpipe_sdk scope --package dorkpipe .)"
-	if [[ -f "$DORKPIPE_STATE_DIR/run.json" ]] && have_jq; then
-		jq '{name, ts, policy}' "$DORKPIPE_STATE_DIR/run.json" 2>/dev/null | sed 's/^/    /' || true
+	DORKPIPE_SCOPE_DIR="$(dockpipe scope --package dorkpipe .)"
+	if [[ -f "$DORKPIPE_SCOPE_DIR/run.json" ]] && have_jq; then
+		jq '{name, ts, policy}' "$DORKPIPE_SCOPE_DIR/run.json" 2>/dev/null | sed 's/^/    /' || true
 	else
 		echo "- **run.json:** not present"
 	fi
@@ -88,7 +81,7 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo ""
 	echo "## Self-analysis bundle (DorkPipe package scope)"
 	echo ""
-	DORKPIPE_SELF_ANALYSIS_DIR="$DORKPIPE_STATE_DIR/self-analysis"
+	DORKPIPE_SELF_ANALYSIS_DIR="$DORKPIPE_SCOPE_DIR/self-analysis"
 	if [[ -d "$DORKPIPE_SELF_ANALYSIS_DIR" ]] && [[ -n "$(ls -A "$DORKPIPE_SELF_ANALYSIS_DIR" 2>/dev/null)" ]]; then
 		ls -1 "$DORKPIPE_SELF_ANALYSIS_DIR" 2>/dev/null | head -30 | sed 's/^/- /'
 	else

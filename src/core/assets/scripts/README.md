@@ -10,10 +10,11 @@
 - **`src/core/assets/scripts/lib/repo_tools.py`**
 - **`src/core/assets/scripts/lib/repotools/repotools.go`**
 
-For shell, prefer direct CLI getters for plain context reads:
+For shell workflow authors, prefer explicit workflow `cwd` and normal relative paths. When a script
+needs the source checkout explicitly, use the scope CLI:
 
 ```bash
-dockpipe get workdir
+dockpipe scope source
 ```
 
 ## Injected script context
@@ -31,10 +32,9 @@ context into the environment. The backing env vars are:
 - `DOCKPIPE_PACKAGE_ID`
 - `DOCKPIPE_PACKAGE_STATE_DIR`
 
-The public shell authoring API for reading those values is `dockpipe get ...`:
+The public shell authoring API for reading package/script metadata is `dockpipe get ...`:
 
 ```bash
-dockpipe get workdir
 dockpipe get workflow_name
 dockpipe get script_dir
 dockpipe get package_root
@@ -47,7 +47,8 @@ dockpipe get package_state_dir
 
 Recommended usage:
 
-- Package scripts and examples: use `dockpipe get ...`
+- Package scripts and examples: use workflow `cwd`, relative paths, and `dockpipe scope ...`
+- Package/script metadata: use `dockpipe get ...`
 - Shell-only behavior that must mutate the current shell: use `eval "$(dockpipe sdk)"` and `dockpipe_sdk ...`
 - Low-level implementation helpers may read the backing env vars directly when they are intentionally
   avoiding subprocess overhead, but that is an internal optimization, not the default authoring style
@@ -58,22 +59,29 @@ The important mapping is:
 - `dockpipe get package_root` reads injected `DOCKPIPE_PACKAGE_ROOT`
 - `dockpipe get assets_dir` reads injected `DOCKPIPE_ASSETS_DIR`
 - `dockpipe get workflow_name` reads injected `DOCKPIPE_WORKFLOW_NAME`
-- `dockpipe get workdir` prefers injected `DOCKPIPE_WORKDIR` and otherwise falls back to the current directory
+- `dockpipe get workdir` prefers injected `DOCKPIPE_WORKDIR` and otherwise falls back to the current directory; authored scripts should usually use `pwd` after setting workflow `cwd`
 - `dockpipe get dockpipe_bin` resolves the active DockPipe binary for the current workdir
 - `dockpipe get state_dir` reads `DOCKPIPE_STATE_DIR` or defaults to `<workdir>/bin/.dockpipe`
 - `dockpipe get artifact_root` reads `DOCKPIPE_ARTIFACT_ROOT` or defaults to the current workflow artifact root
 - `dockpipe get output_root` reads `DOCKPIPE_OUTPUT_ROOT` or falls back to the artifact root
 - `dockpipe get package_state_dir` reads `DOCKPIPE_PACKAGE_STATE_DIR` or defaults to `<state_dir>/packages/<package_id>`
 
-For generated artifacts, prefer the shell SDK path helper instead of hand-writing `tmp/`,
-`.dockpipe/`, or package/workflow state paths:
+For generated artifacts, prefer `dockpipe scope` instead of hand-writing `tmp/`, `.dockpipe/`, or
+package/workflow state paths:
+
+```bash
+dockpipe scope artifacts providers/codex/result.json
+dockpipe scope workflow docs.orchestrate orchestrate
+dockpipe scope --package dorkpipe training metrics.jsonl
+```
+
+Use `dockpipe_sdk` for shell actions that need to affect the current shell or load shared shell
+helpers:
 
 ```bash
 eval "$(dockpipe sdk)"
 dockpipe_sdk path build npm-cache
-dockpipe_sdk scope artifacts providers/codex/result.json
-dockpipe_sdk scope workflow docs.orchestrate orchestrate
-dockpipe_sdk scope --package dorkpipe training metrics.jsonl
+dockpipe_sdk source terraform-pipeline
 ```
 
 `dockpipe scope` prints the current workflow scope object with `source_root`, `output_root`, and

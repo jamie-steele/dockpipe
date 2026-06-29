@@ -109,7 +109,7 @@ func workflowTypedInputsMissingError(wf *domain.Workflow, step *domain.Step) err
 		return fmt.Errorf("workflow uses inputs: but no typed workflow inputs could be resolved")
 	}
 	if len(wf.Types) > 0 {
-		return fmt.Errorf("workflow uses inputs: but no typed workflow inputs could be resolved from types:")
+		return fmt.Errorf("workflow uses inputs but no typed workflow inputs could be resolved from types")
 	}
 	resolverName := strings.TrimSpace(wf.Resolver)
 	runtimeName := strings.TrimSpace(wf.Runtime)

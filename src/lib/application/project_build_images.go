@@ -114,10 +114,6 @@ func imageArtifactBuildPathsExist(root string, artifact *domain.ImageArtifactMan
 	return err == nil && ctx.IsDir()
 }
 
-func prebuildCompiledImageArtifact(workdir string, artifact *domain.ImageArtifactManifest) (bool, error) {
-	return prebuildCompiledImageArtifactFromRoot(workdir, workdir, artifact)
-}
-
 func prebuildCompiledImageArtifactFromRoot(workdir, buildRoot string, artifact *domain.ImageArtifactManifest) (bool, error) {
 	if artifact == nil || strings.TrimSpace(artifact.Source) != "build" || artifact.Build == nil {
 		return false, nil

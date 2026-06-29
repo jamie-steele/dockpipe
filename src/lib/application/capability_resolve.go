@@ -51,8 +51,5 @@ func WorkflowNeedsDockerReachableResolved(wf *domain.Workflow, workdir, repoRoot
 			}
 		}
 	}
-	if len(wf.Run) > 0 {
-		return true
-	}
-	return false
+	return len(wf.Run) > 0
 }

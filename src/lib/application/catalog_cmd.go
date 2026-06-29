@@ -81,9 +81,15 @@ type catalogListOutput struct {
 	Runtimes   []string                `json:"runtimes"`
 }
 
+type usageError string
+
+func (e usageError) Error() string {
+	return string(e)
+}
+
 func cmdCatalog(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf(`usage: dockpipe catalog list [--workdir <path>] [--format json|text]
+		return usageError(`usage: dockpipe catalog list [--workdir <path>] [--format json|text]
 
   Prints the launcher-facing DockPipe catalog. The launcher should consume this contract instead of
   scanning repo/package trees directly.`)
@@ -237,10 +243,6 @@ type catalogWorkflowTypeEntry struct {
 
 func buildCatalogWorkflowInputs(cfgPath string, wf *domain.Workflow) []catalogWorkflowInputRecord {
 	return buildCatalogWorkflowInputsForStepWithProjectRoot(cfgPath, "", wf, nil)
-}
-
-func buildCatalogWorkflowInputsForStep(cfgPath string, wf *domain.Workflow, step *domain.Step) []catalogWorkflowInputRecord {
-	return buildCatalogWorkflowInputsForStepWithProjectRoot(cfgPath, "", wf, step)
 }
 
 func buildCatalogWorkflowInputsForStepWithProjectRoot(cfgPath, projectRoot string, wf *domain.Workflow, step *domain.Step) []catalogWorkflowInputRecord {
@@ -740,68 +742,6 @@ func findCatalogClassDefaults(prog *pipelang.Program, className string) map[stri
 			}
 		}
 		break
-	}
-	return out
-}
-
-func extractCatalogPipeFieldDocs(path string) map[string]string {
-	out := map[string]string{}
-	f, err := os.Open(path)
-	if err != nil {
-		return out
-	}
-	defer f.Close()
-
-	var pending []string
-	inSummary := false
-	sc := bufio.NewScanner(f)
-	for sc.Scan() {
-		line := sc.Text()
-		if inSummary {
-			if m := pipeSummaryEndRe.FindStringSubmatch(line); len(m) == 2 {
-				text := strings.TrimSpace(m[1])
-				if text != "" {
-					pending = append(pending, text)
-				}
-				inSummary = false
-				continue
-			}
-			text := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "///"))
-			if text != "" {
-				pending = append(pending, text)
-			}
-			continue
-		}
-		if m := pipeSummaryStartRe.FindStringSubmatch(line); len(m) == 2 {
-			text := strings.TrimSpace(m[1])
-			if strings.Contains(text, "</summary>") {
-				text = strings.TrimSpace(strings.TrimSuffix(text, "</summary>"))
-				if text != "" {
-					pending = append(pending, text)
-				}
-				inSummary = false
-			} else {
-				if text != "" {
-					pending = append(pending, text)
-				}
-				inSummary = true
-			}
-			continue
-		}
-		if m := pipeFieldLineRe.FindStringSubmatch(line); len(m) == 3 {
-			fieldName := strings.TrimSpace(m[2])
-			if fieldName != "" && len(pending) > 0 {
-				out[fieldName] = strings.Join(pending, " ")
-			}
-			pending = nil
-			continue
-		}
-		if pipeAnnotationLineRe.MatchString(line) {
-			continue
-		}
-		if strings.TrimSpace(line) != "" {
-			pending = nil
-		}
 	}
 	return out
 }

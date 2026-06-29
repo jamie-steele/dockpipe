@@ -2,7 +2,7 @@
 # Pipeon feature gate: explicit enable + minimum version (default 0.6.5) unless prerelease allowed.
 # Source from other scripts:  source "$(dirname ...)/lib/enable.sh"
 set -euo pipefail
-ROOT="$(dockpipe get workdir)"
+ROOT="$(pwd)"
 
 # DOCKPIPE_PIPEON=1 (or "true") — required to run Pipeon commands.
 # DOCKPIPE_PIPEON_MIN_VERSION — semver string, default 0.6.5 (release when Pipeon is officially on).

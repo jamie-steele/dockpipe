@@ -9,9 +9,17 @@ docker_preflight: false
 steps:
   - id: process
     kind: host
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
     run:
       - scripts/dorkpipe/user-insight-process.sh
   - id: export
     kind: host
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
     run:
       - scripts/dorkpipe/user-insight-export-by-category.sh

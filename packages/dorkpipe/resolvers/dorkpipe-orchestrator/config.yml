@@ -7,5 +7,9 @@ description: >-
 steps:
   - id: orchestrate
     kind: host
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
     run:
       - assets/scripts/run-orchestrator.sh

@@ -229,7 +229,6 @@ func translateMountSpec(distro, val string) string {
 		if strings.HasSuffix(lower, suf) {
 			modeSuffix = val[len(val)-len(suf):]
 			val = val[:len(val)-len(suf)]
-			lower = strings.ToLower(val)
 			break
 		}
 	}

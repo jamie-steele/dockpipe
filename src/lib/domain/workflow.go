@@ -804,7 +804,7 @@ func ValidateWorkflowSingleFlowFields(w *Workflow) error {
 		return nil
 	}
 	if len(w.Run) > 0 {
-		return fmt.Errorf("workflow with steps: uses top-level run; move those host pre-scripts onto a step with run: or pre_script:")
+		return fmt.Errorf("workflow with steps uses top-level run; move those host pre-scripts onto a step with run: or pre_script")
 	}
 	if strings.TrimSpace(w.Act) != "" || strings.TrimSpace(w.Action) != "" {
 		return fmt.Errorf("workflow with steps: uses top-level act/action; set act/action on the specific step that needs it")
@@ -926,10 +926,10 @@ func ValidateStepPackageInvocation(i int, s Step) error {
 		return fmt.Errorf("step %d: packaged workflow step requires package: <namespace>", i+1)
 	}
 	if strings.TrimSpace(s.Resolver) != "" {
-		return fmt.Errorf("step %d: packaged workflow step uses workflow: <name>; do not also set resolver:", i+1)
+		return fmt.Errorf("step %d: packaged workflow step uses workflow: <name>; do not also set resolver", i+1)
 	}
 	if strings.TrimSpace(s.Isolate) != "" {
-		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set isolate:", i+1)
+		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set isolate", i+1)
 	}
 	if strings.TrimSpace(s.CmdLine()) != "" {
 		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set cmd/command", i+1)
@@ -941,7 +941,7 @@ func ValidateStepPackageInvocation(i int, s Step) error {
 		return fmt.Errorf("step %d: packaged workflow step cannot use kind: host", i+1)
 	}
 	if !WorkflowSecurityConfigIsEmpty(s.Security) {
-		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set security:", i+1)
+		return fmt.Errorf("step %d: packaged workflow step uses workflow/package; do not also set security", i+1)
 	}
 	return nil
 }

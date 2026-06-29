@@ -3,9 +3,6 @@
 # Requires: op, OP_ENV_FILE (default .env.op.template), SECRET_ENV_OUT (must match step outputs: path).
 set -euo pipefail
 
-ROOT="$(dockpipe get workdir)"
-cd "$ROOT"
-
 die() { echo "secretstore-op-inject: $*" >&2; exit 1; }
 
 command -v op >/dev/null 2>&1 || die "install 1Password CLI (https://developer.1password.com/docs/cli/)"

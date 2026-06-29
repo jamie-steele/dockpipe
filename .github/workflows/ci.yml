@@ -50,6 +50,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             cmake \
             build-essential \
+            shellcheck \
             qt6-base-dev \
             libgl1-mesa-dev \
             libegl1-mesa-dev
@@ -60,12 +61,12 @@ jobs:
           DOCKPIPE_WORKFLOW_NAME: ci
         run: |
           set -euo pipefail
-          eval "$(./src/bin/dockpipe sdk --workdir "$DOCKPIPE_WORKDIR")"
-          CI_RAW_DIR="$(dockpipe_sdk ci raw)"
-          CI_ANALYSIS_DIR="$(dockpipe_sdk ci analysis)"
+          CI_RAW_DIR="$(./src/bin/dockpipe scope artifacts ci-raw --workdir "$DOCKPIPE_WORKDIR")"
+          CI_ANALYSIS_DIR="$(./src/bin/dockpipe scope artifacts ci-analysis --workdir "$DOCKPIPE_WORKDIR")"
           rm -rf "$CI_RAW_DIR" "$CI_ANALYSIS_DIR"
           mkdir -p "$CI_RAW_DIR"
           GOBIN="$(go env GOPATH)/bin"
+          go install honnef.co/go/tools/cmd/staticcheck@latest
           go install golang.org/x/vuln/cmd/govulncheck@latest
           go install github.com/securego/gosec/v2/cmd/gosec@latest
           set +e
@@ -93,10 +94,26 @@ jobs:
       - name: Go test
         run: go test ./...
 
+      - name: Staticcheck
+        run: staticcheck ./...
+
+      - name: ShellCheck syntax gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t shell_scripts < <(git ls-files '*.sh' ':!:src/app/tooling/vscode-extensions/**/node_modules/**' ':!:bin/**')
+          existing_shell_scripts=()
+          for script in "${shell_scripts[@]}"; do
+            [[ -f "$script" ]] && existing_shell_scripts+=("$script")
+          done
+          if ((${#existing_shell_scripts[@]})); then
+            shellcheck -S error "${existing_shell_scripts[@]}"
+          fi
+
       - name: Templates/core path guard (docs + code)
         run: bash src/scripts/check-templates-core-paths.sh
 
-      # Workflow "test" = go test + vet + govulncheck + gosec inside Docker (tools installed in-container; only mod cache mounted).
+      # Workflow "test" = go test + vet + staticcheck + govulncheck + gosec inside Docker (tools installed in-container; only mod cache mounted).
       - name: DockPipe workflow — test
         env:
           DOCKPIPE_REPO_ROOT: ${{ github.workspace }}

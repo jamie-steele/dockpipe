@@ -32,14 +32,14 @@ fi
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-export DOCKPIPE_WORKDIR="$tmp"
+unset DOCKPIPE_WORKDIR
 
-if ! "$PIPEON" bundle >/dev/null; then
+if ! (cd "$tmp" && "$PIPEON" bundle >/dev/null); then
 	echo "test_pipeon: bundle failed in empty repo" >&2
 	exit 1
 fi
 
-pipeon_context="$(DOCKPIPE_WORKDIR="$tmp" "$ROOT/src/bin/dockpipe" scope --package pipeon pipeon-context.md)"
+pipeon_context="$("$ROOT/src/bin/dockpipe" scope --package pipeon pipeon-context.md --workdir "$tmp")"
 if [[ ! -f "$pipeon_context" ]]; then
 	echo "test_pipeon: missing pipeon-context.md" >&2
 	exit 1

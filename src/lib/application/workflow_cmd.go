@@ -12,7 +12,7 @@ import (
 
 func cmdWorkflow(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf(`usage: dockpipe workflow validate [path]
+		return usageError(`usage: dockpipe workflow validate [path]
        dockpipe workflow test [--workdir <path>] [--only <workflow>]
        dockpipe workflow list [--workdir <path>] [--format json|text]
 

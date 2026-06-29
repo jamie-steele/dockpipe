@@ -10,6 +10,9 @@ docker_preflight: false
 steps:
   - id: summarize
     kind: host
-    cwd: artifacts
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
     run:
       - scripts/dockpipe/repo-ci-summary.sh

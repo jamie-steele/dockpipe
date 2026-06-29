@@ -106,3 +106,15 @@ packages/pipeon/resolvers/pipeon/vscode-extension/*.vsix
 src/app/tooling/vscode-extensions/dockpipe-language-support/node_modules/
 src/app/tooling/vscode-extensions/dockpipe-language-support/*.vsix
 src/app/tooling/vscode-extensions/dockpipe-language-support/dist/
+
+.agents/*
+
+# BEGIN dockpipe-gitignore
+# Local tooling and cache (see dockpipe docs). Safe to re-run; idempotent.
+# Compile output and host-run state live under bin/.dockpipe/ (ignored if you already ignore bin/).
+bin/.dockpipe/
+.gocache/
+.gomodcache/
+tmp/
+# END dockpipe-gitignore
+

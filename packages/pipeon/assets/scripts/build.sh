@@ -41,26 +41,16 @@ pipeon_resolve_repo_root() {
 }
 
 REPO_ROOT="$(pipeon_resolve_repo_root)"
-SDK_SH="$REPO_ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh"
+DOCKPIPE_BIN="${DOCKPIPE_BIN:-$REPO_ROOT/src/bin/dockpipe}"
+BUILD_ROOT="$REPO_ROOT/bin/.dockpipe/build"
 
-if [[ -f "$SDK_SH" ]]; then
-  # shellcheck source=/dev/null
-  source "$SDK_SH"
-  dockpipe_sdk_refresh "$REPO_ROOT"
-  PACKAGE_ROOT="$(dockpipe get package_root 2>/dev/null || printf '%s\n' "$PACKAGE_ROOT")"
-  SDK_WORKDIR="$(dockpipe get workdir 2>/dev/null || true)"
-  if pipeon_is_repo_root "$SDK_WORKDIR"; then
-    REPO_ROOT="$SDK_WORKDIR"
-  fi
-fi
-
-PIPEON_DESKTOP_TARGET_DIR="${PIPEON_DESKTOP_TARGET_DIR:-$(dockpipe_sdk path build pipeon-desktop-target)}"
-PIPEON_EXTENSIONS_DIR="${PIPEON_EXTENSIONS_DIR:-$(dockpipe_sdk scope --package pipeon extensions)}"
+PIPEON_DESKTOP_TARGET_DIR="${PIPEON_DESKTOP_TARGET_DIR:-$BUILD_ROOT/pipeon-desktop-target}"
+PIPEON_EXTENSIONS_DIR="${PIPEON_EXTENSIONS_DIR:-$("$DOCKPIPE_BIN" scope --package pipeon extensions --workdir "$REPO_ROOT")}"
 PIPEON_VSCODE_EXT_SRC="$REPO_ROOT/packages/pipeon/resolvers/pipeon/vscode-extension"
-PIPEON_VSCODE_EXT_BUILD_DIR="${PIPEON_VSCODE_EXT_BUILD_DIR:-$(dockpipe_sdk path build pipeon-vscode-extension)}"
-PIPEON_VSCODE_EXT_NPM_CACHE="${PIPEON_VSCODE_EXT_NPM_CACHE:-$(dockpipe_sdk path build npm-cache)}"
+PIPEON_VSCODE_EXT_BUILD_DIR="${PIPEON_VSCODE_EXT_BUILD_DIR:-$BUILD_ROOT/pipeon-vscode-extension}"
+PIPEON_VSCODE_EXT_NPM_CACHE="${PIPEON_VSCODE_EXT_NPM_CACHE:-$BUILD_ROOT/npm-cache}"
 DOCKPIPE_VSCODE_EXT_DIR="$REPO_ROOT/src/app/tooling/vscode-extensions/dockpipe-language-support"
-DOCKPIPE_VSCODE_TMP_CACHE="$(dockpipe_sdk path build npm-cache)"
+DOCKPIPE_VSCODE_TMP_CACHE="$BUILD_ROOT/npm-cache"
 PIPEON_WINDOWS_BUILD_HELPER="$REPO_ROOT/packages/pipeon/assets/scripts/build-desktop-windows.ps1"
 PIPEON_WINDOWS_VSIX_HELPER="$REPO_ROOT/packages/pipeon/assets/scripts/package-vsix-windows.ps1"
 

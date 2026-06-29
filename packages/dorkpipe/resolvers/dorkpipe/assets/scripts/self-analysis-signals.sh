@@ -1,16 +1,9 @@
 #!/usr/bin/env bash
 # Search-based signals (grounded).
 set -euo pipefail
-ROOT="$(dockpipe get workdir)"
-if [[ -n "${DOCKPIPE_SDK_SH:-}" && -f "$DOCKPIPE_SDK_SH" ]]; then
-	# shellcheck source=/dev/null
-	source "$DOCKPIPE_SDK_SH"
-	dockpipe_sdk_refresh "$ROOT"
-else
-	eval "$(dockpipe sdk --workdir "$ROOT")"
-fi
-DORKPIPE_STATE_DIR="$(dockpipe_sdk scope --package dorkpipe .)"
-OUT="$DORKPIPE_STATE_DIR/self-analysis"
+ROOT="$(pwd)"
+OUT="$(dockpipe scope --package dorkpipe self-analysis)"
+METRICS="$(dockpipe scope --package dorkpipe metrics.jsonl)"
 mkdir -p "$OUT"
 
 todo_hits() {
@@ -60,8 +53,8 @@ engine_files() {
 	fi
 } >"$OUT/signals_go_list.txt"
 
-if [[ -f "$DORKPIPE_STATE_DIR/metrics.jsonl" ]]; then
-	tail -5 "$DORKPIPE_STATE_DIR/metrics.jsonl" >"$OUT/signals_metrics_tail.txt" || true
+if [[ -f "$METRICS" ]]; then
+	tail -5 "$METRICS" >"$OUT/signals_metrics_tail.txt" || true
 else
 	echo "(no DorkPipe package metrics.jsonl yet — run dorkpipe eval after orchestrator runs)" >"$OUT/signals_metrics_tail.txt"
 fi

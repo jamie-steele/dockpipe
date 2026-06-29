@@ -2,7 +2,7 @@
 # Host prep: Cursor desktop hints + AI agent / MCP quickstart (no remote Cursor server).
 set -euo pipefail
 
-ROOT="$(dockpipe get workdir)"
+ROOT="$(pwd)"
 STATE_ROOT="$(dockpipe scope --package cursor-dev .)"
 DIR="$STATE_ROOT"
 mkdir -p "$DIR"

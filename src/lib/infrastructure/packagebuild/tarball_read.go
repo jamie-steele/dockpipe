@@ -71,7 +71,7 @@ func ListTarGzMemberPaths(tarGzPath string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
-		if hdr.Typeflag != tar.TypeReg && hdr.Typeflag != tar.TypeRegA {
+		if hdr.Typeflag != tar.TypeReg && hdr.Typeflag != 0 {
 			continue
 		}
 		name := strings.TrimSuffix(strings.TrimSpace(hdr.Name), "/")

@@ -2,7 +2,6 @@ package pipelang
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 )
 
@@ -343,13 +342,4 @@ func pickEntryClass(cp *checkedProgram, name string) (*ClassDecl, error) {
 		}
 	}
 	return nil, fmt.Errorf("no public class declarations found")
-}
-
-func sortedClassNames(cp *checkedProgram) []string {
-	out := make([]string, 0, len(cp.classes))
-	for name := range cp.classes {
-		out = append(out, name)
-	}
-	sort.Strings(out)
-	return out
 }

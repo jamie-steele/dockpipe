@@ -14,7 +14,7 @@ Language support for DockPipe authoring:
 - DockPipe `package.yml` image metadata hints for package-owned OCI image refs
 - DockPipe `package.yml` support for `script_contract.inject` with valid generic injectable suggestions
 - DockPipe `dockpipe.config.json` hover/docs and section-key completion
-- First-party package script IntelliSense for the shared DockPipe SDK surface in shell, PowerShell, Python, and Go
+- First-party package script IntelliSense for workflow cwd, `dockpipe scope`, and focused DockPipe SDK helpers in shell, PowerShell, Python, and Go
 - Runtime path env suggestions for scripts: `DOCKPIPE_SOURCE_ROOT`, `DOCKPIPE_ARTIFACT_ROOT`, `DOCKPIPE_OUTPUT_ROOT`, and `DOCKPIPE_STEP_CWD`
 - Structure-aware YAML semantic coloring for workflow keys, step keys, `vars:` fields, and `types:` entries
 - YAML parse diagnostics for DockPipe workflow files (`config.yml` / `config.yaml`)
@@ -22,9 +22,10 @@ Language support for DockPipe authoring:
 - `vars:` value suggestions from implementing class defaults and nearby `Struct` known-values
 - Completion/hover for SDK-object patterns:
   - shell:
-    - getters: `dockpipe get workdir`, `dockpipe get workflow_name`, `dockpipe get script_dir`, `dockpipe get package_root`, `dockpipe get assets_dir`, `dockpipe get dockpipe_bin`
-    - scopes: `dockpipe scope`, `dockpipe scope workflow <name> <path>`, `dockpipe scope --package <name>`, `dockpipe scope resolver <name> auth-dir`, `dockpipe_sdk scope ...`
-    - shell-only actions: `eval "$(dockpipe sdk)"` then `dockpipe_sdk init-script`, `dockpipe_sdk cd-workdir`, `dockpipe_sdk require dockpipe-bin`, `dockpipe_sdk require workflow-name`, `dockpipe_sdk source terraform-pipeline`, `dockpipe_sdk die`
+    - cwd/source: prefer `pwd` under explicit workflow `cwd`; use `dockpipe scope source` when a script must resolve the source checkout from another cwd
+    - getters: `dockpipe get workflow_name`, `dockpipe get script_dir`, `dockpipe get package_root`, `dockpipe get assets_dir`, `dockpipe get dockpipe_bin`
+    - scopes: `dockpipe scope`, `dockpipe scope artifacts <path>`, `dockpipe scope source <path>`, `dockpipe scope workflow <name> <path>`, `dockpipe scope --package <name>`, `dockpipe scope resolver <name> auth-dir`
+    - shell-only actions: `eval "$(dockpipe sdk)"` then `dockpipe_sdk init-script`, `dockpipe_sdk require dockpipe-bin`, `dockpipe_sdk require workflow-name`, `dockpipe_sdk source terraform-pipeline`, `dockpipe_sdk die`
   - PowerShell: `$dockpipe.Workdir`, `$dockpipe.DockpipeBin`, `$dockpipe.WorkflowName`, `$dockpipe.ScriptDir`, `$dockpipe.PackageRoot`, `$dockpipe.AssetsDir`, `Invoke-DockpipeScope`
   - Python: `dockpipe.workdir`, `dockpipe.dockpipe_bin`, `dockpipe.workflow_name`, `dockpipe.script_dir`, `dockpipe.package_root`, `dockpipe.assets_dir`, `dockpipe.scope(...)`
   - Go: `dockpipe.Workdir`, `dockpipe.DockpipeBin`, `dockpipe.WorkflowName`, `dockpipe.ScriptDir`, `dockpipe.PackageRoot`, `dockpipe.AssetsDir`, `dockpipe.WorkflowScope()`, `dockpipe.PackageScope(...)`

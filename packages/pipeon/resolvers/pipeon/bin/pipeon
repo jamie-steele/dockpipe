@@ -23,7 +23,6 @@ fi
 if [[ -n "${DOCKPIPE_BIN:-}" ]]; then
   export PATH="$(dirname "$DOCKPIPE_BIN")${PATH:+:$PATH}"
 fi
-export DOCKPIPE_SDK_SH="${DOCKPIPE_SDK_SH:-$REPO_ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh}"
 if [[ -z "${DOCKPIPE_HOST_BASH_BIN:-}" ]]; then
   for candidate in \
     "${BASH:-}" \

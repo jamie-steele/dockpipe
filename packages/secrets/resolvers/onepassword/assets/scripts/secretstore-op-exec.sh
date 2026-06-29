@@ -2,9 +2,6 @@
 # 1Password CLI: op run --env-file for the onepassword package workflow.
 set -euo pipefail
 
-ROOT="$(dockpipe get workdir)"
-cd "$ROOT"
-
 die() { echo "secretstore-op-exec: $*" >&2; exit 1; }
 
 PROVIDER="${SECRETSTORE_PROVIDER:-op}"
