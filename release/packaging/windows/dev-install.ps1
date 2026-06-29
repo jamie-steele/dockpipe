@@ -50,7 +50,7 @@ if (-not $Version) {
     throw "VERSION is empty. Pass -Version explicitly or fix the repo VERSION file."
 }
 
-$stageRoot = Join-Path $repoRoot "bin\dev-install"
+$stageRoot = Join-Path $repoRoot "bin\.dockpipe\build\dev-install"
 $buildExe = Join-Path $stageRoot "dockpipe.exe"
 $repoBinDir = Join-Path $repoRoot "src\bin"
 $repoExe = Join-Path $repoBinDir "dockpipe.exe"

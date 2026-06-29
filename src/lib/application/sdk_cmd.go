@@ -576,17 +576,11 @@ func sanitizeNamedScope(scope string) string {
 }
 
 func resolveDockpipeBinForSDK(workdir string) (string, error) {
+	if local := resolveRepoLocalDockpipeBin(workdir); local != "" {
+		return local, nil
+	}
 	if configured := strings.TrimSpace(os.Getenv("DOCKPIPE_BIN")); configured != "" {
 		return configured, nil
-	}
-	candidates := []string{
-		filepath.Join(workdir, "src", "bin", "dockpipe"),
-		filepath.Join(workdir, "src", "bin", "dockpipe.exe"),
-	}
-	for _, candidate := range candidates {
-		if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
-			return candidate, nil
-		}
 	}
 	path, err := exec.LookPath("dockpipe")
 	if err != nil {
@@ -598,9 +592,6 @@ func resolveDockpipeBinForSDK(workdir string) (string, error) {
 var osExecutableFn = os.Executable
 
 func resolveDockpipeBinForChildProcess(workdir string) (string, error) {
-	if configured := strings.TrimSpace(os.Getenv("DOCKPIPE_BIN")); configured != "" {
-		return configured, nil
-	}
 	if exe, err := osExecutableFn(); err == nil {
 		exe = strings.TrimSpace(exe)
 		if exe != "" {
@@ -610,6 +601,19 @@ func resolveDockpipeBinForChildProcess(workdir string) (string, error) {
 		}
 	}
 	return resolveDockpipeBinForSDK(workdir)
+}
+
+func resolveRepoLocalDockpipeBin(workdir string) string {
+	candidates := []string{
+		filepath.Join(workdir, "src", "bin", "dockpipe.exe"),
+		filepath.Join(workdir, "src", "bin", "dockpipe"),
+	}
+	for _, candidate := range candidates {
+		if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
+			return candidate
+		}
+	}
+	return ""
 }
 
 func normalizeGetField(s string) string {
