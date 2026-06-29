@@ -1,7 +1,6 @@
 package application
 
 import (
-	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -102,7 +101,7 @@ func TestMergeStepVarsRespectsLocks(t *testing.T) {
 	}
 }
 
-func TestApplyContainerPathEnvMapsDockpipeBinAndPath(t *testing.T) {
+func TestApplyContainerPathEnvMapsDockpipeBin(t *testing.T) {
 	workHost := filepath.Join(string(filepath.Separator), "repo")
 	dockpipeBin := filepath.Join(workHost, "src", "bin", "dockpipe")
 	env := map[string]string{
@@ -116,9 +115,8 @@ func TestApplyContainerPathEnvMapsDockpipeBinAndPath(t *testing.T) {
 	if got, want := env["DOCKPIPE_BIN"], "/work/src/bin/dockpipe"; got != want {
 		t.Fatalf("DOCKPIPE_BIN = %q want %q", got, want)
 	}
-	wantDir := path.Dir("/work/src/bin/dockpipe")
-	if got := env["PATH"]; !strings.HasPrefix(got, wantDir+":") {
-		t.Fatalf("PATH = %q want prefix %q", got, wantDir+":")
+	if got, want := env["PATH"], "/usr/local/bin:/usr/bin:/bin"; got != want {
+		t.Fatalf("PATH = %q want unchanged %q", got, want)
 	}
 }
 
@@ -144,7 +142,7 @@ func TestBuildStepContainerPassesDockpipeBinAsContainerPath(t *testing.T) {
 	if got, want := env["DOCKPIPE_BIN"], "/work/src/bin/dockpipe"; got != want {
 		t.Fatalf("DOCKPIPE_BIN = %q want %q", got, want)
 	}
-	if got := env["PATH"]; !strings.HasPrefix(got, "/work/src/bin:") {
-		t.Fatalf("PATH = %q want /work/src/bin prefix", got)
+	if _, ok := env["PATH"]; ok {
+		t.Fatalf("PATH should not be injected into container env: %#v", env)
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -1237,18 +1236,6 @@ func applyContainerPathEnv(env map[string]string, workHost, outputsPath string) 
 	}
 	if v := containerWorktreePath(outputsPath, workHost); v != "" {
 		env["DOCKPIPE_STEP_OUTPUTS_FILE"] = v
-	}
-	if dp := strings.TrimSpace(env["DOCKPIPE_BIN"]); dp != "" {
-		if dir := path.Dir(dp); dir != "." && dir != "/" {
-			curPath := strings.TrimSpace(env["PATH"])
-			if curPath == "" {
-				curPath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-			}
-			prefix := dir + ":"
-			if curPath != dir && !strings.HasPrefix(curPath, prefix) {
-				env["PATH"] = dir + ":" + curPath
-			}
-		}
 	}
 }
 

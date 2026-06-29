@@ -25,7 +25,8 @@ steps:
       bash -c 'set -euo pipefail
       export HOME=/tmp/dockpipe-home
       mkdir -p "$HOME"
-      DEMO_DIR="$(dockpipe scope artifacts demo)"
+      DOCKPIPE_CLI="${DOCKPIPE_BIN:-dockpipe}"
+      DEMO_DIR="$("$DOCKPIPE_CLI" scope artifacts demo)"
       DEMO_FILE="$DEMO_DIR/main.go"
       echo "[demo] ================================================================="
       echo "[demo] Isolation — each step runs in a fresh container; your repo is mounted"
@@ -50,7 +51,8 @@ steps:
       bash -c 'set -euo pipefail
       export HOME=/tmp/dockpipe-home
       mkdir -p "$HOME"
-      GO_ARTIFACT_DIR="$(dockpipe scope artifacts go)"
+      DOCKPIPE_CLI="${DOCKPIPE_BIN:-dockpipe}"
+      GO_ARTIFACT_DIR="$("$DOCKPIPE_CLI" scope artifacts go)"
       export GOTMPDIR="$GO_ARTIFACT_DIR/gotmp"
       export GOCACHE="$GO_ARTIFACT_DIR/gocache"
       export GOBIN="$GO_ARTIFACT_DIR/bin"
