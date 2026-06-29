@@ -10,6 +10,7 @@ failed=0
 # These are source-checkout integration tests. Point the repo-built dockpipe
 # binary at this checkout instead of the materialized bundled cache.
 export DOCKPIPE_REPO_ROOT="$REPO_ROOT"
+export DOCKPIPE_BIN="$REPO_ROOT/src/bin/dockpipe"
 
 if ! command -v docker &>/dev/null; then
   echo "Error: docker not in PATH. Integration tests require Docker." >&2
