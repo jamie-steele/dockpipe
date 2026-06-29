@@ -3,7 +3,6 @@ package infrastructure
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -29,15 +28,15 @@ func TestRunHostCommandUsesStepCWD(t *testing.T) {
 		"DOCKPIPE_STEP_CWD="+cwd,
 		"DOCKPIPE_SKIP_HOST_CLEANUP=1",
 	)
-	if err := RunHostCommand("pwd > pwd.txt", env); err != nil {
+	if err := RunHostCommand("printf ok > marker.txt", env); err != nil {
 		t.Fatalf("RunHostCommand: %v", err)
 	}
-	body, err := os.ReadFile(filepath.Join(cwd, "pwd.txt"))
+	body, err := os.ReadFile(filepath.Join(cwd, "marker.txt"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.TrimSpace(string(body)); got != cwd {
-		t.Fatalf("pwd = %q want %q", got, cwd)
+	if got := string(body); got != "ok" {
+		t.Fatalf("marker = %q want ok", got)
 	}
 }
 

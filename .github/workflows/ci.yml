@@ -55,6 +55,9 @@ jobs:
             libgl1-mesa-dev \
             libegl1-mesa-dev
 
+      - name: Build CLI (Bash tests use src/bin/dockpipe)
+        run: make
+
       - name: govulncheck + gosec + DorkPipe CI signal bundle
         env:
           DOCKPIPE_WORKDIR: ${{ github.workspace }}
@@ -87,9 +90,6 @@ jobs:
             echo "::error::gosec failed (exit $GC)"
             exit "$GC"
           fi
-
-      - name: Build CLI (Bash tests use src/bin/dockpipe)
-        run: make
 
       - name: Go test
         run: go test ./...

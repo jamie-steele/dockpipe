@@ -36,6 +36,7 @@ func captureStdout(t *testing.T, fn func() error) (string, error) {
 func TestCmdScopeWorkflowAndPackageObjects(t *testing.T) {
 	wd := t.TempDir()
 	t.Setenv("DOCKPIPE_WORKDIR", wd)
+	t.Setenv("DOCKPIPE_BIN", filepath.Join(wd, "dockpipe"))
 	t.Setenv("DOCKPIPE_WORKFLOW_NAME", "Doctor/Check")
 	t.Setenv("DOCKPIPE_SOURCE_ROOT", wd)
 	t.Setenv("DOCKPIPE_ARTIFACT_ROOT", "")
