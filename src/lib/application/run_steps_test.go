@@ -1,6 +1,7 @@
 package application
 
 import (
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -98,5 +99,52 @@ func TestMergeStepVarsRespectsLocks(t *testing.T) {
 	}
 	if got := dockerEnv["FREE"]; got != "new" {
 		t.Fatalf("docker free key not updated: %q", got)
+	}
+}
+
+func TestApplyContainerPathEnvMapsDockpipeBinAndPath(t *testing.T) {
+	workHost := filepath.Join(string(filepath.Separator), "repo")
+	dockpipeBin := filepath.Join(workHost, "src", "bin", "dockpipe")
+	env := map[string]string{
+		"DOCKPIPE_WORKDIR": workHost,
+		"DOCKPIPE_BIN":     dockpipeBin,
+		"PATH":             "/usr/local/bin:/usr/bin:/bin",
+	}
+
+	applyContainerPathEnv(env, workHost, "")
+
+	if got, want := env["DOCKPIPE_BIN"], "/work/src/bin/dockpipe"; got != want {
+		t.Fatalf("DOCKPIPE_BIN = %q want %q", got, want)
+	}
+	wantDir := path.Dir("/work/src/bin/dockpipe")
+	if got := env["PATH"]; !strings.HasPrefix(got, wantDir+":") {
+		t.Fatalf("PATH = %q want prefix %q", got, wantDir+":")
+	}
+}
+
+func TestBuildStepContainerPassesDockpipeBinAsContainerPath(t *testing.T) {
+	workHost := filepath.Join(string(filepath.Separator), "repo")
+	o := &runStepsOpts{
+		wf:       &domain.Workflow{},
+		wfRoot:   filepath.Join(workHost, "workflows", "ci", "test"),
+		repoRoot: workHost,
+		envMap: map[string]string{
+			"DOCKPIPE_WORKDIR": workHost,
+			"DOCKPIPE_BIN":     filepath.Join(workHost, "src", "bin", "dockpipe"),
+		},
+		opts: &CliOpts{},
+	}
+	step := domain.Step{Isolate: "alpine", Cmd: "dockpipe scope artifacts demo"}
+
+	_, runOpts, _, _, _, err := buildStepContainer(o, 0, 1, step, o.envMap, map[string]string{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := domain.EnvSliceToMap(runOpts.ExtraEnv)
+	if got, want := env["DOCKPIPE_BIN"], "/work/src/bin/dockpipe"; got != want {
+		t.Fatalf("DOCKPIPE_BIN = %q want %q", got, want)
+	}
+	if got := env["PATH"]; !strings.HasPrefix(got, "/work/src/bin:") {
+		t.Fatalf("PATH = %q want /work/src/bin prefix", got)
 	}
 }
