@@ -6,8 +6,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CLI="${REPO_ROOT}/src/bin/dockpipe"
 
 test_help() {
-  "$CLI" --help | grep -q "dockpipe"
-  "$CLI" -h | grep -q "dockpipe"
+  local out
+  out="$("$CLI" --help)"
+  grep -q "dockpipe" <<<"$out"
+  out="$("$CLI" -h)"
+  grep -q "dockpipe" <<<"$out"
   echo "test_help OK"
 }
 
