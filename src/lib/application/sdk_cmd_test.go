@@ -234,3 +234,54 @@ func TestCmdScopeResolverAuthFields(t *testing.T) {
 		t.Fatalf("auth-mount-mode = %q", gotMode)
 	}
 }
+
+func TestResolveDockpipeBinForSDKPrefersRepoLocalExe(t *testing.T) {
+	wd := t.TempDir()
+	binDir := filepath.Join(wd, "src", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	exePath := filepath.Join(binDir, "dockpipe.exe")
+	if err := os.WriteFile(exePath, []byte("stub"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := resolveDockpipeBinForSDK(wd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != exePath {
+		t.Fatalf("resolveDockpipeBinForSDK() = %q want %q", got, exePath)
+	}
+}
+
+func TestResolveDockpipeBinForChildProcessPrefersCurrentExecutable(t *testing.T) {
+	wd := t.TempDir()
+	binDir := filepath.Join(wd, "src", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	repoExe := filepath.Join(binDir, "dockpipe.exe")
+	if err := os.WriteFile(repoExe, []byte("repo"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	currentExe := filepath.Join(wd, "active", "dockpipe.exe")
+	if err := os.MkdirAll(filepath.Dir(currentExe), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(currentExe, []byte("active"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldFn := osExecutableFn
+	osExecutableFn = func() (string, error) { return currentExe, nil }
+	defer func() { osExecutableFn = oldFn }()
+
+	got, err := resolveDockpipeBinForChildProcess(wd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != currentExe {
+		t.Fatalf("resolveDockpipeBinForChildProcess() = %q want %q", got, currentExe)
+	}
+}

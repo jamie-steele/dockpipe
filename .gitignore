@@ -37,7 +37,6 @@ release/packaging/build/
 *.deb
 src/bin/
 # ad-hoc go build -o in repo root (prefer: make build-windows → src/bin/dockpipe.exe)
-/dockpipe.exe
 *.wixobj
 *.wixpdb
 # Legacy local output (prefer release/artifacts)

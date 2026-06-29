@@ -45,7 +45,7 @@ func discoverPackageSourceBuildTargets(workdir, only string) ([]packageScriptTar
 }
 
 func packageSourceBuildEnv(workdir string, target packageScriptTarget) []string {
-	dockpipeBin, _ := resolveDockpipeBinForSDK(workdir)
+	dockpipeBin, _ := resolveDockpipeBinForChildProcess(workdir)
 	return []string{
 		"DOCKPIPE_SOURCE_BUILD=1",
 		"DOCKPIPE_PACKAGE_SOURCE_BUILD_SCRIPT=" + target.ScriptRel,

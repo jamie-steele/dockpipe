@@ -6,6 +6,7 @@
 .DESCRIPTION
   Dev-side install helper for Windows. This script:
   - builds dockpipe.exe from the current repo
+  - refreshes src\bin\dockpipe.exe in the repo when possible
   - copies it to %LOCALAPPDATA%\dockpipe\dockpipe.exe
   - compiles the current core slice from src/core into dockpipe-core-<version>.tar.gz
   - copies that fresh tarball into %LOCALAPPDATA%\dockpipe\packages\core
@@ -51,6 +52,8 @@ if (-not $Version) {
 
 $stageRoot = Join-Path $repoRoot "bin\dev-install"
 $buildExe = Join-Path $stageRoot "dockpipe.exe"
+$repoBinDir = Join-Path $repoRoot "src\bin"
+$repoExe = Join-Path $repoBinDir "dockpipe.exe"
 $compileWorkdir = Join-Path $stageRoot "compile-workdir"
 $compiledCoreDir = Join-Path $compileWorkdir "bin\.dockpipe\internal\packages\core"
 
@@ -63,6 +66,7 @@ if (Test-Path -LiteralPath $stageRoot) {
 }
 New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $compileWorkdir | Out-Null
+New-Item -ItemType Directory -Force -Path $repoBinDir | Out-Null
 
 Write-Host "Building dockpipe.exe from $repoRoot"
 Push-Location $repoRoot
@@ -88,6 +92,14 @@ New-Item -ItemType Directory -Force -Path $installCoreDir | Out-Null
 
 if (Test-Path -LiteralPath $installExe) {
     Copy-Item -LiteralPath $installExe -Destination ($installExe + ".bak") -Force
+}
+
+Write-Host "Refreshing repo-local dockpipe.exe at $repoExe"
+try {
+    Copy-Item -LiteralPath $buildExe -Destination $repoExe -Force
+}
+catch {
+    Write-Warning "Could not update $repoExe. A running process may still have the file open. Child-process paths now prefer the active dockpipe.exe, but repo-local invocations may still use the older binary until you close the lock and rebuild."
 }
 
 Write-Host "Installing dockpipe.exe to $installExe"

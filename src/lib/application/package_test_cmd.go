@@ -78,7 +78,7 @@ func discoverPackageTestTargets(workdir, only string) ([]packageScriptTarget, er
 }
 
 func packageTestEnv(workdir string, target packageScriptTarget) []string {
-	dockpipeBin, _ := resolveDockpipeBinForSDK(workdir)
+	dockpipeBin, _ := resolveDockpipeBinForChildProcess(workdir)
 	return []string{
 		"DOCKPIPE_PACKAGE_TEST=1",
 		"DOCKPIPE_PACKAGE_TEST_SCRIPT=" + target.ScriptRel,

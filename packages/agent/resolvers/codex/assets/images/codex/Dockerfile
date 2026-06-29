@@ -24,10 +24,11 @@ RUN git config --system user.email "dockpipe@local" \
 RUN mkdir -p /work && chmod 777 /work
 
 COPY assets/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY packages/agent/resolvers/codex/assets/images/codex/entrypoint-wrapper.sh /codex-entrypoint.sh
+RUN chmod +x /entrypoint.sh /codex-entrypoint.sh
 
 WORKDIR /work
 # Quieter Rust logs for `codex exec` in demos/CI; override per run if you need debug.
 ENV RUST_LOG=error
 USER node
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/codex-entrypoint.sh"]

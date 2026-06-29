@@ -2,3 +2,11 @@
 
 !assets/
 !assets/entrypoint.sh
+!packages/
+!packages/agent/
+!packages/agent/resolvers/
+!packages/agent/resolvers/claude/
+!packages/agent/resolvers/claude/assets/
+!packages/agent/resolvers/claude/assets/images/
+!packages/agent/resolvers/claude/assets/images/claude/
+!packages/agent/resolvers/claude/assets/images/claude/entrypoint-wrapper.sh

@@ -74,6 +74,37 @@ EOF
   fi
 }
 
+dorkpipe_orchestrate_helper_bin() {
+  if [[ -n "${DORKPIPE_ORCH_HELPER_BIN:-}" ]]; then
+    printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
+    return 0
+  fi
+  local assets_dir package_root repo_root
+  assets_dir="${DOCKPIPE_ASSETS_DIR:-}"
+  if [[ -z "${assets_dir}" ]]; then
+    assets_dir="$(cd "${SCRIPT_DIR}/.." && pwd)"
+  fi
+  package_root="${DOCKPIPE_PACKAGE_ROOT:-}"
+  if [[ -z "${package_root}" ]]; then
+    package_root="$(cd "${assets_dir}/../../.." && pwd)"
+  fi
+  repo_root="$(cd "${package_root}/../.." && pwd)"
+  local candidate
+  for candidate in \
+    "${repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper" \
+    "${repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper.exe"
+  do
+    if [[ -x "${candidate}" ]]; then
+      DORKPIPE_ORCH_HELPER_BIN="${candidate}"
+      export DORKPIPE_ORCH_HELPER_BIN
+      printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
+      return 0
+    fi
+  done
+  echo "orchestrate-helper: compiled helper not found. Run dockpipe package build source --only dorkpipe" >&2
+  return 1
+}
+
 dorkpipe_orchestrate_task_dir() {
   local task_id="${1:?task id}"
   printf '%s\n' "${DORKPIPE_ORCH_TASKS_DIR}/${task_id}"
@@ -250,33 +281,13 @@ dorkpipe_orchestrate_estimate_tokens_for_file() {
 
 dorkpipe_orchestrate_read_usage_number() {
   local key="${1:?key}"
-  python3 - "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" "${key}" <<'PY'
-import json
-import sys
-
-try:
-    payload = json.load(open(sys.argv[1], "r", encoding="utf-8"))
-    value = payload.get(sys.argv[2], 0)
-    print(int(value or 0))
-except Exception:
-    print(0)
-PY
+  "$(dorkpipe_orchestrate_helper_bin)" usage-number "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" "${key}"
 }
 
 dorkpipe_orchestrate_read_provider_usage_number() {
   local provider="${1:?provider}"
   local field="${2:?field}"
-  python3 - "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" "${provider}" "${field}" <<'PY'
-import json
-import sys
-
-try:
-    payload = json.load(open(sys.argv[1], "r", encoding="utf-8"))
-    value = ((payload.get("providers") or {}).get(sys.argv[2]) or {}).get(sys.argv[3], 0)
-    print(int(value or 0))
-except Exception:
-    print(0)
-PY
+  "$(dorkpipe_orchestrate_helper_bin)" provider-usage-number "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" "${provider}" "${field}"
 }
 
 dorkpipe_orchestrate_with_cloud_usage_lock() {

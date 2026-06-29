@@ -117,9 +117,7 @@ func mergeOpInjectFromProjectIfEnabled(env map[string]string, opts *CliOpts, wfC
 		return nil
 	}
 	if _, err := os.Stat(tmplPath); err != nil {
-		if vaultModeRequiresOp(mode) {
-			return fmt.Errorf("workflow vault: op requires vault template file at %s: %w", tmplPath, err)
-		}
+		fmt.Fprintf(os.Stderr, "[dockpipe] warning: workflow vault template file is missing, skipping op inject: %s (%v)\n", tmplPath, err)
 		return nil
 	}
 	if !vaultModeRequiresOp(mode) && !workflowReferencesVaultTemplateKey(wfConfig, wf, tmplPath) {

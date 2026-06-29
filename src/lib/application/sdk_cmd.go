@@ -579,15 +579,37 @@ func resolveDockpipeBinForSDK(workdir string) (string, error) {
 	if configured := strings.TrimSpace(os.Getenv("DOCKPIPE_BIN")); configured != "" {
 		return configured, nil
 	}
-	candidate := filepath.Join(workdir, "src", "bin", "dockpipe")
-	if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
-		return candidate, nil
+	candidates := []string{
+		filepath.Join(workdir, "src", "bin", "dockpipe"),
+		filepath.Join(workdir, "src", "bin", "dockpipe.exe"),
+	}
+	for _, candidate := range candidates {
+		if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
+			return candidate, nil
+		}
 	}
 	path, err := exec.LookPath("dockpipe")
 	if err != nil {
 		return "", fmt.Errorf("dockpipe binary not found; set DOCKPIPE_BIN or add dockpipe to PATH")
 	}
 	return path, nil
+}
+
+var osExecutableFn = os.Executable
+
+func resolveDockpipeBinForChildProcess(workdir string) (string, error) {
+	if configured := strings.TrimSpace(os.Getenv("DOCKPIPE_BIN")); configured != "" {
+		return configured, nil
+	}
+	if exe, err := osExecutableFn(); err == nil {
+		exe = strings.TrimSpace(exe)
+		if exe != "" {
+			if st, statErr := os.Stat(exe); statErr == nil && !st.IsDir() {
+				return exe, nil
+			}
+		}
+	}
+	return resolveDockpipeBinForSDK(workdir)
 }
 
 func normalizeGetField(s string) string {

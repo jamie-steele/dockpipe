@@ -14,17 +14,7 @@ confidence="0.60"
 issues='[]'
 next_action="human approval before treating orchestration output as final"
 
-eval "$(
-  python3 - "${DORKPIPE_ORCH_PLAN_JSON}" <<'PY'
-import json
-import shlex
-import sys
-
-plan = json.load(open(sys.argv[1], "r", encoding="utf-8"))
-verify = plan.get("verify", {})
-print(f"VERIFY_NEXT_ACTION_DEFAULT={shlex.quote(verify.get('next_action_default', 'human approval before treating orchestration output as final'))}")
-PY
-)"
+eval "$("$(dorkpipe_orchestrate_helper_bin)" verify-plan-env "${DORKPIPE_ORCH_PLAN_JSON}")"
 next_action="${VERIFY_NEXT_ACTION_DEFAULT:-$next_action}"
 
 if command -v jq >/dev/null 2>&1; then
@@ -36,102 +26,7 @@ if command -v jq >/dev/null 2>&1; then
   fi
 fi
 
-eval "$(
-  python3 - "${merge_json}" "${DORKPIPE_ORCH_TASKS_DIR}" "${issues}" <<'PY'
-import json
-import pathlib
-import re
-import shlex
-import sys
-
-merge = json.load(open(sys.argv[1], "r", encoding="utf-8"))
-tasks_dir = pathlib.Path(sys.argv[2])
-try:
-    issues = json.loads(sys.argv[3])
-except Exception:
-    issues = []
-
-bad_patterns = [
-    (re.compile(r"\bI will (outline|create|write|complete)\b", re.I), "worker narrated a plan instead of returning the requested artifact"),
-    (re.compile(r"(?im)^\s*(#{1,6}\s*)?(Task Artifact|Lane Selection|Worker Result Artifact|Merge Result|Final Report Checklist)\s*:"), "worker imitated orchestration artifacts instead of answering the task"),
-    (re.compile(r"```json\s*\{", re.I), "worker returned sample JSON artifacts instead of concise markdown"),
-    (re.compile(r"\b(files? (were|modified|touched)|validations? run|generated artifacts?)\b", re.I), "worker included implementation/reporting chatter"),
-]
-
-boundary_patterns = [
-    (re.compile(r"\bworkflow declares (?:its )?limitations in concurrency control\b", re.I), "worker incorrectly said workflow does not own concurrency declaration"),
-    (re.compile(r"\bworkflow (?:does not|should not|is not responsible to) own concurrency\b", re.I), "worker incorrectly said workflow does not own concurrency declaration"),
-    (re.compile(r"\bconcurrency (?:is|should be) (?:owned|managed) by worker results\b", re.I), "worker incorrectly assigned concurrency declaration to worker results"),
-]
-
-shape_patterns = [
-    (re.compile(r"(?im)^\s*Here (?:are|is)\b"), "worker included preamble instead of direct artifact content"),
-    (re.compile(r"(?im)^\s*(?:Note|Please note)\s*:"), "worker added a note/footer instead of direct artifact content"),
-    (re.compile(r"\bcould not be completed due to lack of information\b", re.I), "worker added a false missing-information footer"),
-    (re.compile(r"\badheres to (?:the )?(?:specified )?formatting\b", re.I), "worker added formatting commentary instead of direct artifact content"),
-    (re.compile(r"(?im)^###\s+repo_shape\s*$"), "worker repeated task id as a heading"),
-    (re.compile(r"\buncertainties remain\b", re.I), "worker added generic uncertainty instead of bounded uncertainty"),
-    (re.compile(r"\b(?:lane scores|confidence values) should be cited\b", re.I), "worker invented lane score citation guidance"),
-]
-
-for task in list(merge.get("planning_tasks", [])) + list(merge.get("tasks", [])):
-    task_id = task.get("task_id")
-    if not task_id:
-        continue
-    response_path = tasks_dir / task_id / "response.md"
-    if not response_path.exists():
-        issues.append(f"{task_id}: response artifact is missing")
-        continue
-    text = response_path.read_text(encoding="utf-8", errors="replace")
-    prompt_path = tasks_dir / task_id / "prompt.md"
-    prompt_text = ""
-    if prompt_path.exists():
-        prompt_text = prompt_path.read_text(encoding="utf-8", errors="replace")
-    stripped_text = text.lstrip()
-    for pattern, message in bad_patterns:
-        if pattern.search(text):
-            issues.append(f"{task_id}: {message}")
-            break
-    for pattern, message in boundary_patterns:
-        if pattern.search(text):
-            issues.append(f"{task_id}: {message}")
-            break
-    for pattern, message in shape_patterns:
-        if pattern.search(text):
-            issues.append(f"{task_id}: {message}")
-            break
-    if 'The first character of the response must be "-".' in prompt_text and not stripped_text.startswith("-"):
-        issues.append(f"{task_id}: worker did not start with the required dash bullet")
-        continue
-    bullet_count_match = re.search(r"Return exactly (\w+) bullets? and no headings?\.", prompt_text, re.I)
-    bullet_marker = re.compile(r"^\s*(?:[-*+]\s+|•\s*)")
-    bullet_lines = [line for line in text.splitlines() if bullet_marker.match(line)]
-    bullet_prefix_matches = re.findall(r"Bullet\s+(\d+)\s+must\s+start\s+with\s+\"([^\"\n]+)\"", prompt_text, re.I)
-    for bullet_number, required_prefix in bullet_prefix_matches:
-        index = int(bullet_number) - 1
-        if index >= len(bullet_lines) or not bullet_marker.sub("", bullet_lines[index], count=1).startswith(required_prefix):
-            issues.append(f"{task_id}: bullet {bullet_number} did not start with {required_prefix!r}")
-    if bullet_count_match:
-        number_words = {
-            "one": 1,
-            "two": 2,
-            "three": 3,
-            "four": 4,
-            "five": 5,
-        }
-        expected_count = number_words.get(bullet_count_match.group(1).lower())
-        lines = [line for line in text.splitlines() if line.strip()]
-        if expected_count is not None and (len(lines) != expected_count or any(not bullet_marker.match(line) for line in lines)):
-            issues.append(f"{task_id}: worker did not return exactly {expected_count} markdown bullets")
-            continue
-
-status = "pass"
-if issues:
-    status = "review"
-print(f"VERIFY_HEURISTIC_STATUS={shlex.quote(status)}")
-print(f"VERIFY_HEURISTIC_ISSUES={shlex.quote(json.dumps(issues))}")
-PY
-)"
+eval "$("$(dorkpipe_orchestrate_helper_bin)" verify-heuristics "${merge_json}" "${DORKPIPE_ORCH_TASKS_DIR}" "${issues}")"
 if [[ "${VERIFY_HEURISTIC_STATUS:-pass}" != "pass" ]]; then
   status="${VERIFY_HEURISTIC_STATUS}"
   issues="${VERIFY_HEURISTIC_ISSUES:-${issues}}"

@@ -303,7 +303,7 @@ func Run(argv []string, baseEnviron []string) error {
 		envMap["DOCKPIPE_WORKDIR"] = opts.Workdir
 	}
 	if strings.TrimSpace(envMap["DOCKPIPE_BIN"]) == "" {
-		if dp, derr := resolveDockpipeBinForSDK(effWd); derr == nil && strings.TrimSpace(dp) != "" {
+		if dp, derr := resolveDockpipeBinForChildProcess(effWd); derr == nil && strings.TrimSpace(dp) != "" {
 			envMap["DOCKPIPE_BIN"] = dp
 		}
 	}

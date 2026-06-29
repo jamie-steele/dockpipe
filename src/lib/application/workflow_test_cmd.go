@@ -67,7 +67,7 @@ func RunWorkflowTestsFromFlags(workdir, only string) error {
 		}
 		return nil
 	}
-	dockpipeBin, _ := resolveDockpipeBinForSDK(root)
+	dockpipeBin, _ := resolveDockpipeBinForChildProcess(root)
 	for _, target := range targets {
 		fmt.Fprintf(os.Stderr, "[dockpipe] workflow test: %s (%s)\n", target.Name, target.ScriptRel)
 		if err := runWorkflowTestTarget(root, target, dockpipeBin); err != nil {

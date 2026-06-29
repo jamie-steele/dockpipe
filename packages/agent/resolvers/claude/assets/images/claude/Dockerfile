@@ -21,12 +21,12 @@ RUN git config --system user.email "dockpipe@local" \
 
 RUN mkdir -p /work /claude-home && chmod 777 /work /claude-home
 
-# Use generic dockpipe entrypoint (must copy from context when building from repo root)
 COPY assets/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY packages/agent/resolvers/claude/assets/images/claude/entrypoint-wrapper.sh /claude-entrypoint.sh
+RUN chmod +x /entrypoint.sh /claude-entrypoint.sh
 
 WORKDIR /work
 # Non-root: Windows omits -u (Getuid -1); Linux still passes -u host:host which overrides USER.
 # Avoids CLIs that refuse --dangerously-skip-permissions as root.
 USER node
-ENTRYPOINT ["/entrypoint.sh"]
+ENTRYPOINT ["/claude-entrypoint.sh"]

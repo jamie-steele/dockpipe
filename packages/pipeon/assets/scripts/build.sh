@@ -41,6 +41,17 @@ pipeon_resolve_repo_root() {
 }
 
 REPO_ROOT="$(pipeon_resolve_repo_root)"
+if [[ -z "${DOCKPIPE_BIN:-}" ]]; then
+  for candidate in \
+    "$REPO_ROOT/src/bin/dockpipe" \
+    "$REPO_ROOT/src/bin/dockpipe.exe"
+  do
+    if [[ -x "$candidate" ]]; then
+      DOCKPIPE_BIN="$candidate"
+      break
+    fi
+  done
+fi
 DOCKPIPE_BIN="${DOCKPIPE_BIN:-$REPO_ROOT/src/bin/dockpipe}"
 BUILD_ROOT="$REPO_ROOT/bin/.dockpipe/build"
 

@@ -8,6 +8,7 @@ REPO_ROOT="$(cd "$PACKAGE_ROOT/../.." && pwd)"
 OUT_DIR="$REPO_ROOT/bin/.dockpipe/tooling/bin"
 BUILD_DIR="$REPO_ROOT/bin/.dockpipe/build"
 VERSION_FILE="$REPO_ROOT/VERSION"
+GOEXE="$(go env GOEXE)"
 
 version="0.0.0"
 if [[ -f "$VERSION_FILE" ]]; then
@@ -22,5 +23,7 @@ export GOTMPDIR="${GOTMPDIR:-$BUILD_DIR/go-tmp}"
 
 go build -C "$PACKAGE_ROOT/lib" -trimpath -ldflags "$ldflags" -o "$OUT_DIR/dorkpipe" ./cmd/dorkpipe
 go build -C "$PACKAGE_ROOT/mcp" -trimpath -ldflags "$ldflags" -o "$OUT_DIR/mcpd" ./cmd/mcpd
+go build -C "$PACKAGE_ROOT/lib" -trimpath -ldflags "$ldflags" -o "$OUT_DIR/skills-render$GOEXE" ./cmd/skills-render
+go build -C "$PACKAGE_ROOT/lib" -trimpath -ldflags "$ldflags" -o "$OUT_DIR/orchestrate-helper$GOEXE" ./cmd/orchestrate-helper
 
-printf '[dockpipe] package build source: built %s and %s\n' "$OUT_DIR/dorkpipe" "$OUT_DIR/mcpd" >&2
+printf '[dockpipe] package build source: built %s, %s, %s, and %s\n' "$OUT_DIR/dorkpipe" "$OUT_DIR/mcpd" "$OUT_DIR/skills-render$GOEXE" "$OUT_DIR/orchestrate-helper$GOEXE" >&2

@@ -1,6 +1,7 @@
 package application
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -274,5 +275,52 @@ func TestMergeOpInjectFromProjectIfEnabled_BestEffortInjectsWhenWorkflowReferenc
 	}
 	if env["NEEDED_SECRET"] != "injected" {
 		t.Fatalf("expected referenced key injected, got %#v", env)
+	}
+}
+
+func TestMergeOpInjectFromProjectIfEnabled_MissingTemplateWarnsAndSkips(t *testing.T) {
+	t.Setenv("DOCKPIPE_OP_INJECT", "1")
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, domain.DockpipeProjectConfigFileName), []byte(`{
+  "schema": 1,
+  "secrets": { "op_inject_template": ".env.op.template", "vault": "op" }
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldRun := runOpInjectFn
+	defer func() { runOpInjectFn = oldRun }()
+	runOpInjectFn = func(string) ([]byte, error) {
+		t.Fatal("op inject should not run when template file is missing")
+		return nil, nil
+	}
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() {
+		os.Stderr = oldStderr
+	}()
+
+	env := map[string]string{}
+	opts := &CliOpts{Workdir: tmp}
+	wf := &domain.Workflow{Vault: "op"}
+	runErr := mergeOpInjectFromProjectIfEnabled(env, opts, "", tmp, wf)
+	_ = w.Close()
+	var buf bytes.Buffer
+	_, _ = buf.ReadFrom(r)
+	_ = r.Close()
+
+	if runErr != nil {
+		t.Fatal(runErr)
+	}
+	if len(env) != 0 {
+		t.Fatalf("expected no merge, got %#v", env)
+	}
+	if got := buf.String(); got == "" || !bytes.Contains([]byte(got), []byte("warning: workflow vault template file is missing")) {
+		t.Fatalf("expected warning on stderr, got %q", got)
 	}
 }
