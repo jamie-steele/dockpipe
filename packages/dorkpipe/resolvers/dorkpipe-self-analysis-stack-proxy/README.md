@@ -39,7 +39,10 @@ What stays package-specific:
 GPU note:
 
 - **`DORKPIPE_DEV_STACK_GPU=auto`** is the default and will use NVIDIA when Docker can expose it to the Ollama container
-- if the host has NVIDIA but Docker GPU access is missing, the workflow now offers the same remediation / CPU fallback prompt path used by Pipeon
+- **`DORKPIPE_DEV_STACK_GPU_SETUP=never`** keeps workflow runs non-interactive by default
+- **`DORKPIPE_DEV_STACK_GPU_ON_FAILURE=cpu`** makes `auto` fall back to CPU instead of pausing for remediation
+- set **`DORKPIPE_DEV_STACK_GPU=nvidia`** or **`DORKPIPE_DEV_STACK_GPU_ON_FAILURE=fail`** when the workflow must hard-fail without CPU fallback
+- direct/manual script runs can still use **`DORKPIPE_DEV_STACK_GPU_SETUP=prompt`** for interactive remediation
 
 Host endpoint note:
 

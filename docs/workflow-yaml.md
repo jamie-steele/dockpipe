@@ -184,6 +184,27 @@ inputs:
 Those references are resolved through the same `dockpipe scope` CLI before prompts and task JSON are
 written. Use plain relative paths for normal checkout files.
 
+For task execution lanes, prefer the seeded `worker` profile over repeating provider hints in every
+task:
+
+```yaml
+tasks:
+  - id: scout
+    worker: ollama
+    worker_type: planning
+  - id: patch
+    worker: codex
+    worker_policy:
+      mode: require
+    worker_type: patch_decision
+```
+
+`worker: codex|claude|ollama` keeps the authoring surface provider-agnostic while DorkPipe maps the
+task to seeded lane defaults such as preferred lane family and model provider. By default
+`worker_policy.mode: prefer` lets the orchestrator fall back, compare, or escalate when policy says
+it should. Use `worker_policy.mode: require` only when the task must stay on that worker profile.
+Use `resolver_hint` only as an explicit hard override when a seeded worker profile is not enough.
+
 DockPipe also injects these variables for every step:
 
 | Variable | Meaning |
@@ -387,7 +408,7 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `package` | Required for a **packaged workflow step**. This is the **child workflow namespace** and must match the nested workflow’s **`namespace:`** in **`config.yml`** (resolution searches packaged / staging / **`workflows/`** trees on disk). |
 | `act` / `action` | Action script for this step. Do not combine this with packaged workflow steps. |
 | `vars` | Per-step env map (merged for that step; `--var` keys can be “locked”). |
-| `agent` | Optional agentic step declaration consumed by DorkPipe-owned scripts/tooling. Use this to declare startup prompt, accessible paths, model knobs, and orchestration fanout directly in `config.yml`. |
+| `agent` | Optional agentic step declaration consumed by DorkPipe-owned scripts/tooling. Use this to declare startup prompt, accessible paths, model knobs, seeded worker profiles, and orchestration fanout directly in `config.yml`. |
 | `container` | Optional step-level container mount override. Use this on container steps to change the primary `/work` bind for one step, change its working subdirectory under `/work`, or add extra bind mounts without affecting the whole workflow. |
 | `security` | Optional step-level container security override. Use this only on container steps when one step needs a different profile or tighter `network` / `filesystem` / `process` settings than the workflow default. |
 | `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Relative paths resolve under `DOCKPIPE_OUTPUT_ROOT`, not the process cwd. This is the normal way one step passes values forward to later steps. |

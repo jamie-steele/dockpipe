@@ -30,6 +30,8 @@ steps:
       - up
     vars:
       DORKPIPE_DEV_STACK_GPU: "auto"
+      DORKPIPE_DEV_STACK_GPU_SETUP: "never"
+      DORKPIPE_DEV_STACK_GPU_ON_FAILURE: "cpu"
       DORKPIPE_DEV_STACK_SERVICES: "postgres ollama policy-proxy"
 
   - id: self_analysis

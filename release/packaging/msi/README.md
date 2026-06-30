@@ -27,11 +27,11 @@ To include the Qt launcher in the same MSI, stage the launcher payload first and
 ```powershell
 cmake -S src/app/tooling/dockpipe-launcher -B src/app/tooling/dockpipe-launcher/build
 cmake --build src/app/tooling/dockpipe-launcher/build --config Release
-C:\Qt\6.8.3\msvc2022_64\bin\windeployqt.exe --release --compiler-runtime --dir .\bin\launcher-stage .\src\app\tooling\dockpipe-launcher\build\Release\dockpipe-launcher.exe
-.\release\packaging\msi\build.ps1 -Version 0.6.0 -SourceExe .\dockpipe.exe -LauncherStageDir .\bin\launcher-stage -OutDir .\bin\msi-dist
+C:\Qt\6.8.3\msvc2022_64\bin\windeployqt.exe --release --compiler-runtime --dir .\bin\.dockpipe\build\windows-msi\launcher-stage .\src\app\tooling\dockpipe-launcher\build\Release\dockpipe-launcher.exe
+.\release\packaging\msi\build.ps1 -Version 0.6.0 -SourceExe .\dockpipe.exe -LauncherStageDir .\bin\.dockpipe\build\windows-msi\launcher-stage -OutDir .\bin\.dockpipe\build\windows-msi\msi-dist
 ```
 
-Output: `bin\msi-dist\dockpipe_0.6.0_windows_amd64.msi`
+Output: `bin\.dockpipe\build\windows-msi\msi-dist\dockpipe_0.6.0_windows_amd64.msi`
 
 When the launcher payload is present, the MSI exposes **DockPipe Launcher** as a separate feature in the standard Windows installer UI. Users can deselect it during install and later use **Apps & features → dockpipe → Modify** to add or remove it. Silent installs can choose features with standard MSI properties such as `ADDLOCAL=MainFeature` for CLI-only installs.
 
@@ -45,10 +45,11 @@ Use **`build-local.ps1`** to generate the real launcher-inclusive MSI locally. I
 
 Outputs:
 
-- `bin\windows-msi\msi-dist\dockpipe_<version>_windows_amd64.msi`
-- `bin\windows-msi\launcher-build\` (local launcher build output)
-- `bin\windows-msi\launcher-stage\` (Qt-deployed launcher payload used to build the MSI)
-- `bin\windows-msi\dockpipe.exe` (local CLI binary used to build the MSI)
+- `bin\.dockpipe\build\windows-msi\msi-dist\dockpipe_<version>_windows_amd64.msi`
+- `bin\.dockpipe\build\windows-msi\launcher-build\` (local launcher build output)
+- `bin\.dockpipe\build\windows-msi\launcher-stage\` (Qt-deployed launcher payload used to build the MSI)
+- `bin\.dockpipe\build\windows-msi\dockpipe.exe` (local CLI binary used to build the MSI)
+- `bin\.dockpipe\tmp\windows-msi\wix314\` (downloaded/extracted WiX toolset cache for local builds)
 
 ## CI
 

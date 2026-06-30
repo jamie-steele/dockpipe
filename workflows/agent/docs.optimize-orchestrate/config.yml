@@ -124,7 +124,7 @@ steps:
               - `packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh`
         tasks:
           - id: latest_run_audit
-            resolver_hint: ollama
+            worker: ollama
             worker_type: analysis
             goal: Audit the latest docs.orchestrate artifacts for Ollama worker shape failures.
             expected_output: Three terse bullets naming concrete failures and affected task ids.
@@ -150,7 +150,9 @@ steps:
               Focus on preambles, Note/Please note footers, false uncertainty, and verifier misses.
               Do not recommend cloud escalation.
           - id: codex_patch_decision
-            resolver_hint: codex
+            worker: codex
+            worker_policy:
+              mode: require
             worker_type: patch_decision
             depends_on:
               - latest_run_audit

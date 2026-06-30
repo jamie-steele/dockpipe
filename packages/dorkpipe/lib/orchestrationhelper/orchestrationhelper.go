@@ -63,6 +63,27 @@ type laneCandidate struct {
 	Training trainingEntry  `json:"training"`
 }
 
+var seededWorkerProfiles = map[string]map[string]any{
+	"codex": {
+		"preferred_resolver_hint": "codex",
+		"model": map[string]any{
+			"provider": "codex",
+		},
+	},
+	"claude": {
+		"preferred_resolver_hint": "claude",
+		"model": map[string]any{
+			"provider": "claude",
+		},
+	},
+	"ollama": {
+		"preferred_resolver_hint": "ollama",
+		"model": map[string]any{
+			"provider": "ollama",
+		},
+	},
+}
+
 type schedulerTask struct {
 	ID         string         `json:"id"`
 	BaseTaskID string         `json:"base_task_id"`
@@ -227,6 +248,8 @@ func emitTaskEnv(path string, stdout io.Writer) error {
 	lane := mapValue(task["lane"])
 	mapping := map[string]string{
 		"TASK_BASE_ID":                 fallbackString(stringValue(task["base_id"]), stringValue(task["id"])),
+		"TASK_WORKER_PROFILE":          stringValue(task["worker"]),
+		"TASK_WORKER_POLICY_MODE":      workerPolicyMode(task),
 		"TASK_COMPARISON_JSON":         mustJSON(task["comparison"], map[string]any{"enabled": false}),
 		"TASK_RESOLVER_HINT":           fallbackString(stringValue(task["resolver_hint"]), "auto"),
 		"TASK_REQUESTED_RESOLVER_HINT": fallbackString(stringValue(task["requested_resolver_hint"]), fallbackString(stringValue(task["resolver_hint"]), "auto")),
@@ -903,7 +926,10 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 		})
 	}
 	for _, rawTask := range tasks {
-		task := mapValue(rawTask)
+		task, err := applyTaskWorkerProfile(mapValue(rawTask), env)
+		if err != nil {
+			return fmt.Errorf("%s: %w", workflowPath, err)
+		}
 		baseTaskID := stringValue(task["id"])
 		if baseTaskID == "" {
 			return fmt.Errorf("%s: each task needs id:", workflowPath)
@@ -1001,6 +1027,8 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			taskPayload := map[string]any{
 				"id":                      taskID,
 				"base_id":                 variant["base_task_id"],
+				"worker":                  stringValue(task["worker"]),
+				"worker_policy":           mapValue(task["worker_policy"]),
 				"comparison":              laneSelection["comparison"],
 				"goal":                    stringValue(task["goal"]),
 				"inputs":                  taskInputs,
@@ -2350,6 +2378,8 @@ func laneScore(lane, task, policy, selectionPolicy map[string]any, trainingStats
 	provider := stringValue(lane["provider"])
 	resolverHint := fallbackString(stringValue(lane["resolver_hint"]), provider)
 	capabilities := stringSet(listValue(lane["capabilities"]))
+	workerPreferred := stringValue(task["worker_preferred_resolver_hint"])
+	workerPolicyMode := workerPolicyMode(task)
 	text := strings.ToLower(strings.Join([]string{
 		stringValue(task["goal"]),
 		stringValue(task["expected_output"]),
@@ -2363,6 +2393,9 @@ func laneScore(lane, task, policy, selectionPolicy map[string]any, trainingStats
 		} else {
 			score -= 100
 		}
+	} else if workerPolicyMode == "prefer" && workerPreferred != "" && (workerPreferred == provider || workerPreferred == resolverHint || workerPreferred == stringValue(lane["id"])) {
+		score += floatDefault(selectionPolicy["worker_preference_bonus"], 10.0)
+		reason = append(reason, "seeded worker preference matched "+workerPreferred)
 	}
 	attemptPref := strings.ToLower(stringValue(mapValue(policy["attempt"])["preference"]))
 	validatePref := strings.ToLower(stringValue(mapValue(policy["validate"])["preference"]))
@@ -2400,10 +2433,14 @@ func laneScore(lane, task, policy, selectionPolicy map[string]any, trainingStats
 
 func selectLane(task, policy map[string]any, requestedOverride, forceProvider, forceProviderScope string, env map[string]string, modelLanes []map[string]any, selectionPolicy, trainingPolicy map[string]any, trainingStats map[string]trainingEntry, cloudLanesEnabled bool, compareProviders []string) map[string]any {
 	requested := expandEnv(fallbackString(stringValue(task["resolver_hint"]), "auto"), env)
+	workerPreferred := expandEnv(stringValue(task["worker_preferred_resolver_hint"]), env)
+	workerMode := workerPolicyMode(task)
 	if requestedOverride != "" {
 		requested = requestedOverride
 	} else if forceProvider != "" && (forceProviderScope == "all" || requested == "auto") {
 		requested = forceProvider
+	} else if requested == "auto" && workerMode == "require" && workerPreferred != "" {
+		requested = workerPreferred
 	} else if requested == "auto" && containsString(stringList(task["depends_on"]), "planner_brain") {
 		brainProvider := expandEnv(env["DORKPIPE_ORCH_BRAIN_PROVIDER"], env)
 		fanoutProvider := expandEnv(env["DORKPIPE_ORCH_FANOUT_PROVIDER"], env)
@@ -2473,6 +2510,9 @@ func selectLane(task, policy map[string]any, requestedOverride, forceProvider, f
 	}
 	return map[string]any{
 		"task_id":              stringValue(task["id"]),
+		"worker":               stringValue(task["worker"]),
+		"worker_policy_mode":   workerMode,
+		"worker_preference":    workerPreferred,
 		"requested":            requested,
 		"lane_id":              stringValue(lane["id"]),
 		"provider":             fallbackString(stringValue(lane["provider"]), fallbackString(stringValue(lane["resolver_hint"]), requested)),
@@ -2491,6 +2531,57 @@ func selectLane(task, policy map[string]any, requestedOverride, forceProvider, f
 		"baseline_gate_reason": baselineGateReason,
 		"training":             selected.Training,
 	}
+}
+
+func applyTaskWorkerProfile(task map[string]any, env map[string]string) (map[string]any, error) {
+	profile := strings.ToLower(strings.TrimSpace(expandEnv(stringValue(task["worker"]), env)))
+	out := copyMap(task)
+	if profile == "" {
+		return out, nil
+	}
+	defaults, ok := seededWorkerProfiles[profile]
+	if !ok {
+		keys := make([]string, 0, len(seededWorkerProfiles))
+		for key := range seededWorkerProfiles {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		return nil, fmt.Errorf("unknown worker profile %q (expected one of: %s)", profile, strings.Join(keys, ", "))
+	}
+	out["worker"] = profile
+	policy := copyMap(mapValue(out["worker_policy"]))
+	if mode := strings.ToLower(strings.TrimSpace(expandEnv(stringValue(policy["mode"]), env))); mode != "" {
+		if mode != "prefer" && mode != "require" {
+			return nil, fmt.Errorf("worker profile %q uses unsupported worker_policy.mode %q (expected prefer or require)", profile, mode)
+		}
+		policy["mode"] = mode
+	} else {
+		policy["mode"] = "prefer"
+	}
+	out["worker_policy"] = policy
+	out["worker_preferred_resolver_hint"] = stringValue(defaults["preferred_resolver_hint"])
+	model := copyMap(mapValue(out["model"]))
+	defaultModel := mapValue(defaults["model"])
+	for key, value := range defaultModel {
+		if _, exists := model[key]; !exists || stringValue(model[key]) == "" {
+			model[key] = value
+		}
+	}
+	if len(model) > 0 {
+		out["model"] = model
+	}
+	return out, nil
+}
+
+func workerPolicyMode(task map[string]any) string {
+	mode := strings.ToLower(strings.TrimSpace(stringValue(mapValue(task["worker_policy"])["mode"])))
+	if mode == "require" {
+		return "require"
+	}
+	if strings.TrimSpace(stringValue(task["worker"])) != "" {
+		return "prefer"
+	}
+	return ""
 }
 
 func wordsInText(text string, words []string) bool {
@@ -2531,6 +2622,9 @@ func highRiskTask(task, selectionPolicy map[string]any) bool {
 
 func comparisonEnabledForTask(task map[string]any, compareProviders []string, compareScope string) bool {
 	if len(compareProviders) == 0 {
+		return false
+	}
+	if workerPolicyMode(task) == "require" {
 		return false
 	}
 	requested := stringValue(task["resolver_hint"])

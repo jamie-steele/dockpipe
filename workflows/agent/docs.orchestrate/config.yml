@@ -100,7 +100,7 @@ steps:
             collector: dockpipe_cli_inspect
         tasks:
           - id: contract_brain
-            resolver_hint: ollama
+            worker: ollama
             worker_type: planning
             goal: Distill the DorkPipe orchestration contract into guidance for downstream documentation workers.
             expected_output: Three terse markdown bullets about the contract primitives downstream workers must preserve.
@@ -127,7 +127,7 @@ steps:
               - Do not write an execution plan.
               - Do not answer the final documentation request.
           - id: workflow_brain
-            resolver_hint: ollama
+            worker: ollama
             worker_type: planning
             goal: Distill the docs.orchestrate workflow surface into guidance for downstream documentation workers.
             expected_output: Three terse markdown bullets about what the workflow declares and what DorkPipe owns.
@@ -158,7 +158,7 @@ steps:
               - Do not write an execution plan.
               - Do not answer the final documentation request.
           - id: planner_brain
-            resolver_hint: "${DORKPIPE_ORCH_BRAIN_PROVIDER:-ollama}"
+            worker: "${DORKPIPE_ORCH_BRAIN_PROVIDER:-ollama}"
             worker_type: planning
             depends_on:
               - contract_brain
@@ -195,7 +195,7 @@ steps:
               - Do not answer the final documentation request.
               - Do not write an execution plan beyond this three-bullet work order.
           - id: repo_shape
-            resolver_hint: ollama
+            worker: ollama
             depends_on:
               - contract_brain
               - workflow_brain
@@ -231,7 +231,7 @@ steps:
               - Return concise markdown suitable for downstream merge.
               - Only call out uncertainty if a required referenced file is missing; do not add an uncertainty footer.
           - id: package_contracts
-            resolver_hint: auto
+            worker: claude
             depends_on:
               - contract_brain
               - workflow_brain
@@ -272,7 +272,7 @@ steps:
               - Return concise markdown suitable for downstream merge.
               - Only call out uncertainty if a required referenced file is missing; do not add an uncertainty footer.
           - id: safety_model
-            resolver_hint: auto
+            worker: codex
             depends_on:
               - contract_brain
               - workflow_brain

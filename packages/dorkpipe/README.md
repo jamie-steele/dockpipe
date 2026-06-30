@@ -63,4 +63,14 @@ Maintainer-only local rebuild behavior is explicit:
 - compile packaged consumer artifacts: `dockpipe package compile resolvers --workdir . --from packages/dorkpipe --force`
 - or opt into checkout binaries for the stack only: `DORKPIPE_DEV_STACK_BUNDLE_MODE=checkout scripts/dorkpipe/dev-stack.sh up`
 
+GPU policy is explicit and workflow-safe:
+
+- `DORKPIPE_DEV_STACK_GPU=auto|cpu|nvidia|all`
+- `DORKPIPE_DEV_STACK_GPU_SETUP=never|auto|prompt`
+- `DORKPIPE_DEV_STACK_GPU_ON_FAILURE=cpu|fail`
+
+Workflow callers should set the policy they want in YAML/env. The packaged stack workflows use
+`GPU=auto`, `GPU_SETUP=never`, and `GPU_ON_FAILURE=cpu`, so automation never prompts and never
+advances unless the requested services are actually up.
+
 **Detail:** **`lib/README.md`** (Go module); this tree is YAML + assets.

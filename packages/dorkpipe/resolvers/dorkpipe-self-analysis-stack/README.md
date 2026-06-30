@@ -25,14 +25,17 @@ Proxy-backed policy example: **`dorkpipe-self-analysis-stack-proxy`**.
 
 Current shape:
 
-- **stack up** goes through the package host script so Ollama can auto-enable Docker GPU access, prompt for remediation, and write the temporary GPU compose override when available
+- **stack up** goes through the package host script and follows explicit GPU policy from workflow vars or env
 - **stack down** also goes through the package host script, with keepalive controlled by **`DORKPIPE_DEV_STACK_AUTODOWN`**
 - the stack still exports **`DATABASE_URL`** and **`OLLAMA_HOST`** into the later DockPipe step through workflow vars
 
 GPU note:
 
 - **`DORKPIPE_DEV_STACK_GPU=auto`** is the default and will use NVIDIA when Docker can expose it to the Ollama container
-- if the host has NVIDIA but Docker GPU access is missing, the workflow now offers the same remediation / CPU fallback prompt path used by Pipeon
+- **`DORKPIPE_DEV_STACK_GPU_SETUP=never`** keeps workflow runs non-interactive by default
+- **`DORKPIPE_DEV_STACK_GPU_ON_FAILURE=cpu`** makes `auto` fall back to CPU instead of pausing for remediation
+- set **`DORKPIPE_DEV_STACK_GPU=nvidia`** or **`DORKPIPE_DEV_STACK_GPU_ON_FAILURE=fail`** when the workflow must hard-fail without CPU fallback
+- direct/manual script runs can still use **`DORKPIPE_DEV_STACK_GPU_SETUP=prompt`** for interactive remediation
 
 Host endpoint note:
 

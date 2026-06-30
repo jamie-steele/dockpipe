@@ -11,4 +11,4 @@ Workflow YAML still uses the **logical** path **`scripts/dorkpipe/<file>`** (sam
 Notable entrypoints:
 
 - **`dev-stack.sh`** — local Postgres + Ollama helper; defaults to packaged consumer assets and supports explicit `DORKPIPE_DEV_STACK_BUNDLE_MODE=checkout` for maintainer binaries
-- **`dev-stack-lib.sh`** — shared helper functions for GPU detection, prompt/remediation flow, and compose override wiring
+- **`dev-stack-lib.sh`** — shared helper functions for GPU policy, prompt/remediation flow, service readiness checks, and compose override wiring

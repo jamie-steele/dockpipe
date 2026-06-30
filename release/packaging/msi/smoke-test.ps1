@@ -23,6 +23,26 @@ function Get-UserPathValue {
     return [Environment]::GetEnvironmentVariable("Path", "User")
 }
 
+function Get-DirectorySnapshot {
+    param([string]$PathValue)
+
+    if (-not (Test-Path -LiteralPath $PathValue)) {
+        return @()
+    }
+
+    $root = [IO.Path]::GetFullPath($PathValue).TrimEnd('\')
+    $items = Get-ChildItem -LiteralPath $PathValue -Recurse -Force -ErrorAction SilentlyContinue
+    $snapshot = @()
+    foreach ($item in $items) {
+        $full = [IO.Path]::GetFullPath($item.FullName)
+        $relative = $full.Substring($root.Length).TrimStart('\')
+        if (-not [string]::IsNullOrWhiteSpace($relative)) {
+            $snapshot += $relative.Replace('\', '/')
+        }
+    }
+    return @($snapshot | Sort-Object -Unique)
+}
+
 function Test-PathEntryPresent {
     param([string]$PathValue, [string]$Entry)
 
@@ -34,6 +54,31 @@ function Test-PathEntryPresent {
         }
     }
     return $false
+}
+
+$baselineUserPath = Get-UserPathValue
+$baselineCoreSnapshot = Get-DirectorySnapshot -PathValue $corePackageDir
+$baselineInstallDirInPath = Test-PathEntryPresent -PathValue $baselineUserPath -Entry $installDir
+$baselineExePresent = Test-Path -LiteralPath $exePath
+$baselineLauncherPresent = Test-Path -LiteralPath $launcherPath
+$baselineLauncherPlatformPluginPresent = Test-Path -LiteralPath $launcherPlatformPlugin
+$baselineLauncherCoreDllPresent = Test-Path -LiteralPath $launcherCoreDll
+$baselineStartMenuShortcutPresent = Test-Path -LiteralPath $startMenuShortcut
+
+if ($baselineExePresent) {
+    throw "Smoke test requires $exePath to be absent before install. Remove the existing install or use a clean profile."
+}
+if ($baselineLauncherPresent) {
+    throw "Smoke test requires $launcherPath to be absent before install. Remove the existing launcher install or use a clean profile."
+}
+if ($baselineLauncherPlatformPluginPresent) {
+    throw "Smoke test requires $launcherPlatformPlugin to be absent before install. Remove the existing launcher payload or use a clean profile."
+}
+if ($baselineLauncherCoreDllPresent) {
+    throw "Smoke test requires $launcherCoreDll to be absent before install. Remove the existing launcher payload or use a clean profile."
+}
+if ($baselineStartMenuShortcutPresent) {
+    throw "Smoke test requires $startMenuShortcut to be absent before install. Remove the existing launcher shortcut or use a clean profile."
 }
 
 Write-Host "Installing $MsiPath"
@@ -83,7 +128,11 @@ if ($uninstall.ExitCode -ne 0 -and $uninstall.ExitCode -ne 3010) {
 if (Test-Path -LiteralPath $exePath) {
     throw "Installed dockpipe.exe still exists after uninstall: $exePath"
 }
-if (Test-Path -LiteralPath $corePackageDir) {
+$currentCoreSnapshot = Get-DirectorySnapshot -PathValue $corePackageDir
+if (@($currentCoreSnapshot) -join "`n" -ne @($baselineCoreSnapshot) -join "`n") {
+    throw "Installed dockpipe core package contents did not return to baseline after uninstall: $corePackageDir"
+}
+if ($baselineCoreSnapshot.Count -eq 0 -and (Test-Path -LiteralPath $corePackageDir)) {
     throw "Installed dockpipe core package directory still exists after uninstall: $corePackageDir"
 }
 if ($ExpectLauncher -and (Test-Path -LiteralPath $launcherPath)) {
@@ -100,7 +149,7 @@ if ($ExpectLauncher -and (Test-Path -LiteralPath $startMenuShortcut)) {
 }
 
 $userPathAfter = Get-UserPathValue
-if (Test-PathEntryPresent -PathValue $userPathAfter -Entry $installDir) {
+if (-not $baselineInstallDirInPath -and (Test-PathEntryPresent -PathValue $userPathAfter -Entry $installDir)) {
     throw "User PATH still contains $installDir after uninstall"
 }
 

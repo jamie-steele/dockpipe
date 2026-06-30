@@ -9,7 +9,7 @@ mkdir -p "$(dockpipe_sdk path build go-cache)" "$(dockpipe_sdk path build go-tmp
 export GOCACHE="${GOCACHE:-$(dockpipe_sdk path build go-cache)}"
 export GOTMPDIR="${GOTMPDIR:-$(dockpipe_sdk path build go-tmp)}"
 failed=0
-for f in test_normalize_ci_scans.sh test_user_insight_queue.sh test_repo_tools.sh test_orchestration_lanes.sh test_orchestration_container_auth.sh; do
+for f in test_normalize_ci_scans.sh test_user_insight_queue.sh test_repo_tools.sh test_orchestration_lanes.sh test_orchestration_container_auth.sh test_dev_stack_gpu_policy.sh; do
 	echo "--- dorkpipe/tests/$f ---"
 	bash "$DIR/$f" || failed=1
 done

@@ -262,23 +262,29 @@ type StepAgentSharedArtifact struct {
 	Paths     []string `yaml:"paths,omitempty"`
 }
 
+type StepAgentWorkerPolicyConfig struct {
+	Mode string `yaml:"mode,omitempty"`
+}
+
 type StepAgentTaskConfig struct {
-	ID              string                     `yaml:"id,omitempty"`
-	ResolverHint    string                     `yaml:"resolver_hint,omitempty"`
-	Goal            string                     `yaml:"goal,omitempty"`
-	ExpectedOutput  string                     `yaml:"expected_output,omitempty"`
-	WorkerType      string                     `yaml:"worker_type,omitempty"`
-	Prompt          string                     `yaml:"prompt,omitempty"`
-	Inputs          []string                   `yaml:"inputs,omitempty"`
-	Constraints     []string                   `yaml:"constraints,omitempty"`
-	DependsOn       []string                   `yaml:"depends_on,omitempty"`
-	Claims          []string                   `yaml:"claims,omitempty"`
-	Citations       []string                   `yaml:"citations,omitempty"`
-	AccessiblePaths []string                   `yaml:"accessible_paths,omitempty"`
-	Access          StepAgentAccessConfig      `yaml:"access,omitempty"`
-	MaxCloudTokens  int                        `yaml:"max_cloud_tokens,omitempty"`
-	Model           StepAgentModelConfig       `yaml:"model,omitempty"`
-	ModelPolicy     StepAgentModelPolicyConfig `yaml:"model_policy,omitempty"`
+	ID              string                      `yaml:"id,omitempty"`
+	Worker          string                      `yaml:"worker,omitempty"`
+	WorkerPolicy    StepAgentWorkerPolicyConfig `yaml:"worker_policy,omitempty"`
+	ResolverHint    string                      `yaml:"resolver_hint,omitempty"`
+	Goal            string                      `yaml:"goal,omitempty"`
+	ExpectedOutput  string                      `yaml:"expected_output,omitempty"`
+	WorkerType      string                      `yaml:"worker_type,omitempty"`
+	Prompt          string                      `yaml:"prompt,omitempty"`
+	Inputs          []string                    `yaml:"inputs,omitempty"`
+	Constraints     []string                    `yaml:"constraints,omitempty"`
+	DependsOn       []string                    `yaml:"depends_on,omitempty"`
+	Claims          []string                    `yaml:"claims,omitempty"`
+	Citations       []string                    `yaml:"citations,omitempty"`
+	AccessiblePaths []string                    `yaml:"accessible_paths,omitempty"`
+	Access          StepAgentAccessConfig       `yaml:"access,omitempty"`
+	MaxCloudTokens  int                         `yaml:"max_cloud_tokens,omitempty"`
+	Model           StepAgentModelConfig        `yaml:"model,omitempty"`
+	ModelPolicy     StepAgentModelPolicyConfig  `yaml:"model_policy,omitempty"`
 }
 
 type StepAgentMergeConfig struct {

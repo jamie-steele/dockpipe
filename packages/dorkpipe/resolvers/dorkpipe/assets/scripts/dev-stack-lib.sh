@@ -416,8 +416,196 @@ services:
 EOF
 }
 
+dorkpipe_stack_is_workflow_invocation() {
+  [[ -n "${DOCKPIPE_WORKFLOW_NAME:-${DOCKPIPE_WORKFLOW_CONFIG:-}}" ]]
+}
+
+dorkpipe_stack_is_interactive_session() {
+  case "${DORKPIPE_DEV_STACK_INTERACTIVE:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    0|false|FALSE|no|NO|off|OFF)
+      return 1
+      ;;
+  esac
+  [[ -t 0 && -t 2 ]] || return 1
+  [[ -z "${CI:-}" ]] || return 1
+  return 0
+}
+
+dorkpipe_stack_gpu_setup_policy() {
+  local configured
+  configured="${DORKPIPE_DEV_STACK_GPU_SETUP:-}"
+  if [[ -z "$configured" ]]; then
+    if dorkpipe_stack_is_workflow_invocation; then
+      printf 'never\n'
+    elif dorkpipe_stack_is_interactive_session; then
+      printf 'prompt\n'
+    else
+      printf 'never\n'
+    fi
+    return 0
+  fi
+  case "$configured" in
+    never|auto|prompt)
+      printf '%s\n' "$configured"
+      ;;
+    *)
+      echo "dorkpipe-dev-stack: DORKPIPE_DEV_STACK_GPU_SETUP must be never, auto, or prompt (got $configured)" >&2
+      return 1
+      ;;
+  esac
+}
+
+dorkpipe_stack_gpu_failure_policy() {
+  local configured="${DORKPIPE_DEV_STACK_GPU_ON_FAILURE:-}"
+  if [[ -n "$configured" ]]; then
+    case "$configured" in
+      cpu|fail)
+        printf '%s\n' "$configured"
+        return 0
+        ;;
+      *)
+        echo "dorkpipe-dev-stack: DORKPIPE_DEV_STACK_GPU_ON_FAILURE must be cpu or fail (got $configured)" >&2
+        return 1
+        ;;
+    esac
+  fi
+  case "${1:-auto}" in
+    auto|"")
+      printf 'cpu\n'
+      ;;
+    nvidia|all)
+      printf 'fail\n'
+      ;;
+    *)
+      printf 'cpu\n'
+      ;;
+  esac
+}
+
+dorkpipe_stack_prompt_for_gpu_recovery() {
+  local gpu_choice gpu_approval
+  declare -F dockpipe_sdk >/dev/null 2>&1 || return 1
+  gpu_choice="$(
+    dockpipe_sdk prompt choice \
+      --id dorkpipe_gpu_docker_access \
+      --title "Docker GPU Access Is Not Enabled" \
+      --message "DorkPipe found an NVIDIA GPU on the host, but Docker cannot use it yet. What would you like to do?" \
+      --default "Continue with CPU for now" \
+      --option "Enable Docker GPU access" \
+      --option "Continue with CPU for now" \
+      --option "Cancel launch"
+  )" || return 21
+  case "$gpu_choice" in
+    "Enable Docker GPU access")
+      gpu_approval="$(
+        dockpipe_sdk prompt confirm \
+          --id dorkpipe_enable_docker_gpu_access_confirm \
+          --title "Allow Docker GPU Setup?" \
+          --message "DockPipe will try to change this system by installing GPU container support, updating Docker runtime configuration, and restarting Docker. Continue?" \
+          --default no \
+          --intent host-mutation \
+          --automation-group system-changes \
+          --allow-auto-approve \
+          --auto-approve-value yes
+      )" || return 21
+      if [[ "$gpu_approval" != "yes" ]]; then
+        return 21
+      fi
+      printf '[dorkpipe-dev-stack] Ollama GPU: attempting to enable Docker GPU access...\n' >&2
+      if dorkpipe_stack_try_enable_docker_gpu_access; then
+        return 0
+      fi
+      dorkpipe_stack_explain_docker_gpu_setup
+      return 20
+      ;;
+    "Continue with CPU for now")
+      return 30
+      ;;
+    *)
+      return 21
+      ;;
+  esac
+}
+
+dorkpipe_stack_handle_gpu_unavailable() {
+  local requested="$1"
+  local mode_file="$2"
+  local gpu_file="$3"
+  local reason="${4:-docker-gpu-unavailable}"
+  local setup_policy failure_policy setup_status
+  setup_policy="$(dorkpipe_stack_gpu_setup_policy)" || return 1
+  failure_policy="$(dorkpipe_stack_gpu_failure_policy "$requested")" || return 1
+
+  case "$reason" in
+    no-host-gpu)
+      printf '[dorkpipe-dev-stack] Ollama GPU: no host NVIDIA GPU detected\n' >&2
+      ;;
+    *)
+      printf '[dorkpipe-dev-stack] Ollama GPU: host NVIDIA detected, but Docker GPU access is not ready yet\n' >&2
+      printf '[dorkpipe-dev-stack] Ollama GPU: Docker GPU access needs nvidia-container-toolkit or equivalent runtime setup\n' >&2
+      ;;
+  esac
+
+  case "$setup_policy" in
+    auto)
+      printf '[dorkpipe-dev-stack] Ollama GPU: GPU setup policy is auto; attempting Docker GPU enablement\n' >&2
+      if dorkpipe_stack_try_enable_docker_gpu_access; then
+        dorkpipe_stack_write_gpu_override
+        printf 'nvidia\n' > "$mode_file"
+        printf '[dorkpipe-dev-stack] Ollama GPU: Docker GPU access enabled; continuing with NVIDIA\n' >&2
+        return 0
+      fi
+      ;;
+    prompt)
+      if [[ "$reason" != "no-host-gpu" ]]; then
+        if dorkpipe_stack_prompt_for_gpu_recovery; then
+          setup_status=0
+          dorkpipe_stack_write_gpu_override
+          printf 'nvidia\n' > "$mode_file"
+          printf '[dorkpipe-dev-stack] Ollama GPU: Docker GPU access enabled; continuing with NVIDIA\n' >&2
+          return 0
+        else
+          setup_status=$?
+        fi
+        case "$setup_status" in
+          30)
+            printf '[dorkpipe-dev-stack] Ollama GPU: continuing on CPU for this launch\n' >&2
+            ;;
+          20|21)
+            return "$setup_status"
+            ;;
+          *)
+            return "$setup_status"
+            ;;
+        esac
+      fi
+      ;;
+  esac
+
+  if [[ "$failure_policy" == "cpu" ]]; then
+    rm -f "$gpu_file"
+    printf 'cpu\n' > "$mode_file"
+    printf '[dorkpipe-dev-stack] Ollama GPU: continuing on CPU for this launch\n' >&2
+    return 0
+  fi
+
+  dorkpipe_stack_explain_docker_gpu_setup
+  case "$reason" in
+    no-host-gpu)
+      echo "dorkpipe-dev-stack: NVIDIA GPU was requested, but no host NVIDIA GPU was detected" >&2
+      ;;
+    *)
+      echo "dorkpipe-dev-stack: NVIDIA GPU was requested, but Docker GPU access is unavailable" >&2
+      ;;
+  esac
+  return 1
+}
+
 dorkpipe_stack_configure_gpu() {
-  local requested mode_file gpu_file gpu_choice
+  local requested mode_file gpu_file
   requested="${DORKPIPE_DEV_STACK_GPU:-auto}"
   mode_file="$(dorkpipe_stack_gpu_mode_file)"
   gpu_file="$(dorkpipe_stack_gpu_compose_file)"
@@ -431,74 +619,22 @@ dorkpipe_stack_configure_gpu() {
           printf 'nvidia\n' > "$mode_file"
           printf '[dorkpipe-dev-stack] Ollama GPU: NVIDIA enabled via Docker Compose override\n' >&2
         else
-          rm -f "$gpu_file"
-          printf 'cpu\n' > "$mode_file"
-          printf '[dorkpipe-dev-stack] Ollama GPU: host NVIDIA detected, but Docker GPU access is not ready yet\n' >&2
-          printf '[dorkpipe-dev-stack] Ollama GPU: Docker GPU access needs nvidia-container-toolkit or equivalent runtime setup\n' >&2
-          if declare -F dockpipe_sdk >/dev/null 2>&1; then
-            gpu_choice="$(
-              dockpipe_sdk prompt choice \
-                --id dorkpipe_gpu_docker_access \
-                --title "Docker GPU Access Is Not Enabled" \
-                --message "DorkPipe found an NVIDIA GPU on the host, but Docker cannot use it yet. What would you like to do?" \
-                --default "Continue with CPU for now" \
-                --option "Enable Docker GPU access" \
-                --option "Continue with CPU for now" \
-                --option "Cancel launch"
-            )" || return 1
-            case "$gpu_choice" in
-              "Enable Docker GPU access")
-                local gpu_approval
-                gpu_approval="$(
-                  dockpipe_sdk prompt confirm \
-                    --id dorkpipe_enable_docker_gpu_access_confirm \
-                    --title "Allow Docker GPU Setup?" \
-                    --message "DockPipe will try to change this system by installing GPU container support, updating Docker runtime configuration, and restarting Docker. Continue?" \
-                    --default no \
-                    --intent host-mutation \
-                    --automation-group system-changes \
-                    --allow-auto-approve \
-                    --auto-approve-value yes
-                )" || return 1
-                if [[ "$gpu_approval" != "yes" ]]; then
-                  DORKPIPE_DEV_STACK_PROMPT_RESULT="cancelled"
-                  return 0
-                fi
-                printf '[dorkpipe-dev-stack] Ollama GPU: attempting to enable Docker GPU access...\n' >&2
-                if dorkpipe_stack_try_enable_docker_gpu_access; then
-                  dorkpipe_stack_write_gpu_override
-                  printf 'nvidia\n' > "$mode_file"
-                  printf '[dorkpipe-dev-stack] Ollama GPU: Docker GPU access enabled; continuing with NVIDIA\n' >&2
-                else
-                  dorkpipe_stack_explain_docker_gpu_setup
-                  DORKPIPE_DEV_STACK_PROMPT_RESULT="gpu-setup"
-                  return 0
-                fi
-                ;;
-              "Continue with CPU for now")
-                printf '[dorkpipe-dev-stack] Ollama GPU: continuing on CPU for this launch\n' >&2
-                ;;
-              *)
-                DORKPIPE_DEV_STACK_PROMPT_RESULT="cancelled"
-                return 0
-                ;;
-            esac
-          else
-            dorkpipe_stack_explain_docker_gpu_setup
-            printf '[dorkpipe-dev-stack] Ollama GPU: continuing on CPU for this launch\n' >&2
-            echo "dorkpipe-dev-stack: continuing on CPU because no interactive DockPipe SDK prompt was available" >&2
-          fi
+          dorkpipe_stack_handle_gpu_unavailable "$requested" "$mode_file" "$gpu_file"
         fi
       else
-        rm -f "$gpu_file"
-        printf 'cpu\n' > "$mode_file"
-        printf '[dorkpipe-dev-stack] Ollama GPU: no host NVIDIA GPU detected; using CPU\n' >&2
+        dorkpipe_stack_handle_gpu_unavailable "$requested" "$mode_file" "$gpu_file" no-host-gpu
       fi
       ;;
     nvidia|all)
-      dorkpipe_stack_write_gpu_override
-      printf 'nvidia\n' > "$mode_file"
       printf '[dorkpipe-dev-stack] Ollama GPU: NVIDIA forced by DORKPIPE_DEV_STACK_GPU=%s\n' "$requested" >&2
+      if ! dorkpipe_stack_detect_nvidia_gpu; then
+        dorkpipe_stack_handle_gpu_unavailable "$requested" "$mode_file" "$gpu_file" no-host-gpu
+      elif ! dorkpipe_stack_docker_supports_nvidia_gpu; then
+        dorkpipe_stack_handle_gpu_unavailable "$requested" "$mode_file" "$gpu_file"
+      else
+        dorkpipe_stack_write_gpu_override
+        printf 'nvidia\n' > "$mode_file"
+      fi
       ;;
     cpu|none|off|0|false)
       rm -f "$gpu_file"
@@ -533,6 +669,62 @@ dorkpipe_stack_service_enabled() {
     if [[ "$service" == "$needle" ]]; then
       return 0
     fi
+  done
+  return 1
+}
+
+dorkpipe_stack_service_container_id() {
+  docker compose "${COMPOSE_ARGS[@]}" ps -q "$1" 2>/dev/null | head -n 1
+}
+
+dorkpipe_stack_service_ready() {
+  local service="$1"
+  local cid running health
+  cid="$(dorkpipe_stack_service_container_id "$service")"
+  [[ -n "$cid" ]] || return 1
+  running="$(docker inspect --format '{{if .State.Running}}true{{else}}false{{end}}' "$cid" 2>/dev/null || true)"
+  [[ "$running" == "true" ]] || return 1
+  health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || true)"
+  case "$health" in
+    none|healthy)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+dorkpipe_stack_wait_for_services_ready() {
+  local attempts="${1:-60}"
+  local services=() service i
+  if [[ -n "${DORKPIPE_DEV_STACK_SERVICES:-}" ]]; then
+    # shellcheck disable=SC2206
+    services=(${DORKPIPE_DEV_STACK_SERVICES})
+  else
+    services=(postgres ollama dorkpipe-stack dorkpipe-mcp-proxy)
+  fi
+  for ((i = 0; i < attempts; i++)); do
+    local all_ready="true"
+    for service in "${services[@]}"; do
+      if ! dorkpipe_stack_service_ready "$service"; then
+        all_ready="false"
+        break
+      fi
+    done
+    if [[ "$all_ready" == "true" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "dorkpipe-dev-stack: requested services did not become ready: ${services[*]}" >&2
+  for service in "${services[@]}"; do
+    local cid state
+    cid="$(dorkpipe_stack_service_container_id "$service")"
+    if [[ -z "$cid" ]]; then
+      printf '  %s: not created\n' "$service" >&2
+      continue
+    fi
+    state="$(docker inspect --format '{{if .State.Running}}running{{else}}{{.State.Status}}{{end}}{{if .State.Health}}{{printf " health=%s" .State.Health.Status}}{{end}}' "$cid" 2>/dev/null || true)"
+    printf '  %s: %s\n' "$service" "${state:-unknown}" >&2
   done
   return 1
 }

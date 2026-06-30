@@ -134,6 +134,34 @@ steps:
 	}
 }
 
+func TestParseWorkflowYAMLAgentTaskWorkerProfile(t *testing.T) {
+	y := `
+steps:
+  - kind: host
+    run: scripts/dorkpipe/orchestrate-plan.sh
+    agent:
+      orchestration:
+        tasks:
+          - id: scout
+            worker: ollama
+            worker_policy:
+              mode: require
+            worker_type: planning
+            goal: Scout the repo
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Steps) != 1 || w.Steps[0].Agent.Orchestration == nil || len(w.Steps[0].Agent.Orchestration.Tasks) != 1 {
+		t.Fatalf("agent task parse: got %+v", w.Steps)
+	}
+	task := w.Steps[0].Agent.Orchestration.Tasks[0]
+	if task.Worker != "ollama" || task.WorkerPolicy.Mode != "require" || task.WorkerType != "planning" {
+		t.Fatalf("worker profile parse: got %+v", task)
+	}
+}
+
 func TestParseWorkflowYAMLRejectsRuntimePackageResolverOverload(t *testing.T) {
 	y := `
 steps:

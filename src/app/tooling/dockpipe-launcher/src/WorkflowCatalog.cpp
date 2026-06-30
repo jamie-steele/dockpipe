@@ -10,6 +10,8 @@
 
 namespace {
 
+constexpr int kCatalogDiscoveryTimeoutMs = 30000;
+
 QStringList sortedUnique(QStringList values)
 {
     values.removeDuplicates();
@@ -119,7 +121,12 @@ WorkflowCatalogData WorkflowCatalog::discoverCatalog(const QString &hintWorkdir)
 
     QProcess proc;
     proc.start(program, args);
-    if (!proc.waitForFinished(8000) || proc.exitCode() != 0)
+    if (!proc.waitForFinished(kCatalogDiscoveryTimeoutMs)) {
+        proc.kill();
+        proc.waitForFinished();
+        return out;
+    }
+    if (proc.exitCode() != 0)
         return out;
 
     const QJsonDocument doc = QJsonDocument::fromJson(proc.readAllStandardOutput());

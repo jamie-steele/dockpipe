@@ -30,6 +30,13 @@ should include enough metadata for DorkPipe and tooling to answer:
 - is it installed/available when the stack starts?
 - what budget/halt rules apply before DorkPipe can use it?
 
+Workflow authoring should normally select these lanes through seeded worker profiles such as
+`worker: ollama`, `worker: codex`, and `worker: claude`. Those profiles keep the task contract
+generic while package-owned lane metadata still determines the actual resolver, model provider, and
+availability policy. Treat `worker` as a seeded preference by default. If a task must stay on one
+worker class, declare `worker_policy.mode: require`; otherwise keep the default `prefer` behavior so
+DorkPipe can still compare, fall back, or escalate through the lane catalog.
+
 ## Hard Rules
 
 - Local models such as Ollama can be cheap/default attempt lanes.

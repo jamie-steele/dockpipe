@@ -21,7 +21,6 @@ export DORKPIPE_DEV_STACK_POLICY_PROXY_JS="${DORKPIPE_DEV_STACK_POLICY_PROXY_JS:
 export DORKPIPE_DEV_STACK_WORKDIR="${DORKPIPE_DEV_STACK_WORKDIR:-$ROOT}"
 cmd="${1:-}"
 PROJECT="${DORKPIPE_DEV_STACK_PROJECT:-dorkpipe-dev}"
-GPU_PROMPT_RESULT=""
 mapfile -t COMPOSE_ARGS < <(dorkpipe_stack_compose_args)
 
 ensure_executable_binary() {
@@ -103,17 +102,20 @@ dorkpipe_stack_require_consumer_binaries() {
 
 case "$cmd" in
 up)
-	dorkpipe_stack_configure_gpu
-	case "${DORKPIPE_DEV_STACK_PROMPT_RESULT:-}" in
-	gpu-setup)
-		echo "dorkpipe-dev-stack: launch paused before starting services so Docker GPU access can be enabled"
-		exit 0
-		;;
-	cancelled)
-		echo "dorkpipe-dev-stack: launch cancelled before starting services"
-		exit 0
-		;;
-	esac
+	if dorkpipe_stack_configure_gpu; then
+		:
+	else
+		gpu_status=$?
+		case "$gpu_status" in
+		20)
+			echo "dorkpipe-dev-stack: launch stopped before starting services because Docker GPU access still requires remediation" >&2
+			;;
+		21)
+			echo "dorkpipe-dev-stack: launch cancelled before starting services" >&2
+			;;
+		esac
+		exit "$gpu_status"
+	fi
 	mapfile -t COMPOSE_ARGS < <(dorkpipe_stack_compose_args)
 	if [[ -n "${DORKPIPE_DEV_STACK_SERVICES:-}" ]]; then
 		# shellcheck disable=SC2206
@@ -133,6 +135,7 @@ up)
 		;;
 	esac
 	docker compose "${COMPOSE_ARGS[@]}" "${UP_ARGS[@]}" "${SERVICES[@]}"
+	dorkpipe_stack_wait_for_services_ready "${DORKPIPE_DEV_STACK_READY_ATTEMPTS:-60}"
 	dorkpipe_stack_ensure_ollama_model
 	dorkpipe_stack_wait_for_mcp_ready "${DORKPIPE_DEV_STACK_MCP_READY_ATTEMPTS:-60}"
 	if dorkpipe_stack_service_enabled dorkpipe-mcp-proxy; then

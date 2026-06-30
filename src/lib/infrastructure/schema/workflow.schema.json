@@ -191,6 +191,21 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string" },
+        "worker": {
+          "type": "string",
+          "description": "Seeded worker profile such as codex, claude, or ollama. DorkPipe maps this to provider-specific lane defaults while keeping execution boundaries separate."
+        },
+        "worker_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": {
+              "type": "string",
+              "enum": ["prefer", "require"],
+              "description": "How strongly the worker profile constrains lane selection. prefer keeps orchestration free to escalate or fall back; require pins to that worker profile unless a stronger runtime override is applied."
+            }
+          }
+        },
         "resolver_hint": { "type": "string" },
         "goal": { "type": "string" },
         "expected_output": { "type": "string" },

@@ -48,6 +48,7 @@ dockpipe scope workflow <workflow-name> orchestrate
 Each `task.json` should define:
 
 - `id`
+- `worker`
 - `goal`
 - `inputs`
 - `constraints`
@@ -63,6 +64,13 @@ Each `task.json` may also include:
 - `lane`
 - `model_policy`
 - `access`
+- `worker_policy`
+
+`worker` is the seeded execution profile selected by workflow authoring, such as `codex`, `claude`,
+or `ollama`. DorkPipe expands that profile into lane defaults before planning while still keeping
+the worker containers and provider boundaries separate. `worker_policy.mode: prefer` keeps the
+profile as a scheduler preference; `require` turns it into a hard lane-family requirement without
+forcing authors to drop down to resolver-specific task authoring.
 
 ## Model lane catalog
 

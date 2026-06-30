@@ -4,17 +4,24 @@ param(
     [string]$QtArch = "win64_msvc2022_64",
     [string]$QtRoot = "",
     [string]$QtInstallRoot = "C:\Qt",
-    [string]$WixRoot = "C:\tmp\wix314",
-    [string]$OutDir = "C:\Source\dockpipe\bin\windows-msi\msi-dist",
+    [string]$WixRoot = "",
+    [string]$OutDir = "",
     [switch]$InstallQt,
     [switch]$SkipSmokeTest
 )
 
 $ErrorActionPreference = "Stop"
 
+function Resolve-RepoRoot {
+    $root = Split-Path -Parent $PSScriptRoot
+    $root = Split-Path -Parent $root
+    $root = Split-Path -Parent $root
+    return [IO.Path]::GetFullPath($root)
+}
+
 function Resolve-RepoPath {
     param([string]$PathValue)
-    return [IO.Path]::GetFullPath((Join-Path $PWD $PathValue))
+    return [IO.Path]::GetFullPath((Join-Path $script:RepoRoot $PathValue))
 }
 
 function Require-Tool {
@@ -33,18 +40,31 @@ function Require-Tool {
 
 function Ensure-WixRoot {
     param([string]$PathValue)
+    $wixZip = Join-Path $script:WindowsMsiTempRoot "wix314-binaries.zip"
     if (Test-Path -LiteralPath (Join-Path $PathValue "candle.exe")) {
         return [IO.Path]::GetFullPath($PathValue)
     }
-    if (-not (Test-Path -LiteralPath "C:\tmp\wix314-binaries.zip")) {
-        Invoke-WebRequest -Uri "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip" -OutFile "C:\tmp\wix314-binaries.zip"
+    if (-not (Test-Path -LiteralPath $wixZip)) {
+        Invoke-WebRequest -Uri "https://github.com/wixtoolset/wix3/releases/download/wix3141rtm/wix314-binaries.zip" -OutFile $wixZip
     }
     if (Test-Path -LiteralPath $PathValue) {
         Remove-Item -LiteralPath $PathValue -Recurse -Force
     }
     New-Item -ItemType Directory -Force -Path $PathValue | Out-Null
-    Expand-Archive -Path "C:\tmp\wix314-binaries.zip" -DestinationPath $PathValue -Force
+    Expand-Archive -Path $wixZip -DestinationPath $PathValue -Force
     return [IO.Path]::GetFullPath($PathValue)
+}
+
+function Initialize-BuildEnvironment {
+    param([string]$BuildRoot)
+
+    $goCache = Join-Path $BuildRoot "go\gocache"
+    $goTmp = Join-Path $BuildRoot "go\gotmp"
+    $goBin = Join-Path $BuildRoot "go\bin"
+    New-Item -ItemType Directory -Force -Path $goCache, $goTmp, $goBin | Out-Null
+    $env:GOCACHE = $goCache
+    $env:GOTMPDIR = $goTmp
+    $env:GOBIN = $goBin
 }
 
 function Set-MsvcEnvironment {
@@ -107,6 +127,19 @@ function Set-MsvcEnvironment {
     $env:LIB = ($libParts -join ';')
     $env:LIBPATH = ($libParts -join ';')
 }
+
+$script:RepoRoot = Resolve-RepoRoot
+$script:WindowsMsiRoot = Join-Path $script:RepoRoot "bin\.dockpipe\build\windows-msi"
+$script:WindowsMsiTempRoot = Join-Path $script:RepoRoot "bin\.dockpipe\tmp\windows-msi"
+New-Item -ItemType Directory -Force -Path $script:WindowsMsiRoot, $script:WindowsMsiTempRoot | Out-Null
+
+if (-not $WixRoot) {
+    $WixRoot = Join-Path $script:WindowsMsiTempRoot "wix314"
+}
+if (-not $OutDir) {
+    $OutDir = Join-Path $script:WindowsMsiRoot "msi-dist"
+}
+Initialize-BuildEnvironment -BuildRoot $script:WindowsMsiRoot
 
 if (-not $Version) {
     $Version = (Get-Content (Resolve-RepoPath "VERSION") -Raw).Trim()
