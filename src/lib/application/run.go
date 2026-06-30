@@ -902,13 +902,23 @@ func Run(argv []string, baseEnviron []string) error {
 			fmt.Fprintln(os.Stderr, "[dockpipe] Container: DOCKPIPE_WORKTREE_DETACHED=1")
 		}
 	}
+	workPath := opts.WorkPath
+	authoredMounts := opts.ExtraMounts
+	if wf != nil {
+		containerHostBase := firstNonEmpty(envMap["DOCKPIPE_SOURCE_ROOT"], envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
+		var mountErr error
+		workHost, workPath, authoredMounts, mountErr = resolveWorkflowContainerConfig(wf.Container, containerHostBase, workHost, workPath, opts.ExtraMounts)
+		if mountErr != nil {
+			return mountErr
+		}
+	}
 
 	runOpts := infrastructure.RunOpts{
 		Image:         image,
 		WorkdirHost:   workHost,
-		WorkPath:      opts.WorkPath,
+		WorkPath:      workPath,
 		ActionPath:    actionForContainer,
-		ExtraMounts:   opts.ExtraMounts,
+		ExtraMounts:   authoredMounts,
 		NetworkMode:   networkMode,
 		ExtraEnv:      extraDocker,
 		DataVolume:    dataVol,

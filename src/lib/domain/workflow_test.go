@@ -218,6 +218,84 @@ steps:
 	}
 }
 
+func TestParseWorkflowYAMLContainer(t *testing.T) {
+	y := `
+container:
+  workdir_host: ../consumer
+  work_path: src/app
+  mounts:
+    - host: ../shared
+      guest: /workspace/shared
+      mode: ro
+steps:
+  - cmd: echo hi
+    container:
+      workdir_host: ../override
+      work_path: tools
+      mounts:
+        - host: ../cache
+          guest: /workspace/cache
+          mode: rw
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w.Container.WorkdirHost != "../consumer" || w.Container.WorkPath != "src/app" {
+		t.Fatalf("workflow container: %+v", w.Container)
+	}
+	if len(w.Container.Mounts) != 1 || w.Container.Mounts[0].Guest != "/workspace/shared" || w.Container.Mounts[0].Mode != "ro" {
+		t.Fatalf("workflow container mounts: %+v", w.Container.Mounts)
+	}
+	if len(w.Steps) != 1 {
+		t.Fatalf("steps: got %d", len(w.Steps))
+	}
+	got := w.Steps[0].Container
+	if got.WorkdirHost != "../override" || got.WorkPath != "tools" {
+		t.Fatalf("step container: %+v", got)
+	}
+	if len(got.Mounts) != 1 || got.Mounts[0].Guest != "/workspace/cache" || got.Mounts[0].Mode != "rw" {
+		t.Fatalf("step container mounts: %+v", got.Mounts)
+	}
+}
+
+func TestValidateStepContainerFieldRejectsHostAndPackagedWorkflow(t *testing.T) {
+	hostStep := Step{
+		Kind: "host",
+		Container: WorkflowContainerConfig{
+			WorkdirHost: "../repo",
+		},
+	}
+	if err := ValidateStepContainerField(0, hostStep); err == nil || !strings.Contains(err.Error(), "kind: host step does not use container") {
+		t.Fatalf("expected host-step container validation error, got %v", err)
+	}
+
+	packaged := Step{
+		WorkflowName: "child",
+		Package:      "dockpipe.demo",
+		Container: WorkflowContainerConfig{
+			Mounts: []WorkflowContainerMount{{Host: "../repo", Guest: "/work"}},
+		},
+	}
+	if err := ValidateStepContainerField(0, packaged); err == nil || !strings.Contains(err.Error(), "packaged workflow step does not use container") {
+		t.Fatalf("expected packaged-step container validation error, got %v", err)
+	}
+}
+
+func TestValidateWorkflowContainerConfigRejectsInvalidWorkPathAndMode(t *testing.T) {
+	err := ValidateWorkflowContainerConfig("container", WorkflowContainerConfig{WorkPath: "/absolute"})
+	if err == nil || !strings.Contains(err.Error(), "work_path must be relative") {
+		t.Fatalf("expected work_path validation error, got %v", err)
+	}
+
+	err = ValidateWorkflowContainerConfig("container", WorkflowContainerConfig{
+		Mounts: []WorkflowContainerMount{{Host: "../repo", Guest: "/work", Mode: "readonly"}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "container.mounts[0].mode") {
+		t.Fatalf("expected mount mode validation error, got %v", err)
+	}
+}
+
 // TestParseWorkflowYAMLSteps checks multi-step YAML: two steps, per-step isolate override, and CmdLine.
 func TestParseWorkflowYAMLSteps(t *testing.T) {
 	dir := t.TempDir()

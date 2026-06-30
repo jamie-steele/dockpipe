@@ -15,6 +15,7 @@ const DOCKPIPE_TOP_LEVEL_KEYS = [
   "model_policy",
   "vars",
   "compose",
+  "container",
   "security",
   "image",
   "steps",
@@ -44,6 +45,7 @@ const DOCKPIPE_STEP_KEYS = [
   "inputs",
   "vars",
   "vm",
+  "container",
   "agent",
   "security",
   "image",
@@ -72,6 +74,7 @@ const TOP_LEVEL_KEY_DETAILS = {
   model_policy: "Optional AI model attempt, validation, and escalation policy for DorkPipe harnesses.",
   vars: "Workflow variables exported before execution unless already set in the environment.",
   compose: "Optional Docker Compose settings for host built-ins such as compose_up, compose_down, and compose_ps.",
+  container: "Optional container mount defaults. Use this to override the primary /work bind for the workflow and declare additional host-to-container mounts.",
   security: "Optional authored container security policy. Choose a security profile, then apply bounded network/filesystem/process overrides.",
   image: "Optional image customization. Use image.packages.apt to materialize a derived Docker image with workflow-authored Debian packages.",
   steps: "Ordered workflow steps. Each step can run in a container or on the host.",
@@ -101,6 +104,7 @@ const STEP_KEY_DETAILS = {
   inputs: "Typed step-local inputs backed by the workflow's PipeLang types. Use field paths such as Advanced.KeepAlive and optional from/value bindings instead of raw env names.",
   vars: "Step-local variables merged for this step.",
   vm: "Declarative VM step settings. Use this to set guest path sync, interactive desktop or SSH session behavior, keepalive, and host port forwarding without hand-writing DOCKPIPE_VM_* variables or host prep steps.",
+  container: "Optional step-level container mount override. Use this on container steps to change the primary /work source or add extra host mounts for one step.",
   agent: "Declarative agentic step settings. Put startup prompt, access.read/write/deny policy, model knobs, DorkPipe orchestration fanout/concurrency/apply data, and task-level model_policy here so shared scripts can drive agent behavior directly from workflow YAML.",
   security: "Optional step-level container security override. Use this to tighten or specialize policy for one container step.",
   image: "Optional step-level image customization. Use image.packages.apt for extra Debian packages needed only by this step.",
@@ -343,6 +347,18 @@ const STEP_VM_KEY_DETAILS = {
 const STEP_VM_MOUNT_KEY_DETAILS = {
   host: "Host path to stage or mount into the guest before the guest command runs.",
   guest: "Guest destination path for this host mapping."
+};
+
+const CONTAINER_KEY_DETAILS = {
+  workdir_host: "Optional host path to bind at /work for container execution. Relative paths resolve from the active workflow source/workdir, not the packaged workflow asset directory.",
+  work_path: "Optional working subdirectory under /work. Keep this relative; DockPipe rejects absolute container paths here.",
+  mounts: "Optional additional host-to-container bind mounts applied after the primary /work mount."
+};
+
+const CONTAINER_MOUNT_KEY_DETAILS = {
+  host: "Host path for this additional bind mount. Relative paths resolve from the active workflow source/workdir.",
+  guest: "Container destination path for this additional bind mount.",
+  mode: "Optional bind mode. Use ro for read-only or rw for read-write."
 };
 
 const CORE_HELPER_PROFILES = {
@@ -1848,10 +1864,16 @@ function activate(context) {
               docs = WORKFLOW_VIEW_PAGE_KEY_DETAILS;
             } else if (parentChain.length === 5 && parentChain[0] === "view" && parentChain[1] === "pages" && parentChain[3] === "sections") {
               docs = WORKFLOW_VIEW_SECTION_KEY_DETAILS;
+            } else if (parentChain.length === 1 && parentChain[0] === "container") {
+              docs = CONTAINER_KEY_DETAILS;
             } else if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "vm") {
               docs = STEP_VM_KEY_DETAILS;
+            } else if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "container") {
+              docs = CONTAINER_KEY_DETAILS;
             } else if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "scopes") {
               docs = STEP_SCOPE_KEY_DETAILS;
+            } else if (parentChain.length === 3 && parentChain[0] === "container" && parentChain[1] === "mounts") {
+              docs = CONTAINER_MOUNT_KEY_DETAILS;
             } else if (info?.inSteps && parentChain.length === 3 && parentChain[0] === "vm" && parentChain[1] === "mounts") {
               docs = STEP_VM_MOUNT_KEY_DETAILS;
             }
@@ -2049,11 +2071,20 @@ function activate(context) {
             if (parentChain.length === 1 && parentChain[0] === "view") {
               return hoverForWorkflowKey(word, WORKFLOW_VIEW_KEY_DETAILS, range);
             }
+            if (parentChain.length === 1 && parentChain[0] === "container") {
+              return hoverForWorkflowKey(word, CONTAINER_KEY_DETAILS, range);
+            }
             if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "vm") {
               return hoverForWorkflowKey(word, STEP_VM_KEY_DETAILS, range);
             }
+            if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "container") {
+              return hoverForWorkflowKey(word, CONTAINER_KEY_DETAILS, range);
+            }
             if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "scopes") {
               return hoverForWorkflowKey(word, STEP_SCOPE_KEY_DETAILS, range);
+            }
+            if (parentChain.length === 3 && parentChain[0] === "container" && parentChain[1] === "mounts") {
+              return hoverForWorkflowKey(word, CONTAINER_MOUNT_KEY_DETAILS, range);
             }
             if (info?.inSteps && parentChain.length === 3 && parentChain[0] === "vm" && parentChain[1] === "mounts") {
               return hoverForWorkflowKey(word, STEP_VM_MOUNT_KEY_DETAILS, range);

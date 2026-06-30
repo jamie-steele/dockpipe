@@ -359,3 +359,59 @@ func TestBuildStepContainer_PrefersCompiledStepManifest(t *testing.T) {
 		t.Fatalf("expected compiled step manifest, got %+v", rm)
 	}
 }
+
+func TestBuildStepContainer_AppliesWorkflowAndStepContainerOverrides(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	o := &runStepsOpts{
+		projectRoot: repoRoot,
+		repoRoot:    repoRoot,
+		wfRoot:      filepath.Join(repoRoot, "workflows", "ci"),
+		wf: &domain.Workflow{
+			Name:    "ci",
+			Isolate: "base-dev",
+			Container: domain.WorkflowContainerConfig{
+				WorkdirHost: "../consumer",
+				Mounts: []domain.WorkflowContainerMount{
+					{Host: "../shared", Guest: "/workspace/shared", Mode: "ro"},
+				},
+			},
+		},
+		opts: &CliOpts{Workdir: repoRoot, ExtraMounts: []string{"/tmp/cache:/cache"}},
+	}
+	step := domain.Step{
+		Cmd: "echo hi",
+		Container: domain.WorkflowContainerConfig{
+			WorkPath: "src/app",
+			Mounts: []domain.WorkflowContainerMount{
+				{Host: "../cache", Guest: "/workspace/cache", Mode: "rw"},
+			},
+		},
+	}
+	envMap := map[string]string{
+		"DOCKPIPE_SOURCE_ROOT": repoRoot,
+		"DOCKPIPE_WORKDIR":     repoRoot,
+	}
+
+	_, runOpts, _, _, _, err := buildStepContainer(o, 0, 1, step, envMap, map[string]string{}, nil)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if want := filepath.Clean(filepath.Join(repoRoot, "..", "consumer")); runOpts.WorkdirHost != want {
+		t.Fatalf("WorkdirHost = %q want %q", runOpts.WorkdirHost, want)
+	}
+	if runOpts.WorkPath != "src/app" {
+		t.Fatalf("WorkPath = %q want %q", runOpts.WorkPath, "src/app")
+	}
+	if len(runOpts.ExtraMounts) != 3 {
+		t.Fatalf("ExtraMounts len = %d want 3 (%#v)", len(runOpts.ExtraMounts), runOpts.ExtraMounts)
+	}
+	if want := filepath.Clean(filepath.Join(repoRoot, "..", "shared")) + ":/workspace/shared:ro"; runOpts.ExtraMounts[0] != want {
+		t.Fatalf("ExtraMounts[0] = %q want %q", runOpts.ExtraMounts[0], want)
+	}
+	if want := filepath.Clean(filepath.Join(repoRoot, "..", "cache")) + ":/workspace/cache:rw"; runOpts.ExtraMounts[1] != want {
+		t.Fatalf("ExtraMounts[1] = %q want %q", runOpts.ExtraMounts[1], want)
+	}
+	if runOpts.ExtraMounts[2] != "/tmp/cache:/cache" {
+		t.Fatalf("ExtraMounts[2] = %q want %q", runOpts.ExtraMounts[2], "/tmp/cache:/cache")
+	}
+}

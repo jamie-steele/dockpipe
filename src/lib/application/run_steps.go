@@ -1176,6 +1176,14 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 			workPath = ""
 		}
 	}
+	containerCfg := mergeWorkflowContainerConfig(o.wf.Container, step.Container)
+	containerHostBase := firstNonEmpty(envMap["DOCKPIPE_SOURCE_ROOT"], envMap["DOCKPIPE_WORKDIR"], runStepsWorkdir(o), o.projectRoot, o.repoRoot)
+	authoredMounts := []string(nil)
+	var mountErr error
+	workHost, workPath, authoredMounts, mountErr = resolveWorkflowContainerConfig(containerCfg, containerHostBase, workHost, workPath, o.opts.ExtraMounts)
+	if mountErr != nil {
+		return nil, runOpts, "", "", nil, mountErr
+	}
 	dockerForRun := maps.Clone(dockerEnv)
 	if strings.TrimSpace(dockerForRun["DOCKPIPE_BIN"]) == "" {
 		if dp := strings.TrimSpace(envMap["DOCKPIPE_BIN"]); dp != "" {
@@ -1199,7 +1207,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 		WorkdirHost:   workHost,
 		WorkPath:      workPath,
 		ActionPath:    actionPath,
-		ExtraMounts:   o.opts.ExtraMounts,
+		ExtraMounts:   authoredMounts,
 		NetworkMode:   networkMode,
 		ExtraEnv:      domain.EnvMapToSlice(dockerForRun),
 		DataVolume:    o.dataVol,

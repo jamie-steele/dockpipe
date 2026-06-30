@@ -72,6 +72,30 @@
         "hostfwd": { "type": "string" }
       }
     },
+    "container_mount": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": { "type": "string" },
+        "guest": { "type": "string" },
+        "mode": { "type": "string", "enum": ["ro", "rw"] }
+      }
+    },
+    "container_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workdir_host": { "type": "string" },
+        "work_path": {
+          "type": "string",
+          "description": "Container working subdirectory under /work. Must stay relative to the primary work mount."
+        },
+        "mounts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/container_mount" }
+        }
+      }
+    },
     "agent_model": {
       "type": "object",
       "additionalProperties": false,
@@ -426,6 +450,7 @@
         "inputs": { "$ref": "#/$defs/input_map" },
         "vars": { "$ref": "#/$defs/string_map" },
         "vm": { "$ref": "#/$defs/step_vm" },
+        "container": { "$ref": "#/$defs/container_config" },
         "agent": { "$ref": "#/$defs/step_agent" },
         "security": {
           "type": "object",
@@ -602,6 +627,7 @@
         }
       }
     },
+    "container": { "$ref": "#/$defs/container_config" },
     "security": {
       "type": "object",
       "additionalProperties": false,

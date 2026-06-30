@@ -204,6 +204,7 @@ DockPipe also injects these variables for every step:
 | `category` | Optional **UI metadata** for tools like **Pipeon**: e.g. `app` marks a launchable GUI/container IDE-style workflow shown in **Basic** mode. Omit or use other values for pipelines and advanced-only flows. |
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
 | `compose` | Optional Docker Compose settings for host built-ins such as `compose_up`, `compose_down`, and `compose_ps`. Fields: `file`, `project`, `project_directory`, `autodown_env`, `exports`, `services`. Compose runs inherit DockPipe’s resolved environment and vault-injected vars directly. |
+| `container` | Optional container mount defaults. Use this to override the primary host path bound at `/work` (`workdir_host`), set a default container subdirectory under `/work` (`work_path`), and declare extra bind mounts (`mounts`). Relative host paths resolve from the active source/workdir, not the packaged workflow asset directory. |
 | `security` | Optional container security policy. Select a core-owned `profile`, then apply bounded `network`, `filesystem`, and `process` overrides. This applies to container execution only; `kind: host` steps remain outside Docker policy. |
 | `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). Single-flow shorthand only; do not combine with `steps:`. Logical resolver script ids like `scripts/dorkpipe/...` must also have an explicit resolver dependency (`requires_resolvers`, `inject.resolver`, or workflow/step resolver selection). |
 | `isolate` | Advanced low-level image/template override. Prefer **`runtime`** + **`resolver`** for the normal authoring path; use **`isolate`** when you need to pin the exact image/template. |
@@ -387,6 +388,7 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `act` / `action` | Action script for this step. Do not combine this with packaged workflow steps. |
 | `vars` | Per-step env map (merged for that step; `--var` keys can be “locked”). |
 | `agent` | Optional agentic step declaration consumed by DorkPipe-owned scripts/tooling. Use this to declare startup prompt, accessible paths, model knobs, and orchestration fanout directly in `config.yml`. |
+| `container` | Optional step-level container mount override. Use this on container steps to change the primary `/work` bind for one step, change its working subdirectory under `/work`, or add extra bind mounts without affecting the whole workflow. |
 | `security` | Optional step-level container security override. Use this only on container steps when one step needs a different profile or tighter `network` / `filesystem` / `process` settings than the workflow default. |
 | `outputs` | Path to a **dotenv-style** file (`KEY=value` lines) written by the step; merged into env for **later** steps. Relative paths resolve under `DOCKPIPE_OUTPUT_ROOT`, not the process cwd. This is the normal way one step passes values forward to later steps. |
 | `capture_stdout` | Host path (relative to **`DOCKPIPE_WORKDIR`** / **`--workdir`**) — container **stdout** is also appended to this file (still printed on the terminal). |
@@ -395,6 +397,14 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `host_builtin` | Optional engine-owned host action for `kind: host` steps. Supported values: `package_build_store`, `compose_up`, `compose_down`, `compose_ps`. Compose built-ins require top-level `compose.file`. |
 
 Step-level `security` follows the same shape as top-level `security`, but it applies only to that one container step. It is not meaningful on `kind: host` steps, and packaged workflow steps should keep their policy inside the child workflow instead of trying to override it from the parent.
+
+Step-level `container` follows the same shape as top-level `container`:
+
+- `workdir_host`: host path to bind at `/work`
+- `work_path`: relative container cwd under `/work`
+- `mounts`: additional `{ host, guest, mode }` bind mounts, where `mode` is `ro` or `rw`
+
+Like `security`, this is only meaningful on container steps. DockPipe rejects `container:` on `kind: host` steps and on packaged workflow-call steps.
 
 ### Agentic steps (`agent`)
 

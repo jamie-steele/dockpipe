@@ -3,6 +3,7 @@ package domain
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -84,6 +85,8 @@ type Workflow struct {
 	ModelPolicy StepAgentModelPolicyConfig `yaml:"model_policy,omitempty"`
 	// Image: optional workflow-level image customizations materialized during package compile.
 	Image WorkflowImageConfig `yaml:"image,omitempty"`
+	// Container: optional workflow-level container mount overrides/defaults for container execution.
+	Container WorkflowContainerConfig `yaml:"container,omitempty"`
 	// Inject: explicit compile closure dependencies (workflow/package ids and resolver profile names).
 	// Unlike imports:, this does not merge YAML — it only guides package compile for-workflow ordering.
 	Inject   WorkflowInjectList      `yaml:"inject,omitempty"`
@@ -109,6 +112,24 @@ type WorkflowImageConfig struct {
 
 type WorkflowImagePackagesConfig struct {
 	Apt []string `yaml:"apt,omitempty"`
+}
+
+type WorkflowContainerConfig struct {
+	WorkdirHost string                   `yaml:"workdir_host,omitempty"`
+	WorkPath    string                   `yaml:"work_path,omitempty"`
+	Mounts      []WorkflowContainerMount `yaml:"mounts,omitempty"`
+}
+
+type WorkflowContainerMount struct {
+	Host  string `yaml:"host,omitempty"`
+	Guest string `yaml:"guest,omitempty"`
+	Mode  string `yaml:"mode,omitempty"`
+}
+
+func (c WorkflowContainerConfig) IsEmpty() bool {
+	return strings.TrimSpace(c.WorkdirHost) == "" &&
+		strings.TrimSpace(c.WorkPath) == "" &&
+		len(c.Mounts) == 0
 }
 
 type WorkflowView struct {
@@ -362,6 +383,7 @@ type Step struct {
 	VM        StepVMConfig            `yaml:"vm,omitempty"`
 	Security  WorkflowSecurityConfig  `yaml:"security,omitempty"`
 	Image     WorkflowImageConfig     `yaml:"image,omitempty"`
+	Container WorkflowContainerConfig `yaml:"container,omitempty"`
 	Agent     StepAgentConfig         `yaml:"agent,omitempty"`
 	// Blocking is YAML is_blocking: when false, this step joins a parallel batch with adjacent
 	// non-blocking steps. Inputs = env after last blocking step + this step’s vars/pre-scripts only;
@@ -583,6 +605,7 @@ type workflowFile struct {
 	View            WorkflowView               `yaml:"view,omitempty"`
 	ModelPolicy     StepAgentModelPolicyConfig `yaml:"model_policy,omitempty"`
 	Image           WorkflowImageConfig        `yaml:"image,omitempty"`
+	Container       WorkflowContainerConfig    `yaml:"container,omitempty"`
 	Inputs          map[string]InputBinding    `yaml:"inputs,omitempty"`
 	Vars            map[string]string          `yaml:"vars"`
 	Compose         WorkflowComposeConfig      `yaml:"compose,omitempty"`
@@ -764,6 +787,9 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 	if err := ValidateWorkflowSecurityField(w); err != nil {
 		return err
 	}
+	if err := ValidateWorkflowContainerField(w); err != nil {
+		return err
+	}
 	if err := ValidateWorkflowSingleFlowFields(w); err != nil {
 		return err
 	}
@@ -784,6 +810,9 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 			return err
 		}
 		if err := ValidateStepSecurityField(i, s); err != nil {
+			return err
+		}
+		if err := ValidateStepContainerField(i, s); err != nil {
 			return err
 		}
 		if err := ValidateStepVMField(i, s); err != nil {
@@ -869,6 +898,13 @@ func ValidateWorkflowSecurityField(w *Workflow) error {
 	return ValidateWorkflowSecurityConfig("security", w.Security)
 }
 
+func ValidateWorkflowContainerField(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	return ValidateWorkflowContainerConfig("container", w.Container)
+}
+
 func ValidateWorkflowSecurityConfig(fieldPrefix string, cfg WorkflowSecurityConfig) error {
 	if err := validateEnum(fieldPrefix+".profile", cfg.Profile, validPolicyProfiles); err != nil {
 		return err
@@ -893,6 +929,24 @@ func ValidateWorkflowSecurityConfig(fieldPrefix string, cfg WorkflowSecurityConf
 	}
 	if cfg.Process.PIDLimit < 0 {
 		return fmt.Errorf("%s.process.pid_limit must be >= 0", fieldPrefix)
+	}
+	return nil
+}
+
+func ValidateWorkflowContainerConfig(fieldPrefix string, cfg WorkflowContainerConfig) error {
+	if cfg.IsEmpty() {
+		return nil
+	}
+	if wp := strings.TrimSpace(cfg.WorkPath); wp != "" && (strings.HasPrefix(wp, "/") || filepath.IsAbs(wp)) {
+		return fmt.Errorf("%s.work_path must be relative to the container work root", fieldPrefix)
+	}
+	for idx, mount := range cfg.Mounts {
+		if strings.TrimSpace(mount.Host) == "" || strings.TrimSpace(mount.Guest) == "" {
+			return fmt.Errorf("%s.mounts[%d] requires both host and guest", fieldPrefix, idx)
+		}
+		if err := validateEnum(fmt.Sprintf("%s.mounts[%d].mode", fieldPrefix, idx), mount.Mode, map[string]struct{}{"": {}, "ro": {}, "rw": {}}); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -957,6 +1011,19 @@ func ValidateStepSecurityField(i int, s Step) error {
 		return fmt.Errorf("step %d: packaged workflow step does not use security; keep policy inside the child workflow", i+1)
 	}
 	return ValidateWorkflowSecurityConfig(fmt.Sprintf("steps[%d].security", i), s.Security)
+}
+
+func ValidateStepContainerField(i int, s Step) error {
+	if s.Container.IsEmpty() {
+		return nil
+	}
+	if s.IsHostStep() {
+		return fmt.Errorf("step %d: kind: host step does not use container; remove container: or switch to a container step", i+1)
+	}
+	if s.UsesPackagedWorkflow() {
+		return fmt.Errorf("step %d: packaged workflow step does not use container; keep child container mounts inside the child workflow", i+1)
+	}
+	return ValidateWorkflowContainerConfig(fmt.Sprintf("steps[%d].container", i), s.Container)
 }
 
 func ValidateStepVMField(i int, s Step) error {
