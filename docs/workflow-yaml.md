@@ -205,14 +205,14 @@ DockPipe also injects these variables for every step:
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
 | `compose` | Optional Docker Compose settings for host built-ins such as `compose_up`, `compose_down`, and `compose_ps`. Fields: `file`, `project`, `project_directory`, `autodown_env`, `exports`, `services`. Compose runs inherit DockPipe’s resolved environment and vault-injected vars directly. |
 | `security` | Optional container security policy. Select a core-owned `profile`, then apply bounded `network`, `filesystem`, and `process` overrides. This applies to container execution only; `kind: host` steps remain outside Docker policy. |
-| `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). Single-flow shorthand only; do not combine with `steps:`. |
+| `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). Single-flow shorthand only; do not combine with `steps:`. Logical resolver script ids like `scripts/dorkpipe/...` must also have an explicit resolver dependency (`requires_resolvers`, `inject.resolver`, or workflow/step resolver selection). |
 | `isolate` | Advanced low-level image/template override. Prefer **`runtime`** + **`resolver`** for the normal authoring path; use **`isolate`** when you need to pin the exact image/template. |
 | `act` / `action` | Action script after the container command (when not using per-step act). Single-flow shorthand only; do not combine with `steps:`. |
 | `runtime` | Main **where does this run?** field. Names an existing **core** runtime profile under **`templates/core/runtimes/<name>`**. Also acts as the default for steps unless a step overrides it. |
 | `resolver` | Main **which tool/profile does this use?** field. Names an existing **core** resolver profile under **`templates/core/resolvers/<name>`**. Also acts as the default for steps unless a step overrides it. |
 | `steps` | List of **steps** (multi-step mode). |
 | `imports` | List of paths (relative to this file) to merge **before** this file: each imported file’s **`vars`** are merged (later files override), then **`steps`** from imports run **before** **`steps`** here. Circular imports are rejected. Requires loading from disk (not raw bytes-only parse). Use this when you want to change the authored workflow itself. |
-| `inject` | Compile-closure dependencies only. Use this when compile needs extra workflows/packages/resolvers included, but you do **not** want to merge their YAML into this workflow. |
+| `inject` | Compile-closure dependencies only. Use this when compile needs extra workflows/packages/resolvers included, but you do **not** want to merge their YAML into this workflow. `inject.resolver` also counts as an explicit dependency for logical resolver script ids like `scripts/dorkpipe/...`. |
 | `strategy` | Default **strategy name** when the CLI does **not** pass **`--strategy <name>`**. |
 | `strategies` | Optional allowlist: if non-empty, the effective strategy (CLI **`--strategy`** or **`strategy:`**) must be one of the listed names. |
 | `docker_preflight` | Default **true**. When **false**, the runner skips the Docker reachability check before **`steps:`** if **no** step uses the container. Use for **host-only** workflows whose **`run:`** / **`pre_script`** scripts do **not** invoke Docker. If a script calls **`docker`**, keep the default or the workflow may fail later. |
@@ -374,7 +374,7 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 |-----|---------|
 | `id` | Optional. Used in stderr logs (e.g. `[merge]` lines). If omitted, logs use `step 1`, `step 2`, … |
 | `cmd` / `command` | Shell command line for this step. In a **container** step it runs inside the container. In a **host** step it runs on the host. |
-| `run` | String or YAML list: host pre-scripts before this step’s container. |
+| `run` | String or YAML list: host pre-scripts before this step’s container. Logical resolver script ids like `scripts/dorkpipe/...` require an explicit resolver dependency instead of relying on workflow-package fallback. |
 | `pre_script` | Single extra pre-script path (in addition to `run`). |
 | `isolate` | Template/image for this step (falls back to workflow / CLI / **core** runtime profile). |
 | `kind` | Step kind. Use **`container`** (default) for normal isolated execution, or **`host`** for host-side actions. |

@@ -54,7 +54,8 @@ func ExtractTarGzToDir(tarGzPath, destDir string) error {
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
-			out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(hdr.Mode&0o777))
+			mode := normalizeArchiveMode(name, os.FileMode(hdr.Mode&0o777), false)
+			out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode)
 			if err != nil {
 				return err
 			}
@@ -64,6 +65,11 @@ func ExtractTarGzToDir(tarGzPath, destDir string) error {
 			}
 			if err := out.Close(); err != nil {
 				return err
+			}
+			if shouldForceExecutable(name) {
+				if err := markExecutableOnDisk(target); err != nil {
+					return err
+				}
 			}
 		default:
 			continue

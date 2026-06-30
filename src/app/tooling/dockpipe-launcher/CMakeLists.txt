@@ -12,7 +12,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_package(OpenGL REQUIRED)
 endif()
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Network Concurrent)
 
 set(DOCKPIPE_LAUNCHER_SOURCES
     src/main.cpp
@@ -47,7 +47,7 @@ else()
 endif()
 
 target_include_directories(dockpipe-launcher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
-target_link_libraries(dockpipe-launcher PRIVATE Qt6::Widgets Qt6::Network)
+target_link_libraries(dockpipe-launcher PRIVATE Qt6::Widgets Qt6::Network Qt6::Concurrent)
 
 if(MSVC)
     target_compile_definitions(dockpipe-launcher PRIVATE _CRT_SECURE_NO_WARNINGS)

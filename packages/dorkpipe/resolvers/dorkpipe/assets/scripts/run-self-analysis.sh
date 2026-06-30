@@ -9,7 +9,8 @@ cd "$ROOT"
 BIN="$(dorkpipe_script_resolve_bin "$(dorkpipe_script_repo_root "$SCRIPT_DIR")")"
 SPEC="${DORKPIPE_SELF_ANALYSIS_SPEC:-${SCRIPT_DIR}/../../dorkpipe-self-analysis/spec.yaml}"
 if [[ ! -x "$BIN" ]]; then
-	echo "dorkpipe-self-analysis: build the orchestrator first: ./src/bin/dockpipe package build source --workdir . --only dorkpipe (expected $BIN)" >&2
+	echo "dorkpipe-self-analysis: dorkpipe CLI not available from packaged assets, repo-local builds, or PATH (expected $BIN)" >&2
+	echo "dorkpipe-self-analysis: consumer path expects compiled package assets or an installed dorkpipe binary; maintainer fallback: dockpipe package build source --workdir . --only dorkpipe" >&2
 	exit 1
 fi
 if [[ ! -f "$SPEC" ]]; then

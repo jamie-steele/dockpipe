@@ -81,7 +81,10 @@ dorkpipe_orchestrate_helper_bin() {
   fi
   local repo_root dockpipe_bin
   repo_root="${ROOT:-$(dockpipe_sdk get workdir)}"
-  DORKPIPE_ORCH_HELPER_BIN="$(dockpipe_sdk require tooling-bin orchestrate-helper || true)"
+  DORKPIPE_ORCH_HELPER_BIN="${DOCKPIPE_ASSETS_DIR:-}/tooling/bin/$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf 'windows' ;; darwin*:*|*:darwin*:* ) printf 'darwin' ;; *) printf 'linux' ;; esac)/orchestrate-helper$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf '.exe' ;; *) printf '' ;; esac)"
+  if [[ ! -x "${DORKPIPE_ORCH_HELPER_BIN}" ]]; then
+    DORKPIPE_ORCH_HELPER_BIN="$(dockpipe_sdk require tooling-bin orchestrate-helper || true)"
+  fi
   if [[ -n "${DORKPIPE_ORCH_HELPER_BIN}" ]]; then
     export DORKPIPE_ORCH_HELPER_BIN
     printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"

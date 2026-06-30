@@ -337,6 +337,90 @@ func TestResolveWorkflowConfigPathWithWorkdirPrefersProjectWorkflowsOverTarball(
 	}
 }
 
+func TestResolveWorkflowConfigPathWithConfiguredExternalStore(t *testing.T) {
+	tmp := t.TempDir()
+	external := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, "dockpipe.config.json"), []byte(`{
+  "schema": 1,
+  "packages": {
+    "sources": [
+      {
+        "kind": "store",
+        "path": "`+filepath.ToSlash(external)+`"
+      }
+    ]
+  }
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := t.TempDir()
+	if err := os.WriteFile(filepath.Join(st, "config.yml"), []byte("name: externaldemo\nsteps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: externaldemo\nversion: 0.1.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pw := filepath.Join(external, "workflows")
+	if err := os.MkdirAll(pw, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(pw, "dockpipe-workflow-externaldemo-0.1.0.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(st, tgz, "workflows/externaldemo"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveWorkflowConfigPathWithWorkdir(tmp, tmp, "externaldemo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got, "tar://") {
+		t.Fatalf("want tar workflow URI from configured external store, got %s", got)
+	}
+}
+
+func TestResolveWorkflowConfigPathWithConfiguredExternalStoreFromBundleRepoRoot(t *testing.T) {
+	bundle := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(bundle, BundledLayoutDir, "workflows"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	external := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, "dockpipe.config.json"), []byte(`{
+  "schema": 1,
+  "packages": {
+    "sources": [
+      {
+        "kind": "store",
+        "path": "`+filepath.ToSlash(external)+`"
+      }
+    ]
+  }
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := t.TempDir()
+	if err := os.WriteFile(filepath.Join(st, "config.yml"), []byte("name: bundleexternal\nsteps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(st, "package.yml"), []byte("schema: 1\nname: bundleexternal\nversion: 0.1.0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pw := filepath.Join(external, "workflows")
+	if err := os.MkdirAll(pw, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(pw, "dockpipe-workflow-bundleexternal-0.1.0.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(st, tgz, "workflows/bundleexternal"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveWorkflowConfigPathWithWorkdir(bundle, project, "bundleexternal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(got, "tar://") {
+		t.Fatalf("want tar workflow URI from project-config package source, got %s", got)
+	}
+}
+
 func TestProjectWorkflowConfigPathRespectsDockpipeWorkflowsDir(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("DOCKPIPE_WORKFLOWS_DIR", "ci-flows")

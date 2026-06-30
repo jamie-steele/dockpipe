@@ -396,6 +396,36 @@ func resolveScriptsPrefixedPath(repoRoot, projectRoot, rel string) string {
 	if scriptFileExists(filepath.Join(pkgWf, rest)) {
 		return filepath.Join(pkgWf, rest)
 	}
+	for _, root := range configuredPackageStoreRoots(projectRoot) {
+		resRoot := filepath.Join(root, "resolvers")
+		wfRoot := filepath.Join(root, "workflows")
+		if p, ok := tryBundledAssetsScripts(resRoot, "", rest); ok {
+			return p
+		}
+		if p, ok := scriptPathFromResolverTarballs(projectRoot, resRoot, rest); ok {
+			return p
+		}
+		if p, ok := tryBundledAssetsScripts(wfRoot, "", rest); ok {
+			return p
+		}
+		if p, ok := scriptPathFromWorkflowTarballs(projectRoot, wfRoot, rest); ok {
+			return p
+		}
+		if scriptFileExists(filepath.Join(resRoot, rest)) {
+			return filepath.Join(resRoot, rest)
+		}
+		if scriptFileExists(filepath.Join(wfRoot, rest)) {
+			return filepath.Join(wfRoot, rest)
+		}
+	}
+	for _, dir := range configuredPackageTarballDirs(projectRoot) {
+		if p, ok := scriptPathFromResolverTarballs(projectRoot, dir, rest); ok {
+			return p
+		}
+		if p, ok := scriptPathFromWorkflowTarballs(projectRoot, dir, rest); ok {
+			return p
+		}
+	}
 	core := CoreDir(repoRoot)
 	wfRoots := WorkflowCompileRootsCached(projectRoot)
 	bundleRoots := BundleCompileRootsCached(projectRoot)
@@ -509,6 +539,12 @@ func ResolveResolverFilePath(repoRoot, resolverName string) (string, error) {
 		candidates = append(candidates,
 			filepath.Join(pr, resolverName),
 			filepath.Join(pr, resolverName, "profile"),
+		)
+	}
+	for _, root := range configuredPackageStoreRoots(repoRoot) {
+		candidates = append(candidates,
+			filepath.Join(root, "resolvers", resolverName),
+			filepath.Join(root, "resolvers", resolverName, "profile"),
 		)
 	}
 	if !UsesBundledAssetLayout(repoRoot) {

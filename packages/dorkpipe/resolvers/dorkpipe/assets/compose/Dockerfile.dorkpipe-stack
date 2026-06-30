@@ -5,9 +5,9 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends bash ca-certificates git jq openssh-client python3 ripgrep; \
     rm -rf /var/lib/apt/lists/*
 
-COPY src/bin/dockpipe /usr/local/bin/dockpipe
-COPY bin/.dockpipe/tooling/bin/dorkpipe /usr/local/bin/dorkpipe
-COPY bin/.dockpipe/tooling/bin/mcpd /usr/local/bin/mcpd
+COPY tooling/bin/linux/dockpipe /usr/local/bin/dockpipe
+COPY tooling/bin/linux/dorkpipe /usr/local/bin/dorkpipe
+COPY tooling/bin/linux/mcpd /usr/local/bin/mcpd
 
 RUN chmod +x /usr/local/bin/dockpipe /usr/local/bin/dorkpipe /usr/local/bin/mcpd
 

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"dockpipe/src/lib/domain"
 )
 
 func TestResolveWorkflowYAMLPath_relativeFromSubdir(t *testing.T) {
@@ -306,5 +308,120 @@ steps:
 	err := ValidateResolvedWorkflowYAML(cfg)
 	if err == nil || !strings.Contains(err.Error(), "does not use security") {
 		t.Fatalf("expected host security rejection, got %v", err)
+	}
+}
+
+func TestValidateResolvedWorkflowYAML_RejectsResolverOwnedScriptWithoutExplicitDependency(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DOCKPIPE_REPO_ROOT", root)
+	if err := os.WriteFile(filepath.Join(root, domain.DockpipeProjectConfigFileName), []byte(`{
+  "schema": 1,
+  "compile": {
+    "workflows": ["workflows", "packages"]
+  }
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resolverDir := filepath.Join(root, "packages", "dorkpipe", "resolvers", "dorkpipe", "profile")
+	if err := os.MkdirAll(resolverDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfgDir := filepath.Join(root, "workflows", "demo")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(cfgDir, "config.yml")
+	yml := `name: demo
+steps:
+  - kind: host
+    run: scripts/dorkpipe/dev-stack.sh
+`
+	if err := os.WriteFile(cfg, []byte(yml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := ValidateResolvedWorkflowYAML(cfg)
+	if err == nil || !strings.Contains(err.Error(), "require an explicit resolver dependency") {
+		t.Fatalf("expected explicit resolver dependency error, got %v", err)
+	}
+}
+
+func TestValidateResolvedWorkflowYAML_AcceptsResolverOwnedScriptWithRequiresResolvers(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DOCKPIPE_REPO_ROOT", root)
+	if err := os.WriteFile(filepath.Join(root, domain.DockpipeProjectConfigFileName), []byte(`{
+  "schema": 1,
+  "compile": {
+    "workflows": ["workflows", "packages"]
+  }
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resolverDir := filepath.Join(root, "packages", "dorkpipe", "resolvers", "dorkpipe", "profile")
+	if err := os.MkdirAll(resolverDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfgDir := filepath.Join(root, "workflows", "demo")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "package.yml"), []byte(`schema: 1
+name: demo
+version: 0.1.0
+kind: workflow
+requires_resolvers: [dorkpipe]
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(cfgDir, "config.yml")
+	yml := `name: demo
+steps:
+  - kind: host
+    run: scripts/dorkpipe/dev-stack.sh
+`
+	if err := os.WriteFile(cfg, []byte(yml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateResolvedWorkflowYAML(cfg); err != nil {
+		t.Fatalf("expected requires_resolvers to satisfy logical resolver script dependency, got %v", err)
+	}
+}
+
+func TestValidateResolvedWorkflowYAML_AcceptsProjectScriptOverrideWithoutResolverDependency(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DOCKPIPE_REPO_ROOT", root)
+	if err := os.WriteFile(filepath.Join(root, domain.DockpipeProjectConfigFileName), []byte(`{
+  "schema": 1,
+  "compile": {
+    "workflows": ["workflows", "packages"]
+  }
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	resolverDir := filepath.Join(root, "packages", "dorkpipe", "resolvers", "dorkpipe", "profile")
+	if err := os.MkdirAll(resolverDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	overridePath := filepath.Join(root, "scripts", "dorkpipe")
+	if err := os.MkdirAll(overridePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(overridePath, "dev-stack.sh"), []byte("#!/usr/bin/env bash\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfgDir := filepath.Join(root, "workflows", "demo")
+	if err := os.MkdirAll(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(cfgDir, "config.yml")
+	yml := `name: demo
+steps:
+  - kind: host
+    run: scripts/dorkpipe/dev-stack.sh
+`
+	if err := os.WriteFile(cfg, []byte(yml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateResolvedWorkflowYAML(cfg); err != nil {
+		t.Fatalf("expected project script override to bypass resolver dependency check, got %v", err)
 	}
 }

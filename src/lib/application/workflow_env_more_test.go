@@ -3,6 +3,7 @@ package application
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"dockpipe/src/lib/domain"
@@ -219,6 +220,13 @@ func TestBuildWorkflowEnvIntoResolvesTypedInputsFromTarWorkflowConfig(t *testing
 	if err := buildWorkflowEnvInto(env, wf, wfConfig, stageRoot, projectRoot, &CliOpts{Workdir: projectRoot}); err != nil {
 		t.Fatal(err)
 	}
+	onDiskConfig := filepath.Join(projectRoot, "bin", ".dockpipe", "internal", "cache", "tarball")
+	if got := env["DOCKPIPE_WORKFLOW_CONFIG"]; !strings.HasSuffix(filepath.ToSlash(got), "/workflows/demo/config.yml") || !strings.Contains(filepath.ToSlash(got), filepath.ToSlash(onDiskConfig)) {
+		t.Fatalf("expected extracted workflow config path, got %q", got)
+	}
+	if env["DOCKPIPE_WORKFLOW_CONFIG_URI"] != wfConfig {
+		t.Fatalf("expected original tar uri in DOCKPIPE_WORKFLOW_CONFIG_URI, got %q", env["DOCKPIPE_WORKFLOW_CONFIG_URI"])
+	}
 	if env["DOCKPIPE_VM_EXEC_MODE"] != "powershell" {
 		t.Fatalf("DOCKPIPE_VM_EXEC_MODE=%q", env["DOCKPIPE_VM_EXEC_MODE"])
 	}
@@ -298,6 +306,23 @@ func TestMergeExtraEnvCLIIntoSteps(t *testing.T) {
 	}
 	if env["SHARED"] != "from-var" {
 		t.Fatalf("--var should win over --env for SHARED: got %q", env["SHARED"])
+	}
+}
+
+func TestPrependPATHDirPreservesColonDelimitedPath(t *testing.T) {
+	current := "/mingw64/bin:/usr/local/bin:/c/Program Files/Docker/Docker/resources/bin"
+	got := prependPATHDir(current, `C:\Source\dockpipe\src\bin`)
+	want := `C:\Source\dockpipe\src\bin:/mingw64/bin:/usr/local/bin:/c/Program Files/Docker/Docker/resources/bin`
+	if got != want {
+		t.Fatalf("prependPATHDir() = %q want %q", got, want)
+	}
+}
+
+func TestPrependPATHDirAvoidsDuplicateEntry(t *testing.T) {
+	current := `C:\Source\dockpipe\src\bin;/usr/bin`
+	got := prependPATHDir(current, `C:\Source\dockpipe\src\bin`)
+	if got != current {
+		t.Fatalf("prependPATHDir() = %q want %q", got, current)
 	}
 }
 

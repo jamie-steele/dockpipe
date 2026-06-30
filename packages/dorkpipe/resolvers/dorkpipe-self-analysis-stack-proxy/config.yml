@@ -35,21 +35,14 @@ steps:
   - id: self_analysis
     runtime: dockerimage
     isolate: golang:1.25-bookworm
+    cwd: repo
     vars:
       DATABASE_URL: postgresql://dorkpipe:dorkpipe@host.docker.internal:15432/dorkpipe
       OLLAMA_HOST: http://host.docker.internal:11434
       DOCKPIPE_POLICY_PROXY_URL: http://host.docker.internal:13128
       DOCKPIPE_POLICY_PROXY_NO_PROXY: host.docker.internal,localhost,127.0.0.1,::1
-    cmd: |-
-      bash -c 'set -euo pipefail
-      cd /work
-      # No apt-get: dockpipe maps the container user to the host uid, so apt cannot run as root.
-      # golang:bookworm images ship git and curl; scripts fall back to grep if ripgrep is absent.
-      if [[ ! -x bin/dorkpipe ]]; then
-        echo "[dorkpipe-self-analysis] building bin/dorkpipe in container..."
-        go build -C packages/dorkpipe/lib -trimpath -o /work/bin/dorkpipe ./cmd/dorkpipe
-      fi
-      exec bash packages/dorkpipe/resolvers/dorkpipe/assets/scripts/run-self-analysis.sh'
+    run:
+      - scripts/dorkpipe/run-self-analysis.sh
 
   - id: stack_down
     kind: host

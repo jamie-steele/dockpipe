@@ -9,7 +9,10 @@ REPO_ROOT="${ROOT}"
 if [[ -n "${DOCKPIPE_SKILLS_RENDER_BIN:-}" ]]; then
   RENDER_BIN="${DOCKPIPE_SKILLS_RENDER_BIN}"
 else
-  RENDER_BIN="$(dockpipe_sdk require tooling-bin skills-render || true)"
+  RENDER_BIN="${DOCKPIPE_ASSETS_DIR:-}/tooling/bin/$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf 'windows' ;; darwin*:*|*:darwin*:* ) printf 'darwin' ;; *) printf 'linux' ;; esac)/skills-render$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf '.exe' ;; *) printf '' ;; esac)"
+  if [[ ! -x "${RENDER_BIN}" ]]; then
+    RENDER_BIN="$(dockpipe_sdk require tooling-bin skills-render || true)"
+  fi
 fi
 
 if [[ -z "${RENDER_BIN:-}" ]]; then

@@ -22,6 +22,42 @@ dorkpipe_script_die() {
 	exit 1
 }
 
+dorkpipe_script_host_os() {
+	case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in
+	Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*)
+		printf 'windows\n'
+		;;
+	darwin*:*|*:darwin*:* )
+		printf 'darwin\n'
+		;;
+	*)
+		printf 'linux\n'
+		;;
+	esac
+}
+
+dorkpipe_script_packaged_bin() {
+	local name="${1:?binary name}"
+	local assets_dir="${DOCKPIPE_ASSETS_DIR:-}"
+	[[ -n "$assets_dir" ]] || return 1
+	local os_dir exe candidate
+	os_dir="$(dorkpipe_script_host_os)"
+	exe=""
+	if [[ "$os_dir" == "windows" ]]; then
+		exe=".exe"
+	fi
+	for candidate in \
+		"$assets_dir/tooling/bin/$os_dir/$name$exe" \
+		"$assets_dir/tooling/bin/$os_dir/$name"
+	do
+		if [[ -x "$candidate" ]]; then
+			printf '%s\n' "$candidate"
+			return 0
+		fi
+	done
+	return 1
+}
+
 dorkpipe_script_exec_cli() {
 	local script_dir="${1:-}"
 	if [[ -n "$script_dir" ]] && [[ "$script_dir" == -* ]]; then
@@ -38,12 +74,17 @@ dorkpipe_script_exec_cli() {
 		exec go run ./cmd/dorkpipe "$@"
 	fi
 
-	dorkpipe_bin="$(dorkpipe_script_resolve_bin "$repo_root")" || dorkpipe_script_die "dorkpipe not found; build the maintainer tool or install it on PATH"
+	dorkpipe_bin="$(dorkpipe_script_resolve_bin "$repo_root")" || dorkpipe_script_die "dorkpipe not found; compile/install the dorkpipe package assets or install it on PATH"
 	exec "$dorkpipe_bin" "$@"
 }
 
 dorkpipe_script_resolve_bin() {
 	local repo_root="${1:-}"
+	local packaged
+	if packaged="$(dorkpipe_script_packaged_bin dorkpipe 2>/dev/null)"; then
+		printf '%s\n' "$packaged"
+		return 0
+	fi
 	if [[ -n "$repo_root" ]]; then
 		local candidate
 		for candidate in \

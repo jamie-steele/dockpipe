@@ -9,7 +9,6 @@
 Use this when you want **one command** from YAML instead of running **`dev-stack.sh`** by hand.
 
 ```bash
-make build
 dockpipe --workflow dorkpipe-self-analysis-stack --workdir . --
 ```
 

@@ -684,7 +684,7 @@
     "compile_hooks": {
       "type": "array",
       "items": { "type": "string" },
-      "description": "Shell commands run by dockpipe package compile workflow from the workflow source dir after validation, before packaging (e.g. go build)."
+      "description": "Shell commands run by dockpipe package compile against the staged package copy after validation and before packaging. DockPipe exports DOCKPIPE_COMPILE_KIND, DOCKPIPE_COMPILE_WORKDIR, DOCKPIPE_COMPILE_SOURCE_DIR, and DOCKPIPE_COMPILE_STAGING_DIR."
     },
     "types": {
       "type": "array",

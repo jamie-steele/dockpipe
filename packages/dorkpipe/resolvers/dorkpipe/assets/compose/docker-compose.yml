@@ -27,8 +27,8 @@ services:
   dorkpipe-stack:
     image: dockpipe-dorkpipe-stack:latest
     build:
-      context: .
-      dockerfile: packages/dorkpipe/resolvers/dorkpipe/assets/compose/Dockerfile.dorkpipe-stack
+      context: "${DORKPIPE_DEV_STACK_CONTEXT_DIR:?DORKPIPE_DEV_STACK_CONTEXT_DIR is required}"
+      dockerfile: compose/Dockerfile.dorkpipe-stack
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,7 +54,6 @@ services:
       - exec "$$DORKPIPE_DEV_STACK_MCPD_BIN" -http "$$DORKPIPE_DEV_STACK_MCPD_LISTEN"
     volumes:
       - "${DORKPIPE_DEV_STACK_WORKDIR:-.}:/work"
-      - "${DORKPIPE_DEV_STACK_REPO_ROOT:-.}:/repo"
       - "${DORKPIPE_DEV_STACK_MCP_API_KEY_FILE:?DORKPIPE_DEV_STACK_MCP_API_KEY_FILE is required}:/run/dorkpipe/mcp-api-key:ro"
       - "${DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE:?DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE is required}:/run/dorkpipe/mcp-tls.crt:ro"
       - "${DORKPIPE_DEV_STACK_MCP_TLS_KEY_FILE:?DORKPIPE_DEV_STACK_MCP_TLS_KEY_FILE is required}:/run/dorkpipe/mcp-tls.key:ro"
@@ -73,9 +72,9 @@ services:
     command:
       - /bin/sh
       - -lc
-      - exec node /repo/packages/dorkpipe/resolvers/dorkpipe/assets/scripts/mcp-proxy.js
+      - exec node /opt/dorkpipe/scripts/mcp-proxy.js
     volumes:
-      - "${DORKPIPE_DEV_STACK_REPO_ROOT:-.}:/repo"
+      - "${DORKPIPE_DEV_STACK_ASSETS_DIR:?DORKPIPE_DEV_STACK_ASSETS_DIR is required}:/opt/dorkpipe:ro"
       - "${DORKPIPE_DEV_STACK_MCP_API_KEY_FILE:?DORKPIPE_DEV_STACK_MCP_API_KEY_FILE is required}:/run/dorkpipe/mcp-api-key:ro"
       - "${DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE:?DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE is required}:/run/dorkpipe/mcp-tls.crt:ro"
   policy-proxy:
@@ -86,7 +85,7 @@ services:
     ports:
       - "13128:3128"
     volumes:
-      - ./policy-proxy.js:/opt/dockpipe/policy-proxy.js:ro
+      - "${DORKPIPE_DEV_STACK_POLICY_PROXY_JS:?DORKPIPE_DEV_STACK_POLICY_PROXY_JS is required}:/opt/dockpipe/policy-proxy.js:ro"
 
 volumes:
   dorkpipe_pgdata:

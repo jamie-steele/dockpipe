@@ -13,6 +13,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type closurePackageDependency struct {
+	workflowDir   string
+	resolverNames []string
+	satisfied     bool
+}
+
 // compileClosureForWorkflow compiles core (if missing), then resolver tarballs and workflow tarballs
 // for the transitive closure of workflowName: config.yml inject:, package.yml depends, requires_resolvers,
 // resolver/runtime names on the workflow and steps, and nested delegate workflows from merged isolation profiles.
@@ -109,6 +115,7 @@ func closureWorkflowOrderAndResolvers(dockpipeRepoRoot, projectRoot, startDir st
 	visited := make(map[string]bool)
 	var order []string
 	resNames := make(map[string]bool)
+	availablePackages := availablePackageNamesForClosure(projectRoot, cfg)
 
 	var visit func(string) error
 	visit = func(wfDir string) error {
@@ -151,13 +158,24 @@ func closureWorkflowOrderAndResolvers(dockpipeRepoRoot, projectRoot, startDir st
 					if dep == "" {
 						continue
 					}
-					depDir := findWorkflowSourceDir(projectRoot, dep, wfRoots)
-					if depDir == "" {
-						fmt.Fprintf(os.Stderr, "[dockpipe] compile for-workflow: warning: depends %q not found under compile.workflows — skip\n", dep)
+					depInfo, err := resolveClosurePackageDependency(projectRoot, dep, wfRoots, availablePackages)
+					if err != nil {
+						return err
+					}
+					if depInfo.workflowDir != "" {
+						if err := visit(depInfo.workflowDir); err != nil {
+							return err
+						}
 						continue
 					}
-					if err := visit(depDir); err != nil {
-						return err
+					for _, resolverName := range depInfo.resolverNames {
+						addResolverName(resNames, resolverName)
+					}
+					if depInfo.satisfied || len(depInfo.resolverNames) > 0 {
+						continue
+					}
+					if depInfo.workflowDir == "" {
+						fmt.Fprintf(os.Stderr, "[dockpipe] compile for-workflow: warning: depends %q not found under compile.workflows — skip\n", dep)
 					}
 				}
 				for _, r := range pm.RequiresResolvers {
@@ -257,6 +275,52 @@ func findWorkflowSourceDir(projectRoot, ref string, wfRoots []string) string {
 	return infrastructure.FindNestedWorkflowDirByLeafName(projectRoot, ref)
 }
 
+func availablePackageNamesForClosure(projectRoot string, cfg *domain.DockpipeProjectConfig) map[string]bool {
+	out := make(map[string]bool)
+	if pkgs, err := infrastructure.PackagesRoot(projectRoot); err == nil {
+		for name := range compiledPackageNamesFromTarballs(pkgs) {
+			out[name] = true
+		}
+	}
+	mergeCompiledPackageNamesFromConfiguredSources(out, projectRoot, cfg)
+	mergeCompiledPackageNamesFromInstalledSources(out)
+	return out
+}
+
+func resolveClosurePackageDependency(projectRoot, ref string, wfRoots []string, availablePackages map[string]bool) (closurePackageDependency, error) {
+	ref = strings.TrimSpace(ref)
+	if ref == "" {
+		return closurePackageDependency{}, nil
+	}
+	if dir := findWorkflowDirByPackageManifestName(projectRoot, ref, wfRoots); dir != "" {
+		if cfgPath := filepath.Join(dir, "config.yml"); fileExists(cfgPath) {
+			return closurePackageDependency{workflowDir: dir}, nil
+		}
+		pmPath := filepath.Join(dir, infrastructure.PackageManifestFilename)
+		pm, err := domain.ParsePackageManifest(pmPath)
+		if err != nil {
+			return closurePackageDependency{}, fmt.Errorf("read %s: %w", pmPath, err)
+		}
+		var resolverNames []string
+		if dirExists(filepath.Join(dir, "profile")) {
+			resolverNames = appendResolverName(resolverNames, filepath.Base(dir))
+		}
+		for _, name := range pm.IncludesResolvers {
+			resolverNames = appendResolverName(resolverNames, name)
+		}
+		if len(resolverNames) > 0 {
+			return closurePackageDependency{resolverNames: resolverNames}, nil
+		}
+	}
+	if availablePackages[ref] {
+		return closurePackageDependency{satisfied: true}, nil
+	}
+	if leaves := infrastructure.NestedResolverLeafDirs(ref, infrastructure.ResolverCompileRootsCached(projectRoot)); len(leaves) > 0 {
+		return closurePackageDependency{resolverNames: []string{ref}}, nil
+	}
+	return closurePackageDependency{}, nil
+}
+
 func findWorkflowDirByPackageManifestName(projectRoot, ref string, wfRoots []string) string {
 	ref = strings.TrimSpace(ref)
 	if ref == "" {
@@ -287,6 +351,24 @@ func findWorkflowDirByPackageManifestName(projectRoot, ref string, wfRoots []str
 		}
 	}
 	return ""
+}
+
+func appendResolverName(existing []string, raw string) []string {
+	name := strings.TrimSpace(raw)
+	if name == "" {
+		return existing
+	}
+	for _, current := range existing {
+		if current == name {
+			return existing
+		}
+	}
+	return append(existing, name)
+}
+
+func dirExists(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.IsDir()
 }
 
 func cmdPackageCompileForWorkflow(args []string) error {

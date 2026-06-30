@@ -175,6 +175,32 @@ func dockpipeScriptCommand(scriptAbs string) (*exec.Cmd, string, error) {
 	}
 }
 
+func dockpipeBashShellCommand(command string) (*exec.Cmd, string, error) {
+	if runtime.GOOS == "windows" {
+		if bashExe := gitBashWindowsPath(); bashExe != "" {
+			return exec.Command(bashExe, "-lc", command), bashExe, nil
+		}
+	}
+	bashExe, err := exec.LookPath("bash")
+	if err != nil {
+		return nil, "", fmt.Errorf("bash not found for shell command %q", command)
+	}
+	return exec.Command(bashExe, "-lc", command), bashExe, nil
+}
+
+func dockpipePathForBashEnv(bashExe, p string) string {
+	if strings.TrimSpace(p) == "" {
+		return p
+	}
+	if runtime.GOOS != "windows" {
+		return p
+	}
+	if bashIsWSLPath(bashExe) {
+		return pathForWSLBash(p)
+	}
+	return pathForGitBash(p)
+}
+
 func dockpipeBashCommandParts(scriptAbs string) (string, string, error) {
 	if runtime.GOOS == "windows" {
 		if bashExe := gitBashWindowsPath(); bashExe != "" {
@@ -223,6 +249,31 @@ func pathForGitBash(p string) string {
 		}
 		rest = filepath.ToSlash(rest)
 		return "/" + drive + "/" + rest
+	}
+	return filepath.ToSlash(abs)
+}
+
+func bashIsWSLPath(bashExe string) bool {
+	s := strings.ToLower(strings.ReplaceAll(strings.TrimSpace(bashExe), `\`, `/`))
+	return strings.Contains(s, "/system32/bash") ||
+		strings.Contains(s, "windowsapps") ||
+		strings.Contains(s, "/wsl/")
+}
+
+func pathForWSLBash(p string) string {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return p
+	}
+	vol := filepath.VolumeName(abs)
+	if len(vol) >= 2 && vol[1] == ':' {
+		drive := strings.ToLower(string(vol[0]))
+		rest := abs[len(vol):]
+		for len(rest) > 0 && (rest[0] == '\\' || rest[0] == '/') {
+			rest = rest[1:]
+		}
+		rest = filepath.ToSlash(rest)
+		return "/mnt/" + drive + "/" + rest
 	}
 	return filepath.ToSlash(abs)
 }

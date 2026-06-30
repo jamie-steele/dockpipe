@@ -147,6 +147,16 @@ func ValidateResolvedWorkflowYAML(absPath string) error {
 	if err := domain.ValidateLoadedWorkflow(wf); err != nil {
 		return err
 	}
+	repoRoot, _ := RepoRoot()
+	projectRoot := filepath.Dir(absPath)
+	if strings.HasPrefix(absPath, "tar://") {
+		projectRoot = repoRoot
+	} else if root, err := domain.FindProjectRootWithDockpipeConfig(filepath.Dir(absPath)); err == nil && strings.TrimSpace(root) != "" {
+		projectRoot = root
+	}
+	if err := CheckWorkflowResolverScriptDependencies(projectRoot, repoRoot, wf, filepath.Dir(absPath), absPath); err != nil {
+		return err
+	}
 	var raw interface{}
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return fmt.Errorf("yaml: %w", err)

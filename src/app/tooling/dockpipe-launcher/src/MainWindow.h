@@ -6,6 +6,7 @@
 #include "SessionManager.h"
 #include "WorkflowCatalog.h"
 
+#include <QFutureWatcher>
 #include <QMainWindow>
 #include <QPointer>
 #include <QSystemTrayIcon>
@@ -24,6 +25,16 @@ class BasicModeWidget;
 class QTabWidget;
 class DockerObservabilityWidget;
 class QTimer;
+
+struct AsyncContextDiscoveryResult {
+    QString workdir;
+    QVector<Context> contexts;
+};
+
+struct AsyncBasicAppsResult {
+    QString workdir;
+    QVector<WorkflowMeta> apps;
+};
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -90,6 +101,8 @@ private:
     void refreshInlineConsole();
     void appendInlineConsole(const QString &text);
     QString currentContextCommandLine() const;
+    void startAdvancedContextDiscovery();
+    void startBasicAppDiscovery();
 
     ContextStore m_store;
     SessionManager m_sessions;
@@ -126,4 +139,14 @@ private:
     QVector<Context> m_advancedContexts;
     QString m_basicLaunchingContextId;
     QString m_basicLaunchingWorkflowId;
+    QFutureWatcher<AsyncContextDiscoveryResult> *m_advancedDiscoveryWatcher = nullptr;
+    QFutureWatcher<AsyncBasicAppsResult> *m_basicAppsWatcher = nullptr;
+    QString m_advancedDiscoveryRequestedWorkdir;
+    QString m_advancedDiscoveryRunningWorkdir;
+    QString m_basicAppsRequestedWorkdir;
+    QString m_basicAppsRunningWorkdir;
+    bool m_advancedDiscoveryLoading = false;
+    bool m_basicAppsLoading = false;
+    bool m_advancedDiscoveryRefreshPending = false;
+    bool m_basicAppsRefreshPending = false;
 };

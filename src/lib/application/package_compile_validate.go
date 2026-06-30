@@ -2,6 +2,7 @@ package application
 
 import (
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -34,6 +35,9 @@ func validateCompileOutputsScoped(workdir string, requireWorkflowNamespace bool,
 		return err
 	}
 	known := compiledPackageNamesFromTarballs(pkgs)
+	mergeCompiledPackageNamesFromCompileRoots(known, repoRoot, cfg)
+	mergeCompiledPackageNamesFromConfiguredSources(known, repoRoot, cfg)
+	mergeCompiledPackageNamesFromInstalledSources(known)
 	for _, kind := range []string{"workflows", "resolvers"} {
 		var pattern string
 		switch kind {
@@ -111,6 +115,73 @@ func validateCompileOutputsScoped(workdir string, requireWorkflowNamespace bool,
 		}
 	}
 	return nil
+}
+
+func mergeCompiledPackageNamesFromCompileRoots(out map[string]bool, repoRoot string, cfg *domain.DockpipeProjectConfig) {
+	for _, root := range domain.EffectiveWorkflowCompileRoots(cfg, repoRoot) {
+		_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+			if err != nil {
+				if filepath.Clean(path) == filepath.Clean(root) {
+					return nil
+				}
+				return nil
+			}
+			if d.IsDir() || filepath.Base(path) != infrastructure.PackageManifestFilename {
+				return nil
+			}
+			pm, err := domain.ParsePackageManifest(path)
+			if err != nil {
+				return nil
+			}
+			if name := strings.TrimSpace(pm.Name); name != "" {
+				out[name] = true
+			}
+			return nil
+		})
+	}
+}
+
+func mergeCompiledPackageNamesFromConfiguredSources(out map[string]bool, repoRoot string, cfg *domain.DockpipeProjectConfig) {
+	if cfg == nil || cfg.Packages.Sources == nil {
+		return
+	}
+	for _, src := range *cfg.Packages.Sources {
+		path := strings.TrimSpace(src.Path)
+		if path == "" {
+			continue
+		}
+		kind := strings.ToLower(strings.TrimSpace(src.Kind))
+		if kind == "" {
+			kind = domain.PackageSourceKindStore
+		}
+		resolved := path
+		if !filepath.IsAbs(resolved) {
+			resolved = filepath.Join(repoRoot, filepath.Clean(resolved))
+		}
+		switch kind {
+		case domain.PackageSourceKindStore:
+			for name := range compiledPackageNamesFromTarballs(resolved) {
+				out[name] = true
+			}
+		case domain.PackageSourceKindTarballDir:
+			for name := range compiledPackageNamesFromTarballDir(resolved) {
+				out[name] = true
+			}
+		}
+	}
+}
+
+func mergeCompiledPackageNamesFromInstalledSources(out map[string]bool) {
+	if globalRoot, err := infrastructure.GlobalPackagesRoot(); err == nil {
+		for name := range compiledPackageNamesFromTarballs(globalRoot) {
+			out[name] = true
+		}
+	}
+	for _, root := range infrastructure.SystemPackagesRoots() {
+		for name := range compiledPackageNamesFromTarballs(root) {
+			out[name] = true
+		}
+	}
 }
 
 func shouldValidateCompiledTarball(kind, tgz string, workflowNames, resolverNames map[string]bool) bool {
@@ -296,6 +367,80 @@ func compiledPackageNamesFromTarballs(pkgsRoot string) map[string]bool {
 			}
 			if n := strings.TrimSpace(pm.Name); n != "" {
 				out[n] = true
+			}
+		}
+	}
+	return out
+}
+
+func compiledPackageNamesFromTarballDir(dir string) map[string]bool {
+	out := make(map[string]bool)
+	for _, pattern := range []string{
+		"dockpipe-core-*.tar.gz",
+		"dockpipe-workflow-*.tar.gz",
+		"dockpipe-resolver-*.tar.gz",
+	} {
+		matches, _ := filepath.Glob(filepath.Join(dir, pattern))
+		for _, tgz := range matches {
+			base := filepath.Base(tgz)
+			switch {
+			case strings.HasPrefix(base, "dockpipe-core-"):
+				b, err := packagebuild.ReadFileFromTarGz(tgz, filepath.ToSlash(filepath.Join("core", infrastructure.PackageManifestFilename)))
+				if err != nil {
+					continue
+				}
+				var pm domain.PackageManifest
+				if yaml.Unmarshal(b, &pm) == nil {
+					if n := strings.TrimSpace(pm.Name); n != "" {
+						out[n] = true
+					}
+				}
+			case strings.HasPrefix(base, "dockpipe-workflow-"):
+				members, err := packagebuild.ListTarGzMemberPaths(tgz)
+				if err != nil {
+					continue
+				}
+				wf, err := packagebuild.WorkflowNameFromTarballMembers(members)
+				if err != nil {
+					continue
+				}
+				suffix := filepath.ToSlash(filepath.Join("workflows", wf, infrastructure.PackageManifestFilename))
+				b, err := packagebuild.ReadFileFromTarGz(tgz, suffix)
+				if err != nil {
+					continue
+				}
+				var pm domain.PackageManifest
+				if yaml.Unmarshal(b, &pm) == nil {
+					if n := strings.TrimSpace(pm.Name); n != "" {
+						out[n] = true
+					}
+				}
+			case strings.HasPrefix(base, "dockpipe-resolver-"):
+				members, err := packagebuild.ListTarGzMemberPaths(tgz)
+				if err != nil {
+					continue
+				}
+				var suffix string
+				for _, m := range members {
+					parts := strings.Split(m, "/")
+					if len(parts) >= 3 && parts[0] == "resolvers" && parts[2] == infrastructure.PackageManifestFilename {
+						suffix = m
+						break
+					}
+				}
+				if suffix == "" {
+					continue
+				}
+				b, err := packagebuild.ReadFileFromTarGz(tgz, suffix)
+				if err != nil {
+					continue
+				}
+				var pm domain.PackageManifest
+				if yaml.Unmarshal(b, &pm) == nil {
+					if n := strings.TrimSpace(pm.Name); n != "" {
+						out[n] = true
+					}
+				}
 			}
 		}
 	}

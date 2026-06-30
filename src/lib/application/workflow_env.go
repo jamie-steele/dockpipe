@@ -15,7 +15,15 @@ func buildWorkflowEnvInto(env map[string]string, wf *domain.Workflow, wfConfig, 
 		opts = &CliOpts{}
 	}
 	if strings.TrimSpace(wfConfig) != "" {
-		domain.MergeIfUnset(env, map[string]string{"DOCKPIPE_WORKFLOW_CONFIG": wfConfig})
+		projectRoot := effectiveWorkdirForWorkflowOpts(opts)
+		wfConfigOnDisk, err := infrastructure.WorkflowConfigOnDiskPath(projectRoot, wfConfig)
+		if err != nil {
+			return err
+		}
+		domain.MergeIfUnset(env, map[string]string{
+			"DOCKPIPE_WORKFLOW_CONFIG":     wfConfigOnDisk,
+			"DOCKPIPE_WORKFLOW_CONFIG_URI": wfConfig,
+		})
 	}
 	if strings.TrimSpace(wfRoot) != "" {
 		domain.MergeIfUnset(env, map[string]string{"DOCKPIPE_WORKFLOW_DIR": wfRoot})
@@ -199,6 +207,31 @@ func appendUniqueEnv(slice []string, pair string) []string {
 		}
 	}
 	return append(slice, pair)
+}
+
+func prependPATHDir(currentPath, dir string) string {
+	dir = strings.TrimSpace(dir)
+	currentPath = strings.TrimSpace(currentPath)
+	if dir == "" {
+		return currentPath
+	}
+	if currentPath == "" {
+		return dir
+	}
+
+	delimiter := string(os.PathListSeparator)
+	if strings.Contains(currentPath, ";") {
+		delimiter = ";"
+	} else if strings.Contains(currentPath, ":") {
+		delimiter = ":"
+	}
+
+	for _, part := range strings.Split(currentPath, delimiter) {
+		if strings.TrimSpace(part) == dir {
+			return currentPath
+		}
+	}
+	return dir + delimiter + currentPath
 }
 
 func firstNonEmpty(ss ...string) string {

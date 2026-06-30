@@ -126,6 +126,7 @@ func tarTreeCore(coreRoot string, tw *tar.Writer) error {
 			return err
 		}
 		hdr.Name = nameInTar
+		hdr.Mode = int64(normalizeArchiveMode(hdr.Name, info.Mode(), info.IsDir()))
 		if hdr.Typeflag == tar.TypeDir && !strings.HasSuffix(hdr.Name, "/") {
 			hdr.Name += "/"
 		}

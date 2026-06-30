@@ -403,6 +403,20 @@ void BasicModeWidget::setApps(const QVector<WorkflowMeta> &apps)
     rebuildItemTexts();
 }
 
+void BasicModeWidget::setAppDiscoveryLoading(bool loading)
+{
+    m_appDiscoveryLoading = loading;
+    if (m_launchingWorkflowId.isEmpty() && m_loadingBanner) {
+        if (loading) {
+            m_loadingBanner->setText(tr("Loading apps from DockPipe..."));
+            m_loadingBanner->setVisible(true);
+        } else {
+            m_loadingBanner->clear();
+            m_loadingBanner->setVisible(false);
+        }
+    }
+}
+
 void BasicModeWidget::rebuildItemTexts()
 {
     for (int i = 0; i < m_list->count() && i < m_apps.size(); ++i) {

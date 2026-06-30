@@ -4,62 +4,100 @@
 # Compose file: packages/dorkpipe/resolvers/dorkpipe/assets/compose/docker-compose.yml
 # When done: dev-stack.sh down — containers stop (nothing long-lived required for orchestration).
 set -euo pipefail
-SOURCE_PATH="${0}"
-SOURCE_DIR="${SOURCE_PATH%/*}"
-[[ "$SOURCE_DIR" == "$SOURCE_PATH" ]] && SOURCE_DIR="."
-SCRIPT_DIR="$(cd "$SOURCE_DIR" && pwd)"
-INFERRED_REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-PWD_REPO_ROOT="$(pwd)"
-GIT_REPO_ROOT="$(git -C "$PWD_REPO_ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
-REPO_ROOT=""
-for candidate in \
-	"${DORKPIPE_DEV_STACK_REPO_ROOT:-}" \
-	"${DOCKPIPE_REPO_ROOT:-}" \
-	"${DOCKPIPE_WORKDIR:-}" \
-	"$GIT_REPO_ROOT" \
-	"$PWD_REPO_ROOT" \
-	"$INFERRED_REPO_ROOT"
-do
-	if [[ -n "$candidate" && -f "$candidate/packages/dorkpipe/resolvers/dorkpipe/assets/compose/Dockerfile.dorkpipe-stack" ]]; then
-		REPO_ROOT="$(cd "$candidate" && pwd)"
-		break
-	fi
-done
-if [[ -z "$REPO_ROOT" ]]; then
-	echo "dev-stack: could not find DockPipe repo root for dorkpipe-stack build context" >&2
-	exit 1
-fi
+eval "$(dockpipe sdk)"
+dockpipe_sdk init-script
+SCRIPT_DIR="${DOCKPIPE_SCRIPT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+ASSETS_DIR="${DOCKPIPE_ASSETS_DIR:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
+ROOT="${ROOT:-$(dockpipe_sdk get workdir)}"
 COMPOSE="$SCRIPT_DIR/../compose/docker-compose.yml"
 source "$SCRIPT_DIR/dev-stack-lib.sh"
 if [[ ! -f "$COMPOSE" ]]; then
 	echo "dev-stack: missing $COMPOSE" >&2
 	exit 1
 fi
-export DORKPIPE_DEV_STACK_REPO_ROOT="${DORKPIPE_DEV_STACK_REPO_ROOT:-$REPO_ROOT}"
-export DORKPIPE_DEV_STACK_WORKDIR="${DORKPIPE_DEV_STACK_WORKDIR:-$REPO_ROOT}"
+export DORKPIPE_DEV_STACK_ASSETS_DIR="${DORKPIPE_DEV_STACK_ASSETS_DIR:-$ASSETS_DIR}"
+export DORKPIPE_DEV_STACK_CONTEXT_DIR="${DORKPIPE_DEV_STACK_CONTEXT_DIR:-$ASSETS_DIR}"
+export DORKPIPE_DEV_STACK_POLICY_PROXY_JS="${DORKPIPE_DEV_STACK_POLICY_PROXY_JS:-$ASSETS_DIR/compose/policy-proxy.js}"
+export DORKPIPE_DEV_STACK_WORKDIR="${DORKPIPE_DEV_STACK_WORKDIR:-$ROOT}"
 cmd="${1:-}"
 PROJECT="${DORKPIPE_DEV_STACK_PROJECT:-dorkpipe-dev}"
 GPU_PROMPT_RESULT=""
-dorkpipe_stack_bootstrap_sdk >/dev/null 2>&1 || true
 mapfile -t COMPOSE_ARGS < <(dorkpipe_stack_compose_args)
 
-dorkpipe_stack_require_local_binaries() {
-	local missing=()
+ensure_executable_binary() {
+	local path="$1"
+	if [[ ! -e "$path" ]]; then
+		return 1
+	fi
+	if [[ -x "$path" ]]; then
+		return 0
+	fi
+	# Tarball extraction on Windows/MSYS can preserve file contents but lose the execute bit.
+	chmod +x "$path" 2>/dev/null || true
+	[[ -x "$path" ]]
+}
+
+dorkpipe_stack_require_present_file() {
+	local path="$1"
+	[[ -f "$path" ]]
+}
+
+dorkpipe_stack_require_consumer_binaries() {
+	local bundle_mode repo_root context_root missing=()
+	bundle_mode="${DORKPIPE_DEV_STACK_BUNDLE_MODE:-package}"
+	if [[ "$bundle_mode" == "checkout" ]]; then
+		repo_root="$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null || true)"
+		if [[ -z "$repo_root" || ! -f "$repo_root/packages/dorkpipe/resolvers/dorkpipe/assets/compose/Dockerfile.dorkpipe-stack" ]]; then
+			echo "dev-stack: checkout bundle mode requires a DockPipe source checkout" >&2
+			return 1
+		fi
+		for path in \
+			"$repo_root/src/bin/dockpipe" \
+			"$repo_root/bin/.dockpipe/tooling/bin/dorkpipe" \
+			"$repo_root/bin/.dockpipe/tooling/bin/mcpd"
+		do
+			if ! dorkpipe_stack_require_present_file "$path"; then
+				missing+=("$path")
+			fi
+		done
+		if [[ "${#missing[@]}" -gt 0 ]]; then
+			echo "dev-stack: checkout bundle mode needs local built binaries:" >&2
+			printf '  missing: %s\n' "${missing[@]}" >&2
+			echo "dev-stack: run: make build && ./src/bin/dockpipe package build source --workdir . --only dorkpipe" >&2
+			return 1
+		fi
+		context_root="$(dorkpipe_stack_state_dir)/checkout-context"
+		rm -rf "$context_root"
+		mkdir -p "$context_root/compose" "$context_root/tooling/bin/linux"
+		cp "$ASSETS_DIR/compose/Dockerfile.dorkpipe-stack" "$context_root/compose/Dockerfile.dorkpipe-stack"
+		if [[ -f "$ASSETS_DIR/compose/Dockerfile.dorkpipe-stack.dockerignore" ]]; then
+			cp "$ASSETS_DIR/compose/Dockerfile.dorkpipe-stack.dockerignore" "$context_root/compose/Dockerfile.dorkpipe-stack.dockerignore"
+		fi
+		cp "$repo_root/src/bin/dockpipe" "$context_root/tooling/bin/linux/dockpipe"
+		cp "$repo_root/bin/.dockpipe/tooling/bin/dorkpipe" "$context_root/tooling/bin/linux/dorkpipe"
+		cp "$repo_root/bin/.dockpipe/tooling/bin/mcpd" "$context_root/tooling/bin/linux/mcpd"
+		chmod +x "$context_root/tooling/bin/linux/dockpipe" "$context_root/tooling/bin/linux/dorkpipe" "$context_root/tooling/bin/linux/mcpd"
+		export DORKPIPE_DEV_STACK_CONTEXT_DIR="$context_root"
+		return 0
+	fi
+
 	for path in \
-		"$REPO_ROOT/src/bin/dockpipe" \
-		"$REPO_ROOT/bin/.dockpipe/tooling/bin/dorkpipe" \
-		"$REPO_ROOT/bin/.dockpipe/tooling/bin/mcpd"
+		"$DORKPIPE_DEV_STACK_CONTEXT_DIR/tooling/bin/linux/dockpipe" \
+		"$DORKPIPE_DEV_STACK_CONTEXT_DIR/tooling/bin/linux/dorkpipe" \
+		"$DORKPIPE_DEV_STACK_CONTEXT_DIR/tooling/bin/linux/mcpd"
 	do
-		if [[ ! -x "$path" ]]; then
+		if ! dorkpipe_stack_require_present_file "$path"; then
 			missing+=("$path")
 		fi
 	done
 	if [[ "${#missing[@]}" -eq 0 ]]; then
 		return 0
 	fi
-	echo "dev-stack: dorkpipe-stack image needs local built binaries:" >&2
+	echo "dev-stack: packaged consumer binaries are missing from the dorkpipe workflow assets:" >&2
 	printf '  missing: %s\n' "${missing[@]}" >&2
-	echo "dev-stack: run: make build && ./src/bin/dockpipe package build source --workdir . --only dorkpipe" >&2
+	echo "dev-stack: consumer path expects compiled package assets; maintainer overrides:" >&2
+	echo "  compile package assets: dockpipe package compile resolvers --workdir \"$ROOT\" --from packages/dorkpipe --force" >&2
+	echo "  or use checkout binaries explicitly: DORKPIPE_DEV_STACK_BUNDLE_MODE=checkout scripts/dorkpipe/dev-stack.sh up" >&2
 	return 1
 }
 
@@ -83,10 +121,8 @@ up)
 	else
 		SERVICES=(postgres ollama dorkpipe-stack dorkpipe-mcp-proxy)
 	fi
-	if dorkpipe_stack_service_enabled dorkpipe-stack; then
-		dorkpipe_stack_require_local_binaries
-	fi
 	if dorkpipe_stack_service_enabled dorkpipe-stack || dorkpipe_stack_service_enabled dorkpipe-mcp-proxy; then
+		dorkpipe_stack_require_consumer_binaries
 		dorkpipe_stack_prepare_mcp_material
 	fi
 	UP_ARGS=(up -d --remove-orphans)

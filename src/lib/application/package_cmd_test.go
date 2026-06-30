@@ -424,6 +424,36 @@ steps: []
 	}
 }
 
+func TestCmdPackageCompileWorkflowRunsCompileHooksInStaging(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "mywf")
+	if err := os.MkdirAll(filepath.Join(src, "assets"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: mywf
+compile_hooks:
+  - printf staged > assets/generated.txt
+steps: []
+`
+	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(src, "assets", "generated.txt")); !os.IsNotExist(err) {
+		t.Fatalf("expected compile hook output to stay out of source tree, got %v", err)
+	}
+	tgz := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "workflows", "dockpipe-workflow-mywf-0.0.0.tar.gz")
+	got, err := packagebuild.ReadFileFromTarGz(tgz, "workflows/mywf/assets/generated.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.TrimSpace(string(got)) != "staged" {
+		t.Fatalf("expected staged compile hook output, got %q", string(got))
+	}
+}
+
 func TestCmdPackageCompileWorkflowRebuildsInvalidStoreTarball(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src", "mywf")

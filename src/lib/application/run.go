@@ -226,7 +226,7 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 			if statErr != nil {
 				names, _ := infrastructure.ListWorkflowNamesInRepoRootAndPackages(repoRoot, effWd)
-				msg := fmt.Sprintf("workflow %q not found — tried workflows/ (or DOCKPIPE_WORKFLOWS_DIR), extra roots from dockpipe.config.json compile.workflows, installed workflow packages under bin/.dockpipe/internal/packages/workflows/, built-in bundled workflows for this dockpipe build, and namespaced workflow tarballs (dockpipe-workflow-%[1]s-*.tar.gz under release/artifacts or packages.tarball_dir when config.yml inside the archive sets namespace:)", opts.Workflow)
+				msg := fmt.Sprintf("workflow %q not found — tried workflows/ (or DOCKPIPE_WORKFLOWS_DIR), extra roots from dockpipe.config.json compile.workflows, installed workflow packages under bin/.dockpipe/internal/packages/workflows/, configured local package sources from packages.sources, built-in bundled workflows for this dockpipe build, and namespaced workflow tarballs (dockpipe-workflow-%[1]s-*.tar.gz under release/artifacts or packages.tarball_dir when config.yml inside the archive sets namespace:)", opts.Workflow)
 				if strings.TrimSpace(opts.Package) != "" {
 					msg = fmt.Sprintf("workflow %q in package %q not found — tried unpacked packaged workflows and configured workflow roots", opts.Workflow, opts.Package)
 				}
@@ -264,6 +264,9 @@ func Run(argv []string, baseEnviron []string) error {
 	}
 	if wf != nil {
 		if err := domain.ValidateLoadedWorkflow(wf); err != nil {
+			return err
+		}
+		if err := infrastructure.CheckWorkflowResolverScriptDependencies(effWd, repoRoot, wf, wfRoot, wfConfig); err != nil {
 			return err
 		}
 		if err := infrastructure.CheckWorkflowPackageRequiresCapabilities(effWd, repoRoot, wfRoot, wfConfig); err != nil {
@@ -310,13 +313,7 @@ func Run(argv []string, baseEnviron []string) error {
 	if dp := strings.TrimSpace(envMap["DOCKPIPE_BIN"]); dp != "" {
 		if filepath.IsAbs(dp) {
 			dpDir := filepath.Dir(dp)
-			curPath := strings.TrimSpace(envMap["PATH"])
-			prefix := dpDir + string(os.PathListSeparator)
-			if curPath == "" {
-				envMap["PATH"] = dpDir
-			} else if !strings.HasPrefix(curPath, prefix) && curPath != dpDir {
-				envMap["PATH"] = dpDir + string(os.PathListSeparator) + curPath
-			}
+			envMap["PATH"] = prependPATHDir(envMap["PATH"], dpDir)
 		}
 	}
 

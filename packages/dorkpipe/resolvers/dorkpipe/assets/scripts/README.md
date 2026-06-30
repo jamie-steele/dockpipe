@@ -1,6 +1,6 @@
 # DorkPipe resolver package — `assets/scripts/`
 
-**Canonical authoring path** for maintainer shell in this checkout:
+**Canonical authoring path** for package-owned shell in this checkout:
 
 **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/`**
 
@@ -10,5 +10,5 @@ Workflow YAML still uses the **logical** path **`scripts/dorkpipe/<file>`** (sam
 
 Notable entrypoints:
 
-- **`dev-stack.sh`** — local Postgres + Ollama helper; now GPU-aware for the Ollama container when Docker can expose NVIDIA
+- **`dev-stack.sh`** — local Postgres + Ollama helper; defaults to packaged consumer assets and supports explicit `DORKPIPE_DEV_STACK_BUNDLE_MODE=checkout` for maintainer binaries
 - **`dev-stack-lib.sh`** — shared helper functions for GPU detection, prompt/remediation flow, and compose override wiring

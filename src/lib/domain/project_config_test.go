@@ -52,6 +52,18 @@ func TestLoadDockpipeProjectConfigInvalidVault(t *testing.T) {
 	}
 }
 
+func TestLoadDockpipeProjectConfigInvalidPackageSourceKind(t *testing.T) {
+	tmp := t.TempDir()
+	p := filepath.Join(tmp, DockpipeProjectConfigFileName)
+	if err := os.WriteFile(p, []byte(`{"schema":1,"packages":{"sources":[{"kind":"bogus","path":"x"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := LoadDockpipeProjectConfig(tmp)
+	if err == nil {
+		t.Fatal("expected error for invalid packages.sources kind")
+	}
+}
+
 func TestResolveVaultTemplatePathPrecedence(t *testing.T) {
 	root := t.TempDir()
 	vault := ".env.vault.template"

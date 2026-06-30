@@ -6,11 +6,7 @@ dorkpipe_stack_state_dir() {
     printf '%s\n' "$DORKPIPE_DEV_STACK_STATE_DIR"
     return 0
   fi
-  if [[ -x "${REPO_ROOT}/src/bin/dockpipe" ]]; then
-    "${REPO_ROOT}/src/bin/dockpipe" scope --package dorkpipe dev-stack --workdir "$REPO_ROOT"
-    return 0
-  fi
-  dockpipe scope --package dorkpipe dev-stack --workdir "$REPO_ROOT"
+  dockpipe scope --package dorkpipe dev-stack --workdir "${ROOT}"
 }
 
 dorkpipe_stack_ensure_state_dir() {
@@ -103,7 +99,6 @@ dorkpipe_stack_bootstrap_sdk() {
   local dockpipe_bin
   for dockpipe_bin in \
     "${DOCKPIPE_BIN:-}" \
-    "$REPO_ROOT/src/bin/dockpipe" \
     "$(command -v dockpipe 2>/dev/null || true)"
   do
     if [[ -n "$dockpipe_bin" && -x "$dockpipe_bin" ]]; then
@@ -133,9 +128,45 @@ dorkpipe_stack_host_bash_bin() {
   return 1
 }
 
+dorkpipe_stack_nvidia_smi_bin() {
+  local candidate
+  for candidate in \
+    "${DORKPIPE_NVIDIA_SMI_BIN:-}" \
+    "$(command -v nvidia-smi 2>/dev/null || true)" \
+    "$(command -v nvidia-smi.exe 2>/dev/null || true)" \
+    "/c/Program Files/NVIDIA Corporation/NVSMI/nvidia-smi.exe" \
+    "/c/Windows/System32/nvidia-smi.exe"
+  do
+    if [[ -n "$candidate" && -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+dorkpipe_stack_wsl_exe_bin() {
+  local candidate
+  for candidate in \
+    "${DORKPIPE_WSL_EXE_BIN:-}" \
+    "$(command -v wsl.exe 2>/dev/null || true)" \
+    "$(command -v wsl 2>/dev/null || true)" \
+    "/c/Windows/System32/wsl.exe" \
+    "/c/Windows/Sysnative/wsl.exe"
+  do
+    if [[ -n "$candidate" && -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
 dorkpipe_stack_detect_nvidia_gpu() {
-  command -v nvidia-smi >/dev/null 2>&1 || return 1
-  nvidia-smi -L >/dev/null 2>&1 || return 1
+  local nvidia_smi_bin
+  nvidia_smi_bin="$(dorkpipe_stack_nvidia_smi_bin 2>/dev/null || true)"
+  [[ -n "$nvidia_smi_bin" ]] || return 1
+  "$nvidia_smi_bin" -L >/dev/null 2>&1 || return 1
 }
 
 dorkpipe_stack_is_windows_host() {
@@ -145,7 +176,14 @@ dorkpipe_stack_is_windows_host() {
 dorkpipe_stack_docker_supports_nvidia_gpu() {
   local docker_runtimes
   docker_runtimes="$(docker info --format '{{json .Runtimes}}' 2>/dev/null || true)"
-  printf '%s' "$docker_runtimes" | grep -qi '"nvidia"'
+  if printf '%s' "$docker_runtimes" | grep -qi '"nvidia"'; then
+    return 0
+  fi
+  dorkpipe_stack_can_run_nvidia_sample
+}
+
+dorkpipe_stack_can_run_nvidia_sample() {
+  docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi >/dev/null 2>&1
 }
 
 dorkpipe_stack_wait_for_docker() {
@@ -184,12 +222,14 @@ EOF
 }
 
 dorkpipe_stack_try_enable_windows_docker_gpu_access() {
+  local wsl_exe
   printf '[dorkpipe-dev-stack] Ollama GPU: detected Windows host; attempting WSL/Docker Desktop GPU prerequisites...\n' >&2
-  if ! command -v wsl.exe >/dev/null 2>&1; then
+  wsl_exe="$(dorkpipe_stack_wsl_exe_bin 2>/dev/null || true)"
+  if [[ -z "$wsl_exe" ]]; then
     echo "dorkpipe-dev-stack: wsl.exe is not available on PATH, so Docker Desktop GPU setup cannot be automated here" >&2
     return 1
   fi
-  if ! wsl.exe --update; then
+  if ! "$wsl_exe" --update; then
     echo "dorkpipe-dev-stack: WSL update failed; Docker Desktop GPU support on Windows requires an updated WSL 2 kernel" >&2
     return 1
   fi
@@ -198,7 +238,7 @@ dorkpipe_stack_try_enable_windows_docker_gpu_access() {
     echo "dorkpipe-dev-stack: Docker did not respond after the WSL update" >&2
     return 1
   fi
-  if ! docker run --rm --gpus all ubuntu nvidia-smi >/dev/null 2>&1; then
+  if ! dorkpipe_stack_can_run_nvidia_sample; then
     echo "dorkpipe-dev-stack: Docker Desktop still cannot run a GPU container after the WSL update" >&2
     echo "dorkpipe-dev-stack: open Docker Desktop Settings and enable the WSL 2 engine, then ensure Linux containers are active" >&2
     return 1
@@ -356,7 +396,7 @@ dorkpipe_stack_try_enable_docker_gpu_access() {
     return 1
   fi
   printf '[dorkpipe-dev-stack] Ollama GPU: verifying Docker GPU access with a sample container...\n' >&2
-  if ! docker run --rm --gpus all ubuntu nvidia-smi >/dev/null 2>&1; then
+  if ! dorkpipe_stack_can_run_nvidia_sample; then
     echo "dorkpipe-dev-stack: Docker reports an nvidia runtime, but a sample GPU container still failed" >&2
     return 1
   fi
@@ -479,7 +519,7 @@ dorkpipe_stack_compose_args() {
   if [[ -s "$gpu_file" ]]; then
     printf '%s\n' -f "$gpu_file"
   fi
-  printf '%s\n' --project-directory "$REPO_ROOT"
+  printf '%s\n' --project-directory "$ROOT"
 }
 
 dorkpipe_stack_service_enabled() {

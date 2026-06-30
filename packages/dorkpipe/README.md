@@ -1,6 +1,8 @@
 # DorkPipe plugin (`dorkpipe` package)
 
-All DorkPipe **maintainer** workflows for this repo live here under **`resolvers/<name>/`** — one directory per **`--workflow`** leaf ( **`config.yml`** + assets). Umbrella metadata: **`package.yml`**.
+The `dorkpipe` package is the consumer-facing agentic stack. It ships DorkPipe workflows, MCP sidecar
+assets, packaged helper binaries, and the local control-plane compose contract without requiring a
+DockPipe source checkout in the consuming repo.
 
 | Resolver / workflow | Role |
 |---------------------|------|
@@ -43,9 +45,10 @@ artifact graph without calling live model backends.
 
 ## Dev Control Plane
 
-The DorkPipe dev stack is package-owned under
-**`resolvers/dorkpipe/assets/compose/`**. It runs the persistent local services that orchestration
-can share across CLI and app surfaces:
+The DorkPipe stack is package-owned under **`resolvers/dorkpipe/assets/`**. The default path uses
+compiled package assets, including packaged helper binaries under **`assets/tooling/bin/`**, so a
+consumer repo can depend on `dorkpipe` and run the stack from installed/extracted package material.
+It runs the persistent local services that orchestration can share across CLI and app surfaces:
 
 - **`dorkpipe-stack`**: MCP/control-plane container with built `dockpipe`, `dorkpipe`, and `mcpd`
 - **`dorkpipe-mcp-proxy`**: loopback-only host MCP endpoint at **`http://127.0.0.1:8766/mcp`**
@@ -54,5 +57,10 @@ can share across CLI and app surfaces:
 
 Codex and Claude stay out of this persistent stack. They are resolver-backed worker lanes that run
 ephemerally for bounded tasks, record artifacts, and exit.
+
+Maintainer-only local rebuild behavior is explicit:
+
+- compile packaged consumer artifacts: `dockpipe package compile resolvers --workdir . --from packages/dorkpipe --force`
+- or opt into checkout binaries for the stack only: `DORKPIPE_DEV_STACK_BUNDLE_MODE=checkout scripts/dorkpipe/dev-stack.sh up`
 
 **Detail:** **`lib/README.md`** (Go module); this tree is YAML + assets.

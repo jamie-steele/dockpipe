@@ -25,7 +25,7 @@ DockPipe has **four** package/artifact roots. Do not collapse them into one path
    - each **workflow** and **resolver** package resolves a **valid `namespace`** (from **`package.yml`**, **`config.yml` / `resolver.yaml`**, or repo-root **`dockpipe.config.json`** **`packages.namespace`** as a default),
    - every **`depends`** entry in **`package.yml`** names a package **already present** in the compiled store (names from **`package.yml`** under **`core/`**, **`resolvers/`**, **`workflows/`**).
 
-**Runtime** may still resolve workflows from **project-local tarballs** under **`bin/.dockpipe/internal/packages/workflows/`**, **global packages** under **`<global-root>/packages/workflows/`**, or **`packages.tarball_dir`** / **`release/artifacts`** when no on-disk workflow config wins; optional **`packages.namespace`** filters tarball choice when set.
+**Runtime** may still resolve workflows from **project-local tarballs** under **`bin/.dockpipe/internal/packages/workflows/`**, explicit local package sources from **`packages.sources`** in **`dockpipe.config.json`**, **global packages** under **`<global-root>/packages/workflows/`**, or **`packages.tarball_dir`** / **`release/artifacts`** when no on-disk workflow config wins; optional **`packages.namespace`** filters tarball choice when set.
 
 ## State roots
 
@@ -80,6 +80,10 @@ Materialize a **project-local** store under **`bin/.dockpipe/internal/packages/`
 - **`secrets`** (optional) — not secrets themselves; pointers for humans and tooling:
   - **`op_inject_template`** — repo-relative or absolute path to a **mapping file** for **`op inject`** (e.g. **`.env.op.template`** with **`op://`** lines). **`dockpipe doctor`** reports whether that file exists when **`dockpipe.config.json`** is present in the current directory.
   - **`notes`** — free-text reminder (e.g. vault naming, policy).
+- **`packages.sources`** (optional) — explicit local package sources used for resolution without publishing first:
+  - **`{ "kind": "store", "path": "C:\\Source\\dockpipe\\bin\\.dockpipe\\internal\\packages" }`** for a compiled package store root
+  - **`{ "kind": "tarball_dir", "path": "release/artifacts" }`** for a directory of **`dockpipe-*.tar.gz`** artifacts
+  - these supplement local/global/system package roots and do **not** replace **`packages.tarball_dir`**, namespace filtering, or self-hosted S3/R2 package mirrors
 
 If **`dockpipe.config.json`** is **missing**, compile uses built-in defaults for each omitted key. **`dockpipe init`** seeds a starter JSON. **Maintainer package trees** (for example **`packages/`** in this repo) are **not** implied: add them explicitly under **`compile.workflows`** when you want them compiled (legacy **`compile.bundles`** is merged into **`compile.workflows`**).
 
@@ -87,7 +91,7 @@ Compile steps:
 
 1. **`compile core`** — copies **`src/core`** (default when **`src/core/runtimes`** exists) or **`templates/core`**, or **`compile.core_from`** / **`--from`**, into **`packages/core/`** and writes **`package.yml`** (`kind: core`). **Omits** top-level **`resolvers/`**, **`bundles/`**, and **`workflows/`** from that copy so those slices stay separate packages.
 2. **`compile resolvers`** — repeatable **`--from`**; default roots are **`compile.workflows`** (plus legacy **`compile.bundles`** merged in), **`src/core/resolvers`**, and **`templates/core/resolvers`** when those directories exist; deprecated **`compile.resolvers`** entries are merged if present. **Pack roots** under each **`--from`** directory include: **`resolvers/`** (flat); **`packages/<group>/resolvers/`**; **`dockpipe/<group>/resolvers/`** (e.g. dockpipe repo: **`agent`**, **`ide`**, **`secrets`**, **`cloud/storage`**, …). Every immediate child of each pack root that contains **`profile/`** becomes **one** tarball (**`dockpipe-resolver-<name>-…`**) — the **store** still lists **separate** installable resolvers. **`src/core/resolvers`** stays a flat list (no nested **`resolvers/resolvers/`**). **Strategies** and **runtimes** are not packed from the same vendor folder as resolvers; keep lifecycle slices in **`compile core`** until a follow-up convention exists.
-3. **`compile workflows`** — every **`config.yml`** under each **`--from`** root (recursive walk). With no config, the default is **`workflows/`** when present. List maintainer roots (for example **`packages/`**) in **`compile.workflows`** when you want them compiled; legacy **`compile.bundles`** paths are merged into this list. **`dockpipe package compile bundles`** is an alias for **`compile workflows`**. Optional **`compile_hooks:`** in workflow YAML is a list of **shell** strings run from the workflow source directory **after** validation and **before** the tarball is written (e.g. **`go build`**, codegen).
+3. **`compile workflows`** — every **`config.yml`** under each **`--from`** root (recursive walk). With no config, the default is **`workflows/`** when present. List maintainer roots (for example **`packages/`**) in **`compile.workflows`** when you want them compiled; legacy **`compile.bundles`** paths are merged into this list. **`dockpipe package compile bundles`** is an alias for **`compile workflows`**. Optional **`compile_hooks:`** in workflow/resolver `config.yml` is a list of **shell** strings run against the staged package copy **after** validation and **before** the tarball is written; DockPipe exports **`DOCKPIPE_COMPILE_WORKDIR`**, **`DOCKPIPE_COMPILE_SOURCE_DIR`**, **`DOCKPIPE_COMPILE_STAGING_DIR`**, and **`DOCKPIPE_COMPILE_KIND`** so hooks can read source-only inputs while writing packaged outputs into the staged tree (e.g. **`go build`**, codegen, asset bundling).
 4. **`compile all`** — runs **core → resolvers → workflows** and emits compiled runtime/security/image manifests, but does not run Docker builds.
 5. **`dockpipe build`** — runs **compile all --force**, then prebuilds Dockerfile-backed image artifacts by default and records materialized receipts under **`bin/.dockpipe/internal/images/by-fingerprint/`**. **`dockpipe run`** can reuse those receipts before deciding whether a Docker build is needed. Use **`dockpipe build --no-images`** when you want manifest/package materialization only. **`dockpipe clean`** removes the compiled store; **`dockpipe rebuild`** runs **clean** then **build**.
 
@@ -123,7 +127,7 @@ When **`dockpipe install`** (workflow package) exists end-to-end, installing a *
 Package dependencies should remain package-shaped:
 
 - **`depends`** names other package ids.
-- **`requires_resolvers`** names resolver profile ids that must be available project-locally, globally, or from the install closure.
+- **`requires_resolvers`** names resolver profile ids that must be available project-locally, globally, or from the install closure. Workflows that use logical resolver script ids such as **`scripts/dorkpipe/...`** should declare the owning resolver here instead of relying on workflow-package fallback.
 - **`requires_capabilities`** names dotted capability ids for catalog/search and dependency checks.
 - **`image`** may point at a normal OCI reference, ideally digest-pinned, but Docker layers remain in Docker/OCI registries rather than DockPipe package tarballs.
 

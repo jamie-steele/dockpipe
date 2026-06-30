@@ -28,6 +28,7 @@ public:
     void setContinueLastVisible(bool visible);
 
     void setApps(const QVector<WorkflowMeta> &apps);
+    void setAppDiscoveryLoading(bool loading);
     void setRunningByWorkflow(const QHash<QString, bool> &running);
     void setViewIconMode(bool icons);
     void setLaunchingWorkflow(const QString &workflowId, const QString &displayName);
@@ -89,4 +90,5 @@ protected:
     QString m_launchingWorkflowId;
     QString m_launchingWorkflowName;
     int m_loadingFrame = 0;
+    bool m_appDiscoveryLoading = false;
 };

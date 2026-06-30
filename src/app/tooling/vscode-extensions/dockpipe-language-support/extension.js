@@ -84,7 +84,7 @@ const TOP_LEVEL_KEY_DETAILS = {
   strategy: "Lifecycle wrapper that runs around the workflow.",
   strategies: "Available strategies for selection or validation.",
   vault: "Vault provider used for secret injection.",
-  compile_hooks: "Shell hooks run during package compile before the tarball is written.",
+  compile_hooks: "Shell hooks run during package compile against the staged copy before the tarball is written. Use DOCKPIPE_COMPILE_* env vars when the hook needs source or staging paths.",
   imports: "Additional workflow YAML merged into this workflow during authoring.",
   inject: "Compile-closure dependencies that should be included without merging their YAML into this workflow."
 };

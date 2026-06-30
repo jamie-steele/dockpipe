@@ -1,12 +1,10 @@
 **
 
-!src/
-!src/bin/
-!src/bin/dockpipe
-
-!bin/
-!bin/.dockpipe/
-!bin/.dockpipe/tooling/
-!bin/.dockpipe/tooling/bin/
-!bin/.dockpipe/tooling/bin/dorkpipe
-!bin/.dockpipe/tooling/bin/mcpd
+!compose/
+!compose/Dockerfile.dorkpipe-stack
+!tooling/
+!tooling/bin/
+!tooling/bin/linux/
+!tooling/bin/linux/dockpipe
+!tooling/bin/linux/dorkpipe
+!tooling/bin/linux/mcpd

@@ -315,6 +315,10 @@ func ListWorkflowNamesInPackagesStore(workdir string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	return listWorkflowNamesFromTarballDir(root)
+}
+
+func listWorkflowNamesFromTarballDir(root string) ([]string, error) {
 	matches, err := filepath.Glob(filepath.Join(root, "dockpipe-workflow-*.tar.gz"))
 	if err != nil {
 		return nil, err
@@ -341,24 +345,18 @@ func ListWorkflowNamesInGlobalPackagesStore() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	matches, err := filepath.Glob(filepath.Join(root, "dockpipe-workflow-*.tar.gz"))
-	if err != nil {
-		return nil, err
-	}
-	if len(matches) == 0 {
-		return nil, nil
-	}
+	return listWorkflowNamesFromTarballDir(root)
+}
+
+// ListWorkflowNamesInSystemPackagesStores lists workflows from dockpipe-workflow-*.tar.gz under system-shared packages/workflows dirs.
+func ListWorkflowNamesInSystemPackagesStores() ([]string, error) {
 	var out []string
-	for _, tgz := range matches {
-		members, err := packagebuild.ListTarGzMemberPaths(tgz)
+	for _, root := range SystemPackagesWorkflowsDirs() {
+		names, err := listWorkflowNamesFromTarballDir(root)
 		if err != nil {
-			continue
+			return nil, err
 		}
-		name, err := packagebuild.WorkflowNameFromTarballMembers(members)
-		if err != nil {
-			continue
-		}
-		out = append(out, name)
+		out = append(out, names...)
 	}
 	sort.Strings(out)
 	return out, nil
@@ -377,13 +375,33 @@ func ListWorkflowNamesInRepoRootAndPackages(repoRoot, workdir string) ([]string,
 			return nil, err
 		}
 	}
+	configRoot := packageSourcesConfigRoot(repoRoot, workdir)
+	var c []string
+	for _, root := range configuredPackageStoreRoots(configRoot) {
+		names, err := listWorkflowNamesFromTarballDir(filepath.Join(root, "workflows"))
+		if err != nil {
+			return nil, err
+		}
+		c = append(c, names...)
+	}
+	for _, dir := range configuredPackageTarballDirs(configRoot) {
+		names, err := listWorkflowNamesFromTarballDir(dir)
+		if err != nil {
+			return nil, err
+		}
+		c = append(c, names...)
+	}
 	g, err := ListWorkflowNamesInGlobalPackagesStore()
+	if err != nil {
+		return nil, err
+	}
+	s, err := ListWorkflowNamesInSystemPackagesStores()
 	if err != nil {
 		return nil, err
 	}
 	seen := make(map[string]struct{})
 	var out []string
-	for _, x := range append(append(append([]string{}, a...), b...), g...) {
+	for _, x := range append(append(append(append(append([]string{}, a...), b...), c...), g...), s...) {
 		if _, ok := seen[x]; ok {
 			continue
 		}

@@ -106,3 +106,31 @@ func TestWorkflowCompileStartDirExtractsTarball(t *testing.T) {
 		t.Fatalf("expected config at %s: %v", cfg, err)
 	}
 }
+
+func TestTryResolveWorkflowTarballURIFromSystemPackages(t *testing.T) {
+	root := t.TempDir()
+	systemRoot := t.TempDir()
+	t.Setenv("DOCKPIPE_SYSTEM_ROOT", systemRoot)
+	store := filepath.Join(systemRoot, "packages", "workflows")
+	if err := os.MkdirAll(store, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	wf := filepath.Join(t.TempDir(), "demo")
+	if err := os.MkdirAll(wf, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wf, "config.yml"), []byte("name: demo\nnamespace: acme\nrun: echo hi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(store, "dockpipe-workflow-demo-1.0.0.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(wf, tgz, "workflows/demo"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := tryResolveWorkflowTarballURI(root, "", "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == "" {
+		t.Fatal("expected tar URI from system packages store")
+	}
+}

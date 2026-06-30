@@ -49,6 +49,7 @@
 #include <QFontDatabase>
 #include <QGuiApplication>
 #include <QRegularExpression>
+#include <QtConcurrent>
 
 #include <functional>
 
@@ -234,6 +235,39 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     m_settings.load();
     const QStringList args = QCoreApplication::arguments();
     const bool startHome = args.contains(QStringLiteral("--start-home"));
+    m_advancedDiscoveryWatcher = new QFutureWatcher<AsyncContextDiscoveryResult>(this);
+    m_basicAppsWatcher = new QFutureWatcher<AsyncBasicAppsResult>(this);
+
+    connect(m_advancedDiscoveryWatcher, &QFutureWatcher<AsyncContextDiscoveryResult>::finished, this, [this]() {
+        const AsyncContextDiscoveryResult result = m_advancedDiscoveryWatcher->result();
+        m_advancedDiscoveryRunningWorkdir.clear();
+        const QString requested = QDir::cleanPath(m_advancedDiscoveryRequestedWorkdir);
+        const QString currentProject = QDir::cleanPath(m_settings.projectFolder);
+        if (result.workdir == requested && result.workdir == currentProject) {
+            m_advancedSourceContexts = result.contexts;
+            m_advancedDiscoveryLoading = false;
+            applyAdvancedContextFilter();
+        }
+        if (m_advancedDiscoveryRefreshPending || requested != result.workdir) {
+            m_advancedDiscoveryRefreshPending = false;
+            startAdvancedContextDiscovery();
+        }
+    });
+    connect(m_basicAppsWatcher, &QFutureWatcher<AsyncBasicAppsResult>::finished, this, [this]() {
+        const AsyncBasicAppsResult result = m_basicAppsWatcher->result();
+        m_basicAppsRunningWorkdir.clear();
+        const QString requested = QDir::cleanPath(m_basicAppsRequestedWorkdir);
+        const QString currentProject = QDir::cleanPath(m_settings.projectFolder);
+        if (result.workdir == requested && result.workdir == currentProject) {
+            m_basicApps = result.apps;
+            m_basicAppsLoading = false;
+            updateBasicPage();
+        }
+        if (m_basicAppsRefreshPending || requested != result.workdir) {
+            m_basicAppsRefreshPending = false;
+            startBasicAppDiscovery();
+        }
+    });
 
     setupMenuBar();
 
@@ -714,25 +748,24 @@ void MainWindow::activateHome()
 
 void MainWindow::onRefreshAppList()
 {
-    rebuildAdvancedContextList();
-    updateBasicPage();
+    startAdvancedContextDiscovery();
+    startBasicAppDiscovery();
     refreshInlineConsole();
 }
 
 void MainWindow::updateBasicPage()
 {
     if (m_settings.projectFolder.isEmpty()) {
+        m_basicAppsLoading = false;
         m_basicApps.clear();
         m_basicWidget->setApps({});
+        m_basicWidget->setAppDiscoveryLoading(false);
         m_basicWidget->setRunningByWorkflow({});
         m_basicWidget->clearLaunchingWorkflow();
         return;
     }
-
-    const QString repo = DockpipeChoices::findRepoRoot(m_settings.projectFolder);
-    const QVector<WorkflowMeta> apps = WorkflowCatalog::discoverAppWorkflows(repo, m_settings.projectFolder);
-    m_basicApps = apps;
-    m_basicWidget->setApps(apps);
+    m_basicWidget->setApps(m_basicApps);
+    m_basicWidget->setAppDiscoveryLoading(m_basicAppsLoading);
 
     QHash<QString, bool> run;
     if (!m_settings.projectFolder.isEmpty()) {
@@ -951,10 +984,13 @@ void MainWindow::clearContextList()
 void MainWindow::rebuildAdvancedContextList()
 {
     const bool hasProject = !m_settings.projectFolder.isEmpty();
-    m_advancedSourceContexts.clear();
-    if (hasProject)
-        m_advancedSourceContexts = ContextDiscovery::contextsForWorkdir(m_settings.projectFolder);
-    applyAdvancedContextFilter();
+    if (!hasProject) {
+        m_advancedDiscoveryLoading = false;
+        m_advancedSourceContexts.clear();
+        applyAdvancedContextFilter();
+        return;
+    }
+    startAdvancedContextDiscovery();
 }
 
 void MainWindow::applyAdvancedContextFilter()
@@ -975,6 +1011,9 @@ void MainWindow::applyAdvancedContextFilter()
         if (!hasProject) {
             m_emptyTitle->setText(tr("No project selected"));
             m_emptyBody->setText(tr("Open a project folder in Basic mode or with File → Open project folder."));
+        } else if (m_advancedDiscoveryLoading) {
+            m_emptyTitle->setText(tr("Loading workflows"));
+            m_emptyBody->setText(tr("DockPipe is discovering workflows for the current project folder."));
         } else if (noProjectRows) {
             m_emptyTitle->setText(tr("No workflows found"));
             m_emptyBody->setText(
@@ -1024,6 +1063,7 @@ void MainWindow::applyAdvancedContextFilter()
 void MainWindow::rebuildUi()
 {
     rebuildAdvancedContextList();
+    startBasicAppDiscovery();
     updateBasicPage();
     refreshInlineConsole();
 }
@@ -1039,6 +1079,69 @@ void MainWindow::onSessionChanged()
         }
     }
     rebuildUi();
+}
+
+void MainWindow::startAdvancedContextDiscovery()
+{
+    const QString workdir = QDir::cleanPath(m_settings.projectFolder);
+    if (workdir.isEmpty()) {
+        m_advancedDiscoveryRequestedWorkdir.clear();
+        m_advancedDiscoveryRunningWorkdir.clear();
+        m_advancedDiscoveryLoading = false;
+        m_advancedSourceContexts.clear();
+        applyAdvancedContextFilter();
+        return;
+    }
+    m_advancedDiscoveryRequestedWorkdir = workdir;
+    if (m_advancedDiscoveryWatcher->isRunning()) {
+        m_advancedDiscoveryRefreshPending = true;
+        m_advancedDiscoveryLoading = true;
+        applyAdvancedContextFilter();
+        return;
+    }
+    m_advancedDiscoveryRefreshPending = false;
+    m_advancedDiscoveryLoading = true;
+    m_advancedDiscoveryRunningWorkdir = workdir;
+    m_advancedSourceContexts.clear();
+    applyAdvancedContextFilter();
+    m_advancedDiscoveryWatcher->setFuture(QtConcurrent::run([workdir]() {
+        AsyncContextDiscoveryResult result;
+        result.workdir = workdir;
+        result.contexts = ContextDiscovery::contextsForWorkdir(workdir);
+        return result;
+    }));
+}
+
+void MainWindow::startBasicAppDiscovery()
+{
+    const QString workdir = QDir::cleanPath(m_settings.projectFolder);
+    if (workdir.isEmpty()) {
+        m_basicAppsRequestedWorkdir.clear();
+        m_basicAppsRunningWorkdir.clear();
+        m_basicAppsLoading = false;
+        m_basicApps.clear();
+        updateBasicPage();
+        return;
+    }
+    m_basicAppsRequestedWorkdir = workdir;
+    if (m_basicAppsWatcher->isRunning()) {
+        m_basicAppsRefreshPending = true;
+        m_basicAppsLoading = true;
+        updateBasicPage();
+        return;
+    }
+    m_basicAppsRefreshPending = false;
+    m_basicAppsLoading = true;
+    m_basicAppsRunningWorkdir = workdir;
+    m_basicApps.clear();
+    updateBasicPage();
+    m_basicAppsWatcher->setFuture(QtConcurrent::run([workdir]() {
+        AsyncBasicAppsResult result;
+        result.workdir = workdir;
+        const QString repo = DockpipeChoices::findRepoRoot(workdir);
+        result.apps = WorkflowCatalog::discoverAppWorkflows(repo, workdir);
+        return result;
+    }));
 }
 
 void MainWindow::onAdvancedSearchChanged(const QString &)

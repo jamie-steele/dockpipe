@@ -11,7 +11,8 @@ BIN="$(dorkpipe_script_resolve_bin "$(dorkpipe_script_repo_root "$SCRIPT_DIR")")
 SPEC="${DORKPIPE_SPEC:-$WORKFLOW_ROOT/spec.example.yaml}"
 
 if [[ ! -x "$BIN" ]]; then
-  echo "dorkpipe: build the orchestrator first: ./src/bin/dockpipe package build source --workdir . --only dorkpipe" >&2
+  echo "dorkpipe: dorkpipe CLI not available from packaged assets, repo-local builds, or PATH" >&2
+  echo "dorkpipe: consumer path expects compiled package assets or an installed dorkpipe binary; maintainer fallback: dockpipe package build source --workdir . --only dorkpipe" >&2
   exit 1
 fi
 

@@ -54,6 +54,18 @@ type DockpipePackagesConfig struct {
 	// RegistryURLs optional HTTPS bases for future package id resolution (e.g. https://packages.dockpipe.com).
 	// Not wired in the runner yet; compile and resolution use compile.workflows paths and local stores.
 	RegistryURLs *[]string `json:"registry_urls,omitempty"`
+	// Sources extends package resolution with explicit local filesystem sources for unpublished or shared package stores.
+	// This supplements, but does not replace, DOCKPIPE_PACKAGES_ROOT, global package roots, or remote tarball flows.
+	Sources *[]DockpipePackageSourceConfig `json:"sources,omitempty"`
+}
+
+// DockpipePackageSourceConfig points package resolution at an explicit local filesystem source.
+// Supported kinds:
+// - "store": a package store root containing workflows/, resolvers/, and core/
+// - "tarball_dir": a directory containing dockpipe-*.tar.gz artifacts
+type DockpipePackageSourceConfig struct {
+	Kind string `json:"kind,omitempty"`
+	Path string `json:"path,omitempty"`
 }
 
 // LoadDockpipeProjectConfig reads dockpipe.config.json from repoRoot. Returns (nil, nil) if the file is missing.

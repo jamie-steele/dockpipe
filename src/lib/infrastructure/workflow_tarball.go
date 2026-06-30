@@ -37,7 +37,8 @@ func tryResolveWorkflowTarballURI(repoRoot, workdir, name string) (string, error
 	if name == "" {
 		return "", nil
 	}
-	cfg, err := domain.LoadDockpipeProjectConfig(repoRoot)
+	configRoot := packageSourcesConfigRoot(repoRoot, workdir)
+	cfg, err := domain.LoadDockpipeProjectConfig(configRoot)
 	if err != nil {
 		return "", err
 	}
@@ -47,10 +48,15 @@ func tryResolveWorkflowTarballURI(repoRoot, workdir, name string) (string, error
 			searchDirs = append(searchDirs, pw)
 		}
 	}
+	for _, root := range configuredPackageStoreRoots(configRoot) {
+		searchDirs = append(searchDirs, filepath.Join(root, "workflows"))
+	}
 	if gw, err := GlobalPackagesWorkflowsDir(); err == nil {
 		searchDirs = append(searchDirs, gw)
 	}
-	if d := workflowTarballSearchDir(repoRoot, cfg); d != "" {
+	searchDirs = append(searchDirs, SystemPackagesWorkflowsDirs()...)
+	searchDirs = append(searchDirs, configuredPackageTarballDirs(configRoot)...)
+	if d := workflowTarballSearchDir(configRoot, cfg); d != "" {
 		searchDirs = append(searchDirs, d)
 	}
 	entry := filepath.ToSlash(filepath.Join("workflows", name, "config.yml"))

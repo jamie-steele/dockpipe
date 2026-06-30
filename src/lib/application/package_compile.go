@@ -5,7 +5,6 @@ import (
 	"io"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -147,21 +146,6 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 	if err != nil {
 		return fmt.Errorf("parse workflow: %w", err)
 	}
-	for i, hook := range wf.CompileHooks {
-		hook = strings.TrimSpace(hook)
-		if hook == "" {
-			continue
-		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] compile_hooks[%d]: %s\n", i, hook)
-		cmd := exec.Command("sh", "-c", hook)
-		cmd.Dir = srcAbs
-		cmd.Env = os.Environ()
-		cmd.Stdout = os.Stderr
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("compile_hooks[%d]: %w", i, err)
-		}
-	}
 	pkgName := strings.TrimSpace(name)
 	if pkgName == "" {
 		pkgName = strings.TrimSpace(wf.Name)
@@ -237,13 +221,27 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 		_ = infrastructure.RemoveGlob(tarGlob)
 		_ = os.RemoveAll(legacyDir)
 	}
-	staging, err := os.MkdirTemp("", "dockpipe-compile-wf-*")
+	staging, err := mkdirCompileStagingDir(workdir, "dockpipe-compile-wf-*")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(staging)
 	if err := copyDir(srcAbs, staging); err != nil {
 		return fmt.Errorf("copy workflow: %w", err)
+	}
+	if err := runWorkflowCompileHooks(workdir, srcAbs, staging, wf.CompileHooks); err != nil {
+		return err
+	}
+	b, err = os.ReadFile(filepath.Join(staging, "config.yml"))
+	if err != nil {
+		return err
+	}
+	wf, err = domain.ParseWorkflowYAML(b)
+	if err != nil {
+		return fmt.Errorf("parse workflow: %w", err)
+	}
+	if err := infrastructure.ValidateWorkflowYAML(filepath.Join(staging, "config.yml")); err != nil {
+		return fmt.Errorf("validate workflow after compile_hooks: %w", err)
 	}
 	if err := ensureWorkflowImageEntrypoint(workdir, staging); err != nil {
 		return fmt.Errorf("stage workflow image entrypoint: %w", err)
@@ -303,6 +301,60 @@ func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
 		return err
 	}
 	fmt.Fprintf(os.Stderr, "[dockpipe] compiled workflow package → %s\n", outPath)
+	return nil
+}
+
+func runWorkflowCompileHooks(workdir, srcAbs, staging string, hooks []string) error {
+	return runCompileHooksForStaging(workdir, srcAbs, staging, "workflow", hooks)
+}
+
+func mkdirCompileStagingDir(workdir, pattern string) (string, error) {
+	stateRoot, err := infrastructure.StateRoot(workdir)
+	if err != nil {
+		return "", err
+	}
+	tmpRoot := filepath.Join(stateRoot, "tmp")
+	if err := os.MkdirAll(tmpRoot, 0o755); err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(tmpRoot, pattern)
+}
+
+func runCompileHooksForStaging(workdir, srcAbs, staging, kind string, hooks []string) error {
+	for i, hook := range hooks {
+		hook = strings.TrimSpace(hook)
+		if hook == "" {
+			continue
+		}
+		fmt.Fprintf(os.Stderr, "[dockpipe] compile_hooks[%d]: %s\n", i, hook)
+		cmd, bashExe, err := dockpipeBashShellCommand(hook)
+		if err != nil {
+			return fmt.Errorf("compile_hooks[%d]: %w", i, err)
+		}
+		cmd.Dir = staging
+		compileWorkdir := workdir
+		compileSourceDir := srcAbs
+		compileStagingDir := staging
+		if bashExe != "" {
+			compileWorkdir = dockpipePathForBashEnv(bashExe, workdir)
+			compileSourceDir = dockpipePathForBashEnv(bashExe, srcAbs)
+			compileStagingDir = dockpipePathForBashEnv(bashExe, staging)
+		}
+		cmd.Env = append(os.Environ(),
+			"DOCKPIPE_COMPILE_KIND="+strings.TrimSpace(kind),
+			"DOCKPIPE_COMPILE_WORKDIR="+compileWorkdir,
+			"DOCKPIPE_COMPILE_SOURCE_DIR="+compileSourceDir,
+			"DOCKPIPE_COMPILE_STAGING_DIR="+compileStagingDir,
+		)
+		if bashExe != "" {
+			cmd.Env = upsertEnvLocal(cmd.Env, "DOCKPIPE_HOST_BASH_BIN", bashExe)
+		}
+		cmd.Stdout = os.Stderr
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("compile_hooks[%d]: %w", i, err)
+		}
+	}
 	return nil
 }
 
@@ -525,7 +577,7 @@ func cmdPackageCompileCore(args []string) error {
 		_ = infrastructure.RemoveGlob(coreTarGlob)
 		_ = infrastructure.RemoveLegacyPackageSubdirs(coreDir)
 	}
-	staging, err := os.MkdirTemp("", "dockpipe-compile-core-*")
+	staging, err := mkdirCompileStagingDir(workdir, "dockpipe-compile-core-*")
 	if err != nil {
 		return err
 	}
@@ -983,13 +1035,27 @@ func compileSingleResolverDir(workdir, destRoot, from, name string, defaultNames
 		_ = infrastructure.RemoveGlob(tarGlob)
 		_ = os.RemoveAll(legacyDir)
 	}
-	staging, err := os.MkdirTemp("", "dockpipe-compile-"+kind+"-*")
+	staging, err := mkdirCompileStagingDir(workdir, "dockpipe-compile-"+kind+"-*")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(staging)
 	if err := copyDir(from, staging); err != nil {
 		return fmt.Errorf("copy %s %s: %w", kind, name, err)
+	}
+	if b, err := os.ReadFile(filepath.Join(staging, "config.yml")); err == nil {
+		wf, err := domain.ParseWorkflowYAML(b)
+		if err != nil {
+			return fmt.Errorf("%s %s: parse workflow: %w", kind, name, err)
+		}
+		if err := runCompileHooksForStaging(workdir, from, staging, kind, wf.CompileHooks); err != nil {
+			return fmt.Errorf("%s %s: %w", kind, name, err)
+		}
+		if err := infrastructure.ValidateWorkflowYAML(filepath.Join(staging, "config.yml")); err != nil {
+			return fmt.Errorf("validate %s %s after compile_hooks: %w", kind, name, err)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("%s %s: read config.yml: %w", kind, name, err)
 	}
 	if err := ensureWorkflowImageEntrypoint(workdir, staging); err != nil {
 		return fmt.Errorf("stage resolver image entrypoint: %w", err)
@@ -1346,7 +1412,8 @@ Use "compile all" to run the default sequence.
 const packageCompileWorkflowUsageText = `dockpipe package compile workflow <source-dir>
 
 Runs workflow YAML validation (same rules as dockpipe workflow validate), runs optional
-compile_hooks from config.yml (shell, cwd = source dir), then writes the workflow tarball under
+compile_hooks from config.yml against the staged package copy (shell, cwd = staged copy; source and
+staging paths exported via DOCKPIPE_COMPILE_* env vars), then writes the workflow tarball under
 <workdir>/bin/.dockpipe/internal/packages/workflows/.
 
 Options:
