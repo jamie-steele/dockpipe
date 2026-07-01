@@ -210,6 +210,11 @@
         "goal": { "type": "string" },
         "expected_output": { "type": "string" },
         "worker_type": { "type": "string" },
+        "work_mode": {
+          "type": "string",
+          "enum": ["artifact", "artifacts", "readonly", "read-only", "read-only-artifacts", "collect", "gather", "edit", "direct", "direct-edit", "workspace-edit", "writable"],
+          "description": "Task execution mode for cloud worker prompts. Artifact/read-only modes collect response artifacts without editing mounted source. Edit/direct modes allow normal source edits when mounts and access policy are writable."
+        },
         "prompt": { "type": "string" },
         "inputs": {
           "type": "array",

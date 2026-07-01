@@ -54,6 +54,7 @@ Each `task.json` should define:
 - `constraints`
 - `expected_output`
 - `worker_type`
+- `work_mode`
 - `resolver_hint`
 - `max_cloud_tokens`
 - `depends_on`
@@ -71,6 +72,17 @@ or `ollama`. DorkPipe expands that profile into lane defaults before planning wh
 the worker containers and provider boundaries separate. `worker_policy.mode: prefer` keeps the
 profile as a scheduler preference; `require` turns it into a hard lane-family requirement without
 forcing authors to drop down to resolver-specific task authoring.
+
+`work_mode` controls how cloud worker prompts should treat mounted source paths:
+
+- `artifact` is the default. Workers gather evidence and return `response.md` artifact content.
+  Mounted source paths are treated as read-only, and approval-gated apply/promotion writes files later.
+- `edit` is direct workspace mode. Codex or Claude may use normal repo-worker behavior, including
+  source edits and validation, but only inside paths that are writable by both access policy and
+  container mounts.
+
+Use `artifact` for planning, synthesis, doc drafting, validation, and artifact generation. Use `edit`
+only for tasks whose purpose is implementation or repair, and pair it with explicit writable mounts.
 
 ## Model lane catalog
 
@@ -165,6 +177,14 @@ Users sign in normally on the host; DorkPipe passes that auth into the container
 - API-key env vars declared by resolver profiles are still forwarded by the DockPipe runner
 
 Do not bake credentials into images or require a separate container login as the normal path.
+
+Cloud worker tooling should be consumer-selectable and image-backed. Set
+`DORKPIPE_ORCH_CONTAINER_IMAGE_PACKAGES` in workflow `vars:` to generate a provider-specific
+derived Docker image for Codex or Claude workers. The image tag is fingerprinted from provider, base
+image, and normalized package list, so package changes naturally produce a different image. Keep
+resolver images lean; workflows that need Python, Ruby, Go, .NET, or other heavier stacks should
+declare those packages explicitly. The generated Dockerfile adds Microsoft's Debian package feed on
+demand for `.NET` package names such as `dotnet-sdk-8.0`.
 
 ## Training metrics
 

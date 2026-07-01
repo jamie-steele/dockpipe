@@ -50,6 +50,36 @@ provider_live_command() {
   esac
 }
 
+doctor_providers() {
+  local configured="${DORKPIPE_AGENT_DOCTOR_PROVIDERS:-codex claude}"
+  local provider
+  for provider in ${configured//,/ }; do
+    case "$provider" in
+      codex|claude) printf '%s\n' "$provider" ;;
+      "") ;;
+      *) echo "agent.cloud-lanes.doctor: unknown provider ${provider}" >&2; return 1 ;;
+    esac
+  done
+}
+
+doctor_windows_host_path() {
+  local path="${1:-}"
+  if [[ "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" == Windows_NT:* || "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" == *:msys*:* || "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" == *:cygwin*:* || "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" == *:*:MINGW* ]]; then
+    if [[ "${path}" =~ ^/([A-Za-z])/(.*)$ ]]; then
+      local drive rest
+      drive="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:lower:]' '[:upper:]')"
+      rest="${BASH_REMATCH[2]//\//\\}"
+      printf '%s:\\%s\n' "${drive}" "${rest}"
+      return 0
+    fi
+    if [[ "${path}" =~ ^([A-Za-z]):/ ]]; then
+      printf '%s\n' "${path//\//\\}"
+      return 0
+    fi
+  fi
+  printf '%s\n' "${path}"
+}
+
 run_provider() {
   local provider="$1"
   local provider_dir
@@ -63,9 +93,11 @@ run_provider() {
   local exit_code=0
 
   mkdir -p "$provider_dir"
-  host_auth="$(provider_auth_dir "$provider")"
+  local source_workdir
+  source_workdir="$(doctor_windows_host_path "$(dockpipe scope source)")"
+  host_auth="$(doctor_windows_host_path "$(provider_auth_dir "$provider")")"
   container_auth="$(provider_container_auth_dir "$provider")"
-  host_config="$(provider_host_config_file "$provider")"
+  host_config="$(doctor_windows_host_path "$(provider_host_config_file "$provider")")"
   container_config="$(provider_container_config_file "$provider")"
   cli="$(provider_cli "$provider")"
   live="$(doctor_bool "${DORKPIPE_AGENT_DOCTOR_LIVE:-true}")"
@@ -75,7 +107,7 @@ run_provider() {
   [[ -n "$host_config" && -f "$host_config" ]] && host_config_exists="true"
 
   local args=(
-    "--workdir" "$(dockpipe scope source)"
+    "--workdir" "$source_workdir"
     "--runtime" "dockerimage"
     "--resolver" "$provider"
     "--no-data"
@@ -99,7 +131,7 @@ run_provider() {
   args+=("--env" "DORKPIPE_AGENT_DOCTOR_LIVE_CMD=$live_cmd")
 
   set +e
-  dockpipe "${args[@]}" -- bash -lc "$(cat <<'SH'
+  MSYS2_ARG_CONV_EXCL='*' dockpipe "${args[@]}" -- bash -lc "$(cat <<'SH'
 set -u
 provider="${DOCKPIPE_RESOLVER_NAME:?provider}"
 cli="${DOCKPIPE_RESOLVER_CLI:?cli}"
@@ -205,7 +237,10 @@ if provider == "claude" and not checks["container_config_file_present"]:
 if not checks["container_skills_dir_present"]:
     issues.append(f"skills directory was not visible inside container: {container_auth}/skills")
 if live == "true" and not live_ok:
-    issues.append("tiny live prompt did not return expected marker")
+    if "Not logged in" in live_text or "Please run /login" in live_text:
+        issues.append(f"{provider} CLI is not logged in inside the resolver container; run {provider} /login on the host and rerun this doctor")
+    else:
+        issues.append("tiny live prompt did not return expected marker")
 if int(exit_code) != 0:
     issues.append(f"container command exited {exit_code}")
 
@@ -228,7 +263,11 @@ pathlib.Path(result_path).write_text(json.dumps({
 PY
 }
 
-providers=(codex claude)
+mapfile -t providers < <(doctor_providers)
+if [[ "${#providers[@]}" -eq 0 ]]; then
+  echo "agent.cloud-lanes.doctor: no providers selected" >&2
+  exit 1
+fi
 for provider in "${providers[@]}"; do
   echo "[agent.cloud-lanes.doctor] checking ${provider}"
   run_provider "$provider"

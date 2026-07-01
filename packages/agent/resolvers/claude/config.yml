@@ -5,12 +5,7 @@ description: Claude Code in a worktree (dockpipe-claude image).
 
 image:
   packages:
-    apt:
-      - build-essential
-      - cargo
-      - golang-go
-      - python3
-      - rustc
+    apt: []
 
 steps:
   - id: claude

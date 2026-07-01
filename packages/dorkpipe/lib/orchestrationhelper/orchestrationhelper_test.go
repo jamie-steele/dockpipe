@@ -1,9 +1,11 @@
 package orchestrationhelper
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -126,6 +128,20 @@ func TestComparisonDisabledForRequiredWorker(t *testing.T) {
 	}
 }
 
+func TestEmitTaskEnvIncludesWorkMode(t *testing.T) {
+	taskPath := filepath.Join(t.TempDir(), "task.json")
+	if err := os.WriteFile(taskPath, []byte(`{"id":"patch","worker":"codex","work_mode":"edit"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	if err := emitTaskEnv(taskPath, &stdout); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), "TASK_WORK_MODE='edit'") {
+		t.Fatalf("task env missing work mode:\n%s", stdout.String())
+	}
+}
+
 func TestResolveDockpipeCommandPrefersEnv(t *testing.T) {
 	got := resolveDockpipeCommand(t.TempDir(), map[string]string{"DOCKPIPE_BIN": "/custom/dockpipe"})
 	if got != "/custom/dockpipe" {
@@ -201,6 +217,32 @@ func TestResolveApplyTargetPathRejectsDisallowedGuestMount(t *testing.T) {
 	}
 }
 
+func TestApplyResultsPreflightsAllSourcesBeforeWriting(t *testing.T) {
+	root := t.TempDir()
+	artifactRoot := filepath.Join(root, "artifacts")
+	if err := os.MkdirAll(filepath.Join(artifactRoot, "merge"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactRoot, "merge", "first.md"), []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(artifactRoot, "plan.json")
+	approvalPath := filepath.Join(artifactRoot, "approval.md")
+	resultPath := filepath.Join(artifactRoot, "apply.json")
+	if err := os.WriteFile(planPath, []byte(`{"apply":{"require_approval":true,"outputs":[{"source":"merge/first.md","path":"out/first.md"},{"source":"merge/missing.md","path":"out/missing.md"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(approvalPath, []byte("- Approved: yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyResults(root, artifactRoot, planPath, approvalPath, resultPath); err == nil {
+		t.Fatal("expected missing second source to fail")
+	}
+	if _, err := os.Stat(filepath.Join(root, "out", "first.md")); !os.IsNotExist(err) {
+		t.Fatalf("first output should not be written before all sources preflight, err=%v", err)
+	}
+}
+
 func TestBuildMergeResultUsesTaskResultObjects(t *testing.T) {
 	dir := t.TempDir()
 	mainPath := filepath.Join(dir, "main.json")
@@ -231,4 +273,78 @@ func TestBuildMergeResultUsesTaskResultObjects(t *testing.T) {
 	if len(planning) != 1 {
 		t.Fatalf("planning length = %d want 1", len(planning))
 	}
+}
+
+func TestOllamaChatRequestAndResponseHelpers(t *testing.T) {
+	dir := t.TempDir()
+	promptPath := filepath.Join(dir, "prompt.md")
+	requestPath := filepath.Join(dir, "request.json")
+	responsePath := filepath.Join(dir, "response.json")
+	outPath := filepath.Join(dir, "response.md")
+	if err := os.WriteFile(promptPath, []byte("hello"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeOllamaChatRequest("llama-test", promptPath, requestPath); err != nil {
+		t.Fatal(err)
+	}
+	request := readJSONMap(requestPath)
+	if got := stringValue(request["model"]); got != "llama-test" {
+		t.Fatalf("model = %q", got)
+	}
+	if err := os.WriteFile(responsePath, []byte(`{"message":{"content":"useful response"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeOllamaChatResponse(responsePath, outPath); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(mustReadFile(t, outPath))); got != "useful response" {
+		t.Fatalf("response = %q", got)
+	}
+}
+
+func TestEmitVerifySummaryEnvCountsFallbackTasks(t *testing.T) {
+	dir := t.TempDir()
+	mergePath := filepath.Join(dir, "merge.json")
+	if err := os.WriteFile(mergePath, []byte(`{"average_confidence":0.55,"tasks":[{"used_live_model":false},{"used_live_model":true},{"used_live_model":false}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if err := emitVerifySummaryEnv(mergePath, &out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	for _, want := range []string{"VERIFY_LIVE_COUNT='1'", "VERIFY_FALLBACK_COUNT='2'", "VERIFY_AVG_CONFIDENCE='0.55'"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("verify env missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestExecutableSearchPathEntriesNormalizesGitBashWindowsPath(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Git Bash PATH normalization is Windows-specific")
+	}
+	entries := executableSearchPathEntries("/c/Program Files/Docker/Docker/resources/bin:/usr/bin")
+	if len(entries) == 0 || entries[0] != `C:\Program Files\Docker\Docker\resources\bin` {
+		t.Fatalf("entries = %#v", entries)
+	}
+}
+
+func TestWindowsExecutableFallbackDirsIncludesDockerDesktop(t *testing.T) {
+	dirs := windowsExecutableFallbackDirs("docker")
+	if len(dirs) == 0 {
+		t.Fatal("expected docker fallback dirs")
+	}
+	if dirs[0] != `C:\Program Files\Docker\Docker\resources\bin` {
+		t.Fatalf("first fallback dir = %q", dirs[0])
+	}
+}
+
+func mustReadFile(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
 }

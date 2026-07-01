@@ -41,6 +41,7 @@ append_dependency_context() {
   "$(dorkpipe_orchestrate_helper_bin)" append-dependency-context "${prompt_md}" "${DORKPIPE_ORCH_TASKS_DIR}" "${TASK_DEPENDS_ON_JSON:-[]}" "${DORKPIPE_ORCH_DEPENDENCY_CONTEXT_MAX_BYTES}" "${DORKPIPE_ORCH_DEPENDENCY_CONTEXT_TOTAL_MAX_BYTES}" "${DORKPIPE_ORCH_PREFER_PLANNER_CONTEXT}"
 }
 
+dorkpipe_orchestrate_append_work_mode_prompt "${prompt_md}"
 append_dependency_context
 estimated_input_tokens="$(dorkpipe_orchestrate_estimate_tokens_for_file "${prompt_md}")"
 estimated_total_tokens="${estimated_input_tokens}"
@@ -140,16 +141,18 @@ if [[ "${budget_halt}" != "true" ]]; then
         fi
         ;;
       ollama)
-        if command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+        if command -v curl >/dev/null 2>&1; then
           ollama_host="${OLLAMA_HOST:-http://host.docker.internal:11434}"
           ollama_host="${ollama_host%/}"
           ollama_model="${selected_model}"
           if [[ -z "${ollama_model}" ]]; then
             ollama_model="${DORKPIPE_ORCH_OLLAMA_MODEL:-llama3.2}"
           fi
-          req_json="$(jq -n --arg model "${ollama_model}" --arg prompt "$(cat "${prompt_md}")" '{model:$model,messages:[{role:"user",content:$prompt}],stream:false}')"
-          if resp_json="$(curl -sf "${ollama_host}/api/chat" -H 'Content-Type: application/json' -d "${req_json}")"; then
-            if printf '%s' "${resp_json}" | jq -er '.message.content' > "${response_md}"; then
+          request_json="${task_dir}/ollama-request.json"
+          response_json="${task_dir}/ollama-response.json"
+          "$(dorkpipe_orchestrate_helper_bin)" ollama-chat-request "${ollama_model}" "${prompt_md}" "${request_json}"
+          if curl -sf "${ollama_host}/api/chat" -H 'Content-Type: application/json' -d "@${request_json}" > "${response_json}"; then
+            if "$(dorkpipe_orchestrate_helper_bin)" ollama-chat-response "${response_json}" "${response_md}"; then
               used_live_model="true"
               summary="Live Ollama worker output captured in response.md"
               confidence="0.68"
@@ -157,6 +160,8 @@ if [[ "${budget_halt}" != "true" ]]; then
               next_actions_json='["merge this task with sibling worker outputs"]'
             fi
           fi
+        else
+          issues_json='["curl is not installed or not available on PATH for Ollama API calls"]'
         fi
         ;;
     esac
@@ -164,7 +169,8 @@ if [[ "${budget_halt}" != "true" ]]; then
 fi
 
 if [[ "${used_live_model}" != "true" ]]; then
-  if [[ "${budget_halt}" != "true" && "${TASK_WORKER_POLICY_MODE:-}" == "require" ]]; then
+  fallback_policy="$(printf '%s' "${DORKPIPE_ORCH_FALLBACK_OUTPUT:-allow}" | tr '[:upper:]' '[:lower:]')"
+  if [[ "${budget_halt}" != "true" && ( "${TASK_WORKER_POLICY_MODE:-}" == "require" || "${fallback_policy}" == "fail" || "${fallback_policy}" == "error" || "${fallback_policy}" == "never" ) ]]; then
     status="failed"
     summary="Required live ${provider} worker could not complete ${task_id}"
     confidence="0.05"

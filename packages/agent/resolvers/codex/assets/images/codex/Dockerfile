@@ -5,17 +5,15 @@ FROM node:20-slim
 # Do not install distro bubblewrap: Debian's /usr/bin/bwrap is often too old and lacks --argv0,
 # which Codex's sandbox passes — that breaks exec with "bwrap: Unknown option --argv0".
 # Codex falls back to its vendored bubblewrap when system bwrap is absent (see CLI warning).
-# DorkPipe orchestration invokes the resolver image directly, so bake in the same toolchain shape
-# the bundled codex workflow would otherwise add via image.packages.apt.
+# Keep this base image lean. Consumer workflows can add project-specific tooling at run time with
+# DORKPIPE_ORCH_CONTAINER_APT_PACKAGES or through normal image.packages-derived images.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
-    build-essential \
     ca-certificates \
-    cargo \
     curl \
     file \
     git \
-    golang-go \
+    gnupg \
     iproute2 \
     jq \
     less \
@@ -24,11 +22,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
     patch \
     procps \
-    python3 \
     ripgrep \
-    rustc \
     unzip \
     util-linux \
+    wget \
     zip \
     && rm -rf /var/lib/apt/lists/*
 
@@ -50,8 +47,7 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:
 # Clear sudo-like markers some CLIs interpret as elevated mode.
 unset SUDO_COMMAND SUDO_USER SUDO_UID SUDO_GID 2>/dev/null || true
 
-# Some hosts still start the container as root even when the image sets USER node.
-# Codex behaves better when it runs as node in the disposable resolver image.
+# Start as root only so the entrypoint can drop to node consistently.
 if [[ -z "${DOCKPIPE_SKIP_DROP_TO_NODE:-}" ]] && [[ "$(id -u)" -eq 0 ]] && [[ -z "${DOCKPIPE_ENTRYPOINT_DROPPED:-}" ]] && id -u node &>/dev/null; then
   export DOCKPIPE_ENTRYPOINT_DROPPED=1
   if command -v runuser >/dev/null 2>&1; then
@@ -76,5 +72,4 @@ RUN chmod +x /entrypoint.sh /codex-entrypoint.sh
 WORKDIR /work
 # Quieter Rust logs for `codex exec` in demos/CI; override per run if you need debug.
 ENV RUST_LOG=error
-USER node
 ENTRYPOINT ["/codex-entrypoint.sh"]

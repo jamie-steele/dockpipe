@@ -2,17 +2,15 @@
 # Requires ANTHROPIC_API_KEY or ~/.claude credentials at run time.
 FROM node:20-slim
 
-# DorkPipe orchestration invokes the resolver image directly, so bake in the same toolchain shape
-# the bundled claude workflow would otherwise add via image.packages.apt.
+# Keep this base image lean. Consumer workflows can add project-specific tooling at run time with
+# DORKPIPE_ORCH_CONTAINER_APT_PACKAGES or through normal image.packages-derived images.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
-    build-essential \
     ca-certificates \
-    cargo \
     curl \
     file \
     git \
-    golang-go \
+    gnupg \
     iproute2 \
     jq \
     less \
@@ -21,11 +19,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-client \
     patch \
     procps \
-    python3 \
     ripgrep \
-    rustc \
     unzip \
     util-linux \
+    wget \
     zip \
     && rm -rf /var/lib/apt/lists/*
 
@@ -48,8 +45,7 @@ export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:
 # Clear sudo-like markers some CLIs interpret as elevated mode.
 unset SUDO_COMMAND SUDO_USER SUDO_UID SUDO_GID 2>/dev/null || true
 
-# Some hosts still start the container as root even when the image sets USER node.
-# Claude behaves better when it runs as node in the disposable resolver image.
+# Start as root only so the entrypoint can drop to node consistently.
 if [[ -z "${DOCKPIPE_SKIP_DROP_TO_NODE:-}" ]] && [[ "$(id -u)" -eq 0 ]] && [[ -z "${DOCKPIPE_ENTRYPOINT_DROPPED:-}" ]] && id -u node &>/dev/null; then
   export DOCKPIPE_ENTRYPOINT_DROPPED=1
   if command -v runuser >/dev/null 2>&1; then
@@ -72,7 +68,4 @@ EOF
 RUN chmod +x /entrypoint.sh /claude-entrypoint.sh
 
 WORKDIR /work
-# Non-root: Windows omits -u (Getuid -1); Linux still passes -u host:host which overrides USER.
-# Avoids CLIs that refuse --dangerously-skip-permissions as root.
-USER node
 ENTRYPOINT ["/claude-entrypoint.sh"]

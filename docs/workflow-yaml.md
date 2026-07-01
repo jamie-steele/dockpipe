@@ -92,6 +92,32 @@ steps:
 DockPipe materializes these declarations as a derived Docker image at package compile/build time.
 Keep common inspection tools in resolver images; declare heavier project-specific toolchains here.
 
+DorkPipe orchestration cloud workers also accept a run-level consumer image override:
+
+```yaml
+vars:
+  DORKPIPE_ORCH_CONTAINER_IMAGE_PACKAGES: "make cmake libxml2-utils"
+```
+
+When Codex or Claude orchestration workers need extra Debian packages, DorkPipe generates a derived
+Dockerfile from the provider image, tags the image with a checksum of provider + base image + package
+list, builds it once if missing, and runs workers with `--isolate <generated-image>`. This keeps
+tooling deterministic and cacheable instead of installing packages inside every worker container at
+startup.
+
+This override is intentionally consumer-owned. Resolver images keep only a lean baseline, so
+project workflows should request their own heavier language stacks, for example:
+
+```yaml
+vars:
+  DORKPIPE_ORCH_CONTAINER_IMAGE_PACKAGES: "python3 ruby-full golang-go dotnet-sdk-8.0"
+```
+
+The generated Dockerfile adds Microsoft's Debian package feed on demand when the requested package
+set includes `.NET` packages such as `dotnet-sdk-8.0`. `DORKPIPE_ORCH_CONTAINER_APT_PACKAGES`
+remains accepted as a compatibility alias, but new workflows should use
+`DORKPIPE_ORCH_CONTAINER_IMAGE_PACKAGES`.
+
 If a workflow grows beyond one simple run, prefer moving to **`steps:`** instead of piling more meaning onto top-level **`run`** / **`act`**.
 Once you switch to **`steps:`**, move those fields onto the specific step that needs them.
 
@@ -210,6 +236,7 @@ tasks:
     worker: codex
     worker_policy:
       mode: require
+    work_mode: edit
     worker_type: patch_decision
 ```
 
@@ -218,6 +245,12 @@ task to seeded lane defaults such as preferred lane family and model provider. B
 `worker_policy.mode: prefer` lets the orchestrator fall back, compare, or escalate when policy says
 it should. Use `worker_policy.mode: require` only when the task must stay on that worker profile.
 Use `resolver_hint` only as an explicit hard override when a seeded worker profile is not enough.
+
+Task `work_mode` separates readonly artifact collection from direct workspace editing. The default
+`artifact` mode tells Codex/Claude workers to inspect mounted sources and return the requested
+artifact in `response.md`; DorkPipe apply/promotion writes approved files later. Set `work_mode:
+edit` only for implementation or repair tasks, and pair it with writable container mounts plus
+matching `agent.access.write` policy.
 
 DockPipe also injects these variables for every step:
 

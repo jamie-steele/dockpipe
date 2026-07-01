@@ -136,6 +136,16 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 		}
 		fmt.Fprintln(stdout, model)
 		return nil
+	case "ollama-chat-request":
+		if len(args) != 4 {
+			return errors.New("usage: orchestrate-helper ollama-chat-request <model> <prompt.md> <request.json>")
+		}
+		return writeOllamaChatRequest(args[1], args[2], args[3])
+	case "ollama-chat-response":
+		if len(args) != 3 {
+			return errors.New("usage: orchestrate-helper ollama-chat-response <response.json> <response.md>")
+		}
+		return writeOllamaChatResponse(args[1], args[2])
 	case "append-dependency-context":
 		if len(args) != 7 {
 			return errors.New("usage: orchestrate-helper append-dependency-context <prompt.md> <tasks-dir> <depends-on.json> <max-bytes> <total-max-bytes> <prefer-planner>")
@@ -186,6 +196,11 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("usage: orchestrate-helper verify-plan-env <plan.json>")
 		}
 		return emitVerifyPlanEnv(args[1], stdout)
+	case "verify-summary-env":
+		if len(args) != 2 {
+			return errors.New("usage: orchestrate-helper verify-summary-env <merge.json>")
+		}
+		return emitVerifySummaryEnv(args[1], stdout)
 	case "verify-heuristics":
 		if len(args) != 4 {
 			return errors.New("usage: orchestrate-helper verify-heuristics <merge.json> <tasks-dir> <issues.json>")
@@ -255,6 +270,7 @@ func emitTaskEnv(path string, stdout io.Writer) error {
 		"TASK_BASE_ID":                 fallbackString(stringValue(task["base_id"]), stringValue(task["id"])),
 		"TASK_WORKER_PROFILE":          stringValue(task["worker"]),
 		"TASK_WORKER_POLICY_MODE":      workerPolicyMode(task),
+		"TASK_WORK_MODE":               stringValue(task["work_mode"]),
 		"TASK_COMPARISON_JSON":         mustJSON(task["comparison"], map[string]any{"enabled": false}),
 		"TASK_RESOLVER_HINT":           fallbackString(stringValue(task["resolver_hint"]), "auto"),
 		"TASK_REQUESTED_RESOLVER_HINT": fallbackString(stringValue(task["requested_resolver_hint"]), fallbackString(stringValue(task["resolver_hint"]), "auto")),
@@ -384,6 +400,33 @@ func writeTaskResult(path string, env map[string]string) error {
 		"next_actions":            decodeJSONAny(env["next_actions_json"], []any{}),
 	}
 	return writeJSONFile(path, payload)
+}
+
+func writeOllamaChatRequest(model, promptPath, outPath string) error {
+	prompt, err := os.ReadFile(promptPath)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(model) == "" {
+		model = "llama3.2"
+	}
+	return writeJSONFile(outPath, map[string]any{
+		"model": model,
+		"messages": []map[string]string{
+			{"role": "user", "content": string(prompt)},
+		},
+		"stream": false,
+	})
+}
+
+func writeOllamaChatResponse(responsePath, outPath string) error {
+	payload := readJSONMap(responsePath)
+	message := mapValue(payload["message"])
+	content := strings.TrimSpace(stringValue(message["content"]))
+	if content == "" {
+		return errors.New("ollama response did not include message.content")
+	}
+	return os.WriteFile(outPath, []byte(content+"\n"), 0o644)
 }
 
 func mergeResultPaths(graphPath, tasksDir, mode string) ([]string, error) {
@@ -562,6 +605,26 @@ func emitVerifyPlanEnv(planPath string, stdout io.Writer) error {
 	return nil
 }
 
+func emitVerifySummaryEnv(mergePath string, stdout io.Writer) error {
+	merge := readJSONMap(mergePath)
+	tasks := listValue(merge["tasks"])
+	liveCount := 0
+	fallbackCount := 0
+	for _, raw := range tasks {
+		task := mapValue(raw)
+		if boolAny(task["used_live_model"]) {
+			liveCount++
+		} else {
+			fallbackCount++
+		}
+	}
+	confidence := floatDefault(merge["average_confidence"], 0.6)
+	fmt.Fprintf(stdout, "VERIFY_LIVE_COUNT=%s\n", shellQuote(strconv.Itoa(liveCount)))
+	fmt.Fprintf(stdout, "VERIFY_FALLBACK_COUNT=%s\n", shellQuote(strconv.Itoa(fallbackCount)))
+	fmt.Fprintf(stdout, "VERIFY_AVG_CONFIDENCE=%s\n", shellQuote(strconv.FormatFloat(confidence, 'f', -1, 64)))
+	return nil
+}
+
 func emitVerifyHeuristics(mergePath, tasksDir, issuesJSON string, stdout io.Writer) error {
 	merge := readJSONMap(mergePath)
 	var issues []string
@@ -700,7 +763,12 @@ func applyResults(rootPath, artifactRootPath, planPath, approvalPath, resultPath
 			return fail("approval artifact does not approve apply")
 		}
 	}
-	applied := []map[string]any{}
+	type pendingApply struct {
+		sourcePath string
+		targetPath string
+		content    []byte
+	}
+	pending := []pendingApply{}
 	for _, raw := range outputs {
 		item := mapValue(raw)
 		source := strings.TrimSpace(stringValue(item["source"]))
@@ -726,26 +794,34 @@ func applyResults(rootPath, artifactRootPath, planPath, approvalPath, resultPath
 		if err != nil || info.IsDir() {
 			return fail("apply source is missing: " + source)
 		}
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
-			return err
-		}
 		content, err := os.ReadFile(sourcePath)
 		if err != nil {
 			return err
 		}
-		if err := os.WriteFile(targetPath, content, 0o644); err != nil {
+		pending = append(pending, pendingApply{
+			sourcePath: sourcePath,
+			targetPath: targetPath,
+			content:    content,
+		})
+	}
+	applied := []map[string]any{}
+	for _, item := range pending {
+		if err := os.MkdirAll(filepath.Dir(item.targetPath), 0o755); err != nil {
 			return err
 		}
-		relTarget, _ := filepath.Rel(root, targetPath)
-		relSource, err := filepath.Rel(root, sourcePath)
-		sourceValue := sourcePath
+		if err := os.WriteFile(item.targetPath, item.content, 0o644); err != nil {
+			return err
+		}
+		relTarget, _ := filepath.Rel(root, item.targetPath)
+		relSource, err := filepath.Rel(root, item.sourcePath)
+		sourceValue := item.sourcePath
 		if err == nil && !strings.HasPrefix(relSource, "..") {
 			sourceValue = relSource
 		}
 		applied = append(applied, map[string]any{
 			"source": sourceValue,
 			"path":   relTarget,
-			"bytes":  len(content),
+			"bytes":  len(item.content),
 		})
 	}
 	return writeJSONFile(resultPath, map[string]any{
@@ -1275,6 +1351,7 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 				"constraints":             listValue(task["constraints"]),
 				"expected_output":         stringValue(task["expected_output"]),
 				"worker_type":             fallbackString(stringValue(task["worker_type"]), "analysis"),
+				"work_mode":               stringValue(task["work_mode"]),
 				"resolver_hint":           fallbackString(stringValue(laneSelection["resolver_hint"]), expandEnv(fallbackString(stringValue(task["resolver_hint"]), "auto"), env)),
 				"requested_resolver_hint": expandEnv(fallbackString(stringValue(task["resolver_hint"]), "auto"), env),
 				"lane":                    laneSelection,
@@ -2581,7 +2658,7 @@ func loadModelLanes(path string, env map[string]string) []map[string]any {
 		commands := stringList(mapValue(item["availability"])["commands"])
 		missing := []string{}
 		for _, command := range commands {
-			if _, err := exec.LookPath(command); err != nil {
+			if !commandAvailable(command) {
 				missing = append(missing, command)
 			}
 		}
@@ -2590,6 +2667,91 @@ func loadModelLanes(path string, env map[string]string) []map[string]any {
 		out = append(out, item)
 	}
 	return out
+}
+
+func commandAvailable(command string) bool {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return true
+	}
+	if _, err := exec.LookPath(command); err == nil {
+		return true
+	}
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(command), ".exe") {
+		if _, err := exec.LookPath(command + ".exe"); err == nil {
+			return true
+		}
+	}
+	for _, dir := range executableSearchPathEntries(os.Getenv("PATH")) {
+		for _, candidate := range executableCandidateNames(command) {
+			info, err := os.Stat(filepath.Join(dir, candidate))
+			if err == nil && !info.IsDir() {
+				return true
+			}
+		}
+	}
+	if runtime.GOOS == "windows" {
+		for _, dir := range windowsExecutableFallbackDirs(command) {
+			for _, candidate := range executableCandidateNames(command) {
+				info, err := os.Stat(filepath.Join(dir, candidate))
+				if err == nil && !info.IsDir() {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+func windowsExecutableFallbackDirs(command string) []string {
+	switch strings.ToLower(strings.TrimSuffix(command, ".exe")) {
+	case "docker", "docker-compose":
+		return []string{
+			`C:\Program Files\Docker\Docker\resources\bin`,
+			`C:\ProgramData\DockerDesktop\version-bin`,
+		}
+	default:
+		return nil
+	}
+}
+
+func executableCandidateNames(command string) []string {
+	if runtime.GOOS != "windows" || strings.HasSuffix(strings.ToLower(command), ".exe") {
+		return []string{command}
+	}
+	return []string{command, command + ".exe"}
+}
+
+func executableSearchPathEntries(pathValue string) []string {
+	if pathValue == "" {
+		return nil
+	}
+	delimiter := string(os.PathListSeparator)
+	if runtime.GOOS == "windows" && !strings.Contains(pathValue, ";") && strings.Contains(pathValue, ":/") {
+		delimiter = ":"
+	}
+	parts := strings.Split(pathValue, delimiter)
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		out = append(out, normalizeExecutableSearchPath(part))
+	}
+	return out
+}
+
+func normalizeExecutableSearchPath(path string) string {
+	path = strings.ReplaceAll(path, "\\", "/")
+	if runtime.GOOS == "windows" && len(path) >= 3 && path[0] == '/' && path[2] == '/' && isASCIILetter(path[1]) {
+		return strings.ToUpper(string(path[1])) + ":" + filepath.FromSlash(path[2:])
+	}
+	return filepath.FromSlash(path)
+}
+
+func isASCIILetter(ch byte) bool {
+	return (ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z')
 }
 
 func loadTrainingStats(path string, trainingPolicy map[string]any) map[string]trainingEntry {

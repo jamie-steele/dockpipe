@@ -5,12 +5,7 @@ description: OpenAI Codex CLI in a worktree (dockpipe-codex image).
 
 image:
   packages:
-    apt:
-      - build-essential
-      - cargo
-      - golang-go
-      - python3
-      - rustc
+    apt: []
 
 steps:
   - id: codex
