@@ -91,6 +91,7 @@ func runEmbeddedResolverWorkflowWithLoad(
 	return runStepsFn(runStepsOpts{
 		wf:             subWf,
 		wfRoot:         wfRoot,
+		wfConfig:       wfPath,
 		repoRoot:       repoRoot,
 		projectRoot:    projectRoot,
 		cliArgs:        cliArgs,

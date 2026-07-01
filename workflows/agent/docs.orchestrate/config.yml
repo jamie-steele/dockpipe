@@ -31,7 +31,7 @@ vars:
   DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS: "40000"
   DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED: "true"
   DORKPIPE_ORCH_CLOUD_LANES: "true"
-  DORKPIPE_DEV_STACK_AUTODOWN: "0"
+  DORKPIPE_DEV_STACK_AUTODOWN: "1"
   DORKPIPE_DEV_STACK_MCP_PORT: "8766"
   MCP_HTTP_URL: http://127.0.0.1:8766/mcp
   DATABASE_URL: postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe
@@ -346,6 +346,7 @@ steps:
     kind: host
     run: scripts/dorkpipe/orchestrate-apply-results.sh
 
+finally:
   - id: stack_down
     kind: host
     run:

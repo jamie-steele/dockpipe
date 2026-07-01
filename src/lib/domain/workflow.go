@@ -95,6 +95,7 @@ type Workflow struct {
 	Compose  WorkflowComposeConfig   `yaml:"compose,omitempty"`
 	Security WorkflowSecurityConfig  `yaml:"security,omitempty"`
 	Steps    []Step                  `yaml:"steps,omitempty"`
+	Finally  []Step                  `yaml:"finally,omitempty"`
 }
 
 type WorkflowComposeConfig struct {
@@ -620,6 +621,7 @@ type workflowFile struct {
 	Imports         []string                   `yaml:"imports,omitempty"`
 	Inject          WorkflowInjectList         `yaml:"inject,omitempty"`
 	Steps           []stepOrGroupYAML          `yaml:"steps"`
+	Finally         []stepOrGroupYAML          `yaml:"finally,omitempty"`
 }
 
 type stepOrGroupYAML struct {
@@ -800,49 +802,64 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 		return err
 	}
 	for i, s := range w.Steps {
-		if err := ValidateStepKind(i, s); err != nil {
+		if err := validateWorkflowStep(i, s, w); err != nil {
 			return err
 		}
-		if err := ValidateStepCWD(i, s); err != nil {
-			return err
-		}
-		if err := ValidateStepScopes(i, s); err != nil {
-			return err
-		}
-		if err := ValidateStepHostShape(i, s); err != nil {
-			return err
-		}
-		if err := ValidateStepPackageInvocation(i, s); err != nil {
-			return err
-		}
-		if err := ValidateStepSecurityField(i, s); err != nil {
-			return err
-		}
-		if err := ValidateStepContainerField(i, s); err != nil {
-			return err
-		}
-		if err := ValidateStepVMField(i, s); err != nil {
-			return err
-		}
-		if err := ValidateStepHostBuiltin(i, s); err != nil {
-			return err
-		}
-		if err := ValidateStepComposeBuiltin(i, s, w); err != nil {
-			return err
+	}
+	for i, s := range w.Finally {
+		if err := validateWorkflowStep(i, s, w); err != nil {
+			return fmt.Errorf("finally step %d: %w", i+1, err)
 		}
 	}
 	return nil
 }
 
 func ValidateWorkflowSingleFlowFields(w *Workflow) error {
-	if w == nil || len(w.Steps) == 0 {
+	if w == nil || (len(w.Steps) == 0 && len(w.Finally) == 0) {
 		return nil
+	}
+	if len(w.Steps) == 0 && len(w.Finally) > 0 {
+		return fmt.Errorf("workflow with finally: requires at least one main step in steps:")
 	}
 	if len(w.Run) > 0 {
 		return fmt.Errorf("workflow with steps uses top-level run; move those host pre-scripts onto a step with run: or pre_script")
 	}
 	if strings.TrimSpace(w.Act) != "" || strings.TrimSpace(w.Action) != "" {
 		return fmt.Errorf("workflow with steps: uses top-level act/action; set act/action on the specific step that needs it")
+	}
+	return nil
+}
+
+func validateWorkflowStep(i int, s Step, w *Workflow) error {
+	if err := ValidateStepKind(i, s); err != nil {
+		return err
+	}
+	if err := ValidateStepCWD(i, s); err != nil {
+		return err
+	}
+	if err := ValidateStepScopes(i, s); err != nil {
+		return err
+	}
+	if err := ValidateStepHostShape(i, s); err != nil {
+		return err
+	}
+	if err := ValidateStepPackageInvocation(i, s); err != nil {
+		return err
+	}
+	if err := ValidateStepSecurityField(i, s); err != nil {
+		return err
+	}
+	if err := ValidateStepContainerField(i, s); err != nil {
+		return err
+	}
+	if err := ValidateStepVMField(i, s); err != nil {
+		return err
+	}
+	if err := ValidateStepHostBuiltin(i, s); err != nil {
+		return err
+	}
+	if err := ValidateStepComposeBuiltin(i, s, w); err != nil {
+		return err
 	}
 	return nil
 }

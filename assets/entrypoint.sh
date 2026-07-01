@@ -1,9 +1,10 @@
-#!/usr/bin/env bash
+#!/bin/bash
 # dockpipe container entrypoint.
 # Runs the user command; if DOCKPIPE_ACTION is set, runs that script after the command exits
 # with DOCKPIPE_EXIT_CODE and DOCKPIPE_CONTAINER_WORKDIR set. On SIGTERM/SIGHUP/SIGINT we
 # terminate the command and exit so the container does not linger.
 set -euo pipefail
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:$PATH}"
 
 WORKDIR="${DOCKPIPE_CONTAINER_WORKDIR:-/work}"
 cd "${WORKDIR}"

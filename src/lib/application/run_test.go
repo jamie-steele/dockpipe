@@ -505,6 +505,38 @@ func TestRunWorkflowStepsModeDelegatesToRunSteps(t *testing.T) {
 	}
 }
 
+func TestRunWorkflowStepsModeNonZeroExitCallsExitFn(t *testing.T) {
+	withRunSeams(t)
+	repoRoot := t.TempDir()
+	repoRootAppFn = func() (string, error) { return repoRoot, nil }
+	workflowDir := filepath.Join(repoRoot, "templates", "demo")
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workflowDir, "config.yml"), []byte("name: demo\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	loadWorkflowAppFn = func(path string) (*domain.Workflow, error) {
+		return &domain.Workflow{
+			Steps:   []domain.Step{{Cmd: "exit 7"}},
+			Finally: []domain.Step{{Kind: "host", Run: []string{"cleanup.sh"}}},
+		}, nil
+	}
+	runStepsAppFn = func(o runStepsOpts) error {
+		return &workflowExitCodeError{Code: 7}
+	}
+	exitCode := -1
+	osExitAppFn = func(code int) { exitCode = code }
+
+	err := Run([]string{"--workflow", "demo", "--", "echo", "x"}, nil)
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+	if exitCode != 7 {
+		t.Fatalf("expected exit code 7, got %d", exitCode)
+	}
+}
+
 // TestRunWorkflowStepsModeCliWorkdirOverridesInheritedEnvMap ensures --workdir is stored on envMap so
 // envSlice rebuilds after strategy pre-scripts still pass DOCKPIPE_WORKDIR to host steps.
 func TestRunWorkflowStepsModeCliWorkdirOverridesInheritedEnvMap(t *testing.T) {

@@ -34,6 +34,7 @@ next_actions_json='["review merged output before treating it as final"]'
 budget_halt="false"
 estimated_output_tokens="0"
 selected_model="$("$(dorkpipe_orchestrate_helper_bin)" task-model)"
+hard_fail="false"
 
 append_dependency_context() {
   [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_APPEND_DEPENDENCY_CONTEXT}")" == "true" ]] || return 0
@@ -163,6 +164,13 @@ if [[ "${budget_halt}" != "true" ]]; then
 fi
 
 if [[ "${used_live_model}" != "true" ]]; then
+  if [[ "${budget_halt}" != "true" && "${TASK_WORKER_POLICY_MODE:-}" == "require" ]]; then
+    status="failed"
+    summary="Required live ${provider} worker could not complete ${task_id}"
+    confidence="0.05"
+    next_actions_json='["fix the required worker backend or relax worker_policy.mode before rerunning this workflow"]'
+    hard_fail="true"
+  fi
   cat > "${response_md}" <<EOF
 # ${task_id}
 
@@ -190,3 +198,8 @@ export task_id status resolver_hint provider lane_id selected_model used_live_mo
 "$(dorkpipe_orchestrate_helper_bin)" write-task-result "${result_json}"
 
 printf '[dorkpipe] task %s result ready at %s\n' "${task_id}" "${result_json}" >&2
+
+if [[ "${hard_fail}" == "true" ]]; then
+  echo "[dorkpipe] required worker ${task_id} (${provider}) did not produce a live response" >&2
+  exit 1
+fi

@@ -4,7 +4,7 @@
 
 1. **`stack_up`** (host) — the DorkPipe host stack helper starts Postgres + Ollama and handles Ollama GPU setup when available.
 2. **`self_analysis`** (container) — same as **`dorkpipe-self-analysis`**.
-3. **`stack_down`** (host) — the DorkPipe stack helper brings compose down, skipped when **`DORKPIPE_DEV_STACK_AUTODOWN=0`**.
+3. **`finally.stack_down`** (host) — the DorkPipe stack helper brings compose down, skipped when **`DORKPIPE_DEV_STACK_AUTODOWN=0`**.
 
 Use this when you want **one command** from YAML instead of running **`dev-stack.sh`** by hand.
 

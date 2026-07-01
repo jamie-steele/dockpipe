@@ -41,6 +41,25 @@ func TestTemplateBuild(t *testing.T) {
 	}
 }
 
+func TestDockerfileDirBundledLayoutUsesBundledWorkflowImage(t *testing.T) {
+	repo := t.TempDir()
+	dockerfile := filepath.Join(repo, BundledLayoutDir, "workflows", "claude", "assets", "images", "claude", "Dockerfile")
+	if err := os.MkdirAll(filepath.Dir(dockerfile), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dockerfile, []byte("FROM scratch\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, BundledLayoutDir, "core"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got := DockerfileDir(repo, "claude")
+	if got != filepath.Dir(dockerfile) {
+		t.Fatalf("got %q want bundled workflow image dir %q", got, filepath.Dir(dockerfile))
+	}
+}
+
 // TestMaybeVersionTag appends dockpipe-* image tags from VERSION file when missing.
 func TestMaybeVersionTag(t *testing.T) {
 	tmp := t.TempDir()

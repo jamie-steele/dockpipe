@@ -48,6 +48,26 @@ func baseRunStepsOpts() runStepsOpts {
 	}
 }
 
+func TestApplyWorkflowContainerMountEnvResolvesMounts(t *testing.T) {
+	wd := t.TempDir()
+	o := baseRunStepsOpts()
+	o.projectRoot = wd
+	o.repoRoot = wd
+	o.envMap = map[string]string{"DOCKPIPE_WORKDIR": wd}
+	o.wf.Container.Mounts = []domain.WorkflowContainerMount{
+		{Host: "../shared", Guest: "/shared", Mode: "ro"},
+		{Host: "cache", Guest: "/cache", Mode: "rw"},
+	}
+	if err := applyWorkflowContainerMountEnv(&o); err != nil {
+		t.Fatalf("applyWorkflowContainerMountEnv: %v", err)
+	}
+	want := filepath.Clean(filepath.Join(wd, "..", "shared")) + ":/shared:ro\n" +
+		filepath.Clean(filepath.Join(wd, "cache")) + ":/cache:rw"
+	if got := o.envMap["DOCKPIPE_CONTAINER_MOUNTS"]; got != want {
+		t.Fatalf("DOCKPIPE_CONTAINER_MOUNTS=%q want %q", got, want)
+	}
+}
+
 // TestRunBlockingStepHostMergesOutputs loads outputs.env into env for a blocking host step.
 func TestRunBlockingStepHostMergesOutputs(t *testing.T) {
 	withRunStepsSeams(t)

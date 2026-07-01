@@ -3,11 +3,13 @@ package infrastructure
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 
 	"golang.org/x/term"
 )
@@ -50,7 +52,7 @@ func SourceHostScript(scriptPath string, env []string) (map[string]string, error
 		return nil, fmt.Errorf("pre-script wrapper path: %w", err)
 	}
 	cmd := exec.Command(bashExe, wrapperForBash)
-	cmd.Env = upsertEnv(env, "DOCKPIPE_HOST_BASH_BIN", bashExe)
+	cmd.Env = prepareHostBashEnv(env, bashExe)
 	if cwd := strings.TrimSpace(envGet(cmd.Env, "DOCKPIPE_STEP_CWD")); cwd != "" {
 		cmd.Dir = cwd
 	}
@@ -84,15 +86,21 @@ func RunHostScript(scriptPath string, env []string) error {
 		return fmt.Errorf("host run registry: %w", err)
 	}
 	env = applyInteractivePromptMode(env)
-	env = upsertEnv(env, "DOCKPIPE_HOST_BASH_BIN", bashExe)
+	env = prepareHostBashEnv(env, bashExe)
 	cmd := exec.Command(bashExe, bashPath)
 	cmd.Env = env
 	if cwd := strings.TrimSpace(envGet(cmd.Env, "DOCKPIPE_STEP_CWD")); cwd != "" {
 		cmd.Dir = cwd
 	}
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("host script stdout pipe %s: %w", scriptPath, err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("host script stderr pipe %s: %w", scriptPath, err)
+	}
 	setRunHostProcAttrs(cmd)
 	defer func() {
 		ApplyHostCleanup(env)
@@ -101,11 +109,22 @@ func RunHostScript(scriptPath string, env []string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("host script start %s: %w", scriptPath, err)
 	}
+	stopSpin := StartLineSpinner(os.Stderr, hostScriptSpinnerLabel(scriptPath))
+	stopSpinnerOnce := sync.OnceFunc(stopSpin)
+	var copyWG sync.WaitGroup
+	copyWG.Add(2)
+	go streamHostScriptPipe(stdoutPipe, os.Stdout, stopSpinnerOnce, &copyWG)
+	go streamHostScriptPipe(stderrPipe, os.Stderr, stopSpinnerOnce, &copyWG)
 	if err := WriteHostRunRecord(runFile, runID, cmd.Process.Pid, envGet(env, "DOCKPIPE_WORKDIR"), scriptPath); err != nil {
 		_ = cmd.Process.Kill()
+		stopSpinnerOnce()
+		copyWG.Wait()
 		return fmt.Errorf("host run registry write: %w", err)
 	}
-	if err := waitHostScriptWithSignalForward(cmd); err != nil {
+	err = waitHostScriptWithSignalForward(cmd)
+	stopSpinnerOnce()
+	copyWG.Wait()
+	if err != nil {
 		return fmt.Errorf("host script %s: %w", scriptPath, err)
 	}
 	return nil
@@ -277,4 +296,139 @@ func upsertEnv(env []string, key, value string) []string {
 		out = append(out, prefix+value)
 	}
 	return out
+}
+
+func hostScriptSpinnerLabel(scriptPath string) string {
+	name := strings.TrimSpace(filepath.Base(scriptPath))
+	switch {
+	case strings.Contains(name, "clone-worktree"):
+		return "Preparing worktree..."
+	case strings.Contains(name, "dev-stack"):
+		return "Running host setup (dev stack)..."
+	default:
+		return "Running host setup..."
+	}
+}
+
+type hostScriptOutputWriter struct {
+	dest    io.Writer
+	onFirst func()
+}
+
+func (w *hostScriptOutputWriter) Write(p []byte) (int, error) {
+	if len(bytes.TrimSpace(p)) > 0 && w.onFirst != nil {
+		w.onFirst()
+		w.onFirst = nil
+	}
+	return w.dest.Write(p)
+}
+
+func streamHostScriptPipe(src io.Reader, dest io.Writer, stopSpinner func(), wg *sync.WaitGroup) {
+	defer wg.Done()
+	_, _ = io.Copy(&hostScriptOutputWriter{dest: dest, onFirst: stopSpinner}, src)
+}
+
+func prepareHostBashEnv(env []string, bashExe string) []string {
+	env = upsertEnv(env, "DOCKPIPE_HOST_BASH_BIN", bashExe)
+	mergedPath := mergeHostExecutablePATH(envGet(env, "PATH"), os.Getenv("PATH"), bashExe)
+	if strings.TrimSpace(mergedPath) != "" {
+		env = upsertEnv(env, "PATH", mergedPath)
+	}
+	return env
+}
+
+func mergeHostExecutablePATH(currentPath, hostPath, bashExe string) string {
+	currentPath = strings.TrimSpace(currentPath)
+	hostPath = strings.TrimSpace(hostPath)
+	if currentPath == "" {
+		return hostPath
+	}
+	if hostPath == "" {
+		return currentPath
+	}
+
+	targetDelim := detectPathListDelimiter(currentPath)
+	currentParts := splitPathList(currentPath, targetDelim)
+	hostParts := splitPathList(hostPath, detectPathListDelimiter(hostPath))
+	if runtime.GOOS == "windows" && targetDelim == ":" {
+		hostParts = convertWindowsPathListForBash(hostParts, bashExe)
+	}
+
+	seen := make(map[string]bool, len(currentParts)+len(hostParts))
+	out := make([]string, 0, len(currentParts)+len(hostParts))
+	for _, part := range currentParts {
+		addPathListPart(&out, seen, part)
+	}
+	for _, part := range hostParts {
+		addPathListPart(&out, seen, part)
+	}
+	return strings.Join(out, targetDelim)
+}
+
+func detectPathListDelimiter(path string) string {
+	if strings.Contains(path, ";") {
+		return ";"
+	}
+	return ":"
+}
+
+func splitPathList(path, delim string) []string {
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	raw := strings.Split(path, delim)
+	out := make([]string, 0, len(raw))
+	for _, part := range raw {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		out = append(out, part)
+	}
+	return out
+}
+
+func addPathListPart(out *[]string, seen map[string]bool, part string) {
+	part = strings.TrimSpace(part)
+	if part == "" {
+		return
+	}
+	key := part
+	if runtime.GOOS == "windows" {
+		key = strings.ToLower(key)
+	}
+	if seen[key] {
+		return
+	}
+	seen[key] = true
+	*out = append(*out, part)
+}
+
+func convertWindowsPathListForBash(parts []string, bashExe string) []string {
+	if len(parts) == 0 {
+		return nil
+	}
+	mapper := pathForBashSource
+	if bashIsWSL(bashExe) {
+		mapper = pathForWSL
+	}
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if looksLikeWindowsAbsolutePath(part) {
+			if mapped, err := mapper(part); err == nil && strings.TrimSpace(mapped) != "" {
+				out = append(out, mapped)
+				continue
+			}
+		}
+		out = append(out, part)
+	}
+	return out
+}
+
+func looksLikeWindowsAbsolutePath(path string) bool {
+	if len(path) >= 3 && ((path[1] == ':' && (path[2] == '\\' || path[2] == '/')) ||
+		(path[0] == '\\' && path[1] == '\\')) {
+		return true
+	}
+	return false
 }

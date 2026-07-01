@@ -2,8 +2,10 @@ package infrastructure
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -142,13 +144,13 @@ func TestRunContainerDetachBuildsDockerRun(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		ch := calls[0]
 		chJoined := strings.Join(ch.args, " ")
-		if ch.name != "docker" || !strings.Contains(chJoined, "chown") {
+		if !isDockerCommandName(ch.name) || !strings.Contains(chJoined, "chown") {
 			t.Fatalf("expected first call to be chown docker run, got %s %v", ch.name, ch.args)
 		}
 	}
 	last := calls[len(calls)-1]
 	joined := strings.Join(last.args, " ")
-	if last.name != "docker" || !strings.Contains(joined, "-d --rm") || !strings.Contains(joined, "img echo ok") {
+	if !isDockerCommandName(last.name) || !strings.Contains(joined, "-d --rm") || !strings.Contains(joined, "img echo ok") {
 		t.Fatalf("unexpected detach docker args: %s %s", last.name, joined)
 	}
 	if runtime.GOOS == "windows" {
@@ -210,7 +212,7 @@ func TestRunContainerAppliesSecurityFlags(t *testing.T) {
 	}
 	joined := ""
 	for _, c := range calls {
-		if c.name == "docker" && len(c.args) > 0 && c.args[0] == "run" {
+		if isDockerCommandName(c.name) && len(c.args) > 0 && c.args[0] == "run" {
 			joined = strings.Join(c.args, " ")
 			break
 		}
@@ -335,7 +337,7 @@ func TestRunContainerAttachedSkipsCommitOnNonZero(t *testing.T) {
 	withDockerSeams(t)
 	execCommandFn = func(name string, args ...string) *exec.Cmd {
 		// docker run ... → failure; docker logs / rm still run
-		if name == "docker" && len(args) > 0 && args[0] == "run" {
+		if isDockerCommandName(name) && len(args) > 0 && args[0] == "run" {
 			return exec.Command("bash", "-c", "exit 3")
 		}
 		return exec.Command("bash", "-c", "exit 0")
@@ -441,14 +443,46 @@ func TestDockerBuildPaths(t *testing.T) {
 	}
 }
 
+func TestDockerBuildUsesConfiguredDockerBinary(t *testing.T) {
+	withDockerSeams(t)
+	fakeDocker := filepath.Join(t.TempDir(), "docker-test")
+	if err := os.WriteFile(fakeDocker, []byte(""), 0o755); err != nil {
+		t.Fatalf("write fake docker: %v", err)
+	}
+	t.Setenv("DOCKPIPE_DOCKER_BIN", fakeDocker)
+	var calls []call
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		calls = append(calls, call{name: name, args: append([]string(nil), args...)})
+		return helperExitCommand(0)
+	}
+	if err := DockerBuild("ubuntu:latest", "/repo/templates/core/assets/images/dev", "/repo"); err != nil {
+		t.Fatalf("DockerBuild failed: %v", err)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("expected one docker call, got %#v", calls)
+	}
+	if calls[0].name != fakeDocker {
+		t.Fatalf("expected configured docker binary %q, got %q", fakeDocker, calls[0].name)
+	}
+}
+
 func TestDockerBuildEnvEnablesBuildKitByDefault(t *testing.T) {
-	got := dockerBuildEnv([]string{"PATH=/usr/bin"})
+	got := dockerBuildEnv([]string{"PATH=/usr/bin"}, "docker")
 	if !containsEnv(got, "DOCKER_BUILDKIT=1") {
 		t.Fatalf("expected DOCKER_BUILDKIT=1, got %#v", got)
 	}
-	got = dockerBuildEnv([]string{"DOCKER_BUILDKIT=0"})
+	got = dockerBuildEnv([]string{"DOCKER_BUILDKIT=0"}, "docker")
 	if len(got) != 1 || got[0] != "DOCKER_BUILDKIT=0" {
 		t.Fatalf("expected existing DOCKER_BUILDKIT to be preserved, got %#v", got)
+	}
+}
+
+func TestDockerCommandEnvPrependsDockerBinaryDir(t *testing.T) {
+	dockerCmd := filepath.Join(t.TempDir(), "docker")
+	got := dockerCommandEnv([]string{"PATH=/usr/bin"}, dockerCmd)
+	want := filepath.Dir(dockerCmd) + string(os.PathListSeparator) + "/usr/bin"
+	if !containsEnv(got, "PATH="+want) {
+		t.Fatalf("expected PATH to include docker binary dir, got %#v", got)
 	}
 }
 
@@ -464,7 +498,33 @@ func containsEnv(env []string, want string) bool {
 func flattenCalls(calls []call) []string {
 	out := make([]string, 0, len(calls))
 	for _, c := range calls {
-		out = append(out, c.name+" "+strings.Join(c.args, " "))
+		name := c.name
+		if isDockerCommandName(name) {
+			name = "docker"
+		}
+		out = append(out, name+" "+strings.Join(c.args, " "))
 	}
 	return out
+}
+
+func isDockerCommandName(name string) bool {
+	base := strings.ToLower(filepath.Base(name))
+	return base == "docker" || base == "docker.exe"
+}
+
+func helperExitCommand(code int) *exec.Cmd {
+	cmd := exec.Command(os.Args[0], "-test.run=TestDockerHelperProcess", "--")
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GO_WANT_DOCKER_HELPER_PROCESS=%d", code))
+	return cmd
+}
+
+func TestDockerHelperProcess(t *testing.T) {
+	code := strings.TrimSpace(os.Getenv("GO_WANT_DOCKER_HELPER_PROCESS"))
+	if code == "" {
+		return
+	}
+	if code == "0" {
+		os.Exit(0)
+	}
+	os.Exit(1)
 }

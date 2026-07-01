@@ -834,6 +834,10 @@ func Run(argv []string, baseEnviron []string) error {
 			templateName:          templateName,
 			strategyHandlesCommit: strategyHandlesCommit,
 		}); err != nil {
+			if code, ok := exitCodeFromError(err); ok {
+				osExitAppFn(code)
+				return nil
+			}
 			return err
 		}
 		if strategyHandlesCommit {
@@ -874,9 +878,9 @@ func Run(argv []string, baseEnviron []string) error {
 			}
 			policyFingerprint, _ := runtimePolicyFingerprintForRun(wfConfig, wfRoot)
 			if artifact, err := buildImageArtifactManifest(repoRoot, wfName, "", templateName, image, buildDir, buildCtx, policyFingerprint, domain.ImageArtifactProvenance{Isolate: templateName, DockpipeVersion: authoredPackageVersion(repoRoot)}); err == nil {
-				artifact.ArtifactState = "materialized"
-				_ = persistCachedImageArtifactForIsolate(effWd, image, artifact)
-				_ = persistImageArtifactIndexRecord(effWd, artifact)
+				persistMaterializedImageArtifactForRun(effWd, image, artifact)
+			} else {
+				fmt.Fprintf(os.Stderr, "[dockpipe] warning: image artifact manifest write skipped: %v\n", err)
 			}
 			imageDecision = "image: materialized image artifact for current run"
 		}

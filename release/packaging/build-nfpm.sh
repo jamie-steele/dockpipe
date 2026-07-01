@@ -38,6 +38,9 @@ NFPM_VER="${NFPM_VERSION:-v2.41.0}"
 NFPM=(go run "github.com/goreleaser/nfpm/v2/cmd/nfpm@${NFPM_VER}")
 LDFLAGS="-s -w -X main.Version=${VERSION}"
 
+bash "${REPO_ROOT}/release/packaging/prepare-embedded-dorkpipe-assets.sh" prepare
+trap 'bash "${REPO_ROOT}/release/packaging/prepare-embedded-dorkpipe-assets.sh" clean' EXIT
+
 for goarch in amd64 arm64; do
   BIN="${STAGE}/dockpipe-linux-${goarch}"
   GOOS=linux GOARCH="${goarch}" CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "${BIN}" ./src/cmd

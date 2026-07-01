@@ -29,9 +29,55 @@ var errStopScriptWalk = errors.New("stop script walk")
 // Uses forward slashes so YAML paths match Linux/container expectations.
 func ResolveWorkflowScript(rel, workflowRoot, repoRoot, projectRoot string) string {
 	if strings.HasPrefix(rel, "scripts/") {
+		if p, ok := projectScriptOverridePath(repoRoot, projectRoot, rel); ok {
+			return filepath.ToSlash(p)
+		}
+		if p, ok := workflowSiblingScriptPath(workflowRoot, rel); ok {
+			return filepath.ToSlash(p)
+		}
 		return filepath.ToSlash(resolveScriptsPrefixedPath(repoRoot, projectRoot, rel))
 	}
 	return filepath.ToSlash(filepath.Join(workflowRoot, rel))
+}
+
+func projectScriptOverridePath(repoRoot, projectRoot, rel string) (string, bool) {
+	if projectRoot == "" {
+		projectRoot = repoRoot
+	}
+	rest := strings.TrimPrefix(rel, "scripts/")
+	for _, candidate := range []string{
+		filepath.Join(projectRoot, "scripts", rest),
+		filepath.Join(projectRoot, "src", "scripts", rest),
+	} {
+		if scriptFileExists(candidate) {
+			return candidate, true
+		}
+	}
+	return "", false
+}
+
+func workflowSiblingScriptPath(workflowRoot, rel string) (string, bool) {
+	workflowRoot = strings.TrimSpace(workflowRoot)
+	if workflowRoot == "" {
+		return "", false
+	}
+	rest := strings.TrimPrefix(rel, "scripts/")
+	if strings.HasPrefix(rest, "core.") || !strings.Contains(rest, "/") {
+		return "", false
+	}
+	first, after, ok := strings.Cut(rest, "/")
+	if !ok || first == "" || after == "" {
+		return "", false
+	}
+	// Package workflow tarballs commonly contain sibling workflow trees:
+	// workflows/orchestrate.stack/config.yml can reference scripts/acme/foo.sh,
+	// which lives at workflows/acme/assets/scripts/foo.sh in the same package.
+	parent := filepath.Dir(workflowRoot)
+	candidate := filepath.Join(parent, first, "assets", "scripts", after)
+	if scriptFileExists(candidate) {
+		return candidate, true
+	}
+	return "", false
 }
 
 // ResolveCoreNamespacedScriptPath resolves scripts/core.<dot.segments> the same way as workflow YAML
@@ -549,6 +595,12 @@ func ResolveResolverFilePath(repoRoot, resolverName string) (string, error) {
 	}
 	if !UsesBundledAssetLayout(repoRoot) {
 		candidates = append(candidates, nestedResolverProfileCandidates(repoRoot, resolverName, ResolverCompileRootsCached(repoRoot))...)
+	} else {
+		wfRoot := WorkflowsRootDir(repoRoot)
+		candidates = append(candidates,
+			filepath.Join(wfRoot, resolverName),
+			filepath.Join(wfRoot, resolverName, "profile"),
+		)
 	}
 	candidates = append(candidates,
 		filepath.Join(CoreDir(repoRoot), "resolvers", resolverName),

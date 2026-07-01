@@ -171,6 +171,31 @@ dorkpipe_orchestrate_dockpipe_bin() {
   dockpipe_sdk require dockpipe-bin
 }
 
+dorkpipe_orchestrate_cli_mount_host_path() {
+  local path="${1:-}"
+  if [[ "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" == Windows_NT:* || "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" == *:msys*:* || "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" == *:cygwin*:* || "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" == *:*:MINGW* ]]; then
+    if [[ "${path}" =~ ^([A-Za-z]):[\\/] ]]; then
+      local drive rest
+      drive="$(printf '%s' "${BASH_REMATCH[1]}" | tr '[:upper:]' '[:lower:]')"
+      rest="${path:2}"
+      rest="${rest//\\//}"
+      rest="${rest#/}"
+      printf '/%s/%s\n' "${drive}" "${rest}"
+      return 0
+    fi
+  fi
+  printf '%s\n' "${path}"
+}
+
+dorkpipe_orchestrate_cli_mount_spec() {
+  local spec="${1:-}"
+  if [[ "${spec}" =~ ^([A-Za-z]:[\\/].*):(/.*)$ ]]; then
+    printf '%s:%s\n' "$(dorkpipe_orchestrate_cli_mount_host_path "${BASH_REMATCH[1]}")" "${BASH_REMATCH[2]}"
+    return 0
+  fi
+  printf '%s\n' "${spec}"
+}
+
 dorkpipe_orchestrate_container_auth_dir() {
   local provider="${1:?provider}"
   dockpipe scope resolver "${provider}" auth-dir
@@ -188,7 +213,17 @@ dorkpipe_orchestrate_container_auth_mount() {
     ro|rw) ;;
     *) mode="rw" ;;
   esac
+  host_dir="$(dorkpipe_orchestrate_cli_mount_host_path "${host_dir}")"
   printf '%s:%s:%s\n' "${host_dir}" "${container_dir}" "${mode}"
+}
+
+dorkpipe_orchestrate_container_auth_seed_mount() {
+  local provider="${1:?provider}"
+  local host_dir
+  host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}")" || return 1
+  [[ -n "${host_dir}" && -d "${host_dir}" ]] || return 1
+  host_dir="$(dorkpipe_orchestrate_cli_mount_host_path "${host_dir}")"
+  printf '%s:/dockpipe-auth/%s:ro\n' "${host_dir}" "${provider}"
 }
 
 dorkpipe_orchestrate_container_extra_auth_mounts() {
@@ -202,12 +237,92 @@ dorkpipe_orchestrate_container_extra_auth_mounts() {
   case "${provider}" in
     claude)
       host_file="$(dockpipe scope resolver "${provider}" config-file)"
-      container_file="$(dockpipe scope resolver "${provider}" container-config-file)"
       if [[ -n "${host_file}" && -f "${host_file}" ]]; then
-        printf '%s:%s:%s\n' "${host_file}" "${container_file}" "${mode}"
+        host_file="$(dorkpipe_orchestrate_cli_mount_host_path "${host_file}")"
+        printf '%s:/dockpipe-auth/%s-config/.claude.json:ro\n' "${host_file}" "${provider}"
       fi
       ;;
   esac
+}
+
+dorkpipe_orchestrate_container_workflow_mounts() {
+  local mount
+  while IFS= read -r mount; do
+    mount="${mount#"${mount%%[![:space:]]*}"}"
+    mount="${mount%"${mount##*[![:space:]]}"}"
+    [[ -n "${mount}" ]] || continue
+    dorkpipe_orchestrate_cli_mount_spec "${mount}"
+  done <<< "${DOCKPIPE_CONTAINER_MOUNTS:-}"
+}
+
+dorkpipe_orchestrate_worker_cwd() {
+  local cwd="${DORKPIPE_ORCH_WORKER_CWD:-${DORKPIPE_ORCH_TARGET_GUEST_PATH:-}}"
+  cwd="${cwd#"${cwd%%[![:space:]]*}"}"
+  cwd="${cwd%"${cwd##*[![:space:]]}"}"
+  if [[ -z "${cwd}" ]]; then
+    printf '/work\n'
+    return 0
+  fi
+  case "${cwd}" in
+    /*) printf '%s\n' "${cwd}" ;;
+    *) printf '/work/%s\n' "${cwd}" ;;
+  esac
+}
+
+dorkpipe_orchestrate_container_auth_envs() {
+  local provider="${1:?provider}"
+  case "${provider}" in
+    codex)
+      printf '%s\n' \
+        "CODEX_HOME=/home/node/.codex" \
+        "DOCKPIPE_POLICY_NETWORK_MODE=internet"
+      if [[ -n "${OPENAI_API_KEY:-}" ]]; then
+        printf '%s\n' "OPENAI_API_KEY=${OPENAI_API_KEY}"
+      fi
+      if [[ -n "${CODEX_API_KEY:-}" ]]; then
+        printf '%s\n' "CODEX_API_KEY=${CODEX_API_KEY}"
+      fi
+      ;;
+    claude)
+      printf '%s\n' \
+        "CLAUDE_HOME=/home/node/.claude" \
+        "DOCKPIPE_POLICY_NETWORK_MODE=internet"
+      if [[ -n "${ANTHROPIC_API_KEY:-}" ]]; then
+        printf '%s\n' "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}"
+      fi
+      if [[ -n "${CLAUDE_API_KEY:-}" ]]; then
+        printf '%s\n' "CLAUDE_API_KEY=${CLAUDE_API_KEY}"
+      fi
+      ;;
+  esac
+}
+
+dorkpipe_orchestrate_auth_state_hint() {
+  local provider="${1:?provider}"
+  local host_dir host_file
+  case "${provider}" in
+    codex)
+      if [[ -n "${OPENAI_API_KEY:-}" || -n "${CODEX_API_KEY:-}" ]]; then
+        return 0
+      fi
+      host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}" 2>/dev/null || true)"
+      [[ -n "${host_dir}" && -s "${host_dir}/auth.json" ]] && return 0
+      echo "codex auth unavailable: set OPENAI_API_KEY/CODEX_API_KEY or run codex login so ${host_dir:-<codex auth dir>}/auth.json exists" >&2
+      return 1
+      ;;
+    claude)
+      if [[ -n "${ANTHROPIC_API_KEY:-}" || -n "${CLAUDE_API_KEY:-}" ]]; then
+        return 0
+      fi
+      host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}" 2>/dev/null || true)"
+      host_file="$(dockpipe scope resolver "${provider}" config-file 2>/dev/null || true)"
+      [[ -n "${host_dir}" && -s "${host_dir}/.credentials.json" ]] && return 0
+      [[ -n "${host_file}" && -s "${host_file}" ]] && return 0
+      echo "claude auth unavailable: set ANTHROPIC_API_KEY/CLAUDE_API_KEY or run claude login so ${host_dir:-<claude auth dir>} contains credentials" >&2
+      return 1
+      ;;
+  esac
+  return 0
 }
 
 dorkpipe_orchestrate_run_container_worker() {
@@ -215,9 +330,11 @@ dorkpipe_orchestrate_run_container_worker() {
   local prompt_path="${2:?prompt path}"
   local response_path="${3:?response path}"
   local selected_model="${4:-}"
-  local dockpipe_bin auth_mount raw_response_path
+  local dockpipe_bin auth_mount raw_response_path worker_cwd
   dockpipe_bin="$(dorkpipe_orchestrate_dockpipe_bin)" || return 1
   raw_response_path="${response_path}.raw"
+  worker_cwd="$(dorkpipe_orchestrate_worker_cwd)"
+  dorkpipe_orchestrate_auth_state_hint "${provider}" || return 1
 
   local args=(
     "--workdir" "${ROOT}"
@@ -227,31 +344,72 @@ dorkpipe_orchestrate_run_container_worker() {
     "--env" "HOME=/home/node"
     "--env" "PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games"
   )
-  if auth_mount="$(dorkpipe_orchestrate_container_auth_mount "${provider}" 2>/dev/null)"; then
+  while IFS= read -r auth_env; do
+    [[ -n "${auth_env}" ]] || continue
+    args+=("--env" "${auth_env}")
+  done < <(dorkpipe_orchestrate_container_auth_envs "${provider}")
+  if auth_mount="$(dorkpipe_orchestrate_container_auth_seed_mount "${provider}" 2>/dev/null)"; then
     args+=("--mount" "${auth_mount}")
   fi
   while IFS= read -r auth_mount; do
     [[ -n "${auth_mount}" ]] || continue
     args+=("--mount" "${auth_mount}")
   done < <(dorkpipe_orchestrate_container_extra_auth_mounts "${provider}" 2>/dev/null || true)
+  while IFS= read -r workflow_mount; do
+    [[ -n "${workflow_mount}" ]] || continue
+    args+=("--mount" "${workflow_mount}")
+  done < <(dorkpipe_orchestrate_container_workflow_mounts 2>/dev/null || true)
 
   case "${provider}" in
     codex)
-      local codex_args=(
-        "codex" "exec"
-        "--dangerously-bypass-approvals-and-sandbox"
-      )
-      if [[ -n "${selected_model}" && "${selected_model}" != "cli" ]]; then
-        codex_args+=("--model" "${selected_model}")
-      fi
-      codex_args+=("$(cat "${prompt_path}")")
-      "${dockpipe_bin}" "${args[@]}" -- \
-        "${codex_args[@]}" > "${raw_response_path}"
-      ;;
-    claude)
-      "${dockpipe_bin}" "${args[@]}" -- \
+      MSYS2_ARG_CONV_EXCL='*' "${dockpipe_bin}" "${args[@]}" -- \
         bash -lc '
           set -euo pipefail
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:$PATH}"
+          if [[ -n "${3:-}" ]]; then
+            cd "$3"
+          fi
+          mkdir -p /home/node/.codex
+          if [[ -d /dockpipe-auth/codex ]]; then
+            for item in auth.json config.toml version.json installation_id .codex-global-state.json AGENTS.md; do
+              if [[ -e "/dockpipe-auth/codex/${item}" ]]; then
+                cp -a "/dockpipe-auth/codex/${item}" /home/node/.codex/ 2>/dev/null || true
+              fi
+            done
+            chmod -R u+rwX /home/node/.codex 2>/dev/null || true
+          fi
+          if [[ -n "${2:-}" && "${2:-}" != "cli" ]]; then
+            codex exec --dangerously-bypass-approvals-and-sandbox --model "$2" "$1"
+          else
+            codex exec --dangerously-bypass-approvals-and-sandbox "$1"
+          fi
+        ' _ "$(cat "${prompt_path}")" "${selected_model}" "${worker_cwd}" > "${raw_response_path}"
+      ;;
+    claude)
+      MSYS2_ARG_CONV_EXCL='*' "${dockpipe_bin}" "${args[@]}" -- \
+        bash -lc '
+          set -euo pipefail
+          export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:$PATH}"
+          if [[ -n "${3:-}" ]]; then
+            cd "$3"
+          fi
+          mkdir -p /home/node/.claude
+          if [[ -d /dockpipe-auth/claude ]]; then
+            for item in .credentials.json settings.json mcp-needs-auth-cache.json .last-cleanup; do
+              if [[ -e "/dockpipe-auth/claude/${item}" ]]; then
+                cp -a "/dockpipe-auth/claude/${item}" /home/node/.claude/ 2>/dev/null || true
+              fi
+            done
+            if [[ -d /dockpipe-auth/claude/backups ]]; then
+              mkdir -p /home/node/.claude/backups
+              find /dockpipe-auth/claude/backups -maxdepth 1 -type f -name ".claude.json.backup.*" -exec cp -a {} /home/node/.claude/backups/ \; 2>/dev/null || true
+            fi
+            chmod -R u+rwX /home/node/.claude 2>/dev/null || true
+          fi
+          if [[ -f /dockpipe-auth/claude-config/.claude.json && ! -f /home/node/.claude.json ]]; then
+            cp /dockpipe-auth/claude-config/.claude.json /home/node/.claude.json 2>/dev/null || true
+            chmod u+rw /home/node/.claude.json 2>/dev/null || true
+          fi
           if [[ ! -f /home/node/.claude.json && -d /home/node/.claude/backups ]]; then
             latest="$(find /home/node/.claude/backups -maxdepth 1 -type f -name ".claude.json.backup.*" -printf "%T@ %p\n" 2>/dev/null | sort -nr | head -1 | cut -d" " -f2-)"
             if [[ -n "${latest:-}" ]]; then
@@ -263,7 +421,7 @@ dorkpipe_orchestrate_run_container_worker() {
           else
             claude --dangerously-skip-permissions -p "$1"
           fi
-        ' _ "$(cat "${prompt_path}")" "${selected_model}" > "${raw_response_path}"
+        ' _ "$(cat "${prompt_path}")" "${selected_model}" "${worker_cwd}" > "${raw_response_path}"
       ;;
     *)
       return 1

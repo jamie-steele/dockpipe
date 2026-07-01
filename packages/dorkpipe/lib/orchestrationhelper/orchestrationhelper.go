@@ -757,7 +757,7 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			return "", fmt.Errorf("%s: unsupported scope reference %q", workflowPath, value)
 		}
 		args = append(args, "--workdir", root)
-		resolved, err := runCommandString(root, env, "dockpipe", args...)
+		resolved, err := runCommandString(root, env, resolveDockpipeCommand(root, env), args...)
 		if err != nil {
 			return "", fmt.Errorf("%s: could not resolve %q: %w", workflowPath, value, err)
 		}
@@ -2670,18 +2670,7 @@ func renderShared(entry map[string]any, root string, env map[string]string) (str
 		}
 		return strings.Join(lines, "\n") + "\n", nil
 	case "dockpipe_cli_inspect":
-		dockpipeCmd := "dockpipe"
-		dockpipeBin := filepath.Join(root, "src", "bin", "dockpipe")
-		if runtime.GOOS == "windows" {
-			dockpipeBinExe := dockpipeBin + ".exe"
-			if _, err := os.Stat(dockpipeBinExe); err == nil {
-				dockpipeCmd = dockpipeBinExe
-			} else if _, err := os.Stat(dockpipeBin); err == nil {
-				dockpipeCmd = dockpipeBin
-			}
-		} else if _, err := os.Stat(dockpipeBin); err == nil {
-			dockpipeCmd = dockpipeBin
-		}
+		dockpipeCmd := resolveDockpipeCommand(root, env)
 		version, _ := runCommandString(root, env, dockpipeCmd, "--version")
 		packages, _ := runCommandString(root, env, dockpipeCmd, "package", "list", "--workdir", root)
 		return strings.Join([]string{
@@ -2825,6 +2814,25 @@ func renderInputContext(inputPaths []string, provider, root, artifactRoot, share
 		sections = append(sections, "", "Local model lane guidance:", "- Prefer direct claims from the excerpts over broad background knowledge.", "- If the excerpts do not prove a point, mark it as uncertain instead of filling the gap.", "- Keep the answer short and concrete so the merge step can compare it against stronger lanes.")
 	}
 	return strings.Join(sections, "\n") + "\n"
+}
+
+func resolveDockpipeCommand(root string, env map[string]string) string {
+	if env != nil {
+		if configured := strings.TrimSpace(env["DOCKPIPE_BIN"]); configured != "" {
+			return configured
+		}
+	}
+	dockpipeBin := filepath.Join(root, "src", "bin", "dockpipe")
+	if runtime.GOOS == "windows" {
+		dockpipeBinExe := dockpipeBin + ".exe"
+		if _, err := os.Stat(dockpipeBinExe); err == nil {
+			return dockpipeBinExe
+		}
+	}
+	if _, err := os.Stat(dockpipeBin); err == nil {
+		return dockpipeBin
+	}
+	return "dockpipe"
 }
 
 func mustResolveScopeCitations(task map[string]any, taskInputs []string, resolve func([]any) ([]string, error)) []string {

@@ -133,3 +133,28 @@ func TestLoadIsolationProfileExplicitPairDoesNotCrossRead(t *testing.T) {
 		t.Fatalf("runtime merge: %#v", m)
 	}
 }
+
+func TestLoadIsolationProfileBundledLayoutUsesBundledWorkflowResolverProfile(t *testing.T) {
+	repo := t.TempDir()
+	rt := filepath.Join(repo, BundledLayoutDir, "core", "runtimes", "dockerimage", "profile")
+	rs := filepath.Join(repo, BundledLayoutDir, "workflows", "claude", "profile")
+	for path, body := range map[string]string{
+		rt: "DOCKPIPE_RUNTIME_SUBSTRATE=dockerimage\n",
+		rs: "DOCKPIPE_RESOLVER_TEMPLATE=claude\nDOCKPIPE_RESOLVER_CMD=claude\n",
+	} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	m, err := LoadIsolationProfile(repo, "dockerimage", "claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m["DOCKPIPE_RUNTIME_SUBSTRATE"] != "dockerimage" || m["DOCKPIPE_RESOLVER_TEMPLATE"] != "claude" {
+		t.Fatalf("expected bundled runtime + resolver profile merge, got %#v", m)
+	}
+}

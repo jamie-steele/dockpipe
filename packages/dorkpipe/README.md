@@ -14,6 +14,7 @@ DockPipe source checkout in the consuming repo.
 | **`dorkpipe/`** | Small domain **`config.yml`** pack (namespace wiring) |
 | **`user-insight-process/`** | Host workflow: queue → **`insights.json`** — **`resolvers/user-insight-process/README.md`** |
 | **`workflows/skills.render/`** | Package workflow that renders curated DorkPipe skills to target-specific local formats |
+| **`workflows/orchestrate.stack/`** | Package workflow wrapper that owns stack lifecycle around the standard orchestration flow |
 
 Go code for the orchestrator lives in **`lib/`** (module **`dorkpipe.orchestrator`**) — this tree is **YAML + assets** only (not the Go module).
 
@@ -72,5 +73,23 @@ GPU policy is explicit and workflow-safe:
 Workflow callers should set the policy they want in YAML/env. The packaged stack workflows use
 `GPU=auto`, `GPU_SETUP=never`, and `GPU_ON_FAILURE=cpu`, so automation never prompts and never
 advances unless the requested services are actually up.
+
+## Package Workflow Wrapper
+
+Consumers that want DorkPipe to own stack lifecycle can call the package workflow:
+
+```yaml
+steps:
+  - id: plan
+    workflow: orchestrate.stack
+    package: dockpipeproject
+    agent:
+      orchestration:
+        # caller-owned request/plan/tasks/merge/verify/apply block
+```
+
+By default the wrapper plans against the caller workflow config and the caller step id `plan`, then
+runs stack up and stack down internally with `finally:`. If the orchestration declaration lives on a
+different caller step, set `DORKPIPE_ORCH_SOURCE_STEP_ID` on the packaged workflow step.
 
 **Detail:** **`lib/README.md`** (Go module); this tree is YAML + assets.

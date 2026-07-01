@@ -14,6 +14,7 @@ tmp/
 packages/dorkpipe/bin/dorkpipe
 packages/dorkpipe-mcp/bin/mcpd
 packages/dorkpipe/mcp/bin/mcpd
+packages/dorkpipe/resolvers/dorkpipe/assets/tooling/bin/
 
 # Local Cursor / remote server / IDE (binaries, keys, workspace state — do not commit)
 .cache/

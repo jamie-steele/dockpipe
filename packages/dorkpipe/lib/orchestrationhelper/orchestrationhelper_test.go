@@ -1,6 +1,11 @@
 package orchestrationhelper
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+)
 
 func TestApplyTaskWorkerProfileDefaultsToPrefer(t *testing.T) {
 	task, err := applyTaskWorkerProfile(map[string]any{
@@ -118,5 +123,31 @@ func TestComparisonDisabledForRequiredWorker(t *testing.T) {
 	}
 	if comparisonEnabledForTask(task, []string{"codex", "claude"}, "auto") {
 		t.Fatal("comparison should be disabled when worker_policy.mode=require")
+	}
+}
+
+func TestResolveDockpipeCommandPrefersEnv(t *testing.T) {
+	got := resolveDockpipeCommand(t.TempDir(), map[string]string{"DOCKPIPE_BIN": "/custom/dockpipe"})
+	if got != "/custom/dockpipe" {
+		t.Fatalf("resolveDockpipeCommand() = %q", got)
+	}
+}
+
+func TestResolveDockpipeCommandFallsBackToRepoLocalBinary(t *testing.T) {
+	root := t.TempDir()
+	binDir := filepath.Join(root, "src", "bin")
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(binDir, "dockpipe")
+	if runtime.GOOS == "windows" {
+		want += ".exe"
+	}
+	if err := os.WriteFile(want, []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := resolveDockpipeCommand(root, map[string]string{})
+	if got != want {
+		t.Fatalf("resolveDockpipeCommand() = %q want %q", got, want)
 	}
 }

@@ -19,6 +19,7 @@ const DOCKPIPE_TOP_LEVEL_KEYS = [
   "security",
   "image",
   "steps",
+  "finally",
   "resolver",
   "runtime",
   "run",
@@ -78,6 +79,7 @@ const TOP_LEVEL_KEY_DETAILS = {
   security: "Optional authored container security policy. Choose a security profile, then apply bounded network/filesystem/process overrides.",
   image: "Optional image customization. Use image.packages.apt to materialize a derived Docker image with workflow-authored Debian packages.",
   steps: "Ordered workflow steps. Each step can run in a container or on the host.",
+  finally: "Cleanup steps that always run after steps, including failure or interrupt paths. Use this for teardown such as stopping helper stacks.",
   resolver: "Tooling profile for this workflow. Acts as the default resolver for steps unless they override it.",
   runtime: "Execution substrate for this workflow. Acts as the default runtime for steps unless they override it.",
   run: "Host pre-scripts for a compact single-flow workflow. Do not combine with steps:.",
@@ -279,6 +281,7 @@ const CONTAINER_KEYS = new Set([
   "vars",
   "vm",
   "steps",
+  "finally",
   "run",
   "compose",
   "security",
@@ -1235,7 +1238,7 @@ function analyzeYamlStructure(document) {
       parents,
       inVars: parents.includes("vars"),
       inInputs: parents.includes("inputs"),
-      inSteps: parents.includes("steps"),
+      inSteps: parents.includes("steps") || parents.includes("finally"),
       inTypes: parents.includes("types")
     };
 
@@ -1252,7 +1255,7 @@ function analyzeYamlStructure(document) {
         info.kind = "topLevelKey";
       } else if (parents.includes("vars")) {
         info.kind = "varKey";
-      } else if (parents.includes("steps")) {
+      } else if (parents.includes("steps") || parents.includes("finally")) {
         info.kind = "stepKey";
       } else {
         info.kind = "key";

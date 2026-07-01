@@ -64,6 +64,65 @@ function Find-OptionalTool {
     return $null
 }
 
+function Find-GitBash {
+    $fallbacks = @(
+        "C:\Program Files\Git\bin\bash.exe",
+        "C:\Program Files\Git\usr\bin\bash.exe"
+    )
+    foreach ($fallback in $fallbacks) {
+        if (Test-Path -LiteralPath $fallback) {
+            return $fallback
+        }
+    }
+    $cmd = Get-Command bash -ErrorAction SilentlyContinue
+    if ($cmd -and $cmd.Source -and $cmd.Source -notmatch "\\System32\\bash\.exe$") {
+        return $cmd.Source
+    }
+    return $null
+}
+
+function Convert-ToBashPath {
+    param([string]$BashExe, [string]$PathValue)
+    $escaped = $PathValue.Replace("'", "'\''")
+    $converted = & $BashExe -lc "cygpath -u '$escaped'"
+    if ($LASTEXITCODE -ne 0 -or -not $converted) {
+        throw "Failed to convert path for bash: $PathValue"
+    }
+    return ($converted | Select-Object -First 1)
+}
+
+function Invoke-EmbeddedDorkPipeAssetPreparation {
+    param([string]$RepoRoot)
+    $bashExe = Find-GitBash
+    if (-not $bashExe) {
+        throw "bash not found on PATH. Install Git for Windows or add bash to PATH before building embedded DorkPipe assets."
+    }
+    $script = Join-Path $RepoRoot "release\packaging\prepare-embedded-dorkpipe-assets.sh"
+    $scriptBash = Convert-ToBashPath -BashExe $bashExe -PathValue $script
+    Write-Host "Preparing embedded DorkPipe stack assets"
+    & $bashExe $scriptBash prepare
+    if ($LASTEXITCODE -ne 0) { throw "prepare embedded DorkPipe stack assets failed" }
+}
+
+function Clear-EmbeddedDorkPipeAssetPreparation {
+    param([string]$RepoRoot)
+    $bashExe = Find-GitBash
+    if (-not $bashExe) {
+        return
+    }
+    $script = Join-Path $RepoRoot "release\packaging\prepare-embedded-dorkpipe-assets.sh"
+    if (-not (Test-Path -LiteralPath $script)) {
+        return
+    }
+    try {
+        $scriptBash = Convert-ToBashPath -BashExe $bashExe -PathValue $script
+        & $bashExe $scriptBash clean
+    }
+    catch {
+        Write-Warning "Embedded DorkPipe stack asset cleanup failed: $($_.Exception.Message)"
+    }
+}
+
 function Resolve-QtRoot {
     param([string]$ExplicitRoot, [string]$QtVersionValue, [string]$QtInstallRootValue)
     if ($ExplicitRoot) {
@@ -201,6 +260,7 @@ New-Item -ItemType Directory -Force -Path $repoBinDir | Out-Null
 Write-Host "Building dockpipe.exe from $repoRoot"
 Push-Location $repoRoot
 try {
+    Invoke-EmbeddedDorkPipeAssetPreparation -RepoRoot $repoRoot
     & $goExe build -trimpath -ldflags "-s -w -X main.Version=$Version" -o $buildExe .\src\cmd
     if ($LASTEXITCODE -ne 0) { throw "go build failed" }
 
@@ -209,6 +269,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "dockpipe package compile core failed" }
 }
 finally {
+    Clear-EmbeddedDorkPipeAssetPreparation -RepoRoot $repoRoot
     Pop-Location
 }
 

@@ -10,6 +10,10 @@ import (
 
 // waitHostScriptWithSignalForward forwards Ctrl+C (Interrupt) to the bash child on Windows.
 func waitHostScriptWithSignalForward(cmd *exec.Cmd) error {
+	return waitCommandWithSignalForward(cmd)
+}
+
+func waitCommandWithSignalForward(cmd *exec.Cmd) error {
 	sigCh := make(chan os.Signal, 4)
 	signal.Notify(sigCh, os.Interrupt)
 	done := make(chan struct{})

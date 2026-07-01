@@ -536,7 +536,12 @@ func resolveResolverHostPath(profile map[string]string, envKey, defaultKey strin
 	}
 	home := strings.TrimSpace(os.Getenv("HOME"))
 	if home == "" {
-		return "", fmt.Errorf("HOME is not set")
+		if userHome, err := os.UserHomeDir(); err == nil {
+			home = strings.TrimSpace(userHome)
+		}
+	}
+	if home == "" {
+		return "", fmt.Errorf("user home directory is not set")
 	}
 	return filepath.Join(home, filepath.Clean(value)), nil
 }

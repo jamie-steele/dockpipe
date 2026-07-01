@@ -14,6 +14,10 @@ import (
 // SIGTERM from `kill <pid>` and the child keeps running. Linux also uses PR_SET_PDEATHSIG (see
 // prescript_runhost_linux.go) when the parent exits without a graceful signal path.
 func waitHostScriptWithSignalForward(cmd *exec.Cmd) error {
+	return waitCommandWithSignalForward(cmd)
+}
+
+func waitCommandWithSignalForward(cmd *exec.Cmd) error {
 	sigCh := make(chan os.Signal, 8)
 	signal.Notify(sigCh, os.Interrupt, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGQUIT)
 	done := make(chan struct{})

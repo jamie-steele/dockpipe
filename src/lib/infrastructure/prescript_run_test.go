@@ -3,6 +3,8 @@ package infrastructure
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -44,5 +46,28 @@ func TestEnvGetUsesLastDuplicate(t *testing.T) {
 	env := []string{"A=old", "B=1", "A=new"}
 	if got := envGet(env, "A"); got != "new" {
 		t.Fatalf("envGet duplicate = %q want new", got)
+	}
+}
+
+func TestMergeHostExecutablePATHPreservesCurrentAndAddsMissingHostEntries(t *testing.T) {
+	got := mergeHostExecutablePATH("/work/bin:/usr/bin", "/usr/bin:/opt/docker/bin:/custom/bin", "/usr/bin/bash")
+	if got != "/work/bin:/usr/bin:/opt/docker/bin:/custom/bin" {
+		t.Fatalf("mergeHostExecutablePATH() = %q", got)
+	}
+}
+
+func TestMergeHostExecutablePATHConvertsWindowsHostEntriesForBash(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows-only path conversion")
+	}
+	got := mergeHostExecutablePATH("/work/bin:/usr/bin", `C:\Program Files\Docker\Docker\resources\bin;C:\Windows\System32`, `C:\Program Files\Git\bin\bash.exe`)
+	if !strings.Contains(got, "/c/Program Files/Docker/Docker/resources/bin") {
+		t.Fatalf("expected docker path converted for bash, got %q", got)
+	}
+	if !strings.Contains(got, "/c/Windows/System32") {
+		t.Fatalf("expected System32 converted for bash, got %q", got)
+	}
+	if !strings.HasPrefix(got, "/work/bin:/usr/bin:") {
+		t.Fatalf("expected current PATH entries preserved first, got %q", got)
 	}
 }

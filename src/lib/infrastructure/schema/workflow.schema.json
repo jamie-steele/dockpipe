@@ -743,6 +743,16 @@
           { "$ref": "#/$defs/async_group" }
         ]
       }
+    },
+    "finally": {
+      "type": "array",
+      "description": "Cleanup steps that always run after steps, even when an earlier step fails.",
+      "items": {
+        "oneOf": [
+          { "$ref": "#/$defs/workflow_step" },
+          { "$ref": "#/$defs/async_group" }
+        ]
+      }
     }
   },
   "allOf": [
@@ -757,6 +767,33 @@
         "required": ["steps"]
       },
       "then": {
+        "not": {
+          "anyOf": [
+            { "required": ["run"] },
+            { "required": ["act"] },
+            { "required": ["action"] }
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "finally": {
+            "type": "array",
+            "minItems": 1
+          }
+        },
+        "required": ["finally"]
+      },
+      "then": {
+        "properties": {
+          "steps": {
+            "type": "array",
+            "minItems": 1
+          }
+        },
+        "required": ["steps"],
         "not": {
           "anyOf": [
             { "required": ["run"] },

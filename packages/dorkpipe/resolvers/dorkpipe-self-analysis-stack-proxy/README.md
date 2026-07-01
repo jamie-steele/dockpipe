@@ -7,7 +7,7 @@ Lifecycle:
 
 1. `stack_up` starts Postgres, Ollama, and an allowlist egress proxy with the DorkPipe host stack helper so Ollama can use Docker GPU access when available.
 2. `self_analysis` runs in a disposable container with `security.profile: sidecar-client` and `security.network.mode: allowlist`, which compiles to proxy-backed enforcement.
-3. `stack_down` tears the stack down with the DorkPipe host stack helper unless `DORKPIPE_DEV_STACK_AUTODOWN=0`.
+3. `finally.stack_down` tears the stack down with the DorkPipe host stack helper unless `DORKPIPE_DEV_STACK_AUTODOWN=0`.
 
 Run it with:
 

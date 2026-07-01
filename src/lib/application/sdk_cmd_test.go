@@ -235,6 +235,23 @@ func TestCmdScopeResolverAuthFields(t *testing.T) {
 	}
 }
 
+func TestResolveResolverHostPathUsesUserHomeWhenHomeEnvMissing(t *testing.T) {
+	t.Setenv("HOME", "")
+	got, err := resolveResolverHostPath(map[string]string{
+		"DOCKPIPE_RESOLVER_AUTH_DIR": ".codex",
+	}, "DOCKPIPE_RESOLVER_AUTH_DIR_ENV", "DOCKPIPE_RESOLVER_AUTH_DIR")
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != filepath.Join(home, ".codex") {
+		t.Fatalf("got %q want %q", got, filepath.Join(home, ".codex"))
+	}
+}
+
 func TestResolveDockpipeBinForSDKPrefersRepoLocalExe(t *testing.T) {
 	wd := t.TempDir()
 	binDir := filepath.Join(wd, "src", "bin")

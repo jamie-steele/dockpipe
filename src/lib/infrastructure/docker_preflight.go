@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -39,7 +40,8 @@ func checkDockerReachable(stderr *os.File, ignoreSkipEnv bool) error {
 	if !ignoreSkipEnv && os.Getenv("DOCKPIPE_SKIP_DOCKER_PREFLIGHT") == "1" {
 		return nil
 	}
-	if _, err := exec.LookPath("docker"); err != nil {
+	dockerCmd, err := resolveDockerCommandPath()
+	if err != nil {
 		return fmt.Errorf(
 			"docker not found in PATH — install the Docker CLI and ensure the daemon is running\n" +
 				"  https://docs.docker.com/get-docker/",
@@ -48,7 +50,7 @@ func checkDockerReachable(stderr *os.File, ignoreSkipEnv bool) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	cmd := execCommandContextFn(ctx, "docker", "version")
+	cmd := execCommandContextFn(ctx, dockerCmd, "version")
 	out, err := cmd.CombinedOutput()
 	msg := strings.TrimSpace(string(out))
 	if err == nil {
@@ -72,6 +74,50 @@ func checkDockerReachable(stderr *os.File, ignoreSkipEnv bool) error {
 // execCommandContextFn is exec.CommandContext for tests.
 var execCommandContextFn = func(ctx context.Context, name string, arg ...string) *exec.Cmd {
 	return exec.CommandContext(ctx, name, arg...)
+}
+
+func dockerCommandName() string {
+	if p, err := resolveDockerCommandPath(); err == nil {
+		return p
+	}
+	return "docker"
+}
+
+func resolveDockerCommandPath() (string, error) {
+	if configured := strings.TrimSpace(os.Getenv("DOCKPIPE_DOCKER_BIN")); configured != "" {
+		if _, err := os.Stat(configured); err != nil {
+			return "", err
+		}
+		return configured, nil
+	}
+	if p, err := exec.LookPath("docker"); err == nil {
+		return p, nil
+	}
+	if runtime.GOOS == "windows" {
+		return resolveWindowsDockerDesktopPath()
+	}
+	return "", exec.ErrNotFound
+}
+
+func resolveWindowsDockerDesktopPath() (string, error) {
+	roots := []string{
+		os.Getenv("ProgramFiles"),
+		os.Getenv("ProgramW6432"),
+		`C:\Program Files`,
+	}
+	seen := map[string]bool{}
+	for _, root := range roots {
+		root = strings.TrimSpace(root)
+		if root == "" || seen[strings.ToLower(root)] {
+			continue
+		}
+		seen[strings.ToLower(root)] = true
+		candidate := filepath.Join(root, "Docker", "Docker", "resources", "bin", "docker.exe")
+		if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
+			return candidate, nil
+		}
+	}
+	return "", exec.ErrNotFound
 }
 
 func dockerDaemonHints() string {

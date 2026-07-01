@@ -10,7 +10,7 @@ description: >-
   stack_up (host): Postgres+Ollama+policy-proxy via the DorkPipe host stack script with GPU-aware Ollama setup.
   self_analysis (container): same as dorkpipe-self-analysis, but compiled with
   proxy-backed allowlist network policy.
-  stack_down (host): compose down unless DORKPIPE_DEV_STACK_AUTODOWN=0.
+  finally.stack_down (host): compose down unless DORKPIPE_DEV_STACK_AUTODOWN=0.
 
 security:
   profile: sidecar-client
@@ -46,6 +46,7 @@ steps:
     run:
       - scripts/dorkpipe/run-self-analysis.sh
 
+finally:
   - id: stack_down
     kind: host
     run:

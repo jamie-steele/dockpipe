@@ -435,6 +435,28 @@ steps:
 	}
 }
 
+func TestParseWorkflowYAMLFinallySugar(t *testing.T) {
+	y := `
+steps:
+  - id: main
+    cmd: echo main
+finally:
+  - id: cleanup
+    kind: host
+    run: scripts/cleanup.sh
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Steps) != 1 || w.Steps[0].ID != "main" {
+		t.Fatalf("unexpected steps: %+v", w.Steps)
+	}
+	if len(w.Finally) != 1 || w.Finally[0].ID != "cleanup" {
+		t.Fatalf("unexpected finally steps: %+v", w.Finally)
+	}
+}
+
 // TestParseWorkflowYAMLGroupValidation rejects invalid group blocks (wrong mode, empty tasks, blocking inside tasks, extra keys).
 func TestParseWorkflowYAMLGroupValidation(t *testing.T) {
 	cases := []struct {
@@ -817,5 +839,15 @@ func TestValidateLoadedWorkflowRejectsTopLevelSingleFlowFieldsWithSteps(t *testi
 				t.Fatalf("expected %q validation error, got %v", tc.want, err)
 			}
 		})
+	}
+}
+
+func TestValidateLoadedWorkflowRejectsFinallyWithoutSteps(t *testing.T) {
+	w := &Workflow{
+		Finally: []Step{{Kind: "host", Run: []string{"scripts/cleanup.sh"}}},
+	}
+	err := ValidateLoadedWorkflow(w)
+	if err == nil || !strings.Contains(err.Error(), "workflow with finally: requires at least one main step") {
+		t.Fatalf("expected finally without steps validation error, got %v", err)
 	}
 }

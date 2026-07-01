@@ -22,8 +22,8 @@ func TestRunEmbeddedResolverWorkflowWithLoad_CallsRunSteps(t *testing.T) {
 	called := false
 	runSteps := func(o runStepsOpts) error {
 		called = true
-		if o.wfRoot != wfDir || o.repoRoot != repoRoot {
-			t.Fatalf("unexpected runSteps opts wfRoot=%q repoRoot=%q", o.wfRoot, o.repoRoot)
+		if o.wfRoot != wfDir || o.wfConfig != filepath.Join(wfDir, "config.yml") || o.repoRoot != repoRoot {
+			t.Fatalf("unexpected runSteps opts wfRoot=%q wfConfig=%q repoRoot=%q", o.wfRoot, o.wfConfig, o.repoRoot)
 		}
 		return nil
 	}

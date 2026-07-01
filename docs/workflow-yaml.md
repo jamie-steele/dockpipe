@@ -63,7 +63,7 @@ In practice, most workflows should:
 | Mode | When | `config.yml` |
 |------|------|----------------|
 | **Single flow** | No `steps:` (or empty) | Top-level **`run`**, **`runtime`** / **`resolver`** (or advanced **`isolate`**), and **`act`** / **`action`** describe one run. This is the compact shorthand for simple workflows. |
-| **Multi-step** | Non-empty **`steps:`** | Each list item is a **step**. A step is either a **container step** (default) or a **host step** (`kind: host`). The CLI argument after `--` can supply the **last** step’s command if that step has no `cmd`/`command`. Top-level **`run`** and **`act`** / **`action`** are not used in this mode. |
+| **Multi-step** | Non-empty **`steps:`** | Each list item is a **step**. A step is either a **container step** (default) or a **host step** (`kind: host`). The CLI argument after `--` can supply the **last** step’s command if that step has no `cmd`/`command`. Top-level **`run`** and **`act`** / **`action`** are not used in this mode. Optional **`finally:`** steps run after the main steps even when a step fails or the run is interrupted. |
 
 Variable precedence for workflows is documented in **[CLI reference](cli-reference.md)** (CLI > config > `.env` / `--env-file` / `--var`).
 
@@ -94,6 +94,20 @@ Keep common inspection tools in resolver images; declare heavier project-specifi
 
 If a workflow grows beyond one simple run, prefer moving to **`steps:`** instead of piling more meaning onto top-level **`run`** / **`act`**.
 Once you switch to **`steps:`**, move those fields onto the specific step that needs them.
+
+Use **`finally:`** for teardown that must happen on failure paths as well:
+
+```yaml
+steps:
+  - id: stack_up
+    kind: host
+    run: scripts/dorkpipe/dev-stack-ensure-up.sh
+
+finally:
+  - id: stack_down
+    kind: host
+    run: scripts/dorkpipe/dev-stack-maybe-down.sh
+```
 
 ### Host steps (`kind: host`)
 

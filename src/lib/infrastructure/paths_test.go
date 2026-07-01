@@ -78,6 +78,28 @@ func TestResolveResolverFilePathPrefersProfileInDirectory(t *testing.T) {
 	}
 }
 
+func TestResolveResolverFilePathBundledLayoutUsesBundledWorkflowProfile(t *testing.T) {
+	repo := t.TempDir()
+	prof := filepath.Join(repo, BundledLayoutDir, "workflows", "claude", "profile")
+	if err := os.MkdirAll(filepath.Dir(prof), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(prof, []byte("DOCKPIPE_RESOLVER_TEMPLATE=claude\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(repo, BundledLayoutDir, "core"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := ResolveResolverFilePath(repo, "claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != prof {
+		t.Fatalf("got %q want bundled workflow profile %q", got, prof)
+	}
+}
+
 // TestResolveResolverFilePathIgnoresWorkflowLocal verifies profiles beside templates/<wf>/ are not used.
 func TestResolveCoreNamespacedScriptPath(t *testing.T) {
 	repo := t.TempDir()
@@ -227,6 +249,46 @@ func TestResolveWorkflowScriptPrefersUserScriptsOverCore(t *testing.T) {
 	got := ResolveWorkflowScript("scripts/shared.sh", "/wf", repo, "")
 	if got != filepath.ToSlash(user) {
 		t.Fatalf("got %q want user path %q", got, filepath.ToSlash(user))
+	}
+}
+
+func TestResolveWorkflowScriptResolvesSiblingWorkflowAsset(t *testing.T) {
+	repo := t.TempDir()
+	pkgRoot := t.TempDir()
+	wfRoot := filepath.Join(pkgRoot, "workflows", "orchestrate.stack")
+	script := filepath.Join(pkgRoot, "workflows", "acme", "assets", "scripts", "ensure-up.sh")
+	if err := os.MkdirAll(filepath.Dir(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(script, []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got := ResolveWorkflowScript("scripts/acme/ensure-up.sh", wfRoot, repo, "")
+	if got != filepath.ToSlash(script) {
+		t.Fatalf("got %q want sibling workflow asset %q", got, filepath.ToSlash(script))
+	}
+}
+
+func TestResolveWorkflowScriptPrefersProjectOverrideOverSiblingWorkflowAsset(t *testing.T) {
+	repo := t.TempDir()
+	project := t.TempDir()
+	pkgRoot := t.TempDir()
+	wfRoot := filepath.Join(pkgRoot, "workflows", "orchestrate.stack")
+	override := filepath.Join(project, "scripts", "acme", "ensure-up.sh")
+	sibling := filepath.Join(pkgRoot, "workflows", "acme", "assets", "scripts", "ensure-up.sh")
+	for _, script := range []string{override, sibling} {
+		if err := os.MkdirAll(filepath.Dir(script), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(script, []byte("#!/bin/sh\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	got := ResolveWorkflowScript("scripts/acme/ensure-up.sh", wfRoot, repo, project)
+	if got != filepath.ToSlash(override) {
+		t.Fatalf("got %q want project override %q", got, filepath.ToSlash(override))
 	}
 }
 

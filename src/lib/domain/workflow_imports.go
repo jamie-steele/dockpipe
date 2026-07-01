@@ -21,6 +21,10 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 	if err != nil {
 		return nil, err
 	}
+	finallySteps, err := flattenSteps(f.Finally)
+	if err != nil {
+		return nil, err
+	}
 	return &Workflow{
 		Name:            f.Name,
 		Description:     f.Description,
@@ -50,6 +54,7 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 		Compose:         f.Compose,
 		Security:        f.Security,
 		Steps:           steps,
+		Finally:         finallySteps,
 	}, nil
 }
 
@@ -88,6 +93,7 @@ func parseWorkflowFileRecursive(data []byte, baseDir string, readFile func(strin
 	mergedInputs := map[string]InputBinding{}
 	var mergedInject []WorkflowInjectEntry
 	var stepParts []stepOrGroupYAML
+	var finallyParts []stepOrGroupYAML
 	for _, imp := range f.Imports {
 		imp = strings.TrimSpace(imp)
 		if imp == "" {
@@ -123,6 +129,7 @@ func parseWorkflowFileRecursive(data []byte, baseDir string, readFile func(strin
 		}
 		mergedInject = append(mergedInject, sub.Inject...)
 		stepParts = append(stepParts, sub.Steps...)
+		finallyParts = append(finallyParts, sub.Finally...)
 	}
 	for k, v := range f.Inputs {
 		mergedInputs[k] = v
@@ -135,6 +142,8 @@ func parseWorkflowFileRecursive(data []byte, baseDir string, readFile func(strin
 	out.Vars = mergedVars
 	out.Inject = append(mergedInject, f.Inject...)
 	out.Steps = append(stepParts, f.Steps...)
+	// Run importer-local cleanup before imported/base cleanup.
+	out.Finally = append(f.Finally, finallyParts...)
 	out.Imports = nil
 	return &out, nil
 }

@@ -37,11 +37,29 @@ dockpipe_sdk() {
   return 1
 }
 
+saved_os="${OS:-}"
+saved_ostype="${OSTYPE:-}"
+saved_msystem="${MSYSTEM:-}"
+OS=Windows_NT
+OSTYPE=msys
+MSYSTEM=MINGW64
+converted="$(dorkpipe_orchestrate_cli_mount_host_path 'C:\Users\Jamie\.codex')"
+if [[ "${converted}" != "/c/Users/Jamie/.codex" ]]; then
+  echo "expected Windows auth mount host path to convert for Bash CLI launch, got: ${converted}" >&2
+  exit 1
+fi
+OS="${saved_os}"
+OSTYPE="${saved_ostype}"
+MSYSTEM="${saved_msystem}"
+
 export ROOT
 export HOME="$tmp/home"
 export FAKE_DOCKPIPE_ARGS="$fake_args"
+export DOCKPIPE_CONTAINER_MOUNTS=$'C:\\Source\\UniteHere:/UniteHere:ro\nC:\\docs\\UniteHere\\Design Notes:/DesignNotes:ro'
+export DORKPIPE_ORCH_WORKER_CWD="/UniteHere"
 export PATH="$tmp:$PATH"
 mkdir -p "$HOME/.codex"
+printf '{"auth_mode":"chatgpt"}\n' > "$HOME/.codex/auth.json"
 
 prompt="$tmp/prompt.md"
 response="$tmp/response.md"
@@ -53,10 +71,13 @@ grep -qx -- "--resolver" "$fake_args"
 grep -qx -- "codex" "$fake_args"
 grep -qx -- "--no-data" "$fake_args"
 grep -qx -- "--mount" "$fake_args"
-grep -qx -- "$HOME/.codex:/home/node/.codex:ro" "$fake_args"
+grep -qx -- "$HOME/.codex:/dockpipe-auth/codex:ro" "$fake_args"
+grep -qx -- "/c/Source/UniteHere:/UniteHere:ro" "$fake_args"
+grep -qx -- "/c/docs/UniteHere/Design Notes:/DesignNotes:ro" "$fake_args"
+grep -qx -- "/UniteHere" "$fake_args"
 grep -qx -- "codex" "$fake_args"
-grep -qx -- "exec" "$fake_args"
-grep -qx -- "--dangerously-bypass-approvals-and-sandbox" "$fake_args"
+grep -q -- "codex exec" "$fake_args"
+grep -q -- "--dangerously-bypass-approvals-and-sandbox" "$fake_args"
 grep -qx -- "container worker ok" "$response"
 
 echo "test_orchestration_container_auth OK"

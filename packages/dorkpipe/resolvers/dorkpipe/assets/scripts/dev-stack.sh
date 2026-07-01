@@ -145,6 +145,9 @@ up)
 	fi
 	;;
 down)
+	if dorkpipe_stack_service_enabled dorkpipe-stack || dorkpipe_stack_service_enabled dorkpipe-mcp-proxy; then
+		dorkpipe_stack_prepare_mcp_material
+	fi
 	docker compose "${COMPOSE_ARGS[@]}" down
 	echo "dev-stack: down — sidecar stack stopped"
 	;;

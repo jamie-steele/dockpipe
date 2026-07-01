@@ -28,19 +28,22 @@ cat > "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" <<EOF
   }
 }
 EOF
-[[ -n "${DOCKPIPE_WORKFLOW_CONFIG:-}" ]] || {
-  echo "DOCKPIPE_WORKFLOW_CONFIG is required" >&2
+source_workflow_config="${DORKPIPE_ORCH_SOURCE_WORKFLOW_CONFIG:-${DOCKPIPE_WORKFLOW_CONFIG:-}}"
+source_step_id="${DORKPIPE_ORCH_SOURCE_STEP_ID:-${DOCKPIPE_STEP_ID:-}}"
+
+[[ -n "${source_workflow_config}" ]] || {
+  echo "DORKPIPE_ORCH_SOURCE_WORKFLOW_CONFIG or DOCKPIPE_WORKFLOW_CONFIG is required" >&2
   exit 1
 }
-[[ -f "${DOCKPIPE_WORKFLOW_CONFIG}" ]] || {
-  echo "missing workflow config: ${DOCKPIPE_WORKFLOW_CONFIG}" >&2
+[[ -f "${source_workflow_config}" ]] || {
+  echo "missing workflow config: ${source_workflow_config}" >&2
   exit 1
 }
-[[ -n "${DOCKPIPE_STEP_ID:-}" ]] || {
-  echo "DOCKPIPE_STEP_ID is required for orchestration planning" >&2
+[[ -n "${source_step_id}" ]] || {
+  echo "DORKPIPE_ORCH_SOURCE_STEP_ID or DOCKPIPE_STEP_ID is required for orchestration planning" >&2
   exit 1
 }
 
-"$(dorkpipe_orchestrate_helper_bin)" plan "${DOCKPIPE_WORKFLOW_CONFIG}" "${DOCKPIPE_STEP_ID}"
+"$(dorkpipe_orchestrate_helper_bin)" plan "${source_workflow_config}" "${source_step_id}"
 
 printf '[dorkpipe] orchestration plan ready at %s\n' "${DORKPIPE_ORCH_ROOT}" >&2

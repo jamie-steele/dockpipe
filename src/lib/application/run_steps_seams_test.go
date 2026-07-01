@@ -3,6 +3,7 @@ package application
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"dockpipe/src/lib/domain"
@@ -135,6 +136,77 @@ func TestRunStepPreScripts_HostUsesRunHostExec(t *testing.T) {
 		}
 		if !called {
 			t.Fatal("expected RunHostScript for kind: host")
+		}
+	})
+}
+
+func TestStepPreparationLabelIncludesHostScript(t *testing.T) {
+	step := domain.Step{ID: "stack_up", Kind: "host", Run: []string{"scripts/dorkpipe/dev-stack-ensure-up.sh"}}
+	got := stepPreparationLabel(step, 0)
+	if !strings.Contains(got, `Preparing host step "stack_up"`) || !strings.Contains(got, "dev-stack-ensure-up.sh") {
+		t.Fatalf("unexpected preparation label: %q", got)
+	}
+}
+
+func TestRunStepsFinallyRunsAfterFailure(t *testing.T) {
+	withRunStepSeams(t, func() {
+		tmp := t.TempDir()
+		cleanupRan := false
+		dockerBuildFn = func(image, dockerfileDir, contextDir string) error { return nil }
+		runContainerFn = func(infrastructure.RunOpts, []string) (int, error) {
+			return 17, nil
+		}
+		runHostScriptFn = func(path string, env []string) error {
+			cleanupRan = true
+			return nil
+		}
+		osStatFn = func(name string) (os.FileInfo, error) { return nil, nil }
+
+		o := runStepsOpts{
+			wf: &domain.Workflow{
+				Steps:   []domain.Step{{Cmd: "exit 17"}},
+				Finally: []domain.Step{{ID: "cleanup", Kind: "host", Run: []string{"cleanup.sh"}}},
+			},
+			wfRoot:   tmp,
+			repoRoot: tmp,
+			envMap:   map[string]string{},
+			envSlice: nil,
+			locked:   map[string]bool{},
+			opts:     &CliOpts{Workdir: tmp},
+		}
+		err := runSteps(o)
+		if code, ok := exitCodeFromError(err); !ok || code != 17 {
+			t.Fatalf("expected exit code 17, got %v", err)
+		}
+		if !cleanupRan {
+			t.Fatal("expected finally step to run after failure")
+		}
+	})
+}
+
+func TestRunStepsFinallyFailureCombinesErrors(t *testing.T) {
+	withRunStepSeams(t, func() {
+		tmp := t.TempDir()
+		runHostScriptFn = func(path string, env []string) error {
+			return os.ErrPermission
+		}
+		osStatFn = func(name string) (os.FileInfo, error) { return nil, nil }
+
+		o := runStepsOpts{
+			wf: &domain.Workflow{
+				Steps:   []domain.Step{{Kind: "host", Cmd: "echo ok"}},
+				Finally: []domain.Step{{Kind: "host", Run: []string{"cleanup.sh"}}},
+			},
+			wfRoot:   tmp,
+			repoRoot: tmp,
+			envMap:   map[string]string{},
+			envSlice: nil,
+			locked:   map[string]bool{},
+			opts:     &CliOpts{Workdir: tmp},
+		}
+		err := runSteps(o)
+		if err == nil || !strings.Contains(err.Error(), "permission denied") {
+			t.Fatalf("expected finally error, got %v", err)
 		}
 	})
 }

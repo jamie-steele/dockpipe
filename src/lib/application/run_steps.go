@@ -1,6 +1,7 @@
 package application
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -49,6 +50,7 @@ type runStepsOpts struct {
 	// strategyHandlesCommit: parent workflow uses a named strategy whose after hook runs bundled commit.
 	// Suppress per-step bundled commit so CommitOnHost runs once after all steps (strategy after).
 	strategyHandlesCommit bool
+	phase                 string
 }
 
 // runSteps executes workflow steps. Blocking steps run alone. Explicit async groups
@@ -59,13 +61,19 @@ type runStepsOpts struct {
 //     into the shared env for the next blocking step.
 func runSteps(o runStepsOpts) error {
 	dockerEnv := domain.EnvSliceToMap(o.opts.ExtraEnvLines)
+	if err := applyWorkflowContainerMountEnv(&o); err != nil {
+		return err
+	}
+	o.envSlice = domain.EnvMapToSlice(o.envMap)
 	n := len(o.wf.Steps)
 	i := 0
+	var runErr error
 	for i < n {
 		step := o.wf.Steps[i]
 		if step.IsBlocking() {
 			if err := runBlockingStep(&o, i, n, dockerEnv); err != nil {
-				return err
+				runErr = err
+				break
 			}
 			i++
 			continue
@@ -75,11 +83,69 @@ func runSteps(o runStepsOpts) error {
 			j++
 		}
 		if err := runParallelBatch(&o, i, j, n, dockerEnv); err != nil {
-			return err
+			runErr = err
+			break
 		}
 		i = j
 	}
+	return runWorkflowFinally(o, runErr)
+}
+
+func applyWorkflowContainerMountEnv(o *runStepsOpts) error {
+	if o == nil || o.wf == nil || o.envMap == nil {
+		return nil
+	}
+	hostBase := firstNonEmpty(o.envMap["DOCKPIPE_SOURCE_ROOT"], o.envMap["DOCKPIPE_WORKDIR"], runStepsWorkdir(o), o.projectRoot, o.repoRoot)
+	mounts, err := workflowContainerMountSpecs(o.wf.Container.Mounts, hostBase)
+	if err != nil {
+		return err
+	}
+	if len(mounts) == 0 {
+		delete(o.envMap, "DOCKPIPE_CONTAINER_MOUNTS")
+		return nil
+	}
+	o.envMap["DOCKPIPE_CONTAINER_MOUNTS"] = strings.Join(mounts, "\n")
 	return nil
+}
+
+type workflowExitCodeError struct {
+	Code int
+}
+
+func (e *workflowExitCodeError) Error() string {
+	return fmt.Sprintf("exit code %d", e.Code)
+}
+
+func exitCodeFromError(err error) (int, bool) {
+	var exitErr *workflowExitCodeError
+	if errors.As(err, &exitErr) {
+		return exitErr.Code, true
+	}
+	return 0, false
+}
+
+func runWorkflowFinally(o runStepsOpts, runErr error) error {
+	if o.wf == nil || len(o.wf.Finally) == 0 {
+		return runErr
+	}
+	finallyWf := *o.wf
+	finallyWf.Steps = append([]domain.Step(nil), o.wf.Finally...)
+	finallyWf.Finally = nil
+	finallyOpts := o
+	finallyOpts.wf = &finallyWf
+	finallyOpts.phase = "Finally"
+	finallyErr := runSteps(finallyOpts)
+	if finallyErr == nil {
+		return runErr
+	}
+	if runErr == nil {
+		return finallyErr
+	}
+	if code, ok := exitCodeFromError(runErr); ok {
+		fmt.Fprintf(os.Stderr, "[dockpipe] finally failed: %v\n", finallyErr)
+		return &workflowExitCodeError{Code: code}
+	}
+	return errors.Join(runErr, fmt.Errorf("finally failed: %w", finallyErr))
 }
 
 // resolveStepIsolationNames returns per-step runtime and resolver profile names when set.
@@ -330,6 +396,7 @@ func runStepPackageWorkflow(o *runStepsOpts, i, n int, step domain.Step, dockerE
 	if ns == "" {
 		return fmt.Errorf("step %s: packaged workflow step requires package: <namespace> (must match nested workflow namespace:)", step.DisplayName(i))
 	}
+	fmt.Fprintf(os.Stderr, "[dockpipe] Package workflow %q (namespace %s)\n", wfName, ns)
 	workdir := firstNonEmpty(o.envMap["DOCKPIPE_WORKDIR"], o.opts.Workdir)
 	wfPath, err := infrastructure.ResolvePackagedWorkflowConfigPath(o.repoRoot, workdir, wfName, ns)
 	if err != nil {
@@ -345,6 +412,7 @@ func runStepPackageWorkflow(o *runStepsOpts, i, n int, step domain.Step, dockerE
 	if err := domain.ValidateLoadedWorkflow(subWf); err != nil {
 		return fmt.Errorf("step %s: %w", step.DisplayName(i), err)
 	}
+	subWf.Container = mergeWorkflowContainerConfig(o.wf.Container, subWf.Container)
 	wfRoot := filepath.Dir(wfPath)
 	if err := buildWorkflowEnvInto(o.envMap, subWf, wfPath, wfRoot, o.repoRoot, o.opts); err != nil {
 		return fmt.Errorf("step %s: %w", step.DisplayName(i), err)
@@ -355,7 +423,6 @@ func runStepPackageWorkflow(o *runStepsOpts, i, n int, step domain.Step, dockerE
 			return err
 		}
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] Package workflow %q (namespace %s)\n", wfName, ns)
 	// Call runSteps directly (not runStepsAppFn) to avoid init cycle with run.go.
 	if err := runSteps(runStepsOpts{
 		wf:                    subWf,
@@ -376,6 +443,7 @@ func runStepPackageWorkflow(o *runStepsOpts, i, n int, step domain.Step, dockerE
 		resolver:              wfName,
 		templateName:          "",
 		strategyHandlesCommit: o.strategyHandlesCommit,
+		phase:                 o.phase,
 	}); err != nil {
 		return err
 	}
@@ -385,7 +453,12 @@ func runStepPackageWorkflow(o *runStepsOpts, i, n int, step domain.Step, dockerE
 
 func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) error {
 	step := o.wf.Steps[i]
-	fmt.Fprintf(os.Stderr, "[dockpipe] --- Step %d/%d ---\n", i+1, n)
+	phaseLabel := strings.TrimSpace(o.phase)
+	if phaseLabel == "" {
+		phaseLabel = "Step"
+	}
+	fmt.Fprintf(os.Stderr, "[dockpipe] --- %s %d/%d ---\n", phaseLabel, i+1, n)
+	fmt.Fprintf(os.Stderr, "[dockpipe] %s\n", stepPreparationLabel(step, i))
 
 	if err := applyStepEnvOverrides(o, step, i, o.envMap, dockerEnv); err != nil {
 		return err
@@ -457,9 +530,9 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 				policyFingerprint = strings.TrimSpace(rm.PolicyFingerprint)
 			}
 			if artifact, err := buildImageArtifactManifest(o.repoRoot, strings.TrimSpace(o.wf.Name), "", stepRunPolicyID(step, i), runOpts.Image, buildDir, buildCtx, policyFingerprint, runStepImageArtifactProvenance(o.repoRoot, step)); err == nil {
-				artifact.ArtifactState = "materialized"
-				_ = persistCachedImageArtifactForIsolate(o.projectRoot, runOpts.Image, artifact)
-				_ = persistImageArtifactIndexRecord(o.projectRoot, artifact)
+				persistMaterializedImageArtifactForRun(o.projectRoot, runOpts.Image, artifact)
+			} else {
+				fmt.Fprintf(os.Stderr, "[dockpipe] warning: image artifact manifest write skipped: %v\n", err)
 			}
 			imageDecision = "image: materialized image artifact for current run"
 		}
@@ -488,10 +561,60 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 	}
 	if rc != 0 {
 		fmt.Fprintf(os.Stderr, "[dockpipe] Step %d failed with exit code %d\n", i+1, rc)
-		os.Exit(rc)
+		return &workflowExitCodeError{Code: rc}
 	}
 	applyOutputsFile(stepOutputsAbsPath(o, step, o.envMap), o.envMap, dockerEnv, o.locked, nil, "")
 	return nil
+}
+
+func stepPreparationLabel(step domain.Step, stepIndex int) string {
+	display := step.DisplayName(stepIndex)
+	if step.UsesPackagedWorkflow() {
+		wf := strings.TrimSpace(step.WorkflowName)
+		ns := strings.TrimSpace(step.Package)
+		if ns != "" {
+			return fmt.Sprintf("Preparing packaged workflow %q (namespace %s)", wf, ns)
+		}
+		if wf != "" {
+			return fmt.Sprintf("Preparing packaged workflow %q", wf)
+		}
+		return "Preparing packaged workflow"
+	}
+	if step.IsHostStep() {
+		if script := firstStepScriptDisplay(step); script != "" {
+			return fmt.Sprintf("Preparing host step %q (%s)", display, script)
+		}
+		if strings.TrimSpace(step.CmdLine()) != "" {
+			return fmt.Sprintf("Preparing host command %q", display)
+		}
+		return fmt.Sprintf("Preparing host step %q", display)
+	}
+	if script := firstStepScriptDisplay(step); script != "" {
+		return fmt.Sprintf("Preparing container step %q (host setup: %s)", display, script)
+	}
+	return fmt.Sprintf("Preparing container step %q", display)
+}
+
+func firstStepScriptDisplay(step domain.Step) string {
+	paths := step.RunPaths()
+	if len(paths) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(paths))
+	for _, p := range paths {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		names = append(names, filepath.Base(filepath.FromSlash(p)))
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	if len(names) == 1 {
+		return names[0]
+	}
+	return fmt.Sprintf("%s +%d", names[0], len(names)-1)
 }
 
 func runParallelBatch(o *runStepsOpts, from, to, n int, dockerEnv map[string]string) error {
@@ -667,9 +790,9 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 			policyFingerprint = strings.TrimSpace(rm.PolicyFingerprint)
 		}
 		if artifact, err := buildImageArtifactManifest(o.repoRoot, strings.TrimSpace(o.wf.Name), "", stepRunPolicyID(step, idx), runOpts.Image, buildDir, buildCtx, policyFingerprint, runStepImageArtifactProvenance(o.repoRoot, step)); err == nil {
-			artifact.ArtifactState = "materialized"
-			_ = persistCachedImageArtifactForIsolate(o.projectRoot, runOpts.Image, artifact)
-			_ = persistImageArtifactIndexRecord(o.projectRoot, artifact)
+			persistMaterializedImageArtifactForRun(o.projectRoot, runOpts.Image, artifact)
+		} else {
+			fmt.Fprintf(os.Stderr, "[dockpipe] warning: image artifact manifest write skipped: %v\n", err)
 		}
 	}
 	return nil
@@ -754,7 +877,8 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 		return err
 	}
 	if rc != 0 {
-		return fmt.Errorf("parallel step %d exited with code %d", idx+1, rc)
+		fmt.Fprintf(os.Stderr, "[dockpipe] Parallel step %d failed with exit code %d\n", idx+1, rc)
+		return &workflowExitCodeError{Code: rc}
 	}
 	return nil
 }
@@ -1073,7 +1197,7 @@ func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {
 		if step.IsHostStep() {
 			// host-step run: must exec with inherited stdio — SourceHostScript sources and
 			// captures CombinedOutput(), so users would see nothing (e.g. cursor-dev step 2, vscode).
-			fmt.Fprintf(os.Stderr, "[dockpipe] Host setup\n")
+			fmt.Fprintf(os.Stderr, "[dockpipe] Host setup: %s\n", filepath.Base(p))
 			if err := runHostScriptFn(p, envSliceWithScriptContext(o.envSlice, p)); err != nil {
 				return err
 			}

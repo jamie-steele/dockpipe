@@ -1,0 +1,16 @@
+schema: 1
+kind: workflow
+name: orchestrate.stack
+version: 0.6.0
+title: DorkPipe Orchestrate Stack
+description: |
+  Package-owned orchestration wrapper that handles DorkPipe stack lifecycle around the standard
+  plan -> run workers -> merge -> verify -> approval -> apply flow. Consumer workflows can call
+  this packaged workflow instead of hand-authoring stack_up/stack_down steps.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [workflow, dorkpipe, orchestration, stack]
+depends: [dorkpipe]
+allow_clone: true
+distribution: source

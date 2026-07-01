@@ -47,6 +47,12 @@ func tryResolveResolver(repoRoot, name string) string {
 	var candidates []string
 	if !UsesBundledAssetLayout(repoRoot) {
 		candidates = append(candidates, nestedResolverProfileCandidates(repoRoot, name, ResolverCompileRootsCached(repoRoot))...)
+	} else {
+		wfRoot := WorkflowsRootDir(repoRoot)
+		candidates = append(candidates,
+			filepath.Join(wfRoot, name, "profile"),
+			filepath.Join(wfRoot, name),
+		)
 	}
 	candidates = append(candidates,
 		filepath.Join(CoreDir(repoRoot), "resolvers", name),

@@ -1,17 +1,35 @@
-# Codex template: base-dev + Node.js + OpenAI Codex CLI. For AI-assisted workflows.
+# Codex template: Node.js + Codex CLI + the worker baseline DorkPipe orchestration lanes expect.
 # Requires OPENAI_API_KEY or Codex login at run time.
 FROM node:20-slim
 
 # Do not install distro bubblewrap: Debian's /usr/bin/bwrap is often too old and lacks --argv0,
 # which Codex's sandbox passes — that breaks exec with "bwrap: Unknown option --argv0".
 # Codex falls back to its vendored bubblewrap when system bwrap is absent (see CLI warning).
+# DorkPipe orchestration invokes the resolver image directly, so bake in the same toolchain shape
+# the bundled codex workflow would otherwise add via image.packages.apt.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     bash \
+    build-essential \
     ca-certificates \
+    cargo \
     curl \
+    file \
     git \
+    golang-go \
+    iproute2 \
     jq \
+    less \
+    lsof \
+    man-db \
+    openssh-client \
+    patch \
+    procps \
+    python3 \
     ripgrep \
+    rustc \
+    unzip \
+    util-linux \
+    zip \
     && rm -rf /var/lib/apt/lists/*
 
 RUN npm install -g @openai/codex
@@ -24,7 +42,35 @@ RUN git config --system user.email "dockpipe@local" \
 RUN mkdir -p /work && chmod 777 /work
 
 COPY assets/entrypoint.sh /entrypoint.sh
-COPY packages/agent/resolvers/codex/assets/images/codex/entrypoint-wrapper.sh /codex-entrypoint.sh
+RUN cat > /codex-entrypoint.sh <<'EOF'
+#!/bin/bash
+set -euo pipefail
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:$PATH}"
+
+# Clear sudo-like markers some CLIs interpret as elevated mode.
+unset SUDO_COMMAND SUDO_USER SUDO_UID SUDO_GID 2>/dev/null || true
+
+# Some hosts still start the container as root even when the image sets USER node.
+# Codex behaves better when it runs as node in the disposable resolver image.
+if [[ -z "${DOCKPIPE_SKIP_DROP_TO_NODE:-}" ]] && [[ "$(id -u)" -eq 0 ]] && [[ -z "${DOCKPIPE_ENTRYPOINT_DROPPED:-}" ]] && id -u node &>/dev/null; then
+  export DOCKPIPE_ENTRYPOINT_DROPPED=1
+  if command -v runuser >/dev/null 2>&1; then
+    exec runuser -u node -- /bin/bash /entrypoint.sh "$@"
+  fi
+  if command -v setpriv >/dev/null 2>&1; then
+    exec setpriv --reuid="$(id -u node)" --regid="$(id -g node)" --init-groups -- /bin/bash /entrypoint.sh "$@"
+  fi
+  echo "[dockpipe] codex entrypoint: FATAL: need runuser or setpriv (util-linux) to drop root -> node" >&2
+  exit 1
+fi
+
+# Claude/Codex-style CLIs treat IS_SANDBOX=1 as disposable-sandbox mode.
+if [[ -z "${DOCKPIPE_NO_SANDBOX_ENV:-}" ]] && [[ -z "${IS_SANDBOX:-}" ]]; then
+  export IS_SANDBOX=1
+fi
+
+exec /bin/bash /entrypoint.sh "$@"
+EOF
 RUN chmod +x /entrypoint.sh /codex-entrypoint.sh
 
 WORKDIR /work

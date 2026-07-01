@@ -22,6 +22,8 @@ func DockerfileDir(repoRoot, name string) string {
 		for _, br := range BundleCompileRootsCached(repoRoot) {
 			candidates = append(candidates, filepath.Join(br, name, "assets", "images", name))
 		}
+	} else {
+		candidates = append(candidates, filepath.Join(WorkflowsRootDir(repoRoot), name, "assets", "images", name))
 	}
 	candidates = append(candidates,
 		filepath.Join(core, "resolvers", name, "assets", "images", name),

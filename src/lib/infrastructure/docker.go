@@ -110,15 +110,19 @@ var (
 
 // DockerBuild runs docker build -q -t image -f Dir/Dockerfile context.
 func DockerBuild(image, dockerfileDir, contextDir string) error {
+	dockerCmd := dockerCommandName()
 	df := filepath.Join(dockerfileDir, "Dockerfile")
 	baseName := image
 	if i := strings.LastIndex(image, ":"); i >= 0 {
 		baseName = image[:i]
 	}
 	if baseName == "dockpipe-dev" {
-		if err := execCommandFn("docker", "image", "inspect", "dockpipe-base-dev:latest").Run(); err != nil {
-			cmd := execCommandFn("docker", "build", "-q", "-t", "dockpipe-base-dev",
+		inspect := execCommandFn(dockerCmd, "image", "inspect", "dockpipe-base-dev:latest")
+		inspect.Env = dockerCommandEnv(os.Environ(), dockerCmd)
+		if err := inspect.Run(); err != nil {
+			cmd := execCommandFn(dockerCmd, "build", "-q", "-t", "dockpipe-base-dev",
 				"-f", filepath.Join(CoreDir(contextDir), "assets", "images", "base-dev", "Dockerfile"), contextDir)
+			cmd.Env = dockerBuildEnv(os.Environ(), dockerCmd)
 			cmd.Stdout = os.Stdout
 			cmd.Stderr = os.Stderr
 			if err := cmd.Run(); err != nil {
@@ -126,20 +130,75 @@ func DockerBuild(image, dockerfileDir, contextDir string) error {
 			}
 		}
 	}
-	cmd := execCommandFn("docker", "build", "-q", "-t", image, "-f", df, contextDir)
-	cmd.Env = dockerBuildEnv(os.Environ())
+	cmd := execCommandFn(dockerCmd, "build", "-q", "-t", image, "-f", df, contextDir)
+	cmd.Env = dockerBuildEnv(os.Environ(), dockerCmd)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 
-func dockerBuildEnv(env []string) []string {
+func dockerBuildEnv(env []string, dockerCmd string) []string {
+	env = dockerCommandEnv(env, dockerCmd)
 	for _, entry := range env {
-		if strings.HasPrefix(entry, "DOCKER_BUILDKIT=") {
+		if strings.HasPrefix(strings.ToUpper(entry), "DOCKER_BUILDKIT=") {
 			return env
 		}
 	}
 	return append(env, "DOCKER_BUILDKIT=1")
+}
+
+func dockerCommandEnv(env []string, dockerCmd string) []string {
+	dir := strings.TrimSpace(filepath.Dir(dockerCmd))
+	if dir == "" || dir == "." || !filepath.IsAbs(dir) {
+		return env
+	}
+	return prependEnvPathDir(env, dir)
+}
+
+func prependEnvPathDir(env []string, dir string) []string {
+	if strings.TrimSpace(dir) == "" {
+		return env
+	}
+	out := append([]string(nil), env...)
+	pathKey := "PATH"
+	pathIdx := -1
+	for i, entry := range out {
+		key, value, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		if strings.EqualFold(key, "PATH") {
+			pathKey = key
+			pathIdx = i
+			if pathContainsDir(value, dir) {
+				return out
+			}
+			out[i] = pathKey + "=" + dir + string(os.PathListSeparator) + value
+			return out
+		}
+	}
+	if pathIdx < 0 {
+		out = append(out, pathKey+"="+dir)
+	}
+	return out
+}
+
+func pathContainsDir(pathValue, dir string) bool {
+	want := normalizePathForCompare(dir)
+	for _, part := range filepath.SplitList(pathValue) {
+		if normalizePathForCompare(part) == want {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizePathForCompare(path string) string {
+	cleaned := filepath.Clean(strings.TrimSpace(path))
+	if runtime.GOOS == "windows" {
+		cleaned = strings.ToLower(cleaned)
+	}
+	return cleaned
 }
 
 // DockerImageExists reports whether a local docker image reference currently resolves.
@@ -148,7 +207,10 @@ func DockerImageExists(image string) (bool, error) {
 	if image == "" {
 		return false, fmt.Errorf("image is empty")
 	}
-	err := execCommandFn("docker", "image", "inspect", image).Run()
+	dockerCmd := dockerCommandName()
+	cmd := execCommandFn(dockerCmd, "image", "inspect", image)
+	cmd.Env = dockerCommandEnv(os.Environ(), dockerCmd)
+	err := cmd.Run()
 	if err == nil {
 		return true, nil
 	}
@@ -164,7 +226,9 @@ func DockerPull(image string) error {
 	if image == "" {
 		return fmt.Errorf("image is empty")
 	}
-	cmd := execCommandFn("docker", "pull", image)
+	dockerCmd := dockerCommandName()
+	cmd := execCommandFn(dockerCmd, "pull", image)
+	cmd.Env = dockerCommandEnv(os.Environ(), dockerCmd)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -375,7 +439,10 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 			}
 		}
 		fmt.Fprintf(stderr, "  Removing volume '%s'...\n", o.DataVolume)
-		_ = execCommandFn("docker", "volume", "rm", o.DataVolume).Run()
+		dockerCmd := dockerCommandName()
+		cmd := execCommandFn(dockerCmd, "volume", "rm", o.DataVolume)
+		cmd.Env = dockerCommandEnv(os.Environ(), dockerCmd)
+		_ = cmd.Run()
 		fmt.Fprintln(stderr, "  Done. Starting with a fresh volume.")
 	}
 
@@ -400,7 +467,9 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		)
 		// POSIX chown inside the container is meaningless for host uid/gid on Windows.
 		if runtime.GOOS != "windows" {
-			ch := execCommandFn("docker", "run", "--rm", "-v", dataDir+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
+			dockerCmd := dockerCommandName()
+			ch := execCommandFn(dockerCmd, "run", "--rm", "-v", dataDir+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
+			ch.Env = dockerCommandEnv(os.Environ(), dockerCmd)
 			_ = ch.Run()
 		}
 	} else if o.DataVolume != "" {
@@ -410,7 +479,9 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 			"-e", "HOME=/dockpipe-data",
 		)
 		if runtime.GOOS != "windows" {
-			ch := execCommandFn("docker", "run", "--rm", "-v", o.DataVolume+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
+			dockerCmd := dockerCommandName()
+			ch := execCommandFn(dockerCmd, "run", "--rm", "-v", o.DataVolume+":/dockpipe-data", "-u", "0", o.Image, "sh", "-c", chown)
+			ch.Env = dockerCommandEnv(os.Environ(), dockerCmd)
 			_ = ch.Run()
 		}
 	}
@@ -436,7 +507,9 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		args = append(args, "-d", "--rm")
 		args = append(args, o.Image)
 		args = append(args, argv...)
-		cmd := execCommandFn("docker", args...)
+		dockerCmd := dockerCommandName()
+		cmd := execCommandFn(dockerCmd, args...)
+		cmd.Env = dockerCommandEnv(os.Environ(), dockerCmd)
 		cmd.Stdin = stdin
 		var cidBuf bytes.Buffer
 		cmd.Stdout = io.MultiWriter(stdoutOut, &cidBuf)
@@ -471,12 +544,17 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	fmt.Fprintln(stderr, "[dockpipe] Starting container…")
 
 	start := timeNowDockerFn()
-	cmd := execCommandFn("docker", args...)
+	dockerCmd := dockerCommandName()
+	cmd := execCommandFn(dockerCmd, args...)
+	cmd.Env = dockerCommandEnv(os.Environ(), dockerCmd)
 	cmd.Stdin = stdin
 	cmd.Stdout = stdoutOut
 	var runErrBuf bytes.Buffer
 	cmd.Stderr = io.MultiWriter(stderr, &runErrBuf)
-	err := cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return 1, err
+	}
+	err := waitCommandWithSignalForward(cmd)
 	rc := 0
 	if err != nil {
 		if x, ok := err.(*exec.ExitError); ok {
@@ -499,7 +577,9 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 			fmt.Fprintf(stderr, "  Container exited quickly (%s). Full container output:\n", elapsed.Truncate(time.Second))
 		}
 		fmt.Fprintln(stderr, "  ---")
-		logs := execCommandFn("docker", "logs", cid)
+		dockerCmd := dockerCommandName()
+		logs := execCommandFn(dockerCmd, "logs", cid)
+		logs.Env = dockerCommandEnv(os.Environ(), dockerCmd)
 		logOut, _ := logs.CombinedOutput()
 		for _, line := range strings.Split(string(logOut), "\n") {
 			if line != "" {
@@ -508,7 +588,12 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		}
 		fmt.Fprintln(stderr, "  ---")
 	}
-	_ = execCommandFn("docker", "rm", cid).Run()
+	{
+		dockerCmd := dockerCommandName()
+		rm := execCommandFn(dockerCmd, "rm", cid)
+		rm.Env = dockerCommandEnv(os.Environ(), dockerCmd)
+		_ = rm.Run()
+	}
 
 	if o.CommitOnHost {
 		if rc != 0 {

@@ -19,7 +19,7 @@ task, result, merge, and verifier artifacts.
 
 ## Stack lifecycle
 
-The workflow brings up the DorkPipe dev stack before planning and tears it down after approval:
+The workflow brings up the DorkPipe dev stack before planning and tears it down from `finally:`:
 
 1. Postgres + pgvector for persistent orchestration memory
 2. Ollama for local model lanes
@@ -28,9 +28,9 @@ The workflow brings up the DorkPipe dev stack before planning and tears it down 
 5. orchestration planning/workers/merge/verify/approval/apply
 6. stack down
 
-By default, this workflow leaves the sidecars running after approval so iterative CLI/app testing can
-reuse the same reasoning stack. Override `DORKPIPE_DEV_STACK_AUTODOWN=1` when you want the workflow
-to stop the stack at the end. The default local endpoints are:
+By default, this workflow tears the sidecars down at the end like a normal one-shot DockPipe run.
+Override `DORKPIPE_DEV_STACK_AUTODOWN=0` when you want iterative CLI/app testing to reuse the same
+reasoning stack between runs. The default local endpoints are:
 
 - `MCP_HTTP_URL=http://127.0.0.1:8766/mcp`
 - `OLLAMA_HOST=http://127.0.0.1:11434`
