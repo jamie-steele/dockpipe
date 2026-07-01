@@ -41,13 +41,16 @@ cleanup() {
 }
 trap cleanup SIGTERM SIGHUP SIGINT
 
-# No action: run command in foreground so it keeps the TTY (required for interactive CLIs).
+# No action: run command in foreground. Interactive shell wrapping is opt-in; non-interactive
+# workflow workers must not get bash job-control noise or inherited stdin behavior.
 # With action: run command in background, wait, then run the action script.
 if [[ -z "${DOCKPIPE_ACTION:-}" ]] || [[ ! -f "${DOCKPIPE_ACTION:-}" ]]; then
   if [[ $# -gt 0 ]]; then
-    bash -i -c 'exec "$@"' _ "$@" || true
-    _rc=$?
-    exit "$_rc"
+    if [[ "${DOCKPIPE_INTERACTIVE_ENTRYPOINT:-auto}" =~ ^(1|true|yes|on)$ ]] || { [[ "${DOCKPIPE_INTERACTIVE_ENTRYPOINT:-auto}" == "auto" ]] && [[ -t 0 && -t 1 ]]; }; then
+      bash -i -c 'exec "$@"' _ "$@"
+    else
+      exec "$@"
+    fi
   else
     if [[ -n "${DOCKPIPE_CMD:-}" ]]; then
       exec bash -c "${DOCKPIPE_CMD}"

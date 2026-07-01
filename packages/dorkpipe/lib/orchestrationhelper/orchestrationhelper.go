@@ -171,6 +171,11 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("usage: orchestrate-helper merge-plan-env <plan.json>")
 		}
 		return emitMergePlanEnv(args[1], stdout)
+	case "merge-build-result":
+		if len(args) < 3 {
+			return errors.New("usage: orchestrate-helper merge-build-result <out.json> <main-result.json>... [--planning <planning-result.json>...]")
+		}
+		return buildMergeResult(args[1], args[2:])
 	case "merge-render-final":
 		if len(args) != 4 {
 			return errors.New("usage: orchestrate-helper merge-render-final <merge-result.json> <final.md> <tasks-dir>")
@@ -411,6 +416,98 @@ func emitMergePlanEnv(planPath string, stdout io.Writer) error {
 	fmt.Fprintf(stdout, "MERGE_TITLE=%s\n", shellQuote(fallbackString(stringValue(merge["title"]), "DorkPipe Orchestration Synthesis")))
 	fmt.Fprintf(stdout, "MERGE_SUMMARY_POINTS_JSON=%s\n", shellQuote(mustJSON(merge["summary_points"], []any{})))
 	return nil
+}
+
+func buildMergeResult(outPath string, args []string) error {
+	var mainPaths []string
+	var planningPaths []string
+	planning := false
+	for _, arg := range args {
+		if arg == "--planning" {
+			planning = true
+			continue
+		}
+		if strings.TrimSpace(arg) == "" {
+			continue
+		}
+		if planning {
+			planningPaths = append(planningPaths, arg)
+		} else {
+			mainPaths = append(mainPaths, arg)
+		}
+	}
+	mainTasks := readMergeTaskResults(mainPaths)
+	planningTasks := readMergeTaskResults(planningPaths)
+	payload := map[string]any{
+		"status":                        "ok",
+		"tasks":                         mainTasks,
+		"average_confidence":            averageMergeConfidence(mainTasks),
+		"total_estimated_input_tokens":  sumMergeNumber(mainTasks, "estimated_input_tokens"),
+		"total_estimated_output_tokens": sumMergeNumber(mainTasks, "estimated_output_tokens"),
+		"total_estimated_task_tokens":   sumMergeNumber(mainTasks, "estimated_total_tokens"),
+		"total_duration_ms":             sumMergeNumber(mainTasks, "duration_ms"),
+		"max_task_duration_ms":          maxMergeNumber(mainTasks, "duration_ms"),
+	}
+	if len(planningTasks) > 0 {
+		payload["planning_tasks"] = planningTasks
+	}
+	return writeJSONFile(outPath, payload)
+}
+
+func readMergeTaskResults(paths []string) []map[string]any {
+	out := make([]map[string]any, 0, len(paths))
+	for _, path := range paths {
+		raw := readJSONMap(path)
+		if len(raw) == 0 {
+			continue
+		}
+		out = append(out, map[string]any{
+			"task_id":                 stringValue(raw["task_id"]),
+			"base_task_id":            stringValue(raw["base_task_id"]),
+			"comparison":              mapValue(raw["comparison"]),
+			"provider_actual":         stringValue(raw["provider_actual"]),
+			"used_live_model":         boolAny(raw["used_live_model"]),
+			"budget_halt":             boolAny(raw["budget_halt"]),
+			"estimated_input_tokens":  intAny(raw["estimated_input_tokens"]),
+			"estimated_output_tokens": intAny(raw["estimated_output_tokens"]),
+			"estimated_total_tokens":  intAny(raw["estimated_total_tokens"]),
+			"started_at":              stringValue(raw["started_at"]),
+			"finished_at":             stringValue(raw["finished_at"]),
+			"duration_ms":             intAny(raw["duration_ms"]),
+			"summary":                 stringValue(raw["summary"]),
+			"confidence":              floatAny(raw["confidence"]),
+		})
+	}
+	return out
+}
+
+func averageMergeConfidence(tasks []map[string]any) float64 {
+	if len(tasks) == 0 {
+		return 0
+	}
+	var total float64
+	for _, task := range tasks {
+		total += floatAny(task["confidence"])
+	}
+	return total / float64(len(tasks))
+}
+
+func sumMergeNumber(tasks []map[string]any, key string) int {
+	total := 0
+	for _, task := range tasks {
+		total += intAny(task[key])
+	}
+	return total
+}
+
+func maxMergeNumber(tasks []map[string]any, key string) int {
+	max := 0
+	for _, task := range tasks {
+		if value := intAny(task[key]); value > max {
+			max = value
+		}
+	}
+	return max
 }
 
 func renderMergeFinal(resultPath, destPath, tasksDir string, env map[string]string) error {
@@ -761,6 +858,7 @@ func parseContainerMountSpec(spec string) (string, string, bool) {
 
 func cleanGuestPath(path string) string {
 	path = strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
+	path = normalizeGitBashGuestPath(path)
 	if path == "" || !strings.HasPrefix(path, "/") {
 		return ""
 	}
@@ -772,6 +870,24 @@ func cleanGuestPath(path string) string {
 		cleaned = "/" + cleaned
 	}
 	return cleaned
+}
+
+func normalizeGitBashGuestPath(path string) string {
+	lower := strings.ToLower(path)
+	for _, marker := range []string{":/program files/git/", ":/program files (x86)/git/"} {
+		if idx := strings.Index(lower, marker); idx > 0 && idx == 1 {
+			return "/" + path[idx+len(marker):]
+		}
+	}
+	for _, marker := range []string{"/program files/git/", "/program files (x86)/git/"} {
+		if strings.HasPrefix(lower, marker) {
+			return "/" + path[len(marker):]
+		}
+		if len(path) >= 3 && path[0] == '/' && path[2] == '/' && strings.HasPrefix(lower[2:], marker) {
+			return "/" + path[2+len(marker):]
+		}
+	}
+	return path
 }
 
 func guestPathContains(root, target string) bool {
@@ -2244,12 +2360,41 @@ func intFromString(value string, fallback int) int {
 	return parsed
 }
 
+func intAny(v any) int {
+	switch typed := v.(type) {
+	case int:
+		return typed
+	case int64:
+		return int(typed)
+	case float64:
+		return int(typed)
+	case json.Number:
+		parsed, err := typed.Int64()
+		if err == nil {
+			return int(parsed)
+		}
+		asFloat, err := typed.Float64()
+		if err == nil {
+			return int(asFloat)
+		}
+		return 0
+	case string:
+		return intFromString(typed, 0)
+	default:
+		return 0
+	}
+}
+
 func floatFromString(value string, fallback float64) float64 {
 	parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
 	if err != nil {
 		return fallback
 	}
 	return parsed
+}
+
+func floatAny(v any) float64 {
+	return floatDefault(v, 0)
 }
 
 func floatDefault(v any, fallback float64) float64 {

@@ -287,7 +287,14 @@ dorkpipe_orchestrate_container_workflow_mounts() {
 }
 
 dorkpipe_orchestrate_worker_cwd() {
-  local cwd="${DORKPIPE_ORCH_WORKER_CWD:-${DORKPIPE_ORCH_TARGET_GUEST_PATH:-}}"
+  local provider="${1:-}"
+  local upper provider_override cwd
+  if [[ -n "${provider}" ]]; then
+    upper="$(printf '%s' "${provider}" | tr '[:lower:]' '[:upper:]')"
+    provider_override="DORKPIPE_ORCH_${upper}_WORKER_CWD"
+  fi
+  cwd="${provider_override:+${!provider_override:-}}"
+  cwd="${cwd:-${DORKPIPE_ORCH_WORKER_CWD:-${DORKPIPE_ORCH_TARGET_GUEST_PATH:-}}}"
   cwd="${cwd#"${cwd%%[![:space:]]*}"}"
   cwd="${cwd%"${cwd##*[![:space:]]}"}"
   # Git Bash converts env values like /UniteHere to its install root when launching
@@ -371,7 +378,7 @@ dorkpipe_orchestrate_run_container_worker() {
   local dockpipe_bin auth_mount raw_response_path worker_cwd
   dockpipe_bin="$(dorkpipe_orchestrate_dockpipe_bin)" || return 1
   raw_response_path="${response_path}.raw"
-  worker_cwd="$(dorkpipe_orchestrate_worker_cwd)"
+  worker_cwd="$(dorkpipe_orchestrate_worker_cwd "${provider}")"
   dorkpipe_orchestrate_auth_state_hint "${provider}" || return 1
 
   local args=(
@@ -404,7 +411,7 @@ dorkpipe_orchestrate_run_container_worker() {
   case "${provider}" in
     codex)
       MSYS2_ARG_CONV_EXCL='*' "${dockpipe_bin}" "${args[@]}" -- \
-        bash -lc '
+        bash -c '
           set -euo pipefail
           export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:$PATH}"
           if [[ -n "${3:-}" ]]; then
@@ -425,15 +432,15 @@ dorkpipe_orchestrate_run_container_worker() {
             chmod -R u+rwX /home/node/.codex/skills 2>/dev/null || true
           fi
           if [[ -n "${2:-}" && "${2:-}" != "cli" ]]; then
-            codex exec --dangerously-bypass-approvals-and-sandbox --model "$2" "$1"
+            codex exec --dangerously-bypass-approvals-and-sandbox --model "$2" "$1" </dev/null
           else
-            codex exec --dangerously-bypass-approvals-and-sandbox "$1"
+            codex exec --dangerously-bypass-approvals-and-sandbox "$1" </dev/null
           fi
         ' _ "$(cat "${prompt_path}")" "${selected_model}" "${worker_cwd}" > "${raw_response_path}"
       ;;
     claude)
       MSYS2_ARG_CONV_EXCL='*' "${dockpipe_bin}" "${args[@]}" -- \
-        bash -lc '
+        bash -c '
           set -euo pipefail
           export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:$PATH}"
           if [[ -n "${3:-}" ]]; then
@@ -468,9 +475,9 @@ dorkpipe_orchestrate_run_container_worker() {
             chmod -R u+rwX /home/node/.claude/skills 2>/dev/null || true
           fi
           if [[ -n "${2:-}" && "${2:-}" != "cli" ]]; then
-            claude --dangerously-skip-permissions --model "$2" -p "$1"
+            claude --dangerously-skip-permissions --model "$2" -p "$1" </dev/null
           else
-            claude --dangerously-skip-permissions -p "$1"
+            claude --dangerously-skip-permissions -p "$1" </dev/null
           fi
         ' _ "$(cat "${prompt_path}")" "${selected_model}" "${worker_cwd}" > "${raw_response_path}"
       ;;
@@ -504,10 +511,20 @@ dorkpipe_orchestrate_read_provider_usage_number() {
 
 dorkpipe_orchestrate_with_cloud_usage_lock() {
   local lock_dir="${DORKPIPE_ORCH_CLOUD_USAGE_JSON}.lock"
-  local attempts=0
+  local attempts=0 stale_seconds now lock_mtime
+  stale_seconds="${DORKPIPE_ORCH_CLOUD_USAGE_LOCK_STALE_SECONDS:-30}"
   local status=0
   until mkdir "${lock_dir}" 2>/dev/null; do
     attempts="$((attempts + 1))"
+    if [[ -d "${lock_dir}" ]]; then
+      now="$(date +%s)"
+      lock_mtime="$(stat -c %Y "${lock_dir}" 2>/dev/null || printf '0')"
+      if [[ "${lock_mtime}" =~ ^[0-9]+$ ]] && (( lock_mtime > 0 )) && (( now - lock_mtime > stale_seconds )); then
+        echo "removing stale cloud usage lock: ${lock_dir}" >&2
+        rmdir "${lock_dir}" 2>/dev/null || true
+        continue
+      fi
+    fi
     if (( attempts > 500 )); then
       echo "timed out waiting for cloud usage lock: ${lock_dir}" >&2
       return 1

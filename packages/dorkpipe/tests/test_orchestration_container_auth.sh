@@ -49,12 +49,21 @@ if [[ "${converted}" != "/c/Users/Jamie/.codex" ]]; then
   exit 1
 fi
 export DORKPIPE_ORCH_WORKER_CWD='C:/Program Files/Git/UniteHere'
-converted="$(dorkpipe_orchestrate_worker_cwd)"
+converted="$(dorkpipe_orchestrate_worker_cwd codex)"
 if [[ "${converted}" != "/UniteHere" ]]; then
   echo "expected Git Bash converted worker cwd to normalize to /UniteHere, got: ${converted}" >&2
   exit 1
 fi
 unset DORKPIPE_ORCH_WORKER_CWD
+export DORKPIPE_ORCH_WORKER_CWD="/UniteHere"
+export DORKPIPE_ORCH_CLAUDE_WORKER_CWD="/work"
+converted="$(dorkpipe_orchestrate_worker_cwd claude)"
+if [[ "${converted}" != "/work" ]]; then
+  echo "expected provider-specific Claude worker cwd override, got: ${converted}" >&2
+  exit 1
+fi
+unset DORKPIPE_ORCH_WORKER_CWD
+unset DORKPIPE_ORCH_CLAUDE_WORKER_CWD
 OS="${saved_os}"
 OSTYPE="${saved_ostype}"
 MSYSTEM="${saved_msystem}"

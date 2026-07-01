@@ -29,29 +29,11 @@ fi
 
 eval "$("$(dorkpipe_orchestrate_helper_bin)" merge-plan-env "${DORKPIPE_ORCH_PLAN_JSON}")"
 
-if command -v jq >/dev/null 2>&1; then
-  jq -s '{
-    status:"ok",
-    tasks: map({task_id, base_task_id, comparison, provider_actual, used_live_model, budget_halt, estimated_input_tokens, estimated_output_tokens, estimated_total_tokens, started_at, finished_at, duration_ms, summary, confidence}),
-    average_confidence: ((map(.confidence) | add) / length),
-    total_estimated_input_tokens: (map(.estimated_input_tokens // 0) | add),
-    total_estimated_output_tokens: (map(.estimated_output_tokens // 0) | add),
-    total_estimated_task_tokens: (map(.estimated_total_tokens // 0) | add),
-    total_duration_ms: (map(.duration_ms // 0) | add),
-    max_task_duration_ms: (map(.duration_ms // 0) | max)
-  }' "${main_result_paths[@]}" > "${DORKPIPE_ORCH_MERGE_DIR}/result.json"
-  if [[ "${#planning_result_paths[@]}" -gt 0 ]]; then
-    tmp_result="${DORKPIPE_ORCH_MERGE_DIR}/result.tmp.json"
-    jq -s --slurpfile planning <(jq -s 'map({task_id, base_task_id, provider_actual, used_live_model, estimated_input_tokens, estimated_output_tokens, estimated_total_tokens, started_at, finished_at, duration_ms, summary, confidence})' "${planning_result_paths[@]}") \
-      '.[0] + {planning_tasks: ($planning[0] // [])}' \
-      "${DORKPIPE_ORCH_MERGE_DIR}/result.json" > "${tmp_result}"
-    mv "${tmp_result}" "${DORKPIPE_ORCH_MERGE_DIR}/result.json"
-  fi
-else
-  cat > "${DORKPIPE_ORCH_MERGE_DIR}/result.json" <<EOF
-{"status":"ok","tasks":["repo_shape","package_contracts","safety_model"],"average_confidence":0.6}
-EOF
-fi
+"$(dorkpipe_orchestrate_helper_bin)" merge-build-result \
+  "${DORKPIPE_ORCH_MERGE_DIR}/result.json" \
+  "${main_result_paths[@]}" \
+  --planning \
+  "${planning_result_paths[@]}"
 
 "$(dorkpipe_orchestrate_helper_bin)" merge-render-final "${DORKPIPE_ORCH_MERGE_DIR}/result.json" "${DORKPIPE_ORCH_MERGE_DIR}/final.md" "${DORKPIPE_ORCH_TASKS_DIR}"
 

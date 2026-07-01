@@ -172,6 +172,25 @@ func TestResolveApplyTargetPathMapsAllowedGuestMount(t *testing.T) {
 	}
 }
 
+func TestResolveApplyTargetPathAllowsGitBashConvertedGuestRoot(t *testing.T) {
+	root := t.TempDir()
+	uniteHere := filepath.Join(root, "UniteHere")
+	t.Setenv("DOCKPIPE_CONTAINER_MOUNTS", uniteHere+":/UniteHere:ro")
+	t.Setenv("DORKPIPE_ORCH_APPLY_ALLOWED_GUEST_ROOTS", "C:/Program Files/Git/UniteHere")
+
+	gotPath, gotRoot, err := resolveApplyTargetPath(root, "/UniteHere/docs/agents/plans/brain.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPath := filepath.Join(uniteHere, "docs", "agents", "plans", "brain.md")
+	if gotPath != wantPath {
+		t.Fatalf("target path = %q want %q", gotPath, wantPath)
+	}
+	if gotRoot != uniteHere {
+		t.Fatalf("target root = %q want %q", gotRoot, uniteHere)
+	}
+}
+
 func TestResolveApplyTargetPathRejectsDisallowedGuestMount(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("DOCKPIPE_CONTAINER_MOUNTS", filepath.Join(root, "UniteHere")+":/UniteHere:ro\n"+filepath.Join(root, "DesignNotes")+":/DesignNotes:ro")
@@ -179,5 +198,37 @@ func TestResolveApplyTargetPathRejectsDisallowedGuestMount(t *testing.T) {
 
 	if _, _, err := resolveApplyTargetPath(root, "/DesignNotes/planning/generated.md"); err == nil {
 		t.Fatal("expected disallowed guest mount apply target to fail")
+	}
+}
+
+func TestBuildMergeResultUsesTaskResultObjects(t *testing.T) {
+	dir := t.TempDir()
+	mainPath := filepath.Join(dir, "main.json")
+	planPath := filepath.Join(dir, "planning.json")
+	outPath := filepath.Join(dir, "merge.json")
+	if err := os.WriteFile(mainPath, []byte(`{"task_id":"codex_brain_plan","provider_actual":"codex","summary":"done","confidence":0.8,"estimated_input_tokens":10,"estimated_output_tokens":5,"estimated_total_tokens":15,"duration_ms":100}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(planPath, []byte(`{"task_id":"repo_knowledge","provider_actual":"ollama","summary":"planned","confidence":0.6,"estimated_input_tokens":4,"estimated_output_tokens":2,"estimated_total_tokens":6,"duration_ms":20}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := buildMergeResult(outPath, []string{mainPath, "--planning", planPath}); err != nil {
+		t.Fatal(err)
+	}
+	result := readJSONMap(outPath)
+	tasks := listValue(result["tasks"])
+	if len(tasks) != 1 {
+		t.Fatalf("tasks length = %d want 1", len(tasks))
+	}
+	task := mapValue(tasks[0])
+	if got := stringValue(task["task_id"]); got != "codex_brain_plan" {
+		t.Fatalf("task_id = %q", got)
+	}
+	if got := intAny(result["total_estimated_task_tokens"]); got != 15 {
+		t.Fatalf("total_estimated_task_tokens = %d", got)
+	}
+	planning := listValue(result["planning_tasks"])
+	if len(planning) != 1 {
+		t.Fatalf("planning length = %d want 1", len(planning))
 	}
 }
