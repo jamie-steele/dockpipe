@@ -151,3 +151,33 @@ func TestResolveDockpipeCommandFallsBackToRepoLocalBinary(t *testing.T) {
 		t.Fatalf("resolveDockpipeCommand() = %q want %q", got, want)
 	}
 }
+
+func TestResolveApplyTargetPathMapsAllowedGuestMount(t *testing.T) {
+	root := t.TempDir()
+	uniteHere := filepath.Join(root, "UniteHere")
+	designNotes := filepath.Join(root, "DesignNotes")
+	t.Setenv("DOCKPIPE_CONTAINER_MOUNTS", uniteHere+":/UniteHere:ro\n"+designNotes+":/DesignNotes:ro")
+	t.Setenv("DORKPIPE_ORCH_APPLY_ALLOWED_GUEST_ROOTS", "/UniteHere")
+
+	gotPath, gotRoot, err := resolveApplyTargetPath(root, "/UniteHere/docs/agents/plans/brain.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPath := filepath.Join(uniteHere, "docs", "agents", "plans", "brain.md")
+	if gotPath != wantPath {
+		t.Fatalf("target path = %q want %q", gotPath, wantPath)
+	}
+	if gotRoot != uniteHere {
+		t.Fatalf("target root = %q want %q", gotRoot, uniteHere)
+	}
+}
+
+func TestResolveApplyTargetPathRejectsDisallowedGuestMount(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DOCKPIPE_CONTAINER_MOUNTS", filepath.Join(root, "UniteHere")+":/UniteHere:ro\n"+filepath.Join(root, "DesignNotes")+":/DesignNotes:ro")
+	t.Setenv("DORKPIPE_ORCH_APPLY_ALLOWED_GUEST_ROOTS", "/UniteHere")
+
+	if _, _, err := resolveApplyTargetPath(root, "/DesignNotes/planning/generated.md"); err == nil {
+		t.Fatal("expected disallowed guest mount apply target to fail")
+	}
+}

@@ -615,14 +615,14 @@ func applyResults(rootPath, artifactRootPath, planPath, approvalPath, resultPath
 		if err != nil {
 			return fail("apply source escapes artifact root: " + source)
 		}
-		targetPath, err := filepath.Abs(filepath.Join(root, target))
+		targetPath, targetRoot, err := resolveApplyTargetPath(root, target)
 		if err != nil {
-			return fail("apply target escapes worktree: " + target)
+			return fail(err.Error())
 		}
 		if !withinRoot(artifactRoot, sourcePath) {
 			return fail("apply source escapes artifact root: " + source)
 		}
-		if !withinRoot(root, targetPath) {
+		if !withinRoot(targetRoot, targetPath) {
 			return fail("apply target escapes worktree: " + target)
 		}
 		info, err := os.Stat(sourcePath)
@@ -655,6 +655,130 @@ func applyResults(rootPath, artifactRootPath, planPath, approvalPath, resultPath
 		"status":  "applied",
 		"applied": applied,
 	})
+}
+
+func resolveApplyTargetPath(root, target string) (string, string, error) {
+	if strings.TrimSpace(target) == "" {
+		return "", "", errors.New("apply target is empty")
+	}
+	if strings.HasPrefix(filepath.ToSlash(target), "/") {
+		if !guestPathAllowedByPolicy(target, os.Getenv("DORKPIPE_ORCH_APPLY_ALLOWED_GUEST_ROOTS")) {
+			return "", "", fmt.Errorf("apply target is not allowed by DORKPIPE_ORCH_APPLY_ALLOWED_GUEST_ROOTS: %s", target)
+		}
+		hostPath, hostRoot, ok := resolveGuestMountTarget(target, os.Getenv("DOCKPIPE_CONTAINER_MOUNTS"))
+		if !ok {
+			return "", "", fmt.Errorf("apply target uses undeclared guest path: %s", target)
+		}
+		return hostPath, hostRoot, nil
+	}
+	targetPath, err := filepath.Abs(filepath.Join(root, target))
+	if err != nil {
+		return "", "", fmt.Errorf("apply target escapes worktree: %s", target)
+	}
+	return targetPath, root, nil
+}
+
+func guestPathAllowedByPolicy(target, allowedRoots string) bool {
+	allowedRoots = strings.TrimSpace(allowedRoots)
+	if allowedRoots == "" {
+		return true
+	}
+	target = cleanGuestPath(target)
+	if target == "" {
+		return false
+	}
+	for _, raw := range strings.FieldsFunc(allowedRoots, func(r rune) bool {
+		return r == ',' || r == ';' || r == '\n' || r == '\r' || r == '\t'
+	}) {
+		root := cleanGuestPath(raw)
+		if root != "" && guestPathContains(root, target) {
+			return true
+		}
+	}
+	return false
+}
+
+func resolveGuestMountTarget(target, mountEnv string) (string, string, bool) {
+	target = cleanGuestPath(target)
+	if target == "" {
+		return "", "", false
+	}
+	bestGuest := ""
+	bestHost := ""
+	for _, line := range strings.Split(mountEnv, "\n") {
+		host, guest, ok := parseContainerMountSpec(line)
+		if !ok {
+			continue
+		}
+		guest = cleanGuestPath(guest)
+		if guest == "" || !guestPathContains(guest, target) {
+			continue
+		}
+		if len(guest) > len(bestGuest) {
+			bestGuest = guest
+			bestHost = host
+		}
+	}
+	if bestHost == "" {
+		return "", "", false
+	}
+	hostRoot, err := filepath.Abs(bestHost)
+	if err != nil {
+		return "", "", false
+	}
+	rel := strings.TrimPrefix(target, bestGuest)
+	rel = strings.TrimPrefix(rel, "/")
+	targetPath, err := filepath.Abs(filepath.Join(hostRoot, filepath.FromSlash(rel)))
+	if err != nil || !withinRoot(hostRoot, targetPath) {
+		return "", "", false
+	}
+	return targetPath, hostRoot, true
+}
+
+func parseContainerMountSpec(spec string) (string, string, bool) {
+	spec = strings.TrimSpace(spec)
+	if spec == "" {
+		return "", "", false
+	}
+	base := spec
+	if idx := strings.LastIndex(base, ":"); idx >= 0 {
+		suffix := strings.ToLower(strings.TrimSpace(base[idx+1:]))
+		if suffix == "ro" || suffix == "rw" {
+			base = base[:idx]
+		}
+	}
+	idx := strings.LastIndex(base, ":")
+	if idx <= 0 || idx >= len(base)-1 {
+		return "", "", false
+	}
+	host := strings.TrimSpace(base[:idx])
+	guest := strings.TrimSpace(base[idx+1:])
+	if host == "" || guest == "" || !strings.HasPrefix(filepath.ToSlash(guest), "/") {
+		return "", "", false
+	}
+	return host, guest, true
+}
+
+func cleanGuestPath(path string) string {
+	path = strings.TrimSpace(strings.ReplaceAll(path, "\\", "/"))
+	if path == "" || !strings.HasPrefix(path, "/") {
+		return ""
+	}
+	cleaned := filepath.ToSlash(filepath.Clean(path))
+	if cleaned == "." {
+		return ""
+	}
+	if !strings.HasPrefix(cleaned, "/") {
+		cleaned = "/" + cleaned
+	}
+	return cleaned
+}
+
+func guestPathContains(root, target string) bool {
+	if root == target {
+		return true
+	}
+	return strings.HasPrefix(target, strings.TrimRight(root, "/")+"/")
 }
 
 func planOrchestration(workflowPath, stepID string, env map[string]string) error {

@@ -66,7 +66,9 @@ export DOCKPIPE_CONTAINER_MOUNTS=$'C:\\Source\\UniteHere:/UniteHere:ro\nC:\\docs
 export DORKPIPE_ORCH_WORKER_CWD="/UniteHere"
 export PATH="$tmp:$PATH"
 mkdir -p "$HOME/.codex"
+mkdir -p "$HOME/.codex/skills/dorkpipe-package-authoring"
 printf '{"auth_mode":"chatgpt"}\n' > "$HOME/.codex/auth.json"
+printf '# skill\n' > "$HOME/.codex/skills/dorkpipe-package-authoring/SKILL.md"
 
 prompt="$tmp/prompt.md"
 response="$tmp/response.md"
@@ -79,6 +81,7 @@ grep -qx -- "codex" "$fake_args"
 grep -qx -- "--no-data" "$fake_args"
 grep -qx -- "--mount" "$fake_args"
 grep -qx -- "$HOME/.codex:/dockpipe-auth/codex:ro" "$fake_args"
+grep -qx -- "$HOME/.codex/skills:/dockpipe-auth/codex-skills:ro" "$fake_args"
 grep -qx -- "/c/Source/UniteHere:/UniteHere:ro" "$fake_args"
 grep -qx -- "/c/docs/UniteHere/Design Notes:/DesignNotes:ro" "$fake_args"
 grep -qx -- "/UniteHere" "$fake_args"
@@ -86,5 +89,14 @@ grep -qx -- "codex" "$fake_args"
 grep -q -- "codex exec" "$fake_args"
 grep -q -- "--dangerously-bypass-approvals-and-sandbox" "$fake_args"
 grep -qx -- "container worker ok" "$response"
+
+export DORKPIPE_ORCH_CONTAINER_SKILLS="never"
+rm -f "$fake_args" "$response"
+dorkpipe_orchestrate_run_container_worker codex "$prompt" "$response"
+if grep -qx -- "$HOME/.codex/skills:/dockpipe-auth/codex-skills:ro" "$fake_args"; then
+  echo "expected DORKPIPE_ORCH_CONTAINER_SKILLS=never to skip skills mount" >&2
+  exit 1
+fi
+unset DORKPIPE_ORCH_CONTAINER_SKILLS
 
 echo "test_orchestration_container_auth OK"

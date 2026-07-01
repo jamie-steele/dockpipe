@@ -48,6 +48,7 @@ dorkpipe_orchestrate_init() {
   export DORKPIPE_ORCH_DEPENDENCY_CONTEXT_TOTAL_MAX_BYTES="${DORKPIPE_ORCH_DEPENDENCY_CONTEXT_TOTAL_MAX_BYTES:-12000}"
   export DORKPIPE_ORCH_FANOUT_PROVIDER="${DORKPIPE_ORCH_FANOUT_PROVIDER:-}"
   export DORKPIPE_ORCH_CONTAINERIZE_CLOUD="${DORKPIPE_ORCH_CONTAINERIZE_CLOUD:-true}"
+  export DORKPIPE_ORCH_CONTAINER_SKILLS="${DORKPIPE_ORCH_CONTAINER_SKILLS:-auto}"
   export DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS="${DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS:-120000}"
   export DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS="${DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS:-40000}"
   export DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED="${DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED:-true}"
@@ -226,6 +227,36 @@ dorkpipe_orchestrate_container_auth_seed_mount() {
   printf '%s:/dockpipe-auth/%s:ro\n' "${host_dir}" "${provider}"
 }
 
+dorkpipe_orchestrate_container_skills_dir() {
+  local provider="${1:?provider}"
+  local upper override host_dir
+  upper="$(printf '%s' "${provider}" | tr '[:lower:]' '[:upper:]')"
+  override="DORKPIPE_ORCH_${upper}_SKILLS_DIR"
+  if [[ -n "${!override:-}" ]]; then
+    printf '%s\n' "${!override}"
+    return 0
+  fi
+  if [[ -n "${DORKPIPE_ORCH_SKILLS_DIR:-}" ]]; then
+    printf '%s\n' "${DORKPIPE_ORCH_SKILLS_DIR}"
+    return 0
+  fi
+  host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}")" || return 1
+  printf '%s\n' "${host_dir}/skills"
+}
+
+dorkpipe_orchestrate_container_skills_mount() {
+  local provider="${1:?provider}"
+  local mode host_dir
+  mode="$(printf '%s' "${DORKPIPE_ORCH_CONTAINER_SKILLS:-auto}" | tr '[:upper:]' '[:lower:]')"
+  case "${mode}" in
+    0|false|no|off|never|none|disabled) return 1 ;;
+  esac
+  host_dir="$(dorkpipe_orchestrate_container_skills_dir "${provider}")" || return 1
+  [[ -n "${host_dir}" && -d "${host_dir}" ]] || return 1
+  host_dir="$(dorkpipe_orchestrate_cli_mount_host_path "${host_dir}")"
+  printf '%s:/dockpipe-auth/%s-skills:ro\n' "${host_dir}" "${provider}"
+}
+
 dorkpipe_orchestrate_container_extra_auth_mounts() {
   local provider="${1:?provider}"
   local mode host_file container_file
@@ -358,6 +389,9 @@ dorkpipe_orchestrate_run_container_worker() {
   if auth_mount="$(dorkpipe_orchestrate_container_auth_seed_mount "${provider}" 2>/dev/null)"; then
     args+=("--mount" "${auth_mount}")
   fi
+  if auth_mount="$(dorkpipe_orchestrate_container_skills_mount "${provider}" 2>/dev/null)"; then
+    args+=("--mount" "${auth_mount}")
+  fi
   while IFS= read -r auth_mount; do
     [[ -n "${auth_mount}" ]] || continue
     args+=("--mount" "${auth_mount}")
@@ -384,6 +418,11 @@ dorkpipe_orchestrate_run_container_worker() {
               fi
             done
             chmod -R u+rwX /home/node/.codex 2>/dev/null || true
+          fi
+          if [[ -d /dockpipe-auth/codex-skills ]]; then
+            mkdir -p /home/node/.codex/skills
+            cp -a /dockpipe-auth/codex-skills/. /home/node/.codex/skills/ 2>/dev/null || true
+            chmod -R u+rwX /home/node/.codex/skills 2>/dev/null || true
           fi
           if [[ -n "${2:-}" && "${2:-}" != "cli" ]]; then
             codex exec --dangerously-bypass-approvals-and-sandbox --model "$2" "$1"
@@ -422,6 +461,11 @@ dorkpipe_orchestrate_run_container_worker() {
             if [[ -n "${latest:-}" ]]; then
               cp "${latest}" /home/node/.claude.json
             fi
+          fi
+          if [[ -d /dockpipe-auth/claude-skills ]]; then
+            mkdir -p /home/node/.claude/skills
+            cp -a /dockpipe-auth/claude-skills/. /home/node/.claude/skills/ 2>/dev/null || true
+            chmod -R u+rwX /home/node/.claude/skills 2>/dev/null || true
           fi
           if [[ -n "${2:-}" && "${2:-}" != "cli" ]]; then
             claude --dangerously-skip-permissions --model "$2" -p "$1"

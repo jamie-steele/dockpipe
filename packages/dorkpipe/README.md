@@ -44,6 +44,13 @@ cloud lanes behind budget/halt policy.
 Set **`DORKPIPE_ORCH_LIVE_MODELS=false`** for dry runs and tests that should exercise the full
 artifact graph without calling live model backends.
 
+When Codex or Claude lanes run in containers, DorkPipe seeds the matching host skill directory into
+the worker home before launching the CLI: **`~/.codex/skills`** for Codex and **`~/.claude/skills`**
+for Claude. The mount is read-only and separate from auth seeding. Set
+**`DORKPIPE_ORCH_CONTAINER_SKILLS=never`** to disable skill propagation, or set
+**`DORKPIPE_ORCH_CODEX_SKILLS_DIR`**, **`DORKPIPE_ORCH_CLAUDE_SKILLS_DIR`**, or
+**`DORKPIPE_ORCH_SKILLS_DIR`** to override the host skill source.
+
 ## Dev Control Plane
 
 The DorkPipe stack is package-owned under **`resolvers/dorkpipe/assets/`**. The default path uses
