@@ -324,6 +324,49 @@ func TestValidateWorkflowContainerConfigRejectsInvalidWorkPathAndMode(t *testing
 	}
 }
 
+func TestParseWorkflowYAMLWorkspace(t *testing.T) {
+	y := `
+name: session-demo
+workspace:
+  repo: biztraak
+  mode: managed
+  base: main
+  storage: worktree
+  lifecycle:
+    branch_prefix: ai
+    branch: js/features/demo
+    checkpoint: auto
+    publish: review
+steps:
+  - id: ok
+    kind: host
+    cmd: echo ok
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := w.Workspace.Repo; got != "biztraak" {
+		t.Fatalf("workspace.repo = %q", got)
+	}
+	if got := w.Workspace.Lifecycle.Checkpoint; got != "auto" {
+		t.Fatalf("workspace.lifecycle.checkpoint = %q", got)
+	}
+	if got := w.Workspace.Lifecycle.Branch; got != "js/features/demo" {
+		t.Fatalf("workspace.lifecycle.branch = %q", got)
+	}
+	if err := ValidateLoadedWorkflow(w); err != nil {
+		t.Fatalf("ValidateLoadedWorkflow: %v", err)
+	}
+}
+
+func TestValidateWorkflowWorkspaceConfigRejectsBadMode(t *testing.T) {
+	err := ValidateWorkflowWorkspaceConfig("workspace", WorkflowWorkspaceConfig{Mode: "magic"})
+	if err == nil || !strings.Contains(err.Error(), "workspace.mode") {
+		t.Fatalf("expected workspace.mode validation error, got %v", err)
+	}
+}
+
 // TestParseWorkflowYAMLSteps checks multi-step YAML: two steps, per-step isolate override, and CmdLine.
 func TestParseWorkflowYAMLSteps(t *testing.T) {
 	dir := t.TempDir()

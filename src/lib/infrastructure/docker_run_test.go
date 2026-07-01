@@ -99,7 +99,7 @@ func TestRunContainerDetachBuildsDockerRun(t *testing.T) {
 		mu.Lock()
 		calls = append(calls, call{name: name, args: append([]string(nil), args...)})
 		mu.Unlock()
-		return exec.Command("bash", "-c", "exit 0")
+		return helperExitCommand(0)
 	}
 	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
 	filepathAbsDocker = func(path string) (string, error) { return path, nil }
@@ -168,7 +168,7 @@ func TestRunContainerAppliesSecurityFlags(t *testing.T) {
 		mu.Lock()
 		calls = append(calls, call{name: name, args: append([]string(nil), args...)})
 		mu.Unlock()
-		return exec.Command("bash", "-c", "exit 0")
+		return helperExitCommand(0)
 	}
 	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
 	filepathAbsDocker = func(path string) (string, error) { return path, nil }
@@ -329,6 +329,56 @@ func TestRunContainerAttachedCallsCommitOnHost(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("expected CommitOnHost to be called")
+	}
+}
+
+func TestRunContainerWorkspaceVolumeSyncsAroundRun(t *testing.T) {
+	withDockerSeams(t)
+	var mu sync.Mutex
+	var calls []call
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		mu.Lock()
+		calls = append(calls, call{name: name, args: append([]string(nil), args...)})
+		mu.Unlock()
+		return helperExitCommand(0)
+	}
+	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
+	filepathAbsDocker = func(path string) (string, error) { return path, nil }
+	osStatDockerFn = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	isTerminalDockerFn = func(fd int) bool { return false }
+	timeNowDockerFn = func() time.Time { return time.Unix(1000, 0) }
+	in, _ := os.CreateTemp(t.TempDir(), "in")
+	out, _ := os.CreateTemp(t.TempDir(), "out")
+	errf, _ := os.CreateTemp(t.TempDir(), "err")
+	defer in.Close()
+	defer out.Close()
+	defer errf.Close()
+
+	rc, err := RunContainer(RunOpts{
+		Image:         "img",
+		WorkdirHost:   "/tmp/wd",
+		WorkdirVolume: "dockpipe-ws-demo",
+		Stdin:         in,
+		Stdout:        out,
+		Stderr:        errf,
+	}, []string{"echo", "ok"})
+	if err != nil || rc != 0 {
+		t.Fatalf("RunContainer failed rc=%d err=%v", rc, err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	got := strings.Join(flattenCalls(calls), "\n")
+	if strings.Count(got, "docker run") < 3 {
+		t.Fatalf("expected sync-in, main run, and sync-out docker run calls, got:\n%s", got)
+	}
+	if !strings.Contains(got, "dockpipe-ws-demo:/work") {
+		t.Fatalf("expected main run to mount workspace volume at /work, got:\n%s", got)
+	}
+	if !strings.Contains(got, ":/dockpipe-sync-src:ro") || !strings.Contains(got, "dockpipe-ws-demo:/dockpipe-sync-dst") {
+		t.Fatalf("expected host to volume sync call, got:\n%s", got)
+	}
+	if !strings.Contains(got, "dockpipe-ws-demo:/dockpipe-sync-src:ro") || !strings.Contains(got, ":/dockpipe-sync-dst") {
+		t.Fatalf("expected volume to host sync call, got:\n%s", got)
 	}
 }
 

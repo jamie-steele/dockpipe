@@ -23,34 +23,36 @@ func resolveWorkflowInputsEnv(wf *domain.Workflow, wfConfig, projectRoot string,
 	if wf == nil || len(wf.Inputs) == 0 {
 		return nil, nil
 	}
-	fields, err := workflowTypedInputFields(wf, wfConfig, projectRoot, nil)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]string, len(wf.Inputs))
-	for key, binding := range wf.Inputs {
-		field, ok := fields[strings.TrimSpace(key)]
-		if !ok {
-			return nil, fmt.Errorf("workflow input %q does not match any typed field from workflow types", key)
-		}
-		out[field.EnvName] = resolveInputBinding(binding, env, field.DefaultValue)
-	}
-	return out, nil
+	return resolveInputBindingsEnv(wf, wfConfig, projectRoot, nil, wf.Inputs, env)
 }
 
 func resolveStepInputsEnv(wf *domain.Workflow, wfConfig, projectRoot string, step domain.Step, env map[string]string) (map[string]string, error) {
 	if len(step.Inputs) == 0 {
 		return nil, nil
 	}
-	fields, err := workflowTypedInputFields(wf, wfConfig, projectRoot, &step)
+	return resolveInputBindingsEnv(wf, wfConfig, projectRoot, &step, step.Inputs, env)
+}
+
+func resolveWorkflowInputBindingsEnv(wf *domain.Workflow, wfConfig, projectRoot string, bindings map[string]domain.InputBinding, env map[string]string) (map[string]string, error) {
+	if len(bindings) == 0 {
+		return nil, nil
+	}
+	return resolveInputBindingsEnv(wf, wfConfig, projectRoot, nil, bindings, env)
+}
+
+func resolveInputBindingsEnv(wf *domain.Workflow, wfConfig, projectRoot string, step *domain.Step, bindings map[string]domain.InputBinding, env map[string]string) (map[string]string, error) {
+	fields, err := workflowTypedInputFields(wf, wfConfig, projectRoot, step)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]string, len(step.Inputs))
-	for key, binding := range step.Inputs {
+	out := make(map[string]string, len(bindings))
+	for key, binding := range bindings {
 		field, ok := fields[strings.TrimSpace(key)]
 		if !ok {
-			return nil, fmt.Errorf("step input %q does not match any typed field from workflow types", key)
+			if step != nil {
+				return nil, fmt.Errorf("step input %q does not match any typed field from workflow types", key)
+			}
+			return nil, fmt.Errorf("workflow input %q does not match any typed field from workflow types", key)
 		}
 		out[field.EnvName] = resolveInputBinding(binding, env, field.DefaultValue)
 	}

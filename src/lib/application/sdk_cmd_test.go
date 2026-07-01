@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -170,6 +171,22 @@ func TestCmdGetStateFields(t *testing.T) {
 	}
 	if want := filepath.Join(wd, "custom-output"); gotOutputRoot != want {
 		t.Fatalf("output_root = %q want %q", gotOutputRoot, want)
+	}
+}
+
+func TestCmdGetStateDirNormalizesGitBashWindowsWorkdir(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows path normalization")
+	}
+	got, err := captureStdout(t, func() error {
+		return cmdGet([]string{"state_dir", "--workdir", "/c/Source/uh-workflows"})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(`C:\Source\uh-workflows`, "bin", ".dockpipe")
+	if got != want {
+		t.Fatalf("state_dir = %q want %q", got, want)
 	}
 }
 

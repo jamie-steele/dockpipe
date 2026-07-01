@@ -7,6 +7,9 @@ description: >-
 
 docker_preflight: false
 
+types:
+  - models/IOrchestrateStackConfig.pipe
+
 vars:
   DORKPIPE_ORCH_SOURCE_STEP_ID: plan
   DORKPIPE_DEV_STACK_GPU: "auto"

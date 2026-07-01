@@ -96,6 +96,54 @@
         }
       }
     },
+    "workspace_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "repo": {
+          "type": "string",
+          "description": "Logical repository identity or source path/URL for runtime-owned workspace sessions."
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["managed", "bind"],
+          "description": "Workspace storage mode. managed creates a DockPipe-owned session workspace; bind opts into the current checkout."
+        },
+        "base": {
+          "type": "string",
+          "description": "Base ref for the session branch. Defaults to HEAD."
+        },
+        "storage": {
+          "type": "string",
+          "enum": ["volume", "worktree", "clone"],
+          "description": "Advanced storage implementation hint. volume mounts a runtime Docker volume at /work while keeping a managed worktree for checkpoints; clone is reserved for future distributed workers. Most workflows should omit this."
+        },
+        "lifecycle": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "branch_prefix": {
+              "type": "string",
+              "description": "Prefix for runtime-created session branches. Defaults to ai."
+            },
+            "branch": {
+              "type": "string",
+              "description": "Exact session branch name. Use when the repository has a required branch naming convention; overrides branch_prefix-derived names."
+            },
+            "checkpoint": {
+              "type": "string",
+              "enum": ["manual", "auto", "step"],
+              "description": "Runtime checkpoint policy."
+            },
+            "publish": {
+              "type": "string",
+              "enum": ["none", "branch", "review"],
+              "description": "Future runtime publish policy. Merge remains human-controlled."
+            }
+          }
+        }
+      }
+    },
     "agent_model": {
       "type": "object",
       "additionalProperties": false,
@@ -648,6 +696,7 @@
       }
     },
     "container": { "$ref": "#/$defs/container_config" },
+    "workspace": { "$ref": "#/$defs/workspace_config" },
     "security": {
       "type": "object",
       "additionalProperties": false,

@@ -19,6 +19,7 @@ task_dir="$(dorkpipe_orchestrate_task_dir "${task_id}")"
 prompt_md="${task_dir}/prompt.md"
 response_md="${task_dir}/response.md"
 result_json="${task_dir}/result.json"
+worker_log="${task_dir}/worker.log"
 
 [[ -f "${task_dir}/task.json" ]] || { echo "missing task.json for ${task_id}" >&2; exit 1; }
 eval "$("$(dorkpipe_orchestrate_helper_bin)" task-env "${task_dir}/task.json")"
@@ -86,7 +87,7 @@ if [[ "${budget_halt}" != "true" ]]; then
     case "${provider}" in
       codex)
         if [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_CONTAINERIZE_CLOUD}")" == "true" ]]; then
-          if dorkpipe_orchestrate_run_container_worker codex "${prompt_md}" "${response_md}" "${selected_model}" && live_response_is_valid "${response_md}"; then
+          if dorkpipe_orchestrate_run_logged "codex task ${task_id}" "${worker_log}" dorkpipe_orchestrate_run_container_worker codex "${prompt_md}" "${response_md}" "${selected_model}" && live_response_is_valid "${response_md}"; then
             used_live_model="true"
             summary="Live Codex worker output captured in response.md from the codex resolver container"
             confidence="0.72"
@@ -114,7 +115,7 @@ if [[ "${budget_halt}" != "true" ]]; then
         ;;
       claude)
         if [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_CONTAINERIZE_CLOUD}")" == "true" ]]; then
-          if dorkpipe_orchestrate_run_container_worker claude "${prompt_md}" "${response_md}" "${selected_model}" && live_response_is_valid "${response_md}"; then
+          if dorkpipe_orchestrate_run_logged "claude task ${task_id}" "${worker_log}" dorkpipe_orchestrate_run_container_worker claude "${prompt_md}" "${response_md}" "${selected_model}" && live_response_is_valid "${response_md}"; then
             used_live_model="true"
             summary="Live Claude worker output captured in response.md from the claude resolver container"
             confidence="0.72"

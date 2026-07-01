@@ -176,7 +176,32 @@ Users sign in normally on the host; DorkPipe passes that auth into the container
 - Workflows read those fields with `dockpipe scope resolver <name> <field>` instead of hardcoding provider auth paths
 - API-key env vars declared by resolver profiles are still forwarded by the DockPipe runner
 
+Before launching a `codex` or `claude` worker, DorkPipe runs an auth preflight. API-key env vars
+pass immediately. Otherwise DorkPipe checks the host resolver auth files. If auth is missing and the
+run has an interactive terminal, it asks whether to launch the provider login command:
+
+- Codex: `codex login`
+- Claude: `claude /login`
+
+Set `DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING=never` to fail fast without prompting, or `always` to run
+the login command without asking. Non-interactive runs fail fast with the command to run manually.
+
 Do not bake credentials into images or require a separate container login as the normal path.
+
+## Logging modes
+
+DorkPipe orchestration defaults to progress-oriented logs for long-running package-owned work:
+
+- `DORKPIPE_ORCH_LOG_MODE=default` hides raw Codex, Claude, Docker Compose, and Ollama pull output
+  behind progress lines and prints log tails on failure.
+- `DORKPIPE_ORCH_LOG_MODE=minimal` is accepted as the quieter stable mode for package scripts; it
+  currently matches `default` for worker/dev-stack wrappers.
+- `DORKPIPE_ORCH_LOG_MODE=verbose` streams raw provider and Docker output for debugging.
+- `DORKPIPE_ORCH_LOG_MODE=none` suppresses package-owned progress lines where possible.
+
+Worker logs are stored with task artifacts, for example `tasks/<task-id>/worker.log`. Dev-stack
+logs are stored under the DorkPipe package dev-stack state directory. Set
+`DORKPIPE_DEV_STACK_LOG_MODE` to override only sidecar stack logging.
 
 Cloud worker tooling should be consumer-selectable and image-backed. Set
 `DORKPIPE_ORCH_CONTAINER_IMAGE_PACKAGES` in workflow `vars:` to generate a provider-specific

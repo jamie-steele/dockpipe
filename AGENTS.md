@@ -15,6 +15,7 @@ Machine-readable routing: `docs/agents/index.yaml`.
 | Preserve the architecture model: workflow/template = what, runtime = where, resolver = tool/profile, strategy = lifecycle wrapper. | `docs/agents/architecture.md` |
 | Use package/store helpers for project/global paths. Do not hand-write bare `.dockpipe/internal` paths. | `docs/agents/core-package-model.md` |
 | Prefer the scope model for generated paths: `cwd: artifacts` for simple producers, `cwd: repo` plus `scopes` only when checkout cwd is required. | `docs/agents/path-scopes.md` |
+| Treat Git lifecycle as runtime-owned session behavior. Agents request checkpoint/sync/publish; they do not run raw Git. | `docs/agents/git-runtime-sessions.md` |
 | Template/workflow work should stay in YAML/assets/scripts unless a general primitive is needed. | `docs/agents/yaml-workflows.md` |
 | Package-specific behavior belongs inside package YAML/assets/scripts/docs/tests. | `docs/agents/package-authoring.md` |
 | Keep authored YAML/schema/editor docs in sync when changing workflow/config surfaces. | `docs/agents/yaml-workflows.md` |
@@ -28,6 +29,7 @@ Machine-readable routing: `docs/agents/index.yaml`.
 | Engine or CLI behavior | `docs/agents/engine-boundary.md`, `docs/agents/architecture.md`, `docs/agents/validation-commands.md` | `dorkpipe-core-review` |
 | Workflow YAML or authored surface | `docs/agents/yaml-workflows.md`, `docs/agents/safety-guardrails.md` | `dorkpipe-yaml-workflows` |
 | Path/scope/artifact migration | `docs/agents/path-scopes.md`, `docs/agents/yaml-workflows.md`, `docs/agents/core-package-model.md` | `dorkpipe-yaml-workflows`, `dorkpipe-package-authoring` |
+| Git runtime sessions or workspace lifecycle | `docs/agents/git-runtime-sessions.md`, `docs/agents/architecture.md`, `docs/agents/path-scopes.md` | `dorkpipe-core-review`, `dorkpipe-yaml-workflows` |
 | Package authoring | `docs/agents/package-authoring.md`, `docs/agents/core-package-model.md` | `dorkpipe-package-authoring` |
 | Package promotion | `docs/agents/package-promotion.md`, `docs/agents/validation-commands.md` | `dorkpipe-package-authoring`, `dorkpipe-core-review` |
 | Agentic/DorkPipe workflows | `docs/agents/model-escalation.md`, `docs/agents/docs-generation.md`, `docs/agents/yaml-workflows.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
@@ -92,6 +94,7 @@ Report:
 - `docs/agents/engine-boundary.md`
 - `docs/agents/core-package-model.md`
 - `docs/agents/path-scopes.md`
+- `docs/agents/git-runtime-sessions.md`
 - `docs/agents/yaml-workflows.md`
 - `docs/agents/package-authoring.md`
 - `docs/agents/package-promotion.md`

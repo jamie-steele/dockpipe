@@ -393,6 +393,7 @@ func resolveSDKWorkdir(workdir string) (string, error) {
 			workdir = wd
 		}
 	}
+	workdir = infrastructure.HostPathForGit(workdir)
 	if abs, err := filepath.Abs(workdir); err != nil {
 		return "", err
 	} else {

@@ -11,8 +11,11 @@ trap 'rm -rf "$tmp"' EXIT
 
 fake_dockpipe="$tmp/dockpipe"
 fake_docker="$tmp/docker"
+fake_codex="$tmp/codex"
+fake_claude="$tmp/claude"
 fake_args="$tmp/args.txt"
 fake_docker_args="$tmp/docker-args.txt"
+fake_login_args="$tmp/login-args.txt"
 cat >"$fake_dockpipe" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -53,6 +56,31 @@ esac
 exit 0
 SH
 chmod +x "$fake_docker"
+cat >"$fake_codex" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'codex:%s\n' "$*" >> "${FAKE_LOGIN_ARGS:?}"
+if [[ "${1:-}" == "login" ]]; then
+  mkdir -p "$HOME/.codex"
+  printf '{"auth_mode":"chatgpt"}\n' > "$HOME/.codex/auth.json"
+  exit 0
+fi
+exit 1
+SH
+chmod +x "$fake_codex"
+cat >"$fake_claude" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'claude:%s\n' "$*" >> "${FAKE_LOGIN_ARGS:?}"
+if [[ "${1:-}" == "/login" ]]; then
+  mkdir -p "$HOME/.claude"
+  printf '{"claudeAiOauth":{}}\n' > "$HOME/.claude/.credentials.json"
+  printf '{"oauthAccount":{}}\n' > "$HOME/.claude.json"
+  exit 0
+fi
+exit 1
+SH
+chmod +x "$fake_claude"
 
 dockpipe_sdk() {
   if [[ "${1:-}" == "require" && "${2:-}" == "dockpipe-bin" ]]; then
@@ -97,6 +125,7 @@ export ROOT
 export HOME="$tmp/home"
 export FAKE_DOCKPIPE_ARGS="$fake_args"
 export FAKE_DOCKER_ARGS="$fake_docker_args"
+export FAKE_LOGIN_ARGS="$fake_login_args"
 export DORKPIPE_ORCH_ROOT="$tmp/orchestrate"
 export DOCKPIPE_CONTAINER_MOUNTS=$'C:\\Source\\UniteHere:/UniteHere:ro\nC:\\docs\\UniteHere\\Design Notes:/DesignNotes:ro'
 export DORKPIPE_ORCH_WORKER_CWD="/UniteHere"
@@ -107,6 +136,19 @@ mkdir -p "$HOME/.codex"
 mkdir -p "$HOME/.codex/skills/dorkpipe-package-authoring"
 mkdir -p "$HOME/.claude"
 mkdir -p "$HOME/.claude/skills/dorkpipe-package-authoring"
+export DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING="never"
+if dorkpipe_orchestrate_auth_preflight codex 2>"$tmp/codex-auth-never.err"; then
+  echo "expected codex auth preflight to fail when login is disabled and auth is missing" >&2
+  exit 1
+fi
+grep -q -- "codex auth preflight failed" "$tmp/codex-auth-never.err"
+export DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING="always"
+dorkpipe_orchestrate_auth_preflight codex
+grep -qx -- "codex:login" "$fake_login_args"
+rm -f "$fake_login_args"
+dorkpipe_orchestrate_auth_preflight claude
+grep -qx -- "claude:/login" "$fake_login_args"
+unset DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING
 printf '{"auth_mode":"chatgpt"}\n' > "$HOME/.codex/auth.json"
 printf '# skill\n' > "$HOME/.codex/skills/dorkpipe-package-authoring/SKILL.md"
 printf '{"claudeAiOauth":{}}\n' > "$HOME/.claude/.credentials.json"

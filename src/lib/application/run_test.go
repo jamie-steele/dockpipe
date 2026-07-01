@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -573,6 +574,40 @@ func TestRunWorkflowStepsModeCliWorkdirOverridesInheritedEnvMap(t *testing.T) {
 	err := Run([]string{"--workflow", "demo", "--workdir", wantWd, "--", "echo", "x"}, base)
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
+	}
+}
+
+func TestEffectiveWorkdirNormalizesMsysPathOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("MSYS workdir normalization is Windows-only")
+	}
+	got := effectiveWorkdirForWorkflowOpts(&CliOpts{Workdir: `/c/Source/uh-workflows`})
+	want := filepath.Clean(`C:\Source\uh-workflows`)
+	if got != want {
+		t.Fatalf("effectiveWorkdirForWorkflowOpts returned %q, want %q", got, want)
+	}
+}
+
+func TestResolveWorkflowWorkspaceSourceUsesLocalRepoPath(t *testing.T) {
+	sourceDir := t.TempDir()
+	target := filepath.Join(filepath.Dir(sourceDir), "UniteHere")
+	if err := os.MkdirAll(target, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	gotSource, gotID := resolveWorkflowWorkspaceSource("../UniteHere", sourceDir, filepath.Join(sourceDir, "workflows", "brain.optimize"), "brain.optimize")
+	if filepath.Clean(gotSource) != filepath.Clean(target) {
+		t.Fatalf("source = %q want %q", gotSource, target)
+	}
+	if gotID != "UniteHere" {
+		t.Fatalf("workspace id = %q want UniteHere", gotID)
+	}
+
+	gotSource, gotID = resolveWorkflowWorkspaceSource("logical-repo", sourceDir, sourceDir, "brain.optimize")
+	if gotSource != sourceDir {
+		t.Fatalf("logical source = %q want %q", gotSource, sourceDir)
+	}
+	if gotID != "logical-repo" {
+		t.Fatalf("logical workspace id = %q want logical-repo", gotID)
 	}
 }
 

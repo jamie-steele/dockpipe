@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"dockpipe/src/lib/domain"
 	"dockpipe/src/lib/infrastructure"
@@ -108,6 +109,9 @@ func Run(argv []string, baseEnviron []string) error {
 	}
 	if argv[0] == "runs" {
 		return cmdRuns(argv[1:])
+	}
+	if argv[0] == "session" {
+		return cmdSession(argv[1:])
 	}
 	if argv[0] == "install" {
 		return cmdInstall(argv[1:])
@@ -274,7 +278,33 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 	}
 
+	var gitSession *infrastructure.GitSession
+	if wf != nil && !wf.Workspace.IsEmpty() {
+		session, err := createWorkflowGitSession(wf, effWd, wfRoot, opts)
+		if err != nil {
+			return err
+		}
+		gitSession = session
+		opts.Workdir = session.Storage.Workspace
+		effWd = effectiveWorkdirForWorkflowOpts(opts)
+		projectRoot = effWd
+		if ap, err := filepath.Abs(effWd); err == nil {
+			projectRoot = ap
+		}
+		fmt.Fprintf(os.Stderr, "[dockpipe] Workspace: %s session=%s branch=%s mode=%s\n", session.WorkspaceID, session.SessionID, session.Repo.SessionRef, session.Storage.Mode)
+	}
+
 	envMap := domain.EnvironToMap(baseEnviron)
+	if gitSession != nil {
+		envMap["DOCKPIPE_WORKSPACE_ID"] = gitSession.WorkspaceID
+		envMap["DOCKPIPE_SESSION_ID"] = gitSession.SessionID
+		envMap["DOCKPIPE_SESSION_BRANCH"] = gitSession.Repo.SessionRef
+		envMap["DOCKPIPE_SESSION_WORKSPACE"] = gitSession.Storage.Workspace
+		if strings.TrimSpace(gitSession.Storage.Volume) != "" {
+			envMap["DOCKPIPE_SESSION_VOLUME"] = gitSession.Storage.Volume
+		}
+		envMap["DOCKPIPE_AGENT_GIT_POLICY"] = "runtime-owned"
+	}
 	if len(rest) > 0 {
 		if b, err := json.Marshal(rest); err == nil {
 			envMap["DOCKPIPE_ARGS_JSON"] = string(b)
@@ -734,6 +764,9 @@ func Run(argv []string, baseEnviron []string) error {
 				return err
 			}
 		}
+		if err := checkpointWorkflowGitSession(gitSession, wf); err != nil {
+			return err
+		}
 		if commitOnHost && !strategyHandlesCommit {
 			if err := infrastructure.CommitOnHost(workHost, envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut), strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
 				return err
@@ -778,6 +811,9 @@ func Run(argv []string, baseEnviron []string) error {
 			if err := RunStrategyAfterScripts(stratAfterAbs, repoRoot, envMap, envSlice, opts); err != nil {
 				return err
 			}
+		}
+		if err := checkpointWorkflowGitSession(gitSession, wf); err != nil {
+			return err
 		}
 		if commitOnHost && !strategyHandlesCommit {
 			if err := infrastructure.CommitOnHost(workHost, envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut), strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
@@ -846,7 +882,12 @@ func Run(argv []string, baseEnviron []string) error {
 			envSlice = domain.EnvMapToSlice(envMap)
 		}
 		if len(stratAfterAbs) > 0 {
-			return RunStrategyAfterScripts(stratAfterAbs, repoRoot, envMap, envSlice, opts)
+			if err := RunStrategyAfterScripts(stratAfterAbs, repoRoot, envMap, envSlice, opts); err != nil {
+				return err
+			}
+		}
+		if err := checkpointWorkflowGitSession(gitSession, wf); err != nil {
+			return err
 		}
 		return nil
 	}
@@ -920,6 +961,7 @@ func Run(argv []string, baseEnviron []string) error {
 	runOpts := infrastructure.RunOpts{
 		Image:         image,
 		WorkdirHost:   workHost,
+		WorkdirVolume: envMap["DOCKPIPE_SESSION_VOLUME"],
 		WorkPath:      workPath,
 		ActionPath:    actionForContainer,
 		ExtraMounts:   authoredMounts,
@@ -967,18 +1009,123 @@ func Run(argv []string, baseEnviron []string) error {
 			return err
 		}
 	}
+	if err := checkpointWorkflowGitSession(gitSession, wf); err != nil {
+		return err
+	}
 	return nil
+}
+
+func createWorkflowGitSession(wf *domain.Workflow, sourceDir, wfRoot string, opts *CliOpts) (*infrastructure.GitSession, error) {
+	if wf == nil || wf.Workspace.IsEmpty() {
+		return nil, nil
+	}
+	cfg := wf.Workspace
+	sessionSourceDir, workspaceID := resolveWorkflowWorkspaceSource(cfg.Repo, sourceDir, wfRoot, wf.Name)
+	sessionID := strings.TrimSpace(os.Getenv("DOCKPIPE_SESSION_ID"))
+	if sessionID == "" {
+		name := strings.TrimSpace(wf.Name)
+		if name == "" && opts != nil {
+			name = strings.TrimSpace(opts.Workflow)
+		}
+		if name == "" {
+			name = "workflow"
+		}
+		sessionID = timeNowSessionSlug(name)
+	}
+	return infrastructure.CreateSessionBranch(infrastructure.GitSessionRequest{
+		WorkspaceID:  workspaceID,
+		SourceDir:    sessionSourceDir,
+		Mode:         cfg.Mode,
+		Storage:      cfg.Storage,
+		BaseRef:      cfg.Base,
+		BranchPrefix: cfg.Lifecycle.BranchPrefix,
+		BranchName:   cfg.Lifecycle.Branch,
+		SessionID:    sessionID,
+		Checkpoint:   cfg.Lifecycle.Checkpoint,
+		Publish:      cfg.Lifecycle.Publish,
+	})
+}
+
+func resolveWorkflowWorkspaceSource(repo, sourceDir, wfRoot, wfName string) (string, string) {
+	repo = strings.TrimSpace(repo)
+	if repo == "" {
+		return sourceDir, firstNonEmpty(wfName, "workspace")
+	}
+	for _, base := range []string{sourceDir, wfRoot} {
+		if base == "" {
+			continue
+		}
+		candidate := repo
+		if !filepath.IsAbs(candidate) {
+			candidate = filepath.Join(base, repo)
+		}
+		if st, err := os.Stat(candidate); err == nil && st.IsDir() {
+			return candidate, filepath.Base(filepath.Clean(candidate))
+		}
+	}
+	if filepath.IsAbs(repo) {
+		if st, err := os.Stat(repo); err == nil && st.IsDir() {
+			return repo, filepath.Base(filepath.Clean(repo))
+		}
+	}
+	return sourceDir, firstNonEmpty(repo, wfName, "workspace")
+}
+
+func checkpointWorkflowGitSession(session *infrastructure.GitSession, wf *domain.Workflow) error {
+	if session == nil || wf == nil {
+		return nil
+	}
+	mode := strings.TrimSpace(wf.Workspace.Lifecycle.Checkpoint)
+	if mode == "" {
+		mode = "auto"
+	}
+	switch mode {
+	case "auto", "step":
+		cp, err := infrastructure.CheckpointSession(session, "workflow completed")
+		if err != nil {
+			return err
+		}
+		if cp.Status == "created" {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Checkpoint: %s %s\n", cp.CheckpointID, cp.Commit)
+		} else {
+			fmt.Fprintf(os.Stderr, "[dockpipe] Checkpoint: clean (%s)\n", cp.CheckpointID)
+		}
+		return nil
+	case "manual":
+		return nil
+	default:
+		return fmt.Errorf("workspace.lifecycle.checkpoint must be manual, auto, or step")
+	}
+}
+
+func timeNowSessionSlug(name string) string {
+	name = strings.TrimSpace(strings.ToLower(name))
+	var b strings.Builder
+	for _, r := range name {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			continue
+		}
+		if b.Len() > 0 && !strings.HasSuffix(b.String(), "-") {
+			b.WriteByte('-')
+		}
+	}
+	slug := strings.Trim(b.String(), "-")
+	if slug == "" {
+		slug = "workflow"
+	}
+	return time.Now().UTC().Format("20060102-150405") + "-" + slug
 }
 
 func effectiveWorkdirForWorkflowOpts(opts *CliOpts) string {
 	if opts != nil && strings.TrimSpace(opts.Workdir) != "" {
-		return opts.Workdir
+		return infrastructure.HostPathForGit(opts.Workdir)
 	}
 	wd, err := os.Getwd()
 	if err != nil {
 		return "."
 	}
-	return wd
+	return infrastructure.HostPathForGit(wd)
 }
 
 func compileDepsWanted(opts *CliOpts) bool {

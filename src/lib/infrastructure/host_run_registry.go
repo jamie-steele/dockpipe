@@ -211,6 +211,7 @@ func ListHostRuns(workdir string, w io.Writer) error {
 }
 
 func absHostWorkdir(wd string) (string, error) {
+	wd = HostPathForGit(wd)
 	if filepath.IsAbs(wd) {
 		return filepath.Clean(wd), nil
 	}

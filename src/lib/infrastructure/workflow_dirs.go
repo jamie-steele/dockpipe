@@ -50,7 +50,7 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 		}
 	}
 	if wd := strings.TrimSpace(workdir); wd != "" {
-		absWd, err := filepath.Abs(filepath.Clean(wd))
+		absWd, err := absHostWorkdir(wd)
 		if err != nil {
 			absWd = filepath.Clean(wd)
 		}
@@ -132,7 +132,7 @@ func OnDiskWorkflowConfigPath(projectRoot, name string) string {
 			return p
 		}
 	}
-	absWd, err := filepath.Abs(projectRoot)
+	absWd, err := absHostWorkdir(projectRoot)
 	if err != nil {
 		absWd = projectRoot
 	}
@@ -194,7 +194,7 @@ func ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, workdir, nam
 		return u, nil
 	}
 	if wd := strings.TrimSpace(workdir); wd != "" {
-		absWd, err := filepath.Abs(filepath.Clean(wd))
+		absWd, err := absHostWorkdir(wd)
 		if err != nil {
 			absWd = filepath.Clean(wd)
 		}

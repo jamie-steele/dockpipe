@@ -498,6 +498,69 @@ func TestMergeStepVarsAppliesTypedInputs(t *testing.T) {
 	}
 }
 
+func TestPackagedWorkflowStepInputsResolveAgainstChildTypes(t *testing.T) {
+	withRunStepsSeams(t)
+	repo := t.TempDir()
+	wfRoot := filepath.Join(repo, "workflows", "caller")
+	childRoot := filepath.Join(repo, "workflows", "child")
+	modelsDir := filepath.Join(childRoot, "models")
+	for _, dir := range []string{wfRoot, modelsDir} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(p, s string) {
+		t.Helper()
+		if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(filepath.Join(repo, "dockpipe.config.json"), `{"compile":{"workflows":["workflows"]}}`)
+	write(filepath.Join(childRoot, "config.yml"), `name: child
+namespace: demopkg
+types:
+  - models/ChildConfig.pipe
+steps:
+  - id: see-env
+    kind: host
+    cmd: echo ok
+`)
+	write(filepath.Join(modelsDir, "ChildConfig.pipe"), `public Class ChildConfig
+{
+    [EnvName = "CHILD_MESSAGE"]
+    public string Message = "default";
+}
+`)
+
+	o := baseRunStepsOpts()
+	o.repoRoot = repo
+	o.projectRoot = repo
+	o.wfRoot = wfRoot
+	o.wfConfig = filepath.Join(wfRoot, "config.yml")
+	o.opts.Workdir = repo
+	o.envMap["DOCKPIPE_WORKDIR"] = repo
+	o.wf.Steps = []domain.Step{{
+		ID:           "child",
+		WorkflowName: "child",
+		Package:      "demopkg",
+		Inputs: map[string]domain.InputBinding{
+			"Message": {Value: "from-parent"},
+		},
+	}}
+
+	var gotEnv []string
+	runHostCommandFn = func(cmd string, env []string) error {
+		gotEnv = append([]string(nil), env...)
+		return nil
+	}
+	if err := runBlockingStep(&o, 0, 1, map[string]string{}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(gotEnv, "\n"), "CHILD_MESSAGE=from-parent") {
+		t.Fatalf("expected child typed input in env, got %q", strings.Join(gotEnv, "\n"))
+	}
+}
+
 func TestRunBlockingStepHostIsolateReappliesWorkflowInputsFromWorkflowVars(t *testing.T) {
 	withRunStepsSeams(t)
 	wd := t.TempDir()

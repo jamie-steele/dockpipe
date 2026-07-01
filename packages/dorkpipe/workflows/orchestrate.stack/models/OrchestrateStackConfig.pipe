@@ -1,0 +1,59 @@
+/// <summary>
+/// Concrete defaults for the DorkPipe orchestration stack workflow inputs.
+/// </summary>
+public Class OrchestrateStackConfig : IOrchestrateStackConfig
+{
+    [EnvName = "DORKPIPE_ORCH_OLLAMA_MODEL"]
+    public string OllamaModel = "llama3.2";
+
+    [EnvName = "DORKPIPE_ORCH_BRAIN_PROVIDER"]
+    public string BrainProvider = "ollama";
+
+    [EnvName = "DORKPIPE_ORCH_CONTAINERIZE_CLOUD"]
+    public string ContainerizeCloud = "true";
+
+    [EnvName = "DORKPIPE_ORCH_CONTAINER_IMAGE_PACKAGES"]
+    public string ContainerImagePackages = "python3 ruby-full golang-go dotnet-sdk-8.0";
+
+    [EnvName = "DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS"]
+    public string MaxTotalCloudTokens = "180000";
+
+    [EnvName = "DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS"]
+    public string MaxTaskCloudTokens = "45000";
+
+    [EnvName = "DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED"]
+    public string StopOnBudgetExceeded = "true";
+
+    [EnvName = "DORKPIPE_ORCH_CLOUD_LANES"]
+    public string CloudLanes = "true";
+
+    [EnvName = "DORKPIPE_ORCH_FALLBACK_OUTPUT"]
+    public string FallbackOutput = "fail";
+
+    [EnvName = "DORKPIPE_ORCH_WORK_MODE"]
+    public string WorkMode = "artifact";
+
+    [EnvName = "DORKPIPE_ORCH_WORKER_CWD"]
+    public string WorkerCwd = "/work";
+
+    [EnvName = "DORKPIPE_ORCH_CLAUDE_WORKER_CWD"]
+    public string ClaudeWorkerCwd = "/work";
+
+    [EnvName = "DORKPIPE_ORCH_APPLY_ALLOWED_GUEST_ROOTS"]
+    public string ApplyAllowedGuestRoots = "/work";
+
+    [EnvName = "DORKPIPE_DEV_STACK_AUTODOWN"]
+    public string DevStackAutodown = "1";
+
+    [EnvName = "DORKPIPE_DEV_STACK_MCP_PORT"]
+    public string DevStackMcpPort = "8766";
+
+    [EnvName = "MCP_HTTP_URL"]
+    public string McpHttpUrl = "http://127.0.0.1:8766/mcp";
+
+    [EnvName = "DATABASE_URL"]
+    public string DatabaseUrl = "postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe";
+
+    [EnvName = "OLLAMA_HOST"]
+    public string OllamaHost = "http://127.0.0.1:11434";
+}

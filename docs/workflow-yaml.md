@@ -118,6 +118,25 @@ set includes `.NET` packages such as `dotnet-sdk-8.0`. `DORKPIPE_ORCH_CONTAINER_
 remains accepted as a compatibility alias, but new workflows should use
 `DORKPIPE_ORCH_CONTAINER_IMAGE_PACKAGES`.
 
+Cloud Codex/Claude workers run a host-auth preflight before the container starts. API-key env vars
+pass immediately; otherwise DorkPipe checks the provider auth files resolved by `dockpipe scope
+resolver <name> auth-dir`. When auth is missing and the run is interactive, DorkPipe asks whether to
+launch the host login command (`codex login` or `claude /login`) and re-checks after the user
+finishes. Set `DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING=never` to fail fast, or `always` to launch the
+login command without asking. Non-interactive runs fail fast with the manual command to run.
+
+DorkPipe orchestration logging is controlled by `DORKPIPE_ORCH_LOG_MODE`:
+
+- `default` hides raw worker, Docker Compose, and Ollama pull chatter behind progress lines, but
+  prints failure log tails.
+- `minimal` currently behaves like `default` for orchestration scripts and is reserved for stricter
+  future output pruning.
+- `verbose` streams raw provider and Docker output.
+- `none` suppresses orchestration progress lines where package scripts own the output.
+
+Dev-stack logging can be overridden separately with `DORKPIPE_DEV_STACK_LOG_MODE`; otherwise it
+inherits `DORKPIPE_ORCH_LOG_MODE`.
+
 If a workflow grows beyond one simple run, prefer moving to **`steps:`** instead of piling more meaning onto top-level **`run`** / **`act`**.
 Once you switch to **`steps:`**, move those fields onto the specific step that needs them.
 
@@ -273,6 +292,7 @@ DockPipe also injects these variables for every step:
 | `vars` | Map of default env vars (merged if not already set; `--var` overrides). |
 | `compose` | Optional Docker Compose settings for host built-ins such as `compose_up`, `compose_down`, and `compose_ps`. Fields: `file`, `project`, `project_directory`, `autodown_env`, `exports`, `services`. Compose runs inherit DockPipe’s resolved environment and vault-injected vars directly. |
 | `container` | Optional container mount defaults. Use this to override the primary host path bound at `/work` (`workdir_host`), set a default container subdirectory under `/work` (`work_path`), and declare extra bind mounts (`mounts`). Relative host paths resolve from the active source/workdir, not the packaged workflow asset directory. |
+| `workspace` | Optional runtime-owned Git workspace/session lifecycle. Use `mode: managed` for a DockPipe-owned session workspace, or `mode: bind` only when a workflow intentionally operates on the current checkout. |
 | `security` | Optional container security policy. Select a core-owned `profile`, then apply bounded `network`, `filesystem`, and `process` overrides. This applies to container execution only; `kind: host` steps remain outside Docker policy. |
 | `run` | String or list of host pre-script paths (repo `scripts/…` or paths under the template). Single-flow shorthand only; do not combine with `steps:`. Logical resolver script ids like `scripts/dorkpipe/...` must also have an explicit resolver dependency (`requires_resolvers`, `inject.resolver`, or workflow/step resolver selection). |
 | `isolate` | Advanced low-level image/template override. Prefer **`runtime`** + **`resolver`** for the normal authoring path; use **`isolate`** when you need to pin the exact image/template. |
@@ -395,6 +415,56 @@ Public authoring fields:
 
 DockPipe compiles this into an effective runtime policy manifest and derives the actual enforcement mode there. Public workflow YAML does **not** set raw Docker security options or the low-level network enforcement mechanism directly. See **[security-policy.md](security-policy.md)** for the policy model.
 
+### `workspace`
+
+Use `workspace` when a workflow should run inside a runtime-owned Git session instead of letting
+agents or package scripts own Git lifecycle commands.
+
+```yaml
+workspace:
+  repo: biztraak
+  mode: managed
+  lifecycle:
+    branch_prefix: ai
+    branch: js/features/spnext/reporting/worktree-report-poc
+    checkpoint: auto
+    publish: review
+```
+
+Public fields:
+
+- `repo`: logical repository identity or source path/URL.
+- `mode`: `managed` or `bind`. `managed` is preferred and creates a DockPipe-owned session
+  workspace; `bind` opts into the current checkout.
+- `base`: optional base ref for the session branch; defaults to `HEAD`.
+- `storage`: optional advanced implementation hint: `worktree`, `volume`, or `clone`.
+  `volume` creates a Docker named volume for container `/work` while keeping a managed Git
+  worktree as the checkpointable source of truth. `clone` is reserved for future distributed
+  workers.
+- `lifecycle.branch_prefix`: branch prefix for the runtime-created session branch; defaults to `ai`.
+- `lifecycle.branch`: exact session branch name. Use this when a repository has a required branch
+  naming convention; it overrides the `branch_prefix` + session-id derived branch name. The session
+  id remains a separate safe metadata key.
+- `lifecycle.checkpoint`: `manual`, `auto`, or `step`.
+- `lifecycle.publish`: `none`, `branch`, or `review`.
+
+Current implementation:
+
+- `mode: managed` creates a runtime-owned Git worktree under `bin/.dockpipe/sessions/<id>/workspace`
+  and runs the workflow from that workspace.
+- `mode: managed` plus `storage: volume` creates a runtime-owned Docker volume and mounts it at
+  `/work` for container runs. The runner overlays the worktree into the volume before each
+  container run and overlays volume changes back into the worktree after the run for checkpoints.
+- `mode: bind` checks out a runtime-created session branch in the current source checkout.
+- DockPipe writes session metadata and event logs under `bin/.dockpipe/sessions/<id>/`.
+- Runtime lifecycle operations now include `CreateSessionBranch`, `CheckpointSession`,
+  `SyncSession`, `PublishSession`, `ArchiveSession`, `CreateWorkerLease`, and
+  `ReleaseWorkerLease`.
+- Agents should request lifecycle transitions through DockPipe behavior; they should not run raw
+  Git commands such as `git commit`, `git pull`, or `git push`.
+
+The long-term architecture is documented in **[git-runtime-sessions.md](git-runtime-sessions.md)**.
+
 ---
 
 ## Named strategies
@@ -455,6 +525,7 @@ Each **`-`** under `steps:` is one step (or a **`group`** wrapper — see [Async
 | `package` | Required for a **packaged workflow step**. This is the **child workflow namespace** and must match the nested workflow’s **`namespace:`** in **`config.yml`** (resolution searches packaged / staging / **`workflows/`** trees on disk). |
 | `act` / `action` | Action script for this step. Do not combine this with packaged workflow steps. |
 | `vars` | Per-step env map (merged for that step; `--var` keys can be “locked”). |
+| `inputs` | Typed input bindings. On normal steps these resolve against the caller workflow model; on packaged workflow steps they resolve against the child packaged workflow model. |
 | `agent` | Optional agentic step declaration consumed by DorkPipe-owned scripts/tooling. Use this to declare startup prompt, accessible paths, model knobs, seeded worker profiles, and orchestration fanout directly in `config.yml`. |
 | `container` | Optional step-level container mount override. Use this on container steps to change the primary `/work` bind for one step, change its working subdirectory under `/work`, or add extra bind mounts without affecting the whole workflow. |
 | `security` | Optional step-level container security override. Use this only on container steps when one step needs a different profile or tighter `network` / `filesystem` / `process` settings than the workflow default. |
@@ -660,6 +731,11 @@ steps:
   - id: child
     workflow: child-name
     package: acme-team
+    inputs:
+      General.Mode: fast
 ```
 
 That is the explicit nesting form. Do not write `runtime: package`.
+
+When the child workflow publishes `types:`, `inputs:` on the parent step uses the child model. This lets a
+package expose stable field paths and editor help while still exporting the env names its scripts consume.

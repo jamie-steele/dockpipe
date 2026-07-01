@@ -92,6 +92,34 @@ tasks:
       - ./src/bin/dockpipe package compile workflows --workdir . --from packages/<package> --force
       - go test ./src/lib/domain ./src/lib/application
 
+  git_runtime_sessions:
+    read:
+      - AGENTS.md
+      - docs/agents/git-runtime-sessions.md
+      - docs/agents/architecture.md
+      - docs/agents/engine-boundary.md
+      - docs/agents/path-scopes.md
+      - docs/agents/core-package-model.md
+      - docs/agents/validation-commands.md
+    optional:
+      - docs/git-runtime-sessions.md
+      - docs/workflow-yaml.md
+      - src/lib/infrastructure/schema/workflow.schema.json
+    skills:
+      - dorkpipe-core-review
+      - dorkpipe-yaml-workflows
+      - dorkpipe-token-optimization
+    escalate:
+      required_for:
+        - public workspace lifecycle fields
+        - runtime-owned Git operations
+        - autonomous checkpoint or publish behavior
+        - managed workspace storage changes
+    validation:
+      - git diff --check
+      - go test ./src/lib/...
+      - make build
+
   package_authoring:
     read:
       - AGENTS.md

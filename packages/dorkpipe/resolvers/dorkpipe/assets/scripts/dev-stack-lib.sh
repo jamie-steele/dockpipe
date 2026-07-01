@@ -9,6 +9,96 @@ dorkpipe_stack_state_dir() {
   dockpipe scope --package dorkpipe dev-stack --workdir "${ROOT}"
 }
 
+dorkpipe_stack_log_mode() {
+  local mode
+  mode="$(printf '%s' "${DORKPIPE_DEV_STACK_LOG_MODE:-${DORKPIPE_ORCH_LOG_MODE:-${DORKPIPE_LOG_MODE:-default}}}" | tr '[:upper:]' '[:lower:]')"
+  case "${mode}" in
+    verbose|default|minimal|none) printf '%s\n' "${mode}" ;;
+    quiet|silent|off) printf 'none\n' ;;
+    "") printf 'default\n' ;;
+    *)
+      echo "[dorkpipe-dev-stack] unknown log mode ${mode}; expected verbose, default, minimal, or none" >&2
+      printf 'default\n'
+      ;;
+  esac
+}
+
+dorkpipe_stack_log_supports_color() {
+  [[ -t 2 && -z "${NO_COLOR:-}" ]]
+}
+
+dorkpipe_stack_log_icon() {
+  local kind="${1:-info}"
+  if dorkpipe_stack_log_supports_color; then
+    case "${kind}" in
+      ok) printf '\033[32m✓\033[0m' ;;
+      fail) printf '\033[31m✗\033[0m' ;;
+      *) printf '•' ;;
+    esac
+    return 0
+  fi
+  case "${kind}" in
+    ok) printf '[ok]' ;;
+    fail) printf '[fail]' ;;
+    *) printf '[..]' ;;
+  esac
+}
+
+dorkpipe_stack_log_dir() {
+  printf '%s/logs\n' "$(dorkpipe_stack_state_dir)"
+}
+
+dorkpipe_stack_log_tail() {
+  local log_path="${1:?log path}"
+  local lines="${2:-40}"
+  [[ -s "${log_path}" ]] || return 0
+  echo "[dorkpipe-dev-stack] last ${lines} log lines from ${log_path}:" >&2
+  tail -n "${lines}" "${log_path}" >&2 || true
+}
+
+dorkpipe_stack_run_logged() {
+  local label="${1:?label}"
+  local log_path="${2:?log path}"
+  shift 2
+  local mode pid rc frame_index frame frames
+  mode="$(dorkpipe_stack_log_mode)"
+  if [[ "${mode}" == "verbose" ]]; then
+    "$@"
+    return $?
+  fi
+
+  mkdir -p "$(dirname "${log_path}")"
+  : > "${log_path}"
+  if [[ "${mode}" != "none" ]]; then
+    printf '[dorkpipe-dev-stack] %s ... ' "${label}" >&2
+  fi
+  "$@" > "${log_path}" 2>&1 &
+  pid=$!
+  frame_index=0
+  frames='|/-\'
+  while kill -0 "${pid}" 2>/dev/null; do
+    if [[ "${mode}" != "none" && -t 2 ]]; then
+      frame="${frames:${frame_index}:1}"
+      printf '\r[dorkpipe-dev-stack] %s ... %s' "${label}" "${frame}" >&2
+      frame_index=$(( (frame_index + 1) % 4 ))
+    fi
+    sleep 0.2
+  done
+  set +e
+  wait "${pid}"
+  rc=$?
+  set -e
+  if [[ "${mode}" != "none" ]]; then
+    if [[ "${rc}" -eq 0 ]]; then
+      printf '\r[dorkpipe-dev-stack] %s %s\n' "$(dorkpipe_stack_log_icon ok)" "${label}" >&2
+    else
+      printf '\r[dorkpipe-dev-stack] %s %s\n' "$(dorkpipe_stack_log_icon fail)" "${label}" >&2
+      dorkpipe_stack_log_tail "${log_path}" "${DORKPIPE_DEV_STACK_LOG_FAILURE_LINES:-40}"
+    fi
+  fi
+  return "${rc}"
+}
+
 dorkpipe_stack_ensure_state_dir() {
   mkdir -p "$(dorkpipe_stack_state_dir)"
 }
@@ -758,17 +848,17 @@ dorkpipe_stack_wait_for_ollama_ready() {
 }
 
 dorkpipe_stack_ensure_ollama_model() {
-  local model
+  local model log_path
   if [[ "${DORKPIPE_DEV_STACK_PULL_MODEL:-1}" != "1" ]]; then
     return 0
   fi
   dorkpipe_stack_service_enabled ollama || return 0
   model="${DORKPIPE_DEV_STACK_OLLAMA_MODEL:-${PIPEON_OLLAMA_MODEL:-${DOCKPIPE_OLLAMA_MODEL:-${DORKPIPE_ORCH_OLLAMA_MODEL:-llama3.2}}}}"
   [[ -n "$model" ]] || return 0
-  printf '[dorkpipe-dev-stack] ensuring Ollama model %s is available...\n' "$model" >&2
   if ! dorkpipe_stack_wait_for_ollama_ready "${DORKPIPE_DEV_STACK_OLLAMA_READY_ATTEMPTS:-90}"; then
     echo "dorkpipe-dev-stack: Ollama did not become ready in time" >&2
     return 1
   fi
-  docker compose "${COMPOSE_ARGS[@]}" exec -T ollama ollama pull "$model" >&2
+  log_path="$(dorkpipe_stack_log_dir)/ollama-pull-${model//[^A-Za-z0-9_.-]/_}.log"
+  dorkpipe_stack_run_logged "ensure Ollama model ${model}" "${log_path}" docker compose "${COMPOSE_ARGS[@]}" exec -T ollama ollama pull "$model"
 }

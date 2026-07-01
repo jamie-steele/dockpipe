@@ -3,6 +3,7 @@ package infrastructure
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -54,6 +55,35 @@ func TestStateRootDefault(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := filepath.Join(dir, DockpipeDirRel)
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestStateRootNormalizesGitBashWindowsWorkdir(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows path normalization")
+	}
+	got, err := StateRoot(`/c/Source/uh-workflows`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(`C:\Source\uh-workflows`, DockpipeDirRel)
+	if got != want {
+		t.Fatalf("got %q want %q", got, want)
+	}
+}
+
+func TestPackagesRootNormalizesGitBashWindowsOverride(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("Windows path normalization")
+	}
+	t.Setenv(envPackagesRoot, `/c/Source/uh-workflows/.dockpipe-packages`)
+	got, err := PackagesRoot(`C:\unused`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Clean(`C:\Source\uh-workflows\.dockpipe-packages`)
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}

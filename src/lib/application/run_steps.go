@@ -417,6 +417,16 @@ func runStepPackageWorkflow(o *runStepsOpts, i, n int, step domain.Step, dockerE
 	if err := buildWorkflowEnvInto(o.envMap, subWf, wfPath, wfRoot, o.repoRoot, o.opts); err != nil {
 		return fmt.Errorf("step %s: %w", step.DisplayName(i), err)
 	}
+	packageInputsEnv, err := resolveWorkflowInputBindingsEnv(subWf, wfPath, o.projectRoot, step.Inputs, o.envMap)
+	if err != nil {
+		return fmt.Errorf("step %s: %w", step.DisplayName(i), err)
+	}
+	for k, v := range packageInputsEnv {
+		if !o.locked[k] {
+			o.envMap[k] = v
+			dockerEnv[k] = v
+		}
+	}
 	o.envSlice = domain.EnvMapToSlice(o.envMap)
 	if WorkflowNeedsDockerReachableResolved(subWf, workdir, o.repoRoot) {
 		if err := infrastructure.EnsureDockerReachable(os.Stderr); err != nil {
@@ -926,14 +936,16 @@ func applyStepEnvOverrides(o *runStepsOpts, step domain.Step, stepIndex int, env
 			dockerEnv[k] = v
 		}
 	}
-	inputsEnv, err := resolveStepInputsEnv(o.wf, inputsConfigPath, o.projectRoot, step, envMap)
-	if err != nil {
-		return err
-	}
-	for k, v := range inputsEnv {
-		if !o.locked[k] {
-			envMap[k] = v
-			dockerEnv[k] = v
+	if !step.UsesPackagedWorkflow() {
+		inputsEnv, err := resolveStepInputsEnv(o.wf, inputsConfigPath, o.projectRoot, step, envMap)
+		if err != nil {
+			return err
+		}
+		for k, v := range inputsEnv {
+			if !o.locked[k] {
+				envMap[k] = v
+				dockerEnv[k] = v
+			}
 		}
 	}
 	for k, v := range step.Vars {
@@ -1329,6 +1341,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 	runOpts = infrastructure.RunOpts{
 		Image:         image,
 		WorkdirHost:   workHost,
+		WorkdirVolume: envMap["DOCKPIPE_SESSION_VOLUME"],
 		WorkPath:      workPath,
 		ActionPath:    actionPath,
 		ExtraMounts:   authoredMounts,

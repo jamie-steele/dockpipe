@@ -1,0 +1,42 @@
+/// <summary>
+/// Contract for the DorkPipe orchestration stack workflow inputs.
+/// </summary>
+public Interface IOrchestrateStackConfig
+{
+    /// <summary>Local Ollama model used for bounded extractor lanes.</summary>
+    public string OllamaModel;
+    /// <summary>Brain provider used by orchestration planner and worker selection.</summary>
+    public string BrainProvider;
+    /// <summary>Whether cloud lanes should run inside containerized workers.</summary>
+    public string ContainerizeCloud;
+    /// <summary>APT-style package list installed into derived cloud worker images.</summary>
+    public string ContainerImagePackages;
+    /// <summary>Total cloud token budget for the orchestration run.</summary>
+    public string MaxTotalCloudTokens;
+    /// <summary>Per-task cloud token budget for the orchestration run.</summary>
+    public string MaxTaskCloudTokens;
+    /// <summary>Whether the run should fail when the configured cloud budget is exceeded.</summary>
+    public string StopOnBudgetExceeded;
+    /// <summary>Whether strong cloud lanes are available for selected tasks.</summary>
+    public string CloudLanes;
+    /// <summary>Fallback behavior when a task cannot produce a valid output.</summary>
+    public string FallbackOutput;
+    /// <summary>Default worker mode for orchestration tasks.</summary>
+    public string WorkMode;
+    /// <summary>Working directory used by generic orchestration workers.</summary>
+    public string WorkerCwd;
+    /// <summary>Working directory used by Claude workers.</summary>
+    public string ClaudeWorkerCwd;
+    /// <summary>Guest roots where approval-gated apply may write outputs.</summary>
+    public string ApplyAllowedGuestRoots;
+    /// <summary>Whether the development stack should auto-shutdown after the run.</summary>
+    public string DevStackAutodown;
+    /// <summary>HTTP MCP port used by the local development stack.</summary>
+    public string DevStackMcpPort;
+    /// <summary>HTTP endpoint for the local MCP server.</summary>
+    public string McpHttpUrl;
+    /// <summary>Database URL for the local development stack.</summary>
+    public string DatabaseUrl;
+    /// <summary>Local Ollama host endpoint used by extractor lanes.</summary>
+    public string OllamaHost;
+}

@@ -134,7 +134,7 @@ up)
 		UP_ARGS+=(--build --force-recreate)
 		;;
 	esac
-	docker compose "${COMPOSE_ARGS[@]}" "${UP_ARGS[@]}" "${SERVICES[@]}"
+	dorkpipe_stack_run_logged "docker compose up (${SERVICES[*]})" "$(dorkpipe_stack_log_dir)/compose-up.log" docker compose "${COMPOSE_ARGS[@]}" "${UP_ARGS[@]}" "${SERVICES[@]}"
 	dorkpipe_stack_wait_for_services_ready "${DORKPIPE_DEV_STACK_READY_ATTEMPTS:-60}"
 	dorkpipe_stack_ensure_ollama_model
 	dorkpipe_stack_wait_for_mcp_ready "${DORKPIPE_DEV_STACK_MCP_READY_ATTEMPTS:-60}"
@@ -148,7 +148,7 @@ down)
 	if dorkpipe_stack_service_enabled dorkpipe-stack || dorkpipe_stack_service_enabled dorkpipe-mcp-proxy; then
 		dorkpipe_stack_prepare_mcp_material
 	fi
-	docker compose "${COMPOSE_ARGS[@]}" down
+	dorkpipe_stack_run_logged "docker compose down" "$(dorkpipe_stack_log_dir)/compose-down.log" docker compose "${COMPOSE_ARGS[@]}" down
 	echo "dev-stack: down — sidecar stack stopped"
 	;;
 ps | status)

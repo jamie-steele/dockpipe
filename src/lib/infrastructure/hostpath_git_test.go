@@ -49,3 +49,36 @@ func TestNormalizeDockerBindMountWindows(t *testing.T) {
 		t.Fatalf("got %q want %q", got, want)
 	}
 }
+
+func TestStatePathsNormalizeMsysWorkdirOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("MSYS workdir normalization is Windows-only")
+	}
+	workdir := `/c/Source/uh-workflows`
+	wantState := filepath.Clean(`C:\Source\uh-workflows\bin\.dockpipe`)
+	gotState, err := StateRoot(workdir)
+	if err != nil {
+		t.Fatalf("StateRoot returned error: %v", err)
+	}
+	if gotState != wantState {
+		t.Fatalf("StateRoot(%q) = %q, want %q", workdir, gotState, wantState)
+	}
+
+	wantCache := filepath.Join(wantState, "internal", "cache", "images")
+	gotCache, err := ImageArtifactCacheDir(workdir)
+	if err != nil {
+		t.Fatalf("ImageArtifactCacheDir returned error: %v", err)
+	}
+	if gotCache != wantCache {
+		t.Fatalf("ImageArtifactCacheDir(%q) = %q, want %q", workdir, gotCache, wantCache)
+	}
+
+	wantIndex := filepath.Join(wantState, "internal", "images")
+	gotIndex, err := ImageArtifactIndexDir(workdir)
+	if err != nil {
+		t.Fatalf("ImageArtifactIndexDir returned error: %v", err)
+	}
+	if gotIndex != wantIndex {
+		t.Fatalf("ImageArtifactIndexDir(%q) = %q, want %q", workdir, gotIndex, wantIndex)
+	}
+}

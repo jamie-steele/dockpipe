@@ -87,6 +87,8 @@ type Workflow struct {
 	Image WorkflowImageConfig `yaml:"image,omitempty"`
 	// Container: optional workflow-level container mount overrides/defaults for container execution.
 	Container WorkflowContainerConfig `yaml:"container,omitempty"`
+	// Workspace: optional runtime-owned workspace/session lifecycle intent.
+	Workspace WorkflowWorkspaceConfig `yaml:"workspace,omitempty"`
 	// Inject: explicit compile closure dependencies (workflow/package ids and resolver profile names).
 	// Unlike imports:, this does not merge YAML — it only guides package compile for-workflow ordering.
 	Inject   WorkflowInjectList      `yaml:"inject,omitempty"`
@@ -125,6 +127,32 @@ type WorkflowContainerMount struct {
 	Host  string `yaml:"host,omitempty"`
 	Guest string `yaml:"guest,omitempty"`
 	Mode  string `yaml:"mode,omitempty"`
+}
+
+type WorkflowWorkspaceConfig struct {
+	Repo      string                           `yaml:"repo,omitempty"`
+	Mode      string                           `yaml:"mode,omitempty"`
+	Base      string                           `yaml:"base,omitempty"`
+	Storage   string                           `yaml:"storage,omitempty"`
+	Lifecycle WorkflowWorkspaceLifecycleConfig `yaml:"lifecycle,omitempty"`
+}
+
+type WorkflowWorkspaceLifecycleConfig struct {
+	BranchPrefix string `yaml:"branch_prefix,omitempty"`
+	Branch       string `yaml:"branch,omitempty"`
+	Checkpoint   string `yaml:"checkpoint,omitempty"`
+	Publish      string `yaml:"publish,omitempty"`
+}
+
+func (c WorkflowWorkspaceConfig) IsEmpty() bool {
+	return strings.TrimSpace(c.Repo) == "" &&
+		strings.TrimSpace(c.Mode) == "" &&
+		strings.TrimSpace(c.Base) == "" &&
+		strings.TrimSpace(c.Storage) == "" &&
+		strings.TrimSpace(c.Lifecycle.BranchPrefix) == "" &&
+		strings.TrimSpace(c.Lifecycle.Branch) == "" &&
+		strings.TrimSpace(c.Lifecycle.Checkpoint) == "" &&
+		strings.TrimSpace(c.Lifecycle.Publish) == ""
 }
 
 func (c WorkflowContainerConfig) IsEmpty() bool {
@@ -613,6 +641,7 @@ type workflowFile struct {
 	ModelPolicy     StepAgentModelPolicyConfig `yaml:"model_policy,omitempty"`
 	Image           WorkflowImageConfig        `yaml:"image,omitempty"`
 	Container       WorkflowContainerConfig    `yaml:"container,omitempty"`
+	Workspace       WorkflowWorkspaceConfig    `yaml:"workspace,omitempty"`
 	Inputs          map[string]InputBinding    `yaml:"inputs,omitempty"`
 	Vars            map[string]string          `yaml:"vars"`
 	Compose         WorkflowComposeConfig      `yaml:"compose,omitempty"`
@@ -798,6 +827,9 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 	if err := ValidateWorkflowContainerField(w); err != nil {
 		return err
 	}
+	if err := ValidateWorkflowWorkspaceField(w); err != nil {
+		return err
+	}
 	if err := ValidateWorkflowSingleFlowFields(w); err != nil {
 		return err
 	}
@@ -926,6 +958,47 @@ func ValidateWorkflowContainerField(w *Workflow) error {
 		return nil
 	}
 	return ValidateWorkflowContainerConfig("container", w.Container)
+}
+
+func ValidateWorkflowWorkspaceField(w *Workflow) error {
+	if w == nil {
+		return nil
+	}
+	return ValidateWorkflowWorkspaceConfig("workspace", w.Workspace)
+}
+
+func ValidateWorkflowWorkspaceConfig(fieldPrefix string, cfg WorkflowWorkspaceConfig) error {
+	if cfg.IsEmpty() {
+		return nil
+	}
+	mode := strings.TrimSpace(cfg.Mode)
+	if mode == "" {
+		mode = "managed"
+	}
+	if err := validateEnum(fieldPrefix+".mode", mode, map[string]struct{}{"managed": {}, "bind": {}}); err != nil {
+		return err
+	}
+	if err := validateEnum(fieldPrefix+".lifecycle.checkpoint", cfg.Lifecycle.Checkpoint, map[string]struct{}{"": {}, "manual": {}, "auto": {}, "step": {}}); err != nil {
+		return err
+	}
+	if err := validateEnum(fieldPrefix+".lifecycle.publish", cfg.Lifecycle.Publish, map[string]struct{}{"": {}, "none": {}, "branch": {}, "review": {}}); err != nil {
+		return err
+	}
+	if err := validateEnum(fieldPrefix+".storage", cfg.Storage, map[string]struct{}{"": {}, "volume": {}, "worktree": {}, "clone": {}}); err != nil {
+		return err
+	}
+	if strings.TrimSpace(cfg.Lifecycle.BranchPrefix) != "" && strings.ContainsAny(cfg.Lifecycle.BranchPrefix, " \t\r\n") {
+		return fmt.Errorf("%s.lifecycle.branch_prefix must not contain whitespace", fieldPrefix)
+	}
+	if branch := strings.TrimSpace(cfg.Lifecycle.Branch); branch != "" {
+		if strings.ContainsAny(branch, " \t\r\n") {
+			return fmt.Errorf("%s.lifecycle.branch must not contain whitespace", fieldPrefix)
+		}
+		if strings.HasPrefix(branch, "/") || strings.HasSuffix(branch, "/") || strings.Contains(branch, "//") {
+			return fmt.Errorf("%s.lifecycle.branch must be a relative git branch name without empty path segments", fieldPrefix)
+		}
+	}
+	return nil
 }
 
 func ValidateWorkflowSecurityConfig(fieldPrefix string, cfg WorkflowSecurityConfig) error {

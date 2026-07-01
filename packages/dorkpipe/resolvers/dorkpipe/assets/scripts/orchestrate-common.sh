@@ -154,6 +154,100 @@ dorkpipe_orchestrate_bool() {
   esac
 }
 
+dorkpipe_orchestrate_log_mode() {
+  local mode
+  mode="$(printf '%s' "${DORKPIPE_ORCH_LOG_MODE:-${DORKPIPE_LOG_MODE:-default}}" | tr '[:upper:]' '[:lower:]')"
+  case "${mode}" in
+    verbose|default|minimal|none) printf '%s\n' "${mode}" ;;
+    quiet|silent|off) printf 'none\n' ;;
+    "") printf 'default\n' ;;
+    *)
+      echo "[dorkpipe] unknown DORKPIPE_ORCH_LOG_MODE=${mode}; expected verbose, default, minimal, or none" >&2
+      printf 'default\n'
+      ;;
+  esac
+}
+
+dorkpipe_orchestrate_log_is_verbose() {
+  [[ "$(dorkpipe_orchestrate_log_mode)" == "verbose" ]]
+}
+
+dorkpipe_orchestrate_log_is_none() {
+  [[ "$(dorkpipe_orchestrate_log_mode)" == "none" ]]
+}
+
+dorkpipe_orchestrate_log_supports_color() {
+  [[ -t 2 && -z "${NO_COLOR:-}" ]]
+}
+
+dorkpipe_orchestrate_log_icon() {
+  local kind="${1:-info}"
+  if dorkpipe_orchestrate_log_supports_color; then
+    case "${kind}" in
+      ok) printf '\033[32m✓\033[0m' ;;
+      fail) printf '\033[31m✗\033[0m' ;;
+      *) printf '•' ;;
+    esac
+    return 0
+  fi
+  case "${kind}" in
+    ok) printf '[ok]' ;;
+    fail) printf '[fail]' ;;
+    *) printf '[..]' ;;
+  esac
+}
+
+dorkpipe_orchestrate_log_tail() {
+  local log_path="${1:?log path}"
+  local lines="${2:-40}"
+  [[ -s "${log_path}" ]] || return 0
+  echo "[dorkpipe] last ${lines} log lines from ${log_path}:" >&2
+  tail -n "${lines}" "${log_path}" >&2 || true
+}
+
+dorkpipe_orchestrate_run_logged() {
+  local label="${1:?label}"
+  local log_path="${2:?log path}"
+  shift 2
+  local mode pid rc frame_index frame frames
+  mode="$(dorkpipe_orchestrate_log_mode)"
+  if [[ "${mode}" == "verbose" ]]; then
+    "$@"
+    return $?
+  fi
+
+  mkdir -p "$(dirname "${log_path}")"
+  : > "${log_path}"
+  if [[ "${mode}" != "none" ]]; then
+    printf '[dorkpipe] %s ... ' "${label}" >&2
+  fi
+  "$@" > "${log_path}" 2>&1 &
+  pid=$!
+  frame_index=0
+  frames='|/-\'
+  while kill -0 "${pid}" 2>/dev/null; do
+    if [[ "${mode}" != "none" && -t 2 ]]; then
+      frame="${frames:${frame_index}:1}"
+      printf '\r[dorkpipe] %s ... %s' "${label}" "${frame}" >&2
+      frame_index=$(( (frame_index + 1) % 4 ))
+    fi
+    sleep 0.2
+  done
+  set +e
+  wait "${pid}"
+  rc=$?
+  set -e
+  if [[ "${mode}" != "none" ]]; then
+    if [[ "${rc}" -eq 0 ]]; then
+      printf '\r[dorkpipe] %s %s\n' "$(dorkpipe_orchestrate_log_icon ok)" "${label}" >&2
+    else
+      printf '\r[dorkpipe] %s %s\n' "$(dorkpipe_orchestrate_log_icon fail)" "${label}" >&2
+      dorkpipe_orchestrate_log_tail "${log_path}" "${DORKPIPE_ORCH_LOG_FAILURE_LINES:-40}"
+    fi
+  fi
+  return "${rc}"
+}
+
 dorkpipe_orchestrate_now_ms() {
   date +%s%3N
 }
@@ -532,7 +626,7 @@ dorkpipe_orchestrate_container_auth_envs() {
   esac
 }
 
-dorkpipe_orchestrate_auth_state_hint() {
+dorkpipe_orchestrate_auth_is_available() {
   local provider="${1:?provider}"
   local host_dir host_file
   case "${provider}" in
@@ -542,7 +636,6 @@ dorkpipe_orchestrate_auth_state_hint() {
       fi
       host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}" 2>/dev/null || true)"
       [[ -n "${host_dir}" && -s "${host_dir}/auth.json" ]] && return 0
-      echo "codex auth unavailable: set OPENAI_API_KEY/CODEX_API_KEY or run codex login so ${host_dir:-<codex auth dir>}/auth.json exists" >&2
       return 1
       ;;
     claude)
@@ -553,11 +646,101 @@ dorkpipe_orchestrate_auth_state_hint() {
       host_file="$(dockpipe scope resolver "${provider}" config-file 2>/dev/null || true)"
       [[ -n "${host_dir}" && -s "${host_dir}/.credentials.json" ]] && return 0
       [[ -n "${host_file}" && -s "${host_file}" ]] && return 0
-      echo "claude auth unavailable: set ANTHROPIC_API_KEY/CLAUDE_API_KEY or run claude login so ${host_dir:-<claude auth dir>} contains credentials" >&2
       return 1
       ;;
   esac
   return 0
+}
+
+dorkpipe_orchestrate_auth_login_command_text() {
+  case "${1:-}" in
+    codex) printf 'codex login\n' ;;
+    claude) printf 'claude /login\n' ;;
+    *) printf '%s login\n' "${1:-provider}" ;;
+  esac
+}
+
+dorkpipe_orchestrate_has_tty() {
+  { : </dev/tty >/dev/tty; } 2>/dev/null
+}
+
+dorkpipe_orchestrate_run_auth_login() {
+  local provider="${1:?provider}"
+  case "${provider}" in
+    codex)
+      if ! command -v codex >/dev/null 2>&1; then
+        echo "codex login unavailable: codex CLI is not installed on the host PATH" >&2
+        return 1
+      fi
+      echo "[dorkpipe] launching host login: codex login" >&2
+      if dorkpipe_orchestrate_has_tty; then
+        codex login </dev/tty >/dev/tty
+      else
+        codex login
+      fi
+      ;;
+    claude)
+      if ! command -v claude >/dev/null 2>&1; then
+        echo "claude login unavailable: claude CLI is not installed on the host PATH" >&2
+        return 1
+      fi
+      echo "[dorkpipe] launching host login: claude /login" >&2
+      if dorkpipe_orchestrate_has_tty; then
+        claude /login </dev/tty >/dev/tty
+      else
+        claude /login
+      fi
+      ;;
+    *)
+      echo "auth login unsupported for provider: ${provider}" >&2
+      return 1
+      ;;
+  esac
+}
+
+dorkpipe_orchestrate_auth_preflight() {
+  local provider="${1:?provider}"
+  local mode answer command_text
+  if dorkpipe_orchestrate_auth_is_available "${provider}"; then
+    return 0
+  fi
+  command_text="$(dorkpipe_orchestrate_auth_login_command_text "${provider}")"
+  echo "[dorkpipe] ${provider} auth preflight failed." >&2
+  echo "[dorkpipe] Run '${command_text}' or set the provider API key before launching ${provider} workers." >&2
+  mode="$(printf '%s' "${DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING:-ask}" | tr '[:upper:]' '[:lower:]')"
+  case "${mode}" in
+    1|true|yes|always|auto-login)
+      ;;
+    0|false|no|never|off|disabled)
+      return 1
+      ;;
+    ask|prompt|"")
+      if ! dorkpipe_orchestrate_has_tty; then
+        echo "[dorkpipe] cannot ask to log in because this run is non-interactive." >&2
+        return 1
+      fi
+      printf '[dorkpipe] Login to %s now? [y/N] ' "${provider}" >/dev/tty
+      IFS= read -r answer </dev/tty || answer=""
+      case "${answer}" in
+        y|Y|yes|YES) ;;
+        *)
+          echo "[dorkpipe] ${provider} login skipped by user." >&2
+          return 1
+          ;;
+      esac
+      ;;
+    *)
+      echo "[dorkpipe] unknown DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING=${DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING}; expected ask, never, or always" >&2
+      return 1
+      ;;
+  esac
+  dorkpipe_orchestrate_run_auth_login "${provider}" || return 1
+  if dorkpipe_orchestrate_auth_is_available "${provider}"; then
+    echo "[dorkpipe] ${provider} auth preflight passed after login." >&2
+    return 0
+  fi
+  echo "[dorkpipe] ${provider} auth still unavailable after login. Check the login result and retry." >&2
+  return 1
 }
 
 dorkpipe_orchestrate_run_container_worker() {
@@ -569,7 +752,7 @@ dorkpipe_orchestrate_run_container_worker() {
   dockpipe_bin="$(dorkpipe_orchestrate_dockpipe_bin)" || return 1
   raw_response_path="${response_path}.raw"
   worker_cwd="$(dorkpipe_orchestrate_worker_cwd "${provider}")"
-  dorkpipe_orchestrate_auth_state_hint "${provider}" || return 1
+  dorkpipe_orchestrate_auth_preflight "${provider}" || return 1
 
   local args=(
     "--workdir" "${ROOT}"

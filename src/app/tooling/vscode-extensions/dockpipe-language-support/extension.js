@@ -2,6 +2,7 @@
 const vscode = require("vscode");
 const fs = require("fs/promises");
 const path = require("path");
+const zlib = require("zlib");
 
 const DOCKPIPE_TOP_LEVEL_KEYS = [
   "name",
@@ -16,6 +17,7 @@ const DOCKPIPE_TOP_LEVEL_KEYS = [
   "vars",
   "compose",
   "container",
+  "workspace",
   "security",
   "image",
   "steps",
@@ -76,6 +78,7 @@ const TOP_LEVEL_KEY_DETAILS = {
   vars: "Workflow variables exported before execution unless already set in the environment.",
   compose: "Optional Docker Compose settings for host built-ins such as compose_up, compose_down, and compose_ps.",
   container: "Optional container mount defaults. Use this to override the primary /work bind for the workflow and declare additional host-to-container mounts.",
+  workspace: "Optional runtime-owned Git workspace/session lifecycle. Use managed for DockPipe-owned worktrees and bind only for explicit local checkout sessions.",
   security: "Optional authored container security policy. Choose a security profile, then apply bounded network/filesystem/process overrides.",
   image: "Optional image customization. Use image.packages.apt to materialize a derived Docker image with workflow-authored Debian packages.",
   steps: "Ordered workflow steps. Each step can run in a container or on the host.",
@@ -284,6 +287,7 @@ const CONTAINER_KEYS = new Set([
   "finally",
   "run",
   "compose",
+  "workspace",
   "security",
   "image",
   "outputs",
@@ -362,6 +366,21 @@ const CONTAINER_MOUNT_KEY_DETAILS = {
   host: "Host path for this additional bind mount. Relative paths resolve from the active workflow source/workdir.",
   guest: "Container destination path for this additional bind mount.",
   mode: "Optional bind mode. Use ro for read-only or rw for read-write."
+};
+
+const WORKSPACE_KEY_DETAILS = {
+  repo: "Logical repository identity or source path/URL for runtime-owned workspace sessions.",
+  mode: "Workspace storage mode. Use managed by default; bind explicitly opts into the current checkout.",
+  base: "Base ref for the session branch. Defaults to HEAD.",
+  storage: "Advanced implementation hint such as worktree, volume, or clone. volume mounts a runtime Docker volume at /work while keeping a managed worktree for checkpoints.",
+  lifecycle: "Runtime-owned branch, checkpoint, and publish policy."
+};
+
+const WORKSPACE_LIFECYCLE_KEY_DETAILS = {
+  branch_prefix: "Prefix for runtime-created session branches. Defaults to ai.",
+  branch: "Exact session branch name. Use this when a repo requires a slash-preserving branch convention; overrides branch_prefix-derived names.",
+  checkpoint: "Runtime checkpoint policy: manual, auto, or step.",
+  publish: "Future runtime publish policy: none, branch, or review. Merge remains human-controlled."
 };
 
 const CORE_HELPER_PROFILES = {
@@ -1147,6 +1166,235 @@ async function buildModelContext(doc) {
   return ctx;
 }
 
+async function buildModelContextForWorkflowFile(fileName) {
+  const src = await readIfExists(fileName);
+  if (!src) return { types: {}, knownValues: [] };
+  return buildModelContext({
+    fileName,
+    getText: () => src
+  });
+}
+
+async function modelContextForInputsPosition(document, position, fallbackCtx) {
+  const stepRef = packagedWorkflowStepForInputsPosition(document, position);
+  if (!stepRef) return fallbackCtx;
+  const childCtx = await resolvePackagedWorkflowModelContextForEditor(document, stepRef.workflow, stepRef.pkg);
+  return childCtx || fallbackCtx;
+}
+
+function packagedWorkflowStepForInputsPosition(document, position) {
+  const lines = document.getText().split(/\r?\n/);
+  let inputsLine = -1;
+  let inputsIndent = -1;
+  for (let i = position.line; i >= 0; i--) {
+    const m = lines[i].match(/^(\s*)inputs:\s*(?:#.*)?$/);
+    if (!m) continue;
+    inputsLine = i;
+    inputsIndent = m[1].length;
+    break;
+  }
+  if (inputsLine < 0) return null;
+
+  let stepStart = -1;
+  let stepIndent = -1;
+  for (let i = inputsLine - 1; i >= 0; i--) {
+    const m = lines[i].match(/^(\s*)-\s+[A-Za-z_][A-Za-z0-9_.-]*\s*:/);
+    if (!m) continue;
+    const indent = m[1].length;
+    if (indent < inputsIndent) {
+      stepStart = i;
+      stepIndent = indent;
+      break;
+    }
+  }
+  if (stepStart < 0) return null;
+
+  let workflow = "";
+  let pkg = "";
+  for (let i = stepStart; i < lines.length; i++) {
+    if (i > stepStart && new RegExp(`^\\s{${stepIndent}}-\\s+`).test(lines[i])) break;
+    const m = lines[i].match(/^\s*(workflow|package)\s*:\s*(.+?)\s*(?:#.*)?$/);
+    if (!m) continue;
+    if (m[1] === "workflow") workflow = yamlScalarValue(m[2]);
+    if (m[1] === "package") pkg = yamlScalarValue(m[2]);
+  }
+  if (!workflow || !pkg) return null;
+  return { workflow, pkg };
+}
+
+async function resolvePackagedWorkflowModelContextForEditor(document, workflowName, namespace) {
+  const pattern = `**/${workflowName}/config.yml`;
+  const uris = await vscode.workspace.findFiles(pattern, "**/{.git,node_modules}/**", 50);
+  for (const uri of uris) {
+    const src = await readIfExists(uri.fsPath);
+    if (!src) continue;
+    const ns = yamlTopLevelScalarFromSource(src, "namespace");
+    if (ns === namespace) return buildModelContextForWorkflowFile(uri.fsPath);
+  }
+
+  const startDir = path.dirname(document.fileName);
+  const projectRoot = await findProjectRoot(startDir);
+  const direct = path.join(projectRoot, "bin", ".dockpipe", "internal", "packages", "workflows", workflowName, "config.yml");
+  const directSrc = await readIfExists(direct);
+  if (directSrc && yamlTopLevelScalarFromSource(directSrc, "namespace") === namespace) {
+    return buildModelContextForWorkflowFile(direct);
+  }
+  return resolvePackagedWorkflowModelContextFromStores(projectRoot, workflowName, namespace);
+}
+
+async function resolvePackagedWorkflowModelContextFromStores(projectRoot, workflowName, namespace) {
+  const dirs = [];
+  dirs.push(path.join(projectRoot, "bin", ".dockpipe", "internal", "packages", "workflows"));
+  const projectCfg = await readDockpipeProjectConfig(projectRoot);
+  const packages = projectCfg?.packages || {};
+  if (packages.tarball_dir) {
+    dirs.push(path.isAbsolute(packages.tarball_dir) ? packages.tarball_dir : path.join(projectRoot, packages.tarball_dir));
+  }
+  for (const src of Array.isArray(packages.sources) ? packages.sources : []) {
+    const srcPath = String(src?.path || "").trim();
+    if (!srcPath) continue;
+    const abs = path.isAbsolute(srcPath) ? srcPath : path.join(projectRoot, srcPath);
+    if (src.kind === "store" || !src.kind) {
+      dirs.push(path.join(abs, "workflows"));
+    } else if (src.kind === "tarball_dir") {
+      dirs.push(abs);
+    }
+  }
+
+  for (const dir of [...new Set(dirs)]) {
+    const names = await fs.readdir(dir).catch(() => []);
+    const prefix = `dockpipe-workflow-${workflowName}-`;
+    for (const name of names) {
+      if (!name.startsWith(prefix) || !name.endsWith(".tar.gz")) continue;
+      const archivePath = path.join(dir, name);
+      const entries = await readGzipTarTextEntries(archivePath);
+      if (!entries) continue;
+      const configEntry = Object.keys(entries).find((entry) => entry.endsWith(`/workflows/${workflowName}/config.yml`) || entry === `workflows/${workflowName}/config.yml`);
+      if (!configEntry) continue;
+      const configSrc = entries[configEntry];
+      if (yamlTopLevelScalarFromSource(configSrc, "namespace") !== namespace) continue;
+      return buildModelContextForWorkflowArchive(archivePath, entries, configEntry);
+    }
+  }
+  return null;
+}
+
+async function readDockpipeProjectConfig(projectRoot) {
+  const src = await readIfExists(path.join(projectRoot, "dockpipe.config.json"));
+  if (!src) return null;
+  try {
+    return JSON.parse(src);
+  } catch {
+    return null;
+  }
+}
+
+async function readGzipTarTextEntries(archivePath) {
+  try {
+    const compressed = await fs.readFile(archivePath);
+    const tar = zlib.gunzipSync(compressed);
+    const out = {};
+    let offset = 0;
+    while (offset + 512 <= tar.length) {
+      const header = tar.subarray(offset, offset + 512);
+      offset += 512;
+      const rawName = header.subarray(0, 100).toString("utf8").replace(/\0.*$/, "");
+      const rawPrefix = header.subarray(345, 500).toString("utf8").replace(/\0.*$/, "");
+      if (!rawName) break;
+      const sizeRaw = header.subarray(124, 136).toString("utf8").replace(/\0.*$/, "").trim();
+      const size = parseInt(sizeRaw || "0", 8) || 0;
+      const name = normalizeArchivePath(rawPrefix ? `${rawPrefix}/${rawName}` : rawName);
+      const body = tar.subarray(offset, offset + size);
+      if (name.endsWith(".yml") || name.endsWith(".yaml") || name.endsWith(".pipe")) {
+        out[name] = body.toString("utf8");
+      }
+      offset += Math.ceil(size / 512) * 512;
+    }
+    return out;
+  } catch {
+    return null;
+  }
+}
+
+function normalizeArchivePath(p) {
+  return String(p || "").replace(/\\/g, "/").replace(/^\.?\//, "");
+}
+
+function buildModelContextForWorkflowArchive(archivePath, entries, configEntry) {
+  const configSrc = entries[configEntry] || "";
+  const typeEntries = extractTypesEntriesFromSource(configSrc).map((spec) => ({
+    spec,
+    baseDir: path.posix.dirname(configEntry)
+  }));
+  if (typeEntries.length === 0) {
+    return { types: {}, knownValues: [] };
+  }
+
+  /** @type {ModelContext} */
+  const ctx = { types: {}, knownValues: [] };
+  const loadedModelFiles = new Set();
+
+  function readArchiveEntry(entryPath) {
+    return entries[normalizeArchivePath(entryPath)] || "";
+  }
+
+  function loadPipeDir(dirPath) {
+    const prefix = normalizeArchivePath(dirPath).replace(/\/?$/, "/");
+    for (const [entry, src] of Object.entries(entries)) {
+      if (!entry.startsWith(prefix) || !entry.endsWith(".pipe") || loadedModelFiles.has(entry)) continue;
+      loadedModelFiles.add(entry);
+      for (const t of parsePipeModel(src)) {
+        ctx.types[t.name] = t;
+      }
+    }
+  }
+
+  for (const entry of typeEntries) {
+    const spec = String(entry.spec || "").trim();
+    if (!spec) continue;
+    let left = spec;
+    let explicitRef = "";
+    const i = spec.indexOf("<");
+    const j = spec.lastIndexOf(">");
+    if (i >= 0 && j > i) {
+      left = spec.slice(0, i).trim();
+      explicitRef = spec.slice(i + 1, j).trim();
+    }
+    let rel = left;
+    if (!rel.endsWith(".pipe")) rel += ".pipe";
+    const primaryFile = normalizeArchivePath(path.posix.join(entry.baseDir, rel));
+    const primarySrc = readArchiveEntry(primaryFile);
+    if (!primarySrc) continue;
+    loadPipeDir(path.posix.join(path.posix.dirname(configEntry), "models"));
+    loadPipeDir(path.posix.dirname(primaryFile));
+
+    const primaryTypes = parsePipeModel(primarySrc);
+    const primaryName = primaryTypes[0]?.name;
+    if (!primaryName) continue;
+    ctx.entryInterface = primaryName;
+    if (explicitRef) {
+      ctx.entryClass = explicitRef;
+    } else {
+      const iface = ctx.types[primaryName];
+      if (iface?.kind === "Interface") {
+        const impl = Object.values(ctx.types).filter((t) => t.implements === primaryName);
+        if (impl.length === 1) ctx.entryClass = impl[0].name;
+      } else {
+        ctx.entryClass = primaryName;
+      }
+    }
+  }
+  return ctx;
+}
+
+function yamlTopLevelScalarFromSource(src, key) {
+  for (const line of String(src || "").split(/\r?\n/)) {
+    const m = line.match(/^([A-Za-z_][A-Za-z0-9_.-]*)\s*:\s*(.+?)\s*$/);
+    if (m && m[1] === key) return yamlScalarValue(m[2]);
+  }
+  return "";
+}
+
 function wordRange(document, position) {
   return document.getWordRangeAtPosition(position, /[A-Za-z0-9_.-]+/u);
 }
@@ -1258,7 +1506,7 @@ function analyzeYamlStructure(document) {
       } else if (parents.includes("steps") || parents.includes("finally")) {
         info.kind = "stepKey";
       } else {
-        info.kind = "key";
+        info.kind = "nestedKey";
       }
 
       const shouldPush = !parsed.hasInlineValue || CONTAINER_KEYS.has(parsed.key);
@@ -1869,6 +2117,10 @@ function activate(context) {
               docs = WORKFLOW_VIEW_SECTION_KEY_DETAILS;
             } else if (parentChain.length === 1 && parentChain[0] === "container") {
               docs = CONTAINER_KEY_DETAILS;
+            } else if (parentChain.length === 1 && parentChain[0] === "workspace") {
+              docs = WORKSPACE_KEY_DETAILS;
+            } else if (parentChain.length === 2 && parentChain[0] === "workspace" && parentChain[1] === "lifecycle") {
+              docs = WORKSPACE_LIFECYCLE_KEY_DETAILS;
             } else if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "vm") {
               docs = STEP_VM_KEY_DETAILS;
             } else if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "container") {
@@ -1972,6 +2224,7 @@ function activate(context) {
           }
           const inputsInfo = findInputsBlockInfo(document, position);
           if (inputsInfo) {
+            const inputsModelCtx = await modelContextForInputsPosition(document, position, modelCtx);
             const before = lineToCursor;
             const colonIdx = before.indexOf(":");
             if (colonIdx < 0) {
@@ -1984,7 +2237,7 @@ function activate(context) {
                 }
                 return items;
               }
-              for (const field of modelInputFields(modelCtx)) {
+              for (const field of modelInputFields(inputsModelCtx)) {
                 const it = new vscode.CompletionItem(field.path, vscode.CompletionItemKind.Variable);
                 it.insertText = `${field.path}: `;
                 it.detail = `${field.type || "string"}${field.exportedName ? ` → ${field.exportedName}` : ""}`;
@@ -2000,7 +2253,7 @@ function activate(context) {
               return items;
             } else {
               const key = before.slice(0, colonIdx).trim().replace(/^- /, "");
-              const fieldInfo = modelInputFieldInfo(modelCtx, key);
+              const fieldInfo = modelInputFieldInfo(inputsModelCtx, key);
               if (fieldInfo?.defaultValue) {
                 const it = new vscode.CompletionItem(fieldInfo.defaultValue, vscode.CompletionItemKind.Value);
                 it.insertText = quoted(fieldInfo.defaultValue);
@@ -2056,17 +2309,24 @@ function activate(context) {
             if (word === "vars") {
               return hoverForVarsContainer(range, modelCtx, TOP_LEVEL_KEY_DETAILS.vars);
             }
-            return hoverForWorkflowKey(word, TOP_LEVEL_KEY_DETAILS, range);
+            const hover = hoverForWorkflowKey(word, TOP_LEVEL_KEY_DETAILS, range);
+            if (hover) {
+              return hover;
+            }
           }
 
           if (info?.kind === "stepKey") {
             if (word === "inputs") {
-              return hoverForInputsContainer(range, modelCtx, STEP_KEY_DETAILS.inputs);
+              const inputsModelCtx = await modelContextForInputsPosition(document, position, modelCtx);
+              return hoverForInputsContainer(range, inputsModelCtx, STEP_KEY_DETAILS.inputs);
             }
             if (word === "vars") {
               return hoverForVarsContainer(range, modelCtx, STEP_KEY_DETAILS.vars);
             }
-            return hoverForWorkflowKey(word, STEP_KEY_DETAILS, range);
+            const hover = hoverForWorkflowKey(word, STEP_KEY_DETAILS, range);
+            if (hover) {
+              return hover;
+            }
           }
 
           if (info?.kind === "nestedKey") {
@@ -2076,6 +2336,12 @@ function activate(context) {
             }
             if (parentChain.length === 1 && parentChain[0] === "container") {
               return hoverForWorkflowKey(word, CONTAINER_KEY_DETAILS, range);
+            }
+            if (parentChain.length === 1 && parentChain[0] === "workspace") {
+              return hoverForWorkflowKey(word, WORKSPACE_KEY_DETAILS, range);
+            }
+            if (parentChain.length === 2 && parentChain[0] === "workspace" && parentChain[1] === "lifecycle") {
+              return hoverForWorkflowKey(word, WORKSPACE_LIFECYCLE_KEY_DETAILS, range);
             }
             if (info?.inSteps && parentChain.length === 1 && parentChain[0] === "vm") {
               return hoverForWorkflowKey(word, STEP_VM_KEY_DETAILS, range);
@@ -2154,7 +2420,8 @@ function activate(context) {
 
           const inputsInfo = findInputsBlockInfo(document, position);
           if (!inputsInfo) return null;
-          const inputField = modelInputFieldInfo(modelCtx, inputsInfo.key);
+          const inputsModelCtx = await modelContextForInputsPosition(document, position, modelCtx);
+          const inputField = modelInputFieldInfo(inputsModelCtx, inputsInfo.key);
           if (isDirectChildOfInputs(inputsInfo) && inputField && rangeContains(info?.keyRange, position)) {
             return hoverForModelField(inputsInfo.key, inputField, info.keyRange, yamlScalarValue(info.valueText));
           }

@@ -29,6 +29,8 @@ Capabilities are separate dotted ids documented in `docs/capabilities.md`; they 
 - `runtime.type: agent` classifies behavior. It is not a separate DockPipe product model.
 - DorkPipe is a package/harness on top of DockPipe primitives.
 - DockPipe is extended with workflows, runtimes, resolvers, and strategies; not plugins, core branching, or special-case flags.
+- Runtime-owned Git sessions are runtime lifecycle behavior. Agents and resolvers request lifecycle
+  transitions; they do not own raw Git commands.
 
 ## `src/core` Shape
 
@@ -55,4 +57,5 @@ If it is a tool/platform, put it under `resolvers/`. If it is an execution subst
 
 - `docs/architecture-model.md`
 - `docs/capabilities.md`
+- `docs/git-runtime-sessions.md`
 - `docs/workflow-yaml.md`

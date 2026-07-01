@@ -77,6 +77,7 @@ var mainUsageSections = []usageSection{
 			{"compile", "Same as dockpipe package compile (core, resolvers, workflows)"},
 			{"release upload", "Upload a file to S3-compatible storage (self-hosted; uses aws CLI)"},
 			{"workflow validate|list", "Validate YAML or print the DockPipe-resolved workflow catalog"},
+			{"session list|inspect|switch|publish", "Inspect and publish runtime-owned Git session workspaces"},
 			{"catalog list", "Print the DockPipe-owned launcher/tooling catalog (workflows, resolvers, strategies, runtimes)"},
 			{"pipelang compile|invoke|materialize", "PipeLang typed authoring helpers"},
 			{"doctor", "Check docker, bash, and bundled assets"},

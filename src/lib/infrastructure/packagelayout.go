@@ -136,6 +136,7 @@ func PackageStateDir(workdir, scope string) (string, error) {
 // PackagesRoot returns the absolute directory for installed packages (default: workdir/bin/.dockpipe/internal/packages).
 func PackagesRoot(workdir string) (string, error) {
 	if v := strings.TrimSpace(os.Getenv(envPackagesRoot)); v != "" {
+		v = HostPathForGit(v)
 		if filepath.IsAbs(v) {
 			return filepath.Clean(v), nil
 		}

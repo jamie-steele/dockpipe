@@ -238,10 +238,14 @@ func DockerPull(image string) error {
 type RunOpts struct {
 	Image       string
 	WorkdirHost string
-	WorkPath    string
-	ActionPath  string
-	ExtraMounts []string
-	ExtraEnv    []string
+	// WorkdirVolume mounts a Docker named volume at /work instead of bind-mounting WorkdirHost.
+	// When WorkdirHost is set, the runner overlays host -> volume before the container run and
+	// volume -> host after it so runtime-owned Git checkpoints can still operate on the host worktree.
+	WorkdirVolume string
+	WorkPath      string
+	ActionPath    string
+	ExtraMounts   []string
+	ExtraEnv      []string
 	// ContainerUser overrides the default user mapping when set (for example "0:0").
 	ContainerUser string
 	// ReadOnlyRootFS enables docker --read-only for the container root filesystem.
@@ -309,6 +313,12 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	workHost, absErr = filepathAbsDocker(workHost)
 	if absErr != nil {
 		return 1, absErr
+	}
+	workVolume := strings.TrimSpace(o.WorkdirVolume)
+	if workVolume != "" {
+		if err := dockerSyncWorkspaceIntoVolume(o.Image, workHost, workVolume); err != nil {
+			return 1, err
+		}
 	}
 
 	stdoutFile := o.Stdout
@@ -398,8 +408,12 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	if mem := strings.TrimSpace(o.MemoryLimit); mem != "" {
 		args = append(args, "--memory", mem)
 	}
+	workMount := workHost + ":" + containerWorkMount
+	if workVolume != "" {
+		workMount = workVolume + ":" + containerWorkMount
+	}
 	args = append(args,
-		"-v", workHost+":"+containerWorkMount,
+		"-v", workMount,
 		"-w", cwdInContainer,
 		"-e", "DOCKPIPE_CONTAINER_WORKDIR="+containerWorkMount,
 	)
@@ -594,6 +608,11 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		rm.Env = dockerCommandEnv(os.Environ(), dockerCmd)
 		_ = rm.Run()
 	}
+	if workVolume != "" {
+		if err := dockerSyncWorkspaceFromVolume(o.Image, workVolume, workHost); err != nil && rc == 0 {
+			return 1, err
+		}
+	}
 
 	if o.CommitOnHost {
 		if rc != 0 {
@@ -603,6 +622,30 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		}
 	}
 	return rc, nil
+}
+
+func dockerSyncWorkspaceIntoVolume(image, hostDir, volume string) error {
+	return dockerSyncWorkspace(image, hostDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar cf - . | tar xf - -C /dockpipe-sync-dst")
+}
+
+func dockerSyncWorkspaceFromVolume(image, volume, hostDir string) error {
+	return dockerSyncWorkspace(image, volume+":/dockpipe-sync-src:ro", hostDir+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar cf - . | tar xf - -C /dockpipe-sync-dst")
+}
+
+func dockerSyncWorkspace(image, srcMount, dstMount, script string) error {
+	image = strings.TrimSpace(image)
+	if image == "" {
+		return fmt.Errorf("workspace volume sync requires an image")
+	}
+	dockerCmd := dockerCommandName()
+	args := []string{"run", "--rm", "-v", srcMount, "-v", dstMount, "-u", "0", image, "sh", "-c", script}
+	cmd := execCommandFn(dockerCmd, args...)
+	cmd.Env = dockerCommandEnv(os.Environ(), dockerCmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("sync workspace docker volume: %w\n%s", err, out)
+	}
+	return nil
 }
 
 const banner = `
