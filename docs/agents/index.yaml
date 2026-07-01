@@ -96,6 +96,7 @@ tasks:
     read:
       - AGENTS.md
       - docs/agents/git-runtime-sessions.md
+      - docs/agents/git-runtime-auth.md
       - docs/agents/architecture.md
       - docs/agents/engine-boundary.md
       - docs/agents/path-scopes.md

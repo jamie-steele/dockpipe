@@ -44,6 +44,7 @@ source_step_id="${DORKPIPE_ORCH_SOURCE_STEP_ID:-${DOCKPIPE_STEP_ID:-}}"
   exit 1
 }
 
-"$(dorkpipe_orchestrate_helper_bin)" plan "${source_workflow_config}" "${source_step_id}"
+helper_bin="$(dorkpipe_orchestrate_helper_bin)"
+"${helper_bin}" plan "${source_workflow_config}" "${source_step_id}"
 
 printf '[dorkpipe] orchestration plan ready at %s\n' "${DORKPIPE_ORCH_ROOT}" >&2

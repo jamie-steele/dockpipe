@@ -21,6 +21,7 @@ bin/.dockpipe/
 .gocache/
 .gomodcache/
 tmp/
+.tmp/
 ` + dockpipeGitignoreEnd + "\n"
 
 // appendDockpipeGitignore writes a marked block to .gitignore at the git repository root

@@ -95,6 +95,7 @@ Report:
 - `docs/agents/core-package-model.md`
 - `docs/agents/path-scopes.md`
 - `docs/agents/git-runtime-sessions.md`
+- `docs/agents/git-runtime-auth.md`
 - `docs/agents/yaml-workflows.md`
 - `docs/agents/package-authoring.md`
 - `docs/agents/package-promotion.md`

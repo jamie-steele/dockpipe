@@ -121,7 +121,7 @@ remains accepted as a compatibility alias, but new workflows should use
 Cloud Codex/Claude workers run a host-auth preflight before the container starts. API-key env vars
 pass immediately; otherwise DorkPipe checks the provider auth files resolved by `dockpipe scope
 resolver <name> auth-dir`. When auth is missing and the run is interactive, DorkPipe asks whether to
-launch the host login command (`codex login` or `claude /login`) and re-checks after the user
+launch the host login command (`codex login` or `claude login`) and re-checks after the user
 finishes. Set `DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING=never` to fail fast, or `always` to launch the
 login command without asking. Non-interactive runs fail fast with the manual command to run.
 

@@ -265,7 +265,7 @@ Default storage should become managed runtime workspaces, not host bind mounts.
 Preferred default:
 
 ```text
-repo source -> DockPipe managed clone/worktree -> named runtime volume -> session branch -> checkpoints
+repo source -> runtime-owned session metadata -> named runtime volume workspace -> session branch -> checkpoints
 ```
 
 Supported modes:
@@ -277,10 +277,70 @@ Supported modes:
 
 Managed local implementation:
 
-- create a session workspace under `bin/.dockpipe/sessions/<id>/workspace` or a Docker named volume
-- prefer Docker volume for container workers once volume clone/bootstrap is implemented
-- expose the workspace to workers at a stable guest path, for example `/workspace/<workspace-id>`
-- keep `/work` as compatibility only, not the conceptual identity
+- create session metadata under `bin/.dockpipe/sessions/<id>/`
+- prefer `workspace.storage: volume` for container workers
+- expose the worker editing surface at `/work`
+- keep session Git lifecycle runtime-owned; workers edit files only
+- allow `workspace.storage: worktree` as a debugging-oriented host implementation, not the long-term
+  container default
+
+### Volume-First Session Workspace
+
+The preferred container model is a runtime-owned Docker volume prepared by a non-AI helper
+container. This keeps Git lifecycle authority out of worker prompts and out of package scripts.
+
+```text
+runtime metadata on host
+  -> runtime creates named volume
+  -> runtime helper container clones/fetches repo into volume
+  -> runtime helper container checks out or creates the session branch in that volume clone
+  -> worker container mounts the same volume at /work
+  -> worker edits files only
+  -> runtime helper/runtime checkpoints or publishes
+```
+
+Key properties:
+
+- the volume clone is a runtime workspace, not an agent-owned checkout
+- AI workers never run `git clone`, `git checkout`, `git commit`, `git push`, or `git merge`
+- a small runtime helper image may own clone/fetch/checkout/checkpoint/publish mechanics
+- host metadata remains the audit surface for sessions, events, checkpoints, and worker leases
+- `workspace.storage: worktree` may still exist for local debugging and inspection, but
+  `workspace.storage: volume` should be the container-oriented default
+
+### Provider Adapters And Host Discovery
+
+The helper container should stay Git-generic. Provider-specific behavior belongs in host-side auth
+adapters that inspect the user's existing Git setup, derive the minimum required auth material, and
+mount only that material into the helper container.
+
+Recommended flow:
+
+```text
+host runtime inspects repo remote and Git config
+  -> determines provider and auth mode
+  -> resolves host-side auth/config paths
+  -> mounts only the needed auth material into the helper container
+  -> helper container runs plain Git against the volume workspace
+```
+
+Useful host-side discovery commands:
+
+- `git remote get-url origin`
+- `git config --get core.sshCommand`
+- `git config --get-regexp '^url\.'`
+- `git config --get credential.helper`
+- `git config --list --show-origin`
+- `ssh -G <host-or-alias>` for SSH-backed remotes
+
+Day-1 adapters can stay narrow:
+
+- GitHub SSH
+- Azure DevOps SSH
+
+Those adapters can share the same SSH mount mechanism while keeping provider detection and
+preflight logic on the host. HTTPS and credential-helper passthrough can come later as separate
+auth modes rather than complicating the first runtime helper implementation.
 
 Bind implementation:
 
@@ -338,10 +398,11 @@ After container or worker failure:
 7. If conflict or corrupt workspace state is detected, runtime marks the session `conflict` or
    `failed` and requires human or higher-level orchestrator resolution.
 
-For managed volumes, recovery should not depend on the failed container. A new runtime process can:
+For managed volumes, recovery should not depend on the failed worker container. A new runtime
+process can:
 
 - read `session.json`
-- reattach the Docker volume or session workspace path
+- reattach the Docker volume or helper container against that volume
 - inspect the session branch
 - resume from the latest checkpoint
 - archive orphaned worker leases
@@ -373,6 +434,10 @@ Required core primitives:
 - state helpers: `SessionRoot`, `WorkspaceRoot`, `SessionEventLog`
 - runner: create/open workspace before step execution when `workspace` is configured
 - container runner: mount/attach managed workspace by identity, not raw host repo path
+- runtime helper image/tools: bootstrap volume clones and perform runtime-owned Git operations for
+  `workspace.storage: volume`
+- host-side provider/auth adapters: inspect remotes, resolve auth inputs, and build the helper
+  container mount plan
 - SDK/control API: expose lifecycle requests without exposing raw Git commands
 - policy: deny or flag direct Git command execution from agent workers
 - docs/language support: document fields and editor validation
@@ -408,13 +473,16 @@ Phase 2: managed workspace path
 
 Phase 3: Docker volume workspace
 
-- Add named volume bootstrap from managed clone/worktree. Implemented for container runs as
-  `workspace.storage: volume`: DockPipe creates a session volume, mounts it at `/work`, syncs the
-  managed worktree into it before the run, and overlays changes back after the run for checkpoints.
-- Make container workers attach to the volume. Implemented for generic `RunContainer` paths through
-  runtime-owned `WorkdirVolume`.
-- Store enough metadata to reattach after process crash. Implemented in session metadata:
-  `storage.volume`, `storage.workspace`, `storage.metadata`, and event logs.
+- Add named volume bootstrap for `workspace.storage: volume`.
+- Introduce a small runtime-owned helper image or toolset that mounts the volume and performs:
+  clone, fetch, checkout/create-session-branch, checkpoint, inspect, and publish.
+- Add host-side provider adapters that inspect the current repo and choose the helper auth mount
+  plan before container startup.
+- Make worker containers attach to that same volume at `/work` and edit files only.
+- Store enough metadata to reattach after process crash. Session metadata should record
+  `storage.volume`, `storage.workspace`, `storage.metadata`, helper runtime details, and events.
+- Keep host session metadata as the durable audit trail even when the active Git checkout lives in
+  the volume.
 
 Phase 4: multi-worker isolation
 
@@ -447,8 +515,10 @@ Phase 6: distributed runtime
 
 | Risk | Mitigation |
 | --- | --- |
-| Managed workspaces add startup cost. | Cache clones/volumes by workspace id and base ref. |
+| Managed workspaces add startup cost. | Cache clones/volumes by workspace id and base ref; use a runtime helper image for fast volume bootstrap. |
 | Docker volumes are opaque to users. | Provide `dockpipe session inspect`, export, archive, and cleanup commands. |
+| Git in a volume can blur authority boundaries. | Treat the helper container as runtime infrastructure, not as an AI worker or workflow script. |
+| Provider auth can sprawl. | Keep helper Git generic; move detection and auth rules into host-side provider adapters with narrow supported modes. |
 | Checkpoint commits may clutter history. | Treat them as recovery commits and squash/rebase at publish/review. |
 | Multi-worker writes can conflict. | Start with serialized write leases; add worker branches later. |
 | Bind mode remains tempting. | Make managed the default and require explicit bind opt-in. |
@@ -461,14 +531,14 @@ Phase 6: distributed runtime
 Default implementation should be:
 
 ```text
-managed clone/worktree + session branch + runtime checkpoint commits
+runtime-owned volume workspace + helper-container Git lifecycle + runtime checkpoint commits
 ```
 
 Not direct bind mounts.
 
-Initial local implementation can use a managed worktree on the host because it is simpler to debug
-than Docker-volume-only storage. The long-term default for container workers should be a named
-runtime volume backed by that managed workspace identity.
+Initial local implementations can keep `workspace.storage: worktree` for debugging and human
+inspection. The container-oriented default should move toward `workspace.storage: volume` backed by
+a runtime helper container that owns non-AI Git mechanics inside the volume workspace.
 
 Branches should be the user-facing review unit:
 
@@ -483,8 +553,8 @@ session API and checkpoint ledger are stable.
 In short:
 
 - public default: session branch
-- local implementation: managed worktree first
-- container implementation: named volume attached to session
+- local debugging path: managed worktree when needed
+- container implementation: named volume attached to session, prepared by runtime helper tools
 - future distributed implementation: isolated clone or worker branch behind the same API
 
 This keeps workflows stable while letting the runtime evolve from local Docker to distributed

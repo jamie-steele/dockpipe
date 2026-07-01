@@ -18,13 +18,17 @@ vars:
   DORKPIPE_DEV_STACK_SERVICES: "postgres ollama dorkpipe-stack dorkpipe-mcp-proxy"
 
 steps:
-  - id: stack_up
-    kind: host
-    run: scripts/dorkpipe/dev-stack-ensure-up.sh
-
   - id: plan
     kind: host
     run: scripts/dorkpipe/orchestrate-plan.sh
+
+  - id: auth_preflight
+    kind: host
+    run: scripts/dorkpipe/orchestrate-auth-preflight.sh
+
+  - id: stack_up
+    kind: host
+    run: scripts/dorkpipe/dev-stack-ensure-up.sh
 
   - id: run_workers
     kind: host

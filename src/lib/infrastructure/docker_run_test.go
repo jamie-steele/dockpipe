@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -248,12 +249,9 @@ func TestRunContainerAttachedExitCodeTriggersLogsAndRm(t *testing.T) {
 		calls = append(calls, call{name: name, args: append([]string(nil), args...)})
 		mu.Unlock()
 		if len(args) > 0 && args[0] == "run" {
-			return exec.Command("bash", "-c", "exit 7")
+			return helperExitCommand(7)
 		}
-		if len(args) > 0 && args[0] == "logs" {
-			return exec.Command("bash", "-c", "echo line1")
-		}
-		return exec.Command("bash", "-c", "exit 0")
+		return helperExitCommand(0)
 	}
 	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
 	filepathAbsDocker = func(path string) (string, error) { return path, nil }
@@ -291,7 +289,7 @@ func TestRunContainerAttachedExitCodeTriggersLogsAndRm(t *testing.T) {
 func TestRunContainerAttachedCallsCommitOnHost(t *testing.T) {
 	withDockerSeams(t)
 	execCommandFn = func(name string, args ...string) *exec.Cmd {
-		return exec.Command("bash", "-c", "exit 0")
+		return helperExitCommand(0)
 	}
 	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
 	filepathAbsDocker = func(path string) (string, error) { return path, nil }
@@ -342,7 +340,8 @@ func TestRunContainerWorkspaceVolumeSyncsAroundRun(t *testing.T) {
 		mu.Unlock()
 		return helperExitCommand(0)
 	}
-	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
+	repo := initGitSessionTestRepo(t)
+	getwdDockerFn = func() (string, error) { return repo, nil }
 	filepathAbsDocker = func(path string) (string, error) { return path, nil }
 	osStatDockerFn = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
 	isTerminalDockerFn = func(fd int) bool { return false }
@@ -356,7 +355,7 @@ func TestRunContainerWorkspaceVolumeSyncsAroundRun(t *testing.T) {
 
 	rc, err := RunContainer(RunOpts{
 		Image:         "img",
-		WorkdirHost:   "/tmp/wd",
+		WorkdirHost:   repo,
 		WorkdirVolume: "dockpipe-ws-demo",
 		Stdin:         in,
 		Stdout:        out,
@@ -374,11 +373,17 @@ func TestRunContainerWorkspaceVolumeSyncsAroundRun(t *testing.T) {
 	if !strings.Contains(got, "dockpipe-ws-demo:/work") {
 		t.Fatalf("expected main run to mount workspace volume at /work, got:\n%s", got)
 	}
-	if !strings.Contains(got, ":/dockpipe-sync-src:ro") || !strings.Contains(got, "dockpipe-ws-demo:/dockpipe-sync-dst") {
-		t.Fatalf("expected host to volume sync call, got:\n%s", got)
+	if !strings.Contains(got, repo+":/dockpipe-sync-src:ro") || !strings.Contains(got, "dockpipe-ws-demo:/dockpipe-sync-dst") {
+		t.Fatalf("expected host to volume bootstrap call, got:\n%s", got)
 	}
-	if !strings.Contains(got, "dockpipe-ws-demo:/dockpipe-sync-src:ro") || !strings.Contains(got, ":/dockpipe-sync-dst") {
-		t.Fatalf("expected volume to host sync call, got:\n%s", got)
+	if !strings.Contains(got, "git clone /dockpipe-sync-src /dockpipe-sync-dst") || !strings.Contains(got, "git -C /dockpipe-sync-dst fetch --prune dockpipe-host") {
+		t.Fatalf("expected git-based volume bootstrap script, got:\n%s", got)
+	}
+	if !strings.Contains(got, "dockpipe-ws-demo:/dockpipe-sync-src") || !strings.Contains(got, repo+":/dockpipe-sync-dst") {
+		t.Fatalf("expected volume to host patch apply call, got:\n%s", got)
+	}
+	if !strings.Contains(got, "git -C /dockpipe-sync-src diff --cached --binary | git -C /dockpipe-sync-dst apply --whitespace=nowarn -") {
+		t.Fatalf("expected git patch apply sync-back script, got:\n%s", got)
 	}
 }
 
@@ -388,9 +393,9 @@ func TestRunContainerAttachedSkipsCommitOnNonZero(t *testing.T) {
 	execCommandFn = func(name string, args ...string) *exec.Cmd {
 		// docker run ... → failure; docker logs / rm still run
 		if isDockerCommandName(name) && len(args) > 0 && args[0] == "run" {
-			return exec.Command("bash", "-c", "exit 3")
+			return helperExitCommand(3)
 		}
-		return exec.Command("bash", "-c", "exit 0")
+		return helperExitCommand(0)
 	}
 	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
 	filepathAbsDocker = func(path string) (string, error) { return path, nil }
@@ -469,9 +474,9 @@ func TestDockerBuildPaths(t *testing.T) {
 		mu.Unlock()
 		// Force inspect miss to trigger base build path.
 		if len(args) >= 3 && args[0] == "image" && args[1] == "inspect" {
-			return exec.Command("bash", "-c", "exit 1")
+			return helperExitCommand(1)
 		}
-		return exec.Command("bash", "-c", "exit 0")
+		return helperExitCommand(0)
 	}
 	if err := DockerBuild("dockpipe-dev:0.6.0", "/repo/templates/core/assets/images/dev", "/repo"); err != nil {
 		t.Fatalf("DockerBuild dockpipe-dev failed: %v", err)
@@ -563,18 +568,21 @@ func isDockerCommandName(name string) bool {
 }
 
 func helperExitCommand(code int) *exec.Cmd {
-	cmd := exec.Command(os.Args[0], "-test.run=TestDockerHelperProcess", "--")
+	cmd := exec.Command(os.Args[0], "-test.run=TestDockerHelperProcess", "--", strconv.Itoa(code))
 	cmd.Env = append(os.Environ(), fmt.Sprintf("GO_WANT_DOCKER_HELPER_PROCESS=%d", code))
 	return cmd
 }
 
 func TestDockerHelperProcess(t *testing.T) {
 	code := strings.TrimSpace(os.Getenv("GO_WANT_DOCKER_HELPER_PROCESS"))
+	if code == "" && len(os.Args) > 0 {
+		code = strings.TrimSpace(os.Args[len(os.Args)-1])
+	}
 	if code == "" {
 		return
 	}
-	if code == "0" {
-		os.Exit(0)
+	if n, err := strconv.Atoi(code); err == nil {
+		os.Exit(n)
 	}
 	os.Exit(1)
 }

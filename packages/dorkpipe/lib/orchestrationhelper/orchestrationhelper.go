@@ -129,6 +129,11 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("usage: orchestrate-helper task-env <task.json>")
 		}
 		return emitTaskEnv(args[1], stdout)
+	case "required-auth-providers":
+		if len(args) != 2 {
+			return errors.New("usage: orchestrate-helper required-auth-providers <tasks-dir>")
+		}
+		return emitRequiredAuthProviders(args[1], stdout)
 	case "task-model":
 		model := ""
 		if parsed, err := decodeJSONMapString(env["TASK_MODEL_JSON"]); err == nil {
@@ -292,6 +297,43 @@ func emitTaskEnv(path string, stdout io.Writer) error {
 	sort.Strings(keys)
 	for _, key := range keys {
 		fmt.Fprintf(stdout, "%s=%s\n", key, shellQuote(mapping[key]))
+	}
+	return nil
+}
+
+func emitRequiredAuthProviders(tasksDir string, stdout io.Writer) error {
+	entries, err := os.ReadDir(tasksDir)
+	if err != nil {
+		return err
+	}
+	seen := map[string]bool{}
+	var providers []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		task := readJSONMapOptional(filepath.Join(tasksDir, entry.Name(), "task.json"))
+		if len(task) == 0 {
+			continue
+		}
+		if workerPolicyMode(task) != "require" {
+			continue
+		}
+		provider := strings.ToLower(strings.TrimSpace(stringValue(mapValue(task["lane"])["provider"])))
+		switch provider {
+		case "codex", "claude":
+		default:
+			continue
+		}
+		if seen[provider] {
+			continue
+		}
+		seen[provider] = true
+		providers = append(providers, provider)
+	}
+	sort.Strings(providers)
+	for _, provider := range providers {
+		fmt.Fprintln(stdout, provider)
 	}
 	return nil
 }
@@ -840,6 +882,9 @@ func resolveApplyTargetPath(root, target string) (string, string, error) {
 		}
 		hostPath, hostRoot, ok := resolveGuestMountTarget(target, os.Getenv("DOCKPIPE_CONTAINER_MOUNTS"))
 		if !ok {
+			hostPath, hostRoot, ok = resolvePrimaryWorkTarget(root, target)
+		}
+		if !ok {
 			return "", "", fmt.Errorf("apply target uses undeclared guest path: %s", target)
 		}
 		return hostPath, hostRoot, nil
@@ -849,6 +894,24 @@ func resolveApplyTargetPath(root, target string) (string, string, error) {
 		return "", "", fmt.Errorf("apply target escapes worktree: %s", target)
 	}
 	return targetPath, root, nil
+}
+
+func resolvePrimaryWorkTarget(root, target string) (string, string, bool) {
+	target = cleanGuestPath(target)
+	if target == "" || !guestPathContains("/work", target) {
+		return "", "", false
+	}
+	hostRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", "", false
+	}
+	rel := strings.TrimPrefix(target, "/work")
+	rel = strings.TrimPrefix(rel, "/")
+	targetPath, err := filepath.Abs(filepath.Join(hostRoot, filepath.FromSlash(rel)))
+	if err != nil || !withinRoot(hostRoot, targetPath) {
+		return "", "", false
+	}
+	return targetPath, hostRoot, true
 }
 
 func guestPathAllowedByPolicy(target, allowedRoots string) bool {

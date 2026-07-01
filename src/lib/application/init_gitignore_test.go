@@ -34,6 +34,9 @@ func TestAppendDockpipeGitignoreCreatesFile(t *testing.T) {
 	if !bytes.Contains(b, []byte(dockpipeGitignoreBegin)) || !bytes.Contains(b, []byte("bin/.dockpipe/")) {
 		t.Fatalf("unexpected .gitignore:\n%s", b)
 	}
+	if !bytes.Contains(b, []byte(".tmp/")) {
+		t.Fatalf("expected .tmp/ in .gitignore:\n%s", b)
+	}
 }
 
 func TestAppendDockpipeGitignoreIdempotent(t *testing.T) {
@@ -86,6 +89,9 @@ func TestCmdInitGitignore(t *testing.T) {
 	}
 	if !strings.Contains(string(b), "bin/.dockpipe/") {
 		t.Fatalf("expected bin/.dockpipe/ in .gitignore, got:\n%s", b)
+	}
+	if !strings.Contains(string(b), ".tmp/") {
+		t.Fatalf("expected .tmp/ in .gitignore, got:\n%s", b)
 	}
 	if strings.Contains(string(b), ".dorkpipe/") {
 		t.Fatalf("did not expect legacy .dorkpipe/ entry in .gitignore, got:\n%s", b)

@@ -625,11 +625,17 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 }
 
 func dockerSyncWorkspaceIntoVolume(image, hostDir, volume string) error {
-	return dockerSyncWorkspace(image, hostDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar cf - . | tar xf - -C /dockpipe-sync-dst")
+	if top, err := GitTopLevel(hostDir); err == nil && samePathForDocker(top, hostDir) {
+		return dockerBootstrapGitWorkspaceVolume(hostDir, volume)
+	}
+	return dockerSyncWorkspace(dockerWorkspaceHelperImage(image), hostDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar cf - . | tar xf - -C /dockpipe-sync-dst")
 }
 
 func dockerSyncWorkspaceFromVolume(image, volume, hostDir string) error {
-	return dockerSyncWorkspace(image, volume+":/dockpipe-sync-src:ro", hostDir+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar cf - . | tar xf - -C /dockpipe-sync-dst")
+	if top, err := GitTopLevel(hostDir); err == nil && samePathForDocker(top, hostDir) {
+		return dockerApplyGitWorkspaceVolume(volume, hostDir)
+	}
+	return dockerSyncWorkspace(dockerWorkspaceHelperImage(image), volume+":/dockpipe-sync-src:ro", hostDir+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar cf - . | tar xf - -C /dockpipe-sync-dst")
 }
 
 func dockerSyncWorkspace(image, srcMount, dstMount, script string) error {
@@ -646,6 +652,66 @@ func dockerSyncWorkspace(image, srcMount, dstMount, script string) error {
 		return fmt.Errorf("sync workspace docker volume: %w\n%s", err, out)
 	}
 	return nil
+}
+
+func dockerBootstrapGitWorkspaceVolume(hostDir, volume string) error {
+	image := dockerWorkspaceHelperImage("")
+	script := strings.Join([]string{
+		`set -e`,
+		`branch="$(git -C /dockpipe-sync-src rev-parse --abbrev-ref HEAD)"`,
+		`head_commit="$(git -C /dockpipe-sync-src rev-parse HEAD)"`,
+		`if [ ! -d /dockpipe-sync-dst/.git ]; then`,
+		`  find /dockpipe-sync-dst -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true`,
+		`  git clone /dockpipe-sync-src /dockpipe-sync-dst >/dev/null 2>&1`,
+		`fi`,
+		`git -C /dockpipe-sync-dst remote remove dockpipe-host >/dev/null 2>&1 || true`,
+		`git -C /dockpipe-sync-dst remote add dockpipe-host /dockpipe-sync-src`,
+		`git -C /dockpipe-sync-dst fetch --prune dockpipe-host >/dev/null 2>&1`,
+		`if [ "$branch" = "HEAD" ]; then`,
+		`  git -C /dockpipe-sync-dst checkout --detach "$head_commit" >/dev/null 2>&1`,
+		`  git -C /dockpipe-sync-dst reset --hard "$head_commit" >/dev/null 2>&1`,
+		`else`,
+		`  git -C /dockpipe-sync-dst checkout -B "$branch" "dockpipe-host/$branch" >/dev/null 2>&1`,
+		`  git -C /dockpipe-sync-dst reset --hard "dockpipe-host/$branch" >/dev/null 2>&1`,
+		`fi`,
+		`git -C /dockpipe-sync-dst clean -fd >/dev/null 2>&1`,
+	}, "\n")
+	return dockerSyncWorkspace(image, hostDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", script)
+}
+
+func dockerApplyGitWorkspaceVolume(volume, hostDir string) error {
+	image := dockerWorkspaceHelperImage("")
+	script := strings.Join([]string{
+		`set -e`,
+		`git -C /dockpipe-sync-src add -A`,
+		`if git -C /dockpipe-sync-src diff --cached --quiet --no-ext-diff; then`,
+		`  exit 0`,
+		`fi`,
+		`git -C /dockpipe-sync-src diff --cached --binary | git -C /dockpipe-sync-dst apply --whitespace=nowarn -`,
+	}, "\n")
+	return dockerSyncWorkspace(image, volume+":/dockpipe-sync-src", hostDir+":/dockpipe-sync-dst", script)
+}
+
+func dockerWorkspaceHelperImage(runImage string) string {
+	if helper := strings.TrimSpace(os.Getenv("DOCKPIPE_RUNTIME_HELPER_IMAGE")); helper != "" {
+		return helper
+	}
+	if helper := strings.TrimSpace(os.Getenv("DOCKPIPE_GIT_HELPER_IMAGE")); helper != "" {
+		return helper
+	}
+	if strings.TrimSpace(runImage) != "" {
+		return runImage
+	}
+	return "alpine/git:latest"
+}
+
+func samePathForDocker(a, b string) bool {
+	a = filepath.Clean(strings.TrimSpace(a))
+	b = filepath.Clean(strings.TrimSpace(b))
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }
 
 const banner = `

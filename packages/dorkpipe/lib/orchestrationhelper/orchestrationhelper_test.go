@@ -142,6 +142,49 @@ func TestEmitTaskEnvIncludesWorkMode(t *testing.T) {
 	}
 }
 
+func TestEmitRequiredAuthProviders(t *testing.T) {
+	tasksDir := filepath.Join(t.TempDir(), "tasks")
+	if err := os.MkdirAll(filepath.Join(tasksDir, "need-claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tasksDir, "need-codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tasksDir, "prefer-claude"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(tasksDir, "local-ollama"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "need-claude", "task.json"), []byte(`{"worker":"claude","worker_policy":{"mode":"require"},"lane":{"provider":"claude"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "need-codex", "task.json"), []byte(`{"worker":"codex","worker_policy":{"mode":"require"},"lane":{"provider":"codex"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "prefer-claude", "task.json"), []byte(`{"worker":"claude","worker_policy":{"mode":"prefer"},"lane":{"provider":"claude"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tasksDir, "local-ollama", "task.json"), []byte(`{"worker":"ollama","worker_policy":{"mode":"require"},"lane":{"provider":"ollama"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	if err := emitRequiredAuthProviders(tasksDir, &stdout); err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Fields(stdout.String())
+	want := []string{"claude", "codex"}
+	if len(got) != len(want) {
+		t.Fatalf("required providers = %#v want %#v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("required providers = %#v want %#v", got, want)
+		}
+	}
+}
+
 func TestResolveDockpipeCommandPrefersEnv(t *testing.T) {
 	got := resolveDockpipeCommand(t.TempDir(), map[string]string{"DOCKPIPE_BIN": "/custom/dockpipe"})
 	if got != "/custom/dockpipe" {
@@ -214,6 +257,24 @@ func TestResolveApplyTargetPathRejectsDisallowedGuestMount(t *testing.T) {
 
 	if _, _, err := resolveApplyTargetPath(root, "/DesignNotes/planning/generated.md"); err == nil {
 		t.Fatal("expected disallowed guest mount apply target to fail")
+	}
+}
+
+func TestResolveApplyTargetPathFallsBackToWorkflowRootForWorkGuestPath(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("DOCKPIPE_CONTAINER_MOUNTS", filepath.Join(root, "DesignNotes")+":/DesignNotes:ro")
+	t.Setenv("DORKPIPE_ORCH_APPLY_ALLOWED_GUEST_ROOTS", "/work")
+
+	gotPath, gotRoot, err := resolveApplyTargetPath(root, "/work/docs/agents/brain/index.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantPath := filepath.Join(root, "docs", "agents", "brain", "index.md")
+	if gotPath != wantPath {
+		t.Fatalf("target path = %q want %q", gotPath, wantPath)
+	}
+	if gotRoot != root {
+		t.Fatalf("target root = %q want %q", gotRoot, root)
 	}
 }
 

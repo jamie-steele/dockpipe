@@ -181,7 +181,7 @@ pass immediately. Otherwise DorkPipe checks the host resolver auth files. If aut
 run has an interactive terminal, it asks whether to launch the provider login command:
 
 - Codex: `codex login`
-- Claude: `claude /login`
+- Claude: `claude login`
 
 Set `DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING=never` to fail fast without prompting, or `always` to run
 the login command without asking. Non-interactive runs fail fast with the command to run manually.

@@ -16,12 +16,16 @@ Use `docs/git-runtime-sessions.md` as the source of truth for the long-term arch
 - Human review remains the final authority before merge.
 - Workflow authors describe workspace intent; runtimes decide clone, worktree, volume, bind mount,
   branch, checkpoint, and cleanup mechanics.
+- For `workspace.storage: volume`, treat `/work` as the worker editing surface and keep Git
+  lifecycle actions in runtime-owned helper tools.
+- Provider/auth mount rules live in `docs/agents/git-runtime-auth.md`.
 
 ## Routing
 
 | Work type | Read with |
 | --- | --- |
 | Runtime/session primitives | `docs/agents/engine-boundary.md`, `docs/agents/architecture.md` |
+| Provider detection or auth mounts | `docs/agents/git-runtime-auth.md`, `docs/agents/engine-boundary.md` |
 | Workspace storage or path movement | `docs/agents/path-scopes.md`, `docs/agents/core-package-model.md` |
 | Workflow YAML fields | `docs/agents/yaml-workflows.md`, `src/lib/infrastructure/schema/workflow.schema.json` |
 | Agentic orchestration behavior | `docs/agents/model-escalation.md`, `docs/agents/docs-generation.md` |
@@ -36,6 +40,8 @@ Use `docs/git-runtime-sessions.md` as the source of truth for the long-term arch
   runtime primitive.
 - Do not require workflows to know host paths, Docker volume names, Git commands, or worktree paths.
 - Prefer `workspace.mode: managed` as the future default; keep `workspace.mode: bind` explicit.
+- Prefer `workspace.storage: volume` for container-facing managed sessions; reserve
+  `workspace.storage: worktree` for local debugging and inspection when needed.
 - Start with serialized write leases before introducing worker branches or parallel worktrees.
 - Current lifecycle primitives are `CreateSessionBranch`, `CheckpointSession`, `SyncSession`,
   `PublishSession`, `ArchiveSession`, `CreateWorkerLease`, and `ReleaseWorkerLease`.
@@ -45,8 +51,11 @@ Use `docs/git-runtime-sessions.md` as the source of truth for the long-term arch
   parent shell's current directory.
 - `dockpipe session publish` should checkpoint first, then push the session branch. It must not
   merge into the user's current branch.
-- `workspace.storage: volume` means container `/work` uses a runtime Docker volume, but Git
-  checkpoints still operate on the managed session worktree after runtime sync-back.
+- `workspace.storage: volume` should mount a runtime-owned volume at `/work`.
+- AI workers edit files in `/work` only. They do not clone, branch, checkpoint, or publish.
+- Non-AI runtime helper tools may clone/fetch/checkout/checkpoint/publish against the volume
+  workspace as part of DockPipe runtime behavior.
+- Keep session metadata and audit logs under `bin/.dockpipe/sessions/...`.
 
 ## Validation
 

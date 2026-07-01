@@ -81,7 +81,7 @@ dorkpipe_orchestrate_helper_bin() {
     printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
     return 0
   fi
-  local repo_root dockpipe_bin
+  local repo_root dockpipe_bin dockpipe_dir dockpipe_repo_root candidate
   repo_root="${ROOT:-$(dockpipe_sdk get workdir)}"
   DORKPIPE_ORCH_HELPER_BIN="${DOCKPIPE_ASSETS_DIR:-}/tooling/bin/$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf 'windows' ;; darwin*:*|*:darwin*:* ) printf 'darwin' ;; *) printf 'linux' ;; esac)/orchestrate-helper$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf '.exe' ;; *) printf '' ;; esac)"
   if [[ ! -x "${DORKPIPE_ORCH_HELPER_BIN}" ]]; then
@@ -95,6 +95,21 @@ dorkpipe_orchestrate_helper_bin() {
   dockpipe_bin="${DOCKPIPE_BIN:-}"
   if [[ -z "${dockpipe_bin}" ]]; then
     dockpipe_bin="$(dockpipe_sdk require dockpipe-bin || true)"
+  fi
+  if [[ -x "${dockpipe_bin:-}" ]]; then
+    dockpipe_dir="$(cd "$(dirname "${dockpipe_bin}")" && pwd)"
+    dockpipe_repo_root="$(cd "${dockpipe_dir}/../.." 2>/dev/null && pwd || true)"
+    for candidate in \
+      "${dockpipe_repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper" \
+      "${dockpipe_repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper.exe"
+    do
+      if [[ -x "${candidate}" ]]; then
+        DORKPIPE_ORCH_HELPER_BIN="${candidate}"
+        export DORKPIPE_ORCH_HELPER_BIN
+        printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
+        return 0
+      fi
+    done
   fi
   if [[ -x "${dockpipe_bin:-}" ]]; then
     "${dockpipe_bin}" package build source --workdir "${repo_root}" --only dorkpipe
@@ -290,10 +305,71 @@ dorkpipe_orchestrate_container_auth_dir() {
   dockpipe scope resolver "${provider}" auth-dir
 }
 
+dorkpipe_orchestrate_host_auth_candidates() {
+  local provider="${1:?provider}"
+  local host_dir
+  host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}" 2>/dev/null || true)"
+  [[ -n "${host_dir}" ]] && printf '%s\n' "${host_dir}"
+  case "${provider}" in
+    codex)
+      [[ -n "${HOME:-}" ]] && printf '%s\n' "${HOME}/.codex"
+      [[ -n "${USERPROFILE:-}" ]] && printf '%s\n' "${USERPROFILE}/.codex"
+      ;;
+    claude)
+      [[ -n "${HOME:-}" ]] && printf '%s\n' "${HOME}/.claude"
+      [[ -n "${USERPROFILE:-}" ]] && printf '%s\n' "${USERPROFILE}/.claude"
+      ;;
+  esac
+}
+
+dorkpipe_orchestrate_host_config_candidates() {
+  local provider="${1:?provider}"
+  local host_file
+  host_file="$(dockpipe scope resolver "${provider}" config-file 2>/dev/null || true)"
+  [[ -n "${host_file}" ]] && printf '%s\n' "${host_file}"
+  case "${provider}" in
+    claude)
+      [[ -n "${HOME:-}" ]] && printf '%s\n' "${HOME}/.claude.json"
+      [[ -n "${USERPROFILE:-}" ]] && printf '%s\n' "${USERPROFILE}/.claude.json"
+      ;;
+  esac
+}
+
+dorkpipe_orchestrate_host_auth_dir_for_mount() {
+  local provider="${1:?provider}"
+  local dir
+  while IFS= read -r dir; do
+    [[ -n "${dir}" ]] || continue
+    case "${provider}" in
+      codex)
+        [[ -s "${dir}/auth.json" ]] && printf '%s\n' "${dir}" && return 0
+        ;;
+      claude)
+        [[ -s "${dir}/.credentials.json" ]] && printf '%s\n' "${dir}" && return 0
+        if compgen -G "${dir}/backups/.claude.json.backup.*" >/dev/null; then
+          printf '%s\n' "${dir}"
+          return 0
+        fi
+        ;;
+    esac
+  done < <(dorkpipe_orchestrate_host_auth_candidates "${provider}")
+  return 1
+}
+
+dorkpipe_orchestrate_host_config_file_for_mount() {
+  local provider="${1:?provider}"
+  local file
+  while IFS= read -r file; do
+    [[ -n "${file}" ]] || continue
+    [[ -s "${file}" ]] && printf '%s\n' "${file}" && return 0
+  done < <(dorkpipe_orchestrate_host_config_candidates "${provider}")
+  return 1
+}
+
 dorkpipe_orchestrate_container_auth_mount() {
   local provider="${1:?provider}"
   local host_dir container_dir mode
-  host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}")" || return 1
+  host_dir="$(dorkpipe_orchestrate_host_auth_dir_for_mount "${provider}")" || return 1
   [[ -n "${host_dir}" && -d "${host_dir}" ]] || return 1
   container_dir="$(dockpipe scope resolver "${provider}" container-auth-dir)" || return 1
   [[ -n "${container_dir}" ]] || return 1
@@ -309,7 +385,7 @@ dorkpipe_orchestrate_container_auth_mount() {
 dorkpipe_orchestrate_container_auth_seed_mount() {
   local provider="${1:?provider}"
   local host_dir
-  host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}")" || return 1
+  host_dir="$(dorkpipe_orchestrate_host_auth_dir_for_mount "${provider}")" || return 1
   [[ -n "${host_dir}" && -d "${host_dir}" ]] || return 1
   host_dir="$(dorkpipe_orchestrate_cli_mount_host_path "${host_dir}")"
   printf '%s:/dockpipe-auth/%s:ro\n' "${host_dir}" "${provider}"
@@ -328,7 +404,7 @@ dorkpipe_orchestrate_container_skills_dir() {
     printf '%s\n' "${DORKPIPE_ORCH_SKILLS_DIR}"
     return 0
   fi
-  host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}")" || return 1
+  host_dir="$(dorkpipe_orchestrate_host_auth_dir_for_mount "${provider}")" || return 1
   printf '%s\n' "${host_dir}/skills"
 }
 
@@ -355,7 +431,7 @@ dorkpipe_orchestrate_container_extra_auth_mounts() {
   esac
   case "${provider}" in
     claude)
-      host_file="$(dockpipe scope resolver "${provider}" config-file)"
+      host_file="$(dorkpipe_orchestrate_host_config_file_for_mount "${provider}" || true)"
       if [[ -n "${host_file}" && -f "${host_file}" ]]; then
         host_file="$(dorkpipe_orchestrate_cli_mount_host_path "${host_file}")"
         printf '%s:/dockpipe-auth/%s-config/.claude.json:ro\n' "${host_file}" "${provider}"
@@ -629,13 +705,21 @@ dorkpipe_orchestrate_container_auth_envs() {
 dorkpipe_orchestrate_auth_is_available() {
   local provider="${1:?provider}"
   local host_dir host_file
+  local -a dirs files
   case "${provider}" in
     codex)
       if [[ -n "${OPENAI_API_KEY:-}" || -n "${CODEX_API_KEY:-}" ]]; then
         return 0
       fi
       host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}" 2>/dev/null || true)"
-      [[ -n "${host_dir}" && -s "${host_dir}/auth.json" ]] && return 0
+      dirs=()
+      [[ -n "${host_dir}" ]] && dirs+=("${host_dir}")
+      [[ -n "${HOME:-}" ]] && dirs+=("${HOME}/.codex")
+      [[ -n "${USERPROFILE:-}" ]] && dirs+=("${USERPROFILE}/.codex")
+      local dir
+      for dir in "${dirs[@]}"; do
+        [[ -n "${dir}" && -s "${dir}/auth.json" ]] && return 0
+      done
       return 1
       ;;
     claude)
@@ -644,8 +728,24 @@ dorkpipe_orchestrate_auth_is_available() {
       fi
       host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}" 2>/dev/null || true)"
       host_file="$(dockpipe scope resolver "${provider}" config-file 2>/dev/null || true)"
-      [[ -n "${host_dir}" && -s "${host_dir}/.credentials.json" ]] && return 0
-      [[ -n "${host_file}" && -s "${host_file}" ]] && return 0
+      dirs=()
+      files=()
+      [[ -n "${host_dir}" ]] && dirs+=("${host_dir}")
+      [[ -n "${HOME:-}" ]] && dirs+=("${HOME}/.claude")
+      [[ -n "${USERPROFILE:-}" ]] && dirs+=("${USERPROFILE}/.claude")
+      [[ -n "${host_file}" ]] && files+=("${host_file}")
+      [[ -n "${HOME:-}" ]] && files+=("${HOME}/.claude.json")
+      [[ -n "${USERPROFILE:-}" ]] && files+=("${USERPROFILE}/.claude.json")
+      local dir file
+      for dir in "${dirs[@]}"; do
+        [[ -n "${dir}" && -s "${dir}/.credentials.json" ]] && return 0
+        if compgen -G "${dir}/backups/.claude.json.backup.*" >/dev/null; then
+          return 0
+        fi
+      done
+      for file in "${files[@]}"; do
+        [[ -n "${file}" && -s "${file}" ]] && return 0
+      done
       return 1
       ;;
   esac
@@ -655,7 +755,7 @@ dorkpipe_orchestrate_auth_is_available() {
 dorkpipe_orchestrate_auth_login_command_text() {
   case "${1:-}" in
     codex) printf 'codex login\n' ;;
-    claude) printf 'claude /login\n' ;;
+    claude) printf 'claude login\n' ;;
     *) printf '%s login\n' "${1:-provider}" ;;
   esac
 }
@@ -684,11 +784,11 @@ dorkpipe_orchestrate_run_auth_login() {
         echo "claude login unavailable: claude CLI is not installed on the host PATH" >&2
         return 1
       fi
-      echo "[dorkpipe] launching host login: claude /login" >&2
+      echo "[dorkpipe] launching host login: claude login" >&2
       if dorkpipe_orchestrate_has_tty; then
-        claude /login </dev/tty >/dev/tty
+        claude login </dev/tty >/dev/tty
       else
-        claude /login
+        claude login
       fi
       ;;
     *)
@@ -763,6 +863,11 @@ dorkpipe_orchestrate_run_container_worker() {
     "--env" "PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games"
     "--env" "DORKPIPE_ORCH_WORK_MODE=$(dorkpipe_orchestrate_work_mode)"
   )
+  if dorkpipe_orchestrate_is_cloud_provider "${provider}"; then
+    # Nested dockpipe runs can inherit the parent workflow's offline Docker network
+    # policy via DOCKPIPE_DOCKER_NETWORK=none. Cloud workers need real egress.
+    args+=("--env" "DOCKPIPE_DOCKER_NETWORK=bridge")
+  fi
   if [[ -n "$(dorkpipe_orchestrate_container_tool_packages | tr -d '[:space:]')" ]]; then
     tool_image="$(dorkpipe_orchestrate_tool_image "${provider}")" || return 1
     args+=("--isolate" "${tool_image}")

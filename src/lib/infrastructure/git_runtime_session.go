@@ -168,6 +168,16 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 	if baseRef == "" {
 		baseRef = "HEAD"
 	}
+	if err := validateSessionBranchNamespace(top, branch); err != nil {
+		return nil, err
+	}
+	if mode == "managed" {
+		if existing, err := findReusableManagedGitSession(top, branch); err != nil {
+			return nil, err
+		} else if existing != nil {
+			return existing, nil
+		}
+	}
 
 	sessionDir, err := GitSessionRoot(top, sessionID)
 	if err != nil {
@@ -184,14 +194,8 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 		backend = "worktree"
 		workspace = filepath.Join(sessionDir, "workspace")
 		if _, err := os.Stat(workspace); os.IsNotExist(err) {
-			if err := gitRun(top, "worktree", "add", "-b", branch, workspace, baseRef); err != nil {
-				if strings.Contains(err.Error(), "already exists") {
-					if err2 := gitRun(top, "worktree", "add", workspace, branch); err2 != nil {
-						return nil, err
-					}
-				} else {
-					return nil, err
-				}
+			if err := ensureManagedSessionWorktree(top, workspace, branch, baseRef); err != nil {
+				return nil, err
 			}
 		}
 		if storage == "volume" {
@@ -249,6 +253,51 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 		"session_ref": branch,
 	})
 	return s, nil
+}
+
+func ensureManagedSessionWorktree(repo, workspace, branch, baseRef string) error {
+	if gitRun(repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) == nil {
+		return gitRun(repo, "worktree", "add", workspace, branch)
+	}
+	return gitRun(repo, "worktree", "add", "-b", branch, workspace, baseRef)
+}
+
+func findReusableManagedGitSession(repo, branch string) (*GitSession, error) {
+	sessions, err := ListGitSessions(repo)
+	if err != nil {
+		return nil, err
+	}
+	for _, session := range sessions {
+		if session == nil {
+			continue
+		}
+		if strings.TrimSpace(session.Storage.Mode) != "managed" {
+			continue
+		}
+		if strings.TrimSpace(session.Repo.SessionRef) != branch {
+			continue
+		}
+		workspace := strings.TrimSpace(session.Storage.Workspace)
+		if workspace == "" {
+			continue
+		}
+		if st, err := os.Stat(workspace); err != nil || !st.IsDir() {
+			continue
+		}
+		if got := strings.TrimSpace(mustGitBranchNameOrEmpty(workspace)); got != branch {
+			continue
+		}
+		return session, nil
+	}
+	return nil, nil
+}
+
+func mustGitBranchNameOrEmpty(workdir string) string {
+	out, err := gitOutput(workdir, "branch", "--show-current")
+	if err != nil {
+		return ""
+	}
+	return out
 }
 
 func CheckpointSession(session *GitSession, reason string) (*GitCheckpoint, error) {
@@ -714,10 +763,39 @@ func ensureBindSessionBranch(workdir, branch, baseRef string) error {
 	if current == branch {
 		return nil
 	}
+	if err := validateSessionBranchNamespace(workdir, branch); err != nil {
+		return err
+	}
 	if gitRun(workdir, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) == nil {
 		return gitRun(workdir, "checkout", branch)
 	}
 	return gitRun(workdir, "checkout", "-b", branch, baseRef)
+}
+
+func validateSessionBranchNamespace(workdir, branch string) error {
+	branch = strings.Trim(strings.TrimSpace(branch), "/")
+	if branch == "" {
+		return fmt.Errorf("session branch is empty")
+	}
+	if gitRun(workdir, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) == nil {
+		return nil
+	}
+	parts := strings.Split(branch, "/")
+	for i := 1; i < len(parts); i++ {
+		parent := strings.Join(parts[:i], "/")
+		if gitRun(workdir, "show-ref", "--verify", "--quiet", "refs/heads/"+parent) == nil {
+			return fmt.Errorf("session branch %q conflicts with existing branch %q; Git cannot create nested refs under an existing branch name. Use a sibling name like %q or set workspace.lifecycle.branch_prefix instead", branch, parent, parent+"-"+parts[i])
+		}
+	}
+	out, err := gitOutput(workdir, "for-each-ref", "--format=%(refname:strip=2)", "refs/heads/"+branch+"/*")
+	if err != nil {
+		return err
+	}
+	if child := strings.TrimSpace(out); child != "" {
+		first := strings.Split(child, "\n")[0]
+		return fmt.Errorf("session branch %q conflicts with existing nested branch %q; Git cannot create a parent branch when child refs already exist. Use a different session branch name", branch, strings.TrimSpace(first))
+	}
+	return nil
 }
 
 func writeGitSession(session *GitSession, workdir string) error {

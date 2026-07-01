@@ -103,6 +103,145 @@ func TestCreateSessionBranchPreservesExplicitBranchName(t *testing.T) {
 	gitRemoveWorktree(t, repo, session.Storage.Workspace)
 }
 
+func TestCreateSessionBranchManagedWorktreeReusesExistingBranch(t *testing.T) {
+	repo := initGitSessionTestRepo(t)
+	out, err := exec.Command("git", "-C", repo, "checkout", "-b", "js/features/spnext/reporting-worktree-001").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git checkout -b existing branch: %v\n%s", err, out)
+	}
+	out, err = exec.Command("git", "-C", repo, "checkout", "-").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git checkout -: %v\n%s", err, out)
+	}
+
+	session, err := CreateSessionBranch(GitSessionRequest{
+		WorkspaceID: "demo",
+		SourceDir:   repo,
+		Mode:        "managed",
+		BranchName:  "js/features/spnext/reporting-worktree-001",
+		SessionID:   "reporting-worktree-001",
+	})
+	if err != nil {
+		t.Fatalf("CreateSessionBranch: %v", err)
+	}
+	if got := session.Repo.SessionRef; got != "js/features/spnext/reporting-worktree-001" {
+		t.Fatalf("session ref = %q", got)
+	}
+	if got := strings.TrimSpace(mustGitOutput(t, session.Storage.Workspace, "branch", "--show-current")); got != "js/features/spnext/reporting-worktree-001" {
+		t.Fatalf("workspace branch = %q", got)
+	}
+	gitRemoveWorktree(t, repo, session.Storage.Workspace)
+}
+
+func TestCreateSessionBranchManagedReusesExistingSessionWorktree(t *testing.T) {
+	repo := initGitSessionTestRepo(t)
+	first, err := CreateSessionBranch(GitSessionRequest{
+		WorkspaceID: "demo",
+		SourceDir:   repo,
+		Mode:        "managed",
+		BranchName:  "js/features/spnext/reporting-worktree-001",
+		SessionID:   "first-reporting-worktree",
+	})
+	if err != nil {
+		t.Fatalf("CreateSessionBranch first: %v", err)
+	}
+
+	second, err := CreateSessionBranch(GitSessionRequest{
+		WorkspaceID: "demo",
+		SourceDir:   repo,
+		Mode:        "managed",
+		BranchName:  "js/features/spnext/reporting-worktree-001",
+		SessionID:   "second-reporting-worktree",
+	})
+	if err != nil {
+		t.Fatalf("CreateSessionBranch second: %v", err)
+	}
+	if second.SessionID != first.SessionID {
+		t.Fatalf("expected session reuse, got first=%q second=%q", first.SessionID, second.SessionID)
+	}
+	if second.Storage.Workspace != first.Storage.Workspace {
+		t.Fatalf("expected workspace reuse, got first=%q second=%q", first.Storage.Workspace, second.Storage.Workspace)
+	}
+	gitRemoveWorktree(t, repo, first.Storage.Workspace)
+}
+
+func TestCreateSessionBranchManagedVolumeAllocatesDockerVolumeMetadata(t *testing.T) {
+	repo := initGitSessionTestRepo(t)
+	oldCreate := execCommandFn
+	t.Cleanup(func() {
+		execCommandFn = oldCreate
+	})
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		if strings.Contains(strings.ToLower(filepath.Base(name)), "docker") {
+			return helperExitCommand(0)
+		}
+		return exec.Command(name, args...)
+	}
+	session, err := CreateSessionBranch(GitSessionRequest{
+		WorkspaceID:  "demo",
+		SourceDir:    repo,
+		Mode:         "managed",
+		Storage:      "volume",
+		BranchPrefix: "ai",
+		SessionID:    "volume-session",
+	})
+	if err != nil {
+		t.Fatalf("CreateSessionBranch: %v", err)
+	}
+	if session.Storage.Backend != "docker_volume" {
+		t.Fatalf("unexpected backend: %+v", session.Storage)
+	}
+	if session.Storage.Volume == "" {
+		t.Fatalf("expected volume name in session storage: %+v", session.Storage)
+	}
+	if _, err := os.Stat(filepath.Join(session.Storage.Workspace, ".git")); err != nil {
+		t.Fatalf("managed workspace not created: %v", err)
+	}
+	gitRemoveWorktree(t, repo, session.Storage.Workspace)
+}
+
+func TestCreateSessionBranchErrorsOnExistingParentBranchNamespace(t *testing.T) {
+	repo := initGitSessionTestRepo(t)
+	out, err := exec.Command("git", "-C", repo, "checkout", "-b", "js/features/spnext/reporting").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git checkout -b parent: %v\n%s", err, out)
+	}
+	_, err = CreateSessionBranch(GitSessionRequest{
+		WorkspaceID: "demo",
+		SourceDir:   repo,
+		Mode:        "managed",
+		BranchName:  "js/features/spnext/reporting/worktree-001",
+		SessionID:   "report-poc",
+	})
+	if err == nil {
+		t.Fatal("expected namespace collision error")
+	}
+	if !strings.Contains(err.Error(), `conflicts with existing branch "js/features/spnext/reporting"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestCreateSessionBranchErrorsOnExistingChildBranchNamespace(t *testing.T) {
+	repo := initGitSessionTestRepo(t)
+	out, err := exec.Command("git", "-C", repo, "checkout", "-b", "js/features/spnext/reporting/worktree-001").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git checkout -b child: %v\n%s", err, out)
+	}
+	_, err = CreateSessionBranch(GitSessionRequest{
+		WorkspaceID: "demo",
+		SourceDir:   repo,
+		Mode:        "managed",
+		BranchName:  "js/features/spnext/reporting",
+		SessionID:   "report-poc",
+	})
+	if err == nil {
+		t.Fatal("expected namespace collision error")
+	}
+	if !strings.Contains(err.Error(), `conflicts with existing nested branch "js/features/spnext/reporting/worktree-001"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestGitSessionLifecycleSyncPublishArchiveAndLease(t *testing.T) {
 	repo := initGitSessionTestRepo(t)
 	git := func(dir string, args ...string) {

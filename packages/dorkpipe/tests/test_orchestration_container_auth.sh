@@ -21,14 +21,14 @@ cat >"$fake_dockpipe" <<'SH'
 set -euo pipefail
 if [[ "${1:-}" == "scope" && "${2:-}" == "resolver" ]]; then
   case "${3:-}:${4:-}" in
-    codex:auth-dir) printf '%s\n' "$HOME/.codex" ;;
+    codex:auth-dir) printf '%s\n' "${CODEX_HOME:-$HOME/.codex}" ;;
     codex:container-auth-dir) printf '%s\n' "/home/node/.codex" ;;
     codex:auth-mount-mode) printf '%s\n' "ro" ;;
     codex:config-file|codex:container-config-file) printf '\n' ;;
-    claude:auth-dir) printf '%s\n' "$HOME/.claude" ;;
+    claude:auth-dir) printf '%s\n' "${CLAUDE_HOME:-$HOME/.claude}" ;;
     claude:container-auth-dir) printf '%s\n' "/home/node/.claude" ;;
     claude:auth-mount-mode) printf '%s\n' "ro" ;;
-    claude:config-file) printf '%s\n' "$HOME/.claude.json" ;;
+    claude:config-file) printf '%s\n' "${CLAUDE_CONFIG_HOME:-$HOME/.claude.json}" ;;
     claude:container-config-file) printf '%s\n' "/home/node/.claude.json" ;;
     *) exit 1 ;;
   esac
@@ -72,7 +72,7 @@ cat >"$fake_claude" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf 'claude:%s\n' "$*" >> "${FAKE_LOGIN_ARGS:?}"
-if [[ "${1:-}" == "/login" ]]; then
+if [[ "${1:-}" == "login" ]]; then
   mkdir -p "$HOME/.claude"
   printf '{"claudeAiOauth":{}}\n' > "$HOME/.claude/.credentials.json"
   printf '{"oauthAccount":{}}\n' > "$HOME/.claude.json"
@@ -123,6 +123,7 @@ MSYSTEM="${saved_msystem}"
 
 export ROOT
 export HOME="$tmp/home"
+export USERPROFILE="$HOME"
 export FAKE_DOCKPIPE_ARGS="$fake_args"
 export FAKE_DOCKER_ARGS="$fake_docker_args"
 export FAKE_LOGIN_ARGS="$fake_login_args"
@@ -147,13 +148,19 @@ dorkpipe_orchestrate_auth_preflight codex
 grep -qx -- "codex:login" "$fake_login_args"
 rm -f "$fake_login_args"
 dorkpipe_orchestrate_auth_preflight claude
-grep -qx -- "claude:/login" "$fake_login_args"
+grep -qx -- "claude:login" "$fake_login_args"
 unset DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING
 printf '{"auth_mode":"chatgpt"}\n' > "$HOME/.codex/auth.json"
 printf '# skill\n' > "$HOME/.codex/skills/dorkpipe-package-authoring/SKILL.md"
 printf '{"claudeAiOauth":{}}\n' > "$HOME/.claude/.credentials.json"
 printf '{"oauthAccount":{}}\n' > "$HOME/.claude.json"
 printf '# skill\n' > "$HOME/.claude/skills/dorkpipe-package-authoring/SKILL.md"
+export CLAUDE_HOME="/home/node/.claude"
+export CODEX_HOME="/home/node/.codex"
+dorkpipe_orchestrate_auth_preflight codex
+dorkpipe_orchestrate_auth_preflight claude
+unset CLAUDE_HOME
+unset CODEX_HOME
 
 prompt="$tmp/prompt.md"
 response="$tmp/response.md"
@@ -174,6 +181,7 @@ grep -qx -- "--resolver" "$fake_args"
 grep -qx -- "codex" "$fake_args"
 grep -qx -- "--no-data" "$fake_args"
 grep -Fqx -- "DORKPIPE_ORCH_WORK_MODE=artifact" "$fake_args"
+grep -Fqx -- "DOCKPIPE_DOCKER_NETWORK=bridge" "$fake_args"
 grep -qx -- "--isolate" "$fake_args"
 grep -Eqx -- "dockpipe-codex-tools:[0-9a-f]{12}" "$fake_args"
 grep -q -- "build" "$fake_docker_args"
@@ -213,10 +221,25 @@ grep -qx -- "container worker ok" "$response"
 export DORKPIPE_ORCH_WORK_MODE="artifact"
 export DOCKPIPE_CONTAINER_MOUNTS=$'C:\\Source\\UniteHere:/UniteHere:ro\nC:\\docs\\UniteHere\\Design Notes:/DesignNotes:ro'
 
+export CODEX_HOME="/home/node/.codex"
+export CLAUDE_HOME="/home/node/.claude"
+export CLAUDE_CONFIG_HOME="/home/node/.claude.json"
+rm -f "$fake_args" "$response"
+dorkpipe_orchestrate_run_container_worker codex "$prompt" "$response"
+grep -qx -- "$HOME/.codex:/dockpipe-auth/codex:ro" "$fake_args"
+rm -f "$fake_args" "$response"
+dorkpipe_orchestrate_run_container_worker claude "$prompt" "$response"
+grep -qx -- "$HOME/.claude:/dockpipe-auth/claude:ro" "$fake_args"
+grep -qx -- "$HOME/.claude.json:/dockpipe-auth/claude-config/.claude.json:ro" "$fake_args"
+unset CODEX_HOME
+unset CLAUDE_HOME
+unset CLAUDE_CONFIG_HOME
+
 rm -f "$fake_args" "$response"
 dorkpipe_orchestrate_run_container_worker claude "$prompt" "$response"
 grep -qx -- "--resolver" "$fake_args"
 grep -qx -- "claude" "$fake_args"
+grep -Fqx -- "DOCKPIPE_DOCKER_NETWORK=bridge" "$fake_args"
 grep -qx -- "$HOME/.claude:/dockpipe-auth/claude:ro" "$fake_args"
 grep -qx -- "$HOME/.claude.json:/dockpipe-auth/claude-config/.claude.json:ro" "$fake_args"
 grep -qx -- "$HOME/.claude/skills:/dockpipe-auth/claude-skills:ro" "$fake_args"
