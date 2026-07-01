@@ -48,6 +48,13 @@ if [[ "${converted}" != "/c/Users/Jamie/.codex" ]]; then
   echo "expected Windows auth mount host path to convert for Bash CLI launch, got: ${converted}" >&2
   exit 1
 fi
+export DORKPIPE_ORCH_WORKER_CWD='C:/Program Files/Git/UniteHere'
+converted="$(dorkpipe_orchestrate_worker_cwd)"
+if [[ "${converted}" != "/UniteHere" ]]; then
+  echo "expected Git Bash converted worker cwd to normalize to /UniteHere, got: ${converted}" >&2
+  exit 1
+fi
+unset DORKPIPE_ORCH_WORKER_CWD
 OS="${saved_os}"
 OSTYPE="${saved_ostype}"
 MSYSTEM="${saved_msystem}"

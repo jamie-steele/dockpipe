@@ -259,6 +259,13 @@ dorkpipe_orchestrate_worker_cwd() {
   local cwd="${DORKPIPE_ORCH_WORKER_CWD:-${DORKPIPE_ORCH_TARGET_GUEST_PATH:-}}"
   cwd="${cwd#"${cwd%%[![:space:]]*}"}"
   cwd="${cwd%"${cwd##*[![:space:]]}"}"
+  # Git Bash converts env values like /UniteHere to its install root when launching
+  # Windows child processes. Convert that shape back to the intended guest path.
+  if [[ "${cwd}" =~ ^[A-Za-z]:[\\/](Program[[:space:]]Files|Program[[:space:]]Files[[:space:]]\(x86\))[\\/]Git[\\/](.+)$ ]]; then
+    cwd="/${BASH_REMATCH[2]//\\//}"
+  elif [[ "${cwd}" =~ ^/[A-Za-z]/(Program[[:space:]]Files|Program[[:space:]]Files[[:space:]]\(x86\))/Git/(.+)$ ]]; then
+    cwd="/${BASH_REMATCH[2]}"
+  fi
   if [[ -z "${cwd}" ]]; then
     printf '/work\n'
     return 0

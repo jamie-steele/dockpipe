@@ -354,8 +354,8 @@ func mergeHostExecutablePATH(currentPath, hostPath, bashExe string) string {
 		hostParts = convertWindowsPathListForBash(hostParts, bashExe)
 	}
 
-	seen := make(map[string]bool, len(currentParts)+len(hostParts))
-	out := make([]string, 0, len(currentParts)+len(hostParts))
+	seen := make(map[string]bool)
+	out := make([]string, 0, len(currentParts))
 	for _, part := range currentParts {
 		addPathListPart(&out, seen, part)
 	}

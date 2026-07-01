@@ -56,6 +56,13 @@ func TestMergeHostExecutablePATHPreservesCurrentAndAddsMissingHostEntries(t *tes
 	}
 }
 
+func TestMergeHostExecutablePATHDeduplicatesWithoutCapacityHint(t *testing.T) {
+	got := mergeHostExecutablePATH("/work/bin:/usr/bin", "/usr/bin:/work/bin:/custom/bin", "/usr/bin/bash")
+	if got != "/work/bin:/usr/bin:/custom/bin" {
+		t.Fatalf("mergeHostExecutablePATH() = %q", got)
+	}
+}
+
 func TestMergeHostExecutablePATHConvertsWindowsHostEntriesForBash(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("windows-only path conversion")
