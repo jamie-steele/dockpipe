@@ -49,8 +49,8 @@ role authority, context, output contract, validation surface, or rerun value.
 
 | Work class | Default | Escalate when |
 | --- | --- | --- |
-| inventory | local Ollama or embedding lane | missed sources or malformed output |
-| extraction/summarization | local or cheap cloud | source separation or exactness fails |
+| inventory | deterministic walker, or local lane over supplied source packets | missed sources, malformed output, or no tool access |
+| extraction/summarization | local or cheap cloud over supplied excerpts | source separation or exactness fails |
 | source selection | strong cloud lane | source precedence affects durable output |
 | architecture/routing | strongest practical reasoning lane | workflow shape, safety, or apply policy matters |
 | authoring | strong lane sized to complexity | coherence/schema failures appear |
@@ -91,6 +91,13 @@ Treat every run as an evaluation DAG. Use existing artifacts:
 Run summaries should include end-state status, per-node status, failure class, likely root-cause task, repair/rerun target, token/elapsed cost, and whether orchestration appears to beat the direct-worker baseline.
 
 Prefer deterministic checks for syntax, links, schemas, tests, forbidden paths, and apply coherence. Use LLM judges for qualitative judgment after mechanical failures are removed.
+
+## Local Lane Gap
+
+Prompt-only local lanes should not be treated as source scouts. They can summarize bounded source
+packets, but they cannot inspect mounted roots unless DorkPipe provides deterministic walker output.
+Future package work should add source walkers that turn allowed roots into compact, authority-labeled
+packets for cheap local extraction.
 
 ## Source
 

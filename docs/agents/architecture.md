@@ -57,5 +57,6 @@ If it is a tool/platform, put it under `resolvers/`. If it is an execution subst
 
 - `docs/architecture-model.md`
 - `docs/capabilities.md`
+- `docs/operation-results.md`
 - `docs/git-runtime-sessions.md`
 - `docs/workflow-yaml.md`

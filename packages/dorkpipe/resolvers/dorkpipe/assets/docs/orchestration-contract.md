@@ -180,10 +180,19 @@ The baseline policy starts as a conservative cheap-first cascade:
 
 Task-class gating should make weak local lanes effectively non-authoritative:
 
-- extraction and inventory tasks can still favor local lanes
+- extraction and inventory tasks can still favor local lanes only when deterministic source context
+  has already been provided to the model
 - architecture, routing, validation, and edit-mode repair tasks should strongly favor stronger lanes
 - local model strings and host capacity should be considered together so a large Ollama model on a
   small laptop does not win just because it is local
+
+TODO: add package-owned source walkers for local lanes. The current Ollama lane is prompt-only; it
+can summarize provided excerpts, but it cannot inspect mounted roots by itself. DorkPipe should add
+deterministic walkers that produce bounded repo/design/source packets from `access.read`,
+`context.source_roots`, ignore rules, size limits, file type filters, and source authority labels.
+Those packets can then feed local models cheaply without pretending local lanes performed source-root
+discovery. Until that exists, broad source discovery should use a tool-capable worker or a
+deterministic shared collector artifact.
 
 Host-local capability hints can be supplied explicitly when needed:
 
@@ -268,6 +277,12 @@ file content
 DorkPipe extracts these blocks into `tasks/<id>/materialized/<path>` before downstream tasks or apply
 consume them. This keeps role-shaped work, such as technical writing or schema maintenance, from
 degrading into one LLM worker per file while preserving deterministic apply artifacts.
+
+Apply writes approved outputs into the current workspace so humans can inspect concrete files and
+diffs. A `verify.status` of `review` does not block workspace apply; `apply/result.json` records
+`requires_human_review: true` and `publish_allowed: false`. A failed verification still blocks apply
+unless explicitly overridden for debugging. Publish, merge, or sync to a durable branch remains a
+separate human-governed boundary.
 
 ## Cloud budget primitive
 

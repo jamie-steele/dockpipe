@@ -232,5 +232,6 @@ Full detail: **[package-model.md](package-model.md)** (**`package.yml`**, compil
 ## Related docs (non-normative mechanics)
 
 - [isolation-layer.md](isolation-layer.md) — file paths, `DOCKPIPE_RUNTIME_*` / `DOCKPIPE_RESOLVER_*` aliases, lookup order  
+- [operation-results.md](operation-results.md) — unit-of-work result/logging contract for meaningful operations
 - [workflow-yaml.md](workflow-yaml.md) — workflow and strategy fields  
 - [architecture.md](architecture.md) — data flow and extension points  

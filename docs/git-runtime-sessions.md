@@ -92,6 +92,76 @@ Required properties:
 - implementation may use Git CLI internally, libgit2 later, or remote provider APIs where useful
 - operation results include enough data for audit and recovery without parsing terminal logs
 
+### Operational Result Contract
+
+Runtime-owned Git/session operations should converge on one unit-of-work result shape instead of
+mixing ad hoc stderr strings with operation-specific return payloads.
+
+This is one application of the broader DockPipe pattern documented in
+`docs/operation-results.md`.
+
+Each nontrivial runtime action should have:
+
+- a stable unit name such as `session.create`, `session.volume.seed`, `worker.lease.create`,
+  `session.checkpoint`, `session.sync`, or `session.publish`
+- a typed result object carrying status, identifiers, duration, and optional details
+- one shared human-log renderer so `start`, `done`, and `fail` lines stay consistent
+- one shared machine/event mapping so `events.jsonl` and future APIs do not depend on parsing text
+
+Preparatory work that can block or invalidate the main action should be surfaced as its own named
+unit rather than being hidden behind a later failure. In practice that means preflight and
+mutation-oriented units should both be visible when they matter.
+
+Conceptual shape:
+
+```go
+type RuntimeWorkResult struct {
+    Unit       string
+    Status     string
+    Message    string
+    DurationMs int64
+    IDs        map[string]string
+    Details    map[string]any
+}
+```
+
+Status values should stay small and stable:
+
+- `start`
+- `done`
+- `fail`
+- optional bounded intermediate checkpoints such as `progress`
+
+That contract should be the source for both stderr summaries and structured audit events. Core
+runtime code should avoid one-off user-facing strings for important side effects when those strings
+cannot be traced back to a named result unit.
+
+Example human-log shape:
+
+```text
+[dockpipe] unit=session.volume.preflight status=done workspace=unitehere session=run-1842 branch=js/sessions/session-run-1842
+[dockpipe] unit=session.volume.seed status=start workspace=unitehere session=run-1842 volume=dockpipe-ws-unitehere-run-1842 branch=js/sessions/session-run-1842
+[dockpipe] unit=session.volume.seed status=done duration_ms=1824
+```
+
+For the interactive CLI, the `session.volume.seed` start state should normally be shown through the
+existing DockPipe loading animation/spinner. Once the unit finishes, the CLI should finalize that
+display as the stable result line with duration and relevant identifiers.
+
+Example failure shape:
+
+```text
+[dockpipe] unit=session.volume.seed status=fail duration_ms=640 error="git clone failed"
+```
+
+This is not a second architecture model. It is an operational contract for runtime work so the
+same unit can be:
+
+- returned from core helpers
+- rendered to human logs
+- written to session metadata/events
+- asserted in tests
+
 Agents should request lifecycle actions using structured events:
 
 ```json
@@ -240,6 +310,9 @@ bin/.dockpipe/sessions/<session-id>/
 {"ts":"2026-07-01T00:10:00Z","type":"checkpoint.created","actor":"runtime","checkpoint_id":"cp-0003","commit":"abc1234"}
 {"ts":"2026-07-01T00:20:00Z","type":"worker.failed","actor":"runtime","worker_id":"editor-a","reason":"container_exit_137"}
 ```
+
+When unit-of-work results are implemented, those events should map cleanly from the same operation
+contract rather than being authored independently from stderr messaging.
 
 Checkpoint metadata:
 

@@ -686,6 +686,24 @@ func dockerBootstrapGitWorkspaceVolume(hostDir, volume string) error {
 	return dockerSyncWorkspace(image, hostDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", script)
 }
 
+func dockerBootstrapGitBranchVolume(repoDir, volume, branch string) error {
+	image := dockerWorkspaceHelperImage("")
+	branch = strings.TrimSpace(branch)
+	scriptLines := []string{
+		`set -e`,
+		`find /dockpipe-sync-dst -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true`,
+		`git clone /dockpipe-sync-src /dockpipe-sync-dst >/dev/null 2>&1`,
+	}
+	if branch != "" {
+		scriptLines = append(scriptLines,
+			fmt.Sprintf(`git -C /dockpipe-sync-dst checkout %q >/dev/null 2>&1`, branch),
+			fmt.Sprintf(`git -C /dockpipe-sync-dst reset --hard %q >/dev/null 2>&1`, branch),
+		)
+	}
+	scriptLines = append(scriptLines, `git -C /dockpipe-sync-dst clean -fd >/dev/null 2>&1`)
+	return dockerSyncWorkspace(image, repoDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", strings.Join(scriptLines, "\n"))
+}
+
 func dockerApplyGitWorkspaceVolume(volume, hostDir string) error {
 	image := dockerWorkspaceHelperImage("")
 	script := strings.Join([]string{

@@ -171,8 +171,10 @@ func TestCreateSessionBranchManagedVolumeAllocatesDockerVolumeMetadata(t *testin
 	t.Cleanup(func() {
 		execCommandFn = oldCreate
 	})
+	var calls []string
 	execCommandFn = func(name string, args ...string) *exec.Cmd {
 		if strings.Contains(strings.ToLower(filepath.Base(name)), "docker") {
+			calls = append(calls, strings.Join(append([]string{filepath.Base(name)}, args...), " "))
 			return helperExitCommand(0)
 		}
 		return exec.Command(name, args...)
@@ -196,6 +198,13 @@ func TestCreateSessionBranchManagedVolumeAllocatesDockerVolumeMetadata(t *testin
 	}
 	if _, err := os.Stat(filepath.Join(session.Storage.Workspace, ".git")); err != nil {
 		t.Fatalf("managed workspace not created: %v", err)
+	}
+	got := strings.Join(calls, "\n")
+	if !strings.Contains(got, "volume create "+session.Storage.Volume) {
+		t.Fatalf("expected session volume create call, got:\n%s", got)
+	}
+	if !strings.Contains(got, " run --rm --entrypoint sh ") {
+		t.Fatalf("expected session volume bootstrap helper run, got:\n%s", got)
 	}
 	gitRemoveWorktree(t, repo, session.Storage.Workspace)
 }

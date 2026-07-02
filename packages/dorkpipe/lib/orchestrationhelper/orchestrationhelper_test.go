@@ -126,6 +126,52 @@ func TestSelectLaneWorkerRequirePinsPreferredLane(t *testing.T) {
 	}
 }
 
+func TestSelectLaneDoesNotUseMismatchedRoleModel(t *testing.T) {
+	task, err := applyTaskWorkerProfile(map[string]any{
+		"id":     "contract_brain",
+		"worker": "ollama",
+		"model": map[string]any{
+			"provider": "ollama",
+			"model":    "llama3.2",
+		},
+	}, map[string]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lanes := []map[string]any{
+		{
+			"id":            "ollama.local.default",
+			"provider":      "ollama",
+			"resolver_hint": "ollama",
+			"model":         "llama3.2",
+			"local":         true,
+			"available":     true,
+		},
+		{
+			"id":            "codex.cli.default",
+			"provider":      "codex",
+			"resolver_hint": "codex",
+			"model":         "cli",
+			"cloud":         true,
+			"available":     true,
+		},
+	}
+	selection := selectLane(task, mapValue(task["model_policy"]), "codex", "", "", map[string]string{}, lanes, map[string]any{}, map[string]any{}, map[string]trainingEntry{}, true, nil)
+	if got := stringValue(selection["provider"]); got != "codex" {
+		t.Fatalf("provider = %q, want codex", got)
+	}
+	if got := stringValue(selection["model"]); got != "cli" {
+		t.Fatalf("model = %q, want selected codex lane model", got)
+	}
+	effective := taskModelForLane(mapValue(task["model"]), selection)
+	if got := stringValue(effective["provider"]); got != "codex" {
+		t.Fatalf("effective provider = %q, want codex", got)
+	}
+	if got := stringValue(effective["model"]); got != "cli" {
+		t.Fatalf("effective model = %q, want cli", got)
+	}
+}
+
 func TestSelectLaneArchitectureTaskPrefersCloudOverCheapLocal(t *testing.T) {
 	task, err := applyTaskWorkerProfile(map[string]any{
 		"id":              "brain_contract",
@@ -385,6 +431,24 @@ func TestMaterializeTaskOutputsExtractsDeclaredBlocks(t *testing.T) {
 	}
 }
 
+func TestRenderMaterializeOutputContractShowsExactBlocks(t *testing.T) {
+	got := renderMaterializeOutputContract([]any{
+		map[string]any{"path": "index.yaml"},
+		map[string]any{"path": "design-corpus-index.yaml"},
+	})
+	for _, want := range []string{
+		"DorkPipe materialized output contract:",
+		"Required output paths: index.yaml, design-corpus-index.yaml",
+		`<!-- dorkpipe:file path="index.yaml" -->`,
+		`<!-- dorkpipe:file path="design-corpus-index.yaml" -->`,
+		"Do not use YAML bundle/list wrappers around the file blocks.",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("contract missing %q in:\n%s", want, got)
+		}
+	}
+}
+
 func TestMaterializeTaskOutputsRejectsEscapingPath(t *testing.T) {
 	dir := t.TempDir()
 	responsePath := filepath.Join(dir, "response.md")
@@ -547,6 +611,23 @@ func TestResolveApplyTargetPathFallsBackToWorkflowRootForWorkGuestPath(t *testin
 	}
 }
 
+func TestMountedGuestRootNotesDescribesDesignNotesAsExternalMirror(t *testing.T) {
+	notes := mountedGuestRootNotes("C:\\docs\\UniteHere\\UH - SePuede - Design Notes:/DesignNotes:ro\nC:\\Source\\UniteHere:/work:rw")
+	got := strings.Join(notes, "\n")
+	for _, want := range []string{
+		"`/DesignNotes` is an external mounted design corpus",
+		"Host path for this run: `C:\\docs\\UniteHere\\UH - SePuede - Design Notes`.",
+		"SharePoint-backed or Windows-local design-notes mirror",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("mounted guest root notes missing %q in:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "`/work` is an external mounted") {
+		t.Fatalf("mounted guest root notes should not emit a standalone /work mount note:\n%s", got)
+	}
+}
+
 func TestHasSchedulerOutputConflictMatchesSameTarget(t *testing.T) {
 	running := map[string]schedulerTask{
 		"author_index": {ID: "author_index", OutputPath: "/work/docs/agents/index.md"},
@@ -585,7 +666,7 @@ func TestApplyResultsPreflightsAllSourcesBeforeWriting(t *testing.T) {
 	}
 }
 
-func TestApplyResultsSkipsWhenVerifyStatusIsReview(t *testing.T) {
+func TestApplyResultsAllowsReviewForWorkspaceDiff(t *testing.T) {
 	root := t.TempDir()
 	artifactRoot := filepath.Join(root, "artifacts")
 	if err := os.MkdirAll(filepath.Join(artifactRoot, "merge"), 0o755); err != nil {
@@ -610,19 +691,25 @@ func TestApplyResultsSkipsWhenVerifyStatusIsReview(t *testing.T) {
 	if err := applyResultsWithVerify(root, artifactRoot, planPath, approvalPath, resultPath, verifyPath, false); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(root, "out", "first.md")); !os.IsNotExist(err) {
-		t.Fatalf("output should not be written when verify status is review, err=%v", err)
+	if got, err := os.ReadFile(filepath.Join(root, "out", "first.md")); err != nil || string(got) != "first" {
+		t.Fatalf("output = %q err=%v", string(got), err)
 	}
 	result := readJSONMap(resultPath)
-	if got := stringValue(result["status"]); got != "skipped" {
-		t.Fatalf("status = %q want skipped", got)
+	if got := stringValue(result["status"]); got != "applied" {
+		t.Fatalf("status = %q want applied", got)
 	}
 	if got := stringValue(result["verify_status"]); got != "review" {
 		t.Fatalf("verify_status = %q want review", got)
 	}
+	if !boolAny(result["requires_human_review"]) {
+		t.Fatal("expected requires_human_review for review-status apply")
+	}
+	if boolAny(result["publish_allowed"]) {
+		t.Fatal("review-status apply should not mark publish_allowed")
+	}
 }
 
-func TestApplyResultsAllowsReviewWithExplicitOverride(t *testing.T) {
+func TestApplyResultsSkipsWhenVerifyStatusIsFail(t *testing.T) {
 	root := t.TempDir()
 	artifactRoot := filepath.Join(root, "artifacts")
 	if err := os.MkdirAll(filepath.Join(artifactRoot, "merge"), 0o755); err != nil {
@@ -641,18 +728,21 @@ func TestApplyResultsAllowsReviewWithExplicitOverride(t *testing.T) {
 	if err := os.WriteFile(approvalPath, []byte("- Approved: yes\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(verifyPath, []byte(`{"status":"review"}`), 0o644); err != nil {
+	if err := os.WriteFile(verifyPath, []byte(`{"status":"fail"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := applyResultsWithVerify(root, artifactRoot, planPath, approvalPath, resultPath, verifyPath, true); err != nil {
+	if err := applyResultsWithVerify(root, artifactRoot, planPath, approvalPath, resultPath, verifyPath, false); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := os.ReadFile(filepath.Join(root, "out", "first.md")); err != nil || string(got) != "first" {
-		t.Fatalf("output = %q err=%v", string(got), err)
+	if _, err := os.Stat(filepath.Join(root, "out", "first.md")); !os.IsNotExist(err) {
+		t.Fatalf("output should not be written when verify status is fail, err=%v", err)
 	}
 	result := readJSONMap(resultPath)
-	if got := stringValue(result["status"]); got != "applied" {
-		t.Fatalf("status = %q want applied", got)
+	if got := stringValue(result["status"]); got != "skipped" {
+		t.Fatalf("status = %q want skipped", got)
+	}
+	if got := stringValue(result["verify_status"]); got != "fail" {
+		t.Fatalf("verify_status = %q want fail", got)
 	}
 }
 

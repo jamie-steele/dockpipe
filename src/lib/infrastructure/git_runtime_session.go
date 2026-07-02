@@ -208,6 +208,9 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 			if err := DockerVolumeCreate(volumeName); err != nil {
 				return nil, fmt.Errorf("create workspace docker volume %q: %w", volumeName, err)
 			}
+			if err := dockerBootstrapGitBranchVolume(top, volumeName, branch); err != nil {
+				return nil, fmt.Errorf("seed workspace docker volume %q from repo %q at branch %q: %w", volumeName, top, branch, err)
+			}
 		}
 	} else {
 		if err := ensureBindSessionBranch(top, branch, baseRef); err != nil {

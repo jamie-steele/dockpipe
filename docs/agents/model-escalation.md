@@ -44,8 +44,9 @@ If a role must stay on one worker class, declare `worker_policy.mode: require`; 
 
 - Local models such as Ollama can be cheap/default attempt lanes.
 - Cloud-backed lanes such as Codex/Claude need budget ledgers and halt markers.
-- Escalate by work class, not provider habit: inventory/extraction can be cheap; source selection,
-  architecture, validation, and edit repair need stronger lanes when they affect durable output.
+- Escalate by work class, not provider habit: inventory/extraction can be cheap only when the lane
+  receives deterministic source packets or has real tool access; source selection, architecture,
+  validation, and edit repair need stronger lanes when they affect durable output.
 - Record requested lane, actual lane, token use, fallback state, and escalation reason in artifacts.
 - Do not hide escalation behind provider wrappers.
 - Do not hardcode provider behavior in `src/lib/` or `src/cmd/`.

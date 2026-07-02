@@ -78,6 +78,7 @@ has TODOs before it fully hides physical execution planning:
 - internal fanout now has a package-owned runner, but richer task splitting and dependency
   scheduling are still future work
 
+
 ## Tooling Surfaces
 
 Agent tooling should expose the same contract from different angles, not create separate control

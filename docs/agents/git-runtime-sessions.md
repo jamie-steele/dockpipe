@@ -6,6 +6,8 @@ managed workspaces, bind-mount policy, or recovery/publish behavior.
 ## Canonical Design
 
 Use `docs/git-runtime-sessions.md` as the source of truth for the long-term architecture.
+Use `docs/operation-results.md` for the broader unit-of-work result/logging pattern that runtime
+session work should follow.
 
 ## Hard Rules
 
@@ -39,6 +41,9 @@ Use `docs/git-runtime-sessions.md` as the source of truth for the long-term arch
 - Do not add DorkPipe-specific session behavior to generic engine code unless it is a reusable
   runtime primitive.
 - Do not require workflows to know host paths, Docker volume names, Git commands, or worktree paths.
+- Prefer one unit-of-work result/logging contract for runtime actions such as session create, volume
+  seed/sync, worker lease, checkpoint, sync, and publish; do not add more ad hoc status strings per
+  code path.
 - Prefer `workspace.mode: managed` as the future default; keep `workspace.mode: bind` explicit.
 - Prefer `workspace.storage: volume` for container-facing managed sessions; reserve
   `workspace.storage: worktree` for local debugging and inspection when needed.

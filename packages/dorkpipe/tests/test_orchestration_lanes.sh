@@ -182,7 +182,7 @@ import sys
 root = pathlib.Path(sys.argv[1])
 graph = json.loads((root / "task-graph.json").read_text())
 tasks = {task["id"]: task for task in graph["tasks"]}
-assert tasks["contract_brain"]["provider"] == "ollama", tasks["contract_brain"]
+assert tasks["contract_brain"]["provider"] == "codex", tasks["contract_brain"]
 assert tasks["workflow_brain"]["provider"] == "ollama", tasks["workflow_brain"]
 assert tasks["planner_brain"]["provider"] == "codex", tasks["planner_brain"]
 assert tasks["repo_shape"]["provider"] == "ollama", tasks["repo_shape"]
@@ -217,10 +217,18 @@ root = pathlib.Path(sys.argv[1])
 lane_plan = json.loads((root / "lanes" / "plan.json").read_text())
 tasks = {task["task_id"]: task for task in lane_plan.get("tasks", [])}
 expected = {
-    "contract_brain": "ollama",
-    "workflow_brain": "ollama",
-    "planner_brain": "ollama",
-    "repo_shape": "ollama",
+    "contract_brain__ollama": "ollama",
+    "contract_brain__codex": "codex",
+    "contract_brain__claude": "claude",
+    "workflow_brain__ollama": "ollama",
+    "workflow_brain__codex": "codex",
+    "workflow_brain__claude": "claude",
+    "planner_brain__ollama": "ollama",
+    "planner_brain__codex": "codex",
+    "planner_brain__claude": "claude",
+    "repo_shape__ollama": "ollama",
+    "repo_shape__codex": "codex",
+    "repo_shape__claude": "claude",
     "package_contracts__ollama": "ollama",
     "package_contracts__codex": "codex",
     "package_contracts__claude": "claude",
@@ -229,13 +237,10 @@ expected = {
     "safety_model__claude": "claude",
 }
 assert {key: tasks[key]["provider"] for key in expected} == expected, tasks
-assert tasks["repo_shape"]["comparison"]["enabled"] is False, tasks["repo_shape"]
 for task_id in expected:
     task = tasks[task_id]
-    if task_id in {"contract_brain", "workflow_brain", "planner_brain", "repo_shape"}:
-        continue
     assert task["comparison"]["enabled"] is True, task
-    assert task["base_task_id"] in {"package_contracts", "safety_model"}, task
+    assert task["base_task_id"] in {"contract_brain", "workflow_brain", "planner_brain", "repo_shape", "package_contracts", "safety_model"}, task
 graph = json.loads((root / "task-graph.json").read_text())
 graph_tasks = {task["id"]: task for task in graph["tasks"]}
 for task_id, provider in expected.items():
@@ -246,13 +251,10 @@ for task_id, provider in expected.items():
     if provider == "claude":
         assert graph_tasks[task_id]["model"] == "test-claude-model", graph_tasks[task_id]
     if provider == "ollama":
-        if task_id in {"contract_brain", "workflow_brain", "repo_shape"}:
-            assert graph_tasks[task_id]["model"] == "llama3.2", graph_tasks[task_id]
-        else:
-            assert graph_tasks[task_id]["model"] == "test-ollama-model", graph_tasks[task_id]
+        assert graph_tasks[task_id]["model"] == "test-ollama-model", graph_tasks[task_id]
     prompt = (root / "tasks" / task_id / "prompt.md").read_text()
     assert "DorkPipe worker output contract:" in prompt, prompt
-    assert "Return only the requested markdown artifact content." in prompt, prompt
+    assert "Return only the requested artifact content." in prompt, prompt
     assert "Do not create or describe task.json" in prompt, prompt
     assert "AGENTS.md context:" in prompt, prompt
     assert "DockPipe Root Router" in prompt, prompt

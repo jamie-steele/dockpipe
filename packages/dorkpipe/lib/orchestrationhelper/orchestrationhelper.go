@@ -578,6 +578,41 @@ func materializeTaskOutputs(responsePath, taskDir, outputsJSON, resultPath strin
 	})
 }
 
+func renderMaterializeOutputContract(outputs []any) string {
+	if len(outputs) == 0 {
+		return ""
+	}
+	paths := []string{}
+	for _, rawOutput := range outputs {
+		path := strings.TrimSpace(stringValue(mapValue(rawOutput)["path"]))
+		if path == "" {
+			continue
+		}
+		paths = append(paths, path)
+	}
+	if len(paths) == 0 {
+		return ""
+	}
+	lines := []string{
+		"DorkPipe materialized output contract:",
+		"- Your response must contain one exact block for each required output path.",
+		"- Do not wrap these blocks in markdown fences.",
+		"- Do not use YAML bundle/list wrappers around the file blocks.",
+		"- Required output paths: " + strings.Join(paths, ", "),
+		"",
+		"Use this exact block format for every required path:",
+	}
+	for _, path := range paths {
+		lines = append(lines,
+			"",
+			fmt.Sprintf(`<!-- dorkpipe:file path="%s" -->`, path),
+			"file content here",
+			"<!-- /dorkpipe:file -->",
+		)
+	}
+	return strings.Join(lines, "\n")
+}
+
 func parseMaterializedBlocks(text string) map[string]string {
 	blocks := map[string]string{}
 	re := regexp.MustCompile(`(?ms)<!--\s*dorkpipe:file\s+([^>]+?)\s*-->\s*\r?\n?(.*?)\r?\n?<!--\s*/dorkpipe:file\s*-->`)
@@ -1699,10 +1734,10 @@ func applyResultsWithVerify(rootPath, artifactRootPath, planPath, approvalPath, 
 	verifyStatus := ""
 	if strings.TrimSpace(verifyPath) != "" {
 		verifyStatus = strings.TrimSpace(stringValue(readJSONMapOptional(verifyPath)["status"]))
-		if verifyStatus != "" && !strings.EqualFold(verifyStatus, "pass") && !allowReviewApply {
+		if verifyStatus != "" && !strings.EqualFold(verifyStatus, "pass") && !strings.EqualFold(verifyStatus, "review") && !allowReviewApply {
 			return writeJSONFile(resultPath, map[string]any{
 				"status":        "skipped",
-				"reason":        "verify status is " + verifyStatus + "; set DORKPIPE_ORCH_APPLY_ON_REVIEW=1 to override intentionally",
+				"reason":        "verify status is " + verifyStatus + "; apply is blocked unless explicitly overridden",
 				"verify_status": verifyStatus,
 				"applied":       []any{},
 			})
@@ -1796,10 +1831,19 @@ func applyResultsWithVerify(rootPath, artifactRootPath, planPath, approvalPath, 
 			"bytes":  len(item.content),
 		})
 	}
-	return writeJSONFile(resultPath, map[string]any{
+	result := map[string]any{
 		"status":  "applied",
 		"applied": applied,
-	})
+	}
+	if verifyStatus != "" {
+		result["verify_status"] = verifyStatus
+	}
+	if strings.EqualFold(verifyStatus, "review") {
+		result["requires_human_review"] = true
+		result["publish_allowed"] = false
+		result["reason"] = "verify status is review; applied to workspace for concrete diff inspection only"
+	}
+	return writeJSONFile(resultPath, result)
 }
 
 func resolveApplyTargetPath(root, target string) (string, string, error) {
@@ -1936,6 +1980,39 @@ func parseContainerMountSpec(spec string) (string, string, bool) {
 		return "", "", false
 	}
 	return host, guest, true
+}
+
+func mountedGuestRootNotes(mountEnv string) []string {
+	notes := []string{}
+	seen := map[string]bool{}
+	for _, line := range strings.Split(mountEnv, "\n") {
+		host, guest, ok := parseContainerMountSpec(line)
+		if !ok {
+			continue
+		}
+		guest = cleanGuestPath(guest)
+		if guest == "" || seen[guest] {
+			continue
+		}
+		seen[guest] = true
+		switch guest {
+		case "/work":
+			continue
+		case "/DesignNotes":
+			notes = append(notes,
+				fmt.Sprintf("- `%s` is an external mounted design corpus, not part of the repo checkout under `/work`.", guest),
+				fmt.Sprintf("- Host path for this run: `%s`.", filepath.Clean(host)),
+				"- If durable docs need to mention it, describe it as a SharePoint-backed or Windows-local design-notes mirror at that host path; do not imply it lives inside the repo.",
+			)
+		default:
+			notes = append(notes,
+				fmt.Sprintf("- `%s` is an external mounted source root for this run.", guest),
+				fmt.Sprintf("- Host path for this run: `%s`.", filepath.Clean(host)),
+				"- Do not describe this mount as a repo-owned directory unless the task has explicit source authority for that claim.",
+			)
+		}
+	}
+	return notes
 }
 
 func cleanGuestPath(path string) string {
@@ -2458,6 +2535,7 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 				}
 				dependsOn = append(dependsOn, dep)
 			}
+			effectiveTaskModel := taskModelForLane(taskModel, laneSelection)
 			taskPayload := map[string]any{
 				"id":                      taskID,
 				"base_id":                 variant["base_task_id"],
@@ -2489,19 +2567,12 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 				"include_agents_md":       includeAgentsMD,
 				"accessible_paths":        accessiblePaths,
 				"access":                  taskAccess,
-				"model":                   taskModel,
+				"model":                   effectiveTaskModel,
 				"model_policy":            taskPolicy,
 				"task_class": map[string]any{
 					"name":      class.Name,
 					"authority": class.Authority,
 				},
-			}
-			if len(taskModel) == 0 {
-				taskPayload["model"] = map[string]any{
-					"provider": laneSelection["provider"],
-					"model":    laneSelection["model"],
-					"num_ctx":  laneSelection["context_window"],
-				}
 			}
 			if followUpMode {
 				taskPayload["follow_up"] = requestPayload["follow_up"]
@@ -2536,6 +2607,8 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 					"- Treat context briefing paths as starting context, not the full source boundary.",
 					"- Access policy and mounted roots define what else you may inspect.",
 					"- Ground substantive claims in exact source paths.",
+					"- Keep durable target docs target-agnostic unless the task explicitly asks for workflow, runtime, provider, or model details.",
+					"- Do not turn orchestration lane choices, provider names, model names, or mount mechanics into repo policy unless the task explicitly requires that and the cited sources support it.",
 					"- Return concise markdown suitable for downstream merge.",
 					"- Return the requested artifact content directly; do not narrate your tool workflow.",
 					"- Call out uncertainty explicitly.",
@@ -2549,15 +2622,22 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			if boolString(fallbackString(env["DORKPIPE_ORCH_STRICT_OUTPUT_CONTRACT"], "true")) {
 				outputContract = append(outputContract,
 					"DorkPipe worker output contract:",
-					"- Return only the requested markdown artifact content.",
-					"- Answer the task directly in final markdown.",
+					"- Return only the requested artifact content.",
+					"- Answer the task directly in the requested format.",
 					"- Do not describe files you wrote, commands you ran, validation steps, source-control status, or container behavior.",
 					"- Do not say you completed the task; produce the task answer itself.",
 					"- Do not create or describe task.json, lane-selection.json, result.json, merge artifacts, or example artifacts in the response.",
 					"- Do not write an execution plan, checklist, final report, or sample output unless the task explicitly asks for one.",
 					"- Do not write or modify source files unless the task explicitly asks for edits.",
+					"- Do not restate DorkPipe workflow/runtime/provider/model choices as durable target-repo policy unless the task explicitly asks for those details and the cited sources make them canonical.",
 					"- Use the same output standard regardless of provider or model lane.",
 				)
+			}
+			if materializedContract := renderMaterializeOutputContract(listValue(taskPayload["materialize_outputs"])); materializedContract != "" {
+				if len(outputContract) > 0 {
+					outputContract = append(outputContract, "")
+				}
+				outputContract = append(outputContract, materializedContract)
 			}
 			if variant["compare_provider"] != "" {
 				outputContract = append(outputContract, "", "Comparison mode:", fmt.Sprintf("- You are the %s fork for base task `%s`.", variant["compare_provider"], variant["base_task_id"]), "- Produce an independent answer for side-by-side evaluation.", "- Do not mention that you are in a competition or compare yourself to other lanes.")
@@ -2602,6 +2682,10 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 						prefix = append(prefix, "- "+path)
 					}
 				}
+			}
+			if mountNotes := mountedGuestRootNotes(env["DOCKPIPE_CONTAINER_MOUNTS"]); len(mountNotes) > 0 {
+				prefix = append(prefix, "", "Mounted source roots:")
+				prefix = append(prefix, mountNotes...)
 			}
 			if includeAgentsMD {
 				agentsPath := filepath.Join(root, "AGENTS.md")
@@ -4306,7 +4390,9 @@ func selectLane(task, policy map[string]any, requestedOverride, forceProvider, f
 	}
 	lane := copyMap(selected.Lane)
 	taskModel := mapValue(task["model"])
-	if model := stringValue(taskModel["model"]); model != "" {
+	laneProvider := fallbackString(stringValue(lane["provider"]), fallbackString(stringValue(lane["resolver_hint"]), requested))
+	taskModelProvider := expandEnv(stringValue(taskModel["provider"]), env)
+	if model := stringValue(taskModel["model"]); model != "" && (taskModelProvider == "" || strings.EqualFold(taskModelProvider, laneProvider)) {
 		lane["model"] = expandEnv(model, env)
 	}
 	return map[string]any{
@@ -4316,7 +4402,7 @@ func selectLane(task, policy map[string]any, requestedOverride, forceProvider, f
 		"worker_preference":    workerPreferred,
 		"requested":            requested,
 		"lane_id":              stringValue(lane["id"]),
-		"provider":             fallbackString(stringValue(lane["provider"]), fallbackString(stringValue(lane["resolver_hint"]), requested)),
+		"provider":             laneProvider,
 		"resolver_hint":        fallbackString(stringValue(lane["resolver_hint"]), fallbackString(stringValue(lane["provider"]), requested)),
 		"model":                stringValue(lane["model"]),
 		"cloud":                boolAny(lane["cloud"]),
@@ -4332,6 +4418,36 @@ func selectLane(task, policy map[string]any, requestedOverride, forceProvider, f
 		"baseline_gate_reason": baselineGateReason,
 		"training":             selected.Training,
 	}
+}
+
+func taskModelForLane(taskModel, laneSelection map[string]any) map[string]any {
+	laneProvider := stringValue(laneSelection["provider"])
+	laneModel := stringValue(laneSelection["model"])
+	laneContext := intFromAny(laneSelection["context_window"])
+	if len(taskModel) > 0 {
+		taskProvider := stringValue(taskModel["provider"])
+		if taskProvider == "" || strings.EqualFold(taskProvider, laneProvider) {
+			out := copyMap(taskModel)
+			if stringValue(out["provider"]) == "" {
+				out["provider"] = laneProvider
+			}
+			if stringValue(out["model"]) == "" {
+				out["model"] = laneModel
+			}
+			if _, ok := out["num_ctx"]; !ok && laneContext > 0 {
+				out["num_ctx"] = laneContext
+			}
+			return out
+		}
+	}
+	out := map[string]any{
+		"provider": laneProvider,
+		"model":    laneModel,
+	}
+	if laneContext > 0 {
+		out["num_ctx"] = laneContext
+	}
+	return out
 }
 
 func applyTaskWorkerProfile(task map[string]any, env map[string]string) (map[string]any, error) {
