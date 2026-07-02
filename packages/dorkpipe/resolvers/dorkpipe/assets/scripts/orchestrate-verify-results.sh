@@ -32,6 +32,13 @@ if [[ "${VERIFY_HEURISTIC_STATUS:-pass}" != "pass" ]]; then
   next_action="human review: worker output appears to miss the requested artifact shape"
 fi
 
+eval "$("$(dorkpipe_orchestrate_helper_bin)" verify-apply-coherence "${ROOT}" "${DORKPIPE_ORCH_ROOT}" "${DORKPIPE_ORCH_PLAN_JSON}" "${issues}")"
+if [[ "${VERIFY_APPLY_STATUS:-pass}" != "pass" ]]; then
+  status="${VERIFY_APPLY_STATUS}"
+  issues="${VERIFY_APPLY_ISSUES:-${issues}}"
+  next_action="human review: staged apply outputs contain broken links, bad references, or contradictory validation claims"
+fi
+
 if [[ -f "${DORKPIPE_ORCH_HALT_JSON}" ]]; then
   status="review"
   issues='["cloud budget halt triggered during orchestration; review cloud-usage.json and halt.json before resuming cloud workers"]'

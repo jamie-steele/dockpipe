@@ -28,6 +28,20 @@ func TestApplyTaskWorkerProfileDefaultsToPrefer(t *testing.T) {
 	}
 }
 
+func TestApplyTaskWorkerProfileEditModeDefaultsToRequire(t *testing.T) {
+	task, err := applyTaskWorkerProfile(map[string]any{
+		"id":        "patch",
+		"worker":    "codex",
+		"work_mode": "edit",
+	}, map[string]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := workerPolicyMode(task); got != "require" {
+		t.Fatalf("worker policy mode = %q, want require for edit mode", got)
+	}
+}
+
 func TestSelectLaneWorkerPreferAllowsFallback(t *testing.T) {
 	task, err := applyTaskWorkerProfile(map[string]any{
 		"id":     "analysis",
@@ -294,7 +308,7 @@ func TestComparisonDisabledForRequiredWorker(t *testing.T) {
 
 func TestEmitTaskEnvIncludesWorkMode(t *testing.T) {
 	taskPath := filepath.Join(t.TempDir(), "task.json")
-	if err := os.WriteFile(taskPath, []byte(`{"id":"patch","worker":"codex","work_mode":"edit"}`), 0o644); err != nil {
+	if err := os.WriteFile(taskPath, []byte(`{"id":"patch","worker":"codex","work_mode":"edit","output_path":"/work/docs/brain.md"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	var stdout bytes.Buffer
@@ -303,6 +317,23 @@ func TestEmitTaskEnvIncludesWorkMode(t *testing.T) {
 	}
 	if !strings.Contains(stdout.String(), "TASK_WORK_MODE='edit'") {
 		t.Fatalf("task env missing work mode:\n%s", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "TASK_OUTPUT_PATH='/work/docs/brain.md'") {
+		t.Fatalf("task env missing output path:\n%s", stdout.String())
+	}
+}
+
+func TestInferTaskOutputPathPrefersExplicitThenExpectedOutput(t *testing.T) {
+	if got := inferTaskOutputPath(map[string]any{
+		"output_path":     "/work/docs/explicit.md",
+		"expected_output": "Write /work/docs/fallback.md",
+	}); got != "/work/docs/explicit.md" {
+		t.Fatalf("explicit output path = %q", got)
+	}
+	if got := inferTaskOutputPath(map[string]any{
+		"expected_output": "Update canonical doc at /work/docs/agents/index.md and keep links valid.",
+	}); got != "/work/docs/agents/index.md" {
+		t.Fatalf("inferred output path = %q", got)
 	}
 }
 
@@ -442,6 +473,18 @@ func TestResolveApplyTargetPathFallsBackToWorkflowRootForWorkGuestPath(t *testin
 	}
 }
 
+func TestHasSchedulerOutputConflictMatchesSameTarget(t *testing.T) {
+	running := map[string]schedulerTask{
+		"author_index": {ID: "author_index", OutputPath: "/work/docs/agents/index.md"},
+	}
+	if !hasSchedulerOutputConflict(schedulerTask{ID: "finalize_index", OutputPath: "/work/docs/agents/index.md"}, running) {
+		t.Fatal("expected same output path to conflict")
+	}
+	if hasSchedulerOutputConflict(schedulerTask{ID: "author_repo", OutputPath: "/work/docs/agents/repo.md"}, running) {
+		t.Fatal("did not expect different output path to conflict")
+	}
+}
+
 func TestApplyResultsPreflightsAllSourcesBeforeWriting(t *testing.T) {
 	root := t.TempDir()
 	artifactRoot := filepath.Join(root, "artifacts")
@@ -465,6 +508,66 @@ func TestApplyResultsPreflightsAllSourcesBeforeWriting(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "out", "first.md")); !os.IsNotExist(err) {
 		t.Fatalf("first output should not be written before all sources preflight, err=%v", err)
+	}
+}
+
+func TestEmitVerifyApplyCoherenceFlagsBrokenMarkdownAndYamlTargets(t *testing.T) {
+	root := t.TempDir()
+	artifactRoot := filepath.Join(root, "artifacts")
+	if err := os.MkdirAll(filepath.Join(artifactRoot, "merge"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactRoot, "merge", "index.md"), []byte("[Missing](./missing.md)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactRoot, "merge", "index.yaml"), []byte("canonical: ./missing.md\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(artifactRoot, "plan.json")
+	if err := os.WriteFile(planPath, []byte(`{"apply":{"outputs":[{"source":"merge/index.md","path":"docs/index.md"},{"source":"merge/index.yaml","path":"docs/index.yaml"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if err := emitVerifyApplyCoherence(root, artifactRoot, planPath, `[]`, &out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "VERIFY_APPLY_STATUS='review'") {
+		t.Fatalf("expected review status, got:\n%s", got)
+	}
+	for _, want := range []string{"markdown link target is missing", "yaml reference target is missing"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestEmitVerifyApplyCoherenceFlagsContradictoryValidationClaim(t *testing.T) {
+	root := t.TempDir()
+	artifactRoot := filepath.Join(root, "artifacts")
+	if err := os.MkdirAll(filepath.Join(artifactRoot, "merge"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "docs", "source-of-truth.md"), []byte("still here\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactRoot, "merge", "validation.md"), []byte("- **Removed `source-of-truth.md`**\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(artifactRoot, "plan.json")
+	if err := os.WriteFile(planPath, []byte(`{"apply":{"outputs":[{"source":"merge/validation.md","path":"docs/validation.md"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if err := emitVerifyApplyCoherence(root, artifactRoot, planPath, `[]`, &out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "still exists") {
+		t.Fatalf("expected contradictory validation claim issue, got:\n%s", got)
 	}
 }
 

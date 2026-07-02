@@ -53,6 +53,29 @@ live_response_is_valid() {
   "$(dorkpipe_orchestrate_helper_bin)" validate-live-response "${path}" >/dev/null
 }
 
+sync_edit_response_from_worktree() {
+  [[ "${TASK_WORK_MODE:-}" == "edit" ]] || return 0
+  [[ -n "${TASK_OUTPUT_PATH:-}" ]] || return 0
+  local host_output_path=""
+  host_output_path="$("$(dorkpipe_orchestrate_helper_bin)" resolve-target-path "${ROOT}" "${TASK_OUTPUT_PATH}")" || return 1
+  [[ -f "${host_output_path}" ]] || return 1
+  cp "${host_output_path}" "${response_md}"
+}
+
+task_comparison_enabled() {
+  printf '%s' "${TASK_COMPARISON_JSON:-}" | grep -qi '"enabled"[[:space:]]*:[[:space:]]*true'
+}
+
+sync_artifact_response_to_worktree() {
+  [[ "${TASK_WORK_MODE:-}" != "edit" ]] || return 0
+  [[ -n "${TASK_OUTPUT_PATH:-}" ]] || return 0
+  task_comparison_enabled && return 0
+  local host_output_path=""
+  host_output_path="$("$(dorkpipe_orchestrate_helper_bin)" resolve-target-path "${ROOT}" "${TASK_OUTPUT_PATH}")" || return 1
+  mkdir -p "$(dirname "${host_output_path}")"
+  cp "${response_md}" "${host_output_path}"
+}
+
 if dorkpipe_orchestrate_is_cloud_provider "${provider}"; then
   if [[ -f "${DORKPIPE_ORCH_HALT_JSON}" ]]; then
     budget_halt="true"
@@ -166,6 +189,30 @@ if [[ "${budget_halt}" != "true" ]]; then
         fi
         ;;
     esac
+  fi
+fi
+
+if [[ "${used_live_model}" == "true" ]]; then
+  if ! sync_edit_response_from_worktree; then
+    used_live_model="false"
+    status="failed"
+    summary="Required edit output was not written to ${TASK_OUTPUT_PATH:-the expected worktree path}"
+    confidence="0.05"
+    issues_json="[\"edit-mode task did not produce the expected worktree output at ${TASK_OUTPUT_PATH:-unknown}\"]"
+    next_actions_json='["fix the worker prompt or edit permissions so the task writes the requested file into /work before rerunning"]'
+    hard_fail="true"
+  fi
+fi
+
+if [[ "${used_live_model}" == "true" && "${hard_fail}" != "true" ]]; then
+  if ! sync_artifact_response_to_worktree; then
+    used_live_model="false"
+    status="failed"
+    summary="Artifact task output could not be synchronized into ${TASK_OUTPUT_PATH:-the expected worktree path}"
+    confidence="0.05"
+    issues_json="[\"artifact-mode task could not sync its response into ${TASK_OUTPUT_PATH:-unknown}\"]"
+    next_actions_json='["fix the declared output path or apply permissions so downstream tasks can read the updated /work artifact"]'
+    hard_fail="true"
   fi
 fi
 

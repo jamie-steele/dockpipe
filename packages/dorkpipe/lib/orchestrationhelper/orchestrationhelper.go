@@ -42,6 +42,9 @@ var (
 	reBulletPrefix      = regexp.MustCompile(`(?i)Bullet\s+(\d+)\s+must\s+start\s+with\s+"([^"\n]+)"`)
 	reBulletMarker      = regexp.MustCompile(`^\s*(?:[-*+]\s+|•\s*)`)
 	reSafeCompareSuffix = regexp.MustCompile(`[^A-Za-z0-9_]+`)
+	reGuestDocPath      = regexp.MustCompile(`/(?:work|DesignNotes)/[A-Za-z0-9._/\-]+\.(?:md|ya?ml)`)
+	reMarkdownLink      = regexp.MustCompile(`\[[^\]]*\]\(([^)#]+)(?:#[^)]+)?\)`)
+	reValidationRemoved = regexp.MustCompile("(?im)^- \\*\\*Removed `([^`]+)`")
 )
 
 type trainingEntry struct {
@@ -103,6 +106,7 @@ type schedulerTask struct {
 	DependsOn     []string       `json:"depends_on"`
 	Provider      string         `json:"provider"`
 	Model         string         `json:"model"`
+	OutputPath    string         `json:"output_path"`
 	ReuseExisting bool           `json:"reuse_existing"`
 }
 
@@ -142,6 +146,16 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("usage: orchestrate-helper task-env <task.json>")
 		}
 		return emitTaskEnv(args[1], stdout)
+	case "resolve-target-path":
+		if len(args) != 3 {
+			return errors.New("usage: orchestrate-helper resolve-target-path <root> <target>")
+		}
+		targetPath, _, err := resolveApplyTargetPath(args[1], args[2])
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(stdout, targetPath)
+		return nil
 	case "worker-lease-env":
 		if len(args) != 2 {
 			return errors.New("usage: orchestrate-helper worker-lease-env <lease.json>")
@@ -229,6 +243,11 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("usage: orchestrate-helper verify-heuristics <merge.json> <tasks-dir> <issues.json>")
 		}
 		return emitVerifyHeuristics(args[1], args[2], args[3], stdout)
+	case "verify-apply-coherence":
+		if len(args) != 5 {
+			return errors.New("usage: orchestrate-helper verify-apply-coherence <root> <artifact-root> <plan.json> <issues.json>")
+		}
+		return emitVerifyApplyCoherence(args[1], args[2], args[3], args[4], stdout)
 	case "apply-results":
 		if len(args) != 6 {
 			return errors.New("usage: orchestrate-helper apply-results <root> <artifact-root> <plan.json> <approval.md> <result.json>")
@@ -294,6 +313,7 @@ func emitTaskEnv(path string, stdout io.Writer) error {
 		"TASK_WORKER_PROFILE":          stringValue(task["worker"]),
 		"TASK_WORKER_POLICY_MODE":      workerPolicyMode(task),
 		"TASK_WORK_MODE":               stringValue(task["work_mode"]),
+		"TASK_OUTPUT_PATH":             stringValue(task["output_path"]),
 		"TASK_COMPARISON_JSON":         mustJSON(task["comparison"], map[string]any{"enabled": false}),
 		"TASK_RESOLVER_HINT":           fallbackString(stringValue(task["resolver_hint"]), "auto"),
 		"TASK_REQUESTED_RESOLVER_HINT": fallbackString(stringValue(task["requested_resolver_hint"]), fallbackString(stringValue(task["resolver_hint"]), "auto")),
@@ -808,6 +828,278 @@ func emitVerifyHeuristics(mergePath, tasksDir, issuesJSON string, stdout io.Writ
 	return nil
 }
 
+func emitVerifyApplyCoherence(rootPath, artifactRootPath, planPath, issuesJSON string, stdout io.Writer) error {
+	plan := readJSONMap(planPath)
+	applyCfg := mapValue(plan["apply"])
+	outputs := listValue(applyCfg["outputs"])
+	issues := []string{}
+	_ = json.Unmarshal([]byte(issuesJSON), &issues)
+	if len(outputs) == 0 {
+		fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote("pass"))
+		fmt.Fprintf(stdout, "VERIFY_APPLY_ISSUES=%s\n", shellQuote(mustJSON(issues, []string{})))
+		return nil
+	}
+	stage, err := stageApplyOutputs(rootPath, artifactRootPath, outputs)
+	if err != nil {
+		issues = append(issues, err.Error())
+		fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote("review"))
+		fmt.Fprintf(stdout, "VERIFY_APPLY_ISSUES=%s\n", shellQuote(mustJSON(issues, []string{})))
+		return nil
+	}
+	defer os.RemoveAll(stage.TempRoot)
+	for _, item := range stage.Files {
+		switch strings.ToLower(filepath.Ext(item.TargetPath)) {
+		case ".md":
+			issues = append(issues, verifyMarkdownTargets(stage, item)...)
+			if strings.EqualFold(filepath.Base(item.TargetPath), "validation.md") {
+				issues = append(issues, verifyValidationClaims(stage, item)...)
+			}
+		case ".yml", ".yaml":
+			issues = append(issues, verifyYAMLTargets(stage, item)...)
+		}
+	}
+	status := "pass"
+	if len(issues) > 0 {
+		status = "review"
+	}
+	fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote(status))
+	fmt.Fprintf(stdout, "VERIFY_APPLY_ISSUES=%s\n", shellQuote(mustJSON(issues, []string{})))
+	return nil
+}
+
+type stagedApplyFile struct {
+	SourcePath string
+	TargetPath string
+	StagePath  string
+}
+
+type stagedApplyTree struct {
+	Root     string
+	TempRoot string
+	Files    []stagedApplyFile
+}
+
+func stageApplyOutputs(rootPath, artifactRootPath string, outputs []any) (stagedApplyTree, error) {
+	root, err := filepath.Abs(rootPath)
+	if err != nil {
+		return stagedApplyTree{}, err
+	}
+	artifactRoot, err := filepath.Abs(artifactRootPath)
+	if err != nil {
+		return stagedApplyTree{}, err
+	}
+	tempRoot, err := os.MkdirTemp("", "dockpipe-orch-apply-*")
+	if err != nil {
+		return stagedApplyTree{}, err
+	}
+	stageRoot := filepath.Join(tempRoot, "root")
+	if err := os.MkdirAll(stageRoot, 0o755); err != nil {
+		_ = os.RemoveAll(tempRoot)
+		return stagedApplyTree{}, err
+	}
+	files := []stagedApplyFile{}
+	for _, raw := range outputs {
+		item := mapValue(raw)
+		source := strings.TrimSpace(stringValue(item["source"]))
+		target := strings.TrimSpace(stringValue(item["path"]))
+		if source == "" || target == "" {
+			_ = os.RemoveAll(tempRoot)
+			return stagedApplyTree{}, errors.New("each apply output needs source and path")
+		}
+		sourcePath, err := filepath.Abs(filepath.Join(artifactRoot, source))
+		if err != nil || !withinRoot(artifactRoot, sourcePath) {
+			_ = os.RemoveAll(tempRoot)
+			return stagedApplyTree{}, fmt.Errorf("apply source escapes artifact root: %s", source)
+		}
+		info, err := os.Stat(sourcePath)
+		if err != nil || info.IsDir() {
+			_ = os.RemoveAll(tempRoot)
+			return stagedApplyTree{}, fmt.Errorf("apply source is missing: %s", source)
+		}
+		targetPath, targetRoot, err := resolveApplyTargetPath(root, target)
+		if err != nil {
+			_ = os.RemoveAll(tempRoot)
+			return stagedApplyTree{}, err
+		}
+		if !withinRoot(targetRoot, targetPath) {
+			_ = os.RemoveAll(tempRoot)
+			return stagedApplyTree{}, fmt.Errorf("apply target escapes worktree: %s", target)
+		}
+		if !withinRoot(root, targetPath) {
+			continue
+		}
+		stagePath, err := stagedPathForTarget(stageRoot, root, targetPath)
+		if err != nil {
+			_ = os.RemoveAll(tempRoot)
+			return stagedApplyTree{}, err
+		}
+		content, err := os.ReadFile(sourcePath)
+		if err != nil {
+			_ = os.RemoveAll(tempRoot)
+			return stagedApplyTree{}, err
+		}
+		if err := os.MkdirAll(filepath.Dir(stagePath), 0o755); err != nil {
+			_ = os.RemoveAll(tempRoot)
+			return stagedApplyTree{}, err
+		}
+		if err := os.WriteFile(stagePath, content, 0o644); err != nil {
+			_ = os.RemoveAll(tempRoot)
+			return stagedApplyTree{}, err
+		}
+		files = append(files, stagedApplyFile{
+			SourcePath: sourcePath,
+			TargetPath: targetPath,
+			StagePath:  stagePath,
+		})
+	}
+	return stagedApplyTree{Root: root, TempRoot: tempRoot, Files: files}, nil
+}
+
+func stagedPathForTarget(stageRoot, root, targetPath string) (string, error) {
+	rel, err := filepath.Rel(root, targetPath)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", fmt.Errorf("apply target escapes staging root: %s", targetPath)
+	}
+	return filepath.Join(stageRoot, rel), nil
+}
+
+func stagePathOrTarget(stage stagedApplyTree, targetPath string) string {
+	for _, item := range stage.Files {
+		if sameFilePath(item.TargetPath, targetPath) {
+			return item.StagePath
+		}
+	}
+	return targetPath
+}
+
+func sameFilePath(a, b string) bool {
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
+}
+
+func hasSchedulerOutputConflict(task schedulerTask, running map[string]schedulerTask) bool {
+	if strings.TrimSpace(task.OutputPath) == "" {
+		return false
+	}
+	for _, active := range running {
+		if strings.TrimSpace(active.OutputPath) == "" {
+			continue
+		}
+		if sameFilePath(task.OutputPath, active.OutputPath) {
+			return true
+		}
+	}
+	return false
+}
+
+func verifyMarkdownTargets(stage stagedApplyTree, item stagedApplyFile) []string {
+	raw, err := os.ReadFile(item.StagePath)
+	if err != nil {
+		return []string{fmt.Sprintf("%s: staged markdown output could not be read", relativeTo(stage.Root, item.TargetPath))}
+	}
+	issues := []string{}
+	for _, match := range reMarkdownLink.FindAllStringSubmatch(string(raw), -1) {
+		if len(match) < 2 {
+			continue
+		}
+		target := strings.TrimSpace(match[1])
+		if target == "" || strings.HasPrefix(target, "#") || strings.Contains(target, "://") || strings.HasPrefix(target, "mailto:") {
+			continue
+		}
+		if strings.HasPrefix(target, "/") {
+			continue
+		}
+		candidate := filepath.Clean(filepath.Join(filepath.Dir(item.TargetPath), filepath.FromSlash(target)))
+		resolved := stagePathOrTarget(stage, candidate)
+		info, err := os.Stat(resolved)
+		if err != nil || info.IsDir() {
+			issues = append(issues, fmt.Sprintf("%s: markdown link target is missing: %s", relativeTo(stage.Root, item.TargetPath), target))
+		}
+	}
+	return issues
+}
+
+func verifyYAMLTargets(stage stagedApplyTree, item stagedApplyFile) []string {
+	raw, err := os.ReadFile(item.StagePath)
+	if err != nil {
+		return []string{fmt.Sprintf("%s: staged yaml output could not be read", relativeTo(stage.Root, item.TargetPath))}
+	}
+	var payload any
+	if err := yaml.Unmarshal(raw, &payload); err != nil {
+		return []string{fmt.Sprintf("%s: yaml could not be parsed: %v", relativeTo(stage.Root, item.TargetPath), err)}
+	}
+	issues := []string{}
+	walkStringScalars(payload, func(value string) {
+		trimmed := strings.TrimSpace(value)
+		if trimmed == "" || strings.HasPrefix(trimmed, "/") || strings.Contains(trimmed, "://") {
+			return
+		}
+		lower := strings.ToLower(trimmed)
+		if !strings.HasSuffix(lower, ".md") && !strings.HasSuffix(lower, ".yml") && !strings.HasSuffix(lower, ".yaml") {
+			return
+		}
+		candidate := filepath.Clean(filepath.Join(filepath.Dir(item.TargetPath), filepath.FromSlash(trimmed)))
+		resolved := stagePathOrTarget(stage, candidate)
+		info, err := os.Stat(resolved)
+		if err != nil || info.IsDir() {
+			issues = append(issues, fmt.Sprintf("%s: yaml reference target is missing: %s", relativeTo(stage.Root, item.TargetPath), trimmed))
+		}
+	})
+	return issues
+}
+
+func verifyValidationClaims(stage stagedApplyTree, item stagedApplyFile) []string {
+	raw, err := os.ReadFile(item.StagePath)
+	if err != nil {
+		return nil
+	}
+	issues := []string{}
+	for _, match := range reValidationRemoved.FindAllStringSubmatch(string(raw), -1) {
+		if len(match) < 2 {
+			continue
+		}
+		claimed := strings.TrimSpace(match[1])
+		if claimed == "" {
+			continue
+		}
+		candidate := filepath.Clean(filepath.Join(filepath.Dir(item.TargetPath), filepath.FromSlash(claimed)))
+		resolved := stagePathOrTarget(stage, candidate)
+		if info, err := os.Stat(resolved); err == nil && !info.IsDir() {
+			issues = append(issues, fmt.Sprintf("%s: validation claims %s was removed but it still exists", relativeTo(stage.Root, item.TargetPath), claimed))
+		}
+	}
+	return issues
+}
+
+func walkStringScalars(value any, visit func(string)) {
+	switch typed := value.(type) {
+	case string:
+		visit(typed)
+	case []any:
+		for _, item := range typed {
+			walkStringScalars(item, visit)
+		}
+	case map[string]any:
+		for _, item := range typed {
+			walkStringScalars(item, visit)
+		}
+	case map[any]any:
+		for _, item := range typed {
+			walkStringScalars(item, visit)
+		}
+	}
+}
+
+func relativeTo(root, path string) string {
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return path
+	}
+	return filepath.ToSlash(rel)
+}
+
 func applyResults(rootPath, artifactRootPath, planPath, approvalPath, resultPath string) error {
 	root, err := filepath.Abs(rootPath)
 	if err != nil {
@@ -933,6 +1225,19 @@ func resolveApplyTargetPath(root, target string) (string, string, error) {
 		return "", "", fmt.Errorf("apply target escapes worktree: %s", target)
 	}
 	return targetPath, root, nil
+}
+
+func inferTaskOutputPath(task map[string]any) string {
+	if direct := strings.TrimSpace(stringValue(task["output_path"])); direct != "" {
+		return direct
+	}
+	for _, field := range []string{"expected_output", "prompt"} {
+		text := stringValue(task[field])
+		if match := reGuestDocPath.FindString(text); match != "" {
+			return match
+		}
+	}
+	return ""
 }
 
 func resolvePrimaryWorkTarget(root, target string) (string, string, bool) {
@@ -1556,6 +1861,7 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 				"inputs":                  taskInputs,
 				"constraints":             listValue(task["constraints"]),
 				"expected_output":         stringValue(task["expected_output"]),
+				"output_path":             inferTaskOutputPath(task),
 				"worker_type":             fallbackString(stringValue(task["worker_type"]), "analysis"),
 				"work_mode":               stringValue(task["work_mode"]),
 				"resolver_hint":           fallbackString(stringValue(laneSelection["resolver_hint"]), expandEnv(fallbackString(stringValue(task["resolver_hint"]), "auto"), env)),
@@ -1701,6 +2007,7 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 				"lane_id":        laneSelection["lane_id"],
 				"provider":       laneSelection["provider"],
 				"model":          laneSelection["model"],
+				"output_path":    taskPayload["output_path"],
 				"worker_type":    taskPayload["worker_type"],
 				"reuse_existing": reuseExisting,
 			})
@@ -1741,6 +2048,7 @@ func runTasks(graphPath, runner string, env map[string]string, stderr io.Writer)
 			DependsOn:     stringList(item["depends_on"]),
 			Provider:      stringValue(item["provider"]),
 			Model:         stringValue(item["model"]),
+			OutputPath:    stringValue(item["output_path"]),
 			ReuseExisting: boolAny(item["reuse_existing"]),
 		}
 	}
@@ -1992,6 +2300,9 @@ func runTasks(graphPath, runner string, env map[string]string, stderr io.Writer)
 				}
 			}
 			if depFailed || !depsDone {
+				continue
+			}
+			if hasSchedulerOutputConflict(task, runningTasks) {
 				continue
 			}
 			if total >= maxWorkers {
@@ -3418,7 +3729,11 @@ func applyTaskWorkerProfile(task map[string]any, env map[string]string) (map[str
 		}
 		policy["mode"] = mode
 	} else {
-		policy["mode"] = "prefer"
+		if strings.EqualFold(strings.TrimSpace(stringValue(out["work_mode"])), "edit") {
+			policy["mode"] = "require"
+		} else {
+			policy["mode"] = "prefer"
+		}
 	}
 	out["worker_policy"] = policy
 	out["worker_preferred_resolver_hint"] = stringValue(defaults["preferred_resolver_hint"])

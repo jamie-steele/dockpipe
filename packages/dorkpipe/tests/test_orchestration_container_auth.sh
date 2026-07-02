@@ -22,6 +22,12 @@ fake_lease_state="$tmp/lease-state.txt"
 cat >"$fake_dockpipe" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "${1:-}" == "package" && "${2:-}" == "build" && "${3:-}" == "source" ]]; then
+  if [[ -n "${FAKE_FAIL_SOURCE_BUILD:-}" ]]; then
+    echo "unexpected source build" >&2
+    exit 99
+  fi
+fi
 if [[ "${1:-}" == "scope" && "${2:-}" == "resolver" ]]; then
   case "${3:-}:${4:-}" in
     codex:auth-dir) printf '%s\n' "${CODEX_HOME:-$HOME/.codex}" ;;
@@ -177,6 +183,10 @@ dockpipe_sdk() {
     printf '%s\n' "$fake_dockpipe"
     return 0
   fi
+  if [[ "${1:-}" == "require" && "${2:-}" == "tooling-bin" && "${3:-}" == "orchestrate-helper" ]]; then
+    printf '%s\n' "$fake_orchestrate_helper"
+    return 0
+  fi
   return 1
 }
 
@@ -248,6 +258,24 @@ printf '# skill\n' > "$HOME/.codex/skills/dorkpipe-package-authoring/SKILL.md"
 printf '{"claudeAiOauth":{}}\n' > "$HOME/.claude/.credentials.json"
 printf '{"oauthAccount":{}}\n' > "$HOME/.claude.json"
 printf '# skill\n' > "$HOME/.claude/skills/dorkpipe-package-authoring/SKILL.md"
+consumer_root="$tmp/consumer-repo"
+mkdir -p "$consumer_root"
+saved_root="$ROOT"
+saved_assets_dir="${DOCKPIPE_ASSETS_DIR:-}"
+saved_helper_bin="${DORKPIPE_ORCH_HELPER_BIN:-}"
+ROOT="$consumer_root"
+export DOCKPIPE_ASSETS_DIR="$saved_root/packages/dorkpipe/resolvers/dorkpipe/assets"
+unset DORKPIPE_ORCH_HELPER_BIN
+export FAKE_FAIL_SOURCE_BUILD="1"
+consumer_helper="$(dorkpipe_orchestrate_helper_bin)"
+if [[ "$consumer_helper" != "$fake_orchestrate_helper" ]]; then
+  echo "expected consumer repo helper resolution to use installed tooling helper, got: $consumer_helper" >&2
+  exit 1
+fi
+unset FAKE_FAIL_SOURCE_BUILD
+ROOT="$saved_root"
+export DOCKPIPE_ASSETS_DIR="$saved_assets_dir"
+export DORKPIPE_ORCH_HELPER_BIN="$saved_helper_bin"
 export CLAUDE_HOME="/home/node/.claude"
 export CODEX_HOME="/home/node/.codex"
 dorkpipe_orchestrate_auth_preflight codex
@@ -373,6 +401,8 @@ grep -qx -- "$HOME/.claude:/dockpipe-auth/claude:ro" "$fake_args"
 grep -qx -- "$HOME/.claude.json:/dockpipe-auth/claude-config/.claude.json:ro" "$fake_args"
 grep -qx -- "$claude_stage_dir:/dockpipe-auth/claude-skills:ro" "$fake_args"
 grep -q -- "cp /dockpipe-auth/claude-config/.claude.json /home/node/.claude.json" "$fake_args"
+grep -q -- "hasTrustDialogAccepted = true" "$fake_args"
+grep -q -- 'payload.projects\[guestProjectRoot\] = project' "$fake_args"
 grep -q -- "claude --dangerously-skip-permissions" "$fake_args"
 grep -qx -- "container worker ok" "$response"
 

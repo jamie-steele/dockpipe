@@ -82,15 +82,29 @@ dorkpipe_orchestrate_helper_bin() {
     printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
     return 0
   fi
-  local repo_root package_root dockpipe_bin dockpipe_dir dockpipe_repo_root candidate repo_candidate packaged_candidate helper_sources_stale
+  local repo_root package_root source_repo_root dockpipe_bin dockpipe_dir dockpipe_repo_root candidate repo_candidate packaged_candidate helper_sources_stale can_source_build
   repo_root="${ROOT:-$(dockpipe_sdk get workdir)}"
   if [[ -n "${DOCKPIPE_ASSETS_DIR:-}" ]]; then
     package_root="$(cd "${DOCKPIPE_ASSETS_DIR}/../../.." 2>/dev/null && pwd || true)"
   fi
+  source_repo_root=""
+  if [[ -n "${package_root:-}" ]]; then
+    source_repo_root="$(cd "${package_root}/../.." 2>/dev/null && pwd || true)"
+  fi
   repo_candidate="${repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf '.exe' ;; *) printf '' ;; esac)"
   packaged_candidate="${DOCKPIPE_ASSETS_DIR:-}/tooling/bin/$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf 'windows' ;; darwin*:*|*:darwin*:* ) printf 'darwin' ;; *) printf 'linux' ;; esac)/orchestrate-helper$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf '.exe' ;; *) printf '' ;; esac)"
   helper_sources_stale="0"
-  if [[ -x "${repo_candidate}" ]] && [[ -n "${package_root:-}" ]]; then
+  can_source_build="0"
+  if [[ -n "${source_repo_root:-}" && "${repo_root}" == "${source_repo_root}" ]] && [[ -d "${package_root}/lib/cmd/orchestrate-helper" ]] && [[ -d "${package_root}/lib/orchestrationhelper" ]]; then
+    can_source_build="1"
+  fi
+  if [[ -x "${repo_candidate}" ]]; then
+    if [[ "${can_source_build}" != "1" ]]; then
+      DORKPIPE_ORCH_HELPER_BIN="${repo_candidate}"
+      export DORKPIPE_ORCH_HELPER_BIN
+      printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
+      return 0
+    fi
     if ! find "${package_root}/lib/cmd/orchestrate-helper" "${package_root}/lib/orchestrationhelper" \
       -type f \( -name '*.go' -o -name 'go.mod' -o -name 'go.sum' \) -newer "${repo_candidate}" -print -quit 2>/dev/null | grep -q .; then
       DORKPIPE_ORCH_HELPER_BIN="${repo_candidate}"
@@ -119,7 +133,13 @@ dorkpipe_orchestrate_helper_bin() {
       fi
     done
   fi
-  if [[ -x "${dockpipe_bin:-}" ]] && { [[ "${helper_sources_stale}" == "1" ]] || [[ ! -x "${repo_candidate}" ]]; }; then
+  DORKPIPE_ORCH_HELPER_BIN="$(dockpipe_sdk require tooling-bin orchestrate-helper 2>/dev/null || true)"
+  if [[ -n "${DORKPIPE_ORCH_HELPER_BIN}" && ( "${can_source_build}" != "1" || "${helper_sources_stale}" != "1" ) ]]; then
+    export DORKPIPE_ORCH_HELPER_BIN
+    printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
+    return 0
+  fi
+  if [[ "${can_source_build}" == "1" ]] && [[ -x "${dockpipe_bin:-}" ]] && { [[ "${helper_sources_stale}" == "1" ]] || [[ ! -x "${repo_candidate}" ]]; }; then
     "${dockpipe_bin}" package build source --workdir "${repo_root}" --only dorkpipe
     for candidate in \
       "${repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper" \
@@ -1132,6 +1152,60 @@ dorkpipe_orchestrate_run_container_worker() {
             if [[ -n "${latest:-}" ]]; then
               cp "${latest}" /home/node/.claude.json
             fi
+          fi
+          if [[ -f /home/node/.claude.json && -n "${3:-}" ]]; then
+            node - "$3" <<'"'"'NODE'"'"'
+const fs = require("fs");
+
+const guestProjectRoot = process.argv[2];
+if (!guestProjectRoot) {
+  process.exit(0);
+}
+
+const configPath = "/home/node/.claude.json";
+let payload;
+try {
+  payload = JSON.parse(fs.readFileSync(configPath, "utf8"));
+} catch {
+  process.exit(0);
+}
+
+if (!payload || typeof payload !== "object") {
+  process.exit(0);
+}
+
+if (!payload.projects || typeof payload.projects !== "object" || Array.isArray(payload.projects)) {
+  payload.projects = {};
+}
+
+const existing = payload.projects[guestProjectRoot];
+const project = existing && typeof existing === "object" && !Array.isArray(existing) ? existing : {};
+if (!Array.isArray(project.allowedTools)) {
+  project.allowedTools = [];
+}
+if (!Array.isArray(project.mcpContextUris)) {
+  project.mcpContextUris = [];
+}
+if (!Array.isArray(project.enabledMcpjsonServers)) {
+  project.enabledMcpjsonServers = [];
+}
+if (!Array.isArray(project.disabledMcpjsonServers)) {
+  project.disabledMcpjsonServers = [];
+}
+project.hasTrustDialogAccepted = true;
+if (typeof project.projectOnboardingSeenCount !== "number") {
+  project.projectOnboardingSeenCount = 0;
+}
+if (typeof project.hasClaudeMdExternalIncludesApproved !== "boolean") {
+  project.hasClaudeMdExternalIncludesApproved = false;
+}
+if (typeof project.hasClaudeMdExternalIncludesWarningShown !== "boolean") {
+  project.hasClaudeMdExternalIncludesWarningShown = false;
+}
+payload.projects[guestProjectRoot] = project;
+
+fs.writeFileSync(configPath, JSON.stringify(payload, null, 2));
+NODE
           fi
           if [[ -d /dockpipe-auth/claude-skills ]]; then
             mkdir -p /home/node/.claude/skills
