@@ -1,6 +1,8 @@
 package application
 
 import (
+	"bytes"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -221,5 +223,76 @@ func TestPrebuildCompiledImageArtifactsSkipsExistingImage(t *testing.T) {
 	}
 	if len(matches) != 1 {
 		t.Fatalf("expected one reused image index record under %s, got %d", index, len(matches))
+	}
+}
+
+func TestPrebuildCompiledImageArtifactsLogsOperationResults(t *testing.T) {
+	dir := t.TempDir()
+	buildDir := filepath.Join(dir, "src", "core", "assets", "images", "codex")
+	if err := os.MkdirAll(buildDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(buildDir, "Dockerfile"), []byte("FROM alpine:3.20\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := buildImageArtifactManifest(dir, "mywf", "mywf", "codex", "dockpipe-codex:test", buildDir, dir, "sha256:policy", domain.ImageArtifactProvenance{Resolver: "codex"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stage := filepath.Join(dir, "stage")
+	manifestDir := filepath.Join(stage, domain.RuntimeManifestDirName)
+	if err := os.MkdirAll(manifestDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(manifestDir, domain.ImageArtifactFileName), artifact); err != nil {
+		t.Fatal(err)
+	}
+	pkgDir, err := infrastructure.PackagesWorkflowsDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tgz := filepath.Join(pkgDir, "dockpipe-workflow-mywf-1.2.3.tar.gz")
+	if _, err := packagebuild.WriteDirTarGzWithPrefix(stage, tgz, "workflows/mywf"); err != nil {
+		t.Fatal(err)
+	}
+
+	oldExists := dockerImageExistsAppFn
+	oldBuild := dockerBuildAppFn
+	t.Cleanup(func() {
+		dockerImageExistsAppFn = oldExists
+		dockerBuildAppFn = oldBuild
+	})
+	dockerImageExistsAppFn = func(string) (bool, error) { return false, nil }
+	dockerBuildAppFn = func(string, string, string) error { return nil }
+
+	oldStderr := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = oldStderr })
+
+	done := make(chan string, 1)
+	go func() {
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+		done <- buf.String()
+	}()
+
+	if _, err := prebuildCompiledImageArtifacts(dir); err != nil {
+		t.Fatal(err)
+	}
+	_ = w.Close()
+	os.Stderr = oldStderr
+	msg := <-done
+	if !strings.Contains(msg, "unit=build.image.artifact status=start action=materialize image_key=codex image_ref=dockpipe-codex:test") {
+		t.Fatalf("expected start operation result, got:\n%s", msg)
+	}
+	if !strings.Contains(msg, "unit=build.image.artifact status=done") {
+		t.Fatalf("expected done operation result, got:\n%s", msg)
 	}
 }

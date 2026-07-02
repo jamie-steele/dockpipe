@@ -42,8 +42,12 @@ build:
 	if err := os.WriteFile(filepath.Join(pkgDir, "assets", "scripts", "build-source.sh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := RunPackageBuildSourceFromFlags(dir, ""); err != nil {
+	n, err := RunPackageBuildSourceFromFlags(dir, "")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("built count = %d, want 1", n)
 	}
 	built, err := os.ReadFile(filepath.Join(pkgDir, "built.txt"))
 	if err != nil {
@@ -79,8 +83,12 @@ func TestRunPackageBuildSourceFromFlagsOnlyMatchesOnePackage(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if err := RunPackageBuildSourceFromFlags(dir, "demo"); err != nil {
+	n, err := RunPackageBuildSourceFromFlags(dir, "demo")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("built count = %d, want 1", n)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "packages", "demo", "built-demo")); err != nil {
 		t.Fatalf("demo script did not run: %v", err)
@@ -125,8 +133,12 @@ build:
 	if err := os.WriteFile(filepath.Join(pkgDir, "assets", "scripts", "build-source.sh"), []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := RunPackageBuildSourceFromFlags(dir, "demo"); err != nil {
+	n, err := RunPackageBuildSourceFromFlags(dir, "demo")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("built count = %d, want 1", n)
 	}
 	if _, err := os.Stat(filepath.Join(pkgDir, "built-from-vendor")); err != nil {
 		t.Fatalf("expected vendor-root build output: %v", err)

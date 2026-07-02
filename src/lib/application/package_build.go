@@ -189,7 +189,8 @@ func cmdPackageBuildSource(args []string) error {
 		}
 		workdir = wd
 	}
-	return RunPackageBuildSourceFromFlags(workdir, only)
+	_, err = RunPackageBuildSourceFromFlags(workdir, only)
+	return err
 }
 
 // RunPackageBuildStoreFromEnv runs the same logic as "dockpipe package build store" using merged workflow env.

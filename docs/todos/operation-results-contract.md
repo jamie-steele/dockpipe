@@ -10,6 +10,9 @@
   `session.volume.sync_out`.
 - Workflow host setup and workflow checkpointing now use the same operation-result rendering in the
   main CLI path.
+- `dockpipe build` now surfaces stable operation-result units for compile, package source builds,
+  image artifact materialization, and clean-path behavior instead of relying on one-off build/image
+  status strings.
 - Runtime-owned helper containers now use stable DockPipe helper names and labels instead of
   leaving random Docker-generated names as the only operator clue.
 - DorkPipe orchestration scripts do not reference core internals directly, but the main package
@@ -21,6 +24,8 @@
 - Expand the core operation-result contract into remaining runtime actions such as publish, broader
   session creation lifecycle, auth discovery outside the current DorkPipe shell path, and other
   long-running runtime/bootstrap work that still prints one-off lines.
+- Continue rolling the same result contract deeper into compile/package subcommands that still emit
+  ad hoc detail lines beneath the now-normalized top-level build units.
 - Continue migrating package-owned scripts and package workflows that still use bespoke status
   wrappers, especially older `dev-stack` and optimizer-style logging, onto the same unit/result
   vocabulary.

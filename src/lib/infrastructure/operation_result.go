@@ -6,13 +6,15 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
 const (
-	OperationStatusStart = "start"
-	OperationStatusDone  = "done"
-	OperationStatusFail  = "fail"
+	OperationStatusStart    = "start"
+	OperationStatusProgress = "progress"
+	OperationStatusDone     = "done"
+	OperationStatusFail     = "fail"
 )
 
 type OperationResult struct {
@@ -26,8 +28,18 @@ type OperationResult struct {
 	Error      string
 }
 
+type OperationOptions struct {
+	Spinner       bool
+	ProgressEvery time.Duration
+}
+
 func RunOperation(stderr *os.File, unit, spinnerMessage string, ids map[string]string, fn func() error) error {
 	_, err := RunOperationWithResult(stderr, unit, spinnerMessage, ids, fn)
+	return err
+}
+
+func RunOperationWithOptions(stderr *os.File, unit, spinnerMessage string, ids map[string]string, options OperationOptions, fn func() error) error {
+	_, err := RunOperationWithResultOptions(stderr, unit, spinnerMessage, ids, options, fn)
 	return err
 }
 
@@ -36,26 +48,47 @@ func LogOperationResult(stderr *os.File, result OperationResult) {
 }
 
 func RunOperationWithResult(stderr *os.File, unit, spinnerMessage string, ids map[string]string, fn func() error) (OperationResult, error) {
+	return RunOperationWithResultOptions(stderr, unit, spinnerMessage, ids, OperationOptions{Spinner: true}, fn)
+}
+
+func RunOperationWithResultOptions(stderr *os.File, unit, spinnerMessage string, ids map[string]string, options OperationOptions, fn func() error) (OperationResult, error) {
 	if stderr == nil {
 		stderr = os.Stderr
 	}
 	startedAt := timeNowDockerFn()
 	stopSpinner := func() {}
-	if fd, ok := fdInt(stderr); ok && isTerminalDockerFn(fd) {
-		if msg := strings.TrimSpace(spinnerMessage); msg != "" {
-			stopSpinner = StartLineSpinner(stderr, msg)
+	stopProgress := func() {}
+	if options.Spinner {
+		if fd, ok := fdInt(stderr); ok && isTerminalDockerFn(fd) {
+			if msg := strings.TrimSpace(spinnerMessage); msg != "" {
+				stopSpinner = StartLineSpinner(stderr, msg)
+			}
+		} else {
+			logOperationResult(stderr, OperationResult{
+				Unit:      unit,
+				Status:    OperationStatusStart,
+				Message:   strings.TrimSpace(spinnerMessage),
+				StartedAt: startedAt,
+				IDs:       copyOperationIDs(ids),
+			})
 		}
 	} else {
-		logOperationResult(stderr, OperationResult{
-			Unit:      unit,
-			Status:    OperationStatusStart,
-			Message:   strings.TrimSpace(spinnerMessage),
-			StartedAt: startedAt,
-			IDs:       copyOperationIDs(ids),
-		})
+		if msg := strings.TrimSpace(spinnerMessage); msg != "" {
+			logOperationResult(stderr, OperationResult{
+				Unit:      unit,
+				Status:    OperationStatusStart,
+				Message:   msg,
+				StartedAt: startedAt,
+				IDs:       copyOperationIDs(ids),
+			})
+		}
+		if options.ProgressEvery > 0 {
+			stopProgress = startOperationProgressLogger(stderr, unit, strings.TrimSpace(spinnerMessage), copyOperationIDs(ids), startedAt, options.ProgressEvery)
+		}
 	}
 	err := fn()
 	stopSpinner()
+	stopProgress()
 	finishedAt := timeNowDockerFn()
 	result := OperationResult{
 		Unit:       unit,
@@ -74,12 +107,45 @@ func RunOperationWithResult(stderr *os.File, unit, spinnerMessage string, ids ma
 	return result, err
 }
 
+func startOperationProgressLogger(stderr *os.File, unit, message string, ids map[string]string, startedAt time.Time, every time.Duration) func() {
+	if every <= 0 {
+		return func() {}
+	}
+	done := make(chan struct{})
+	var once sync.Once
+	go func() {
+		ticker := time.NewTicker(every)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				now := timeNowDockerFn()
+				logOperationResult(stderr, OperationResult{
+					Unit:       unit,
+					Status:     OperationStatusProgress,
+					Message:    message,
+					StartedAt:  startedAt,
+					FinishedAt: now,
+					DurationMs: now.Sub(startedAt).Milliseconds(),
+					IDs:        copyOperationIDs(ids),
+				})
+			}
+		}
+	}()
+	return func() {
+		once.Do(func() { close(done) })
+	}
+}
+
 func logOperationResult(stderr *os.File, result OperationResult) {
 	if stderr == nil {
 		stderr = os.Stderr
 	}
 	fields := []string{
 		"[dockpipe]",
+		"ts=" + operationResultTimestamp(result),
 		"unit=" + result.Unit,
 		"status=" + result.Status,
 	}
@@ -157,4 +223,14 @@ func OperationEventFields(result OperationResult) map[string]string {
 		fields[key] = value
 	}
 	return fields
+}
+
+func operationResultTimestamp(result OperationResult) string {
+	if !result.FinishedAt.IsZero() && result.Status != OperationStatusStart {
+		return result.FinishedAt.UTC().Format(time.RFC3339Nano)
+	}
+	if !result.StartedAt.IsZero() {
+		return result.StartedAt.UTC().Format(time.RFC3339Nano)
+	}
+	return timeNowDockerFn().UTC().Format(time.RFC3339Nano)
 }

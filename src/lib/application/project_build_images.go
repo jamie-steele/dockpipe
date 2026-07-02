@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"dockpipe/src/lib/domain"
 	"dockpipe/src/lib/infrastructure"
@@ -122,6 +123,10 @@ func prebuildCompiledImageArtifactFromRoot(workdir, buildRoot string, artifact *
 	if ref == "" {
 		return false, nil
 	}
+	ids := map[string]string{
+		"image_key": firstNonEmptyString(strings.TrimSpace(artifact.ImageKey), ref),
+		"image_ref": ref,
+	}
 	exists, err := dockerImageExistsAppFn(ref)
 	if err != nil {
 		return false, err
@@ -131,20 +136,33 @@ func prebuildCompiledImageArtifactFromRoot(workdir, buildRoot string, artifact *
 		if err := persistImageArtifactIndexRecord(workdir, artifact); err != nil {
 			return false, err
 		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] image: ready materialized image artifact %s (%s)\n", firstNonEmptyString(strings.TrimSpace(artifact.ImageKey), ref), ref)
+		infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+			Unit:       "build.image.artifact",
+			Status:     infrastructure.OperationStatusDone,
+			DurationMs: 0,
+			IDs: mergeOperationResultIDs(ids, map[string]string{
+				"action": "ready",
+			}),
+		})
 		return false, nil
 	}
 	dockerfilePath := absFromRepoRoot(buildRoot, strings.TrimSpace(artifact.Build.Dockerfile))
 	contextPath := absFromRepoRoot(buildRoot, strings.TrimSpace(artifact.Build.Context))
 	if strings.TrimSpace(dockerfilePath) == "" || strings.TrimSpace(contextPath) == "" {
-		return false, fmt.Errorf("build image artifact %s is missing dockerfile/context", firstNonEmptyString(strings.TrimSpace(artifact.ImageKey), ref))
+		return false, fmt.Errorf("build image artifact %s is missing dockerfile/context", ids["image_key"])
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] image: materializing image artifact %s (%s)\n", firstNonEmptyString(strings.TrimSpace(artifact.ImageKey), ref), ref)
-	if err := dockerBuildAppFn(ref, filepath.Dir(dockerfilePath), contextPath); err != nil {
-		return false, err
-	}
-	artifact.ArtifactState = "materialized"
-	if err := persistImageArtifactIndexRecord(workdir, artifact); err != nil {
+	if err := infrastructure.RunOperationWithOptions(os.Stderr, "build.image.artifact", "Materializing image artifact…", mergeOperationResultIDs(ids, map[string]string{
+		"action": "materialize",
+	}), infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		if err := dockerBuildAppFn(ref, filepath.Dir(dockerfilePath), contextPath); err != nil {
+			return err
+		}
+		artifact.ArtifactState = "materialized"
+		if err := persistImageArtifactIndexRecord(workdir, artifact); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		return false, err
 	}
 	return true, nil

@@ -120,17 +120,18 @@ Human-facing stderr logging should render from the same result envelope.
 Example shape:
 
 ```text
-ha[dockpipe] unit=session.volume.seed status=done duration_ms=1824
+[dockpipe] ts=2026-07-02T21:15:10Z unit=session.volume.seed status=done duration_ms=1824
 ```
 
 Failure shape:
 
 ```text
-[dockpipe] unit=session.volume.seed status=fail duration_ms=640 error="git clone failed"
+[dockpipe] ts=2026-07-02T21:15:11Z unit=session.volume.seed status=fail duration_ms=640 error="git clone failed"
 ```
 
 Rules:
 
+- operation-result lines should carry an explicit timestamp
 - unit name first
 - same `status=` vocabulary everywhere
 - identifiers are flat and bounded
@@ -223,11 +224,15 @@ Recommended interactive pattern:
 2. when the unit finishes, replace or finalize that row with the stable result line
 3. include duration and key identifiers in the completed or failed rendering
 
+When a unit cannot safely use the live spinner because child work is already writing verbose output,
+the CLI should still prove liveness with periodic `status=progress duration_ms=...` heartbeat lines
+until the final `done` or `fail` result is emitted.
+
 Example:
 
 ```text
 [dockpipe] seeding session workspace volume... unitehere / run-1842
-[dockpipe] unit=session.volume.seed status=done duration_ms=1824 workspace=unitehere session=run-1842 volume=dockpipe-ws-unitehere-run-1842
+[dockpipe] ts=2026-07-02T21:15:12Z unit=session.volume.seed status=done duration_ms=1824 workspace=unitehere session=run-1842 volume=dockpipe-ws-unitehere-run-1842
 ```
 
 This keeps the nice live CLI experience while preserving one canonical result contract after the

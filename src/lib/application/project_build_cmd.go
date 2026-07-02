@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"dockpipe/src/lib/domain"
 	"dockpipe/src/lib/infrastructure"
@@ -50,29 +52,72 @@ func cmdBuild(args []string) error {
 	if err != nil {
 		return err
 	}
+	compileIDs := buildOperationIDs(workdir, wfName)
+	compileIDs["mode"] = "all"
+	compileArgs := append([]string{"compile", "all", "--force"}, forward...)
 	if wfName != "" {
-		if err := cmdPackage(append([]string{"compile", "for-workflow", wfName, "--force"}, forward...)); err != nil {
-			return err
-		}
-	} else if err := cmdPackage(append([]string{"compile", "all", "--force"}, forward...)); err != nil {
+		compileIDs["mode"] = "for-workflow"
+		compileArgs = append([]string{"compile", "for-workflow", wfName, "--force"}, forward...)
+	}
+	if err := infrastructure.RunOperationWithOptions(os.Stderr, "build.compile", "Compiling DockPipe packages…", compileIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		return cmdPackage(compileArgs)
+	}); err != nil {
 		return err
 	}
 	if buildSourcePkgs {
-		if err := RunPackageBuildSourceFromFlags(workdir, ""); err != nil {
+		if _, err := RunPackageBuildSourceFromFlags(workdir, ""); err != nil {
 			return err
 		}
 	}
 	if !buildImages {
 		return nil
 	}
-	n, err := prebuildCompiledImageArtifacts(workdir)
+	imageIDs := buildOperationIDs(workdir, wfName)
+	err = infrastructure.RunOperationWithOptions(os.Stderr, "build.image.artifacts", "Materializing image artifacts…", imageIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		n, runErr := prebuildCompiledImageArtifacts(workdir)
+		if runErr == nil {
+			imageIDs["count"] = strconv.Itoa(n)
+		}
+		return runErr
+	})
 	if err != nil {
 		return err
 	}
-	if n > 0 {
-		fmt.Fprintf(os.Stderr, "[dockpipe] image: materialized %d image artifact(s)\n", n)
-	}
 	return nil
+}
+
+func buildOperationIDs(workdir, workflow string) map[string]string {
+	ids := map[string]string{
+		"project": filepath.Base(strings.TrimRight(filepath.Clean(workdir), string(os.PathSeparator))),
+	}
+	if strings.TrimSpace(workflow) != "" {
+		ids["workflow"] = strings.TrimSpace(workflow)
+	}
+	return ids
+}
+
+func mergeOperationResultIDs(base map[string]string, extra map[string]string) map[string]string {
+	out := make(map[string]string, len(base)+len(extra))
+	for key, value := range base {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" {
+			continue
+		}
+		out[key] = value
+	}
+	for key, value := range extra {
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
+		if key == "" || value == "" {
+			continue
+		}
+		out[key] = value
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func parseBuildWorkdir(args []string) (string, error) {
@@ -111,14 +156,22 @@ func cmdClean(args []string) error {
 		return err
 	}
 	if _, err := os.Stat(root); os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "[dockpipe] clean: nothing to remove (%s)\n", root)
+		infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+			Unit:       "build.clean",
+			Status:     infrastructure.OperationStatusDone,
+			DurationMs: 0,
+			IDs: mergeOperationResultIDs(buildOperationIDs(workdir, ""), map[string]string{
+				"result": "noop",
+			}),
+		})
 		return nil
 	}
-	if err := os.RemoveAll(root); err != nil {
-		return fmt.Errorf("clean: %w", err)
-	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] clean: removed %s\n", root)
-	return nil
+	return infrastructure.RunOperation(os.Stderr, "build.clean", "Removing compiled package store…", buildOperationIDs(workdir, ""), func() error {
+		if err := os.RemoveAll(root); err != nil {
+			return fmt.Errorf("clean: %w", err)
+		}
+		return nil
+	})
 }
 
 func parseWorkdirOnly(args []string) (string, error) {
