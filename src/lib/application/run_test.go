@@ -184,6 +184,43 @@ vars:
 	}
 }
 
+func TestRunNonStepsSkipsWorkspaceSyncForAuthoritativeSessionVolume(t *testing.T) {
+	withRunSeams(t)
+	repoRoot := t.TempDir()
+	writeTestCoreResolver(t, repoRoot, "codex", "DOCKPIPE_RESOLVER_TEMPLATE=codex\n")
+	repoRootAppFn = func() (string, error) { return repoRoot, nil }
+	loadResolverFileAppFn = func(path string) (map[string]string, error) {
+		return map[string]string{"DOCKPIPE_RESOLVER_TEMPLATE": "codex"}, nil
+	}
+	templateBuildAppFn = func(repoRoot, name string) (string, string, bool) {
+		if name == "codex" {
+			return "dockpipe-codex", "/build/codex", true
+		}
+		return "", "", false
+	}
+	maybeVersionTagAppFn = func(repoRoot, image string) string { return image }
+	dockerBuildAppFn = func(image, dockerfileDir, contextDir string) error { return nil }
+	var gotRunOpts infrastructure.RunOpts
+	runContainerAppFn = func(o infrastructure.RunOpts, argv []string) (int, error) {
+		gotRunOpts = o
+		return 0, nil
+	}
+
+	err := Run([]string{"--resolver", "codex", "--", "echo", "hi"}, []string{
+		"DOCKPIPE_SESSION_VOLUME=dockpipe-ws-demo",
+		"DOCKPIPE_SESSION_VOLUME_AUTHORITATIVE=1",
+	})
+	if err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if gotRunOpts.WorkdirVolume != "dockpipe-ws-demo" {
+		t.Fatalf("expected workdir volume, got %+v", gotRunOpts)
+	}
+	if !gotRunOpts.SkipVolumeWorkspaceSync {
+		t.Fatalf("expected authoritative session volume to skip workspace sync, got %+v", gotRunOpts)
+	}
+}
+
 func TestMaybeSkipDockerBuildForWorkflowTarballArtifact(t *testing.T) {
 	withRunSeams(t)
 	repoRoot := t.TempDir()

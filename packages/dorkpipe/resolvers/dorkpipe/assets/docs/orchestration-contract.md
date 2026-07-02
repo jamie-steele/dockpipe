@@ -84,6 +84,14 @@ forcing authors to drop down to resolver-specific task authoring.
 Use `artifact` for planning, synthesis, doc drafting, validation, and artifact generation. Use `edit`
 only for tasks whose purpose is implementation or repair, and pair it with explicit writable mounts.
 
+When `work_mode: edit` is used with managed DockPipe volume sessions, DorkPipe can request one of
+two runtime-owned isolation strategies via `DORKPIPE_ORCH_EDIT_ISOLATION`:
+
+- `serialized` keeps workers on the authoritative session volume but allows only one active edit
+  lease at a time.
+- `split-volume` provisions a per-worker cloned Docker volume, runs edits there, and applies the
+  resulting Git patch back through a runtime-owned release step.
+
 ## Model lane catalog
 
 DorkPipe owns model lane metadata in package assets:
@@ -112,13 +120,44 @@ The planner writes `lanes/plan.json` for each run and `tasks/<task-id>/lane-sele
 task. Explicit task hints can still be honored, but `auto` should resolve through `model_policy`,
 task intent, lane availability, and training metadata.
 
+For targeted repair or refinement passes on an existing orchestration artifact root, DorkPipe also
+supports follow-up mode through:
+
+- `DORKPIPE_ORCH_FOLLOWUP_REQUEST`
+- `DORKPIPE_ORCH_FOLLOWUP_GOAL`
+- `DORKPIPE_ORCH_FOLLOWUP_TASK_IDS`
+
+In follow-up mode, the planner keeps the full graph, reruns the selected worker task ids plus their
+downstream dependents, and reuses untouched `tasks/<task-id>/result.json` artifacts from the
+existing workspace. This enables bounded fix-up runs on the same managed session/workspace without
+regenerating every worker result from scratch.
+
 The baseline policy starts as a conservative cheap-first cascade:
 
 - local lanes are preferred by default
 - `DORKPIPE_ORCH_CLOUD_LANES=false` blocks automatic cloud lane selection
 - when cloud lanes are enabled, cloud candidates must cross baseline score thresholds
+- task-class gating can override cheap-first when the task is high-authority
+- local model fit can be penalized when the selected host hardware is weak for that model
 - historical metrics adjust lane scores only after a minimum sample count
 - all gates and training adjustments are written into `lanes/plan.json`
+
+Task-class gating should make weak local lanes effectively non-authoritative:
+
+- extraction and inventory tasks can still favor local lanes
+- architecture, routing, validation, and edit-mode repair tasks should strongly favor stronger lanes
+- local model strings and host capacity should be considered together so a large Ollama model on a
+  small laptop does not win just because it is local
+
+Host-local capability hints can be supplied explicitly when needed:
+
+- `DORKPIPE_ORCH_HOST_MEMORY_GB`
+- `DORKPIPE_ORCH_HOST_CPU_CORES`
+- `DORKPIPE_ORCH_LOCAL_ACCELERATION`
+- `DORKPIPE_ORCH_LOCAL_HARDWARE_TIER`
+
+When those hints are not provided, DorkPipe should still make a best-effort host-capability
+assessment and record the resulting profile in `lanes/plan.json`.
 
 ## Worker result artifact
 

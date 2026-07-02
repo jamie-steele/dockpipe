@@ -6,6 +6,12 @@ public Class OrchestrateStackConfig : IOrchestrateStackConfig
     [EnvName = "DORKPIPE_ORCH_OLLAMA_MODEL"]
     public string OllamaModel = "llama3.2";
 
+    [EnvName = "DORKPIPE_ORCH_CODEX_MODEL"]
+    public string CodexModel = "cli";
+
+    [EnvName = "DORKPIPE_ORCH_CLAUDE_MODEL"]
+    public string ClaudeModel = "cli";
+
     [EnvName = "DORKPIPE_ORCH_BRAIN_PROVIDER"]
     public string BrainProvider = "ollama";
 
@@ -33,6 +39,9 @@ public Class OrchestrateStackConfig : IOrchestrateStackConfig
     [EnvName = "DORKPIPE_ORCH_WORK_MODE"]
     public string WorkMode = "artifact";
 
+    [EnvName = "DORKPIPE_ORCH_EDIT_ISOLATION"]
+    public string EditIsolation = "serialized";
+
     [EnvName = "DORKPIPE_ORCH_WORKER_CWD"]
     public string WorkerCwd = "/work";
 
@@ -56,4 +65,25 @@ public Class OrchestrateStackConfig : IOrchestrateStackConfig
 
     [EnvName = "OLLAMA_HOST"]
     public string OllamaHost = "http://127.0.0.1:11434";
+
+    [EnvName = "DORKPIPE_ORCH_HOST_MEMORY_GB"]
+    public string HostMemoryGb = "";
+
+    [EnvName = "DORKPIPE_ORCH_HOST_CPU_CORES"]
+    public string HostCpuCores = "";
+
+    [EnvName = "DORKPIPE_ORCH_LOCAL_ACCELERATION"]
+    public string LocalAcceleration = "";
+
+    [EnvName = "DORKPIPE_ORCH_LOCAL_HARDWARE_TIER"]
+    public string LocalHardwareTier = "";
+
+    [EnvName = "DORKPIPE_ORCH_FOLLOWUP_REQUEST"]
+    public string FollowUpRequest = "";
+
+    [EnvName = "DORKPIPE_ORCH_FOLLOWUP_GOAL"]
+    public string FollowUpGoal = "";
+
+    [EnvName = "DORKPIPE_ORCH_FOLLOWUP_TASK_IDS"]
+    public string FollowUpTaskIds = "";
 }

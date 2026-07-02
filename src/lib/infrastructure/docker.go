@@ -242,10 +242,14 @@ type RunOpts struct {
 	// When WorkdirHost is set, the runner overlays host -> volume before the container run and
 	// volume -> host after it so runtime-owned Git checkpoints can still operate on the host worktree.
 	WorkdirVolume string
-	WorkPath      string
-	ActionPath    string
-	ExtraMounts   []string
-	ExtraEnv      []string
+	// SkipVolumeWorkspaceSync leaves a mounted WorkdirVolume authoritative for the run and skips
+	// host<->volume copy steps. Use this only when the caller ensures all required workspace state
+	// is already present in the volume and post-run lifecycle does not depend on a synced host tree.
+	SkipVolumeWorkspaceSync bool
+	WorkPath                string
+	ActionPath              string
+	ExtraMounts             []string
+	ExtraEnv                []string
 	// ContainerUser overrides the default user mapping when set (for example "0:0").
 	ContainerUser string
 	// ReadOnlyRootFS enables docker --read-only for the container root filesystem.
@@ -315,12 +319,6 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		return 1, absErr
 	}
 	workVolume := strings.TrimSpace(o.WorkdirVolume)
-	if workVolume != "" {
-		if err := dockerSyncWorkspaceIntoVolume(o.Image, workHost, workVolume); err != nil {
-			return 1, err
-		}
-	}
-
 	stdoutFile := o.Stdout
 	if stdoutFile == nil {
 		stdoutFile = os.Stdout
@@ -344,6 +342,13 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	stdin := o.Stdin
 	if stdin == nil {
 		stdin = os.Stdin
+	}
+	if workVolume != "" && !o.SkipVolumeWorkspaceSync {
+		fmt.Fprintln(stderr, "[dockpipe] Syncing managed workspace into session volume…")
+		if err := dockerSyncWorkspaceIntoVolume(o.Image, workHost, workVolume); err != nil {
+			return 1, err
+		}
+		fmt.Fprintln(stderr, "[dockpipe] Managed workspace volume ready.")
 	}
 
 	cwdInContainer := containerWorkMount
@@ -608,10 +613,12 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		rm.Env = dockerCommandEnv(os.Environ(), dockerCmd)
 		_ = rm.Run()
 	}
-	if workVolume != "" {
+	if workVolume != "" && !o.SkipVolumeWorkspaceSync {
+		fmt.Fprintln(stderr, "[dockpipe] Syncing managed workspace changes back from session volume…")
 		if err := dockerSyncWorkspaceFromVolume(o.Image, workVolume, workHost); err != nil && rc == 0 {
 			return 1, err
 		}
+		fmt.Fprintln(stderr, "[dockpipe] Managed workspace sync-back complete.")
 	}
 
 	if o.CommitOnHost {
@@ -625,17 +632,17 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 }
 
 func dockerSyncWorkspaceIntoVolume(image, hostDir, volume string) error {
-	if top, err := GitTopLevel(hostDir); err == nil && samePathForDocker(top, hostDir) {
+	if top, err := GitTopLevel(hostDir); err == nil && samePathForDocker(top, hostDir) && hasStandaloneGitDir(hostDir) {
 		return dockerBootstrapGitWorkspaceVolume(hostDir, volume)
 	}
-	return dockerSyncWorkspace(dockerWorkspaceHelperImage(image), hostDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar cf - . | tar xf - -C /dockpipe-sync-dst")
+	return dockerSyncWorkspace(dockerWorkspaceHelperImage(image), hostDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar --exclude=.git --exclude=bin/.dockpipe --exclude=.dorkpipe -cf - . | tar xf - -C /dockpipe-sync-dst")
 }
 
 func dockerSyncWorkspaceFromVolume(image, volume, hostDir string) error {
-	if top, err := GitTopLevel(hostDir); err == nil && samePathForDocker(top, hostDir) {
+	if top, err := GitTopLevel(hostDir); err == nil && samePathForDocker(top, hostDir) && hasStandaloneGitDir(hostDir) {
 		return dockerApplyGitWorkspaceVolume(volume, hostDir)
 	}
-	return dockerSyncWorkspace(dockerWorkspaceHelperImage(image), volume+":/dockpipe-sync-src:ro", hostDir+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar cf - . | tar xf - -C /dockpipe-sync-dst")
+	return dockerSyncWorkspace(dockerWorkspaceHelperImage(image), volume+":/dockpipe-sync-src:ro", hostDir+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar --exclude=.git --exclude=bin/.dockpipe --exclude=.dorkpipe -cf - . | tar xf - -C /dockpipe-sync-dst")
 }
 
 func dockerSyncWorkspace(image, srcMount, dstMount, script string) error {
@@ -644,7 +651,7 @@ func dockerSyncWorkspace(image, srcMount, dstMount, script string) error {
 		return fmt.Errorf("workspace volume sync requires an image")
 	}
 	dockerCmd := dockerCommandName()
-	args := []string{"run", "--rm", "-v", srcMount, "-v", dstMount, "-u", "0", image, "sh", "-c", script}
+	args := []string{"run", "--rm", "--entrypoint", "sh", "-v", srcMount, "-v", dstMount, "-u", "0", image, "-c", script}
 	cmd := execCommandFn(dockerCmd, args...)
 	cmd.Env = dockerCommandEnv(os.Environ(), dockerCmd)
 	out, err := cmd.CombinedOutput()
@@ -703,6 +710,14 @@ func dockerWorkspaceHelperImage(runImage string) string {
 		return runImage
 	}
 	return "alpine/git:latest"
+}
+
+func hasStandaloneGitDir(hostDir string) bool {
+	info, err := osStatDockerFn(filepath.Join(strings.TrimSpace(hostDir), ".git"))
+	if err != nil {
+		return false
+	}
+	return info.IsDir()
 }
 
 func samePathForDocker(a, b string) bool {

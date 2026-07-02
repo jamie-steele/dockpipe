@@ -242,3 +242,12 @@ func firstNonEmpty(ss ...string) string {
 	}
 	return ""
 }
+
+func isTruthyString(v string) bool {
+	switch strings.TrimSpace(strings.ToLower(v)) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}

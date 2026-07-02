@@ -302,6 +302,9 @@ func Run(argv []string, baseEnviron []string) error {
 		envMap["DOCKPIPE_SESSION_WORKSPACE"] = gitSession.Storage.Workspace
 		if strings.TrimSpace(gitSession.Storage.Volume) != "" {
 			envMap["DOCKPIPE_SESSION_VOLUME"] = gitSession.Storage.Volume
+			if strings.EqualFold(strings.TrimSpace(gitSession.Storage.Backend), "docker_volume") {
+				envMap["DOCKPIPE_SESSION_VOLUME_AUTHORITATIVE"] = "1"
+			}
 		}
 		envMap["DOCKPIPE_AGENT_GIT_POLICY"] = "runtime-owned"
 	}
@@ -959,23 +962,24 @@ func Run(argv []string, baseEnviron []string) error {
 	}
 
 	runOpts := infrastructure.RunOpts{
-		Image:         image,
-		WorkdirHost:   workHost,
-		WorkdirVolume: envMap["DOCKPIPE_SESSION_VOLUME"],
-		WorkPath:      workPath,
-		ActionPath:    actionForContainer,
-		ExtraMounts:   authoredMounts,
-		NetworkMode:   networkMode,
-		ExtraEnv:      extraDocker,
-		DataVolume:    dataVol,
-		DataDir:       dataDir,
-		Reinit:        opts.Reinit,
-		Force:         opts.Force,
-		Detach:        opts.Detach,
-		CommitOnHost:  commitOnHost && !strategyHandlesCommit,
-		CommitMessage: envMap["DOCKPIPE_COMMIT_MESSAGE"],
-		BundleOut:     firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut),
-		BundleAll:     strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1",
+		Image:                   image,
+		WorkdirHost:             workHost,
+		WorkdirVolume:           envMap["DOCKPIPE_SESSION_VOLUME"],
+		SkipVolumeWorkspaceSync: isTruthyString(envMap["DOCKPIPE_SESSION_VOLUME_AUTHORITATIVE"]),
+		WorkPath:                workPath,
+		ActionPath:              actionForContainer,
+		ExtraMounts:             authoredMounts,
+		NetworkMode:             networkMode,
+		ExtraEnv:                extraDocker,
+		DataVolume:              dataVol,
+		DataDir:                 dataDir,
+		Reinit:                  opts.Reinit,
+		Force:                   opts.Force,
+		Detach:                  opts.Detach,
+		CommitOnHost:            commitOnHost && !strategyHandlesCommit,
+		CommitMessage:           envMap["DOCKPIPE_COMMIT_MESSAGE"],
+		BundleOut:               firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut),
+		BundleAll:               strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1",
 	}
 	if rm, err := applyCompiledRuntimePolicy(&runOpts, wfConfig, wfRoot); err != nil {
 		return err

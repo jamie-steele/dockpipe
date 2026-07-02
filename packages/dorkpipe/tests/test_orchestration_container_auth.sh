@@ -13,9 +13,12 @@ fake_dockpipe="$tmp/dockpipe"
 fake_docker="$tmp/docker"
 fake_codex="$tmp/codex"
 fake_claude="$tmp/claude"
+fake_skills_render="$tmp/skills-render"
+fake_orchestrate_helper="$tmp/orchestrate-helper"
 fake_args="$tmp/args.txt"
 fake_docker_args="$tmp/docker-args.txt"
 fake_login_args="$tmp/login-args.txt"
+fake_lease_state="$tmp/lease-state.txt"
 cat >"$fake_dockpipe" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -32,6 +35,44 @@ if [[ "${1:-}" == "scope" && "${2:-}" == "resolver" ]]; then
     claude:container-config-file) printf '%s\n' "/home/node/.claude.json" ;;
     *) exit 1 ;;
   esac
+  exit 0
+fi
+if [[ "${1:-}" == "session" && "${2:-}" == "worker-acquire" ]]; then
+  mode="serialized"
+  worker=""
+  state_file="${FAKE_LEASE_STATE:-}"
+  while (($#)); do
+    case "${1:-}" in
+      --mode) mode="${2:-}"; shift 2 ;;
+      --worker) worker="${2:-}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  if [[ "${mode}" == "serialized" && -n "${FAKE_LEASE_FAIL_ONCE_WORKER:-}" && "${worker}" == "${FAKE_LEASE_FAIL_ONCE_WORKER}" && -n "${state_file}" ]]; then
+    if [[ ! -f "${state_file}" ]]; then
+      printf 'session "test" already has an active worker lease for "other" (serialized); wait for that writer to finish before requesting serialized mode\n' >&2
+      : > "${state_file}"
+      exit 1
+    fi
+  fi
+  volume="dockpipe-session-volume"
+  base_volume="dockpipe-session-volume"
+  if [[ "${mode}" == "split-volume" ]]; then
+    volume="dockpipe-session-volume-worker-${worker}"
+  fi
+  cat <<EOF
+{
+  "lease_id": "lease-${worker}",
+  "worker_id": "${worker}",
+  "mode": "${mode}",
+  "status": "active",
+  "volume": "${volume}",
+  "base_volume": "${base_volume}"
+}
+EOF
+  exit 0
+fi
+if [[ "${1:-}" == "session" && "${2:-}" == "worker-release" ]]; then
   exit 0
 fi
 printf '%s\n' "$@" > "${FAKE_DOCKPIPE_ARGS:?}"
@@ -81,6 +122,55 @@ fi
 exit 1
 SH
 chmod +x "$fake_claude"
+cat >"$fake_skills_render" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+target=""
+output=""
+while (($#)); do
+  case "${1:-}" in
+    --target)
+      target="${2:-}"
+      shift 2
+      ;;
+    --output)
+      output="${2:-}"
+      shift 2
+      ;;
+    --force)
+      shift
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+[[ -n "${target}" && -n "${output}" ]] || exit 1
+mkdir -p "${output}/dorkpipe-core-review"
+printf '# curated %s skill\n' "${target}" > "${output}/dorkpipe-core-review/SKILL.md"
+SH
+chmod +x "$fake_skills_render"
+cat >"$fake_orchestrate_helper" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "worker-lease-env" ]]; then
+  file="${2:?lease json}"
+  json="$(tr -d '\r\n' < "${file}")"
+  extract() {
+    local key="${1:?key}"
+    printf '%s' "${json}" | sed -n "s/.*\"${key}\": \"\\([^\"]*\\)\".*/\\1/p"
+  }
+  printf "LEASE_BASE_VOLUME='%s'\n" "$(extract base_volume)"
+  printf "LEASE_ID='%s'\n" "$(extract lease_id)"
+  printf "LEASE_MODE='%s'\n" "$(extract mode)"
+  printf "LEASE_STATUS='%s'\n" "$(extract status)"
+  printf "LEASE_VOLUME='%s'\n" "$(extract volume)"
+  printf "LEASE_WORKER_ID='%s'\n" "$(extract worker_id)"
+  exit 0
+fi
+exit 1
+SH
+chmod +x "$fake_orchestrate_helper"
 
 dockpipe_sdk() {
   if [[ "${1:-}" == "require" && "${2:-}" == "dockpipe-bin" ]]; then
@@ -127,10 +217,13 @@ export USERPROFILE="$HOME"
 export FAKE_DOCKPIPE_ARGS="$fake_args"
 export FAKE_DOCKER_ARGS="$fake_docker_args"
 export FAKE_LOGIN_ARGS="$fake_login_args"
+export FAKE_LEASE_STATE="$fake_lease_state"
 export DORKPIPE_ORCH_ROOT="$tmp/orchestrate"
 export DOCKPIPE_CONTAINER_MOUNTS=$'C:\\Source\\UniteHere:/UniteHere:ro\nC:\\docs\\UniteHere\\Design Notes:/DesignNotes:ro'
 export DORKPIPE_ORCH_WORKER_CWD="/UniteHere"
 export DORKPIPE_ORCH_CONTAINER_IMAGE_PACKAGES="make cmake"
+export DOCKPIPE_SKILLS_RENDER_BIN="$fake_skills_render"
+export DORKPIPE_ORCH_HELPER_BIN="$fake_orchestrate_helper"
 export PATH="$tmp:$PATH"
 mkdir -p "$DORKPIPE_ORCH_ROOT"
 mkdir -p "$HOME/.codex"
@@ -177,6 +270,10 @@ grep -q -- "Do not use apply_patch" "$prompt"
 
 dorkpipe_orchestrate_run_container_worker codex "$prompt" "$response"
 
+codex_stage_dir="$DORKPIPE_ORCH_ROOT/skills/codex"
+[[ -f "$codex_stage_dir/dorkpipe-package-authoring/SKILL.md" ]]
+[[ -f "$codex_stage_dir/dorkpipe-core-review/SKILL.md" ]]
+
 grep -qx -- "--resolver" "$fake_args"
 grep -qx -- "codex" "$fake_args"
 grep -qx -- "--no-data" "$fake_args"
@@ -188,7 +285,7 @@ grep -q -- "build" "$fake_docker_args"
 grep -q -- "dockpipe-codex-tools:" "$fake_docker_args"
 grep -qx -- "--mount" "$fake_args"
 grep -qx -- "$HOME/.codex:/dockpipe-auth/codex:ro" "$fake_args"
-grep -qx -- "$HOME/.codex/skills:/dockpipe-auth/codex-skills:ro" "$fake_args"
+grep -qx -- "$codex_stage_dir:/dockpipe-auth/codex-skills:ro" "$fake_args"
 grep -Fqx -- "C:\\Source\\UniteHere:/UniteHere:ro" "$fake_args"
 grep -Fqx -- "C:\\docs\\UniteHere\\Design Notes:/DesignNotes:ro" "$fake_args"
 grep -qx -- "/UniteHere" "$fake_args"
@@ -200,14 +297,27 @@ grep -qx -- "container worker ok" "$response"
 export DORKPIPE_ORCH_CONTAINER_SKILLS="never"
 rm -f "$fake_args" "$response"
 dorkpipe_orchestrate_run_container_worker codex "$prompt" "$response"
-if grep -qx -- "$HOME/.codex/skills:/dockpipe-auth/codex-skills:ro" "$fake_args"; then
+if grep -qx -- "$codex_stage_dir:/dockpipe-auth/codex-skills:ro" "$fake_args"; then
   echo "expected DORKPIPE_ORCH_CONTAINER_SKILLS=never to skip skills mount" >&2
   exit 1
 fi
 unset DORKPIPE_ORCH_CONTAINER_SKILLS
 
 export DORKPIPE_ORCH_WORK_MODE="edit"
+export DOCKPIPE_SESSION_ID="brain-optimize-session"
+export DOCKPIPE_SESSION_VOLUME="dockpipe-session-volume"
 export DOCKPIPE_CONTAINER_MOUNTS=$'C:\\Source\\UniteHere:/UniteHere:rw\nC:\\docs\\UniteHere\\Design Notes:/DesignNotes:ro'
+export FAKE_LEASE_FAIL_ONCE_WORKER="codex-serialized-retry"
+export DORKPIPE_ORCH_EDIT_LEASE_RETRY_SECONDS="0.01"
+export DORKPIPE_ORCH_EDIT_LEASE_MAX_WAIT_SECONDS="5"
+rm -f "$fake_lease_state"
+lease_json="$tmp/lease-retry.json"
+dorkpipe_orchestrate_edit_worker_acquire "codex-serialized-retry" "$lease_json" 2>"$tmp/lease-retry.err"
+[[ -f "$lease_json" ]]
+grep -q -- "waiting for serialized edit lease for codex-serialized-retry" "$tmp/lease-retry.err"
+unset FAKE_LEASE_FAIL_ONCE_WORKER
+unset DORKPIPE_ORCH_EDIT_LEASE_RETRY_SECONDS
+unset DORKPIPE_ORCH_EDIT_LEASE_MAX_WAIT_SECONDS
 edit_prompt="$tmp/edit-prompt.md"
 printf 'edit prompt\n' > "$edit_prompt"
 dorkpipe_orchestrate_append_work_mode_prompt "$edit_prompt"
@@ -217,9 +327,25 @@ rm -f "$fake_args" "$response"
 dorkpipe_orchestrate_run_container_worker codex "$edit_prompt" "$response"
 grep -Fqx -- "DORKPIPE_ORCH_WORK_MODE=edit" "$fake_args"
 grep -Fqx -- "C:\\Source\\UniteHere:/UniteHere:rw" "$fake_args"
+grep -Fqx -- "DOCKPIPE_SESSION_VOLUME=dockpipe-session-volume" "$fake_args"
+grep -Fqx -- "DOCKPIPE_SESSION_VOLUME_AUTHORITATIVE=1" "$fake_args"
 grep -qx -- "container worker ok" "$response"
 export DORKPIPE_ORCH_WORK_MODE="artifact"
 export DOCKPIPE_CONTAINER_MOUNTS=$'C:\\Source\\UniteHere:/UniteHere:ro\nC:\\docs\\UniteHere\\Design Notes:/DesignNotes:ro'
+
+export DORKPIPE_ORCH_WORK_MODE="edit"
+export DORKPIPE_ORCH_EDIT_ISOLATION="split-volume"
+export DOCKPIPE_SESSION_ID="brain-optimize-session"
+export DOCKPIPE_SESSION_VOLUME="dockpipe-session-volume"
+rm -f "$fake_args" "$response"
+dorkpipe_orchestrate_run_container_worker codex "$edit_prompt" "$response"
+grep -Fqx -- "DOCKPIPE_SESSION_VOLUME=dockpipe-session-volume-worker-worker" "$fake_args"
+grep -Fqx -- "DOCKPIPE_SESSION_VOLUME_AUTHORITATIVE=1" "$fake_args"
+grep -qx -- "container worker ok" "$response"
+unset DORKPIPE_ORCH_EDIT_ISOLATION
+unset DOCKPIPE_SESSION_ID
+unset DOCKPIPE_SESSION_VOLUME
+export DORKPIPE_ORCH_WORK_MODE="artifact"
 
 export CODEX_HOME="/home/node/.codex"
 export CLAUDE_HOME="/home/node/.claude"
@@ -229,6 +355,9 @@ dorkpipe_orchestrate_run_container_worker codex "$prompt" "$response"
 grep -qx -- "$HOME/.codex:/dockpipe-auth/codex:ro" "$fake_args"
 rm -f "$fake_args" "$response"
 dorkpipe_orchestrate_run_container_worker claude "$prompt" "$response"
+claude_stage_dir="$DORKPIPE_ORCH_ROOT/skills/claude"
+[[ -f "$claude_stage_dir/dorkpipe-package-authoring/SKILL.md" ]]
+[[ -f "$claude_stage_dir/dorkpipe-core-review/SKILL.md" ]]
 grep -qx -- "$HOME/.claude:/dockpipe-auth/claude:ro" "$fake_args"
 grep -qx -- "$HOME/.claude.json:/dockpipe-auth/claude-config/.claude.json:ro" "$fake_args"
 unset CODEX_HOME
@@ -242,7 +371,7 @@ grep -qx -- "claude" "$fake_args"
 grep -Fqx -- "DOCKPIPE_DOCKER_NETWORK=bridge" "$fake_args"
 grep -qx -- "$HOME/.claude:/dockpipe-auth/claude:ro" "$fake_args"
 grep -qx -- "$HOME/.claude.json:/dockpipe-auth/claude-config/.claude.json:ro" "$fake_args"
-grep -qx -- "$HOME/.claude/skills:/dockpipe-auth/claude-skills:ro" "$fake_args"
+grep -qx -- "$claude_stage_dir:/dockpipe-auth/claude-skills:ro" "$fake_args"
 grep -q -- "cp /dockpipe-auth/claude-config/.claude.json /home/node/.claude.json" "$fake_args"
 grep -q -- "claude --dangerously-skip-permissions" "$fake_args"
 grep -qx -- "container worker ok" "$response"

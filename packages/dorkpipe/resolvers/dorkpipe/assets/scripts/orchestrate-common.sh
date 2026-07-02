@@ -39,6 +39,7 @@ dorkpipe_orchestrate_init() {
   export DORKPIPE_ORCH_COMPARE_WORKER_LOGS="${DORKPIPE_ORCH_COMPARE_WORKER_LOGS:-artifact}"
   export DORKPIPE_ORCH_STRICT_OUTPUT_CONTRACT="${DORKPIPE_ORCH_STRICT_OUTPUT_CONTRACT:-true}"
   export DORKPIPE_ORCH_WORK_MODE="${DORKPIPE_ORCH_WORK_MODE:-artifact}"
+  export DORKPIPE_ORCH_EDIT_ISOLATION="${DORKPIPE_ORCH_EDIT_ISOLATION:-serialized}"
   export DORKPIPE_ORCH_INLINE_INPUT_CONTEXT="${DORKPIPE_ORCH_INLINE_INPUT_CONTEXT:-true}"
   export DORKPIPE_ORCH_INLINE_INPUT_MAX_BYTES="${DORKPIPE_ORCH_INLINE_INPUT_MAX_BYTES:-6000}"
   export DORKPIPE_ORCH_INLINE_INPUT_TOTAL_MAX_BYTES="${DORKPIPE_ORCH_INLINE_INPUT_TOTAL_MAX_BYTES:-18000}"
@@ -81,22 +82,29 @@ dorkpipe_orchestrate_helper_bin() {
     printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
     return 0
   fi
-  local repo_root dockpipe_bin dockpipe_dir dockpipe_repo_root candidate
+  local repo_root package_root dockpipe_bin dockpipe_dir dockpipe_repo_root candidate repo_candidate packaged_candidate helper_sources_stale
   repo_root="${ROOT:-$(dockpipe_sdk get workdir)}"
-  DORKPIPE_ORCH_HELPER_BIN="${DOCKPIPE_ASSETS_DIR:-}/tooling/bin/$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf 'windows' ;; darwin*:*|*:darwin*:* ) printf 'darwin' ;; *) printf 'linux' ;; esac)/orchestrate-helper$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf '.exe' ;; *) printf '' ;; esac)"
-  if [[ ! -x "${DORKPIPE_ORCH_HELPER_BIN}" ]]; then
-    DORKPIPE_ORCH_HELPER_BIN="$(dockpipe_sdk require tooling-bin orchestrate-helper || true)"
+  if [[ -n "${DOCKPIPE_ASSETS_DIR:-}" ]]; then
+    package_root="$(cd "${DOCKPIPE_ASSETS_DIR}/../../.." 2>/dev/null && pwd || true)"
   fi
-  if [[ -n "${DORKPIPE_ORCH_HELPER_BIN}" ]]; then
-    export DORKPIPE_ORCH_HELPER_BIN
-    printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
-    return 0
+  repo_candidate="${repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf '.exe' ;; *) printf '' ;; esac)"
+  packaged_candidate="${DOCKPIPE_ASSETS_DIR:-}/tooling/bin/$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf 'windows' ;; darwin*:*|*:darwin*:* ) printf 'darwin' ;; *) printf 'linux' ;; esac)/orchestrate-helper$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf '.exe' ;; *) printf '' ;; esac)"
+  helper_sources_stale="0"
+  if [[ -x "${repo_candidate}" ]] && [[ -n "${package_root:-}" ]]; then
+    if ! find "${package_root}/lib/cmd/orchestrate-helper" "${package_root}/lib/orchestrationhelper" \
+      -type f \( -name '*.go' -o -name 'go.mod' -o -name 'go.sum' \) -newer "${repo_candidate}" -print -quit 2>/dev/null | grep -q .; then
+      DORKPIPE_ORCH_HELPER_BIN="${repo_candidate}"
+      export DORKPIPE_ORCH_HELPER_BIN
+      printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
+      return 0
+    fi
+    helper_sources_stale="1"
   fi
   dockpipe_bin="${DOCKPIPE_BIN:-}"
   if [[ -z "${dockpipe_bin}" ]]; then
     dockpipe_bin="$(dockpipe_sdk require dockpipe-bin || true)"
   fi
-  if [[ -x "${dockpipe_bin:-}" ]]; then
+  if [[ -x "${dockpipe_bin:-}" ]] && [[ "${helper_sources_stale}" != "1" ]] && [[ ! -x "${repo_candidate}" ]]; then
     dockpipe_dir="$(cd "$(dirname "${dockpipe_bin}")" && pwd)"
     dockpipe_repo_root="$(cd "${dockpipe_dir}/../.." 2>/dev/null && pwd || true)"
     for candidate in \
@@ -111,14 +119,31 @@ dorkpipe_orchestrate_helper_bin() {
       fi
     done
   fi
-  if [[ -x "${dockpipe_bin:-}" ]]; then
+  if [[ -x "${dockpipe_bin:-}" ]] && { [[ "${helper_sources_stale}" == "1" ]] || [[ ! -x "${repo_candidate}" ]]; }; then
     "${dockpipe_bin}" package build source --workdir "${repo_root}" --only dorkpipe
+    for candidate in \
+      "${repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper" \
+      "${repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper.exe"
+    do
+      if [[ -x "${candidate}" ]]; then
+        DORKPIPE_ORCH_HELPER_BIN="${candidate}"
+        export DORKPIPE_ORCH_HELPER_BIN
+        printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
+        return 0
+      fi
+    done
     DORKPIPE_ORCH_HELPER_BIN="$(dockpipe_sdk require tooling-bin orchestrate-helper || true)"
     if [[ -n "${DORKPIPE_ORCH_HELPER_BIN}" ]]; then
       export DORKPIPE_ORCH_HELPER_BIN
       printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
       return 0
     fi
+  fi
+  if [[ -x "${packaged_candidate}" ]]; then
+    DORKPIPE_ORCH_HELPER_BIN="${packaged_candidate}"
+    export DORKPIPE_ORCH_HELPER_BIN
+    printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
+    return 0
   fi
   echo "orchestrate-helper: compiled helper not found at ${repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper(.exe)" >&2
   echo "Run: ${dockpipe_bin:-dockpipe} package build source --workdir ${repo_root} --only dorkpipe" >&2
@@ -310,6 +335,7 @@ dorkpipe_orchestrate_host_auth_candidates() {
   local host_dir
   host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}" 2>/dev/null || true)"
   [[ -n "${host_dir}" ]] && printf '%s\n' "${host_dir}"
+  set +e
   case "${provider}" in
     codex)
       [[ -n "${HOME:-}" ]] && printf '%s\n' "${HOME}/.codex"
@@ -408,6 +434,63 @@ dorkpipe_orchestrate_container_skills_dir() {
   printf '%s\n' "${host_dir}/skills"
 }
 
+dorkpipe_orchestrate_container_skills_stage_dir() {
+  local provider="${1:?provider}"
+  printf '%s\n' "${DORKPIPE_ORCH_ROOT}/skills/${provider}"
+}
+
+dorkpipe_orchestrate_skills_render_bin() {
+  local render_bin dockpipe_bin
+  if [[ -n "${DOCKPIPE_SKILLS_RENDER_BIN:-}" && -x "${DOCKPIPE_SKILLS_RENDER_BIN}" ]]; then
+    printf '%s\n' "${DOCKPIPE_SKILLS_RENDER_BIN}"
+    return 0
+  fi
+  render_bin="${DOCKPIPE_ASSETS_DIR:-}/tooling/bin/$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf 'windows' ;; darwin*:*|*:darwin*:* ) printf 'darwin' ;; *) printf 'linux' ;; esac)/skills-render$(case "${OS:-}:${OSTYPE:-}:${MSYSTEM:-}" in Windows_NT:*|*:msys*:*|*:cygwin*:*|*:*:MINGW*) printf '.exe' ;; *) printf '' ;; esac)"
+  if [[ -x "${render_bin}" ]]; then
+    printf '%s\n' "${render_bin}"
+    return 0
+  fi
+  render_bin="$(dockpipe_sdk require tooling-bin skills-render 2>/dev/null || true)"
+  if [[ -n "${render_bin}" && -x "${render_bin}" ]]; then
+    printf '%s\n' "${render_bin}"
+    return 0
+  fi
+  dockpipe_bin="$(dorkpipe_orchestrate_dockpipe_bin)" || return 1
+  "${dockpipe_bin}" package build source --workdir "${ROOT}" --only dorkpipe >/dev/null
+  render_bin="$(dockpipe_sdk require tooling-bin skills-render 2>/dev/null || true)"
+  [[ -n "${render_bin}" && -x "${render_bin}" ]] || return 1
+  printf '%s\n' "${render_bin}"
+}
+
+dorkpipe_orchestrate_render_curated_skills() {
+  local provider="${1:?provider}"
+  local output_dir="${2:?output dir}"
+  local render_bin
+  render_bin="$(dorkpipe_orchestrate_skills_render_bin)" || return 1
+  mkdir -p "${output_dir}"
+  "${render_bin}" --target "${provider}" --output "${output_dir}" --force >/dev/null
+}
+
+dorkpipe_orchestrate_prepare_container_skills_dir() {
+  local provider="${1:?provider}"
+  local stage_dir source_dir stamp_file
+  stage_dir="$(dorkpipe_orchestrate_container_skills_stage_dir "${provider}")"
+  stamp_file="${stage_dir}/.dorkpipe-orch-skills-ready"
+  if [[ -f "${stamp_file}" ]]; then
+    printf '%s\n' "${stage_dir}"
+    return 0
+  fi
+  rm -rf "${stage_dir}"
+  mkdir -p "${stage_dir}"
+  source_dir="$(dorkpipe_orchestrate_container_skills_dir "${provider}" 2>/dev/null || true)"
+  if [[ -n "${source_dir}" && -d "${source_dir}" ]]; then
+    cp -a "${source_dir}/." "${stage_dir}/" 2>/dev/null || true
+  fi
+  dorkpipe_orchestrate_render_curated_skills "${provider}" "${stage_dir}" || return 1
+  printf 'provider=%s\nsource=%s\n' "${provider}" "${source_dir:-}" > "${stamp_file}"
+  printf '%s\n' "${stage_dir}"
+}
+
 dorkpipe_orchestrate_container_skills_mount() {
   local provider="${1:?provider}"
   local mode host_dir
@@ -415,7 +498,7 @@ dorkpipe_orchestrate_container_skills_mount() {
   case "${mode}" in
     0|false|no|off|never|none|disabled) return 1 ;;
   esac
-  host_dir="$(dorkpipe_orchestrate_container_skills_dir "${provider}")" || return 1
+  host_dir="$(dorkpipe_orchestrate_prepare_container_skills_dir "${provider}")" || return 1
   [[ -n "${host_dir}" && -d "${host_dir}" ]] || return 1
   host_dir="$(dorkpipe_orchestrate_cli_mount_host_path "${host_dir}")"
   printf '%s:/dockpipe-auth/%s-skills:ro\n' "${host_dir}" "${provider}"
@@ -598,6 +681,83 @@ dorkpipe_orchestrate_work_mode() {
       printf 'artifact\n'
       ;;
   esac
+}
+
+dorkpipe_orchestrate_edit_isolation_mode() {
+  local mode="${DORKPIPE_ORCH_EDIT_ISOLATION:-serialized}"
+  mode="$(printf '%s' "${mode}" | tr '[:upper:]' '[:lower:]' | tr '_' '-')"
+  case "${mode}" in
+    serialized|split-volume)
+      printf '%s\n' "${mode}"
+      ;;
+    *)
+      printf 'serialized\n'
+      ;;
+  esac
+}
+
+dorkpipe_orchestrate_edit_worker_acquire() {
+  local task_id="${1:?task id}"
+  local lease_json="${2:?lease json}"
+  local dockpipe_bin mode retry_seconds max_wait_seconds start_time elapsed err_file
+  dockpipe_bin="$(dorkpipe_orchestrate_dockpipe_bin)" || return 1
+  mode="$(dorkpipe_orchestrate_edit_isolation_mode)"
+  if [[ "${mode}" != "serialized" ]]; then
+    "${dockpipe_bin}" session worker-acquire "${DOCKPIPE_SESSION_ID}" \
+      --workdir "${ROOT}" \
+      --worker "${task_id}" \
+      --role edit \
+      --mode "${mode}" \
+      --json > "${lease_json}"
+    return 0
+  fi
+  retry_seconds="${DORKPIPE_ORCH_EDIT_LEASE_RETRY_SECONDS:-2}"
+  max_wait_seconds="${DORKPIPE_ORCH_EDIT_LEASE_MAX_WAIT_SECONDS:-900}"
+  start_time="$(date +%s)"
+  err_file="${lease_json}.err"
+  while true; do
+    if "${dockpipe_bin}" session worker-acquire "${DOCKPIPE_SESSION_ID}" \
+      --workdir "${ROOT}" \
+      --worker "${task_id}" \
+      --role edit \
+      --mode "${mode}" \
+      --json > "${lease_json}" 2> "${err_file}"; then
+      rm -f "${err_file}"
+      return 0
+    fi
+    if ! grep -qi "active worker lease" "${err_file}" 2>/dev/null; then
+      cat "${err_file}" >&2 || true
+      rm -f "${err_file}"
+      return 1
+    fi
+    elapsed="$(( $(date +%s) - start_time ))"
+    if (( elapsed >= max_wait_seconds )); then
+      cat "${err_file}" >&2 || true
+      echo "[dorkpipe] timed out waiting for serialized edit lease for ${task_id} after ${elapsed}s" >&2
+      rm -f "${err_file}"
+      return 1
+    fi
+    echo "[dorkpipe] waiting for serialized edit lease for ${task_id} (${elapsed}s elapsed)" >&2
+    sleep "${retry_seconds}"
+  done
+}
+
+dorkpipe_orchestrate_edit_worker_release() {
+  local task_id="${1:?task id}"
+  local status="${2:-released}"
+  local apply_changes="${3:-false}"
+  local dockpipe_bin args=()
+  dockpipe_bin="$(dorkpipe_orchestrate_dockpipe_bin)" || return 1
+  args=(
+    session worker-release "${DOCKPIPE_SESSION_ID}"
+    --workdir "${ROOT}"
+    --worker "${task_id}"
+    --status "${status}"
+  )
+  if [[ "$(dorkpipe_orchestrate_bool "${apply_changes}")" == "true" ]]; then
+    args+=(--apply)
+  fi
+  "${dockpipe_bin}" "${args[@]}" >/dev/null
 }
 
 dorkpipe_orchestrate_append_work_mode_prompt() {
@@ -849,10 +1009,26 @@ dorkpipe_orchestrate_run_container_worker() {
   local response_path="${3:?response path}"
   local selected_model="${4:-}"
   local dockpipe_bin auth_mount raw_response_path worker_cwd tool_image
+  local lease_json lease_acquired lease_apply_on_release worker_session_volume
+  local rc release_status
   dockpipe_bin="$(dorkpipe_orchestrate_dockpipe_bin)" || return 1
   raw_response_path="${response_path}.raw"
   worker_cwd="$(dorkpipe_orchestrate_worker_cwd "${provider}")"
   dorkpipe_orchestrate_auth_preflight "${provider}" || return 1
+  lease_json="${response_path}.lease.json"
+  lease_acquired="false"
+  lease_apply_on_release="false"
+  worker_session_volume=""
+
+  if [[ "$(dorkpipe_orchestrate_work_mode)" == "edit" && -n "${DOCKPIPE_SESSION_ID:-}" && -n "${DOCKPIPE_SESSION_VOLUME:-}" ]]; then
+    dorkpipe_orchestrate_edit_worker_acquire "${task_id:-worker}" "${lease_json}" || return 1
+    eval "$("$(dorkpipe_orchestrate_helper_bin)" worker-lease-env "${lease_json}")"
+    lease_acquired="true"
+    worker_session_volume="${LEASE_VOLUME:-}"
+    if [[ "${LEASE_MODE:-}" == "split-volume" ]]; then
+      lease_apply_on_release="true"
+    fi
+  fi
 
   local args=(
     "--workdir" "${ROOT}"
@@ -881,6 +1057,10 @@ dorkpipe_orchestrate_run_container_worker() {
   fi
   if auth_mount="$(dorkpipe_orchestrate_container_skills_mount "${provider}" 2>/dev/null)"; then
     args+=("--mount" "${auth_mount}")
+  fi
+  if [[ -n "${worker_session_volume}" ]]; then
+    args+=("--env" "DOCKPIPE_SESSION_VOLUME=${worker_session_volume}")
+    args+=("--env" "DOCKPIPE_SESSION_VOLUME_AUTHORITATIVE=1")
   fi
   while IFS= read -r auth_mount; do
     [[ -n "${auth_mount}" ]] || continue
@@ -920,6 +1100,7 @@ dorkpipe_orchestrate_run_container_worker() {
             codex exec --dangerously-bypass-approvals-and-sandbox "$1" </dev/null
           fi
         ' _ "$(cat "${prompt_path}")" "${selected_model}" "${worker_cwd}" > "${raw_response_path}"
+      rc=$?
       ;;
     claude)
       MSYS2_ARG_CONV_EXCL='*' "${dockpipe_bin}" "${args[@]}" -- \
@@ -963,11 +1144,25 @@ dorkpipe_orchestrate_run_container_worker() {
             claude --dangerously-skip-permissions -p "$1" </dev/null
           fi
         ' _ "$(cat "${prompt_path}")" "${selected_model}" "${worker_cwd}" > "${raw_response_path}"
+      rc=$?
       ;;
     *)
+      set -e
       return 1
       ;;
   esac
+  set -e
+  release_status="released"
+  if [[ "${rc:-0}" -ne 0 ]]; then
+    release_status="failed"
+  fi
+  if [[ "${lease_acquired}" == "true" ]]; then
+    dorkpipe_orchestrate_edit_worker_release "${task_id:-worker}" "${release_status}" "${lease_apply_on_release}" || return 1
+    rm -f "${lease_json}"
+  fi
+  if [[ "${rc:-0}" -ne 0 ]]; then
+    return "${rc}"
+  fi
   sed '/^sha256:[0-9a-f]\{64\}$/d' "${raw_response_path}" > "${response_path}"
   rm -f "${raw_response_path}"
 }

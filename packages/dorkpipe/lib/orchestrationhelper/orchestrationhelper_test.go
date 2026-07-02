@@ -112,6 +112,170 @@ func TestSelectLaneWorkerRequirePinsPreferredLane(t *testing.T) {
 	}
 }
 
+func TestSelectLaneArchitectureTaskPrefersCloudOverCheapLocal(t *testing.T) {
+	task, err := applyTaskWorkerProfile(map[string]any{
+		"id":              "brain_contract",
+		"worker":          "claude",
+		"worker_type":     "architecture",
+		"goal":            "Define the architecture contract and acceptance criteria",
+		"expected_output": "A durable contract and routing policy",
+		"model_policy": map[string]any{
+			"attempt": map[string]any{
+				"preference": "cheap-first",
+			},
+		},
+	}, map[string]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lanes := []map[string]any{
+		{
+			"id":            "ollama.local.default",
+			"provider":      "ollama",
+			"resolver_hint": "ollama",
+			"model":         "qwen2.5:7b",
+			"local":         true,
+			"available":     true,
+		},
+		{
+			"id":            "claude.cloud.default",
+			"provider":      "claude",
+			"resolver_hint": "claude",
+			"model":         "cli",
+			"cloud":         true,
+			"available":     true,
+			"capabilities":  []any{"review", "safety", "strong_validation"},
+		},
+	}
+	selection := selectLane(task, mapValue(task["model_policy"]), "", "", "", map[string]string{
+		"DORKPIPE_ORCH_HOST_MEMORY_GB":      "16",
+		"DORKPIPE_ORCH_HOST_CPU_CORES":      "8",
+		"DORKPIPE_ORCH_LOCAL_ACCELERATION":  "cpu",
+		"DORKPIPE_ORCH_LOCAL_HARDWARE_TIER": "low",
+	}, lanes, map[string]any{
+		"local_first_bonus":                 15.0,
+		"cloud_cost_penalty":                2.0,
+		"worker_preference_bonus":           10.0,
+		"authority_cloud_bonus":             8.0,
+		"local_architecture_penalty":        18.0,
+		"low_tier_local_authority_penalty":  10.0,
+		"architecture_keywords":             []any{"architecture", "contract", "acceptance criteria"},
+		"cloud_score_threshold":             14.0,
+		"high_risk_cloud_score_threshold":   10.0,
+		"explicit_hint_bypasses_cloud_gate": true,
+	}, map[string]any{}, map[string]trainingEntry{}, true, nil)
+	if got := stringValue(selection["provider"]); got != "claude" {
+		t.Fatalf("provider = %q, want claude for architecture authority", got)
+	}
+}
+
+func TestSelectLaneExtractionTaskKeepsLocalWhenModelFitsHost(t *testing.T) {
+	task, err := applyTaskWorkerProfile(map[string]any{
+		"id":              "repo_fact_packet",
+		"worker":          "ollama",
+		"worker_type":     "extraction",
+		"goal":            "Extract narrow repo facts only",
+		"expected_output": "A compact fact packet",
+		"constraints":     []any{"facts only", "extract path groups"},
+		"model_policy": map[string]any{
+			"attempt": map[string]any{
+				"preference": "cheap-first",
+			},
+		},
+	}, map[string]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lanes := []map[string]any{
+		{
+			"id":            "ollama.local.default",
+			"provider":      "ollama",
+			"resolver_hint": "ollama",
+			"model":         "qwen2.5:7b",
+			"local":         true,
+			"available":     true,
+		},
+		{
+			"id":            "codex.cloud.default",
+			"provider":      "codex",
+			"resolver_hint": "codex",
+			"model":         "cli",
+			"cloud":         true,
+			"available":     true,
+			"capabilities":  []any{"code", "strong_validation"},
+		},
+	}
+	selection := selectLane(task, mapValue(task["model_policy"]), "", "", "", map[string]string{
+		"DORKPIPE_ORCH_HOST_MEMORY_GB":     "64",
+		"DORKPIPE_ORCH_HOST_CPU_CORES":     "16",
+		"DORKPIPE_ORCH_LOCAL_ACCELERATION": "gpu",
+	}, lanes, map[string]any{
+		"local_first_bonus":          15.0,
+		"cloud_cost_penalty":         2.0,
+		"worker_preference_bonus":    10.0,
+		"extraction_local_bonus":     8.0,
+		"local_model_fit_bonus":      3.0,
+		"gpu_local_extraction_bonus": 2.0,
+		"extraction_keywords":        []any{"extract", "facts only", "fact packet", "path groups"},
+	}, map[string]any{}, map[string]trainingEntry{}, true, nil)
+	if got := stringValue(selection["provider"]); got != "ollama" {
+		t.Fatalf("provider = %q, want ollama for bounded extraction", got)
+	}
+}
+
+func TestSelectLaneOversizedLocalModelLosesOnSmallHost(t *testing.T) {
+	task, err := applyTaskWorkerProfile(map[string]any{
+		"id":              "design_inventory",
+		"worker":          "ollama",
+		"worker_type":     "extraction",
+		"goal":            "Extract design inventory only",
+		"expected_output": "A compact inventory packet",
+		"constraints":     []any{"extract path groups"},
+		"model_policy": map[string]any{
+			"attempt": map[string]any{
+				"preference": "cheap-first",
+			},
+		},
+	}, map[string]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lanes := []map[string]any{
+		{
+			"id":            "ollama.local.default",
+			"provider":      "ollama",
+			"resolver_hint": "ollama",
+			"model":         "qwen2.5:32b",
+			"local":         true,
+			"available":     true,
+		},
+		{
+			"id":            "claude.cloud.default",
+			"provider":      "claude",
+			"resolver_hint": "claude",
+			"model":         "cli",
+			"cloud":         true,
+			"available":     true,
+			"capabilities":  []any{"review", "strong_validation"},
+		},
+	}
+	selection := selectLane(task, mapValue(task["model_policy"]), "", "", "", map[string]string{
+		"DORKPIPE_ORCH_HOST_MEMORY_GB":     "16",
+		"DORKPIPE_ORCH_HOST_CPU_CORES":     "8",
+		"DORKPIPE_ORCH_LOCAL_ACCELERATION": "cpu",
+	}, lanes, map[string]any{
+		"local_first_bonus":             15.0,
+		"cloud_cost_penalty":            2.0,
+		"worker_preference_bonus":       10.0,
+		"extraction_local_bonus":        8.0,
+		"oversized_local_model_penalty": 30.0,
+		"extraction_keywords":           []any{"extract", "inventory", "path groups"},
+	}, map[string]any{}, map[string]trainingEntry{}, true, nil)
+	if got := stringValue(selection["provider"]); got != "claude" {
+		t.Fatalf("provider = %q, want claude when local model is oversized for host", got)
+	}
+}
+
 func TestComparisonDisabledForRequiredWorker(t *testing.T) {
 	task, err := applyTaskWorkerProfile(map[string]any{
 		"id":     "patch",

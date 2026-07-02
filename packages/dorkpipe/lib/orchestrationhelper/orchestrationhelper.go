@@ -63,6 +63,18 @@ type laneCandidate struct {
 	Training trainingEntry  `json:"training"`
 }
 
+type taskClass struct {
+	Name      string `json:"name"`
+	Authority string `json:"authority"`
+}
+
+type localHostProfile struct {
+	MemoryGB     int    `json:"memory_gb"`
+	CPUCores     int    `json:"cpu_cores"`
+	Acceleration string `json:"acceleration"`
+	Tier         string `json:"tier"`
+}
+
 var seededWorkerProfiles = map[string]map[string]any{
 	"codex": {
 		"preferred_resolver_hint": "codex",
@@ -85,12 +97,13 @@ var seededWorkerProfiles = map[string]map[string]any{
 }
 
 type schedulerTask struct {
-	ID         string         `json:"id"`
-	BaseTaskID string         `json:"base_task_id"`
-	Comparison map[string]any `json:"comparison"`
-	DependsOn  []string       `json:"depends_on"`
-	Provider   string         `json:"provider"`
-	Model      string         `json:"model"`
+	ID            string         `json:"id"`
+	BaseTaskID    string         `json:"base_task_id"`
+	Comparison    map[string]any `json:"comparison"`
+	DependsOn     []string       `json:"depends_on"`
+	Provider      string         `json:"provider"`
+	Model         string         `json:"model"`
+	ReuseExisting bool           `json:"reuse_existing"`
 }
 
 func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
@@ -129,6 +142,11 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("usage: orchestrate-helper task-env <task.json>")
 		}
 		return emitTaskEnv(args[1], stdout)
+	case "worker-lease-env":
+		if len(args) != 2 {
+			return errors.New("usage: orchestrate-helper worker-lease-env <lease.json>")
+		}
+		return emitWorkerLeaseEnv(args[1], stdout)
 	case "required-auth-providers":
 		if len(args) != 2 {
 			return errors.New("usage: orchestrate-helper required-auth-providers <tasks-dir>")
@@ -289,6 +307,27 @@ func emitTaskEnv(path string, stdout io.Writer) error {
 		"TASK_MAX_CLOUD_TOKENS":        strconv.Itoa(intFromAny(task["max_cloud_tokens"])),
 		"TASK_MODEL_JSON":              mustJSON(task["model"], map[string]any{}),
 		"TASK_DEPENDS_ON_JSON":         mustJSON(task["depends_on"], []any{}),
+	}
+	keys := make([]string, 0, len(mapping))
+	for key := range mapping {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		fmt.Fprintf(stdout, "%s=%s\n", key, shellQuote(mapping[key]))
+	}
+	return nil
+}
+
+func emitWorkerLeaseEnv(path string, stdout io.Writer) error {
+	lease := readJSONMap(path)
+	mapping := map[string]string{
+		"LEASE_ID":          stringValue(lease["lease_id"]),
+		"LEASE_WORKER_ID":   stringValue(lease["worker_id"]),
+		"LEASE_MODE":        stringValue(lease["mode"]),
+		"LEASE_VOLUME":      stringValue(lease["volume"]),
+		"LEASE_BASE_VOLUME": stringValue(lease["base_volume"]),
+		"LEASE_STATUS":      stringValue(lease["status"]),
 	}
 	keys := make([]string, 0, len(mapping))
 	for key := range mapping {
@@ -1036,6 +1075,46 @@ func guestPathContains(root, target string) bool {
 	return strings.HasPrefix(target, strings.TrimRight(root, "/")+"/")
 }
 
+func taskIDSet(values []string) map[string]bool {
+	out := map[string]bool{}
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value != "" {
+			out[value] = true
+		}
+	}
+	return out
+}
+
+func downstreamTaskClosure(tasks []any, selected map[string]bool) map[string]bool {
+	if len(selected) == 0 {
+		return map[string]bool{}
+	}
+	closure := map[string]bool{}
+	for key := range selected {
+		closure[key] = true
+	}
+	changed := true
+	for changed {
+		changed = false
+		for _, raw := range tasks {
+			task := mapValue(raw)
+			taskID := stringValue(task["id"])
+			if taskID == "" || closure[taskID] {
+				continue
+			}
+			for _, dep := range stringList(task["depends_on"]) {
+				if closure[dep] {
+					closure[taskID] = true
+					changed = true
+					break
+				}
+			}
+		}
+	}
+	return closure
+}
+
 func planOrchestration(workflowPath, stepID string, env map[string]string) error {
 	root := env["ROOT"]
 	sharedDir := env["DORKPIPE_ORCH_SHARED_DIR"]
@@ -1061,6 +1140,10 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 	inlineInputContext := boolString(fallbackString(env["DORKPIPE_ORCH_INLINE_INPUT_CONTEXT"], "true"))
 	inlineInputMaxBytes := intFromString(env["DORKPIPE_ORCH_INLINE_INPUT_MAX_BYTES"], 6000)
 	inlineInputTotalMaxBytes := intFromString(env["DORKPIPE_ORCH_INLINE_INPUT_TOTAL_MAX_BYTES"], 18000)
+	followUpRequest := strings.TrimSpace(env["DORKPIPE_ORCH_FOLLOWUP_REQUEST"])
+	followUpGoal := strings.TrimSpace(env["DORKPIPE_ORCH_FOLLOWUP_GOAL"])
+	followUpTaskIDs := splitCSVTrim(env["DORKPIPE_ORCH_FOLLOWUP_TASK_IDS"])
+	followUpMode := followUpRequest != "" || followUpGoal != "" || len(followUpTaskIDs) > 0
 
 	workflow := readYAMLMap(workflowPath)
 	workflowModelPolicy := mapValue(workflow["model_policy"])
@@ -1099,6 +1182,29 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 	}
 	if len(tasks) == 0 {
 		return fmt.Errorf("%s: steps[].agent.orchestration.tasks must contain at least one task", workflowPath)
+	}
+	taskIDs := map[string]bool{}
+	for _, raw := range tasks {
+		taskID := stringValue(mapValue(raw)["id"])
+		if taskID != "" {
+			taskIDs[taskID] = true
+		}
+	}
+	selectedFollowUpTasks := taskIDSet(followUpTaskIDs)
+	for taskID := range selectedFollowUpTasks {
+		if !taskIDs[taskID] {
+			return fmt.Errorf("%s: DORKPIPE_ORCH_FOLLOWUP_TASK_IDS includes unknown task id %q", workflowPath, taskID)
+		}
+	}
+	rerunTasks := map[string]bool{}
+	if followUpMode {
+		if len(selectedFollowUpTasks) == 0 {
+			for taskID := range taskIDs {
+				rerunTasks[taskID] = true
+			}
+		} else {
+			rerunTasks = downstreamTaskClosure(tasks, selectedFollowUpTasks)
+		}
 	}
 	scopeCache := map[string]string{}
 	resolveScopeRef := func(value string) (string, error) {
@@ -1177,6 +1283,7 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 	if err != nil {
 		return err
 	}
+	hostProfile := detectLocalHostProfile(env)
 	modelLanes := loadModelLanes(modelCatalogPath, env)
 	lanesByProvider := map[string]map[string]any{}
 	for _, lane := range modelLanes {
@@ -1206,10 +1313,14 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 		}
 	}
 
+	requestText := stringValue(request["text"])
+	if followUpRequest != "" {
+		requestText = followUpRequest
+	}
 	requestPayload := map[string]any{
 		"contract_version": "v1",
 		"workflow":         workflowName,
-		"request":          stringValue(request["text"]),
+		"request":          requestText,
 		"artifact_root":    artifactRoot,
 		"workflow_config":  workflowPath,
 		"step_id":          stepID,
@@ -1227,11 +1338,24 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 		"compare_providers":    compareProviders,
 		"compare_scope":        compareScope,
 	}
+	if followUpMode {
+		requestPayload["follow_up"] = map[string]any{
+			"enabled":        true,
+			"request":        followUpRequest,
+			"goal":           followUpGoal,
+			"selected_tasks": followUpTaskIDs,
+			"rerun_tasks":    sortedTaskIDsFromSet(rerunTasks),
+		}
+	}
 	if err := writeJSONFile(requestJSON, requestPayload); err != nil {
 		return err
 	}
+	goalText := fallbackString(stringValue(planCfg["goal"]), requestText)
+	if followUpGoal != "" {
+		goalText = followUpGoal
+	}
 	planPayload := map[string]any{
-		"goal":         fallbackString(stringValue(planCfg["goal"]), stringValue(request["text"])),
+		"goal":         goalText,
 		"steps":        listValue(planCfg["steps"]),
 		"cloud_budget": requestPayload["cloud_budget"],
 		"concurrency": map[string]any{
@@ -1250,6 +1374,9 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			"require_approval": boolDefault(apply["require_approval"], true),
 			"outputs":          listValue(apply["outputs"]),
 		},
+	}
+	if followUpMode {
+		planPayload["follow_up"] = requestPayload["follow_up"]
 	}
 	if len(compareProviders) > 0 {
 		compareWidth := len(compareProviders)
@@ -1282,6 +1409,12 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 		"cloud_lanes_enabled":     cloudLanesEnabled,
 		"global_training_metrics": globalTrainingMetricsPath,
 		"policy":                  agentModelPolicy,
+		"local_host_profile": map[string]any{
+			"memory_gb":     hostProfile.MemoryGB,
+			"cpu_cores":     hostProfile.CPUCores,
+			"acceleration":  hostProfile.Acceleration,
+			"hardware_tier": hostProfile.Tier,
+		},
 		"thresholds": map[string]any{
 			"cloud_score_threshold":           floatDefault(selectionPolicy["cloud_score_threshold"], 14.0),
 			"high_risk_cloud_score_threshold": floatDefault(selectionPolicy["high_risk_cloud_score_threshold"], 10.0),
@@ -1289,6 +1422,9 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 		},
 		"lanes": []map[string]any{},
 		"tasks": []map[string]any{},
+	}
+	if followUpMode {
+		lanePlan["follow_up"] = requestPayload["follow_up"]
 	}
 	for _, lane := range modelLanes {
 		lanePlan["lanes"] = append(lanePlan["lanes"].([]map[string]any), map[string]any{
@@ -1332,9 +1468,14 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			})
 		}
 		for _, variant := range taskVariants {
+			class := classifyTask(task, selectionPolicy)
 			taskID := variant["task_id"]
 			workerIDs = append(workerIDs, taskID)
 			taskDir := filepath.Join(tasksDir, taskID)
+			reuseExisting := followUpMode && !rerunTasks[taskID]
+			if !reuseExisting {
+				_ = os.RemoveAll(taskDir)
+			}
 			if err := os.MkdirAll(taskDir, 0o755); err != nil {
 				return err
 			}
@@ -1362,6 +1503,7 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			if err := writeJSONFile(filepath.Join(taskDir, "lane-selection.json"), laneSelection); err != nil {
 				return err
 			}
+			laneSelection["reuse_existing"] = reuseExisting
 			lanePlan["tasks"] = append(lanePlan["tasks"].([]map[string]any), laneSelection)
 
 			accessiblePaths := append([]string{}, workflowAccessiblePaths...)
@@ -1406,6 +1548,7 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			taskPayload := map[string]any{
 				"id":                      taskID,
 				"base_id":                 variant["base_task_id"],
+				"reuse_existing":          reuseExisting,
 				"worker":                  stringValue(task["worker"]),
 				"worker_policy":           mapValue(task["worker_policy"]),
 				"comparison":              laneSelection["comparison"],
@@ -1428,6 +1571,10 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 				"access":                  taskAccess,
 				"model":                   taskModel,
 				"model_policy":            taskPolicy,
+				"task_class": map[string]any{
+					"name":      class.Name,
+					"authority": class.Authority,
+				},
 			}
 			if len(taskModel) == 0 {
 				taskPayload["model"] = map[string]any{
@@ -1435,6 +1582,9 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 					"model":    laneSelection["model"],
 					"num_ctx":  laneSelection["context_window"],
 				}
+			}
+			if followUpMode {
+				taskPayload["follow_up"] = requestPayload["follow_up"]
 			}
 			if err := writeJSONFile(filepath.Join(taskDir, "task.json"), taskPayload); err != nil {
 				return err
@@ -1483,6 +1633,21 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			}
 			localLane := boolAny(laneSelection["local"])
 			prefix := []string{}
+			if followUpMode && !reuseExisting {
+				followUpLines := []string{
+					"Follow-up repair mode:",
+					"- This is a targeted rerun on top of an existing orchestration workspace.",
+					"- Preserve the existing doc set shape unless the follow-up request requires a concrete correction.",
+					"- Prefer minimal edits that fix the stated issues without broad rewrites.",
+				}
+				if followUpRequest != "" {
+					followUpLines = append(followUpLines, "- Follow-up request: "+followUpRequest)
+				}
+				if followUpGoal != "" {
+					followUpLines = append(followUpLines, "- Follow-up goal: "+followUpGoal)
+				}
+				prefix = append(prefix, strings.Join(followUpLines, "\n"))
+			}
 			if startupPrompt != "" {
 				prefix = append(prefix, strings.TrimRight(startupPrompt, "\n"))
 			}
@@ -1528,15 +1693,16 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 				return err
 			}
 			graphTasks = append(graphTasks, map[string]any{
-				"id":            taskID,
-				"base_task_id":  variant["base_task_id"],
-				"comparison":    laneSelection["comparison"],
-				"depends_on":    dependsOn,
-				"resolver_hint": taskPayload["resolver_hint"],
-				"lane_id":       laneSelection["lane_id"],
-				"provider":      laneSelection["provider"],
-				"model":         laneSelection["model"],
-				"worker_type":   taskPayload["worker_type"],
+				"id":             taskID,
+				"base_task_id":   variant["base_task_id"],
+				"comparison":     laneSelection["comparison"],
+				"depends_on":     dependsOn,
+				"resolver_hint":  taskPayload["resolver_hint"],
+				"lane_id":        laneSelection["lane_id"],
+				"provider":       laneSelection["provider"],
+				"model":          laneSelection["model"],
+				"worker_type":    taskPayload["worker_type"],
+				"reuse_existing": reuseExisting,
 			})
 		}
 	}
@@ -1544,7 +1710,11 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 	verifyID := fallbackString(stringValue(verify["id"]), "verify_final")
 	graphTasks = append(graphTasks, map[string]any{"id": mergeID, "depends_on": workerIDs, "worker_type": "merge"})
 	graphTasks = append(graphTasks, map[string]any{"id": verifyID, "depends_on": []string{mergeID}, "worker_type": "verify"})
-	if err := writeJSONFile(graphJSON, map[string]any{"concurrency": planPayload["concurrency"], "tasks": graphTasks}); err != nil {
+	graphPayload := map[string]any{"concurrency": planPayload["concurrency"], "tasks": graphTasks}
+	if followUpMode {
+		graphPayload["follow_up"] = requestPayload["follow_up"]
+	}
+	if err := writeJSONFile(graphJSON, graphPayload); err != nil {
 		return err
 	}
 	return writeJSONFile(lanePlanJSON, lanePlan)
@@ -1565,12 +1735,13 @@ func runTasks(graphPath, runner string, env map[string]string, stderr io.Writer)
 			continue
 		}
 		tasks[taskID] = schedulerTask{
-			ID:         taskID,
-			BaseTaskID: fallbackString(stringValue(item["base_task_id"]), taskID),
-			Comparison: mapValue(item["comparison"]),
-			DependsOn:  stringList(item["depends_on"]),
-			Provider:   stringValue(item["provider"]),
-			Model:      stringValue(item["model"]),
+			ID:            taskID,
+			BaseTaskID:    fallbackString(stringValue(item["base_task_id"]), taskID),
+			Comparison:    mapValue(item["comparison"]),
+			DependsOn:     stringList(item["depends_on"]),
+			Provider:      stringValue(item["provider"]),
+			Model:         stringValue(item["model"]),
+			ReuseExisting: boolAny(item["reuse_existing"]),
 		}
 	}
 	if len(tasks) == 0 {
@@ -1627,6 +1798,25 @@ func runTasks(graphPath, runner string, env map[string]string, stderr io.Writer)
 		payload := readJSONMapOptional(filepath.Join(root, taskID, "result.json"))
 		taskResults[taskID] = payload
 		return payload
+	}
+	for taskID, task := range tasks {
+		if !task.ReuseExisting {
+			continue
+		}
+		result := readTaskResult(taskID)
+		if len(result) == 0 {
+			failed[taskID] = "follow-up reuse requested but no existing result.json was found"
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(stringValue(result["status"])), "failed") {
+			failed[taskID] = "follow-up reuse requested but the existing result is failed"
+			continue
+		}
+		done[taskID] = true
+		started[taskID] = true
+		if !animationEnabled {
+			fmt.Fprintf(stderr, "[dorkpipe] reusing existing orchestration task %s\n", taskID)
+		}
 	}
 	taskStatus := func(taskID string) string {
 		if _, ok := failed[taskID]; ok {
@@ -2705,6 +2895,133 @@ func splitCSVLower(raw string) []string {
 	return out
 }
 
+func splitCSVTrim(raw string) []string {
+	out := []string{}
+	for _, item := range strings.Split(raw, ",") {
+		item = strings.TrimSpace(item)
+		if item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
+}
+
+func envInt(env map[string]string, key string) int {
+	raw := strings.TrimSpace(env[key])
+	if raw == "" {
+		return 0
+	}
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 0 {
+		return 0
+	}
+	return value
+}
+
+func detectHostMemoryGB() int {
+	switch runtime.GOOS {
+	case "linux":
+		data, err := os.ReadFile("/proc/meminfo")
+		if err != nil {
+			return 0
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if !strings.HasPrefix(line, "MemTotal:") {
+				continue
+			}
+			fields := strings.Fields(line)
+			if len(fields) < 2 {
+				return 0
+			}
+			kb, err := strconv.Atoi(fields[1])
+			if err != nil || kb <= 0 {
+				return 0
+			}
+			return int((int64(kb) + 1024*1024 - 1) / (1024 * 1024))
+		}
+	case "darwin":
+		out, err := exec.Command("sysctl", "-n", "hw.memsize").Output()
+		if err != nil {
+			return 0
+		}
+		bytes, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+		if err != nil || bytes <= 0 {
+			return 0
+		}
+		return int((bytes + (1 << 30) - 1) / (1 << 30))
+	case "windows":
+		out, err := exec.Command("powershell", "-NoProfile", "-Command", "[math]::Ceiling((Get-CimInstance Win32_ComputerSystem).TotalPhysicalMemory / 1GB)").Output()
+		if err != nil {
+			return 0
+		}
+		value, err := strconv.Atoi(strings.TrimSpace(string(out)))
+		if err != nil || value <= 0 {
+			return 0
+		}
+		return value
+	}
+	return 0
+}
+
+func detectLocalHostProfile(env map[string]string) localHostProfile {
+	profile := localHostProfile{
+		MemoryGB: envInt(env, "DORKPIPE_ORCH_HOST_MEMORY_GB"),
+		CPUCores: envInt(env, "DORKPIPE_ORCH_HOST_CPU_CORES"),
+	}
+	if profile.CPUCores == 0 {
+		profile.CPUCores = runtime.NumCPU()
+	}
+	if profile.MemoryGB == 0 {
+		profile.MemoryGB = detectHostMemoryGB()
+	}
+	acceleration := strings.ToLower(strings.TrimSpace(env["DORKPIPE_ORCH_LOCAL_ACCELERATION"]))
+	if acceleration == "" {
+		switch strings.ToLower(strings.TrimSpace(env["DORKPIPE_DEV_STACK_GPU"])) {
+		case "nvidia", "gpu", "all":
+			acceleration = "gpu"
+		case "cpu", "none", "off", "false", "0":
+			acceleration = "cpu"
+		}
+	}
+	if acceleration == "" {
+		if commandAvailable("nvidia-smi") {
+			acceleration = "gpu"
+		} else {
+			acceleration = "cpu"
+		}
+	}
+	profile.Acceleration = acceleration
+	profile.Tier = strings.ToLower(strings.TrimSpace(env["DORKPIPE_ORCH_LOCAL_HARDWARE_TIER"]))
+	if profile.Tier == "" {
+		switch {
+		case profile.Acceleration == "gpu" || profile.MemoryGB >= 48 || profile.CPUCores >= 16:
+			profile.Tier = "high"
+		case profile.MemoryGB >= 24 || profile.CPUCores >= 8:
+			profile.Tier = "medium"
+		default:
+			profile.Tier = "low"
+		}
+	}
+	return profile
+}
+
+func estimateModelMemoryGB(model string) float64 {
+	matches := regexp.MustCompile(`(?i)(\d+(?:\.\d+)?)b\b`).FindStringSubmatch(model)
+	if len(matches) < 2 {
+		return 0
+	}
+	paramsB, err := strconv.ParseFloat(matches[1], 64)
+	if err != nil || paramsB <= 0 {
+		return 0
+	}
+	required := paramsB * 1.2
+	if required < 4 {
+		required = 4
+	}
+	return required
+}
+
 func loadModelLanes(path string, env map[string]string) []map[string]any {
 	raw := readYAMLMapOptional(path)
 	out := []map[string]any{}
@@ -2866,12 +3183,13 @@ func loadTrainingStats(path string, trainingPolicy map[string]any) map[string]tr
 	return stats
 }
 
-func laneScore(lane, task, policy, selectionPolicy map[string]any, trainingStats map[string]trainingEntry, requested string) (float64, []string, trainingEntry) {
+func laneScore(lane, task, policy, selectionPolicy map[string]any, env map[string]string, trainingStats map[string]trainingEntry, requested string) (float64, []string, trainingEntry) {
 	score := 0.0
 	reason := []string{}
 	provider := stringValue(lane["provider"])
 	resolverHint := fallbackString(stringValue(lane["resolver_hint"]), provider)
 	capabilities := stringSet(listValue(lane["capabilities"]))
+	taskClass := classifyTask(task, selectionPolicy)
 	workerPreferred := stringValue(task["worker_preferred_resolver_hint"])
 	workerPolicyMode := workerPolicyMode(task)
 	text := strings.ToLower(strings.Join([]string{
@@ -2912,6 +3230,53 @@ func laneScore(lane, task, policy, selectionPolicy map[string]any, trainingStats
 		score += floatDefault(selectionPolicy["safety_review_bonus"], 4.0)
 		reason = append(reason, "review/safety capability")
 	}
+	if taskClass.Name == "extraction" && boolAny(lane["local"]) {
+		score += floatDefault(selectionPolicy["extraction_local_bonus"], 8.0)
+		reason = append(reason, "local extractor bonus")
+	}
+	if taskClass.Authority == "high" && boolAny(lane["cloud"]) {
+		score += floatDefault(selectionPolicy["authority_cloud_bonus"], 8.0)
+		reason = append(reason, "high-authority task favors strong cloud lane")
+	}
+	if boolAny(lane["local"]) {
+		switch taskClass.Name {
+		case "architecture":
+			score -= floatDefault(selectionPolicy["local_architecture_penalty"], 18.0)
+			reason = append(reason, "local lane penalized for architecture task")
+		case "validation":
+			score -= floatDefault(selectionPolicy["local_validation_penalty"], 20.0)
+			reason = append(reason, "local lane penalized for validation task")
+		case "routing":
+			score -= floatDefault(selectionPolicy["local_routing_penalty"], 18.0)
+			reason = append(reason, "local lane penalized for routing task")
+		case "edit":
+			score -= floatDefault(selectionPolicy["local_edit_penalty"], 16.0)
+			reason = append(reason, "local lane penalized for edit task")
+		}
+		host := detectLocalHostProfile(env)
+		if taskClass.Authority == "high" && host.Tier == "low" {
+			score -= floatDefault(selectionPolicy["low_tier_local_authority_penalty"], 10.0)
+			reason = append(reason, "host local-model tier is low for high-authority task")
+		}
+		requiredMemGB := estimateModelMemoryGB(stringValue(lane["model"]))
+		if requiredMemGB > 0 && host.MemoryGB > 0 {
+			if requiredMemGB > float64(host.MemoryGB) {
+				oversizeRatio := requiredMemGB / float64(host.MemoryGB)
+				score -= floatDefault(selectionPolicy["oversized_local_model_penalty"], 14.0) * oversizeRatio
+				reason = append(reason, fmt.Sprintf("local model likely exceeds host memory budget (%0.1fGB>%dGB)", requiredMemGB, host.MemoryGB))
+			} else if requiredMemGB > float64(host.MemoryGB)*0.7 {
+				score -= floatDefault(selectionPolicy["tight_fit_local_model_penalty"], 6.0)
+				reason = append(reason, fmt.Sprintf("local model is a tight fit for host memory (%0.1fGB/%dGB)", requiredMemGB, host.MemoryGB))
+			} else {
+				score += floatDefault(selectionPolicy["local_model_fit_bonus"], 3.0)
+				reason = append(reason, "local model fits host memory profile")
+			}
+		}
+		if taskClass.Name == "extraction" && host.Acceleration == "gpu" {
+			score += floatDefault(selectionPolicy["gpu_local_extraction_bonus"], 2.0)
+			reason = append(reason, "GPU-backed local extraction bonus")
+		}
+	}
 	if !boolAny(lane["available"]) {
 		score -= floatDefault(selectionPolicy["unavailable_penalty"], 25.0)
 		reason = append(reason, "lane availability check failed")
@@ -2948,7 +3313,7 @@ func selectLane(task, policy map[string]any, requestedOverride, forceProvider, f
 	}
 	candidates := []laneCandidate{}
 	for _, lane := range modelLanes {
-		score, reason, training := laneScore(lane, task, policy, selectionPolicy, trainingStats, requested)
+		score, reason, training := laneScore(lane, task, policy, selectionPolicy, env, trainingStats, requested)
 		candidates = append(candidates, laneCandidate{Lane: lane, Score: score, Reason: reason, Training: training})
 	}
 	sort.Slice(candidates, func(i, j int) bool { return candidates[i].Score > candidates[j].Score })
@@ -2990,7 +3355,10 @@ func selectLane(task, policy map[string]any, requestedOverride, forceProvider, f
 		}
 		threshold := floatDefault(selectionPolicy[thresholdKey], 14.0)
 		if selected.Score < threshold {
-			if local := firstLane(candidates, func(item laneCandidate) bool { return boolAny(item.Lane["local"]) && boolAny(item.Lane["available"]) }); local != nil {
+			localAcceptThreshold := floatDefault(selectionPolicy["local_accept_score_threshold"], 0.0)
+			if local := firstLane(candidates, func(item laneCandidate) bool {
+				return boolAny(item.Lane["local"]) && boolAny(item.Lane["available"]) && item.Score >= localAcceptThreshold
+			}); local != nil {
 				selected = *local
 				gatedByBaseline = true
 				baselineGateReason = fmt.Sprintf("cloud lane gated by baseline threshold %.1f", threshold)
@@ -3101,6 +3469,33 @@ func stringListOrDefault(v any, fallback []string) []string {
 		return fallback
 	}
 	return values
+}
+
+func classifyTask(task, selectionPolicy map[string]any) taskClass {
+	text := strings.ToLower(strings.Join([]string{
+		stringValue(task["id"]),
+		stringValue(task["goal"]),
+		stringValue(task["expected_output"]),
+		strings.Join(stringList(task["constraints"]), " "),
+		stringValue(task["worker_type"]),
+		stringValue(task["work_mode"]),
+	}, " "))
+	switch {
+	case wordsInText(text, stringListOrDefault(selectionPolicy["validation_keywords"], []string{"validate", "validation", "verifier", "review"})):
+		return taskClass{Name: "validation", Authority: "high"}
+	case wordsInText(text, stringListOrDefault(selectionPolicy["routing_keywords"], []string{"router", "routing", "yaml", "index.yaml", "machine-readable"})):
+		return taskClass{Name: "routing", Authority: "high"}
+	case wordsInText(text, stringListOrDefault(selectionPolicy["architecture_keywords"], []string{"architecture", "contract", "source-of-truth", "policy", "acceptance criteria", "synthesis"})):
+		return taskClass{Name: "architecture", Authority: "high"}
+	case stringValue(task["work_mode"]) == "edit":
+		return taskClass{Name: "edit", Authority: "high"}
+	case wordsInText(text, stringListOrDefault(selectionPolicy["extraction_keywords"], []string{"extract", "inventory", "fact packet", "facts only", "path groups", "boundary signals"})):
+		return taskClass{Name: "extraction", Authority: "low"}
+	case wordsInText(text, stringListOrDefault(selectionPolicy["code_keywords"], []string{"patch", "code", "implementation", "edit"})):
+		return taskClass{Name: "code", Authority: "medium"}
+	default:
+		return taskClass{Name: "analysis", Authority: "medium"}
+	}
 }
 
 func highRiskTask(task, selectionPolicy map[string]any) bool {
@@ -3403,6 +3798,17 @@ func sortedTaskIDs(tasks map[string]schedulerTask) []string {
 	keys := make([]string, 0, len(tasks))
 	for key := range tasks {
 		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedTaskIDsFromSet(values map[string]bool) []string {
+	keys := make([]string, 0, len(values))
+	for key, ok := range values {
+		if ok {
+			keys = append(keys, key)
+		}
 	}
 	sort.Strings(keys)
 	return keys

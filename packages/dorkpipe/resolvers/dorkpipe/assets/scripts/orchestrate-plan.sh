@@ -6,9 +6,15 @@ SCRIPT_DIR="$(dockpipe get script_dir)"
 source "$SCRIPT_DIR/orchestrate-common.sh"
 
 dorkpipe_orchestrate_init
-find "${DORKPIPE_ORCH_TASKS_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-find "${DORKPIPE_ORCH_SHARED_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-find "${DORKPIPE_ORCH_LANES_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+followup_mode="0"
+if [[ -n "${DORKPIPE_ORCH_FOLLOWUP_REQUEST:-}" || -n "${DORKPIPE_ORCH_FOLLOWUP_GOAL:-}" || -n "${DORKPIPE_ORCH_FOLLOWUP_TASK_IDS:-}" ]]; then
+  followup_mode="1"
+fi
+if [[ "${followup_mode}" != "1" ]]; then
+  find "${DORKPIPE_ORCH_TASKS_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  find "${DORKPIPE_ORCH_SHARED_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+  find "${DORKPIPE_ORCH_LANES_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
+fi
 rm -f "${DORKPIPE_ORCH_HALT_JSON}"
 cat > "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" <<EOF
 {

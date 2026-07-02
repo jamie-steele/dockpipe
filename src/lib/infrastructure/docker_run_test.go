@@ -343,7 +343,7 @@ func TestRunContainerWorkspaceVolumeSyncsAroundRun(t *testing.T) {
 	repo := initGitSessionTestRepo(t)
 	getwdDockerFn = func() (string, error) { return repo, nil }
 	filepathAbsDocker = func(path string) (string, error) { return path, nil }
-	osStatDockerFn = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	osStatDockerFn = os.Stat
 	isTerminalDockerFn = func(fd int) bool { return false }
 	timeNowDockerFn = func() time.Time { return time.Unix(1000, 0) }
 	in, _ := os.CreateTemp(t.TempDir(), "in")
@@ -364,6 +364,9 @@ func TestRunContainerWorkspaceVolumeSyncsAroundRun(t *testing.T) {
 	if err != nil || rc != 0 {
 		t.Fatalf("RunContainer failed rc=%d err=%v", rc, err)
 	}
+	if err := errf.Close(); err != nil {
+		t.Fatalf("close stderr capture: %v", err)
+	}
 	mu.Lock()
 	defer mu.Unlock()
 	got := strings.Join(flattenCalls(calls), "\n")
@@ -376,6 +379,9 @@ func TestRunContainerWorkspaceVolumeSyncsAroundRun(t *testing.T) {
 	if !strings.Contains(got, repo+":/dockpipe-sync-src:ro") || !strings.Contains(got, "dockpipe-ws-demo:/dockpipe-sync-dst") {
 		t.Fatalf("expected host to volume bootstrap call, got:\n%s", got)
 	}
+	if strings.Count(got, "--entrypoint sh") < 2 {
+		t.Fatalf("expected helper sync containers to force sh entrypoint, got:\n%s", got)
+	}
 	if !strings.Contains(got, "git clone /dockpipe-sync-src /dockpipe-sync-dst") || !strings.Contains(got, "git -C /dockpipe-sync-dst fetch --prune dockpipe-host") {
 		t.Fatalf("expected git-based volume bootstrap script, got:\n%s", got)
 	}
@@ -384,6 +390,129 @@ func TestRunContainerWorkspaceVolumeSyncsAroundRun(t *testing.T) {
 	}
 	if !strings.Contains(got, "git -C /dockpipe-sync-src diff --cached --binary | git -C /dockpipe-sync-dst apply --whitespace=nowarn -") {
 		t.Fatalf("expected git patch apply sync-back script, got:\n%s", got)
+	}
+	stderrBytes, readErr := os.ReadFile(errf.Name())
+	if readErr != nil {
+		t.Fatalf("read stderr capture: %v", readErr)
+	}
+	stderrText := string(stderrBytes)
+	for _, want := range []string{
+		"[dockpipe] Syncing managed workspace into session volume…",
+		"[dockpipe] Managed workspace volume ready.",
+		"[dockpipe] Syncing managed workspace changes back from session volume…",
+		"[dockpipe] Managed workspace sync-back complete.",
+	} {
+		if !strings.Contains(stderrText, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderrText)
+		}
+	}
+}
+
+func TestRunContainerWorkspaceVolumeUsesTarSyncForGitWorktree(t *testing.T) {
+	withDockerSeams(t)
+	var mu sync.Mutex
+	var calls []call
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		mu.Lock()
+		calls = append(calls, call{name: name, args: append([]string(nil), args...)})
+		mu.Unlock()
+		return helperExitCommand(0)
+	}
+	repo := initGitSessionTestRepo(t)
+	session, err := CreateSessionBranch(GitSessionRequest{
+		WorkspaceID:  "demo",
+		SourceDir:    repo,
+		Mode:         "managed",
+		Storage:      "worktree",
+		BranchPrefix: "ai",
+		SessionID:    "volume-worktree-test",
+	})
+	if err != nil {
+		t.Fatalf("CreateSessionBranch: %v", err)
+	}
+	t.Cleanup(func() {
+		gitRemoveWorktree(t, repo, session.Storage.Workspace)
+	})
+	getwdDockerFn = func() (string, error) { return session.Storage.Workspace, nil }
+	filepathAbsDocker = func(path string) (string, error) { return path, nil }
+	osStatDockerFn = os.Stat
+	isTerminalDockerFn = func(fd int) bool { return false }
+	timeNowDockerFn = func() time.Time { return time.Unix(1000, 0) }
+	in, _ := os.CreateTemp(t.TempDir(), "in")
+	out, _ := os.CreateTemp(t.TempDir(), "out")
+	errf, _ := os.CreateTemp(t.TempDir(), "err")
+	defer in.Close()
+	defer out.Close()
+	defer errf.Close()
+
+	rc, err := RunContainer(RunOpts{
+		Image:         "img",
+		WorkdirHost:   session.Storage.Workspace,
+		WorkdirVolume: "dockpipe-ws-worktree-demo",
+		Stdin:         in,
+		Stdout:        out,
+		Stderr:        errf,
+	}, []string{"echo", "ok"})
+	if err != nil || rc != 0 {
+		t.Fatalf("RunContainer failed rc=%d err=%v", rc, err)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	got := strings.Join(flattenCalls(calls), "\n")
+	if strings.Contains(got, "git clone /dockpipe-sync-src /dockpipe-sync-dst") || strings.Contains(got, "git -C /dockpipe-sync-src diff --cached --binary | git -C /dockpipe-sync-dst apply --whitespace=nowarn -") {
+		t.Fatalf("expected worktree-backed volume sync to avoid git metadata helper flow, got:\n%s", got)
+	}
+	if strings.Count(got, "tar --exclude=.git --exclude=bin/.dockpipe --exclude=.dorkpipe -cf - . | tar xf - -C /dockpipe-sync-dst") < 2 {
+		t.Fatalf("expected tar sync with .git exclusion for worktree-backed volume sync, got:\n%s", got)
+	}
+}
+
+func TestRunContainerWorkspaceVolumeSkipsSyncWhenAuthoritative(t *testing.T) {
+	withDockerSeams(t)
+	var mu sync.Mutex
+	var calls []call
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		mu.Lock()
+		calls = append(calls, call{name: name, args: append([]string(nil), args...)})
+		mu.Unlock()
+		return helperExitCommand(0)
+	}
+	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
+	filepathAbsDocker = func(path string) (string, error) { return path, nil }
+	osStatDockerFn = os.Stat
+	isTerminalDockerFn = func(fd int) bool { return false }
+	timeNowDockerFn = func() time.Time { return time.Unix(1000, 0) }
+	in, _ := os.CreateTemp(t.TempDir(), "in")
+	out, _ := os.CreateTemp(t.TempDir(), "out")
+	errf, _ := os.CreateTemp(t.TempDir(), "err")
+	defer in.Close()
+	defer out.Close()
+	defer errf.Close()
+
+	rc, err := RunContainer(RunOpts{
+		Image:                   "img",
+		WorkdirHost:             "/tmp/wd",
+		WorkdirVolume:           "dockpipe-ws-authoritative",
+		SkipVolumeWorkspaceSync: true,
+		Stdin:                   in,
+		Stdout:                  out,
+		Stderr:                  errf,
+	}, []string{"echo", "ok"})
+	if err != nil || rc != 0 {
+		t.Fatalf("RunContainer failed rc=%d err=%v", rc, err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	got := strings.Join(flattenCalls(calls), "\n")
+	if strings.Count(got, "docker run") != 1 {
+		t.Fatalf("expected only the main docker run call, got:\n%s", got)
+	}
+	if !strings.Contains(got, "dockpipe-ws-authoritative:/work") {
+		t.Fatalf("expected authoritative volume mount at /work, got:\n%s", got)
+	}
+	if strings.Contains(got, "/dockpipe-sync-src") || strings.Contains(got, "/dockpipe-sync-dst") {
+		t.Fatalf("expected no workspace sync helper calls, got:\n%s", got)
 	}
 }
 

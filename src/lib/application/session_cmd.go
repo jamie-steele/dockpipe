@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"text/tabwriter"
 
@@ -26,8 +27,12 @@ func cmdSession(args []string) error {
 		return cmdSessionSwitch(args[1:])
 	case "publish":
 		return cmdSessionPublish(args[1:])
+	case "worker-acquire":
+		return cmdSessionWorkerAcquire(args[1:])
+	case "worker-release":
+		return cmdSessionWorkerRelease(args[1:])
 	default:
-		return fmt.Errorf("unknown session subcommand %q (try: list, inspect, switch, or publish)", args[0])
+		return fmt.Errorf("unknown session subcommand %q (try: list, inspect, switch, publish, worker-acquire, or worker-release)", args[0])
 	}
 }
 
@@ -209,6 +214,176 @@ func cmdSessionPublish(args []string) error {
 	return nil
 }
 
+func cmdSessionWorkerAcquire(args []string) error {
+	selector, rest, err := takeSessionSelector("worker-acquire", args)
+	if err != nil {
+		return err
+	}
+	if selector == "" {
+		return nil
+	}
+	workdir := ""
+	workerID := ""
+	role := ""
+	mode := "serialized"
+	jsonOut := false
+	branch := false
+	ttlSeconds := 0
+	for i := 0; i < len(rest); i++ {
+		switch rest[i] {
+		case "--workdir":
+			if i+1 >= len(rest) {
+				return fmt.Errorf("--workdir requires a path")
+			}
+			workdir = rest[i+1]
+			i++
+		case "--worker":
+			if i+1 >= len(rest) {
+				return fmt.Errorf("--worker requires an id")
+			}
+			workerID = rest[i+1]
+			i++
+		case "--role":
+			if i+1 >= len(rest) {
+				return fmt.Errorf("--role requires a value")
+			}
+			role = rest[i+1]
+			i++
+		case "--mode":
+			if i+1 >= len(rest) {
+				return fmt.Errorf("--mode requires serialized or split-volume")
+			}
+			mode = rest[i+1]
+			i++
+		case "--ttl":
+			if i+1 >= len(rest) {
+				return fmt.Errorf("--ttl requires seconds")
+			}
+			ttlSeconds, err = strconv.Atoi(rest[i+1])
+			if err != nil {
+				return fmt.Errorf("--ttl requires an integer number of seconds")
+			}
+			i++
+		case "--branch":
+			branch = true
+		case "--json":
+			jsonOut = true
+		default:
+			if strings.HasPrefix(rest[i], "-") {
+				return fmt.Errorf("unknown option %s", rest[i])
+			}
+			return fmt.Errorf("unexpected argument %q", rest[i])
+		}
+	}
+	if strings.TrimSpace(workerID) == "" {
+		return fmt.Errorf("--worker is required")
+	}
+	if workdir == "" {
+		var wdErr error
+		workdir, wdErr = os.Getwd()
+		if wdErr != nil {
+			return wdErr
+		}
+	}
+	session, err := infrastructure.LoadGitSession(workdir, selector)
+	if err != nil {
+		return err
+	}
+	lease, err := infrastructure.CreateWorkerLease(session, infrastructure.GitWorkerLeaseRequest{
+		WorkerID:   workerID,
+		Role:       role,
+		Mode:       mode,
+		Branch:     branch,
+		TTLSeconds: ttlSeconds,
+	})
+	if err != nil {
+		return err
+	}
+	if jsonOut {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(lease)
+	}
+	fmt.Fprintf(os.Stdout, "Lease:     %s\n", lease.LeaseID)
+	fmt.Fprintf(os.Stdout, "Worker:    %s\n", lease.WorkerID)
+	fmt.Fprintf(os.Stdout, "Mode:      %s\n", firstNonEmpty(lease.Mode, "-"))
+	fmt.Fprintf(os.Stdout, "Volume:    %s\n", firstNonEmpty(lease.Volume, "-"))
+	return nil
+}
+
+func cmdSessionWorkerRelease(args []string) error {
+	selector, rest, err := takeSessionSelector("worker-release", args)
+	if err != nil {
+		return err
+	}
+	if selector == "" {
+		return nil
+	}
+	workdir := ""
+	workerID := ""
+	status := "released"
+	jsonOut := false
+	applyChanges := false
+	for i := 0; i < len(rest); i++ {
+		switch rest[i] {
+		case "--workdir":
+			if i+1 >= len(rest) {
+				return fmt.Errorf("--workdir requires a path")
+			}
+			workdir = rest[i+1]
+			i++
+		case "--worker":
+			if i+1 >= len(rest) {
+				return fmt.Errorf("--worker requires an id")
+			}
+			workerID = rest[i+1]
+			i++
+		case "--status":
+			if i+1 >= len(rest) {
+				return fmt.Errorf("--status requires a value")
+			}
+			status = rest[i+1]
+			i++
+		case "--apply":
+			applyChanges = true
+		case "--json":
+			jsonOut = true
+		default:
+			if strings.HasPrefix(rest[i], "-") {
+				return fmt.Errorf("unknown option %s", rest[i])
+			}
+			return fmt.Errorf("unexpected argument %q", rest[i])
+		}
+	}
+	if strings.TrimSpace(workerID) == "" {
+		return fmt.Errorf("--worker is required")
+	}
+	if workdir == "" {
+		var wdErr error
+		workdir, wdErr = os.Getwd()
+		if wdErr != nil {
+			return wdErr
+		}
+	}
+	session, err := infrastructure.LoadGitSession(workdir, selector)
+	if err != nil {
+		return err
+	}
+	lease, err := infrastructure.ReleaseWorkerLeaseWithOptions(session, workerID, status, applyChanges)
+	if err != nil {
+		return err
+	}
+	if jsonOut {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(lease)
+	}
+	fmt.Fprintf(os.Stdout, "Lease:     %s\n", lease.LeaseID)
+	fmt.Fprintf(os.Stdout, "Worker:    %s\n", lease.WorkerID)
+	fmt.Fprintf(os.Stdout, "Status:    %s\n", lease.Status)
+	return nil
+}
+
 func parseSessionCommonFlags(args []string) (string, bool, error) {
 	workdir := ""
 	jsonOut := false
@@ -295,6 +470,8 @@ Usage:
   dockpipe session inspect <id|latest> [--workdir <path>] [--json]
   dockpipe session switch <id|latest> [--workdir <path>] [--json]
   dockpipe session publish <id|latest> [--workdir <path>] [--remote origin] [--json]
+  dockpipe session worker-acquire <id|latest> [--workdir <path>] --worker <worker-id> [--role edit] [--mode serialized|split-volume] [--ttl <seconds>] [--branch] [--json]
+  dockpipe session worker-release <id|latest> [--workdir <path>] --worker <worker-id> [--status released] [--apply] [--json]
 
 Notes:
   switch prints the managed worktree path and shell cd command; a child process cannot change the parent shell cwd.

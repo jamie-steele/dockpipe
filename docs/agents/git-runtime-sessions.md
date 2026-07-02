@@ -53,6 +53,9 @@ Use `docs/git-runtime-sessions.md` as the source of truth for the long-term arch
   merge into the user's current branch.
 - `workspace.storage: volume` should mount a runtime-owned volume at `/work`.
 - AI workers edit files in `/work` only. They do not clone, branch, checkpoint, or publish.
+- Codex/Claude worker containers should receive a runtime-staged skills directory that preserves
+  the user's provider skills and overlays curated DorkPipe skills for deterministic script/task
+  routing guidance.
 - Non-AI runtime helper tools may clone/fetch/checkout/checkpoint/publish against the volume
   workspace as part of DockPipe runtime behavior.
 - Keep session metadata and audit logs under `bin/.dockpipe/sessions/...`.

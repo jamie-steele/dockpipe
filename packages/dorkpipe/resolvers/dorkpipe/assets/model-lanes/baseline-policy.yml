@@ -27,12 +27,24 @@ selection:
   explicit_hint_bypasses_cloud_gate: true
   cloud_score_threshold: 14.0
   high_risk_cloud_score_threshold: 10.0
+  local_accept_score_threshold: 0.0
   unavailable_penalty: 25.0
   cloud_cost_penalty: 2.0
   local_first_bonus: 15.0
+  extraction_local_bonus: 8.0
+  authority_cloud_bonus: 8.0
   strong_validation_bonus: 8.0
   code_task_bonus: 4.0
   safety_review_bonus: 4.0
+  local_architecture_penalty: 18.0
+  local_validation_penalty: 20.0
+  local_routing_penalty: 18.0
+  local_edit_penalty: 16.0
+  low_tier_local_authority_penalty: 10.0
+  oversized_local_model_penalty: 14.0
+  tight_fit_local_model_penalty: 6.0
+  local_model_fit_bonus: 3.0
+  gpu_local_extraction_bonus: 2.0
   high_risk_keywords:
     - approval
     - auth
@@ -53,6 +65,34 @@ selection:
     - implementation
     - patch
     - refactor
+  extraction_keywords:
+    - extract
+    - extraction
+    - fact packet
+    - facts only
+    - inventory
+    - path groups
+    - repo map
+    - source listing
+  architecture_keywords:
+    - architecture
+    - contract
+    - acceptance criteria
+    - source-of-truth
+    - lane policy
+    - synthesis
+  validation_keywords:
+    - validate
+    - validation
+    - verifier
+    - review
+    - critique
+  routing_keywords:
+    - router
+    - routing
+    - index.yaml
+    - machine-readable
+    - yaml
   safety_keywords:
     - approval
     - risk

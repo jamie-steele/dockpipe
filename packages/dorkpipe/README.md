@@ -46,10 +46,14 @@ artifact graph without calling live model backends.
 
 When Codex or Claude lanes run in containers, DorkPipe seeds the matching host skill directory into
 the worker home before launching the CLI: **`~/.codex/skills`** for Codex and **`~/.claude/skills`**
-for Claude. The mount is read-only and separate from auth seeding. Set
+for Claude. DorkPipe now stages a run-local merged skills directory first: it copies the user's
+existing provider skills, then overlays the curated DorkPipe rendered skills for that provider, and
+mounts the merged result read-only into the worker. This keeps user skills available while making
+the DorkPipe routing/script skills deterministic for every run. Set
 **`DORKPIPE_ORCH_CONTAINER_SKILLS=never`** to disable skill propagation, or set
 **`DORKPIPE_ORCH_CODEX_SKILLS_DIR`**, **`DORKPIPE_ORCH_CLAUDE_SKILLS_DIR`**, or
-**`DORKPIPE_ORCH_SKILLS_DIR`** to override the host skill source.
+**`DORKPIPE_ORCH_SKILLS_DIR`** to override the base host skill source that gets merged before the
+curated overlay.
 
 ## Dev Control Plane
 
@@ -100,3 +104,23 @@ runs stack up and stack down internally with `finally:`. If the orchestration de
 different caller step, set `DORKPIPE_ORCH_SOURCE_STEP_ID` on the packaged workflow step.
 
 **Detail:** **`lib/README.md`** (Go module); this tree is YAML + assets.
+### Follow-up repair mode
+
+`orchestrate.stack` can reuse an existing orchestration workspace for a targeted repair pass instead
+of rerunning the full worker graph from scratch.
+
+Set:
+
+- `DORKPIPE_ORCH_FOLLOWUP_REQUEST` to describe the correction you want
+- `DORKPIPE_ORCH_FOLLOWUP_GOAL` to override the planner goal for the repair pass
+- `DORKPIPE_ORCH_FOLLOWUP_TASK_IDS` as a comma-separated list of orchestration task ids to rerun
+
+Behavior:
+
+- selected tasks rerun
+- downstream dependent tasks rerun automatically
+- untouched task results are reused from the existing artifact root
+- merge, verify, approval, and apply consume the mixed set of reused and fresh artifacts
+
+This is intended for repair or refinement passes on the same managed session/workspace, especially
+when the original run already produced mostly-correct artifacts.

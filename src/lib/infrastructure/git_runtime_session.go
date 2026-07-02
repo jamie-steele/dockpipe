@@ -92,6 +92,7 @@ type GitPublishResult struct {
 type GitWorkerLeaseRequest struct {
 	WorkerID   string
 	Role       string
+	Mode       string
 	Branch     bool
 	TTLSeconds int
 }
@@ -102,8 +103,11 @@ type GitWorkerLease struct {
 	SessionID  string `json:"session_id"`
 	WorkerID   string `json:"worker_id"`
 	Role       string `json:"role,omitempty"`
+	Mode       string `json:"mode,omitempty"`
 	Status     string `json:"status"`
 	Workspace  string `json:"workspace"`
+	Volume     string `json:"volume,omitempty"`
+	BaseVolume string `json:"base_volume,omitempty"`
 	Branch     string `json:"branch,omitempty"`
 	CreatedAt  string `json:"created_at"`
 	UpdatedAt  string `json:"updated_at"`
@@ -498,6 +502,18 @@ func CreateWorkerLease(session *GitSession, req GitWorkerLeaseRequest) (*GitWork
 		return nil, fmt.Errorf("worker id is empty")
 	}
 	workerID := sanitizeSessionSegment(req.WorkerID)
+	mode := strings.ToLower(strings.TrimSpace(req.Mode))
+	if mode == "" {
+		mode = "serialized"
+	}
+	switch mode {
+	case "serialized", "split-volume":
+	default:
+		return nil, fmt.Errorf("worker lease mode must be serialized or split-volume, got %q", req.Mode)
+	}
+	if err := ensureNoConflictingWorkerLease(session, workerID, mode); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 	lease := &GitWorkerLease{
 		Schema:    1,
@@ -505,10 +521,26 @@ func CreateWorkerLease(session *GitSession, req GitWorkerLeaseRequest) (*GitWork
 		SessionID: session.SessionID,
 		WorkerID:  workerID,
 		Role:      strings.TrimSpace(req.Role),
+		Mode:      mode,
 		Status:    "active",
 		Workspace: session.Storage.Workspace,
 		CreatedAt: now.Format(time.RFC3339),
 		UpdatedAt: now.Format(time.RFC3339),
+	}
+	if strings.TrimSpace(session.Storage.Volume) != "" {
+		lease.BaseVolume = session.Storage.Volume
+		switch mode {
+		case "serialized":
+			lease.Volume = session.Storage.Volume
+		case "split-volume":
+			lease.Volume = dockerWorkerLeaseVolumeName(session, workerID, lease.LeaseID)
+			if err := DockerVolumeCreate(lease.Volume); err != nil {
+				return nil, fmt.Errorf("create worker docker volume %q: %w", lease.Volume, err)
+			}
+			if err := DockerVolumeClone(session.Storage.Volume, lease.Volume); err != nil {
+				return nil, fmt.Errorf("clone worker docker volume %q from %q: %w", lease.Volume, session.Storage.Volume, err)
+			}
+		}
 	}
 	if req.TTLSeconds > 0 {
 		lease.ExpiresAt = now.Add(time.Duration(req.TTLSeconds) * time.Second).Format(time.RFC3339)
@@ -534,6 +566,10 @@ func CreateWorkerLease(session *GitSession, req GitWorkerLeaseRequest) (*GitWork
 }
 
 func ReleaseWorkerLease(session *GitSession, workerID, status string) (*GitWorkerLease, error) {
+	return ReleaseWorkerLeaseWithOptions(session, workerID, status, false)
+}
+
+func ReleaseWorkerLeaseWithOptions(session *GitSession, workerID, status string, applySplitVolumeChanges bool) (*GitWorkerLease, error) {
 	if session == nil {
 		return nil, fmt.Errorf("session is nil")
 	}
@@ -551,12 +587,22 @@ func ReleaseWorkerLease(session *GitSession, workerID, status string) (*GitWorke
 	if err := json.Unmarshal(b, &lease); err != nil {
 		return nil, err
 	}
+	if applySplitVolumeChanges && lease.Mode == "split-volume" && strings.TrimSpace(lease.Volume) != "" && strings.TrimSpace(lease.BaseVolume) != "" {
+		if err := DockerApplyGitVolumeDiff(lease.Volume, lease.BaseVolume); err != nil {
+			return nil, err
+		}
+	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	lease.Status = firstNonEmptyString(status, "released")
 	lease.UpdatedAt = now
 	lease.ReleasedAt = now
 	if err := writeGitWorkerLease(session, &lease); err != nil {
 		return nil, err
+	}
+	if lease.Mode == "split-volume" && strings.TrimSpace(lease.Volume) != "" && !sameVolumeName(lease.Volume, lease.BaseVolume) {
+		if err := DockerVolumeRemove(lease.Volume); err != nil {
+			return nil, err
+		}
 	}
 	_ = appendGitSessionEvent(session, map[string]string{
 		"type":       "worker.lease." + lease.Status,
@@ -758,6 +804,49 @@ func DockerVolumeCreate(name string) error {
 	return nil
 }
 
+func DockerVolumeRemove(name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("docker volume name is empty")
+	}
+	dockerCmd := dockerCommandName()
+	cmd := execCommandFn(dockerCmd, "volume", "rm", "-f", name)
+	cmd.Env = dockerCommandEnv(os.Environ(), dockerCmd)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("docker volume rm %s: %w\n%s", name, err, out)
+	}
+	return nil
+}
+
+func DockerVolumeClone(srcVolume, dstVolume string) error {
+	srcVolume = strings.TrimSpace(srcVolume)
+	dstVolume = strings.TrimSpace(dstVolume)
+	if srcVolume == "" || dstVolume == "" {
+		return fmt.Errorf("docker volume clone requires source and destination volumes")
+	}
+	image := dockerWorkspaceHelperImage("")
+	return dockerSyncWorkspace(image, srcVolume+":/dockpipe-sync-src:ro", dstVolume+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar -cf - . | tar xf - -C /dockpipe-sync-dst")
+}
+
+func DockerApplyGitVolumeDiff(srcVolume, dstVolume string) error {
+	srcVolume = strings.TrimSpace(srcVolume)
+	dstVolume = strings.TrimSpace(dstVolume)
+	if srcVolume == "" || dstVolume == "" {
+		return fmt.Errorf("docker git volume apply requires source and destination volumes")
+	}
+	image := dockerWorkspaceHelperImage("")
+	script := strings.Join([]string{
+		`set -e`,
+		`git -C /dockpipe-sync-src add -A`,
+		`if git -C /dockpipe-sync-src diff --cached --quiet --no-ext-diff; then`,
+		`  exit 0`,
+		`fi`,
+		`git -C /dockpipe-sync-src diff --cached --binary | git -C /dockpipe-sync-dst apply --whitespace=nowarn -`,
+	}, "\n")
+	return dockerSyncWorkspace(image, srcVolume+":/dockpipe-sync-src", dstVolume+":/dockpipe-sync-dst", script)
+}
+
 func ensureBindSessionBranch(workdir, branch, baseRef string) error {
 	current, _ := GitBranchShowCurrent(workdir)
 	if current == branch {
@@ -927,6 +1016,72 @@ func gitRun(workdir string, args ...string) error {
 	return err
 }
 
+func listWorkerLeases(session *GitSession) ([]GitWorkerLease, error) {
+	if session == nil {
+		return nil, fmt.Errorf("session is nil")
+	}
+	dir, err := gitSessionMetadataDir(session, session.Storage.Workspace)
+	if err != nil {
+		return nil, err
+	}
+	workerDir := filepath.Join(dir, "workers")
+	entries, err := os.ReadDir(workerDir)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	leases := make([]GitWorkerLease, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(strings.ToLower(entry.Name()), ".json") {
+			continue
+		}
+		raw, err := os.ReadFile(filepath.Join(workerDir, entry.Name()))
+		if err != nil {
+			return nil, err
+		}
+		var lease GitWorkerLease
+		if err := json.Unmarshal(raw, &lease); err != nil {
+			return nil, err
+		}
+		leases = append(leases, lease)
+	}
+	return leases, nil
+}
+
+func ensureNoConflictingWorkerLease(session *GitSession, workerID, requestedMode string) error {
+	leases, err := listWorkerLeases(session)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for _, lease := range leases {
+		if lease.WorkerID == workerID {
+			continue
+		}
+		if strings.TrimSpace(lease.Status) != "active" {
+			continue
+		}
+		if lease.ExpiresAt != "" {
+			if expiresAt, err := time.Parse(time.RFC3339, lease.ExpiresAt); err == nil && !expiresAt.After(now) {
+				continue
+			}
+		}
+		activeMode := strings.TrimSpace(lease.Mode)
+		if activeMode == "" {
+			activeMode = "serialized"
+		}
+		if requestedMode == "serialized" {
+			return fmt.Errorf("session %q already has an active worker lease for %q (%s); wait for that writer to finish before requesting serialized mode", session.SessionID, lease.WorkerID, activeMode)
+		}
+		if activeMode == "serialized" {
+			return fmt.Errorf("session %q already has an active serialized worker lease for %q; wait for that writer to finish or retry split-volume later", session.SessionID, lease.WorkerID)
+		}
+	}
+	return nil
+}
+
 func gitOutput(workdir string, args ...string) (string, error) {
 	d, err := gitDir(workdir)
 	if err != nil {
@@ -969,6 +1124,18 @@ func sanitizeSessionSegment(s string) string {
 		return out
 	}
 	return "workspace"
+}
+
+func dockerWorkerLeaseVolumeName(session *GitSession, workerID, leaseID string) string {
+	base := strings.TrimSpace(session.Storage.Volume)
+	if base == "" {
+		base = "dockpipe-ws-" + sanitizeSessionSegment(session.WorkspaceID) + "-" + sanitizeSessionID(session.SessionID)
+	}
+	return base + "-worker-" + sanitizeSessionSegment(workerID) + "-" + sanitizeSessionSegment(leaseID)
+}
+
+func sameVolumeName(a, b string) bool {
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
 }
 
 func firstNonEmptyString(vals ...string) string {

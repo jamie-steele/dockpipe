@@ -10,6 +10,7 @@ export DOCKPIPE_WORKFLOW_NAME="docs.orchestrate"
 export DOCKPIPE_STEP_ID="plan"
 export DORKPIPE_ORCH_WORKFLOW="test.docs.orchestrate"
 export DORKPIPE_ORCH_ROOT="${TMPDIR:-/tmp}/dorkpipe-orch-lanes-${RANDOM}-${RANDOM}"
+export DORKPIPE_ORCH_GLOBAL_TRAINING_METRICS="${TMPDIR:-/tmp}/dorkpipe-orch-global-metrics-${RANDOM}-${RANDOM}.jsonl"
 export DORKPIPE_ORCH_LIVE_MODELS="false"
 export DORKPIPE_ORCH_TRAINING_MODE="observe"
 export DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS="1000"
@@ -70,6 +71,64 @@ assert "planner_brain" in graph_tasks["package_contracts"]["depends_on"], graph_
 PY
 
 echo "test_orchestration_lanes OK"
+
+python3 - "$DORKPIPE_ORCH_ROOT" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+snapshot = {
+    "package_contracts": (root / "tasks" / "package_contracts" / "result.json").stat().st_mtime_ns,
+    "repo_shape": (root / "tasks" / "repo_shape" / "result.json").stat().st_mtime_ns,
+    "safety_model": (root / "tasks" / "safety_model" / "result.json").stat().st_mtime_ns,
+}
+(root / "before-followup.json").write_text(json.dumps(snapshot))
+PY
+
+export DORKPIPE_ORCH_FOLLOWUP_REQUEST="Tighten the package contract guidance without rewriting unrelated sections."
+export DORKPIPE_ORCH_FOLLOWUP_GOAL="Repair only the package contract output and preserve untouched worker results."
+export DORKPIPE_ORCH_FOLLOWUP_TASK_IDS="package_contracts"
+
+bash "$DOCKPIPE_SCRIPT_DIR/orchestrate-plan.sh" >/dev/null
+bash "$DOCKPIPE_SCRIPT_DIR/orchestrate-run-tasks.sh" >/dev/null
+
+python3 - "$DORKPIPE_ORCH_ROOT" <<'PY'
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+before = json.loads((root / "before-followup.json").read_text())
+request = json.loads((root / "request.json").read_text())
+follow_up = request.get("follow_up") or {}
+assert follow_up.get("enabled") is True, request
+assert follow_up.get("request"), request
+assert follow_up.get("goal"), request
+assert follow_up.get("selected_tasks") == ["package_contracts"], request
+assert follow_up.get("rerun_tasks") == ["package_contracts"], request
+graph = json.loads((root / "task-graph.json").read_text())
+graph_tasks = {task["id"]: task for task in graph["tasks"]}
+assert graph_tasks["package_contracts"]["reuse_existing"] is False, graph_tasks["package_contracts"]
+assert graph_tasks["repo_shape"]["reuse_existing"] is True, graph_tasks["repo_shape"]
+assert graph_tasks["safety_model"]["reuse_existing"] is True, graph_tasks["safety_model"]
+after_package = (root / "tasks" / "package_contracts" / "result.json").stat().st_mtime_ns
+after_repo = (root / "tasks" / "repo_shape" / "result.json").stat().st_mtime_ns
+after_safety = (root / "tasks" / "safety_model" / "result.json").stat().st_mtime_ns
+assert after_package > before["package_contracts"], (before, after_package)
+assert after_repo == before["repo_shape"], (before, after_repo)
+assert after_safety == before["safety_model"], (before, after_safety)
+prompt = (root / "tasks" / "package_contracts" / "prompt.md").read_text()
+assert "Follow-up repair mode:" in prompt, prompt
+assert "Follow-up request:" in prompt, prompt
+assert "Follow-up goal:" in prompt, prompt
+PY
+
+unset DORKPIPE_ORCH_FOLLOWUP_REQUEST
+unset DORKPIPE_ORCH_FOLLOWUP_GOAL
+unset DORKPIPE_ORCH_FOLLOWUP_TASK_IDS
+
+echo "test_orchestration_followup_reuse OK"
 
 export DORKPIPE_ORCH_WORKFLOW="test.docs.orchestrate.force-codex"
 export DORKPIPE_ORCH_ROOT="${TMPDIR:-/tmp}/dorkpipe-orch-force-codex-${RANDOM}-${RANDOM}"

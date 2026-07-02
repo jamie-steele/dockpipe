@@ -5,6 +5,10 @@ public Interface IOrchestrateStackConfig
 {
     /// <summary>Local Ollama model used for bounded extractor lanes.</summary>
     public string OllamaModel;
+    /// <summary>Codex model or CLI selector used for cloud-backed Codex lanes.</summary>
+    public string CodexModel;
+    /// <summary>Claude model or CLI selector used for cloud-backed Claude lanes.</summary>
+    public string ClaudeModel;
     /// <summary>Brain provider used by orchestration planner and worker selection.</summary>
     public string BrainProvider;
     /// <summary>Whether cloud lanes should run inside containerized workers.</summary>
@@ -23,6 +27,8 @@ public Interface IOrchestrateStackConfig
     public string FallbackOutput;
     /// <summary>Default worker mode for orchestration tasks.</summary>
     public string WorkMode;
+    /// <summary>Edit-mode isolation strategy: serialized or split-volume.</summary>
+    public string EditIsolation;
     /// <summary>Working directory used by generic orchestration workers.</summary>
     public string WorkerCwd;
     /// <summary>Working directory used by Claude workers.</summary>
@@ -39,4 +45,18 @@ public Interface IOrchestrateStackConfig
     public string DatabaseUrl;
     /// <summary>Local Ollama host endpoint used by extractor lanes.</summary>
     public string OllamaHost;
+    /// <summary>Optional host memory hint in GB for local-lane scoring.</summary>
+    public string HostMemoryGb;
+    /// <summary>Optional host CPU core hint for local-lane scoring.</summary>
+    public string HostCpuCores;
+    /// <summary>Optional local acceleration hint such as cpu or gpu.</summary>
+    public string LocalAcceleration;
+    /// <summary>Optional local hardware tier hint such as low, medium, or high.</summary>
+    public string LocalHardwareTier;
+    /// <summary>Optional follow-up request override used for targeted repair or refinement passes.</summary>
+    public string FollowUpRequest;
+    /// <summary>Optional follow-up goal override used for targeted repair or refinement passes.</summary>
+    public string FollowUpGoal;
+    /// <summary>Optional comma-separated orchestration task ids to rerun, plus their downstream dependents.</summary>
+    public string FollowUpTaskIds;
 }

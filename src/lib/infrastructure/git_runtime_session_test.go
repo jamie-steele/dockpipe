@@ -200,6 +200,91 @@ func TestCreateSessionBranchManagedVolumeAllocatesDockerVolumeMetadata(t *testin
 	gitRemoveWorktree(t, repo, session.Storage.Workspace)
 }
 
+func TestCreateWorkerLeaseSerializedRejectsConcurrentWriter(t *testing.T) {
+	repo := initGitSessionTestRepo(t)
+	oldCreate := execCommandFn
+	t.Cleanup(func() {
+		execCommandFn = oldCreate
+	})
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		if strings.Contains(strings.ToLower(filepath.Base(name)), "docker") {
+			return helperExitCommand(0)
+		}
+		return exec.Command(name, args...)
+	}
+	session, err := CreateSessionBranch(GitSessionRequest{
+		WorkspaceID: "demo",
+		SourceDir:   repo,
+		Mode:        "managed",
+		Storage:     "volume",
+		SessionID:   "lease-serialized",
+	})
+	if err != nil {
+		t.Fatalf("CreateSessionBranch: %v", err)
+	}
+	first, err := CreateWorkerLease(session, GitWorkerLeaseRequest{WorkerID: "writer-a", Role: "edit", Mode: "serialized"})
+	if err != nil {
+		t.Fatalf("CreateWorkerLease first: %v", err)
+	}
+	if first.Volume != session.Storage.Volume {
+		t.Fatalf("expected serialized lease to use session volume, got %+v", first)
+	}
+	if _, err := CreateWorkerLease(session, GitWorkerLeaseRequest{WorkerID: "writer-b", Role: "edit", Mode: "serialized"}); err == nil {
+		t.Fatal("expected concurrent serialized worker lease to fail")
+	}
+	gitRemoveWorktree(t, repo, session.Storage.Workspace)
+}
+
+func TestCreateWorkerLeaseSplitVolumeClonesAndReleaseApplies(t *testing.T) {
+	repo := initGitSessionTestRepo(t)
+	oldCreate := execCommandFn
+	t.Cleanup(func() {
+		execCommandFn = oldCreate
+	})
+	var calls []string
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		if strings.Contains(strings.ToLower(filepath.Base(name)), "docker") {
+			calls = append(calls, strings.Join(append([]string{filepath.Base(name)}, args...), " "))
+			return helperExitCommand(0)
+		}
+		return exec.Command(name, args...)
+	}
+	session, err := CreateSessionBranch(GitSessionRequest{
+		WorkspaceID: "demo",
+		SourceDir:   repo,
+		Mode:        "managed",
+		Storage:     "volume",
+		SessionID:   "lease-split",
+	})
+	if err != nil {
+		t.Fatalf("CreateSessionBranch: %v", err)
+	}
+	lease, err := CreateWorkerLease(session, GitWorkerLeaseRequest{WorkerID: "writer-a", Role: "edit", Mode: "split-volume"})
+	if err != nil {
+		t.Fatalf("CreateWorkerLease split-volume: %v", err)
+	}
+	if lease.Volume == "" || lease.Volume == session.Storage.Volume {
+		t.Fatalf("expected split-volume worker lease to allocate a clone volume, got %+v", lease)
+	}
+	if _, err := ReleaseWorkerLeaseWithOptions(session, "writer-a", "released", true); err != nil {
+		t.Fatalf("ReleaseWorkerLeaseWithOptions: %v", err)
+	}
+	got := strings.Join(calls, "\n")
+	if !strings.Contains(got, "volume create "+session.Storage.Volume) {
+		t.Fatalf("expected session volume create call, got:\n%s", got)
+	}
+	if !strings.Contains(got, "volume create "+lease.Volume) {
+		t.Fatalf("expected worker clone volume create call, got:\n%s", got)
+	}
+	if strings.Count(got, " run --rm --entrypoint sh ") < 2 {
+		t.Fatalf("expected docker helper runs for clone and apply, got:\n%s", got)
+	}
+	if !strings.Contains(got, "volume rm -f "+lease.Volume) {
+		t.Fatalf("expected worker clone volume removal call, got:\n%s", got)
+	}
+	gitRemoveWorktree(t, repo, session.Storage.Workspace)
+}
+
 func TestCreateSessionBranchErrorsOnExistingParentBranchNamespace(t *testing.T) {
 	repo := initGitSessionTestRepo(t)
 	out, err := exec.Command("git", "-C", repo, "checkout", "-b", "js/features/spnext/reporting").CombinedOutput()

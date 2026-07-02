@@ -197,6 +197,35 @@ func TestBuildStepContainer_MapsScopePathsForContainer(t *testing.T) {
 	}
 }
 
+func TestBuildStepContainer_SkipsWorkspaceSyncForAuthoritativeSessionVolume(t *testing.T) {
+	repoRoot := testRepoRoot(t)
+	o := &runStepsOpts{
+		projectRoot: repoRoot,
+		repoRoot:    repoRoot,
+		wfRoot:      filepath.Join(repoRoot, "workflows", "ci"),
+		wf:          &domain.Workflow{Name: "ci", Isolate: "base-dev"},
+		opts:        &CliOpts{Workdir: repoRoot},
+	}
+	step := domain.Step{Cmd: "echo hi"}
+	envMap := map[string]string{
+		"DOCKPIPE_SOURCE_ROOT":                  repoRoot,
+		"DOCKPIPE_WORKDIR":                      repoRoot,
+		"DOCKPIPE_SESSION_VOLUME":               "dockpipe-ws-demo",
+		"DOCKPIPE_SESSION_VOLUME_AUTHORITATIVE": "1",
+	}
+
+	_, runOpts, _, _, _, err := buildStepContainer(o, 0, 1, step, envMap, map[string]string{}, nil)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if runOpts.WorkdirVolume != "dockpipe-ws-demo" {
+		t.Fatalf("expected workdir volume, got %+v", runOpts)
+	}
+	if !runOpts.SkipVolumeWorkspaceSync {
+		t.Fatalf("expected authoritative session volume to skip workspace sync, got %+v", runOpts)
+	}
+}
+
 // TestBuildStepContainer_StepResolverTemplate uses DOCKPIPE_RESOLVER_TEMPLATE from a per-step resolver assignment.
 func TestBuildStepContainer_StepResolverTemplate(t *testing.T) {
 	repoRoot := testRepoRoot(t)
