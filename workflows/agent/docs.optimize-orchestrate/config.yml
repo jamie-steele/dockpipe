@@ -124,24 +124,19 @@ steps:
               - `packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh`
         tasks:
           - id: latest_run_audit
-            worker: ollama
-            worker_type: analysis
+            agent: local_optimizer_auditor
             goal: Audit the latest docs.orchestrate artifacts for Ollama worker shape failures.
             expected_output: Three terse bullets naming concrete failures and affected task ids.
-            inputs:
-              - shared/optimizer-request.md
-              - scope:workflow:docs.orchestrate:optimize/assessment.md
-              - scope:workflow:docs.orchestrate:orchestrate/verify/result.json
-              - scope:workflow:docs.orchestrate:orchestrate/tasks/planner_brain/response.md
-              - scope:workflow:docs.orchestrate:orchestrate/tasks/repo_shape/response.md
-              - scope:workflow:docs.orchestrate:orchestrate/tasks/package_contracts/response.md
-              - scope:workflow:docs.orchestrate:orchestrate/tasks/safety_model/response.md
-            constraints:
-              - local Ollama only
-              - ground findings in target artifacts
-              - do not propose edits outside the allowlist
-            model:
-              model: llama3.2
+            brief: Audit latest target artifacts for concrete worker-shape failures only.
+            context:
+              required_artifacts:
+                - shared/optimizer-request.md
+                - scope:workflow:docs.orchestrate:optimize/assessment.md
+                - scope:workflow:docs.orchestrate:orchestrate/verify/result.json
+                - scope:workflow:docs.orchestrate:orchestrate/tasks/planner_brain/response.md
+                - scope:workflow:docs.orchestrate:orchestrate/tasks/repo_shape/response.md
+                - scope:workflow:docs.orchestrate:orchestrate/tasks/package_contracts/response.md
+                - scope:workflow:docs.orchestrate:orchestrate/tasks/safety_model/response.md
             prompt: |
               You are the local DorkPipe optimizer audit worker.
 
@@ -150,49 +145,34 @@ steps:
               Focus on preambles, Note/Please note footers, false uncertainty, and verifier misses.
               Do not recommend cloud escalation.
           - id: codex_patch_decision
-            worker: codex
-            worker_policy:
-              mode: require
-            worker_type: patch_decision
+            agent: codex_patch_decider
             depends_on:
               - latest_run_audit
             goal: Decide whether a scoped code change is warranted and, if so, author a unified diff proposal.
             expected_output: A short decision note followed by one fenced diff block containing a valid unified diff, or a defer decision with no diff.
-            model_policy:
-              attempt:
-                preference: strong
-              validate:
-                preference: strongest_available
-            inputs:
-              - AGENTS.md
-              - docs/agents/index.yaml
-              - docs/agents/yaml-workflows.md
-              - docs/agents/package-authoring.md
-              - docs/agents/model-escalation.md
-              - docs/agents/docs-generation.md
-              - docs/agents/safety-guardrails.md
-              - shared/optimizer-request.md
-              - scope:workflow:docs.orchestrate:optimize/assessment.md
-              - scope:workflow:docs.orchestrate:optimize/history/previous-run-summary.md
-              - scope:workflow:docs.orchestrate:optimize/history/previous-recommendation.md
-              - scope:workflow:docs.orchestrate:optimize/history/previous-proposed.patch
-              - scope:workflow:docs.orchestrate:optimize/history/previous-propose-result.json
-              - scope:workflow:docs.orchestrate:optimize/history/previous-codex-response.md
-              - scope:artifacts:orchestrate/tasks/latest_run_audit/response.md
-              - workflows/agent/docs.optimize-orchestrate/config.yml
-              - workflows/agent/docs.optimize-orchestrate/README.md
-              - workflows/agent/docs.orchestrate/config.yml
-              - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-optimize.sh
-              - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh
-            constraints:
-              - Codex must make the patch decision
-              - use AGENTS.md and routed docs as operating instructions
-              - treat Ollama output as scout context, not authority
-              - use previous optimizer handoff to avoid repeating a rejected or already-applied idea
-              - keep edits small and repo-workflow-scoped
-              - write a proposed patch only
-              - do not apply the patch
-              - never commit
+            brief: Decide whether the artifacts justify a scoped patch proposal. Do not apply it.
+            context:
+              required_artifacts:
+                - AGENTS.md
+                - docs/agents/index.yaml
+                - docs/agents/yaml-workflows.md
+                - docs/agents/package-authoring.md
+                - docs/agents/model-escalation.md
+                - docs/agents/docs-generation.md
+                - docs/agents/safety-guardrails.md
+                - shared/optimizer-request.md
+                - scope:workflow:docs.orchestrate:optimize/assessment.md
+                - scope:workflow:docs.orchestrate:optimize/history/previous-run-summary.md
+                - scope:workflow:docs.orchestrate:optimize/history/previous-recommendation.md
+                - scope:workflow:docs.orchestrate:optimize/history/previous-proposed.patch
+                - scope:workflow:docs.orchestrate:optimize/history/previous-propose-result.json
+                - scope:workflow:docs.orchestrate:optimize/history/previous-codex-response.md
+                - scope:artifacts:orchestrate/tasks/latest_run_audit/response.md
+                - workflows/agent/docs.optimize-orchestrate/config.yml
+                - workflows/agent/docs.optimize-orchestrate/README.md
+                - workflows/agent/docs.orchestrate/config.yml
+                - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-optimize.sh
+                - packages/dorkpipe/resolvers/dorkpipe/assets/scripts/orchestrate-verify-results.sh
             prompt: |
               You are Codex inside a DorkPipe optimizer run: a senior coding agent operating from
               the same repo instructions the outer Codex uses. Treat AGENTS.md and the included

@@ -323,6 +323,80 @@ func TestEmitTaskEnvIncludesWorkMode(t *testing.T) {
 	}
 }
 
+func TestWriteTaskResultIncludesTraceOnlyWorkerSession(t *testing.T) {
+	outPath := filepath.Join(t.TempDir(), "result.json")
+	err := writeTaskResult(outPath, map[string]string{
+		"task_id":                 "author_index",
+		"status":                  "ok",
+		"resolver_hint":           "codex",
+		"provider":                "codex",
+		"selected_model":          "cli",
+		"lane_id":                 "codex.cloud.default",
+		"provider_session_id":     "abc123",
+		"used_live_model":         "true",
+		"budget_halt":             "false",
+		"estimated_input_tokens":  "10",
+		"estimated_output_tokens": "5",
+		"estimated_total_tokens":  "15",
+		"confidence":              "0.72",
+		"issues_json":             "[]",
+		"next_actions_json":       "[]",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := readJSONMap(outPath)
+	session := mapValue(result["worker_session"])
+	if got := stringValue(session["session_id"]); got != "abc123" {
+		t.Fatalf("session_id = %q want abc123", got)
+	}
+	if got := stringValue(session["mode"]); got != "trace_only" {
+		t.Fatalf("session mode = %q want trace_only", got)
+	}
+}
+
+func TestMaterializeTaskOutputsExtractsDeclaredBlocks(t *testing.T) {
+	dir := t.TempDir()
+	responsePath := filepath.Join(dir, "response.md")
+	resultPath := filepath.Join(dir, "materialized-result.json")
+	response := strings.Join([]string{
+		`<!-- dorkpipe:file path="index.md" -->`,
+		"# Index",
+		"",
+		"Start here.",
+		`<!-- /dorkpipe:file -->`,
+		"",
+		`<!-- dorkpipe:file path="index.yaml" -->`,
+		"schema: test",
+		`<!-- /dorkpipe:file -->`,
+	}, "\n")
+	if err := os.WriteFile(responsePath, []byte(response), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outputs := `[{"path":"index.md"},{"path":"index.yaml"}]`
+	if err := materializeTaskOutputs(responsePath, dir, outputs, resultPath); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.TrimSpace(string(mustReadFile(t, filepath.Join(dir, "materialized", "index.md")))); got != "# Index\n\nStart here." {
+		t.Fatalf("index.md = %q", got)
+	}
+	if got := stringValue(readJSONMap(resultPath)["status"]); got != "materialized" {
+		t.Fatalf("status = %q want materialized", got)
+	}
+}
+
+func TestMaterializeTaskOutputsRejectsEscapingPath(t *testing.T) {
+	dir := t.TempDir()
+	responsePath := filepath.Join(dir, "response.md")
+	if err := os.WriteFile(responsePath, []byte(`<!-- dorkpipe:file path="../bad.md" -->bad<!-- /dorkpipe:file -->`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := materializeTaskOutputs(responsePath, dir, `[{"path":"../bad.md"}]`, filepath.Join(dir, "result.json"))
+	if err == nil {
+		t.Fatal("expected escaping materialized path to fail")
+	}
+}
+
 func TestInferTaskOutputPathPrefersExplicitThenExpectedOutput(t *testing.T) {
 	if got := inferTaskOutputPath(map[string]any{
 		"output_path":     "/work/docs/explicit.md",
@@ -511,6 +585,77 @@ func TestApplyResultsPreflightsAllSourcesBeforeWriting(t *testing.T) {
 	}
 }
 
+func TestApplyResultsSkipsWhenVerifyStatusIsReview(t *testing.T) {
+	root := t.TempDir()
+	artifactRoot := filepath.Join(root, "artifacts")
+	if err := os.MkdirAll(filepath.Join(artifactRoot, "merge"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactRoot, "merge", "first.md"), []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(artifactRoot, "plan.json")
+	approvalPath := filepath.Join(artifactRoot, "approval.md")
+	verifyPath := filepath.Join(artifactRoot, "verify.json")
+	resultPath := filepath.Join(artifactRoot, "apply.json")
+	if err := os.WriteFile(planPath, []byte(`{"apply":{"require_approval":true,"outputs":[{"source":"merge/first.md","path":"out/first.md"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(approvalPath, []byte("- Approved: yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(verifyPath, []byte(`{"status":"review"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyResultsWithVerify(root, artifactRoot, planPath, approvalPath, resultPath, verifyPath, false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "out", "first.md")); !os.IsNotExist(err) {
+		t.Fatalf("output should not be written when verify status is review, err=%v", err)
+	}
+	result := readJSONMap(resultPath)
+	if got := stringValue(result["status"]); got != "skipped" {
+		t.Fatalf("status = %q want skipped", got)
+	}
+	if got := stringValue(result["verify_status"]); got != "review" {
+		t.Fatalf("verify_status = %q want review", got)
+	}
+}
+
+func TestApplyResultsAllowsReviewWithExplicitOverride(t *testing.T) {
+	root := t.TempDir()
+	artifactRoot := filepath.Join(root, "artifacts")
+	if err := os.MkdirAll(filepath.Join(artifactRoot, "merge"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactRoot, "merge", "first.md"), []byte("first"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(artifactRoot, "plan.json")
+	approvalPath := filepath.Join(artifactRoot, "approval.md")
+	verifyPath := filepath.Join(artifactRoot, "verify.json")
+	resultPath := filepath.Join(artifactRoot, "apply.json")
+	if err := os.WriteFile(planPath, []byte(`{"apply":{"require_approval":true,"outputs":[{"source":"merge/first.md","path":"out/first.md"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(approvalPath, []byte("- Approved: yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(verifyPath, []byte(`{"status":"review"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyResultsWithVerify(root, artifactRoot, planPath, approvalPath, resultPath, verifyPath, true); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "out", "first.md")); err != nil || string(got) != "first" {
+		t.Fatalf("output = %q err=%v", string(got), err)
+	}
+	result := readJSONMap(resultPath)
+	if got := stringValue(result["status"]); got != "applied" {
+		t.Fatalf("status = %q want applied", got)
+	}
+}
+
 func TestEmitVerifyApplyCoherenceFlagsBrokenMarkdownAndYamlTargets(t *testing.T) {
 	root := t.TempDir()
 	artifactRoot := filepath.Join(root, "artifacts")
@@ -600,6 +745,133 @@ func TestBuildMergeResultUsesTaskResultObjects(t *testing.T) {
 	planning := listValue(result["planning_tasks"])
 	if len(planning) != 1 {
 		t.Fatalf("planning length = %d want 1", len(planning))
+	}
+}
+
+func TestBuildVerifyResultAddsValueBarAndRerunTargets(t *testing.T) {
+	dir := t.TempDir()
+	planPath := filepath.Join(dir, "plan.json")
+	graphPath := filepath.Join(dir, "graph.json")
+	mergePath := filepath.Join(dir, "merge.json")
+	usagePath := filepath.Join(dir, "cloud-usage.json")
+	haltPath := filepath.Join(dir, "halt.json")
+	outPath := filepath.Join(dir, "verify.json")
+	if err := writeJSONFile(planPath, map[string]any{
+		"apply": map[string]any{
+			"require_approval": true,
+			"outputs": []map[string]any{
+				{"source": "tasks/author/response.md", "path": "/work/docs/brain.md"},
+			},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(graphPath, map[string]any{
+		"tasks": []map[string]any{
+			{"id": "extract", "worker_type": "extraction", "provider": "ollama"},
+			{"id": "architect", "worker_type": "architecture", "provider": "claude", "depends_on": []string{"extract"}},
+			{"id": "author", "worker_type": "authoring", "provider": "codex", "depends_on": []string{"architect"}, "output_path": "/work/docs/brain.md"},
+			{"id": "validator", "worker_type": "validation", "provider": "claude", "depends_on": []string{"author"}},
+			{"id": "merge_final", "worker_type": "merge", "depends_on": []string{"validator"}},
+			{"id": "verify_final", "worker_type": "verify", "depends_on": []string{"merge_final"}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(mergePath, map[string]any{
+		"average_confidence": 0.71,
+		"tasks": []map[string]any{
+			{"task_id": "extract", "status": "ok", "provider_actual": "ollama", "used_live_model": true, "confidence": 0.7},
+			{"task_id": "architect", "status": "ok", "provider_actual": "claude", "used_live_model": true, "confidence": 0.8},
+			{"task_id": "author", "status": "ok", "provider_actual": "codex", "used_live_model": true, "confidence": 0.75},
+			{"task_id": "validator", "status": "ok", "provider_actual": "claude", "used_live_model": true, "confidence": 0.7},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(usagePath, map[string]any{"total_estimated_tokens": 4200}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := buildVerifyResult(outPath, planPath, graphPath, mergePath, usagePath, haltPath, "pass", "0.71", `["author: markdown link target is missing: missing.md"]`, "review links", map[string]string{}); err != nil {
+		t.Fatal(err)
+	}
+	result := readJSONMap(outPath)
+	if got := stringValue(result["status"]); got != "review" {
+		t.Fatalf("status = %q want review", got)
+	}
+	if got := stringValue(result["failure_class"]); got != "broken_references" {
+		t.Fatalf("failure_class = %q want broken_references", got)
+	}
+	rerun := stringList(result["recommended_rerun_tasks"])
+	if len(rerun) != 1 || rerun[0] != "author" {
+		t.Fatalf("recommended_rerun_tasks = %#v want [author]", rerun)
+	}
+	valueBar := mapValue(result["value_bar"])
+	if got := stringValue(valueBar["verdict"]); got != "strong_orchestration_value" {
+		t.Fatalf("value_bar verdict = %q", got)
+	}
+	baseline := mapValue(result["direct_worker_baseline"])
+	if got := stringValue(baseline["verdict"]); got != "orchestration_adds_value" {
+		t.Fatalf("baseline verdict = %q", got)
+	}
+}
+
+func TestBuildVerifyResultFlagsLowValueSerialGraph(t *testing.T) {
+	dir := t.TempDir()
+	planPath := filepath.Join(dir, "plan.json")
+	graphPath := filepath.Join(dir, "graph.json")
+	mergePath := filepath.Join(dir, "merge.json")
+	usagePath := filepath.Join(dir, "cloud-usage.json")
+	haltPath := filepath.Join(dir, "halt.json")
+	outPath := filepath.Join(dir, "verify.json")
+	if err := writeJSONFile(planPath, map[string]any{"apply": map[string]any{"require_approval": false}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(graphPath, map[string]any{
+		"tasks": []map[string]any{
+			{"id": "a", "worker_type": "analysis", "provider": "codex"},
+			{"id": "b", "worker_type": "analysis", "provider": "codex", "depends_on": []string{"a"}},
+			{"id": "c", "worker_type": "analysis", "provider": "codex", "depends_on": []string{"b"}},
+			{"id": "d", "worker_type": "analysis", "provider": "codex", "depends_on": []string{"c"}},
+			{"id": "merge_final", "worker_type": "merge", "depends_on": []string{"d"}},
+			{"id": "verify_final", "worker_type": "verify", "depends_on": []string{"merge_final"}},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(mergePath, map[string]any{
+		"average_confidence": 0.82,
+		"tasks": []map[string]any{
+			{"task_id": "a", "status": "ok", "provider_actual": "codex", "used_live_model": true, "confidence": 0.8},
+			{"task_id": "b", "status": "ok", "provider_actual": "codex", "used_live_model": true, "confidence": 0.8},
+			{"task_id": "c", "status": "ok", "provider_actual": "codex", "used_live_model": true, "confidence": 0.8},
+			{"task_id": "d", "status": "ok", "provider_actual": "codex", "used_live_model": true, "confidence": 0.8},
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(usagePath, map[string]any{"total_estimated_tokens": 9000}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := buildVerifyResult(outPath, planPath, graphPath, mergePath, usagePath, haltPath, "pass", "0.82", `[]`, "review", map[string]string{}); err != nil {
+		t.Fatal(err)
+	}
+	result := readJSONMap(outPath)
+	if got := stringValue(result["status"]); got != "review" {
+		t.Fatalf("status = %q want review", got)
+	}
+	if got := stringValue(result["failure_class"]); got != "low_value_graph" {
+		t.Fatalf("failure_class = %q want low_value_graph", got)
+	}
+	baseline := mapValue(result["direct_worker_baseline"])
+	if got := stringValue(baseline["verdict"]); got != "direct_worker_likely_better" {
+		t.Fatalf("baseline verdict = %q", got)
+	}
+	graphLint := mapValue(result["graph_lint"])
+	if got := stringValue(graphLint["status"]); got != "review" {
+		t.Fatalf("graph_lint status = %q", got)
 	}
 }
 

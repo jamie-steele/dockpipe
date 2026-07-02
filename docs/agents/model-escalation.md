@@ -17,8 +17,11 @@ Use YAML to declare:
 - validation preference
 - escalation triggers
 - approval over cost
-- per-task cloud token budgets
+- role/task cloud token budgets
 - halt behavior
+
+For AI workflow value, lane routing, and direct-worker baseline rules, read
+`docs/agents/ai-workflow-value-bar.md` first. This file only covers model escalation mechanics.
 
 Treat a model as an escalation lane, not only a provider/model string. A lane can represent a local
 Ollama model, a CLI-backed Codex/Claude agent, or another package-owned adapter. The lane definition
@@ -30,17 +33,20 @@ should include enough metadata for DorkPipe and tooling to answer:
 - is it installed/available when the stack starts?
 - what budget/halt rules apply before DorkPipe can use it?
 
-Workflow authoring should normally select these lanes through seeded worker profiles such as
-`worker: ollama`, `worker: codex`, and `worker: claude`. Those profiles keep the task contract
-generic while package-owned lane metadata still determines the actual resolver, model provider, and
-availability policy. Treat `worker` as a seeded preference by default. If a task must stay on one
-worker class, declare `worker_policy.mode: require`; otherwise keep the default `prefer` behavior so
-DorkPipe can still compare, fall back, or escalate through the lane catalog.
+Workflow authoring should normally select these lanes through reusable role definitions in
+`agents.yml`, not by repeating provider choices on every task. Role definitions carry seeded worker
+profiles such as `worker: ollama`, `worker: codex`, and `worker: claude`; task entries reference
+roles with `agent:` and carry only workflow-specific goal, brief, context, dependencies, and outputs.
+If a role must stay on one worker class, declare `worker_policy.mode: require`; otherwise use
+`prefer` so DorkPipe can still compare, fall back, or escalate through the lane catalog.
 
 ## Hard Rules
 
 - Local models such as Ollama can be cheap/default attempt lanes.
 - Cloud-backed lanes such as Codex/Claude need budget ledgers and halt markers.
+- Escalate by work class, not provider habit: inventory/extraction can be cheap; source selection,
+  architecture, validation, and edit repair need stronger lanes when they affect durable output.
+- Record requested lane, actual lane, token use, fallback state, and escalation reason in artifacts.
 - Do not hide escalation behind provider wrappers.
 - Do not hardcode provider behavior in `src/lib/` or `src/cmd/`.
 - Human approval stays explicit before promotion/apply/publish.

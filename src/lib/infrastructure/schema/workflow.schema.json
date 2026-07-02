@@ -228,9 +228,10 @@
         "collector": { "type": "string" },
         "text": { "type": "string" },
         "focus": { "type": "string" },
-        "paths": {
+        "starting_points": {
           "type": "array",
-          "items": { "type": "string" }
+          "items": { "type": "string" },
+          "description": "Optional collector starting points. These are hints for building the shared artifact, not access boundaries."
         }
       }
     },
@@ -239,35 +240,18 @@
       "additionalProperties": false,
       "properties": {
         "id": { "type": "string" },
-        "worker": {
+        "agent": {
           "type": "string",
-          "description": "Seeded worker profile such as codex, claude, or ollama. DorkPipe maps this to provider-specific lane defaults while keeping execution boundaries separate."
+          "description": "Reusable agent role id from agent.orchestration.agents. Role defaults supply worker/model/access/authority; task fields supply task-specific brief and context."
         },
-        "worker_policy": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "mode": {
-              "type": "string",
-              "enum": ["prefer", "require"],
-              "description": "How strongly the worker profile constrains lane selection. prefer keeps orchestration free to escalate or fall back; require pins to that worker profile unless a stronger runtime override is applied."
-            }
-          }
+        "brief": {
+          "type": "string",
+          "description": "Task-specific briefing text. Briefs are instructions/context, not a source boundary."
         },
-        "resolver_hint": { "type": "string" },
+        "context": { "$ref": "#/$defs/agent_task_context" },
         "goal": { "type": "string" },
         "expected_output": { "type": "string" },
-        "worker_type": { "type": "string" },
-        "work_mode": {
-          "type": "string",
-          "enum": ["artifact", "artifacts", "readonly", "read-only", "read-only-artifacts", "collect", "gather", "edit", "direct", "direct-edit", "workspace-edit", "writable"],
-          "description": "Task execution mode for cloud worker prompts. Artifact/read-only modes collect response artifacts without editing mounted source. Edit/direct modes allow normal source edits when mounts and access policy are writable."
-        },
         "prompt": { "type": "string" },
-        "inputs": {
-          "type": "array",
-          "items": { "type": "string" }
-        },
         "constraints": {
           "type": "array",
           "items": { "type": "string" }
@@ -284,12 +268,87 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "materialize_outputs": {
+          "type": "array",
+          "description": "DorkPipe task response files to extract from structured dorkpipe:file blocks into tasks/<id>/materialized/ for downstream inputs and apply outputs.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": { "type": "string" },
+              "path": {
+                "type": "string",
+                "description": "Relative artifact path under the task materialized directory. The worker response must include a matching <!-- dorkpipe:file path=\"...\" --> block."
+              }
+            },
+            "required": ["path"]
+          }
+        },
+        "max_cloud_tokens": { "type": "integer" }
+      }
+    },
+    "agent_task_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required_artifacts": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Prior artifacts or shared files that must be included as briefing context."
+        },
+        "seed_paths": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Concrete source paths used as starting points, not a hard source allowlist."
+        },
+        "source_roots": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Allowed source roots the role may inspect when needed, subject to access policy."
+        }
+      }
+    },
+    "agent_definition": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "role": { "type": "string" },
+        "worker": { "type": "string" },
+        "worker_type": { "type": "string" },
+        "work_mode": {
+          "type": "string",
+          "enum": ["artifact", "artifacts", "readonly", "read-only", "read-only-artifacts", "collect", "gather", "edit", "direct", "direct-edit", "workspace-edit", "writable"]
+        },
+        "worker_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "mode": { "type": "string", "enum": ["prefer", "require"] }
+          }
+        },
+        "authority": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "can": {
+              "type": "array",
+              "items": { "type": "string" }
+            },
+            "cannot": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "constraints": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
         "accessible_paths": {
           "type": "array",
           "items": { "type": "string" }
         },
         "access": { "$ref": "#/$defs/agent_access" },
-        "max_cloud_tokens": { "type": "integer" },
         "model": { "$ref": "#/$defs/agent_model" },
         "model_policy": { "$ref": "#/$defs/model_policy" }
       }
@@ -351,6 +410,10 @@
             "shared": {
               "type": "array",
               "items": { "$ref": "#/$defs/agent_shared_item" }
+            },
+            "agents": {
+              "type": "object",
+              "additionalProperties": { "$ref": "#/$defs/agent_definition" }
             },
             "tasks": {
               "type": "array",

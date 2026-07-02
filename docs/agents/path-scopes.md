@@ -24,8 +24,8 @@ task prompts and task JSON:
 - `scope:workflow:<name>:<path>` -> another workflow's artifact path
 - `scope:package:<name>:<path>` -> package-owned state path
 
-Use these in `accessible_paths`, `access.read/write/deny`, and task `inputs` when a worker needs a
-generated file path. Keep normal repository files as plain relative paths.
+Use these in `accessible_paths`, `access.read/write/deny`, and task `context` fields when a worker
+needs a generated file path. Keep normal repository files as plain relative paths.
 
 ## Migration Rules
 

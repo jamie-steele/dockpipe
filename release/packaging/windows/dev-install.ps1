@@ -123,6 +123,24 @@ function Clear-EmbeddedDorkPipeAssetPreparation {
     }
 }
 
+function Clear-MaterializedBundledCache {
+    param(
+        [string]$InstallRoot,
+        [string]$VersionValue
+    )
+    $cacheRoot = Join-Path $InstallRoot "bundled-$VersionValue"
+    if (-not (Test-Path -LiteralPath $cacheRoot)) {
+        return
+    }
+    $resolved = [IO.Path]::GetFullPath((Resolve-Path -LiteralPath $cacheRoot).Path)
+    $expected = [IO.Path]::GetFullPath((Join-Path $InstallRoot "bundled-$VersionValue"))
+    if ($resolved -ne $expected) {
+        throw "Refusing to remove unexpected bundled cache path: $resolved"
+    }
+    Write-Host "Invalidating materialized bundled workflow cache at $resolved"
+    Remove-Item -LiteralPath $resolved -Recurse -Force
+}
+
 function Resolve-QtRoot {
     param([string]$ExplicitRoot, [string]$QtVersionValue, [string]$QtInstallRootValue)
     if ($ExplicitRoot) {
@@ -299,6 +317,7 @@ Copy-Item -LiteralPath $buildExe -Destination $installExe -Force
 Write-Host "Refreshing global core package in $installCoreDir"
 Get-ChildItem -LiteralPath $installCoreDir -Filter "dockpipe-core-*.tar.gz" -File -ErrorAction SilentlyContinue | Remove-Item -Force
 Copy-Item -LiteralPath $coreTarball.FullName -Destination (Join-Path $installCoreDir $coreTarball.Name) -Force
+Clear-MaterializedBundledCache -InstallRoot $installRoot -VersionValue $Version
 
 if (-not $SkipLauncher) {
     try {

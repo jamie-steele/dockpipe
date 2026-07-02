@@ -197,7 +197,7 @@ SH
   exit_code=$?
   set -e
 
-  python3 - "$provider" "$host_auth" "$host_auth_exists" "$host_config" "$host_config_exists" "$container_auth" "$container_config" "$stdout_file" "$stderr_file" "$exit_code" "$live" "$result_file" <<'PY'
+  MSYS2_ARG_CONV_EXCL='*' python3 - "$provider" "$host_auth" "$host_auth_exists" "$host_config" "$host_config_exists" "$container_auth" "$container_config" "$stdout_file" "$stderr_file" "$exit_code" "$live" "$result_file" <<'PY'
 import json
 import pathlib
 import re
@@ -214,6 +214,10 @@ skill_files = re.findall(r"^skill_file: (.+)$", stdout, re.MULTILINE)
 live_outputs = re.findall(r"^live_output: (.+)$", stdout, re.MULTILINE)
 live_text = "\n".join(live_outputs).strip()
 live_ok = live != "true" or "DORKPIPE_AGENT_OK" in live_text
+login_command = {
+    "claude": "claude auth login",
+    "codex": "codex login",
+}.get(provider, f"{provider} login")
 checks = {
     "host_auth_dir_present": host_auth_exists == "true",
     "host_config_file_present": host_config_exists == "true",
@@ -238,7 +242,7 @@ if not checks["container_skills_dir_present"]:
     issues.append(f"skills directory was not visible inside container: {container_auth}/skills")
 if live == "true" and not live_ok:
     if "Not logged in" in live_text or "Please run /login" in live_text:
-        issues.append(f"{provider} CLI is not logged in inside the resolver container; run {provider} /login on the host and rerun this doctor")
+        issues.append(f"{provider} CLI is not logged in inside the resolver container; run {login_command} on the host and rerun this doctor")
     else:
         issues.append("tiny live prompt did not return expected marker")
 if int(exit_code) != 0:

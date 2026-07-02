@@ -165,12 +165,14 @@ tasks:
     read:
       - AGENTS.md
       - docs/agents/yaml-workflows.md
+      - docs/agents/ai-workflow-value-bar.md
       - docs/agents/model-escalation.md
       - docs/agents/docs-generation.md
       - docs/agents/safety-guardrails.md
       - docs/agents/validation-commands.md
     optional:
       - docs/agentic-workflows.md
+      - docs/research/agentic-workflow-research-2026.md
       - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
     skills:
       - dorkpipe-agentic-yaml

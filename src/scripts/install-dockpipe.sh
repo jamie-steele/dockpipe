@@ -20,6 +20,41 @@ install_binary_atomically() {
   mv -f "$tmp" "$dest"
 }
 
+bundled_cache_base() {
+  if [[ -n "${DOCKPIPE_BUNDLED_CACHE:-}" ]]; then
+    printf '%s\n' "${DOCKPIPE_BUNDLED_CACHE%/}"
+    return 0
+  fi
+  case "$(uname -s 2>/dev/null || true)" in
+    Darwin*)
+      printf '%s\n' "${HOME}/Library/Caches"
+      ;;
+    *[Mm][Ss][Yy][Ss]*|*MINGW*|*CYGWIN*)
+      printf '%s\n' "${LOCALAPPDATA:-${USERPROFILE:-$HOME}/AppData/Local}"
+      ;;
+    *)
+      printf '%s\n' "${XDG_CACHE_HOME:-${HOME}/.cache}"
+      ;;
+  esac
+}
+
+invalidate_materialized_bundle_cache() {
+  local version cache_base target expected
+  version="$(tr -d ' \t\r\n' < "$REPO_ROOT/VERSION")"
+  [[ -n "$version" ]] || return 0
+  cache_base="$(bundled_cache_base)"
+  target="${cache_base%/}/dockpipe/bundled-${version}"
+  [[ -d "$target" ]] || return 0
+  expected="$(cd "$(dirname "$target")" && pwd -P)/$(basename "$target")"
+  target="$(cd "$target" && pwd -P)"
+  if [[ "$target" != "$expected" ]]; then
+    echo "install-dockpipe: refusing to remove unexpected bundled cache path: $target" >&2
+    return 1
+  fi
+  echo "Invalidating materialized bundled workflow cache at $target"
+  rm -rf "$target"
+}
+
 if [[ ! -f "$SRC" ]]; then
   echo "install-dockpipe: missing binary: $SRC" >&2
   echo "Run: make build" >&2
@@ -29,6 +64,7 @@ fi
 if [[ -n "${DOCKPIPE_INSTALL_PREFIX:-}" ]]; then
   DEST_DIR="${DOCKPIPE_INSTALL_PREFIX%/}/bin"
   install_binary_atomically "$SRC" "$DEST_DIR/dockpipe"
+  invalidate_materialized_bundle_cache
   echo "Installed: $DEST_DIR/dockpipe"
   exit 0
 fi
@@ -39,6 +75,7 @@ if [[ -n "${WINDIR:-}" ]] || [[ "$(uname -s 2>/dev/null)" == *[Mm][Ss][Yy][Ss]* 
   DEST_DIR="${BASE}/bin"
   install_binary_atomically "$SRC" "$DEST_DIR/dockpipe.exe"
   chmod +x "$DEST_DIR/dockpipe.exe" 2>/dev/null || true
+  invalidate_materialized_bundle_cache
   echo "Installed: $DEST_DIR/dockpipe.exe"
   echo "Add to PATH if needed: $DEST_DIR"
   exit 0
@@ -49,6 +86,7 @@ local_install_err=""
 if [[ -n "${HOME:-}" ]]; then
   DEST_DIR="$HOME/.local/bin"
   if install_binary_atomically "$SRC" "$DEST_DIR/dockpipe" 2>/tmp/dockpipe-install-local.err; then
+    invalidate_materialized_bundle_cache
     echo "Installed: $DEST_DIR/dockpipe"
     echo "Ensure ~/.local/bin is on your PATH (many distros include it by default)."
     exit 0
@@ -59,6 +97,7 @@ fi
 
 global_install_err=""
 if [[ -d /usr/local/bin ]] && install_binary_atomically "$SRC" "/usr/local/bin/dockpipe" 2>/tmp/dockpipe-install-global.err; then
+  invalidate_materialized_bundle_cache
   echo "Installed: /usr/local/bin/dockpipe"
   exit 0
 else

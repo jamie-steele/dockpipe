@@ -21,6 +21,6 @@ EOF
   exit 0
 fi
 
-"$(dorkpipe_orchestrate_helper_bin)" apply-results "${ROOT}" "${DORKPIPE_ORCH_ROOT}" "${DORKPIPE_ORCH_PLAN_JSON}" "${DORKPIPE_ORCH_APPROVAL_MD}" "${DORKPIPE_ORCH_APPLY_DIR}/result.json"
+"$(dorkpipe_orchestrate_helper_bin)" apply-results "${ROOT}" "${DORKPIPE_ORCH_ROOT}" "${DORKPIPE_ORCH_PLAN_JSON}" "${DORKPIPE_ORCH_APPROVAL_MD}" "${DORKPIPE_ORCH_APPLY_DIR}/result.json" "${DORKPIPE_ORCH_VERIFY_DIR}/result.json"
 
 printf '[dorkpipe] apply result ready at %s\n' "${DORKPIPE_ORCH_APPLY_DIR}/result.json" >&2

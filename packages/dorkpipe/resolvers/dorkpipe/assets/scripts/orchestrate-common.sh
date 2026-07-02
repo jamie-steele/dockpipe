@@ -99,20 +99,16 @@ dorkpipe_orchestrate_helper_bin() {
     can_source_build="1"
   fi
   if [[ -x "${repo_candidate}" ]]; then
-    if [[ "${can_source_build}" != "1" ]]; then
-      DORKPIPE_ORCH_HELPER_BIN="${repo_candidate}"
-      export DORKPIPE_ORCH_HELPER_BIN
-      printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
-      return 0
+    if [[ "${can_source_build}" == "1" ]]; then
+      if ! find "${package_root}/lib/cmd/orchestrate-helper" "${package_root}/lib/orchestrationhelper" \
+        -type f \( -name '*.go' -o -name 'go.mod' -o -name 'go.sum' \) -newer "${repo_candidate}" -print -quit 2>/dev/null | grep -q .; then
+        DORKPIPE_ORCH_HELPER_BIN="${repo_candidate}"
+        export DORKPIPE_ORCH_HELPER_BIN
+        printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
+        return 0
+      fi
+      helper_sources_stale="1"
     fi
-    if ! find "${package_root}/lib/cmd/orchestrate-helper" "${package_root}/lib/orchestrationhelper" \
-      -type f \( -name '*.go' -o -name 'go.mod' -o -name 'go.sum' \) -newer "${repo_candidate}" -print -quit 2>/dev/null | grep -q .; then
-      DORKPIPE_ORCH_HELPER_BIN="${repo_candidate}"
-      export DORKPIPE_ORCH_HELPER_BIN
-      printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
-      return 0
-    fi
-    helper_sources_stale="1"
   fi
   dockpipe_bin="${DOCKPIPE_BIN:-}"
   if [[ -z "${dockpipe_bin}" ]]; then
@@ -121,17 +117,19 @@ dorkpipe_orchestrate_helper_bin() {
   if [[ -x "${dockpipe_bin:-}" ]] && [[ "${helper_sources_stale}" != "1" ]] && [[ ! -x "${repo_candidate}" ]]; then
     dockpipe_dir="$(cd "$(dirname "${dockpipe_bin}")" && pwd)"
     dockpipe_repo_root="$(cd "${dockpipe_dir}/../.." 2>/dev/null && pwd || true)"
-    for candidate in \
-      "${dockpipe_repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper" \
-      "${dockpipe_repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper.exe"
-    do
-      if [[ -x "${candidate}" ]]; then
-        DORKPIPE_ORCH_HELPER_BIN="${candidate}"
-        export DORKPIPE_ORCH_HELPER_BIN
-        printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
-        return 0
-      fi
-    done
+    if [[ "${dockpipe_repo_root}" != "/" && "${dockpipe_repo_root}" != "//" && -d "${dockpipe_repo_root}/packages/dorkpipe/lib/orchestrationhelper" ]]; then
+      for candidate in \
+        "${dockpipe_repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper" \
+        "${dockpipe_repo_root}/bin/.dockpipe/tooling/bin/orchestrate-helper.exe"
+      do
+        if [[ -x "${candidate}" ]]; then
+          DORKPIPE_ORCH_HELPER_BIN="${candidate}"
+          export DORKPIPE_ORCH_HELPER_BIN
+          printf '%s\n' "${DORKPIPE_ORCH_HELPER_BIN}"
+          return 0
+        fi
+      done
+    fi
   fi
   DORKPIPE_ORCH_HELPER_BIN="$(dockpipe_sdk require tooling-bin orchestrate-helper 2>/dev/null || true)"
   if [[ -n "${DORKPIPE_ORCH_HELPER_BIN}" && ( "${can_source_build}" != "1" || "${helper_sources_stale}" != "1" ) ]]; then
@@ -794,6 +792,17 @@ dorkpipe_orchestrate_append_work_mode_prompt() {
     printf '## DorkPipe Work Mode: %s\n\n' "${mode}"
     case "${mode}" in
       edit)
+        if [[ -n "${TASK_OUTPUT_PATH:-}" ]]; then
+          cat <<EOF
+Target file contract:
+
+- You must write exactly this target file: ${TASK_OUTPUT_PATH}
+- Do not edit sibling package files or substitute a different output file.
+- Return the final content of ${TASK_OUTPUT_PATH} in your response after writing it.
+- If you discover issues outside ${TASK_OUTPUT_PATH}, mention them in the response only; do not edit other files.
+
+EOF
+        fi
         cat <<'EOF'
 You are in direct workspace edit mode.
 
@@ -882,6 +891,11 @@ dorkpipe_orchestrate_container_auth_envs() {
   esac
 }
 
+dorkpipe_orchestrate_claude_auth_status_ok() {
+  command -v claude >/dev/null 2>&1 || return 2
+  claude auth status --json 2>/dev/null | grep -Eq '"loggedIn"[[:space:]]*:[[:space:]]*true'
+}
+
 dorkpipe_orchestrate_auth_is_available() {
   local provider="${1:?provider}"
   local host_dir host_file
@@ -905,6 +919,12 @@ dorkpipe_orchestrate_auth_is_available() {
     claude)
       if [[ -n "${ANTHROPIC_API_KEY:-}" || -n "${CLAUDE_API_KEY:-}" ]]; then
         return 0
+      fi
+      if command -v claude >/dev/null 2>&1; then
+        if dorkpipe_orchestrate_claude_auth_status_ok; then
+          return 0
+        fi
+        return 1
       fi
       host_dir="$(dorkpipe_orchestrate_container_auth_dir "${provider}" 2>/dev/null || true)"
       host_file="$(dockpipe scope resolver "${provider}" config-file 2>/dev/null || true)"
@@ -935,7 +955,7 @@ dorkpipe_orchestrate_auth_is_available() {
 dorkpipe_orchestrate_auth_login_command_text() {
   case "${1:-}" in
     codex) printf 'codex login\n' ;;
-    claude) printf 'claude login\n' ;;
+    claude) printf 'claude auth login\n' ;;
     *) printf '%s login\n' "${1:-provider}" ;;
   esac
 }
@@ -961,14 +981,14 @@ dorkpipe_orchestrate_run_auth_login() {
       ;;
     claude)
       if ! command -v claude >/dev/null 2>&1; then
-        echo "claude login unavailable: claude CLI is not installed on the host PATH" >&2
+        echo "claude auth login unavailable: claude CLI is not installed on the host PATH" >&2
         return 1
       fi
-      echo "[dorkpipe] launching host login: claude login" >&2
+      echo "[dorkpipe] launching host login: claude auth login" >&2
       if dorkpipe_orchestrate_has_tty; then
-        claude login </dev/tty >/dev/tty
+        claude auth login </dev/tty >/dev/tty
       else
-        claude login
+        claude auth login
       fi
       ;;
     *)
@@ -1132,15 +1152,15 @@ dorkpipe_orchestrate_run_container_worker() {
           fi
           mkdir -p /home/node/.claude
           if [[ -d /dockpipe-auth/claude ]]; then
-            for item in .credentials.json settings.json mcp-needs-auth-cache.json .last-cleanup; do
-              if [[ -e "/dockpipe-auth/claude/${item}" ]]; then
-                cp -a "/dockpipe-auth/claude/${item}" /home/node/.claude/ 2>/dev/null || true
-              fi
+            shopt -s dotglob nullglob
+            for item in /dockpipe-auth/claude/*; do
+              name="$(basename "${item}")"
+              case "${name}" in
+                cache|debug|downloads|sessions|history.jsonl) continue ;;
+              esac
+              cp -a "${item}" /home/node/.claude/ 2>/dev/null || true
             done
-            if [[ -d /dockpipe-auth/claude/backups ]]; then
-              mkdir -p /home/node/.claude/backups
-              find /dockpipe-auth/claude/backups -maxdepth 1 -type f -name ".claude.json.backup.*" -exec cp -a {} /home/node/.claude/backups/ \; 2>/dev/null || true
-            fi
+            shopt -u dotglob nullglob
             chmod -R u+rwX /home/node/.claude 2>/dev/null || true
           fi
           if [[ -f /dockpipe-auth/claude-config/.claude.json ]]; then

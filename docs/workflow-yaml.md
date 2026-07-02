@@ -121,7 +121,7 @@ remains accepted as a compatibility alias, but new workflows should use
 Cloud Codex/Claude workers run a host-auth preflight before the container starts. API-key env vars
 pass immediately; otherwise DorkPipe checks the provider auth files resolved by `dockpipe scope
 resolver <name> auth-dir`. When auth is missing and the run is interactive, DorkPipe asks whether to
-launch the host login command (`codex login` or `claude login`) and re-checks after the user
+launch the host login command (`codex login` or `claude auth login`) and re-checks after the user
 finishes. Set `DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING=never` to fail fast, or `always` to launch the
 login command without asking. Non-interactive runs fail fast with the manual command to run.
 
@@ -232,26 +232,43 @@ dockpipe scope resolver codex auth-mount-mode
 ```
 
 DorkPipe agent orchestration also accepts full-string scope references in path lists such as
-`agent.accessible_paths`, `agent.access.read/write/deny`, and task `inputs`:
+`agent.accessible_paths`, `agent.access.read/write/deny`, and task `context` fields:
 
 ```yaml
-inputs:
-  - scope:workflow:docs.orchestrate:orchestrate/verify/result.json
-  - scope:artifacts:orchestrate/tasks/latest_run_audit/response.md
+context:
+  required_artifacts:
+    - scope:workflow:docs.orchestrate:orchestrate/verify/result.json
+    - scope:artifacts:orchestrate/tasks/latest_run_audit/response.md
 ```
 
 Those references are resolved through the same `dockpipe scope` CLI before prompts and task JSON are
 written. Use plain relative paths for normal checkout files.
 
-For task execution lanes, prefer the seeded `worker` profile over repeating provider hints in every
-task:
+Shared collectors may declare `starting_points` when a collector needs concrete seeds:
 
 ```yaml
-tasks:
-  - id: scout
+shared:
+  - path: repo-map.md
+    collector: repo_map
+    focus: Current orchestration contract
+    starting_points:
+      - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
+```
+
+Use `starting_points` as optional collector hints only. Do not duplicate broad mounted roots there;
+mounts and `access.read` define the actual exploration boundary.
+
+For task execution lanes, define reusable role agents in sibling `agents.yml`, then reference those
+roles from tasks:
+
+```yaml
+agents:
+  source_scout:
+    role: source scout
     worker: ollama
     worker_type: planning
-  - id: patch
+  patch_decider:
+    role: patch decision owner
     worker: codex
     worker_policy:
       mode: require
@@ -259,13 +276,22 @@ tasks:
     worker_type: patch_decision
 ```
 
-`worker: codex|claude|ollama` keeps the authoring surface provider-agnostic while DorkPipe maps the
-task to seeded lane defaults such as preferred lane family and model provider. By default
-`worker_policy.mode: prefer` lets the orchestrator fall back, compare, or escalate when policy says
-it should. Use `worker_policy.mode: require` only when the task must stay on that worker profile.
-Use `resolver_hint` only as an explicit hard override when a seeded worker profile is not enough.
+```yaml
+tasks:
+  - id: scout_repo
+    agent: source_scout
+    brief: Inventory current repo evidence.
+    context:
+      required_artifacts:
+        - shared/repo-map.md
+```
 
-Task `work_mode` separates readonly artifact collection from direct workspace editing. The default
+`worker: codex|claude|ollama` belongs on the role definition, not each task. DorkPipe maps the role
+to seeded lane defaults such as preferred lane family and model provider. By default
+`worker_policy.mode: prefer` lets the orchestrator fall back, compare, or escalate when policy says
+it should. Use `worker_policy.mode: require` only when that role must stay on that worker profile.
+
+Role `work_mode` separates readonly artifact collection from direct workspace editing. The default
 `artifact` mode tells Codex/Claude workers to inspect mounted sources and return the requested
 artifact in `response.md`; DorkPipe apply/promotion writes approved files later. Set `work_mode:
 edit` only for implementation or repair tasks, and pair it with writable container mounts plus
@@ -558,8 +584,7 @@ Typical uses:
 - model/provider knobs that affect generation
 - model policy overrides for attempt, validation, and escalation
 - orchestration fanout data such as request, tasks, concurrency, merge, verify, and apply policy
-- task-level `model_policy` overrides so DorkPipe can choose local/cloud lanes per task without
-  hardcoding provider-specific workflow steps
+- sibling `agents.yml` role definitions so worker/model/access policy is reusable across workflows
 
 This keeps user intent in `config.yml` and lets shared scripts materialize the contract instead of
 forcing one shell file per workflow shape.
@@ -568,6 +593,19 @@ forcing one shell file per workflow shape.
 `access.deny` when the workflow needs a real contract that DorkPipe tooling can materialize into
 artifacts and, later, stronger runtime policy.
 
+`agent.orchestration.tasks[].context` entries are required briefing/discovery hints, not a hard
+allowlist. Keep them small: request text, compact source maps, seed paths, and previous role outputs.
+Let `access.read` and the mounted paths define the broader exploration boundary. Prompts should
+explicitly say when a role may inspect additional allowed sources and must cite exact paths for any
+claim it carries forward.
+
+Prefer reusable role definitions in a sibling `agents.yml`; inline `agent.orchestration.agents` is
+available for workflow-local overrides. Tasks reference roles via `tasks[].agent`. Agent definitions
+describe who the worker is: role, worker profile, authority, model policy, access defaults, and
+standing constraints. Tasks describe what happens in this workflow: `brief`,
+`context.required_artifacts`, `context.seed_paths`, `context.source_roots`, dependencies, and declared
+outputs. Keep source boundaries in access policy and mounts, not in task briefing fields.
+
 `agent.orchestration.concurrency` lets DorkPipe-owned harnesses cap worker fanout without hiding
 scheduling rules in scripts. `max_workers` caps total runnable workers, while `max_local_workers`
 and `max_cloud_workers` cap local and cloud-backed lanes separately.
@@ -575,6 +613,13 @@ and `max_cloud_workers` cap local and cloud-backed lanes separately.
 `agent.orchestration.apply` declares approved artifact-to-worktree outputs. DorkPipe harnesses should
 write reviewable artifacts first, verify them, require approval when configured, and only then copy
 declared outputs into the checkout as normal uncommitted changes.
+
+`agent.orchestration.tasks[].materialize_outputs` lets one role worker own a coherent output cluster
+without becoming one worker per file. The worker returns `<!-- dorkpipe:file path="..." -->` blocks in
+its `response.md`; DorkPipe extracts only the declared relative paths into
+`tasks/<task-id>/materialized/`. `apply.outputs[].source` can then point at those materialized files.
+Use this for role-shaped authoring such as a technical writer producing a markdown cluster or a schema
+maintainer producing aligned router files.
 
 ### Step state flow
 

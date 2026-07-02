@@ -2,6 +2,13 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
+if ! python3 - <<'PY' >/dev/null 2>&1
+import json
+PY
+then
+  echo "test_orchestration_lanes: skip (python3 not runnable)"
+  exit 0
+fi
 export PATH="$ROOT/src/bin:$PATH"
 export DOCKPIPE_SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
 export DOCKPIPE_ASSETS_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets"
@@ -145,16 +152,13 @@ import sys
 root = pathlib.Path(sys.argv[1])
 lane_plan = json.loads((root / "lanes" / "plan.json").read_text())
 tasks = {task["task_id"]: task for task in lane_plan.get("tasks", [])}
-assert tasks["contract_brain"]["provider"] == "ollama", tasks
-assert tasks["workflow_brain"]["provider"] == "ollama", tasks
-assert tasks["planner_brain"]["provider"] == "ollama", tasks
-assert tasks["repo_shape"]["provider"] == "ollama", tasks
-assert tasks["repo_shape"]["requested"] == "ollama", tasks
-for task_id in ("package_contracts", "safety_model"):
+for task_id in ("contract_brain", "workflow_brain", "planner_brain", "repo_shape", "package_contracts", "safety_model"):
     task = tasks[task_id]
     assert task["requested"] == "codex", task
     assert task["provider"] == "codex", task
     assert task["lane_id"] == "codex.cli.default", task
+assert tasks["contract_brain"]["worker_preference"] == "ollama", tasks
+assert tasks["repo_shape"]["worker_preference"] == "ollama", tasks
 request = json.loads((root / "request.json").read_text())
 assert request["force_provider"] == "codex", request
 assert request["force_provider_scope"] == "auto", request
@@ -252,7 +256,7 @@ for task_id, provider in expected.items():
     assert "Do not create or describe task.json" in prompt, prompt
     assert "AGENTS.md context:" in prompt, prompt
     assert "DockPipe Root Router" in prompt, prompt
-    assert "Input context excerpts:" in prompt, prompt
+    assert "Briefing context excerpts:" in prompt, prompt
     assert "shared/repo-map.md" in prompt, prompt
     if provider == "ollama":
         assert prompt.startswith("DorkPipe worker output contract:"), prompt

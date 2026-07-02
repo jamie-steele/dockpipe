@@ -45,15 +45,16 @@ if [[ -f "${DORKPIPE_ORCH_HALT_JSON}" ]]; then
   next_action="human review of cloud budget halt before any further cloud worker execution"
 fi
 
-cat > "${DORKPIPE_ORCH_VERIFY_DIR}/result.json" <<EOF
-{
-  "status": "${status}",
-  "confidence": ${confidence},
-  "issues": ${issues},
-  "cloud_usage_artifact": "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}",
-  "halt_artifact": "${DORKPIPE_ORCH_HALT_JSON}",
-  "next_action": "$(dorkpipe_orchestrate_json_escape "${next_action}")"
-}
-EOF
+"$(dorkpipe_orchestrate_helper_bin)" build-verify-result \
+  "${DORKPIPE_ORCH_VERIFY_DIR}/result.json" \
+  "${DORKPIPE_ORCH_PLAN_JSON}" \
+  "${DORKPIPE_ORCH_GRAPH_JSON}" \
+  "${merge_json}" \
+  "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" \
+  "${DORKPIPE_ORCH_HALT_JSON}" \
+  "${status}" \
+  "${confidence}" \
+  "${issues}" \
+  "${next_action}"
 
 printf '[dorkpipe] verify result ready at %s\n' "${DORKPIPE_ORCH_VERIFY_DIR}/result.json" >&2

@@ -34,6 +34,6 @@ Set `DORKPIPE_AGENT_DOCTOR_LIVE=false` to skip live model calls and only validat
 If the live Claude check reports `Not logged in`, fix the host login first:
 
 ```bash
-claude login
+claude auth login
 DORKPIPE_AGENT_DOCTOR_PROVIDERS=claude dockpipe --workflow agent.cloud-lanes.doctor --
 ```

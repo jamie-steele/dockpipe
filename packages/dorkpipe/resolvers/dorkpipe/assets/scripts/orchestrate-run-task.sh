@@ -20,6 +20,7 @@ prompt_md="${task_dir}/prompt.md"
 response_md="${task_dir}/response.md"
 result_json="${task_dir}/result.json"
 worker_log="${task_dir}/worker.log"
+materialize_result_json="${task_dir}/materialized-result.json"
 
 [[ -f "${task_dir}/task.json" ]] || { echo "missing task.json for ${task_id}" >&2; exit 1; }
 eval "$("$(dorkpipe_orchestrate_helper_bin)" task-env "${task_dir}/task.json")"
@@ -36,6 +37,8 @@ budget_halt="false"
 estimated_output_tokens="0"
 selected_model="$("$(dorkpipe_orchestrate_helper_bin)" task-model)"
 hard_fail="false"
+hard_fail_message=""
+provider_session_id=""
 
 append_dependency_context() {
   [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_APPEND_DEPENDENCY_CONTEXT}")" == "true" ]] || return 0
@@ -53,11 +56,23 @@ live_response_is_valid() {
   "$(dorkpipe_orchestrate_helper_bin)" validate-live-response "${path}" >/dev/null
 }
 
+capture_worker_session_id() {
+  [[ -f "${worker_log}" ]] || return 0
+  case "${provider}" in
+    codex)
+      provider_session_id="$(sed -nE 's/.*[Ss]ession id:[[:space:]]*([^[:space:]]+).*/\1/p' "${worker_log}" | tail -1)"
+      ;;
+    claude)
+      provider_session_id="$(sed -nE 's/.*([Ss]ession[_ -]?[Ii][Dd]|[Cc]onversation[_ -]?[Ii][Dd]):[[:space:]]*([^[:space:]]+).*/\2/p' "${worker_log}" | tail -1)"
+      ;;
+  esac
+}
+
 sync_edit_response_from_worktree() {
   [[ "${TASK_WORK_MODE:-}" == "edit" ]] || return 0
   [[ -n "${TASK_OUTPUT_PATH:-}" ]] || return 0
   local host_output_path=""
-  host_output_path="$("$(dorkpipe_orchestrate_helper_bin)" resolve-target-path "${ROOT}" "${TASK_OUTPUT_PATH}")" || return 1
+  host_output_path="$(MSYS2_ARG_CONV_EXCL='*' "$(dorkpipe_orchestrate_helper_bin)" resolve-target-path "${ROOT}" "${TASK_OUTPUT_PATH}")" || return 1
   [[ -f "${host_output_path}" ]] || return 1
   cp "${host_output_path}" "${response_md}"
 }
@@ -71,9 +86,17 @@ sync_artifact_response_to_worktree() {
   [[ -n "${TASK_OUTPUT_PATH:-}" ]] || return 0
   task_comparison_enabled && return 0
   local host_output_path=""
-  host_output_path="$("$(dorkpipe_orchestrate_helper_bin)" resolve-target-path "${ROOT}" "${TASK_OUTPUT_PATH}")" || return 1
+  host_output_path="$(MSYS2_ARG_CONV_EXCL='*' "$(dorkpipe_orchestrate_helper_bin)" resolve-target-path "${ROOT}" "${TASK_OUTPUT_PATH}")" || return 1
   mkdir -p "$(dirname "${host_output_path}")"
   cp "${response_md}" "${host_output_path}"
+}
+
+materialize_task_outputs() {
+  printf '%s' "${TASK_MATERIALIZE_OUTPUTS_JSON:-[]}" | grep -q '[^[:space:]]' || return 0
+  if printf '%s' "${TASK_MATERIALIZE_OUTPUTS_JSON:-[]}" | grep -Eq '^\s*\[\s*\]\s*$'; then
+    return 0
+  fi
+  "$(dorkpipe_orchestrate_helper_bin)" materialize-task-outputs "${response_md}" "${task_dir}" "${TASK_MATERIALIZE_OUTPUTS_JSON}" "${materialize_result_json}"
 }
 
 if dorkpipe_orchestrate_is_cloud_provider "${provider}"; then
@@ -192,27 +215,41 @@ if [[ "${budget_halt}" != "true" ]]; then
   fi
 fi
 
+capture_worker_session_id
+
 if [[ "${used_live_model}" == "true" ]]; then
+  if ! materialize_task_outputs; then
+    status="failed"
+    summary="Task response did not contain every declared materialized output block"
+    confidence="0.05"
+    issues_json='["materialize_outputs declared but response did not contain every required dorkpipe:file block"]'
+    next_actions_json='["rerun the role worker or repair the response so every declared materialized output has an exact block"]'
+    hard_fail="true"
+    hard_fail_message="worker ${task_id} (${provider}) did not produce all declared materialized outputs"
+  fi
+fi
+
+if [[ "${used_live_model}" == "true" && "${hard_fail}" != "true" ]]; then
   if ! sync_edit_response_from_worktree; then
-    used_live_model="false"
     status="failed"
     summary="Required edit output was not written to ${TASK_OUTPUT_PATH:-the expected worktree path}"
     confidence="0.05"
     issues_json="[\"edit-mode task did not produce the expected worktree output at ${TASK_OUTPUT_PATH:-unknown}\"]"
-    next_actions_json='["fix the worker prompt or edit permissions so the task writes the requested file into /work before rerunning"]'
+    next_actions_json='["rerun after fixing the worker prompt or edit permissions so the task writes exactly the requested file in /work"]'
     hard_fail="true"
+    hard_fail_message="worker ${task_id} (${provider}) produced a live response but did not write the required target ${TASK_OUTPUT_PATH:-unknown}"
   fi
 fi
 
 if [[ "${used_live_model}" == "true" && "${hard_fail}" != "true" ]]; then
   if ! sync_artifact_response_to_worktree; then
-    used_live_model="false"
     status="failed"
     summary="Artifact task output could not be synchronized into ${TASK_OUTPUT_PATH:-the expected worktree path}"
     confidence="0.05"
     issues_json="[\"artifact-mode task could not sync its response into ${TASK_OUTPUT_PATH:-unknown}\"]"
     next_actions_json='["fix the declared output path or apply permissions so downstream tasks can read the updated /work artifact"]'
     hard_fail="true"
+    hard_fail_message="worker ${task_id} (${provider}) produced a live response but DorkPipe could not sync it to ${TASK_OUTPUT_PATH:-unknown}"
   fi
 fi
 
@@ -224,6 +261,7 @@ if [[ "${used_live_model}" != "true" ]]; then
     confidence="0.05"
     next_actions_json='["fix the required worker backend or relax worker_policy.mode before rerunning this workflow"]'
     hard_fail="true"
+    hard_fail_message="required worker ${task_id} (${provider}) did not produce a live response"
   fi
   cat > "${response_md}" <<EOF
 # ${task_id}
@@ -248,12 +286,12 @@ fi
 
 dorkpipe_orchestrate_record_training_metric "${task_id}" "${lane_id}" "${provider}" "${status}" "${confidence}" "${estimated_input_tokens}" "${estimated_output_tokens}" "${used_live_model}" "${budget_halt}" "${task_started_at}" "${task_finished_at}" "${duration_ms}"
 
-export task_id status resolver_hint provider lane_id selected_model used_live_model budget_halt estimated_input_tokens estimated_output_tokens estimated_total_tokens task_started_at task_finished_at duration_ms summary confidence issues_json next_actions_json TASK_BASE_ID TASK_COMPARISON_JSON TASK_LANE_JSON TASK_CLAIMS_JSON TASK_CITATIONS_JSON
+export task_id status resolver_hint provider lane_id selected_model provider_session_id used_live_model budget_halt estimated_input_tokens estimated_output_tokens estimated_total_tokens task_started_at task_finished_at duration_ms summary confidence issues_json next_actions_json TASK_BASE_ID TASK_COMPARISON_JSON TASK_LANE_JSON TASK_CLAIMS_JSON TASK_CITATIONS_JSON
 "$(dorkpipe_orchestrate_helper_bin)" write-task-result "${result_json}"
 
 printf '[dorkpipe] task %s result ready at %s\n' "${task_id}" "${result_json}" >&2
 
 if [[ "${hard_fail}" == "true" ]]; then
-  echo "[dorkpipe] required worker ${task_id} (${provider}) did not produce a live response" >&2
+  echo "[dorkpipe] ${hard_fail_message:-required worker ${task_id} (${provider}) failed}" >&2
   exit 1
 fi

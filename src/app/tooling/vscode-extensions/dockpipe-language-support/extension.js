@@ -110,7 +110,7 @@ const STEP_KEY_DETAILS = {
   vars: "Step-local variables merged for this step.",
   vm: "Declarative VM step settings. Use this to set guest path sync, interactive desktop or SSH session behavior, keepalive, and host port forwarding without hand-writing DOCKPIPE_VM_* variables or host prep steps.",
   container: "Optional step-level container mount override. Use this on container steps to change the primary /work source or add extra host mounts for one step.",
-  agent: "Declarative agentic step settings. Put startup prompt, access.read/write/deny policy, model knobs, seeded worker profiles and worker policy, DorkPipe orchestration fanout/concurrency/apply data, and task-level model_policy here so shared scripts can drive agent behavior directly from workflow YAML.",
+  agent: "Declarative agentic step settings. Put startup prompt, access policy, reusable orchestration agents, task briefs/context, model knobs, DorkPipe orchestration fanout/concurrency/apply data, and role output materialization here so shared scripts can drive agent behavior directly from workflow YAML.",
   security: "Optional step-level container security override. Use this to tighten or specialize policy for one container step.",
   image: "Optional step-level image customization. Use image.packages.apt for extra Debian packages needed only by this step.",
   outputs: "Dotenv-style outputs file merged into the environment for later steps. This is the normal way one step passes values forward.",

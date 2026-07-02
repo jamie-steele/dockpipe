@@ -21,6 +21,7 @@ Machine-readable routing: `docs/agents/index.yaml`.
 | Keep authored YAML/schema/editor docs in sync when changing workflow/config surfaces. | `docs/agents/yaml-workflows.md` |
 | Secrets must be references only. Never commit plaintext secrets or generated resolved templates. | `docs/agents/safety-guardrails.md` |
 | Treat `bin/.dockpipe/` and `.dorkpipe/` as generated/read-only grounding unless the user asks to refresh. | `docs/agents/artifacts-and-mcp.md` |
+| AI workflows must beat one strong direct worker on quality, safety, cost, review effort, or rerun value. DorkPipe owns the lower-level proof through artifacts/metrics, not user boilerplate. | `docs/agents/ai-workflow-value-bar.md` |
 
 ## Task Routing
 
@@ -32,7 +33,7 @@ Machine-readable routing: `docs/agents/index.yaml`.
 | Git runtime sessions or workspace lifecycle | `docs/agents/git-runtime-sessions.md`, `docs/agents/architecture.md`, `docs/agents/path-scopes.md` | `dorkpipe-core-review`, `dorkpipe-yaml-workflows` |
 | Package authoring | `docs/agents/package-authoring.md`, `docs/agents/core-package-model.md` | `dorkpipe-package-authoring` |
 | Package promotion | `docs/agents/package-promotion.md`, `docs/agents/validation-commands.md` | `dorkpipe-package-authoring`, `dorkpipe-core-review` |
-| Agentic/DorkPipe workflows | `docs/agents/model-escalation.md`, `docs/agents/docs-generation.md`, `docs/agents/yaml-workflows.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
+| Agentic/DorkPipe workflows | `docs/agents/ai-workflow-value-bar.md`, `docs/agents/model-escalation.md`, `docs/agents/docs-generation.md`, `docs/agents/yaml-workflows.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
 | Docs or agent guidance | `docs/agents/token-optimization.md`, `docs/agents/skills.md` | `dorkpipe-token-optimization` |
 | Artifacts or MCP | `docs/agents/artifacts-and-mcp.md`, `docs/agents/safety-guardrails.md` | `dorkpipe-core-review` |
 
@@ -99,6 +100,7 @@ Report:
 - `docs/agents/yaml-workflows.md`
 - `docs/agents/package-authoring.md`
 - `docs/agents/package-promotion.md`
+- `docs/agents/ai-workflow-value-bar.md`
 - `docs/agents/model-escalation.md`
 - `docs/agents/docs-generation.md`
 - `docs/agents/artifacts-and-mcp.md`

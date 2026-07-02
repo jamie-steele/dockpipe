@@ -284,11 +284,11 @@ type StepAgentConcurrencyConfig struct {
 }
 
 type StepAgentSharedArtifact struct {
-	Path      string   `yaml:"path,omitempty"`
-	Collector string   `yaml:"collector,omitempty"`
-	Text      string   `yaml:"text,omitempty"`
-	Focus     string   `yaml:"focus,omitempty"`
-	Paths     []string `yaml:"paths,omitempty"`
+	Path           string   `yaml:"path,omitempty"`
+	Collector      string   `yaml:"collector,omitempty"`
+	Text           string   `yaml:"text,omitempty"`
+	Focus          string   `yaml:"focus,omitempty"`
+	StartingPoints []string `yaml:"starting_points,omitempty"`
 }
 
 type StepAgentWorkerPolicyConfig struct {
@@ -296,24 +296,30 @@ type StepAgentWorkerPolicyConfig struct {
 }
 
 type StepAgentTaskConfig struct {
-	ID              string                      `yaml:"id,omitempty"`
-	Worker          string                      `yaml:"worker,omitempty"`
-	WorkerPolicy    StepAgentWorkerPolicyConfig `yaml:"worker_policy,omitempty"`
-	ResolverHint    string                      `yaml:"resolver_hint,omitempty"`
-	Goal            string                      `yaml:"goal,omitempty"`
-	ExpectedOutput  string                      `yaml:"expected_output,omitempty"`
-	WorkerType      string                      `yaml:"worker_type,omitempty"`
-	Prompt          string                      `yaml:"prompt,omitempty"`
-	Inputs          []string                    `yaml:"inputs,omitempty"`
-	Constraints     []string                    `yaml:"constraints,omitempty"`
-	DependsOn       []string                    `yaml:"depends_on,omitempty"`
-	Claims          []string                    `yaml:"claims,omitempty"`
-	Citations       []string                    `yaml:"citations,omitempty"`
-	AccessiblePaths []string                    `yaml:"accessible_paths,omitempty"`
-	Access          StepAgentAccessConfig       `yaml:"access,omitempty"`
-	MaxCloudTokens  int                         `yaml:"max_cloud_tokens,omitempty"`
-	Model           StepAgentModelConfig        `yaml:"model,omitempty"`
-	ModelPolicy     StepAgentModelPolicyConfig  `yaml:"model_policy,omitempty"`
+	ID                 string                       `yaml:"id,omitempty"`
+	Agent              string                       `yaml:"agent,omitempty"`
+	Goal               string                       `yaml:"goal,omitempty"`
+	Brief              string                       `yaml:"brief,omitempty"`
+	Context            StepAgentTaskContextConfig   `yaml:"context,omitempty"`
+	ExpectedOutput     string                       `yaml:"expected_output,omitempty"`
+	Prompt             string                       `yaml:"prompt,omitempty"`
+	Constraints        []string                     `yaml:"constraints,omitempty"`
+	DependsOn          []string                     `yaml:"depends_on,omitempty"`
+	Claims             []string                     `yaml:"claims,omitempty"`
+	Citations          []string                     `yaml:"citations,omitempty"`
+	MaxCloudTokens     int                          `yaml:"max_cloud_tokens,omitempty"`
+	MaterializeOutputs []StepAgentMaterializeOutput `yaml:"materialize_outputs,omitempty"`
+}
+
+type StepAgentTaskContextConfig struct {
+	RequiredArtifacts []string `yaml:"required_artifacts,omitempty"`
+	SeedPaths         []string `yaml:"seed_paths,omitempty"`
+	SourceRoots       []string `yaml:"source_roots,omitempty"`
+}
+
+type StepAgentMaterializeOutput struct {
+	ID   string `yaml:"id,omitempty"`
+	Path string `yaml:"path,omitempty"`
 }
 
 type StepAgentMergeConfig struct {

@@ -134,7 +134,7 @@ steps:
 	}
 }
 
-func TestParseWorkflowYAMLAgentTaskWorkerProfile(t *testing.T) {
+func TestParseWorkflowYAMLAgentTaskRoleContext(t *testing.T) {
 	y := `
 steps:
   - kind: host
@@ -143,11 +143,16 @@ steps:
       orchestration:
         tasks:
           - id: scout
-            worker: ollama
-            worker_policy:
-              mode: require
-            worker_type: planning
+            agent: source_scout
+            brief: Scout the repo
+            context:
+              required_artifacts:
+                - shared/request.md
+              source_roots:
+                - /work
             goal: Scout the repo
+            materialize_outputs:
+              - path: index.md
 `
 	w, err := ParseWorkflowYAML([]byte(y))
 	if err != nil {
@@ -157,8 +162,8 @@ steps:
 		t.Fatalf("agent task parse: got %+v", w.Steps)
 	}
 	task := w.Steps[0].Agent.Orchestration.Tasks[0]
-	if task.Worker != "ollama" || task.WorkerPolicy.Mode != "require" || task.WorkerType != "planning" {
-		t.Fatalf("worker profile parse: got %+v", task)
+	if task.Agent != "source_scout" || task.Brief != "Scout the repo" || len(task.Context.RequiredArtifacts) != 1 || len(task.Context.SourceRoots) != 1 || len(task.MaterializeOutputs) != 1 {
+		t.Fatalf("agent task role/context parse: got %+v", task)
 	}
 }
 

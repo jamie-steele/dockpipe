@@ -196,6 +196,11 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("invalid live response")
 		}
 		return nil
+	case "materialize-task-outputs":
+		if len(args) != 5 {
+			return errors.New("usage: orchestrate-helper materialize-task-outputs <response.md> <task-dir> <outputs.json> <result.json>")
+		}
+		return materializeTaskOutputs(args[1], args[2], args[3], args[4])
 	case "write-task-result":
 		if len(args) != 2 {
 			return errors.New("usage: orchestrate-helper write-task-result <result.json>")
@@ -248,11 +253,20 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("usage: orchestrate-helper verify-apply-coherence <root> <artifact-root> <plan.json> <issues.json>")
 		}
 		return emitVerifyApplyCoherence(args[1], args[2], args[3], args[4], stdout)
-	case "apply-results":
-		if len(args) != 6 {
-			return errors.New("usage: orchestrate-helper apply-results <root> <artifact-root> <plan.json> <approval.md> <result.json>")
+	case "build-verify-result":
+		if len(args) != 11 {
+			return errors.New("usage: orchestrate-helper build-verify-result <out.json> <plan.json> <graph.json> <merge.json> <cloud-usage.json> <halt.json> <status> <confidence> <issues.json> <next-action>")
 		}
-		return applyResults(args[1], args[2], args[3], args[4], args[5])
+		return buildVerifyResult(args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], env)
+	case "apply-results":
+		if len(args) != 6 && len(args) != 7 {
+			return errors.New("usage: orchestrate-helper apply-results <root> <artifact-root> <plan.json> <approval.md> <result.json> [verify-result.json]")
+		}
+		verifyPath := ""
+		if len(args) == 7 {
+			verifyPath = args[6]
+		}
+		return applyResultsWithVerify(args[1], args[2], args[3], args[4], args[5], verifyPath, boolString(env["DORKPIPE_ORCH_APPLY_ON_REVIEW"]))
 	case "plan":
 		if len(args) != 3 {
 			return errors.New("usage: orchestrate-helper plan <workflow.yml> <step-id>")
@@ -309,24 +323,25 @@ func emitTaskEnv(path string, stdout io.Writer) error {
 	task := readJSONMap(path)
 	lane := mapValue(task["lane"])
 	mapping := map[string]string{
-		"TASK_BASE_ID":                 fallbackString(stringValue(task["base_id"]), stringValue(task["id"])),
-		"TASK_WORKER_PROFILE":          stringValue(task["worker"]),
-		"TASK_WORKER_POLICY_MODE":      workerPolicyMode(task),
-		"TASK_WORK_MODE":               stringValue(task["work_mode"]),
-		"TASK_OUTPUT_PATH":             stringValue(task["output_path"]),
-		"TASK_COMPARISON_JSON":         mustJSON(task["comparison"], map[string]any{"enabled": false}),
-		"TASK_RESOLVER_HINT":           fallbackString(stringValue(task["resolver_hint"]), "auto"),
-		"TASK_REQUESTED_RESOLVER_HINT": fallbackString(stringValue(task["requested_resolver_hint"]), fallbackString(stringValue(task["resolver_hint"]), "auto")),
-		"TASK_LANE_JSON":               mustJSON(lane, map[string]any{}),
-		"TASK_LANE_ID":                 stringValue(lane["lane_id"]),
-		"TASK_GOAL":                    stringValue(task["goal"]),
-		"TASK_EXPECTED_OUTPUT":         stringValue(task["expected_output"]),
-		"TASK_INPUTS_JSON":             mustJSON(task["inputs"], []any{}),
-		"TASK_CLAIMS_JSON":             mustJSON(task["claims"], []any{}),
-		"TASK_CITATIONS_JSON":          mustJSON(fallbackAny(task["citations"], task["inputs"]), []any{}),
-		"TASK_MAX_CLOUD_TOKENS":        strconv.Itoa(intFromAny(task["max_cloud_tokens"])),
-		"TASK_MODEL_JSON":              mustJSON(task["model"], map[string]any{}),
-		"TASK_DEPENDS_ON_JSON":         mustJSON(task["depends_on"], []any{}),
+		"TASK_BASE_ID":                  fallbackString(stringValue(task["base_id"]), stringValue(task["id"])),
+		"TASK_WORKER_PROFILE":           stringValue(task["worker"]),
+		"TASK_WORKER_POLICY_MODE":       workerPolicyMode(task),
+		"TASK_WORK_MODE":                stringValue(task["work_mode"]),
+		"TASK_OUTPUT_PATH":              stringValue(task["output_path"]),
+		"TASK_COMPARISON_JSON":          mustJSON(task["comparison"], map[string]any{"enabled": false}),
+		"TASK_RESOLVER_HINT":            fallbackString(stringValue(task["resolver_hint"]), "auto"),
+		"TASK_REQUESTED_RESOLVER_HINT":  fallbackString(stringValue(task["requested_resolver_hint"]), fallbackString(stringValue(task["resolver_hint"]), "auto")),
+		"TASK_LANE_JSON":                mustJSON(lane, map[string]any{}),
+		"TASK_LANE_ID":                  stringValue(lane["lane_id"]),
+		"TASK_GOAL":                     stringValue(task["goal"]),
+		"TASK_EXPECTED_OUTPUT":          stringValue(task["expected_output"]),
+		"TASK_CONTEXT_PATHS_JSON":       mustJSON(task["context_paths"], []any{}),
+		"TASK_CLAIMS_JSON":              mustJSON(task["claims"], []any{}),
+		"TASK_CITATIONS_JSON":           mustJSON(fallbackAny(task["citations"], task["context_paths"]), []any{}),
+		"TASK_MATERIALIZE_OUTPUTS_JSON": mustJSON(task["materialize_outputs"], []any{}),
+		"TASK_MAX_CLOUD_TOKENS":         strconv.Itoa(intFromAny(task["max_cloud_tokens"])),
+		"TASK_MODEL_JSON":               mustJSON(task["model"], map[string]any{}),
+		"TASK_DEPENDS_ON_JSON":          mustJSON(task["depends_on"], []any{}),
 	}
 	keys := make([]string, 0, len(mapping))
 	for key := range mapping {
@@ -500,7 +515,111 @@ func writeTaskResult(path string, env map[string]string) error {
 		"issues":                  decodeJSONAny(env["issues_json"], []any{}),
 		"next_actions":            decodeJSONAny(env["next_actions_json"], []any{}),
 	}
+	if sessionID := strings.TrimSpace(env["provider_session_id"]); sessionID != "" {
+		payload["worker_session"] = map[string]any{
+			"provider":   env["provider"],
+			"session_id": sessionID,
+			"mode":       "trace_only",
+		}
+	}
 	return writeJSONFile(path, payload)
+}
+
+func materializeTaskOutputs(responsePath, taskDir, outputsJSON, resultPath string) error {
+	outputs := listValue(decodeJSONAny(outputsJSON, []any{}))
+	if len(outputs) == 0 {
+		return writeJSONFile(resultPath, map[string]any{
+			"status": "skipped",
+			"files":  []any{},
+		})
+	}
+	raw, err := os.ReadFile(responsePath)
+	if err != nil {
+		return err
+	}
+	blocks := parseMaterializedBlocks(string(raw))
+	materializedRoot := filepath.Join(taskDir, "materialized")
+	files := []map[string]any{}
+	for _, rawOutput := range outputs {
+		output := mapValue(rawOutput)
+		rel := strings.TrimSpace(stringValue(output["path"]))
+		if rel == "" {
+			return errors.New("materialize_outputs entry missing path")
+		}
+		clean, err := cleanMaterializedRelPath(rel)
+		if err != nil {
+			return err
+		}
+		content, ok := blocks[filepath.ToSlash(clean)]
+		if !ok {
+			id := strings.TrimSpace(stringValue(output["id"]))
+			if id != "" {
+				content, ok = blocks[id]
+			}
+		}
+		if !ok {
+			return fmt.Errorf("missing materialized output block for %s", rel)
+		}
+		target := filepath.Join(materializedRoot, filepath.FromSlash(clean))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(target, []byte(strings.TrimRight(content, "\r\n")+"\n"), 0o644); err != nil {
+			return err
+		}
+		files = append(files, map[string]any{
+			"path":     filepath.ToSlash(clean),
+			"artifact": filepath.ToSlash(filepath.Join("materialized", filepath.FromSlash(clean))),
+		})
+	}
+	return writeJSONFile(resultPath, map[string]any{
+		"status": "materialized",
+		"files":  files,
+	})
+}
+
+func parseMaterializedBlocks(text string) map[string]string {
+	blocks := map[string]string{}
+	re := regexp.MustCompile(`(?ms)<!--\s*dorkpipe:file\s+([^>]+?)\s*-->\s*\r?\n?(.*?)\r?\n?<!--\s*/dorkpipe:file\s*-->`)
+	for _, match := range re.FindAllStringSubmatch(text, -1) {
+		key := materializedBlockKey(match[1])
+		if key == "" {
+			continue
+		}
+		blocks[key] = match[2]
+	}
+	return blocks
+}
+
+func materializedBlockKey(attrs string) string {
+	attrs = strings.TrimSpace(attrs)
+	for _, re := range []*regexp.Regexp{
+		regexp.MustCompile(`(?:^|\s)path\s*=\s*"([^"]+)"`),
+		regexp.MustCompile(`(?:^|\s)path\s*=\s*'([^']+)'`),
+		regexp.MustCompile(`(?:^|\s)id\s*=\s*"([^"]+)"`),
+		regexp.MustCompile(`(?:^|\s)id\s*=\s*'([^']+)'`),
+	} {
+		if match := re.FindStringSubmatch(attrs); len(match) == 2 {
+			return strings.TrimSpace(match[1])
+		}
+	}
+	fields := strings.Fields(attrs)
+	if len(fields) > 0 {
+		return strings.TrimSpace(fields[0])
+	}
+	return ""
+}
+
+func cleanMaterializedRelPath(path string) (string, error) {
+	normalized := filepath.ToSlash(strings.TrimSpace(path))
+	if normalized == "" || strings.HasPrefix(normalized, "/") || strings.Contains(normalized, ":") {
+		return "", fmt.Errorf("materialized output path must be relative: %s", path)
+	}
+	cleaned := filepath.ToSlash(filepath.Clean(filepath.FromSlash(normalized)))
+	if cleaned == "." || strings.HasPrefix(cleaned, "../") || cleaned == ".." {
+		return "", fmt.Errorf("materialized output path escapes task directory: %s", path)
+	}
+	return cleaned, nil
 }
 
 func writeOllamaChatRequest(model, promptPath, outPath string) error {
@@ -609,6 +728,7 @@ func readMergeTaskResults(paths []string) []map[string]any {
 			"task_id":                 stringValue(raw["task_id"]),
 			"base_task_id":            stringValue(raw["base_task_id"]),
 			"comparison":              mapValue(raw["comparison"]),
+			"status":                  stringValue(raw["status"]),
 			"provider_actual":         stringValue(raw["provider_actual"]),
 			"used_live_model":         boolAny(raw["used_live_model"]),
 			"budget_halt":             boolAny(raw["budget_halt"]),
@@ -867,6 +987,469 @@ func emitVerifyApplyCoherence(rootPath, artifactRootPath, planPath, issuesJSON s
 	return nil
 }
 
+func buildVerifyResult(outPath, planPath, graphPath, mergePath, usagePath, haltPath, status, confidenceRaw, issuesJSON, nextAction string, env map[string]string) error {
+	plan := readJSONMapOptional(planPath)
+	graph := readJSONMapOptional(graphPath)
+	merge := readJSONMapOptional(mergePath)
+	usage := readJSONMapOptional(usagePath)
+	halt := readJSONMapOptional(haltPath)
+	issues := []string{}
+	_ = json.Unmarshal([]byte(issuesJSON), &issues)
+	confidence := floatFromString(confidenceRaw, floatDefault(merge["average_confidence"], 0.6))
+	if status == "" {
+		status = "pass"
+	}
+	valueBar := evaluateValueBar(plan, graph, merge, usage, halt)
+	graphLint := lintGraphShape(graph, merge, plan)
+	failureClass := classifyVerifyFailure(status, issues, graphLint, valueBar, halt)
+	recommended := recommendRerunTasks(graph, merge, issues, graphLint, failureClass)
+	baseline := directWorkerBaseline(graph, merge, valueBar, graphLint)
+	allIssues := append([]string{}, issues...)
+	for _, warning := range stringList(graphLint["warnings"]) {
+		allIssues = append(allIssues, warning)
+	}
+	if stringValue(baseline["verdict"]) == "direct_worker_likely_better" {
+		allIssues = append(allIssues, "orchestration may not beat one strong direct worker for this graph shape")
+		if status == "pass" {
+			status = "review"
+		}
+	}
+	if len(allIssues) > 0 && status == "pass" {
+		status = "review"
+	}
+	payload := map[string]any{
+		"status":                  status,
+		"confidence":              confidence,
+		"issues":                  allIssues,
+		"failure_class":           failureClass,
+		"root_cause_task":         rootCauseTask(merge, allIssues, recommended),
+		"recommended_rerun_tasks": recommended,
+		"value_bar":               valueBar,
+		"graph_lint":              graphLint,
+		"direct_worker_baseline":  baseline,
+		"cloud_usage_artifact":    usagePath,
+		"halt_artifact":           haltPath,
+		"next_action":             nextAction,
+	}
+	if followUp := mapValue(plan["follow_up"]); len(followUp) > 0 {
+		payload["follow_up"] = followUp
+	}
+	return writeJSONFile(outPath, payload)
+}
+
+func evaluateValueBar(plan, graph, merge, usage, halt map[string]any) map[string]any {
+	tasks := workerGraphTasks(graph)
+	mergeTasks := append(listValue(merge["planning_tasks"]), listValue(merge["tasks"])...)
+	providers := map[string]bool{}
+	liveCount := 0
+	fallbackCount := 0
+	cloudTokens := intAny(usage["total_estimated_tokens"])
+	for _, raw := range mergeTasks {
+		task := mapValue(raw)
+		provider := stringValue(task["provider_actual"])
+		if provider != "" {
+			providers[provider] = true
+		}
+		if boolAny(task["used_live_model"]) {
+			liveCount++
+		} else {
+			fallbackCount++
+		}
+	}
+	outputs := listValue(mapValue(plan["apply"])["outputs"])
+	parallelWidth := maxParallelWidth(tasks)
+	hasValidation := hasWorkerType(tasks, "validation") || hasWorkerType(tasks, "verify")
+	hasLocalExtraction := hasProvider(tasks, "ollama") || hasWorkerType(tasks, "extraction") || hasWorkerType(tasks, "inventory")
+	hasApply := len(outputs) > 0
+	hasApproval := boolDefault(mapValue(plan["apply"])["require_approval"], true)
+	hasFollowUp := len(mapValue(graph["follow_up"])) > 0 || len(mapValue(plan["follow_up"])) > 0
+	hasComparison := false
+	for _, task := range tasks {
+		if boolAny(mapValue(task["comparison"])["enabled"]) {
+			hasComparison = true
+			break
+		}
+	}
+	dims := map[string]any{
+		"breadth": map[string]any{
+			"score":  scoreBool(len(tasks) >= 3 || parallelWidth > 1 || len(providers) > 1 || hasComparison),
+			"reason": breadthReason(len(tasks), parallelWidth, len(providers), hasComparison),
+		},
+		"safety": map[string]any{
+			"score":  scoreBool(hasApply && hasApproval),
+			"reason": safetyReason(hasApply, hasApproval),
+		},
+		"cost": map[string]any{
+			"score":  scoreBool(hasLocalExtraction || cloudTokens == 0),
+			"reason": costReason(hasLocalExtraction, cloudTokens),
+		},
+		"validation": map[string]any{
+			"score":  scoreBool(hasValidation),
+			"reason": validationReason(hasValidation),
+		},
+		"rerunability": map[string]any{
+			"score":  scoreBool(hasFollowUp || len(tasks) > 1),
+			"reason": rerunReason(hasFollowUp, len(tasks)),
+		},
+		"traceability": map[string]any{
+			"score":  1.0,
+			"reason": "request, graph, task, merge, verify, usage, halt, and approval artifacts are materialized by DorkPipe",
+		},
+	}
+	if len(halt) > 0 {
+		dims["cost"].(map[string]any)["score"] = 0.25
+		dims["cost"].(map[string]any)["reason"] = "cloud budget halt was triggered; cost control worked but the run needs review"
+	}
+	total := 0.0
+	for _, raw := range dims {
+		total += floatAny(mapValue(raw)["score"])
+	}
+	overall := total / float64(len(dims))
+	return map[string]any{
+		"overall_score": round2(overall),
+		"verdict":       valueBarVerdict(overall),
+		"dimensions":    dims,
+	}
+}
+
+func lintGraphShape(graph, merge, plan map[string]any) map[string]any {
+	tasks := workerGraphTasks(graph)
+	warnings := []string{}
+	serial := isMostlySerial(tasks)
+	distinctProviders := map[string]bool{}
+	distinctTypes := map[string]bool{}
+	outputPaths := map[string]bool{}
+	for _, task := range tasks {
+		if provider := stringValue(task["provider"]); provider != "" {
+			distinctProviders[provider] = true
+		}
+		if workerType := stringValue(task["worker_type"]); workerType != "" {
+			distinctTypes[workerType] = true
+		}
+		if output := stringValue(task["output_path"]); output != "" {
+			outputPaths[output] = true
+		}
+	}
+	if serial && len(tasks) > 3 && len(distinctProviders) <= 1 {
+		warnings = append(warnings, "graph is mostly serial with one provider; consider collapsing to one strong direct worker")
+	}
+	if len(tasks) > 4 && len(distinctTypes) <= 1 {
+		warnings = append(warnings, "graph has many tasks with the same worker_type; split value is unclear")
+	}
+	if len(tasks) > 3 && len(outputPaths) <= 1 && len(listValue(mapValue(plan["apply"])["outputs"])) <= 1 {
+		warnings = append(warnings, "graph has many workers but little output separation; orchestration may add handoff cost")
+	}
+	live := 0
+	for _, raw := range append(listValue(merge["planning_tasks"]), listValue(merge["tasks"])...) {
+		if boolAny(mapValue(raw)["used_live_model"]) {
+			live++
+		}
+	}
+	if len(tasks) > 0 && live == 0 {
+		warnings = append(warnings, "no worker used a live model; output is fallback-only")
+	}
+	return map[string]any{
+		"status":            ternaryString(len(warnings) == 0, "pass", "review"),
+		"warnings":          warnings,
+		"worker_task_count": len(tasks),
+		"parallel_width":    maxParallelWidth(tasks),
+		"provider_count":    len(distinctProviders),
+		"worker_type_count": len(distinctTypes),
+		"mostly_serial":     serial,
+	}
+}
+
+func classifyVerifyFailure(status string, issues []string, graphLint, valueBar, halt map[string]any) string {
+	if len(halt) > 0 {
+		return "budget_halt"
+	}
+	joined := strings.ToLower(strings.Join(issues, " "))
+	switch {
+	case strings.Contains(joined, "fallback"):
+		return "fallback_only"
+	case strings.Contains(joined, "yaml"):
+		return "schema_or_yaml"
+	case strings.Contains(joined, "markdown link") || strings.Contains(joined, "reference target"):
+		return "broken_references"
+	case strings.Contains(joined, "artifact shape") || strings.Contains(joined, "preamble") || strings.Contains(joined, "narrated"):
+		return "artifact_shape"
+	case stringValue(graphLint["status"]) != "pass":
+		return "low_value_graph"
+	case stringValue(valueBar["verdict"]) == "weak_orchestration_value":
+		return "weak_value_bar"
+	case status != "pass":
+		return "verification_review"
+	default:
+		return "none"
+	}
+}
+
+func recommendRerunTasks(graph, merge map[string]any, issues []string, graphLint map[string]any, failureClass string) []string {
+	tasks := workerGraphTasks(graph)
+	known := map[string]bool{}
+	for _, task := range tasks {
+		known[stringValue(task["id"])] = true
+	}
+	recommended := map[string]bool{}
+	for _, issue := range issues {
+		first := strings.SplitN(issue, ":", 2)[0]
+		first = strings.TrimSpace(first)
+		if known[first] {
+			recommended[first] = true
+		}
+	}
+	if len(recommended) == 0 {
+		for _, raw := range append(listValue(merge["planning_tasks"]), listValue(merge["tasks"])...) {
+			task := mapValue(raw)
+			status := strings.ToLower(stringValue(task["status"]))
+			if status == "failed" || boolAny(task["budget_halt"]) || !boolAny(task["used_live_model"]) {
+				id := stringValue(task["task_id"])
+				if known[id] {
+					recommended[id] = true
+				}
+			}
+		}
+	}
+	if len(recommended) == 0 && (failureClass == "low_value_graph" || failureClass == "weak_value_bar") {
+		for _, task := range tasks {
+			id := stringValue(task["id"])
+			if id != "" {
+				recommended[id] = true
+				break
+			}
+		}
+	}
+	return sortedTaskIDsFromSet(recommended)
+}
+
+func rootCauseTask(merge map[string]any, issues []string, recommended []string) string {
+	if len(recommended) > 0 {
+		return recommended[0]
+	}
+	for _, raw := range append(listValue(merge["planning_tasks"]), listValue(merge["tasks"])...) {
+		task := mapValue(raw)
+		if !boolAny(task["used_live_model"]) || strings.EqualFold(stringValue(task["status"]), "failed") {
+			return stringValue(task["task_id"])
+		}
+	}
+	if len(issues) > 0 {
+		return "verify_final"
+	}
+	return ""
+}
+
+func directWorkerBaseline(graph, merge, valueBar, graphLint map[string]any) map[string]any {
+	tasks := workerGraphTasks(graph)
+	providers := map[string]bool{}
+	for _, task := range tasks {
+		if provider := stringValue(task["provider"]); provider != "" {
+			providers[provider] = true
+		}
+	}
+	serial := boolAny(graphLint["mostly_serial"])
+	weakValue := stringValue(valueBar["verdict"]) == "weak_orchestration_value"
+	verdict := "orchestration_adds_value"
+	reason := "DorkPipe adds governance, traceability, apply safety, or rerunable task artifacts."
+	if len(tasks) <= 2 && len(providers) <= 1 {
+		verdict = "direct_worker_likely_sufficient"
+		reason = "The graph is small and uses a single lane family; one strong worker may be simpler."
+	}
+	if len(tasks) > 3 && serial && len(providers) <= 1 && (weakValue || stringValue(graphLint["status"]) != "pass") {
+		verdict = "direct_worker_likely_better"
+		reason = "The graph is mostly serial, same-lane, and does not show enough value-bar benefit."
+	}
+	return map[string]any{
+		"baseline": "one strong Codex or Claude worker reading the same declared sources and producing the requested output",
+		"verdict":  verdict,
+		"reason":   reason,
+	}
+}
+
+func workerGraphTasks(graph map[string]any) []map[string]any {
+	out := []map[string]any{}
+	for _, raw := range listValue(graph["tasks"]) {
+		task := mapValue(raw)
+		workerType := stringValue(task["worker_type"])
+		if workerType == "merge" || workerType == "verify" {
+			continue
+		}
+		if stringValue(task["id"]) == "" {
+			continue
+		}
+		out = append(out, task)
+	}
+	return out
+}
+
+func maxParallelWidth(tasks []map[string]any) int {
+	if len(tasks) == 0 {
+		return 0
+	}
+	widthByDepth := map[int]int{}
+	depthByID := map[string]int{}
+	for len(depthByID) < len(tasks) {
+		changed := false
+		for _, task := range tasks {
+			id := stringValue(task["id"])
+			if id == "" || depthByID[id] != 0 {
+				continue
+			}
+			deps := stringList(task["depends_on"])
+			depth := 1
+			ready := true
+			for _, dep := range deps {
+				if depDepth, ok := depthByID[dep]; ok {
+					depth = maxInt(depth, depDepth+1)
+					continue
+				}
+				if graphHasTask(tasks, dep) {
+					ready = false
+					break
+				}
+			}
+			if !ready {
+				continue
+			}
+			depthByID[id] = depth
+			widthByDepth[depth]++
+			changed = true
+		}
+		if !changed {
+			break
+		}
+	}
+	maxWidth := 1
+	for _, width := range widthByDepth {
+		maxWidth = maxInt(maxWidth, width)
+	}
+	return maxWidth
+}
+
+func graphHasTask(tasks []map[string]any, id string) bool {
+	for _, task := range tasks {
+		if stringValue(task["id"]) == id {
+			return true
+		}
+	}
+	return false
+}
+
+func isMostlySerial(tasks []map[string]any) bool {
+	if len(tasks) <= 1 {
+		return true
+	}
+	return maxParallelWidth(tasks) <= 1
+}
+
+func hasWorkerType(tasks []map[string]any, workerType string) bool {
+	for _, task := range tasks {
+		if strings.EqualFold(stringValue(task["worker_type"]), workerType) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasProvider(tasks []map[string]any, provider string) bool {
+	for _, task := range tasks {
+		if strings.EqualFold(stringValue(task["provider"]), provider) {
+			return true
+		}
+	}
+	return false
+}
+
+func hasCloudAuthorityTask(tasks []map[string]any) bool {
+	for _, task := range tasks {
+		provider := strings.ToLower(stringValue(task["provider"]))
+		if provider != "codex" && provider != "claude" {
+			continue
+		}
+		switch strings.ToLower(stringValue(task["worker_type"])) {
+		case "architecture", "routing", "validation", "authoring", "repair":
+			return true
+		}
+	}
+	return false
+}
+
+func scoreBool(ok bool) float64 {
+	if ok {
+		return 1
+	}
+	return 0
+}
+
+func breadthReason(taskCount, parallelWidth, providerCount int, comparison bool) string {
+	parts := []string{fmt.Sprintf("%d worker task(s)", taskCount), fmt.Sprintf("parallel width %d", parallelWidth), fmt.Sprintf("%d provider(s)", providerCount)}
+	if comparison {
+		parts = append(parts, "comparison lanes enabled")
+	}
+	return strings.Join(parts, "; ")
+}
+
+func safetyReason(hasApply, hasApproval bool) string {
+	if hasApply && hasApproval {
+		return "durable writes are approval-gated apply outputs"
+	}
+	if hasApply {
+		return "apply outputs exist but approval is not required"
+	}
+	return "no approval-gated apply outputs were declared"
+}
+
+func costReason(hasLocalExtraction bool, cloudTokens int) string {
+	if hasLocalExtraction && cloudTokens > 0 {
+		return fmt.Sprintf("cheap/local lanes were used before governed cloud spend (%d estimated cloud tokens)", cloudTokens)
+	}
+	if hasLocalExtraction {
+		return "cheap/local lanes were used and no cloud token spend was recorded"
+	}
+	if cloudTokens > 0 {
+		return fmt.Sprintf("cloud spend recorded without an obvious cheap/local extraction lane (%d estimated cloud tokens)", cloudTokens)
+	}
+	return "no cloud token spend was recorded"
+}
+
+func validationReason(hasValidation bool) string {
+	if hasValidation {
+		return "graph includes an explicit validation or verify stage"
+	}
+	return "no explicit validation worker was present beyond mechanical verification"
+}
+
+func rerunReason(hasFollowUp bool, taskCount int) string {
+	if hasFollowUp {
+		return "follow-up mode records selected rerun tasks"
+	}
+	if taskCount > 1 {
+		return "multi-node graph can rerun targeted failed tasks"
+	}
+	return "single worker graph has little node-level rerun value"
+}
+
+func valueBarVerdict(score float64) string {
+	switch {
+	case score >= 0.75:
+		return "strong_orchestration_value"
+	case score >= 0.5:
+		return "mixed_orchestration_value"
+	default:
+		return "weak_orchestration_value"
+	}
+}
+
+func round2(value float64) float64 {
+	return math.Round(value*100) / 100
+}
+
+func ternaryString(cond bool, yes, no string) string {
+	if cond {
+		return yes
+	}
+	return no
+}
+
 type stagedApplyFile struct {
 	SourcePath string
 	TargetPath string
@@ -1101,6 +1684,10 @@ func relativeTo(root, path string) string {
 }
 
 func applyResults(rootPath, artifactRootPath, planPath, approvalPath, resultPath string) error {
+	return applyResultsWithVerify(rootPath, artifactRootPath, planPath, approvalPath, resultPath, "", false)
+}
+
+func applyResultsWithVerify(rootPath, artifactRootPath, planPath, approvalPath, resultPath, verifyPath string, allowReviewApply bool) error {
 	root, err := filepath.Abs(rootPath)
 	if err != nil {
 		return err
@@ -1108,6 +1695,18 @@ func applyResults(rootPath, artifactRootPath, planPath, approvalPath, resultPath
 	artifactRoot, err := filepath.Abs(artifactRootPath)
 	if err != nil {
 		return err
+	}
+	verifyStatus := ""
+	if strings.TrimSpace(verifyPath) != "" {
+		verifyStatus = strings.TrimSpace(stringValue(readJSONMapOptional(verifyPath)["status"]))
+		if verifyStatus != "" && !strings.EqualFold(verifyStatus, "pass") && !allowReviewApply {
+			return writeJSONFile(resultPath, map[string]any{
+				"status":        "skipped",
+				"reason":        "verify status is " + verifyStatus + "; set DORKPIPE_ORCH_APPLY_ON_REVIEW=1 to override intentionally",
+				"verify_status": verifyStatus,
+				"applied":       []any{},
+			})
+		}
 	}
 	plan := readJSONMap(planPath)
 	applyCfg := mapValue(plan["apply"])
@@ -1468,6 +2067,10 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 	orchestration := mapValue(agent["orchestration"])
 	request := mapValue(orchestration["request"])
 	planCfg := mapValue(orchestration["plan"])
+	agentsCfg := loadAgentsConfig(workflowPath)
+	for key, value := range mapValue(orchestration["agents"]) {
+		agentsCfg[key] = value
+	}
 	shared := listValue(orchestration["shared"])
 	tasks := listValue(orchestration["tasks"])
 	merge := mapValue(orchestration["merge"])
@@ -1746,7 +2349,11 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 		})
 	}
 	for _, rawTask := range tasks {
-		task, err := applyTaskWorkerProfile(mapValue(rawTask), env)
+		task, err := resolveAgentTask(mapValue(rawTask), agentsCfg, env)
+		if err != nil {
+			return fmt.Errorf("%s: %w", workflowPath, err)
+		}
+		task, err = applyTaskWorkerProfile(task, env)
 		if err != nil {
 			return fmt.Errorf("%s: %w", workflowPath, err)
 		}
@@ -1838,7 +2445,8 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 					}
 				}
 			}
-			taskInputs, err := resolveScopeList(listValue(task["inputs"]))
+			contextPaths := taskContextPaths(task)
+			resolvedContextPaths, err := resolveScopeList(anySlice(contextPaths))
 			if err != nil {
 				return err
 			}
@@ -1854,11 +2462,16 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 				"id":                      taskID,
 				"base_id":                 variant["base_task_id"],
 				"reuse_existing":          reuseExisting,
+				"agent":                   stringValue(task["agent"]),
+				"role":                    stringValue(task["role"]),
+				"authority":               mapValue(task["authority"]),
 				"worker":                  stringValue(task["worker"]),
 				"worker_policy":           mapValue(task["worker_policy"]),
 				"comparison":              laneSelection["comparison"],
 				"goal":                    stringValue(task["goal"]),
-				"inputs":                  taskInputs,
+				"brief":                   stringValue(task["brief"]),
+				"context":                 mapValue(task["context"]),
+				"context_paths":           resolvedContextPaths,
 				"constraints":             listValue(task["constraints"]),
 				"expected_output":         stringValue(task["expected_output"]),
 				"output_path":             inferTaskOutputPath(task),
@@ -1870,7 +2483,8 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 				"max_cloud_tokens":        intFromAny(fallbackAny(task["max_cloud_tokens"], fallbackAny(laneSelection["max_task_tokens"], maxTaskCloudTokens))),
 				"depends_on":              dependsOn,
 				"claims":                  listValue(task["claims"]),
-				"citations":               mustResolveScopeCitations(task, taskInputs, resolveScopeList),
+				"citations":               mustResolveScopeCitations(task, resolvedContextPaths, resolveScopeList),
+				"materialize_outputs":     listValue(task["materialize_outputs"]),
 				"startup_prompt":          startupPrompt,
 				"include_agents_md":       includeAgentsMD,
 				"accessible_paths":        accessiblePaths,
@@ -1902,16 +2516,30 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 					"",
 					"Task id: " + taskID,
 					"Base task id: " + variant["base_task_id"],
+					"Agent role: " + fallbackString(stringValue(taskPayload["role"]), stringValue(taskPayload["agent"])),
 					"Goal: " + stringValue(taskPayload["goal"]),
 					"Expected output: " + stringValue(taskPayload["expected_output"]),
+				}
+				if brief := strings.TrimSpace(stringValue(taskPayload["brief"])); brief != "" {
+					lines = append(lines, "", "Brief:", brief)
+				}
+				if len(contextPaths) > 0 {
+					lines = append(lines, "", "Context briefing paths:")
+					for _, path := range contextPaths {
+						lines = append(lines, "- "+path)
+					}
+				}
+				lines = append(lines,
 					"",
 					"Rules:",
 					"- Treat this as one bounded task, not the whole request.",
-					"- Ground claims in the referenced inputs.",
+					"- Treat context briefing paths as starting context, not the full source boundary.",
+					"- Access policy and mounted roots define what else you may inspect.",
+					"- Ground substantive claims in exact source paths.",
 					"- Return concise markdown suitable for downstream merge.",
 					"- Return the requested artifact content directly; do not narrate your tool workflow.",
 					"- Call out uncertainty explicitly.",
-				}
+				)
 				if variant["compare_provider"] != "" {
 					lines = append(lines, "", "Comparison mode:", fmt.Sprintf("- You are the %s fork for base task `%s`.", variant["compare_provider"], variant["base_task_id"]), "- Produce an independent answer for later side-by-side evaluation.")
 				}
@@ -1981,9 +2609,9 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 					prefix = append(prefix, "", "AGENTS.md context:", "", strings.TrimRight(string(rawAgents), "\n"))
 				}
 			}
-			inputContext := renderInputContext(taskInputs, stringValue(laneSelection["provider"]), root, artifactRoot, sharedDir, inlineInputContext, inlineInputMaxBytes, inlineInputTotalMaxBytes)
-			if inputContext != "" && !localLane {
-				prefix = append(prefix, "", strings.TrimRight(inputContext, "\n"))
+			briefingContext := renderBriefingContext(resolvedContextPaths, stringValue(laneSelection["provider"]), root, artifactRoot, sharedDir, inlineInputContext, inlineInputMaxBytes, inlineInputTotalMaxBytes)
+			if briefingContext != "" && !localLane {
+				prefix = append(prefix, "", strings.TrimRight(briefingContext, "\n"))
 			}
 			if len(prefix) > 0 {
 				if localLane {
@@ -1992,8 +2620,8 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 					prompt = strings.TrimRight(strings.Join(prefix, "\n"), "\n") + "\n\n" + strings.TrimLeft(prompt, "\n")
 				}
 			}
-			if inputContext != "" && localLane {
-				prompt = strings.TrimRight(prompt, "\n") + "\n\nReference context excerpts:\n\n" + strings.TrimRight(inputContext, "\n") + "\n"
+			if briefingContext != "" && localLane {
+				prompt = strings.TrimRight(prompt, "\n") + "\n\nReference context excerpts:\n\n" + strings.TrimRight(briefingContext, "\n") + "\n"
 			}
 			if err := os.WriteFile(filepath.Join(taskDir, "prompt.md"), []byte(prompt), 0o644); err != nil {
 				return err
@@ -3863,10 +4491,10 @@ func renderShared(entry map[string]any, root string, env map[string]string) (str
 		if focus := stringValue(entry["focus"]); focus != "" {
 			lines = append(lines, "- Focus: "+focus)
 		}
-		paths := stringList(entry["paths"])
-		if len(paths) > 0 {
-			lines = append(lines, "", "## Key Paths", "")
-			for _, rel := range paths {
+		startingPoints := stringList(entry["starting_points"])
+		if len(startingPoints) > 0 {
+			lines = append(lines, "", "## Starting Points", "")
+			for _, rel := range startingPoints {
 				if _, err := os.Stat(filepath.Join(root, rel)); err == nil {
 					lines = append(lines, "- `"+rel+"`")
 				}
@@ -3953,18 +4581,18 @@ func resolveInputPath(rel, root, artifactRoot, sharedDir string) string {
 	return ""
 }
 
-func renderInputContext(inputPaths []string, provider, root, artifactRoot, sharedDir string, enabled bool, maxBytes, totalMaxBytes int) string {
-	if !enabled || len(inputPaths) == 0 || totalMaxBytes <= 0 {
+func renderBriefingContext(contextPaths []string, provider, root, artifactRoot, sharedDir string, enabled bool, maxBytes, totalMaxBytes int) string {
+	if !enabled || len(contextPaths) == 0 || totalMaxBytes <= 0 {
 		return ""
 	}
 	remaining := totalMaxBytes
 	sections := []string{
-		"Input context excerpts:",
+		"Briefing context excerpts:",
 		"",
-		"Use these excerpts as the primary source of truth for this task. Cite paths in prose when useful, but keep the final answer compact.",
+		"Use these excerpts as required briefing for this task. They are not a source boundary; cite exact paths in prose when useful, but keep the final answer compact.",
 	}
 	included := 0
-	ordered := append([]string{}, inputPaths...)
+	ordered := append([]string{}, contextPaths...)
 	sort.Slice(ordered, func(i, j int) bool {
 		left := ordered[i]
 		right := ordered[j]
@@ -4039,10 +4667,10 @@ func resolveDockpipeCommand(root string, env map[string]string) string {
 	return "dockpipe"
 }
 
-func mustResolveScopeCitations(task map[string]any, taskInputs []string, resolve func([]any) ([]string, error)) []string {
-	paths, err := resolve(listValue(fallbackAny(task["citations"], anySlice(taskInputs))))
+func mustResolveScopeCitations(task map[string]any, contextPaths []string, resolve func([]any) ([]string, error)) []string {
+	paths, err := resolve(listValue(fallbackAny(task["citations"], anySlice(contextPaths))))
 	if err != nil {
-		return taskInputs
+		return contextPaths
 	}
 	return paths
 }
@@ -4071,6 +4699,65 @@ func copyMap(in map[string]any) map[string]any {
 		out[key] = value
 	}
 	return out
+}
+
+func resolveAgentTask(task, agents map[string]any, env map[string]string) (map[string]any, error) {
+	agentID := strings.TrimSpace(expandEnv(stringValue(task["agent"]), env))
+	if agentID == "" {
+		return task, nil
+	}
+	def := mapValue(agents[agentID])
+	if len(def) == 0 {
+		return nil, fmt.Errorf("task %q references unknown agent %q", stringValue(task["id"]), agentID)
+	}
+	out := copyMap(def)
+	out["agent"] = agentID
+	out["id"] = task["id"]
+	for _, key := range []string{"constraints"} {
+		merged := append(listValue(def[key]), listValue(task[key])...)
+		if len(merged) > 0 {
+			out[key] = merged
+		}
+	}
+	for key, value := range task {
+		if key == "constraints" {
+			continue
+		}
+		out[key] = value
+	}
+	if stringValue(out["role"]) == "" {
+		out["role"] = agentID
+	}
+	if len(mapValue(out["context"])) == 0 {
+		out["context"] = map[string]any{}
+	}
+	return out, nil
+}
+
+func loadAgentsConfig(workflowPath string) map[string]any {
+	path := filepath.Join(filepath.Dir(workflowPath), "agents.yml")
+	payload := readYAMLMapOptional(path)
+	if len(payload) == 0 {
+		return map[string]any{}
+	}
+	if agents := mapValue(payload["agents"]); len(agents) > 0 {
+		return agents
+	}
+	return mapValue(mapValue(payload["agent"])["agents"])
+}
+
+func taskContextPaths(task map[string]any) []string {
+	context := mapValue(task["context"])
+	values := []string{}
+	for _, key := range []string{"required_artifacts", "seed_paths", "source_roots"} {
+		for _, raw := range listValue(context[key]) {
+			value := strings.TrimSpace(fmt.Sprint(raw))
+			if value != "" && !containsString(values, value) {
+				values = append(values, value)
+			}
+		}
+	}
+	return values
 }
 
 func firstLane(candidates []laneCandidate, keep func(laneCandidate) bool) *laneCandidate {

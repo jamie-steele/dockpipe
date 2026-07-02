@@ -8,6 +8,8 @@ Read when building docs workflows, documentation orchestration, or agent-created
 - DorkPipe materializes request, plan, task, merge, verify, usage, halt, and approval artifacts.
 - Worker prompts and access policy come from `steps[].agent`.
 - Skills route reusable assistant behavior; docs keep repo-local truth.
+- Use `docs/agents/ai-workflow-value-bar.md` for the direct-worker baseline, lane routing, and
+  DAG/node evaluation rules before splitting docs work across agents.
 
 ## Avoid
 
@@ -16,6 +18,8 @@ Read when building docs workflows, documentation orchestration, or agent-created
 - stale docs that reference deleted workflows/scripts
 - target-specific skill routing
 - burying access/cost policy in prompt prose only
+- forcing every docs workflow into a rigid evidence ledger; use source/citation artifacts only when
+  they improve the result over one strong worker
 
 ## Required Outputs
 
@@ -25,6 +29,7 @@ Docs workflows should produce reviewable artifacts:
 - per-task results with citations/claims
 - merge synthesis
 - verifier result
+- failure class/root-cause or explicit reason no deeper evaluation was needed
 - approval record or explicit next action
 
 ## Checks
