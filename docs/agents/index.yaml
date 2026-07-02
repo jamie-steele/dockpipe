@@ -251,11 +251,28 @@ tasks:
       - docs/agents/token-optimization.md
       - docs/agents/skills.md
       - docs/agents/index.yaml
+      - docs/TODO.md
     skills:
       - dorkpipe-token-optimization
       - dorkpipe-core-review
     validation:
       - ./src/bin/dockpipe --package dorkpipe --workflow skills.render -- --list
+
+  backlog_or_followup_update:
+    read:
+      - AGENTS.md
+      - docs/TODO.md
+      - docs/agents/repo-map.md
+      - docs/agents/token-optimization.md
+    optional:
+      - docs/operation-results.md
+      - docs/git-runtime-sessions.md
+      - docs/agents/architecture.md
+    skills:
+      - dorkpipe-token-optimization
+      - dorkpipe-core-review
+    validation:
+      - rg -n "Current state:|Still open:|TODO" docs/TODO.md -S
 
   skills_render:
     read:

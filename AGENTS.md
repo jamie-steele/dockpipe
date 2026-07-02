@@ -22,6 +22,7 @@ Machine-readable routing: `docs/agents/index.yaml`.
 | Secrets must be references only. Never commit plaintext secrets or generated resolved templates. | `docs/agents/safety-guardrails.md` |
 | Treat `bin/.dockpipe/` and `.dorkpipe/` as generated/read-only grounding unless the user asks to refresh. | `docs/agents/artifacts-and-mcp.md` |
 | AI workflows must beat one strong direct worker on quality, safety, cost, review effort, or rerun value. DorkPipe owns the lower-level proof through artifacts/metrics, not user boilerplate. | `docs/agents/ai-workflow-value-bar.md` |
+| Treat `docs/TODO.md` as the cross-cutting backlog for operational/runtime follow-ups. When a task materially completes or advances one of those items, update `docs/TODO.md` in the same change so agent guidance stays current. | `docs/TODO.md` |
 
 ## Task Routing
 
@@ -108,5 +109,6 @@ Report:
 - `docs/agents/safety-guardrails.md`
 - `docs/agents/token-optimization.md`
 - `docs/agents/skills.md`
+- `docs/TODO.md`
 
 DockPipe runs anything, anywhere, in isolation. Keep it simple. Keep it composable.

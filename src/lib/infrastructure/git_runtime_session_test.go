@@ -206,6 +206,9 @@ func TestCreateSessionBranchManagedVolumeAllocatesDockerVolumeMetadata(t *testin
 	if !strings.Contains(got, " run --rm --entrypoint sh ") {
 		t.Fatalf("expected session volume bootstrap helper run, got:\n%s", got)
 	}
+	if !strings.Contains(got, "--name dockpipe-helper-session-volume-seed-") || !strings.Contains(got, "--label com.dockpipe.helper.unit=session.volume.seed") {
+		t.Fatalf("expected stable helper naming and labels for session volume seed, got:\n%s", got)
+	}
 	gitRemoveWorktree(t, repo, session.Storage.Workspace)
 }
 
@@ -287,6 +290,9 @@ func TestCreateWorkerLeaseSplitVolumeClonesAndReleaseApplies(t *testing.T) {
 	}
 	if strings.Count(got, " run --rm --entrypoint sh ") < 2 {
 		t.Fatalf("expected docker helper runs for clone and apply, got:\n%s", got)
+	}
+	if !strings.Contains(got, "--label com.dockpipe.helper.unit=session.volume.seed") || !strings.Contains(got, "--label com.dockpipe.helper.unit=worker.volume.clone") || !strings.Contains(got, "--label com.dockpipe.helper.unit=worker.volume.apply") {
+		t.Fatalf("expected stable helper labels for runtime-owned volume helpers, got:\n%s", got)
 	}
 	if !strings.Contains(got, "volume rm -f "+lease.Volume) {
 		t.Fatalf("expected worker clone volume removal call, got:\n%s", got)

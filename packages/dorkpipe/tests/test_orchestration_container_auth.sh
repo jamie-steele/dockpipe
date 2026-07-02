@@ -20,6 +20,7 @@ fake_args="$tmp/args.txt"
 fake_docker_args="$tmp/docker-args.txt"
 fake_login_args="$tmp/login-args.txt"
 fake_claude_auth_marker="$tmp/claude-auth-ok"
+fake_container_auth_fail_once_marker="$tmp/container-auth-fail-once.txt"
 fake_lease_state="$tmp/lease-state.txt"
 cat >"$fake_dockpipe" <<'SH'
 #!/usr/bin/env bash
@@ -82,6 +83,14 @@ EOF
 fi
 if [[ "${1:-}" == "session" && "${2:-}" == "worker-release" ]]; then
   exit 0
+fi
+if [[ "${FAKE_CONTAINER_AUTH_FAIL_ONCE_CLAUDE:-}" == "1" && -n "${FAKE_CONTAINER_AUTH_FAIL_ONCE_MARKER:-}" ]]; then
+  joined=" $* "
+  if [[ "${joined}" == *" --resolver claude "* ]] && [[ ! -f "${FAKE_CONTAINER_AUTH_FAIL_ONCE_MARKER}" ]]; then
+    : > "${FAKE_CONTAINER_AUTH_FAIL_ONCE_MARKER}"
+    printf 'Not logged in · Please run /login\n' >&2
+    exit 1
+  fi
 fi
 printf '%s\n' "$@" > "${FAKE_DOCKPIPE_ARGS:?}"
 printf 'container worker ok\n'
@@ -258,6 +267,7 @@ export FAKE_DOCKPIPE_ARGS="$fake_args"
 export FAKE_DOCKER_ARGS="$fake_docker_args"
 export FAKE_LOGIN_ARGS="$fake_login_args"
 export FAKE_CLAUDE_AUTH_MARKER="$fake_claude_auth_marker"
+export FAKE_CONTAINER_AUTH_FAIL_ONCE_MARKER="$fake_container_auth_fail_once_marker"
 export FAKE_LEASE_STATE="$fake_lease_state"
 export DORKPIPE_ORCH_ROOT="$tmp/orchestrate"
 export DOCKPIPE_CONTAINER_MOUNTS=$'C:\\Source\\UniteHere:/UniteHere:ro\nC:\\docs\\UniteHere\\Design Notes:/DesignNotes:ro'
@@ -452,5 +462,15 @@ grep -q -- "hasTrustDialogAccepted = true" "$fake_args"
 grep -q -- 'payload.projects\[guestProjectRoot\] = project' "$fake_args"
 grep -q -- "claude --dangerously-skip-permissions" "$fake_args"
 grep -qx -- "container worker ok" "$response"
+
+rm -f "$fake_args" "$response" "$fake_login_args" "$fake_container_auth_fail_once_marker"
+: > "$fake_claude_auth_marker"
+export DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING="always"
+export FAKE_CONTAINER_AUTH_FAIL_ONCE_CLAUDE="1"
+dorkpipe_orchestrate_run_container_worker claude "$prompt" "$response"
+grep -qx -- "claude:auth login" "$fake_login_args"
+grep -qx -- "container worker ok" "$response"
+unset FAKE_CONTAINER_AUTH_FAIL_ONCE_CLAUDE
+unset DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING
 
 echo "test_orchestration_container_auth OK"

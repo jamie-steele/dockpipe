@@ -15,6 +15,7 @@ Read when orienting in the DockPipe checkout.
 | `bin/.dockpipe/` | Generated project-local state, compiled packages, handoffs, metrics. |
 | `.dorkpipe/` | Generated DorkPipe handoffs/analysis where present. |
 | `docs/` | Human docs and agent routing. |
+| `docs/TODO.md` | Cross-cutting backlog for operational/runtime follow-ups; update it when work materially completes or advances one of its items. |
 
 ## Generated State
 

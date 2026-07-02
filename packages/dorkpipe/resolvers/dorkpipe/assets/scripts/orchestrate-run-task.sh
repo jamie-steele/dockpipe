@@ -26,6 +26,7 @@ materialize_result_json="${task_dir}/materialized-result.json"
 eval "$("$(dorkpipe_orchestrate_helper_bin)" task-env "${task_dir}/task.json")"
 resolver_hint="${TASK_RESOLVER_HINT:-auto}"
 provider="$(dorkpipe_orchestrate_resolve_provider "${resolver_hint:-auto}")"
+dorkpipe_orchestrate_operation_emit "orchestrate.task" "start" "" "task=${task_id}" "provider=${provider}" "workflow=${DORKPIPE_ORCH_WORKFLOW}"
 lane_id="${TASK_LANE_ID:-${provider}}"
 used_live_model="false"
 status="ok"
@@ -289,9 +290,10 @@ dorkpipe_orchestrate_record_training_metric "${task_id}" "${lane_id}" "${provide
 export task_id status resolver_hint provider lane_id selected_model provider_session_id used_live_model budget_halt estimated_input_tokens estimated_output_tokens estimated_total_tokens task_started_at task_finished_at duration_ms summary confidence issues_json next_actions_json TASK_BASE_ID TASK_COMPARISON_JSON TASK_LANE_JSON TASK_CLAIMS_JSON TASK_CITATIONS_JSON
 "$(dorkpipe_orchestrate_helper_bin)" write-task-result "${result_json}"
 
-printf '[dorkpipe] task %s result ready at %s\n' "${task_id}" "${result_json}" >&2
-
 if [[ "${hard_fail}" == "true" ]]; then
+  dorkpipe_orchestrate_operation_fail "orchestrate.task" "${task_started_at_ms}" "${hard_fail_message:-required worker ${task_id} (${provider}) failed}" "task=${task_id}" "provider=${provider}" "result=${result_json}" "status=${status}"
   echo "[dorkpipe] ${hard_fail_message:-required worker ${task_id} (${provider}) failed}" >&2
   exit 1
 fi
+
+dorkpipe_orchestrate_operation_emit "orchestrate.task" "done" "${duration_ms}" "task=${task_id}" "provider=${provider}" "result=${result_json}" "status=${status}" "live=${used_live_model}"

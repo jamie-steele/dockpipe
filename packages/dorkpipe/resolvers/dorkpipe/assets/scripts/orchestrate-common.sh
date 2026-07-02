@@ -314,6 +314,44 @@ dorkpipe_orchestrate_now_iso() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
+dorkpipe_orchestrate_result_escape() {
+  printf '%s' "${1:-}" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+dorkpipe_orchestrate_operation_duration_ms() {
+  local started_ms="${1:-0}"
+  local finished_ms
+  finished_ms="$(dorkpipe_orchestrate_now_ms)"
+  printf '%s\n' "$(( finished_ms - started_ms ))"
+}
+
+dorkpipe_orchestrate_operation_emit() {
+  local unit="${1:?unit}"
+  local status="${2:?status}"
+  local duration_ms="${3:-}"
+  shift 3 || true
+  printf '[dorkpipe] unit=%s status=%s' "${unit}" "${status}" >&2
+  if [[ -n "${duration_ms}" && "${status}" != "start" ]]; then
+    printf ' duration_ms=%s' "${duration_ms}" >&2
+  fi
+  local field
+  for field in "$@"; do
+    [[ -n "${field}" ]] || continue
+    printf ' %s' "${field}" >&2
+  done
+  printf '\n' >&2
+}
+
+dorkpipe_orchestrate_operation_fail() {
+  local unit="${1:?unit}"
+  local started_ms="${2:?started ms}"
+  local error_message="${3:-failed}"
+  shift 3 || true
+  local duration_ms
+  duration_ms="$(dorkpipe_orchestrate_operation_duration_ms "${started_ms}")"
+  dorkpipe_orchestrate_operation_emit "${unit}" "fail" "${duration_ms}" "$@" "error=\"$(dorkpipe_orchestrate_result_escape "${error_message}")\""
+}
+
 dorkpipe_orchestrate_is_cloud_provider() {
   case "${1:-}" in
     codex|claude) return 0 ;;
@@ -998,6 +1036,20 @@ dorkpipe_orchestrate_run_auth_login() {
   esac
 }
 
+dorkpipe_orchestrate_worker_log_shows_auth_failure() {
+  local provider="${1:?provider}"
+  local log_path="${2:?log path}"
+  [[ -f "${log_path}" ]] || return 1
+  case "${provider}" in
+    codex|claude)
+      grep -Eqi 'not logged in|please run /login|please run .*login|authentication failed|auth(entication)? required' "${log_path}"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 dorkpipe_orchestrate_auth_preflight() {
   local provider="${1:?provider}"
   local mode answer command_text
@@ -1043,22 +1095,71 @@ dorkpipe_orchestrate_auth_preflight() {
   return 1
 }
 
+dorkpipe_orchestrate_auth_recover_after_worker_failure() {
+  local provider="${1:?provider}"
+  local log_path="${2:?log path}"
+  local mode answer command_text
+  dorkpipe_orchestrate_worker_log_shows_auth_failure "${provider}" "${log_path}" || return 1
+  if [[ -s "${log_path}" ]]; then
+    cat "${log_path}" >&2
+  fi
+  command_text="$(dorkpipe_orchestrate_auth_login_command_text "${provider}")"
+  echo "[dorkpipe] ${provider} worker failed because host auth appears to be missing or expired." >&2
+  echo "[dorkpipe] Run '${command_text}' on the host, then retry this worker." >&2
+  mode="$(printf '%s' "${DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING:-ask}" | tr '[:upper:]' '[:lower:]')"
+  case "${mode}" in
+    1|true|yes|always|auto-login)
+      ;;
+    0|false|no|never|off|disabled)
+      return 1
+      ;;
+    ask|prompt|"")
+      if ! dorkpipe_orchestrate_has_tty; then
+        echo "[dorkpipe] cannot recover ${provider} auth interactively because this run is non-interactive." >&2
+        return 1
+      fi
+      printf '[dorkpipe] Login to %s on the host now, then retry this worker? [y/N] ' "${provider}" >/dev/tty
+      IFS= read -r answer </dev/tty || answer=""
+      case "${answer}" in
+        y|Y|yes|YES) ;;
+        *)
+          echo "[dorkpipe] ${provider} auth recovery skipped by user." >&2
+          return 1
+          ;;
+      esac
+      ;;
+    *)
+      echo "[dorkpipe] unknown DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING=${DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING}; expected ask, never, or always" >&2
+      return 1
+      ;;
+  esac
+  dorkpipe_orchestrate_run_auth_login "${provider}" || return 1
+  if dorkpipe_orchestrate_auth_is_available "${provider}"; then
+    echo "[dorkpipe] ${provider} auth recovery succeeded; retrying worker once." >&2
+    return 0
+  fi
+  echo "[dorkpipe] ${provider} auth still unavailable after host login. Worker retry skipped." >&2
+  return 1
+}
+
 dorkpipe_orchestrate_run_container_worker() {
   local provider="${1:?provider}"
   local prompt_path="${2:?prompt path}"
   local response_path="${3:?response path}"
   local selected_model="${4:-}"
-  local dockpipe_bin auth_mount raw_response_path worker_cwd tool_image
+  local dockpipe_bin auth_mount raw_response_path raw_error_path worker_cwd tool_image
   local lease_json lease_acquired lease_apply_on_release worker_session_volume
-  local rc release_status
+  local rc release_status auth_retry_performed
   dockpipe_bin="$(dorkpipe_orchestrate_dockpipe_bin)" || return 1
   raw_response_path="${response_path}.raw"
+  raw_error_path="${response_path}.err"
   worker_cwd="$(dorkpipe_orchestrate_worker_cwd "${provider}")"
   dorkpipe_orchestrate_auth_preflight "${provider}" || return 1
   lease_json="${response_path}.lease.json"
   lease_acquired="false"
   lease_apply_on_release="false"
   worker_session_volume=""
+  auth_retry_performed="false"
 
   if [[ "$(dorkpipe_orchestrate_work_mode)" == "edit" && -n "${DOCKPIPE_SESSION_ID:-}" && -n "${DOCKPIPE_SESSION_VOLUME:-}" ]]; then
     dorkpipe_orchestrate_edit_worker_acquire "${task_id:-worker}" "${lease_json}" || return 1
@@ -1113,8 +1214,11 @@ dorkpipe_orchestrate_run_container_worker() {
 
   case "${provider}" in
     codex)
-      MSYS2_ARG_CONV_EXCL='*' "${dockpipe_bin}" "${args[@]}" -- \
-        bash -c '
+      while :; do
+        rm -f "${raw_error_path}"
+        set +e
+        MSYS2_ARG_CONV_EXCL='*' "${dockpipe_bin}" "${args[@]}" -- \
+          bash -c '
           set -euo pipefail
           export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:$PATH}"
           if [[ -n "${3:-}" ]]; then
@@ -1139,12 +1243,26 @@ dorkpipe_orchestrate_run_container_worker() {
           else
             codex exec --dangerously-bypass-approvals-and-sandbox "$1" </dev/null
           fi
-        ' _ "$(cat "${prompt_path}")" "${selected_model}" "${worker_cwd}" > "${raw_response_path}"
-      rc=$?
+          ' _ "$(cat "${prompt_path}")" "${selected_model}" "${worker_cwd}" > "${raw_response_path}" 2> "${raw_error_path}"
+        rc=$?
+        set -e
+        if [[ "${rc:-0}" -eq 0 ]]; then
+          break
+        fi
+        if [[ "${auth_retry_performed}" != "true" ]] && dorkpipe_orchestrate_auth_recover_after_worker_failure "${provider}" "${raw_error_path}"; then
+          auth_retry_performed="true"
+          continue
+        fi
+        [[ -s "${raw_error_path}" ]] && cat "${raw_error_path}" >&2
+        break
+      done
       ;;
     claude)
-      MSYS2_ARG_CONV_EXCL='*' "${dockpipe_bin}" "${args[@]}" -- \
-        bash -c '
+      while :; do
+        rm -f "${raw_error_path}"
+        set +e
+        MSYS2_ARG_CONV_EXCL='*' "${dockpipe_bin}" "${args[@]}" -- \
+          bash -c '
           set -euo pipefail
           export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin${PATH:+:$PATH}"
           if [[ -n "${3:-}" ]]; then
@@ -1237,8 +1355,19 @@ NODE
           else
             claude --dangerously-skip-permissions -p "$1" </dev/null
           fi
-        ' _ "$(cat "${prompt_path}")" "${selected_model}" "${worker_cwd}" > "${raw_response_path}"
-      rc=$?
+          ' _ "$(cat "${prompt_path}")" "${selected_model}" "${worker_cwd}" > "${raw_response_path}" 2> "${raw_error_path}"
+        rc=$?
+        set -e
+        if [[ "${rc:-0}" -eq 0 ]]; then
+          break
+        fi
+        if [[ "${auth_retry_performed}" != "true" ]] && dorkpipe_orchestrate_auth_recover_after_worker_failure "${provider}" "${raw_error_path}"; then
+          auth_retry_performed="true"
+          continue
+        fi
+        [[ -s "${raw_error_path}" ]] && cat "${raw_error_path}" >&2
+        break
+      done
       ;;
     *)
       set -e

@@ -344,11 +344,13 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		stdin = os.Stdin
 	}
 	if workVolume != "" && !o.SkipVolumeWorkspaceSync {
-		fmt.Fprintln(stderr, "[dockpipe] Syncing managed workspace into session volume…")
-		if err := dockerSyncWorkspaceIntoVolume(o.Image, workHost, workVolume); err != nil {
+		if err := RunOperation(stderr, "session.volume.sync_in", "Syncing managed workspace into session volume…", map[string]string{
+			"volume": workVolume,
+		}, func() error {
+			return dockerSyncWorkspaceIntoVolume(o.Image, workHost, workVolume)
+		}); err != nil {
 			return 1, err
 		}
-		fmt.Fprintln(stderr, "[dockpipe] Managed workspace volume ready.")
 	}
 
 	cwdInContainer := containerWorkMount
@@ -614,11 +616,14 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		_ = rm.Run()
 	}
 	if workVolume != "" && !o.SkipVolumeWorkspaceSync {
-		fmt.Fprintln(stderr, "[dockpipe] Syncing managed workspace changes back from session volume…")
-		if err := dockerSyncWorkspaceFromVolume(o.Image, workVolume, workHost); err != nil && rc == 0 {
+		err := RunOperation(stderr, "session.volume.sync_out", "Syncing managed workspace changes back from session volume…", map[string]string{
+			"volume": workVolume,
+		}, func() error {
+			return dockerSyncWorkspaceFromVolume(o.Image, workVolume, workHost)
+		})
+		if err != nil && rc == 0 {
 			return 1, err
 		}
-		fmt.Fprintln(stderr, "[dockpipe] Managed workspace sync-back complete.")
 	}
 
 	if o.CommitOnHost {
@@ -635,23 +640,31 @@ func dockerSyncWorkspaceIntoVolume(image, hostDir, volume string) error {
 	if top, err := GitTopLevel(hostDir); err == nil && samePathForDocker(top, hostDir) && hasStandaloneGitDir(hostDir) {
 		return dockerBootstrapGitWorkspaceVolume(hostDir, volume)
 	}
-	return dockerSyncWorkspace(dockerWorkspaceHelperImage(image), hostDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar --exclude=.git --exclude=bin/.dockpipe --exclude=.dorkpipe -cf - . | tar xf - -C /dockpipe-sync-dst")
+	return dockerSyncWorkspace("session.volume.sync_in", dockerWorkspaceHelperImage(image), hostDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar --exclude=.git --exclude=bin/.dockpipe --exclude=.dorkpipe -cf - . | tar xf - -C /dockpipe-sync-dst")
 }
 
 func dockerSyncWorkspaceFromVolume(image, volume, hostDir string) error {
 	if top, err := GitTopLevel(hostDir); err == nil && samePathForDocker(top, hostDir) && hasStandaloneGitDir(hostDir) {
 		return dockerApplyGitWorkspaceVolume(volume, hostDir)
 	}
-	return dockerSyncWorkspace(dockerWorkspaceHelperImage(image), volume+":/dockpipe-sync-src:ro", hostDir+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar --exclude=.git --exclude=bin/.dockpipe --exclude=.dorkpipe -cf - . | tar xf - -C /dockpipe-sync-dst")
+	return dockerSyncWorkspace("session.volume.sync_out", dockerWorkspaceHelperImage(image), volume+":/dockpipe-sync-src:ro", hostDir+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar --exclude=.git --exclude=bin/.dockpipe --exclude=.dorkpipe -cf - . | tar xf - -C /dockpipe-sync-dst")
 }
 
-func dockerSyncWorkspace(image, srcMount, dstMount, script string) error {
+func dockerSyncWorkspace(unit, image, srcMount, dstMount, script string) error {
 	image = strings.TrimSpace(image)
 	if image == "" {
 		return fmt.Errorf("workspace volume sync requires an image")
 	}
 	dockerCmd := dockerCommandName()
-	args := []string{"run", "--rm", "--entrypoint", "sh", "-v", srcMount, "-v", dstMount, "-u", "0", image, "-c", script}
+	args := []string{"run", "--rm", "--entrypoint", "sh"}
+	if helperName := dockerHelperContainerName(unit); helperName != "" {
+		args = append(args,
+			"--name", helperName,
+			"--label", "com.dockpipe.helper=1",
+			"--label", "com.dockpipe.helper.unit="+unit,
+		)
+	}
+	args = append(args, "-v", srcMount, "-v", dstMount, "-u", "0", image, "-c", script)
 	cmd := execCommandFn(dockerCmd, args...)
 	cmd.Env = dockerCommandEnv(os.Environ(), dockerCmd)
 	out, err := cmd.CombinedOutput()
@@ -683,7 +696,7 @@ func dockerBootstrapGitWorkspaceVolume(hostDir, volume string) error {
 		`fi`,
 		`git -C /dockpipe-sync-dst clean -fd >/dev/null 2>&1`,
 	}, "\n")
-	return dockerSyncWorkspace(image, hostDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", script)
+	return dockerSyncWorkspace("session.volume.seed", image, hostDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", script)
 }
 
 func dockerBootstrapGitBranchVolume(repoDir, volume, branch string) error {
@@ -701,7 +714,7 @@ func dockerBootstrapGitBranchVolume(repoDir, volume, branch string) error {
 		)
 	}
 	scriptLines = append(scriptLines, `git -C /dockpipe-sync-dst clean -fd >/dev/null 2>&1`)
-	return dockerSyncWorkspace(image, repoDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", strings.Join(scriptLines, "\n"))
+	return dockerSyncWorkspace("session.volume.seed", image, repoDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", strings.Join(scriptLines, "\n"))
 }
 
 func dockerApplyGitWorkspaceVolume(volume, hostDir string) error {
@@ -714,7 +727,7 @@ func dockerApplyGitWorkspaceVolume(volume, hostDir string) error {
 		`fi`,
 		`git -C /dockpipe-sync-src diff --cached --binary | git -C /dockpipe-sync-dst apply --whitespace=nowarn -`,
 	}, "\n")
-	return dockerSyncWorkspace(image, volume+":/dockpipe-sync-src", hostDir+":/dockpipe-sync-dst", script)
+	return dockerSyncWorkspace("session.volume.sync_out", image, volume+":/dockpipe-sync-src", hostDir+":/dockpipe-sync-dst", script)
 }
 
 func dockerWorkspaceHelperImage(runImage string) string {
@@ -745,6 +758,18 @@ func samePathForDocker(a, b string) bool {
 		return strings.EqualFold(a, b)
 	}
 	return a == b
+}
+
+func dockerHelperContainerName(unit string) string {
+	unit = strings.TrimSpace(unit)
+	if unit == "" {
+		return ""
+	}
+	unit = strings.ToLower(unit)
+	unit = strings.ReplaceAll(unit, ".", "-")
+	unit = strings.ReplaceAll(unit, "_", "-")
+	unit = strings.ReplaceAll(unit, "/", "-")
+	return fmt.Sprintf("dockpipe-helper-%s-%d-%d", unit, os.Getpid(), timeNowDockerFn().UnixNano()%1e9)
 }
 
 const banner = `

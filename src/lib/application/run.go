@@ -704,10 +704,16 @@ func Run(argv []string, baseEnviron []string) error {
 			if _, err := os.Stat(p); err != nil {
 				return fmt.Errorf("strategy before script not found: %s: %w", p, err)
 			}
-			fmt.Fprintf(os.Stderr, "[dockpipe] Host setup (strategy)\n")
-			stop := infrastructure.StartLineSpinner(os.Stderr, hostSpinnerLabel(p))
-			em, err := sourceHostScriptAppFn(p, envSlice)
-			stop()
+			ids := map[string]string{
+				"kind":   "strategy",
+				"script": filepath.Base(p),
+			}
+			var em map[string]string
+			_, err := infrastructure.RunOperationWithResult(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, func() error {
+				var opErr error
+				em, opErr = sourceHostScriptAppFn(p, envSlice)
+				return opErr
+			})
 			if err != nil {
 				return err
 			}
@@ -723,10 +729,16 @@ func Run(argv []string, baseEnviron []string) error {
 			if _, err := os.Stat(p); err != nil {
 				return fmt.Errorf("pre-script not found: %s", p)
 			}
-			fmt.Fprintf(os.Stderr, "[dockpipe] Host setup\n")
-			stop := infrastructure.StartLineSpinner(os.Stderr, hostSpinnerLabel(p))
-			em, err := sourceHostScriptAppFn(p, envSlice)
-			stop()
+			ids := map[string]string{
+				"kind":   "pre",
+				"script": filepath.Base(p),
+			}
+			var em map[string]string
+			_, err := infrastructure.RunOperationWithResult(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, func() error {
+				var opErr error
+				em, opErr = sourceHostScriptAppFn(p, envSlice)
+				return opErr
+			})
 			if err != nil {
 				return err
 			}
@@ -1085,14 +1097,24 @@ func checkpointWorkflowGitSession(session *infrastructure.GitSession, wf *domain
 	}
 	switch mode {
 	case "auto", "step":
-		cp, err := infrastructure.CheckpointSession(session, "workflow completed")
+		ids := map[string]string{
+			"session": session.SessionID,
+		}
+		var cp *infrastructure.GitCheckpoint
+		_, err := infrastructure.RunOperationWithResult(os.Stderr, "session.checkpoint", "Checkpointing session workspace…", ids, func() error {
+			var opErr error
+			cp, opErr = infrastructure.CheckpointSession(session, "workflow completed")
+			if cp != nil {
+				ids["checkpoint"] = cp.CheckpointID
+				if strings.TrimSpace(cp.Commit) != "" {
+					ids["commit"] = cp.Commit
+				}
+				ids["result"] = cp.Status
+			}
+			return opErr
+		})
 		if err != nil {
 			return err
-		}
-		if cp.Status == "created" {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Checkpoint: %s %s\n", cp.CheckpointID, cp.Commit)
-		} else {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Checkpoint: clean (%s)\n", cp.CheckpointID)
 		}
 		return nil
 	case "manual":

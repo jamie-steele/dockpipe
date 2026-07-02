@@ -8,6 +8,8 @@ source "$SCRIPT_DIR/orchestrate-common.sh"
 dorkpipe_orchestrate_init
 merge_json="${DORKPIPE_ORCH_MERGE_DIR}/result.json"
 [[ -f "${merge_json}" ]] || { echo "missing merge result" >&2; exit 1; }
+op_started_ms="$(dorkpipe_orchestrate_now_ms)"
+dorkpipe_orchestrate_operation_emit "orchestrate.verify" "start" "" "workflow=${DORKPIPE_ORCH_WORKFLOW}" "root=${DORKPIPE_ORCH_VERIFY_DIR}"
 
 status="pass"
 confidence="0.60"
@@ -45,7 +47,7 @@ if [[ -f "${DORKPIPE_ORCH_HALT_JSON}" ]]; then
   next_action="human review of cloud budget halt before any further cloud worker execution"
 fi
 
-"$(dorkpipe_orchestrate_helper_bin)" build-verify-result \
+if ! "$(dorkpipe_orchestrate_helper_bin)" build-verify-result \
   "${DORKPIPE_ORCH_VERIFY_DIR}/result.json" \
   "${DORKPIPE_ORCH_PLAN_JSON}" \
   "${DORKPIPE_ORCH_GRAPH_JSON}" \
@@ -55,6 +57,9 @@ fi
   "${status}" \
   "${confidence}" \
   "${issues}" \
-  "${next_action}"
+  "${next_action}"; then
+  dorkpipe_orchestrate_operation_fail "orchestrate.verify" "${op_started_ms}" "build-verify-result failed" "workflow=${DORKPIPE_ORCH_WORKFLOW}"
+  exit 1
+fi
 
-printf '[dorkpipe] verify result ready at %s\n' "${DORKPIPE_ORCH_VERIFY_DIR}/result.json" >&2
+dorkpipe_orchestrate_operation_emit "orchestrate.verify" "done" "$(dorkpipe_orchestrate_operation_duration_ms "${op_started_ms}")" "workflow=${DORKPIPE_ORCH_WORKFLOW}" "result=${DORKPIPE_ORCH_VERIFY_DIR}/result.json" "status=${status}"

@@ -832,14 +832,25 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 		if _, err := osStatFn(p); err != nil {
 			return fmt.Errorf("pre-script not found: %s", p)
 		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] [parallel %d] Host setup\n", idx+1)
+		ids := map[string]string{
+			"parallel": fmt.Sprintf("%d", idx+1),
+			"script":   filepath.Base(p),
+		}
 		if step.IsHostStep() {
-			if err := runHostScriptFn(p, envSliceWithScriptContext(envSlice, p)); err != nil {
+			_, err := infrastructure.RunOperationWithResult(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, func() error {
+				return runHostScriptFn(p, envSliceWithScriptContext(envSlice, p))
+			})
+			if err != nil {
 				return err
 			}
 			continue
 		}
-		em, err := sourceHostScriptFn(p, envSliceWithScriptContext(envSlice, p))
+		var em map[string]string
+		_, err := infrastructure.RunOperationWithResult(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, func() error {
+			var opErr error
+			em, opErr = sourceHostScriptFn(p, envSliceWithScriptContext(envSlice, p))
+			return opErr
+		})
 		if err != nil {
 			return err
 		}
@@ -1206,18 +1217,26 @@ func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {
 		if _, err := osStatFn(p); err != nil {
 			return fmt.Errorf("pre-script not found: %s", p)
 		}
+		ids := map[string]string{
+			"script": filepath.Base(p),
+		}
 		if step.IsHostStep() {
 			// host-step run: must exec with inherited stdio — SourceHostScript sources and
 			// captures CombinedOutput(), so users would see nothing (e.g. cursor-dev step 2, vscode).
-			fmt.Fprintf(os.Stderr, "[dockpipe] Host setup: %s\n", filepath.Base(p))
-			if err := runHostScriptFn(p, envSliceWithScriptContext(o.envSlice, p)); err != nil {
+			_, err := infrastructure.RunOperationWithResult(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, func() error {
+				return runHostScriptFn(p, envSliceWithScriptContext(o.envSlice, p))
+			})
+			if err != nil {
 				return err
 			}
 			continue
 		}
-		stop := infrastructure.StartLineSpinner(os.Stderr, hostSpinnerLabel(p))
-		em, err := sourceHostScriptFn(p, envSliceWithScriptContext(o.envSlice, p))
-		stop()
+		var em map[string]string
+		_, err := infrastructure.RunOperationWithResult(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, func() error {
+			var opErr error
+			em, opErr = sourceHostScriptFn(p, envSliceWithScriptContext(o.envSlice, p))
+			return opErr
+		})
 		if err != nil {
 			return err
 		}

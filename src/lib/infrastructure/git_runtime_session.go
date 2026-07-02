@@ -205,10 +205,37 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 		if storage == "volume" {
 			backend = "docker_volume"
 			volumeName = dockerWorkspaceVolumeName(workspaceID, sessionID)
-			if err := DockerVolumeCreate(volumeName); err != nil {
+			volumeIDs := map[string]string{
+				"branch":    branch,
+				"session":   sessionID,
+				"volume":    volumeName,
+				"workspace": workspaceID,
+			}
+			preflightResult, err := RunOperationWithResult(os.Stderr, "session.volume.preflight", "Preflighting session workspace volume…", volumeIDs, func() error {
+				return preflightManagedVolumeSeed(top, branch)
+			})
+			if sessionEventErr := appendGitSessionEvent(nil, OperationEventFields(preflightResult), sessionDir); sessionEventErr != nil {
+				return nil, sessionEventErr
+			}
+			if err != nil {
+				return nil, fmt.Errorf("preflight workspace docker volume %q for repo %q at branch %q: %w", volumeName, top, branch, err)
+			}
+			createResult, err := RunOperationWithResult(os.Stderr, "session.volume.create", "Creating session workspace volume…", volumeIDs, func() error {
+				return DockerVolumeCreate(volumeName)
+			})
+			if sessionEventErr := appendGitSessionEvent(nil, OperationEventFields(createResult), sessionDir); sessionEventErr != nil {
+				return nil, sessionEventErr
+			}
+			if err != nil {
 				return nil, fmt.Errorf("create workspace docker volume %q: %w", volumeName, err)
 			}
-			if err := dockerBootstrapGitBranchVolume(top, volumeName, branch); err != nil {
+			seedResult, err := RunOperationWithResult(os.Stderr, "session.volume.seed", "Seeding session workspace volume…", volumeIDs, func() error {
+				return dockerBootstrapGitBranchVolume(top, volumeName, branch)
+			})
+			if sessionEventErr := appendGitSessionEvent(nil, OperationEventFields(seedResult), sessionDir); sessionEventErr != nil {
+				return nil, sessionEventErr
+			}
+			if err != nil {
 				return nil, fmt.Errorf("seed workspace docker volume %q from repo %q at branch %q: %w", volumeName, top, branch, err)
 			}
 		}
@@ -258,7 +285,7 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 		"session_id":  sessionID,
 		"workspace":   workspace,
 		"session_ref": branch,
-	})
+	}, "")
 	return s, nil
 }
 
@@ -267,6 +294,20 @@ func ensureManagedSessionWorktree(repo, workspace, branch, baseRef string) error
 		return gitRun(repo, "worktree", "add", workspace, branch)
 	}
 	return gitRun(repo, "worktree", "add", "-b", branch, workspace, baseRef)
+}
+
+func preflightManagedVolumeSeed(repo, branch string) error {
+	if _, err := GitTopLevel(repo); err != nil {
+		return fmt.Errorf("workspace source must be a git work tree: %w", err)
+	}
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return fmt.Errorf("session branch is empty")
+	}
+	if gitRun(repo, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) != nil {
+		return fmt.Errorf("session branch %q does not exist yet", branch)
+	}
+	return nil
 }
 
 func findReusableManagedGitSession(repo, branch string) (*GitSession, error) {
@@ -357,7 +398,7 @@ func CheckpointSession(session *GitSession, reason string) (*GitCheckpoint, erro
 		"session_id":    session.SessionID,
 		"checkpoint_id": cp.CheckpointID,
 		"commit":        cp.Commit,
-	})
+	}, "")
 	return cp, nil
 }
 
@@ -397,7 +438,7 @@ func SyncSession(session *GitSession) (*GitSyncResult, error) {
 			"actor":      "runtime",
 			"session_id": session.SessionID,
 			"base_ref":   baseRef,
-		})
+		}, "")
 		return res, mergeErr
 	}
 	commit, _ := GitRevParse(top, "HEAD")
@@ -416,7 +457,7 @@ func SyncSession(session *GitSession) (*GitSyncResult, error) {
 		"session_id": session.SessionID,
 		"base_ref":   baseRef,
 		"commit":     commit,
-	})
+	}, "")
 	return res, nil
 }
 
@@ -452,7 +493,7 @@ func PublishSession(session *GitSession, remote string) (*GitPublishResult, erro
 			"session_id": session.SessionID,
 			"remote":     remote,
 			"branch":     branch,
-		})
+		}, "")
 		return res, pushErr
 	}
 	session.Status = "published"
@@ -469,7 +510,7 @@ func PublishSession(session *GitSession, remote string) (*GitPublishResult, erro
 		"session_id": session.SessionID,
 		"remote":     remote,
 		"branch":     branch,
-	})
+	}, "")
 	return res, nil
 }
 
@@ -490,7 +531,7 @@ func ArchiveSession(session *GitSession) error {
 		"type":       "session.archived",
 		"actor":      "runtime",
 		"session_id": session.SessionID,
-	})
+	}, "")
 }
 
 func CreateWorkerLease(session *GitSession, req GitWorkerLeaseRequest) (*GitWorkerLease, error) {
@@ -564,7 +605,7 @@ func CreateWorkerLease(session *GitSession, req GitWorkerLeaseRequest) (*GitWork
 		"worker_id":  workerID,
 		"lease_id":   lease.LeaseID,
 		"branch":     lease.Branch,
-	})
+	}, "")
 	return lease, nil
 }
 
@@ -613,7 +654,7 @@ func ReleaseWorkerLeaseWithOptions(session *GitSession, workerID, status string,
 		"session_id": session.SessionID,
 		"worker_id":  lease.WorkerID,
 		"lease_id":   lease.LeaseID,
-	})
+	}, "")
 	return &lease, nil
 }
 
@@ -829,7 +870,7 @@ func DockerVolumeClone(srcVolume, dstVolume string) error {
 		return fmt.Errorf("docker volume clone requires source and destination volumes")
 	}
 	image := dockerWorkspaceHelperImage("")
-	return dockerSyncWorkspace(image, srcVolume+":/dockpipe-sync-src:ro", dstVolume+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar -cf - . | tar xf - -C /dockpipe-sync-dst")
+	return dockerSyncWorkspace("worker.volume.clone", image, srcVolume+":/dockpipe-sync-src:ro", dstVolume+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar -cf - . | tar xf - -C /dockpipe-sync-dst")
 }
 
 func DockerApplyGitVolumeDiff(srcVolume, dstVolume string) error {
@@ -847,7 +888,7 @@ func DockerApplyGitVolumeDiff(srcVolume, dstVolume string) error {
 		`fi`,
 		`git -C /dockpipe-sync-src diff --cached --binary | git -C /dockpipe-sync-dst apply --whitespace=nowarn -`,
 	}, "\n")
-	return dockerSyncWorkspace(image, srcVolume+":/dockpipe-sync-src", dstVolume+":/dockpipe-sync-dst", script)
+	return dockerSyncWorkspace("worker.volume.apply", image, srcVolume+":/dockpipe-sync-src", dstVolume+":/dockpipe-sync-dst", script)
 }
 
 func ensureBindSessionBranch(workdir, branch, baseRef string) error {
@@ -964,10 +1005,14 @@ func writeGitCheckpoint(session *GitSession, cp *GitCheckpoint) error {
 	return os.WriteFile(filepath.Join(cpDir, cp.CheckpointID+".json"), append(b, '\n'), 0o644)
 }
 
-func appendGitSessionEvent(session *GitSession, fields map[string]string) error {
-	dir, err := gitSessionMetadataDir(session, session.Storage.Workspace)
-	if err != nil {
-		return err
+func appendGitSessionEvent(session *GitSession, fields map[string]string, metadataDir string) error {
+	dir := strings.TrimSpace(metadataDir)
+	if dir == "" {
+		var err error
+		dir, err = gitSessionMetadataDir(session, metadataDir)
+		if err != nil {
+			return err
+		}
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
