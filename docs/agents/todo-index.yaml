@@ -1,0 +1,22 @@
+schema: 1
+description: AI entrypoint for the indexed cross-cutting backlog.
+
+todos:
+  - id: TODO-001
+    topic: Operation results contract rollout
+    path: docs/todos/operation-results-contract.md
+  - id: TODO-002
+    topic: Orchestration validation and source walkers
+    path: docs/todos/orchestration-validation.md
+  - id: TODO-003
+    topic: Managed session volume cleanup and retention
+    path: docs/todos/session-volume-cleanup.md
+  - id: TODO-004
+    topic: Qt app and VS Code extension compile performance
+    path: docs/todos/compile-performance-qt-vscode.md
+
+maintenance:
+  - Treat this YAML file as the AI/backlog entrypoint.
+  - Put topic-specific status in the linked markdown, not in this index.
+  - When work materially completes or advances one of these items, update this index if needed and
+    update the corresponding topic file in the same change.

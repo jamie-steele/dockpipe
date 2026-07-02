@@ -251,7 +251,7 @@ tasks:
       - docs/agents/token-optimization.md
       - docs/agents/skills.md
       - docs/agents/index.yaml
-      - docs/TODO.md
+      - docs/agents/todo-index.yaml
     skills:
       - dorkpipe-token-optimization
       - dorkpipe-core-review
@@ -261,7 +261,7 @@ tasks:
   backlog_or_followup_update:
     read:
       - AGENTS.md
-      - docs/TODO.md
+      - docs/agents/todo-index.yaml
       - docs/agents/repo-map.md
       - docs/agents/token-optimization.md
     optional:
@@ -272,7 +272,7 @@ tasks:
       - dorkpipe-token-optimization
       - dorkpipe-core-review
     validation:
-      - rg -n "Current state:|Still open:|TODO" docs/TODO.md -S
+      - rg -n "TODO-00|Current State|Still Open" docs/agents/todo-index.yaml docs/todos -S
 
   skills_render:
     read:
