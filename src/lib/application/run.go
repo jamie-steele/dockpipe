@@ -779,7 +779,7 @@ func Run(argv []string, baseEnviron []string) error {
 				return err
 			}
 		}
-		if err := checkpointWorkflowGitSession(gitSession, wf); err != nil {
+		if err := finalizeWorkflowGitSession(gitSession, wf); err != nil {
 			return err
 		}
 		if commitOnHost && !strategyHandlesCommit {
@@ -827,7 +827,7 @@ func Run(argv []string, baseEnviron []string) error {
 				return err
 			}
 		}
-		if err := checkpointWorkflowGitSession(gitSession, wf); err != nil {
+		if err := finalizeWorkflowGitSession(gitSession, wf); err != nil {
 			return err
 		}
 		if commitOnHost && !strategyHandlesCommit {
@@ -901,7 +901,7 @@ func Run(argv []string, baseEnviron []string) error {
 				return err
 			}
 		}
-		if err := checkpointWorkflowGitSession(gitSession, wf); err != nil {
+		if err := finalizeWorkflowGitSession(gitSession, wf); err != nil {
 			return err
 		}
 		return nil
@@ -1025,7 +1025,7 @@ func Run(argv []string, baseEnviron []string) error {
 			return err
 		}
 	}
-	if err := checkpointWorkflowGitSession(gitSession, wf); err != nil {
+	if err := finalizeWorkflowGitSession(gitSession, wf); err != nil {
 		return err
 	}
 	return nil
@@ -1087,6 +1087,13 @@ func resolveWorkflowWorkspaceSource(repo, sourceDir, wfRoot, wfName string) (str
 	return sourceDir, firstNonEmpty(repo, wfName, "workspace")
 }
 
+func finalizeWorkflowGitSession(session *infrastructure.GitSession, wf *domain.Workflow) error {
+	if err := checkpointWorkflowGitSession(session, wf); err != nil {
+		return err
+	}
+	return autoCleanupWorkflowGitSessionVolume(session, wf)
+}
+
 func checkpointWorkflowGitSession(session *infrastructure.GitSession, wf *domain.Workflow) error {
 	if session == nil || wf == nil {
 		return nil
@@ -1121,6 +1128,27 @@ func checkpointWorkflowGitSession(session *infrastructure.GitSession, wf *domain
 		return nil
 	default:
 		return fmt.Errorf("workspace.lifecycle.checkpoint must be manual, auto, or step")
+	}
+}
+
+func autoCleanupWorkflowGitSessionVolume(session *infrastructure.GitSession, wf *domain.Workflow) error {
+	if session == nil || wf == nil {
+		return nil
+	}
+	if !strings.EqualFold(strings.TrimSpace(session.Storage.Backend), "docker_volume") {
+		return nil
+	}
+	policy := strings.TrimSpace(os.Getenv("DOCKPIPE_SESSION_VOLUME_AUTOCLEANUP"))
+	if policy == "" {
+		policy = "true"
+	}
+	switch strings.ToLower(policy) {
+	case "1", "true", "yes", "on":
+		return infrastructure.CleanupSessionVolume(session)
+	case "0", "false", "no", "off":
+		return nil
+	default:
+		return fmt.Errorf("DOCKPIPE_SESSION_VOLUME_AUTOCLEANUP must be true or false")
 	}
 }
 

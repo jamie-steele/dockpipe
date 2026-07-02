@@ -300,6 +300,77 @@ func TestCreateWorkerLeaseSplitVolumeClonesAndReleaseApplies(t *testing.T) {
 	gitRemoveWorktree(t, repo, session.Storage.Workspace)
 }
 
+func TestCleanupSessionVolumeRemovesManagedVolumeWhenRecoverable(t *testing.T) {
+	repo := initGitSessionTestRepo(t)
+	oldCreate := execCommandFn
+	t.Cleanup(func() {
+		execCommandFn = oldCreate
+	})
+	var calls []string
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		if strings.Contains(strings.ToLower(filepath.Base(name)), "docker") {
+			calls = append(calls, strings.Join(append([]string{filepath.Base(name)}, args...), " "))
+			return helperExitCommand(0)
+		}
+		return exec.Command(name, args...)
+	}
+	session, err := CreateSessionBranch(GitSessionRequest{
+		WorkspaceID: "demo",
+		SourceDir:   repo,
+		Mode:        "managed",
+		Storage:     "volume",
+		SessionID:   "cleanup-session",
+	})
+	if err != nil {
+		t.Fatalf("CreateSessionBranch: %v", err)
+	}
+	if err := CleanupSessionVolume(session); err != nil {
+		t.Fatalf("CleanupSessionVolume: %v", err)
+	}
+	if session.Storage.VolumeStatus != "cleaned" || strings.TrimSpace(session.Storage.CleanedAt) == "" {
+		t.Fatalf("expected cleaned volume metadata, got %+v", session.Storage)
+	}
+	got := strings.Join(calls, "\n")
+	if !strings.Contains(got, "volume inspect "+session.Storage.Volume) {
+		t.Fatalf("expected volume inspect preflight, got:\n%s", got)
+	}
+	if !strings.Contains(got, "volume rm -f "+session.Storage.Volume) {
+		t.Fatalf("expected volume removal call, got:\n%s", got)
+	}
+	gitRemoveWorktree(t, repo, session.Storage.Workspace)
+}
+
+func TestCleanupSessionVolumeRejectsActiveWorkerLease(t *testing.T) {
+	repo := initGitSessionTestRepo(t)
+	oldCreate := execCommandFn
+	t.Cleanup(func() {
+		execCommandFn = oldCreate
+	})
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		if strings.Contains(strings.ToLower(filepath.Base(name)), "docker") {
+			return helperExitCommand(0)
+		}
+		return exec.Command(name, args...)
+	}
+	session, err := CreateSessionBranch(GitSessionRequest{
+		WorkspaceID: "demo",
+		SourceDir:   repo,
+		Mode:        "managed",
+		Storage:     "volume",
+		SessionID:   "cleanup-active-lease",
+	})
+	if err != nil {
+		t.Fatalf("CreateSessionBranch: %v", err)
+	}
+	if _, err := CreateWorkerLease(session, GitWorkerLeaseRequest{WorkerID: "writer-a", Role: "edit", Mode: "serialized"}); err != nil {
+		t.Fatalf("CreateWorkerLease: %v", err)
+	}
+	if err := CleanupSessionVolume(session); err == nil {
+		t.Fatal("expected active worker lease to block cleanup")
+	}
+	gitRemoveWorktree(t, repo, session.Storage.Workspace)
+}
+
 func TestCreateSessionBranchErrorsOnExistingParentBranchNamespace(t *testing.T) {
 	repo := initGitSessionTestRepo(t)
 	out, err := exec.Command("git", "-C", repo, "checkout", "-b", "js/features/spnext/reporting").CombinedOutput()

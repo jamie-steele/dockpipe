@@ -45,11 +45,13 @@ type GitSessionRepo struct {
 }
 
 type GitSessionStorage struct {
-	Mode      string `json:"mode"`
-	Backend   string `json:"backend"`
-	Workspace string `json:"workspace"`
-	Metadata  string `json:"metadata"`
-	Volume    string `json:"volume,omitempty"`
+	Mode         string `json:"mode"`
+	Backend      string `json:"backend"`
+	Workspace    string `json:"workspace"`
+	Metadata     string `json:"metadata"`
+	Volume       string `json:"volume,omitempty"`
+	VolumeStatus string `json:"volume_status,omitempty"`
+	CleanedAt    string `json:"cleaned_at,omitempty"`
 }
 
 type GitSessionPolicy struct {
@@ -250,6 +252,10 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 	if strings.TrimSpace(remote) == "" {
 		remote = top
 	}
+	volumeStatus := ""
+	if volumeName != "" {
+		volumeStatus = "ready"
+	}
 	s := &GitSession{
 		Schema:      1,
 		SessionID:   sessionID,
@@ -261,11 +267,12 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 			SessionRef: branch,
 		},
 		Storage: GitSessionStorage{
-			Mode:      mode,
-			Backend:   backend,
-			Workspace: workspace,
-			Metadata:  sessionDir,
-			Volume:    volumeName,
+			Mode:         mode,
+			Backend:      backend,
+			Workspace:    workspace,
+			Metadata:     sessionDir,
+			Volume:       volumeName,
+			VolumeStatus: volumeStatus,
 		},
 		Status:    "active",
 		CreatedAt: now,
@@ -532,6 +539,53 @@ func ArchiveSession(session *GitSession) error {
 		"actor":      "runtime",
 		"session_id": session.SessionID,
 	}, "")
+}
+
+func CleanupSessionVolume(session *GitSession) error {
+	if session == nil {
+		return fmt.Errorf("session is nil")
+	}
+	if !strings.EqualFold(strings.TrimSpace(session.Storage.Backend), "docker_volume") {
+		return nil
+	}
+	volumeName := strings.TrimSpace(session.Storage.Volume)
+	if volumeName == "" {
+		return nil
+	}
+	workspace := strings.TrimSpace(session.Storage.Workspace)
+	metadataDir, err := gitSessionMetadataDir(session, workspace)
+	if err != nil {
+		return err
+	}
+	ids := map[string]string{
+		"session":   session.SessionID,
+		"volume":    volumeName,
+		"workspace": session.WorkspaceID,
+	}
+	preflightResult, err := RunOperationWithResult(os.Stderr, "session.volume.cleanup.preflight", "Preflighting session volume cleanup…", ids, func() error {
+		return preflightSessionVolumeCleanup(session)
+	})
+	_ = appendGitSessionEvent(nil, OperationEventFields(preflightResult), metadataDir)
+	if err != nil {
+		return err
+	}
+	cleanupResult, err := RunOperationWithResult(os.Stderr, "session.volume.cleanup", "Cleaning up session workspace volume…", ids, func() error {
+		exists, existsErr := DockerVolumeExists(volumeName)
+		if existsErr != nil {
+			return existsErr
+		}
+		if !exists {
+			return nil
+		}
+		return DockerVolumeRemove(volumeName)
+	})
+	_ = appendGitSessionEvent(nil, OperationEventFields(cleanupResult), metadataDir)
+	if err != nil {
+		return err
+	}
+	session.Storage.VolumeStatus = "cleaned"
+	session.Storage.CleanedAt = time.Now().UTC().Format(time.RFC3339)
+	return writeGitSession(session, workspace)
 }
 
 func CreateWorkerLease(session *GitSession, req GitWorkerLeaseRequest) (*GitWorkerLease, error) {
@@ -848,6 +902,24 @@ func DockerVolumeCreate(name string) error {
 	return nil
 }
 
+func DockerVolumeExists(name string) (bool, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false, fmt.Errorf("docker volume name is empty")
+	}
+	dockerCmd := dockerCommandName()
+	cmd := execCommandFn(dockerCmd, "volume", "inspect", name)
+	cmd.Env = dockerCommandEnv(os.Environ(), dockerCmd)
+	err := cmd.Run()
+	if err == nil {
+		return true, nil
+	}
+	if _, ok := err.(*exec.ExitError); ok {
+		return false, nil
+	}
+	return false, err
+}
+
 func DockerVolumeRemove(name string) error {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -1126,6 +1198,53 @@ func ensureNoConflictingWorkerLease(session *GitSession, workerID, requestedMode
 		if activeMode == "serialized" {
 			return fmt.Errorf("session %q already has an active serialized worker lease for %q; wait for that writer to finish or retry split-volume later", session.SessionID, lease.WorkerID)
 		}
+	}
+	return nil
+}
+
+func preflightSessionVolumeCleanup(session *GitSession) error {
+	if session == nil {
+		return fmt.Errorf("session is nil")
+	}
+	workspace := strings.TrimSpace(session.Storage.Workspace)
+	if workspace == "" {
+		return fmt.Errorf("session workspace is empty")
+	}
+	if st, err := os.Stat(workspace); err != nil || !st.IsDir() {
+		if err != nil {
+			return fmt.Errorf("session workspace not available: %w", err)
+		}
+		return fmt.Errorf("session workspace is not a directory")
+	}
+	branch := strings.TrimSpace(session.Repo.SessionRef)
+	if branch == "" {
+		return fmt.Errorf("session branch is empty")
+	}
+	if got := strings.TrimSpace(mustGitBranchNameOrEmpty(workspace)); got != branch {
+		return fmt.Errorf("session workspace branch %q does not match expected branch %q", got, branch)
+	}
+	top, err := sessionGitTop(session)
+	if err != nil {
+		return err
+	}
+	if gitRun(top, "show-ref", "--verify", "--quiet", "refs/heads/"+branch) != nil {
+		return fmt.Errorf("session branch %q does not exist locally", branch)
+	}
+	leases, err := listWorkerLeases(session)
+	if err != nil {
+		return err
+	}
+	now := time.Now().UTC()
+	for _, lease := range leases {
+		if strings.TrimSpace(lease.Status) != "active" {
+			continue
+		}
+		if lease.ExpiresAt != "" {
+			if expiresAt, parseErr := time.Parse(time.RFC3339, lease.ExpiresAt); parseErr == nil && !expiresAt.After(now) {
+				continue
+			}
+		}
+		return fmt.Errorf("active worker lease %q still depends on session volume", lease.WorkerID)
 	}
 	return nil
 }

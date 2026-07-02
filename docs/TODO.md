@@ -40,10 +40,22 @@ Still open:
 - Add package-owned deterministic source walkers for broad mounted roots and external corpora so
   cheap/local lanes consume bounded fact packets instead of pretending they performed source-root
   discovery on their own.
-- Add core DockPipe retention and cleanup for managed session Docker volumes and related workspace
-  artifacts. Multi-GB session volumes cannot accumulate indefinitely; DockPipe should provide
-  explicit inspect/list/prune behavior and safe defaults for stale volume cleanup.
-- Model volume cleanup as a runtime-owned `finally` task: always evaluate session cleanup
-  eligibility, but delete only when recoverability is proven (for example the matching session
-  branch/checkpoint state exists locally and no active run or worker lease still depends on the
-  volume).
+
+Managed session volume cleanup current state:
+
+- Core DockPipe now auto-cleans managed session base volumes after successful workflow completion
+  and after `dockpipe session publish` when the session uses `workspace.storage: volume`.
+- Cleanup is runtime-owned and gated by preflight checks: managed worktree exists, local session
+  branch exists and matches the workspace branch, and no active worker lease still depends on the
+  volume.
+- Cleanup writes operation-result lines and session events and records cleaned volume metadata in
+  the session record.
+- `DOCKPIPE_SESSION_VOLUME_AUTOCLEANUP=false` disables the default cleanup behavior when a user
+  intentionally wants to keep the runtime-owned volume around.
+
+Still open:
+
+- Add explicit inspect/list/prune CLI behavior for retained or stale managed session volumes and
+  related workspace artifacts.
+- Broaden cleanup evaluation to more failure paths so runtime-owned cleanup is not limited to the
+  current successful workflow completion and publish paths.

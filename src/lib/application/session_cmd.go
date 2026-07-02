@@ -203,6 +203,21 @@ func cmdSessionPublish(args []string) error {
 	if err != nil {
 		return err
 	}
+	if strings.EqualFold(strings.TrimSpace(session.Storage.Backend), "docker_volume") {
+		policy := strings.TrimSpace(os.Getenv("DOCKPIPE_SESSION_VOLUME_AUTOCLEANUP"))
+		if policy == "" {
+			policy = "true"
+		}
+		switch strings.ToLower(policy) {
+		case "1", "true", "yes", "on":
+			if err := infrastructure.CleanupSessionVolume(session); err != nil {
+				return err
+			}
+		case "0", "false", "no", "off":
+		default:
+			return fmt.Errorf("DOCKPIPE_SESSION_VOLUME_AUTOCLEANUP must be true or false")
+		}
+	}
 	if !jsonOut {
 		if cp.Status == "created" {
 			fmt.Fprintf(os.Stdout, "Checkpoint: %s %s\n", cp.CheckpointID, cp.Commit)
