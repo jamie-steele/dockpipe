@@ -43,5 +43,9 @@ environment.
 
 ## Status
 
-Open. Captured after `jq` succeeded from host execution but failed from Codex sandboxed Git Bash due
-to the WinGet link being non-executable.
+Partially implemented. Package tests now avoid sandbox-blocked `jq` and `python3` Windows aliases by
+using a Go-based assertion helper under the DorkPipe lib module. Standalone package tests also use a
+repo-local temp root so Git Bash does not try to write under sandbox-blocked `C:\Users\...` paths.
+
+Remaining work is the broader productized tool resolver/preflight surface for non-test workflows and
+optional repo-managed portable tool installation.
