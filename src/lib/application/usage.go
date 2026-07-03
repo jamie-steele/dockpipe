@@ -86,7 +86,7 @@ var mainUsageSections = []usageSection{
 			{"scope [--package <name>]", "Print current workflow/package scope JSON or resolve a scope path"},
 			{"sdk [--workdir]", "Emit shell bootstrap for the DockPipe SDK object"},
 			{"terraform pipeline-path | terraform run <cmds>", "Terraform helpers (see dockpipe terraform --help)"},
-			{"runs list [--workdir]", "List active host-run records under bin/.dockpipe/runs/"},
+			{"runs list|events [--workdir]", "List host-run records or inspect operation event JSONL logs"},
 			{"windows setup|doctor", "Windows: optional WSL bridge setup"},
 			{"action|pre|template init", "Copy sample scripts (use each with --help)"},
 		},
@@ -164,9 +164,11 @@ workdir/bin/.dockpipe/runs/policy/.
 
 Usage:
   dockpipe runs list [--workdir <path>]
+  dockpipe runs events --event-log <path> [--json]
   dockpipe runs policy [--workdir <path>] [--workflow <name>] [--step <id>] [--json]
 
   --workdir   Project directory (default: DOCKPIPE_WORKDIR or current directory)
+  --event-log Operation event JSONL path (events only; default: DOCKPIPE_EVENT_LOG)
   --workflow  Filter policy records by workflow name (policy only)
   --step      Filter policy records by step id (policy only)
   --json      Emit policy records as JSON instead of a table (policy only)

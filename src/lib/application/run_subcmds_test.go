@@ -301,8 +301,80 @@ func TestCmdRunsPolicyListsStructuredRecords(t *testing.T) {
 
 func TestCmdRunsUnknownSubcommandMentionsPolicy(t *testing.T) {
 	err := cmdRuns([]string{"nope"})
-	if err == nil || !strings.Contains(err.Error(), "list or policy") {
+	if err == nil || !strings.Contains(err.Error(), "list, policy, or events") {
 		t.Fatalf("expected runs subcommand guidance, got %v", err)
+	}
+}
+
+func TestCmdRunsEventsPrintsOperationEventLog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	duration := int64(42)
+	if err := infrastructure.AppendOperationEvent(path, infrastructure.OperationEvent{
+		Timestamp:  "2026-07-03T00:00:00Z",
+		Unit:       "build.compile",
+		Status:     infrastructure.OperationStatusDone,
+		DurationMs: &duration,
+		IDs: map[string]string{
+			"project": "dockpipe",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
+	if err := cmdRuns([]string{"events", "--event-log", path}); err != nil {
+		t.Fatalf("cmdRuns events failed: %v", err)
+	}
+	_ = w.Close()
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatal(err)
+	}
+	out := buf.String()
+	for _, want := range []string{"2026-07-03T00:00:00Z", "done", "build.compile", "duration_ms=42", "project=dockpipe"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected events output to contain %q, got:\n%s", want, out)
+		}
+	}
+}
+
+func TestCmdRunsEventsJSONUsesEventLogEnv(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "events.jsonl")
+	if err := infrastructure.AppendOperationEvent(path, infrastructure.OperationEvent{
+		Unit:   "build.compile",
+		Status: infrastructure.OperationStatusStart,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(infrastructure.EnvDockpipeEventLog, path)
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
+	if err := cmdRuns([]string{"events", "--json"}); err != nil {
+		t.Fatalf("cmdRuns events json failed: %v", err)
+	}
+	_ = w.Close()
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatal(err)
+	}
+	var events []infrastructure.OperationEvent
+	if err := json.Unmarshal(buf.Bytes(), &events); err != nil {
+		t.Fatalf("expected json output, got %q (%v)", buf.String(), err)
+	}
+	if len(events) != 1 || events[0].Unit != "build.compile" {
+		t.Fatalf("unexpected events: %+v", events)
 	}
 }
 

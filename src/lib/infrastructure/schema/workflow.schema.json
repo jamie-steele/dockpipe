@@ -444,6 +444,11 @@
               "additionalProperties": false,
               "properties": {
                 "require_approval": { "type": "boolean" },
+                "target_root": { "type": "string" },
+                "required_artifacts": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
                 "outputs": {
                   "type": "array",
                   "items": {

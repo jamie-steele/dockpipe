@@ -63,6 +63,13 @@ func RunOperationWithResultOptions(stderr *os.File, unit, spinnerMessage string,
 			if msg := strings.TrimSpace(spinnerMessage); msg != "" {
 				stopSpinner = StartLineSpinner(stderr, msg)
 			}
+			appendConfiguredOperationEvent(OperationResult{
+				Unit:      unit,
+				Status:    OperationStatusStart,
+				Message:   strings.TrimSpace(spinnerMessage),
+				StartedAt: startedAt,
+				IDs:       copyOperationIDs(ids),
+			})
 		} else {
 			logOperationResult(stderr, OperationResult{
 				Unit:      unit,
@@ -143,6 +150,7 @@ func logOperationResult(stderr *os.File, result OperationResult) {
 	if stderr == nil {
 		stderr = os.Stderr
 	}
+	appendConfiguredOperationEvent(result)
 	fields := []string{
 		"[dockpipe]",
 		"ts=" + operationResultTimestamp(result),

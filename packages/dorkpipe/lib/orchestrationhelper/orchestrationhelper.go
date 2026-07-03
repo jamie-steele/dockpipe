@@ -986,7 +986,15 @@ func emitVerifyHeuristics(mergePath, tasksDir, issuesJSON string, stdout io.Writ
 func emitVerifyApplyCoherence(rootPath, artifactRootPath, planPath, issuesJSON string, stdout io.Writer) error {
 	plan := readJSONMap(planPath)
 	applyCfg := mapValue(plan["apply"])
-	outputs := listValue(applyCfg["outputs"])
+	outputs, err := resolveApplyOutputs(rootPath, artifactRootPath, applyCfg)
+	if err != nil {
+		issues := []string{}
+		_ = json.Unmarshal([]byte(issuesJSON), &issues)
+		issues = append(issues, err.Error())
+		fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote("review"))
+		fmt.Fprintf(stdout, "VERIFY_APPLY_ISSUES=%s\n", shellQuote(mustJSON(issues, []string{})))
+		return nil
+	}
 	issues := []string{}
 	_ = json.Unmarshal([]byte(issuesJSON), &issues)
 	if len(outputs) == 0 {
@@ -1573,6 +1581,97 @@ func stageApplyOutputs(rootPath, artifactRootPath string, outputs []any) (staged
 	return stagedApplyTree{Root: root, TempRoot: tempRoot, Files: files}, nil
 }
 
+func resolveApplyOutputs(rootPath, artifactRootPath string, applyCfg map[string]any) ([]any, error) {
+	outputs := listValue(applyCfg["outputs"])
+	if len(outputs) > 0 {
+		return outputs, nil
+	}
+	targetRoot := strings.TrimSpace(stringValue(applyCfg["target_root"]))
+	if targetRoot == "" {
+		return nil, nil
+	}
+	return inferApplyOutputs(rootPath, artifactRootPath, targetRoot, listValue(applyCfg["required_artifacts"]))
+}
+
+func inferApplyOutputs(rootPath, artifactRootPath, targetRoot string, required []any) ([]any, error) {
+	_, err := filepath.Abs(rootPath)
+	if err != nil {
+		return nil, err
+	}
+	artifactRoot, err := filepath.Abs(artifactRootPath)
+	if err != nil {
+		return nil, err
+	}
+	tasksRoot := filepath.Join(artifactRoot, "tasks")
+	if info, statErr := os.Stat(tasksRoot); statErr != nil || !info.IsDir() {
+		return nil, errors.New("no materialized apply outputs inferred from tasks/*/materialized")
+	}
+	type inferredApplyOutput struct {
+		source string
+		target string
+	}
+	byRel := map[string]inferredApplyOutput{}
+	if err := filepath.WalkDir(tasksRoot, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		marker := string(filepath.Separator) + "materialized" + string(filepath.Separator)
+		idx := strings.Index(path, marker)
+		if idx < 0 {
+			return nil
+		}
+		rel := path[idx+len(marker):]
+		rel = filepath.Clean(rel)
+		if rel == "." || rel == "" || strings.HasPrefix(rel, "..") {
+			return nil
+		}
+		sourceRel, err := filepath.Rel(artifactRoot, path)
+		if err != nil {
+			return err
+		}
+		key := filepath.ToSlash(rel)
+		if existing, exists := byRel[key]; exists {
+			return fmt.Errorf("inferred apply artifact %s is duplicated between %s and %s", key, existing.source, filepath.ToSlash(sourceRel))
+		}
+		byRel[key] = inferredApplyOutput{
+			source: filepath.ToSlash(sourceRel),
+			target: filepath.ToSlash(filepath.Join(targetRoot, rel)),
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	if len(byRel) == 0 {
+		return nil, errors.New("no materialized apply outputs inferred from tasks/*/materialized")
+	}
+	for _, raw := range required {
+		rel := filepath.ToSlash(filepath.Clean(strings.TrimSpace(fmt.Sprint(raw))))
+		if rel == "" || rel == "." {
+			continue
+		}
+		if _, ok := byRel[rel]; !ok {
+			return nil, fmt.Errorf("required apply artifact is missing: %s", rel)
+		}
+	}
+	keys := make([]string, 0, len(byRel))
+	for key := range byRel {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	outputs := make([]any, 0, len(keys))
+	for _, key := range keys {
+		item := byRel[key]
+		outputs = append(outputs, map[string]any{
+			"source": item.source,
+			"path":   item.target,
+		})
+	}
+	return outputs, nil
+}
+
 func stagedPathForTarget(stageRoot, root, targetPath string) (string, error) {
 	rel, err := filepath.Rel(root, targetPath)
 	if err != nil || strings.HasPrefix(rel, "..") {
@@ -1745,7 +1844,7 @@ func applyResultsWithVerify(rootPath, artifactRootPath, planPath, approvalPath, 
 	}
 	plan := readJSONMap(planPath)
 	applyCfg := mapValue(plan["apply"])
-	outputs := listValue(applyCfg["outputs"])
+	outputs, err := resolveApplyOutputs(rootPath, artifactRootPath, applyCfg)
 	requireApproval := true
 	if raw, ok := applyCfg["require_approval"]; ok {
 		requireApproval = boolAny(raw)
@@ -1758,8 +1857,11 @@ func applyResultsWithVerify(rootPath, artifactRootPath, planPath, approvalPath, 
 		})
 		return errors.New(message)
 	}
+	if err != nil {
+		return fail(err.Error())
+	}
 	if len(outputs) == 0 {
-		return fail("no apply outputs declared")
+		return fail("no apply outputs declared or inferred")
 	}
 	if requireApproval {
 		rawApproval, err := os.ReadFile(approvalPath)

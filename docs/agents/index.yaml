@@ -169,6 +169,7 @@ tasks:
       - docs/agents/ai-workflow-value-bar.md
       - docs/agents/model-escalation.md
       - docs/agents/docs-generation.md
+      - docs/agents/planner-promotion-model.md
       - docs/agents/safety-guardrails.md
       - docs/agents/validation-commands.md
     optional:
@@ -193,12 +194,14 @@ tasks:
     read:
       - AGENTS.md
       - docs/agents/tooling-surfaces.md
+      - docs/agents/planner-promotion-model.md
       - docs/agents/yaml-workflows.md
       - docs/agents/model-escalation.md
       - docs/agents/validation-commands.md
     optional:
       - docs/agentic-workflows.md
       - docs/workflow-yaml.md
+      - docs/todos/agentic-app-ui.md
       - src/app/tooling/vscode-extensions/dockpipe-language-support/extension.js
       - packages/pipeon/resolvers/pipeon/vscode-extension/README.md
       - packages/pipeon/resolvers/pipeon/vscode-extension/src/extension.ts
@@ -216,12 +219,14 @@ tasks:
       - AGENTS.md
       - docs/agents/docs-system.md
       - docs/agents/docs-generation.md
+      - docs/agents/planner-promotion-model.md
       - docs/agents/token-optimization.md
       - docs/agents/safety-guardrails.md
       - docs/agents/validation-commands.md
     optional:
       - docs/agentic-workflows.md
       - docs/workflow-yaml.md
+      - packages/dorkpipe/resolvers/dorkpipe/assets/docs/example-brain/index.md
     skills:
       - dorkpipe-agentic-yaml
       - dorkpipe-token-optimization
@@ -267,11 +272,13 @@ tasks:
       - docs/agents/docs-system.md
       - docs/agents/todo-index.yaml
       - docs/agents/repo-map.md
+      - docs/agents/planner-promotion-model.md
       - docs/agents/token-optimization.md
     optional:
       - docs/operation-results.md
       - docs/git-runtime-sessions.md
       - docs/agents/architecture.md
+      - packages/dorkpipe/resolvers/dorkpipe/assets/docs/example-brain/index.md
     skills:
       - dorkpipe-token-optimization
       - dorkpipe-core-review

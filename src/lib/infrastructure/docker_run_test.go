@@ -403,10 +403,10 @@ func TestRunContainerWorkspaceVolumeSyncsAroundRun(t *testing.T) {
 	}
 	stderrText := string(stderrBytes)
 	for _, want := range []string{
-		"[dockpipe] unit=session.volume.sync_in status=start volume=dockpipe-ws-demo",
-		"[dockpipe] unit=session.volume.sync_in status=done duration_ms=",
-		"[dockpipe] unit=session.volume.sync_out status=start volume=dockpipe-ws-demo",
-		"[dockpipe] unit=session.volume.sync_out status=done duration_ms=",
+		"unit=session.volume.sync_in status=start volume=dockpipe-ws-demo",
+		"unit=session.volume.sync_in status=done duration_ms=",
+		"unit=session.volume.sync_out status=start volume=dockpipe-ws-demo",
+		"unit=session.volume.sync_out status=done duration_ms=",
 	} {
 		if !strings.Contains(stderrText, want) {
 			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderrText)

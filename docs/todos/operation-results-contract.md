@@ -13,6 +13,11 @@
 - `dockpipe build` now surfaces stable operation-result units for compile, package source builds,
   image artifact materialization, and clean-path behavior instead of relying on one-off build/image
   status strings.
+- Operation results can now mirror to append-only JSONL when `DOCKPIPE_EVENT_LOG` is set. The
+  canonical event schema is `dockpipe.operation_event.v1`, implemented in
+  `src/lib/infrastructure`.
+- `dockpipe runs events --event-log <path> [--json]` can inspect the JSONL operation event ledger
+  without requiring Postgres or PipeDeck.
 - Runtime-owned helper containers now use stable DockPipe helper names and labels instead of
   leaving random Docker-generated names as the only operator clue.
 - DorkPipe orchestration scripts do not reference core internals directly, but the main package
@@ -31,5 +36,10 @@
   vocabulary.
 - Expose a cleaner public CLI/SDK surface for package-owned scripts that want canonical
   operation-result emission without reimplementing helper formatting in shell.
-- Push structured event usage further so session metadata, orchestration artifacts, and future
-  machine-readable output depend on the shared result contract instead of handwritten event shapes.
+- Add default event-log path creation for workflow/session runs so users do not need to set
+  `DOCKPIPE_EVENT_LOG` manually.
+- Add a rebuildable Postgres projection over operation-event JSONL for PipeDeck, dashboards, search,
+  and cross-run history.
+- Push structured event usage further so session metadata, orchestration artifacts, host-action
+  approval requests, and future machine-readable output depend on the shared result contract instead
+  of handwritten event shapes.

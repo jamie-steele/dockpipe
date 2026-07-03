@@ -610,16 +610,24 @@ outputs. Keep source boundaries in access policy and mounts, not in task briefin
 scheduling rules in scripts. `max_workers` caps total runnable workers, while `max_local_workers`
 and `max_cloud_workers` cap local and cloud-backed lanes separately.
 
-`agent.orchestration.apply` declares approved artifact-to-worktree outputs. DorkPipe harnesses should
+`agent.orchestration.apply` declares approved artifact-to-worktree writes. DorkPipe harnesses should
 write reviewable artifacts first, verify them, require approval when configured, and only then copy
-declared outputs into the checkout as normal uncommitted changes.
+approved content into the checkout as normal uncommitted changes.
 
 `agent.orchestration.tasks[].materialize_outputs` lets one role worker own a coherent output cluster
 without becoming one worker per file. The worker returns `<!-- dorkpipe:file path="..." -->` blocks in
 its `response.md`; DorkPipe extracts only the declared relative paths into
-`tasks/<task-id>/materialized/`. `apply.outputs[].source` can then point at those materialized files.
-Use this for role-shaped authoring such as a technical writer producing a markdown cluster or a schema
-maintainer producing aligned router files.
+`tasks/<task-id>/materialized/`.
+
+Apply can then use either:
+
+- explicit `apply.outputs[]` entries with `source` and `path`
+- or `apply.target_root` plus `apply.required_artifacts`
+
+When `target_root` is used, DorkPipe infers the full apply set from `tasks/*/materialized/*`,
+requires the listed relative artifact paths to exist, and then writes the whole inferred bundle under
+the target root. Use this when the workflow needs a minimum required doc set but should still allow
+the AI to split or extend the durable file set beyond a rigid static list.
 
 ### Step state flow
 

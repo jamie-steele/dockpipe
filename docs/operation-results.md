@@ -170,13 +170,22 @@ does expensive or destructive work and to make failure location obvious.
 
 Structured events should map from the same result contract rather than being authored independently.
 
-Conceptual mapping:
+The canonical observed-state event log is append-only JSONL. When `DOCKPIPE_EVENT_LOG` is set,
+operation results are mirrored to that file. The file is the durable runtime ledger for the current
+run/session; Postgres or another database may index it later, but should be treated as a rebuildable
+projection rather than the source of truth.
+
+Current event schema:
 
 ```json
 {
+  "schema": "dockpipe.operation_event.v1",
+  "type": "operation_result",
   "ts": "2026-07-02T21:15:10Z",
   "unit": "session.volume.seed",
   "status": "done",
+  "started_at": "2026-07-02T21:15:08Z",
+  "finished_at": "2026-07-02T21:15:10Z",
   "duration_ms": 1824,
   "ids": {
     "workspace": "unitehere",
@@ -185,7 +194,24 @@ Conceptual mapping:
 }
 ```
 
-The exact event schema can differ by subsystem, but the unit/result contract should be the source.
+Rules:
+
+- JSONL files are canonical for observed runtime facts.
+- YAML files are canonical for desired state and configuration.
+- Postgres indexes JSONL/YAML as a rebuildable projection for PipeDeck, dashboards, search, and
+  cross-run queries.
+- Event writers should append; they should not rewrite earlier observed facts.
+- Structured events must derive from the Go result contract instead of being hand-authored in
+  parallel.
+
+CLI inspection:
+
+```bash
+dockpipe runs events --event-log <path>
+dockpipe runs events --event-log <path> --json
+```
+
+When `--event-log` is omitted, `dockpipe runs events` reads `DOCKPIPE_EVENT_LOG`.
 
 ## Bash Adapter Rules
 

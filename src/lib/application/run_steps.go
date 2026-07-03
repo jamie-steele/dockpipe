@@ -837,8 +837,8 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 			"script":   filepath.Base(p),
 		}
 		if step.IsHostStep() {
-			_, err := infrastructure.RunOperationWithResult(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, func() error {
-				return runHostScriptFn(p, envSliceWithScriptContext(envSlice, p))
+			_, err := infrastructure.RunOperationWithResultOptions(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, hostSetupOperationOptions(), func() error {
+				return runHostScriptFn(p, appendUniqueEnv(envSliceWithScriptContext(envSlice, p), "DOCKPIPE_HOST_SCRIPT_SPINNER=false"))
 			})
 			if err != nil {
 				return err
@@ -846,7 +846,7 @@ func runParallelStepWorker(o *runStepsOpts, idx, n, batchStart int, baseEnv, bas
 			continue
 		}
 		var em map[string]string
-		_, err := infrastructure.RunOperationWithResult(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, func() error {
+		_, err := infrastructure.RunOperationWithResultOptions(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, hostSetupOperationOptions(), func() error {
 			var opErr error
 			em, opErr = sourceHostScriptFn(p, envSliceWithScriptContext(envSlice, p))
 			return opErr
@@ -1223,8 +1223,8 @@ func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {
 		if step.IsHostStep() {
 			// host-step run: must exec with inherited stdio — SourceHostScript sources and
 			// captures CombinedOutput(), so users would see nothing (e.g. cursor-dev step 2, vscode).
-			_, err := infrastructure.RunOperationWithResult(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, func() error {
-				return runHostScriptFn(p, envSliceWithScriptContext(o.envSlice, p))
+			_, err := infrastructure.RunOperationWithResultOptions(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, hostSetupOperationOptions(), func() error {
+				return runHostScriptFn(p, appendUniqueEnv(envSliceWithScriptContext(o.envSlice, p), "DOCKPIPE_HOST_SCRIPT_SPINNER=false"))
 			})
 			if err != nil {
 				return err
@@ -1232,7 +1232,7 @@ func runStepPreScripts(o *runStepsOpts, i int, step domain.Step) error {
 			continue
 		}
 		var em map[string]string
-		_, err := infrastructure.RunOperationWithResult(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, func() error {
+		_, err := infrastructure.RunOperationWithResultOptions(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, hostSetupOperationOptions(), func() error {
 			var opErr error
 			em, opErr = sourceHostScriptFn(p, envSliceWithScriptContext(o.envSlice, p))
 			return opErr

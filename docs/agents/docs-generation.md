@@ -8,8 +8,13 @@ Read when building docs workflows, documentation orchestration, or agent-created
 - DorkPipe materializes request, plan, task, merge, verify, usage, halt, and approval artifacts.
 - Worker prompts and access policy come from `steps[].agent`.
 - Skills route reusable assistant behavior; docs keep repo-local truth.
+- Planner output is a session artifact first. Promote it to durable repo guidance only through the
+  rules in `docs/agents/planner-promotion-model.md`.
 - Use `docs/agents/ai-workflow-value-bar.md` for the direct-worker baseline, lane routing, and
   DAG/node evaluation rules before splitting docs work across agents.
+- When generating consumer-repo guidance, seed package-owned deterministic baseline rules before
+  repo-specific synthesis. Use
+  `packages/dorkpipe/resolvers/dorkpipe/assets/docs/example-brain/index.md`.
 
 ## Avoid
 
@@ -20,6 +25,10 @@ Read when building docs workflows, documentation orchestration, or agent-created
 - burying access/cost policy in prompt prose only
 - forcing every docs workflow into a rigid evidence ledger; use source/citation artifacts only when
   they improve the result over one strong worker
+- leaking runtime mount points, artifact labels, or orchestration mechanics into durable
+  consumer-repo guidance
+- persisting fully compiled per-run prompts, exact task splits, or lane choices as repo config
+  without promotion checks
 
 ## Required Outputs
 

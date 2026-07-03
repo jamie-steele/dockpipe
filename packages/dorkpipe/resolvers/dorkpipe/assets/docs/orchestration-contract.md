@@ -13,6 +13,16 @@ This document defines the minimal orchestration primitive for DorkPipe:
 
 This is the core primitive behind "agentic" orchestration. Marketing terms are secondary.
 
+When this primitive is used to generate durable guidance for a consumer repo, seed the package-owned
+consumer baseline first:
+
+```text
+assets/docs/example-brain/index.md
+```
+
+That baseline keeps consumer output repo-native and prevents runtime, mount, artifact, or lane
+terminology from leaking into durable docs unless the consumer repo explicitly owns those concepts.
+
 The primitive should be driven by workflow-owned declarative data such as YAML task specs. Shared
 scripts should materialize and execute the contract; they should not hardcode one example workflow's
 task graph.
@@ -279,10 +289,13 @@ consume them. This keeps role-shaped work, such as technical writing or schema m
 degrading into one LLM worker per file while preserving deterministic apply artifacts.
 
 Apply writes approved outputs into the current workspace so humans can inspect concrete files and
-diffs. A `verify.status` of `review` does not block workspace apply; `apply/result.json` records
-`requires_human_review: true` and `publish_allowed: false`. A failed verification still blocks apply
-unless explicitly overridden for debugging. Publish, merge, or sync to a durable branch remains a
-separate human-governed boundary.
+diffs. Workflows can either declare explicit `apply.outputs` entries or declare a broader
+`apply.target_root` plus `apply.required_artifacts`. In the latter mode, DorkPipe infers the full
+apply set from `tasks/*/materialized/*`, enforces that the required artifact paths exist, and then
+applies the whole inferred bundle under the target root. A `verify.status` of `review` does not
+block workspace apply; `apply/result.json` records `requires_human_review: true` and
+`publish_allowed: false`. A failed verification still blocks apply unless explicitly overridden for
+debugging. Publish, merge, or sync to a durable branch remains a separate human-governed boundary.
 
 ## Cloud budget primitive
 

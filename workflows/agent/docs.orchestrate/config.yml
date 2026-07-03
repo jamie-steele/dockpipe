@@ -96,6 +96,15 @@ steps:
               - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
               - packages/dorkpipe/resolvers/dorkpipe/assets/docs/request-contract.md
               - workflows/agent/docs.orchestrate/config.yml
+          - path: example-brain-baseline.md
+            collector: literal
+            text: |
+              Consumer repo guidance baseline:
+
+              - Durable consumer output should read like native repo guidance.
+              - Do not describe runtime mounts, artifact roots, worker lanes, or orchestration mechanics as if they are product concepts in the consumer repo.
+              - Prefer direct code and repo docs for current implementation claims.
+              - Preserve current-state versus intended-direction conflicts instead of blending them.
           - path: cli-inspect.md
             collector: dockpipe_cli_inspect
         tasks:

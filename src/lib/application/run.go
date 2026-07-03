@@ -709,7 +709,7 @@ func Run(argv []string, baseEnviron []string) error {
 				"script": filepath.Base(p),
 			}
 			var em map[string]string
-			_, err := infrastructure.RunOperationWithResult(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, func() error {
+			_, err := infrastructure.RunOperationWithResultOptions(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, hostSetupOperationOptions(), func() error {
 				var opErr error
 				em, opErr = sourceHostScriptAppFn(p, envSlice)
 				return opErr
@@ -734,7 +734,7 @@ func Run(argv []string, baseEnviron []string) error {
 				"script": filepath.Base(p),
 			}
 			var em map[string]string
-			_, err := infrastructure.RunOperationWithResult(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, func() error {
+			_, err := infrastructure.RunOperationWithResultOptions(os.Stderr, "host.setup", hostSpinnerLabel(p), ids, hostSetupOperationOptions(), func() error {
 				var opErr error
 				em, opErr = sourceHostScriptAppFn(p, envSlice)
 				return opErr

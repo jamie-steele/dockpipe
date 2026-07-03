@@ -17,6 +17,15 @@ todos:
   - id: TODO-005
     topic: Shared agents config discovery
     path: docs/todos/shared-agents-config-discovery.md
+  - id: TODO-006
+    topic: Example brain baseline
+    path: docs/todos/example-brain-baseline.md
+  - id: TODO-007
+    topic: Generic software dev workflow
+    path: docs/todos/generic-software-dev-workflow.md
+  - id: TODO-008
+    topic: PipeDeck agentic app UI
+    path: docs/todos/agentic-app-ui.md
 
 maintenance:
   - Treat this YAML file as the AI/backlog entrypoint.

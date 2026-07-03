@@ -13,6 +13,10 @@ It treats the useful core as:
 6. approve
 7. apply approved source-tree changes
 
+For repo guidance work, use the package-owned baseline under
+`packages/dorkpipe/resolvers/dorkpipe/assets/docs/example-brain/` before writing repo-specific
+brain docs. Durable consumer output should read like native repo guidance, not runtime commentary.
+
 The workflow runs bounded worker tasks through the package-owned scheduler. The contract remains
 DAG-shaped so dependency handling, richer splitters, and additional worker lanes can reuse the same
 task, result, merge, and verifier artifacts.
@@ -62,6 +66,9 @@ The example is driven directly by `config.yml`.
 The plan step carries an `agent.orchestration` block, and the worker steps carry `agent.task_id`.
 The shared DorkPipe scripts read that YAML through injected workflow/step context and materialize
 request, plan, task, merge, and verify artifacts without needing a workflow-specific sidecar spec.
+
+That same pattern should seed deterministic consumer guidance first, then layer repo-specific facts
+on top. Do not let workflow mechanics become the consumer repo's durable vocabulary.
 
 ## Artifact root
 

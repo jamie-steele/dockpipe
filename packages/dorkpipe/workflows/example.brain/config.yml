@@ -1,0 +1,225 @@
+name: example.brain
+namespace: dockpipeproject
+description: >-
+  Package-owned starter workflow for generating repo-native brain guidance in a checkout.
+
+docker_preflight: false
+
+vars:
+  DORKPIPE_ORCH_OLLAMA_MODEL: llama3.2
+  DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS: "120000"
+  DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS: "40000"
+  DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED: "true"
+  DORKPIPE_ORCH_CLOUD_LANES: "true"
+  DORKPIPE_DEV_STACK_AUTODOWN: "1"
+  DORKPIPE_DEV_STACK_MCP_PORT: "8766"
+  MCP_HTTP_URL: http://127.0.0.1:8766/mcp
+  DATABASE_URL: postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe
+  OLLAMA_HOST: http://127.0.0.1:11434
+  DORKPIPE_ORCH_BRAIN_PROVIDER: ollama
+
+steps:
+  - id: plan
+    kind: host
+    run: scripts/dorkpipe/orchestrate-plan.sh
+    agent:
+      startup_prompt: >-
+        Generate durable repo-native guidance for this checkout. Preserve source precedence and keep
+        runtime or orchestration mechanics out of the durable docs.
+      include_agents_md: true
+      access:
+        read:
+          - AGENTS.md
+          - docs
+          - src
+          - packages
+          - workflows
+        write:
+          - scope:artifacts:orchestrate
+        deny:
+          - .env
+          - .env.*
+          - "**/*secret*"
+          - "**/*token*"
+      orchestration:
+        request:
+          text: Build a durable starter brain for this repo using repo-native wording and explicit source-precedence rules.
+        plan:
+          goal: Seed durable repo guidance first, then summarize repo evidence and open gaps without leaking runtime abstractions.
+          steps:
+            - collect baseline guidance and repo map context
+            - plan bounded writer tasks for rules and repo inventory
+            - materialize durable starter docs under docs/agents/brain
+            - verify wording and source-precedence quality before approval
+        concurrency:
+          max_workers: 3
+          max_local_workers: 2
+          max_cloud_workers: 1
+        shared:
+          - path: repo-map.md
+            collector: repo_map
+            focus: Current repo structure, high-value doc roots, and implementation evidence starting points
+            starting_points:
+              - docs
+              - src
+              - packages
+              - workflows
+          - path: baseline-rules.md
+            collector: literal
+            text: |
+              Consumer repo brain baseline:
+
+              - Write from the repo's point of view.
+              - Prefer repo-native names, paths, and terminology.
+              - Do not mention DockPipe, DorkPipe, mounts, /work, artifact roots, worker lanes, or orchestration internals unless the repo itself treats them as product concepts.
+              - Prefer direct code and repo docs for current implementation claims.
+              - Prefer architecture notes, ADRs, planning docs, and explicit design references for intended direction.
+              - Preserve disagreements between current state and target state instead of blending them.
+              - Use exact path citations when a durable claim depends on a file.
+          - path: todo-pattern.md
+            collector: literal
+            text: |
+              Starter backlog pattern:
+
+              - Keep one open-only index file as the AI/backlog entrypoint.
+              - Link each active topic to its own markdown file.
+              - Keep status detail in the topic file, not in the index.
+              - Use TODOs for real source-of-truth gaps, architecture ambiguities, parity gaps, and doc-quality issues.
+        tasks:
+          - id: planner_brain
+            agent: planner_brain
+            goal: Plan bounded durable-doc tasks for the example brain starter.
+            expected_output: Three concise bullets that assign starter docs to downstream workers.
+            context:
+              required_artifacts:
+                - shared/repo-map.md
+                - shared/baseline-rules.md
+                - shared/todo-pattern.md
+            constraints:
+              - keep output short enough to prepend to later workers
+              - do not answer the whole request
+            prompt: |
+              You are the planner for an example brain starter.
+
+              Rules:
+              - Return exactly three bullets and no headings.
+              - Bullet 1 must start with "rules:" and assign source-of-truth-rules.md and index.md.
+              - Bullet 2 must start with "inventory:" and assign repo-knowledge.md.
+              - Bullet 3 must start with "gaps:" and assign open-gaps.md.
+              - Do not mention runtime mounts, DockPipe, DorkPipe, or orchestration mechanics.
+          - id: rules_writer
+            agent: guidance_architect
+            depends_on:
+              - planner_brain
+            goal: Write the durable source-precedence and routing starter docs for this repo.
+            expected_output: Materialized file blocks for index.md and source-of-truth-rules.md.
+            context:
+              required_artifacts:
+                - shared/repo-map.md
+                - shared/baseline-rules.md
+                - tasks/planner_brain/response.md
+            materialize_outputs:
+              - path: index.md
+              - path: source-of-truth-rules.md
+            constraints:
+              - keep repo-native wording
+              - do not mention runtime or orchestration internals
+            prompt: |
+              Write two durable markdown files for an example brain starter.
+
+              Required files:
+              - index.md
+              - source-of-truth-rules.md
+
+              Rules:
+              - Output only dorkpipe:file blocks for the required files.
+              - Write from the repo's point of view.
+              - Do not mention DockPipe, DorkPipe, /work, mounts, artifact roots, or worker lanes.
+              - index.md should explain what the brain docs are for and which page to read first.
+              - source-of-truth-rules.md should separate current implementation, intended direction, terminology, and conflict handling.
+              - Use concise markdown suitable for durable repo docs.
+          - id: inventory_writer
+            agent: repo_inventory_writer
+            depends_on:
+              - planner_brain
+            goal: Write durable repo evidence and open-gap starter docs for this repo.
+            expected_output: Materialized file blocks for repo-knowledge.md and open-gaps.md.
+            context:
+              required_artifacts:
+                - shared/repo-map.md
+                - shared/baseline-rules.md
+                - shared/todo-pattern.md
+                - tasks/planner_brain/response.md
+            materialize_outputs:
+              - path: repo-knowledge.md
+              - path: open-gaps.md
+            constraints:
+              - ground current-state claims in repo evidence
+              - keep open gaps clearly separate from proven implementation
+            prompt: |
+              Write two durable markdown files for an example brain starter.
+
+              Required files:
+              - repo-knowledge.md
+              - open-gaps.md
+
+              Rules:
+              - Output only dorkpipe:file blocks for the required files.
+              - Write from the repo's point of view.
+              - Do not mention DockPipe, DorkPipe, /work, mounts, artifact roots, or worker lanes.
+              - repo-knowledge.md should summarize high-value current repo facts and likely starting points.
+              - open-gaps.md should capture unresolved truth gaps, parity gaps, or documentation gaps that deserve later follow-up.
+              - Do not claim target architecture is already implemented unless direct repo evidence proves it.
+        merge:
+          title: Example Brain Starter
+          summary_points:
+            - Durable repo-native wording beats runtime commentary.
+            - Current implementation and intended direction must remain distinct.
+            - Open gaps should survive as maintained docs, not disappear into one run summary.
+        verify:
+          next_action_default: human approval before treating the starter brain docs as durable repo guidance
+        apply:
+          require_approval: true
+          target_root: docs/agents/brain
+          required_artifacts:
+            - index.md
+            - source-of-truth-rules.md
+            - repo-knowledge.md
+            - open-gaps.md
+
+  - id: auth_preflight
+    kind: host
+    run: scripts/dorkpipe/orchestrate-auth-preflight.sh
+
+  - id: stack_up
+    kind: host
+    run: scripts/dorkpipe/dev-stack-ensure-up.sh
+    vars:
+      DORKPIPE_DEV_STACK_GPU: "auto"
+      DORKPIPE_DEV_STACK_SERVICES: "postgres ollama dorkpipe-stack dorkpipe-mcp-proxy"
+
+  - id: run_workers
+    kind: host
+    run: scripts/dorkpipe/orchestrate-run-tasks.sh
+
+  - id: merge
+    kind: host
+    run: scripts/dorkpipe/orchestrate-merge-results.sh
+
+  - id: verify
+    kind: host
+    run: scripts/dorkpipe/orchestrate-verify-results.sh
+
+  - id: approval
+    kind: host
+    run: scripts/dorkpipe/orchestrate-approve.sh
+
+  - id: apply
+    kind: host
+    run: scripts/dorkpipe/orchestrate-apply-results.sh
+
+finally:
+  - id: stack_down
+    kind: host
+    run:
+      - scripts/dorkpipe/dev-stack-maybe-down.sh

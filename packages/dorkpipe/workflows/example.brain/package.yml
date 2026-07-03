@@ -1,0 +1,15 @@
+schema: 1
+kind: workflow
+name: example.brain
+version: 0.6.0
+title: Example Brain Starter
+description: |
+  Package-owned starter workflow for generating durable repo brain guidance with repo-native
+  wording, source-precedence rules, starter indexes, and open-gap docs under docs/agents/brain/.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [workflow, dorkpipe, brain, docs, example]
+depends: [dorkpipe]
+allow_clone: true
+distribution: source

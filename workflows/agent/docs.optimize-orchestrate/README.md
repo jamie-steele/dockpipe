@@ -68,3 +68,7 @@ The workflow may propose changes only inside the optimizer workflow, the docs or
 and the DorkPipe optimizer/verifier scripts. By default it does not apply the patch and does not
 create commits. With `DORKPIPE_OPTIMIZER_APPLY=1`, it applies the validated patch to the working tree
 and still does not create commits.
+
+When using this optimizer pattern for consumer-repo guidance workflows, prefer fixes that strengthen
+deterministic seeded guidance first: source precedence, repo-native wording, conflict handling, and
+TODO/index structure. Avoid proposals that merely polish run-specific artifact narration.

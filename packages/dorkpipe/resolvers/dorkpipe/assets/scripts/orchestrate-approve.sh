@@ -6,25 +6,33 @@ SCRIPT_DIR="$(dockpipe get script_dir)"
 source "$SCRIPT_DIR/orchestrate-common.sh"
 
 dorkpipe_orchestrate_init
-decision="no"
+decision="review"
 if [[ "${DORKPIPE_ORCH_APPROVAL_MODE:-prompt}" == "auto-no" ]]; then
-  decision="no"
+  decision="review"
 elif [[ "${DORKPIPE_ORCH_APPROVAL_MODE:-prompt}" == "auto-yes" ]]; then
-  decision="yes"
-elif dockpipe_sdk prompt confirm \
+  decision="approve"
+else
+  decision="$(dockpipe_sdk prompt choice \
   --id dorkpipe_orchestrate_approve \
   --title "Approve orchestration result?" \
-  --message "Review ${DORKPIPE_ORCH_MERGE_DIR}/final.md and ${DORKPIPE_ORCH_VERIFY_DIR}/result.json. Approve this orchestration run for manual follow-up?" \
-  --default no \
+  --message "Review ${DORKPIPE_ORCH_MERGE_DIR}/final.md and ${DORKPIPE_ORCH_VERIFY_DIR}/result.json. Choose whether this orchestration result is ready for manual follow-up." \
+  --option review \
+  --option approve \
+  --default review \
   --intent review \
-  --automation-group docs-review; then
-  decision="yes"
+  --automation-group docs-review)"
+fi
+
+approved="no"
+if [[ "${decision}" == "approve" ]]; then
+  approved="yes"
 fi
 
 cat > "${DORKPIPE_ORCH_APPROVAL_MD}" <<EOF
 # Approval
 
-- Approved: ${decision}
+- Decision: ${decision}
+- Approved: ${approved}
 - Final synthesis: \`${DORKPIPE_ORCH_MERGE_DIR}/final.md\`
 - Verify result: \`${DORKPIPE_ORCH_VERIFY_DIR}/result.json\`
 

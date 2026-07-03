@@ -1,0 +1,56 @@
+agents:
+  planner_brain:
+    role: consumer repo planner
+    worker: ${DORKPIPE_ORCH_BRAIN_PROVIDER:-ollama}
+    worker_type: planning
+    work_mode: artifact
+    authority:
+      can:
+        - plan_bounded_repo_guidance_tasks
+        - preserve_repo_native_language
+      cannot:
+        - answer_the_entire_request
+        - approve_apply
+    constraints:
+      - keep downstream tasks bounded
+      - keep runtime and orchestration mechanics out of durable output
+  guidance_architect:
+    role: source-of-truth architect
+    worker: claude
+    worker_type: documentation
+    work_mode: artifact
+    worker_policy:
+      mode: prefer
+    model_policy:
+      attempt:
+        preference: strong
+      validate:
+        preference: strongest_available
+    authority:
+      can:
+        - write_repo_native_guidance
+        - define_source_precedence_rules
+      cannot:
+        - invent_implementation_status
+        - approve_apply
+    constraints:
+      - no runtime mount terminology in durable docs
+      - preserve current-versus-target distinctions
+  repo_inventory_writer:
+    role: repo inventory writer
+    worker: ollama
+    worker_type: documentation
+    work_mode: artifact
+    model:
+      provider: ollama
+      model: ${DORKPIPE_ORCH_OLLAMA_MODEL:-llama3.2}
+    authority:
+      can:
+        - summarize_current_repo_evidence
+        - identify_open_gaps
+      cannot:
+        - claim_target_architecture_is_implemented
+        - approve_apply
+    constraints:
+      - ground claims in repo files
+      - keep output bounded and reviewable

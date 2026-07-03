@@ -35,7 +35,8 @@ Machine-readable routing: `docs/agents/index.yaml`.
 | Git runtime sessions or workspace lifecycle | `docs/agents/git-runtime-sessions.md`, `docs/agents/architecture.md`, `docs/agents/path-scopes.md` | `dorkpipe-core-review`, `dorkpipe-yaml-workflows` |
 | Package authoring | `docs/agents/package-authoring.md`, `docs/agents/core-package-model.md` | `dorkpipe-package-authoring` |
 | Package promotion | `docs/agents/package-promotion.md`, `docs/agents/validation-commands.md` | `dorkpipe-package-authoring`, `dorkpipe-core-review` |
-| Agentic/DorkPipe workflows | `docs/agents/ai-workflow-value-bar.md`, `docs/agents/model-escalation.md`, `docs/agents/docs-generation.md`, `docs/agents/yaml-workflows.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
+| Agentic/DorkPipe workflows | `docs/agents/ai-workflow-value-bar.md`, `docs/agents/model-escalation.md`, `docs/agents/docs-generation.md`, `docs/agents/planner-promotion-model.md`, `docs/agents/yaml-workflows.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
+| Tooling app or UI surface | `docs/agents/tooling-surfaces.md`, `docs/agents/planner-promotion-model.md`, `docs/todos/agentic-app-ui.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
 | Docs or agent guidance | `docs/agents/token-optimization.md`, `docs/agents/skills.md` | `dorkpipe-token-optimization` |
 | Docs system or sync rules | `docs/agents/docs-system.md`, `docs/agents/token-optimization.md` | `dorkpipe-token-optimization`, `dorkpipe-core-review` |
 | Artifacts or MCP | `docs/agents/artifacts-and-mcp.md`, `docs/agents/safety-guardrails.md` | `dorkpipe-core-review` |
@@ -106,6 +107,7 @@ Report:
 - `docs/agents/ai-workflow-value-bar.md`
 - `docs/agents/model-escalation.md`
 - `docs/agents/docs-generation.md`
+- `docs/agents/planner-promotion-model.md`
 - `docs/agents/artifacts-and-mcp.md`
 - `docs/agents/validation-commands.md`
 - `docs/agents/safety-guardrails.md`

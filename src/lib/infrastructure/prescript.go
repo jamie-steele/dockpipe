@@ -109,8 +109,11 @@ func RunHostScript(scriptPath string, env []string) error {
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("host script start %s: %w", scriptPath, err)
 	}
-	stopSpin := StartLineSpinner(os.Stderr, hostScriptSpinnerLabel(scriptPath))
-	stopSpinnerOnce := sync.OnceFunc(stopSpin)
+	stopSpinnerOnce := func() {}
+	if hostScriptSpinnerEnabled(env) {
+		stopSpin := StartLineSpinner(os.Stderr, hostScriptSpinnerLabel(scriptPath))
+		stopSpinnerOnce = sync.OnceFunc(stopSpin)
+	}
 	var copyWG sync.WaitGroup
 	copyWG.Add(2)
 	go streamHostScriptPipe(stdoutPipe, os.Stdout, stopSpinnerOnce, &copyWG)
@@ -128,6 +131,15 @@ func RunHostScript(scriptPath string, env []string) error {
 		return fmt.Errorf("host script %s: %w", scriptPath, err)
 	}
 	return nil
+}
+
+func hostScriptSpinnerEnabled(env []string) bool {
+	switch strings.ToLower(strings.TrimSpace(envGet(env, "DOCKPIPE_HOST_SCRIPT_SPINNER"))) {
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return true
+	}
 }
 
 func applyInteractivePromptMode(env []string) []string {

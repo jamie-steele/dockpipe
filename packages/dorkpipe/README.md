@@ -15,6 +15,7 @@ DockPipe source checkout in the consuming repo.
 | **`user-insight-process/`** | Host workflow: queue → **`insights.json`** — **`resolvers/user-insight-process/README.md`** |
 | **`workflows/skills.render/`** | Package workflow that renders curated DorkPipe skills to target-specific local formats |
 | **`workflows/orchestrate.stack/`** | Package workflow wrapper that owns stack lifecycle around the standard orchestration flow |
+| **`workflows/example.brain/`** | Package workflow starter that seeds repo-native brain docs under `docs/agents/brain/` for repos |
 
 Go code for the orchestrator lives in **`lib/`** (module **`dorkpipe.orchestrator`**) — this tree is **YAML + assets** only (not the Go module).
 
@@ -102,6 +103,19 @@ steps:
 By default the wrapper plans against the caller workflow config and the caller step id `plan`, then
 runs stack up and stack down internally with `finally:`. If the orchestration declaration lives on a
 different caller step, set `DORKPIPE_ORCH_SOURCE_STEP_ID` on the packaged workflow step.
+
+## Example Brain Starter
+
+Consumers that want a package-owned starting point for durable repo guidance can run:
+
+```bash
+dockpipe --package dorkpipe --workflow example.brain --
+```
+
+The workflow writes starter docs under `docs/agents/brain/` using repo-native wording and seeded
+source-precedence rules. It is intentionally conservative: current-state claims should come from repo
+evidence, open gaps should remain explicit, and runtime or orchestration terminology should stay out
+of durable output unless the consumer repo explicitly owns those concepts.
 
 **Detail:** **`lib/README.md`** (Go module); this tree is YAML + assets.
 ### Follow-up repair mode

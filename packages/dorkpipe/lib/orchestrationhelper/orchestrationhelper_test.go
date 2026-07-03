@@ -746,6 +746,63 @@ func TestApplyResultsSkipsWhenVerifyStatusIsFail(t *testing.T) {
 	}
 }
 
+func TestApplyResultsInfersMaterializedOutputsFromTargetRoot(t *testing.T) {
+	root := t.TempDir()
+	artifactRoot := filepath.Join(root, "artifacts")
+	materializedDir := filepath.Join(artifactRoot, "tasks", "writer", "materialized")
+	if err := os.MkdirAll(materializedDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(materializedDir, "index.md"), []byte("index"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(materializedDir, "open-gaps.md"), []byte("gaps"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(artifactRoot, "plan.json")
+	approvalPath := filepath.Join(artifactRoot, "approval.md")
+	resultPath := filepath.Join(artifactRoot, "apply.json")
+	if err := os.WriteFile(planPath, []byte(`{"apply":{"require_approval":true,"target_root":"docs/agents/brain","required_artifacts":["index.md"]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(approvalPath, []byte("- Approved: yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyResults(root, artifactRoot, planPath, approvalPath, resultPath); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "docs", "agents", "brain", "index.md")); err != nil || string(got) != "index" {
+		t.Fatalf("index.md = %q err=%v", string(got), err)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "docs", "agents", "brain", "open-gaps.md")); err != nil || string(got) != "gaps" {
+		t.Fatalf("open-gaps.md = %q err=%v", string(got), err)
+	}
+}
+
+func TestApplyResultsFailsWhenRequiredInferredArtifactMissing(t *testing.T) {
+	root := t.TempDir()
+	artifactRoot := filepath.Join(root, "artifacts")
+	materializedDir := filepath.Join(artifactRoot, "tasks", "writer", "materialized")
+	if err := os.MkdirAll(materializedDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(materializedDir, "index.md"), []byte("index"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(artifactRoot, "plan.json")
+	approvalPath := filepath.Join(artifactRoot, "approval.md")
+	resultPath := filepath.Join(artifactRoot, "apply.json")
+	if err := os.WriteFile(planPath, []byte(`{"apply":{"require_approval":true,"target_root":"docs/agents/brain","required_artifacts":["index.md","source-of-truth-rules.md"]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(approvalPath, []byte("- Approved: yes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := applyResults(root, artifactRoot, planPath, approvalPath, resultPath); err == nil {
+		t.Fatal("expected missing required inferred artifact to fail")
+	}
+}
+
 func TestEmitVerifyApplyCoherenceFlagsBrokenMarkdownAndYamlTargets(t *testing.T) {
 	root := t.TempDir()
 	artifactRoot := filepath.Join(root, "artifacts")
