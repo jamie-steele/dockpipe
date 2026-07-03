@@ -1,6 +1,7 @@
 package application
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,6 +43,23 @@ func TestSessionCommandsListInspectSwitch(t *testing.T) {
 	}
 	if !strings.Contains(inspectOut, "Session:") || !strings.Contains(inspectOut, session.Storage.Workspace) {
 		t.Fatalf("inspect output missing details: %q", inspectOut)
+	}
+	if !strings.Contains(inspectOut, filepath.Join(session.Storage.Metadata, "events.jsonl")) {
+		t.Fatalf("inspect output missing event log path: %q", inspectOut)
+	}
+
+	inspectJSON, err := captureStdout(t, func() error {
+		return cmdSession([]string{"inspect", "cmd-session", "--workdir", repo, "--json"})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var inspected infrastructure.GitSession
+	if err := json.Unmarshal([]byte(inspectJSON), &inspected); err != nil {
+		t.Fatalf("inspect json should decode: %v\n%s", err, inspectJSON)
+	}
+	if want := filepath.Join(session.Storage.Metadata, "events.jsonl"); inspected.Storage.EventLog != want {
+		t.Fatalf("inspect json event_log = %q want %q", inspected.Storage.EventLog, want)
 	}
 
 	switchOut, err := captureStdout(t, func() error {

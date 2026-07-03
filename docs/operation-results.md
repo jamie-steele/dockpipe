@@ -208,13 +208,18 @@ Rules:
 CLI inspection:
 
 ```bash
+dockpipe get event_log
+dockpipe scope
 dockpipe runs events --event-log <path>
 dockpipe runs events --event-log <path> --json
+dockpipe session inspect <id|latest>
+dockpipe session inspect <id|latest> --json
 ```
 
-When `--event-log` is omitted, `dockpipe runs events` reads `DOCKPIPE_EVENT_LOG`. Future run/session
-inspection should surface the resolved event-log path so users do not need to remember the artifact
-layout.
+When `--event-log` is omitted, `dockpipe runs events` reads `DOCKPIPE_EVENT_LOG`.
+`dockpipe get event_log` and workflow `dockpipe scope` expose the resolved workflow operation-event
+ledger path. `dockpipe session inspect` exposes the runtime-owned session metadata event log under
+`storage.event_log` for managed workspace/session lifecycle events.
 
 ## Bash Adapter Rules
 

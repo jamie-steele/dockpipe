@@ -70,7 +70,8 @@ Expected launcher context:
 - current repo/workspace
 - selected workflow or package, when present
 - active session/run identity, when present
-- artifact root and operation-result stream
+- artifact root and operation-result stream, discoverable through `dockpipe get event_log`,
+  workflow `dockpipe scope`, and `dockpipe session inspect --json`
 - allowed scopes and access policy
 - available resolver/model lanes
 - MCP connector availability
@@ -193,8 +194,6 @@ updated after the run.
   editors.
 - Extend the initial `dockpipe.operation_event.v1` JSONL stream into the full PipeDeck run inspector
   feed, including logs, artifact references, approvals, and task graph state.
-- Read default workflow event logs from `<artifact_root>/events.jsonl` and fall back to explicit
-  `DOCKPIPE_EVENT_LOG` when a run supplies one.
 - Decide how much editing happens in-app versus handing off to the user's normal editor.
 - Design conflict preview and repair flows without turning the app into a full IDE.
 - Decide where remote-access YAML lives and how it maps to Cloudflare Tunnel, Let's Encrypt,

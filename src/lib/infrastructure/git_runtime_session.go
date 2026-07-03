@@ -49,6 +49,7 @@ type GitSessionStorage struct {
 	Backend      string `json:"backend"`
 	Workspace    string `json:"workspace"`
 	Metadata     string `json:"metadata"`
+	EventLog     string `json:"event_log,omitempty"`
 	Volume       string `json:"volume,omitempty"`
 	VolumeStatus string `json:"volume_status,omitempty"`
 	CleanedAt    string `json:"cleaned_at,omitempty"`
@@ -271,6 +272,7 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 			Backend:      backend,
 			Workspace:    workspace,
 			Metadata:     sessionDir,
+			EventLog:     gitSessionEventLogPath(sessionDir),
 			Volume:       volumeName,
 			VolumeStatus: volumeStatus,
 		},
@@ -809,6 +811,7 @@ func ReadGitSessionFile(path string) (*GitSession, error) {
 	if strings.TrimSpace(session.Storage.Metadata) == "" {
 		session.Storage.Metadata = filepath.Dir(path)
 	}
+	ensureGitSessionDerivedStorage(&session)
 	return &session, nil
 }
 
@@ -1008,6 +1011,10 @@ func writeGitSession(session *GitSession, workdir string) error {
 	if err != nil {
 		return err
 	}
+	if strings.TrimSpace(session.Storage.Metadata) == "" {
+		session.Storage.Metadata = dir
+	}
+	ensureGitSessionDerivedStorage(session)
 	if err := os.MkdirAll(filepath.Join(dir, "checkpoints"), 0o755); err != nil {
 		return err
 	}
@@ -1019,6 +1026,24 @@ func writeGitSession(session *GitSession, workdir string) error {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, "session.json"), append(b, '\n'), 0o644)
+}
+
+func ensureGitSessionDerivedStorage(session *GitSession) {
+	if session == nil {
+		return
+	}
+	metadata := strings.TrimSpace(session.Storage.Metadata)
+	if metadata == "" {
+		return
+	}
+	session.Storage.Metadata = filepath.Clean(metadata)
+	if strings.TrimSpace(session.Storage.EventLog) == "" {
+		session.Storage.EventLog = gitSessionEventLogPath(session.Storage.Metadata)
+	}
+}
+
+func gitSessionEventLogPath(metadataDir string) string {
+	return filepath.Join(filepath.Clean(metadataDir), "events.jsonl")
 }
 
 func writeGitSyncResult(session *GitSession, res *GitSyncResult) error {

@@ -57,6 +57,9 @@ func TestCmdScopeWorkflowAndPackageObjects(t *testing.T) {
 	if wf["kind"] != "workflow" || wf["root"] != wantArtifact || wf["output_root"] != wantArtifact {
 		t.Fatalf("unexpected workflow scope: %#v", wf)
 	}
+	if wf["event_log"] != filepath.Join(wantArtifact, "events.jsonl") {
+		t.Fatalf("workflow scope missing event_log: %#v", wf)
+	}
 	if wf["dockpipe_bin"] == "" {
 		t.Fatalf("workflow scope missing dockpipe_bin: %#v", wf)
 	}
@@ -160,6 +163,16 @@ func TestCmdGetStateFields(t *testing.T) {
 	wantArtifactRoot := filepath.Join(wd, "bin", ".dockpipe", "workflows", "Doctor-Check", "artifacts")
 	if gotArtifactRoot != wantArtifactRoot {
 		t.Fatalf("artifact_root = %q want %q", gotArtifactRoot, wantArtifactRoot)
+	}
+
+	gotEventLog, err := captureStdout(t, func() error {
+		return cmdGet([]string{"event_log"})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := filepath.Join(wantArtifactRoot, "events.jsonl"); gotEventLog != want {
+		t.Fatalf("event_log = %q want %q", gotEventLog, want)
 	}
 
 	t.Setenv("DOCKPIPE_OUTPUT_ROOT", filepath.Join(wd, "custom-output"))

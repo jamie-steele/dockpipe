@@ -19,6 +19,10 @@
 - Workflow runs now default `DOCKPIPE_EVENT_LOG` to `<artifact_root>/events.jsonl` and set the parent
   process env while the run is active so Go-side host setup/checkpoint events and child steps share
   the same ledger.
+- `dockpipe get event_log` and workflow `dockpipe scope` now expose the resolved operation-event
+  ledger path so callers do not need to know the artifact layout.
+- `dockpipe session inspect <id|latest> [--json]` now exposes the runtime-owned session metadata
+  event log as `storage.event_log`.
 - `dockpipe runs events --event-log <path> [--json]` can inspect the JSONL operation event ledger
   without requiring Postgres or PipeDeck.
 - Runtime-owned helper containers now use stable DockPipe helper names and labels instead of
@@ -39,8 +43,6 @@
   vocabulary.
 - Expose a cleaner public CLI/SDK surface for package-owned scripts that want canonical
   operation-result emission without reimplementing helper formatting in shell.
-- Surface the resolved event-log path from run/session inspection so users and PipeDeck can find it
-  without knowing the artifact layout.
 - Add a rebuildable Postgres projection over operation-event JSONL for PipeDeck, dashboards, search,
   and cross-run history.
 - Push structured event usage further so session metadata, orchestration artifacts, host-action

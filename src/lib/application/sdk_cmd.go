@@ -41,6 +41,7 @@ Fields:
   assets_dir
   state_dir
   artifact_root
+  event_log
   output_root
   package_id
   package_state_dir
@@ -177,6 +178,13 @@ func cmdGet(args []string) error {
 		}
 		fmt.Println(v)
 		return nil
+	case "event_log":
+		v, err := resolveEventLogPath(workdir)
+		if err != nil {
+			return err
+		}
+		fmt.Println(v)
+		return nil
 	case "output_root":
 		v := strings.TrimSpace(os.Getenv("DOCKPIPE_OUTPUT_ROOT"))
 		if v == "" {
@@ -296,6 +304,7 @@ type scopeObject struct {
 	DockpipeBin  string `json:"dockpipe_bin,omitempty"`
 	SourceRoot   string `json:"source_root,omitempty"`
 	ArtifactRoot string `json:"artifact_root,omitempty"`
+	EventLog     string `json:"event_log,omitempty"`
 	OutputRoot   string `json:"output_root,omitempty"`
 	StateRoot    string `json:"state_root,omitempty"`
 	Workdir      string `json:"workdir"`
@@ -418,6 +427,10 @@ func workflowScopeObject(workdir string) (scopeObject, error) {
 			return scopeObject{}, err
 		}
 	}
+	eventLog, err := resolveEventLogPath(workdir)
+	if err != nil {
+		return scopeObject{}, err
+	}
 	sourceRoot := firstNonEmpty(strings.TrimSpace(os.Getenv("DOCKPIPE_SOURCE_ROOT")), workdir)
 	name := strings.TrimSpace(os.Getenv("DOCKPIPE_WORKFLOW_NAME"))
 	dockpipeBin, err := resolveDockpipeBinForSDK(workdir)
@@ -432,6 +445,7 @@ func workflowScopeObject(workdir string) (scopeObject, error) {
 		DockpipeBin:  dockpipeBin,
 		SourceRoot:   sourceRoot,
 		ArtifactRoot: artifactRoot,
+		EventLog:     eventLog,
 		OutputRoot:   outputRoot,
 		StateRoot:    filepath.Join(stateRoot, "workflows", sanitizeWorkflowStateScope(name)),
 		Workdir:      workdir,
@@ -556,6 +570,21 @@ func resolveOutputRoot(workdir string) (string, error) {
 		return v, nil
 	}
 	return workflowArtifactRoot(workdir, strings.TrimSpace(os.Getenv("DOCKPIPE_WORKFLOW_NAME")))
+}
+
+func resolveEventLogPath(workdir string) (string, error) {
+	if v := strings.TrimSpace(os.Getenv(infrastructure.EnvDockpipeEventLog)); v != "" {
+		return v, nil
+	}
+	artifactRoot := strings.TrimSpace(os.Getenv("DOCKPIPE_ARTIFACT_ROOT"))
+	if artifactRoot == "" {
+		var err error
+		artifactRoot, err = workflowArtifactRoot(workdir, strings.TrimSpace(os.Getenv("DOCKPIPE_WORKFLOW_NAME")))
+		if err != nil {
+			return "", err
+		}
+	}
+	return filepath.Join(artifactRoot, "events.jsonl"), nil
 }
 
 func sanitizeNamedScope(scope string) string {

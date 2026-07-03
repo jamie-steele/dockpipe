@@ -536,6 +536,9 @@ func TestListAndLoadGitSessions(t *testing.T) {
 	if loaded.SessionID != "second-session" {
 		t.Fatalf("loaded session = %q", loaded.SessionID)
 	}
+	if want := filepath.Join(loaded.Storage.Metadata, "events.jsonl"); loaded.Storage.EventLog != want {
+		t.Fatalf("loaded event_log = %q want %q", loaded.Storage.EventLog, want)
+	}
 	fromWorkspace, err := ListGitSessions(second.Storage.Workspace)
 	if err != nil {
 		t.Fatalf("ListGitSessions from workspace: %v", err)

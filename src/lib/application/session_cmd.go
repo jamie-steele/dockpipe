@@ -465,6 +465,9 @@ func printSessionDetails(session *infrastructure.GitSession) {
 		fmt.Fprintf(os.Stdout, "Volume:    %s\n", session.Storage.Volume)
 	}
 	fmt.Fprintf(os.Stdout, "Metadata:  %s\n", session.Storage.Metadata)
+	if strings.TrimSpace(session.Storage.EventLog) != "" {
+		fmt.Fprintf(os.Stdout, "Events:    %s\n", session.Storage.EventLog)
+	}
 	fmt.Fprintf(os.Stdout, "Created:   %s\n", session.CreatedAt)
 	fmt.Fprintf(os.Stdout, "Updated:   %s\n", session.UpdatedAt)
 	fmt.Fprintf(os.Stdout, "Policy:    checkpoint=%s publish=%s allow_agent_git=%v\n", session.Policy.Checkpoint, session.Policy.Publish, session.Policy.AllowAgentGit)
