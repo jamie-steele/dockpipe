@@ -23,7 +23,12 @@ export DORKPIPE_ORCH_TRAINING_MODE="observe"
 export DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS="1000"
 export DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS="400"
 
-bash "$DOCKPIPE_SCRIPT_DIR/orchestrate-plan.sh" >/dev/null
+plan_log="$DORKPIPE_ORCH_ROOT.plan.err"
+bash "$DOCKPIPE_SCRIPT_DIR/orchestrate-plan.sh" >/dev/null 2>"$plan_log"
+grep -Fq -- "unit=orchestrate.plan status=start" "$plan_log"
+grep -Fq -- "unit=orchestrate.plan status=done" "$plan_log"
+grep -Fq -- "workflow=test.docs.orchestrate" "$plan_log"
+grep -Fq -- "followup=false" "$plan_log"
 bash "$DOCKPIPE_SCRIPT_DIR/orchestrate-run-tasks.sh" >/dev/null
 
 python3 - "$DORKPIPE_ORCH_ROOT" <<'PY'
@@ -97,7 +102,12 @@ export DORKPIPE_ORCH_FOLLOWUP_REQUEST="Tighten the package contract guidance wit
 export DORKPIPE_ORCH_FOLLOWUP_GOAL="Repair only the package contract output and preserve untouched worker results."
 export DORKPIPE_ORCH_FOLLOWUP_TASK_IDS="package_contracts"
 
-bash "$DOCKPIPE_SCRIPT_DIR/orchestrate-plan.sh" >/dev/null
+followup_plan_log="$DORKPIPE_ORCH_ROOT.followup-plan.err"
+bash "$DOCKPIPE_SCRIPT_DIR/orchestrate-plan.sh" >/dev/null 2>"$followup_plan_log"
+grep -Fq -- "unit=orchestrate.plan status=start" "$followup_plan_log"
+grep -Fq -- "unit=orchestrate.plan status=done" "$followup_plan_log"
+grep -Fq -- "workflow=test.docs.orchestrate" "$followup_plan_log"
+grep -Fq -- "followup=true" "$followup_plan_log"
 bash "$DOCKPIPE_SCRIPT_DIR/orchestrate-run-tasks.sh" >/dev/null
 
 python3 - "$DORKPIPE_ORCH_ROOT" <<'PY'

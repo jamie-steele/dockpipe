@@ -18,6 +18,8 @@
 - DorkPipe orchestration auth checks now emit `orchestrate.auth.preflight` start/done/fail units and
   host-login recovery after worker auth failures now emits `orchestrate.auth.recovery` units with
   provider, auth status, login policy, retry status, and duration.
+- DorkPipe orchestration planning now emits `orchestrate.plan` start/done/fail units with workflow,
+  normalized orchestration root, follow-up mode, plan path, and duration.
 - Operation results can now mirror to append-only JSONL when `DOCKPIPE_EVENT_LOG` is set. The
   canonical event schema is `dockpipe.operation_event.v1`, implemented in
   `src/lib/infrastructure`.

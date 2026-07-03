@@ -5,18 +5,19 @@ SCRIPT_DIR="$(dockpipe get script_dir)"
 # shellcheck source=/dev/null
 source "$SCRIPT_DIR/orchestrate-common.sh"
 
-dorkpipe_orchestrate_init
-followup_mode="0"
-if [[ -n "${DORKPIPE_ORCH_FOLLOWUP_REQUEST:-}" || -n "${DORKPIPE_ORCH_FOLLOWUP_GOAL:-}" || -n "${DORKPIPE_ORCH_FOLLOWUP_TASK_IDS:-}" ]]; then
-  followup_mode="1"
-fi
-if [[ "${followup_mode}" != "1" ]]; then
-  find "${DORKPIPE_ORCH_TASKS_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-  find "${DORKPIPE_ORCH_SHARED_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-  find "${DORKPIPE_ORCH_LANES_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
-fi
-rm -f "${DORKPIPE_ORCH_HALT_JSON}"
-cat > "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" <<EOF
+dorkpipe_orchestrate_plan_main() {
+  local followup_mode source_workflow_config source_step_id helper_bin
+  followup_mode="0"
+  if [[ -n "${DORKPIPE_ORCH_FOLLOWUP_REQUEST:-}" || -n "${DORKPIPE_ORCH_FOLLOWUP_GOAL:-}" || -n "${DORKPIPE_ORCH_FOLLOWUP_TASK_IDS:-}" ]]; then
+    followup_mode="1"
+  fi
+  if [[ "${followup_mode}" != "1" ]]; then
+    find "${DORKPIPE_ORCH_TASKS_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} + || return 1
+    find "${DORKPIPE_ORCH_SHARED_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} + || return 1
+    find "${DORKPIPE_ORCH_LANES_DIR}" -mindepth 1 -maxdepth 1 -exec rm -rf {} + || return 1
+  fi
+  rm -f "${DORKPIPE_ORCH_HALT_JSON}" || return 1
+  cat > "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" <<EOF
 {
   "max_total_cloud_tokens": ${DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS},
   "max_task_cloud_tokens": ${DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS},
@@ -34,23 +35,36 @@ cat > "${DORKPIPE_ORCH_CLOUD_USAGE_JSON}" <<EOF
   }
 }
 EOF
-source_workflow_config="${DORKPIPE_ORCH_SOURCE_WORKFLOW_CONFIG:-${DOCKPIPE_WORKFLOW_CONFIG:-}}"
-source_step_id="${DORKPIPE_ORCH_SOURCE_STEP_ID:-${DOCKPIPE_STEP_ID:-}}"
+  source_workflow_config="${DORKPIPE_ORCH_SOURCE_WORKFLOW_CONFIG:-${DOCKPIPE_WORKFLOW_CONFIG:-}}"
+  source_step_id="${DORKPIPE_ORCH_SOURCE_STEP_ID:-${DOCKPIPE_STEP_ID:-}}"
 
-[[ -n "${source_workflow_config}" ]] || {
-  echo "DORKPIPE_ORCH_SOURCE_WORKFLOW_CONFIG or DOCKPIPE_WORKFLOW_CONFIG is required" >&2
-  exit 1
-}
-[[ -f "${source_workflow_config}" ]] || {
-  echo "missing workflow config: ${source_workflow_config}" >&2
-  exit 1
-}
-[[ -n "${source_step_id}" ]] || {
-  echo "DORKPIPE_ORCH_SOURCE_STEP_ID or DOCKPIPE_STEP_ID is required for orchestration planning" >&2
-  exit 1
+  [[ -n "${source_workflow_config}" ]] || {
+    echo "DORKPIPE_ORCH_SOURCE_WORKFLOW_CONFIG or DOCKPIPE_WORKFLOW_CONFIG is required" >&2
+    return 1
+  }
+  [[ -f "${source_workflow_config}" ]] || {
+    echo "missing workflow config: ${source_workflow_config}" >&2
+    return 1
+  }
+  [[ -n "${source_step_id}" ]] || {
+    echo "DORKPIPE_ORCH_SOURCE_STEP_ID or DOCKPIPE_STEP_ID is required for orchestration planning" >&2
+    return 1
+  }
+
+  helper_bin="$(dorkpipe_orchestrate_helper_bin)" || return 1
+  "${helper_bin}" plan "${source_workflow_config}" "${source_step_id}" || return 1
 }
 
-helper_bin="$(dorkpipe_orchestrate_helper_bin)"
-"${helper_bin}" plan "${source_workflow_config}" "${source_step_id}"
-
-printf '[dorkpipe] orchestration plan ready at %s\n' "${DORKPIPE_ORCH_ROOT}" >&2
+dorkpipe_orchestrate_init
+started_ms="$(dorkpipe_orchestrate_now_ms)"
+plan_followup="false"
+if [[ -n "${DORKPIPE_ORCH_FOLLOWUP_REQUEST:-}" || -n "${DORKPIPE_ORCH_FOLLOWUP_GOAL:-}" || -n "${DORKPIPE_ORCH_FOLLOWUP_TASK_IDS:-}" ]]; then
+  plan_followup="true"
+fi
+dorkpipe_orchestrate_operation_emit "orchestrate.plan" "start" "" "workflow=${DORKPIPE_ORCH_WORKFLOW:-}" "root=${DORKPIPE_ORCH_ROOT:-}" "followup=${plan_followup}"
+if ! dorkpipe_orchestrate_plan_main; then
+  dorkpipe_orchestrate_operation_fail "orchestrate.plan" "${started_ms}" "orchestration planning failed" "workflow=${DORKPIPE_ORCH_WORKFLOW:-}" "root=${DORKPIPE_ORCH_ROOT:-}"
+  exit 1
+fi
+duration_ms="$(dorkpipe_orchestrate_operation_duration_ms "${started_ms}")"
+dorkpipe_orchestrate_operation_emit "orchestrate.plan" "done" "${duration_ms}" "workflow=${DORKPIPE_ORCH_WORKFLOW:-}" "root=${DORKPIPE_ORCH_ROOT:-}" "followup=${plan_followup}" "plan=${DORKPIPE_ORCH_LANES_DIR}/plan.json"
