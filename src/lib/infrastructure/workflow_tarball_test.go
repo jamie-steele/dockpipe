@@ -82,6 +82,7 @@ func TestWorkflowCompileStartDirPrefersOnDiskOverStoreTarball(t *testing.T) {
 func TestWorkflowCompileStartDirExtractsTarball(t *testing.T) {
 	// Single project root: tarball search uses projectRoot for release/artifacts and packages store.
 	root := t.TempDir()
+	isolateWorkflowPackageRoots(t, root)
 	art := filepath.Join(root, "release", "artifacts")
 	if err := os.MkdirAll(art, 0o755); err != nil {
 		t.Fatal(err)

@@ -1,6 +1,7 @@
 # Tests, packaging, gosec/govulncheck, and CodeQL in one workflow (one Actions run per trigger).
 # See release/docs/branching.md
-# Local: quick tests  make test-quick  |  full Linux job  make ci  (src/scripts/ci-local.sh)
+# Local: quick tests  make test-quick  |  GitHub Actions emulation  make ci
+# Full local CI uses nektos/act + Docker to run this workflow's test job.
 #
 # --- Optional GitHub repo configuration (Settings → Secrets and variables → Actions) ---
 #

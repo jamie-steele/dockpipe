@@ -57,10 +57,12 @@ type Workflow struct {
 	// Namespace: optional author/org label for packages and tooling (see ValidateNamespace).
 	Namespace string  `yaml:"namespace,omitempty"`
 	Run       RunSpec `yaml:"run,omitempty"`
-	Isolate   string  `yaml:"isolate,omitempty"`
-	Act       string  `yaml:"act,omitempty"`
-	Action    string  `yaml:"action,omitempty"`
-	Resolver  string  `yaml:"resolver,omitempty"`
+	// Platforms declares supported host platforms for host steps and dependency installers.
+	Platforms []string `yaml:"platforms,omitempty"`
+	Isolate   string   `yaml:"isolate,omitempty"`
+	Act       string   `yaml:"act,omitempty"`
+	Action    string   `yaml:"action,omitempty"`
+	Resolver  string   `yaml:"resolver,omitempty"`
 	// Runtime: default runtime profile name (templates/core/runtimes/<name>).
 	Runtime string `yaml:"runtime,omitempty"`
 	// Strategy: default named strategy (templates/core/strategies/<name> or templates/<wf>/strategies/<name>).
@@ -89,6 +91,8 @@ type Workflow struct {
 	Container WorkflowContainerConfig `yaml:"container,omitempty"`
 	// Workspace: optional runtime-owned workspace/session lifecycle intent.
 	Workspace WorkflowWorkspaceConfig `yaml:"workspace,omitempty"`
+	// Dependencies declares host tools required before this workflow can run.
+	Dependencies DependencySpec `yaml:"dependencies,omitempty"`
 	// Inject: explicit compile closure dependencies (workflow/package ids and resolver profile names).
 	// Unlike imports:, this does not merge YAML — it only guides package compile for-workflow ordering.
 	Inject   WorkflowInjectList      `yaml:"inject,omitempty"`
@@ -631,6 +635,7 @@ type workflowFile struct {
 	Icon            string                     `yaml:"icon,omitempty"`
 	WorkflowType    string                     `yaml:"workflow_type,omitempty"`
 	Namespace       string                     `yaml:"namespace,omitempty"`
+	Platforms       []string                   `yaml:"platforms,omitempty"`
 	Run             RunSpec                    `yaml:"run"`
 	Isolate         string                     `yaml:"isolate"`
 	Act             string                     `yaml:"act"`
@@ -648,6 +653,7 @@ type workflowFile struct {
 	Image           WorkflowImageConfig        `yaml:"image,omitempty"`
 	Container       WorkflowContainerConfig    `yaml:"container,omitempty"`
 	Workspace       WorkflowWorkspaceConfig    `yaml:"workspace,omitempty"`
+	Dependencies    DependencySpec             `yaml:"dependencies,omitempty"`
 	Inputs          map[string]InputBinding    `yaml:"inputs,omitempty"`
 	Vars            map[string]string          `yaml:"vars"`
 	Compose         WorkflowComposeConfig      `yaml:"compose,omitempty"`
@@ -821,6 +827,9 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 	if err := ValidateWorkflowNamespaceField(w); err != nil {
 		return err
 	}
+	if err := ValidatePlatformList("platforms", w.Platforms); err != nil {
+		return err
+	}
 	if err := ValidateWorkflowVaultField(w); err != nil {
 		return err
 	}
@@ -834,6 +843,9 @@ func ValidateLoadedWorkflow(w *Workflow) error {
 		return err
 	}
 	if err := ValidateWorkflowWorkspaceField(w); err != nil {
+		return err
+	}
+	if err := ValidateDependencySpec("dependencies", w.Dependencies); err != nil {
 		return err
 	}
 	if err := ValidateWorkflowSingleFlowFields(w); err != nil {

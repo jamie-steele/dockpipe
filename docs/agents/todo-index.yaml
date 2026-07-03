@@ -29,6 +29,9 @@ todos:
   - id: TODO-009
     topic: Sandbox toolchain determinism
     path: docs/todos/sandbox-toolchain-determinism.md
+  - id: TODO-010
+    topic: Declarative dependency install UX
+    path: docs/todos/declarative-dependency-install-ux.md
 
 maintenance:
   - Treat this YAML file as the AI/backlog entrypoint.

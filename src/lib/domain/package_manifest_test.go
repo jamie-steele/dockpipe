@@ -247,6 +247,48 @@ requires_capabilities: [cli.codex, app.vscode]
 	}
 }
 
+func TestParsePackageManifestHostDependencies(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	p := filepath.Join(dir, "package.yml")
+	body := `schema: 1
+name: ci-tools
+version: 1.0.0
+title: CI Tools
+description: Local CI workflow helpers
+author: ACME
+website: https://example.com
+license: Apache-2.0
+kind: workflow
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: act
+      command: act
+      description: Runs GitHub Actions locally
+      install:
+        windows: winget install nektos.act
+        deb: sudo apt-get install -y act
+`
+	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, err := ParsePackageManifest(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Dependencies.Host) != 1 {
+		t.Fatalf("dependencies.host: %+v", m.Dependencies.Host)
+	}
+	dep := m.Dependencies.Host[0]
+	if dep.ID != "act" || dep.Command != "act" || dep.Install.Windows == "" || dep.Install.Deb == "" {
+		t.Fatalf("dependency: %+v", dep)
+	}
+	if len(m.Platforms) != 2 || m.Platforms[1] != "deb" {
+		t.Fatalf("platforms: %+v", m.Platforms)
+	}
+}
+
 func TestParsePackageManifestProviderRejectsTooLong(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()

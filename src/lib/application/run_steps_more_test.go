@@ -993,7 +993,8 @@ func TestRunParallelStepWorkerNonZeroExit(t *testing.T) {
 	o.wf.Steps = []domain.Step{{Cmd: "echo a", Isolate: "ubuntu:latest", Blocking: &bFalse}}
 	runContainerFn = func(ro infrastructure.RunOpts, argv []string) (int, error) { return 3, nil }
 	err := runParallelStepWorker(&o, 0, 1, 0, map[string]string{}, map[string]string{})
-	if err == nil || !strings.Contains(err.Error(), "parallel step 1 exited with code 3") {
+	code, ok := exitCodeFromError(err)
+	if !ok || code != 3 {
 		t.Fatalf("expected non-zero worker error, got %v", err)
 	}
 }

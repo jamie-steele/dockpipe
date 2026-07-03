@@ -129,6 +129,7 @@ Package dependencies should remain package-shaped:
 - **`depends`** names other package ids.
 - **`requires_resolvers`** names resolver profile ids that must be available project-locally, globally, or from the install closure. Workflows that use logical resolver script ids such as **`scripts/dorkpipe/...`** should declare the owning resolver here instead of relying on workflow-package fallback.
 - **`requires_capabilities`** names dotted capability ids for catalog/search and dependency checks.
+- **`platforms`** declares which host platforms the package supports, and **`dependencies.host`** names required external executables with OS-specific install commands. Core preflights these before workflow execution; future install flows should surface them before first run.
 - **`image`** may point at a normal OCI reference, ideally digest-pinned, but Docker layers remain in Docker/OCI registries rather than DockPipe package tarballs.
 
 Security metadata in **`package.yml`** should stay compatibility-only, for example **`compatible_security_profiles`** or **`requires_network: true`** if added later. Effective network, filesystem, process, and Docker enforcement settings belong only in compiled runtime manifests.
@@ -179,6 +180,7 @@ Suggested subdirectories (mirror authoring concepts; not all are required):
 | **`provides`** | Resolver capability names (e.g. tool ids) for **`kind: resolver`** |
 | **`requires_resolvers`** | Hint compatible resolver profiles for **`kind: workflow`** |
 | **`depends`** | Other package **names** this package expects |
+| **`dependencies`** | Supported host platforms plus external host tools needed by this package's workflows/scripts, separate from package graph **`depends`** |
 | **`namespace`** | Author/org label for discovery and future namespaced installs (validated; see **`domain.ValidateNamespace`**) |
 | **`allow_clone`** | If **`true`**, **`dockpipe clone`** may export the compiled tree to **`workflows/`**; if false or omitted, clone is refused. |
 | **`distribution`** | Optional hint: **`source`** or **`binary`** (documentation for store pages). |

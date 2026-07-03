@@ -126,7 +126,8 @@ func TestApplyHostCleanup_RunScopedOnlyStopsTrackedContainer(t *testing.T) {
 	old := hostCleanupExecCommandFn
 	hostCleanupExecCommandFn = func(ctx context.Context, name string, arg ...string) *exec.Cmd {
 		got = append(got, append([]string{name}, arg...))
-		return exec.CommandContext(ctx, "bash", "-lc", "exit 0")
+		cmd := successfulComposeTestCommand()
+		return exec.CommandContext(ctx, cmd.Path, cmd.Args[1:]...)
 	}
 	defer func() { hostCleanupExecCommandFn = old }()
 

@@ -83,6 +83,7 @@ func TestSourceHostScriptExportsEnvironment(t *testing.T) {
 // TestCommitOnHostNoRepoReturnsNil skips git work when the workdir is not a git repository.
 func TestCommitOnHostNoRepoReturnsNil(t *testing.T) {
 	tmp := t.TempDir()
+	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(tmp))
 	if err := os.WriteFile(filepath.Join(tmp, "x.txt"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}

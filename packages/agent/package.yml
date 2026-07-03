@@ -11,6 +11,27 @@ author: DockPipe
 license: Apache-2.0
 repository: https://github.com/dockpipe/dockpipe
 tags: [resolver, workflow, agents, ai]
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs package-owned resolver and doctor shell scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: git
+      command: git
+      description: Resolves repository roots in package tests and maintainer workflows.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y git
+    - id: docker
+      command: docker
+      description: Runs Codex, Claude, and Ollama resolver containers.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
 includes_resolvers:
   - claude
   - codex

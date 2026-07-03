@@ -11,5 +11,20 @@ license: Apache-2.0
 repository: https://github.com/dockpipe/dockpipe
 tags: [workflow, dorkpipe, skills, codex, claude]
 depends: [dorkpipe]
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs the skills render wrapper script.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: go
+      command: go
+      description: Builds the skills-render helper from source when no compiled helper is present.
+      install:
+        windows: winget install GoLang.Go
+        deb: sudo apt-get update && sudo apt-get install -y golang-go
 allow_clone: true
 distribution: source

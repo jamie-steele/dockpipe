@@ -533,6 +533,44 @@
         }
       }
     },
+    "dependencies_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "host": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Stable dependency id. Defaults to command when omitted."
+              },
+              "command": {
+                "type": "string",
+                "description": "Executable name expected on the host PATH."
+              },
+              "description": { "type": "string" },
+              "required": {
+                "type": "boolean",
+                "description": "Defaults to true. Optional dependencies are documented but do not fail preflight."
+              },
+              "install": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "windows": { "type": "string" },
+                  "macos": { "type": "string" },
+                  "linux": { "type": "string" },
+                  "deb": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "workflow_view": {
       "type": "object",
       "additionalProperties": false,
@@ -737,6 +775,14 @@
       "type": "string",
       "description": "Optional author/org label for packages and discovery. Lowercase label (a-z, digits, hyphens); must not be a reserved word (e.g. dockpipe, core, system)."
     },
+    "platforms": {
+      "type": "array",
+      "description": "Host platforms this workflow supports. Host steps and required dependencies must work on every declared platform.",
+      "items": {
+        "type": "string",
+        "enum": ["windows", "macos", "linux", "deb"]
+      }
+    },
     "imports": {
       "type": "array",
       "items": { "type": "string" },
@@ -765,6 +811,7 @@
     },
     "container": { "$ref": "#/$defs/container_config" },
     "workspace": { "$ref": "#/$defs/workspace_config" },
+    "dependencies": { "$ref": "#/$defs/dependencies_config" },
     "security": {
       "type": "object",
       "additionalProperties": false,

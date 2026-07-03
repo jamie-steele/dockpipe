@@ -60,6 +60,10 @@ type PackageManifest struct {
 	IncludesResolvers []string `yaml:"includes_resolvers,omitempty"`
 	// Depends lists other package names this package expects (optional).
 	Depends []string `yaml:"depends,omitempty"`
+	// Platforms declares supported host platforms for package-owned workflows/scripts.
+	Platforms []string `yaml:"platforms,omitempty"`
+	// Dependencies declares host tools expected by this package's workflows/scripts.
+	Dependencies DependencySpec `yaml:"dependencies,omitempty"`
 	// AllowClone: when true, dockpipe clone may copy this compiled package into an authoring tree (e.g. workflows/).
 	// Omitted or false: clone is refused — use for commercial/binary-only drops where the publisher does not grant source export.
 	AllowClone bool `yaml:"allow_clone,omitempty"`
@@ -153,6 +157,12 @@ func ValidatePackageManifest(m *PackageManifest) error {
 		return err
 	}
 	if err := ValidatePackageTestSpec(&m.Test); err != nil {
+		return err
+	}
+	if err := ValidatePlatformList("platforms", m.Platforms); err != nil {
+		return err
+	}
+	if err := ValidateDependencySpec("dependencies", m.Dependencies); err != nil {
 		return err
 	}
 	// kind-specific required fields kept minimal — capability / requires_capabilities are optional metadata.

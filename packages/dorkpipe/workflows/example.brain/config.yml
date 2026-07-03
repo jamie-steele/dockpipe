@@ -4,6 +4,33 @@ description: >-
   Package-owned starter workflow for generating repo-native brain guidance in a checkout.
 
 docker_preflight: false
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs DorkPipe orchestration host scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: docker
+      command: docker
+      description: Starts the DorkPipe sidecar stack and resolver worker containers.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+    - id: git
+      command: git
+      description: Reads repository state and applies approved generated artifacts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y git
+    - id: curl
+      command: curl
+      description: Checks local Ollama and DorkPipe stack HTTP endpoints.
+      install:
+        windows: winget install cURL.cURL
+        deb: sudo apt-get update && sudo apt-get install -y curl
 
 vars:
   DORKPIPE_ORCH_OLLAMA_MODEL: llama3.2

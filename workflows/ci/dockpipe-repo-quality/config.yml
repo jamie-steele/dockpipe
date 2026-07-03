@@ -1,8 +1,8 @@
-# Host-only: surface DorkPipe CI signals after running govulncheck + gosec on the host (see ci-local.sh).
-# Pair with workflows/ci/test for the full Docker-isolated CI chain.
+# Host-only: surface DorkPipe CI signals after a CI run writes ci-analysis artifacts.
+# Pair with workflows/ci/ci-emulate for the GitHub Actions-shaped local CI chain.
 name: dockpipe-repo-quality
 description: >-
-  Print a short summary of DorkPipe-normalized CI scans. Run after ci-local or CI scan steps.
+  Print a short summary of DorkPipe-normalized CI scans. Run after ci-emulate or GitHub CI scan steps.
 
 docker_preflight: false
 # Host-only step — no workflow-level runtime (substrate is per step when you add container steps).

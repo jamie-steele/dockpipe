@@ -13,6 +13,27 @@ license: Apache-2.0
 repository: https://github.com/dockpipe/dockpipe
 icon: assets/images/icon.png
 tags: [dorkpipe, orchestration, stack, agentic]
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs package-owned shell scripts and workflow helpers.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: git
+      command: git
+      description: Reads repository state and validates generated patch/session artifacts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y git
+    - id: go
+      command: go
+      description: Builds DorkPipe helper binaries from source in maintainer and fallback paths.
+      install:
+        windows: winget install GoLang.Go
+        deb: sudo apt-get update && sudo apt-get install -y golang-go
 artwork:
   icon: assets/images/icon.png
 includes_resolvers:

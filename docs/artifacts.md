@@ -15,7 +15,7 @@ When asked *“compliance issues?”* or *“security posture?”*:
 
 ## CI scan bundle
 
-**govulncheck** / **gosec** feed workflow-scoped `ci-raw/` artifacts → normalized `ci-analysis/findings.json` (schema: **`src/schemas/dockpipe-ci-findings.schema.json`**). **`dorkpipe ci normalize-scans`** is the canonical implementation; **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/normalize-ci-scans.sh`** is the compatibility wrapper. **`bash src/scripts/ci-local.sh`** reproduces locally.
+**govulncheck** / **gosec** feed workflow-scoped `ci-raw/` artifacts → normalized `ci-analysis/findings.json` (schema: **`src/schemas/dockpipe-ci-findings.schema.json`**). **`dorkpipe ci normalize-scans`** is the canonical implementation; **`packages/dorkpipe/resolvers/dorkpipe/assets/scripts/normalize-ci-scans.sh`** is the compatibility wrapper. **`make ci`** reproduces the GitHub Actions test job locally through **`act`**.
 
 | Path | Role |
 |------|------|

@@ -107,9 +107,9 @@ dev-install: build install
 test-quick:
 	bash src/scripts/test-quick.sh
 
-# Same sequence as Linux job in .github/workflows/ci.yml (not CodeQL, not Windows).
+# Run the real GitHub Actions CI test job locally through nektos/act.
 ci:
-	bash src/scripts/ci-local.sh
+	bash src/scripts/ci-emulate.sh
 
 # Tar.gz + sha256 + install-manifest.json for `dockpipe install core` (upload release/artifacts/* to your HTTPS base URL).
 package-templates-core:

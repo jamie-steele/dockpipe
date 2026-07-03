@@ -57,7 +57,7 @@ steps:
       export GOCACHE="$GO_ARTIFACT_DIR/gocache"
       export GOBIN="$GO_ARTIFACT_DIR/bin"
       mkdir -p "$GOTMPDIR" "$GOCACHE" "$GOBIN"
-      echo "[demo] --- Step 2: verify artifact + full Go + security scan (same spirit as CI / ci-local.sh) ---"
+      echo "[demo] --- Step 2: verify artifact + full Go + security scan (same spirit as GitHub CI) ---"
       test -n "${ARTIFACT_SHA256:-}" || { echo "[demo] FAIL missing ARTIFACT_SHA256"; exit 1; }
       test -f "$DEMO_FILE" || { echo "[demo] FAIL missing $DEMO_FILE"; exit 1; }
       GOT=$(sha256sum "$DEMO_FILE" | cut -b1-64)

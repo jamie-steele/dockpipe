@@ -192,7 +192,7 @@ func TestCmdPackageCompileCore(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldWd) })
 
-	if err := cmdPackage([]string{"compile", "core", "--from", src}); err != nil {
+	if err := cmdPackage([]string{"compile", "core", "--workdir", dir, "--from", src}); err != nil {
 		t.Fatal(err)
 	}
 	coreDir := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "core")
@@ -249,7 +249,7 @@ func TestCmdPackageCompileCoreRunsSourceBuildScript(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldWd) })
 
-	if err := cmdPackage([]string{"compile", "core", "--from", src}); err != nil {
+	if err := cmdPackage([]string{"compile", "core", "--workdir", dir, "--from", src}); err != nil {
 		t.Fatal(err)
 	}
 	coreDir := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "core")
@@ -288,7 +288,7 @@ func TestCmdPackageCompileResolversVendorResolversSubdir(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldWd) })
 
-	if err := cmdPackage([]string{"compile", "resolvers", "--from", pack}); err != nil {
+	if err := cmdPackage([]string{"compile", "resolvers", "--workdir", dir, "--from", pack}); err != nil {
 		t.Fatal(err)
 	}
 	dest := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "resolvers")

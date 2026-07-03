@@ -32,6 +32,7 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 		Icon:            f.Icon,
 		WorkflowType:    f.WorkflowType,
 		Namespace:       f.Namespace,
+		Platforms:       f.Platforms,
 		Run:             f.Run,
 		Isolate:         f.Isolate,
 		Act:             f.Act,
@@ -49,6 +50,7 @@ func ParseWorkflowFromDisk(data []byte, baseDir string, readFile func(string) ([
 		Image:           f.Image,
 		Container:       f.Container,
 		Workspace:       f.Workspace,
+		Dependencies:    f.Dependencies,
 		Inject:          f.Inject,
 		Inputs:          f.Inputs,
 		Vars:            f.Vars,
@@ -92,6 +94,8 @@ func parseWorkflowFileRecursive(data []byte, baseDir string, readFile func(strin
 	}
 	mergedVars := map[string]string{}
 	mergedInputs := map[string]InputBinding{}
+	var mergedPlatforms []string
+	var mergedDependencies DependencySpec
 	var mergedInject []WorkflowInjectEntry
 	var stepParts []stepOrGroupYAML
 	var finallyParts []stepOrGroupYAML
@@ -128,6 +132,8 @@ func parseWorkflowFileRecursive(data []byte, baseDir string, readFile func(strin
 				mergedInputs[k] = v
 			}
 		}
+		mergedPlatforms = append(mergedPlatforms, sub.Platforms...)
+		mergedDependencies.Host = append(mergedDependencies.Host, sub.Dependencies.Host...)
 		mergedInject = append(mergedInject, sub.Inject...)
 		stepParts = append(stepParts, sub.Steps...)
 		finallyParts = append(finallyParts, sub.Finally...)
@@ -141,6 +147,8 @@ func parseWorkflowFileRecursive(data []byte, baseDir string, readFile func(strin
 	out := f
 	out.Inputs = mergedInputs
 	out.Vars = mergedVars
+	out.Platforms = append(mergedPlatforms, f.Platforms...)
+	out.Dependencies.Host = append(mergedDependencies.Host, f.Dependencies.Host...)
 	out.Inject = append(mergedInject, f.Inject...)
 	out.Steps = append(stepParts, f.Steps...)
 	// Run importer-local cleanup before imported/base cleanup.

@@ -365,6 +365,66 @@ steps:
 	}
 }
 
+func TestParseWorkflowYAMLHostDependencies(t *testing.T) {
+	y := `
+name: ci-local
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: act
+      command: act
+      description: Runs GitHub Actions locally
+      install:
+        windows: winget install nektos.act
+        deb: sudo apt-get install -y act
+run: echo ok
+`
+	w, err := ParseWorkflowYAML([]byte(y))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(w.Dependencies.Host) != 1 {
+		t.Fatalf("dependencies.host: %+v", w.Dependencies.Host)
+	}
+	if got := w.Dependencies.Host[0].Command; got != "act" {
+		t.Fatalf("dependency command: %q", got)
+	}
+	if got := w.Dependencies.Host[0].Install.Deb; got == "" {
+		t.Fatalf("dependency install.deb missing: %+v", w.Dependencies.Host[0].Install)
+	}
+	if got := w.Platforms; len(got) != 2 || got[1] != "deb" {
+		t.Fatalf("platforms: %+v", got)
+	}
+	if err := ValidateLoadedWorkflow(w); err != nil {
+		t.Fatalf("ValidateLoadedWorkflow: %v", err)
+	}
+}
+
+func TestValidateLoadedWorkflowRejectsInvalidDependencyPlatform(t *testing.T) {
+	w := &Workflow{
+		Platforms:    []string{"amiga"},
+		Dependencies: DependencySpec{Host: []HostDependency{{Command: "act"}}},
+		Run:          RunSpec{"echo ok"},
+	}
+	err := ValidateLoadedWorkflow(w)
+	if err == nil || !strings.Contains(err.Error(), "platforms") {
+		t.Fatalf("expected dependency platform validation error, got %v", err)
+	}
+}
+
+func TestValidateLoadedWorkflowRejectsDependencyCommandPath(t *testing.T) {
+	w := &Workflow{
+		Dependencies: DependencySpec{
+			Host: []HostDependency{{Command: "tools/act"}},
+		},
+		Run: RunSpec{"echo ok"},
+	}
+	err := ValidateLoadedWorkflow(w)
+	if err == nil || !strings.Contains(err.Error(), "dependencies.host[0].command") {
+		t.Fatalf("expected dependency command validation error, got %v", err)
+	}
+}
+
 func TestValidateWorkflowWorkspaceConfigRejectsBadMode(t *testing.T) {
 	err := ValidateWorkflowWorkspaceConfig("workspace", WorkflowWorkspaceConfig{Mode: "magic"})
 	if err == nil || !strings.Contains(err.Error(), "workspace.mode") {

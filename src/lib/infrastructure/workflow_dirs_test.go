@@ -10,6 +10,19 @@ import (
 	"dockpipe/src/lib/infrastructure/packagebuild"
 )
 
+func isolateWorkflowPackageRoots(t *testing.T, projectRoot string) {
+	t.Helper()
+	t.Setenv("DOCKPIPE_SYSTEM_ROOT", t.TempDir())
+	if os.Getenv("DOCKPIPE_GLOBAL_ROOT") == "" {
+		t.Setenv("DOCKPIPE_GLOBAL_ROOT", t.TempDir())
+	}
+	if strings.TrimSpace(projectRoot) != "" {
+		if err := os.WriteFile(filepath.Join(projectRoot, "dockpipe.config.json"), []byte("{}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // TestListWorkflowNamesInRepoRoot lists workflows/<name>/ for a normal project.
 func TestListWorkflowNamesInRepoRoot(t *testing.T) {
 	tmp := t.TempDir()
@@ -107,6 +120,7 @@ func TestResolveWorkflowConfigPathGlobalFallback(t *testing.T) {
 	tmp := t.TempDir()
 	glob := t.TempDir()
 	t.Setenv("DOCKPIPE_GLOBAL_ROOT", glob)
+	isolateWorkflowPackageRoots(t, tmp)
 	st := t.TempDir()
 	if err := os.WriteFile(filepath.Join(st, "config.yml"), []byte("name: onlyglobal\nsteps: []\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -207,6 +221,7 @@ func TestResolveWorkflowConfigPathPrefersWorkflowsOverLegacyTemplates(t *testing
 
 func TestResolveWorkflowConfigPathWithWorkdirPrefersPackagesOverLegacyTemplates(t *testing.T) {
 	tmp := t.TempDir()
+	isolateWorkflowPackageRoots(t, tmp)
 	if err := os.MkdirAll(filepath.Join(tmp, "templates", "core"), 0o755); err != nil {
 		t.Fatal(err)
 	}

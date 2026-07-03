@@ -279,6 +279,9 @@ func Run(argv []string, baseEnviron []string) error {
 		if err := infrastructure.CheckWorkflowPackageRequiresCapabilities(effWd, repoRoot, wfRoot, wfConfig); err != nil {
 			return err
 		}
+		if err := checkWorkflowHostDependencies(wf, wfRoot, wfConfig, opts); err != nil {
+			return err
+		}
 	}
 
 	var gitSession *infrastructure.GitSession

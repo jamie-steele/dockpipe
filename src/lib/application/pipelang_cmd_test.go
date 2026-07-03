@@ -2,7 +2,6 @@ package application
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -92,7 +91,11 @@ func TestPipeLangBindingsEnvConsumableByScript(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 	envPath := filepath.Join(outDir, "DefaultDeployConfig.bindings.env")
-	cmd := exec.Command("bash", "-lc", ". \""+envPath+"\"; test \"$PIPELANG_IMAGE\" = \"nginx\"; test \"$PIPELANG_REPLICAS\" = \"1\"; echo ok")
+	bashCmd, _, err := dockpipeBashShellCommand(". \"" + filepath.ToSlash(envPath) + "\"; test \"$PIPELANG_IMAGE\" = \"nginx\"; test \"$PIPELANG_REPLICAS\" = \"1\"; echo ok")
+	if err != nil {
+		t.Fatalf("resolve bash: %v", err)
+	}
+	cmd := bashCmd
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("script consume env: %v\n%s", err, string(out))

@@ -703,15 +703,20 @@ func isDockerCommandName(name string) bool {
 }
 
 func helperExitCommand(code int) *exec.Cmd {
-	cmd := exec.Command(os.Args[0], "-test.run=TestDockerHelperProcess", "--", strconv.Itoa(code))
+	cmd := exec.Command(os.Args[0], "-test.run=TestDockerHelperProcess", "--", "DOCKPIPE_DOCKER_HELPER_EXIT", strconv.Itoa(code))
 	cmd.Env = append(os.Environ(), fmt.Sprintf("GO_WANT_DOCKER_HELPER_PROCESS=%d", code))
 	return cmd
 }
 
 func TestDockerHelperProcess(t *testing.T) {
 	code := strings.TrimSpace(os.Getenv("GO_WANT_DOCKER_HELPER_PROCESS"))
-	if code == "" && len(os.Args) > 0 {
-		code = strings.TrimSpace(os.Args[len(os.Args)-1])
+	if code == "" {
+		for i := 0; i+1 < len(os.Args); i++ {
+			if os.Args[i] == "DOCKPIPE_DOCKER_HELPER_EXIT" {
+				code = strings.TrimSpace(os.Args[i+1])
+				break
+			}
+		}
 	}
 	if code == "" {
 		return

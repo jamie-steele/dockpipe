@@ -92,6 +92,33 @@ steps:
 DockPipe materializes these declarations as a derived Docker image at package compile/build time.
 Keep common inspection tools in resolver images; declare heavier project-specific toolchains here.
 
+### Host Dependencies
+
+Use `dependencies.host` when a workflow needs a host executable before it can run. DockPipe checks
+required dependencies before workspace/session mutation or step execution. If the command is missing
+and the current host platform is supported, DockPipe can run the package/workflow-authored install
+command after explicit approval (`--yes`, `DOCKPIPE_APPROVE_PROMPTS=1`, or an interactive confirm).
+
+```yaml
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: act
+      command: act
+      description: Runs GitHub Actions workflows locally.
+      install:
+        windows: winget install nektos.act
+        deb: sudo apt-get update && sudo apt-get install -y act
+```
+
+`command` is the executable name searched on `PATH`. `required` defaults to `true`; set
+`required: false` to document optional tooling without failing preflight. Top-level `platforms`
+may contain `windows`, `macos`, `linux`, or `deb`; when set, DockPipe blocks the workflow/package on
+unsupported hosts and only offers installers on supported platforms. Every required host dependency
+and host script must work on each declared platform. `install.<platform>` is an
+author-provided shell command and must be treated as code. Host dependencies are not package graph
+dependencies; use package `depends` for other DockPipe packages.
+
 DorkPipe orchestration cloud workers also accept a run-level consumer image override:
 
 ```yaml

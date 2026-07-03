@@ -63,6 +63,7 @@ func TestAppendDockpipeGitignoreIdempotent(t *testing.T) {
 
 func TestAppendDockpipeGitignoreWithoutGitErrors(t *testing.T) {
 	dir := t.TempDir()
+	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(dir))
 	err := appendDockpipeGitignore(dir)
 	if err == nil || !strings.Contains(err.Error(), "git working tree") {
 		t.Fatalf("expected git working tree error, got %v", err)

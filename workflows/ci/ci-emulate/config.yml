@@ -1,15 +1,29 @@
 name: ci-emulate
 vault: none
 description: >-
-  Host-only local mirror of the repo's Linux GitHub CI test job as closely as possible.
-  Runs the same maintainer path as make ci / src/scripts/ci-local.sh: scans, build, Go tests,
-  templates/core guard, DockPipe workflow test, .deb build, shell tests, and Docker integration tests.
-  CodeQL and the PR-only release-notes/version gate still stay on GitHub.
+  Local GitHub Actions CI emulator. Runs the real .github/workflows/ci.yml test job through
+  nektos/act so local validation follows the same runner/job shape as GitHub. CodeQL and PR-only
+  release gates still stay on GitHub unless you explicitly select those jobs.
 
 docker_preflight: false
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: docker
+      command: docker
+      description: Required by nektos/act and by the GitHub Actions test job.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+    - id: act
+      command: act
+      description: Runs GitHub Actions workflows locally.
+      install:
+        windows: winget install nektos.act
+        deb: curl -s https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
 
 steps:
   - id: emulate
     kind: host
     run:
-      - bash src/scripts/ci-local.sh
+      - bash src/scripts/ci-emulate.sh

@@ -2,8 +2,10 @@ package infrastructure
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -16,6 +18,16 @@ func withComposeSeams(t *testing.T) {
 	})
 }
 
+func successfulComposeTestCommand() *exec.Cmd {
+	if runtime.GOOS == "windows" {
+		return exec.Command("cmd", "/c", "exit 0")
+	}
+	if shell := os.Getenv("SHELL"); shell != "" {
+		return exec.Command(shell, "-c", "exit 0")
+	}
+	return exec.Command("sh", "-c", "exit 0")
+}
+
 func TestRunComposeLifecycleUpBuildsArgs(t *testing.T) {
 	withComposeSeams(t)
 	var gotName string
@@ -23,7 +35,7 @@ func TestRunComposeLifecycleUpBuildsArgs(t *testing.T) {
 	composeExecCommandFn = func(_ context.Context, name string, args ...string) *exec.Cmd {
 		gotName = name
 		gotArgs = append([]string(nil), args...)
-		return exec.Command("bash", "-c", "exit 0")
+		return successfulComposeTestCommand()
 	}
 	err := RunComposeLifecycle(ComposeLifecycleOpts{
 		Action:           "up",
@@ -66,7 +78,7 @@ func TestRunComposeLifecycleDefaultsProjectDirectoryFromFile(t *testing.T) {
 	var gotArgs []string
 	composeExecCommandFn = func(_ context.Context, name string, args ...string) *exec.Cmd {
 		gotArgs = append([]string(nil), args...)
-		return exec.Command("bash", "-c", "exit 0")
+		return successfulComposeTestCommand()
 	}
 	if err := RunComposeLifecycle(ComposeLifecycleOpts{
 		Action: "ps",
