@@ -25,5 +25,8 @@ dependencies:
 steps:
   - id: emulate
     kind: host
-    run:
-      - bash src/scripts/ci-emulate.sh
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
+    cmd: bash src/scripts/ci-emulate.sh
