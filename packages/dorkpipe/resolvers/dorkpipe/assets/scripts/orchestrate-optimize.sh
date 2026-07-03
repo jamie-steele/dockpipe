@@ -14,6 +14,10 @@ optimizer_root="$(dockpipe scope workflow "${target_workflow}" optimize)"
 
 resolve_path() {
   local path="${1:?path}"
+  if [[ "${path}" =~ ^[A-Za-z][\\/].* ]]; then
+    echo "orchestrate-optimize: invalid drive path uses U+F03A instead of ':' -> ${path}" >&2
+    exit 1
+  fi
   case "${path}" in
     /*|[A-Za-z]:\\*|[A-Za-z]:/*|\\\\*)
       printf '%s\n' "${path}"

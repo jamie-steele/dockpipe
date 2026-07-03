@@ -352,6 +352,35 @@ func TestResolveWorkflowConfigPathWithWorkdirPrefersProjectWorkflowsOverTarball(
 	}
 }
 
+func TestResolveWorkflowConfigPathWithWorkdirFindsNestedProjectWorkflowFromBundleRepoRoot(t *testing.T) {
+	bundle := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(bundle, BundledLayoutDir, "workflows"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	project := t.TempDir()
+	if err := os.WriteFile(filepath.Join(project, "dockpipe.config.json"), []byte("{\n  \"schema\": 1,\n  \"compile\": {\n    \"workflows\": [\"workflows\"]\n  }\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := filepath.Join(project, "workflows", "ci", "demo", "config.yml")
+	if err := os.MkdirAll(filepath.Dir(cfg), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cfg, []byte("name: demo\nsteps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	workdir := filepath.Join(project, "subdir")
+	if err := os.MkdirAll(workdir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ResolveWorkflowConfigPathWithWorkdir(bundle, workdir, "demo")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != cfg {
+		t.Fatalf("want nested project workflow %s got %s", cfg, got)
+	}
+}
+
 func TestResolveWorkflowConfigPathWithConfiguredExternalStore(t *testing.T) {
 	tmp := t.TempDir()
 	external := t.TempDir()

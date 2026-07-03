@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"dockpipe/src/lib/domain"
 	"dockpipe/src/lib/infrastructure/packagebuild"
 )
 
@@ -50,21 +51,7 @@ func ResolveWorkflowConfigPathWithWorkdir(repoRoot, workdir, name string) (strin
 		}
 	}
 	if wd := strings.TrimSpace(workdir); wd != "" {
-		absWd, err := absHostWorkdir(wd)
-		if err != nil {
-			absWd = filepath.Clean(wd)
-		}
-		wdRel := effectiveWorkflowsDirRel()
-		if wdRel == "" {
-			wdRel = DefaultUserWorkflowsDirRel
-		}
-		var projPath string
-		if filepath.IsAbs(wdRel) {
-			projPath = filepath.Join(wdRel, name, "config.yml")
-		} else {
-			projPath = filepath.Join(absWd, wdRel, name, "config.yml")
-		}
-		if st, err := os.Stat(projPath); err == nil && !st.IsDir() {
+		if projPath := projectAuthoredWorkflowConfigPath(wd, name); projPath != "" {
 			return projPath, nil
 		}
 	}
@@ -107,6 +94,31 @@ func ProjectWorkflowConfigPath(projectRoot, name string) string {
 	}
 	if st, err := os.Stat(p); err == nil && !st.IsDir() {
 		return p
+	}
+	return ""
+}
+
+func projectAuthoredWorkflowConfigPath(workdir, name string) string {
+	workdir = strings.TrimSpace(workdir)
+	name = strings.TrimSpace(name)
+	if workdir == "" || name == "" {
+		return ""
+	}
+	absWd, err := absHostWorkdir(workdir)
+	if err != nil {
+		absWd = filepath.Clean(workdir)
+	}
+	projectRoot, err := domain.FindProjectRootWithDockpipeConfig(absWd)
+	if err != nil {
+		projectRoot = absWd
+	}
+	if p := ProjectWorkflowConfigPath(projectRoot, name); p != "" {
+		return p
+	}
+	for _, p := range nestedWorkflowConfigCandidates(projectRoot, name, WorkflowCompileRootsCached(projectRoot)) {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
 	}
 	return ""
 }
@@ -194,21 +206,7 @@ func ResolveEmbeddedResolverWorkflowConfigPathWithWorkdir(repoRoot, workdir, nam
 		return u, nil
 	}
 	if wd := strings.TrimSpace(workdir); wd != "" {
-		absWd, err := absHostWorkdir(wd)
-		if err != nil {
-			absWd = filepath.Clean(wd)
-		}
-		wdRel := effectiveWorkflowsDirRel()
-		if wdRel == "" {
-			wdRel = DefaultUserWorkflowsDirRel
-		}
-		var projPath string
-		if filepath.IsAbs(wdRel) {
-			projPath = filepath.Join(wdRel, name, "config.yml")
-		} else {
-			projPath = filepath.Join(absWd, wdRel, name, "config.yml")
-		}
-		if st, err := os.Stat(projPath); err == nil && !st.IsDir() {
+		if projPath := projectAuthoredWorkflowConfigPath(wd, name); projPath != "" {
 			return projPath, nil
 		}
 	}
