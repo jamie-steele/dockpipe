@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	EnvDockpipeEventLog = "DOCKPIPE_EVENT_LOG"
+	EnvDockpipeEventLog   = "DOCKPIPE_EVENT_LOG"
+	EnvDockpipeEventIndex = "DOCKPIPE_EVENT_INDEX"
 
 	OperationEventSchemaV1 = "dockpipe.operation_event.v1"
 	OperationEventKind     = "operation_result"

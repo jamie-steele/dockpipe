@@ -426,6 +426,41 @@ func TestCmdRunsEventsIndexesOperationEventLog(t *testing.T) {
 	}
 }
 
+func TestCmdRunsEventsIndexesOperationEventLogUsingEnvPath(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events.jsonl")
+	indexPath := filepath.Join(dir, "events-index.json")
+	if err := infrastructure.AppendOperationEvent(path, infrastructure.OperationEvent{
+		Unit:   "build.compile",
+		Status: infrastructure.OperationStatusDone,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(infrastructure.EnvDockpipeEventIndex, indexPath)
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
+	if err := cmdRuns([]string{"events", "--event-log", path, "--index"}); err != nil {
+		t.Fatalf("cmdRuns events --index failed: %v", err)
+	}
+	_ = w.Close()
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), indexPath) {
+		t.Fatalf("unexpected index output:\n%s", buf.String())
+	}
+	if _, err := os.Stat(indexPath); err != nil {
+		t.Fatalf("expected env index path to be written: %v", err)
+	}
+}
+
 func TestCmdRunsPolicyJSONSupportsFilters(t *testing.T) {
 	project := t.TempDir()
 	for _, rec := range []*infrastructure.RunPolicyRecord{

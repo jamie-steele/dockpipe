@@ -165,12 +165,12 @@ workdir/bin/.dockpipe/runs/policy/.
 Usage:
   dockpipe runs list [--workdir <path>]
   dockpipe runs events --event-log <path> [--json]
-  dockpipe runs events --event-log <path> --index <path> [--json]
+  dockpipe runs events --event-log <path> --index [<path>] [--json]
   dockpipe runs policy [--workdir <path>] [--workflow <name>] [--step <id>] [--json]
 
   --workdir   Project directory (default: DOCKPIPE_WORKDIR or current directory)
   --event-log Operation event JSONL path (events only; default: DOCKPIPE_EVENT_LOG)
-  --index     Rebuild a JSON operation-event index from the JSONL ledger (events only)
+  --index     Rebuild JSON index from the JSONL ledger (events only; default: DOCKPIPE_EVENT_INDEX)
   --workflow  Filter policy records by workflow name (policy only)
   --step      Filter policy records by step id (policy only)
   --json      Emit policy/index/events as JSON where supported

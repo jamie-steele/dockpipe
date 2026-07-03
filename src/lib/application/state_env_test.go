@@ -67,17 +67,24 @@ func TestApplyWorkflowArtifactEnv(t *testing.T) {
 	if got, want := envMap[infrastructure.EnvDockpipeEventLog], filepath.Join(wd, "bin", ".dockpipe", "workflows", "CI-Test", "artifacts", "events.jsonl"); got != want {
 		t.Fatalf("event log = %q want %q", got, want)
 	}
+	if got, want := envMap[infrastructure.EnvDockpipeEventIndex], filepath.Join(wd, "bin", ".dockpipe", "workflows", "CI-Test", "artifacts", "events-index.json"); got != want {
+		t.Fatalf("event index = %q want %q", got, want)
+	}
 }
 
-func TestApplyWorkflowArtifactEnvPreservesExplicitEventLog(t *testing.T) {
+func TestApplyWorkflowArtifactEnvPreservesExplicitEventPaths(t *testing.T) {
 	wd := t.TempDir()
 	envMap := map[string]string{
-		infrastructure.EnvDockpipeEventLog: filepath.Join(wd, "custom-events.jsonl"),
+		infrastructure.EnvDockpipeEventLog:   filepath.Join(wd, "custom-events.jsonl"),
+		infrastructure.EnvDockpipeEventIndex: filepath.Join(wd, "custom-events-index.json"),
 	}
 	if err := applyWorkflowArtifactEnv(envMap, wd, "CI/Test"); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := envMap[infrastructure.EnvDockpipeEventLog], filepath.Join(wd, "custom-events.jsonl"); got != want {
 		t.Fatalf("event log should preserve explicit value, got %q want %q", got, want)
+	}
+	if got, want := envMap[infrastructure.EnvDockpipeEventIndex], filepath.Join(wd, "custom-events-index.json"); got != want {
+		t.Fatalf("event index should preserve explicit value, got %q want %q", got, want)
 	}
 }

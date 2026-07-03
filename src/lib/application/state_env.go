@@ -93,6 +93,9 @@ func applyWorkflowArtifactEnv(envMap map[string]string, workdir, workflowName st
 	if strings.TrimSpace(envMap[infrastructure.EnvDockpipeEventLog]) == "" {
 		envMap[infrastructure.EnvDockpipeEventLog] = filepath.Join(artifactRoot, "events.jsonl")
 	}
+	if strings.TrimSpace(envMap[infrastructure.EnvDockpipeEventIndex]) == "" {
+		envMap[infrastructure.EnvDockpipeEventIndex] = filepath.Join(artifactRoot, "events-index.json")
+	}
 	if strings.TrimSpace(envMap["DOCKPIPE_SOURCE_ROOT"]) == "" {
 		envMap["DOCKPIPE_SOURCE_ROOT"] = sourceRoot
 	}

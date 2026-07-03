@@ -57,11 +57,12 @@ func cmdRuns(argv []string) error {
 			if publicSub != "events" {
 				return fmt.Errorf("dockpipe runs %s: --index is only valid with events", publicSub)
 			}
-			if i+1 >= len(rest) {
-				return fmt.Errorf("dockpipe runs events: --index requires a path")
+			if i+1 < len(rest) && !strings.HasPrefix(rest[i+1], "-") {
+				eventIndex = rest[i+1]
+				i++
+			} else {
+				eventIndex = "__default__"
 			}
-			eventIndex = rest[i+1]
-			i++
 		case "--workflow":
 			if publicSub != "policy" {
 				return fmt.Errorf("dockpipe runs %s: --workflow is only valid with policy", publicSub)
@@ -123,6 +124,12 @@ func cmdRunsEvents(eventLog, eventIndex string, jsonOut bool) error {
 	}
 	eventIndex = strings.TrimSpace(eventIndex)
 	if eventIndex != "" {
+		if eventIndex == "__default__" {
+			eventIndex = strings.TrimSpace(os.Getenv(infrastructure.EnvDockpipeEventIndex))
+			if eventIndex == "" {
+				return fmt.Errorf("dockpipe runs events: provide --index <path> or set %s", infrastructure.EnvDockpipeEventIndex)
+			}
+		}
 		index, err := infrastructure.BuildOperationEventIndex(eventLog)
 		if err != nil {
 			return err

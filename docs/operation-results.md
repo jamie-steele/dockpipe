@@ -171,10 +171,11 @@ does expensive or destructive work and to make failure location obvious.
 Structured events should map from the same result contract rather than being authored independently.
 
 The canonical observed-state event log is append-only JSONL. Workflow runs default
-`DOCKPIPE_EVENT_LOG` to `<artifact_root>/events.jsonl` when the variable is not already set.
-Operation results are mirrored to that file. The file is the durable runtime ledger for the current
-run/session; Postgres or another database may index it later, but should be treated as a rebuildable
-projection rather than the source of truth.
+`DOCKPIPE_EVENT_LOG` to `<artifact_root>/events.jsonl` and `DOCKPIPE_EVENT_INDEX` to
+`<artifact_root>/events-index.json` when those variables are not already set. Operation results are
+mirrored to the JSONL ledger. The ledger is the durable runtime source for the current run/session;
+JSON index files, Postgres, or another database may index it later, but should be treated as
+rebuildable projections rather than the source of truth.
 
 Current event schema:
 
@@ -211,20 +212,23 @@ CLI inspection:
 
 ```bash
 dockpipe get event_log
+dockpipe get event_index
 dockpipe scope
 dockpipe runs events --event-log <path>
 dockpipe runs events --event-log <path> --json
 dockpipe runs events --event-log <path> --index <path>
+dockpipe runs events --event-log <path> --index
 dockpipe runs events --event-log <path> --index <path> --json
 dockpipe session inspect <id|latest>
 dockpipe session inspect <id|latest> --json
 ```
 
 When `--event-log` is omitted, `dockpipe runs events` reads `DOCKPIPE_EVENT_LOG`.
-`dockpipe get event_log` and workflow `dockpipe scope` expose the resolved workflow operation-event
-ledger path. `dockpipe session inspect` exposes the runtime-owned session metadata event log under
-`storage.event_log` for managed workspace/session lifecycle events. `--index` rebuilds a
-`dockpipe.operation_event_index.v1` JSON projection from the JSONL ledger.
+When `--index` is supplied without a path, it writes to `DOCKPIPE_EVENT_INDEX`. `dockpipe get
+event_log`, `dockpipe get event_index`, and workflow `dockpipe scope` expose the resolved workflow
+operation-event ledger and projection paths. `dockpipe session inspect` exposes the runtime-owned
+session metadata event log under `storage.event_log` for managed workspace/session lifecycle events.
+`--index` rebuilds a `dockpipe.operation_event_index.v1` JSON projection from the JSONL ledger.
 
 ## Bash Adapter Rules
 

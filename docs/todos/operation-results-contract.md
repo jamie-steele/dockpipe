@@ -16,18 +16,19 @@
 - Operation results can now mirror to append-only JSONL when `DOCKPIPE_EVENT_LOG` is set. The
   canonical event schema is `dockpipe.operation_event.v1`, implemented in
   `src/lib/infrastructure`.
-- Workflow runs now default `DOCKPIPE_EVENT_LOG` to `<artifact_root>/events.jsonl` and set the parent
-  process env while the run is active so Go-side host setup/checkpoint events and child steps share
-  the same ledger.
-- `dockpipe get event_log` and workflow `dockpipe scope` now expose the resolved operation-event
-  ledger path so callers do not need to know the artifact layout.
+- Workflow runs now default `DOCKPIPE_EVENT_LOG` to `<artifact_root>/events.jsonl` and
+  `DOCKPIPE_EVENT_INDEX` to `<artifact_root>/events-index.json`; the parent process env is set while
+  the run is active so Go-side host setup/checkpoint events and child steps share the same ledger.
+- `dockpipe get event_log`, `dockpipe get event_index`, and workflow `dockpipe scope` now expose the
+  resolved operation-event ledger/projection paths so callers do not need to know the artifact
+  layout.
 - `dockpipe session inspect <id|latest> [--json]` now exposes the runtime-owned session metadata
   event log as `storage.event_log`.
 - `dockpipe runs events --event-log <path> [--json]` can inspect the JSONL operation event ledger
   without requiring Postgres or PipeDeck.
-- `dockpipe runs events --event-log <path> --index <path> [--json]` can rebuild a
+- `dockpipe runs events --event-log <path> --index [<path>] [--json]` can rebuild a
   `dockpipe.operation_event_index.v1` JSON projection from the JSONL ledger for fast summaries and
-  future UI bootstrap.
+  future UI bootstrap; omitting the index path uses `DOCKPIPE_EVENT_INDEX`.
 - Runtime-owned helper containers now use stable DockPipe helper names and labels instead of
   leaving random Docker-generated names as the only operator clue.
 - DorkPipe orchestration scripts do not reference core internals directly, but the main package
