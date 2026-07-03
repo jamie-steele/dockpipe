@@ -41,6 +41,7 @@
 - Session checkpoint/sync/publish units now include `session.checkpoint.status`,
   `session.checkpoint.commit`, `session.checkpoint.metadata`, `session.sync.fetch`,
   `session.sync.merge`, `session.publish.preflight`, and `session.publish.push`.
+- Session archive now emits `session.archive.metadata`.
 - Worker lease units now include `worker.lease.preflight`, `worker.lease.metadata`,
   `worker.lease.volume`, `worker.lease.branch`, `worker.lease.apply`,
   `worker.lease.release.metadata`, and `worker.lease.cleanup`.
@@ -60,8 +61,6 @@
 - Expand the core operation-result contract into remaining runtime actions such as auth discovery
   outside the current DorkPipe shell path and other long-running runtime/bootstrap work that still
   prints one-off lines.
-- Audit session archive and any remaining small lifecycle helpers for whether they need explicit
-  operation-result units or can remain simple metadata-only state transitions.
 - Continue rolling the same result contract deeper into compile/package subcommands that still emit
   ad hoc detail lines beneath the now-normalized top-level build units.
 - Continue migrating any newly added package-owned scripts that do meaningful long-running work onto

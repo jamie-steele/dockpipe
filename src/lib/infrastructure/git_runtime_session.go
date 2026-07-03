@@ -649,9 +649,21 @@ func ArchiveSession(session *GitSession) error {
 	if err != nil {
 		return err
 	}
-	session.Status = "archived"
-	session.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	if err := writeGitSession(session, top); err != nil {
+	metadataDir := ""
+	if dir, dirErr := gitSessionMetadataDir(session, session.Storage.Workspace); dirErr == nil {
+		metadataDir = dir
+	}
+	ids := map[string]string{
+		"session": session.SessionID,
+		"status":  "archived",
+	}
+	archiveResult, err := RunOperationWithResult(os.Stderr, "session.archive.metadata", "Archiving Git session metadata…", ids, func() error {
+		session.Status = "archived"
+		session.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+		return writeGitSession(session, top)
+	})
+	_ = appendGitSessionEvent(nil, OperationEventFields(archiveResult), metadataDir)
+	if err != nil {
 		return err
 	}
 	return appendGitSessionEvent(session, map[string]string{

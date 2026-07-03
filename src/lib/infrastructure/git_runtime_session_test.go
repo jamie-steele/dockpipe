@@ -603,6 +603,13 @@ func TestGitSessionLifecycleSyncPublishArchiveAndLease(t *testing.T) {
 	if session.Status != "archived" {
 		t.Fatalf("session status = %q", session.Status)
 	}
+	sessionEvents, err = os.ReadFile(filepath.Join(session.Storage.Metadata, "events.jsonl"))
+	if err != nil {
+		t.Fatalf("read archive session events: %v", err)
+	}
+	if !strings.Contains(string(sessionEvents), `"unit":"session.archive.metadata"`) || !strings.Contains(string(sessionEvents), `"status":"archived"`) {
+		t.Fatalf("session archive events missing archive metadata operation:\n%s", sessionEvents)
+	}
 	git(repo, "worktree", "remove", "--force", session.Storage.Workspace)
 }
 
