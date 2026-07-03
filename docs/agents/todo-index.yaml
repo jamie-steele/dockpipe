@@ -14,9 +14,14 @@ todos:
   - id: TODO-004
     topic: Qt app and VS Code extension compile performance
     path: docs/todos/compile-performance-qt-vscode.md
+  - id: TODO-005
+    topic: Shared agents config discovery
+    path: docs/todos/shared-agents-config-discovery.md
 
 maintenance:
   - Treat this YAML file as the AI/backlog entrypoint.
+  - Keep this index open-only; do not list closed items here.
   - Put topic-specific status in the linked markdown, not in this index.
+  - Move completed topic files to docs/todos/closed/ with a short shipped summary and completion date.
   - When work materially completes or advances one of these items, update this index if needed and
     update the corresponding topic file in the same change.

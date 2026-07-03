@@ -13,7 +13,7 @@ This document is **FINAL**. It defines the core concepts, their relationships, a
 | **capability** (abstract) | **Which need** — stable dotted id (e.g. **`cli.codex`**, **`blob.storage`**) for packages and docs. **Resolvers satisfy capabilities**; runtime stays separate. See **[capabilities.md](capabilities.md)**. |
 | **resolver** | **Which platform/tool performs the work** — **platform-specific** adapter (a **resolver package** implements a **capability**). |
 | **strategy** | **Lifecycle wrapper** — before/after execution behavior. |
-| **assets** | **Support files** — scripts, image trees, compose examples under **`templates/core/assets/`** (not additional primitives). |
+| **assets** | **Support files** — scripts, image trees, and compose examples under the core authoring tree (**`src/core/assets/`** in-repo; equivalent installed/materialized core layout elsewhere). |
 | **runtime.type** | **Classification of runtime behavior** — not implementation. |
 
 ---
@@ -87,19 +87,23 @@ In configuration, **`DOCKPIPE_RUNTIME_TYPE`** is the field that carries **`runti
 
 ---
 
-## `templates/core/` layout (filesystem)
+## Core layout (filesystem)
 
-Under the repository (and in materialized bundles), **`templates/core/`** contains **only** these category directories — **no loose files** at the `core/` root:
+In the repository, the authored core tree is **`src/core/`**. Installed or materialized core keeps
+the same logical categories under its own core root. The core root contains **only** these category
+directories — **no loose files** at the root:
 
 | Directory | Role |
 |-----------|------|
 | **`runtimes/`** | Runtime profiles (**where** execution runs). |
 | **`resolvers/`** | Resolver profiles (**which** tool/platform). |
 | **`strategies/`** | Strategy **KEY=value** files (lifecycle before/after). |
-| **`bundles/`** | **Domain** script/asset trees (**dorkpipe**, **pipeon**, …) — not resolvers; see **`paths.go`** resolution order. |
-| **`assets/`** | Reusable **support files** — **`assets/scripts/`** (agnostic shell only), **`assets/images/`** (agnostic Dockerfiles only: **base-dev**, **dev**, **example**, **minimal**), **`assets/compose/README.md`** + agnostic **`minimal/`** / **`multi-service/`** demos. Per-domain images and compose live under **`resolvers/…/assets/`** or **`bundles/…/assets/`**. Not additional primitives. |
+| **`assets/`** | Reusable **support files** — **`assets/scripts/`**, **`assets/images/`**, and **`assets/compose/`**. Per-domain assets live under packages or resolver trees, not as new primitives. |
+| **`workflows/`** | Bundled example workflows only. Not the home for repo-specific CI or maintainer automation. |
 
-Workflows continue to reference scripts in YAML as **`scripts/…`**; the runner resolves **`repo/scripts/…`** first, then **`templates/core/resolvers/…`** (resolver-owned), **`templates/core/bundles/…`** (domain script trees), then **`templates/core/assets/scripts/…`** in the bundled tree.
+Workflows continue to reference scripts in YAML as **`scripts/…`**; the runner resolves
+**`repo/scripts/…`** first, then resolver/package-owned paths, then core **`assets/scripts/…`**
+through the centralized path helpers and package/store resolution logic.
 
 Bundling policy and legal classification: **[templates-core-assets.md](templates-core-assets.md)**.
 
@@ -212,10 +216,10 @@ This section **does not change** the four primitives above; it describes **where
 
 | Layer | Role | Default home |
 |--------|------|----------------|
-| **Runtimes** | Where execution runs — **stable, platform-agnostic profiles** | **In-repo** under **`templates/core/runtimes/`** (light profile files; stays in the bundle / git tree). |
-| **Strategies** | Lifecycle before/after — **small, stable** | **In-repo** under **`templates/core/strategies/`** (thin env + script pointers). |
-| **Compiled core** | Tight **`templates/core`** tree users can refresh from HTTPS | **Optional S3/R2 (or any static origin)** via **`dockpipe install core`** + manifest (slim baseline; not every resolver in the universe). |
-| **Resolvers** | Tool/platform **adapters** — **packages** that **implement** **capabilities** (`capability:` in **`package.yml`**) | **Bundled** under **`templates/core/resolvers/`** *or* **store packages** (tarball / **`bin/.dockpipe/internal/packages/`**) for extended catalogs. |
+| **Runtimes** | Where execution runs — **stable, platform-agnostic profiles** | **In-repo** under **`src/core/runtimes/`** (light profile files; compiled/installed/materialized into core elsewhere). |
+| **Strategies** | Lifecycle before/after — **small, stable** | **In-repo** under **`src/core/strategies/`**. |
+| **Compiled core** | Tight core tree users can refresh from HTTPS | **Optional static origin install** via **`dockpipe install core`** + manifest, or compiled project-local core tarball under the package store. |
+| **Resolvers** | Tool/platform **adapters** — **packages** that **implement** **capabilities** (`capability:` in **`package.yml`**) | **Bundled defaults** under **`src/core/resolvers/`** plus package/store resolver tarballs under **`bin/.dockpipe/internal/packages/`** for extended catalogs. |
 | **Workflows** | What runs — **packages** when compiled/published; **rich metadata** for authoring and store discovery | **Project `workflows/`**, **installed packages**, or **store**; **`package.yml`** carries **`requires_capabilities`**, **`requires_resolvers`**, and dependency hints. |
 
 **Ecosystem shape:** **workflows** and **resolver** packs are the natural **“plugin store”** surface (metadata-heavy). **Runtimes** and **strategies** stay **minimal and in-repo** so every install has a predictable, lightweight spine.

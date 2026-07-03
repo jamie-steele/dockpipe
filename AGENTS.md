@@ -22,6 +22,7 @@ Machine-readable routing: `docs/agents/index.yaml`.
 | Secrets must be references only. Never commit plaintext secrets or generated resolved templates. | `docs/agents/safety-guardrails.md` |
 | Treat `bin/.dockpipe/` and `.dorkpipe/` as generated/read-only grounding unless the user asks to refresh. | `docs/agents/artifacts-and-mcp.md` |
 | AI workflows must beat one strong direct worker on quality, safety, cost, review effort, or rerun value. DorkPipe owns the lower-level proof through artifacts/metrics, not user boilerplate. | `docs/agents/ai-workflow-value-bar.md` |
+| Main docs stay canonical for repo facts and public behavior. `docs/agents/` is the compressed routing/safety layer, not a shadow documentation tree. | `docs/agents/docs-system.md` |
 | Treat `docs/agents/todo-index.yaml` as the AI entrypoint for the cross-cutting backlog and keep the linked topic files current when a task materially completes or advances one of those items. | `docs/agents/todo-index.yaml` |
 
 ## Task Routing
@@ -36,6 +37,7 @@ Machine-readable routing: `docs/agents/index.yaml`.
 | Package promotion | `docs/agents/package-promotion.md`, `docs/agents/validation-commands.md` | `dorkpipe-package-authoring`, `dorkpipe-core-review` |
 | Agentic/DorkPipe workflows | `docs/agents/ai-workflow-value-bar.md`, `docs/agents/model-escalation.md`, `docs/agents/docs-generation.md`, `docs/agents/yaml-workflows.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
 | Docs or agent guidance | `docs/agents/token-optimization.md`, `docs/agents/skills.md` | `dorkpipe-token-optimization` |
+| Docs system or sync rules | `docs/agents/docs-system.md`, `docs/agents/token-optimization.md` | `dorkpipe-token-optimization`, `dorkpipe-core-review` |
 | Artifacts or MCP | `docs/agents/artifacts-and-mcp.md`, `docs/agents/safety-guardrails.md` | `dorkpipe-core-review` |
 
 ## Skill Routing
@@ -109,6 +111,7 @@ Report:
 - `docs/agents/safety-guardrails.md`
 - `docs/agents/token-optimization.md`
 - `docs/agents/skills.md`
+- `docs/agents/docs-system.md`
 - `docs/agents/todo-index.yaml`
 
 DockPipe runs anything, anywhere, in isolation. Keep it simple. Keep it composable.

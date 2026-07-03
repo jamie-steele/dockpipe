@@ -14,6 +14,13 @@ Route tasks to the smallest sufficient context set while preserving repo-specifi
 - DorkPipe skills hold reusable assistant behavior.
 - Canonical docs hold deeper reference material.
 
+## Canonical Rule
+
+- Prefer improving the canonical main docs over creating normalized duplicate docs.
+- Keep `docs/agents/` as a compressed routing/policy layer, not a second full documentation tree.
+- Only add agent-only normalized text when the content is truly routing, safety, or maintenance
+  policy that humans do not need in the main reference docs.
+
 ## Compression Rules
 
 - Prefer tables and checklists.
@@ -22,6 +29,7 @@ Route tasks to the smallest sufficient context set while preserving repo-specifi
 - Keep forbidden artifacts centralized.
 - Avoid generic AI-agent advice.
 - Avoid target-specific skill routing.
+- Avoid shadow copies of `docs/*.md` under `docs/agents/`.
 
 ## Review
 
