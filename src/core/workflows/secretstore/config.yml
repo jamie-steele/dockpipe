@@ -5,6 +5,15 @@ workflow_type: secretstore
 description: >-
   Host-only: SECRETSTORE_COMMAND runs after loading KEY=value from SECRETSTORE_ENV_FILE (default .env.secretstore).
   Copy .env.secretstore.example; for op:// vault mapping use workflow secretstore-onepassword.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the dotenv secretstore script.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
 
 docker_preflight: false
 # Substrate is per-step; dotenv resolver loads SECRETSTORE_ENV_FILE; script-owned env merge.
@@ -18,8 +27,6 @@ vars:
 
 steps:
   - id: exec-with-secrets
-    runtime: dockerimage
-    resolver: dotenv
     kind: host
     run:
       - scripts/dockpipe/secretstore-exec.sh

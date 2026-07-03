@@ -3,6 +3,27 @@ name: vscode
 category: app
 icon: assets/images/icon.png
 description: Base-dev session container plus a user-installed VS Code desktop app on the host, attached to /work as a remote window.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the VS Code session scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: docker
+      command: docker
+      description: Required to run the VS Code session container.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+    - id: code
+      command: code
+      description: Required to open the host VS Code desktop app.
+      install:
+        windows: winget install Microsoft.VisualStudioCode
+        deb: sudo snap install code --classic
 
 vault: none
 

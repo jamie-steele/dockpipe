@@ -3,6 +3,7 @@ kind: package
 name: dorkpipe.mcp
 version: 0.6.0
 title: DorkPipe MCP bridge
+platforms: [windows, deb]
 description: |
   Model Context Protocol server (stdio or HTTPS) with tiered IAM over dockpipe/dorkpipe subprocesses.
   DorkPipe-owned control-plane surface. Go module dorkpipe.mcp; not part of the core dockpipe engine module.

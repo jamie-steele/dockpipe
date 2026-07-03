@@ -3,6 +3,7 @@ kind: package
 name: pipeon
 version: 0.6.0
 title: DockPipe Pipeon
+platforms: [windows, deb]
 description: |
   First-party Pipeon harness, resolver profile, VS Code extension assets, and local assistant surface.
   Pipeon is intended to sit on top of the DorkPipe orchestration and MCP control-plane surfaces for

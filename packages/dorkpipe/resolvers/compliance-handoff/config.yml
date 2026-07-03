@@ -5,6 +5,15 @@ name: compliance-handoff
 description: >-
   Host-only: run scripts/dorkpipe/compliance-handoff.sh. Points AI at docs/artifacts.md and
   available DorkPipe package artifacts for CI scan signals, self-analysis, and run metadata.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the packaged compliance handoff script.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
 
 docker_preflight: false
 steps:

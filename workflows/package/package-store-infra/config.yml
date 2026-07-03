@@ -4,6 +4,7 @@ description: >-
   Run: ./src/bin/dockpipe --workflow package-store-infra --workdir . --
   Terraform: pass --tf plan|apply so DOCKPIPE_TF_COMMANDS is set; with DOCKPIPE_TF_OPTIONAL_WHEN_UNSET=1, Terraform is skipped when unset.
   Vault: secrets.vault_template keys override same-named vars when op inject runs.
+platforms: [windows, deb]
 
 docker_preflight: false
 

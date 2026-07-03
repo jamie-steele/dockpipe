@@ -5,6 +5,27 @@ description: >-
   Pipeon product dev stack: ensure dockpipe + dorkpipe + mcpd binaries, start the isolated
   DorkPipe control-plane stack with internal Postgres + Ollama, expose MCP only, warm the default local
   model, and open Pipeon against the current workdir.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the Pipeon dev-stack scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: docker
+      command: docker
+      description: Required for the Pipeon managed stack and code-server container.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+    - id: curl
+      command: curl
+      description: Required to wait for the Pipeon UI endpoint.
+      install:
+        windows: winget install cURL.cURL
+        deb: sudo apt-get update && sudo apt-get install -y curl
 
 steps:
   - id: launch

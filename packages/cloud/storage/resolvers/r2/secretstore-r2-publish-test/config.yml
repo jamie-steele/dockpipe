@@ -18,6 +18,27 @@ name: secretstore-r2-publish-test
 workflow_type: secretstore
 description: >-
   Test pipeline: op inject secrets into an outputs file, DockPipe merges into env, then r2-publish.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the secretstore and R2 publish scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: op
+      command: op
+      description: Required to inject secrets from 1Password.
+      install:
+        windows: winget install AgileBits.1Password.CLI
+        deb: sudo apt-get update && sudo apt-get install -y 1password-cli
+    - id: wrangler
+      command: wrangler
+      description: Required for the default Cloudflare R2 upload path.
+      install:
+        windows: winget install OpenJS.NodeJS.LTS
+        deb: sudo apt-get update && sudo apt-get install -y npm && sudo npm install -g wrangler
 
 docker_preflight: false
 # Secrets: package-provided op scripts (not workflow-level vault: merge).

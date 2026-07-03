@@ -7,6 +7,15 @@
 # cannot reach proxy.golang.org for go install / govulncheck. Host network matches the host stack.
 name: test
 vault: none
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: docker
+      command: docker
+      description: Required to run the CI parity workflow containers.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
 types:
   - models/ITestWorkflowConfig
 vars:

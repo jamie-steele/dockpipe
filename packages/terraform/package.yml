@@ -3,6 +3,7 @@ kind: package
 name: terraform
 version: 0.6.0
 title: DockPipe Terraform primitives
+platforms: [windows, deb]
 description: |
   Generic host Terraform workflow (dockpipe.terraform.core) — DOCKPIPE_TF_* module dir, backends, and
   terraform-pipeline.sh. Compose domain packs (e.g. cloud.storage.r2) on top; see resolver README.

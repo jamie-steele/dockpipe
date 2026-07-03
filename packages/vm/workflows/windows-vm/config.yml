@@ -1,6 +1,27 @@
 name: windows-vm
 category: app
 vault: none
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: qemu
+      command: qemu-system-x86_64
+      description: Required to boot the Windows guest through QEMU.
+      install:
+        windows: winget install SoftwareFreedomConservancy.QEMU
+        deb: sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils ovmf swtpm
+    - id: qemu-img
+      command: qemu-img
+      description: Required to create and inspect VM disk images.
+      install:
+        windows: winget install SoftwareFreedomConservancy.QEMU
+        deb: sudo apt-get update && sudo apt-get install -y qemu-utils
+    - id: ssh
+      command: ssh
+      description: Required when running commands in an existing Windows guest over SSH.
+      install:
+        windows: Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
+        deb: sudo apt-get update && sudo apt-get install -y openssh-client
 view:
   entry:
     type: choice

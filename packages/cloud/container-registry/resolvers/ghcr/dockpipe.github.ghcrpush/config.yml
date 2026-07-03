@@ -4,6 +4,21 @@ description: >-
   Retag a local OCI/container image and push it to GitHub Container Registry via
   assets/scripts/ghcr-push.sh. Build happens elsewhere; this workflow owns
   login, tag, dry-run, and push behavior.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the GHCR publish script.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: docker
+      command: docker
+      description: Default container CLI for retagging and pushing images.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
 
 docker_preflight: false
 

@@ -1,6 +1,7 @@
 # Reference resolver-shaped workflow — see README.md in this directory.
 name: example
 category: demo
+platforms: [windows, deb]
 description: Minimal layout demo for resolver profiles (agnostic script only).
 
 steps:

@@ -5,6 +5,15 @@
 # - clear multi-step flow with host/container boundaries
 name: example
 description: Starter typed pipeline with a prepare step, an isolated run step, and a host summary step.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required by the starter host steps.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
 
 types:
   - models/IExampleWorkflowConfig.pipe

@@ -4,6 +4,21 @@ description: >-
   Terraform-only for the Cloudflare R2 module under dockpipe.cloudflare.r2publish/terraform.
   Secrets: vault / .env. Non-secret TF_VAR_* below. Follow with dockpipe.cloudflare.r2upload for objects.
   PipeLang defaults are typed in IR2InfraConfig/R2InfraConfig and projected directly to matching env names.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the Cloudflare R2 Terraform wrapper.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: terraform
+      command: terraform
+      description: Required to provision Cloudflare R2 infrastructure.
+      install:
+        windows: winget install Hashicorp.Terraform
+        deb: sudo apt-get update && sudo apt-get install -y terraform
 
 types:
   - models/IR2InfraConfig

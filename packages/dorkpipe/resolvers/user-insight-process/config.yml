@@ -4,6 +4,15 @@ description: >-
   Run the packaged user-insight processing host steps and optional export-by-category.
   Uses the dorkpipe CLI user-insight commands. Does not treat user text as truth —
   see docs/artifacts.md and resolvers/user-insight-process/README.md.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the packaged user-insight scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
 
 docker_preflight: false
 steps:

@@ -2,6 +2,15 @@
 # Substrate is per-step (runtime / resolver); workflow-level runtime is not used.
 name: codex-security
 description: Isolated tests then Codex security review step (requires OPENAI_API_KEY for Codex).
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: docker
+      command: docker
+      description: Required to run the isolated test and Codex resolver containers.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
 
 steps:
   - id: tests

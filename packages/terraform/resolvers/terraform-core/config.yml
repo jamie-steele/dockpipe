@@ -4,6 +4,21 @@ description: >-
   Provider-agnostic host: packages/terraform/resolvers/terraform-core/assets/scripts/terraform-run.sh + terraform-pipeline.sh.
   Set DOCKPIPE_TF_MODULE_DIR. Remote: DOCKPIPE_TF_REMOTE_BACKEND_FILE only (no generated R2 backend here).
   Cloudflare R2: dockpipe.cloudflare.r2infra resolver ships terraform-cloudflare-r2-run.sh (wraps this pipeline; module .tf under dockpipe.cloudflare.r2publish/terraform).
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the Terraform wrapper scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: terraform
+      command: terraform
+      description: Required by the Terraform core workflow.
+      install:
+        windows: winget install Hashicorp.Terraform
+        deb: sudo apt-get update && sudo apt-get install -y terraform
 
 docker_preflight: false
 

@@ -728,22 +728,6 @@ vmimage_secure_boot_mode() {
   esac
 }
 
-vmimage_prompt_install_host_deps() {
-  local missing_desc="$1"
-  local answer
-  answer="$(
-    vmimage_prompt_confirm \
-      "vmimage.install-host-deps" \
-      "Install VM Host Dependencies?" \
-      "DockPipe needs additional host tools before it can run this VM: ${missing_desc}. Allow DockPipe to help launch the install command for your system?" \
-      no \
-      host-mutation \
-      vm-host-deps \
-      yes
-  )" || vmimage_die "prompt failed for host dependency install"
-  [[ "$answer" == "yes" ]]
-}
-
 vmimage_confirm_user_supplied_media_rights() {
   vmimage_confirm_prompts_enabled || return 0
   [[ -n "${DOCKPIPE_VM_CDROM:-}${DOCKPIPE_VM_VIRTIO_ISO:-}" ]] || return 0
@@ -1040,76 +1024,22 @@ vmimage_terminal_launcher() {
   return 1
 }
 
-vmimage_install_command_for_host() {
-  local include_qemu="${1:-false}" include_putty="${2:-false}"
-  if vmimage_is_windows_host; then
-    if command -v winget >/dev/null 2>&1; then
-      local cmds=()
-      if [[ "$include_qemu" == "true" ]]; then
-        cmds+=("winget install --id SoftwareFreedomConservancy.QEMU --exact")
-      fi
-      if [[ "$include_putty" == "true" ]]; then
-        cmds+=("winget install --id PuTTY.PuTTY --exact")
-      fi
-      if (( ${#cmds[@]} > 0 )); then
-        local joined=""
-        local cmd
-        for cmd in "${cmds[@]}"; do
-          if [[ -n "$joined" ]]; then
-            joined+="; "
-          fi
-          joined+="$cmd"
-        done
-        printf '%s\n' "$joined"
-        return 0
-      fi
-    fi
-    return 1
-  fi
-  if command -v apt-get >/dev/null 2>&1; then
-    printf 'sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils ovmf swtpm\n'
-    return 0
-  fi
-  if command -v dnf >/dev/null 2>&1; then
-    printf 'sudo dnf install -y qemu-system-x86 qemu-img edk2-ovmf swtpm\n'
-    return 0
-  fi
-  if command -v pacman >/dev/null 2>&1; then
-    printf 'sudo pacman -S --needed qemu-desktop edk2-ovmf swtpm\n'
-    return 0
-  fi
-  if command -v zypper >/dev/null 2>&1; then
-    printf 'sudo zypper install -y qemu-x86 qemu-img ovmf swtpm\n'
-    return 0
-  fi
-  return 1
-}
-
-vmimage_run_install_command_for_host() {
-  local install_cmd="$1"
-  if vmimage_is_windows_host; then
-    powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$install_cmd"
-  else
-    bash -lc "$install_cmd"
-  fi
-}
-
 vmimage_launch_install_terminal() {
-  local install_cmd="$1"
+  local command_text="$1"
   local term
   term="$(vmimage_terminal_launcher)" || return 1
   case "$term" in
     x-terminal-emulator)
-      "$term" -e bash -lc "$install_cmd; status=\$?; echo; if [ \$status -eq 0 ]; then echo 'DockPipe host dependencies installed.'; else echo 'Install command failed with status' \$status; fi; read -r -p 'Press Enter to close...' _"
+      "$term" -e bash -lc "$command_text; status=\$?; echo; if [ \$status -eq 0 ]; then echo 'DockPipe host command completed.'; else echo 'Host command failed with status' \$status; fi; read -r -p 'Press Enter to close...' _"
       ;;
     gnome-terminal)
-      "$term" -- bash -lc "$install_cmd; status=\$?; echo; if [ \$status -eq 0 ]; then echo 'DockPipe host dependencies installed.'; else echo 'Install command failed with status' \$status; fi; read -r -p 'Press Enter to close...' _"
+      "$term" -- bash -lc "$command_text; status=\$?; echo; if [ \$status -eq 0 ]; then echo 'DockPipe host command completed.'; else echo 'Host command failed with status' \$status; fi; read -r -p 'Press Enter to close...' _"
       ;;
     konsole)
-      "$term" -e bash -lc "$install_cmd; status=\$?; echo; if [ \$status -eq 0 ]; then echo 'DockPipe host dependencies installed.'; else echo 'Install command failed with status' \$status; fi; read -r -p 'Press Enter to close...' _"
+      "$term" -e bash -lc "$command_text; status=\$?; echo; if [ \$status -eq 0 ]; then echo 'DockPipe host command completed.'; else echo 'Host command failed with status' \$status; fi; read -r -p 'Press Enter to close...' _"
       ;;
     xterm)
-      "$term" -e bash -lc "$install_cmd; status=\$?; echo; if [ \$status -eq 0 ]; then echo 'DockPipe host dependencies installed.'; else echo 'Install command failed with status' \$status; fi; read -r -p 'Press Enter to close...' _"
+      "$term" -e bash -lc "$command_text; status=\$?; echo; if [ \$status -eq 0 ]; then echo 'DockPipe host command completed.'; else echo 'Host command failed with status' \$status; fi; read -r -p 'Press Enter to close...' _"
       ;;
   esac
 }
@@ -1117,17 +1047,16 @@ vmimage_launch_install_terminal() {
 vmimage_require_host_dependencies() {
   local -a missing=()
   local qemu_bin qemu_img_bin
-  local need_qemu=false need_putty=false
   qemu_bin="$(vmimage_qemu_bin || true)"
   qemu_img_bin="$(vmimage_qemu_img_bin || true)"
-  [[ -n "$qemu_bin" ]] || { missing+=("$(vmimage_default_qemu_bin)"); need_qemu=true; }
-  [[ -n "$qemu_img_bin" ]] || { missing+=("$(vmimage_default_qemu_img_bin)"); need_qemu=true; }
+  [[ -n "$qemu_bin" ]] || missing+=("$(vmimage_default_qemu_bin)")
+  [[ -n "$qemu_img_bin" ]] || missing+=("$(vmimage_default_qemu_img_bin)")
   if vmimage_is_windows_host && [[ -n "$(vmimage_ssh_password)" ]]; then
     local plink_bin pscp_bin
     plink_bin="$(vmimage_plink_bin || true)"
     pscp_bin="$(vmimage_pscp_bin || true)"
-    [[ -n "$plink_bin" ]] || { missing+=("plink.exe"); need_putty=true; }
-    [[ -n "$pscp_bin" ]] || { missing+=("pscp.exe"); need_putty=true; }
+    [[ -n "$plink_bin" ]] || missing+=("plink.exe")
+    [[ -n "$pscp_bin" ]] || missing+=("pscp.exe")
   fi
   if [[ "$(vmimage_tpm_mode)" != "off" && "$(vmimage_backend)" != "qemu-windows" ]]; then
     command -v swtpm >/dev/null 2>&1 || missing+=("swtpm")
@@ -1136,31 +1065,12 @@ vmimage_require_host_dependencies() {
     return 0
   fi
 
-  local missing_desc install_cmd
+  local missing_desc
   missing_desc="$(IFS=', '; printf '%s' "${missing[*]}")"
-  if ! vmimage_prompt_install_host_deps "$missing_desc"; then
-    vmimage_die "missing required host tools: ${missing_desc}"
+  if vmimage_is_windows_host; then
+    vmimage_die "missing required host tools: ${missing_desc}. Install QEMU for Windows and PuTTY (plink/pscp) as needed, then rerun windows-vm."
   fi
-  if ! install_cmd="$(vmimage_install_command_for_host "$need_qemu" "$need_putty")"; then
-    if vmimage_is_windows_host; then
-      vmimage_die "missing required host tools: ${missing_desc}. Install QEMU for Windows and PuTTY (plink/pscp) as needed, then rerun windows-vm."
-    fi
-    vmimage_die "missing required host tools: ${missing_desc}. Install QEMU system emulation, qemu-img, and UEFI firmware for your distro, then rerun windows-vm."
-  fi
-
-  if [[ -t 0 && -t 1 ]]; then
-    vmimage_run_install_command_for_host "$install_cmd"
-    if vmimage_is_windows_host; then
-      vmimage_die "host dependency install finished. Open a new shell if needed, then rerun windows-vm."
-    fi
-    vmimage_die "host dependency install finished. Rerun windows-vm now that QEMU is installed."
-  fi
-
-  if ! vmimage_is_windows_host && vmimage_launch_install_terminal "$install_cmd"; then
-    vmimage_die "host dependency install terminal launched. After it completes, rerun windows-vm."
-  fi
-
-  vmimage_die "missing required host tools: ${missing_desc}. Run: ${install_cmd}"
+  vmimage_die "missing required host tools: ${missing_desc}. Install QEMU system emulation, qemu-img, swtpm, and UEFI firmware for your distro, then rerun windows-vm."
 }
 
 vmimage_detect_ovmf_pair() {

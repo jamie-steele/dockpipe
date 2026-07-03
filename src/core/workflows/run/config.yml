@@ -3,6 +3,15 @@
 # Commit is provided by named strategy commit (templates/core/strategies/commit).
 name: run
 description: Disposable container run, then commit changes on your current branch.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: docker
+      command: docker
+      description: Required to run the isolated command container.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
 
 strategy: commit
 strategies:

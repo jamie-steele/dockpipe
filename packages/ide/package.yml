@@ -3,6 +3,7 @@ kind: package
 name: ide
 version: 0.6.0
 title: DockPipe IDE resolvers
+platforms: [windows, deb]
 description: |
   Compatibility resolvers for user-installed desktop editors (vscode,
   cursor-dev). First-party Pipeon lives under packages/pipeon/ in this repo.

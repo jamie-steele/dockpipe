@@ -4,6 +4,15 @@ name: dorkpipe-self-analysis-host
 description: >-
   Host-only self-analysis (no container). Same outputs as dorkpipe-self-analysis.
   Use when Docker is unavailable or for fastest local iteration.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the packaged self-analysis host script.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
 
 steps:
   - id: self_analysis

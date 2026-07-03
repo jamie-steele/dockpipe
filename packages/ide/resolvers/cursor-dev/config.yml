@@ -3,6 +3,21 @@ name: cursor-dev
 category: app
 icon: assets/images/icon.png
 description: Experimental — base-dev session container until you stop it; open a user-installed Cursor desktop app on the host (no remote server).
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the Cursor session scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: docker
+      command: docker
+      description: Required to run the Cursor session container.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
 
 types:
   - models/ICursorDevResolverConfig

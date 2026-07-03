@@ -3,6 +3,15 @@
 name: dorkpipe-orchestrator
 description: >-
   Host step runs assets/scripts/run-orchestrator.sh (requires `make build` for bin/dorkpipe).
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the packaged orchestrator host script.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
 
 steps:
   - id: orchestrate
