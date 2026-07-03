@@ -22,6 +22,8 @@
   normalized orchestration root, follow-up mode, plan path, and duration.
 - DorkPipe orchestration approval now emits `orchestrate.approval` start/done/fail units with
   workflow, approval mode, decision, approved flag, approval artifact path, and duration.
+- DorkPipe task hard failures now rely on the canonical `orchestrate.task status=fail` line instead
+  of printing a second bespoke required-worker failure line.
 - Operation results can now mirror to append-only JSONL when `DOCKPIPE_EVENT_LOG` is set. The
   canonical event schema is `dockpipe.operation_event.v1`, implemented in
   `src/lib/infrastructure`.

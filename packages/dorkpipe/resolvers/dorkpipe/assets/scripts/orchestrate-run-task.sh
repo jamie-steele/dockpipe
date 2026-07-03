@@ -292,7 +292,6 @@ export task_id status resolver_hint provider lane_id selected_model provider_ses
 
 if [[ "${hard_fail}" == "true" ]]; then
   dorkpipe_orchestrate_operation_fail "orchestrate.task" "${task_started_at_ms}" "${hard_fail_message:-required worker ${task_id} (${provider}) failed}" "task=${task_id}" "provider=${provider}" "result=${result_json}" "status=${status}"
-  echo "[dorkpipe] ${hard_fail_message:-required worker ${task_id} (${provider}) failed}" >&2
   exit 1
 fi
 
