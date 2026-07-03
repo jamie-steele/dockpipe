@@ -13,6 +13,8 @@
 - `dockpipe build` now surfaces stable operation-result units for compile, package source builds,
   image artifact materialization, and clean-path behavior instead of relying on one-off build/image
   status strings.
+- DorkPipe package source builds now emit per-tool `package.source.tool` units for the package-owned
+  `dorkpipe`, `mcpd`, `skills-render`, and `orchestrate-helper` binaries.
 - Operation results can now mirror to append-only JSONL when `DOCKPIPE_EVENT_LOG` is set. The
   canonical event schema is `dockpipe.operation_event.v1`, implemented in
   `src/lib/infrastructure`.
