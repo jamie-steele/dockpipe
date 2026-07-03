@@ -14,11 +14,14 @@ optimizer_root="$(dockpipe scope workflow "${target_workflow}" optimize)"
 
 resolve_path() {
   local path="${1:?path}"
-  if [[ "${path}" = /* ]]; then
-    printf '%s\n' "${path}"
-  else
-    printf '%s/%s\n' "${ROOT}" "${path}"
-  fi
+  case "${path}" in
+    /*|[A-Za-z]:\\*|[A-Za-z]:/*|\\\\*)
+      printf '%s\n' "${path}"
+      ;;
+    *)
+      printf '%s/%s\n' "${ROOT}" "${path}"
+      ;;
+  esac
 }
 
 optimizer_dir="$(resolve_path "${optimizer_root}")"
@@ -34,6 +37,41 @@ case "${action}" in
     exit 1
     ;;
 esac
+
+optimizer_unit="orchestrate.optimize"
+optimizer_started_ms="$(dorkpipe_orchestrate_now_ms)"
+optimizer_completed="0"
+dorkpipe_orchestrate_operation_emit "${optimizer_unit}" "start" "" \
+  "action=${action}" \
+  "target_workflow=${target_workflow}" \
+  "result=${result_json}"
+
+finish_optimizer_operation() {
+  local lifecycle_status="${1:?status}"
+  local result_status="${2:-}"
+  shift 2 || true
+  local duration_ms
+  duration_ms="$(dorkpipe_orchestrate_operation_duration_ms "${optimizer_started_ms}")"
+  optimizer_completed="1"
+  dorkpipe_orchestrate_operation_emit "${optimizer_unit}" "${lifecycle_status}" "${duration_ms}" \
+    "action=${action}" \
+    "target_workflow=${target_workflow}" \
+    "result=${result_json}" \
+    "status=${result_status:-${lifecycle_status}}" \
+    "$@"
+}
+
+optimizer_exit_trap() {
+  local rc=$?
+  if [[ "${optimizer_completed}" != "1" && "${rc}" -ne 0 ]]; then
+    dorkpipe_orchestrate_operation_fail "${optimizer_unit}" "${optimizer_started_ms}" "optimizer action failed" \
+      "action=${action}" \
+      "target_workflow=${target_workflow}" \
+      "result=${result_json}" \
+      "exit_code=${rc}"
+  fi
+}
+trap optimizer_exit_trap EXIT
 
 if [[ "${action}" == "iterate" ]]; then
   iterations="${DORKPIPE_OPTIMIZER_ITERATIONS:-1}"
@@ -62,7 +100,7 @@ if [[ "${action}" == "iterate" ]]; then
   "iterations": 1
 }
 EOF
-    printf '[dorkpipe] optimizer %s result ready at %s\n' "${action}" "${result_json}" >&2
+    finish_optimizer_operation "done" "skipped" "reason=single_optimizer_pass" "iterations=1"
     exit 0
   fi
 
@@ -152,10 +190,14 @@ EOF
   "run_dir": "${run_dir}"
 }
 EOF
-  printf '[dorkpipe] optimizer %s result ready at %s\n' "${action}" "${result_json}" >&2
+  finish_optimizer_operation "done" "ready" \
+    "iterations=${iterations}" \
+    "completed_child_iterations=$((iterations - 1))" \
+    "run_dir=${run_dir}"
   exit 0
 fi
 
 "$(dorkpipe_orchestrate_helper_bin)" optimize-action "${action}" "${ROOT}" "${target_dir}" "${optimizer_dir}" "${DORKPIPE_ORCH_ROOT}" "${DORKPIPE_ORCH_APPROVAL_MD}" "${result_json}"
 
-printf '[dorkpipe] optimizer %s result ready at %s\n' "${action}" "${result_json}" >&2
+result_status="$("$(dorkpipe_orchestrate_helper_bin)" optimizer-result-status "${result_json}" 2>/dev/null || true)"
+finish_optimizer_operation "done" "${result_status:-ready}"

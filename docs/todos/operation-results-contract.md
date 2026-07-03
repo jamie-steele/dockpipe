@@ -38,6 +38,9 @@
   helpers in `orchestrate-common.sh`, with a text fallback for older binaries.
 - DorkPipe dev-stack logged operations now use the same `dockpipe result` adapter through
   `dev-stack-lib.sh`, while keeping the existing spinner/log-tail UX.
+- DorkPipe optimizer actions now emit canonical `orchestrate.optimize` start/done/fail results with
+  duration, target workflow, result artifact path, and action status; the package test suite covers
+  the cheap single-pass optimizer path and Windows absolute artifact paths.
 
 ## Still Open
 
