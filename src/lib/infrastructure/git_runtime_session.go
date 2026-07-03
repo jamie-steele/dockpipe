@@ -729,7 +729,20 @@ func CreateWorkerLease(session *GitSession, req GitWorkerLeaseRequest) (*GitWork
 	default:
 		return nil, fmt.Errorf("worker lease mode must be serialized or split-volume, got %q", req.Mode)
 	}
-	if err := ensureNoConflictingWorkerLease(session, workerID, mode); err != nil {
+	metadataDir := ""
+	if dir, dirErr := gitSessionMetadataDir(session, session.Storage.Workspace); dirErr == nil {
+		metadataDir = dir
+	}
+	ids := map[string]string{
+		"mode":    mode,
+		"session": session.SessionID,
+		"worker":  workerID,
+	}
+	preflightResult, err := RunOperationWithResult(os.Stderr, "worker.lease.preflight", "Preflighting worker lease…", ids, func() error {
+		return ensureNoConflictingWorkerLease(session, workerID, mode)
+	})
+	_ = appendGitSessionEvent(nil, OperationEventFields(preflightResult), metadataDir)
+	if err != nil {
 		return nil, err
 	}
 	now := time.Now().UTC()
@@ -747,29 +760,52 @@ func CreateWorkerLease(session *GitSession, req GitWorkerLeaseRequest) (*GitWork
 	}
 	if strings.TrimSpace(session.Storage.Volume) != "" {
 		lease.BaseVolume = session.Storage.Volume
+		ids["base_volume"] = lease.BaseVolume
 		switch mode {
 		case "serialized":
 			lease.Volume = session.Storage.Volume
 		case "split-volume":
 			lease.Volume = dockerWorkerLeaseVolumeName(session, workerID, lease.LeaseID)
-			if err := DockerVolumeCreate(lease.Volume); err != nil {
-				return nil, fmt.Errorf("create worker docker volume %q: %w", lease.Volume, err)
-			}
-			if err := DockerVolumeClone(session.Storage.Volume, lease.Volume); err != nil {
-				return nil, fmt.Errorf("clone worker docker volume %q from %q: %w", lease.Volume, session.Storage.Volume, err)
+			ids["lease"] = lease.LeaseID
+			ids["volume"] = lease.Volume
+			volumeResult, err := RunOperationWithResult(os.Stderr, "worker.lease.volume", "Preparing worker lease volume…", ids, func() error {
+				if err := DockerVolumeCreate(lease.Volume); err != nil {
+					return fmt.Errorf("create worker docker volume %q: %w", lease.Volume, err)
+				}
+				if err := DockerVolumeClone(session.Storage.Volume, lease.Volume); err != nil {
+					return fmt.Errorf("clone worker docker volume %q from %q: %w", lease.Volume, session.Storage.Volume, err)
+				}
+				return nil
+			})
+			_ = appendGitSessionEvent(nil, OperationEventFields(volumeResult), metadataDir)
+			if err != nil {
+				return nil, err
 			}
 		}
+	}
+	ids["lease"] = lease.LeaseID
+	if strings.TrimSpace(lease.Volume) != "" {
+		ids["volume"] = lease.Volume
 	}
 	if req.TTLSeconds > 0 {
 		lease.ExpiresAt = now.Add(time.Duration(req.TTLSeconds) * time.Second).Format(time.RFC3339)
 	}
 	if req.Branch {
 		lease.Branch = strings.Trim(strings.TrimSpace(session.Repo.SessionRef), "/") + "-worker-" + workerID
-		if err := gitRun(top, "branch", lease.Branch, "HEAD"); err != nil {
+		ids["branch"] = lease.Branch
+		branchResult, err := RunOperationWithResult(os.Stderr, "worker.lease.branch", "Creating worker lease branch…", ids, func() error {
+			return gitRun(top, "branch", lease.Branch, "HEAD")
+		})
+		_ = appendGitSessionEvent(nil, OperationEventFields(branchResult), metadataDir)
+		if err != nil {
 			return nil, err
 		}
 	}
-	if err := writeGitWorkerLease(session, lease); err != nil {
+	metadataResult, err := RunOperationWithResult(os.Stderr, "worker.lease.metadata", "Writing worker lease metadata…", ids, func() error {
+		return writeGitWorkerLease(session, lease)
+	})
+	_ = appendGitSessionEvent(nil, OperationEventFields(metadataResult), metadataDir)
+	if err != nil {
 		return nil, err
 	}
 	_ = appendGitSessionEvent(session, map[string]string{
@@ -805,8 +841,25 @@ func ReleaseWorkerLeaseWithOptions(session *GitSession, workerID, status string,
 	if err := json.Unmarshal(b, &lease); err != nil {
 		return nil, err
 	}
+	ids := map[string]string{
+		"lease":   lease.LeaseID,
+		"mode":    lease.Mode,
+		"session": session.SessionID,
+		"status":  firstNonEmptyString(status, "released"),
+		"worker":  lease.WorkerID,
+	}
+	if strings.TrimSpace(lease.Volume) != "" {
+		ids["volume"] = lease.Volume
+	}
+	if strings.TrimSpace(lease.BaseVolume) != "" {
+		ids["base_volume"] = lease.BaseVolume
+	}
 	if applySplitVolumeChanges && lease.Mode == "split-volume" && strings.TrimSpace(lease.Volume) != "" && strings.TrimSpace(lease.BaseVolume) != "" {
-		if err := DockerApplyGitVolumeDiff(lease.Volume, lease.BaseVolume); err != nil {
+		applyResult, err := RunOperationWithResult(os.Stderr, "worker.lease.apply", "Applying worker lease volume changes…", ids, func() error {
+			return DockerApplyGitVolumeDiff(lease.Volume, lease.BaseVolume)
+		})
+		_ = appendGitSessionEvent(nil, OperationEventFields(applyResult), dir)
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -814,11 +867,20 @@ func ReleaseWorkerLeaseWithOptions(session *GitSession, workerID, status string,
 	lease.Status = firstNonEmptyString(status, "released")
 	lease.UpdatedAt = now
 	lease.ReleasedAt = now
-	if err := writeGitWorkerLease(session, &lease); err != nil {
+	ids["status"] = lease.Status
+	metadataResult, err := RunOperationWithResult(os.Stderr, "worker.lease.release.metadata", "Writing worker lease release metadata…", ids, func() error {
+		return writeGitWorkerLease(session, &lease)
+	})
+	_ = appendGitSessionEvent(nil, OperationEventFields(metadataResult), dir)
+	if err != nil {
 		return nil, err
 	}
 	if lease.Mode == "split-volume" && strings.TrimSpace(lease.Volume) != "" && !sameVolumeName(lease.Volume, lease.BaseVolume) {
-		if err := DockerVolumeRemove(lease.Volume); err != nil {
+		cleanupResult, err := RunOperationWithResult(os.Stderr, "worker.lease.cleanup", "Cleaning up worker lease volume…", ids, func() error {
+			return DockerVolumeRemove(lease.Volume)
+		})
+		_ = appendGitSessionEvent(nil, OperationEventFields(cleanupResult), dir)
+		if err != nil {
 			return nil, err
 		}
 	}

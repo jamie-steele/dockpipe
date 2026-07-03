@@ -53,6 +53,9 @@
   completed operations.
 - Git session sync now emits `session.sync.fetch` and `session.sync.merge` units around the existing
   pre-sync checkpoint and conflict/synced metadata behavior.
+- Worker leases now emit `worker.lease.preflight`, `worker.lease.metadata`, optional
+  `worker.lease.volume`, optional `worker.lease.branch`, and release-side `worker.lease.apply`,
+  `worker.lease.release.metadata`, and `worker.lease.cleanup` units with session/worker/lease IDs.
 
 ## Still Open
 

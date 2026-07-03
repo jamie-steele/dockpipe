@@ -269,8 +269,29 @@ func TestCreateWorkerLeaseSerializedRejectsConcurrentWriter(t *testing.T) {
 	if first.Volume != session.Storage.Volume {
 		t.Fatalf("expected serialized lease to use session volume, got %+v", first)
 	}
+	sessionEvents, err := os.ReadFile(filepath.Join(session.Storage.Metadata, "events.jsonl"))
+	if err != nil {
+		t.Fatalf("read worker lease events: %v", err)
+	}
+	for _, want := range []string{
+		`"unit":"worker.lease.preflight"`,
+		`"unit":"worker.lease.metadata"`,
+		`"worker":"writer-a"`,
+		`"mode":"serialized"`,
+	} {
+		if !strings.Contains(string(sessionEvents), want) {
+			t.Fatalf("serialized worker lease events missing %s:\n%s", want, sessionEvents)
+		}
+	}
 	if _, err := CreateWorkerLease(session, GitWorkerLeaseRequest{WorkerID: "writer-b", Role: "edit", Mode: "serialized"}); err == nil {
 		t.Fatal("expected concurrent serialized worker lease to fail")
+	}
+	sessionEvents, err = os.ReadFile(filepath.Join(session.Storage.Metadata, "events.jsonl"))
+	if err != nil {
+		t.Fatalf("read failed worker lease events: %v", err)
+	}
+	if !strings.Contains(string(sessionEvents), `"unit":"worker.lease.preflight"`) || !strings.Contains(string(sessionEvents), `"status":"fail"`) || !strings.Contains(string(sessionEvents), `"worker":"writer-b"`) {
+		t.Fatalf("expected failed worker lease preflight event for writer-b:\n%s", sessionEvents)
 	}
 	gitRemoveWorktree(t, repo, session.Storage.Workspace)
 }
@@ -308,6 +329,23 @@ func TestCreateWorkerLeaseSplitVolumeClonesAndReleaseApplies(t *testing.T) {
 	}
 	if _, err := ReleaseWorkerLeaseWithOptions(session, "writer-a", "released", true); err != nil {
 		t.Fatalf("ReleaseWorkerLeaseWithOptions: %v", err)
+	}
+	sessionEvents, err := os.ReadFile(filepath.Join(session.Storage.Metadata, "events.jsonl"))
+	if err != nil {
+		t.Fatalf("read split worker lease events: %v", err)
+	}
+	for _, want := range []string{
+		`"unit":"worker.lease.preflight"`,
+		`"unit":"worker.lease.volume"`,
+		`"unit":"worker.lease.apply"`,
+		`"unit":"worker.lease.release.metadata"`,
+		`"unit":"worker.lease.cleanup"`,
+		`"mode":"split-volume"`,
+		`"worker":"writer-a"`,
+	} {
+		if !strings.Contains(string(sessionEvents), want) {
+			t.Fatalf("split worker lease events missing %s:\n%s", want, sessionEvents)
+		}
 	}
 	got := strings.Join(calls, "\n")
 	if !strings.Contains(got, "volume create "+session.Storage.Volume) {
