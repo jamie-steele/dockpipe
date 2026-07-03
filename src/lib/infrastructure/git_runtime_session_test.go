@@ -455,6 +455,19 @@ func TestGitSessionLifecycleSyncPublishArchiveAndLease(t *testing.T) {
 	if pub.Status != "published" {
 		t.Fatalf("publish status = %q", pub.Status)
 	}
+	sessionEvents, err := os.ReadFile(filepath.Join(session.Storage.Metadata, "events.jsonl"))
+	if err != nil {
+		t.Fatalf("read session events: %v", err)
+	}
+	for _, want := range []string{
+		`"unit":"session.publish.preflight"`,
+		`"unit":"session.publish.push"`,
+		`"status":"done"`,
+	} {
+		if !strings.Contains(string(sessionEvents), want) {
+			t.Fatalf("session publish events missing %s:\n%s", want, sessionEvents)
+		}
+	}
 	out, err = exec.Command("git", "--git-dir", remote, "rev-parse", "--verify", "refs/heads/"+session.Repo.SessionRef).CombinedOutput()
 	if err != nil {
 		t.Fatalf("published branch missing: %v\n%s", err, out)
@@ -498,6 +511,43 @@ func TestGitSessionLifecycleSyncPublishArchiveAndLease(t *testing.T) {
 		t.Fatalf("session status = %q", session.Status)
 	}
 	git(repo, "worktree", "remove", "--force", session.Storage.Workspace)
+}
+
+func TestPublishSessionRecordsFailedPushOperation(t *testing.T) {
+	repo := initGitSessionTestRepo(t)
+	session, err := CreateSessionBranch(GitSessionRequest{
+		WorkspaceID:  "demo",
+		SourceDir:    repo,
+		Mode:         "managed",
+		BranchPrefix: "ai",
+		SessionID:    "publish-fail",
+	})
+	if err != nil {
+		t.Fatalf("CreateSessionBranch: %v", err)
+	}
+	defer gitRemoveWorktree(t, repo, session.Storage.Workspace)
+
+	pub, err := PublishSession(session, "missing-remote")
+	if err == nil {
+		t.Fatal("expected publish to missing remote to fail")
+	}
+	if pub == nil || pub.Status != "failed" {
+		t.Fatalf("expected failed publish result, got result=%+v err=%v", pub, err)
+	}
+	sessionEvents, readErr := os.ReadFile(filepath.Join(session.Storage.Metadata, "events.jsonl"))
+	if readErr != nil {
+		t.Fatalf("read session events: %v", readErr)
+	}
+	for _, want := range []string{
+		`"unit":"session.publish.preflight"`,
+		`"unit":"session.publish.push"`,
+		`"status":"fail"`,
+		`"remote":"missing-remote"`,
+	} {
+		if !strings.Contains(string(sessionEvents), want) {
+			t.Fatalf("failed publish events missing %s:\n%s", want, sessionEvents)
+		}
+	}
 }
 
 func TestListAndLoadGitSessions(t *testing.T) {

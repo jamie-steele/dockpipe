@@ -474,14 +474,32 @@ func PublishSession(session *GitSession, remote string) (*GitPublishResult, erro
 	if session == nil {
 		return nil, fmt.Errorf("session is nil")
 	}
-	top, err := sessionGitTop(session)
-	if err != nil {
-		return nil, err
-	}
 	remote = firstNonEmptyString(remote, "origin")
 	branch := strings.TrimSpace(session.Repo.SessionRef)
-	if branch == "" {
-		return nil, fmt.Errorf("session branch is empty")
+	metadataDir := ""
+	if dir, err := gitSessionMetadataDir(session, session.Storage.Workspace); err == nil {
+		metadataDir = dir
+	}
+	ids := map[string]string{
+		"branch":  branch,
+		"remote":  remote,
+		"session": session.SessionID,
+	}
+	var top string
+	preflightResult, err := RunOperationWithResult(os.Stderr, "session.publish.preflight", "Preflighting session publish…", ids, func() error {
+		if branch == "" {
+			return fmt.Errorf("session branch is empty")
+		}
+		resolvedTop, topErr := sessionGitTop(session)
+		if topErr != nil {
+			return topErr
+		}
+		top = resolvedTop
+		return nil
+	})
+	_ = appendGitSessionEvent(nil, OperationEventFields(preflightResult), metadataDir)
+	if err != nil {
+		return nil, err
 	}
 	res := &GitPublishResult{
 		Schema:    1,
@@ -491,7 +509,13 @@ func PublishSession(session *GitSession, remote string) (*GitPublishResult, erro
 		Status:    "published",
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	out, pushErr := gitCombined(top, "push", "-u", remote, branch)
+	var out string
+	pushResult, pushErr := RunOperationWithResult(os.Stderr, "session.publish.push", "Pushing session branch…", ids, func() error {
+		var pushErr error
+		out, pushErr = gitCombined(top, "push", "-u", remote, branch)
+		return pushErr
+	})
+	_ = appendGitSessionEvent(nil, OperationEventFields(pushResult), metadataDir)
 	if pushErr != nil {
 		res.Status = "failed"
 		res.Message = strings.TrimSpace(out)

@@ -41,12 +41,15 @@
 - DorkPipe optimizer actions now emit canonical `orchestrate.optimize` start/done/fail results with
   duration, target workflow, result artifact path, and action status; the package test suite covers
   the cheap single-pass optimizer path and Windows absolute artifact paths.
+- Git session publish now splits validation and mutation into `session.publish.preflight` and
+  `session.publish.push` operation-result units, with session/remote/branch identifiers and
+  session event-log coverage for successful and failed pushes.
 
 ## Still Open
 
-- Expand the core operation-result contract into remaining runtime actions such as publish, broader
-  session creation lifecycle, auth discovery outside the current DorkPipe shell path, and other
-  long-running runtime/bootstrap work that still prints one-off lines.
+- Expand the core operation-result contract into remaining runtime actions such as broader session
+  creation lifecycle, auth discovery outside the current DorkPipe shell path, and other long-running
+  runtime/bootstrap work that still prints one-off lines.
 - Continue rolling the same result contract deeper into compile/package subcommands that still emit
   ad hoc detail lines beneath the now-normalized top-level build units.
 - Continue migrating any newly added package-owned scripts that do meaningful long-running work onto
