@@ -26,6 +26,9 @@ todos:
   - id: TODO-008
     topic: PipeDeck agentic app UI
     path: docs/todos/agentic-app-ui.md
+  - id: TODO-009
+    topic: Sandbox toolchain determinism
+    path: docs/todos/sandbox-toolchain-determinism.md
 
 maintenance:
   - Treat this YAML file as the AI/backlog entrypoint.
