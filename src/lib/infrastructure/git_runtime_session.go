@@ -175,9 +175,6 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 	if baseRef == "" {
 		baseRef = "HEAD"
 	}
-	if err := validateSessionBranchNamespace(top, branch); err != nil {
-		return nil, err
-	}
 	if mode == "managed" {
 		if existing, err := findReusableManagedGitSession(top, branch); err != nil {
 			return nil, err
@@ -193,6 +190,22 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		return nil, err
 	}
+	createIDs := map[string]string{
+		"branch":    branch,
+		"mode":      mode,
+		"session":   sessionID,
+		"storage":   storage,
+		"workspace": workspaceID,
+	}
+	preflightResult, err := RunOperationWithResult(os.Stderr, "session.create.preflight", "Preflighting Git session…", createIDs, func() error {
+		return validateSessionBranchNamespace(top, branch)
+	})
+	if sessionEventErr := appendGitSessionEvent(nil, OperationEventFields(preflightResult), sessionDir); sessionEventErr != nil {
+		return nil, sessionEventErr
+	}
+	if err != nil {
+		return nil, err
+	}
 
 	workspace := top
 	backend := "bind"
@@ -201,7 +214,13 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 		backend = "worktree"
 		workspace = filepath.Join(sessionDir, "workspace")
 		if _, err := os.Stat(workspace); os.IsNotExist(err) {
-			if err := ensureManagedSessionWorktree(top, workspace, branch, baseRef); err != nil {
+			workspaceResult, err := RunOperationWithResult(os.Stderr, "session.create.workspace", "Creating Git session workspace…", createIDs, func() error {
+				return ensureManagedSessionWorktree(top, workspace, branch, baseRef)
+			})
+			if sessionEventErr := appendGitSessionEvent(nil, OperationEventFields(workspaceResult), sessionDir); sessionEventErr != nil {
+				return nil, sessionEventErr
+			}
+			if err != nil {
 				return nil, err
 			}
 		}
@@ -243,7 +262,13 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 			}
 		}
 	} else {
-		if err := ensureBindSessionBranch(top, branch, baseRef); err != nil {
+		branchResult, err := RunOperationWithResult(os.Stderr, "session.create.branch", "Preparing Git session branch…", createIDs, func() error {
+			return ensureBindSessionBranch(top, branch, baseRef)
+		})
+		if sessionEventErr := appendGitSessionEvent(nil, OperationEventFields(branchResult), sessionDir); sessionEventErr != nil {
+			return nil, sessionEventErr
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -285,7 +310,13 @@ func CreateSessionBranch(req GitSessionRequest) (*GitSession, error) {
 			AllowAgentGit: false,
 		},
 	}
-	if err := writeGitSession(s, top); err != nil {
+	metadataResult, err := RunOperationWithResult(os.Stderr, "session.create.metadata", "Writing Git session metadata…", createIDs, func() error {
+		return writeGitSession(s, top)
+	})
+	if sessionEventErr := appendGitSessionEvent(nil, OperationEventFields(metadataResult), sessionDir); sessionEventErr != nil {
+		return nil, sessionEventErr
+	}
+	if err != nil {
 		return nil, err
 	}
 	_ = appendGitSessionEvent(s, map[string]string{

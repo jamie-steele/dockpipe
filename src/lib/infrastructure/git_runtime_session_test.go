@@ -64,6 +64,20 @@ func TestCreateSessionBranchManagedWorktreeAndCheckpoint(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(repo, "bin", ".dockpipe", "sessions", "test-session", "session.json")); err != nil {
 		t.Fatalf("session metadata missing: %v", err)
 	}
+	sessionEvents, err := os.ReadFile(filepath.Join(repo, "bin", ".dockpipe", "sessions", "test-session", "events.jsonl"))
+	if err != nil {
+		t.Fatalf("read session events: %v", err)
+	}
+	for _, want := range []string{
+		`"unit":"session.create.preflight"`,
+		`"unit":"session.create.workspace"`,
+		`"unit":"session.create.metadata"`,
+		`"status":"done"`,
+	} {
+		if !strings.Contains(string(sessionEvents), want) {
+			t.Fatalf("session create events missing %s:\n%s", want, sessionEvents)
+		}
+	}
 
 	if err := os.WriteFile(filepath.Join(session.Storage.Workspace, "generated.txt"), []byte("generated\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -389,6 +403,19 @@ func TestCreateSessionBranchErrorsOnExistingParentBranchNamespace(t *testing.T) 
 	}
 	if !strings.Contains(err.Error(), `conflicts with existing branch "js/features/spnext/reporting"`) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	sessionEvents, readErr := os.ReadFile(filepath.Join(repo, "bin", ".dockpipe", "sessions", "report-poc", "events.jsonl"))
+	if readErr != nil {
+		t.Fatalf("read failed create events: %v", readErr)
+	}
+	for _, want := range []string{
+		`"unit":"session.create.preflight"`,
+		`"status":"fail"`,
+		`"branch":"js/features/spnext/reporting/worktree-001"`,
+	} {
+		if !strings.Contains(string(sessionEvents), want) {
+			t.Fatalf("failed session create events missing %s:\n%s", want, sessionEvents)
+		}
 	}
 }
 

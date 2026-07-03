@@ -44,12 +44,16 @@
 - Git session publish now splits validation and mutation into `session.publish.preflight` and
   `session.publish.push` operation-result units, with session/remote/branch identifiers and
   session event-log coverage for successful and failed pushes.
+- Git session creation now emits `session.create.preflight`, `session.create.workspace` or
+  `session.create.branch`, and `session.create.metadata` operation-result units with
+  workspace/session/branch/mode/storage identifiers. Namespace collision failures are recorded as
+  failed preflight events.
 
 ## Still Open
 
-- Expand the core operation-result contract into remaining runtime actions such as broader session
-  creation lifecycle, auth discovery outside the current DorkPipe shell path, and other long-running
-  runtime/bootstrap work that still prints one-off lines.
+- Expand the core operation-result contract into remaining runtime actions such as auth discovery
+  outside the current DorkPipe shell path and other long-running runtime/bootstrap work that still
+  prints one-off lines.
 - Continue rolling the same result contract deeper into compile/package subcommands that still emit
   ad hoc detail lines beneath the now-normalized top-level build units.
 - Continue migrating any newly added package-owned scripts that do meaningful long-running work onto
