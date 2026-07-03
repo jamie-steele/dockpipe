@@ -329,12 +329,27 @@ if dorkpipe_orchestrate_auth_preflight codex 2>"$tmp/codex-auth-never.err"; then
   echo "expected codex auth preflight to fail when login is disabled and auth is missing" >&2
   exit 1
 fi
+grep -Fq -- "[dockpipe] unit=orchestrate.auth.preflight status=start provider=codex" "$tmp/codex-auth-never.err"
+grep -Fq -- "[dockpipe] unit=orchestrate.auth.preflight status=fail" "$tmp/codex-auth-never.err"
+grep -Fq -- "provider=codex" "$tmp/codex-auth-never.err"
+grep -Fq -- "auth_status=missing" "$tmp/codex-auth-never.err"
+grep -Fq -- "login_policy=never" "$tmp/codex-auth-never.err"
 grep -q -- "codex auth preflight failed" "$tmp/codex-auth-never.err"
 export DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING="always"
-dorkpipe_orchestrate_auth_preflight codex
+dorkpipe_orchestrate_auth_preflight codex 2>"$tmp/codex-auth-login.err"
+grep -Fq -- "[dockpipe] unit=orchestrate.auth.preflight status=start provider=codex" "$tmp/codex-auth-login.err"
+grep -Fq -- "[dockpipe] unit=orchestrate.auth.preflight status=done" "$tmp/codex-auth-login.err"
+grep -Fq -- "provider=codex" "$tmp/codex-auth-login.err"
+grep -Fq -- "auth_status=available" "$tmp/codex-auth-login.err"
+grep -Fq -- "login=performed" "$tmp/codex-auth-login.err"
 grep -qx -- "codex:login" "$fake_login_args"
 rm -f "$fake_login_args"
-dorkpipe_orchestrate_auth_preflight claude
+dorkpipe_orchestrate_auth_preflight claude 2>"$tmp/claude-auth-login.err"
+grep -Fq -- "[dockpipe] unit=orchestrate.auth.preflight status=start provider=claude" "$tmp/claude-auth-login.err"
+grep -Fq -- "[dockpipe] unit=orchestrate.auth.preflight status=done" "$tmp/claude-auth-login.err"
+grep -Fq -- "provider=claude" "$tmp/claude-auth-login.err"
+grep -Fq -- "auth_status=available" "$tmp/claude-auth-login.err"
+grep -Fq -- "login=performed" "$tmp/claude-auth-login.err"
 grep -qx -- "claude:auth login" "$fake_login_args"
 unset DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING
 printf '{"auth_mode":"chatgpt"}\n' > "$HOME/.codex/auth.json"
@@ -505,7 +520,13 @@ rm -f "$fake_args" "$response" "$fake_login_args" "$fake_container_auth_fail_onc
 : > "$fake_claude_auth_marker"
 export DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING="always"
 export FAKE_CONTAINER_AUTH_FAIL_ONCE_CLAUDE="1"
-dorkpipe_orchestrate_run_container_worker claude "$prompt" "$response"
+dorkpipe_orchestrate_run_container_worker claude "$prompt" "$response" 2>"$tmp/claude-auth-recovery.err"
+grep -Fq -- "[dockpipe] unit=orchestrate.auth.recovery status=start provider=claude" "$tmp/claude-auth-recovery.err"
+grep -Fq -- "[dockpipe] unit=orchestrate.auth.recovery status=done" "$tmp/claude-auth-recovery.err"
+grep -Fq -- "provider=claude" "$tmp/claude-auth-recovery.err"
+grep -Fq -- "auth_status=available" "$tmp/claude-auth-recovery.err"
+grep -Fq -- "login=performed" "$tmp/claude-auth-recovery.err"
+grep -Fq -- "retry=worker" "$tmp/claude-auth-recovery.err"
 grep -qx -- "claude:auth login" "$fake_login_args"
 grep -qx -- "container worker ok" "$response"
 unset FAKE_CONTAINER_AUTH_FAIL_ONCE_CLAUDE

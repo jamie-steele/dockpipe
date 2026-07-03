@@ -1088,8 +1088,12 @@ dorkpipe_orchestrate_worker_log_shows_auth_failure() {
 
 dorkpipe_orchestrate_auth_preflight() {
   local provider="${1:?provider}"
-  local mode answer command_text
+  local mode answer command_text started_ms duration_ms
+  started_ms="$(dorkpipe_orchestrate_now_ms)"
+  dorkpipe_orchestrate_operation_emit "orchestrate.auth.preflight" "start" "" "provider=${provider}"
   if dorkpipe_orchestrate_auth_is_available "${provider}"; then
+    duration_ms="$(dorkpipe_orchestrate_operation_duration_ms "${started_ms}")"
+    dorkpipe_orchestrate_operation_emit "orchestrate.auth.preflight" "done" "${duration_ms}" "provider=${provider}" "auth_status=available"
     return 0
   fi
   command_text="$(dorkpipe_orchestrate_auth_login_command_text "${provider}")"
@@ -1100,11 +1104,13 @@ dorkpipe_orchestrate_auth_preflight() {
     1|true|yes|always|auto-login)
       ;;
     0|false|no|never|off|disabled)
+      dorkpipe_orchestrate_operation_fail "orchestrate.auth.preflight" "${started_ms}" "auth missing and login disabled" "provider=${provider}" "auth_status=missing" "login_policy=${mode}"
       return 1
       ;;
     ask|prompt|"")
       if ! dorkpipe_orchestrate_has_tty; then
         echo "[dorkpipe] cannot ask to log in because this run is non-interactive." >&2
+        dorkpipe_orchestrate_operation_fail "orchestrate.auth.preflight" "${started_ms}" "auth missing and non-interactive login prompt unavailable" "provider=${provider}" "auth_status=missing" "login_policy=ask"
         return 1
       fi
       printf '[dorkpipe] Login to %s now? [y/N] ' "${provider}" >/dev/tty
@@ -1113,29 +1119,39 @@ dorkpipe_orchestrate_auth_preflight() {
         y|Y|yes|YES) ;;
         *)
           echo "[dorkpipe] ${provider} login skipped by user." >&2
+          dorkpipe_orchestrate_operation_fail "orchestrate.auth.preflight" "${started_ms}" "auth missing and login skipped by user" "provider=${provider}" "auth_status=missing" "login_policy=ask"
           return 1
           ;;
       esac
       ;;
     *)
       echo "[dorkpipe] unknown DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING=${DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING}; expected ask, never, or always" >&2
+      dorkpipe_orchestrate_operation_fail "orchestrate.auth.preflight" "${started_ms}" "unknown auth login policy" "provider=${provider}" "auth_status=missing" "login_policy=${mode}"
       return 1
       ;;
   esac
-  dorkpipe_orchestrate_run_auth_login "${provider}" || return 1
+  if ! dorkpipe_orchestrate_run_auth_login "${provider}"; then
+    dorkpipe_orchestrate_operation_fail "orchestrate.auth.preflight" "${started_ms}" "host login command failed" "provider=${provider}" "auth_status=missing" "login_policy=${mode}"
+    return 1
+  fi
   if dorkpipe_orchestrate_auth_is_available "${provider}"; then
     echo "[dorkpipe] ${provider} auth preflight passed after login." >&2
+    duration_ms="$(dorkpipe_orchestrate_operation_duration_ms "${started_ms}")"
+    dorkpipe_orchestrate_operation_emit "orchestrate.auth.preflight" "done" "${duration_ms}" "provider=${provider}" "auth_status=available" "login=performed"
     return 0
   fi
   echo "[dorkpipe] ${provider} auth still unavailable after login. Check the login result and retry." >&2
+  dorkpipe_orchestrate_operation_fail "orchestrate.auth.preflight" "${started_ms}" "auth still unavailable after host login" "provider=${provider}" "auth_status=missing" "login_policy=${mode}" "login=performed"
   return 1
 }
 
 dorkpipe_orchestrate_auth_recover_after_worker_failure() {
   local provider="${1:?provider}"
   local log_path="${2:?log path}"
-  local mode answer command_text
+  local mode answer command_text started_ms duration_ms
   dorkpipe_orchestrate_worker_log_shows_auth_failure "${provider}" "${log_path}" || return 1
+  started_ms="$(dorkpipe_orchestrate_now_ms)"
+  dorkpipe_orchestrate_operation_emit "orchestrate.auth.recovery" "start" "" "provider=${provider}"
   if [[ -s "${log_path}" ]]; then
     cat "${log_path}" >&2
   fi
@@ -1147,11 +1163,13 @@ dorkpipe_orchestrate_auth_recover_after_worker_failure() {
     1|true|yes|always|auto-login)
       ;;
     0|false|no|never|off|disabled)
+      dorkpipe_orchestrate_operation_fail "orchestrate.auth.recovery" "${started_ms}" "auth recovery login disabled" "provider=${provider}" "auth_status=missing" "login_policy=${mode}"
       return 1
       ;;
     ask|prompt|"")
       if ! dorkpipe_orchestrate_has_tty; then
         echo "[dorkpipe] cannot recover ${provider} auth interactively because this run is non-interactive." >&2
+        dorkpipe_orchestrate_operation_fail "orchestrate.auth.recovery" "${started_ms}" "auth recovery prompt unavailable in non-interactive run" "provider=${provider}" "auth_status=missing" "login_policy=ask"
         return 1
       fi
       printf '[dorkpipe] Login to %s on the host now, then retry this worker? [y/N] ' "${provider}" >/dev/tty
@@ -1160,21 +1178,29 @@ dorkpipe_orchestrate_auth_recover_after_worker_failure() {
         y|Y|yes|YES) ;;
         *)
           echo "[dorkpipe] ${provider} auth recovery skipped by user." >&2
+          dorkpipe_orchestrate_operation_fail "orchestrate.auth.recovery" "${started_ms}" "auth recovery skipped by user" "provider=${provider}" "auth_status=missing" "login_policy=ask"
           return 1
           ;;
       esac
       ;;
     *)
       echo "[dorkpipe] unknown DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING=${DORKPIPE_ORCH_AUTH_LOGIN_ON_MISSING}; expected ask, never, or always" >&2
+      dorkpipe_orchestrate_operation_fail "orchestrate.auth.recovery" "${started_ms}" "unknown auth login policy" "provider=${provider}" "auth_status=missing" "login_policy=${mode}"
       return 1
       ;;
   esac
-  dorkpipe_orchestrate_run_auth_login "${provider}" || return 1
+  if ! dorkpipe_orchestrate_run_auth_login "${provider}"; then
+    dorkpipe_orchestrate_operation_fail "orchestrate.auth.recovery" "${started_ms}" "host login command failed" "provider=${provider}" "auth_status=missing" "login_policy=${mode}"
+    return 1
+  fi
   if dorkpipe_orchestrate_auth_is_available "${provider}"; then
     echo "[dorkpipe] ${provider} auth recovery succeeded; retrying worker once." >&2
+    duration_ms="$(dorkpipe_orchestrate_operation_duration_ms "${started_ms}")"
+    dorkpipe_orchestrate_operation_emit "orchestrate.auth.recovery" "done" "${duration_ms}" "provider=${provider}" "auth_status=available" "login=performed" "retry=worker"
     return 0
   fi
   echo "[dorkpipe] ${provider} auth still unavailable after host login. Worker retry skipped." >&2
+  dorkpipe_orchestrate_operation_fail "orchestrate.auth.recovery" "${started_ms}" "auth still unavailable after host login" "provider=${provider}" "auth_status=missing" "login_policy=${mode}" "login=performed"
   return 1
 }
 

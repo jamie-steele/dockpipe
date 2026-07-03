@@ -15,6 +15,9 @@
   status strings.
 - DorkPipe package source builds now emit per-tool `package.source.tool` units for the package-owned
   `dorkpipe`, `mcpd`, `skills-render`, and `orchestrate-helper` binaries.
+- DorkPipe orchestration auth checks now emit `orchestrate.auth.preflight` start/done/fail units and
+  host-login recovery after worker auth failures now emits `orchestrate.auth.recovery` units with
+  provider, auth status, login policy, retry status, and duration.
 - Operation results can now mirror to append-only JSONL when `DOCKPIPE_EVENT_LOG` is set. The
   canonical event schema is `dockpipe.operation_event.v1`, implemented in
   `src/lib/infrastructure`.
@@ -60,8 +63,8 @@
 
 ## Still Open
 
-- Expand the core operation-result contract into remaining runtime actions such as auth discovery
-  outside the current DorkPipe shell path and other long-running runtime/bootstrap work that still
+- Expand the core operation-result contract into remaining runtime actions outside the current
+  covered session/build/DorkPipe-shell paths and other long-running runtime/bootstrap work that still
   prints one-off lines.
 - Continue rolling the same result contract deeper into compile/package subcommands that still emit
   ad hoc detail lines beneath the now-normalized top-level build units.
