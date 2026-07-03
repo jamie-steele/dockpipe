@@ -330,11 +330,47 @@ dorkpipe_orchestrate_operation_emit() {
   local status="${2:?status}"
   local duration_ms="${3:-}"
   shift 3 || true
+  local dockpipe_bin
+  dockpipe_bin="$(dorkpipe_orchestrate_dockpipe_bin 2>/dev/null || true)"
+  local args=(
+    "result"
+    "--unit" "${unit}"
+    "--status" "${status}"
+  )
+  if [[ -n "${duration_ms}" && "${status}" != "start" ]]; then
+    args+=("--duration-ms" "${duration_ms}")
+  fi
+  local field key value
+  for field in "$@"; do
+    [[ -n "${field}" ]] || continue
+    if [[ "${field}" == *=* ]]; then
+      key="${field%%=*}"
+      value="${field#*=}"
+      value="${value%\"}"
+      value="${value#\"}"
+      case "${key}" in
+        error)
+          args+=("--error" "${value}")
+          ;;
+        status)
+          args+=("--id" "result_status=${value}")
+          ;;
+        *)
+          args+=("--id" "${key}=${value}")
+          ;;
+      esac
+    fi
+  done
+  if [[ -n "${dockpipe_bin}" ]]; then
+    if "${dockpipe_bin}" "${args[@]}"; then
+      return 0
+    fi
+    echo "[dorkpipe] warning: dockpipe result adapter failed; falling back to shell operation-result rendering" >&2
+  fi
   printf '[dorkpipe] unit=%s status=%s' "${unit}" "${status}" >&2
   if [[ -n "${duration_ms}" && "${status}" != "start" ]]; then
     printf ' duration_ms=%s' "${duration_ms}" >&2
   fi
-  local field
   for field in "$@"; do
     [[ -n "${field}" ]] || continue
     printf ' %s' "${field}" >&2

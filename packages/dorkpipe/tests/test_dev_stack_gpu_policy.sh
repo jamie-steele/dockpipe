@@ -105,4 +105,56 @@ if [[ "$setup_attempts" -ne 0 || "$prompt_calls" -ne 0 ]]; then
   exit 1
 fi
 
+reset_gpu_env
+source_lib
+fake_dockpipe="$TMPDIR/dockpipe"
+cat > "$fake_dockpipe" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "result" ]]; then
+  shift
+  unit=""
+  status=""
+  duration_ms=""
+  fields=()
+  error=""
+  while (($#)); do
+    case "${1:-}" in
+      --unit) unit="${2:-}"; shift 2 ;;
+      --status) status="${2:-}"; shift 2 ;;
+      --duration-ms) duration_ms="${2:-}"; shift 2 ;;
+      --id) fields+=("${2:-}"); shift 2 ;;
+      --error) error="${2:-}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  printf '[dockpipe] unit=%s status=%s' "${unit}" "${status}" >&2
+  if [[ -n "${duration_ms}" && "${status}" != "start" ]]; then
+    printf ' duration_ms=%s' "${duration_ms}" >&2
+  fi
+  for field in "${fields[@]}"; do
+    [[ -n "${field}" ]] && printf ' %s' "${field}" >&2
+  done
+  if [[ -n "${error}" ]]; then
+    printf ' error="%s"' "${error}" >&2
+  fi
+  printf '\n' >&2
+  exit 0
+fi
+exit 1
+SH
+chmod +x "$fake_dockpipe"
+export DOCKPIPE_BIN="$fake_dockpipe"
+dorkpipe_stack_run_logged "docker compose down" "$TMPDIR/down.log" bash -c 'printf ok' 2>"$TMPDIR/run-logged-ok.err"
+grep -Fq -- "[dockpipe] unit=devstack.docker-compose-down status=start" "$TMPDIR/run-logged-ok.err"
+grep -Fq -- "[dockpipe] unit=devstack.docker-compose-down status=done" "$TMPDIR/run-logged-ok.err"
+grep -Fq -- "log=$TMPDIR/down.log" "$TMPDIR/run-logged-ok.err"
+if dorkpipe_stack_run_logged "docker compose fail" "$TMPDIR/fail.log" bash -c 'exit 7' 2>"$TMPDIR/run-logged-fail.err"; then
+  echo "test_dev_stack_gpu_policy: expected failing logged command to return non-zero" >&2
+  exit 1
+fi
+grep -Fq -- "[dockpipe] unit=devstack.docker-compose-fail status=fail" "$TMPDIR/run-logged-fail.err"
+grep -Fq -- 'error="command exited 7"' "$TMPDIR/run-logged-fail.err"
+unset DOCKPIPE_BIN
+
 echo "test_dev_stack_gpu_policy OK"

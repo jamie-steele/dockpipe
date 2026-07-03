@@ -31,6 +31,36 @@ if [[ "${1:-}" == "package" && "${2:-}" == "build" && "${3:-}" == "source" ]]; t
     exit 99
   fi
 fi
+if [[ "${1:-}" == "result" ]]; then
+  shift
+  unit=""
+  status=""
+  duration_ms=""
+  error=""
+  fields=()
+  while (($#)); do
+    case "${1:-}" in
+      --unit) unit="${2:-}"; shift 2 ;;
+      --status) status="${2:-}"; shift 2 ;;
+      --duration-ms) duration_ms="${2:-}"; shift 2 ;;
+      --id) fields+=("${2:-}"); shift 2 ;;
+      --error) error="${2:-}"; shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  printf '[dockpipe] unit=%s status=%s' "${unit}" "${status}" >&2
+  if [[ -n "${duration_ms}" && "${status}" != "start" ]]; then
+    printf ' duration_ms=%s' "${duration_ms}" >&2
+  fi
+  for field in "${fields[@]}"; do
+    [[ -n "${field}" ]] && printf ' %s' "${field}" >&2
+  done
+  if [[ -n "${error}" ]]; then
+    printf ' error="%s"' "${error}" >&2
+  fi
+  printf '\n' >&2
+  exit 0
+fi
 if [[ "${1:-}" == "scope" && "${2:-}" == "resolver" ]]; then
   case "${3:-}:${4:-}" in
     codex:auth-dir) printf '%s\n' "${CODEX_HOME:-$HOME/.codex}" ;;
@@ -280,6 +310,14 @@ hash -r
 unset CODEX_HOME
 unset CLAUDE_HOME
 unset CLAUDE_CONFIG_HOME
+dorkpipe_orchestrate_operation_emit "orchestrate.test" "done" "12" "workflow=brain.optimize" "status=skipped" 2>"$tmp/operation-emit.err"
+grep -Fq -- "[dockpipe] unit=orchestrate.test status=done duration_ms=12" "$tmp/operation-emit.err"
+grep -Fq -- "workflow=brain.optimize" "$tmp/operation-emit.err"
+grep -Fq -- "result_status=skipped" "$tmp/operation-emit.err"
+dorkpipe_orchestrate_operation_fail "orchestrate.test" "$(dorkpipe_orchestrate_now_ms)" "failed on purpose" "task=source_analyst" 2>"$tmp/operation-fail.err"
+grep -Fq -- "[dockpipe] unit=orchestrate.test status=fail" "$tmp/operation-fail.err"
+grep -Fq -- "task=source_analyst" "$tmp/operation-fail.err"
+grep -Fq -- 'error="failed on purpose"' "$tmp/operation-fail.err"
 mkdir -p "$DORKPIPE_ORCH_ROOT"
 mkdir -p "$HOME/.codex"
 mkdir -p "$HOME/.codex/skills/dorkpipe-package-authoring"
@@ -314,7 +352,7 @@ saved_assets_dir="${DOCKPIPE_ASSETS_DIR:-}"
 saved_helper_bin="${DORKPIPE_ORCH_HELPER_BIN:-}"
 ROOT="$consumer_root"
 export DOCKPIPE_ASSETS_DIR="$saved_root/packages/dorkpipe/resolvers/dorkpipe/assets"
-unset DORKPIPE_ORCH_HELPER_BIN
+export DORKPIPE_ORCH_HELPER_BIN="$fake_orchestrate_helper"
 export FAKE_FAIL_SOURCE_BUILD="1"
 consumer_helper="$(dorkpipe_orchestrate_helper_bin)"
 if [[ "$consumer_helper" != "$fake_orchestrate_helper" ]]; then

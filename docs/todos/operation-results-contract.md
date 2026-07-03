@@ -34,8 +34,10 @@
 - Runtime-owned helper containers now use stable DockPipe helper names and labels instead of
   leaving random Docker-generated names as the only operator clue.
 - DorkPipe orchestration scripts do not reference core internals directly, but the main package
-  shell path now mirrors the same `unit=... status=... duration_ms=...` pattern through shared
-  helpers in `orchestrate-common.sh`.
+  shell path now delegates operation-result emission through `dockpipe result` from the shared
+  helpers in `orchestrate-common.sh`, with a text fallback for older binaries.
+- DorkPipe dev-stack logged operations now use the same `dockpipe result` adapter through
+  `dev-stack-lib.sh`, while keeping the existing spinner/log-tail UX.
 
 ## Still Open
 
@@ -44,9 +46,8 @@
   long-running runtime/bootstrap work that still prints one-off lines.
 - Continue rolling the same result contract deeper into compile/package subcommands that still emit
   ad hoc detail lines beneath the now-normalized top-level build units.
-- Continue migrating package-owned scripts and package workflows that still use bespoke status
-  wrappers, especially older `dev-stack` and optimizer-style logging, onto the same unit/result
-  vocabulary.
+- Continue migrating any newly added package-owned scripts that do meaningful long-running work onto
+  `dockpipe result` or a shared package wrapper instead of adding new bespoke status formats.
 - Add a rebuildable Postgres projection over operation-event JSONL and JSON/YAML indexes for
   PipeDeck, dashboards, search, and cross-run history.
 - Push structured event usage further so session metadata, orchestration artifacts, host-action

@@ -56,11 +56,74 @@ dorkpipe_stack_log_tail() {
   tail -n "${lines}" "${log_path}" >&2 || true
 }
 
+dorkpipe_stack_operation_unit() {
+  local label="${1:-operation}"
+  label="$(printf '%s' "${label}" | tr '[:upper:]' '[:lower:]')"
+  label="$(printf '%s' "${label}" | sed 's/[^a-z0-9_.-]\+/-/g; s/^-//; s/-$//')"
+  if [[ -z "${label}" ]]; then
+    label="operation"
+  fi
+  printf 'devstack.%s\n' "${label}"
+}
+
+dorkpipe_stack_operation_emit() {
+  local unit="${1:?unit}"
+  local status="${2:?status}"
+  local duration_ms="${3:-}"
+  shift 3 || true
+  local dockpipe_bin
+  dockpipe_bin="${DOCKPIPE_BIN:-$(command -v dockpipe 2>/dev/null || true)}"
+  local args=(
+    result
+    --unit "${unit}"
+    --status "${status}"
+  )
+  if [[ -n "${duration_ms}" && "${status}" != "start" ]]; then
+    args+=(--duration-ms "${duration_ms}")
+  fi
+  local field key value
+  for field in "$@"; do
+    [[ -n "${field}" ]] || continue
+    if [[ "${field}" == *=* ]]; then
+      key="${field%%=*}"
+      value="${field#*=}"
+      value="${value%\"}"
+      value="${value#\"}"
+      case "${key}" in
+        error)
+          args+=(--error "${value}")
+          ;;
+        status)
+          args+=(--id "result_status=${value}")
+          ;;
+        *)
+          args+=(--id "${key}=${value}")
+          ;;
+      esac
+    fi
+  done
+  if [[ -n "${dockpipe_bin}" ]]; then
+    if "${dockpipe_bin}" "${args[@]}"; then
+      return 0
+    fi
+    echo "[dorkpipe-dev-stack] warning: dockpipe result adapter failed; falling back to shell operation-result rendering" >&2
+  fi
+  printf '[dorkpipe-dev-stack] unit=%s status=%s' "${unit}" "${status}" >&2
+  if [[ -n "${duration_ms}" && "${status}" != "start" ]]; then
+    printf ' duration_ms=%s' "${duration_ms}" >&2
+  fi
+  for field in "$@"; do
+    [[ -n "${field}" ]] || continue
+    printf ' %s' "${field}" >&2
+  done
+  printf '\n' >&2
+}
+
 dorkpipe_stack_run_logged() {
   local label="${1:?label}"
   local log_path="${2:?log path}"
   shift 2
-  local mode pid rc frame_index frame frames
+  local mode pid rc frame_index frame frames unit started_ms duration_ms
   mode="$(dorkpipe_stack_log_mode)"
   if [[ "${mode}" == "verbose" ]]; then
     "$@"
@@ -69,6 +132,9 @@ dorkpipe_stack_run_logged() {
 
   mkdir -p "$(dirname "${log_path}")"
   : > "${log_path}"
+  unit="$(dorkpipe_stack_operation_unit "${label}")"
+  started_ms="$(date +%s%3N)"
+  dorkpipe_stack_operation_emit "${unit}" "start" "" "log=${log_path}"
   if [[ "${mode}" != "none" ]]; then
     printf '[dorkpipe-dev-stack] %s ... ' "${label}" >&2
   fi
@@ -88,6 +154,7 @@ dorkpipe_stack_run_logged() {
   wait "${pid}"
   rc=$?
   set -e
+  duration_ms="$(( $(date +%s%3N) - started_ms ))"
   if [[ "${mode}" != "none" ]]; then
     if [[ "${rc}" -eq 0 ]]; then
       printf '\r[dorkpipe-dev-stack] %s %s\n' "$(dorkpipe_stack_log_icon ok)" "${label}" >&2
@@ -95,6 +162,11 @@ dorkpipe_stack_run_logged() {
       printf '\r[dorkpipe-dev-stack] %s %s\n' "$(dorkpipe_stack_log_icon fail)" "${label}" >&2
       dorkpipe_stack_log_tail "${log_path}" "${DORKPIPE_DEV_STACK_LOG_FAILURE_LINES:-40}"
     fi
+  fi
+  if [[ "${rc}" -eq 0 ]]; then
+    dorkpipe_stack_operation_emit "${unit}" "done" "${duration_ms}" "log=${log_path}"
+  else
+    dorkpipe_stack_operation_emit "${unit}" "fail" "${duration_ms}" "log=${log_path}" "error=command exited ${rc}"
   fi
   return "${rc}"
 }
