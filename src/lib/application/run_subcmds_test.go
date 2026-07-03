@@ -378,6 +378,54 @@ func TestCmdRunsEventsJSONUsesEventLogEnv(t *testing.T) {
 	}
 }
 
+func TestCmdRunsEventsIndexesOperationEventLog(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events.jsonl")
+	indexPath := filepath.Join(dir, "projection", "events-index.json")
+	duration := int64(42)
+	if err := infrastructure.AppendOperationEvent(path, infrastructure.OperationEvent{
+		Timestamp:  "2026-07-03T00:00:00Z",
+		Unit:       "build.compile",
+		Status:     infrastructure.OperationStatusDone,
+		DurationMs: &duration,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
+	if err := cmdRuns([]string{"events", "--event-log", path, "--index", indexPath}); err != nil {
+		t.Fatalf("cmdRuns events --index failed: %v", err)
+	}
+	_ = w.Close()
+	var buf bytes.Buffer
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(buf.String(), "Indexed 1 operation events") || !strings.Contains(buf.String(), indexPath) {
+		t.Fatalf("unexpected index output:\n%s", buf.String())
+	}
+	b, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var index infrastructure.OperationEventIndex
+	if err := json.Unmarshal(b, &index); err != nil {
+		t.Fatalf("index should decode: %v\n%s", err, b)
+	}
+	if index.Schema != infrastructure.OperationEventIndexSchemaV1 || index.EventCount != 1 {
+		t.Fatalf("unexpected index: %+v", index)
+	}
+	if len(index.Units) != 1 || index.Units[0].Unit != "build.compile" || index.Units[0].TotalDurationMs != duration {
+		t.Fatalf("unexpected indexed units: %+v", index.Units)
+	}
+}
+
 func TestCmdRunsPolicyJSONSupportsFilters(t *testing.T) {
 	project := t.TempDir()
 	for _, rec := range []*infrastructure.RunPolicyRecord{

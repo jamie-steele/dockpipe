@@ -198,6 +198,8 @@ Current event schema:
 Rules:
 
 - JSONL files are canonical for observed runtime facts.
+- JSON projection files are rebuildable indexes over JSONL, useful for fast summaries and UI
+  bootstrap, but not authoritative.
 - YAML files are canonical for desired state and configuration.
 - Postgres indexes JSONL/YAML as a rebuildable projection for PipeDeck, dashboards, search, and
   cross-run queries.
@@ -212,6 +214,8 @@ dockpipe get event_log
 dockpipe scope
 dockpipe runs events --event-log <path>
 dockpipe runs events --event-log <path> --json
+dockpipe runs events --event-log <path> --index <path>
+dockpipe runs events --event-log <path> --index <path> --json
 dockpipe session inspect <id|latest>
 dockpipe session inspect <id|latest> --json
 ```
@@ -219,7 +223,8 @@ dockpipe session inspect <id|latest> --json
 When `--event-log` is omitted, `dockpipe runs events` reads `DOCKPIPE_EVENT_LOG`.
 `dockpipe get event_log` and workflow `dockpipe scope` expose the resolved workflow operation-event
 ledger path. `dockpipe session inspect` exposes the runtime-owned session metadata event log under
-`storage.event_log` for managed workspace/session lifecycle events.
+`storage.event_log` for managed workspace/session lifecycle events. `--index` rebuilds a
+`dockpipe.operation_event_index.v1` JSON projection from the JSONL ledger.
 
 ## Bash Adapter Rules
 

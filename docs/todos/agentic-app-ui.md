@@ -116,6 +116,7 @@ state should still come from YAML/package config through the shared API.
 When a workflow runs, the app should show richer information over the same CLI/master protocol:
 
 - live operation-result timeline
+- rebuildable operation-event index summary from `dockpipe runs events --index`
 - current stage, worker, and task graph state
 - logs by operation/task
 - artifact browser
@@ -194,6 +195,8 @@ updated after the run.
   editors.
 - Extend the initial `dockpipe.operation_event.v1` JSONL stream into the full PipeDeck run inspector
   feed, including logs, artifact references, approvals, and task graph state.
+- Decide where PipeDeck stores or discovers rebuilt `dockpipe.operation_event_index.v1` projection
+  files before the Postgres mirror exists.
 - Decide how much editing happens in-app versus handing off to the user's normal editor.
 - Design conflict preview and repair flows without turning the app into a full IDE.
 - Decide where remote-access YAML lives and how it maps to Cloudflare Tunnel, Let's Encrypt,

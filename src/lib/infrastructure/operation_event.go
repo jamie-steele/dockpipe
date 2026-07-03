@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -15,6 +16,8 @@ const (
 
 	OperationEventSchemaV1 = "dockpipe.operation_event.v1"
 	OperationEventKind     = "operation_result"
+
+	OperationEventIndexSchemaV1 = "dockpipe.operation_event_index.v1"
 )
 
 type OperationEvent struct {
@@ -29,6 +32,26 @@ type OperationEvent struct {
 	DurationMs *int64            `json:"duration_ms,omitempty"`
 	IDs        map[string]string `json:"ids,omitempty"`
 	Error      string            `json:"error,omitempty"`
+}
+
+type OperationEventIndex struct {
+	Schema       string                    `json:"schema"`
+	Source       string                    `json:"source"`
+	GeneratedAt  string                    `json:"generated_at"`
+	EventCount   int                       `json:"event_count"`
+	StatusCounts map[string]int            `json:"status_counts,omitempty"`
+	Units        []OperationEventUnitIndex `json:"units,omitempty"`
+}
+
+type OperationEventUnitIndex struct {
+	Unit            string         `json:"unit"`
+	Count           int            `json:"count"`
+	StatusCounts    map[string]int `json:"status_counts,omitempty"`
+	FirstTimestamp  string         `json:"first_ts,omitempty"`
+	LastTimestamp   string         `json:"last_ts,omitempty"`
+	LastStatus      string         `json:"last_status,omitempty"`
+	LastError       string         `json:"last_error,omitempty"`
+	TotalDurationMs int64          `json:"total_duration_ms,omitempty"`
 }
 
 func OperationEventFromResult(result OperationResult) OperationEvent {
@@ -116,6 +139,89 @@ func ReadOperationEvents(path string) ([]OperationEvent, error) {
 		return nil, err
 	}
 	return events, nil
+}
+
+func BuildOperationEventIndex(path string) (OperationEventIndex, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return OperationEventIndex{}, fmt.Errorf("operation event log path is empty")
+	}
+	events, err := ReadOperationEvents(path)
+	if err != nil {
+		return OperationEventIndex{}, err
+	}
+	index := OperationEventIndex{
+		Schema:       OperationEventIndexSchemaV1,
+		Source:       path,
+		GeneratedAt:  timeNowDockerFn().UTC().Format(time.RFC3339Nano),
+		EventCount:   len(events),
+		StatusCounts: map[string]int{},
+	}
+	byUnit := map[string]*OperationEventUnitIndex{}
+	for _, event := range events {
+		status := strings.TrimSpace(event.Status)
+		if status == "" {
+			status = "unknown"
+		}
+		index.StatusCounts[status]++
+		unit := strings.TrimSpace(event.Unit)
+		if unit == "" {
+			unit = "unknown"
+		}
+		row := byUnit[unit]
+		if row == nil {
+			row = &OperationEventUnitIndex{
+				Unit:         unit,
+				StatusCounts: map[string]int{},
+			}
+			byUnit[unit] = row
+		}
+		row.Count++
+		row.StatusCounts[status]++
+		if row.FirstTimestamp == "" {
+			row.FirstTimestamp = strings.TrimSpace(event.Timestamp)
+		}
+		if ts := strings.TrimSpace(event.Timestamp); ts != "" {
+			row.LastTimestamp = ts
+		}
+		row.LastStatus = status
+		if errText := strings.TrimSpace(event.Error); errText != "" {
+			row.LastError = errText
+		}
+		if event.DurationMs != nil {
+			row.TotalDurationMs += *event.DurationMs
+		}
+	}
+	units := make([]string, 0, len(byUnit))
+	for unit := range byUnit {
+		units = append(units, unit)
+	}
+	sort.Strings(units)
+	for _, unit := range units {
+		index.Units = append(index.Units, *byUnit[unit])
+	}
+	return index, nil
+}
+
+func WriteOperationEventIndex(path string, index OperationEventIndex) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return fmt.Errorf("operation event index path is empty")
+	}
+	if index.Schema == "" {
+		index.Schema = OperationEventIndexSchemaV1
+	}
+	if index.GeneratedAt == "" {
+		index.GeneratedAt = timeNowDockerFn().UTC().Format(time.RFC3339Nano)
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(index, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(b, '\n'), 0o644)
 }
 
 func appendConfiguredOperationEvent(result OperationResult) {

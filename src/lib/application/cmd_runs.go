@@ -33,6 +33,7 @@ func cmdRuns(argv []string) error {
 	rest := argv[1:]
 	workdir := ""
 	eventLog := ""
+	eventIndex := ""
 	jsonOut := false
 	policyOpts := infrastructure.RunPolicyListOptions{}
 	for i := 0; i < len(rest); i++ {
@@ -51,6 +52,15 @@ func cmdRuns(argv []string) error {
 				return fmt.Errorf("dockpipe runs events: --event-log requires a path")
 			}
 			eventLog = rest[i+1]
+			i++
+		case "--index":
+			if publicSub != "events" {
+				return fmt.Errorf("dockpipe runs %s: --index is only valid with events", publicSub)
+			}
+			if i+1 >= len(rest) {
+				return fmt.Errorf("dockpipe runs events: --index requires a path")
+			}
+			eventIndex = rest[i+1]
 			i++
 		case "--workflow":
 			if publicSub != "policy" {
@@ -98,18 +108,35 @@ func cmdRuns(argv []string) error {
 		return infrastructure.ListRunPolicyRecords(workdir, os.Stdout, policyOpts)
 	}
 	if publicSub == "events" {
-		return cmdRunsEvents(eventLog, jsonOut)
+		return cmdRunsEvents(eventLog, eventIndex, jsonOut)
 	}
 	return infrastructure.ListHostRuns(workdir, os.Stdout)
 }
 
-func cmdRunsEvents(eventLog string, jsonOut bool) error {
+func cmdRunsEvents(eventLog, eventIndex string, jsonOut bool) error {
 	eventLog = strings.TrimSpace(eventLog)
 	if eventLog == "" {
 		eventLog = strings.TrimSpace(os.Getenv(infrastructure.EnvDockpipeEventLog))
 	}
 	if eventLog == "" {
 		return fmt.Errorf("dockpipe runs events: provide --event-log <path> or set %s", infrastructure.EnvDockpipeEventLog)
+	}
+	eventIndex = strings.TrimSpace(eventIndex)
+	if eventIndex != "" {
+		index, err := infrastructure.BuildOperationEventIndex(eventLog)
+		if err != nil {
+			return err
+		}
+		if err := infrastructure.WriteOperationEventIndex(eventIndex, index); err != nil {
+			return err
+		}
+		if jsonOut {
+			enc := json.NewEncoder(os.Stdout)
+			enc.SetIndent("", "  ")
+			return enc.Encode(index)
+		}
+		fmt.Fprintf(os.Stdout, "Indexed %d operation events -> %s\n", index.EventCount, eventIndex)
+		return nil
 	}
 	events, err := infrastructure.ReadOperationEvents(eventLog)
 	if err != nil {

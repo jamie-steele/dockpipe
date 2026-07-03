@@ -1,6 +1,7 @@
 package infrastructure
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -178,5 +179,73 @@ func TestReadOperationEventsReportsMalformedLine(t *testing.T) {
 	_, err := ReadOperationEvents(path)
 	if err == nil || !strings.Contains(err.Error(), ":1:") {
 		t.Fatalf("expected line-numbered malformed JSON error, got %v", err)
+	}
+}
+
+func TestBuildAndWriteOperationEventIndex(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events.jsonl")
+	buildDuration := int64(25)
+	testDuration := int64(10)
+	events := []OperationEvent{
+		{
+			Timestamp: "2026-07-03T00:00:00Z",
+			Unit:      "build.compile",
+			Status:    OperationStatusStart,
+		},
+		{
+			Timestamp:  "2026-07-03T00:00:01Z",
+			Unit:       "build.compile",
+			Status:     OperationStatusDone,
+			DurationMs: &buildDuration,
+		},
+		{
+			Timestamp:  "2026-07-03T00:00:02Z",
+			Unit:       "test.unit",
+			Status:     OperationStatusFail,
+			DurationMs: &testDuration,
+			Error:      "boom",
+		},
+	}
+	for _, event := range events {
+		if err := AppendOperationEvent(path, event); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	index, err := BuildOperationEventIndex(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if index.Schema != OperationEventIndexSchemaV1 || index.Source != path || index.EventCount != 3 {
+		t.Fatalf("unexpected index header: %+v", index)
+	}
+	if index.StatusCounts[OperationStatusDone] != 1 || index.StatusCounts[OperationStatusFail] != 1 || index.StatusCounts[OperationStatusStart] != 1 {
+		t.Fatalf("unexpected status counts: %+v", index.StatusCounts)
+	}
+	if len(index.Units) != 2 || index.Units[0].Unit != "build.compile" || index.Units[1].Unit != "test.unit" {
+		t.Fatalf("unexpected unit order: %+v", index.Units)
+	}
+	if index.Units[0].Count != 2 || index.Units[0].TotalDurationMs != buildDuration || index.Units[0].LastStatus != OperationStatusDone {
+		t.Fatalf("unexpected build unit index: %+v", index.Units[0])
+	}
+	if index.Units[1].LastError != "boom" || index.Units[1].TotalDurationMs != testDuration {
+		t.Fatalf("unexpected failing unit index: %+v", index.Units[1])
+	}
+
+	indexPath := filepath.Join(dir, "index", "events-index.json")
+	if err := WriteOperationEventIndex(indexPath, index); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded OperationEventIndex
+	if err := json.Unmarshal(b, &decoded); err != nil {
+		t.Fatalf("index json should decode: %v\n%s", err, b)
+	}
+	if decoded.EventCount != 3 || len(decoded.Units) != 2 {
+		t.Fatalf("unexpected decoded index: %+v", decoded)
 	}
 }
