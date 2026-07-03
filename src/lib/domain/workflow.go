@@ -869,7 +869,7 @@ func ValidateWorkflowSingleFlowFields(w *Workflow) error {
 		return nil
 	}
 	if len(w.Steps) == 0 && len(w.Finally) > 0 {
-		return fmt.Errorf("workflow with finally: requires at least one main step in steps:")
+		return fmt.Errorf("workflow with finally requires at least one main step in steps")
 	}
 	if len(w.Run) > 0 {
 		return fmt.Errorf("workflow with steps uses top-level run; move those host pre-scripts onto a step with run: or pre_script")

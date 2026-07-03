@@ -34,8 +34,16 @@ steps:
       bash -c 'set -euo pipefail
       export HOME=/tmp/dockpipe-home
       mkdir -p "$HOME"
-      DOCKPIPE_CLI="${DOCKPIPE_BIN:-dockpipe}"
-      DEMO_DIR="$("$DOCKPIPE_CLI" scope artifacts demo)"
+      dockpipe_cli() {
+        local dockpipe_bin="${DOCKPIPE_BIN:-}"
+        if [[ -n "$dockpipe_bin" && -x "$dockpipe_bin" ]]; then
+          "$dockpipe_bin" "$@"
+          return
+        fi
+        local container_root="${DOCKPIPE_CONTAINER_WORKDIR:-/work}"
+        (cd "$container_root" && go run ./src/cmd "$@")
+      }
+      DEMO_DIR="$(dockpipe_cli scope artifacts demo)"
       DEMO_FILE="$DEMO_DIR/main.go"
       echo "[demo] ================================================================="
       echo "[demo] Isolation — each step runs in a fresh container; your repo is mounted"
@@ -60,8 +68,16 @@ steps:
       bash -c 'set -euo pipefail
       export HOME=/tmp/dockpipe-home
       mkdir -p "$HOME"
-      DOCKPIPE_CLI="${DOCKPIPE_BIN:-dockpipe}"
-      GO_ARTIFACT_DIR="$("$DOCKPIPE_CLI" scope artifacts go)"
+      dockpipe_cli() {
+        local dockpipe_bin="${DOCKPIPE_BIN:-}"
+        if [[ -n "$dockpipe_bin" && -x "$dockpipe_bin" ]]; then
+          "$dockpipe_bin" "$@"
+          return
+        fi
+        local container_root="${DOCKPIPE_CONTAINER_WORKDIR:-/work}"
+        (cd "$container_root" && go run ./src/cmd "$@")
+      }
+      GO_ARTIFACT_DIR="$(dockpipe_cli scope artifacts go)"
       export GOTMPDIR="$GO_ARTIFACT_DIR/gotmp"
       export GOCACHE="$GO_ARTIFACT_DIR/gocache"
       export GOBIN="$GO_ARTIFACT_DIR/bin"

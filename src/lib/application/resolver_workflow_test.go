@@ -28,7 +28,7 @@ func TestRunEmbeddedResolverWorkflowWithLoad_CallsRunSteps(t *testing.T) {
 		return nil
 	}
 	env := map[string]string{}
-	opts := &CliOpts{}
+	opts := &CliOpts{Workdir: repoRoot}
 	err := runEmbeddedResolverWorkflowWithLoad(infrastructure.LoadWorkflow, runSteps, "cursor-dev", repoRoot, env, opts, nil, nil, "", "", "cursor", "")
 	if err != nil {
 		t.Fatal(err)

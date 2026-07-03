@@ -15,5 +15,10 @@ func TestMain(m *testing.M) {
 	if os.Getenv("DOCKPIPE_COMPILE_DEPS") == "" {
 		os.Setenv("DOCKPIPE_COMPILE_DEPS", "0")
 	}
+	// Application package tests stub container/build seams and should not depend on a real Docker CLI
+	// being present in the host or CI container.
+	if os.Getenv("DOCKPIPE_SKIP_DOCKER_PREFLIGHT") == "" {
+		os.Setenv("DOCKPIPE_SKIP_DOCKER_PREFLIGHT", "1")
+	}
 	os.Exit(m.Run())
 }

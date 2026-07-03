@@ -955,7 +955,7 @@ func TestValidateLoadedWorkflowRejectsFinallyWithoutSteps(t *testing.T) {
 		Finally: []Step{{Kind: "host", Run: []string{"scripts/cleanup.sh"}}},
 	}
 	err := ValidateLoadedWorkflow(w)
-	if err == nil || !strings.Contains(err.Error(), "workflow with finally: requires at least one main step") {
+	if err == nil || !strings.Contains(err.Error(), "workflow with finally requires at least one main step") {
 		t.Fatalf("expected finally without steps validation error, got %v", err)
 	}
 }

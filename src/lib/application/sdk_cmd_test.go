@@ -280,13 +280,13 @@ func TestCmdScopeResolverAuthFields(t *testing.T) {
 
 func TestResolveResolverHostPathUsesUserHomeWhenHomeEnvMissing(t *testing.T) {
 	t.Setenv("HOME", "")
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		t.Skip("os.UserHomeDir is unavailable when HOME is unset in this environment")
+	}
 	got, err := resolveResolverHostPath(map[string]string{
 		"DOCKPIPE_RESOLVER_AUTH_DIR": ".codex",
 	}, "DOCKPIPE_RESOLVER_AUTH_DIR_ENV", "DOCKPIPE_RESOLVER_AUTH_DIR")
-	if err != nil {
-		t.Fatal(err)
-	}
-	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Fatal(err)
 	}
