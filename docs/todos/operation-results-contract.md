@@ -29,6 +29,8 @@
 - `dockpipe runs events --event-log <path> --index [<path>] [--json]` can rebuild a
   `dockpipe.operation_event_index.v1` JSON projection from the JSONL ledger for fast summaries and
   future UI bootstrap; omitting the index path uses `DOCKPIPE_EVENT_INDEX`.
+- `dockpipe result --unit <name> --status <status> ...` now gives package-owned scripts and shell
+  helpers a public core adapter for canonical operation-result rendering and JSONL mirroring.
 - Runtime-owned helper containers now use stable DockPipe helper names and labels instead of
   leaving random Docker-generated names as the only operator clue.
 - DorkPipe orchestration scripts do not reference core internals directly, but the main package
@@ -45,8 +47,6 @@
 - Continue migrating package-owned scripts and package workflows that still use bespoke status
   wrappers, especially older `dev-stack` and optimizer-style logging, onto the same unit/result
   vocabulary.
-- Expose a cleaner public CLI/SDK surface for package-owned scripts that want canonical
-  operation-result emission without reimplementing helper formatting in shell.
 - Add a rebuildable Postgres projection over operation-event JSONL and JSON/YAML indexes for
   PipeDeck, dashboards, search, and cross-run history.
 - Push structured event usage further so session metadata, orchestration artifacts, host-action

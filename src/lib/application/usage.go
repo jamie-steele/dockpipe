@@ -85,6 +85,7 @@ var mainUsageSections = []usageSection{
 			{"get <field> [--workdir]", "Print generic DockPipe context like workdir or dockpipe_bin"},
 			{"scope [--package <name>]", "Print current workflow/package scope JSON or resolve a scope path"},
 			{"sdk [--workdir]", "Emit shell bootstrap for the DockPipe SDK object"},
+			{"result --unit <name> --status <status>", "Emit a canonical operation-result line and optional JSONL event"},
 			{"terraform pipeline-path | terraform run <cmds>", "Terraform helpers (see dockpipe terraform --help)"},
 			{"runs list|events [--workdir]", "List host-run records or inspect operation event JSONL logs"},
 			{"windows setup|doctor", "Windows: optional WSL bridge setup"},

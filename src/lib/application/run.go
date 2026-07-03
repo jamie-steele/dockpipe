@@ -110,6 +110,9 @@ func Run(argv []string, baseEnviron []string) error {
 	if argv[0] == "runs" {
 		return cmdRuns(argv[1:])
 	}
+	if argv[0] == "result" {
+		return cmdResult(argv[1:])
+	}
 	if argv[0] == "session" {
 		return cmdSession(argv[1:])
 	}

@@ -235,6 +235,8 @@ session metadata event log under `storage.event_log` for managed workspace/sessi
 Shell helpers may still need to emit operational status, especially for package-owned scripts and
 DorkPipe orchestration support code. When they do:
 
+- prefer `dockpipe result --unit <name> --status <status> ...` when the `dockpipe` binary is
+  available
 - reuse the same unit names and status vocabulary
 - keep key/value rendering aligned with the Go renderer
 - do not invent a separate shell-only lifecycle taxonomy
@@ -243,7 +245,9 @@ DorkPipe orchestration support code. When they do:
 
 In practice:
 
-- good: shell emits `unit=devstack.up status=start`
+- good: shell calls `dockpipe result --unit devstack.up --status start --id service=postgres`
+- acceptable adapter: shell emits `unit=devstack.up status=start` through a shared wrapper that
+  matches the core vocabulary
 - bad: one script says `starting`, another says `bootstrapping`, another says `doing setup now`
   with no shared shape
 
