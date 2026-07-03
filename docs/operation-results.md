@@ -170,8 +170,9 @@ does expensive or destructive work and to make failure location obvious.
 
 Structured events should map from the same result contract rather than being authored independently.
 
-The canonical observed-state event log is append-only JSONL. When `DOCKPIPE_EVENT_LOG` is set,
-operation results are mirrored to that file. The file is the durable runtime ledger for the current
+The canonical observed-state event log is append-only JSONL. Workflow runs default
+`DOCKPIPE_EVENT_LOG` to `<artifact_root>/events.jsonl` when the variable is not already set.
+Operation results are mirrored to that file. The file is the durable runtime ledger for the current
 run/session; Postgres or another database may index it later, but should be treated as a rebuildable
 projection rather than the source of truth.
 
@@ -211,7 +212,9 @@ dockpipe runs events --event-log <path>
 dockpipe runs events --event-log <path> --json
 ```
 
-When `--event-log` is omitted, `dockpipe runs events` reads `DOCKPIPE_EVENT_LOG`.
+When `--event-log` is omitted, `dockpipe runs events` reads `DOCKPIPE_EVENT_LOG`. Future run/session
+inspection should surface the resolved event-log path so users do not need to remember the artifact
+layout.
 
 ## Bash Adapter Rules
 

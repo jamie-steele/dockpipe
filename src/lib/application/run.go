@@ -395,6 +395,8 @@ func Run(argv []string, baseEnviron []string) error {
 	if err := applyWorkflowArtifactEnv(envMap, effWd, workflowStateScopeHint(opts, wfRoot, wf, rtName, rsName)); err != nil {
 		return err
 	}
+	restoreEventLogEnv := applyProcessEventLogEnv(envMap)
+	defer restoreEventLogEnv()
 	profileLabel := ProfileLabelForEnv(rtName, rsName)
 	if rtName != "" {
 		if err := ValidateRuntimeAllowlist(wf, rtName); err != nil {
