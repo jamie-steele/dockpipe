@@ -33,6 +33,17 @@
   helpers a public core adapter for canonical operation-result rendering and JSONL mirroring.
 - Runtime-owned helper containers now use stable DockPipe helper names and labels instead of
   leaving random Docker-generated names as the only operator clue.
+- Core Git session lifecycle now uses operation-result units across creation, checkpoint, sync,
+  publish, volume cleanup, and worker leases. These events are mirrored both to normal
+  operation-event sinks and to the runtime-owned session `events.jsonl` file.
+- Session creation units now include `session.create.preflight`, `session.create.workspace`,
+  `session.create.branch`, and `session.create.metadata`.
+- Session checkpoint/sync/publish units now include `session.checkpoint.status`,
+  `session.checkpoint.commit`, `session.checkpoint.metadata`, `session.sync.fetch`,
+  `session.sync.merge`, `session.publish.preflight`, and `session.publish.push`.
+- Worker lease units now include `worker.lease.preflight`, `worker.lease.metadata`,
+  `worker.lease.volume`, `worker.lease.branch`, `worker.lease.apply`,
+  `worker.lease.release.metadata`, and `worker.lease.cleanup`.
 - DorkPipe orchestration scripts do not reference core internals directly, but the main package
   shell path now delegates operation-result emission through `dockpipe result` from the shared
   helpers in `orchestrate-common.sh`, with a text fallback for older binaries.
@@ -41,27 +52,16 @@
 - DorkPipe optimizer actions now emit canonical `orchestrate.optimize` start/done/fail results with
   duration, target workflow, result artifact path, and action status; the package test suite covers
   the cheap single-pass optimizer path and Windows absolute artifact paths.
-- Git session publish now splits validation and mutation into `session.publish.preflight` and
-  `session.publish.push` operation-result units, with session/remote/branch identifiers and
-  session event-log coverage for successful and failed pushes.
-- Git session creation now emits `session.create.preflight`, `session.create.workspace` or
-  `session.create.branch`, and `session.create.metadata` operation-result units with
-  workspace/session/branch/mode/storage identifiers. Namespace collision failures are recorded as
-  failed preflight events.
-- Git session checkpoint now emits `session.checkpoint.status`, `session.checkpoint.commit`, and
-  `session.checkpoint.metadata` units, including clean no-op checkpoint commits as explicit
-  completed operations.
-- Git session sync now emits `session.sync.fetch` and `session.sync.merge` units around the existing
-  pre-sync checkpoint and conflict/synced metadata behavior.
-- Worker leases now emit `worker.lease.preflight`, `worker.lease.metadata`, optional
-  `worker.lease.volume`, optional `worker.lease.branch`, and release-side `worker.lease.apply`,
-  `worker.lease.release.metadata`, and `worker.lease.cleanup` units with session/worker/lease IDs.
+- Session lifecycle tests now cover successful and failed operation-result events for create,
+  checkpoint, sync, publish, cleanup, and worker lease paths.
 
 ## Still Open
 
 - Expand the core operation-result contract into remaining runtime actions such as auth discovery
   outside the current DorkPipe shell path and other long-running runtime/bootstrap work that still
   prints one-off lines.
+- Audit session archive and any remaining small lifecycle helpers for whether they need explicit
+  operation-result units or can remain simple metadata-only state transitions.
 - Continue rolling the same result contract deeper into compile/package subcommands that still emit
   ad hoc detail lines beneath the now-normalized top-level build units.
 - Continue migrating any newly added package-owned scripts that do meaningful long-running work onto

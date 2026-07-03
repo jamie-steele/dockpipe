@@ -7,8 +7,8 @@
 - Cleanup is runtime-owned and gated by preflight checks: managed worktree exists, local session
   branch exists and matches the workspace branch, local session branch metadata still exists, and
   no active worker lease still depends on the volume.
-- Cleanup writes operation-result lines and session events and records cleaned volume metadata in
-  the session record.
+- Cleanup writes `session.volume.cleanup.preflight` and `session.volume.cleanup` operation-result
+  lines/session events and records cleaned volume metadata in the session record.
 - `DOCKPIPE_SESSION_VOLUME_AUTOCLEANUP=false` disables the default cleanup behavior when a user
   intentionally wants to keep the runtime-owned volume around.
 
