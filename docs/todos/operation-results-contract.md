@@ -48,6 +48,11 @@
   `session.create.branch`, and `session.create.metadata` operation-result units with
   workspace/session/branch/mode/storage identifiers. Namespace collision failures are recorded as
   failed preflight events.
+- Git session checkpoint now emits `session.checkpoint.status`, `session.checkpoint.commit`, and
+  `session.checkpoint.metadata` units, including clean no-op checkpoint commits as explicit
+  completed operations.
+- Git session sync now emits `session.sync.fetch` and `session.sync.merge` units around the existing
+  pre-sync checkpoint and conflict/synced metadata behavior.
 
 ## Still Open
 

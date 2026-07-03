@@ -400,36 +400,82 @@ func CheckpointSession(session *GitSession, reason string) (*GitCheckpoint, erro
 	if err != nil {
 		return nil, err
 	}
-	status, err := gitOutput(top, "status", "--porcelain")
+	metadataDir := ""
+	if dir, dirErr := gitSessionMetadataDir(session, workspace); dirErr == nil {
+		metadataDir = dir
+	}
+	checkpointID := "cp-" + time.Now().UTC().Format("20060102-150405")
+	reason = firstNonEmptyString(reason, "runtime checkpoint")
+	ids := map[string]string{
+		"checkpoint": checkpointID,
+		"reason":     reason,
+		"session":    session.SessionID,
+	}
+	var status string
+	statusResult, err := RunOperationWithResult(os.Stderr, "session.checkpoint.status", "Checking session workspace changes…", ids, func() error {
+		var statusErr error
+		status, statusErr = gitOutput(top, "status", "--porcelain")
+		return statusErr
+	})
+	if sessionEventErr := appendGitSessionEvent(nil, OperationEventFields(statusResult), metadataDir); sessionEventErr != nil {
+		return nil, sessionEventErr
+	}
 	if err != nil {
 		return nil, err
 	}
 	dirty := strings.TrimSpace(status) != ""
 	cp := &GitCheckpoint{
 		Schema:       1,
-		CheckpointID: "cp-" + time.Now().UTC().Format("20060102-150405"),
+		CheckpointID: checkpointID,
 		SessionID:    session.SessionID,
-		Reason:       firstNonEmptyString(reason, "runtime checkpoint"),
+		Reason:       reason,
 		DirtyBefore:  dirty,
 		Status:       "skipped_clean",
 		CreatedAt:    time.Now().UTC().Format(time.RFC3339),
 	}
-	if dirty {
+	commitIDs := map[string]string{
+		"checkpoint": cp.CheckpointID,
+		"dirty":      fmt.Sprintf("%v", dirty),
+		"reason":     cp.Reason,
+		"session":    session.SessionID,
+	}
+	commitResult, err := RunOperationWithResult(os.Stderr, "session.checkpoint.commit", "Creating session checkpoint commit…", commitIDs, func() error {
+		if !dirty {
+			return nil
+		}
 		if err := gitRun(top, "add", "-A"); err != nil {
-			return nil, err
+			return err
 		}
 		msg := fmt.Sprintf("checkpoint(runtime): %s\n\nDockPipe-Session: %s\nDockPipe-Checkpoint: %s\nDockPipe-Reason: runtime\n", cp.Reason, session.SessionID, cp.CheckpointID)
 		if err := gitRun(top, "commit", "-m", msg); err != nil {
-			return nil, err
+			return err
 		}
 		commit, err := GitRevParse(top, "HEAD")
 		if err != nil {
-			return nil, err
+			return err
 		}
 		cp.Commit = commit
 		cp.Status = "created"
+		return nil
+	})
+	if sessionEventErr := appendGitSessionEvent(nil, OperationEventFields(commitResult), metadataDir); sessionEventErr != nil {
+		return nil, sessionEventErr
 	}
-	if err := writeGitCheckpoint(session, cp); err != nil {
+	if err != nil {
+		return nil, err
+	}
+	metadataIDs := map[string]string{
+		"checkpoint":        cp.CheckpointID,
+		"checkpoint_status": cp.Status,
+		"session":           session.SessionID,
+	}
+	metadataResult, err := RunOperationWithResult(os.Stderr, "session.checkpoint.metadata", "Writing session checkpoint metadata…", metadataIDs, func() error {
+		return writeGitCheckpoint(session, cp)
+	})
+	if sessionEventErr := appendGitSessionEvent(nil, OperationEventFields(metadataResult), metadataDir); sessionEventErr != nil {
+		return nil, sessionEventErr
+	}
+	if err != nil {
 		return nil, err
 	}
 	_ = appendGitSessionEvent(session, map[string]string{
@@ -461,11 +507,28 @@ func SyncSession(session *GitSession) (*GitSyncResult, error) {
 		Status:    "synced",
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	_ = gitRun(top, "fetch", "--all", "--prune")
+	metadataDir := ""
+	if dir, dirErr := gitSessionMetadataDir(session, session.Storage.Workspace); dirErr == nil {
+		metadataDir = dir
+	}
+	ids := map[string]string{
+		"base_ref": baseRef,
+		"session":  session.SessionID,
+	}
+	fetchResult, _ := RunOperationWithResult(os.Stderr, "session.sync.fetch", "Fetching session remotes…", ids, func() error {
+		return gitRun(top, "fetch", "--all", "--prune")
+	})
+	_ = appendGitSessionEvent(nil, OperationEventFields(fetchResult), metadataDir)
 	if _, err := CheckpointSession(session, "pre-sync checkpoint"); err != nil {
 		return nil, err
 	}
-	out, mergeErr := gitCombined(top, "merge", "--no-edit", baseRef)
+	var out string
+	mergeResult, mergeErr := RunOperationWithResult(os.Stderr, "session.sync.merge", "Merging session base ref…", ids, func() error {
+		var err error
+		out, err = gitCombined(top, "merge", "--no-edit", baseRef)
+		return err
+	})
+	_ = appendGitSessionEvent(nil, OperationEventFields(mergeResult), metadataDir)
 	if mergeErr != nil {
 		session.Status = "conflict"
 		session.UpdatedAt = time.Now().UTC().Format(time.RFC3339)

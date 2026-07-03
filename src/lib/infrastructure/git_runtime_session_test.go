@@ -89,6 +89,20 @@ func TestCreateSessionBranchManagedWorktreeAndCheckpoint(t *testing.T) {
 	if cp.Status != "created" || cp.Commit == "" {
 		t.Fatalf("unexpected checkpoint: %+v", cp)
 	}
+	sessionEvents, err = os.ReadFile(filepath.Join(repo, "bin", ".dockpipe", "sessions", "test-session", "events.jsonl"))
+	if err != nil {
+		t.Fatalf("read checkpoint session events: %v", err)
+	}
+	for _, want := range []string{
+		`"unit":"session.checkpoint.status"`,
+		`"unit":"session.checkpoint.commit"`,
+		`"unit":"session.checkpoint.metadata"`,
+		`"checkpoint_status":"created"`,
+	} {
+		if !strings.Contains(string(sessionEvents), want) {
+			t.Fatalf("session checkpoint events missing %s:\n%s", want, sessionEvents)
+		}
+	}
 	if _, err := os.Stat(filepath.Join(repo, "bin", ".dockpipe", "sessions", "test-session", "checkpoints", cp.CheckpointID+".json")); err != nil {
 		t.Fatalf("checkpoint metadata missing from session root: %v", err)
 	}
@@ -511,6 +525,20 @@ func TestGitSessionLifecycleSyncPublishArchiveAndLease(t *testing.T) {
 	}
 	if syncRes.Status != "synced" {
 		t.Fatalf("sync status = %q", syncRes.Status)
+	}
+	sessionEvents, err = os.ReadFile(filepath.Join(session.Storage.Metadata, "events.jsonl"))
+	if err != nil {
+		t.Fatalf("read sync session events: %v", err)
+	}
+	for _, want := range []string{
+		`"unit":"session.sync.fetch"`,
+		`"unit":"session.sync.merge"`,
+		`"unit":"session.checkpoint.commit"`,
+		`"dirty":"false"`,
+	} {
+		if !strings.Contains(string(sessionEvents), want) {
+			t.Fatalf("session sync events missing %s:\n%s", want, sessionEvents)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(session.Storage.Workspace, "base.txt")); err != nil {
 		t.Fatalf("synced base file missing: %v", err)
