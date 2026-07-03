@@ -24,6 +24,8 @@
   workflow, approval mode, decision, approved flag, approval artifact path, and duration.
 - DorkPipe task hard failures now rely on the canonical `orchestrate.task status=fail` line instead
   of printing a second bespoke required-worker failure line.
+- DorkPipe optimizer child iterations now emit `orchestrate.optimize.iteration` units, and target
+  refresh reruns after applied optimizer output emit `orchestrate.optimize.refresh` units.
 - Operation results can now mirror to append-only JSONL when `DOCKPIPE_EVENT_LOG` is set. The
   canonical event schema is `dockpipe.operation_event.v1`, implemented in
   `src/lib/infrastructure`.

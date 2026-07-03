@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-trap 'rc=$?; echo "test_orchestration_optimize failed at line ${LINENO}: ${BASH_COMMAND}" >&2; if [[ -n "${tmp:-}" && -f "$tmp/optimize.err" ]]; then cat "$tmp/optimize.err" >&2; fi; exit "$rc"' ERR
+trap 'rc=$?; echo "test_orchestration_optimize failed at line ${LINENO}: ${BASH_COMMAND}" >&2; if [[ -n "${tmp:-}" && -f "$tmp/optimize.err" ]]; then cat "$tmp/optimize.err" >&2; fi; if [[ -n "${tmp:-}" && -f "$tmp/optimize-iterations.err" ]]; then cat "$tmp/optimize-iterations.err" >&2; fi; exit "$rc"' ERR
 
 ROOT="$(git rev-parse --show-toplevel)"
 SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
@@ -12,7 +12,9 @@ trap 'rm -rf "$tmp"' EXIT
 
 tmp_win="$(cygpath -m "$tmp")"
 fake_dockpipe="$tmp/dockpipe"
+fake_helper="$tmp/orchestrate-helper"
 operation_log="$tmp/operation.log"
+workflow_log="$tmp/workflows.log"
 
 cat >"$fake_dockpipe" <<'SH'
 #!/usr/bin/env bash
@@ -75,7 +77,13 @@ SDK
       suffix="${4:-}"
       case "${suffix}" in
         orchestrate) printf '%s\n' "${FAKE_TARGET_ROOT:?}/${workflow}/orchestrate" ;;
-        optimize) printf '%s\n' "${FAKE_OPTIMIZER_ROOT:?}/${workflow}/optimize" ;;
+        optimize)
+          if [[ "${5:-}" == "iterations" ]]; then
+            printf '%s\n' "${FAKE_OPTIMIZER_ROOT:?}/${workflow}/optimize/iterations"
+          else
+            printf '%s\n' "${FAKE_OPTIMIZER_ROOT:?}/${workflow}/optimize"
+          fi
+          ;;
         *) return 1 ;;
       esac
       exit 0
@@ -110,10 +118,47 @@ SDK
     exit 0
     ;;
 esac
+if [[ " $* " == *" --workflow "* ]]; then
+  printf '%s\n' "$*" >> "${FAKE_WORKFLOW_LOG:?}"
+  mkdir -p "${FAKE_OPTIMIZER_ROOT:?}/${DORKPIPE_OPTIMIZER_TARGET_WORKFLOW:?}/optimize/apply-if-enabled"
+  mkdir -p "${FAKE_OPTIMIZER_ROOT:?}/${DORKPIPE_OPTIMIZER_TARGET_WORKFLOW:?}/optimize/propose"
+  cat > "${FAKE_OPTIMIZER_ROOT:?}/${DORKPIPE_OPTIMIZER_TARGET_WORKFLOW:?}/optimize/apply-if-enabled/result.json" <<EOF
+{"status":"ready"}
+EOF
+  cat > "${FAKE_OPTIMIZER_ROOT:?}/${DORKPIPE_OPTIMIZER_TARGET_WORKFLOW:?}/optimize/propose/result.json" <<EOF
+{"status":"ready","invalid_patch":false}
+EOF
+  exit 0
+fi
 echo "fake dockpipe: unsupported args: $*" >&2
 exit 1
 SH
 chmod +x "$fake_dockpipe"
+
+cat >"$fake_helper" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  optimizer-result-status)
+    file="${2:?result json}"
+    [[ -f "$file" ]] || exit 0
+    sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$file" | head -1
+    ;;
+  optimizer-propose-invalid)
+    file="${2:?result json}"
+    if [[ -f "$file" ]] && grep -Eq '"invalid_patch"[[:space:]]*:[[:space:]]*true' "$file"; then
+      printf 'true\n'
+    else
+      printf 'false\n'
+    fi
+    ;;
+  *)
+    echo "fake orchestrate-helper: unsupported args: $*" >&2
+    exit 1
+    ;;
+esac
+SH
+chmod +x "$fake_helper"
 
 export PATH="$tmp_unix:$PATH"
 hash -r
@@ -131,6 +176,8 @@ export FAKE_OPTIMIZER_ROOT="${tmp_win}/optimizer"
 export FAKE_ARTIFACT_ROOT="$tmp/artifacts"
 export FAKE_PACKAGE_ROOT="$tmp/package"
 export FAKE_OPERATION_LOG="$operation_log"
+export FAKE_WORKFLOW_LOG="$workflow_log"
+export DORKPIPE_ORCH_HELPER_BIN="$fake_helper"
 
 bash "$SCRIPT_DIR/orchestrate-optimize.sh" 2>"$tmp/optimize.err"
 
@@ -150,5 +197,19 @@ if grep -Fq -- "${tmp}/${tmp_win}" "$operation_log"; then
   echo "optimizer Windows absolute path was incorrectly prefixed by ROOT" >&2
   exit 1
 fi
+
+rm -f "$operation_log" "$workflow_log"
+export DORKPIPE_OPTIMIZER_ITERATIONS="2"
+bash "$SCRIPT_DIR/orchestrate-optimize.sh" 2>"$tmp/optimize-iterations.err"
+
+grep -Fq -- "unit=orchestrate.optimize.iteration status=start" "$operation_log"
+grep -Fq -- "unit=orchestrate.optimize.iteration status=done" "$operation_log"
+grep -Fq -- "iteration=1" "$operation_log"
+grep -Fq -- "iterations=2" "$operation_log"
+grep -Fq -- "result_status=ready" "$operation_log"
+grep -Fq -- "child_workflow=docs.optimize-orchestrate" "$operation_log"
+grep -Fq -- "unit=orchestrate.optimize status=done" "$operation_log"
+grep -Fq -- "completed_child_iterations=1" "$operation_log"
+grep -Fq -- "--workflow docs.optimize-orchestrate" "$workflow_log"
 
 echo "test_orchestration_optimize OK"

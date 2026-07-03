@@ -129,7 +129,12 @@ EOF
   target_args+=(--workflow "${target_workflow}")
 
   for i in $(seq 1 "$((iterations - 1))"); do
-    printf '\n[dorkpipe] optimizer iteration %02d/%02d\n' "${i}" "${iterations}" >&2
+    iteration_started_ms="$(dorkpipe_orchestrate_now_ms)"
+    dorkpipe_orchestrate_operation_emit "orchestrate.optimize.iteration" "start" "" \
+      "iteration=${i}" \
+      "iterations=${iterations}" \
+      "target_workflow=${target_workflow}" \
+      "child_workflow=${child_workflow}"
     DORKPIPE_OPTIMIZER_ITERATIONS=1 \
       DORKPIPE_OPTIMIZER_ITERATION="${i}" \
       dockpipe "${child_args[@]}" --
@@ -155,7 +160,13 @@ EOF
     apply_status="$("$(dorkpipe_orchestrate_helper_bin)" optimizer-result-status "${optimizer_dir}/apply-if-enabled/result.json" 2>/dev/null || true)"
     propose_invalid="$("$(dorkpipe_orchestrate_helper_bin)" optimizer-propose-invalid "${optimizer_dir}/propose/result.json" 2>/dev/null || true)"
     if [[ "${propose_invalid}" == "true" ]]; then
-      printf '[dorkpipe] optimizer iteration %02d stopped: Codex proposed an invalid patch\n' "${i}" >&2
+      dorkpipe_orchestrate_operation_emit "orchestrate.optimize.iteration" "done" "$(dorkpipe_orchestrate_operation_duration_ms "${iteration_started_ms}")" \
+        "iteration=${i}" \
+        "iterations=${iterations}" \
+        "target_workflow=${target_workflow}" \
+        "child_workflow=${child_workflow}" \
+        "status=invalid_patch" \
+        "iter_dir=${iter_dir}"
       cat > "${result_json}" <<EOF
 {
   "status": "stopped",
@@ -168,14 +179,31 @@ EOF
       if [[ "${stop_on_invalid_patch}" =~ ^(1|true|yes|on)$ ]]; then
         exit 1
       fi
+    else
+      dorkpipe_orchestrate_operation_emit "orchestrate.optimize.iteration" "done" "$(dorkpipe_orchestrate_operation_duration_ms "${iteration_started_ms}")" \
+        "iteration=${i}" \
+        "iterations=${iterations}" \
+        "target_workflow=${target_workflow}" \
+        "child_workflow=${child_workflow}" \
+        "status=ready" \
+        "iter_dir=${iter_dir}"
     fi
 
     if [[ "${apply_status}" == "applied" && "${refresh_target_after_apply}" =~ ^(1|true|yes|on)$ ]]; then
-      printf '[dorkpipe] optimizer iteration %02d/%02d refreshing target workflow %s\n' "${i}" "${iterations}" "${target_workflow}" >&2
+      refresh_started_ms="$(dorkpipe_orchestrate_now_ms)"
+      dorkpipe_orchestrate_operation_emit "orchestrate.optimize.refresh" "start" "" \
+        "iteration=${i}" \
+        "iterations=${iterations}" \
+        "target_workflow=${target_workflow}"
       DORKPIPE_ORCH_APPROVAL_MODE=auto-no \
         DORKPIPE_ORCH_SKIP_APPLY=1 \
         DORKPIPE_DEV_STACK_RELOAD=1 \
         dockpipe "${target_args[@]}" --
+      dorkpipe_orchestrate_operation_emit "orchestrate.optimize.refresh" "done" "$(dorkpipe_orchestrate_operation_duration_ms "${refresh_started_ms}")" \
+        "iteration=${i}" \
+        "iterations=${iterations}" \
+        "target_workflow=${target_workflow}" \
+        "status=done"
     fi
   done
 
