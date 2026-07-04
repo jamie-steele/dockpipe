@@ -27,7 +27,7 @@ type DockpipeSecretsConfig struct {
 	VaultTemplate *string `json:"vault_template,omitempty"`
 	// OpInjectTemplate is a legacy alias for VaultTemplate (1Password op inject format). Use vault_template in new projects.
 	OpInjectTemplate *string `json:"op_inject_template,omitempty"`
-	// Vault is the default vault mode when workflow YAML omits vault: (see docs/vault.md).
+	// Vault is the default vault mode when workflow YAML omits vault: (see docs/runtime/vault.md).
 	Vault *string `json:"vault,omitempty"`
 	// Notes is optional human-readable context for maintainers (shown by dockpipe doctor when present).
 	Notes *string `json:"notes,omitempty"`

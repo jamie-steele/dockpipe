@@ -20,4 +20,6 @@ dockpipe --workflow user-insight-process --workdir . --
 
 **Schemas:** `src/schemas/dockpipe-user-insight-queue.schema.json`, `dockpipe-user-insights.schema.json`.
 
-**Repo overview:** **`docs/artifacts.md`** § User insight queue.
+**Repo overview:** **`docs/runtime/artifacts.md`** § User insight queue.
+
+**Example payloads:** `packages/dorkpipe/resolvers/user-insight-process/examples/`.

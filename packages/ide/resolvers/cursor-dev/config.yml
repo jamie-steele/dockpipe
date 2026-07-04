@@ -27,7 +27,7 @@ steps:
     run: assets/scripts/cursor-dev-session.sh
     kind: host
     vars:
-      # Optional: gui = hint that this workflow opens the desktop app (see DOCKPIPE_LAUNCH_MODE in docs/workflow-yaml.md).
+      # Optional: gui = hint that this workflow opens the desktop app (see DOCKPIPE_LAUNCH_MODE in docs/workflows/workflow-yaml.md).
       # DOCKPIPE_LAUNCH_MODE: gui
       # none = print paths only; cli = try Cursor CLI / default install paths (Windows/macOS/Linux).
       CURSOR_DEV_LAUNCH: "cli"

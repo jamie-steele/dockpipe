@@ -68,7 +68,7 @@ func tryResolveResolver(repoRoot, name string) string {
 
 // LoadIsolationProfile loads and merges KEY=value maps from runtime and resolver profiles.
 // Runtime keys (DOCKPIPE_RUNTIME_*) belong under templates/core/runtimes/<name>;
-// resolver keys (DOCKPIPE_RESOLVER_*) under templates/core/resolvers/<name> (see docs/architecture-model.md).
+// resolver keys (DOCKPIPE_RESOLVER_*) under templates/core/resolvers/<name> (see docs/concepts/architecture-model.md).
 //
 // Merge order: runtime file(s) first, then resolver file(s); later keys overlay earlier for duplicate keys.
 //

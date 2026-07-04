@@ -19,7 +19,7 @@ dockpipe/
 - **`DOCKPIPE_REPO_ROOT`** — optional override to point at a **dockpipe source tree** (e.g. when editing templates).
 - **`DOCKPIPE_BUNDLED_CACHE`** — optional parent directory for the `dockpipe/bundled-*` folder (tests, custom cache location).
 
-User-created workflow files from **`dockpipe init`** and **`dockpipe template init`** live in your project (typically under **`templates/`**).
+User-created workflow files from **`dockpipe init`** live in your project, typically under **`workflows/`**. Legacy template-oriented paths still exist in some maintainer and compatibility flows, but they are not the normal starting point for new projects.
 
 ---
 
@@ -53,7 +53,7 @@ sudo apt-get install docker.io
 
 **Persistent data:** By default dockpipe mounts a named volume `dockpipe-data` at `/dockpipe-data` and sets `HOME` there so tool state (e.g. first-time login) persists. Use `--data-vol <name>`, `--data-dir /path`, or `--no-data` to change or disable. If a tool exits immediately with the default volume, try `--no-data` or `--reinit` to get a fresh volume.
 
-**Workflow YAML:** Multi-step templates (`steps:`, async groups, `outputs:`) are documented in **[workflow-yaml.md](workflow-yaml.md)**.
+**Workflow YAML:** Multi-step templates (`steps:`, async groups, `outputs:`) are documented in **[workflows/workflow-yaml.md](workflows/workflow-yaml.md)**.
 
 ---
 
@@ -108,9 +108,9 @@ dockpipe -- ls -la
 
 **Host `git`:** additionally required for **clone / worktree / commit-on-host** (e.g. **`--repo`**, **`clone-worktree.sh`**). Git for Windows covers that for most users.
 
-**Local / gitignored config in worktrees** (e.g. `.env`, `appsettings.Development.json`): see **[worktree-include.md](worktree-include.md)** — use **`.dockpipe-worktreeinclude`** or **`.worktreeinclude`** so dockpipe copies those paths into the worktree after it is created.
+**Local / gitignored config in worktrees** (e.g. `.env`, `appsettings.Development.json`): see **[runtime/worktree-include.md](runtime/worktree-include.md)** — use **`.dockpipe-worktreeinclude`** or **`.worktreeinclude`** so dockpipe copies those paths into the worktree after it is created.
 
-You do **not** need a WSL distro or Linux `dockpipe` unless you opt into **`DOCKPIPE_USE_WSL_BRIDGE=1`**. If **`bash`** is missing but **WSL** is installed, the CLI may offer to **re-run through WSL** (interactive). Optional advanced note: **[wsl-windows.md](wsl-windows.md)** only if you still use **git bundle** handoff between WSL and Windows clones — not part of the default native-Windows flow.
+You do **not** need a WSL distro or Linux `dockpipe` unless you opt into **`DOCKPIPE_USE_WSL_BRIDGE=1`**. If **`bash`** is missing but **WSL** is installed, the CLI may offer to **re-run through WSL** (interactive). Optional advanced note: **[runtime/wsl-windows.md](runtime/wsl-windows.md)** only if you still use **git bundle** handoff between WSL and Windows clones — not part of the default native-Windows flow.
 
 ### Install `dockpipe.exe` on Windows
 
@@ -184,7 +184,7 @@ dockpipe windows setup --distro Ubuntu --install-command "<your install command>
 dockpipe windows doctor
 ```
 
-**Manual QA:** **[manual-qa.md](qa/manual-qa.md)**.
+**Manual QA:** **[manual-qa.md](manual-qa.md)**.
 
 ---
 

@@ -29,7 +29,7 @@ Shell assets (`assets/entrypoint.sh` at repo root, etc.) stay outside **`src/`**
 
 ### Multi-step workflows: async group, join point, merge
 
-**End-user / authoritative spec:** **[../../../docs/workflow-yaml.md](../../../docs/workflow-yaml.md)** (keep in sync when behavior changes).
+**End-user / authoritative spec:** **[../../docs/workflows/workflow-yaml.md](../../docs/workflows/workflow-yaml.md)** (keep in sync when behavior changes).
 
 One-liner: **parallel steps share one merge; declaration order decides overwrites; the next blocking step is the join.**
 

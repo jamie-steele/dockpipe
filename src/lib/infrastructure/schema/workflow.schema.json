@@ -880,7 +880,7 @@
     "runtime": { "type": "string" },
     "vault": {
       "type": "string",
-      "description": "Vault mode for op inject (e.g. op). See docs/vault.md."
+      "description": "Vault mode for op inject (e.g. op). See docs/runtime/vault.md."
     },
     "strategy": { "type": "string" },
     "strategies": {

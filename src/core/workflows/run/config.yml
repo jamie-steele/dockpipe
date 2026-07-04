@@ -1,5 +1,5 @@
 # Simple git path: run a command in isolation, then one commit on the current branch (no worktrees / new branches).
-# For isolated branches, worktrees, and AI resolver flows, use strategy worktree in your own workflow YAML (see docs/workflow-yaml.md).
+# For isolated branches, worktrees, and AI resolver flows, use strategy worktree in your own workflow YAML (see docs/workflows/workflow-yaml.md).
 # Commit is provided by named strategy commit (templates/core/strategies/commit).
 name: run
 description: Disposable container run, then commit changes on your current branch.

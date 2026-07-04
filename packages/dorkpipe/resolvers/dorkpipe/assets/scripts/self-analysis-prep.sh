@@ -57,7 +57,7 @@ find "$ROOT/packages/dorkpipe/lib" -name '*.go' 2>/dev/null | wc -l | tr -d ' ' 
 	find "$ROOT/workflows" -name 'config.yml' 2>/dev/null | sort
 } >"$OUT/workflow_configs.txt" || true
 
-for doc in packages/dorkpipe/lib/README.md AGENTS.md docs/artifacts.md; do
+for doc in packages/dorkpipe/lib/README.md AGENTS.md docs/runtime/artifacts.md; do
 	if [[ -f "$ROOT/$doc" ]]; then
 		echo "### $doc (first 40 lines)"
 		head -40 "$ROOT/$doc"

@@ -317,7 +317,7 @@ func Normalize(workdir string, env map[string]string) (Result, error) {
 
 **DorkPipe:** load %s to classify, correlate with repo analysis, prioritize, and suggest fixes. Compare %s across runs for new/resolved/changed severity.
 
-See **docs/artifacts.md** (CI bundle).
+See **docs/runtime/artifacts.md** (CI bundle).
 `,
 		backtick("1.0")+"",
 		backtick("src/schemas/dockpipe-ci-findings.schema.json"),

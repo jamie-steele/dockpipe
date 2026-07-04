@@ -3,7 +3,7 @@ package domain
 import "strings"
 
 // runtime.type (DOCKPIPE_RUNTIME_TYPE): three behavior classifications only — not Docker vs EC2, not tool names.
-// See docs/architecture-model.md (normative).
+// See docs/concepts/architecture-model.md (normative).
 const (
 	RuntimeKindExecution = "execution" // non-interactive command/test execution
 	RuntimeKindIDE       = "ide"       // interactive development environment

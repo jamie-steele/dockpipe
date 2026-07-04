@@ -112,7 +112,7 @@ func CheckWorkflowPackageRequiresCapabilities(workdir, repoRoot, wfRoot, wfConfi
 		return nil
 	}
 	return fmt.Errorf(
-		"workflow package requires capabilities not satisfied by installed resolver packages: %s — install resolvers that declare these in package.yml (see docs/capabilities.md)",
+		"workflow package requires capabilities not satisfied by installed resolver packages: %s — install resolvers that declare these in package.yml (see docs/concepts/capabilities.md)",
 		strings.Join(missing, ", "),
 	)
 }

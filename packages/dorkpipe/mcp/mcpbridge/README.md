@@ -33,7 +33,7 @@ Every request must authenticate with the same secret via **`Authorization: Beare
 |-----------------|--------|
 | `MCP_HTTP_LISTEN` / `-http` | Listen address (e.g. `:8443`). Empty = stdio (default). |
 | `MCP_HTTP_API_KEY` / `-api-key` | **Required** in HTTP mode **unless** `MCP_HTTP_KEY_TIERS_FILE` is set. |
-| `MCP_HTTP_KEY_TIERS_FILE` / `-key-tiers-file` | JSON file: `[{"key":"secret","tier":"readonly"},…]` — **replaces** single `MCP_HTTP_API_KEY`; each key has its own tier. See **`docs/examples/mcp-http-key-tiers.json`**. |
+| `MCP_HTTP_KEY_TIERS_FILE` / `-key-tiers-file` | JSON file: `[{"key":"secret","tier":"readonly"},…]` — **replaces** single `MCP_HTTP_API_KEY`; each key has its own tier. See **`packages/dorkpipe/mcp/examples/mcp-http-key-tiers.json`**. |
 | `MCP_TLS_CERT_FILE` / `-tls-cert` | PEM certificate (HTTPS). |
 | `MCP_TLS_KEY_FILE` / `-tls-key` | PEM private key (HTTPS). |
 | `MCP_HTTP_INSECURE_LOOPBACK` / `-insecure-loopback` | Allow plain HTTP on loopback only (dev). |

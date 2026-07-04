@@ -69,4 +69,4 @@ DORKPIPE_SELF_ANALYSIS_SPEC=packages/dorkpipe/resolvers/dorkpipe-self-analysis/s
 - **No fake analysis**: prep/signals only record command output.
 - **DockPipe** is the fabric; **DorkPipe** is the DAG orchestrator on top.
 
-See **`AGENTS.md`** and **`docs/artifacts.md`**.
+See **`AGENTS.md`** and **`docs/runtime/artifacts.md`**.

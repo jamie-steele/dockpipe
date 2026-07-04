@@ -183,7 +183,7 @@ func cmdPackageManifest(args []string) error {
 }
 
 const examplePackageManifestYAML = `# package.yml — metadata for a DockPipe package (workflow, resolver, core slice, or assets).
-# Place next to the package tree under bin/.dockpipe/internal/packages/ (see docs/package-model.md).
+# Place next to the package tree under bin/.dockpipe/internal/packages/ (see docs/packages/package-model.md).
 schema: 1
 name: my-package
 version: 1.2.3
@@ -202,7 +202,7 @@ license: Apache-2.0
 kind: workflow
 # kind: package — umbrella at e.g. packages/agent/package.yml (metadata only; resolvers are under resolvers/):
 # includes_resolvers: [codex, claude, ollama]
-# kind: resolver — set capability to the dotted id this package provides (see docs/capabilities.md):
+# kind: resolver — set capability to the dotted id this package provides (see docs/concepts/capabilities.md):
 # capability: cli.codex
 # kind: workflow — capability dependencies:
 # requires_capabilities: [cli.codex, app.vscode]
@@ -218,7 +218,7 @@ kind: workflow
 #   script: tests/run.sh
 # Optional — platform/vendor id for filtering (short label, e.g. cloudflare, aws — not a URL):
 # provider: cloudflare
-# Optional — authoring / store discovery (see docs/package-model.md):
+# Optional — authoring / store discovery (see docs/packages/package-model.md):
 # tags: [ci, security]
 # keywords: [dockpipe, workflow]
 # min_dockpipe_version: "0.9.0"
@@ -241,7 +241,7 @@ func printPackageUsage() {
 const packageUsageText = `dockpipe package
 
 Inspect installed packages and package metadata. Installed store content lives under
-bin/.dockpipe/internal/packages/ by default (see docs/package-model.md).
+bin/.dockpipe/internal/packages/ by default (see docs/packages/package-model.md).
 
 Usage:
   dockpipe package list [--workdir <path>]
@@ -258,7 +258,7 @@ Usage:
   test      Run package-owned tests declared as test.script in package.yml for source checkouts.
   compile   Materialize core / resolvers / workflows into bin/.dockpipe/internal/packages/ (see compile --help).
 
-Optional repo-root dockpipe.config.json lists compile.workflows roots (resolver discovery uses the same list plus src/core/resolvers); compile.bundles merged into workflows when set; see docs/package-model.md.
+Optional repo-root dockpipe.config.json lists compile.workflows roots (resolver discovery uses the same list plus src/core/resolvers); compile.bundles merged into workflows when set; see docs/packages/package-model.md.
 
 Environment:
   DOCKPIPE_PACKAGES_ROOT   Override packages root (default: <workdir>/bin/.dockpipe/internal/packages).

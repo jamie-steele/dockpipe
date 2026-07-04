@@ -3,7 +3,7 @@ name: user-insight-process
 description: >-
   Run the packaged user-insight processing host steps and optional export-by-category.
   Uses the dorkpipe CLI user-insight commands. Does not treat user text as truth —
-  see docs/artifacts.md and resolvers/user-insight-process/README.md.
+  see docs/runtime/artifacts.md and resolvers/user-insight-process/README.md.
 platforms: [windows, deb]
 dependencies:
   host:

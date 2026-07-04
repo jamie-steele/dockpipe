@@ -58,7 +58,7 @@ Treat the Pipeon desktop shell and the Pipeon editor/runtime surface as **separa
 
 > `release/releasenotes/<version>.md` is required. The workflow fails fast if it is missing.
 
-**Before merging to `master` (optional but recommended):** run **[manual QA](../../docs/qa/manual-qa.md)** for the platforms you changed.
+**Before merging to `master` (optional but recommended):** run **[manual QA](../../docs/manual-qa.md)** for the platforms you changed.
 
 **winget:** after the release is live, optionally submit/update a manifest for the Microsoft community repo — see **[../packaging/winget/README.md](../packaging/winget/README.md)**.
 

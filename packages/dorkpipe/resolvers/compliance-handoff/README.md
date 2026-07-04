@@ -10,9 +10,9 @@ make compliance-handoff
 dockpipe --workflow compliance-handoff --workdir . --
 ```
 
-**Reads:** **`docs/artifacts.md`** (governance / artifact contract).
+**Reads:** **`docs/runtime/artifacts.md`** (governance / artifact contract).
 
-**Workflow:** `config.yml` sets **`docker_preflight: false`** so host-only **`run:`** steps skip the Docker socket check (see **`docs/workflow-yaml.md`**). Do not use that if your host scripts call **`docker`**.
+**Workflow:** `config.yml` sets **`docker_preflight: false`** so host-only **`run:`** steps skip the Docker socket check (see **`docs/workflows/workflow-yaml.md`**). Do not use that if your host scripts call **`docker`**.
 
 **Touches:** **`scripts/dorkpipe/compliance-handoff.sh`** — prints artifact presence + short summaries.
 

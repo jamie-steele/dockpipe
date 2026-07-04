@@ -52,7 +52,7 @@ filesystem. Model output is never executed directly.
   "attachments": [
     {
       "kind": "file",
-      "path": "docs/architecture.md"
+      "path": "docs/concepts/architecture.md"
     }
   ],
   "client_capabilities": {

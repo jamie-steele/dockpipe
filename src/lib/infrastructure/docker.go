@@ -85,7 +85,7 @@ func printDockerRunFailureHints(stderr *os.File, dockerStderr string) {
 		return
 	}
 	if strings.Contains(s, "permission denied") && (strings.Contains(s, "mount") || strings.Contains(s, "bind") || strings.Contains(s, "/work")) {
-		fmt.Fprintln(stderr, "[dockpipe] Bind mount: check the host path exists, permissions, and Docker Desktop “File sharing” / drive access (Windows/macOS). WSL: docs/wsl-windows.md")
+		fmt.Fprintln(stderr, "[dockpipe] Bind mount: check the host path exists, permissions, and Docker Desktop “File sharing” / drive access (Windows/macOS). WSL: docs/runtime/wsl-windows.md")
 	}
 	if strings.Contains(s, "invalid mount") || strings.Contains(s, "not a directory") {
 		fmt.Fprintln(stderr, "[dockpipe] Mount: verify `-v` paths and that the directory exists on the host.")

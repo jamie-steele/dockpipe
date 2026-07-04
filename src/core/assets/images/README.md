@@ -10,4 +10,4 @@
 
 Build context is always the **repository root** (for **`COPY assets/entrypoint.sh`** where used).
 
-**Bundling and licensing:** **[docs/templates-core-assets.md](../../../../docs/templates-core-assets.md)**.
+**Bundling and licensing:** **[docs/packages/templates-core-assets.md](../../../../docs/packages/templates-core-assets.md)**.

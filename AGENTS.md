@@ -11,35 +11,35 @@ Machine-readable routing: `docs/agents/index.yaml`.
 
 | Rule | Where to read |
 | --- | --- |
-| Keep `src/lib/` and `src/cmd/` generic. No repo-specific package/workflow/staging knowledge in engine code. | `docs/agents/engine-boundary.md` |
-| Preserve the architecture model: workflow/template = what, runtime = where, resolver = tool/profile, strategy = lifecycle wrapper. | `docs/agents/architecture.md` |
-| Use package/store helpers for project/global paths. Do not hand-write bare `.dockpipe/internal` paths. | `docs/agents/core-package-model.md` |
-| Prefer the scope model for generated paths: `cwd: artifacts` for simple producers, `cwd: repo` plus `scopes` only when checkout cwd is required. | `docs/agents/path-scopes.md` |
-| Treat Git lifecycle as runtime-owned session behavior. Agents request checkpoint/sync/publish; they do not run raw Git. | `docs/agents/git-runtime-sessions.md` |
-| Template/workflow work should stay in YAML/assets/scripts unless a general primitive is needed. | `docs/agents/yaml-workflows.md` |
-| Package-specific behavior belongs inside package YAML/assets/scripts/docs/tests. | `docs/agents/package-authoring.md` |
-| Keep authored YAML/schema/editor docs in sync when changing workflow/config surfaces. | `docs/agents/yaml-workflows.md` |
-| Secrets must be references only. Never commit plaintext secrets or generated resolved templates. | `docs/agents/safety-guardrails.md` |
-| Treat `bin/.dockpipe/` and `.dorkpipe/` as generated/read-only grounding unless the user asks to refresh. | `docs/agents/artifacts-and-mcp.md` |
-| AI workflows must beat one strong direct worker on quality, safety, cost, review effort, or rerun value. DorkPipe owns the lower-level proof through artifacts/metrics, not user boilerplate. | `docs/agents/ai-workflow-value-bar.md` |
-| Main docs stay canonical for repo facts and public behavior. `docs/agents/` is the compressed routing/safety layer, not a shadow documentation tree. | `docs/agents/docs-system.md` |
-| Treat `docs/agents/todo-index.yaml` as the AI entrypoint for the cross-cutting backlog and keep the linked topic files current when a task materially completes or advances one of those items. | `docs/agents/todo-index.yaml` |
+| Keep `src/lib/` and `src/cmd/` generic. No repo-specific package/workflow/staging knowledge in engine code. | `docs/agents/core/engine-boundary.md` |
+| Preserve the architecture model: workflow/template = what, runtime = where, resolver = tool/profile, strategy = lifecycle wrapper. | `docs/agents/core/architecture.md` |
+| Use package/store helpers for project/global paths. Do not hand-write bare `.dockpipe/internal` paths. | `docs/agents/core/core-package-model.md` |
+| Prefer the scope model for generated paths: `cwd: artifacts` for simple producers, `cwd: repo` plus `scopes` only when checkout cwd is required. | `docs/agents/core/path-scopes.md` |
+| Treat Git lifecycle as runtime-owned session behavior. Agents request checkpoint/sync/publish; they do not run raw Git. | `docs/agents/runtime/git-runtime-sessions.md` |
+| Template/workflow work should stay in YAML/assets/scripts unless a general primitive is needed. | `docs/agents/workflows/yaml-workflows.md` |
+| Package-specific behavior belongs inside package YAML/assets/scripts/docs/tests. | `docs/agents/packages/package-authoring.md` |
+| Keep authored YAML/schema/editor docs in sync when changing workflow/config surfaces. | `docs/agents/workflows/yaml-workflows.md` |
+| Secrets must be references only. Never commit plaintext secrets or generated resolved templates. | `docs/agents/runtime/safety-guardrails.md` |
+| Treat `bin/.dockpipe/` and `.dorkpipe/` as generated/read-only grounding unless the user asks to refresh. | `docs/agents/runtime/artifacts-and-mcp.md` |
+| AI workflows must beat one strong direct worker on quality, safety, cost, review effort, or rerun value. DorkPipe owns the lower-level proof through artifacts/metrics, not user boilerplate. | `docs/agents/workflows/ai-workflow-value-bar.md` |
+| Main docs stay canonical for repo facts and public behavior. `docs/agents/` is the compressed routing/safety layer, not a shadow documentation tree. | `docs/agents/docs/docs-system.md` |
+| Treat `docs/agents/task-index.yaml` as the AI entrypoint for the cross-cutting backlog and keep the linked task files current when a task materially completes or advances one of those items. | `docs/agents/task-index.yaml` |
 
 ## Task Routing
 
 | Task | Read first | Recommended skills |
 | --- | --- | --- |
-| Engine or CLI behavior | `docs/agents/engine-boundary.md`, `docs/agents/architecture.md`, `docs/agents/validation-commands.md` | `dorkpipe-core-review` |
-| Workflow YAML or authored surface | `docs/agents/yaml-workflows.md`, `docs/agents/safety-guardrails.md` | `dorkpipe-yaml-workflows` |
-| Path/scope/artifact migration | `docs/agents/path-scopes.md`, `docs/agents/yaml-workflows.md`, `docs/agents/core-package-model.md` | `dorkpipe-yaml-workflows`, `dorkpipe-package-authoring` |
-| Git runtime sessions or workspace lifecycle | `docs/agents/git-runtime-sessions.md`, `docs/agents/architecture.md`, `docs/agents/path-scopes.md` | `dorkpipe-core-review`, `dorkpipe-yaml-workflows` |
-| Package authoring | `docs/agents/package-authoring.md`, `docs/agents/core-package-model.md` | `dorkpipe-package-authoring` |
-| Package promotion | `docs/agents/package-promotion.md`, `docs/agents/validation-commands.md` | `dorkpipe-package-authoring`, `dorkpipe-core-review` |
-| Agentic/DorkPipe workflows | `docs/agents/ai-workflow-value-bar.md`, `docs/agents/model-escalation.md`, `docs/agents/docs-generation.md`, `docs/agents/planner-promotion-model.md`, `docs/agents/yaml-workflows.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
-| Tooling app or UI surface | `docs/agents/tooling-surfaces.md`, `docs/agents/planner-promotion-model.md`, `docs/todos/agentic-app-ui.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
-| Docs or agent guidance | `docs/agents/token-optimization.md`, `docs/agents/skills.md` | `dorkpipe-token-optimization` |
-| Docs system or sync rules | `docs/agents/docs-system.md`, `docs/agents/token-optimization.md` | `dorkpipe-token-optimization`, `dorkpipe-core-review` |
-| Artifacts or MCP | `docs/agents/artifacts-and-mcp.md`, `docs/agents/safety-guardrails.md` | `dorkpipe-core-review` |
+| Engine or CLI behavior | `docs/agents/core/engine-boundary.md`, `docs/agents/core/architecture.md`, `docs/agents/core/validation-commands.md` | `dorkpipe-core-review` |
+| Workflow YAML or authored surface | `docs/agents/workflows/yaml-workflows.md`, `docs/agents/runtime/safety-guardrails.md` | `dorkpipe-yaml-workflows` |
+| Path/scope/artifact migration | `docs/agents/core/path-scopes.md`, `docs/agents/workflows/yaml-workflows.md`, `docs/agents/core/core-package-model.md` | `dorkpipe-yaml-workflows`, `dorkpipe-package-authoring` |
+| Git runtime sessions or workspace lifecycle | `docs/agents/runtime/git-runtime-sessions.md`, `docs/agents/core/architecture.md`, `docs/agents/core/path-scopes.md` | `dorkpipe-core-review`, `dorkpipe-yaml-workflows` |
+| Package authoring | `docs/agents/packages/package-authoring.md`, `docs/agents/core/core-package-model.md` | `dorkpipe-package-authoring` |
+| Package promotion | `docs/agents/packages/package-promotion.md`, `docs/agents/core/validation-commands.md` | `dorkpipe-package-authoring`, `dorkpipe-core-review` |
+| Agentic/DorkPipe workflows | `docs/agents/workflows/ai-workflow-value-bar.md`, `docs/agents/workflows/model-escalation.md`, `docs/agents/workflows/docs-generation.md`, `docs/agents/workflows/planner-promotion-model.md`, `docs/agents/workflows/yaml-workflows.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
+| Tooling app or UI surface | `docs/agents/workflows/tooling-surfaces.md`, `docs/agents/workflows/planner-promotion-model.md`, `docs/agents/tasks/agentic-app-ui.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
+| Docs or agent guidance | `docs/agents/docs/token-optimization.md`, `docs/agents/docs/skills.md` | `dorkpipe-token-optimization` |
+| Docs system or sync rules | `docs/agents/docs/docs-system.md`, `docs/agents/docs/token-optimization.md` | `dorkpipe-token-optimization`, `dorkpipe-core-review` |
+| Artifacts or MCP | `docs/agents/runtime/artifacts-and-mcp.md`, `docs/agents/runtime/safety-guardrails.md` | `dorkpipe-core-review` |
 
 ## Skill Routing
 
@@ -94,26 +94,26 @@ Report:
 ## Focused Docs
 
 - `docs/agents/index.yaml`
-- `docs/agents/repo-map.md`
-- `docs/agents/architecture.md`
-- `docs/agents/engine-boundary.md`
-- `docs/agents/core-package-model.md`
-- `docs/agents/path-scopes.md`
-- `docs/agents/git-runtime-sessions.md`
-- `docs/agents/git-runtime-auth.md`
-- `docs/agents/yaml-workflows.md`
-- `docs/agents/package-authoring.md`
-- `docs/agents/package-promotion.md`
-- `docs/agents/ai-workflow-value-bar.md`
-- `docs/agents/model-escalation.md`
-- `docs/agents/docs-generation.md`
-- `docs/agents/planner-promotion-model.md`
-- `docs/agents/artifacts-and-mcp.md`
-- `docs/agents/validation-commands.md`
-- `docs/agents/safety-guardrails.md`
-- `docs/agents/token-optimization.md`
-- `docs/agents/skills.md`
-- `docs/agents/docs-system.md`
-- `docs/agents/todo-index.yaml`
+- `docs/agents/core/repo-map.md`
+- `docs/agents/core/architecture.md`
+- `docs/agents/core/engine-boundary.md`
+- `docs/agents/core/core-package-model.md`
+- `docs/agents/core/path-scopes.md`
+- `docs/agents/runtime/git-runtime-sessions.md`
+- `docs/agents/runtime/git-runtime-auth.md`
+- `docs/agents/workflows/yaml-workflows.md`
+- `docs/agents/packages/package-authoring.md`
+- `docs/agents/packages/package-promotion.md`
+- `docs/agents/workflows/ai-workflow-value-bar.md`
+- `docs/agents/workflows/model-escalation.md`
+- `docs/agents/workflows/docs-generation.md`
+- `docs/agents/workflows/planner-promotion-model.md`
+- `docs/agents/runtime/artifacts-and-mcp.md`
+- `docs/agents/core/validation-commands.md`
+- `docs/agents/runtime/safety-guardrails.md`
+- `docs/agents/docs/token-optimization.md`
+- `docs/agents/docs/skills.md`
+- `docs/agents/docs/docs-system.md`
+- `docs/agents/task-index.yaml`
 
 DockPipe runs anything, anywhere, in isolation. Keep it simple. Keep it composable.

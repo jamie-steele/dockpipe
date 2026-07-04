@@ -17,6 +17,6 @@ Shipped stubs set **`DOCKPIPE_RUNTIME_SUBSTRATE`** to **`dockerimage`**, **`dock
 
 Older workflows may still use **`docker`**, **`cli`**, **`cmd`**, **`powershell`**, **`kube-pod`**, **`kubepod`**, **`cloud`**, or **`keystore`**. Those normalize to **`dockerimage`** when the workflow is loaded. Current authored runtime substrates are **`dockerimage`**, **`dockerfile`**, and **`vm`**; **`vmimage`** remains the internal VM substrate label carried by the runtime profile.
 
-Overview: **[docs/architecture-model.md](../../../docs/architecture-model.md)**.
+Overview: **[docs/concepts/architecture-model.md](../../../docs/concepts/architecture-model.md)**.
 
 The runner merges **`runtimes/<name>`** with **`resolvers/<name>`** when both exist (or with an explicit **`--resolver`**).

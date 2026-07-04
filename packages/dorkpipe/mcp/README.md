@@ -62,7 +62,7 @@ Set **`DOCKPIPE_BIN`** and **`DORKPIPE_BIN`** to the absolute executables you wa
 
 **`mcpbridge`** may import **`dockpipe/.../infrastructure`** for **read-only** discovery only; execution stays subprocess-based.
 
-Optional bootstrap manifest (repo checkout): **`docs/examples/mcp-capabilities.bootstrap.json`**.
+Optional bootstrap manifest (repo checkout): **`packages/dorkpipe/mcp/examples/mcp-capabilities.bootstrap.json`**.
 
 **Non-goals:** Rewriting the engine as MCP; DAG scheduling inside MCP; arbitrary host shell without **`dockpipe`/`dorkpipe`**.
 
@@ -70,4 +70,4 @@ Optional bootstrap manifest (repo checkout): **`docs/examples/mcp-capabilities.b
 
 Point **`command`** at **`packages/dorkpipe/bin/mcpd`**. Default tier without env is **`validate`**; use **`DOCKPIPE_MCP_TIER=readonly`** for the smallest surface.
 
-**See also:** repo **`docs/artifacts.md`** (governance / on-disk signals).
+**See also:** repo **`docs/runtime/artifacts.md`** (governance / on-disk signals).

@@ -1393,7 +1393,7 @@ func workdirAndForceArgs(workdir string, force bool) []string {
 
 const packageCompileUsageText = `dockpipe package compile
 
-Validate and materialize packages into bin/.dockpipe/internal/packages/ (see docs/package-model.md).
+Validate and materialize packages into bin/.dockpipe/internal/packages/ (see docs/packages/package-model.md).
 
 Usage:
   dockpipe package compile core [options]
@@ -1491,7 +1491,7 @@ Options:
 const packageCompileAllUsageText = `dockpipe package compile all
 
 Runs: compile core → compile resolver packages (one tarball per profile) → compile workflow packages (compile.bundles merged into compile.workflows when set).
-Uses dockpipe.config.json compile.workflows for source lists when present (see package-model.md).
+Uses dockpipe.config.json compile.workflows for source lists when present (see packages/package-model.md).
 
 Note: dockpipe build runs this command with --force so existing compiled trees are replaced.
 

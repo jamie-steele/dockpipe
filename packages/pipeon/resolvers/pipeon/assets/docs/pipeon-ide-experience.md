@@ -21,7 +21,7 @@
 
 ### What this repo ships *today* vs the product
 
-The **shell scripts** (`packages/pipeon/resolvers/pipeon/bin/pipeon`, bundle + one-shot chat) are a **developer harness** to exercise the same context bundle and a minimal local chat path before the branded app exists. They are **not** the Pipeon user experience. The **editor** is a **fork of VS Code (Code OSS)** with Pipeon layered on—see **`pipeon-vscode-fork.md`**, **`pipeon-architecture.md`**, and **`../vscode-extension/`** (sibling of **`assets/`**). Harness: **`../assets/scripts/README.md`**.
+The **shell scripts** (`packages/pipeon/resolvers/pipeon/bin/pipeon`, bundle + one-shot chat) are a **developer harness** to exercise the same context bundle and a minimal local chat path before the branded app exists. They are **not** the Pipeon user experience. The **editor** is a **fork of VS Code (Code OSS)** with Pipeon layered on—see **`pipeon-vscode-fork.md`**, **`pipeon-concepts/architecture.md`**, and **`../vscode-extension/`** (sibling of **`assets/`**). Harness: **`../assets/scripts/README.md`**.
 
 ---
 
@@ -208,4 +208,4 @@ The **shipping** Pipeon experience is a **desktop (or equivalent) application** 
 
 **Release plan:** keep harness gates until **`VERSION` ≥ 0.6.5** as planned; the **app** may ship on its own cadence but should consume the **same** artifact contracts.
 
-**Architecture (gateway, MCP, Docker, mounts):** **`pipeon-architecture.md`**. Harness details: **`../assets/scripts/README.md`**.
+**Architecture (gateway, MCP, Docker, mounts):** **`pipeon-concepts/architecture.md`**. Harness details: **`../assets/scripts/README.md`**.

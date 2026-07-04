@@ -3,10 +3,10 @@ package domain
 import "strings"
 
 // ResolverAssignments holds merged fields from runtime + resolver profiles (see infrastructure.LoadIsolationProfile).
-// A resolver profile is a concrete package that satisfies a capability (dotted id); see docs/capabilities.md.
+// A resolver profile is a concrete package that satisfies a capability (dotted id); see docs/concepts/capabilities.md.
 // Runtime file: templates/core/runtimes/<name> (DOCKPIPE_RUNTIME_*). Resolver file: templates/core/resolvers/<name> (DOCKPIPE_RESOLVER_*).
-// Normative model: docs/architecture-model.md.
-// See also docs/isolation-layer.md.
+// Normative model: docs/concepts/architecture-model.md.
+// See also docs/concepts/isolation-layer.md.
 // Contract (not beside a workflow folder):
 //   - DOCKPIPE_RUNTIME_IMAGE_TEMPLATE or DOCKPIPE_RESOLVER_TEMPLATE: built-in template name for docker image (see infrastructure.TemplateBuild).
 //     Omit when DOCKPIPE_RUNTIME_WORKFLOW / DOCKPIPE_RESOLVER_WORKFLOW or DOCKPIPE_RUNTIME_HOST_SCRIPT / DOCKPIPE_RESOLVER_HOST_ISOLATE is set.

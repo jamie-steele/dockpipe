@@ -17,9 +17,9 @@ tasks:
   orientation:
     read:
       - AGENTS.md
-      - docs/agents/repo-map.md
-      - docs/agents/architecture.md
-      - docs/agents/docs-system.md
+      - docs/agents/core/repo-map.md
+      - docs/agents/core/architecture.md
+      - docs/agents/docs/docs-system.md
     optional:
       - docs/README.md
     skills:
@@ -28,14 +28,14 @@ tasks:
   engine_change:
     read:
       - AGENTS.md
-      - docs/agents/engine-boundary.md
-      - docs/agents/architecture.md
-      - docs/agents/core-package-model.md
-      - docs/agents/validation-commands.md
+      - docs/agents/core/engine-boundary.md
+      - docs/agents/core/architecture.md
+      - docs/agents/core/package-model.md
+      - docs/agents/core/validation-commands.md
     optional:
-      - docs/package-model.md
-      - docs/architecture-model.md
-      - docs/capabilities.md
+      - docs/packages/package-model.md
+      - docs/concepts/architecture-model.md
+      - docs/concepts/capabilities.md
     skills:
       - dorkpipe-core-review
       - dorkpipe-token-optimization
@@ -52,13 +52,13 @@ tasks:
   yaml_workflow_change:
     read:
       - AGENTS.md
-      - docs/agents/yaml-workflows.md
-      - docs/agents/path-scopes.md
-      - docs/agents/architecture.md
-      - docs/agents/safety-guardrails.md
-      - docs/agents/validation-commands.md
+      - docs/agents/workflows/yaml-workflows.md
+      - docs/agents/core/path-scopes.md
+      - docs/agents/core/architecture.md
+      - docs/agents/runtime/safety-guardrails.md
+      - docs/agents/core/validation-commands.md
     optional:
-      - docs/workflow-yaml.md
+      - docs/workflows/workflow-yaml.md
       - src/lib/infrastructure/schema/workflow.schema.json
       - src/app/tooling/vscode-extensions/dockpipe-language-support/extension.js
     skills:
@@ -71,13 +71,13 @@ tasks:
   path_scope_migration:
     read:
       - AGENTS.md
-      - docs/agents/path-scopes.md
-      - docs/agents/yaml-workflows.md
-      - docs/agents/core-package-model.md
-      - docs/agents/package-authoring.md
-      - docs/agents/validation-commands.md
+      - docs/agents/core/path-scopes.md
+      - docs/agents/workflows/yaml-workflows.md
+      - docs/agents/core/package-model.md
+      - docs/agents/packages/package-authoring.md
+      - docs/agents/core/validation-commands.md
     optional:
-      - docs/workflow-yaml.md
+      - docs/workflows/workflow-yaml.md
       - src/core/assets/scripts/README.md
       - src/lib/application/sdk_cmd.go
       - src/lib/infrastructure/schema/workflow.schema.json
@@ -96,16 +96,16 @@ tasks:
   git_runtime_sessions:
     read:
       - AGENTS.md
-      - docs/agents/git-runtime-sessions.md
-      - docs/agents/git-runtime-auth.md
-      - docs/agents/architecture.md
-      - docs/agents/engine-boundary.md
-      - docs/agents/path-scopes.md
-      - docs/agents/core-package-model.md
-      - docs/agents/validation-commands.md
+      - docs/agents/runtime/git-runtime-sessions.md
+      - docs/agents/runtime/git-runtime-auth.md
+      - docs/agents/core/architecture.md
+      - docs/agents/core/engine-boundary.md
+      - docs/agents/core/path-scopes.md
+      - docs/agents/core/package-model.md
+      - docs/agents/core/validation-commands.md
     optional:
-      - docs/git-runtime-sessions.md
-      - docs/workflow-yaml.md
+      - docs/runtime/git-runtime-sessions.md
+      - docs/workflows/workflow-yaml.md
       - src/lib/infrastructure/schema/workflow.schema.json
     skills:
       - dorkpipe-core-review
@@ -125,14 +125,14 @@ tasks:
   package_authoring:
     read:
       - AGENTS.md
-      - docs/agents/package-authoring.md
-      - docs/agents/path-scopes.md
-      - docs/agents/core-package-model.md
-      - docs/agents/safety-guardrails.md
-      - docs/agents/validation-commands.md
+      - docs/agents/packages/package-authoring.md
+      - docs/agents/core/path-scopes.md
+      - docs/agents/core/package-model.md
+      - docs/agents/runtime/safety-guardrails.md
+      - docs/agents/core/validation-commands.md
     optional:
-      - docs/package-model.md
-      - docs/package-quickstart.md
+      - docs/packages/package-model.md
+      - docs/packages/package-quickstart.md
     skills:
       - dorkpipe-package-authoring
       - dorkpipe-token-optimization
@@ -144,13 +144,13 @@ tasks:
   package_promotion:
     read:
       - AGENTS.md
-      - docs/agents/package-promotion.md
-      - docs/agents/package-authoring.md
-      - docs/agents/core-package-model.md
-      - docs/agents/safety-guardrails.md
-      - docs/agents/validation-commands.md
+      - docs/agents/packages/package-promotion.md
+      - docs/agents/packages/package-authoring.md
+      - docs/agents/core/package-model.md
+      - docs/agents/runtime/safety-guardrails.md
+      - docs/agents/core/validation-commands.md
     optional:
-      - docs/package-model.md
+      - docs/packages/package-model.md
     skills:
       - dorkpipe-package-authoring
       - dorkpipe-core-review
@@ -165,15 +165,15 @@ tasks:
   agentic_ai_workflow:
     read:
       - AGENTS.md
-      - docs/agents/yaml-workflows.md
-      - docs/agents/ai-workflow-value-bar.md
-      - docs/agents/model-escalation.md
-      - docs/agents/docs-generation.md
-      - docs/agents/planner-promotion-model.md
-      - docs/agents/safety-guardrails.md
-      - docs/agents/validation-commands.md
+      - docs/agents/workflows/yaml-workflows.md
+      - docs/agents/workflows/ai-workflow-value-bar.md
+      - docs/agents/workflows/model-escalation.md
+      - docs/agents/workflows/docs-generation.md
+      - docs/agents/workflows/planner-promotion-model.md
+      - docs/agents/runtime/safety-guardrails.md
+      - docs/agents/core/validation-commands.md
     optional:
-      - docs/agentic-workflows.md
+      - docs/workflows/agentic-workflows.md
       - docs/research/agentic-workflow-research-2026.md
       - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
     skills:
@@ -193,15 +193,15 @@ tasks:
   tooling_surface_change:
     read:
       - AGENTS.md
-      - docs/agents/tooling-surfaces.md
-      - docs/agents/planner-promotion-model.md
-      - docs/agents/yaml-workflows.md
-      - docs/agents/model-escalation.md
-      - docs/agents/validation-commands.md
+      - docs/agents/workflows/tooling-surfaces.md
+      - docs/agents/workflows/planner-promotion-model.md
+      - docs/agents/workflows/yaml-workflows.md
+      - docs/agents/workflows/model-escalation.md
+      - docs/agents/core/validation-commands.md
     optional:
-      - docs/agentic-workflows.md
-      - docs/workflow-yaml.md
-      - docs/todos/agentic-app-ui.md
+      - docs/workflows/agentic-workflows.md
+      - docs/workflows/workflow-yaml.md
+      - docs/agents/tasks/agentic-app-ui.md
       - src/app/tooling/vscode-extensions/dockpipe-language-support/extension.js
       - packages/pipeon/resolvers/pipeon/vscode-extension/README.md
       - packages/pipeon/resolvers/pipeon/vscode-extension/src/extension.ts
@@ -217,15 +217,15 @@ tasks:
   docs_generation:
     read:
       - AGENTS.md
-      - docs/agents/docs-system.md
-      - docs/agents/docs-generation.md
-      - docs/agents/planner-promotion-model.md
-      - docs/agents/token-optimization.md
-      - docs/agents/safety-guardrails.md
-      - docs/agents/validation-commands.md
+      - docs/agents/docs/docs-system.md
+      - docs/agents/workflows/docs-generation.md
+      - docs/agents/workflows/planner-promotion-model.md
+      - docs/agents/docs/token-optimization.md
+      - docs/agents/runtime/safety-guardrails.md
+      - docs/agents/core/validation-commands.md
     optional:
-      - docs/agentic-workflows.md
-      - docs/workflow-yaml.md
+      - docs/workflows/agentic-workflows.md
+      - docs/workflows/workflow-yaml.md
       - packages/dorkpipe/resolvers/dorkpipe/assets/docs/example-brain/index.md
     skills:
       - dorkpipe-agentic-yaml
@@ -237,10 +237,10 @@ tasks:
   artifacts_or_mcp:
     read:
       - AGENTS.md
-      - docs/agents/artifacts-and-mcp.md
-      - docs/agents/safety-guardrails.md
+      - docs/agents/runtime/artifacts-and-mcp.md
+      - docs/agents/runtime/safety-guardrails.md
     optional:
-      - docs/artifacts.md
+      - docs/runtime/artifacts.md
       - packages/dorkpipe-mcp/README.md
       - packages/dorkpipe-mcp/mcpbridge/README.md
     skills:
@@ -255,11 +255,11 @@ tasks:
   docs_or_agent_guidance:
     read:
       - AGENTS.md
-      - docs/agents/docs-system.md
-      - docs/agents/token-optimization.md
-      - docs/agents/skills.md
+      - docs/agents/docs/docs-system.md
+      - docs/agents/docs/token-optimization.md
+      - docs/agents/docs/skills.md
       - docs/agents/index.yaml
-      - docs/agents/todo-index.yaml
+      - docs/agents/task-index.yaml
     skills:
       - dorkpipe-token-optimization
       - dorkpipe-core-review
@@ -269,28 +269,28 @@ tasks:
   backlog_or_followup_update:
     read:
       - AGENTS.md
-      - docs/agents/docs-system.md
-      - docs/agents/todo-index.yaml
-      - docs/agents/repo-map.md
-      - docs/agents/planner-promotion-model.md
-      - docs/agents/token-optimization.md
+      - docs/agents/docs/docs-system.md
+      - docs/agents/task-index.yaml
+      - docs/agents/core/repo-map.md
+      - docs/agents/workflows/planner-promotion-model.md
+      - docs/agents/docs/token-optimization.md
     optional:
-      - docs/operation-results.md
-      - docs/git-runtime-sessions.md
-      - docs/agents/architecture.md
+      - docs/runtime/operation-results.md
+      - docs/runtime/git-runtime-sessions.md
+      - docs/agents/core/architecture.md
       - packages/dorkpipe/resolvers/dorkpipe/assets/docs/example-brain/index.md
     skills:
       - dorkpipe-token-optimization
       - dorkpipe-core-review
     validation:
-      - rg -n "TODO-00|Current State|Still Open" docs/agents/todo-index.yaml docs/todos -S
+      - rg -n "TASK-00|Current State|Still Open" docs/agents/task-index.yaml docs/agents/tasks -S
 
   skills_render:
     read:
       - AGENTS.md
-      - docs/agents/docs-system.md
-      - docs/agents/skills.md
-      - docs/agents/package-authoring.md
+      - docs/agents/docs/docs-system.md
+      - docs/agents/docs/skills.md
+      - docs/agents/packages/package-authoring.md
       - packages/dorkpipe/workflows/skills.render/config.yml
     skills:
       - dorkpipe-package-authoring
@@ -303,11 +303,11 @@ tasks:
   safety_or_secrets:
     read:
       - AGENTS.md
-      - docs/agents/docs-system.md
-      - docs/agents/safety-guardrails.md
-      - docs/agents/artifacts-and-mcp.md
+      - docs/agents/docs/docs-system.md
+      - docs/agents/runtime/safety-guardrails.md
+      - docs/agents/runtime/artifacts-and-mcp.md
     optional:
-      - docs/vault.md
+      - docs/runtime/vault.md
     skills:
       - dorkpipe-core-review
       - dorkpipe-token-optimization

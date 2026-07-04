@@ -348,7 +348,7 @@ steps:
           require_approval: true
           outputs:
             - source: merge/final.md
-              path: docs/dorkpipe-orchestration-synthesis.md
+              path: docs/workflows/dorkpipe-orchestration-synthesis.md
 
   - id: run-workers
     kind: host

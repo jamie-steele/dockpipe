@@ -69,7 +69,7 @@ type Workflow struct {
 	Strategy string `yaml:"strategy,omitempty"`
 	// Strategies: optional allowlist of strategy names; if non-empty, --strategy / workflow.strategy must be listed.
 	Strategies []string `yaml:"strategies,omitempty"`
-	// Vault names which backend runs secret→env injection for this workflow (see docs/vault.md).
+	// Vault names which backend runs secret→env injection for this workflow (see docs/runtime/vault.md).
 	// "op" = 1Password CLI (op inject). "none" / "off" = skip op inject for this workflow.
 	// Omit to use dockpipe.config.json secrets.vault when set, else best-effort inject when the template exists.
 	Vault string `yaml:"vault,omitempty"`
@@ -808,7 +808,7 @@ func ValidateWorkflowNamespaceField(w *Workflow) error {
 	return ValidateNamespace(w.Namespace)
 }
 
-// ValidateWorkflowVaultField checks workflow vault: when set, must be a supported token (see docs/vault.md).
+// ValidateWorkflowVaultField checks workflow vault: when set, must be a supported token (see docs/runtime/vault.md).
 func ValidateWorkflowVaultField(w *Workflow) error {
 	if w == nil {
 		return nil

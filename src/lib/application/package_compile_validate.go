@@ -98,7 +98,7 @@ func validateCompileOutputsScoped(workdir string, requireWorkflowNamespace bool,
 					// Local compiled workflow tarballs are allowed to omit namespace.
 					// Namespace remains relevant for store-facing resolution and packaged workflow selection.
 				} else {
-					return fmt.Errorf("compiled %s package in %s must set namespace — see %s and docs/package-model.md", kind, filepath.Base(tgz), pmPathInTar)
+					return fmt.Errorf("compiled %s package in %s must set namespace — see %s and docs/packages/package-model.md", kind, filepath.Base(tgz), pmPathInTar)
 				}
 			} else if err := domain.ValidateNamespace(ns); err != nil {
 				return fmt.Errorf("%s: %w", tgz, err)

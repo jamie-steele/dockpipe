@@ -7,9 +7,9 @@ Start at:
 - `AGENTS.md`
 - `docs/agents/index.yaml`
 
-Use `docs/agents/docs-system.md` for the contract between canonical main docs and the compressed
+Use `docs/agents/docs/docs-system.md` for the contract between canonical main docs and the compressed
 agent-facing layer.
 
-The active AI backlog lives at:
+The active AI task backlog lives at:
 
-- `docs/agents/todo-index.yaml`
+- `docs/agents/task-index.yaml`

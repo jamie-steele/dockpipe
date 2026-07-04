@@ -1,7 +1,7 @@
 # Design mock — illustrates multi-step pipeline shape alongside the real single-flow config.yml.
 # Packaged workflow calls use workflow + package; tarball-only resolution and richer step-level
-# overrides remain as in docs/package-model.md.
-# Tarball-only resolution and richer step-level overrides remain as in docs/package-model.md.
+# overrides remain as in docs/packages/package-model.md.
+# Tarball-only resolution and richer step-level overrides remain as in docs/packages/package-model.md.
 #
 # See README.md "Design mock (pipeline shape)".
 

@@ -19,7 +19,7 @@ func ComplianceSummary(workdir string) (string, error) {
 
 	var b strings.Builder
 	b.WriteString("\n=== DockPipe — compliance & security posture handoff (signals only) ===\n")
-	b.WriteString("Read: docs/artifacts.md\n\n")
+	b.WriteString("Read: docs/runtime/artifacts.md\n\n")
 
 	findingsPath, findingsErr := statepaths.PackageCIFindingsPath(root)
 	if findingsErr == nil && fileExists(findingsPath) {
@@ -63,7 +63,7 @@ func ComplianceSummary(workdir string) (string, error) {
 	}
 
 	b.WriteString("\nAI: Answer compliance/security questions using AGENTS.md + artifacts above; do not claim certified compliance.\n")
-	b.WriteString("See docs/artifacts.md\n")
+	b.WriteString("See docs/runtime/artifacts.md\n")
 	return b.String(), nil
 }
 

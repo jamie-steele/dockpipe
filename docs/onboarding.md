@@ -20,7 +20,7 @@ If something fails, **`dockpipe doctor`** checks **bash**, **Docker**, and bundl
 |--------|--------|------|
 | **Run** | Host | Optional scripts before the container (`run:` / `--run`). |
 | **Isolate** | Container | Your command after **`--`**; project at **`/work`**. |
-| **Act** | Host or container | Optional script after the main command (see **[architecture.md](architecture.md)**). |
+| **Act** | Host or container | Optional script after the main command (see **[concepts/architecture.md](concepts/architecture.md)**). |
 
 Most days: **`dockpipe -- <command>`** only.
 
@@ -32,10 +32,10 @@ Most days: **`dockpipe -- <command>`** only.
 dockpipe --workflow test --runtime dockerimage
 ```
 
-- **`--workflow test`** — **This repo’s CI** uses **`go vet`** in Docker only (no `go test`); **govulncheck** / **gosec** run on the **host** in the same job.  
+- **`--workflow test`** — This repo’s containerized CI-parity workflow. It runs **`go test`**, **`go vet`**, **`staticcheck`**, **`govulncheck`**, and **`gosec`** inside Docker so you can validate the isolated toolchain locally. GitHub Actions also runs host-side **`go test`**, **`staticcheck`**, and scan normalization outside this workflow for fast signal and artifact upload.  
 - **`--workflow docs.orchestrate`** — Agentic docs dogfood: declarative task graph, local/cloud lanes, merge, verification, and approval artifacts.
 
-Mount **`--mount "$(go env GOPATH)/pkg:/go/pkg:rw"`** so module data is visible in the container. Workflows load from the **materialized bundle** or **`workflows/`** / **`templates/`** in a checkout.
+Mount **`--mount "$(go env GOPATH)/pkg:/go/pkg:rw"`** so module data is visible in the container. Named workflows usually resolve from project **`workflows/`**, package-owned workflow roots configured through **`dockpipe.config.json`**, or the materialized bundled workflow set. Legacy **`templates/`** lookup still exists for compatibility, but it is not the primary authoring path.
 
 To reuse **`workflows/`** presets in another tree, copy the directory or use **`dockpipe init`** with **`--from`** pointing at that path (see **[AGENTS.md](../AGENTS.md)**).
 
@@ -60,7 +60,7 @@ If you are authoring workflow YAML, the normal path is:
 5. use **`isolate`** only when you must pin a specific image/template
 6. treat top-level **`run`** / **`act`** as compact single-flow shorthand only, not step-workflow defaults
 
-Details: **[architecture-model.md](architecture-model.md)** · **[isolation-layer.md](isolation-layer.md)**.
+Details: **[concepts/architecture-model.md](concepts/architecture-model.md)** · **[concepts/isolation-layer.md](concepts/isolation-layer.md)**.
 
 ---
 
@@ -68,12 +68,12 @@ Details: **[architecture-model.md](architecture-model.md)** · **[isolation-laye
 
 | Doc | Use when |
 |-----|----------|
-| [workflow-yaml.md](workflow-yaml.md) | Editing **`config.yml`**, **`steps:`**, **`resolver`**, **`strategy`**, **`runtime`** |
-| [workflow-authoring.md](workflow-authoring.md) | Short workflow authoring path before the full reference |
-| [package-quickstart.md](package-quickstart.md) | Compile/package/reuse flow |
-| [security-policy.md](security-policy.md) | Container security profiles and effective policy |
-| [image-artifacts.md](image-artifacts.md) | Docker image build/reuse artifacts |
-| [package-model.md](package-model.md) | Authoring vs packages, **`compile.*`** in **`dockpipe.config.json`**, how workflows relate to resolver/runtime/strategy slices |
+| [workflows/workflow-yaml.md](workflows/workflow-yaml.md) | Editing **`config.yml`**, **`steps:`**, **`resolver`**, **`strategy`**, **`runtime`** |
+| [workflows/workflow-authoring.md](workflows/workflow-authoring.md) | Short workflow authoring path before the full reference |
+| [packages/package-quickstart.md](packages/package-quickstart.md) | Compile/package/reuse flow |
+| [security/security-policy.md](security/security-policy.md) | Container security profiles and effective policy |
+| [runtime/image-artifacts.md](runtime/image-artifacts.md) | Docker image build/reuse artifacts |
+| [packages/package-model.md](packages/package-model.md) | Authoring vs packages, **`compile.*`** in **`dockpipe.config.json`**, how workflows relate to resolver/runtime/strategy slices |
 | [cli-reference.md](cli-reference.md) | Flags and precedence |
-| [workflow-yaml.md](workflow-yaml.md) § Chaining | Multiple **`dockpipe`** runs, same workdir |
-| [wsl-windows.md](wsl-windows.md) | Optional WSL bridge on Windows |
+| [workflows/workflow-yaml.md](workflows/workflow-yaml.md) § Chaining | Multiple **`dockpipe`** runs, same workdir |
+| [runtime/wsl-windows.md](runtime/wsl-windows.md) | Optional WSL bridge on Windows |

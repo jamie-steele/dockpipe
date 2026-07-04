@@ -54,7 +54,7 @@ If **`DEVTO_PUBLISH=true`** but neither action is set, the job is **skipped** (c
 ## What gets published
 
 - **Title:** `DEVTO_TITLE` / `DEVTO_ONE_TIME_TITLE` or default from release tag.
-- **Body:** `**[tag](url)**` + **GitHub release** link + **`release/releasenotes/X.Y.Z.md`**.
+- **Body:** markdown with a linked release tag, plus the **GitHub release** link and **`release/releasenotes/X.Y.Z.md`**.
 - **`canonical_url`:** GitHub release URL.
 - **`published`:** `true`.
 

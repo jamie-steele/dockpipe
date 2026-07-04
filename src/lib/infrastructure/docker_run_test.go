@@ -414,11 +414,18 @@ func TestRunContainerWorkspaceVolumeSyncsAroundRun(t *testing.T) {
 	if strings.Count(got, "docker run") < 3 {
 		t.Fatalf("expected sync-in, main run, and sync-out docker run calls, got:\n%s", got)
 	}
-	if !strings.Contains(got, "--name dockpipe-helper-session-volume-seed-") || !strings.Contains(got, "--name dockpipe-helper-session-volume-sync-out-") {
-		t.Fatalf("expected stable seed and sync-out helper container names, got:\n%s", got)
+	seedPath := strings.Contains(got, "--name dockpipe-helper-session-volume-seed-") &&
+		strings.Contains(got, "--label com.dockpipe.helper.unit=session.volume.seed") &&
+		strings.Contains(got, "git clone /dockpipe-sync-src /dockpipe-sync-dst") &&
+		strings.Contains(got, "git -C /dockpipe-sync-dst fetch --prune dockpipe-host")
+	tarPath := strings.Contains(got, "--name dockpipe-helper-session-volume-sync-in-") &&
+		strings.Contains(got, "--label com.dockpipe.helper.unit=session.volume.sync_in") &&
+		strings.Contains(got, "cd /dockpipe-sync-src && tar --exclude=.git --exclude=bin/.dockpipe --exclude=.dorkpipe -cf - . | tar xf - -C /dockpipe-sync-dst")
+	if !seedPath && !tarPath {
+		t.Fatalf("expected either git-seed or tar sync-in helper bootstrap path, got:\n%s", got)
 	}
-	if !strings.Contains(got, "--label com.dockpipe.helper=1") || !strings.Contains(got, "--label com.dockpipe.helper.unit=session.volume.seed") || !strings.Contains(got, "--label com.dockpipe.helper.unit=session.volume.sync_out") {
-		t.Fatalf("expected helper labels on workspace seed/sync containers, got:\n%s", got)
+	if !strings.Contains(got, "--label com.dockpipe.helper=1") || !strings.Contains(got, "--label com.dockpipe.helper.unit=session.volume.sync_out") || !strings.Contains(got, "--name dockpipe-helper-session-volume-sync-out-") {
+		t.Fatalf("expected helper labels on workspace sync-out container, got:\n%s", got)
 	}
 	if !strings.Contains(got, "dockpipe-ws-demo:/work") {
 		t.Fatalf("expected main run to mount workspace volume at /work, got:\n%s", got)
@@ -428,9 +435,6 @@ func TestRunContainerWorkspaceVolumeSyncsAroundRun(t *testing.T) {
 	}
 	if strings.Count(got, "--entrypoint sh") < 2 {
 		t.Fatalf("expected helper sync containers to force sh entrypoint, got:\n%s", got)
-	}
-	if !strings.Contains(got, "git clone /dockpipe-sync-src /dockpipe-sync-dst") || !strings.Contains(got, "git -C /dockpipe-sync-dst fetch --prune dockpipe-host") {
-		t.Fatalf("expected git-based volume bootstrap script, got:\n%s", got)
 	}
 	if !strings.Contains(got, "dockpipe-ws-demo:/dockpipe-sync-src") || !strings.Contains(got, repo+":/dockpipe-sync-dst") {
 		t.Fatalf("expected volume to host patch apply call, got:\n%s", got)

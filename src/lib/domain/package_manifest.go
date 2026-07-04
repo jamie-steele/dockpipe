@@ -32,9 +32,9 @@ type PackageManifest struct {
 	// live under resolvers/; use includes_resolvers for optional resolver profile names (store installs stay per-resolver).
 	Kind string `yaml:"kind,omitempty"`
 	// Provider: optional platform / vendor id for filtering and store facets (e.g. cloudflare, aws, github).
-	// Use a short stable label, not a URL — see docs/package-model.md.
+	// Use a short stable label, not a URL — see docs/packages/package-model.md.
 	Provider string `yaml:"provider,omitempty"`
-	// Capability: dotted capability id this resolver package provides (e.g. cli.codex, app.vscode). See docs/capabilities.md.
+	// Capability: dotted capability id this resolver package provides (e.g. cli.codex, app.vscode). See docs/concepts/capabilities.md.
 	Capability string `yaml:"capability,omitempty"`
 	// PrimitiveYAMLDeprecated is the deprecated YAML key "primitive" — merged into Capability after parse.
 	PrimitiveYAMLDeprecated string `yaml:"primitive,omitempty"`
@@ -50,7 +50,7 @@ type PackageManifest struct {
 	// Provides names capabilities for resolver-style packages (e.g. codex, claude-code).
 	Provides []string `yaml:"provides,omitempty"`
 	// RequiresCapabilities: for kind workflow — dotted capability ids this workflow expects (e.g. cli.codex).
-	// See docs/capabilities.md. Complements requires_resolvers (profile names).
+	// See docs/concepts/capabilities.md. Complements requires_resolvers (profile names).
 	RequiresCapabilities []string `yaml:"requires_capabilities,omitempty"`
 	// RequiresPrimitivesYAMLDeprecated is the deprecated YAML key "requires_primitives" — merged into RequiresCapabilities after parse.
 	RequiresPrimitivesYAMLDeprecated []string `yaml:"requires_primitives,omitempty"`
@@ -187,7 +187,7 @@ func ValidateProvider(s string) error {
 	return validateOptionalMetadataString(s, "provider")
 }
 
-// ValidateCapabilityID checks optional dotted capability id (e.g. cli.codex) — see docs/capabilities.md.
+// ValidateCapabilityID checks optional dotted capability id (e.g. cli.codex) — see docs/concepts/capabilities.md.
 func ValidateCapabilityID(s string) error {
 	return validateOptionalMetadataString(s, "capability")
 }

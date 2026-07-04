@@ -35,7 +35,7 @@ steps:
     kind: host
     run: assets/scripts/vscode-session.sh
     vars:
-      # Optional: gui = host opens the desktop app (see DOCKPIPE_LAUNCH_MODE in docs/workflow-yaml.md).
+      # Optional: gui = host opens the desktop app (see DOCKPIPE_LAUNCH_MODE in docs/workflows/workflow-yaml.md).
       # DOCKPIPE_LAUNCH_MODE: gui
       VSCODE_WAIT: "1"
       VSCODE_POLL_SEC: "0.5"

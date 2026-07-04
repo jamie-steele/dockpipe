@@ -5,9 +5,9 @@ Use this skill before and after DockPipe engine edits.
 ## Read First
 
 - `AGENTS.md`
-- `docs/architecture-model.md`
-- `docs/package-model.md`
-- `docs/workflow-yaml.md` when workflow YAML changes
+- `docs/concepts/architecture-model.md`
+- `docs/packages/package-model.md`
+- `docs/workflows/workflow-yaml.md` when workflow YAML changes
 - `src/lib/infrastructure/paths.go` when script/package resolution changes
 
 ## Hard Rules

@@ -2,7 +2,7 @@
 # Reusable Docker named-volume helpers for APT or any "cache across relaunches" path.
 # Source:  source "$(git rev-parse --show-toplevel)/templates/core/assets/scripts/docker-cache-volumes.sh"
 # Or run:  bash scripts/docker-cache-volumes.sh ensure -- "vol:/path" "vol2:/path2"
-# (YAML paths like scripts/… resolve via paths.go — see docs/architecture.md.)
+# (YAML paths like scripts/… resolve via paths.go — see docs/concepts/architecture.md.)
 set -euo pipefail
 
 docker_cache_volume_ensure() {

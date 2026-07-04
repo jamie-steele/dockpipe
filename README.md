@@ -56,14 +56,14 @@ dockpipe --workflow test --
 | Goal | Doc |
 |------|-----|
 | First run | [docs/onboarding.md](docs/onboarding.md) |
-| Write workflow YAML | [docs/workflow-authoring.md](docs/workflow-authoring.md) |
-| Full workflow reference | [docs/workflow-yaml.md](docs/workflow-yaml.md) |
-| Compile/package reusable artifacts | [docs/package-quickstart.md](docs/package-quickstart.md) |
-| Package/store model | [docs/package-model.md](docs/package-model.md) |
-| Security policy | [docs/security-policy.md](docs/security-policy.md) |
-| Docker image artifacts | [docs/image-artifacts.md](docs/image-artifacts.md) |
+| Write workflow YAML | [docs/workflows/workflow-authoring.md](docs/workflows/workflow-authoring.md) |
+| Full workflow reference | [docs/workflows/workflow-yaml.md](docs/workflows/workflow-yaml.md) |
+| Compile/package reusable artifacts | [docs/packages/package-quickstart.md](docs/packages/package-quickstart.md) |
+| Package/store model | [docs/packages/package-model.md](docs/packages/package-model.md) |
+| Security policy | [docs/security/security-policy.md](docs/security/security-policy.md) |
+| Docker image artifacts | [docs/runtime/image-artifacts.md](docs/runtime/image-artifacts.md) |
 | CLI reference | [docs/cli-reference.md](docs/cli-reference.md) |
-| Architecture terms | [docs/architecture-model.md](docs/architecture-model.md) |
+| Architecture terms | [docs/concepts/architecture-model.md](docs/concepts/architecture-model.md) |
 
 Full index: [docs/README.md](docs/README.md).
 
@@ -84,7 +84,7 @@ After `make build`, this repo can dogfood DockPipe like any project:
 ```
 
 Maintainer-specific tools such as DorkPipe, Pipeon, and MCP live under
-`packages/`; see [docs/core-tools.md](docs/core-tools.md) when working on those
+`packages/`; see [docs/packages/core-tools.md](docs/packages/core-tools.md) when working on those
 first-party packages.
 
 ## Disclaimer

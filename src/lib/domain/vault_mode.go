@@ -34,7 +34,7 @@ func ValidateVaultModeString(v string) error {
 	case "op", "1password", "none", "off", "false", "no", "0":
 		return nil
 	default:
-		return fmt.Errorf("vault %q is not supported (see docs/vault.md)", v)
+		return fmt.Errorf("vault %q is not supported (see docs/runtime/vault.md)", v)
 	}
 }
 

@@ -140,6 +140,6 @@ Options:
   --to <dest-dir>    Destination directory (default: <workdir>/workflows/<package-name>)
   --force            Replace existing destination directory
 
-See docs/package-model.md (clone & commercial packages).
+See docs/packages/package-model.md (clone & commercial packages).
 
 `

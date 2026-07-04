@@ -52,4 +52,4 @@ If your **`--isolate`** / workflow uses **codex** or **claude** images, read **`
 ## Compared to **`strategy: worktree`**
 
 - **run** does **not** use runtime profiles for clone, `--repo`, or **`strategy: worktree`**.
-- Isolated branches + worktrees use the **`worktree`** **strategy** in **your** workflow YAML — see **[docs/workflow-yaml.md](../../../docs/workflow-yaml.md#named-strategies)** (`dockpipe template init my-ai` then edit **`config.yml`**).
+- Isolated branches + worktrees use the **`worktree`** **strategy** in **your** workflow YAML — see **[docs/workflows/workflow-yaml.md](../../../../docs/workflows/workflow-yaml.md#named-strategies)** (`dockpipe template init my-ai` then edit **`config.yml`**).

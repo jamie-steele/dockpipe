@@ -54,7 +54,7 @@ starts them for bounded worker tasks, captures their artifacts, and lets their c
 
 After approval, the workflow copies the merged synthesis into the checkout as:
 
-`docs/dorkpipe-orchestration-synthesis.md`
+`docs/workflows/dorkpipe-orchestration-synthesis.md`
 
 This is intentionally an uncommitted source-tree change. It lets CLI-first orchestration prove the
 write path without creating commits or hiding changes in generated artifact directories.

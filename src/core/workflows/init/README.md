@@ -10,4 +10,4 @@ Edit **`config.yml`** to match your workflow. This starter intentionally uses th
 - an isolated container **`run`** step
 - a host **`report`** step
 
-Use it as a sketch, then replace the commands, images, and env names with your real pipeline. **Learning path:** **[docs/onboarding.md](../../docs/onboarding.md)** · **[docs/architecture-model.md](../../docs/architecture-model.md)**.
+Use it as a sketch, then replace the commands, images, and env names with your real pipeline. **Learning path:** **[docs/onboarding.md](../../../../docs/onboarding.md)** · **[docs/concepts/architecture-model.md](../../../../docs/concepts/architecture-model.md)**.

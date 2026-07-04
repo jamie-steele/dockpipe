@@ -12,9 +12,19 @@ Treat **`--isolate`** as the low-level image/template override, not the main way
 
 **Prerequisites:** **Docker** and **`bash` on the host** (dockpipe always invokes bash). **`git` on the host** for **`--repo`**, worktrees, and commit-on-host. See **[install.md](install.md)**.
 
-**Workflow YAML (`config.yml`):** single-command layout (`run` / `isolate` / `act`) or multi-step **`steps:`** (ordering, **`outputs:`**, explicit **`group.mode: async`** for parallel work). In step mode, top-level `run` / `act` are not used. Full reference: **[workflow-yaml.md](workflow-yaml.md)**.
+**Workflow YAML (`config.yml`):** single-command layout (`run` / `isolate` / `act`) or multi-step **`steps:`** (ordering, **`outputs:`**, explicit **`group.mode: async`** for parallel work). In step mode, top-level `run` / `act` are not used. Full reference: **[workflows/workflow-yaml.md](workflows/workflow-yaml.md)**.
 
-**Subcommands:** `dockpipe init`, `dockpipe install` (fetch **`templates/core`** from HTTPS — e.g. **Cloudflare R2** behind a public URL), `dockpipe clone` (copy a compiled workflow package to **`workflows/`** when **`allow_clone: true`** in **`package.yml`**), **`dockpipe build`** / **`clean`** / **`rebuild`** (compiled store under **`bin/.dockpipe/internal/packages/`**), `dockpipe package` (list, manifest, **`package build core`** / **`package build store`**, **`package compile …`**, **`package test`**), `dockpipe workflow validate|list|test`, `dockpipe test` (run package-owned tests plus workflow-local tests for the current project/workdir), `dockpipe release upload` (S3-compatible upload via **`aws` CLI** — self-hosted registries), `dockpipe pipelang compile|invoke|materialize` (optional typed authoring layer: compile inspectable artifacts, invoke methods via CLI, or recursively materialize `.pipe` files under configured compile roots), `dockpipe action init`, `dockpipe pre init`, `dockpipe template init`, `dockpipe doctor` (verify **bash**, **Docker**, bundled assets), `dockpipe core script-path <dotted>` (print absolute path to **`scripts/core.<dots>`** — same resolution as workflow YAML), `dockpipe terraform pipeline-path` (shortcut to **`terraform-pipeline.sh`** — **`packages/terraform/resolvers/terraform-core/`**, **`DOCKPIPE_TF_*`** in **`src/core/assets/scripts/README.md`**), `dockpipe runs list [--workdir]` (list **`bin/.dockpipe/runs/*.json`** for host **`kind: host`** steps), `dockpipe windows setup|doctor` — not covered in the flag table below; see **[README.md](../README.md)** and **[install.md](install.md)**.
+**Main subcommands:** `dockpipe init`, `dockpipe build|clean|rebuild`, `dockpipe package`, `dockpipe workflow validate|list|test`, `dockpipe test`, `dockpipe doctor`, `dockpipe windows setup|doctor`, and optional maintainer/publishing commands such as `dockpipe install core`, `dockpipe release upload`, and `dockpipe pipelang ...`.
+
+If you just want the common path:
+
+- `dockpipe --workflow <name> -- ...` runs a workflow
+- `dockpipe init` creates a starter project/workflow layout
+- `dockpipe workflow validate <config.yml>` checks authored YAML
+- `dockpipe test` runs package-owned tests plus workflow-local tests
+- `dockpipe doctor` checks bash, Docker, and bundled assets
+
+The detailed sections below include maintainer-only commands and lower-level behavior.
 
 ## `dockpipe init`
 
@@ -29,7 +39,7 @@ Local project setup only: **no `git clone`**, no treating **`init`** as a remote
 | `dockpipe init <name> --resolver <n> --runtime <n> --strategy <n>` | Optional; written into the new **`config.yml`**. New workflows use plain **`resolver:`** and **`runtime:`**. Example: **`dockpipe init my-pipeline --from run-apply --resolver codex --runtime dockerimage`**. |
 | `dockpipe init --gitignore` | **Opt-in** only: append a marked block to **`.gitignore`** at the **git repository root** (`bin/.dockpipe/`, Go caches, `tmp/`). Idempotent if the block is already present. Requires a **git working tree** (run from inside a repo). |
 
-On a **dockpipe source checkout**, **`--workflow`** resolves **`workflows/<name>/config.yml`** first (when that tree has workflows), then **nested** **`config.yml`** under directories listed in **`dockpipe.config.json` `compile.workflows`** (for this repo, tracked **`packages/`**), then **`src/core/workflows/<name>/config.yml`**. In a **typical downstream project**, named workflows live under **`workflows/<name>/config.yml`** by default; **`templates/<name>/config.yml`** remains a **legacy** fallback. Override the primary folder with **`--workflows-dir`** or **`DOCKPIPE_WORKFLOWS_DIR`**. This repo keeps **lean CI** under **`workflows/`** and grouped maintainer packages under tracked **`packages/`** (see **[AGENTS.md](../AGENTS.md)**).
+On a **dockpipe source checkout**, **`--workflow`** usually resolves **`workflows/<name>/config.yml`** first, then package-owned workflow roots declared in **`dockpipe.config.json` `compile.workflows`**, then bundled/example workflow roots such as **`src/core/workflows/<name>/config.yml`**. In a **typical downstream project**, named workflows live under **`workflows/<name>/config.yml`** by default; **`templates/<name>/config.yml`** remains a **legacy** fallback. Override the primary folder with **`--workflows-dir`** or **`DOCKPIPE_WORKFLOWS_DIR`**.
 
 **`dockpipe init`** creates the root **`README.md`** when missing and ensures **`workflows/`** exists.
 
@@ -56,21 +66,21 @@ Fetches a published **`templates/core`** tree over **HTTPS** and replaces **`<wo
 |---------|---------|
 | `dockpipe clone <name> [--workdir <path>] [--to <dest>] [--force]` | Copy **`bin/.dockpipe/internal/packages/workflows/<name>/`** to **`--to`** (default **`<workdir>/workflows/<name>`**) only if **`package.yml`** has **`allow_clone: true`**. Refused when **`allow_clone`** is false or omitted (typical for commercial **binary-only** drops). |
 
-See **[package-model.md](package-model.md)** (**Clone, education, and commercial packages**).
+See **[packages/package-model.md](packages/package-model.md)** (**Clone, education, and commercial packages**).
 
 ## `dockpipe build` / `clean` / `rebuild`
 
-Familiar names for the **compiled package store** under **`bin/.dockpipe/internal/packages/`** (see **[package-model.md](package-model.md)**).
+Familiar names for the **compiled package store** under **`bin/.dockpipe/internal/packages/`** (see **[packages/package-model.md](packages/package-model.md)**).
 
 | Command | Purpose |
 |---------|---------|
-| `dockpipe build [options]` | Runs **`dockpipe pipelang materialize`** first (roots from effective `compile.workflows`), then same as **`dockpipe package compile all --force`**: replaces existing compiled outputs, then materializes **core → resolvers → workflows** from **`compile.workflows`** in **`dockpipe.config.json`** (legacy **`compile.bundles`** merged into workflow roots; and defaults). After compile, prebuilds Dockerfile-backed image artifacts by default; pass **`--no-images`** to emit manifests only. If **`--workdir`** is omitted, the project directory is the folder containing **`dockpipe.config.json`** (walking up from the current directory), or the current directory if that file is absent. Options: **`--workdir`**, **`--for-workflow <name>`**, **`--images`**, **`--no-images`**. |
+| `dockpipe build [options]` | Rebuild the compiled package/workflow store under **`bin/.dockpipe/internal/packages/`** for the current project. In practice this is the main “refresh compiled state” command. It also materializes configured PipeLang roots and prebuilds Dockerfile-backed image artifacts unless you pass **`--no-images`**. If **`--workdir`** is omitted, the project directory is the folder containing **`dockpipe.config.json`** (walking up from the current directory), or the current directory if that file is absent. Options: **`--workdir`**, **`--for-workflow <name>`**, **`--images`**, **`--no-images`**. |
 | `dockpipe clean [--workdir <path>]` | **`rm -rf`** the packages root (default **`<workdir>/bin/.dockpipe/internal/packages`**; respects **`DOCKPIPE_PACKAGES_ROOT`**). Does not wipe other **`bin/.dockpipe/`** files. |
 | `dockpipe rebuild [options]` | **`clean`** (only **`--workdir`** is forwarded) then **`build`** with the full option set. |
 
 ## `dockpipe package`
 
-Inspect **installed** package metadata. Store-backed installs are intended to land under **`bin/.dockpipe/internal/packages/`** (workflows, core slices, assets); see **[package-model.md](package-model.md)** for **authoring vs compiled run modes**, **install vs run network boundary**, and the **compile → package → release** pipeline (compile will grow to pull in domain assets; **`package compile workflow`** today copies the source tree after validate).
+Inspect **installed** package metadata. Store-backed installs are intended to land under **`bin/.dockpipe/internal/packages/`** (workflows, core slices, assets); see **[packages/package-model.md](packages/package-model.md)** for **authoring vs compiled run modes**, **install vs run network boundary**, and the **compile → package → release** pipeline (compile will grow to pull in domain assets; **`package compile workflow`** today copies the source tree after validate).
 
 | Command | Purpose |
 |---------|---------|
@@ -106,7 +116,7 @@ Commands:
 
 Optional typed authoring helper. PipeLang compiles to inspectable artifacts; workflow execution still uses normal DockPipe YAML.
 
-When a workflow also declares `view:`, that YAML remains a launcher/tooling presentation layer over the typed model rather than a separate execution contract. See **[pipelang.md](pipelang.md)** and **[workflow-yaml.md](workflow-yaml.md)**.
+When a workflow also declares `view:`, that YAML remains a launcher/tooling presentation layer over the typed model rather than a separate execution contract. See **[concepts/pipelang.md](concepts/pipelang.md)** and **[workflows/workflow-yaml.md](workflows/workflow-yaml.md)**.
 
 | Command | Purpose |
 |---------|---------|
@@ -126,7 +136,7 @@ Upload a single file to an **S3-compatible** bucket (e.g. **Cloudflare R2**) usi
 
 ## Workflow variables (`--workflow`)
 
-When you use `--workflow <name>`, the resolved **`config.yml`** (see **[workflow-yaml.md](workflow-yaml.md)** for lookup order) may include a top-level **`vars:`** block: indented `KEY: value` lines. Those names are **exported** before run scripts, **only if** they are not already set in your shell (so your environment and CI secrets win).
+When you use `--workflow <name>`, the resolved **`config.yml`** (see **[workflows/workflow-yaml.md](workflows/workflow-yaml.md)** for lookup order) may include a top-level **`vars:`** block: indented `KEY: value` lines. Those names are **exported** before run scripts, **only if** they are not already set in your shell (so your environment and CI secrets win).
 
 Additional sources (each only sets **unset** variables, except `--var`):
 
@@ -147,7 +157,7 @@ All options must appear **before** a standalone **`--`**. The command and its ar
 
 | Flag | Aliases | Purpose |
 |------|---------|---------|
-| `--workflow <name>` | | Load workflow YAML: resolution order in **`workflow_dirs.go`** — embedded **`bundle/workflows/<name>/`** (materialized cache under **`~/.cache/dockpipe/bundled-<ver>/`**), nested roots from **`compile.workflows`**, then **`dockpipe-workflow-<name>-*.tar.gz`** as **`tar://`** (read from package store), then project **`workflows/<name>/`** (or **`DOCKPIPE_WORKFLOWS_DIR`**), then legacy **`templates/`** / **`src/core/workflows/`**, then resolver delegate **`…/core/resolvers/<name>/`**. **`compile for-workflow`** still prefers on-disk **`workflows/<name>/config.yml`** when present. With **`steps:`**, a final **`--`** is optional (see **[workflow-yaml.md](workflow-yaml.md)**). Mutually exclusive with **`--workflow-file`**. |
+| `--workflow <name>` | | Load a named workflow. The normal lookup path is project **`workflows/`**, configured package/workflow roots from **`compile.workflows`**, and bundled workflows included with the DockPipe build. Legacy **`templates/`** and some maintainer/example roots remain as compatibility fallbacks. With **`steps:`**, a final **`--`** is optional (see **[workflows/workflow-yaml.md](workflows/workflow-yaml.md)**). Mutually exclusive with **`--workflow-file`**. |
 | `--workflow-file <path>` | | Load workflow YAML from an arbitrary path (same shape as bundled **`config.yml`**). Relative **`run:`** / **`act:`** paths resolve next to that file. **Resolver** profiles load only from **`templates/core/resolvers/`** (or **`bundle/core/resolvers/`** in the materialized bundle) — not from folders beside the YAML file. Mutually exclusive with **`--workflow`**. |
 | `--package <name>` | | With **`--workflow <name>`**, select an unpacked packaged workflow whose nearest **`package.yml`** has matching **`name:`**. This is a generic package selector, not an AI-provider concept. Mutually exclusive with **`--workflow-file`**. |
 | `--workflows-dir <path>` | | Repo-relative or absolute directory for **`--workflow <name>`** resolution (default **`workflows/`**). Same as **`DOCKPIPE_WORKFLOWS_DIR`**. Also **`dockpipe init <name> --workflows-dir …`**. |

@@ -6,7 +6,7 @@ When included in **`dockpipe.config.json`**, you **edit YAML + assets here**, th
 
 **Example layout:** grouped packs such as **`agent/`** (umbrella only — see **`agent/package.yml`**), or other vendor-specific trees. **`resolvers/`** under each pack hold **tool profiles** (**`profile/`**, **`config.yml`**, **`assets/`**). **First-party dogfood-only** workflows that are not shipped as grouped packages stay in **repo-root `workflows/`** (see **`workflows/README.md`**).
 
-**Workflow YAML** still references resolvers, strategies, and runtimes per **`docs/workflow-yaml.md`**.
+**Workflow YAML** still references resolvers, strategies, and runtimes per **`docs/workflows/workflow-yaml.md`**.
 
 ## How it maps
 
@@ -25,7 +25,7 @@ When included in **`dockpipe.config.json`**, you **edit YAML + assets here**, th
 
 Repo-root **`workflows/`** is **lean CI / dogfood**; listed compile roots are for **grouped packages** compiled into the store and embedded binary (when configured).
 
-See **`docs/package-model.md`** for the global **authoring vs compiled store** model.
+See **`docs/packages/package-model.md`** for the global **authoring vs compiled store** model.
 
 ## Tests (self-contained per package)
 
