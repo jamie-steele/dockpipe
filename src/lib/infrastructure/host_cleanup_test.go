@@ -123,8 +123,6 @@ func TestRemoveCleanupMarkersForContainerName(t *testing.T) {
 }
 
 func TestApplyHostCleanup_RunScopedOnlyStopsTrackedContainer(t *testing.T) {
-	t.Parallel()
-
 	root := t.TempDir()
 	runs := HostRunsDir(root)
 	cleanup := filepath.Join(root, DockpipeDirRel, "cleanup")
@@ -195,8 +193,6 @@ func TestApplyHostCleanup_RunScopedOnlyStopsTrackedContainer(t *testing.T) {
 }
 
 func TestApplyHostCleanup_InvalidRunIDDoesNothing(t *testing.T) {
-	t.Parallel()
-
 	root := t.TempDir()
 	runs := HostRunsDir(root)
 	if err := os.MkdirAll(runs, 0o755); err != nil {
@@ -229,8 +225,6 @@ func TestApplyHostCleanup_InvalidRunIDDoesNothing(t *testing.T) {
 }
 
 func TestApplyHostCleanup_RunScopedKillsTrackedPID(t *testing.T) {
-	t.Parallel()
-
 	root := t.TempDir()
 	runs := HostRunsDir(root)
 	if err := os.MkdirAll(runs, 0o755); err != nil {
