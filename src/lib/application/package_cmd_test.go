@@ -249,7 +249,10 @@ func TestCmdPackageCompileCoreRunsSourceBuildScript(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldWd) })
 
-	if err := cmdPackage([]string{"compile", "core", "--workdir", dir, "--from", src}); err != nil {
+	stderr, err := captureResultStderr(t, func() error {
+		return cmdPackage([]string{"compile", "core", "--workdir", dir, "--from", src})
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 	coreDir := filepath.Join(dir, infrastructure.DockpipeDirRel, "internal", "packages", "core")
@@ -263,6 +266,16 @@ func TestCmdPackageCompileCoreRunsSourceBuildScript(t *testing.T) {
 	}
 	if strings.TrimSpace(string(generated)) != "built" {
 		t.Fatalf("expected generated asset from build.source.script, got %q", string(generated))
+	}
+	for _, want := range []string{
+		"unit=package.compile.source_build",
+		"status=start",
+		"status=done",
+		"script=assets/build-source",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected core source build stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 }
 
@@ -496,7 +509,10 @@ steps: []
 	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src}); err != nil {
+	stderr, err := captureResultStderr(t, func() error {
+		return cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src})
+	})
+	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(src, "assets", "generated.txt")); !os.IsNotExist(err) {
@@ -509,6 +525,17 @@ steps: []
 	}
 	if strings.TrimSpace(string(got)) != "staged" {
 		t.Fatalf("expected staged compile hook output, got %q", string(got))
+	}
+	for _, want := range []string{
+		"unit=package.compile.hook",
+		"status=start",
+		"status=done",
+		"compile_kind=workflow",
+		"hook_index=0",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected compile hook stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 }
 

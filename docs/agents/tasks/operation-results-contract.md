@@ -72,6 +72,9 @@
   workflow, core, resolver, full-store, workflow-batch, and dependency-closure paths, including
   compiled-vs-skip/noop outcomes, output paths, batch counts, and stale-prune summaries instead of
   relying on one-off `compiled ...`, `skip ...`, or `compile all:` status lines.
+- Compile internals now emit `package.compile.hook` units for staged `compile_hooks` execution and
+  `package.compile.source_build` units for core `build.source.script` execution instead of bespoke
+  `compile_hooks[...]` and `core source build:` lines.
 
 ## Still Open
 
@@ -79,7 +82,7 @@
   covered session/build/DorkPipe-shell paths and other long-running runtime/bootstrap work that still
   prints one-off lines.
 - Continue rolling the same result contract deeper into compile/package subcommands that still emit
-  ad hoc detail lines beneath the now-normalized build/package units, especially auxiliary hook,
+  ad hoc detail lines beneath the now-normalized build/package units, especially closure warnings,
   validation, and install/bootstrap detail lines that still print bespoke text.
 - Continue migrating any newly added package-owned scripts that do meaningful long-running work onto
   `dockpipe result` or a shared package wrapper instead of adding new bespoke status formats.

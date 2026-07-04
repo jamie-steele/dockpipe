@@ -346,7 +346,6 @@ func runCompileHooksForStaging(workdir, srcAbs, staging, kind string, hooks []st
 		if hook == "" {
 			continue
 		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] compile_hooks[%d]: %s\n", i, hook)
 		cmd, bashExe, err := dockpipeBashShellCommand(hook)
 		if err != nil {
 			return fmt.Errorf("compile_hooks[%d]: %w", i, err)
@@ -371,7 +370,15 @@ func runCompileHooksForStaging(workdir, srcAbs, staging, kind string, hooks []st
 		}
 		cmd.Stdout = os.Stderr
 		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
+		hookIDs := packageCompileIDs(workdir, map[string]string{
+			"compile_kind": strings.TrimSpace(kind),
+			"hook_index":   strconv.Itoa(i),
+			"source":       filepath.ToSlash(srcAbs),
+			"staging":      filepath.ToSlash(staging),
+		})
+		if err := infrastructure.RunOperationWithOptions(os.Stderr, "package.compile.hook", "Running compile hook…", hookIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: packageCompileProgressEvery}, func() error {
+			return cmd.Run()
+		}); err != nil {
 			return fmt.Errorf("compile_hooks[%d]: %w", i, err)
 		}
 	}
@@ -683,8 +690,14 @@ func runCoreSourceBuildTarget(workdir, staging string) error {
 		ScriptRel:  filepath.Clean(manifest.Build.Source.Script),
 		ScriptAbs:  filepath.Join(staging, filepath.FromSlash(manifest.Build.Source.Script)),
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] core source build: %s (%s)\n", target.Name, target.ScriptRel)
-	if err := runPackageScriptTarget(workdir, target, packageSourceBuildEnv(workdir, target), "build.source.script"); err != nil {
+	buildIDs := packageCompileIDs(workdir, map[string]string{
+		"package": target.Name,
+		"script":  filepath.ToSlash(target.ScriptRel),
+		"source":  filepath.ToSlash(staging),
+	})
+	if err := infrastructure.RunOperationWithOptions(os.Stderr, "package.compile.source_build", "Running core source build…", buildIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: packageCompileProgressEvery}, func() error {
+		return runPackageScriptTarget(workdir, target, packageSourceBuildEnv(workdir, target), "build.source.script")
+	}); err != nil {
 		return fmt.Errorf("core source build: %w", err)
 	}
 	return nil
