@@ -304,6 +304,35 @@ func TestCmdPackageCompileResolversVendorResolversSubdir(t *testing.T) {
 	}
 }
 
+func TestCmdPackageCompileResolversEmitsOperationResults(t *testing.T) {
+	dir := t.TempDir()
+	pack := filepath.Join(dir, "vendor")
+	resRoot := filepath.Join(pack, "resolvers", "alpha")
+	if err := os.MkdirAll(resRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(resRoot, "profile"), []byte("DOCKPIPE_RESOLVER_CMD=test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stderr, err := captureResultStderr(t, func() error {
+		return cmdPackage([]string{"compile", "resolvers", "--workdir", dir, "--from", pack})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"unit=package.compile.resolvers",
+		"unit=package.compile.resolver",
+		"package=alpha",
+		"result=compiled",
+		"status=done",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected resolver compile stderr to contain %q, got:\n%s", want, stderr)
+		}
+	}
+}
+
 func TestCmdPackageCompileResolverMaterializesAuthoredAptPackages(t *testing.T) {
 	dir := t.TempDir()
 	pack := filepath.Join(dir, "my-vendor")
@@ -424,6 +453,35 @@ steps: []
 	}
 }
 
+func TestCmdPackageCompileWorkflowEmitsOperationResults(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "mywf")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "config.yml"), []byte("name: mywf\nsteps: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stderr, err := captureResultStderr(t, func() error {
+		return cmdPackage([]string{"compile", "workflow", "--workdir", dir, "--from", src})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"unit=package.compile.workflow",
+		"status=start",
+		"status=done",
+		"package=mywf",
+		"result=compiled",
+		"output=",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected workflow compile stderr to contain %q, got:\n%s", want, stderr)
+		}
+	}
+}
+
 func TestCmdPackageCompileWorkflowRunsCompileHooksInStaging(t *testing.T) {
 	dir := t.TempDir()
 	src := filepath.Join(dir, "src", "mywf")
@@ -496,6 +554,37 @@ func TestCmdPackageCompileWorkflowRebuildsInvalidStoreTarball(t *testing.T) {
 	}
 	if strings.Contains(string(got), "skip_container") || !strings.Contains(string(got), "kind: host") {
 		t.Fatalf("expected rebuilt workflow config, got:\n%s", string(got))
+	}
+}
+
+func TestCmdPackageCompileCoreSkipEmitsOperationResults(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, "src", "core")
+	if err := os.MkdirAll(filepath.Join(src, "runtimes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "runtimes", ".keep"), []byte(""), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmdPackage([]string{"compile", "core", "--workdir", dir, "--from", src}); err != nil {
+		t.Fatal(err)
+	}
+	stderr, err := captureResultStderr(t, func() error {
+		return cmdPackage([]string{"compile", "core", "--workdir", dir, "--from", src})
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"unit=package.compile.core",
+		"status=start",
+		"status=done",
+		"result=skip",
+		"skip_reason=existing_tarball",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected core compile stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 }
 

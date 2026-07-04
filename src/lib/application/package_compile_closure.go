@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"dockpipe/src/lib/domain"
@@ -46,60 +47,66 @@ func compileClosureForWorkflow(projectRoot, workflowName string, force bool) err
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] compile for-workflow %q: %d workflow(s), %d resolver name(s)\n", workflowName, len(order), len(resNames))
-
-	if err := ensureCoreCompiled(projectRoot, cfg, force); err != nil {
-		return err
-	}
-
-	destRes, err := infrastructure.PackagesResolversDir(projectRoot)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(destRes, 0o755); err != nil {
-		return err
-	}
-	var defResolverNS string
-	if cfg != nil && cfg.Packages.Namespace != nil {
-		defResolverNS = strings.TrimSpace(*cfg.Packages.Namespace)
-	}
-	for name := range resNames {
-		leaves := infrastructure.NestedResolverLeafDirs(name, infrastructure.ResolverCompileRootsCached(projectRoot))
-		if len(leaves) == 0 {
-			fmt.Fprintf(os.Stderr, "[dockpipe] compile for-workflow: skip resolver %q (no profile tree under compile roots)\n", name)
-			continue
+	opIDs := packageCompileIDs(projectRoot, map[string]string{
+		"workflow":       workflowName,
+		"workflow_count": strconv.Itoa(len(order)),
+		"resolver_count": strconv.Itoa(len(resNames)),
+	})
+	return infrastructure.RunOperationWithOptions(os.Stderr, "package.compile.for_workflow", "Compiling workflow dependency closure…", opIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: packageCompileProgressEvery}, func() error {
+		if err := ensureCoreCompiled(projectRoot, cfg, force); err != nil {
+			return err
 		}
-		from := leaves[0]
-		if err := compileSingleResolverDir(projectRoot, destRes, from, filepath.Base(from), defResolverNS, authoredPackageVersion(projectRoot), force); err != nil {
-			return fmt.Errorf("resolver %q: %w", name, err)
-		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] compiled resolver %q → %s\n", name, destRes)
-	}
 
-	for _, wfDir := range order {
-		if err := compileWorkflowOne(projectRoot, wfDir, "", force); err != nil {
-			return fmt.Errorf("workflow %s: %w", wfDir, err)
+		destRes, err := infrastructure.PackagesResolversDir(projectRoot)
+		if err != nil {
+			return err
 		}
-	}
-	workflowNames, err := compiledWorkflowNamesForDirs(order)
-	if err != nil {
-		return err
-	}
-	return validateCompileOutputsScoped(projectRoot, false, workflowNames, resNames)
+		if err := os.MkdirAll(destRes, 0o755); err != nil {
+			return err
+		}
+		var defResolverNS string
+		if cfg != nil && cfg.Packages.Namespace != nil {
+			defResolverNS = strings.TrimSpace(*cfg.Packages.Namespace)
+		}
+		skippedResolvers := 0
+		for name := range resNames {
+			leaves := infrastructure.NestedResolverLeafDirs(name, infrastructure.ResolverCompileRootsCached(projectRoot))
+			if len(leaves) == 0 {
+				skippedResolvers++
+				continue
+			}
+			from := leaves[0]
+			if err := compileSingleResolverDir(projectRoot, destRes, from, filepath.Base(from), defResolverNS, authoredPackageVersion(projectRoot), force); err != nil {
+				return fmt.Errorf("resolver %q: %w", name, err)
+			}
+		}
+		if skippedResolvers > 0 {
+			opIDs["skipped_resolvers"] = strconv.Itoa(skippedResolvers)
+		}
+
+		for _, wfDir := range order {
+			if err := compileWorkflowOne(projectRoot, wfDir, "", force); err != nil {
+				return fmt.Errorf("workflow %s: %w", wfDir, err)
+			}
+		}
+		workflowNames, err := compiledWorkflowNamesForDirs(order)
+		if err != nil {
+			return err
+		}
+		if err := validateCompileOutputsScoped(projectRoot, false, workflowNames, resNames); err != nil {
+			return err
+		}
+		opIDs["result"] = "compiled"
+		return nil
+	})
 }
 
 func ensureCoreCompiled(projectRoot string, cfg *domain.DockpipeProjectConfig, force bool) error {
-	pkgs, err := infrastructure.PackagesRoot(projectRoot)
-	if err != nil {
-		return err
-	}
-	coreDir := filepath.Join(pkgs, "core")
 	if !force {
 		if tgz, err := infrastructure.FindLatestCoreTarball(projectRoot); err == nil && strings.TrimSpace(tgz) != "" {
 			return nil
 		}
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] compile for-workflow: compiling core spine (missing under %s)\n", coreDir)
 	args := []string{"--workdir", projectRoot}
 	if force {
 		args = append(args, "--force")

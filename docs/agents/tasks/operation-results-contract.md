@@ -68,6 +68,10 @@
   the cheap single-pass optimizer path and Windows absolute artifact paths.
 - Session lifecycle tests now cover successful and failed operation-result events for create,
   checkpoint, sync, publish, cleanup, and worker lease paths.
+- `dockpipe package compile` now emits canonical `package.compile.*` operation-result units for the
+  workflow, core, resolver, full-store, workflow-batch, and dependency-closure paths, including
+  compiled-vs-skip/noop outcomes, output paths, batch counts, and stale-prune summaries instead of
+  relying on one-off `compiled ...`, `skip ...`, or `compile all:` status lines.
 
 ## Still Open
 
@@ -75,7 +79,8 @@
   covered session/build/DorkPipe-shell paths and other long-running runtime/bootstrap work that still
   prints one-off lines.
 - Continue rolling the same result contract deeper into compile/package subcommands that still emit
-  ad hoc detail lines beneath the now-normalized top-level build units.
+  ad hoc detail lines beneath the now-normalized build/package units, especially auxiliary hook,
+  validation, and install/bootstrap detail lines that still print bespoke text.
 - Continue migrating any newly added package-owned scripts that do meaningful long-running work onto
   `dockpipe result` or a shared package wrapper instead of adding new bespoke status formats.
 - Add a rebuildable Postgres projection over operation-event JSONL and JSON/YAML indexes for
