@@ -110,6 +110,9 @@
 - Docker `--reinit` volume-reset flows now emit canonical `session.volume.reinit` start/done
   units for forced reset and user-aborted prompt paths instead of bespoke `Removing volume...`,
   `Done. Starting with a fresh volume.`, and `Aborted.` lines.
+- Host cleanup now emits canonical `host.cleanup.process` and `host.cleanup.container` units for
+  killed tracked processes, stopped tracked Docker containers, and failed-stop cleanup outcomes
+  instead of bespoke `host cleanup:` and warning lines.
 
 ## Still Open
 

@@ -1,8 +1,10 @@
 package infrastructure
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,6 +13,31 @@ import (
 	"testing"
 	"time"
 )
+
+func captureHostCleanupStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	t.Cleanup(func() {
+		os.Stderr = old
+	})
+	fn()
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
+}
 
 func TestIsSafeDockerContainerName(t *testing.T) {
 	t.Parallel()
@@ -131,14 +158,27 @@ func TestApplyHostCleanup_RunScopedOnlyStopsTrackedContainer(t *testing.T) {
 	}
 	defer func() { hostCleanupExecCommandFn = old }()
 
-	ApplyHostCleanup([]string{
-		"DOCKPIPE_WORKDIR=" + root,
-		"DOCKPIPE_RUN_ID=" + runID,
+	stderr := captureHostCleanupStderr(t, func() {
+		ApplyHostCleanup([]string{
+			"DOCKPIPE_WORKDIR=" + root,
+			"DOCKPIPE_RUN_ID=" + runID,
+		})
 	})
 
 	want := [][]string{{"docker", "stop", "-t", "10", "tracked-container"}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("docker calls mismatch:\n got %#v\nwant %#v", got, want)
+	}
+	for _, want := range []string{
+		"unit=host.cleanup.container",
+		"container=tracked-container",
+		"marker_type=sidecar",
+		"result=stopped",
+		"scope=run",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(runs, runID+".container")); !os.IsNotExist(err) {
 		t.Fatalf("expected run sidecar removed, got %v", err)
@@ -211,9 +251,11 @@ func TestApplyHostCleanup_RunScopedKillsTrackedPID(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ApplyHostCleanup([]string{
-		"DOCKPIPE_WORKDIR=" + root,
-		"DOCKPIPE_RUN_ID=" + runID,
+	stderr := captureHostCleanupStderr(t, func() {
+		ApplyHostCleanup([]string{
+			"DOCKPIPE_WORKDIR=" + root,
+			"DOCKPIPE_RUN_ID=" + runID,
+		})
 	})
 
 	done := make(chan error, 1)
@@ -223,7 +265,59 @@ func TestApplyHostCleanup_RunScopedKillsTrackedPID(t *testing.T) {
 		t.Fatal("expected tracked process to be terminated")
 	case <-done:
 	}
+	for _, want := range []string{
+		"unit=host.cleanup.process",
+		"marker=" + runID + ".pid",
+		"result=stopped",
+		"scope=run",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr)
+		}
+	}
 	if _, err := os.Stat(pidSidecar); !os.IsNotExist(err) {
 		t.Fatalf("expected pid sidecar removed, got %v", err)
+	}
+}
+
+func TestTryStopDockerAndRemoveMarkerLogsFailedStopResult(t *testing.T) {
+	root := t.TempDir()
+	marker := filepath.Join(root, "docker-session")
+	if err := os.WriteFile(marker, []byte("tracked-container\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := hostCleanupExecCommandFn
+	hostCleanupExecCommandFn = func(ctx context.Context, name string, arg ...string) *exec.Cmd {
+		switch {
+		case len(arg) >= 4 && arg[0] == "stop" && arg[3] == "tracked-container":
+			return helperExitCommand(1)
+		case len(arg) >= 2 && arg[0] == "inspect" && arg[1] == "tracked-container":
+			return helperExitCommand(0)
+		case len(arg) >= 2 && arg[0] == "kill" && arg[1] == "tracked-container":
+			return helperExitCommand(0)
+		default:
+			return helperExitCommand(1)
+		}
+	}
+	defer func() { hostCleanupExecCommandFn = old }()
+
+	stderr := captureHostCleanupStderr(t, func() {
+		stopped := tryStopDockerAndRemoveMarker(context.Background(), "tracked-container", marker)
+		if stopped {
+			t.Fatal("expected stop failure")
+		}
+	})
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("expected marker removed, got %v", err)
+	}
+	for _, want := range []string{
+		"unit=host.cleanup.container",
+		"container=tracked-container",
+		"result=skipped",
+		"skip_reason=stop_failed",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 }

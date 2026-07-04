@@ -95,7 +95,16 @@ func isValidHostRunID(runID string) bool {
 func applyRunScopedHostCleanup(ctx context.Context, wdAbs, runID string) {
 	pidSidecar := filepath.Join(HostRunsDir(wdAbs), runID+".pid")
 	if stopped := tryKillProcessAndRemoveMarker(pidSidecar); stopped {
-		fmt.Fprintf(os.Stderr, "[dockpipe] host cleanup: stopped process from %s\n", filepath.Base(pidSidecar))
+		LogOperationResult(os.Stderr, OperationResult{
+			Unit:       "host.cleanup.process",
+			Status:     OperationStatusDone,
+			DurationMs: 0,
+			IDs: map[string]string{
+				"marker": filepath.Base(pidSidecar),
+				"result": "stopped",
+				"scope":  "run",
+			},
+		})
 	}
 	sidecar := filepath.Join(HostRunsDir(wdAbs), runID+".container")
 	b, err := os.ReadFile(sidecar)
@@ -109,7 +118,7 @@ func applyRunScopedHostCleanup(ctx context.Context, wdAbs, runID string) {
 	}
 	marker := sidecar
 	if stopped := tryStopDockerAndRemoveMarker(ctx, cn, marker); stopped {
-		fmt.Fprintf(os.Stderr, "[dockpipe] host cleanup: stopped Docker container %s\n", cn)
+		logHostCleanupContainerResult(cn, "run", "sidecar", "stopped", "")
 	}
 	removeCleanupMarkersForContainerName(wdAbs, cn)
 }
@@ -186,7 +195,7 @@ func applyLegacyHostCleanupSweep(ctx context.Context, wdAbs string) {
 			}
 			cn := strings.TrimSpace(string(b))
 			if stopped := tryStopDockerAndRemoveMarker(ctx, cn, p); stopped {
-				fmt.Fprintf(os.Stderr, "[dockpipe] host cleanup: stopped Docker container %s\n", cn)
+				logHostCleanupContainerResult(cn, "legacy", "cleanup_marker", "stopped", "")
 			}
 		}
 	}
@@ -198,8 +207,30 @@ func applyLegacyHostCleanupSweep(ctx context.Context, wdAbs string) {
 	}
 	cn := strings.TrimSpace(string(b))
 	if stopped := tryStopDockerAndRemoveMarker(ctx, cn, leg); stopped {
-		fmt.Fprintf(os.Stderr, "[dockpipe] host cleanup: stopped Docker container %s (legacy marker)\n", cn)
+		logHostCleanupContainerResult(cn, "legacy", "legacy_marker", "stopped", "")
 	}
+}
+
+func logHostCleanupContainerResult(name, scope, markerType, result, skipReason string) {
+	ids := map[string]string{
+		"container": strings.TrimSpace(name),
+		"result":    strings.TrimSpace(result),
+	}
+	if value := strings.TrimSpace(scope); value != "" {
+		ids["scope"] = value
+	}
+	if value := strings.TrimSpace(markerType); value != "" {
+		ids["marker_type"] = value
+	}
+	if value := strings.TrimSpace(skipReason); value != "" {
+		ids["skip_reason"] = value
+	}
+	LogOperationResult(os.Stderr, OperationResult{
+		Unit:       "host.cleanup.container",
+		Status:     OperationStatusDone,
+		DurationMs: 0,
+		IDs:        ids,
+	})
 }
 
 func tryStopDockerAndRemoveMarker(ctx context.Context, name, markerPath string) bool {
@@ -226,7 +257,7 @@ func tryStopDockerAndRemoveMarker(ctx context.Context, name, markerPath string) 
 		_ = os.Remove(markerPath)
 		return true
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] warning: host cleanup could not stop container %q (try: docker stop %s)\n", name, name)
+	logHostCleanupContainerResult(name, "", "", "skipped", "stop_failed")
 	_ = os.Remove(markerPath)
 	return false
 }
