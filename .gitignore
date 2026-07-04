@@ -59,6 +59,7 @@ Thumbs.db
 *.swp
 *.swo
 .*.sw?
+docs/.obsidian/
 
 # Python bytecode / cache
 __pycache__/
