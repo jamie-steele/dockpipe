@@ -35,7 +35,7 @@ func discoverPackageScriptTargets(workdir, only string, selectScript func(*domai
 	if err != nil {
 		return nil, err
 	}
-	roots := domain.EffectiveWorkflowCompileRoots(cfg, projectRoot)
+	roots := effectiveWorkflowCompileRoots(cfg, projectRoot)
 	var targets []packageScriptTarget
 	seenManifests := map[string]struct{}{}
 	for _, root := range roots {

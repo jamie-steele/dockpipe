@@ -1,25 +1,37 @@
 package domain
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
+type CompilePathResolution struct {
+	Paths        []string
+	MissingPaths []string
+}
+
 // EffectiveWorkflowCompileRoots merges dockpipe.config.json compile.workflows with CLI defaults.
 // compile.bundles (deprecated) entries are appended and deduplicated — same recursive config.yml walk as workflows.
 func EffectiveWorkflowCompileRoots(cfg *DockpipeProjectConfig, repoRoot string) []string {
-	var out []string
+	return EffectiveWorkflowCompileRootsDetailed(cfg, repoRoot).Paths
+}
+
+// EffectiveWorkflowCompileRootsDetailed returns workflow compile roots plus any configured paths
+// that were skipped because they do not currently exist on disk.
+func EffectiveWorkflowCompileRootsDetailed(cfg *DockpipeProjectConfig, repoRoot string) CompilePathResolution {
+	var result CompilePathResolution
 	if cfg != nil && cfg.Compile.Workflows != nil {
-		out = resolveCompilePathList(repoRoot, *cfg.Compile.Workflows)
+		result = ResolveCompilePathList(repoRoot, *cfg.Compile.Workflows)
 	} else {
-		out = defaultWorkflowRoots(repoRoot)
+		result.Paths = defaultWorkflowRoots(repoRoot)
 	}
 	if cfg != nil && cfg.Compile.Bundles != nil {
-		out = mergeUniqueAbsPaths(out, resolveCompilePathList(repoRoot, *cfg.Compile.Bundles))
+		bundles := ResolveCompilePathList(repoRoot, *cfg.Compile.Bundles)
+		result.Paths = mergeUniqueAbsPaths(result.Paths, bundles.Paths)
+		result.MissingPaths = append(result.MissingPaths, bundles.MissingPaths...)
 	}
-	return out
+	return result
 }
 
 func mergeUniqueAbsPaths(a, b []string) []string {
@@ -45,7 +57,13 @@ func mergeUniqueAbsPaths(a, b []string) []string {
 // src/core/resolvers and templates/core/resolvers are always appended when present.
 // Deprecated: compile.resolvers in JSON is still merged when set (for old configs).
 func EffectiveResolverCompileRoots(cfg *DockpipeProjectConfig, repoRoot string) []string {
-	wf := EffectiveWorkflowCompileRoots(cfg, repoRoot)
+	return EffectiveResolverCompileRootsDetailed(cfg, repoRoot).Paths
+}
+
+// EffectiveResolverCompileRootsDetailed returns resolver compile roots plus any configured paths
+// that were skipped because they do not currently exist on disk.
+func EffectiveResolverCompileRootsDetailed(cfg *DockpipeProjectConfig, repoRoot string) CompilePathResolution {
+	wf := EffectiveWorkflowCompileRootsDetailed(cfg, repoRoot)
 	var core []string
 	for _, rel := range []string{
 		filepath.Join("src", "core", "resolvers"),
@@ -56,26 +74,36 @@ func EffectiveResolverCompileRoots(cfg *DockpipeProjectConfig, repoRoot string) 
 			core = append(core, p)
 		}
 	}
-	out := mergeUniqueAbsPaths(wf, core)
-	if cfg != nil && cfg.Compile.Resolvers != nil {
-		legacy := resolveCompilePathList(repoRoot, *cfg.Compile.Resolvers)
-		out = mergeUniqueAbsPaths(out, legacy)
+	result := CompilePathResolution{
+		Paths:        mergeUniqueAbsPaths(wf.Paths, core),
+		MissingPaths: append([]string(nil), wf.MissingPaths...),
 	}
-	return out
+	if cfg != nil && cfg.Compile.Resolvers != nil {
+		legacy := ResolveCompilePathList(repoRoot, *cfg.Compile.Resolvers)
+		result.Paths = mergeUniqueAbsPaths(result.Paths, legacy.Paths)
+		result.MissingPaths = append(result.MissingPaths, legacy.MissingPaths...)
+	}
+	return result
 }
 
 // EffectiveBundleCompileRoots returns paths from compile.bundles only (for DockerfileDir and other
 // lookups that need the bundle compile root without walking the whole workflows list). Compile itself
 // merges these into EffectiveWorkflowCompileRoots — there is no separate bundle compile step.
 func EffectiveBundleCompileRoots(cfg *DockpipeProjectConfig, repoRoot string) []string {
-	if cfg != nil && cfg.Compile.Bundles != nil {
-		return resolveCompilePathList(repoRoot, *cfg.Compile.Bundles)
-	}
-	return nil
+	return EffectiveBundleCompileRootsDetailed(cfg, repoRoot).Paths
 }
 
-func resolveCompilePathList(repoRoot string, rels []string) []string {
-	var out []string
+// EffectiveBundleCompileRootsDetailed returns bundle compile roots plus any configured paths that
+// were skipped because they do not currently exist on disk.
+func EffectiveBundleCompileRootsDetailed(cfg *DockpipeProjectConfig, repoRoot string) CompilePathResolution {
+	if cfg != nil && cfg.Compile.Bundles != nil {
+		return ResolveCompilePathList(repoRoot, *cfg.Compile.Bundles)
+	}
+	return CompilePathResolution{}
+}
+
+func ResolveCompilePathList(repoRoot string, rels []string) CompilePathResolution {
+	var result CompilePathResolution
 	for _, r := range rels {
 		r = strings.TrimSpace(r)
 		if r == "" {
@@ -88,12 +116,12 @@ func resolveCompilePathList(repoRoot string, rels []string) []string {
 			abs = filepath.Clean(r)
 		}
 		if _, err := os.Stat(abs); err == nil {
-			out = append(out, abs)
+			result.Paths = append(result.Paths, abs)
 		} else {
-			fmt.Fprintf(os.Stderr, "[dockpipe] config: skip missing path %s\n", abs)
+			result.MissingPaths = append(result.MissingPaths, abs)
 		}
 	}
-	return out
+	return result
 }
 
 func defaultWorkflowRoots(repoRoot string) []string {

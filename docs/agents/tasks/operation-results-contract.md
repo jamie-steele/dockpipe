@@ -100,6 +100,9 @@
   container launch, post-launch detach metadata, structured Docker mount/daemon hints, and
   host-checkpoint commit/skip behavior instead of bespoke startup, detach, mount-warning, and
   skip-commit lines.
+- Compile-root config warnings now emit canonical `config.compile_path` skip units from the
+  application layer, and the `domain` compile-root resolver now returns missing-path metadata
+  instead of printing raw config warning lines directly.
 
 ## Still Open
 

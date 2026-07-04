@@ -3,6 +3,7 @@ package application
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"dockpipe/src/lib/domain"
@@ -52,6 +53,40 @@ func TestEffectiveWorkflowCompileRootsNoDuplicateWhenListedTwice(t *testing.T) {
 	for p, n := range seen {
 		if n > 1 {
 			t.Fatalf("duplicate root %q (count %d): %v", p, n, out)
+		}
+	}
+}
+
+func TestEffectiveWorkflowCompileRootsLogsMissingConfiguredPaths(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, "workflows"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &domain.DockpipeProjectConfig{
+		Compile: domain.DockpipeCompileConfig{
+			Workflows: &[]string{"workflows", "missing-workflows"},
+		},
+	}
+	stderr, err := captureResultStderr(t, func() error {
+		out := effectiveWorkflowCompileRoots(cfg, repo)
+		if len(out) != 1 {
+			t.Fatalf("want 1 existing root, got %d: %v", len(out), out)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"unit=config.compile_path",
+		"status=done",
+		"path=" + filepath.Join(repo, "missing-workflows"),
+		"result=skip",
+		"root_kind=workflows",
+		"skip_reason=missing_path",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr)
 		}
 	}
 }

@@ -118,7 +118,7 @@ func validateCompileOutputsScoped(workdir string, requireWorkflowNamespace bool,
 }
 
 func mergeCompiledPackageNamesFromCompileRoots(out map[string]bool, repoRoot string, cfg *domain.DockpipeProjectConfig) {
-	for _, root := range domain.EffectiveWorkflowCompileRoots(cfg, repoRoot) {
+	for _, root := range effectiveWorkflowCompileRoots(cfg, repoRoot) {
 		_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				if filepath.Clean(path) == filepath.Clean(root) {

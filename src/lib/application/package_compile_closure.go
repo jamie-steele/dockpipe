@@ -142,7 +142,7 @@ func ensureCoreCompiled(projectRoot string, cfg *domain.DockpipeProjectConfig, f
 // and a set of resolver profile names to compile.
 // dockpipeRepoRoot is the DockPipe engine checkout (templates/core); projectRoot is the project being compiled.
 func closureWorkflowOrderAndResolvers(dockpipeRepoRoot, projectRoot, startDir string, cfg *domain.DockpipeProjectConfig) ([]string, map[string]bool, error) {
-	wfRoots := domain.EffectiveWorkflowCompileRoots(cfg, projectRoot)
+	wfRoots := effectiveWorkflowCompileRoots(cfg, projectRoot)
 	visited := make(map[string]bool)
 	var order []string
 	resNames := make(map[string]bool)
