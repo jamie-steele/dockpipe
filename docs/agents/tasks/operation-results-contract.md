@@ -107,6 +107,9 @@
   direct workflow commit paths, step-finalize commit-worktree actions, and strategy-after bundled
   commits; the underlying host git helper now returns structured commit results instead of printing
   repo-skip, no-change, branch, or bundle summary lines itself.
+- Docker `--reinit` volume-reset flows now emit canonical `session.volume.reinit` start/done
+  units for forced reset and user-aborted prompt paths instead of bespoke `Removing volume...`,
+  `Done. Starting with a fresh volume.`, and `Aborted.` lines.
 
 ## Still Open
 

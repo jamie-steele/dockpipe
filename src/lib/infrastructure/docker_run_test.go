@@ -91,6 +91,109 @@ func TestRunContainerReinitNoTTYRequiresForce(t *testing.T) {
 	}
 }
 
+func TestRunContainerReinitForceLogsOperationResult(t *testing.T) {
+	withDockerSeams(t)
+	var mu sync.Mutex
+	var calls []call
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		mu.Lock()
+		calls = append(calls, call{name: name, args: append([]string(nil), args...)})
+		mu.Unlock()
+		return helperExitCommand(0)
+	}
+	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
+	filepathAbsDocker = func(path string) (string, error) { return path, nil }
+	osStatDockerFn = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	isTerminalDockerFn = func(fd int) bool { return false }
+	timeNowDockerFn = func() time.Time { return time.Unix(1000, 0) }
+	in, _ := os.CreateTemp(t.TempDir(), "in")
+	out, _ := os.CreateTemp(t.TempDir(), "out")
+	errf, _ := os.CreateTemp(t.TempDir(), "err")
+	defer in.Close()
+	defer out.Close()
+	defer errf.Close()
+
+	rc, err := RunContainer(RunOpts{
+		Image:      "img",
+		DataVolume: "dockpipe-data",
+		Reinit:     true,
+		Force:      true,
+		Stdin:      in,
+		Stdout:     out,
+		Stderr:     errf,
+	}, []string{"echo", "ok"})
+	if err != nil || rc != 0 {
+		t.Fatalf("RunContainer reinit force failed rc=%d err=%v", rc, err)
+	}
+	mu.Lock()
+	got := strings.Join(flattenCalls(calls), "\n")
+	mu.Unlock()
+	if !strings.Contains(got, "docker volume rm dockpipe-data") {
+		t.Fatalf("expected docker volume rm call, got:\n%s", got)
+	}
+	stderrBytes, readErr := os.ReadFile(errf.Name())
+	if readErr != nil {
+		t.Fatalf("read stderr capture: %v", readErr)
+	}
+	stderrText := string(stderrBytes)
+	for _, want := range []string{
+		"unit=session.volume.reinit status=start confirm_mode=force volume=dockpipe-data",
+		"unit=session.volume.reinit status=done duration_ms=",
+		"result=reinitialized",
+	} {
+		if !strings.Contains(stderrText, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderrText)
+		}
+	}
+}
+
+func TestRunContainerReinitPromptDeclineLogsAbortedResult(t *testing.T) {
+	withDockerSeams(t)
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		t.Fatalf("exec should not be called when reinit prompt is declined")
+		return nil
+	}
+	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
+	filepathAbsDocker = func(path string) (string, error) { return path, nil }
+	isTerminalDockerFn = func(fd int) bool { return true }
+	in, err := os.CreateTemp(t.TempDir(), "in")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := in.WriteString("n\n"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := in.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
+	out, _ := os.CreateTemp(t.TempDir(), "out")
+	errf, _ := os.CreateTemp(t.TempDir(), "err")
+	defer in.Close()
+	defer out.Close()
+	defer errf.Close()
+
+	rc, err := RunContainer(RunOpts{
+		Image:      "img",
+		DataVolume: "dockpipe-data",
+		Reinit:     true,
+		Force:      false,
+		Stdin:      in,
+		Stdout:     out,
+		Stderr:     errf,
+	}, []string{"echo", "ok"})
+	if err == nil || !strings.Contains(err.Error(), "aborted") || rc != 1 {
+		t.Fatalf("expected aborted reinit, got rc=%d err=%v", rc, err)
+	}
+	stderrBytes, readErr := os.ReadFile(errf.Name())
+	if readErr != nil {
+		t.Fatalf("read stderr capture: %v", readErr)
+	}
+	stderrText := string(stderrBytes)
+	if !strings.Contains(stderrText, "unit=session.volume.reinit status=done duration_ms=0 confirm_mode=prompt result=aborted skip_reason=user_declined volume=dockpipe-data") {
+		t.Fatalf("expected aborted reinit result, got:\n%s", stderrText)
+	}
+}
+
 // TestRunContainerDetachBuildsDockerRun exercises detached mode: chown helper (Unix), docker run -d, mounts and env.
 func TestRunContainerDetachBuildsDockerRun(t *testing.T) {
 	withDockerSeams(t)

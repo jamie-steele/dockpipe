@@ -137,6 +137,52 @@ func dockerRunOperationIDs(image, mode, container string) map[string]string {
 	return ids
 }
 
+func dockerReinitVolume(stderr, stdin *os.File, force bool, volume string) error {
+	volume = strings.TrimSpace(volume)
+	reinitIDs := map[string]string{
+		"volume": volume,
+	}
+	if force {
+		reinitIDs["confirm_mode"] = "force"
+	} else {
+		reinitIDs["confirm_mode"] = "prompt"
+	}
+	fmt.Fprintf(stderr, "  ⚠  REINIT: This will permanently delete all data in volume '%s' (login, cache, repos).\n", volume)
+	if !force {
+		reinitInFd, reinitInOK := fdInt(stdin)
+		if !reinitInOK || !isTerminalDockerFn(reinitInFd) {
+			return fmt.Errorf("no TTY; use -f to reinit non-interactively")
+		}
+		fmt.Fprintf(stderr, "  Continue? [y/N] ")
+		br := bufio.NewReader(stdin)
+		line, _ := br.ReadString('\n')
+		line = strings.TrimSpace(strings.ToLower(line))
+		if line != "y" && line != "yes" {
+			abortIDs := map[string]string{
+				"volume":       volume,
+				"confirm_mode": reinitIDs["confirm_mode"],
+				"result":       "aborted",
+				"skip_reason":  "user_declined",
+			}
+			LogOperationResult(stderr, OperationResult{
+				Unit:       "session.volume.reinit",
+				Status:     OperationStatusDone,
+				DurationMs: 0,
+				IDs:        abortIDs,
+			})
+			return fmt.Errorf("aborted")
+		}
+	}
+	return RunOperationWithOptions(stderr, "session.volume.reinit", "Reinitializing Docker data volume…", reinitIDs, OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		dockerCmd := dockerCommandName()
+		cmd := execCommandFn(dockerCmd, "volume", "rm", volume)
+		cmd.Env = dockerCommandEnv(os.Environ(), dockerCmd)
+		_ = cmd.Run()
+		reinitIDs["result"] = "reinitialized"
+		return nil
+	})
+}
+
 var (
 	execCommandFn      = exec.Command
 	getwdDockerFn      = os.Getwd
@@ -492,27 +538,9 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	}
 
 	if o.Reinit && o.DataVolume != "" {
-		fmt.Fprintf(stderr, "  ⚠  REINIT: This will permanently delete all data in volume '%s' (login, cache, repos).\n", o.DataVolume)
-		if !o.Force {
-			reinitInFd, reinitInOK := fdInt(stdin)
-			if !reinitInOK || !isTerminalDockerFn(reinitInFd) {
-				return 1, fmt.Errorf("no TTY; use -f to reinit non-interactively")
-			}
-			fmt.Fprintf(stderr, "  Continue? [y/N] ")
-			br := bufio.NewReader(stdin)
-			line, _ := br.ReadString('\n')
-			line = strings.TrimSpace(strings.ToLower(line))
-			if line != "y" && line != "yes" {
-				fmt.Fprintln(stderr, "Aborted.")
-				return 1, fmt.Errorf("aborted")
-			}
+		if err := dockerReinitVolume(stderr, stdin, o.Force, o.DataVolume); err != nil {
+			return 1, err
 		}
-		fmt.Fprintf(stderr, "  Removing volume '%s'...\n", o.DataVolume)
-		dockerCmd := dockerCommandName()
-		cmd := execCommandFn(dockerCmd, "volume", "rm", o.DataVolume)
-		cmd.Env = dockerCommandEnv(os.Environ(), dockerCmd)
-		_ = cmd.Run()
-		fmt.Fprintln(stderr, "  Done. Starting with a fresh volume.")
 	}
 
 	uid := strconv.Itoa(getuidDockerFn())
