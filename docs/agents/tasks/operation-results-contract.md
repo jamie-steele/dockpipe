@@ -75,6 +75,9 @@
 - Compile internals now emit `package.compile.hook` units for staged `compile_hooks` execution and
   `package.compile.source_build` units for core `build.source.script` execution instead of bespoke
   `compile_hooks[...]` and `core source build:` lines.
+- Compile-closure discovery now emits `package.compile.dependency` skip units for missing `inject`,
+  `depends`, and nested delegate workflow references instead of bespoke `compile for-workflow:
+  warning: ... skip` lines.
 
 ## Still Open
 
@@ -82,8 +85,8 @@
   covered session/build/DorkPipe-shell paths and other long-running runtime/bootstrap work that still
   prints one-off lines.
 - Continue rolling the same result contract deeper into compile/package subcommands that still emit
-  ad hoc detail lines beneath the now-normalized build/package units, especially closure warnings,
-  validation, and install/bootstrap detail lines that still print bespoke text.
+  ad hoc detail lines beneath the now-normalized build/package units, especially validation and
+  install/bootstrap detail lines that still print bespoke text.
 - Continue migrating any newly added package-owned scripts that do meaningful long-running work onto
   `dockpipe result` or a shared package wrapper instead of adding new bespoke status formats.
 - Add a rebuildable Postgres projection over operation-event JSONL and JSON/YAML indexes for

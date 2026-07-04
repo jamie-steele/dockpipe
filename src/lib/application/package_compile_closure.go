@@ -20,6 +20,30 @@ type closurePackageDependency struct {
 	satisfied     bool
 }
 
+func logCompileClosureSkip(projectRoot, parentWorkflow, relation, missingRef, reason string) {
+	ids := packageCompileIDs(projectRoot, map[string]string{
+		"result": "skip",
+	})
+	if value := strings.TrimSpace(parentWorkflow); value != "" {
+		ids["workflow"] = value
+	}
+	if value := strings.TrimSpace(relation); value != "" {
+		ids["relation"] = value
+	}
+	if value := strings.TrimSpace(missingRef); value != "" {
+		ids["dependency"] = value
+	}
+	if value := strings.TrimSpace(reason); value != "" {
+		ids["skip_reason"] = value
+	}
+	infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+		Unit:       "package.compile.dependency",
+		Status:     infrastructure.OperationStatusDone,
+		DurationMs: 0,
+		IDs:        ids,
+	})
+}
+
 // compileClosureForWorkflow compiles core (if missing), then resolver tarballs and workflow tarballs
 // for the transitive closure of workflowName: config.yml inject:, package.yml depends, requires_resolvers,
 // resolver/runtime names on the workflow and steps, and nested delegate workflows from merged isolation profiles.
@@ -146,7 +170,7 @@ func closureWorkflowOrderAndResolvers(dockpipeRepoRoot, projectRoot, startDir st
 			if name := ent.WorkflowManifestName(); name != "" {
 				depDir := findWorkflowSourceDir(projectRoot, name, wfRoots)
 				if depDir == "" {
-					fmt.Fprintf(os.Stderr, "[dockpipe] compile for-workflow: warning: inject workflow %q not found under compile.workflows — skip\n", name)
+					logCompileClosureSkip(projectRoot, firstNonEmptyString(strings.TrimSpace(wf.Name), filepath.Base(k)), "inject", name, "workflow_not_found")
 					continue
 				}
 				if err := visit(depDir); err != nil {
@@ -182,7 +206,7 @@ func closureWorkflowOrderAndResolvers(dockpipeRepoRoot, projectRoot, startDir st
 						continue
 					}
 					if depInfo.workflowDir == "" {
-						fmt.Fprintf(os.Stderr, "[dockpipe] compile for-workflow: warning: depends %q not found under compile.workflows — skip\n", dep)
+						logCompileClosureSkip(projectRoot, firstNonEmptyString(strings.TrimSpace(wf.Name), filepath.Base(k)), "depends", dep, "dependency_not_found")
 					}
 				}
 				for _, r := range pm.RequiresResolvers {
@@ -212,7 +236,7 @@ func closureWorkflowOrderAndResolvers(dockpipeRepoRoot, projectRoot, startDir st
 				}
 				nestedDir := findWorkflowSourceDir(projectRoot, nested, wfRoots)
 				if nestedDir == "" {
-					fmt.Fprintf(os.Stderr, "[dockpipe] compile for-workflow: warning: nested workflow %q not found — skip\n", nested)
+					logCompileClosureSkip(projectRoot, firstNonEmptyString(strings.TrimSpace(wf.Name), filepath.Base(k)), "nested", nested, "workflow_not_found")
 					continue
 				}
 				if err := visit(nestedDir); err != nil {

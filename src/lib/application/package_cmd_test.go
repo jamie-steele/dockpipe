@@ -615,6 +615,65 @@ func TestCmdPackageCompileCoreSkipEmitsOperationResults(t *testing.T) {
 	}
 }
 
+func TestClosureWorkflowOrderAndResolversEmitsDependencySkipResults(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("DOCKPIPE_REPO_ROOT", dir)
+	workflowDir := filepath.Join(dir, "workflows", "start")
+	if err := os.MkdirAll(workflowDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `name: start
+inject:
+  - missing-inject
+steps:
+  - kind: host
+    cmd: echo ok
+`
+	if err := os.WriteFile(filepath.Join(workflowDir, "config.yml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `schema: 1
+name: start
+kind: workflow
+depends:
+  - missing-dep
+`
+	if err := os.WriteFile(filepath.Join(workflowDir, "package.yml"), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stderr, err := captureResultStderr(t, func() error {
+		order, resNames, err := closureWorkflowOrderAndResolvers(dir, dir, workflowDir, nil)
+		if err != nil {
+			return err
+		}
+		if len(order) != 1 || filepath.Clean(order[0]) != filepath.Clean(workflowDir) {
+			t.Fatalf("unexpected closure order: %+v", order)
+		}
+		if len(resNames) != 0 {
+			t.Fatalf("expected no resolver names, got %+v", resNames)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"unit=package.compile.dependency",
+		"workflow=start",
+		"relation=inject",
+		"dependency=missing-inject",
+		"relation=depends",
+		"dependency=missing-dep",
+		"skip_reason=workflow_not_found",
+		"skip_reason=dependency_not_found",
+		"result=skip",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected for-workflow compile stderr to contain %q, got:\n%s", want, stderr)
+		}
+	}
+}
+
 func TestCmdPackageCompileWorkflowsBatchPrunesStaleTarballs(t *testing.T) {
 	dir := t.TempDir()
 	root := filepath.Join(dir, "workflows")
