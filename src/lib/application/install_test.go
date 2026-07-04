@@ -23,9 +23,23 @@ func TestCmdInstallCoreDryRunRequiresBaseOrURL(t *testing.T) {
 
 func TestCmdInstallCoreDryRunWithBaseURL(t *testing.T) {
 	t.Setenv(envInstallBaseURL, "")
-	err := cmdInstallCore([]string{"--dry-run", "--base-url", "https://cdn.example.com/dockpipe"})
+	stderr, err := captureResultStderr(t, func() error {
+		return cmdInstallCore([]string{"--dry-run", "--base-url", "https://cdn.example.com/dockpipe"})
+	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"unit=install.core.dry_run",
+		"status=start",
+		"status=done",
+		"mode=latest",
+		"result=dry_run",
+		"would GET https://cdn.example.com/dockpipe/install-manifest.json",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected dry-run stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 }
 

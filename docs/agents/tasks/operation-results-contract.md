@@ -89,6 +89,12 @@
   `package.test.*` / `workflow.test.*` units, including noop outcomes for unmatched selectors,
   target names, scripts, counts, and durations instead of bespoke `package test:` /
   `workflow test:` status lines.
+- `dockpipe install core --dry-run` now emits a canonical `install.core.dry_run` unit while
+  preserving the descriptive plan text for fetch/manifest/extract behavior.
+- `dockpipe run` now emits canonical informational `run.*` units for shared runtime/bootstrap
+  context including worktree-base inference, prepared workspace sessions, resolved runtime/resolver
+  profiles, host-isolate selection, `/work` mount context, and container branch/detached context
+  instead of one-off status lines in those paths.
 
 ## Still Open
 

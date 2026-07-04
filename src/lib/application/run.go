@@ -65,7 +65,15 @@ func setUserRepoRootForWorktree(env map[string]string, opts *CliOpts, repoURL st
 		return
 	}
 	env["DOCKPIPE_USER_REPO_ROOT"] = top
-	fmt.Fprintf(os.Stderr, "[dockpipe] Worktree base: %s (same origin as --repo)\n", top)
+	infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+		Unit:       "run.worktree.base",
+		Status:     infrastructure.OperationStatusDone,
+		DurationMs: 0,
+		IDs: map[string]string{
+			"base":      filepath.ToSlash(top),
+			"repo_mode": "same_origin",
+		},
+	})
 }
 
 // Run is the CLI entry (after stripping os.Args[0]).
@@ -297,7 +305,18 @@ func Run(argv []string, baseEnviron []string) error {
 		if ap, err := filepath.Abs(effWd); err == nil {
 			projectRoot = ap
 		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] Workspace: %s session=%s branch=%s mode=%s\n", session.WorkspaceID, session.SessionID, session.Repo.SessionRef, session.Storage.Mode)
+		infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+			Unit:       "run.workspace",
+			Status:     infrastructure.OperationStatusDone,
+			DurationMs: 0,
+			IDs: map[string]string{
+				"workspace": session.WorkspaceID,
+				"session":   session.SessionID,
+				"branch":    session.Repo.SessionRef,
+				"mode":      session.Storage.Mode,
+				"result":    "prepared",
+			},
+		})
 	}
 
 	envMap := domain.EnvironToMap(baseEnviron)
@@ -425,16 +444,23 @@ func Run(argv []string, baseEnviron []string) error {
 		ra := domain.FromResolverMap(rm)
 		resolverEnvHint = ra.EnvHint
 		if rtName != "" && rsName != "" {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Runtime: %s  Resolver: %s", rtName, rsName)
-			if rk := strings.TrimSpace(ra.RuntimeKind); rk != "" {
-				fmt.Fprintf(os.Stderr, "  runtime.type: %s", rk)
-			}
-			fmt.Fprintln(os.Stderr)
-		} else if rk := strings.TrimSpace(ra.RuntimeKind); rk != "" {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Profile: %s (runtime.type: %s)\n", profileLabel, rk)
-		} else {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Profile: %s\n", profileLabel)
 		}
+		profileIDs := map[string]string{"profile": profileLabel}
+		if strings.TrimSpace(rtName) != "" {
+			profileIDs["runtime"] = rtName
+		}
+		if strings.TrimSpace(rsName) != "" {
+			profileIDs["resolver"] = rsName
+		}
+		if rk := strings.TrimSpace(ra.RuntimeKind); rk != "" {
+			profileIDs["runtime_kind"] = rk
+		}
+		infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+			Unit:       "run.profile",
+			Status:     infrastructure.OperationStatusDone,
+			DurationMs: 0,
+			IDs:        profileIDs,
+		})
 		templateName = ra.Template
 		hostIsolate = strings.TrimSpace(ra.HostIsolate)
 		resolverWorkflow = strings.TrimSpace(ra.Workflow)
@@ -775,7 +801,7 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 		workHost := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
 		if commitOnHost && strings.TrimSpace(envMap["DOCKPIPE_WORKDIR"]) != "" {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Mount /work ← %s\n", envMap["DOCKPIPE_WORKDIR"])
+			logRunMount(envMap["DOCKPIPE_WORKDIR"])
 		}
 		if strategyHandlesCommit {
 			mergeCommitEnvFromLines(envMap, opts.ExtraEnvLines)
@@ -808,10 +834,17 @@ func Run(argv []string, baseEnviron []string) error {
 		if _, err := os.Stat(scriptAbs); err != nil {
 			return fmt.Errorf("host isolate script not found: %s: %w", scriptAbs, err)
 		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] Host isolate: %s\n", hostIsolate)
+		infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+			Unit:       "run.host_isolate",
+			Status:     infrastructure.OperationStatusDone,
+			DurationMs: 0,
+			IDs: map[string]string{
+				"script": hostIsolate,
+			},
+		})
 		workHost := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
 		if commitOnHost && strings.TrimSpace(envMap["DOCKPIPE_WORKDIR"]) != "" {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Mount /work ← %s\n", envMap["DOCKPIPE_WORKDIR"])
+			logRunMount(envMap["DOCKPIPE_WORKDIR"])
 		}
 		hostEnv := hostDelegateEnvSlice(
 			envSliceWithScriptContext(envSlice, scriptAbs),
@@ -961,13 +994,27 @@ func Run(argv []string, baseEnviron []string) error {
 
 	workHost := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
 	if commitOnHost && strings.TrimSpace(envMap["DOCKPIPE_WORKDIR"]) != "" {
-		fmt.Fprintf(os.Stderr, "[dockpipe] Mount /work ← %s\n", envMap["DOCKPIPE_WORKDIR"])
+		logRunMount(envMap["DOCKPIPE_WORKDIR"])
 	}
 	if strings.TrimSpace(envMap["DOCKPIPE_WORKDIR"]) != "" {
 		if b := dockerEnvMap["DOCKPIPE_WORKTREE_BRANCH"]; b != "" {
-			fmt.Fprintf(os.Stderr, "[dockpipe] Container: DOCKPIPE_WORKTREE_BRANCH=%s\n", b)
+			infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+				Unit:       "run.container.context",
+				Status:     infrastructure.OperationStatusDone,
+				DurationMs: 0,
+				IDs: map[string]string{
+					"branch": b,
+				},
+			})
 		} else if dockerEnvMap["DOCKPIPE_WORKTREE_DETACHED"] == "1" {
-			fmt.Fprintln(os.Stderr, "[dockpipe] Container: DOCKPIPE_WORKTREE_DETACHED=1")
+			infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+				Unit:       "run.container.context",
+				Status:     infrastructure.OperationStatusDone,
+				DurationMs: 0,
+				IDs: map[string]string{
+					"detached": "1",
+				},
+			})
 		}
 	}
 	workPath := opts.WorkPath
@@ -1188,6 +1235,22 @@ func effectiveWorkdirForWorkflowOpts(opts *CliOpts) string {
 		return "."
 	}
 	return infrastructure.HostPathForGit(wd)
+}
+
+func logRunMount(hostPath string) {
+	hostPath = strings.TrimSpace(hostPath)
+	if hostPath == "" {
+		return
+	}
+	infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+		Unit:       "run.mount",
+		Status:     infrastructure.OperationStatusDone,
+		DurationMs: 0,
+		IDs: map[string]string{
+			"source": filepath.ToSlash(hostPath),
+			"target": "/work",
+		},
+	})
 }
 
 func compileDepsWanted(opts *CliOpts) bool {

@@ -126,9 +126,6 @@ func cmdInstallCore(args []string) error {
 		AllowInsecureHTTP: allowInsecure,
 	}
 	ctx := context.Background()
-	if dryRun {
-		return fetchinstall.InstallTemplatesCore(ctx, opts)
-	}
 	mode := "latest"
 	if strings.TrimSpace(opts.ExactTarballURL) != "" {
 		mode = "url"
@@ -145,6 +142,15 @@ func cmdInstallCore(args []string) error {
 	}
 	if m := strings.TrimSpace(opts.ManifestFile); m != "" {
 		opIDs["manifest"] = m
+	}
+	if dryRun {
+		return infrastructure.RunOperationWithOptions(os.Stderr, "install.core.dry_run", "Describing templates/core install…", opIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+			if err := fetchinstall.InstallTemplatesCore(ctx, opts); err != nil {
+				return err
+			}
+			opIDs["result"] = "dry_run"
+			return nil
+		})
 	}
 	return infrastructure.RunOperationWithOptions(os.Stderr, "install.core", "Installing templates/core…", opIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
 		if err := fetchinstall.InstallTemplatesCore(ctx, opts); err != nil {

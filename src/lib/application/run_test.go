@@ -129,10 +129,21 @@ func TestRunNonStepsHappyPath(t *testing.T) {
 		}
 		return 0, nil
 	}
-
-	err := Run([]string{"--resolver", "codex", "--", "echo", "hi"}, []string{"BASE=1"})
+	var err error
+	stderr := captureRunTestStderr(t, func() {
+		err = Run([]string{"--resolver", "codex", "--", "echo", "hi"}, []string{"BASE=1"})
+	})
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
+	}
+	for _, want := range []string{
+		"unit=run.profile",
+		"profile=codex",
+		"resolver=codex",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 	if !dockerBuilt || !containerRan {
 		t.Fatalf("expected docker build and run, built=%v ran=%v", dockerBuilt, containerRan)
@@ -409,10 +420,20 @@ func TestRunHostIsolateHappyPath(t *testing.T) {
 		gotIsolate = scriptAbs
 		return nil
 	}
-
-	err := Run([]string{"--resolver", "hostiso", "--workdir", repoRoot, "--"}, nil)
+	var err error
+	stderr := captureRunTestStderr(t, func() {
+		err = Run([]string{"--resolver", "hostiso", "--workdir", repoRoot, "--"}, nil)
+	})
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
+	}
+	for _, want := range []string{
+		"unit=run.host_isolate",
+		"script=scripts/host-isolate-test.sh",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 	if dockerBuilt || containerRan {
 		t.Fatalf("expected no docker build/run, built=%v ran=%v", dockerBuilt, containerRan)
@@ -1102,10 +1123,20 @@ isolate: codex
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldWd) })
-
-	err := Run([]string{"--workflow", "wfinfer", "--", "echo", "hi"}, nil)
+	var err error
+	stderr := captureRunTestStderr(t, func() {
+		err = Run([]string{"--workflow", "wfinfer", "--", "echo", "hi"}, nil)
+	})
 	if err != nil {
 		t.Fatalf("Run failed: %v", err)
+	}
+	for _, want := range []string{
+		"unit=run.worktree.base",
+		"repo_mode=same_origin",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 	want := "DOCKPIPE_REPO_URL=" + wantURL
 	found := false

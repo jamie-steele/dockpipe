@@ -339,9 +339,16 @@ func runStepHostIsolate(o *runStepsOpts, step domain.Step, dockerEnv map[string]
 	if _, err := osStatFn(scriptAbs); err != nil {
 		return fmt.Errorf("host isolate script not found: %s: %w", scriptAbs, err)
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] Host isolate: %s\n", rel)
+	infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+		Unit:       "run.host_isolate",
+		Status:     infrastructure.OperationStatusDone,
+		DurationMs: 0,
+		IDs: map[string]string{
+			"script": rel,
+		},
+	})
 	if strings.TrimSpace(o.envMap["DOCKPIPE_WORKDIR"]) != "" {
-		fmt.Fprintf(os.Stderr, "[dockpipe] Mount /work ← %s\n", o.envMap["DOCKPIPE_WORKDIR"])
+		logRunMount(o.envMap["DOCKPIPE_WORKDIR"])
 	}
 	cmdline := stepEffectiveCommand(step, o.cliArgs, stepIndex, len(o.wf.Steps))
 	hostEnv := hostDelegateEnvSlice(
