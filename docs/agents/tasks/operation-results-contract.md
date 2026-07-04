@@ -117,6 +117,10 @@
   verification, optional project/vault inspection, and final summary status instead of bespoke
   `doctor:` / `bash:` / `docker:` / `bundled assets:` / `project config:` lines; only free-form
   human guidance and user-authored secret notes remain outside the shared result contract.
+- Workflow/package host dependency bootstrap now emits canonical `dependency.host.approval` and
+  `dependency.host.install` units for auto-approved installs, non-interactive declines, and
+  installer skip/install outcomes instead of bespoke `dependency install:` status lines; only the
+  interactive approval question text remains free-form.
 
 ## Still Open
 

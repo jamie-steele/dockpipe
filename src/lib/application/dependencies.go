@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"dockpipe/src/lib/domain"
 	"dockpipe/src/lib/infrastructure"
@@ -33,9 +34,9 @@ type packageDependencyMetadata struct {
 }
 
 var (
-	dependencyLookPathFn = exec.LookPath
+	dependencyLookPathFn         = exec.LookPath
 	dependencyPowerShellLookupFn = dependencyLookupViaPowerShell
-	dependencyRunShellFn = runDependencyInstallShellCommand
+	dependencyRunShellFn         = runDependencyInstallShellCommand
 )
 
 func checkWorkflowHostDependencies(wf *domain.Workflow, wfRoot, wfConfig string, opts *CliOpts) error {
@@ -119,9 +120,19 @@ func maybeInstallMissingHostDependencies(missing []missingHostDependency, opts *
 		dep := missingDep.Dep
 		installCmd := installCommandForCurrentPlatform(dep)
 		if strings.TrimSpace(installCmd) == "" {
+			logDependencyResult("dependency.host.install", infrastructure.OperationStatusDone, mergeOperationResultIDs(hostDependencyResultIDs(dep), map[string]string{
+				"platform":    currentDependencyPlatform(),
+				"result":      "skip",
+				"skip_reason": "no_installer",
+			}), "")
 			continue
 		}
 		if !dependencyPlatformsSupportCurrent(missingDep.Platforms) {
+			logDependencyResult("dependency.host.install", infrastructure.OperationStatusDone, mergeOperationResultIDs(hostDependencyResultIDs(dep), map[string]string{
+				"platform":    currentDependencyPlatform(),
+				"result":      "skip",
+				"skip_reason": "unsupported_platform",
+			}), "")
 			continue
 		}
 		approved, err := approveDependencyInstall(dep, installCmd, opts)
@@ -131,8 +142,14 @@ func maybeInstallMissingHostDependencies(missing []missingHostDependency, opts *
 		if !approved {
 			continue
 		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] dependency install: %s\n", hostDependencyID(dep))
-		if err := dependencyRunShellFn(installCmd); err != nil {
+		ids := mergeOperationResultIDs(hostDependencyResultIDs(dep), map[string]string{
+			"platform": currentDependencyPlatform(),
+		})
+		err = infrastructure.RunOperationWithOptions(os.Stderr, "dependency.host.install", "Installing host dependency…", ids, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+			ids["result"] = "installed"
+			return dependencyRunShellFn(installCmd)
+		})
+		if err != nil {
 			return fmt.Errorf("install dependency %s: %w", hostDependencyID(dep), err)
 		}
 	}
@@ -141,13 +158,28 @@ func maybeInstallMissingHostDependencies(missing []missingHostDependency, opts *
 
 func approveDependencyInstall(dep domain.HostDependency, installCmd string, opts *CliOpts) (bool, error) {
 	if opts != nil && opts.ApproveSystemChanges {
+		logDependencyResult("dependency.host.approval", infrastructure.OperationStatusDone, mergeOperationResultIDs(hostDependencyResultIDs(dep), map[string]string{
+			"approval":        "approved",
+			"approval_source": "flag",
+			"platform":        currentDependencyPlatform(),
+		}), "")
 		return true, nil
 	}
 	if envBool(os.Getenv("DOCKPIPE_APPROVE_PROMPTS")) {
+		logDependencyResult("dependency.host.approval", infrastructure.OperationStatusDone, mergeOperationResultIDs(hostDependencyResultIDs(dep), map[string]string{
+			"approval":        "approved",
+			"approval_source": "env",
+			"platform":        currentDependencyPlatform(),
+		}), "")
 		return true, nil
 	}
 	fd, ok := stdinFDInt()
 	if !ok || !term.IsTerminal(fd) {
+		logDependencyResult("dependency.host.approval", infrastructure.OperationStatusDone, mergeOperationResultIDs(hostDependencyResultIDs(dep), map[string]string{
+			"approval":        "declined",
+			"approval_source": "non_interactive",
+			"platform":        currentDependencyPlatform(),
+		}), "")
 		return false, nil
 	}
 	fmt.Fprintf(os.Stderr, "[dockpipe] Missing dependency %s (%s).\n", hostDependencyID(dep), hostDependencyCommand(dep))
@@ -156,7 +188,17 @@ func approveDependencyInstall(dep domain.HostDependency, installCmd string, opts
 	br := bufio.NewReader(os.Stdin)
 	line, _ := br.ReadString('\n')
 	line = strings.TrimSpace(strings.ToLower(line))
-	return line == "y" || line == "yes", nil
+	approved := line == "y" || line == "yes"
+	approval := "declined"
+	if approved {
+		approval = "approved"
+	}
+	logDependencyResult("dependency.host.approval", infrastructure.OperationStatusDone, mergeOperationResultIDs(hostDependencyResultIDs(dep), map[string]string{
+		"approval":        approval,
+		"approval_source": "prompt",
+		"platform":        currentDependencyPlatform(),
+	}), "")
+	return approved, nil
 }
 
 func packageDependenciesForWorkflow(wfRoot, wfConfig string) (packageDependencyMetadata, error) {
@@ -264,6 +306,30 @@ func hostDependencyCommand(dep domain.HostDependency) string {
 		return cmd
 	}
 	return strings.TrimSpace(dep.ID)
+}
+
+func hostDependencyResultIDs(dep domain.HostDependency) map[string]string {
+	ids := map[string]string{}
+	if id := strings.TrimSpace(hostDependencyID(dep)); id != "" {
+		ids["dependency"] = id
+	}
+	if command := strings.TrimSpace(hostDependencyCommand(dep)); command != "" {
+		ids["command"] = command
+	}
+	return ids
+}
+
+func logDependencyResult(unit, status string, ids map[string]string, err string) {
+	result := infrastructure.OperationResult{
+		Unit:       unit,
+		Status:     status,
+		DurationMs: 0,
+		IDs:        ids,
+	}
+	if strings.TrimSpace(err) != "" {
+		result.Error = strings.TrimSpace(err)
+	}
+	infrastructure.LogOperationResult(os.Stderr, result)
 }
 
 func installCommandForCurrentPlatform(dep domain.HostDependency) string {

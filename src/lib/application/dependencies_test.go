@@ -148,6 +148,117 @@ func TestCheckWorkflowHostDependenciesInstallsApprovedMissingDependency(t *testi
 	}
 }
 
+func TestCheckWorkflowHostDependenciesApprovedInstallEmitsOperationResults(t *testing.T) {
+	oldLookPath := dependencyLookPathFn
+	oldPowerShell := dependencyPowerShellLookupFn
+	oldRunShell := dependencyRunShellFn
+	t.Cleanup(func() {
+		dependencyLookPathFn = oldLookPath
+		dependencyPowerShellLookupFn = oldPowerShell
+		dependencyRunShellFn = oldRunShell
+	})
+	installed := false
+	dependencyLookPathFn = func(file string) (string, error) {
+		if installed {
+			return "/bin/" + file, nil
+		}
+		return "", os.ErrNotExist
+	}
+	dependencyPowerShellLookupFn = func(string) (string, error) {
+		return "", os.ErrNotExist
+	}
+	dependencyRunShellFn = func(command string) error {
+		installed = true
+		return nil
+	}
+	wf := &domain.Workflow{
+		Dependencies: domain.DependencySpec{
+			Host: []domain.HostDependency{{
+				ID:      "missing-tool",
+				Command: "dockpipe-approved-missing-tool",
+				Install: domain.HostDependencyInstallHint{
+					Windows: "winget install example.missing-tool",
+					MacOS:   "brew install missing-tool",
+					Linux:   "sudo apt-get install -y missing-tool",
+				},
+			}},
+		},
+	}
+
+	wfRoot := t.TempDir()
+	stderr, err := captureResultStderr(t, func() error {
+		return checkWorkflowHostDependencies(wf, wfRoot, filepath.Join(wfRoot, "config.yml"), &CliOpts{ApproveSystemChanges: true})
+	})
+	if err != nil {
+		t.Fatalf("expected approved install to satisfy dependency: %v", err)
+	}
+	for _, want := range []string{
+		"unit=dependency.host.approval",
+		"approval=approved",
+		"approval_source=flag",
+		"dependency=missing-tool",
+		"command=dockpipe-approved-missing-tool",
+		"unit=dependency.host.install",
+		"status=start",
+		"status=done",
+		"result=installed",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr)
+		}
+	}
+}
+
+func TestCheckWorkflowHostDependenciesNonInteractiveDeclineEmitsApprovalResult(t *testing.T) {
+	oldLookPath := dependencyLookPathFn
+	oldPowerShell := dependencyPowerShellLookupFn
+	oldRunShell := dependencyRunShellFn
+	t.Cleanup(func() {
+		dependencyLookPathFn = oldLookPath
+		dependencyPowerShellLookupFn = oldPowerShell
+		dependencyRunShellFn = oldRunShell
+	})
+	dependencyLookPathFn = func(file string) (string, error) {
+		return "", os.ErrNotExist
+	}
+	dependencyPowerShellLookupFn = func(string) (string, error) {
+		return "", os.ErrNotExist
+	}
+	dependencyRunShellFn = func(command string) error {
+		t.Fatalf("installer should not run without approval: %s", command)
+		return nil
+	}
+	wf := &domain.Workflow{
+		Dependencies: domain.DependencySpec{
+			Host: []domain.HostDependency{{
+				ID:      "missing-tool",
+				Command: "dockpipe-noninteractive-missing-tool",
+				Install: domain.HostDependencyInstallHint{
+					Windows: "winget install example.missing-tool",
+					MacOS:   "brew install missing-tool",
+					Linux:   "sudo apt-get install -y missing-tool",
+				},
+			}},
+		},
+	}
+
+	wfRoot := t.TempDir()
+	stderr, err := captureResultStderr(t, func() error {
+		return checkWorkflowHostDependencies(wf, wfRoot, filepath.Join(wfRoot, "config.yml"), nil)
+	})
+	if err == nil {
+		t.Fatal("expected missing dependency error")
+	}
+	if !strings.Contains(stderr, "unit=dependency.host.approval") ||
+		!strings.Contains(stderr, "approval=declined") ||
+		!strings.Contains(stderr, "approval_source=non_interactive") {
+		t.Fatalf("expected non-interactive approval result, got:\n%s", stderr)
+	}
+	if strings.Contains(stderr, "unit=dependency.host.install") {
+		t.Fatalf("did not expect install unit without approval, got:\n%s", stderr)
+	}
+}
+
 func TestResolveDependencyCommandPathFallsBackToPowerShellOnWindows(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("windows-specific fallback")
