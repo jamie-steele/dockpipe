@@ -113,6 +113,10 @@
 - Host cleanup now emits canonical `host.cleanup.process` and `host.cleanup.container` units for
   killed tracked processes, stopped tracked Docker containers, and failed-stop cleanup outcomes
   instead of bespoke `host cleanup:` and warning lines.
+- `dockpipe doctor` now emits canonical `doctor.*` units for required host checks, bundled-asset
+  verification, optional project/vault inspection, and final summary status instead of bespoke
+  `doctor:` / `bash:` / `docker:` / `bundled assets:` / `project config:` lines; only free-form
+  human guidance and user-authored secret notes remain outside the shared result contract.
 
 ## Still Open
 
