@@ -81,9 +81,11 @@ func TestCmdInitGitignore(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldWd) })
 
-	if err := cmdInit([]string{"--gitignore"}); err != nil {
-		t.Fatalf("cmdInit: %v", err)
-	}
+	stderr := captureStderr(t, func() {
+		if err := cmdInit([]string{"--gitignore"}); err != nil {
+			t.Fatalf("cmdInit: %v", err)
+		}
+	})
 	b, err := os.ReadFile(filepath.Join(project, ".gitignore"))
 	if err != nil {
 		t.Fatal(err)
@@ -96,5 +98,10 @@ func TestCmdInitGitignore(t *testing.T) {
 	}
 	if strings.Contains(string(b), ".dorkpipe/") {
 		t.Fatalf("did not expect legacy .dorkpipe/ entry in .gitignore, got:\n%s", b)
+	}
+	for _, want := range []string{"unit=init.project", "unit=init.gitignore", "status=done"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected init stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 }

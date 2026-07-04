@@ -95,7 +95,16 @@ func cmdInit(args []string) error {
 		defer infrastructure.SetWorkflowsDirForProcess("")
 	}
 
-	if err := ensureProjectScaffold(repoRoot, projectDir); err != nil {
+	if err := infrastructure.RunOperationWithOptions(
+		os.Stderr,
+		"init.project",
+		"Scaffolding project files…",
+		map[string]string{"project": projectDir},
+		infrastructure.OperationOptions{Spinner: false},
+		func() error {
+			return ensureProjectScaffold(repoRoot, projectDir)
+		},
+	); err != nil {
 		return err
 	}
 	if gitignore {
@@ -107,7 +116,6 @@ func cmdInit(args []string) error {
 		if err := ensureDefaultStarterWorkflow(repoRoot, projectDir); err != nil {
 			return err
 		}
-		fmt.Fprintf(os.Stderr, "[dockpipe] Initialized Dockpipe in %s\n", projectDir)
 		return nil
 	}
 
@@ -167,28 +175,39 @@ func cmdTemplate(args []string) error {
 	if _, err := os.Stat(dest); err == nil {
 		return fmt.Errorf("%s already exists", dest)
 	}
-	if err := copyDir(src, dest); err != nil {
-		return err
-	}
-	// Pull in shared templates/core next to the new workflow if not already present (resolvers, strategies).
-	wdParent := filepath.Dir(dest)
-	coreDest := filepath.Join(wdParent, "templates", "core")
-	if _, err := os.Stat(coreDest); err != nil && os.IsNotExist(err) {
-		if err := os.MkdirAll(filepath.Join(wdParent, "templates"), 0o755); err != nil {
-			return err
-		}
-		if err := copyBundledCoreInto(coreDest, repoRoot); err != nil {
-			return fmt.Errorf("copy shared templates/core: %w", err)
-		}
-	}
-	_ = filepath.WalkDir(dest, func(p string, d fs.DirEntry, err error) error {
-		if err == nil && strings.HasSuffix(p, ".sh") {
-			_ = os.Chmod(p, 0o755)
-		}
-		return nil
-	})
-	fmt.Printf("Created: %s (from template %s)\n", dest, from)
-	return nil
+	return infrastructure.RunOperationWithOptions(
+		os.Stderr,
+		"init.template",
+		"Creating template workspace…",
+		map[string]string{
+			"template": from,
+			"path":     dest,
+		},
+		infrastructure.OperationOptions{Spinner: false},
+		func() error {
+			if err := copyDir(src, dest); err != nil {
+				return err
+			}
+			// Pull in shared templates/core next to the new workflow if not already present (resolvers, strategies).
+			wdParent := filepath.Dir(dest)
+			coreDest := filepath.Join(wdParent, "templates", "core")
+			if _, err := os.Stat(coreDest); err != nil && os.IsNotExist(err) {
+				if err := os.MkdirAll(filepath.Join(wdParent, "templates"), 0o755); err != nil {
+					return err
+				}
+				if err := copyBundledCoreInto(coreDest, repoRoot); err != nil {
+					return fmt.Errorf("copy shared templates/core: %w", err)
+				}
+			}
+			_ = filepath.WalkDir(dest, func(p string, d fs.DirEntry, err error) error {
+				if err == nil && strings.HasSuffix(p, ".sh") {
+					_ = os.Chmod(p, 0o755)
+				}
+				return nil
+			})
+			return nil
+		},
+	)
 }
 
 func cmdInitLikeScript(args []string, defaultName string, bundled []string, boiler string) error {
@@ -231,18 +250,34 @@ func cmdInitLikeScript(args []string, defaultName string, bundled []string, boil
 	if _, err := os.Stat(dest); err == nil {
 		return fmt.Errorf("%s already exists", dest)
 	}
+	source := "boilerplate"
 	if from != "" {
-		base := strings.TrimSuffix(from, ".sh")
-		src := filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "scripts", base+".sh")
-		if _, err := os.Stat(src); err != nil {
-			return fmt.Errorf("unknown bundled script %q (try: %v)", from, bundled)
-		}
-		if err := copyFile(src, dest); err != nil {
-			return err
-		}
-		return os.Chmod(dest, 0o755)
+		source = strings.TrimSuffix(from, ".sh")
 	}
-	return os.WriteFile(dest, []byte(boiler), 0o755)
+	return infrastructure.RunOperationWithOptions(
+		os.Stderr,
+		"init.script",
+		"Creating helper script…",
+		map[string]string{
+			"path":   dest,
+			"source": source,
+		},
+		infrastructure.OperationOptions{Spinner: false},
+		func() error {
+			if from != "" {
+				base := strings.TrimSuffix(from, ".sh")
+				src := filepath.Join(infrastructure.CoreDir(repoRoot), "assets", "scripts", base+".sh")
+				if _, err := os.Stat(src); err != nil {
+					return fmt.Errorf("unknown bundled script %q (try: %v)", from, bundled)
+				}
+				if err := copyFile(src, dest); err != nil {
+					return err
+				}
+				return os.Chmod(dest, 0o755)
+			}
+			return os.WriteFile(dest, []byte(boiler), 0o755)
+		},
+	)
 }
 
 // copyBundledCoreInto merges category dirs (assets, resolvers, runtimes, strategies) into coreDest.

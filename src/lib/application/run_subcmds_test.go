@@ -108,9 +108,11 @@ func TestCmdInitLikeScriptCreateAndFromBundled(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldWd) })
 
-	if err := cmdAction([]string{"init"}); err != nil {
-		t.Fatalf("cmdAction init failed: %v", err)
-	}
+	stderr := captureStderr(t, func() {
+		if err := cmdAction([]string{"init"}); err != nil {
+			t.Fatalf("cmdAction init failed: %v", err)
+		}
+	})
 	created := filepath.Join(wd, "my-action.sh")
 	b, err := os.ReadFile(created)
 	if err != nil {
@@ -118,6 +120,11 @@ func TestCmdInitLikeScriptCreateAndFromBundled(t *testing.T) {
 	}
 	if !strings.Contains(string(b), "dockpipe action") {
 		t.Fatalf("expected action boilerplate, got: %q", string(b))
+	}
+	for _, want := range []string{"unit=init.script", "status=start", "status=done", "source=boilerplate"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected action stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 
 	if err := cmdAction([]string{"init", "--from", "print-summary", "from-bundle.sh"}); err != nil {
@@ -144,9 +151,11 @@ func TestCmdPreInitCreatesDefaultScript(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chdir(oldWd) })
 
-	if err := cmdPre([]string{"init"}); err != nil {
-		t.Fatalf("cmdPre init failed: %v", err)
-	}
+	stderr := captureStderr(t, func() {
+		if err := cmdPre([]string{"init"}); err != nil {
+			t.Fatalf("cmdPre init failed: %v", err)
+		}
+	})
 	created := filepath.Join(wd, "my-pre.sh")
 	b, err := os.ReadFile(created)
 	if err != nil {
@@ -154,6 +163,11 @@ func TestCmdPreInitCreatesDefaultScript(t *testing.T) {
 	}
 	if !strings.Contains(string(b), "dockpipe pre-script") {
 		t.Fatalf("expected pre boilerplate, got: %q", string(b))
+	}
+	for _, want := range []string{"unit=init.script", "status=start", "status=done", "source=boilerplate"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected pre stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 }
 

@@ -1,6 +1,7 @@
 package application
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,26 @@ import (
 	"dockpipe/src/lib/infrastructure"
 	"dockpipe/src/lib/infrastructure/packagebuild"
 )
+
+func captureCloneStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	t.Cleanup(func() { os.Stderr = old })
+	fn()
+	_ = w.Close()
+	b, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = r.Close()
+	os.Stderr = old
+	return string(b)
+}
 
 func TestCmdCloneCopiesWhenAllowCloneTrue(t *testing.T) {
 	dir := t.TempDir()
@@ -47,11 +68,18 @@ steps: []
 	if !m.AllowClone {
 		t.Fatal("expected compile to set allow_clone true")
 	}
-	if err := cmdClone([]string{"mywf", "--workdir", dir, "--to", filepath.Join(dir, "out", "mywf")}); err != nil {
-		t.Fatal(err)
-	}
+	stderr := captureCloneStderr(t, func() {
+		if err := cmdClone([]string{"mywf", "--workdir", dir, "--to", filepath.Join(dir, "out", "mywf")}); err != nil {
+			t.Fatal(err)
+		}
+	})
 	if _, err := os.Stat(filepath.Join(dir, "out", "mywf", "config.yml")); err != nil {
 		t.Fatal(err)
+	}
+	for _, want := range []string{"unit=clone.workflow", "status=start", "status=done", "workflow=mywf"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected clone stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 }
 

@@ -96,28 +96,41 @@ func cmdClone(args []string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stat(toAbs); err == nil {
-		if !force {
-			return fmt.Errorf("destination exists: %s (use --force to replace)", toAbs)
-		}
-		if err := os.RemoveAll(toAbs); err != nil {
-			return fmt.Errorf("remove existing: %w", err)
-		}
-	}
-	tmpDir, err := os.MkdirTemp("", "dockpipe-clone-*")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tmpDir)
-	if err := packagebuild.ExtractTarGzToDir(tgz, tmpDir); err != nil {
-		return fmt.Errorf("extract workflow tarball: %w", err)
-	}
-	srcExtracted := filepath.Join(tmpDir, "workflows", wfName)
-	if err := copyDir(srcExtracted, toAbs); err != nil {
-		return fmt.Errorf("clone: %w", err)
-	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] cloned %s → %s\n", tgz, toAbs)
-	return nil
+	return infrastructure.RunOperationWithOptions(
+		os.Stderr,
+		"clone.workflow",
+		"Cloning workflow package…",
+		map[string]string{
+			"package":     name,
+			"workflow":    wfName,
+			"destination": toAbs,
+			"archive":     tgz,
+		},
+		infrastructure.OperationOptions{Spinner: false},
+		func() error {
+			if _, err := os.Stat(toAbs); err == nil {
+				if !force {
+					return fmt.Errorf("destination exists: %s (use --force to replace)", toAbs)
+				}
+				if err := os.RemoveAll(toAbs); err != nil {
+					return fmt.Errorf("remove existing: %w", err)
+				}
+			}
+			tmpDir, err := os.MkdirTemp("", "dockpipe-clone-*")
+			if err != nil {
+				return err
+			}
+			defer os.RemoveAll(tmpDir)
+			if err := packagebuild.ExtractTarGzToDir(tgz, tmpDir); err != nil {
+				return fmt.Errorf("extract workflow tarball: %w", err)
+			}
+			srcExtracted := filepath.Join(tmpDir, "workflows", wfName)
+			if err := copyDir(srcExtracted, toAbs); err != nil {
+				return fmt.Errorf("clone: %w", err)
+			}
+			return nil
+		},
+	)
 }
 
 const cloneUsageText = `dockpipe clone

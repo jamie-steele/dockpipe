@@ -236,6 +236,11 @@ func TestCmdInitBareDoesNotWarnForEmptyWorkflowsSubdirs(t *testing.T) {
 			t.Fatalf("cmdInit: %v", err)
 		}
 	})
+	for _, want := range []string{"unit=init.project", "unit=init.workflow", "status=done", "workflow=example"} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected init stderr to contain %q, got:\n%s", want, stderr)
+		}
+	}
 	if strings.Contains(stderr, "has no DockPipe workflow folders") {
 		t.Fatalf("did not expect workflows warning for empty directory tree, got:\n%s", stderr)
 	}
