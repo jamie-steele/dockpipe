@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"dockpipe/src/lib/infrastructure"
 	"dockpipe/src/lib/infrastructure/packagebuild"
@@ -83,12 +85,20 @@ func cmdPackageBuildCore(args []string) error {
 		}
 		version = v
 	}
-	path, err := packagebuild.WriteCoreRelease(coreParent, outDir, version)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] wrote %s (+ .sha256, install-manifest.json) under %s\n", filepath.Base(path), filepath.Dir(path))
-	return nil
+	opIDs := mergeOperationResultIDs(buildOperationIDs(root, ""), map[string]string{
+		"package": "dockpipe.core",
+		"version": strings.TrimSpace(version),
+	})
+	return infrastructure.RunOperationWithOptions(os.Stderr, "package.build.core", "Building core release artifact…", opIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		path, err := packagebuild.WriteCoreRelease(coreParent, outDir, version)
+		if err != nil {
+			return err
+		}
+		opIDs["result"] = "built"
+		opIDs["output"] = filepath.ToSlash(path)
+		opIDs["manifest"] = filepath.ToSlash(filepath.Join(filepath.Dir(path), "install-manifest.json"))
+		return nil
+	})
 }
 
 func resolvePackageRepoRoot(flagRoot string) (string, error) {
@@ -228,20 +238,34 @@ func RunPackageBuildStoreFromFlags(workdir, outDir, only, fallbackVersion string
 			fallbackVersion = v
 		}
 	}
-	if err := validateCompileOutputsForMode(repoRoot, true); err != nil {
-		return fmt.Errorf("package build store: %w", err)
+	opIDs := mergeOperationResultIDs(buildOperationIDs(repoRoot, ""), map[string]string{
+		"slice": strings.TrimSpace(strings.ToLower(only)),
+	})
+	if opIDs["slice"] == "" {
+		opIDs["slice"] = "all"
 	}
-	m, err := packagebuild.BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only)
-	if err != nil {
-		return err
+	if strings.TrimSpace(fallbackVersion) != "" {
+		opIDs["version_fallback"] = strings.TrimSpace(fallbackVersion)
 	}
-	n := 0
-	if m.Packages.Core != nil {
-		n++
-	}
-	n += len(m.Packages.Workflows) + len(m.Packages.Resolvers)
-	fmt.Fprintf(os.Stderr, "[dockpipe] wrote %d tarball(s) + packages-store-manifest.json under %s\n", n, outDir)
-	return nil
+	return infrastructure.RunOperationWithOptions(os.Stderr, "package.build.store", "Building compiled package store artifacts…", opIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		if err := validateCompileOutputsForMode(repoRoot, true); err != nil {
+			return fmt.Errorf("package build store: %w", err)
+		}
+		m, err := packagebuild.BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only)
+		if err != nil {
+			return err
+		}
+		n := 0
+		if m.Packages.Core != nil {
+			n++
+		}
+		n += len(m.Packages.Workflows) + len(m.Packages.Resolvers)
+		opIDs["count"] = strconv.Itoa(n)
+		opIDs["result"] = "built"
+		opIDs["output_dir"] = filepath.ToSlash(outDir)
+		opIDs["manifest"] = filepath.ToSlash(filepath.Join(outDir, "packages-store-manifest.json"))
+		return nil
+	})
 }
 
 func validatePackageBuildStoreOnly(only string) error {

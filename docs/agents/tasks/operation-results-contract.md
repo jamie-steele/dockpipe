@@ -78,6 +78,9 @@
 - Compile-closure discovery now emits `package.compile.dependency` skip units for missing `inject`,
   `depends`, and nested delegate workflow references instead of bespoke `compile for-workflow:
   warning: ... skip` lines.
+- `dockpipe package build core` and `dockpipe package build store` now emit canonical
+  `package.build.core` and `package.build.store` units with version, output/manifest paths, slice
+  selection, tarball counts, and built results instead of bespoke `[dockpipe] wrote ...` summaries.
 
 ## Still Open
 
