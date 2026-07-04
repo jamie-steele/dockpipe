@@ -32,28 +32,32 @@ func appendDockpipeGitignore(projectDir string) error {
 		return fmt.Errorf("dockpipe init --gitignore requires a git working tree: %w", err)
 	}
 	path := filepath.Join(top, ".gitignore")
-	data, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	if os.IsNotExist(err) {
-		data = nil
-	}
-	if bytes.Contains(data, []byte(dockpipeGitignoreBegin)) {
-		fmt.Fprintf(os.Stderr, "[dockpipe] %s already contains the dockpipe-gitignore block; skipping\n", path)
-		return nil
-	}
-	var buf bytes.Buffer
-	if len(data) > 0 {
-		buf.Write(data)
-		if data[len(data)-1] != '\n' {
-			buf.WriteByte('\n')
-		}
-	}
-	buf.WriteString(dockpipeGitignoreBlock)
-	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
-		return err
-	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] Appended dockpipe entries to %s\n", path)
-	return nil
+	return infrastructure.RunOperationWithOptions(
+		os.Stderr,
+		"init.gitignore",
+		"Updating .gitignore…",
+		map[string]string{"path": path},
+		infrastructure.OperationOptions{Spinner: false},
+		func() error {
+			data, err := os.ReadFile(path)
+			if err != nil && !os.IsNotExist(err) {
+				return err
+			}
+			if os.IsNotExist(err) {
+				data = nil
+			}
+			if bytes.Contains(data, []byte(dockpipeGitignoreBegin)) {
+				return nil
+			}
+			var buf bytes.Buffer
+			if len(data) > 0 {
+				buf.Write(data)
+				if data[len(data)-1] != '\n' {
+					buf.WriteByte('\n')
+				}
+			}
+			buf.WriteString(dockpipeGitignoreBlock)
+			return os.WriteFile(path, buf.Bytes(), 0o644)
+		},
+	)
 }

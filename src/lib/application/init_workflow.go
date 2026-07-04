@@ -239,38 +239,42 @@ func createNamedWorkflow(repoRoot, projectDir, name, fromSource, resolver, runti
 		return err
 	}
 	cfgPath := filepath.Join(td, "config.yml")
-
-	srcDir, isBlank, err := resolveInitFromSource(repoRoot, fromSource)
-	if err != nil {
-		return err
-	}
-	if isBlank {
-		wf := &domain.Workflow{
-			Name:        name,
-			Description: "Dockpipe workflow — edit me.",
-		}
-		if err := writeWorkflowYAML(cfgPath, wf); err != nil {
-			return err
-		}
-	} else {
-		if err := copyDir(srcDir, td); err != nil {
-			return err
-		}
-		if err := patchWorkflowConfigName(cfgPath, name); err != nil {
-			return err
-		}
-	}
-	if err := applyInitWorkflowFlags(cfgPath, resolver, runtime, strategy); err != nil {
-		return err
-	}
 	showRel := td
 	if r, err := filepath.Rel(projectDir, td); err == nil && !strings.HasPrefix(r, "..") {
 		showRel = r
 	}
-	if isBlank {
-		fmt.Fprintf(os.Stderr, "[dockpipe] Created %s/ (empty workflow — edit config.yml; use --from to copy a bundled template)\n", showRel)
-	} else {
-		fmt.Fprintf(os.Stderr, "[dockpipe] Created %s/ (from %s)\n", showRel, fromSource)
-	}
-	return nil
+	return infrastructure.RunOperationWithOptions(
+		os.Stderr,
+		"init.workflow",
+		"Creating workflow…",
+		map[string]string{
+			"workflow": name,
+			"path":     showRel,
+			"source":   fromSource,
+		},
+		infrastructure.OperationOptions{Spinner: false},
+		func() error {
+			srcDir, isBlank, err := resolveInitFromSource(repoRoot, fromSource)
+			if err != nil {
+				return err
+			}
+			if isBlank {
+				wf := &domain.Workflow{
+					Name:        name,
+					Description: "Dockpipe workflow — edit me.",
+				}
+				if err := writeWorkflowYAML(cfgPath, wf); err != nil {
+					return err
+				}
+			} else {
+				if err := copyDir(srcDir, td); err != nil {
+					return err
+				}
+				if err := patchWorkflowConfigName(cfgPath, name); err != nil {
+					return err
+				}
+			}
+			return applyInitWorkflowFlags(cfgPath, resolver, runtime, strategy)
+		},
+	)
 }
