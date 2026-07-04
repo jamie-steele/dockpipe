@@ -1,0 +1,10 @@
+Package: dockpipe
+Version: 0.6.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Depends: bash, docker.io | docker-ce, git
+Maintainer: dockpipe maintainers
+Description: Run any CLI command in a disposable container—project at /work, removed when it exits.
+ dockpipe wires docker run for you: your project at /work, container removed when the
+ command exits, optional host step after. Use for tests, linters, one-off tools, or agents.

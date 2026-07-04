@@ -1,0 +1,7 @@
+name: dorkpipe
+namespace: dockpipeproject
+platforms: [windows, deb]
+description: Domain asset pack (DorkPipe scripts and resources); not intended for direct run.
+compile_hooks:
+  - bash assets/scripts/package-consumer-artifacts.sh
+steps: []

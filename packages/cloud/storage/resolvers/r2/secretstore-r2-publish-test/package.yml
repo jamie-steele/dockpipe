@@ -1,0 +1,17 @@
+schema: 1
+kind: workflow
+name: secretstore-r2-publish-test
+version: 0.6.0
+title: Secretstore R2 Publish Test
+platforms: [windows, deb]
+description: |
+  Inject 1Password secrets into workflow outputs, then publish artifacts to Cloudflare R2 using
+  the shared r2 publish script contract.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [workflow, secrets, onepassword, r2, cloudflare, storage]
+depends: [cloud.storage, secrets]
+requires_resolvers: [onepassword, r2]
+allow_clone: true
+distribution: source

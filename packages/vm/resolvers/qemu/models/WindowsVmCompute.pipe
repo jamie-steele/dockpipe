@@ -1,0 +1,27 @@
+/// <summary>
+/// Guest CPU, memory, and display settings.
+/// </summary>
+public Interface IWindowsVmCompute
+{
+    /// <summary>Default vCPU count for the guest.</summary>
+    [DisplayName = "CPUs"]
+    [EnvName = "DOCKPIPE_VM_CPUS"]
+    public string Cpus;
+
+    /// <summary>Default guest memory allocation.</summary>
+    [DisplayName = "Memory"]
+    [EnvName = "DOCKPIPE_VM_MEMORY"]
+    public string Memory;
+
+    /// <summary>Optional display mode for visible VM sessions. On Windows hosts DockPipe defaults interactive sessions to gtk,grab-on-hover=on,window-close=on unless you override it.</summary>
+    [DisplayName = "Display"]
+    [EnvName = "DOCKPIPE_VM_DISPLAY"]
+    public string Display;
+}
+
+public Class WindowsVmCompute : IWindowsVmCompute
+{
+    public string Cpus = "4";
+    public string Memory = "12G";
+    public string Display = "";
+}

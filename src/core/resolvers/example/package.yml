@@ -1,0 +1,9 @@
+schema: 1
+name: example
+version: 0.6.0
+title: Example resolver
+platforms: [windows, deb]
+description: Minimal layout demo for resolver profiles
+kind: resolver
+allow_clone: true
+distribution: source

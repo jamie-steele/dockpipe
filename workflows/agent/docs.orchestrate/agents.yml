@@ -1,0 +1,101 @@
+agents:
+  planning_scout:
+    role: planning scout
+    worker: ollama
+    worker_type: planning
+    work_mode: artifact
+    model:
+      provider: ollama
+      model: ${DORKPIPE_ORCH_OLLAMA_MODEL:-llama3.2}
+    authority:
+      can:
+        - distill_contract_facts
+        - prepare_downstream_briefing
+      cannot:
+        - answer_final_request
+        - approve_apply
+    constraints:
+      - keep output short enough to prepend to later workers
+      - ground claims in repository files
+  planner_brain:
+    role: orchestration planner brain
+    worker: ${DORKPIPE_ORCH_BRAIN_PROVIDER:-ollama}
+    worker_type: planning
+    work_mode: artifact
+    model_policy:
+      attempt:
+        preference: strong
+      validate:
+        preference: strongest_available
+    authority:
+      can:
+        - plan_bounded_worker_fanout
+        - turn_scout_outputs_into_work_orders
+      cannot:
+        - answer_final_request
+        - approve_apply
+    constraints:
+      - use scout outputs as planning guidance
+      - keep fanout tasks cheap and bounded
+  local_doc_worker:
+    role: local documentation worker
+    worker: ollama
+    worker_type: documentation
+    work_mode: artifact
+    model:
+      provider: ollama
+      model: ${DORKPIPE_ORCH_OLLAMA_MODEL:-llama3.2}
+    authority:
+      can:
+        - summarize_bounded_repo_evidence
+        - explain_artifact_graph_primitives
+      cannot:
+        - change_package_boundaries
+        - approve_apply
+    constraints:
+      - treat DorkPipe as the contract layer
+      - keep output bounded and reviewable
+  boundary_reviewer:
+    role: package boundary reviewer
+    worker: claude
+    worker_type: boundary_review
+    work_mode: artifact
+    worker_policy:
+      mode: prefer
+    model_policy:
+      attempt:
+        preference: strong
+      validate:
+        preference: strongest_available
+    authority:
+      can:
+        - review_package_boundaries
+        - summarize_workflow_vs_contract_surface
+      cannot:
+        - rewrite_core_engine
+        - approve_apply
+    constraints:
+      - keep workflow specifics out of the shared primitive
+      - ground claims in repository files
+  safety_reviewer:
+    role: safety and approval reviewer
+    worker: codex
+    worker_type: safety_review
+    work_mode: artifact
+    worker_policy:
+      mode: prefer
+    model_policy:
+      attempt:
+        preference: strong
+      validate:
+        preference: strongest_available
+    authority:
+      can:
+        - summarize_verification_and_approval_model
+        - identify_budget_and_halt_boundaries
+      cannot:
+        - approve_apply
+        - invent_lane_scores
+    constraints:
+      - keep human approval explicit
+      - ground claims in repository files

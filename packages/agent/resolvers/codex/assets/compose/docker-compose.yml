@@ -1,0 +1,4 @@
+services:
+  codex:
+    image: dockpipe-codex:latest
+    working_dir: /work

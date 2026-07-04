@@ -1,0 +1,50 @@
+/// <summary>
+/// Contract for externally consumable R2 infrastructure defaults.
+/// </summary>
+public Interface IR2InfraConfig
+{
+    /// <summary>Cloudflare account identifier used for R2 and zone API operations.</summary>
+    public string CloudflareAccountId;
+    /// <summary>Cloudflare API token with permission to manage the target R2 bucket and DNS resources.</summary>
+    public string CloudflareApiToken;
+    /// <summary>Backend mode: local or remote.</summary>
+    public string DockpipeTfBackend;
+    /// <summary>Optional extra Terraform command arguments appended to the selected subcommand.</summary>
+    public string DockpipeTfCommands;
+    /// <summary>Enable dry-run style execution so the Terraform wrapper avoids mutating infrastructure.</summary>
+    public string DockpipeTfDryRun;
+    /// <summary>Attach Cloudflare provider env wiring when enabled.</summary>
+    public string DockpipeTfAttachCloudflareProvider;
+    /// <summary>Use legacy R2 publish module mapping when enabled.</summary>
+    public string DockpipeTfUseR2PublishMap;
+    /// <summary>Use -auto-approve for apply when enabled.</summary>
+    public string DockpipeTfApplyAutoApprove;
+    /// <summary>Terraform remote state bucket name.</summary>
+    public string DockpipeTfStateBucket;
+    /// <summary>Terraform remote state object key.</summary>
+    public string DockpipeTfStateKey;
+    /// <summary>R2 bucket name.</summary>
+    public string R2Bucket;
+    /// <summary>Browser cache TTL in seconds.</summary>
+    public string TfVarCacheBrowserTtlSeconds;
+    /// <summary>Edge cache TTL in seconds.</summary>
+    public string TfVarCacheEdgeTtlSeconds;
+    /// <summary>Enable cache rule resources.</summary>
+    public string TfVarEnableCacheRules;
+    /// <summary>Enable custom domain resources.</summary>
+    public string TfVarEnableR2CustomDomain;
+    /// <summary>Enable baseline WAF resources.</summary>
+    public string TfVarEnableWafBaseline;
+    /// <summary>Public hostname for package distribution.</summary>
+    public string TfVarPublicHostname;
+    /// <summary>Cloudflare DNS zone identifier for the public hostname.</summary>
+    public string TfVarZoneId;
+    /// <summary>Enable R2 custom domain binding.</summary>
+    public string TfVarR2CustomDomainEnabled;
+    /// <summary>Minimum TLS version for custom domain.</summary>
+    public string TfVarR2CustomDomainMinTls;
+    /// <summary>Cloudflare managed ruleset identifier.</summary>
+    public string TfVarCloudflareManagedRulesetId;
+    /// <summary>Concise identity string used for diagnostics.</summary>
+    public string TerraformIdentity();
+}

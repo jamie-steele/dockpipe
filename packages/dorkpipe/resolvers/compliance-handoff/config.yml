@@ -1,0 +1,27 @@
+# Internal workflow (this repo + copies): host script prints compliance/security *signal* paths for AI assistants.
+# Not a DockPipe core primitive — DockPipe is the user; workflows/scripts are the extension surface (AGENTS.md).
+# runtime: dockerimage (host steps use kind: host; docker_preflight skips socket check for run:).
+name: compliance-handoff
+description: >-
+  Host-only: run scripts/dorkpipe/compliance-handoff.sh. Points AI at docs/runtime/artifacts.md and
+  available DorkPipe package artifacts for CI scan signals, self-analysis, and run metadata.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the packaged compliance handoff script.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+
+docker_preflight: false
+steps:
+  - id: handoff
+    kind: host
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
+    run:
+      - scripts/dorkpipe/compliance-handoff.sh

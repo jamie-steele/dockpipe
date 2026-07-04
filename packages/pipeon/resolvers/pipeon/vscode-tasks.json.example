@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Pipeon: status",
+      "type": "shell",
+      "command": "DOCKPIPE_PIPEON=1 DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1 DOCKPIPE_WORKDIR=${workspaceFolder} \"${workspaceFolder}/packages/pipeon/resolvers/pipeon/bin/pipeon\" status",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared", "focus": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Pipeon: bundle context",
+      "type": "shell",
+      "command": "DOCKPIPE_PIPEON=1 DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1 DOCKPIPE_WORKDIR=${workspaceFolder} \"${workspaceFolder}/packages/pipeon/resolvers/pipeon/bin/pipeon\" bundle",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared", "focus": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Pipeon: chat",
+      "type": "shell",
+      "command": "DOCKPIPE_PIPEON=1 DOCKPIPE_PIPEON_ALLOW_PRERELEASE=1 DOCKPIPE_WORKDIR=${workspaceFolder} \"${workspaceFolder}/packages/pipeon/resolvers/pipeon/bin/pipeon\" chat ${input:pipeonPrompt}",
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "shared", "focus": true },
+      "problemMatcher": []
+    }
+  ],
+  "inputs": [
+    {
+      "id": "pipeonPrompt",
+      "type": "promptString",
+      "description": "Ask Pipeon (local Ollama)"
+    }
+  ]
+}

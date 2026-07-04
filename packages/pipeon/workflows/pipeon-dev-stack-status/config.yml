@@ -1,0 +1,23 @@
+name: pipeon-dev-stack-status
+description: Print status for the Pipeon local dev stack for the current workdir.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the Pipeon stack status script.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: docker
+      command: docker
+      description: Required to inspect the Pipeon managed stack.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+docker_preflight: false
+
+steps:
+  - id: status
+    kind: host
+    run: ../../resolvers/pipeon-dev-stack/assets/scripts/status.sh

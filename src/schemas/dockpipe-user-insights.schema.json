@@ -1,0 +1,109 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dockpipe.dev/schemas/dockpipe-user-insights.schema.json",
+  "title": "DockPipe normalized user insights",
+  "description": "Structured, attributable user guidance. Separate from repo facts and CI findings; see separation.",
+  "type": "object",
+  "required": ["schema_version", "kind", "insights"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Bump when insight shape changes."
+    },
+    "kind": { "const": "dockpipe_user_insights" },
+    "separation": {
+      "type": "object",
+      "description": "Pointers documenting that this bundle is not repo-derived or scan-derived.",
+      "additionalProperties": { "type": "string" }
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "last_processed_at_utc": { "type": "string", "format": "date-time" },
+        "generator": { "type": "string" },
+        "new_insights_count": { "type": "integer" }
+      }
+    },
+    "insights": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/insight" }
+    }
+  },
+  "$defs": {
+    "scope": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "repo_path": { "type": "string" },
+        "component": { "type": "string" },
+        "workflow": { "type": "string" },
+        "label": { "type": "string" }
+      }
+    },
+    "insight": {
+      "type": "object",
+      "required": ["id", "queue_item_id", "category", "normalized_text", "intent", "provenance", "confidence", "status"],
+      "properties": {
+        "id": { "type": "string", "description": "Stable id for this normalized insight (distinct from queue id)." },
+        "queue_item_id": { "type": "string", "description": "Links to the capture queue item." },
+        "category": {
+          "type": "string",
+          "enum": ["risk", "constraint", "convention", "architecture_note", "compliance", "future_work", "unknown"]
+        },
+        "category_hint": { "type": "string" },
+        "normalized_text": { "type": "string" },
+        "intent": { "const": "user_guidance_signal" },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low", "unspecified"]
+        },
+        "scope": { "$ref": "#/$defs/scope" },
+        "provenance": {
+          "type": "object",
+          "required": ["source", "original_text", "captured_at_utc"],
+          "properties": {
+            "source": { "type": "string", "enum": ["user", "import"] },
+            "original_text": { "type": "string" },
+            "captured_at_utc": { "type": "string", "format": "date-time" },
+            "processed_at_utc": { "type": "string", "format": "date-time" },
+            "classifier": {
+              "type": ["object", "null"],
+              "properties": {
+                "pattern": { "type": "string" },
+                "category": { "type": "string" }
+              }
+            }
+          }
+        },
+        "confidence": {
+          "type": "object",
+          "required": ["role", "note"],
+          "properties": {
+            "role": { "const": "user_signal" },
+            "score": { "type": ["number", "null"] },
+            "note": { "type": "string" }
+          }
+        },
+        "status": {
+          "type": "string",
+          "enum": ["accepted", "pending", "rejected", "superseded"]
+        },
+        "rejection_reason": { "type": "string" },
+        "supersedes": { "type": ["string", "null"] },
+        "stale": { "type": "boolean" },
+        "history": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "at_utc": { "type": "string", "format": "date-time" },
+              "event": { "type": "string" },
+              "detail": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

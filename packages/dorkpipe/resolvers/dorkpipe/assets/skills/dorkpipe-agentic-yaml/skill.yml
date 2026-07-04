@@ -1,0 +1,3 @@
+name: dorkpipe-agentic-yaml
+description: Use for DorkPipe agentic workflow contracts, model_policy, multi-worker task graphs, prompt/context/access declarations, cloud budget controls, verification, and approval gates.
+short_description: Design agentic YAML contracts

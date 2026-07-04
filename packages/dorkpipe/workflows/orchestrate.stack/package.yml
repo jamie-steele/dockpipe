@@ -1,0 +1,43 @@
+schema: 1
+kind: workflow
+name: orchestrate.stack
+version: 0.6.0
+title: DorkPipe Orchestrate Stack
+description: |
+  Package-owned orchestration wrapper that handles DorkPipe stack lifecycle around the standard
+  plan -> run workers -> merge -> verify -> approval -> apply flow. Consumer workflows can call
+  this packaged workflow instead of hand-authoring stack_up/stack_down steps.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [workflow, dorkpipe, orchestration, stack]
+depends: [dorkpipe]
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs DorkPipe orchestration host scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: docker
+      command: docker
+      description: Starts the DorkPipe sidecar stack and resolver worker containers.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+    - id: git
+      command: git
+      description: Reads repository state and applies approved generated artifacts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y git
+    - id: curl
+      command: curl
+      description: Checks local Ollama and DorkPipe stack HTTP endpoints.
+      install:
+        windows: winget install cURL.cURL
+        deb: sudo apt-get update && sudo apt-get install -y curl
+allow_clone: true
+distribution: source

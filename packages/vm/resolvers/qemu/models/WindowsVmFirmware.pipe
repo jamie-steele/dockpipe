@@ -1,0 +1,33 @@
+/// <summary>
+/// Firmware and boot image settings.
+/// </summary>
+public Interface IWindowsVmFirmware
+{
+    /// <summary>Optional UEFI firmware code image path.</summary>
+    [DisplayName = "UEFI Firmware Code"]
+    [EnvName = "DOCKPIPE_VM_FIRMWARE_CODE"]
+    [Control = "file"]
+    [FileMode = "open-file"]
+    public string FirmwareCode;
+
+    /// <summary>Optional UEFI firmware vars image path.</summary>
+    [DisplayName = "UEFI Firmware Vars"]
+    [EnvName = "DOCKPIPE_VM_FIRMWARE_VARS"]
+    [Control = "file"]
+    [FileMode = "open-file"]
+    public string FirmwareVars;
+
+    /// <summary>Optional legacy BIOS image path.</summary>
+    [DisplayName = "BIOS Image"]
+    [EnvName = "DOCKPIPE_VM_BIOS"]
+    [Control = "file"]
+    [FileMode = "open-file"]
+    public string Bios;
+}
+
+public Class WindowsVmFirmware : IWindowsVmFirmware
+{
+    public string FirmwareCode = "";
+    public string FirmwareVars = "";
+    public string Bios = "";
+}

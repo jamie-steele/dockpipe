@@ -1,0 +1,53 @@
+/// <summary>
+/// VM disk and installer media settings.
+/// </summary>
+public Interface IWindowsVmStorage
+{
+    /// <summary>Persistence mode for the selected VM disk image.</summary>
+    [DisplayName = "Persistence"]
+    [EnvName = "DOCKPIPE_VM_PERSISTENCE"]
+    public string Persistence;
+
+    /// <summary>Disk bus presented to the guest. Windows installer defaults to a built-in friendly bus.</summary>
+    [DisplayName = "Disk Bus"]
+    [EnvName = "DOCKPIPE_VM_DISK_BUS"]
+    public string DiskBus;
+
+    /// <summary>Optional installer disk size; when omitted DockPipe prompts with a suggested default.</summary>
+    [DisplayName = "Disk Size"]
+    [EnvName = "DOCKPIPE_VM_DISK_SIZE"]
+    public string DiskSize;
+
+    /// <summary>Optional path to a bootable guest disk image.</summary>
+    [DisplayName = "VM Disk Image"]
+    [EnvName = "DOCKPIPE_VM_DISK"]
+    [Control = "file"]
+    [FileMode = "save-file"]
+    [Placeholder = "Choose or create a VM disk image"]
+    public string Disk;
+
+    /// <summary>Optional Windows installer ISO path.</summary>
+    [DisplayName = "CD-ROM"]
+    [EnvName = "DOCKPIPE_VM_CDROM"]
+    [Control = "file"]
+    [FileMode = "open-file"]
+    [Placeholder = "Choose Windows installer ISO"]
+    public string Cdrom;
+
+    /// <summary>Optional VirtIO driver ISO path.</summary>
+    [DisplayName = "VirtIO Driver ISO"]
+    [EnvName = "DOCKPIPE_VM_VIRTIO_ISO"]
+    [Control = "file"]
+    [FileMode = "open-file"]
+    public string VirtioIso;
+}
+
+public Class WindowsVmStorage : IWindowsVmStorage
+{
+    public string Persistence = "";
+    public string DiskBus = "sata";
+    public string DiskSize = "";
+    public string Disk = "";
+    public string Cdrom = "";
+    public string VirtioIso = "";
+}

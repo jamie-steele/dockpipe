@@ -1,0 +1,936 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+dorkpipe_stack_state_dir() {
+  if [[ -n "${DORKPIPE_DEV_STACK_STATE_DIR:-}" ]]; then
+    printf '%s\n' "$DORKPIPE_DEV_STACK_STATE_DIR"
+    return 0
+  fi
+  dockpipe scope --package dorkpipe dev-stack --workdir "${ROOT}"
+}
+
+dorkpipe_stack_log_mode() {
+  local mode
+  mode="$(printf '%s' "${DORKPIPE_DEV_STACK_LOG_MODE:-${DORKPIPE_ORCH_LOG_MODE:-${DORKPIPE_LOG_MODE:-default}}}" | tr '[:upper:]' '[:lower:]')"
+  case "${mode}" in
+    verbose|default|minimal|none) printf '%s\n' "${mode}" ;;
+    quiet|silent|off) printf 'none\n' ;;
+    "") printf 'default\n' ;;
+    *)
+      echo "[dorkpipe-dev-stack] unknown log mode ${mode}; expected verbose, default, minimal, or none" >&2
+      printf 'default\n'
+      ;;
+  esac
+}
+
+dorkpipe_stack_log_supports_color() {
+  [[ -t 2 && -z "${NO_COLOR:-}" ]]
+}
+
+dorkpipe_stack_log_icon() {
+  local kind="${1:-info}"
+  if dorkpipe_stack_log_supports_color; then
+    case "${kind}" in
+      ok) printf '\033[32m✓\033[0m' ;;
+      fail) printf '\033[31m✗\033[0m' ;;
+      *) printf '•' ;;
+    esac
+    return 0
+  fi
+  case "${kind}" in
+    ok) printf '[ok]' ;;
+    fail) printf '[fail]' ;;
+    *) printf '[..]' ;;
+  esac
+}
+
+dorkpipe_stack_log_dir() {
+  printf '%s/logs\n' "$(dorkpipe_stack_state_dir)"
+}
+
+dorkpipe_stack_log_tail() {
+  local log_path="${1:?log path}"
+  local lines="${2:-40}"
+  [[ -s "${log_path}" ]] || return 0
+  echo "[dorkpipe-dev-stack] last ${lines} log lines from ${log_path}:" >&2
+  tail -n "${lines}" "${log_path}" >&2 || true
+}
+
+dorkpipe_stack_operation_unit() {
+  local label="${1:-operation}"
+  label="$(printf '%s' "${label}" | tr '[:upper:]' '[:lower:]')"
+  label="$(printf '%s' "${label}" | sed 's/[^a-z0-9_.-]\+/-/g; s/^-//; s/-$//')"
+  if [[ -z "${label}" ]]; then
+    label="operation"
+  fi
+  printf 'devstack.%s\n' "${label}"
+}
+
+dorkpipe_stack_operation_emit() {
+  local unit="${1:?unit}"
+  local status="${2:?status}"
+  local duration_ms="${3:-}"
+  shift 3 || true
+  local dockpipe_bin
+  dockpipe_bin="${DOCKPIPE_BIN:-$(command -v dockpipe 2>/dev/null || true)}"
+  local args=(
+    result
+    --unit "${unit}"
+    --status "${status}"
+  )
+  if [[ -n "${duration_ms}" && "${status}" != "start" ]]; then
+    args+=(--duration-ms "${duration_ms}")
+  fi
+  local field key value
+  for field in "$@"; do
+    [[ -n "${field}" ]] || continue
+    if [[ "${field}" == *=* ]]; then
+      key="${field%%=*}"
+      value="${field#*=}"
+      value="${value%\"}"
+      value="${value#\"}"
+      case "${key}" in
+        error)
+          args+=(--error "${value}")
+          ;;
+        status)
+          args+=(--id "result_status=${value}")
+          ;;
+        *)
+          args+=(--id "${key}=${value}")
+          ;;
+      esac
+    fi
+  done
+  if [[ -n "${dockpipe_bin}" ]]; then
+    if "${dockpipe_bin}" "${args[@]}"; then
+      return 0
+    fi
+    echo "[dorkpipe-dev-stack] warning: dockpipe result adapter failed; falling back to shell operation-result rendering" >&2
+  fi
+  printf '[dorkpipe-dev-stack] unit=%s status=%s' "${unit}" "${status}" >&2
+  if [[ -n "${duration_ms}" && "${status}" != "start" ]]; then
+    printf ' duration_ms=%s' "${duration_ms}" >&2
+  fi
+  for field in "$@"; do
+    [[ -n "${field}" ]] || continue
+    printf ' %s' "${field}" >&2
+  done
+  printf '\n' >&2
+}
+
+dorkpipe_stack_run_logged() {
+  local label="${1:?label}"
+  local log_path="${2:?log path}"
+  shift 2
+  local mode pid rc frame_index frame frames unit started_ms duration_ms
+  mode="$(dorkpipe_stack_log_mode)"
+  if [[ "${mode}" == "verbose" ]]; then
+    "$@"
+    return $?
+  fi
+
+  mkdir -p "$(dirname "${log_path}")"
+  : > "${log_path}"
+  unit="$(dorkpipe_stack_operation_unit "${label}")"
+  started_ms="$(date +%s%3N)"
+  dorkpipe_stack_operation_emit "${unit}" "start" "" "log=${log_path}"
+  if [[ "${mode}" != "none" ]]; then
+    printf '[dorkpipe-dev-stack] %s ... ' "${label}" >&2
+  fi
+  "$@" > "${log_path}" 2>&1 &
+  pid=$!
+  frame_index=0
+  frames='|/-\'
+  while kill -0 "${pid}" 2>/dev/null; do
+    if [[ "${mode}" != "none" && -t 2 ]]; then
+      frame="${frames:${frame_index}:1}"
+      printf '\r[dorkpipe-dev-stack] %s ... %s' "${label}" "${frame}" >&2
+      frame_index=$(( (frame_index + 1) % 4 ))
+    fi
+    sleep 0.2
+  done
+  set +e
+  wait "${pid}"
+  rc=$?
+  set -e
+  duration_ms="$(( $(date +%s%3N) - started_ms ))"
+  if [[ "${mode}" != "none" ]]; then
+    if [[ "${rc}" -eq 0 ]]; then
+      printf '\r[dorkpipe-dev-stack] %s %s\n' "$(dorkpipe_stack_log_icon ok)" "${label}" >&2
+    else
+      printf '\r[dorkpipe-dev-stack] %s %s\n' "$(dorkpipe_stack_log_icon fail)" "${label}" >&2
+      dorkpipe_stack_log_tail "${log_path}" "${DORKPIPE_DEV_STACK_LOG_FAILURE_LINES:-40}"
+    fi
+  fi
+  if [[ "${rc}" -eq 0 ]]; then
+    dorkpipe_stack_operation_emit "${unit}" "done" "${duration_ms}" "log=${log_path}"
+  else
+    dorkpipe_stack_operation_emit "${unit}" "fail" "${duration_ms}" "log=${log_path}" "error=command exited ${rc}"
+  fi
+  return "${rc}"
+}
+
+dorkpipe_stack_ensure_state_dir() {
+  mkdir -p "$(dorkpipe_stack_state_dir)"
+}
+
+dorkpipe_stack_gpu_compose_file() {
+  printf '%s/docker-compose.gpu.yml\n' "$(dorkpipe_stack_state_dir)"
+}
+
+dorkpipe_stack_gpu_mode_file() {
+  printf '%s/gpu.mode\n' "$(dorkpipe_stack_state_dir)"
+}
+
+dorkpipe_stack_api_key_file() {
+  printf '%s/api-key\n' "$(dorkpipe_stack_state_dir)"
+}
+
+dorkpipe_stack_mcp_tls_cert_file() {
+  printf '%s/mcp-tls.crt\n' "$(dorkpipe_stack_state_dir)"
+}
+
+dorkpipe_stack_mcp_tls_key_file() {
+  printf '%s/mcp-tls.key\n' "$(dorkpipe_stack_state_dir)"
+}
+
+dorkpipe_stack_mcp_port() {
+  printf '%s\n' "${DORKPIPE_DEV_STACK_MCP_PORT:-8766}"
+}
+
+dorkpipe_stack_mcp_url() {
+  printf 'http://127.0.0.1:%s/mcp\n' "$(dorkpipe_stack_mcp_port)"
+}
+
+dorkpipe_stack_ensure_api_key() {
+  local key_file
+  key_file="${DORKPIPE_DEV_STACK_MCP_API_KEY_FILE:-$(dorkpipe_stack_api_key_file)}"
+  dorkpipe_stack_ensure_state_dir
+  if [[ -s "$key_file" ]]; then
+    return 0
+  fi
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 24 > "$key_file"
+  else
+    date +%s%N | sha256sum | cut -d' ' -f1 > "$key_file"
+  fi
+  chmod 600 "$key_file" 2>/dev/null || true
+}
+
+dorkpipe_stack_ensure_mcp_tls_material() {
+  local cert_file key_file
+  cert_file="${DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE:-$(dorkpipe_stack_mcp_tls_cert_file)}"
+  key_file="${DORKPIPE_DEV_STACK_MCP_TLS_KEY_FILE:-$(dorkpipe_stack_mcp_tls_key_file)}"
+  dorkpipe_stack_ensure_state_dir
+  if [[ -s "$cert_file" && -s "$key_file" ]]; then
+    return 0
+  fi
+  if ! command -v openssl >/dev/null 2>&1; then
+    echo "dorkpipe-dev-stack: openssl is required to generate local MCP TLS material" >&2
+    return 1
+  fi
+  if dorkpipe_stack_is_windows_host; then
+    MSYS2_ARG_CONV_EXCL='*' openssl req -x509 -nodes -newkey rsa:2048 \
+      -keyout "$key_file" \
+      -out "$cert_file" \
+      -days 365 \
+      -subj "/CN=dorkpipe-stack" \
+      -addext "subjectAltName=DNS:dorkpipe-stack,DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+  else
+    openssl req -x509 -nodes -newkey rsa:2048 \
+      -keyout "$key_file" \
+      -out "$cert_file" \
+      -days 365 \
+      -subj "/CN=dorkpipe-stack" \
+      -addext "subjectAltName=DNS:dorkpipe-stack,DNS:localhost,IP:127.0.0.1" >/dev/null 2>&1
+  fi
+  chmod 600 "$key_file" 2>/dev/null || true
+  chmod 644 "$cert_file" 2>/dev/null || true
+}
+
+dorkpipe_stack_prepare_mcp_material() {
+  export DORKPIPE_DEV_STACK_MCP_API_KEY_FILE="${DORKPIPE_DEV_STACK_MCP_API_KEY_FILE:-$(dorkpipe_stack_api_key_file)}"
+  export DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE="${DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE:-$(dorkpipe_stack_mcp_tls_cert_file)}"
+  export DORKPIPE_DEV_STACK_MCP_TLS_KEY_FILE="${DORKPIPE_DEV_STACK_MCP_TLS_KEY_FILE:-$(dorkpipe_stack_mcp_tls_key_file)}"
+  dorkpipe_stack_ensure_api_key
+  dorkpipe_stack_ensure_mcp_tls_material
+}
+
+dorkpipe_stack_bootstrap_sdk() {
+  local dockpipe_bin
+  for dockpipe_bin in \
+    "${DOCKPIPE_BIN:-}" \
+    "$(command -v dockpipe 2>/dev/null || true)"
+  do
+    if [[ -n "$dockpipe_bin" && -x "$dockpipe_bin" ]]; then
+      # shellcheck disable=SC1090
+      eval "$("$dockpipe_bin" sdk)"
+      if declare -F dockpipe_sdk >/dev/null 2>&1; then
+        dockpipe_sdk init-script >/dev/null 2>&1 || true
+      fi
+      return 0
+    fi
+  done
+  return 1
+}
+
+dorkpipe_stack_host_bash_bin() {
+  local candidate
+  for candidate in \
+    "${DOCKPIPE_HOST_BASH_BIN:-}" \
+    "${BASH:-}" \
+    "$(command -v bash 2>/dev/null || true)"
+  do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+dorkpipe_stack_nvidia_smi_bin() {
+  local candidate
+  for candidate in \
+    "${DORKPIPE_NVIDIA_SMI_BIN:-}" \
+    "$(command -v nvidia-smi 2>/dev/null || true)" \
+    "$(command -v nvidia-smi.exe 2>/dev/null || true)" \
+    "/c/Program Files/NVIDIA Corporation/NVSMI/nvidia-smi.exe" \
+    "/c/Windows/System32/nvidia-smi.exe"
+  do
+    if [[ -n "$candidate" && -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+dorkpipe_stack_wsl_exe_bin() {
+  local candidate
+  for candidate in \
+    "${DORKPIPE_WSL_EXE_BIN:-}" \
+    "$(command -v wsl.exe 2>/dev/null || true)" \
+    "$(command -v wsl 2>/dev/null || true)" \
+    "/c/Windows/System32/wsl.exe" \
+    "/c/Windows/Sysnative/wsl.exe"
+  do
+    if [[ -n "$candidate" && -f "$candidate" ]]; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+dorkpipe_stack_detect_nvidia_gpu() {
+  local nvidia_smi_bin
+  nvidia_smi_bin="$(dorkpipe_stack_nvidia_smi_bin 2>/dev/null || true)"
+  [[ -n "$nvidia_smi_bin" ]] || return 1
+  "$nvidia_smi_bin" -L >/dev/null 2>&1 || return 1
+}
+
+dorkpipe_stack_is_windows_host() {
+  [[ -n "${WINDIR:-}${SYSTEMROOT:-}" ]] || [[ "${OSTYPE:-}" == msys* ]] || [[ "${OSTYPE:-}" == cygwin* ]] || [[ "${OSTYPE:-}" == win32 ]]
+}
+
+dorkpipe_stack_docker_supports_nvidia_gpu() {
+  local docker_runtimes
+  docker_runtimes="$(docker info --format '{{json .Runtimes}}' 2>/dev/null || true)"
+  if printf '%s' "$docker_runtimes" | grep -qi '"nvidia"'; then
+    return 0
+  fi
+  dorkpipe_stack_can_run_nvidia_sample
+}
+
+dorkpipe_stack_can_run_nvidia_sample() {
+  docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi >/dev/null 2>&1
+}
+
+dorkpipe_stack_wait_for_docker() {
+  local attempts="${1:-30}"
+  local i
+  for ((i = 0; i < attempts; i++)); do
+    if docker version >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+dorkpipe_stack_explain_docker_gpu_setup() {
+  if dorkpipe_stack_is_windows_host; then
+    cat >&2 <<'EOF'
+dorkpipe-dev-stack: Docker GPU access is not enabled yet on this Windows host.
+  Docker Desktop GPU support on Windows requires the WSL 2 backend.
+  Required host setup:
+    1. Install current NVIDIA Windows drivers with WSL 2 GPU support.
+    2. Run: wsl.exe --update
+    3. In Docker Desktop, enable "Use WSL 2 based engine".
+    4. Make sure Docker Desktop is using Linux containers.
+  Check: docker run --rm --gpus all ubuntu nvidia-smi
+EOF
+    return
+  fi
+  cat >&2 <<'EOF'
+dorkpipe-dev-stack: Docker GPU access is not enabled yet.
+  The host NVIDIA GPU is visible, but Docker does not report an nvidia runtime.
+  To enable Ollama GPU access in containers, install/configure nvidia-container-toolkit,
+  restart Docker, and rerun the stack.
+  Check: docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi
+EOF
+}
+
+dorkpipe_stack_try_enable_windows_docker_gpu_access() {
+  local wsl_exe
+  printf '[dorkpipe-dev-stack] Ollama GPU: detected Windows host; attempting WSL/Docker Desktop GPU prerequisites...\n' >&2
+  wsl_exe="$(dorkpipe_stack_wsl_exe_bin 2>/dev/null || true)"
+  if [[ -z "$wsl_exe" ]]; then
+    echo "dorkpipe-dev-stack: wsl.exe is not available on PATH, so Docker Desktop GPU setup cannot be automated here" >&2
+    return 1
+  fi
+  if ! "$wsl_exe" --update; then
+    echo "dorkpipe-dev-stack: WSL update failed; Docker Desktop GPU support on Windows requires an updated WSL 2 kernel" >&2
+    return 1
+  fi
+  printf '[dorkpipe-dev-stack] Ollama GPU: WSL update completed; verifying Docker GPU support again...\n' >&2
+  if ! dorkpipe_stack_wait_for_docker 45; then
+    echo "dorkpipe-dev-stack: Docker did not respond after the WSL update" >&2
+    return 1
+  fi
+  if ! dorkpipe_stack_can_run_nvidia_sample; then
+    echo "dorkpipe-dev-stack: Docker Desktop still cannot run a GPU container after the WSL update" >&2
+    echo "dorkpipe-dev-stack: open Docker Desktop Settings and enable the WSL 2 engine, then ensure Linux containers are active" >&2
+    return 1
+  fi
+  return 0
+}
+
+dorkpipe_stack_write_gpu_setup_script() {
+  local script_path="$1"
+  cat > "$script_path" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ -f /etc/os-release ]]; then
+  # shellcheck disable=SC1091
+  . /etc/os-release
+fi
+
+if [[ "$(id -u)" -eq 0 ]]; then
+  SUDO=""
+else
+  SUDO="sudo"
+fi
+
+ORIGINAL_USER="${DORKPIPE_GPU_SETUP_ORIGINAL_USER:-${SUDO_USER:-${USER:-}}}"
+ORIGINAL_HOME="${DORKPIPE_GPU_SETUP_ORIGINAL_HOME:-${HOME:-}}"
+
+log() {
+  printf '[dorkpipe-dev-stack][gpu-setup] %s\n' "$*" >&2
+}
+
+run_as_original_user() {
+  if [[ -n "$ORIGINAL_USER" && "$(id -u)" -eq 0 ]]; then
+    if command -v sudo >/dev/null 2>&1; then
+      sudo -u "$ORIGINAL_USER" HOME="$ORIGINAL_HOME" "$@"
+      return $?
+    fi
+    if command -v su >/dev/null 2>&1; then
+      su - "$ORIGINAL_USER" -c "$(printf '%q ' "$@")"
+      return $?
+    fi
+  fi
+  HOME="$ORIGINAL_HOME" "$@"
+}
+
+docker_is_rootless() {
+  docker info --format '{{json .SecurityOptions}}' 2>/dev/null | grep -qi rootless
+}
+
+install_with_apt() {
+  log "Detected apt-based system; installing NVIDIA Container Toolkit"
+  $SUDO apt-get update
+  $SUDO apt-get install -y --no-install-recommends curl gnupg2
+  curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | $SUDO gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+  curl -s -L https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list | \
+    sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+    $SUDO tee /etc/apt/sources.list.d/nvidia-container-toolkit.list >/dev/null
+  $SUDO apt-get update
+  $SUDO apt-get install -y nvidia-container-toolkit
+}
+
+install_with_dnf() {
+  log "Detected dnf-based system; installing NVIDIA Container Toolkit"
+  $SUDO dnf install -y curl
+  curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo | \
+    $SUDO tee /etc/yum.repos.d/nvidia-container-toolkit.repo >/dev/null
+  $SUDO dnf install -y nvidia-container-toolkit
+}
+
+install_with_yum() {
+  log "Detected yum-based system; installing NVIDIA Container Toolkit"
+  $SUDO yum install -y curl
+  curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo | \
+    $SUDO tee /etc/yum.repos.d/nvidia-container-toolkit.repo >/dev/null
+  $SUDO yum install -y nvidia-container-toolkit
+}
+
+install_with_zypper() {
+  log "Detected zypper-based system; installing NVIDIA Container Toolkit"
+  $SUDO zypper ar https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo nvidia-container-toolkit
+  $SUDO zypper --gpg-auto-import-keys install -y nvidia-container-toolkit
+}
+
+if command -v nvidia-ctk >/dev/null 2>&1; then
+  :
+elif command -v apt-get >/dev/null 2>&1; then
+  install_with_apt
+elif command -v dnf >/dev/null 2>&1; then
+  install_with_dnf
+elif command -v yum >/dev/null 2>&1; then
+  install_with_yum
+elif command -v zypper >/dev/null 2>&1; then
+  install_with_zypper
+else
+  echo "dorkpipe-dev-stack: unsupported package manager for automatic Docker GPU setup" >&2
+  exit 2
+fi
+
+if docker_is_rootless; then
+  log "Detected rootless Docker; configuring user daemon"
+  run_as_original_user nvidia-ctk runtime configure --runtime=docker --config="$ORIGINAL_HOME/.config/docker/daemon.json"
+  run_as_original_user systemctl --user restart docker
+  $SUDO nvidia-ctk config --set nvidia-container-cli.no-cgroups --in-place
+else
+  log "Detected rootful Docker; configuring system daemon"
+  $SUDO nvidia-ctk runtime configure --runtime=docker
+  $SUDO systemctl restart docker
+fi
+EOF
+  chmod +x "$script_path"
+}
+
+dorkpipe_stack_run_gpu_setup_script() {
+  local script_path="$1"
+  local bash_bin
+  bash_bin="$(dorkpipe_stack_host_bash_bin)" || {
+    echo "dorkpipe-dev-stack: bash executable not found for GPU setup helper" >&2
+    return 1
+  }
+  if [[ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] && command -v pkexec >/dev/null 2>&1; then
+    pkexec env PATH="$PATH" DOCKPIPE_HOST_BASH_BIN="$bash_bin" "$bash_bin" "$script_path"
+    return $?
+  fi
+  if command -v sudo >/dev/null 2>&1; then
+    sudo -v || return $?
+    "$bash_bin" "$script_path"
+    return $?
+  fi
+  echo "dorkpipe-dev-stack: automatic Docker GPU setup requires pkexec or sudo" >&2
+  return 2
+}
+
+dorkpipe_stack_try_enable_docker_gpu_access() {
+  if dorkpipe_stack_is_windows_host; then
+    dorkpipe_stack_try_enable_windows_docker_gpu_access
+    return $?
+  fi
+  local setup_script
+  dorkpipe_stack_ensure_state_dir
+  setup_script="$(mktemp "$(dorkpipe_stack_state_dir)/gpu-setup.XXXXXX.sh")"
+  dorkpipe_stack_write_gpu_setup_script "$setup_script"
+  if ! DORKPIPE_GPU_SETUP_ORIGINAL_USER="${SUDO_USER:-${USER:-}}" \
+       DORKPIPE_GPU_SETUP_ORIGINAL_HOME="${HOME:-}" \
+       dorkpipe_stack_run_gpu_setup_script "$setup_script"; then
+    rm -f "$setup_script"
+    return 1
+  fi
+  rm -f "$setup_script"
+  if ! dorkpipe_stack_wait_for_docker 45; then
+    echo "dorkpipe-dev-stack: Docker did not come back after GPU runtime configuration" >&2
+    return 1
+  fi
+  if ! dorkpipe_stack_docker_supports_nvidia_gpu; then
+    echo "dorkpipe-dev-stack: Docker restarted, but the nvidia runtime is still unavailable" >&2
+    return 1
+  fi
+  printf '[dorkpipe-dev-stack] Ollama GPU: verifying Docker GPU access with a sample container...\n' >&2
+  if ! dorkpipe_stack_can_run_nvidia_sample; then
+    echo "dorkpipe-dev-stack: Docker reports an nvidia runtime, but a sample GPU container still failed" >&2
+    return 1
+  fi
+  return 0
+}
+
+dorkpipe_stack_write_gpu_override() {
+  local gpu_file
+  gpu_file="$(dorkpipe_stack_gpu_compose_file)"
+  cat > "$gpu_file" <<'EOF'
+services:
+  ollama:
+    gpus: all
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+EOF
+}
+
+dorkpipe_stack_is_workflow_invocation() {
+  [[ -n "${DOCKPIPE_WORKFLOW_NAME:-${DOCKPIPE_WORKFLOW_CONFIG:-}}" ]]
+}
+
+dorkpipe_stack_is_interactive_session() {
+  case "${DORKPIPE_DEV_STACK_INTERACTIVE:-}" in
+    1|true|TRUE|yes|YES|on|ON)
+      return 0
+      ;;
+    0|false|FALSE|no|NO|off|OFF)
+      return 1
+      ;;
+  esac
+  [[ -t 0 && -t 2 ]] || return 1
+  [[ -z "${CI:-}" ]] || return 1
+  return 0
+}
+
+dorkpipe_stack_gpu_setup_policy() {
+  local configured
+  configured="${DORKPIPE_DEV_STACK_GPU_SETUP:-}"
+  if [[ -z "$configured" ]]; then
+    if dorkpipe_stack_is_workflow_invocation; then
+      printf 'never\n'
+    elif dorkpipe_stack_is_interactive_session; then
+      printf 'prompt\n'
+    else
+      printf 'never\n'
+    fi
+    return 0
+  fi
+  case "$configured" in
+    never|auto|prompt)
+      printf '%s\n' "$configured"
+      ;;
+    *)
+      echo "dorkpipe-dev-stack: DORKPIPE_DEV_STACK_GPU_SETUP must be never, auto, or prompt (got $configured)" >&2
+      return 1
+      ;;
+  esac
+}
+
+dorkpipe_stack_gpu_failure_policy() {
+  local configured="${DORKPIPE_DEV_STACK_GPU_ON_FAILURE:-}"
+  if [[ -n "$configured" ]]; then
+    case "$configured" in
+      cpu|fail)
+        printf '%s\n' "$configured"
+        return 0
+        ;;
+      *)
+        echo "dorkpipe-dev-stack: DORKPIPE_DEV_STACK_GPU_ON_FAILURE must be cpu or fail (got $configured)" >&2
+        return 1
+        ;;
+    esac
+  fi
+  case "${1:-auto}" in
+    auto|"")
+      printf 'cpu\n'
+      ;;
+    nvidia|all)
+      printf 'fail\n'
+      ;;
+    *)
+      printf 'cpu\n'
+      ;;
+  esac
+}
+
+dorkpipe_stack_prompt_for_gpu_recovery() {
+  local gpu_choice gpu_approval
+  declare -F dockpipe_sdk >/dev/null 2>&1 || return 1
+  gpu_choice="$(
+    dockpipe_sdk prompt choice \
+      --id dorkpipe_gpu_docker_access \
+      --title "Docker GPU Access Is Not Enabled" \
+      --message "DorkPipe found an NVIDIA GPU on the host, but Docker cannot use it yet. What would you like to do?" \
+      --default "Continue with CPU for now" \
+      --option "Enable Docker GPU access" \
+      --option "Continue with CPU for now" \
+      --option "Cancel launch"
+  )" || return 21
+  case "$gpu_choice" in
+    "Enable Docker GPU access")
+      gpu_approval="$(
+        dockpipe_sdk prompt confirm \
+          --id dorkpipe_enable_docker_gpu_access_confirm \
+          --title "Allow Docker GPU Setup?" \
+          --message "DockPipe will try to change this system by installing GPU container support, updating Docker runtime configuration, and restarting Docker. Continue?" \
+          --default no \
+          --intent host-mutation \
+          --automation-group system-changes \
+          --allow-auto-approve \
+          --auto-approve-value yes
+      )" || return 21
+      if [[ "$gpu_approval" != "yes" ]]; then
+        return 21
+      fi
+      printf '[dorkpipe-dev-stack] Ollama GPU: attempting to enable Docker GPU access...\n' >&2
+      if dorkpipe_stack_try_enable_docker_gpu_access; then
+        return 0
+      fi
+      dorkpipe_stack_explain_docker_gpu_setup
+      return 20
+      ;;
+    "Continue with CPU for now")
+      return 30
+      ;;
+    *)
+      return 21
+      ;;
+  esac
+}
+
+dorkpipe_stack_handle_gpu_unavailable() {
+  local requested="$1"
+  local mode_file="$2"
+  local gpu_file="$3"
+  local reason="${4:-docker-gpu-unavailable}"
+  local setup_policy failure_policy setup_status
+  setup_policy="$(dorkpipe_stack_gpu_setup_policy)" || return 1
+  failure_policy="$(dorkpipe_stack_gpu_failure_policy "$requested")" || return 1
+
+  case "$reason" in
+    no-host-gpu)
+      printf '[dorkpipe-dev-stack] Ollama GPU: no host NVIDIA GPU detected\n' >&2
+      ;;
+    *)
+      printf '[dorkpipe-dev-stack] Ollama GPU: host NVIDIA detected, but Docker GPU access is not ready yet\n' >&2
+      printf '[dorkpipe-dev-stack] Ollama GPU: Docker GPU access needs nvidia-container-toolkit or equivalent runtime setup\n' >&2
+      ;;
+  esac
+
+  case "$setup_policy" in
+    auto)
+      printf '[dorkpipe-dev-stack] Ollama GPU: GPU setup policy is auto; attempting Docker GPU enablement\n' >&2
+      if dorkpipe_stack_try_enable_docker_gpu_access; then
+        dorkpipe_stack_write_gpu_override
+        printf 'nvidia\n' > "$mode_file"
+        printf '[dorkpipe-dev-stack] Ollama GPU: Docker GPU access enabled; continuing with NVIDIA\n' >&2
+        return 0
+      fi
+      ;;
+    prompt)
+      if [[ "$reason" != "no-host-gpu" ]]; then
+        if dorkpipe_stack_prompt_for_gpu_recovery; then
+          setup_status=0
+          dorkpipe_stack_write_gpu_override
+          printf 'nvidia\n' > "$mode_file"
+          printf '[dorkpipe-dev-stack] Ollama GPU: Docker GPU access enabled; continuing with NVIDIA\n' >&2
+          return 0
+        else
+          setup_status=$?
+        fi
+        case "$setup_status" in
+          30)
+            printf '[dorkpipe-dev-stack] Ollama GPU: continuing on CPU for this launch\n' >&2
+            ;;
+          20|21)
+            return "$setup_status"
+            ;;
+          *)
+            return "$setup_status"
+            ;;
+        esac
+      fi
+      ;;
+  esac
+
+  if [[ "$failure_policy" == "cpu" ]]; then
+    rm -f "$gpu_file"
+    printf 'cpu\n' > "$mode_file"
+    printf '[dorkpipe-dev-stack] Ollama GPU: continuing on CPU for this launch\n' >&2
+    return 0
+  fi
+
+  dorkpipe_stack_explain_docker_gpu_setup
+  case "$reason" in
+    no-host-gpu)
+      echo "dorkpipe-dev-stack: NVIDIA GPU was requested, but no host NVIDIA GPU was detected" >&2
+      ;;
+    *)
+      echo "dorkpipe-dev-stack: NVIDIA GPU was requested, but Docker GPU access is unavailable" >&2
+      ;;
+  esac
+  return 1
+}
+
+dorkpipe_stack_configure_gpu() {
+  local requested mode_file gpu_file
+  requested="${DORKPIPE_DEV_STACK_GPU:-auto}"
+  mode_file="$(dorkpipe_stack_gpu_mode_file)"
+  gpu_file="$(dorkpipe_stack_gpu_compose_file)"
+  dorkpipe_stack_ensure_state_dir
+
+  case "$requested" in
+    auto|"")
+      if dorkpipe_stack_detect_nvidia_gpu; then
+        if dorkpipe_stack_docker_supports_nvidia_gpu; then
+          dorkpipe_stack_write_gpu_override
+          printf 'nvidia\n' > "$mode_file"
+          printf '[dorkpipe-dev-stack] Ollama GPU: NVIDIA enabled via Docker Compose override\n' >&2
+        else
+          dorkpipe_stack_handle_gpu_unavailable "$requested" "$mode_file" "$gpu_file"
+        fi
+      else
+        dorkpipe_stack_handle_gpu_unavailable "$requested" "$mode_file" "$gpu_file" no-host-gpu
+      fi
+      ;;
+    nvidia|all)
+      printf '[dorkpipe-dev-stack] Ollama GPU: NVIDIA forced by DORKPIPE_DEV_STACK_GPU=%s\n' "$requested" >&2
+      if ! dorkpipe_stack_detect_nvidia_gpu; then
+        dorkpipe_stack_handle_gpu_unavailable "$requested" "$mode_file" "$gpu_file" no-host-gpu
+      elif ! dorkpipe_stack_docker_supports_nvidia_gpu; then
+        dorkpipe_stack_handle_gpu_unavailable "$requested" "$mode_file" "$gpu_file"
+      else
+        dorkpipe_stack_write_gpu_override
+        printf 'nvidia\n' > "$mode_file"
+      fi
+      ;;
+    cpu|none|off|0|false)
+      rm -f "$gpu_file"
+      printf 'cpu\n' > "$mode_file"
+      printf '[dorkpipe-dev-stack] Ollama GPU: disabled by DORKPIPE_DEV_STACK_GPU=%s\n' "$requested" >&2
+      ;;
+    *)
+      echo "dorkpipe-dev-stack: DORKPIPE_DEV_STACK_GPU must be auto, nvidia, all, cpu, none, off, 0, or false (got $requested)" >&2
+      return 1
+      ;;
+  esac
+}
+
+dorkpipe_stack_compose_args() {
+  local gpu_file
+  gpu_file="$(dorkpipe_stack_gpu_compose_file)"
+  printf '%s\n' -p "$PROJECT" -f "$COMPOSE"
+  if [[ -s "$gpu_file" ]]; then
+    printf '%s\n' -f "$gpu_file"
+  fi
+  printf '%s\n' --project-directory "$ROOT"
+}
+
+dorkpipe_stack_service_enabled() {
+  local needle="$1"
+  local service
+  if [[ -z "${DORKPIPE_DEV_STACK_SERVICES:-}" ]]; then
+    [[ "$needle" == "postgres" || "$needle" == "ollama" || "$needle" == "dorkpipe-stack" || "$needle" == "dorkpipe-mcp-proxy" ]]
+    return $?
+  fi
+  for service in ${DORKPIPE_DEV_STACK_SERVICES}; do
+    if [[ "$service" == "$needle" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+dorkpipe_stack_service_container_id() {
+  docker compose "${COMPOSE_ARGS[@]}" ps -q "$1" 2>/dev/null | head -n 1
+}
+
+dorkpipe_stack_service_ready() {
+  local service="$1"
+  local cid running health
+  cid="$(dorkpipe_stack_service_container_id "$service")"
+  [[ -n "$cid" ]] || return 1
+  running="$(docker inspect --format '{{if .State.Running}}true{{else}}false{{end}}' "$cid" 2>/dev/null || true)"
+  [[ "$running" == "true" ]] || return 1
+  health="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$cid" 2>/dev/null || true)"
+  case "$health" in
+    none|healthy)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+dorkpipe_stack_wait_for_services_ready() {
+  local attempts="${1:-60}"
+  local services=() service i
+  if [[ -n "${DORKPIPE_DEV_STACK_SERVICES:-}" ]]; then
+    # shellcheck disable=SC2206
+    services=(${DORKPIPE_DEV_STACK_SERVICES})
+  else
+    services=(postgres ollama dorkpipe-stack dorkpipe-mcp-proxy)
+  fi
+  for ((i = 0; i < attempts; i++)); do
+    local all_ready="true"
+    for service in "${services[@]}"; do
+      if ! dorkpipe_stack_service_ready "$service"; then
+        all_ready="false"
+        break
+      fi
+    done
+    if [[ "$all_ready" == "true" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "dorkpipe-dev-stack: requested services did not become ready: ${services[*]}" >&2
+  for service in "${services[@]}"; do
+    local cid state
+    cid="$(dorkpipe_stack_service_container_id "$service")"
+    if [[ -z "$cid" ]]; then
+      printf '  %s: not created\n' "$service" >&2
+      continue
+    fi
+    state="$(docker inspect --format '{{if .State.Running}}running{{else}}{{.State.Status}}{{end}}{{if .State.Health}}{{printf " health=%s" .State.Health.Status}}{{end}}' "$cid" 2>/dev/null || true)"
+    printf '  %s: %s\n' "$service" "${state:-unknown}" >&2
+  done
+  return 1
+}
+
+dorkpipe_stack_wait_for_mcp_ready() {
+  local attempts="${1:-60}"
+  local url status i
+  dorkpipe_stack_service_enabled dorkpipe-mcp-proxy || return 0
+  url="$(dorkpipe_stack_mcp_url)"
+  for ((i = 0; i < attempts; i++)); do
+    status="$(curl -sS -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || true)"
+    if [[ "$status" == "401" || "$status" == "400" || "$status" == "405" ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "dorkpipe-dev-stack: MCP proxy did not become ready at $url" >&2
+  return 1
+}
+
+dorkpipe_stack_wait_for_ollama_ready() {
+  local attempts="${1:-90}"
+  local i
+  for ((i = 0; i < attempts; i++)); do
+    if docker compose "${COMPOSE_ARGS[@]}" exec -T ollama ollama list >/dev/null 2>&1; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+dorkpipe_stack_ensure_ollama_model() {
+  local model log_path
+  if [[ "${DORKPIPE_DEV_STACK_PULL_MODEL:-1}" != "1" ]]; then
+    return 0
+  fi
+  dorkpipe_stack_service_enabled ollama || return 0
+  model="${DORKPIPE_DEV_STACK_OLLAMA_MODEL:-${PIPEON_OLLAMA_MODEL:-${DOCKPIPE_OLLAMA_MODEL:-${DORKPIPE_ORCH_OLLAMA_MODEL:-llama3.2}}}}"
+  [[ -n "$model" ]] || return 0
+  if ! dorkpipe_stack_wait_for_ollama_ready "${DORKPIPE_DEV_STACK_OLLAMA_READY_ATTEMPTS:-90}"; then
+    echo "dorkpipe-dev-stack: Ollama did not become ready in time" >&2
+    return 1
+  fi
+  log_path="$(dorkpipe_stack_log_dir)/ollama-pull-${model//[^A-Za-z0-9_.-]/_}.log"
+  dorkpipe_stack_run_logged "ensure Ollama model ${model}" "${log_path}" docker compose "${COMPOSE_ARGS[@]}" exec -T ollama ollama pull "$model"
+}

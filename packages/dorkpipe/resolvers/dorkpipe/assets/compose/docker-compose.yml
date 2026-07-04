@@ -1,0 +1,92 @@
+# Dev stack for DorkPipe control plane + pgvector + Ollama (see lib/dorkpipe/composegen).
+# scripts/dorkpipe/dev-stack.sh up   # project name: dorkpipe-dev (override: DORKPIPE_DEV_STACK_PROJECT)
+# docker compose -p dorkpipe-dev -f packages/dorkpipe/resolvers/dorkpipe/assets/compose/docker-compose.yml up -d
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: dorkpipe
+      POSTGRES_PASSWORD: dorkpipe
+      POSTGRES_DB: dorkpipe
+    # Host 15432 avoids clashing with a local Postgres on 5432
+    ports:
+      - "15432:5432"
+    volumes:
+      - dorkpipe_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dorkpipe -d dorkpipe"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - dorkpipe_ollama:/root/.ollama
+  dorkpipe-stack:
+    image: dockpipe-dorkpipe-stack:latest
+    build:
+      context: "${DORKPIPE_DEV_STACK_CONTEXT_DIR:?DORKPIPE_DEV_STACK_CONTEXT_DIR is required}"
+      dockerfile: compose/Dockerfile.dorkpipe-stack
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    working_dir: /work
+    environment:
+      DOCKPIPE_BIN: "/usr/local/bin/dockpipe"
+      DORKPIPE_BIN: "/usr/local/bin/dorkpipe"
+      DOCKPIPE_WORKDIR: "${DORKPIPE_DEV_STACK_DORKPIPE_WORKDIR:-/work}"
+      DOCKPIPE_MCP_TIER: "${DOCKPIPE_MCP_TIER:-exec}"
+      DOCKPIPE_MCP_RESTRICT_WORKDIR: "1"
+      DOCKPIPE_MCP_REQUIRE_ABSOLUTE_BIN: "1"
+      DATABASE_URL: "${DORKPIPE_DEV_STACK_DORKPIPE_DATABASE_URL:-postgresql://dorkpipe:dorkpipe@postgres:5432/dorkpipe}"
+      OLLAMA_HOST: "${DORKPIPE_DEV_STACK_DORKPIPE_OLLAMA_HOST:-http://ollama:11434}"
+      DORKPIPE_ORCH_OLLAMA_MODEL: "${DORKPIPE_ORCH_OLLAMA_MODEL:-llama3.2}"
+      MCP_HTTP_API_KEY_FILE: "/run/dorkpipe/mcp-api-key"
+      MCP_TLS_CERT_FILE: "/run/dorkpipe/mcp-tls.crt"
+      MCP_TLS_KEY_FILE: "/run/dorkpipe/mcp-tls.key"
+      DORKPIPE_DEV_STACK_MCPD_BIN: "/usr/local/bin/mcpd"
+      DORKPIPE_DEV_STACK_MCPD_LISTEN: "0.0.0.0:8765"
+    command:
+      - exec "$$DORKPIPE_DEV_STACK_MCPD_BIN" -http "$$DORKPIPE_DEV_STACK_MCPD_LISTEN"
+    volumes:
+      - "${DORKPIPE_DEV_STACK_WORKDIR:-.}:/work"
+      - "${DORKPIPE_DEV_STACK_MCP_API_KEY_FILE:?DORKPIPE_DEV_STACK_MCP_API_KEY_FILE is required}:/run/dorkpipe/mcp-api-key:ro"
+      - "${DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE:?DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE is required}:/run/dorkpipe/mcp-tls.crt:ro"
+      - "${DORKPIPE_DEV_STACK_MCP_TLS_KEY_FILE:?DORKPIPE_DEV_STACK_MCP_TLS_KEY_FILE is required}:/run/dorkpipe/mcp-tls.key:ro"
+  dorkpipe-mcp-proxy:
+    image: node:22-bookworm-slim
+    depends_on:
+      dorkpipe-stack:
+        condition: service_started
+    environment:
+      MCP_HTTP_API_KEY_FILE: "/run/dorkpipe/mcp-api-key"
+      NODE_EXTRA_CA_CERTS: "/run/dorkpipe/mcp-tls.crt"
+      DORKPIPE_MCP_PROXY_PORT: "8766"
+      DORKPIPE_MCP_UPSTREAM_URL: "https://dorkpipe-stack:8765"
+    ports:
+      - "127.0.0.1:${DORKPIPE_DEV_STACK_MCP_PORT:-8766}:8766"
+    command:
+      - /bin/sh
+      - -lc
+      - exec node /opt/dorkpipe/scripts/mcp-proxy.js
+    volumes:
+      - "${DORKPIPE_DEV_STACK_ASSETS_DIR:?DORKPIPE_DEV_STACK_ASSETS_DIR is required}:/opt/dorkpipe:ro"
+      - "${DORKPIPE_DEV_STACK_MCP_API_KEY_FILE:?DORKPIPE_DEV_STACK_MCP_API_KEY_FILE is required}:/run/dorkpipe/mcp-api-key:ro"
+      - "${DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE:?DORKPIPE_DEV_STACK_MCP_TLS_CERT_FILE is required}:/run/dorkpipe/mcp-tls.crt:ro"
+  policy-proxy:
+    image: node:22-bookworm-slim
+    # DockPipe injects a per-step proxy URL token; this service decodes that token
+    # and enforces the compiled allow/block policy for the current run.
+    command: ["node", "/opt/dockpipe/policy-proxy.js"]
+    ports:
+      - "13128:3128"
+    volumes:
+      - "${DORKPIPE_DEV_STACK_POLICY_PROXY_JS:?DORKPIPE_DEV_STACK_POLICY_PROXY_JS is required}:/opt/dockpipe/policy-proxy.js:ro"
+
+volumes:
+  dorkpipe_pgdata:
+  dorkpipe_ollama:

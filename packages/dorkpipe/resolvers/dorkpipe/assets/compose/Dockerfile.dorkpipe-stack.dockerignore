@@ -1,0 +1,10 @@
+**
+
+!compose/
+!compose/Dockerfile.dorkpipe-stack
+!tooling/
+!tooling/bin/
+!tooling/bin/linux/
+!tooling/bin/linux/dockpipe
+!tooling/bin/linux/dorkpipe
+!tooling/bin/linux/mcpd

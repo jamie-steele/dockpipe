@@ -1,0 +1,13 @@
+# Agnostic example 2: two services on a private network (not run by dockpipe).
+# docker compose -f templates/core/assets/compose/multi-service/docker-compose.yml up
+services:
+  a:
+    image: alpine:3.20
+    command: ["sleep", "infinity"]
+    networks: [demo]
+  b:
+    image: alpine:3.20
+    command: ["sleep", "infinity"]
+    networks: [demo]
+networks:
+  demo: {}

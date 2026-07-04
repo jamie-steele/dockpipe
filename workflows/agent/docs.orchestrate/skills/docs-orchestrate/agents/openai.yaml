@@ -1,0 +1,7 @@
+interface:
+  display_name: "Docs Orchestrate"
+  short_description: "Run docs work as a DorkPipe task graph"
+  default_prompt: "Use $docs-orchestrate to plan, fan out, merge, verify, and approve a DorkPipe orchestration workflow update."
+
+policy:
+  allow_implicit_invocation: true

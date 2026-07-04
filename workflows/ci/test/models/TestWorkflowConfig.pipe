@@ -1,0 +1,7 @@
+/// <summary>
+/// Concrete defaults for the maintainer isolation test workflow.
+/// </summary>
+public Class TestWorkflowConfig : ITestWorkflowConfig
+{
+    public string DockpipeDockerNetwork = "host";
+}

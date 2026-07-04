@@ -1,0 +1,90 @@
+schema: 1
+description: DorkPipe package-owned model lane catalog for orchestration planning.
+
+lanes:
+  - id: ollama.local.default
+    provider: ollama
+    resolver_hint: ollama
+    display_name: Ollama Local Default
+    local: true
+    cloud: false
+    free: true
+    model: "${DORKPIPE_ORCH_OLLAMA_MODEL:-llama3.2}"
+    context_window: 8192
+    capabilities:
+      - chat
+      - reasoning
+      - code
+      - cheap_attempt
+    availability:
+      commands:
+        - curl
+      optional_env:
+        - OLLAMA_HOST
+    budget:
+      max_task_tokens: 0
+      require_approval_over_cost: false
+    training:
+      exploration_weight: 0.55
+      preferred_for:
+        - cheap_attempt
+        - low_risk
+        - draft
+
+  - id: codex.cli.default
+    provider: codex
+    resolver_hint: codex
+    display_name: Codex CLI
+    local: false
+    cloud: true
+    free: false
+    model: "${DORKPIPE_ORCH_CODEX_MODEL:-cli}"
+    context_window: 128000
+    capabilities:
+      - chat
+      - reasoning
+      - code
+      - patch
+      - strong_validation
+    availability:
+      commands:
+        - docker
+      auth_hint: resolver scope provides Codex auth mount fields
+    budget:
+      max_task_tokens: 40000
+      require_approval_over_cost: true
+    training:
+      exploration_weight: 0.25
+      preferred_for:
+        - code
+        - patch
+        - validation_failed
+
+  - id: claude.cli.default
+    provider: claude
+    resolver_hint: claude
+    display_name: Claude CLI
+    local: false
+    cloud: true
+    free: false
+    model: "${DORKPIPE_ORCH_CLAUDE_MODEL:-cli}"
+    context_window: 200000
+    capabilities:
+      - chat
+      - reasoning
+      - review
+      - safety
+      - strong_validation
+    availability:
+      commands:
+        - docker
+      auth_hint: resolver scope provides Claude auth mount fields
+    budget:
+      max_task_tokens: 40000
+      require_approval_over_cost: true
+    training:
+      exploration_weight: 0.20
+      preferred_for:
+        - review
+        - safety
+        - verifier_disagreement

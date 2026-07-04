@@ -1,0 +1,36 @@
+name: agent.cloud-lanes.doctor
+description: Validate Codex and Claude CLI resolver containers, auth mounts, skills, and optional live prompts.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs the doctor shell script and container live prompt command.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: docker
+      command: docker
+      description: Runs Codex and Claude resolver containers for auth and live prompt checks.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+    - id: python3
+      command: python3
+      description: Writes structured JSON result summaries for provider checks.
+      install:
+        windows: winget install Python.Python.3.12
+        deb: sudo apt-get update && sudo apt-get install -y python3
+
+vars:
+  DORKPIPE_AGENT_DOCTOR_LIVE: "true"
+  DORKPIPE_AGENT_DOCTOR_TIMEOUT_SECONDS: "90"
+
+steps:
+  - id: doctor
+    kind: host
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
+    run: assets/scripts/cloud-lanes-doctor.sh

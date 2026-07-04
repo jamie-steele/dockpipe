@@ -1,0 +1,11 @@
+/// <summary>
+/// Contract for the bundled example workflow starter.
+/// </summary>
+public Interface IExampleWorkflowConfig
+{
+    /// <summary>User-facing message echoed by the example pipeline.</summary>
+    public string ExampleMessage;
+
+    /// <summary>Container image used by the isolated run step.</summary>
+    public string ExampleImage;
+}

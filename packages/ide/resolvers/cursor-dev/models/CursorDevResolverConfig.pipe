@@ -1,0 +1,8 @@
+/// <summary>
+/// Concrete defaults for the staged Cursor host-session resolver workflow.
+/// </summary>
+public Class CursorDevResolverConfig : ICursorDevResolverConfig
+{
+    public string CursorDevLaunch = "cli";
+    public string CursorDevWait = "1";
+}

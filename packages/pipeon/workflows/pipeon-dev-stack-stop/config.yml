@@ -1,0 +1,23 @@
+name: pipeon-dev-stack-stop
+description: Stop the Pipeon local dev stack for the current workdir.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the Pipeon stack stop script.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: docker
+      command: docker
+      description: Required to stop the Pipeon managed stack.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+docker_preflight: false
+
+steps:
+  - id: stop
+    kind: host
+    run: ../../resolvers/pipeon-dev-stack/assets/scripts/stop.sh

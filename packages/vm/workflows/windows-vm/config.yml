@@ -1,0 +1,148 @@
+name: windows-vm
+category: app
+vault: none
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: qemu
+      command: qemu-system-x86_64
+      description: Required to boot the Windows guest through QEMU.
+      install:
+        windows: winget install SoftwareFreedomConservancy.QEMU
+        deb: sudo apt-get update && sudo apt-get install -y qemu-system-x86 qemu-utils ovmf swtpm
+    - id: qemu-img
+      command: qemu-img
+      description: Required to create and inspect VM disk images.
+      install:
+        windows: winget install SoftwareFreedomConservancy.QEMU
+        deb: sudo apt-get update && sudo apt-get install -y qemu-utils
+    - id: ssh
+      command: ssh
+      description: Required when running commands in an existing Windows guest over SSH.
+      install:
+        windows: Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0
+        deb: sudo apt-get update && sudo apt-get install -y openssh-client
+view:
+  entry:
+    type: choice
+    field: General.BootSource
+    title: Windows VM Source
+    description: Choose how you want to start this Windows VM before DockPipe shows the relevant settings.
+    options:
+      - value: image
+        label: Boot existing disk image
+        pages: [image, machine, connectivity, advanced]
+      - value: installer-iso
+        label: Install from ISO
+        pages: [install, machine, connectivity, advanced]
+  pages:
+    - id: image
+      title: Existing Image
+      description: Pick a bootable Windows disk image and any image-specific connection settings.
+      sections:
+        - id: image-session
+          title: Session
+          fields:
+            - General.ExecMode
+        - id: image-media
+          title: Disk Image
+          fields:
+            - Storage.Disk
+            - Network.SshUser
+    - id: install
+      title: Install Media
+      description: Choose installer media and the target disk settings for a fresh Windows install.
+      sections:
+        - id: install-session
+          title: Session
+          fields:
+            - General.ExecMode
+        - id: install-media
+          title: Images And Media
+          fields:
+            - Storage.Cdrom
+            - Storage.VirtioIso
+        - id: install-disk
+          title: Target Disk
+          fields:
+            - Storage.Disk
+            - Storage.DiskSize
+    - id: machine
+      title: Machine
+      description: Configure the guest hardware profile and storage behavior.
+      sections:
+        - id: storage
+          title: Storage
+          fields:
+            - Storage.Persistence
+            - Storage.DiskBus
+        - id: compute
+          title: Compute
+          fields:
+            - Compute.Cpus
+            - Compute.Memory
+            - Compute.Display
+        - id: firmware
+          title: Firmware
+          fields:
+            - Firmware.FirmwareCode
+            - Firmware.FirmwareVars
+            - Firmware.Bios
+    - id: connectivity
+      title: Connectivity
+      description: Network defaults plus Windows-specific security expectations.
+      sections:
+        - id: network
+          title: Network
+          fields:
+            - Network.NetDevice
+            - Network.SshPort
+            - Network.Hostfwd
+        - id: security
+          title: Security
+          fields:
+            - Security.Tpm
+            - Security.SecureBoot
+    - id: advanced
+      title: Advanced
+      description: Less common passthrough and guest wrapper overrides.
+      sections:
+        - id: passthrough
+          title: PCI Passthrough
+          fields:
+            - Passthrough.PciDevices
+            - Passthrough.GpuPrimary
+            - Passthrough.AllowBootVga
+        - id: guest
+          title: Guest Overrides
+          fields:
+            - Advanced.Agent
+            - Advanced.AgentPort
+            - Advanced.ConfirmPrompts
+            - Advanced.EnvAllow
+            - Advanced.BootstrapPath
+            - Advanced.SyncHostPath
+            - Advanced.SyncGuestPath
+            - Advanced.KeepAlive
+            - Advanced.KeepAliveSeconds
+            - Advanced.GuestCommand
+description: >-
+  Boot a user-supplied Windows guest through the generic vm runtime using the
+  packaged qemu resolver, prompt for either a bootable disk image or an
+  installer ISO, then either run a guest command over SSH or keep an interactive
+  installer VM alive until the user exits.
+
+runtime: vm
+resolver: qemu
+
+inputs:
+  General.ExecMode: powershell
+  Storage.Persistence: ephemeral
+  Advanced.Agent: true
+  Advanced.EnvAllow: DOCKPIPE_VM_GUEST_COMMAND,DOCKPIPE_VM_OUTPUTS_REMOTE_PATH
+
+steps:
+  - id: guest-command
+    cmd: >-
+      if ($env:DOCKPIPE_VM_GUEST_COMMAND) { Invoke-Expression $env:DOCKPIPE_VM_GUEST_COMMAND }
+      else { Write-Host "[dockpipe] Connected to Windows VM over SSH."; Write-Host "[dockpipe] Set DOCKPIPE_VM_GUEST_COMMAND to run a different guest command."; whoami; hostname }

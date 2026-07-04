@@ -1,0 +1,5 @@
+name: pipeon
+namespace: dockpipeproject
+platforms: [windows, deb]
+description: Domain asset pack (Pipeon harness scripts and resources); not intended for direct run.
+steps: []

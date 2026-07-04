@@ -1,0 +1,3 @@
+name: dorkpipe-core-review
+description: Use for reviewing DockPipe engine changes, public CLI behavior, workflow parsing, package resolution, or any edit under src/lib or src/cmd where engine/package boundaries matter.
+short_description: Review DockPipe core boundaries
