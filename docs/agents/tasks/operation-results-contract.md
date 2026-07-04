@@ -95,6 +95,11 @@
   context including worktree-base inference, prepared workspace sessions, resolved runtime/resolver
   profiles, host-isolate selection, `/work` mount context, and container branch/detached context
   instead of one-off status lines in those paths.
+- Docker runtime startup and recovery paths now emit canonical `run.container.start`,
+  `run.container.detach`, `run.container.hint`, and `run.host_commit` units for attached/detached
+  container launch, post-launch detach metadata, structured Docker mount/daemon hints, and
+  host-checkpoint commit/skip behavior instead of bespoke startup, detach, mount-warning, and
+  skip-commit lines.
 
 ## Still Open
 

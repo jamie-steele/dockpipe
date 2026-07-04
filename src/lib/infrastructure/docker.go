@@ -85,14 +85,56 @@ func printDockerRunFailureHints(stderr *os.File, dockerStderr string) {
 		return
 	}
 	if strings.Contains(s, "permission denied") && (strings.Contains(s, "mount") || strings.Contains(s, "bind") || strings.Contains(s, "/work")) {
-		fmt.Fprintln(stderr, "[dockpipe] Bind mount: check the host path exists, permissions, and Docker Desktop “File sharing” / drive access (Windows/macOS). WSL: docs/runtime/wsl-windows.md")
+		LogOperationResult(stderr, OperationResult{
+			Unit:       "run.container.hint",
+			Status:     OperationStatusDone,
+			DurationMs: 0,
+			IDs: map[string]string{
+				"category": "mount",
+				"hint":     "bind_mount_permissions",
+				"docs":     "docs/runtime/wsl-windows.md",
+			},
+		})
 	}
 	if strings.Contains(s, "invalid mount") || strings.Contains(s, "not a directory") {
-		fmt.Fprintln(stderr, "[dockpipe] Mount: verify `-v` paths and that the directory exists on the host.")
+		LogOperationResult(stderr, OperationResult{
+			Unit:       "run.container.hint",
+			Status:     OperationStatusDone,
+			DurationMs: 0,
+			IDs: map[string]string{
+				"category": "mount",
+				"hint":     "invalid_mount_path",
+			},
+		})
 	}
 	if strings.Contains(s, "cannot connect to the docker daemon") || strings.Contains(s, "is the docker daemon running") {
-		fmt.Fprintln(stderr, "[dockpipe] Docker daemon not reachable — start Docker Desktop or `sudo systemctl start docker` (Linux).")
+		LogOperationResult(stderr, OperationResult{
+			Unit:       "run.container.hint",
+			Status:     OperationStatusDone,
+			DurationMs: 0,
+			IDs: map[string]string{
+				"category": "daemon",
+				"hint":     "docker_daemon_unreachable",
+			},
+		})
 	}
+}
+
+func dockerRunOperationIDs(image, mode, container string) map[string]string {
+	ids := map[string]string{}
+	if value := strings.TrimSpace(image); value != "" {
+		ids["image"] = value
+	}
+	if value := strings.TrimSpace(mode); value != "" {
+		ids["mode"] = value
+	}
+	if value := strings.TrimSpace(container); value != "" {
+		ids["container"] = value
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	return ids
 }
 
 var (
@@ -544,16 +586,25 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		cmd.Stdout = io.MultiWriter(stdoutOut, &cidBuf)
 		var errBuf bytes.Buffer
 		cmd.Stderr = io.MultiWriter(stderr, &errBuf)
-		stopSpin := StartLineSpinner(stderr, "Starting container…")
-		err := cmd.Run()
-		stopSpin()
+		_, err := RunOperationWithResultOptions(stderr, "run.container.start", "Starting container…", dockerRunOperationIDs(o.Image, "detach", ""), OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+			return cmd.Run()
+		})
 		if err != nil {
 			printDockerRunFailureHints(stderr, errBuf.String())
 			return 1, err
 		}
 		cid := strings.TrimSpace(cidBuf.String())
 		if cid != "" {
-			fmt.Fprintf(stderr, "[dockpipe] Detached: container %s (--rm removes it when the process exits). Logs: docker logs -f %s\n", cid, cid)
+			LogOperationResult(stderr, OperationResult{
+				Unit:       "run.container.detach",
+				Status:     OperationStatusDone,
+				DurationMs: 0,
+				IDs: map[string]string{
+					"container":     cid,
+					"logs_command":  "docker logs -f " + cid,
+					"remove_policy": "rm",
+				},
+			})
 		}
 		return 0, nil
 	}
@@ -570,9 +621,6 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 
 	// User-visible checkpoint: docker run can block on pull, VM, or volume (especially on Windows).
 	printDockerValuePropOnce(stderr)
-	fmt.Fprintln(stderr, "[dockpipe] Starting container…")
-
-	start := timeNowDockerFn()
 	dockerCmd := dockerCommandName()
 	cmd := execCommandFn(dockerCmd, args...)
 	cmd.Env = dockerCommandEnv(os.Environ(), dockerCmd)
@@ -580,10 +628,12 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	cmd.Stdout = stdoutOut
 	var runErrBuf bytes.Buffer
 	cmd.Stderr = io.MultiWriter(stderr, &runErrBuf)
-	if err := cmd.Start(); err != nil {
-		return 1, err
-	}
-	err = waitCommandWithSignalForward(cmd)
+	result, err := RunOperationWithResultOptions(stderr, "run.container.start", "Starting container…", dockerRunOperationIDs(o.Image, "attach", cid), OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		return waitCommandWithSignalForward(cmd)
+	})
 	rc := 0
 	if err != nil {
 		if x, ok := err.(*exec.ExitError); ok {
@@ -592,7 +642,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 			rc = 1
 		}
 	}
-	elapsed := timeNowDockerFn().Sub(start)
+	elapsed := time.Duration(result.DurationMs) * time.Millisecond
 
 	// Keep default output quiet on success. Quick-exit dumps are useful for debugging
 	// but noisy in normal/test runs; opt in via DOCKPIPE_LOG_QUICK_EXIT=1.
@@ -636,9 +686,33 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 
 	if o.CommitOnHost {
 		if rc != 0 {
-			fmt.Fprintln(stderr, "[dockpipe] Skipping host commit (container exited with non-zero code).")
+			LogOperationResult(stderr, OperationResult{
+				Unit:       "run.host_commit",
+				Status:     OperationStatusDone,
+				DurationMs: 0,
+				IDs: map[string]string{
+					"exit_code":   strconv.Itoa(rc),
+					"result":      "skipped",
+					"skip_reason": "container_exit_non_zero",
+				},
+			})
 		} else {
-			_ = commitOnHostFn(workHost, o.CommitMessage, o.BundleOut, o.BundleAll)
+			commitIDs := map[string]string{
+				"workspace": workHost,
+			}
+			if value := strings.TrimSpace(o.BundleOut); value != "" {
+				commitIDs["bundle_out"] = value
+			}
+			if o.BundleAll {
+				commitIDs["bundle_scope"] = "all"
+			}
+			_, _ = RunOperationWithResultOptions(stderr, "run.host_commit", "Recording host checkpoint…", commitIDs, OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+				if err := commitOnHostFn(workHost, o.CommitMessage, o.BundleOut, o.BundleAll); err != nil {
+					return err
+				}
+				commitIDs["result"] = "committed"
+				return nil
+			})
 		}
 	}
 	return rc, nil

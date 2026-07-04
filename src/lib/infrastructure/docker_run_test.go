@@ -159,6 +159,19 @@ func TestRunContainerDetachBuildsDockerRun(t *testing.T) {
 			t.Fatalf("expected no -u on Windows detach run by default (set DOCKPIPE_WINDOWS_CONTAINER_USER to opt in), got %s", joined)
 		}
 	}
+	stderrBytes, readErr := os.ReadFile(errf.Name())
+	if readErr != nil {
+		t.Fatalf("read stderr capture: %v", readErr)
+	}
+	stderrText := string(stderrBytes)
+	for _, want := range []string{
+		"unit=run.container.start status=start image=img mode=detach",
+		"unit=run.container.start status=done duration_ms=",
+	} {
+		if !strings.Contains(stderrText, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderrText)
+		}
+	}
 }
 
 func TestRunContainerAppliesSecurityFlags(t *testing.T) {
@@ -283,6 +296,21 @@ func TestRunContainerAttachedExitCodeTriggersLogsAndRm(t *testing.T) {
 	if !strings.Contains(got, "docker logs") || !strings.Contains(got, "docker rm") {
 		t.Fatalf("expected logs and rm calls, got:\n%s", got)
 	}
+	stderrBytes, readErr := os.ReadFile(errf.Name())
+	if readErr != nil {
+		t.Fatalf("read stderr capture: %v", readErr)
+	}
+	stderrText := string(stderrBytes)
+	for _, want := range []string{
+		"unit=run.container.start status=start",
+		"image=img mode=attach",
+		"unit=run.container.start status=fail duration_ms=",
+		`error="exit status 7"`,
+	} {
+		if !strings.Contains(stderrText, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderrText)
+		}
+	}
 }
 
 // TestRunContainerAttachedCallsCommitOnHost invokes commit-on-host after a successful attached run when requested.
@@ -327,6 +355,19 @@ func TestRunContainerAttachedCallsCommitOnHost(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("expected CommitOnHost to be called")
+	}
+	stderrBytes, readErr := os.ReadFile(errf.Name())
+	if readErr != nil {
+		t.Fatalf("read stderr capture: %v", readErr)
+	}
+	stderrText := string(stderrBytes)
+	for _, want := range []string{
+		"unit=run.host_commit status=start bundle_out=b.bundle workspace=/tmp/wd",
+		"unit=run.host_commit status=done duration_ms=0 bundle_out=b.bundle result=committed workspace=/tmp/wd",
+	} {
+		if !strings.Contains(stderrText, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderrText)
+		}
 	}
 }
 
@@ -614,6 +655,56 @@ func TestRunContainerAttachedSkipsCommitOnNonZero(t *testing.T) {
 	if called {
 		t.Fatal("expected CommitOnHost to be skipped on container failure")
 	}
+	stderrBytes, readErr := os.ReadFile(errf.Name())
+	if readErr != nil {
+		t.Fatalf("read stderr capture: %v", readErr)
+	}
+	stderrText := string(stderrBytes)
+	if !strings.Contains(stderrText, "unit=run.host_commit status=done duration_ms=0 exit_code=3 result=skipped skip_reason=container_exit_non_zero") {
+		t.Fatalf("expected skip commit operation result, got:\n%s", stderrText)
+	}
+}
+
+func TestRunContainerFailureHintsUseOperationResults(t *testing.T) {
+	withDockerSeams(t)
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		if isDockerCommandName(name) && len(args) > 0 && args[0] == "run" {
+			return helperOutputCommand(7, "", "permission denied while mounting /work")
+		}
+		return helperExitCommand(0)
+	}
+	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
+	filepathAbsDocker = func(path string) (string, error) { return path, nil }
+	osStatDockerFn = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	isTerminalDockerFn = func(fd int) bool { return false }
+	timeNowDockerFn = func() time.Time { return time.Unix(1000, 0) }
+	in, _ := os.CreateTemp(t.TempDir(), "in")
+	out, _ := os.CreateTemp(t.TempDir(), "out")
+	errf, _ := os.CreateTemp(t.TempDir(), "err")
+	defer in.Close()
+	defer out.Close()
+	defer errf.Close()
+
+	rc, err := RunContainer(RunOpts{
+		Image:  "img",
+		Stdin:  in,
+		Stdout: out,
+		Stderr: errf,
+	}, []string{"false"})
+	if err != nil {
+		t.Fatalf("expected nil error with non-zero rc, got %v", err)
+	}
+	if rc != 7 {
+		t.Fatalf("expected rc 7, got %d", rc)
+	}
+	stderrBytes, readErr := os.ReadFile(errf.Name())
+	if readErr != nil {
+		t.Fatalf("read stderr capture: %v", readErr)
+	}
+	stderrText := string(stderrBytes)
+	if !strings.Contains(stderrText, "unit=run.container.hint status=done duration_ms=0 category=mount docs=docs/runtime/wsl-windows.md hint=bind_mount_permissions") {
+		t.Fatalf("expected structured mount hint, got:\n%s", stderrText)
+	}
 }
 
 // TestRunContainerActionAbsError fails when the action script path cannot be made absolute.
@@ -756,6 +847,20 @@ func helperExitCommand(code int) *exec.Cmd {
 	return cmd
 }
 
+func helperOutputCommand(code int, stdoutText, stderrText string) *exec.Cmd {
+	cmd := exec.Command(
+		os.Args[0],
+		"-test.run=TestDockerHelperProcess",
+		"--",
+		"DOCKPIPE_DOCKER_HELPER_EXIT",
+		strconv.Itoa(code),
+		stdoutText,
+		stderrText,
+	)
+	cmd.Env = append(os.Environ(), fmt.Sprintf("GO_WANT_DOCKER_HELPER_PROCESS=%d", code))
+	return cmd
+}
+
 func TestDockerHelperProcess(t *testing.T) {
 	code := strings.TrimSpace(os.Getenv("GO_WANT_DOCKER_HELPER_PROCESS"))
 	if code == "" {
@@ -768,6 +873,26 @@ func TestDockerHelperProcess(t *testing.T) {
 	}
 	if code == "" {
 		return
+	}
+	stdoutText := os.Getenv("GO_WANT_DOCKER_HELPER_STDOUT")
+	stderrText := os.Getenv("GO_WANT_DOCKER_HELPER_STDERR")
+	for i := 0; i < len(os.Args); i++ {
+		if os.Args[i] != "DOCKPIPE_DOCKER_HELPER_EXIT" {
+			continue
+		}
+		if i+2 < len(os.Args) {
+			stdoutText = os.Args[i+2]
+		}
+		if i+3 < len(os.Args) {
+			stderrText = os.Args[i+3]
+		}
+		break
+	}
+	if stdoutText != "" {
+		fmt.Fprint(os.Stdout, stdoutText)
+	}
+	if stderrText != "" {
+		fmt.Fprint(os.Stderr, stderrText)
 	}
 	if n, err := strconv.Atoi(code); err == nil {
 		os.Exit(n)
