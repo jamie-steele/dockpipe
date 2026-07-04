@@ -26,6 +26,7 @@ var (
 	dockerImageExistsAppFn = infrastructure.DockerImageExists
 	dockerPullAppFn        = infrastructure.DockerPull
 	runContainerAppFn      = infrastructure.RunContainer
+	commitOnHostAppFn      = infrastructure.CommitOnHostWithResult
 	resolvePreScriptAppFn  = infrastructure.ResolvePreScriptPath
 	resolveWorkflowAppFn   = infrastructure.ResolveWorkflowScript
 	isBundledCommitAppFn   = infrastructure.IsBundledCommitWorktree
@@ -817,7 +818,7 @@ func Run(argv []string, baseEnviron []string) error {
 			return err
 		}
 		if commitOnHost && !strategyHandlesCommit {
-			if err := infrastructure.CommitOnHost(workHost, envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut), strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
+			if err := runHostCommit(workHost, envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut), strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
 				return err
 			}
 		}
@@ -872,7 +873,7 @@ func Run(argv []string, baseEnviron []string) error {
 			return err
 		}
 		if commitOnHost && !strategyHandlesCommit {
-			if err := infrastructure.CommitOnHost(workHost, envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut), strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
+			if err := runHostCommit(workHost, envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut), strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
 				return err
 			}
 		}

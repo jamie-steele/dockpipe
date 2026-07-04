@@ -45,6 +45,7 @@ func withRunSeams(t *testing.T) {
 	oldResolvePre := resolvePreScriptAppFn
 	oldResolveWfScript := resolveWorkflowAppFn
 	oldBundledCommit := isBundledCommitAppFn
+	oldCommitOnHost := commitOnHostAppFn
 	oldRunSteps := runStepsAppFn
 	oldRunHost := runHostScriptAppFn
 	oldExit := osExitAppFn
@@ -63,6 +64,7 @@ func withRunSeams(t *testing.T) {
 		resolvePreScriptAppFn = oldResolvePre
 		resolveWorkflowAppFn = oldResolveWfScript
 		isBundledCommitAppFn = oldBundledCommit
+		commitOnHostAppFn = oldCommitOnHost
 		runStepsAppFn = oldRunSteps
 		runHostScriptAppFn = oldRunHost
 		osExitAppFn = oldExit

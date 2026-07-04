@@ -326,12 +326,12 @@ func TestRunContainerAttachedCallsCommitOnHost(t *testing.T) {
 	timeNowDockerFn = func() time.Time { return time.Unix(1000, 0) }
 	called := false
 	wantWorkdir := "/tmp/wd"
-	commitOnHostFn = func(workdir, message, bundleOut string, bundleAll bool) error {
+	commitOnHostFn = func(workdir, message, bundleOut string, bundleAll bool) (HostCommitResult, error) {
 		called = true
 		if workdir != wantWorkdir || message != "m" || bundleOut != "b.bundle" || bundleAll {
 			t.Fatalf("unexpected commit args: %q %q %q bundleAll=%v", workdir, message, bundleOut, bundleAll)
 		}
-		return nil
+		return HostCommitResult{Result: "committed", BundleOut: bundleOut}, nil
 	}
 	in, _ := os.CreateTemp(t.TempDir(), "in")
 	out, _ := os.CreateTemp(t.TempDir(), "out")
@@ -627,9 +627,9 @@ func TestRunContainerAttachedSkipsCommitOnNonZero(t *testing.T) {
 	isTerminalDockerFn = func(fd int) bool { return false }
 	timeNowDockerFn = func() time.Time { return time.Unix(1000, 0) }
 	called := false
-	commitOnHostFn = func(workdir, message, bundleOut string, bundleAll bool) error {
+	commitOnHostFn = func(workdir, message, bundleOut string, bundleAll bool) (HostCommitResult, error) {
 		called = true
-		return nil
+		return HostCommitResult{Result: "committed"}, nil
 	}
 	in, _ := os.CreateTemp(t.TempDir(), "in")
 	out, _ := os.CreateTemp(t.TempDir(), "out")

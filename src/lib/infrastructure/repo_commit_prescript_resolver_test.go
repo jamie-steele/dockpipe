@@ -92,6 +92,18 @@ func TestCommitOnHostNoRepoReturnsNil(t *testing.T) {
 	}
 }
 
+func TestCommitOnHostWithResultReportsSkippedNonRepo(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("GIT_CEILING_DIRECTORIES", filepath.Dir(tmp))
+	result, err := CommitOnHostWithResult(tmp, "msg", "", false)
+	if err != nil {
+		t.Fatalf("CommitOnHostWithResult should skip non-repo and return nil err: %v", err)
+	}
+	if result.Result != "skipped" || result.SkipReason != "not_git_repo" {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
 // TestCommitOnHostCreatesCommitAndBundle creates a commit and default (thin) bundle in a real git repo.
 func TestCommitOnHostCreatesCommitAndBundle(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
@@ -128,6 +140,39 @@ func TestCommitOnHostCreatesCommitAndBundle(t *testing.T) {
 	}
 	if _, err := os.Stat(bundle); err != nil {
 		t.Fatalf("expected bundle file %q: %v", bundle, err)
+	}
+}
+
+func TestCommitOnHostWithResultReportsCommitAndBundleScope(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmp := t.TempDir()
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = tmp
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v failed: %v\n%s", args, err, out)
+		}
+		return string(out)
+	}
+
+	run("init", "-b", "main")
+	run("config", "user.email", "test@example.com")
+	run("config", "user.name", "Dockpipe Test")
+	if err := os.WriteFile(filepath.Join(tmp, "README.md"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	bundle := filepath.Join(tmp, "repo.bundle")
+	result, err := CommitOnHostWithResult(tmp, "test commit", bundle, false)
+	if err != nil {
+		t.Fatalf("CommitOnHostWithResult error: %v", err)
+	}
+	if result.Result != "committed" || result.Branch != "main" || result.BundleOut != bundle || result.BundleScope != "branch" {
+		t.Fatalf("unexpected result: %+v", result)
 	}
 }
 

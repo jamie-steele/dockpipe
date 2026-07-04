@@ -381,7 +381,7 @@ func finalizeResolverStepAfterHost(o *runStepsOpts, step domain.Step, dockerEnv 
 					tmpl = ProfileLabelForEnv(strings.TrimSpace(step.Runtime), strings.TrimSpace(step.Resolver))
 				}
 				applyBranchPrefix(o.envMap, branchResolverName(o, step, stepIndex), tmpl)
-				if err := infrastructure.CommitOnHost(workHost, o.envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(o.envMap["DOCKPIPE_BUNDLE_OUT"], o.opts.BundleOut), strings.TrimSpace(o.envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
+				if err := runHostCommit(workHost, o.envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(o.envMap["DOCKPIPE_BUNDLE_OUT"], o.opts.BundleOut), strings.TrimSpace(o.envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
 					return err
 				}
 			}

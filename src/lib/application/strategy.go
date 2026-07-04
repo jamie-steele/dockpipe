@@ -145,7 +145,7 @@ func RunStrategyAfterScripts(afterAbs []string, repoRoot string, envMap map[stri
 			return fmt.Errorf("strategy after script not found: %s: %w", p, err)
 		}
 		if infrastructure.IsBundledCommitWorktree(p, repoRoot) {
-			if err := infrastructure.CommitOnHost(workHost, envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut), strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
+			if err := runHostCommit(workHost, envMap["DOCKPIPE_COMMIT_MESSAGE"], firstNonEmpty(envMap["DOCKPIPE_BUNDLE_OUT"], opts.BundleOut), strings.TrimSpace(envMap["DOCKPIPE_BUNDLE_ALL"]) == "1"); err != nil {
 				return err
 			}
 			continue

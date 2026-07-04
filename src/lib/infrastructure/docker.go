@@ -147,7 +147,7 @@ var (
 	getgidDockerFn     = os.Getgid
 	isTerminalDockerFn = term.IsTerminal
 	timeNowDockerFn    = time.Now
-	commitOnHostFn     = CommitOnHost
+	commitOnHostFn     = CommitOnHostWithResult
 )
 
 // DockerBuild runs docker build -q -t image -f Dir/Dockerfile context.
@@ -707,10 +707,25 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 				commitIDs["bundle_scope"] = "all"
 			}
 			_, _ = RunOperationWithResultOptions(stderr, "run.host_commit", "Recording host checkpoint…", commitIDs, OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
-				if err := commitOnHostFn(workHost, o.CommitMessage, o.BundleOut, o.BundleAll); err != nil {
+				result, err := commitOnHostFn(workHost, o.CommitMessage, o.BundleOut, o.BundleAll)
+				if err != nil {
 					return err
 				}
-				commitIDs["result"] = "committed"
+				if value := strings.TrimSpace(result.Result); value != "" {
+					commitIDs["result"] = value
+				}
+				if value := strings.TrimSpace(result.SkipReason); value != "" {
+					commitIDs["skip_reason"] = value
+				}
+				if value := strings.TrimSpace(result.Branch); value != "" {
+					commitIDs["branch"] = value
+				}
+				if value := strings.TrimSpace(result.BundleOut); value != "" {
+					commitIDs["bundle_out"] = value
+				}
+				if value := strings.TrimSpace(result.BundleScope); value != "" {
+					commitIDs["bundle_scope"] = value
+				}
 				return nil
 			})
 		}

@@ -103,6 +103,10 @@
 - Compile-root config warnings now emit canonical `config.compile_path` skip units from the
   application layer, and the `domain` compile-root resolver now returns missing-path metadata
   instead of printing raw config warning lines directly.
+- Bundled host-commit flows now emit canonical `run.host_commit` outcomes across Docker runs,
+  direct workflow commit paths, step-finalize commit-worktree actions, and strategy-after bundled
+  commits; the underlying host git helper now returns structured commit results instead of printing
+  repo-skip, no-change, branch, or bundle summary lines itself.
 
 ## Still Open
 
