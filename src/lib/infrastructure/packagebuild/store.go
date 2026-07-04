@@ -1,6 +1,8 @@
 package packagebuild
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -9,6 +11,7 @@ import (
 	"strings"
 
 	"dockpipe/src/lib/domain"
+	"gopkg.in/yaml.v3"
 )
 
 // StoreBuildManifest is written next to compiled-package tarballs (packages-store-manifest.json).
@@ -55,65 +58,31 @@ func BuildCompiledStore(packagesRoot, outDir, fallbackVersion, only string) (*St
 	if only == "all" || only == "core" {
 		coreDir := filepath.Join(packagesRoot, "core")
 		if st, err := os.Stat(coreDir); err == nil && st.IsDir() {
-			meta := readPackageManifestMeta(coreDir, fallbackVersion)
-			ver := meta.Version
-			base := fmt.Sprintf("dockpipe-core-%s.tar.gz", SafeTarballToken(ver))
-			outPath := filepath.Join(outDir, base)
-			sum, err := WriteDirTarGzWithPrefix(coreDir, outPath, "core")
-			if err != nil {
+			if artifact, err := buildOrCopyCoreArtifact(coreDir, outDir, fallbackVersion); err != nil {
 				return nil, fmt.Errorf("core: %w", err)
+			} else if artifact != nil {
+				m.Packages.Core = artifact
 			}
-			m.Packages.Core = &StoreArtifact{Name: "core", Version: ver, Tarball: base, SHA256: sum, Provider: meta.Provider, Capability: meta.Capability}
 		}
 	}
 
 	wfDir := filepath.Join(packagesRoot, "workflows")
 	if only == "all" || only == "workflows" {
-		names, err := listPackageSubdirs(wfDir)
+		artifacts, err := buildOrCopyWorkflowArtifacts(wfDir, outDir, fallbackVersion)
 		if err != nil {
 			return nil, err
 		}
-		for _, name := range names {
-			dir := filepath.Join(wfDir, name)
-			meta := readPackageManifestMeta(dir, fallbackVersion)
-			ver := meta.Version
-			base := fmt.Sprintf("dockpipe-workflow-%s-%s.tar.gz", SafeTarballToken(name), SafeTarballToken(ver))
-			outPath := filepath.Join(outDir, base)
-			prefix := "workflows/" + name
-			sum, err := WriteDirTarGzWithPrefix(dir, outPath, prefix)
-			if err != nil {
-				return nil, fmt.Errorf("workflow %q: %w", name, err)
-			}
-			m.Packages.Workflows = append(m.Packages.Workflows, StoreArtifact{
-				Name: name, Version: ver, Tarball: base, SHA256: sum,
-				Provider: meta.Provider, Capability: meta.Capability, RequiresCapabilities: meta.RequiresCapabilities,
-			})
-		}
+		m.Packages.Workflows = append(m.Packages.Workflows, artifacts...)
 		sort.Slice(m.Packages.Workflows, func(i, j int) bool { return m.Packages.Workflows[i].Name < m.Packages.Workflows[j].Name })
 	}
 
 	resDir := filepath.Join(packagesRoot, "resolvers")
 	if only == "all" || only == "resolvers" {
-		names, err := listPackageSubdirs(resDir)
+		artifacts, err := buildOrCopyResolverArtifacts(resDir, outDir, fallbackVersion)
 		if err != nil {
 			return nil, err
 		}
-		for _, name := range names {
-			dir := filepath.Join(resDir, name)
-			meta := readPackageManifestMeta(dir, fallbackVersion)
-			ver := meta.Version
-			base := fmt.Sprintf("dockpipe-resolver-%s-%s.tar.gz", SafeTarballToken(name), SafeTarballToken(ver))
-			outPath := filepath.Join(outDir, base)
-			prefix := "resolvers/" + name
-			sum, err := WriteDirTarGzWithPrefix(dir, outPath, prefix)
-			if err != nil {
-				return nil, fmt.Errorf("resolver %q: %w", name, err)
-			}
-			m.Packages.Resolvers = append(m.Packages.Resolvers, StoreArtifact{
-				Name: name, Version: ver, Tarball: base, SHA256: sum,
-				Provider: meta.Provider, Capability: meta.Capability,
-			})
-		}
+		m.Packages.Resolvers = append(m.Packages.Resolvers, artifacts...)
 		sort.Slice(m.Packages.Resolvers, func(i, j int) bool { return m.Packages.Resolvers[i].Name < m.Packages.Resolvers[j].Name })
 	}
 
@@ -158,6 +127,217 @@ func readPackageManifestMeta(dir, fallback string) packageManifestMeta {
 		out.RequiresCapabilities = append([]string(nil), pm.RequiresCapabilities...)
 	}
 	return out
+}
+
+func buildOrCopyCoreArtifact(coreDir, outDir, fallback string) (*StoreArtifact, error) {
+	if paths, err := listTarballs(coreDir, "dockpipe-core-*.tar.gz"); err != nil {
+		return nil, err
+	} else if len(paths) > 0 {
+		return copyTarballArtifact(paths[0], outDir, fallback, tarballKindCore)
+	}
+	meta := readPackageManifestMeta(coreDir, fallback)
+	ver := meta.Version
+	base := fmt.Sprintf("dockpipe-core-%s.tar.gz", SafeTarballToken(ver))
+	outPath := filepath.Join(outDir, base)
+	sum, err := WriteDirTarGzWithPrefix(coreDir, outPath, "core")
+	if err != nil {
+		return nil, err
+	}
+	return &StoreArtifact{Name: "core", Version: ver, Tarball: base, SHA256: sum, Provider: meta.Provider, Capability: meta.Capability}, nil
+}
+
+func buildOrCopyWorkflowArtifacts(root, outDir, fallback string) ([]StoreArtifact, error) {
+	if paths, err := listTarballs(root, "dockpipe-workflow-*.tar.gz"); err != nil {
+		return nil, err
+	} else if len(paths) > 0 {
+		var out []StoreArtifact
+		for _, path := range paths {
+			artifact, err := copyTarballArtifact(path, outDir, fallback, tarballKindWorkflow)
+			if err != nil {
+				return nil, fmt.Errorf("workflow tarball %q: %w", filepath.Base(path), err)
+			}
+			out = append(out, *artifact)
+		}
+		return out, nil
+	}
+	names, err := listPackageSubdirs(root)
+	if err != nil {
+		return nil, err
+	}
+	var out []StoreArtifact
+	for _, name := range names {
+		dir := filepath.Join(root, name)
+		meta := readPackageManifestMeta(dir, fallback)
+		ver := meta.Version
+		base := fmt.Sprintf("dockpipe-workflow-%s-%s.tar.gz", SafeTarballToken(name), SafeTarballToken(ver))
+		outPath := filepath.Join(outDir, base)
+		prefix := "workflows/" + name
+		sum, err := WriteDirTarGzWithPrefix(dir, outPath, prefix)
+		if err != nil {
+			return nil, fmt.Errorf("workflow %q: %w", name, err)
+		}
+		out = append(out, StoreArtifact{
+			Name: name, Version: ver, Tarball: base, SHA256: sum,
+			Provider: meta.Provider, Capability: meta.Capability, RequiresCapabilities: meta.RequiresCapabilities,
+		})
+	}
+	return out, nil
+}
+
+func buildOrCopyResolverArtifacts(root, outDir, fallback string) ([]StoreArtifact, error) {
+	if paths, err := listTarballs(root, "dockpipe-resolver-*.tar.gz"); err != nil {
+		return nil, err
+	} else if len(paths) > 0 {
+		var out []StoreArtifact
+		for _, path := range paths {
+			artifact, err := copyTarballArtifact(path, outDir, fallback, tarballKindResolver)
+			if err != nil {
+				return nil, fmt.Errorf("resolver tarball %q: %w", filepath.Base(path), err)
+			}
+			out = append(out, *artifact)
+		}
+		return out, nil
+	}
+	names, err := listPackageSubdirs(root)
+	if err != nil {
+		return nil, err
+	}
+	var out []StoreArtifact
+	for _, name := range names {
+		dir := filepath.Join(root, name)
+		meta := readPackageManifestMeta(dir, fallback)
+		ver := meta.Version
+		base := fmt.Sprintf("dockpipe-resolver-%s-%s.tar.gz", SafeTarballToken(name), SafeTarballToken(ver))
+		outPath := filepath.Join(outDir, base)
+		prefix := "resolvers/" + name
+		sum, err := WriteDirTarGzWithPrefix(dir, outPath, prefix)
+		if err != nil {
+			return nil, fmt.Errorf("resolver %q: %w", name, err)
+		}
+		out = append(out, StoreArtifact{
+			Name: name, Version: ver, Tarball: base, SHA256: sum,
+			Provider: meta.Provider, Capability: meta.Capability,
+		})
+	}
+	return out, nil
+}
+
+type tarballKind string
+
+const (
+	tarballKindCore     tarballKind = "core"
+	tarballKindWorkflow tarballKind = "workflow"
+	tarballKindResolver tarballKind = "resolver"
+)
+
+func copyTarballArtifact(srcPath, outDir, fallback string, kind tarballKind) (*StoreArtifact, error) {
+	meta, name, err := readPackageManifestMetaFromTarball(srcPath, fallback, kind)
+	if err != nil {
+		return nil, err
+	}
+	base := filepath.Base(srcPath)
+	outPath := filepath.Join(outDir, base)
+	sum, err := copyTarballWithSHA(srcPath, outPath)
+	if err != nil {
+		return nil, err
+	}
+	return &StoreArtifact{
+		Name:                 name,
+		Version:              meta.Version,
+		Tarball:              base,
+		SHA256:               sum,
+		Provider:             meta.Provider,
+		Capability:           meta.Capability,
+		RequiresCapabilities: meta.RequiresCapabilities,
+	}, nil
+}
+
+func readPackageManifestMetaFromTarball(tarGzPath, fallback string, kind tarballKind) (packageManifestMeta, string, error) {
+	var out packageManifestMeta
+	out.Version = fallback
+	members, err := ListTarGzMemberPaths(tarGzPath)
+	if err != nil {
+		return out, "", err
+	}
+	manifestPath, name, err := packageManifestPathForTarball(kind, members)
+	if err != nil {
+		return out, "", err
+	}
+	b, err := ReadFileFromTarGz(tarGzPath, manifestPath)
+	if err != nil {
+		return out, "", err
+	}
+	var pm domain.PackageManifest
+	if err := yaml.Unmarshal(b, &pm); err != nil {
+		return out, "", err
+	}
+	if strings.TrimSpace(pm.Version) != "" {
+		out.Version = strings.TrimSpace(pm.Version)
+	}
+	out.Provider = strings.TrimSpace(pm.Provider)
+	out.Capability = strings.TrimSpace(pm.Capability)
+	if len(pm.RequiresCapabilities) > 0 {
+		out.RequiresCapabilities = append([]string(nil), pm.RequiresCapabilities...)
+	}
+	if strings.TrimSpace(pm.Name) != "" && kind == tarballKindCore {
+		name = strings.TrimSpace(pm.Name)
+	}
+	return out, name, nil
+}
+
+func packageManifestPathForTarball(kind tarballKind, members []string) (string, string, error) {
+	switch kind {
+	case tarballKindCore:
+		for _, member := range members {
+			if member == "core/package.yml" {
+				return member, "core", nil
+			}
+		}
+	case tarballKindWorkflow:
+		for _, member := range members {
+			if strings.HasPrefix(member, "workflows/") && strings.HasSuffix(member, "/package.yml") {
+				parts := strings.Split(member, "/")
+				if len(parts) >= 3 {
+					return member, parts[1], nil
+				}
+			}
+		}
+	case tarballKindResolver:
+		for _, member := range members {
+			if strings.HasPrefix(member, "resolvers/") && strings.HasSuffix(member, "/package.yml") {
+				parts := strings.Split(member, "/")
+				if len(parts) >= 3 {
+					return member, parts[1], nil
+				}
+			}
+		}
+	}
+	return "", "", fmt.Errorf("no package manifest found in %s tarball", kind)
+}
+
+func copyTarballWithSHA(srcPath, outPath string) (string, error) {
+	b, err := os.ReadFile(srcPath)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(b)
+	sumHex := hex.EncodeToString(sum[:])
+	if err := os.WriteFile(outPath, b, 0o644); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(outPath+".sha256", []byte(sumHex+"\n"), 0o644); err != nil {
+		return "", err
+	}
+	return sumHex, nil
+}
+
+func listTarballs(root, pattern string) ([]string, error) {
+	matches, err := filepath.Glob(filepath.Join(root, pattern))
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(matches)
+	return matches, nil
 }
 
 func listPackageSubdirs(root string) ([]string, error) {

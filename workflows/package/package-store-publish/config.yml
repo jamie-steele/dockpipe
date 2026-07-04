@@ -1,0 +1,71 @@
+name: package-store-publish
+description: >-
+  Build release/artifacts for the DockPipe self-hosted package mirror, then upload each file to an
+  S3-compatible bucket such as Cloudflare R2 with credentials injected from 1Password.
+  Default upload mode is dry-run; set R2_PUBLISH_DRY_RUN=0 for a real push.
+platforms: [windows, deb]
+vault: op
+
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the release mirror scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: go
+      command: go
+      description: Required to build the repo-local dockpipe binary and compiled package store.
+      install:
+        windows: winget install GoLang.Go
+        deb: sudo apt-get update && sudo apt-get install -y golang-go
+    - id: aws
+      command: aws
+      description: Required for dockpipe release upload (AWS CLI v2 S3-compatible upload).
+      install:
+        windows: winget install Amazon.AWSCLI
+        deb: sudo apt-get update && sudo apt-get install -y awscli
+    - id: op
+      command: op
+      description: "Required for vault: op secret injection from 1Password."
+      install:
+        windows: winget install AgileBits.1Password.CLI
+        deb: sudo apt-get update && sudo apt-get install -y 1password-cli
+
+docker_preflight: false
+
+vars:
+  RELEASE_ARTIFACTS_DIR: "release/artifacts"
+  RELEASE_VERSION: ""
+  PACKAGE_RELEASE_PREPARE_EMBEDDED_ASSETS: "1"
+  PACKAGE_RELEASE_SKIP_UPLOAD: "0"
+  R2_BUCKET: "dockpipe"
+  R2_PREFIX: "packages/"
+  R2_PUBLISH_DRY_RUN: "1"
+  R2_ENDPOINT_URL: ""
+  AWS_ENDPOINT_URL_S3: ""
+  AWS_REGION: ""
+  CLOUDFLARE_ACCOUNT_ID: ""
+  R2_ACCOUNT_ID: ""
+  AWS_ACCESS_KEY_ID: ""
+  AWS_SECRET_ACCESS_KEY: ""
+
+steps:
+  - id: build-release-artifacts
+    kind: host
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
+    run:
+      - assets/scripts/build-release-artifacts.sh
+
+  - id: upload-release-artifacts
+    kind: host
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
+    run:
+      - assets/scripts/upload-release-artifacts.sh

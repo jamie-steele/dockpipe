@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QFutureWatcher>
 #include <QWidget>
 
 class QLabel;
@@ -32,10 +33,58 @@ private slots:
     void onStopSelectedContainer();
 
 private:
+    struct ContainerRowData {
+        QString id;
+        QString name;
+        QString state;
+        QString statusText;
+        QString image;
+        QString ports;
+        QString created;
+    };
+
+    struct NetworkRowData {
+        QString id;
+        QString name;
+        QString driver;
+        QString scope;
+    };
+
+    struct VolumeRowData {
+        QString name;
+        QString driver;
+        QString mountpoint;
+    };
+
     struct CommandResult {
         bool ok = false;
         QString stdoutText;
         QString stderrText;
+    };
+
+    struct DockerSnapshot {
+        bool containersOk = false;
+        QString containersError;
+        QVector<ContainerRowData> containers;
+
+        bool networksOk = false;
+        QString networksError;
+        QVector<NetworkRowData> networks;
+
+        bool volumesOk = false;
+        QString volumesError;
+        QVector<VolumeRowData> volumes;
+    };
+
+    struct ContainerDetailSnapshot {
+        QString containerId;
+        QString inspectText;
+        QString logsText;
+    };
+
+    struct ObjectDetailSnapshot {
+        QString objectId;
+        QString detailText;
     };
 
     void buildUi();
@@ -44,17 +93,21 @@ private:
     QWidget *buildVolumesPage();
 
     static CommandResult runDocker(const QStringList &args);
+    static DockerSnapshot collectDockerSnapshot();
     void setStatus(const QString &text);
     void updateSummary();
     void applyContainerFilter();
     void updateContainerActionState();
+    bool hasAnyObjects() const;
+    void setLoadingState(bool loading, const QString &text = QString());
     QString selectedContainerId() const;
     QString selectedContainerName() const;
     QString selectedContainerState() const;
 
-    void loadContainers();
-    void loadNetworks();
-    void loadVolumes();
+    void applySnapshot(const DockerSnapshot &snapshot);
+    void refreshContainerDetailsAsync(const QString &containerId);
+    void refreshNetworkDetailsAsync(const QString &networkId);
+    void refreshVolumeDetailsAsync(const QString &volumeName);
 
     void renderContainerDetails(const QString &containerId);
     void renderNetworkDetails(const QString &networkId);
@@ -76,5 +129,15 @@ private:
 
     QTableWidget *m_volumes = nullptr;
     QPlainTextEdit *m_volumeDetails = nullptr;
+    QFutureWatcher<DockerSnapshot> *m_refreshWatcher = nullptr;
+    QFutureWatcher<ContainerDetailSnapshot> *m_containerDetailWatcher = nullptr;
+    QFutureWatcher<ObjectDetailSnapshot> *m_networkDetailWatcher = nullptr;
+    QFutureWatcher<ObjectDetailSnapshot> *m_volumeDetailWatcher = nullptr;
     bool m_hasLoadedOnce = false;
+    bool m_refreshPending = false;
+    bool m_loading = false;
+    bool m_active = false;
+    QString m_pendingContainerDetailId;
+    QString m_pendingNetworkDetailId;
+    QString m_pendingVolumeDetailId;
 };

@@ -133,6 +133,11 @@ jobs:
 
           bash ./release/packaging/build-core-package.sh "${VERSION}" release/artifacts
 
+          mkdir -p src/bin
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags "${LDFLAGS}" -o "src/bin/dockpipe" ./src/cmd
+          ./src/bin/dockpipe build --workdir "${{ github.workspace }}" --no-images
+          ./src/bin/dockpipe package build store --workdir "${{ github.workspace }}" --out release/artifacts --version "${VERSION}"
+
           ./release/packaging/build-deb.sh "${VERSION}" amd64
           ./release/packaging/build-deb.sh "${VERSION}" arm64
           cp "release/packaging/build/dockpipe_${VERSION}_amd64.deb" release/artifacts/
@@ -289,7 +294,7 @@ jobs:
           set -euo pipefail
           cd release/artifacts
           shopt -s nullglob
-          files=( *.tar.gz *.zip *.deb *.msi )
+          files=( *.tar.gz *.zip *.deb *.msi *.apk *.rpm *.pkg.tar.zst )
           if [[ ${#files[@]} -eq 0 ]]; then
             echo "No release files in release/artifacts/" >&2
             exit 1
@@ -320,7 +325,95 @@ jobs:
             release/artifacts/*.apk
             release/artifacts/*.rpm
             release/artifacts/*.pkg.tar.zst
+            release/artifacts/*.sha256
+            release/artifacts/install-manifest.json
+            release/artifacts/packages-store-manifest.json
             release/artifacts/SHA256SUMS.txt
+
+      - uses: actions/setup-go@v6
+        if: needs.meta.outputs.dry_run != 'true' && vars.R2_PUBLISH == 'true'
+        with:
+          go-version: "1.25.11"
+
+      - name: Build DockPipe CLI for mirror publish
+        if: needs.meta.outputs.dry_run != 'true' && vars.R2_PUBLISH == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p bin/release-tools
+          bash ./release/packaging/prepare-embedded-dorkpipe-assets.sh prepare
+          trap 'bash ./release/packaging/prepare-embedded-dorkpipe-assets.sh clean' EXIT
+          go build -trimpath -ldflags "-s -w -X main.Version=${{ needs.meta.outputs.version }}" -o "bin/release-tools/dockpipe" ./src/cmd
+
+      - name: Publish self-hosted mirror to R2
+        if: needs.meta.outputs.dry_run != 'true' && vars.R2_PUBLISH == 'true'
+        shell: bash
+        env:
+          DOCKPIPE_RELEASE_BUCKET: ${{ vars.DOCKPIPE_RELEASE_BUCKET }}
+          R2_BUCKET: ${{ vars.R2_BUCKET }}
+          R2_ENDPOINT_URL: ${{ vars.R2_ENDPOINT_URL }}
+          AWS_ENDPOINT_URL_S3: ${{ vars.AWS_ENDPOINT_URL_S3 }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+          R2_PREFIX: ${{ vars.R2_PREFIX }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          bucket="${DOCKPIPE_RELEASE_BUCKET:-${R2_BUCKET:-}}"
+          if [[ -z "${bucket}" ]]; then
+            echo "::error::Set repository variable DOCKPIPE_RELEASE_BUCKET or R2_BUCKET when R2_PUBLISH=true."
+            exit 1
+          fi
+          if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" ]]; then
+            echo "::error::Set repository secrets AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY when R2_PUBLISH=true."
+            exit 1
+          fi
+          prefix="${R2_PREFIX:-}"
+          prefix="${prefix#/}"
+          if [[ -n "${prefix}" && "${prefix}" != */ ]]; then
+            prefix="${prefix}/"
+          fi
+          content_type() {
+            case "$1" in
+              *.json) echo "application/json" ;;
+              *.sha256|*.txt|*.md) echo "text/plain; charset=utf-8" ;;
+              *.zip) echo "application/zip" ;;
+              *.deb) echo "application/vnd.debian.binary-package" ;;
+              *.msi) echo "application/x-msi" ;;
+              *.rpm) echo "application/x-rpm" ;;
+              *.apk) echo "application/vnd.android.package-archive" ;;
+              *.pkg.tar.zst) echo "application/zstd" ;;
+              *.tar.gz) echo "application/gzip" ;;
+              *) echo "application/octet-stream" ;;
+            esac
+          }
+          cd release/artifacts
+          shopt -s nullglob
+          files=(
+            *.tar.gz
+            *.zip
+            *.deb
+            *.msi
+            *.apk
+            *.rpm
+            *.pkg.tar.zst
+            *.sha256
+            install-manifest.json
+            packages-store-manifest.json
+            SHA256SUMS.txt
+          )
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "::error::No release artifacts found to publish."
+            exit 1
+          fi
+          for file in "${files[@]}"; do
+            [[ -f "${file}" ]] || continue
+            "../../bin/release-tools/dockpipe" release upload "${file}" \
+              --key "${prefix}${file}" \
+              --content-type "$(content_type "${file}")"
+          done
 
   # Optional: dev.to — PUT main article (DEVTO_ARTICLE_ID) + optional one-time POST per release (DEVTO_ONE_TIME_POST).
   # See release/docs/devto.md

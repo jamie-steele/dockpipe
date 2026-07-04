@@ -138,6 +138,58 @@ pipeon_copy_tree_contents() {
   cp -R "$src" "$dest"
 }
 
+pipeon_copy_file_into_context() {
+  local src="${1:?src}"
+  local context_root="${2:?context root}"
+  local rel_path="${3:?relative path}"
+  local dest="$context_root/$rel_path"
+  mkdir -p "$(dirname "$dest")"
+  cp "$src" "$dest"
+}
+
+pipeon_prepare_code_server_build_context() {
+  local context_root="$BUILD_ROOT/pipeon-code-server-context"
+  local rel_path src
+  local -a required_files=(
+    "packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server"
+    "packages/pipeon/resolvers/pipeon/vscode-extension/code-server-user-settings.json"
+    "packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon.ico"
+    "packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon.svg"
+    "packages/pipeon/resolvers/pipeon/vscode-extension/images/favicon-dark-support.svg"
+    "packages/pipeon/resolvers/pipeon/vscode-extension/images/pipeon-192.png"
+    "packages/pipeon/resolvers/pipeon/vscode-extension/images/pipeon-512.png"
+  )
+
+  rm -rf "$context_root"
+  mkdir -p "$context_root"
+
+  for rel_path in "${required_files[@]}"; do
+    src="$REPO_ROOT/$rel_path"
+    if [[ ! -f "$src" ]]; then
+      echo "pipeon-build: missing code-server build input: $src" >&2
+      return 1
+    fi
+    pipeon_copy_file_into_context "$src" "$context_root" "$rel_path"
+  done
+
+  local pipeon_vsix dockpipe_vsix
+  pipeon_vsix="$(ls -1t "$PIPEON_EXTENSIONS_DIR"/pipeon-*.vsix 2>/dev/null | head -n1 || true)"
+  dockpipe_vsix="$(ls -1t "$PIPEON_EXTENSIONS_DIR"/dockpipe-language-support-*.vsix 2>/dev/null | head -n1 || true)"
+  if [[ -z "$pipeon_vsix" || ! -f "$pipeon_vsix" ]]; then
+    echo "pipeon-build: missing packaged Pipeon VSIX under $PIPEON_EXTENSIONS_DIR" >&2
+    return 1
+  fi
+  if [[ -z "$dockpipe_vsix" || ! -f "$dockpipe_vsix" ]]; then
+    echo "pipeon-build: missing packaged DockPipe language support VSIX under $PIPEON_EXTENSIONS_DIR" >&2
+    return 1
+  fi
+
+  pipeon_copy_file_into_context "$pipeon_vsix" "$context_root" "bin/.dockpipe/packages/pipeon/extensions/$(basename "$pipeon_vsix")"
+  pipeon_copy_file_into_context "$dockpipe_vsix" "$context_root" "bin/.dockpipe/packages/pipeon/extensions/$(basename "$dockpipe_vsix")"
+
+  printf '%s\n' "$context_root"
+}
+
 pipeon_vsix_is_current() {
   local output_file="${1:?output file}"
   shift || true
@@ -714,9 +766,11 @@ install_vscode_extension() {
 
 build_code_server_image() {
   package_vscode_extension
+  local context_root
+  context_root="$(pipeon_prepare_code_server_build_context)"
   build_log "Building docker image dockpipe-code-server:latest"
   run_with_progress "dockpipe-code-server docker build" \
-    docker build -t dockpipe-code-server:latest -f "$PIPEON_VSCODE_EXT_SRC/Dockerfile.code-server" "$REPO_ROOT"
+    docker build -t dockpipe-code-server:latest -f "$context_root/packages/pipeon/resolvers/pipeon/vscode-extension/Dockerfile.code-server" "$context_root"
 }
 
 main() {
