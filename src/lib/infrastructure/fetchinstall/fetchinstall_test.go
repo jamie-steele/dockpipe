@@ -210,15 +210,23 @@ func TestDownloadBytesRejectsHTTP(t *testing.T) {
 
 func TestVerifySHA256(t *testing.T) {
 	t.Parallel()
-	if err := verifySHA256([]byte("x"), "", "u"); err != nil {
+	status, got, err := verifyDownloadedSHA256([]byte("x"), "", "u")
+	if err != nil {
 		t.Fatal(err)
+	}
+	if status != "missing" || got == "" {
+		t.Fatalf("missing checksum status=%q got=%q", status, got)
 	}
 	sum := sha256.Sum256([]byte("x"))
 	h := hex.EncodeToString(sum[:])
-	if err := verifySHA256([]byte("x"), h, "u"); err != nil {
+	status, got, err = verifyDownloadedSHA256([]byte("x"), h, "u")
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := verifySHA256([]byte("y"), h, "u"); err == nil {
+	if status != "verified" || got != h {
+		t.Fatalf("verified checksum status=%q got=%q want=%q", status, got, h)
+	}
+	if _, _, err := verifyDownloadedSHA256([]byte("y"), h, "u"); err == nil {
 		t.Fatal("expected mismatch")
 	}
 }

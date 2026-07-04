@@ -17,6 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"dockpipe/src/lib/infrastructure"
 )
 
 // DefaultManifestFile is fetched from the install base URL when version is "latest".
@@ -75,8 +77,28 @@ func InstallTemplatesCore(ctx context.Context, o CoreOptions) error {
 		return nil
 	}
 
-	tarballURL, wantSHA, err := resolveCoreTarballURL(ctx, o, manifestName, ver)
-	if err != nil {
+	mode := installCoreMode(o, ver)
+	resolveIDs := map[string]string{
+		"mode":        mode,
+		"destination": filepath.ToSlash(filepath.Join(wd, "templates", "core")),
+	}
+	if ver != "" {
+		resolveIDs["version"] = ver
+	}
+	if manifestName != "" {
+		resolveIDs["manifest"] = manifestName
+	}
+	var tarballURL string
+	var wantSHA string
+	if err := infrastructure.RunOperationWithOptions(os.Stderr, "install.core.resolve", "Resolving core install bundle…", resolveIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		var runErr error
+		tarballURL, wantSHA, runErr = resolveCoreTarballURL(ctx, o, manifestName, ver)
+		if runErr != nil {
+			return runErr
+		}
+		resolveIDs["source"] = tarballURL
+		return nil
+	}); err != nil {
 		return err
 	}
 	if wantSHA == "" && o.ExpectedSHA256 != "" {
@@ -92,38 +114,55 @@ func InstallTemplatesCore(ctx context.Context, o CoreOptions) error {
 		ua = "dockpipe/fetchinstall"
 	}
 
-	body, err := downloadBytes(ctx, client, tarballURL, ua, o.AllowInsecureHTTP)
-	if err != nil {
-		return fmt.Errorf("download: %w", err)
+	downloadIDs := map[string]string{
+		"mode":   mode,
+		"source": tarballURL,
 	}
-	if err := verifySHA256(body, wantSHA, tarballURL); err != nil {
+	var body []byte
+	var hexSum string
+	var checksumStatus string
+	if err := infrastructure.RunOperationWithOptions(os.Stderr, "install.core.download", "Downloading core bundle…", downloadIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		var runErr error
+		body, runErr = downloadBytes(ctx, client, tarballURL, ua, o.AllowInsecureHTTP)
+		if runErr != nil {
+			return fmt.Errorf("download: %w", runErr)
+		}
+		checksumStatus, hexSum, runErr = verifyDownloadedSHA256(body, wantSHA, tarballURL)
+		if runErr != nil {
+			return runErr
+		}
+		downloadIDs["sha256"] = hexSum
+		downloadIDs["checksum"] = checksumStatus
+		return nil
+	}); err != nil {
 		return err
 	}
 
 	destCore := filepath.Join(wd, "templates", "core")
-	if err := os.RemoveAll(destCore); err != nil {
-		return fmt.Errorf("remove existing templates/core: %w", err)
+	extractIDs := map[string]string{
+		"destination": filepath.ToSlash(destCore),
+		"source":      tarballURL,
+		"sha256":      hexSum,
+		"checksum":    checksumStatus,
 	}
-	if err := os.MkdirAll(destCore, 0o755); err != nil {
-		return fmt.Errorf("mkdir templates/core: %w", err)
-	}
-	if err := extractTarGzCore(body, destCore); err != nil {
-		_ = os.RemoveAll(destCore)
-		return fmt.Errorf("extract: %w", err)
-	}
-	if err := verifyExtractedTreeMatchesTarGz(body, destCore); err != nil {
-		_ = os.RemoveAll(destCore)
-		return fmt.Errorf("post-install checksum: %w", err)
-	}
-	sum := sha256.Sum256(body)
-	hexSum := hex.EncodeToString(sum[:])
-	if wantSHA != "" {
-		fmt.Fprintf(os.Stderr, "[dockpipe] install: checksum ok sha256=%s (remote digest + on-disk tree match)\n", hexSum)
-	} else {
-		fmt.Fprintf(os.Stderr, "[dockpipe] install: checksum ok sha256=%s (on-disk tree match; no remote digest file)\n", hexSum)
-	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] installed templates/core from %s\n", tarballURL)
-	return nil
+	return infrastructure.RunOperationWithOptions(os.Stderr, "install.core.extract", "Extracting core bundle…", extractIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		if err := os.RemoveAll(destCore); err != nil {
+			return fmt.Errorf("remove existing templates/core: %w", err)
+		}
+		if err := os.MkdirAll(destCore, 0o755); err != nil {
+			return fmt.Errorf("mkdir templates/core: %w", err)
+		}
+		if err := extractTarGzCore(body, destCore); err != nil {
+			_ = os.RemoveAll(destCore)
+			return fmt.Errorf("extract: %w", err)
+		}
+		if err := verifyExtractedTreeMatchesTarGz(body, destCore); err != nil {
+			_ = os.RemoveAll(destCore)
+			return fmt.Errorf("post-install checksum: %w", err)
+		}
+		extractIDs["result"] = "installed"
+		return nil
+	})
 }
 
 // describeDryRunCoreInstall returns stderr lines without using the network.
@@ -296,17 +335,26 @@ func parseSHA256File(b []byte) (string, error) {
 	return s, nil
 }
 
-func verifySHA256(body []byte, wantHex, src string) error {
-	if wantHex == "" {
-		fmt.Fprintf(os.Stderr, "[dockpipe] warning: no sha256 for %s — verify trust in the URL and network\n", src)
-		return nil
-	}
+func verifyDownloadedSHA256(body []byte, wantHex, src string) (status string, gotHex string, err error) {
 	sum := sha256.Sum256(body)
 	got := hex.EncodeToString(sum[:])
-	if got != wantHex {
-		return fmt.Errorf("sha256 mismatch for %s (expected %s, got %s)", src, wantHex, got)
+	if wantHex == "" {
+		return "missing", got, nil
 	}
-	return nil
+	if got != wantHex {
+		return "", got, fmt.Errorf("sha256 mismatch for %s (expected %s, got %s)", src, wantHex, got)
+	}
+	return "verified", got, nil
+}
+
+func installCoreMode(o CoreOptions, ver string) string {
+	if strings.TrimSpace(o.ExactTarballURL) != "" {
+		return "url"
+	}
+	if strings.TrimSpace(ver) == "" || strings.TrimSpace(ver) == "latest" {
+		return "latest"
+	}
+	return "version"
 }
 
 func validateHTTPURL(raw string, allowInsecure bool) error {

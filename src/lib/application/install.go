@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"dockpipe/src/lib/infrastructure"
 	"dockpipe/src/lib/infrastructure/fetchinstall"
@@ -112,9 +113,6 @@ func cmdInstallCore(args []string) error {
 		manifestFile = strings.TrimSpace(os.Getenv(envInstallManifest))
 	}
 	allowInsecure := isTruthyEnv(envInstallAllowInsecureHTTP)
-	if globalInstall {
-		fmt.Fprintf(os.Stderr, "[dockpipe] install: user-wide data root %s\n", workdir)
-	}
 
 	opts := fetchinstall.CoreOptions{
 		BaseURL:           strings.TrimSpace(baseURL),
@@ -128,7 +126,33 @@ func cmdInstallCore(args []string) error {
 		AllowInsecureHTTP: allowInsecure,
 	}
 	ctx := context.Background()
-	return fetchinstall.InstallTemplatesCore(ctx, opts)
+	if dryRun {
+		return fetchinstall.InstallTemplatesCore(ctx, opts)
+	}
+	mode := "latest"
+	if strings.TrimSpace(opts.ExactTarballURL) != "" {
+		mode = "url"
+	} else if v := strings.TrimSpace(opts.Version); v != "" && v != "latest" {
+		mode = "version"
+	}
+	opIDs := mergeOperationResultIDs(buildOperationIDs(workdir, ""), map[string]string{
+		"mode":        mode,
+		"scope":       map[bool]string{true: "global", false: "project"}[globalInstall],
+		"destination": filepath.ToSlash(filepath.Join(workdir, "templates", "core")),
+	})
+	if v := strings.TrimSpace(opts.Version); v != "" {
+		opIDs["version"] = v
+	}
+	if m := strings.TrimSpace(opts.ManifestFile); m != "" {
+		opIDs["manifest"] = m
+	}
+	return infrastructure.RunOperationWithOptions(os.Stderr, "install.core", "Installing templates/core…", opIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		if err := fetchinstall.InstallTemplatesCore(ctx, opts); err != nil {
+			return err
+		}
+		opIDs["result"] = "installed"
+		return nil
+	})
 }
 
 func isTruthyEnv(key string) bool {

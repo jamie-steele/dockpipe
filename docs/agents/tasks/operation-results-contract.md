@@ -81,6 +81,10 @@
 - `dockpipe package build core` and `dockpipe package build store` now emit canonical
   `package.build.core` and `package.build.store` units with version, output/manifest paths, slice
   selection, tarball counts, and built results instead of bespoke `[dockpipe] wrote ...` summaries.
+- `dockpipe install core` now emits canonical `install.core`, `install.core.resolve`,
+  `install.core.download`, and `install.core.extract` units across project/global install flows with
+  source URLs, destination paths, mode/version metadata, checksum status, and installed results
+  instead of bespoke install/checksum summary lines.
 
 ## Still Open
 
