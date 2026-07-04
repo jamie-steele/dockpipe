@@ -41,12 +41,6 @@ func effectiveResolverCompileRoots(cfg *domain.DockpipeProjectConfig, repoRoot s
 	return result.Paths
 }
 
-func effectiveBundleCompileRoots(cfg *domain.DockpipeProjectConfig, repoRoot string) []string {
-	result := domain.EffectiveBundleCompileRootsDetailed(cfg, repoRoot)
-	logCompilePathWarnings("bundles", result.MissingPaths)
-	return result.Paths
-}
-
 func logCompilePathWarnings(rootKind string, missingPaths []string) {
 	for _, path := range missingPaths {
 		path = strings.TrimSpace(path)
