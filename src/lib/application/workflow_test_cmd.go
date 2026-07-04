@@ -6,9 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"dockpipe/src/lib/domain"
+	"dockpipe/src/lib/infrastructure"
 )
 
 type workflowTestTarget struct {
@@ -61,18 +64,41 @@ func RunWorkflowTestsFromFlags(workdir, only string) error {
 	if err != nil {
 		return err
 	}
+	ids := mergeOperationResultIDs(buildOperationIDs(root, ""), map[string]string{
+		"count": strconv.Itoa(len(targets)),
+	})
+	if strings.TrimSpace(only) != "" {
+		ids["workflow"] = strings.TrimSpace(only)
+	}
 	if len(targets) == 0 {
-		if strings.TrimSpace(only) != "" {
-			fmt.Fprintf(os.Stderr, "[dockpipe] workflow test: no workflow test matched %q\n", strings.TrimSpace(only))
-		}
+		ids["result"] = "noop"
+		infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+			Unit:       "workflow.test.workflows",
+			Status:     infrastructure.OperationStatusDone,
+			DurationMs: 0,
+			IDs:        ids,
+		})
 		return nil
 	}
 	dockpipeBin, _ := resolveDockpipeBinForChildProcess(root)
-	for _, target := range targets {
-		fmt.Fprintf(os.Stderr, "[dockpipe] workflow test: %s (%s)\n", target.Name, target.ScriptRel)
-		if err := runWorkflowTestTarget(root, target, dockpipeBin); err != nil {
-			return fmt.Errorf("workflow %q test: %w", target.Name, err)
+	if err := infrastructure.RunOperationWithOptions(os.Stderr, "workflow.test.workflows", "Running workflow tests…", ids, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		for _, target := range targets {
+			targetIDs := mergeOperationResultIDs(buildOperationIDs(root, ""), map[string]string{
+				"workflow": target.Name,
+				"script":   filepath.ToSlash(target.ScriptRel),
+			})
+			if err := infrastructure.RunOperationWithOptions(os.Stderr, "workflow.test.workflow", "Running workflow test…", targetIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+				if err := runWorkflowTestTarget(root, target, dockpipeBin); err != nil {
+					return fmt.Errorf("workflow %q test: %w", target.Name, err)
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 	return nil
 }

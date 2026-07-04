@@ -3,11 +3,11 @@ package application
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestRunPackageTestFromFlagsRunsDeclaredScripts(t *testing.T) {
-	t.Parallel()
 	repo := t.TempDir()
 	cfg := `{
   "schema": 1,
@@ -38,11 +38,54 @@ test:
 	if err := os.WriteFile(filepath.Join(pkgDir, "tests", "run.sh"), []byte("#!/usr/bin/env bash\nset -euo pipefail\nprintf ok > \"$DOCKPIPE_WORKDIR/alpha.test\"\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := RunPackageTestFromFlags(repo, ""); err != nil {
+	stderr, err := captureResultStderr(t, func() error {
+		return RunPackageTestFromFlags(repo, "")
+	})
+	if err != nil {
 		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"unit=package.test.packages",
+		"unit=package.test.package",
+		"package=alpha",
+		"script=tests/run.sh",
+		"status=done",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected package test stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(repo, "alpha.test")); err != nil {
 		t.Fatalf("expected package test output: %v", err)
+	}
+}
+
+func TestRunPackageTestFromFlagsNoMatchEmitsNoopResult(t *testing.T) {
+	repo := t.TempDir()
+	cfg := `{
+  "schema": 1,
+  "compile": {
+    "workflows": ["packages"]
+  }
+}`
+	if err := os.WriteFile(filepath.Join(repo, "dockpipe.config.json"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	stderr, err := captureResultStderr(t, func() error {
+		return RunPackageTestFromFlags(repo, "missing")
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"unit=package.test.packages",
+		"package=missing",
+		"result=noop",
+		"status=done",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected noop package test stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 }
 

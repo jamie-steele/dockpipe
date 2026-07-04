@@ -85,6 +85,10 @@
   `install.core.download`, and `install.core.extract` units across project/global install flows with
   source URLs, destination paths, mode/version metadata, checksum status, and installed results
   instead of bespoke install/checksum summary lines.
+- `dockpipe package test` and `dockpipe workflow test` now emit canonical batch and per-target
+  `package.test.*` / `workflow.test.*` units, including noop outcomes for unmatched selectors,
+  target names, scripts, counts, and durations instead of bespoke `package test:` /
+  `workflow test:` status lines.
 
 ## Still Open
 

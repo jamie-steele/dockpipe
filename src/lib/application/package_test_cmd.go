@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
 	"dockpipe/src/lib/domain"
+	"dockpipe/src/lib/infrastructure"
 )
 
 func cmdPackageTest(args []string) error {
@@ -56,17 +59,40 @@ func RunPackageTestFromFlags(workdir, only string) error {
 	if err != nil {
 		return err
 	}
+	ids := mergeOperationResultIDs(buildOperationIDs(root, ""), map[string]string{
+		"count": strconv.Itoa(len(targets)),
+	})
+	if strings.TrimSpace(only) != "" {
+		ids["package"] = strings.TrimSpace(only)
+	}
 	if len(targets) == 0 {
-		if strings.TrimSpace(only) != "" {
-			fmt.Fprintf(os.Stderr, "[dockpipe] package test: no package test matched %q\n", strings.TrimSpace(only))
-		}
+		ids["result"] = "noop"
+		infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+			Unit:       "package.test.packages",
+			Status:     infrastructure.OperationStatusDone,
+			DurationMs: 0,
+			IDs:        ids,
+		})
 		return nil
 	}
-	for _, target := range targets {
-		fmt.Fprintf(os.Stderr, "[dockpipe] package test: %s (%s)\n", target.Name, target.ScriptRel)
-		if err := runPackageScriptTarget(root, target, packageTestEnv(root, target), "test.script"); err != nil {
-			return fmt.Errorf("package %q test: %w", target.Name, err)
+	if err := infrastructure.RunOperationWithOptions(os.Stderr, "package.test.packages", "Running package tests…", ids, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		for _, target := range targets {
+			targetIDs := mergeOperationResultIDs(buildOperationIDs(root, ""), map[string]string{
+				"package": target.Name,
+				"script":  filepath.ToSlash(target.ScriptRel),
+			})
+			if err := infrastructure.RunOperationWithOptions(os.Stderr, "package.test.package", "Running package test…", targetIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+				if err := runPackageScriptTarget(root, target, packageTestEnv(root, target), "test.script"); err != nil {
+					return fmt.Errorf("package %q test: %w", target.Name, err)
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 	return nil
 }
