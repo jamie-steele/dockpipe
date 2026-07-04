@@ -34,6 +34,7 @@ type packageDependencyMetadata struct {
 
 var (
 	dependencyLookPathFn = exec.LookPath
+	dependencyPowerShellLookupFn = dependencyLookupViaPowerShell
 	dependencyRunShellFn = runDependencyInstallShellCommand
 )
 
@@ -211,11 +212,23 @@ func missingRequiredHostDependencies(deps []hostDependencyCandidate) []missingHo
 		if cmd == "" {
 			continue
 		}
-		if _, err := dependencyLookPathFn(cmd); err != nil {
+		if _, err := resolveDependencyCommandPath(cmd); err != nil {
 			missing = append(missing, missingHostDependency(candidate))
 		}
 	}
 	return missing
+}
+
+func resolveDependencyCommandPath(command string) (string, error) {
+	if path, err := dependencyLookPathFn(command); err == nil {
+		return path, nil
+	}
+	if runtime.GOOS == "windows" {
+		if path, err := dependencyPowerShellLookupFn(command); err == nil && strings.TrimSpace(path) != "" {
+			return path, nil
+		}
+	}
+	return "", os.ErrNotExist
 }
 
 func deduplicateHostDependencies(deps []hostDependencyCandidate) []hostDependencyCandidate {
@@ -317,6 +330,26 @@ func runDependencyInstallShellCommand(command string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+func dependencyLookupViaPowerShell(command string) (string, error) {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return "", fmt.Errorf("empty command")
+	}
+	ps := fmt.Sprintf(
+		"$cmd = Get-Command -Name '%s' -ErrorAction SilentlyContinue; if ($cmd) { $cmd.Source }",
+		strings.ReplaceAll(command, "'", "''"),
+	)
+	out, err := exec.Command("powershell.exe", "-NoProfile", "-Command", ps).CombinedOutput()
+	if err != nil {
+		return "", err
+	}
+	path := strings.TrimSpace(string(out))
+	if path == "" {
+		return "", os.ErrNotExist
+	}
+	return path, nil
 }
 
 func envBool(v string) bool {

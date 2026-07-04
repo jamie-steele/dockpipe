@@ -12,6 +12,19 @@ failed=0
 export DOCKPIPE_REPO_ROOT="$REPO_ROOT"
 export DOCKPIPE_BIN="$REPO_ROOT/src/bin/dockpipe"
 
+# act on Windows runs these Linux tests inside a runner container while Docker
+# commands still target the host daemon. Keep temp files under the checkout so
+# nested containers can see them, and use root in nested containers so Windows-
+# backed mounts stay writable.
+if [[ "${ACT:-}" == "true" ]]; then
+  export TMPDIR="${REPO_ROOT}/bin/.dockpipe/tmp/act-host"
+  export TMP="$TMPDIR"
+  export TEMP="$TMPDIR"
+  export DOCKPIPE_FORCE_ROOT_CONTAINER=1
+  mkdir -p "$TMPDIR"
+  chmod 0777 "$TMPDIR" 2>/dev/null || true
+fi
+
 if ! command -v docker &>/dev/null; then
   echo "Error: docker not in PATH. Integration tests require Docker." >&2
   exit 1

@@ -308,15 +308,19 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 		}
 		workHost = wd
 	}
-	// Git Bash exports DOCKPIPE_WORKDIR as /c/Users/...; filepath.Abs on Windows does not treat
-	// that as absolute, so docker -v can bind the wrong path and /work looks empty.
-	if runtime.GOOS == "windows" {
-		workHost = HostPathForGit(workHost)
+	workHost, err := filepathAbsDocker(workHost)
+	if err != nil {
+		return 1, err
 	}
-	var absErr error
-	workHost, absErr = filepathAbsDocker(workHost)
-	if absErr != nil {
-		return 1, absErr
+	dockerWorkHost := HostPathForDocker(workHost)
+	if rewritten, ok := rewriteUnixLikeToWindowsPath(dockerWorkHost); ok {
+		dockerWorkHost = rewritten
+	} else {
+		var dockerAbsErr error
+		dockerWorkHost, dockerAbsErr = filepathAbsDocker(dockerWorkHost)
+		if dockerAbsErr != nil {
+			return 1, dockerAbsErr
+		}
 	}
 	workVolume := strings.TrimSpace(o.WorkdirVolume)
 	stdoutFile := o.Stdout
@@ -415,7 +419,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	if mem := strings.TrimSpace(o.MemoryLimit); mem != "" {
 		args = append(args, "--memory", mem)
 	}
-	workMount := workHost + ":" + containerWorkMount
+	workMount := dockerWorkHost + ":" + containerWorkMount
 	if workVolume != "" {
 		workMount = workVolume + ":" + containerWorkMount
 	}
@@ -430,13 +434,15 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	}
 
 	if o.ActionPath != "" {
-		ap := o.ActionPath
-		if runtime.GOOS == "windows" {
-			ap = HostPathForGit(ap)
-		}
-		ap, err := filepathAbsDocker(ap)
-		if err != nil {
-			return 1, err
+		ap := HostPathForDocker(o.ActionPath)
+		if rewritten, ok := rewriteUnixLikeToWindowsPath(ap); ok {
+			ap = rewritten
+		} else {
+			var err error
+			ap, err = filepathAbsDocker(ap)
+			if err != nil {
+				return 1, err
+			}
 		}
 		if st, err := osStatDockerFn(ap); err == nil && !st.IsDir() {
 			args = append(args, "-v", ap+":/dockpipe-action.sh:ro", "-e", "DOCKPIPE_ACTION=/dockpipe-action.sh")
@@ -472,13 +478,15 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	chown := "chown -R " + uid + ":" + gid + " /dockpipe-data 2>/dev/null || true"
 
 	if o.DataDir != "" {
-		dataDir := o.DataDir
-		if runtime.GOOS == "windows" {
-			dataDir = HostPathForGit(dataDir)
-		}
-		dataDir, absErr = filepathAbsDocker(dataDir)
-		if absErr != nil {
-			return 1, absErr
+		dataDir := HostPathForDocker(o.DataDir)
+		if rewritten, ok := rewriteUnixLikeToWindowsPath(dataDir); ok {
+			dataDir = rewritten
+		} else {
+			var absErr error
+			dataDir, absErr = filepathAbsDocker(dataDir)
+			if absErr != nil {
+				return 1, absErr
+			}
 		}
 		_ = mkdirAllDockerFn(dataDir, 0o755)
 		args = append(args,
@@ -510,7 +518,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	for _, m := range o.ExtraMounts {
 		m = strings.TrimSpace(m)
 		if m != "" {
-			if runtime.GOOS == "windows" {
+			if runtime.GOOS == "windows" || dockerHostUsesWindowsPaths() {
 				m = normalizeDockerBindMountWindows(m)
 			}
 			args = append(args, "-v", m)
@@ -575,7 +583,7 @@ func RunContainer(o RunOpts, argv []string) (int, error) {
 	if err := cmd.Start(); err != nil {
 		return 1, err
 	}
-	err := waitCommandWithSignalForward(cmd)
+	err = waitCommandWithSignalForward(cmd)
 	rc := 0
 	if err != nil {
 		if x, ok := err.(*exec.ExitError); ok {
@@ -640,14 +648,14 @@ func dockerSyncWorkspaceIntoVolume(image, hostDir, volume string) error {
 	if top, err := GitTopLevel(hostDir); err == nil && samePathForDocker(top, hostDir) && hasStandaloneGitDir(hostDir) {
 		return dockerBootstrapGitWorkspaceVolume(hostDir, volume)
 	}
-	return dockerSyncWorkspace("session.volume.sync_in", dockerWorkspaceHelperImage(image), hostDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar --exclude=.git --exclude=bin/.dockpipe --exclude=.dorkpipe -cf - . | tar xf - -C /dockpipe-sync-dst")
+	return dockerSyncWorkspace("session.volume.sync_in", dockerWorkspaceHelperImage(image), HostPathForDocker(hostDir)+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar --exclude=.git --exclude=bin/.dockpipe --exclude=.dorkpipe -cf - . | tar xf - -C /dockpipe-sync-dst")
 }
 
 func dockerSyncWorkspaceFromVolume(image, volume, hostDir string) error {
 	if top, err := GitTopLevel(hostDir); err == nil && samePathForDocker(top, hostDir) && hasStandaloneGitDir(hostDir) {
 		return dockerApplyGitWorkspaceVolume(volume, hostDir)
 	}
-	return dockerSyncWorkspace("session.volume.sync_out", dockerWorkspaceHelperImage(image), volume+":/dockpipe-sync-src:ro", hostDir+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar --exclude=.git --exclude=bin/.dockpipe --exclude=.dorkpipe -cf - . | tar xf - -C /dockpipe-sync-dst")
+	return dockerSyncWorkspace("session.volume.sync_out", dockerWorkspaceHelperImage(image), volume+":/dockpipe-sync-src:ro", HostPathForDocker(hostDir)+":/dockpipe-sync-dst", "cd /dockpipe-sync-src && tar --exclude=.git --exclude=bin/.dockpipe --exclude=.dorkpipe -cf - . | tar xf - -C /dockpipe-sync-dst")
 }
 
 func dockerSyncWorkspace(unit, image, srcMount, dstMount, script string) error {
@@ -696,7 +704,7 @@ func dockerBootstrapGitWorkspaceVolume(hostDir, volume string) error {
 		`fi`,
 		`git -C /dockpipe-sync-dst clean -fd >/dev/null 2>&1`,
 	}, "\n")
-	return dockerSyncWorkspace("session.volume.seed", image, hostDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", script)
+	return dockerSyncWorkspace("session.volume.seed", image, HostPathForDocker(hostDir)+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", script)
 }
 
 func dockerBootstrapGitBranchVolume(repoDir, volume, branch string) error {
@@ -714,7 +722,7 @@ func dockerBootstrapGitBranchVolume(repoDir, volume, branch string) error {
 		)
 	}
 	scriptLines = append(scriptLines, `git -C /dockpipe-sync-dst clean -fd >/dev/null 2>&1`)
-	return dockerSyncWorkspace("session.volume.seed", image, repoDir+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", strings.Join(scriptLines, "\n"))
+	return dockerSyncWorkspace("session.volume.seed", image, HostPathForDocker(repoDir)+":/dockpipe-sync-src:ro", volume+":/dockpipe-sync-dst", strings.Join(scriptLines, "\n"))
 }
 
 func dockerApplyGitWorkspaceVolume(volume, hostDir string) error {
@@ -727,7 +735,7 @@ func dockerApplyGitWorkspaceVolume(volume, hostDir string) error {
 		`fi`,
 		`git -C /dockpipe-sync-src diff --cached --binary | git -C /dockpipe-sync-dst apply --whitespace=nowarn -`,
 	}, "\n")
-	return dockerSyncWorkspace("session.volume.sync_out", image, volume+":/dockpipe-sync-src", hostDir+":/dockpipe-sync-dst", script)
+	return dockerSyncWorkspace("session.volume.sync_out", image, volume+":/dockpipe-sync-src", HostPathForDocker(hostDir)+":/dockpipe-sync-dst", script)
 }
 
 func dockerWorkspaceHelperImage(runImage string) string {

@@ -10,6 +10,24 @@ ROOT="$(pwd)"
 
 PIPEON_MIN_VERSION="${DOCKPIPE_PIPEON_MIN_VERSION:-0.6.5}"
 
+pipeon_normalize_path() {
+	local raw="${1:-}"
+	[[ -n "$raw" ]] || return 0
+	case "$raw" in
+		[A-Za-z]:\\*|[A-Za-z]:/*|\\\\*)
+			if command -v cygpath >/dev/null 2>&1; then
+				cygpath -u "$raw"
+				return 0
+			fi
+			;;
+	esac
+	printf '%s\n' "$raw"
+}
+
+pipeon_scope_path() {
+	pipeon_normalize_path "$(dockpipe scope "$@")"
+}
+
 pipeon_version_from_repo() {
 	local root="${1:-}"
 	if [[ -z "$root" ]]; then

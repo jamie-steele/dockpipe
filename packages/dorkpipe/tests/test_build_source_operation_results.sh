@@ -10,7 +10,11 @@ tmp="$(mktemp -d "$ROOT/bin/.dockpipe/tmp/package-tests/build-source.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
 
 fake_bin="$tmp/bin"
-fake_bin_unix="$(cygpath -u "$fake_bin")"
+if command -v cygpath >/dev/null 2>&1; then
+  fake_bin_unix="$(cygpath -u "$fake_bin")"
+else
+  fake_bin_unix="$fake_bin"
+fi
 fake_repo="$tmp/repo"
 fake_package_root="$fake_repo/packages/dorkpipe"
 mkdir -p "$fake_bin"

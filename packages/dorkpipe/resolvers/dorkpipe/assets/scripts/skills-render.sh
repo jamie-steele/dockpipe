@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-eval "$(dockpipe sdk)"
+dockpipe_cmd="${DOCKPIPE_BIN:-dockpipe}"
+if ! command -v "$dockpipe_cmd" >/dev/null 2>&1 && command -v dockpipe >/dev/null 2>&1; then
+  dockpipe_cmd="dockpipe"
+fi
+
+eval "$("$dockpipe_cmd" sdk)"
 dockpipe_sdk init-script
 
 REPO_ROOT="${ROOT}"

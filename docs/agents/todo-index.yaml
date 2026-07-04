@@ -32,6 +32,9 @@ todos:
   - id: TODO-010
     topic: Declarative dependency install UX
     path: docs/todos/declarative-dependency-install-ux.md
+  - id: TODO-011
+    topic: Local Windows CI VM parity and guest tooling
+    path: docs/todos/local-windows-ci-vm-parity.md
 
 maintenance:
   - Treat this YAML file as the AI/backlog entrypoint.

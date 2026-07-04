@@ -297,7 +297,7 @@ func TestRunContainerAttachedCallsCommitOnHost(t *testing.T) {
 	isTerminalDockerFn = func(fd int) bool { return false }
 	timeNowDockerFn = func() time.Time { return time.Unix(1000, 0) }
 	called := false
-	wantWorkdir := HostPathForGit("/tmp/wd")
+	wantWorkdir := "/tmp/wd"
 	commitOnHostFn = func(workdir, message, bundleOut string, bundleAll bool) error {
 		called = true
 		if workdir != wantWorkdir || message != "m" || bundleOut != "b.bundle" || bundleAll {
@@ -327,6 +327,47 @@ func TestRunContainerAttachedCallsCommitOnHost(t *testing.T) {
 	}
 	if !called {
 		t.Fatal("expected CommitOnHost to be called")
+	}
+}
+
+func TestRunContainerRewritesMntWorkdirForWindowsDockerHost(t *testing.T) {
+	withDockerSeams(t)
+	t.Setenv("DOCKER_HOST", "npipe:////./pipe/docker_engine")
+	var gotRun []string
+	execCommandFn = func(name string, args ...string) *exec.Cmd {
+		if isDockerCommandName(name) && len(args) > 0 && args[0] == "run" && gotRun == nil {
+			gotRun = append([]string(nil), args...)
+		}
+		return helperExitCommand(0)
+	}
+	getwdDockerFn = func() (string, error) { return "/tmp/wd", nil }
+	filepathAbsDocker = func(path string) (string, error) { return path, nil }
+	osStatDockerFn = func(name string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	isTerminalDockerFn = func(fd int) bool { return false }
+	timeNowDockerFn = func() time.Time { return time.Unix(1000, 0) }
+	in, _ := os.CreateTemp(t.TempDir(), "in")
+	out, _ := os.CreateTemp(t.TempDir(), "out")
+	errf, _ := os.CreateTemp(t.TempDir(), "err")
+	defer in.Close()
+	defer out.Close()
+	defer errf.Close()
+
+	rc, err := RunContainer(RunOpts{
+		Image:       "img",
+		WorkdirHost: "/mnt/c/Source/dockpipe",
+		Stdin:       in,
+		Stdout:      out,
+		Stderr:      errf,
+	}, []string{"echo", "ok"})
+	if err != nil || rc != 0 {
+		t.Fatalf("RunContainer failed rc=%d err=%v", rc, err)
+	}
+	if len(gotRun) == 0 {
+		t.Fatal("expected docker run call")
+	}
+	joined := strings.Join(gotRun, " ")
+	if !strings.Contains(joined, `-v C:\Source\dockpipe:/work`) {
+		t.Fatalf("expected rewritten Windows host mount, got %s", joined)
 	}
 }
 

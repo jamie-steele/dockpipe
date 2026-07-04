@@ -101,9 +101,11 @@ dependencies:
 
 func TestCheckWorkflowHostDependenciesInstallsApprovedMissingDependency(t *testing.T) {
 	oldLookPath := dependencyLookPathFn
+	oldPowerShell := dependencyPowerShellLookupFn
 	oldRunShell := dependencyRunShellFn
 	t.Cleanup(func() {
 		dependencyLookPathFn = oldLookPath
+		dependencyPowerShellLookupFn = oldPowerShell
 		dependencyRunShellFn = oldRunShell
 	})
 	installed := false
@@ -111,6 +113,9 @@ func TestCheckWorkflowHostDependenciesInstallsApprovedMissingDependency(t *testi
 		if installed {
 			return "/bin/" + file, nil
 		}
+		return "", os.ErrNotExist
+	}
+	dependencyPowerShellLookupFn = func(string) (string, error) {
 		return "", os.ErrNotExist
 	}
 	var ran string
@@ -140,6 +145,35 @@ func TestCheckWorkflowHostDependenciesInstallsApprovedMissingDependency(t *testi
 	}
 	if ran == "" {
 		t.Fatal("expected install command to run")
+	}
+}
+
+func TestResolveDependencyCommandPathFallsBackToPowerShellOnWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("windows-specific fallback")
+	}
+	oldLookPath := dependencyLookPathFn
+	oldPowerShell := dependencyPowerShellLookupFn
+	t.Cleanup(func() {
+		dependencyLookPathFn = oldLookPath
+		dependencyPowerShellLookupFn = oldPowerShell
+	})
+	dependencyLookPathFn = func(string) (string, error) {
+		return "", os.ErrNotExist
+	}
+	dependencyPowerShellLookupFn = func(command string) (string, error) {
+		if command != "act" {
+			t.Fatalf("unexpected command %q", command)
+		}
+		return `C:\Users\Jamie\AppData\Local\Microsoft\WinGet\Links\act.exe`, nil
+	}
+
+	got, err := resolveDependencyCommandPath("act")
+	if err != nil {
+		t.Fatalf("expected PowerShell fallback to resolve command: %v", err)
+	}
+	if !strings.EqualFold(got, `C:\Users\Jamie\AppData\Local\Microsoft\WinGet\Links\act.exe`) {
+		t.Fatalf("unexpected resolved path %q", got)
 	}
 }
 

@@ -69,6 +69,82 @@ build_log() {
   printf '[pipeon-build] %s\n' "$*" >&2
 }
 
+pipeon_normalize_text_file() {
+  local file="${1:?file}"
+  [[ -f "$file" ]] || return 0
+  perl -0pi -e 's/\x{FEFF}//g; s/\r\n/\n/g; s/\r/\n/g' "$file"
+}
+
+pipeon_any_newer_than() {
+  local target="${1:?target}"
+  shift || true
+  [[ -e "$target" ]] || return 0
+  local candidate
+  for candidate in "$@"; do
+    [[ -e "$candidate" ]] || continue
+    if [[ -d "$candidate" ]]; then
+      if find "$candidate" -type f -newer "$target" -print -quit 2>/dev/null | grep -q .; then
+        return 0
+      fi
+      continue
+    fi
+    if [[ "$candidate" -nt "$target" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+pipeon_file_sha256() {
+  local file="${1:?file}"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | awk '{print $1}'
+    return 0
+  fi
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "$file" | awk '{print $1}'
+    return 0
+  fi
+  if command -v powershell.exe >/dev/null 2>&1; then
+    powershell.exe -NoProfile -Command "(Get-FileHash -Algorithm SHA256 '$(pipeon_windows_path "$file")').Hash.ToLower()" | tr -d '\r'
+    return 0
+  fi
+  echo "pipeon-build: no sha256 tool available" >&2
+  return 1
+}
+
+pipeon_cache_matches_file() {
+  local stamp_file="${1:?stamp file}"
+  local input_file="${2:?input file}"
+  [[ -f "$stamp_file" ]] || return 1
+  local want have
+  want="$(pipeon_file_sha256 "$input_file")" || return 1
+  have="$(tr -d ' \t\r\n' < "$stamp_file" 2>/dev/null || true)"
+  [[ -n "$have" && "$have" == "$want" ]]
+}
+
+pipeon_write_file_cache() {
+  local stamp_file="${1:?stamp file}"
+  local input_file="${2:?input file}"
+  mkdir -p "$(dirname "$stamp_file")"
+  pipeon_file_sha256 "$input_file" > "$stamp_file"
+}
+
+pipeon_copy_tree_contents() {
+  local src="${1:?src}"
+  local dest="${2:?dest}"
+  rm -rf "$dest"
+  mkdir -p "$(dirname "$dest")"
+  cp -R "$src" "$dest"
+}
+
+pipeon_vsix_is_current() {
+  local output_file="${1:?output file}"
+  shift || true
+  [[ -f "$output_file" ]] || return 1
+  ! pipeon_any_newer_than "$output_file" "$@"
+}
+
 pipeon_linux_desktop_pkg_config_deps=(
   "glib-2.0 >= 2.70"
   "gio-2.0 >= 2.70"
@@ -89,6 +165,33 @@ pipeon_linux_desktop_deps_message() {
 [pipeon-build]   glib-2.0 >= 2.70, gio-2.0 >= 2.70, gtk+-3.0, webkit2gtk-4.1,
 [pipeon-build]   javascriptcoregtk-4.1, and libsoup-3.0.
 EOF
+}
+
+pipeon_desktop_output_path() {
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+      printf '%s\n' "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop.exe"
+      ;;
+    *)
+      printf '%s\n' "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/bin/pipeon-desktop"
+      ;;
+  esac
+}
+
+pipeon_desktop_build_inputs_current() {
+  local output_file
+  output_file="$(pipeon_desktop_output_path)"
+  [[ -f "$output_file" ]] || return 1
+  ! pipeon_any_newer_than "$output_file" \
+    "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/src-tauri/Cargo.toml" \
+    "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/src-tauri/Cargo.lock" \
+    "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/src-tauri/build.rs" \
+    "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/src-tauri/tauri.conf.json" \
+    "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/src-tauri/capabilities" \
+    "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/src-tauri/gen" \
+    "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/src-tauri/icons" \
+    "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/src-tauri/src" \
+    "$REPO_ROOT/packages/pipeon/apps/pipeon-desktop/ui"
 }
 
 pipeon_should_build_desktop_for_source() {
@@ -113,6 +216,10 @@ pipeon_should_build_desktop_for_source() {
       return 1
       ;;
     *)
+      if pipeon_desktop_build_inputs_current; then
+        build_log "Skipping Pipeon desktop build during source build: desktop binary is current."
+        return 1
+      fi
       return 0
       ;;
   esac
@@ -389,6 +496,8 @@ require_cargo() {
 }
 
 build_source() {
+  pipeon_normalize_text_file "$REPO_ROOT/packages/pipeon/resolvers/pipeon/bin/pipeon"
+  chmod +x "$REPO_ROOT/packages/pipeon/resolvers/pipeon/bin/pipeon" 2>/dev/null || true
   if pipeon_should_build_desktop_for_source; then
     build_desktop
   fi
@@ -401,13 +510,26 @@ package_dockpipe_language_support() {
   (
     local version output_file
     cd "$DOCKPIPE_VSCODE_EXT_DIR"
+    version="$(node -p "require('./package.json').version")"
+    output_file="$PIPEON_EXTENSIONS_DIR/dockpipe-language-support-$version.vsix"
+    if pipeon_vsix_is_current "$output_file" \
+      "$DOCKPIPE_VSCODE_EXT_DIR/package.json" \
+      "$DOCKPIPE_VSCODE_EXT_DIR/package-lock.json" \
+      "$DOCKPIPE_VSCODE_EXT_DIR/extension.js" \
+      "$DOCKPIPE_VSCODE_EXT_DIR/language-configuration.json" \
+      "$DOCKPIPE_VSCODE_EXT_DIR/images" \
+      "$DOCKPIPE_VSCODE_EXT_DIR/syntaxes" \
+      "$DOCKPIPE_VSCODE_EXT_DIR/snippets" \
+      "$DOCKPIPE_VSCODE_EXT_DIR/README.md" \
+      "$DOCKPIPE_VSCODE_EXT_DIR/LICENSE"; then
+      build_log "DockPipe language support VSIX is current; skipping rebuild"
+      return 0
+    fi
     if [[ ! -x node_modules/.bin/vsce ]]; then
       build_log "Installing DockPipe language support npm dependencies"
       run_with_progress "DockPipe language support npm install" \
         env NPM_CONFIG_CACHE="$DOCKPIPE_VSCODE_TMP_CACHE" npm ci --no-audit --no-fund
     fi
-    version="$(node -p "require('./package.json').version")"
-    output_file="$PIPEON_EXTENSIONS_DIR/dockpipe-language-support-$version.vsix"
     build_log "Running vsce package for DockPipe language support"
     if pipeon_is_windows_host; then
       package_vsix_windows "$DOCKPIPE_VSCODE_EXT_DIR" "$output_file" "$DOCKPIPE_VSCODE_TMP_CACHE"
@@ -436,6 +558,10 @@ build_desktop_windows() {
 }
 
 build_desktop() {
+  if pipeon_desktop_build_inputs_current; then
+    build_log "Pipeon desktop binary is current; skipping rebuild"
+    return 0
+  fi
   case "$(uname -s)" in
     MINGW*|MSYS*|CYGWIN*)
       build_desktop_windows
@@ -482,35 +608,78 @@ install_desktop_global() {
 
 package_vscode_extension() {
   package_dockpipe_language_support
-  build_log "Preparing Pipeon VS Code extension build workspace"
   mkdir -p "$PIPEON_EXTENSIONS_DIR"
-  rm -rf "$PIPEON_VSCODE_EXT_BUILD_DIR"
-  mkdir -p "$PIPEON_VSCODE_EXT_BUILD_DIR"
-  cp "$PIPEON_VSCODE_EXT_SRC/package.json" "$PIPEON_VSCODE_EXT_BUILD_DIR/package.json"
-  cp "$PIPEON_VSCODE_EXT_SRC/package-lock.json" "$PIPEON_VSCODE_EXT_BUILD_DIR/package-lock.json"
-  cp "$PIPEON_VSCODE_EXT_SRC/tsconfig.json" "$PIPEON_VSCODE_EXT_BUILD_DIR/tsconfig.json"
-  cp -R "$PIPEON_VSCODE_EXT_SRC/src" "$PIPEON_VSCODE_EXT_BUILD_DIR/src"
-  cp -R "$PIPEON_VSCODE_EXT_SRC/types" "$PIPEON_VSCODE_EXT_BUILD_DIR/types"
-  cp -R "$PIPEON_VSCODE_EXT_SRC/scripts" "$PIPEON_VSCODE_EXT_BUILD_DIR/scripts"
-  build_log "Installing Pipeon VS Code extension npm dependencies"
-  run_with_progress "Pipeon VS Code extension npm install" \
-    env NPM_CONFIG_CACHE="$PIPEON_VSCODE_EXT_NPM_CACHE" npm --prefix "$PIPEON_VSCODE_EXT_BUILD_DIR" ci --no-audit --no-fund --loglevel=notice
-  build_log "Compiling Pipeon VS Code extension"
-  run_with_progress "Pipeon VS Code extension compile" \
-    npm --prefix "$PIPEON_VSCODE_EXT_BUILD_DIR" run build
-  build_log "Running Pipeon webview smoke test"
-  run_with_progress "Pipeon webview smoke test" \
-    node "$PIPEON_VSCODE_EXT_BUILD_DIR/scripts/webview-smoke.js"
-  build_log "Copying built Pipeon extension assets back into source tree"
-  install -m 644 "$PIPEON_VSCODE_EXT_BUILD_DIR/extension.js" "$PIPEON_VSCODE_EXT_SRC/extension.js"
-  install -m 644 "$PIPEON_VSCODE_EXT_BUILD_DIR/webview/canary.js" "$PIPEON_VSCODE_EXT_SRC/webview/canary.js"
-  install -m 644 "$PIPEON_VSCODE_EXT_BUILD_DIR/webview/chat.js" "$PIPEON_VSCODE_EXT_SRC/webview/chat.js"
   (
     local version output_file vsce_entrypoint
+    local lock_stamp compile_stamp compile_needed=0
     cd "$PIPEON_VSCODE_EXT_SRC"
-    build_log "Packaging Pipeon VSIX"
     version="$(node -p "require('./package.json').version")"
     output_file="$PIPEON_EXTENSIONS_DIR/pipeon-$version.vsix"
+    if pipeon_vsix_is_current "$output_file" \
+      "$PIPEON_VSCODE_EXT_SRC/package.json" \
+      "$PIPEON_VSCODE_EXT_SRC/package-lock.json" \
+      "$PIPEON_VSCODE_EXT_SRC/tsconfig.json" \
+      "$PIPEON_VSCODE_EXT_SRC/src" \
+      "$PIPEON_VSCODE_EXT_SRC/types" \
+      "$PIPEON_VSCODE_EXT_SRC/scripts" \
+      "$PIPEON_VSCODE_EXT_SRC/images" \
+      "$PIPEON_VSCODE_EXT_SRC/webview" \
+      "$PIPEON_VSCODE_EXT_SRC/extension.js" \
+      "$PIPEON_VSCODE_EXT_SRC/README.md" \
+      "$PIPEON_VSCODE_EXT_SRC/LICENSE"; then
+      build_log "Pipeon VSIX is current; skipping rebuild"
+      return 0
+    fi
+
+    lock_stamp="$PIPEON_VSCODE_EXT_BUILD_DIR/.package-lock.sha256"
+    compile_stamp="$PIPEON_VSCODE_EXT_BUILD_DIR/.compile-ready"
+    if [[ ! -f "$compile_stamp" ]]; then
+      compile_needed=1
+    elif pipeon_any_newer_than "$compile_stamp" \
+      "$PIPEON_VSCODE_EXT_SRC/package.json" \
+      "$PIPEON_VSCODE_EXT_SRC/package-lock.json" \
+      "$PIPEON_VSCODE_EXT_SRC/tsconfig.json" \
+      "$PIPEON_VSCODE_EXT_SRC/src" \
+      "$PIPEON_VSCODE_EXT_SRC/types" \
+      "$PIPEON_VSCODE_EXT_SRC/scripts"; then
+      compile_needed=1
+    fi
+
+    if (( compile_needed )); then
+      build_log "Preparing Pipeon VS Code extension build workspace"
+      mkdir -p "$PIPEON_VSCODE_EXT_BUILD_DIR"
+      cp "$PIPEON_VSCODE_EXT_SRC/package.json" "$PIPEON_VSCODE_EXT_BUILD_DIR/package.json"
+      cp "$PIPEON_VSCODE_EXT_SRC/package-lock.json" "$PIPEON_VSCODE_EXT_BUILD_DIR/package-lock.json"
+      cp "$PIPEON_VSCODE_EXT_SRC/tsconfig.json" "$PIPEON_VSCODE_EXT_BUILD_DIR/tsconfig.json"
+      pipeon_copy_tree_contents "$PIPEON_VSCODE_EXT_SRC/src" "$PIPEON_VSCODE_EXT_BUILD_DIR/src"
+      pipeon_copy_tree_contents "$PIPEON_VSCODE_EXT_SRC/types" "$PIPEON_VSCODE_EXT_BUILD_DIR/types"
+      pipeon_copy_tree_contents "$PIPEON_VSCODE_EXT_SRC/scripts" "$PIPEON_VSCODE_EXT_BUILD_DIR/scripts"
+
+      if [[ ! -d "$PIPEON_VSCODE_EXT_BUILD_DIR/node_modules" ]] || ! pipeon_cache_matches_file "$lock_stamp" "$PIPEON_VSCODE_EXT_SRC/package-lock.json"; then
+        build_log "Installing Pipeon VS Code extension npm dependencies"
+        run_with_progress "Pipeon VS Code extension npm install" \
+          env NPM_CONFIG_CACHE="$PIPEON_VSCODE_EXT_NPM_CACHE" npm --prefix "$PIPEON_VSCODE_EXT_BUILD_DIR" ci --no-audit --no-fund --loglevel=notice
+        pipeon_write_file_cache "$lock_stamp" "$PIPEON_VSCODE_EXT_SRC/package-lock.json"
+      else
+        build_log "Reusing existing Pipeon VS Code extension npm dependencies"
+      fi
+
+      build_log "Compiling Pipeon VS Code extension"
+      run_with_progress "Pipeon VS Code extension compile" \
+        npm --prefix "$PIPEON_VSCODE_EXT_BUILD_DIR" run build
+      build_log "Running Pipeon webview smoke test"
+      run_with_progress "Pipeon webview smoke test" \
+        node "$PIPEON_VSCODE_EXT_BUILD_DIR/scripts/webview-smoke.js"
+      build_log "Copying built Pipeon extension assets back into source tree"
+      install -m 644 "$PIPEON_VSCODE_EXT_BUILD_DIR/extension.js" "$PIPEON_VSCODE_EXT_SRC/extension.js"
+      install -m 644 "$PIPEON_VSCODE_EXT_BUILD_DIR/webview/canary.js" "$PIPEON_VSCODE_EXT_SRC/webview/canary.js"
+      install -m 644 "$PIPEON_VSCODE_EXT_BUILD_DIR/webview/chat.js" "$PIPEON_VSCODE_EXT_SRC/webview/chat.js"
+      touch "$compile_stamp"
+    else
+      build_log "Pipeon VS Code extension compile outputs are current; skipping npm/build/smoke"
+    fi
+
+    build_log "Packaging Pipeon VSIX"
     vsce_entrypoint="$REPO_ROOT/src/app/tooling/vscode-extensions/dockpipe-language-support/node_modules/@vscode/vsce/vsce"
     if pipeon_is_windows_host; then
       package_vsix_windows "$PIPEON_VSCODE_EXT_SRC" "$output_file" "" "$vsce_entrypoint"

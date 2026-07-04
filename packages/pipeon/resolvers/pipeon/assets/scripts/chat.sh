@@ -31,7 +31,7 @@ fi
 SYS="$(cat "$SYS_FILE")"
 # Keep JSON safe: escape backslashes and quotes in user content for jq --arg
 COMBINED="$SYS"
-CTX_FILE="$(dockpipe scope --package pipeon pipeon-context.md)"
+CTX_FILE="$(pipeon_scope_path --package pipeon pipeon-context.md)"
 if [[ -f "$CTX_FILE" ]]; then
 	CTX="$(cat "$CTX_FILE")"
 	COMBINED="$COMBINED

@@ -76,10 +76,10 @@ status)
 	else
 		echo "gate: version ok for Pipeon"
 	fi
-	PIPEON_STATE_DIR="$(dockpipe scope --package pipeon .)"
-	CI_FINDINGS="$(dockpipe scope artifacts ci-analysis findings.json)"
-	INSIGHTS="$(dockpipe scope --package dorkpipe analysis/insights.json)"
-	DORKPIPE_RUN="$(dockpipe scope --package dorkpipe run.json)"
+	PIPEON_STATE_DIR="$(pipeon_scope_path --package pipeon .)"
+	CI_FINDINGS="$(pipeon_scope_path artifacts ci-analysis findings.json)"
+	INSIGHTS="$(pipeon_scope_path --package dorkpipe analysis/insights.json)"
+	DORKPIPE_RUN="$(pipeon_scope_path --package dorkpipe run.json)"
 	for p in "$PIPEON_STATE_DIR/pipeon-context.md" "$CI_FINDINGS" "$INSIGHTS" "$DORKPIPE_RUN"; do
 		if [[ -f "$p" ]]; then
 			echo "present: $p"

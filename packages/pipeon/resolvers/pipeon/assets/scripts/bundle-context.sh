@@ -3,8 +3,12 @@
 # Bounded size; no network. Run after enabling Pipeon (see lib/enable.sh).
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=lib/enable.sh
+source "$SCRIPT_DIR/lib/enable.sh"
+
 ROOT="$(pwd)"
-OUT="$(dockpipe scope --package pipeon .)"
+OUT="$(pipeon_scope_path --package pipeon .)"
 CTX="$OUT/pipeon-context.md"
 mkdir -p "$OUT"
 
@@ -34,7 +38,7 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo "## CI / scans"
 	echo ""
 
-	CI_ANALYSIS_DIR="$(dockpipe scope artifacts ci-analysis)"
+	CI_ANALYSIS_DIR="$(pipeon_scope_path artifacts ci-analysis)"
 	echo ""
 	echo "- **analysis dir:** \`$CI_ANALYSIS_DIR\`"
 	FIND="$CI_ANALYSIS_DIR/findings.json"
@@ -59,7 +63,7 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo ""
 	echo "## User insights (DockPipe analysis scope)"
 	echo ""
-	INS="$(dockpipe scope --package dorkpipe analysis/insights.json)"
+	INS="$(pipeon_scope_path --package dorkpipe analysis/insights.json)"
 	if [[ -f "$INS" ]] && have_jq; then
 		echo "- **file:** present"
 		jq -r '"- count: " + ((.insights // []) | length | tostring)' "$INS" 2>/dev/null || true
@@ -71,7 +75,7 @@ have_jq() { command -v jq >/dev/null 2>&1; }
 	echo ""
 	echo "## Orchestrator / run metadata (DorkPipe package scope)"
 	echo ""
-	DORKPIPE_SCOPE_DIR="$(dockpipe scope --package dorkpipe .)"
+	DORKPIPE_SCOPE_DIR="$(pipeon_scope_path --package dorkpipe .)"
 	if [[ -f "$DORKPIPE_SCOPE_DIR/run.json" ]] && have_jq; then
 		jq '{name, ts, policy}' "$DORKPIPE_SCOPE_DIR/run.json" 2>/dev/null | sed 's/^/    /' || true
 	else

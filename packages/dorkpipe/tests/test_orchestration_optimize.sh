@@ -7,10 +7,14 @@ SCRIPT_DIR="$ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
 
 mkdir -p "$ROOT/bin/.dockpipe/tmp/package-tests"
 tmp="$(mktemp -d "$ROOT/bin/.dockpipe/tmp/package-tests/orchestration-optimize.XXXXXX")"
-tmp_unix="$(cygpath -u "$tmp")"
+if command -v cygpath >/dev/null 2>&1; then
+  tmp_unix="$(cygpath -u "$tmp")"
+  tmp_win="$(cygpath -m "$tmp")"
+else
+  tmp_unix="$tmp"
+  tmp_win="$tmp"
+fi
 trap 'rm -rf "$tmp"' EXIT
-
-tmp_win="$(cygpath -m "$tmp")"
 fake_dockpipe="$tmp/dockpipe"
 fake_helper="$tmp/orchestrate-helper"
 operation_log="$tmp/operation.log"

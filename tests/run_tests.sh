@@ -9,6 +9,11 @@ UNIT="$(cd "${ROOT}/tests/unit-tests" && pwd)"
 CLI="${ROOT}/src/bin/dockpipe"
 failed=0
 
+# Keep bundled extraction and related shell-test scratch state inside the repo
+# instead of the caller's user cache so local/CI runs stay hermetic.
+export DOCKPIPE_BUNDLED_CACHE="${DOCKPIPE_BUNDLED_CACHE:-${ROOT}/bin/.dockpipe/tmp/bundled-cache}"
+mkdir -p "$DOCKPIPE_BUNDLED_CACHE"
+
 for f in test_cli.sh test_repo_root.sh test_repo_layout.sh test_clone_worktree_include.sh; do
   if [[ -f "$UNIT/$f" ]]; then
     echo "--- $f ---"

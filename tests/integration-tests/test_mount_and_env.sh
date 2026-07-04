@@ -10,11 +10,20 @@ require_agent_dev_template "$REPO_ROOT"
 
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
+mount_host="$tmp"
+case "${OS:-}" in
+  Windows_NT)
+    if command -v cygpath >/dev/null 2>&1; then
+      mount_host="$(cygpath -aw "$tmp")"
+    fi
+    ;;
+esac
 
-# 1. --mount: bind a file into the container
-# (stdout may include image digest or container name; assert expected content appears)
+# 1. --mount: bind a host directory into the container.
+# Windows Docker Desktop is more reliable with directory binds than single-file binds, while still
+# covering the same DockPipe mount path.
 echo "mount_content_here" > "$tmp/mounted.txt"
-out=$("$DOCKPIPE" --no-data --template agent-dev --mount "$tmp/mounted.txt:/tmp/mounted.txt" -- cat /tmp/mounted.txt)
+out=$(MSYS2_ARG_CONV_EXCL='*' "$DOCKPIPE" --no-data --template agent-dev --mount "$mount_host:/tmp/inttest" -- sh -c 'cat /tmp/inttest/mounted.txt')
 [[ "$out" == *"mount_content_here"* ]] || { echo "Expected mounted content in output, got: $out"; exit 1; }
 
 # 2. --env: pass env var

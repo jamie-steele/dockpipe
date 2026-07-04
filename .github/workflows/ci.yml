@@ -116,6 +116,7 @@ jobs:
 
       # Workflow "test" = go test + vet + staticcheck + govulncheck + gosec inside Docker (tools installed in-container; only mod cache mounted).
       - name: DockPipe workflow — test
+        if: ${{ env.ACT != 'true' }}
         env:
           DOCKPIPE_REPO_ROOT: ${{ github.workspace }}
         run: |
@@ -172,12 +173,13 @@ jobs:
           echo "OK: shipping $V with updated $notes (was ${base_v:-<no VERSION on base>})"
 
       - name: Build amd64 .deb (for test_deb_install.sh)
-        run: ./release/packaging/build-deb.sh "$(tr -d ' \t\r\n' < VERSION)" amd64
+        run: bash ./release/packaging/build-deb.sh "$(tr -d ' \t\r\n' < VERSION)" amd64
 
       - name: Shell unit tests
         run: bash tests/run_tests.sh
 
       - name: Integration tests (Docker)
+        if: ${{ env.ACT != 'true' }}
         run: bash tests/integration-tests/run.sh
 
       - name: Upload DorkPipe CI analysis bundle

@@ -4,6 +4,22 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 
+normalize_path() {
+  local raw="${1:-}"
+  [[ -n "$raw" ]] || return 0
+  case "$raw" in
+    [A-Za-z]:\\*|[A-Za-z]:/*|\\\\*)
+      if command -v cygpath >/dev/null 2>&1; then
+        cygpath -u "$raw"
+        return 0
+      fi
+      ;;
+  esac
+  printf '%s\n' "$raw"
+}
+
+ROOT_NORM="$(normalize_path "$ROOT")"
+
 # shellcheck source=/dev/null
 source "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh"
 
@@ -16,40 +32,41 @@ if [[ "$actual" != "$expected" ]]; then
 fi
 
 build_cache="$(DOCKPIPE_WORKDIR="$ROOT" bash -lc 'source "$1"; dockpipe_sdk path build npm-cache' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
-if [[ "$build_cache" != "$ROOT/bin/.dockpipe/build/npm-cache" ]]; then
+expected_build_cache="$ROOT_NORM/bin/.dockpipe/build/npm-cache"
+if [[ "$build_cache" != "$expected_build_cache" ]]; then
   echo "test_repo_tools: expected build cache under root bin/.dockpipe, got $build_cache" >&2
   exit 1
 fi
 
-package_state="$(DOCKPIPE_WORKDIR="$ROOT" bash -lc 'source "$1"; dockpipe_sdk scope --package dorkpipe dev-stack' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
-expected_package_state="$("$ROOT/src/bin/dockpipe" scope --package dorkpipe dev-stack --workdir "$ROOT")"
+package_state="$(normalize_path "$(DOCKPIPE_WORKDIR="$ROOT" bash -lc 'source "$1"; dockpipe_sdk scope --package dorkpipe dev-stack' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")")"
+expected_package_state="$(normalize_path "$("$ROOT/src/bin/dockpipe" scope --package dorkpipe dev-stack --workdir "$ROOT")")"
 if [[ "$package_state" != "$expected_package_state" ]]; then
   echo "test_repo_tools: expected package state $expected_package_state, got $package_state" >&2
   exit 1
 fi
 
-workflow_state="$(DOCKPIPE_WORKDIR="$ROOT" bash -lc 'source "$1"; dockpipe_sdk scope workflow docs.orchestrate orchestrate' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
-expected_workflow_state="$("$ROOT/src/bin/dockpipe" scope workflow docs.orchestrate orchestrate --workdir "$ROOT")"
+workflow_state="$(normalize_path "$(DOCKPIPE_WORKDIR="$ROOT" bash -lc 'source "$1"; dockpipe_sdk scope workflow docs.orchestrate orchestrate' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")")"
+expected_workflow_state="$(normalize_path "$("$ROOT/src/bin/dockpipe" scope workflow docs.orchestrate orchestrate --workdir "$ROOT")")"
 if [[ "$workflow_state" != "$expected_workflow_state" ]]; then
   echo "test_repo_tools: expected workflow state $expected_workflow_state, got $workflow_state" >&2
   exit 1
 fi
 
-ci_default="$(env -u DOCKPIPE_WORKFLOW_NAME -u DOCKPIPE_CI_RAW_DIR -u DOCKPIPE_CI_ANALYSIS_DIR -u DOCKPIPE_ARTIFACT_ROOT -u DOCKPIPE_OUTPUT_ROOT DOCKPIPE_WORKDIR="$ROOT" bash -lc 'source "$1"; dockpipe_sdk ci analysis findings.json' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
-state_root="$ROOT/bin/.dockpipe"
+ci_default="$(normalize_path "$(env -u DOCKPIPE_WORKFLOW_NAME -u DOCKPIPE_CI_RAW_DIR -u DOCKPIPE_CI_ANALYSIS_DIR -u DOCKPIPE_ARTIFACT_ROOT -u DOCKPIPE_OUTPUT_ROOT DOCKPIPE_WORKDIR="$ROOT" bash -lc 'source "$1"; dockpipe_sdk ci analysis findings.json' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")")"
+state_root="$ROOT_NORM/bin/.dockpipe"
 expected_ci_default="$state_root/packages/dorkpipe/ci/analysis/findings.json"
 if [[ "$ci_default" != "$expected_ci_default" ]]; then
   echo "test_repo_tools: expected default CI artifacts under DorkPipe package state, got $ci_default" >&2
   exit 1
 fi
 
-ci_default_injected="$(env -u DOCKPIPE_WORKFLOW_NAME -u DOCKPIPE_CI_RAW_DIR -u DOCKPIPE_CI_ANALYSIS_DIR -u DOCKPIPE_ARTIFACT_ROOT -u DOCKPIPE_OUTPUT_ROOT DOCKPIPE_WORKDIR="$ROOT" bash -lc 'source "$1"; printf "%s\n" "$DOCKPIPE_CI_ANALYSIS_DIR/findings.json"' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
+ci_default_injected="$(normalize_path "$(env -u DOCKPIPE_WORKFLOW_NAME -u DOCKPIPE_CI_RAW_DIR -u DOCKPIPE_CI_ANALYSIS_DIR -u DOCKPIPE_ARTIFACT_ROOT -u DOCKPIPE_OUTPUT_ROOT DOCKPIPE_WORKDIR="$ROOT" bash -lc 'source "$1"; printf "%s\n" "$DOCKPIPE_CI_ANALYSIS_DIR/findings.json"' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")")"
 if [[ "$ci_default_injected" != "$expected_ci_default" ]]; then
   echo "test_repo_tools: expected SDK refresh to inject default CI artifacts, got $ci_default_injected" >&2
   exit 1
 fi
 
-ci_bound="$(env -u DOCKPIPE_CI_RAW_DIR -u DOCKPIPE_CI_ANALYSIS_DIR -u DOCKPIPE_ARTIFACT_ROOT -u DOCKPIPE_OUTPUT_ROOT DOCKPIPE_WORKDIR="$ROOT" DOCKPIPE_WORKFLOW_NAME=ci bash -lc 'source "$1"; printf "%s\n" "$(dockpipe_sdk ci raw)" "$(dockpipe_sdk ci analysis)"' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
+ci_bound="$(env -u DOCKPIPE_CI_RAW_DIR -u DOCKPIPE_CI_ANALYSIS_DIR -u DOCKPIPE_ARTIFACT_ROOT -u DOCKPIPE_OUTPUT_ROOT DOCKPIPE_WORKDIR="$ROOT" DOCKPIPE_WORKFLOW_NAME=ci bash -lc 'source "$1"; printf "%s\n" "$(dockpipe_sdk ci raw)" "$(dockpipe_sdk ci analysis)"' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh" | while IFS= read -r line; do normalize_path "$line"; done)"
 expected_ci_bound="$state_root/workflows/ci/artifacts/ci-raw
 $state_root/workflows/ci/artifacts/ci-analysis"
 if [[ "$ci_bound" != "$expected_ci_bound" ]]; then
@@ -57,7 +74,7 @@ if [[ "$ci_bound" != "$expected_ci_bound" ]]; then
   exit 1
 fi
 
-ci_injected="$(env -u DOCKPIPE_CI_RAW_DIR -u DOCKPIPE_CI_ANALYSIS_DIR -u DOCKPIPE_ARTIFACT_ROOT -u DOCKPIPE_OUTPUT_ROOT DOCKPIPE_WORKDIR="$ROOT" DOCKPIPE_WORKFLOW_NAME=ci bash -lc 'source "$1"; printf "%s\n" "$DOCKPIPE_CI_RAW_DIR" "$DOCKPIPE_CI_ANALYSIS_DIR"' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh")"
+ci_injected="$(env -u DOCKPIPE_CI_RAW_DIR -u DOCKPIPE_CI_ANALYSIS_DIR -u DOCKPIPE_ARTIFACT_ROOT -u DOCKPIPE_OUTPUT_ROOT DOCKPIPE_WORKDIR="$ROOT" DOCKPIPE_WORKFLOW_NAME=ci bash -lc 'source "$1"; printf "%s\n" "$DOCKPIPE_CI_RAW_DIR" "$DOCKPIPE_CI_ANALYSIS_DIR"' _ "$ROOT/src/core/assets/scripts/lib/dockpipe-sdk.sh" | while IFS= read -r line; do normalize_path "$line"; done)"
 if [[ "$ci_injected" != "$expected_ci_bound" ]]; then
   echo "test_repo_tools: expected SDK refresh to inject workflow-bound CI dirs, got $ci_injected" >&2
   exit 1
