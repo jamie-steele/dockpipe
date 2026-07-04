@@ -188,11 +188,28 @@ dockpipe windows doctor
 
 ---
 
-## macOS (Homebrew)
+## macOS (current path: source fallback)
+
+Current reliable path is source-based:
+
+```bash
+git clone https://github.com/jamie-steele/dockpipe.git
+cd dockpipe
+make
+export PATH="$PATH:$(pwd)/bin"
+```
+
+To persist PATH on zsh (run from your **dockpipe** clone so `$(pwd)` is correct):
+
+```bash
+echo "export PATH=\"\$PATH:$(pwd)/bin\"" >> ~/.zshrc
+```
+
+## macOS (Homebrew, when published)
 
 **Requirements:** **Docker Desktop** (or another engine), and **`bash`** (dockpipe requires it; `/bin/bash` is normal). **git** for worktree / `--repo` flows.
 
-Preferred path once tap is published:
+Preferred packaged path once the tap is published:
 
 ```bash
 brew tap jamie-steele/dockpipe
@@ -211,23 +228,6 @@ Maintainer note: formula source is tracked in `release/packaging/homebrew/dockpi
 General release automation details: **[release/docs/releasing.md](../release/docs/releasing.md)**.
 
 ---
-
-## macOS (source fallback)
-
-Current install path is source-based:
-
-```bash
-git clone https://github.com/jamie-steele/dockpipe.git
-cd dockpipe
-make
-export PATH="$PATH:$(pwd)/bin"
-```
-
-To persist PATH on zsh (run from your **dockpipe** clone so `$(pwd)` is correct):
-
-```bash
-echo "export PATH=\"\$PATH:$(pwd)/bin\"" >> ~/.zshrc
-```
 
 ## Building the .deb (for maintainers)
 

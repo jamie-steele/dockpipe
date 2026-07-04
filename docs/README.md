@@ -5,6 +5,9 @@ with the task you are doing, then drop into reference docs only when needed.
 
 ## Start Here
 
+If you are new to DockPipe, stay in this section first. The concept and
+maintainer docs below are reference material, not the shortest learning path.
+
 | Goal | Doc |
 |------|-----|
 | Install and run the first command | [install.md](install.md), then [onboarding.md](onboarding.md) |

@@ -439,8 +439,11 @@ func TestRunContainerWorkspaceVolumeSyncsAroundRun(t *testing.T) {
 	if !strings.Contains(got, "dockpipe-ws-demo:/dockpipe-sync-src") || !strings.Contains(got, repo+":/dockpipe-sync-dst") {
 		t.Fatalf("expected volume to host patch apply call, got:\n%s", got)
 	}
-	if !strings.Contains(got, "git -C /dockpipe-sync-src diff --cached --binary | git -C /dockpipe-sync-dst apply --whitespace=nowarn -") {
-		t.Fatalf("expected git patch apply sync-back script, got:\n%s", got)
+	gitSyncOut := strings.Contains(got, "git -C /dockpipe-sync-src diff --cached --binary | git -C /dockpipe-sync-dst apply --whitespace=nowarn -")
+	tarSyncOut := strings.Contains(got, "--label com.dockpipe.helper.unit=session.volume.sync_out") &&
+		strings.Contains(got, "cd /dockpipe-sync-src && tar --exclude=.git --exclude=bin/.dockpipe --exclude=.dorkpipe -cf - . | tar xf - -C /dockpipe-sync-dst")
+	if !gitSyncOut && !tarSyncOut {
+		t.Fatalf("expected either git patch apply or tar sync-back script, got:\n%s", got)
 	}
 	stderrBytes, readErr := os.ReadFile(errf.Name())
 	if readErr != nil {

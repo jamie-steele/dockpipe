@@ -24,7 +24,6 @@ need to pin a specific image/template.
 ```yaml
 name: test
 runtime: dockerimage
-resolver: codex
 
 steps:
   - id: test
@@ -52,7 +51,6 @@ steps:
 
   - id: test
     runtime: dockerimage
-    resolver: codex
     cmd: npm test
 ```
 
@@ -66,14 +64,13 @@ Set defaults once, then override only where a step differs:
 ```yaml
 name: review
 runtime: dockerimage
-resolver: codex
 
 steps:
   - id: lint
     cmd: npm run lint
 
   - id: security-review
-    resolver: claude
+    resolver: codex
     cmd: ./scripts/review.sh
 ```
 
@@ -95,7 +92,6 @@ own runtime/resolver/security settings.
 ```yaml
 name: offline-test
 runtime: dockerimage
-resolver: codex
 
 security:
   profile: secure-default

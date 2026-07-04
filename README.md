@@ -9,16 +9,22 @@ first thing you learn.
 
 ## Quick Start
 
+Most users should start with the packaged install flow, not a source checkout:
+
+1. Install DockPipe from [GitHub Releases](https://github.com/jamie-steele/dockpipe/releases) using [docs/install.md](docs/install.md).
+2. Run `dockpipe -- pwd`.
+3. Read [docs/onboarding.md](docs/onboarding.md) for the first workflow path.
+
+If you are contributing from a source checkout, use:
+
 ```bash
 make dev-install
 dockpipe init
 dockpipe -- pwd
 ```
 
-Requires **Docker** and **bash**. Use a
-[release binary](https://github.com/jamie-steele/dockpipe/releases) instead of
-`make dev-install` when you are not in a clone. `dockpipe doctor` checks your
-setup.
+Requires **Docker** and **bash**. `make dev-install` is a contributor shortcut
+for this repository; `dockpipe doctor` checks your setup.
 
 Your project is mounted at `/work` in a disposable container. When the command
 exits, the container is gone.
@@ -39,7 +45,6 @@ exits, the container is gone.
 ```yaml
 name: test
 runtime: dockerimage
-resolver: codex
 
 steps:
   - cmd: npm test
@@ -72,8 +77,8 @@ Full index: [docs/README.md](docs/README.md).
 ```bash
 make dev-deps
 make dev-install
-make test        # fastest: Go tests only
-make test-quick  # Go + path guard + bash unit tests
+make test        # build + Go tests + DockPipe package/workflow tests
+make test-quick  # Go tests + package/workflow tests + path guard + bash unit tests
 make ci          # full Linux CI mirror
 ```
 
