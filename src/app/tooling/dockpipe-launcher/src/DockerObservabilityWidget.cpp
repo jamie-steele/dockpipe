@@ -183,6 +183,8 @@ void DockerObservabilityWidget::buildUi()
     m_status = new QLabel(tr("Docker observability opens cold. Right-click a container row to start or stop it."));
     m_status->setWordWrap(true);
     m_search = new QLineEdit(this);
+    m_search->setObjectName(QStringLiteral("surfaceSearch"));
+    m_search->setClearButtonEnabled(true);
     m_search->setPlaceholderText(tr("Search containers…"));
     connect(m_search, &QLineEdit::textChanged, this, &DockerObservabilityWidget::onContainerSearchChanged);
     auto *refreshButton = new QPushButton(tr("Refresh"));

@@ -34,6 +34,7 @@ maintainer docs below are reference material, not the shortest learning path.
 | Security policy | [security/security-policy.md](security/security-policy.md) |
 | Docker image artifacts | [runtime/image-artifacts.md](runtime/image-artifacts.md) |
 | Combined design notes / history | [security/docker-security-images.md](security/docker-security-images.md) |
+| Windows WSL containers and WSL3 research | [research/wsl-containers-and-wsl3-2026.md](research/wsl-containers-and-wsl3-2026.md) |
 
 ## Advanced / Maintainer
 

@@ -15,6 +15,7 @@
 #include <QResizeEvent>
 #include <QSizePolicy>
 #include <QStackedWidget>
+#include <QStyle>
 #include <QTabWidget>
 #include <QTimer>
 #include <QVBoxLayout>
@@ -110,9 +111,16 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
 
     // --- Home ---
     m_homePage = new QWidget;
+    m_homePage->setObjectName(QStringLiteral("basicHomePage"));
     auto *homeLay = new QVBoxLayout(m_homePage);
     homeLay->setSpacing(12);
     homeLay->setContentsMargins(12, 12, 12, 12);
+
+    auto *homeHero = new QFrame(m_homePage);
+    homeHero->setObjectName(QStringLiteral("basicHero"));
+    auto *homeHeroLay = new QVBoxLayout(homeHero);
+    homeHeroLay->setSpacing(10);
+    homeHeroLay->setContentsMargins(18, 18, 18, 18);
 
     auto *homeTitle = new QLabel(tr("DockPipe Launcher"));
     homeTitle->setObjectName(QStringLiteral("appTitle"));
@@ -120,6 +128,8 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
         tr("Open a project folder to see DockPipe workflows. Recent folders appear here — pick one or browse."));
     homeSub->setObjectName(QStringLiteral("appSubtitle"));
     homeSub->setWordWrap(true);
+    homeHeroLay->addWidget(homeTitle);
+    homeHeroLay->addWidget(homeSub);
 
     m_recentList = new QListWidget;
     m_recentList->setObjectName(QStringLiteral("basicRecentList"));
@@ -142,6 +152,17 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     m_homeEmptyHint->setObjectName(QStringLiteral("hintText"));
     m_homeEmptyHint->setWordWrap(true);
 
+    auto *recentPanel = new QFrame(m_homePage);
+    recentPanel->setObjectName(QStringLiteral("surfacePanel"));
+    auto *recentLay = new QVBoxLayout(recentPanel);
+    recentLay->setContentsMargins(16, 16, 16, 16);
+    recentLay->setSpacing(10);
+    auto *recentTitle = new QLabel(tr("Recent projects"));
+    recentTitle->setObjectName(QStringLiteral("sectionTitle"));
+    recentLay->addWidget(recentTitle);
+    recentLay->addWidget(m_homeEmptyHint);
+    recentLay->addWidget(m_recentList, 0);
+
     auto *homeBtns = new QHBoxLayout;
     homeBtns->setSpacing(8);
     m_openProjectHome = new QPushButton(tr("Open project…"));
@@ -155,15 +176,14 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     homeBtns->addWidget(m_continueLast);
     homeBtns->addStretch(1);
 
-    homeLay->addWidget(homeTitle);
-    homeLay->addWidget(homeSub);
-    homeLay->addWidget(m_homeEmptyHint);
-    homeLay->addWidget(m_recentList, 0);
+    homeLay->addWidget(homeHero);
+    homeLay->addWidget(recentPanel, 0);
     homeLay->addStretch(1);
     homeLay->addLayout(homeBtns);
 
     // --- Workspace ---
     m_workspacePage = new QWidget;
+    m_workspacePage->setObjectName(QStringLiteral("basicWorkspacePage"));
     auto *root = new QVBoxLayout(m_workspacePage);
     root->setSpacing(12);
     root->setContentsMargins(12, 12, 12, 12);
@@ -176,6 +196,12 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     navRow->addWidget(m_backHome);
     navRow->addStretch(1);
     root->addLayout(navRow);
+
+    auto *workspaceHero = new QFrame(m_workspacePage);
+    workspaceHero->setObjectName(QStringLiteral("basicHero"));
+    auto *workspaceHeroLay = new QVBoxLayout(workspaceHero);
+    workspaceHeroLay->setSpacing(12);
+    workspaceHeroLay->setContentsMargins(18, 18, 18, 18);
 
     auto *title = new QLabel(tr("Apps"));
     title->setObjectName(QStringLiteral("appTitle"));
@@ -210,9 +236,23 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     projRow->addWidget(m_refresh, 0, Qt::AlignRight);
     projRow->addWidget(m_browse, 0, Qt::AlignRight);
 
+    auto *projectPanel = new QFrame(workspaceHero);
+    projectPanel->setObjectName(QStringLiteral("projectSummary"));
+    auto *projectLay = new QVBoxLayout(projectPanel);
+    projectLay->setContentsMargins(14, 14, 14, 14);
+    projectLay->setSpacing(10);
+    projectLay->addLayout(projRow);
+
+    workspaceHeroLay->addWidget(title);
+    workspaceHeroLay->addWidget(sub);
+    workspaceHeroLay->addWidget(m_loadingBanner);
+    workspaceHeroLay->addWidget(projectPanel);
+
     m_workspaceTabs = new QTabWidget(m_workspacePage);
+    m_workspaceTabs->setObjectName(QStringLiteral("surfaceTabs"));
 
     m_appsPage = new QWidget(m_workspaceTabs);
+    m_appsPage->setObjectName(QStringLiteral("basicAppsPage"));
     auto *appsLay = new QVBoxLayout(m_appsPage);
     appsLay->setContentsMargins(0, 0, 0, 0);
 
@@ -220,9 +260,11 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
     m_list->setObjectName(QStringLiteral("basicAppList"));
     m_list->setMovement(QListWidget::Static);
     m_list->setResizeMode(QListWidget::Adjust);
-    m_list->setSpacing(8);
+    m_list->setSpacing(12);
     m_list->setWordWrap(true);
     m_list->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_list->setMouseTracking(true);
+    m_list->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     auto launchItem = [this](QListWidgetItem *it) {
         if (!it)
             return;
@@ -293,10 +335,7 @@ BasicModeWidget::BasicModeWidget(QWidget *parent) : QWidget(parent)
         updateLaunchOverlayGeometry();
     });
 
-    root->addWidget(title);
-    root->addWidget(sub);
-    root->addWidget(m_loadingBanner);
-    root->addLayout(projRow);
+    root->addWidget(workspaceHero);
     root->addWidget(m_workspaceTabs, 1);
 
     m_stack->addWidget(m_homePage);
@@ -315,6 +354,7 @@ void BasicModeWidget::showWorkspacePage()
 {
     m_stack->setCurrentWidget(m_workspacePage);
     setDockerTabActive(m_workspaceTabs && m_workspaceTabs->currentIndex() == 1);
+    updateResponsiveMetrics();
     updateLaunchOverlayGeometry();
 }
 
@@ -372,12 +412,16 @@ void BasicModeWidget::applyViewMode()
 {
     if (m_iconMode) {
         m_list->setViewMode(QListWidget::IconMode);
-        m_list->setIconSize(QSize(56, 56));
-        m_list->setGridSize(QSize(128, 148));
+        m_list->setFlow(QListView::LeftToRight);
+        m_list->setWrapping(true);
+        m_list->setUniformItemSizes(false);
     } else {
         m_list->setViewMode(QListWidget::ListMode);
-        m_list->setIconSize(QSize(28, 28));
+        m_list->setFlow(QListView::TopToBottom);
+        m_list->setWrapping(false);
+        m_list->setUniformItemSizes(true);
     }
+    updateResponsiveMetrics();
 }
 
 void BasicModeWidget::setViewIconMode(bool icons)
@@ -400,6 +444,7 @@ void BasicModeWidget::setApps(const QVector<WorkflowMeta> &apps)
         it->setToolTip(workflowTooltip(m));
         m_list->addItem(it);
     }
+    updateResponsiveMetrics();
     rebuildItemTexts();
 }
 
@@ -437,6 +482,22 @@ void BasicModeWidget::rebuildItemTexts()
             const QString stateLine = launching ? tr("\n(Launching)") : (run ? tr("\n(Running)") : QString());
             it->setText(m.displayName + QStringLiteral("\n") + sub + stateLine);
         }
+    }
+}
+
+void BasicModeWidget::updateResponsiveMetrics()
+{
+    if (!m_list)
+        return;
+    if (m_iconMode) {
+        const int availableWidth = qMax(320, m_list->viewport()->width());
+        const int columns = qMax(1, (availableWidth + 16) / 220);
+        const int cellWidth = qBound(168, (availableWidth - ((columns + 1) * 12)) / columns, 260);
+        const int iconSize = qBound(44, cellWidth / 3, 68);
+        m_list->setIconSize(QSize(iconSize, iconSize));
+        m_list->setGridSize(QSize(cellWidth, 168));
+    } else {
+        m_list->setIconSize(QSize(30, 30));
     }
 }
 
@@ -535,5 +596,6 @@ void BasicModeWidget::updateLaunchOverlayGeometry()
 void BasicModeWidget::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
+    updateResponsiveMetrics();
     updateLaunchOverlayGeometry();
 }

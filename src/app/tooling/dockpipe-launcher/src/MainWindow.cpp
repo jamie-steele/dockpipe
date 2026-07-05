@@ -272,6 +272,7 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     setupMenuBar();
 
     auto *central = new QWidget(this);
+    central->setObjectName(QStringLiteral("mainCentral"));
     auto *outer = new QVBoxLayout(central);
     outer->setContentsMargins(0, 0, 0, 0);
     outer->setSpacing(0);
@@ -483,6 +484,7 @@ void MainWindow::setupAdvancedPage(QWidget *page)
     contextsRoot->addWidget(m_hint);
 
     m_search = new QLineEdit(page);
+    m_search->setObjectName(QStringLiteral("surfaceSearch"));
     m_search->setClearButtonEnabled(true);
     m_search->setPlaceholderText(tr("Search workflows by label, folder, workflow, resolver…"));
     connect(m_search, &QLineEdit::textChanged, this, &MainWindow::onAdvancedSearchChanged);
@@ -506,7 +508,7 @@ void MainWindow::setupAdvancedPage(QWidget *page)
             m_basicLaunchingContextId.clear();
             m_basicLaunchingWorkflowId.clear();
             m_basicLaunchingTimer->stop();
-            rebuildUi();
+            refreshSessionUi();
         }
     });
 
@@ -799,6 +801,13 @@ void MainWindow::updateBasicPage()
     }
 }
 
+void MainWindow::refreshSessionUi()
+{
+    applyAdvancedContextFilter();
+    updateBasicPage();
+    refreshInlineConsole();
+}
+
 void MainWindow::onBasicLaunch(const QString &workflowId)
 {
     if (m_settings.projectFolder.isEmpty()) {
@@ -843,7 +852,7 @@ void MainWindow::onBasicLaunch(const QString &workflowId)
         }
         m_basicLaunchingContextId = c->id;
         if (m_sessions.launch(*c, ContextStore::logsDir()))
-            rebuildUi();
+            refreshSessionUi();
         else if (!m_sessions.isRunning(c->id)) {
             m_basicLaunchingContextId.clear();
             m_basicLaunchingWorkflowId.clear();
@@ -861,8 +870,7 @@ void MainWindow::onBasicConfigure(const QString &workflowId)
     Context *c = ensureBasicWorkflowContext(workflowId);
     if (!c)
         return;
-    if (configureContextForWorkflow(*c, meta, true))
-        rebuildUi();
+    configureContextForWorkflow(*c, meta, true);
 }
 
 Context *MainWindow::ensureBasicWorkflowContext(const QString &workflowId)
@@ -908,8 +916,13 @@ WorkflowMeta MainWindow::findWorkflowMeta(const QString &workdir, const QString 
 
 bool MainWindow::configureContextForWorkflow(Context &ctx, const WorkflowMeta &meta, bool forceDialog)
 {
-    if (meta.workflowId.trimmed().isEmpty() || meta.inputs.isEmpty())
+    if (meta.workflowId.trimmed().isEmpty())
+        return false;
+    if (meta.inputs.isEmpty()) {
+        if (forceDialog)
+            return openWorkflowConfig(meta);
         return true;
+    }
     const QMap<QString, QString> currentValues = parseEnvAssignments(ctx.extraDockpipeEnv);
     const QMap<QString, QString> prunedValues = pruneStaleWorkflowValues(meta, currentValues);
     if (prunedValues != currentValues) {
@@ -931,6 +944,27 @@ bool MainWindow::configureContextForWorkflow(Context &ctx, const WorkflowMeta &m
     }
     ctx.extraDockpipeEnv = formatEnvAssignments(merged);
     m_store.save();
+    return true;
+}
+
+bool MainWindow::openWorkflowConfig(const WorkflowMeta &meta)
+{
+    const QString configPath = QDir::cleanPath(meta.configPath);
+    if (configPath.isEmpty()) {
+        QMessageBox::information(this, tr("DockPipe Launcher"),
+                                 tr("This workflow does not expose launcher-managed settings."));
+        return false;
+    }
+    if (!QFileInfo::exists(configPath)) {
+        QMessageBox::warning(this, tr("DockPipe Launcher"),
+                             tr("The workflow file could not be found:\n%1").arg(QDir::toNativeSeparators(configPath)));
+        return false;
+    }
+    if (!QDesktopServices::openUrl(QUrl::fromLocalFile(configPath))) {
+        QMessageBox::warning(this, tr("DockPipe Launcher"),
+                             tr("Could not open the workflow file:\n%1").arg(QDir::toNativeSeparators(configPath)));
+        return false;
+    }
     return true;
 }
 
@@ -1078,7 +1112,7 @@ void MainWindow::onSessionChanged()
             m_basicLaunchingWorkflowId.clear();
         }
     }
-    rebuildUi();
+    refreshSessionUi();
 }
 
 void MainWindow::startAdvancedContextDiscovery()
@@ -1304,7 +1338,7 @@ void MainWindow::onLaunch()
     if (!configureContextForWorkflow(*c, meta, false))
         return;
     if (m_sessions.launch(*c, ContextStore::logsDir()))
-        rebuildUi();
+        refreshSessionUi();
     else if (!m_sessions.isRunning(c->id))
         QMessageBox::warning(this, tr("DockPipe Launcher"), tr("Could not start dockpipe (see stderr)."));
 }
@@ -1326,7 +1360,7 @@ void MainWindow::onStop()
     if (!c)
         return;
     m_sessions.stop(c->id);
-    rebuildUi();
+    refreshSessionUi();
 }
 
 void MainWindow::onStopAllForRepo()
@@ -1342,7 +1376,7 @@ void MainWindow::onStopAllForRepo()
     if (root.isEmpty()) {
         if (Context *c = currentContext())
             m_sessions.stop(c->id);
-        rebuildUi();
+        refreshSessionUi();
         return;
     }
     for (const Context &x : m_store.contexts) {
@@ -1350,7 +1384,7 @@ void MainWindow::onStopAllForRepo()
         if (xr == root && m_sessions.isRunning(x.id))
             m_sessions.stop(x.id);
     }
-    rebuildUi();
+    refreshSessionUi();
 }
 
 void MainWindow::onOpenLogs()
@@ -1406,8 +1440,7 @@ void MainWindow::applyContextMenu(QListWidgetItem *, const QPoint &globalPos)
             return;
         Context *c = ensureStoredContextForDisplay(*display);
         const WorkflowMeta meta = findWorkflowMeta(c->workdir, c->workflow, c->workflowFile);
-        if (configureContextForWorkflow(*c, meta, true))
-            rebuildUi();
+        configureContextForWorkflow(*c, meta, true);
     });
     menu.addAction(tr("Relaunch"), this, &MainWindow::onRelaunch);
     menu.addAction(tr("Stop"), this, &MainWindow::onStop);

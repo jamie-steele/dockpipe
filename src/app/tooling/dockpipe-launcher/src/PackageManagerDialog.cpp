@@ -450,6 +450,8 @@ void PackageManagerDialog::buildUi()
 
     auto *topRow = new QHBoxLayout;
     m_search = new QLineEdit(this);
+    m_search->setObjectName(QStringLiteral("surfaceSearch"));
+    m_search->setClearButtonEnabled(true);
     m_search->setPlaceholderText(tr("Search packages…"));
     connect(m_search, &QLineEdit::textChanged, this, &PackageManagerDialog::onSearchChanged);
     topRow->addWidget(m_search, 1);

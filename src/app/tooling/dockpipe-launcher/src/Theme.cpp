@@ -4,6 +4,8 @@
 #include <QColor>
 #include <QDir>
 #include <QFile>
+#include <QFont>
+#include <QFontDatabase>
 #include <QGuiApplication>
 #include <QIODevice>
 #include <QPalette>
@@ -173,12 +175,37 @@ bool isDarkUi()
     return bg.lightnessF() < 0.45;
 }
 
+void applyLauncherFont(QApplication &app)
+{
+    const QStringList preferredFamilies{
+        QStringLiteral("Aptos"),
+        QStringLiteral("Segoe UI Variable Text"),
+        QStringLiteral("SF Pro Text"),
+        QStringLiteral("Noto Sans"),
+        QStringLiteral("Segoe UI"),
+        QStringLiteral("Ubuntu"),
+    };
+
+    const QStringList families = QFontDatabase::families();
+    QFont font = app.font();
+    for (const QString &family : preferredFamilies) {
+        if (!families.contains(family))
+            continue;
+        font.setFamily(family);
+        break;
+    }
+    font.setPointSizeF(qMax(10.0, font.pointSizeF()));
+    app.setFont(font);
+}
+
 } // namespace
 
 void applyDockpipeLauncherTheme(QApplication &app)
 {
     QStyle *st = app.style();
     const bool dark = isDarkUi();
+
+    applyLauncherFont(app);
 
     if (dark)
         app.setPalette(fusionDarkPalette());

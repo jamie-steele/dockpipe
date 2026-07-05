@@ -51,6 +51,7 @@ private:
     void applyViewMode();
     void rebuildItemTexts();
     void rebuildRecentList();
+    void updateResponsiveMetrics();
     void setDockerTabActive(bool active);
     void updateLoadingBanner();
     void updateLaunchOverlayGeometry();

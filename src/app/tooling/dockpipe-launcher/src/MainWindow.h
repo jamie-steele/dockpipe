@@ -85,11 +85,13 @@ private:
     void rebuildAdvancedContextList();
     void applyAdvancedContextFilter();
     void updateBasicPage();
+    void refreshSessionUi();
     bool hasContext(const Context &c) const;
     Context *findContext(const QString &workdir, const QString &workflow, const QString &workflowFile);
     Context *ensureBasicWorkflowContext(const QString &workflowId);
     WorkflowMeta findWorkflowMeta(const QString &workdir, const QString &workflowId, const QString &workflowFile) const;
     bool configureContextForWorkflow(Context &ctx, const WorkflowMeta &meta, bool forceDialog = false);
+    bool openWorkflowConfig(const WorkflowMeta &meta);
     Context *findStoredContextForDisplay(const Context &display);
     Context *ensureStoredContextForDisplay(const Context &display);
     Context *currentAdvancedDisplayContext();

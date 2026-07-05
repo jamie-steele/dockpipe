@@ -1,28 +1,68 @@
-/* Pipeon — shared layout (colors come from pipeon-light.qss / pipeon-dark.qss) */
+/* DockPipe Launcher shared layout. Color accents live in pipeon-light.qss / pipeon-dark.qss. */
 
-QWidget#mainCentral {
-    background-color: palette(base);
-}
-
+QWidget#mainCentral,
+QWidget#basicHomePage,
+QWidget#basicWorkspacePage,
+QWidget#basicAppsPage,
 QDialog {
     background-color: palette(base);
 }
 
+QToolTip {
+    border-radius: 10px;
+    padding: 8px 10px;
+}
+
+QMenuBar {
+    padding: 6px 10px 4px 10px;
+}
+
+QMenuBar::item {
+    padding: 6px 10px;
+    border-radius: 8px;
+    margin-right: 2px;
+}
+
+QMenu {
+    border-radius: 14px;
+    padding: 8px;
+}
+
+QMenu::item {
+    padding: 8px 16px 8px 12px;
+    border-radius: 9px;
+    margin: 2px 0;
+}
+
+QMenu::separator {
+    height: 1px;
+    margin: 8px 4px;
+}
+
+QStatusBar {
+    background: transparent;
+}
+
 QLabel#appTitle {
-    font-size: 20px;
+    font-size: 22px;
     font-weight: 700;
     color: palette(window-text);
 }
 
-/* Secondary / muted label colors: see theme companion QSS */
+QLabel#sectionTitle {
+    font-size: 14px;
+    font-weight: 700;
+    color: palette(window-text);
+}
 
 QLabel#appSubtitle {
-    font-size: 12px;
-    line-height: 1.45;
+    font-size: 13px;
+    line-height: 1.5;
 }
 
 QLabel#hintText {
     font-size: 12px;
+    line-height: 1.45;
 }
 
 QLabel#disclaimerWatermark {
@@ -33,50 +73,49 @@ QLabel#disclaimerWatermark {
 
 QPushButton#disclaimerDismiss {
     font-size: 11px;
-    padding: 2px 10px;
-    min-height: 22px;
+    padding: 4px 10px;
+    min-height: 24px;
 }
 
-QFrame#headerBar {
-    background-color: palette(alternate-base);
+QFrame#basicHero,
+QFrame#headerBar,
+QFrame#dockerHero {
     border: none;
-    border-radius: 14px;
-    padding: 8px;
+    border-radius: 18px;
+    padding: 6px;
+}
+
+QFrame#surfacePanel,
+QFrame#projectSummary,
+QFrame#listPanel,
+QFrame#inlineConsolePanel,
+QFrame#emptyState,
+QFrame#launchOverlayCard,
+QFrame#promptDialogCard,
+QFrame#promptActionPanel {
+    border-radius: 18px;
 }
 
 QWidget#launchOverlay {
-    border-radius: 18px;
-}
-
-QFrame#launchOverlayCard {
-    background-color: palette(alternate-base);
-    border: 1px solid palette(midlight);
-    border-radius: 18px;
-}
-
-QFrame#promptDialogCard,
-QFrame#promptActionPanel {
-    background-color: palette(alternate-base);
-    border: 1px solid palette(midlight);
-    border-radius: 18px;
+    border-radius: 22px;
 }
 
 QLabel#promptEyebrow {
     font-size: 11px;
     font-weight: 700;
-    letter-spacing: 0.6px;
+    letter-spacing: 0.8px;
     text-transform: uppercase;
 }
 
 QLabel#promptTitle {
-    font-size: 22px;
+    font-size: 24px;
     font-weight: 700;
     color: palette(window-text);
 }
 
 QLabel#promptBody {
     font-size: 13px;
-    line-height: 1.5;
+    line-height: 1.55;
     color: palette(window-text);
 }
 
@@ -85,14 +124,14 @@ QLabel#promptHint {
 }
 
 QLineEdit#promptInput {
-    min-height: 38px;
-    border-radius: 12px;
-    padding: 8px 10px;
+    min-height: 40px;
+    border-radius: 13px;
+    padding: 8px 12px;
     font-size: 13px;
 }
 
 QLabel#launchOverlayGlyph {
-    font-size: 28px;
+    font-size: 30px;
     font-weight: 700;
     letter-spacing: 2px;
     color: palette(highlight);
@@ -100,7 +139,7 @@ QLabel#launchOverlayGlyph {
 }
 
 QLabel#launchOverlayTitle {
-    font-size: 20px;
+    font-size: 21px;
     font-weight: 700;
     color: palette(window-text);
 }
@@ -113,82 +152,66 @@ QLabel#launchOverlayBody {
     qproperty-wordWrap: true;
 }
 
-QFrame#listPanel {
-    background-color: palette(base);
-    border: none;
-    border-radius: 14px;
-}
-
-QFrame#inlineConsolePanel {
-    background-color: palette(base);
-    border: none;
-    border-radius: 14px;
-}
-
 QSplitter::handle {
     background: transparent;
 }
 
 QSplitter::handle:vertical {
-    height: 10px;
+    height: 12px;
 }
 
-QSplitter::handle:vertical:hover {
-    background: palette(midlight);
-    border-radius: 4px;
+QSplitter::handle:horizontal {
+    width: 12px;
+}
+
+QSplitter::handle:hover {
+    border-radius: 6px;
+}
+
+QListWidget,
+QTableWidget {
+    outline: none;
 }
 
 QListWidget {
-    outline: none;
     border: none;
     background: transparent;
-    padding: 4px;
+    padding: 6px;
 }
 
 QListWidget::item {
     border: none;
-    border-radius: 12px;
-    margin: 2px 4px;
+    border-radius: 16px;
+    margin: 4px 4px;
     padding: 0px;
     background: transparent;
 }
 
-QListWidget::item:hover {
-    background-color: palette(alternate-base);
+QListWidget#basicAppList::item {
+    min-height: 76px;
 }
 
 QListWidget::item:selected {
     background-color: palette(highlight);
 }
 
-QListWidget::item:selected:hover {
-    background-color: palette(highlight);
-}
-
-/* Home “recent projects” — compact rows; avoid stretching one item to fill the viewport */
 QListWidget#basicRecentList {
     padding: 2px;
 }
 
 QListWidget#basicRecentList::item {
     margin: 0 2px;
-    padding: 6px 10px;
-    min-height: 24px;
+    padding: 10px 12px;
+    min-height: 28px;
 }
 
 QWidget#contextRow {
     background-color: transparent;
-    border-radius: 12px;
+    border-radius: 14px;
 }
 
 QLabel#contextTitle {
     font-size: 13px;
-    font-weight: 600;
-    color: palette(window-text);
-}
-
-QLabel#consoleTitle {
-    font-size: 14px;
     font-weight: 700;
     color: palette(window-text);
 }
@@ -197,97 +220,107 @@ QLabel#contextPath {
     font-size: 11px;
 }
 
-QLabel#contextMeta {
-    font-size: 11px;
-    font-style: italic;
-}
-
+QLabel#contextMeta,
 QLabel#consoleMeta {
     font-size: 11px;
 }
 
+QLabel#consoleTitle {
+    font-size: 14px;
+    font-weight: 700;
+    color: palette(window-text);
+}
+
 QLabel#statusBadge {
-    min-width: 72px;
-    padding: 4px 10px;
+    min-width: 80px;
+    padding: 5px 11px;
     border-radius: 999px;
     font-size: 11px;
     font-weight: 700;
 }
 
-/* Badge fill/text: theme companion QSS */
-
 QGroupBox {
     font-weight: 600;
     border: none;
-    border-radius: 8px;
+    border-radius: 14px;
     margin-top: 10px;
-    padding: 12px 12px 10px 12px;
+    padding: 14px 14px 12px 14px;
     background-color: palette(alternate-base);
 }
 
 QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    left: 8px;
+    left: 10px;
     padding: 0 6px;
     color: palette(window-text);
 }
 
-QPushButton#primaryButton {
-    padding: 9px 16px;
-    min-height: 24px;
+QPushButton#primaryButton,
+QPushButton#secondaryButton,
+QPushButton#dangerButton {
+    min-height: 26px;
+    border-radius: 12px;
     font-weight: 600;
-    border-radius: 10px;
+}
+
+QPushButton#primaryButton {
+    padding: 10px 18px;
     border: 1px solid palette(highlight);
     background-color: palette(highlight);
     color: palette(highlighted-text);
 }
 
-QPushButton#primaryButton:hover {
-    background-color: palette(highlight);
-    border-color: palette(highlight);
-}
-
 QPushButton#primaryButton:pressed {
-    padding-top: 9px;
-    padding-bottom: 7px;
+    padding-top: 11px;
+    padding-bottom: 9px;
 }
 
-QPushButton#secondaryButton {
-    padding: 9px 14px;
-    min-height: 24px;
-    border-radius: 10px;
-    border: 1px solid palette(midlight);
-    background-color: palette(button);
-}
-
+QPushButton#secondaryButton,
 QPushButton#dangerButton {
-    padding: 9px 14px;
-    min-height: 24px;
-    border-radius: 10px;
+    padding: 10px 14px;
 }
 
-QLineEdit, QComboBox, QTextBrowser, QPlainTextEdit {
-    padding: 7px 10px;
-    border-radius: 10px;
+QLineEdit,
+QComboBox,
+QTextBrowser,
+QPlainTextEdit,
+QTableWidget,
+QAbstractScrollArea {
+    border-radius: 12px;
+}
+
+QLineEdit,
+QComboBox,
+QTextBrowser,
+QPlainTextEdit {
+    padding: 8px 11px;
     border: 1px solid palette(midlight);
     background-color: palette(base);
     color: palette(text);
     min-height: 18px;
 }
 
-QLineEdit:focus, QComboBox:focus, QTextBrowser:focus, QPlainTextEdit:focus {
+QLineEdit#surfaceSearch {
+    min-height: 38px;
+    padding: 8px 12px;
+}
+
+QLineEdit:focus,
+QComboBox:focus,
+QTextBrowser:focus,
+QPlainTextEdit:focus {
     border: 1px solid palette(highlight);
 }
 
 QComboBox::drop-down {
     border: none;
-    width: 22px;
+    width: 24px;
 }
 
 QPlainTextEdit#inlineConsole {
-    border-radius: 8px;
-    padding: 10px 12px;
+    border-radius: 14px;
+    padding: 12px 14px;
     border: 1px solid palette(midlight);
     selection-background-color: palette(highlight);
     font-size: 12px;
@@ -295,52 +328,72 @@ QPlainTextEdit#inlineConsole {
 
 QPlainTextEdit#detailConsole,
 QTextBrowser#detailBrowser {
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 12px 14px;
     selection-background-color: palette(highlight);
 }
 
 QFrame#emptyState {
-    background-color: palette(alternate-base);
-    border-radius: 14px;
     border: none;
 }
 
 QLabel#emptyTitle {
-    font-size: 15px;
-    font-weight: 600;
+    font-size: 16px;
+    font-weight: 700;
 }
 
 QLabel#emptyBody {
     font-size: 12px;
+    line-height: 1.45;
 }
 
 QTabWidget#surfaceTabs::pane,
 QTabWidget::pane {
     border: 1px solid palette(midlight);
-    border-radius: 14px;
+    border-radius: 18px;
     top: -1px;
     background: palette(base);
 }
 
 QTabBar::tab {
-    padding: 8px 14px;
+    padding: 9px 15px;
     margin-right: 6px;
-    border-radius: 10px;
+    border-radius: 11px;
     background: palette(alternate-base);
     color: palette(window-text);
+    font-weight: 600;
 }
 
-QTabBar::tab:selected {
-    background: palette(highlight);
-    color: palette(highlighted-text);
-}
-
-QTabBar::tab:hover:!selected {
-    background: palette(button);
+QHeaderView::section {
+    font-weight: 600;
 }
 
 QTableWidget {
-    border-radius: 12px;
     selection-background-color: palette(highlight);
+    border: 1px solid palette(midlight);
+}
+
+QScrollBar:vertical {
+    width: 12px;
+    margin: 6px 4px 6px 0;
+}
+
+QScrollBar:horizontal {
+    height: 12px;
+    margin: 0 6px 4px 6px;
+}
+
+QScrollBar::handle:vertical,
+QScrollBar::handle:horizontal {
+    min-height: 28px;
+    min-width: 28px;
+    border-radius: 999px;
+}
+
+QScrollBar::add-line,
+QScrollBar::sub-line,
+QScrollBar::add-page,
+QScrollBar::sub-page {
+    border: none;
+    background: transparent;
 }

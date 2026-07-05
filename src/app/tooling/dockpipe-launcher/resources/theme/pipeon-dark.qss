@@ -77,8 +77,41 @@ QLabel#disclaimerWatermark {
     color: #8a8a8a;
 }
 
+QToolTip,
+QMenu {
+    background-color: #1c2128;
+    color: #e7ebf2;
+    border: 1px solid #343841;
+}
+
+QMenuBar {
+    background-color: #171b21;
+    color: #e7ebf2;
+    border-bottom: 1px solid #2c3139;
+}
+
+QMenuBar::item:selected,
+QMenu::item:selected {
+    background-color: rgba(31, 125, 217, 0.22);
+}
+
+QMenu::separator {
+    background: #343841;
+}
+
 QStatusBar {
     border-top: 1px solid #3a3a3a;
+}
+
+QFrame#basicHero,
+QFrame#projectSummary {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #20252d, stop:1 #171b21);
+    border: 1px solid #343841;
+}
+
+QFrame#surfacePanel {
+    background-color: #1b1f26;
+    border: 1px solid #343841;
 }
 
 QFrame#inlineConsolePanel {
@@ -111,6 +144,15 @@ QFrame#promptActionPanel {
     border: 1px solid #343841;
 }
 
+QListWidget::item:hover {
+    background-color: rgba(31, 125, 217, 0.12);
+}
+
+QListWidget::item:selected,
+QListWidget::item:selected:hover {
+    background-color: rgba(31, 125, 217, 0.22);
+}
+
 QPlainTextEdit#inlineConsole {
     background-color: #111317;
     color: #d7dde7;
@@ -129,6 +171,11 @@ QComboBox {
 QLineEdit#promptInput {
     background-color: #171a1f;
     color: #d7dde7;
+    border: 1px solid #343841;
+}
+
+QLineEdit#surfaceSearch {
+    background-color: #171b21;
     border: 1px solid #343841;
 }
 
@@ -252,4 +299,14 @@ QTabBar::tab:selected {
 
 QTabBar::tab:hover:!selected {
     background-color: #323741;
+}
+
+QScrollBar::handle:vertical,
+QScrollBar::handle:horizontal {
+    background-color: #414753;
+}
+
+QScrollBar::handle:vertical:hover,
+QScrollBar::handle:horizontal:hover {
+    background-color: #596274;
 }

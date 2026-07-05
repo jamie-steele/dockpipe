@@ -307,15 +307,15 @@ DOCKPIPE_BIN="$(resolve_repo_tool_bin "${DOCKPIPE_BIN:-}" dockpipe \
   "$WORKDIR/src/bin/dockpipe" \
   "$PROJECT_DIR/src/bin/dockpipe")"
 DORKPIPE_BIN="$(resolve_repo_tool_bin "${DORKPIPE_BIN:-}" dorkpipe \
-  "$WORKDIR/packages/dorkpipe/bin/dorkpipe" \
-  "$PROJECT_DIR/packages/dorkpipe/bin/dorkpipe" \
   "$WORKDIR/bin/.dockpipe/tooling/bin/dorkpipe" \
-  "$PROJECT_DIR/bin/.dockpipe/tooling/bin/dorkpipe")"
+  "$PROJECT_DIR/bin/.dockpipe/tooling/bin/dorkpipe" \
+  "$WORKDIR/packages/dorkpipe/bin/dorkpipe" \
+  "$PROJECT_DIR/packages/dorkpipe/bin/dorkpipe")"
 MCPD_BIN="$(resolve_repo_tool_bin "${MCPD_BIN:-}" mcpd \
-  "$WORKDIR/packages/dorkpipe/bin/mcpd" \
-  "$PROJECT_DIR/packages/dorkpipe/bin/mcpd" \
   "$WORKDIR/bin/.dockpipe/tooling/bin/mcpd" \
-  "$PROJECT_DIR/bin/.dockpipe/tooling/bin/mcpd")"
+  "$PROJECT_DIR/bin/.dockpipe/tooling/bin/mcpd" \
+  "$WORKDIR/packages/dorkpipe/bin/mcpd" \
+  "$PROJECT_DIR/packages/dorkpipe/bin/mcpd")"
 PIPEON_BIN="$(resolve_pipeon_bin "${PIPEON_BIN:-}")"
 
 ensure_pipeon_stack_state_dir
