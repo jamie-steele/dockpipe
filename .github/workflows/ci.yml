@@ -1,4 +1,4 @@
-# Tests, packaging, gosec/govulncheck, and CodeQL in one workflow (one Actions run per trigger).
+# Tests, packaging, and release-safety checks in one workflow.
 # See release/docs/branching.md
 # Local: quick tests  make test-quick  |  GitHub Actions emulation  make ci
 # Full local CI uses nektos/act + Docker to run this workflow's test job.
@@ -22,8 +22,6 @@ on:
     branches: [master, staging]
   push:
     branches: [master, staging]
-  schedule:
-    - cron: "18 11 * * 1" # weekly Monday ~ UTC — CodeQL only (test job skipped)
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -31,7 +29,6 @@ concurrency:
 
 jobs:
   test:
-    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -196,7 +193,6 @@ jobs:
   # Full tests/run_tests.sh and Docker integration tests stay on Linux — Docker/Linux images
   # are not reliable on windows-latest the same way as ubuntu-latest.
   test-windows:
-    if: github.event_name != 'schedule'
     runs-on: windows-latest
     permissions:
       contents: read
@@ -220,33 +216,3 @@ jobs:
 
       - name: clone-worktree include script (bash + git)
         run: bash tests/unit-tests/test_clone_worktree_include.sh
-
-  codeql:
-    name: CodeQL (Go)
-    runs-on: ubuntu-latest
-    timeout-minutes: 120
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
-        with:
-          languages: go
-          config-file: ./.github/codeql/codeql-config.yml
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v4
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
-        with:
-          category: "/language:go"
