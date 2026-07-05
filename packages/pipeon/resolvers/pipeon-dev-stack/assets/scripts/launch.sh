@@ -77,6 +77,7 @@ MODEL_NAME="${PIPEON_OLLAMA_MODEL:-${DOCKPIPE_OLLAMA_MODEL:-llama3.2}}"
 PIPEON_DESKTOP_BIN="${PIPEON_DESKTOP_BIN:-$(pipeon_stack_desktop_bin)}"
 PIPEON_DESKTOP_SCRIPT="$SCRIPT_DIR/desktop.sh"
 CODE_SERVER_IMAGE="${CODE_SERVER_IMAGE:-dockpipe-code-server:latest}"
+COMPOSE_ASSETS_DIR="$(cd "$SCRIPT_DIR/../compose" && pwd)"
 
 is_windows_host() {
   pipeon_stack_is_windows_host
@@ -140,6 +141,36 @@ resolve_pipeon_bin() {
   done
 
   resolve_tool_bin "" pipeon
+}
+
+ensure_executable_binary() {
+  local path="$1"
+  if [[ ! -e "$path" ]]; then
+    return 1
+  fi
+  if [[ -x "$path" ]]; then
+    return 0
+  fi
+  chmod +x "$path" 2>/dev/null || true
+  [[ -x "$path" ]]
+}
+
+prepare_pipeon_stack_context() {
+  local context_root
+  context_root="$(pipeon_stack_context_dir)"
+  rm -rf "$context_root"
+  mkdir -p "$context_root/compose" "$context_root/tooling/bin/linux"
+  cp "$COMPOSE_ASSETS_DIR/Dockerfile.dorkpipe-stack" "$context_root/compose/Dockerfile.dorkpipe-stack"
+  if [[ -f "$COMPOSE_ASSETS_DIR/Dockerfile.dorkpipe-stack.dockerignore" ]]; then
+    cp "$COMPOSE_ASSETS_DIR/Dockerfile.dorkpipe-stack.dockerignore" "$context_root/compose/Dockerfile.dorkpipe-stack.dockerignore"
+  fi
+  cp "$DOCKPIPE_BIN" "$context_root/tooling/bin/linux/dockpipe"
+  cp "$DORKPIPE_BIN" "$context_root/tooling/bin/linux/dorkpipe"
+  cp "$MCPD_BIN" "$context_root/tooling/bin/linux/mcpd"
+  chmod +x \
+    "$context_root/tooling/bin/linux/dockpipe" \
+    "$context_root/tooling/bin/linux/dorkpipe" \
+    "$context_root/tooling/bin/linux/mcpd"
 }
 
 compose_cmd() {
@@ -288,6 +319,7 @@ MCPD_BIN="$(resolve_repo_tool_bin "${MCPD_BIN:-}" mcpd \
 PIPEON_BIN="$(resolve_pipeon_bin "${PIPEON_BIN:-}")"
 
 ensure_pipeon_stack_state_dir
+prepare_pipeon_stack_context
 ensure_pipeon_stack_api_key
 ensure_pipeon_stack_mcp_tls_material
 write_pipeon_stack_runtime_env
@@ -338,7 +370,7 @@ if ! ensure_pipeon_code_server_surface; then
   exit 1
 fi
 
-if [[ ! -x "$DOCKPIPE_BIN" || ! -x "$DORKPIPE_BIN" || ! -x "$MCPD_BIN" ]]; then
+if ! ensure_executable_binary "$DOCKPIPE_BIN" || ! ensure_executable_binary "$DORKPIPE_BIN" || ! ensure_executable_binary "$MCPD_BIN"; then
   echo "pipeon-dev-stack: required binaries are missing after build step" >&2
   echo "  dockpipe: ${DOCKPIPE_BIN:-<unset>}" >&2
   echo "  dorkpipe: ${DORKPIPE_BIN:-<unset>} (set DORKPIPE_BIN or add dorkpipe to PATH)" >&2

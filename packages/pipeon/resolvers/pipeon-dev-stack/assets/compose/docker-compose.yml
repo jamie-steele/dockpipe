@@ -21,8 +21,8 @@ services:
   dorkpipe-stack:
     image: dockpipe-dorkpipe-stack:latest
     build:
-      context: .
-      dockerfile: packages/pipeon/resolvers/pipeon-dev-stack/assets/compose/Dockerfile.dorkpipe-stack
+      context: "${PIPEON_DEV_STACK_CONTEXT_DIR:?PIPEON_DEV_STACK_CONTEXT_DIR is required}"
+      dockerfile: compose/Dockerfile.dorkpipe-stack
     depends_on:
       postgres:
         condition: service_healthy

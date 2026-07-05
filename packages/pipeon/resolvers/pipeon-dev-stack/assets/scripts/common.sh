@@ -73,6 +73,10 @@ pipeon_stack_state_dir() {
   dockpipe scope --package pipeon-dev-stack .
 }
 
+pipeon_stack_context_dir() {
+  printf '%s/stack-context\n' "$(pipeon_stack_state_dir)"
+}
+
 pipeon_stack_compose_file() {
   local script_dir
   script_dir="$(dockpipe get script_dir)"
@@ -862,9 +866,10 @@ pipeon_stack_compose_base_args() {
 }
 
 write_pipeon_stack_runtime_env() {
-  local workdir repo_root api_key_file tls_cert_file tls_key_file
+  local workdir repo_root context_dir api_key_file tls_cert_file tls_key_file
   workdir="$(pipeon_stack_workdir)"
   repo_root="$(pipeon_stack_repo_root)"
+  context_dir="$(pipeon_stack_context_dir)"
   api_key_file="$(pipeon_stack_api_key_file)"
   tls_cert_file="$(pipeon_stack_mcp_tls_cert_file)"
   tls_key_file="$(pipeon_stack_mcp_tls_key_file)"
@@ -873,6 +878,7 @@ WORKDIR=$workdir
 REPO_ROOT=$repo_root
 PIPEON_DEV_STACK_WORKDIR=$workdir
 PIPEON_DEV_STACK_REPO_ROOT=$repo_root
+PIPEON_DEV_STACK_CONTEXT_DIR=$context_dir
 PIPEON_DEV_STACK_MCP_PORT=$(pipeon_stack_mcp_port)
 PIPEON_DEV_STACK_MCP_API_KEY_FILE=$api_key_file
 PIPEON_DEV_STACK_MCP_TLS_CERT_FILE=$tls_cert_file
