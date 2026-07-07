@@ -55,6 +55,16 @@ pipeon_stack_powershell_bin() {
   return 1
 }
 
+pipeon_stack_powershell_hidden() {
+  local powershell_bin="$1"
+  shift
+  if pipeon_stack_is_windows_host; then
+    "$powershell_bin" -NoProfile -WindowStyle Hidden "$@"
+    return $?
+  fi
+  "$powershell_bin" -NoProfile "$@"
+}
+
 pipeon_stack_slug() {
   local workdir base
   workdir="$(pipeon_stack_workdir)"
@@ -124,7 +134,7 @@ PY
   local powershell_bin
   powershell_bin="$(pipeon_stack_powershell_bin 2>/dev/null || true)"
   if [[ -n "$powershell_bin" ]]; then
-    "$powershell_bin" -NoProfile -Command '$listener=[System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback,0); $listener.Start(); try { $listener.LocalEndpoint.Port } finally { $listener.Stop() }'
+    pipeon_stack_powershell_hidden "$powershell_bin" -Command '$listener=[System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback,0); $listener.Start(); try { $listener.LocalEndpoint.Port } finally { $listener.Stop() }'
     return 0
   fi
 
@@ -191,7 +201,7 @@ pipeon_stack_host_theme() {
     return 1
   fi
 
-  "$powershell_bin" -NoProfile -Command '
+  pipeon_stack_powershell_hidden "$powershell_bin" -Command '
     $value = (Get-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" -Name AppsUseLightTheme -ErrorAction SilentlyContinue).AppsUseLightTheme
     if ($null -eq $value) { return }
     if ([int]$value -eq 0) { "dark" } else { "light" }
@@ -222,8 +232,20 @@ pipeon_stack_mcp_port() {
   printf '%s\n' "${PIPEON_DEV_STACK_MCP_PORT:-8766}"
 }
 
+pipeon_stack_host_mcp_port() {
+  printf '%s\n' "${PIPEON_DEV_STACK_HOST_MCP_PORT:-8767}"
+}
+
 pipeon_stack_mcp_url() {
   printf 'http://127.0.0.1:%s/mcp\n' "$(pipeon_stack_mcp_port)"
+}
+
+pipeon_stack_host_mcp_url() {
+  printf 'http://127.0.0.1:%s/mcp\n' "$(pipeon_stack_host_mcp_port)"
+}
+
+pipeon_stack_host_mcp_container_url() {
+  printf 'http://host.docker.internal:%s/mcp\n' "$(pipeon_stack_host_mcp_port)"
 }
 
 pipeon_stack_mcp_container_url() {
@@ -245,6 +267,14 @@ pipeon_stack_mcp_container_url() {
 
 pipeon_stack_api_key_file() {
   printf '%s/api-key\n' "$(pipeon_stack_state_dir)"
+}
+
+pipeon_stack_host_mcp_api_key_file() {
+  printf '%s/host-mcp-api-key\n' "$(pipeon_stack_state_dir)"
+}
+
+pipeon_stack_host_mcp_pid_file() {
+  printf '%s/host-mcp.pid\n' "$(pipeon_stack_state_dir)"
 }
 
 pipeon_stack_mcp_tls_cert_file() {
@@ -344,7 +374,7 @@ PY
   local powershell_bin
   powershell_bin="$(pipeon_stack_powershell_bin 2>/dev/null || true)"
   if [[ -n "$powershell_bin" ]]; then
-    "$powershell_bin" -NoProfile -Command '
+    pipeon_stack_powershell_hidden "$powershell_bin" -Command '
       $repo = $args[0]
       $paths = @(
         (Join-Path $repo "VERSION"),
@@ -407,6 +437,21 @@ ensure_pipeon_stack_state_dir() {
 ensure_pipeon_stack_api_key() {
   local key_file
   key_file="$(pipeon_stack_api_key_file)"
+  ensure_pipeon_stack_state_dir
+  if [[ -s "$key_file" ]]; then
+    return 0
+  fi
+  if command -v openssl >/dev/null 2>&1; then
+    openssl rand -hex 24 > "$key_file"
+  else
+    date +%s%N | sha256sum | cut -d' ' -f1 > "$key_file"
+  fi
+  chmod 600 "$key_file" 2>/dev/null || true
+}
+
+ensure_pipeon_stack_host_mcp_api_key() {
+  local key_file
+  key_file="$(pipeon_stack_host_mcp_api_key_file)"
   ensure_pipeon_stack_state_dir
   if [[ -s "$key_file" ]]; then
     return 0
@@ -896,6 +941,9 @@ CODE_SERVER_URL=$(pipeon_stack_code_server_url)
 MCP_HTTP_URL=$(pipeon_stack_mcp_url)
 MCP_HTTP_CONTAINER_URL=$(pipeon_stack_mcp_container_url)
 MCP_HTTP_API_KEY_FILE=$api_key_file
+PIPEON_HOST_MCP_URL=$(pipeon_stack_host_mcp_url)
+PIPEON_HOST_MCP_CONTAINER_URL=$(pipeon_stack_host_mcp_container_url)
+PIPEON_HOST_MCP_API_KEY_FILE=$(pipeon_stack_host_mcp_api_key_file)
 PIPEON_DEV_STACK_GPU=${PIPEON_DEV_STACK_GPU:-auto}
 EOF
 }

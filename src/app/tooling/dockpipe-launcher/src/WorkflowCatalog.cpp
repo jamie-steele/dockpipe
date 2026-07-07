@@ -101,6 +101,26 @@ WorkflowViewMeta parseWorkflowViewMeta(const QJsonObject &io)
     return view;
 }
 
+bool runCatalogProcess(const QString &program, const QStringList &args, QByteArray *stdoutData)
+{
+    if (program.trimmed().isEmpty())
+        return false;
+
+    QProcess proc;
+    proc.start(program, args);
+    if (!proc.waitForFinished(kCatalogDiscoveryTimeoutMs)) {
+        proc.kill();
+        proc.waitForFinished();
+        return false;
+    }
+    if (proc.exitCode() != 0)
+        return false;
+
+    if (stdoutData)
+        *stdoutData = proc.readAllStandardOutput();
+    return true;
+}
+
 } // namespace
 
 WorkflowCatalogData WorkflowCatalog::discoverCatalog(const QString &hintWorkdir)
@@ -119,17 +139,23 @@ WorkflowCatalogData WorkflowCatalog::discoverCatalog(const QString &hintWorkdir)
     if (!hintWorkdir.trimmed().isEmpty())
         args << QStringLiteral("--workdir") << hintWorkdir;
 
-    QProcess proc;
-    proc.start(program, args);
-    if (!proc.waitForFinished(kCatalogDiscoveryTimeoutMs)) {
-        proc.kill();
-        proc.waitForFinished();
-        return out;
+    QStringList programs{program};
+    if (program != QStringLiteral("dockpipe"))
+        programs.append(QStringLiteral("dockpipe"));
+    programs.removeDuplicates();
+
+    QByteArray stdoutData;
+    bool ok = false;
+    for (const QString &candidate : programs) {
+        if (runCatalogProcess(candidate, args, &stdoutData)) {
+            ok = true;
+            break;
+        }
     }
-    if (proc.exitCode() != 0)
+    if (!ok)
         return out;
 
-    const QJsonDocument doc = QJsonDocument::fromJson(proc.readAllStandardOutput());
+    const QJsonDocument doc = QJsonDocument::fromJson(stdoutData);
     if (!doc.isObject())
         return out;
 

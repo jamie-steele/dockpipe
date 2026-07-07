@@ -35,6 +35,9 @@ tasks:
   - id: TASK-011
     topic: Local Windows CI VM parity and guest tooling
     path: docs/agents/tasks/local-windows-ci-vm-parity.md
+  - id: TASK-012
+    topic: Pipeon startup and provisioning performance
+    path: docs/agents/tasks/pipeon-startup-performance.md
 
 maintenance:
   - Treat this YAML file as the AI/backlog entrypoint.

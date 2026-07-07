@@ -1,7 +1,6 @@
 #include "MainWindow.h"
 
 #include "BasicModeWidget.h"
-#include "ContextDiscovery.h"
 #include "ContextRowWidget.h"
 #include "DockpipeChoices.h"
 #include "DockerObservabilityWidget.h"
@@ -19,9 +18,11 @@
 #include <QCoreApplication>
 #include <QDesktopServices>
 #include <QDir>
+#include <QDirIterator>
 #include <QDialog>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QFile>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QIcon>
@@ -224,6 +225,128 @@ bool workflowNeedsConfigPrompt(const WorkflowMeta &meta, const QMap<QString, QSt
     return workflowNeedsConfigPromptInputs(meta.inputs, currentValues);
 }
 
+QVector<WorkflowMeta> appWorkflowsFromCatalog(const WorkflowCatalogData &catalog)
+{
+    QVector<WorkflowMeta> out;
+    QStringList seenDisplayNames;
+    for (const WorkflowMeta &m : catalog.workflows) {
+        if (m.category.compare(QStringLiteral("app"), Qt::CaseInsensitive) != 0)
+            continue;
+        const QString displayKey = m.displayName.trimmed().toLower();
+        if (!displayKey.isEmpty() && seenDisplayNames.contains(displayKey))
+            continue;
+        out.append(m);
+        if (!displayKey.isEmpty())
+            seenDisplayNames.append(displayKey);
+    }
+    return out;
+}
+
+QVector<Context> contextsFromCatalog(const QString &workdir, const QString &repoRoot, const WorkflowCatalogData &catalog)
+{
+    Q_UNUSED(repoRoot);
+    const QString clean = QDir::cleanPath(workdir);
+
+    QString baseLabel = QFileInfo(clean).fileName();
+    const QString gitRoot = GitHelper::repoRoot(clean);
+    if (!gitRoot.isEmpty())
+        baseLabel = QFileInfo(gitRoot).fileName() + QStringLiteral(" — ") + QFileInfo(clean).fileName();
+
+    QVector<Context> out;
+    if (catalog.workflows.isEmpty()) {
+        Context c = Context::createNew();
+        c.workdir = clean;
+        c.label = baseLabel;
+        c.workflow = QStringLiteral("vscode");
+        c.dockpipeBinary = DockpipeChoices::preferredDockpipeBinary(clean);
+        out.append(c);
+        return out;
+    }
+
+    out.reserve(catalog.workflows.size());
+    for (const WorkflowMeta &wf : catalog.workflows) {
+        if (wf.workflowId.trimmed().isEmpty())
+            continue;
+        Context c = Context::createNew();
+        c.workdir = clean;
+        c.label = baseLabel + QStringLiteral(" — ") + wf.workflowId;
+        c.workflow = wf.workflowId;
+        c.dockpipeBinary = DockpipeChoices::preferredDockpipeBinary(clean);
+        out.append(c);
+    }
+    return out;
+}
+
+WorkflowCatalogData fastWorkflowShellCatalog(const QString &workdir)
+{
+    WorkflowCatalogData catalog;
+    const QString clean = QDir::cleanPath(workdir);
+    const QString repoRoot = DockpipeChoices::findRepoRoot(clean);
+    if (repoRoot.isEmpty())
+        return catalog;
+
+    QSet<QString> seen;
+    auto yamlScalarFromText = [](const QString &text, const QString &key) {
+        const QRegularExpression re(QStringLiteral("(?m)^\\s*%1\\s*:\\s*([^#\\r\\n]+)").arg(QRegularExpression::escape(key)));
+        const QRegularExpressionMatch match = re.match(text);
+        if (!match.hasMatch())
+            return QString();
+        QString value = match.captured(1).trimmed();
+        if ((value.startsWith(QLatin1Char('"')) && value.endsWith(QLatin1Char('"'))) ||
+            (value.startsWith(QLatin1Char('\'')) && value.endsWith(QLatin1Char('\'')))) {
+            value = value.mid(1, value.size() - 2);
+        }
+        return value.trimmed();
+    };
+
+    auto addWorkflow = [&](const QString &workflowId, const QString &configPath) {
+        const QString id = workflowId.trimmed();
+        if (id.isEmpty() || seen.contains(id))
+            return;
+        seen.insert(id);
+        WorkflowMeta meta;
+        meta.workflowId = id;
+        meta.displayName = id;
+        meta.configPath = configPath;
+        QFile config(configPath);
+        if (config.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            const QString text = QString::fromUtf8(config.readAll());
+            meta.category = yamlScalarFromText(text, QStringLiteral("category"));
+            meta.description = yamlScalarFromText(text, QStringLiteral("description"));
+            const QString displayName = yamlScalarFromText(text, QStringLiteral("display_name"));
+            if (!displayName.isEmpty())
+                meta.displayName = displayName;
+            const QString icon = yamlScalarFromText(text, QStringLiteral("icon"));
+            if (!icon.isEmpty()) {
+                const QFileInfo iconInfo(icon);
+                meta.iconPath = iconInfo.isAbsolute() ? QDir::cleanPath(icon)
+                                                      : QDir(QFileInfo(configPath).absolutePath()).filePath(icon);
+            }
+        }
+        catalog.workflows.append(meta);
+    };
+
+    auto scanConfigs = [&](const QString &root) {
+        if (!QFileInfo::exists(root))
+            return;
+        QDirIterator it(root, QStringList{QStringLiteral("config.yml")}, QDir::Files, QDirIterator::Subdirectories);
+        while (it.hasNext()) {
+            const QString configPath = QDir::cleanPath(it.next());
+            const QString id = QFileInfo(QFileInfo(configPath).absolutePath()).fileName();
+            addWorkflow(id, configPath);
+        }
+    };
+
+    scanConfigs(QDir(repoRoot).filePath(QStringLiteral("workflows")));
+    scanConfigs(QDir(repoRoot).filePath(QStringLiteral("src/core/workflows")));
+    scanConfigs(QDir(repoRoot).filePath(QStringLiteral("packages")));
+
+    std::sort(catalog.workflows.begin(), catalog.workflows.end(), [](const WorkflowMeta &a, const WorkflowMeta &b) {
+        return a.workflowId.localeAwareCompare(b.workflowId) < 0;
+    });
+    return catalog;
+}
+
 } // namespace
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
@@ -235,37 +358,18 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), m_sessions(this)
     m_settings.load();
     const QStringList args = QCoreApplication::arguments();
     const bool startHome = args.contains(QStringLiteral("--start-home"));
-    m_advancedDiscoveryWatcher = new QFutureWatcher<AsyncContextDiscoveryResult>(this);
-    m_basicAppsWatcher = new QFutureWatcher<AsyncBasicAppsResult>(this);
+    m_workflowCatalogWatcher = new QFutureWatcher<AsyncWorkflowCatalogResult>(this);
 
-    connect(m_advancedDiscoveryWatcher, &QFutureWatcher<AsyncContextDiscoveryResult>::finished, this, [this]() {
-        const AsyncContextDiscoveryResult result = m_advancedDiscoveryWatcher->result();
-        m_advancedDiscoveryRunningWorkdir.clear();
-        const QString requested = QDir::cleanPath(m_advancedDiscoveryRequestedWorkdir);
+    connect(m_workflowCatalogWatcher, &QFutureWatcher<AsyncWorkflowCatalogResult>::finished, this, [this]() {
+        const AsyncWorkflowCatalogResult result = m_workflowCatalogWatcher->result();
+        m_workflowCatalogRunningWorkdir.clear();
+        const QString requested = QDir::cleanPath(m_workflowCatalogRequestedWorkdir);
         const QString currentProject = QDir::cleanPath(m_settings.projectFolder);
-        if (result.workdir == requested && result.workdir == currentProject) {
-            m_advancedSourceContexts = result.contexts;
-            m_advancedDiscoveryLoading = false;
-            applyAdvancedContextFilter();
-        }
-        if (m_advancedDiscoveryRefreshPending || requested != result.workdir) {
-            m_advancedDiscoveryRefreshPending = false;
-            startAdvancedContextDiscovery();
-        }
-    });
-    connect(m_basicAppsWatcher, &QFutureWatcher<AsyncBasicAppsResult>::finished, this, [this]() {
-        const AsyncBasicAppsResult result = m_basicAppsWatcher->result();
-        m_basicAppsRunningWorkdir.clear();
-        const QString requested = QDir::cleanPath(m_basicAppsRequestedWorkdir);
-        const QString currentProject = QDir::cleanPath(m_settings.projectFolder);
-        if (result.workdir == requested && result.workdir == currentProject) {
-            m_basicApps = result.apps;
-            m_basicAppsLoading = false;
-            updateBasicPage();
-        }
-        if (m_basicAppsRefreshPending || requested != result.workdir) {
-            m_basicAppsRefreshPending = false;
-            startBasicAppDiscovery();
+        if (result.workdir == requested && result.workdir == currentProject)
+            applyWorkflowCatalogResult(result);
+        if (m_workflowCatalogRefreshPending || requested != result.workdir) {
+            m_workflowCatalogRefreshPending = false;
+            startWorkflowCatalogDiscovery();
         }
     });
 
@@ -618,6 +722,8 @@ void MainWindow::applyUiMode()
                                            || !m_settings.recentProjectFolders.isEmpty());
     if (basic)
         m_basicWidget->showHomePage();
+    if (m_advancedDocker && m_advancedTabs)
+        m_advancedDocker->setActive(!basic && m_advancedTabs->currentIndex() == 1);
 
     m_actBasic->blockSignals(false);
     m_actAdvanced->blockSignals(false);
@@ -750,8 +856,7 @@ void MainWindow::activateHome()
 
 void MainWindow::onRefreshAppList()
 {
-    startAdvancedContextDiscovery();
-    startBasicAppDiscovery();
+    startWorkflowCatalogDiscovery();
     refreshInlineConsole();
 }
 
@@ -1033,6 +1138,8 @@ void MainWindow::applyAdvancedContextFilter()
     if (Context *current = currentAdvancedDisplayContext())
         selectedKey = contextDisplayKey(*current);
 
+    if (m_list)
+        m_list->setUpdatesEnabled(false);
     clearContextList();
     m_advancedContexts.clear();
 
@@ -1092,12 +1199,13 @@ void MainWindow::applyAdvancedContextFilter()
     m_list->setVisible(!empty);
     if (restoreRow >= 0)
         m_list->setCurrentRow(restoreRow);
+    if (m_list)
+        m_list->setUpdatesEnabled(true);
 }
 
 void MainWindow::rebuildUi()
 {
-    rebuildAdvancedContextList();
-    startBasicAppDiscovery();
+    startWorkflowCatalogDiscovery();
     updateBasicPage();
     refreshInlineConsole();
 }
@@ -1117,65 +1225,93 @@ void MainWindow::onSessionChanged()
 
 void MainWindow::startAdvancedContextDiscovery()
 {
-    const QString workdir = QDir::cleanPath(m_settings.projectFolder);
-    if (workdir.isEmpty()) {
-        m_advancedDiscoveryRequestedWorkdir.clear();
-        m_advancedDiscoveryRunningWorkdir.clear();
-        m_advancedDiscoveryLoading = false;
-        m_advancedSourceContexts.clear();
-        applyAdvancedContextFilter();
-        return;
-    }
-    m_advancedDiscoveryRequestedWorkdir = workdir;
-    if (m_advancedDiscoveryWatcher->isRunning()) {
-        m_advancedDiscoveryRefreshPending = true;
-        m_advancedDiscoveryLoading = true;
-        applyAdvancedContextFilter();
-        return;
-    }
-    m_advancedDiscoveryRefreshPending = false;
-    m_advancedDiscoveryLoading = true;
-    m_advancedDiscoveryRunningWorkdir = workdir;
-    m_advancedSourceContexts.clear();
-    applyAdvancedContextFilter();
-    m_advancedDiscoveryWatcher->setFuture(QtConcurrent::run([workdir]() {
-        AsyncContextDiscoveryResult result;
-        result.workdir = workdir;
-        result.contexts = ContextDiscovery::contextsForWorkdir(workdir);
-        return result;
-    }));
+    startWorkflowCatalogDiscovery();
 }
 
 void MainWindow::startBasicAppDiscovery()
 {
+    startWorkflowCatalogDiscovery();
+}
+
+void MainWindow::startWorkflowCatalogDiscovery()
+{
     const QString workdir = QDir::cleanPath(m_settings.projectFolder);
     if (workdir.isEmpty()) {
-        m_basicAppsRequestedWorkdir.clear();
-        m_basicAppsRunningWorkdir.clear();
+        m_workflowCatalogRequestedWorkdir.clear();
+        m_workflowCatalogRunningWorkdir.clear();
+        m_workflowCatalogRefreshPending = false;
+        m_advancedDiscoveryLoading = false;
         m_basicAppsLoading = false;
+        m_advancedSourceContexts.clear();
         m_basicApps.clear();
+        applyAdvancedContextFilter();
         updateBasicPage();
         return;
     }
+
+    const QString previousRequested = QDir::cleanPath(m_workflowCatalogRequestedWorkdir);
+    const bool projectChanged = previousRequested != workdir;
+    m_workflowCatalogRequestedWorkdir = workdir;
+    m_advancedDiscoveryRequestedWorkdir = workdir;
     m_basicAppsRequestedWorkdir = workdir;
-    if (m_basicAppsWatcher->isRunning()) {
-        m_basicAppsRefreshPending = true;
+
+    if (m_workflowCatalogWatcher && m_workflowCatalogWatcher->isRunning()) {
+        m_advancedDiscoveryLoading = true;
         m_basicAppsLoading = true;
+        applyAdvancedContextFilter();
         updateBasicPage();
+        if (QDir::cleanPath(m_workflowCatalogRunningWorkdir) != workdir)
+            m_workflowCatalogRefreshPending = true;
         return;
     }
-    m_basicAppsRefreshPending = false;
+
+    m_workflowCatalogRefreshPending = false;
+    m_advancedDiscoveryLoading = true;
     m_basicAppsLoading = true;
+    m_workflowCatalogRunningWorkdir = workdir;
+    m_advancedDiscoveryRunningWorkdir = workdir;
     m_basicAppsRunningWorkdir = workdir;
-    m_basicApps.clear();
+    if (projectChanged) {
+        m_advancedSourceContexts.clear();
+        m_basicApps.clear();
+    }
+    if (projectChanged || m_advancedSourceContexts.isEmpty()) {
+        const WorkflowCatalogData shellCatalog = fastWorkflowShellCatalog(workdir);
+        if (!shellCatalog.workflows.isEmpty()) {
+            m_advancedSourceContexts = contextsFromCatalog(workdir, QString(), shellCatalog);
+            m_basicApps = appWorkflowsFromCatalog(shellCatalog);
+        }
+    }
+    applyAdvancedContextFilter();
     updateBasicPage();
-    m_basicAppsWatcher->setFuture(QtConcurrent::run([workdir]() {
-        AsyncBasicAppsResult result;
-        result.workdir = workdir;
-        const QString repo = DockpipeChoices::findRepoRoot(workdir);
-        result.apps = WorkflowCatalog::discoverAppWorkflows(repo, workdir);
-        return result;
-    }));
+
+    if (m_workflowCatalogWatcher) {
+        m_workflowCatalogWatcher->setFuture(QtConcurrent::run([workdir]() {
+            AsyncWorkflowCatalogResult result;
+            result.workdir = workdir;
+            result.repoRoot = DockpipeChoices::findRepoRoot(workdir);
+            result.catalog = WorkflowCatalog::discoverCatalog(workdir);
+            return result;
+        }));
+    }
+}
+
+void MainWindow::applyWorkflowCatalogResult(const AsyncWorkflowCatalogResult &result)
+{
+    WorkflowCatalogData catalog = result.catalog;
+    if (catalog.workflows.isEmpty()) {
+        const WorkflowCatalogData fallback = fastWorkflowShellCatalog(result.workdir);
+        if (!fallback.workflows.isEmpty())
+            catalog = fallback;
+    }
+    m_advancedSourceContexts = contextsFromCatalog(result.workdir, result.repoRoot, catalog);
+    m_basicApps = appWorkflowsFromCatalog(catalog);
+    m_advancedDiscoveryLoading = false;
+    m_basicAppsLoading = false;
+    m_advancedDiscoveryRunningWorkdir.clear();
+    m_basicAppsRunningWorkdir.clear();
+    applyAdvancedContextFilter();
+    updateBasicPage();
 }
 
 void MainWindow::onAdvancedSearchChanged(const QString &)

@@ -67,9 +67,10 @@ fi
 
 exec /bin/bash /entrypoint.sh "$@"
 EOF
-RUN chmod +x /entrypoint.sh /codex-entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh /codex-entrypoint.sh \
+    && chmod +x /entrypoint.sh /codex-entrypoint.sh
 
 WORKDIR /work
 # Quieter Rust logs for `codex exec` in demos/CI; override per run if you need debug.
 ENV RUST_LOG=error
-ENTRYPOINT ["/codex-entrypoint.sh"]
+ENTRYPOINT ["/bin/bash", "-lc", "set -e; tr -d '\\015' < /entrypoint.sh > /tmp/entrypoint.sh; tr -d '\\015' < /codex-entrypoint.sh > /tmp/codex-entrypoint.sh; cat /tmp/entrypoint.sh > /entrypoint.sh; cat /tmp/codex-entrypoint.sh > /codex-entrypoint.sh; chmod +x /entrypoint.sh /codex-entrypoint.sh; exec /bin/bash /codex-entrypoint.sh \"$@\"", "dockpipe-codex"]

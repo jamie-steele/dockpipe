@@ -18,9 +18,29 @@ catalogs.
 - Use one shared local/server API for desktop Qt, Qt mobile, and web clients.
 - Use the CLI/master protocol and operation-result stream for execution, approvals, logs, artifacts,
   and run state.
+- Keep provider execution close to the DorkPipe orchestration stack: Codex and Claude lanes should
+  run through resolver-backed `exec`/CLI workers and MCP/operation-result events, not through
+  extension-local provider configuration.
+- Keep Pipeon chat as a direct chatbot surface with explicit provider/model selection.
+- Codex direct chat should use the normal host Codex CLI path (`codex exec`) so behavior matches
+  other Codex surfaces, with Codex workspace sandboxing enabled and the host Codex config model
+  used by default. Do not hardcode stale model aliases in the Pipeon layer.
+- Pipeon chat sessions should map to durable Codex transcript IDs and use `codex exec resume`
+  after the first Codex turn so direct chat keeps context across messages.
+- Claude direct chat must not run raw unrestricted host Claude. It needs a guarded DorkPipe gate
+  first: MCP/workflow authorization, bounded workspace access, then a Claude worker inside the
+  controlled boundary.
+- Provider authentication should be surfaced as explicit status/repair state, not discovered through
+  failed chat runs. Pipeon should call `dorkpipe.provider_auth_status` before provider use and
+  `dorkpipe.provider_auth_repair` for direct host login flows such as `claude auth login`.
+- Escalate tougher work from chat/direct agents into YAML-backed DorkPipe workflows when the task
+  needs planning, verification, multiple workers, provider comparison, approvals, cost/risk
+  boundaries, or durable artifacts.
 - Support remote access only as an explicit governed setup with approval, teardown, audit, and
   secret-reference handling.
 - Provide diff, conflict, artifact, and repair review without becoming a full IDE.
+- The Pipeon VS Code extension should remain a thin chat/run-inspection shell for now. Defer rich
+  template and model-lane authoring to PipeDeck, with workflow YAML as the bridge until then.
 
 ## Product Shape
 
@@ -145,6 +165,27 @@ Authoring should expose YAML contracts through purpose-built views:
 
 The app should make it easy to switch between guided UI and raw YAML for advanced users.
 
+## Extension UX Scope
+
+Until PipeDeck owns richer authoring, the Pipeon VS Code extension should:
+
+- expose a provider/model selector for direct chat
+- route Ollama chat through DorkPipe MCP and the local stack
+- route Codex chat through host `codex exec` with Codex workspace sandboxing and default host
+  config model selection, resuming the same Codex transcript for each Pipeon session
+- route Claude chat only through a guarded DorkPipe sandbox gate; do not run raw Claude directly
+- route complex or risky work to existing workflows or YAML handoff instead of making direct chat
+  behave like a multi-agent reasoning system
+- show provider auth readiness before starting guarded workers, with host auth repair actions kept
+  separate from workflow/container execution
+- keep run inspection over DorkPipe artifacts/events
+- expose workflow YAML handoff/export when users need to inspect the routing contract
+- avoid extension-local model-lane or workflow-authoring state that cannot round-trip through
+  workflow/package-owned contracts
+
+Future PipeDeck work can add rich model-lane and workflow authoring once it is backed by durable
+YAML, package catalogs, validation, and CLI/MCP execution.
+
 ## Review UX
 
 The app should support reviewing changes without becoming a full IDE:
@@ -187,6 +228,21 @@ updated after the run.
    health, and teardown.
 8. Add a Qt mobile client over the same app/server API for run monitoring, approvals, and lightweight
    workflow control.
+
+## Pipeon Interim Direct-Agent Slice
+
+Before PipeDeck owns the full control surface, Pipeon should expose a minimal, honest split:
+
+- Chat: provider/model-selectable direct chatbot for lightweight questions, local commands, and
+  handoff.
+- Codex chat: host `codex exec` with workspace sandboxing, host config model selection by
+  default, and per-Pipeon-session transcript resume.
+- Claude chat: guarded DorkPipe sandbox gate only; do not run raw Claude directly from chat.
+- Workflow: `/workflow <name>` or generated workflow YAML for agentic work, including model lanes,
+  multiple workers, approvals, verification, artifacts, and escalation.
+
+Direct agents should not pretend to be multi-reasoning. They can recommend or launch workflows when
+the task crosses the value bar for orchestration.
 
 ## Still Open
 

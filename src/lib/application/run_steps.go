@@ -1353,6 +1353,7 @@ func buildStepContainer(o *runStepsOpts, i, n int, step domain.Step, envMap, doc
 		}
 	}
 	mergeResolverAuthEnvFromHost(dockerForRun, envMap, ra)
+	authoredMounts = append(authoredMounts, resolverAuthMountSpecs(ra, envMap)...)
 	mergePolicyProxyEnvFromHost(dockerForRun, envMap)
 	mergeWorktreeGitDockerEnv(dockerForRun, workHost)
 	applyContainerPathEnv(dockerForRun, workHost, stepOutputsAbsPath(o, step, envMap))

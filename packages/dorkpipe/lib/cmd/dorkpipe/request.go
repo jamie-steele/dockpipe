@@ -25,6 +25,7 @@ type routeRequest struct {
 	SelectionText   string
 	AttachmentFiles []string
 	Mode            string
+	ProviderPreset  string
 }
 
 type workspaceChatContext struct {
@@ -104,6 +105,7 @@ func requestCmd(argv []string) {
 	fs.Var(&attachmentFiles, "attachment-file", "workspace attachment path (repeatable)")
 	selectionText := fs.String("selection-text", "", "selection hint")
 	mode := fs.String("mode", "ask", "request mode: ask, agent, or plan")
+	providerPreset := fs.String("provider-preset", "", "provider lane preset hint: auto, ollama-stack, codex, or claude")
 	executeRoute := fs.Bool("execute", false, "execute the routed request and stream events")
 	model := fs.String("model", "", "Ollama model override")
 	modelProvider := fs.String("model-provider", "", "model provider override (default ollama)")
@@ -139,26 +141,50 @@ func requestCmd(argv []string) {
 		AttachmentFiles: sanitizeAttachmentPaths(absWd, attachmentFiles),
 		SelectionText:   strings.TrimSpace(*selectionText),
 		Mode:            normalizeRequestMode(*mode),
+		ProviderPreset:  normalizeProviderPreset(*providerPreset),
 	}
 	routed := chooseRoute(req)
 	emitEditEvent(reqID, "routed", fmt.Sprintf("Route: %s", routed.Route), 0.22, map[string]any{
-		"route":  routed.Route,
-		"action": routed.Action,
-		"arg":    routed.Arg,
-		"reason": routed.Reason,
-		"mode":   req.Mode,
+		"route":           routed.Route,
+		"action":          routed.Action,
+		"arg":             routed.Arg,
+		"reason":          routed.Reason,
+		"mode":            req.Mode,
+		"provider_preset": req.ProviderPreset,
 	})
 
 	if !*executeRoute {
 		emitEditDone(reqID, "Request routed.", map[string]any{
-			"route":   routed.Route,
-			"action":  routed.Action,
-			"arg":     routed.Arg,
-			"reason":  routed.Reason,
-			"mode":    req.Mode,
-			"workdir": absWd,
+			"route":           routed.Route,
+			"action":          routed.Action,
+			"arg":             routed.Arg,
+			"reason":          routed.Reason,
+			"mode":            req.Mode,
+			"provider_preset": req.ProviderPreset,
+			"workdir":         absWd,
 		})
 		return
+	}
+
+	if routed.Route == "chat" {
+		if response, ok := quickChatResponse(req); ok {
+			emitEditEvent(reqID, "routed", "Answered lightweight chat request", 0.9, map[string]any{
+				"route":           "chat",
+				"action":          "quick_chat",
+				"mode":            req.Mode,
+				"provider_preset": req.ProviderPreset,
+			})
+			emitEditDone(reqID, response, map[string]any{
+				"route":             "chat",
+				"action":            "quick_chat",
+				"mode":              req.Mode,
+				"provider_preset":   req.ProviderPreset,
+				"model":             "none",
+				"validation_status": "not_applicable",
+				"mcp_connected":     true,
+			})
+			return
+		}
 	}
 
 	ctx := context.Background()
@@ -696,6 +722,7 @@ func handleChatRoute(ctx context.Context, reqID, root string, req routeRequest, 
 		"model":             model,
 		"num_ctx":           numCtx,
 		"mode":              normalizeRequestMode(req.Mode),
+		"provider_preset":   req.ProviderPreset,
 		"validation_status": validationStatus,
 		"active_file":       req.ActiveFile,
 		"best_of_n":         policy.BestOfN,
@@ -764,6 +791,123 @@ func isChatIntent(msg string) bool {
 	}
 	return strings.HasSuffix(msg, "?") &&
 		(strings.Contains(msg, "what ") || strings.Contains(msg, "how ") || strings.Contains(msg, "why ") || strings.Contains(msg, "who "))
+}
+
+func quickChatResponse(req routeRequest) (string, bool) {
+	if normalizeRequestMode(req.Mode) != "ask" {
+		return "", false
+	}
+	raw := strings.TrimSpace(req.Message)
+	if raw == "" || strings.Contains(raw, "\n") || len(raw) > 120 {
+		return "", false
+	}
+	if len(req.AttachmentFiles) > 0 || strings.TrimSpace(req.SelectionText) != "" {
+		return "", false
+	}
+	normalized := normalizeQuickChatText(raw)
+	if normalized == "" {
+		return "", false
+	}
+	if isLaneIdentityCheck(normalized) {
+		return laneIdentityResponse(req.ProviderPreset), true
+	}
+	if isPresenceCheck(normalized) {
+		return "Yep. DorkPipe is up and connected through MCP. Ask a repo question or request an action and I'll route it.", true
+	}
+	if isSocialGreeting(normalized) {
+		return "Doing fine. DorkPipe is ready.", true
+	}
+	if isTinyGreeting(normalized) {
+		return "Hey. DorkPipe is ready.", true
+	}
+	return "", false
+}
+
+func normalizeQuickChatText(raw string) string {
+	lower := strings.ToLower(strings.TrimSpace(raw))
+	lower = strings.ReplaceAll(lower, string(rune(0x2019)), "'")
+	var b strings.Builder
+	lastSpace := false
+	for _, r := range lower {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '\'' {
+			b.WriteRune(r)
+			lastSpace = false
+			continue
+		}
+		if !lastSpace {
+			b.WriteByte(' ')
+			lastSpace = true
+		}
+	}
+	return strings.Join(strings.Fields(b.String()), " ")
+}
+
+func isPresenceCheck(normalized string) bool {
+	withoutName := removeQuickChatFiller(normalized)
+	switch withoutName {
+	case "ping", "test", "are you there", "you there", "are you alive", "are you awake", "are you online", "are you with us", "can you hear me", "is this thing on":
+		return true
+	}
+	return strings.HasPrefix(withoutName, "are you with us ") ||
+		strings.HasPrefix(withoutName, "are you there ") ||
+		strings.HasPrefix(withoutName, "you there ")
+}
+
+func isLaneIdentityCheck(normalized string) bool {
+	withoutName := removeQuickChatFiller(normalized)
+	if !strings.Contains(withoutName, "are you") {
+		return false
+	}
+	return strings.Contains(withoutName, "codex") ||
+		strings.Contains(withoutName, "claude") ||
+		strings.Contains(withoutName, "ollama") ||
+		strings.Contains(withoutName, "running under dockpipe") ||
+		strings.Contains(withoutName, "under dockpipe")
+}
+
+func laneIdentityResponse(providerPreset string) string {
+	switch normalizeProviderPreset(providerPreset) {
+	case "codex":
+		return "Codex is selected as the DorkPipe workflow lane for this session. This quick reply is the DorkPipe control plane confirming the lane selection; heavier workflow work will route through the Codex lane."
+	case "claude":
+		return "Claude is selected as the DorkPipe workflow lane for this session. This quick reply is the DorkPipe control plane confirming the lane selection; heavier workflow work will route through the Claude lane."
+	case "ollama-stack":
+		return "The local Ollama stack is selected for this session. This quick reply is the DorkPipe control plane confirming the lane selection."
+	default:
+		return "DorkPipe is running the control plane and will auto-select the appropriate lane for heavier work."
+	}
+}
+
+func isTinyGreeting(normalized string) bool {
+	switch removeQuickChatFiller(normalized) {
+	case "hi", "hello", "hey", "yo", "sup":
+		return true
+	default:
+		return false
+	}
+}
+
+func isSocialGreeting(normalized string) bool {
+	switch removeQuickChatFiller(normalized) {
+	case "how are you", "how are you doing", "how's it going", "hows it going", "nice to meet you", "good morning", "good afternoon", "good evening":
+		return true
+	default:
+		return false
+	}
+}
+
+func removeQuickChatFiller(normalized string) string {
+	words := strings.Fields(normalized)
+	kept := make([]string, 0, len(words))
+	for _, word := range words {
+		switch word {
+		case "sir", "dorkpipe", "dockpipe", "pipeon", "please":
+			continue
+		default:
+			kept = append(kept, word)
+		}
+	}
+	return strings.Join(kept, " ")
 }
 
 func buildChatPrompt(root string, req routeRequest, chatContext workspaceChatContext, mcpText string, mcpLoop *boundedMCPContextResult) string {
@@ -2981,6 +3125,19 @@ func normalizeRequestMode(mode string) string {
 		return "plan"
 	default:
 		return "ask"
+	}
+}
+
+func normalizeProviderPreset(value string) string {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "ollama", "ollama-stack":
+		return "ollama-stack"
+	case "codex":
+		return "codex"
+	case "claude":
+		return "claude"
+	default:
+		return "auto"
 	}
 }
 

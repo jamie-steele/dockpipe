@@ -9,6 +9,7 @@ class QPlainTextEdit;
 class QSplitter;
 class QTabWidget;
 class QTableWidget;
+class QTimer;
 class QWidget;
 
 class DockerObservabilityWidget : public QWidget {
@@ -95,6 +96,7 @@ private:
     static CommandResult runDocker(const QStringList &args);
     static DockerSnapshot collectDockerSnapshot();
     void setStatus(const QString &text);
+    void refreshQuietly();
     void updateSummary();
     void applyContainerFilter();
     void updateContainerActionState();
@@ -103,6 +105,8 @@ private:
     QString selectedContainerId() const;
     QString selectedContainerName() const;
     QString selectedContainerState() const;
+    QString selectedNetworkId() const;
+    QString selectedVolumeName() const;
 
     void applySnapshot(const DockerSnapshot &snapshot);
     void refreshContainerDetailsAsync(const QString &containerId);
@@ -133,11 +137,15 @@ private:
     QFutureWatcher<ContainerDetailSnapshot> *m_containerDetailWatcher = nullptr;
     QFutureWatcher<ObjectDetailSnapshot> *m_networkDetailWatcher = nullptr;
     QFutureWatcher<ObjectDetailSnapshot> *m_volumeDetailWatcher = nullptr;
+    QTimer *m_autoRefreshTimer = nullptr;
     bool m_hasLoadedOnce = false;
     bool m_refreshPending = false;
+    bool m_refreshPendingQuiet = false;
+    bool m_currentRefreshQuiet = false;
     bool m_loading = false;
     bool m_active = false;
     QString m_pendingContainerDetailId;
+    QString m_displayedContainerDetailId;
     QString m_pendingNetworkDetailId;
     QString m_pendingVolumeDetailId;
 };

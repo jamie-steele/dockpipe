@@ -22,6 +22,15 @@ result_json="${task_dir}/result.json"
 worker_log="${task_dir}/worker.log"
 materialize_result_json="${task_dir}/materialized-result.json"
 
+json_string_literal() {
+  local value="${1:-}"
+  value="${value//\\/\\\\}"
+  value="${value//\"/\\\"}"
+  value="${value//$'\n'/\\n}"
+  value="${value//$'\r'/}"
+  printf '"%s"' "${value}"
+}
+
 [[ -f "${task_dir}/task.json" ]] || { echo "missing task.json for ${task_id}" >&2; exit 1; }
 eval "$("$(dorkpipe_orchestrate_helper_bin)" task-env "${task_dir}/task.json")"
 resolver_hint="${TASK_RESOLVER_HINT:-auto}"
@@ -40,6 +49,7 @@ selected_model="$("$(dorkpipe_orchestrate_helper_bin)" task-model)"
 hard_fail="false"
 hard_fail_message=""
 provider_session_id=""
+lane_unavailable="false"
 
 append_dependency_context() {
   [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_APPEND_DEPENDENCY_CONTEXT}")" == "true" ]] || return 0
@@ -100,6 +110,27 @@ materialize_task_outputs() {
   "$(dorkpipe_orchestrate_helper_bin)" materialize-task-outputs "${response_md}" "${task_dir}" "${TASK_MATERIALIZE_OUTPUTS_JSON}" "${materialize_result_json}"
 }
 
+if [[ "$(dorkpipe_orchestrate_bool "${TASK_LANE_AVAILABLE:-true}")" != "true" ]]; then
+  lane_unavailable="true"
+  status="skipped"
+  confidence="0.05"
+  missing_commands_text="$(printf '%s' "${TASK_LANE_MISSING_COMMANDS_JSON:-[]}" | tr -d '[]" ' | tr ',' ' ')"
+  [[ -n "${missing_commands_text}" ]] || missing_commands_text="unknown"
+  summary="Skipped live ${provider} worker because lane ${lane_id} is disabled."
+  issues_json="[$(json_string_literal "selected ${provider} lane ${lane_id} is disabled because required command(s) are missing: ${missing_commands_text}")]"
+  if [[ -n "${TASK_LANE_SETUP_HINT:-}" ]]; then
+    next_actions_json="[$(json_string_literal "${TASK_LANE_SETUP_HINT}")]"
+  elif [[ -n "${TASK_LANE_AUTH_HINT:-}" ]]; then
+    next_actions_json="[$(json_string_literal "${TASK_LANE_AUTH_HINT}")]"
+  else
+    next_actions_json="[$(json_string_literal "install/authenticate the missing provider CLI and rerun this workflow")]"
+  fi
+  if [[ "${TASK_WORKER_POLICY_MODE:-}" == "require" ]]; then
+    hard_fail="true"
+    hard_fail_message="required worker ${task_id} (${provider}) is disabled by missing lane dependencies"
+  fi
+fi
+
 if dorkpipe_orchestrate_is_cloud_provider "${provider}"; then
   if [[ -f "${DORKPIPE_ORCH_HALT_JSON}" ]]; then
     budget_halt="true"
@@ -127,7 +158,7 @@ if dorkpipe_orchestrate_is_cloud_provider "${provider}"; then
   fi
 fi
 
-if [[ "${budget_halt}" != "true" ]]; then
+if [[ "${budget_halt}" != "true" && "${lane_unavailable}" != "true" ]]; then
   if [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_LIVE_MODELS}")" != "true" ]]; then
     issues_json='["live model execution disabled by DORKPIPE_ORCH_LIVE_MODELS"]'
   else

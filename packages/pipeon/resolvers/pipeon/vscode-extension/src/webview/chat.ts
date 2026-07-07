@@ -20,6 +20,8 @@
    * @property {boolean} pinnedToBottom
    * @property {string} mode
    * @property {string} modelProfile
+   * @property {string} chatProvider
+   * @property {string} chatModel
    * @property {boolean} settingsOpen
    * @property {string} selectedNodeId
    * @property {string} workspaceMode
@@ -163,6 +165,22 @@
     ].join("");
   }
 
+  function renderProviderAction(message) {
+    const action = message.providerAction;
+    if (!action) {
+      return "";
+    }
+    return [
+      '<div class="pendingCard">',
+      '<div class="pendingTitle">' + escapeHtml(action.title || "Provider action required") + "</div>",
+      action.description ? '<div class="pendingMeta">' + escapeHtml(action.description) + "</div>" : "",
+      '<div class="pendingActions">',
+      '<button class="btn" type="button" data-provider-action="run" data-message-id="' + escapeHtml(message.id) + '">' + escapeHtml(action.buttonLabel || "Continue") + "</button>",
+      "</div>",
+      "</div>",
+    ].join("");
+  }
+
   function renderDiffPreview(message) {
     if (!message.diffPreview || (message.pendingAction && message.pendingAction.kind === "edit")) {
       return "";
@@ -239,7 +257,7 @@
     }
     return messages.map((message) => {
       const role = message.role === "assistant" ? "DorkPipe" : "You";
-      return '<article class="msg ' + message.role + '"><div class="role">' + role + '</div><div class="body">' + (message.html || "") + renderLiveCard(message) + renderDiffPreview(message) + renderPendingAction(message) + renderRunCard(message) + "</div></article>";
+      return '<article class="msg ' + message.role + '"><div class="role">' + role + '</div><div class="body">' + (message.html || "") + renderLiveCard(message) + renderDiffPreview(message) + renderProviderAction(message) + renderPendingAction(message) + renderRunCard(message) + "</div></article>";
     }).join("");
   }
 
@@ -469,6 +487,37 @@
     }).join("");
   }
 
+  const CHAT_MODEL_OPTIONS = {
+    ollama: ["llama3.2", "qwen2.5-coder:14b", "deepseek-r1:14b"],
+    codex: ["config", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark"],
+    claude: ["sonnet", "opus", "haiku"],
+  };
+
+  function normalizeChatProvider(value) {
+    const next = String(value || "").toLowerCase();
+    return ["ollama", "codex", "claude"].includes(next) ? next : "ollama";
+  }
+
+  function normalizeChatModel(provider, value) {
+    const normalizedProvider = normalizeChatProvider(provider);
+    const options = CHAT_MODEL_OPTIONS[normalizedProvider] || CHAT_MODEL_OPTIONS.ollama;
+    const next = String(value || "").trim();
+    if (normalizedProvider === "codex" && ["default", "auto", "cli-default", "account", "account-default", "gpt-5", "gpt-5-codex", "o4-mini"].includes(next.toLowerCase())) {
+      return "config";
+    }
+    return next || options[0] || "llama3.2";
+  }
+
+  function renderChatModelOptions(provider, selectedModel) {
+    const normalizedProvider = normalizeChatProvider(provider);
+    const selected = normalizeChatModel(normalizedProvider, selectedModel);
+    const options = CHAT_MODEL_OPTIONS[normalizedProvider] || CHAT_MODEL_OPTIONS.ollama;
+    return options.map((model) => {
+      const isSelected = model === selected ? " selected" : "";
+      return '<option value="' + escapeHtml(model) + '"' + isSelected + '>' + escapeHtml(model) + "</option>";
+    }).join("");
+  }
+
   function renderDesignerNode(node, selectedNodeId) {
     const isSelected = node.id === selectedNodeId;
     const badges = [];
@@ -622,6 +671,10 @@
     const autoApplyEdits = getRequiredElement("autoApplyEdits");
     /** @type {HTMLSelectElement} */
     const modelProfileSelect = getRequiredElement("modelProfileSelect");
+    /** @type {HTMLSelectElement} */
+    const chatProviderSelect = getRequiredElement("chatProviderSelect");
+    /** @type {HTMLSelectElement} */
+    const chatModelSelect = getRequiredElement("chatModelSelect");
     /** @type {HTMLElement} */
     const transcript = getRequiredElement("transcript");
     /** @type {HTMLElement | null} */
@@ -796,6 +849,8 @@
           pinnedToBottom: true,
           mode: "ask",
           modelProfile: "balanced",
+          chatProvider: "ollama",
+          chatModel: "llama3.2",
           settingsOpen: false,
           selectedNodeId: "",
           workspaceMode: "chat",
@@ -807,6 +862,8 @@
         pinnedToBottom: raw.pinnedToBottom !== false,
         mode: ["ask", "agent", "plan"].includes(String(raw.mode || "").toLowerCase()) ? String(raw.mode).toLowerCase() : "ask",
         modelProfile: ["fast", "balanced", "deep", "max"].includes(String(raw.modelProfile || "").toLowerCase()) ? String(raw.modelProfile).toLowerCase() : "balanced",
+        chatProvider: normalizeChatProvider(raw.chatProvider),
+        chatModel: normalizeChatModel(raw.chatProvider, raw.chatModel),
         settingsOpen: !!raw.settingsOpen,
         selectedNodeId: typeof raw.selectedNodeId === "string" ? raw.selectedNodeId : "",
         workspaceMode: ["chat", "settings", "template", "models", "run"].includes(String(raw.workspaceMode || "").toLowerCase())
@@ -857,14 +914,17 @@
       return meta ? meta.node : null;
     }
 
-    function openStudio(mode = "template") {
+    function openStudio(mode = "settings") {
       setWorkspaceMode(mode);
     }
 
     function setWorkspaceMode(mode) {
-      const nextMode = ["chat", "settings", "template", "models", "run"].includes(String(mode || "").toLowerCase())
+      let nextMode = ["chat", "settings", "run"].includes(String(mode || "").toLowerCase())
         ? String(mode).toLowerCase()
         : "chat";
+      if (["template", "models"].includes(String(mode || "").toLowerCase())) {
+        nextMode = "settings";
+      }
       saveViewState({ workspaceMode: nextMode });
       const inChat = nextMode === "chat";
       if (header) {
@@ -888,36 +948,28 @@
         settingsStudio.classList.toggle("hidden", nextMode !== "settings");
       }
       if (templateStudio) {
-        templateStudio.classList.toggle("hidden", nextMode !== "template");
+        templateStudio.classList.add("hidden");
       }
       if (modelStudio) {
-        modelStudio.classList.toggle("hidden", nextMode !== "models");
+        modelStudio.classList.add("hidden");
       }
       if (runStudio) {
         runStudio.classList.toggle("hidden", nextMode !== "run");
       }
       if (studioTitle) {
-        studioTitle.textContent = nextMode === "models"
-          ? "Model Browser"
-          : nextMode === "run"
+        studioTitle.textContent = nextMode === "run"
             ? "Run Inspector"
-          : nextMode === "settings"
-            ? "Designer Settings"
-            : "Template Designer";
+            : "Workflow Handoff";
       }
       if (studioMeta) {
-        studioMeta.textContent = nextMode === "models"
-          ? "Manage DorkPipe registry entries and keep template references explicit."
-          : nextMode === "run"
+        studioMeta.textContent = nextMode === "run"
             ? "Inspect the structured edit plan, execution trace, and validation details for this run."
-          : nextMode === "settings"
-            ? "Review templates, choose the active surface, and jump into the dedicated editors."
-            : "Inspect and shape the active DorkPipe reasoning surface.";
+            : "Use workflow YAML and the DorkPipe CLI/MCP stack as the durable contract.";
       }
       if (studioBackBtn) {
-        const showBackButton = nextMode === "template" || nextMode === "models" || nextMode === "run";
+        const showBackButton = nextMode === "run";
         studioBackBtn.classList.toggle("hidden", !showBackButton);
-        studioBackBtn.textContent = nextMode === "template" || nextMode === "models" ? "Back to settings" : "Back to chat";
+        studioBackBtn.textContent = "Back to chat";
       }
     }
 
@@ -971,10 +1023,10 @@
         activeTemplateSummary.textContent = template?.name || "DorkPipe Default";
       }
       if (templateCountSummary) {
-        templateCountSummary.textContent = templates.length + " available";
+        templateCountSummary.textContent = "YAML export";
       }
       if (modelCountSummary) {
-        modelCountSummary.textContent = entries.length + " available";
+        modelCountSummary.textContent = "CLI/MCP";
       }
       deleteTemplateBtn.disabled = locked;
       saveTemplateBtn.disabled = locked || !template;
@@ -1096,6 +1148,11 @@
         modeSelect.value = currentState.composerMode || viewState.mode || "ask";
         autoApplyEdits.checked = !!currentState.autoApplyEdits;
         modelProfileSelect.value = currentState.modelProfile || "balanced";
+        const currentProvider = normalizeChatProvider(currentState.chatProvider || viewState.chatProvider);
+        const currentModel = normalizeChatModel(currentProvider, currentState.chatModel || viewState.chatModel);
+        chatProviderSelect.value = currentProvider;
+        chatModelSelect.innerHTML = renderChatModelOptions(currentProvider, currentModel);
+        chatModelSelect.value = currentModel;
         send.disabled = !!currentState.isBusy;
         clearBtn.disabled = !!currentState.isBusy;
         newChatBtn.disabled = !!currentState.isBusy;
@@ -1103,6 +1160,8 @@
         modeSelect.disabled = !!currentState.isBusy;
         autoApplyEdits.disabled = !!currentState.isBusy;
         modelProfileSelect.disabled = !!currentState.isBusy;
+        chatProviderSelect.disabled = !!currentState.isBusy;
+        chatModelSelect.disabled = !!currentState.isBusy;
         if (stickToBottom) {
           transcript.scrollTop = transcript.scrollHeight;
         } else {
@@ -1171,15 +1230,17 @@
 
     function submitPrompt() {
       const text = prompt.value.trim();
-      postDiag("submit-attempt", { chars: text.length, mode: modeSelect.value, profile: modelProfileSelect.value });
+      postDiag("submit-attempt", { chars: text.length, mode: modeSelect.value, profile: modelProfileSelect.value, provider: chatProviderSelect.value, model: chatModelSelect.value });
       if (!text) return;
       prompt.value = "";
-      saveViewState({ draft: "", pinnedToBottom: true, mode: modeSelect.value, modelProfile: modelProfileSelect.value });
+      saveViewState({ draft: "", pinnedToBottom: true, mode: modeSelect.value, modelProfile: modelProfileSelect.value, chatProvider: chatProviderSelect.value, chatModel: chatModelSelect.value });
       vscode.postMessage({
         type: "ask",
         text,
         mode: modeSelect.value,
         modelProfile: modelProfileSelect.value,
+        chatProvider: chatProviderSelect.value,
+        chatModel: chatModelSelect.value,
         attachments: currentState.pendingAttachments || [],
       });
     }
@@ -1193,6 +1254,9 @@
       prompt.value = viewState.draft || "";
       modeSelect.value = viewState.mode || currentState.composerMode || "ask";
       modelProfileSelect.value = viewState.modelProfile || currentState.modelProfile || "balanced";
+      chatProviderSelect.value = normalizeChatProvider(viewState.chatProvider || currentState.chatProvider);
+      chatModelSelect.innerHTML = renderChatModelOptions(chatProviderSelect.value, viewState.chatModel || currentState.chatModel);
+      chatModelSelect.value = normalizeChatModel(chatProviderSelect.value, viewState.chatModel || currentState.chatModel);
       prompt.addEventListener("input", () => {
         saveViewState({ draft: prompt.value });
       });
@@ -1206,6 +1270,20 @@
       modelProfileSelect.addEventListener("change", () => {
         saveViewState({ modelProfile: modelProfileSelect.value });
         vscode.postMessage({ type: "setModelProfile", value: modelProfileSelect.value });
+      });
+      chatProviderSelect.addEventListener("change", () => {
+        const provider = normalizeChatProvider(chatProviderSelect.value);
+        const model = normalizeChatModel(provider, "");
+        chatModelSelect.innerHTML = renderChatModelOptions(provider, model);
+        chatModelSelect.value = model;
+        saveViewState({ chatProvider: provider, chatModel: model });
+        vscode.postMessage({ type: "setChatProviderModel", provider, model });
+      });
+      chatModelSelect.addEventListener("change", () => {
+        const provider = normalizeChatProvider(chatProviderSelect.value);
+        const model = normalizeChatModel(provider, chatModelSelect.value);
+        saveViewState({ chatProvider: provider, chatModel: model });
+        vscode.postMessage({ type: "setChatProviderModel", provider, model });
       });
       prompt.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") {
@@ -1250,7 +1328,7 @@
         });
         if (studioBackBtn) {
           studioBackBtn.addEventListener("click", () => {
-            setWorkspaceMode(viewState.workspaceMode === "template" || viewState.workspaceMode === "models" ? "settings" : "chat");
+            setWorkspaceMode("chat");
           });
         }
         templateSelect.addEventListener("change", () => {
@@ -1272,17 +1350,17 @@
             const templateId = openButton.getAttribute("data-template-open") || "";
             vscode.postMessage({ type: "setActiveTemplate", templateId });
             saveViewState({ selectedNodeId: "" });
-            openStudio("template");
+            openStudio("settings");
           }
         });
         copyTemplateBtn.addEventListener("click", () => {
           vscode.postMessage({ type: "createTemplate", templateId: templateSelect.value });
-          openStudio("template");
+          openStudio("settings");
         });
         newTemplateBtn.addEventListener("click", () => {
           vscode.postMessage({ type: "createTemplate", templateId: "__blank__" });
           saveViewState({ selectedNodeId: "" });
-          openStudio("template");
+          openStudio("settings");
         });
         deleteTemplateBtn.addEventListener("click", () => {
           if (!workingTemplate || workingTemplate.locked) {
@@ -1302,12 +1380,12 @@
         });
         if (openTemplateDesignerBtn) {
           openTemplateDesignerBtn.addEventListener("click", () => {
-            openStudio("template");
+            vscode.postMessage({ type: "exportTemplateYaml", template: workingTemplate || currentTemplate() });
           });
         }
         if (openModelManagerBtn) {
           openModelManagerBtn.addEventListener("click", () => {
-            openStudio("models");
+            openStudio("settings");
           });
         }
 
@@ -1501,6 +1579,15 @@
           setWorkspaceMode("run");
           return;
         }
+        const providerTarget = event.target instanceof HTMLElement ? event.target.closest("[data-provider-action]") : null;
+        if (providerTarget) {
+          vscode.postMessage({
+            type: "resolveProviderAction",
+            messageId: providerTarget.getAttribute("data-message-id"),
+            action: providerTarget.getAttribute("data-provider-action"),
+          });
+          return;
+        }
         const target = event.target instanceof HTMLElement ? event.target.closest("[data-pending-action]") : null;
         if (!target) {
           return;
@@ -1519,7 +1606,7 @@
           render(msg.state);
         }
         if (msg.type === "forceOpenSettings") {
-          openStudio(msg.mode === "models" ? "models" : msg.mode === "template" ? "template" : "settings");
+          openStudio(msg.mode === "run" ? "run" : "settings");
         }
         if (msg.type === "focusRunInspector" && msg.messageId) {
           saveViewState({ selectedRunMessageId: String(msg.messageId), workspaceMode: "run" });
@@ -1527,6 +1614,9 @@
           setWorkspaceMode("run");
         }
         if (msg.type === "done") {
+          if (msg.sessionId && currentState?.activeSessionId && msg.sessionId !== currentState.activeSessionId) {
+            return;
+          }
           prompt.value = "";
           saveViewState({ draft: "", pinnedToBottom: true });
           send.disabled = false;

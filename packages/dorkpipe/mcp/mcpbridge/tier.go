@@ -74,17 +74,22 @@ func parseTierName(s string) (MCPTier, error) {
 
 // toolMinTier is the minimum tier required to invoke a tool.
 var toolMinTier = map[string]MCPTier{
-	"dockpipe.version":           TierReadonly,
-	"capabilities.workflows":     TierReadonly,
-	"repo.list_files":            TierReadonly,
-	"repo.read_file":             TierReadonly,
-	"repo.search_text":           TierReadonly,
-	"dockpipe.validate_workflow": TierValidate,
-	"dorkpipe.validate_spec":     TierValidate,
-	"dockpipe.run":               TierExec,
-	"dorkpipe.run_spec":          TierExec,
-	"dorkpipe.request":           TierExec,
-	"dorkpipe.apply_edit":        TierExec,
+	"dockpipe.version":              TierReadonly,
+	"capabilities.workflows":        TierReadonly,
+	"repo.list_files":               TierReadonly,
+	"repo.read_file":                TierReadonly,
+	"repo.search_text":              TierReadonly,
+	"dockpipe.validate_workflow":    TierValidate,
+	"dorkpipe.validate_spec":        TierValidate,
+	"dockpipe.run":                  TierExec,
+	"dorkpipe.run_spec":             TierExec,
+	"dorkpipe.request":              TierExec,
+	"dorkpipe.host_codex_chat":      TierExec,
+	"dorkpipe.host_claude_chat":     TierExec,
+	"dorkpipe.host_claude_auth":     TierExec,
+	"dorkpipe.provider_auth_status": TierReadonly,
+	"dorkpipe.provider_auth_repair": TierExec,
+	"dorkpipe.apply_edit":           TierExec,
 }
 
 func minTierForTool(name string) (MCPTier, bool) {
@@ -95,6 +100,9 @@ func minTierForTool(name string) (MCPTier, bool) {
 // allowedToolsExplicit parses DOCKPIPE_MCP_ALLOWED_TOOLS (comma-separated).
 // If empty, the second return is false and the caller should use tier only.
 func allowedToolsExplicit() (map[string]struct{}, bool, error) {
+	if mcpEnvTruthy("DOCKPIPE_MCP_IGNORE_ALLOWED_TOOLS") {
+		return nil, false, nil
+	}
 	raw := strings.TrimSpace(os.Getenv("DOCKPIPE_MCP_ALLOWED_TOOLS"))
 	if raw == "" {
 		return nil, false, nil
@@ -121,6 +129,11 @@ func allowedToolsExplicit() (map[string]struct{}, bool, error) {
 		return nil, true, fmt.Errorf("DOCKPIPE_MCP_ALLOWED_TOOLS produced an empty allowlist")
 	}
 	return out, true, nil
+}
+
+func mcpEnvTruthy(name string) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(name)))
+	return v == "1" || v == "true" || v == "yes" || v == "on"
 }
 
 // ToolAllowed reports whether the named tool may run for this request.

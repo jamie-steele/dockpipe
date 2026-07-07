@@ -10,7 +10,7 @@ public:
     /// Walk upward from workdir to find a dockpipe project root.
     static QString findRepoRoot(const QString &hintWorkdir);
 
-    /// Prefer DOCKPIPE_BIN, then the hinted project's compiled src/bin/dockpipe, then plain `dockpipe`.
+    /// Prefer DOCKPIPE_BIN, then the hinted project's compiled repo-local binary, then plain `dockpipe`.
     static QString preferredDockpipeBinary(const QString &hintWorkdir);
 
     void scan(const QString &repoRoot, const QString &hintWorkdir = QString());

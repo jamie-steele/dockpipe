@@ -11,12 +11,17 @@
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QPushButton>
+#include <QScrollBar>
 #include <QShowEvent>
+#include <QSignalBlocker>
 #include <QSplitter>
 #include <QStyle>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QTextCursor>
+#include <QTimer>
+#include <QSet>
 #include <QVBoxLayout>
 #include <QFrame>
 #include <QtConcurrent>
@@ -113,17 +118,112 @@ QIcon statusIconForState(const QString &state, QWidget *widget)
     return style->standardIcon(QStyle::SP_MessageBoxInformation);
 }
 
+int rowForId(QTableWidget *table, const QString &id)
+{
+    if (!table || id.isEmpty())
+        return -1;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        auto *item = table->item(row, 0);
+        if (item && item->data(Qt::UserRole).toString() == id)
+            return row;
+    }
+    return -1;
+}
+
+void removeRowsNotIn(QTableWidget *table, const QSet<QString> &seenIds)
+{
+    if (!table)
+        return;
+    for (int row = table->rowCount() - 1; row >= 0; --row) {
+        auto *item = table->item(row, 0);
+        const QString id = item ? item->data(Qt::UserRole).toString() : QString();
+        if (id.isEmpty() || !seenIds.contains(id))
+            table->removeRow(row);
+    }
+}
+
+void setItemText(QTableWidget *table, int row, int column, const QString &text, const QString &id = QString())
+{
+    auto *item = table->item(row, column);
+    if (!item) {
+        table->setItem(row, column, roItem(text, id));
+        return;
+    }
+    item->setText(text);
+    if (!id.isEmpty())
+        item->setData(Qt::UserRole, id);
+}
+
+bool isScrolledToBottom(const QPlainTextEdit *edit)
+{
+    if (!edit || !edit->verticalScrollBar())
+        return true;
+    const QScrollBar *bar = edit->verticalScrollBar();
+    return bar->value() >= bar->maximum() - 4;
+}
+
+void restoreScroll(QPlainTextEdit *edit, bool wasAtBottom, int previousValue)
+{
+    if (!edit || !edit->verticalScrollBar())
+        return;
+    QScrollBar *bar = edit->verticalScrollBar();
+    if (wasAtBottom)
+        bar->setValue(bar->maximum());
+    else
+        bar->setValue(qMin(previousValue, bar->maximum()));
+}
+
+void replacePlainTextWithoutFlash(QPlainTextEdit *edit, const QString &text)
+{
+    if (!edit || edit->toPlainText() == text)
+        return;
+    const bool wasAtBottom = isScrolledToBottom(edit);
+    const int previousValue = edit->verticalScrollBar() ? edit->verticalScrollBar()->value() : 0;
+    const QSignalBlocker blocker(edit);
+    edit->setPlainText(text);
+    restoreScroll(edit, wasAtBottom, previousValue);
+}
+
+void streamPlainTextWithoutFlash(QPlainTextEdit *edit, const QString &text)
+{
+    if (!edit)
+        return;
+    const QString current = edit->toPlainText();
+    if (current == text)
+        return;
+
+    const bool wasAtBottom = isScrolledToBottom(edit);
+    const int previousValue = edit->verticalScrollBar() ? edit->verticalScrollBar()->value() : 0;
+    const QSignalBlocker blocker(edit);
+    if (!current.isEmpty() && text.startsWith(current)) {
+        edit->moveCursor(QTextCursor::End);
+        edit->insertPlainText(text.mid(current.size()));
+    } else {
+        edit->setPlainText(text);
+    }
+    restoreScroll(edit, wasAtBottom, previousValue);
+}
+
 } // namespace
 
 DockerObservabilityWidget::DockerObservabilityWidget(QWidget *parent) : QWidget(parent)
 {
     m_refreshWatcher = new QFutureWatcher<DockerSnapshot>(this);
     connect(m_refreshWatcher, &QFutureWatcher<DockerSnapshot>::finished, this, [this]() {
+        const bool quiet = m_currentRefreshQuiet;
+        m_currentRefreshQuiet = false;
         applySnapshot(m_refreshWatcher->result());
         m_hasLoadedOnce = true;
         if (m_refreshPending) {
+            const bool pendingQuiet = m_refreshPendingQuiet;
             m_refreshPending = false;
-            QMetaObject::invokeMethod(this, &DockerObservabilityWidget::refresh, Qt::QueuedConnection);
+            m_refreshPendingQuiet = false;
+            if (pendingQuiet)
+                QMetaObject::invokeMethod(this, &DockerObservabilityWidget::refreshQuietly, Qt::QueuedConnection);
+            else
+                QMetaObject::invokeMethod(this, &DockerObservabilityWidget::refresh, Qt::QueuedConnection);
+        } else if (quiet) {
+            setLoadingState(false);
         }
     });
 
@@ -132,10 +232,11 @@ DockerObservabilityWidget::DockerObservabilityWidget(QWidget *parent) : QWidget(
         const ContainerDetailSnapshot snapshot = m_containerDetailWatcher->result();
         if (snapshot.containerId != m_pendingContainerDetailId)
             return;
+        m_displayedContainerDetailId = snapshot.containerId;
         if (m_containerDetails)
-            m_containerDetails->setPlainText(snapshot.inspectText);
+            replacePlainTextWithoutFlash(m_containerDetails, snapshot.inspectText);
         if (m_containerLogs)
-            m_containerLogs->setPlainText(snapshot.logsText);
+            streamPlainTextWithoutFlash(m_containerLogs, snapshot.logsText);
     });
 
     m_networkDetailWatcher = new QFutureWatcher<ObjectDetailSnapshot>(this);
@@ -155,6 +256,10 @@ DockerObservabilityWidget::DockerObservabilityWidget(QWidget *parent) : QWidget(
         if (m_volumeDetails)
             m_volumeDetails->setPlainText(snapshot.detailText);
     });
+
+    m_autoRefreshTimer = new QTimer(this);
+    m_autoRefreshTimer->setInterval(4000);
+    connect(m_autoRefreshTimer, &QTimer::timeout, this, &DockerObservabilityWidget::refreshQuietly);
 
     buildUi();
 }
@@ -436,8 +541,10 @@ void DockerObservabilityWidget::setStatus(const QString &text)
 
 void DockerObservabilityWidget::refresh()
 {
+    m_currentRefreshQuiet = false;
     if (m_refreshWatcher && m_refreshWatcher->isRunning()) {
         m_refreshPending = true;
+        m_refreshPendingQuiet = false;
         setLoadingState(true, tr("Loading Docker objects…"));
         return;
     }
@@ -447,15 +554,40 @@ void DockerObservabilityWidget::refresh()
         m_refreshWatcher->setFuture(QtConcurrent::run([]() { return DockerObservabilityWidget::collectDockerSnapshot(); }));
 }
 
+void DockerObservabilityWidget::refreshQuietly()
+{
+    if (!m_active)
+        return;
+    if (m_refreshWatcher && m_refreshWatcher->isRunning()) {
+        if (!m_refreshPending) {
+            m_refreshPending = true;
+            m_refreshPendingQuiet = true;
+        }
+        return;
+    }
+
+    m_currentRefreshQuiet = true;
+    if (!hasAnyObjects())
+        setLoadingState(true, tr("Loading Docker objects…"));
+    if (m_refreshWatcher)
+        m_refreshWatcher->setFuture(QtConcurrent::run([]() { return DockerObservabilityWidget::collectDockerSnapshot(); }));
+}
+
 void DockerObservabilityWidget::setActive(bool active)
 {
     m_active = active;
     if (active) {
+        if (m_autoRefreshTimer && !m_autoRefreshTimer->isActive())
+            m_autoRefreshTimer->start();
         if (!m_hasLoadedOnce)
             QMetaObject::invokeMethod(this, &DockerObservabilityWidget::refresh, Qt::QueuedConnection);
+        else
+            QMetaObject::invokeMethod(this, &DockerObservabilityWidget::refreshQuietly, Qt::QueuedConnection);
         return;
     }
 
+    if (m_autoRefreshTimer)
+        m_autoRefreshTimer->stop();
     if (m_containerDetails)
         m_containerDetails->clear();
     if (m_containerLogs)
@@ -466,8 +598,12 @@ void DockerObservabilityWidget::setActive(bool active)
         m_volumeDetails->clear();
     updateContainerActionState();
     m_pendingContainerDetailId.clear();
+    m_displayedContainerDetailId.clear();
     m_pendingNetworkDetailId.clear();
     m_pendingVolumeDetailId.clear();
+    m_refreshPending = false;
+    m_refreshPendingQuiet = false;
+    m_currentRefreshQuiet = false;
     setLoadingState(false);
     setStatus(tr("Docker observability opens cold and refreshes on demand."));
 }
@@ -475,6 +611,8 @@ void DockerObservabilityWidget::setActive(bool active)
 void DockerObservabilityWidget::showEvent(QShowEvent *event)
 {
     QWidget::showEvent(event);
+    if (isVisible() && m_active && m_autoRefreshTimer && !m_autoRefreshTimer->isActive())
+        m_autoRefreshTimer->start();
     if (!m_hasLoadedOnce && isVisible() && m_active)
         QMetaObject::invokeMethod(this, &DockerObservabilityWidget::refresh, Qt::QueuedConnection);
 }
@@ -569,55 +707,128 @@ QString DockerObservabilityWidget::selectedContainerState() const
     return selected.first()->data(Qt::UserRole + 1).toString();
 }
 
+QString DockerObservabilityWidget::selectedNetworkId() const
+{
+    if (!m_networks)
+        return {};
+    const auto selected = m_networks->selectedItems();
+    if (selected.isEmpty())
+        return {};
+    return selected.first()->data(Qt::UserRole).toString();
+}
+
+QString DockerObservabilityWidget::selectedVolumeName() const
+{
+    if (!m_volumes)
+        return {};
+    const auto selected = m_volumes->selectedItems();
+    if (selected.isEmpty())
+        return {};
+    return selected.first()->data(Qt::UserRole).toString();
+}
+
 void DockerObservabilityWidget::applySnapshot(const DockerSnapshot &snapshot)
 {
-    m_containers->setRowCount(0);
+    const QString previousContainerId = selectedContainerId();
+    const QString previousNetworkId = selectedNetworkId();
+    const QString previousVolumeName = selectedVolumeName();
+    int restoredContainerRow = -1;
+    int restoredNetworkRow = -1;
+    int restoredVolumeRow = -1;
+
+    const QSignalBlocker blockContainers(m_containers);
+    const QSignalBlocker blockNetworks(m_networks);
+    const QSignalBlocker blockVolumes(m_volumes);
+
     if (!snapshot.containersOk) {
-        m_containerDetails->setPlainText(tr("Could not query docker containers.\n\n%1").arg(snapshot.containersError));
-    } else if (snapshot.containers.isEmpty()) {
-        m_containerDetails->setPlainText(tr("No Docker containers found. This view includes stopped containers too."));
-    }
-    for (const ContainerRowData &rowData : snapshot.containers) {
-        const QString state = rowData.state;
-        const int row = m_containers->rowCount();
-        m_containers->insertRow(row);
-        auto *nameItem = roItem(rowData.name, rowData.id);
-        nameItem->setData(Qt::UserRole + 1, state);
-        nameItem->setIcon(statusIconForState(state, m_containers));
-        m_containers->setItem(row, 0, nameItem);
-        auto *stateItem = statusItem(QString());
-        stateItem->setData(Qt::UserRole + 1, state);
-        stateItem->setData(Qt::ToolTipRole, rowData.statusText);
-        m_containers->setItem(row, 1, stateItem);
-        m_containers->setCellWidget(row, 1, makeStatusPill(rowData.statusText, state, m_containers));
-        m_containers->setItem(row, 2, roItem(rowData.image));
-        m_containers->setItem(row, 3, roItem(rowData.ports));
-        m_containers->setItem(row, 4, roItem(rowData.created));
+        replacePlainTextWithoutFlash(m_containerDetails, tr("Could not query docker containers.\n\n%1").arg(snapshot.containersError));
+    } else {
+        QSet<QString> seenIds;
+        for (const ContainerRowData &rowData : snapshot.containers) {
+            const QString state = rowData.state;
+            seenIds.insert(rowData.id);
+            int row = rowForId(m_containers, rowData.id);
+            if (row < 0) {
+                row = m_containers->rowCount();
+                m_containers->insertRow(row);
+            }
+            setItemText(m_containers, row, 0, rowData.name, rowData.id);
+            auto *nameItem = m_containers->item(row, 0);
+            nameItem->setData(Qt::UserRole + 1, state);
+            nameItem->setIcon(statusIconForState(state, m_containers));
+
+            auto *stateItem = m_containers->item(row, 1);
+            if (!stateItem) {
+                stateItem = statusItem(QString());
+                m_containers->setItem(row, 1, stateItem);
+            }
+            stateItem->setData(Qt::UserRole + 1, state);
+            stateItem->setData(Qt::ToolTipRole, rowData.statusText);
+            m_containers->setCellWidget(row, 1, makeStatusPill(rowData.statusText, state, m_containers));
+            setItemText(m_containers, row, 2, rowData.image);
+            setItemText(m_containers, row, 3, rowData.ports);
+            setItemText(m_containers, row, 4, rowData.created);
+            if (!previousContainerId.isEmpty() && rowData.id == previousContainerId)
+                restoredContainerRow = row;
+        }
+        removeRowsNotIn(m_containers, seenIds);
+        if (snapshot.containers.isEmpty())
+            replacePlainTextWithoutFlash(m_containerDetails, tr("No Docker containers found. This view includes stopped containers too."));
     }
 
-    m_networks->setRowCount(0);
     if (!snapshot.networksOk) {
-        m_networkDetails->setPlainText(tr("Could not query docker networks.\n\n%1").arg(snapshot.networksError));
-    }
-    for (const NetworkRowData &rowData : snapshot.networks) {
-        const int row = m_networks->rowCount();
-        m_networks->insertRow(row);
-        m_networks->setItem(row, 0, roItem(rowData.name, rowData.id));
-        m_networks->setItem(row, 1, roItem(rowData.driver));
-        m_networks->setItem(row, 2, roItem(rowData.scope));
+        replacePlainTextWithoutFlash(m_networkDetails, tr("Could not query docker networks.\n\n%1").arg(snapshot.networksError));
+    } else {
+        QSet<QString> seenIds;
+        for (const NetworkRowData &rowData : snapshot.networks) {
+            seenIds.insert(rowData.id);
+            int row = rowForId(m_networks, rowData.id);
+            if (row < 0) {
+                row = m_networks->rowCount();
+                m_networks->insertRow(row);
+            }
+            setItemText(m_networks, row, 0, rowData.name, rowData.id);
+            setItemText(m_networks, row, 1, rowData.driver);
+            setItemText(m_networks, row, 2, rowData.scope);
+            if (!previousNetworkId.isEmpty() && rowData.id == previousNetworkId)
+                restoredNetworkRow = row;
+        }
+        removeRowsNotIn(m_networks, seenIds);
     }
 
-    m_volumes->setRowCount(0);
     if (!snapshot.volumesOk) {
-        m_volumeDetails->setPlainText(tr("Could not query docker volumes.\n\n%1").arg(snapshot.volumesError));
+        replacePlainTextWithoutFlash(m_volumeDetails, tr("Could not query docker volumes.\n\n%1").arg(snapshot.volumesError));
+    } else {
+        QSet<QString> seenIds;
+        for (const VolumeRowData &rowData : snapshot.volumes) {
+            seenIds.insert(rowData.name);
+            int row = rowForId(m_volumes, rowData.name);
+            if (row < 0) {
+                row = m_volumes->rowCount();
+                m_volumes->insertRow(row);
+            }
+            setItemText(m_volumes, row, 0, rowData.name, rowData.name);
+            setItemText(m_volumes, row, 1, rowData.driver);
+            setItemText(m_volumes, row, 2, rowData.mountpoint);
+            if (!previousVolumeName.isEmpty() && rowData.name == previousVolumeName)
+                restoredVolumeRow = row;
+        }
+        removeRowsNotIn(m_volumes, seenIds);
     }
-    for (const VolumeRowData &rowData : snapshot.volumes) {
-        const int row = m_volumes->rowCount();
-        m_volumes->insertRow(row);
-        m_volumes->setItem(row, 0, roItem(rowData.name, rowData.name));
-        m_volumes->setItem(row, 1, roItem(rowData.driver));
-        m_volumes->setItem(row, 2, roItem(rowData.mountpoint));
-    }
+
+    if (!previousContainerId.isEmpty())
+        restoredContainerRow = rowForId(m_containers, previousContainerId);
+    if (!previousNetworkId.isEmpty())
+        restoredNetworkRow = rowForId(m_networks, previousNetworkId);
+    if (!previousVolumeName.isEmpty())
+        restoredVolumeRow = rowForId(m_volumes, previousVolumeName);
+
+    if (restoredContainerRow >= 0)
+        m_containers->selectRow(restoredContainerRow);
+    if (restoredNetworkRow >= 0)
+        m_networks->selectRow(restoredNetworkRow);
+    if (restoredVolumeRow >= 0)
+        m_volumes->selectRow(restoredVolumeRow);
 
     applyContainerFilter();
     updateSummary();
@@ -631,6 +842,13 @@ void DockerObservabilityWidget::applySnapshot(const DockerSnapshot &snapshot)
         setStatus(tr("Docker refresh completed with errors."));
     }
     m_loading = false;
+
+    if (restoredContainerRow >= 0)
+        refreshContainerDetailsAsync(previousContainerId);
+    if (restoredNetworkRow >= 0)
+        refreshNetworkDetailsAsync(previousNetworkId);
+    if (restoredVolumeRow >= 0)
+        refreshVolumeDetailsAsync(previousVolumeName);
 }
 
 void DockerObservabilityWidget::renderContainerDetails(const QString &containerId)
@@ -652,10 +870,11 @@ void DockerObservabilityWidget::refreshContainerDetailsAsync(const QString &cont
 {
     if (containerId.isEmpty())
         return;
+    const bool sameVisibleContainer = containerId == m_displayedContainerDetailId;
     m_pendingContainerDetailId = containerId;
-    if (m_containerDetails)
+    if (!sameVisibleContainer && m_containerDetails)
         m_containerDetails->setPlainText(tr("Loading container details…"));
-    if (m_containerLogs)
+    if (!sameVisibleContainer && m_containerLogs)
         m_containerLogs->setPlainText(tr("Loading container logs…"));
     if (m_containerDetailWatcher) {
         m_containerDetailWatcher->setFuture(QtConcurrent::run([containerId]() {

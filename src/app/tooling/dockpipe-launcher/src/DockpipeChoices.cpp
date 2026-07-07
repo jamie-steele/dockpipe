@@ -36,6 +36,26 @@ void appendStaticFallbacks(DockpipeChoices &c)
     c.runtimes = QStringList{QStringLiteral("dockerimage"), QStringLiteral("dockerfile"), QStringLiteral("package")};
 }
 
+QString executableCandidate(const QString &rootOrWorkdir)
+{
+    if (rootOrWorkdir.trimmed().isEmpty())
+        return QString();
+    const QDir d(QDir::cleanPath(QFileInfo(rootOrWorkdir).absoluteFilePath()));
+    const QStringList relativeCandidates{
+#ifdef Q_OS_WIN
+        QStringLiteral("src/bin/dockpipe.exe"),
+#endif
+        QStringLiteral("src/bin/dockpipe"),
+    };
+    for (const QString &relative : relativeCandidates) {
+        const QString candidate = d.filePath(relative);
+        const QFileInfo info(candidate);
+        if (info.isFile() && info.isExecutable())
+            return candidate;
+    }
+    return QString();
+}
+
 } // namespace
 
 QString DockpipeChoices::findRepoRoot(const QString &hintWorkdir)
@@ -70,17 +90,15 @@ QString DockpipeChoices::preferredDockpipeBinary(const QString &hintWorkdir)
 
     const QString repoRoot = findRepoRoot(hintWorkdir);
     if (!repoRoot.isEmpty()) {
-        const QString candidate = QDir(repoRoot).filePath(QStringLiteral("src/bin/dockpipe"));
-        const QFileInfo info(candidate);
-        if (info.isFile() && info.isExecutable())
+        const QString candidate = executableCandidate(repoRoot);
+        if (!candidate.isEmpty())
             return candidate;
     }
 
     if (!hintWorkdir.trimmed().isEmpty()) {
         const QString cleanedHint = QDir::cleanPath(QFileInfo(hintWorkdir).absoluteFilePath());
-        const QString candidate = QDir(cleanedHint).filePath(QStringLiteral("src/bin/dockpipe"));
-        const QFileInfo info(candidate);
-        if (info.isFile() && info.isExecutable())
+        const QString candidate = executableCandidate(cleanedHint);
+        if (!candidate.isEmpty())
             return candidate;
     }
 

@@ -20,14 +20,21 @@ import "strings"
 //   - DOCKPIPE_RUNTIME_EXPERIMENTAL / DOCKPIPE_RESOLVER_EXPERIMENTAL=1: optional; marks profile as experimental in docs.
 //   - DOCKPIPE_RUNTIME_TYPE: runtime.type — execution | ide | agent (classification only; see runtime_kind.go).
 type ResolverAssignments struct {
-	Template     string
-	Workflow     string
-	HostIsolate  string
-	PreScript    string
-	Action       string
-	Cmd          string
-	EnvHint      string
-	Experimental bool
+	Template            string
+	Workflow            string
+	HostIsolate         string
+	PreScript           string
+	Action              string
+	Cmd                 string
+	EnvHint             string
+	AuthDirEnv          string
+	AuthDir             string
+	ContainerAuthDir    string
+	AuthMountMode       string
+	ConfigFileEnv       string
+	ConfigFile          string
+	ContainerConfigFile string
+	Experimental        bool
 	// RuntimeKind is runtime.type (execution / ide / agent) from DOCKPIPE_RUNTIME_TYPE.
 	RuntimeKind string
 }
@@ -66,15 +73,22 @@ func FromResolverMap(m map[string]string) ResolverAssignments {
 		}
 	}
 	return ResolverAssignments{
-		Template:     firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_IMAGE_TEMPLATE", "DOCKPIPE_RESOLVER_TEMPLATE"),
-		Workflow:     firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_WORKFLOW", "DOCKPIPE_RESOLVER_WORKFLOW"),
-		HostIsolate:  firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_HOST_SCRIPT", "DOCKPIPE_RESOLVER_HOST_ISOLATE"),
-		PreScript:    firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_PRE_SCRIPT", "DOCKPIPE_RESOLVER_PRE_SCRIPT"),
-		Action:       firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_ACTION", "DOCKPIPE_RESOLVER_ACTION"),
-		Cmd:          firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_CMD", "DOCKPIPE_RESOLVER_CMD"),
-		EnvHint:      firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_ENV", "DOCKPIPE_RESOLVER_ENV"),
-		Experimental: exp,
-		RuntimeKind:  kind,
+		Template:            firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_IMAGE_TEMPLATE", "DOCKPIPE_RESOLVER_TEMPLATE"),
+		Workflow:            firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_WORKFLOW", "DOCKPIPE_RESOLVER_WORKFLOW"),
+		HostIsolate:         firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_HOST_SCRIPT", "DOCKPIPE_RESOLVER_HOST_ISOLATE"),
+		PreScript:           firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_PRE_SCRIPT", "DOCKPIPE_RESOLVER_PRE_SCRIPT"),
+		Action:              firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_ACTION", "DOCKPIPE_RESOLVER_ACTION"),
+		Cmd:                 firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_CMD", "DOCKPIPE_RESOLVER_CMD"),
+		EnvHint:             firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_ENV", "DOCKPIPE_RESOLVER_ENV"),
+		AuthDirEnv:          firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_AUTH_DIR_ENV", "DOCKPIPE_RESOLVER_AUTH_DIR_ENV"),
+		AuthDir:             firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_AUTH_DIR", "DOCKPIPE_RESOLVER_AUTH_DIR"),
+		ContainerAuthDir:    firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_CONTAINER_AUTH_DIR", "DOCKPIPE_RESOLVER_CONTAINER_AUTH_DIR"),
+		AuthMountMode:       firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_AUTH_MOUNT_MODE", "DOCKPIPE_RESOLVER_AUTH_MOUNT_MODE"),
+		ConfigFileEnv:       firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_CONFIG_FILE_ENV", "DOCKPIPE_RESOLVER_CONFIG_FILE_ENV"),
+		ConfigFile:          firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_CONFIG_FILE", "DOCKPIPE_RESOLVER_CONFIG_FILE"),
+		ContainerConfigFile: firstNonEmptyKV(m, "DOCKPIPE_RUNTIME_CONTAINER_CONFIG_FILE", "DOCKPIPE_RESOLVER_CONTAINER_CONFIG_FILE"),
+		Experimental:        exp,
+		RuntimeKind:         kind,
 	}
 }
 

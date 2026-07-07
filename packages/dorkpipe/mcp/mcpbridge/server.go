@@ -368,6 +368,10 @@ func (s *Server) dispatchTool(ctx context.Context, name string, args json.RawMes
 			Workdir         string   `json:"workdir"`
 			Message         string   `json:"message"`
 			Mode            string   `json:"mode"`
+			SessionID       string   `json:"session_id"`
+			ProviderPreset  string   `json:"provider_preset"`
+			ModelProvider   string   `json:"model_provider"`
+			Model           string   `json:"model"`
 			ActiveFile      string   `json:"active_file"`
 			OpenFiles       []string `json:"open_files"`
 			SelectionText   string   `json:"selection_text"`
@@ -401,6 +405,15 @@ func (s *Server) dispatchTool(ctx context.Context, name string, args json.RawMes
 			mode = "ask"
 		}
 		dargs := []string{"request", "--execute", "--workdir", wd, "--mode", mode, "--message", message}
+		if providerPreset := strings.TrimSpace(in.ProviderPreset); providerPreset != "" {
+			dargs = append(dargs, "--provider-preset", providerPreset)
+		}
+		if modelProvider := strings.TrimSpace(in.ModelProvider); modelProvider != "" {
+			dargs = append(dargs, "--model-provider", modelProvider)
+		}
+		if model := strings.TrimSpace(in.Model); model != "" {
+			dargs = append(dargs, "--model", model)
+		}
 		if activeFile != "" {
 			dargs = append(dargs, "--active-file", activeFile)
 		}
@@ -423,11 +436,136 @@ func (s *Server) dispatchTool(ctx context.Context, name string, args json.RawMes
 		}
 		isError := summary.ExitCode != 0
 		if summary.FinalEvent != nil {
+			if strings.TrimSpace(in.SessionID) != "" {
+				if metadata, ok := summary.FinalEvent["metadata"].(map[string]any); ok {
+					metadata["pipeon_session_id"] = strings.TrimSpace(in.SessionID)
+					metadata["session_context"] = "pipeon_recent_history"
+				}
+			}
 			if eventType, _ := summary.FinalEvent["type"].(string); strings.TrimSpace(eventType) == "error" {
 				isError = true
 			}
 		}
 		return out, isError, nil
+
+	case "dorkpipe.host_codex_chat":
+		var in struct {
+			Workdir       string   `json:"workdir"`
+			Message       string   `json:"message"`
+			Model         string   `json:"model"`
+			SessionID     string   `json:"session_id"`
+			ActiveFile    string   `json:"active_file"`
+			OpenFiles     []string `json:"open_files"`
+			SelectionText string   `json:"selection_text"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, true, err
+		}
+		activeFile, err := normalizeRepoHintPath(in.ActiveFile)
+		if err != nil {
+			return nil, true, err
+		}
+		openFiles, err := normalizeRepoHintPaths(in.OpenFiles)
+		if err != nil {
+			return nil, true, err
+		}
+		summary, err := runHostCodexChat(ctx, in.Workdir, in.Message, in.Model, in.SessionID, activeFile, in.SelectionText, openFiles)
+		if err != nil {
+			return nil, true, err
+		}
+		out, err := json.MarshalIndent(summary, "", "  ")
+		if err != nil {
+			return nil, true, err
+		}
+		return out, summary.ExitCode != 0, nil
+
+	case "dorkpipe.host_claude_chat":
+		var in struct {
+			Workdir       string   `json:"workdir"`
+			Message       string   `json:"message"`
+			Model         string   `json:"model"`
+			SessionID     string   `json:"session_id"`
+			ActiveFile    string   `json:"active_file"`
+			OpenFiles     []string `json:"open_files"`
+			SelectionText string   `json:"selection_text"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, true, err
+		}
+		activeFile, err := normalizeRepoHintPath(in.ActiveFile)
+		if err != nil {
+			return nil, true, err
+		}
+		openFiles, err := normalizeRepoHintPaths(in.OpenFiles)
+		if err != nil {
+			return nil, true, err
+		}
+		summary, err := runHostClaudeChat(ctx, in.Workdir, in.Message, in.Model, in.SessionID, activeFile, in.SelectionText, openFiles)
+		if err != nil {
+			return nil, true, err
+		}
+		out, err := json.MarshalIndent(summary, "", "  ")
+		if err != nil {
+			return nil, true, err
+		}
+		return out, summary.ExitCode != 0, nil
+
+	case "dorkpipe.host_claude_auth":
+		var in struct {
+			Workdir string `json:"workdir"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, true, err
+		}
+		summary, err := runHostClaudeAuth(ctx, in.Workdir)
+		if err != nil {
+			return nil, true, err
+		}
+		out, err := json.MarshalIndent(summary, "", "  ")
+		if err != nil {
+			return nil, true, err
+		}
+		return out, false, nil
+
+	case "dorkpipe.provider_auth_status":
+		var in struct {
+			Provider string `json:"provider"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, true, err
+		}
+		provider := strings.ToLower(strings.TrimSpace(in.Provider))
+		if provider != "codex" && provider != "claude" {
+			return nil, true, fmt.Errorf("unsupported provider %q", in.Provider)
+		}
+		status := providerAuthStatusFor(provider)
+		out, err := json.MarshalIndent(status, "", "  ")
+		if err != nil {
+			return nil, true, err
+		}
+		return out, !status.Authenticated, nil
+
+	case "dorkpipe.provider_auth_repair":
+		var in struct {
+			Provider string `json:"provider"`
+			Workdir  string `json:"workdir"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, true, err
+		}
+		provider := strings.ToLower(strings.TrimSpace(in.Provider))
+		if provider != "claude" {
+			return nil, true, fmt.Errorf("auth repair currently supports claude only")
+		}
+		summary, err := runHostClaudeAuth(ctx, in.Workdir)
+		if err != nil {
+			return nil, true, err
+		}
+		out, err := json.MarshalIndent(summary, "", "  ")
+		if err != nil {
+			return nil, true, err
+		}
+		return out, false, nil
 
 	case "dorkpipe.apply_edit":
 		var in struct {

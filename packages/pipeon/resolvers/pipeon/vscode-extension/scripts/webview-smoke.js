@@ -251,6 +251,8 @@ const settingsBtn = getElement("settingsBtn");
 const header = getElement("header");
 const studioSurface = getElement("studioSurface");
 const settingsStudio = getElement("settingsStudio");
+const templateStudio = getElement("templateStudio");
+const modelStudio = getElement("modelStudio");
 const openModelManagerBtn = getElement("openModelManagerBtn");
 const studioBackBtn = getElement("studioBackBtn");
 const headerActions = getElement("headerActions");
@@ -291,13 +293,16 @@ for (const handler of openModelManagerBtn.listeners.get("click") || []) {
   handler({});
 }
 if (studioSurface.className.includes("hidden")) {
-  throw new Error("Model manager action did not switch into the studio surface.");
+  throw new Error("Model manager action should keep the workflow handoff studio visible.");
 }
-if (!settingsStudio.className.includes("hidden")) {
-  throw new Error("Opening the model manager should switch away from the settings summary surface.");
+if (settingsStudio.className.includes("hidden")) {
+  throw new Error("Model manager action should stay on the workflow handoff surface.");
 }
-if (studioBackBtn.className.includes("hidden")) {
-  throw new Error("Model manager view should show the back button.");
+if (!modelStudio.className.includes("hidden") || !templateStudio.className.includes("hidden")) {
+  throw new Error("Parked model/template surfaces should remain hidden.");
+}
+if (!studioBackBtn.className.includes("hidden")) {
+  throw new Error("Workflow handoff should keep the back button hidden.");
 }
 
 for (const handler of messageHandlers) {

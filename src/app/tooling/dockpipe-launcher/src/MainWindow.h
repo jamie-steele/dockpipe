@@ -26,14 +26,10 @@ class QTabWidget;
 class DockerObservabilityWidget;
 class QTimer;
 
-struct AsyncContextDiscoveryResult {
+struct AsyncWorkflowCatalogResult {
     QString workdir;
-    QVector<Context> contexts;
-};
-
-struct AsyncBasicAppsResult {
-    QString workdir;
-    QVector<WorkflowMeta> apps;
+    QString repoRoot;
+    WorkflowCatalogData catalog;
 };
 
 class MainWindow : public QMainWindow {
@@ -105,6 +101,8 @@ private:
     QString currentContextCommandLine() const;
     void startAdvancedContextDiscovery();
     void startBasicAppDiscovery();
+    void startWorkflowCatalogDiscovery();
+    void applyWorkflowCatalogResult(const AsyncWorkflowCatalogResult &result);
 
     ContextStore m_store;
     SessionManager m_sessions;
@@ -141,14 +139,14 @@ private:
     QVector<Context> m_advancedContexts;
     QString m_basicLaunchingContextId;
     QString m_basicLaunchingWorkflowId;
-    QFutureWatcher<AsyncContextDiscoveryResult> *m_advancedDiscoveryWatcher = nullptr;
-    QFutureWatcher<AsyncBasicAppsResult> *m_basicAppsWatcher = nullptr;
+    QFutureWatcher<AsyncWorkflowCatalogResult> *m_workflowCatalogWatcher = nullptr;
     QString m_advancedDiscoveryRequestedWorkdir;
     QString m_advancedDiscoveryRunningWorkdir;
     QString m_basicAppsRequestedWorkdir;
     QString m_basicAppsRunningWorkdir;
+    QString m_workflowCatalogRequestedWorkdir;
+    QString m_workflowCatalogRunningWorkdir;
     bool m_advancedDiscoveryLoading = false;
     bool m_basicAppsLoading = false;
-    bool m_advancedDiscoveryRefreshPending = false;
-    bool m_basicAppsRefreshPending = false;
+    bool m_workflowCatalogRefreshPending = false;
 };

@@ -369,6 +369,40 @@ func TestEmitTaskEnvIncludesWorkMode(t *testing.T) {
 	}
 }
 
+func TestEmitTaskEnvIncludesLaneAvailability(t *testing.T) {
+	taskPath := filepath.Join(t.TempDir(), "task.json")
+	task := `{
+		"id": "patch",
+		"worker": "codex",
+		"lane": {
+			"lane_id": "codex.cli.default",
+			"provider": "codex",
+			"available": false,
+			"missing_commands": ["codex"],
+			"setup_hint": "Install and sign in to the Codex CLI.",
+			"auth_hint": "Codex CLI must be authenticated."
+		}
+	}`
+	if err := os.WriteFile(taskPath, []byte(task), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout bytes.Buffer
+	if err := emitTaskEnv(taskPath, &stdout); err != nil {
+		t.Fatal(err)
+	}
+	got := stdout.String()
+	for _, want := range []string{
+		"TASK_LANE_AVAILABLE='false'",
+		`TASK_LANE_MISSING_COMMANDS_JSON='["codex"]'`,
+		"TASK_LANE_SETUP_HINT='Install and sign in to the Codex CLI.'",
+		"TASK_LANE_AUTH_HINT='Codex CLI must be authenticated.'",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("task env missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestWriteTaskResultIncludesTraceOnlyWorkerSession(t *testing.T) {
 	outPath := filepath.Join(t.TempDir(), "result.json")
 	err := writeTaskResult(outPath, map[string]string{

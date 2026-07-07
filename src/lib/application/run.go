@@ -435,6 +435,7 @@ func Run(argv []string, baseEnviron []string) error {
 	hostIsolate := ""
 	resolverWorkflow := ""
 	isolationProfileEnv := map[string]string(nil)
+	var resolverAssignments *domain.ResolverAssignments
 	var resolverEnvHint string
 	if rtName != "" || rsName != "" {
 		rm, err := loadMergedIsolationProfile(repoRoot, projectRoot, rtName, rsName)
@@ -443,6 +444,7 @@ func Run(argv []string, baseEnviron []string) error {
 		}
 		isolationProfileEnv = rm
 		ra := domain.FromResolverMap(rm)
+		resolverAssignments = &ra
 		resolverEnvHint = ra.EnvHint
 		if rtName != "" && rsName != "" {
 		}
@@ -883,7 +885,10 @@ func Run(argv []string, baseEnviron []string) error {
 	dockerEnvMap := domain.EnvSliceToMap(opts.ExtraEnvLines)
 	workHostForEnv := firstNonEmpty(envMap["DOCKPIPE_WORKDIR"], opts.Workdir)
 	mergeWorktreeGitDockerEnv(dockerEnvMap, workHostForEnv)
-	mergeEnvHintKeys(dockerEnvMap, envMap, resolverEnvHint)
+	mergeResolverAuthEnvFromHost(dockerEnvMap, envMap, resolverAssignments)
+	if resolverAssignments == nil {
+		mergeEnvHintKeys(dockerEnvMap, envMap, resolverEnvHint)
+	}
 	mergePolicyProxyEnvFromHost(dockerEnvMap, envMap)
 	networkMode := infrastructure.DockerNetworkModeFromEnv(dockerEnvMap)
 	if networkMode == "" {
@@ -1028,6 +1033,7 @@ func Run(argv []string, baseEnviron []string) error {
 			return mountErr
 		}
 	}
+	authoredMounts = append(authoredMounts, resolverAuthMountSpecs(resolverAssignments, envMap)...)
 
 	runOpts := infrastructure.RunOpts{
 		Image:                   image,

@@ -59,7 +59,32 @@ func mcpToolCatalog() []mcpToolMeta {
 		{
 			Name:        "dorkpipe.request",
 			Description: "Run dorkpipe request --execute through the MCP control plane. Tier: exec only.",
-			InputSchema: json.RawMessage(`{"type":"object","properties":{"workdir":{"type":"string"},"message":{"type":"string"},"mode":{"type":"string"},"active_file":{"type":"string"},"open_files":{"type":"array","items":{"type":"string"}},"selection_text":{"type":"string"},"attachment_files":{"type":"array","items":{"type":"string"}}},"required":["message"],"additionalProperties":false}`),
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"workdir":{"type":"string"},"message":{"type":"string"},"mode":{"type":"string"},"session_id":{"type":"string"},"provider_preset":{"type":"string"},"model_provider":{"type":"string"},"model":{"type":"string"},"active_file":{"type":"string"},"open_files":{"type":"array","items":{"type":"string"}},"selection_text":{"type":"string"},"attachment_files":{"type":"array","items":{"type":"string"}}},"required":["message"],"additionalProperties":false}`),
+		},
+		{
+			Name:        "dorkpipe.host_codex_chat",
+			Description: "Host bridge for direct Codex chat. Runs codex exec with workspace sandboxing and the host Codex model config by default. Tier: exec only.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"workdir":{"type":"string"},"message":{"type":"string"},"model":{"type":"string"},"session_id":{"type":"string"},"active_file":{"type":"string"},"open_files":{"type":"array","items":{"type":"string"}},"selection_text":{"type":"string"}},"required":["message"],"additionalProperties":false}`),
+		},
+		{
+			Name:        "dorkpipe.host_claude_chat",
+			Description: "Host bridge for guarded Claude chat. Routes through DockPipe's Claude workflow boundary instead of raw host Claude. Tier: exec only.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"workdir":{"type":"string"},"message":{"type":"string"},"model":{"type":"string"},"session_id":{"type":"string"},"active_file":{"type":"string"},"open_files":{"type":"array","items":{"type":"string"}},"selection_text":{"type":"string"}},"required":["message"],"additionalProperties":false}`),
+		},
+		{
+			Name:        "dorkpipe.host_claude_auth",
+			Description: "Backward-compatible alias for dorkpipe.provider_auth_repair with provider=claude. Tier: exec only.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"workdir":{"type":"string"}},"additionalProperties":false}`),
+		},
+		{
+			Name:        "dorkpipe.provider_auth_status",
+			Description: "Check host provider auth state without launching a worker. Tier: readonly+.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"provider":{"type":"string","enum":["codex","claude"]},"workdir":{"type":"string"}},"required":["provider"],"additionalProperties":false}`),
+		},
+		{
+			Name:        "dorkpipe.provider_auth_repair",
+			Description: "Launch the provider's host authentication flow directly, then recheck provider status. Tier: exec only.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"provider":{"type":"string","enum":["claude"]},"workdir":{"type":"string"}},"required":["provider"],"additionalProperties":false}`),
 		},
 		{
 			Name:        "dorkpipe.apply_edit",

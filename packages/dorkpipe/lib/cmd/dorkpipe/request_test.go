@@ -30,12 +30,12 @@ func TestInferWorkspaceChatTargets_UsesGenericWorkspaceSearch(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
 	files := map[string]string{
-		"docs/notes.md":                        "General notes.\n",
-		"src/router/chat_flow.go":             "package flow\n\nfunc chooseRoute() {}\n// ask mode chat route context gathering\n",
-		"src/web/extension_bridge.ts":         "export function collectWorkspaceSignals() {}\n",
-		"src/other/unrelated.go":              "package other\n",
-		"src/router/secondary_handler.go":     "package flow\n// mode route\n",
-		"src/infra/generated.json":            "{\"route\":\"chat\"}\n",
+		"docs/notes.md":                   "General notes.\n",
+		"src/router/chat_flow.go":         "package flow\n\nfunc chooseRoute() {}\n// ask mode chat route context gathering\n",
+		"src/web/extension_bridge.ts":     "export function collectWorkspaceSignals() {}\n",
+		"src/other/unrelated.go":          "package other\n",
+		"src/router/secondary_handler.go": "package flow\n// mode route\n",
+		"src/infra/generated.json":        "{\"route\":\"chat\"}\n",
 	}
 	for rel, body := range files {
 		path := filepath.Join(root, rel)
@@ -150,10 +150,10 @@ func TestInferWorkspaceChatTargets_PrefersCoreImplementationOverClientSurface(t 
 	t.Parallel()
 	root := t.TempDir()
 	files := map[string]string{
-		"packages/dorkpipe/lib/cmd/dorkpipe/request.go":                              "package main\n\nfunc handleChatRoute(ctx context.Context) {}\nfunc buildWorkspaceChatContext(root string, req routeRequest) workspaceChatContext {}\n",
-		"packages/dorkpipe/lib/cmd/dorkpipe/reasoning_runtime.go":                    "package main\n\ntype runtimePolicy struct{}\nfunc resolveRuntimePolicy() {}\n",
-		"packages/pipeon/resolvers/pipeon/vscode-extension/src/extension.ts":         "export function resolveDorkpipeInvocation() {}\nconst localFirst = true;\n",
-		"packages/pipeon/resolvers/pipeon/vscode-extension/src/webview/chat.ts":      "export function renderRunInspector() {}\n",
+		"packages/dorkpipe/lib/cmd/dorkpipe/request.go":                         "package main\n\nfunc handleChatRoute(ctx context.Context) {}\nfunc buildWorkspaceChatContext(root string, req routeRequest) workspaceChatContext {}\n",
+		"packages/dorkpipe/lib/cmd/dorkpipe/reasoning_runtime.go":               "package main\n\ntype runtimePolicy struct{}\nfunc resolveRuntimePolicy() {}\n",
+		"packages/pipeon/resolvers/pipeon/vscode-extension/src/extension.ts":    "export function resolveDorkpipeInvocation() {}\nconst localFirst = true;\n",
+		"packages/pipeon/resolvers/pipeon/vscode-extension/src/webview/chat.ts": "export function renderRunInspector() {}\n",
 	}
 	for rel, body := range files {
 		path := filepath.Join(root, rel)
@@ -185,8 +185,8 @@ func TestInferWorkspaceChatTargets_RequiresDenseArchitectureMatches(t *testing.T
 	t.Parallel()
 	root := t.TempDir()
 	files := map[string]string{
-		"packages/dorkpipe/lib/cmd/dorkpipe/request.go":           "package main\n\nfunc chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\nfunc buildWorkspaceChatContext(root string, req routeRequest) workspaceChatContext {}\n",
-		"packages/dorkpipe/lib/cmd/dorkpipe/structured_trace.go":  "package main\n\nfunc writePreparedArtifactBundle() {}\nfunc deriveStructuredEdits() {}\n// validation status for artifacts\n",
+		"packages/dorkpipe/lib/cmd/dorkpipe/request.go":             "package main\n\nfunc chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\nfunc buildWorkspaceChatContext(root string, req routeRequest) workspaceChatContext {}\n",
+		"packages/dorkpipe/lib/cmd/dorkpipe/structured_trace.go":    "package main\n\nfunc writePreparedArtifactBundle() {}\nfunc deriveStructuredEdits() {}\n// validation status for artifacts\n",
 		"src/app/tooling/dockpipe-launcher/src/BasicModeWidget.cpp": "namespace dockpipe { class BasicModeWidget {}; }\n",
 	}
 	for rel, body := range files {
@@ -249,6 +249,57 @@ func TestChooseRoute_DoesNotInferInspectFromPlainText(t *testing.T) {
 	}
 }
 
+func TestQuickChatResponse_HandlesPresenceWithoutWorkspaceReasoning(t *testing.T) {
+	t.Parallel()
+	for _, message := range []string{
+		"Are you with us sir dorkpipe?",
+		"How are you sir dorkpipe!",
+		"hello dorkpipe",
+	} {
+		response, ok := quickChatResponse(routeRequest{
+			Message: message,
+			Mode:    "ask",
+		})
+		if !ok {
+			t.Fatalf("expected quick chat response for %q", message)
+		}
+		if strings.Contains(response, "Evidence:") || strings.Contains(response, "packages/") {
+			t.Fatalf("quick response should not cite workspace evidence for %q: %q", message, response)
+		}
+	}
+}
+
+func TestQuickChatResponse_HandlesLaneIdentityWithoutWorkspaceReasoning(t *testing.T) {
+	t.Parallel()
+	response, ok := quickChatResponse(routeRequest{
+		Message:        "Are you my good buddy codex running under dockpipe",
+		Mode:           "ask",
+		ProviderPreset: "codex",
+	})
+	if !ok {
+		t.Fatalf("expected quick chat lane identity response")
+	}
+	if !strings.Contains(response, "Codex is selected as the DorkPipe workflow lane") {
+		t.Fatalf("unexpected lane identity response: %q", response)
+	}
+	if strings.Contains(response, "Evidence:") || strings.Contains(response, "packages/") {
+		t.Fatalf("quick lane response should not cite workspace evidence: %q", response)
+	}
+}
+
+func TestQuickChatResponse_DoesNotSwallowWorkspaceQuestions(t *testing.T) {
+	t.Parallel()
+	for _, message := range []string{
+		"why is pipeon slow when loading workflows?",
+		"explain how request.go currently works",
+		"can you fix the vscode extension layer?",
+	} {
+		if _, ok := quickChatResponse(routeRequest{Message: message, Mode: "ask"}); ok {
+			t.Fatalf("quickChatResponse(%q) unexpectedly handled workspace request", message)
+		}
+	}
+}
+
 func TestValidateChatAnswer_AcceptsEvidenceAnchoredAnswer(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -258,7 +309,7 @@ func TestValidateChatAnswer_AcceptsEvidenceAnchoredAnswer(t *testing.T) {
 		Mode:    "ask",
 	}
 	ctx := workspaceChatContext{
-		Text: "Relevant file: src/request.go\n\n```text\nfunc chooseRoute(req routeRequest) routedRequest {\n}\nfunc handleChatRoute(ctx context.Context) {\n}\n```",
+		Text:    "Relevant file: src/request.go\n\n```text\nfunc chooseRoute(req routeRequest) routedRequest {\n}\nfunc handleChatRoute(ctx context.Context) {\n}\n```",
 		Targets: []string{"src/request.go"},
 		Snippets: map[string]string{
 			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n",
@@ -283,7 +334,7 @@ func TestValidateChatAnswer_RejectsUnsupportedClaims(t *testing.T) {
 		Mode:    "ask",
 	}
 	ctx := workspaceChatContext{
-		Text: "Relevant file: src/request.go\n\n```text\nfunc chooseRoute(req routeRequest) routedRequest {\n}\n```",
+		Text:    "Relevant file: src/request.go\n\n```text\nfunc chooseRoute(req routeRequest) routedRequest {\n}\n```",
 		Targets: []string{"src/request.go"},
 		Snippets: map[string]string{
 			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\n",
@@ -311,7 +362,7 @@ func TestValidateChatAnswer_RequiresMultipleCitationsForArchitectureWhenEvidence
 		Mode:    "ask",
 	}
 	ctx := workspaceChatContext{
-		Text: "Relevant file: src/request.go\n\n```text\nfunc chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n```",
+		Text:    "Relevant file: src/request.go\n\n```text\nfunc chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n```",
 		Targets: []string{"src/request.go"},
 		Snippets: map[string]string{
 			"src/request.go": "func chooseRoute(req routeRequest) routedRequest {}\nfunc handleChatRoute(ctx context.Context) {}\n",
@@ -339,7 +390,7 @@ func TestValidateChatAnswer_RejectsMetaPolicyArchitectureAnswer(t *testing.T) {
 		Mode:    "ask",
 	}
 	ctx := workspaceChatContext{
-		Text: "Relevant file: src/request.go\n\n```text\nfunc handleChatRoute(ctx context.Context) {}\nfunc resolveRuntimePolicy() {}\n```",
+		Text:    "Relevant file: src/request.go\n\n```text\nfunc handleChatRoute(ctx context.Context) {}\nfunc resolveRuntimePolicy() {}\n```",
 		Targets: []string{"src/request.go"},
 		Snippets: map[string]string{
 			"src/request.go": "func handleChatRoute(ctx context.Context) {}\nfunc resolveRuntimePolicy() {}\n",
@@ -367,7 +418,7 @@ func TestValidateChatAnswer_RejectsWrongNearbySymbolCitation(t *testing.T) {
 		Mode:    "ask",
 	}
 	ctx := workspaceChatContext{
-		Text: "Relevant file: src/request.go\n\n```text\nfunc beginReasoningRun() {}\nfunc handleChatRoute(ctx context.Context) {}\n```",
+		Text:    "Relevant file: src/request.go\n\n```text\nfunc beginReasoningRun() {}\nfunc handleChatRoute(ctx context.Context) {}\n```",
 		Targets: []string{"src/request.go"},
 		Snippets: map[string]string{
 			"src/request.go": "func beginReasoningRun() {}\nfunc handleChatRoute(ctx context.Context) {}\n",
@@ -395,7 +446,7 @@ func TestValidateChatAnswer_RejectsRouteMismatchedCitation(t *testing.T) {
 		Mode:    "ask",
 	}
 	ctx := workspaceChatContext{
-		Text: "Relevant file: src/request.go\n\n```text\nfunc handleEditRoute(ctx context.Context) {}\nfunc buildChatAnswerRepairPrompt() {}\n```",
+		Text:    "Relevant file: src/request.go\n\n```text\nfunc handleEditRoute(ctx context.Context) {}\nfunc buildChatAnswerRepairPrompt() {}\n```",
 		Targets: []string{"src/request.go"},
 		Snippets: map[string]string{
 			"src/request.go": "func handleEditRoute(ctx context.Context) {}\nfunc buildChatAnswerRepairPrompt() {}\n",

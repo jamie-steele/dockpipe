@@ -1,7 +1,12 @@
 package application
 
 import (
+	"os"
+	"path/filepath"
+	"reflect"
 	"testing"
+
+	"dockpipe/src/lib/domain"
 )
 
 func TestMergeEnvHintKeys(t *testing.T) {
@@ -37,4 +42,47 @@ func TestMergeEnvHintKeys(t *testing.T) {
 			t.Fatalf("expected no keys, got %#v", dst)
 		}
 	})
+}
+
+func TestResolverAuthMountSpecs(t *testing.T) {
+	home := t.TempDir()
+	authDir := filepath.Join(home, ".claude")
+	configFile := filepath.Join(home, ".claude.json")
+	if err := os.MkdirAll(authDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configFile, []byte(`{"ok":true}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	ra := &domain.ResolverAssignments{
+		AuthDirEnv:          "CLAUDE_HOME",
+		AuthDir:             ".claude",
+		ContainerAuthDir:    "/home/node/.claude",
+		AuthMountMode:       "ro",
+		ConfigFile:          ".claude.json",
+		ContainerConfigFile: "/home/node/.claude.json",
+	}
+	got := resolverAuthMountSpecs(ra, map[string]string{})
+	want := []string{
+		filepath.Clean(authDir) + ":/home/node/.claude:ro",
+		filepath.Clean(configFile) + ":/home/node/.claude.json:ro",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("mounts got %#v want %#v", got, want)
+	}
+}
+
+func TestMergeResolverAuthEnvFromHostSetsContainerAuthDir(t *testing.T) {
+	dst := map[string]string{}
+	src := map[string]string{}
+	ra := &domain.ResolverAssignments{
+		AuthDirEnv:       "CLAUDE_HOME",
+		ContainerAuthDir: "/home/node/.claude",
+	}
+	mergeResolverAuthEnvFromHost(dst, src, ra)
+	if dst["CLAUDE_HOME"] != "/home/node/.claude" {
+		t.Fatalf("CLAUDE_HOME got %q", dst["CLAUDE_HOME"])
+	}
 }

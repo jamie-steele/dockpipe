@@ -28,6 +28,7 @@ param(
     [string]$Version = "",
     [Alias("NoLauncher")]
     [switch]$SkipLauncher,
+    [switch]$CleanLauncher,
     [string]$QtRoot = "",
     [string]$QtVersion = "6.8.3",
     [string]$QtInstallRoot = "C:\Qt"
@@ -178,7 +179,8 @@ function Try-RefreshLauncher {
         [string]$RepoRoot,
         [string]$StageRoot,
         [string]$InstallRoot,
-        [string]$QtRootValue
+        [string]$QtRootValue,
+        [switch]$Clean
     )
 
     $cmakeExe = Find-OptionalTool -Exe "cmake" -Fallbacks @("C:\Program Files\CMake\bin\cmake.exe")
@@ -195,9 +197,11 @@ function Try-RefreshLauncher {
         return
     }
 
-    $launcherBuildDir = Join-Path $StageRoot "launcher-build"
+    $persistentBuildRoot = Split-Path -Parent $StageRoot
+    $launcherBuildDir = Join-Path $persistentBuildRoot "dockpipe-launcher-dev-build"
     $launcherStageDir = Join-Path $StageRoot "launcher-stage"
-    if (Test-Path -LiteralPath $launcherBuildDir) {
+    if ($Clean -and (Test-Path -LiteralPath $launcherBuildDir)) {
+        Write-Host "Cleaning launcher build cache at $launcherBuildDir"
         Remove-Item -LiteralPath $launcherBuildDir -Recurse -Force
     }
     if (Test-Path -LiteralPath $launcherStageDir) {
@@ -263,6 +267,8 @@ $repoBinDir = Join-Path $repoRoot "src\bin"
 $repoExe = Join-Path $repoBinDir "dockpipe.exe"
 $compileWorkdir = Join-Path $stageRoot "compile-workdir"
 $compiledCoreDir = Join-Path $compileWorkdir "bin\.dockpipe\internal\packages\core"
+$goCacheDir = Join-Path $repoRoot "bin\.dockpipe\build\go-cache"
+$goTmpDir = Join-Path $repoRoot "bin\.dockpipe\build\go-tmp"
 
 $installRoot = Join-Path $env:LOCALAPPDATA "dockpipe"
 $installExe = Join-Path $installRoot "dockpipe.exe"
@@ -274,6 +280,13 @@ if (Test-Path -LiteralPath $stageRoot) {
 New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
 New-Item -ItemType Directory -Force -Path $compileWorkdir | Out-Null
 New-Item -ItemType Directory -Force -Path $repoBinDir | Out-Null
+New-Item -ItemType Directory -Force -Path $goCacheDir | Out-Null
+New-Item -ItemType Directory -Force -Path $goTmpDir | Out-Null
+
+$previousGoCache = $env:GOCACHE
+$previousGoTmp = $env:GOTMPDIR
+$env:GOCACHE = $goCacheDir
+$env:GOTMPDIR = $goTmpDir
 
 Write-Host "Building dockpipe.exe from $repoRoot"
 Push-Location $repoRoot
@@ -289,6 +302,8 @@ try {
 finally {
     Clear-EmbeddedDorkPipeAssetPreparation -RepoRoot $repoRoot
     Pop-Location
+    $env:GOCACHE = $previousGoCache
+    $env:GOTMPDIR = $previousGoTmp
 }
 
 $coreTarball = Get-ChildItem -LiteralPath $compiledCoreDir -Filter "dockpipe-core-*.tar.gz" -File | Sort-Object LastWriteTime, Name | Select-Object -Last 1
@@ -321,7 +336,7 @@ Clear-MaterializedBundledCache -InstallRoot $installRoot -VersionValue $Version
 
 if (-not $SkipLauncher) {
     try {
-        Try-RefreshLauncher -RepoRoot $repoRoot -StageRoot $stageRoot -InstallRoot $installRoot -QtRootValue $QtRoot
+        Try-RefreshLauncher -RepoRoot $repoRoot -StageRoot $stageRoot -InstallRoot $installRoot -QtRootValue $QtRoot -Clean:$CleanLauncher
     }
     catch {
         Write-Warning "Launcher refresh failed: $($_.Exception.Message)"

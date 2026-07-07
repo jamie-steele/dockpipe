@@ -19,6 +19,30 @@ func effectiveRepoRoot() (string, error) {
 	return infrastructure.RepoRoot()
 }
 
+// normalizeContainerWorkPath maps the Pipeon/code-server container workspace mount
+// back to the host repo root before Windows path handling sees "/work" as "work".
+func normalizeContainerWorkPath(userPath string) (string, error) {
+	userPath = strings.TrimSpace(userPath)
+	if userPath == "" {
+		return "", nil
+	}
+	if strings.Contains(userPath, "\x00") {
+		return "", fmt.Errorf("invalid path")
+	}
+	normalized := filepath.ToSlash(userPath)
+	if normalized != "/work" && !strings.HasPrefix(normalized, "/work/") {
+		return userPath, nil
+	}
+	root, err := effectiveRepoRoot()
+	if err != nil {
+		return "", err
+	}
+	if normalized == "/work" {
+		return filepath.Clean(root), nil
+	}
+	return filepath.Join(filepath.Clean(root), filepath.FromSlash(strings.TrimPrefix(normalized, "/work/"))), nil
+}
+
 // ResolvePathUnderRepoRoot resolves user-supplied paths for specs and validation targets.
 // Absolute paths must still lie under the resolved project root.
 func ResolvePathUnderRepoRoot(userPath string) (string, error) {
@@ -26,8 +50,9 @@ func ResolvePathUnderRepoRoot(userPath string) (string, error) {
 	if userPath == "" {
 		return "", fmt.Errorf("path is empty")
 	}
-	if strings.Contains(userPath, "\x00") {
-		return "", fmt.Errorf("invalid path")
+	mappedPath, err := normalizeContainerWorkPath(userPath)
+	if err != nil {
+		return "", err
 	}
 	rr, err := effectiveRepoRoot()
 	if err != nil {
@@ -35,10 +60,10 @@ func ResolvePathUnderRepoRoot(userPath string) (string, error) {
 	}
 	root := filepath.Clean(rr)
 	var p string
-	if filepath.IsAbs(userPath) {
-		p = filepath.Clean(userPath)
+	if filepath.IsAbs(mappedPath) {
+		p = filepath.Clean(mappedPath)
 	} else {
-		p = filepath.Clean(filepath.Join(root, userPath))
+		p = filepath.Clean(filepath.Join(root, mappedPath))
 	}
 	rel, err := filepath.Rel(root, p)
 	if err != nil {

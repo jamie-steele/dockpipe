@@ -19,3 +19,4 @@ image:
 steps:
   - id: claude
     isolate: claude
+    resolver: claude

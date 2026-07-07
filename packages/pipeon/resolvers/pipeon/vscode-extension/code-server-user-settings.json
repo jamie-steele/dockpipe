@@ -5,6 +5,9 @@
   "workbench.secondarySideBar.defaultVisibility": "visibleInWorkspace",
   "workbench.startupEditor": "none",
   "workbench.welcome.enabled": false,
+  "security.workspace.trust.enabled": false,
+  "security.workspace.trust.startupPrompt": "never",
+  "security.workspace.trust.untrustedFiles": "open",
   "files.exclude": {
     "**/.dockpipe/**": true,
     "**/bin/.dockpipe/**": true,

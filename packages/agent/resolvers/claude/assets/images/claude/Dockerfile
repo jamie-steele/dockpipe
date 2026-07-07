@@ -65,7 +65,8 @@ fi
 
 exec /bin/bash /entrypoint.sh "$@"
 EOF
-RUN chmod +x /entrypoint.sh /claude-entrypoint.sh
+RUN sed -i 's/\r$//' /entrypoint.sh /claude-entrypoint.sh \
+    && chmod +x /entrypoint.sh /claude-entrypoint.sh
 
 WORKDIR /work
-ENTRYPOINT ["/claude-entrypoint.sh"]
+ENTRYPOINT ["/bin/bash", "-lc", "set -e; tr -d '\\015' < /entrypoint.sh > /tmp/entrypoint.sh; tr -d '\\015' < /claude-entrypoint.sh > /tmp/claude-entrypoint.sh; cat /tmp/entrypoint.sh > /entrypoint.sh; cat /tmp/claude-entrypoint.sh > /claude-entrypoint.sh; chmod +x /entrypoint.sh /claude-entrypoint.sh; exec /bin/bash /claude-entrypoint.sh \"$@\"", "dockpipe-claude"]

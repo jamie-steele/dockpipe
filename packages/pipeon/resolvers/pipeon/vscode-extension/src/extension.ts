@@ -12,6 +12,12 @@ const os = require("os");
 
 const DEFAULT_MODEL = "llama3.2";
 const DEFAULT_MODEL_PROVIDER = "dorkpipe-mcp";
+const DEFAULT_CHAT_PROVIDER = "ollama";
+const DEFAULT_CHAT_MODELS = {
+  ollama: ["llama3.2", "qwen2.5-coder:14b", "deepseek-r1:14b"],
+  codex: ["config", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark"],
+  claude: ["sonnet", "opus", "haiku"],
+};
 const CHAT_VIEW_ID = "pipeon.chatView";
 const WELCOME_PANEL_ID = "pipeon.welcome";
 const CHAT_STATE_KEY = "pipeon.chatState.v2";
@@ -68,6 +74,10 @@ type RequestChannel = {
 type ExecuteNaturalLanguageRequestOptions = {
   mode?: string;
   modelProfile?: unknown;
+  chatProvider?: unknown;
+  chatModel?: unknown;
+  sessionId?: string;
+  conversationHistory?: string;
   reasoningTemplate?: AnyRecord | null;
   attachments?: AttachmentRecord[];
   onEvent?: (message: string) => void;
@@ -94,6 +104,8 @@ type PipeonSurface = {
   webview: Webview;
   rendered: boolean;
   shellVersion: string;
+  kind?: "navigator" | "chat";
+  sessionId?: string;
 };
 
 function deepClone(value) {
@@ -504,6 +516,21 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
+function commandExists(command) {
+  const name = String(command || "").trim();
+  if (!name) {
+    return false;
+  }
+  try {
+    if (process.platform === "win32") {
+      return cp.spawnSync("where.exe", [name], { windowsHide: true, timeout: 1200 }).status === 0;
+    }
+    return cp.spawnSync("sh", ["-lc", `command -v ${shellQuote(name)} >/dev/null 2>&1`], { timeout: 1200 }).status === 0;
+  } catch {
+    return false;
+  }
+}
+
 function nowIso() {
   return new Date().toISOString();
 }
@@ -701,6 +728,8 @@ function createInitialChatState() {
     composerMode: "ask",
     autoApplyEdits: false,
     modelProfile: "balanced",
+    chatProvider: DEFAULT_CHAT_PROVIDER,
+    chatModel: DEFAULT_CHAT_MODELS.ollama[0],
     activeTemplateId: BUILTIN_TEMPLATE_ID,
     reasoningTemplates,
     modelStore,
@@ -710,6 +739,21 @@ function createInitialChatState() {
 function normalizeModelProfile(value) {
   const next = String(value || "").toLowerCase();
   return MODEL_PROFILES.includes(next) ? next : "balanced";
+}
+
+function normalizeChatProvider(value) {
+  const next = String(value || "").toLowerCase().trim();
+  return ["ollama", "codex", "claude"].includes(next) ? next : DEFAULT_CHAT_PROVIDER;
+}
+
+function normalizeChatModel(provider, value) {
+  const normalizedProvider = normalizeChatProvider(provider);
+  const models = DEFAULT_CHAT_MODELS[normalizedProvider] || DEFAULT_CHAT_MODELS.ollama;
+  const next = String(value || "").trim();
+  if (normalizedProvider === "codex" && ["default", "auto", "cli-default", "account", "account-default", "gpt-5", "gpt-5-codex", "o4-mini"].includes(next.toLowerCase())) {
+    return "config";
+  }
+  return next || models[0] || DEFAULT_MODEL;
 }
 
 function normalizeModelEntry(entry) {
@@ -958,6 +1002,23 @@ function sanitizePendingAction(value) {
   };
 }
 
+function sanitizeProviderAction(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const kind = String(value.kind || "").trim();
+  if (kind !== "claude-auth") {
+    return null;
+  }
+  return {
+    kind,
+    title: String(value.title || "Authenticate Claude"),
+    description: value.description ? clampText(String(value.description), 800) : "",
+    buttonLabel: String(value.buttonLabel || "Authenticate Claude"),
+    provider: String(value.provider || "claude"),
+  };
+}
+
 function sanitizeRunRecord(value) {
   if (!value || typeof value !== "object") {
     return null;
@@ -1107,6 +1168,7 @@ function sanitizeMessage(message) {
     format: message?.format === "plain" ? "plain" : "markdown",
     createdAt: String(message?.createdAt || nowIso()),
     pendingAction: sanitizePendingAction(message?.pendingAction),
+    providerAction: sanitizeProviderAction(message?.providerAction),
     run: sanitizeRunRecord(message?.run),
     diffPreview: message?.diffPreview ? summarizeDiffPreview(String(message.diffPreview)) : "",
     liveStatus: message?.liveStatus ? String(message.liveStatus) : "",
@@ -1273,6 +1335,7 @@ function normalizeStoredChatState(raw) {
       .slice(0, MAX_SAVED_SESSIONS);
 
     const activeSession = sessions.find((session) => session.id === raw.activeSessionId) || sessions[0];
+    const chatProvider = normalizeChatProvider(raw.chatProvider);
     return {
       activeSessionId: activeSession.id,
       sessions,
@@ -1281,6 +1344,8 @@ function normalizeStoredChatState(raw) {
         : "ask",
       autoApplyEdits: !!raw.autoApplyEdits,
       modelProfile: normalizeModelProfile(raw.modelProfile),
+      chatProvider,
+      chatModel: normalizeChatModel(chatProvider, raw.chatModel),
       activeTemplateId: templateById(reasoningTemplates, raw.activeTemplateId)?.id || BUILTIN_TEMPLATE_ID,
       reasoningTemplates,
       modelStore,
@@ -1309,6 +1374,8 @@ function ensureValidChatStore(chatStore) {
     ...chatStore,
     sessions,
     activeSessionId,
+    chatProvider: normalizeChatProvider(chatStore.chatProvider),
+    chatModel: normalizeChatModel(chatStore.chatProvider, chatStore.chatModel),
     modelStore: normalizeModelStore(chatStore.modelStore),
     reasoningTemplates: normalizeReasoningTemplates(chatStore.reasoningTemplates, normalizeModelStore(chatStore.modelStore)),
     activeTemplateId: templateById(
@@ -1357,6 +1424,14 @@ function compactPendingActionForStorage(value) {
   };
 }
 
+function compactProviderActionForStorage(value) {
+  const action = sanitizeProviderAction(value);
+  if (!action) {
+    return null;
+  }
+  return action;
+}
+
 function compactMessageForStorage(message) {
   const safe = sanitizeMessage(message);
   return {
@@ -1366,6 +1441,7 @@ function compactMessageForStorage(message) {
     format: safe.format,
     createdAt: safe.createdAt,
     pendingAction: compactPendingActionForStorage(safe.pendingAction),
+    providerAction: compactProviderActionForStorage(safe.providerAction),
     run: sanitizeRunRecord(safe.run),
     diffPreview: safe.diffPreview ? clampText(safe.diffPreview, 3000) : "",
   };
@@ -1380,6 +1456,8 @@ function compactChatStoreForPersistence(chatStore) {
       : "ask",
     autoApplyEdits: !!safe.autoApplyEdits,
     modelProfile: normalizeModelProfile(safe.modelProfile),
+    chatProvider: normalizeChatProvider(safe.chatProvider),
+    chatModel: normalizeChatModel(safe.chatProvider, safe.chatModel),
     activeTemplateId: templateById(safe.reasoningTemplates, safe.activeTemplateId)?.id || BUILTIN_TEMPLATE_ID,
     // User-authored templates and model lanes live in globalState; keep workspaceState focused on chat/session data.
     sessions: safe.sessions.slice(0, MAX_SAVED_SESSIONS).map((session) => ({
@@ -1693,6 +1771,35 @@ function buildSystemPrompt(signals) {
   ].join("\n\n");
 }
 
+function buildConversationHistoryForProvider(session, currentUserMessageId = "") {
+  const messages = Array.isArray(session?.messages) ? session.messages : [];
+  const lines = [];
+  for (const message of messages.slice(-12)) {
+    const role = String(message?.role || "").toLowerCase() === "user" ? "User" : "DorkPipe";
+    const id = String(message?.id || "");
+    const text = clampText(String(message?.text || "").replace(/\s+/g, " ").trim(), 1200);
+    if (!text || id === currentUserMessageId) {
+      continue;
+    }
+    lines.push(`${role}: ${text}`);
+  }
+  return lines.slice(-8).join("\n");
+}
+
+function withConversationHistory(text, history) {
+  const trimmedHistory = String(history || "").trim();
+  if (!trimmedHistory) {
+    return text;
+  }
+  return [
+    "Recent Pipeon conversation context:",
+    trimmedHistory,
+    "",
+    "Current user request:",
+    String(text || "").trim(),
+  ].join("\n");
+}
+
 function runCommand(command, cwd, extraEnv: NodeJS.ProcessEnv = {}): Promise<RunCommandResult> {
   return new Promise((resolve) => {
     cp.exec(command, { cwd, env: { ...process.env, ...extraEnv }, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
@@ -1788,13 +1895,29 @@ async function requireMcpHttpConfig() {
   return config;
 }
 
-async function callMcp(method, params) {
-  const config = await requireMcpHttpConfig();
-  const response = await fetch(`${config.url}/mcp`, {
+function mcpHttpEndpoint(url) {
+  const clean = String(url || "").trim().replace(/\/+$/, "");
+  if (!clean) {
+    return "";
+  }
+  return clean.endsWith("/mcp") ? clean : `${clean}/mcp`;
+}
+
+async function callMcpAt(url, apiKey, method, params) {
+  const endpoint = mcpHttpEndpoint(url);
+  if (!endpoint) {
+    throw new Error("MCP URL is required.");
+  }
+  const headers: AnyRecord = {
+    "Content-Type": "application/json",
+  };
+  const key = String(apiKey || "").trim();
+  if (key) {
+    headers.Authorization = `Bearer ${key}`;
+  }
+  const response = await fetch(endpoint, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
+    headers,
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: Date.now(),
@@ -1811,6 +1934,11 @@ async function callMcp(method, params) {
     throw new Error(`MCP RPC ${payload.error.code}: ${payload.error.message || "request failed"}`);
   }
   return payload?.result || null;
+}
+
+async function callMcp(method, params) {
+  const config = await requireMcpHttpConfig();
+  return callMcpAt(config.url, "", method, params);
 }
 
 function flattenMcpTextContent(items) {
@@ -1832,15 +1960,63 @@ async function callMcpTool(toolName, args) {
   return raw ? JSON.parse(raw) : null;
 }
 
+async function callHostMcpTool(toolName, args) {
+  const url = String(process.env.PIPEON_HOST_MCP_URL || "").trim();
+  const apiKey = String(process.env.PIPEON_HOST_MCP_API_KEY || "").trim();
+  if (!url || !apiKey) {
+    throw new Error("DorkPipe host bridge is not available. Relaunch pipeon-dev-stack so Pipeon receives PIPEON_HOST_MCP_URL and PIPEON_HOST_MCP_API_KEY.");
+  }
+  const result = await callMcpAt(url, apiKey, "tools/call", {
+    name: toolName,
+    arguments: args,
+  });
+  if (!result) {
+    return null;
+  }
+  const raw = flattenMcpTextContent(result.content);
+  return raw ? JSON.parse(raw) : null;
+}
+
 async function executeNaturalLanguageRequest(root, text, signals, options: ExecuteNaturalLanguageRequestOptions = {}): Promise<any> {
   const requestMode = ["ask", "agent", "plan"].includes(String(options.mode || "").toLowerCase())
     ? String(options.mode).toLowerCase()
     : "ask";
   const modelProfile = normalizeModelProfile(options.modelProfile);
+  const chatProvider = normalizeChatProvider(options.chatProvider);
+  const chatModel = normalizeChatModel(chatProvider, options.chatModel);
+  const providerText = chatProvider === "codex"
+    ? text
+    : withConversationHistory(text, options.conversationHistory);
+
+  if (chatProvider === "codex") {
+    return executeCodexHostChat(root, text, signals, {
+      model: chatModel,
+      sessionId: options.sessionId,
+      mode: requestMode,
+      modelProfile,
+      onEvent: options.onEvent,
+      channel: options.channel,
+    });
+  }
+  if (chatProvider === "claude") {
+    return executeClaudeGuardedChat(root, providerText, signals, {
+      model: chatModel,
+      sessionId: options.sessionId,
+      mode: requestMode,
+      modelProfile,
+      onEvent: options.onEvent,
+      channel: options.channel,
+    });
+  }
+
   const payload = await callMcpTool("dorkpipe.request", {
     workdir: root,
-    message: text,
+    message: providerText,
     mode: requestMode,
+    session_id: options.sessionId || "",
+    provider_preset: "ollama-stack",
+    model_provider: "ollama",
+    model: chatModel,
     active_file: signals.activeFile || "",
     open_files: Array.isArray(signals.openFiles) ? signals.openFiles : [],
     selection_text: signals.selectionText || "",
@@ -1871,8 +2047,104 @@ async function executeNaturalLanguageRequest(root, text, signals, options: Execu
     format: "markdown",
     readyToApply: payload?.ready_to_apply || null,
     metadata: finalEvent.metadata || {},
-    status: buildDorkpipeStatus({ ...(finalEvent.metadata || {}), model_profile: modelProfile }, requestMode),
+    status: buildDorkpipeStatus({ ...(finalEvent.metadata || {}), model_profile: modelProfile, model: chatModel }, requestMode),
   };
+}
+
+async function executeCodexHostChat(root, text, signals, options: AnyRecord = {}): Promise<any> {
+  const model = normalizeChatModel("codex", options.model);
+  const sessionId = String(options.sessionId || "").trim();
+  if (options.onEvent) {
+    options.onEvent("Starting Codex host bridge");
+  }
+  options.channel?.appendLine("Codex direct chat: DorkPipe host MCP bridge -> codex exec --sandbox workspace-write");
+  const payload = await callHostMcpTool("dorkpipe.host_codex_chat", {
+    workdir: root,
+    message: text,
+    model,
+    session_id: sessionId,
+    active_file: signals.activeFile || "",
+    open_files: Array.isArray(signals.openFiles) ? signals.openFiles : [],
+    selection_text: signals.selectionText || "",
+  });
+  if (Array.isArray(payload?.stderr) && payload.stderr.length) {
+    options.channel?.appendLine(payload.stderr.join("\n"));
+  } else if (String(payload?.stderr || "").trim()) {
+    options.channel?.appendLine(String(payload.stderr));
+  }
+  return {
+    kind: "codex",
+    text: String(payload?.text || "(Codex returned no output.)"),
+    format: "markdown",
+    readyToApply: payload?.ready_to_apply || null,
+    metadata: payload?.metadata || {
+      route: "chat",
+      provider_preset: "codex",
+      model,
+    },
+    status: payload?.status || `Provider: Codex  |  Model: ${model}  |  Exec sandbox: workspace-write`,
+  };
+}
+
+async function executeClaudeGuardedChat(root, text, signals, options: AnyRecord = {}): Promise<any> {
+  const model = normalizeChatModel("claude", options.model);
+  const sessionId = String(options.sessionId || "").trim();
+  if (options.onEvent) {
+    options.onEvent("Starting Claude guarded bridge");
+  }
+  options.channel?.appendLine("Claude direct chat: DorkPipe host MCP bridge -> guarded DockPipe workflow boundary");
+  const payload = await callHostMcpTool("dorkpipe.host_claude_chat", {
+    workdir: root,
+    message: text,
+    model,
+    session_id: sessionId,
+    active_file: signals.activeFile || "",
+    open_files: Array.isArray(signals.openFiles) ? signals.openFiles : [],
+    selection_text: signals.selectionText || "",
+  });
+  if (Array.isArray(payload?.stderr) && payload.stderr.length) {
+    options.channel?.appendLine(payload.stderr.join("\n"));
+  } else if (String(payload?.stderr || "").trim()) {
+    options.channel?.appendLine(String(payload.stderr));
+  }
+  return {
+    kind: "claude",
+    text: String(payload?.text || "(Claude returned no output.)"),
+    format: "markdown",
+    readyToApply: payload?.ready_to_apply || null,
+    metadata: payload?.metadata || {
+      route: "chat",
+      provider_preset: "claude",
+      model,
+    },
+    providerAction: payload?.metadata?.auth_required
+      ? {
+          kind: "claude-auth",
+          title: "Authenticate Claude",
+          description: "Open a host terminal and run `claude auth login`, then recheck Claude auth before retrying chat.",
+          buttonLabel: "Authenticate On Host",
+          provider: "claude",
+        }
+      : null,
+    status: payload?.status || `Provider: Claude  |  Model: ${model}  |  Guard: DorkPipe workflow boundary`,
+  };
+}
+
+async function repairProviderAuth(root, provider) {
+  try {
+    return await callHostMcpTool("dorkpipe.provider_auth_repair", {
+      workdir: root,
+      provider,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (String(provider || "").toLowerCase() === "claude" && message.includes("provider_auth_repair") && message.includes("not allowed")) {
+      return callHostMcpTool("dorkpipe.host_claude_auth", {
+        workdir: root,
+      });
+    }
+    throw err;
+  }
 }
 
 function buildDorkpipeStatus(metadata, fallbackMode = "ask") {
@@ -2270,6 +2542,9 @@ async function handleLocalCommand(root, rawText) {
           "- `/test`",
           "- `/ci`",
           "- `/validate [path]`",
+          "- `/agents`",
+          "- `/codex <prompt>`",
+          "- `/claude <prompt>`",
           "- `/plan <task>`",
           "- `/edit <task>`",
           "- `/workflow <name>`",
@@ -2277,6 +2552,37 @@ async function handleLocalCommand(root, rawText) {
         ].join("\n"),
         status: "Local command help",
       };
+    case "/agents":
+      return {
+        kind: "local",
+        text: [
+          "# Direct Agents And Workflows",
+          "",
+          "Pipeon chat has a provider/model selector for direct chat.",
+          "",
+          "- `Ollama stack` routes through the DorkPipe MCP boundary.",
+          "- `Codex host exec` routes through the host MCP bridge, then runs `codex exec` with `--sandbox workspace-write`. Select `config` to use your host Codex config model.",
+          "- `Claude guarded` routes through the host MCP bridge, then through a guarded DockPipe workflow boundary.",
+          "- `/workflow <name>` launches a DorkPipe workflow for multi-step, risky, or agentic work.",
+          "",
+          "Use direct chat for one-worker answers. Use workflows when the task needs planning, verification, multiple workers, provider comparison, approvals, or durable artifacts.",
+        ].join("\n"),
+        status: "Direct agent help",
+      };
+    case "/codex": {
+      if (args.length === 0) {
+        return { kind: "local", text: "Usage: `/codex <prompt>`", status: "Codex direct agent needs a prompt" };
+      }
+      const prompt = args.join(" ");
+      return executeCodexHostChat(root, prompt, { activeFile: "", openFiles: [], selectionText: "" }, { model: "config" });
+    }
+    case "/claude": {
+      if (args.length === 0) {
+        return { kind: "local", text: "Usage: `/claude <prompt>`", status: "Claude guarded agent needs a prompt" };
+      }
+      const prompt = args.join(" ");
+      return executeClaudeGuardedChat(root, prompt, { activeFile: "", openFiles: [], selectionText: "" }, { model: "sonnet" });
+    }
     case "/status": {
       const result = await runCommand(`${shellQuote(resolvePipeonCommand())} status`, root, {
         DOCKPIPE_WORKDIR: root,
@@ -2404,6 +2710,10 @@ async function executeDorkpipeRequest(root, session, text, options: ExecuteNatur
       onToken: options.onToken,
       mode,
       modelProfile: options.modelProfile,
+      chatProvider: options.chatProvider,
+      chatModel: options.chatModel,
+      sessionId: options.sessionId,
+      conversationHistory: options.conversationHistory,
       attachments: options.attachments,
       reasoningTemplate,
     });
@@ -2426,6 +2736,10 @@ async function executeDorkpipeRequest(root, session, text, options: ExecuteNatur
     onToken: options.onToken,
     mode,
     modelProfile: options.modelProfile,
+    chatProvider: options.chatProvider,
+    chatModel: options.chatModel,
+    sessionId: options.sessionId,
+    conversationHistory: options.conversationHistory,
     attachments: options.attachments,
     reasoningTemplate,
   });
@@ -2469,7 +2783,7 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
           <div class="headerSpacer"></div>
           <div class="headerActions">
             <select id="sessionSelect" class="headerSelect" aria-label="Chat session"></select>
-            <button class="btn ghost iconBtn" id="settingsBtn" type="button" title="Designer settings and models">⚙</button>
+            <button class="btn ghost iconBtn" id="settingsBtn" type="button" title="Workflow handoff">⚙</button>
             <button class="btn ghost iconBtn" id="clearBtn" type="button" title="Clear chat">↺</button>
             <button class="btn ghost iconBtn" id="newChatBtn" type="button" title="New chat">✎</button>
           </div>
@@ -2482,8 +2796,8 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
         <div class="studioHeader">
           <div>
             <div class="settingsEyebrow">DorkPipe Studio</div>
-            <h2 id="studioTitle">Template Designer</h2>
-            <div class="canvasHint" id="studioMeta">Inspect and shape the active DorkPipe reasoning surface.</div>
+            <h2 id="studioTitle">Workflow Handoff</h2>
+            <div class="canvasHint" id="studioMeta">Use workflow YAML and the DorkPipe CLI/MCP stack as the durable contract.</div>
           </div>
           <div class="toolbarRow">
             <button class="btn ghost" id="studioBackBtn" type="button">Back to chat</button>
@@ -2493,52 +2807,53 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
           <section class="settingsSection hidden" id="settingsStudio">
             <div class="sectionHead">
               <div>
-                <h3>Designer Settings</h3>
-                <p>Review the active reasoning surface here, then jump into the dedicated template or model browser views.</p>
+                <h3>Workflow Handoff</h3>
+                <p>Pipeon chat can switch provider/model for direct chat. Codex runs through host <code>codex exec</code> with workspace sandboxing; Ollama and Claude stay behind DorkPipe-controlled boundaries.</p>
               </div>
             </div>
             <div class="settingsSummaryGrid">
               <article class="summaryCard">
-                <div class="summaryLabel">Active template</div>
-                <div class="summaryValue" id="activeTemplateSummary">DorkPipe Default</div>
+                <div class="summaryLabel">Chat</div>
+                <div class="summaryValue" id="activeTemplateSummary">Provider/model</div>
               </article>
               <article class="summaryCard">
-                <div class="summaryLabel">Templates</div>
-                <div class="summaryValue" id="templateCountSummary">0 available</div>
+                <div class="summaryLabel">Direct agent</div>
+                <div class="summaryValue" id="templateCountSummary">/codex</div>
               </article>
               <article class="summaryCard">
-                <div class="summaryLabel">Models</div>
-                <div class="summaryValue" id="modelCountSummary">0 registered</div>
+                <div class="summaryLabel">Workflow</div>
+                <div class="summaryValue" id="modelCountSummary">/workflow</div>
               </article>
             </div>
             <div class="settingsSection" style="margin-top:12px;">
               <div class="sectionHead">
                 <div>
-                  <h3>Templates</h3>
-                  <p>Select the active template or jump straight into the designer for edits.</p>
+                  <h3>Escalation Path</h3>
+                  <p>Use <code>/codex &lt;prompt&gt;</code> for a direct Codex worker. Use <code>/workflow &lt;name&gt;</code> when work needs planning, verification, multiple workers, provider comparison, or durable artifacts.</p>
                 </div>
                 <div class="toolbarRow compactRow">
-                  <button class="btn" id="newTemplateBtn" type="button">Create template</button>
-                  <button class="btn ghost" id="openTemplateDesignerBtn" type="button">Open designer</button>
+                  <button class="btn" id="exportTemplateYamlBtn" type="button">Open workflow YAML</button>
+                  <button class="btn ghost hidden" id="newTemplateBtn" type="button">Create template</button>
+                  <button class="btn ghost hidden" id="openTemplateDesignerBtn" type="button">Open designer</button>
                 </div>
               </div>
               <select id="templateSelect" class="hidden" aria-label="Active template"></select>
-              <div class="templateManagerList" id="templateManagerList"></div>
+              <div class="templateManagerList hidden" id="templateManagerList"></div>
             </div>
             <div class="settingsSection" style="margin-top:12px;">
               <div class="sectionHead">
                 <div>
-                  <h3>Models</h3>
-                  <p>Open the DorkPipe model browser when you need to register, review, or remove entries.</p>
+                  <h3>Agentic Boundary</h3>
+                  <p>Codex direct execution uses <code>codex exec</code> with the host Codex config model by default. Claude direct execution requires the guarded DorkPipe sandbox gate before any Claude worker can act. Multi-agent reasoning belongs in YAML-backed workflows.</p>
                 </div>
               </div>
               <div class="modelStoreSummary" id="modelStoreSummary"></div>
               <div class="toolbarRow">
-                <button class="btn" id="openModelManagerBtn" type="button">Open model browser</button>
+                <button class="btn hidden" id="openModelManagerBtn" type="button">Open model browser</button>
               </div>
             </div>
           </section>
-          <section class="settingsSection" id="templateStudio">
+          <section class="settingsSection hidden" id="templateStudio">
             <div class="sectionHead">
               <div>
                 <h3>Visual Designer</h3>
@@ -2547,7 +2862,7 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
               <div class="toolbarRow compactRow">
                 <button class="btn ghost" id="copyTemplateBtn" type="button">Duplicate</button>
                 <button class="btn ghost danger" id="deleteTemplateBtn" type="button">Delete</button>
-                <button class="btn ghost" id="exportTemplateYamlBtn" type="button">Export YAML</button>
+                <button class="btn ghost hidden" id="legacyExportTemplateYamlBtn" type="button">Export YAML</button>
                 <button class="btn" id="saveTemplateBtn" type="button">Save template</button>
               </div>
             </div>
@@ -2713,6 +3028,12 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
                   <option value="deep">Deep</option>
                   <option value="max">Max</option>
                 </select>
+                <select id="chatProviderSelect" aria-label="Chat provider">
+                  <option value="ollama">Ollama stack</option>
+                  <option value="codex">Codex host exec</option>
+                  <option value="claude">Claude guarded</option>
+                </select>
+                <select id="chatModelSelect" aria-label="Chat model"></select>
                 <select id="modeSelect" aria-label="Request mode">
                   <option value="ask">Ask</option>
                   <option value="agent">Agent</option>
@@ -2732,6 +3053,159 @@ function renderChatHtmlExternal(webview, extensionUri, state) {
     </div>
     <script type="application/json" id="pipeon-initial-state">${initialStateJson}</script>
     <script nonce="${nonce}" src="${scriptUri}"></script>
+  </body>
+</html>`;
+}
+
+function renderSessionNavigatorHtml(webview, extensionUri, state) {
+  const nonce = String(Date.now());
+  const sessions = Array.isArray(state?.sessionList) ? state.sessionList : [];
+  const activeSessionId = String(state?.activeSessionId || "");
+  const status = String(state?.status || "DorkPipe sessions");
+  const sessionCards = sessions.length
+    ? sessions.map((session) => {
+        const id = String(session.id || "");
+        const title = escapeHtml(session.title || "New chat");
+        const meta = escapeHtml(session.updatedAt ? `Updated ${session.updatedAt}` : "Workspace chat");
+        const active = id === activeSessionId ? " active" : "";
+        return [
+          `<button class="sessionCard${active}" type="button" data-session-id="${escapeHtml(id)}">`,
+          `<span class="sessionTitle">${title}</span>`,
+          `<span class="sessionMeta">${meta}</span>`,
+          "</button>",
+        ].join("");
+      }).join("")
+    : '<div class="empty">No sessions yet.</div>';
+  return `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';"
+    />
+    <style>
+      body {
+        margin: 0;
+        font-family: var(--vscode-font-family);
+        color: var(--vscode-editor-foreground, #f4f7fb);
+        background: var(--vscode-sideBar-background, var(--vscode-editor-background, #1f1f1f));
+      }
+      .wrap {
+        box-sizing: border-box;
+        min-height: 100vh;
+        padding: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+      }
+      .eyebrow {
+        font-size: 10px;
+        letter-spacing: .12em;
+        text-transform: uppercase;
+        color: color-mix(in srgb, var(--vscode-editor-foreground, #f4f7fb) 72%, transparent);
+      }
+      h1 {
+        margin: 2px 0 0;
+        font-size: 15px;
+        line-height: 1.2;
+        color: var(--vscode-editor-foreground, #ffffff);
+      }
+      .status {
+        color: color-mix(in srgb, var(--vscode-editor-foreground, #f4f7fb) 78%, transparent);
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      button {
+        font: inherit;
+      }
+      .newBtn {
+        border: 1px solid var(--vscode-button-border, transparent);
+        border-radius: 10px;
+        padding: 7px 10px;
+        cursor: pointer;
+        color: var(--vscode-button-foreground);
+        background: var(--vscode-button-background);
+        font-weight: 700;
+      }
+      .sessions {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+      .sessionCard {
+        width: 100%;
+        text-align: left;
+        border: 1px solid color-mix(in srgb, var(--vscode-sideBarSectionHeader-border, var(--vscode-panel-border)) 80%, transparent);
+        border-radius: 12px;
+        padding: 10px;
+        cursor: pointer;
+        color: var(--vscode-editor-foreground, #f4f7fb);
+        background: color-mix(in srgb, var(--vscode-sideBar-background) 84%, var(--vscode-editor-background));
+      }
+      .sessionCard:hover {
+        background: var(--vscode-list-hoverBackground);
+      }
+      .sessionCard.active {
+        border-color: var(--vscode-focusBorder);
+        background: color-mix(in srgb, var(--vscode-list-activeSelectionBackground) 45%, var(--vscode-sideBar-background));
+        color: var(--vscode-editor-foreground, #ffffff);
+      }
+      .sessionTitle {
+        display: block;
+        font-weight: 700;
+        font-size: 12px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .sessionMeta {
+        display: block;
+        margin-top: 4px;
+        font-size: 11px;
+        color: color-mix(in srgb, currentColor 72%, transparent);
+      }
+      .hint, .empty {
+        border: 1px dashed var(--vscode-panel-border);
+        border-radius: 12px;
+        padding: 10px;
+        color: color-mix(in srgb, var(--vscode-editor-foreground, #f4f7fb) 76%, transparent);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="top">
+        <div>
+          <div class="eyebrow">DorkPipe</div>
+          <h1>Sessions</h1>
+        </div>
+        <button class="newBtn" id="newSession" type="button">New</button>
+      </div>
+      <div class="status">${escapeHtml(status)}</div>
+      <div class="sessions">${sessionCards}</div>
+      <div class="hint">Open a session to chat in the main editor area. You can keep multiple DorkPipe sessions beside source files.</div>
+    </div>
+    <script nonce="${nonce}">
+      const vscode = acquireVsCodeApi();
+      document.getElementById("newSession").addEventListener("click", () => {
+        vscode.postMessage({ type: "newSession", openPanel: true });
+      });
+      for (const item of document.querySelectorAll("[data-session-id]")) {
+        item.addEventListener("click", () => {
+          vscode.postMessage({ type: "openSession", sessionId: item.getAttribute("data-session-id") || "" });
+        });
+      }
+    </script>
   </body>
 </html>`;
 }
@@ -3049,8 +3523,7 @@ class PipeonChatViewProvider {
   extensionVersion: string;
   view: WebviewView | null;
   surfaces: Map<string, PipeonSurface>;
-  detachedPanel: WebviewPanel | null;
-  detachedSurfaceId: string;
+  sessionPanels: Map<string, WebviewPanel>;
   chatStore: any;
   state: any;
 
@@ -3060,8 +3533,7 @@ class PipeonChatViewProvider {
     this.extensionVersion = extensionVersion || "unknown";
     this.view = null;
     this.surfaces = new Map();
-    this.detachedPanel = null;
-    this.detachedSurfaceId = "";
+    this.sessionPanels = new Map();
     logChannelInfo(this.channel, "Pipeon chat provider constructing");
     try {
       const workspaceChatStore = normalizeStoredChatState(this.context.workspaceState.get(CHAT_STATE_KEY));
@@ -3086,6 +3558,8 @@ class PipeonChatViewProvider {
       composerMode: this.chatStore.composerMode || "ask",
       autoApplyEdits: !!this.chatStore.autoApplyEdits,
       modelProfile: normalizeModelProfile(this.chatStore.modelProfile),
+      chatProvider: normalizeChatProvider(this.chatStore.chatProvider),
+      chatModel: normalizeChatModel(this.chatStore.chatProvider, this.chatStore.chatModel),
       pendingAttachments: [],
       activeTemplateId: this.chatStore.activeTemplateId || BUILTIN_TEMPLATE_ID,
       activeTemplate: null,
@@ -3128,6 +3602,11 @@ class PipeonChatViewProvider {
     return this.chatStore.sessions.find((session) => session.id === this.chatStore.activeSessionId) || this.chatStore.sessions[0];
   }
 
+  sessionById(sessionId) {
+    this.chatStore = ensureValidChatStore(this.chatStore);
+    return this.chatStore.sessions.find((session) => session.id === sessionId) || null;
+  }
+
   async persistChatStore() {
     const compact = compactChatStoreForPersistence(this.chatStore);
     const userStudio = compactUserStudioStateForPersistence(this.chatStore);
@@ -3166,6 +3645,8 @@ class PipeonChatViewProvider {
     this.state.composerMode = this.chatStore.composerMode || "ask";
     this.state.autoApplyEdits = !!this.chatStore.autoApplyEdits;
     this.state.modelProfile = normalizeModelProfile(this.chatStore.modelProfile);
+    this.state.chatProvider = normalizeChatProvider(this.chatStore.chatProvider);
+    this.state.chatModel = normalizeChatModel(this.state.chatProvider, this.chatStore.chatModel);
     this.state.activeTemplateId = activeTemplate?.id || BUILTIN_TEMPLATE_ID;
     this.state.activeTemplate = activeTemplate ? summarizeTemplate(activeTemplate) : null;
     this.state.reasoningTemplates = normalizeReasoningTemplates(this.chatStore.reasoningTemplates, this.chatStore.modelStore).map((template) => deepClone(template));
@@ -3174,11 +3655,27 @@ class PipeonChatViewProvider {
     this.state.sessionList = sortSessionsByUpdate(this.chatStore.sessions).map((item) => ({
       id: item.id,
       title: item.title || "New chat",
+      updatedAt: item.updatedAt || item.createdAt || "",
+      messageCount: Array.isArray(item.messages) ? item.messages.length : 0,
     }));
     this.state.messages = session.messages.map((message) => ({
       ...message,
       html: safeRenderMessageBody(message, this.channel),
     }));
+  }
+
+  stateForSession(sessionId) {
+    this.syncViewState();
+    const session = this.sessionById(sessionId) || this.activeSession;
+    return {
+      ...this.state,
+      activeSessionId: session.id,
+      activeSessionTitle: session.title || "New chat",
+      messages: session.messages.map((message) => ({
+        ...message,
+        html: safeRenderMessageBody(message, this.channel),
+      })),
+    };
   }
 
   async focus() {
@@ -3189,32 +3686,53 @@ class PipeonChatViewProvider {
     this.syncViewState();
     for (const [surfaceId, surface] of this.surfaces.entries()) {
       try {
+        const surfaceState = surface.kind === "chat"
+          ? this.stateForSession(surface.sessionId || this.chatStore.activeSessionId)
+          : this.state;
+        if (surface.kind === "chat" && surface.sessionId) {
+          const panel = this.sessionPanels.get(surface.sessionId);
+          const session = this.sessionById(surface.sessionId);
+          if (panel && session?.title) {
+            panel.title = session.title === "New chat" ? "DorkPipe Chat" : `DorkPipe: ${session.title}`;
+          }
+        }
         if (!surface.rendered) {
           logChannelInfo(this.channel, "Rendering chat webview shell", {
             surfaceId,
-            activeSessionId: this.state.activeSessionId,
-            messages: Array.isArray(this.state.messages) ? this.state.messages.length : 0,
+            activeSessionId: surfaceState.activeSessionId,
+            messages: Array.isArray(surfaceState.messages) ? surfaceState.messages.length : 0,
             shellVersion: CHAT_WEBVIEW_SHELL_VERSION,
           });
-          surface.webview.html = renderChatHtmlExternal(surface.webview, this.context.extensionUri, this.state);
+          surface.webview.html = surface.kind === "navigator"
+            ? renderSessionNavigatorHtml(surface.webview, this.context.extensionUri, surfaceState)
+            : renderChatHtmlExternal(surface.webview, this.context.extensionUri, surfaceState);
           surface.rendered = true;
           surface.shellVersion = "";
         } else {
           logChannelInfo(this.channel, "Posting state to chat webview", {
             surfaceId,
-            activeSessionId: this.state.activeSessionId,
-            messages: Array.isArray(this.state.messages) ? this.state.messages.length : 0,
+            activeSessionId: surfaceState.activeSessionId,
+            messages: Array.isArray(surfaceState.messages) ? surfaceState.messages.length : 0,
             isBusy: !!this.state.isBusy,
             shellVersion: surface.shellVersion || "unknown",
           });
-          surface.webview.postMessage({ type: "state", state: this.state });
+          if (surface.kind === "navigator") {
+            surface.webview.html = renderSessionNavigatorHtml(surface.webview, this.context.extensionUri, surfaceState);
+          } else {
+            surface.webview.postMessage({ type: "state", state: surfaceState });
+          }
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         this.channel.error(`Webview refresh failed (${surfaceId}): ${message}`);
         try {
           logChannelInfo(this.channel, "Attempting full webview reload after refresh failure", { surfaceId });
-          surface.webview.html = renderChatHtmlExternal(surface.webview, this.context.extensionUri, this.state);
+          const surfaceState = surface.kind === "chat"
+            ? this.stateForSession(surface.sessionId || this.chatStore.activeSessionId)
+            : this.state;
+          surface.webview.html = surface.kind === "navigator"
+            ? renderSessionNavigatorHtml(surface.webview, this.context.extensionUri, surfaceState)
+            : renderChatHtmlExternal(surface.webview, this.context.extensionUri, surfaceState);
           surface.rendered = true;
           surface.shellVersion = "";
         } catch (reloadError) {
@@ -3238,6 +3756,7 @@ class PipeonChatViewProvider {
     this.state.trace = [];
     this.state.status = "Started a new chat.";
     await this.saveAndRefresh();
+    return session;
   }
 
   async clearActiveSession() {
@@ -3259,6 +3778,7 @@ class PipeonChatViewProvider {
     this.state.trace = [];
     this.state.status = `Viewing chat: ${found.title}`;
     await this.saveAndRefresh();
+    return found;
   }
 
   async setComposerMode(mode) {
@@ -3279,6 +3799,16 @@ class PipeonChatViewProvider {
   async setModelProfile(value) {
     this.chatStore.modelProfile = normalizeModelProfile(value);
     this.state.modelProfile = normalizeModelProfile(value);
+    await this.saveAndRefresh();
+  }
+
+  async setChatProviderModel(provider, model) {
+    const nextProvider = normalizeChatProvider(provider);
+    const nextModel = normalizeChatModel(nextProvider, model);
+    this.chatStore.chatProvider = nextProvider;
+    this.chatStore.chatModel = nextModel;
+    this.state.chatProvider = nextProvider;
+    this.state.chatModel = nextModel;
     await this.saveAndRefresh();
   }
 
@@ -3462,13 +3992,16 @@ class PipeonChatViewProvider {
     this.refresh();
   }
 
-  async ask(root, text, mode = "ask", modelProfile = "balanced", attachments = []) {
+  async ask(root, text, mode = "ask", modelProfile = "balanced", attachments = [], sessionId = "", chatProvider = "", chatModel = "") {
     logChannelInfo(this.channel, "Received ask request", {
       mode,
       modelProfile,
+      chatProvider,
+      chatModel,
       promptChars: String(text || "").length,
     });
-    const session = this.activeSession;
+    const session = this.sessionById(sessionId) || this.activeSession;
+    this.chatStore.activeSessionId = session.id;
     const createdAt = nowIso();
     const userMessage = sanitizeMessage({
       id: makeId("msg"),
@@ -3482,6 +4015,7 @@ class PipeonChatViewProvider {
     if (session.messages.filter((message) => message.role === "user").length === 1) {
       session.title = summarizeSessionTitle(text);
     }
+    const conversationHistory = buildConversationHistoryForProvider(session, userMessage.id);
 
     const normalizedMode = ["ask", "agent", "plan"].includes(String(mode || "").toLowerCase())
       ? String(mode).toLowerCase()
@@ -3491,6 +4025,12 @@ class PipeonChatViewProvider {
     const normalizedProfile = normalizeModelProfile(modelProfile || this.chatStore.modelProfile);
     this.chatStore.modelProfile = normalizedProfile;
     this.state.modelProfile = normalizedProfile;
+    const normalizedProvider = normalizeChatProvider(chatProvider || this.chatStore.chatProvider);
+    const normalizedModel = normalizeChatModel(normalizedProvider, chatModel || this.chatStore.chatModel);
+    this.chatStore.chatProvider = normalizedProvider;
+    this.chatStore.chatModel = normalizedModel;
+    this.state.chatProvider = normalizedProvider;
+    this.state.chatModel = normalizedModel;
     const normalizedAttachments = normalizeAttachmentRecords(root, attachments);
 
     const commandConfirmation = getCliConfirmationRequest(text, normalizedMode);
@@ -3509,7 +4049,7 @@ class PipeonChatViewProvider {
       this.state.status = "Awaiting command confirmation";
       this.state.isBusy = false;
       await this.saveAndRefresh();
-      this.postToSurfaces({ type: "done" });
+      this.postToSurfaces({ type: "done", sessionId: session.id });
       return;
     }
 
@@ -3557,6 +4097,10 @@ class PipeonChatViewProvider {
         channel: this.channel,
         mode: normalizedMode,
         modelProfile: normalizedProfile,
+        chatProvider: normalizedProvider,
+        chatModel: normalizedModel,
+        sessionId: session.id,
+        conversationHistory,
         attachments: normalizedAttachments,
         reasoningTemplate,
       });
@@ -3564,6 +4108,7 @@ class PipeonChatViewProvider {
       assistantMessage.liveTrace = [];
       assistantMessage.text = result.text;
       assistantMessage.format = result.format || "markdown";
+      assistantMessage.providerAction = sanitizeProviderAction(result.providerAction);
       assistantMessage.run = null;
       assistantMessage.diffPreview = "";
       session.updatedAt = nowIso();
@@ -3631,6 +4176,7 @@ class PipeonChatViewProvider {
       assistantMessage.liveTrace = [];
       assistantMessage.text = `DorkPipe error: ${message}`;
       assistantMessage.format = "markdown";
+      assistantMessage.providerAction = null;
       this.state.status = buildRequestErrorStatus(message);
       this.channel.error(message);
     }
@@ -3639,11 +4185,12 @@ class PipeonChatViewProvider {
     this.state.pendingAttachments = [];
     this.state.isBusy = false;
     await this.saveAndRefresh();
-    this.postToSurfaces({ type: "done" });
+    this.postToSurfaces({ type: "done", sessionId: session.id });
   }
 
-  async resolvePendingAction(root, messageId, decision) {
-    const session = this.activeSession;
+  async resolvePendingAction(root, messageId, decision, sessionId = "") {
+    const session = this.sessionById(sessionId) || this.activeSession;
+    this.chatStore.activeSessionId = session.id;
     const assistantMessage = session.messages.find((message) => message.id === messageId);
     if (!assistantMessage?.pendingAction) {
       return;
@@ -3718,7 +4265,46 @@ class PipeonChatViewProvider {
     session.updatedAt = nowIso();
     this.state.isBusy = false;
     await this.saveAndRefresh();
-    this.postToSurfaces({ type: "done" });
+    this.postToSurfaces({ type: "done", sessionId: session.id });
+  }
+
+  async resolveProviderAction(root, messageId, action, sessionId = "") {
+    const session = this.sessionById(sessionId) || this.activeSession;
+    this.chatStore.activeSessionId = session.id;
+    const assistantMessage = session.messages.find((message) => message.id === messageId);
+    const providerAction = sanitizeProviderAction(assistantMessage?.providerAction);
+    if (!assistantMessage || !providerAction || action !== "run") {
+      return;
+    }
+    try {
+      assistantMessage.liveStatus = "Opening provider authentication";
+      assistantMessage.liveTrace = ["Launching direct host auth command"];
+      this.state.isBusy = true;
+      this.state.status = "Opening provider authentication terminal";
+      this.refresh();
+      const result = await repairProviderAuth(root, providerAction.provider || "claude");
+      assistantMessage.liveStatus = "";
+      assistantMessage.liveTrace = [];
+      assistantMessage.providerAction = null;
+      const commandBlock = result?.command
+        ? `\n\nCommand:\n\n\`\`\`powershell\n${String(result.command)}\n\`\`\``
+        : "";
+      assistantMessage.text = `${assistantMessage.text}\n\n---\n\n${String(result?.text || "Provider authentication launched.")}${commandBlock}`;
+      assistantMessage.format = "markdown";
+      this.state.status = result?.status || "Provider authentication launched";
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      assistantMessage.liveStatus = "";
+      assistantMessage.liveTrace = [];
+      assistantMessage.text = `${assistantMessage.text}\n\n---\n\nDorkPipe error launching provider auth: ${message}`;
+      assistantMessage.format = "markdown";
+      this.state.status = buildRequestErrorStatus(message);
+      this.channel.error(message);
+    }
+    session.updatedAt = nowIso();
+    this.state.isBusy = false;
+    await this.saveAndRefresh();
+    this.postToSurfaces({ type: "done", sessionId: session.id });
   }
 
   bindWebviewSurface(surfaceId, webview) {
@@ -3732,12 +4318,25 @@ class PipeonChatViewProvider {
           messageId: msg?.messageId || "",
         });
         const workspaceRoot = getWorkspaceRoot();
+        const surface = this.surfaces.get(surfaceId);
+        const surfaceSessionId = String(msg?.sessionId || surface?.sessionId || this.chatStore.activeSessionId || "");
+        if (msg?.type === "openSession" && msg.sessionId) {
+          await this.switchSession(msg.sessionId);
+          this.openChatPanel(msg.sessionId);
+          return;
+        }
         if (msg?.type === "switchSession" && msg.sessionId) {
           await this.switchSession(msg.sessionId);
+          if (surface?.kind === "navigator") {
+            this.openChatPanel(msg.sessionId);
+          } else if (surface?.kind === "chat") {
+            this.openChatPanel(msg.sessionId);
+          }
           return;
         }
         if (msg?.type === "newSession") {
-          await this.newSession(msg.seed || "");
+          const session = await this.newSession(msg.seed || "");
+          this.openChatPanel(session.id);
           return;
         }
         if (msg?.type === "clearSession") {
@@ -3754,6 +4353,10 @@ class PipeonChatViewProvider {
         }
         if (msg?.type === "setModelProfile") {
           await this.setModelProfile(msg.value);
+          return;
+        }
+        if (msg?.type === "setChatProviderModel") {
+          await this.setChatProviderModel(msg.provider, msg.model);
           return;
         }
         if (msg?.type === "pickAttachmentFiles") {
@@ -3831,11 +4434,11 @@ class PipeonChatViewProvider {
             surfaceId,
             mode: msg.mode || "settings",
           });
-          const nextMode = msg.mode === "models" ? "models" : msg.mode === "template" ? "template" : "settings";
+          const nextMode = msg.mode === "run" ? "run" : "settings";
           let targetSurfaceId = surfaceId;
-          if (surfaceId === "sidebar") {
-            this.openDetachedChatPanel();
-            targetSurfaceId = this.detachedSurfaceId || surfaceId;
+          if (surface?.kind === "navigator") {
+            const panel = this.openChatPanel(this.chatStore.activeSessionId);
+            targetSurfaceId = panel ? `panel:${this.chatStore.activeSessionId}` : surfaceId;
           }
           this.postToSurface(targetSurfaceId, {
             type: "forceOpenSettings",
@@ -3858,11 +4461,15 @@ class PipeonChatViewProvider {
           return;
         }
         if (msg?.type === "resolvePendingAction" && msg.messageId) {
-          await this.resolvePendingAction(workspaceRoot, msg.messageId, msg.decision);
+          await this.resolvePendingAction(workspaceRoot, msg.messageId, msg.decision, surfaceSessionId);
+          return;
+        }
+        if (msg?.type === "resolveProviderAction" && msg.messageId) {
+          await this.resolveProviderAction(workspaceRoot, msg.messageId, msg.action, surfaceSessionId);
           return;
         }
         if (msg?.type === "ask" && msg.text) {
-          await this.ask(workspaceRoot, msg.text, msg.mode, msg.modelProfile, msg.attachments);
+          await this.ask(workspaceRoot, msg.text, msg.mode, msg.modelProfile, msg.attachments, surfaceSessionId, msg.chatProvider, msg.chatModel);
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -3876,59 +4483,62 @@ class PipeonChatViewProvider {
     });
   }
 
-  attachWebviewSurface(surfaceId, webview) {
+  attachWebviewSurface(surfaceId, webview, options: Partial<PipeonSurface> = {}) {
     this.surfaces.set(surfaceId, {
       webview,
       rendered: false,
       shellVersion: "",
+      kind: options.kind || "chat",
+      sessionId: options.sessionId || "",
     });
     this.bindWebviewSurface(surfaceId, webview);
   }
 
-  openDetachedChatPanel() {
-    if (this.detachedPanel) {
+  openChatPanel(sessionId = "") {
+    const session = this.sessionById(sessionId) || this.activeSession;
+    this.chatStore.activeSessionId = session.id;
+    const existing = this.sessionPanels.get(session.id);
+    if (existing) {
       try {
-        this.detachedPanel.reveal(vscode.ViewColumn.Beside, true);
-        return this.detachedPanel;
+        existing.reveal(vscode.ViewColumn.Active, true);
+        return existing;
       } catch {
-        this.detachedPanel = null;
+        this.sessionPanels.delete(session.id);
       }
     }
     const panel = vscode.window.createWebviewPanel(
       "pipeon.chatPanel",
-      "DorkPipe Chat",
-      vscode.ViewColumn.Beside,
+      session.title && session.title !== "New chat" ? `DorkPipe: ${session.title}` : "DorkPipe Chat",
+      vscode.ViewColumn.Active,
       {
         enableScripts: true,
-        retainContextWhenHidden: false,
+        retainContextWhenHidden: true,
         localResourceRoots: [
           vscode.Uri.joinPath(this.context.extensionUri, "webview"),
           vscode.Uri.joinPath(this.context.extensionUri, "images"),
         ],
       }
     );
-    const surfaceId = `panel:${Date.now().toString(36)}`;
-    this.detachedPanel = panel;
-    this.detachedSurfaceId = surfaceId;
-    this.attachWebviewSurface(surfaceId, panel.webview);
+    const surfaceId = `panel:${session.id}`;
+    this.sessionPanels.set(session.id, panel);
+    this.attachWebviewSurface(surfaceId, panel.webview, { kind: "chat", sessionId: session.id });
     this.refresh();
     panel.onDidDispose(() => {
       logChannelInfo(this.channel, "Detached chat panel disposed", { surfaceId });
       this.surfaces.delete(surfaceId);
-      if (this.detachedPanel === panel) {
-        this.detachedPanel = null;
-      }
-      if (this.detachedSurfaceId === surfaceId) {
-        this.detachedSurfaceId = "";
-      }
+      this.sessionPanels.delete(session.id);
     });
     return panel;
+  }
+
+  openDetachedChatPanel() {
+    return this.openChatPanel(this.chatStore.activeSessionId);
   }
 
   resolveWebviewView(webviewView) {
     this.view = webviewView;
     logChannelInfo(this.channel, "resolveWebviewView called");
-    this.attachWebviewSurface("sidebar", webviewView.webview);
+    this.attachWebviewSurface("sidebar", webviewView.webview, { kind: "navigator" });
     const root = getWorkspaceRoot();
     if (root) {
       this.state.status = "DorkPipe control plane ready for this workspace.";
