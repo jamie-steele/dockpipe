@@ -62,6 +62,21 @@ func mcpToolCatalog() []mcpToolMeta {
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"workdir":{"type":"string"},"message":{"type":"string"},"mode":{"type":"string"},"session_id":{"type":"string"},"provider_preset":{"type":"string"},"model_provider":{"type":"string"},"model":{"type":"string"},"active_file":{"type":"string"},"open_files":{"type":"array","items":{"type":"string"}},"selection_text":{"type":"string"},"attachment_files":{"type":"array","items":{"type":"string"}}},"required":["message"],"additionalProperties":false}`),
 		},
 		{
+			Name:        "dorkpipe.provider_pool_catalog",
+			Description: "Read the shared DorkPipe provider-pool catalog plus current provider states. Tier: readonly+.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"workdir":{"type":"string"}},"additionalProperties":false}`),
+		},
+		{
+			Name:        "dorkpipe.provider_pool_status",
+			Description: "Read current DorkPipe provider-pool status, optionally filtered to one provider. Tier: readonly+.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"workdir":{"type":"string"},"provider":{"type":"string","enum":["ollama","codex","claude"]}},"additionalProperties":false}`),
+		},
+		{
+			Name:        "dorkpipe.provider_pool_chat",
+			Description: "Route a direct prompt through the shared DorkPipe provider-pool contract. Tier: exec only.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"workdir":{"type":"string"},"message":{"type":"string"},"provider":{"type":"string","enum":["ollama","codex","claude"]},"model":{"type":"string"},"session_id":{"type":"string"},"active_file":{"type":"string"},"open_files":{"type":"array","items":{"type":"string"}},"selection_text":{"type":"string"}},"required":["message"],"additionalProperties":false}`),
+		},
+		{
 			Name:        "dorkpipe.host_codex_chat",
 			Description: "Host bridge for direct Codex chat. Runs codex exec with workspace sandboxing and the host Codex model config by default. Tier: exec only.",
 			InputSchema: json.RawMessage(`{"type":"object","properties":{"workdir":{"type":"string"},"message":{"type":"string"},"model":{"type":"string"},"session_id":{"type":"string"},"active_file":{"type":"string"},"open_files":{"type":"array","items":{"type":"string"}},"selection_text":{"type":"string"}},"required":["message"],"additionalProperties":false}`),

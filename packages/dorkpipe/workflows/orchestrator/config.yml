@@ -1,0 +1,28 @@
+name: orchestrator
+namespace: dockpipeproject
+description: Direct DorkPipe orchestrator prompt routed through the shared provider-pool contract.
+docker_preflight: false
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs the DorkPipe provider-pool orchestrator wrapper.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: go
+      command: go
+      description: Builds the DorkPipe CLI from source when no compiled helper is present.
+      install:
+        windows: winget install GoLang.Go
+        deb: sudo apt-get update && sudo apt-get install -y golang-go
+
+steps:
+  - id: prompt
+    kind: host
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
+    run: scripts/dorkpipe/orchestrator-prompt.sh

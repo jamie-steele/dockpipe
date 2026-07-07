@@ -33,6 +33,8 @@ func main() {
 		runCmd(os.Args[2:])
 	case "request":
 		requestCmd(os.Args[2:])
+	case "provider-pool":
+		providerPoolCmd(os.Args[2:])
 	case "edit":
 		editCmd(os.Args[2:])
 	case "apply-edit":
@@ -66,6 +68,7 @@ func usage() {
 Usage:
   dorkpipe run -f <spec.yaml> [--workdir <dir>]
   dorkpipe request --message <text> [--workdir <dir>]
+  dorkpipe provider-pool <catalog|status|prompt> [flags]
   dorkpipe edit --message <text> [--workdir <dir>] [--apply]
   dorkpipe apply-edit --artifact-dir <dir> [--workdir <dir>]
   dorkpipe compose [-o <compose.yml>] [--no-ollama]

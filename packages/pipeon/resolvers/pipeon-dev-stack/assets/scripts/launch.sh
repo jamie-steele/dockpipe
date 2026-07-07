@@ -454,6 +454,9 @@ pipeon_host_mcp_has_required_tools() {
       --data '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' \
       "$url" 2>/dev/null || true
   )"
+  [[ "$response" == *'"dorkpipe.provider_pool_catalog"'* ]] || return 1
+  [[ "$response" == *'"dorkpipe.provider_pool_status"'* ]] || return 1
+  [[ "$response" == *'"dorkpipe.provider_pool_chat"'* ]] || return 1
   [[ "$response" == *'"dorkpipe.host_codex_chat"'* ]] || return 1
   [[ "$response" == *'"dorkpipe.host_claude_chat"'* ]] || return 1
   [[ "$response" == *'"dorkpipe.host_claude_auth"'* ]] || return 1

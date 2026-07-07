@@ -120,6 +120,30 @@ func SelfAnalysisDir(workdir string) (string, error) {
 	return filepath.Join(root, "self-analysis"), nil
 }
 
+func ProviderPoolsDir(workdir string) (string, error) {
+	root, err := PackageStateDir(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "provider-pools"), nil
+}
+
+func ProviderPoolLeasesDir(workdir string) (string, error) {
+	root, err := ProviderPoolsDir(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "leases"), nil
+}
+
+func ProviderPoolSessionsPath(workdir string) (string, error) {
+	root, err := ProviderPoolsDir(workdir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(root, "sessions.json"), nil
+}
+
 func packageStatePath(workdir string, parts ...string) string {
 	root, err := PackageStateDir(workdir)
 	if err != nil {

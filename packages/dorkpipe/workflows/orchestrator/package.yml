@@ -1,0 +1,30 @@
+schema: 1
+kind: workflow
+name: orchestrator
+version: 0.6.0
+title: DorkPipe Direct Orchestrator
+description: |
+  Direct prompt workflow that routes through the shared DorkPipe provider-pool catalog and status
+  contract used by Pipeon and future UI surfaces.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [workflow, dorkpipe, orchestrator, provider-pool, codex, claude, ollama]
+depends: [dorkpipe]
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs the DorkPipe provider-pool orchestrator wrapper.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: go
+      command: go
+      description: Builds the DorkPipe CLI from source when no compiled helper is present.
+      install:
+        windows: winget install GoLang.Go
+        deb: sudo apt-get update && sudo apt-get install -y golang-go
+allow_clone: true
+distribution: source

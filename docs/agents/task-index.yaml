@@ -36,7 +36,7 @@ tasks:
     topic: Local Windows CI VM parity and guest tooling
     path: docs/agents/tasks/local-windows-ci-vm-parity.md
   - id: TASK-012
-    topic: Pipeon startup and provisioning performance
+    topic: Pipeon startup, provisioning, and DorkPipe provider pools
     path: docs/agents/tasks/pipeon-startup-performance.md
 
 maintenance:

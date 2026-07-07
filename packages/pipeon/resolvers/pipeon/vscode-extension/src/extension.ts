@@ -18,6 +18,14 @@ const DEFAULT_CHAT_MODELS = {
   codex: ["config", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark"],
   claude: ["sonnet", "opus", "haiku"],
 };
+const DEFAULT_PROVIDER_CATALOG = {
+  defaultProvider: DEFAULT_CHAT_PROVIDER,
+  providers: [
+    { id: "ollama", label: "Ollama stack", models: DEFAULT_CHAT_MODELS.ollama, status: "ready" },
+    { id: "codex", label: "Codex host", models: DEFAULT_CHAT_MODELS.codex, status: "ready" },
+    { id: "claude", label: "Claude guarded", models: DEFAULT_CHAT_MODELS.claude, status: "warming" },
+  ],
+};
 const CHAT_VIEW_ID = "pipeon.chatView";
 const WELCOME_PANEL_ID = "pipeon.welcome";
 const CHAT_STATE_KEY = "pipeon.chatState.v2";
@@ -76,6 +84,7 @@ type ExecuteNaturalLanguageRequestOptions = {
   modelProfile?: unknown;
   chatProvider?: unknown;
   chatModel?: unknown;
+  providerCatalog?: unknown;
   sessionId?: string;
   conversationHistory?: string;
   reasoningTemplate?: AnyRecord | null;
@@ -730,6 +739,7 @@ function createInitialChatState() {
     modelProfile: "balanced",
     chatProvider: DEFAULT_CHAT_PROVIDER,
     chatModel: DEFAULT_CHAT_MODELS.ollama[0],
+    providerCatalog: normalizeProviderCatalog(null),
     activeTemplateId: BUILTIN_TEMPLATE_ID,
     reasoningTemplates,
     modelStore,
@@ -746,9 +756,33 @@ function normalizeChatProvider(value) {
   return ["ollama", "codex", "claude"].includes(next) ? next : DEFAULT_CHAT_PROVIDER;
 }
 
-function normalizeChatModel(provider, value) {
+function providerCatalogModels(catalog, provider) {
   const normalizedProvider = normalizeChatProvider(provider);
-  const models = DEFAULT_CHAT_MODELS[normalizedProvider] || DEFAULT_CHAT_MODELS.ollama;
+  const source = Array.isArray(catalog?.providers) ? catalog.providers : DEFAULT_PROVIDER_CATALOG.providers;
+  const entry = source.find((item) => normalizeChatProvider(item?.id) === normalizedProvider);
+  const models = Array.isArray(entry?.models) ? entry.models.map((item) => String(item || "").trim()).filter(Boolean) : [];
+  return models.length ? models : (DEFAULT_CHAT_MODELS[normalizedProvider] || DEFAULT_CHAT_MODELS.ollama);
+}
+
+function normalizeProviderCatalog(raw) {
+  const source = Array.isArray(raw?.providers) ? raw.providers : DEFAULT_PROVIDER_CATALOG.providers;
+  const providers = source
+    .map((item) => ({
+      id: normalizeChatProvider(item?.id),
+      label: String(item?.label || item?.display_name || item?.id || "").trim() || normalizeChatProvider(item?.id),
+      models: providerCatalogModels({ providers: [item] }, item?.id),
+      status: String(item?.status?.state || item?.status || "").trim().toLowerCase() || "ready",
+    }))
+    .filter((item, index, arr) => arr.findIndex((candidate) => candidate.id === item.id) === index);
+  return {
+    defaultProvider: normalizeChatProvider(raw?.defaultProvider || raw?.default_provider || DEFAULT_PROVIDER_CATALOG.defaultProvider),
+    providers: providers.length ? providers : DEFAULT_PROVIDER_CATALOG.providers,
+  };
+}
+
+function normalizeChatModel(provider, value, catalog?) {
+  const normalizedProvider = normalizeChatProvider(provider);
+  const models = providerCatalogModels(catalog, normalizedProvider);
   const next = String(value || "").trim();
   if (normalizedProvider === "codex" && ["default", "auto", "cli-default", "account", "account-default", "gpt-5", "gpt-5-codex", "o4-mini"].includes(next.toLowerCase())) {
     return "config";
@@ -1335,7 +1369,8 @@ function normalizeStoredChatState(raw) {
       .slice(0, MAX_SAVED_SESSIONS);
 
     const activeSession = sessions.find((session) => session.id === raw.activeSessionId) || sessions[0];
-    const chatProvider = normalizeChatProvider(raw.chatProvider);
+    const providerCatalog = normalizeProviderCatalog(raw.providerCatalog || base.providerCatalog);
+    const chatProvider = normalizeChatProvider(raw.chatProvider || providerCatalog.defaultProvider);
     return {
       activeSessionId: activeSession.id,
       sessions,
@@ -1345,7 +1380,8 @@ function normalizeStoredChatState(raw) {
       autoApplyEdits: !!raw.autoApplyEdits,
       modelProfile: normalizeModelProfile(raw.modelProfile),
       chatProvider,
-      chatModel: normalizeChatModel(chatProvider, raw.chatModel),
+      chatModel: normalizeChatModel(chatProvider, raw.chatModel, providerCatalog),
+      providerCatalog,
       activeTemplateId: templateById(reasoningTemplates, raw.activeTemplateId)?.id || BUILTIN_TEMPLATE_ID,
       reasoningTemplates,
       modelStore,
@@ -1375,7 +1411,8 @@ function ensureValidChatStore(chatStore) {
     sessions,
     activeSessionId,
     chatProvider: normalizeChatProvider(chatStore.chatProvider),
-    chatModel: normalizeChatModel(chatStore.chatProvider, chatStore.chatModel),
+    chatModel: normalizeChatModel(chatStore.chatProvider, chatStore.chatModel, chatStore.providerCatalog),
+    providerCatalog: normalizeProviderCatalog(chatStore.providerCatalog),
     modelStore: normalizeModelStore(chatStore.modelStore),
     reasoningTemplates: normalizeReasoningTemplates(chatStore.reasoningTemplates, normalizeModelStore(chatStore.modelStore)),
     activeTemplateId: templateById(
@@ -1390,11 +1427,15 @@ function normalizeUserStudioState(raw, fallback?) {
   const source = raw && typeof raw === "object" ? raw : {};
   const fallbackState = fallback && typeof fallback === "object" ? fallback : {};
   const modelStore = normalizeModelStore(source.modelStore || fallbackState.modelStore || base.modelStore);
+  const providerCatalog = normalizeProviderCatalog(source.providerCatalog || fallbackState.providerCatalog || base.providerCatalog);
   const reasoningTemplates = normalizeReasoningTemplates(
     source.reasoningTemplates || fallbackState.reasoningTemplates || base.reasoningTemplates,
     modelStore
   );
   return {
+    chatProvider: normalizeChatProvider(source.chatProvider || fallbackState.chatProvider || providerCatalog.defaultProvider),
+    chatModel: normalizeChatModel(source.chatProvider || fallbackState.chatProvider || providerCatalog.defaultProvider, source.chatModel || fallbackState.chatModel || base.chatModel, providerCatalog),
+    providerCatalog,
     activeTemplateId: templateById(reasoningTemplates, source.activeTemplateId || fallbackState.activeTemplateId)?.id || BUILTIN_TEMPLATE_ID,
     reasoningTemplates,
     modelStore,
@@ -1457,7 +1498,7 @@ function compactChatStoreForPersistence(chatStore) {
     autoApplyEdits: !!safe.autoApplyEdits,
     modelProfile: normalizeModelProfile(safe.modelProfile),
     chatProvider: normalizeChatProvider(safe.chatProvider),
-    chatModel: normalizeChatModel(safe.chatProvider, safe.chatModel),
+    chatModel: normalizeChatModel(safe.chatProvider, safe.chatModel, safe.providerCatalog),
     activeTemplateId: templateById(safe.reasoningTemplates, safe.activeTemplateId)?.id || BUILTIN_TEMPLATE_ID,
     // User-authored templates and model lanes live in globalState; keep workspaceState focused on chat/session data.
     sessions: safe.sessions.slice(0, MAX_SAVED_SESSIONS).map((session) => ({
@@ -1983,71 +2024,65 @@ async function executeNaturalLanguageRequest(root, text, signals, options: Execu
     : "ask";
   const modelProfile = normalizeModelProfile(options.modelProfile);
   const chatProvider = normalizeChatProvider(options.chatProvider);
-  const chatModel = normalizeChatModel(chatProvider, options.chatModel);
+  const chatModel = normalizeChatModel(chatProvider, options.chatModel, options.providerCatalog);
   const providerText = chatProvider === "codex"
     ? text
     : withConversationHistory(text, options.conversationHistory);
-
-  if (chatProvider === "codex") {
-    return executeCodexHostChat(root, text, signals, {
-      model: chatModel,
-      sessionId: options.sessionId,
-      mode: requestMode,
-      modelProfile,
-      onEvent: options.onEvent,
-      channel: options.channel,
-    });
-  }
-  if (chatProvider === "claude") {
-    return executeClaudeGuardedChat(root, providerText, signals, {
-      model: chatModel,
-      sessionId: options.sessionId,
-      mode: requestMode,
-      modelProfile,
-      onEvent: options.onEvent,
-      channel: options.channel,
-    });
-  }
-
-  const payload = await callMcpTool("dorkpipe.request", {
-    workdir: root,
-    message: providerText,
-    mode: requestMode,
-    session_id: options.sessionId || "",
-    provider_preset: "ollama-stack",
-    model_provider: "ollama",
+  return executeProviderPoolChat(root, providerText, signals, {
+    provider: chatProvider,
     model: chatModel,
+    sessionId: options.sessionId,
+    mode: requestMode,
+    modelProfile,
+    onEvent: options.onEvent,
+    channel: options.channel,
+  });
+}
+
+async function executeProviderPoolChat(root, text, signals, options: AnyRecord = {}): Promise<any> {
+  const provider = normalizeChatProvider(options.provider);
+  const model = normalizeChatModel(provider, options.model);
+  const sessionId = String(options.sessionId || "").trim();
+  if (options.onEvent) {
+    options.onEvent(`Checking ${provider} provider pool`);
+  }
+  const payload = await callHostMcpTool("dorkpipe.provider_pool_chat", {
+    workdir: root,
+    message: text,
+    provider,
+    model,
+    session_id: sessionId,
     active_file: signals.activeFile || "",
     open_files: Array.isArray(signals.openFiles) ? signals.openFiles : [],
     selection_text: signals.selectionText || "",
-    attachment_files: normalizeAttachmentRecords(root, options.attachments || [])
-      .filter((item) => item.status === "ready")
-      .map((item) => item.absolutePath),
   });
-  if (Array.isArray(payload?.events)) {
-    for (const entry of payload.events) {
-      if (String(entry || "").trim() && options.onEvent) {
-        options.onEvent(String(entry).trim());
-      }
-    }
-  }
   if (Array.isArray(payload?.stderr) && payload.stderr.length) {
     options.channel?.appendLine(payload.stderr.join("\n"));
+  } else if (String(payload?.stderr || "").trim()) {
+    options.channel?.appendLine(String(payload.stderr));
   }
-  const finalEvent = payload?.final_event || null;
-  if (finalEvent?.type === "error") {
-    throw new Error(finalEvent?.error?.user_message || "DorkPipe MCP request failed.");
-  }
-  if (!finalEvent) {
-    throw new Error("DorkPipe MCP request did not return a final event.");
-  }
+  const providerAction = payload?.state === "auth-required" && provider === "claude"
+    ? {
+        kind: "claude-auth",
+        title: "Authenticate Claude",
+        description: "Open a host terminal and run `claude auth login`, then retry Claude direct chat.",
+        buttonLabel: "Authenticate On Host",
+        provider: "claude",
+      }
+    : null;
   return {
-    kind: finalEvent.metadata?.route || "chat",
-    text: finalEvent.user_message || payload?.streamed_text || "(No response text returned.)",
+    kind: provider,
+    text: String(payload?.text || "(No response text returned.)"),
     format: "markdown",
     readyToApply: payload?.ready_to_apply || null,
-    metadata: finalEvent.metadata || {},
-    status: buildDorkpipeStatus({ ...(finalEvent.metadata || {}), model_profile: modelProfile, model: chatModel }, requestMode),
+    metadata: payload?.metadata || {
+      route: "chat",
+      provider_preset: provider,
+      model,
+      provider_pool_state: payload?.state || "unknown",
+    },
+    providerAction,
+    status: payload?.status || `Provider: ${provider} | Model: ${model}`,
   };
 }
 
@@ -2712,6 +2747,7 @@ async function executeDorkpipeRequest(root, session, text, options: ExecuteNatur
       modelProfile: options.modelProfile,
       chatProvider: options.chatProvider,
       chatModel: options.chatModel,
+      providerCatalog: options.providerCatalog,
       sessionId: options.sessionId,
       conversationHistory: options.conversationHistory,
       attachments: options.attachments,
@@ -2738,6 +2774,7 @@ async function executeDorkpipeRequest(root, session, text, options: ExecuteNatur
     modelProfile: options.modelProfile,
     chatProvider: options.chatProvider,
     chatModel: options.chatModel,
+    providerCatalog: options.providerCatalog,
     sessionId: options.sessionId,
     conversationHistory: options.conversationHistory,
     attachments: options.attachments,
@@ -3559,7 +3596,8 @@ class PipeonChatViewProvider {
       autoApplyEdits: !!this.chatStore.autoApplyEdits,
       modelProfile: normalizeModelProfile(this.chatStore.modelProfile),
       chatProvider: normalizeChatProvider(this.chatStore.chatProvider),
-      chatModel: normalizeChatModel(this.chatStore.chatProvider, this.chatStore.chatModel),
+      chatModel: normalizeChatModel(this.chatStore.chatProvider, this.chatStore.chatModel, this.chatStore.providerCatalog),
+      providerCatalog: normalizeProviderCatalog(this.chatStore.providerCatalog),
       pendingAttachments: [],
       activeTemplateId: this.chatStore.activeTemplateId || BUILTIN_TEMPLATE_ID,
       activeTemplate: null,
@@ -3573,6 +3611,7 @@ class PipeonChatViewProvider {
       extensionVersion: this.extensionVersion,
     };
     this.syncViewState();
+    void this.refreshProviderCatalog();
   }
 
   postToSurfaces(message) {
@@ -3646,7 +3685,8 @@ class PipeonChatViewProvider {
     this.state.autoApplyEdits = !!this.chatStore.autoApplyEdits;
     this.state.modelProfile = normalizeModelProfile(this.chatStore.modelProfile);
     this.state.chatProvider = normalizeChatProvider(this.chatStore.chatProvider);
-    this.state.chatModel = normalizeChatModel(this.state.chatProvider, this.chatStore.chatModel);
+    this.state.chatModel = normalizeChatModel(this.state.chatProvider, this.chatStore.chatModel, this.chatStore.providerCatalog);
+    this.state.providerCatalog = deepClone(normalizeProviderCatalog(this.chatStore.providerCatalog));
     this.state.activeTemplateId = activeTemplate?.id || BUILTIN_TEMPLATE_ID;
     this.state.activeTemplate = activeTemplate ? summarizeTemplate(activeTemplate) : null;
     this.state.reasoningTemplates = normalizeReasoningTemplates(this.chatStore.reasoningTemplates, this.chatStore.modelStore).map((template) => deepClone(template));
@@ -3662,6 +3702,25 @@ class PipeonChatViewProvider {
       ...message,
       html: safeRenderMessageBody(message, this.channel),
     }));
+  }
+
+  async refreshProviderCatalog() {
+    const root = getWorkspaceRoot();
+    if (!root) {
+      return;
+    }
+    try {
+      const payload = await callHostMcpTool("dorkpipe.provider_pool_catalog", { workdir: root });
+      const providerCatalog = normalizeProviderCatalog(payload);
+      this.chatStore.providerCatalog = providerCatalog;
+      this.chatStore.chatProvider = normalizeChatProvider(this.chatStore.chatProvider || providerCatalog.defaultProvider);
+      this.chatStore.chatModel = normalizeChatModel(this.chatStore.chatProvider, this.chatStore.chatModel, providerCatalog);
+      this.syncViewState();
+      this.refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.channel.appendLine(`Provider pool catalog refresh skipped: ${message}`);
+    }
   }
 
   stateForSession(sessionId) {
@@ -3804,7 +3863,7 @@ class PipeonChatViewProvider {
 
   async setChatProviderModel(provider, model) {
     const nextProvider = normalizeChatProvider(provider);
-    const nextModel = normalizeChatModel(nextProvider, model);
+    const nextModel = normalizeChatModel(nextProvider, model, this.chatStore.providerCatalog);
     this.chatStore.chatProvider = nextProvider;
     this.chatStore.chatModel = nextModel;
     this.state.chatProvider = nextProvider;
@@ -4025,8 +4084,8 @@ class PipeonChatViewProvider {
     const normalizedProfile = normalizeModelProfile(modelProfile || this.chatStore.modelProfile);
     this.chatStore.modelProfile = normalizedProfile;
     this.state.modelProfile = normalizedProfile;
-    const normalizedProvider = normalizeChatProvider(chatProvider || this.chatStore.chatProvider);
-    const normalizedModel = normalizeChatModel(normalizedProvider, chatModel || this.chatStore.chatModel);
+    const normalizedProvider = normalizeChatProvider(chatProvider || this.chatStore.chatProvider || this.chatStore.providerCatalog?.defaultProvider);
+    const normalizedModel = normalizeChatModel(normalizedProvider, chatModel || this.chatStore.chatModel, this.chatStore.providerCatalog);
     this.chatStore.chatProvider = normalizedProvider;
     this.chatStore.chatModel = normalizedModel;
     this.state.chatProvider = normalizedProvider;
@@ -4099,6 +4158,7 @@ class PipeonChatViewProvider {
         modelProfile: normalizedProfile,
         chatProvider: normalizedProvider,
         chatModel: normalizedModel,
+        providerCatalog: this.chatStore.providerCatalog,
         sessionId: session.id,
         conversationHistory,
         attachments: normalizedAttachments,

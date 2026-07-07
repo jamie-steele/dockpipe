@@ -448,6 +448,99 @@ func (s *Server) dispatchTool(ctx context.Context, name string, args json.RawMes
 		}
 		return out, isError, nil
 
+	case "dorkpipe.provider_pool_catalog":
+		var in struct {
+			Workdir string `json:"workdir"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, true, err
+		}
+		wd, err := resolveExecWorkdir(in.Workdir)
+		if err != nil {
+			return nil, true, err
+		}
+		stdout, stderr, code, err := runDorkpipe(ctx, []string{"provider-pool", "catalog", "--workdir", wd, "--json"})
+		if err != nil {
+			return nil, true, err
+		}
+		if code != 0 {
+			return []byte(stdout + stderr), true, nil
+		}
+		return []byte(stdout), false, nil
+
+	case "dorkpipe.provider_pool_status":
+		var in struct {
+			Workdir  string `json:"workdir"`
+			Provider string `json:"provider"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, true, err
+		}
+		wd, err := resolveExecWorkdir(in.Workdir)
+		if err != nil {
+			return nil, true, err
+		}
+		dargs := []string{"provider-pool", "status", "--workdir", wd, "--json"}
+		if strings.TrimSpace(in.Provider) != "" {
+			dargs = append(dargs, "--provider", strings.TrimSpace(in.Provider))
+		}
+		stdout, stderr, code, err := runDorkpipe(ctx, dargs)
+		if err != nil {
+			return nil, true, err
+		}
+		if code != 0 {
+			return []byte(stdout + stderr), true, nil
+		}
+		return []byte(stdout), false, nil
+
+	case "dorkpipe.provider_pool_chat":
+		var in struct {
+			Workdir       string   `json:"workdir"`
+			Message       string   `json:"message"`
+			Provider      string   `json:"provider"`
+			Model         string   `json:"model"`
+			SessionID     string   `json:"session_id"`
+			ActiveFile    string   `json:"active_file"`
+			OpenFiles     []string `json:"open_files"`
+			SelectionText string   `json:"selection_text"`
+		}
+		if err := json.Unmarshal(args, &in); err != nil {
+			return nil, true, err
+		}
+		wd, err := resolveExecWorkdir(in.Workdir)
+		if err != nil {
+			return nil, true, err
+		}
+		dargs := []string{"provider-pool", "prompt", "--workdir", wd, "--json", "--prompt", in.Message}
+		if strings.TrimSpace(in.Provider) != "" {
+			dargs = append(dargs, "--provider", strings.TrimSpace(in.Provider))
+		}
+		if strings.TrimSpace(in.Model) != "" {
+			dargs = append(dargs, "--model", strings.TrimSpace(in.Model))
+		}
+		if strings.TrimSpace(in.SessionID) != "" {
+			dargs = append(dargs, "--session-id", strings.TrimSpace(in.SessionID))
+		}
+		if strings.TrimSpace(in.ActiveFile) != "" {
+			dargs = append(dargs, "--active-file", strings.TrimSpace(in.ActiveFile))
+		}
+		for _, item := range in.OpenFiles {
+			if strings.TrimSpace(item) != "" {
+				dargs = append(dargs, "--open-file", strings.TrimSpace(item))
+			}
+		}
+		if strings.TrimSpace(in.SelectionText) != "" {
+			dargs = append(dargs, "--selection-text", strings.TrimSpace(in.SelectionText))
+		}
+		stdout, stderr, code, err := runDorkpipe(ctx, dargs)
+		if err != nil {
+			return nil, true, err
+		}
+		if code != 0 && strings.TrimSpace(stdout) == "" {
+			return []byte(stdout + stderr), true, nil
+		}
+		return []byte(stdout), false, nil
+
 	case "dorkpipe.host_codex_chat":
 		var in struct {
 			Workdir       string   `json:"workdir"`

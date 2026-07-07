@@ -1,0 +1,86 @@
+schema: 1
+description: Shared DorkPipe provider-pool catalog for direct orchestration surfaces.
+
+defaults:
+  provider: ollama
+  mode: direct
+
+providers:
+  - id: ollama
+    display_name: Ollama local
+    description: Warm local Ollama service lane for cheap direct orchestration.
+    enabled_env:
+      - DORKPIPE_PROVIDER_POOL_OLLAMA
+      - PIPEON_PROVIDER_POOL_OLLAMA
+    default_model: llama3.2
+    model_env:
+      - DORKPIPE_PROVIDER_POOL_OLLAMA_MODEL
+      - PIPEON_PROVIDER_POOL_OLLAMA_MODEL
+      - DORKPIPE_ORCH_OLLAMA_MODEL
+      - PIPEON_OLLAMA_MODEL
+      - DOCKPIPE_OLLAMA_MODEL
+    models:
+      - llama3.2
+      - qwen2.5-coder:14b
+      - deepseek-r1:14b
+    pool:
+      min_ready: 1
+      max_active: 1
+      idle_ttl_seconds: 0
+      role: direct
+      session_affinity: false
+      warm_mode: service
+      requires_auth: false
+      warm_source: dorkpipe-stack-ollama
+
+  - id: claude
+    display_name: Claude guarded
+    description: Guarded Claude container lane owned by DorkPipe provider pools.
+    enabled_env:
+      - DORKPIPE_PROVIDER_POOL_CLAUDE
+      - PIPEON_PROVIDER_POOL_CLAUDE
+    default_model: sonnet
+    model_env:
+      - DORKPIPE_PROVIDER_POOL_CLAUDE_MODEL
+      - PIPEON_PROVIDER_POOL_CLAUDE_MODEL
+      - DORKPIPE_ORCH_CLAUDE_MODEL
+    models:
+      - sonnet
+      - opus
+      - haiku
+    pool:
+      min_ready: 1
+      max_active: 1
+      idle_ttl_seconds: 900
+      role: direct
+      session_affinity: true
+      warm_mode: guarded_container
+      requires_auth: true
+      warm_source: docker-claude-resolver
+
+  - id: codex
+    display_name: Codex host
+    description: Host Codex exec lane with session resume binding when available.
+    enabled_env:
+      - DORKPIPE_PROVIDER_POOL_CODEX
+      - PIPEON_PROVIDER_POOL_CODEX
+    default_model: config
+    model_env:
+      - DORKPIPE_PROVIDER_POOL_CODEX_MODEL
+      - PIPEON_PROVIDER_POOL_CODEX_MODEL
+      - DORKPIPE_ORCH_CODEX_MODEL
+    models:
+      - config
+      - gpt-5.5
+      - gpt-5.4
+      - gpt-5.4-mini
+      - gpt-5.3-codex-spark
+    pool:
+      min_ready: 0
+      max_active: 1
+      idle_ttl_seconds: 0
+      role: direct
+      session_affinity: true
+      warm_mode: host_exec_resume
+      requires_auth: true
+      warm_source: codex-host-cli

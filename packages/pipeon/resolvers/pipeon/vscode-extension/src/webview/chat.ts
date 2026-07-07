@@ -492,6 +492,23 @@
     codex: ["config", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini", "gpt-5.3-codex-spark"],
     claude: ["sonnet", "opus", "haiku"],
   };
+  let providerCatalogState = {};
+
+  function providerCatalogEntries(state) {
+    const entries = Array.isArray(state?.providerCatalog?.providers) ? state.providerCatalog.providers : [];
+    return entries.length ? entries : [
+      { id: "ollama", label: "Ollama stack", models: CHAT_MODEL_OPTIONS.ollama, status: "ready" },
+      { id: "codex", label: "Codex host", models: CHAT_MODEL_OPTIONS.codex, status: "ready" },
+      { id: "claude", label: "Claude guarded", models: CHAT_MODEL_OPTIONS.claude, status: "warming" },
+    ];
+  }
+
+  function providerCatalogOptions(provider, state) {
+    const normalizedProvider = normalizeChatProvider(provider);
+    const entry = providerCatalogEntries(state).find((item) => normalizeChatProvider(item?.id) === normalizedProvider);
+    const models = Array.isArray(entry?.models) ? entry.models.map((item) => String(item || "").trim()).filter(Boolean) : [];
+    return models.length ? models : (CHAT_MODEL_OPTIONS[normalizedProvider] || CHAT_MODEL_OPTIONS.ollama);
+  }
 
   function normalizeChatProvider(value) {
     const next = String(value || "").toLowerCase();
@@ -500,7 +517,7 @@
 
   function normalizeChatModel(provider, value) {
     const normalizedProvider = normalizeChatProvider(provider);
-    const options = CHAT_MODEL_OPTIONS[normalizedProvider] || CHAT_MODEL_OPTIONS.ollama;
+    const options = providerCatalogOptions(normalizedProvider, providerCatalogState);
     const next = String(value || "").trim();
     if (normalizedProvider === "codex" && ["default", "auto", "cli-default", "account", "account-default", "gpt-5", "gpt-5-codex", "o4-mini"].includes(next.toLowerCase())) {
       return "config";
@@ -508,10 +525,21 @@
     return next || options[0] || "llama3.2";
   }
 
+  function renderChatProviderOptions(selectedProvider) {
+    const currentProvider = normalizeChatProvider(selectedProvider);
+    return providerCatalogEntries(providerCatalogState).map((entry) => {
+      const provider = normalizeChatProvider(entry?.id);
+      const selected = provider === currentProvider ? " selected" : "";
+      const status = String(entry?.status || "").trim().toLowerCase();
+      const suffix = status && status !== "ready" ? ` (${status})` : "";
+      return '<option value="' + escapeHtml(provider) + '"' + selected + '>' + escapeHtml(String(entry?.label || provider) + suffix) + "</option>";
+    }).join("");
+  }
+
   function renderChatModelOptions(provider, selectedModel) {
     const normalizedProvider = normalizeChatProvider(provider);
     const selected = normalizeChatModel(normalizedProvider, selectedModel);
-    const options = CHAT_MODEL_OPTIONS[normalizedProvider] || CHAT_MODEL_OPTIONS.ollama;
+    const options = providerCatalogOptions(normalizedProvider, providerCatalogState);
     return options.map((model) => {
       const isSelected = model === selected ? " selected" : "";
       return '<option value="' + escapeHtml(model) + '"' + isSelected + '>' + escapeHtml(model) + "</option>";
@@ -1134,6 +1162,7 @@
     function render(nextState) {
       try {
         currentState = nextState || {};
+        providerCatalogState = currentState || {};
         syncTemplateFromState();
         const previousBottomOffset = transcript.scrollHeight - transcript.scrollTop;
         const stickToBottom = previousBottomOffset - transcript.clientHeight <= 24 || !!viewState.pinnedToBottom;
@@ -1150,6 +1179,7 @@
         modelProfileSelect.value = currentState.modelProfile || "balanced";
         const currentProvider = normalizeChatProvider(currentState.chatProvider || viewState.chatProvider);
         const currentModel = normalizeChatModel(currentProvider, currentState.chatModel || viewState.chatModel);
+        chatProviderSelect.innerHTML = renderChatProviderOptions(currentProvider);
         chatProviderSelect.value = currentProvider;
         chatModelSelect.innerHTML = renderChatModelOptions(currentProvider, currentModel);
         chatModelSelect.value = currentModel;
@@ -1254,6 +1284,7 @@
       prompt.value = viewState.draft || "";
       modeSelect.value = viewState.mode || currentState.composerMode || "ask";
       modelProfileSelect.value = viewState.modelProfile || currentState.modelProfile || "balanced";
+      chatProviderSelect.innerHTML = renderChatProviderOptions(viewState.chatProvider || currentState.chatProvider);
       chatProviderSelect.value = normalizeChatProvider(viewState.chatProvider || currentState.chatProvider);
       chatModelSelect.innerHTML = renderChatModelOptions(chatProviderSelect.value, viewState.chatModel || currentState.chatModel);
       chatModelSelect.value = normalizeChatModel(chatProviderSelect.value, viewState.chatModel || currentState.chatModel);

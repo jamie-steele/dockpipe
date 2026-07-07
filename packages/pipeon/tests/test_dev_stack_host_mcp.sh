@@ -20,6 +20,9 @@ if ! grep -q 'Get-NetTCPConnection -LocalAddress 127.0.0.1 -LocalPort' "$launch"
 fi
 
 for tool in \
+  dorkpipe.provider_pool_catalog \
+  dorkpipe.provider_pool_status \
+  dorkpipe.provider_pool_chat \
   dorkpipe.host_codex_chat \
   dorkpipe.host_claude_chat \
   dorkpipe.host_claude_auth \
