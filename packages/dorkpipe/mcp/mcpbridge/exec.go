@@ -191,25 +191,40 @@ func runFixedHostCommand(ctx context.Context, workdir, command string, args []st
 	return stdout, stderr, 0, nil
 }
 
-func codexSessionStatePath(workdir string) string {
-	return filepath.Join(workdir, "bin", ".dockpipe", "packages", "dorkpipe", "host-bridge", "codex-sessions.json")
+func hostBridgeStateRoot() (string, error) {
+	return ResolvePathUnderRepoRoot(filepath.Join("bin", ".dockpipe", "packages", "dorkpipe", "host-bridge"))
 }
 
-func loadCodexSessionState(workdir string) codexSessionState {
-	state := codexSessionState{Sessions: map[string]codexSessionBinding{}}
-	data, err := os.ReadFile(codexSessionStatePath(workdir))
+func codexSessionStatePath() (string, error) {
+	root, err := hostBridgeStateRoot()
 	if err != nil {
-		return state
+		return "", err
+	}
+	return filepath.Join(root, "codex-sessions.json"), nil
+}
+
+func loadCodexSessionState() (codexSessionState, error) {
+	state := codexSessionState{Sessions: map[string]codexSessionBinding{}}
+	path, err := codexSessionStatePath()
+	if err != nil {
+		return state, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return state, nil
 	}
 	_ = json.Unmarshal(data, &state)
 	if state.Sessions == nil {
 		state.Sessions = map[string]codexSessionBinding{}
 	}
-	return state
+	return state, nil
 }
 
-func saveCodexSessionState(workdir string, state codexSessionState) error {
-	path := codexSessionStatePath(workdir)
+func saveCodexSessionState(state codexSessionState) error {
+	path, err := codexSessionStatePath()
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -287,8 +302,12 @@ func shouldDiscoverCodexSessionID(resumed bool, knownSessionID string) bool {
 	return !resumed || strings.TrimSpace(knownSessionID) == ""
 }
 
-func tempLastMessagePath(workdir string) (string, error) {
-	dir := filepath.Join(workdir, "bin", ".dockpipe", "packages", "dorkpipe", "host-bridge", "codex-last-message")
+func tempLastMessagePath() (string, error) {
+	root, err := hostBridgeStateRoot()
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(root, "codex-last-message")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", err
 	}
@@ -553,10 +572,13 @@ func runHostCodexChat(ctx context.Context, workdir, message, model, pipeonSessio
 		}, nil
 	}
 	chosenModel, passModel := codexModelArg(model)
-	state := loadCodexSessionState(wd)
+	state, err := loadCodexSessionState()
+	if err != nil {
+		return nil, err
+	}
 	pipeonSessionID = strings.TrimSpace(pipeonSessionID)
 	binding, hasBinding := state.Sessions[pipeonSessionID]
-	lastMessagePath, err := tempLastMessagePath(wd)
+	lastMessagePath, err := tempLastMessagePath()
 	if err != nil {
 		return nil, err
 	}
@@ -612,7 +634,7 @@ func runHostCodexChat(ctx context.Context, workdir, message, model, pipeonSessio
 			Model:          chosenModel,
 			UpdatedAt:      time.Now().UTC().Format(time.RFC3339Nano),
 		}
-		_ = saveCodexSessionState(wd, state)
+		_ = saveCodexSessionState(state)
 	}
 	status := fmt.Sprintf("Provider: Codex | Model: %s | Session: %s", chosenModel, map[bool]string{true: "resumed", false: "new"}[resumed])
 	return &hostChatSummary{
@@ -828,8 +850,8 @@ func runHostClaudeAuth(ctx context.Context, workdir string) (*hostAuthSummary, e
 				Metadata: map[string]any{"auth_provider": "claude", "auth_started": false, "auth_method": "manual_command"},
 			}, nil
 		}
-		script := "cd " + shQuote(wd) + " && " + shQuote(before.CLIPath) + " auth login; echo; read -r -p 'Claude login finished. Press enter to close.'"
-		cmd := exec.CommandContext(ctx, terminal, "-e", "bash", "-lc", script)
+		cmd := exec.CommandContext(ctx, terminal, "-e", before.CLIPath, "auth", "login")
+		cmd.Dir = wd
 		if err := cmd.Start(); err != nil {
 			return nil, fmt.Errorf("launch Claude auth terminal: %w", err)
 		}
