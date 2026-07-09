@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -39,5 +40,25 @@ func TestMustWorkdirFallsBackToCWD(t *testing.T) {
 
 	if got := mustWorkdir(""); got != wd {
 		t.Fatalf("mustWorkdir default = %q want cwd %q", got, wd)
+	}
+}
+
+func TestMustWorkdirCanonicalizesRelativeFlags(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DOCKPIPE_SOURCE_ROOT", "")
+	t.Setenv("DOCKPIPE_WORKDIR", "")
+
+	got := mustWorkdir(".")
+	if got != wd {
+		t.Fatalf("mustWorkdir relative flag = %q want %q", got, wd)
+	}
+
+	got = providerPoolWorkdirHash(".")
+	want := providerPoolWorkdirHash(filepath.Clean(wd))
+	if got != want {
+		t.Fatalf("providerPoolWorkdirHash relative = %q want %q", got, want)
 	}
 }

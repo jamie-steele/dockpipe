@@ -295,11 +295,29 @@ First vertical slice for shared DorkPipe provider pools landed:
   `failed` states instead of silently cold-starting a provider lane.
 - Pipeon provider selection and direct chat now consume the shared DorkPipe provider-pool catalog and
   MCP chat tool rather than owning a separate routing model.
+- Pipeon dev-stack startup now explicitly calls the shared DorkPipe provider-pool warm lifecycle and
+  writes a provider-pool status snapshot into stack state, so warm-up is deliberate and observable
+  instead of being triggered implicitly by a read-only status/catalog call.
 
 Current lane status on a normal core-dev machine is intentionally honest:
 
 - Codex direct chat preserves session bindings and can use the host `codex exec` resume lane.
 - Ollama reports `warming` until the local service is reachable instead of triggering an implicit cold
   path.
-- Claude still needs the guarded warm-worker/container lane to be materialized and healthy before it
-  can become `ready`; that remains the next major responsiveness fix.
+- Claude guarded warm-worker health is now materially better:
+  - explicit `op inject` is no longer forced just because project config selects 1Password; workflows
+    without referenced secret-template keys now skip vault injection cleanly
+  - direct prompts wait briefly for a warming provider instead of immediately failing back to “retry”
+  - the guarded worker now reuses the same pool identity across direct CLI, workflow host steps, and
+    future app surfaces because relative and absolute workdirs canonicalize to the same repo-root key
+  - the guarded worker bootstrap now avoids copying heavyweight host Claude state such as
+    `file-history`, while still copying the smaller auth/session files needed for a viable warm lane
+  - the keepalive no longer depends on `runuser`, which was missing from the current `dockpipe-claude`
+    image and caused worker exits
+- Claude remains the active tuning area rather than a correctness blocker:
+  - shared-pool direct prompt latency is currently about 31 seconds on the measured Windows core-dev
+    machine once the worker is warm
+  - the full `dockpipe --package dorkpipe --workflow orchestrator` path is currently about 41 seconds
+    against that warm worker
+  - the remaining gap appears to be inside the guarded Claude container lane itself, not provider-pool
+    identity drift, hidden cold starts, or workflow dispatch overhead

@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"dorkpipe.orchestrator/statepaths"
@@ -60,6 +61,12 @@ type providerPoolCatalogResponse struct {
 	DefaultProvider string             `json:"default_provider"`
 	Providers       []providerPoolView `json:"providers"`
 	GeneratedAt     string             `json:"generated_at"`
+}
+
+type providerPoolWarmResponse struct {
+	ContractVersion string               `json:"contract_version"`
+	Providers       []providerPoolStatus `json:"providers"`
+	GeneratedAt     string               `json:"generated_at"`
 }
 
 type providerPoolView struct {
@@ -124,9 +131,11 @@ type providerPoolPromptOptions struct {
 	SelectionText string
 }
 
+var providerPoolClaudeImageBuild sync.Mutex
+
 func providerPoolCmd(argv []string) {
 	if len(argv) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: dorkpipe provider-pool <catalog|status|prompt> [flags]")
+		fmt.Fprintln(os.Stderr, "usage: dorkpipe provider-pool <catalog|status|warm|prompt> [flags]")
 		os.Exit(2)
 	}
 	switch argv[0] {
@@ -134,11 +143,13 @@ func providerPoolCmd(argv []string) {
 		providerPoolCatalogCmd(argv[1:])
 	case "status":
 		providerPoolStatusCmd(argv[1:])
+	case "warm":
+		providerPoolWarmCmd(argv[1:])
 	case "prompt":
 		providerPoolPromptCmd(argv[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown provider-pool subcommand %q\n", argv[0])
-		fmt.Fprintln(os.Stderr, "usage: dorkpipe provider-pool <catalog|status|prompt> [flags]")
+		fmt.Fprintln(os.Stderr, "usage: dorkpipe provider-pool <catalog|status|warm|prompt> [flags]")
 		os.Exit(2)
 	}
 }
@@ -149,7 +160,7 @@ func providerPoolCatalogCmd(argv []string) {
 	asJSON := fs.Bool("json", false, "print JSON")
 	_ = fs.Parse(argv)
 	wd := mustWorkdir(*workdir)
-	payload, err := buildProviderPoolCatalogResponse(wd)
+	payload, err := buildProviderPoolCatalogResponse(wd, false)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -173,7 +184,7 @@ func providerPoolStatusCmd(argv []string) {
 	asJSON := fs.Bool("json", false, "print JSON")
 	_ = fs.Parse(argv)
 	wd := mustWorkdir(*workdir)
-	payload, err := buildProviderPoolCatalogResponse(wd)
+	payload, err := buildProviderPoolCatalogResponse(wd, false)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -195,6 +206,29 @@ func providerPoolStatusCmd(argv []string) {
 	}
 	for _, item := range payload.Providers {
 		fmt.Printf("%s: %s\n", item.ID, item.Status.Status)
+	}
+}
+
+func providerPoolWarmCmd(argv []string) {
+	fs := flag.NewFlagSet("provider-pool warm", flag.ExitOnError)
+	workdir := fs.String("workdir", "", "working directory (default cwd)")
+	provider := fs.String("provider", "", "provider id filter")
+	asJSON := fs.Bool("json", false, "print JSON")
+	_ = fs.Parse(argv)
+	wd := mustWorkdir(*workdir)
+	payload, err := warmProviderPools(wd, strings.TrimSpace(*provider))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(payload)
+		return
+	}
+	for _, item := range payload.Providers {
+		fmt.Println(item.Status)
 	}
 }
 
@@ -260,7 +294,7 @@ func providerPoolPromptArgs(argv []string) []string {
 	return append(out, parsed...)
 }
 
-func buildProviderPoolCatalogResponse(workdir string) (*providerPoolCatalogResponse, error) {
+func buildProviderPoolCatalogResponse(workdir string, allowWarmStart bool) (*providerPoolCatalogResponse, error) {
 	doc, err := loadProviderPoolCatalog(workdir)
 	if err != nil {
 		return nil, err
@@ -272,7 +306,7 @@ func buildProviderPoolCatalogResponse(workdir string) (*providerPoolCatalogRespo
 	}
 	for _, item := range doc.Providers {
 		defaultModel := providerPoolChosenModel(item)
-		status, err := providerPoolStatusFor(workdir, item, defaultModel, "")
+		status, err := providerPoolStatusFor(workdir, item, defaultModel, "", allowWarmStart)
 		if err != nil {
 			return nil, err
 		}
@@ -307,9 +341,18 @@ func runProviderPoolPrompt(ctx context.Context, opts providerPoolPromptOptions) 
 	if chosenModel == "" {
 		chosenModel = providerPoolChosenModel(provider)
 	}
-	status, err := providerPoolStatusFor(opts.Workdir, provider, chosenModel, opts.SessionID)
+	status, err := providerPoolStatusFor(opts.Workdir, provider, chosenModel, opts.SessionID, true)
 	if err != nil {
 		return nil, err
+	}
+	if status.State == "warming" {
+		waitedStatus, waitErr := waitForProviderPoolPromptReady(ctx, opts.Workdir, provider, chosenModel, opts.SessionID)
+		if waitErr != nil {
+			return nil, waitErr
+		}
+		if waitedStatus != nil {
+			status = waitedStatus
+		}
 	}
 	if status.State != "ready" {
 		return &providerPoolPromptResponse{
@@ -357,6 +400,78 @@ func runProviderPoolPrompt(ctx context.Context, opts providerPoolPromptOptions) 
 	}
 }
 
+func waitForProviderPoolPromptReady(ctx context.Context, workdir string, provider providerPoolProvider, chosenModel, sessionID string) (*providerPoolStatus, error) {
+	timeout := providerPoolPromptWarmWaitTimeout()
+	if timeout <= 0 {
+		return nil, nil
+	}
+	fmt.Fprintf(os.Stderr, "Provider: %s | State: warming | Waiting up to %s for a ready worker\n", provider.DisplayName, timeout.Round(time.Second))
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+		status, err := providerPoolStatusFor(workdir, provider, chosenModel, sessionID, true)
+		if err != nil {
+			return nil, err
+		}
+		if status.State == "ready" || status.State == "failed" || status.State == "auth-required" || status.State == "disabled" {
+			return status, nil
+		}
+	}
+	return providerPoolStatusFor(workdir, provider, chosenModel, sessionID, true)
+}
+
+func providerPoolPromptWarmWaitTimeout() time.Duration {
+	raw := strings.TrimSpace(os.Getenv("DORKPIPE_PROVIDER_POOL_PROMPT_WAIT_SECONDS"))
+	if raw == "" {
+		return 10 * time.Second
+	}
+	if strings.EqualFold(raw, "0") || strings.EqualFold(raw, "off") || strings.EqualFold(raw, "false") {
+		return 0
+	}
+	seconds, err := time.ParseDuration(raw + "s")
+	if err == nil {
+		if seconds < 0 {
+			return 0
+		}
+		return seconds
+	}
+	if duration, err := time.ParseDuration(raw); err == nil {
+		if duration < 0 {
+			return 0
+		}
+		return duration
+	}
+	return 10 * time.Second
+}
+
+func warmProviderPools(workdir, providerFilter string) (*providerPoolWarmResponse, error) {
+	doc, err := loadProviderPoolCatalog(workdir)
+	if err != nil {
+		return nil, err
+	}
+	resp := &providerPoolWarmResponse{
+		ContractVersion: "v1",
+		GeneratedAt:     time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	for _, item := range doc.Providers {
+		if providerFilter != "" && !strings.EqualFold(strings.TrimSpace(item.ID), providerFilter) {
+			continue
+		}
+		chosenModel := providerPoolChosenModel(item)
+		status, err := providerPoolStatusFor(workdir, item, chosenModel, "", item.Pool.MinReady > 0)
+		if err != nil {
+			return nil, err
+		}
+		resp.Providers = append(resp.Providers, *status)
+	}
+	sort.Slice(resp.Providers, func(i, j int) bool { return resp.Providers[i].Provider < resp.Providers[j].Provider })
+	return resp, nil
+}
+
 func providerPoolUnavailableText(status *providerPoolStatus) string {
 	if status == nil {
 		return "Provider-pool status unavailable."
@@ -377,7 +492,7 @@ func providerPoolUnavailableText(status *providerPoolStatus) string {
 	}
 }
 
-func providerPoolStatusFor(workdir string, provider providerPoolProvider, chosenModel, sessionID string) (*providerPoolStatus, error) {
+func providerPoolStatusFor(workdir string, provider providerPoolProvider, chosenModel, sessionID string, allowWarmStart bool) (*providerPoolStatus, error) {
 	status := &providerPoolStatus{
 		Provider:        provider.ID,
 		DisplayName:     provider.DisplayName,
@@ -454,7 +569,18 @@ func providerPoolStatusFor(workdir string, provider providerPoolProvider, chosen
 		}
 		containerName := providerPoolClaudeContainerName(workdir)
 		status.Metadata["container_name"] = containerName
-		if !providerPoolClaudeImageReady() {
+		if !providerPoolClaudeImageReady(workdir) {
+			if allowWarmStart {
+				if err := providerPoolEnsureClaudeImage(context.Background(), workdir); err != nil {
+					status.State = "failed"
+					status.DisableReason = err.Error()
+					status.NextAction = "Inspect the DockPipe image build output, then retry."
+					status.Status = fmt.Sprintf("Provider: %s | State: failed | %s", provider.DisplayName, status.DisableReason)
+					return status, nil
+				}
+			}
+		}
+		if !providerPoolClaudeImageReady(workdir) {
 			status.State = "disabled"
 			status.DisableReason = "resolver image dockpipe-claude:latest is missing."
 			status.NextAction = "Build or materialize the Claude resolver image, then retry."
@@ -470,21 +596,30 @@ func providerPoolStatusFor(workdir string, provider providerPoolProvider, chosen
 			status.BoundSessionID = strings.TrimSpace(sessionID)
 			return status, nil
 		}
-		if started, startErr := providerPoolEnsureClaudeWarmContainer(context.Background(), workdir, containerName); startErr != nil {
-			status.State = "failed"
-			status.DisableReason = startErr.Error()
-			status.Status = fmt.Sprintf("Provider: %s | State: failed | %s", provider.DisplayName, status.DisableReason)
-			return status, nil
-		} else if started {
-			status.State = "warming"
-			status.Status = fmt.Sprintf("Provider: %s | State: warming | Started guarded worker %s", provider.DisplayName, containerName)
-			status.WorkerID = containerName
-			status.BoundSessionID = strings.TrimSpace(sessionID)
-			status.NextAction = "Retry once the guarded container worker is ready."
-			return status, nil
+		if allowWarmStart {
+			if started, startErr := providerPoolEnsureClaudeWarmContainer(context.Background(), workdir, containerName); startErr != nil {
+				status.State = "failed"
+				status.DisableReason = startErr.Error()
+				status.Status = fmt.Sprintf("Provider: %s | State: failed | %s", provider.DisplayName, status.DisableReason)
+				return status, nil
+			} else if started {
+				status.State = "warming"
+				status.Status = fmt.Sprintf("Provider: %s | State: warming | Started guarded worker %s", provider.DisplayName, containerName)
+				status.WorkerID = containerName
+				status.BoundSessionID = strings.TrimSpace(sessionID)
+				status.NextAction = "Retry once the guarded container worker is ready."
+				return status, nil
+			}
 		}
 		status.State = "warming"
 		status.Status = fmt.Sprintf("Provider: %s | State: warming | Waiting for guarded worker %s", provider.DisplayName, containerName)
+		status.WorkerID = containerName
+		status.BoundSessionID = strings.TrimSpace(sessionID)
+		if allowWarmStart {
+			status.NextAction = "Retry once the guarded container worker is ready."
+		} else {
+			status.NextAction = "Warm the Claude provider pool or open Pipeon so the guarded worker can start."
+		}
 		return status, nil
 	default:
 		return nil, fmt.Errorf("unsupported provider-pool provider %q", provider.ID)
@@ -618,13 +753,33 @@ func runProviderPoolClaudePrompt(ctx context.Context, provider providerPoolProvi
 			},
 		}, nil
 	}
-	args := []string{"exec", "-i", "-w", "/work", containerName, "claude", "--dangerously-skip-permissions"}
+	runCtx, cancel := context.WithTimeout(ctx, providerPoolPromptExecutionTimeout("claude", 2*time.Minute))
+	defer cancel()
+	args := []string{"exec", "-i", "-u", "node", "-e", "HOME=/home/node", "-w", "/work", containerName, "claude", "--dangerously-skip-permissions"}
 	if strings.TrimSpace(chosenModel) != "" {
 		args = append(args, "--model", chosenModel)
 	}
 	args = append(args, "-p", augmentDirectPrompt(opts.Prompt, opts.ActiveFile, opts.SelectionText, opts.OpenFiles))
-	stdout, stderr, code, runErr := runCommandCapture(ctx, opts.Workdir, "docker", args...)
+	stdout, stderr, code, runErr := runCommandCapture(runCtx, opts.Workdir, "docker", args...)
 	if runErr != nil {
+		if errors.Is(runErr, context.DeadlineExceeded) || errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			return &providerPoolPromptResponse{
+				Provider: "claude",
+				Model:    chosenModel,
+				State:    "failed",
+				Status:   fmt.Sprintf("Provider: %s | State: failed | Timed out waiting for Claude after %s", provider.DisplayName, providerPoolPromptExecutionTimeout("claude", 2*time.Minute).Round(time.Second)),
+				Text:     "Claude direct orchestration timed out before returning a response.",
+				ExitCode: -1,
+				Stdout:   stdout,
+				Stderr:   stderr,
+				Metadata: map[string]any{
+					"provider_preset": "claude",
+					"container_name":  containerName,
+					"session_id":      strings.TrimSpace(opts.SessionID),
+					"timeout":         providerPoolPromptExecutionTimeout("claude", 2*time.Minute).String(),
+				},
+			}, nil
+		}
 		return nil, runErr
 	}
 	text := cleanDirectProviderText(stdout)
@@ -655,6 +810,30 @@ func runProviderPoolClaudePrompt(ctx context.Context, provider providerPoolProvi
 			"session_id":      strings.TrimSpace(opts.SessionID),
 		},
 	}, nil
+}
+
+func providerPoolPromptExecutionTimeout(provider string, fallback time.Duration) time.Duration {
+	envKey := "DORKPIPE_PROVIDER_POOL_" + strings.ToUpper(strings.ReplaceAll(strings.TrimSpace(provider), "-", "_")) + "_PROMPT_TIMEOUT"
+	raw := strings.TrimSpace(os.Getenv(envKey))
+	if raw == "" {
+		return fallback
+	}
+	if strings.EqualFold(raw, "0") || strings.EqualFold(raw, "off") || strings.EqualFold(raw, "false") {
+		return 0
+	}
+	if duration, err := time.ParseDuration(raw); err == nil {
+		if duration < 0 {
+			return 0
+		}
+		return duration
+	}
+	if seconds, err := time.ParseDuration(raw + "s"); err == nil {
+		if seconds < 0 {
+			return 0
+		}
+		return seconds
+	}
+	return fallback
 }
 
 type selfEventStreamSummary struct {
@@ -906,13 +1085,101 @@ func providerPoolClaudeContainerName(workdir string) string {
 }
 
 func providerPoolWorkdirHash(workdir string) string {
-	sum := sha1.Sum([]byte(filepath.Clean(workdir)))
+	canonical := filepath.Clean(strings.TrimSpace(workdir))
+	if canonical == "" {
+		canonical = "."
+	}
+	if abs, err := filepath.Abs(canonical); err == nil {
+		canonical = abs
+	}
+	sum := sha1.Sum([]byte(canonical))
 	return hex.EncodeToString(sum[:])[:10]
 }
 
-func providerPoolClaudeImageReady() bool {
-	_, _, code, err := runCommandCapture(context.Background(), "", "docker", "image", "inspect", "dockpipe-claude:latest")
-	return err == nil && code == 0
+func providerPoolClaudeImageReady(workdir string) bool {
+	_, ok := providerPoolClaudeImageRef(workdir)
+	return ok
+}
+
+func providerPoolClaudeImageRef(workdir string) (string, bool) {
+	candidates := []string{"dockpipe-claude:latest"}
+	if version := providerPoolRepoVersion(workdir); version != "" {
+		candidates = append(candidates, "dockpipe-claude:"+version)
+	}
+	for _, candidate := range candidates {
+		_, _, code, err := runCommandCapture(context.Background(), "", "docker", "image", "inspect", candidate)
+		if err == nil && code == 0 {
+			return candidate, true
+		}
+	}
+	return "", false
+}
+
+func providerPoolRepoVersion(workdir string) string {
+	for _, name := range []string{"VERSION", "version"} {
+		path := filepath.Join(workdir, name)
+		raw, err := os.ReadFile(path)
+		if err == nil {
+			if value := strings.TrimSpace(string(raw)); value != "" {
+				return value
+			}
+		}
+	}
+	return ""
+}
+
+func providerPoolEnsureClaudeImage(ctx context.Context, workdir string) error {
+	providerPoolClaudeImageBuild.Lock()
+	defer providerPoolClaudeImageBuild.Unlock()
+
+	if providerPoolClaudeImageReady(workdir) {
+		return nil
+	}
+
+	dockpipeBin, err := providerPoolDockpipeBin(workdir)
+	if err != nil {
+		return fmt.Errorf("locate dockpipe build command for Claude image: %w", err)
+	}
+
+	buildCtx, cancel := context.WithTimeout(ctx, 20*time.Minute)
+	defer cancel()
+	stdout, stderr, code, runErr := runCommandCapture(buildCtx, workdir, dockpipeBin, "build", "--workdir", workdir, "--no-source-builds")
+	if runErr != nil {
+		return fmt.Errorf("build dockpipe-claude image: %w", runErr)
+	}
+	if code != 0 {
+		text := strings.TrimSpace(firstNonEmptyString(stderr, stdout, fmt.Sprintf("dockpipe build exited %d", code)))
+		return fmt.Errorf("build dockpipe-claude image: %s", text)
+	}
+	if !providerPoolClaudeImageReady(workdir) {
+		return errors.New("dockpipe build completed but no local dockpipe-claude image tag is available")
+	}
+	return nil
+}
+
+func providerPoolDockpipeBin(workdir string) (string, error) {
+	candidates := []string{}
+	if value := strings.TrimSpace(os.Getenv("DOCKPIPE_BIN")); value != "" {
+		candidates = append(candidates, value)
+	}
+	if workdir != "" {
+		candidates = append(candidates,
+			filepath.Join(workdir, "src", "bin", "dockpipe.exe"),
+			filepath.Join(workdir, "src", "bin", "dockpipe"),
+		)
+	}
+	if value, err := exec.LookPath("dockpipe"); err == nil && strings.TrimSpace(value) != "" {
+		candidates = append(candidates, value)
+	}
+	for _, candidate := range candidates {
+		if strings.TrimSpace(candidate) == "" {
+			continue
+		}
+		if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
+			return candidate, nil
+		}
+	}
+	return "", errors.New("dockpipe binary not found")
 }
 
 func providerPoolClaudeContainerRunning(containerName string) (bool, error) {
@@ -937,17 +1204,21 @@ func providerPoolEnsureClaudeWarmContainer(ctx context.Context, workdir, contain
 	_, _, _, _ = runCommandCapture(ctx, "", "docker", "rm", "-f", containerName)
 	args := []string{"run", "-d", "--name", containerName, "-w", "/work", "--mount", fmt.Sprintf("type=bind,src=%s,dst=/work", workdir)}
 	if path, ok := stringFromMap(providerPoolClaudeAuthStatus(), "auth_dir"); ok {
-		args = append(args, "--mount", fmt.Sprintf("type=bind,src=%s,dst=/home/node/.claude", path))
+		args = append(args, "--mount", fmt.Sprintf("type=bind,src=%s,dst=/dockpipe-auth/claude,readonly", path))
 	}
 	if path, ok := stringFromMap(providerPoolClaudeAuthStatus(), "config_file"); ok {
-		args = append(args, "--mount", fmt.Sprintf("type=bind,src=%s,dst=/home/node/.claude.json", path))
+		args = append(args, "--mount", fmt.Sprintf("type=bind,src=%s,dst=/dockpipe-auth/claude-config/.claude.json,readonly", path))
 	}
 	for _, key := range []string{"ANTHROPIC_API_KEY", "CLAUDE_API_KEY"} {
 		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
 			args = append(args, "-e", fmt.Sprintf("%s=%s", key, value))
 		}
 	}
-	args = append(args, "dockpipe-claude:latest", "bash", "-lc", "trap 'exit 0' TERM INT; while :; do sleep 3600; done")
+	imageRef, ok := providerPoolClaudeImageRef(workdir)
+	if !ok {
+		return false, errors.New("dockpipe-claude image is unavailable after build/materialization")
+	}
+	args = append(args, imageRef, "bash", "-lc", providerPoolClaudeWarmBootstrapScript())
 	_, stderr, code, err := runCommandCapture(ctx, workdir, "docker", args...)
 	if err != nil {
 		return false, err
@@ -956,6 +1227,29 @@ func providerPoolEnsureClaudeWarmContainer(ctx context.Context, workdir, contain
 		return false, fmt.Errorf("start guarded Claude worker: %s", strings.TrimSpace(stderr))
 	}
 	return true, nil
+}
+
+func providerPoolClaudeWarmBootstrapScript() string {
+	return `set -euo pipefail
+if id node >/dev/null 2>&1; then
+  install -d -o node -g node /home/node/.claude
+  if [[ -d /dockpipe-auth/claude ]]; then
+    for name in .credentials.json .last-cleanup history.jsonl ide mcp-needs-auth-cache.json plans plugins policy-limits.json projects remote-settings.json session-env sessions settings.json shell-snapshots skills; do
+      if [[ -e "/dockpipe-auth/claude/${name}" ]]; then
+        cp -a "/dockpipe-auth/claude/${name}" /home/node/.claude/ 2>/dev/null || true
+      fi
+    done
+    chown -R node:node /home/node/.claude 2>/dev/null || true
+    chmod -R u+rwX /home/node/.claude 2>/dev/null || true
+  fi
+  if [[ -f /dockpipe-auth/claude-config/.claude.json ]]; then
+    cp /dockpipe-auth/claude-config/.claude.json /home/node/.claude.json 2>/dev/null || true
+    chown node:node /home/node/.claude.json 2>/dev/null || true
+    chmod u+rw /home/node/.claude.json 2>/dev/null || true
+  fi
+fi
+trap 'exit 0' TERM INT
+while :; do sleep 3600; done`
 }
 
 func acquireProviderPoolLease(workdir string, provider providerPoolProvider, sessionID string) (func(), bool, error) {

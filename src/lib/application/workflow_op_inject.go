@@ -69,9 +69,9 @@ func vaultModeRequiresOp(v string) bool {
 
 // mergeOpInjectFromProjectIfEnabled resolves vault references via `op inject` when project config
 // sets secrets.vault_template or secrets.op_inject_template and the template file exists.
-// Effective vault mode: workflow YAML vault: wins when set; else secrets.vault in dockpipe.config.json;
-// else best-effort inject when template exists and the selected workflow references one of its keys.
-// Strict op mode (workflow or project) requires template + file.
+// Effective vault mode: workflow YAML vault: wins when set; else secrets.vault in dockpipe.config.json.
+// Explicit workflow vault: op is strict. Project-level secrets.vault selects the backend, but inject
+// still runs only when the selected workflow references one of the template keys.
 // Resolved KEY=VAL pairs overwrite env (vault over workflow .env for those keys).
 func mergeOpInjectFromProjectIfEnabled(env map[string]string, opts *CliOpts, wfConfig, wfRoot string, wf *domain.Workflow) error {
 	start := ""
@@ -100,18 +100,20 @@ func mergeOpInjectFromProjectIfEnabled(env map[string]string, opts *CliOpts, wfC
 		return err
 	}
 	mode := domain.EffectiveVaultString(wf, cfg)
+	explicitWorkflowVault := wf != nil && strings.TrimSpace(wf.Vault) != ""
+	strictOp := explicitWorkflowVault && vaultModeRequiresOp(mode)
 	if vaultModeSkipInject(mode) {
 		return nil
 	}
 	if cfg == nil {
-		if vaultModeRequiresOp(mode) {
+		if strictOp {
 			return fmt.Errorf("workflow vault: op requires %s with secrets.vault_template or secrets.op_inject_template", domain.DockpipeProjectConfigFileName)
 		}
 		return nil
 	}
 	tmplPath, ok := domain.ResolveVaultTemplatePath(cfg, projectRoot)
 	if !ok {
-		if vaultModeRequiresOp(mode) {
+		if strictOp {
 			return fmt.Errorf("workflow vault: op requires secrets.vault_template or secrets.op_inject_template in %s", domain.DockpipeProjectConfigFileName)
 		}
 		return nil
@@ -120,7 +122,7 @@ func mergeOpInjectFromProjectIfEnabled(env map[string]string, opts *CliOpts, wfC
 		fmt.Fprintf(os.Stderr, "[dockpipe] warning: workflow vault template file is missing, skipping op inject: %s (%v)\n", tmplPath, err)
 		return nil
 	}
-	if !vaultModeRequiresOp(mode) && !workflowReferencesVaultTemplateKey(wfConfig, wf, tmplPath) {
+	if !strictOp && !workflowReferencesVaultTemplateKey(wfConfig, wf, tmplPath) {
 		return nil
 	}
 	if _, err := opLookPathFn("op"); err != nil {

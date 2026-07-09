@@ -60,4 +60,14 @@ if ! grep -q 'Ollama model .* is already present; skipping pull' "$launch"; then
   exit 1
 fi
 
+if ! grep -q 'provider-pool warm --workdir "\$WORKDIR"' "$launch"; then
+  echo "missing Pipeon startup provider-pool warm-up through shared DorkPipe contract" >&2
+  exit 1
+fi
+
+if ! grep -q 'provider-pool status --workdir "\$WORKDIR" --json' "$launch"; then
+  echo "missing Pipeon startup provider-pool status snapshot" >&2
+  exit 1
+fi
+
 echo "pipeon-dev-stack host MCP, hidden PowerShell, and model-cache checks ok"

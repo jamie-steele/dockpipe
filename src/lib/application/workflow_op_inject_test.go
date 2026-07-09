@@ -171,6 +171,40 @@ func TestMergeOpInjectFromProjectIfEnabled_SkipsWhenProjectVaultNone(t *testing.
 	}
 }
 
+func TestMergeOpInjectFromProjectIfEnabled_ProjectVaultOpStillSkipsWhenWorkflowDoesNotReferenceTemplateKeys(t *testing.T) {
+	t.Setenv("DOCKPIPE_OP_INJECT", "1")
+	tmp := t.TempDir()
+	if err := os.WriteFile(filepath.Join(tmp, domain.DockpipeProjectConfigFileName), []byte(`{
+  "schema": 1,
+  "secrets": { "op_inject_template": ".env.op.template", "vault": "op" }
+}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(tmp, ".env.op.template"), []byte("UNUSED_SECRET=op://Vault/Item/field\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wfConfig := filepath.Join(tmp, "workflow.yml")
+	if err := os.WriteFile(wfConfig, []byte("name: no-secrets\nvars:\n  PLAIN: value\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	oldRun := runOpInjectFn
+	defer func() { runOpInjectFn = oldRun }()
+	runOpInjectFn = func(string) ([]byte, error) {
+		t.Fatal("op inject should not run when only project-level vault is set and workflow does not reference template keys")
+		return nil, nil
+	}
+
+	env := map[string]string{}
+	opts := &CliOpts{Workdir: tmp}
+	if err := mergeOpInjectFromProjectIfEnabled(env, opts, wfConfig, tmp, &domain.Workflow{}); err != nil {
+		t.Fatal(err)
+	}
+	if len(env) != 0 {
+		t.Fatalf("expected no merge, got %#v", env)
+	}
+}
+
 func TestMergeOpInjectFromProjectIfEnabled_WorkflowVaultOverridesProjectNone(t *testing.T) {
 	t.Setenv("DOCKPIPE_OP_INJECT", "1")
 	tmp := t.TempDir()

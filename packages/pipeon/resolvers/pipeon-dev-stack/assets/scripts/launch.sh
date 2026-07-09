@@ -538,6 +538,23 @@ start_pipeon_host_mcp_bridge() {
   fi
 }
 
+warm_pipeon_provider_pools() {
+  local status_file warm_output warm_status
+  status_file="$(pipeon_stack_state_dir)/provider-pools-status.json"
+
+  warm_output="$("$DORKPIPE_BIN" provider-pool warm --workdir "$WORKDIR" 2>&1)" || warm_status=$?
+  warm_status="${warm_status:-0}"
+  if [[ "$warm_status" -ne 0 ]]; then
+    printf '[pipeon-dev-stack] provider-pool warm failed (exit %s)\n%s\n' "$warm_status" "$warm_output" >&2
+  elif [[ -n "$warm_output" ]]; then
+    printf '[pipeon-dev-stack] provider pools\n%s\n' "$warm_output" >&2
+  fi
+
+  if ! "$DORKPIPE_BIN" provider-pool status --workdir "$WORKDIR" --json > "$status_file"; then
+    printf '[pipeon-dev-stack] provider-pool status snapshot failed: %s\n' "$status_file" >&2
+  fi
+}
+
 if ! docker version >/dev/null 2>&1; then
   echo "pipeon-dev-stack: Docker is not reachable" >&2
   exit 1
@@ -712,6 +729,8 @@ if [[ "${PIPEON_DEV_STACK_PIPEON_BUNDLE:-1}" == "1" && -x "$PIPEON_BIN" ]]; then
   fi
 fi
 
+warm_pipeon_provider_pools
+
 cat >&2 <<EOF
 [dockpipe-ready] pipeon-dev-stack
 [pipeon-dev-stack] ready
@@ -721,6 +740,7 @@ cat >&2 <<EOF
   mcp:          $MCP_URL
   mcp api key:  $(pipeon_stack_api_key_file)
   host mcp:     $(pipeon_stack_host_mcp_url)
+  provider pools: $(pipeon_stack_state_dir)/provider-pools-status.json
   dorkpipe:     isolated compose service
   state:        $(pipeon_stack_state_dir)
   control:      isolated compose service dorkpipe-stack

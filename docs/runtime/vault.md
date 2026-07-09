@@ -8,8 +8,8 @@ The CLI runs **`op inject -i <template>`** with **no `--out-file`** so **`op`** 
 
 If you see a file literally named **`-`** in the repo root, that almost always comes from a **shell mistake**: **`op inject … > -`** redirects output to a **file** named **`-`**, not to stdout. **Do not use `> -`.** When **`dockpipe`** builds step env (including when **`DOCKPIPE_OP_INJECT=0`** or **`--no-op-inject`**), it may **remove** that file if it looks like accidental inject output (env-like text); set **`DOCKPIPE_KEEP_DASH_FILE=1`** to keep it. For manual checks, run **`op inject -i .env.op.template`** (writes to stdout) or **`op inject -i .env.op.template | …`**, then **`rm -- -`** to remove any stray file. **Delete** that file if it contains plaintext secrets and rotate credentials if it was ever committed.
 
-- **`secrets.vault`** — optional default **`op`** when workflow YAML **omits** **`vault:`**. With **`op`**, the template path must resolve and the template file must exist (strict). **Omit** **`secrets.vault`** for best-effort inject: merge only when the template file exists, without failing on missing config.
-- **`vault: op`** on a workflow — same strict behavior as project **`secrets.vault: op`** when set.
+- **`secrets.vault`** — optional default backend when workflow YAML **omits** **`vault:`**. With **`op`**, DockPipe uses the 1Password inject path only when the selected workflow references one of the template keys. This is backend selection, not a force-inject flag.
+- **`vault: op`** on a workflow — strict opt-in. DockPipe requires the template path/config and runs **`op inject`** even when the project default would otherwise skip.
 
 Workflow **`vault:`** overrides **`secrets.vault`** when non-empty. Resolution order for the template file: **`vault_template`** first, then **`op_inject_template`**.
 

@@ -68,7 +68,7 @@ func usage() {
 Usage:
   dorkpipe run -f <spec.yaml> [--workdir <dir>]
   dorkpipe request --message <text> [--workdir <dir>]
-  dorkpipe provider-pool <catalog|status|prompt> [flags]
+  dorkpipe provider-pool <catalog|status|warm|prompt> [flags]
   dorkpipe edit --message <text> [--workdir <dir>] [--apply]
   dorkpipe apply-edit --artifact-dir <dir> [--workdir <dir>]
   dorkpipe compose [-o <compose.yml>] [--no-ollama]
@@ -273,21 +273,27 @@ func insightSupersedeCmd(argv []string) {
 }
 
 func mustWorkdir(flagValue string) string {
+	raw := ""
 	if flagValue != "" {
-		return flagValue
+		raw = flagValue
+	} else if wd := strings.TrimSpace(os.Getenv("DOCKPIPE_SOURCE_ROOT")); wd != "" {
+		raw = wd
+	} else if wd := strings.TrimSpace(os.Getenv("DOCKPIPE_WORKDIR")); wd != "" {
+		raw = wd
+	} else {
+		wd, err := os.Getwd()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		raw = wd
 	}
-	if wd := strings.TrimSpace(os.Getenv("DOCKPIPE_SOURCE_ROOT")); wd != "" {
-		return wd
-	}
-	if wd := strings.TrimSpace(os.Getenv("DOCKPIPE_WORKDIR")); wd != "" {
-		return wd
-	}
-	wd, err := os.Getwd()
+	abs, err := filepath.Abs(raw)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	return wd
+	return abs
 }
 
 func ciCmd(argv []string) {
