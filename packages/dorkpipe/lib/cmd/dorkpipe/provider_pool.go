@@ -325,6 +325,8 @@ func buildProviderPoolCatalogResponse(workdir string, allowWarmStart bool) (*pro
 }
 
 func runProviderPoolPrompt(ctx context.Context, opts providerPoolPromptOptions) (*providerPoolPromptResponse, error) {
+	startedAt := time.Now()
+	timings := map[string]int64{}
 	doc, err := loadProviderPoolCatalog(opts.Workdir)
 	if err != nil {
 		return nil, err
@@ -341,20 +343,29 @@ func runProviderPoolPrompt(ctx context.Context, opts providerPoolPromptOptions) 
 	if chosenModel == "" {
 		chosenModel = providerPoolChosenModel(provider)
 	}
+	statusStartedAt := time.Now()
 	status, err := providerPoolStatusFor(opts.Workdir, provider, chosenModel, opts.SessionID, true)
 	if err != nil {
 		return nil, err
 	}
+	timings["status_ms"] = elapsedMillis(statusStartedAt)
+	if status != nil && status.Metadata != nil {
+		mergePromptTimings(timings, status.Metadata["timings_ms"])
+	}
 	if status.State == "warming" {
+		waitStartedAt := time.Now()
 		waitedStatus, waitErr := waitForProviderPoolPromptReady(ctx, opts.Workdir, provider, chosenModel, opts.SessionID)
 		if waitErr != nil {
 			return nil, waitErr
 		}
+		timings["readiness_wait_ms"] = elapsedMillis(waitStartedAt)
 		if waitedStatus != nil {
 			status = waitedStatus
 		}
 	}
 	if status.State != "ready" {
+		status.Metadata = ensureMetadata(status.Metadata)
+		status.Metadata["timings_ms"] = promptTimings(timings, startedAt)
 		return &providerPoolPromptResponse{
 			Provider: provider.ID,
 			Model:    chosenModel,
@@ -365,16 +376,19 @@ func runProviderPoolPrompt(ctx context.Context, opts providerPoolPromptOptions) 
 			Metadata: status.Metadata,
 		}, nil
 	}
+	leaseStartedAt := time.Now()
 	releaseLease, queued, err := acquireProviderPoolLease(opts.Workdir, provider, opts.SessionID)
 	if err != nil {
 		return nil, err
 	}
+	timings["queue_wait_ms"] = elapsedMillis(leaseStartedAt)
 	if queued {
 		queueStatus := *status
 		queueStatus.State = "queued"
 		queueStatus.Status = fmt.Sprintf("Provider: %s | State: queued | Active workers reached %d/%d", provider.DisplayName, queueStatus.ActiveWorkers, queueStatus.MaxActive)
 		queueStatus.Metadata = ensureMetadata(queueStatus.Metadata)
 		queueStatus.Metadata["queue_reason"] = "max_active_reached"
+		queueStatus.Metadata["timings_ms"] = promptTimings(timings, startedAt)
 		return &providerPoolPromptResponse{
 			Provider: provider.ID,
 			Model:    chosenModel,
@@ -388,16 +402,26 @@ func runProviderPoolPrompt(ctx context.Context, opts providerPoolPromptOptions) 
 	if releaseLease != nil {
 		defer releaseLease()
 	}
+	runStartedAt := time.Now()
+	var result *providerPoolPromptResponse
 	switch provider.ID {
 	case "ollama":
-		return runProviderPoolOllamaPrompt(ctx, opts, chosenModel)
+		result, err = runProviderPoolOllamaPrompt(ctx, opts, chosenModel)
 	case "codex":
-		return runProviderPoolCodexPrompt(ctx, opts, chosenModel)
+		result, err = runProviderPoolCodexPrompt(ctx, opts, chosenModel)
 	case "claude":
-		return runProviderPoolClaudePrompt(ctx, provider, opts, chosenModel)
+		result, err = runProviderPoolClaudePrompt(ctx, provider, opts, chosenModel)
 	default:
 		return nil, fmt.Errorf("provider-pool prompt not implemented for %q", provider.ID)
 	}
+	if err != nil {
+		return nil, err
+	}
+	timings["provider_prompt_ms"] = elapsedMillis(runStartedAt)
+	result.Metadata = ensureMetadata(result.Metadata)
+	mergePromptTimings(timings, result.Metadata["timings_ms"])
+	result.Metadata["timings_ms"] = promptTimings(timings, startedAt)
+	return result, nil
 }
 
 func waitForProviderPoolPromptReady(ctx context.Context, workdir string, provider providerPoolProvider, chosenModel, sessionID string) (*providerPoolStatus, error) {
@@ -552,7 +576,11 @@ func providerPoolStatusFor(workdir string, provider providerPoolProvider, chosen
 		status.BoundSessionID = strings.TrimSpace(sessionID)
 		return status, nil
 	case "claude":
+		statusTimings := map[string]int64{}
+		authStartedAt := time.Now()
 		auth := providerPoolClaudeAuthStatus()
+		statusTimings["auth_check_ms"] = elapsedMillis(authStartedAt)
+		status.Metadata["timings_ms"] = statusTimings
 		status.Auth = auth
 		if !boolFromMap(auth, "authenticated") {
 			status.State = "auth-required"
@@ -569,25 +597,38 @@ func providerPoolStatusFor(workdir string, provider providerPoolProvider, chosen
 		}
 		containerName := providerPoolClaudeContainerName(workdir)
 		status.Metadata["container_name"] = containerName
+		status.Metadata["worker_mode"] = providerPoolClaudeWorkerMode()
+		imageStartedAt := time.Now()
 		if !providerPoolClaudeImageReady(workdir) {
+			statusTimings["image_check_ms"] = elapsedMillis(imageStartedAt)
 			if allowWarmStart {
+				imageBuildStartedAt := time.Now()
 				if err := providerPoolEnsureClaudeImage(context.Background(), workdir); err != nil {
+					statusTimings["image_build_ms"] = elapsedMillis(imageBuildStartedAt)
 					status.State = "failed"
 					status.DisableReason = err.Error()
 					status.NextAction = "Inspect the DockPipe image build output, then retry."
 					status.Status = fmt.Sprintf("Provider: %s | State: failed | %s", provider.DisplayName, status.DisableReason)
 					return status, nil
 				}
+				statusTimings["image_build_ms"] = elapsedMillis(imageBuildStartedAt)
 			}
+		} else {
+			statusTimings["image_check_ms"] = elapsedMillis(imageStartedAt)
 		}
+		imageRecheckStartedAt := time.Now()
 		if !providerPoolClaudeImageReady(workdir) {
+			statusTimings["image_recheck_ms"] = elapsedMillis(imageRecheckStartedAt)
 			status.State = "disabled"
 			status.DisableReason = "resolver image dockpipe-claude:latest is missing."
 			status.NextAction = "Build or materialize the Claude resolver image, then retry."
 			status.Status = fmt.Sprintf("Provider: %s | State: disabled | %s", provider.DisplayName, status.DisableReason)
 			return status, nil
 		}
+		statusTimings["image_recheck_ms"] = elapsedMillis(imageRecheckStartedAt)
+		runningStartedAt := time.Now()
 		running, _ := providerPoolClaudeContainerRunning(containerName)
+		statusTimings["container_running_check_ms"] = elapsedMillis(runningStartedAt)
 		if running {
 			status.State = "ready"
 			status.ReadyWorkers = 1
@@ -597,12 +638,15 @@ func providerPoolStatusFor(workdir string, provider providerPoolProvider, chosen
 			return status, nil
 		}
 		if allowWarmStart {
+			workerStartStartedAt := time.Now()
 			if started, startErr := providerPoolEnsureClaudeWarmContainer(context.Background(), workdir, containerName); startErr != nil {
+				statusTimings["worker_start_ms"] = elapsedMillis(workerStartStartedAt)
 				status.State = "failed"
 				status.DisableReason = startErr.Error()
 				status.Status = fmt.Sprintf("Provider: %s | State: failed | %s", provider.DisplayName, status.DisableReason)
 				return status, nil
 			} else if started {
+				statusTimings["worker_start_ms"] = elapsedMillis(workerStartStartedAt)
 				status.State = "warming"
 				status.Status = fmt.Sprintf("Provider: %s | State: warming | Started guarded worker %s", provider.DisplayName, containerName)
 				status.WorkerID = containerName
@@ -750,17 +794,55 @@ func runProviderPoolClaudePrompt(ctx context.Context, provider providerPoolProvi
 			Metadata: map[string]any{
 				"provider_preset": "claude",
 				"container_name":  containerName,
+				"worker_mode":     providerPoolClaudeWorkerMode(),
 			},
 		}, nil
 	}
+	if providerPoolClaudeStreamWorkerEnabled() {
+		result, streamErr := runProviderPoolClaudeStreamPrompt(ctx, provider, opts, chosenModel, containerName)
+		if streamErr == nil {
+			return result, nil
+		}
+		if !providerPoolClaudeSinglePromptFallbackEnabled() {
+			return &providerPoolPromptResponse{
+				Provider: "claude",
+				Model:    chosenModel,
+				State:    "failed",
+				Status:   fmt.Sprintf("Provider: %s | State: failed | Stream worker failed", provider.DisplayName),
+				Text:     "Claude stream worker failed before returning a response.",
+				ExitCode: -1,
+				Stderr:   streamErr.Error(),
+				Metadata: map[string]any{
+					"provider_preset":       "claude",
+					"container_name":        containerName,
+					"session_id":            strings.TrimSpace(opts.SessionID),
+					"worker_id":             providerPoolClaudeStreamWorkerID(opts.Workdir, opts.SessionID, chosenModel),
+					"worker_mode":           "stream_worker",
+					"stream_restart_reason": "stream_worker_error",
+					"stream_error":          streamErr.Error(),
+				},
+			}, nil
+		}
+		fallback, fallbackErr := runProviderPoolClaudeSinglePrompt(ctx, provider, opts, chosenModel, containerName)
+		if fallbackErr != nil {
+			return nil, fallbackErr
+		}
+		fallback.Metadata = ensureMetadata(fallback.Metadata)
+		fallback.Metadata["worker_mode"] = "single_prompt_fallback"
+		fallback.Metadata["stream_restart_reason"] = "stream_worker_error"
+		fallback.Metadata["stream_error"] = streamErr.Error()
+		return fallback, nil
+	}
+	return runProviderPoolClaudeSinglePrompt(ctx, provider, opts, chosenModel, containerName)
+}
+
+func runProviderPoolClaudeSinglePrompt(ctx context.Context, provider providerPoolProvider, opts providerPoolPromptOptions, chosenModel, containerName string) (*providerPoolPromptResponse, error) {
 	runCtx, cancel := context.WithTimeout(ctx, providerPoolPromptExecutionTimeout("claude", 2*time.Minute))
 	defer cancel()
-	args := []string{"exec", "-i", "-u", "node", "-e", "HOME=/home/node", "-w", "/work", containerName, "claude", "--dangerously-skip-permissions"}
-	if strings.TrimSpace(chosenModel) != "" {
-		args = append(args, "--model", chosenModel)
-	}
-	args = append(args, "-p", augmentDirectPrompt(opts.Prompt, opts.ActiveFile, opts.SelectionText, opts.OpenFiles))
+	args := providerPoolClaudePromptDockerArgs(containerName, chosenModel, augmentDirectPrompt(opts.Prompt, opts.ActiveFile, opts.SelectionText, opts.OpenFiles))
+	promptStartedAt := time.Now()
 	stdout, stderr, code, runErr := runCommandCapture(runCtx, opts.Workdir, "docker", args...)
+	promptMs := elapsedMillis(promptStartedAt)
 	if runErr != nil {
 		if errors.Is(runErr, context.DeadlineExceeded) || errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 			return &providerPoolPromptResponse{
@@ -776,7 +858,13 @@ func runProviderPoolClaudePrompt(ctx context.Context, provider providerPoolProvi
 					"provider_preset": "claude",
 					"container_name":  containerName,
 					"session_id":      strings.TrimSpace(opts.SessionID),
+					"worker_id":       containerName,
+					"worker_mode":     "single_prompt",
 					"timeout":         providerPoolPromptExecutionTimeout("claude", 2*time.Minute).String(),
+					"timings_ms": map[string]int64{
+						"claude_command_ms": promptMs,
+						"provider_turn_ms":  promptMs,
+					},
 				},
 			}, nil
 		}
@@ -806,10 +894,431 @@ func runProviderPoolClaudePrompt(ctx context.Context, provider providerPoolProvi
 		Stderr:   stderr,
 		Metadata: map[string]any{
 			"provider_preset": "claude",
+			"selected_model":  chosenModel,
 			"container_name":  containerName,
 			"session_id":      strings.TrimSpace(opts.SessionID),
+			"worker_id":       containerName,
+			"worker_mode":     "single_prompt",
+			"timings_ms": map[string]int64{
+				"claude_command_ms": promptMs,
+				"provider_turn_ms":  promptMs,
+			},
 		},
 	}, nil
+}
+
+func runProviderPoolClaudeStreamPrompt(ctx context.Context, provider providerPoolProvider, opts providerPoolPromptOptions, chosenModel, containerName string) (*providerPoolPromptResponse, error) {
+	workerID := providerPoolClaudeStreamWorkerID(opts.Workdir, opts.SessionID, chosenModel)
+	socketPath := providerPoolClaudeStreamSocketPath(workerID)
+	timings := map[string]int64{}
+	streamStartStartedAt := time.Now()
+	reused, err := providerPoolEnsureClaudeStreamWorker(ctx, containerName, socketPath, chosenModel, timings)
+	timings["stream_start_ms"] = elapsedMillis(streamStartStartedAt)
+	if err != nil {
+		return nil, err
+	}
+	promptTurnID := providerPoolPromptTurnID()
+	runCtx, cancel := context.WithTimeout(ctx, providerPoolPromptExecutionTimeout("claude", 2*time.Minute))
+	defer cancel()
+	requestStartedAt := time.Now()
+	stdout, stderr, code, runErr := runCommandCapture(runCtx, opts.Workdir, "docker", providerPoolClaudeStreamClientDockerArgs(containerName, socketPath, augmentDirectPrompt(opts.Prompt, opts.ActiveFile, opts.SelectionText, opts.OpenFiles), promptTurnID)...)
+	providerTurnMs := elapsedMillis(requestStartedAt)
+	if runErr != nil {
+		if errors.Is(runErr, context.DeadlineExceeded) || errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			timings["provider_turn_ms"] = providerTurnMs
+			return &providerPoolPromptResponse{
+				Provider: "claude",
+				Model:    chosenModel,
+				State:    "failed",
+				Status:   fmt.Sprintf("Provider: %s | State: failed | Timed out waiting for Claude stream worker after %s", provider.DisplayName, providerPoolPromptExecutionTimeout("claude", 2*time.Minute).Round(time.Second)),
+				Text:     "Claude stream worker timed out before returning a response.",
+				ExitCode: -1,
+				Stdout:   stdout,
+				Stderr:   stderr,
+				Metadata: map[string]any{
+					"provider_preset": "claude",
+					"selected_model":  chosenModel,
+					"container_name":  containerName,
+					"session_id":      strings.TrimSpace(opts.SessionID),
+					"worker_id":       workerID,
+					"worker_mode":     "stream_worker",
+					"prompt_turn_id":  promptTurnID,
+					"stream_reused":   reused,
+					"timeout":         providerPoolPromptExecutionTimeout("claude", 2*time.Minute).String(),
+					"timings_ms":      timings,
+				},
+			}, nil
+		}
+		return nil, runErr
+	}
+	var payload providerPoolClaudeStreamClientResponse
+	if strings.TrimSpace(stdout) != "" {
+		if err := json.Unmarshal([]byte(strings.TrimSpace(stdout)), &payload); err != nil {
+			return nil, fmt.Errorf("parse Claude stream worker response: %w: %s", err, strings.TrimSpace(stdout))
+		}
+	}
+	mergePromptTimings(timings, payload.TimingsMS)
+	if timings["provider_turn_ms"] == 0 {
+		timings["provider_turn_ms"] = providerTurnMs
+	}
+	text := strings.TrimSpace(payload.Text)
+	if text == "" && strings.TrimSpace(stderr) != "" {
+		text = strings.TrimSpace(stderr)
+	}
+	if text == "" {
+		text = "(Claude returned no output.)"
+	}
+	state := "ready"
+	status := fmt.Sprintf("Provider: %s | State: ready | Stream worker %s", provider.DisplayName, workerID)
+	if code != 0 || !payload.OK {
+		state = "failed"
+		status = fmt.Sprintf("Provider: %s | State: failed | Stream worker exit %d", provider.DisplayName, code)
+		if strings.TrimSpace(payload.Error) != "" {
+			text = payload.Error
+		}
+	}
+	return &providerPoolPromptResponse{
+		Provider: "claude",
+		Model:    chosenModel,
+		State:    state,
+		Status:   status,
+		Text:     text,
+		ExitCode: code,
+		Stdout:   stdout,
+		Stderr:   firstNonEmptyString(stderr, payload.Stderr),
+		Metadata: map[string]any{
+			"provider_preset":       "claude",
+			"selected_model":        chosenModel,
+			"container_name":        containerName,
+			"session_id":            strings.TrimSpace(opts.SessionID),
+			"worker_id":             workerID,
+			"worker_mode":           "stream_worker",
+			"provider_session_id":   payload.ProviderSessionID,
+			"provider_request_id":   payload.ProviderRequestID,
+			"prompt_turn_id":        promptTurnID,
+			"prompt_count":          payload.PromptCount,
+			"stream_reused":         reused,
+			"stream_restart_reason": map[bool]string{true: "", false: "worker_not_running"}[reused],
+			"timings_ms":            timings,
+		},
+	}, nil
+}
+
+type providerPoolClaudeStreamClientResponse struct {
+	OK                bool             `json:"ok"`
+	Text              string           `json:"text"`
+	Error             string           `json:"error"`
+	Stderr            string           `json:"stderr"`
+	ProviderSessionID string           `json:"provider_session_id"`
+	ProviderRequestID string           `json:"provider_request_id"`
+	PromptCount       int              `json:"prompt_count"`
+	TimingsMS         map[string]int64 `json:"timings_ms"`
+}
+
+func providerPoolClaudePromptDockerArgs(containerName, chosenModel, prompt string) []string {
+	args := []string{"exec", "-u", "node", "-e", "HOME=/home/node", "-w", "/work", containerName, "claude", "--dangerously-skip-permissions"}
+	if strings.TrimSpace(chosenModel) != "" {
+		args = append(args, "--model", chosenModel)
+	}
+	return append(args, "-p", prompt)
+}
+
+func providerPoolClaudeStreamWorkerEnabled() bool {
+	raw := strings.TrimSpace(os.Getenv("DORKPIPE_PROVIDER_POOL_CLAUDE_STREAM_WORKER"))
+	if raw == "" {
+		raw = strings.TrimSpace(os.Getenv("PIPEON_PROVIDER_POOL_CLAUDE_STREAM_WORKER"))
+	}
+	switch strings.ToLower(raw) {
+	case "0", "false", "no", "off", "disabled", "single", "single_prompt":
+		return false
+	default:
+		return true
+	}
+}
+
+func providerPoolClaudeSinglePromptFallbackEnabled() bool {
+	for _, key := range []string{"DORKPIPE_PROVIDER_POOL_CLAUDE_SINGLE_PROMPT_FALLBACK", "PIPEON_PROVIDER_POOL_CLAUDE_SINGLE_PROMPT_FALLBACK"} {
+		switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+		case "1", "true", "yes", "on", "enabled":
+			return true
+		}
+	}
+	return false
+}
+
+func providerPoolClaudeWorkerMode() string {
+	if providerPoolClaudeStreamWorkerEnabled() {
+		return "stream_worker"
+	}
+	return "single_prompt"
+}
+
+func providerPoolClaudeStreamWorkerID(workdir, sessionID, chosenModel string) string {
+	session := strings.TrimSpace(sessionID)
+	if session == "" {
+		session = "default"
+	}
+	model := strings.TrimSpace(chosenModel)
+	if model == "" {
+		model = "default"
+	}
+	return "claude-stream-" + providerPoolWorkdirHash(workdir+"|"+session+"|"+model)
+}
+
+func providerPoolClaudeStreamSocketPath(workerID string) string {
+	return "/tmp/dorkpipe-provider-pool/" + strings.TrimSpace(workerID) + ".sock"
+}
+
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
+}
+
+func providerPoolPromptTurnID() string {
+	return fmt.Sprintf("turn-%d", time.Now().UTC().UnixNano())
+}
+
+func providerPoolEnsureClaudeStreamWorker(ctx context.Context, containerName, socketPath, chosenModel string, timings map[string]int64) (bool, error) {
+	if providerPoolClaudeStreamWorkerPing(ctx, containerName, socketPath) {
+		return true, nil
+	}
+	_, _, _, _ = runCommandCapture(ctx, "", "docker", "exec", containerName, "bash", "-lc", "pkill -f "+shellSingleQuote(socketPath)+" 2>/dev/null || true; rm -f "+shellSingleQuote(socketPath))
+	startedAt := time.Now()
+	stdout, stderr, code, err := runCommandCapture(ctx, "", "docker", providerPoolClaudeStreamDaemonDockerArgs(containerName, socketPath, chosenModel)...)
+	if err != nil {
+		return false, err
+	}
+	if code != 0 {
+		return false, fmt.Errorf("start Claude stream worker daemon: %s", strings.TrimSpace(firstNonEmptyString(stderr, stdout, fmt.Sprintf("docker exec exited %d", code))))
+	}
+	timings["stream_process_start_ms"] = elapsedMillis(startedAt)
+	readyStartedAt := time.Now()
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		if providerPoolClaudeStreamWorkerPing(ctx, containerName, socketPath) {
+			timings["stream_ready_ms"] = elapsedMillis(readyStartedAt)
+			return false, nil
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	timings["stream_ready_ms"] = elapsedMillis(readyStartedAt)
+	return false, errors.New("Claude stream worker daemon did not become ready")
+}
+
+func providerPoolClaudeStreamWorkerPing(ctx context.Context, containerName, socketPath string) bool {
+	pingCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	stdout, _, code, err := runCommandCapture(pingCtx, "", "docker", providerPoolClaudeStreamClientDockerArgs(containerName, socketPath, "", "ping")...)
+	if err != nil || code != 0 {
+		return false
+	}
+	var payload map[string]any
+	if json.Unmarshal([]byte(strings.TrimSpace(stdout)), &payload) != nil {
+		return false
+	}
+	protocol, _ := stringFromMap(payload, "protocol_version")
+	return boolFromMap(payload, "ok") && protocol == "stream_worker_v1"
+}
+
+func providerPoolClaudeStreamDaemonDockerArgs(containerName, socketPath, chosenModel string) []string {
+	return []string{"exec", "-d", "-u", "node", "-e", "HOME=/home/node", "-w", "/work", containerName, "node", "-e", providerPoolClaudeStreamDaemonScript(), socketPath, chosenModel}
+}
+
+func providerPoolClaudeStreamClientDockerArgs(containerName, socketPath, prompt, promptTurnID string) []string {
+	return []string{"exec", "-u", "node", "-e", "HOME=/home/node", "-w", "/work", containerName, "node", "-e", providerPoolClaudeStreamClientScript(), socketPath, prompt, promptTurnID}
+}
+
+func providerPoolClaudeStreamDaemonScript() string {
+	return `const net = require('net');
+const fs = require('fs');
+const path = require('path');
+const readline = require('readline');
+const { spawn } = require('child_process');
+
+const socketPath = process.argv[1];
+const model = (process.argv[2] || '').trim();
+fs.mkdirSync(path.dirname(socketPath), { recursive: true });
+try { fs.unlinkSync(socketPath); } catch (_) {}
+
+const timingsBase = {};
+const stderrLines = [];
+let promptCount = 0;
+let current = null;
+
+const claudeArgs = ['--dangerously-skip-permissions'];
+if (model) claudeArgs.push('--model', model);
+claudeArgs.push('-p', '--input-format', 'stream-json', '--output-format', 'stream-json', '--include-partial-messages', '--replay-user-messages', '--verbose');
+const child = spawn('claude', claudeArgs, { cwd: '/work', env: { ...process.env, HOME: '/home/node' }, stdio: ['pipe', 'pipe', 'pipe'] });
+timingsBase.stream_pid = child.pid || 0;
+
+child.stderr.on('data', chunk => {
+  for (const line of String(chunk).split(/\r?\n/)) {
+    if (line.trim()) stderrLines.push(line);
+  }
+  while (stderrLines.length > 40) stderrLines.shift();
+});
+
+function eventText(event) {
+  if (!event || typeof event !== 'object') return '';
+  if (typeof event.result === 'string') return event.result;
+  if (typeof event.text === 'string') return event.text;
+  if (event.delta && typeof event.delta.text === 'string') return event.delta.text;
+  const message = event.message || {};
+  const content = event.content || message.content;
+  if (Array.isArray(content)) {
+    return content.map(item => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item.text === 'string') return item.text;
+      return '';
+    }).join('');
+  }
+  return '';
+}
+
+function finish(payload) {
+  if (!current) return;
+  const response = {
+    ok: payload.ok,
+    text: (payload.text || current.text.join('')).trim(),
+    error: payload.error || '',
+    stderr: stderrLines.join('\n'),
+    provider_session_id: payload.provider_session_id || current.providerSessionID || '',
+    provider_request_id: payload.provider_request_id || current.providerRequestID || '',
+    prompt_count: promptCount,
+    timings_ms: {
+      time_to_request_ms: current.timeToRequestMS,
+      time_to_first_token_ms: current.firstTokenAt ? current.firstTokenAt - current.startedAt : 0,
+      provider_turn_ms: Date.now() - current.startedAt
+    }
+  };
+  current.socket.end(JSON.stringify(response) + '\n');
+  current = null;
+}
+
+readline.createInterface({ input: child.stdout }).on('line', line => {
+  if (!current) return;
+  let event;
+  try { event = JSON.parse(line); } catch (_) { return; }
+  const text = eventText(event);
+  if (text) {
+    if (!current.firstTokenAt) current.firstTokenAt = Date.now();
+    if (event.type !== 'result') current.text.push(text);
+  }
+  if (typeof event.session_id === 'string') current.providerSessionID = event.session_id;
+  if (typeof event.request_id === 'string') current.providerRequestID = event.request_id;
+  if (event.type === 'result') {
+    finish({
+      ok: true,
+      text: typeof event.result === 'string' ? event.result : current.text.join(''),
+      provider_session_id: event.session_id || '',
+      provider_request_id: event.request_id || ''
+    });
+  }
+});
+
+child.on('exit', (code, signal) => {
+  if (current) finish({ ok: false, error: 'claude stream exited: code=' + code + ' signal=' + signal });
+  process.exit(code || 0);
+});
+
+function handleSocketRequest(socket, raw) {
+  let req;
+  try { req = JSON.parse(raw || '{}'); } catch (err) {
+    socket.end(JSON.stringify({ ok: false, error: 'invalid request json: ' + err.message }) + '\n');
+    return;
+  }
+  if (req.type === 'ping') {
+    socket.end(JSON.stringify({ ok: true, protocol_version: 'stream_worker_v1', prompt_count: promptCount, stream_pid: timingsBase.stream_pid }) + '\n');
+    return;
+  }
+  if (current) {
+    socket.end(JSON.stringify({ ok: false, error: 'stream worker is busy' }) + '\n');
+    return;
+  }
+  const prompt = String(req.prompt || '').trim();
+  if (!prompt) {
+    socket.end(JSON.stringify({ ok: false, error: 'prompt is required' }) + '\n');
+    return;
+  }
+  promptCount++;
+  const startedAt = Date.now();
+  current = { socket, startedAt, firstTokenAt: 0, text: [], providerSessionID: '', providerRequestID: '', timeToRequestMS: 0 };
+  const input = { type: 'user', message: { role: 'user', content: [{ type: 'text', text: prompt }] } };
+  child.stdin.write(JSON.stringify(input) + '\n', () => {
+    if (current) current.timeToRequestMS = Date.now() - startedAt;
+  });
+}
+
+const server = net.createServer(socket => {
+  let raw = '';
+  let handled = false;
+  socket.on('data', chunk => {
+    raw += chunk.toString();
+    if (!handled && raw.includes('\n')) {
+      handled = true;
+      handleSocketRequest(socket, raw.trim());
+    }
+  });
+});
+
+server.listen(socketPath, () => {
+  try { fs.chmodSync(socketPath, 0o600); } catch (_) {}
+});
+`
+}
+
+func providerPoolClaudeStreamClientScript() string {
+	return `const net = require('net');
+const socketPath = process.argv[1];
+const prompt = process.argv[2] || '';
+const turnID = process.argv[3] || '';
+const type = turnID === 'ping' ? 'ping' : 'prompt';
+const socket = net.createConnection(socketPath);
+let raw = '';
+socket.on('connect', () => {
+  socket.write(JSON.stringify({ type, prompt, prompt_turn_id: turnID }) + '\n');
+});
+socket.on('data', chunk => raw += chunk.toString());
+socket.on('end', () => {
+  process.stdout.write((raw.trim() || '{"ok":false,"error":"empty stream worker response"}') + '\n');
+});
+socket.on('error', err => {
+  process.stdout.write(JSON.stringify({ ok: false, error: err.message }) + '\n');
+  process.exitCode = 1;
+});
+`
+}
+
+func elapsedMillis(startedAt time.Time) int64 {
+	return time.Since(startedAt).Milliseconds()
+}
+
+func promptTimings(timings map[string]int64, startedAt time.Time) map[string]int64 {
+	out := map[string]int64{}
+	for key, value := range timings {
+		out[key] = value
+	}
+	out["total_ms"] = elapsedMillis(startedAt)
+	return out
+}
+
+func mergePromptTimings(dst map[string]int64, src any) {
+	switch typed := src.(type) {
+	case map[string]int64:
+		for key, value := range typed {
+			dst[key] = value
+		}
+	case map[string]any:
+		for key, value := range typed {
+			switch v := value.(type) {
+			case int64:
+				dst[key] = v
+			case int:
+				dst[key] = int64(v)
+			case float64:
+				dst[key] = int64(v)
+			}
+		}
+	}
 }
 
 func providerPoolPromptExecutionTimeout(provider string, fallback time.Duration) time.Duration {

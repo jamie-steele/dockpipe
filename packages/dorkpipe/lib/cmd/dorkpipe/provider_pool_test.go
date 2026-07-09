@@ -126,6 +126,93 @@ func TestProviderPoolClaudeWarmBootstrapScriptUsesAllowlistAndPortableKeepalive(
 	}
 }
 
+func TestProviderPoolClaudePromptDockerArgsDoNotKeepStdinOpen(t *testing.T) {
+	args := providerPoolClaudePromptDockerArgs("worker", "sonnet", "hello")
+	if len(args) == 0 {
+		t.Fatal("expected docker args")
+	}
+	if args[0] != "exec" {
+		t.Fatalf("first arg = %q, want exec", args[0])
+	}
+	for _, arg := range args {
+		if arg == "-i" {
+			t.Fatalf("claude prompt args should not keep stdin open: %v", args)
+		}
+	}
+	if !reflect.DeepEqual(args[:8], []string{"exec", "-u", "node", "-e", "HOME=/home/node", "-w", "/work", "worker"}) {
+		t.Fatalf("unexpected docker exec prefix: %v", args)
+	}
+	if !containsAll(strings.Join(args, "\x00"), "claude", "--dangerously-skip-permissions", "--model", "sonnet", "-p", "hello") {
+		t.Fatalf("unexpected claude args: %v", args)
+	}
+}
+
+func TestProviderPoolClaudeStreamWorkerModeCanBeDisabledExplicitly(t *testing.T) {
+	t.Setenv("DORKPIPE_PROVIDER_POOL_CLAUDE_STREAM_WORKER", "")
+	if !providerPoolClaudeStreamWorkerEnabled() {
+		t.Fatal("stream worker should be enabled by default")
+	}
+	if got := providerPoolClaudeWorkerMode(); got != "stream_worker" {
+		t.Fatalf("mode = %q, want stream_worker", got)
+	}
+
+	t.Setenv("DORKPIPE_PROVIDER_POOL_CLAUDE_STREAM_WORKER", "single_prompt")
+	if providerPoolClaudeStreamWorkerEnabled() {
+		t.Fatal("stream worker should be disabled by explicit single_prompt mode")
+	}
+	if got := providerPoolClaudeWorkerMode(); got != "single_prompt" {
+		t.Fatalf("mode = %q, want single_prompt", got)
+	}
+}
+
+func TestProviderPoolClaudeStreamDaemonArgsUseGenericWorkerBoundary(t *testing.T) {
+	args := providerPoolClaudeStreamDaemonDockerArgs("worker", "/tmp/dorkpipe-provider-pool/claude.sock", "sonnet")
+	if len(args) == 0 {
+		t.Fatal("expected docker args")
+	}
+	if !reflect.DeepEqual(args[:8], []string{"exec", "-d", "-u", "node", "-e", "HOME=/home/node", "-w", "/work"}) {
+		t.Fatalf("unexpected daemon docker prefix: %v", args)
+	}
+	joined := strings.Join(args, "\x00")
+	if !containsAll(joined,
+		"worker",
+		"node",
+		"--input-format', 'stream-json'",
+		"--output-format', 'stream-json'",
+		"--include-partial-messages",
+		"--replay-user-messages",
+		"--verbose",
+		"/tmp/dorkpipe-provider-pool/claude.sock",
+		"sonnet",
+	) {
+		t.Fatalf("unexpected daemon args: %v", args)
+	}
+}
+
+func TestProviderPoolClaudeStreamClientArgsUseUnixSocket(t *testing.T) {
+	args := providerPoolClaudeStreamClientDockerArgs("worker", "/tmp/dorkpipe-provider-pool/claude.sock", "hello", "turn-1")
+	if !reflect.DeepEqual(args[:7], []string{"exec", "-u", "node", "-e", "HOME=/home/node", "-w", "/work"}) {
+		t.Fatalf("unexpected client docker prefix: %v", args)
+	}
+	joined := strings.Join(args, "\x00")
+	if !containsAll(joined, "worker", "node", "createConnection", "/tmp/dorkpipe-provider-pool/claude.sock", "hello", "turn-1") {
+		t.Fatalf("unexpected client args: %v", args)
+	}
+}
+
+func TestMergePromptTimingsPreservesProviderTiming(t *testing.T) {
+	dst := map[string]int64{"status_ms": 7}
+	mergePromptTimings(dst, map[string]any{
+		"claude_command_ms": float64(25),
+	})
+	if dst["status_ms"] != 7 {
+		t.Fatalf("status timing changed: %v", dst)
+	}
+	if dst["claude_command_ms"] != 25 {
+		t.Fatalf("claude command timing missing: %v", dst)
+	}
+}
+
 func containsAll(s string, parts ...string) bool {
 	for _, part := range parts {
 		if !strings.Contains(s, part) {
