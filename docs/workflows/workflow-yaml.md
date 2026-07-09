@@ -362,6 +362,21 @@ DockPipe also injects these variables for every step:
 | `model_policy` | Optional AI model attempt, validation, and escalation policy for DorkPipe harnesses. Use this to express cheap/local attempts, stronger validation, and approval-on-cost escalation intent. |
 | `view` | Optional authored launcher presentation layer. Define pages, sections, and ordered field paths over the typed model while keeping the underlying env contract unchanged. |
 
+#### Provider-Pool Model Policy
+
+DorkPipe agent workflows can opt selected workflow/subagent workers into the shared provider-pool leasing path without naming a provider-specific YAML field:
+
+```yaml
+model_policy:
+  execution_mode: provider_pool
+  role: reviewer
+  session_scope: workflow
+  max_active: 1
+  queue_timeout_seconds: 30
+```
+
+`execution_mode: provider_pool` makes the DorkPipe worker script call `dorkpipe provider-pool prompt --json` for that worker instead of spawning a direct provider CLI. `role` is a provider-neutral attribution/session grouping label. `session_scope: node` isolates each subagent node; `session_scope: workflow` reuses a role session within the workflow run. `max_active` narrows the provider catalog's active lease cap for that policy, and `queue_timeout_seconds` controls how long the worker waits before returning a visible queued failure.
+
 ### `imports` vs `inject`
 
 These two fields solve different problems:

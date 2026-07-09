@@ -140,6 +140,29 @@ const STEP_SCOPE_KEY_DETAILS = {
   artifacts: "Artifact/output-facing scope. Use artifacts to bind generated output to workflow state."
 };
 
+const MODEL_POLICY_KEY_DETAILS = {
+  mode: "Optional DorkPipe model policy mode used by package-owned harnesses.",
+  execution_mode: "Provider-neutral execution substrate. Use provider_pool for selected workflow/subagent workers that should lease the shared provider pool.",
+  role: "Provider-neutral worker role label used for provider-pool attribution and session grouping.",
+  session_scope: "Provider-pool session reuse boundary: node isolates each subagent node; workflow reuses a role session within one orchestration run.",
+  max_active: "Optional per-policy active lease cap. It can only narrow the provider catalog cap.",
+  queue_timeout_seconds: "Seconds to wait for a provider-pool lease before returning a visible queued failure.",
+  attempt: "Attempt preference and retry policy for package-owned model harnesses.",
+  validate: "Validation preference and required validation targets for package-owned model harnesses.",
+  escalation: "Escalation triggers and approval policy for package-owned model harnesses."
+};
+
+const MODEL_POLICY_VALUE_DETAILS = {
+  execution_mode: {
+    workflow: "Use the workflow package's normal worker execution path.",
+    provider_pool: "Lease a shared provider-pool worker via dorkpipe provider-pool prompt."
+  },
+  session_scope: {
+    node: "Isolate the provider-pool session to this subagent node.",
+    workflow: "Reuse the provider-pool role session within the current workflow run."
+  }
+};
+
 const DORKPIPE_AGENT_SCOPE_REF_DETAILS = {
   "scope:artifacts": {
     insertText: "scope:artifacts:${1:path/to/artifact}",
@@ -2105,11 +2128,25 @@ function activate(context) {
               return it;
             });
           }
+          if (info?.kind === "nestedKey" && (info.parents || []).includes("model_policy") && lineToCursor.includes(":")) {
+            const values = MODEL_POLICY_VALUE_DETAILS[info.key];
+            if (values) {
+              return Object.entries(values).map(([value, doc]) => {
+                const it = new vscode.CompletionItem(value, vscode.CompletionItemKind.EnumMember);
+                it.insertText = value;
+                it.detail = `model_policy.${info.key}`;
+                it.documentation = doc;
+                return it;
+              });
+            }
+          }
 
           if (!lineToCursor.includes(":") && info?.kind === "nestedKey") {
             const parentChain = info.parents || [];
             let docs = null;
-            if (parentChain.length === 1 && parentChain[0] === "view") {
+            if (parentChain.includes("model_policy")) {
+              docs = MODEL_POLICY_KEY_DETAILS;
+            } else if (parentChain.length === 1 && parentChain[0] === "view") {
               docs = WORKFLOW_VIEW_KEY_DETAILS;
             } else if (parentChain.length === 3 && parentChain[0] === "view" && parentChain[1] === "entry") {
               docs = WORKFLOW_VIEW_ENTRY_KEY_DETAILS;
@@ -2335,6 +2372,9 @@ function activate(context) {
 
           if (info?.kind === "nestedKey") {
             const parentChain = info.parents || [];
+            if (parentChain.includes("model_policy")) {
+              return hoverForWorkflowKey(word, MODEL_POLICY_KEY_DETAILS, range);
+            }
             if (parentChain.length === 1 && parentChain[0] === "view") {
               return hoverForWorkflowKey(word, WORKFLOW_VIEW_KEY_DETAILS, range);
             }

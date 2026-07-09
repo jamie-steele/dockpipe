@@ -227,10 +227,15 @@ type StepAgentAccessConfig struct {
 }
 
 type StepAgentModelPolicyConfig struct {
-	Mode       string                         `yaml:"mode,omitempty"`
-	Attempt    StepAgentModelAttemptPolicy    `yaml:"attempt,omitempty"`
-	Validate   StepAgentModelValidatePolicy   `yaml:"validate,omitempty"`
-	Escalation StepAgentModelEscalationPolicy `yaml:"escalation,omitempty"`
+	Mode                string                         `yaml:"mode,omitempty"`
+	ExecutionMode       string                         `yaml:"execution_mode,omitempty"`
+	Role                string                         `yaml:"role,omitempty"`
+	SessionScope        string                         `yaml:"session_scope,omitempty"`
+	MaxActive           int                            `yaml:"max_active,omitempty"`
+	QueueTimeoutSeconds int                            `yaml:"queue_timeout_seconds,omitempty"`
+	Attempt             StepAgentModelAttemptPolicy    `yaml:"attempt,omitempty"`
+	Validate            StepAgentModelValidatePolicy   `yaml:"validate,omitempty"`
+	Escalation          StepAgentModelEscalationPolicy `yaml:"escalation,omitempty"`
 }
 
 type StepAgentModelAttemptPolicy struct {

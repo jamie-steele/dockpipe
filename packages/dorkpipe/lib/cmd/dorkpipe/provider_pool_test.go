@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -73,6 +74,44 @@ func TestProviderPoolDockpipeBinPrefersRepoLocalBinary(t *testing.T) {
 	}
 }
 
+func TestProviderPoolCodexCLIPathPrefersExplicitEnv(t *testing.T) {
+	root := t.TempDir()
+	codexPath := filepath.Join(root, "codex.exe")
+	if err := os.WriteFile(codexPath, []byte("stub"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_CLI_PATH", codexPath)
+	got, err := providerPoolCodexCLIPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != codexPath {
+		t.Fatalf("got %q want %q", got, codexPath)
+	}
+}
+
+func TestProviderPoolCodexCLIPathPrefersBundledBeforePath(t *testing.T) {
+	root := t.TempDir()
+	bundled := filepath.Join(root, ".vscode", "extensions", "openai.chatgpt-test", "bin", "windows-x86_64", "codex.exe")
+	if err := os.MkdirAll(filepath.Dir(bundled), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(bundled, []byte("stub"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CODEX_CLI_PATH", "")
+	t.Setenv("CLAUDE_HOME", "")
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", root)
+	got, err := providerPoolCodexCLIPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != bundled {
+		t.Fatalf("got %q want bundled %q", got, bundled)
+	}
+}
+
 func TestProviderPoolPromptWarmWaitTimeout(t *testing.T) {
 	t.Setenv("DORKPIPE_PROVIDER_POOL_PROMPT_WAIT_SECONDS", "")
 	if got := providerPoolPromptWarmWaitTimeout(); got != 10*time.Second {
@@ -92,6 +131,87 @@ func TestProviderPoolPromptWarmWaitTimeout(t *testing.T) {
 	t.Setenv("DORKPIPE_PROVIDER_POOL_PROMPT_WAIT_SECONDS", "1500ms")
 	if got := providerPoolPromptWarmWaitTimeout(); got != 1500*time.Millisecond {
 		t.Fatalf("duration timeout = %s, want 1500ms", got)
+	}
+}
+
+func TestProviderPoolLeaseHonorsEffectiveMaxActive(t *testing.T) {
+	root := t.TempDir()
+	provider := providerPoolProvider{
+		ID:          "codex",
+		DisplayName: "Codex",
+		Pool: providerPoolProviderShape{
+			MaxActive: 2,
+		},
+	}
+	release1, queued, err := acquireProviderPoolLease(context.Background(), root, provider, "session-1", "reviewer", "run-1", "node-1", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queued {
+		t.Fatal("first lease queued unexpectedly")
+	}
+	defer release1()
+	release2, queued, err := acquireProviderPoolLease(context.Background(), root, provider, "session-2", "reviewer", "run-1", "node-2", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queued {
+		t.Fatal("second lease queued unexpectedly")
+	}
+	defer release2()
+	release3, queued, err := acquireProviderPoolLease(context.Background(), root, provider, "session-3", "reviewer", "run-1", "node-3", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if release3 != nil {
+		defer release3()
+	}
+	if !queued {
+		t.Fatal("third lease should queue at max_active=2")
+	}
+	release2()
+	release4, queued, err := acquireProviderPoolLease(context.Background(), root, provider, "session-4", "reviewer", "run-1", "node-4", 0, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queued {
+		t.Fatal("lease after release queued unexpectedly")
+	}
+	release4()
+}
+
+func TestProviderPoolLeasePolicyCanNarrowMaxActive(t *testing.T) {
+	root := t.TempDir()
+	provider := providerPoolProvider{
+		ID:          "claude",
+		DisplayName: "Claude",
+		Pool: providerPoolProviderShape{
+			MaxActive: 3,
+		},
+	}
+	release, queued, err := acquireProviderPoolLease(context.Background(), root, provider, "session-1", "reviewer", "run-1", "node-1", 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queued {
+		t.Fatal("first narrowed lease queued unexpectedly")
+	}
+	defer release()
+	_, queued, err = acquireProviderPoolLease(context.Background(), root, provider, "session-2", "reviewer", "run-1", "node-2", 1, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !queued {
+		t.Fatal("second narrowed lease should queue at requested max_active=1")
+	}
+}
+
+func TestProviderPoolCodexOutputFailedDetectsZeroExitErrors(t *testing.T) {
+	if !providerPoolCodexOutputFailed("[2026-07-09T15:50:15] ERROR: unexpected status 400 Bad Request") {
+		t.Fatal("expected Codex ERROR line to be treated as failed")
+	}
+	if providerPoolCodexOutputFailed("provider-pool-direct-smoke") {
+		t.Fatal("normal output should not be treated as failed")
 	}
 }
 

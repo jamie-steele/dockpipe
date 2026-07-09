@@ -9,6 +9,16 @@ dorkpipe_orchestrate_init() {
   default_orch_root="$(dockpipe scope artifacts orchestrate)"
   export DORKPIPE_ORCH_ROOT="${DORKPIPE_ORCH_ROOT:-${default_orch_root}}"
   mkdir -p "${DORKPIPE_ORCH_ROOT}"
+  if [[ -z "${DORKPIPE_ORCH_RUN_ID:-}" ]]; then
+    run_id_file="${DORKPIPE_ORCH_ROOT}/run-id"
+    if [[ -s "${run_id_file}" ]]; then
+      DORKPIPE_ORCH_RUN_ID="$(cat "${run_id_file}")"
+    else
+      DORKPIPE_ORCH_RUN_ID="${DORKPIPE_ORCH_WORKFLOW}-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+      printf '%s\n' "${DORKPIPE_ORCH_RUN_ID}" > "${run_id_file}"
+    fi
+    export DORKPIPE_ORCH_RUN_ID
+  fi
   export DORKPIPE_ORCH_REQUEST_JSON="${DORKPIPE_ORCH_REQUEST_JSON:-${DORKPIPE_ORCH_ROOT}/request.json}"
   export DORKPIPE_ORCH_PLAN_JSON="${DORKPIPE_ORCH_PLAN_JSON:-${DORKPIPE_ORCH_ROOT}/plan.json}"
   export DORKPIPE_ORCH_GRAPH_JSON="${DORKPIPE_ORCH_GRAPH_JSON:-${DORKPIPE_ORCH_ROOT}/task-graph.json}"

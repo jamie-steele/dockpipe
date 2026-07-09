@@ -50,6 +50,7 @@ hard_fail="false"
 hard_fail_message=""
 provider_session_id=""
 lane_unavailable="false"
+provider_pool_metadata_json=""
 
 append_dependency_context() {
   [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_APPEND_DEPENDENCY_CONTEXT}")" == "true" ]] || return 0
@@ -110,6 +111,31 @@ materialize_task_outputs() {
   "$(dorkpipe_orchestrate_helper_bin)" materialize-task-outputs "${response_md}" "${task_dir}" "${TASK_MATERIALIZE_OUTPUTS_JSON}" "${materialize_result_json}"
 }
 
+provider_pool_session_id_for_task() {
+  local scope="${TASK_PROVIDER_POOL_SESSION_SCOPE:-node}"
+  local run_id="${DORKPIPE_ORCH_RUN_ID:-${DORKPIPE_ORCH_WORKFLOW:-workflow}}"
+  case "${scope}" in
+    workflow)
+      printf 'workflow:%s:role:%s\n' "${run_id}" "${TASK_PROVIDER_POOL_ROLE:-workflow}"
+      ;;
+    node|"")
+      printf 'workflow:%s:node:%s:role:%s\n' "${run_id}" "${task_id}" "${TASK_PROVIDER_POOL_ROLE:-workflow}"
+      ;;
+    *)
+      echo "unsupported provider-pool session_scope '${scope}' for ${task_id}; expected workflow or node" >&2
+      return 1
+      ;;
+  esac
+}
+
+run_provider_pool_prompt() {
+  local output_json="${1:?output json}"
+  shift
+  local dockpipe_bin
+  dockpipe_bin="$(dorkpipe_orchestrate_dockpipe_bin)" || return 1
+  "${dockpipe_bin}" "$@" > "${output_json}"
+}
+
 if [[ "$(dorkpipe_orchestrate_bool "${TASK_LANE_AVAILABLE:-true}")" != "true" ]]; then
   lane_unavailable="true"
   status="skipped"
@@ -162,7 +188,59 @@ if [[ "${budget_halt}" != "true" && "${lane_unavailable}" != "true" ]]; then
   if [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_LIVE_MODELS}")" != "true" ]]; then
     issues_json='["live model execution disabled by DORKPIPE_ORCH_LIVE_MODELS"]'
   else
-    case "${provider}" in
+    if [[ "${TASK_MODEL_POLICY_EXECUTION_MODE:-}" == "provider_pool" ]]; then
+      provider_pool_json="${task_dir}/provider-pool-response.json"
+      provider_pool_session_id="$(provider_pool_session_id_for_task)"
+      provider_pool_args=(
+        "provider-pool" "prompt"
+        "--workdir" "${ROOT}"
+        "--json"
+        "--provider" "${provider}"
+        "--prompt" "$(cat "${prompt_md}")"
+        "--session-id" "${provider_pool_session_id}"
+        "--role" "${TASK_PROVIDER_POOL_ROLE:-workflow}"
+        "--workflow-run-id" "${DORKPIPE_ORCH_RUN_ID:-${DORKPIPE_ORCH_WORKFLOW:-workflow}}"
+        "--node-id" "${task_id}"
+      )
+      if [[ -n "${selected_model}" && "${selected_model}" != "cli" && "${selected_model}" != "config" ]]; then
+        provider_pool_args+=("--model" "${selected_model}")
+      fi
+      if [[ "${TASK_PROVIDER_POOL_MAX_ACTIVE:-0}" =~ ^[0-9]+$ ]] && (( TASK_PROVIDER_POOL_MAX_ACTIVE > 0 )); then
+        provider_pool_args+=("--max-active" "${TASK_PROVIDER_POOL_MAX_ACTIVE}")
+      fi
+      if [[ "${TASK_PROVIDER_POOL_QUEUE_TIMEOUT_SECONDS:-0}" =~ ^[0-9]+$ ]]; then
+        provider_pool_args+=("--queue-timeout-seconds" "${TASK_PROVIDER_POOL_QUEUE_TIMEOUT_SECONDS}")
+      fi
+      if dorkpipe_orchestrate_run_logged "provider-pool ${provider} task ${task_id}" "${worker_log}" run_provider_pool_prompt "${provider_pool_json}" "${provider_pool_args[@]}"; then
+        eval "$("$(dorkpipe_orchestrate_helper_bin)" provider-pool-response-env "${provider_pool_json}" "${response_md}")"
+        provider_pool_metadata_json="${PROVIDER_POOL_METADATA_JSON:-{}}"
+        provider_session_id="${PROVIDER_POOL_PROVIDER_SESSION_ID:-${provider_pool_session_id}}"
+        if [[ "${PROVIDER_POOL_USED_LIVE_MODEL:-false}" == "true" ]] && live_response_is_valid "${response_md}"; then
+          used_live_model="true"
+          summary="Live ${provider} worker output captured through the provider pool"
+          confidence="0.72"
+          issues_json='[]'
+          next_actions_json='["merge this task with sibling worker outputs"]'
+        else
+          status="failed"
+          confidence="0.05"
+          summary="Provider-pool ${provider} worker did not return a live response for ${task_id}"
+          issues_json="[$(json_string_literal "${PROVIDER_POOL_STATUS:-provider-pool prompt did not return ready output}")]"
+          next_actions_json='["wait for provider-pool capacity or raise queue_timeout_seconds/max_active intentionally"]'
+          hard_fail="true"
+          hard_fail_message="provider-pool worker ${task_id} (${provider}) did not produce a live response"
+        fi
+      else
+        status="failed"
+        confidence="0.05"
+        summary="Provider-pool ${provider} prompt failed for ${task_id}"
+        issues_json='["provider-pool prompt command failed; inspect worker.log and provider-pool-response.json if present"]'
+        next_actions_json='["fix the provider-pool backend or rerun after capacity is ready"]'
+        hard_fail="true"
+        hard_fail_message="provider-pool worker ${task_id} (${provider}) command failed"
+      fi
+    else
+      case "${provider}" in
       codex)
         if [[ "$(dorkpipe_orchestrate_bool "${DORKPIPE_ORCH_CONTAINERIZE_CLOUD}")" == "true" ]]; then
           if dorkpipe_orchestrate_run_logged "codex task ${task_id}" "${worker_log}" dorkpipe_orchestrate_run_container_worker codex "${prompt_md}" "${response_md}" "${selected_model}" && live_response_is_valid "${response_md}"; then
@@ -243,7 +321,8 @@ if [[ "${budget_halt}" != "true" && "${lane_unavailable}" != "true" ]]; then
           issues_json='["curl is not installed or not available on PATH for Ollama API calls"]'
         fi
         ;;
-    esac
+      esac
+    fi
   fi
 fi
 
@@ -295,7 +374,8 @@ if [[ "${used_live_model}" != "true" ]]; then
     hard_fail="true"
     hard_fail_message="required worker ${task_id} (${provider}) did not produce a live response"
   fi
-  cat > "${response_md}" <<EOF
+  if [[ "${TASK_MODEL_POLICY_EXECUTION_MODE:-}" != "provider_pool" || "${hard_fail}" != "true" || ! -s "${response_md}" ]]; then
+    cat > "${response_md}" <<EOF
 # ${task_id}
 
 Fallback worker output for provider \`${provider}\`.
@@ -304,6 +384,7 @@ Fallback worker output for provider \`${provider}\`.
 - Expected output: ${TASK_EXPECTED_OUTPUT}
 - Task stayed bounded and artifact-driven.
 EOF
+  fi
 fi
 
 estimated_output_tokens="$(dorkpipe_orchestrate_estimate_tokens_for_file "${response_md}")"
@@ -318,7 +399,7 @@ fi
 
 dorkpipe_orchestrate_record_training_metric "${task_id}" "${lane_id}" "${provider}" "${status}" "${confidence}" "${estimated_input_tokens}" "${estimated_output_tokens}" "${used_live_model}" "${budget_halt}" "${task_started_at}" "${task_finished_at}" "${duration_ms}"
 
-export task_id status resolver_hint provider lane_id selected_model provider_session_id used_live_model budget_halt estimated_input_tokens estimated_output_tokens estimated_total_tokens task_started_at task_finished_at duration_ms summary confidence issues_json next_actions_json TASK_BASE_ID TASK_COMPARISON_JSON TASK_LANE_JSON TASK_CLAIMS_JSON TASK_CITATIONS_JSON
+export task_id status resolver_hint provider lane_id selected_model provider_session_id provider_pool_metadata_json used_live_model budget_halt estimated_input_tokens estimated_output_tokens estimated_total_tokens task_started_at task_finished_at duration_ms summary confidence issues_json next_actions_json TASK_BASE_ID TASK_COMPARISON_JSON TASK_LANE_JSON TASK_CLAIMS_JSON TASK_CITATIONS_JSON
 "$(dorkpipe_orchestrate_helper_bin)" write-task-result "${result_json}"
 
 if [[ "${hard_fail}" == "true" ]]; then

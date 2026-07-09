@@ -126,6 +126,82 @@ func TestSelectLaneWorkerRequirePinsPreferredLane(t *testing.T) {
 	}
 }
 
+func TestEmitTaskEnvIncludesProviderPoolModelPolicy(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "task.json")
+	if err := writeJSONFile(path, map[string]any{
+		"id":   "review",
+		"goal": "review the change",
+		"model_policy": map[string]any{
+			"execution_mode":        "provider_pool",
+			"role":                  "reviewer",
+			"session_scope":         "workflow",
+			"max_active":            1,
+			"queue_timeout_seconds": 2,
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := emitTaskEnv(path, &out); err != nil {
+		t.Fatal(err)
+	}
+	text := out.String()
+	for _, want := range []string{
+		"TASK_MODEL_POLICY_EXECUTION_MODE='provider_pool'",
+		"TASK_PROVIDER_POOL_ROLE='reviewer'",
+		"TASK_PROVIDER_POOL_SESSION_SCOPE='workflow'",
+		"TASK_PROVIDER_POOL_MAX_ACTIVE='1'",
+		"TASK_PROVIDER_POOL_QUEUE_TIMEOUT_SECONDS='2'",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("task env missing %s in:\n%s", want, text)
+		}
+	}
+}
+
+func TestEmitProviderPoolResponseEnvWritesResponseAndMetadata(t *testing.T) {
+	dir := t.TempDir()
+	responseJSON := filepath.Join(dir, "provider-pool-response.json")
+	responseMD := filepath.Join(dir, "response.md")
+	if err := writeJSONFile(responseJSON, map[string]any{
+		"state":     "ready",
+		"status":    "ready",
+		"text":      "pooled response",
+		"exit_code": 0,
+		"metadata": map[string]any{
+			"session_id":     "workflow:run:node:review",
+			"worker_id":      "worker-1",
+			"prompt_turn_id": "turn-1",
+		},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := emitProviderPoolResponseEnv(responseJSON, responseMD, &out); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(responseMD)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(raw) != "pooled response" {
+		t.Fatalf("response.md = %q", string(raw))
+	}
+	text := out.String()
+	for _, want := range []string{
+		"PROVIDER_POOL_STATE='ready'",
+		"PROVIDER_POOL_USED_LIVE_MODEL='true'",
+		"PROVIDER_POOL_PROVIDER_SESSION_ID='workflow:run:node:review'",
+		"PROVIDER_POOL_WORKER_ID='worker-1'",
+		"PROVIDER_POOL_PROMPT_TURN_ID='turn-1'",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("provider pool env missing %s in:\n%s", want, text)
+		}
+	}
+}
+
 func TestSelectLaneDoesNotUseMismatchedRoleModel(t *testing.T) {
 	task, err := applyTaskWorkerProfile(map[string]any{
 		"id":     "contract_brain",

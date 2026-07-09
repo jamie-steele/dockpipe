@@ -12,10 +12,12 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"dorkpipe.orchestrator/statepaths"
@@ -128,21 +130,30 @@ type providerPoolPromptResponse struct {
 }
 
 type providerPoolLease struct {
-	Provider  string `json:"provider"`
-	SessionID string `json:"session_id,omitempty"`
-	Workdir   string `json:"workdir"`
-	StartedAt string `json:"started_at"`
+	Provider      string `json:"provider"`
+	LeaseID       string `json:"lease_id"`
+	SessionID     string `json:"session_id,omitempty"`
+	Role          string `json:"role,omitempty"`
+	WorkflowRunID string `json:"workflow_run_id,omitempty"`
+	NodeID        string `json:"node_id,omitempty"`
+	Workdir       string `json:"workdir"`
+	StartedAt     string `json:"started_at"`
 }
 
 type providerPoolPromptOptions struct {
-	Workdir       string
-	Provider      string
-	Model         string
-	Prompt        string
-	SessionID     string
-	ActiveFile    string
-	OpenFiles     []string
-	SelectionText string
+	Workdir             string
+	Provider            string
+	Model               string
+	Prompt              string
+	SessionID           string
+	Role                string
+	WorkflowRunID       string
+	NodeID              string
+	MaxActive           int
+	QueueTimeoutSeconds int
+	ActiveFile          string
+	OpenFiles           []string
+	SelectionText       string
 }
 
 var providerPoolClaudeImageBuild sync.Mutex
@@ -278,7 +289,12 @@ func providerPoolPromptCmd(argv []string) {
 	provider := fs.String("provider", "", "provider override")
 	model := fs.String("model", "", "model override")
 	prompt := fs.String("prompt", "", "prompt text")
-	sessionID := fs.String("session-id", "", "direct-session id")
+	sessionID := fs.String("session-id", "", "provider-pool session id")
+	role := fs.String("role", "", "provider-pool role hint")
+	workflowRunID := fs.String("workflow-run-id", "", "workflow run attribution")
+	nodeID := fs.String("node-id", "", "workflow node attribution")
+	maxActive := fs.Int("max-active", 0, "provider-pool active lease cap override")
+	queueTimeoutSeconds := fs.Int("queue-timeout-seconds", 0, "seconds to wait for a provider-pool lease before returning queued")
 	activeFile := fs.String("active-file", "", "repo-relative active file hint")
 	var openFiles stringListFlag
 	fs.Var(&openFiles, "open-file", "repo-relative open file hint (repeatable)")
@@ -290,15 +306,22 @@ func providerPoolPromptCmd(argv []string) {
 		os.Exit(2)
 	}
 	wd := mustWorkdir(*workdir)
-	result, err := runProviderPoolPrompt(context.Background(), providerPoolPromptOptions{
-		Workdir:       wd,
-		Provider:      strings.TrimSpace(*provider),
-		Model:         strings.TrimSpace(*model),
-		Prompt:        strings.TrimSpace(*prompt),
-		SessionID:     strings.TrimSpace(*sessionID),
-		ActiveFile:    strings.TrimSpace(*activeFile),
-		OpenFiles:     uniqueNonEmpty(openFiles),
-		SelectionText: strings.TrimSpace(*selectionText),
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	result, err := runProviderPoolPrompt(ctx, providerPoolPromptOptions{
+		Workdir:             wd,
+		Provider:            strings.TrimSpace(*provider),
+		Model:               strings.TrimSpace(*model),
+		Prompt:              strings.TrimSpace(*prompt),
+		SessionID:           strings.TrimSpace(*sessionID),
+		Role:                strings.TrimSpace(*role),
+		WorkflowRunID:       strings.TrimSpace(*workflowRunID),
+		NodeID:              strings.TrimSpace(*nodeID),
+		MaxActive:           *maxActive,
+		QueueTimeoutSeconds: *queueTimeoutSeconds,
+		ActiveFile:          strings.TrimSpace(*activeFile),
+		OpenFiles:           uniqueNonEmpty(openFiles),
+		SelectionText:       strings.TrimSpace(*selectionText),
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -405,6 +428,7 @@ func runProviderPoolPrompt(ctx context.Context, opts providerPoolPromptOptions) 
 	if status.State != "ready" {
 		status.Metadata = ensureMetadata(status.Metadata)
 		status.Metadata["timings_ms"] = promptTimings(timings, startedAt)
+		enrichProviderPoolPromptMetadata(status.Metadata, provider.ID, chosenModel, opts)
 		return &providerPoolPromptResponse{
 			Provider: provider.ID,
 			Model:    chosenModel,
@@ -416,7 +440,8 @@ func runProviderPoolPrompt(ctx context.Context, opts providerPoolPromptOptions) 
 		}, nil
 	}
 	leaseStartedAt := time.Now()
-	releaseLease, queued, err := acquireProviderPoolLease(opts.Workdir, provider, opts.SessionID)
+	queueTimeout := time.Duration(max(0, opts.QueueTimeoutSeconds)) * time.Second
+	releaseLease, queued, err := acquireProviderPoolLease(ctx, opts.Workdir, provider, opts.SessionID, opts.Role, opts.WorkflowRunID, opts.NodeID, opts.MaxActive, queueTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -427,7 +452,10 @@ func runProviderPoolPrompt(ctx context.Context, opts providerPoolPromptOptions) 
 		queueStatus.Status = fmt.Sprintf("Provider: %s | State: queued | Active workers reached %d/%d", provider.DisplayName, queueStatus.ActiveWorkers, queueStatus.MaxActive)
 		queueStatus.Metadata = ensureMetadata(queueStatus.Metadata)
 		queueStatus.Metadata["queue_reason"] = "max_active_reached"
+		queueStatus.Metadata["queue_timeout_seconds"] = max(0, opts.QueueTimeoutSeconds)
+		queueStatus.Metadata["max_active"] = effectiveProviderPoolMaxActive(provider, opts.MaxActive)
 		queueStatus.Metadata["timings_ms"] = promptTimings(timings, startedAt)
+		enrichProviderPoolPromptMetadata(queueStatus.Metadata, provider.ID, chosenModel, opts)
 		return &providerPoolPromptResponse{
 			Provider: provider.ID,
 			Model:    chosenModel,
@@ -460,7 +488,43 @@ func runProviderPoolPrompt(ctx context.Context, opts providerPoolPromptOptions) 
 	result.Metadata = ensureMetadata(result.Metadata)
 	mergePromptTimings(timings, result.Metadata["timings_ms"])
 	result.Metadata["timings_ms"] = promptTimings(timings, startedAt)
+	enrichProviderPoolPromptMetadata(result.Metadata, provider.ID, chosenModel, opts)
 	return result, nil
+}
+
+func enrichProviderPoolPromptMetadata(metadata map[string]any, providerID, chosenModel string, opts providerPoolPromptOptions) {
+	if metadata == nil {
+		return
+	}
+	if _, ok := metadata["provider_preset"]; !ok {
+		metadata["provider_preset"] = providerID
+	}
+	if strings.TrimSpace(chosenModel) != "" {
+		if _, ok := metadata["selected_model"]; !ok {
+			metadata["selected_model"] = chosenModel
+		}
+	}
+	if strings.TrimSpace(opts.SessionID) != "" {
+		metadata["session_id"] = strings.TrimSpace(opts.SessionID)
+	}
+	if strings.TrimSpace(opts.Role) != "" {
+		metadata["role"] = strings.TrimSpace(opts.Role)
+	}
+	if strings.TrimSpace(opts.WorkflowRunID) != "" {
+		metadata["workflow_run_id"] = strings.TrimSpace(opts.WorkflowRunID)
+	}
+	if strings.TrimSpace(opts.NodeID) != "" {
+		metadata["node_id"] = strings.TrimSpace(opts.NodeID)
+	}
+	if opts.MaxActive > 0 {
+		metadata["requested_max_active"] = opts.MaxActive
+	}
+	if opts.QueueTimeoutSeconds > 0 {
+		metadata["queue_timeout_seconds"] = opts.QueueTimeoutSeconds
+	}
+	if _, ok := metadata["prompt_turn_id"]; !ok {
+		metadata["prompt_turn_id"] = providerPoolPromptTurnID()
+	}
 }
 
 func waitForProviderPoolPromptReady(ctx context.Context, workdir string, provider providerPoolProvider, chosenModel, sessionID string) (*providerPoolStatus, error) {
@@ -803,7 +867,7 @@ func runProviderPoolOllamaPrompt(ctx context.Context, opts providerPoolPromptOpt
 }
 
 func runProviderPoolCodexPrompt(ctx context.Context, opts providerPoolPromptOptions, chosenModel string) (*providerPoolPromptResponse, error) {
-	codexPath, err := exec.LookPath("codex")
+	codexPath, err := providerPoolCodexCLIPath()
 	if err != nil {
 		return &providerPoolPromptResponse{
 			Provider: "codex",
@@ -860,8 +924,11 @@ func runProviderPoolCodexPrompt(ctx context.Context, opts providerPoolPromptOpti
 	}
 	state := "ready"
 	status := fmt.Sprintf("Provider: Codex host | State: ready | Model: %s", firstNonEmptyString(chosenModel, "config"))
-	if code != 0 {
+	if code != 0 || providerPoolCodexOutputFailed(text, stdout, stderr) {
 		state = "failed"
+		if code == 0 {
+			code = 1
+		}
 		status = fmt.Sprintf("Provider: Codex host | State: failed | Exit %d", code)
 	}
 	return &providerPoolPromptResponse{
@@ -875,11 +942,30 @@ func runProviderPoolCodexPrompt(ctx context.Context, opts providerPoolPromptOpti
 		Stderr:   stderr,
 		Metadata: map[string]any{
 			"provider_preset": "codex",
+			"selected_model":  chosenModel,
 			"sandbox":         "workspace-write",
 			"model_source":    map[bool]string{true: "explicit", false: "codex_config"}[!strings.EqualFold(chosenModel, "config") && chosenModel != ""],
 			"session_id":      strings.TrimSpace(opts.SessionID),
+			"worker_id":       providerPoolCodexWorkerID(opts.Workdir),
+			"worker_mode":     map[bool]string{true: "host_resume", false: "host_prompt"}[codexSession != ""],
 		},
 	}, nil
+}
+
+func providerPoolCodexOutputFailed(parts ...string) bool {
+	for _, part := range parts {
+		text := strings.TrimSpace(part)
+		if text == "" {
+			continue
+		}
+		if strings.Contains(text, "] ERROR:") || strings.HasPrefix(text, "ERROR:") {
+			return true
+		}
+		if strings.Contains(text, "unexpected status 400 Bad Request") || strings.Contains(text, "error sending request for url") {
+			return true
+		}
+	}
+	return false
 }
 
 func runProviderPoolClaudePrompt(ctx context.Context, provider providerPoolProvider, opts providerPoolPromptOptions, chosenModel string) (*providerPoolPromptResponse, error) {
@@ -1631,7 +1717,7 @@ func providerPoolCodexAuthStatus() map[string]any {
 		"installed":     false,
 		"authenticated": false,
 	}
-	if path, err := exec.LookPath("codex"); err == nil && strings.TrimSpace(path) != "" {
+	if path, err := providerPoolCodexCLIPath(); err == nil && strings.TrimSpace(path) != "" {
 		status["installed"] = true
 		status["cli_path"] = path
 	}
@@ -1644,6 +1730,52 @@ func providerPoolCodexAuthStatus() map[string]any {
 		}
 	}
 	return status
+}
+
+func providerPoolCodexCLIPath() (string, error) {
+	if path := strings.TrimSpace(os.Getenv("CODEX_CLI_PATH")); path != "" && fileExists(path) {
+		return path, nil
+	}
+	for _, home := range providerPoolHomeDirs() {
+		for _, candidate := range providerPoolCodexBundledCandidates(home) {
+			if fileExists(candidate) {
+				return candidate, nil
+			}
+		}
+	}
+	return exec.LookPath("codex")
+}
+
+func providerPoolCodexBundledCandidates(home string) []string {
+	if strings.TrimSpace(home) == "" {
+		return nil
+	}
+	patterns := []string{
+		filepath.Join(home, ".vscode", "extensions", "openai.chatgpt-*", "bin", "windows-x86_64", "codex.exe"),
+		filepath.Join(home, "AppData", "Local", "OpenAI", "Codex", "bin", "*", "codex.exe"),
+	}
+	var candidates []string
+	for _, pattern := range patterns {
+		matches, _ := filepath.Glob(pattern)
+		sort.Slice(matches, func(i, j int) bool {
+			left, leftErr := os.Stat(matches[i])
+			right, rightErr := os.Stat(matches[j])
+			if leftErr == nil && rightErr == nil {
+				return left.ModTime().After(right.ModTime())
+			}
+			return matches[i] > matches[j]
+		})
+		candidates = append(candidates, matches...)
+	}
+	return candidates
+}
+
+func fileExists(path string) bool {
+	if strings.TrimSpace(path) == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 func providerPoolClaudeAuthStatus() map[string]any {
@@ -1874,7 +2006,29 @@ trap 'exit 0' TERM INT
 while :; do sleep 3600; done`
 }
 
-func acquireProviderPoolLease(workdir string, provider providerPoolProvider, sessionID string) (func(), bool, error) {
+func acquireProviderPoolLease(ctx context.Context, workdir string, provider providerPoolProvider, sessionID, role, workflowRunID, nodeID string, maxActive int, queueTimeout time.Duration) (func(), bool, error) {
+	deadline := time.Now().Add(queueTimeout)
+	for {
+		release, queued, err := tryAcquireProviderPoolLease(workdir, provider, sessionID, role, workflowRunID, nodeID, maxActive)
+		if err != nil || !queued || queueTimeout <= 0 {
+			return release, queued, err
+		}
+		if !time.Now().Before(deadline) {
+			return nil, true, nil
+		}
+		sleepFor := 250 * time.Millisecond
+		if remaining := time.Until(deadline); remaining < sleepFor {
+			sleepFor = remaining
+		}
+		select {
+		case <-ctx.Done():
+			return nil, false, ctx.Err()
+		case <-time.After(sleepFor):
+		}
+	}
+}
+
+func tryAcquireProviderPoolLease(workdir string, provider providerPoolProvider, sessionID, role, workflowRunID, nodeID string, maxActive int) (func(), bool, error) {
 	leasesDir, err := statepaths.ProviderPoolLeasesDir(workdir)
 	if err != nil {
 		return nil, false, err
@@ -1882,7 +2036,15 @@ func acquireProviderPoolLease(workdir string, provider providerPoolProvider, ses
 	if err := os.MkdirAll(leasesDir, 0o755); err != nil {
 		return nil, false, err
 	}
-	leasePath := filepath.Join(leasesDir, provider.ID+".json")
+	active, err := countProviderPoolLeases(workdir, provider.ID)
+	if err != nil {
+		return nil, false, err
+	}
+	if active >= effectiveProviderPoolMaxActive(provider, maxActive) {
+		return nil, true, nil
+	}
+	leaseID := providerPoolLeaseID(provider.ID, sessionID, role, workflowRunID, nodeID)
+	leasePath := filepath.Join(leasesDir, provider.ID+"-"+leaseID+".json")
 	file, err := os.OpenFile(leasePath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
@@ -1891,10 +2053,14 @@ func acquireProviderPoolLease(workdir string, provider providerPoolProvider, ses
 		return nil, false, err
 	}
 	payload := providerPoolLease{
-		Provider:  provider.ID,
-		SessionID: strings.TrimSpace(sessionID),
-		Workdir:   workdir,
-		StartedAt: time.Now().UTC().Format(time.RFC3339Nano),
+		Provider:      provider.ID,
+		LeaseID:       leaseID,
+		SessionID:     strings.TrimSpace(sessionID),
+		Role:          strings.TrimSpace(role),
+		WorkflowRunID: strings.TrimSpace(workflowRunID),
+		NodeID:        strings.TrimSpace(nodeID),
+		Workdir:       workdir,
+		StartedAt:     time.Now().UTC().Format(time.RFC3339Nano),
 	}
 	if err := json.NewEncoder(file).Encode(payload); err != nil {
 		_ = file.Close()
@@ -1905,6 +2071,20 @@ func acquireProviderPoolLease(workdir string, provider providerPoolProvider, ses
 	return func() {
 		_ = os.Remove(leasePath)
 	}, false, nil
+}
+
+func effectiveProviderPoolMaxActive(provider providerPoolProvider, requested int) int {
+	effective := max(1, provider.Pool.MaxActive)
+	if requested > 0 && requested < effective {
+		effective = requested
+	}
+	return effective
+}
+
+func providerPoolLeaseID(parts ...string) string {
+	seed := strings.Join(parts, "\x00") + fmt.Sprintf("\x00%d\x00%d", os.Getpid(), time.Now().UnixNano())
+	sum := sha1.Sum([]byte(seed))
+	return hex.EncodeToString(sum[:])[:16]
 }
 
 func countProviderPoolLeases(workdir, providerID string) (int, error) {
@@ -1924,7 +2104,9 @@ func countProviderPoolLeases(workdir, providerID string) (int, error) {
 		if entry.IsDir() {
 			continue
 		}
-		if strings.EqualFold(strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name())), providerID) {
+		stem := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		provider := strings.ToLower(strings.TrimSpace(providerID))
+		if strings.EqualFold(stem, provider) || strings.HasPrefix(strings.ToLower(stem), provider+"-") {
 			count++
 		}
 	}
@@ -1936,9 +2118,24 @@ func removeProviderPoolLease(workdir, providerID string) error {
 	if err != nil {
 		return err
 	}
-	leasePath := filepath.Join(leasesDir, strings.ToLower(strings.TrimSpace(providerID))+".json")
-	if err := os.Remove(leasePath); err != nil && !os.IsNotExist(err) {
+	provider := strings.ToLower(strings.TrimSpace(providerID))
+	entries, err := os.ReadDir(leasesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
 		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		stem := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+		if strings.EqualFold(stem, provider) || strings.HasPrefix(strings.ToLower(stem), provider+"-") {
+			if err := os.Remove(filepath.Join(leasesDir, entry.Name())); err != nil && !os.IsNotExist(err) {
+				return err
+			}
+		}
 	}
 	return nil
 }

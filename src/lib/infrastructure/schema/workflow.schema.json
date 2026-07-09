@@ -187,6 +187,30 @@
       "additionalProperties": false,
       "properties": {
         "mode": { "type": "string" },
+        "execution_mode": {
+          "type": "string",
+          "enum": ["workflow", "provider_pool"],
+          "description": "Execution substrate for DorkPipe agent workers. Use provider_pool only when selected workflow/subagent nodes should lease the shared provider pool."
+        },
+        "role": {
+          "type": "string",
+          "description": "Provider-neutral worker role label used for provider-pool attribution and session grouping."
+        },
+        "session_scope": {
+          "type": "string",
+          "enum": ["node", "workflow"],
+          "description": "Provider-pool session reuse boundary. node isolates each subagent node; workflow reuses a role session within the orchestration run."
+        },
+        "max_active": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Optional per-policy cap for active provider-pool leases. It can only narrow the provider catalog cap."
+        },
+        "queue_timeout_seconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Seconds a provider-pool task waits for a lease before returning a visible queued failure."
+        },
         "attempt": {
           "type": "object",
           "additionalProperties": false,

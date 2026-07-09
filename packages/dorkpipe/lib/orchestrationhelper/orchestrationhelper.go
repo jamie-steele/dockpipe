@@ -161,6 +161,11 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("usage: orchestrate-helper worker-lease-env <lease.json>")
 		}
 		return emitWorkerLeaseEnv(args[1], stdout)
+	case "provider-pool-response-env":
+		if len(args) != 3 {
+			return errors.New("usage: orchestrate-helper provider-pool-response-env <response.json> <response.md>")
+		}
+		return emitProviderPoolResponseEnv(args[1], args[2], stdout)
 	case "required-auth-providers":
 		if len(args) != 2 {
 			return errors.New("usage: orchestrate-helper required-auth-providers <tasks-dir>")
@@ -322,30 +327,37 @@ func taskIDFromWorkflow(path, stepID string) (string, error) {
 func emitTaskEnv(path string, stdout io.Writer) error {
 	task := readJSONMap(path)
 	lane := mapValue(task["lane"])
+	modelPolicy := mapValue(task["model_policy"])
 	mapping := map[string]string{
-		"TASK_BASE_ID":                    fallbackString(stringValue(task["base_id"]), stringValue(task["id"])),
-		"TASK_WORKER_PROFILE":             stringValue(task["worker"]),
-		"TASK_WORKER_POLICY_MODE":         workerPolicyMode(task),
-		"TASK_WORK_MODE":                  stringValue(task["work_mode"]),
-		"TASK_OUTPUT_PATH":                stringValue(task["output_path"]),
-		"TASK_COMPARISON_JSON":            mustJSON(task["comparison"], map[string]any{"enabled": false}),
-		"TASK_RESOLVER_HINT":              fallbackString(stringValue(task["resolver_hint"]), "auto"),
-		"TASK_REQUESTED_RESOLVER_HINT":    fallbackString(stringValue(task["requested_resolver_hint"]), fallbackString(stringValue(task["resolver_hint"]), "auto")),
-		"TASK_LANE_JSON":                  mustJSON(lane, map[string]any{}),
-		"TASK_LANE_ID":                    stringValue(lane["lane_id"]),
-		"TASK_LANE_AVAILABLE":             strconv.FormatBool(boolAny(lane["available"])),
-		"TASK_LANE_MISSING_COMMANDS_JSON": mustJSON(lane["missing_commands"], []any{}),
-		"TASK_LANE_SETUP_HINT":            stringValue(lane["setup_hint"]),
-		"TASK_LANE_AUTH_HINT":             stringValue(lane["auth_hint"]),
-		"TASK_GOAL":                       stringValue(task["goal"]),
-		"TASK_EXPECTED_OUTPUT":            stringValue(task["expected_output"]),
-		"TASK_CONTEXT_PATHS_JSON":         mustJSON(task["context_paths"], []any{}),
-		"TASK_CLAIMS_JSON":                mustJSON(task["claims"], []any{}),
-		"TASK_CITATIONS_JSON":             mustJSON(fallbackAny(task["citations"], task["context_paths"]), []any{}),
-		"TASK_MATERIALIZE_OUTPUTS_JSON":   mustJSON(task["materialize_outputs"], []any{}),
-		"TASK_MAX_CLOUD_TOKENS":           strconv.Itoa(intFromAny(task["max_cloud_tokens"])),
-		"TASK_MODEL_JSON":                 mustJSON(task["model"], map[string]any{}),
-		"TASK_DEPENDS_ON_JSON":            mustJSON(task["depends_on"], []any{}),
+		"TASK_BASE_ID":                             fallbackString(stringValue(task["base_id"]), stringValue(task["id"])),
+		"TASK_WORKER_PROFILE":                      stringValue(task["worker"]),
+		"TASK_WORKER_POLICY_MODE":                  workerPolicyMode(task),
+		"TASK_WORK_MODE":                           stringValue(task["work_mode"]),
+		"TASK_OUTPUT_PATH":                         stringValue(task["output_path"]),
+		"TASK_COMPARISON_JSON":                     mustJSON(task["comparison"], map[string]any{"enabled": false}),
+		"TASK_RESOLVER_HINT":                       fallbackString(stringValue(task["resolver_hint"]), "auto"),
+		"TASK_REQUESTED_RESOLVER_HINT":             fallbackString(stringValue(task["requested_resolver_hint"]), fallbackString(stringValue(task["resolver_hint"]), "auto")),
+		"TASK_LANE_JSON":                           mustJSON(lane, map[string]any{}),
+		"TASK_LANE_ID":                             stringValue(lane["lane_id"]),
+		"TASK_LANE_AVAILABLE":                      strconv.FormatBool(boolAny(lane["available"])),
+		"TASK_LANE_MISSING_COMMANDS_JSON":          mustJSON(lane["missing_commands"], []any{}),
+		"TASK_LANE_SETUP_HINT":                     stringValue(lane["setup_hint"]),
+		"TASK_LANE_AUTH_HINT":                      stringValue(lane["auth_hint"]),
+		"TASK_GOAL":                                stringValue(task["goal"]),
+		"TASK_EXPECTED_OUTPUT":                     stringValue(task["expected_output"]),
+		"TASK_CONTEXT_PATHS_JSON":                  mustJSON(task["context_paths"], []any{}),
+		"TASK_CLAIMS_JSON":                         mustJSON(task["claims"], []any{}),
+		"TASK_CITATIONS_JSON":                      mustJSON(fallbackAny(task["citations"], task["context_paths"]), []any{}),
+		"TASK_MATERIALIZE_OUTPUTS_JSON":            mustJSON(task["materialize_outputs"], []any{}),
+		"TASK_MAX_CLOUD_TOKENS":                    strconv.Itoa(intFromAny(task["max_cloud_tokens"])),
+		"TASK_MODEL_JSON":                          mustJSON(task["model"], map[string]any{}),
+		"TASK_MODEL_POLICY_JSON":                   mustJSON(modelPolicy, map[string]any{}),
+		"TASK_MODEL_POLICY_EXECUTION_MODE":         strings.ToLower(strings.TrimSpace(stringValue(modelPolicy["execution_mode"]))),
+		"TASK_PROVIDER_POOL_ROLE":                  fallbackString(stringValue(modelPolicy["role"]), "workflow"),
+		"TASK_PROVIDER_POOL_SESSION_SCOPE":         fallbackString(stringValue(modelPolicy["session_scope"]), "node"),
+		"TASK_PROVIDER_POOL_MAX_ACTIVE":            strconv.Itoa(intFromAny(modelPolicy["max_active"])),
+		"TASK_PROVIDER_POOL_QUEUE_TIMEOUT_SECONDS": strconv.Itoa(intFromAny(modelPolicy["queue_timeout_seconds"])),
+		"TASK_DEPENDS_ON_JSON":                     mustJSON(task["depends_on"], []any{}),
 	}
 	keys := make([]string, 0, len(mapping))
 	for key := range mapping {
@@ -367,6 +379,38 @@ func emitWorkerLeaseEnv(path string, stdout io.Writer) error {
 		"LEASE_VOLUME":      stringValue(lease["volume"]),
 		"LEASE_BASE_VOLUME": stringValue(lease["base_volume"]),
 		"LEASE_STATUS":      stringValue(lease["status"]),
+	}
+	keys := make([]string, 0, len(mapping))
+	for key := range mapping {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		fmt.Fprintf(stdout, "%s=%s\n", key, shellQuote(mapping[key]))
+	}
+	return nil
+}
+
+func emitProviderPoolResponseEnv(responsePath, responseMarkdownPath string, stdout io.Writer) error {
+	payload := readJSONMap(responsePath)
+	text := stringValue(payload["text"])
+	if strings.TrimSpace(text) != "" {
+		if err := os.WriteFile(responseMarkdownPath, []byte(text), 0o644); err != nil {
+			return err
+		}
+	}
+	metadata := mapValue(payload["metadata"])
+	providerSessionID := fallbackString(stringValue(metadata["provider_session_id"]), stringValue(metadata["session_id"]))
+	mapping := map[string]string{
+		"PROVIDER_POOL_STATE":               stringValue(payload["state"]),
+		"PROVIDER_POOL_STATUS":              stringValue(payload["status"]),
+		"PROVIDER_POOL_EXIT_CODE":           strconv.Itoa(intFromAny(payload["exit_code"])),
+		"PROVIDER_POOL_TEXT_BYTES":          strconv.Itoa(len([]byte(text))),
+		"PROVIDER_POOL_USED_LIVE_MODEL":     strconv.FormatBool(strings.EqualFold(stringValue(payload["state"]), "ready") && strings.TrimSpace(text) != ""),
+		"PROVIDER_POOL_PROVIDER_SESSION_ID": providerSessionID,
+		"PROVIDER_POOL_WORKER_ID":           stringValue(metadata["worker_id"]),
+		"PROVIDER_POOL_PROMPT_TURN_ID":      stringValue(metadata["prompt_turn_id"]),
+		"PROVIDER_POOL_METADATA_JSON":       mustJSON(metadata, map[string]any{}),
 	}
 	keys := make([]string, 0, len(mapping))
 	for key := range mapping {
@@ -520,11 +564,18 @@ func writeTaskResult(path string, env map[string]string) error {
 		"next_actions":            decodeJSONAny(env["next_actions_json"], []any{}),
 	}
 	if sessionID := strings.TrimSpace(env["provider_session_id"]); sessionID != "" {
+		mode := "trace_only"
+		if strings.TrimSpace(env["provider_pool_metadata_json"]) != "" {
+			mode = "provider_pool"
+		}
 		payload["worker_session"] = map[string]any{
 			"provider":   env["provider"],
 			"session_id": sessionID,
-			"mode":       "trace_only",
+			"mode":       mode,
 		}
+	}
+	if metadata := strings.TrimSpace(env["provider_pool_metadata_json"]); metadata != "" {
+		payload["provider_pool"] = decodeJSONAny(metadata, map[string]any{})
 	}
 	return writeJSONFile(path, payload)
 }
