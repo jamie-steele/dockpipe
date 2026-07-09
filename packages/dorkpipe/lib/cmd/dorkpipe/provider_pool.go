@@ -69,6 +69,20 @@ type providerPoolWarmResponse struct {
 	GeneratedAt     string               `json:"generated_at"`
 }
 
+type providerPoolStopResponse struct {
+	ContractVersion string                   `json:"contract_version"`
+	Providers       []providerPoolStopStatus `json:"providers"`
+	GeneratedAt     string                   `json:"generated_at"`
+}
+
+type providerPoolStopStatus struct {
+	Provider       string         `json:"provider"`
+	State          string         `json:"state"`
+	Status         string         `json:"status"`
+	StoppedWorkers []string       `json:"stopped_workers,omitempty"`
+	Metadata       map[string]any `json:"metadata,omitempty"`
+}
+
 type providerPoolView struct {
 	ID           string                    `json:"id"`
 	DisplayName  string                    `json:"display_name"`
@@ -135,7 +149,7 @@ var providerPoolClaudeImageBuild sync.Mutex
 
 func providerPoolCmd(argv []string) {
 	if len(argv) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: dorkpipe provider-pool <catalog|status|warm|prompt> [flags]")
+		fmt.Fprintln(os.Stderr, "usage: dorkpipe provider-pool <catalog|status|warm|prompt|stop> [flags]")
 		os.Exit(2)
 	}
 	switch argv[0] {
@@ -147,9 +161,11 @@ func providerPoolCmd(argv []string) {
 		providerPoolWarmCmd(argv[1:])
 	case "prompt":
 		providerPoolPromptCmd(argv[1:])
+	case "stop":
+		providerPoolStopCmd(argv[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown provider-pool subcommand %q\n", argv[0])
-		fmt.Fprintln(os.Stderr, "usage: dorkpipe provider-pool <catalog|status|warm|prompt> [flags]")
+		fmt.Fprintln(os.Stderr, "usage: dorkpipe provider-pool <catalog|status|warm|prompt|stop> [flags]")
 		os.Exit(2)
 	}
 }
@@ -217,6 +233,29 @@ func providerPoolWarmCmd(argv []string) {
 	_ = fs.Parse(argv)
 	wd := mustWorkdir(*workdir)
 	payload, err := warmProviderPools(wd, strings.TrimSpace(*provider))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		_ = enc.Encode(payload)
+		return
+	}
+	for _, item := range payload.Providers {
+		fmt.Println(item.Status)
+	}
+}
+
+func providerPoolStopCmd(argv []string) {
+	fs := flag.NewFlagSet("provider-pool stop", flag.ExitOnError)
+	workdir := fs.String("workdir", "", "working directory (default cwd)")
+	provider := fs.String("provider", "", "provider id filter")
+	asJSON := fs.Bool("json", false, "print JSON")
+	_ = fs.Parse(argv)
+	wd := mustWorkdir(*workdir)
+	payload, err := stopProviderPools(context.Background(), wd, strings.TrimSpace(*provider))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -494,6 +533,72 @@ func warmProviderPools(workdir, providerFilter string) (*providerPoolWarmRespons
 	}
 	sort.Slice(resp.Providers, func(i, j int) bool { return resp.Providers[i].Provider < resp.Providers[j].Provider })
 	return resp, nil
+}
+
+func stopProviderPools(ctx context.Context, workdir, providerFilter string) (*providerPoolStopResponse, error) {
+	doc, err := loadProviderPoolCatalog(workdir)
+	if err != nil {
+		return nil, err
+	}
+	resp := &providerPoolStopResponse{
+		ContractVersion: "v1",
+		GeneratedAt:     time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	for _, item := range doc.Providers {
+		if providerFilter != "" && !strings.EqualFold(strings.TrimSpace(item.ID), providerFilter) {
+			continue
+		}
+		status := providerPoolStopStatus{
+			Provider: item.ID,
+			State:    "stopped",
+			Metadata: map[string]any{
+				"provider_preset": item.ID,
+				"warm_mode":       item.Pool.WarmMode,
+				"warm_source":     item.Pool.WarmSource,
+			},
+		}
+		switch item.ID {
+		case "claude":
+			containerName := providerPoolClaudeContainerName(workdir)
+			status.Metadata["container_name"] = containerName
+			stopped, stopErr := stopProviderPoolClaudeWorker(ctx, workdir, containerName)
+			if stopErr != nil {
+				status.State = "failed"
+				status.Status = fmt.Sprintf("Provider: %s | State: failed | %s", item.DisplayName, stopErr.Error())
+				status.Metadata["error"] = stopErr.Error()
+			} else if stopped {
+				status.StoppedWorkers = append(status.StoppedWorkers, containerName)
+				status.Status = fmt.Sprintf("Provider: %s | State: stopped | Removed worker %s", item.DisplayName, containerName)
+			} else {
+				status.Status = fmt.Sprintf("Provider: %s | State: stopped | No worker to remove for this workdir", item.DisplayName)
+			}
+		default:
+			status.Status = fmt.Sprintf("Provider: %s | State: stopped | No managed worker teardown required", item.DisplayName)
+			_ = removeProviderPoolLease(workdir, item.ID)
+		}
+		resp.Providers = append(resp.Providers, status)
+	}
+	sort.Slice(resp.Providers, func(i, j int) bool { return resp.Providers[i].Provider < resp.Providers[j].Provider })
+	return resp, nil
+}
+
+func stopProviderPoolClaudeWorker(ctx context.Context, workdir, containerName string) (bool, error) {
+	_ = removeProviderPoolLease(workdir, "claude")
+	if _, err := exec.LookPath("docker"); err != nil {
+		return false, nil
+	}
+	stdout, stderr, code, err := runCommandCapture(ctx, "", "docker", "rm", "-f", containerName)
+	if err != nil {
+		return false, err
+	}
+	if code != 0 {
+		text := strings.TrimSpace(firstNonEmptyString(stderr, stdout))
+		if strings.Contains(strings.ToLower(text), "no such container") {
+			return false, nil
+		}
+		return false, fmt.Errorf("remove provider worker %s: %s", containerName, text)
+	}
+	return strings.TrimSpace(stdout) != "", nil
 }
 
 func providerPoolUnavailableText(status *providerPoolStatus) string {
@@ -1711,7 +1816,15 @@ func providerPoolEnsureClaudeWarmContainer(ctx context.Context, workdir, contain
 		return false, nil
 	}
 	_, _, _, _ = runCommandCapture(ctx, "", "docker", "rm", "-f", containerName)
-	args := []string{"run", "-d", "--name", containerName, "-w", "/work", "--mount", fmt.Sprintf("type=bind,src=%s,dst=/work", workdir)}
+	args := []string{
+		"run", "-d",
+		"--name", containerName,
+		"--label", "com.dockpipe.provider-pool=true",
+		"--label", "com.dockpipe.provider-pool.provider=claude",
+		"--label", "com.dockpipe.provider-pool.workdir-hash=" + providerPoolWorkdirHash(workdir),
+		"-w", "/work",
+		"--mount", fmt.Sprintf("type=bind,src=%s,dst=/work", workdir),
+	}
 	if path, ok := stringFromMap(providerPoolClaudeAuthStatus(), "auth_dir"); ok {
 		args = append(args, "--mount", fmt.Sprintf("type=bind,src=%s,dst=/dockpipe-auth/claude,readonly", path))
 	}
@@ -1816,6 +1929,18 @@ func countProviderPoolLeases(workdir, providerID string) (int, error) {
 		}
 	}
 	return count, nil
+}
+
+func removeProviderPoolLease(workdir, providerID string) error {
+	leasesDir, err := statepaths.ProviderPoolLeasesDir(workdir)
+	if err != nil {
+		return err
+	}
+	leasePath := filepath.Join(leasesDir, strings.ToLower(strings.TrimSpace(providerID))+".json")
+	if err := os.Remove(leasePath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 func loadProviderPoolCodexBindings(workdir string) map[string]string {
