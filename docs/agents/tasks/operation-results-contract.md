@@ -144,6 +144,10 @@
 - Release upload tests now assert that dry-run preflight and upload results mirror into the
   append-only operation-event JSONL ledger, so CI/UI consumers can rely on the same structured
   facts as the human log.
+- `dockpipe pipelang compile` and `dockpipe pipelang materialize` now emit canonical
+  `pipelang.compile` and `pipelang.materialize` done/fail results with normalized source/output,
+  entry/artifact, root/count, force, and result metadata; each mirrors to the operation-event JSONL
+  ledger without changing the machine-facing `pipelang invoke` stdout interface.
 
 ## Still Open
 

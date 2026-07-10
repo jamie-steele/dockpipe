@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"dockpipe/src/lib/infrastructure"
 )
 
 func TestCmdPipeLangMaterializeUsesCompileRootsFromConfig(t *testing.T) {
@@ -113,5 +115,48 @@ types:
 	})
 	if found == 0 {
 		t.Fatalf("expected mapped artifact under %s", outRoot)
+	}
+}
+
+func TestCmdPipeLangMaterializeMirrorsOperationEvent(t *testing.T) {
+	project := t.TempDir()
+	root := filepath.Join(project, "workflows")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "config.pipe"), []byte(samplePipeLang), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	eventLog := filepath.Join(project, "events.jsonl")
+	t.Setenv(infrastructure.EnvDockpipeEventLog, eventLog)
+
+	if _, err := captureResultStderr(t, func() error {
+		return cmdPipeLang([]string{"materialize", "--workdir", project, "--from", root, "--force"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := infrastructure.ReadOperationEvents(eventLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("event count = %d want 1: %#v", len(events), events)
+	}
+	event := events[0]
+	if event.Schema != infrastructure.OperationEventSchemaV1 || event.Type != infrastructure.OperationEventKind || event.Unit != "pipelang.materialize" || event.Status != infrastructure.OperationStatusDone {
+		t.Fatalf("unexpected event: %#v", event)
+	}
+	for key, want := range map[string]string{
+		"project":        filepath.Base(project),
+		"workdir":        filepath.ToSlash(project),
+		"output_root":    filepath.ToSlash(filepath.Join(project, "bin", ".dockpipe", "pipelang")),
+		"force":          "true",
+		"root_count":     "1",
+		"artifact_count": "1",
+		"result":         "materialized",
+	} {
+		if got := event.IDs[key]; got != want {
+			t.Fatalf("event ID %s = %q want %q (event: %#v)", key, got, want, event)
+		}
 	}
 }

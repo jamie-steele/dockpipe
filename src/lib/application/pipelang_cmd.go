@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"dockpipe/src/lib/infrastructure"
@@ -71,45 +72,61 @@ func cmdPipeLangCompile(args []string) error {
 	if outDir == "" {
 		outDir = filepath.Join(infrastructure.DockpipeDirRel, "pipelang")
 	}
-	src, err := os.ReadFile(inPath)
-	if err != nil {
-		return err
+	ids := map[string]string{
+		"input_path": filepath.ToSlash(filepath.Clean(inPath)),
+		"output_dir": filepath.ToSlash(filepath.Clean(outDir)),
 	}
-	moduleRoot := detectPipeLangModuleRoot(filepath.Dir(inPath))
-	files, _, err := readPipeFilesUnder(moduleRoot)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(entry) == "" {
-		if p, err := pipelang.Parse(src); err == nil && len(p.Classes) > 0 {
-			entry = p.Classes[0].Name
+	return infrastructure.RunOperationWithOptions(os.Stderr, "pipelang.compile", "", ids, infrastructure.OperationOptions{Spinner: false}, func() (err error) {
+		defer func() {
+			if err != nil {
+				ids["result"] = "failed"
+			}
+		}()
+
+		src, err := os.ReadFile(inPath)
+		if err != nil {
+			return err
 		}
-	}
-	res, err := pipelang.CompileFiles(files, entry)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return err
-	}
-	base := res.EntryClass
-	wf := filepath.Join(outDir, base+".workflow.yml")
-	bj := filepath.Join(outDir, base+".bindings.json")
-	be := filepath.Join(outDir, base+".bindings.env")
-	if err := os.WriteFile(wf, res.WorkflowYAML, 0o644); err != nil {
-		return err
-	}
-	if err := os.WriteFile(bj, res.BindingsJSON, 0o644); err != nil {
-		return err
-	}
-	if err := os.WriteFile(be, res.BindingsEnv, 0o644); err != nil {
-		return err
-	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] PipeLang compiled: %s\n", inPath)
-	fmt.Fprintf(os.Stderr, "[dockpipe]   workflow: %s\n", wf)
-	fmt.Fprintf(os.Stderr, "[dockpipe]   bindings: %s\n", bj)
-	fmt.Fprintf(os.Stderr, "[dockpipe]   env: %s\n", be)
-	return nil
+		moduleRoot := detectPipeLangModuleRoot(filepath.Dir(inPath))
+		files, _, err := readPipeFilesUnder(moduleRoot)
+		if err != nil {
+			return err
+		}
+		if strings.TrimSpace(entry) == "" {
+			if p, parseErr := pipelang.Parse(src); parseErr == nil && len(p.Classes) > 0 {
+				entry = p.Classes[0].Name
+			}
+		}
+		if strings.TrimSpace(entry) != "" {
+			ids["entry_class"] = entry
+		}
+		res, err := pipelang.CompileFiles(files, entry)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(outDir, 0o755); err != nil {
+			return err
+		}
+		base := res.EntryClass
+		wf := filepath.Join(outDir, base+".workflow.yml")
+		bj := filepath.Join(outDir, base+".bindings.json")
+		be := filepath.Join(outDir, base+".bindings.env")
+		ids["entry_class"] = base
+		ids["workflow_path"] = filepath.ToSlash(wf)
+		ids["bindings_json_path"] = filepath.ToSlash(bj)
+		ids["bindings_env_path"] = filepath.ToSlash(be)
+		if err := os.WriteFile(wf, res.WorkflowYAML, 0o644); err != nil {
+			return err
+		}
+		if err := os.WriteFile(bj, res.BindingsJSON, 0o644); err != nil {
+			return err
+		}
+		if err := os.WriteFile(be, res.BindingsEnv, 0o644); err != nil {
+			return err
+		}
+		ids["result"] = "compiled"
+		return nil
+	})
 }
 
 func cmdPipeLangInvoke(args []string) error {
@@ -250,21 +267,37 @@ func cmdPipeLangMaterialize(args []string) error {
 	if err != nil {
 		return err
 	}
-	if len(from) == 0 {
-		cfg, err := loadDockpipeProjectConfig(repoRoot)
+	outBase := filepath.Join(repoRoot, infrastructure.DockpipeDirRel, "pipelang")
+	ids := map[string]string{
+		"project":     filepath.Base(repoRoot),
+		"workdir":     filepath.ToSlash(repoRoot),
+		"output_root": filepath.ToSlash(outBase),
+		"force":       strconv.FormatBool(force),
+	}
+	return infrastructure.RunOperationWithOptions(os.Stderr, "pipelang.materialize", "", ids, infrastructure.OperationOptions{Spinner: false}, func() (err error) {
+		defer func() {
+			if err != nil {
+				ids["result"] = "failed"
+			}
+		}()
+
+		if len(from) == 0 {
+			cfg, err := loadDockpipeProjectConfig(repoRoot)
+			if err != nil {
+				return err
+			}
+			from = effectiveWorkflowCompileRoots(cfg, repoRoot)
+		}
+		roots := dedupeAbsExistingDirs(from)
+		ids["root_count"] = strconv.Itoa(len(roots))
+		n, err := materializePipeLangRoots(roots, force, outBase)
 		if err != nil {
 			return err
 		}
-		from = effectiveWorkflowCompileRoots(cfg, repoRoot)
-	}
-	roots := dedupeAbsExistingDirs(from)
-	outBase := filepath.Join(repoRoot, infrastructure.DockpipeDirRel, "pipelang")
-	n, err := materializePipeLangRoots(roots, force, outBase)
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] pipelang materialize: wrote %d artifact set(s) under %s\n", n, outBase)
-	return nil
+		ids["artifact_count"] = strconv.Itoa(n)
+		ids["result"] = "materialized"
+		return nil
+	})
 }
 
 func shellQuoteForEnv(s string) string {
