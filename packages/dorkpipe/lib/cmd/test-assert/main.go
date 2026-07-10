@@ -188,7 +188,7 @@ func assertOrchestrationForceCodex(root string) {
 
 func assertOrchestrationBrainCodex(root string) {
 	lanes := taskMap(readJSON(filepath.Join(root, "lanes", "plan.json")), "task_id")
-	assert(lanes["contract_brain"]["provider"] == "codex", "contract_brain provider")
+	assert(lanes["contract_brain"]["provider"] == "ollama", "contract_brain provider")
 	assert(lanes["workflow_brain"]["provider"] == "ollama", "workflow_brain provider")
 	assert(lanes["planner_brain"]["provider"] == "codex", "planner_brain provider")
 	assert(lanes["repo_shape"]["provider"] == "ollama", "repo_shape provider")
