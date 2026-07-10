@@ -9,6 +9,9 @@
   platform's author-provided installer after explicit approval.
 - `workflows/ci/ci-emulate` declares `docker` and `act`, so missing `act` fails before any CI
   emulator script runs.
+- Workflow/package host dependency preflight now emits canonical `dependency.host.preflight` units for
+  found, missing, optional-missing, and malformed dependency declarations before install approval
+  or workflow execution.
 
 ## Still Open
 
@@ -22,8 +25,8 @@
 - Migrate the whole repo over time: every first-party workflow, package, resolver script, CI helper,
   and maintainer command should declare external host tools in `dependencies.host` instead of hiding
   them in script bodies or README-only setup notes.
-- Add structured operation-result units for dependency preflight and future dependency install
-  attempts.
+- Continue expanding dependency operation-result coverage as install-time package dependency checks and
+  trusted installer policy are added.
 - Decide whether optional dependencies should appear in catalog/doctor output even when they do not
   block execution.
 

@@ -55,14 +55,14 @@ func checkWorkflowHostDependencies(wf *domain.Workflow, wfRoot, wfConfig string,
 		}
 		deps = appendDependencyCandidates(deps, pkgMeta.Dependencies, pkgMeta.Platforms)
 	}
-	missing := missingRequiredHostDependencies(deduplicateHostDependencies(deps))
+	missing := preflightHostDependencies(deduplicateHostDependencies(deps))
 	if len(missing) == 0 {
 		return nil
 	}
 	if err := maybeInstallMissingHostDependencies(missing, opts); err != nil {
 		return err
 	}
-	missing = missingRequiredHostDependencies(deduplicateHostDependencies(deps))
+	missing = preflightHostDependencies(deduplicateHostDependencies(deps))
 	if len(missing) == 0 {
 		return nil
 	}
@@ -243,20 +243,43 @@ func yamlUnmarshalPackageManifest(b []byte, pm *domain.PackageManifest) error {
 	return domain.ValidatePackageManifest(pm)
 }
 
-func missingRequiredHostDependencies(deps []hostDependencyCandidate) []missingHostDependency {
+func preflightHostDependencies(deps []hostDependencyCandidate) []missingHostDependency {
 	var missing []missingHostDependency
 	for _, candidate := range deps {
 		dep := candidate.Dep
-		if dep.Required != nil && !*dep.Required {
-			continue
-		}
+		required := dep.Required == nil || *dep.Required
+		ids := mergeOperationResultIDs(hostDependencyResultIDs(dep), map[string]string{
+			"platform": currentDependencyPlatform(),
+			"required": fmt.Sprintf("%t", required),
+		})
 		cmd := hostDependencyCommand(dep)
 		if cmd == "" {
+			logDependencyResult("dependency.host.preflight", infrastructure.OperationStatusDone, mergeOperationResultIDs(ids, map[string]string{
+				"result":      "skip",
+				"skip_reason": "no_command",
+			}), "")
 			continue
 		}
-		if _, err := resolveDependencyCommandPath(cmd); err != nil {
-			missing = append(missing, missingHostDependency(candidate))
+		path, err := resolveDependencyCommandPath(cmd)
+		if err == nil {
+			logDependencyResult("dependency.host.preflight", infrastructure.OperationStatusDone, mergeOperationResultIDs(ids, map[string]string{
+				"result": "found",
+				"path":   path,
+			}), "")
+			continue
 		}
+		if !required {
+			logDependencyResult("dependency.host.preflight", infrastructure.OperationStatusDone, mergeOperationResultIDs(ids, map[string]string{
+				"result":      "skip",
+				"skip_reason": "optional_missing",
+			}), "")
+			continue
+		}
+		logDependencyResult("dependency.host.preflight", infrastructure.OperationStatusFail, mergeOperationResultIDs(ids, map[string]string{
+			"result":            "missing",
+			"installer_present": fmt.Sprintf("%t", strings.TrimSpace(installCommandForCurrentPlatform(dep)) != ""),
+		}), err.Error())
+		missing = append(missing, missingHostDependency(candidate))
 	}
 	return missing
 }

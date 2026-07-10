@@ -121,6 +121,9 @@
   `dependency.host.install` units for auto-approved installs, non-interactive declines, and
   installer skip/install outcomes instead of bespoke `dependency install:` status lines; only the
   interactive approval question text remains free-form.
+- Workflow/package host dependency preflight now emits canonical `dependency.host.preflight` units for
+  found, missing, optional-missing, and no-command dependency checks, and mirrors those results to
+  operation-event JSONL.
 - `dockpipe init`, `dockpipe clone`, `dockpipe template init`, `dockpipe action init`,
   `dockpipe pre init`, and `dockpipe init --gitignore` now emit canonical `init.project`,
   `init.workflow`, `init.template`, `init.script`, `init.gitignore`, and `clone.workflow` units
