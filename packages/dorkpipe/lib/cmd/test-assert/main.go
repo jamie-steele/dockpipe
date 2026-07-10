@@ -187,13 +187,14 @@ func assertOrchestrationForceCodex(root string) {
 }
 
 func assertOrchestrationBrainCodex(root string) {
+	lanes := taskMap(readJSON(filepath.Join(root, "lanes", "plan.json")), "task_id")
+	assert(lanes["contract_brain"]["provider"] == "codex", "contract_brain provider")
+	assert(lanes["workflow_brain"]["provider"] == "ollama", "workflow_brain provider")
+	assert(lanes["planner_brain"]["provider"] == "codex", "planner_brain provider")
+	assert(lanes["repo_shape"]["provider"] == "ollama", "repo_shape provider")
+	assert(lanes["package_contracts"]["provider"] == "ollama", "package_contracts provider")
+	assert(lanes["safety_model"]["provider"] == "ollama", "safety_model provider")
 	tasks := taskMap(readJSON(filepath.Join(root, "task-graph.json")), "id")
-	assert(tasks["contract_brain"]["provider"] == "codex", "contract_brain provider")
-	assert(tasks["workflow_brain"]["provider"] == "ollama", "workflow_brain provider")
-	assert(tasks["planner_brain"]["provider"] == "codex", "planner_brain provider")
-	assert(tasks["repo_shape"]["provider"] == "ollama", "repo_shape provider")
-	assert(tasks["package_contracts"]["provider"] == "ollama", "package_contracts provider")
-	assert(tasks["safety_model"]["provider"] == "ollama", "safety_model provider")
 	assertStringArrayEqual(asStringArray(tasks["planner_brain"]["depends_on"], "depends_on"), []string{"contract_brain", "workflow_brain"}, "planner_brain depends_on")
 	for _, taskID := range []string{"repo_shape", "package_contracts", "safety_model"} {
 		assertStringArrayContains(asStringArray(tasks[taskID]["depends_on"], "depends_on"), "planner_brain", taskID+" depends_on")
