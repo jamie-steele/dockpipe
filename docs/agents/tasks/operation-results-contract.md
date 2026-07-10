@@ -135,6 +135,9 @@
 - `dockpipe release upload` now emits `release.upload.preflight` for local artifact, bucket,
   endpoint/region/key, and AWS CLI readiness checks so CI/release setup failures are structured
   before any upload mutation is attempted.
+- Release upload tests now assert that dry-run preflight and upload results mirror into the
+  append-only operation-event JSONL ledger, so CI/UI consumers can rely on the same structured
+  facts as the human log.
 
 ## Still Open
 

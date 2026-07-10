@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"dockpipe/src/lib/infrastructure"
 )
 
 func TestResolveReleaseEndpointPrefersExplicitEnv(t *testing.T) {
@@ -58,6 +60,56 @@ func TestCmdReleaseUploadDryRunUsesEnvBucketAndEndpoint(t *testing.T) {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr)
 		}
+	}
+}
+
+func TestCmdReleaseUploadDryRunMirrorsOperationEvents(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "artifact.tar.gz")
+	if err := os.WriteFile(file, []byte("payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	eventLog := filepath.Join(dir, "events.jsonl")
+	t.Setenv(infrastructure.EnvDockpipeEventLog, eventLog)
+	t.Setenv(envReleaseBucket, "dockpipe-mirror")
+	t.Setenv(envR2Endpoint, "https://account.r2.cloudflarestorage.com")
+	t.Setenv(envAWSRegion, "")
+
+	if _, err := captureResultStderr(t, func() error {
+		return cmdReleaseUpload([]string{file, "--dry-run"})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := infrastructure.ReadOperationEvents(eventLog)
+	if err != nil {
+		t.Fatalf("ReadOperationEvents: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("expected 2 operation events, got %d: %#v", len(events), events)
+	}
+	preflight := events[0]
+	if preflight.Schema != infrastructure.OperationEventSchemaV1 || preflight.Type != infrastructure.OperationEventKind {
+		t.Fatalf("unexpected preflight event envelope: %#v", preflight)
+	}
+	if preflight.Unit != "release.upload.preflight" || preflight.Status != infrastructure.OperationStatusDone {
+		t.Fatalf("unexpected preflight event status: %#v", preflight)
+	}
+	for key, want := range map[string]string{
+		"bucket": "dockpipe-mirror",
+		"remote": "s3://dockpipe-mirror/artifact.tar.gz",
+		"result": "dry_run",
+		"region": "auto",
+	} {
+		if got := preflight.IDs[key]; got != want {
+			t.Fatalf("preflight event ID %s = %q want %q (event: %#v)", key, got, want, preflight)
+		}
+	}
+	upload := events[1]
+	if upload.Unit != "release.upload" || upload.Status != infrastructure.OperationStatusDone {
+		t.Fatalf("unexpected upload event status: %#v", upload)
+	}
+	if got := upload.IDs["result"]; got != "dry_run" {
+		t.Fatalf("upload event result = %q want dry_run (event: %#v)", got, upload)
 	}
 }
 
