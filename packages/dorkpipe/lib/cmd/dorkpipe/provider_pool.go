@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"sync"
@@ -157,6 +158,7 @@ type providerPoolPromptOptions struct {
 }
 
 var providerPoolClaudeImageBuild sync.Mutex
+var stopProviderPoolClaudeWorkersFunc = stopProviderPoolClaudeWorkers
 
 func providerPoolCmd(argv []string) {
 	if len(argv) == 0 {
@@ -625,14 +627,14 @@ func stopProviderPools(ctx context.Context, workdir, providerFilter string) (*pr
 		case "claude":
 			containerName := providerPoolClaudeContainerName(workdir)
 			status.Metadata["container_name"] = containerName
-			stopped, stopErr := stopProviderPoolClaudeWorker(ctx, workdir, containerName)
+			stopped, stopErr := stopProviderPoolClaudeWorkersFunc(ctx, workdir)
 			if stopErr != nil {
 				status.State = "failed"
 				status.Status = fmt.Sprintf("Provider: %s | State: failed | %s", item.DisplayName, stopErr.Error())
 				status.Metadata["error"] = stopErr.Error()
-			} else if stopped {
-				status.StoppedWorkers = append(status.StoppedWorkers, containerName)
-				status.Status = fmt.Sprintf("Provider: %s | State: stopped | Removed worker %s", item.DisplayName, containerName)
+			} else if len(stopped) > 0 {
+				status.StoppedWorkers = append(status.StoppedWorkers, stopped...)
+				status.Status = fmt.Sprintf("Provider: %s | State: stopped | Removed %d worker(s)", item.DisplayName, len(stopped))
 			} else {
 				status.Status = fmt.Sprintf("Provider: %s | State: stopped | No worker to remove for this workdir", item.DisplayName)
 			}
@@ -646,12 +648,53 @@ func stopProviderPools(ctx context.Context, workdir, providerFilter string) (*pr
 	return resp, nil
 }
 
-func stopProviderPoolClaudeWorker(ctx context.Context, workdir, containerName string) (bool, error) {
+func stopProviderPoolClaudeWorkers(ctx context.Context, workdir string) ([]string, error) {
 	_ = removeProviderPoolLease(workdir, "claude")
 	if _, err := exec.LookPath("docker"); err != nil {
+		return nil, nil
+	}
+	var stopped []string
+	for _, name := range providerPoolClaudeContainerNameCandidates(workdir) {
+		removed, err := removeDockerContainer(ctx, name)
+		if err != nil {
+			return stopped, err
+		}
+		if removed {
+			stopped = append(stopped, name)
+		}
+	}
+	for _, hash := range providerPoolWorkdirHashCandidates(workdir) {
+		stdout, stderr, code, err := runCommandCapture(ctx, "", "docker", "ps", "-aq",
+			"--filter", "label=com.dockpipe.provider-pool=true",
+			"--filter", "label=com.dockpipe.provider-pool.provider=claude",
+			"--filter", "label=com.dockpipe.provider-pool.workdir-hash="+hash,
+		)
+		if err != nil {
+			return stopped, err
+		}
+		if code != 0 {
+			text := strings.TrimSpace(firstNonEmptyString(stderr, stdout, fmt.Sprintf("docker ps exited %d", code)))
+			return stopped, fmt.Errorf("list Claude provider workers: %s", text)
+		}
+		for _, id := range strings.Fields(stdout) {
+			removed, err := removeDockerContainer(ctx, id)
+			if err != nil {
+				return stopped, err
+			}
+			if removed {
+				stopped = append(stopped, id)
+			}
+		}
+	}
+	return uniqueNonEmpty(stopped), nil
+}
+
+func removeDockerContainer(ctx context.Context, container string) (bool, error) {
+	container = strings.TrimSpace(container)
+	if container == "" {
 		return false, nil
 	}
-	stdout, stderr, code, err := runCommandCapture(ctx, "", "docker", "rm", "-f", containerName)
+	stdout, stderr, code, err := runCommandCapture(ctx, "", "docker", "rm", "-f", container)
 	if err != nil {
 		return false, err
 	}
@@ -660,7 +703,7 @@ func stopProviderPoolClaudeWorker(ctx context.Context, workdir, containerName st
 		if strings.Contains(strings.ToLower(text), "no such container") {
 			return false, nil
 		}
-		return false, fmt.Errorf("remove provider worker %s: %s", containerName, text)
+		return false, fmt.Errorf("remove provider worker %s: %s", container, text)
 	}
 	return strings.TrimSpace(stdout) != "", nil
 }
@@ -892,7 +935,14 @@ func runProviderPoolCodexPrompt(ctx context.Context, opts providerPoolPromptOpti
 			}
 		}
 	}
-	lastMessagePath, err := os.CreateTemp("", "dorkpipe-codex-last-message-*.txt")
+	scratchDir, err := statepaths.ProviderPoolScratchDir(opts.Workdir)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(scratchDir, 0o755); err != nil {
+		return nil, err
+	}
+	lastMessagePath, err := os.CreateTemp(scratchDir, "codex-last-message-*.txt")
 	if err != nil {
 		return nil, err
 	}
@@ -1830,16 +1880,67 @@ func providerPoolClaudeContainerName(workdir string) string {
 	return "dorkpipe-provider-pool-claude-" + providerPoolWorkdirHash(workdir)
 }
 
+func providerPoolClaudeContainerNameCandidates(workdir string) []string {
+	var names []string
+	for _, hash := range providerPoolWorkdirHashCandidates(workdir) {
+		names = append(names, "dorkpipe-provider-pool-claude-"+hash)
+	}
+	return uniqueNonEmpty(names)
+}
+
 func providerPoolWorkdirHash(workdir string) string {
 	canonical := filepath.Clean(strings.TrimSpace(workdir))
 	if canonical == "" {
 		canonical = "."
 	}
+	windowsPath := providerPoolLooksWindowsPath(canonical)
 	if abs, err := filepath.Abs(canonical); err == nil {
 		canonical = abs
 	}
+	if runtime.GOOS == "windows" || windowsPath {
+		canonical = strings.ToLower(filepath.Clean(canonical))
+	}
 	sum := sha1.Sum([]byte(canonical))
 	return hex.EncodeToString(sum[:])[:10]
+}
+
+func providerPoolWorkdirHashCandidates(workdir string) []string {
+	var hashes []string
+	for _, canonical := range providerPoolWorkdirCanonicalCandidates(workdir) {
+		sum := sha1.Sum([]byte(canonical))
+		hashes = append(hashes, hex.EncodeToString(sum[:])[:10])
+	}
+	hashes = append(hashes, providerPoolWorkdirHash(workdir))
+	return uniqueNonEmpty(hashes)
+}
+
+func providerPoolWorkdirCanonicalCandidates(workdir string) []string {
+	trimmed := strings.TrimSpace(workdir)
+	if trimmed == "" {
+		trimmed = "."
+	}
+	cleaned := filepath.Clean(trimmed)
+	var candidates []string
+	candidates = append(candidates, cleaned)
+	if abs, err := filepath.Abs(cleaned); err == nil {
+		candidates = append(candidates, abs)
+	}
+	for _, value := range append([]string{}, candidates...) {
+		candidates = append(candidates, filepath.ToSlash(value))
+		if runtime.GOOS == "windows" || providerPoolLooksWindowsPath(value) {
+			candidates = append(candidates, strings.ToLower(filepath.Clean(value)))
+			candidates = append(candidates, strings.ToLower(filepath.ToSlash(value)))
+		}
+	}
+	return uniqueNonEmpty(candidates)
+}
+
+func providerPoolLooksWindowsPath(path string) bool {
+	path = strings.TrimSpace(path)
+	if len(path) >= 3 && path[1] == ':' && (path[2] == '\\' || path[2] == '/') {
+		return true
+	}
+	return strings.Contains(path, "\\")
 }
 
 func providerPoolClaudeImageReady(workdir string) bool {

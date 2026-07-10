@@ -555,6 +555,14 @@ warm_pipeon_provider_pools() {
   fi
 }
 
+stop_pipeon_provider_pools() {
+  if [[ -z "${DORKPIPE_BIN:-}" || ! -x "$DORKPIPE_BIN" ]]; then
+    return 0
+  fi
+  "$DORKPIPE_BIN" provider-pool stop --workdir "$WORKDIR" >/dev/null 2>&1 || \
+    printf '[pipeon-dev-stack] provider-pool stop failed; continuing stack teardown\n' >&2
+}
+
 if ! docker version >/dev/null 2>&1; then
   echo "pipeon-dev-stack: Docker is not reachable" >&2
   exit 1
@@ -584,6 +592,7 @@ write_pipeon_stack_runtime_env
 
 cleanup() {
   if [[ "$AUTODOWN" == "1" ]]; then
+    stop_pipeon_provider_pools
     docker rm -f "$CODE_SERVER_CONTAINER_NAME" >/dev/null 2>&1 || true
     docker rm -f "$LEGACY_CODE_SERVER_CONTAINER_NAME" >/dev/null 2>&1 || true
     docker ps -aq --filter "label=com.dockpipe.stack.project=$COMPOSE_PROJECT" | xargs -r docker rm -f >/dev/null 2>&1 || true

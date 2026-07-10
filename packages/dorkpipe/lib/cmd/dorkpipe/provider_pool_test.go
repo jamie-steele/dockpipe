@@ -206,6 +206,68 @@ func TestProviderPoolLeasePolicyCanNarrowMaxActive(t *testing.T) {
 	}
 }
 
+func TestProviderPoolWorkdirHashCandidatesIncludeWindowsStyleNormalizations(t *testing.T) {
+	workdir := `C:\Source\DockPipe`
+	candidates := providerPoolWorkdirCanonicalCandidates(workdir)
+	if !containsAll(strings.Join(candidates, "\x00"),
+		`c:\source\dockpipe`,
+		`c:/source/dockpipe`,
+	) {
+		t.Fatalf("windows-style candidates missing normalized variants: %#v", candidates)
+	}
+
+	lowerHash := providerPoolWorkdirHash(`C:\Source\DockPipe`)
+	upperHash := providerPoolWorkdirHash(`C:\SOURCE\DOCKPIPE`)
+	if lowerHash != upperHash {
+		t.Fatalf("windows-style hash should be case-insensitive: %q != %q", lowerHash, upperHash)
+	}
+
+	hashes := providerPoolWorkdirHashCandidates(workdir)
+	if len(hashes) < 2 {
+		t.Fatalf("expected multiple hash candidates for windows-style path, got %#v", hashes)
+	}
+}
+
+func TestStopProviderPoolsReportsMultipleClaudeWorkers(t *testing.T) {
+	root := t.TempDir()
+	catalogPath := filepath.Join(root, "catalog.yml")
+	catalog := `schema: 1
+providers:
+  - id: claude
+    display_name: Claude
+    pool:
+      warm_mode: guarded_container
+      warm_source: docker-claude-resolver
+`
+	if err := os.WriteFile(catalogPath, []byte(catalog), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DORKPIPE_PROVIDER_POOL_CATALOG", catalogPath)
+
+	oldStop := stopProviderPoolClaudeWorkersFunc
+	stopProviderPoolClaudeWorkersFunc = func(context.Context, string) ([]string, error) {
+		return []string{"worker-a", "worker-b"}, nil
+	}
+	t.Cleanup(func() { stopProviderPoolClaudeWorkersFunc = oldStop })
+
+	resp, err := stopProviderPools(context.Background(), root, "claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Providers) != 1 {
+		t.Fatalf("provider count = %d, want 1", len(resp.Providers))
+	}
+	status := resp.Providers[0]
+	if status.State != "stopped" {
+		t.Fatalf("state = %q, want stopped", status.State)
+	}
+	if !reflect.DeepEqual(status.StoppedWorkers, []string{"worker-a", "worker-b"}) {
+		t.Fatalf("stopped workers = %#v", status.StoppedWorkers)
+	}
+	if !strings.Contains(status.Status, "Removed 2 worker(s)") {
+		t.Fatalf("status did not report multiple workers: %q", status.Status)
+	}
+}
 func TestProviderPoolCodexOutputFailedDetectsZeroExitErrors(t *testing.T) {
 	if !providerPoolCodexOutputFailed("[2026-07-09T15:50:15] ERROR: unexpected status 400 Bad Request") {
 		t.Fatal("expected Codex ERROR line to be treated as failed")

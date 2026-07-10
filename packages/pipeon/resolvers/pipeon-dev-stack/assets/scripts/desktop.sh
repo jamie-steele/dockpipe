@@ -180,6 +180,21 @@ pipeon_validate_code_server_workspace_mount() {
   return 1
 }
 
+pipeon_configure_code_server_git() {
+  if ! pipeon_stack_is_windows_host; then
+    return 0
+  fi
+  docker exec "$CODE_SERVER_CONTAINER_NAME" sh -lc '
+    command -v git >/dev/null 2>&1 || exit 0
+    git config --global core.autocrlf true
+    git config --global core.filemode false
+    git config --global core.safecrlf false
+  ' >/dev/null 2>&1 || {
+    echo "pipeon-dev-stack: warning: failed to seed Windows-compatible Git config in code-server" >&2
+    return 0
+  }
+}
+
 pipeon_seed_code_server_settings() {
   local target_dir="$CODE_SERVER_HOME/.local/share/code-server/User"
   local target_path="$target_dir/settings.json"
@@ -284,7 +299,8 @@ pipeon_start_code_server() {
       docker rm -f "$CODE_SERVER_CONTAINER_NAME" >/dev/null 2>&1 || true
     else
       printf '[pipeon-dev-stack] code-server lane availability: codex=%s claude=%s\n' "$codex_available" "$claude_available" >&2
-    return 0
+      pipeon_configure_code_server_git
+      return 0
     fi
   fi
   if docker ps -a --format '{{.Names}}' | grep -qx "$CODE_SERVER_CONTAINER_NAME"; then
@@ -411,6 +427,7 @@ pipeon_start_code_server() {
     docker logs "$CODE_SERVER_CONTAINER_NAME" >&2 || true
     return 1
   fi
+  pipeon_configure_code_server_git
 }
 
 if [[ ! -x "$PIPEON_DESKTOP_BIN" ]]; then

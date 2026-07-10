@@ -309,9 +309,9 @@ Current state:
 - Pipeon direct chat uses the host MCP provider-pool path and benefits from warm workers through
   `dorkpipe.provider_pool_chat`.
 - CLI orchestrator prompts use the same DorkPipe provider-pool prompt contract.
-- Workflow fan-out and sub-container agent nodes do not yet automatically lease warm provider-pool
-  workers. They still use the normal workflow resolver/runtime path unless a package workflow
-  explicitly calls the provider-pool CLI/MCP operation.
+- Workflow fan-out and sub-container agent nodes can now explicitly lease provider-pool workers when
+  inherited workflow/agent/task `model_policy.execution_mode` is `provider_pool`. Workflows without
+  that explicit policy still use the normal workflow resolver/runtime path.
 
 Goal:
 
@@ -349,13 +349,16 @@ steps:
 Field intent:
 
 - `execution_mode`: provider-neutral mode selector. Initial values should include the existing
-  default workflow execution mode and `provider_pool`.
+  default workflow execution mode and `provider_pool`. Implemented values are `workflow` and
+  `provider_pool`.
 - `provider`: catalog provider id such as `codex`, `claude`, or `ollama`; no provider-specific schema
-  fields.
+  fields. This remains supplied through existing agent model/lane selection rather than duplicating
+  provider/model fields inside `model_policy`.
 - `role`: `direct`, `workflow`, or future role names. Workflow nodes should not reuse direct-chat
   workers by default.
-- `session_scope`: `node`, `workflow`, or `explicit`. `node` isolates each agent turn, `workflow`
-  allows reuse within one workflow run, and `explicit` requires a caller-provided session id.
+- `session_scope`: `node`, `workflow`, or future `explicit`. `node` isolates each agent turn,
+  `workflow` allows reuse within one workflow run, and `explicit` would require a caller-provided
+  session id. Implemented values are `node` and `workflow`.
 - `max_active`: cap for this workflow's active pool leases. The effective cap is the minimum of
   workflow policy, provider catalog policy, and global pool policy.
 - `queue_timeout_seconds`: how long a workflow node may wait for a pooled worker before failing with
@@ -435,30 +438,36 @@ Implementation status on 2026-07-09:
   DorkPipe provider-pool CLI/MCP contract and DorkPipe workflow runner; no `packages/pipeon` files
   were touched.
 
-Implementation phases:
+Follow-up completion checklist:
 
-1. Add schema/docs/language-support for provider-neutral `model_policy.execution_mode:
-   provider_pool`, `role`, `session_scope`, `max_active`, and `queue_timeout_seconds`.
-2. Add workflow-run/node identity to provider-pool prompt metadata so turns can be attributed to a
-   workflow lease without changing the public provider/session/worker/turn model.
-3. Implement a package-owned workflow runner adapter that routes eligible agent prompt nodes through
-   `dorkpipe provider-pool prompt --json`.
-4. Add MCP/status visibility for workflow leases using existing provider-pool status concepts:
-   ready, queued, busy, failed, auth-required, disabled, canceled.
-5. Validate first with Codex host-provider workflow leases if viable, then Claude guarded stream
-   worker leases, then Pipeon UI status. Pipeon should not need extension-local routing changes.
+- Done: schema/docs/language-support for provider-neutral `model_policy.execution_mode:
+  provider_pool`, `role`, `session_scope`, `max_active`, and `queue_timeout_seconds`.
+- Done: workflow-run/node identity in provider-pool prompt metadata without changing the public
+  provider/session/worker/turn model.
+- Done: package-owned workflow runner adapter for eligible agent prompt nodes through
+  `dorkpipe provider-pool prompt --json`.
+- Done: max-active and bounded queue timeout enforcement with visible queued/failed states.
+- Done: Codex host-provider direct and workflow-attributed provider-pool smoke validation.
+- Done: Pipeon extension-local routing check; no Pipeon changes needed for this follow-up.
+- Partial: MCP/status visibility reports provider state and active lease counts through existing
+  status concepts, but it does not yet list workflow lease role/run/node details.
+- Deferred: `session_scope: explicit` and caller-provided workflow session ids.
+- Deferred: Claude guarded stream-worker workflow lease smoke after the local
+  `dockpipe-claude:latest` image is rebuilt/materialized.
+- Deferred: Pipeon UI status validation of workflow lease metadata. Pipeon direct chat already uses
+  the shared MCP path, but no workflow-lease-specific UI change was added.
 
 Acceptance criteria:
 
-- A workflow with `execution_mode: provider_pool` can run a subagent turn through the shared
+- Done: A workflow with `execution_mode: provider_pool` can run a subagent turn through the shared
   provider-pool contract and record provider-pool timings in its artifacts.
-- Direct Pipeon chat continues to use its own session-affine provider lane and is not polluted by
+- Done: Direct Pipeon chat continues to use its own session-affine provider lane and is not polluted by
   workflow/subagent context.
-- `max_active` and queue state are enforced and visible; workflow fan-out cannot silently create more
-  cloud/provider work than policy allows.
-- Stack teardown and workflow cancellation release leases and stop workers according to pool lifecycle
-  policy.
-- Public API and MCP terminology remains provider-neutral: provider, session, worker, turn.
+- Done: `max_active` and queue state are enforced and visible; workflow fan-out cannot silently create
+  more cloud/provider work than policy allows.
+- Done: Prompt cancellation/teardown releases leases. Provider-pool stop removes provider lease files
+  as part of pool lifecycle cleanup.
+- Done: Public API and MCP terminology remains provider-neutral: provider, session, worker, turn.
 
 Non-goals for this follow-up:
 
@@ -713,3 +722,45 @@ Stream-worker implementation pass:
 - Pipeon should pick up the fast path automatically: the extension call sites still read
   `dorkpipe.provider_pool_catalog` and send direct chat through `dorkpipe.provider_pool_chat`, which
   invokes the same `provider-pool prompt --json` implementation.
+
+### Provider-pool lifecycle hardening pass on 2026-07-09
+
+- Codex provider-pool scratch files now stay under project package state at
+  `bin/.dockpipe/packages/dorkpipe/provider-pools/scratch` instead of system temp. This keeps generated
+  provider-pool handoff material in DockPipe-owned project state and avoids `.tmp` drift.
+- Workdir hash fallback now accounts for Windows-style path normalization and candidate hashes. This
+  preserves cleanup when a worker was started through one host path spelling and stopped through
+  another, such as Git Bash/MSYS slash conversion or case differences.
+- Pipeon code-server on Windows now seeds container Git config with `core.autocrlf=true`,
+  `core.filemode=false`, and `core.safecrlf=false`. The finding was that the `/work` bind mount could
+  otherwise make Git report broad file modifications because Linux container defaults did not match the
+  Windows checkout's CRLF/filemode behavior.
+- Claude provider-pool stop now removes all matching managed workers for the workdir, including
+  name/hash candidates and Docker label/hash fallback. Stop reporting now lists all removed worker ids
+  and reports the count instead of assuming one container name.
+- Pipeon `launch.sh` autodown and `stop.sh` both call `dorkpipe provider-pool stop --workdir <repo>`
+  before stack/container teardown, so provider-pool workers are tied to Pipeon lifecycle unless a future
+  explicit detached mode is added.
+- Manual lifecycle validation on Windows/Docker Desktop 29.6.1:
+  - `dorkpipe provider-pool warm --workdir . --provider claude --json` started
+    `dorkpipe-provider-pool-claude-4ca0fbabc6`; reported timings included `worker_start_ms=1473`,
+    `container_running_check_ms=258`, `image_check_ms=203`, and `image_recheck_ms=200`.
+  - Docker inspection showed one `com.dockpipe.provider-pool=true` container running.
+  - Git Bash `stop.sh` completed in about 18 seconds and reported stack removal for `/c/Source/dockpipe`.
+  - A final Docker label query returned no `com.dockpipe.provider-pool=true` containers.
+- Focused validation from this pass:
+  - `go test ./packages/dorkpipe/lib/statepaths ./packages/dorkpipe/lib/cmd/dorkpipe` passed with a
+    repo-local Go cache under `bin/.dockpipe` after the default user Go cache was denied by the sandbox.
+    Package test times reported by Go were `statepaths=0.104s` and `cmd/dorkpipe=0.324s` on the passing
+    run.
+  - Git Bash syntax checks passed for touched Pipeon scripts:
+    `launch.sh`, `desktop.sh`, and `stop.sh`.
+
+Boundary check:
+
+- DockPipe core under `src/lib` and `src/cmd` was not changed.
+- Provider-pool lifecycle logic remains in the DorkPipe package, and Pipeon behavior remains package-local
+  to the `pipeon-dev-stack` scripts.
+- Direct Pipeon chat isolation from workflow/subagent sessions is preserved: Pipeon still calls the shared
+  provider-pool/MCP direct-chat path, while workflow provider-pool leasing remains explicit through
+  workflow model policy.
