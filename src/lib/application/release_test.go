@@ -223,7 +223,7 @@ func TestCmdReleaseUploadPreflightFailuresMirrorOperationEvents(t *testing.T) {
 				}
 				t.Setenv(envReleaseBucket, "dockpipe-mirror")
 				return []string{file, "--key", "/", "--dry-run"}, map[string]string{
-					"local_path": filepath.ToSlash(file), "bucket": "dockpipe-mirror", "key": "", "remote": "s3://dockpipe-mirror/", "region": "us-east-1", "result": "missing_key",
+					"local_path": filepath.ToSlash(file), "bucket": "dockpipe-mirror", "remote": "s3://dockpipe-mirror/", "region": "us-east-1", "result": "missing_key",
 				}
 			},
 			errorText: "object key must not be empty",
