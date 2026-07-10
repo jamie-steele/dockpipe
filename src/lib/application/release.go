@@ -6,6 +6,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
+
+	"dockpipe/src/lib/infrastructure"
 )
 
 // env vars aligned with the dockpipe.cloudflare.r2publish workflow (R2 publish resolver) and AWS CLI conventions.
@@ -110,19 +113,30 @@ func cmdReleaseUpload(args []string) error {
 	}
 	key = strings.TrimPrefix(key, "/")
 	remote := fmt.Sprintf("s3://%s/%s", bucket, key)
+	ids := releaseUploadOperationIDs(localPath, bucket, key, remote, endpoint, region, contentType)
 
 	if dryRun {
-		fmt.Fprintf(os.Stderr, "[dockpipe] dry-run: would upload %q to %q", localPath, remote)
-		if endpoint != "" {
-			fmt.Fprintf(os.Stderr, " endpoint=%q", endpoint)
-		}
-		fmt.Fprintln(os.Stderr)
+		ids["result"] = "dry_run"
+		infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+			Unit:       "release.upload",
+			Status:     infrastructure.OperationStatusDone,
+			DurationMs: 0,
+			IDs:        ids,
+		})
 		return nil
 	}
 
 	awsPath, err := exec.LookPath("aws")
 	if err != nil {
-		return fmt.Errorf("aws CLI not found in PATH (install AWS CLI v2 for S3-compatible uploads)")
+		err = fmt.Errorf("aws CLI not found in PATH (install AWS CLI v2 for S3-compatible uploads)")
+		infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+			Unit:       "release.upload",
+			Status:     infrastructure.OperationStatusFail,
+			DurationMs: 0,
+			IDs:        ids,
+			Error:      err.Error(),
+		})
+		return err
 	}
 
 	cmdArgs := []string{"s3", "cp", localPath, remote, "--region", region}
@@ -136,11 +150,29 @@ func cmdReleaseUpload(args []string) error {
 	cmd.Env = append(os.Environ(), "AWS_EC2_METADATA_DISABLED=true")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("aws s3 cp: %w", err)
+	return infrastructure.RunOperationWithOptions(os.Stderr, "release.upload", "Uploading release artifact…", ids, infrastructure.OperationOptions{Spinner: false, ProgressEvery: 5 * time.Second}, func() error {
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("aws s3 cp: %w", err)
+		}
+		return nil
+	})
+}
+
+func releaseUploadOperationIDs(localPath, bucket, key, remote, endpoint, region, contentType string) map[string]string {
+	ids := map[string]string{
+		"local_path": filepath.ToSlash(localPath),
+		"bucket":     bucket,
+		"key":        key,
+		"remote":     remote,
+		"region":     region,
 	}
-	fmt.Fprintf(os.Stderr, "[dockpipe] uploaded %s\n", remote)
-	return nil
+	if endpoint != "" {
+		ids["endpoint"] = endpoint
+	}
+	if contentType != "" {
+		ids["content_type"] = contentType
+	}
+	return ids
 }
 
 func resolveReleaseEndpoint() string {

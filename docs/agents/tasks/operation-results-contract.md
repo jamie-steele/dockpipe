@@ -130,6 +130,9 @@
 - `dockpipe workflow validate` now emits canonical `workflow.validate` done/fail units with the
   resolved workflow path and requested path metadata instead of the bespoke `OK: workflow ...` line.
 
+- `dockpipe release upload` now emits canonical `release.upload` dry-run, done, and fail units
+  with bucket/key/remote/region metadata instead of bespoke dry-run and uploaded status lines.
+
 ## Still Open
 
 - Expand the core operation-result contract into remaining runtime actions outside the current
