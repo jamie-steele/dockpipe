@@ -90,12 +90,13 @@ func assertOrchestrationLanesInitial(root string) {
 	for _, taskID := range []string{"contract_brain", "workflow_brain", "planner_brain", "repo_shape", "package_contracts", "safety_model"} {
 		assert(providers[taskID] == "ollama", "unexpected provider for %s: %s", taskID, providers[taskID])
 	}
-	explicitLocal := map[string]bool{"contract_brain": true, "workflow_brain": true, "planner_brain": true, "repo_shape": true}
 	for _, task := range tasks {
 		obj := asObject(task, "lane task")
 		taskID := asString(obj["task_id"], "task_id")
 		gated, _ := obj["gated_by_baseline"].(bool)
-		assert(gated || explicitLocal[taskID], "task should be gated or explicitly local: %s", taskID)
+		requested := asString(obj["requested"], "requested")
+		local, _ := obj["local"].(bool)
+		assert(gated || (requested == "ollama" && local), "task should be gated or explicitly local: %s", taskID)
 	}
 	metrics := readJSONLines(filepath.Join(root, "training", "metrics.jsonl"))
 	assert(len(metrics) == 6, "expected 6 training metrics, got %d", len(metrics))
