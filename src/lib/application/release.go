@@ -87,9 +87,14 @@ func cmdReleaseUpload(args []string) error {
 	err := infrastructure.RunOperationWithOptions(os.Stderr, "release.upload.preflight", "", preflightIDs, infrastructure.OperationOptions{Spinner: false}, func() error {
 		localPath = filepath.Clean(localPath)
 		preflightIDs["local_path"] = filepath.ToSlash(localPath)
-		if _, err := os.Stat(localPath); err != nil {
+		info, err := os.Stat(localPath)
+		if err != nil {
 			preflightIDs["result"] = "missing_file"
 			return fmt.Errorf("file %q: %w", localPath, err)
+		}
+		if !info.Mode().IsRegular() {
+			preflightIDs["result"] = "non_regular_file"
+			return fmt.Errorf("local path %q must be a regular file", localPath)
 		}
 		if bucket == "" {
 			bucket = os.Getenv(envReleaseBucket)
@@ -121,6 +126,10 @@ func cmdReleaseUpload(args []string) error {
 		remote := fmt.Sprintf("s3://%s/%s", bucket, key)
 		for k, v := range releaseUploadOperationIDs(localPath, bucket, key, remote, endpoint, region, contentType) {
 			preflightIDs[k] = v
+		}
+		if key == "" {
+			preflightIDs["result"] = "missing_key"
+			return fmt.Errorf("object key must not be empty")
 		}
 		if dryRun {
 			preflightIDs["result"] = "dry_run"

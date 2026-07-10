@@ -3,6 +3,7 @@ package application
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -194,5 +195,118 @@ func TestCmdReleaseUploadMissingAWSCLIEmitsOperationResult(t *testing.T) {
 		if !strings.Contains(stderr, want) {
 			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr)
 		}
+	}
+}
+
+func TestCmdReleaseUploadPreflightFailuresMirrorOperationEvents(t *testing.T) {
+	tests := []struct {
+		name      string
+		prepare   func(t *testing.T, dir string) ([]string, map[string]string)
+		errorText string
+	}{
+		{
+			name: "directory",
+			prepare: func(t *testing.T, dir string) ([]string, map[string]string) {
+				t.Setenv(envReleaseBucket, "dockpipe-mirror")
+				return []string{dir, "--dry-run"}, map[string]string{
+					"local_path": filepath.ToSlash(filepath.Clean(dir)), "result": "non_regular_file",
+				}
+			},
+			errorText: "must be a regular file",
+		},
+		{
+			name: "empty normalized key",
+			prepare: func(t *testing.T, dir string) ([]string, map[string]string) {
+				file := filepath.Join(dir, "artifact.tar.gz")
+				if err := os.WriteFile(file, []byte("payload"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv(envReleaseBucket, "dockpipe-mirror")
+				return []string{file, "--key", "/", "--dry-run"}, map[string]string{
+					"local_path": filepath.ToSlash(file), "bucket": "dockpipe-mirror", "key": "", "remote": "s3://dockpipe-mirror/", "region": "us-east-1", "result": "missing_key",
+				}
+			},
+			errorText: "object key must not be empty",
+		},
+		{
+			name: "missing file",
+			prepare: func(t *testing.T, dir string) ([]string, map[string]string) {
+				file := filepath.Join(dir, "missing.tar.gz")
+				t.Setenv(envReleaseBucket, "dockpipe-mirror")
+				return []string{file, "--dry-run"}, map[string]string{
+					"local_path": filepath.ToSlash(file), "result": "missing_file",
+				}
+			},
+			errorText: "missing.tar.gz",
+		},
+		{
+			name: "missing bucket",
+			prepare: func(t *testing.T, dir string) ([]string, map[string]string) {
+				file := filepath.Join(dir, "artifact.tar.gz")
+				if err := os.WriteFile(file, []byte("payload"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv(envReleaseBucket, "")
+				t.Setenv(envR2Bucket, "")
+				return []string{file, "--dry-run"}, map[string]string{
+					"local_path": filepath.ToSlash(file), "result": "missing_bucket",
+				}
+			},
+			errorText: "set --bucket",
+		},
+		{
+			name: "missing aws cli",
+			prepare: func(t *testing.T, dir string) ([]string, map[string]string) {
+				file := filepath.Join(dir, "artifact.tar.gz")
+				if err := os.WriteFile(file, []byte("payload"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				emptyPath := filepath.Join(dir, "empty-path")
+				if err := os.MkdirAll(emptyPath, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				t.Setenv("PATH", emptyPath)
+				t.Setenv(envReleaseBucket, "dockpipe-mirror")
+				return []string{file}, map[string]string{
+					"local_path": filepath.ToSlash(file), "bucket": "dockpipe-mirror", "key": "artifact.tar.gz", "remote": "s3://dockpipe-mirror/artifact.tar.gz", "region": "us-east-1", "result": "missing_aws_cli",
+				}
+			},
+			errorText: "aws CLI not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			eventLog := filepath.Join(dir, "events.jsonl")
+			t.Setenv(infrastructure.EnvDockpipeEventLog, eventLog)
+			t.Setenv(envR2Endpoint, "")
+			t.Setenv(envAWSEndpointS3, "")
+			t.Setenv(envCloudflareAcct, "")
+			t.Setenv(envR2AccountID, "")
+			t.Setenv(envAWSRegion, "")
+
+			args, wantIDs := tt.prepare(t, dir)
+			if _, err := captureResultStderr(t, func() error { return cmdReleaseUpload(args) }); err == nil || !strings.Contains(err.Error(), tt.errorText) {
+				t.Fatalf("expected error containing %q, got %v", tt.errorText, err)
+			}
+			events, err := infrastructure.ReadOperationEvents(eventLog)
+			if err != nil {
+				t.Fatalf("ReadOperationEvents: %v", err)
+			}
+			if len(events) != 1 {
+				t.Fatalf("expected one preflight event and no release.upload event, got %#v", events)
+			}
+			event := events[0]
+			if event.Schema != infrastructure.OperationEventSchemaV1 || event.Type != infrastructure.OperationEventKind || event.Unit != "release.upload.preflight" || event.Status != infrastructure.OperationStatusFail {
+				t.Fatalf("unexpected preflight failure event: %#v", event)
+			}
+			if !reflect.DeepEqual(event.IDs, wantIDs) {
+				t.Fatalf("event IDs = %#v want %#v", event.IDs, wantIDs)
+			}
+			if !strings.Contains(event.Error, tt.errorText) {
+				t.Fatalf("event error = %q should contain %q", event.Error, tt.errorText)
+			}
+		})
 	}
 }
