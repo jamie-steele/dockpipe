@@ -82,36 +82,62 @@ func cmdReleaseUpload(args []string) error {
 	if localPath == "" {
 		return fmt.Errorf("missing local file path (try: dockpipe release upload --help)")
 	}
-	localPath = filepath.Clean(localPath)
-	if _, err := os.Stat(localPath); err != nil {
-		return fmt.Errorf("file %q: %w", localPath, err)
-	}
-	if bucket == "" {
-		bucket = os.Getenv(envReleaseBucket)
+	preflightIDs := map[string]string{"local_path": filepath.ToSlash(filepath.Clean(localPath))}
+	var awsPath string
+	err := infrastructure.RunOperationWithOptions(os.Stderr, "release.upload.preflight", "", preflightIDs, infrastructure.OperationOptions{Spinner: false}, func() error {
+		localPath = filepath.Clean(localPath)
+		preflightIDs["local_path"] = filepath.ToSlash(localPath)
+		if _, err := os.Stat(localPath); err != nil {
+			preflightIDs["result"] = "missing_file"
+			return fmt.Errorf("file %q: %w", localPath, err)
+		}
 		if bucket == "" {
-			bucket = os.Getenv(envR2Bucket)
+			bucket = os.Getenv(envReleaseBucket)
+			if bucket == "" {
+				bucket = os.Getenv(envR2Bucket)
+			}
 		}
-	}
-	if bucket == "" {
-		return fmt.Errorf("set --bucket or %s or %s", envReleaseBucket, envR2Bucket)
-	}
-	if endpoint == "" {
-		endpoint = resolveReleaseEndpoint()
-	}
-	if region == "" {
-		region = os.Getenv(envAWSRegion)
-	}
-	if region == "" {
-		if endpoint != "" {
-			region = "auto"
-		} else {
-			region = "us-east-1"
+		if bucket == "" {
+			preflightIDs["result"] = "missing_bucket"
+			return fmt.Errorf("set --bucket or %s or %s", envReleaseBucket, envR2Bucket)
 		}
+		if endpoint == "" {
+			endpoint = resolveReleaseEndpoint()
+		}
+		if region == "" {
+			region = os.Getenv(envAWSRegion)
+		}
+		if region == "" {
+			if endpoint != "" {
+				region = "auto"
+			} else {
+				region = "us-east-1"
+			}
+		}
+		if key == "" {
+			key = filepath.Base(localPath)
+		}
+		key = strings.TrimPrefix(key, "/")
+		remote := fmt.Sprintf("s3://%s/%s", bucket, key)
+		for k, v := range releaseUploadOperationIDs(localPath, bucket, key, remote, endpoint, region, contentType) {
+			preflightIDs[k] = v
+		}
+		if dryRun {
+			preflightIDs["result"] = "dry_run"
+			return nil
+		}
+		var lookPathErr error
+		awsPath, lookPathErr = exec.LookPath("aws")
+		if lookPathErr != nil {
+			preflightIDs["result"] = "missing_aws_cli"
+			return fmt.Errorf("aws CLI not found in PATH (install AWS CLI v2 for S3-compatible uploads)")
+		}
+		preflightIDs["result"] = "ready"
+		return nil
+	})
+	if err != nil {
+		return err
 	}
-	if key == "" {
-		key = filepath.Base(localPath)
-	}
-	key = strings.TrimPrefix(key, "/")
 	remote := fmt.Sprintf("s3://%s/%s", bucket, key)
 	ids := releaseUploadOperationIDs(localPath, bucket, key, remote, endpoint, region, contentType)
 
@@ -124,19 +150,6 @@ func cmdReleaseUpload(args []string) error {
 			IDs:        ids,
 		})
 		return nil
-	}
-
-	awsPath, err := exec.LookPath("aws")
-	if err != nil {
-		err = fmt.Errorf("aws CLI not found in PATH (install AWS CLI v2 for S3-compatible uploads)")
-		infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
-			Unit:       "release.upload",
-			Status:     infrastructure.OperationStatusFail,
-			DurationMs: 0,
-			IDs:        ids,
-			Error:      err.Error(),
-		})
-		return err
 	}
 
 	cmdArgs := []string{"s3", "cp", localPath, remote, "--region", region}

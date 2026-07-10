@@ -47,6 +47,8 @@ func TestCmdReleaseUploadDryRunUsesEnvBucketAndEndpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
+		"unit=release.upload.preflight",
+		"status=done",
 		"unit=release.upload",
 		"status=done",
 		"result=dry_run",
@@ -68,9 +70,44 @@ func TestCmdReleaseUploadRequiresBucket(t *testing.T) {
 	t.Setenv(envReleaseBucket, "")
 	t.Setenv(envR2Bucket, "")
 
-	err := cmdReleaseUpload([]string{file, "--dry-run"})
+	stderr, err := captureResultStderr(t, func() error {
+		return cmdReleaseUpload([]string{file, "--dry-run"})
+	})
 	if err == nil || !strings.Contains(err.Error(), "set --bucket") {
 		t.Fatalf("expected missing bucket error, got %v", err)
+	}
+	for _, want := range []string{
+		"unit=release.upload.preflight",
+		"status=fail",
+		"result=missing_bucket",
+		"error=",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected missing bucket stderr to contain %q, got:\n%s", want, stderr)
+		}
+	}
+}
+
+func TestCmdReleaseUploadMissingFileEmitsPreflightResult(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "missing.tar.gz")
+	t.Setenv(envReleaseBucket, "dockpipe-mirror")
+
+	stderr, err := captureResultStderr(t, func() error {
+		return cmdReleaseUpload([]string{file, "--dry-run"})
+	})
+	if err == nil || !strings.Contains(err.Error(), "missing.tar.gz") {
+		t.Fatalf("expected missing file error, got %v", err)
+	}
+	for _, want := range []string{
+		"unit=release.upload.preflight",
+		"status=fail",
+		"result=missing_file",
+		"error=",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected missing file stderr to contain %q, got:\n%s", want, stderr)
+		}
 	}
 }
 
@@ -96,8 +133,9 @@ func TestCmdReleaseUploadMissingAWSCLIEmitsOperationResult(t *testing.T) {
 		t.Fatalf("expected missing aws CLI error, got %v", err)
 	}
 	for _, want := range []string{
-		"unit=release.upload",
+		"unit=release.upload.preflight",
 		"status=fail",
+		"result=missing_aws_cli",
 		"remote=s3://dockpipe-mirror/artifact.tar.gz",
 		"error=",
 	} {

@@ -132,6 +132,9 @@
 
 - `dockpipe release upload` now emits canonical `release.upload` dry-run, done, and fail units
   with bucket/key/remote/region metadata instead of bespoke dry-run and uploaded status lines.
+- `dockpipe release upload` now emits `release.upload.preflight` for local artifact, bucket,
+  endpoint/region/key, and AWS CLI readiness checks so CI/release setup failures are structured
+  before any upload mutation is attempted.
 
 ## Still Open
 
