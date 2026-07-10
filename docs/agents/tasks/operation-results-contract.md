@@ -127,6 +127,9 @@
   with project/workflow/source/path metadata instead of bespoke `Created ...`, `Initialized ...`,
   `cloned ...`, and `.gitignore` summary lines.
 
+- `dockpipe workflow validate` now emits canonical `workflow.validate` done/fail units with the
+  resolved workflow path and requested path metadata instead of the bespoke `OK: workflow ...` line.
+
 ## Still Open
 
 - Expand the core operation-result contract into remaining runtime actions outside the current
