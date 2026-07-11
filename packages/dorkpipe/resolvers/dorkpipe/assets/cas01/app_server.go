@@ -23,6 +23,8 @@ type Event struct {
 	ItemID    string
 	RequestID string
 	Status    string
+	ErrorKind string
+	WillRetry bool
 }
 type Policy struct {
 	Sandbox  string
@@ -30,10 +32,14 @@ type Policy struct {
 	Shell    bool
 }
 type Expect struct {
-	Status   string
-	Denied   int
-	Rejected int
-	Terminal string
+	Status            string
+	Denied            int
+	Rejected          int
+	Terminal          string
+	ErrorKinds        map[string]int
+	RetriableErrors   int
+	Warnings          int
+	TerminalErrorKind string
 }
 type Fixture struct {
 	Name   string
@@ -48,15 +54,16 @@ type pending struct {
 	denied bool
 }
 type state struct {
-	status   string
-	terminal string
-	thread   string
-	turn     string
-	items    map[string]bool
-	pending  map[string]pending
-	seen     map[string]bool
-	denied   int
-	rejected int
+	status     string
+	terminal   string
+	thread     string
+	turn       string
+	items      map[string]bool
+	pending    map[string]pending
+	seen       map[string]bool
+	denied     int
+	rejected   int
+	diagnostic diagnostic
 }
 type Audit struct {
 	Sequence  int    `json:"sequence"`
@@ -66,21 +73,29 @@ type Audit struct {
 	Terminal  string `json:"terminal,omitempty"`
 }
 type Evidence struct {
-	Harness                  string           `json:"harness"`
-	Protocol                 string           `json:"protocol"`
-	Outcome                  string           `json:"outcome"`
-	StartedAt                string           `json:"startedAt"`
-	CompletedAt              string           `json:"completedAt"`
-	Durations                map[string]int64 `json:"durationsMs"`
-	Events                   []Audit          `json:"events"`
-	Redaction                string           `json:"redaction"`
-	Blocker                  string           `json:"blocker,omitempty"`
-	MaterializationTerminal  string           `json:"materializationTerminal,omitempty"`
-	MaterializationErrorKind string           `json:"materializationErrorKind,omitempty"`
-	ResumeTerminal           string           `json:"resumeTerminal,omitempty"`
+	Harness                   string           `json:"harness"`
+	Protocol                  string           `json:"protocol"`
+	Outcome                   string           `json:"outcome"`
+	StartedAt                 string           `json:"startedAt"`
+	CompletedAt               string           `json:"completedAt"`
+	Durations                 map[string]int64 `json:"durationsMs"`
+	Events                    []Audit          `json:"events"`
+	Redaction                 string           `json:"redaction"`
+	Blocker                   string           `json:"blocker,omitempty"`
+	MaterializationTerminal   string           `json:"materializationTerminal,omitempty"`
+	MaterializationErrorKind  string           `json:"materializationErrorKind,omitempty"`
+	ResumeTerminal            string           `json:"resumeTerminal,omitempty"`
+	MaterializationDiagnostic *diagnostic      `json:"materializationDiagnostic,omitempty"`
 }
 type terminalState struct {
 	classification string
+	diagnostic     diagnostic
+}
+type diagnostic struct {
+	ErrorKinds        map[string]int `json:"errorKinds,omitempty"`
+	RetriableErrors   int            `json:"retriableErrors,omitempty"`
+	Warnings          int            `json:"warnings,omitempty"`
+	TerminalErrorKind string         `json:"terminalErrorKind,omitempty"`
 }
 type terminalError struct{ kind string }
 
@@ -94,7 +109,7 @@ type Client struct {
 }
 
 func main() {
-	mode := flag.String("mode", "fixtures", "fixtures, policy, or live")
+	mode := flag.String("mode", "fixtures", "fixtures, diagnostics, policy, or live")
 	fixtures := flag.String("fixtures", "", "absolute fixture file")
 	sandbox := flag.String("sandbox", "workspace-write", "sandbox")
 	reviewer := flag.String("reviewer", "user", "reviewer")
@@ -109,6 +124,8 @@ func main() {
 	switch *mode {
 	case "fixtures":
 		err = validateFixtures(*fixtures)
+	case "diagnostics":
+		err = validateDiagnostics()
 	case "policy":
 		err = policy(*sandbox, *reviewer, *method)
 	case "live":
@@ -156,6 +173,30 @@ func validateFixtures(path string) error {
 	fmt.Printf("cas01 fixtures OK (%d)\n", len(fixtures))
 	return nil
 }
+func validateDiagnostics() error {
+	notification := map[string]any{
+		"threadId":  "thread-A",
+		"turnId":    "turn-A",
+		"willRetry": true,
+		"error": map[string]any{
+			"codexErrorInfo": map[string]any{"responseTooManyFailedAttempts": map[string]any{}},
+		},
+	}
+	if !correlatedError(notification, "thread-A", "turn-A") {
+		return errors.New("error notification correlation failed")
+	}
+	d := diagnostic{}
+	recordError(&d, notificationErrorKind(notification), asBool(notification["willRetry"]))
+	if !sameKinds(d.ErrorKinds, map[string]int{"responseTooManyFailedAttempts": 1}) || d.RetriableErrors != 1 {
+		return errors.New("error notification diagnostic classification failed")
+	}
+	terminal := map[string]any{"turn": map[string]any{"error": map[string]any{"codexErrorInfo": "sandboxError"}}}
+	if turnErrorKind(terminal) != "sandboxError" || safeCodexErrorKind(map[string]any{"unrecognized": map[string]any{}}) != "unknown" {
+		return errors.New("terminal diagnostic classification failed")
+	}
+	fmt.Println("cas01 diagnostics OK")
+	return nil
+}
 func validate(f Fixture) error {
 	if f.Name == "" || len(f.Events) == 0 || f.Policy.Shell {
 		return errors.New("fixture name, events, and no-shell policy are required")
@@ -163,13 +204,13 @@ func validate(f Fixture) error {
 	if err := policy(f.Policy.Sandbox, f.Policy.Reviewer, ""); err != nil {
 		return err
 	}
-	s := state{status: "Ready", items: map[string]bool{}, pending: map[string]pending{}, seen: map[string]bool{}}
+	s := state{status: "Ready", items: map[string]bool{}, pending: map[string]pending{}, seen: map[string]bool{}, diagnostic: diagnostic{ErrorKinds: map[string]int{}}}
 	for _, e := range f.Events {
 		if e.Kind == "" {
 			return errors.New("event kind is required")
 		}
 		key := e.Kind + ":" + e.ThreadID + ":" + e.TurnID + ":" + e.ItemID + ":" + e.RequestID
-		if s.seen[key] && e.Kind != "approval_replay" {
+		if s.seen[key] && e.Kind != "approval_replay" && e.Kind != "error" && e.Kind != "warning" {
 			closeState(&s)
 			continue
 		}
@@ -204,6 +245,9 @@ func validate(f Fixture) error {
 				return errors.New("unknown terminal state")
 			}
 			s.terminal = terminal
+			if e.Status == "failed" {
+				s.diagnostic.TerminalErrorKind = safeCodexErrorKind(e.ErrorKind)
+			}
 			s.turn = ""
 			if e.Status == "failed" {
 				s.status = "Failed"
@@ -215,6 +259,16 @@ func validate(f Fixture) error {
 				return errors.New("invalid approval tuple")
 			}
 			s.pending[e.RequestID] = pending{e.ThreadID, e.TurnID, e.ItemID, false}
+		case "error":
+			if s.status != "Running" || e.ThreadID != s.thread || e.TurnID != s.turn {
+				return errors.New("uncorrelated error notification")
+			}
+			recordError(&s.diagnostic, safeCodexErrorKind(e.ErrorKind), e.WillRetry)
+		case "warning":
+			if e.ThreadID != s.thread {
+				return errors.New("uncorrelated warning notification")
+			}
+			s.diagnostic.Warnings++
 		case "approval_denied":
 			p, ok := s.pending[e.RequestID]
 			if !ok || p.denied || p.thread != e.ThreadID || p.turn != e.TurnID || p.item != e.ItemID {
@@ -231,8 +285,8 @@ func validate(f Fixture) error {
 			return fmt.Errorf("unsupported event %q", e.Kind)
 		}
 	}
-	if s.status != f.Expect.Status || s.denied != f.Expect.Denied || s.rejected != f.Expect.Rejected || s.terminal != f.Expect.Terminal {
-		return fmt.Errorf("got status=%s denied=%d rejected=%d terminal=%s", s.status, s.denied, s.rejected, s.terminal)
+	if s.status != f.Expect.Status || s.denied != f.Expect.Denied || s.rejected != f.Expect.Rejected || s.terminal != f.Expect.Terminal || !sameKinds(s.diagnostic.ErrorKinds, f.Expect.ErrorKinds) || s.diagnostic.RetriableErrors != f.Expect.RetriableErrors || s.diagnostic.Warnings != f.Expect.Warnings || s.diagnostic.TerminalErrorKind != f.Expect.TerminalErrorKind {
+		return fmt.Errorf("got status=%s denied=%d rejected=%d terminal=%s diagnostics=%+v", s.status, s.denied, s.rejected, s.terminal, s.diagnostic)
 	}
 	return nil
 }
@@ -258,7 +312,7 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 	if err := os.MkdirAll(artifacts, 0755); err != nil {
 		return err
 	}
-	e := Evidence{Harness: "cas-01", Protocol: "stdio", Outcome: "Blocked", StartedAt: time.Now().UTC().Format(time.RFC3339), Durations: map[string]int64{}, Redaction: "method, timing, and SHA-256 request IDs only; no raw RPC, prompt, command, diff, stderr, or credentials"}
+	e := Evidence{Harness: "cas-01", Protocol: "stdio", Outcome: "Blocked", StartedAt: time.Now().UTC().Format(time.RFC3339), Durations: map[string]int64{}, Redaction: "method, timing, SHA-256 request IDs, and allow-listed diagnostic classes/counts only; no raw RPC, prompt, command, diff, stderr, or credentials"}
 	defer func() {
 		e.CompletedAt = time.Now().UTC().Format(time.RFC3339)
 		data, _ := json.MarshalIndent(e, "", "  ")
@@ -323,6 +377,7 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 	}
 	terminal, err := c.waitTurn(threadID, turnID)
 	e.MaterializationTerminal = terminal.classification
+	e.MaterializationDiagnostic = &terminal.diagnostic
 	if err != nil {
 		e.Blocker = "turn_completion"
 		e.MaterializationErrorKind = safeErrorKind(err)
@@ -370,35 +425,52 @@ func (c *Client) call(method string, params map[string]any) (map[string]any, err
 }
 func (c *Client) waitTurn(threadID, turnID string) (terminalState, error) {
 	deadline := time.Now().Add(2 * time.Minute)
+	diagnostic := diagnostic{ErrorKinds: map[string]int{}}
 	for time.Now().Before(deadline) {
 		if !c.scan.Scan() {
-			return terminalState{}, terminalError{kind: "transport_closed"}
+			return terminalState{diagnostic: diagnostic}, terminalError{kind: "transport_closed"}
 		}
 		var v map[string]any
 		if json.Unmarshal(c.scan.Bytes(), &v) != nil {
 			continue
 		}
-		audit := c.record("in", asString(v["method"]), fmt.Sprint(v["id"]))
-		if asString(v["method"]) != "turn/completed" {
+		method := asString(v["method"])
+		audit := c.record("in", method, fmt.Sprint(v["id"]))
+		params, _ := v["params"].(map[string]any)
+		switch method {
+		case "error":
+			if correlatedError(params, threadID, turnID) {
+				recordError(&diagnostic, notificationErrorKind(params), asBool(params["willRetry"]))
+			}
+			continue
+		case "warning":
+			if params != nil && asString(params["threadId"]) == threadID {
+				diagnostic.Warnings++
+			}
+			continue
+		case "turn/completed":
+		default:
 			continue
 		}
-		params, _ := v["params"].(map[string]any)
 		if params == nil {
 			audit.Terminal = "malformed"
-			return terminalState{classification: "malformed"}, terminalError{kind: "malformed_terminal"}
+			return terminalState{classification: "malformed", diagnostic: diagnostic}, terminalError{kind: "malformed_terminal"}
 		}
-		if asString(params["threadId"]) != threadID || nested(params, "turn", "id") != turnID {
+		if !correlated(params, threadID, turnID) {
 			audit.Terminal = "correlation_mismatch"
-			return terminalState{classification: "correlation_mismatch"}, terminalError{kind: "correlation_mismatch"}
+			return terminalState{classification: "correlation_mismatch", diagnostic: diagnostic}, terminalError{kind: "correlation_mismatch"}
 		}
 		classification, known := safeTurnTerminal(nested(params, "turn", "status"))
 		audit.Terminal = classification
-		if !known || classification != "completed" {
-			return terminalState{classification: classification}, terminalError{kind: "terminal_status_mismatch"}
+		if classification == "failed" {
+			diagnostic.TerminalErrorKind = turnErrorKind(params)
 		}
-		return terminalState{classification: classification}, nil
+		if !known || classification != "completed" {
+			return terminalState{classification: classification, diagnostic: diagnostic}, terminalError{kind: "terminal_status_mismatch"}
+		}
+		return terminalState{classification: classification, diagnostic: diagnostic}, nil
 	}
-	return terminalState{}, terminalError{kind: "timeout"}
+	return terminalState{diagnostic: diagnostic}, terminalError{kind: "timeout"}
 }
 func (c *Client) send(method string, params map[string]any) error {
 	return c.write(map[string]any{"jsonrpc": "2.0", "method": method, "params": params})
@@ -443,6 +515,85 @@ func safeTurnTerminal(status string) (string, bool) {
 		return "unexpected", false
 	}
 }
+func correlated(params map[string]any, threadID, turnID string) bool {
+	return params != nil && asString(params["threadId"]) == threadID && nested(params, "turn", "id") == turnID
+}
+func correlatedError(params map[string]any, threadID, turnID string) bool {
+	return params != nil && asString(params["threadId"]) == threadID && asString(params["turnId"]) == turnID
+}
+func notificationErrorKind(params map[string]any) string {
+	err, ok := params["error"].(map[string]any)
+	if !ok {
+		return "unknown"
+	}
+	return errorInfoKind(err)
+}
+func turnErrorKind(params map[string]any) string {
+	turn, ok := params["turn"].(map[string]any)
+	if !ok {
+		return "unknown"
+	}
+	err, found := turn["error"]
+	if !found || err == nil {
+		return "none"
+	}
+	errorObject, ok := err.(map[string]any)
+	if !ok {
+		return "unknown"
+	}
+	return errorInfoKind(errorObject)
+}
+func errorInfoKind(err map[string]any) string {
+	info, found := err["codexErrorInfo"]
+	if !found || info == nil {
+		return "none"
+	}
+	return safeCodexErrorKind(info)
+}
+func safeCodexErrorKind(value any) string {
+	if value == nil || value == "" {
+		return "none"
+	}
+	if kind, ok := value.(string); ok {
+		switch kind {
+		case "contextWindowExceeded", "sessionBudgetExceeded", "usageLimitExceeded", "serverOverloaded", "cyberPolicy", "internalServerError", "unauthorized", "badRequest", "threadRollbackFailed", "sandboxError", "other":
+			return kind
+		default:
+			return "unknown"
+		}
+	}
+	object, ok := value.(map[string]any)
+	if !ok {
+		return "unknown"
+	}
+	for _, kind := range []string{"httpConnectionFailed", "responseStreamConnectionFailed", "responseStreamDisconnected", "responseTooManyFailedAttempts", "activeTurnNotSteerable"} {
+		if _, found := object[kind]; found {
+			return kind
+		}
+	}
+	return "unknown"
+}
+func recordError(d *diagnostic, kind string, willRetry bool) {
+	if d.ErrorKinds == nil {
+		d.ErrorKinds = map[string]int{}
+	}
+	d.ErrorKinds[kind]++
+	if willRetry {
+		d.RetriableErrors++
+	}
+}
+func sameKinds(one, two map[string]int) bool {
+	if len(one) != len(two) {
+		return false
+	}
+	for kind, count := range one {
+		if two[kind] != count {
+			return false
+		}
+	}
+	return true
+}
+func asBool(v any) bool { b, _ := v.(bool); return b }
 func nested(v map[string]any, one, two string) string {
 	m, _ := v[one].(map[string]any)
 	return asString(m[two])
