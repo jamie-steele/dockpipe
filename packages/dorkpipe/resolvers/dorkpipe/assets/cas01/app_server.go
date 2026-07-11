@@ -268,6 +268,7 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 	c := Client{stdin: in, scan: scanner, next: 1, events: &e.Events}
 	started := time.Now()
 	if _, err = c.call("initialize", map[string]any{"clientInfo": map[string]any{"name": "dockpipe-cas01", "version": "0.1"}, "capabilities": map[string]any{"experimentalApi": false}}); err != nil {
+		e.Blocker = "initialize"
 		return errors.New("initialize failed without retaining server payload")
 	}
 	e.Durations["cold_initialize"] = time.Since(started).Milliseconds()
@@ -277,6 +278,7 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 	started = time.Now()
 	r, err := c.call("thread/start", map[string]any{"cwd": workspace, "sandbox": "workspace-write", "approvalPolicy": "untrusted", "approvalsReviewer": "user"})
 	if err != nil {
+		e.Blocker = "thread_start"
 		return errors.New("thread start failed without retaining server payload")
 	}
 	threadID := nested(r, "thread", "id")
@@ -286,9 +288,11 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 	e.Durations["thread_start"] = time.Since(started).Milliseconds()
 	started = time.Now()
 	if _, err = c.call("thread/read", map[string]any{"threadId": threadID, "includeTurns": false}); err != nil {
+		e.Blocker = "thread_read"
 		return errors.New("thread read failed without retaining server payload")
 	}
 	if _, err = c.call("thread/resume", map[string]any{"threadId": threadID, "cwd": workspace, "sandbox": "workspace-write", "approvalPolicy": "untrusted", "approvalsReviewer": "user"}); err != nil {
+		e.Blocker = "thread_resume"
 		return errors.New("thread resume failed without retaining server payload")
 	}
 	e.Durations["read_resume"] = time.Since(started).Milliseconds()
@@ -298,6 +302,7 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 	}
 	_, err = c.call("turn/start", map[string]any{"threadId": threadID, "cwd": workspace, "sandboxPolicy": map[string]any{"type": "workspaceWrite", "writableRoots": []string{workspace}, "networkAccess": false}, "approvalPolicy": "untrusted", "approvalsReviewer": "user", "input": []any{map[string]any{"type": "text", "text": "Reply only CAS01_OK. Do not use tools or change anything."}}})
 	if err != nil {
+		e.Blocker = "turn_start"
 		return errors.New("turn start failed without retaining server payload")
 	}
 	e.Outcome = "Started"
