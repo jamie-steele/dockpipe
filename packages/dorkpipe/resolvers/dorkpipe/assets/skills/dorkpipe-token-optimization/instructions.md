@@ -22,6 +22,10 @@ Keep routing precise while preserving repository-specific safety rules.
 - Avoid target-specific skill routing keys; use `skills`.
 - Keep forbidden artifacts centralized instead of repeated everywhere.
 
+## Completed slices
+
+When editing handoff guidance, use [Session Handoffs](../../../../../../../docs/agents/docs/session-handoffs.md) as the canonical checklist. The global AGENTS.md rule makes its commit question and compact next-slice prompt mandatory for every completed slice; do not duplicate the checklist here.
+
 ## Review Pass
 
 1. Identify which task types need the guidance.
