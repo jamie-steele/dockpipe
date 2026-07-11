@@ -112,7 +112,23 @@ On 2026-07-11, three workspace-sandboxed materialization probes reached a correl
 
 ### CAS-02 current decision
 
-CAS-02 adds the unused `packages/dorkpipe/lib/providersession` contract package and its package-owned documentation. It defines provider-neutral session identity, lifecycle states, contiguous event sequencing, safe normalized events, user-input and approval requests, cancellation intent, recovery reference, and an adapter interface. `Disconnected` is fail-closed and can return to `Ready` only through verified recovery; every human approval requires the complete process-incarnation, connection, session, interaction, activity, request, and one-time decision tuple. The contract carries references and summaries only—no provider protocol unions, raw payloads, credentials, or provider-specific error types. Its source-boundary test rejects provider protocol identifiers, and focused tests cover ordering/duplicate/stale/gap rejection, approval correlation, user-input/cancellation references, and recovery transitions. CAS-03+ retain all process supervision, transport, lifecycle execution, event normalization, approval delivery, persistence, audit, and Pipeon wiring.
+CAS-02 adds the unused `packages/dorkpipe/lib/providersession` contract package and its package-owned documentation. It defines provider-neutral session identity, lifecycle states, contiguous event sequencing, safe normalized events, user-input and approval requests, cancellation intent, recovery reference, and an adapter interface. `Disconnected` is fail-closed and can return to `Ready` only through verified recovery; every human approval requires the complete process-incarnation, connection, session, interaction, activity, request, and one-time decision tuple. The contract carries references and summaries only—no provider protocol unions, raw payloads, credentials, or provider-specific error types. Its source-boundary test rejects provider protocol identifiers, and focused tests cover ordering/duplicate/stale/gap rejection, approval correlation, user-input/cancellation references, and recovery transitions. CAS-03+ retain protocol lifecycle execution, event normalization, approval delivery, persistence, audit, and Pipeon wiring.
+
+### CAS-03 current decision
+
+CAS-03 adds the unused package-local `appserversupervisor` foundation. It directly owns one
+host-resident child with private stdio (no listener, socket, shell, fallback process, credentials,
+or raw-payload storage), observes JSONL framing only, and bounds startup, liveness, graceful
+shutdown, and kill escalation. Startup failure, child exit, closed or malformed stdout, transport
+loss, and deadline expiry each produce exactly one provider-neutral `providersession` state event:
+fail-closed `Disconnected` with a safe reason class. A stopped supervisor cannot start again, so it
+does not retry, resume, replay, or fall back. Native turns remain deferred: CAS-04+ must still set
+the pinned `gpt-5.6-terra`/`high` and the workspace-write, declared-root, network-disabled,
+user-review policy; host process placement itself grants none of those capabilities.
+
+Deferred to CAS-04+: all provider protocol initialization and request handling, thread/turn
+lifecycle, normalized provider events, approval delivery, interruption, persistence, audit,
+hardening, Pipeon migration, and CLI fallback.
 
 ## Likely impact map
 

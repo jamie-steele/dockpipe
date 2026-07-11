@@ -28,6 +28,10 @@ or cross-session application.
 
 A future App Server adapter maps its provider-specific thread to `SessionRef`, turn to
 `InteractionID`, item to `ActivityID`, and approval request to `RequestID`. It owns all protocol
-parsing and raw-payload handling; Pipeon receives only `providersession.Event` values. CAS-03+
-implement host process supervision, transport, lifecycle execution, normalization, approval relay,
-and persistence. This contract intentionally does none of those things.
+parsing and raw-payload handling; Pipeon receives only `providersession.Event` values.
+
+CAS-03 adds a package-local, host-resident child supervisor. It owns one direct child and private
+stdio, bounds startup/shutdown/kill/liveness, and projects startup failure, child exit, closed or
+malformed JSONL transport, and deadline expiry as a single normalized `disconnected` state event.
+It does not initialize a protocol, issue provider requests, start/resume threads or turns, persist
+raw payloads, relay approvals, or weaken the native turn policy that CAS-04+ must supply.
