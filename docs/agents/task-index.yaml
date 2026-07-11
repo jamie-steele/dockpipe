@@ -2,9 +2,6 @@ schema: 1
 description: AI entrypoint for the indexed cross-cutting backlog.
 
 tasks:
-  - id: TASK-001
-    topic: Operation results contract rollout
-    path: docs/agents/tasks/operation-results-contract.md
   - id: TASK-002
     topic: Orchestration validation and source walkers
     path: docs/agents/tasks/orchestration-validation.md
@@ -36,6 +33,9 @@ tasks:
     topic: Local Windows CI VM parity and guest tooling
     path: docs/agents/tasks/local-windows-ci-vm-parity.md
   - id: TASK-012
+  - id: TASK-013
+    topic: Codex App Server adapter for top-level orchestrators
+    path: docs/agents/tasks/codex-app-server-adapter.md
     topic: Pipeon startup, provisioning, and DorkPipe provider pools
     path: docs/agents/tasks/pipeon-startup-performance.md
 

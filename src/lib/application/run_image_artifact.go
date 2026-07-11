@@ -267,11 +267,20 @@ func persistMaterializedImageArtifactForRun(workdir, image string, artifact *dom
 	}
 	artifact.ArtifactState = "materialized"
 	if err := persistCachedImageArtifactForIsolate(workdir, image, artifact); err != nil {
-		fmt.Fprintf(os.Stderr, "[dockpipe] warning: image artifact cache write failed: %v\n", err)
+		logImageArtifactOperationResult("run.image_artifact.cache", image, err)
 	}
 	if err := persistImageArtifactIndexRecord(workdir, artifact); err != nil {
-		fmt.Fprintf(os.Stderr, "[dockpipe] warning: image artifact index write failed: %v\n", err)
+		logImageArtifactOperationResult("run.image_artifact.index", image, err)
 	}
+}
+
+func logImageArtifactOperationResult(unit, image string, err error) {
+	result := infrastructure.OperationResult{Unit: unit, Status: infrastructure.OperationStatusDone, DurationMs: 0, IDs: map[string]string{"artifact_state": "materialized", "image": strings.TrimSpace(image)}}
+	if err != nil {
+		result.Status = infrastructure.OperationStatusFail
+		result.Error = err.Error()
+	}
+	infrastructure.LogOperationResult(os.Stderr, result)
 }
 
 func loadCompiledImageArtifactForWorkflow(wfConfig, wfRoot string) (*domain.ImageArtifactManifest, error) {

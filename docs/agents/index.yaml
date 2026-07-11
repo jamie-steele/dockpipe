@@ -305,6 +305,7 @@ tasks:
       - AGENTS.md
       - docs/agents/docs/docs-system.md
       - docs/agents/runtime/safety-guardrails.md
+      - docs/agents/runtime/codex-sandbox-sessions.md
       - docs/agents/runtime/artifacts-and-mcp.md
     optional:
       - docs/runtime/vault.md

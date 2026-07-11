@@ -549,7 +549,7 @@ func runBlockingStep(o *runStepsOpts, i, n int, dockerEnv map[string]string) err
 			if artifact, err := buildImageArtifactManifest(o.repoRoot, strings.TrimSpace(o.wf.Name), "", stepRunPolicyID(step, i), runOpts.Image, buildDir, buildCtx, policyFingerprint, runStepImageArtifactProvenance(o.repoRoot, step)); err == nil {
 				persistMaterializedImageArtifactForRun(o.projectRoot, runOpts.Image, artifact)
 			} else {
-				fmt.Fprintf(os.Stderr, "[dockpipe] warning: image artifact manifest write skipped: %v\n", err)
+				logImageArtifactOperationResult("run.image_artifact.manifest", runOpts.Image, err)
 			}
 			imageDecision = "image: materialized image artifact for current run"
 		}
@@ -809,7 +809,7 @@ func prefetchDockerBuildsForBatch(o *runStepsOpts, from, to, n int, baseEnv, bas
 		if artifact, err := buildImageArtifactManifest(o.repoRoot, strings.TrimSpace(o.wf.Name), "", stepRunPolicyID(step, idx), runOpts.Image, buildDir, buildCtx, policyFingerprint, runStepImageArtifactProvenance(o.repoRoot, step)); err == nil {
 			persistMaterializedImageArtifactForRun(o.projectRoot, runOpts.Image, artifact)
 		} else {
-			fmt.Fprintf(os.Stderr, "[dockpipe] warning: image artifact manifest write skipped: %v\n", err)
+			logImageArtifactOperationResult("run.image_artifact.manifest", runOpts.Image, err)
 		}
 	}
 	return nil
