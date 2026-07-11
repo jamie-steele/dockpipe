@@ -33,6 +33,7 @@ type Expect struct {
 	Status   string
 	Denied   int
 	Rejected int
+	Terminal string
 }
 type Fixture struct {
 	Name   string
@@ -48,6 +49,7 @@ type pending struct {
 }
 type state struct {
 	status   string
+	terminal string
 	thread   string
 	turn     string
 	items    map[string]bool
@@ -61,18 +63,29 @@ type Audit struct {
 	Direction string `json:"direction"`
 	Method    string `json:"method"`
 	ID        string `json:"id,omitempty"`
+	Terminal  string `json:"terminal,omitempty"`
 }
 type Evidence struct {
-	Harness     string           `json:"harness"`
-	Protocol    string           `json:"protocol"`
-	Outcome     string           `json:"outcome"`
-	StartedAt   string           `json:"startedAt"`
-	CompletedAt string           `json:"completedAt"`
-	Durations   map[string]int64 `json:"durationsMs"`
-	Events      []Audit          `json:"events"`
-	Redaction   string           `json:"redaction"`
-	Blocker     string           `json:"blocker,omitempty"`
+	Harness                  string           `json:"harness"`
+	Protocol                 string           `json:"protocol"`
+	Outcome                  string           `json:"outcome"`
+	StartedAt                string           `json:"startedAt"`
+	CompletedAt              string           `json:"completedAt"`
+	Durations                map[string]int64 `json:"durationsMs"`
+	Events                   []Audit          `json:"events"`
+	Redaction                string           `json:"redaction"`
+	Blocker                  string           `json:"blocker,omitempty"`
+	MaterializationTerminal  string           `json:"materializationTerminal,omitempty"`
+	MaterializationErrorKind string           `json:"materializationErrorKind,omitempty"`
+	ResumeTerminal           string           `json:"resumeTerminal,omitempty"`
 }
+type terminalState struct {
+	classification string
+}
+type terminalError struct{ kind string }
+
+func (e terminalError) Error() string { return e.kind }
+
 type Client struct {
 	stdin  io.WriteCloser
 	scan   *bufio.Scanner
@@ -186,9 +199,11 @@ func validate(f Fixture) error {
 			if s.status != "Running" || e.ThreadID != s.thread || e.TurnID != s.turn {
 				return errors.New("unordered terminal turn")
 			}
-			if e.Status != "completed" && e.Status != "interrupted" && e.Status != "failed" {
+			terminal, ok := safeTurnTerminal(e.Status)
+			if !ok {
 				return errors.New("unknown terminal state")
 			}
+			s.terminal = terminal
 			s.turn = ""
 			if e.Status == "failed" {
 				s.status = "Failed"
@@ -216,8 +231,8 @@ func validate(f Fixture) error {
 			return fmt.Errorf("unsupported event %q", e.Kind)
 		}
 	}
-	if s.status != f.Expect.Status || s.denied != f.Expect.Denied || s.rejected != f.Expect.Rejected {
-		return fmt.Errorf("got status=%s denied=%d rejected=%d", s.status, s.denied, s.rejected)
+	if s.status != f.Expect.Status || s.denied != f.Expect.Denied || s.rejected != f.Expect.Rejected || s.terminal != f.Expect.Terminal {
+		return fmt.Errorf("got status=%s denied=%d rejected=%d terminal=%s", s.status, s.denied, s.rejected, s.terminal)
 	}
 	return nil
 }
@@ -291,21 +306,38 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 		e.Blocker = "thread_read"
 		return errors.New("thread read failed without retaining server payload")
 	}
-	if _, err = c.call("thread/resume", map[string]any{"threadId": threadID, "cwd": workspace, "sandbox": "workspace-write", "approvalPolicy": "untrusted", "approvalsReviewer": "user"}); err != nil {
-		e.Blocker = "thread_resume"
-		return errors.New("thread resume failed without retaining server payload")
-	}
-	e.Durations["read_resume"] = time.Since(started).Milliseconds()
 	if !turn {
-		e.Outcome = "Ready"
-		return nil
+		e.Blocker = "materialization_turn"
+		return errors.New("safe resume requires a completed materialization turn")
 	}
-	_, err = c.call("turn/start", map[string]any{"threadId": threadID, "cwd": workspace, "sandboxPolicy": map[string]any{"type": "workspaceWrite", "writableRoots": []string{workspace}, "networkAccess": false}, "approvalPolicy": "untrusted", "approvalsReviewer": "user", "input": []any{map[string]any{"type": "text", "text": "Reply only CAS01_OK. Do not use tools or change anything."}}})
+	started = time.Now()
+	r, err = c.call("turn/start", map[string]any{"threadId": threadID, "cwd": workspace, "sandboxPolicy": map[string]any{"type": "workspaceWrite", "writableRoots": []string{workspace}, "networkAccess": false}, "approvalPolicy": "untrusted", "approvalsReviewer": "user", "input": []any{map[string]any{"type": "text", "text": "Reply only CAS01_OK. Do not use tools or change anything."}}})
 	if err != nil {
 		e.Blocker = "turn_start"
 		return errors.New("turn start failed without retaining server payload")
 	}
-	e.Outcome = "Started"
+	turnID := nested(r, "turn", "id")
+	if turnID == "" {
+		e.Blocker = "turn_start"
+		return errors.New("turn start returned no ID")
+	}
+	terminal, err := c.waitTurn(threadID, turnID)
+	e.MaterializationTerminal = terminal.classification
+	if err != nil {
+		e.Blocker = "turn_completion"
+		e.MaterializationErrorKind = safeErrorKind(err)
+		return errors.New("turn completion failed without retaining server payload")
+	}
+	e.Durations["materialization_turn"] = time.Since(started).Milliseconds()
+	started = time.Now()
+	if _, err = c.call("thread/resume", map[string]any{"threadId": threadID}); err != nil {
+		e.Blocker = "thread_resume"
+		e.ResumeTerminal = safeErrorKind(err)
+		return errors.New("thread resume failed without retaining server payload")
+	}
+	e.ResumeTerminal = "result"
+	e.Durations["read_resume"] = time.Since(started).Milliseconds()
+	e.Outcome = "Ready"
 	return nil
 }
 func (c *Client) call(method string, params map[string]any) (map[string]any, error) {
@@ -325,14 +357,48 @@ func (c *Client) call(method string, params map[string]any) (map[string]any, err
 		}
 		if n, ok := v["id"].(float64); ok && int(n) == id {
 			if _, failed := v["error"]; failed {
+				c.recordTerminal(v["id"], "error")
 				return nil, errors.New("server rejected request")
 			}
+			c.recordTerminal(v["id"], "result")
 			r, _ := v["result"].(map[string]any)
 			return r, nil
 		}
 		c.record("in", asString(v["method"]), fmt.Sprint(v["id"]))
 	}
 	return nil, errors.New("request timed out")
+}
+func (c *Client) waitTurn(threadID, turnID string) (terminalState, error) {
+	deadline := time.Now().Add(2 * time.Minute)
+	for time.Now().Before(deadline) {
+		if !c.scan.Scan() {
+			return terminalState{}, terminalError{kind: "transport_closed"}
+		}
+		var v map[string]any
+		if json.Unmarshal(c.scan.Bytes(), &v) != nil {
+			continue
+		}
+		audit := c.record("in", asString(v["method"]), fmt.Sprint(v["id"]))
+		if asString(v["method"]) != "turn/completed" {
+			continue
+		}
+		params, _ := v["params"].(map[string]any)
+		if params == nil {
+			audit.Terminal = "malformed"
+			return terminalState{classification: "malformed"}, terminalError{kind: "malformed_terminal"}
+		}
+		if asString(params["threadId"]) != threadID || nested(params, "turn", "id") != turnID {
+			audit.Terminal = "correlation_mismatch"
+			return terminalState{classification: "correlation_mismatch"}, terminalError{kind: "correlation_mismatch"}
+		}
+		classification, known := safeTurnTerminal(nested(params, "turn", "status"))
+		audit.Terminal = classification
+		if !known || classification != "completed" {
+			return terminalState{classification: classification}, terminalError{kind: "terminal_status_mismatch"}
+		}
+		return terminalState{classification: classification}, nil
+	}
+	return terminalState{}, terminalError{kind: "timeout"}
 }
 func (c *Client) send(method string, params map[string]any) error {
 	return c.write(map[string]any{"jsonrpc": "2.0", "method": method, "params": params})
@@ -346,8 +412,36 @@ func (c *Client) write(v map[string]any) error {
 	_, err = c.stdin.Write(append(data, '\n'))
 	return err
 }
-func (c *Client) record(direction, method, id string) {
+func (c *Client) record(direction, method, id string) *Audit {
 	*c.events = append(*c.events, Audit{Sequence: len(*c.events) + 1, Direction: direction, Method: method, ID: digest(id)})
+	return &(*c.events)[len(*c.events)-1]
+}
+func (c *Client) recordTerminal(id any, terminal string) {
+	*c.events = append(*c.events, Audit{Sequence: len(*c.events) + 1, Direction: "in", Method: "response", ID: digest(fmt.Sprint(id)), Terminal: terminal})
+}
+func safeErrorKind(err error) string {
+	var terminal terminalError
+	if errors.As(err, &terminal) {
+		return terminal.kind
+	}
+	switch err.Error() {
+	case "server rejected request":
+		return "error"
+	case "transport closed":
+		return "transport_closed"
+	case "request timed out":
+		return "timeout"
+	default:
+		return "client_error"
+	}
+}
+func safeTurnTerminal(status string) (string, bool) {
+	switch status {
+	case "completed", "interrupted", "failed":
+		return status, true
+	default:
+		return "unexpected", false
+	}
 }
 func nested(v map[string]any, one, two string) string {
 	m, _ := v[one].(map[string]any)
