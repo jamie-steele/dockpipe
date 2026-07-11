@@ -13,11 +13,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 const (
-	cas01Model    = "gpt-5.5"
+	cas01Model    = "gpt-5.6-terra"
 	cas01Provider = "openai"
 	cas01Effort   = "high"
 )
@@ -81,6 +82,11 @@ type Audit struct {
 type Evidence struct {
 	Harness                   string           `json:"harness"`
 	Protocol                  string           `json:"protocol"`
+	CodexVersion              string           `json:"codexVersion"`
+	SelectedModel             string           `json:"selectedModel"`
+	SelectedReasoningEffort   string           `json:"selectedReasoningEffort"`
+	CatalogVerified           bool             `json:"catalogVerified"`
+	AccountMetadata           string           `json:"accountMetadata,omitempty"`
 	Outcome                   string           `json:"outcome"`
 	StartedAt                 string           `json:"startedAt"`
 	CompletedAt               string           `json:"completedAt"`
@@ -91,6 +97,7 @@ type Evidence struct {
 	MaterializationTerminal   string           `json:"materializationTerminal,omitempty"`
 	MaterializationErrorKind  string           `json:"materializationErrorKind,omitempty"`
 	ResumeTerminal            string           `json:"resumeTerminal,omitempty"`
+	FailureReconciliation     string           `json:"failureReconciliation,omitempty"`
 	MaterializationDiagnostic *diagnostic      `json:"materializationDiagnostic,omitempty"`
 }
 type terminalState struct {
@@ -127,6 +134,7 @@ func main() {
 	effort := flag.String("reasoning-effort", cas01Effort, "reasoning effort")
 	turn := flag.Bool("start-turn", false, "start a cloud-backed turn")
 	ack := flag.Bool("ack-cloud-spend", false, "acknowledge cloud-backed work")
+	accountMetadata := flag.Bool("account-metadata", false, "record only whether account/read succeeds")
 	flag.Parse()
 	var err error
 	switch *mode {
@@ -137,7 +145,7 @@ func main() {
 	case "policy":
 		err = policy(*sandbox, *reviewer, *method, *model, *effort)
 	case "live":
-		err = live(*artifacts, *codex, *workspace, *turn, *ack)
+		err = live(*artifacts, *codex, *workspace, *model, *effort, *turn, *ack, *accountMetadata)
 	default:
 		err = fmt.Errorf("unsupported mode %q", *mode)
 	}
@@ -156,13 +164,13 @@ func policy(sandbox, reviewer, method, model, effort string) error {
 	if method == "thread/shellCommand" {
 		return errors.New("thread shell command is forbidden")
 	}
-	if model != cas01Model || effort != cas01Effort {
-		return errors.New("only gpt-5.5 with high reasoning is permitted")
+	if model == "" || effort == "" {
+		return errors.New("model and reasoning effort are required")
 	}
-	if err := verifyModelCatalog(map[string]any{"data": []any{map[string]any{"id": cas01Model, "supportedReasoningEfforts": []any{map[string]any{"reasoningEffort": cas01Effort}}}}}); err != nil {
+	if err := verifyModelCatalog(map[string]any{"data": []any{map[string]any{"id": model, "supportedReasoningEfforts": []any{map[string]any{"reasoningEffort": effort}}}}}, model, effort); err != nil {
 		return err
 	}
-	if err := validatePinnedRequests(); err != nil {
+	if err := validatePinnedRequests(model, effort); err != nil {
 		return err
 	}
 	return nil
@@ -210,6 +218,18 @@ func validateDiagnostics() error {
 	terminal := map[string]any{"turn": map[string]any{"error": map[string]any{"codexErrorInfo": "sandboxError"}}}
 	if turnErrorKind(terminal) != "sandboxError" || safeCodexErrorKind(map[string]any{"unrecognized": map[string]any{}}) != "unknown" {
 		return errors.New("terminal diagnostic classification failed")
+	}
+	if !correlatedModelReroute(map[string]any{"threadId": "thread-A", "turnId": "turn-A"}, "thread-A", "turn-A") || correlatedModelReroute(map[string]any{"threadId": "thread-B", "turnId": "turn-A"}, "thread-A", "turn-A") {
+		return errors.New("model reroute correlation failed")
+	}
+	if !mayReconcileFailedTerminal("failed") || mayReconcileFailedTerminal("completed") || mayReconcileFailedTerminal("interrupted") || mayReconcileFailedTerminal("timeout") {
+		return errors.New("failure reconciliation gate failed")
+	}
+	if version, ok := safeCodexVersion("codex-cli 0.144.1"); !ok || version != "codex-cli 0.144.1" {
+		return errors.New("codex version classification failed")
+	}
+	if _, ok := safeCodexVersion("unexpected version output"); ok {
+		return errors.New("unsafe codex version was accepted")
 	}
 	fmt.Println("cas01 diagnostics OK")
 	return nil
@@ -296,7 +316,7 @@ func validate(f Fixture) error {
 			s.denied++
 		case "approval_replay", "approval_cross_session":
 			s.rejected++
-		case "malformed", "duplicate", "reordered", "stale", "child_died", "shutdown", "transport_lost":
+		case "model_rerouted", "malformed", "duplicate", "reordered", "stale", "child_died", "shutdown", "transport_lost":
 			closeState(&s)
 		default:
 			return fmt.Errorf("unsupported event %q", e.Kind)
@@ -319,7 +339,7 @@ func closeState(s *state) {
 		s.status = "Disconnected"
 	}
 }
-func live(artifacts, codex, workspace string, turn, ack bool) error {
+func live(artifacts, codex, workspace, model, effort string, turn, ack, accountMetadata bool) error {
 	if !filepath.IsAbs(artifacts) || !filepath.IsAbs(codex) || !filepath.IsAbs(workspace) {
 		return errors.New("artifacts, codex, and workspace must be absolute")
 	}
@@ -329,12 +349,18 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 	if err := os.MkdirAll(artifacts, 0755); err != nil {
 		return err
 	}
-	e := Evidence{Harness: "cas-01", Protocol: "stdio", Outcome: "Blocked", StartedAt: time.Now().UTC().Format(time.RFC3339), Durations: map[string]int64{}, Redaction: "method, timing, SHA-256 request IDs, and allow-listed diagnostic classes/counts only; no raw RPC, prompt, command, diff, stderr, or credentials"}
+	e := Evidence{Harness: "cas-01", Protocol: "stdio", SelectedModel: model, SelectedReasoningEffort: effort, Outcome: "Blocked", StartedAt: time.Now().UTC().Format(time.RFC3339), Durations: map[string]int64{}, Redaction: "method, timing, selected model policy, account-read success/failure class, SHA-256 request IDs, and allow-listed diagnostic classes/counts only; no raw RPC, account payload, prompt, command, diff, stderr, or credentials"}
 	defer func() {
 		e.CompletedAt = time.Now().UTC().Format(time.RFC3339)
 		data, _ := json.MarshalIndent(e, "", "  ")
 		_ = os.WriteFile(filepath.Join(artifacts, "cas01-live-evidence.json"), append(data, '\n'), 0600)
 	}()
+	version, err := readCodexVersion(codex)
+	if err != nil {
+		e.Blocker = "codex_version"
+		return errors.New("codex version could not be recorded without retaining command output")
+	}
+	e.CodexVersion = version
 	cmd := exec.Command(codex, "app-server", "--stdio")
 	in, err := cmd.StdinPipe()
 	if err != nil {
@@ -361,17 +387,30 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 	if err = c.send("initialized", map[string]any{}); err != nil {
 		return err
 	}
+	if accountMetadata {
+		if _, err = c.call("account/read", map[string]any{}); err != nil {
+			e.AccountMetadata = safeErrorKind(err)
+			e.Blocker = "account_metadata"
+			return errors.New("account metadata failed without retaining server payload")
+		}
+		e.AccountMetadata = "result"
+	}
 	models, err := c.call("model/list", map[string]any{})
 	if err != nil {
 		e.Blocker = "model_policy"
 		return errors.New("model catalog failed without retaining server payload")
 	}
-	if err = verifyModelCatalog(models); err != nil {
+	if err = policy("workspace-write", "user", "", model, effort); err != nil {
 		e.Blocker = "model_policy"
-		return errors.New("gpt-5.5 high is unavailable; turn was not started")
+		return errors.New("selected model policy is invalid; turn was not started")
 	}
+	if err = verifyModelCatalog(models, model, effort); err != nil {
+		e.Blocker = "model_policy"
+		return errors.New("selected model policy is unavailable; turn was not started")
+	}
+	e.CatalogVerified = true
 	started = time.Now()
-	r, err := c.call("thread/start", threadStartParams(workspace))
+	r, err := c.call("thread/start", threadStartParams(workspace, model, effort))
 	if err != nil {
 		e.Blocker = "thread_start"
 		return errors.New("thread start failed without retaining server payload")
@@ -387,11 +426,15 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 		return errors.New("thread read failed without retaining server payload")
 	}
 	if !turn {
+		if accountMetadata {
+			e.Outcome = "MetadataReady"
+			return nil
+		}
 		e.Blocker = "materialization_turn"
 		return errors.New("safe resume requires a completed materialization turn")
 	}
 	started = time.Now()
-	r, err = c.call("turn/start", turnStartParams(threadID, workspace))
+	r, err = c.call("turn/start", turnStartParams(threadID, workspace, model, effort))
 	if err != nil {
 		e.Blocker = "turn_start"
 		return errors.New("turn start failed without retaining server payload")
@@ -407,6 +450,13 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 	if err != nil {
 		e.Blocker = "turn_completion"
 		e.MaterializationErrorKind = safeErrorKind(err)
+		if mayReconcileFailedTerminal(terminal.classification) {
+			if _, readErr := c.call("thread/read", map[string]any{"threadId": threadID, "includeTurns": false}); readErr != nil {
+				e.FailureReconciliation = safeErrorKind(readErr)
+			} else {
+				e.FailureReconciliation = "result"
+			}
+		}
 		return errors.New("turn completion failed without retaining server payload")
 	}
 	e.Durations["materialization_turn"] = time.Since(started).Milliseconds()
@@ -421,17 +471,28 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 	e.Outcome = "Ready"
 	return nil
 }
-func threadStartParams(workspace string) map[string]any {
-	return map[string]any{"cwd": workspace, "sandbox": "workspace-write", "approvalPolicy": "untrusted", "approvalsReviewer": "user", "model": cas01Model, "modelProvider": cas01Provider, "effort": cas01Effort}
+func threadStartParams(workspace, model, effort string) map[string]any {
+	return map[string]any{"cwd": workspace, "sandbox": "workspace-write", "approvalPolicy": "untrusted", "approvalsReviewer": "user", "model": model, "modelProvider": cas01Provider, "effort": effort}
 }
-func turnStartParams(threadID, workspace string) map[string]any {
-	return map[string]any{"threadId": threadID, "cwd": workspace, "sandboxPolicy": map[string]any{"type": "workspaceWrite", "writableRoots": []string{workspace}, "networkAccess": false}, "approvalPolicy": "untrusted", "approvalsReviewer": "user", "model": cas01Model, "effort": cas01Effort, "input": []any{map[string]any{"type": "text", "text": "Reply only CAS01_OK. Do not use tools or change anything."}}}
+func turnStartParams(threadID, workspace, model, effort string) map[string]any {
+	return map[string]any{"threadId": threadID, "cwd": workspace, "sandboxPolicy": map[string]any{"type": "workspaceWrite", "writableRoots": []string{workspace}, "networkAccess": false}, "approvalPolicy": "untrusted", "approvalsReviewer": "user", "model": model, "effort": effort, "input": []any{map[string]any{"type": "text", "text": "Reply only CAS01_OK. Do not use tools or change anything."}}}
 }
-func validatePinnedRequests() error {
-	thread := threadStartParams("/workspace")
-	turn := turnStartParams("thread", "/workspace")
-	if asString(thread["model"]) != cas01Model || asString(thread["modelProvider"]) != cas01Provider || asString(thread["effort"]) != cas01Effort || asString(turn["model"]) != cas01Model || asString(turn["effort"]) != cas01Effort {
+func validatePinnedRequests(model, effort string) error {
+	thread := threadStartParams("/workspace", model, effort)
+	turn := turnStartParams("thread", "/workspace", model, effort)
+	if asString(thread["model"]) != model || asString(thread["modelProvider"]) != cas01Provider || asString(thread["effort"]) != effort || asString(turn["model"]) != model || asString(turn["effort"]) != effort {
 		return errors.New("pinned model policy is incomplete")
+	}
+	if asString(thread["sandbox"]) != "workspace-write" || asString(thread["approvalPolicy"]) != "untrusted" || asString(thread["approvalsReviewer"]) != "user" || asString(turn["approvalPolicy"]) != "untrusted" || asString(turn["approvalsReviewer"]) != "user" {
+		return errors.New("thread and turn safety policy is incomplete")
+	}
+	sandbox, ok := turn["sandboxPolicy"].(map[string]any)
+	if !ok || asString(sandbox["type"]) != "workspaceWrite" || asBool(sandbox["networkAccess"]) {
+		return errors.New("turn sandbox policy is incomplete")
+	}
+	roots, ok := sandbox["writableRoots"].([]string)
+	if !ok || len(roots) != 1 || roots[0] != "/workspace" {
+		return errors.New("turn writable roots are incomplete")
 	}
 	for _, params := range []map[string]any{thread, turn} {
 		for key := range params {
@@ -442,14 +503,14 @@ func validatePinnedRequests() error {
 	}
 	return nil
 }
-func verifyModelCatalog(result map[string]any) error {
+func verifyModelCatalog(result map[string]any, selectedModel, selectedEffort string) error {
 	models, ok := result["data"].([]any)
 	if !ok {
 		return errors.New("model catalog has no data")
 	}
 	for _, entry := range models {
 		model, ok := entry.(map[string]any)
-		if !ok || (asString(model["id"]) != cas01Model && asString(model["model"]) != cas01Model) {
+		if !ok || (asString(model["id"]) != selectedModel && asString(model["model"]) != selectedModel) {
 			continue
 		}
 		efforts, ok := model["supportedReasoningEfforts"].([]any)
@@ -458,12 +519,12 @@ func verifyModelCatalog(result map[string]any) error {
 		}
 		for _, entry := range efforts {
 			effort, _ := entry.(map[string]any)
-			if asString(effort["reasoningEffort"]) == cas01Effort {
+			if asString(effort["reasoningEffort"]) == selectedEffort {
 				return nil
 			}
 		}
 	}
-	return errors.New("gpt-5.5 high is not available")
+	return errors.New("selected model and reasoning effort are not available")
 }
 func (c *Client) call(method string, params map[string]any) (map[string]any, error) {
 	id := c.next
@@ -514,7 +575,7 @@ func (c *Client) waitTurn(threadID, turnID string) (terminalState, error) {
 			}
 			continue
 		case "model/rerouted":
-			if params != nil && asString(params["threadId"]) == threadID && asString(params["turnId"]) == turnID {
+			if correlatedModelReroute(params, threadID, turnID) {
 				audit.Terminal = "model_rerouted"
 				return terminalState{classification: "model_rerouted", diagnostic: diagnostic}, terminalError{kind: "model_rerouted"}
 			}
@@ -596,6 +657,33 @@ func correlated(params map[string]any, threadID, turnID string) bool {
 }
 func correlatedError(params map[string]any, threadID, turnID string) bool {
 	return params != nil && asString(params["threadId"]) == threadID && asString(params["turnId"]) == turnID
+}
+func correlatedModelReroute(params map[string]any, threadID, turnID string) bool {
+	return params != nil && asString(params["threadId"]) == threadID && asString(params["turnId"]) == turnID
+}
+func mayReconcileFailedTerminal(classification string) bool { return classification == "failed" }
+func readCodexVersion(codex string) (string, error) {
+	output, err := exec.Command(codex, "--version").Output()
+	if err != nil {
+		return "", err
+	}
+	version, ok := safeCodexVersion(string(output))
+	if !ok {
+		return "", errors.New("unexpected codex version format")
+	}
+	return version, nil
+}
+func safeCodexVersion(raw string) (string, bool) {
+	version := strings.TrimSpace(raw)
+	if !strings.HasPrefix(version, "codex-cli ") || len(version) > 64 {
+		return "", false
+	}
+	for _, r := range version {
+		if !(r == ' ' || r == '.' || r == '-' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z') {
+			return "", false
+		}
+	}
+	return version, true
 }
 func notificationErrorKind(params map[string]any) string {
 	err, ok := params["error"].(map[string]any)
