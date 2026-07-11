@@ -108,7 +108,7 @@ Rollback disables adapter for new sessions. Existing App Server sessions become 
 
 ### CAS-01 current evidence
 
-On 2026-07-11, one approved materialization probe reached a correlated `turn/completed` terminal event classified as `failed`; the harness halted before `thread/resume`. The package-local harness preserves only redacted evidence at `bin/.dockpipe/workflows/cas.01.app-server/artifacts/cas01-live-evidence.json` and now records allow-listed terminal/error classes plus retry and warning counts for a future approved diagnostic probe. The failure cause and a safe successful resume remain unproven.
+On 2026-07-11, one approved materialization probe reached a correlated `turn/completed` terminal event classified as `failed`; the harness halted before `thread/resume`. The package-local harness preserves only redacted evidence at `bin/.dockpipe/workflows/cas.01.app-server/artifacts/cas01-live-evidence.json` and now records allow-listed terminal/error classes plus retry and warning counts for a future approved diagnostic probe. A future probe is fail-closed to the explicit `gpt-5.5` / `high` policy: it verifies that the initialized server advertises that model and effort before starting a thread, pins them on thread and turn start, and halts if a model-reroute event occurs. The failure cause and a safe successful resume remain unproven.
 
 ## Likely impact map
 

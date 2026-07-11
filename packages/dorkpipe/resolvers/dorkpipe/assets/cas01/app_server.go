@@ -16,6 +16,12 @@ import (
 	"time"
 )
 
+const (
+	cas01Model    = "gpt-5.5"
+	cas01Provider = "openai"
+	cas01Effort   = "high"
+)
+
 type Event struct {
 	Kind      string
 	ThreadID  string
@@ -117,6 +123,8 @@ func main() {
 	artifacts := flag.String("artifacts", "", "absolute artifact directory")
 	codex := flag.String("codex", "", "absolute Codex CLI path")
 	workspace := flag.String("workspace", "", "absolute workspace")
+	model := flag.String("model", cas01Model, "model")
+	effort := flag.String("reasoning-effort", cas01Effort, "reasoning effort")
 	turn := flag.Bool("start-turn", false, "start a cloud-backed turn")
 	ack := flag.Bool("ack-cloud-spend", false, "acknowledge cloud-backed work")
 	flag.Parse()
@@ -127,7 +135,7 @@ func main() {
 	case "diagnostics":
 		err = validateDiagnostics()
 	case "policy":
-		err = policy(*sandbox, *reviewer, *method)
+		err = policy(*sandbox, *reviewer, *method, *model, *effort)
 	case "live":
 		err = live(*artifacts, *codex, *workspace, *turn, *ack)
 	default:
@@ -138,7 +146,7 @@ func main() {
 		os.Exit(1)
 	}
 }
-func policy(sandbox, reviewer, method string) error {
+func policy(sandbox, reviewer, method, model, effort string) error {
 	if sandbox != "workspace-write" {
 		return errors.New("only workspace-write is permitted")
 	}
@@ -147,6 +155,15 @@ func policy(sandbox, reviewer, method string) error {
 	}
 	if method == "thread/shellCommand" {
 		return errors.New("thread shell command is forbidden")
+	}
+	if model != cas01Model || effort != cas01Effort {
+		return errors.New("only gpt-5.5 with high reasoning is permitted")
+	}
+	if err := verifyModelCatalog(map[string]any{"data": []any{map[string]any{"id": cas01Model, "supportedReasoningEfforts": []any{map[string]any{"reasoningEffort": cas01Effort}}}}}); err != nil {
+		return err
+	}
+	if err := validatePinnedRequests(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -201,7 +218,7 @@ func validate(f Fixture) error {
 	if f.Name == "" || len(f.Events) == 0 || f.Policy.Shell {
 		return errors.New("fixture name, events, and no-shell policy are required")
 	}
-	if err := policy(f.Policy.Sandbox, f.Policy.Reviewer, ""); err != nil {
+	if err := policy(f.Policy.Sandbox, f.Policy.Reviewer, "", cas01Model, cas01Effort); err != nil {
 		return err
 	}
 	s := state{status: "Ready", items: map[string]bool{}, pending: map[string]pending{}, seen: map[string]bool{}, diagnostic: diagnostic{ErrorKinds: map[string]int{}}}
@@ -344,8 +361,17 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 	if err = c.send("initialized", map[string]any{}); err != nil {
 		return err
 	}
+	models, err := c.call("model/list", map[string]any{})
+	if err != nil {
+		e.Blocker = "model_policy"
+		return errors.New("model catalog failed without retaining server payload")
+	}
+	if err = verifyModelCatalog(models); err != nil {
+		e.Blocker = "model_policy"
+		return errors.New("gpt-5.5 high is unavailable; turn was not started")
+	}
 	started = time.Now()
-	r, err := c.call("thread/start", map[string]any{"cwd": workspace, "sandbox": "workspace-write", "approvalPolicy": "untrusted", "approvalsReviewer": "user"})
+	r, err := c.call("thread/start", threadStartParams(workspace))
 	if err != nil {
 		e.Blocker = "thread_start"
 		return errors.New("thread start failed without retaining server payload")
@@ -365,7 +391,7 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 		return errors.New("safe resume requires a completed materialization turn")
 	}
 	started = time.Now()
-	r, err = c.call("turn/start", map[string]any{"threadId": threadID, "cwd": workspace, "sandboxPolicy": map[string]any{"type": "workspaceWrite", "writableRoots": []string{workspace}, "networkAccess": false}, "approvalPolicy": "untrusted", "approvalsReviewer": "user", "input": []any{map[string]any{"type": "text", "text": "Reply only CAS01_OK. Do not use tools or change anything."}}})
+	r, err = c.call("turn/start", turnStartParams(threadID, workspace))
 	if err != nil {
 		e.Blocker = "turn_start"
 		return errors.New("turn start failed without retaining server payload")
@@ -394,6 +420,50 @@ func live(artifacts, codex, workspace string, turn, ack bool) error {
 	e.Durations["read_resume"] = time.Since(started).Milliseconds()
 	e.Outcome = "Ready"
 	return nil
+}
+func threadStartParams(workspace string) map[string]any {
+	return map[string]any{"cwd": workspace, "sandbox": "workspace-write", "approvalPolicy": "untrusted", "approvalsReviewer": "user", "model": cas01Model, "modelProvider": cas01Provider, "effort": cas01Effort}
+}
+func turnStartParams(threadID, workspace string) map[string]any {
+	return map[string]any{"threadId": threadID, "cwd": workspace, "sandboxPolicy": map[string]any{"type": "workspaceWrite", "writableRoots": []string{workspace}, "networkAccess": false}, "approvalPolicy": "untrusted", "approvalsReviewer": "user", "model": cas01Model, "effort": cas01Effort, "input": []any{map[string]any{"type": "text", "text": "Reply only CAS01_OK. Do not use tools or change anything."}}}
+}
+func validatePinnedRequests() error {
+	thread := threadStartParams("/workspace")
+	turn := turnStartParams("thread", "/workspace")
+	if asString(thread["model"]) != cas01Model || asString(thread["modelProvider"]) != cas01Provider || asString(thread["effort"]) != cas01Effort || asString(turn["model"]) != cas01Model || asString(turn["effort"]) != cas01Effort {
+		return errors.New("pinned model policy is incomplete")
+	}
+	for _, params := range []map[string]any{thread, turn} {
+		for key := range params {
+			if key == "fallbackModel" || key == "fallbackModels" || key == "fallbackProvider" {
+				return errors.New("fallback is forbidden")
+			}
+		}
+	}
+	return nil
+}
+func verifyModelCatalog(result map[string]any) error {
+	models, ok := result["data"].([]any)
+	if !ok {
+		return errors.New("model catalog has no data")
+	}
+	for _, entry := range models {
+		model, ok := entry.(map[string]any)
+		if !ok || (asString(model["id"]) != cas01Model && asString(model["model"]) != cas01Model) {
+			continue
+		}
+		efforts, ok := model["supportedReasoningEfforts"].([]any)
+		if !ok {
+			break
+		}
+		for _, entry := range efforts {
+			effort, _ := entry.(map[string]any)
+			if asString(effort["reasoningEffort"]) == cas01Effort {
+				return nil
+			}
+		}
+	}
+	return errors.New("gpt-5.5 high is not available")
 }
 func (c *Client) call(method string, params map[string]any) (map[string]any, error) {
 	id := c.next
@@ -441,6 +511,12 @@ func (c *Client) waitTurn(threadID, turnID string) (terminalState, error) {
 		case "error":
 			if correlatedError(params, threadID, turnID) {
 				recordError(&diagnostic, notificationErrorKind(params), asBool(params["willRetry"]))
+			}
+			continue
+		case "model/rerouted":
+			if params != nil && asString(params["threadId"]) == threadID && asString(params["turnId"]) == turnID {
+				audit.Terminal = "model_rerouted"
+				return terminalState{classification: "model_rerouted", diagnostic: diagnostic}, terminalError{kind: "model_rerouted"}
 			}
 			continue
 		case "warning":
