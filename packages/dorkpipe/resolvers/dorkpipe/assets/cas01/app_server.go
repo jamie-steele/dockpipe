@@ -420,7 +420,6 @@ func live(artifacts, codex, workspace, model, effort string, turn, ack, accountM
 		return errors.New("thread start returned no ID")
 	}
 	e.Durations["thread_start"] = time.Since(started).Milliseconds()
-	started = time.Now()
 	if _, err = c.call("thread/read", map[string]any{"threadId": threadID, "includeTurns": false}); err != nil {
 		e.Blocker = "thread_read"
 		return errors.New("thread read failed without retaining server payload")
