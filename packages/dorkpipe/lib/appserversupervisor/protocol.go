@@ -39,6 +39,9 @@ func (c InitializationConfig) validate() error {
 	if c.Model != PinnedModel || c.ReasoningEffort != PinnedReasoningEffort {
 		return errors.New("model and reasoning effort must use the CAS-01 pinned policy")
 	}
+	if len(c.RequiredCapabilities) > maxRequiredCapabilities || len(c.SchemaVersion) > maxInitializationValues || len(c.ClientName) > maxInitializationValues || len(c.ClientVersion) > maxInitializationValues || strings.TrimSpace(c.SchemaVersion) != c.SchemaVersion || strings.TrimSpace(c.ClientName) != c.ClientName || strings.TrimSpace(c.ClientVersion) != c.ClientVersion || !safeCapability(c.SchemaVersion) || !validID(c.ClientName) || !safeVersion(c.ClientVersion) {
+		return errors.New("initialization values must be bounded safe identifiers")
+	}
 	seen := map[string]bool{}
 	for _, capability := range c.RequiredCapabilities {
 		if !safeCapability(capability) || seen[capability] {
@@ -324,6 +327,10 @@ type initializeResponse struct {
 }
 
 func projectInitialization(result json.RawMessage, config InitializationConfig) (InitializationInfo, DisconnectReason) {
+	fields, ok := objectFields(result, "protocolVersion", "serverInfo", "capabilities", "configWarnings")
+	if !ok || !nestedObjectFields(fields["serverInfo"], "name", "version") || !nestedObjectFields(fields["capabilities"], config.RequiredCapabilities...) {
+		return InitializationInfo{}, DisconnectUnsupportedSchema
+	}
 	var response initializeResponse
 	if json.Unmarshal(result, &response) != nil || response.ProtocolVersion != config.SchemaVersion || response.Capabilities == nil {
 		return InitializationInfo{}, DisconnectUnsupportedSchema
@@ -337,14 +344,28 @@ func projectInitialization(result json.RawMessage, config InitializationConfig) 
 	if identityClass(response.ServerInfo.Name) == "" || !safeVersion(response.ServerInfo.Version) {
 		return InitializationInfo{}, DisconnectInitializationRejected
 	}
+	if len(response.ConfigWarnings) > 4 {
+		return InitializationInfo{}, DisconnectInitializationRejected
+	}
 	warnings := make([]string, 0, len(response.ConfigWarnings))
 	for _, warning := range response.ConfigWarnings {
+		if !warningShapeAllowed(warning) {
+			return InitializationInfo{}, DisconnectInitializationRejected
+		}
 		if len(warnings) == 4 {
 			break
 		}
 		warnings = append(warnings, classifyWarning(warning))
 	}
 	return InitializationInfo{SchemaVersion: response.ProtocolVersion, ProviderVersion: response.ServerInfo.Version, IdentityClass: identityClass(response.ServerInfo.Name), ConfigurationWarnings: warnings, Model: config.Model, ReasoningEffort: config.ReasoningEffort}, ""
+}
+
+func warningShapeAllowed(raw json.RawMessage) bool {
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return true
+	}
+	return nestedObjectFields(raw, "code", "message")
 }
 
 func identityClass(name string) string {

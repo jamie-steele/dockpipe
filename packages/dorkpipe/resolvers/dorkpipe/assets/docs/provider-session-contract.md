@@ -88,5 +88,15 @@ approve, deny, steer, cancel, or recover a turn. Raw frames/payloads, timestamps
 commands, patches, paths, credentials, token text, provider IDs/error bodies, account/config data,
 and process details are excluded. Missing, corrupt, oversized, stale, gapped, cross-session, or
 unsafe audit evidence fails closed. A recovered idle session must match its retained audit cursor;
-that evidence still never claims prior active or unknown work survived. CAS-11+ hardening, migration,
-and operations work remain deferred.
+that evidence still never claims prior active or unknown work survived.
+
+CAS-11 closes the remaining supervisor-local hardening gaps. Only the direct `codex app-server --stdio`
+child shape is accepted; bounded constructor, policy, reference, snapshot, and audit values are required.
+The policy stays pinned to `gpt-5.6-terra` / `high`, workspace-write, declared in-workspace roots,
+network disabled, and human review. Unknown or duplicate initialization, event, server-request, or
+MCP-progress extensions fail closed without retaining raw content. Disconnect and rejected recovery clear
+private transport and active/pending state before bounded child cleanup. The journal stays descriptive
+only and has no replay, retry, resume, recovery, decision, dispatch, or export operation.
+
+CAS-12 contract-test expansion, CAS-13 controlled integration, and CAS-14+ migration and operations work
+remain deferred.

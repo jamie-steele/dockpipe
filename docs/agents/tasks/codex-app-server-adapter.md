@@ -247,7 +247,7 @@ private idle reconciliation read. It never reconnects to the prior process or co
 turn. Policy mismatch, non-idle/unknown state, cursor ambiguity, corrupt or stale evidence,
 response mismatch, timeout, transport/child failure, provider error, reroute, or malformed input
 stays fail-closed as bounded `recovery_required` or `disconnected`; only an exact idle result emits
-`ready`. CAS-10 audit/telemetry and all CAS-11+ work remain deferred.
+`ready`. CAS-10 audit/telemetry and CAS-11 hardening are now complete; CAS-12+ remain deferred.
 
 ### CAS-10 current decision
 
@@ -268,9 +268,24 @@ Idle persistence commits only after its audit event is durable and before it bec
 recovery requires the retained audit cursor to match the safe idle snapshot and still starts a fresh
 initialized supervisor. Audit therefore cannot imply that an active or unknown prior turn survived.
 
-CAS-11+ remain explicitly deferred: no broader hardening, Pipeon wiring, provider pools, CLI fallback,
-workers, integration calls, telemetry export, listeners, background reconnect, automatic recovery, or
-new neutral protocol surface is introduced here.
+### CAS-11 current decision
+
+CAS-11 hardens only the package-local `appserversupervisor`. Constructor and startup validation now
+requires bounded session, deadline, initialization, direct-child launcher, and lifecycle-policy values;
+the launcher accepts only the direct `codex app-server --stdio` shape. Lifecycle policy remains exactly
+`gpt-5.6-terra` / `high`, workspace-write, declared in-workspace roots, network disabled, and human
+review, with shell, full-access, auto-review, fallback, policy drift, and malformed identifiers rejected.
+Protocol initialization, notification, server-request, MCP-progress, snapshot, and audit shapes use a
+closed package-local allow-list; unknown or duplicate extension data is disconnected without retaining
+the raw value. Disconnect, shutdown, and rejected recovery clear private streams and active/pending
+approval, input, cancellation, and lifecycle state before bounded child cleanup. Snapshot and file-audit
+serialization reject unsafe bounded data. Audit remains descriptive and cannot execute, replay, resume,
+retry, approve, deny, steer, cancel, recover, or export anything.
+
+Focused local fixtures cover unsafe launcher/configuration, policy tampering, stale and extended local
+state, cross-correlation rejection, snapshot/audit serialization, redaction, and disconnect cleanup.
+CAS-12 contract-test expansion, CAS-13 controlled integration, and all later migration/operations work
+remain explicitly deferred.
 
 ## Likely impact map
 

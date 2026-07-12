@@ -45,6 +45,9 @@ func (s *Supervisor) handleNotification(method string, raw json.RawMessage) Disc
 	if len(raw) == 0 || !json.Valid(raw) {
 		return DisconnectMalformedEnvelope
 	}
+	if !notificationShapeAllowed(method, raw) {
+		return DisconnectUnsupportedEvent
+	}
 	var params eventParams
 	if json.Unmarshal(raw, &params) != nil {
 		return DisconnectMalformedEnvelope
@@ -227,6 +230,79 @@ func (s *Supervisor) handleNotification(method string, raw json.RawMessage) Disc
 	s.events <- event
 	s.mu.Lock()
 	return ""
+}
+
+// notificationShapeAllowed is an intentionally narrow protocol boundary. It
+// permits only the observed fields needed to classify an event (plus transient
+// private content fields that are never projected or retained).
+func notificationShapeAllowed(method string, raw json.RawMessage) bool {
+	fields, ok := objectFields(raw, notificationFields(method)...)
+	if !ok {
+		return false
+	}
+	switch method {
+	case "thread/started":
+		return nestedObjectFields(fields["thread"], "id")
+	case "item/started", "item/updated", "item/completed":
+		return nestedObjectFields(fields["item"], "id", "type", "status", "text")
+	case "turn/started", "turn/completed":
+		return nestedObjectFields(fields["turn"], "id", "status", "error") && (len(fields["turn"]) == 0 || validTurnErrorShape(fields["turn"]))
+	case "thread/tokenUsage/updated":
+		return nestedObjectFields(fields["tokenUsage"], "totalTokens", "text")
+	case "warning":
+		return warningShapeAllowed(fields["warning"])
+	case "error":
+		return validErrorShape(fields["error"])
+	case "serverRequest/resolved":
+		return true
+	default:
+		return true
+	}
+}
+
+func notificationFields(method string) []string {
+	switch method {
+	case "thread/started":
+		return []string{"thread"}
+	case "thread/status/changed":
+		return []string{"threadId", "status"}
+	case "turn/started", "turn/completed":
+		return []string{"threadId", "turn"}
+	case "item/started", "item/updated", "item/completed":
+		return []string{"threadId", "turnId", "item"}
+	case "item/agentMessage/delta", "item/reasoning/textDelta", "item/reasoning/summaryTextDelta", "item/commandExecution/outputDelta", "item/fileChange/outputDelta", "item/mcpToolCall/progress", "item/plan/delta":
+		return []string{"threadId", "turnId", "itemId", "delta"}
+	case "thread/tokenUsage/updated":
+		return []string{"threadId", "turnId", "tokenUsage"}
+	case "warning":
+		return []string{"threadId", "turnId", "warning", "message"}
+	case "error":
+		return []string{"threadId", "turnId", "error"}
+	case "serverRequest/resolved":
+		return []string{"threadId", "requestId"}
+	default:
+		return nil
+	}
+}
+
+func validTurnErrorShape(raw json.RawMessage) bool {
+	var turn struct {
+		Error json.RawMessage `json:"error"`
+	}
+	return json.Unmarshal(raw, &turn) == nil && (len(turn.Error) == 0 || validErrorShape(turn.Error))
+}
+
+func validErrorShape(raw json.RawMessage) bool {
+	fields, ok := objectFields(raw, "codexErrorInfo", "message", "stack")
+	if !ok || len(fields["codexErrorInfo"]) == 0 {
+		return false
+	}
+	var text string
+	if json.Unmarshal(fields["codexErrorInfo"], &text) == nil {
+		return classifyErrorInfo(fields["codexErrorInfo"]) != "unknown"
+	}
+	info, ok := objectFields(fields["codexErrorInfo"], "httpConnectionFailed", "responseStreamConnectionFailed", "responseStreamDisconnected", "responseTooManyFailedAttempts", "activeTurnNotSteerable")
+	return ok && len(info) == 1
 }
 
 func (s *Supervisor) eventCorrelation(turnID, itemID string) providersession.Correlation {

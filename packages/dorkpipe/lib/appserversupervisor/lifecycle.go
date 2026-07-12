@@ -71,16 +71,16 @@ type lifecycleState struct {
 }
 
 func (p LifecyclePolicy) validate() error {
-	if !filepath.IsAbs(p.Workspace) || strings.TrimSpace(p.Workspace) == "" || p.Sandbox != "workspace-write" || p.NetworkEnabled || p.ApprovalPolicy != "untrusted" || p.Reviewer != "user" || p.Model != PinnedModel || p.ReasoningEffort != PinnedReasoningEffort || p.ModelProvider != "openai" || p.FullAccess || p.AllowShell || p.AutoReview || strings.TrimSpace(p.FallbackModel) != "" || strings.TrimSpace(p.FallbackProvider) != "" {
+	workspace, workspaceOK := boundedLocalPath(p.Workspace)
+	if !workspaceOK || p.Sandbox != "workspace-write" || p.NetworkEnabled || p.ApprovalPolicy != "untrusted" || p.Reviewer != "user" || p.Model != PinnedModel || p.ReasoningEffort != PinnedReasoningEffort || p.ModelProvider != "openai" || p.FullAccess || p.AllowShell || p.AutoReview || strings.TrimSpace(p.FallbackModel) != "" || strings.TrimSpace(p.FallbackProvider) != "" || len(p.WritableRoots) == 0 || len(p.WritableRoots) > maxLifecycleRoots {
 		return errors.New("CAS-05 native-turn policy is not permitted")
 	}
-	workspace := filepath.Clean(p.Workspace)
 	seen, containsWorkspace := map[string]bool{}, false
 	for _, root := range p.WritableRoots {
-		if !filepath.IsAbs(root) || strings.TrimSpace(root) == "" {
+		root, rootOK := boundedLocalPath(root)
+		if !rootOK || !containedPath(workspace, root) {
 			return errors.New("writable roots must be declared absolute paths")
 		}
-		root = filepath.Clean(root)
 		if seen[root] {
 			return errors.New("writable roots must be unique")
 		}
@@ -109,7 +109,7 @@ func (p LifecyclePolicy) key() [sha256.Size]byte {
 }
 
 func (r LifecycleReference) Validate() error {
-	if err := r.Session.Validate(); err != nil || !identifierPattern.MatchString(r.Correlation.ProcessIncarnationID) || !identifierPattern.MatchString(r.Correlation.ConnectionID) || r.Correlation.SessionID != r.Session.SessionID || !identifierPattern.MatchString(r.Correlation.SessionID) {
+	if err := validateSupervisorSession(r.Session); err != nil || !identifierPattern.MatchString(r.Correlation.ProcessIncarnationID) || !identifierPattern.MatchString(r.Correlation.ConnectionID) || r.Correlation.SessionID != r.Session.SessionID || !identifierPattern.MatchString(r.Correlation.SessionID) {
 		return errors.New("complete lifecycle session correlation is required")
 	}
 	if r.Correlation.InteractionID != "" && !identifierPattern.MatchString(r.Correlation.InteractionID) {

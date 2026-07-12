@@ -54,6 +54,8 @@ const (
 	DisconnectCancellationRejected   DisconnectReason = "cancellation_rejected"
 	DisconnectPersistenceFailure     DisconnectReason = "persistence_failure"
 	DisconnectAuditFailure           DisconnectReason = "audit_failure"
+	DisconnectUnsafeConfiguration    DisconnectReason = "unsafe_configuration"
+	DisconnectTransportOwnership     DisconnectReason = "transport_ownership"
 )
 
 // Deadlines bound the supervisor itself. They are not a substitute for future
@@ -69,6 +71,11 @@ type Deadlines struct {
 func (d Deadlines) validate() error {
 	if d.Startup <= 0 || d.Shutdown <= 0 || d.Kill <= 0 || d.Liveness <= 0 || d.Request <= 0 {
 		return errors.New("startup, shutdown, kill, liveness, and request deadlines must be positive")
+	}
+	for _, value := range []time.Duration{d.Startup, d.Shutdown, d.Kill, d.Liveness, d.Request} {
+		if value > maxSupervisorDeadline {
+			return errors.New("supervisor deadlines must be bounded")
+		}
 	}
 	return nil
 }
@@ -86,6 +93,7 @@ type Child interface {
 // must not start a listener, shell, or fallback process.
 type Launcher interface {
 	Start(context.Context) (Child, error)
+	validateLaunch() error
 }
 
 // HostLauncher starts one executable directly with inherited host placement.
@@ -96,18 +104,26 @@ type HostLauncher struct {
 	Args       []string
 }
 
+func (l HostLauncher) validateLaunch() error {
+	if strings.TrimSpace(l.Executable) != l.Executable || l.Executable == "" || len(l.Executable) > maxLocalPathBytes {
+		return errors.New("direct codex executable is required")
+	}
+	name := strings.ToLower(filepath.Base(l.Executable))
+	if name != "codex" && name != "codex.exe" {
+		return errors.New("only the direct codex app-server executable is permitted")
+	}
+	if isShell(name) || len(l.Args) != 2 || l.Args[0] != "app-server" || l.Args[1] != "--stdio" {
+		return errors.New("only direct app-server stdio launch is permitted")
+	}
+	return nil
+}
+
 func (l HostLauncher) Start(ctx context.Context) (Child, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(l.Executable) == "" {
-		return nil, errors.New("host executable is required")
-	}
-	if isShell(filepath.Base(l.Executable)) {
-		return nil, errors.New("shell launch is forbidden")
-	}
-	if len(l.Args) != 2 || l.Args[0] != "app-server" || l.Args[1] != "--stdio" {
-		return nil, errors.New("only direct app-server stdio launch is permitted")
+	if err := l.validateLaunch(); err != nil {
+		return nil, err
 	}
 	cmd := exec.Command(l.Executable, l.Args...)
 	stdin, err := cmd.StdinPipe()
@@ -182,6 +198,7 @@ type Supervisor struct {
 	sequence           uint64
 	child              Child
 	stdin              io.WriteCloser
+	stdout             io.ReadCloser
 	client             *protocolClient
 	initializationInfo InitializationInfo
 	processRef         string
@@ -215,11 +232,14 @@ func NewWithSnapshotStore(session providersession.SessionRef, launcher Launcher,
 // NewWithStores keeps both CAS-09 recovery and CAS-10 audit evidence inside
 // this package. AuditStore receives only bounded safe projections.
 func NewWithStores(session providersession.SessionRef, launcher Launcher, deadlines Deadlines, initialization InitializationConfig, store SnapshotStore, auditStore AuditStore) (*Supervisor, error) {
-	if err := session.Validate(); err != nil {
+	if err := validateSupervisorSession(session); err != nil {
 		return nil, err
 	}
 	if launcher == nil {
 		return nil, errors.New("host launcher is required")
+	}
+	if err := launcher.validateLaunch(); err != nil {
+		return nil, err
 	}
 	if err := deadlines.validate(); err != nil {
 		return nil, err
@@ -366,8 +386,7 @@ func (s *Supervisor) start(ctx context.Context, emitReady bool) error {
 			return errors.New("start app server child: private stdio is required")
 		}
 		s.mu.Lock()
-		s.child = result.child
-		s.stdin = stdin
+		s.child, s.stdin, s.stdout = result.child, stdin, stdout
 		s.waitDone = make(chan struct{})
 		waitDone := s.waitDone
 		s.mu.Unlock()
@@ -454,12 +473,31 @@ func (s *Supervisor) Shutdown(ctx context.Context) error {
 func (s *Supervisor) disconnect(reason DisconnectReason) {
 	s.disconnectOnce.Do(func() {
 		s.mu.Lock()
+		stdin, stdout := s.stdin, s.stdout
+		s.stdin, s.stdout = nil, nil
+		s.clearPrivateStateLocked()
 		s.state = providersession.StateDisconnected
 		s.sequence++
 		event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: time.Now().UTC(), Session: s.session, Kind: providersession.EventStateChanged, State: providersession.StateDisconnected, Summary: string(reason)}
 		s.mu.Unlock()
+		if stdin != nil {
+			_ = stdin.Close()
+		}
+		if stdout != nil {
+			_ = stdout.Close()
+		}
 		s.publish(event, "disconnect", "failed", "disconnected")
 	})
+}
+
+func (s *Supervisor) clearPrivateStateLocked() {
+	if s.lifecycle.pending != nil && s.lifecycle.pending.timer != nil {
+		s.lifecycle.pending.timer.Stop()
+	}
+	if s.lifecycle.cancellation != nil && s.lifecycle.cancellation.timer != nil {
+		s.lifecycle.cancellation.timer.Stop()
+	}
+	s.lifecycle = lifecycleState{}
 }
 
 func (s *Supervisor) emit(state providersession.State, summary, operation, outcome string) bool {

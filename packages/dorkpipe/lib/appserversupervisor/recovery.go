@@ -64,6 +64,9 @@ func (f FileSnapshotStore) Save(ctx context.Context, evidence string, data []byt
 	if len(data) == 0 || len(data) > maxSnapshotBytes {
 		return errors.New("snapshot is not bounded")
 	}
+	if _, err := parseSnapshot(data, evidence); err != nil {
+		return errors.New("snapshot is unsafe")
+	}
 	path, err := f.path(evidence)
 	if err != nil {
 		return err
@@ -153,7 +156,7 @@ func parseSnapshot(data []byte, evidence string) (recoverySnapshot, error) {
 	if snapshot.Version != snapshotVersion || snapshot.Evidence != evidence || snapshot.Lifecycle != "idle" || snapshot.SafeSummary != "thread_idle" || snapshot.EventCursor == 0 || snapshot.NextCursor != snapshot.EventCursor+1 {
 		return recoverySnapshot{}, errors.New("unsupported snapshot")
 	}
-	if err := snapshot.Session.Validate(); err != nil || !validID(snapshot.Session.SessionID) || !validID(snapshot.Process) || !validID(snapshot.Connection) || len(snapshot.Policy) != sha256.Size*2 {
+	if err := validateSupervisorSession(snapshot.Session); err != nil || !validID(snapshot.Process) || !validID(snapshot.Connection) || len(snapshot.Policy) != sha256.Size*2 {
 		return recoverySnapshot{}, errors.New("unsafe snapshot")
 	}
 	if _, err := hex.DecodeString(snapshot.Policy); err != nil {
@@ -265,8 +268,18 @@ func (s *Supervisor) recoveryRequired(summary string) {
 		s.mu.Unlock()
 		return
 	}
+	stdin, stdout := s.stdin, s.stdout
+	s.stdin, s.stdout = nil, nil
+	s.clearPrivateStateLocked()
 	s.state, s.sequence = providersession.StateDisconnected, s.sequence+1
 	event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: nowUTC(), Session: s.session, Kind: providersession.EventRecoveryRequired, Summary: summary}
 	s.mu.Unlock()
+	if stdin != nil {
+		_ = stdin.Close()
+	}
+	if stdout != nil {
+		_ = stdout.Close()
+	}
 	s.publish(event, "recovery", "rejected", "disconnected")
+	s.startShutdown()
 }

@@ -19,6 +19,7 @@ type fakeLauncher struct {
 }
 
 func (l fakeLauncher) Start(ctx context.Context) (Child, error) { return l.start(ctx) }
+func (l fakeLauncher) validateLaunch() error                    { return nil }
 
 type fakeChild struct {
 	stdinR  *io.PipeReader

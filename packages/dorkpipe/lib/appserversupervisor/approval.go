@@ -60,6 +60,9 @@ func (s *Supervisor) handleServerRequest(providerID uint64, method string, raw j
 	if json.Unmarshal(raw, &params) != nil {
 		return DisconnectMalformedEnvelope
 	}
+	if !serverRequestShapeAllowed(method, raw) {
+		return DisconnectUnsupportedEvent
+	}
 	kind, actionClass, scope, reason := classifyServerRequest(method, params)
 	if reason != "" {
 		return reason
@@ -110,6 +113,38 @@ func (s *Supervisor) handleServerRequest(providerID uint64, method string, raw j
 		return DisconnectAuditFailure
 	}
 	return ""
+}
+
+func serverRequestShapeAllowed(method string, raw json.RawMessage) bool {
+	var allowed []string
+	switch method {
+	case "item/commandExecution/requestApproval":
+		allowed = []string{"threadId", "turnId", "itemId", "command", "cwd", "reason"}
+	case "item/fileChange/requestApproval":
+		allowed = []string{"threadId", "turnId", "itemId", "patch", "reason", "grantRoot"}
+	case "item/permissions/requestApproval":
+		allowed = []string{"threadId", "turnId", "itemId", "permissions", "additionalPermissions", "networkApprovalContext", "proposedExecpolicyAmendment", "proposedNetworkPolicyAmendments"}
+	case "item/tool/requestUserInput":
+		allowed = []string{"threadId", "turnId", "itemId", "questions"}
+	default:
+		return false
+	}
+	fields, ok := objectFields(raw, allowed...)
+	if !ok {
+		return false
+	}
+	if questions, found := fields["questions"]; found {
+		var values []json.RawMessage
+		if json.Unmarshal(questions, &values) != nil {
+			return false
+		}
+		for _, value := range values {
+			if !nestedObjectFields(value, "id", "header", "question", "options") {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func classifyServerRequest(method string, params serverRequestParams) (pendingKind, string, []string, DisconnectReason) {
@@ -165,6 +200,13 @@ func validQuestions(questions []json.RawMessage) bool {
 }
 
 func (s *Supervisor) permissionScopeDeclared(raw json.RawMessage) bool {
+	fields, ok := objectFields(raw, "fileSystem")
+	if !ok {
+		return false
+	}
+	if !nestedObjectFields(fields["fileSystem"], "write") {
+		return false
+	}
 	var permissions struct {
 		FileSystem map[string]json.RawMessage `json:"fileSystem"`
 	}

@@ -98,11 +98,11 @@ func newStoredIdleSupervisor(t *testing.T, store SnapshotStore) (*Supervisor, pr
 	if event := nextEvent(t, s); event.State != providersession.StateReady {
 		t.Fatal(event)
 	}
-	sendNotification(t, child, "thread/started", `{"thread":{"id":"thread-1"},"command":"private command","path":"private path"}`)
+	sendNotification(t, child, "thread/started", `{"thread":{"id":"thread-1"}}`)
 	_ = nextEvent(t, s)
 	sendNotification(t, child, "thread/status/changed", `{"threadId":"thread-1","status":"active"}`)
 	_ = nextEvent(t, s)
-	sendNotification(t, child, "thread/status/changed", `{"threadId":"thread-1","status":"idle","prompt":"private prompt","patch":"private patch"}`)
+	sendNotification(t, child, "thread/status/changed", `{"threadId":"thread-1","status":"idle"}`)
 	idle := nextEvent(t, s)
 	if idle.Summary != "thread_idle" {
 		t.Fatal(idle)
@@ -304,9 +304,16 @@ func TestRecoveryReconciliationFailuresDisconnect(t *testing.T) {
 
 func TestFileSnapshotStoreUsesFinalBoundedAtomicFile(t *testing.T) {
 	store := FileSnapshotStore{Root: t.TempDir()}
-	if err := store.Save(context.Background(), "recovery-safe", []byte(`{"safe":true}`)); err != nil {
+	policy := recoveryPolicy(t)
+	snapshot := validRecoverySnapshot(policy, providersession.SessionRef{Provider: "test", SessionID: "thread-1"}, "recovery-safe")
+	data, err := json.Marshal(snapshot)
+	if err != nil {
 		t.Fatal(err)
 	}
+	if err := store.Save(context.Background(), "recovery-safe", data); err != nil {
+		t.Fatal(err)
+	}
+	initial := append([]byte(nil), data...)
 	path, err := store.path("recovery-safe")
 	if err != nil {
 		t.Fatal(err)
@@ -314,15 +321,20 @@ func TestFileSnapshotStoreUsesFinalBoundedAtomicFile(t *testing.T) {
 	if err := os.WriteFile(path+".tmp-interrupted", []byte("partial"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	data, err := store.Load(context.Background(), "recovery-safe")
-	if err != nil || string(data) != `{"safe":true}` {
+	data, err = store.Load(context.Background(), "recovery-safe")
+	if err != nil || string(data) != string(initial) {
 		t.Fatalf("load = %q, %v", data, err)
 	}
-	if err := store.Save(context.Background(), "recovery-safe", []byte(`{"safe":false}`)); err != nil {
+	snapshot.EventCursor, snapshot.NextCursor = 8, 9
+	replacement, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.Save(context.Background(), "recovery-safe", replacement); err != nil {
 		t.Fatal(err)
 	}
 	data, err = store.Load(context.Background(), "recovery-safe")
-	if err != nil || string(data) != `{"safe":false}` {
+	if err != nil || string(data) != string(replacement) {
 		t.Fatalf("replaced load = %q, %v", data, err)
 	}
 	if err := store.Save(context.Background(), "recovery-safe", []byte(strings.Repeat("x", maxSnapshotBytes+1))); err == nil {

@@ -98,6 +98,10 @@ func (f FileAuditStore) Save(ctx context.Context, evidence string, data []byte) 
 	if len(data) == 0 || len(data) > maxAuditBytes {
 		return errors.New("audit document is not bounded")
 	}
+	var document auditDocument
+	if json.Unmarshal(data, &document) != nil || document.validate(evidence, document.Session) != nil {
+		return errors.New("audit document is unsafe")
+	}
 	path, err := f.path(evidence)
 	if err != nil {
 		return err
@@ -291,7 +295,7 @@ func (r AuditRecord) validContent(provider string, requireUnsetSequence bool) er
 	if !validAuditBucket(r.Progress) || !validAuditBucket(r.Latency) {
 		return errors.New("audit bucket is invalid")
 	}
-	if r.Session.Validate() != nil || r.Session.Provider != provider {
+	if validateSupervisorSession(r.Session) != nil || r.Session.Provider != provider {
 		return errors.New("audit session is invalid")
 	}
 	if !validAuditCorrelation(r.Correlation, r.Session.SessionID) {
@@ -304,7 +308,7 @@ func (r AuditRecord) validContent(provider string, requireUnsetSequence bool) er
 }
 
 func (d auditDocument) validate(evidence string, session providersession.SessionRef) error {
-	if d.Version != auditSchemaVersion || d.Evidence != evidence || d.Session.Validate() != nil || d.Session.Provider != session.Provider || d.PriorEvent > d.LastEvent || len(d.Segments) > maxAuditSegments {
+	if d.Version != auditSchemaVersion || !safeEvidence(d.Evidence) || d.Evidence != evidence || validateSupervisorSession(d.Session) != nil || d.Session.Provider != session.Provider || d.PriorEvent > d.LastEvent || len(d.Segments) > maxAuditSegments {
 		return errors.New("audit document is invalid")
 	}
 	var lastSequence uint64
@@ -396,7 +400,7 @@ func safeAuditClass(value string) bool {
 
 func validAuditDisconnectReason(value string) bool {
 	switch DisconnectReason(value) {
-	case DisconnectStartupFailure, DisconnectStartupDeadline, DisconnectChildExit, DisconnectTransportClosed, DisconnectMalformedInput, DisconnectLivenessDeadline, DisconnectShutdown, DisconnectRequestDeadline, DisconnectMalformedEnvelope, DisconnectCorrelationMismatch, DisconnectProviderError, DisconnectInitializationRejected, DisconnectUnsupportedSchema, DisconnectUnsupportedCapability, DisconnectModelRerouted, DisconnectPolicyMismatch, DisconnectLifecycleRejected, DisconnectUnsupportedLifecycle, DisconnectUnsupportedEvent, DisconnectEventOrdering, DisconnectDecisionRejected, DisconnectCancellationRejected, DisconnectPersistenceFailure, DisconnectAuditFailure:
+	case DisconnectStartupFailure, DisconnectStartupDeadline, DisconnectChildExit, DisconnectTransportClosed, DisconnectMalformedInput, DisconnectLivenessDeadline, DisconnectShutdown, DisconnectRequestDeadline, DisconnectMalformedEnvelope, DisconnectCorrelationMismatch, DisconnectProviderError, DisconnectInitializationRejected, DisconnectUnsupportedSchema, DisconnectUnsupportedCapability, DisconnectModelRerouted, DisconnectPolicyMismatch, DisconnectLifecycleRejected, DisconnectUnsupportedLifecycle, DisconnectUnsupportedEvent, DisconnectEventOrdering, DisconnectDecisionRejected, DisconnectCancellationRejected, DisconnectPersistenceFailure, DisconnectAuditFailure, DisconnectUnsafeConfiguration, DisconnectTransportOwnership:
 		return true
 	default:
 		return false
