@@ -270,6 +270,7 @@ func (s *Supervisor) recoveryRequired(summary string) {
 	}
 	stdin, stdout := s.stdin, s.stdout
 	s.stdin, s.stdout = nil, nil
+	s.client = nil
 	s.clearPrivateStateLocked()
 	s.state, s.sequence = providersession.StateDisconnected, s.sequence+1
 	event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: nowUTC(), Session: s.session, Kind: providersession.EventRecoveryRequired, Summary: summary}

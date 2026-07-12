@@ -95,9 +95,9 @@ func TestCAS11DisconnectClearsPrivatePendingStateAndPreventsReuse(t *testing.T) 
 		t.Fatalf("disconnect = %+v", disconnected)
 	}
 	s.mu.RLock()
-	pending, stdin, stdout := s.lifecycle.pending, s.stdin, s.stdout
+	pending, stdin, stdout, client := s.lifecycle.pending, s.stdin, s.stdout, s.client
 	s.mu.RUnlock()
-	if pending != nil || stdin != nil || stdout != nil {
+	if pending != nil || stdin != nil || stdout != nil || client != nil {
 		t.Fatal("disconnect retained reusable private transport or approval state")
 	}
 	if err := s.Decide(context.Background(), providersession.ApprovalDecision{Correlation: event.Approval.Correlation, Decision: providersession.DecisionDeny}); !errors.Is(err, ErrDecisionRejected) {

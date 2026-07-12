@@ -475,6 +475,7 @@ func (s *Supervisor) disconnect(reason DisconnectReason) {
 		s.mu.Lock()
 		stdin, stdout := s.stdin, s.stdout
 		s.stdin, s.stdout = nil, nil
+		s.client = nil
 		s.clearPrivateStateLocked()
 		s.state = providersession.StateDisconnected
 		s.sequence++
