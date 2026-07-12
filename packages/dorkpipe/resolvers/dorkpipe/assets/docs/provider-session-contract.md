@@ -47,3 +47,15 @@ raw frames, token text, item content, messages, error bodies, commands, files, a
 private and transient. A correlated terminal turn event can release the private active-turn gate,
 but does not implement recovery or replay. Approval relay, interruption, persistence, audit,
 additional hardening, and Pipeon wiring remain deferred to CAS-07+.
+
+CAS-07 adds package-local approval and user-input request relay. It creates opaque request and
+one-time decision references only after exact process, connection, thread, turn, and item
+correlation. It projects closed action classes and safe scope labels, never command text, patches,
+paths, question text, provider request IDs, raw payloads, or permission/policy data. The neutral
+contract now bounds approval decisions to one-turn `approve` or `deny`: command/file requests can
+use both; declared-permission requests are deny-only because a granted subset would need a new
+neutral contract surface. User-input requests are delivered as opaque references but have no answer
+operation yet. Expiry and every stale, duplicate, malformed, unsupported, transport, child-exit,
+provider-error, or reroute condition fail closed. CAS-08 cancellation/interruption and all later
+CAS-09+ persistence, recovery, audit, hardening, testing expansion, and Pipeon work remain
+deferred.

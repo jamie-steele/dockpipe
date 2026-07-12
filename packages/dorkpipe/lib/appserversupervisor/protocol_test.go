@@ -193,7 +193,7 @@ func TestProtocolBoundaryContainsNoGenericOrPipeonLeak(t *testing.T) {
 			t.Fatal(err)
 		}
 		lower := strings.ToLower(string(contents))
-		for _, token := range forbidden {
+		for _, token := range append(forbidden, "requestapproval", "requestuserinput") {
 			if strings.Contains(lower, token) {
 				t.Fatalf("provider protocol boundary leak %q in %s", token, path)
 			}
@@ -205,7 +205,7 @@ func TestProtocolBoundaryContainsNoGenericOrPipeonLeak(t *testing.T) {
 			t.Fatal(err)
 		}
 		lower := strings.ToLower(string(contents))
-		for _, token := range []string{"appserversupervisor", "model/rerouted", "thread/start", "turn/start", "json.rawmessage"} {
+		for _, token := range []string{"appserversupervisor", "model/rerouted", "thread/start", "turn/start", "requestapproval", "requestuserinput", "json.rawmessage"} {
 			if strings.Contains(lower, token) {
 				t.Fatalf("app server protocol boundary leak %q in %s", token, path)
 			}

@@ -50,6 +50,17 @@ func TestApprovalRequiresCompleteOneTimeCorrelation(t *testing.T) {
 	}
 }
 
+func TestApprovalDecisionIsNeutralAndBounded(t *testing.T) {
+	for _, decision := range []string{DecisionApprove, DecisionDeny} {
+		if err := (ApprovalDecision{Correlation: decisionCorrelation(), Decision: decision}).Validate(); err != nil {
+			t.Fatalf("valid decision %q: %v", decision, err)
+		}
+	}
+	if err := (ApprovalDecision{Correlation: decisionCorrelation(), Decision: "acceptForSession"}).Validate(); err == nil {
+		t.Fatal("provider-specific session grant must be rejected")
+	}
+}
+
 func TestEventKindsRequireTheirSafeReferences(t *testing.T) {
 	session := SessionRef{Provider: "example", SessionID: "session"}
 	input := Event{ContractVersion: ContractVersion, Sequence: 1, OccurredAt: time.Now(), Session: session, Kind: EventUserInputRequested, UserInput: &UserInputRequest{Correlation: decisionCorrelation(), PromptRef: "artifact://prompt/1"}}

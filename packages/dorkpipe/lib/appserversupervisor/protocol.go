@@ -65,15 +65,16 @@ type protocolClient struct {
 	failFunc func(DisconnectReason)
 	liveness time.Duration
 
-	mu          sync.Mutex
-	nextID      uint64
-	pending     map[uint64]chan json.RawMessage
-	reason      DisconnectReason
-	done        chan struct{}
-	failOnce    sync.Once
-	writeMu     sync.Mutex
-	activity    chan struct{}
-	eventNotify func(string, json.RawMessage) DisconnectReason
+	mu            sync.Mutex
+	nextID        uint64
+	pending       map[uint64]chan json.RawMessage
+	reason        DisconnectReason
+	done          chan struct{}
+	failOnce      sync.Once
+	writeMu       sync.Mutex
+	activity      chan struct{}
+	eventNotify   func(string, json.RawMessage) DisconnectReason
+	requestNotify func(uint64, string, json.RawMessage) DisconnectReason
 }
 
 func newProtocolClient(stdin io.WriteCloser, stdout io.ReadCloser, liveness time.Duration, failFunc func(DisconnectReason)) *protocolClient {
@@ -81,10 +82,22 @@ func newProtocolClient(stdin io.WriteCloser, stdout io.ReadCloser, liveness time
 }
 
 func newProtocolClientWithNotifications(stdin io.WriteCloser, stdout io.ReadCloser, liveness time.Duration, failFunc func(DisconnectReason), notify func(string, json.RawMessage) DisconnectReason) *protocolClient {
-	c := &protocolClient{stdin: stdin, failFunc: failFunc, liveness: liveness, pending: map[uint64]chan json.RawMessage{}, done: make(chan struct{}), activity: make(chan struct{}, 1), eventNotify: notify}
+	return newProtocolClientWithHandlers(stdin, stdout, liveness, failFunc, notify, nil)
+}
+
+func newProtocolClientWithHandlers(stdin io.WriteCloser, stdout io.ReadCloser, liveness time.Duration, failFunc func(DisconnectReason), notify func(string, json.RawMessage) DisconnectReason, requestNotify func(uint64, string, json.RawMessage) DisconnectReason) *protocolClient {
+	c := &protocolClient{stdin: stdin, failFunc: failFunc, liveness: liveness, pending: map[uint64]chan json.RawMessage{}, done: make(chan struct{}), activity: make(chan struct{}, 1), eventNotify: notify, requestNotify: requestNotify}
 	go c.read(stdout)
 	go c.watchLiveness()
 	return c
+}
+
+func (c *protocolClient) respond(ctx context.Context, id uint64, result map[string]any) error {
+	if id == 0 {
+		c.fail(DisconnectMalformedEnvelope)
+		return errors.New("server request identifier is required")
+	}
+	return c.write(ctx, map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
 }
 
 func (c *protocolClient) initialize(parent context.Context, deadline time.Duration, config InitializationConfig) (InitializationInfo, error) {
@@ -197,12 +210,27 @@ func (c *protocolClient) handle(frame []byte) bool {
 		return false
 	}
 	if envelope.ID != nil {
-		if envelope.Method != nil || len(envelope.Result) == 0 && len(envelope.Error) == 0 || len(envelope.Result) != 0 && len(envelope.Error) != 0 {
+		var id uint64
+		if json.Unmarshal(*envelope.ID, &id) != nil || id == 0 {
 			c.fail(DisconnectMalformedEnvelope)
 			return false
 		}
-		var id uint64
-		if json.Unmarshal(*envelope.ID, &id) != nil || id == 0 {
+		if envelope.Method != nil {
+			if strings.TrimSpace(*envelope.Method) == "" || len(envelope.Result) != 0 || len(envelope.Error) != 0 || len(envelope.Params) == 0 || c.requestNotify == nil {
+				c.fail(DisconnectMalformedEnvelope)
+				return false
+			}
+			if containsModelReroute(envelope.Params) {
+				c.fail(DisconnectModelRerouted)
+				return false
+			}
+			if reason := c.requestNotify(id, *envelope.Method, append(json.RawMessage(nil), envelope.Params...)); reason != "" {
+				c.fail(reason)
+				return false
+			}
+			return true
+		}
+		if len(envelope.Result) == 0 && len(envelope.Error) == 0 || len(envelope.Result) != 0 && len(envelope.Error) != 0 {
 			c.fail(DisconnectMalformedEnvelope)
 			return false
 		}

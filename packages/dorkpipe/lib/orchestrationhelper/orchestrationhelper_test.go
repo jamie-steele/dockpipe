@@ -81,6 +81,36 @@ func TestSelectLaneWorkerPreferAllowsFallback(t *testing.T) {
 	}
 }
 
+func TestSelectLanePlanningWorkerPreferPinsDeclaredLane(t *testing.T) {
+	task, err := applyTaskWorkerProfile(map[string]any{
+		"id":          "contract_brain",
+		"worker":      "ollama",
+		"worker_type": "planning",
+		"goal":        "distill an architecture contract",
+	}, map[string]string{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	lanes := []map[string]any{
+		{"id": "ollama.local.default", "provider": "ollama", "resolver_hint": "ollama", "local": true, "available": true},
+		{"id": "codex.cloud.default", "provider": "codex", "resolver_hint": "codex", "cloud": true, "available": true, "capabilities": []any{"strong_validation"}},
+	}
+	selection := selectLane(task, map[string]any{"validate": map[string]any{"preference": "strongest_available"}}, "", "", "", map[string]string{}, lanes, map[string]any{
+		"local_first_bonus":          15.0,
+		"cloud_cost_penalty":         2.0,
+		"worker_preference_bonus":    10.0,
+		"strong_validation_bonus":    8.0,
+		"authority_cloud_bonus":      8.0,
+		"local_architecture_penalty": 18.0,
+	}, map[string]any{}, map[string]trainingEntry{}, true, nil)
+	if got := stringValue(selection["provider"]); got != "ollama" {
+		t.Fatalf("provider = %q, want declared planning lane ollama", got)
+	}
+	if got := stringValue(selection["requested"]); got != "ollama" {
+		t.Fatalf("requested = %q, want ollama", got)
+	}
+}
+
 func TestSelectLaneWorkerRequirePinsPreferredLane(t *testing.T) {
 	task, err := applyTaskWorkerProfile(map[string]any{
 		"id":     "patch",

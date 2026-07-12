@@ -50,6 +50,7 @@ const (
 	DisconnectUnsupportedLifecycle   DisconnectReason = "unsupported_lifecycle_state"
 	DisconnectUnsupportedEvent       DisconnectReason = "unsupported_event"
 	DisconnectEventOrdering          DisconnectReason = "event_ordering"
+	DisconnectDecisionRejected       DisconnectReason = "decision_rejected"
 )
 
 // Deadlines bound the supervisor itself. They are not a substitute for future
@@ -287,7 +288,7 @@ func (s *Supervisor) Start(ctx context.Context) error {
 		s.waitDone = make(chan struct{})
 		waitDone := s.waitDone
 		s.mu.Unlock()
-		client := newProtocolClientWithNotifications(stdin, stdout, s.deadlines.Liveness, s.fail, s.handleNotification)
+		client := newProtocolClientWithHandlers(stdin, stdout, s.deadlines.Liveness, s.fail, s.handleNotification, s.handleServerRequest)
 		s.mu.Lock()
 		s.client = client
 		s.mu.Unlock()

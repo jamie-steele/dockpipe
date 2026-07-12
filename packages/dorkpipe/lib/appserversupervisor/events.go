@@ -14,11 +14,12 @@ import (
 const maxSafeEventCounter uint64 = 100_000_000
 
 type eventParams struct {
-	ThreadID string `json:"threadId"`
-	TurnID   string `json:"turnId"`
-	ItemID   string `json:"itemId"`
-	Status   string `json:"status"`
-	Thread   struct {
+	ThreadID  string          `json:"threadId"`
+	TurnID    string          `json:"turnId"`
+	ItemID    string          `json:"itemId"`
+	RequestID json.RawMessage `json:"requestId"`
+	Status    string          `json:"status"`
+	Thread    struct {
 		ID string `json:"id"`
 	} `json:"thread"`
 	Turn struct {
@@ -51,10 +52,16 @@ func (s *Supervisor) handleNotification(method string, raw json.RawMessage) Disc
 	if containsModelReroute(raw) {
 		return DisconnectModelRerouted
 	}
+	if method == "serverRequest/resolved" {
+		return s.handleServerRequestResolved(params)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if !s.started || !s.initialized || s.state == providersession.StateDisconnected || s.lifecycle.threadID == "" {
 		return DisconnectLifecycleRejected
+	}
+	if s.lifecycle.pending != nil {
+		return DisconnectEventOrdering
 	}
 	var summary string
 	var correlation providersession.Correlation

@@ -63,6 +63,9 @@ type lifecycleState struct {
 	errorNotified   bool
 	tokenTotal      uint64
 	policyKey       [sha256.Size]byte
+	declaredRoots   map[string]bool
+	pending         *pendingRequest
+	requestCounter  uint64
 }
 
 func (p LifecyclePolicy) validate() error {
@@ -176,6 +179,10 @@ func (s *Supervisor) StartThread(ctx context.Context, policy LifecyclePolicy) (L
 	s.session = providersession.SessionRef{Provider: s.session.Provider, SessionID: threadID}
 	s.lifecycle.threadID = threadID
 	s.lifecycle.policyKey = policy.key()
+	s.lifecycle.declaredRoots = map[string]bool{}
+	for _, root := range policy.WritableRoots {
+		s.lifecycle.declaredRoots[filepath.Clean(root)] = true
+	}
 	s.mu.Unlock()
 	return s.lifecycleReference(""), nil
 }

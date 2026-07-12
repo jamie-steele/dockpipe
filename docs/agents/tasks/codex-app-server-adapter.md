@@ -194,6 +194,26 @@ delivery (CAS-08), persistence/reconciliation/recovery (CAS-09), audit journal (
 hardening (CAS-11), contract/integration expansion (CAS-12/13), Pipeon migration (CAS-14/15), CLI
 fallback changes (CAS-16), and operations guidance (CAS-17).
 
+### CAS-07 current decision
+
+CAS-07 extends only the package-local `appserversupervisor` request path. It accepts the stable
+command-execution, file-change, declared-permission, and tool user-input request notifications
+only when they exactly match the current private process/connection/thread/turn/item invariant.
+It projects neutral approval or user-input events with supervisor-generated opaque request and
+one-time decision references. Command text, patches, paths, prompt/question text, provider request
+IDs, messages, credentials, raw payloads, policy amendments, network requests, and session grants
+remain private and transient. Only the bounded neutral one-turn approve/deny operation is exposed:
+it maps to private command/file decisions, while permission requests are deny-only because the
+neutral contract carries no grant subset. User-input requests have no answer operation in the
+existing neutral contract and expire fail-closed.
+
+Duplicate, stale, reordered, cross-thread, cross-turn, cross-item, uncorrelated, malformed,
+unsupported, expired, transport-loss, child-exit, provider-error, and reroute conditions deny or
+disconnect fail-closed. A successful private response still requires the exact matching
+`serverRequest/resolved` notification before the supervisor returns to `running`; no terminal,
+retry, replay, reconnect, cancellation, recovery, persistence, audit journal, or Pipeon behavior
+is introduced. CAS-08+ remains explicitly deferred.
+
 ## Likely impact map
 
 - packages/dorkpipe/lib: provider-neutral contracts, adapter package, state and tests;

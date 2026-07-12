@@ -224,6 +224,25 @@ type ApprovalDecision struct {
 	Decision    string      `json:"decision"`
 }
 
+const (
+	DecisionApprove = "approve"
+	DecisionDeny    = "deny"
+)
+
+// Validate keeps decision values provider-neutral and deliberately bounded.
+// Adapters map these one-turn human choices to their private protocol values;
+// session grants, policy changes, and user-input answers need separate future
+// contract surfaces.
+func (d ApprovalDecision) Validate() error {
+	if err := d.Correlation.ValidateForDecision(); err != nil {
+		return err
+	}
+	if d.Decision != DecisionApprove && d.Decision != DecisionDeny {
+		return errors.New("known approval decision is required")
+	}
+	return nil
+}
+
 type RecoveryRequest struct {
 	Session          SessionRef `json:"session"`
 	RecoveryEvidence string     `json:"recovery_evidence"`

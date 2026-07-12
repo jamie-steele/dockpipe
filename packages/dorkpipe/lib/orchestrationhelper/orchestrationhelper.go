@@ -4480,6 +4480,11 @@ func selectLane(task, policy map[string]any, requestedOverride, forceProvider, f
 		requested = requestedOverride
 	} else if forceProvider != "" && (forceProviderScope == "all" || requested == "auto") {
 		requested = forceProvider
+	} else if requested == "auto" && workerMode == "prefer" && workerPreferred != "" && strings.EqualFold(stringValue(task["worker_type"]), "planning") {
+		// Planning scouts are intentionally cheap, bounded preparation lanes.
+		// Their declared worker preference remains authoritative unless a caller
+		// explicitly overrides it above; downstream fanout can still escalate.
+		requested = workerPreferred
 	} else if requested == "auto" && workerMode == "require" && workerPreferred != "" {
 		requested = workerPreferred
 	} else if requested == "auto" && containsString(stringList(task["depends_on"]), "planner_brain") {
