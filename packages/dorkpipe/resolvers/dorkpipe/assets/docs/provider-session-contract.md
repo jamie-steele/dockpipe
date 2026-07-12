@@ -98,5 +98,12 @@ MCP-progress extensions fail closed without retaining raw content. Disconnect an
 private transport and active/pending state before bounded child cleanup. The journal stays descriptive
 only and has no replay, retry, resume, recovery, decision, dispatch, or export operation.
 
-CAS-12 contract-test expansion, CAS-13 controlled integration, and CAS-14+ migration and operations work
-remain deferred.
+CAS-12 is complete with deterministic fixture-only contract coverage for the existing CAS-03 through
+CAS-11 behavior: strict initialization and launcher/policy gates, lifecycle and event ordering,
+approval/input one-time correlation, exact cancellation completion, idle-only recovery, bounded
+snapshot/audit stores, redaction, and fail-closed cleanup. The fixtures use only a local fake launcher
+and private in-memory stdio; no provider executable, account, credential, network, auth, listener, or
+integration route is involved. Expanded source-boundary checks keep App Server/raw-protocol vocabulary
+out of `providersession` and Pipeon.
+
+CAS-13 controlled Codex integration and CAS-14+ migration and operations work remain explicitly deferred.

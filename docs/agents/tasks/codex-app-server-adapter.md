@@ -284,8 +284,19 @@ retry, approve, deny, steer, cancel, recover, or export anything.
 
 Focused local fixtures cover unsafe launcher/configuration, policy tampering, stale and extended local
 state, cross-correlation rejection, snapshot/audit serialization, redaction, and disconnect cleanup.
-CAS-12 contract-test expansion, CAS-13 controlled integration, and all later migration/operations work
-remain explicitly deferred.
+
+### CAS-12 current decision
+
+CAS-12 is complete with deterministic local fixture-only contract coverage across the existing CAS-03
+through CAS-11 boundary. The fake launcher and private in-memory stdio child exercise malformed,
+duplicate, stale, out-of-order, cross-process, cross-connection, cross-session, and cross-turn inputs
+for initialization, lifecycle, events, approvals/input, cancellation, recovery, and audit cursors. The
+expansion asserts fail-closed projection and cleanup of private transport/client, active lifecycle, pending
+approval/input, cancellation, and reuse routes. The source-boundary fixtures also reject expanded
+App Server and raw-protocol vocabulary in `providersession` and Pipeon source. No executable, account,
+credential, listener, network, or provider call is used.
+
+CAS-13 controlled Codex integration and CAS-14+ migration/operations work remain explicitly deferred.
 
 ## Likely impact map
 
