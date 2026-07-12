@@ -65,6 +65,7 @@ type lifecycleState struct {
 	policyKey       [sha256.Size]byte
 	declaredRoots   map[string]bool
 	pending         *pendingRequest
+	cancellation    *pendingCancellation
 	requestCounter  uint64
 }
 

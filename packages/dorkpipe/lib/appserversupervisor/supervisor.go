@@ -51,6 +51,7 @@ const (
 	DisconnectUnsupportedEvent       DisconnectReason = "unsupported_event"
 	DisconnectEventOrdering          DisconnectReason = "event_ordering"
 	DisconnectDecisionRejected       DisconnectReason = "decision_rejected"
+	DisconnectCancellationRejected   DisconnectReason = "cancellation_rejected"
 )
 
 // Deadlines bound the supervisor itself. They are not a substitute for future

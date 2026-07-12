@@ -183,6 +183,9 @@ func (s *Supervisor) handleNotification(method string, raw json.RawMessage) Disc
 		if !s.validActiveTurn(params) {
 			return eventMismatch(params.ThreadID != s.lifecycle.threadID || params.TurnID != s.lifecycle.turnID)
 		}
+		if s.lifecycle.cancellation != nil {
+			return DisconnectProviderError
+		}
 		if s.lifecycle.errorNotified {
 			return DisconnectEventOrdering
 		}
@@ -193,22 +196,14 @@ func (s *Supervisor) handleNotification(method string, raw json.RawMessage) Disc
 		s.lifecycle.errorNotified = true
 		summary, correlation = "error_"+classification, s.eventCorrelation(s.lifecycle.turnID, "")
 	case "turn/completed":
-		if !s.validTurnNotification(params) {
-			return eventMismatch(params.ThreadID != s.lifecycle.threadID || params.Turn.ID != s.lifecycle.turnID)
+		event, reason := s.terminalEventLocked(params)
+		if reason != "" {
+			return reason
 		}
-		if !validTurnTerminal(params.Turn.Status) {
-			return DisconnectUnsupportedLifecycle
-		}
-		if !s.lifecycle.turnNotified || s.lifecycle.itemID != "" {
-			return DisconnectEventOrdering
-		}
-		turnID := s.lifecycle.turnID
-		status := params.Turn.Status
-		if status == "failed" && len(params.Turn.Error) != 0 && classifyEventError(params.Turn.Error) == "unknown" {
-			return DisconnectUnsupportedEvent
-		}
-		s.lifecycle.turnID, s.lifecycle.active, s.lifecycle.steerable, s.lifecycle.turnNotified = "", false, false, false
-		summary, correlation = "turn_"+status, s.eventCorrelation(turnID, "")
+		s.mu.Unlock()
+		s.events <- event
+		s.mu.Lock()
+		return ""
 	default:
 		return DisconnectUnsupportedEvent
 	}

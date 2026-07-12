@@ -73,6 +73,20 @@ func TestEventKindsRequireTheirSafeReferences(t *testing.T) {
 	}
 }
 
+func TestCancellationReasonsAreNeutralAndBounded(t *testing.T) {
+	intent := CancellationIntent{Session: SessionRef{Provider: "example", SessionID: "session"}, Correlation: decisionCorrelation(), Reason: CancellationReasonUserRequested}
+	for _, reason := range []string{CancellationReasonUserRequested, CancellationReasonSafetyStop, CancellationReasonDeadline} {
+		intent.Reason = reason
+		if err := intent.Validate(); err != nil {
+			t.Fatalf("valid cancellation reason %q: %v", reason, err)
+		}
+	}
+	intent.Reason = "provider_specific_reason"
+	if err := intent.Validate(); err == nil {
+		t.Fatal("unbounded cancellation reason must be rejected")
+	}
+}
+
 func TestContractSourceDoesNotLeakProviderProtocolTypes(t *testing.T) {
 	_, source, _, ok := runtime.Caller(0)
 	if !ok {

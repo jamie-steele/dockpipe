@@ -56,6 +56,15 @@ contract now bounds approval decisions to one-turn `approve` or `deny`: command/
 use both; declared-permission requests are deny-only because a granted subset would need a new
 neutral contract surface. User-input requests are delivered as opaque references but have no answer
 operation yet. Expiry and every stale, duplicate, malformed, unsupported, transport, child-exit,
-provider-error, or reroute condition fail closed. CAS-08 cancellation/interruption and all later
-CAS-09+ persistence, recovery, audit, hardening, testing expansion, and Pipeon work remain
-deferred.
+provider-error, or reroute condition fail closed.
+
+CAS-08 adds cancellation only through the existing neutral `CancellationIntent`: `user_requested`,
+`safety_stop`, or `deadline_exceeded`. The package-local supervisor requires the exact active
+process/connection/session/turn correlation, projects the opaque intent, and privately requests
+the active turn interrupt. The accepted response is not cancellation completion; only the exact
+correlated terminal `interrupted` notification projects `cancelled`. Timeout, transport loss,
+child exit, response mismatch, malformed/provider-error/reroute input, a missing or
+non-interrupted terminal, and any ambiguity disconnect and invoke the existing bounded shutdown
+path. A background-process indication is reduced to the neutral
+`background_process_risk_possible` summary only. CAS-09+ persistence, resumption,
+reconciliation/recovery, audit, hardening, testing expansion, and Pipeon work remain deferred.

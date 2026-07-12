@@ -214,6 +214,24 @@ disconnect fail-closed. A successful private response still requires the exact m
 retry, replay, reconnect, cancellation, recovery, persistence, audit journal, or Pipeon behavior
 is introduced. CAS-08+ remains explicitly deferred.
 
+### CAS-08 current decision
+
+CAS-08 extends only the package-local `appserversupervisor` with the existing neutral
+`providersession.CancellationIntent`. It accepts only bounded neutral reason classes and requires
+the exact current process, connection, session, and active-turn correlation before it emits an
+opaque cancellation-intent projection and sends the private `turn/interrupt` request. An accepted
+interrupt response is delivery acknowledgement only: the session stays non-terminal while it waits
+for the exact correlated `turn/completed: interrupted` notification. Only that terminal
+notification projects `cancelled`; a request, response, timeout, or item transition never does.
+
+Duplicate, stale, reordered, cross-process, cross-connection, cross-thread, cross-turn,
+cross-item, uncorrelated, malformed, unsupported, provider-error, reroute, transport-loss, child
+exit, interrupt mismatch, non-interrupted terminal, or missing terminal notification disconnects
+through the existing bounded supervisor shutdown/kill path. A private background-process indicator
+can produce only the bounded neutral `background_process_risk_possible` summary; command and
+process details remain transient. CAS-09 persistence, resumption, reconciliation, recovery, and
+all later audit, hardening, migration, and fallback work remain explicitly deferred.
+
 ## Likely impact map
 
 - packages/dorkpipe/lib: provider-neutral contracts, adapter package, state and tests;

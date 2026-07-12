@@ -137,14 +137,25 @@ type CancellationIntent struct {
 	Reason      string      `json:"reason"`
 }
 
+const (
+	CancellationReasonUserRequested = "user_requested"
+	CancellationReasonSafetyStop    = "safety_stop"
+	CancellationReasonDeadline      = "deadline_exceeded"
+)
+
 func (i CancellationIntent) Validate() error {
 	if err := i.Session.Validate(); err != nil {
 		return err
 	}
-	if strings.TrimSpace(i.Correlation.SessionID) == "" || strings.TrimSpace(i.Correlation.InteractionID) == "" || strings.TrimSpace(i.Reason) == "" {
-		return errors.New("session, interaction, and cancellation reason are required")
+	if strings.TrimSpace(i.Correlation.SessionID) == "" || strings.TrimSpace(i.Correlation.InteractionID) == "" {
+		return errors.New("session and interaction are required for cancellation")
 	}
-	return nil
+	switch i.Reason {
+	case CancellationReasonUserRequested, CancellationReasonSafetyStop, CancellationReasonDeadline:
+		return nil
+	default:
+		return errors.New("known cancellation reason is required")
+	}
 }
 
 type EventKind string
