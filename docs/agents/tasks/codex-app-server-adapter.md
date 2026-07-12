@@ -232,6 +232,23 @@ can produce only the bounded neutral `background_process_risk_possible` summary;
 process details remain transient. CAS-09 persistence, resumption, reconciliation, recovery, and
 all later audit, hardening, migration, and fallback work remain explicitly deferred.
 
+### CAS-09 current decision
+
+CAS-09 adds only package-local, versioned, bounded idle-session snapshots and explicit recovery.
+A snapshot contains safe session and policy references, opaque prior process/connection
+incarnations, a contiguous event cursor, and closed lifecycle/summary classes; it contains no raw
+RPC, prompt, command, patch, path, approval/input payload, credential, provider error, or process
+detail. It is committed atomically only after the existing supervisor has observed the thread idle
+with no active turn, pending approval/input, or cancellation.
+
+Recovery requires the existing neutral `RecoveryRequest` with the exact session and opaque
+evidence. A new supervisor starts a fresh initialized child and makes only a strictly correlated
+private idle reconciliation read. It never reconnects to the prior process or continues a prior
+turn. Policy mismatch, non-idle/unknown state, cursor ambiguity, corrupt or stale evidence,
+response mismatch, timeout, transport/child failure, provider error, reroute, or malformed input
+stays fail-closed as bounded `recovery_required` or `disconnected`; only an exact idle result emits
+`ready`. CAS-10 audit/telemetry and all CAS-11+ work remain deferred.
+
 ## Likely impact map
 
 - packages/dorkpipe/lib: provider-neutral contracts, adapter package, state and tests;

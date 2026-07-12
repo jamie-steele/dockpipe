@@ -259,6 +259,23 @@ type RecoveryRequest struct {
 	RecoveryEvidence string     `json:"recovery_evidence"`
 }
 
+// Validate keeps recovery evidence opaque, bounded, and bound to one neutral
+// session. Adapters own the evidence format and must reject any mismatch.
+func (r RecoveryRequest) Validate() error {
+	if err := r.Session.Validate(); err != nil {
+		return err
+	}
+	if len(r.RecoveryEvidence) == 0 || len(r.RecoveryEvidence) > 128 {
+		return errors.New("bounded recovery evidence is required")
+	}
+	for _, character := range r.RecoveryEvidence {
+		if !(character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' || character >= '0' && character <= '9' || character == '-' || character == '_' || character == '.') {
+			return errors.New("recovery evidence must be an opaque safe reference")
+		}
+	}
+	return nil
+}
+
 // Adapter is a contract only. CAS-03 and later own process supervision, transport,
 // lifecycle execution, approval delivery, and persistence.
 type Adapter interface {

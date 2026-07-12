@@ -96,6 +96,11 @@ func (s *Supervisor) handleNotification(method string, raw json.RawMessage) Disc
 		}
 		s.lifecycle.threadStatus = params.Status
 		summary, correlation = "thread_"+params.Status, s.eventCorrelation("", "")
+		if params.Status == "idle" {
+			if reason := s.persistIdleLocked(s.sequence + 1); reason != "" {
+				return reason
+			}
+		}
 	case "turn/started":
 		if !s.validTurnNotification(params) {
 			return eventMismatch(params.ThreadID != s.lifecycle.threadID || params.Turn.ID != s.lifecycle.turnID)

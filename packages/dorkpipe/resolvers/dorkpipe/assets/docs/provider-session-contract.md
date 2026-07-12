@@ -15,6 +15,8 @@ or approval delivery behavior.
   records before a future adapter applies them.
 - `Correlation` is the one-time decision tuple: process incarnation, connection, session,
   interaction, activity, request, and decision identity.
+- `RecoveryRequest` binds an opaque bounded recovery-evidence reference to the exact session;
+  adapter-local persistence and reconciliation decide whether that evidence is safe.
 - `Adapter` describes future start, send, decide, cancel, and recover operations without choosing a
   provider implementation.
 
@@ -68,3 +70,13 @@ non-interrupted terminal, and any ambiguity disconnect and invoke the existing b
 path. A background-process indication is reduced to the neutral
 `background_process_risk_possible` summary only. CAS-09+ persistence, resumption,
 reconciliation/recovery, audit, hardening, testing expansion, and Pipeon work remain deferred.
+
+CAS-09 adds bounded package-local idle-session snapshots and an explicit validated
+`RecoveryRequest`. The snapshot retains only safe session/policy/incarnation references, a
+contiguous event cursor, and closed lifecycle/summary classes. Recovery launches a fresh
+initialized supervisor, performs one exact private idle reconciliation read, and emits `ready` only
+then. It never reconnects to a prior child or resumes/replays an active, pending, cancelled,
+failed, unknown, or non-idle turn. Corrupt/stale evidence, policy/cursor mismatch, response or
+transport ambiguity, child exit, provider error, reroute, and timeout remain bounded
+`recovery_required`/`disconnected`. CAS-10 audit/journaling and CAS-11+ hardening, migration, and
+operations work remain deferred.

@@ -52,6 +52,7 @@ const (
 	DisconnectEventOrdering          DisconnectReason = "event_ordering"
 	DisconnectDecisionRejected       DisconnectReason = "decision_rejected"
 	DisconnectCancellationRejected   DisconnectReason = "cancellation_rejected"
+	DisconnectPersistenceFailure     DisconnectReason = "persistence_failure"
 )
 
 // Deadlines bound the supervisor itself. They are not a substitute for future
@@ -169,6 +170,7 @@ type Supervisor struct {
 	deadlines      Deadlines
 	initialization InitializationConfig
 	events         chan providersession.Event
+	store          SnapshotStore
 
 	mu                 sync.RWMutex
 	lifecycleMu        sync.Mutex
@@ -182,6 +184,7 @@ type Supervisor struct {
 	initializationInfo InitializationInfo
 	processRef         string
 	connectionRef      string
+	recoveryEvidence   string
 	lifecycle          lifecycleState
 	waitDone           chan struct{}
 	record             ShutdownRecord
@@ -197,6 +200,13 @@ var supervisorReferences atomic.Uint64
 // New constructs a supervisor for an opaque session reference supplied by a
 // future adapter. No provider session/thread lifecycle is started here.
 func New(session providersession.SessionRef, launcher Launcher, deadlines Deadlines, initialization InitializationConfig) (*Supervisor, error) {
+	return NewWithSnapshotStore(session, launcher, deadlines, initialization, nil)
+}
+
+// NewWithSnapshotStore keeps CAS-09 recovery state owned by this package. The
+// supplied store receives only bounded snapshot bytes produced below; it never
+// receives protocol frames or provider payloads.
+func NewWithSnapshotStore(session providersession.SessionRef, launcher Launcher, deadlines Deadlines, initialization InitializationConfig, store SnapshotStore) (*Supervisor, error) {
 	if err := session.Validate(); err != nil {
 		return nil, err
 	}
@@ -211,15 +221,17 @@ func New(session providersession.SessionRef, launcher Launcher, deadlines Deadli
 	}
 	reference := supervisorReferences.Add(1)
 	return &Supervisor{
-		session:        session,
-		launcher:       launcher,
-		deadlines:      deadlines,
-		initialization: initialization,
-		state:          providersession.StateReady,
-		events:         make(chan providersession.Event, 16),
-		processRef:     "process-" + strconv.FormatUint(reference, 10),
-		connectionRef:  "connection-" + strconv.FormatUint(reference, 10),
-		shutdownDone:   make(chan struct{}),
+		session:          session,
+		launcher:         launcher,
+		deadlines:        deadlines,
+		initialization:   initialization,
+		store:            store,
+		state:            providersession.StateReady,
+		events:           make(chan providersession.Event, 16),
+		processRef:       "process-" + strconv.FormatUint(reference, 10),
+		connectionRef:    "connection-" + strconv.FormatUint(reference, 10),
+		recoveryEvidence: "recovery-" + strconv.FormatUint(reference, 10),
+		shutdownDone:     make(chan struct{}),
 	}, nil
 }
 
@@ -246,9 +258,21 @@ func (s *Supervisor) Initialization() InitializationInfo {
 	return s.initializationInfo
 }
 
+// RecoveryEvidence is an opaque reference only. It is usable after a safe
+// idle snapshot has been committed; it carries no session content itself.
+func (s *Supervisor) RecoveryEvidence() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.recoveryEvidence
+}
+
 // Start launches one child under a bounded startup context. A later Start is
 // rejected, including after failure, so no active work can be replayed.
 func (s *Supervisor) Start(ctx context.Context) error {
+	return s.start(ctx, true)
+}
+
+func (s *Supervisor) start(ctx context.Context, emitReady bool) error {
 	s.mu.Lock()
 	if s.started || s.state == providersession.StateDisconnected {
 		s.mu.Unlock()
@@ -307,7 +331,9 @@ func (s *Supervisor) Start(ctx context.Context) error {
 		s.initializationInfo = info
 		s.initialized = true
 		s.mu.Unlock()
-		s.emit(providersession.StateReady, "initialized")
+		if emitReady {
+			s.emit(providersession.StateReady, "initialized")
+		}
 		return nil
 	case <-startupCtx.Done():
 		go reapLateLaunch(launched)

@@ -87,6 +87,19 @@ func TestCancellationReasonsAreNeutralAndBounded(t *testing.T) {
 	}
 }
 
+func TestRecoveryRequestRequiresExactBoundedEvidence(t *testing.T) {
+	request := RecoveryRequest{Session: SessionRef{Provider: "example", SessionID: "session"}, RecoveryEvidence: "recovery-safe_1"}
+	if err := request.Validate(); err != nil {
+		t.Fatalf("valid recovery request: %v", err)
+	}
+	for _, evidence := range []string{"", "unsafe/evidence", strings.Repeat("x", 129)} {
+		request.RecoveryEvidence = evidence
+		if err := request.Validate(); err == nil {
+			t.Fatalf("unsafe recovery evidence %q was accepted", evidence)
+		}
+	}
+}
+
 func TestContractSourceDoesNotLeakProviderProtocolTypes(t *testing.T) {
 	_, source, _, ok := runtime.Caller(0)
 	if !ok {
