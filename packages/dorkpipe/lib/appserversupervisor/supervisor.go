@@ -3,9 +3,7 @@
 package appserversupervisor
 
 import (
-	"bufio"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -30,13 +28,21 @@ var (
 type DisconnectReason string
 
 const (
-	DisconnectStartupFailure   DisconnectReason = "startup_failure"
-	DisconnectStartupDeadline  DisconnectReason = "startup_deadline"
-	DisconnectChildExit        DisconnectReason = "child_exit"
-	DisconnectTransportClosed  DisconnectReason = "transport_closed"
-	DisconnectMalformedInput   DisconnectReason = "malformed_transport"
-	DisconnectLivenessDeadline DisconnectReason = "liveness_deadline"
-	DisconnectShutdown         DisconnectReason = "shutdown"
+	DisconnectStartupFailure         DisconnectReason = "startup_failure"
+	DisconnectStartupDeadline        DisconnectReason = "startup_deadline"
+	DisconnectChildExit              DisconnectReason = "child_exit"
+	DisconnectTransportClosed        DisconnectReason = "transport_closed"
+	DisconnectMalformedInput         DisconnectReason = "malformed_transport"
+	DisconnectLivenessDeadline       DisconnectReason = "liveness_deadline"
+	DisconnectShutdown               DisconnectReason = "shutdown"
+	DisconnectRequestDeadline        DisconnectReason = "request_deadline"
+	DisconnectMalformedEnvelope      DisconnectReason = "malformed_envelope"
+	DisconnectCorrelationMismatch    DisconnectReason = "correlation_mismatch"
+	DisconnectProviderError          DisconnectReason = "provider_error"
+	DisconnectInitializationRejected DisconnectReason = "initialization_rejected"
+	DisconnectUnsupportedSchema      DisconnectReason = "unsupported_schema"
+	DisconnectUnsupportedCapability  DisconnectReason = "unsupported_capability"
+	DisconnectModelRerouted          DisconnectReason = "model_rerouted"
 )
 
 // Deadlines bound the supervisor itself. They are not a substitute for future
@@ -46,11 +52,12 @@ type Deadlines struct {
 	Shutdown time.Duration
 	Kill     time.Duration
 	Liveness time.Duration
+	Request  time.Duration
 }
 
 func (d Deadlines) validate() error {
-	if d.Startup <= 0 || d.Shutdown <= 0 || d.Kill <= 0 || d.Liveness <= 0 {
-		return errors.New("startup, shutdown, kill, and liveness deadlines must be positive")
+	if d.Startup <= 0 || d.Shutdown <= 0 || d.Kill <= 0 || d.Liveness <= 0 || d.Request <= 0 {
+		return errors.New("startup, shutdown, kill, liveness, and request deadlines must be positive")
 	}
 	return nil
 }
@@ -148,19 +155,22 @@ type launchResult struct {
 // Supervisor projects its process lifecycle as provider-neutral state events.
 // It owns exactly one child and never retries, resumes, replays, or falls back.
 type Supervisor struct {
-	session   providersession.SessionRef
-	launcher  Launcher
-	deadlines Deadlines
-	events    chan providersession.Event
+	session        providersession.SessionRef
+	launcher       Launcher
+	deadlines      Deadlines
+	initialization InitializationConfig
+	events         chan providersession.Event
 
-	mu       sync.RWMutex
-	started  bool
-	state    providersession.State
-	sequence uint64
-	child    Child
-	stdin    io.WriteCloser
-	waitDone chan struct{}
-	record   ShutdownRecord
+	mu                 sync.RWMutex
+	started            bool
+	state              providersession.State
+	sequence           uint64
+	child              Child
+	stdin              io.WriteCloser
+	client             *protocolClient
+	initializationInfo InitializationInfo
+	waitDone           chan struct{}
+	record             ShutdownRecord
 
 	disconnectOnce sync.Once
 	shutdownOnce   sync.Once
@@ -170,7 +180,7 @@ type Supervisor struct {
 
 // New constructs a supervisor for an opaque session reference supplied by a
 // future adapter. No provider session/thread lifecycle is started here.
-func New(session providersession.SessionRef, launcher Launcher, deadlines Deadlines) (*Supervisor, error) {
+func New(session providersession.SessionRef, launcher Launcher, deadlines Deadlines, initialization InitializationConfig) (*Supervisor, error) {
 	if err := session.Validate(); err != nil {
 		return nil, err
 	}
@@ -180,13 +190,17 @@ func New(session providersession.SessionRef, launcher Launcher, deadlines Deadli
 	if err := deadlines.validate(); err != nil {
 		return nil, err
 	}
+	if err := initialization.validate(); err != nil {
+		return nil, err
+	}
 	return &Supervisor{
-		session:      session,
-		launcher:     launcher,
-		deadlines:    deadlines,
-		state:        providersession.StateReady,
-		events:       make(chan providersession.Event, 4),
-		shutdownDone: make(chan struct{}),
+		session:        session,
+		launcher:       launcher,
+		deadlines:      deadlines,
+		initialization: initialization,
+		state:          providersession.StateReady,
+		events:         make(chan providersession.Event, 4),
+		shutdownDone:   make(chan struct{}),
 	}, nil
 }
 
@@ -203,6 +217,14 @@ func (s *Supervisor) ShutdownRecord() ShutdownRecord {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.record
+}
+
+// Initialization returns the bounded, allow-listed initialization projection.
+// It is empty until the supervisor has completed initialize/initialized.
+func (s *Supervisor) Initialization() InitializationInfo {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.initializationInfo
 }
 
 // Start launches one child under a bounded startup context. A later Start is
@@ -246,10 +268,26 @@ func (s *Supervisor) Start(ctx context.Context) error {
 		s.child = result.child
 		s.stdin = stdin
 		s.waitDone = make(chan struct{})
+		waitDone := s.waitDone
 		s.mu.Unlock()
-		s.emit(providersession.StateReady, "")
-		go s.waitForChild(result.child)
-		go s.observeStdout(stdout)
+		client := newProtocolClient(stdin, stdout, s.deadlines.Liveness, s.fail)
+		s.mu.Lock()
+		s.client = client
+		s.mu.Unlock()
+		go s.waitForChild(result.child, waitDone)
+		info, err := client.initialize(ctx, s.deadlines.Request, s.initialization)
+		if err != nil {
+			s.fail(client.failureReason())
+			return errors.New("app server initialization did not complete")
+		}
+		s.mu.Lock()
+		if s.state == providersession.StateDisconnected {
+			s.mu.Unlock()
+			return errors.New("app server disconnected during initialization")
+		}
+		s.initializationInfo = info
+		s.mu.Unlock()
+		s.emit(providersession.StateReady, "initialized")
 		return nil
 	case <-startupCtx.Done():
 		go reapLateLaunch(launched)
@@ -270,80 +308,15 @@ func reapLateLaunch(launched <-chan launchResult) {
 	_ = result.child.Wait()
 }
 
-func (s *Supervisor) waitForChild(child Child) {
+func (s *Supervisor) waitForChild(child Child, waitDone chan struct{}) {
 	_ = child.Wait()
 	s.mu.Lock()
 	if s.record.ExitedAt.IsZero() {
 		s.record.ExitedAt = time.Now().UTC()
 	}
-	waitDone := s.waitDone
 	s.mu.Unlock()
 	close(waitDone)
-}
-
-type frameResult struct{ reason DisconnectReason }
-
-func (s *Supervisor) observeStdout(stdout io.ReadCloser) {
-	frames := make(chan frameResult, 1)
-	go readJSONLFrames(stdout, frames)
-
-	timer := time.NewTimer(s.deadlines.Liveness)
-	defer timer.Stop()
-	for {
-		select {
-		case frame, ok := <-frames:
-			if !ok {
-				s.fail(DisconnectTransportClosed)
-				return
-			}
-			if frame.reason != "" {
-				s.fail(frame.reason)
-				return
-			}
-			resetTimer(timer, s.deadlines.Liveness)
-		case <-s.waitChannel():
-			s.fail(DisconnectChildExit)
-			return
-		case <-timer.C:
-			s.fail(DisconnectLivenessDeadline)
-			return
-		}
-	}
-}
-
-func readJSONLFrames(stdout io.ReadCloser, frames chan<- frameResult) {
-	defer close(frames)
-	scanner := bufio.NewScanner(stdout)
-	scanner.Buffer(make([]byte, 4096), 1<<20)
-	for scanner.Scan() {
-		var object map[string]json.RawMessage
-		if err := json.Unmarshal(scanner.Bytes(), &object); err != nil || object == nil {
-			frames <- frameResult{reason: DisconnectMalformedInput}
-			return
-		}
-		frames <- frameResult{}
-	}
-	if err := scanner.Err(); err != nil {
-		frames <- frameResult{reason: DisconnectMalformedInput}
-		return
-	}
-	frames <- frameResult{reason: DisconnectTransportClosed}
-}
-
-func resetTimer(timer *time.Timer, duration time.Duration) {
-	if !timer.Stop() {
-		select {
-		case <-timer.C:
-		default:
-		}
-	}
-	timer.Reset(duration)
-}
-
-func (s *Supervisor) waitChannel() <-chan struct{} {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.waitDone
+	s.fail(DisconnectChildExit)
 }
 
 func (s *Supervisor) fail(reason DisconnectReason) {

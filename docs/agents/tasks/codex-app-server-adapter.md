@@ -126,9 +126,30 @@ does not retry, resume, replay, or fall back. Native turns remain deferred: CAS-
 the pinned `gpt-5.6-terra`/`high` and the workspace-write, declared-root, network-disabled,
 user-review policy; host process placement itself grants none of those capabilities.
 
-Deferred to CAS-04+: all provider protocol initialization and request handling, thread/turn
-lifecycle, normalized provider events, approval delivery, interruption, persistence, audit,
-hardening, Pipeon migration, and CLI fallback.
+### CAS-04 current decision
+
+CAS-04 extends only the package-local `appserversupervisor` with a private JSONL protocol client.
+The one host-resident direct child now receives a bounded `initialize` request followed by the
+`initialized` notification. Request IDs start at one, advance monotonically, and only the active
+response can satisfy the request. The initialization gate requires an explicit accepted stable
+schema version and required capability set; it retains only an allow-listed projection of the
+provider version, `codex_app_server` identity class, bounded configuration-warning classes, and
+the pinned `gpt-5.6-terra` / `high` policy configuration. It neither calls the model catalog nor
+starts a thread or turn.
+
+Malformed JSONL/envelopes, correlation mismatches, provider errors, rejected initialization,
+schema/capability mismatch, model-reroute indications, request deadline expiry, transport loss,
+or child exit produce the single safe `Disconnected` projection and stop the child. The protocol
+client keeps frames, provider errors, IDs, prompts, account data, commands, stderr, and
+credentials private and transient; none crosses into `providersession` or Pipeon. It adds no
+retry, resume, replay, reconnect, fallback process, listener, socket, shell, credential access,
+or persistence.
+
+Deferred to CAS-05+: all thread/turn start/read/resume/follow-up/steer work; normalized provider
+events; approvals/user input; interruption; persistence/resumption; audit; additional hardening;
+Pipeon migration; and CLI fallback. Future turns must still explicitly enforce workspace-write,
+declared writable roots, network disabled, and user review; host process placement grants none of
+those capabilities.
 
 ## Likely impact map
 

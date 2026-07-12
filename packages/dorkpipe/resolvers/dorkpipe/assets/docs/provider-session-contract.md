@@ -30,8 +30,13 @@ A future App Server adapter maps its provider-specific thread to `SessionRef`, t
 `InteractionID`, item to `ActivityID`, and approval request to `RequestID`. It owns all protocol
 parsing and raw-payload handling; Pipeon receives only `providersession.Event` values.
 
-CAS-03 adds a package-local, host-resident child supervisor. It owns one direct child and private
-stdio, bounds startup/shutdown/kill/liveness, and projects startup failure, child exit, closed or
-malformed JSONL transport, and deadline expiry as a single normalized `disconnected` state event.
-It does not initialize a protocol, issue provider requests, start/resume threads or turns, persist
-raw payloads, relay approvals, or weaken the native turn policy that CAS-04+ must supply.
+CAS-03 adds a package-local, host-resident child supervisor. CAS-04 adds its private JSONL
+initialization client: a bounded `initialize` request, `initialized` notification, monotonic
+correlation, and schema/capability gate. It retains only safe provider-version, identity-class,
+and configuration-warning classifications. Malformed envelopes, response mismatch, provider
+errors, request deadline, transport loss, child exit, and reroute indications are all one safe
+`disconnected` state event. Protocol data remains package-local; the neutral contract and Pipeon
+receive no raw payloads or provider types.
+
+Thread/turn operations, normalized provider events, approval relay, interruption, persistence,
+audit, hardening, and Pipeon wiring remain deferred to CAS-05+.

@@ -1,9 +1,12 @@
 package appserversupervisor
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -69,16 +72,53 @@ func (c *fakeChild) killed() int {
 }
 
 func testDeadlines() Deadlines {
-	return Deadlines{Startup: time.Second, Shutdown: 30 * time.Millisecond, Kill: 30 * time.Millisecond, Liveness: time.Second}
+	return Deadlines{Startup: time.Second, Shutdown: 30 * time.Millisecond, Kill: 30 * time.Millisecond, Liveness: time.Second, Request: time.Second}
+}
+
+func testInitialization() InitializationConfig {
+	return InitializationConfig{SchemaVersion: "v2", RequiredCapabilities: []string{"stableV2"}, ClientName: "dockpipe-test", ClientVersion: "1.0.0", Model: PinnedModel, ReasoningEffort: PinnedReasoningEffort}
 }
 
 func newTestSupervisor(t *testing.T, launcher Launcher, deadlines Deadlines) *Supervisor {
 	t.Helper()
-	s, err := New(providersession.SessionRef{Provider: "test", SessionID: "session"}, launcher, deadlines)
+	s, err := New(providersession.SessionRef{Provider: "test", SessionID: "session"}, launcher, deadlines, testInitialization())
 	if err != nil {
 		t.Fatal(err)
 	}
 	return s
+}
+
+func startInitialized(t *testing.T, s *Supervisor, child *fakeChild, result string) error {
+	t.Helper()
+	started := make(chan error, 1)
+	go func() { started <- s.Start(context.Background()) }()
+	scanner := bufio.NewScanner(child.stdinR)
+	if !scanner.Scan() {
+		t.Fatal("expected initialize request")
+	}
+	var request struct {
+		ID     uint64 `json:"id"`
+		Method string `json:"method"`
+	}
+	if err := json.Unmarshal(scanner.Bytes(), &request); err != nil || request.ID == 0 || request.Method != "initialize" {
+		t.Fatalf("initialize request = %s, err=%v", scanner.Text(), err)
+	}
+	if result == "" {
+		result = `{"protocolVersion":"v2","serverInfo":{"name":"codex-app-server","version":"0.144.1"},"capabilities":{"stableV2":true},"configWarnings":["config_deprecated"]}`
+	}
+	if _, err := child.stdoutW.Write([]byte(`{"jsonrpc":"2.0","id":` + strconv.FormatUint(request.ID, 10) + `,"result":` + result + "}\n")); err != nil {
+		t.Fatal(err)
+	}
+	if !scanner.Scan() {
+		t.Fatal("expected initialized notification")
+	}
+	var notification struct {
+		Method string `json:"method"`
+	}
+	if err := json.Unmarshal(scanner.Bytes(), &notification); err != nil || notification.Method != "initialized" {
+		t.Fatalf("initialized notification = %s, err=%v", scanner.Text(), err)
+	}
+	return <-started
 }
 
 func nextEvent(t *testing.T, s *Supervisor) providersession.Event {
@@ -154,7 +194,7 @@ func TestStartupDeadlineProjectsDisconnected(t *testing.T) {
 func TestCleanShutdownClosesPrivateStdinWithoutKill(t *testing.T) {
 	child := newFakeChild()
 	s := newTestSupervisor(t, fakeLauncher{start: func(context.Context) (Child, error) { return child, nil }}, testDeadlines())
-	if err := s.Start(context.Background()); err != nil {
+	if err := startInitialized(t, s, child, ""); err != nil {
 		t.Fatal(err)
 	}
 	done := make(chan error, 1)
@@ -176,7 +216,7 @@ func TestCleanShutdownClosesPrivateStdinWithoutKill(t *testing.T) {
 func TestForcedChildDeathProjectsDisconnected(t *testing.T) {
 	child := newFakeChild()
 	s := newTestSupervisor(t, fakeLauncher{start: func(context.Context) (Child, error) { return child, nil }}, testDeadlines())
-	if err := s.Start(context.Background()); err != nil {
+	if err := startInitialized(t, s, child, ""); err != nil {
 		t.Fatal(err)
 	}
 	child.exit(errors.New("died"))
@@ -186,7 +226,7 @@ func TestForcedChildDeathProjectsDisconnected(t *testing.T) {
 func TestClosedStdoutProjectsDisconnected(t *testing.T) {
 	child := newFakeChild()
 	s := newTestSupervisor(t, fakeLauncher{start: func(context.Context) (Child, error) { return child, nil }}, testDeadlines())
-	if err := s.Start(context.Background()); err != nil {
+	if err := startInitialized(t, s, child, ""); err != nil {
 		t.Fatal(err)
 	}
 	_ = child.stdoutW.Close()
@@ -198,7 +238,7 @@ func TestLivenessDeadlineProjectsDisconnectedAndKillsChild(t *testing.T) {
 	deadlines := testDeadlines()
 	deadlines.Liveness = 20 * time.Millisecond
 	s := newTestSupervisor(t, fakeLauncher{start: func(context.Context) (Child, error) { return child, nil }}, deadlines)
-	if err := s.Start(context.Background()); err != nil {
+	if err := startInitialized(t, s, child, ""); err != nil {
 		t.Fatal(err)
 	}
 	requireDisconnected(t, s, DisconnectLivenessDeadline)
@@ -219,17 +259,17 @@ func TestLivenessDeadlineProjectsDisconnectedAndKillsChild(t *testing.T) {
 func TestMalformedStdoutProjectsDisconnected(t *testing.T) {
 	child := newFakeChild()
 	s := newTestSupervisor(t, fakeLauncher{start: func(context.Context) (Child, error) { return child, nil }}, testDeadlines())
-	if err := s.Start(context.Background()); err != nil {
+	if err := startInitialized(t, s, child, ""); err != nil {
 		t.Fatal(err)
 	}
 	_, _ = child.stdoutW.Write([]byte("not-json\n"))
-	requireDisconnected(t, s, DisconnectMalformedInput)
+	requireDisconnected(t, s, DisconnectMalformedEnvelope)
 }
 
 func TestNoReplayOrResumeAfterDisconnect(t *testing.T) {
 	child := newFakeChild()
 	s := newTestSupervisor(t, fakeLauncher{start: func(context.Context) (Child, error) { return child, nil }}, testDeadlines())
-	if err := s.Start(context.Background()); err != nil {
+	if err := startInitialized(t, s, child, ""); err != nil {
 		t.Fatal(err)
 	}
 	child.exit(errors.New("died"))
