@@ -48,6 +48,8 @@ const (
 	DisconnectPolicyMismatch         DisconnectReason = "policy_mismatch"
 	DisconnectLifecycleRejected      DisconnectReason = "lifecycle_rejected"
 	DisconnectUnsupportedLifecycle   DisconnectReason = "unsupported_lifecycle_state"
+	DisconnectUnsupportedEvent       DisconnectReason = "unsupported_event"
+	DisconnectEventOrdering          DisconnectReason = "event_ordering"
 )
 
 // Deadlines bound the supervisor itself. They are not a substitute for future
@@ -212,7 +214,7 @@ func New(session providersession.SessionRef, launcher Launcher, deadlines Deadli
 		deadlines:      deadlines,
 		initialization: initialization,
 		state:          providersession.StateReady,
-		events:         make(chan providersession.Event, 4),
+		events:         make(chan providersession.Event, 16),
 		processRef:     "process-" + strconv.FormatUint(reference, 10),
 		connectionRef:  "connection-" + strconv.FormatUint(reference, 10),
 		shutdownDone:   make(chan struct{}),
@@ -285,7 +287,7 @@ func (s *Supervisor) Start(ctx context.Context) error {
 		s.waitDone = make(chan struct{})
 		waitDone := s.waitDone
 		s.mu.Unlock()
-		client := newProtocolClient(stdin, stdout, s.deadlines.Liveness, s.fail)
+		client := newProtocolClientWithNotifications(stdin, stdout, s.deadlines.Liveness, s.fail, s.handleNotification)
 		s.mu.Lock()
 		s.client = client
 		s.mu.Unlock()
@@ -381,6 +383,21 @@ func (s *Supervisor) emit(state providersession.State, summary string) {
 	s.state = state
 	s.sequence++
 	event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: time.Now().UTC(), Session: s.session, Kind: providersession.EventStateChanged, State: state, Summary: summary}
+	s.mu.Unlock()
+	s.events <- event
+}
+
+// emitProgress projects a bounded, provider-neutral event. Its correlation is
+// composed only from supervisor-owned process/connection references and the
+// opaque lifecycle identifiers already held privately by the supervisor.
+func (s *Supervisor) emitProgress(summary string, correlation providersession.Correlation) {
+	s.mu.Lock()
+	if s.state == providersession.StateDisconnected {
+		s.mu.Unlock()
+		return
+	}
+	s.sequence++
+	event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: time.Now().UTC(), Session: s.session, Kind: providersession.EventProgress, Correlation: correlation, Summary: summary}
 	s.mu.Unlock()
 	s.events <- event
 }

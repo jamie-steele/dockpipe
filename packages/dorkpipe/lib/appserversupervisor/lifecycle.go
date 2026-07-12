@@ -51,11 +51,18 @@ var (
 )
 
 type lifecycleState struct {
-	threadID  string
-	turnID    string
-	active    bool
-	steerable bool
-	policyKey [sha256.Size]byte
+	threadID        string
+	turnID          string
+	itemID          string
+	active          bool
+	steerable       bool
+	threadNotified  bool
+	turnNotified    bool
+	threadStatus    string
+	warningNotified bool
+	errorNotified   bool
+	tokenTotal      uint64
+	policyKey       [sha256.Size]byte
 }
 
 func (p LifecyclePolicy) validate() error {
@@ -257,9 +264,14 @@ func (s *Supervisor) StartTurn(ctx context.Context, reference LifecycleReference
 		return LifecycleReference{}, s.rejectLifecycle(reason)
 	}
 	s.mu.Lock()
-	s.lifecycle.turnID, s.lifecycle.active, s.lifecycle.steerable = turnID, true, steerable
+	s.lifecycle.turnID, s.lifecycle.itemID, s.lifecycle.active, s.lifecycle.steerable = turnID, "", true, steerable
+	s.lifecycle.turnNotified, s.lifecycle.warningNotified, s.lifecycle.errorNotified, s.lifecycle.tokenTotal = false, false, false, 0
 	s.mu.Unlock()
-	s.emit(providersession.StateRunning, "turn_started")
+	if s.State() == providersession.StateReady {
+		s.emit(providersession.StateRunning, "turn_started")
+	} else {
+		s.emitProgress("turn_started", s.lifecycleCorrelation(turnID, ""))
+	}
 	return s.lifecycleReference(turnID), nil
 }
 

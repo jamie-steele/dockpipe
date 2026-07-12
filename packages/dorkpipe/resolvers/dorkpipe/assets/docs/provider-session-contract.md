@@ -41,5 +41,9 @@ provider error bodies remain package-local and transient. Malformed envelopes, r
 provider errors, lifecycle/policy rejection, request deadline, transport loss, child exit, and
 reroute indications are all one safe `disconnected` state event.
 
-Normalized provider events and terminal turn state, approval relay, interruption, persistence,
-audit, additional hardening, and Pipeon wiring remain deferred to CAS-06+.
+CAS-06 adds package-local structured notification normalization. It emits contiguous supervisor-owned
+progress events with opaque thread/turn/item correlation and bounded allow-listed summaries only;
+raw frames, token text, item content, messages, error bodies, commands, files, and credentials stay
+private and transient. A correlated terminal turn event can release the private active-turn gate,
+but does not implement recovery or replay. Approval relay, interruption, persistence, audit,
+additional hardening, and Pipeon wiring remain deferred to CAS-07+.

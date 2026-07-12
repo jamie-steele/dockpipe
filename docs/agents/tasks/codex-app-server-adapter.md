@@ -173,6 +173,27 @@ Deferred to CAS-06+: provider-event normalization and terminal turn state; appro
 relay; interruption; persistence/reconciliation; audit; further hardening; Pipeon migration; and
 CLI fallback.
 
+### CAS-06 current decision
+
+CAS-06 extends only the package-local `appserversupervisor` notification path. It accepts a closed
+allow-list of correlated thread, turn, item, progress, warning, error, token-usage, and terminal
+turn notifications after CAS-05's initialization/thread/turn gates. Raw JSONL frames, token text,
+item content, provider messages, error bodies, command/file data, credentials, and provider IDs
+remain private and transient. The supervisor projects only contiguous, supervisor-owned neutral
+`providersession.Event` progress summaries and opaque `SessionRef`/`Correlation` references.
+
+One private item may be active within the one private active turn. Duplicate, stale, reordered,
+cross-thread, cross-turn, cross-item, malformed, uncorrelated, unsupported, rerouted, transport,
+or child-exit notifications fail closed through the single `Disconnected` projection. A validated,
+exact terminal turn notification alone releases the active-turn invariant; it does not recover,
+resume, replay, retry, or cancel work. `providersession` and Pipeon remain free of App Server
+protocol/raw-payload types.
+
+Deferred explicitly to CAS-07+: approval and user-input relay (CAS-07), interruption/cancellation
+delivery (CAS-08), persistence/reconciliation/recovery (CAS-09), audit journal (CAS-10), broader
+hardening (CAS-11), contract/integration expansion (CAS-12/13), Pipeon migration (CAS-14/15), CLI
+fallback changes (CAS-16), and operations guidance (CAS-17).
+
 ## Likely impact map
 
 - packages/dorkpipe/lib: provider-neutral contracts, adapter package, state and tests;

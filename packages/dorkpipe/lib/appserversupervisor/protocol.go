@@ -65,18 +65,23 @@ type protocolClient struct {
 	failFunc func(DisconnectReason)
 	liveness time.Duration
 
-	mu       sync.Mutex
-	nextID   uint64
-	pending  map[uint64]chan json.RawMessage
-	reason   DisconnectReason
-	done     chan struct{}
-	failOnce sync.Once
-	writeMu  sync.Mutex
-	activity chan struct{}
+	mu          sync.Mutex
+	nextID      uint64
+	pending     map[uint64]chan json.RawMessage
+	reason      DisconnectReason
+	done        chan struct{}
+	failOnce    sync.Once
+	writeMu     sync.Mutex
+	activity    chan struct{}
+	eventNotify func(string, json.RawMessage) DisconnectReason
 }
 
 func newProtocolClient(stdin io.WriteCloser, stdout io.ReadCloser, liveness time.Duration, failFunc func(DisconnectReason)) *protocolClient {
-	c := &protocolClient{stdin: stdin, failFunc: failFunc, liveness: liveness, pending: map[uint64]chan json.RawMessage{}, done: make(chan struct{}), activity: make(chan struct{}, 1)}
+	return newProtocolClientWithNotifications(stdin, stdout, liveness, failFunc, nil)
+}
+
+func newProtocolClientWithNotifications(stdin io.WriteCloser, stdout io.ReadCloser, liveness time.Duration, failFunc func(DisconnectReason), notify func(string, json.RawMessage) DisconnectReason) *protocolClient {
+	c := &protocolClient{stdin: stdin, failFunc: failFunc, liveness: liveness, pending: map[uint64]chan json.RawMessage{}, done: make(chan struct{}), activity: make(chan struct{}, 1), eventNotify: notify}
 	go c.read(stdout)
 	go c.watchLiveness()
 	return c
@@ -222,6 +227,12 @@ func (c *protocolClient) handle(frame []byte) bool {
 	if strings.Contains(strings.ToLower(*envelope.Method), "model/rerout") || containsModelReroute(envelope.Params) {
 		c.fail(DisconnectModelRerouted)
 		return false
+	}
+	if c.eventNotify != nil {
+		if reason := c.eventNotify(*envelope.Method, append(json.RawMessage(nil), envelope.Params...)); reason != "" {
+			c.fail(reason)
+			return false
+		}
 	}
 	return true
 }
