@@ -28,6 +28,7 @@ type pendingCancellation struct {
 // return acknowledges delivery only: the session remains running until the
 // correlated interrupted terminal notification is received.
 func (s *Supervisor) Cancel(parent context.Context, intent providersession.CancellationIntent) error {
+	started := time.Now()
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	if err := intent.Validate(); err != nil {
@@ -48,7 +49,9 @@ func (s *Supervisor) Cancel(parent context.Context, intent providersession.Cance
 	s.sequence++
 	event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: nowUTC(), Session: s.session, Kind: providersession.EventCancellationRequested, Correlation: intent.Correlation, Summary: "cancellation_requested", Cancellation: &intent}
 	s.mu.Unlock()
-	s.events <- event
+	if !s.publish(event, "cancellation", "accepted", "running") {
+		return ErrCancellationUnavailable
+	}
 
 	result, err := s.lifecycleRequest(parent, client, "turn/interrupt", map[string]any{"threadId": intent.Session.SessionID, "turnId": intent.Correlation.InteractionID})
 	if err != nil {
@@ -63,6 +66,7 @@ func (s *Supervisor) Cancel(parent context.Context, intent providersession.Cance
 		return s.rejectCancellation(reason)
 	}
 
+	var riskEvent *providersession.Event
 	s.mu.Lock()
 	pending := s.lifecycle.cancellation
 	if s.state == providersession.StateDisconnected || pending == nil || pending.intent != intent || !s.lifecycle.active || s.lifecycle.threadID != threadID || s.lifecycle.turnID != turnID {
@@ -73,10 +77,16 @@ func (s *Supervisor) Cancel(parent context.Context, intent providersession.Cance
 	pending.timer = time.AfterFunc(s.deadlines.Request, func() { s.expireCancellation(intent.Correlation) })
 	if risk {
 		s.sequence++
-		riskEvent := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: nowUTC(), Session: s.session, Kind: providersession.EventProgress, Correlation: intent.Correlation, Summary: "background_process_risk_possible"}
-		s.events <- riskEvent
+		event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: nowUTC(), Session: s.session, Kind: providersession.EventProgress, Correlation: intent.Correlation, Summary: "background_process_risk_possible"}
+		riskEvent = &event
 	}
 	s.mu.Unlock()
+	if riskEvent != nil && !s.publish(*riskEvent, "cancellation", "delivered", "running") {
+		return ErrCancellationUnavailable
+	}
+	if !s.auditOperation("cancellation", "delivered", "running", "interrupt_delivered", intent.Correlation, started) {
+		return ErrCancellationUnavailable
+	}
 	return nil
 }
 

@@ -66,6 +66,22 @@ func saveRecoverySnapshot(t *testing.T, store *memorySnapshotStore, snapshot rec
 	store.data[snapshot.Evidence] = data
 }
 
+func saveAuditCursor(t *testing.T, evidence string, session providersession.SessionRef, cursor uint64) {
+	t.Helper()
+	records := make([]AuditRecord, 0, cursor)
+	for sequence := uint64(1); sequence <= cursor; sequence++ {
+		records = append(records, AuditRecord{Version: auditSchemaVersion, Sequence: sequence, EventSequence: sequence, Operation: "event", Outcome: "completed", Lifecycle: "idle", Summary: "thread_idle", Session: session, Progress: "low", Latency: "none"})
+	}
+	document := auditDocument{Version: auditSchemaVersion, Evidence: evidence, Session: session, LastEvent: cursor, Segments: []auditSegment{{FirstSequence: 1, LastSequence: cursor, Records: records}}}
+	data, err := json.Marshal(document)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := defaultAuditStore.Save(context.Background(), evidence, data); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func newStoredIdleSupervisor(t *testing.T, store SnapshotStore) (*Supervisor, providersession.SessionRef, uint64, LifecyclePolicy) {
 	t.Helper()
 	child := newFakeChild()
@@ -237,6 +253,7 @@ func TestRecoveryReconciliationFailuresDisconnect(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			store := &memorySnapshotStore{}
 			saveRecoverySnapshot(t, store, validRecoverySnapshot(policy, session, evidence))
+			saveAuditCursor(t, evidence, session, 7)
 			child := newFakeChild()
 			s, _ := NewWithSnapshotStore(session, fakeLauncher{start: func(context.Context) (Child, error) { return child, nil }}, testDeadlines(), testInitialization(), store)
 			done := make(chan error, 1)
@@ -261,6 +278,7 @@ func TestRecoveryReconciliationFailuresDisconnect(t *testing.T) {
 	t.Run("timeout", func(t *testing.T) {
 		store := &memorySnapshotStore{}
 		saveRecoverySnapshot(t, store, validRecoverySnapshot(policy, session, evidence))
+		saveAuditCursor(t, evidence, session, 7)
 		child := newFakeChild()
 		deadlines := testDeadlines()
 		deadlines.Request = 20 * time.Millisecond
@@ -318,7 +336,7 @@ func TestRecoverySourceKeepsPersistenceAndProtocolBoundaries(t *testing.T) {
 		t.Fatal(err)
 	}
 	lower := strings.ToLower(string(data))
-	for _, forbidden := range []string{"turn/resume", "turn/start", "turn/interrupt", "requestapproval", "commandexecution", "filechange", "credential", "patch", "prompt", "question", "retry", "replay", "audit"} {
+	for _, forbidden := range []string{"turn/resume", "turn/start", "turn/interrupt", "requestapproval", "commandexecution", "filechange", "credential", "patch", "prompt", "question", "retry", "replay"} {
 		if strings.Contains(lower, forbidden) {
 			t.Fatalf("recovery source contains forbidden %q", forbidden)
 		}

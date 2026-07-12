@@ -65,6 +65,7 @@ func (s *Supervisor) handleNotification(method string, raw json.RawMessage) Disc
 	}
 	var summary string
 	var correlation providersession.Correlation
+	persistIdle := false
 	switch method {
 	case "thread/started":
 		if !validID(params.Thread.ID) {
@@ -97,9 +98,7 @@ func (s *Supervisor) handleNotification(method string, raw json.RawMessage) Disc
 		s.lifecycle.threadStatus = params.Status
 		summary, correlation = "thread_"+params.Status, s.eventCorrelation("", "")
 		if params.Status == "idle" {
-			if reason := s.persistIdleLocked(s.sequence + 1); reason != "" {
-				return reason
-			}
+			persistIdle = true
 		}
 	case "turn/started":
 		if !s.validTurnNotification(params) {
@@ -206,7 +205,9 @@ func (s *Supervisor) handleNotification(method string, raw json.RawMessage) Disc
 			return reason
 		}
 		s.mu.Unlock()
-		s.events <- event
+		if !s.publish(event, "event", "completed", auditLifecycle(s.State())) {
+			return DisconnectAuditFailure
+		}
 		s.mu.Lock()
 		return ""
 	default:
@@ -215,6 +216,14 @@ func (s *Supervisor) handleNotification(method string, raw json.RawMessage) Disc
 	s.sequence++
 	event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: nowUTC(), Session: s.session, Kind: providersession.EventProgress, Correlation: correlation, Summary: summary}
 	s.mu.Unlock()
+	if !s.auditEvent(event, "event", "completed", auditLifecycle(s.State())) {
+		return DisconnectAuditFailure
+	}
+	if persistIdle {
+		if reason := s.persistIdle(event.Sequence); reason != "" {
+			return reason
+		}
+	}
 	s.events <- event
 	s.mu.Lock()
 	return ""

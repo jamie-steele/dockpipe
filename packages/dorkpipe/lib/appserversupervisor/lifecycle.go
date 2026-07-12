@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"dorkpipe.orchestrator/providersession"
 )
@@ -158,6 +159,7 @@ func inputParam(input InputReference) []any {
 // StartThread performs the first provider thread lifecycle operation after the
 // CAS-04 initialization gate and returns only neutral references.
 func (s *Supervisor) StartThread(ctx context.Context, policy LifecyclePolicy) (LifecycleReference, error) {
+	started := time.Now()
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	if err := policy.validate(); err != nil {
@@ -178,6 +180,9 @@ func (s *Supervisor) StartThread(ctx context.Context, policy LifecyclePolicy) (L
 	}
 	s.mu.Lock()
 	s.session = providersession.SessionRef{Provider: s.session.Provider, SessionID: threadID}
+	if s.audit != nil {
+		s.audit.updateSession(s.session)
+	}
 	s.lifecycle.threadID = threadID
 	s.lifecycle.policyKey = policy.key()
 	s.lifecycle.declaredRoots = map[string]bool{}
@@ -185,7 +190,11 @@ func (s *Supervisor) StartThread(ctx context.Context, policy LifecyclePolicy) (L
 		s.lifecycle.declaredRoots[filepath.Clean(root)] = true
 	}
 	s.mu.Unlock()
-	return s.lifecycleReference(""), nil
+	reference := s.lifecycleReference("")
+	if !s.auditOperation("lifecycle", "accepted", "ready", "thread_started", reference.Correlation, started) {
+		return LifecycleReference{}, ErrLifecycleUnavailable
+	}
+	return reference, nil
 }
 
 // ReadThread verifies the active private thread still matches its neutral
@@ -201,6 +210,7 @@ func (s *Supervisor) ResumeThread(ctx context.Context, reference LifecycleRefere
 }
 
 func (s *Supervisor) threadOperation(ctx context.Context, method string, reference LifecycleReference, policy LifecyclePolicy) (LifecycleReference, error) {
+	started := time.Now()
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	if err := policy.validate(); err != nil {
@@ -232,12 +242,17 @@ func (s *Supervisor) threadOperation(ctx context.Context, method string, referen
 		}
 		return LifecycleReference{}, s.rejectLifecycle(reason)
 	}
-	return s.lifecycleReference(""), nil
+	resultReference := s.lifecycleReference("")
+	if !s.auditOperation("lifecycle", "completed", "ready", "thread_checked", resultReference.Correlation, started) {
+		return LifecycleReference{}, ErrLifecycleUnavailable
+	}
+	return resultReference, nil
 }
 
 // StartTurn allows one active turn for the supervisor-owned thread. The input
 // is deliberately an opaque reference rather than a retained prompt.
 func (s *Supervisor) StartTurn(ctx context.Context, reference LifecycleReference, policy LifecyclePolicy, input InputReference) (LifecycleReference, error) {
+	started := time.Now()
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	if err := policy.validate(); err != nil {
@@ -276,15 +291,22 @@ func (s *Supervisor) StartTurn(ctx context.Context, reference LifecycleReference
 	s.lifecycle.turnNotified, s.lifecycle.warningNotified, s.lifecycle.errorNotified, s.lifecycle.tokenTotal = false, false, false, 0
 	s.mu.Unlock()
 	if s.State() == providersession.StateReady {
-		s.emit(providersession.StateRunning, "turn_started")
+		if !s.emit(providersession.StateRunning, "turn_started", "lifecycle", "accepted") {
+			return LifecycleReference{}, ErrLifecycleUnavailable
+		}
 	} else {
 		s.emitProgress("turn_started", s.lifecycleCorrelation(turnID, ""))
 	}
-	return s.lifecycleReference(turnID), nil
+	resultReference := s.lifecycleReference(turnID)
+	if !s.auditOperation("lifecycle", "accepted", "running", "turn_started", resultReference.Correlation, started) {
+		return LifecycleReference{}, ErrLifecycleUnavailable
+	}
+	return resultReference, nil
 }
 
 // SteerTurn is allowed only for the current active steerable turn.
 func (s *Supervisor) SteerTurn(ctx context.Context, reference LifecycleReference, policy LifecyclePolicy, input InputReference) error {
+	started := time.Now()
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	if err := policy.validate(); err != nil {
@@ -316,6 +338,9 @@ func (s *Supervisor) SteerTurn(ctx context.Context, reference LifecycleReference
 			reason = DisconnectCorrelationMismatch
 		}
 		return s.rejectLifecycle(reason)
+	}
+	if !s.auditOperation("lifecycle", "delivered", "running", "turn_steered", reference.Correlation, started) {
+		return ErrLifecycleUnavailable
 	}
 	return nil
 }

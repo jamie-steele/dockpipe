@@ -78,5 +78,15 @@ initialized supervisor, performs one exact private idle reconciliation read, and
 then. It never reconnects to a prior child or resumes/replays an active, pending, cancelled,
 failed, unknown, or non-idle turn. Corrupt/stale evidence, policy/cursor mismatch, response or
 transport ambiguity, child exit, provider error, reroute, and timeout remain bounded
-`recovery_required`/`disconnected`. CAS-10 audit/journaling and CAS-11+ hardening, migration, and
-operations work remain deferred.
+`recovery_required`/`disconnected`.
+
+CAS-10 adds an appserversupervisor-local, bounded, versioned audit journal. It stores only safe
+operation/event outcome classes, opaque neutral session/correlation references, contiguous event and
+journal cursors, and coarse progress/latency buckets. The journal is atomically replaced as bounded
+append-only segments and is never an adapter operation surface: it cannot replay, resume, retry,
+approve, deny, steer, cancel, or recover a turn. Raw frames/payloads, timestamps, prompts, questions,
+commands, patches, paths, credentials, token text, provider IDs/error bodies, account/config data,
+and process details are excluded. Missing, corrupt, oversized, stale, gapped, cross-session, or
+unsafe audit evidence fails closed. A recovered idle session must match its retained audit cursor;
+that evidence still never claims prior active or unknown work survived. CAS-11+ hardening, migration,
+and operations work remain deferred.

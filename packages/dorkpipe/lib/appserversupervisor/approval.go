@@ -106,7 +106,9 @@ func (s *Supervisor) handleServerRequest(providerID uint64, method string, raw j
 		event.Approval = &providersession.ApprovalRequest{Correlation: correlation, ActionClass: actionClass, Summary: actionClass + "_approval", Scope: scope}
 	}
 	s.mu.Unlock()
-	s.events <- event
+	if !s.publish(event, "approval", "accepted", "waiting") {
+		return DisconnectAuditFailure
+	}
 	return ""
 }
 
@@ -189,6 +191,7 @@ func (s *Supervisor) permissionScopeDeclared(raw json.RawMessage) bool {
 // private App Server response. It cannot grant session access, amend policy,
 // answer a user-input request, or approve a permission profile.
 func (s *Supervisor) Decide(parent context.Context, decision providersession.ApprovalDecision) error {
+	started := time.Now()
 	if err := decision.Validate(); err != nil {
 		return s.rejectDecision(DisconnectDecisionRejected)
 	}
@@ -214,6 +217,9 @@ func (s *Supervisor) Decide(parent context.Context, decision providersession.App
 	defer cancel()
 	if client == nil || client.respond(ctx, providerID, result) != nil {
 		s.fail(DisconnectTransportClosed)
+		return ErrDecisionUnavailable
+	}
+	if !s.auditOperation("approval", "delivered", "waiting", "approval_delivered", decision.Correlation, started) {
 		return ErrDecisionUnavailable
 	}
 	return nil
@@ -243,6 +249,13 @@ func (s *Supervisor) expirePending(correlation providersession.Correlation) {
 	pending, client := s.lifecycle.pending, s.client
 	s.lifecycle.pending = nil
 	s.mu.Unlock()
+	operation := "approval"
+	if pending.kind == pendingUserInput {
+		operation = "user_input"
+	}
+	if !s.auditOperation(operation, "expired", "waiting", "request_expired", correlation, time.Time{}) {
+		return
+	}
 	if pending.kind != pendingUserInput && client != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), s.deadlines.Request)
 		_ = client.respond(ctx, pending.providerID, decisionResult(pending.kind, providersession.DecisionDeny))
@@ -278,7 +291,9 @@ func (s *Supervisor) handleServerRequestResolved(params eventParams) DisconnectR
 	s.sequence++
 	event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: nowUTC(), Session: s.session, Kind: providersession.EventStateChanged, State: s.state, Correlation: pending.correlation, Summary: "approval_resolved"}
 	s.mu.Unlock()
-	s.events <- event
+	if !s.publish(event, "approval", "resolved", "running") {
+		return DisconnectAuditFailure
+	}
 	return ""
 }
 

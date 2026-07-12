@@ -119,17 +119,25 @@ type recoverySnapshot struct {
 	SafeSummary string                     `json:"safe_summary"`
 }
 
-func (s *Supervisor) persistIdleLocked(nextCursor uint64) DisconnectReason {
+func (s *Supervisor) persistIdle(eventCursor uint64) DisconnectReason {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.store == nil {
 		return ""
 	}
-	if s.lifecycle.threadStatus != "idle" || s.lifecycle.active || s.lifecycle.turnID != "" || s.lifecycle.itemID != "" || s.lifecycle.pending != nil || s.lifecycle.cancellation != nil || s.lifecycle.policyKey == [sha256.Size]byte{} || nextCursor == 0 {
+	if s.state == providersession.StateDisconnected || s.lifecycle.threadStatus != "idle" || s.lifecycle.active || s.lifecycle.turnID != "" || s.lifecycle.itemID != "" || s.lifecycle.pending != nil || s.lifecycle.cancellation != nil || s.lifecycle.policyKey == [sha256.Size]byte{} || eventCursor == 0 || eventCursor != s.sequence {
 		return DisconnectPersistenceFailure
 	}
-	snapshot := recoverySnapshot{Version: snapshotVersion, Evidence: s.recoveryEvidence, Session: s.session, Policy: hex.EncodeToString(s.lifecycle.policyKey[:]), Lifecycle: "idle", Process: s.processRef, Connection: s.connectionRef, EventCursor: nextCursor, NextCursor: nextCursor + 1, SafeSummary: "thread_idle"}
+	snapshot := recoverySnapshot{Version: snapshotVersion, Evidence: s.recoveryEvidence, Session: s.session, Policy: hex.EncodeToString(s.lifecycle.policyKey[:]), Lifecycle: "idle", Process: s.processRef, Connection: s.connectionRef, EventCursor: eventCursor, NextCursor: eventCursor + 1, SafeSummary: "thread_idle"}
 	data, err := json.Marshal(snapshot)
 	if err != nil || len(data) == 0 || len(data) > maxSnapshotBytes {
 		return DisconnectPersistenceFailure
+	}
+	if s.audit == nil {
+		return DisconnectAuditFailure
+	}
+	if err := s.audit.append(context.Background(), AuditRecord{Version: auditSchemaVersion, Operation: "persistence", Outcome: "completed", Lifecycle: "idle", Summary: "thread_idle", Session: s.session, Progress: auditProgress(s.sequence), Latency: "none"}); err != nil {
+		return DisconnectAuditFailure
 	}
 	if err := s.store.Save(context.Background(), snapshot.Evidence, data); err != nil {
 		return DisconnectPersistenceFailure
@@ -182,6 +190,10 @@ func (s *Supervisor) Recover(ctx context.Context, request providersession.Recove
 		s.recoveryRequired("snapshot_rejected")
 		return LifecycleReference{}, ErrRecoveryRejected
 	}
+	if s.audit == nil || s.audit.recoverCursor(ctx, request.RecoveryEvidence, snapshot.Session, snapshot.EventCursor) != nil {
+		s.recoveryRequired("audit_rejected")
+		return LifecycleReference{}, ErrRecoveryRejected
+	}
 	s.mu.Lock()
 	if snapshot.Process == s.processRef || snapshot.Connection == s.connectionRef {
 		s.mu.Unlock()
@@ -222,7 +234,9 @@ func (s *Supervisor) Recover(ctx context.Context, request providersession.Recove
 	}
 	s.lifecycle.threadStatus = "idle"
 	s.mu.Unlock()
-	s.emit(providersession.StateReady, "recovered_idle")
+	if !s.emit(providersession.StateReady, "recovered_idle", "recovery", "completed") {
+		return LifecycleReference{}, ErrRecoveryRejected
+	}
 	return s.lifecycleReference(""), nil
 }
 
@@ -254,5 +268,5 @@ func (s *Supervisor) recoveryRequired(summary string) {
 	s.state, s.sequence = providersession.StateDisconnected, s.sequence+1
 	event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: nowUTC(), Session: s.session, Kind: providersession.EventRecoveryRequired, Summary: summary}
 	s.mu.Unlock()
-	s.events <- event
+	s.publish(event, "recovery", "rejected", "disconnected")
 }

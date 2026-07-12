@@ -190,13 +190,13 @@ func TestEventNormalizationRedactsFailuresAndRejectsUnsafeFrames(t *testing.T) {
 	}
 }
 
-func TestEventNormalizerAddsNoOperationsBeyondCAS09(t *testing.T) {
+func TestEventNormalizerAddsNoOperationsBeyondCAS10(t *testing.T) {
 	contents, err := os.ReadFile("events.go")
 	if err != nil {
 		t.Fatal(err)
 	}
 	lower := strings.ToLower(string(contents))
-	for _, forbidden := range []string{"retry", "replay", "reconnect", "fallback", "approval", "audit"} {
+	for _, forbidden := range []string{"retry", "replay", "reconnect", "fallback"} {
 		if strings.Contains(lower, forbidden) {
 			t.Fatalf("deferred operation %q found in event normalizer", forbidden)
 		}

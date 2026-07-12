@@ -53,6 +53,7 @@ const (
 	DisconnectDecisionRejected       DisconnectReason = "decision_rejected"
 	DisconnectCancellationRejected   DisconnectReason = "cancellation_rejected"
 	DisconnectPersistenceFailure     DisconnectReason = "persistence_failure"
+	DisconnectAuditFailure           DisconnectReason = "audit_failure"
 )
 
 // Deadlines bound the supervisor itself. They are not a substitute for future
@@ -171,6 +172,7 @@ type Supervisor struct {
 	initialization InitializationConfig
 	events         chan providersession.Event
 	store          SnapshotStore
+	audit          *auditJournal
 
 	mu                 sync.RWMutex
 	lifecycleMu        sync.Mutex
@@ -200,13 +202,19 @@ var supervisorReferences atomic.Uint64
 // New constructs a supervisor for an opaque session reference supplied by a
 // future adapter. No provider session/thread lifecycle is started here.
 func New(session providersession.SessionRef, launcher Launcher, deadlines Deadlines, initialization InitializationConfig) (*Supervisor, error) {
-	return NewWithSnapshotStore(session, launcher, deadlines, initialization, nil)
+	return NewWithStores(session, launcher, deadlines, initialization, nil, nil)
 }
 
 // NewWithSnapshotStore keeps CAS-09 recovery state owned by this package. The
 // supplied store receives only bounded snapshot bytes produced below; it never
 // receives protocol frames or provider payloads.
 func NewWithSnapshotStore(session providersession.SessionRef, launcher Launcher, deadlines Deadlines, initialization InitializationConfig, store SnapshotStore) (*Supervisor, error) {
+	return NewWithStores(session, launcher, deadlines, initialization, store, nil)
+}
+
+// NewWithStores keeps both CAS-09 recovery and CAS-10 audit evidence inside
+// this package. AuditStore receives only bounded safe projections.
+func NewWithStores(session providersession.SessionRef, launcher Launcher, deadlines Deadlines, initialization InitializationConfig, store SnapshotStore, auditStore AuditStore) (*Supervisor, error) {
 	if err := session.Validate(); err != nil {
 		return nil, err
 	}
@@ -220,19 +228,69 @@ func NewWithSnapshotStore(session providersession.SessionRef, launcher Launcher,
 		return nil, err
 	}
 	reference := supervisorReferences.Add(1)
+	recoveryEvidence := "recovery-" + strconv.FormatUint(reference, 10)
 	return &Supervisor{
 		session:          session,
 		launcher:         launcher,
 		deadlines:        deadlines,
 		initialization:   initialization,
 		store:            store,
+		audit:            newAuditJournal(session, recoveryEvidence, auditStore),
 		state:            providersession.StateReady,
 		events:           make(chan providersession.Event, 16),
 		processRef:       "process-" + strconv.FormatUint(reference, 10),
 		connectionRef:    "connection-" + strconv.FormatUint(reference, 10),
-		recoveryEvidence: "recovery-" + strconv.FormatUint(reference, 10),
+		recoveryEvidence: recoveryEvidence,
 		shutdownDone:     make(chan struct{}),
 	}, nil
+}
+
+func (s *Supervisor) auditOperation(operation, outcome, lifecycle, summary string, correlation providersession.Correlation, started time.Time) bool {
+	if s.audit == nil {
+		s.auditFailure()
+		return false
+	}
+	s.mu.RLock()
+	record := AuditRecord{Version: auditSchemaVersion, Operation: operation, Outcome: outcome, Lifecycle: lifecycle, Summary: summary, Session: s.session, Correlation: correlation, Progress: auditProgress(s.sequence), Latency: auditLatency(started)}
+	s.mu.RUnlock()
+	if err := s.audit.append(context.Background(), record); err != nil {
+		s.auditFailure()
+		return false
+	}
+	return true
+}
+
+func (s *Supervisor) publish(event providersession.Event, operation, outcome, lifecycle string) bool {
+	if !s.auditEvent(event, operation, outcome, lifecycle) {
+		return false
+	}
+	s.events <- event
+	return true
+}
+
+func (s *Supervisor) auditEvent(event providersession.Event, operation, outcome, lifecycle string) bool {
+	if s.audit == nil {
+		s.auditFailure()
+		return false
+	}
+	if err := s.audit.append(context.Background(), AuditRecord{Version: auditSchemaVersion, EventSequence: event.Sequence, Operation: operation, Outcome: outcome, Lifecycle: lifecycle, Summary: event.Summary, Session: event.Session, Correlation: event.Correlation, Progress: auditProgress(event.Sequence), Latency: "none"}); err != nil {
+		s.auditFailure()
+		return false
+	}
+	return true
+}
+
+func (s *Supervisor) auditFailure() {
+	s.mu.Lock()
+	if s.state == providersession.StateDisconnected {
+		s.mu.Unlock()
+		return
+	}
+	s.state, s.sequence = providersession.StateDisconnected, s.sequence+1
+	event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: nowUTC(), Session: s.session, Kind: providersession.EventStateChanged, State: providersession.StateDisconnected, Summary: string(DisconnectAuditFailure)}
+	s.mu.Unlock()
+	s.events <- event
+	s.startShutdown()
 }
 
 // Events contains state projections only. It carries no raw child data.
@@ -332,7 +390,9 @@ func (s *Supervisor) start(ctx context.Context, emitReady bool) error {
 		s.initialized = true
 		s.mu.Unlock()
 		if emitReady {
-			s.emit(providersession.StateReady, "initialized")
+			if !s.emit(providersession.StateReady, "initialized", "initialization", "completed") {
+				return errors.New("app server audit journal failed during initialization")
+			}
 		}
 		return nil
 	case <-startupCtx.Done():
@@ -398,21 +458,21 @@ func (s *Supervisor) disconnect(reason DisconnectReason) {
 		s.sequence++
 		event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: time.Now().UTC(), Session: s.session, Kind: providersession.EventStateChanged, State: providersession.StateDisconnected, Summary: string(reason)}
 		s.mu.Unlock()
-		s.events <- event
+		s.publish(event, "disconnect", "failed", "disconnected")
 	})
 }
 
-func (s *Supervisor) emit(state providersession.State, summary string) {
+func (s *Supervisor) emit(state providersession.State, summary, operation, outcome string) bool {
 	s.mu.Lock()
 	if s.state == providersession.StateDisconnected {
 		s.mu.Unlock()
-		return
+		return false
 	}
 	s.state = state
 	s.sequence++
 	event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: time.Now().UTC(), Session: s.session, Kind: providersession.EventStateChanged, State: state, Summary: summary}
 	s.mu.Unlock()
-	s.events <- event
+	return s.publish(event, operation, outcome, auditLifecycle(state))
 }
 
 // emitProgress projects a bounded, provider-neutral event. Its correlation is
@@ -427,7 +487,24 @@ func (s *Supervisor) emitProgress(summary string, correlation providersession.Co
 	s.sequence++
 	event := providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: time.Now().UTC(), Session: s.session, Kind: providersession.EventProgress, Correlation: correlation, Summary: summary}
 	s.mu.Unlock()
-	s.events <- event
+	s.publish(event, "event", "completed", auditLifecycle(s.State()))
+}
+
+func auditLifecycle(state providersession.State) string {
+	switch state {
+	case providersession.StateReady:
+		return "ready"
+	case providersession.StateRunning:
+		return "running"
+	case providersession.StateWaitingForApproval, providersession.StateWaitingForUserInput:
+		return "waiting"
+	case providersession.StateCompleted, providersession.StateCancelled, providersession.StateFailed:
+		return "terminal"
+	case providersession.StateDisconnected:
+		return "disconnected"
+	default:
+		return "idle"
+	}
 }
 
 func (s *Supervisor) startShutdown() {

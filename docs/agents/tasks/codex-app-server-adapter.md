@@ -249,6 +249,29 @@ response mismatch, timeout, transport/child failure, provider error, reroute, or
 stays fail-closed as bounded `recovery_required` or `disconnected`; only an exact idle result emits
 `ready`. CAS-10 audit/telemetry and all CAS-11+ work remain deferred.
 
+### CAS-10 current decision
+
+CAS-10 adds a package-local, versioned, bounded audit journal for the normalized supervisor. Its
+atomically replaced bounded segments retain only neutral session/correlation references, contiguous
+audit and event cursors, closed lifecycle/operation/outcome/summary classes, and coarse
+progress/latency buckets. It stores neither raw timestamps nor JSON-RPC frames, provider IDs,
+prompts, questions, commands, paths, patches, credentials, token text, error bodies, account/config
+data, or process details. The journal is write-only evidence: it exposes no replay, retry, recovery,
+approval, denial, steering, cancellation, or export capability.
+
+Every normalized state/progress/request/cancellation/recovery/disconnect event is paired with a
+contiguous audit-event cursor; operation-result evidence covers initialization, lifecycle delivery,
+approval and input expiry/resolution, cancellation delivery, persistence, reconciliation, disconnect,
+and shutdown outcomes. Corrupt, partial, oversized, reordered, stale, gapped, cross-session, or
+unsafe evidence, and every serialization or storage failure, fail closed through bounded shutdown.
+Idle persistence commits only after its audit event is durable and before it becomes observable;
+recovery requires the retained audit cursor to match the safe idle snapshot and still starts a fresh
+initialized supervisor. Audit therefore cannot imply that an active or unknown prior turn survived.
+
+CAS-11+ remain explicitly deferred: no broader hardening, Pipeon wiring, provider pools, CLI fallback,
+workers, integration calls, telemetry export, listeners, background reconnect, automatic recovery, or
+new neutral protocol surface is introduced here.
+
 ## Likely impact map
 
 - packages/dorkpipe/lib: provider-neutral contracts, adapter package, state and tests;
