@@ -9,8 +9,10 @@ import (
 	"io"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"dorkpipe.orchestrator/providersession"
@@ -43,6 +45,9 @@ const (
 	DisconnectUnsupportedSchema      DisconnectReason = "unsupported_schema"
 	DisconnectUnsupportedCapability  DisconnectReason = "unsupported_capability"
 	DisconnectModelRerouted          DisconnectReason = "model_rerouted"
+	DisconnectPolicyMismatch         DisconnectReason = "policy_mismatch"
+	DisconnectLifecycleRejected      DisconnectReason = "lifecycle_rejected"
+	DisconnectUnsupportedLifecycle   DisconnectReason = "unsupported_lifecycle_state"
 )
 
 // Deadlines bound the supervisor itself. They are not a substitute for future
@@ -162,13 +167,18 @@ type Supervisor struct {
 	events         chan providersession.Event
 
 	mu                 sync.RWMutex
+	lifecycleMu        sync.Mutex
 	started            bool
+	initialized        bool
 	state              providersession.State
 	sequence           uint64
 	child              Child
 	stdin              io.WriteCloser
 	client             *protocolClient
 	initializationInfo InitializationInfo
+	processRef         string
+	connectionRef      string
+	lifecycle          lifecycleState
 	waitDone           chan struct{}
 	record             ShutdownRecord
 
@@ -177,6 +187,8 @@ type Supervisor struct {
 	shutdownDone   chan struct{}
 	shutdownErr    error
 }
+
+var supervisorReferences atomic.Uint64
 
 // New constructs a supervisor for an opaque session reference supplied by a
 // future adapter. No provider session/thread lifecycle is started here.
@@ -193,6 +205,7 @@ func New(session providersession.SessionRef, launcher Launcher, deadlines Deadli
 	if err := initialization.validate(); err != nil {
 		return nil, err
 	}
+	reference := supervisorReferences.Add(1)
 	return &Supervisor{
 		session:        session,
 		launcher:       launcher,
@@ -200,6 +213,8 @@ func New(session providersession.SessionRef, launcher Launcher, deadlines Deadli
 		initialization: initialization,
 		state:          providersession.StateReady,
 		events:         make(chan providersession.Event, 4),
+		processRef:     "process-" + strconv.FormatUint(reference, 10),
+		connectionRef:  "connection-" + strconv.FormatUint(reference, 10),
 		shutdownDone:   make(chan struct{}),
 	}, nil
 }
@@ -231,7 +246,7 @@ func (s *Supervisor) Initialization() InitializationInfo {
 // rejected, including after failure, so no active work can be replayed.
 func (s *Supervisor) Start(ctx context.Context) error {
 	s.mu.Lock()
-	if s.started {
+	if s.started || s.state == providersession.StateDisconnected {
 		s.mu.Unlock()
 		return ErrAlreadyStarted
 	}
@@ -286,6 +301,7 @@ func (s *Supervisor) Start(ctx context.Context) error {
 			return errors.New("app server disconnected during initialization")
 		}
 		s.initializationInfo = info
+		s.initialized = true
 		s.mu.Unlock()
 		s.emit(providersession.StateReady, "initialized")
 		return nil

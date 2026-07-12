@@ -219,7 +219,7 @@ func (c *protocolClient) handle(frame []byte) bool {
 		c.fail(DisconnectMalformedEnvelope)
 		return false
 	}
-	if strings.Contains(strings.ToLower(*envelope.Method), "model/rerout") {
+	if strings.Contains(strings.ToLower(*envelope.Method), "model/rerout") || containsModelReroute(envelope.Params) {
 		c.fail(DisconnectModelRerouted)
 		return false
 	}

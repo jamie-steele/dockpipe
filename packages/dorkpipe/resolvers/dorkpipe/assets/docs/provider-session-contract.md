@@ -32,11 +32,14 @@ parsing and raw-payload handling; Pipeon receives only `providersession.Event` v
 
 CAS-03 adds a package-local, host-resident child supervisor. CAS-04 adds its private JSONL
 initialization client: a bounded `initialize` request, `initialized` notification, monotonic
-correlation, and schema/capability gate. It retains only safe provider-version, identity-class,
-and configuration-warning classifications. Malformed envelopes, response mismatch, provider
-errors, request deadline, transport loss, child exit, and reroute indications are all one safe
-`disconnected` state event. Protocol data remains package-local; the neutral contract and Pipeon
-receive no raw payloads or provider types.
+correlation, and schema/capability gate. CAS-05 adds bounded private thread/read/resume and
+turn/start/steer lifecycle requests after that gate. It maps provider identifiers only into opaque
+`SessionRef` and `Correlation` values, permits one active steerable turn, and rejects stale or
+mismatched lifecycle references. Every request pins `gpt-5.6-terra` / `high`, workspace-write,
+declared roots, network disabled, and human user review; protocol data, prompts, credentials, and
+provider error bodies remain package-local and transient. Malformed envelopes, response mismatch,
+provider errors, lifecycle/policy rejection, request deadline, transport loss, child exit, and
+reroute indications are all one safe `disconnected` state event.
 
-Thread/turn operations, normalized provider events, approval relay, interruption, persistence,
-audit, hardening, and Pipeon wiring remain deferred to CAS-05+.
+Normalized provider events and terminal turn state, approval relay, interruption, persistence,
+audit, additional hardening, and Pipeon wiring remain deferred to CAS-06+.

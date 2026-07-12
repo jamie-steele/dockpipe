@@ -151,6 +151,28 @@ Pipeon migration; and CLI fallback. Future turns must still explicitly enforce w
 declared writable roots, network disabled, and user review; host process placement grants none of
 those capabilities.
 
+### CAS-05 current decision
+
+CAS-05 extends only the package-local `appserversupervisor` lifecycle client. After the completed
+CAS-04 initialization gate it makes bounded `thread/start`, `thread/read`, `thread/resume`,
+`turn/start`, and `turn/steer` requests. Provider thread and turn IDs remain private and are
+projected only as opaque `providersession.SessionRef` and `Correlation` values. A single
+supervisor owns one active steerable turn; duplicate/concurrent starts, stale lifecycle references,
+correlation mismatches, non-steerable steering, bad response shapes/states, policy changes, and
+any failure leave it safely `Disconnected`.
+
+Every lifecycle request reconstructs the pinned `gpt-5.6-terra` / `high` native-turn envelope:
+workspace-write with explicitly declared writable roots, network disabled, and untrusted policy
+reviewed by the human user. Full access, shell commands, automatic review, fallback models or
+providers, empty roots, and policy/model changes are rejected. The host App Server child remains
+host-resident only for provider-stream reachability; that placement grants no additional turn
+capabilities. No raw payload, prompt, account, command, error body, credential, retry, replay,
+reconnect, fallback, or persistence is retained or introduced.
+
+Deferred to CAS-06+: provider-event normalization and terminal turn state; approval/user-input
+relay; interruption; persistence/reconciliation; audit; further hardening; Pipeon migration; and
+CLI fallback.
+
 ## Likely impact map
 
 - packages/dorkpipe/lib: provider-neutral contracts, adapter package, state and tests;
