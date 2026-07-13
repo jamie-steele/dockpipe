@@ -225,8 +225,11 @@ editor/account.
 2. **Existing environments — decided (2026-07-13):** first release is managed-only. External or
    user-started containers remain status-only; no `exec`, adoption, labeling, cleanup, or mutation
    is permitted.
-3. **Cleanup policy:** are managed containers stopped on Pipeon close, retained for reuse, or chosen
-   per request? They must never be coupled implicitly to Pipeon's stack teardown.
+3. **Cleanup policy — decided (2026-07-13):** Pipeon close explicitly requests a stop only for an
+   exactly proven managed container. The stopped container and its managed session record are
+   retained for reuse; remove/down remains a separate destructive action requiring stronger
+   confirmation. This is a Dev Container lifecycle request, never an incidental side effect of
+   Pipeon stack teardown.
 4. **First attachment:** VS Code, Cursor, Pipeon code-server, or status/exec-only; attach remains a
    host action and not proof of lifecycle ownership.
 5. **Definition scope:** whether recursive/nonstandard definitions beyond the root and direct
@@ -281,5 +284,6 @@ Implemented the next lifecycle contract slice in `packages/ide/resolvers/devcont
 
 Remaining recovery/cleanup risks: a crash after a real future CLI creates a container but before
 the session record is persisted will be an orphan candidate; failed/cancelled real starts need a
-later reconciliation/repair contract; and retention, stop, and destructive cleanup policy remain
-open decisions. No automatic recovery or cleanup is authorized by this slice.
+later reconciliation/repair contract. The retention policy is decided: Pipeon close stops only an
+exact managed container and retains its record for reuse. Remove/down and automatic recovery remain
+unauthorized until their separate destructive/recovery contracts exist.
