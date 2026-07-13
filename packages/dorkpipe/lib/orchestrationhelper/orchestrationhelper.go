@@ -2777,6 +2777,9 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 				}
 				prompt = strings.Join(lines, "\n") + "\n"
 			}
+			if laneContext := renderExecutionLanePromptContext(laneSelection, taskPayload); laneContext != "" {
+				prompt = laneContext + "\n\n" + strings.TrimLeft(prompt, "\n")
+			}
 			outputContract := []string{}
 			if boolString(fallbackString(env["DORKPIPE_ORCH_STRICT_OUTPUT_CONTRACT"], "true")) {
 				outputContract = append(outputContract,
@@ -4614,6 +4617,44 @@ func taskModelForLane(taskModel, laneSelection map[string]any) map[string]any {
 		out["num_ctx"] = laneContext
 	}
 	return out
+}
+
+func renderExecutionLanePromptContext(laneSelection, taskPayload map[string]any) string {
+	if len(laneSelection) == 0 {
+		return ""
+	}
+	lines := []string{"Execution lane (operational run metadata):"}
+	if requested := stringValue(laneSelection["requested"]); requested != "" {
+		lines = append(lines, "- Requested lane: "+requested)
+	}
+	if laneID := stringValue(laneSelection["lane_id"]); laneID != "" {
+		lines = append(lines, "- Selected lane: "+laneID)
+	}
+	if provider := stringValue(laneSelection["provider"]); provider != "" {
+		lines = append(lines, "- Provider: "+provider)
+	}
+	if model := stringValue(laneSelection["model"]); model != "" {
+		lines = append(lines, "- Model: "+model)
+	}
+	if taskClass := mapValue(taskPayload["task_class"]); len(taskClass) > 0 {
+		if name := stringValue(taskClass["name"]); name != "" {
+			lines = append(lines, "- Work class: "+name)
+		}
+		if authority := stringValue(taskClass["authority"]); authority != "" {
+			lines = append(lines, "- Authority: "+authority)
+		}
+	}
+	if reasons := stringList(laneSelection["reasons"]); len(reasons) > 0 {
+		lines = append(lines, "- Selection rationale: "+strings.Join(reasons, "; "))
+	}
+	if policy := mapValue(taskPayload["model_policy"]); len(policy) > 0 {
+		lines = append(lines, "- Model policy: `"+mustJSON(policy, map[string]any{})+"`")
+	}
+	lines = append(lines,
+		"- This metadata describes the current run only; do not turn it into durable repository policy.",
+		"- Do not substitute lane selection for source evidence; follow the task scope and report uncertainty when evidence is unavailable.",
+	)
+	return strings.Join(lines, "\n")
 }
 
 func applyTaskWorkerProfile(task map[string]any, env map[string]string) (map[string]any, error) {

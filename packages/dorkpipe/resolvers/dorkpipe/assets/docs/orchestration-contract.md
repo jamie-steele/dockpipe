@@ -45,7 +45,7 @@ dockpipe scope workflow <workflow-name> orchestrate
 - `shared/*`
 - `tasks/<task-id>/task.json`
 - `tasks/<task-id>/lane-selection.json`
-- `tasks/<task-id>/prompt.md`
+- `tasks/<task-id>/prompt.md` (including selected lane/model-policy run metadata; never durable repo policy)
 - `tasks/<task-id>/response.md`
 - `tasks/<task-id>/result.json`
 - `merge/result.json`

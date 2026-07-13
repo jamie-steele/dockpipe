@@ -57,6 +57,38 @@ func TestLoadAgentsConfigUsesPackageAuthoringRoot(t *testing.T) {
 	}
 }
 
+func TestRenderExecutionLanePromptContextIncludesSelectionAndPolicy(t *testing.T) {
+	got := renderExecutionLanePromptContext(map[string]any{
+		"requested": "auto",
+		"lane_id":   "codex.strong",
+		"provider":  "codex",
+		"model":     "gpt-5.6",
+		"reasons":   []string{"high-authority task favors a strong lane", "available"},
+	}, map[string]any{
+		"task_class": map[string]any{"name": "architecture", "authority": "high"},
+		"model_policy": map[string]any{
+			"attempt": map[string]any{"preference": "strong"},
+		},
+	})
+	for _, want := range []string{
+		"Execution lane (operational run metadata):",
+		"Requested lane: auto",
+		"Selected lane: codex.strong",
+		"Provider: codex",
+		"Model: gpt-5.6",
+		"Work class: architecture",
+		"Authority: high",
+		"Selection rationale: high-authority task favors a strong lane; available",
+		"Model policy: `{\"attempt\":{\"preference\":\"strong\"}}`",
+		"current run only",
+		"Do not substitute lane selection for source evidence",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("prompt context missing %q:\n%s", want, got)
+		}
+	}
+}
+
 func TestApplyTaskWorkerProfileDefaultsToPrefer(t *testing.T) {
 	task, err := applyTaskWorkerProfile(map[string]any{
 		"id":     "patch",
