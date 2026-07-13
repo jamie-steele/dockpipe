@@ -122,3 +122,11 @@ func TestAuditProjectionRejectsUnsafeClassesAndFailsClosed(t *testing.T) {
 		t.Fatalf("event = %+v", event)
 	}
 }
+
+func TestAuditAcceptsBoundedCurrentErrorProjection(t *testing.T) {
+	session := providersession.SessionRef{Provider: "codex", SessionID: "thread-1"}
+	record := AuditRecord{Version: auditSchemaVersion, EventSequence: 1, Operation: "event", Outcome: "completed", Lifecycle: "running", Summary: "error_other", Session: session, Correlation: providersession.Correlation{ProcessIncarnationID: "process-1", ConnectionID: "connection-1", SessionID: session.SessionID, InteractionID: "turn-1"}, Progress: "low", Latency: "none"}
+	if err := newAuditJournal(session, "audit-safe", &memoryAuditStore{}).append(context.Background(), record); err != nil {
+		t.Fatalf("bounded current error projection was rejected: %v", err)
+	}
+}

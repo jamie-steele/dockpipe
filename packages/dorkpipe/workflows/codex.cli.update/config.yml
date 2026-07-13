@@ -1,0 +1,30 @@
+name: codex.cli.update
+namespace: dockpipeproject
+description: Explicitly update the host Codex CLI and verify its App Server schema.
+docker_preflight: false
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs the package-owned Codex CLI update wrapper.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: npm
+      command: npm
+      description: Installs the current Codex CLI package.
+      install:
+        windows: winget install OpenJS.NodeJS.LTS
+        deb: sudo apt-get update && sudo apt-get install -y nodejs npm
+    - id: codex
+      command: codex
+      description: The host Codex CLI used for App Server sessions.
+      install:
+        windows: npm install --global @openai/codex@latest
+        deb: sudo npm install --global @openai/codex@latest
+
+steps:
+  - id: update
+    kind: host
+    run: scripts/dorkpipe/codex-cli-update.sh

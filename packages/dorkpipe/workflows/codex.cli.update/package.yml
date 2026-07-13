@@ -1,0 +1,37 @@
+schema: 1
+kind: workflow
+name: codex.cli.update
+version: 0.6.0
+title: Update the host Codex CLI
+description: |
+  Explicitly updates the host Codex CLI through npm after user approval, then verifies that the
+  installed CLI exposes the App Server schema. This workflow never runs automatically as a missing
+  dependency preflight.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [workflow, dorkpipe, codex, dependency, update]
+depends: [dorkpipe]
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs the package-owned Codex CLI update wrapper.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: npm
+      command: npm
+      description: Installs the current Codex CLI package.
+      install:
+        windows: winget install OpenJS.NodeJS.LTS
+        deb: sudo apt-get update && sudo apt-get install -y nodejs npm
+    - id: codex
+      command: codex
+      description: The host Codex CLI used for App Server sessions.
+      install:
+        windows: npm install --global @openai/codex@latest
+        deb: sudo npm install --global @openai/codex@latest
+allow_clone: true
+distribution: source

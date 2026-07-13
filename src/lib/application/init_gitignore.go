@@ -21,7 +21,6 @@ bin/.dockpipe/
 .gocache/
 .gomodcache/
 tmp/
-.tmp/
 ` + dockpipeGitignoreEnd + "\n"
 
 // appendDockpipeGitignore writes a marked block to .gitignore at the git repository root
@@ -46,8 +45,21 @@ func appendDockpipeGitignore(projectDir string) error {
 			if os.IsNotExist(err) {
 				data = nil
 			}
-			if bytes.Contains(data, []byte(dockpipeGitignoreBegin)) {
-				return nil
+			if start := bytes.Index(data, []byte(dockpipeGitignoreBegin)); start >= 0 {
+				end := bytes.Index(data[start:], []byte(dockpipeGitignoreEnd))
+				if end < 0 {
+					return nil
+				}
+				end += start + len(dockpipeGitignoreEnd)
+				block := data[start:end]
+				migrated := bytes.ReplaceAll(block, []byte("\n.tmp/\n"), []byte("\n"))
+				if bytes.Equal(block, migrated) {
+					return nil
+				}
+				updated := append([]byte{}, data[:start]...)
+				updated = append(updated, migrated...)
+				updated = append(updated, data[end:]...)
+				return os.WriteFile(path, updated, 0o644)
 			}
 			var buf bytes.Buffer
 			if len(data) > 0 {

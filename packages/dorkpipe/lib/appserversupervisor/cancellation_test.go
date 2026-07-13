@@ -56,6 +56,38 @@ func TestCancellationProjectsIntentDeliversExactInterruptAndWaitsForTerminal(t *
 	}
 }
 
+func TestCancellationAcceptsCurrentEmptyInterruptAcknowledgement(t *testing.T) {
+	s, child, scanner, _, turn := startEventTurn(t)
+	intent := cancellationIntent(turn)
+	done := beginCancellation(t, s, scanner, intent)
+	acknowledgeInterrupt(t, child, 4, `{}`)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if s.State() != providersession.StateRunning {
+		t.Fatalf("empty acknowledgement claimed terminal state: %s", s.State())
+	}
+	sendNotification(t, child, "turn/completed", `{"threadId":"thread-1","turn":{"id":"turn-1","status":"interrupted"}}`)
+	if event := nextEvent(t, s); event.State != providersession.StateCancelled || event.Summary != "cancelled" {
+		t.Fatalf("empty acknowledgement cancellation terminal = %+v", event)
+	}
+}
+
+func TestCancellationAcceptsInterruptedTerminalWithActiveItem(t *testing.T) {
+	s, child, scanner, _, turn := startEventTurn(t)
+	sendNotification(t, child, "item/started", `{"threadId":"thread-1","turnId":"turn-1","item":{"id":"item-1","type":"agentMessage","status":"inProgress"}}`)
+	_ = nextEvent(t, s)
+	done := beginCancellation(t, s, scanner, cancellationIntent(turn))
+	acknowledgeInterrupt(t, child, 4, `{}`)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	sendNotification(t, child, "turn/completed", `{"threadId":"thread-1","turn":{"id":"turn-1","status":"interrupted"}}`)
+	if event := nextEvent(t, s); event.State != providersession.StateCancelled || event.Summary != "cancelled" {
+		t.Fatalf("active-item cancellation terminal = %+v", event)
+	}
+}
+
 func TestCancellationRejectsDuplicateStaleReorderedAndCrossCorrelatedMessages(t *testing.T) {
 	for _, fixture := range []struct {
 		name   string

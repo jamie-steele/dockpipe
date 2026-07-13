@@ -41,11 +41,35 @@ func TestInitializeProjectsOnlyAllowlistedInformation(t *testing.T) {
 		t.Fatal(err)
 	}
 	info := s.Initialization()
-	if info.SchemaVersion != "v2" || info.ProviderVersion != "0.144.1" || info.IdentityClass != "codex_app_server" || len(info.ConfigurationWarnings) != 1 || info.ConfigurationWarnings[0] != "config_deprecated" || info.Model != PinnedModel || info.ReasoningEffort != PinnedReasoningEffort {
+	if info.SchemaVersion != "v2" || info.ProviderVersion != "0.144.1" || info.IdentityClass != "codex_app_server" || len(info.ConfigurationWarnings) != 0 || info.Model != PinnedModel || info.ReasoningEffort != PinnedReasoningEffort {
 		t.Fatalf("unsafe or incomplete initialization projection: %+v", info)
 	}
 	if event := nextEvent(t, s); event.State != "ready" || event.Summary != "initialized" {
 		t.Fatalf("ready event = %+v", event)
+	}
+}
+
+func TestInitializeAcceptsCodexV2ResultWithoutRedundantJSONRPCVersion(t *testing.T) {
+	child := newFakeChild()
+	s := newTestSupervisor(t, fakeLauncher{start: func(context.Context) (Child, error) { return child, nil }}, testDeadlines())
+	started := make(chan error, 1)
+	go func() { started <- s.Start(context.Background()) }()
+	scanner := bufio.NewScanner(child.stdinR)
+	if !scanner.Scan() {
+		t.Fatal("expected initialize request")
+	}
+	var request struct{ ID uint64 }
+	if err := json.Unmarshal(scanner.Bytes(), &request); err != nil || request.ID == 0 {
+		t.Fatalf("initialize request = %s, err=%v", scanner.Text(), err)
+	}
+	if _, err := child.stdoutW.Write([]byte(`{"id":` + strconv.FormatUint(request.ID, 10) + `,"result":{"userAgent":"codex/0.144.1","codexHome":"C:/codex","platformFamily":"windows","platformOs":"windows"}}` + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	if !scanner.Scan() {
+		t.Fatal("expected initialized notification")
+	}
+	if err := <-started; err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -141,7 +165,7 @@ func TestSchemaAndCapabilityRejection(t *testing.T) {
 		reason DisconnectReason
 	}{
 		"schema":     {result: `{"protocolVersion":"v1","serverInfo":{"name":"codex","version":"0.144.1"},"capabilities":{"stableV2":true}}`, reason: DisconnectUnsupportedSchema},
-		"capability": {result: `{"protocolVersion":"v2","serverInfo":{"name":"codex","version":"0.144.1"},"capabilities":{"stableV2":false}}`, reason: DisconnectUnsupportedCapability},
+		"capability": {result: `{"protocolVersion":"v2","serverInfo":{"name":"codex","version":"0.144.1"},"capabilities":{"stableV2":false}}`, reason: DisconnectUnsupportedSchema},
 	} {
 		t.Run(name, func(t *testing.T) {
 			child := newFakeChild()
@@ -162,7 +186,7 @@ func TestSchemaAndCapabilityRejection(t *testing.T) {
 func TestModelRerouteIndicationFailsClosed(t *testing.T) {
 	child := newFakeChild()
 	s := newTestSupervisor(t, fakeLauncher{start: func(context.Context) (Child, error) { return child, nil }}, testDeadlines())
-	if err := startInitialized(t, s, child, `{"protocolVersion":"v2","serverInfo":{"name":"codex","version":"0.144.1"},"capabilities":{"stableV2":true}}`); err != nil {
+	if err := startInitialized(t, s, child, `{"userAgent":"codex/0.144.1","codexHome":"C:/codex","platformFamily":"windows","platformOs":"windows"}`); err != nil {
 		t.Fatal(err)
 	}
 	_, _ = child.stdoutW.Write([]byte(`{"jsonrpc":"2.0","method":"model/rerouted","params":{}}` + "\n"))

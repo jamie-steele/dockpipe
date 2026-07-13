@@ -59,7 +59,7 @@ func (s *Supervisor) Cancel(parent context.Context, intent providersession.Cance
 		return ErrCancellationUnavailable
 	}
 	threadID, turnID, risk, reason := projectInterrupt(result)
-	if reason != "" || threadID != intent.Session.SessionID || turnID != intent.Correlation.InteractionID {
+	if reason != "" || (threadID != "" && (threadID != intent.Session.SessionID || turnID != intent.Correlation.InteractionID)) {
 		if reason == "" {
 			reason = DisconnectCorrelationMismatch
 		}
@@ -69,7 +69,7 @@ func (s *Supervisor) Cancel(parent context.Context, intent providersession.Cance
 	var riskEvent *providersession.Event
 	s.mu.Lock()
 	pending := s.lifecycle.cancellation
-	if s.state == providersession.StateDisconnected || pending == nil || pending.intent != intent || !s.lifecycle.active || s.lifecycle.threadID != threadID || s.lifecycle.turnID != turnID {
+	if s.state == providersession.StateDisconnected || pending == nil || pending.intent != intent || !s.lifecycle.active || (threadID != "" && (s.lifecycle.threadID != threadID || s.lifecycle.turnID != turnID)) {
 		s.mu.Unlock()
 		return s.rejectCancellation(DisconnectEventOrdering)
 	}
@@ -120,6 +120,16 @@ func projectInterrupt(result json.RawMessage) (string, string, bool, DisconnectR
 	if containsModelReroute(result) {
 		return "", "", false, DisconnectModelRerouted
 	}
+	fields, ok := objectFields(result, "thread", "turn", "backgroundProcesses")
+	if !ok {
+		return "", "", false, DisconnectUnsupportedLifecycle
+	}
+	if len(fields["thread"]) == 0 && len(fields["turn"]) == 0 {
+		return "", "", hasBackgroundProcessRisk(result), ""
+	}
+	if len(fields["thread"]) == 0 || len(fields["turn"]) == 0 {
+		return "", "", false, DisconnectUnsupportedLifecycle
+	}
 	var response interruptResponse
 	if json.Unmarshal(result, &response) != nil || !identifierPattern.MatchString(response.Thread.ID) || !identifierPattern.MatchString(response.Turn.ID) || response.Turn.Status != "inProgress" {
 		return "", "", false, DisconnectUnsupportedLifecycle
@@ -163,17 +173,22 @@ func (s *Supervisor) terminalEventLocked(params eventParams) (providersession.Ev
 	if !s.validTurnNotification(params) {
 		return providersession.Event{}, eventMismatch(params.ThreadID != s.lifecycle.threadID || params.Turn.ID != s.lifecycle.turnID)
 	}
-	if !validTurnTerminal(params.Turn.Status) {
+	status := turnEventStatus(params.Turn.Status)
+	if !validTurnTerminal(status) {
 		return providersession.Event{}, DisconnectUnsupportedLifecycle
 	}
-	if !s.lifecycle.turnNotified || s.lifecycle.itemID != "" {
+	if !s.lifecycle.turnNotified || (s.lifecycle.itemID != "" && s.lifecycle.cancellation == nil) {
 		return providersession.Event{}, DisconnectEventOrdering
 	}
 	turnID := s.lifecycle.turnID
-	status := params.Turn.Status
+	terminalClass := "none"
 	if status == "failed" && len(params.Turn.Error) != 0 && classifyEventError(params.Turn.Error) == "unknown" {
 		return providersession.Event{}, DisconnectUnsupportedEvent
 	}
+	if status == "failed" {
+		terminalClass = classifyEventError(params.Turn.Error)
+	}
+	s.lastNotification = "turn_" + status + "_" + terminalClass
 	if pending := s.lifecycle.cancellation; pending != nil {
 		if !pending.interruptAcknowledged {
 			return providersession.Event{}, DisconnectEventOrdering
@@ -184,7 +199,7 @@ func (s *Supervisor) terminalEventLocked(params eventParams) (providersession.Ev
 		if pending.timer != nil {
 			pending.timer.Stop()
 		}
-		s.lifecycle.turnID, s.lifecycle.active, s.lifecycle.steerable, s.lifecycle.turnNotified, s.lifecycle.cancellation = "", false, false, false, nil
+		s.lifecycle.turnID, s.lifecycle.active, s.lifecycle.steerable, s.lifecycle.turnNotified, s.lifecycle.itemID, s.lifecycle.cancellation = "", false, false, false, "", nil
 		s.state = providersession.StateCancelled
 		s.sequence++
 		return providersession.Event{ContractVersion: providersession.ContractVersion, Sequence: s.sequence, OccurredAt: nowUTC(), Session: s.session, Kind: providersession.EventStateChanged, State: providersession.StateCancelled, Correlation: pending.intent.Correlation, Summary: "cancelled"}, ""

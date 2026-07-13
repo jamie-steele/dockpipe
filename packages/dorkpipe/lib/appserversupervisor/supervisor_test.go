@@ -100,12 +100,20 @@ func startInitialized(t *testing.T, s *Supervisor, child *fakeChild, result stri
 	var request struct {
 		ID     uint64 `json:"id"`
 		Method string `json:"method"`
+		Params struct {
+			Capabilities struct {
+				OptOutNotificationMethods []string `json:"optOutNotificationMethods"`
+			} `json:"capabilities"`
+		} `json:"params"`
 	}
 	if err := json.Unmarshal(scanner.Bytes(), &request); err != nil || request.ID == 0 || request.Method != "initialize" {
 		t.Fatalf("initialize request = %s, err=%v", scanner.Text(), err)
 	}
+	if len(request.Params.Capabilities.OptOutNotificationMethods) != 8 || request.Params.Capabilities.OptOutNotificationMethods[0] != remoteControlStatusNotification || request.Params.Capabilities.OptOutNotificationMethods[1] != threadStartedNotification || request.Params.Capabilities.OptOutNotificationMethods[2] != turnStartedNotification || request.Params.Capabilities.OptOutNotificationMethods[3] != threadSettingsNotification || request.Params.Capabilities.OptOutNotificationMethods[4] != mcpStartupNotification || request.Params.Capabilities.OptOutNotificationMethods[5] != mcpOAuthNotification || request.Params.Capabilities.OptOutNotificationMethods[6] != globalWarningNotification || request.Params.Capabilities.OptOutNotificationMethods[7] != accountRateLimitsNotification {
+		t.Fatalf("initialize notification opt-out = %+v", request.Params.Capabilities.OptOutNotificationMethods)
+	}
 	if result == "" {
-		result = `{"protocolVersion":"v2","serverInfo":{"name":"codex-app-server","version":"0.144.1"},"capabilities":{"stableV2":true},"configWarnings":["config_deprecated"]}`
+		result = `{"userAgent":"codex/0.144.1","codexHome":"C:/codex","platformFamily":"windows","platformOs":"windows"}`
 	}
 	if _, err := child.stdoutW.Write([]byte(`{"jsonrpc":"2.0","id":` + strconv.FormatUint(request.ID, 10) + `,"result":` + result + "}\n")); err != nil {
 		t.Fatal(err)

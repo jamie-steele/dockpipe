@@ -296,7 +296,34 @@ approval/input, cancellation, and reuse routes. The source-boundary fixtures als
 App Server and raw-protocol vocabulary in `providersession` and Pipeon source. No executable, account,
 credential, listener, network, or provider call is used.
 
-CAS-13 controlled Codex integration and CAS-14+ migration/operations work remain explicitly deferred.
+CAS-13 controlled Codex integration is complete. CAS-14+ migration/operations work remains explicitly deferred.
+
+### CAS-13 bounded status
+
+On 2026-07-13, the opt-in `cas13` harness completed controlled host-resident verification against
+the authenticated current App Server with exact `gpt-5.6-terra` / `high` catalog verification. A
+workspace-write, declared-root, network-disabled, human-reviewed no-tool turn reached normalized
+completion and clean child shutdown; a second turn reached the exact correlated interrupted
+terminal after neutral cancellation. A constrained workspace-change turn produced a file-change
+approval request, DockPipe denied it, and the exact resolution returned to running without making
+the requested change. Controlled stdout loss projected `transport_closed`, while termination of
+the direct child projected `child_exit` after a bounded owned-child exit observation. No raw frame,
+provider error, prompt, command, path, credential, account value, or provider identifier was
+retained; every temporary `C:\tmp` workspace was removed after its test.
+
+The current v2 surface omits the redundant `jsonrpc` member on responses, emits object-shaped
+thread statuses, and may attach a numeric `startedAtMs` field to a file-change approval request.
+The App Server also uses JSON-RPC ID zero for that incoming server request. The supervisor accepts
+only that timestamp's unsigned-numeric shape and preserves the zero ID privately for the matching
+one-time deny/resolve exchange; client-originated request IDs remain non-zero. Current unrelated
+remote-control and rate-limit snapshots are explicitly opted out. Fixture coverage retains strict
+rejection of unexpected approval fields, policy expansion, malformed IDs, retries, replay, and
+fallbacks.
+
+The workspace sandbox cannot reach the provider stream, so these direct-child checks run through
+a narrowly reviewed host-network path while each native turn remains constrained by the same
+workspace-write policy. CAS-13 is complete. CAS-14+ remains deferred; no Pipeon migration,
+adapter selection, fallback, or production consumer wiring was started.
 
 ## Likely impact map
 

@@ -34,8 +34,8 @@ func TestAppendDockpipeGitignoreCreatesFile(t *testing.T) {
 	if !bytes.Contains(b, []byte(dockpipeGitignoreBegin)) || !bytes.Contains(b, []byte("bin/.dockpipe/")) {
 		t.Fatalf("unexpected .gitignore:\n%s", b)
 	}
-	if !bytes.Contains(b, []byte(".tmp/")) {
-		t.Fatalf("expected .tmp/ in .gitignore:\n%s", b)
+	if bytes.Contains(b, []byte(".tmp/")) {
+		t.Fatalf("did not expect repo-root .tmp/ to be ignored:\n%s", b)
 	}
 }
 
@@ -58,6 +58,30 @@ func TestAppendDockpipeGitignoreIdempotent(t *testing.T) {
 	}
 	if string(first) != string(second) {
 		t.Fatalf("second run should not change file")
+	}
+}
+
+func TestAppendDockpipeGitignoreRemovesLegacyRootTmpFromManagedBlock(t *testing.T) {
+	repo := t.TempDir()
+	gitInit(t, repo)
+	path := filepath.Join(repo, ".gitignore")
+	legacy := "# User-owned rule\ncustom/\n" + dockpipeGitignoreBegin + "\n.tmp/\n" + dockpipeGitignoreEnd + "\n"
+	if err := os.WriteFile(path, []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := appendDockpipeGitignore(repo); err != nil {
+		t.Fatal(err)
+	}
+	actual, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(actual), "\n.tmp/\n") {
+		t.Fatalf("expected legacy root .tmp/ entry to be removed from managed block:\n%s", actual)
+	}
+	if !strings.Contains(string(actual), "# User-owned rule\ncustom/\n") {
+		t.Fatalf("expected user-owned entries outside managed block to remain:\n%s", actual)
 	}
 }
 
@@ -93,8 +117,8 @@ func TestCmdInitGitignore(t *testing.T) {
 	if !strings.Contains(string(b), "bin/.dockpipe/") {
 		t.Fatalf("expected bin/.dockpipe/ in .gitignore, got:\n%s", b)
 	}
-	if !strings.Contains(string(b), ".tmp/") {
-		t.Fatalf("expected .tmp/ in .gitignore, got:\n%s", b)
+	if strings.Contains(string(b), ".tmp/") {
+		t.Fatalf("did not expect repo-root .tmp/ to be ignored, got:\n%s", b)
 	}
 	if strings.Contains(string(b), ".dorkpipe/") {
 		t.Fatalf("did not expect legacy .dorkpipe/ entry in .gitignore, got:\n%s", b)

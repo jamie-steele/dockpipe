@@ -61,13 +61,14 @@ type lifecycleState struct {
 	turnNotified    bool
 	threadStatus    string
 	warningNotified bool
-	errorNotified   bool
+	errorCount      uint8
 	tokenTotal      uint64
 	policyKey       [sha256.Size]byte
 	declaredRoots   map[string]bool
 	pending         *pendingRequest
 	cancellation    *pendingCancellation
 	requestCounter  uint64
+	startPending    bool
 }
 
 func (p LifecyclePolicy) validate() error {
@@ -252,13 +253,22 @@ func (s *Supervisor) threadOperation(ctx context.Context, method string, referen
 // StartTurn allows one active turn for the supervisor-owned thread. The input
 // is deliberately an opaque reference rather than a retained prompt.
 func (s *Supervisor) StartTurn(ctx context.Context, reference LifecycleReference, policy LifecyclePolicy, input InputReference) (LifecycleReference, error) {
+	if err := validateInputReference(input); err != nil {
+		return LifecycleReference{}, s.rejectLifecycle(DisconnectLifecycleRejected)
+	}
+	return s.startTurn(ctx, reference, policy, inputParam(input))
+}
+
+// startTurn keeps the private provider input inside the supervisor package.
+// The public lifecycle surface remains limited to opaque InputReference values.
+func (s *Supervisor) startTurn(ctx context.Context, reference LifecycleReference, policy LifecyclePolicy, input []any) (LifecycleReference, error) {
 	started := time.Now()
 	s.lifecycleMu.Lock()
 	defer s.lifecycleMu.Unlock()
 	if err := policy.validate(); err != nil {
 		return LifecycleReference{}, s.rejectLifecycle(DisconnectPolicyMismatch)
 	}
-	if err := validateInputReference(input); err != nil {
+	if len(input) == 0 {
 		return LifecycleReference{}, s.rejectLifecycle(DisconnectLifecycleRejected)
 	}
 	client, ready := s.lifecycleReady()
@@ -271,24 +281,27 @@ func (s *Supervisor) StartTurn(ctx context.Context, reference LifecycleReference
 	if s.lifecycle.policyKey != policy.key() {
 		return LifecycleReference{}, s.rejectLifecycle(DisconnectPolicyMismatch)
 	}
+	s.mu.Lock()
+	s.lifecycle.startPending = true
+	s.mu.Unlock()
 	params := policy.params()
 	params["threadId"] = threadID
-	params["input"] = inputParam(input)
+	params["input"] = input
 	result, err := s.lifecycleRequest(ctx, client, "turn/start", params)
 	if err != nil {
+		s.mu.Lock()
+		s.lifecycle.startPending = false
+		s.mu.Unlock()
 		s.fail(client.failureReason())
 		return LifecycleReference{}, ErrLifecycleUnavailable
 	}
-	returnedThread, turnID, steerable, reason := projectTurn(result)
-	if reason != "" || returnedThread != threadID {
-		if reason == "" {
-			reason = DisconnectCorrelationMismatch
-		}
+	_, turnID, steerable, reason := projectTurn(result)
+	if reason != "" {
 		return LifecycleReference{}, s.rejectLifecycle(reason)
 	}
 	s.mu.Lock()
-	s.lifecycle.turnID, s.lifecycle.itemID, s.lifecycle.active, s.lifecycle.steerable = turnID, "", true, steerable
-	s.lifecycle.turnNotified, s.lifecycle.warningNotified, s.lifecycle.errorNotified, s.lifecycle.tokenTotal = false, false, false, 0
+	s.lifecycle.turnID, s.lifecycle.itemID, s.lifecycle.active, s.lifecycle.steerable, s.lifecycle.startPending = turnID, "", true, steerable, false
+	s.lifecycle.turnNotified, s.lifecycle.warningNotified, s.lifecycle.errorCount, s.lifecycle.tokenTotal = false, false, 0, 0
 	s.mu.Unlock()
 	if s.State() == providersession.StateReady {
 		if !s.emit(providersession.StateRunning, "turn_started", "lifecycle", "accepted") {
@@ -361,8 +374,8 @@ type turnResponse struct {
 		ID string `json:"id"`
 	} `json:"thread"`
 	Turn struct {
-		ID     string `json:"id"`
-		Status string `json:"status"`
+		ID     string          `json:"id"`
+		Status json.RawMessage `json:"status"`
 	} `json:"turn"`
 }
 
@@ -382,13 +395,25 @@ func projectTurn(result json.RawMessage) (string, string, bool, DisconnectReason
 		return "", "", false, DisconnectModelRerouted
 	}
 	var response turnResponse
-	if json.Unmarshal(result, &response) != nil || !identifierPattern.MatchString(response.Thread.ID) || !identifierPattern.MatchString(response.Turn.ID) {
+	if json.Unmarshal(result, &response) != nil || (response.Thread.ID != "" && !identifierPattern.MatchString(response.Thread.ID)) || !identifierPattern.MatchString(response.Turn.ID) {
 		return "", "", false, DisconnectUnsupportedLifecycle
 	}
-	if response.Turn.Status != "inProgress" {
+	if !inProgressTurnStatus(response.Turn.Status) {
 		return "", "", false, DisconnectUnsupportedLifecycle
 	}
 	return response.Thread.ID, response.Turn.ID, true, ""
+}
+
+func inProgressTurnStatus(raw json.RawMessage) bool {
+	var value string
+	if json.Unmarshal(raw, &value) == nil {
+		return value == "inProgress"
+	}
+	fields, ok := objectFields(raw, "type")
+	if !ok {
+		return false
+	}
+	return json.Unmarshal(fields["type"], &value) == nil && value == "inProgress"
 }
 
 func containsModelReroute(raw json.RawMessage) bool {
