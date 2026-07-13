@@ -287,3 +287,15 @@ the session record is persisted will be an orphan candidate; failed/cancelled re
 later reconciliation/repair contract. The retention policy is decided: Pipeon close stops only an
 exact managed container and retains its record for reuse. Remove/down and automatic recovery remain
 unauthorized until their separate destructive/recovery contracts exist.
+
+## Implementation Update — Pinned Live Read-Configuration Verification (2026-07-13)
+
+The package-owned resolver now has an explicit `--live-read-configuration` status adapter. It
+requires the installed `@devcontainers/cli` to equal package pin `0.87.0`, then invokes only
+`read-configuration` for the selected definition and still consumes Docker status exclusively from
+the existing captured fixture. Windows resolves the npm command shim to the package JavaScript entry
+point under the current Node executable, without a shell. Missing, unpinned, timed-out, malformed,
+or identity-mismatched output fails closed and retains no raw adapter output. Dev Container CLI
+`0.87.0` performs its own label-filtered, read-only `docker ps` during this operation; that is the
+sole Docker exception for the slice. No direct Docker call, `up`, hook, editor, provider, `exec`,
+stop, remove, or Pipeon lifecycle path was added.

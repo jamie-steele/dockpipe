@@ -67,7 +67,7 @@ workspace-relative reference. A multi-definition workspace emits `discovered`,
 `selection_required`, then `failed` and exits non-zero; no selection is guessed. `status` always
 requires an explicit workspace-relative `--definition-ref`.
 
-`status` accepts captured JSON adapter fixtures only:
+`status` accepts captured JSON adapter fixtures by default:
 
 - `--read-configuration-fixture` — JSON object with `definition_ref` (or `config_file`) matching
   the selected reference.
@@ -76,6 +76,18 @@ requires an explicit workspace-relative `--definition-ref`.
 - `--managed-session-fixture` (optional) — `{ "sessions": [...] }`; a managed record must bind
   `container_id`, `session_id`, `workspace_ref`, `definition_ref`, and
   `definition_fingerprint`, and Docker must carry `com.dockpipe.devcontainer.session`.
+
+For an explicit, read-only installed-adapter verification, replace
+`--read-configuration-fixture` with `--live-read-configuration`. The resolver checks that the
+installed `@devcontainers/cli` is exactly the package pin (`0.87.0`), then invokes only
+`read-configuration --workspace-folder <workspace> --config <selected-definition>`. Docker
+inspection remains a captured fixture in this slice. On Windows, the npm command shim is resolved
+to its installed JavaScript entry point and run through the current Node executable without a shell.
+An absent, unpinned, timed-out, malformed, or mismatched adapter fails closed without exposing raw
+paths, command text, or adapter output. Dev Container CLI `0.87.0` itself performs a
+label-filtered, read-only `docker ps` while reading configuration; that indirect query is the sole
+Docker exception for this slice. The package does not directly invoke Docker or broaden this into a
+Docker preflight.
 
 `up` requires an explicit workspace-relative `--definition-ref`. It first emits `up_requested`.
 Without an approval fixture bound to the request id, workspace, selected reference/fingerprint,
@@ -91,9 +103,8 @@ explicit workspace-relative `--managed-session-output` path. The persisted recor
 raw container id for later exact reconciliation; the event stream exposes only its opaque
 `environment_ref` plus the session identity and label name.
 
-No fixture means no status adapter: `status` fails closed with `state: unavailable`. The resolver
-intentionally contains no subprocess call to Docker or the Dev Container CLI. The adapter result
-fixture proves the lifecycle contract only; a live CLI invocation is not implemented in this slice.
+Without either a read-configuration fixture or explicit live-read flag, `status` fails closed with
+`state: unavailable`. The resolver never directly invokes Docker or a Dev Container lifecycle command.
 External/user-started containers remain status-only under the selected managed-only policy.
 
 `external` is read-only even if it has Dev Container labels. A matching session label without an

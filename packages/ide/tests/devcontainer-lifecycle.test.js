@@ -3,14 +3,16 @@
 const assert = require('assert');
 const crypto = require('crypto');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
 const root = path.resolve(__dirname, '..');
 const script = path.join(root, 'resolvers', 'devcontainer', 'assets', 'scripts', 'devcontainer-lifecycle.js');
 const wrapper = path.join(root, 'resolvers', 'devcontainer', 'assets', 'scripts', 'devcontainer-lifecycle.sh');
-const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'dockpipe-devcontainer-test-'));
+const { PINNED_DEVCONTAINER_CLI_VERSION, readLiveConfiguration } = require(script);
+const packageTestTmp = path.join(root, '..', '..', 'bin', '.dockpipe', 'tmp', 'package-tests');
+fs.mkdirSync(packageTestTmp, { recursive: true });
+const workspace = fs.mkdtempSync(path.join(packageTestTmp, 'devcontainer-lifecycle-'));
 
 function write(relative, value) {
   const target = path.join(workspace, ...relative.split('/'));
@@ -83,6 +85,31 @@ try {
   assert.deepStrictEqual(noContainer.events.map((event) => event.event), ['status', 'completed']);
   assert.strictEqual(noContainer.events[0].state, 'not_created');
   assert.strictEqual(noContainer.events[0].ownership, 'external');
+
+  // The live adapter runs only the exact selected read-configuration command
+  // after proving the installed CLI matches the package pin. Its process
+  // contract is unit-tested with an injected runner, so the package suite
+  // never needs Docker or an installed Dev Container CLI.
+  const liveCalls = [];
+  const liveCandidate = { definition_ref: '.devcontainer/devcontainer.json' };
+  const liveRead = readLiveConfiguration({}, workspace, liveCandidate, {
+    invocation: { program: 'fake-devcontainer', prefix: [] },
+    runner(program, args, options) {
+      liveCalls.push({ program, args, options });
+      if (args[0] === '--version') return { status: 0, stdout: `${PINNED_DEVCONTAINER_CLI_VERSION}\n` };
+      return { status: 0, stdout: JSON.stringify({ config_file: path.join(workspace, '.devcontainer', 'devcontainer.json') }) };
+    },
+  });
+  assert.strictEqual(liveRead.config_file, path.join(workspace, '.devcontainer', 'devcontainer.json'));
+  assert.deepStrictEqual(liveCalls.map((call) => call.args), [
+    ['--version'],
+    ['read-configuration', '--workspace-folder', workspace, '--config', path.join(workspace, '.devcontainer', 'devcontainer.json')],
+  ]);
+  assert.ok(liveCalls.every((call) => call.options.shell === false && call.options.timeout > 0));
+  assert.throws(() => readLiveConfiguration({}, workspace, liveCandidate, {
+    invocation: { program: 'fake-devcontainer', prefix: [] },
+    runner() { return { status: 0, stdout: '0.0.0\n' }; },
+  }), /version does not match/);
 
   // A fixture-adapted installed/pinned CLI result produces a managed record.
   // The public stream deliberately contains only an opaque environment ref.
@@ -185,7 +212,9 @@ try {
     assert.strictEqual(wrappedEvents[0].contract_version, 'devcontainer.lifecycle.v1');
     assert.deepStrictEqual(wrappedEvents.map((event) => event.sequence), [1, 2]);
   }
-  assert.ok(!/docker\s+(run|start|stop|exec)|devcontainer\s+(up|exec|build)/i.test(fs.readFileSync(script, 'utf8')), 'read-only resolver must not contain lifecycle invocation');
+  const source = fs.readFileSync(script, 'utf8');
+  assert.ok(!/\['(up|exec|build|run-user-commands)'/.test(source), 'live adapter must not invoke a lifecycle command');
+  assert.ok(source.includes("['read-configuration', '--workspace-folder', root, '--config', selected]"), 'live adapter must be limited to read-configuration');
   process.stdout.write('ide devcontainer fixture contract tests ok\n');
 } finally {
   fs.rmSync(workspace, { recursive: true, force: true });

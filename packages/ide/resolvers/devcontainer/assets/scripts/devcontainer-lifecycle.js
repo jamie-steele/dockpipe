@@ -1,16 +1,21 @@
 #!/usr/bin/env node
 'use strict';
 
-// Package-owned, fixture-only native Dev Container lifecycle seam.
-// This module intentionally does not import child_process and never invokes
-// Docker, the Dev Container CLI, an editor, lifecycle hooks, or a provider.
+// Package-owned native Dev Container lifecycle seam. The only live adapter in
+// this slice is a pinned read-configuration call for an explicit definition.
+// It never directly invokes Docker, up, exec, build, hooks, an editor, or a
+// provider. Dev Container CLI 0.87.0 performs its own label-filtered, read-only
+// `docker ps` during read-configuration; that indirect query is expressly allowed.
 
 const crypto = require('crypto');
+const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
 const CONTRACT_VERSION = 'devcontainer.lifecycle.v1';
 const SESSION_LABEL = 'com.dockpipe.devcontainer.session';
+const PINNED_DEVCONTAINER_CLI_VERSION = '0.87.0';
+const ADAPTER_TIMEOUT_MS = 10000;
 const allowedOperations = new Set(['discover', 'status', 'up']);
 const APPROVAL_RISKS = ['image_pull', 'build', 'compose_create_start', 'feature_install', 'lifecycle_hooks'];
 
@@ -33,7 +38,7 @@ function parseArgs(argv) {
   }
   const out = {
     operation: '', workspace: '.', definitionRef: '', requestId: '', readFixture: '', dockerFixture: '', sessionsFixture: '',
-    approvalFixture: '', upFixture: '', sessionOutput: '',
+    approvalFixture: '', upFixture: '', sessionOutput: '', liveReadConfiguration: false, devcontainerBin: '',
   };
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
@@ -46,6 +51,10 @@ function parseArgs(argv) {
       out.operation = args[++index] || '';
       continue;
     }
+    if (token === '--live-read-configuration') {
+      out.liveReadConfiguration = true;
+      continue;
+    }
     const options = new Map([
       ['--workspace', 'workspace'],
       ['--definition-ref', 'definitionRef'],
@@ -56,6 +65,7 @@ function parseArgs(argv) {
       ['--approval-fixture', 'approvalFixture'],
       ['--up-result-fixture', 'upFixture'],
       ['--managed-session-output', 'sessionOutput'],
+      ['--devcontainer-bin', 'devcontainerBin'],
     ]);
     if (options.has(token)) {
       const value = args[++index];
@@ -70,10 +80,74 @@ function parseArgs(argv) {
     fail(`unknown argument ${JSON.stringify(token)}`);
   }
   if (!allowedOperations.has(out.operation)) fail('operation must be discover, status, or up');
+  if (out.liveReadConfiguration && out.readFixture) fail('live read-configuration cannot be combined with a fixture');
   out.readFixture ||= process.env.DEVCONTAINER_READ_CONFIGURATION_FIXTURE || '';
   out.dockerFixture ||= process.env.DEVCONTAINER_DOCKER_INSPECT_FIXTURE || '';
   out.sessionsFixture ||= process.env.DEVCONTAINER_MANAGED_SESSION_FIXTURE || '';
   return out;
+}
+
+function executableOnPath(command) {
+  if (path.isAbsolute(command)) return fs.existsSync(command) ? command : '';
+  const extensions = process.platform === 'win32' ? ['.cmd', '.exe', ''] : [''];
+  for (const directory of String(process.env.PATH || '').split(path.delimiter)) {
+    if (!directory) continue;
+    for (const extension of extensions) {
+      const candidate = path.join(directory, `${command}${extension}`);
+      if (fs.existsSync(candidate)) return candidate;
+    }
+  }
+  return '';
+}
+
+function installedDevcontainerInvocation(command) {
+  const executable = executableOnPath(command || 'devcontainer');
+  if (!executable) fail('installed Dev Container CLI is unavailable');
+  if (process.platform === 'win32' && path.extname(executable).toLowerCase() === '.cmd') {
+    const entrypoint = path.join(path.dirname(executable), 'node_modules', '@devcontainers', 'cli', 'devcontainer.js');
+    if (!fs.existsSync(entrypoint)) fail('installed Dev Container CLI entrypoint is unavailable');
+    return { program: process.execPath, prefix: [entrypoint] };
+  }
+  return { program: executable, prefix: [] };
+}
+
+function runAdapter(invocation, args, runner) {
+  const result = runner(invocation.program, [...invocation.prefix, ...args], {
+    encoding: 'utf8',
+    shell: false,
+    windowsHide: true,
+    timeout: ADAPTER_TIMEOUT_MS,
+    maxBuffer: 1024 * 1024,
+  });
+  if (!result || result.error || result.signal || result.status !== 0) fail('installed Dev Container CLI adapter failed');
+  return String(result.stdout || '').trim();
+}
+
+function configurationReference(payload) {
+  if (!payload || Array.isArray(payload) || typeof payload !== 'object') return '';
+  const configuration = payload.configuration && typeof payload.configuration === 'object' ? payload.configuration : {};
+  for (const value of [payload.definition_ref, payload.config_file, payload.configFile, payload.config_path, payload.configPath,
+    configuration.definition_ref, configuration.config_file, configuration.configFile, configuration.config_path, configuration.configPath]) {
+    if (typeof value === 'string' && value) return value;
+  }
+  return '';
+}
+
+function readLiveConfiguration(input, root, candidate, options = {}) {
+  const runner = options.runner || spawnSync;
+  const invocation = options.invocation || installedDevcontainerInvocation(input.devcontainerBin);
+  const version = runAdapter(invocation, ['--version'], runner);
+  if (version !== PINNED_DEVCONTAINER_CLI_VERSION) fail('installed Dev Container CLI version does not match the package pin');
+  const selected = path.join(root, ...candidate.definition_ref.split('/'));
+  const text = runAdapter(invocation, ['read-configuration', '--workspace-folder', root, '--config', selected], runner);
+  let payload;
+  try { payload = JSON.parse(text); } catch (_) { fail('installed Dev Container CLI returned invalid read-configuration JSON'); }
+  if (!payload || Array.isArray(payload) || typeof payload !== 'object') fail('installed Dev Container CLI returned an invalid read-configuration result');
+  const returnedReference = configurationReference(payload);
+  if (returnedReference && fixtureRef(returnedReference, root) !== candidate.definition_ref) {
+    fail('installed Dev Container CLI read-configuration result does not match the selected definition');
+  }
+  return payload;
 }
 
 function workspaceRoot(input) {
@@ -468,11 +542,15 @@ function run(input) {
   let dockerInspect;
   let sessions;
   try {
-    readConfiguration = readJSON(input.readFixture, 'read-configuration');
+    readConfiguration = input.liveReadConfiguration
+      ? readLiveConfiguration(input, root, candidate)
+      : readJSON(input.readFixture, 'read-configuration');
     dockerInspect = readJSON(input.dockerFixture, 'docker inspect');
     sessions = input.sessionsFixture ? readJSON(input.sessionsFixture, 'managed session') : { sessions: [] };
-    const fixtureDefinitionRef = fixtureRef(readConfiguration.definition_ref || readConfiguration.config_file || readConfiguration.configFile, root);
-    if (fixtureDefinitionRef !== candidate.definition_ref) fail('read-configuration fixture does not match the selected definition');
+    if (!input.liveReadConfiguration) {
+      const fixtureDefinitionRef = fixtureRef(configurationReference(readConfiguration), root);
+      if (fixtureDefinitionRef !== candidate.definition_ref) fail('read-configuration fixture does not match the selected definition');
+    }
   } catch (error) {
     const fields = resultFields(candidate, 'unavailable', 'ambiguous', error.message, ['supply_fixture_adapter']);
     emit('failed', fields);
@@ -485,12 +563,16 @@ function run(input) {
   return 0;
 }
 
-let exitCode = 2;
-try {
-  exitCode = run(parseArgs(process.argv.slice(2)));
-} catch (error) {
-  // Parsing failures occur before an operation envelope exists. Keep stderr
-  // bounded and do not include workspace paths, raw adapter payloads, or commands.
-  process.stderr.write(`devcontainer lifecycle: ${error.message}\n`);
+if (require.main === module) {
+  let exitCode = 2;
+  try {
+    exitCode = run(parseArgs(process.argv.slice(2)));
+  } catch (error) {
+    // Parsing failures occur before an operation envelope exists. Keep stderr
+    // bounded and do not include workspace paths, raw adapter payloads, or commands.
+    process.stderr.write(`devcontainer lifecycle: ${error.message}\n`);
+  }
+  process.exit(exitCode);
 }
-process.exit(exitCode);
+
+module.exports = { PINNED_DEVCONTAINER_CLI_VERSION, readLiveConfiguration };

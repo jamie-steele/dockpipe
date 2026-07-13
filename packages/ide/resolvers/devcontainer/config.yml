@@ -1,10 +1,12 @@
-# Fixture-only native Dev Container discovery/status plus an explicitly approved
-# managed-up contract. It never invokes a live CLI/Docker process, attaches,
-# executes in, stops, or removes a container.
+# Native Dev Container discovery/status plus an explicitly approved managed-up
+# contract. Status may explicitly verify a pinned live read-configuration CLI
+# adapter. That CLI makes its own label-filtered read-only Docker query; this
+# package never directly invokes Docker, attaches, executes in, stops, or
+# removes a container.
 name: devcontainer
 category: tooling
 icon: ../vscode/assets/images/icon.png
-description: Native Dev Container discovery/status and fixture-proven approved managed-up contract.
+description: Native Dev Container discovery/status with pinned read-configuration verification and fixture-proven approved managed-up contract.
 platforms: [windows, deb]
 dependencies:
   host:
@@ -22,8 +24,9 @@ dependencies:
         deb: sudo apt-get update && sudo apt-get install -y nodejs
 
 vault: none
-# Every step is host-only and the package scripts intentionally reject live
-# Docker/Dev Container CLI adapters, so the generic Docker preflight is unsafe.
+# Every step is host-only. The package may call the explicitly selected pinned
+# Dev Container CLI for read-configuration only; its indirect read-only Docker
+# query is narrower than, and must not be replaced by, generic Docker preflight.
 docker_preflight: false
 
 steps:
