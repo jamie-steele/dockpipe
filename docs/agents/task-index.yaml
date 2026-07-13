@@ -11,9 +11,6 @@ tasks:
   - id: TASK-004
     topic: Qt app and VS Code extension compile performance
     path: docs/agents/tasks/compile-performance-qt-vscode.md
-  - id: TASK-005
-    topic: Shared agents config discovery
-    path: docs/agents/tasks/shared-agents-config-discovery.md
   - id: TASK-006
     topic: Example brain baseline
     path: docs/agents/tasks/example-brain-baseline.md

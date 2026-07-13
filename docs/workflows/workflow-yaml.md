@@ -286,7 +286,10 @@ Use `starting_points` as optional collector hints only. Do not duplicate broad m
 mounts and `access.read` define the actual exploration boundary.
 
 For task execution lanes, define reusable role agents in sibling `agents.yml`, then reference those
-roles from tasks:
+roles from tasks. If that sibling is absent, DorkPipe searches parent workflow directories for the
+nearest `agents.yml`; the sibling always wins. Search stops at the owning `workflows/` directory or,
+for package workflows, the package directory containing `package.yml`; it never falls back to an
+unbounded repository-level `agents.yml`.
 
 ```yaml
 agents:
@@ -626,7 +629,8 @@ Typical uses:
 - model/provider knobs that affect generation
 - model policy overrides for attempt, validation, and escalation
 - orchestration fanout data such as request, tasks, concurrency, merge, verify, and apply policy
-- sibling `agents.yml` role definitions so worker/model/access policy is reusable across workflows
+- sibling or bounded-parent `agents.yml` role definitions so worker/model/access policy is reusable
+  across workflow families
 
 This keeps user intent in `config.yml` and lets shared scripts materialize the contract instead of
 forcing one shell file per workflow shape.
@@ -641,8 +645,10 @@ Let `access.read` and the mounted paths define the broader exploration boundary.
 explicitly say when a role may inspect additional allowed sources and must cite exact paths for any
 claim it carries forward.
 
-Prefer reusable role definitions in a sibling `agents.yml`; inline `agent.orchestration.agents` is
-available for workflow-local overrides. Tasks reference roles via `tasks[].agent`. Agent definitions
+Prefer reusable role definitions in a sibling `agents.yml`; when it is absent, DorkPipe uses the
+nearest parent `agents.yml` within the workflow or package authoring root. Inline
+`agent.orchestration.agents` is available for workflow-local overrides. Tasks reference roles via
+`tasks[].agent`. Agent definitions
 describe who the worker is: role, worker profile, authority, model policy, access defaults, and
 standing constraints. Tasks describe what happens in this workflow: `brief`,
 `context.required_artifacts`, `context.seed_paths`, `context.source_roots`, dependencies, and declared

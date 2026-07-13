@@ -5017,15 +5017,42 @@ func resolveAgentTask(task, agents map[string]any, env map[string]string) (map[s
 }
 
 func loadAgentsConfig(workflowPath string) map[string]any {
-	path := filepath.Join(filepath.Dir(workflowPath), "agents.yml")
-	payload := readYAMLMapOptional(path)
-	if len(payload) == 0 {
-		return map[string]any{}
+	workflowDir := filepath.Dir(workflowPath)
+	searchRoot := agentsConfigSearchRoot(workflowDir)
+	for dir := workflowDir; ; dir = filepath.Dir(dir) {
+		path := filepath.Join(dir, "agents.yml")
+		if _, err := os.Stat(path); err == nil {
+			payload := readYAMLMapOptional(path)
+			if agents := mapValue(payload["agents"]); len(agents) > 0 {
+				return agents
+			}
+			return mapValue(mapValue(payload["agent"])["agents"])
+		}
+		if dir == searchRoot {
+			break
+		}
 	}
-	if agents := mapValue(payload["agents"]); len(agents) > 0 {
-		return agents
+	return map[string]any{}
+}
+
+func agentsConfigSearchRoot(workflowDir string) string {
+	workflowRoot := ""
+	for dir := workflowDir; ; dir = filepath.Dir(dir) {
+		if _, err := os.Stat(filepath.Join(dir, "package.yml")); err == nil {
+			return dir
+		}
+		if workflowRoot == "" && filepath.Base(dir) == "workflows" {
+			workflowRoot = dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
 	}
-	return mapValue(mapValue(payload["agent"])["agents"])
+	if workflowRoot != "" {
+		return workflowRoot
+	}
+	return workflowDir
 }
 
 func taskContextPaths(task map[string]any) []string {

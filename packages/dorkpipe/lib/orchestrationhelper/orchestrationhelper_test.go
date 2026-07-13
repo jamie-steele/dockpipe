@@ -9,6 +9,54 @@ import (
 	"testing"
 )
 
+func TestLoadAgentsConfigUsesNearestWorkflowParentAndSiblingOverride(t *testing.T) {
+	root := t.TempDir()
+	workflowPath := filepath.Join(root, "workflows", "agent", "review", "config.yml")
+	writeAgentsConfig := func(path, role string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		content := "agents:\n  reviewer:\n    role: " + role + "\n"
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	writeAgentsConfig(filepath.Join(root, "agents.yml"), "outside-workflow-root")
+	writeAgentsConfig(filepath.Join(root, "workflows", "agent", "agents.yml"), "shared-reviewer")
+	if got := stringValue(mapValue(loadAgentsConfig(workflowPath)["reviewer"])["role"]); got != "shared-reviewer" {
+		t.Fatalf("parent role = %q, want shared-reviewer", got)
+	}
+
+	writeAgentsConfig(filepath.Join(filepath.Dir(workflowPath), "agents.yml"), "local-reviewer")
+	if got := stringValue(mapValue(loadAgentsConfig(workflowPath)["reviewer"])["role"]); got != "local-reviewer" {
+		t.Fatalf("sibling role = %q, want local-reviewer", got)
+	}
+}
+
+func TestLoadAgentsConfigUsesPackageAuthoringRoot(t *testing.T) {
+	root := t.TempDir()
+	packageRoot := filepath.Join(root, "packages", "example")
+	workflowPath := filepath.Join(packageRoot, "workflows", "review", "config.yml")
+	if err := os.MkdirAll(filepath.Dir(workflowPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packageRoot, "package.yml"), []byte("name: example\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "agents.yml"), []byte("agents:\n  reviewer:\n    role: outside-package-root\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(packageRoot, "agents.yml"), []byte("agents:\n  reviewer:\n    role: package-reviewer\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := stringValue(mapValue(loadAgentsConfig(workflowPath)["reviewer"])["role"]); got != "package-reviewer" {
+		t.Fatalf("package role = %q, want package-reviewer", got)
+	}
+}
+
 func TestApplyTaskWorkerProfileDefaultsToPrefer(t *testing.T) {
 	task, err := applyTaskWorkerProfile(map[string]any{
 		"id":     "patch",
