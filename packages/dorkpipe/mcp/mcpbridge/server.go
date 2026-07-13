@@ -301,30 +301,19 @@ func (s *Server) dispatchTool(ctx context.Context, name string, args json.RawMes
 		return []byte(msg), false, nil
 
 	case "dockpipe.run":
-		var in struct {
-			Workflow string   `json:"workflow"`
-			Workdir  string   `json:"workdir"`
-			Argv     []string `json:"argv"`
-		}
+		var in dockpipeRunInput
 		if err := json.Unmarshal(args, &in); err != nil {
 			return nil, true, err
 		}
-		wf := strings.TrimSpace(in.Workflow)
-		if wf == "" {
-			return nil, true, fmt.Errorf("workflow required")
-		}
-		wd, err := resolveExecWorkdir(in.Workdir)
+		cmdArgs, err := in.commandArgs()
 		if err != nil {
 			return nil, true, err
 		}
-		cmdArgs := []string{"--workflow", wf, "--workdir", wd, "--"}
-		cmdArgs = append(cmdArgs, in.Argv...)
 		stdout, stderr, code, err := runDockpipe(ctx, cmdArgs)
 		if err != nil {
 			return nil, true, err
 		}
-		summary := fmt.Sprintf("exit_code=%d\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
-		return []byte(summary), code != 0, nil
+		return in.formatResult(stdout, stderr, code)
 
 	case "dorkpipe.run_spec":
 		var in struct {

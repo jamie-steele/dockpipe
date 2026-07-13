@@ -1,10 +1,23 @@
 # Session Handoffs
 
-At a completed slice:
+At a completed slice in a normal session:
 
 1. Report the completed scope, checks, risks, and generated artifacts.
 2. Ask whether the user wants the current branch committed. Commit only after explicit approval; never commit/push by default.
 3. If work remains, offer one compact next-slice prompt. Otherwise ask what to do next.
+
+## Autonomous Master Exception
+
+An explicitly designated master-orchestrator session may select one bounded slice whose required
+product decisions are already recorded, then stage only its exact changed files and commit the
+validated slice on the current branch. It must preserve unrelated worktree changes and never push,
+open a PR, rebase, reset, stash, delete state, or change repository policy incidentally.
+
+Stop and ask the user only for an architecture gate: a missing decision or ambiguous scope; a new
+generic primitive or `src/lib` / `src/cmd` edit; a public CLI/MCP/schema contract; a package/runtime
+ownership boundary; live provider/Docker/auth/network work; destructive cleanup or secrets;
+validation uncertainty; or overlap/conflict with user changes. All other bounded implementation,
+validation, task-documentation, and commit decisions are autonomous.
 
 ## Next-slice prompt
 

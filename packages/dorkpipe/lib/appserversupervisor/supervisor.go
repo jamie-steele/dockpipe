@@ -25,6 +25,11 @@ var (
 	ErrKillDeadline    = errors.New("app server child did not exit after kill deadline")
 )
 
+const (
+	hostPipeWaitDelay          = 5 * time.Second
+	childExitObservationWindow = 25 * time.Millisecond
+)
+
 // DisconnectReason is a closed, safe classification. It never contains a
 // child exit message, provider response, or transport payload.
 type DisconnectReason string
@@ -126,6 +131,9 @@ func (l HostLauncher) Start(ctx context.Context) (Child, error) {
 		return nil, err
 	}
 	cmd := exec.Command(l.Executable, l.Args...)
+	// Bound Wait when a command shim exits but leaves a descendant holding the
+	// private stdio handles. This affects only post-exit pipe drainage.
+	cmd.WaitDelay = hostPipeWaitDelay
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -205,6 +213,7 @@ type Supervisor struct {
 	connectionRef      string
 	recoveryEvidence   string
 	lifecycle          lifecycleState
+	lastNotification   string
 	waitDone           chan struct{}
 	record             ShutdownRecord
 
@@ -445,8 +454,29 @@ func (s *Supervisor) waitForChild(child Child, waitDone chan struct{}) {
 }
 
 func (s *Supervisor) fail(reason DisconnectReason) {
+	if reason == DisconnectTransportClosed && s.childExitedWithinObservationWindow() {
+		reason = DisconnectChildExit
+	}
 	s.disconnect(reason)
 	s.startShutdown()
+}
+
+// childExitedWithinObservationWindow distinguishes the owned process exiting
+// from a still-live child whose stdout alone closed. It observes only the
+// existing Wait completion signal and never reads child output or retries.
+func (s *Supervisor) childExitedWithinObservationWindow() bool {
+	s.mu.RLock()
+	waitDone := s.waitDone
+	s.mu.RUnlock()
+	if waitDone == nil {
+		return false
+	}
+	select {
+	case <-waitDone:
+		return true
+	case <-time.After(childExitObservationWindow):
+		return false
+	}
 }
 
 // Shutdown immediately projects Disconnected, closes private stdin, then uses

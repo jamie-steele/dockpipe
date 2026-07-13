@@ -11,9 +11,6 @@ tasks:
   - id: TASK-004
     topic: Qt app and VS Code extension compile performance
     path: docs/agents/tasks/compile-performance-qt-vscode.md
-  - id: TASK-005
-    topic: Shared agents config discovery
-    path: docs/agents/tasks/shared-agents-config-discovery.md
   - id: TASK-006
     topic: Example brain baseline
     path: docs/agents/tasks/example-brain-baseline.md
@@ -33,11 +30,14 @@ tasks:
     topic: Local Windows CI VM parity and guest tooling
     path: docs/agents/tasks/local-windows-ci-vm-parity.md
   - id: TASK-012
+    topic: Pipeon startup, provisioning, and DorkPipe provider pools
+    path: docs/agents/tasks/pipeon-startup-performance.md
   - id: TASK-013
     topic: Codex App Server adapter for top-level orchestrators
     path: docs/agents/tasks/codex-app-server-adapter.md
-    topic: Pipeon startup, provisioning, and DorkPipe provider pools
-    path: docs/agents/tasks/pipeon-startup-performance.md
+  - id: TASK-014
+    topic: Native Dev Container discovery and lifecycle for Pipeon and CLI
+    path: docs/agents/tasks/native-devcontainer-support.md
 
 maintenance:
   - Treat this YAML file as the AI/backlog entrypoint.

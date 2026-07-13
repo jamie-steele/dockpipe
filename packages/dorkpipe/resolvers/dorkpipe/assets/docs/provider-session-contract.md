@@ -98,5 +98,35 @@ MCP-progress extensions fail closed without retaining raw content. Disconnect an
 private transport and active/pending state before bounded child cleanup. The journal stays descriptive
 only and has no replay, retry, resume, recovery, decision, dispatch, or export operation.
 
-CAS-12 contract-test expansion, CAS-13 controlled integration, and CAS-14+ migration and operations work
-remain deferred.
+CAS-12 is complete with deterministic fixture-only contract coverage for the existing CAS-03 through
+CAS-11 behavior: strict initialization and launcher/policy gates, lifecycle and event ordering,
+approval/input one-time correlation, exact cancellation completion, idle-only recovery, bounded
+snapshot/audit stores, redaction, and fail-closed cleanup. The fixtures use only a local fake launcher
+and private in-memory stdio; no provider executable, account, credential, network, auth, listener, or
+integration route is involved. Expanded source-boundary checks keep App Server/raw-protocol vocabulary
+out of `providersession` and Pipeon.
+
+CAS-13 is not complete. On 2026-07-12 its opt-in supervisor harness used the CAS-11 direct
+`codex app-server --stdio` child to verify the current v2 initialization shape, the exact pinned
+`gpt-5.6-terra` / `high` catalog entry, thread start, clean shutdown, and bounded controlled
+transport loss. The v2 wire result omits the redundant `jsonrpc` member; the supervisor now
+accepts only that documented omission or `2.0`, and retains no raw frame. The pinned policy remains
+workspace-write with declared in-workspace roots, network disabled, human review, and no shell,
+full-access, automatic-review, reroute, or fallback path.
+
+The constrained no-tool turn now reaches a normalized `turn_failed` terminal after its bounded
+provider run for both tested opaque no-tool references and an ephemeral direct no-tool prompt; the
+prompt was not retained. A constrained workspace-change prompt also failed before any approval
+request arrived. Current v2 object status shapes and terminal thread-status transitions are covered
+by fixtures. This proves correlated streaming and fail-closed terminal normalization, not a
+successful completed turn. A constrained interrupt cannot win the race before that failure, so
+genuine approval/denial, exact interruption terminal confirmation, and controlled real child death
+remain unverified. CAS-13 and CAS-14+ remain deferred. No provider artifact is retained.
+
+A post-failure read of the same thread succeeds, isolating the bounded `turn_failed_other` outcome
+to the model-execution/stream path rather than App Server initialization, existing authentication,
+catalog, or thread-control availability. No provider error body is retained.
+
+The direct child is `codex-cli 0.144.1`. A narrowly reviewed host-side no-model-turn initialization
+probe of the current desktop App resource failed at child startup, so the active desktop Terra UI is
+not a substitutable App Server route for this task.

@@ -1,0 +1,2 @@
+# Resolver: native repository Dev Container discovery/status only.
+# It is not a runtime, provider-pool worker, Docker lifecycle manager, or editor attachment flow.

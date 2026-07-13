@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"dorkpipe.orchestrator/providersession"
 )
@@ -187,6 +188,51 @@ func TestEventNormalizationRedactsFailuresAndRejectsUnsafeFrames(t *testing.T) {
 				t.Fatalf("event = %+v", event)
 			}
 		})
+	}
+}
+
+func TestEventNormalizationAcceptsCurrentObjectStatusShapes(t *testing.T) {
+	s, child, _, _, _ := startEventTurn(t)
+	sendNotification(t, child, "thread/status/changed", `{"threadId":"thread-1","status":{"type":"systemError"}}`)
+	if event := nextEvent(t, s); event.Summary != "thread_system_error" || event.State != "" {
+		t.Fatalf("current thread status projection = %+v", event)
+	}
+	sendNotification(t, child, "turn/completed", `{"threadId":"thread-1","turn":{"id":"turn-1","status":{"type":"failed"},"error":null}}`)
+	if event := nextEvent(t, s); event.Summary != "turn_failed" || event.State != "" {
+		t.Fatalf("current turn status projection = %+v", event)
+	}
+}
+
+func TestEventNormalizationIgnoresDuplicateCorrelatedThreadStatus(t *testing.T) {
+	s, child, _, _, _ := startEventTurn(t)
+	sendNotification(t, child, "thread/status/changed", `{"threadId":"thread-1","status":"active"}`)
+	select {
+	case event := <-s.Events():
+		t.Fatalf("duplicate thread status projected an event: %+v", event)
+	case <-time.After(20 * time.Millisecond):
+	}
+	if s.State() != providersession.StateRunning {
+		t.Fatalf("duplicate thread status changed state: %s", s.State())
+	}
+}
+
+func TestEventNormalizationAcceptsCurrentTokenUsageShape(t *testing.T) {
+	s, child, _, _, _ := startEventTurn(t)
+	sendNotification(t, child, "thread/tokenUsage/updated", `{"threadId":"thread-1","turnId":"turn-1","tokenUsage":{"last":{"cachedInputTokens":0,"inputTokens":1,"outputTokens":2,"reasoningOutputTokens":0,"totalTokens":3},"total":{"cachedInputTokens":4,"inputTokens":5,"outputTokens":6,"reasoningOutputTokens":7,"totalTokens":22},"modelContextWindow":100000}}`)
+	event := nextEvent(t, s)
+	if event.Summary != "token_usage_total_22" || event.State != "" {
+		t.Fatalf("current token usage projection = %+v", event)
+	}
+	if strings.Contains(event.Summary, "input") || strings.Contains(event.Summary, "output") {
+		t.Fatalf("current token usage leaked breakdown data: %+v", event)
+	}
+}
+
+func TestEventNormalizationRejectsMalformedCurrentTokenUsageShape(t *testing.T) {
+	s, child, _, _, _ := startEventTurn(t)
+	sendNotification(t, child, "thread/tokenUsage/updated", `{"threadId":"thread-1","turnId":"turn-1","tokenUsage":{"last":{"cachedInputTokens":0,"inputTokens":1,"outputTokens":2,"reasoningOutputTokens":0,"totalTokens":3},"total":{"cachedInputTokens":4,"inputTokens":5,"outputTokens":6,"reasoningOutputTokens":7,"totalTokens":22},"unknown":true}}`)
+	if event := nextEvent(t, s); event.State != providersession.StateDisconnected || event.Summary != string(DisconnectUnsupportedEvent) {
+		t.Fatalf("malformed current token usage projection = %+v", event)
 	}
 }
 

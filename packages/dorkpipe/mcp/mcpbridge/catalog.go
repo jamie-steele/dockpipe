@@ -48,8 +48,8 @@ func mcpToolCatalog() []mcpToolMeta {
 		},
 		{
 			Name:        "dockpipe.run",
-			Description: "Run dockpipe with --workflow, --workdir, argv after --. Tier: exec only.",
-			InputSchema: json.RawMessage(`{"type":"object","properties":{"workflow":{"type":"string"},"workdir":{"type":"string"},"argv":{"type":"array","items":{"type":"string"}}},"required":["workflow"],"additionalProperties":false}`),
+			Description: "Run dockpipe with --workflow, optional --package, --workdir, argv after --. Tier: exec only.",
+			InputSchema: json.RawMessage(`{"type":"object","properties":{"workflow":{"type":"string"},"package":{"type":"string","description":"optional package name for package-owned workflows"},"workdir":{"type":"string"},"argv":{"type":"array","items":{"type":"string"}},"result_mode":{"type":"string","enum":["summary","stdout"],"description":"summary (default) wraps CLI stdout/stderr; stdout returns the package event stream unchanged"}},"required":["workflow"],"additionalProperties":false}`),
 		},
 		{
 			Name:        "dorkpipe.run_spec",

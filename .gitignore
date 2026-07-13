@@ -3,10 +3,11 @@
 .gomodcache/
 .cache/
 
-# Ad-hoc scratch (local experiments, packaging test output)
-tmp/
-.tmp/
-.codex-tmp/
+# Ad-hoc scratch (local experiments, packaging test output). DockPipe-managed
+# state belongs under bin/.dockpipe/; do not hide a repo-root .tmp/ directory.
+tmp/*
+.tmp/*
+.codex-tmp/*
 
 # Shell footgun: `op inject ... > -` creates a repo-root file named `-` (not stdout). DockPipe never does this.
 /-
@@ -105,7 +106,14 @@ src/app/tooling/vscode-extensions/dockpipe-language-support/dist/
 .agents/
 .claude/
 .codex/
-.codex
+# Keep the repo-owned environment contract visible while ignoring all other
+# Codex local state and generated files.
+!.codex/
+.codex/*
+!.codex/environments/
+.codex/environments/*
+!.codex/environments/environment.toml
+.glider-trace/
 .cursor-server/
 .cursor/
 .devcontainer/
@@ -120,7 +128,6 @@ bin/.dockpipe/
 .gocache/
 .gomodcache/
 tmp/
-.tmp/
 # END dockpipe-gitignore
 
 .local-go-cache/*

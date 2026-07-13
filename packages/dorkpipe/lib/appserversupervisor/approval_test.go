@@ -57,7 +57,7 @@ func TestApprovalRelayProjectsSafeCorrelatedRequestsAndOneTimeDecision(t *testin
 		wantResult  map[string]any
 	}{
 		{"command", "item/commandExecution/requestApproval", `{"threadId":"thread-1","turnId":"turn-1","itemId":"item-1","command":"private command","cwd":"private path","reason":"private reason"}`, "command_execution", providersession.DecisionApprove, map[string]any{"decision": "accept"}},
-		{"file", "item/fileChange/requestApproval", `{"threadId":"thread-1","turnId":"turn-1","itemId":"item-1","patch":"private patch","reason":"private reason"}`, "workspace_change", providersession.DecisionDeny, map[string]any{"decision": "decline"}},
+		{"file", "item/fileChange/requestApproval", `{"threadId":"thread-1","turnId":"turn-1","itemId":"item-1","patch":"private patch","reason":"private reason","startedAtMs":1710000000000}`, "workspace_change", providersession.DecisionDeny, map[string]any{"decision": "decline"}},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			s, child, scanner, _, _ := startApprovalTurn(t)
@@ -109,6 +109,52 @@ func TestApprovalRelayPermissionIsDeclaredAndDenyOnly(t *testing.T) {
 		t.Fatalf("permission decision event = %+v", disconnected)
 	}
 	_ = scanner
+}
+
+func TestApprovalRelayIgnoresCurrentUnchangedThreadStatusWhilePending(t *testing.T) {
+	s, child, scanner, _, _ := startApprovalTurn(t)
+	event := approvalRequest(t, s, child, 48, "item/fileChange/requestApproval", `{"threadId":"thread-1","turnId":"turn-1","itemId":"item-1"}`)
+	sendNotification(t, child, "thread/status/changed", `{"threadId":"thread-1","status":"idle"}`)
+	time.Sleep(20 * time.Millisecond)
+	if s.State() != providersession.StateWaitingForApproval {
+		t.Fatalf("pending thread status changed session state: %s", s.State())
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- s.Decide(context.Background(), providersession.ApprovalDecision{Correlation: event.Approval.Correlation, Decision: providersession.DecisionDeny})
+	}()
+	if !scanner.Scan() {
+		t.Fatal("expected decision after unchanged thread status")
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestApprovalRelayAcceptsZeroServerRequestID(t *testing.T) {
+	s, child, scanner, _, _ := startApprovalTurn(t)
+	event := approvalRequest(t, s, child, 0, "item/fileChange/requestApproval", `{"threadId":"thread-1","turnId":"turn-1","itemId":"item-1","startedAtMs":1710000000000}`)
+	done := make(chan error, 1)
+	go func() {
+		done <- s.Decide(context.Background(), providersession.ApprovalDecision{Correlation: event.Approval.Correlation, Decision: providersession.DecisionDeny})
+	}()
+	if !scanner.Scan() {
+		t.Fatal("expected zero-ID decision response")
+	}
+	var response struct {
+		ID     uint64         `json:"id"`
+		Result map[string]any `json:"result"`
+	}
+	if err := json.Unmarshal(scanner.Bytes(), &response); err != nil || response.ID != 0 || !sameResult(response.Result, map[string]any{"decision": "decline"}) {
+		t.Fatalf("zero-ID decision response = %s, err=%v", scanner.Text(), err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	sendNotification(t, child, "serverRequest/resolved", `{"threadId":"thread-1","requestId":0}`)
+	if resolved := nextEvent(t, s); resolved.State != providersession.StateRunning || resolved.Summary != "approval_resolved" {
+		t.Fatalf("zero-ID resolution event = %+v", resolved)
+	}
 }
 
 func TestUserInputRelayIsOpaqueAndHasNoAnswerOperation(t *testing.T) {

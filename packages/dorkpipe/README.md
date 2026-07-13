@@ -56,6 +56,14 @@ the DorkPipe routing/script skills deterministic for every run. Set
 **`DORKPIPE_ORCH_SKILLS_DIR`** to override the base host skill source that gets merged before the
 curated overlay.
 
+To explicitly update the host Codex CLI, run the package-owned workflow below. It asks for a
+system-change confirmation, updates through npm, and verifies the App Server schema; ordinary
+dependency preflight never performs this upgrade automatically.
+
+```bash
+dockpipe --package dorkpipe --workflow codex.cli.update
+```
+
 ## Dev Control Plane
 
 The DorkPipe stack is package-owned under **`resolvers/dorkpipe/assets/`**. The default path uses

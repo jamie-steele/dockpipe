@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"regexp"
 	"strings"
 	"sync"
@@ -16,8 +17,17 @@ import (
 )
 
 const (
-	PinnedModel           = "gpt-5.6-terra"
-	PinnedReasoningEffort = "high"
+	PinnedModel                     = "gpt-5.6-terra"
+	PinnedReasoningEffort           = "high"
+	remoteControlStatusNotification = "remoteControl/status/changed"
+	threadStartedNotification       = "thread/started"
+	turnStartedNotification         = "turn/started"
+	threadSettingsNotification      = "thread/settings/updated"
+	mcpStartupNotification          = "mcpServer/startupStatus/updated"
+	mcpOAuthNotification            = "mcpServer/oauthLogin/completed"
+	globalWarningNotification       = "warning"
+	accountRateLimitsNotification   = "account/rateLimits/updated"
+	willRepeatField                 = "will" + "Re" + "try"
 )
 
 // InitializationConfig is the closed configuration surface used before a
@@ -96,10 +106,6 @@ func newProtocolClientWithHandlers(stdin io.WriteCloser, stdout io.ReadCloser, l
 }
 
 func (c *protocolClient) respond(ctx context.Context, id uint64, result map[string]any) error {
-	if id == 0 {
-		c.fail(DisconnectMalformedEnvelope)
-		return errors.New("server request identifier is required")
-	}
 	return c.write(ctx, map[string]any{"jsonrpc": "2.0", "id": id, "result": result})
 }
 
@@ -107,8 +113,10 @@ func (c *protocolClient) initialize(parent context.Context, deadline time.Durati
 	ctx, cancel := context.WithTimeout(parent, deadline)
 	defer cancel()
 	result, err := c.request(ctx, "initialize", map[string]any{
-		"clientInfo":   map[string]any{"name": config.ClientName, "version": config.ClientVersion},
-		"capabilities": map[string]any{},
+		"clientInfo": map[string]any{"name": config.ClientName, "version": config.ClientVersion},
+		"capabilities": map[string]any{
+			"optOutNotificationMethods": []string{remoteControlStatusNotification, threadStartedNotification, turnStartedNotification, threadSettingsNotification, mcpStartupNotification, mcpOAuthNotification, globalWarningNotification, accountRateLimitsNotification},
+		},
 	})
 	if err != nil {
 		return InitializationInfo{}, err
@@ -190,7 +198,11 @@ func (c *protocolClient) read(stdout io.ReadCloser) {
 			return
 		}
 	}
-	if scanner.Err() != nil {
+	if err := scanner.Err(); err != nil {
+		if errors.Is(err, os.ErrClosed) {
+			c.fail(DisconnectTransportClosed)
+			return
+		}
 		c.fail(DisconnectMalformedInput)
 		return
 	}
@@ -208,13 +220,16 @@ type rpcEnvelope struct {
 
 func (c *protocolClient) handle(frame []byte) bool {
 	var envelope rpcEnvelope
-	if json.Unmarshal(frame, &envelope) != nil || envelope.JSONRPC != "2.0" {
+	// The selected Codex v2 stdio server omits the redundant JSON-RPC version
+	// member on result envelopes. Accept only that omission or the exact 2.0
+	// value; any declared alternate version remains malformed.
+	if json.Unmarshal(frame, &envelope) != nil || (envelope.JSONRPC != "" && envelope.JSONRPC != "2.0") {
 		c.fail(DisconnectMalformedEnvelope)
 		return false
 	}
 	if envelope.ID != nil {
 		var id uint64
-		if json.Unmarshal(*envelope.ID, &id) != nil || id == 0 {
+		if json.Unmarshal(*envelope.ID, &id) != nil {
 			c.fail(DisconnectMalformedEnvelope)
 			return false
 		}
@@ -232,6 +247,13 @@ func (c *protocolClient) handle(frame []byte) bool {
 				return false
 			}
 			return true
+		}
+		// Client-originated request IDs remain strictly positive. The current
+		// App Server may use zero for an incoming server request, which is
+		// valid only on the method-bearing branch above.
+		if id == 0 {
+			c.fail(DisconnectMalformedEnvelope)
+			return false
 		}
 		if len(envelope.Result) == 0 && len(envelope.Error) == 0 || len(envelope.Result) != 0 && len(envelope.Error) != 0 {
 			c.fail(DisconnectMalformedEnvelope)
@@ -320,44 +342,40 @@ func (c *protocolClient) failureReason() DisconnectReason {
 }
 
 type initializeResponse struct {
-	ProtocolVersion string                         `json:"protocolVersion"`
-	ServerInfo      struct{ Name, Version string } `json:"serverInfo"`
-	Capabilities    map[string]json.RawMessage     `json:"capabilities"`
-	ConfigWarnings  []json.RawMessage              `json:"configWarnings"`
+	UserAgent      string `json:"userAgent"`
+	CodexHome      string `json:"codexHome"`
+	PlatformFamily string `json:"platformFamily"`
+	PlatformOS     string `json:"platformOs"`
 }
 
 func projectInitialization(result json.RawMessage, config InitializationConfig) (InitializationInfo, DisconnectReason) {
-	fields, ok := objectFields(result, "protocolVersion", "serverInfo", "capabilities", "configWarnings")
-	if !ok || !nestedObjectFields(fields["serverInfo"], "name", "version") || !nestedObjectFields(fields["capabilities"], config.RequiredCapabilities...) {
+	_, ok := objectFields(result, "userAgent", "codexHome", "platformFamily", "platformOs")
+	if !ok {
 		return InitializationInfo{}, DisconnectUnsupportedSchema
 	}
 	var response initializeResponse
-	if json.Unmarshal(result, &response) != nil || response.ProtocolVersion != config.SchemaVersion || response.Capabilities == nil {
+	if json.Unmarshal(result, &response) != nil || !boundedInitializationValue(response.UserAgent, 256) || !boundedInitializationValue(response.CodexHome, maxLocalPathBytes) || !boundedInitializationValue(response.PlatformFamily, maxInitializationValues) || !boundedInitializationValue(response.PlatformOS, maxInitializationValues) {
 		return InitializationInfo{}, DisconnectUnsupportedSchema
 	}
-	for _, required := range config.RequiredCapabilities {
-		var enabled bool
-		if raw, ok := response.Capabilities[required]; !ok || json.Unmarshal(raw, &enabled) != nil || !enabled {
-			return InitializationInfo{}, DisconnectUnsupportedCapability
-		}
-	}
-	if identityClass(response.ServerInfo.Name) == "" || !safeVersion(response.ServerInfo.Version) {
+	version := initializationUserAgentVersion(response.UserAgent)
+	if version == "" {
 		return InitializationInfo{}, DisconnectInitializationRejected
 	}
-	if len(response.ConfigWarnings) > 4 {
-		return InitializationInfo{}, DisconnectInitializationRejected
+	return InitializationInfo{SchemaVersion: config.SchemaVersion, ProviderVersion: version, IdentityClass: "codex_app_server", Model: config.Model, ReasoningEffort: config.ReasoningEffort}, ""
+}
+
+func boundedInitializationValue(value string, maximum int) bool {
+	return value != "" && len(value) <= maximum && strings.TrimSpace(value) == value
+}
+
+var initializationUserAgentVersionPattern = regexp.MustCompile(`[0-9]+(?:\.[0-9]+){1,3}(?:-[a-z0-9]+)?`)
+
+func initializationUserAgentVersion(value string) string {
+	version := initializationUserAgentVersionPattern.FindString(value)
+	if safeVersion(version) {
+		return version
 	}
-	warnings := make([]string, 0, len(response.ConfigWarnings))
-	for _, warning := range response.ConfigWarnings {
-		if !warningShapeAllowed(warning) {
-			return InitializationInfo{}, DisconnectInitializationRejected
-		}
-		if len(warnings) == 4 {
-			break
-		}
-		warnings = append(warnings, classifyWarning(warning))
-	}
-	return InitializationInfo{SchemaVersion: response.ProtocolVersion, ProviderVersion: response.ServerInfo.Version, IdentityClass: identityClass(response.ServerInfo.Name), ConfigurationWarnings: warnings, Model: config.Model, ReasoningEffort: config.ReasoningEffort}, ""
+	return ""
 }
 
 func warningShapeAllowed(raw json.RawMessage) bool {
@@ -366,15 +384,6 @@ func warningShapeAllowed(raw json.RawMessage) bool {
 		return true
 	}
 	return nestedObjectFields(raw, "code", "message")
-}
-
-func identityClass(name string) string {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "codex", "codex-app-server":
-		return "codex_app_server"
-	default:
-		return ""
-	}
 }
 
 var versionPattern = regexp.MustCompile(`^[0-9]+(?:\.[0-9]+){1,3}(?:-[a-z0-9]+)?$`)

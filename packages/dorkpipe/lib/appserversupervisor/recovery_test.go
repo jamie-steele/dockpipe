@@ -151,7 +151,7 @@ func TestRecoveryReconcilesOnlyPersistedIdleSessionOnFreshChild(t *testing.T) {
 	if err := json.Unmarshal(scanner.Bytes(), &initialize); err != nil || initialize.Method != "initialize" {
 		t.Fatalf("initialize = %s, %v", scanner.Text(), err)
 	}
-	_, _ = child.stdoutW.Write([]byte(response(initialize.ID, `{"protocolVersion":"v2","serverInfo":{"name":"codex-app-server","version":"0.144.1"},"capabilities":{"stableV2":true}}`)))
+	_, _ = child.stdoutW.Write([]byte(response(initialize.ID, `{"userAgent":"codex/0.144.1","codexHome":"C:/codex","platformFamily":"windows","platformOs":"windows"}`)))
 	if !scanner.Scan() || !strings.Contains(scanner.Text(), `"initialized"`) {
 		t.Fatal("missing fresh initialized notification")
 	}
@@ -263,7 +263,7 @@ func TestRecoveryReconciliationFailuresDisconnect(t *testing.T) {
 			}()
 			scanner := bufio.NewScanner(child.stdinR)
 			scanner.Scan()
-			_, _ = child.stdoutW.Write([]byte(response(1, `{"protocolVersion":"v2","serverInfo":{"name":"codex-app-server","version":"0.144.1"},"capabilities":{"stableV2":true}}`)))
+			_, _ = child.stdoutW.Write([]byte(response(1, `{"userAgent":"codex/0.144.1","codexHome":"C:/codex","platformFamily":"windows","platformOs":"windows"}`)))
 			scanner.Scan()
 			_ = lifecycleRequest(t, scanner, "thread/read", 2)
 			action(t, child)
@@ -290,7 +290,7 @@ func TestRecoveryReconciliationFailuresDisconnect(t *testing.T) {
 		}()
 		scanner := bufio.NewScanner(child.stdinR)
 		scanner.Scan()
-		_, _ = child.stdoutW.Write([]byte(response(1, `{"protocolVersion":"v2","serverInfo":{"name":"codex-app-server","version":"0.144.1"},"capabilities":{"stableV2":true}}`)))
+		_, _ = child.stdoutW.Write([]byte(response(1, `{"userAgent":"codex/0.144.1","codexHome":"C:/codex","platformFamily":"windows","platformOs":"windows"}`)))
 		scanner.Scan()
 		_ = lifecycleRequest(t, scanner, "thread/read", 2)
 		if err := <-done; !errors.Is(err, ErrRecoveryRejected) {

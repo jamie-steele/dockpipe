@@ -45,7 +45,7 @@ dockpipe scope workflow <workflow-name> orchestrate
 - `shared/*`
 - `tasks/<task-id>/task.json`
 - `tasks/<task-id>/lane-selection.json`
-- `tasks/<task-id>/prompt.md`
+- `tasks/<task-id>/prompt.md` (including selected lane/model-policy run metadata; never durable repo policy)
 - `tasks/<task-id>/response.md`
 - `tasks/<task-id>/result.json`
 - `merge/result.json`
@@ -82,7 +82,10 @@ Each authored task should define:
 - `max_cloud_tokens`
 - `depends_on`
 
-Reusable roles live in a sibling `agents.yml` file or, for workflow-local overrides, inline
+Reusable roles live in a sibling `agents.yml` file or, when that file is absent, the nearest parent
+workflow directory's `agents.yml`. Sibling definitions win. The lookup stops at the owning
+`workflows/` directory or package directory containing `package.yml`, so a repository-level fallback
+cannot silently change a workflow family's roles. For workflow-local overrides, use inline
 `agent.orchestration.agents`. Each role definition carries:
 
 - `role`
@@ -106,8 +109,9 @@ other allowed sources. `access.read`, declared mounts, and runtime policy define
 boundary; prompts should tell workers to inspect additional allowed source roots when the role needs
 them and to cite exact paths for claims.
 
-Prefer reusable role definitions in a sibling `agents.yml`; inline `agent.orchestration.agents` can
-override or add workflow-local roles. Task entries reference roles through `tasks[].agent`. Agent
+Prefer reusable role definitions in a sibling `agents.yml` or a bounded parent workflow directory;
+inline `agent.orchestration.agents` can override or add workflow-local roles. Task entries reference
+roles through `tasks[].agent`. Agent
 definitions answer "who is doing the work" and carry worker profile, model, authority, access
 defaults, and standing constraints. Task entries answer "what happens now" and carry `brief`, typed
 `context`, dependencies, and outputs. `context.required_artifacts`, `context.seed_paths`, and

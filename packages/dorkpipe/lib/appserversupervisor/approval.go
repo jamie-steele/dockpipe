@@ -50,7 +50,7 @@ type serverRequestParams struct {
 }
 
 func (s *Supervisor) handleServerRequest(providerID uint64, method string, raw json.RawMessage) DisconnectReason {
-	if providerID == 0 || len(raw) == 0 || !json.Valid(raw) || containsModelReroute(raw) {
+	if len(raw) == 0 || !json.Valid(raw) || containsModelReroute(raw) {
 		if containsModelReroute(raw) {
 			return DisconnectModelRerouted
 		}
@@ -70,6 +70,7 @@ func (s *Supervisor) handleServerRequest(providerID uint64, method string, raw j
 
 	s.mu.Lock()
 	if !s.started || !s.initialized || !s.lifecycle.active {
+		s.lastNotification = "approval_inactive"
 		s.mu.Unlock()
 		return DisconnectEventOrdering
 	}
@@ -78,10 +79,16 @@ func (s *Supervisor) handleServerRequest(providerID uint64, method string, raw j
 		return DisconnectMalformedEnvelope
 	}
 	if params.ThreadID != s.lifecycle.threadID || params.TurnID != s.lifecycle.turnID || params.ItemID != s.lifecycle.itemID {
+		if params.ThreadID != s.lifecycle.threadID || params.TurnID != s.lifecycle.turnID {
+			s.lastNotification = "approval_turn_mismatch"
+		} else {
+			s.lastNotification = "approval_item_mismatch"
+		}
 		s.mu.Unlock()
 		return DisconnectCorrelationMismatch
 	}
 	if s.state != providersession.StateRunning || s.lifecycle.pending != nil {
+		s.lastNotification = "approval_not_running"
 		s.mu.Unlock()
 		return DisconnectEventOrdering
 	}
@@ -121,7 +128,7 @@ func serverRequestShapeAllowed(method string, raw json.RawMessage) bool {
 	case "item/commandExecution/requestApproval":
 		allowed = []string{"threadId", "turnId", "itemId", "command", "cwd", "reason"}
 	case "item/fileChange/requestApproval":
-		allowed = []string{"threadId", "turnId", "itemId", "patch", "reason", "grantRoot"}
+		allowed = []string{"threadId", "turnId", "itemId", "patch", "reason", "grantRoot", "startedAtMs"}
 	case "item/permissions/requestApproval":
 		allowed = []string{"threadId", "turnId", "itemId", "permissions", "additionalPermissions", "networkApprovalContext", "proposedExecpolicyAmendment", "proposedNetworkPolicyAmendments"}
 	case "item/tool/requestUserInput":
@@ -131,6 +138,9 @@ func serverRequestShapeAllowed(method string, raw json.RawMessage) bool {
 	}
 	fields, ok := objectFields(raw, allowed...)
 	if !ok {
+		return false
+	}
+	if startedAt, found := fields["startedAtMs"]; found && !validRequestTimestamp(startedAt) {
 		return false
 	}
 	if questions, found := fields["questions"]; found {
@@ -145,6 +155,13 @@ func serverRequestShapeAllowed(method string, raw json.RawMessage) bool {
 		}
 	}
 	return true
+}
+
+// validRequestTimestamp validates the current App Server's optional event
+// timestamp without storing or projecting it. It has no approval semantics.
+func validRequestTimestamp(raw json.RawMessage) bool {
+	var value uint64
+	return json.Unmarshal(raw, &value) == nil
 }
 
 func classifyServerRequest(method string, params serverRequestParams) (pendingKind, string, []string, DisconnectReason) {
@@ -341,7 +358,7 @@ func (s *Supervisor) handleServerRequestResolved(params eventParams) DisconnectR
 
 func providerRequestID(raw json.RawMessage) (uint64, bool) {
 	var id uint64
-	if len(raw) == 0 || json.Unmarshal(raw, &id) != nil || id == 0 {
+	if len(raw) == 0 || json.Unmarshal(raw, &id) != nil {
 		return 0, false
 	}
 	return id, true
