@@ -6,7 +6,8 @@ title: DockPipe IDE resolvers
 platforms: [windows, deb]
 description: |
   Compatibility resolvers for user-installed desktop editors (vscode,
-  cursor-dev). First-party Pipeon lives under packages/pipeon/ in this repo.
+  cursor-dev) plus read-only native Dev Container discovery/status. First-party
+  Pipeon lives under packages/pipeon/ in this repo.
 author: DockPipe
 license: Apache-2.0
 repository: https://github.com/dockpipe/dockpipe
@@ -18,5 +19,8 @@ tags: [resolver, ide, editor]
 includes_resolvers:
   - vscode
   - cursor-dev
+  - devcontainer
+test:
+  script: tests/run.sh
 script_contract:
   inject: [workdir, workflow_name, script_dir, package_root, assets_dir, dockpipe_bin]

@@ -1,0 +1,31 @@
+# Read-only native Dev Container discovery/status. This resolver never starts,
+# builds, attaches to, executes in, stops, or removes a container.
+name: devcontainer
+category: tooling
+icon: ../vscode/assets/images/icon.png
+description: Read-only native Dev Container discovery and fixture-adapted selected-definition status.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to launch the package-owned Dev Container resolver script.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: node
+      command: node
+      description: Required for deterministic JSON/JSONC discovery and fixture adapters.
+      install:
+        windows: winget install OpenJS.NodeJS.LTS
+        deb: sudo apt-get update && sudo apt-get install -y nodejs
+
+vault: none
+# Every step is host-only and the package scripts intentionally reject live
+# Docker/Dev Container CLI adapters, so the generic Docker preflight is unsafe.
+docker_preflight: false
+
+steps:
+  - id: lifecycle
+    kind: host
+    run: assets/scripts/devcontainer-lifecycle.sh
