@@ -4,11 +4,34 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"dockpipe/src/lib/domain"
 	"dockpipe/src/lib/infrastructure"
 )
+
+func cmdWorkflowValidate(path string) error {
+	ids := map[string]string{}
+	if trimmed := strings.TrimSpace(path); trimmed != "" {
+		ids["requested_path"] = filepath.ToSlash(trimmed)
+	}
+	resolved, err := infrastructure.ResolveWorkflowYAMLPath(path)
+	if err != nil {
+		infrastructure.LogOperationResult(os.Stderr, infrastructure.OperationResult{
+			Unit:       "workflow.validate",
+			Status:     infrastructure.OperationStatusFail,
+			DurationMs: 0,
+			IDs:        ids,
+			Error:      err.Error(),
+		})
+		return err
+	}
+	ids["path"] = filepath.ToSlash(resolved)
+	return infrastructure.RunOperationWithOptions(os.Stderr, "workflow.validate", "", ids, infrastructure.OperationOptions{Spinner: false}, func() error {
+		return infrastructure.ValidateResolvedWorkflowYAML(resolved)
+	})
+}
 
 func cmdWorkflow(args []string) error {
 	if len(args) == 0 {
@@ -24,15 +47,7 @@ func cmdWorkflow(args []string) error {
 		if len(args) > 1 {
 			path = args[1]
 		}
-		resolved, err := infrastructure.ResolveWorkflowYAMLPath(path)
-		if err != nil {
-			return err
-		}
-		if err := infrastructure.ValidateResolvedWorkflowYAML(resolved); err != nil {
-			return err
-		}
-		fmt.Fprintf(os.Stderr, "OK: workflow %q\n", resolved)
-		return nil
+		return cmdWorkflowValidate(path)
 	case "list":
 		format := "text"
 		workdir := ""

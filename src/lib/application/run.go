@@ -983,7 +983,7 @@ func Run(argv []string, baseEnviron []string) error {
 			if artifact, err := buildImageArtifactManifest(repoRoot, wfName, "", templateName, image, buildDir, buildCtx, policyFingerprint, domain.ImageArtifactProvenance{Isolate: templateName, DockpipeVersion: authoredPackageVersion(repoRoot)}); err == nil {
 				persistMaterializedImageArtifactForRun(effWd, image, artifact)
 			} else {
-				fmt.Fprintf(os.Stderr, "[dockpipe] warning: image artifact manifest write skipped: %v\n", err)
+				logImageArtifactOperationResult("run.image_artifact.manifest", image, err)
 			}
 			imageDecision = "image: materialized image artifact for current run"
 		}

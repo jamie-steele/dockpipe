@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"dockpipe/src/lib/domain"
+	"dockpipe/src/lib/infrastructure"
 )
 
 func TestCheckWorkflowHostDependenciesReportsMissingRequiredDependency(t *testing.T) {
@@ -209,6 +210,119 @@ func TestCheckWorkflowHostDependenciesApprovedInstallEmitsOperationResults(t *te
 	}
 }
 
+func TestCheckWorkflowHostDependenciesEmitsPreflightOperationResults(t *testing.T) {
+	oldLookPath := dependencyLookPathFn
+	oldPowerShell := dependencyPowerShellLookupFn
+	t.Cleanup(func() {
+		dependencyLookPathFn = oldLookPath
+		dependencyPowerShellLookupFn = oldPowerShell
+	})
+	dependencyLookPathFn = func(file string) (string, error) {
+		if file == "dockpipe-present-tool" {
+			return "/bin/" + file, nil
+		}
+		return "", os.ErrNotExist
+	}
+	dependencyPowerShellLookupFn = func(string) (string, error) {
+		return "", os.ErrNotExist
+	}
+	optional := false
+	wf := &domain.Workflow{
+		Dependencies: domain.DependencySpec{
+			Host: []domain.HostDependency{
+				{ID: "present-tool", Command: "dockpipe-present-tool"},
+				{ID: "optional-tool", Command: "dockpipe-optional-missing-tool", Required: &optional},
+				{ID: "missing-tool", Command: "dockpipe-required-missing-tool"},
+			},
+		},
+	}
+
+	wfRoot := t.TempDir()
+	stderr, err := captureResultStderr(t, func() error {
+		return checkWorkflowHostDependencies(wf, wfRoot, filepath.Join(wfRoot, "config.yml"), nil)
+	})
+	if err == nil {
+		t.Fatal("expected missing dependency error")
+	}
+	for _, want := range []string{
+		"unit=dependency.host.preflight",
+		"dependency=present-tool",
+		"result=found",
+		"dependency=optional-tool",
+		"required=false",
+		"skip_reason=optional_missing",
+		"dependency=missing-tool",
+		"status=fail",
+		"result=missing",
+		"installer_present=false",
+	} {
+		if !strings.Contains(stderr, want) {
+			t.Fatalf("expected stderr to contain %q, got:\n%s", want, stderr)
+		}
+	}
+}
+
+func TestCheckWorkflowHostDependenciesPreflightMirrorsOperationEvents(t *testing.T) {
+	oldLookPath := dependencyLookPathFn
+	oldPowerShell := dependencyPowerShellLookupFn
+	t.Cleanup(func() {
+		dependencyLookPathFn = oldLookPath
+		dependencyPowerShellLookupFn = oldPowerShell
+	})
+	dependencyLookPathFn = func(file string) (string, error) {
+		return "", os.ErrNotExist
+	}
+	dependencyPowerShellLookupFn = func(string) (string, error) {
+		return "", os.ErrNotExist
+	}
+	wf := &domain.Workflow{
+		Dependencies: domain.DependencySpec{
+			Host: []domain.HostDependency{{
+				ID:      "missing-tool",
+				Command: "dockpipe-event-missing-tool",
+				Install: domain.HostDependencyInstallHint{
+					Windows: "winget install example.missing-tool",
+					MacOS:   "brew install missing-tool",
+					Linux:   "sudo apt-get install -y missing-tool",
+				},
+			}},
+		},
+	}
+	wfRoot := t.TempDir()
+	eventLog := filepath.Join(wfRoot, "events.jsonl")
+	t.Setenv(infrastructure.EnvDockpipeEventLog, eventLog)
+
+	if _, err := captureResultStderr(t, func() error {
+		return checkWorkflowHostDependencies(wf, wfRoot, filepath.Join(wfRoot, "config.yml"), nil)
+	}); err == nil {
+		t.Fatal("expected missing dependency error")
+	}
+	events, err := infrastructure.ReadOperationEvents(eventLog)
+	if err != nil {
+		t.Fatalf("ReadOperationEvents: %v", err)
+	}
+	if len(events) < 1 {
+		t.Fatalf("expected mirrored preflight events, got %#v", events)
+	}
+	preflight := events[0]
+	if preflight.Schema != infrastructure.OperationEventSchemaV1 || preflight.Type != infrastructure.OperationEventKind {
+		t.Fatalf("unexpected preflight event envelope: %#v", preflight)
+	}
+	if preflight.Unit != "dependency.host.preflight" || preflight.Status != infrastructure.OperationStatusFail {
+		t.Fatalf("unexpected preflight event status: %#v", preflight)
+	}
+	for key, want := range map[string]string{
+		"dependency":        "missing-tool",
+		"command":           "dockpipe-event-missing-tool",
+		"result":            "missing",
+		"required":          "true",
+		"installer_present": "true",
+	} {
+		if got := preflight.IDs[key]; got != want {
+			t.Fatalf("preflight event ID %s = %q want %q (event: %#v)", key, got, want, preflight)
+		}
+	}
+}
 func TestCheckWorkflowHostDependenciesNonInteractiveDeclineEmitsApprovalResult(t *testing.T) {
 	oldLookPath := dependencyLookPathFn
 	oldPowerShell := dependencyPowerShellLookupFn

@@ -47,5 +47,10 @@ Partially implemented. Package tests now avoid sandbox-blocked `jq` and `python3
 using a Go-based assertion helper under the DorkPipe lib module. Standalone package tests also use a
 repo-local temp root so Git Bash does not try to write under sandbox-blocked `C:\Users\...` paths.
 
+The canonical [Codex workspace-sandbox session guide](../../runtime/codex-sandbox-sessions.md) now
+requires an effective-capability check and a narrow reviewed host request for unavailable Docker,
+remote Git, or network capability. It does not treat `PATH` visibility as proof that a sandbox can
+use the host tool.
+
 Remaining work is the broader productized tool resolver/preflight surface for non-test workflows and
 optional repo-managed portable tool installation.

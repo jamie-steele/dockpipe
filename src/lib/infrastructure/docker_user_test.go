@@ -29,7 +29,7 @@ func TestUnixDockerUserSpec_nonRootHost(t *testing.T) {
 	}
 }
 
-func TestUnixDockerUserSpec_rootHost_nodeImage(t *testing.T) {
+func TestUnixDockerUserSpec_rootHost_nodeImageUsesRootEntrypoint(t *testing.T) {
 	oldU, oldG := getuidDockerFn, getgidDockerFn
 	getuidDockerFn = func() int { return 0 }
 	getgidDockerFn = func() int { return 0 }
@@ -42,8 +42,8 @@ func TestUnixDockerUserSpec_rootHost_nodeImage(t *testing.T) {
 
 	var buf bytes.Buffer
 	got := unixDockerUserSpec("dockpipe-claude:latest", &buf)
-	if got != "node" {
-		t.Fatalf("got %q want node", got)
+	if got != "0:0" {
+		t.Fatalf("got %q want 0:0", got)
 	}
 	if buf.Len() == 0 {
 		t.Fatal("expected stderr notice")

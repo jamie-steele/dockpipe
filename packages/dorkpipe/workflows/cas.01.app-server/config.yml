@@ -1,0 +1,19 @@
+name: cas.01.app-server
+namespace: dockpipeproject
+description: Run the disposable CAS-01 App Server harness with evidence in workflow artifacts.
+docker_preflight: false
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs the package-owned CAS-01 wrapper.
+    - id: go
+      command: go
+      description: Runs the standard-library-only harness.
+steps:
+  - id: probe
+    kind: host
+    cwd: repo
+    scopes: { source: repo, artifacts: artifacts }
+    run: scripts/dorkpipe/cas01-app-server.sh

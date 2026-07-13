@@ -16,6 +16,7 @@ Machine-readable routing: `docs/agents/index.yaml`.
 | Use package/store helpers for project/global paths. Do not hand-write bare `.dockpipe/internal` paths. | `docs/agents/core/core-package-model.md` |
 | Prefer the scope model for generated paths: `cwd: artifacts` for simple producers, `cwd: repo` plus `scopes` only when checkout cwd is required. | `docs/agents/core/path-scopes.md` |
 | Treat Git lifecycle as runtime-owned session behavior. Agents request checkpoint/sync/publish; they do not run raw Git. | `docs/agents/runtime/git-runtime-sessions.md` |
+| For Codex workspace-sandbox sessions, verify effective capabilities. Request a narrow reviewed host operation for unavailable Docker, remote Git, or network access; never bypass the sandbox. | `docs/agents/runtime/codex-sandbox-sessions.md` |
 | Template/workflow work should stay in YAML/assets/scripts unless a general primitive is needed. | `docs/agents/workflows/yaml-workflows.md` |
 | Package-specific behavior belongs inside package YAML/assets/scripts/docs/tests. | `docs/agents/packages/package-authoring.md` |
 | Keep authored YAML/schema/editor docs in sync when changing workflow/config surfaces. | `docs/agents/workflows/yaml-workflows.md` |
@@ -24,6 +25,7 @@ Machine-readable routing: `docs/agents/index.yaml`.
 | AI workflows must beat one strong direct worker on quality, safety, cost, review effort, or rerun value. DorkPipe owns the lower-level proof through artifacts/metrics, not user boilerplate. | `docs/agents/workflows/ai-workflow-value-bar.md` |
 | Main docs stay canonical for repo facts and public behavior. `docs/agents/` is the compressed routing/safety layer, not a shadow documentation tree. | `docs/agents/docs/docs-system.md` |
 | Treat `docs/agents/task-index.yaml` as the AI entrypoint for the cross-cutting backlog and keep the linked task files current when a task materially completes or advances one of those items. | `docs/agents/task-index.yaml` |
+| At each completed slice, ask whether to commit the current branch; commit only after explicit approval. Offer a compact linked next-slice prompt, or ask what is next when no work remains. | `docs/agents/docs/session-handoffs.md` |
 
 ## Task Routing
 
@@ -100,6 +102,7 @@ Report:
 - `docs/agents/core/core-package-model.md`
 - `docs/agents/core/path-scopes.md`
 - `docs/agents/runtime/git-runtime-sessions.md`
+- `docs/agents/runtime/codex-sandbox-sessions.md`
 - `docs/agents/runtime/git-runtime-auth.md`
 - `docs/agents/workflows/yaml-workflows.md`
 - `docs/agents/packages/package-authoring.md`

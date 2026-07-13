@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"dockpipe/src/lib/infrastructure"
 )
 
 const samplePipeLang = `public Interface DeployConfig
@@ -137,5 +139,76 @@ func TestPipeLangInvokePrivateMethodDenied(t *testing.T) {
 	err := cmdPipeLang([]string{"invoke", "--in", in, "--class", "DefaultDeployConfig", "--method", "IsTiny"})
 	if err == nil || !strings.Contains(err.Error(), "private") {
 		t.Fatalf("expected private method invoke failure, got %v", err)
+	}
+}
+
+func TestCmdPipeLangCompileMirrorsOperationEvent(t *testing.T) {
+	wd := t.TempDir()
+	in := filepath.Join(wd, "demo.pipe")
+	if err := os.WriteFile(in, []byte(samplePipeLang), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outDir := filepath.Join(wd, "out")
+	eventLog := filepath.Join(wd, "events.jsonl")
+	t.Setenv(infrastructure.EnvDockpipeEventLog, eventLog)
+
+	if _, err := captureResultStderr(t, func() error {
+		return cmdPipeLang([]string{"compile", "--in", in, "--out", outDir})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	events, err := infrastructure.ReadOperationEvents(eventLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("event count = %d want 1: %#v", len(events), events)
+	}
+	event := events[0]
+	if event.Schema != infrastructure.OperationEventSchemaV1 || event.Type != infrastructure.OperationEventKind || event.Unit != "pipelang.compile" || event.Status != infrastructure.OperationStatusDone {
+		t.Fatalf("unexpected event: %#v", event)
+	}
+	for key, want := range map[string]string{
+		"input_path":         filepath.ToSlash(in),
+		"output_dir":         filepath.ToSlash(outDir),
+		"entry_class":        "DefaultDeployConfig",
+		"workflow_path":      filepath.ToSlash(filepath.Join(outDir, "DefaultDeployConfig.workflow.yml")),
+		"bindings_json_path": filepath.ToSlash(filepath.Join(outDir, "DefaultDeployConfig.bindings.json")),
+		"bindings_env_path":  filepath.ToSlash(filepath.Join(outDir, "DefaultDeployConfig.bindings.env")),
+		"result":             "compiled",
+	} {
+		if got := event.IDs[key]; got != want {
+			t.Fatalf("event ID %s = %q want %q (event: %#v)", key, got, want, event)
+		}
+	}
+}
+
+func TestCmdPipeLangCompileFailureMirrorsOperationEvent(t *testing.T) {
+	wd := t.TempDir()
+	in := filepath.Join(wd, "missing.pipe")
+	eventLog := filepath.Join(wd, "events.jsonl")
+	t.Setenv(infrastructure.EnvDockpipeEventLog, eventLog)
+
+	if _, err := captureResultStderr(t, func() error {
+		return cmdPipeLang([]string{"compile", "--in", in, "--out", filepath.Join(wd, "out")})
+	}); err == nil {
+		t.Fatal("expected compile failure")
+	}
+	events, err := infrastructure.ReadOperationEvents(eventLog)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("event count = %d want 1: %#v", len(events), events)
+	}
+	event := events[0]
+	if event.Schema != infrastructure.OperationEventSchemaV1 || event.Type != infrastructure.OperationEventKind || event.Unit != "pipelang.compile" || event.Status != infrastructure.OperationStatusFail {
+		t.Fatalf("unexpected event: %#v", event)
+	}
+	if event.IDs["input_path"] != filepath.ToSlash(in) || event.IDs["result"] != "failed" {
+		t.Fatalf("unexpected failure IDs: %#v", event.IDs)
+	}
+	if event.Error == "" {
+		t.Fatalf("expected failure error: %#v", event)
 	}
 }

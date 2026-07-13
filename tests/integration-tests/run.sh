@@ -6,6 +6,9 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 failed=0
+failed_tests=()
+log_dir="${TMPDIR:-/tmp}/dockpipe-integration-logs-${RANDOM}-${RANDOM}"
+mkdir -p "$log_dir"
 
 # These are source-checkout integration tests. Point the repo-built dockpipe
 # binary at this checkout instead of the materialized bundled cache.
@@ -37,9 +40,29 @@ fi
 for f in "$DIR"/test_*.sh; do
   [[ -f "$f" ]] || continue
   name="$(basename "$f")"
+  log_file="$log_dir/${name}.log"
   echo "--- $name ---"
-  bash "$f" || failed=1
+  if bash "$f" > >(tee "$log_file") 2> >(tee -a "$log_file" >&2); then
+    :
+  else
+    failed=1
+    failed_tests+=("$name")
+    echo "$name FAILED"
+  fi
 done
+
+if [[ $failed -ne 0 ]]; then
+  echo "Failed integration tests: ${failed_tests[*]}"
+  for name in "${failed_tests[@]}"; do
+    log_file="$log_dir/${name}.log"
+    echo "--- ${name} failure log tail ---"
+    if [[ -f "$log_file" ]]; then
+      tail -120 "$log_file"
+    else
+      echo "missing log file: $log_file"
+    fi
+  done
+fi
 
 if [[ $failed -eq 0 ]]; then
   echo "All integration tests passed."

@@ -46,6 +46,7 @@ DockPipe itself, publishing packages, or debugging compiled/runtime behavior.
 | Engine data flow | [concepts/architecture.md](concepts/architecture.md) |
 | DockPipe vs first-party maintainer packages | [packages/core-tools.md](packages/core-tools.md) |
 | Generated maintainer artifacts | [runtime/artifacts.md](runtime/artifacts.md) |
+| Codex workspace-sandbox session limits and host requests | [runtime/codex-sandbox-sessions.md](runtime/codex-sandbox-sessions.md) |
 | Agent routing and focused maintainer rules | [agents/index.yaml](agents/index.yaml), [agents/](agents/) |
 | Core-vs-packages audit | [packages/core-vs-packages-audit.md](packages/core-vs-packages-audit.md) |
 | Manual QA | [manual-qa.md](manual-qa.md) |

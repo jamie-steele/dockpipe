@@ -186,13 +186,29 @@ Executor modes:
 
 - bridge mode is for Docker/container or other non-host-sandboxed planners; host mutation goes
   through capability-scoped bridge calls
-- native sandbox mode is for executors such as Codex that already provide host sandboxing and
-  escalation; safe reads, edits, and commands can use that direct path
+- native sandbox mode is for executors already constrained by an OS-enforced DockPipe runtime; a
+  local offline agent may run entirely inside that runtime, while a cloud-backed agent uses a
+  governed provider control plane and sends every tool action through the sandboxed executor
 - both modes must use the same policy language and operation-result events so the CLI and future UI
   do not fork behavior
 
 That layer should orchestrate the generic workflow; it should not replace the underlying governed
 contract.
+
+## Host Sandbox Runtime Decision
+
+Resolved direction: prototype the generic `host-sandbox` runtime on Linux first, with no implicit
+fallback to unrestricted `kind: host` execution. The authoritative architecture and audit decisions
+are in
+[host-sandbox-runtime-design-decision-2026.md](../../research/host-sandbox-runtime-design-decision-2026.md)
+and
+[host-sandbox-runtime-audit-addendum-2026.md](../../research/host-sandbox-runtime-audit-addendum-2026.md).
+
+The first implementation is an explicitly opted-in preview with a versioned guarantee contract,
+active enforcement probes, canonical workspace roots, offline networking, inherited descendant
+restrictions, structured approvals, and complete teardown. Windows remains a narrower technical
+preview; required macOS guarantees fail closed. A cloud model uses the governed split
+controller/executor topology until a narrow in-sandbox provider broker exists.
 
 ## Planner Promotion Decision
 
@@ -259,7 +275,11 @@ future master agent to generate richer workflows on top of the same governed con
 - Add a bounded agent-designed soft layer for tasks, dependencies, and inferred artifacts while
   keeping security, mounts, approval, and publish settings fixed.
 - Implement planner-promotion checks for graduating per-run artifacts into durable repo config.
-- Design the CLI-first governed MCP/host-bridge contract for master-agent host actions, approval
-  prompts, non-interactive policy behavior, native sandbox mode, and operation-result events.
+- Implement the CLI-first governed MCP/host bridge and the Phase 0 versioned guarantee contract and
+  Linux offline probes from the host-sandbox decision; provider-broker implementation remains later
+  work.
+- After the Linux security and performance baselines stabilize, evaluate signed DockPipe-owned native
+  launchers behind the same `host-sandbox` contract to reduce external runtime dependencies and
+  high-frequency startup overhead; require conformance parity and measured benefit before migration.
 - Decide whether `example.brain` becomes a pure task-pack example on top of the generic workflow or
   remains a slightly thicker starter wrapper.

@@ -19,9 +19,9 @@ func isNodeFamilyImage(image string) bool {
 
 // unixDockerUserSpec returns the value for docker run -u on Linux/macOS.
 //
-// When the dockpipe process runs as root (uid 0), mapping -u 0:0 makes CLIs such as Claude Code
-// reject --dangerously-skip-permissions. For node-based images we default to user "node" unless
-// overridden. See docs/cli-reference.md.
+// When the dockpipe process runs as root (uid 0), DockPipe-owned node-family resolver images
+// still start as root so their entrypoint can normalize files and then drop to node. Generic
+// root-host overrides remain available through DOCKPIPE_CONTAINER_USER.
 func unixDockerUserSpec(image string, stderr io.Writer) string {
 	uid := getuidDockerFn()
 	gid := getgidDockerFn()
@@ -34,11 +34,8 @@ func unixDockerUserSpec(image string, stderr io.Writer) string {
 	if u := strings.TrimSpace(os.Getenv("DOCKPIPE_CONTAINER_USER")); u != "" {
 		return u
 	}
-	if isNodeFamilyImage(image) {
-		if stderr != nil {
-			fmt.Fprintf(stderr, "[dockpipe] Host uid is 0; using container user \"node\" (override: DOCKPIPE_CONTAINER_USER=… or DOCKPIPE_FORCE_ROOT_CONTAINER=1).\n")
-		}
-		return "node"
+	if isNodeFamilyImage(image) && stderr != nil {
+		fmt.Fprintf(stderr, "[dockpipe] Host uid is 0; using resolver image root entrypoint; it will drop to node when supported (override: DOCKPIPE_CONTAINER_USER=…).\n")
 	}
 	return "0:0"
 }
