@@ -18,3 +18,12 @@ provider, model, task class/authority, selection rationale, and task `model_poli
 values as operational run metadata, prohibits turning them into durable repository policy, and
 requires source evidence rather than treating the lane as authority. Focused helper coverage fixes
 that prompt contract; source-packet walkers and broader prompt-brief compression remain open.
+
+## Implementation Update — Local Source Packets (2026-07-13)
+
+For a local lane with explicit `context.source_roots`, the orchestration helper now materializes a
+bounded deterministic source packet under the task artifact directory and appends it to that local
+prompt. Host-resolved `/work` and declared external mounts are accepted only when inside
+`access.read`; denied roots, generated/cache directories, symlinks, and non-text files are excluded.
+Planning fails closed when declared source roots do not have readable authority. Focused fixtures cover
+allowed evidence and access-boundary rejection; broad prompt-brief compression remains open.

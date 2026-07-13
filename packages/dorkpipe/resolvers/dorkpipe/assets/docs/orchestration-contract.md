@@ -208,6 +208,13 @@ Those packets can then feed local models cheaply without pretending local lanes 
 discovery. Until that exists, broad source discovery should use a tool-capable worker or a
 deterministic shared collector artifact.
 
+Local lanes now materialize a `tasks/<task-id>/source-packet.md` when the task declares
+`context.source_roots`. The packet is package-owned, bounded, and deterministic: it resolves `/work`
+and declared external mounts on the host, accepts only roots inside `access.read`, excludes
+`access.deny`, cache/generated directories, symlinks, and non-text files, and is appended to the
+local prompt as evidence. A local task with source roots but no readable access fails during planning
+instead of silently broadening discovery. Broader prompt-brief compression remains separate work.
+
 Host-local capability hints can be supplied explicitly when needed:
 
 - `DORKPIPE_ORCH_HOST_MEMORY_GB`

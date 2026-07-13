@@ -89,6 +89,57 @@ func TestRenderExecutionLanePromptContextIncludesSelectionAndPolicy(t *testing.T
 	}
 }
 
+func TestRenderSourcePacketUsesOnlyAllowedTextEvidence(t *testing.T) {
+	root := t.TempDir()
+	write := func(rel, content string) {
+		t.Helper()
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("docs/a.md", "allowed A\n")
+	write("docs/z.go", "package docs\n")
+	write("secrets/hidden.md", "do not expose\n")
+	write(".git/config", "ignored\n")
+	write("docs/image.png", "\x00binary")
+
+	packet, err := renderSourcePacket(root, []string{"."}, []string{"."}, []string{"secrets"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"docs/a.md", "allowed A", "docs/z.go", "package docs", "access.read"} {
+		if !strings.Contains(packet, want) {
+			t.Fatalf("packet missing %q:\n%s", want, packet)
+		}
+	}
+	for _, forbidden := range []string{"hidden.md", "do not expose", ".git/config", "image.png"} {
+		if strings.Contains(packet, forbidden) {
+			t.Fatalf("packet leaked %q:\n%s", forbidden, packet)
+		}
+	}
+}
+
+func TestRenderSourcePacketRejectsRootOutsideReadAccess(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{"allowed/a.md", "outside/b.md"} {
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("evidence\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := renderSourcePacket(root, []string{"outside"}, []string{"allowed"}, nil, "")
+	if err == nil || !strings.Contains(err.Error(), "outside access.read") {
+		t.Fatalf("expected access failure, got %v", err)
+	}
+}
+
 func TestApplyTaskWorkerProfileDefaultsToPrefer(t *testing.T) {
 	task, err := applyTaskWorkerProfile(map[string]any{
 		"id":     "patch",
