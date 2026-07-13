@@ -140,6 +140,61 @@ func TestRenderSourcePacketRejectsRootOutsideReadAccess(t *testing.T) {
 	}
 }
 
+func TestMaterializePromptBriefPersistsBoundedContextForLocalLane(t *testing.T) {
+	root := t.TempDir()
+	taskDir := filepath.Join(root, "artifacts", "tasks", "inventory")
+	for rel, content := range map[string]string{
+		"docs/z.md": "z evidence\n",
+		"docs/a.md": "a evidence that is longer than the configured per-file limit\n",
+	} {
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(taskDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	metadata, brief, err := materializePromptBrief(taskDir, []string{"docs/z.md", "docs/a.md"}, "ollama", root, filepath.Join(root, "artifacts"), filepath.Join(root, "artifacts", "shared"), true, 12, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := stringValue(metadata["path"]); got != "tasks/inventory/prompt-brief.md" {
+		t.Fatalf("brief path = %q", got)
+	}
+	if !strings.Contains(brief, "### docs/a.md") || strings.Index(brief, "### docs/a.md") > strings.Index(brief, "### docs/z.md") {
+		t.Fatalf("brief ordering is not deterministic:\n%s", brief)
+	}
+	if !strings.Contains(brief, "[truncated]") || !strings.Contains(brief, "Local model lane guidance:") {
+		t.Fatalf("brief did not preserve bounded local guidance:\n%s", brief)
+	}
+	persisted, err := os.ReadFile(filepath.Join(taskDir, "prompt-brief.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(persisted) != brief {
+		t.Fatalf("persisted brief differs from prompt evidence")
+	}
+}
+
+func TestMaterializePromptBriefSkipsDisabledOrMissingContext(t *testing.T) {
+	taskDir := t.TempDir()
+	metadata, brief, err := materializePromptBrief(taskDir, []string{"missing.md"}, "ollama", taskDir, filepath.Join(taskDir, "artifacts"), filepath.Join(taskDir, "shared"), false, 100, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metadata) != 0 || brief != "" {
+		t.Fatalf("disabled context should not materialize a brief: %#v %q", metadata, brief)
+	}
+	if _, err := os.Stat(filepath.Join(taskDir, "prompt-brief.md")); !os.IsNotExist(err) {
+		t.Fatalf("disabled context unexpectedly wrote a brief: %v", err)
+	}
+}
+
 func TestApplyTaskWorkerProfileDefaultsToPrefer(t *testing.T) {
 	task, err := applyTaskWorkerProfile(map[string]any{
 		"id":     "patch",

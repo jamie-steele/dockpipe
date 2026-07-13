@@ -7,9 +7,6 @@
 - Add package-owned deterministic source walkers for broad mounted roots and external corpora so
   cheap/local lanes consume bounded fact packets instead of pretending they performed source-root
   discovery on their own.
-- Add automatic prompt-brief compression for custom or weaker lanes such as Ollama so DorkPipe can
-  derive bounded context artifacts from canonical docs before prompt assembly instead of requiring a
-  permanent normalized duplicate docs tree in the repo.
 
 ## Implementation Update — Prompt Lane Context (2026-07-13)
 
@@ -27,3 +24,11 @@ prompt. Host-resolved `/work` and declared external mounts are accepted only whe
 `access.read`; denied roots, generated/cache directories, symlinks, and non-text files are excluded.
 Planning fails closed when declared source roots do not have readable authority. Focused fixtures cover
 allowed evidence and access-boundary rejection; broad prompt-brief compression remains open.
+
+## Implementation Update — Local Prompt Brief Artifacts (2026-07-13)
+
+Local/custom lanes now materialize a bounded `prompt-brief.md` from declared required-artifact and
+seed context before prompt assembly. It reuses the existing deterministic excerpt ordering and byte
+limits, is recorded in `task.json`, and supplies the local prompt without creating any durable
+normalized documentation tree. Focused coverage verifies deterministic ordering, truncation, local
+guidance, and artifact persistence.

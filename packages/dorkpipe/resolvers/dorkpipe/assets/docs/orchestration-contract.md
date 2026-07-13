@@ -213,7 +213,14 @@ Local lanes now materialize a `tasks/<task-id>/source-packet.md` when the task d
 and declared external mounts on the host, accepts only roots inside `access.read`, excludes
 `access.deny`, cache/generated directories, symlinks, and non-text files, and is appended to the
 local prompt as evidence. A local task with source roots but no readable access fails during planning
-instead of silently broadening discovery. Broader prompt-brief compression remains separate work.
+instead of silently broadening discovery.
+
+Local/custom lanes also materialize `tasks/<task-id>/prompt-brief.md` from their declared
+`context.required_artifacts` and `context.seed_paths` before prompt assembly. It reuses the existing
+deterministic ordering and configured inline-context byte limits, is recorded as `prompt_brief` in
+`task.json`, and is appended to the local prompt as bounded evidence. The file lives only in the run
+artifact root; it is not a durable normalized copy of repository documentation. Missing, directory,
+or disabled context paths simply contribute no excerpt.
 
 Host-local capability hints can be supplied explicitly when needed:
 

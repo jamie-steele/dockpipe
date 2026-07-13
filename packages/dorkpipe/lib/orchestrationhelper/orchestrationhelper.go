@@ -2687,9 +2687,18 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			if err != nil {
 				return err
 			}
+			localLane := boolAny(laneSelection["local"])
+			promptBrief := map[string]any{}
+			promptBriefText := ""
+			if localLane {
+				promptBrief, promptBriefText, err = materializePromptBrief(taskDir, resolvedContextPaths, stringValue(laneSelection["provider"]), root, artifactRoot, sharedDir, inlineInputContext, inlineInputMaxBytes, inlineInputTotalMaxBytes)
+				if err != nil {
+					return fmt.Errorf("%s: task %q prompt brief: %w", workflowPath, taskID, err)
+				}
+			}
 			sourcePacket := map[string]any{}
 			sourcePacketText := ""
-			if boolAny(laneSelection["local"]) {
+			if localLane {
 				sourceRoots, err := resolveScopeList(listValue(mapValue(task["context"])["source_roots"]))
 				if err != nil {
 					return err
@@ -2733,6 +2742,7 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 				"brief":                   stringValue(task["brief"]),
 				"context":                 mapValue(task["context"]),
 				"context_paths":           resolvedContextPaths,
+				"prompt_brief":            promptBrief,
 				"source_packet":           sourcePacket,
 				"constraints":             listValue(task["constraints"]),
 				"expected_output":         stringValue(task["expected_output"]),
@@ -2832,7 +2842,10 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			if len(outputContract) > 0 {
 				prompt = strings.Join(outputContract, "\n") + "\n\n" + strings.TrimLeft(prompt, "\n")
 			}
-			localLane := boolAny(laneSelection["local"])
+			briefingContext := promptBriefText
+			if !localLane {
+				briefingContext = renderBriefingContext(resolvedContextPaths, stringValue(laneSelection["provider"]), root, artifactRoot, sharedDir, inlineInputContext, inlineInputMaxBytes, inlineInputTotalMaxBytes)
+			}
 			prefix := []string{}
 			if followUpMode && !reuseExisting {
 				followUpLines := []string{
@@ -2880,7 +2893,6 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 					prefix = append(prefix, "", "AGENTS.md context:", "", strings.TrimRight(string(rawAgents), "\n"))
 				}
 			}
-			briefingContext := renderBriefingContext(resolvedContextPaths, stringValue(laneSelection["provider"]), root, artifactRoot, sharedDir, inlineInputContext, inlineInputMaxBytes, inlineInputTotalMaxBytes)
 			if briefingContext != "" && !localLane {
 				prefix = append(prefix, "", strings.TrimRight(briefingContext, "\n"))
 			}
@@ -5205,6 +5217,25 @@ func renderBriefingContext(contextPaths []string, provider, root, artifactRoot, 
 		sections = append(sections, "", "Local model lane guidance:", "- Prefer direct claims from the excerpts over broad background knowledge.", "- If the excerpts do not prove a point, mark it as uncertain instead of filling the gap.", "- Keep the answer short and concrete so the merge step can compare it against stronger lanes.")
 	}
 	return strings.Join(sections, "\n") + "\n"
+}
+
+// materializePromptBrief keeps the bounded context assembled for a local lane as a run artifact as
+// well as prompt evidence. It reuses the same deterministic path ordering and byte limits as inline
+// briefing context, so it never creates a durable normalized copy of repository documentation.
+func materializePromptBrief(taskDir string, contextPaths []string, provider, root, artifactRoot, sharedDir string, enabled bool, maxBytes, totalMaxBytes int) (map[string]any, string, error) {
+	text := renderBriefingContext(contextPaths, provider, root, artifactRoot, sharedDir, enabled, maxBytes, totalMaxBytes)
+	if text == "" {
+		return map[string]any{}, "", nil
+	}
+	path := filepath.Join(taskDir, "prompt-brief.md")
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		return nil, "", err
+	}
+	return map[string]any{
+		"path":          filepath.ToSlash(filepath.Join("tasks", filepath.Base(taskDir), "prompt-brief.md")),
+		"context_paths": contextPaths,
+		"authority":     "context briefing paths",
+	}, text, nil
 }
 
 func resolveDockpipeCommand(root string, env map[string]string) string {
