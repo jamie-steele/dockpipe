@@ -5,8 +5,9 @@
 
 # Ad-hoc scratch (local experiments, packaging test output). DockPipe-managed
 # state belongs under bin/.dockpipe/; do not hide a repo-root .tmp/ directory.
-tmp/
-.codex-tmp/
+tmp/*
+.tmp/*
+.codex-tmp/*
 
 # Shell footgun: `op inject ... > -` creates a repo-root file named `-` (not stdout). DockPipe never does this.
 /-
