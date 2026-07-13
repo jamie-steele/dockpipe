@@ -1,9 +1,10 @@
-# Read-only native Dev Container discovery/status. This resolver never starts,
-# builds, attaches to, executes in, stops, or removes a container.
+# Fixture-only native Dev Container discovery/status plus an explicitly approved
+# managed-up contract. It never invokes a live CLI/Docker process, attaches,
+# executes in, stops, or removes a container.
 name: devcontainer
 category: tooling
 icon: ../vscode/assets/images/icon.png
-description: Read-only native Dev Container discovery and fixture-adapted selected-definition status.
+description: Native Dev Container discovery/status and fixture-proven approved managed-up contract.
 platforms: [windows, deb]
 dependencies:
   host:

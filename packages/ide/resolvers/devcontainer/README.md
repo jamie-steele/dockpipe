@@ -1,8 +1,9 @@
-# Native Dev Container resolver (read-only slice)
+# Native Dev Container resolver (managed-up contract slice)
 
 `devcontainer` is a package-owned resolver for one intentionally narrow capability:
-filesystem-only discovery and fixture-adapted status of a selected repository Dev Container
-definition. It is not a Docker lifecycle manager, runtime, provider-pool worker, or editor
+filesystem-only discovery, fixture-adapted status, and a fixture-proven explicitly approved
+managed `up` contract for a selected repository Dev Container definition. It is not a generic
+Docker lifecycle manager, runtime, provider-pool worker, external-container executor, or editor
 attachment flow.
 
 ## CLI and MCP entrypoint
@@ -15,6 +16,11 @@ dockpipe --workflow devcontainer --package ide --workdir . -- status --workspace
   --definition-ref .devcontainer/devcontainer.json \
   --read-configuration-fixture fixtures/read-configuration.json \
   --docker-inspect-fixture fixtures/docker-inspect.json
+dockpipe --workflow devcontainer --package ide --workdir . -- up --workspace . \
+  --definition-ref .devcontainer/devcontainer.json --request-id request-123 \
+  --approval-fixture fixtures/up-approval.json \
+  --up-result-fixture fixtures/up-result.json \
+  --managed-session-output artifacts/devcontainer-session.json
 ```
 
 DockPipe passes the arguments after `--` to this resolver through `DOCKPIPE_ARGS_JSON`; direct
@@ -46,12 +52,13 @@ Every stdout line is one JSON event with these common fields:
 | --- | --- |
 | `contract_version` | Always `devcontainer.lifecycle.v1`. |
 | `request_id`, `sequence` | Per-operation correlation and strictly increasing event order. |
-| `event` | `discovered`, `selection_required`, `status`, `completed`, or `failed` in this slice. |
+| `event` | `discovered`, `selection_required`, `status`, `up_requested`, `approval_required`, `up_result`, `completed`, or `failed`. |
 | `workspace_ref`, `definition_ref`, `definition_fingerprint` | Safe workspace-relative identity; no resolved configuration is emitted. |
-| `operation` | `discover` or `status`. |
-| `state` | `unavailable`, `selection_required`, `available`, `not_created`, `created`, `running`, `stopped`, or `ambiguous`. |
+| `operation` | `discover`, `status`, or `up`. |
+| `state` | `unavailable`, `selection_required`, `available`, `not_created`, `created`, `running`, `stopped`, `ambiguous`, `approval_required`, or `failed`. |
 | `ownership` | `external`, `managed`, `orphan_candidate`, or `ambiguous`. |
 | `environment_ref` | Opaque, deterministic reference only when one container is known. |
+| `approval_id`, `session_id`, `session_label` | Present only for the approved managed-up result; no raw container id is emitted. |
 | `summary`, `log_ref`, `next_actions` | Safe renderable status; `log_ref` is absent in this read-only slice. |
 
 Discovery scans only the workspace root for `.devcontainer/devcontainer.json`, `.devcontainer.json`,
@@ -70,9 +77,24 @@ requires an explicit workspace-relative `--definition-ref`.
   `container_id`, `session_id`, `workspace_ref`, `definition_ref`, and
   `definition_fingerprint`, and Docker must carry `com.dockpipe.devcontainer.session`.
 
-No fixture means no status adapter: the operation fails closed with `state: unavailable`. The
-resolver intentionally contains no subprocess call to Docker or `devcontainer`; adapter
-distribution and the policy for live external-container `exec` remain product decisions.
+`up` requires an explicit workspace-relative `--definition-ref`. It first emits `up_requested`.
+Without an approval fixture bound to the request id, workspace, selected reference/fingerprint,
+and every possible lifecycle risk (`image_pull`, `build`, `compose_create_start`, `feature_install`, and
+`lifecycle_hooks`), it emits `approval_required`, then fails before loading any up adapter fixture
+or writing a record.
+
+An approved `up` currently accepts only `--up-result-fixture`. That captured result must prove the
+chosen **installed/pinned Dev Container CLI** adapter by supplying equal installed and pinned
+versions, and bind the selected workspace/reference/fingerprint, container id, session id, and
+`com.dockpipe.devcontainer.session` label. The resolver writes the resulting record only to an
+explicit workspace-relative `--managed-session-output` path. The persisted record contains the
+raw container id for later exact reconciliation; the event stream exposes only its opaque
+`environment_ref` plus the session identity and label name.
+
+No fixture means no status adapter: `status` fails closed with `state: unavailable`. The resolver
+intentionally contains no subprocess call to Docker or the Dev Container CLI. The adapter result
+fixture proves the lifecycle contract only; a live CLI invocation is not implemented in this slice.
+External/user-started containers remain status-only under the selected managed-only policy.
 
 `external` is read-only even if it has Dev Container labels. A matching session label without an
 exact session record is `orphan_candidate`; an identity mismatch or multiple containers is

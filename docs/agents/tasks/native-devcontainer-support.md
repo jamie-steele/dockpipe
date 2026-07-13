@@ -217,12 +217,14 @@ lost-session recovery cases; CLI/MCP event sequence and redaction assertions; an
 against recorded events. No test may invoke Docker, pull/build an image, run hooks, or require an
 editor/account.
 
-### Decisions Needed Before Lifecycle Implementation
+### Lifecycle Decisions
 
-1. **Adapter distribution:** require an installed/pinned Dev Container CLI, package it, or support
-   a limited direct-Docker fallback behind the resolver.
-2. **Existing environments:** is explicit `exec` against an external/user-started container allowed,
-   or is first release managed-only after status?
+1. **Adapter distribution — decided (2026-07-13):** require an installed/pinned Dev Container CLI.
+   The first lifecycle contract fixture-verifies the installed version against its pin; it does not
+   yet execute the CLI live.
+2. **Existing environments — decided (2026-07-13):** first release is managed-only. External or
+   user-started containers remain status-only; no `exec`, adoption, labeling, cleanup, or mutation
+   is permitted.
 3. **Cleanup policy:** are managed containers stopped on Pipeon close, retained for reuse, or chosen
    per request? They must never be coupled implicitly to Pipeon's stack teardown.
 4. **First attachment:** VS Code, Cursor, Pipeon code-server, or status/exec-only; attach remains a
@@ -255,7 +257,29 @@ Implemented the recommended first vertical slice in the package-owned
   multi-definition refusal, adapter absence, `not_created` / external / managed / orphan / changed
   fingerprint / duplicate-container status, event sequencing, and identifier/workspace redaction.
 
-The next slice remains lifecycle-only and must not start until the adapter-distribution and
-external-container `exec` product decisions above are made. It may then prove an explicitly
-approved managed `up` path; it must still keep provider pools separate and never adopt or mutate
-external containers.
+## Implementation Update — Approved Managed `up` Contract Slice (2026-07-13)
+
+Implemented the next lifecycle contract slice in `packages/ide/resolvers/devcontainer` only.
+
+- `up` requires an explicit workspace-relative `--definition-ref` and first emits an
+  `up_requested` event. Without an approval record bound to the request id, workspace identity,
+  selected definition reference/fingerprint, and all pull/build/Compose/features/hooks risks, it
+  emits `approval_required` and fails before an adapter result is read or a session record exists.
+- The fixture adapter accepts only a successful installed/pinned Dev Container CLI result whose
+  installed version equals its pin. A successful result must bind the container id, session id,
+  selected workspace/reference/fingerprint, and
+  `com.dockpipe.devcontainer.session`. The resolver persists that exact managed record only to an
+  explicit workspace-relative output path, while the event stream exposes an opaque environment
+  reference rather than the container id.
+- The existing `devcontainer.lifecycle.v1` NDJSON and generic `dockpipe.run` MCP stdout path are
+  unchanged. Pipeon remains an event consumer; provider pools remain separate. This contract adds
+  neither a live CLI/Docker invocation nor any external-container execution, adoption, cleanup,
+  attach, build, stop/down/remove, or Pipeon control.
+- Fixture tests cover unapproved and incomplete approval failure, approved pinned-adapter result,
+  session-record persistence, record-backed managed status, redaction, and the prior discovery and
+  status cases. No test invokes Docker, a Dev Container CLI, hooks, or an editor.
+
+Remaining recovery/cleanup risks: a crash after a real future CLI creates a container but before
+the session record is persisted will be an orphan candidate; failed/cancelled real starts need a
+later reconciliation/repair contract; and retention, stop, and destructive cleanup policy remain
+open decisions. No automatic recovery or cleanup is authorized by this slice.

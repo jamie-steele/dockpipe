@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// Package-owned, fixture-only native Dev Container discovery/status seam.
+// Package-owned, fixture-only native Dev Container lifecycle seam.
 // This module intentionally does not import child_process and never invokes
 // Docker, the Dev Container CLI, an editor, lifecycle hooks, or a provider.
 
@@ -11,7 +11,8 @@ const path = require('path');
 
 const CONTRACT_VERSION = 'devcontainer.lifecycle.v1';
 const SESSION_LABEL = 'com.dockpipe.devcontainer.session';
-const allowedOperations = new Set(['discover', 'status']);
+const allowedOperations = new Set(['discover', 'status', 'up']);
+const APPROVAL_RISKS = ['image_pull', 'build', 'compose_create_start', 'feature_install', 'lifecycle_hooks'];
 
 function fail(message) {
   throw new Error(message);
@@ -30,10 +31,13 @@ function parseArgs(argv) {
       fail('--args-json must be a JSON array of strings');
     }
   }
-  const out = { operation: '', workspace: '.', definitionRef: '', requestId: '', readFixture: '', dockerFixture: '', sessionsFixture: '' };
+  const out = {
+    operation: '', workspace: '.', definitionRef: '', requestId: '', readFixture: '', dockerFixture: '', sessionsFixture: '',
+    approvalFixture: '', upFixture: '', sessionOutput: '',
+  };
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index];
-    if (token === 'discover' || token === 'status') {
+    if (token === 'discover' || token === 'status' || token === 'up') {
       if (out.operation) fail('only one operation is allowed');
       out.operation = token;
       continue;
@@ -49,6 +53,9 @@ function parseArgs(argv) {
       ['--read-configuration-fixture', 'readFixture'],
       ['--docker-inspect-fixture', 'dockerFixture'],
       ['--managed-session-fixture', 'sessionsFixture'],
+      ['--approval-fixture', 'approvalFixture'],
+      ['--up-result-fixture', 'upFixture'],
+      ['--managed-session-output', 'sessionOutput'],
     ]);
     if (options.has(token)) {
       const value = args[++index];
@@ -62,7 +69,7 @@ function parseArgs(argv) {
     }
     fail(`unknown argument ${JSON.stringify(token)}`);
   }
-  if (!allowedOperations.has(out.operation)) fail('operation must be discover or status');
+  if (!allowedOperations.has(out.operation)) fail('operation must be discover, status, or up');
   out.readFixture ||= process.env.DEVCONTAINER_READ_CONFIGURATION_FIXTURE || '';
   out.dockerFixture ||= process.env.DEVCONTAINER_DOCKER_INSPECT_FIXTURE || '';
   out.sessionsFixture ||= process.env.DEVCONTAINER_MANAGED_SESSION_FIXTURE || '';
@@ -194,7 +201,7 @@ function eventEmitter(input, root) {
   let sequence = 0;
   const workspaceRef = path.relative(root, root) || '.';
   const requestId = input.requestId || `dc-${crypto.createHash('sha256').update(`${input.operation}\0${root}\0${input.definitionRef}`).digest('hex').slice(0, 20)}`;
-  return (event, fields = {}) => {
+  const emit = (event, fields = {}) => {
     sequence += 1;
     const output = {
       contract_version: CONTRACT_VERSION,
@@ -208,6 +215,9 @@ function eventEmitter(input, root) {
       state: fields.state,
       ownership: fields.ownership,
       environment_ref: fields.environment_ref,
+      approval_id: fields.approval_id,
+      session_id: fields.session_id,
+      session_label: fields.session_label,
       summary: fields.summary,
       log_ref: fields.log_ref,
       next_actions: fields.next_actions || [],
@@ -216,6 +226,8 @@ function eventEmitter(input, root) {
     for (const key of Object.keys(output)) if (output[key] == null || output[key] === '') delete output[key];
     process.stdout.write(`${JSON.stringify(output)}\n`);
   };
+  emit.requestID = requestId;
+  return emit;
 }
 
 function resultFields(candidate, state, ownership, summary, nextActions, environmentRef) {
@@ -302,12 +314,122 @@ function classify(candidate, containers, sessionsPayload, root) {
 }
 
 function selectedCandidate(candidates, ref) {
-  if (!ref) fail('status requires --definition-ref');
+  if (!ref) fail('this operation requires --definition-ref');
   const normalized = normalizedRef(ref);
   const candidate = candidates.find((item) => item.definition_ref === normalized);
   if (!candidate) fail('definition_ref is not a discovered Dev Container candidate');
   if (!candidate.valid) fail('selected definition is malformed JSON/JSONC');
   return candidate;
+}
+
+function workspaceOutputPath(root, value) {
+  if (!value) fail('up requires --managed-session-output');
+  const raw = String(value).replace(/\\/g, '/').trim();
+  if (!raw || path.posix.isAbsolute(raw) || raw === '.' || raw.startsWith('../') || raw.includes('/../')) {
+    fail('managed_session_output must be a workspace-relative file path');
+  }
+  const output = path.resolve(root, ...path.posix.normalize(raw).split('/'));
+  if (output === root || !output.startsWith(`${root}${path.sep}`)) fail('managed_session_output must stay under the workspace');
+  return output;
+}
+
+function approvalForUp(payload, candidate, requestID, root) {
+  if (!payload || payload.approved !== true) fail('explicit approval is required before up');
+  if (String(payload.operation || '') !== 'up') fail('approval fixture must approve the up operation');
+  if (String(payload.request_id || '') !== requestID) fail('approval fixture does not match the request_id');
+  if (fixtureRef(payload.workspace_ref, root) !== '.') fail('approval fixture does not match the workspace');
+  if (String(payload.definition_ref || '') !== candidate.definition_ref || String(payload.definition_fingerprint || '') !== candidate.definition_fingerprint) {
+    fail('approval fixture does not match the selected definition identity');
+  }
+  const risks = new Set(Array.isArray(payload.risks) ? payload.risks : []);
+  if (APPROVAL_RISKS.some((risk) => !risks.has(risk))) fail('approval fixture must cover every up lifecycle risk');
+  const approvalID = String(payload.approval_id || '');
+  if (!approvalID) fail('approval fixture requires approval_id');
+  return approvalID;
+}
+
+function managedRecordFromUp(payload, candidate, root) {
+  if (!payload || String(payload.outcome || '') !== 'success') fail('up result fixture must report outcome success');
+  const adapter = payload.adapter;
+  if (!adapter || String(adapter.distribution || '') !== 'installed_pinned_devcontainer_cli' || String(adapter.command || '') !== 'devcontainer') {
+    fail('up result fixture must use the installed/pinned Dev Container CLI adapter');
+  }
+  if (!String(adapter.version || '') || String(adapter.version) !== String(adapter.pinned_version || '')) {
+    fail('up result fixture must prove the installed Dev Container CLI version is pinned');
+  }
+  if (fixtureRef(payload.workspace_ref, root) !== '.' || String(payload.definition_ref || '') !== candidate.definition_ref || String(payload.definition_fingerprint || '') !== candidate.definition_fingerprint) {
+    fail('up result fixture does not match the selected definition identity');
+  }
+  const containerID = String(payload.container_id || '');
+  const sessionID = String(payload.session_id || '');
+  const labels = payload.labels && typeof payload.labels === 'object' ? payload.labels : {};
+  if (!containerID || !sessionID || String(labels[SESSION_LABEL] || '') !== sessionID) {
+    fail('up result fixture must bind container_id, session_id, and the DockPipe session label');
+  }
+  return {
+    container_id: containerID,
+    environment_ref: opaqueEnvironmentRef({ Id: containerID }),
+    session_id: sessionID,
+    workspace_ref: '.',
+    definition_ref: candidate.definition_ref,
+    definition_fingerprint: candidate.definition_fingerprint,
+    session_label: SESSION_LABEL,
+    session_label_value: sessionID,
+  };
+}
+
+function writeManagedSession(output, record) {
+  let sessions = [];
+  if (fs.existsSync(output)) {
+    let existing;
+    try { existing = JSON.parse(fs.readFileSync(output, 'utf8')); } catch (_) { fail('managed_session_output must contain valid JSON when it already exists'); }
+    sessions = Array.isArray(existing) ? existing : existing && Array.isArray(existing.sessions) ? existing.sessions : null;
+    if (!sessions) fail('managed_session_output must contain a sessions array when it already exists');
+    if (sessions.some((item) => item && (item.container_id === record.container_id || item.session_id === record.session_id))) {
+      fail('managed_session_output already contains this managed session identity');
+    }
+  }
+  fs.mkdirSync(path.dirname(output), { recursive: true });
+  const temporary = `${output}.tmp-${process.pid}`;
+  try {
+    fs.writeFileSync(temporary, `${JSON.stringify({ schema_version: 'devcontainer.managed-session.v1', sessions: [...sessions, record] }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(temporary, output);
+  } catch (error) {
+    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch (_) { /* best effort */ }
+    throw error;
+  }
+}
+
+function runUp(input, root, emit, candidate) {
+  const requested = resultFields(candidate, 'approval_required', 'ambiguous', 'A managed Dev Container up request requires explicit approval.', ['approve_up']);
+  emit('up_requested', requested);
+  if (!input.approvalFixture) {
+    emit('approval_required', requested);
+    emit('failed', requested);
+    return 3;
+  }
+  let approvalID;
+  try {
+    approvalID = approvalForUp(readJSON(input.approvalFixture, 'approval'), candidate, emit.requestID, root);
+  } catch (error) {
+    const fields = { ...requested, summary: error.message, next_actions: ['approve_up'] };
+    emit('approval_required', fields);
+    emit('failed', fields);
+    return 3;
+  }
+  let record;
+  try {
+    record = managedRecordFromUp(readJSON(input.upFixture, 'up result'), candidate, root);
+    writeManagedSession(workspaceOutputPath(root, input.sessionOutput), record);
+  } catch (error) {
+    const fields = resultFields(candidate, 'failed', 'ambiguous', error.message, ['repair_managed_session']);
+    emit('failed', { ...fields, approval_id: approvalID });
+    return 2;
+  }
+  const fields = resultFields(candidate, 'running', 'managed', 'An explicitly approved managed Dev Container was recorded.', ['status'], record.environment_ref);
+  emit('up_result', { ...fields, approval_id: approvalID, session_id: record.session_id, session_label: record.session_label });
+  emit('completed', { ...fields, approval_id: approvalID, session_id: record.session_id, session_label: record.session_label });
+  return 0;
 }
 
 function run(input) {
@@ -341,6 +463,7 @@ function run(input) {
     emit('failed', fields);
     return 2;
   }
+  if (input.operation === 'up') return runUp(input, root, emit, candidate);
   let readConfiguration;
   let dockerInspect;
   let sessions;
