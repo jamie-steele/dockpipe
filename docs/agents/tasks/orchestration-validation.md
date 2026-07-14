@@ -2,8 +2,6 @@
 
 ## Still Open
 
-- Expand deterministic verification around orchestration apply/publish paths so missing sources,
-  broken references, and contradictory validation claims fail before writes.
 - Add package-owned deterministic source walkers for broad mounted roots and external corpora so
   cheap/local lanes consume bounded fact packets instead of pretending they performed source-root
   discovery on their own.
@@ -32,3 +30,10 @@ seed context before prompt assembly. It reuses the existing deterministic excerp
 limits, is recorded in `task.json`, and supplies the local prompt without creating any durable
 normalized documentation tree. Focused coverage verifies deterministic ordering, truncation, local
 guidance, and artifact persistence.
+
+## Implementation Update — Fail-Closed Apply Coherence (2026-07-13)
+
+Deterministic apply-coherence defects now fail before workspace writes: missing apply sources,
+broken staged Markdown or YAML references, and contradictory validation claims produce
+`verify.status: fail`. Existing qualitative/heuristic `review` findings remain review-only, so the
+concrete-diff inspection path is unchanged when the staged apply set is coherent.

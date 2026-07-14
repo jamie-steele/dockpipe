@@ -312,8 +312,10 @@ diffs. Workflows can either declare explicit `apply.outputs` entries or declare 
 apply set from `tasks/*/materialized/*`, enforces that the required artifact paths exist, and then
 applies the whole inferred bundle under the target root. A `verify.status` of `review` does not
 block workspace apply; `apply/result.json` records `requires_human_review: true` and
-`publish_allowed: false`. A failed verification still blocks apply unless explicitly overridden for
-debugging. Publish, merge, or sync to a durable branch remains a separate human-governed boundary.
+`publish_allowed: false`. Deterministic apply-coherence failures (missing sources, broken markdown
+or YAML references, and contradictory validation claims) are `fail` and block writes. A failed
+verification still blocks apply unless explicitly overridden for debugging. Publish, merge, or sync
+to a durable branch remains a separate human-governed boundary.
 
 ## Cloud budget primitive
 

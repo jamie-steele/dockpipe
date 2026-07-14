@@ -1042,17 +1042,15 @@ func emitVerifyHeuristics(mergePath, tasksDir, issuesJSON string, stdout io.Writ
 func emitVerifyApplyCoherence(rootPath, artifactRootPath, planPath, issuesJSON string, stdout io.Writer) error {
 	plan := readJSONMap(planPath)
 	applyCfg := mapValue(plan["apply"])
+	issues := []string{}
+	_ = json.Unmarshal([]byte(issuesJSON), &issues)
 	outputs, err := resolveApplyOutputs(rootPath, artifactRootPath, applyCfg)
 	if err != nil {
-		issues := []string{}
-		_ = json.Unmarshal([]byte(issuesJSON), &issues)
 		issues = append(issues, err.Error())
-		fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote("review"))
+		fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote("fail"))
 		fmt.Fprintf(stdout, "VERIFY_APPLY_ISSUES=%s\n", shellQuote(mustJSON(issues, []string{})))
 		return nil
 	}
-	issues := []string{}
-	_ = json.Unmarshal([]byte(issuesJSON), &issues)
 	if len(outputs) == 0 {
 		fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote("pass"))
 		fmt.Fprintf(stdout, "VERIFY_APPLY_ISSUES=%s\n", shellQuote(mustJSON(issues, []string{})))
@@ -1061,25 +1059,27 @@ func emitVerifyApplyCoherence(rootPath, artifactRootPath, planPath, issuesJSON s
 	stage, err := stageApplyOutputs(rootPath, artifactRootPath, outputs)
 	if err != nil {
 		issues = append(issues, err.Error())
-		fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote("review"))
+		fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote("fail"))
 		fmt.Fprintf(stdout, "VERIFY_APPLY_ISSUES=%s\n", shellQuote(mustJSON(issues, []string{})))
 		return nil
 	}
 	defer os.RemoveAll(stage.TempRoot)
+	coherenceIssues := []string{}
 	for _, item := range stage.Files {
 		switch strings.ToLower(filepath.Ext(item.TargetPath)) {
 		case ".md":
-			issues = append(issues, verifyMarkdownTargets(stage, item)...)
+			coherenceIssues = append(coherenceIssues, verifyMarkdownTargets(stage, item)...)
 			if strings.EqualFold(filepath.Base(item.TargetPath), "validation.md") {
-				issues = append(issues, verifyValidationClaims(stage, item)...)
+				coherenceIssues = append(coherenceIssues, verifyValidationClaims(stage, item)...)
 			}
 		case ".yml", ".yaml":
-			issues = append(issues, verifyYAMLTargets(stage, item)...)
+			coherenceIssues = append(coherenceIssues, verifyYAMLTargets(stage, item)...)
 		}
 	}
+	issues = append(issues, coherenceIssues...)
 	status := "pass"
-	if len(issues) > 0 {
-		status = "review"
+	if len(coherenceIssues) > 0 {
+		status = "fail"
 	}
 	fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote(status))
 	fmt.Fprintf(stdout, "VERIFY_APPLY_ISSUES=%s\n", shellQuote(mustJSON(issues, []string{})))

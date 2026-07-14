@@ -1150,13 +1150,39 @@ func TestEmitVerifyApplyCoherenceFlagsBrokenMarkdownAndYamlTargets(t *testing.T)
 		t.Fatal(err)
 	}
 	got := out.String()
-	if !strings.Contains(got, "VERIFY_APPLY_STATUS='review'") {
-		t.Fatalf("expected review status, got:\n%s", got)
+	if !strings.Contains(got, "VERIFY_APPLY_STATUS='fail'") {
+		t.Fatalf("expected fail status, got:\n%s", got)
 	}
 	for _, want := range []string{"markdown link target is missing", "yaml reference target is missing"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in:\n%s", want, got)
 		}
+	}
+}
+
+func TestEmitVerifyApplyCoherencePreservesPriorReviewWithoutBlockingApply(t *testing.T) {
+	root := t.TempDir()
+	artifactRoot := filepath.Join(root, "artifacts")
+	if err := os.MkdirAll(filepath.Join(artifactRoot, "merge"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactRoot, "merge", "index.md"), []byte("# Valid\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(artifactRoot, "plan.json")
+	if err := os.WriteFile(planPath, []byte(`{"apply":{"outputs":[{"source":"merge/index.md","path":"docs/index.md"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if err := emitVerifyApplyCoherence(root, artifactRoot, planPath, `["heuristic review"]`, &out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "VERIFY_APPLY_STATUS='pass'") {
+		t.Fatalf("expected pass status for valid staged output, got:\n%s", got)
+	}
+	if !strings.Contains(got, "heuristic review") {
+		t.Fatalf("expected inherited issue to be preserved, got:\n%s", got)
 	}
 }
 
