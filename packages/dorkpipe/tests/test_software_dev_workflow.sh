@@ -14,7 +14,10 @@ trap 'rm -rf "$tmp" "$proof_output"' EXIT
 consumer="$REPO_ROOT"
 task_pack="packages/dorkpipe/tests/fixtures/software.dev/task-pack.yml"
 valid_proposal="packages/dorkpipe/tests/fixtures/software.dev/valid-proposal.yml"
+agents_file="packages/dorkpipe/tests/fixtures/software.dev/agents.yml"
 rm -rf "$proof_output"
+cp "$consumer/$task_pack" "$tmp/task-pack.before.yml"
+cp "$consumer/$agents_file" "$tmp/agents.before.yml"
 
 helper_bin="$tmp/orchestrate-helper"
 (
@@ -207,6 +210,44 @@ export DORKPIPE_SOFTWARE_DEV_EXECUTION_LOG="$tmp/planner-executed.log"
 MSYS2_ARG_CONV_EXCL='*' "$helper_bin" run-tasks "$planner_root/task-graph.json" "$runner"
 printf '%s\n' plan_write plan_review >"$tmp/planner-expected.log"
 cmp "$tmp/planner-expected.log" "$DORKPIPE_SOFTWARE_DEV_EXECUTION_LOG"
+
+mkdir -p "$planner_root/verify"
+cat >"$planner_root/verify/result.json" <<'EOF'
+{
+  "status": "pass",
+  "confidence": 0.91,
+  "issues": [],
+  "failure_class": "none",
+  "value_bar": {
+    "overall_score": 0.83,
+    "verdict": "strong_orchestration_value"
+  },
+  "direct_worker_baseline": {
+    "verdict": "orchestration_adds_value"
+  }
+}
+EOF
+MSYS2_ARG_CONV_EXCL='*' "$helper_bin" software-dev-evaluate-promotion \
+  "$consumer" "$task_pack" planner_pack "$planner_root"
+candidate="$planner_root/proposal/promotion-candidate.json"
+grep -Fq '"contract_version": "software.dev.promotion-candidate/v1"' "$candidate"
+grep -Fq '"status": "eligible"' "$candidate"
+grep -Fq '"task_pack_path": "packages/dorkpipe/tests/fixtures/software.dev/task-pack.yml"' "$candidate"
+grep -Fq '"step_id": "planner_pack"' "$candidate"
+grep -Fq '"path": "packages/dorkpipe/tests/fixtures/software.dev/agents.yml"' "$candidate"
+grep -Fq '"role": "reusable fixture evidence writer"' "$candidate"
+grep -Fq '"inferred.md"' "$candidate"
+grep -Fq '"performed": false' "$candidate"
+cp "$candidate" "$tmp/promotion-candidate.first.json"
+MSYS2_ARG_CONV_EXCL='*' "$helper_bin" software-dev-evaluate-promotion \
+  "$consumer" "$task_pack" planner_pack "$planner_root"
+cmp "$tmp/promotion-candidate.first.json" "$candidate"
+cmp "$tmp/task-pack.before.yml" "$consumer/$task_pack"
+cmp "$tmp/agents.before.yml" "$consumer/$agents_file"
+if find "$planner_root/proposal" -maxdepth 1 -name '.promotion-candidate-*.json' -print -quit | grep -q .; then
+  echo "software.dev promotion evaluation left a temporary candidate" >&2
+  exit 1
+fi
 
 for invalid in malformed narrated structural authority-widening unknown-role invalid-dependency missing-output-floor; do
   invalid_root="$tmp/invalid-$invalid"

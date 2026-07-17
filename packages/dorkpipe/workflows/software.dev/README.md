@@ -15,5 +15,18 @@ dockpipe --package dorkpipe --workflow software.dev --workdir . \
 Set `DORKPIPE_SOFTWARE_DEV_PLANNER_MODE=true` to run the single bounded bootstrap planner before
 strictly parsing and compiling its proposal. Static task packs compile without planner execution.
 
+After a compiled planner run has a passing `verify/result.json`, the package helper can evaluate a
+review-only promotion candidate offline:
+
+```text
+orchestrate-helper software-dev-evaluate-promotion \
+  <repo-root> <repo-relative-task-pack.yml> <selected-step-id> <artifact-root>
+```
+
+The command atomically writes `proposal/promotion-candidate.json`. It can propose only reusable
+soft-layer guidance and required-artifact floor additions for the exact selected task-pack surface.
+It never patches the consumer repository; approval-gated patch generation and application are a
+later boundary.
+
 Publish and sync are disabled. Apply always requires approval and uses only the repo-selected
 `apply.target_root` plus the compiled materialized output bundle.

@@ -1,8 +1,18 @@
+startup_prompt: Preserve reusable fixture guidance across future runs.
 constraints:
   - preserve deterministic fixture order
 orchestration:
   plan:
     goal: Execute the valid fixture proposal.
+    constraints:
+      - keep the reusable fixture plan reviewable
+  agents:
+    fixture_worker:
+      role: reusable fixture evidence writer
+      worker: ollama
+      worker_type: documentation
+      constraints:
+        - cite stable fixture evidence
   tasks:
     - id: plan_write
       agent: fixture_worker
@@ -19,11 +29,16 @@ orchestration:
       expected_output: Materialized summary.md file.
       materialize_outputs:
         - path: summary.md
+  merge:
+    title: Reusable fixture merge guidance
+  verify:
+    next_action_default: review the reusable fixture evidence
   apply:
     require_approval: true
     target_root: bin/.dockpipe/tmp/package-tests/software-dev-proof-output
     required_artifacts:
       - required.md
       - summary.md
+      - inferred.md
   publish: false
   sync: false

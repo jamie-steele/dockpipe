@@ -60,6 +60,32 @@ A planner proposal may be promoted only when all of these are true:
 Verification is necessary but not sufficient. Passing checks does not grant authority to widen the
 workflow's runtime permissions.
 
+## Review Candidate Boundary
+
+`software.dev` now implements the first promotion boundary as a deterministic review artifact, not
+as a repository patch. The package-local evaluator accepts the exact repo-relative task-pack path,
+selected step id, and existing run artifact root. It requires one selected raw proposal, an identical
+normalized proposal, consistent compiler metadata, and `verify/result.json` with `status: pass`.
+
+The evaluator reuses the verifier's value-bar and direct-worker-baseline evidence. Weak value-bar
+results, a baseline that prefers one direct worker, missing evidence, review, failure, and inconsistent
+artifacts all fail closed. Passing evidence can produce a candidate only when the proposal contains a
+meaningful reusable soft-layer delta.
+
+The review artifact is `proposal/promotion-candidate.json`. Its mutable identity is the exact selected
+task-pack file plus step id. An exact sibling `agents.yml` can be named as a possible role target only
+when it is a regular repo-owned sibling with an `agents` mapping; parent or symlinked sidecars are not
+promotion targets. Candidate generation is atomic and writes nothing to the consumer repository.
+
+Promotable data is limited to reusable role wording and constraints, stable task-pack constraints,
+required-artifact floor additions, and reusable startup, plan, merge, or verification guidance. Exact
+tasks, dependencies, lane/provider/model choices, inferred output declarations, repair evidence,
+access and deny policy, budgets, approvals, apply targets, publish/sync behavior, auth, secrets, and
+destructive-action policy are explicitly excluded.
+
+Approval-gated patch generation and repository application remain a later boundary. An eligible
+candidate grants neither mutation authority nor approval.
+
 ## Prompt Layers
 
 Use prompts in layers so the durable parts stay maintainable:

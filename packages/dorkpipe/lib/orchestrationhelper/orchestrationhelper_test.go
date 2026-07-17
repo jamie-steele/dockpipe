@@ -665,6 +665,449 @@ func TestMaterializeSoftwareDevContractWritesDeterministicRuntimeLayout(t *testi
 	}
 }
 
+func TestEvaluateSoftwareDevPromotionSelectsOnlyReusableSoftLayer(t *testing.T) {
+	repo := validContractRepoTaskPack()
+	proposal := validContractProposal()
+	proposal["startup_prompt"] = "Reusable promoted startup guidance."
+	proposal["constraints"] = []any{"repo rule", "reusable quality rule"}
+	orchestration := contractOrchestration(proposal)
+	orchestration["constraints"] = []any{"stable orchestration rule"}
+	orchestration["plan"] = map[string]any{
+		"goal":        "Use the reusable review plan.",
+		"steps":       []any{"inspect sources", "verify durable output"},
+		"constraints": []any{"keep the plan reviewable"},
+	}
+	orchestration["merge"] = map[string]any{"title": "Reusable merge guidance"}
+	orchestration["verify"] = map[string]any{"next_action_default": "review reusable evidence"}
+	baseRole := mapValue(mapValue(orchestration["agents"])["base"])
+	baseRole["role"] = "reusable repository reviewer"
+	baseRole["constraints"] = []any{"proposal role rule", "cite durable evidence"}
+	baseRole["worker"] = "codex"
+	baseRole["worker_type"] = "validation"
+	baseRole["model"] = map[string]any{"model": "session-model"}
+	baseRole["access"] = map[string]any{"read": []any{"/work/src/pkg"}}
+	baseRole["authority"] = map[string]any{"can": []any{"session_action"}}
+	baseRole["max_cloud_tokens"] = 100
+	contractApply(proposal)["required_artifacts"] = []any{"base.md", "repo.md", "extra.md", "reusable-floor.md"}
+
+	candidate := evaluateSoftwareDevPromotion(
+		repo,
+		proposal,
+		map[string]any{"source_format": "json", "selected_graph": true},
+		validPromotionVerification(),
+		softwareDevPromotionIdentity{TaskPackPath: "workflows/software-dev/config.yml", StepID: "software_dev", SiblingRoles: "workflows/software-dev/agents.yml"},
+		"proposal/raw.json",
+	)
+	if got := stringValue(mapValue(candidate["eligibility"])["status"]); got != "eligible" {
+		t.Fatalf("eligibility = %q, candidate = %s", got, mustJSON(candidate, nil))
+	}
+	delta := mapValue(candidate["promotable_soft_layer_delta"])
+	step := mapValue(delta["task_pack_step"])
+	if got := stringValue(step["startup_prompt"]); got != "Reusable promoted startup guidance." {
+		t.Fatalf("startup_prompt = %q", got)
+	}
+	promotedOrchestration := mapValue(step["orchestration"])
+	assertStringOrder(t, "root constraints", stringList(step["constraints"]), []string{"reusable quality rule"})
+	assertStringOrder(t, "orchestration constraints", stringList(promotedOrchestration["constraints"]), []string{"stable orchestration rule"})
+	assertStringOrder(t, "required floor", stringList(mapValue(promotedOrchestration["apply"])["required_artifacts"]), []string{"base.md", "extra.md", "reusable-floor.md"})
+	if got := stringValue(mapValue(promotedOrchestration["merge"])["title"]); got != "Reusable merge guidance" {
+		t.Fatalf("merge title = %q", got)
+	}
+	roles := mapValue(delta["roles"])
+	base := mapValue(roles["base"])
+	if got := stringValue(base["role"]); got != "reusable repository reviewer" {
+		t.Fatalf("role guidance = %q", got)
+	}
+	assertStringOrder(t, "role constraints", stringList(base["constraints"]), []string{"proposal role rule", "cite durable evidence"})
+	for _, forbidden := range []string{"worker", "worker_type", "model", "access", "authority", "max_cloud_tokens"} {
+		if _, present := base[forbidden]; present {
+			t.Fatalf("promotable role delta contains %s: %#v", forbidden, base)
+		}
+	}
+	deltaJSON := mustJSON(delta, nil)
+	for _, forbidden := range []string{"proposal_write", "depends_on", "target_root", "publish", "sync", "session-model"} {
+		if strings.Contains(deltaJSON, forbidden) {
+			t.Fatalf("promotable delta contains excluded %q: %s", forbidden, deltaJSON)
+		}
+	}
+	targets := listValue(candidate["repo_owned_target_surfaces"])
+	if len(targets) != 2 || stringValue(mapValue(targets[1])["path"]) != "workflows/software-dev/agents.yml" {
+		t.Fatalf("target surfaces = %#v", targets)
+	}
+	if len(listValue(candidate["excluded_session_only_fields"])) == 0 || len(listValue(candidate["excluded_hard_authority_fields"])) == 0 {
+		t.Fatal("candidate does not explicitly record session-only and hard-authority exclusions")
+	}
+}
+
+func TestEvaluateSoftwareDevPromotionRejectsVerificationAndEmptyDeltas(t *testing.T) {
+	tests := []struct {
+		name         string
+		proposal     func() map[string]any
+		verification func() map[string]any
+		wantReason   string
+	}{
+		{
+			name:         "missing verification evidence",
+			proposal:     validContractProposal,
+			verification: func() map[string]any { return map[string]any{} },
+			wantReason:   "verification_not_passed",
+		},
+		{
+			name:     "review verification",
+			proposal: validContractProposal,
+			verification: func() map[string]any {
+				value := validPromotionVerification()
+				value["status"] = "review"
+				value["failure_class"] = "verification_review"
+				return value
+			},
+			wantReason: "verification_not_passed",
+		},
+		{
+			name:     "failed verification",
+			proposal: validContractProposal,
+			verification: func() map[string]any {
+				value := validPromotionVerification()
+				value["status"] = "fail"
+				return value
+			},
+			wantReason: "verification_not_passed",
+		},
+		{
+			name:     "weak value bar",
+			proposal: validContractProposal,
+			verification: func() map[string]any {
+				value := validPromotionVerification()
+				mapValue(value["value_bar"])["verdict"] = "weak_orchestration_value"
+				return value
+			},
+			wantReason: "weak_or_missing_value_bar",
+		},
+		{
+			name:     "direct worker preferred",
+			proposal: validContractProposal,
+			verification: func() map[string]any {
+				value := validPromotionVerification()
+				mapValue(value["direct_worker_baseline"])["verdict"] = "direct_worker_likely_better"
+				return value
+			},
+			wantReason: "lower_or_missing_direct_worker_baseline",
+		},
+		{
+			name:         "no reusable delta",
+			proposal:     validContractRepoTaskPack,
+			verification: validPromotionVerification,
+			wantReason:   "no_reusable_soft_layer_delta",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			candidate := evaluateSoftwareDevPromotion(
+				validContractRepoTaskPack(),
+				tt.proposal(),
+				map[string]any{"source_format": "json", "selected_graph": true},
+				tt.verification(),
+				softwareDevPromotionIdentity{TaskPackPath: "workflows/task-pack.yml", StepID: "software_dev"},
+				"proposal/raw.json",
+			)
+			eligibility := mapValue(candidate["eligibility"])
+			if got := stringValue(eligibility["status"]); got != "ineligible" {
+				t.Fatalf("eligibility = %q, want ineligible", got)
+			}
+			if !promotionReasonsContain(eligibility, tt.wantReason) {
+				t.Fatalf("eligibility reasons = %s, want %q", mustJSON(eligibility["reasons"], nil), tt.wantReason)
+			}
+		})
+	}
+}
+
+func TestSoftwareDevPromotionArtifactsAreDeterministicAndDoNotMutateConsumer(t *testing.T) {
+	repoRoot, artifactRoot, taskPackPath, stepID := writePromotionFixture(t)
+	taskPackBefore, err := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(taskPackPath)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentsPath := filepath.Join(filepath.Dir(filepath.Join(repoRoot, filepath.FromSlash(taskPackPath))), "agents.yml")
+	agentsBefore, err := os.ReadFile(agentsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := evaluateSoftwareDevPromotionArtifacts(repoRoot, taskPackPath, stepID, artifactRoot); err != nil {
+		t.Fatal(err)
+	}
+	candidatePath := filepath.Join(artifactRoot, "proposal", "promotion-candidate.json")
+	first, err := os.ReadFile(candidatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := evaluateSoftwareDevPromotionArtifacts(repoRoot, taskPackPath, stepID, artifactRoot); err != nil {
+		t.Fatal(err)
+	}
+	second, err := os.ReadFile(candidatePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(first, second) {
+		t.Fatalf("promotion candidate is not byte-for-byte deterministic:\nfirst: %s\nsecond: %s", first, second)
+	}
+	taskPackAfter, _ := os.ReadFile(filepath.Join(repoRoot, filepath.FromSlash(taskPackPath)))
+	agentsAfter, _ := os.ReadFile(agentsPath)
+	if !bytes.Equal(taskPackBefore, taskPackAfter) || !bytes.Equal(agentsBefore, agentsAfter) {
+		t.Fatal("promotion evaluation mutated a consumer repo target surface")
+	}
+	candidate := readJSONMap(candidatePath)
+	if boolAny(mapValue(candidate["workspace_mutation"])["performed"]) {
+		t.Fatal("candidate does not confirm mutation-free evaluation")
+	}
+	if targets := listValue(candidate["repo_owned_target_surfaces"]); len(targets) != 2 {
+		t.Fatalf("repo-owned targets = %#v", targets)
+	}
+	leftovers, err := filepath.Glob(filepath.Join(artifactRoot, "proposal", ".promotion-candidate-*.json"))
+	if err != nil || len(leftovers) != 0 {
+		t.Fatalf("atomic candidate generation left temporary files: %#v, %v", leftovers, err)
+	}
+}
+
+func TestSoftwareDevPromotionIdentityAndArtifactFailuresFailClosed(t *testing.T) {
+	repoRoot, artifactRoot, taskPackPath, stepID := writePromotionFixture(t)
+	tests := []struct {
+		name    string
+		path    string
+		stepID  string
+		mutate  func()
+		wantErr string
+	}{
+		{name: "escaped task pack", path: "../task-pack.yml", stepID: stepID, wantErr: "escapes the consumer repo"},
+		{name: "noncanonical task pack", path: "./" + taskPackPath, stepID: stepID, wantErr: "not an exact canonical repo-relative identity"},
+		{name: "mismatched step identity", path: taskPackPath, stepID: "other", wantErr: `task pack step id "other" was not found`},
+		{
+			name:   "mismatched metadata identity",
+			path:   taskPackPath,
+			stepID: stepID,
+			mutate: func() {
+				metadataPath := filepath.Join(artifactRoot, "proposal", "metadata.json")
+				metadata := readJSONMap(metadataPath)
+				mapValue(metadata["task_pack"])["step_id"] = "different"
+				if err := writeJSONFile(metadataPath, metadata); err != nil {
+					t.Fatal(err)
+				}
+			},
+			wantErr: "metadata task-pack identity does not match",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, freshArtifactRoot, _, _ := writePromotionFixtureAt(t, repoRoot, taskPackPath, stepID)
+			artifactRoot = freshArtifactRoot
+			if tt.mutate != nil {
+				tt.mutate()
+			}
+			err := evaluateSoftwareDevPromotionArtifacts(repoRoot, tt.path, tt.stepID, artifactRoot)
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("evaluateSoftwareDevPromotionArtifacts() error = %v, want %q", err, tt.wantErr)
+			}
+			if _, statErr := os.Stat(filepath.Join(artifactRoot, "proposal", "promotion-candidate.json")); !os.IsNotExist(statErr) {
+				t.Fatalf("failed evaluation left a candidate: %v", statErr)
+			}
+		})
+	}
+
+	t.Run("missing verification", func(t *testing.T) {
+		_, missingRoot, _, _ := writePromotionFixtureAt(t, repoRoot, taskPackPath, stepID)
+		if err := os.Remove(filepath.Join(missingRoot, "verify", "result.json")); err != nil {
+			t.Fatal(err)
+		}
+		err := evaluateSoftwareDevPromotionArtifacts(repoRoot, taskPackPath, stepID, missingRoot)
+		if err == nil || !strings.Contains(err.Error(), "verify/result.json is missing") {
+			t.Fatalf("missing verification error = %v", err)
+		}
+	})
+
+	t.Run("malformed verification", func(t *testing.T) {
+		_, malformedRoot, _, _ := writePromotionFixtureAt(t, repoRoot, taskPackPath, stepID)
+		if err := os.WriteFile(filepath.Join(malformedRoot, "verify", "result.json"), []byte("{\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		err := evaluateSoftwareDevPromotionArtifacts(repoRoot, taskPackPath, stepID, malformedRoot)
+		if err == nil || !strings.Contains(err.Error(), "malformed JSON") {
+			t.Fatalf("malformed verification error = %v", err)
+		}
+	})
+
+	t.Run("inconsistent normalized proposal", func(t *testing.T) {
+		_, inconsistentRoot, _, _ := writePromotionFixtureAt(t, repoRoot, taskPackPath, stepID)
+		normalizedPath := filepath.Join(inconsistentRoot, "proposal", "normalized.json")
+		normalized := readJSONMap(normalizedPath)
+		normalized["startup_prompt"] = "inconsistent"
+		if err := writeJSONFile(normalizedPath, normalized); err != nil {
+			t.Fatal(err)
+		}
+		err := evaluateSoftwareDevPromotionArtifacts(repoRoot, taskPackPath, stepID, inconsistentRoot)
+		if err == nil || !strings.Contains(err.Error(), "raw and normalized artifacts are inconsistent") {
+			t.Fatalf("inconsistent proposal error = %v", err)
+		}
+	})
+
+	t.Run("ambiguous step", func(t *testing.T) {
+		ambiguousRoot := t.TempDir()
+		workflowPath := filepath.Join(ambiguousRoot, "task-pack.yml")
+		if err := os.WriteFile(workflowPath, []byte("name: ambiguous\nsteps:\n  - id: duplicate\n    agent:\n      orchestration: {}\n  - id: duplicate\n    agent:\n      orchestration: {}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, _, err := loadSoftwareDevPromotionIdentity(ambiguousRoot, "task-pack.yml", "duplicate")
+		if err == nil || !strings.Contains(err.Error(), "is ambiguous") {
+			t.Fatalf("ambiguous identity error = %v", err)
+		}
+	})
+
+	t.Run("symlinked task pack", func(t *testing.T) {
+		symlinkRoot := t.TempDir()
+		target := filepath.Join(symlinkRoot, "actual.yml")
+		link := filepath.Join(symlinkRoot, "linked.yml")
+		if err := os.WriteFile(target, []byte("name: linked\nsteps: []\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, link); err != nil {
+			t.Skipf("symlinks unavailable on %s: %v", runtime.GOOS, err)
+		}
+		_, _, err := loadSoftwareDevPromotionIdentity(symlinkRoot, "linked.yml", "software_dev")
+		if err == nil || !strings.Contains(err.Error(), "symlinked identity") {
+			t.Fatalf("symlink identity error = %v", err)
+		}
+	})
+}
+
+func validPromotionVerification() map[string]any {
+	return map[string]any{
+		"status":        "pass",
+		"confidence":    0.91,
+		"issues":        []any{},
+		"failure_class": "none",
+		"value_bar": map[string]any{
+			"overall_score": 0.83,
+			"verdict":       "strong_orchestration_value",
+		},
+		"direct_worker_baseline": map[string]any{
+			"verdict": "orchestration_adds_value",
+		},
+	}
+}
+
+func promotionReasonsContain(eligibility map[string]any, code string) bool {
+	for _, raw := range listValue(eligibility["reasons"]) {
+		if stringValue(mapValue(raw)["code"]) == code {
+			return true
+		}
+	}
+	return false
+}
+
+func writePromotionFixture(t *testing.T) (string, string, string, string) {
+	t.Helper()
+	repoRoot := t.TempDir()
+	taskPackPath := "workflows/software-dev/config.yml"
+	stepID := "software_dev"
+	workflowPath := filepath.Join(repoRoot, filepath.FromSlash(taskPackPath))
+	if err := os.MkdirAll(filepath.Dir(workflowPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	workflow := `name: repo.software-dev
+steps:
+  - id: software_dev
+    workflow: software.dev
+    package: dockpipeproject
+    agent:
+      startup_prompt: Existing repo guidance.
+      orchestration:
+        agents:
+          writer:
+            role: repo writer
+        tasks:
+          - id: write
+            agent: writer
+            goal: Write the existing output.
+            materialize_outputs:
+              - path: existing.md
+        apply:
+          require_approval: true
+          target_root: docs/generated
+          required_artifacts:
+            - existing.md
+`
+	if err := os.WriteFile(workflowPath, []byte(workflow), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(workflowPath), "agents.yml"), []byte("agents:\n  writer:\n    role: repo writer\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, artifactRoot, _, _ := writePromotionFixtureAt(t, repoRoot, taskPackPath, stepID)
+	return repoRoot, artifactRoot, taskPackPath, stepID
+}
+
+func writePromotionFixtureAt(t *testing.T, repoRoot, taskPackPath, stepID string) (string, string, string, string) {
+	t.Helper()
+	artifactRoot := t.TempDir()
+	proposal := map[string]any{
+		"startup_prompt": "Reusable promoted guidance.",
+		"constraints":    []any{"preserve reusable evidence"},
+		"orchestration": map[string]any{
+			"agents": map[string]any{
+				"writer": map[string]any{"role": "reusable evidence writer", "constraints": []any{"cite durable sources"}, "worker": "ollama"},
+			},
+			"tasks": []any{
+				map[string]any{
+					"id":         "write",
+					"agent":      "writer",
+					"goal":       "Write the exact run output.",
+					"depends_on": []any{},
+					"materialize_outputs": []any{
+						map[string]any{"path": "existing.md"},
+						map[string]any{"path": "promoted.md"},
+					},
+				},
+			},
+			"apply": map[string]any{
+				"require_approval":   true,
+				"target_root":        "docs/generated",
+				"required_artifacts": []any{"existing.md", "promoted.md"},
+			},
+		},
+	}
+	proposalDir := filepath.Join(artifactRoot, "proposal")
+	verifyDir := filepath.Join(artifactRoot, "verify")
+	for _, directory := range []string{proposalDir, verifyDir} {
+		if err := os.MkdirAll(directory, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	raw := []byte(mustJSON(proposal, nil) + "\n")
+	if err := os.WriteFile(filepath.Join(proposalDir, "raw.json"), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(proposalDir, "normalized.json"), proposal); err != nil {
+		t.Fatal(err)
+	}
+	metadata := map[string]any{
+		"present":             true,
+		"source_format":       "json",
+		"selected_graph":      true,
+		"role_ids":            []any{"writer"},
+		"constraints":         []any{"preserve reusable evidence"},
+		"task_ids":            []any{"write"},
+		"dependencies":        []any{map[string]any{"task_id": "write", "depends_on": []any{}}},
+		"materialize_outputs": []any{map[string]any{"task_id": "write", "path": "existing.md"}, map[string]any{"task_id": "write", "path": "promoted.md"}},
+		"task_pack":           map[string]any{"path": taskPackPath, "step_id": stepID},
+	}
+	if err := writeJSONFile(filepath.Join(proposalDir, "metadata.json"), metadata); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeJSONFile(filepath.Join(verifyDir, "result.json"), validPromotionVerification()); err != nil {
+		t.Fatal(err)
+	}
+	return repoRoot, artifactRoot, taskPackPath, stepID
+}
+
 func TestCompileExecutableContractRejectsInvalidContractsWithoutPartialArtifacts(t *testing.T) {
 	tests := []struct {
 		name    string

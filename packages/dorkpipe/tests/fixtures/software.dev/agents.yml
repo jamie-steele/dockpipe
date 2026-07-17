@@ -1,0 +1,5 @@
+agents:
+  fixture_worker:
+    role: fixture writer
+    constraints:
+      - use only fixture-owned evidence
