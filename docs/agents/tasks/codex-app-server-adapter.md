@@ -16,9 +16,21 @@ Pipeon and future top-level DockPipe orchestrators use host codex exec, buffered
 
 ### Decision status
 
-**Prototype before deciding.** Canonical research: docs/research/codex-app-server-top-level-orchestrators-2026-07.md.
+**Prototype successful; migration decision pending.** CAS-01 through CAS-13 proved the constrained,
+package-owned adapter boundary through controlled integration. CAS-14 is the first feature-gated
+Pipeon migration and requires a separate maintainer decision. Canonical research:
+`docs/research/codex-app-server-top-level-orchestrators-2026-07.md`.
 
 Repository has no ADR convention; this is the proposed-decision record, not an accepted ADR.
+
+### Current state
+
+- The protocol spike, provider-neutral contracts, supervision, lifecycle, approvals, cancellation,
+  recovery, persistence, audit, security fixtures, and controlled Codex integration are complete.
+- The boundary remains package-local and unused by production consumers. No Pipeon migration,
+  adapter selection, fallback policy, operations rollout, or default-provider change has started.
+- The next review is the CAS-14 go/no-go decision, including feature-flag scope, fallback, rollback,
+  user-visible recovery, and acceptance evidence for the first Pipeon consumer.
 
 ### Scope
 
@@ -66,14 +78,13 @@ Repository has no ADR convention; this is the proposed-decision record, not an a
 
 Rollback disables adapter for new sessions. Existing App Server sessions become Disconnected until explicitly reconciled; never replay active turn. Retain audit records and offer user-guided resume/fork only after recovery checks.
 
-### Dependencies and unresolved questions
+### Remaining migration decisions
 
-- Stable-enough schema/capabilities for selected Codex version.
-- Genuine approval-producing sandbox test on Windows and supported hosts.
-- Effective-config/policy inspection needed to prove resumed sandbox equivalence.
-- Existing ChatGPT auth reuse without adapter credential access.
-- Event retention/redaction and user-visible reconnect policy.
-- Maintainer decision on ADR process and default provider.
+- Whether CAS-14 should begin and which single Pipeon direct-session path is the opt-in consumer.
+- Feature-flag ownership, adapter selection, CLI fallback, and rollback/reconciliation behavior.
+- Operations documentation, event retention, and user-visible reconnect/recovery policy.
+- Cross-platform controlled evidence beyond the completed Windows integration harness.
+- Maintainer decision on ADR process and any eventual default-provider change.
 
 ### Epic acceptance criteria
 

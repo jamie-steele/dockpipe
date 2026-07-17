@@ -13,6 +13,20 @@ Pipeon startup should prefer already-materialized state: repo bind mounts, stabl
 `bin/.dockpipe`, cached Go/npm/Cargo outputs, existing Docker images, existing containers when safe,
 and already-pulled Ollama models.
 
+## Current State Summary
+
+- Immediate startup optimizations skip cached Ollama pulls, hide non-interactive Windows startup
+  processes, reuse valid host bridges, and retain package-owned build caches and bind mounts.
+- DorkPipe now owns the shared provider-pool catalog, lifecycle, status/chat CLI and MCP operations,
+  package orchestrator workflow, and Pipeon consumer path.
+- Claude direct prompts use a session/model-affine in-container stream worker with a one-shot fallback;
+  measured repeated turns proved the intended low-latency reuse path.
+- Workflow provider-pool leasing is implemented with normalized events, bounded queue/cancel behavior,
+  worker reuse, and generic workflow consumption.
+- Remaining work is release and product hardening: prebuilt image publication/selection, richer lease
+  detail in status and Pipeon, deferred explicit session scope and live workflow smoke, and measured
+  Pipeon launch budgets.
+
 ## Current Startup Cost Centers
 
 - Branded `dockpipe-code-server:latest` image refresh: packaging VSIX files and rebuilding the image
@@ -70,30 +84,24 @@ Desired steady-state model:
   DAGs, or isolated edits, it escalates into YAML-backed DorkPipe workflows; the top-level direct
   chat providers do not become the workflow engine.
 
-Current gap:
+Historical gap resolved by the stream-worker implementation recorded below:
 
-- Claude direct chat currently routes through the guarded DockPipe workflow boundary per prompt. That
-  preserves the resolver/auth/container boundary, but it creates a container, runs one prompt, returns,
-  and tears down. This is correct for cold workflow execution but too slow for a top-level chat lane.
+- Claude direct chat previously routed through the guarded DockPipe workflow boundary per prompt. That
+  preserved the resolver/auth/container boundary, but created a container, ran one prompt, returned,
+  and tore down. It was correct for cold workflow execution but too slow for a top-level chat lane.
 
-Implementation direction:
+Implemented direction:
 
-- Add package-owned warm provider services or worker processes under the DorkPipe package/provider
-  layer. Pipeon composes those services into its stack as one consumer.
-- Mount the same repo/workspace bind and resolver auth/config paths that the one-shot `claude`
-  workflow uses today.
-- Expose a small guarded request API through the existing host MCP bridge or the isolated DorkPipe MCP
-  boundary. The bridge should preserve the same approval/auth checks and never expose raw unrestricted
-  host execution.
-- Do not assume the provider CLI will discover DockPipe/MCP from a bind mount. The pool manager must
-  inject the explicit contract: provider identity, workspace path, allowed tools, host-bridge
-  endpoint if permitted, workflow escalation rules, and approval boundaries.
-- Keep provider availability visible in the Pipeon dropdown: disabled until the corresponding host or
-  stack lane is present/authenticated, with an actionable setup message.
-- Add coarse latency metrics for direct-provider calls: queue time, provider command time, container
-  startup time if any, and total elapsed time. A warm direct prompt should make cold-start costs
-  obvious if they regress.
-- Keep cold workflow execution available for agentic runs, fan-outs, one-off isolated worktrees, and
+- Package-owned warm provider workers live under the DorkPipe package/provider layer, with Pipeon as
+  one consumer.
+- Workers receive the repo/workspace bind, resolver auth/config paths, and explicit provider,
+  workspace, tool, bridge, escalation, and approval contract.
+- The guarded request path uses the shared host MCP boundary without exposing raw unrestricted host
+  execution.
+- Pipeon provider availability reflects whether the corresponding host or stack lane is ready and
+  authenticated.
+- Direct-provider results include queue, status/readiness, worker, provider-turn, and total timing.
+- Cold workflow execution remains available for agentic runs, fan-outs, isolated worktrees, and
   release/CI use cases.
 
 ### Pool Contract
@@ -118,7 +126,7 @@ Pool model:
 
 ### Provider Stream Worker Contract
 
-The next provider-pool milestone is a generic stream-worker contract. The public contract must stay
+The provider-pool stream-worker milestone established a generic contract. The public contract stays
 provider-neutral and DorkPipe-owned; Claude is the first implementation because its CLI exposes a
 working stream JSON mode, not because the pool API should become Claude-specific.
 
@@ -492,13 +500,13 @@ Non-goals:
 
 ## CLI Orchestrator Workflow
 
-Add a simpler CLI entrypoint for core development and non-Pipeon users. It should exercise the same
-DorkPipe provider-pool contract as Pipeon direct chat, so the CLI path becomes the reference
-implementation rather than a second routing system.
+The package-owned CLI orchestrator is implemented for core development and non-Pipeon users. It
+exercises the same DorkPipe provider-pool contract as Pipeon direct chat, so the CLI path remains the
+reference implementation rather than a second routing system.
 
-Desired workflow shape:
+Implemented workflow shape:
 
-- Package-owned workflow, likely under the DorkPipe package, for a direct orchestrator prompt.
+- Package-owned DorkPipe workflow for a direct orchestrator prompt.
 - Inputs include prompt text, workspace path/session identity when needed, provider override, model
   override, budget/approval mode, and optional workflow-escalation policy.
 - Default provider resolves from DorkPipe provider-pool config. Inline CLI override can select
@@ -573,7 +581,7 @@ Capture coarse timing around:
 The launch script should emit enough timing to explain slow starts without forcing users to inspect
 Docker logs manually.
 
-## Open Questions
+## Remaining Decisions
 
 - Which image variants are worth publishing for the first release: CPU-only, NVIDIA GPU, or one
   runtime-configurable image?
@@ -583,8 +591,6 @@ Docker logs manually.
 - How should offline installs seed images: tarball import, local registry, or documented `docker pull`
   cache warming?
 - What is the acceptable first-launch target on Windows with Docker Desktop already running?
-- Should the warm Claude lane be a long-running container service with an HTTP/MCP shim, or a host
-  bridge-managed daemon that still uses the resolver container as its isolation boundary?
 - Can Codex eventually use a persistent protocol/MCP mode for lower latency, or is `codex exec
   resume` the right direct lane until the CLI exposes a stable daemon interface?
 
@@ -593,7 +599,8 @@ Docker logs manually.
 In progress. Launch now skips cached Ollama model pulls and hides non-interactive Windows PowerShell
 startup calls. Prebuilt image generation is documented here as the larger release-engineering item.
 
-First vertical slice for shared DorkPipe provider pools landed:
+The first vertical slice for shared DorkPipe provider pools landed and was subsequently extended by
+the stream-worker and workflow-leasing passes recorded below:
 
 - DorkPipe now owns a package-level provider-pool catalog/config for `ollama`, `claude`, and `codex`.
 - DorkPipe exposes shared provider-pool catalog/status/chat operations through its CLI and host MCP
@@ -680,11 +687,11 @@ Follow-up stream-worker experiment:
   `time_to_request_ms=22293`, `ttft_ms=28550`, and `duration_ms=28571`; the second turn in the same
   Claude process returned `second-turn` with `time_to_request_ms=44`, `ttft_ms=2657`, and
   `duration_ms=2731`.
-- Next implementation direction: keep the existing DorkPipe provider-pool/MCP contract as the public
-  surface, but replace the sleeping guarded Claude container plus per-prompt `docker exec claude -p`
-  with a session-affine in-container Claude stream process managed by DorkPipe. MCP can keep the
-  provider session addressable and route prompts, but the latency win comes from keeping the Claude
-  stream process alive behind that contract.
+- Experiment conclusion at the time: keep the existing DorkPipe provider-pool/MCP contract as the
+  public surface, but replace the sleeping guarded Claude container plus per-prompt
+  `docker exec claude -p` with a session-affine in-container Claude stream process managed by
+  DorkPipe. MCP can keep the provider session addressable and route prompts, but the latency win
+  comes from keeping the Claude stream process alive behind that contract.
 
 Stream-worker implementation pass:
 
