@@ -38,6 +38,9 @@ tasks:
   - id: TASK-014
     topic: Native Dev Container discovery and lifecycle for Pipeon and CLI
     path: docs/agents/tasks/native-devcontainer-support.md
+  - id: TASK-015
+    topic: Backlog-driven remote tasks and multi-machine execution
+    path: docs/agents/tasks/backlog-driven-remote-tasks.md
 
 maintenance:
   - Treat this YAML file as the AI/backlog entrypoint.

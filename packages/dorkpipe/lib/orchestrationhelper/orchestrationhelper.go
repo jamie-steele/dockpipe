@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"math"
 	"os"
 	"os/exec"
@@ -1041,17 +1042,15 @@ func emitVerifyHeuristics(mergePath, tasksDir, issuesJSON string, stdout io.Writ
 func emitVerifyApplyCoherence(rootPath, artifactRootPath, planPath, issuesJSON string, stdout io.Writer) error {
 	plan := readJSONMap(planPath)
 	applyCfg := mapValue(plan["apply"])
+	issues := []string{}
+	_ = json.Unmarshal([]byte(issuesJSON), &issues)
 	outputs, err := resolveApplyOutputs(rootPath, artifactRootPath, applyCfg)
 	if err != nil {
-		issues := []string{}
-		_ = json.Unmarshal([]byte(issuesJSON), &issues)
 		issues = append(issues, err.Error())
-		fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote("review"))
+		fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote("fail"))
 		fmt.Fprintf(stdout, "VERIFY_APPLY_ISSUES=%s\n", shellQuote(mustJSON(issues, []string{})))
 		return nil
 	}
-	issues := []string{}
-	_ = json.Unmarshal([]byte(issuesJSON), &issues)
 	if len(outputs) == 0 {
 		fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote("pass"))
 		fmt.Fprintf(stdout, "VERIFY_APPLY_ISSUES=%s\n", shellQuote(mustJSON(issues, []string{})))
@@ -1060,25 +1059,27 @@ func emitVerifyApplyCoherence(rootPath, artifactRootPath, planPath, issuesJSON s
 	stage, err := stageApplyOutputs(rootPath, artifactRootPath, outputs)
 	if err != nil {
 		issues = append(issues, err.Error())
-		fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote("review"))
+		fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote("fail"))
 		fmt.Fprintf(stdout, "VERIFY_APPLY_ISSUES=%s\n", shellQuote(mustJSON(issues, []string{})))
 		return nil
 	}
 	defer os.RemoveAll(stage.TempRoot)
+	coherenceIssues := []string{}
 	for _, item := range stage.Files {
 		switch strings.ToLower(filepath.Ext(item.TargetPath)) {
 		case ".md":
-			issues = append(issues, verifyMarkdownTargets(stage, item)...)
+			coherenceIssues = append(coherenceIssues, verifyMarkdownTargets(stage, item)...)
 			if strings.EqualFold(filepath.Base(item.TargetPath), "validation.md") {
-				issues = append(issues, verifyValidationClaims(stage, item)...)
+				coherenceIssues = append(coherenceIssues, verifyValidationClaims(stage, item)...)
 			}
 		case ".yml", ".yaml":
-			issues = append(issues, verifyYAMLTargets(stage, item)...)
+			coherenceIssues = append(coherenceIssues, verifyYAMLTargets(stage, item)...)
 		}
 	}
+	issues = append(issues, coherenceIssues...)
 	status := "pass"
-	if len(issues) > 0 {
-		status = "review"
+	if len(coherenceIssues) > 0 {
+		status = "fail"
 	}
 	fmt.Fprintf(stdout, "VERIFY_APPLY_STATUS=%s\n", shellQuote(status))
 	fmt.Fprintf(stdout, "VERIFY_APPLY_ISSUES=%s\n", shellQuote(mustJSON(issues, []string{})))
@@ -2686,6 +2687,38 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			if err != nil {
 				return err
 			}
+			localLane := boolAny(laneSelection["local"])
+			promptBrief := map[string]any{}
+			promptBriefText := ""
+			if localLane {
+				promptBrief, promptBriefText, err = materializePromptBrief(taskDir, resolvedContextPaths, stringValue(laneSelection["provider"]), root, artifactRoot, sharedDir, inlineInputContext, inlineInputMaxBytes, inlineInputTotalMaxBytes)
+				if err != nil {
+					return fmt.Errorf("%s: task %q prompt brief: %w", workflowPath, taskID, err)
+				}
+			}
+			sourcePacket := map[string]any{}
+			sourcePacketText := ""
+			if localLane {
+				sourceRoots, err := resolveScopeList(listValue(mapValue(task["context"])["source_roots"]))
+				if err != nil {
+					return err
+				}
+				if len(sourceRoots) > 0 {
+					sourcePacketText, err = renderSourcePacket(root, sourceRoots, taskAccess["read"], taskAccess["deny"], env["DOCKPIPE_CONTAINER_MOUNTS"])
+					if err != nil {
+						return fmt.Errorf("%s: task %q source packet: %w", workflowPath, taskID, err)
+					}
+					sourcePacketPath := filepath.Join(taskDir, "source-packet.md")
+					if err := os.WriteFile(sourcePacketPath, []byte(sourcePacketText), 0o644); err != nil {
+						return err
+					}
+					sourcePacket = map[string]any{
+						"path":         filepath.ToSlash(filepath.Join("tasks", taskID, "source-packet.md")),
+						"source_roots": sourceRoots,
+						"authority":    "access.read",
+					}
+				}
+			}
 			dependsOn := []string{}
 			for _, depRaw := range listValue(task["depends_on"]) {
 				dep := fmt.Sprint(depRaw)
@@ -2709,6 +2742,8 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 				"brief":                   stringValue(task["brief"]),
 				"context":                 mapValue(task["context"]),
 				"context_paths":           resolvedContextPaths,
+				"prompt_brief":            promptBrief,
+				"source_packet":           sourcePacket,
 				"constraints":             listValue(task["constraints"]),
 				"expected_output":         stringValue(task["expected_output"]),
 				"output_path":             inferTaskOutputPath(task),
@@ -2807,7 +2842,10 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			if len(outputContract) > 0 {
 				prompt = strings.Join(outputContract, "\n") + "\n\n" + strings.TrimLeft(prompt, "\n")
 			}
-			localLane := boolAny(laneSelection["local"])
+			briefingContext := promptBriefText
+			if !localLane {
+				briefingContext = renderBriefingContext(resolvedContextPaths, stringValue(laneSelection["provider"]), root, artifactRoot, sharedDir, inlineInputContext, inlineInputMaxBytes, inlineInputTotalMaxBytes)
+			}
 			prefix := []string{}
 			if followUpMode && !reuseExisting {
 				followUpLines := []string{
@@ -2855,7 +2893,6 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 					prefix = append(prefix, "", "AGENTS.md context:", "", strings.TrimRight(string(rawAgents), "\n"))
 				}
 			}
-			briefingContext := renderBriefingContext(resolvedContextPaths, stringValue(laneSelection["provider"]), root, artifactRoot, sharedDir, inlineInputContext, inlineInputMaxBytes, inlineInputTotalMaxBytes)
 			if briefingContext != "" && !localLane {
 				prefix = append(prefix, "", strings.TrimRight(briefingContext, "\n"))
 			}
@@ -2868,6 +2905,9 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			}
 			if briefingContext != "" && localLane {
 				prompt = strings.TrimRight(prompt, "\n") + "\n\nReference context excerpts:\n\n" + strings.TrimRight(briefingContext, "\n") + "\n"
+			}
+			if localLane && sourcePacketText != "" {
+				prompt = strings.TrimRight(prompt, "\n") + "\n\nDeterministic source packet:\n\n" + strings.TrimRight(sourcePacketText, "\n") + "\n"
 			}
 			if err := os.WriteFile(filepath.Join(taskDir, "prompt.md"), []byte(prompt), 0o644); err != nil {
 				return err
@@ -4847,6 +4887,214 @@ func renderShared(entry map[string]any, root string, env map[string]string) (str
 	}
 }
 
+const (
+	sourcePacketMaxFiles     = 32
+	sourcePacketMaxFileBytes = 1200
+	sourcePacketMaxBytes     = 6000
+)
+
+var sourcePacketExtensions = map[string]bool{
+	".bash": true, ".c": true, ".cfg": true, ".conf": true, ".cpp": true, ".cs": true,
+	".css": true, ".go": true, ".h": true, ".hcl": true, ".hpp": true, ".html": true,
+	".ini": true, ".java": true, ".js": true, ".json": true, ".jsx": true, ".md": true,
+	".mjs": true, ".pipe": true, ".ps1": true, ".py": true, ".rb": true, ".rs": true,
+	".scss": true, ".sh": true, ".sql": true, ".toml": true, ".ts": true, ".tsx": true,
+	".txt": true, ".xml": true, ".yaml": true, ".yml": true,
+}
+
+var sourcePacketIgnoredDirs = map[string]bool{
+	".dockpipe": true, ".git": true, ".staging": true, "bin": true, "build": true,
+	"coverage": true, "dist": true, "node_modules": true,
+}
+
+// renderSourcePacket produces a bounded, deterministic evidence artifact for a local lane. Source
+// roots are ordered by the task; each root is walked lexically and may only yield text files that are
+// within access.read and outside access.deny. Guest roots resolve through declared mounts before any
+// filesystem walk, so a packet cannot silently widen a worker's declared source authority.
+func renderSourcePacket(root string, sourceRoots, readRoots, denyRoots []string, mountEnv string) (string, error) {
+	if len(readRoots) == 0 {
+		return "", errors.New("context.source_roots requires access.read for local source packets")
+	}
+	resolvedReads, err := resolveSourcePacketPaths(root, readRoots, mountEnv)
+	if err != nil {
+		return "", fmt.Errorf("resolve access.read: %w", err)
+	}
+	resolvedDenies, err := resolveSourcePacketPaths(root, denyRoots, mountEnv)
+	if err != nil {
+		return "", fmt.Errorf("resolve access.deny: %w", err)
+	}
+	resolvedSources, err := resolveSourcePacketPaths(root, sourceRoots, mountEnv)
+	if err != nil {
+		return "", fmt.Errorf("resolve context.source_roots: %w", err)
+	}
+	for _, source := range resolvedSources {
+		if !pathWithinAny(source, resolvedReads) {
+			return "", fmt.Errorf("source root is outside access.read: %s", source)
+		}
+	}
+
+	files := []string{}
+	seen := map[string]bool{}
+	for _, source := range resolvedSources {
+		if len(files) >= sourcePacketMaxFiles {
+			break
+		}
+		walkErr := filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
+			if walkErr != nil {
+				return walkErr
+			}
+			if pathWithinAny(path, resolvedDenies) {
+				if entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if entry.IsDir() {
+				if sourcePacketIgnoredDirs[strings.ToLower(entry.Name())] {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if entry.Type()&os.ModeSymlink != 0 || !sourcePacketExtensions[strings.ToLower(filepath.Ext(entry.Name()))] || !pathWithinAny(path, resolvedReads) {
+				return nil
+			}
+			if !seen[path] {
+				seen[path] = true
+				files = append(files, path)
+			}
+			if len(files) >= sourcePacketMaxFiles {
+				return filepath.SkipDir
+			}
+			return nil
+		})
+		if walkErr != nil {
+			return "", walkErr
+		}
+	}
+
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	lines := []string{
+		"# Deterministic Source Packet",
+		"",
+		"- Authority: read-only evidence from `access.read`; paths under `access.deny` are excluded.",
+		fmt.Sprintf("- Bounds: at most %d text files, %d bytes per file, and %d source bytes total.", sourcePacketMaxFiles, sourcePacketMaxFileBytes, sourcePacketMaxBytes),
+		"- Ordering: declared source-root order, then lexical path order within each root.",
+		"- Text filter: source and documentation extensions only; generated/cache directories and symlinks are excluded.",
+		"",
+		"## Source roots",
+		"",
+	}
+	for _, source := range resolvedSources {
+		lines = append(lines, "- `"+sourcePacketDisplayPath(rootAbs, source)+"` (allowed by `access.read`)")
+	}
+	remaining := sourcePacketMaxBytes
+	included := 0
+	for _, path := range files {
+		if remaining <= 0 {
+			break
+		}
+		content, err := readSourcePacketFile(path, minInt(sourcePacketMaxFileBytes, remaining))
+		if err != nil {
+			return "", err
+		}
+		if len(content) == 0 || !isSourcePacketText(content) {
+			continue
+		}
+		content = truncateUTF8(content, minInt(sourcePacketMaxFileBytes, remaining))
+		remaining -= len(content)
+		included++
+		text := strings.ReplaceAll(strings.TrimRight(string(content), "\n"), "```", "``\\`")
+		lines = append(lines, "", "## "+sourcePacketDisplayPath(rootAbs, path), "", "```text", text, "```")
+	}
+	if included == 0 {
+		lines = append(lines, "", "No readable text files matched the declared roots and packet policy.")
+	} else if remaining == 0 || len(files) >= sourcePacketMaxFiles {
+		lines = append(lines, "", "Packet bounds reached; additional allowed files were not included.")
+	}
+	return strings.Join(lines, "\n") + "\n", nil
+}
+
+func resolveSourcePacketPaths(root string, paths []string, mountEnv string) ([]string, error) {
+	resolved := []string{}
+	seen := map[string]bool{}
+	for _, raw := range paths {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		path, err := resolveSourcePacketPath(root, value, mountEnv)
+		if err != nil {
+			return nil, err
+		}
+		if !seen[path] {
+			seen[path] = true
+			resolved = append(resolved, path)
+		}
+	}
+	return resolved, nil
+}
+
+func resolveSourcePacketPath(root, value, mountEnv string) (string, error) {
+	if strings.HasPrefix(filepath.ToSlash(value), "/") {
+		if path, _, ok := resolveGuestMountTarget(value, mountEnv); ok {
+			return path, nil
+		}
+		if path, _, ok := resolvePrimaryWorkTarget(root, value); ok {
+			return path, nil
+		}
+	}
+	path := value
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(root, path)
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(abs); err != nil {
+		return "", err
+	}
+	return abs, nil
+}
+
+func pathWithinAny(path string, roots []string) bool {
+	for _, root := range roots {
+		if withinRoot(root, path) {
+			return true
+		}
+	}
+	return false
+}
+
+func sourcePacketDisplayPath(root, path string) string {
+	rel, err := filepath.Rel(root, path)
+	if err == nil && !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel) {
+		return filepath.ToSlash(rel)
+	}
+	return filepath.ToSlash(path)
+}
+
+func readSourcePacketFile(path string, limit int) ([]byte, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	return io.ReadAll(io.LimitReader(file, int64(limit)))
+}
+
+func isSourcePacketText(content []byte) bool {
+	for _, value := range content {
+		if value == 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func runCommandString(root string, env map[string]string, name string, args ...string) (string, error) {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = root
@@ -4969,6 +5217,25 @@ func renderBriefingContext(contextPaths []string, provider, root, artifactRoot, 
 		sections = append(sections, "", "Local model lane guidance:", "- Prefer direct claims from the excerpts over broad background knowledge.", "- If the excerpts do not prove a point, mark it as uncertain instead of filling the gap.", "- Keep the answer short and concrete so the merge step can compare it against stronger lanes.")
 	}
 	return strings.Join(sections, "\n") + "\n"
+}
+
+// materializePromptBrief keeps the bounded context assembled for a local lane as a run artifact as
+// well as prompt evidence. It reuses the same deterministic path ordering and byte limits as inline
+// briefing context, so it never creates a durable normalized copy of repository documentation.
+func materializePromptBrief(taskDir string, contextPaths []string, provider, root, artifactRoot, sharedDir string, enabled bool, maxBytes, totalMaxBytes int) (map[string]any, string, error) {
+	text := renderBriefingContext(contextPaths, provider, root, artifactRoot, sharedDir, enabled, maxBytes, totalMaxBytes)
+	if text == "" {
+		return map[string]any{}, "", nil
+	}
+	path := filepath.Join(taskDir, "prompt-brief.md")
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		return nil, "", err
+	}
+	return map[string]any{
+		"path":          filepath.ToSlash(filepath.Join("tasks", filepath.Base(taskDir), "prompt-brief.md")),
+		"context_paths": contextPaths,
+		"authority":     "context briefing paths",
+	}, text, nil
 }
 
 func resolveDockpipeCommand(root string, env map[string]string) string {

@@ -208,6 +208,20 @@ Those packets can then feed local models cheaply without pretending local lanes 
 discovery. Until that exists, broad source discovery should use a tool-capable worker or a
 deterministic shared collector artifact.
 
+Local lanes now materialize a `tasks/<task-id>/source-packet.md` when the task declares
+`context.source_roots`. The packet is package-owned, bounded, and deterministic: it resolves `/work`
+and declared external mounts on the host, accepts only roots inside `access.read`, excludes
+`access.deny`, cache/generated directories, symlinks, and non-text files, and is appended to the
+local prompt as evidence. A local task with source roots but no readable access fails during planning
+instead of silently broadening discovery.
+
+Local/custom lanes also materialize `tasks/<task-id>/prompt-brief.md` from their declared
+`context.required_artifacts` and `context.seed_paths` before prompt assembly. It reuses the existing
+deterministic ordering and configured inline-context byte limits, is recorded as `prompt_brief` in
+`task.json`, and is appended to the local prompt as bounded evidence. The file lives only in the run
+artifact root; it is not a durable normalized copy of repository documentation. Missing, directory,
+or disabled context paths simply contribute no excerpt.
+
 Host-local capability hints can be supplied explicitly when needed:
 
 - `DORKPIPE_ORCH_HOST_MEMORY_GB`
@@ -298,8 +312,10 @@ diffs. Workflows can either declare explicit `apply.outputs` entries or declare 
 apply set from `tasks/*/materialized/*`, enforces that the required artifact paths exist, and then
 applies the whole inferred bundle under the target root. A `verify.status` of `review` does not
 block workspace apply; `apply/result.json` records `requires_human_review: true` and
-`publish_allowed: false`. A failed verification still blocks apply unless explicitly overridden for
-debugging. Publish, merge, or sync to a durable branch remains a separate human-governed boundary.
+`publish_allowed: false`. Deterministic apply-coherence failures (missing sources, broken markdown
+or YAML references, and contradictory validation claims) are `fail` and block writes. A failed
+verification still blocks apply unless explicitly overridden for debugging. Publish, merge, or sync
+to a durable branch remains a separate human-governed boundary.
 
 ## Cloud budget primitive
 

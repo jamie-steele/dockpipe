@@ -38,10 +38,10 @@ eval "$("$(dorkpipe_orchestrate_helper_bin)" verify-apply-coherence "${ROOT}" "$
 if [[ "${VERIFY_APPLY_STATUS:-pass}" != "pass" ]]; then
   status="${VERIFY_APPLY_STATUS}"
   issues="${VERIFY_APPLY_ISSUES:-${issues}}"
-  next_action="human review: staged apply outputs contain broken links, bad references, or contradictory validation claims"
+  next_action="repair staged apply outputs: broken links, bad references, and contradictory validation claims block apply"
 fi
 
-if [[ -f "${DORKPIPE_ORCH_HALT_JSON}" ]]; then
+if [[ -f "${DORKPIPE_ORCH_HALT_JSON}" && "${status}" != "fail" ]]; then
   status="review"
   issues='["cloud budget halt triggered during orchestration; review cloud-usage.json and halt.json before resuming cloud workers"]'
   next_action="human review of cloud budget halt before any further cloud worker execution"

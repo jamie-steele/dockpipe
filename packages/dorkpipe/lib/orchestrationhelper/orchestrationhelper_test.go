@@ -89,6 +89,112 @@ func TestRenderExecutionLanePromptContextIncludesSelectionAndPolicy(t *testing.T
 	}
 }
 
+func TestRenderSourcePacketUsesOnlyAllowedTextEvidence(t *testing.T) {
+	root := t.TempDir()
+	write := func(rel, content string) {
+		t.Helper()
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("docs/a.md", "allowed A\n")
+	write("docs/z.go", "package docs\n")
+	write("secrets/hidden.md", "do not expose\n")
+	write(".git/config", "ignored\n")
+	write("docs/image.png", "\x00binary")
+
+	packet, err := renderSourcePacket(root, []string{"."}, []string{"."}, []string{"secrets"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"docs/a.md", "allowed A", "docs/z.go", "package docs", "access.read"} {
+		if !strings.Contains(packet, want) {
+			t.Fatalf("packet missing %q:\n%s", want, packet)
+		}
+	}
+	for _, forbidden := range []string{"hidden.md", "do not expose", ".git/config", "image.png"} {
+		if strings.Contains(packet, forbidden) {
+			t.Fatalf("packet leaked %q:\n%s", forbidden, packet)
+		}
+	}
+}
+
+func TestRenderSourcePacketRejectsRootOutsideReadAccess(t *testing.T) {
+	root := t.TempDir()
+	for _, rel := range []string{"allowed/a.md", "outside/b.md"} {
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("evidence\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, err := renderSourcePacket(root, []string{"outside"}, []string{"allowed"}, nil, "")
+	if err == nil || !strings.Contains(err.Error(), "outside access.read") {
+		t.Fatalf("expected access failure, got %v", err)
+	}
+}
+
+func TestMaterializePromptBriefPersistsBoundedContextForLocalLane(t *testing.T) {
+	root := t.TempDir()
+	taskDir := filepath.Join(root, "artifacts", "tasks", "inventory")
+	for rel, content := range map[string]string{
+		"docs/z.md": "z evidence\n",
+		"docs/a.md": "a evidence that is longer than the configured per-file limit\n",
+	} {
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(taskDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	metadata, brief, err := materializePromptBrief(taskDir, []string{"docs/z.md", "docs/a.md"}, "ollama", root, filepath.Join(root, "artifacts"), filepath.Join(root, "artifacts", "shared"), true, 12, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := stringValue(metadata["path"]); got != "tasks/inventory/prompt-brief.md" {
+		t.Fatalf("brief path = %q", got)
+	}
+	if !strings.Contains(brief, "### docs/a.md") || strings.Index(brief, "### docs/a.md") > strings.Index(brief, "### docs/z.md") {
+		t.Fatalf("brief ordering is not deterministic:\n%s", brief)
+	}
+	if !strings.Contains(brief, "[truncated]") || !strings.Contains(brief, "Local model lane guidance:") {
+		t.Fatalf("brief did not preserve bounded local guidance:\n%s", brief)
+	}
+	persisted, err := os.ReadFile(filepath.Join(taskDir, "prompt-brief.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(persisted) != brief {
+		t.Fatalf("persisted brief differs from prompt evidence")
+	}
+}
+
+func TestMaterializePromptBriefSkipsDisabledOrMissingContext(t *testing.T) {
+	taskDir := t.TempDir()
+	metadata, brief, err := materializePromptBrief(taskDir, []string{"missing.md"}, "ollama", taskDir, filepath.Join(taskDir, "artifacts"), filepath.Join(taskDir, "shared"), false, 100, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(metadata) != 0 || brief != "" {
+		t.Fatalf("disabled context should not materialize a brief: %#v %q", metadata, brief)
+	}
+	if _, err := os.Stat(filepath.Join(taskDir, "prompt-brief.md")); !os.IsNotExist(err) {
+		t.Fatalf("disabled context unexpectedly wrote a brief: %v", err)
+	}
+}
+
 func TestApplyTaskWorkerProfileDefaultsToPrefer(t *testing.T) {
 	task, err := applyTaskWorkerProfile(map[string]any{
 		"id":     "patch",
@@ -1044,13 +1150,39 @@ func TestEmitVerifyApplyCoherenceFlagsBrokenMarkdownAndYamlTargets(t *testing.T)
 		t.Fatal(err)
 	}
 	got := out.String()
-	if !strings.Contains(got, "VERIFY_APPLY_STATUS='review'") {
-		t.Fatalf("expected review status, got:\n%s", got)
+	if !strings.Contains(got, "VERIFY_APPLY_STATUS='fail'") {
+		t.Fatalf("expected fail status, got:\n%s", got)
 	}
 	for _, want := range []string{"markdown link target is missing", "yaml reference target is missing"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("expected %q in:\n%s", want, got)
 		}
+	}
+}
+
+func TestEmitVerifyApplyCoherencePreservesPriorReviewWithoutBlockingApply(t *testing.T) {
+	root := t.TempDir()
+	artifactRoot := filepath.Join(root, "artifacts")
+	if err := os.MkdirAll(filepath.Join(artifactRoot, "merge"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactRoot, "merge", "index.md"), []byte("# Valid\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	planPath := filepath.Join(artifactRoot, "plan.json")
+	if err := os.WriteFile(planPath, []byte(`{"apply":{"outputs":[{"source":"merge/index.md","path":"docs/index.md"}]}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	if err := emitVerifyApplyCoherence(root, artifactRoot, planPath, `["heuristic review"]`, &out); err != nil {
+		t.Fatal(err)
+	}
+	got := out.String()
+	if !strings.Contains(got, "VERIFY_APPLY_STATUS='pass'") {
+		t.Fatalf("expected pass status for valid staged output, got:\n%s", got)
+	}
+	if !strings.Contains(got, "heuristic review") {
+		t.Fatalf("expected inherited issue to be preserved, got:\n%s", got)
 	}
 }
 
