@@ -58,6 +58,122 @@ func TestLoadAgentsConfigUsesPackageAuthoringRoot(t *testing.T) {
 	}
 }
 
+func TestPlanOrchestrationPreservesApplyContract(t *testing.T) {
+	tests := []struct {
+		name              string
+		applyYAML         string
+		requireApproval   bool
+		wantOutputs       []map[string]string
+		wantTargetRoot    string
+		wantRequiredPaths []string
+	}{
+		{
+			name: "explicit and inferred fields",
+			applyYAML: `          require_approval: false
+          outputs:
+            - source: merge/summary.md
+              path: docs/summary.md
+          target_root: docs/generated
+          required_artifacts:
+            - overview.md
+            - decisions.md
+`,
+			requireApproval: false,
+			wantOutputs: []map[string]string{
+				{"source": "merge/summary.md", "path": "docs/summary.md"},
+			},
+			wantTargetRoot:    "docs/generated",
+			wantRequiredPaths: []string{"overview.md", "decisions.md"},
+		},
+		{
+			name: "inferred outputs only",
+			applyYAML: `          require_approval: true
+          target_root: docs/agents/brain
+          required_artifacts:
+            - index.md
+            - source-of-truth-rules.md
+            - repo-knowledge.md
+`,
+			requireApproval:   true,
+			wantTargetRoot:    "docs/agents/brain",
+			wantRequiredPaths: []string{"index.md", "source-of-truth-rules.md", "repo-knowledge.md"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			artifactRoot := filepath.Join(root, "artifacts")
+			sharedDir := filepath.Join(artifactRoot, "shared")
+			tasksDir := filepath.Join(artifactRoot, "tasks")
+			for _, dir := range []string{sharedDir, tasksDir} {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			workflowPath := filepath.Join(root, "config.yml")
+			workflow := `name: plan-apply-contract
+steps:
+  - id: orchestrate
+    agent:
+      include_agents_md: false
+      orchestration:
+        request:
+          text: Preserve the authored apply contract.
+        tasks:
+          - id: writer
+            goal: Produce one bounded output.
+            expected_output: A concise artifact.
+        apply:
+` + tt.applyYAML
+			if err := os.WriteFile(workflowPath, []byte(workflow), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			planPath := filepath.Join(artifactRoot, "plan.json")
+			env := map[string]string{
+				"ROOT":                                  root,
+				"DORKPIPE_ORCH_SHARED_DIR":              sharedDir,
+				"DORKPIPE_ORCH_TASKS_DIR":               tasksDir,
+				"DORKPIPE_ORCH_REQUEST_JSON":            filepath.Join(artifactRoot, "request.json"),
+				"DORKPIPE_ORCH_PLAN_JSON":               planPath,
+				"DORKPIPE_ORCH_GRAPH_JSON":              filepath.Join(artifactRoot, "task-graph.json"),
+				"DORKPIPE_ORCH_LANE_PLAN_JSON":          filepath.Join(artifactRoot, "lane-plan.json"),
+				"DORKPIPE_ORCH_MODEL_CATALOG":           filepath.Join(root, "missing-model-catalog.yml"),
+				"DORKPIPE_ORCH_BASELINE_POLICY":         filepath.Join(root, "missing-baseline-policy.yml"),
+				"DORKPIPE_ORCH_GLOBAL_TRAINING_METRICS": filepath.Join(root, "missing-training-metrics.jsonl"),
+				"DORKPIPE_ORCH_WORKFLOW":                "plan-apply-contract",
+				"DORKPIPE_ORCH_ROOT":                    artifactRoot,
+			}
+			if err := planOrchestration(workflowPath, "orchestrate", env); err != nil {
+				t.Fatal(err)
+			}
+
+			applyPlan := mapValue(readJSONMap(planPath)["apply"])
+			if got := boolAny(applyPlan["require_approval"]); got != tt.requireApproval {
+				t.Fatalf("apply.require_approval = %t, want %t", got, tt.requireApproval)
+			}
+			outputs := listValue(applyPlan["outputs"])
+			if len(outputs) != len(tt.wantOutputs) {
+				t.Fatalf("apply.outputs length = %d, want %d", len(outputs), len(tt.wantOutputs))
+			}
+			for index, want := range tt.wantOutputs {
+				got := mapValue(outputs[index])
+				if stringValue(got["source"]) != want["source"] || stringValue(got["path"]) != want["path"] {
+					t.Fatalf("apply.outputs[%d] = %#v, want %#v", index, got, want)
+				}
+			}
+			if got := stringValue(applyPlan["target_root"]); got != tt.wantTargetRoot {
+				t.Fatalf("apply.target_root = %q, want %q", got, tt.wantTargetRoot)
+			}
+			if got := stringList(applyPlan["required_artifacts"]); strings.Join(got, "\n") != strings.Join(tt.wantRequiredPaths, "\n") {
+				t.Fatalf("apply.required_artifacts = %#v, want %#v", got, tt.wantRequiredPaths)
+			}
+		})
+	}
+}
+
 func TestRenderExecutionLanePromptContextIncludesSelectionAndPolicy(t *testing.T) {
 	got := renderExecutionLanePromptContext(map[string]any{
 		"requested": "auto",

@@ -266,15 +266,14 @@ tasks before any planner worker runs, so a planner response cannot yet become a 
 task graph. The compiler must load the repo task-pack step, run and parse the bootstrap proposal,
 apply the precedence rules, and then materialize the executable graph.
 
-One existing apply handoff must also be repaired in that package slice: `planOrchestration` currently
-copies `apply.require_approval` and `apply.outputs` into `plan.json` but drops authored
-`apply.target_root` and `apply.required_artifacts`, even though downstream apply inference already
-consumes those fields. This is a package helper defect, not a reason to add schema fields.
+The package-helper apply handoff prerequisite completed on 2026-07-17: `planOrchestration` now
+preserves authored `apply.require_approval`, `apply.outputs`, `apply.target_root`, and ordered
+`apply.required_artifacts` in `plan.json`. Downstream inferred-apply behavior remains unchanged.
 
 ## Remaining Implementation Slices
 
-1. Add focused package tests for task-pack loading, step identity, precedence, authority narrowing,
-   graph validation, output floors, and the dropped inferred-apply fields.
+1. Next, add focused package tests for task-pack loading, step identity, precedence, authority
+   narrowing, graph validation, and output floors.
 2. Implement the DorkPipe task-pack loader and two-phase proposal compiler in package code and
    scripts, preserving the existing orchestration artifact contract.
 3. Add the package-owned `software.dev` workflow with hard policy, direct invocation variables or

@@ -2732,8 +2732,10 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 			"next_action_default": fallbackString(stringValue(verify["next_action_default"]), "human approval before treating orchestration output as final"),
 		},
 		"apply": map[string]any{
-			"require_approval": boolDefault(apply["require_approval"], true),
-			"outputs":          listValue(apply["outputs"]),
+			"require_approval":   boolDefault(apply["require_approval"], true),
+			"outputs":            listValue(apply["outputs"]),
+			"target_root":        stringValue(apply["target_root"]),
+			"required_artifacts": listValue(apply["required_artifacts"]),
 		},
 	}
 	if followUpMode {
