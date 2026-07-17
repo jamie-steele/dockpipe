@@ -10,6 +10,112 @@ import (
 	"testing"
 )
 
+func TestLoadTaskPackSelectsExactStepAgentDeclaration(t *testing.T) {
+	root := t.TempDir()
+	workflowPath := filepath.Join(root, "workflows", "software-dev", "config.yml")
+	if err := os.MkdirAll(filepath.Dir(workflowPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	workflow := `name: repo.software-dev
+steps:
+  - id: software_dev_preview
+    workflow: software.dev
+    package: dockpipeproject
+    agent:
+      orchestration:
+        request:
+          text: Do not select this step.
+  - id: software_dev
+    workflow: software.dev
+    package: dockpipeproject
+    vars:
+      IGNORED_BY_TASK_PACK_LOADER: "true"
+    agent:
+      startup_prompt: Apply this repo's source-of-truth rules.
+      include_agents_md: true
+      orchestration:
+        request:
+          text: Implement the bounded request.
+        plan:
+          goal: Produce a verified repo change.
+        tasks: []
+`
+	if err := os.WriteFile(workflowPath, []byte(workflow), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	agent, err := loadTaskPack(root, "workflows/software-dev/config.yml", "software_dev")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := stringValue(agent["startup_prompt"]); got != "Apply this repo's source-of-truth rules." {
+		t.Fatalf("startup_prompt = %q", got)
+	}
+	orchestration := mapValue(agent["orchestration"])
+	if got := stringValue(mapValue(orchestration["request"])["text"]); got != "Implement the bounded request." {
+		t.Fatalf("request.text = %q", got)
+	}
+	for _, excluded := range []string{"id", "workflow", "package", "vars"} {
+		if _, ok := agent[excluded]; ok {
+			t.Fatalf("selected task-pack agent unexpectedly includes step field %q", excluded)
+		}
+	}
+}
+
+func TestLoadTaskPackRejectsInvalidPathOrStepIdentity(t *testing.T) {
+	root := t.TempDir()
+	workflowPath := filepath.Join(root, "workflows", "task-pack.yml")
+	if err := os.MkdirAll(filepath.Dir(workflowPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	workflow := `name: repo.task-pack
+steps:
+  - id: valid
+    agent:
+      orchestration:
+        request:
+          text: Valid task pack.
+  - id: duplicate
+    agent:
+      orchestration: {}
+  - id: duplicate
+    agent:
+      orchestration: {}
+  - id: missing_orchestration
+    agent:
+      startup_prompt: Incomplete declaration.
+`
+	if err := os.WriteFile(workflowPath, []byte(workflow), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outsidePath := filepath.Join(filepath.Dir(root), "outside-task-pack.yml")
+
+	tests := []struct {
+		name    string
+		path    string
+		stepID  string
+		wantErr string
+	}{
+		{name: "empty path", path: "", stepID: "valid", wantErr: "task pack path is required"},
+		{name: "missing path", path: "workflows/missing.yml", stepID: "valid", wantErr: `task pack path "workflows/missing.yml" does not exist`},
+		{name: "absolute path", path: outsidePath, stepID: "valid", wantErr: fmt.Sprintf("task pack path %q must be relative to the consumer repo", outsidePath)},
+		{name: "escaping path", path: "../outside-task-pack.yml", stepID: "valid", wantErr: `task pack path "../outside-task-pack.yml" escapes the consumer repo`},
+		{name: "missing step id", path: "workflows/task-pack.yml", stepID: "", wantErr: `task pack step id is required for "workflows/task-pack.yml"`},
+		{name: "unknown step id", path: "workflows/task-pack.yml", stepID: "unknown", wantErr: `workflows/task-pack.yml: task pack step id "unknown" was not found`},
+		{name: "ambiguous step id", path: "workflows/task-pack.yml", stepID: "duplicate", wantErr: `workflows/task-pack.yml: task pack step id "duplicate" is ambiguous (2 matches)`},
+		{name: "missing orchestration", path: "workflows/task-pack.yml", stepID: "missing_orchestration", wantErr: `workflows/task-pack.yml: task pack step id "missing_orchestration" has no agent.orchestration declaration`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := loadTaskPack(root, tt.path, tt.stepID)
+			if err == nil || err.Error() != tt.wantErr {
+				t.Fatalf("loadTaskPack() error = %v, want %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestLoadAgentsConfigUsesNearestWorkflowParentAndSiblingOverride(t *testing.T) {
 	root := t.TempDir()
 	workflowPath := filepath.Join(root, "workflows", "agent", "review", "config.yml")

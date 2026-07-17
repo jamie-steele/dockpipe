@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"dockpipe/src/lib/infrastructure"
 	"gopkg.in/yaml.v3"
 )
 
@@ -338,6 +339,98 @@ func taskIDFromWorkflow(path, stepID string) (string, error) {
 		return stringValue(mapValue(step["agent"])["task_id"]), nil
 	}
 	return "", nil
+}
+
+func loadTaskPack(repoRoot, taskPackPath, stepID string) (map[string]any, error) {
+	displayPath := strings.TrimSpace(taskPackPath)
+	if displayPath == "" {
+		return nil, errors.New("task pack path is required")
+	}
+	if strings.TrimSpace(repoRoot) == "" {
+		return nil, fmt.Errorf("task pack path %q cannot be loaded without a consumer repo root", displayPath)
+	}
+	if filepath.IsAbs(displayPath) || filepath.VolumeName(displayPath) != "" {
+		return nil, fmt.Errorf("task pack path %q must be relative to the consumer repo", displayPath)
+	}
+
+	rootPath, err := filepath.Abs(repoRoot)
+	if err != nil {
+		return nil, fmt.Errorf("task pack path %q has an invalid consumer repo root: %w", displayPath, err)
+	}
+	candidatePath, err := filepath.Abs(filepath.Join(rootPath, filepath.Clean(filepath.FromSlash(displayPath))))
+	if err != nil || !withinRoot(rootPath, candidatePath) {
+		return nil, fmt.Errorf("task pack path %q escapes the consumer repo", displayPath)
+	}
+	info, err := os.Stat(candidatePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("task pack path %q does not exist", displayPath)
+		}
+		return nil, fmt.Errorf("task pack path %q cannot be read: %w", displayPath, err)
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("task pack path %q is not a workflow file", displayPath)
+	}
+
+	resolvedRoot, err := filepath.EvalSymlinks(rootPath)
+	if err != nil {
+		return nil, fmt.Errorf("task pack path %q has an invalid consumer repo root: %w", displayPath, err)
+	}
+	resolvedCandidate, err := filepath.EvalSymlinks(candidatePath)
+	if err != nil {
+		return nil, fmt.Errorf("task pack path %q cannot be resolved: %w", displayPath, err)
+	}
+	if !withinRoot(resolvedRoot, resolvedCandidate) {
+		return nil, fmt.Errorf("task pack path %q escapes the consumer repo", displayPath)
+	}
+
+	selectedStepID := strings.TrimSpace(stepID)
+	if selectedStepID == "" {
+		return nil, fmt.Errorf("task pack step id is required for %q", displayPath)
+	}
+	raw, err := os.ReadFile(resolvedCandidate)
+	if err != nil {
+		return nil, fmt.Errorf("task pack path %q cannot be read: %w", displayPath, err)
+	}
+	workflow := map[string]any{}
+	if err := yaml.Unmarshal(raw, &workflow); err != nil {
+		return nil, fmt.Errorf("task pack path %q is not valid workflow YAML: %w", displayPath, err)
+	}
+
+	matches := []map[string]any{}
+	for _, rawStep := range listValue(workflow["steps"]) {
+		step := mapValue(rawStep)
+		if stringValue(step["id"]) == selectedStepID {
+			matches = append(matches, step)
+		}
+	}
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("%s: task pack step id %q was not found", displayPath, selectedStepID)
+	}
+	if len(matches) > 1 {
+		return nil, fmt.Errorf("%s: task pack step id %q is ambiguous (%d matches)", displayPath, selectedStepID, len(matches))
+	}
+
+	agent, ok := mapDeclaration(matches[0]["agent"])
+	if !ok {
+		return nil, fmt.Errorf("%s: task pack step id %q has no agent.orchestration declaration", displayPath, selectedStepID)
+	}
+	if _, ok := mapDeclaration(agent["orchestration"]); !ok {
+		return nil, fmt.Errorf("%s: task pack step id %q has no agent.orchestration declaration", displayPath, selectedStepID)
+	}
+	if err := infrastructure.ValidateResolvedWorkflowYAML(resolvedCandidate); err != nil {
+		return nil, fmt.Errorf("task pack path %q is not a valid workflow: %w", displayPath, err)
+	}
+	return copyMap(agent), nil
+}
+
+func mapDeclaration(value any) (map[string]any, bool) {
+	switch value.(type) {
+	case map[string]any, map[any]any:
+		return mapValue(value), true
+	default:
+		return nil, false
+	}
 }
 
 func emitTaskEnv(path string, stdout io.Writer) error {

@@ -270,12 +270,19 @@ The package-helper apply handoff prerequisite completed on 2026-07-17: `planOrch
 preserves authored `apply.require_approval`, `apply.outputs`, `apply.target_root`, and ordered
 `apply.required_artifacts` in `plan.json`. Downstream inferred-apply behavior remains unchanged.
 
+The package-helper task-pack loader prerequisite completed on 2026-07-17: a non-empty repo-relative
+workflow path is contained within the consumer repo after lexical and symlink resolution, exact step
+ids are selected without prefix matching, duplicate ids fail as ambiguous, and only the selected
+step's `agent` declaration is returned after confirming `agent.orchestration` exists and the file
+passes DockPipe's existing workflow validation. Precedence, authority narrowing, graph compilation,
+and output-floor validation remain separate later slices.
+
 ## Remaining Implementation Slices
 
-1. Next, add focused package tests for task-pack loading, step identity, precedence, authority
-   narrowing, graph validation, and output floors.
-2. Implement the DorkPipe task-pack loader and two-phase proposal compiler in package code and
-   scripts, preserving the existing orchestration artifact contract.
+1. Next, add focused package contract tests for precedence, authority narrowing, graph validation,
+   and output floors.
+2. Implement the DorkPipe two-phase proposal compiler in package code and scripts, preserving the
+   existing task-pack loader and orchestration artifact contract.
 3. Add the package-owned `software.dev` workflow with hard policy, direct invocation variables or
    typed inputs, planner bootstrap, execute/merge/verify/approval/apply stages, and no implicit
    publish.
