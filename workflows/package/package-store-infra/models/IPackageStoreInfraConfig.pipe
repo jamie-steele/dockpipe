@@ -1,0 +1,134 @@
+/// <summary>
+/// Contract for maintainer package-store infrastructure workflow variables.
+/// </summary>
+public Interface IPackageStoreInfraConfig
+{
+    /// <summary>R2 bucket name for package artifacts.</summary>
+    public string R2Bucket;
+    /// <summary>Object key prefix for uploaded package artifacts.</summary>
+    public string R2Prefix;
+    /// <summary>Enable dry-run mode for publish helpers.</summary>
+    public string R2PublishDryRun;
+    /// <summary>Skip Terraform in combined publish helpers when enabled.</summary>
+    public string R2SkipTerraform;
+    /// <summary>Legacy alias for state access key id.</summary>
+    public string R2StateAccessKeyId;
+    /// <summary>Legacy alias for state secret access key.</summary>
+    public string R2StateSecretAccessKey;
+    /// <summary>Legacy alias for Terraform backend mode.</summary>
+    public string R2TfBackend;
+    /// <summary>Legacy alias for import existing bucket behavior.</summary>
+    public string R2TfImportR2Bucket;
+    /// <summary>Legacy alias for import jurisdiction.</summary>
+    public string R2TfR2ImportJurisdiction;
+    /// <summary>Legacy alias for Terraform state bucket.</summary>
+    public string R2TfStateBucket;
+    /// <summary>Legacy alias for Terraform state key.</summary>
+    public string R2TfStateKey;
+    /// <summary>Legacy alias for extra terraform apply args.</summary>
+    public string R2TerraformApplyArgs;
+    /// <summary>Legacy alias for terraform apply auto-approve.</summary>
+    public string R2TerraformApplyAutoApprove;
+    /// <summary>Legacy alias for terraform command list.</summary>
+    public string R2TerraformCommands;
+    /// <summary>Legacy alias for terraform fmt args.</summary>
+    public string R2TerraformFmtArgs;
+    /// <summary>Legacy alias for single terraform import args.</summary>
+    public string R2TerraformImportArgs;
+    /// <summary>Legacy alias for terraform import file.</summary>
+    public string R2TerraformImportFile;
+    /// <summary>Legacy alias for terraform init args.</summary>
+    public string R2TerraformInitArgs;
+    /// <summary>Legacy alias for terraform plan args.</summary>
+    public string R2TerraformPlanArgs;
+    /// <summary>Legacy alias for terraform skip-init toggle.</summary>
+    public string R2TerraformSkipInit;
+    /// <summary>Legacy alias for terraform validate args.</summary>
+    public string R2TerraformValidateArgs;
+    /// <summary>Legacy alias for Terraform module directory.</summary>
+    public string R2TerraformDir;
+    /// <summary>Optional Cloudflare R2 location passed into Terraform.</summary>
+    public string R2TfLocation;
+    /// <summary>Cloudflare account identifier used by Terraform and uploads.</summary>
+    public string CloudflareAccountId;
+    /// <summary>Cloudflare API token for Terraform and token-based upload flows.</summary>
+    public string CloudflareApiToken;
+    /// <summary>Cloudflare email for legacy global API key auth.</summary>
+    public string CloudflareEmail;
+    /// <summary>Cloudflare global API key for legacy auth.</summary>
+    public string CloudflareGlobalApiKey;
+    /// <summary>Extra arguments passed to terraform apply.</summary>
+    public string DockpipeTfApplyArgs;
+    /// <summary>Enable terraform apply auto-approve when set to 1.</summary>
+    public string DockpipeTfApplyAutoApprove;
+    /// <summary>Attach Cloudflare provider env mapping in the nested resolver.</summary>
+    public string DockpipeTfAttachCloudflareProvider;
+    /// <summary>Terraform backend mode for the nested resolver.</summary>
+    public string DockpipeTfBackend;
+    /// <summary>Optional backend HCL path used by advanced wrappers.</summary>
+    public string DockpipeTfBackendHclPath;
+    /// <summary>Optional Cloudflare account id override for backend generation.</summary>
+    public string DockpipeTfCloudflareAccountId;
+    /// <summary>Terraform command list injected by --tf.</summary>
+    public string DockpipeTfCommands;
+    /// <summary>Enable Terraform dry-run mode when set to 1.</summary>
+    public string DockpipeTfDryRun;
+    /// <summary>Extra arguments passed to terraform fmt.</summary>
+    public string DockpipeTfFmtArgs;
+    /// <summary>Single terraform import invocation arguments.</summary>
+    public string DockpipeTfImportArgs;
+    /// <summary>Path to a file containing terraform import lines.</summary>
+    public string DockpipeTfImportFile;
+    /// <summary>Enable import of a pre-existing R2 bucket when set to 1.</summary>
+    public string DockpipeTfImportR2Bucket;
+    /// <summary>Extra arguments passed to terraform init.</summary>
+    public string DockpipeTfInitArgs;
+    /// <summary>Optional explicit Terraform module directory.</summary>
+    public string DockpipeTfModuleDir;
+    /// <summary>Skip Terraform entirely when no command list is set.</summary>
+    public string DockpipeTfOptionalWhenUnset;
+    /// <summary>Optional hint string printed by the terraform pipeline.</summary>
+    public string DockpipeTfPipelineHint;
+    /// <summary>Extra arguments passed to terraform plan.</summary>
+    public string DockpipeTfPlanArgs;
+    /// <summary>Optional prebuilt backend config file path.</summary>
+    public string DockpipeTfRemoteBackendFile;
+    /// <summary>Jurisdiction used when importing an existing R2 bucket.</summary>
+    public string DockpipeTfR2ImportJurisdiction;
+    /// <summary>Skip auto-prepended terraform init when set to 1.</summary>
+    public string DockpipeTfSkipInit;
+    /// <summary>State bucket access key id.</summary>
+    public string DockpipeTfStateAccessKeyId;
+    /// <summary>Dedicated Terraform state bucket.</summary>
+    public string DockpipeTfStateBucket;
+    /// <summary>Terraform state object key.</summary>
+    public string DockpipeTfStateKey;
+    /// <summary>State bucket secret access key.</summary>
+    public string DockpipeTfStateSecretAccessKey;
+    /// <summary>Use the historical r2publish environment mapping in the nested resolver.</summary>
+    public string DockpipeTfUseR2PublishMap;
+    /// <summary>Extra arguments passed to terraform validate.</summary>
+    public string DockpipeTfValidateArgs;
+    /// <summary>Optional non-default Terraform workspace name.</summary>
+    public string DockpipeTfWorkspace;
+    /// <summary>Browser cache TTL in seconds.</summary>
+    public string TfVarCacheBrowserTtlSeconds;
+    /// <summary>Edge cache TTL in seconds.</summary>
+    public string TfVarCacheEdgeTtlSeconds;
+    /// <summary>Cloudflare managed ruleset identifier for the baseline WAF.</summary>
+    public string TfVarCloudflareManagedRulesetId;
+    /// <summary>Enable CDN cache rules when true.</summary>
+    public string TfVarEnableCacheRules;
+    /// <summary>Enable creation of the R2 custom domain resources when true.</summary>
+    public string TfVarEnableR2CustomDomain;
+    /// <summary>Enable baseline WAF resources when true.</summary>
+    public string TfVarEnableWafBaseline;
+    /// <summary>Public hostname used for CDN and custom-domain resources.</summary>
+    public string TfVarPublicHostname;
+    /// <summary>Enable the R2 custom-domain binding when true.</summary>
+    public string TfVarR2CustomDomainEnabled;
+    /// <summary>Minimum TLS version for the R2 custom domain.</summary>
+    public string TfVarR2CustomDomainMinTls;
+    /// <summary>Cloudflare DNS zone identifier for the public hostname.</summary>
+    public string TfVarZoneId;
+}

@@ -1,0 +1,24 @@
+# DockPipe self-analysis — runs inside an isolated container (golang) over the mounted repo at /work.
+# Optional local sidecar stack (Ollama + Postgres): scripts/dorkpipe/dev-stack.sh up
+# Host-only fallback workflow: dorkpipe-self-analysis-host
+name: dorkpipe-self-analysis
+description: >-
+  Container-isolated DorkPipe run from packaged assets and packaged tooling.
+  Resolve artifacts and package state with dockpipe scope commands. Tear down sidecars with dev-stack.sh down when done.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: docker
+      command: docker
+      description: Required to run the isolated self-analysis container.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+
+steps:
+  - id: self_analysis
+    runtime: dockerimage
+    isolate: golang:1.25-bookworm
+    cwd: repo
+    run:
+      - scripts/dorkpipe/run-self-analysis.sh

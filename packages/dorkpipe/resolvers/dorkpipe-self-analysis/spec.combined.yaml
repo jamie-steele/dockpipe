@@ -1,0 +1,80 @@
+# Combined: fast deterministic prep → handoff → local Ollama refinement (requires Ollama).
+# Produces package-scoped handoff artifacts:
+#   dockpipe scope --package dorkpipe handoff/orchestrator-cursor-prompt.md
+#   dockpipe scope --package dorkpipe handoff/orchestrator-cursor-prompt.refined.md
+#
+# Run:
+#   DORKPIPE_SELF_ANALYSIS_SPEC=packages/dorkpipe/resolvers/dorkpipe-self-analysis/spec.combined.yaml \
+#     dockpipe --workflow dorkpipe-self-analysis-host --workdir . --
+#   export OLLAMA_HOST=http://127.0.0.1:11434   # if not default
+name: dorkpipe-self-analysis-combined
+policy:
+  escalate_confidence_below: 0.01
+nodes:
+  - id: prep
+    kind: shell
+    script: |
+      set -euo pipefail
+      bash scripts/dorkpipe/self-analysis-prep.sh
+
+  - id: signals
+    kind: shell
+    needs: [prep]
+    script: |
+      set -euo pipefail
+      bash scripts/dorkpipe/self-analysis-signals.sh
+
+  - id: handoff
+    kind: shell
+    needs: [signals]
+    script: |
+      set -euo pipefail
+      bash scripts/dorkpipe/build-cursor-handoff.sh
+
+  # Feed the handoff (truncated) into the next node via DorkPipe stdout substitution.
+  - id: emit_ctx
+    kind: shell
+    needs: [handoff]
+    script: |
+      set -euo pipefail
+      handoff="$(dockpipe scope --package dorkpipe handoff/orchestrator-cursor-prompt.md)"
+      head -c 48000 "$handoff"
+
+  - id: refine
+    kind: ollama
+    needs: [emit_ctx]
+    model: llama3.2
+    prompt: |
+      You are a staff engineer. The following markdown is a DockPipe/DorkPipe self-analysis handoff grounded in real repo scans.
+
+      Add ONE new section only, in markdown:
+
+      ## Refined priorities (5 bullets)
+
+      Each bullet: one concrete next action with a file path from the text. No fluff, no repeating section 1–8 verbatim.
+
+      ---HANDOFF---
+      {{emit_ctx}}
+
+  - id: save_refine
+    kind: shell
+    needs: [refine]
+    script: |
+      set -euo pipefail
+      node_dir="$(dockpipe scope --package dorkpipe nodes)"
+      refined="$(dockpipe scope --package dorkpipe handoff/orchestrator-cursor-prompt.refined.md)"
+      refine_txt="$node_dir/refine.txt"
+      if [[ ! -f "$refine_txt" ]]; then
+        echo "save_refine: expected refine.txt from DorkPipe package nodes scope" >&2
+        exit 1
+      fi
+      mkdir -p "$(dirname "$refined")"
+      cp "$refine_txt" "$refined"
+      echo "save_refine: wrote $refined ($(wc -c < "$refined") bytes)"
+
+  - id: merge_paste
+    kind: shell
+    needs: [save_refine]
+    script: |
+      set -euo pipefail
+      bash scripts/dorkpipe/merge-paste-prompt.sh

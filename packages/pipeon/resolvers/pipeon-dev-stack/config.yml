@@ -1,0 +1,48 @@
+name: pipeon-dev-stack
+category: app
+vault: none
+description: >-
+  Pipeon product dev stack: ensure dockpipe + dorkpipe + mcpd binaries, start the isolated
+  DorkPipe control-plane stack with internal Postgres + Ollama, expose MCP only, warm the default local
+  model, and open Pipeon against the current workdir.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the Pipeon dev-stack scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: docker
+      command: docker
+      description: Required for the Pipeon managed stack and code-server container.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+    - id: curl
+      command: curl
+      description: Required to wait for the Pipeon UI endpoint.
+      install:
+        windows: winget install cURL.cURL
+        deb: sudo apt-get update && sudo apt-get install -y curl
+
+steps:
+  - id: launch
+    kind: host
+    run: assets/scripts/launch.sh
+    vars:
+      # Default behavior: when the Pipeon/code-server window closes, the stack tears down automatically.
+      # Set to 0 only if you intentionally want warm backends left running.
+      PIPEON_DEV_STACK_AUTODOWN: "1"
+      # auto = refresh the Pipeon-managed code-server surface when our image/VSIX inputs changed.
+      # always = force-refresh that surface every launch. never = trust the current image as-is.
+      PIPEON_DEV_STACK_BUILD: "auto"
+      # auto enables NVIDIA GPU for Ollama when host nvidia-smi works; set cpu/none to force CPU.
+      PIPEON_DEV_STACK_GPU: "auto"
+      PIPEON_DEV_STACK_PIPEON_BUNDLE: "1"
+      PIPEON_DEV_STACK_PULL_MODEL: "1"
+      DOCKPIPE_MCP_TIER: "exec"
+      CODE_SERVER_IMAGE: "dockpipe-code-server:latest"
+      CODE_SERVER_AUTH: "none"
+      CODE_SERVER_WAIT: "1"

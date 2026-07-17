@@ -1,0 +1,21 @@
+# Bundled workflow for resolver codex and DOCKPIPE_RESOLVER_WORKFLOW=codex.
+# Used after worktree strategy clone; parent runs commit-worktree on the host.
+name: codex
+description: OpenAI Codex CLI in a worktree (dockpipe-codex image).
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: docker
+      command: docker
+      description: Required to run the Codex resolver image.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+
+image:
+  packages:
+    apt: []
+
+steps:
+  - id: codex
+    isolate: codex

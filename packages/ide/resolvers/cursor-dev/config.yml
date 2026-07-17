@@ -1,0 +1,42 @@
+# Experimental: long-lived base-dev container (docker wait) + user-installed Cursor on the host.
+name: cursor-dev
+category: app
+icon: assets/images/icon.png
+description: Experimental — base-dev session container until you stop it; open a user-installed Cursor desktop app on the host (no remote server).
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the Cursor session scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: docker
+      command: docker
+      description: Required to run the Cursor session container.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+
+types:
+  - models/ICursorDevResolverConfig
+
+steps:
+  - id: session
+    run: assets/scripts/cursor-dev-session.sh
+    kind: host
+    vars:
+      # Optional: gui = hint that this workflow opens the desktop app (see DOCKPIPE_LAUNCH_MODE in docs/workflows/workflow-yaml.md).
+      # DOCKPIPE_LAUNCH_MODE: gui
+      # none = print paths only; cli = try Cursor CLI / default install paths (Windows/macOS/Linux).
+      CURSOR_DEV_LAUNCH: "cli"
+      # 1 = background watcher stops the session container (quit Cursor and/or remote idle — default both; see README).
+      # 0 = keep the container until Ctrl+C or docker stop here.
+      CURSOR_DEV_WAIT: "1"
+      # Default both = host quit OR close remote window (set host for host-only if remote detection misbehaves).
+      # CURSOR_DEV_SESSION_SHUTDOWN: "both"
+      # Optional: pin image (default dockpipe-base-dev:latest after first dockpipe build).
+      # CURSOR_DEV_SESSION_IMAGE: "dockpipe-base-dev:latest"
+      # CURSOR_DEV_CONTAINER_NAME: dockpipe-cursor-dev-mine
+      # CURSOR_DEV_SKIP_DOCKER_CHECK: "0"

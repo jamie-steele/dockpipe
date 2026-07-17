@@ -1,0 +1,4 @@
+# Runtime substrate: virtual machine image executed on the host via a backend VMM.
+DOCKPIPE_RUNTIME_SUBSTRATE=vmimage
+DOCKPIPE_RUNTIME_HOST_SCRIPT=scripts/core.assets.scripts.vmimage-run.sh
+DOCKPIPE_RUNTIME_HOST_REQUIRES_DOCKER=0

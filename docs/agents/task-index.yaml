@@ -1,0 +1,51 @@
+schema: 1
+description: AI entrypoint for the indexed cross-cutting backlog.
+
+tasks:
+  - id: TASK-002
+    topic: Orchestration validation and source walkers
+    path: docs/agents/tasks/orchestration-validation.md
+  - id: TASK-003
+    topic: Managed session volume cleanup and retention
+    path: docs/agents/tasks/session-volume-cleanup.md
+  - id: TASK-004
+    topic: Qt app and VS Code extension compile performance
+    path: docs/agents/tasks/compile-performance-qt-vscode.md
+  - id: TASK-006
+    topic: Example brain baseline
+    path: docs/agents/tasks/example-brain-baseline.md
+  - id: TASK-007
+    topic: Generic software dev workflow
+    path: docs/agents/tasks/generic-software-dev-workflow.md
+  - id: TASK-008
+    topic: PipeDeck agentic app UI
+    path: docs/agents/tasks/agentic-app-ui.md
+  - id: TASK-009
+    topic: Sandbox toolchain determinism
+    path: docs/agents/tasks/sandbox-toolchain-determinism.md
+  - id: TASK-010
+    topic: Declarative dependency install UX
+    path: docs/agents/tasks/declarative-dependency-install-ux.md
+  - id: TASK-011
+    topic: Local Windows CI VM parity and guest tooling
+    path: docs/agents/tasks/local-windows-ci-vm-parity.md
+  - id: TASK-012
+    topic: Pipeon startup, provisioning, and DorkPipe provider pools
+    path: docs/agents/tasks/pipeon-startup-performance.md
+  - id: TASK-013
+    topic: Codex App Server adapter for top-level orchestrators
+    path: docs/agents/tasks/codex-app-server-adapter.md
+  - id: TASK-014
+    topic: Native Dev Container discovery and lifecycle for Pipeon and CLI
+    path: docs/agents/tasks/native-devcontainer-support.md
+  - id: TASK-015
+    topic: Backlog-driven remote tasks and multi-machine execution
+    path: docs/agents/tasks/backlog-driven-remote-tasks.md
+
+maintenance:
+  - Treat this YAML file as the AI/backlog entrypoint.
+  - Keep this index open-only; do not list closed items here.
+  - Put task-specific status in the linked markdown, not in this index.
+  - Move completed task files to docs/agents/tasks/closed/ with a short shipped summary and completion date.
+  - When work materially completes or advances one of these items, update this index if needed and
+    update the corresponding task file in the same change.

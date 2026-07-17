@@ -1,0 +1,12 @@
+**
+
+!assets/
+!assets/entrypoint.sh
+!packages/
+!packages/agent/
+!packages/agent/resolvers/
+!packages/agent/resolvers/codex/
+!packages/agent/resolvers/codex/assets/
+!packages/agent/resolvers/codex/assets/images/
+!packages/agent/resolvers/codex/assets/images/codex/
+!packages/agent/resolvers/codex/assets/images/codex/entrypoint-wrapper.sh

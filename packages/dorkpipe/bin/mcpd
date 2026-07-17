@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+TARGET="$ROOT/bin/.dockpipe/tooling/bin/mcpd"
+DOCKPIPE_BIN="${DOCKPIPE_BIN:-}"
+
+if [[ -z "$DOCKPIPE_BIN" ]]; then
+  for candidate in \
+    "$ROOT/src/bin/dockpipe" \
+    "$ROOT/src/bin/dockpipe.exe"
+  do
+    if [[ -x "$candidate" ]]; then
+      DOCKPIPE_BIN="$candidate"
+      break
+    fi
+  done
+fi
+
+mcpd_target_is_stale() {
+  [[ -x "$TARGET" ]] || return 0
+  if [[ -f "$ROOT/VERSION" && "$ROOT/VERSION" -nt "$TARGET" ]]; then
+    return 0
+  fi
+  find "$ROOT/packages/dorkpipe/mcp" "$ROOT/packages/dorkpipe/lib" \
+    \( -path '*/.git' -o -path '*/bin' -o -path '*/node_modules' -o -path '*/.dockpipe' \) -prune \
+    -o -type f \( -name '*.go' -o -name 'go.mod' -o -name 'go.sum' \) -newer "$TARGET" -print -quit \
+    | grep -q .
+}
+
+if mcpd_target_is_stale; then
+  if [[ -x "$DOCKPIPE_BIN" ]]; then
+    "$DOCKPIPE_BIN" package build source --workdir "$ROOT" --only dorkpipe
+  fi
+fi
+
+if [[ ! -x "$TARGET" ]]; then
+  echo "mcpd wrapper: missing maintainer binary at $TARGET" >&2
+  echo "Run: $DOCKPIPE_BIN package build source --workdir $ROOT --only dorkpipe" >&2
+  exit 1
+fi
+
+exec "$TARGET" "$@"

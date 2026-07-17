@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://dockpipe.dev/schemas/dockpipe-user-insight-queue.schema.json",
+  "title": "DockPipe user insight capture queue",
+  "description": "Append-only capture of user-provided guidance before normalization. User text is a signal, not verified fact.",
+  "type": "object",
+  "required": ["schema_version", "kind", "items"],
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+$",
+      "description": "Bump when queue item shape changes."
+    },
+    "kind": { "const": "dockpipe_user_insight_queue" },
+    "items": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/queue_item" }
+    }
+  },
+  "$defs": {
+    "scope": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "repo_path": { "type": "string", "description": "Repo-relative path or prefix." },
+        "component": { "type": "string" },
+        "workflow": { "type": "string" },
+        "label": { "type": "string", "description": "Free-form scope tag." }
+      }
+    },
+    "queue_item": {
+      "type": "object",
+      "required": ["id", "raw_text", "category_hint", "source", "timestamp_utc"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Stable identifier assigned at enqueue time (not content-hash of meaning)."
+        },
+        "raw_text": { "type": "string", "minLength": 1 },
+        "category_hint": {
+          "type": "string",
+          "description": "User or importer guess; may be unknown until processed."
+        },
+        "source": { "type": "string", "enum": ["user", "import"] },
+        "timestamp_utc": { "type": "string", "format": "date-time" },
+        "scope": { "$ref": "#/$defs/scope" }
+      }
+    }
+  }
+}

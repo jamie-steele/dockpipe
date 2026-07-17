@@ -1,0 +1,42 @@
+# agent
+
+Tracked first-party package family for governed AI stages in DockPipe.
+
+What lives here:
+
+- `resolvers/claude/` — Claude resolver profile
+- `resolvers/codex/` — Codex resolver profile
+- `resolvers/ollama/` — local Ollama resolver profile
+- `workflows/agent.cloud-lanes.doctor/` — portable diagnostic for cloud-backed agent lanes
+
+This package keeps DockPipe's separation of concerns intact:
+
+- DockPipe is the governed runtime and orchestration layer.
+- Resolver profiles such as `claude` and `codex` are tool adapters, not the product.
+- AI workers are workflow/package stages with explicit YAML contracts: prompts, context, access
+  boundaries, model policy, output artifacts, verification, and approval requirements.
+- DorkPipe is the preferred harness when those stages need model execution, verifier artifacts,
+  escalation, and approval handling.
+
+This tracked package is the canonical first-party location going forward.
+
+## Promoted resolvers
+
+The promoted `claude`, `codex`, and `ollama` resolver trees preserve their existing:
+
+- `config.yml` delegate workflow
+- `profile` environment contract
+- `README.md` usage notes
+- `assets/compose/` examples
+- `assets/images/<resolver>/Dockerfile`
+
+No binaries, caches, vendor trees, local environment files, or build outputs were copied during
+promotion.
+
+## Package workflow
+
+`workflows/agent.cloud-lanes.doctor/` checks whether the Codex and Claude resolver containers have
+the expected auth mounts, skills, and optional live prompt behavior.
+
+Repo-specific docs orchestration dogfood now lives under the repository root `workflows/` tree
+instead of being published as part of this package.

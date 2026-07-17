@@ -1,0 +1,15 @@
+/// <summary>
+/// Concrete defaults for the GitHub Container Registry push workflow.
+/// </summary>
+public Class GHCRPushConfig : IGHCRPushConfig
+{
+    public string GhcrContainerCli = "docker";
+    public string GhcrImageSource = "";
+    public string GhcrImageTarget = "";
+    public string GhcrLoginSkip = "0";
+    public string GhcrPushDryRun = "0";
+    public string GhcrRegistry = "ghcr.io";
+    public string GhcrTags = "";
+    public string GhcrToken = "";
+    public string GhcrUsername = "";
+}

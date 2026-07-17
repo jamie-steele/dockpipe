@@ -1,0 +1,35 @@
+# Native Dev Container discovery/status plus an explicitly approved managed-up
+# contract. Status may explicitly verify a pinned live read-configuration CLI
+# adapter. That CLI makes its own label-filtered read-only Docker query; this
+# package never directly invokes Docker, attaches, executes in, stops, or
+# removes a container.
+name: devcontainer
+category: tooling
+icon: ../vscode/assets/images/icon.png
+description: Native Dev Container discovery/status with pinned read-configuration verification and fixture-proven approved managed-up contract.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to launch the package-owned Dev Container resolver script.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: node
+      command: node
+      description: Required for deterministic JSON/JSONC discovery and fixture adapters.
+      install:
+        windows: winget install OpenJS.NodeJS.LTS
+        deb: sudo apt-get update && sudo apt-get install -y nodejs
+
+vault: none
+# Every step is host-only. The package may call the explicitly selected pinned
+# Dev Container CLI for read-configuration only; its indirect read-only Docker
+# query is narrower than, and must not be replaced by, generic Docker preflight.
+docker_preflight: false
+
+steps:
+  - id: lifecycle
+    kind: host
+    run: assets/scripts/devcontainer-lifecycle.sh

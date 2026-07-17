@@ -1,0 +1,22 @@
+# Pipeline: run → apply (pair with run-apply-validate when you need a third validate phase)
+name: run-apply
+description: Two sequential steps — run phase, then apply phase.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: docker
+      command: docker
+      description: Required to run the isolated example steps.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+
+steps:
+  - id: run
+    runtime: dockerimage
+    isolate: alpine
+    cmd: sh -c 'echo "[run] phase" >&2'
+  - id: apply
+    runtime: dockerimage
+    isolate: alpine
+    cmd: sh -c 'echo "[apply] phase" >&2'

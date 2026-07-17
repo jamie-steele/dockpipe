@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# Pipeon CLI entry — canonical path: packages/pipeon/resolvers/pipeon/bin/pipeon.
+set -euo pipefail
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$HERE/../../../../.." && pwd)"
+export DOCKPIPE_WORKDIR="${DOCKPIPE_WORKDIR:-$PWD}"
+if [[ "$DOCKPIPE_WORKDIR" != "$REPO_ROOT" ]]; then
+  unset DOCKPIPE_STATE_DIR
+  unset DOCKPIPE_PACKAGE_STATE_DIR
+  unset DOCKPIPE_PACKAGE_ID
+fi
+if [[ -z "${DOCKPIPE_BIN:-}" ]]; then
+  for candidate in \
+    "$REPO_ROOT/src/bin/dockpipe" \
+    "$REPO_ROOT/src/bin/dockpipe.exe"
+  do
+    if [[ -x "$candidate" ]]; then
+      export DOCKPIPE_BIN="$candidate"
+      break
+    fi
+  done
+fi
+if [[ -n "${DOCKPIPE_BIN:-}" ]]; then
+  export PATH="$(dirname "$DOCKPIPE_BIN")${PATH:+:$PATH}"
+fi
+if [[ -z "${DOCKPIPE_HOST_BASH_BIN:-}" ]]; then
+  for candidate in \
+    "${BASH:-}" \
+    "$HERE/../../../../../src/bin/does-not-exist" \
+    "$(command -v bash 2>/dev/null || true)"
+  do
+    if [[ -n "$candidate" && -x "$candidate" ]]; then
+      export DOCKPIPE_HOST_BASH_BIN="$candidate"
+      break
+    fi
+  done
+fi
+export DOCKPIPE_SCRIPT_DIR="$HERE/../assets/scripts"
+exec "${DOCKPIPE_HOST_BASH_BIN:-bash}" "$HERE/../assets/scripts/pipeon.sh" "$@"

@@ -1,0 +1,33 @@
+# Example DorkPipe DAG: branch competition + conditional skip (no external services).
+# Run: dorkpipe validate -f lib/dorkpipe/examples/full-bar.yaml
+#      dorkpipe run -f lib/dorkpipe/examples/full-bar.yaml --workdir "$(pwd)/tmp-dorkpipe"
+name: full-bar-demo
+policy:
+  escalate_confidence_below: 0.01
+  branch_judge: choose_plan
+nodes:
+  - id: choose_plan
+    kind: shell
+    script: |
+      echo '{"winner":"plan_a"}'
+  - id: plan_a
+    kind: shell
+    script: echo plan_a
+    branch_required: plan_a
+    branch_tag: plan_a
+    needs: [choose_plan]
+  - id: plan_b
+    kind: shell
+    script: echo plan_b
+    branch_required: plan_b
+    branch_tag: plan_b
+    needs: [choose_plan]
+  - id: maybe_retrieve
+    kind: shell
+    script: echo would_retrieve
+    retrieve_if_calibrated_below: 0.5
+    needs: [plan_a]
+  - id: late
+    kind: shell
+    script: echo late
+    needs: [plan_a, plan_b, maybe_retrieve]

@@ -1,0 +1,3 @@
+name: dorkpipe-yaml-workflows
+description: Use for DockPipe workflow YAML changes, step modeling, host/container execution, resolver/runtime selection, package workflow calls, model_policy, or agentic YAML fields.
+short_description: Review DockPipe workflow YAML

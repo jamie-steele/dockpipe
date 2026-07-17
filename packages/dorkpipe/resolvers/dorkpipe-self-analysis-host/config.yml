@@ -1,0 +1,21 @@
+# Same as dorkpipe-self-analysis but runs on the host (`kind: host`) — CI or machines without Docker.
+# Prefer: dockpipe --workflow dorkpipe-self-analysis (container-isolated).
+name: dorkpipe-self-analysis-host
+description: >-
+  Host-only self-analysis (no container). Same outputs as dorkpipe-self-analysis.
+  Use when Docker is unavailable or for fastest local iteration.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the packaged self-analysis host script.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+
+steps:
+  - id: self_analysis
+    kind: host
+    run:
+      - scripts/dorkpipe/run-self-analysis.sh

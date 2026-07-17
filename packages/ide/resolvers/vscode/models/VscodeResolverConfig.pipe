@@ -1,0 +1,9 @@
+/// <summary>
+/// Defaults for the VS Code desktop compatibility resolver.
+/// </summary>
+public Class VscodeResolverConfig : IVscodeResolverConfig
+{
+    public string DockpipeLaunchMode = "gui";
+    public string VscodeWait = "1";
+    public string VscodeSessionImage = "dockpipe-base-dev:latest";
+}

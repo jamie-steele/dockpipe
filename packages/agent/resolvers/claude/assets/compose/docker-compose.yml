@@ -1,0 +1,4 @@
+services:
+  claude:
+    image: dockpipe-claude:latest
+    working_dir: /work

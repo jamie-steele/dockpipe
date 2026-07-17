@@ -1,0 +1,22 @@
+schema: 1
+kind: workflow
+name: cas.01.app-server
+version: 0.6.0
+title: CAS-01 Codex App Server evidence spike
+description: Disposable, opt-in, stdio-only research harness for CAS-01; not a production adapter.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+tags: [workflow, dorkpipe, research, codex, app-server]
+depends: [dorkpipe]
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs the package-owned CAS-01 wrapper.
+    - id: go
+      command: go
+      description: Runs the standard-library-only harness.
+allow_clone: true
+distribution: source

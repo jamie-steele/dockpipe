@@ -1,0 +1,47 @@
+agents:
+  local_optimizer_auditor:
+    role: local optimizer auditor
+    worker: ollama
+    worker_type: analysis
+    work_mode: artifact
+    model:
+      provider: ollama
+      model: ${DORKPIPE_ORCH_OLLAMA_MODEL:-llama3.2}
+    authority:
+      can:
+        - audit_latest_artifacts
+        - name_shape_failures
+      cannot:
+        - decide_code_changes
+        - propose_cloud_escalation
+        - approve_apply
+    constraints:
+      - local Ollama only
+      - ground findings in target artifacts
+      - do not propose edits outside the allowlist
+  codex_patch_decider:
+    role: Codex patch decision owner
+    worker: codex
+    worker_type: patch_decision
+    work_mode: artifact
+    worker_policy:
+      mode: require
+    model_policy:
+      attempt:
+        preference: strong
+      validate:
+        preference: strongest_available
+    authority:
+      can:
+        - decide_whether_patch_is_warranted
+        - author_unified_diff_proposal
+      cannot:
+        - apply_patch
+        - commit_changes
+        - approve_apply
+    constraints:
+      - use AGENTS.md and routed docs as operating instructions
+      - treat Ollama output as scout context, not authority
+      - use previous optimizer handoff to avoid repeating rejected or already-applied ideas
+      - keep edits small and repo-workflow-scoped
+      - write a proposed patch only

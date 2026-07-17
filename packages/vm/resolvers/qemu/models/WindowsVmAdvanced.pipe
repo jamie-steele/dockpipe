@@ -1,0 +1,69 @@
+/// <summary>
+/// Advanced guest wrapper behavior and env forwarding.
+/// </summary>
+public Interface IWindowsVmAdvanced
+{
+    /// <summary>Enable the DockPipe guest agent service path for structured readiness, observability, and graceful shutdown on provisioned Windows guests.</summary>
+    [DisplayName = "DockPipe Guest Agent"]
+    [EnvName = "DOCKPIPE_VM_AGENT"]
+    public string Agent;
+
+    /// <summary>Host and guest port used for the DockPipe guest agent HTTP control plane.</summary>
+    [DisplayName = "Guest Agent Port"]
+    [EnvName = "DOCKPIPE_VM_AGENT_PORT"]
+    public string AgentPort;
+
+    /// <summary>Opt in to VM safety confirmations for runs that should pause before persistent disk, host exposure, or similar mutations.</summary>
+    [DisplayName = "Confirm VM Prompts"]
+    [EnvName = "DOCKPIPE_VM_CONFIRM_PROMPTS"]
+    public string ConfirmPrompts;
+
+    /// <summary>Comma-separated env vars forwarded into the guest wrapper.</summary>
+    [DisplayName = "Allowed Guest Env Vars"]
+    [EnvName = "DOCKPIPE_VM_ENV_ALLOW"]
+    public string EnvAllow;
+
+    /// <summary>Optional host file or directory copied into the guest over SCP after SSH is ready and before the guest command runs.</summary>
+    [DisplayName = "Sync Host Path"]
+    [EnvName = "DOCKPIPE_VM_SYNC_HOST_PATH"]
+    public string SyncHostPath;
+
+    /// <summary>Guest destination directory for host-to-guest sync before the guest command runs.</summary>
+    [DisplayName = "Sync Guest Path"]
+    [EnvName = "DOCKPIPE_VM_SYNC_GUEST_PATH"]
+    public string SyncGuestPath;
+
+    /// <summary>Optional host file or directory staged onto guest-visible bootstrap media before the VM starts. Use this for first-run provisioning before SSH is available.</summary>
+    [DisplayName = "Bootstrap Media Path"]
+    [EnvName = "DOCKPIPE_VM_BOOTSTRAP_PATH"]
+    public string BootstrapPath;
+
+    /// <summary>Keep the VM running after the guest command finishes so you can SSH in for manual setup work.</summary>
+    [DisplayName = "Keep VM Alive"]
+    [EnvName = "DOCKPIPE_VM_KEEPALIVE"]
+    public string KeepAlive;
+
+    /// <summary>How long to keep the VM alive after the guest command finishes, in seconds.</summary>
+    [DisplayName = "Keepalive Seconds"]
+    [EnvName = "DOCKPIPE_VM_KEEPALIVE_SECONDS"]
+    public string KeepAliveSeconds;
+
+    /// <summary>Optional guest command override executed instead of the default smoke command.</summary>
+    [DisplayName = "Guest Command"]
+    [EnvName = "DOCKPIPE_VM_GUEST_COMMAND"]
+    public string GuestCommand;
+}
+
+public Class WindowsVmAdvanced : IWindowsVmAdvanced
+{
+    public string Agent = "";
+    public string AgentPort = "47831";
+    public string ConfirmPrompts = "";
+    public string EnvAllow = "";
+    public string SyncHostPath = "";
+    public string SyncGuestPath = "";
+    public string BootstrapPath = "";
+    public string KeepAlive = "";
+    public string KeepAliveSeconds = "";
+    public string GuestCommand = "";
+}

@@ -1,0 +1,53 @@
+schema: 1
+kind: package
+name: dorkpipe
+version: 0.6.0
+title: DorkPipe agentic stack package
+description: |
+  Single umbrella package for DorkPipe workflows: orchestrator, self-analysis variants,
+  compliance-handoff, user-insight-process, and the package-owned DorkPipe stack/control plane.
+  Consumer repos run these capabilities from compiled package artifacts; checkout-only source rebuild
+  flows remain opt-in maintainer paths.
+author: DockPipe
+license: Apache-2.0
+repository: https://github.com/dockpipe/dockpipe
+icon: assets/images/icon.png
+tags: [dorkpipe, orchestration, stack, agentic]
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs package-owned shell scripts and workflow helpers.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: git
+      command: git
+      description: Reads repository state and validates generated patch/session artifacts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y git
+    - id: go
+      command: go
+      description: Builds DorkPipe helper binaries from source in maintainer and fallback paths.
+      install:
+        windows: winget install GoLang.Go
+        deb: sudo apt-get update && sudo apt-get install -y golang-go
+artwork:
+  icon: assets/images/icon.png
+includes_resolvers:
+  - compliance-handoff
+  - dorkpipe-orchestrator
+  - dorkpipe-self-analysis
+  - dorkpipe-self-analysis-host
+  - dorkpipe-self-analysis-stack
+  - dorkpipe
+  - user-insight-process
+script_contract:
+  inject: [workdir, workflow_name, script_dir, package_root, assets_dir, dockpipe_bin]
+build:
+  source:
+    script: assets/scripts/build-source.sh
+test:
+  script: tests/run.sh

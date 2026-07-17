@@ -1,0 +1,24 @@
+# Internal workflow: run the DorkPipe orchestrator (bin/dorkpipe) on a DAG spec.
+# This repo: orchestration is a separate binary that still calls `dockpipe` for tool steps.
+name: dorkpipe-orchestrator
+description: >-
+  Host step runs assets/scripts/run-orchestrator.sh (requires `make build` for bin/dorkpipe).
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Required to run the packaged orchestrator host script.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+
+steps:
+  - id: orchestrate
+    kind: host
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
+    run:
+      - assets/scripts/run-orchestrator.sh

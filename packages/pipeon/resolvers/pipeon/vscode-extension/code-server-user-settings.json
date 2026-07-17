@@ -1,0 +1,37 @@
+{
+  "telemetry.telemetryLevel": "off",
+  "extensions.autoUpdate": false,
+  "update.mode": "none",
+  "workbench.secondarySideBar.defaultVisibility": "visibleInWorkspace",
+  "workbench.startupEditor": "none",
+  "workbench.welcome.enabled": false,
+  "security.workspace.trust.enabled": false,
+  "security.workspace.trust.startupPrompt": "never",
+  "security.workspace.trust.untrustedFiles": "open",
+  "files.exclude": {
+    "**/.dockpipe/**": true,
+    "**/bin/.dockpipe/**": true,
+    "**/release/artifacts/**": true
+  },
+  "search.exclude": {
+    "**/.dockpipe/**": true,
+    "**/bin/.dockpipe/**": true,
+    "**/release/artifacts/**": true
+  },
+  "files.watcherExclude": {
+    "**/bin/**": true,
+    "**/.dockpipe/**": true,
+    "**/release/artifacts/**": true
+  },
+  "typescript.tsserver.watchOptions": {
+    "excludeDirectories": [
+      "**/.dockpipe/**",
+      "**/bin/.dockpipe/**",
+      "**/release/artifacts/**"
+    ]
+  },
+  "window.title": "Pipeon — ${rootName}",
+  "window.autoDetectColorScheme": true,
+  "workbench.preferredDarkColorTheme": "Default Dark+",
+  "workbench.preferredLightColorTheme": "Default Light+"
+}

@@ -1,0 +1,22 @@
+# Bundled workflow for resolver claude and DOCKPIPE_RESOLVER_WORKFLOW=claude.
+# Used after worktree strategy clone; parent runs commit-worktree on the host.
+name: claude
+description: Claude Code in a worktree (dockpipe-claude image).
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: docker
+      command: docker
+      description: Required to run the Claude resolver image.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+
+image:
+  packages:
+    apt: []
+
+steps:
+  - id: claude
+    isolate: claude
+    resolver: claude

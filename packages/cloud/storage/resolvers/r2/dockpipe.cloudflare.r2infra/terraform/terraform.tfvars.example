@@ -1,0 +1,59 @@
+# Copy to terraform.tfvars (do not commit secrets). All keys optional unless you enable edge features.
+#
+# Preferred: API token (Account R2: Edit or broader).
+# cloudflare_api_token = "..."
+#
+# Legacy: Global API Key + account email (use instead of api_token, not both).
+# cloudflare_api_token = ""
+# cloudflare_email     = "you@example.com"
+# cloudflare_api_key   = "your_global_api_key"
+#
+# account_id           = "..."
+# bucket_name          = "my-packages"
+#
+# Pre-existing bucket (import into state): env DOCKPIPE_TF_IMPORT_R2_BUCKET=1 and DOCKPIPE_TF_COMMANDS=init,import
+# (uses account_id + bucket_name + jurisdiction; override DOCKPIPE_TF_R2_IMPORT_JURISDICTION if needed, default default).
+
+# --- Optional: R2 bucket region hint (WEUR, WNAM, …) ---
+# location = "WEUR"
+
+# --- Public HTTPS + edge (set zone + hostname when using any enable_* below) ---
+# zone_id         = ""
+# public_hostname = "cdn.example.com"
+
+# enable_r2_custom_domain   = false
+# r2_custom_domain_enabled  = true
+# r2_custom_domain_min_tls  = "1.2"
+
+# enable_waf_baseline = false
+# cloudflare_managed_ruleset_id = "efb7b8c949ac4650a09736fc376e9aee"
+
+# enable_cache_rules = false
+# cache_rule_expression = ""  # non-empty = full override; else built from host + cache_path_suffixes
+# cache_path_suffixes = [".tar.gz", ".sha256", ".json"]
+# cache_edge_ttl_seconds   = 86400
+# cache_browser_ttl_seconds = 3600
+
+# --- Expression overrides (advanced) ---
+# edge_host_filter_expression = ""  # set to replace default http.host filter for WAF + cache host clause
+# waf_rule_expression         = ""  # non-empty = WAF expression only (full override)
+
+# --- White-label / multi-tenant resource names ---
+# waf_ruleset_name        = "dockpipe-r2-waf-managed"
+# waf_ruleset_description = "Execute Cloudflare Managed Ruleset for R2 package CDN hostname"
+# waf_ruleset_phase       = "http_request_firewall_managed"
+# waf_rule_ref            = "managed_rules_r2_host"
+# waf_rule_description    = "Execute Cloudflare Managed Ruleset for {hostname}"
+# waf_rule_enabled        = true
+
+# cache_ruleset_name        = "dockpipe-r2-package-cache"
+# cache_ruleset_description = "CDN cache rules for package tarballs and manifests on R2 hostname"
+# cache_ruleset_phase       = "http_request_cache_settings"
+# cache_rule_ref            = "package_cache_static"
+# cache_rule_description    = "Edge + browser TTL for package objects"
+# cache_rule_enabled        = true
+
+# cache_edge_ttl_mode    = "override_origin"
+# cache_browser_ttl_mode = "override_origin"
+# cache_respect_strong_etags = true
+# cache_eligible         = true

@@ -1,0 +1,1605 @@
+package application
+
+import (
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+
+	"dockpipe/src/lib/domain"
+	"dockpipe/src/lib/infrastructure"
+	"dockpipe/src/lib/infrastructure/packagebuild"
+
+	"gopkg.in/yaml.v3"
+)
+
+const packageCompileProgressEvery = 5 * time.Second
+
+func packageCompileIDs(workdir string, extra map[string]string) map[string]string {
+	return mergeOperationResultIDs(buildOperationIDs(workdir, ""), extra)
+}
+
+// injectCompileWorkdirFromProjectConfig prepends --workdir <dir> when args does not already
+// set it, where dir is the directory containing dockpipe.config.json found by walking up
+// from the current working directory (or cwd if the file is absent).
+func injectCompileWorkdirFromProjectConfig(args []string) ([]string, error) {
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--workdir" && i+1 < len(args) {
+			return args, nil
+		}
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+	root, err := domain.FindProjectRootWithDockpipeConfig(cwd)
+	if err != nil {
+		return nil, err
+	}
+	cwdAbs, err := filepath.Abs(cwd)
+	if err != nil {
+		return nil, err
+	}
+	if root != cwdAbs {
+		fmt.Fprintf(os.Stderr, "[dockpipe] using project root %s (%s)\n", root, domain.DockpipeProjectConfigFileName)
+	}
+	return append([]string{"--workdir", root}, args...), nil
+}
+
+func cmdPackageCompile(args []string) error {
+	if len(args) == 0 || args[0] == "--help" || args[0] == "-h" {
+		fmt.Print(packageCompileUsageText)
+		return nil
+	}
+	switch args[0] {
+	case "for-workflow":
+		return cmdPackageCompileForWorkflow(args[1:])
+	case "workflow":
+		return cmdPackageCompileWorkflow(args[1:])
+	case "core":
+		return cmdPackageCompileCore(args[1:])
+	case "resolvers":
+		return cmdPackageCompileResolvers(args[1:])
+	case "bundles":
+		if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+			fmt.Print(packageCompileBundlesUsageText)
+			return nil
+		}
+		// compile.bundles paths are merged into compile.workflows; same recursive config.yml walk.
+		return cmdPackageCompileWorkflowsBatch(args[1:])
+	case "workflows":
+		return cmdPackageCompileWorkflowsBatch(args[1:])
+	case "all":
+		return cmdPackageCompileAll(args[1:])
+	default:
+		return fmt.Errorf("unknown package compile target %q (try: dockpipe package compile --help; use for-workflow for dependency-scoped compile)", args[0])
+	}
+}
+
+func cmdPackageCompileWorkflow(args []string) error {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
+		fmt.Print(packageCompileWorkflowUsageText)
+		return nil
+	}
+	var err error
+	args, err = injectCompileWorkdirFromProjectConfig(args)
+	if err != nil {
+		return err
+	}
+	var (
+		workdir string
+		src     string
+		name    string
+		force   bool
+	)
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--workdir" && i+1 < len(args):
+			workdir = args[i+1]
+			i++
+		case (args[i] == "--from" || args[i] == "--source") && i+1 < len(args):
+			src = args[i+1]
+			i++
+		case args[i] == "--name" && i+1 < len(args):
+			name = args[i+1]
+			i++
+		case args[i] == "--force":
+			force = true
+		case strings.HasPrefix(args[i], "-"):
+			return fmt.Errorf("unknown option %s (try: dockpipe package compile workflow --help)", args[i])
+		default:
+			if src == "" {
+				src = args[i]
+				continue
+			}
+			return fmt.Errorf("unexpected argument %q", args[i])
+		}
+	}
+	if workdir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		workdir = wd
+	}
+	if strings.TrimSpace(src) == "" {
+		return fmt.Errorf("missing source directory (use --from <path> or a positional path)")
+	}
+	srcAbs, err := filepath.Abs(filepath.Clean(src))
+	if err != nil {
+		return err
+	}
+	return compileWorkflowOne(workdir, srcAbs, name, force)
+}
+
+// compileWorkflowOne validates YAML, materializes a streamable dockpipe-workflow-<name>-<ver>.tar.gz
+// under packages/workflows/ (no expanded directory trees in the store).
+func compileWorkflowOne(workdir, srcAbs, name string, force bool) error {
+	cfgPath := filepath.Join(srcAbs, "config.yml")
+	if _, err := os.Stat(cfgPath); err != nil {
+		return fmt.Errorf("workflow source must contain config.yml: %w", err)
+	}
+	if err := infrastructure.ValidateWorkflowYAML(cfgPath); err != nil {
+		return fmt.Errorf("validate workflow: %w", err)
+	}
+	b, err := os.ReadFile(cfgPath)
+	if err != nil {
+		return err
+	}
+	wf, err := domain.ParseWorkflowYAML(b)
+	if err != nil {
+		return fmt.Errorf("parse workflow: %w", err)
+	}
+	pkgName := strings.TrimSpace(name)
+	if pkgName == "" {
+		pkgName = strings.TrimSpace(wf.Name)
+	}
+	if pkgName == "" {
+		pkgName = filepath.Base(srcAbs)
+	}
+	opIDs := packageCompileIDs(workdir, map[string]string{
+		"package": pkgName,
+		"source":  filepath.ToSlash(srcAbs),
+	})
+	pw, err := infrastructure.PackagesWorkflowsDir(workdir)
+	if err != nil {
+		return err
+	}
+	return infrastructure.RunOperationWithOptions(os.Stderr, "package.compile.workflow", "Compiling workflow package…", opIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: packageCompileProgressEvery}, func() error {
+		if err := os.MkdirAll(pw, 0o755); err != nil {
+			return err
+		}
+		tarGlob := filepath.Join(pw, fmt.Sprintf("dockpipe-workflow-%s-*.tar.gz", packagebuild.SafeTarballToken(pkgName)))
+		legacyDir := filepath.Join(pw, pkgName)
+		rebuild := force
+		if !force {
+			matches, _ := filepath.Glob(tarGlob)
+			if len(matches) > 0 {
+				latestTar := infrastructure.PickLatestModTimePath(matches)
+				if latestTar == "" {
+					rebuild = true
+				} else {
+					if ok, reason := compiledPackageWorkflowConfigsValid(latestTar); !ok {
+						opIDs["rebuild_reason"] = "invalid_store_tarball"
+						opIDs["validation_error"] = reason
+						rebuild = true
+					}
+					if !rebuild {
+						stale, err := infrastructure.SourceDirNewerThanPath(srcAbs, latestTar)
+						if err != nil {
+							return err
+						}
+						if !stale {
+							opIDs["result"] = "skip"
+							opIDs["skip_reason"] = "up_to_date_tarball"
+							opIDs["output"] = filepath.ToSlash(latestTar)
+							return nil
+						}
+						opIDs["rebuild_reason"] = "source_newer_than_tarball"
+						rebuild = true
+					}
+				}
+			} else if _, err := os.Stat(legacyDir); err == nil {
+				refMax, err := infrastructure.MaxModTimeFilesUnder(legacyDir)
+				if err != nil {
+					return err
+				}
+				srcMax, err := infrastructure.MaxModTimeFilesUnder(srcAbs)
+				if err != nil {
+					return err
+				}
+				switch {
+				case srcMax.IsZero():
+					opIDs["rebuild_reason"] = "untimed_sources"
+					rebuild = true
+				case refMax.IsZero():
+					opIDs["rebuild_reason"] = "empty_legacy_store"
+					rebuild = true
+				case !srcMax.After(refMax):
+					opIDs["result"] = "skip"
+					opIDs["skip_reason"] = "up_to_date_legacy_store"
+					opIDs["output"] = filepath.ToSlash(legacyDir)
+					return nil
+				default:
+					opIDs["rebuild_reason"] = "source_newer_than_legacy_store"
+					rebuild = true
+				}
+			}
+		}
+		if rebuild {
+			if n, err := infrastructure.InvalidateTarballExtractCacheForPackage(workdir, "workflow", pkgName); err != nil {
+				return err
+			} else if n > 0 {
+				opIDs["cache_invalidated"] = strconv.Itoa(n)
+			}
+			_ = infrastructure.RemoveGlob(tarGlob)
+			_ = os.RemoveAll(legacyDir)
+		}
+		staging, err := mkdirCompileStagingDir(workdir, "dockpipe-compile-wf-*")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(staging)
+		if err := copyDir(srcAbs, staging); err != nil {
+			return fmt.Errorf("copy workflow: %w", err)
+		}
+		if err := runWorkflowCompileHooks(workdir, srcAbs, staging, wf.CompileHooks); err != nil {
+			return err
+		}
+		b, err = os.ReadFile(filepath.Join(staging, "config.yml"))
+		if err != nil {
+			return err
+		}
+		wf, err = domain.ParseWorkflowYAML(b)
+		if err != nil {
+			return fmt.Errorf("parse workflow: %w", err)
+		}
+		if err := infrastructure.ValidateWorkflowYAML(filepath.Join(staging, "config.yml")); err != nil {
+			return fmt.Errorf("validate workflow after compile_hooks: %w", err)
+		}
+		if err := ensureWorkflowImageEntrypoint(workdir, staging); err != nil {
+			return fmt.Errorf("stage workflow image entrypoint: %w", err)
+		}
+		if _, err := materializePipeLangRoots([]string{staging}, true, ""); err != nil {
+			return fmt.Errorf("compile pipelang artifacts: %w", err)
+		}
+		authoredManifest, err := readAuthoredPackageManifest(srcAbs)
+		if err != nil {
+			return fmt.Errorf("package manifest: %w", err)
+		}
+		if err := writeCompiledWorkflowRuntimeArtifacts(workdir, staging, pkgName, wf, authoredManifest); err != nil {
+			return fmt.Errorf("write runtime artifacts: %w", err)
+		}
+		defaultVersion := authoredPackageVersion(workdir)
+		manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
+		if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
+			pm := map[string]any{
+				"schema":       1,
+				"name":         pkgName,
+				"version":      defaultVersion,
+				"title":        pkgName,
+				"description":  "Compiled from " + srcAbs,
+				"kind":         "workflow",
+				"allow_clone":  true,
+				"distribution": "source",
+			}
+			repoRoot, err := filepath.Abs(workdir)
+			if err != nil {
+				return err
+			}
+			if ns := strings.TrimSpace(wf.Namespace); ns != "" {
+				pm["namespace"] = ns
+			} else if pc, err := loadDockpipeProjectConfig(repoRoot); err == nil && pc != nil && pc.Packages.Namespace != nil {
+				if def := strings.TrimSpace(*pc.Packages.Namespace); def != "" {
+					pm["namespace"] = def
+				}
+			}
+			out, err := yaml.Marshal(pm)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(manifestPath, out, 0o644); err != nil {
+				return err
+			}
+		}
+		pmParsed, err := domain.ParsePackageManifest(manifestPath)
+		if err != nil {
+			return fmt.Errorf("package manifest: %w", err)
+		}
+		ver := strings.TrimSpace(pmParsed.Version)
+		if ver == "" {
+			ver = defaultVersion
+		}
+		outPath := filepath.Join(pw, fmt.Sprintf("dockpipe-workflow-%s-%s.tar.gz", packagebuild.SafeTarballToken(pkgName), packagebuild.SafeTarballToken(ver)))
+		if _, err := packagebuild.WriteDirTarGzWithPrefix(staging, outPath, "workflows/"+pkgName); err != nil {
+			return err
+		}
+		opIDs["result"] = "compiled"
+		opIDs["output"] = filepath.ToSlash(outPath)
+		return nil
+	})
+}
+
+func runWorkflowCompileHooks(workdir, srcAbs, staging string, hooks []string) error {
+	return runCompileHooksForStaging(workdir, srcAbs, staging, "workflow", hooks)
+}
+
+func mkdirCompileStagingDir(workdir, pattern string) (string, error) {
+	stateRoot, err := infrastructure.StateRoot(workdir)
+	if err != nil {
+		return "", err
+	}
+	tmpRoot := filepath.Join(stateRoot, "tmp")
+	if err := os.MkdirAll(tmpRoot, 0o755); err != nil {
+		return "", err
+	}
+	return os.MkdirTemp(tmpRoot, pattern)
+}
+
+func runCompileHooksForStaging(workdir, srcAbs, staging, kind string, hooks []string) error {
+	for i, hook := range hooks {
+		hook = strings.TrimSpace(hook)
+		if hook == "" {
+			continue
+		}
+		cmd, bashExe, err := dockpipeBashShellCommand(hook)
+		if err != nil {
+			return fmt.Errorf("compile_hooks[%d]: %w", i, err)
+		}
+		cmd.Dir = staging
+		compileWorkdir := workdir
+		compileSourceDir := srcAbs
+		compileStagingDir := staging
+		if bashExe != "" {
+			compileWorkdir = dockpipePathForBashEnv(bashExe, workdir)
+			compileSourceDir = dockpipePathForBashEnv(bashExe, srcAbs)
+			compileStagingDir = dockpipePathForBashEnv(bashExe, staging)
+		}
+		cmd.Env = append(os.Environ(),
+			"DOCKPIPE_COMPILE_KIND="+strings.TrimSpace(kind),
+			"DOCKPIPE_COMPILE_WORKDIR="+compileWorkdir,
+			"DOCKPIPE_COMPILE_SOURCE_DIR="+compileSourceDir,
+			"DOCKPIPE_COMPILE_STAGING_DIR="+compileStagingDir,
+		)
+		if bashExe != "" {
+			cmd.Env = upsertEnvLocal(cmd.Env, "DOCKPIPE_HOST_BASH_BIN", bashExe)
+		}
+		cmd.Stdout = os.Stderr
+		cmd.Stderr = os.Stderr
+		hookIDs := packageCompileIDs(workdir, map[string]string{
+			"compile_kind": strings.TrimSpace(kind),
+			"hook_index":   strconv.Itoa(i),
+			"source":       filepath.ToSlash(srcAbs),
+			"staging":      filepath.ToSlash(staging),
+		})
+		if err := infrastructure.RunOperationWithOptions(os.Stderr, "package.compile.hook", "Running compile hook…", hookIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: packageCompileProgressEvery}, func() error {
+			return cmd.Run()
+		}); err != nil {
+			return fmt.Errorf("compile_hooks[%d]: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func readAuthoredPackageManifest(root string) (*domain.PackageManifest, error) {
+	manifestPath := filepath.Join(root, infrastructure.PackageManifestFilename)
+	if _, err := os.Stat(manifestPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return domain.ParsePackageManifest(manifestPath)
+}
+
+func validateWorkflowConfigsUnderDir(root string) error {
+	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case ".git", ".dockpipe", ".dorkpipe", "node_modules":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.Name() != "config.yml" {
+			return nil
+		}
+		if err := infrastructure.ValidateResolvedWorkflowYAML(path); err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		return nil
+	})
+}
+
+func compiledPackageWorkflowConfigsValid(tgz string) (bool, string) {
+	members, err := packagebuild.ListTarGzMemberPaths(tgz)
+	if err != nil {
+		return false, err.Error()
+	}
+	for _, entry := range members {
+		if !compiledPackageWorkflowConfigEntry(entry) {
+			continue
+		}
+		if err := validateWorkflowConfigInTarball(tgz, entry); err != nil {
+			return false, fmt.Sprintf("%s: %v", entry, err)
+		}
+	}
+	return true, ""
+}
+
+func compiledPackageWorkflowConfigEntry(entry string) bool {
+	parts := strings.Split(filepath.ToSlash(entry), "/")
+	if len(parts) < 3 || parts[len(parts)-1] != "config.yml" {
+		return false
+	}
+	switch parts[0] {
+	case "workflows":
+		return len(parts) == 3
+	case "resolvers":
+		// Resolver packages may include a resolver-shaped workflow at
+		// resolvers/<name>/config.yml or embedded child workflows one level down.
+		return len(parts) == 3 || len(parts) == 4
+	default:
+		return false
+	}
+}
+
+func validateWorkflowConfigInTarball(tgz, entry string) error {
+	entry = filepath.ToSlash(entry)
+	b, err := packagebuild.ReadFileFromTarGz(tgz, entry)
+	if err != nil {
+		return err
+	}
+	baseDir := filepath.ToSlash(filepath.Dir(entry))
+	readFile := func(p string) ([]byte, error) {
+		return packagebuild.ReadFileFromTarGz(tgz, filepath.ToSlash(filepath.Clean(p)))
+	}
+	wf, err := domain.ParseWorkflowFromDisk(b, baseDir, readFile)
+	if err != nil {
+		return fmt.Errorf("parse workflow: %w", err)
+	}
+	if err := domain.ValidateLoadedWorkflow(wf); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ensureWorkflowImageEntrypoint(workdir, staging string) error {
+	imagesDir := filepath.Join(staging, "assets", "images")
+	if st, err := os.Stat(imagesDir); err != nil || !st.IsDir() {
+		return nil
+	}
+	needsEntrypoint := false
+	if err := filepath.WalkDir(imagesDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() && d.Name() == "Dockerfile" {
+			needsEntrypoint = true
+			return filepath.SkipAll
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if !needsEntrypoint {
+		return nil
+	}
+	dst := filepath.Join(staging, "assets", "entrypoint.sh")
+	if st, err := os.Stat(dst); err == nil && !st.IsDir() {
+		return nil
+	}
+	src := filepath.Join(workdir, "assets", "entrypoint.sh")
+	b, err := os.ReadFile(src)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(dst, b, 0o755)
+}
+
+func cmdPackageCompileCore(args []string) error {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
+		fmt.Print(packageCompileCoreUsageText)
+		return nil
+	}
+	var err error
+	args, err = injectCompileWorkdirFromProjectConfig(args)
+	if err != nil {
+		return err
+	}
+	var (
+		workdir string
+		src     string
+		force   bool
+	)
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--workdir" && i+1 < len(args):
+			workdir = args[i+1]
+			i++
+		case (args[i] == "--from" || args[i] == "--source") && i+1 < len(args):
+			src = args[i+1]
+			i++
+		case args[i] == "--force":
+			force = true
+		case strings.HasPrefix(args[i], "-"):
+			return fmt.Errorf("unknown option %s (try: dockpipe package compile core --help)", args[i])
+		default:
+			if src == "" {
+				src = args[i]
+				continue
+			}
+			return fmt.Errorf("unexpected argument %q", args[i])
+		}
+	}
+	if workdir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		workdir = wd
+	}
+	repoRoot, err := filepath.Abs(workdir)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(src) == "" {
+		cfg, err := loadDockpipeProjectConfig(repoRoot)
+		if err != nil {
+			return err
+		}
+		if p, err := coreFromConfig(cfg, repoRoot); err != nil {
+			return err
+		} else if strings.TrimSpace(p) != "" {
+			src = p
+		}
+	}
+	opIDs := packageCompileIDs(workdir, map[string]string{
+		"package": "dockpipe.core",
+	})
+	return infrastructure.RunOperationWithOptions(os.Stderr, "package.compile.core", "Compiling core package…", opIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: packageCompileProgressEvery}, func() error {
+		if strings.TrimSpace(src) == "" {
+			src, err = defaultCoreSource(repoRoot)
+			if err != nil {
+				if seeded, seedErr := seedCompiledCoreFromInstalledTarball(workdir, force, opIDs); seedErr == nil && seeded {
+					return nil
+				}
+				return err
+			}
+		}
+		srcAbs, err := filepath.Abs(filepath.Clean(src))
+		if err != nil {
+			return err
+		}
+		opIDs["source"] = filepath.ToSlash(srcAbs)
+		if st, err := os.Stat(srcAbs); err != nil || !st.IsDir() {
+			return fmt.Errorf("core source must be a directory: %s", srcAbs)
+		}
+		coreDir, err := infrastructure.PackagesCoreDir(workdir)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(coreDir, 0o755); err != nil {
+			return err
+		}
+		coreTarGlob := filepath.Join(coreDir, "dockpipe-core-*.tar.gz")
+		if !force {
+			if matches, _ := filepath.Glob(coreTarGlob); len(matches) > 0 {
+				opIDs["result"] = "skip"
+				opIDs["skip_reason"] = "existing_tarball"
+				opIDs["output"] = filepath.ToSlash(matches[0])
+				return nil
+			}
+			if st, err := os.Stat(filepath.Join(coreDir, "runtimes")); err == nil && st.IsDir() {
+				opIDs["result"] = "skip"
+				opIDs["skip_reason"] = "legacy_tree_exists"
+				opIDs["output"] = filepath.ToSlash(coreDir)
+				return nil
+			}
+		} else {
+			_ = infrastructure.RemoveGlob(coreTarGlob)
+			_ = infrastructure.RemoveLegacyPackageSubdirs(coreDir)
+		}
+		staging, err := mkdirCompileStagingDir(workdir, "dockpipe-compile-core-*")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(staging)
+		exclude := map[string]bool{"resolvers": true, "bundles": true, "workflows": true}
+		if err := copyDirExcludingTopLevel(srcAbs, staging, exclude); err != nil {
+			return fmt.Errorf("copy core: %w", err)
+		}
+		if err := runCoreSourceBuildTarget(workdir, staging); err != nil {
+			return err
+		}
+		if _, err := materializePipeLangRoots([]string{staging}, true, ""); err != nil {
+			return fmt.Errorf("compile pipelang artifacts: %w", err)
+		}
+		defaultVersion := authoredPackageVersion(workdir)
+		manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
+		if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
+			pm := map[string]any{
+				"schema":       1,
+				"name":         "dockpipe.core",
+				"version":      defaultVersion,
+				"title":        "Compiled core slice",
+				"description":  "Compiled from " + srcAbs,
+				"kind":         "core",
+				"allow_clone":  true,
+				"distribution": "source",
+				"depends":      []string{},
+			}
+			out, err := yaml.Marshal(pm)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(manifestPath, out, 0o644); err != nil {
+				return err
+			}
+		}
+		pmParsed, err := domain.ParsePackageManifest(manifestPath)
+		if err != nil {
+			return fmt.Errorf("package manifest: %w", err)
+		}
+		ver := strings.TrimSpace(pmParsed.Version)
+		if ver == "" {
+			ver = defaultVersion
+		}
+		outPath := filepath.Join(coreDir, fmt.Sprintf("dockpipe-core-%s.tar.gz", packagebuild.SafeTarballToken(ver)))
+		if _, err := packagebuild.WriteDirTarGzWithPrefix(staging, outPath, "core"); err != nil {
+			return err
+		}
+		opIDs["result"] = "compiled"
+		opIDs["output"] = filepath.ToSlash(outPath)
+		return nil
+	})
+}
+
+func runCoreSourceBuildTarget(workdir, staging string) error {
+	manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
+	if _, err := os.Stat(manifestPath); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	manifest, err := domain.ParsePackageManifest(manifestPath)
+	if err != nil {
+		return fmt.Errorf("package manifest: %w", err)
+	}
+	if manifest.Build.Source == nil || strings.TrimSpace(manifest.Build.Source.Script) == "" {
+		return nil
+	}
+	target := packageScriptTarget{
+		Name:       strings.TrimSpace(manifest.Name),
+		Manifest:   manifestPath,
+		PackageDir: staging,
+		ScriptRel:  filepath.Clean(manifest.Build.Source.Script),
+		ScriptAbs:  filepath.Join(staging, filepath.FromSlash(manifest.Build.Source.Script)),
+	}
+	buildIDs := packageCompileIDs(workdir, map[string]string{
+		"package": target.Name,
+		"script":  filepath.ToSlash(target.ScriptRel),
+		"source":  filepath.ToSlash(staging),
+	})
+	if err := infrastructure.RunOperationWithOptions(os.Stderr, "package.compile.source_build", "Running core source build…", buildIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: packageCompileProgressEvery}, func() error {
+		return runPackageScriptTarget(workdir, target, packageSourceBuildEnv(workdir, target), "build.source.script")
+	}); err != nil {
+		return fmt.Errorf("core source build: %w", err)
+	}
+	return nil
+}
+
+func defaultCoreSource(repoRoot string) (string, error) {
+	srcCore := filepath.Join(repoRoot, "src", "core")
+	if st, err := os.Stat(filepath.Join(srcCore, "runtimes")); err == nil && st.IsDir() {
+		return filepath.Abs(srcCore)
+	}
+	tc := filepath.Join(repoRoot, "templates", "core")
+	if st, err := os.Stat(filepath.Join(tc, "runtimes")); err == nil && st.IsDir() {
+		return filepath.Abs(tc)
+	}
+	return "", fmt.Errorf("no default core tree (expected src/core/runtimes or templates/core/runtimes); use --from <dir>")
+}
+
+func seedCompiledCoreFromInstalledTarball(workdir string, force bool, opIDs map[string]string) (bool, error) {
+	coreDir, err := infrastructure.PackagesCoreDir(workdir)
+	if err != nil {
+		return false, err
+	}
+	if err := os.MkdirAll(coreDir, 0o755); err != nil {
+		return false, err
+	}
+	coreTarGlob := filepath.Join(coreDir, "dockpipe-core-*.tar.gz")
+	if !force {
+		if matches, _ := filepath.Glob(coreTarGlob); len(matches) > 0 {
+			opIDs["result"] = "skip"
+			opIDs["skip_reason"] = "existing_tarball"
+			opIDs["output"] = filepath.ToSlash(matches[0])
+			return true, nil
+		}
+	}
+	sourceTarball := ""
+	if gp, err := infrastructure.GlobalPackagesRoot(); err == nil {
+		if p, err := latestGlob(filepath.Join(gp, "core", "dockpipe-core-*.tar.gz")); err != nil {
+			return false, err
+		} else if p != "" {
+			sourceTarball = p
+		}
+	}
+	if sourceTarball == "" {
+		for _, dir := range infrastructure.SystemPackagesCoreDirs() {
+			if p, err := latestGlob(filepath.Join(dir, "dockpipe-core-*.tar.gz")); err != nil {
+				return false, err
+			} else if p != "" {
+				sourceTarball = p
+				break
+			}
+		}
+	}
+	if sourceTarball == "" {
+		return false, nil
+	}
+	if force {
+		_ = infrastructure.RemoveGlob(coreTarGlob)
+		_ = infrastructure.RemoveLegacyPackageSubdirs(coreDir)
+	}
+	destTarball := filepath.Join(coreDir, filepath.Base(sourceTarball))
+	if err := copyFileWithMode(sourceTarball, destTarball, 0o644); err != nil {
+		return false, err
+	}
+	if sum := sourceTarball + ".sha256"; fileExists(sum) {
+		if err := copyFileWithMode(sum, destTarball+".sha256", 0o644); err != nil {
+			return false, err
+		}
+	}
+	opIDs["source"] = filepath.ToSlash(sourceTarball)
+	opIDs["result"] = "seeded"
+	opIDs["output"] = filepath.ToSlash(destTarball)
+	return true, nil
+}
+
+func latestGlob(pattern string) (string, error) {
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return "", err
+	}
+	if len(matches) == 0 {
+		return "", nil
+	}
+	return infrastructure.PickLatestModTimePath(matches), nil
+}
+
+func copyFileWithMode(src, dst string, mode os.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+	if _, err := io.Copy(out, in); err != nil {
+		return err
+	}
+	return out.Close()
+}
+
+func fileExists(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && !st.IsDir()
+}
+
+func cmdPackageCompileResolvers(args []string) error {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
+		fmt.Print(packageCompileResolversUsageText)
+		return nil
+	}
+	var err error
+	args, err = injectCompileWorkdirFromProjectConfig(args)
+	if err != nil {
+		return err
+	}
+	var (
+		workdir string
+		from    []string
+		force   bool
+	)
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--workdir" && i+1 < len(args):
+			workdir = args[i+1]
+			i++
+		case (args[i] == "--from" || args[i] == "--source") && i+1 < len(args):
+			from = append(from, args[i+1])
+			i++
+		case args[i] == "--force":
+			force = true
+		case strings.HasPrefix(args[i], "-"):
+			return fmt.Errorf("unknown option %s (try: dockpipe package compile resolvers --help)", args[i])
+		default:
+			if len(from) == 0 {
+				from = append(from, args[i])
+				continue
+			}
+			return fmt.Errorf("unexpected argument %q", args[i])
+		}
+	}
+	if workdir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		workdir = wd
+	}
+	repoRoot, err := filepath.Abs(workdir)
+	if err != nil {
+		return err
+	}
+	if len(from) == 0 {
+		cfg, err := loadDockpipeProjectConfig(repoRoot)
+		if err != nil {
+			return err
+		}
+		from = effectiveResolverCompileRoots(cfg, repoRoot)
+	}
+	if len(from) == 0 {
+		return fmt.Errorf("no resolver source directories (set compile.workflows in %s or pass --from)", domain.DockpipeProjectConfigFileName)
+	}
+	destRes, err := infrastructure.PackagesResolversDir(workdir)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(destRes, 0o755); err != nil {
+		return err
+	}
+	var defResolverNamespace string
+	if cfg, err := loadDockpipeProjectConfig(repoRoot); err == nil && cfg != nil && cfg.Packages.Namespace != nil {
+		defResolverNamespace = strings.TrimSpace(*cfg.Packages.Namespace)
+	}
+	opIDs := packageCompileIDs(workdir, map[string]string{
+		"root_count": strconv.Itoa(len(from)),
+	})
+	return infrastructure.RunOperationWithOptions(os.Stderr, "package.compile.resolvers", "Compiling resolver packages…", opIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: packageCompileProgressEvery}, func() error {
+		total := 0
+		skippedRoots := 0
+		for _, root := range from {
+			srcAbs, err := filepath.Abs(filepath.Clean(root))
+			if err != nil {
+				return err
+			}
+			if st, err := os.Stat(srcAbs); err != nil || !st.IsDir() {
+				skippedRoots++
+				continue
+			}
+			n, err := mergeChildPackages(workdir, srcAbs, destRes, "resolver", defResolverNamespace, authoredPackageVersion(repoRoot), force)
+			if err != nil {
+				return err
+			}
+			total += n
+		}
+		opIDs["count"] = strconv.Itoa(total)
+		opIDs["output"] = filepath.ToSlash(destRes)
+		if skippedRoots > 0 {
+			opIDs["skipped_roots"] = strconv.Itoa(skippedRoots)
+		}
+		if total == 0 {
+			opIDs["result"] = "noop"
+		} else {
+			opIDs["result"] = "compiled"
+		}
+		return nil
+	})
+}
+
+const resolverMetaFilename = "resolver.yaml"
+
+// readResolverNamespaceYAML returns the optional namespace from <dir>/resolver.yaml (empty if absent).
+func readResolverNamespaceYAML(dir string) (string, error) {
+	p := filepath.Join(dir, resolverMetaFilename)
+	b, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	var aux struct {
+		Namespace string `yaml:"namespace"`
+	}
+	if err := yaml.Unmarshal(b, &aux); err != nil {
+		return "", fmt.Errorf("parse %s: %w", p, err)
+	}
+	if err := domain.ValidateNamespace(aux.Namespace); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(aux.Namespace), nil
+}
+
+// collectResolverPackRoots returns every directory named resolvers under srcRoot, plus the flat
+// srcRoot/resolvers tree when present. The caller's compile roots define the search space; no
+// repository-specific layout assumptions are baked into src/lib.
+func collectResolverPackRoots(srcRoot string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	add := func(p string) {
+		if st, err := os.Stat(p); err != nil || !st.IsDir() {
+			return
+		}
+		if _, ok := seen[p]; ok {
+			return
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	add(filepath.Join(srcRoot, "resolvers"))
+	_ = filepath.WalkDir(srcRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if path != srcRoot {
+			switch d.Name() {
+			case ".git", ".dockpipe", ".dorkpipe", "node_modules", "target":
+				return filepath.SkipDir
+			}
+			if strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
+		}
+		if path != srcRoot && d.Name() == "resolvers" {
+			add(path)
+			return filepath.SkipDir
+		}
+		return nil
+	})
+	return out
+}
+
+// hasNestedResolverPackLayout reports whether dir looks like a grouped resolver tree (at least one
+// immediate child directory has no profile/ — recurse into group folders until profile/ is found).
+func hasNestedResolverPackLayout(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(dir, e.Name(), "profile")); err != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// mergeChildPackages packs each immediate child directory from srcRoot into
+// dockpipe-resolver-<name>-<ver>.tar.gz under destRoot (no expanded trees).
+// For resolvers, when the tree is grouped (child dirs without profile/), we descend until profile/ is found.
+//
+// Resolver authoring can be flat (srcRoot/resolvers) or nested under any compile root-provided tree.
+// Each resolver child still becomes its own dockpipe-resolver-<name>-*.tar.gz for the store.
+func mergeChildPackages(workdir, srcRoot, destRoot string, kind string, defaultNamespace string, defaultVersion string, force bool) (int, error) {
+	if kind == "resolver" {
+		roots := collectResolverPackRoots(srcRoot)
+		// Drop top-level resolvers/ if it does not exist (collectResolverPackRoots still added it — fix)
+		roots = filterExistingResolverRoots(roots)
+		if len(roots) > 0 {
+			total := 0
+			for _, root := range roots {
+				n, err := mergeChildPackagesWalk(workdir, root, destRoot, kind, defaultNamespace, defaultVersion, force)
+				total += n
+				if err != nil {
+					return total, err
+				}
+			}
+			return total, nil
+		}
+	}
+	return mergeChildPackagesWalk(workdir, srcRoot, destRoot, kind, defaultNamespace, defaultVersion, force)
+}
+
+func filterExistingResolverRoots(roots []string) []string {
+	var out []string
+	for _, p := range roots {
+		if st, err := os.Stat(p); err == nil && st.IsDir() {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// compileSingleResolverDir packs one resolver profile directory (contains profile) into
+// dockpipe-resolver-<name>-<ver>.tar.gz under destRoot.
+func compileSingleResolverDir(workdir, destRoot, from, name string, defaultNamespace string, defaultVersion string, force bool) error {
+	kind := "resolver"
+	opIDs := packageCompileIDs(workdir, map[string]string{
+		"package": name,
+		"source":  filepath.ToSlash(from),
+	})
+	return infrastructure.RunOperationWithOptions(os.Stderr, "package.compile.resolver", "Compiling resolver package…", opIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: packageCompileProgressEvery}, func() error {
+		if err := validateWorkflowConfigsUnderDir(from); err != nil {
+			return fmt.Errorf("validate resolver %s: %w", name, err)
+		}
+		tarGlob := filepath.Join(destRoot, fmt.Sprintf("dockpipe-resolver-%s-*.tar.gz", packagebuild.SafeTarballToken(name)))
+		legacyDir := filepath.Join(destRoot, name)
+		rebuild := force
+		if !force {
+			matches, _ := filepath.Glob(tarGlob)
+			if len(matches) > 0 {
+				latestTar := infrastructure.PickLatestModTimePath(matches)
+				if latestTar == "" {
+					rebuild = true
+				} else {
+					if ok, reason := compiledPackageWorkflowConfigsValid(latestTar); !ok {
+						opIDs["rebuild_reason"] = "invalid_store_tarball"
+						opIDs["validation_error"] = reason
+						rebuild = true
+					}
+					if !rebuild {
+						stale, err := infrastructure.SourceDirNewerThanPath(from, latestTar)
+						if err != nil {
+							return err
+						}
+						if !stale {
+							opIDs["result"] = "skip"
+							opIDs["skip_reason"] = "up_to_date_tarball"
+							opIDs["output"] = filepath.ToSlash(latestTar)
+							return nil
+						}
+						opIDs["rebuild_reason"] = "source_newer_than_tarball"
+						rebuild = true
+					}
+				}
+			} else if _, err := os.Stat(legacyDir); err == nil {
+				refMax, err := infrastructure.MaxModTimeFilesUnder(legacyDir)
+				if err != nil {
+					return err
+				}
+				srcMax, err := infrastructure.MaxModTimeFilesUnder(from)
+				if err != nil {
+					return err
+				}
+				switch {
+				case srcMax.IsZero():
+					opIDs["rebuild_reason"] = "untimed_sources"
+					rebuild = true
+				case refMax.IsZero():
+					opIDs["rebuild_reason"] = "empty_legacy_store"
+					rebuild = true
+				case !srcMax.After(refMax):
+					opIDs["result"] = "skip"
+					opIDs["skip_reason"] = "up_to_date_legacy_store"
+					opIDs["output"] = filepath.ToSlash(legacyDir)
+					return nil
+				default:
+					opIDs["rebuild_reason"] = "source_newer_than_legacy_store"
+					rebuild = true
+				}
+			}
+		}
+		if rebuild {
+			if n, err := infrastructure.InvalidateTarballExtractCacheForPackage(workdir, "resolver", name); err != nil {
+				return err
+			} else if n > 0 {
+				opIDs["cache_invalidated"] = strconv.Itoa(n)
+			}
+			_ = infrastructure.RemoveGlob(tarGlob)
+			_ = os.RemoveAll(legacyDir)
+		}
+		staging, err := mkdirCompileStagingDir(workdir, "dockpipe-compile-"+kind+"-*")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(staging)
+		if err := copyDir(from, staging); err != nil {
+			return fmt.Errorf("copy %s %s: %w", kind, name, err)
+		}
+		if b, err := os.ReadFile(filepath.Join(staging, "config.yml")); err == nil {
+			wf, err := domain.ParseWorkflowYAML(b)
+			if err != nil {
+				return fmt.Errorf("%s %s: parse workflow: %w", kind, name, err)
+			}
+			if err := runCompileHooksForStaging(workdir, from, staging, kind, wf.CompileHooks); err != nil {
+				return fmt.Errorf("%s %s: %w", kind, name, err)
+			}
+			if err := infrastructure.ValidateWorkflowYAML(filepath.Join(staging, "config.yml")); err != nil {
+				return fmt.Errorf("validate %s %s after compile_hooks: %w", kind, name, err)
+			}
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("%s %s: read config.yml: %w", kind, name, err)
+		}
+		if err := ensureWorkflowImageEntrypoint(workdir, staging); err != nil {
+			return fmt.Errorf("stage resolver image entrypoint: %w", err)
+		}
+		if _, err := materializePipeLangRoots([]string{staging}, true, ""); err != nil {
+			return fmt.Errorf("compile pipelang artifacts for %s %s: %w", kind, name, err)
+		}
+		manifestPath := filepath.Join(staging, infrastructure.PackageManifestFilename)
+		if _, err := os.Stat(manifestPath); os.IsNotExist(err) {
+			pm := map[string]any{
+				"schema":       1,
+				"name":         name,
+				"version":      defaultVersion,
+				"title":        name,
+				"description":  "Compiled from " + from,
+				"kind":         kind,
+				"allow_clone":  true,
+				"distribution": "source",
+			}
+			ns, err := readResolverNamespaceYAML(staging)
+			if err != nil {
+				return fmt.Errorf("resolver %s: %w", name, err)
+			}
+			if ns != "" {
+				pm["namespace"] = ns
+			} else if strings.TrimSpace(defaultNamespace) != "" {
+				pm["namespace"] = strings.TrimSpace(defaultNamespace)
+			}
+			out, err := yaml.Marshal(pm)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(manifestPath, out, 0o644); err != nil {
+				return err
+			}
+		}
+		pmParsed, err := domain.ParsePackageManifest(manifestPath)
+		if err != nil {
+			return fmt.Errorf("%s %s: %w", kind, name, err)
+		}
+		cfgPath := filepath.Join(staging, "config.yml")
+		if b, err := os.ReadFile(cfgPath); err == nil {
+			wf, err := domain.ParseWorkflowYAML(b)
+			if err != nil {
+				return fmt.Errorf("%s %s: parse workflow: %w", kind, name, err)
+			}
+			if err := writeCompiledWorkflowRuntimeArtifacts(workdir, staging, name, wf, pmParsed); err != nil {
+				return fmt.Errorf("%s %s: write runtime artifacts: %w", kind, name, err)
+			}
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("%s %s: read config.yml: %w", kind, name, err)
+		}
+		ver := strings.TrimSpace(pmParsed.Version)
+		if ver == "" {
+			ver = defaultVersion
+		}
+		prefix := "resolvers/" + name
+		base := fmt.Sprintf("dockpipe-resolver-%s-%s.tar.gz", packagebuild.SafeTarballToken(name), packagebuild.SafeTarballToken(ver))
+		outPath := filepath.Join(destRoot, base)
+		if _, err := packagebuild.WriteDirTarGzWithPrefix(staging, outPath, prefix); err != nil {
+			return fmt.Errorf("%s %s: %w", kind, name, err)
+		}
+		opIDs["result"] = "compiled"
+		opIDs["output"] = filepath.ToSlash(outPath)
+		return nil
+	})
+}
+
+func mergeChildPackagesWalk(workdir, srcRoot, destRoot string, kind string, defaultNamespace string, defaultVersion string, force bool) (int, error) {
+	entries, err := os.ReadDir(srcRoot)
+	if err != nil {
+		return 0, err
+	}
+	nestedPack := kind == "resolver" && hasNestedResolverPackLayout(srcRoot)
+	n := 0
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if strings.HasPrefix(name, ".") {
+			continue
+		}
+		from := filepath.Join(srcRoot, name)
+		if nestedPack {
+			if _, err := os.Stat(filepath.Join(from, "profile")); err != nil {
+				sub, err := mergeChildPackagesWalk(workdir, from, destRoot, kind, defaultNamespace, defaultVersion, force)
+				if err != nil {
+					return n, err
+				}
+				n += sub
+				continue
+			}
+		}
+		if kind != "resolver" {
+			return n, fmt.Errorf("mergeChildPackages: unknown kind %q", kind)
+		}
+		if err := compileSingleResolverDir(workdir, destRoot, from, name, defaultNamespace, defaultVersion, force); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, nil
+}
+
+func cmdPackageCompileWorkflowsBatch(args []string) error {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
+		fmt.Print(packageCompileWorkflowsUsageText)
+		return nil
+	}
+	var err error
+	args, err = injectCompileWorkdirFromProjectConfig(args)
+	if err != nil {
+		return err
+	}
+	var (
+		workdir    string
+		from       []string
+		force      bool
+		pruneStale bool
+	)
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--workdir" && i+1 < len(args):
+			workdir = args[i+1]
+			i++
+		case (args[i] == "--from" || args[i] == "--source") && i+1 < len(args):
+			from = append(from, args[i+1])
+			i++
+		case args[i] == "--force":
+			force = true
+		case args[i] == "--prune-stale":
+			pruneStale = true
+		case strings.HasPrefix(args[i], "-"):
+			return fmt.Errorf("unknown option %s (try: dockpipe package compile workflows --help)", args[i])
+		default:
+			return fmt.Errorf("unexpected argument %q", args[i])
+		}
+	}
+	if workdir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		workdir = wd
+	}
+	repoRoot, err := filepath.Abs(workdir)
+	if err != nil {
+		return err
+	}
+	if len(from) == 0 {
+		cfg, err := loadDockpipeProjectConfig(repoRoot)
+		if err != nil {
+			return err
+		}
+		from = effectiveWorkflowCompileRoots(cfg, repoRoot)
+	}
+	opIDs := packageCompileIDs(workdir, map[string]string{
+		"root_count": strconv.Itoa(len(from)),
+	})
+	return infrastructure.RunOperationWithOptions(os.Stderr, "package.compile.workflows", "Compiling workflow packages…", opIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: packageCompileProgressEvery}, func() error {
+		seen := make(map[string]struct{})
+		total := 0
+		skippedRoots := 0
+		skippedDuplicates := 0
+		for _, root := range from {
+			rootAbs, err := filepath.Abs(filepath.Clean(root))
+			if err != nil {
+				return err
+			}
+			if _, err := os.Stat(rootAbs); err != nil {
+				skippedRoots++
+				continue
+			}
+			if err := filepath.WalkDir(rootAbs, func(path string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if d.IsDir() || (d.Name() != "config.yml" && d.Name() != "config.pipe") {
+					return nil
+				}
+				wfDir := filepath.Dir(path)
+				wfName := filepath.Base(wfDir)
+				if strings.HasPrefix(wfName, ".") {
+					return nil
+				}
+				if d.Name() == "config.pipe" {
+					if _, err := os.Stat(filepath.Join(wfDir, "config.yml")); err == nil {
+						return nil
+					}
+				}
+				if _, ok := seen[wfName]; ok {
+					skippedDuplicates++
+					return nil
+				}
+				if d.Name() == "config.pipe" {
+					if err := compileWorkflowOneFromPipe(workdir, wfDir, force); err != nil {
+						return fmt.Errorf("workflow %q (config.pipe): %w", wfName, err)
+					}
+				} else if err := compileWorkflowOne(workdir, wfDir, "", force); err != nil {
+					return fmt.Errorf("workflow %q: %w", wfName, err)
+				}
+				seen[wfName] = struct{}{}
+				total++
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
+		pruned := 0
+		if pruneStale {
+			n, err := pruneStaleWorkflowTarballs(workdir, seen)
+			if err != nil {
+				return err
+			}
+			pruned = n
+		}
+		opIDs["count"] = strconv.Itoa(total)
+		if skippedRoots > 0 {
+			opIDs["skipped_roots"] = strconv.Itoa(skippedRoots)
+		}
+		if skippedDuplicates > 0 {
+			opIDs["skipped_duplicates"] = strconv.Itoa(skippedDuplicates)
+		}
+		if pruned > 0 {
+			opIDs["pruned"] = strconv.Itoa(pruned)
+		}
+		if total == 0 {
+			opIDs["result"] = "noop"
+		} else {
+			opIDs["result"] = "compiled"
+		}
+		return nil
+	})
+}
+
+func pruneStaleWorkflowTarballs(workdir string, seen map[string]struct{}) (int, error) {
+	pw, err := infrastructure.PackagesWorkflowsDir(workdir)
+	if err != nil {
+		return 0, err
+	}
+	all, err := filepath.Glob(filepath.Join(pw, "dockpipe-workflow-*.tar.gz"))
+	if err != nil {
+		return 0, err
+	}
+	keep := map[string]struct{}{}
+	for name := range seen {
+		pattern := filepath.Join(pw, fmt.Sprintf("dockpipe-workflow-%s-*.tar.gz", packagebuild.SafeTarballToken(name)))
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			return 0, err
+		}
+		for _, path := range matches {
+			keep[filepath.Clean(path)] = struct{}{}
+		}
+	}
+	removed := 0
+	for _, path := range all {
+		clean := filepath.Clean(path)
+		if _, ok := keep[clean]; ok {
+			continue
+		}
+		if err := os.Remove(clean); err != nil && !os.IsNotExist(err) {
+			return removed, err
+		}
+		_ = os.Remove(clean + ".sha256")
+		removed++
+	}
+	return removed, nil
+}
+
+func cmdPackageCompileAll(args []string) error {
+	if len(args) > 0 && (args[0] == "--help" || args[0] == "-h") {
+		fmt.Print(packageCompileAllUsageText)
+		return nil
+	}
+	var err error
+	args, err = injectCompileWorkdirFromProjectConfig(args)
+	if err != nil {
+		return err
+	}
+	var (
+		workdir string
+		force   bool
+	)
+	for i := 0; i < len(args); i++ {
+		switch {
+		case args[i] == "--workdir" && i+1 < len(args):
+			workdir = args[i+1]
+			i++
+		case args[i] == "--force":
+			force = true
+		case args[i] == "--with-bundles", args[i] == "--skip-bundles":
+			// Ignored: bundle roots compile as workflows (compile.bundles merged into compile.workflows).
+		case args[i] == "--help" || args[i] == "-h":
+			fmt.Print(packageCompileAllUsageText)
+			return nil
+		case strings.HasPrefix(args[i], "-"):
+			return fmt.Errorf("unknown option %s (try: dockpipe package compile all --help)", args[i])
+		default:
+			return fmt.Errorf("unexpected argument %q", args[i])
+		}
+	}
+	if workdir == "" {
+		wd, err := os.Getwd()
+		if err != nil {
+			return err
+		}
+		workdir = wd
+	}
+	repoRoot, err := filepath.Abs(workdir)
+	if err != nil {
+		return err
+	}
+	cfg, err := loadDockpipeProjectConfig(repoRoot)
+	if err != nil {
+		return err
+	}
+	opIDs := packageCompileIDs(workdir, nil)
+	return infrastructure.RunOperationWithOptions(os.Stderr, "package.compile.all", "Compiling package store…", opIDs, infrastructure.OperationOptions{Spinner: false, ProgressEvery: packageCompileProgressEvery}, func() error {
+		if err := cmdPackageCompileCore(workdirAndForceArgs(workdir, force)); err != nil {
+			return err
+		}
+		resRoots := effectiveResolverCompileRoots(cfg, repoRoot)
+		if len(resRoots) == 0 {
+			opIDs["resolver_result"] = "noop"
+		} else {
+			resArgs := []string{"--workdir", workdir}
+			if force {
+				resArgs = append(resArgs, "--force")
+			}
+			for _, p := range resRoots {
+				resArgs = append(resArgs, "--from", p)
+			}
+			if err := cmdPackageCompileResolvers(resArgs); err != nil {
+				return err
+			}
+		}
+		wfArgs := workdirAndForceArgs(workdir, force)
+		if force {
+			wfArgs = append(wfArgs, "--prune-stale")
+		}
+		for _, p := range effectiveWorkflowCompileRoots(cfg, repoRoot) {
+			wfArgs = append(wfArgs, "--from", p)
+		}
+		if err := cmdPackageCompileWorkflowsBatch(wfArgs); err != nil {
+			return err
+		}
+		if err := validateCompileOutputs(workdir); err != nil {
+			return err
+		}
+		opIDs["result"] = "compiled"
+		return nil
+	})
+}
+
+func workdirAndForceArgs(workdir string, force bool) []string {
+	out := []string{"--workdir", workdir}
+	if force {
+		out = append(out, "--force")
+	}
+	return out
+}
+
+const packageCompileUsageText = `dockpipe package compile
+
+Validate and materialize packages into bin/.dockpipe/internal/packages/ (see docs/packages/package-model.md).
+
+Usage:
+  dockpipe package compile core [options]
+  dockpipe package compile resolvers [options]
+  dockpipe package compile bundles [options]   (alias: same as compile workflows; compile.bundles merged into roots)
+  dockpipe package compile workflows [options]
+  dockpipe package compile all [options]
+  dockpipe package compile for-workflow <name> [options]   (core + transitive resolvers/workflows only)
+  dockpipe package compile workflow [options] [--from] <source-dir>
+
+Order for a full local store: core (spine only) → resolvers → workflows (dockpipe-workflow-* tarballs only).
+Use "compile all" to run the default sequence.
+
+`
+
+const packageCompileWorkflowUsageText = `dockpipe package compile workflow <source-dir>
+
+Runs workflow YAML validation (same rules as dockpipe workflow validate), runs optional
+compile_hooks from config.yml against the staged package copy (shell, cwd = staged copy; source and
+staging paths exported via DOCKPIPE_COMPILE_* env vars), then writes the workflow tarball under
+<workdir>/bin/.dockpipe/internal/packages/workflows/.
+
+Options:
+  --workdir <path>   Project directory (default: current directory)
+  --from <path>      Source workflow directory (same as positional <source-dir>)
+  --name <n>         Package folder name (default: workflow name from config.yml, else basename of source)
+  --force            Replace existing package directory
+
+`
+
+const packageCompileCoreUsageText = `dockpipe package compile core
+
+Copies a core authoring tree (default: src/core or templates/core when present) into
+<workdir>/bin/.dockpipe/internal/packages/core/ and writes package.yml (kind: core).
+Top-level resolvers/, bundles/, and workflows/ in the source are omitted — compile those with
+"package compile resolvers|workflows" so they land under packages/resolvers/ or packages/workflows/.
+
+Optional dockpipe.config.json "compile.core_from" overrides the default core path when --from is omitted.
+
+Options:
+  --workdir <path>   Project directory (default: current directory)
+  --from <path>      Source core root (typically runtimes/, strategies/, assets/, …)
+  --force            Replace existing packages/core tree
+
+`
+
+const packageCompileResolversUsageText = `dockpipe package compile resolvers
+
+Merges each child directory from each --from source into
+bin/.dockpipe/internal/packages/resolvers/<name>/ (later --from wins on name clash).
+
+Defaults: same roots as compile.workflows (plus legacy compile.bundles merged in), plus src/core/resolvers and
+templates/core/resolvers when those directories exist. Deprecated compile.resolvers entries are merged if present.
+Dirs with profile/ under each root become resolver tarballs.
+
+Pack roots:
+  - <from>/resolvers/... for a flat vendor tree
+  - Any nested directory named resolvers/ under a declared compile root
+Each immediate child with profile/ becomes one store tarball.
+
+Optional resolver.yaml next to each profile may set namespace: <label> (same rules as workflow namespace).
+
+Options:
+  --workdir <path>      Project directory (default: current directory)
+  --from <path>         Repeatable; each root's subdirectories are resolver profiles
+
+`
+
+const packageCompileBundlesUsageText = `dockpipe package compile bundles
+
+Same as "dockpipe package compile workflows". Legacy name only — compile.bundles paths are merged into
+compile.workflows; bundle-listed trees are normal workflows (config.yml per directory).
+
+Options:
+  --workdir <path>      Project directory (default: current directory)
+  --from <path>         Repeatable workflow roots
+  --force               Replace existing tarballs
+
+`
+
+const packageCompileWorkflowsUsageText = `dockpipe package compile workflows
+
+Compiles every immediate subdirectory that contains config.yml under each --from root.
+
+Defaults: dockpipe.config.json compile.workflows, else workflows/ when present.
+
+Options:
+  --workdir <path>       Project directory (default: current directory)
+  --from <path>          Repeatable; roots to scan for named workflow folders
+  --force                Replace existing packages/workflows/<name>
+  --prune-stale          Remove workflow tarballs not produced by this compile pass
+
+`
+
+const packageCompileAllUsageText = `dockpipe package compile all
+
+Runs: compile core → compile resolver packages (one tarball per profile) → compile workflow packages (compile.bundles merged into compile.workflows when set).
+Uses dockpipe.config.json compile.workflows for source lists when present (see packages/package-model.md).
+
+Note: dockpipe build runs this command with --force so existing compiled trees are replaced.
+
+Options:
+  --workdir <path>   Project directory (default: directory with dockpipe.config.json, walking up from cwd; else cwd)
+  --force            Replace existing packages/core and tarball outputs under packages/workflows/
+  --with-bundles, --skip-bundles   Ignored (compatibility no-ops)
+
+`

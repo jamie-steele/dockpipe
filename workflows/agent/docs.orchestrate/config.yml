@@ -1,0 +1,377 @@
+name: docs.orchestrate
+description: >-
+  DorkPipe task-graph workflow: plan, split into bounded worker tasks, merge results, verify, and
+  require approval before manual promotion.
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs DorkPipe orchestration host scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: docker
+      command: docker
+      description: Starts the DorkPipe sidecar stack and resolver worker containers.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+    - id: git
+      command: git
+      description: Reads repository state and applies approved generated artifacts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y git
+    - id: curl
+      command: curl
+      description: Checks local Ollama and DorkPipe stack HTTP endpoints.
+      install:
+        windows: winget install cURL.cURL
+        deb: sudo apt-get update && sudo apt-get install -y curl
+
+model_policy:
+  mode: auto
+  attempt:
+    preference: local
+    max_attempts: 2
+  validate:
+    preference: strongest_available
+    required_for:
+      - architecture
+      - security
+      - package_promotion
+      - destructive_changes
+  escalation:
+    enabled: true
+    "on":
+      - failed_contract
+      - low_confidence
+      - test_failure
+      - verifier_disagreement
+      - dangerous_capability_requested
+    require_approval_over_cost: true
+
+vars:
+  DORKPIPE_ORCH_OLLAMA_MODEL: llama3.2
+  DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS: "120000"
+  DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS: "40000"
+  DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED: "true"
+  DORKPIPE_ORCH_CLOUD_LANES: "true"
+  DORKPIPE_DEV_STACK_AUTODOWN: "1"
+  DORKPIPE_DEV_STACK_MCP_PORT: "8766"
+  MCP_HTTP_URL: http://127.0.0.1:8766/mcp
+  DATABASE_URL: postgresql://dorkpipe:dorkpipe@127.0.0.1:15432/dorkpipe
+  OLLAMA_HOST: http://127.0.0.1:11434
+  DORKPIPE_ORCH_BRAIN_PROVIDER: ollama
+
+steps:
+  - id: stack_up
+    kind: host
+    run: scripts/dorkpipe/dev-stack-ensure-up.sh
+    vars:
+      DORKPIPE_DEV_STACK_GPU: "auto"
+      DORKPIPE_DEV_STACK_SERVICES: "postgres ollama dorkpipe-stack dorkpipe-mcp-proxy"
+
+  - id: plan
+    kind: host
+    run: scripts/dorkpipe/orchestrate-plan.sh
+    agent:
+      startup_prompt: >-
+        Treat this as a bounded DorkPipe orchestration run. Use the repository contract and keep
+        claims grounded in accessible files.
+      include_agents_md: true
+      accessible_paths:
+        - docs
+        - packages
+        - workflows
+        - src/app/tooling/vscode-extensions/dockpipe-language-support
+      access:
+        read:
+          - AGENTS.md
+          - docs
+          - packages
+          - workflows
+          - src
+        write:
+          - scope:artifacts:orchestrate
+        deny:
+          - .env
+          - .env.*
+          - "**/*secret*"
+          - "**/*token*"
+      orchestration:
+        request:
+          text: Assess whether orchestration adds value for governed documentation generation in DockPipe.
+        plan:
+          goal: Evaluate orchestration as a real primitive using bounded multi-worker tasks.
+          steps:
+            - collect shared repo and package context
+            - split the request into bounded task artifacts
+            - run specialized workers under resolver hints
+            - merge results into a final synthesis
+            - verify coverage and risk before approval
+        concurrency:
+          max_workers: 3
+          max_local_workers: 2
+          max_cloud_workers: 1
+        shared:
+          - path: repo-map.md
+            collector: repo_map
+            focus: DorkPipe orchestration primitive, task graph, and agent package workflows
+            starting_points:
+              - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
+              - packages/dorkpipe/resolvers/dorkpipe/assets/docs/request-contract.md
+              - workflows/agent/docs.orchestrate/config.yml
+          - path: example-brain-baseline.md
+            collector: literal
+            text: |
+              Consumer repo guidance baseline:
+
+              - Durable consumer output should read like native repo guidance.
+              - Do not describe runtime mounts, artifact roots, worker lanes, or orchestration mechanics as if they are product concepts in the consumer repo.
+              - Prefer direct code and repo docs for current implementation claims.
+              - Preserve current-state versus intended-direction conflicts instead of blending them.
+          - path: cli-inspect.md
+            collector: dockpipe_cli_inspect
+        tasks:
+          - id: contract_brain
+            agent: planning_scout
+            goal: Distill the DorkPipe orchestration contract into guidance for downstream documentation workers.
+            expected_output: Three terse markdown bullets about the contract primitives downstream workers must preserve.
+            brief: Distill contract primitives for downstream workers without answering the final request.
+            context:
+              required_artifacts:
+                - shared/repo-map.md
+                - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
+            constraints:
+              - ground claims in repository files
+              - keep output short enough to prepend to later workers
+              - do not answer the whole user request
+            prompt: |
+              You are a planning scout for a later DorkPipe orchestration run.
+
+              Task id: contract_brain
+              Goal: Distill the DorkPipe orchestration contract into guidance for downstream documentation workers.
+              Expected output: Three terse markdown bullets about the contract primitives downstream workers must preserve.
+
+              Rules:
+              - Return exactly three bullets and no headings.
+              - Each bullet must be one line.
+              - Focus on task graph artifacts, worker result artifacts, merge/verify, approval, and budget/halt.
+              - Do not write an execution plan.
+              - Do not answer the final documentation request.
+          - id: workflow_brain
+            agent: planning_scout
+            goal: Distill the docs.orchestrate workflow surface into guidance for downstream documentation workers.
+            expected_output: Three terse markdown bullets about what the workflow declares and what DorkPipe owns.
+            brief: Distill the workflow declaration surface for downstream workers without answering the final request.
+            context:
+              required_artifacts:
+                - shared/repo-map.md
+                - workflows/agent/docs.orchestrate/config.yml
+            constraints:
+              - ground claims in repository files
+              - keep output short enough to prepend to later workers
+              - do not answer the whole user request
+            prompt: |
+              You are a planning scout for a later DorkPipe orchestration run.
+
+              Task id: workflow_brain
+              Goal: Distill the docs.orchestrate workflow surface into guidance for downstream documentation workers.
+              Expected output: Three terse markdown bullets about what the workflow declares and what DorkPipe owns.
+
+              Rules:
+              - Return exactly three bullets and no headings.
+              - Each bullet must be one line.
+              - Bullet 1 must say the workflow declares request text, task list, prompts, concurrency limits, shared artifacts, and apply outputs.
+              - Bullet 2 must say DorkPipe owns the reusable orchestration contract and materialized artifacts.
+              - Bullet 3 must say the workflow declares intent while DorkPipe materializes and governs execution artifacts.
+              - Do not say the workflow should not own request text, task list, prompts, concurrency, shared artifacts, or apply outputs.
+              - Do not say concurrency is owned by worker results.
+              - Do not write an execution plan.
+              - Do not answer the final documentation request.
+          - id: planner_brain
+            agent: planner_brain
+            depends_on:
+              - contract_brain
+              - workflow_brain
+            goal: Plan the downstream bounded documentation workers from the contract and workflow scout outputs.
+            expected_output: A compact markdown work order for repo_shape, package_contracts, and safety_model.
+            brief: Convert scout outputs into bounded work orders for the downstream role workers.
+            context:
+              required_artifacts:
+                - shared/repo-map.md
+                - workflows/agent/docs.orchestrate/config.yml
+                - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
+            constraints:
+              - use scout outputs as planning guidance
+              - keep Ollama fanout tasks cheap and bounded
+              - do not answer the final documentation request
+            prompt: |
+              You are the DorkPipe planner brain for a later cheap worker fanout.
+
+              Task id: planner_brain
+              Goal: Plan the downstream bounded documentation workers from the contract and workflow scout outputs.
+              Expected output: A compact markdown work order for repo_shape, package_contracts, and safety_model.
+
+              Rules:
+              - Return exactly three bullets and no headings.
+              - The first character of the response must be "-".
+              - Do not add preamble, explanation, Note, Please note, or formatting commentary.
+              - Bullet 1 must start with "repo_shape:" and say what the worker should emphasize.
+              - Bullet 2 must start with "package_contracts:" and say packages/agent owns request, tasks, prompts, concurrency, and apply outputs while packages/dorkpipe owns artifacts, lanes, merge, verify, budget, and halt.
+              - Bullet 3 must start with "safety_model:" and say what verification, budget, and approval facts the worker must preserve.
+              - Do not answer the final documentation request.
+              - Do not write an execution plan beyond this three-bullet work order.
+          - id: repo_shape
+            agent: local_doc_worker
+            depends_on:
+              - contract_brain
+              - workflow_brain
+              - planner_brain
+            goal: Explain the task-graph artifact primitive and why it is stronger than generic agent branding.
+            expected_output: A short markdown explanation of the orchestration primitive.
+            brief: Explain the artifact graph primitive using the planning outputs and declared context.
+            context:
+              required_artifacts:
+                - shared/repo-map.md
+                - workflows/agent/docs.orchestrate/config.yml
+                - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
+            constraints:
+              - ground claims in repository files
+              - keep output bounded and reviewable
+              - treat DorkPipe as the contract layer
+            prompt: |
+              You are one worker in a DorkPipe orchestration graph.
+
+              Task id: repo_shape
+              Goal: Explain the task-graph artifact primitive and why it is stronger than generic agent branding.
+              Expected output: A short markdown explanation of the orchestration primitive.
+
+              Rules:
+              - Treat this as one bounded task, not the whole request.
+              - Ground claims in the referenced files.
+              - Explain the artifact graph primitive; do not propose code, files, or lane-weight changes.
+              - Do not repeat planning scout bullets; synthesize the answer in your own concise paragraph or bullets.
+              - Return exactly two bullets and no headings.
+              - The first character of the response must be "-".
+              - Do not add preamble, explanation, Note, Please note, or formatting commentary.
+              - Do not mention packages/agent ownership; this task is about why artifact graphs are stronger than branding.
+              - Return concise markdown suitable for downstream merge.
+              - Only call out uncertainty if a required referenced file is missing; do not add an uncertainty footer.
+          - id: package_contracts
+            agent: boundary_reviewer
+            depends_on:
+              - contract_brain
+              - workflow_brain
+              - planner_brain
+            goal: Summarize how packages/agent and packages/dorkpipe should divide workflow surface vs contract surface.
+            expected_output: A short markdown summary of package boundaries.
+            brief: Review package boundary responsibilities from the planning outputs and declared context.
+            context:
+              required_artifacts:
+                - shared/repo-map.md
+                - workflows/agent/docs.orchestrate/config.yml
+                - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
+            constraints:
+              - ground claims in repository files
+              - keep output bounded and reviewable
+              - keep workflow specifics out of the shared primitive
+            prompt: |
+              You are one worker in a DorkPipe orchestration graph.
+
+              Task id: package_contracts
+              Goal: Summarize how packages/agent and packages/dorkpipe should divide workflow surface vs contract surface.
+              Expected output: A short markdown summary of package boundaries.
+
+              Rules:
+              - Treat this as one bounded task, not the whole request.
+              - Ground claims in the referenced files.
+              - Summarize package boundaries; do not write an execution plan.
+              - Return exactly three bullets and no headings.
+              - The first character of the response must be "-".
+              - Do not add preamble, explanation, Note, Please note, or formatting commentary.
+              - Bullet 1 must start with "packages/agent owns" and describe the workflow surface: request, task list, prompts, concurrency, apply outputs.
+              - Bullet 2 must start with "packages/dorkpipe owns" and describe the contract surface: orchestration artifacts, lane catalog, worker result, merge, verify, budget/halt.
+              - Bullet 3 must start with "Boundary rule" and say workflows declare what while DorkPipe materializes and governs the artifact contract.
+              - Do not add preamble, headings, examples, Note, Please note, formatting commentary, or an uncertainty footer unless a referenced file is missing.
+              - Return concise markdown suitable for downstream merge.
+              - Only call out uncertainty if a required referenced file is missing; do not add an uncertainty footer.
+          - id: safety_model
+            agent: safety_reviewer
+            depends_on:
+              - contract_brain
+              - workflow_brain
+              - planner_brain
+            goal: Summarize the safety and approval model for multi-worker orchestration.
+            expected_output: A short markdown summary of verification and approval needs.
+            brief: Summarize verification, budget halt, and human approval boundaries.
+            context:
+              required_artifacts:
+                - shared/repo-map.md
+                - packages/dorkpipe/resolvers/dorkpipe/assets/docs/orchestration-contract.md
+            constraints:
+              - ground claims in repository files
+              - keep output bounded and reviewable
+              - keep human approval explicit
+            prompt: |
+              You are one worker in a DorkPipe orchestration graph.
+
+              Task id: safety_model
+              Goal: Summarize the safety and approval model for multi-worker orchestration.
+              Expected output: A short markdown summary of verification and approval needs.
+
+              Rules:
+              - Treat this as one bounded task, not the whole request.
+              - Ground claims in the referenced files.
+              - Summarize verification, budget halt, and approval boundaries; do not invent lane scores.
+              - Do not list the full worker result schema.
+              - Return exactly three bullets and no headings.
+              - The first character of the response must be "-".
+              - Do not add preamble, explanation, Note, Please note, or formatting commentary.
+              - Bullet 1 must start with "Verification".
+              - Bullet 2 must start with "Budget halt".
+              - Bullet 3 must start with "Approval".
+              - Do not say lane scores or confidence values should be cited.
+              - Return concise markdown suitable for downstream merge.
+              - Only call out uncertainty if a required referenced file is missing; do not add an uncertainty footer.
+        merge:
+          title: DorkPipe Orchestration Synthesis
+          summary_points:
+            - The primitive is artifact graph execution, not generic agent branding.
+            - DorkPipe should own task, result, merge, and verifier contracts.
+            - Resolvers such as codex, claude, and ollama should remain interchangeable worker backends.
+        verify:
+          next_action_default: human approval before treating orchestration output as final
+        apply:
+          require_approval: true
+          outputs:
+            - source: merge/final.md
+              path: docs/workflows/dorkpipe-orchestration-synthesis.md
+
+  - id: run-workers
+    kind: host
+    run: scripts/dorkpipe/orchestrate-run-tasks.sh
+
+  - id: merge
+    kind: host
+    run: scripts/dorkpipe/orchestrate-merge-results.sh
+
+  - id: verify
+    kind: host
+    run: scripts/dorkpipe/orchestrate-verify-results.sh
+
+  - id: approval
+    kind: host
+    run: scripts/dorkpipe/orchestrate-approve.sh
+
+  - id: apply
+    kind: host
+    run: scripts/dorkpipe/orchestrate-apply-results.sh
+
+finally:
+  - id: stack_down
+    kind: host
+    run:
+      - scripts/dorkpipe/dev-stack-maybe-down.sh

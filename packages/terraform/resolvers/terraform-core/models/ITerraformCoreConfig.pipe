@@ -1,0 +1,42 @@
+/// <summary>
+/// Contract for the provider-agnostic Terraform core workflow variables.
+/// </summary>
+public Interface ITerraformCoreConfig
+{
+    /// <summary>Extra arguments passed to terraform apply.</summary>
+    public string DockpipeTfApplyArgs;
+    /// <summary>Enable terraform apply auto-approve when set to 1.</summary>
+    public string DockpipeTfApplyAutoApprove;
+    /// <summary>Terraform backend mode. Remote backends should usually provide a backend config file.</summary>
+    public string DockpipeTfBackend;
+    /// <summary>Optional backend HCL path used by advanced wrappers.</summary>
+    public string DockpipeTfBackendHclPath;
+    /// <summary>Comma-separated terraform pipeline commands.</summary>
+    public string DockpipeTfCommands;
+    /// <summary>Enable pipeline dry-run mode when set to 1.</summary>
+    public string DockpipeTfDryRun;
+    /// <summary>Extra arguments passed to terraform fmt.</summary>
+    public string DockpipeTfFmtArgs;
+    /// <summary>Single terraform import invocation arguments.</summary>
+    public string DockpipeTfImportArgs;
+    /// <summary>File containing terraform import lines.</summary>
+    public string DockpipeTfImportFile;
+    /// <summary>Extra arguments passed to terraform init.</summary>
+    public string DockpipeTfInitArgs;
+    /// <summary>Terraform module directory relative to the workdir or absolute.</summary>
+    public string DockpipeTfModuleDir;
+    /// <summary>Exit successfully when no terraform commands are set.</summary>
+    public string DockpipeTfOptionalWhenUnset;
+    /// <summary>Optional hint string shown during dry-run output.</summary>
+    public string DockpipeTfPipelineHint;
+    /// <summary>Extra arguments passed to terraform plan.</summary>
+    public string DockpipeTfPlanArgs;
+    /// <summary>Path to a backend config file for remote backends.</summary>
+    public string DockpipeTfRemoteBackendFile;
+    /// <summary>Skip auto-prepended terraform init when set to 1.</summary>
+    public string DockpipeTfSkipInit;
+    /// <summary>Extra arguments passed to terraform validate.</summary>
+    public string DockpipeTfValidateArgs;
+    /// <summary>Non-default Terraform workspace name.</summary>
+    public string DockpipeTfWorkspace;
+}

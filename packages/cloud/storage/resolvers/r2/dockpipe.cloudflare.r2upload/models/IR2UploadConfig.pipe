@@ -1,0 +1,36 @@
+/// <summary>
+/// Contract for Cloudflare R2 upload workflow variables.
+/// </summary>
+public Interface IR2UploadConfig
+{
+    /// <summary>Archive file name override. Empty uses the timestamp-based default.</summary>
+    public string R2ArchiveName;
+    /// <summary>Target bucket name for the uploaded archive.</summary>
+    public string R2Bucket;
+    /// <summary>Content-Type used for the uploaded object.</summary>
+    public string R2ContentType;
+    /// <summary>Optional explicit R2 endpoint URL.</summary>
+    public string R2EndpointUrl;
+    /// <summary>Object key prefix inside the bucket.</summary>
+    public string R2Prefix;
+    /// <summary>Upload even when Terraform did not run apply when set to 1.</summary>
+    public string R2PublishAlwaysUpload;
+    /// <summary>Print the upload plan without mutating R2 when set to 1.</summary>
+    public string R2PublishDryRun;
+    /// <summary>Directory to archive before upload.</summary>
+    public string R2PublishSource;
+    /// <summary>Must stay 1 for this upload-only workflow so Terraform is skipped.</summary>
+    public string R2SkipTerraform;
+    /// <summary>Optional override for the combined helper's Terraform decision.</summary>
+    public string R2UseTerraform;
+    /// <summary>S3-style access key id for the aws cli upload path.</summary>
+    public string AwsAccessKeyId;
+    /// <summary>S3-style secret access key for the aws cli upload path.</summary>
+    public string AwsSecretAccessKey;
+    /// <summary>Optional aws cli endpoint alias.</summary>
+    public string AwsEndpointUrlS3;
+    /// <summary>Cloudflare account identifier used to derive the default endpoint or wrangler auth.</summary>
+    public string CloudflareAccountId;
+    /// <summary>Cloudflare API token for wrangler uploads.</summary>
+    public string CloudflareApiToken;
+}

@@ -1,0 +1,2 @@
+# Runtime substrate: container from a pre-built image (pull / run).
+DOCKPIPE_RUNTIME_SUBSTRATE=dockerimage

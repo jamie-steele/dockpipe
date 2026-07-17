@@ -1,0 +1,306 @@
+from __future__ import annotations
+
+import os
+import shutil
+import sys
+import json
+import getpass
+import subprocess
+from pathlib import Path
+
+
+def repo_root(root: str | None = None) -> Path:
+    candidate = Path(root or os.environ.get("DOCKPIPE_WORKDIR") or os.getcwd())
+    return candidate.expanduser().resolve()
+
+
+def resolve_dockpipe_bin(root: str | None = None) -> str | None:
+    resolved_root = repo_root(root)
+    candidate = resolved_root / "src" / "bin" / "dockpipe"
+    if candidate.is_file() and os.access(candidate, os.X_OK):
+        return str(candidate)
+    return shutil.which("dockpipe")
+
+
+class DockpipeSDK:
+    def __init__(self, root: str | None = None) -> None:
+        self.workdir = repo_root(root)
+        self.dockpipe_bin = resolve_dockpipe_bin(str(self.workdir))
+        self.workflow_name = os.environ.get("DOCKPIPE_WORKFLOW_NAME") or None
+        self.script_dir = os.environ.get("DOCKPIPE_SCRIPT_DIR") or None
+        self.package_root = os.environ.get("DOCKPIPE_PACKAGE_ROOT") or None
+        self.assets_dir = os.environ.get("DOCKPIPE_ASSETS_DIR") or None
+
+    def refresh(self, root: str | None = None) -> "DockpipeSDK":
+        updated = DockpipeSDK(root)
+        self.workdir = updated.workdir
+        self.dockpipe_bin = updated.dockpipe_bin
+        self.workflow_name = updated.workflow_name
+        self.script_dir = updated.script_dir
+        self.package_root = updated.package_root
+        self.assets_dir = updated.assets_dir
+        return self
+
+    def scope(self, *args: str, package: str | None = None) -> str | dict[str, object]:
+        if not self.dockpipe_bin:
+            raise RuntimeError("dockpipe binary not found; set DOCKPIPE_BIN or add dockpipe to PATH")
+        argv = [self.dockpipe_bin, "scope", "--workdir", str(self.workdir)]
+        if package:
+            argv.extend(["--package", package])
+        argv.extend(str(arg) for arg in args)
+        out = subprocess.check_output(argv, text=True).strip()
+        if not args:
+            return json.loads(out)
+        return out
+
+    def prompt(
+        self,
+        kind: str,
+        *,
+        prompt_id: str | None = None,
+        title: str = "",
+        message: str = "",
+        default: str = "",
+        options: list[str] | None = None,
+        sensitive: bool = False,
+        intent: str = "",
+        automation_group: str = "",
+        allow_auto_approve: bool = False,
+        auto_approve_value: str = "",
+        path_mode: str = "open-file",
+        file_filter: str = "",
+        must_exist: bool = False,
+        resource_mode: str = "select",
+        resource_selection: str = "single",
+        resource_kind: str = "file",
+        filters: list[str] | None = None,
+    ) -> str:
+        return prompt(
+            kind,
+            prompt_id=prompt_id,
+            title=title,
+            message=message,
+            default=default,
+            options=options,
+            sensitive=sensitive,
+            intent=intent,
+            automation_group=automation_group,
+            allow_auto_approve=allow_auto_approve,
+            auto_approve_value=auto_approve_value,
+            path_mode=path_mode,
+            file_filter=file_filter,
+            must_exist=must_exist,
+            resource_mode=resource_mode,
+            resource_selection=resource_selection,
+            resource_kind=resource_kind,
+            filters=filters,
+        )
+
+
+def _truthy(value: str | None) -> bool:
+    if not value:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _prompt_mode() -> str:
+    mode = os.environ.get("DOCKPIPE_SDK_PROMPT_MODE")
+    if mode == "json":
+        return "json"
+    if mode == "terminal":
+        return "terminal"
+    if sys.stdin.isatty() and sys.stderr.isatty():
+        return "terminal"
+    return "noninteractive"
+
+
+def _resolve_prompt_path(value: str) -> Path:
+    p = Path(value).expanduser()
+    if p.is_absolute():
+        return p
+    base = Path(os.environ.get("DOCKPIPE_WORKDIR") or os.getcwd())
+    return (base / p).resolve()
+
+
+def _normalize_resource_entries(raw: str) -> list[str]:
+    values: list[str] = []
+    for part in raw.split(";"):
+        candidate = part.strip()
+        if len(candidate) >= 2 and candidate[0] == candidate[-1] and candidate[0] in {"'", '"'}:
+            candidate = candidate[1:-1]
+        candidate = candidate.strip()
+        if candidate:
+            values.append(candidate)
+    return values
+
+
+def _resource_exists(value: str, resource_kind: str) -> bool:
+    resolved = _resolve_prompt_path(value)
+    if resource_kind == "directory":
+        return resolved.is_dir()
+    return resolved.exists()
+
+
+def prompt(
+    kind: str,
+    *,
+    prompt_id: str | None = None,
+    title: str = "",
+    message: str = "",
+    default: str = "",
+    options: list[str] | None = None,
+    sensitive: bool = False,
+    intent: str = "",
+    automation_group: str = "",
+    allow_auto_approve: bool = False,
+    auto_approve_value: str = "",
+    path_mode: str = "open-file",
+    file_filter: str = "",
+    must_exist: bool = False,
+    resource_mode: str = "select",
+    resource_selection: str = "single",
+    resource_kind: str = "file",
+    filters: list[str] | None = None,
+) -> str:
+    options = list(options or [])
+    filters = list(filters or [])
+    prompt_id = prompt_id or f"prompt.{os.getpid()}.{id(options)}"
+    message = message or title
+    mode = _prompt_mode()
+
+    if allow_auto_approve and _truthy(os.environ.get("DOCKPIPE_APPROVE_PROMPTS")):
+        if auto_approve_value:
+            return auto_approve_value
+        if default:
+            return default
+        if kind == "confirm":
+            return "yes"
+        if kind == "choice" and options:
+            return options[0]
+        if kind == "resource" and default:
+            return default
+
+    if mode == "json":
+        payload = json.dumps(
+            {
+                "type": kind,
+                "id": prompt_id,
+                "title": title,
+                "message": message,
+                "default": default,
+                "sensitive": sensitive,
+                "intent": intent,
+                "automation_group": automation_group,
+                "allow_auto_approve": allow_auto_approve,
+                "auto_approve_value": auto_approve_value,
+                "path_mode": path_mode,
+                "file_filter": file_filter,
+                "must_exist": must_exist,
+                "base_dir": str(repo_root()),
+                "resource_mode": resource_mode,
+                "resource_selection": resource_selection,
+                "resource_kind": resource_kind,
+                "filters": filters,
+                "options": options,
+            },
+            separators=(",", ":"),
+        )
+        print(f"::dockpipe-prompt::{payload}", file=sys.stderr)
+        response = sys.stdin.readline()
+        if response == "":
+            raise RuntimeError("DockPipe prompt response stream closed")
+        return response.rstrip("\r\n")
+
+    if mode == "terminal":
+        if title:
+            print(title, file=sys.stderr)
+        if kind == "confirm":
+            default_yes = default.strip().lower() in {"1", "true", "yes", "y", "on"}
+            suffix = " [Y/n] " if default_yes else " [y/N] "
+            while True:
+                print(f"{message}{suffix}", end="", file=sys.stderr)
+                response = input()
+                normalized = (response or ("yes" if default_yes else "no")).strip().lower()
+                if normalized in {"y", "yes", "true", "1"}:
+                    return "yes"
+                if normalized in {"n", "no", "false", "0"}:
+                    return "no"
+                print("Please answer yes or no.", file=sys.stderr)
+        if kind == "input":
+            prompt_text = message if not default else f"{message} [{default}]"
+            response = getpass.getpass(f"{prompt_text}: ") if sensitive else input(f"{prompt_text}: ")
+            return response or default
+        if kind == "file":
+            while True:
+                prompt_text = message if not default else f"{message} [{default}]"
+                if file_filter:
+                    print(f"Filter: {file_filter}", file=sys.stderr)
+                response = input(f"{prompt_text}: ")
+                selected = response or default
+                if not selected:
+                    return selected
+                if must_exist:
+                    resolved = _resolve_prompt_path(selected)
+                    valid = resolved.is_dir() if path_mode == "open-dir" else resolved.exists()
+                    if not valid:
+                        kind_label = "Directory" if path_mode == "open-dir" else "File"
+                        print(f"{kind_label} not found: {selected}", file=sys.stderr)
+                        continue
+                return selected
+        if kind == "choice":
+            if not options:
+                raise RuntimeError("DockPipe choice prompt requires at least one option")
+            print(message, file=sys.stderr)
+            default_index = 1
+            for idx, option in enumerate(options, start=1):
+                if default and option == default:
+                    default_index = idx
+                print(f"  {idx}. {option}", file=sys.stderr)
+            while True:
+                raw = input(f"Choose an option [{default_index}]: ").strip()
+                if not raw:
+                    return options[default_index - 1]
+                if raw.isdigit():
+                    selected = int(raw)
+                    if 1 <= selected <= len(options):
+                        return options[selected - 1]
+                print(f"Enter a number between 1 and {len(options)}.", file=sys.stderr)
+        if kind == "resource":
+            filter_text = ";;".join(filter(None, filters)) or file_filter
+            while True:
+                prompt_text = message
+                if resource_selection == "multi":
+                    prompt_text = f"{prompt_text} (separate multiple paths with ;)"
+                prompt_text = prompt_text if not default else f"{prompt_text} [{default}]"
+                if filter_text:
+                    print(f"Filter: {filter_text}", file=sys.stderr)
+                response = input(f"{prompt_text}: ")
+                selected = response or default
+                if not selected:
+                    return selected
+                if resource_selection == "multi":
+                    entries = _normalize_resource_entries(selected)
+                    if not entries:
+                        return "[]"
+                    if must_exist:
+                        missing = next((entry for entry in entries if not _resource_exists(entry, resource_kind)), None)
+                        if missing is not None:
+                            kind_label = "Directory" if resource_kind == "directory" else "File"
+                            print(f"{kind_label} not found: {missing}", file=sys.stderr)
+                            continue
+                    return json.dumps(entries, separators=(",", ":"))
+                entries = _normalize_resource_entries(selected)
+                if not entries:
+                    return ""
+                single = entries[0]
+                if must_exist and not _resource_exists(single, resource_kind):
+                    kind_label = "Directory" if resource_kind == "directory" else "File"
+                    print(f"{kind_label} not found: {single}", file=sys.stderr)
+                    continue
+                return single
+        raise RuntimeError(f"Unsupported DockPipe prompt kind: {kind}")
+
+    if default:
+        return default
+    raise RuntimeError("DockPipe prompt requires a terminal or DOCKPIPE_SDK_PROMPT_MODE=json")
+dockpipe = DockpipeSDK()

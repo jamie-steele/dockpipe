@@ -1,133 +1,122 @@
-# AGENTS.md — dockpipe maintainer and agent guide
+# AGENTS.md - DockPipe Root Router
 
-This file explains the repository’s purpose, architecture, coding standards, and how to extend it. It is intended for human maintainers and AI agents that modify the repo.
+DockPipe is the governed, cross-platform runtime for commands, packages, environments, CI jobs, AI workflows, and deployable tooling.
+The engine has one action: spawn -> run -> act.
+DorkPipe is a DockPipe package and harness, not a replacement for DockPipe.
+This file is a lightweight router. Load only the focused docs needed for the task.
 
----
+Machine-readable routing: `docs/agents/index.yaml`.
 
-## Repo purpose
+## Global Hard Rules
 
-**dockpipe** is a small, open-source CLI that provides a single primitive:
+| Rule | Where to read |
+| --- | --- |
+| Keep `src/lib/` and `src/cmd/` generic. No repo-specific package/workflow/staging knowledge in engine code. | `docs/agents/core/engine-boundary.md` |
+| Preserve the architecture model: workflow/template = what, runtime = where, resolver = tool/profile, strategy = lifecycle wrapper. | `docs/agents/core/architecture.md` |
+| Use package/store helpers for project/global paths. Do not hand-write bare `.dockpipe/internal` paths. | `docs/agents/core/core-package-model.md` |
+| Prefer the scope model for generated paths: `cwd: artifacts` for simple producers, `cwd: repo` plus `scopes` only when checkout cwd is required. | `docs/agents/core/path-scopes.md` |
+| Treat Git lifecycle as runtime-owned session behavior. Agents request checkpoint/sync/publish; they do not run raw Git. | `docs/agents/runtime/git-runtime-sessions.md` |
+| For Codex workspace-sandbox sessions, verify effective capabilities. Request a narrow reviewed host operation for unavailable Docker, remote Git, or network access; never bypass the sandbox. | `docs/agents/runtime/codex-sandbox-sessions.md` |
+| Template/workflow work should stay in YAML/assets/scripts unless a general primitive is needed. | `docs/agents/workflows/yaml-workflows.md` |
+| Package-specific behavior belongs inside package YAML/assets/scripts/docs/tests. | `docs/agents/packages/package-authoring.md` |
+| Keep authored YAML/schema/editor docs in sync when changing workflow/config surfaces. | `docs/agents/workflows/yaml-workflows.md` |
+| Secrets must be references only. Never commit plaintext secrets or generated resolved templates. | `docs/agents/runtime/safety-guardrails.md` |
+| Treat `bin/.dockpipe/` and `.dorkpipe/` as generated/read-only grounding unless the user asks to refresh. | `docs/agents/runtime/artifacts-and-mcp.md` |
+| AI workflows must beat one strong direct worker on quality, safety, cost, review effort, or rerun value. DorkPipe owns the lower-level proof through artifacts/metrics, not user boilerplate. | `docs/agents/workflows/ai-workflow-value-bar.md` |
+| Main docs stay canonical for repo facts and public behavior. `docs/agents/` is the compressed routing/safety layer, not a shadow documentation tree. | `docs/agents/docs/docs-system.md` |
+| Treat `docs/agents/task-index.yaml` as the AI entrypoint for the cross-cutting backlog and keep the linked task files current when a task materially completes or advances one of those items. | `docs/agents/task-index.yaml` |
+| Normal sessions ask before committing. An explicitly designated autonomous master session follows the bounded commit exception in `docs/agents/docs/session-handoffs.md`. | `docs/agents/docs/session-handoffs.md` |
 
-1. **Spawn** a container from a chosen image  
-2. **Run** a user-supplied command or script inside it  
-3. **Act** on the result via an optional action script (e.g. commit, export patch)
+## Task Routing
 
-The core is **agent-agnostic** and **command-agnostic**. AI tools (Claude, Codex, etc.) are supported via templates and examples, not by hardcoding them in the core. Commit/cherry-pick/export are implemented as **actions** or **example scripts**, not as built-in behavior.
+| Task | Read first | Recommended skills |
+| --- | --- | --- |
+| Engine or CLI behavior | `docs/agents/core/engine-boundary.md`, `docs/agents/core/architecture.md`, `docs/agents/core/validation-commands.md` | `dorkpipe-core-review` |
+| Workflow YAML or authored surface | `docs/agents/workflows/yaml-workflows.md`, `docs/agents/runtime/safety-guardrails.md` | `dorkpipe-yaml-workflows` |
+| Path/scope/artifact migration | `docs/agents/core/path-scopes.md`, `docs/agents/workflows/yaml-workflows.md`, `docs/agents/core/core-package-model.md` | `dorkpipe-yaml-workflows`, `dorkpipe-package-authoring` |
+| Git runtime sessions or workspace lifecycle | `docs/agents/runtime/git-runtime-sessions.md`, `docs/agents/core/architecture.md`, `docs/agents/core/path-scopes.md` | `dorkpipe-core-review`, `dorkpipe-yaml-workflows` |
+| Package authoring | `docs/agents/packages/package-authoring.md`, `docs/agents/core/core-package-model.md` | `dorkpipe-package-authoring` |
+| Package promotion | `docs/agents/packages/package-promotion.md`, `docs/agents/core/validation-commands.md` | `dorkpipe-package-authoring`, `dorkpipe-core-review` |
+| Agentic/DorkPipe workflows | `docs/agents/workflows/ai-workflow-value-bar.md`, `docs/agents/workflows/model-escalation.md`, `docs/agents/workflows/docs-generation.md`, `docs/agents/workflows/planner-promotion-model.md`, `docs/agents/workflows/yaml-workflows.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
+| Tooling app or UI surface | `docs/agents/workflows/tooling-surfaces.md`, `docs/agents/workflows/planner-promotion-model.md`, `docs/agents/tasks/agentic-app-ui.md` | `dorkpipe-agentic-yaml`, `dorkpipe-yaml-workflows` |
+| Docs or agent guidance | `docs/agents/docs/token-optimization.md`, `docs/agents/docs/skills.md` | `dorkpipe-token-optimization` |
+| Docs system or sync rules | `docs/agents/docs/docs-system.md`, `docs/agents/docs/token-optimization.md` | `dorkpipe-token-optimization`, `dorkpipe-core-review` |
+| Artifacts or MCP | `docs/agents/runtime/artifacts-and-mcp.md`, `docs/agents/runtime/safety-guardrails.md` | `dorkpipe-core-review` |
 
----
+## Skill Routing
 
-## Architecture
-
-- **CLI** (`bin/dockpipe`) — Parses flags, resolves templates (image + optional build path), sets env for the runner, then sources `lib/runner.sh` and calls `dockpipe_run "$@"` with the user’s command.
-- **Runner** (`lib/runner.sh`) — Builds the `docker run` invocation: mounts, env, optional action script mount, then `exec docker run ... <image> "$@"`.
-- **Entrypoint** (`lib/entrypoint.sh`) — Runs inside every image. Executes the command (argv or `DOCKPIPE_CMD`), then runs `DOCKPIPE_ACTION` if set, then exits with the command’s exit code.
-- **Images** — Dockerfiles in `images/`; they `COPY lib/entrypoint.sh` from the **repo root** build context. Build with `-f images/<name>/Dockerfile .` from repo root.
-- **Templates** — Named presets (e.g. `base-dev`, `dev`, `agent-dev`, `claude`) that map to an image name and a build path. Resolved in the CLI; no plugin system. Prefer `agent-dev` over `claude` in docs for command-agnostic appeal.
-- **Actions** — Shell scripts that run inside the container after the user command. They receive `DOCKPIPE_EXIT_CODE` and `DOCKPIPE_CONTAINER_WORKDIR`. Shipped as examples under `examples/actions/`.
-
-Data flow: **Host CLI → Docker → container entrypoint → user command → action (if any) → exit.**
-
----
-
-## Coding standards
-
-- **Shell:** Use Bash with `set -euo pipefail`. Prefer portable constructs; avoid Bash 5-only features if avoidable.
-- **Naming:** `DOCKPIPE_*` for env vars used by the tool. Scripts and paths: lowercase, hyphenated (e.g. `commit-worktree.sh`).
-- **No vendor lock-in:** The core must not depend on Claude, Codex, or any specific AI tool. Such logic lives in `examples/` or `images/claude/` (or similar).
-- **Simplicity:** Prefer obvious, boring code. No hidden magic; no framework or plugin layer unless clearly justified.
-- **Composition:** Keep the core minimal; add integrations and examples in a modular way (templates, actions, example scripts).
-
----
-
-## Adding templates / images / actions
-
-### New image (e.g. another AI tool)
-
-1. Add `images/<name>/Dockerfile`. Use `COPY lib/entrypoint.sh` and set `ENTRYPOINT ["/entrypoint.sh"]` so the generic flow is preserved.
-2. Build from repo root: `docker build -t dockpipe-<name> -f images/<name>/Dockerfile .`
-3. In `bin/dockpipe`, add a case in `resolve_template()` so `--template <name>` maps to the image and build path.
-4. Document in README and, if useful, add an example under `examples/`.
-
-### New action
-
-1. Add a script under `examples/actions/` (e.g. `examples/actions/my-action.sh`). It will run inside the container; use `DOCKPIPE_EXIT_CODE` and `DOCKPIPE_CONTAINER_WORKDIR` as needed.
-2. Document in README and in `examples/actions/` (e.g. a one-line comment in the script and a mention in README). Users can copy it with `dockpipe action init my-copy.sh --from my-action`.
-
-### New example workflow
-
-1. Add a directory under `examples/` (e.g. `examples/my-workflow/`) with a README and any scripts.
-2. Do not put vendor-specific or commit-specific logic in `lib/` or `bin/`; keep it in the example.
-
----
-
-## Philosophy
-
-- **Core = primitive only:** Spawn → run → act. No hardcoded commit behavior, no hardcoded AI tool.
-- **Templates and actions are the extension points:** Simple, obvious names and file locations.
-- **Documentation is first-class:** README, AGENTS.md, and docs should make the primitive and extension model clear so users and contributors can add their own images and actions without reading the whole codebase.
-
----
-
-## Contributing: keep it primitive
-
-Contributions should extend the primitive (templates, actions, examples) or fix bugs in the core—not turn the core into a workflow engine or add first-class support for specific tools.
-
-**Do:**
-- Add or improve templates, actions, and example scripts.
-- Fix bugs in CLI/runner/entrypoint; improve docs and tests.
-- Use env vars and `--mount` / `--env` for one-off needs; document patterns in examples or docs.
-
-**Don’t (examples of what we don’t want):**
-- **Branch or workflow flags in the core** — e.g. `--branch`, `--worktree`, “create branch for me.” The user’s repo state (current branch, workdir) is the contract; orchestration belongs in scripts or the caller.
-- **Vendor- or AI-specific behavior in `bin/` or `lib/`** — e.g. “if command is claude then …”. Keep that in templates and examples.
-- **Built-in worktree/clone/commit logic** — Those are actions or example scripts that use the primitive, not core features.
-- **Plugin/registry system** — Templates and actions are the extension points; no dynamic loading or plugin API unless the current model clearly can’t scale.
-- **Orchestration in the core** — Retries, fan-out, multi-step state machines: script around dockpipe (Makefile, shell, CI), don’t build them into the CLI.
-
-When in doubt: if it can be done by a script that runs `dockpipe` and passes `--mount` / `--env`, prefer that over adding new flags or core behavior.
-
----
-
-## Running Docker (or dockpipe) from inside a container
-
-You can run `docker` or dockpipe **from inside** a container by mounting the host’s Docker socket. The inner run creates **sibling** containers on the same host daemon (no nested daemon).
-
-**How:** Pass the socket as an extra mount:
+Use target-independent skill ids. Do not write target-specific skill routing keys.
+DorkPipe renders the same curated skills to Codex, Claude, or generic targets:
 
 ```bash
-dockpipe --mount /var/run/docker.sock:/var/run/docker.sock --template agent-dev -- your-command
+./src/bin/dockpipe --package dorkpipe --workflow skills.render -- --list
+./src/bin/dockpipe --package dorkpipe --workflow skills.render -- --target codex
 ```
 
-**Use cases:**
-- **Contributors:** Test a newer or patched dockpipe inside a container while the host runs a stable install. Clone your fork in the container (or mount it), mount the socket, run your version’s `dockpipe` from inside; it will create sibling containers via the host’s Docker.
-- **CI or automation:** A job runs in a container but needs to start other containers (e.g. sidecar, one-off build). Same pattern: socket mount + Docker CLI in the image.
-- **Any “docker from inside” need:** Build images, run sibling services, or chain containerized steps without leaving the first container.
+Installed Codex skills expected here:
 
-**Caveat:** The image must have the Docker CLI installed for the inner `docker` (or dockpipe) to work. The default agent-dev image does not ship it; use a custom image or add it to a template if you need this pattern.
+- `dorkpipe-agentic-yaml`
+- `dorkpipe-core-review`
+- `dorkpipe-package-authoring`
+- `dorkpipe-token-optimization`
+- `dorkpipe-yaml-workflows`
 
----
+## Forbidden Artifact Summary
 
-## Tests
+Do not add or commit:
 
-- `tests/` contains CLI and runner tests (argument parsing, template/action resolution, basic smoke tests).
-- Run from repo root. Prefer practical assertions (exit codes, expected output) over heavy mocking.
-- Adding a new template or flag should be accompanied by a small test where appropriate.
+- plaintext secrets, resolved vault templates, local `.env` material with private values
+- cache/build/generated state unless explicitly intended: `bin/.dockpipe/`, `.dorkpipe/`, `.staging` outputs, local assistant output
+- repo-root one-off script shadows such as `scripts/dockpipe/...`
+- engine references to checkout-only `packages/`, `workflows/`, or `.staging/` paths/names
+- target-specific skill routing in AGENTS or `docs/agents/index.yaml`
 
----
+## Before Editing
 
-## Limitations and escape hatches
+1. Identify task type in `docs/agents/index.yaml`.
+2. Load only the routed docs and relevant skill instructions.
+3. Check whether the work is engine, workflow, package, resolver, strategy, docs, or generated artifact.
+4. If editing `src/`, verify the change is a general primitive.
+5. If changing authored YAML semantics, update schema, docs, and language support together.
+6. If touching packages, keep logic inside package assets and prefer repo-local binaries over `PATH`.
+7. If moving generated paths, decide first whether the file is workflow artifact, package state, resolver scope, or source.
+8. Check `git status --short` and do not revert unrelated user changes.
 
-- **UID/GID:** The runner passes `-u "$(id -u):$(id -g)"` so container-created files in the workdir are owned by the host user. Custom images or root-written volumes can still cause permission issues.
-- **State between chained runs:** No env var bridge; use the shared workdir (files) or stdout/stdin. Documented in [docs/architecture.md](docs/architecture.md).
-- **When the primitive isn’t enough:** Orchestration (retries, fan-out), rich multi-step state, or heavy tooling may require scripting around dockpipe (Makefile, shell, or an orchestrator). See “When the primitive isn’t enough” in architecture.md. Maintainers can note “most complex workflow” or escape-hatch experiences here as they come up.
+## Final Report Checklist
 
----
+Report:
 
-## What to avoid
+- what changed and why
+- files or areas touched
+- validations run and results
+- any generated artifacts created
+- risks, TODOs, or skipped checks
+- whether package/engine boundaries were preserved
 
-See **Contributing: keep it primitive** for best practices and examples of features we don’t want. In addition:
+## Focused Docs
 
-- Do not add Claude- or vendor-specific logic to `lib/runner.sh` or `lib/entrypoint.sh`.
-- Do not make commit/cherry-pick/export a required or default behavior of the core.
-- Do not introduce a plugin/registry system unless the current template + action model proves insufficient.
-- Do not leave dead code or prototype-only paths in the core; keep `bin/` and `lib/` minimal and stable.
+- `docs/agents/index.yaml`
+- `docs/agents/core/repo-map.md`
+- `docs/agents/core/architecture.md`
+- `docs/agents/core/engine-boundary.md`
+- `docs/agents/core/core-package-model.md`
+- `docs/agents/core/path-scopes.md`
+- `docs/agents/runtime/git-runtime-sessions.md`
+- `docs/agents/runtime/codex-sandbox-sessions.md`
+- `docs/agents/runtime/git-runtime-auth.md`
+- `docs/agents/workflows/yaml-workflows.md`
+- `docs/agents/packages/package-authoring.md`
+- `docs/agents/packages/package-promotion.md`
+- `docs/agents/workflows/ai-workflow-value-bar.md`
+- `docs/agents/workflows/model-escalation.md`
+- `docs/agents/workflows/docs-generation.md`
+- `docs/agents/workflows/planner-promotion-model.md`
+- `docs/agents/runtime/artifacts-and-mcp.md`
+- `docs/agents/core/validation-commands.md`
+- `docs/agents/runtime/safety-guardrails.md`
+- `docs/agents/docs/token-optimization.md`
+- `docs/agents/docs/skills.md`
+- `docs/agents/docs/docs-system.md`
+- `docs/agents/task-index.yaml`
+
+DockPipe runs anything, anywhere, in isolation. Keep it simple. Keep it composable.

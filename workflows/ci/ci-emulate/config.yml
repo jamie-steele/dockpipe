@@ -1,0 +1,33 @@
+name: ci-emulate
+vault: none
+description: >-
+  Local CI emulator. Runs the Linux GitHub Actions test job through nektos/act and validates the
+  Windows CI subset either on the native Windows host or through the repo's windows-vm workflow on
+  Linux. CodeQL and PR-only release gates still stay on GitHub unless you explicitly select those
+  jobs.
+
+docker_preflight: false
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: docker
+      command: docker
+      description: Required by nektos/act and by the GitHub Actions test job.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+    - id: act
+      command: act
+      description: Runs the Linux GitHub Actions workflow job locally.
+      install:
+        windows: winget install nektos.act
+        deb: curl -s https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
+
+steps:
+  - id: emulate
+    kind: host
+    cwd: repo
+    scopes:
+      source: repo
+      artifacts: artifacts
+    cmd: bash src/scripts/ci-emulate.sh

@@ -1,0 +1,8 @@
+/// <summary>
+/// Concrete defaults for the bundled example workflow starter.
+/// </summary>
+public Class ExampleWorkflowConfig : IExampleWorkflowConfig
+{
+    public string ExampleMessage = "hello from dockpipe";
+    public string ExampleImage = "alpine:3.22";
+}

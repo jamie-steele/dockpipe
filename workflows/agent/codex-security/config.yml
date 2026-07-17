@@ -1,0 +1,24 @@
+# Run tests in isolation, then Codex-assisted security-oriented follow-up.
+# Substrate is per-step (runtime / resolver); workflow-level runtime is not used.
+name: codex-security
+description: Isolated tests then Codex security review step (requires OPENAI_API_KEY for Codex).
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: docker
+      command: docker
+      description: Required to run the isolated test and Codex resolver containers.
+      install:
+        windows: winget install Docker.DockerDesktop
+        deb: sudo apt-get update && sudo apt-get install -y docker.io docker-compose-plugin
+
+steps:
+  - id: tests
+    runtime: dockerimage
+    isolate: alpine
+    cmd: "sh -c 'echo \"[tests] Replace with go test, make test, or your linter suite\" >&2'"
+  - id: codex-security
+    runtime: dockerimage
+    resolver: codex
+    isolate: dev
+    cmd: "sh -c 'echo \"[codex-security] Replace with your Codex security review command\" >&2'"

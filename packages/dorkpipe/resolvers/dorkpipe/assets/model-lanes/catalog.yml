@@ -1,0 +1,108 @@
+schema: 1
+description: DorkPipe package-owned model lane catalog for orchestration planning.
+
+lanes:
+  - id: ollama.local.default
+    preset: ollama-stack
+    provider: ollama
+    resolver_hint: ollama
+    display_name: Ollama Local Default
+    setup_hint: Start the DorkPipe Ollama stack or point OLLAMA_HOST at an available Ollama service.
+    local: true
+    cloud: false
+    free: true
+    model: "${DORKPIPE_ORCH_OLLAMA_MODEL:-llama3.2}"
+    context_window: 8192
+    capabilities:
+      - chat
+      - reasoning
+      - code
+      - cheap_attempt
+    availability:
+      commands:
+        - curl
+      optional_env:
+        - OLLAMA_HOST
+      auth_hint: Ollama must be reachable from the runner through OLLAMA_HOST or the default host bridge.
+    dependencies:
+      commands:
+        - curl
+      services:
+        - ollama
+    budget:
+      max_task_tokens: 0
+      require_approval_over_cost: false
+    training:
+      exploration_weight: 0.55
+      preferred_for:
+        - cheap_attempt
+        - low_risk
+        - draft
+
+  - id: codex.cli.default
+    preset: codex
+    provider: codex
+    resolver_hint: codex
+    display_name: Codex CLI
+    setup_hint: Install and sign in to the Codex CLI, then rerun DorkPipe lane discovery or the agentic workflow.
+    local: false
+    cloud: true
+    free: false
+    model: "${DORKPIPE_ORCH_CODEX_MODEL:-cli}"
+    context_window: 128000
+    capabilities:
+      - chat
+      - reasoning
+      - code
+      - patch
+      - strong_validation
+    availability:
+      commands:
+        - codex
+      auth_hint: Codex CLI must be installed and authenticated for Codex worker lanes.
+    dependencies:
+      commands:
+        - codex
+    budget:
+      max_task_tokens: 40000
+      require_approval_over_cost: true
+    training:
+      exploration_weight: 0.25
+      preferred_for:
+        - code
+        - patch
+        - validation_failed
+
+  - id: claude.cli.default
+    preset: claude
+    provider: claude
+    resolver_hint: claude
+    display_name: Claude CLI
+    setup_hint: Install and sign in to Claude Code or the Claude CLI, then rerun DorkPipe lane discovery or the agentic workflow.
+    local: false
+    cloud: true
+    free: false
+    model: "${DORKPIPE_ORCH_CLAUDE_MODEL:-cli}"
+    context_window: 200000
+    capabilities:
+      - chat
+      - reasoning
+      - review
+      - safety
+      - strong_validation
+    availability:
+      commands:
+        - claude
+      auth_hint: Claude CLI must be installed and authenticated for Claude worker lanes.
+    dependencies:
+      commands:
+        - claude
+    budget:
+      max_task_tokens: 40000
+      require_approval_over_cost: true
+    training:
+      exploration_weight: 0.20
+      preferred_for:
+        - review
+        - safety
+        - verifier_disagreement
