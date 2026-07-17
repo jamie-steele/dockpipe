@@ -200,20 +200,16 @@ Task-class gating should make weak local lanes effectively non-authoritative:
 - local model strings and host capacity should be considered together so a large Ollama model on a
   small laptop does not win just because it is local
 
-TODO: add package-owned source walkers for local lanes. The current Ollama lane is prompt-only; it
-can summarize provided excerpts, but it cannot inspect mounted roots by itself. DorkPipe should add
-deterministic walkers that produce bounded repo/design/source packets from `access.read`,
-`context.source_roots`, ignore rules, size limits, file type filters, and source authority labels.
-Those packets can then feed local models cheaply without pretending local lanes performed source-root
-discovery. Until that exists, broad source discovery should use a tool-capable worker or a
-deterministic shared collector artifact.
-
-Local lanes now materialize a `tasks/<task-id>/source-packet.md` when the task declares
-`context.source_roots`. The packet is package-owned, bounded, and deterministic: it resolves `/work`
+Local lanes are source-packet consumers, not source scouts. When a task declares
+`context.source_roots`, DorkPipe materializes a package-owned
+`tasks/<task-id>/source-packet.md` before prompt assembly. The deterministic walker resolves `/work`
 and declared external mounts on the host, accepts only roots inside `access.read`, excludes
-`access.deny`, cache/generated directories, symlinks, and non-text files, and is appended to the
-local prompt as evidence. A local task with source roots but no readable access fails during planning
-instead of silently broadening discovery.
+`access.deny`, cache/generated directories, symlinks, and non-text files, and enforces fixed file,
+per-file byte, and total source-byte bounds. Declared root order is preserved and each root is walked
+lexically. Packet headings retain stable guest paths such as `/DesignNotes/reference.md`; resolved
+machine-specific host mount paths are never rendered into the packet. A local task with source roots
+but no readable access fails during planning instead of silently broadening discovery. Broad source
+discovery still requires a tool-capable worker or an explicitly declared deterministic source set.
 
 Local/custom lanes also materialize `tasks/<task-id>/prompt-brief.md` from their declared
 `context.required_artifacts` and `context.seed_paths` before prompt assembly. It reuses the existing

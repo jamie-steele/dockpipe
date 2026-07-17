@@ -4893,6 +4893,16 @@ const (
 	sourcePacketMaxBytes     = 6000
 )
 
+type sourcePacketRoot struct {
+	hostPath    string
+	displayPath string
+}
+
+type sourcePacketFile struct {
+	hostPath    string
+	displayPath string
+}
+
 var sourcePacketExtensions = map[string]bool{
 	".bash": true, ".c": true, ".cfg": true, ".conf": true, ".cpp": true, ".cs": true,
 	".css": true, ".go": true, ".h": true, ".hcl": true, ".hpp": true, ".html": true,
@@ -4923,23 +4933,23 @@ func renderSourcePacket(root string, sourceRoots, readRoots, denyRoots []string,
 	if err != nil {
 		return "", fmt.Errorf("resolve access.deny: %w", err)
 	}
-	resolvedSources, err := resolveSourcePacketPaths(root, sourceRoots, mountEnv)
+	resolvedSources, err := resolveSourcePacketRoots(root, sourceRoots, mountEnv)
 	if err != nil {
 		return "", fmt.Errorf("resolve context.source_roots: %w", err)
 	}
 	for _, source := range resolvedSources {
-		if !pathWithinAny(source, resolvedReads) {
-			return "", fmt.Errorf("source root is outside access.read: %s", source)
+		if !pathWithinAny(source.hostPath, resolvedReads) {
+			return "", fmt.Errorf("source root is outside access.read: %s", source.displayPath)
 		}
 	}
 
-	files := []string{}
+	files := []sourcePacketFile{}
 	seen := map[string]bool{}
 	for _, source := range resolvedSources {
 		if len(files) >= sourcePacketMaxFiles {
 			break
 		}
-		walkErr := filepath.WalkDir(source, func(path string, entry fs.DirEntry, walkErr error) error {
+		walkErr := filepath.WalkDir(source.hostPath, func(path string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
 			}
@@ -4960,7 +4970,10 @@ func renderSourcePacket(root string, sourceRoots, readRoots, denyRoots []string,
 			}
 			if !seen[path] {
 				seen[path] = true
-				files = append(files, path)
+				files = append(files, sourcePacketFile{
+					hostPath:    path,
+					displayPath: sourcePacketChildDisplayPath(source, path),
+				})
 			}
 			if len(files) >= sourcePacketMaxFiles {
 				return filepath.SkipDir
@@ -4972,10 +4985,6 @@ func renderSourcePacket(root string, sourceRoots, readRoots, denyRoots []string,
 		}
 	}
 
-	rootAbs, err := filepath.Abs(root)
-	if err != nil {
-		return "", err
-	}
 	lines := []string{
 		"# Deterministic Source Packet",
 		"",
@@ -4988,15 +4997,15 @@ func renderSourcePacket(root string, sourceRoots, readRoots, denyRoots []string,
 		"",
 	}
 	for _, source := range resolvedSources {
-		lines = append(lines, "- `"+sourcePacketDisplayPath(rootAbs, source)+"` (allowed by `access.read`)")
+		lines = append(lines, "- `"+source.displayPath+"` (allowed by `access.read`)")
 	}
 	remaining := sourcePacketMaxBytes
 	included := 0
-	for _, path := range files {
+	for _, file := range files {
 		if remaining <= 0 {
 			break
 		}
-		content, err := readSourcePacketFile(path, minInt(sourcePacketMaxFileBytes, remaining))
+		content, err := readSourcePacketFile(file.hostPath, minInt(sourcePacketMaxFileBytes, remaining))
 		if err != nil {
 			return "", err
 		}
@@ -5007,7 +5016,7 @@ func renderSourcePacket(root string, sourceRoots, readRoots, denyRoots []string,
 		remaining -= len(content)
 		included++
 		text := strings.ReplaceAll(strings.TrimRight(string(content), "\n"), "```", "``\\`")
-		lines = append(lines, "", "## "+sourcePacketDisplayPath(rootAbs, path), "", "```text", text, "```")
+		lines = append(lines, "", "## "+file.displayPath, "", "```text", text, "```")
 	}
 	if included == 0 {
 		lines = append(lines, "", "No readable text files matched the declared roots and packet policy.")
@@ -5015,6 +5024,31 @@ func renderSourcePacket(root string, sourceRoots, readRoots, denyRoots []string,
 		lines = append(lines, "", "Packet bounds reached; additional allowed files were not included.")
 	}
 	return strings.Join(lines, "\n") + "\n", nil
+}
+
+func resolveSourcePacketRoots(root string, paths []string, mountEnv string) ([]sourcePacketRoot, error) {
+	resolved := []sourcePacketRoot{}
+	seen := map[string]bool{}
+	for _, raw := range paths {
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		hostPath, err := resolveSourcePacketPath(root, value, mountEnv)
+		if err != nil {
+			return nil, err
+		}
+		if seen[hostPath] {
+			continue
+		}
+		displayPath, err := sourcePacketRootDisplayPath(root, value, hostPath, mountEnv)
+		if err != nil {
+			return nil, err
+		}
+		seen[hostPath] = true
+		resolved = append(resolved, sourcePacketRoot{hostPath: hostPath, displayPath: displayPath})
+	}
+	return resolved, nil
 }
 
 func resolveSourcePacketPaths(root string, paths []string, mountEnv string) ([]string, error) {
@@ -5069,12 +5103,71 @@ func pathWithinAny(path string, roots []string) bool {
 	return false
 }
 
-func sourcePacketDisplayPath(root, path string) string {
-	rel, err := filepath.Rel(root, path)
-	if err == nil && !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel) {
-		return filepath.ToSlash(rel)
+func sourcePacketRootDisplayPath(root, declared, hostPath, mountEnv string) (string, error) {
+	declaredSlash := filepath.ToSlash(declared)
+	if strings.HasPrefix(declaredSlash, "/") {
+		if _, _, ok := resolveGuestMountTarget(declared, mountEnv); ok {
+			return cleanGuestPath(declared), nil
+		}
+		if _, _, ok := resolvePrimaryWorkTarget(root, declared); ok {
+			return cleanGuestPath(declared), nil
+		}
 	}
-	return filepath.ToSlash(path)
+	if !filepath.IsAbs(declared) {
+		return filepath.ToSlash(filepath.Clean(declared)), nil
+	}
+	if guestPath, ok := sourcePacketGuestPathForHost(hostPath, mountEnv); ok {
+		return guestPath, nil
+	}
+	rootAbs, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	rel, err := filepath.Rel(rootAbs, hostPath)
+	if err == nil && !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel) {
+		return filepath.ToSlash(rel), nil
+	}
+	return "", fmt.Errorf("external source root must use a declared guest mount")
+}
+
+func sourcePacketGuestPathForHost(hostPath, mountEnv string) (string, bool) {
+	bestHostRoot := ""
+	bestGuestRoot := ""
+	for _, line := range strings.Split(mountEnv, "\n") {
+		host, guest, ok := parseContainerMountSpec(line)
+		if !ok {
+			continue
+		}
+		hostRoot, err := filepath.Abs(host)
+		if err != nil || !withinRoot(hostRoot, hostPath) || len(hostRoot) <= len(bestHostRoot) {
+			continue
+		}
+		bestHostRoot = hostRoot
+		bestGuestRoot = cleanGuestPath(guest)
+	}
+	if bestHostRoot == "" || bestGuestRoot == "" {
+		return "", false
+	}
+	rel, err := filepath.Rel(bestHostRoot, hostPath)
+	if err != nil {
+		return "", false
+	}
+	if rel == "." {
+		return bestGuestRoot, true
+	}
+	return strings.TrimRight(bestGuestRoot, "/") + "/" + filepath.ToSlash(rel), true
+}
+
+func sourcePacketChildDisplayPath(root sourcePacketRoot, hostPath string) string {
+	rel, err := filepath.Rel(root.hostPath, hostPath)
+	if err != nil || rel == "." {
+		return root.displayPath
+	}
+	rel = filepath.ToSlash(rel)
+	if root.displayPath == "." {
+		return rel
+	}
+	return strings.TrimRight(root.displayPath, "/") + "/" + rel
 }
 
 func readSourcePacketFile(path string, limit int) ([]byte, error) {
