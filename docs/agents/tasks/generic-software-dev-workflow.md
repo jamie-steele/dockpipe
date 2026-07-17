@@ -284,21 +284,26 @@ or proposal-selected graphs reject invalid dependencies, cycles, duplicate produ
 required-output producers. The helper remains pure and package-local and does not execute or
 materialize a proposed graph.
 
+The package-helper two-phase compiler slice completed on 2026-07-17: one strict JSON or YAML planner
+proposal can be parsed as structured, non-executable data, and narrated, malformed, ambiguous, or
+structurally invalid proposals fail before compilation. The separate pure compiler sends package
+defaults, the loaded repo task pack, and the optional parsed proposal through the normalized-contract
+boundary before producing deterministic in-memory plan, task-graph, per-task, and proposal-metadata
+representations. Unknown role references, graph errors, authority widening, and output-floor errors
+produce no partial executable graph or task artifacts.
+
 ## Remaining Implementation Slices
 
-1. Next, implement two-phase proposal parsing and executable graph compilation in package code and
-   scripts, preserving the existing task-pack loader, normalized-contract boundary, and
-   orchestration artifact contract.
-2. Add the package-owned `software.dev` workflow with hard policy, direct invocation variables or
-   typed inputs, planner bootstrap, execute/merge/verify/approval/apply stages, and no implicit
+1. Next, add the package-owned `software.dev` workflow and a minimal repo task-pack proof fixture.
+   Prove hard policy, direct invocation variables or typed inputs, planner bootstrap,
+   execute/merge/verify/approval/apply stages, static and planner-proposed tasks, inferred extra
+   outputs, required floors, deterministic verification, approval-gated apply, and no implicit
    publish.
-3. Add a minimal repo task-pack fixture that proves static tasks and planner-proposed tasks, inferred
-   extra outputs, required floors, deterministic verification, and approval-gated apply.
-4. Run `example.brain` as an unchanged proof sketch against the contract tests; do not migrate or
+2. Run `example.brain` as an unchanged proof sketch against the contract tests; do not migrate or
    replace it until the generic workflow is stable.
-5. Implement proposal promotion as a separate package-owned slice with explicit mutable surfaces,
+3. Implement proposal promotion as a separate package-owned slice with explicit mutable surfaces,
    small reviewable patches, and rollback-safe verification.
-6. Document consumer invocation and only then evaluate thin wrappers for `brain.optimize`-style
+4. Document consumer invocation and only then evaluate thin wrappers for `brain.optimize`-style
    workflows. Provider pools, host bridges, remote execution, and TASK-008 remain out of scope.
 
 ## Supporting Decisions

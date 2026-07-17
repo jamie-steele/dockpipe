@@ -414,6 +414,315 @@ func TestNormalizeTaskPackContractRejectsInvalidGraphsDeterministically(t *testi
 	}
 }
 
+func TestParsePlannerProposalAcceptsStructuredJSONAndYAML(t *testing.T) {
+	tests := []struct {
+		name       string
+		raw        string
+		wantFormat string
+	}{
+		{
+			name:       "json",
+			raw:        mustJSON(validExecutableProposal(), nil),
+			wantFormat: "json",
+		},
+		{
+			name: "yaml",
+			raw: `startup_prompt: proposal prompt
+constraints:
+  - proposal rule
+orchestration:
+  agents:
+    base:
+      role: proposal base
+      constraints:
+        - proposal role rule
+  tasks:
+    - id: proposal_write
+      agent: base
+      goal: Write the bounded output.
+      brief: Preserve the repository contract.
+      context:
+        required_artifacts:
+          - shared/request.md
+        seed_paths:
+          - packages/dorkpipe
+        source_roots:
+          - packages/dorkpipe
+      constraints:
+        - Do not widen authority.
+      expected_output: A reviewable artifact bundle.
+      max_cloud_tokens: 200
+      depends_on: []
+      materialize_outputs:
+        - id: base
+          path: base.md
+`,
+			wantFormat: "yaml",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proposal, err := parsePlannerProposal([]byte(tt.raw))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if proposal.Format != tt.wantFormat {
+				t.Fatalf("format = %q, want %q", proposal.Format, tt.wantFormat)
+			}
+			tasks := listValue(contractOrchestration(proposal.Declaration)["tasks"])
+			if len(tasks) == 0 {
+				t.Fatal("parsed proposal has no tasks")
+			}
+			first := mapValue(tasks[0])
+			if stringValue(first["id"]) != "proposal_write" || stringValue(first["agent"]) != "base" {
+				t.Fatalf("first task identity = %#v", first)
+			}
+			if tt.name == "yaml" {
+				assertStringOrder(t, "context.required_artifacts", stringList(mapValue(first["context"])["required_artifacts"]), []string{"shared/request.md"})
+				assertStringOrder(t, "materialize_outputs", []string{stringValue(mapValue(listValue(first["materialize_outputs"])[0])["path"])}, []string{"base.md"})
+			}
+		})
+	}
+}
+
+func TestParsePlannerProposalRejectsUnstructuredOrInvalidInput(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		wantErr string
+	}{
+		{name: "empty", raw: " \n\t", wantErr: "planner proposal is empty"},
+		{name: "malformed json", raw: `{`, wantErr: "planner proposal is not valid JSON or YAML"},
+		{name: "malformed yaml", raw: "orchestration:\n  tasks: [", wantErr: "planner proposal is not valid JSON or YAML"},
+		{name: "wrong root", raw: "- id: task\n", wantErr: "planner proposal root must be an object"},
+		{name: "narrated", raw: "Here is the proposal:\n  orchestration:\n    tasks:\n      - id: task\n", wantErr: `planner proposal root field "Here is the proposal" is not allowed`},
+		{name: "fenced", raw: "```yaml\norchestration:\n  tasks:\n    - id: task\n```\n", wantErr: "planner proposal is not valid JSON or YAML"},
+		{name: "multiple documents", raw: "orchestration:\n  tasks:\n    - id: first\n---\norchestration:\n  tasks:\n    - id: second\n", wantErr: "planner proposal must contain exactly one structured document"},
+		{name: "duplicate keys", raw: "orchestration:\n  tasks:\n    - id: first\n  tasks:\n    - id: second\n", wantErr: "planner proposal is not valid JSON or YAML"},
+		{name: "missing orchestration", raw: "constraints: [bounded]\n", wantErr: "planner proposal.orchestration is required"},
+		{name: "wrong task root", raw: "orchestration:\n  tasks: task\n", wantErr: "planner proposal.orchestration.tasks must be an array"},
+		{name: "empty tasks", raw: "orchestration:\n  tasks: []\n", wantErr: "planner proposal.orchestration.tasks must contain at least one task"},
+		{name: "missing task id", raw: "orchestration:\n  tasks:\n    - goal: missing id\n", wantErr: "planner proposal.orchestration.tasks[0].id is required"},
+		{name: "wrong dependencies", raw: "orchestration:\n  tasks:\n    - id: task\n      depends_on: other\n", wantErr: "planner proposal.orchestration.tasks[0].depends_on must be an array of strings"},
+		{name: "wrong context", raw: "orchestration:\n  tasks:\n    - id: task\n      context: source.md\n", wantErr: "planner proposal.orchestration.tasks[0].context must be an object"},
+		{name: "missing output path", raw: "orchestration:\n  tasks:\n    - id: task\n      materialize_outputs:\n        - id: output\n", wantErr: "planner proposal.orchestration.tasks[0].materialize_outputs[0].path is required"},
+		{name: "unknown task field", raw: "orchestration:\n  tasks:\n    - id: task\n      publish: true\n", wantErr: `planner proposal.orchestration.tasks[0] field "publish" is not allowed`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			proposal, err := parsePlannerProposal([]byte(tt.raw))
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("parsePlannerProposal() = %#v, %v, want %q", proposal, err, tt.wantErr)
+			}
+			if proposal != nil {
+				t.Fatalf("parse failure returned partial proposal: %#v", proposal)
+			}
+		})
+	}
+}
+
+func TestCompileExecutableContractBuildsDeterministicArtifacts(t *testing.T) {
+	tests := []struct {
+		name         string
+		prepare      func(map[string]any, map[string]any) *parsedPlannerProposal
+		wantTaskIDs  []string
+		wantProposal bool
+	}{
+		{
+			name:        "static repo graph",
+			wantTaskIDs: []string{"repo_write", "repo_verify"},
+		},
+		{
+			name: "proposal selected graph",
+			prepare: func(_ map[string]any, _ map[string]any) *parsedPlannerProposal {
+				proposal, err := parsePlannerProposal([]byte(mustJSON(validExecutableProposal(), nil)))
+				if err != nil {
+					t.Fatal(err)
+				}
+				return proposal
+			},
+			wantTaskIDs:  []string{"proposal_write", "proposal_verify"},
+			wantProposal: true,
+		},
+		{
+			name: "package seed fallback",
+			prepare: func(_ map[string]any, repo map[string]any) *parsedPlannerProposal {
+				delete(contractOrchestration(repo), "tasks")
+				contractApply(repo)["required_artifacts"] = []any{}
+				return nil
+			},
+			wantTaskIDs: []string{"package_seed"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			packageDefaults := validContractPackageDefaults()
+			repo := validContractRepoTaskPack()
+			addExecutableTaskFields(packageDefaults, repo)
+			var proposal *parsedPlannerProposal
+			if tt.prepare != nil {
+				proposal = tt.prepare(packageDefaults, repo)
+			}
+
+			compiled, err := compileExecutableContract(packageDefaults, repo, proposal)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertStringOrder(t, "graph tasks", contractIDs(listValue(compiled.TaskGraph["tasks"])), tt.wantTaskIDs)
+			assertStringOrder(t, "task artifacts", contractIDs(compiled.TaskArtifacts), tt.wantTaskIDs)
+			if got := boolAny(compiled.ProposalMetadata["present"]); got != tt.wantProposal {
+				t.Fatalf("proposal metadata present = %v, want %v", got, tt.wantProposal)
+			}
+			if boolAny(compiled.Plan["publish"]) || boolAny(compiled.Plan["sync"]) || !boolAny(compiled.Plan["approval_required"]) {
+				t.Fatalf("compiled hard authority = approval:%v publish:%v sync:%v", compiled.Plan["approval_required"], compiled.Plan["publish"], compiled.Plan["sync"])
+			}
+
+			if tt.wantProposal {
+				first := mapValue(compiled.TaskArtifacts[0])
+				if stringValue(first["agent"]) != "base" || stringValue(first["goal"]) != "proposal goal for writer" || stringValue(first["brief"]) != "proposal writer brief" {
+					t.Fatalf("compiled proposal task fields = %#v", first)
+				}
+				assertStringOrder(t, "compiled dependencies", stringList(mapValue(compiled.TaskArtifacts[1])["depends_on"]), []string{"proposal_write"})
+				assertStringOrder(t, "compiled context", stringList(mapValue(first["context"])["required_artifacts"]), []string{"shared/request.md", "shared/repo.md"})
+				assertStringOrder(t, "compiled constraints", stringList(first["constraints"]), []string{"package role rule", "repo role rule", "proposal role rule", "writer constraint", "shared task constraint"})
+				assertStringOrder(t, "compiled outputs", []string{
+					stringValue(mapValue(listValue(first["materialize_outputs"])[0])["path"]),
+					stringValue(mapValue(listValue(first["materialize_outputs"])[1])["path"]),
+					stringValue(mapValue(listValue(first["materialize_outputs"])[2])["path"]),
+				}, []string{"base.md", "repo.md", "extra.md"})
+				if intFromAny(first["max_cloud_tokens"]) != 200 || stringValue(first["expected_output"]) != "proposal writer output" {
+					t.Fatalf("compiled output contract = %#v", first)
+				}
+				assertStringOrder(t, "proposal role metadata", stringList(compiled.ProposalMetadata["role_ids"]), []string{"aaa", "base"})
+				assertStringOrder(t, "proposal task metadata", stringList(compiled.ProposalMetadata["task_ids"]), tt.wantTaskIDs)
+			}
+
+			second, err := compileExecutableContract(packageDefaults, repo, proposal)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if mustJSON(compiled, nil) != mustJSON(second, nil) {
+				t.Fatalf("compiled output is not deterministic:\nfirst:  %s\nsecond: %s", mustJSON(compiled, nil), mustJSON(second, nil))
+			}
+		})
+	}
+}
+
+func TestCompileExecutableContractRejectsInvalidContractsWithoutPartialArtifacts(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(map[string]any, map[string]any, *parsedPlannerProposal)
+		wantErr string
+	}{
+		{
+			name: "unknown role reference",
+			mutate: func(_ map[string]any, _ map[string]any, proposal *parsedPlannerProposal) {
+				mapValue(listValue(contractOrchestration(proposal.Declaration)["tasks"])[0])["agent"] = "missing_role"
+			},
+			wantErr: `proposal.tasks["proposal_write"].agent references unknown normalized role "missing_role"`,
+		},
+		{
+			name: "invalid dependency",
+			mutate: func(_ map[string]any, _ map[string]any, proposal *parsedPlannerProposal) {
+				mapValue(listValue(contractOrchestration(proposal.Declaration)["tasks"])[0])["depends_on"] = []any{"missing"}
+			},
+			wantErr: `tasks["proposal_write"].depends_on dependency "missing" does not exist`,
+		},
+		{
+			name: "authority widening",
+			mutate: func(_ map[string]any, _ map[string]any, proposal *parsedPlannerProposal) {
+				proposal.Declaration["access"] = map[string]any{"read": []any{"/etc"}}
+			},
+			wantErr: `proposal.access.read path "/etc" is outside the current package authority ceiling`,
+		},
+		{
+			name: "output floor",
+			mutate: func(_ map[string]any, _ map[string]any, proposal *parsedPlannerProposal) {
+				first := mapValue(listValue(contractOrchestration(proposal.Declaration)["tasks"])[0])
+				first["materialize_outputs"] = []any{map[string]any{"path": "extra.md"}}
+			},
+			wantErr: `required output floor "base.md" has no producer`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			packageDefaults := validContractPackageDefaults()
+			repo := validContractRepoTaskPack()
+			addExecutableTaskFields(packageDefaults, repo)
+			proposal, err := parsePlannerProposal([]byte(mustJSON(validExecutableProposal(), nil)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			tt.mutate(packageDefaults, repo, proposal)
+
+			compiled, firstErr := compileExecutableContract(packageDefaults, repo, proposal)
+			second, secondErr := compileExecutableContract(packageDefaults, repo, proposal)
+			if firstErr == nil || !strings.Contains(firstErr.Error(), tt.wantErr) {
+				t.Fatalf("compileExecutableContract() = %#v, %v, want %q", compiled, firstErr, tt.wantErr)
+			}
+			if compiled != nil {
+				t.Fatalf("compile failure returned partial executable artifacts: %#v", compiled)
+			}
+			if second != nil || secondErr == nil || firstErr.Error() != secondErr.Error() {
+				t.Fatalf("compile errors are not deterministic:\nfirst:  %#v, %v\nsecond: %#v, %v", compiled, firstErr, second, secondErr)
+			}
+		})
+	}
+}
+
+func validExecutableProposal() map[string]any {
+	proposal := validContractProposal()
+	tasks := listValue(contractOrchestration(proposal)["tasks"])
+	writer := mapValue(tasks[0])
+	writer["agent"] = "base"
+	writer["goal"] = "proposal goal for writer"
+	writer["brief"] = "proposal writer brief"
+	writer["context"] = map[string]any{
+		"required_artifacts": []any{"shared/request.md", "shared/repo.md"},
+		"seed_paths":         []any{"packages/dorkpipe"},
+		"source_roots":       []any{"packages/dorkpipe/lib"},
+	}
+	writer["constraints"] = []any{"writer constraint", "shared task constraint"}
+	writer["expected_output"] = "proposal writer output"
+	verifier := mapValue(tasks[1])
+	verifier["agent"] = "aaa"
+	verifier["goal"] = "proposal goal for verifier"
+	verifier["brief"] = "proposal verifier brief"
+	verifier["context"] = map[string]any{"required_artifacts": []any{"tasks/proposal_write/result.json"}}
+	verifier["constraints"] = []any{"verifier constraint"}
+	verifier["expected_output"] = "proposal verifier output"
+	return proposal
+}
+
+func addExecutableTaskFields(packageDefaults, repo map[string]any) {
+	packageTask := mapValue(listValue(contractOrchestration(packageDefaults)["tasks"])[0])
+	packageTask["agent"] = "base"
+	packageTask["goal"] = "package seed goal"
+	packageTask["brief"] = "package seed brief"
+	packageTask["context"] = map[string]any{}
+	packageTask["constraints"] = []any{"package task constraint"}
+	packageTask["expected_output"] = "package seed output"
+
+	repoTasks := listValue(contractOrchestration(repo)["tasks"])
+	for index, raw := range repoTasks {
+		task := mapValue(raw)
+		if index == 0 {
+			task["agent"] = "base"
+		} else {
+			task["agent"] = "repo_role"
+		}
+		task["goal"] = fmt.Sprintf("repo task %d goal", index)
+		task["brief"] = fmt.Sprintf("repo task %d brief", index)
+		task["context"] = map[string]any{}
+		task["constraints"] = []any{fmt.Sprintf("repo task %d constraint", index)}
+		task["expected_output"] = fmt.Sprintf("repo task %d output", index)
+	}
+}
+
 func validContractPackageDefaults() map[string]any {
 	return map[string]any{
 		"startup_prompt": "package prompt",
