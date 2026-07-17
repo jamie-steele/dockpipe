@@ -274,25 +274,31 @@ The package-helper task-pack loader prerequisite completed on 2026-07-17: a non-
 workflow path is contained within the consumer repo after lexical and symlink resolution, exact step
 ids are selected without prefix matching, duplicate ids fail as ambiguous, and only the selected
 step's `agent` declaration is returned after confirming `agent.orchestration` exists and the file
-passes DockPipe's existing workflow validation. Precedence, authority narrowing, graph compilation,
-and output-floor validation remain separate later slices.
+passes DockPipe's existing workflow validation.
+
+The package-helper normalized-contract prerequisite completed on 2026-07-17: package defaults, the
+loaded repo task pack, and an optional per-run proposal now compile through deterministic
+field-class precedence; repo and proposal authority can only narrow package ceilings; constraints,
+deny rules, roles, required output floors, tasks, and errors retain deterministic order; and static
+or proposal-selected graphs reject invalid dependencies, cycles, duplicate producers, and missing
+required-output producers. The helper remains pure and package-local and does not execute or
+materialize a proposed graph.
 
 ## Remaining Implementation Slices
 
-1. Next, add focused package contract tests for precedence, authority narrowing, graph validation,
-   and output floors.
-2. Implement the DorkPipe two-phase proposal compiler in package code and scripts, preserving the
-   existing task-pack loader and orchestration artifact contract.
-3. Add the package-owned `software.dev` workflow with hard policy, direct invocation variables or
+1. Next, implement two-phase proposal parsing and executable graph compilation in package code and
+   scripts, preserving the existing task-pack loader, normalized-contract boundary, and
+   orchestration artifact contract.
+2. Add the package-owned `software.dev` workflow with hard policy, direct invocation variables or
    typed inputs, planner bootstrap, execute/merge/verify/approval/apply stages, and no implicit
    publish.
-4. Add a minimal repo task-pack fixture that proves static tasks and planner-proposed tasks, inferred
+3. Add a minimal repo task-pack fixture that proves static tasks and planner-proposed tasks, inferred
    extra outputs, required floors, deterministic verification, and approval-gated apply.
-5. Run `example.brain` as an unchanged proof sketch against the contract tests; do not migrate or
+4. Run `example.brain` as an unchanged proof sketch against the contract tests; do not migrate or
    replace it until the generic workflow is stable.
-6. Implement proposal promotion as a separate package-owned slice with explicit mutable surfaces,
+5. Implement proposal promotion as a separate package-owned slice with explicit mutable surfaces,
    small reviewable patches, and rollback-safe verification.
-7. Document consumer invocation and only then evaluate thin wrappers for `brain.optimize`-style
+6. Document consumer invocation and only then evaluate thin wrappers for `brain.optimize`-style
    workflows. Provider pools, host bridges, remote execution, and TASK-008 remain out of scope.
 
 ## Supporting Decisions

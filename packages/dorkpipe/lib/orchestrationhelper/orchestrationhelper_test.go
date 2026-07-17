@@ -116,6 +116,430 @@ steps:
 	}
 }
 
+func TestNormalizeTaskPackContractPrecedenceAndValidGraphs(t *testing.T) {
+	tests := []struct {
+		name            string
+		proposal        func() map[string]any
+		prepare         func(map[string]any, map[string]any, map[string]any)
+		wantPrompt      string
+		wantGoal        string
+		wantConstraints []string
+		wantFloors      []string
+		wantRoles       []string
+		wantTasks       []string
+		wantRead        []string
+		wantBudget      int
+	}{
+		{
+			name:            "static repo graph",
+			wantPrompt:      "repo prompt",
+			wantGoal:        "repo goal",
+			wantConstraints: []string{"package rule", "shared rule", "repo rule"},
+			wantFloors:      []string{"base.md", "repo.md"},
+			wantRoles:       []string{"base", "repo_role", "zeta"},
+			wantTasks:       []string{"repo_write", "repo_verify"},
+			wantRead:        []string{"/work/src"},
+			wantBudget:      300,
+		},
+		{
+			name:            "proposal selected graph",
+			proposal:        validContractProposal,
+			wantPrompt:      "proposal prompt",
+			wantGoal:        "proposal goal",
+			wantConstraints: []string{"package rule", "shared rule", "repo rule", "proposal rule"},
+			wantFloors:      []string{"base.md", "repo.md", "extra.md"},
+			wantRoles:       []string{"aaa", "base", "repo_role", "zeta"},
+			wantTasks:       []string{"proposal_write", "proposal_verify"},
+			wantRead:        []string{"/work/src/pkg"},
+			wantBudget:      250,
+		},
+		{
+			name: "package seed fallback",
+			prepare: func(_ map[string]any, repo, _ map[string]any) {
+				delete(contractOrchestration(repo), "tasks")
+				contractApply(repo)["required_artifacts"] = []any{}
+			},
+			wantPrompt:      "repo prompt",
+			wantGoal:        "repo goal",
+			wantConstraints: []string{"package rule", "shared rule", "repo rule"},
+			wantFloors:      []string{"base.md"},
+			wantRoles:       []string{"base", "repo_role", "zeta"},
+			wantTasks:       []string{"package_seed"},
+			wantRead:        []string{"/work/src"},
+			wantBudget:      300,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			packageDefaults := validContractPackageDefaults()
+			repo := validContractRepoTaskPack()
+			proposal := map[string]any(nil)
+			if tt.proposal != nil {
+				proposal = tt.proposal()
+			}
+			if tt.prepare != nil {
+				tt.prepare(packageDefaults, repo, proposal)
+			}
+			packageBefore := mustJSON(packageDefaults, nil)
+			repoBefore := mustJSON(repo, nil)
+			proposalBefore := mustJSON(proposal, nil)
+
+			normalized, err := normalizeTaskPackContract(packageDefaults, repo, proposal)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := stringValue(normalized["startup_prompt"]); got != tt.wantPrompt {
+				t.Fatalf("startup_prompt = %q, want %q", got, tt.wantPrompt)
+			}
+			if got := stringValue(mapValue(normalized["plan"])["goal"]); got != tt.wantGoal {
+				t.Fatalf("plan.goal = %q, want %q", got, tt.wantGoal)
+			}
+			if got := stringValue(mapValue(normalized["request"])["text"]); got != strings.Replace(tt.wantGoal, "goal", "request", 1) {
+				t.Fatalf("request.text = %q", got)
+			}
+			assertStringOrder(t, "constraints", stringList(normalized["constraints"]), tt.wantConstraints)
+			assertStringOrder(t, "required_outputs", stringList(normalized["required_outputs"]), tt.wantFloors)
+			assertStringOrder(t, "access.read", stringList(mapValue(normalized["access"])["read"]), tt.wantRead)
+			wantDeny := []string{"/work/.git", "/work/secrets", "/work/generated"}
+			if tt.proposal != nil {
+				wantDeny = append(wantDeny, "/work/src/tmp")
+			}
+			assertStringOrder(t, "access.deny", stringList(mapValue(normalized["access"])["deny"]), wantDeny)
+			if got := intFromAny(mapValue(normalized["cloud_budget"])["max_task_tokens"]); got != tt.wantBudget {
+				t.Fatalf("cloud_budget.max_task_tokens = %d, want %d", got, tt.wantBudget)
+			}
+			if !boolAny(normalized["approval_required"]) || boolAny(normalized["publish"]) || boolAny(normalized["sync"]) {
+				t.Fatalf("hard authority = approval:%v publish:%v sync:%v", normalized["approval_required"], normalized["publish"], normalized["sync"])
+			}
+			if got := stringValue(normalized["apply_target"]); got != "docs/generated" {
+				t.Fatalf("apply_target = %q, want repo-selected target", got)
+			}
+			assertStringOrder(t, "roles", contractIDs(listValue(normalized["roles"])), tt.wantRoles)
+			assertStringOrder(t, "tasks", contractIDs(listValue(normalized["tasks"])), tt.wantTasks)
+
+			baseRole := contractItemByID(listValue(normalized["roles"]), "base")
+			wantRole := "repo base"
+			wantRoleConstraints := []string{"package role rule", "repo role rule"}
+			if tt.proposal != nil {
+				wantRole = "proposal base"
+				wantRoleConstraints = append(wantRoleConstraints, "proposal role rule")
+			}
+			if got := stringValue(baseRole["role"]); got != wantRole {
+				t.Fatalf("base role = %q, want %q", got, wantRole)
+			}
+			assertStringOrder(t, "base role constraints", stringList(baseRole["constraints"]), wantRoleConstraints)
+
+			if got := mustJSON(packageDefaults, nil); got != packageBefore {
+				t.Fatal("package defaults were mutated")
+			}
+			if got := mustJSON(repo, nil); got != repoBefore {
+				t.Fatal("repo task pack was mutated")
+			}
+			if got := mustJSON(proposal, nil); got != proposalBefore {
+				t.Fatal("proposal was mutated")
+			}
+		})
+	}
+}
+
+func TestNormalizeTaskPackContractRejectsAuthorityWidening(t *testing.T) {
+	tests := []struct {
+		name    string
+		mutate  func(map[string]any, map[string]any, map[string]any)
+		wantErr string
+	}{
+		{
+			name: "read outside package ceiling",
+			mutate: func(_ map[string]any, repo, _ map[string]any) {
+				repo["access"] = map[string]any{"read": []any{"/etc"}}
+			},
+			wantErr: `repo.access.read path "/etc" is outside the current package authority ceiling`,
+		},
+		{
+			name: "write outside package ceiling",
+			mutate: func(_ map[string]any, repo, _ map[string]any) {
+				repo["access"] = map[string]any{"write": []any{"/DesignNotes"}}
+			},
+			wantErr: `repo.access.write path "/DesignNotes" is outside the current package authority ceiling`,
+		},
+		{
+			name: "proposal role access widens narrowed run authority",
+			mutate: func(_ map[string]any, _ map[string]any, proposal map[string]any) {
+				mapValue(mapValue(contractOrchestration(proposal)["agents"])["aaa"])["access"] = map[string]any{"read": []any{"/work/other"}}
+			},
+			wantErr: `proposal.roles["aaa"].access.read path "/work/other" is outside the current package authority ceiling`,
+		},
+		{
+			name: "remove package deny rule",
+			mutate: func(_ map[string]any, repo, _ map[string]any) {
+				repo["access"] = map[string]any{"remove_deny": []any{"/work/.git"}}
+			},
+			wantErr: `repo.access.remove_deny cannot remove package deny rule "/work/.git"`,
+		},
+		{
+			name: "cloud budget above package ceiling",
+			mutate: func(_ map[string]any, repo, _ map[string]any) {
+				repo["cloud_budget"] = map[string]any{"max_total_tokens": 1001}
+			},
+			wantErr: `repo.cloud_budget.max_total_tokens value 1001 exceeds package ceiling 1000`,
+		},
+		{
+			name: "task budget above package ceiling",
+			mutate: func(_ map[string]any, repo, proposal map[string]any) {
+				for key := range proposal {
+					delete(proposal, key)
+				}
+				mapValue(listValue(contractOrchestration(repo)["tasks"])[0])["max_cloud_tokens"] = 401
+			},
+			wantErr: `repo.tasks["repo_write"].max_cloud_tokens value 401 exceeds package ceiling 300`,
+		},
+		{
+			name: "selected graph exceeds task count ceiling",
+			mutate: func(_ map[string]any, repo, proposal map[string]any) {
+				for key := range proposal {
+					delete(proposal, key)
+				}
+				repo["cloud_budget"] = map[string]any{"max_tasks": 1}
+			},
+			wantErr: `repo.tasks count 2 exceeds cloud_budget.max_tasks ceiling 1`,
+		},
+		{
+			name: "disable mandatory approval",
+			mutate: func(_ map[string]any, repo, _ map[string]any) {
+				contractApply(repo)["require_approval"] = false
+			},
+			wantErr: `repo.apply.require_approval cannot disable mandatory package approval`,
+		},
+		{
+			name:    "enable publish from task pack",
+			mutate:  func(_ map[string]any, repo, _ map[string]any) { repo["publish"] = true },
+			wantErr: `repo.publish cannot enable package-owned publish`,
+		},
+		{
+			name:    "enable sync from proposal",
+			mutate:  func(_ map[string]any, _ map[string]any, proposal map[string]any) { proposal["sync"] = true },
+			wantErr: `proposal.sync cannot enable package-owned sync`,
+		},
+		{
+			name: "change repo apply target",
+			mutate: func(_ map[string]any, _ map[string]any, proposal map[string]any) {
+				contractApply(proposal)["target_root"] = "elsewhere"
+			},
+			wantErr: `proposal.apply.target_root "elsewhere" cannot change repo-selected target "docs/generated"`,
+		},
+		{
+			name: "rename required output floor",
+			mutate: func(_ map[string]any, _ map[string]any, proposal map[string]any) {
+				contractApply(proposal)["required_artifacts"] = []any{"renamed.md", "repo.md", "extra.md"}
+			},
+			wantErr: `proposal.apply.required_artifacts cannot remove or rename required output "base.md"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			packageDefaults := validContractPackageDefaults()
+			repo := validContractRepoTaskPack()
+			proposal := validContractProposal()
+			tt.mutate(packageDefaults, repo, proposal)
+			_, err := normalizeTaskPackContract(packageDefaults, repo, proposal)
+			if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("normalizeTaskPackContract() error = %v, want %q", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestNormalizeTaskPackContractRejectsInvalidGraphsDeterministically(t *testing.T) {
+	tests := []struct {
+		name    string
+		tasks   []any
+		wantErr string
+	}{
+		{
+			name: "duplicate task ids",
+			tasks: []any{
+				contractTask("dup", nil, "base.md"),
+				contractTask("dup", nil, "repo.md"),
+			},
+			wantErr: `tasks["dup"].id is duplicate`,
+		},
+		{
+			name: "missing dependency",
+			tasks: []any{
+				contractTask("a", []string{"missing"}, "base.md", "repo.md"),
+			},
+			wantErr: `tasks["a"].depends_on dependency "missing" does not exist`,
+		},
+		{
+			name: "dependency cycle",
+			tasks: []any{
+				contractTask("a", []string{"b"}, "base.md"),
+				contractTask("b", []string{"a"}, "repo.md"),
+			},
+			wantErr: `tasks["b"].depends_on dependency "a" creates cycle a -> b -> a`,
+		},
+		{
+			name: "duplicate output producers",
+			tasks: []any{
+				contractTask("a", nil, "base.md", "repo.md"),
+				contractTask("b", nil, "repo.md"),
+			},
+			wantErr: `materialized output "repo.md" has duplicate producers tasks["a"] and tasks["b"]`,
+		},
+		{
+			name: "required floor without producer",
+			tasks: []any{
+				contractTask("a", nil, "base.md"),
+			},
+			wantErr: `required output floor "repo.md" has no producer`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			packageDefaults := validContractPackageDefaults()
+			repo := validContractRepoTaskPack()
+			contractOrchestration(repo)["tasks"] = tt.tasks
+			_, firstErr := normalizeTaskPackContract(packageDefaults, repo, nil)
+			_, secondErr := normalizeTaskPackContract(packageDefaults, repo, nil)
+			if firstErr == nil || !strings.Contains(firstErr.Error(), tt.wantErr) {
+				t.Fatalf("normalizeTaskPackContract() error = %v, want %q", firstErr, tt.wantErr)
+			}
+			if secondErr == nil || firstErr.Error() != secondErr.Error() {
+				t.Fatalf("errors are not deterministic:\nfirst:  %v\nsecond: %v", firstErr, secondErr)
+			}
+		})
+	}
+}
+
+func validContractPackageDefaults() map[string]any {
+	return map[string]any{
+		"startup_prompt": "package prompt",
+		"access": map[string]any{
+			"read":  []any{"/work", "/DesignNotes"},
+			"write": []any{"/work"},
+			"deny":  []any{"/work/.git", "/work/secrets"},
+		},
+		"cloud_budget": map[string]any{"max_total_tokens": 1000, "max_task_tokens": 400, "max_tasks": 4},
+		"constraints":  []any{"package rule", "shared rule"},
+		"publish":      false,
+		"sync":         false,
+		"orchestration": map[string]any{
+			"request": map[string]any{"text": "package request"},
+			"plan":    map[string]any{"goal": "package goal"},
+			"agents": map[string]any{
+				"zeta": map[string]any{"role": "package zeta"},
+				"base": map[string]any{"role": "package base", "constraints": []any{"package role rule"}},
+			},
+			"tasks": []any{contractTask("package_seed", nil, "base.md")},
+			"apply": map[string]any{
+				"require_approval":   true,
+				"target_root":        "package/default",
+				"required_artifacts": []any{"base.md"},
+			},
+		},
+	}
+}
+
+func validContractRepoTaskPack() map[string]any {
+	return map[string]any{
+		"startup_prompt": "repo prompt",
+		"access": map[string]any{
+			"read":  []any{"/work/src"},
+			"write": []any{"/work/src"},
+			"deny":  []any{"/work/generated", "/work/secrets"},
+		},
+		"cloud_budget": map[string]any{"max_total_tokens": 800, "max_task_tokens": 300, "max_tasks": 3},
+		"constraints":  []any{"repo rule", "shared rule"},
+		"orchestration": map[string]any{
+			"request": map[string]any{"text": "repo request"},
+			"plan":    map[string]any{"goal": "repo goal"},
+			"agents": map[string]any{
+				"repo_role": map[string]any{"role": "repo only"},
+				"base":      map[string]any{"role": "repo base", "constraints": []any{"repo role rule"}},
+			},
+			"tasks": []any{
+				contractTask("repo_write", nil, "base.md", "repo.md"),
+				contractTask("repo_verify", []string{"repo_write"}),
+			},
+			"apply": map[string]any{
+				"require_approval":   true,
+				"target_root":        "docs/generated",
+				"required_artifacts": []any{"repo.md"},
+			},
+		},
+	}
+}
+
+func validContractProposal() map[string]any {
+	return map[string]any{
+		"startup_prompt": "proposal prompt",
+		"access": map[string]any{
+			"read":  []any{"/work/src/pkg"},
+			"write": []any{"/work/src/pkg"},
+			"deny":  []any{"/work/src/tmp"},
+		},
+		"cloud_budget": map[string]any{"max_total_tokens": 700, "max_task_tokens": 250, "max_tasks": 2},
+		"constraints":  []any{"proposal rule", "repo rule"},
+		"orchestration": map[string]any{
+			"request": map[string]any{"text": "proposal request"},
+			"plan":    map[string]any{"goal": "proposal goal"},
+			"agents": map[string]any{
+				"aaa":  map[string]any{"role": "proposal only"},
+				"base": map[string]any{"role": "proposal base", "constraints": []any{"proposal role rule"}},
+			},
+			"tasks": []any{
+				contractTask("proposal_write", nil, "base.md", "repo.md", "extra.md"),
+				contractTask("proposal_verify", []string{"proposal_write"}),
+			},
+			"apply": map[string]any{
+				"require_approval":   true,
+				"target_root":        "docs/generated",
+				"required_artifacts": []any{"base.md", "repo.md", "extra.md"},
+			},
+		},
+	}
+}
+
+func contractTask(id string, dependencies []string, outputs ...string) map[string]any {
+	materialized := make([]any, 0, len(outputs))
+	for _, output := range outputs {
+		materialized = append(materialized, map[string]any{"path": output})
+	}
+	return map[string]any{
+		"id":                  id,
+		"depends_on":          anySlice(dependencies),
+		"max_cloud_tokens":    200,
+		"materialize_outputs": materialized,
+	}
+}
+
+func contractIDs(items []any) []string {
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		out = append(out, stringValue(mapValue(item)["id"]))
+	}
+	return out
+}
+
+func contractItemByID(items []any, id string) map[string]any {
+	for _, item := range items {
+		if value := mapValue(item); stringValue(value["id"]) == id {
+			return value
+		}
+	}
+	return map[string]any{}
+}
+
+func assertStringOrder(t *testing.T, field string, got, want []string) {
+	t.Helper()
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("%s = %#v, want %#v", field, got, want)
+	}
+}
+
 func TestLoadAgentsConfigUsesNearestWorkflowParentAndSiblingOverride(t *testing.T) {
 	root := t.TempDir()
 	workflowPath := filepath.Join(root, "workflows", "agent", "review", "config.yml")
