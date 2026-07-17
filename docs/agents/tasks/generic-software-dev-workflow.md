@@ -6,8 +6,8 @@ TASK-006 closed on 2026-07-17. The package-owned Example Brain baseline now seed
 deterministically, and materialized documentation fails closed on ambiguous runtime or host-path
 identity. The TASK-007 contract design is unblocked; no TASK-007 implementation is included in that
 baseline slice. The contract baseline below is now settled, and the first package-owned workflow
-plus offline proof fixture is complete; unchanged Example Brain contract proof and later promotion
-work remain.
+plus offline proof fixture and unchanged Example Brain contract proof are complete. TASK-007 remains
+open for proposal promotion and the later consumer-invocation evaluation.
 
 ## Goal
 
@@ -305,13 +305,22 @@ required output floors plus an inferred output; approval-gated apply to a tempor
 publish/sync; and fail-closed malformed, narrated, structural, authority, role, dependency, and output
 floor proposals with no executable graph or task artifacts left behind.
 
+The unchanged `example.brain` contract proof completed on 2026-07-17. Baseline eligibility now uses
+each task's explicit `shared/baseline-rules.md` context reference: eligible planning and durable-
+guidance tasks move that baseline first while mixed-pack implementation tasks remain untouched. The
+focused proof reads the actual unchanged `config.yml` and sibling `agents.yml`; maps package access,
+deny, lane/budget, approval, apply, and absent publish/sync policy to the hard layer; maps request,
+plan, collectors, roles, tasks, dependencies, merge/verification guidance, target root, and output
+floors to the repo-defined layer; and proves `planner_brain` is a bounded artifact consumed by the
+two downstream writers rather than a same-run dynamic graph proposal. The writers still declare
+exactly four materialized files, those four remain the required apply floor, and inferred unique
+extras remain compatible with approval-gated apply.
+
 ## Remaining Implementation Slices
 
-1. Next, run `example.brain` as an unchanged proof sketch against the contract tests; do not migrate or
-   replace it until the generic workflow is stable.
-2. Implement proposal promotion as a separate package-owned slice with explicit mutable surfaces,
+1. Next, implement proposal promotion as a separate package-owned slice with explicit mutable surfaces,
    small reviewable patches, and rollback-safe verification.
-3. Document consumer invocation and only then evaluate thin wrappers for `brain.optimize`-style
+2. Document consumer invocation and only then evaluate thin wrappers for `brain.optimize`-style
    workflows. Provider pools, host bridges, remote execution, and TASK-008 remain out of scope.
 
 ## Supporting Decisions

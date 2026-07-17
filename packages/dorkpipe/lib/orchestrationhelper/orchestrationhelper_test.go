@@ -1975,7 +1975,7 @@ func TestMaterializeTaskOutputsRejectsEscapingPath(t *testing.T) {
 	}
 }
 
-func TestExampleBrainBaselineOrdersBeforeRepoSpecificContext(t *testing.T) {
+func TestExampleBrainBaselineEligibilityInMixedTaskPack(t *testing.T) {
 	shared := []any{
 		map[string]any{"path": "repo-map.md", "collector": "repo_map"},
 		map[string]any{"path": "baseline-rules.md", "collector": "example_brain_baseline"},
@@ -1989,10 +1989,246 @@ func TestExampleBrainBaselineOrdersBeforeRepoSpecificContext(t *testing.T) {
 	if baseline != "shared/baseline-rules.md" {
 		t.Fatalf("baseline context path = %q", baseline)
 	}
-	context := prependUniqueString([]string{"shared/repo-map.md", baseline, "docs/README.md"}, baseline)
-	want := []string{baseline, "shared/repo-map.md", "docs/README.md"}
-	if fmt.Sprint(context) != fmt.Sprint(want) {
-		t.Fatalf("context order = %#v want %#v", context, want)
+	tests := []struct {
+		name    string
+		context []string
+		want    []string
+	}{
+		{
+			name:    "durable guidance writer opts in",
+			context: []string{"shared/repo-map.md", baseline, "docs/README.md"},
+			want:    []string{baseline, "shared/repo-map.md", "docs/README.md"},
+		},
+		{
+			name:    "planning dependency opts in",
+			context: []string{"shared/request.md", baseline, "shared/repo-map.md"},
+			want:    []string{baseline, "shared/request.md", "shared/repo-map.md"},
+		},
+		{
+			name:    "general implementation task does not opt in",
+			context: []string{"shared/request.md", "src/app.go", "docs/README.md"},
+			want:    []string{"shared/request.md", "src/app.go", "docs/README.md"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := orderNativeGuidanceTaskContext(tt.context, baseline)
+			if fmt.Sprint(got) != fmt.Sprint(tt.want) {
+				t.Fatalf("context order = %#v want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestExampleBrainUnchangedConfigurationProvesTaskPackContract(t *testing.T) {
+	_, testFile, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("could not locate orchestrationhelper test source")
+	}
+	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(testFile), "..", "..", "..", ".."))
+	workflowPath := filepath.Join(repoRoot, "packages", "dorkpipe", "workflows", "example.brain", "config.yml")
+	agentsPath := filepath.Join(filepath.Dir(workflowPath), "agents.yml")
+	for _, path := range []string{workflowPath, agentsPath} {
+		if info, err := os.Stat(path); err != nil || info.IsDir() {
+			t.Fatalf("required Example Brain contract source %s is unavailable: %v", path, err)
+		}
+	}
+
+	workflow := readYAMLMap(workflowPath)
+	if stringValue(workflow["name"]) != "example.brain" {
+		t.Fatalf("workflow name = %q", stringValue(workflow["name"]))
+	}
+	steps := listValue(workflow["steps"])
+	stepByID := func(id string) map[string]any {
+		t.Helper()
+		for _, raw := range steps {
+			step := mapValue(raw)
+			if stringValue(step["id"]) == id {
+				return step
+			}
+		}
+		t.Fatalf("missing workflow step %q", id)
+		return nil
+	}
+	wantStepOrder := []string{"plan", "auth_preflight", "stack_up", "run_workers", "merge", "verify", "approval", "apply"}
+	gotStepOrder := make([]string, 0, len(steps))
+	for _, raw := range steps {
+		gotStepOrder = append(gotStepOrder, stringValue(mapValue(raw)["id"]))
+	}
+	assertStringOrder(t, "Example Brain hard-stage order", gotStepOrder, wantStepOrder)
+	if stringValue(stepByID("approval")["run"]) != "scripts/dorkpipe/orchestrate-approve.sh" || stringValue(stepByID("apply")["run"]) != "scripts/dorkpipe/orchestrate-apply-results.sh" {
+		t.Fatal("approval and apply must remain separate package-owned mechanics")
+	}
+	for _, forbidden := range []string{"publish", "sync"} {
+		for _, id := range gotStepOrder {
+			if id == forbidden {
+				t.Fatalf("Example Brain must not define an implicit %s step", forbidden)
+			}
+		}
+	}
+	finally := listValue(workflow["finally"])
+	if len(finally) != 1 || stringValue(mapValue(finally[0])["id"]) != "stack_down" {
+		t.Fatalf("finally stages = %#v, want stack_down", finally)
+	}
+
+	vars := mapValue(workflow["vars"])
+	for key, want := range map[string]string{
+		"DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS":  "120000",
+		"DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS":   "40000",
+		"DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED": "true",
+		"DORKPIPE_ORCH_CLOUD_LANES":             "true",
+		"DORKPIPE_ORCH_BRAIN_PROVIDER":          "ollama",
+	} {
+		if got := stringValue(vars[key]); got != want {
+			t.Fatalf("vars.%s = %q want %q", key, got, want)
+		}
+	}
+
+	planStep := stepByID("plan")
+	agent := mapValue(planStep["agent"])
+	if !boolAny(agent["include_agents_md"]) || !strings.Contains(stringValue(agent["startup_prompt"]), "durable repo-native guidance") {
+		t.Fatal("repo-defined startup guidance or AGENTS.md inclusion changed")
+	}
+	access := mapValue(agent["access"])
+	assertStringOrder(t, "access.read", stringList(access["read"]), []string{"AGENTS.md", "docs", "src", "packages", "workflows"})
+	assertStringOrder(t, "access.write", stringList(access["write"]), []string{"scope:artifacts:orchestrate"})
+	assertStringOrder(t, "access.deny", stringList(access["deny"]), []string{".env", ".env.*", "**/*secret*", "**/*token*"})
+
+	orchestration := mapValue(agent["orchestration"])
+	if strings.TrimSpace(stringValue(mapValue(orchestration["request"])["text"])) == "" || len(listValue(mapValue(orchestration["plan"])["steps"])) != 4 {
+		t.Fatal("repo-defined request and plan guidance must remain populated")
+	}
+	if _, present := orchestration["publish"]; present {
+		t.Fatal("Example Brain orchestration must not define publish behavior")
+	}
+	if _, present := orchestration["sync"]; present {
+		t.Fatal("Example Brain orchestration must not define sync behavior")
+	}
+
+	shared := listValue(orchestration["shared"])
+	if len(shared) != 3 {
+		t.Fatalf("shared collector count = %d want 3", len(shared))
+	}
+	assertStringOrder(t, "shared collectors", []string{
+		stringValue(mapValue(shared[0])["collector"]),
+		stringValue(mapValue(shared[1])["collector"]),
+		stringValue(mapValue(shared[2])["collector"]),
+	}, []string{"example_brain_baseline", "repo_map", "literal"})
+	baseline := nativeGuidanceBaselineContextPath(shared)
+	if baseline != "shared/baseline-rules.md" {
+		t.Fatalf("baseline context path = %q", baseline)
+	}
+
+	agents := loadAgentsConfig(workflowPath)
+	if len(agents) != 3 {
+		t.Fatalf("sibling agents.yml role count = %d want 3", len(agents))
+	}
+	for id, workerType := range map[string]string{
+		"planner_brain":         "planning",
+		"guidance_architect":    "documentation",
+		"repo_inventory_writer": "documentation",
+	} {
+		role := mapValue(agents[id])
+		if stringValue(role["worker_type"]) != workerType || stringValue(role["work_mode"]) != "artifact" {
+			t.Fatalf("role %s = %#v", id, role)
+		}
+	}
+
+	tasks := listValue(orchestration["tasks"])
+	if len(tasks) != 3 {
+		t.Fatalf("task count = %d want 3", len(tasks))
+	}
+	taskByID := func(id string) map[string]any {
+		t.Helper()
+		for _, raw := range tasks {
+			task := mapValue(raw)
+			if stringValue(task["id"]) == id {
+				return task
+			}
+		}
+		t.Fatalf("missing Example Brain task %q", id)
+		return nil
+	}
+	planner := taskByID("planner_brain")
+	rulesWriter := taskByID("rules_writer")
+	inventoryWriter := taskByID("inventory_writer")
+	if len(listValue(planner["materialize_outputs"])) != 0 || !strings.Contains(stringValue(planner["expected_output"]), "Three concise bullets") {
+		t.Fatal("planner_brain must remain a bounded planning response, not a materialized graph proposal")
+	}
+	for _, task := range []map[string]any{rulesWriter, inventoryWriter} {
+		assertStringOrder(t, stringValue(task["id"])+" dependencies", stringList(task["depends_on"]), []string{"planner_brain"})
+		if !containsString(taskContextPaths(task), "tasks/planner_brain/response.md") {
+			t.Fatalf("task %s does not consume the bounded planner artifact", stringValue(task["id"]))
+		}
+	}
+
+	contextTests := []struct {
+		task map[string]any
+		want []string
+	}{
+		{planner, []string{baseline, "shared/repo-map.md", "shared/todo-pattern.md"}},
+		{rulesWriter, []string{baseline, "shared/repo-map.md", "tasks/planner_brain/response.md"}},
+		{inventoryWriter, []string{baseline, "shared/repo-map.md", "shared/todo-pattern.md", "tasks/planner_brain/response.md", "AGENTS.md", "docs/README.md", "src/lib/domain/workflow.go", "packages/dorkpipe/package.yml", "workflows/README.md"}},
+	}
+	for _, tt := range contextTests {
+		got := orderNativeGuidanceTaskContext(taskContextPaths(tt.task), baseline)
+		assertStringOrder(t, stringValue(tt.task["id"])+" effective context", got, tt.want)
+	}
+
+	materializedPaths := []string{}
+	for _, task := range []map[string]any{rulesWriter, inventoryWriter} {
+		for _, raw := range listValue(task["materialize_outputs"]) {
+			materializedPaths = append(materializedPaths, stringValue(mapValue(raw)["path"]))
+		}
+	}
+	apply := mapValue(orchestration["apply"])
+	if !boolAny(apply["require_approval"]) || stringValue(apply["target_root"]) != "docs/agents/brain" {
+		t.Fatalf("apply contract = %#v", apply)
+	}
+	required := stringList(apply["required_artifacts"])
+	assertStringOrder(t, "materialized files", materializedPaths, []string{"index.md", "source-of-truth-rules.md", "repo-knowledge.md", "open-gaps.md"})
+	assertStringOrder(t, "required artifact floor", required, materializedPaths)
+
+	artifactRoot := t.TempDir()
+	writeMaterialized := func(taskID, rel string) {
+		t.Helper()
+		path := filepath.Join(artifactRoot, "tasks", taskID, "materialized", filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(rel), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeMaterialized("rules_writer", "index.md")
+	writeMaterialized("rules_writer", "source-of-truth-rules.md")
+	writeMaterialized("inventory_writer", "repo-knowledge.md")
+	writeMaterialized("inventory_writer", "open-gaps.md")
+	writeMaterialized("inventory_writer", "supplemental.md")
+	inferred, err := inferApplyOutputs(repoRoot, artifactRoot, stringValue(apply["target_root"]), listValue(apply["required_artifacts"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inferred) != 5 {
+		t.Fatalf("inferred apply output count = %d want 5", len(inferred))
+	}
+	wantTargets := []string{
+		"docs/agents/brain/index.md",
+		"docs/agents/brain/open-gaps.md",
+		"docs/agents/brain/repo-knowledge.md",
+		"docs/agents/brain/source-of-truth-rules.md",
+		"docs/agents/brain/supplemental.md",
+	}
+	gotTargets := make([]string, 0, len(inferred))
+	for _, raw := range inferred {
+		gotTargets = append(gotTargets, stringValue(mapValue(raw)["path"]))
+	}
+	assertStringOrder(t, "required floor plus inferred unique extra", gotTargets, wantTargets)
+
+	merge := mapValue(orchestration["merge"])
+	verify := mapValue(orchestration["verify"])
+	if stringValue(merge["title"]) != "Example Brain Starter" || len(listValue(merge["summary_points"])) != 3 || strings.TrimSpace(stringValue(verify["next_action_default"])) == "" {
+		t.Fatal("merge or verification guidance changed")
 	}
 }
 

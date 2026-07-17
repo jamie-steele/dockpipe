@@ -51,8 +51,9 @@ The package-owned baseline docs live under:
 
 `example.brain` is currently the only package-owned native guidance workflow that materializes
 durable consumer-repository documentation. Its `example_brain_baseline` shared collector loads
-`baseline-rules.md` once, and the package helper places that seed before every task's repo-specific
-context.
+`baseline-rules.md` once. Each authored task explicitly includes that shared artifact, and the
+package helper moves it before the task's repo-specific context while preserving the relative order
+of the remaining entries.
 
 Materialized Markdown and YAML are checked before they become durable files. Stable guest paths may
 appear in source packets, but durable output must cite repo-relative paths. A guest or host path is

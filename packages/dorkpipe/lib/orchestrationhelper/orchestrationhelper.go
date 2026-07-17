@@ -4523,10 +4523,7 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 					}
 				}
 			}
-			contextPaths := taskContextPaths(task)
-			if baselineContextPath != "" {
-				contextPaths = prependUniqueString(contextPaths, baselineContextPath)
-			}
+			contextPaths := orderNativeGuidanceTaskContext(taskContextPaths(task), baselineContextPath)
 			resolvedContextPaths, err := resolveScopeList(anySlice(contextPaths))
 			if err != nil {
 				return err
@@ -6767,6 +6764,13 @@ func nativeGuidanceBaselineContextPath(shared []any) string {
 		}
 	}
 	return ""
+}
+
+func orderNativeGuidanceTaskContext(values []string, baseline string) []string {
+	if baseline == "" || !containsString(values, baseline) {
+		return append([]string{}, values...)
+	}
+	return prependUniqueString(values, baseline)
 }
 
 func prependUniqueString(values []string, first string) []string {

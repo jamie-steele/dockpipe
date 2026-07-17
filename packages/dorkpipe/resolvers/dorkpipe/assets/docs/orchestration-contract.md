@@ -23,9 +23,12 @@ assets/docs/example-brain/index.md
 That baseline keeps consumer output repo-native and prevents runtime, mount, artifact, or lane
 terminology from leaking into durable docs unless the consumer repo explicitly owns those concepts.
 The `example_brain_baseline` shared collector loads the package asset and DorkPipe deterministically
-places it before every task's repo-specific context. `example.brain` is currently the only
-package-owned native guidance workflow that materializes durable consumer documentation, so it is
-the complete eligible-workflow inventory for this contract.
+places it first only for tasks that explicitly reference its `shared/<path>` artifact in authored
+context. That reference is the package-local eligibility signal: eligible durable-guidance and
+planning tasks move the baseline ahead of their repo-specific context without changing the relative
+order of the remaining entries, while tasks that omit the reference receive no baseline.
+`example.brain` is currently the only package-owned native guidance workflow that materializes
+durable consumer documentation, so it is the complete eligible-workflow inventory for this contract.
 
 Source packets and durable output intentionally have different path rules:
 
