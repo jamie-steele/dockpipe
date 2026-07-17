@@ -2,6 +2,7 @@ package orchestrationhelper
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -138,6 +139,184 @@ func TestRenderSourcePacketRejectsRootOutsideReadAccess(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "outside access.read") {
 		t.Fatalf("expected access failure, got %v", err)
 	}
+}
+
+func TestRenderSourcePacketUsesGuestPathsForExternalMount(t *testing.T) {
+	root := t.TempDir()
+	externalRoot := t.TempDir()
+	path := filepath.Join(externalRoot, "reference", "design.md")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("external design evidence\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	mountEnv := externalRoot + ":/DesignNotes:ro"
+
+	packet, err := renderSourcePacket(root, []string{"/DesignNotes/reference"}, []string{"/DesignNotes"}, nil, mountEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostDeclaredPacket, err := renderSourcePacket(root, []string{filepath.Join(externalRoot, "reference")}, []string{externalRoot}, nil, mountEnv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hostDeclaredPacket != packet {
+		t.Fatalf("host-resolved and guest-declared packets differ:\nguest:\n%s\nhost-resolved:\n%s", packet, hostDeclaredPacket)
+	}
+	for _, want := range []string{"`/DesignNotes/reference`", "## /DesignNotes/reference/design.md", "external design evidence"} {
+		if !strings.Contains(packet, want) {
+			t.Fatalf("packet missing guest-oriented path %q:\n%s", want, packet)
+		}
+	}
+	for _, hostPath := range []string{externalRoot, filepath.ToSlash(externalRoot)} {
+		if strings.Contains(packet, hostPath) {
+			t.Fatalf("packet disclosed host path %q:\n%s", hostPath, packet)
+		}
+	}
+}
+
+func TestRenderSourcePacketPreservesDeclaredRootAndLexicalFileOrder(t *testing.T) {
+	root := t.TempDir()
+	write := func(rel string) {
+		t.Helper()
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(rel+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("first/z.md")
+	write("first/a.md")
+	write("second/b.md")
+	write("second/a.md")
+
+	packet, err := renderSourcePacket(root, []string{"second", "first"}, []string{"."}, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ordered := []string{"## second/a.md", "## second/b.md", "## first/a.md", "## first/z.md"}
+	previous := -1
+	for _, heading := range ordered {
+		index := strings.Index(packet, heading)
+		if index < 0 {
+			t.Fatalf("packet missing %q:\n%s", heading, packet)
+		}
+		if index <= previous {
+			t.Fatalf("packet order is not declared-root then lexical: %q\n%s", heading, packet)
+		}
+		previous = index
+	}
+}
+
+func TestRenderSourcePacketExcludesBinaryFilesAndSymlinks(t *testing.T) {
+	root := t.TempDir()
+	docs := filepath.Join(root, "docs")
+	if err := os.MkdirAll(docs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(docs, "visible.md"), []byte("visible evidence\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(docs, "binary.md"), []byte("binary\x00payload"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(root, "outside.md")
+	if err := os.WriteFile(target, []byte("symlink target must stay out\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	symlinkPath := filepath.Join(docs, "linked.md")
+	symlinkCreated := true
+	if err := os.Symlink(target, symlinkPath); err != nil {
+		symlinkCreated = false
+		t.Logf("symlink fixture unavailable on this platform: %v", err)
+	}
+
+	packet, err := renderSourcePacket(root, []string{"docs"}, []string{"."}, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(packet, "visible evidence") {
+		t.Fatalf("packet omitted visible text evidence:\n%s", packet)
+	}
+	for _, forbidden := range []string{"binary.md", "binary\\x00payload"} {
+		if strings.Contains(packet, forbidden) {
+			t.Fatalf("packet included binary evidence %q:\n%s", forbidden, packet)
+		}
+	}
+	if symlinkCreated {
+		for _, forbidden := range []string{"linked.md", "symlink target must stay out"} {
+			if strings.Contains(packet, forbidden) {
+				t.Fatalf("packet followed symlink evidence %q:\n%s", forbidden, packet)
+			}
+		}
+	}
+}
+
+func TestRenderSourcePacketEnforcesPacketBounds(t *testing.T) {
+	t.Run("file count", func(t *testing.T) {
+		root := t.TempDir()
+		docs := filepath.Join(root, "docs")
+		if err := os.MkdirAll(docs, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for index := 0; index <= sourcePacketMaxFiles; index++ {
+			name := fmt.Sprintf("%02d.md", index)
+			if err := os.WriteFile(filepath.Join(docs, name), []byte(name+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		packet, err := renderSourcePacket(root, []string{"docs"}, []string{"."}, nil, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := strings.Count(packet, "## docs/"); got != sourcePacketMaxFiles {
+			t.Fatalf("packet included %d files, want %d:\n%s", got, sourcePacketMaxFiles, packet)
+		}
+		if strings.Contains(packet, fmt.Sprintf("## docs/%02d.md", sourcePacketMaxFiles)) {
+			t.Fatalf("packet included a file beyond its count bound:\n%s", packet)
+		}
+		if !strings.Contains(packet, "Packet bounds reached") {
+			t.Fatalf("packet did not report its file-count bound:\n%s", packet)
+		}
+	})
+
+	t.Run("per file and total bytes", func(t *testing.T) {
+		root := t.TempDir()
+		docs := filepath.Join(root, "docs")
+		if err := os.MkdirAll(docs, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		fileCount := sourcePacketMaxBytes/sourcePacketMaxFileBytes + 1
+		for index := 0; index < fileCount; index++ {
+			content := strings.Repeat(string(rune('a'+index)), sourcePacketMaxFileBytes)
+			if index == 0 {
+				content += "AFTER_FILE_BOUND"
+			}
+			name := fmt.Sprintf("%02d.md", index)
+			if err := os.WriteFile(filepath.Join(docs, name), []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		packet, err := renderSourcePacket(root, []string{"docs"}, []string{"."}, nil, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(packet, "AFTER_FILE_BOUND") {
+			t.Fatalf("packet exceeded its per-file byte bound:\n%s", packet)
+		}
+		lastName := fmt.Sprintf("## docs/%02d.md", fileCount-1)
+		if strings.Contains(packet, lastName) {
+			t.Fatalf("packet exceeded its total source-byte bound:\n%s", packet)
+		}
+		if !strings.Contains(packet, "Packet bounds reached") {
+			t.Fatalf("packet did not report its total byte bound:\n%s", packet)
+		}
+	})
 }
 
 func TestMaterializePromptBriefPersistsBoundedContextForLocalLane(t *testing.T) {

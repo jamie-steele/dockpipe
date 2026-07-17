@@ -177,6 +177,12 @@ steps:
                 - shared/baseline-rules.md
                 - shared/todo-pattern.md
                 - tasks/planner_brain/response.md
+              source_roots:
+                - AGENTS.md
+                - docs/README.md
+                - src/lib/domain/workflow.go
+                - packages/dorkpipe/package.yml
+                - workflows/README.md
             materialize_outputs:
               - path: repo-knowledge.md
               - path: open-gaps.md

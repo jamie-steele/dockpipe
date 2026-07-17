@@ -2,9 +2,6 @@ schema: 1
 description: AI entrypoint for the indexed cross-cutting backlog.
 
 tasks:
-  - id: TASK-002
-    topic: Orchestration validation and source walkers
-    path: docs/agents/tasks/orchestration-validation.md
   - id: TASK-003
     topic: Managed session volume cleanup and retention
     path: docs/agents/tasks/session-volume-cleanup.md
