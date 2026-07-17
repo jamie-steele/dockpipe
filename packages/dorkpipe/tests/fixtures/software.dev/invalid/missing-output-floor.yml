@@ -1,0 +1,6 @@
+orchestration:
+  tasks:
+    - id: plan_write
+      agent: fixture_worker
+      materialize_outputs:
+        - path: inferred.md

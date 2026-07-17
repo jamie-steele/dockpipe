@@ -1,0 +1,13 @@
+orchestration:
+  tasks:
+    - id: plan_write
+      agent: fixture_worker
+      depends_on: [missing]
+      materialize_outputs:
+        - path: required.md
+        - path: inferred.md
+    - id: plan_review
+      agent: fixture_worker
+      depends_on: [plan_write]
+      materialize_outputs:
+        - path: summary.md

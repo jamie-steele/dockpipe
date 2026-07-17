@@ -1,0 +1,118 @@
+name: fixture.software-dev
+namespace: fixture
+description: Consumer-style task-pack proof for the package-owned software.dev workflow.
+
+steps:
+  - id: static_pack
+    workflow: software.dev
+    package: dockpipeproject
+    vars:
+      DORKPIPE_SOFTWARE_DEV_TASK_PACK: packages/dorkpipe/tests/fixtures/software.dev/task-pack.yml
+      DORKPIPE_SOFTWARE_DEV_TASK_PACK_STEP: static_pack
+    agent:
+      startup_prompt: Use only the fixture's bounded sources and materialized outputs.
+      include_agents_md: false
+      access:
+        read:
+          - .
+        write:
+          - scope:artifacts:orchestrate
+        deny:
+          - fixture-private
+      orchestration:
+        request:
+          text: Produce the static offline software.dev proof bundle.
+        plan:
+          goal: Materialize two required files and one additional inferred file.
+        agents:
+          fixture_worker:
+            role: fixture writer
+            worker: ollama
+            worker_type: documentation
+            work_mode: artifact
+            constraints:
+              - use concise fixture-only content
+        tasks:
+          - id: static_write
+            agent: fixture_worker
+            goal: Produce the required primary file and one inferred file.
+            expected_output: Materialized required.md and inferred.md files.
+            materialize_outputs:
+              - path: required.md
+              - path: inferred.md
+          - id: static_review
+            agent: fixture_worker
+            depends_on:
+              - static_write
+            goal: Produce the required summary file after the primary output.
+            expected_output: Materialized summary.md file.
+            materialize_outputs:
+              - path: summary.md
+        merge:
+          title: Static software.dev fixture
+        verify:
+          next_action_default: approve the governed fixture output
+        apply:
+          require_approval: true
+          target_root: bin/.dockpipe/tmp/package-tests/software-dev-proof-output
+          required_artifacts:
+            - required.md
+            - summary.md
+
+  - id: planner_pack
+    workflow: software.dev
+    package: dockpipeproject
+    vars:
+      DORKPIPE_SOFTWARE_DEV_TASK_PACK: packages/dorkpipe/tests/fixtures/software.dev/task-pack.yml
+      DORKPIPE_SOFTWARE_DEV_TASK_PACK_STEP: planner_pack
+      DORKPIPE_SOFTWARE_DEV_PLANNER_MODE: "true"
+    agent:
+      startup_prompt: Use the compiled planner graph only.
+      include_agents_md: false
+      access:
+        read:
+          - .
+        write:
+          - scope:artifacts:orchestrate
+        deny:
+          - fixture-private
+      orchestration:
+        request:
+          text: Produce the planner-proposed offline software.dev proof bundle.
+        plan:
+          goal: Compile a bounded proposal before any proposed task runs.
+        agents:
+          fixture_worker:
+            role: fixture writer
+            worker: ollama
+            worker_type: documentation
+            work_mode: artifact
+        tasks: []
+        merge:
+          title: Planner software.dev fixture
+        verify:
+          next_action_default: approve the governed planner fixture output
+        apply:
+          require_approval: true
+          target_root: bin/.dockpipe/tmp/package-tests/software-dev-proof-output
+          required_artifacts:
+            - required.md
+            - summary.md
+
+  - id: seed_pack
+    workflow: software.dev
+    package: dockpipeproject
+    vars:
+      DORKPIPE_SOFTWARE_DEV_TASK_PACK: packages/dorkpipe/tests/fixtures/software.dev/task-pack.yml
+      DORKPIPE_SOFTWARE_DEV_TASK_PACK_STEP: seed_pack
+    agent:
+      include_agents_md: false
+      orchestration:
+        request:
+          text: Use the package seed task.
+        plan:
+          goal: Prove package task fallback when the repo supplies no task list.
+        apply:
+          require_approval: true
+          target_root: bin/.dockpipe/tmp/package-tests/software-dev-proof-output
+          required_artifacts: []

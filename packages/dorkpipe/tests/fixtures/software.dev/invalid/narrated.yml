@@ -1,0 +1,4 @@
+Here is the proposal:
+  orchestration:
+    tasks:
+      - id: narrated

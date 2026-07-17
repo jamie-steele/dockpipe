@@ -1,0 +1,214 @@
+name: software.dev
+namespace: dockpipeproject
+description: >-
+  Package-owned governed software-development orchestration with repo-selected task packs and an
+  optional strictly compiled planner proposal.
+
+docker_preflight: false
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs package-owned orchestration scripts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+    - id: git
+      command: git
+      description: Reads repository state and applies approved materialized artifacts.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y git
+
+vars:
+  DORKPIPE_SOFTWARE_DEV_TASK_PACK: ""
+  DORKPIPE_SOFTWARE_DEV_TASK_PACK_STEP: software_dev
+  DORKPIPE_SOFTWARE_DEV_PLANNER_MODE: "false"
+  DORKPIPE_SOFTWARE_DEV_PLANNER_PROPOSAL_FIXTURE: ""
+  DORKPIPE_ORCH_MAX_TOTAL_CLOUD_TOKENS: "60000"
+  DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS: "20000"
+  DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED: "true"
+  DORKPIPE_ORCH_CLOUD_LANES: "true"
+
+steps:
+  - id: planner_contract
+    kind: host
+    run: scripts/dorkpipe/software-dev-orchestrate.sh
+    agent:
+      startup_prompt: >-
+        Propose only a bounded task graph inside the supplied repo task pack. Return one structured
+        document and do not request broader access, budget, apply, publish, or sync authority.
+      include_agents_md: true
+      access:
+        read:
+          - .
+        write:
+          - scope:artifacts:orchestrate
+        deny:
+          - .env
+          - .env.*
+          - "**/*secret*"
+          - "**/*token*"
+      orchestration:
+        request:
+          text: Propose the exact bounded task graph for this software-development run.
+        plan:
+          goal: Produce one strict planner proposal for package compilation before any proposed task runs.
+        concurrency:
+          max_workers: 1
+          max_local_workers: 1
+          max_cloud_workers: 1
+        agents:
+          software_dev_planner:
+            role: bounded software development planner
+            worker: ollama
+            worker_type: planning
+            work_mode: artifact
+            authority:
+              can:
+                - propose_bounded_tasks
+                - add_inferred_materialized_outputs
+              cannot:
+                - widen_access_or_budget
+                - change_apply_target
+                - enable_publish_or_sync
+                - approve_apply
+            constraints:
+              - return exactly one JSON or YAML object with no narration or fences
+              - use only roles permitted by the supplied task pack or package defaults
+        tasks:
+          - id: software_dev_planner
+            agent: software_dev_planner
+            goal: Propose the exact executable task graph for this run.
+            expected_output: One strict JSON or YAML planner proposal object and no other text.
+            context:
+              required_artifacts:
+                - shared/software-dev-task-pack.yml
+            constraints:
+              - include at least one task
+              - preserve every repo required_artifact floor
+              - keep the repo-selected apply target unchanged
+              - do not enable publish or sync
+            prompt: |
+              Read shared/software-dev-task-pack.yml and return exactly one structured proposal.
+              The root may contain startup_prompt, include_agents_md, access, cloud_budget,
+              constraints, publish, sync, and orchestration. The orchestration object may contain
+              request, plan, agents, tasks, merge, verify, apply, access, cloud_budget, constraints,
+              publish, and sync. Return no markdown fence, commentary, or second document.
+        merge:
+          title: Software Development Planner Bootstrap
+        verify:
+          next_action_default: compile the structured proposal before running proposed tasks
+        apply:
+          require_approval: true
+          target_root: .
+          required_artifacts: []
+
+  - id: contract
+    kind: host
+    run: scripts/dorkpipe/software-dev-orchestrate.sh
+    agent:
+      startup_prompt: >-
+        Execute only the successfully compiled repo task graph. Keep all work bounded, reviewable,
+        artifact-driven, and subordinate to package authority.
+      include_agents_md: true
+      access:
+        read:
+          - .
+        write:
+          - scope:artifacts:orchestrate
+        deny:
+          - .env
+          - .env.*
+          - "**/*secret*"
+          - "**/*token*"
+      orchestration:
+        request:
+          text: Complete the bounded repo-selected software-development task pack.
+        plan:
+          goal: Produce a deterministic, verified, approval-gated materialized output bundle.
+        concurrency:
+          max_workers: 3
+          max_local_workers: 2
+          max_cloud_workers: 1
+        agents:
+          software_dev_worker:
+            role: bounded software development worker
+            worker: ollama
+            worker_type: implementation
+            work_mode: artifact
+            authority:
+              can:
+                - inspect_allowed_repo_sources
+                - produce_declared_materialized_outputs
+              cannot:
+                - modify_the_consumer_worktree_directly
+                - approve_or_apply_outputs
+                - publish_or_sync
+            constraints:
+              - keep output within declared materialize_outputs
+              - do not widen the task pack contract
+        tasks:
+          - id: software_dev_seed
+            agent: software_dev_worker
+            goal: Produce the package seed result when the repo supplies no static task graph.
+            expected_output: One materialized software-dev-summary.md file.
+            materialize_outputs:
+              - path: software-dev-summary.md
+            constraints:
+              - summarize the bounded request and the evidence inspected
+            prompt: |
+              Produce only one dorkpipe:file block for software-dev-summary.md with a concise,
+              evidence-grounded summary of the bounded request.
+        merge:
+          title: Governed Software Development Result
+          summary_points:
+            - Only successfully compiled tasks may contribute results.
+            - Required output floors and inferred outputs remain reviewable before apply.
+        verify:
+          next_action_default: human approval before applying the compiled materialized output bundle
+        apply:
+          require_approval: true
+          target_root: .
+          required_artifacts: []
+
+  - id: prepare
+    kind: host
+    run: scripts/dorkpipe/software-dev-orchestrate.sh
+
+  - id: planner_auth
+    kind: host
+    run: scripts/dorkpipe/software-dev-orchestrate.sh
+
+  - id: planner_run
+    kind: host
+    run: scripts/dorkpipe/software-dev-orchestrate.sh
+
+  - id: compile
+    kind: host
+    run: scripts/dorkpipe/software-dev-orchestrate.sh
+
+  - id: worker_auth
+    kind: host
+    run: scripts/dorkpipe/software-dev-orchestrate.sh
+
+  - id: run_workers
+    kind: host
+    run: scripts/dorkpipe/orchestrate-run-tasks.sh
+
+  - id: merge
+    kind: host
+    run: scripts/dorkpipe/orchestrate-merge-results.sh
+
+  - id: verify
+    kind: host
+    run: scripts/dorkpipe/orchestrate-verify-results.sh
+
+  - id: approval
+    kind: host
+    run: scripts/dorkpipe/orchestrate-approve.sh
+
+  - id: apply
+    kind: host
+    run: scripts/dorkpipe/orchestrate-apply-results.sh

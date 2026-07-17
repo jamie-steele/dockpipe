@@ -611,6 +611,60 @@ func TestCompileExecutableContractBuildsDeterministicArtifacts(t *testing.T) {
 	}
 }
 
+func TestMaterializeSoftwareDevContractWritesDeterministicRuntimeLayout(t *testing.T) {
+	packageDefaults := validContractPackageDefaults()
+	repo := validContractRepoTaskPack()
+	addExecutableTaskFields(packageDefaults, repo)
+	compiled, err := compileExecutableContract(packageDefaults, repo, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	firstRoot := t.TempDir()
+	secondRoot := t.TempDir()
+	if err := materializeSoftwareDevContract(firstRoot, firstRoot, compiled, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := materializeSoftwareDevContract(secondRoot, secondRoot, compiled, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, relativePath := range []string{
+		"request.json",
+		"plan.json",
+		"task-graph.json",
+		"proposal/metadata.json",
+		"tasks/repo_write/task.json",
+		"tasks/repo_write/prompt.md",
+		"tasks/repo_verify/task.json",
+		"tasks/repo_verify/prompt.md",
+	} {
+		first, err := os.ReadFile(filepath.Join(firstRoot, filepath.FromSlash(relativePath)))
+		if err != nil {
+			t.Fatalf("read first %s: %v", relativePath, err)
+		}
+		second, err := os.ReadFile(filepath.Join(secondRoot, filepath.FromSlash(relativePath)))
+		if err != nil {
+			t.Fatalf("read second %s: %v", relativePath, err)
+		}
+		if !bytes.Equal(first, second) {
+			t.Fatalf("materialized artifact %s is not deterministic", relativePath)
+		}
+	}
+
+	task := readJSONMap(filepath.Join(firstRoot, "tasks", "repo_write", "task.json"))
+	if !boolAny(mapValue(task["lane"])["available"]) || stringValue(task["resolver_hint"]) == "" {
+		t.Fatalf("compiled runtime task lacks an executable lane: %#v", task)
+	}
+	promptRaw, err := os.ReadFile(filepath.Join(firstRoot, "tasks", "repo_write", "prompt.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	prompt := string(promptRaw)
+	if !strings.Contains(prompt, "Execute only this compiled task") || !strings.Contains(prompt, "dorkpipe:file") {
+		t.Fatalf("compiled runtime prompt lacks bounded execution or materialized-output contract:\n%s", prompt)
+	}
+}
+
 func TestCompileExecutableContractRejectsInvalidContractsWithoutPartialArtifacts(t *testing.T) {
 	tests := []struct {
 		name    string

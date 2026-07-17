@@ -5,8 +5,9 @@
 TASK-006 closed on 2026-07-17. The package-owned Example Brain baseline now seeds native guidance
 deterministically, and materialized documentation fails closed on ambiguous runtime or host-path
 identity. The TASK-007 contract design is unblocked; no TASK-007 implementation is included in that
-baseline slice. The contract baseline below is now settled; substantial package implementation
-remains.
+baseline slice. The contract baseline below is now settled, and the first package-owned workflow
+plus offline proof fixture is complete; unchanged Example Brain contract proof and later promotion
+work remain.
 
 ## Goal
 
@@ -292,18 +293,25 @@ boundary before producing deterministic in-memory plan, task-graph, per-task, an
 representations. Unknown role references, graph errors, authority widening, and output-floor errors
 produce no partial executable graph or task artifacts.
 
+The package-owned `software.dev` workflow and minimal proof fixture completed on 2026-07-17. Direct
+invocation selects one repo-relative workflow step with `DORKPIPE_SOFTWARE_DEV_TASK_PACK` and
+`DORKPIPE_SOFTWARE_DEV_TASK_PACK_STEP`; a thin consumer wrapper continues to use the existing
+`workflow:` plus `package:` form. Static task packs compile without planner execution. Planner mode
+materializes and runs only the bounded bootstrap planner first, strictly parses one proposal artifact,
+and replaces the bootstrap graph only after `compileExecutableContract` succeeds. The compiler's
+deterministic plan, graph, task, prompt, raw/normalized proposal, and proposal-metadata artifacts use
+the normal orchestration layout. Offline package proof covers static, planner, and package-seed graphs;
+required output floors plus an inferred output; approval-gated apply to a temporary workspace; absent
+publish/sync; and fail-closed malformed, narrated, structural, authority, role, dependency, and output
+floor proposals with no executable graph or task artifacts left behind.
+
 ## Remaining Implementation Slices
 
-1. Next, add the package-owned `software.dev` workflow and a minimal repo task-pack proof fixture.
-   Prove hard policy, direct invocation variables or typed inputs, planner bootstrap,
-   execute/merge/verify/approval/apply stages, static and planner-proposed tasks, inferred extra
-   outputs, required floors, deterministic verification, approval-gated apply, and no implicit
-   publish.
-2. Run `example.brain` as an unchanged proof sketch against the contract tests; do not migrate or
+1. Next, run `example.brain` as an unchanged proof sketch against the contract tests; do not migrate or
    replace it until the generic workflow is stable.
-3. Implement proposal promotion as a separate package-owned slice with explicit mutable surfaces,
+2. Implement proposal promotion as a separate package-owned slice with explicit mutable surfaces,
    small reviewable patches, and rollback-safe verification.
-4. Document consumer invocation and only then evaluate thin wrappers for `brain.optimize`-style
+3. Document consumer invocation and only then evaluate thin wrappers for `brain.optimize`-style
    workflows. Provider pools, host bridges, remote execution, and TASK-008 remain out of scope.
 
 ## Supporting Decisions
