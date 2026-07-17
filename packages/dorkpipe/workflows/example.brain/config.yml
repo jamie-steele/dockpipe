@@ -83,6 +83,8 @@ steps:
           max_local_workers: 2
           max_cloud_workers: 1
         shared:
+          - path: baseline-rules.md
+            collector: example_brain_baseline
           - path: repo-map.md
             collector: repo_map
             focus: Current repo structure, high-value doc roots, and implementation evidence starting points
@@ -91,18 +93,6 @@ steps:
               - src
               - packages
               - workflows
-          - path: baseline-rules.md
-            collector: literal
-            text: |
-              Consumer repo brain baseline:
-
-              - Write from the repo's point of view.
-              - Prefer repo-native names, paths, and terminology.
-              - Do not mention DockPipe, DorkPipe, mounts, /work, artifact roots, worker lanes, or orchestration internals unless the repo itself treats them as product concepts.
-              - Prefer direct code and repo docs for current implementation claims.
-              - Prefer architecture notes, ADRs, planning docs, and explicit design references for intended direction.
-              - Preserve disagreements between current state and target state instead of blending them.
-              - Use exact path citations when a durable claim depends on a file.
           - path: todo-pattern.md
             collector: literal
             text: |

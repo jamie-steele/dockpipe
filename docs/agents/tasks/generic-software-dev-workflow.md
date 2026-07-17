@@ -1,5 +1,12 @@
 # TASK-007 Generic Software Dev Workflow
 
+## Dependency Status
+
+TASK-006 closed on 2026-07-17. The package-owned Example Brain baseline now seeds native guidance
+deterministically, and materialized documentation fails closed on ambiguous runtime or host-path
+identity. The TASK-007 contract design is unblocked; no TASK-007 implementation is included in that
+baseline slice.
+
 ## Goal
 
 Design one main governed software-development orchestration workflow that can be reused across repos

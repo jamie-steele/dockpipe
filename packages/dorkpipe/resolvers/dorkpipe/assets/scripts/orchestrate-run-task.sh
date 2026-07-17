@@ -108,7 +108,7 @@ materialize_task_outputs() {
   if printf '%s' "${TASK_MATERIALIZE_OUTPUTS_JSON:-[]}" | grep -Eq '^\s*\[\s*\]\s*$'; then
     return 0
   fi
-  "$(dorkpipe_orchestrate_helper_bin)" materialize-task-outputs "${response_md}" "${task_dir}" "${TASK_MATERIALIZE_OUTPUTS_JSON}" "${materialize_result_json}"
+  "$(dorkpipe_orchestrate_helper_bin)" materialize-task-outputs "${response_md}" "${task_dir}" "${TASK_MATERIALIZE_OUTPUTS_JSON}" "${materialize_result_json}" "${ROOT}"
 }
 
 provider_pool_session_id_for_task() {

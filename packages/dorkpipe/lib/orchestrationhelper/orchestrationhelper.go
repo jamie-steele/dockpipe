@@ -44,9 +44,24 @@ var (
 	reBulletMarker      = regexp.MustCompile(`^\s*(?:[-*+]\s+|•\s*)`)
 	reSafeCompareSuffix = regexp.MustCompile(`[^A-Za-z0-9_]+`)
 	reGuestDocPath      = regexp.MustCompile(`/(?:work|DesignNotes)/[A-Za-z0-9._/\-]+\.(?:md|ya?ml)`)
+	reDurableHostPath   = regexp.MustCompile("(?i)(?:[A-Z]:[\\\\/]|\\\\\\\\|/(?:home|Users|tmp|var|mnt|opt)/)[^`<>\\r\\n]*?\\.(?:md|ya?ml|txt|json|go|js|jsx|ts|tsx|xml|toml|ini|cs|java|py|rb|rs|sh|ps1|sql)")
+	reDurableHostToken  = regexp.MustCompile(`(?i)(?:[A-Z]:[\\/]|\\\\|/(?:home|Users|tmp|var|mnt|opt)/)[A-Za-z0-9._~@%+,\-\\/]+`)
 	reMarkdownLink      = regexp.MustCompile(`\[[^\]]*\]\(([^)#]+)(?:#[^)]+)?\)`)
 	reValidationRemoved = regexp.MustCompile("(?im)^- \\*\\*Removed `([^`]+)`")
 )
+
+var durableOutputForbiddenTerms = []struct {
+	label   string
+	pattern *regexp.Regexp
+}{
+	{label: "DockPipe or DorkPipe", pattern: regexp.MustCompile(`(?i)\b(?:dockpipe|dorkpipe)\b`)},
+	{label: "orchestration", pattern: regexp.MustCompile(`(?i)\borchestrat(?:ion|or|ed|ing)\b`)},
+	{label: "runtime mount terminology", pattern: regexp.MustCompile(`(?i)\b(?:runtime mounts?|mount labels?|mounted source(?: roots?)?)\b`)},
+	{label: "artifact root terminology", pattern: regexp.MustCompile(`(?i)\b(?:artifact|workflow) roots?\b`)},
+	{label: "lane terminology", pattern: regexp.MustCompile(`(?i)\b(?:worker|model|provider) lanes?\b|\blane selection\b`)},
+	{label: "provider metadata", pattern: regexp.MustCompile(`(?i)\bproviders?_(?:actual|requested)\b|\bresolver hints?\b`)},
+	{label: "run artifact terminology", pattern: regexp.MustCompile(`(?i)\b(?:source packets?|task graphs?|worker results?|merge results?|materialized outputs?|artifact handoffs?|worker artifacts?)\b`)},
+}
 
 type trainingEntry struct {
 	Samples         int     `json:"samples"`
@@ -203,10 +218,10 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 		}
 		return nil
 	case "materialize-task-outputs":
-		if len(args) != 5 {
-			return errors.New("usage: orchestrate-helper materialize-task-outputs <response.md> <task-dir> <outputs.json> <result.json>")
+		if len(args) != 6 {
+			return errors.New("usage: orchestrate-helper materialize-task-outputs <response.md> <task-dir> <outputs.json> <result.json> <repo-root>")
 		}
-		return materializeTaskOutputs(args[1], args[2], args[3], args[4])
+		return materializeTaskOutputs(args[1], args[2], args[3], args[4], args[5], env["DOCKPIPE_CONTAINER_MOUNTS"])
 	case "write-task-result":
 		if len(args) != 2 {
 			return errors.New("usage: orchestrate-helper write-task-result <result.json>")
@@ -581,7 +596,7 @@ func writeTaskResult(path string, env map[string]string) error {
 	return writeJSONFile(path, payload)
 }
 
-func materializeTaskOutputs(responsePath, taskDir, outputsJSON, resultPath string) error {
+func materializeTaskOutputs(responsePath, taskDir, outputsJSON, resultPath, repoRoot, mountEnv string) error {
 	outputs := listValue(decodeJSONAny(outputsJSON, []any{}))
 	if len(outputs) == 0 {
 		return writeJSONFile(resultPath, map[string]any{
@@ -595,7 +610,11 @@ func materializeTaskOutputs(responsePath, taskDir, outputsJSON, resultPath strin
 	}
 	blocks := parseMaterializedBlocks(string(raw))
 	materializedRoot := filepath.Join(taskDir, "materialized")
-	files := []map[string]any{}
+	type pendingMaterializedOutput struct {
+		clean   string
+		content string
+	}
+	pending := []pendingMaterializedOutput{}
 	for _, rawOutput := range outputs {
 		output := mapValue(rawOutput)
 		rel := strings.TrimSpace(stringValue(output["path"]))
@@ -616,22 +635,221 @@ func materializeTaskOutputs(responsePath, taskDir, outputsJSON, resultPath strin
 		if !ok {
 			return fmt.Errorf("missing materialized output block for %s", rel)
 		}
-		target := filepath.Join(materializedRoot, filepath.FromSlash(clean))
+		if durableOutputNeedsPolicy(clean) {
+			content, err = normalizeDurableOutput(content, repoRoot, mountEnv)
+			if err != nil {
+				return fmt.Errorf("%s: %w", filepath.ToSlash(clean), err)
+			}
+		}
+		pending = append(pending, pendingMaterializedOutput{clean: clean, content: content})
+	}
+	files := []map[string]any{}
+	for _, output := range pending {
+		target := filepath.Join(materializedRoot, filepath.FromSlash(output.clean))
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(target, []byte(strings.TrimRight(content, "\r\n")+"\n"), 0o644); err != nil {
+		if err := os.WriteFile(target, []byte(strings.TrimRight(output.content, "\r\n")+"\n"), 0o644); err != nil {
 			return err
 		}
 		files = append(files, map[string]any{
-			"path":     filepath.ToSlash(clean),
-			"artifact": filepath.ToSlash(filepath.Join("materialized", filepath.FromSlash(clean))),
+			"path":     filepath.ToSlash(output.clean),
+			"artifact": filepath.ToSlash(filepath.Join("materialized", filepath.FromSlash(output.clean))),
 		})
 	}
 	return writeJSONFile(resultPath, map[string]any{
 		"status": "materialized",
 		"files":  files,
 	})
+}
+
+func durableOutputNeedsPolicy(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".md", ".markdown", ".yml", ".yaml":
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizeDurableOutput(content, repoRoot, mountEnv string) (string, error) {
+	root, err := filepath.Abs(strings.TrimSpace(repoRoot))
+	if err != nil || strings.TrimSpace(repoRoot) == "" {
+		return "", errors.New("durable output policy requires an explicit consumer repository root")
+	}
+	guestRoots := []string{"/work", "/DesignNotes"}
+	seenRoots := map[string]bool{"/work": true, "/DesignNotes": true}
+	for _, line := range strings.Split(mountEnv, "\n") {
+		_, guest, ok := parseContainerMountSpec(line)
+		if !ok {
+			continue
+		}
+		guest = cleanGuestPath(guest)
+		if guest != "" && !seenRoots[guest] {
+			seenRoots[guest] = true
+			guestRoots = append(guestRoots, guest)
+		}
+	}
+	sort.Slice(guestRoots, func(i, j int) bool {
+		if len(guestRoots[i]) != len(guestRoots[j]) {
+			return len(guestRoots[i]) > len(guestRoots[j])
+		}
+		return guestRoots[i] < guestRoots[j]
+	})
+	parts := make([]string, 0, len(guestRoots))
+	for _, guest := range guestRoots {
+		parts = append(parts, regexp.QuoteMeta(guest))
+	}
+	guestPattern := regexp.MustCompile(`(?:` + strings.Join(parts, "|") + `)(?:/[A-Za-z0-9._~@%+,\-]+)*`)
+	normalized, err := rewriteDurableGuestReferences(content, guestPattern, func(reference string) (string, error) {
+		return repoNativeGuestReference(root, reference, mountEnv)
+	})
+	if err != nil {
+		return "", err
+	}
+	normalized, err = rewriteDurableHostReferences(normalized, reDurableHostPath, func(reference string) (string, error) {
+		return repoNativeHostReference(root, reference)
+	})
+	if err != nil {
+		return "", err
+	}
+	normalized, err = rewriteDurableHostReferences(normalized, reDurableHostToken, func(reference string) (string, error) {
+		return repoNativeHostReference(root, reference)
+	})
+	if err != nil {
+		return "", err
+	}
+	for _, forbidden := range durableOutputForbiddenTerms {
+		if match := forbidden.pattern.FindString(normalized); match != "" {
+			return "", fmt.Errorf("durable output contains orchestration-only terminology %q (%s)", match, forbidden.label)
+		}
+	}
+	return normalized, nil
+}
+
+func rewriteDurableGuestReferences(content string, pattern *regexp.Regexp, rewrite func(string) (string, error)) (string, error) {
+	return rewriteDurableReferencesWhere(content, pattern, func(text string, start, end int) bool {
+		if start > 0 && isDurablePathCharacter(text[start-1]) {
+			return false
+		}
+		return end >= len(text) || !isDurablePathCharacter(text[end])
+	}, rewrite)
+}
+
+func rewriteDurableHostReferences(content string, pattern *regexp.Regexp, rewrite func(string) (string, error)) (string, error) {
+	return rewriteDurableReferencesWhere(content, pattern, func(text string, start, end int) bool {
+		if strings.Contains(text[start:end], "://") {
+			return false
+		}
+		tokenStart := strings.LastIndexAny(text[:start], " \t\r\n`(<[\"'")
+		return !strings.Contains(text[tokenStart+1:start], "://")
+	}, rewrite)
+}
+
+func rewriteDurableReferencesWhere(content string, pattern *regexp.Regexp, include func(string, int, int) bool, rewrite func(string) (string, error)) (string, error) {
+	allMatches := pattern.FindAllStringIndex(content, -1)
+	matches := make([][]int, 0, len(allMatches))
+	for _, match := range allMatches {
+		if include(content, match[0], match[1]) {
+			matches = append(matches, match)
+		}
+	}
+	if len(matches) == 0 {
+		return content, nil
+	}
+	var out strings.Builder
+	start := 0
+	for _, match := range matches {
+		reference := content[match[0]:match[1]]
+		replacement, err := rewrite(reference)
+		if err != nil {
+			return "", err
+		}
+		out.WriteString(content[start:match[0]])
+		out.WriteString(replacement)
+		start = match[1]
+	}
+	out.WriteString(content[start:])
+	return out.String(), nil
+}
+
+func isDurablePathCharacter(value byte) bool {
+	return value == '/' || value == '\\' || value == '-' || value == '_' || value == '.' || value == '~' || value == '@' || value == '%' || value == '+' || value == ',' ||
+		(value >= '0' && value <= '9') || (value >= 'A' && value <= 'Z') || (value >= 'a' && value <= 'z')
+}
+
+func repoNativeGuestReference(repoRoot, reference, mountEnv string) (string, error) {
+	type candidate struct {
+		guestRoot string
+		hostRoot  string
+	}
+	candidates := []candidate{{guestRoot: "/work", hostRoot: repoRoot}}
+	for _, line := range strings.Split(mountEnv, "\n") {
+		host, guest, ok := parseContainerMountSpec(line)
+		if !ok {
+			continue
+		}
+		guest = cleanGuestPath(guest)
+		if guest != "" {
+			candidates = append(candidates, candidate{guestRoot: guest, hostRoot: host})
+		}
+	}
+	cleanReference := cleanGuestPath(reference)
+	bestLength := -1
+	resolved := map[string]bool{}
+	for _, item := range candidates {
+		if !guestPathContains(item.guestRoot, cleanReference) {
+			continue
+		}
+		if len(item.guestRoot) < bestLength {
+			continue
+		}
+		if len(item.guestRoot) > bestLength {
+			bestLength = len(item.guestRoot)
+			resolved = map[string]bool{}
+		}
+		hostRoot, err := filepath.Abs(item.hostRoot)
+		if err != nil {
+			return "", fmt.Errorf("runtime path reference %q has an invalid source mapping", reference)
+		}
+		rel := strings.TrimPrefix(cleanReference, item.guestRoot)
+		rel = strings.TrimPrefix(rel, "/")
+		hostTarget, err := filepath.Abs(filepath.Join(hostRoot, filepath.FromSlash(rel)))
+		if err != nil || !withinRoot(hostRoot, hostTarget) {
+			return "", fmt.Errorf("runtime path reference %q escapes its explicit source mapping", reference)
+		}
+		resolved[filepath.Clean(hostTarget)] = true
+	}
+	if len(resolved) != 1 {
+		return "", fmt.Errorf("runtime path reference %q is ambiguous; no unique repo-native source mapping exists", reference)
+	}
+	var hostTarget string
+	for value := range resolved {
+		hostTarget = value
+	}
+	if !withinRoot(repoRoot, hostTarget) {
+		return "", fmt.Errorf("runtime path reference %q maps outside the consumer repository", reference)
+	}
+	rel, err := filepath.Rel(repoRoot, hostTarget)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("runtime path reference %q does not prove a specific repo-native reference", reference)
+	}
+	return filepath.ToSlash(rel), nil
+}
+
+func repoNativeHostReference(repoRoot, reference string) (string, error) {
+	if runtime.GOOS != "windows" && regexp.MustCompile(`^[A-Za-z]:[\\/]`).MatchString(reference) {
+		return "", fmt.Errorf("machine host path %q cannot be mapped on this host", reference)
+	}
+	hostPath, err := filepath.Abs(reference)
+	if err != nil || !withinRoot(repoRoot, hostPath) {
+		return "", fmt.Errorf("machine host path %q is not a repo-native reference", reference)
+	}
+	rel, err := filepath.Rel(repoRoot, hostPath)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") || filepath.IsAbs(rel) {
+		return "", fmt.Errorf("machine host path %q does not prove a specific repo-native reference", reference)
+	}
+	return filepath.ToSlash(rel), nil
 }
 
 func renderMaterializeOutputContract(outputs []any) string {
@@ -2144,7 +2362,7 @@ func mountedGuestRootNotes(mountEnv string) []string {
 	notes := []string{}
 	seen := map[string]bool{}
 	for _, line := range strings.Split(mountEnv, "\n") {
-		host, guest, ok := parseContainerMountSpec(line)
+		_, guest, ok := parseContainerMountSpec(line)
 		if !ok {
 			continue
 		}
@@ -2158,15 +2376,13 @@ func mountedGuestRootNotes(mountEnv string) []string {
 			continue
 		case "/DesignNotes":
 			notes = append(notes,
-				fmt.Sprintf("- `%s` is an external mounted design corpus, not part of the repo checkout under `/work`.", guest),
-				fmt.Sprintf("- Host path for this run: `%s`.", filepath.Clean(host)),
-				"- If durable docs need to mention it, describe it as a SharePoint-backed or Windows-local design-notes mirror at that host path; do not imply it lives inside the repo.",
+				fmt.Sprintf("- `%s` is a stable source-packet label for an external design corpus, not a repo-native path.", guest),
+				"- Use it only while gathering evidence. Durable docs must cite a repo-native reference proven by an explicit source mapping or omit the path.",
 			)
 		default:
 			notes = append(notes,
-				fmt.Sprintf("- `%s` is an external mounted source root for this run.", guest),
-				fmt.Sprintf("- Host path for this run: `%s`.", filepath.Clean(host)),
-				"- Do not describe this mount as a repo-owned directory unless the task has explicit source authority for that claim.",
+				fmt.Sprintf("- `%s` is a stable source-packet label, not a repo-native path.", guest),
+				"- Use it only while gathering evidence. Durable docs must cite a repo-native reference proven by an explicit source mapping or omit the path.",
 			)
 		}
 	}
@@ -2437,6 +2653,8 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 	trainingPolicy := mapValue(baselinePolicy["training"])
 	trainingStats := loadTrainingStats(globalTrainingMetricsPath, trainingPolicy)
 
+	shared = orderedNativeGuidanceShared(shared)
+	baselineContextPath := nativeGuidanceBaselineContextPath(shared)
 	for _, raw := range shared {
 		entry := mapValue(raw)
 		rel := stringValue(entry["path"])
@@ -2683,6 +2901,9 @@ func planOrchestration(workflowPath, stepID string, env map[string]string) error
 				}
 			}
 			contextPaths := taskContextPaths(task)
+			if baselineContextPath != "" {
+				contextPaths = prependUniqueString(contextPaths, baselineContextPath)
+			}
 			resolvedContextPaths, err := resolveScopeList(anySlice(contextPaths))
 			if err != nil {
 				return err
@@ -4842,6 +5063,16 @@ func renderShared(entry map[string]any, root string, env map[string]string) (str
 	switch collector {
 	case "literal":
 		return stringValue(entry["text"]), nil
+	case "example_brain_baseline":
+		path := strings.TrimSpace(env["DORKPIPE_ORCH_EXAMPLE_BRAIN_BASELINE"])
+		if path == "" {
+			return "", errors.New("example_brain_baseline collector requires DORKPIPE_ORCH_EXAMPLE_BRAIN_BASELINE")
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return "", fmt.Errorf("read example brain baseline: %w", err)
+		}
+		return string(raw), nil
 	case "repo_map":
 		tracked, _ := runCommandString(root, env, "git", "-C", root, "ls-files")
 		trackedCount := 0
@@ -4885,6 +5116,44 @@ func renderShared(entry map[string]any, root string, env map[string]string) (str
 	default:
 		return "", fmt.Errorf("unknown shared collector %q", collector)
 	}
+}
+
+func orderedNativeGuidanceShared(shared []any) []any {
+	ordered := make([]any, 0, len(shared))
+	for _, raw := range shared {
+		if stringValue(mapValue(raw)["collector"]) == "example_brain_baseline" {
+			ordered = append(ordered, raw)
+		}
+	}
+	for _, raw := range shared {
+		if stringValue(mapValue(raw)["collector"]) != "example_brain_baseline" {
+			ordered = append(ordered, raw)
+		}
+	}
+	return ordered
+}
+
+func nativeGuidanceBaselineContextPath(shared []any) string {
+	for _, raw := range shared {
+		entry := mapValue(raw)
+		if stringValue(entry["collector"]) != "example_brain_baseline" {
+			continue
+		}
+		if rel := strings.TrimSpace(stringValue(entry["path"])); rel != "" {
+			return filepath.ToSlash(filepath.Join("shared", rel))
+		}
+	}
+	return ""
+}
+
+func prependUniqueString(values []string, first string) []string {
+	out := []string{first}
+	for _, value := range values {
+		if value != first {
+			out = append(out, value)
+		}
+	}
+	return out
 }
 
 const (

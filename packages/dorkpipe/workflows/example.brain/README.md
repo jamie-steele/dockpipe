@@ -48,3 +48,13 @@ Fork or wrap this workflow when a repo needs:
 The package-owned baseline docs live under:
 
 - `packages/dorkpipe/resolvers/dorkpipe/assets/docs/example-brain/`
+
+`example.brain` is currently the only package-owned native guidance workflow that materializes
+durable consumer-repository documentation. Its `example_brain_baseline` shared collector loads
+`baseline-rules.md` once, and the package helper places that seed before every task's repo-specific
+context.
+
+Materialized Markdown and YAML are checked before they become durable files. Stable guest paths may
+appear in source packets, but durable output must cite repo-relative paths. A guest or host path is
+rewritten only when one explicit mapping proves the repo-relative target; external or ambiguous
+references and orchestration-only terminology are rejected.

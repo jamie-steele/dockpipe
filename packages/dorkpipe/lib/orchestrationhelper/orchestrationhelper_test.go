@@ -925,7 +925,7 @@ func TestMaterializeTaskOutputsExtractsDeclaredBlocks(t *testing.T) {
 		t.Fatal(err)
 	}
 	outputs := `[{"path":"index.md"},{"path":"index.yaml"}]`
-	if err := materializeTaskOutputs(responsePath, dir, outputs, resultPath); err != nil {
+	if err := materializeTaskOutputs(responsePath, dir, outputs, resultPath, dir, ""); err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.TrimSpace(string(mustReadFile(t, filepath.Join(dir, "materialized", "index.md")))); got != "# Index\n\nStart here." {
@@ -960,9 +960,143 @@ func TestMaterializeTaskOutputsRejectsEscapingPath(t *testing.T) {
 	if err := os.WriteFile(responsePath, []byte(`<!-- dorkpipe:file path="../bad.md" -->bad<!-- /dorkpipe:file -->`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	err := materializeTaskOutputs(responsePath, dir, `[{"path":"../bad.md"}]`, filepath.Join(dir, "result.json"))
+	err := materializeTaskOutputs(responsePath, dir, `[{"path":"../bad.md"}]`, filepath.Join(dir, "result.json"), dir, "")
 	if err == nil {
 		t.Fatal("expected escaping materialized path to fail")
+	}
+}
+
+func TestExampleBrainBaselineOrdersBeforeRepoSpecificContext(t *testing.T) {
+	shared := []any{
+		map[string]any{"path": "repo-map.md", "collector": "repo_map"},
+		map[string]any{"path": "baseline-rules.md", "collector": "example_brain_baseline"},
+		map[string]any{"path": "todo-pattern.md", "collector": "literal"},
+	}
+	ordered := orderedNativeGuidanceShared(shared)
+	if got := stringValue(mapValue(ordered[0])["collector"]); got != "example_brain_baseline" {
+		t.Fatalf("first shared collector = %q", got)
+	}
+	baseline := nativeGuidanceBaselineContextPath(ordered)
+	if baseline != "shared/baseline-rules.md" {
+		t.Fatalf("baseline context path = %q", baseline)
+	}
+	context := prependUniqueString([]string{"shared/repo-map.md", baseline, "docs/README.md"}, baseline)
+	want := []string{baseline, "shared/repo-map.md", "docs/README.md"}
+	if fmt.Sprint(context) != fmt.Sprint(want) {
+		t.Fatalf("context order = %#v want %#v", context, want)
+	}
+}
+
+func TestRenderSharedExampleBrainBaselinePreservesSourcePrecedence(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "baseline-rules.md")
+	want := "# Baseline\n\n- direct code before summary prose\n- intended direction stays separate\n"
+	if err := os.WriteFile(path, []byte(want), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := renderShared(map[string]any{"collector": "example_brain_baseline"}, dir, map[string]string{
+		"DORKPIPE_ORCH_EXAMPLE_BRAIN_BASELINE": path,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("baseline = %q want %q", got, want)
+	}
+}
+
+func TestNormalizeDurableOutputPreservesRepoNativeReferences(t *testing.T) {
+	root := t.TempDir()
+	want := "See `docs/architecture.md`, `/api/workflows`, and https://example.com/home/guide.md.\n"
+	got, err := normalizeDurableOutput(want, root, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Fatalf("normalized output = %q want %q", got, want)
+	}
+}
+
+func TestNormalizeDurableOutputRewritesMappedRuntimeReferences(t *testing.T) {
+	root := t.TempDir()
+	docsRoot := filepath.Join(root, "docs")
+	if err := os.MkdirAll(docsRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mounts := docsRoot + ":/RepoDocs:ro"
+	input := "Use `/work/AGENTS.md` first, then `/RepoDocs/architecture.md`.\n"
+	got, err := normalizeDurableOutput(input, root, mounts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Use `AGENTS.md` first, then `docs/architecture.md`.\n"
+	if got != want {
+		t.Fatalf("normalized output = %q want %q", got, want)
+	}
+}
+
+func TestNormalizeDurableOutputRejectsAmbiguousRuntimeReference(t *testing.T) {
+	root := t.TempDir()
+	first := filepath.Join(root, "docs", "first")
+	second := filepath.Join(root, "docs", "second")
+	mounts := first + ":/DesignNotes:ro\n" + second + ":/DesignNotes:ro"
+	if _, err := normalizeDurableOutput("See `/DesignNotes/decision.md`.\n", root, mounts); err == nil || !strings.Contains(err.Error(), "ambiguous") {
+		t.Fatalf("expected ambiguous runtime reference failure, got %v", err)
+	}
+}
+
+func TestNormalizeDurableOutputRejectsExternalMountReference(t *testing.T) {
+	root := t.TempDir()
+	external := t.TempDir()
+	mounts := external + ":/DesignNotes:ro"
+	if _, err := normalizeDurableOutput("See `/DesignNotes/decision.md`.\n", root, mounts); err == nil || !strings.Contains(err.Error(), "outside the consumer repository") {
+		t.Fatalf("expected external mount failure, got %v", err)
+	}
+}
+
+func TestNormalizeDurableOutputRejectsMachineHostPathDisclosure(t *testing.T) {
+	root := t.TempDir()
+	for _, external := range []string{filepath.Join(t.TempDir(), "decision.md"), filepath.Join(t.TempDir(), "private")} {
+		input := fmt.Sprintf("See `%s`.\n", external)
+		if _, err := normalizeDurableOutput(input, root, ""); err == nil || !strings.Contains(err.Error(), "machine host path") {
+			t.Fatalf("expected machine host path failure for %q, got %v", external, err)
+		}
+	}
+}
+
+func TestNormalizeDurableOutputRejectsOrchestrationTerminology(t *testing.T) {
+	root := t.TempDir()
+	for _, input := range []string{
+		"The provider lane produced this page.\n",
+		"Copy the worker artifact into the artifact root.\n",
+		"The source packet is authoritative.\n",
+	} {
+		if _, err := normalizeDurableOutput(input, root, ""); err == nil || !strings.Contains(err.Error(), "orchestration-only terminology") {
+			t.Fatalf("expected terminology failure for %q, got %v", input, err)
+		}
+	}
+}
+
+func TestMaterializeTaskOutputsPreflightsDurablePolicyBeforeWriting(t *testing.T) {
+	dir := t.TempDir()
+	responsePath := filepath.Join(dir, "response.md")
+	response := strings.Join([]string{
+		`<!-- dorkpipe:file path="first.md" -->`,
+		"# Valid",
+		`<!-- /dorkpipe:file -->`,
+		`<!-- dorkpipe:file path="second.md" -->`,
+		"The provider lane produced this page.",
+		`<!-- /dorkpipe:file -->`,
+	}, "\n")
+	if err := os.WriteFile(responsePath, []byte(response), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := materializeTaskOutputs(responsePath, dir, `[{"path":"first.md"},{"path":"second.md"}]`, filepath.Join(dir, "result.json"), dir, "")
+	if err == nil {
+		t.Fatal("expected durable output policy failure")
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "materialized", "first.md")); !os.IsNotExist(statErr) {
+		t.Fatalf("first output should not be written before all durable outputs pass, err=%v", statErr)
 	}
 }
 
@@ -1116,17 +1250,19 @@ func TestResolveApplyTargetPathFallsBackToWorkflowRootForWorkGuestPath(t *testin
 	}
 }
 
-func TestMountedGuestRootNotesDescribesDesignNotesAsExternalMirror(t *testing.T) {
+func TestMountedGuestRootNotesKeepsHostPathsOutOfGuidance(t *testing.T) {
 	notes := mountedGuestRootNotes("C:\\docs\\UniteHere\\UH - SePuede - Design Notes:/DesignNotes:ro\nC:\\Source\\UniteHere:/work:rw")
 	got := strings.Join(notes, "\n")
 	for _, want := range []string{
-		"`/DesignNotes` is an external mounted design corpus",
-		"Host path for this run: `C:\\docs\\UniteHere\\UH - SePuede - Design Notes`.",
-		"SharePoint-backed or Windows-local design-notes mirror",
+		"`/DesignNotes` is a stable source-packet label",
+		"Durable docs must cite a repo-native reference proven by an explicit source mapping",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("mounted guest root notes missing %q in:\n%s", want, got)
 		}
+	}
+	if strings.Contains(got, "C:\\docs") || strings.Contains(got, "Host path") {
+		t.Fatalf("mounted guest root notes disclosed a machine host path:\n%s", got)
 	}
 	if strings.Contains(got, "`/work` is an external mounted") {
 		t.Fatalf("mounted guest root notes should not emit a standalone /work mount note:\n%s", got)

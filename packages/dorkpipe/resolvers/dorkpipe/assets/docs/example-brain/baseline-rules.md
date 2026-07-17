@@ -26,8 +26,11 @@ These are the deterministic rules to seed first when producing example brain gui
 - Separate "what exists now" from "what is intended next".
 - Call out open gaps explicitly when repo wiring, implementation, and design intent are not yet in
   parity.
-- Normalize runtime-only paths into repo-relative or real local reference language before writing
-  durable docs.
+- Source packets may retain stable guest display paths so evidence stays attributable during a run.
+- Durable consumer docs must use repo-relative references. Rewrite a runtime or machine path only
+  when one explicit source mapping proves the exact repo-relative target.
+- Reject runtime labels, machine host paths, ambiguous mappings, and orchestration-only terminology
+  rather than guessing or applying broad string replacement.
 
 ## What not to do
 
