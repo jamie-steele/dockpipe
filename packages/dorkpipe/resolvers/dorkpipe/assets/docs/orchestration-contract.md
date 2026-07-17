@@ -73,6 +73,9 @@ dockpipe scope workflow <workflow-name> orchestrate
 - `merge/final.md`
 - `verify/result.json`
 - `approval.md`
+- `proposal/promotion-candidate.json` (eligible reusable soft-layer review data only)
+- `proposal/promotion-patch.json` and `proposal/promotion.patch` (deterministic review artifacts)
+- `proposal/promotion-apply-result.json` (separately approved promotion result)
 
 ## Shared artifacts
 

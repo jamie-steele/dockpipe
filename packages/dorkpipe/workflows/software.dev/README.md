@@ -25,8 +25,40 @@ orchestrate-helper software-dev-evaluate-promotion \
 
 The command atomically writes `proposal/promotion-candidate.json`. It can propose only reusable
 soft-layer guidance and required-artifact floor additions for the exact selected task-pack surface.
-It never patches the consumer repository; approval-gated patch generation and application are a
-later boundary.
+It records exact target source digests and never patches the consumer repository.
+
+Build a deterministic review patch after inspecting an eligible candidate:
+
+```text
+orchestrate-helper software-dev-build-promotion-patch <repo-root> <artifact-root>
+```
+
+This writes `proposal/promotion-patch.json` and `proposal/promotion.patch` only under the run artifact
+root. The manifest binds the candidate digest, exact task-pack step, optional exact sibling
+`agents.yml`, target before/after digests, assigned soft changes, and textual patch digest.
+
+Application requires a separately created JSON approval artifact under the run artifact root:
+
+```json
+{
+  "contract_version": "software.dev.promotion-approval/v1",
+  "decision": "approve",
+  "approved": true,
+  "patch_sha256": "sha256:<promotion.patch digest>",
+  "targets": [
+    {"path": "workflows/software-dev/config.yml", "before_sha256": "sha256:<before digest>"}
+  ]
+}
+```
+
+```text
+orchestrate-helper software-dev-apply-promotion \
+  <repo-root> <artifact-root> <approval.json>
+```
+
+The helper never creates approval. It replays all source evidence, stages and validates all target
+after-images, and applies only the exact digest-bound target set transactionally. The result is
+`proposal/promotion-apply-result.json`.
 
 Publish and sync are disabled. Apply always requires approval and uses only the repo-selected
 `apply.target_root` plus the compiled materialized output bundle.

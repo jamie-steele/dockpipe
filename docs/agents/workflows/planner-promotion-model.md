@@ -75,7 +75,8 @@ meaningful reusable soft-layer delta.
 The review artifact is `proposal/promotion-candidate.json`. Its mutable identity is the exact selected
 task-pack file plus step id. An exact sibling `agents.yml` can be named as a possible role target only
 when it is a regular repo-owned sibling with an `agents` mapping; parent or symlinked sidecars are not
-promotion targets. Candidate generation is atomic and writes nothing to the consumer repository.
+promotion targets. Candidate generation records SHA-256 digests for those exact source files, is
+atomic, and writes nothing to the consumer repository.
 
 Promotable data is limited to reusable role wording and constraints, stable task-pack constraints,
 required-artifact floor additions, and reusable startup, plan, merge, or verification guidance. Exact
@@ -83,8 +84,27 @@ tasks, dependencies, lane/provider/model choices, inferred output declarations, 
 access and deny policy, budgets, approvals, apply targets, publish/sync behavior, auth, secrets, and
 destructive-action policy are explicitly excluded.
 
-Approval-gated patch generation and repository application remain a later boundary. An eligible
-candidate grants neither mutation authority nor approval.
+An eligible candidate still grants neither mutation authority nor approval. The separate
+`software-dev-build-promotion-patch` command replays the candidate's raw, normalized, metadata, and
+verification evidence, requires the candidate and target source digests to match exactly, and emits
+`proposal/promotion-patch.json` plus `proposal/promotion.patch` without changing the consumer repo.
+The manifest binds the exact task-pack step, optional owned sibling, before/after target digests,
+assigned soft deltas, and textual patch digest.
+
+`software-dev-apply-promotion` accepts a distinct JSON approval artifact under the run artifact root.
+That approval must explicitly approve and bind the exact patch digest plus every target before-digest.
+Before mutation, application regenerates and validates the candidate, manifest, patch, target
+identities, source evidence, and staged YAML. All approved targets are atomically replaced as one
+transaction; a later-target failure restores earlier target bytes. Missing, denied, malformed, stale,
+or mismatched approval leaves the consumer repo unchanged. Reapplying an already-applied exact patch
+returns `already_applied` without rewriting files.
+
+The authored workflow schema has no root or orchestration-level `constraints` field. Candidate root
+and orchestration constraints therefore append as labeled `startup_prompt` guidance, plan constraints
+append to schema-valid `plan.steps`, and role constraints remain in the exact sibling or selected
+inline `agents` mapping. Existing list values and required-artifact floors are never removed.
+Existing scalar guidance is retained and the promoted wording is appended in the nearest
+schema-valid guidance field.
 
 ## Prompt Layers
 

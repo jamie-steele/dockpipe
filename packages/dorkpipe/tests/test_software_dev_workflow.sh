@@ -9,12 +9,17 @@ dorkpipe_test_require_go "test_software_dev_workflow"
 dorkpipe_test_init_go_cache "$REPO_ROOT"
 
 tmp="$(dorkpipe_test_mktemp_dir "$REPO_ROOT")"
-proof_output="$REPO_ROOT/bin/.dockpipe/tmp/package-tests/software-dev-proof-output"
+consumer="$tmp/consumer"
+consumer_workflow_dir="$consumer/workflows/software-dev"
+proof_output="$consumer/bin/.dockpipe/tmp/package-tests/software-dev-proof-output"
 trap 'rm -rf "$tmp" "$proof_output"' EXIT
-consumer="$REPO_ROOT"
-task_pack="packages/dorkpipe/tests/fixtures/software.dev/task-pack.yml"
-valid_proposal="packages/dorkpipe/tests/fixtures/software.dev/valid-proposal.yml"
-agents_file="packages/dorkpipe/tests/fixtures/software.dev/agents.yml"
+mkdir -p "$consumer_workflow_dir"
+cp "$REPO_ROOT/packages/dorkpipe/tests/fixtures/software.dev/task-pack.yml" "$consumer_workflow_dir/task-pack.yml"
+cp "$REPO_ROOT/packages/dorkpipe/tests/fixtures/software.dev/agents.yml" "$consumer_workflow_dir/agents.yml"
+cp "$REPO_ROOT/packages/dorkpipe/tests/fixtures/software.dev/valid-proposal.yml" "$consumer_workflow_dir/valid-proposal.yml"
+task_pack="workflows/software-dev/task-pack.yml"
+valid_proposal="workflows/software-dev/valid-proposal.yml"
+agents_file="workflows/software-dev/agents.yml"
 rm -rf "$proof_output"
 cp "$consumer/$task_pack" "$tmp/task-pack.before.yml"
 cp "$consumer/$agents_file" "$tmp/agents.before.yml"
@@ -41,6 +46,7 @@ export DORKPIPE_ORCH_MAX_TASK_CLOUD_TOKENS="20000"
 export DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED="true"
 export ROOT="$consumer"
 export DORKPIPE_SOFTWARE_DEV_TASK_PACK="$task_pack"
+cd "$consumer"
 
 use_orch_root() {
   export DORKPIPE_ORCH_ROOT="${1:?orchestration root}"
@@ -232,9 +238,9 @@ MSYS2_ARG_CONV_EXCL='*' "$helper_bin" software-dev-evaluate-promotion \
 candidate="$planner_root/proposal/promotion-candidate.json"
 grep -Fq '"contract_version": "software.dev.promotion-candidate/v1"' "$candidate"
 grep -Fq '"status": "eligible"' "$candidate"
-grep -Fq '"task_pack_path": "packages/dorkpipe/tests/fixtures/software.dev/task-pack.yml"' "$candidate"
+grep -Fq '"task_pack_path": "workflows/software-dev/task-pack.yml"' "$candidate"
 grep -Fq '"step_id": "planner_pack"' "$candidate"
-grep -Fq '"path": "packages/dorkpipe/tests/fixtures/software.dev/agents.yml"' "$candidate"
+grep -Fq '"path": "workflows/software-dev/agents.yml"' "$candidate"
 grep -Fq '"role": "reusable fixture evidence writer"' "$candidate"
 grep -Fq '"inferred.md"' "$candidate"
 grep -Fq '"performed": false' "$candidate"
@@ -249,6 +255,110 @@ if find "$planner_root/proposal" -maxdepth 1 -name '.promotion-candidate-*.json'
   exit 1
 fi
 
+MSYS2_ARG_CONV_EXCL='*' "$helper_bin" software-dev-build-promotion-patch \
+  "$consumer" "$planner_root"
+promotion_manifest="$planner_root/proposal/promotion-patch.json"
+promotion_patch="$planner_root/proposal/promotion.patch"
+grep -Fq '"contract_version": "software.dev.promotion-patch/v1"' "$promotion_manifest"
+grep -Fq '"approval_required": true' "$promotion_manifest"
+grep -Fq '"performed": false' "$promotion_manifest"
+grep -Fq -- '--- a/workflows/software-dev/task-pack.yml' "$promotion_patch"
+grep -Fq -- '--- a/workflows/software-dev/agents.yml' "$promotion_patch"
+if grep '^+' "$promotion_patch" | grep -Eq 'plan_write|depends_on|max_cloud_tokens|worker:|target_root:|require_approval:|publish:|sync:'; then
+  echo "software.dev promotion patch added a session-only or hard-authority field" >&2
+  exit 1
+fi
+cmp "$tmp/task-pack.before.yml" "$consumer/$task_pack"
+cmp "$tmp/agents.before.yml" "$consumer/$agents_file"
+
+patch_digest="$(awk '/"patch": \{/{inside=1; next} inside && /"sha256":/{gsub(/[",]/, "", $2); print $2; exit}' "$promotion_manifest")"
+task_pack_before_digest="$(grep -m1 '"before_sha256"' "$promotion_manifest" | sed -E 's/.*"before_sha256": "([^"]+)".*/\1/')"
+agents_before_digest="$(grep '"before_sha256"' "$promotion_manifest" | sed -n '2s/.*"before_sha256": "\([^"]*\)".*/\1/p')"
+promotion_approval="$planner_root/proposal/promotion-approval.json"
+cat >"$promotion_approval" <<EOF
+{
+  "contract_version": "software.dev.promotion-approval/v1",
+  "decision": "approve",
+  "approved": true,
+  "patch_sha256": "$patch_digest",
+  "targets": [
+    {
+      "path": "$task_pack",
+      "before_sha256": "$task_pack_before_digest"
+    },
+    {
+      "path": "$agents_file",
+      "before_sha256": "$agents_before_digest"
+    }
+  ]
+}
+EOF
+MSYS2_ARG_CONV_EXCL='*' "$helper_bin" software-dev-apply-promotion \
+  "$consumer" "$planner_root" "$promotion_approval"
+grep -Fq '"status": "applied"' "$planner_root/proposal/promotion-apply-result.json"
+if cmp -s "$tmp/task-pack.before.yml" "$consumer/$task_pack" || cmp -s "$tmp/agents.before.yml" "$consumer/$agents_file"; then
+  echo "approved promotion did not change both exact consumer targets" >&2
+  exit 1
+fi
+grep -Fq 'Preserve reusable fixture guidance across future runs.' "$consumer/$task_pack"
+grep -Fq 'Use the compiled planner graph only.' "$consumer/$task_pack"
+grep -Fq 'Compile a bounded proposal before any proposed task runs.' "$consumer/$task_pack"
+grep -Fq 'Planner software.dev fixture' "$consumer/$task_pack"
+grep -Fq 'approve the governed planner fixture output' "$consumer/$task_pack"
+grep -Fq 'reusable fixture evidence writer' "$consumer/$agents_file"
+grep -Fq 'fixture writer' "$consumer/$agents_file"
+grep -Fq 'inferred.md' "$consumer/$task_pack"
+
+denied_consumer="$tmp/denied-consumer"
+mkdir -p "$denied_consumer/workflows/software-dev"
+cp "$tmp/task-pack.before.yml" "$denied_consumer/$task_pack"
+cp "$tmp/agents.before.yml" "$denied_consumer/$agents_file"
+cat >"$promotion_approval" <<EOF
+{
+  "contract_version": "software.dev.promotion-approval/v1",
+  "decision": "deny",
+  "approved": false,
+  "patch_sha256": "$patch_digest",
+  "targets": [
+    {"path": "$task_pack", "before_sha256": "$task_pack_before_digest"},
+    {"path": "$agents_file", "before_sha256": "$agents_before_digest"}
+  ]
+}
+EOF
+if MSYS2_ARG_CONV_EXCL='*' "$helper_bin" software-dev-apply-promotion \
+  "$denied_consumer" "$planner_root" "$promotion_approval"; then
+  echo "denied promotion unexpectedly applied" >&2
+  exit 1
+fi
+cmp "$tmp/task-pack.before.yml" "$denied_consumer/$task_pack"
+cmp "$tmp/agents.before.yml" "$denied_consumer/$agents_file"
+
+stale_consumer="$tmp/stale-consumer"
+mkdir -p "$stale_consumer/workflows/software-dev"
+cp "$tmp/task-pack.before.yml" "$stale_consumer/$task_pack"
+cp "$tmp/agents.before.yml" "$stale_consumer/$agents_file"
+printf '%s\n' '# stale target' >>"$stale_consumer/$task_pack"
+cp "$stale_consumer/$task_pack" "$tmp/stale-task-pack.before.yml"
+cat >"$promotion_approval" <<EOF
+{
+  "contract_version": "software.dev.promotion-approval/v1",
+  "decision": "approve",
+  "approved": true,
+  "patch_sha256": "$patch_digest",
+  "targets": [
+    {"path": "$task_pack", "before_sha256": "$task_pack_before_digest"},
+    {"path": "$agents_file", "before_sha256": "$agents_before_digest"}
+  ]
+}
+EOF
+if MSYS2_ARG_CONV_EXCL='*' "$helper_bin" software-dev-apply-promotion \
+  "$stale_consumer" "$planner_root" "$promotion_approval"; then
+  echo "stale promotion unexpectedly applied" >&2
+  exit 1
+fi
+cmp "$tmp/stale-task-pack.before.yml" "$stale_consumer/$task_pack"
+cmp "$tmp/agents.before.yml" "$stale_consumer/$agents_file"
+
 for invalid in malformed narrated structural authority-widening unknown-role invalid-dependency missing-output-floor; do
   invalid_root="$tmp/invalid-$invalid"
   mkdir -p "$invalid_root/tasks/sentinel"
@@ -256,7 +366,7 @@ for invalid in malformed narrated structural authority-widening unknown-role inv
   printf '%s\n' '{}' >"$invalid_root/tasks/sentinel/task.json"
   if MSYS2_ARG_CONV_EXCL='*' "$helper_bin" software-dev-compile \
     "$workflow_config" contract \
-    "$consumer" "$task_pack" planner_pack "$invalid_root" "$consumer/packages/dorkpipe/tests/fixtures/software.dev/invalid/$invalid.yml" \
+    "$consumer" "$task_pack" planner_pack "$invalid_root" "$REPO_ROOT/packages/dorkpipe/tests/fixtures/software.dev/invalid/$invalid.yml" \
     >"$tmp/$invalid.out" 2>"$tmp/$invalid.err"; then
     echo "invalid planner proposal unexpectedly compiled: $invalid" >&2
     exit 1

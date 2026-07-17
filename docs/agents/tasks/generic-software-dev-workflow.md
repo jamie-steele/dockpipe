@@ -6,9 +6,9 @@ TASK-006 closed on 2026-07-17. The package-owned Example Brain baseline now seed
 deterministically, and materialized documentation fails closed on ambiguous runtime or host-path
 identity. The TASK-007 contract design is unblocked; no TASK-007 implementation is included in that
 baseline slice. The contract baseline below is now settled, and the first package-owned workflow,
-offline proof fixture, unchanged Example Brain contract proof, and deterministic proposal-promotion
-eligibility/candidate boundary are complete. TASK-007 remains open for approval-gated promotion patch
-generation/application and the later consumer-invocation evaluation.
+offline proof fixture, unchanged Example Brain contract proof, deterministic proposal-promotion
+eligibility/candidate boundary, and approval-gated promotion patch generation/application are
+complete. TASK-007 remains open for consumer-invocation documentation and evaluation.
 
 ## Goal
 
@@ -313,6 +313,16 @@ against the exact repo-relative task-pack step, and atomically writes
 mutation remain excluded. The offline proof confirms deterministic output and unchanged task-pack and
 sibling `agents.yml` bytes.
 
+The approval-gated promotion patch slice completed on 2026-07-17. The package helper now regenerates
+and exactly matches eligible candidates against raw, normalized, metadata, verification, target
+identity, and source-digest evidence before emitting deterministic `promotion-patch.json` and
+`promotion.patch` review artifacts. A separate JSON approval binds an approve decision to the patch
+digest and every target before-digest. Application stages and validates all exact targets, replaces
+them transactionally, rolls earlier writes back on later-target failure, and returns stable applied,
+already-applied, denied, or failed evidence without broadening the target set. Offline proof uses
+temporary consumer copies and confirms generation, denied approval, and stale approval do not mutate
+consumer files.
+
 The unchanged `example.brain` contract proof completed on 2026-07-17. Baseline eligibility now uses
 each task's explicit `shared/baseline-rules.md` context reference: eligible planning and durable-
 guidance tasks move that baseline first while mixed-pack implementation tasks remain untouched. The
@@ -326,10 +336,7 @@ extras remain compatible with approval-gated apply.
 
 ## Remaining Implementation Slices
 
-1. Next, turn an eligible `proposal/promotion-candidate.json` into a small approval-gated patch for
-   its exact repo-owned target surface, then apply it only through a separately approved mutation
-   boundary. Candidate eligibility alone must never write the consumer repo.
-2. Document consumer invocation and only then evaluate thin wrappers for `brain.optimize`-style
+1. Document consumer invocation and only then evaluate thin wrappers for `brain.optimize`-style
    workflows. Provider pools, host bridges, remote execution, and TASK-008 remain out of scope.
 
 ## Supporting Decisions
@@ -495,8 +502,8 @@ TASK-007 implementation is complete only when all of these are true:
 
 - Implement and test every slice under `Remaining Implementation Slices`; this contract-design slice
   deliberately closes none of that implementation work.
-- Implement approval-gated promotion patch generation and repository application from the completed
-  deterministic eligibility/candidate artifact boundary.
+- Document and evaluate the consumer invocation path now that the promotion patch/apply boundary is
+  complete.
 - Decide whether to migrate `example.brain` to a pure task pack only after the generic workflow is
   stable; it remains the unchanged proof sketch for now.
 - Implement the CLI-first governed MCP/host bridge and the Phase 0 versioned guarantee contract and

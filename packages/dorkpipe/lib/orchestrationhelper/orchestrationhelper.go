@@ -314,6 +314,16 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("usage: orchestrate-helper software-dev-evaluate-promotion <repo-root> <task-pack.yml> <task-pack-step-id> <artifact-root>")
 		}
 		return evaluateSoftwareDevPromotionArtifacts(args[1], args[2], args[3], args[4])
+	case "software-dev-build-promotion-patch":
+		if len(args) != 3 {
+			return errors.New("usage: orchestrate-helper software-dev-build-promotion-patch <repo-root> <artifact-root>")
+		}
+		return buildSoftwareDevPromotionPatchArtifacts(args[1], args[2])
+	case "software-dev-apply-promotion":
+		if len(args) != 4 {
+			return errors.New("usage: orchestrate-helper software-dev-apply-promotion <repo-root> <artifact-root> <approval.json>")
+		}
+		return applySoftwareDevPromotionPatch(args[1], args[2], args[3])
 	case "run-tasks":
 		if len(args) != 3 {
 			return errors.New("usage: orchestrate-helper run-tasks <graph.json> <runner.sh>")
@@ -1397,6 +1407,9 @@ func evaluateSoftwareDevPromotionArtifacts(repoRoot, taskPackPath, taskPackStepI
 	}
 
 	candidate := evaluateSoftwareDevPromotion(repoTaskPack, normalized, metadata, verification, identity, rawRelativePath)
+	if err := addPromotionCandidateTargetDigests(candidate, repoRoot, identity); err != nil {
+		return err
+	}
 	if err := writeJSONFileAtomic(candidatePath, candidate); err != nil {
 		return fmt.Errorf("write promotion candidate: %w", err)
 	}
