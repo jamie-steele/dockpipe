@@ -18,10 +18,10 @@ memory, or a shared-worktree inference loop to resume work after interruption.
 
 ## Why This Is A Separate Task
 
-TASK-007 owns the generic software-development workflow and repo task-pack model. This task applies
-that model to the DockPipe standardized backlog and a remote-task adapter. TASK-013 remains the
-separate host-resident App Server path for interactive top-level sessions; this task must not couple
-remote Cloud task lifecycle to that adapter.
+TASK-007 shipped the generic software-development workflow and repo task-pack model. This task
+applies that model to the DockPipe standardized backlog and a remote-task adapter. TASK-013 remains
+the separate host-resident App Server path for interactive top-level sessions; this task must not
+couple remote Cloud task lifecycle to that adapter.
 
 ## Proposed Contract
 

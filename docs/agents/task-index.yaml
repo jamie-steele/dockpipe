@@ -8,9 +8,6 @@ tasks:
   - id: TASK-004
     topic: Qt app and VS Code extension compile performance
     path: docs/agents/tasks/compile-performance-qt-vscode.md
-  - id: TASK-007
-    topic: Generic software dev workflow
-    path: docs/agents/tasks/generic-software-dev-workflow.md
   - id: TASK-008
     topic: PipeDeck agentic app UI
     path: docs/agents/tasks/agentic-app-ui.md

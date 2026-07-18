@@ -99,6 +99,22 @@ transaction; a later-target failure restores earlier target bytes. Missing, deni
 or mismatched approval leaves the consumer repo unchanged. Reapplying an already-applied exact patch
 returns `already_applied` without rewriting files.
 
+For consumers, promotion is an explicit command sequence after the normal `software.dev` run has
+finished and verification has passed:
+
+```bash
+orchestrate-helper software-dev-evaluate-promotion \
+  "$repo_root" workflows/software-dev/config.yml software_dev "$artifact_root"
+orchestrate-helper software-dev-build-promotion-patch "$repo_root" "$artifact_root"
+# The consumer separately reviews the patch and authors proposal/promotion-approval.json.
+orchestrate-helper software-dev-apply-promotion \
+  "$repo_root" "$artifact_root" "$artifact_root/proposal/promotion-approval.json"
+```
+
+Workflow execution never runs these commands automatically. Normal output-bundle approval applies
+verified task results to `apply.target_root`; it does not approve planner promotion. Promotion owns a
+second approval artifact that binds the generated patch digest and every exact target before-digest.
+
 The authored workflow schema has no root or orchestration-level `constraints` field. Candidate root
 and orchestration constraints therefore append as labeled `startup_prompt` guidance, plan constraints
 append to schema-valid `plan.steps`, and role constraints remain in the exact sibling or selected

@@ -20,9 +20,25 @@ cp "$REPO_ROOT/packages/dorkpipe/tests/fixtures/software.dev/valid-proposal.yml"
 task_pack="workflows/software-dev/task-pack.yml"
 valid_proposal="workflows/software-dev/valid-proposal.yml"
 agents_file="workflows/software-dev/agents.yml"
+wrapper_file="workflows/software-dev/run.yml"
 rm -rf "$proof_output"
 cp "$consumer/$task_pack" "$tmp/task-pack.before.yml"
 cp "$consumer/$agents_file" "$tmp/agents.before.yml"
+
+cat >"$consumer/$wrapper_file" <<'WRAPPER'
+name: repo.software-dev
+namespace: consumer
+description: Thin repo-owned wrapper for durable software.dev selection defaults.
+
+steps:
+  - id: software_dev
+    workflow: software.dev
+    package: dockpipeproject
+    vars:
+      DORKPIPE_SOFTWARE_DEV_TASK_PACK: workflows/software-dev/task-pack.yml
+      DORKPIPE_SOFTWARE_DEV_TASK_PACK_STEP: static_pack
+      DORKPIPE_SOFTWARE_DEV_PLANNER_MODE: "false"
+WRAPPER
 
 helper_bin="$tmp/orchestrate-helper"
 (
@@ -47,6 +63,31 @@ export DORKPIPE_ORCH_STOP_ON_BUDGET_EXCEEDED="true"
 export ROOT="$consumer"
 export DORKPIPE_SOFTWARE_DEV_TASK_PACK="$task_pack"
 cd "$consumer"
+
+"$REPO_ROOT/src/bin/dockpipe" workflow validate "$consumer/$wrapper_file"
+
+wrapper_var() {
+  local key="${1:?wrapper variable name}"
+  awk -v key="$key" '
+    $1 == key ":" {
+      value = $2
+      gsub(/^"|"$/, "", value)
+      print value
+      found = 1
+      exit
+    }
+    END { if (!found) exit 1 }
+  ' "$consumer/$wrapper_file"
+}
+
+grep -Fq 'workflow: software.dev' "$consumer/$wrapper_file"
+grep -Fq 'package: dockpipeproject' "$consumer/$wrapper_file"
+wrapper_task_pack="$(wrapper_var DORKPIPE_SOFTWARE_DEV_TASK_PACK)"
+wrapper_task_pack_step="$(wrapper_var DORKPIPE_SOFTWARE_DEV_TASK_PACK_STEP)"
+wrapper_planner_mode="$(wrapper_var DORKPIPE_SOFTWARE_DEV_PLANNER_MODE)"
+test "$wrapper_task_pack" = "$task_pack"
+test "$wrapper_task_pack_step" = "static_pack"
+test "$wrapper_planner_mode" = "false"
 
 use_orch_root() {
   export DORKPIPE_ORCH_ROOT="${1:?orchestration root}"
@@ -93,6 +134,22 @@ for path in request.json plan.json task-graph.json proposal/metadata.json; do
   cmp "$static_root/$path" "$deterministic_root/$path"
 done
 diff -r "$static_root/tasks" "$deterministic_root/tasks"
+
+wrapper_root="$tmp/wrapper-orchestrate"
+MSYS2_ARG_CONV_EXCL='*' "$helper_bin" software-dev-compile \
+  "$workflow_config" contract \
+  "$consumer" "$wrapper_task_pack" "$wrapper_task_pack_step" "$wrapper_root"
+for path in request.json plan.json task-graph.json proposal/metadata.json; do
+  cmp "$static_root/$path" "$wrapper_root/$path"
+done
+diff -r "$static_root/tasks" "$wrapper_root/tasks"
+grep -Fq '"path": "workflows/software-dev/task-pack.yml"' "$wrapper_root/proposal/metadata.json"
+grep -Fq '"step_id": "static_pack"' "$wrapper_root/proposal/metadata.json"
+grep -Fq '"approval_required": true' "$wrapper_root/plan.json"
+grep -Fq '"target_root": "bin/.dockpipe/tmp/package-tests/software-dev-proof-output"' "$wrapper_root/plan.json"
+grep -Fq '"required_artifacts": [' "$wrapper_root/plan.json"
+grep -Fq '"publish": false' "$wrapper_root/plan.json"
+grep -Fq '"sync": false' "$wrapper_root/plan.json"
 
 seed_root="$tmp/seed-orchestrate"
 MSYS2_ARG_CONV_EXCL='*' "$helper_bin" software-dev-compile \
@@ -211,6 +268,9 @@ grep -Fq '"present": true' "$planner_root/proposal/metadata.json"
 grep -Fq '"selected_graph": true' "$planner_root/proposal/metadata.json"
 test -f "$planner_root/proposal/raw.yaml"
 test -f "$planner_root/proposal/normalized.json"
+for path in promotion-candidate.json promotion-patch.json promotion.patch promotion-apply-result.json; do
+  test ! -e "$planner_root/proposal/$path"
+done
 
 export DORKPIPE_SOFTWARE_DEV_EXECUTION_LOG="$tmp/planner-executed.log"
 MSYS2_ARG_CONV_EXCL='*' "$helper_bin" run-tasks "$planner_root/task-graph.json" "$runner"
