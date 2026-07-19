@@ -113,9 +113,28 @@ selector; prose remains non-authoritative.
 The installed CLI documents `codex cloud exec --env <id> --branch <branch> [query]`, but its help
 does not expose a machine-readable submission receipt or a stable task-ID response schema. Parsing
 undocumented terminal text would not be a safe resumable identity contract, so live submission
-remains unimplemented. The next bounded remote-task slice is an opt-in CLI compatibility contract
-that proves a machine-readable submission receipt before adding live dispatch or status/diff/result
-retrieval. Completion-candidate reconciliation and `ready_for_review` remain later work.
+remains unimplemented.
+
+The package now has a fail-closed compatibility preflight before fixture dispatch. Its narrow tracked
+fixtures record the exact read-only `codex-cli 0.144.1` surfaces from `codex --version`,
+`codex cloud --help`, and `codex cloud exec --help`. The resulting
+`remote-adapter-compatibility.json` is bound to the immutable `remote-request.json` fingerprint and
+explicit environment/branch refs. It records the required command surface, documented
+`--env <ENV_ID>` and optional `--branch <BRANCH>` inputs, snapshot digests, receipt/task-ID support,
+compatibility status, enabled adapter modes, and the exact fail-closed gap. That CLI version
+documents neither a machine-readable submission receipt nor a safely recoverable stable opaque task
+ID, so compatibility is `unsupported`, live submission is disabled, and fixture dispatch remains
+the only enabled adapter.
+
+Temporary consumer proofs show repeated compatibility artifacts are byte-for-byte deterministic;
+the preflight itself leaves no `remote-task.json`; malformed contracts emit deterministic failure
+evidence and stop before dispatch; and the complete offline workflow invokes no Codex, Git, SSH,
+network, apply, commit, push, or publication surface. Existing selection, request, fixture dispatch,
+and artifact-only restart identity remain deterministic. The next bounded remote-task slice is a
+fixture-backed `completion_candidate` ingestion and stale/duplicate/mismatch rejection envelope that
+does not advance to `ready_for_review` and does not add live status/diff/result retrieval, apply, or
+publication. A live Codex Cloud adapter remains blocked until a future installed CLI documents a
+machine-readable receipt with a stable opaque task ID.
 
 ## Boundaries
 
@@ -138,6 +157,8 @@ retrieval. Completion-candidate reconciliation and `ready_for_review` remain lat
 - `backlog-selection.json`: selected task ID, linked task path, bounded slice, baseline, and
   deterministic rejection reason when not dispatchable.
 - `remote-request.md` and `remote-request.json`: reviewable compiled request and safe metadata.
+- `remote-adapter-compatibility.json`: inspected adapter/CLI contract, documented inputs and receipt
+  capability, exact fail-closed reason, and immutable request/target binding.
 - `remote-task.json`: remote task ID, request fingerprint, environment/branch reference, and
   submission timestamp.
 - `remote-status.json`, `remote-diff.patch`, and `remote-result.json`: fetched remote evidence; no
@@ -150,6 +171,8 @@ retrieval. Completion-candidate reconciliation and `ready_for_review` remain lat
   request and rejects closed, unknown, malformed, ambiguous, active-external, and blocked entries.
 - The adapter fixture proves submission/status/diff/result parsing, records one opaque remote task
   ID, and never calls a live provider by default.
+- The compatibility fixture proves the exact documented CLI submission surface, fails closed when a
+  machine-readable receipt or stable opaque task ID is absent, and cannot create a task identity.
 - Completion-candidate fixtures prove that stale, duplicated, mismatched, unvalidated, halted, or
   unapproved signals cannot advance beyond `completion_candidate`; only reconciled evidence can
   reach `ready_for_review`.

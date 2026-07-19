@@ -12,6 +12,7 @@ const backlogTestBaseline = "0123456789abcdef0123456789abcdef01234567"
 
 func TestBacklogRemoteArtifactsAreDeterministicAndRestartSafe(t *testing.T) {
 	repo := writeBacklogTestRepo(t)
+	compatibilityFixture := writeBacklogCompatibilityFixture(t)
 	fixture := filepath.Join(t.TempDir(), "dispatch.json")
 	writeBacklogTestFile(t, fixture, `{
   "contract_version": "dorkpipe.remote-dispatch-fixture/v1",
@@ -34,6 +35,12 @@ func TestBacklogRemoteArtifactsAreDeterministicAndRestartSafe(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
+		if err := preflightBacklogRemoteCompatibility(root, compatibilityFixture); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := os.Stat(filepath.Join(root, "remote-task.json")); !os.IsNotExist(err) {
+			t.Fatalf("compatibility preflight created remote-task.json: %v", err)
+		}
 		if err := dispatchBacklogFixture(root, fixture); err != nil {
 			t.Fatal(err)
 		}
@@ -46,12 +53,21 @@ func TestBacklogRemoteArtifactsAreDeterministicAndRestartSafe(t *testing.T) {
 	second := filepath.Join(t.TempDir(), "second")
 	compile(first)
 	compile(second)
-	for _, name := range []string{"backlog-selection.json", "remote-request.json", "remote-request.md", "remote-task.json"} {
+	for _, name := range []string{"backlog-selection.json", "remote-request.json", "remote-request.md", "remote-adapter-compatibility.json", "remote-task.json"} {
 		firstRaw := mustReadFile(t, filepath.Join(first, name))
 		secondRaw := mustReadFile(t, filepath.Join(second, name))
 		if string(firstRaw) != string(secondRaw) {
 			t.Fatalf("%s is not deterministic", name)
 		}
+	}
+	compatibility := readJSONMap(filepath.Join(first, "remote-adapter-compatibility.json"))
+	if stringValue(mapValue(compatibility["compatibility"])["status"]) != "unsupported" || backlogTestBool(compatibility["live_submission_enabled"]) {
+		t.Fatalf("unexpected compatibility artifact: %#v", compatibility)
+	}
+	binding := mapValue(compatibility["request_binding"])
+	request := readJSONMap(filepath.Join(first, "remote-request.json"))
+	if stringValue(binding["request_fingerprint"]) != stringValue(request["request_fingerprint"]) || !jsonMapsEqual(map[string]any{"environment_ref": binding["environment_ref"], "branch_ref": binding["branch_ref"]}, mapValue(request["target"])) {
+		t.Fatalf("compatibility artifact is not bound to the immutable request: %#v", binding)
 	}
 	task := readJSONMap(filepath.Join(first, "remote-task.json"))
 	if backlogTestBool(mapValue(task["adapter"])["provider_invoked"]) {
@@ -152,6 +168,30 @@ maintenance:
 	}
 }
 
+func TestBacklogCompatibilityRejectsMalformedContractWithoutDispatchArtifact(t *testing.T) {
+	repo := writeBacklogTestRepo(t)
+	root := filepath.Join(t.TempDir(), "artifacts")
+	if err := inspectBacklogSelection(repo, backlogIndexPath, "TASK-015", "Implement only the bounded compatibility preflight slice.", backlogTestBaseline, root); err != nil {
+		t.Fatal(err)
+	}
+	if err := compileBacklogRemoteRequest(repo, root, "fixture-environment", "js/dev", `["packages/dorkpipe"]`, `["No live provider"]`, `["go test ./packages/dorkpipe/lib/orchestrationhelper"]`, `[]`); err != nil {
+		t.Fatal(err)
+	}
+	fixtureRoot := t.TempDir()
+	writeBacklogTestFile(t, filepath.Join(fixtureRoot, "contract.json"), "{}\n")
+	if err := preflightBacklogRemoteCompatibility(root, fixtureRoot); err == nil {
+		t.Fatal("malformed compatibility contract unexpectedly passed")
+	}
+	compatibility := readJSONMap(filepath.Join(root, "remote-adapter-compatibility.json"))
+	status := mapValue(compatibility["compatibility"])
+	if stringValue(status["status"]) != "error" || stringValue(status["reason_code"]) != "invalid_compatibility_fixture" {
+		t.Fatalf("unexpected compatibility failure artifact: %#v", compatibility)
+	}
+	if _, err := os.Stat(filepath.Join(root, "remote-task.json")); !os.IsNotExist(err) {
+		t.Fatalf("malformed compatibility contract left remote-task.json: %v", err)
+	}
+}
+
 func TestBacklogFollowupRejectsTamperedImmutableRequest(t *testing.T) {
 	repo := writeBacklogTestRepo(t)
 	root := filepath.Join(t.TempDir(), "artifacts")
@@ -191,6 +231,32 @@ func writeBacklogTestRepo(t *testing.T) string {
 	if err := os.MkdirAll(filepath.Join(root, "packages", "dorkpipe", "lib"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	return root
+}
+
+func writeBacklogCompatibilityFixture(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	writeBacklogTestFile(t, filepath.Join(root, "contract.json"), `{
+  "contract_version": "dorkpipe.codex-cloud-cli-compatibility-fixture/v1",
+  "adapter_identity": "codex-cloud-cli",
+  "cli": {"reference": "codex", "version": "codex-cli 0.144.1"},
+  "inspected_commands": [
+    {"argv": ["codex", "--version"], "fixture": "codex-version.txt"},
+    {"argv": ["codex", "cloud", "--help"], "fixture": "codex-cloud-help.txt"},
+    {"argv": ["codex", "cloud", "exec", "--help"], "fixture": "codex-cloud-exec-help.txt"}
+  ],
+  "recognized_inputs": [
+    {"name": "environment", "flag": "--env", "value": "ENV_ID", "required": true},
+    {"name": "branch", "flag": "--branch", "value": "BRANCH", "required": false}
+  ],
+  "submission_receipt": {"machine_readable_documented": false, "stable_opaque_task_id_recoverable": false},
+  "exact_gap": "codex cloud exec --help for codex-cli 0.144.1 documents no machine-readable submission receipt and no stable opaque task-ID response contract."
+}
+`)
+	writeBacklogTestFile(t, filepath.Join(root, "codex-version.txt"), "codex-cli 0.144.1\n")
+	writeBacklogTestFile(t, filepath.Join(root, "codex-cloud-help.txt"), "Usage: codex cloud [OPTIONS] [COMMAND]\nexec    Submit a new Codex Cloud task without launching the TUI\n")
+	writeBacklogTestFile(t, filepath.Join(root, "codex-cloud-exec-help.txt"), "Usage: codex cloud exec [OPTIONS] --env <ENV_ID> [QUERY]\n--env <ENV_ID>\n--branch <BRANCH>\n")
 	return root
 }
 

@@ -14,6 +14,7 @@ pristine="$tmp/pristine"
 artifact_root="$tmp/artifacts"
 second_root="$tmp/artifacts-second"
 fixture_root="$REPO_ROOT/packages/dorkpipe/tests/fixtures/backlog.remote"
+compatibility_fixture="$REPO_ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/fixtures/backlog-remote-codex-cli"
 helper_bin="$tmp/orchestrate-helper"
 invocation_log="$tmp/forbidden-invocations.log"
 trap 'rm -rf "$tmp"' EXIT
@@ -54,26 +55,37 @@ export DORKPIPE_BACKLOG_ALLOWED_PATHS_JSON='["packages/dorkpipe","docs/agents/ta
 export DORKPIPE_BACKLOG_HARD_BOUNDARIES_JSON='["No live provider invocation","No apply, commit, push, or publication"]'
 export DORKPIPE_BACKLOG_REQUIRED_VALIDATION_JSON='["go test ./packages/dorkpipe/lib/orchestrationhelper"]'
 export DORKPIPE_BACKLOG_ROUTED_SOURCES_JSON='["docs/agents/packages/package-authoring.md","docs/agents/workflows/yaml-workflows.md"]'
+export DORKPIPE_BACKLOG_COMPATIBILITY_FIXTURE="$compatibility_fixture"
 export DORKPIPE_BACKLOG_DISPATCH_FIXTURE="$fixture_root/dispatch.json"
 export ROOT="$consumer"
 
 log="$tmp/workflow.err"
-for step in inspect compile dispatch; do
+for step in inspect compile compatibility dispatch; do
   export DOCKPIPE_STEP_ID="$step"
   bash "$DOCKPIPE_SCRIPT_DIR/backlog-remote.sh" 2>>"$log"
 done
 
-for step in inspect compile dispatch; do
+for step in inspect compile compatibility dispatch; do
   grep -Fq "unit=backlog.$step status=start" "$log"
   grep -Fq "unit=backlog.$step status=done" "$log"
 done
-for name in backlog-selection.json remote-request.md remote-request.json remote-task.json; do
+grep -Fq "unit=backlog.compatibility status=done" "$log"
+grep -Fq "compatibility=unsupported" "$log"
+grep -Fq "reason=machine_readable_submission_receipt_not_documented" "$log"
+grep -Fq "live_submission=false" "$log"
+for name in backlog-selection.json remote-request.md remote-request.json remote-adapter-compatibility.json remote-task.json; do
   test -f "$artifact_root/$name"
 done
 grep -Fq '"status": "selected"' "$artifact_root/backlog-selection.json"
 grep -Fq '"contract_version": "dorkpipe.remote-request/v1"' "$artifact_root/remote-request.json"
 grep -Fq '"adapter_mode": "fixture_only"' "$artifact_root/remote-request.json"
 grep -Fq '"live_provider": false' "$artifact_root/remote-request.json"
+grep -Fq '"contract_version": "dorkpipe.remote-adapter-compatibility/v1"' "$artifact_root/remote-adapter-compatibility.json"
+grep -Fq '"version": "codex-cli 0.144.1"' "$artifact_root/remote-adapter-compatibility.json"
+grep -Fq '"status": "unsupported"' "$artifact_root/remote-adapter-compatibility.json"
+grep -Fq '"machine_readable_documented": false' "$artifact_root/remote-adapter-compatibility.json"
+grep -Fq '"stable_opaque_task_id_recoverable": false' "$artifact_root/remote-adapter-compatibility.json"
+grep -Fq '"live_submission_enabled": false' "$artifact_root/remote-adapter-compatibility.json"
 grep -Fq '"provider_invoked": false' "$artifact_root/remote-task.json"
 grep -Fq '"remote_task_id": "remote_fixture_task_015"' "$artifact_root/remote-task.json"
 test ! -e "$invocation_log"
@@ -86,13 +98,40 @@ MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-compile \
   "$consumer" "$second_root" "$DORKPIPE_BACKLOG_ENVIRONMENT_REF" "$DORKPIPE_BACKLOG_BRANCH_REF" \
   "$DORKPIPE_BACKLOG_ALLOWED_PATHS_JSON" "$DORKPIPE_BACKLOG_HARD_BOUNDARIES_JSON" \
   "$DORKPIPE_BACKLOG_REQUIRED_VALIDATION_JSON" "$DORKPIPE_BACKLOG_ROUTED_SOURCES_JSON"
+MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-compatibility-preflight "$second_root" "$compatibility_fixture"
+test ! -e "$second_root/remote-task.json"
 MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-dispatch-fixture "$second_root" "$DORKPIPE_BACKLOG_DISPATCH_FIXTURE"
-for name in backlog-selection.json remote-request.md remote-request.json remote-task.json; do
+for name in backlog-selection.json remote-request.md remote-request.json remote-adapter-compatibility.json remote-task.json; do
   if ! cmp "$artifact_root/$name" "$second_root/$name"; then
     diff -u "$artifact_root/$name" "$second_root/$name" >&2 || true
     exit 1
   fi
 done
+
+malformed_root="$tmp/malformed-compatibility"
+malformed_fixture="$tmp/malformed-fixture"
+mkdir -p "$malformed_fixture"
+printf '{}\n' >"$malformed_fixture/contract.json"
+MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-inspect \
+  "$consumer" docs/agents/task-index.yaml TASK-015 \
+  "$DORKPIPE_BACKLOG_SLICE" "$DORKPIPE_BACKLOG_BASELINE" "$malformed_root"
+MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-compile \
+  "$consumer" "$malformed_root" "$DORKPIPE_BACKLOG_ENVIRONMENT_REF" "$DORKPIPE_BACKLOG_BRANCH_REF" \
+  "$DORKPIPE_BACKLOG_ALLOWED_PATHS_JSON" "$DORKPIPE_BACKLOG_HARD_BOUNDARIES_JSON" \
+  "$DORKPIPE_BACKLOG_REQUIRED_VALIDATION_JSON" "$DORKPIPE_BACKLOG_ROUTED_SOURCES_JSON"
+export DORKPIPE_BACKLOG_ARTIFACT_ROOT="$malformed_root"
+export DORKPIPE_BACKLOG_COMPATIBILITY_FIXTURE="$malformed_fixture"
+export DOCKPIPE_STEP_ID="compatibility"
+if bash "$DOCKPIPE_SCRIPT_DIR/backlog-remote.sh" 2>"$tmp/malformed.err"; then
+  echo "malformed compatibility contract unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'unit=backlog.compatibility status=start' "$tmp/malformed.err"
+grep -Fq 'unit=backlog.compatibility status=fail' "$tmp/malformed.err"
+grep -Fq '"status": "error"' "$malformed_root/remote-adapter-compatibility.json"
+grep -Fq '"reason_code": "invalid_compatibility_fixture"' "$malformed_root/remote-adapter-compatibility.json"
+test ! -e "$malformed_root/remote-task.json"
+export DORKPIPE_BACKLOG_COMPATIBILITY_FIXTURE="$compatibility_fixture"
 
 rejected_root="$tmp/rejected"
 export DORKPIPE_BACKLOG_ARTIFACT_ROOT="$rejected_root"

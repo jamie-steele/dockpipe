@@ -21,12 +21,14 @@ import (
 )
 
 const (
-	backlogIndexPath         = "docs/agents/task-index.yaml"
-	backlogSelectionContract = "dorkpipe.backlog-selection/v1"
-	backlogRequestContract   = "dorkpipe.remote-request/v1"
-	backlogTaskContract      = "dorkpipe.remote-task/v1"
-	backlogFollowupContract  = "dorkpipe.remote-followup/v1"
-	backlogFixtureContract   = "dorkpipe.remote-dispatch-fixture/v1"
+	backlogIndexPath                    = "docs/agents/task-index.yaml"
+	backlogSelectionContract            = "dorkpipe.backlog-selection/v1"
+	backlogRequestContract              = "dorkpipe.remote-request/v1"
+	backlogTaskContract                 = "dorkpipe.remote-task/v1"
+	backlogFollowupContract             = "dorkpipe.remote-followup/v1"
+	backlogFixtureContract              = "dorkpipe.remote-dispatch-fixture/v1"
+	backlogCompatibilityFixtureContract = "dorkpipe.codex-cloud-cli-compatibility-fixture/v1"
+	backlogCompatibilityContract        = "dorkpipe.remote-adapter-compatibility/v1"
 )
 
 var (
@@ -55,6 +57,38 @@ type backlogDispatchFixture struct {
 	AdapterIdentity string `json:"adapter_identity"`
 	RemoteTaskID    string `json:"remote_task_id"`
 	SubmittedAt     string `json:"submitted_at"`
+}
+
+type backlogCompatibilityFixture struct {
+	ContractVersion   string                        `json:"contract_version"`
+	AdapterIdentity   string                        `json:"adapter_identity"`
+	CLI               backlogCompatibilityCLI       `json:"cli"`
+	InspectedCommands []backlogCompatibilityCommand `json:"inspected_commands"`
+	RecognizedInputs  []backlogCompatibilityInput   `json:"recognized_inputs"`
+	SubmissionReceipt backlogCompatibilityReceipt   `json:"submission_receipt"`
+	ExactGap          string                        `json:"exact_gap"`
+}
+
+type backlogCompatibilityCLI struct {
+	Reference string `json:"reference"`
+	Version   string `json:"version"`
+}
+
+type backlogCompatibilityCommand struct {
+	Argv    []string `json:"argv"`
+	Fixture string   `json:"fixture"`
+}
+
+type backlogCompatibilityInput struct {
+	Name     string `json:"name"`
+	Flag     string `json:"flag"`
+	Value    string `json:"value"`
+	Required bool   `json:"required"`
+}
+
+type backlogCompatibilityReceipt struct {
+	MachineReadableDocumented     bool `json:"machine_readable_documented"`
+	StableOpaqueTaskIDRecoverable bool `json:"stable_opaque_task_id_recoverable"`
 }
 
 type backlogRejection struct {
@@ -381,6 +415,161 @@ func renderBacklogRequestMarkdown(payload map[string]any) string {
 	}
 	lines = append(lines, "", "This request permits no live submission, status polling, diff retrieval, apply, commit, push, or publication in the fixture-only slice.", "")
 	return strings.Join(lines, "\n")
+}
+
+func preflightBacklogRemoteCompatibility(artifactRoot, fixtureRoot string) error {
+	request, _, err := loadAndVerifyBacklogRequest(artifactRoot)
+	if err != nil {
+		return err
+	}
+	compatibilityPath, err := backlogArtifactPath(artifactRoot, "remote-adapter-compatibility.json")
+	if err != nil {
+		return err
+	}
+	binding := map[string]any{
+		"request_fingerprint": stringValue(request["request_fingerprint"]),
+		"environment_ref":     stringValue(mapValue(request["target"])["environment_ref"]),
+		"branch_ref":          stringValue(mapValue(request["target"])["branch_ref"]),
+	}
+	fail := func(cause error) error {
+		payload := map[string]any{
+			"contract_version":          backlogCompatibilityContract,
+			"request_binding":           binding,
+			"enabled_dispatch_adapters": []any{},
+			"live_submission_enabled":   false,
+			"compatibility": map[string]any{
+				"status": "error", "reason_code": "invalid_compatibility_fixture", "reason": cause.Error(),
+			},
+		}
+		if writeErr := writeJSONFileAtomic(compatibilityPath, payload); writeErr != nil {
+			return fmt.Errorf("%w; writing compatibility failure artifact: %v", cause, writeErr)
+		}
+		return cause
+	}
+
+	fixture, fixtureRaw, outputs, err := loadBacklogCompatibilityFixture(fixtureRoot)
+	if err != nil {
+		return fail(err)
+	}
+	if fixture.SubmissionReceipt.MachineReadableDocumented || fixture.SubmissionReceipt.StableOpaqueTaskIDRecoverable {
+		return fail(errors.New("compatibility fixture claims a receipt contract that this fail-closed slice does not implement"))
+	}
+	commandArtifacts := make([]any, 0, len(fixture.InspectedCommands))
+	digestInput := append([]byte{}, fixtureRaw...)
+	for i, command := range fixture.InspectedCommands {
+		raw := outputs[i]
+		digestInput = append(digestInput, []byte("\n---"+command.Fixture+"---\n")...)
+		digestInput = append(digestInput, raw...)
+		commandArtifacts = append(commandArtifacts, map[string]any{
+			"argv": anyStrings(command.Argv), "fixture": command.Fixture, "sha256": sha256String(raw),
+		})
+	}
+	inputs := map[string]any{}
+	for _, input := range fixture.RecognizedInputs {
+		inputs[input.Name] = map[string]any{"flag": input.Flag, "value": input.Value, "required": input.Required}
+	}
+	payload := map[string]any{
+		"contract_version": backlogCompatibilityContract,
+		"adapter_identity": fixture.AdapterIdentity,
+		"inspected_cli": map[string]any{
+			"reference": fixture.CLI.Reference, "version": fixture.CLI.Version,
+			"fixture_contract": fixture.ContractVersion, "fixture_digest": sha256String(digestInput),
+		},
+		"required_command_surface": commandArtifacts,
+		"recognized_inputs":        inputs,
+		"submission_receipt": map[string]any{
+			"machine_readable_documented": false, "stable_opaque_task_id_recoverable": false,
+		},
+		"request_binding": binding,
+		"compatibility": map[string]any{
+			"status": "unsupported", "reason_code": "machine_readable_submission_receipt_not_documented", "reason": fixture.ExactGap,
+		},
+		"enabled_dispatch_adapters": []any{"fixture_only"},
+		"live_submission_enabled":   false,
+	}
+	return writeJSONFileAtomic(compatibilityPath, payload)
+}
+
+func loadBacklogCompatibilityFixture(root string) (*backlogCompatibilityFixture, []byte, [][]byte, error) {
+	if strings.TrimSpace(root) == "" {
+		return nil, nil, nil, errors.New("compatibility fixture root is required")
+	}
+	contractPath := filepath.Join(root, "contract.json")
+	contractRaw, err := os.ReadFile(contractPath)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("compatibility contract cannot be read: %w", err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(contractRaw))
+	decoder.DisallowUnknownFields()
+	fixture := &backlogCompatibilityFixture{}
+	if err := decoder.Decode(fixture); err != nil {
+		return nil, nil, nil, fmt.Errorf("compatibility contract is malformed: %w", err)
+	}
+	if err := ensureJSONEOF(decoder); err != nil {
+		return nil, nil, nil, fmt.Errorf("compatibility contract is malformed: %w", err)
+	}
+	if fixture.ContractVersion != backlogCompatibilityFixtureContract || fixture.AdapterIdentity != "codex-cloud-cli" || fixture.CLI.Reference != "codex" || strings.TrimSpace(fixture.CLI.Version) == "" {
+		return nil, nil, nil, errors.New("compatibility contract has an invalid contract, adapter identity, CLI reference, or version")
+	}
+	expectedCommands := []backlogCompatibilityCommand{
+		{Argv: []string{"codex", "--version"}, Fixture: "codex-version.txt"},
+		{Argv: []string{"codex", "cloud", "--help"}, Fixture: "codex-cloud-help.txt"},
+		{Argv: []string{"codex", "cloud", "exec", "--help"}, Fixture: "codex-cloud-exec-help.txt"},
+	}
+	if len(fixture.InspectedCommands) != len(expectedCommands) {
+		return nil, nil, nil, errors.New("compatibility contract must inspect exactly codex --version, codex cloud --help, and codex cloud exec --help")
+	}
+	outputs := make([][]byte, 0, len(expectedCommands))
+	for i, expected := range expectedCommands {
+		actual := fixture.InspectedCommands[i]
+		if !stringSlicesEqual(actual.Argv, expected.Argv) || actual.Fixture != expected.Fixture {
+			return nil, nil, nil, errors.New("compatibility contract command surface is not the required Codex Cloud inspection surface")
+		}
+		raw, err := os.ReadFile(filepath.Join(root, expected.Fixture))
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("compatibility help fixture %q cannot be read: %w", expected.Fixture, err)
+		}
+		outputs = append(outputs, raw)
+	}
+	if string(outputs[0]) != fixture.CLI.Version+"\n" {
+		return nil, nil, nil, errors.New("codex version fixture does not match the declared inspected CLI version")
+	}
+	cloudHelp := string(outputs[1])
+	execHelp := string(outputs[2])
+	if !strings.Contains(cloudHelp, "Usage: codex cloud [OPTIONS] [COMMAND]") || !strings.Contains(cloudHelp, "exec    Submit a new Codex Cloud task without launching the TUI") {
+		return nil, nil, nil, errors.New("codex cloud help fixture does not document the required exec command surface")
+	}
+	if !strings.Contains(execHelp, "Usage: codex cloud exec [OPTIONS] --env <ENV_ID> [QUERY]") || !strings.Contains(execHelp, "--env <ENV_ID>") || !strings.Contains(execHelp, "--branch <BRANCH>") {
+		return nil, nil, nil, errors.New("codex cloud exec help fixture does not document the required environment and branch inputs")
+	}
+	expectedInputs := []backlogCompatibilityInput{
+		{Name: "environment", Flag: "--env", Value: "ENV_ID", Required: true},
+		{Name: "branch", Flag: "--branch", Value: "BRANCH", Required: false},
+	}
+	if len(fixture.RecognizedInputs) != len(expectedInputs) {
+		return nil, nil, nil, errors.New("compatibility contract must recognize exactly the documented environment and branch inputs")
+	}
+	for i, expected := range expectedInputs {
+		if fixture.RecognizedInputs[i] != expected {
+			return nil, nil, nil, errors.New("compatibility contract environment or branch input does not match documented help")
+		}
+	}
+	if fixture.ExactGap == "" || fixture.ExactGap != strings.TrimSpace(fixture.ExactGap) || strings.ContainsAny(fixture.ExactGap, "\r\n") {
+		return nil, nil, nil, errors.New("compatibility contract requires one exact trimmed fail-closed gap")
+	}
+	return fixture, contractRaw, outputs, nil
+}
+
+func stringSlicesEqual(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func dispatchBacklogFixture(artifactRoot, fixturePath string) error {

@@ -26,6 +26,7 @@ vars:
   DORKPIPE_BACKLOG_HARD_BOUNDARIES_JSON: "[]"
   DORKPIPE_BACKLOG_REQUIRED_VALIDATION_JSON: "[]"
   DORKPIPE_BACKLOG_ROUTED_SOURCES_JSON: "[]"
+  DORKPIPE_BACKLOG_COMPATIBILITY_FIXTURE: ""
   DORKPIPE_BACKLOG_DISPATCH_FIXTURE: ""
 
 steps:
@@ -36,6 +37,12 @@ steps:
     run: scripts/dorkpipe/backlog-remote.sh
 
   - id: compile
+    kind: host
+    cwd: repo
+    scopes: { source: repo, artifacts: artifacts }
+    run: scripts/dorkpipe/backlog-remote.sh
+
+  - id: compatibility
     kind: host
     cwd: repo
     scopes: { source: repo, artifacts: artifacts }

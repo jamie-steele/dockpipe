@@ -334,6 +334,11 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("usage: orchestrate-helper backlog-compile <repo-root> <artifact-root> <environment-ref> <branch-ref> <allowed-paths-json> <hard-boundaries-json> <required-validation-json> <routed-sources-json>")
 		}
 		return compileBacklogRemoteRequest(args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8])
+	case "backlog-compatibility-preflight":
+		if len(args) != 3 {
+			return errors.New("usage: orchestrate-helper backlog-compatibility-preflight <artifact-root> <fixture-root>")
+		}
+		return preflightBacklogRemoteCompatibility(args[1], args[2])
 	case "backlog-dispatch-fixture":
 		if len(args) != 3 {
 			return errors.New("usage: orchestrate-helper backlog-dispatch-fixture <artifact-root> <fixture.json>")

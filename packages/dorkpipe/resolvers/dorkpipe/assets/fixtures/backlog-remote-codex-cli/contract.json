@@ -1,0 +1,41 @@
+{
+  "contract_version": "dorkpipe.codex-cloud-cli-compatibility-fixture/v1",
+  "adapter_identity": "codex-cloud-cli",
+  "cli": {
+    "reference": "codex",
+    "version": "codex-cli 0.144.1"
+  },
+  "inspected_commands": [
+    {
+      "argv": ["codex", "--version"],
+      "fixture": "codex-version.txt"
+    },
+    {
+      "argv": ["codex", "cloud", "--help"],
+      "fixture": "codex-cloud-help.txt"
+    },
+    {
+      "argv": ["codex", "cloud", "exec", "--help"],
+      "fixture": "codex-cloud-exec-help.txt"
+    }
+  ],
+  "recognized_inputs": [
+    {
+      "name": "environment",
+      "flag": "--env",
+      "value": "ENV_ID",
+      "required": true
+    },
+    {
+      "name": "branch",
+      "flag": "--branch",
+      "value": "BRANCH",
+      "required": false
+    }
+  ],
+  "submission_receipt": {
+    "machine_readable_documented": false,
+    "stable_opaque_task_id_recoverable": false
+  },
+  "exact_gap": "codex cloud exec --help for codex-cli 0.144.1 documents no machine-readable submission receipt and no stable opaque task-ID response contract."
+}

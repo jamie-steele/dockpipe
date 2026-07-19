@@ -14,6 +14,7 @@ step_id="${DOCKPIPE_STEP_ID:-}"
 unit="backlog.${step_id:-unknown}"
 started_ms="$(dorkpipe_orchestrate_now_ms)"
 helper_bin="$(dorkpipe_orchestrate_helper_bin)"
+completion_details=()
 
 backlog_remote_fail() {
   local rc=$?
@@ -51,6 +52,18 @@ case "$step_id" in
       "${DORKPIPE_BACKLOG_REQUIRED_VALIDATION_JSON:-[]}" \
       "${DORKPIPE_BACKLOG_ROUTED_SOURCES_JSON:-[]}"
     ;;
+  compatibility)
+    fixture_root="${DORKPIPE_BACKLOG_COMPATIBILITY_FIXTURE:-${DOCKPIPE_ASSETS_DIR}/fixtures/backlog-remote-codex-cli}"
+    if command -v cygpath >/dev/null 2>&1; then
+      fixture_root="$(cygpath -m "$fixture_root")"
+    fi
+    MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-compatibility-preflight "$artifact_root" "$fixture_root"
+    completion_details=(
+      "compatibility=unsupported"
+      "reason=machine_readable_submission_receipt_not_documented"
+      "live_submission=false"
+    )
+    ;;
   dispatch)
     fixture="${DORKPIPE_BACKLOG_DISPATCH_FIXTURE:-${DOCKPIPE_ASSETS_DIR}/fixtures/backlog-remote-dispatch.json}"
     if command -v cygpath >/dev/null 2>&1; then
@@ -65,4 +78,4 @@ case "$step_id" in
 esac
 
 duration_ms="$(dorkpipe_orchestrate_operation_duration_ms "$started_ms")"
-dorkpipe_orchestrate_operation_emit "$unit" done "$duration_ms" "artifact_root=$artifact_root" "adapter=fixture_only"
+dorkpipe_orchestrate_operation_emit "$unit" done "$duration_ms" "artifact_root=$artifact_root" "adapter=fixture_only" "${completion_details[@]}"

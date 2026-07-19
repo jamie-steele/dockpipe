@@ -1,9 +1,10 @@
 # backlog.remote
 
-`backlog.remote` is the offline first slice of TASK-015. It resolves exactly one explicit entry from
+`backlog.remote` is the offline TASK-015 path. It resolves exactly one explicit entry from
 `docs/agents/task-index.yaml`, validates its exact linked task document and a one-line bounded slice,
-compiles reviewable immutable request artifacts, and records fixture dispatch identity. It never
-invokes Codex Cloud, polls status, retrieves a diff, applies work, commits, pushes, or publishes.
+compiles reviewable immutable request artifacts, preflights the Codex Cloud CLI contract from narrow
+package-owned help fixtures, and records fixture dispatch identity. It never invokes Codex Cloud,
+polls status, retrieves a diff, applies work, commits, pushes, or publishes.
 
 Run it from the consumer repository root with every authority-bearing input explicit:
 
@@ -26,6 +27,10 @@ The workflow writes under the normal `backlog-remote` artifact scope:
   source digests. A rejected inspection writes the same contract with a deterministic rejection code.
 - `remote-request.json` and `remote-request.md` bind the explicit target, allowed paths, hard
   boundaries, validation, and exact source file digests under one request fingerprint.
+- `remote-adapter-compatibility.json` binds the inspected adapter/CLI contract to that request
+  fingerprint and the explicit environment/branch refs. It records required commands, documented
+  inputs, receipt/task-ID support, the compatibility status and exact fail-closed reason, enabled
+  adapter modes, and whether live submission is enabled.
 - `remote-task.json` records one opaque fixture task ID, that fingerprint, the target references,
   deterministic fixture time, and adapter identity with `provider_invoked: false`.
 
@@ -37,6 +42,11 @@ an optional `dispatch_state` (`blocked`, `external_active`, or `closed`) only to
 rejection. The canonical index is unchanged; a future `--next` selector remains out of scope until
 that metadata contract is decided.
 
-The installed Codex CLI currently documents `codex cloud exec --env <id> --branch <branch> [query]`,
-but its help does not expose a machine-readable submission receipt or stable task-ID response schema.
-The default adapter therefore remains fixture-only instead of parsing undocumented terminal text.
+The checked package fixture records the exact read-only inspection of `codex-cli 0.144.1` through
+`codex --version`, `codex cloud --help`, and `codex cloud exec --help`. The documented submit surface
+is `codex cloud exec --env <ENV_ID> [--branch <BRANCH>] [QUERY]`; it exposes no machine-readable
+submission receipt or stable opaque task-ID response contract. Compatibility is therefore
+`unsupported`, live submission remains disabled, and fixture dispatch remains the only enabled
+adapter. The preflight never parses submission terminal text, credentials, authentication state, or
+environment listings. A malformed compatibility contract fails before fixture dispatch and leaves
+no `remote-task.json`.
