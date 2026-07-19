@@ -344,6 +344,11 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("usage: orchestrate-helper backlog-dispatch-fixture <artifact-root> <fixture.json>")
 		}
 		return dispatchBacklogFixture(args[1], args[2])
+	case "backlog-ingest-completion-candidate":
+		if len(args) != 3 {
+			return errors.New("usage: orchestrate-helper backlog-ingest-completion-candidate <artifact-root> <fixture.json>")
+		}
+		return ingestBacklogCompletionCandidate(args[1], args[2])
 	case "backlog-followup":
 		if len(args) != 2 {
 			return errors.New("usage: orchestrate-helper backlog-followup <artifact-root>")

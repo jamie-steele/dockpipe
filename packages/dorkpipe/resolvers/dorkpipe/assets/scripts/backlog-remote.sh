@@ -71,6 +71,35 @@ case "$step_id" in
     fi
     MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-dispatch-fixture "$artifact_root" "$fixture"
     ;;
+  completion_candidate)
+    fixture="${DORKPIPE_BACKLOG_COMPLETION_FIXTURE:-}"
+    if [[ -z "$fixture" ]]; then
+      echo "DORKPIPE_BACKLOG_COMPLETION_FIXTURE is required for fixture-backed completion candidate ingestion" >&2
+      exit 1
+    fi
+    if command -v cygpath >/dev/null 2>&1; then
+      fixture="$(cygpath -m "$fixture")"
+    fi
+    trap - ERR
+    set +e
+    completion_error="$(MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-ingest-completion-candidate "$artifact_root" "$fixture" 2>&1)"
+    completion_rc=$?
+    set -e
+    trap backlog_remote_fail ERR
+    if (( completion_rc != 0 )); then
+      printf '%s\n' "$completion_error" >&2
+      completion_reason_code="${completion_error%%:*}"
+      dorkpipe_orchestrate_operation_fail "$unit" "$started_ms" "$completion_error" \
+        "artifact_root=$artifact_root" "reason_code=$completion_reason_code"
+      trap - ERR
+      exit "$completion_rc"
+    fi
+    completion_details=(
+      "authoritative_state=completion_candidate"
+      "ready_for_review=false"
+      "terminal_claim_trusted=false"
+    )
+    ;;
   *)
     echo "unsupported backlog.remote workflow step: ${step_id:-<empty>}" >&2
     exit 1

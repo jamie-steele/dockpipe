@@ -73,9 +73,10 @@ couple remote Cloud task lifecycle to that adapter.
 5. `backlog.apply` requests explicit approval, applies the reviewed remote diff locally, and then
    delegates checkpoint/publish to the runtime-owned Git lifecycle.
 
-The first vertical slice stops after `inspect`, `compile`, and fixture-backed `dispatch` metadata.
-It does not create a scheduler, auto-poll, auto-apply, auto-commit, auto-push, or cross-task
-orchestrator.
+The implemented vertical slice stops after `inspect`, `compile`, compatibility preflight,
+fixture-backed `dispatch`, and untrusted `completion_candidate` ingestion. It does not create a
+scheduler, auto-poll, retrieve status/diff/result evidence, validate remote work, advance to
+`ready_for_review`, auto-apply, auto-commit, auto-push, or create a cross-task orchestrator.
 
 ## Current Status (2026-07-19)
 
@@ -91,11 +92,17 @@ orchestration-helper commands:
   allowed paths, hard boundaries, required validation, and only `AGENTS.md`, the index, the linked
   task, and explicitly routed source files with digests.
 - `backlog.dispatch` is fixture-only. It writes `remote-task.json` with one opaque task ID, request
-  fingerprint, environment/branch refs, deterministic fixture time, and adapter identity. The
-  artifact records `provider_invoked: false` and no status, diff, result, apply, commit, push, or
-  publication capability.
-- Artifact-only follow-up validates and recovers the task identity from `remote-task.json`,
-  `remote-request.json`, and `remote-request.md`; it does not reread the checkout or prose state.
+  and compatibility fingerprints, environment/branch refs, deterministic fixture time, and adapter
+  identity. The artifact records `provider_invoked: false` and no status, diff, result, apply,
+  commit, push, or publication capability.
+- `backlog.completion_candidate` ingests one strict fixture with separate candidate and replay
+  identities, source adapter identity, remote task ID, request and dispatch fingerprints, explicit
+  environment/branch refs, canonical observation time, and exactly one untrusted `completed` claim.
+  Its reviewable `completion-candidate.json` has only `state: completion_candidate`, records the
+  terminal claim as untrusted, and leaves every retrieval, validation, review, apply, commit, push,
+  and publication transition false.
+- Artifact-only follow-up and candidate ingestion validate the immutable request, compatibility,
+  and dispatch artifacts; neither rereads the checkout or prose state.
 
 The package proof rejects absent, malformed, unknown, and ambiguous IDs; malformed index entries;
 missing, escaping, mismatched, or closed linked task paths; empty, whitespace-padded, multiline, or
@@ -126,15 +133,23 @@ documents neither a machine-readable submission receipt nor a safely recoverable
 ID, so compatibility is `unsupported`, live submission is disabled, and fixture dispatch remains
 the only enabled adapter.
 
-Temporary consumer proofs show repeated compatibility artifacts are byte-for-byte deterministic;
-the preflight itself leaves no `remote-task.json`; malformed contracts emit deterministic failure
-evidence and stop before dispatch; and the complete offline workflow invokes no Codex, Git, SSH,
-network, apply, commit, push, or publication surface. Existing selection, request, fixture dispatch,
-and artifact-only restart identity remain deterministic. The next bounded remote-task slice is a
-fixture-backed `completion_candidate` ingestion and stale/duplicate/mismatch rejection envelope that
-does not advance to `ready_for_review` and does not add live status/diff/result retrieval, apply, or
-publication. A live Codex Cloud adapter remains blocked until a future installed CLI documents a
-machine-readable receipt with a stable opaque task ID.
+Temporary consumer proofs show repeated compatibility and completion-candidate artifacts are
+byte-for-byte deterministic; the preflight itself leaves no `remote-task.json`; and malformed
+contracts emit deterministic operation-result failure evidence. Completion ingestion rejects an
+observation at or before dispatch as stale; rejects wrong task, request, dispatch, adapter,
+environment, or branch bindings; rejects duplicate candidate IDs and replayed replay IDs; and fails
+closed on malformed fixtures or tampered request, compatibility, or dispatch artifacts. Rejection
+writes no candidate, status, diff, result, validation, review, or apply artifact. A duplicate or
+replay after acceptance leaves both the accepted candidate and dispatch bytes unchanged.
+
+The complete offline workflow invokes no Codex, Git, SSH, network, status/diff/result retrieval,
+validation, apply, commit, push, or publication surface. Existing selection, request, compatibility,
+fixture dispatch, follow-up, and software.dev/Example Brain behavior remain deterministic. The next
+bounded remote-task slice is fixture-backed remote status evidence retrieval bound to the accepted
+candidate and immutable dispatch, still without diff/result retrieval, validation-receipt
+reconciliation, or any `ready_for_review`, apply, or publication transition. A live Codex Cloud
+adapter remains blocked until a future installed CLI documents a machine-readable receipt with a
+stable opaque task ID.
 
 ## Boundaries
 
@@ -160,10 +175,14 @@ machine-readable receipt with a stable opaque task ID.
 - `remote-adapter-compatibility.json`: inspected adapter/CLI contract, documented inputs and receipt
   capability, exact fail-closed reason, and immutable request/target binding.
 - `remote-task.json`: remote task ID, request fingerprint, environment/branch reference, and
-  submission timestamp.
+  submission timestamp, plus the compatibility and dispatch fingerprints.
+- `completion-candidate.json`: candidate/replay identity, immutable task/request/dispatch/adapter/
+  target binding, deterministic observation time, untrusted terminal claim, and only the
+  `completion_candidate` lifecycle state.
 - `remote-status.json`, `remote-diff.patch`, and `remote-result.json`: fetched remote evidence; no
   raw credentials or hidden provider transcript.
-- operation-result events for inspect, compile, dispatch, status, diff, apply, and failure.
+- operation-result events for inspect, compile, compatibility, dispatch, completion-candidate
+  ingestion/rejection, status, diff, apply, and failure.
 
 ## Acceptance Criteria
 
@@ -173,11 +192,12 @@ machine-readable receipt with a stable opaque task ID.
   ID, and never calls a live provider by default.
 - The compatibility fixture proves the exact documented CLI submission surface, fails closed when a
   machine-readable receipt or stable opaque task ID is absent, and cannot create a task identity.
-- Completion-candidate fixtures prove that stale, duplicated, mismatched, unvalidated, halted, or
-  unapproved signals cannot advance beyond `completion_candidate`; only reconciled evidence can
-  reach `ready_for_review`.
-- A restart can recover status solely from `remote-task.json`; it does not need a cron worker or
-  mutable prose status record.
+- Completion-candidate fixtures prove that stale, duplicated, replayed, mismatched, malformed, or
+  tampered signals cannot create or advance beyond `completion_candidate`. Reconciled evidence is
+  still required before a future slice can define `ready_for_review`.
+- A restart can recover identity solely from the immutable request, compatibility, and
+  `remote-task.json` artifacts; it does not need the consumer checkout, a cron worker, or a mutable
+  prose status record.
 - Remote apply is impossible without an explicit reviewed action. Checkpoint and publish remain
   separate runtime-owned requests.
 - The workflow is package-owned, uses standard artifact scopes, and introduces no engine or

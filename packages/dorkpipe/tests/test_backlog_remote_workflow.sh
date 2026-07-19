@@ -57,15 +57,16 @@ export DORKPIPE_BACKLOG_REQUIRED_VALIDATION_JSON='["go test ./packages/dorkpipe/
 export DORKPIPE_BACKLOG_ROUTED_SOURCES_JSON='["docs/agents/packages/package-authoring.md","docs/agents/workflows/yaml-workflows.md"]'
 export DORKPIPE_BACKLOG_COMPATIBILITY_FIXTURE="$compatibility_fixture"
 export DORKPIPE_BACKLOG_DISPATCH_FIXTURE="$fixture_root/dispatch.json"
+export DORKPIPE_BACKLOG_COMPLETION_FIXTURE="$fixture_root/completion-candidate.json"
 export ROOT="$consumer"
 
 log="$tmp/workflow.err"
-for step in inspect compile compatibility dispatch; do
+for step in inspect compile compatibility dispatch completion_candidate; do
   export DOCKPIPE_STEP_ID="$step"
   bash "$DOCKPIPE_SCRIPT_DIR/backlog-remote.sh" 2>>"$log"
 done
 
-for step in inspect compile compatibility dispatch; do
+for step in inspect compile compatibility dispatch completion_candidate; do
   grep -Fq "unit=backlog.$step status=start" "$log"
   grep -Fq "unit=backlog.$step status=done" "$log"
 done
@@ -73,7 +74,11 @@ grep -Fq "unit=backlog.compatibility status=done" "$log"
 grep -Fq "compatibility=unsupported" "$log"
 grep -Fq "reason=machine_readable_submission_receipt_not_documented" "$log"
 grep -Fq "live_submission=false" "$log"
-for name in backlog-selection.json remote-request.md remote-request.json remote-adapter-compatibility.json remote-task.json; do
+grep -Fq "unit=backlog.completion_candidate status=done" "$log"
+grep -Fq "authoritative_state=completion_candidate" "$log"
+grep -Fq "ready_for_review=false" "$log"
+grep -Fq "terminal_claim_trusted=false" "$log"
+for name in backlog-selection.json remote-request.md remote-request.json remote-adapter-compatibility.json remote-task.json completion-candidate.json; do
   test -f "$artifact_root/$name"
 done
 grep -Fq '"status": "selected"' "$artifact_root/backlog-selection.json"
@@ -88,6 +93,17 @@ grep -Fq '"stable_opaque_task_id_recoverable": false' "$artifact_root/remote-ada
 grep -Fq '"live_submission_enabled": false' "$artifact_root/remote-adapter-compatibility.json"
 grep -Fq '"provider_invoked": false' "$artifact_root/remote-task.json"
 grep -Fq '"remote_task_id": "remote_fixture_task_015"' "$artifact_root/remote-task.json"
+grep -Fq '"compatibility_fingerprint": "sha256:' "$artifact_root/remote-task.json"
+grep -Fq '"contract_version": "dorkpipe.remote-completion-candidate/v1"' "$artifact_root/completion-candidate.json"
+grep -Fq '"state": "completion_candidate"' "$artifact_root/completion-candidate.json"
+grep -Fq '"candidate_id": "completion_fixture_candidate_015"' "$artifact_root/completion-candidate.json"
+grep -Fq '"replay_identity": "completion_fixture_replay_015"' "$artifact_root/completion-candidate.json"
+grep -Fq '"terminal_claim_trusted": false' "$artifact_root/completion-candidate.json"
+grep -Fq '"ready_for_review": false' "$artifact_root/completion-candidate.json"
+if grep -Fq '"ready_for_review": true' "$artifact_root/completion-candidate.json"; then
+  echo "completion candidate unexpectedly enabled ready_for_review" >&2
+  exit 1
+fi
 test ! -e "$invocation_log"
 diff -r "$pristine" "$consumer"
 
@@ -107,6 +123,11 @@ for name in backlog-selection.json remote-request.md remote-request.json remote-
     exit 1
   fi
 done
+
+malformed_candidate_root="$tmp/malformed-candidate-artifacts"
+tampered_dispatch_root="$tmp/tampered-dispatch-artifacts"
+cp -R "$second_root" "$malformed_candidate_root"
+cp -R "$second_root" "$tampered_dispatch_root"
 
 malformed_root="$tmp/malformed-compatibility"
 malformed_fixture="$tmp/malformed-fixture"
@@ -133,6 +154,39 @@ grep -Fq '"reason_code": "invalid_compatibility_fixture"' "$malformed_root/remot
 test ! -e "$malformed_root/remote-task.json"
 export DORKPIPE_BACKLOG_COMPATIBILITY_FIXTURE="$compatibility_fixture"
 
+malformed_candidate_fixture="$tmp/malformed-completion-candidate.json"
+printf '{"unexpected":true}\n' >"$malformed_candidate_fixture"
+export DORKPIPE_BACKLOG_ARTIFACT_ROOT="$malformed_candidate_root"
+export DORKPIPE_BACKLOG_COMPLETION_FIXTURE="$malformed_candidate_fixture"
+export DOCKPIPE_STEP_ID="completion_candidate"
+if bash "$DOCKPIPE_SCRIPT_DIR/backlog-remote.sh" 2>"$tmp/malformed-candidate.err"; then
+  echo "malformed completion candidate unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'unit=backlog.completion_candidate status=start' "$tmp/malformed-candidate.err"
+grep -Fq 'unit=backlog.completion_candidate status=fail' "$tmp/malformed-candidate.err"
+if ! grep -Fq 'completion_candidate_fixture_malformed:' "$tmp/malformed-candidate.err"; then
+  cat "$tmp/malformed-candidate.err" >&2
+  exit 1
+fi
+grep -Fq 'reason_code=completion_candidate_fixture_malformed' "$tmp/malformed-candidate.err"
+grep -Fq 'reason_code=completion_candidate_fixture_malformed' "$tmp/malformed-candidate.err"
+test ! -e "$malformed_candidate_root/completion-candidate.json"
+
+sed -i 's/remote_fixture_task_015/remote_fixture_task_tampered/' "$tampered_dispatch_root/remote-task.json"
+export DORKPIPE_BACKLOG_ARTIFACT_ROOT="$tampered_dispatch_root"
+export DORKPIPE_BACKLOG_COMPLETION_FIXTURE="$fixture_root/completion-candidate.json"
+if bash "$DOCKPIPE_SCRIPT_DIR/backlog-remote.sh" 2>"$tmp/tampered-candidate.err"; then
+  echo "tampered immutable dispatch unexpectedly ingested a completion candidate" >&2
+  exit 1
+fi
+grep -Fq 'unit=backlog.completion_candidate status=start' "$tmp/tampered-candidate.err"
+grep -Fq 'unit=backlog.completion_candidate status=fail' "$tmp/tampered-candidate.err"
+grep -Fq 'completion_candidate_dispatch_invalid:' "$tmp/tampered-candidate.err"
+grep -Fq 'reason_code=completion_candidate_dispatch_invalid' "$tmp/tampered-candidate.err"
+grep -Fq 'reason_code=completion_candidate_dispatch_invalid' "$tmp/tampered-candidate.err"
+test ! -e "$tampered_dispatch_root/completion-candidate.json"
+
 rejected_root="$tmp/rejected"
 export DORKPIPE_BACKLOG_ARTIFACT_ROOT="$rejected_root"
 export DORKPIPE_BACKLOG_TASK_ID="TASK-999"
@@ -154,6 +208,25 @@ export DORKPIPE_BACKLOG_ARTIFACT_ROOT="$artifact_root"
 MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-followup "$artifact_root" >"$tmp/followup.json"
 grep -Fq '"contract_version": "dorkpipe.remote-followup/v1"' "$tmp/followup.json"
 grep -Fq '"remote_task_id": "remote_fixture_task_015"' "$tmp/followup.json"
+
+MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-ingest-completion-candidate "$second_root" "$fixture_root/completion-candidate.json"
+cmp "$artifact_root/completion-candidate.json" "$second_root/completion-candidate.json"
+
+cp "$artifact_root/completion-candidate.json" "$tmp/accepted-completion-candidate.json"
+cp "$artifact_root/remote-task.json" "$tmp/accepted-remote-task.json"
+export DORKPIPE_BACKLOG_COMPLETION_FIXTURE="$fixture_root/completion-candidate.json"
+export DOCKPIPE_STEP_ID="completion_candidate"
+if bash "$DOCKPIPE_SCRIPT_DIR/backlog-remote.sh" 2>"$tmp/duplicate-candidate.err"; then
+  echo "duplicate completion candidate unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'unit=backlog.completion_candidate status=start' "$tmp/duplicate-candidate.err"
+grep -Fq 'unit=backlog.completion_candidate status=fail' "$tmp/duplicate-candidate.err"
+grep -Fq 'completion_candidate_duplicate:' "$tmp/duplicate-candidate.err"
+grep -Fq 'reason_code=completion_candidate_duplicate' "$tmp/duplicate-candidate.err"
+grep -Fq 'reason_code=completion_candidate_duplicate' "$tmp/duplicate-candidate.err"
+cmp "$tmp/accepted-completion-candidate.json" "$artifact_root/completion-candidate.json"
+cmp "$tmp/accepted-remote-task.json" "$artifact_root/remote-task.json"
 test ! -e "$invocation_log"
 
 if find "$artifact_root" -mindepth 1 \( -iname '*status*' -o -iname '*diff*' -o -iname '*result*' -o -iname '*apply*' -o -iname '*commit*' -o -iname '*push*' -o -iname '*publish*' \) -print -quit | grep -q .; then
