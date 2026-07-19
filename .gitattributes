@@ -1,3 +1,5 @@
 # Shell scripts must stay LF for bash (source) on Windows Git Bash.
 *.sh text eol=lf
 packages/pipeon/resolvers/pipeon/bin/pipeon text eol=lf
+# The checksum fixture is over exact patch bytes on every platform.
+packages/dorkpipe/tests/fixtures/backlog.remote/remote-diff.patch text eol=lf

@@ -10,6 +10,8 @@ import (
 
 const backlogTestBaseline = "0123456789abcdef0123456789abcdef01234567"
 
+const backlogTestPatch = "diff --git a/packages/dorkpipe/README.md b/packages/dorkpipe/README.md\nindex 1111111..2222222 100644\n--- a/packages/dorkpipe/README.md\n+++ b/packages/dorkpipe/README.md\n@@ -1 +1,2 @@\n # Fixture package\n+Untrusted remote fixture change.\n"
+
 func TestBacklogRemoteArtifactsAreDeterministicAndRestartSafe(t *testing.T) {
 	repo := writeBacklogTestRepo(t)
 	compatibilityFixture := writeBacklogCompatibilityFixture(t)
@@ -72,7 +74,24 @@ func TestBacklogRemoteArtifactsAreDeterministicAndRestartSafe(t *testing.T) {
 	if err := retrieveBacklogRemoteStatusFixture(second, secondStatus); err != nil {
 		t.Fatalf("second clean remote status retrieval failed: %v", err)
 	}
-	for _, name := range []string{"backlog-selection.json", "remote-request.json", "remote-request.md", "remote-adapter-compatibility.json", "remote-task.json", "completion-candidate.json", "remote-status.json"} {
+	immutableBeforeDiff := map[string][]byte{}
+	for _, name := range []string{"remote-request.json", "remote-request.md", "remote-adapter-compatibility.json", "remote-task.json", "completion-candidate.json", "remote-status.json"} {
+		immutableBeforeDiff[name] = mustReadFile(t, filepath.Join(first, name))
+	}
+	firstDiff := writeBacklogDiffFixture(t, first, "diff_fixture_observation_015", "diff_fixture_replay_015", "2026-07-19T00:03:00Z", backlogTestPatch)
+	secondDiff := writeBacklogDiffFixture(t, second, "diff_fixture_observation_015", "diff_fixture_replay_015", "2026-07-19T00:03:00Z", backlogTestPatch)
+	if err := retrieveBacklogRemoteDiffFixture(first, firstDiff); err != nil {
+		t.Fatalf("artifact-only remote diff retrieval failed: %v", err)
+	}
+	if err := retrieveBacklogRemoteDiffFixture(second, secondDiff); err != nil {
+		t.Fatalf("second clean remote diff retrieval failed: %v", err)
+	}
+	for name, before := range immutableBeforeDiff {
+		if string(mustReadFile(t, filepath.Join(first, name))) != string(before) {
+			t.Fatalf("remote diff retrieval changed immutable artifact %s", name)
+		}
+	}
+	for _, name := range []string{"backlog-selection.json", "remote-request.json", "remote-request.md", "remote-adapter-compatibility.json", "remote-task.json", "completion-candidate.json", "remote-status.json", "remote-diff.json", "remote-diff.patch"} {
 		firstRaw := mustReadFile(t, filepath.Join(first, name))
 		secondRaw := mustReadFile(t, filepath.Join(second, name))
 		if string(firstRaw) != string(secondRaw) {
@@ -118,6 +137,16 @@ func TestBacklogRemoteArtifactsAreDeterministicAndRestartSafe(t *testing.T) {
 	for name, value := range mapValue(status["lifecycle"]) {
 		if backlogTestBool(value) {
 			t.Fatalf("remote status unexpectedly enables %s", name)
+		}
+	}
+	diffMetadata := readJSONMap(filepath.Join(first, "remote-diff.json"))
+	patch := mapValue(diffMetadata["patch"])
+	if stringValue(diffMetadata["state"]) != "completion_candidate" || !backlogTestBool(patch["opaque"]) || backlogTestBool(patch["trusted"]) || string(mustReadFile(t, filepath.Join(first, "remote-diff.patch"))) != backlogTestPatch {
+		t.Fatalf("unexpected remote diff metadata or patch: %#v", diffMetadata)
+	}
+	for name, value := range mapValue(diffMetadata["lifecycle"]) {
+		if backlogTestBool(value) {
+			t.Fatalf("remote diff unexpectedly enables %s", name)
 		}
 	}
 	followup, err := loadBacklogFollowup(first)
@@ -458,6 +487,136 @@ func TestBacklogRemoteStatusRejectsStaleMismatchedMalformedAndTamperedEvidence(t
 	}
 }
 
+func TestBacklogRemoteDiffRejectsDuplicateAndReplayWithoutMutation(t *testing.T) {
+	root := prepareBacklogDiffTest(t)
+	acceptedFixture := writeBacklogDiffFixture(t, root, "diff_fixture_observation_015", "diff_fixture_replay_015", "2026-07-19T00:03:00Z", backlogTestPatch)
+	if err := retrieveBacklogRemoteDiffFixture(root, acceptedFixture); err != nil {
+		t.Fatal(err)
+	}
+	accepted := map[string][]byte{}
+	for _, name := range []string{"remote-diff.json", "remote-diff.patch", "remote-status.json", "completion-candidate.json", "remote-task.json"} {
+		accepted[name] = mustReadFile(t, filepath.Join(root, name))
+	}
+	if err := retrieveBacklogRemoteDiffFixture(root, acceptedFixture); err == nil || !strings.HasPrefix(err.Error(), "remote_diff_duplicate:") {
+		t.Fatalf("duplicate error = %v", err)
+	}
+	replayFixture := writeBacklogDiffFixture(t, root, "diff_fixture_observation_016", "diff_fixture_replay_015", "2026-07-19T00:04:00Z", backlogTestPatch)
+	if err := retrieveBacklogRemoteDiffFixture(root, replayFixture); err == nil || !strings.HasPrefix(err.Error(), "remote_diff_replay:") {
+		t.Fatalf("replay error = %v", err)
+	}
+	for name, before := range accepted {
+		if string(mustReadFile(t, filepath.Join(root, name))) != string(before) {
+			t.Fatalf("duplicate or replay rejection changed %s", name)
+		}
+	}
+}
+
+func TestBacklogRemoteDiffRejectsStaleMismatchedMalformedMissingAndTamperedEvidence(t *testing.T) {
+	tests := []struct {
+		name     string
+		wantCode string
+		mutate   func(t *testing.T, root, fixturePath string)
+	}{
+		{name: "stale at status time", wantCode: "remote_diff_stale", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["observed_at"] = "2026-07-19T00:02:00Z" })
+		}},
+		{name: "wrong status observation", wantCode: "remote_diff_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) {
+				payload["remote_status_observation_id"] = "status_fixture_observation_wrong"
+			})
+		}},
+		{name: "wrong status fingerprint", wantCode: "remote_diff_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) {
+				payload["remote_status_fingerprint"] = "sha256:" + strings.Repeat("0", 64)
+			})
+		}},
+		{name: "wrong candidate", wantCode: "remote_diff_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) {
+				payload["completion_candidate_id"] = "completion_fixture_candidate_wrong"
+			})
+		}},
+		{name: "wrong candidate fingerprint", wantCode: "remote_diff_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) {
+				payload["completion_candidate_fingerprint"] = "sha256:" + strings.Repeat("1", 64)
+			})
+		}},
+		{name: "wrong remote task", wantCode: "remote_diff_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["remote_task_id"] = "remote_fixture_task_wrong" })
+		}},
+		{name: "wrong request", wantCode: "remote_diff_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["request_fingerprint"] = "sha256:" + strings.Repeat("2", 64) })
+		}},
+		{name: "wrong dispatch", wantCode: "remote_diff_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["dispatch_fingerprint"] = "sha256:" + strings.Repeat("3", 64) })
+		}},
+		{name: "wrong adapter", wantCode: "remote_diff_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["adapter_identity"] = "codex-cloud-fixture-wrong" })
+		}},
+		{name: "wrong environment", wantCode: "remote_diff_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["environment_ref"] = "wrong-environment" })
+		}},
+		{name: "wrong branch", wantCode: "remote_diff_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["branch_ref"] = "wrong/branch" })
+		}},
+		{name: "malformed fixture", wantCode: "remote_diff_fixture_malformed", mutate: func(t *testing.T, _, fixturePath string) {
+			writeBacklogTestFile(t, fixturePath, "{\"unexpected\":true}\n")
+		}},
+		{name: "missing fixture", wantCode: "remote_diff_fixture_missing", mutate: func(t *testing.T, _, fixturePath string) {
+			if err := os.Remove(fixturePath); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "missing patch", wantCode: "remote_diff_patch_missing", mutate: func(t *testing.T, _, fixturePath string) {
+			if err := os.Remove(filepath.Join(filepath.Dir(fixturePath), "remote-diff.patch")); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{name: "tampered patch bytes", wantCode: "remote_diff_patch_tampered", mutate: func(t *testing.T, _, fixturePath string) {
+			writeBacklogTestFile(t, filepath.Join(filepath.Dir(fixturePath), "remote-diff.patch"), backlogTestPatch+"tampered\n")
+		}},
+		{name: "tampered request", wantCode: "remote_diff_request_invalid", mutate: func(t *testing.T, root, _ string) {
+			mutateBacklogJSONFile(t, filepath.Join(root, "remote-request.json"), func(payload map[string]any) { payload["request_fingerprint"] = "sha256:" + strings.Repeat("4", 64) })
+		}},
+		{name: "tampered compatibility", wantCode: "remote_diff_compatibility_invalid", mutate: func(t *testing.T, root, _ string) {
+			mutateBacklogJSONFile(t, filepath.Join(root, "remote-adapter-compatibility.json"), func(payload map[string]any) { payload["adapter_identity"] = "tampered-adapter" })
+		}},
+		{name: "tampered dispatch", wantCode: "remote_diff_dispatch_invalid", mutate: func(t *testing.T, root, _ string) {
+			mutateBacklogJSONFile(t, filepath.Join(root, "remote-task.json"), func(payload map[string]any) { payload["remote_task_id"] = "remote_fixture_task_tampered" })
+		}},
+		{name: "tampered candidate", wantCode: "remote_diff_candidate_invalid", mutate: func(t *testing.T, root, _ string) {
+			mutateBacklogJSONFile(t, filepath.Join(root, "completion-candidate.json"), func(payload map[string]any) { payload["state"] = "ready_for_review" })
+		}},
+		{name: "tampered status", wantCode: "remote_diff_status_invalid", mutate: func(t *testing.T, root, _ string) {
+			mutateBacklogJSONFile(t, filepath.Join(root, "remote-status.json"), func(payload map[string]any) { mapValue(payload["lifecycle"])["ready_for_review"] = true })
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := prepareBacklogDiffTest(t)
+			fixturePath := writeBacklogDiffFixture(t, root, "diff_fixture_observation_015", "diff_fixture_replay_015", "2026-07-19T00:03:00Z", backlogTestPatch)
+			test.mutate(t, root, fixturePath)
+			before := map[string][]byte{}
+			for _, name := range []string{"remote-status.json", "completion-candidate.json", "remote-task.json"} {
+				before[name] = mustReadFile(t, filepath.Join(root, name))
+			}
+			err := retrieveBacklogRemoteDiffFixture(root, fixturePath)
+			if err == nil || !strings.HasPrefix(err.Error(), test.wantCode+":") {
+				t.Fatalf("error = %v, want code %s", err, test.wantCode)
+			}
+			for _, name := range []string{"remote-diff.json", "remote-diff.patch", "ready-for-review.json", "remote-result.json", "validation-receipt.json", "apply.json"} {
+				if _, statErr := os.Stat(filepath.Join(root, name)); !os.IsNotExist(statErr) {
+					t.Fatalf("rejected diff observation left forbidden artifact %s: %v", name, statErr)
+				}
+			}
+			for name, content := range before {
+				if string(mustReadFile(t, filepath.Join(root, name))) != string(content) {
+					t.Fatalf("rejected diff observation changed %s", name)
+				}
+			}
+		})
+	}
+}
+
 func prepareBacklogCompletionTest(t *testing.T) string {
 	t.Helper()
 	repo := writeBacklogTestRepo(t)
@@ -489,6 +648,16 @@ func prepareBacklogStatusTest(t *testing.T) string {
 	root := prepareBacklogCompletionTest(t)
 	fixture := writeBacklogCompletionFixture(t, root, "completion_fixture_candidate_015", "completion_fixture_replay_015", "2026-07-19T00:01:00Z")
 	if err := ingestBacklogCompletionCandidate(root, fixture); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func prepareBacklogDiffTest(t *testing.T) string {
+	t.Helper()
+	root := prepareBacklogStatusTest(t)
+	fixture := writeBacklogStatusFixture(t, root, "status_fixture_observation_015", "status_fixture_replay_015", "2026-07-19T00:02:00Z")
+	if err := retrieveBacklogRemoteStatusFixture(root, fixture); err != nil {
 		t.Fatal(err)
 	}
 	return root
@@ -539,6 +708,41 @@ func writeBacklogStatusFixture(t *testing.T, root, observationID, replayIdentity
 	}
 	path := filepath.Join(t.TempDir(), "remote-status.json")
 	writeBacklogTestFile(t, path, string(raw)+"\n")
+	return path
+}
+
+func writeBacklogDiffFixture(t *testing.T, root, observationID, replayIdentity, observedAt, patch string) string {
+	t.Helper()
+	task := readJSONMap(filepath.Join(root, "remote-task.json"))
+	target := mapValue(task["target"])
+	adapter := mapValue(task["adapter"])
+	candidate := readJSONMap(filepath.Join(root, "completion-candidate.json"))
+	candidateFingerprint, err := backlogJSONFingerprint(candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	status := readJSONMap(filepath.Join(root, "remote-status.json"))
+	statusFingerprint, err := backlogJSONFingerprint(status)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := backlogDiffFixture{
+		ContractVersion: backlogDiffFixtureContract, ObservationID: observationID, ReplayIdentity: replayIdentity,
+		RemoteStatusObservationID: stringValue(mapValue(status["identity"])["observation_id"]), RemoteStatusFingerprint: statusFingerprint,
+		CompletionCandidateID: stringValue(mapValue(candidate["identity"])["candidate_id"]), CompletionCandidateFingerprint: candidateFingerprint,
+		AdapterIdentity: stringValue(adapter["identity"]), RemoteTaskID: stringValue(task["remote_task_id"]),
+		RequestFingerprint: stringValue(task["request_fingerprint"]), DispatchFingerprint: stringValue(task["dispatch_fingerprint"]),
+		EnvironmentRef: stringValue(target["environment_ref"]), BranchRef: stringValue(target["branch_ref"]),
+		ObservedAt: observedAt, PatchFile: "remote-diff.patch", PatchSHA256: sha256String([]byte(patch)),
+	}
+	raw, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootPath := t.TempDir()
+	path := filepath.Join(rootPath, "remote-diff.json")
+	writeBacklogTestFile(t, path, string(raw)+"\n")
+	writeBacklogTestFile(t, filepath.Join(rootPath, "remote-diff.patch"), patch)
 	return path
 }
 

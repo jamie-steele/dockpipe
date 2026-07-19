@@ -33,6 +33,8 @@ const (
 	backlogCompletionCandidateContract  = "dorkpipe.remote-completion-candidate/v1"
 	backlogStatusFixtureContract        = "dorkpipe.remote-status-observation-fixture/v1"
 	backlogStatusContract               = "dorkpipe.remote-status/v1"
+	backlogDiffFixtureContract          = "dorkpipe.remote-diff-observation-fixture/v1"
+	backlogDiffContract                 = "dorkpipe.remote-diff/v1"
 )
 
 var (
@@ -124,6 +126,25 @@ type backlogStatusFixture struct {
 	BranchRef                      string `json:"branch_ref"`
 	ObservedAt                     string `json:"observed_at"`
 	ClaimedRemoteStatus            string `json:"claimed_remote_status"`
+}
+
+type backlogDiffFixture struct {
+	ContractVersion                string `json:"contract_version"`
+	ObservationID                  string `json:"observation_id"`
+	ReplayIdentity                 string `json:"replay_identity"`
+	RemoteStatusObservationID      string `json:"remote_status_observation_id"`
+	RemoteStatusFingerprint        string `json:"remote_status_fingerprint"`
+	CompletionCandidateID          string `json:"completion_candidate_id"`
+	CompletionCandidateFingerprint string `json:"completion_candidate_fingerprint"`
+	AdapterIdentity                string `json:"adapter_identity"`
+	RemoteTaskID                   string `json:"remote_task_id"`
+	RequestFingerprint             string `json:"request_fingerprint"`
+	DispatchFingerprint            string `json:"dispatch_fingerprint"`
+	EnvironmentRef                 string `json:"environment_ref"`
+	BranchRef                      string `json:"branch_ref"`
+	ObservedAt                     string `json:"observed_at"`
+	PatchFile                      string `json:"patch_file"`
+	PatchSHA256                    string `json:"patch_sha256"`
 }
 
 type backlogRejection struct {
@@ -1009,6 +1030,362 @@ func retrieveBacklogRemoteStatusFixture(artifactRoot, fixturePath string) error 
 		},
 	}
 	return writeJSONFileAtomic(statusPath, payload)
+}
+
+func retrieveBacklogRemoteDiffFixture(artifactRoot, fixturePath string) error {
+	request, _, err := loadAndVerifyBacklogRequest(artifactRoot)
+	if err != nil {
+		return rejectBacklog("remote_diff_request_invalid", "%v", err)
+	}
+	_, compatibilityFingerprint, err := loadAndVerifyBacklogCompatibility(artifactRoot, request)
+	if err != nil {
+		return rejectBacklog("remote_diff_compatibility_invalid", "%v", err)
+	}
+	task, err := loadAndVerifyBacklogDispatch(artifactRoot, request, compatibilityFingerprint)
+	if err != nil {
+		return rejectBacklog("remote_diff_dispatch_invalid", "%v", err)
+	}
+	candidate, candidateFingerprint, err := loadAndVerifyBacklogCompletionCandidate(artifactRoot, task)
+	if err != nil {
+		return rejectBacklog("remote_diff_candidate_invalid", "%v", err)
+	}
+	status, statusFingerprint, err := loadAndVerifyBacklogRemoteStatus(artifactRoot, task, candidate, candidateFingerprint)
+	if err != nil {
+		return rejectBacklog("remote_diff_status_invalid", "%v", err)
+	}
+
+	fixtureRaw, err := os.ReadFile(fixturePath)
+	if err != nil {
+		return rejectBacklog("remote_diff_fixture_missing", "remote diff fixture cannot be read: %v", err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(fixtureRaw))
+	decoder.DisallowUnknownFields()
+	fixture := backlogDiffFixture{}
+	if err := decoder.Decode(&fixture); err != nil {
+		return rejectBacklog("remote_diff_fixture_malformed", "remote diff fixture is malformed: %v", err)
+	}
+	if err := ensureJSONEOF(decoder); err != nil {
+		return rejectBacklog("remote_diff_fixture_malformed", "remote diff fixture is malformed: %v", err)
+	}
+	if fixture.ContractVersion != backlogDiffFixtureContract ||
+		!backlogOpaqueID.MatchString(fixture.ObservationID) ||
+		!backlogOpaqueID.MatchString(fixture.ReplayIdentity) ||
+		fixture.ObservationID == fixture.ReplayIdentity ||
+		!backlogOpaqueID.MatchString(fixture.RemoteStatusObservationID) ||
+		!backlogFingerprint.MatchString(fixture.RemoteStatusFingerprint) ||
+		!backlogOpaqueID.MatchString(fixture.CompletionCandidateID) ||
+		!backlogFingerprint.MatchString(fixture.CompletionCandidateFingerprint) ||
+		!backlogOpaqueID.MatchString(fixture.AdapterIdentity) ||
+		!backlogOpaqueID.MatchString(fixture.RemoteTaskID) ||
+		!backlogFingerprint.MatchString(fixture.RequestFingerprint) ||
+		!backlogFingerprint.MatchString(fixture.DispatchFingerprint) ||
+		fixture.PatchFile != "remote-diff.patch" ||
+		!backlogFingerprint.MatchString(fixture.PatchSHA256) {
+		return rejectBacklog("remote_diff_identity_invalid", "remote diff contract, identity, or patch fields are invalid")
+	}
+	if err := validateBacklogReference("environment", fixture.EnvironmentRef); err != nil {
+		return rejectBacklog("remote_diff_identity_invalid", "%v", err)
+	}
+	if err := validateBacklogReference("branch", fixture.BranchRef); err != nil {
+		return rejectBacklog("remote_diff_identity_invalid", "%v", err)
+	}
+
+	statusIdentity := mapValue(status["identity"])
+	candidateIdentity := mapValue(candidate["identity"])
+	target := mapValue(task["target"])
+	adapter := mapValue(task["adapter"])
+	if fixture.RemoteStatusObservationID != stringValue(statusIdentity["observation_id"]) ||
+		fixture.RemoteStatusFingerprint != statusFingerprint ||
+		fixture.CompletionCandidateID != stringValue(candidateIdentity["candidate_id"]) ||
+		fixture.CompletionCandidateFingerprint != candidateFingerprint ||
+		fixture.RemoteTaskID != stringValue(task["remote_task_id"]) ||
+		fixture.RequestFingerprint != stringValue(task["request_fingerprint"]) ||
+		fixture.DispatchFingerprint != stringValue(task["dispatch_fingerprint"]) ||
+		fixture.AdapterIdentity != stringValue(adapter["identity"]) ||
+		fixture.EnvironmentRef != stringValue(target["environment_ref"]) ||
+		fixture.BranchRef != stringValue(target["branch_ref"]) {
+		return rejectBacklog("remote_diff_binding_mismatch", "remote diff observation does not match the accepted status, candidate, task, request, dispatch, adapter, environment, and branch identity")
+	}
+	observedAt, err := time.Parse(time.RFC3339, fixture.ObservedAt)
+	if err != nil || observedAt.Format(time.RFC3339) != fixture.ObservedAt {
+		return rejectBacklog("remote_diff_observation_invalid", "remote diff observed_at must be canonical RFC3339")
+	}
+	submittedAt, _ := time.Parse(time.RFC3339, stringValue(task["submitted_at"]))
+	candidateObservedAt, _ := time.Parse(time.RFC3339, stringValue(candidate["observed_at"]))
+	statusObservedAt, _ := time.Parse(time.RFC3339, stringValue(status["observed_at"]))
+	if !observedAt.After(submittedAt) || !observedAt.After(candidateObservedAt) || !observedAt.After(statusObservedAt) {
+		return rejectBacklog("remote_diff_stale", "remote diff observed_at must be later than dispatch, completion-candidate, and remote-status observation times")
+	}
+
+	patchPath := filepath.Join(filepath.Dir(fixturePath), fixture.PatchFile)
+	patchRaw, err := os.ReadFile(patchPath)
+	if err != nil {
+		return rejectBacklog("remote_diff_patch_missing", "remote diff patch fixture cannot be read: %v", err)
+	}
+	patchFingerprint := sha256String(patchRaw)
+	if patchFingerprint != fixture.PatchSHA256 {
+		return rejectBacklog("remote_diff_patch_tampered", "remote diff patch bytes do not match the declared SHA-256")
+	}
+
+	diffPath, err := backlogArtifactPath(artifactRoot, "remote-diff.json")
+	if err != nil {
+		return err
+	}
+	acceptedPatchPath, err := backlogArtifactPath(artifactRoot, "remote-diff.patch")
+	if err != nil {
+		return err
+	}
+	if _, diffErr := os.Stat(diffPath); diffErr == nil {
+		existing, readErr := loadAndVerifyBacklogRemoteDiff(artifactRoot, task, candidate, candidateFingerprint, status, statusFingerprint)
+		if readErr != nil {
+			return rejectBacklog("remote_diff_artifact_invalid", "%v", readErr)
+		}
+		identity := mapValue(existing["identity"])
+		switch {
+		case stringValue(identity["observation_id"]) == fixture.ObservationID:
+			return rejectBacklog("remote_diff_duplicate", "diff observation identity %q was already ingested", fixture.ObservationID)
+		case stringValue(identity["replay_identity"]) == fixture.ReplayIdentity:
+			return rejectBacklog("remote_diff_replay", "diff replay identity %q was already ingested", fixture.ReplayIdentity)
+		default:
+			return rejectBacklog("remote_diff_already_recorded", "one remote diff observation is already recorded for the accepted status observation")
+		}
+	} else if !os.IsNotExist(diffErr) {
+		return err
+	} else if _, patchErr := os.Lstat(acceptedPatchPath); patchErr == nil {
+		return rejectBacklog("remote_diff_artifact_invalid", "remote-diff.patch exists without accepted metadata")
+	} else if !os.IsNotExist(patchErr) {
+		return patchErr
+	}
+
+	payload := map[string]any{
+		"contract_version": backlogDiffContract,
+		"state":            "completion_candidate",
+		"identity": map[string]any{
+			"observation_id": fixture.ObservationID, "replay_identity": fixture.ReplayIdentity,
+		},
+		"remote_status": map[string]any{
+			"observation_id":  stringValue(statusIdentity["observation_id"]),
+			"replay_identity": stringValue(statusIdentity["replay_identity"]),
+			"fingerprint":     statusFingerprint,
+		},
+		"completion_candidate": map[string]any{
+			"candidate_id":    stringValue(candidateIdentity["candidate_id"]),
+			"replay_identity": stringValue(candidateIdentity["replay_identity"]),
+			"fingerprint":     candidateFingerprint,
+		},
+		"binding": map[string]any{
+			"remote_task_id": fixture.RemoteTaskID, "request_fingerprint": fixture.RequestFingerprint,
+			"dispatch_fingerprint": fixture.DispatchFingerprint, "adapter_identity": fixture.AdapterIdentity,
+			"environment_ref": fixture.EnvironmentRef, "branch_ref": fixture.BranchRef,
+		},
+		"observed_at": fixture.ObservedAt,
+		"patch": map[string]any{
+			"artifact": "remote-diff.patch", "sha256": patchFingerprint, "bytes": len(patchRaw),
+			"opaque": true, "trusted": false,
+		},
+		"source": map[string]any{
+			"mode": "fixture", "provider_invoked": false, "package_owned_metadata": true,
+		},
+		"lifecycle": map[string]any{
+			"ready_for_review": false, "result_retrieval": false, "semantic_diff_verification": false,
+			"allowed_path_verification": false, "validation": false, "apply": false, "commit": false,
+			"push": false, "publication": false,
+		},
+	}
+	return writeBacklogDiffArtifactsAtomic(diffPath, payload, acceptedPatchPath, patchRaw)
+}
+
+func loadAndVerifyBacklogRemoteStatus(artifactRoot string, task, candidate map[string]any, candidateFingerprint string) (map[string]any, string, error) {
+	statusPath, err := backlogArtifactPath(artifactRoot, "remote-status.json")
+	if err != nil {
+		return nil, "", err
+	}
+	status, err := readStrictJSONMap(statusPath)
+	if err != nil {
+		return nil, "", fmt.Errorf("remote status cannot be loaded: %w", err)
+	}
+	identity := mapValue(status["identity"])
+	candidateIdentity := mapValue(candidate["identity"])
+	target := mapValue(task["target"])
+	adapter := mapValue(task["adapter"])
+	if !backlogOpaqueID.MatchString(stringValue(identity["observation_id"])) ||
+		!backlogOpaqueID.MatchString(stringValue(identity["replay_identity"])) ||
+		stringValue(identity["observation_id"]) == stringValue(identity["replay_identity"]) {
+		return nil, "", errors.New("remote status identity is malformed")
+	}
+	observedAt, err := time.Parse(time.RFC3339, stringValue(status["observed_at"]))
+	if err != nil || observedAt.Format(time.RFC3339) != stringValue(status["observed_at"]) {
+		return nil, "", errors.New("remote status observed_at is not canonical RFC3339")
+	}
+	submittedAt, _ := time.Parse(time.RFC3339, stringValue(task["submitted_at"]))
+	candidateObservedAt, _ := time.Parse(time.RFC3339, stringValue(candidate["observed_at"]))
+	if !observedAt.After(submittedAt) || !observedAt.After(candidateObservedAt) {
+		return nil, "", errors.New("remote status is stale relative to immutable dispatch or completion candidate")
+	}
+	expected := map[string]any{
+		"contract_version": backlogStatusContract,
+		"state":            "completion_candidate",
+		"identity": map[string]any{
+			"observation_id": stringValue(identity["observation_id"]), "replay_identity": stringValue(identity["replay_identity"]),
+		},
+		"completion_candidate": map[string]any{
+			"candidate_id":    stringValue(candidateIdentity["candidate_id"]),
+			"replay_identity": stringValue(candidateIdentity["replay_identity"]),
+			"fingerprint":     candidateFingerprint,
+		},
+		"binding": map[string]any{
+			"remote_task_id": stringValue(task["remote_task_id"]), "request_fingerprint": stringValue(task["request_fingerprint"]),
+			"dispatch_fingerprint": stringValue(task["dispatch_fingerprint"]), "adapter_identity": stringValue(adapter["identity"]),
+			"environment_ref": stringValue(target["environment_ref"]), "branch_ref": stringValue(target["branch_ref"]),
+		},
+		"observed_at": stringValue(status["observed_at"]),
+		"evidence": map[string]any{
+			"claimed_remote_status": "completed", "mode": "fixture", "provider_invoked": false,
+			"trusted": false, "authoritative": false,
+		},
+		"lifecycle": map[string]any{
+			"ready_for_review": false, "diff_retrieval": false, "result_retrieval": false,
+			"validation": false, "apply": false, "commit": false, "push": false, "publication": false,
+		},
+	}
+	if !jsonMapsEqual(status, expected) {
+		return nil, "", errors.New("remote status is malformed, tampered, or does not match accepted candidate and immutable dispatch identity")
+	}
+	fingerprint, err := backlogJSONFingerprint(status)
+	if err != nil {
+		return nil, "", err
+	}
+	return status, fingerprint, nil
+}
+
+func loadAndVerifyBacklogRemoteDiff(artifactRoot string, task, candidate map[string]any, candidateFingerprint string, status map[string]any, statusFingerprint string) (map[string]any, error) {
+	diffPath, err := backlogArtifactPath(artifactRoot, "remote-diff.json")
+	if err != nil {
+		return nil, err
+	}
+	diff, err := readStrictJSONMap(diffPath)
+	if err != nil {
+		return nil, fmt.Errorf("remote diff metadata cannot be loaded: %w", err)
+	}
+	identity := mapValue(diff["identity"])
+	if !backlogOpaqueID.MatchString(stringValue(identity["observation_id"])) ||
+		!backlogOpaqueID.MatchString(stringValue(identity["replay_identity"])) ||
+		stringValue(identity["observation_id"]) == stringValue(identity["replay_identity"]) {
+		return nil, errors.New("remote diff identity is malformed")
+	}
+	patchPath, err := backlogArtifactPath(artifactRoot, "remote-diff.patch")
+	if err != nil {
+		return nil, err
+	}
+	patchRaw, err := os.ReadFile(patchPath)
+	if err != nil {
+		return nil, fmt.Errorf("remote diff patch cannot be loaded: %w", err)
+	}
+	statusIdentity := mapValue(status["identity"])
+	candidateIdentity := mapValue(candidate["identity"])
+	target := mapValue(task["target"])
+	adapter := mapValue(task["adapter"])
+	expected := map[string]any{
+		"contract_version": backlogDiffContract,
+		"state":            "completion_candidate",
+		"identity": map[string]any{
+			"observation_id": stringValue(identity["observation_id"]), "replay_identity": stringValue(identity["replay_identity"]),
+		},
+		"remote_status": map[string]any{
+			"observation_id":  stringValue(statusIdentity["observation_id"]),
+			"replay_identity": stringValue(statusIdentity["replay_identity"]),
+			"fingerprint":     statusFingerprint,
+		},
+		"completion_candidate": map[string]any{
+			"candidate_id":    stringValue(candidateIdentity["candidate_id"]),
+			"replay_identity": stringValue(candidateIdentity["replay_identity"]),
+			"fingerprint":     candidateFingerprint,
+		},
+		"binding": map[string]any{
+			"remote_task_id": stringValue(task["remote_task_id"]), "request_fingerprint": stringValue(task["request_fingerprint"]),
+			"dispatch_fingerprint": stringValue(task["dispatch_fingerprint"]), "adapter_identity": stringValue(adapter["identity"]),
+			"environment_ref": stringValue(target["environment_ref"]), "branch_ref": stringValue(target["branch_ref"]),
+		},
+		"observed_at": stringValue(diff["observed_at"]),
+		"patch": map[string]any{
+			"artifact": "remote-diff.patch", "sha256": sha256String(patchRaw), "bytes": len(patchRaw),
+			"opaque": true, "trusted": false,
+		},
+		"source": map[string]any{
+			"mode": "fixture", "provider_invoked": false, "package_owned_metadata": true,
+		},
+		"lifecycle": map[string]any{
+			"ready_for_review": false, "result_retrieval": false, "semantic_diff_verification": false,
+			"allowed_path_verification": false, "validation": false, "apply": false, "commit": false,
+			"push": false, "publication": false,
+		},
+	}
+	observedAt, timeErr := time.Parse(time.RFC3339, stringValue(diff["observed_at"]))
+	statusObservedAt, _ := time.Parse(time.RFC3339, stringValue(status["observed_at"]))
+	if timeErr != nil || observedAt.Format(time.RFC3339) != stringValue(diff["observed_at"]) || !observedAt.After(statusObservedAt) {
+		return nil, errors.New("remote diff observation time is invalid or stale")
+	}
+	if !jsonMapsEqual(diff, expected) {
+		return nil, errors.New("remote diff metadata or patch is malformed, tampered, or does not match the immutable artifact chain")
+	}
+	return diff, nil
+}
+
+func writeBacklogDiffArtifactsAtomic(diffPath string, metadata map[string]any, patchPath string, patchRaw []byte) error {
+	if err := os.MkdirAll(filepath.Dir(diffPath), 0o755); err != nil {
+		return err
+	}
+	for _, path := range []string{diffPath, patchPath} {
+		if info, err := os.Lstat(path); err == nil {
+			if info.Mode()&os.ModeSymlink != 0 {
+				return fmt.Errorf("atomic diff target cannot be a symlink: %s", path)
+			}
+			return fmt.Errorf("atomic diff target already exists: %s", path)
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+	}
+	metadataRaw, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return err
+	}
+	writeTemporary := func(pattern string, content []byte) (string, error) {
+		temporary, createErr := os.CreateTemp(filepath.Dir(diffPath), pattern)
+		if createErr != nil {
+			return "", createErr
+		}
+		temporaryPath := temporary.Name()
+		_, writeErr := temporary.Write(content)
+		if writeErr == nil {
+			writeErr = temporary.Sync()
+		}
+		if closeErr := temporary.Close(); writeErr == nil {
+			writeErr = closeErr
+		}
+		if writeErr == nil {
+			return temporaryPath, nil
+		}
+		_ = os.Remove(temporaryPath)
+		return "", writeErr
+	}
+	temporaryPatch, err := writeTemporary(".remote-diff-*.patch", patchRaw)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(temporaryPatch)
+	temporaryMetadata, err := writeTemporary(".remote-diff-*.json", append(metadataRaw, '\n'))
+	if err != nil {
+		return err
+	}
+	defer os.Remove(temporaryMetadata)
+	if err := os.Rename(temporaryPatch, patchPath); err != nil {
+		return err
+	}
+	if err := os.Rename(temporaryMetadata, diffPath); err != nil {
+		_ = os.Remove(patchPath)
+		return err
+	}
+	return nil
 }
 
 func loadAndVerifyBacklogCompletionCandidate(artifactRoot string, task map[string]any) (map[string]any, string, error) {

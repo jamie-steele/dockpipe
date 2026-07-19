@@ -354,6 +354,11 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("usage: orchestrate-helper backlog-retrieve-status-fixture <artifact-root> <fixture.json>")
 		}
 		return retrieveBacklogRemoteStatusFixture(args[1], args[2])
+	case "backlog-retrieve-diff-fixture":
+		if len(args) != 3 {
+			return errors.New("usage: orchestrate-helper backlog-retrieve-diff-fixture <artifact-root> <fixture.json>")
+		}
+		return retrieveBacklogRemoteDiffFixture(args[1], args[2])
 	case "backlog-followup":
 		if len(args) != 2 {
 			return errors.New("usage: orchestrate-helper backlog-followup <artifact-root>")

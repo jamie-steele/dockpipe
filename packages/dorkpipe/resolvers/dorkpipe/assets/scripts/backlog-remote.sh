@@ -131,6 +131,38 @@ case "$step_id" in
       "status_evidence_authoritative=false"
     )
     ;;
+  diff)
+    fixture="${DORKPIPE_BACKLOG_DIFF_FIXTURE:-}"
+    if [[ -z "$fixture" ]]; then
+      echo "DORKPIPE_BACKLOG_DIFF_FIXTURE is required for fixture-backed remote diff retrieval" >&2
+      exit 1
+    fi
+    if command -v cygpath >/dev/null 2>&1; then
+      fixture="$(cygpath -m "$fixture")"
+    fi
+    trap - ERR
+    set +e
+    diff_error="$(MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-retrieve-diff-fixture "$artifact_root" "$fixture" 2>&1)"
+    diff_rc=$?
+    set -e
+    trap backlog_remote_fail ERR
+    if (( diff_rc != 0 )); then
+      printf '%s\n' "$diff_error" >&2
+      diff_reason_code="${diff_error%%:*}"
+      dorkpipe_orchestrate_operation_fail "$unit" "$started_ms" "$diff_error" \
+        "artifact_root=$artifact_root" "reason_code=$diff_reason_code"
+      trap - ERR
+      exit "$diff_rc"
+    fi
+    completion_details=(
+      "artifact=remote-diff.json"
+      "patch_artifact=remote-diff.patch"
+      "authoritative_state=completion_candidate"
+      "ready_for_review=false"
+      "diff_evidence_trusted=false"
+      "patch_treated_as_opaque=true"
+    )
+    ;;
   *)
     echo "unsupported backlog.remote workflow step: ${step_id:-<empty>}" >&2
     exit 1
