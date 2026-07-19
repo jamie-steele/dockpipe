@@ -74,9 +74,10 @@ couple remote Cloud task lifecycle to that adapter.
    delegates checkpoint/publish to the runtime-owned Git lifecycle.
 
 The implemented vertical slice stops after `inspect`, `compile`, compatibility preflight,
-fixture-backed `dispatch`, and untrusted `completion_candidate` ingestion. It does not create a
-scheduler, auto-poll, retrieve status/diff/result evidence, validate remote work, advance to
-`ready_for_review`, auto-apply, auto-commit, auto-push, or create a cross-task orchestrator.
+fixture-backed `dispatch`, untrusted `completion_candidate` ingestion, and one fixture-backed remote
+status observation. It does not create a scheduler, live-poll, retrieve diff/result evidence,
+validate remote work, advance to `ready_for_review`, auto-apply, auto-commit, auto-push, or create a
+cross-task orchestrator.
 
 ## Current Status (2026-07-19)
 
@@ -103,14 +104,23 @@ orchestration-helper commands:
   and publication transition false.
 - Artifact-only follow-up and candidate ingestion validate the immutable request, compatibility,
   and dispatch artifacts; neither rereads the checkout or prose state.
+- `backlog.status` ingests one strict fixture with separate observation and replay identities bound
+  to the accepted candidate identity and full candidate fingerprint plus the immutable task,
+  request, dispatch, adapter, environment, and branch identity. The canonical observation time must
+  be later than both dispatch and candidate observation times. `remote-status.json` records only
+  untrusted, non-authoritative fixture status evidence, remains at `state: completion_candidate`, and
+  leaves `ready_for_review`, diff/result retrieval, validation, apply, commit, push, and publication
+  false.
+- Artifact-only status retrieval revalidates the immutable request, compatibility, dispatch, and
+  complete accepted candidate artifact; it does not reread the checkout or backlog prose.
 
 The package proof rejects absent, malformed, unknown, and ambiguous IDs; malformed index entries;
 missing, escaping, mismatched, or closed linked task paths; empty, whitespace-padded, multiline, or
 otherwise malformed bounded slices; invalid baselines; and explicitly blocked or externally active
 fixture entries. Rejected inspection writes a deterministic rejection code but no request or
 dispatch artifact. Temporary consumer copies prove repeated-run determinism, no consumer mutation,
-no live provider invocation, no Git/SSH/network tool invocation, and no status/diff/result retrieval,
-apply, commit, push, or publication.
+no live provider invocation, no Git/SSH/network tool invocation, and no live status polling,
+diff/result retrieval, apply, commit, push, or publication.
 
 The canonical index remains unchanged and open-only. Package-owned fixtures use an optional
 `dispatch_state` solely to represent `blocked`, `external_active`, and `closed` deterministically.
@@ -142,14 +152,25 @@ closed on malformed fixtures or tampered request, compatibility, or dispatch art
 writes no candidate, status, diff, result, validation, review, or apply artifact. A duplicate or
 replay after acceptance leaves both the accepted candidate and dispatch bytes unchanged.
 
-The complete offline workflow invokes no Codex, Git, SSH, network, status/diff/result retrieval,
-validation, apply, commit, push, or publication surface. Existing selection, request, compatibility,
-fixture dispatch, follow-up, and software.dev/Example Brain behavior remain deterministic. The next
-bounded remote-task slice is fixture-backed remote status evidence retrieval bound to the accepted
-candidate and immutable dispatch, still without diff/result retrieval, validation-receipt
-reconciliation, or any `ready_for_review`, apply, or publication transition. A live Codex Cloud
-adapter remains blocked until a future installed CLI documents a machine-readable receipt with a
-stable opaque task ID.
+Remote-status proofs show byte-for-byte deterministic output across clean runs and artifact-only
+restart after the consumer checkout is removed. Status ingestion rejects observations at or before
+the accepted candidate time; wrong candidate, task, request, dispatch, adapter, environment, or
+branch bindings; duplicate observation IDs; replayed replay IDs; malformed fixtures; untrusted
+claims other than the one fixture `completed` status; and tampered request, compatibility, dispatch,
+or candidate artifacts. Every rejection writes no status, review, diff, result, validation, or apply
+artifact and leaves the accepted candidate and dispatch bytes unchanged. Operation-result evidence
+records success and deterministic stale, duplicate, replay, mismatch, malformed, and tampered
+rejection reason codes.
+
+The complete offline workflow invokes no Codex, Git, SSH, network, live status polling, diff/result
+retrieval, validation, apply, commit, push, or publication surface. Existing selection, request,
+compatibility, fixture dispatch, follow-up, and completion-candidate artifacts remain byte-for-byte
+deterministic, and software.dev/Example Brain behavior is preserved. The next bounded remote-task
+slice is fixture-backed remote diff evidence retrieval bound to the accepted candidate and status
+observation, still without result retrieval, validation-receipt reconciliation, diff verification,
+or any `ready_for_review`, apply, or publication transition. A live Codex Cloud adapter remains
+blocked until a future installed CLI documents a machine-readable receipt with a stable opaque task
+ID.
 
 ## Boundaries
 
@@ -179,8 +200,11 @@ stable opaque task ID.
 - `completion-candidate.json`: candidate/replay identity, immutable task/request/dispatch/adapter/
   target binding, deterministic observation time, untrusted terminal claim, and only the
   `completion_candidate` lifecycle state.
-- `remote-status.json`, `remote-diff.patch`, and `remote-result.json`: fetched remote evidence; no
-  raw credentials or hidden provider transcript.
+- `remote-status.json`: status observation/replay identity, full accepted candidate fingerprint,
+  immutable task/request/dispatch/adapter/target binding, deterministic later observation time, and
+  only untrusted fixture status evidence at the `completion_candidate` lifecycle state.
+- `remote-diff.patch` and `remote-result.json`: future fetched remote evidence; no raw credentials or
+  hidden provider transcript.
 - operation-result events for inspect, compile, compatibility, dispatch, completion-candidate
   ingestion/rejection, status, diff, apply, and failure.
 
@@ -188,13 +212,17 @@ stable opaque task ID.
 
 - A fixture task index plus linked task document deterministically compiles one explicit bounded
   request and rejects closed, unknown, malformed, ambiguous, active-external, and blocked entries.
-- The adapter fixture proves submission/status/diff/result parsing, records one opaque remote task
-  ID, and never calls a live provider by default.
+- The adapter fixtures prove dispatch, completion-candidate, and status-observation parsing, record
+  one opaque remote task ID, and never call a live provider by default. Diff/result parsing remains
+  future work.
 - The compatibility fixture proves the exact documented CLI submission surface, fails closed when a
   machine-readable receipt or stable opaque task ID is absent, and cannot create a task identity.
 - Completion-candidate fixtures prove that stale, duplicated, replayed, mismatched, malformed, or
   tampered signals cannot create or advance beyond `completion_candidate`. Reconciled evidence is
   still required before a future slice can define `ready_for_review`.
+- Remote-status fixtures prove that stale, duplicated, replayed, mismatched, malformed, or tampered
+  observations cannot create an artifact or advance beyond `completion_candidate`; accepted status
+  evidence remains explicitly untrusted and cannot authorize diff/result retrieval or review.
 - A restart can recover identity solely from the immutable request, compatibility, and
   `remote-task.json` artifacts; it does not need the consumer checkout, a cron worker, or a mutable
   prose status record.

@@ -1,0 +1,15 @@
+{
+  "contract_version": "dorkpipe.remote-status-observation-fixture/v1",
+  "observation_id": "status_fixture_observation_015",
+  "replay_identity": "status_fixture_replay_015",
+  "completion_candidate_id": "completion_fixture_candidate_015",
+  "completion_candidate_fingerprint": "sha256:62a5fc73cbf512c2ccb7e4f284f916a08fc3757927fc85bab69866a1a743cce7",
+  "adapter_identity": "codex-cloud-fixture-v1",
+  "remote_task_id": "remote_fixture_task_015",
+  "request_fingerprint": "sha256:9c837213017e55623e8a52215ca0f3a54d89c5ad65ccb3edec80daf662d8ae63",
+  "dispatch_fingerprint": "sha256:54c5ba85197067c1b650e0ad9e0d9209138de604ac88971e2ee3a4cb23c55b7b",
+  "environment_ref": "fixture-environment",
+  "branch_ref": "js/dev",
+  "observed_at": "2026-07-19T00:02:00Z",
+  "claimed_remote_status": "completed"
+}

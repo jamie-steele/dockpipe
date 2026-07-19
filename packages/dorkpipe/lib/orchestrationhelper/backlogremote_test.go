@@ -64,7 +64,15 @@ func TestBacklogRemoteArtifactsAreDeterministicAndRestartSafe(t *testing.T) {
 	if err := ingestBacklogCompletionCandidate(second, secondCandidate); err != nil {
 		t.Fatalf("second clean completion candidate ingestion failed: %v", err)
 	}
-	for _, name := range []string{"backlog-selection.json", "remote-request.json", "remote-request.md", "remote-adapter-compatibility.json", "remote-task.json", "completion-candidate.json"} {
+	firstStatus := writeBacklogStatusFixture(t, first, "status_fixture_observation_015", "status_fixture_replay_015", "2026-07-19T00:02:00Z")
+	secondStatus := writeBacklogStatusFixture(t, second, "status_fixture_observation_015", "status_fixture_replay_015", "2026-07-19T00:02:00Z")
+	if err := retrieveBacklogRemoteStatusFixture(first, firstStatus); err != nil {
+		t.Fatalf("artifact-only remote status retrieval failed: %v", err)
+	}
+	if err := retrieveBacklogRemoteStatusFixture(second, secondStatus); err != nil {
+		t.Fatalf("second clean remote status retrieval failed: %v", err)
+	}
+	for _, name := range []string{"backlog-selection.json", "remote-request.json", "remote-request.md", "remote-adapter-compatibility.json", "remote-task.json", "completion-candidate.json", "remote-status.json"} {
 		firstRaw := mustReadFile(t, filepath.Join(first, name))
 		secondRaw := mustReadFile(t, filepath.Join(second, name))
 		if string(firstRaw) != string(secondRaw) {
@@ -97,6 +105,19 @@ func TestBacklogRemoteArtifactsAreDeterministicAndRestartSafe(t *testing.T) {
 	for name, value := range mapValue(candidate["lifecycle"]) {
 		if backlogTestBool(value) {
 			t.Fatalf("completion candidate unexpectedly enables %s", name)
+		}
+	}
+	status := readJSONMap(filepath.Join(first, "remote-status.json"))
+	statusEvidence := mapValue(status["evidence"])
+	if stringValue(status["state"]) != "completion_candidate" || backlogTestBool(statusEvidence["trusted"]) || backlogTestBool(statusEvidence["authoritative"]) || backlogTestBool(statusEvidence["provider_invoked"]) {
+		t.Fatalf("unexpected remote status state, trust, authority, or provider claim: %#v", status)
+	}
+	if stringValue(statusEvidence["claimed_remote_status"]) != "completed" {
+		t.Fatalf("unexpected fixture status evidence: %#v", statusEvidence)
+	}
+	for name, value := range mapValue(status["lifecycle"]) {
+		if backlogTestBool(value) {
+			t.Fatalf("remote status unexpectedly enables %s", name)
 		}
 	}
 	followup, err := loadBacklogFollowup(first)
@@ -320,6 +341,123 @@ func TestBacklogCompletionCandidateRejectsStaleMismatchedMalformedAndTamperedEvi
 	}
 }
 
+func TestBacklogRemoteStatusRejectsDuplicateAndReplayWithoutMutation(t *testing.T) {
+	root := prepareBacklogStatusTest(t)
+	acceptedFixture := writeBacklogStatusFixture(t, root, "status_fixture_observation_015", "status_fixture_replay_015", "2026-07-19T00:02:00Z")
+	if err := retrieveBacklogRemoteStatusFixture(root, acceptedFixture); err != nil {
+		t.Fatal(err)
+	}
+	statusPath := filepath.Join(root, "remote-status.json")
+	acceptedStatus := mustReadFile(t, statusPath)
+	acceptedCandidate := mustReadFile(t, filepath.Join(root, "completion-candidate.json"))
+	acceptedDispatch := mustReadFile(t, filepath.Join(root, "remote-task.json"))
+
+	if err := retrieveBacklogRemoteStatusFixture(root, acceptedFixture); err == nil || !strings.HasPrefix(err.Error(), "remote_status_duplicate:") {
+		t.Fatalf("duplicate error = %v", err)
+	}
+	replayFixture := writeBacklogStatusFixture(t, root, "status_fixture_observation_016", "status_fixture_replay_015", "2026-07-19T00:03:00Z")
+	if err := retrieveBacklogRemoteStatusFixture(root, replayFixture); err == nil || !strings.HasPrefix(err.Error(), "remote_status_replay:") {
+		t.Fatalf("replay error = %v", err)
+	}
+	if string(mustReadFile(t, statusPath)) != string(acceptedStatus) {
+		t.Fatal("duplicate or replay rejection changed the accepted remote status")
+	}
+	if string(mustReadFile(t, filepath.Join(root, "completion-candidate.json"))) != string(acceptedCandidate) {
+		t.Fatal("duplicate or replay rejection changed the accepted completion candidate")
+	}
+	if string(mustReadFile(t, filepath.Join(root, "remote-task.json"))) != string(acceptedDispatch) {
+		t.Fatal("duplicate or replay rejection changed the accepted dispatch identity")
+	}
+}
+
+func TestBacklogRemoteStatusRejectsStaleMismatchedMalformedAndTamperedEvidence(t *testing.T) {
+	tests := []struct {
+		name     string
+		wantCode string
+		mutate   func(t *testing.T, root, fixturePath string)
+	}{
+		{name: "stale at candidate time", wantCode: "remote_status_stale", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["observed_at"] = "2026-07-19T00:01:00Z" })
+		}},
+		{name: "wrong candidate", wantCode: "remote_status_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) {
+				payload["completion_candidate_id"] = "completion_fixture_candidate_wrong"
+			})
+		}},
+		{name: "wrong candidate fingerprint", wantCode: "remote_status_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) {
+				payload["completion_candidate_fingerprint"] = "sha256:" + strings.Repeat("0", 64)
+			})
+		}},
+		{name: "wrong remote task", wantCode: "remote_status_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["remote_task_id"] = "remote_fixture_task_wrong" })
+		}},
+		{name: "wrong request", wantCode: "remote_status_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["request_fingerprint"] = "sha256:" + strings.Repeat("1", 64) })
+		}},
+		{name: "wrong dispatch", wantCode: "remote_status_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["dispatch_fingerprint"] = "sha256:" + strings.Repeat("2", 64) })
+		}},
+		{name: "wrong adapter", wantCode: "remote_status_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["adapter_identity"] = "codex-cloud-fixture-wrong" })
+		}},
+		{name: "wrong environment", wantCode: "remote_status_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["environment_ref"] = "wrong-environment" })
+		}},
+		{name: "wrong branch", wantCode: "remote_status_binding_mismatch", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["branch_ref"] = "wrong/branch" })
+		}},
+		{name: "tampered status claim", wantCode: "remote_status_claim_invalid", mutate: func(t *testing.T, _, fixturePath string) {
+			mutateBacklogJSONFile(t, fixturePath, func(payload map[string]any) { payload["claimed_remote_status"] = "ready_for_review" })
+		}},
+		{name: "malformed fixture", wantCode: "remote_status_fixture_malformed", mutate: func(t *testing.T, _, fixturePath string) {
+			writeBacklogTestFile(t, fixturePath, "{\"unexpected\":true}\n")
+		}},
+		{name: "tampered request", wantCode: "remote_status_request_invalid", mutate: func(t *testing.T, root, _ string) {
+			mutateBacklogJSONFile(t, filepath.Join(root, "remote-request.json"), func(payload map[string]any) { payload["request_fingerprint"] = "sha256:" + strings.Repeat("3", 64) })
+		}},
+		{name: "tampered compatibility", wantCode: "remote_status_compatibility_invalid", mutate: func(t *testing.T, root, _ string) {
+			mutateBacklogJSONFile(t, filepath.Join(root, "remote-adapter-compatibility.json"), func(payload map[string]any) { payload["adapter_identity"] = "tampered-adapter" })
+		}},
+		{name: "tampered dispatch", wantCode: "remote_status_dispatch_invalid", mutate: func(t *testing.T, root, _ string) {
+			mutateBacklogJSONFile(t, filepath.Join(root, "remote-task.json"), func(payload map[string]any) { payload["remote_task_id"] = "remote_fixture_task_tampered" })
+		}},
+		{name: "tampered candidate state", wantCode: "remote_status_candidate_invalid", mutate: func(t *testing.T, root, _ string) {
+			mutateBacklogJSONFile(t, filepath.Join(root, "completion-candidate.json"), func(payload map[string]any) { payload["state"] = "ready_for_review" })
+		}},
+		{name: "tampered candidate lifecycle", wantCode: "remote_status_candidate_invalid", mutate: func(t *testing.T, root, _ string) {
+			mutateBacklogJSONFile(t, filepath.Join(root, "completion-candidate.json"), func(payload map[string]any) { mapValue(payload["lifecycle"])["ready_for_review"] = true })
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			root := prepareBacklogStatusTest(t)
+			fixturePath := writeBacklogStatusFixture(t, root, "status_fixture_observation_015", "status_fixture_replay_015", "2026-07-19T00:02:00Z")
+			test.mutate(t, root, fixturePath)
+			candidateBefore := mustReadFile(t, filepath.Join(root, "completion-candidate.json"))
+			dispatchBefore := mustReadFile(t, filepath.Join(root, "remote-task.json"))
+			err := retrieveBacklogRemoteStatusFixture(root, fixturePath)
+			if err == nil || !strings.HasPrefix(err.Error(), test.wantCode+":") {
+				t.Fatalf("error = %v, want code %s", err, test.wantCode)
+			}
+			if _, statErr := os.Stat(filepath.Join(root, "remote-status.json")); !os.IsNotExist(statErr) {
+				t.Fatalf("rejected status observation left remote-status.json: %v", statErr)
+			}
+			if string(mustReadFile(t, filepath.Join(root, "completion-candidate.json"))) != string(candidateBefore) {
+				t.Fatal("rejected status observation changed the accepted completion candidate")
+			}
+			if string(mustReadFile(t, filepath.Join(root, "remote-task.json"))) != string(dispatchBefore) {
+				t.Fatal("rejected status observation changed the dispatch artifact")
+			}
+			for _, name := range []string{"ready-for-review.json", "remote-diff.patch", "remote-result.json", "validation-receipt.json", "apply.json"} {
+				if _, statErr := os.Stat(filepath.Join(root, name)); !os.IsNotExist(statErr) {
+					t.Fatalf("rejected status observation left forbidden artifact %s", name)
+				}
+			}
+		})
+	}
+}
+
 func prepareBacklogCompletionTest(t *testing.T) string {
 	t.Helper()
 	repo := writeBacklogTestRepo(t)
@@ -346,6 +484,16 @@ func prepareBacklogCompletionTest(t *testing.T) string {
 	return root
 }
 
+func prepareBacklogStatusTest(t *testing.T) string {
+	t.Helper()
+	root := prepareBacklogCompletionTest(t)
+	fixture := writeBacklogCompletionFixture(t, root, "completion_fixture_candidate_015", "completion_fixture_replay_015", "2026-07-19T00:01:00Z")
+	if err := ingestBacklogCompletionCandidate(root, fixture); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
 func writeBacklogCompletionFixture(t *testing.T, root, candidateID, replayIdentity, observedAt string) string {
 	t.Helper()
 	task := readJSONMap(filepath.Join(root, "remote-task.json"))
@@ -363,6 +511,33 @@ func writeBacklogCompletionFixture(t *testing.T, root, candidateID, replayIdenti
 		t.Fatal(err)
 	}
 	path := filepath.Join(t.TempDir(), "completion-candidate.json")
+	writeBacklogTestFile(t, path, string(raw)+"\n")
+	return path
+}
+
+func writeBacklogStatusFixture(t *testing.T, root, observationID, replayIdentity, observedAt string) string {
+	t.Helper()
+	task := readJSONMap(filepath.Join(root, "remote-task.json"))
+	target := mapValue(task["target"])
+	adapter := mapValue(task["adapter"])
+	candidate := readJSONMap(filepath.Join(root, "completion-candidate.json"))
+	candidateFingerprint, err := backlogJSONFingerprint(candidate)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := backlogStatusFixture{
+		ContractVersion: backlogStatusFixtureContract, ObservationID: observationID, ReplayIdentity: replayIdentity,
+		CompletionCandidateID: stringValue(mapValue(candidate["identity"])["candidate_id"]), CompletionCandidateFingerprint: candidateFingerprint,
+		AdapterIdentity: stringValue(adapter["identity"]), RemoteTaskID: stringValue(task["remote_task_id"]),
+		RequestFingerprint: stringValue(task["request_fingerprint"]), DispatchFingerprint: stringValue(task["dispatch_fingerprint"]),
+		EnvironmentRef: stringValue(target["environment_ref"]), BranchRef: stringValue(target["branch_ref"]),
+		ObservedAt: observedAt, ClaimedRemoteStatus: "completed",
+	}
+	raw, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "remote-status.json")
 	writeBacklogTestFile(t, path, string(raw)+"\n")
 	return path
 }

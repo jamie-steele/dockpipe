@@ -100,6 +100,37 @@ case "$step_id" in
       "terminal_claim_trusted=false"
     )
     ;;
+  status)
+    fixture="${DORKPIPE_BACKLOG_STATUS_FIXTURE:-}"
+    if [[ -z "$fixture" ]]; then
+      echo "DORKPIPE_BACKLOG_STATUS_FIXTURE is required for fixture-backed remote status retrieval" >&2
+      exit 1
+    fi
+    if command -v cygpath >/dev/null 2>&1; then
+      fixture="$(cygpath -m "$fixture")"
+    fi
+    trap - ERR
+    set +e
+    status_error="$(MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-retrieve-status-fixture "$artifact_root" "$fixture" 2>&1)"
+    status_rc=$?
+    set -e
+    trap backlog_remote_fail ERR
+    if (( status_rc != 0 )); then
+      printf '%s\n' "$status_error" >&2
+      status_reason_code="${status_error%%:*}"
+      dorkpipe_orchestrate_operation_fail "$unit" "$started_ms" "$status_error" \
+        "artifact_root=$artifact_root" "reason_code=$status_reason_code"
+      trap - ERR
+      exit "$status_rc"
+    fi
+    completion_details=(
+      "artifact=remote-status.json"
+      "authoritative_state=completion_candidate"
+      "ready_for_review=false"
+      "status_evidence_trusted=false"
+      "status_evidence_authoritative=false"
+    )
+    ;;
   *)
     echo "unsupported backlog.remote workflow step: ${step_id:-<empty>}" >&2
     exit 1

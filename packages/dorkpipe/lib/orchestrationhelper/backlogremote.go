@@ -31,6 +31,8 @@ const (
 	backlogCompatibilityContract        = "dorkpipe.remote-adapter-compatibility/v1"
 	backlogCompletionFixtureContract    = "dorkpipe.remote-completion-candidate-fixture/v1"
 	backlogCompletionCandidateContract  = "dorkpipe.remote-completion-candidate/v1"
+	backlogStatusFixtureContract        = "dorkpipe.remote-status-observation-fixture/v1"
+	backlogStatusContract               = "dorkpipe.remote-status/v1"
 )
 
 var (
@@ -106,6 +108,22 @@ type backlogCompletionFixture struct {
 	BranchRef             string `json:"branch_ref"`
 	ObservedAt            string `json:"observed_at"`
 	ClaimedTerminalSignal string `json:"claimed_terminal_signal"`
+}
+
+type backlogStatusFixture struct {
+	ContractVersion                string `json:"contract_version"`
+	ObservationID                  string `json:"observation_id"`
+	ReplayIdentity                 string `json:"replay_identity"`
+	CompletionCandidateID          string `json:"completion_candidate_id"`
+	CompletionCandidateFingerprint string `json:"completion_candidate_fingerprint"`
+	AdapterIdentity                string `json:"adapter_identity"`
+	RemoteTaskID                   string `json:"remote_task_id"`
+	RequestFingerprint             string `json:"request_fingerprint"`
+	DispatchFingerprint            string `json:"dispatch_fingerprint"`
+	EnvironmentRef                 string `json:"environment_ref"`
+	BranchRef                      string `json:"branch_ref"`
+	ObservedAt                     string `json:"observed_at"`
+	ClaimedRemoteStatus            string `json:"claimed_remote_status"`
 }
 
 type backlogRejection struct {
@@ -864,6 +882,191 @@ func ingestBacklogCompletionCandidate(artifactRoot, fixturePath string) error {
 		},
 	}
 	return writeJSONFileAtomic(candidatePath, payload)
+}
+
+func retrieveBacklogRemoteStatusFixture(artifactRoot, fixturePath string) error {
+	request, _, err := loadAndVerifyBacklogRequest(artifactRoot)
+	if err != nil {
+		return rejectBacklog("remote_status_request_invalid", "%v", err)
+	}
+	_, compatibilityFingerprint, err := loadAndVerifyBacklogCompatibility(artifactRoot, request)
+	if err != nil {
+		return rejectBacklog("remote_status_compatibility_invalid", "%v", err)
+	}
+	task, err := loadAndVerifyBacklogDispatch(artifactRoot, request, compatibilityFingerprint)
+	if err != nil {
+		return rejectBacklog("remote_status_dispatch_invalid", "%v", err)
+	}
+	candidate, candidateFingerprint, err := loadAndVerifyBacklogCompletionCandidate(artifactRoot, task)
+	if err != nil {
+		return rejectBacklog("remote_status_candidate_invalid", "%v", err)
+	}
+
+	fixtureRaw, err := os.ReadFile(fixturePath)
+	if err != nil {
+		return rejectBacklog("remote_status_fixture_malformed", "remote status fixture cannot be read: %v", err)
+	}
+	decoder := json.NewDecoder(bytes.NewReader(fixtureRaw))
+	decoder.DisallowUnknownFields()
+	fixture := backlogStatusFixture{}
+	if err := decoder.Decode(&fixture); err != nil {
+		return rejectBacklog("remote_status_fixture_malformed", "remote status fixture is malformed: %v", err)
+	}
+	if err := ensureJSONEOF(decoder); err != nil {
+		return rejectBacklog("remote_status_fixture_malformed", "remote status fixture is malformed: %v", err)
+	}
+	if fixture.ContractVersion != backlogStatusFixtureContract ||
+		!backlogOpaqueID.MatchString(fixture.ObservationID) ||
+		!backlogOpaqueID.MatchString(fixture.ReplayIdentity) ||
+		fixture.ObservationID == fixture.ReplayIdentity ||
+		!backlogOpaqueID.MatchString(fixture.CompletionCandidateID) ||
+		!backlogFingerprint.MatchString(fixture.CompletionCandidateFingerprint) ||
+		!backlogOpaqueID.MatchString(fixture.AdapterIdentity) ||
+		!backlogOpaqueID.MatchString(fixture.RemoteTaskID) ||
+		!backlogFingerprint.MatchString(fixture.RequestFingerprint) ||
+		!backlogFingerprint.MatchString(fixture.DispatchFingerprint) {
+		return rejectBacklog("remote_status_identity_invalid", "remote status contract or identity fields are invalid")
+	}
+	if err := validateBacklogReference("environment", fixture.EnvironmentRef); err != nil {
+		return rejectBacklog("remote_status_identity_invalid", "%v", err)
+	}
+	if err := validateBacklogReference("branch", fixture.BranchRef); err != nil {
+		return rejectBacklog("remote_status_identity_invalid", "%v", err)
+	}
+	if fixture.ClaimedRemoteStatus != "completed" {
+		return rejectBacklog("remote_status_claim_invalid", "fixture status observations must carry exactly the untrusted completed claim")
+	}
+
+	candidateIdentity := mapValue(candidate["identity"])
+	target := mapValue(task["target"])
+	adapter := mapValue(task["adapter"])
+	if fixture.CompletionCandidateID != stringValue(candidateIdentity["candidate_id"]) ||
+		fixture.CompletionCandidateFingerprint != candidateFingerprint ||
+		fixture.RemoteTaskID != stringValue(task["remote_task_id"]) ||
+		fixture.RequestFingerprint != stringValue(task["request_fingerprint"]) ||
+		fixture.DispatchFingerprint != stringValue(task["dispatch_fingerprint"]) ||
+		fixture.AdapterIdentity != stringValue(adapter["identity"]) ||
+		fixture.EnvironmentRef != stringValue(target["environment_ref"]) ||
+		fixture.BranchRef != stringValue(target["branch_ref"]) {
+		return rejectBacklog("remote_status_binding_mismatch", "remote status observation does not match the accepted candidate, task, request, dispatch, adapter, environment, and branch identity")
+	}
+	observedAt, err := time.Parse(time.RFC3339, fixture.ObservedAt)
+	if err != nil || observedAt.Format(time.RFC3339) != fixture.ObservedAt {
+		return rejectBacklog("remote_status_observation_invalid", "remote status observed_at must be canonical RFC3339")
+	}
+	submittedAt, _ := time.Parse(time.RFC3339, stringValue(task["submitted_at"]))
+	candidateObservedAt, _ := time.Parse(time.RFC3339, stringValue(candidate["observed_at"]))
+	if !observedAt.After(submittedAt) || !observedAt.After(candidateObservedAt) {
+		return rejectBacklog("remote_status_stale", "remote status observed_at must be later than both dispatch and completion-candidate observation times")
+	}
+
+	statusPath, err := backlogArtifactPath(artifactRoot, "remote-status.json")
+	if err != nil {
+		return err
+	}
+	if _, err := os.Stat(statusPath); err == nil {
+		existing, readErr := readStrictJSONMap(statusPath)
+		if readErr != nil || stringValue(existing["contract_version"]) != backlogStatusContract || stringValue(existing["state"]) != "completion_candidate" {
+			return rejectBacklog("remote_status_artifact_invalid", "existing remote-status.json is malformed or tampered")
+		}
+		identity := mapValue(existing["identity"])
+		switch {
+		case stringValue(identity["observation_id"]) == fixture.ObservationID:
+			return rejectBacklog("remote_status_duplicate", "status observation identity %q was already ingested", fixture.ObservationID)
+		case stringValue(identity["replay_identity"]) == fixture.ReplayIdentity:
+			return rejectBacklog("remote_status_replay", "status replay identity %q was already ingested", fixture.ReplayIdentity)
+		default:
+			return rejectBacklog("remote_status_already_recorded", "one remote status observation is already recorded for the accepted completion candidate")
+		}
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	payload := map[string]any{
+		"contract_version": backlogStatusContract,
+		"state":            "completion_candidate",
+		"identity": map[string]any{
+			"observation_id": fixture.ObservationID, "replay_identity": fixture.ReplayIdentity,
+		},
+		"completion_candidate": map[string]any{
+			"candidate_id":    stringValue(candidateIdentity["candidate_id"]),
+			"replay_identity": stringValue(candidateIdentity["replay_identity"]),
+			"fingerprint":     candidateFingerprint,
+		},
+		"binding": map[string]any{
+			"remote_task_id": fixture.RemoteTaskID, "request_fingerprint": fixture.RequestFingerprint,
+			"dispatch_fingerprint": fixture.DispatchFingerprint, "adapter_identity": fixture.AdapterIdentity,
+			"environment_ref": fixture.EnvironmentRef, "branch_ref": fixture.BranchRef,
+		},
+		"observed_at": fixture.ObservedAt,
+		"evidence": map[string]any{
+			"claimed_remote_status": fixture.ClaimedRemoteStatus, "mode": "fixture",
+			"provider_invoked": false, "trusted": false, "authoritative": false,
+		},
+		"lifecycle": map[string]any{
+			"ready_for_review": false, "diff_retrieval": false, "result_retrieval": false,
+			"validation": false, "apply": false, "commit": false, "push": false, "publication": false,
+		},
+	}
+	return writeJSONFileAtomic(statusPath, payload)
+}
+
+func loadAndVerifyBacklogCompletionCandidate(artifactRoot string, task map[string]any) (map[string]any, string, error) {
+	candidatePath, err := backlogArtifactPath(artifactRoot, "completion-candidate.json")
+	if err != nil {
+		return nil, "", err
+	}
+	candidate, err := readStrictJSONMap(candidatePath)
+	if err != nil {
+		return nil, "", fmt.Errorf("completion candidate cannot be loaded: %w", err)
+	}
+	identity := mapValue(candidate["identity"])
+	binding := mapValue(candidate["binding"])
+	target := mapValue(task["target"])
+	adapter := mapValue(task["adapter"])
+	if !backlogOpaqueID.MatchString(stringValue(identity["candidate_id"])) ||
+		!backlogOpaqueID.MatchString(stringValue(identity["replay_identity"])) ||
+		stringValue(identity["candidate_id"]) == stringValue(identity["replay_identity"]) {
+		return nil, "", errors.New("completion candidate identity is malformed")
+	}
+	observedAt, err := time.Parse(time.RFC3339, stringValue(candidate["observed_at"]))
+	if err != nil || observedAt.Format(time.RFC3339) != stringValue(candidate["observed_at"]) {
+		return nil, "", errors.New("completion candidate observed_at is not canonical RFC3339")
+	}
+	submittedAt, _ := time.Parse(time.RFC3339, stringValue(task["submitted_at"]))
+	if !observedAt.After(submittedAt) {
+		return nil, "", errors.New("completion candidate is stale relative to immutable dispatch")
+	}
+	expected := map[string]any{
+		"contract_version": backlogCompletionCandidateContract,
+		"state":            "completion_candidate",
+		"identity": map[string]any{
+			"candidate_id": stringValue(identity["candidate_id"]), "replay_identity": stringValue(identity["replay_identity"]),
+		},
+		"binding": map[string]any{
+			"remote_task_id": stringValue(task["remote_task_id"]), "request_fingerprint": stringValue(task["request_fingerprint"]),
+			"dispatch_fingerprint": stringValue(task["dispatch_fingerprint"]), "adapter_identity": stringValue(adapter["identity"]),
+			"environment_ref": stringValue(target["environment_ref"]), "branch_ref": stringValue(target["branch_ref"]),
+		},
+		"observed_at":             stringValue(candidate["observed_at"]),
+		"claimed_terminal_signal": "completed",
+		"source": map[string]any{
+			"mode": "fixture", "provider_invoked": false, "terminal_claim_trusted": false,
+		},
+		"lifecycle": map[string]any{
+			"ready_for_review": false, "status_retrieval": false, "diff_retrieval": false,
+			"result_retrieval": false, "validation": false, "apply": false, "commit": false,
+			"push": false, "publication": false,
+		},
+	}
+	if !jsonMapsEqual(candidate, expected) || !jsonMapsEqual(binding, mapValue(expected["binding"])) {
+		return nil, "", errors.New("completion candidate is malformed, tampered, or does not match immutable dispatch identity")
+	}
+	fingerprint, err := backlogJSONFingerprint(candidate)
+	if err != nil {
+		return nil, "", err
+	}
+	return candidate, fingerprint, nil
 }
 
 func loadAndVerifyBacklogRequest(artifactRoot string) (map[string]any, string, error) {
