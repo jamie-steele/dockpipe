@@ -32,6 +32,9 @@ tasks:
   - id: TASK-015
     topic: Backlog-driven remote tasks and multi-machine execution
     path: docs/agents/tasks/backlog-driven-remote-tasks.md
+  - id: TASK-016
+    topic: Guided game-development package and Unreal integration
+    path: docs/agents/tasks/guided-game-development-package.md
 
 maintenance:
   - Treat this YAML file as the AI/backlog entrypoint.
