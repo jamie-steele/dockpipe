@@ -324,6 +324,32 @@ func Run(args []string, env map[string]string, stdout, stderr io.Writer) error {
 			return errors.New("usage: orchestrate-helper software-dev-apply-promotion <repo-root> <artifact-root> <approval.json>")
 		}
 		return applySoftwareDevPromotionPatch(args[1], args[2], args[3])
+	case "backlog-inspect":
+		if len(args) != 7 {
+			return errors.New("usage: orchestrate-helper backlog-inspect <repo-root> <task-index.yml> <task-id> <bounded-slice> <baseline-commit> <artifact-root>")
+		}
+		return inspectBacklogSelection(args[1], args[2], args[3], args[4], args[5], args[6])
+	case "backlog-compile":
+		if len(args) != 9 {
+			return errors.New("usage: orchestrate-helper backlog-compile <repo-root> <artifact-root> <environment-ref> <branch-ref> <allowed-paths-json> <hard-boundaries-json> <required-validation-json> <routed-sources-json>")
+		}
+		return compileBacklogRemoteRequest(args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8])
+	case "backlog-dispatch-fixture":
+		if len(args) != 3 {
+			return errors.New("usage: orchestrate-helper backlog-dispatch-fixture <artifact-root> <fixture.json>")
+		}
+		return dispatchBacklogFixture(args[1], args[2])
+	case "backlog-followup":
+		if len(args) != 2 {
+			return errors.New("usage: orchestrate-helper backlog-followup <artifact-root>")
+		}
+		followup, err := loadBacklogFollowup(args[1])
+		if err != nil {
+			return err
+		}
+		encoder := json.NewEncoder(stdout)
+		encoder.SetIndent("", "  ")
+		return encoder.Encode(followup)
 	case "run-tasks":
 		if len(args) != 3 {
 			return errors.New("usage: orchestrate-helper run-tasks <graph.json> <runner.sh>")

@@ -1,0 +1,125 @@
+#!/usr/bin/env bash
+set -euo pipefail
+trap 'rc=$?; echo "test_backlog_remote_workflow failed at line ${LINENO}: ${BASH_COMMAND}" >&2; exit "$rc"' ERR
+
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+# shellcheck source=packages/dorkpipe/tests/lib/test-tools.sh
+source "$REPO_ROOT/packages/dorkpipe/tests/lib/test-tools.sh"
+dorkpipe_test_require_go "test_backlog_remote_workflow"
+dorkpipe_test_init_go_cache "$REPO_ROOT"
+
+tmp="$(dorkpipe_test_mktemp_dir "$REPO_ROOT")"
+consumer="$tmp/consumer"
+pristine="$tmp/pristine"
+artifact_root="$tmp/artifacts"
+second_root="$tmp/artifacts-second"
+fixture_root="$REPO_ROOT/packages/dorkpipe/tests/fixtures/backlog.remote"
+helper_bin="$tmp/orchestrate-helper"
+invocation_log="$tmp/forbidden-invocations.log"
+trap 'rm -rf "$tmp"' EXIT
+
+mkdir -p "$consumer" "$tmp/fake-bin"
+cp -R "$fixture_root/consumer/." "$consumer/"
+cp -R "$consumer" "$pristine"
+(
+  cd "$REPO_ROOT/packages/dorkpipe/lib"
+  go build -o "$helper_bin" ./cmd/orchestrate-helper
+)
+
+cat >"$tmp/fake-bin/forbidden-tool" <<'TOOL'
+#!/usr/bin/env bash
+printf '%s\n' "$(basename "$0") $*" >>"${DORKPIPE_BACKLOG_FORBIDDEN_LOG:?}"
+exit 97
+TOOL
+chmod +x "$tmp/fake-bin/forbidden-tool"
+for tool in codex curl git ssh; do
+  cp "$tmp/fake-bin/forbidden-tool" "$tmp/fake-bin/$tool"
+done
+
+export PATH="$tmp/fake-bin:$REPO_ROOT/src/bin:$PATH"
+export DORKPIPE_BACKLOG_FORBIDDEN_LOG="$invocation_log"
+export DOCKPIPE_SCRIPT_DIR="$REPO_ROOT/packages/dorkpipe/resolvers/dorkpipe/assets/scripts"
+export DOCKPIPE_ASSETS_DIR="$REPO_ROOT/packages/dorkpipe/resolvers/dorkpipe/assets"
+export DOCKPIPE_WORKFLOW_CONFIG="$REPO_ROOT/packages/dorkpipe/workflows/backlog.remote/config.yml"
+export DOCKPIPE_WORKFLOW_NAME="backlog.remote"
+export DORKPIPE_ORCH_HELPER_BIN="$helper_bin"
+export DORKPIPE_BACKLOG_ARTIFACT_ROOT="$artifact_root"
+export DORKPIPE_BACKLOG_TASK_INDEX="docs/agents/task-index.yaml"
+export DORKPIPE_BACKLOG_TASK_ID="TASK-015"
+export DORKPIPE_BACKLOG_SLICE="Implement only the bounded offline fixture dispatch slice."
+export DORKPIPE_BACKLOG_BASELINE="0123456789abcdef0123456789abcdef01234567"
+export DORKPIPE_BACKLOG_ENVIRONMENT_REF="fixture-environment"
+export DORKPIPE_BACKLOG_BRANCH_REF="js/dev"
+export DORKPIPE_BACKLOG_ALLOWED_PATHS_JSON='["packages/dorkpipe","docs/agents/tasks/backlog-driven-remote-tasks.md"]'
+export DORKPIPE_BACKLOG_HARD_BOUNDARIES_JSON='["No live provider invocation","No apply, commit, push, or publication"]'
+export DORKPIPE_BACKLOG_REQUIRED_VALIDATION_JSON='["go test ./packages/dorkpipe/lib/orchestrationhelper"]'
+export DORKPIPE_BACKLOG_ROUTED_SOURCES_JSON='["docs/agents/packages/package-authoring.md","docs/agents/workflows/yaml-workflows.md"]'
+export DORKPIPE_BACKLOG_DISPATCH_FIXTURE="$fixture_root/dispatch.json"
+export ROOT="$consumer"
+
+log="$tmp/workflow.err"
+for step in inspect compile dispatch; do
+  export DOCKPIPE_STEP_ID="$step"
+  bash "$DOCKPIPE_SCRIPT_DIR/backlog-remote.sh" 2>>"$log"
+done
+
+for step in inspect compile dispatch; do
+  grep -Fq "unit=backlog.$step status=start" "$log"
+  grep -Fq "unit=backlog.$step status=done" "$log"
+done
+for name in backlog-selection.json remote-request.md remote-request.json remote-task.json; do
+  test -f "$artifact_root/$name"
+done
+grep -Fq '"status": "selected"' "$artifact_root/backlog-selection.json"
+grep -Fq '"contract_version": "dorkpipe.remote-request/v1"' "$artifact_root/remote-request.json"
+grep -Fq '"adapter_mode": "fixture_only"' "$artifact_root/remote-request.json"
+grep -Fq '"live_provider": false' "$artifact_root/remote-request.json"
+grep -Fq '"provider_invoked": false' "$artifact_root/remote-task.json"
+grep -Fq '"remote_task_id": "remote_fixture_task_015"' "$artifact_root/remote-task.json"
+test ! -e "$invocation_log"
+diff -r "$pristine" "$consumer"
+
+MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-inspect \
+  "$consumer" docs/agents/task-index.yaml TASK-015 \
+  "$DORKPIPE_BACKLOG_SLICE" "$DORKPIPE_BACKLOG_BASELINE" "$second_root"
+MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-compile \
+  "$consumer" "$second_root" "$DORKPIPE_BACKLOG_ENVIRONMENT_REF" "$DORKPIPE_BACKLOG_BRANCH_REF" \
+  "$DORKPIPE_BACKLOG_ALLOWED_PATHS_JSON" "$DORKPIPE_BACKLOG_HARD_BOUNDARIES_JSON" \
+  "$DORKPIPE_BACKLOG_REQUIRED_VALIDATION_JSON" "$DORKPIPE_BACKLOG_ROUTED_SOURCES_JSON"
+MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-dispatch-fixture "$second_root" "$DORKPIPE_BACKLOG_DISPATCH_FIXTURE"
+for name in backlog-selection.json remote-request.md remote-request.json remote-task.json; do
+  if ! cmp "$artifact_root/$name" "$second_root/$name"; then
+    diff -u "$artifact_root/$name" "$second_root/$name" >&2 || true
+    exit 1
+  fi
+done
+
+rejected_root="$tmp/rejected"
+export DORKPIPE_BACKLOG_ARTIFACT_ROOT="$rejected_root"
+export DORKPIPE_BACKLOG_TASK_ID="TASK-999"
+export DOCKPIPE_STEP_ID="inspect"
+if bash "$DOCKPIPE_SCRIPT_DIR/backlog-remote.sh" 2>"$tmp/rejected.err"; then
+  echo "unknown backlog task unexpectedly inspected" >&2
+  exit 1
+fi
+grep -Fq 'unit=backlog.inspect status=start' "$tmp/rejected.err"
+grep -Fq 'unit=backlog.inspect status=fail' "$tmp/rejected.err"
+grep -Fq '"code": "unknown_task_id"' "$rejected_root/backlog-selection.json"
+for name in remote-request.md remote-request.json remote-task.json; do
+  test ! -e "$rejected_root/$name"
+done
+
+rm -rf "$consumer"
+export DORKPIPE_BACKLOG_TASK_ID="TASK-015"
+export DORKPIPE_BACKLOG_ARTIFACT_ROOT="$artifact_root"
+MSYS2_ARG_CONV_EXCL='*' "$helper_bin" backlog-followup "$artifact_root" >"$tmp/followup.json"
+grep -Fq '"contract_version": "dorkpipe.remote-followup/v1"' "$tmp/followup.json"
+grep -Fq '"remote_task_id": "remote_fixture_task_015"' "$tmp/followup.json"
+test ! -e "$invocation_log"
+
+if find "$artifact_root" -mindepth 1 \( -iname '*status*' -o -iname '*diff*' -o -iname '*result*' -o -iname '*apply*' -o -iname '*commit*' -o -iname '*push*' -o -iname '*publish*' \) -print -quit | grep -q .; then
+  echo "fixture slice created a forbidden lifecycle artifact" >&2
+  exit 1
+fi
+
+echo "test_backlog_remote_workflow OK"

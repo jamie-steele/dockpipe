@@ -77,6 +77,46 @@ The first vertical slice stops after `inspect`, `compile`, and fixture-backed `d
 It does not create a scheduler, auto-poll, auto-apply, auto-commit, auto-push, or cross-task
 orchestrator.
 
+## Current Status (2026-07-19)
+
+The first vertical slice is implemented as the package-owned `backlog.remote` workflow and dedicated
+orchestration-helper commands:
+
+- `backlog.inspect` requires one exact `TASK-NNN`, one trimmed single-line bounded slice, and one
+  exact baseline commit. It strictly loads `docs/agents/task-index.yaml`, resolves one exact linked
+  document, verifies that document's heading matches the selected task ID, and records source
+  digests in `backlog-selection.json`.
+- `backlog.compile` writes deterministic `remote-request.json` and `remote-request.md`. Their shared
+  fingerprint binds the selected task/path/slice/baseline, explicit environment and branch refs,
+  allowed paths, hard boundaries, required validation, and only `AGENTS.md`, the index, the linked
+  task, and explicitly routed source files with digests.
+- `backlog.dispatch` is fixture-only. It writes `remote-task.json` with one opaque task ID, request
+  fingerprint, environment/branch refs, deterministic fixture time, and adapter identity. The
+  artifact records `provider_invoked: false` and no status, diff, result, apply, commit, push, or
+  publication capability.
+- Artifact-only follow-up validates and recovers the task identity from `remote-task.json`,
+  `remote-request.json`, and `remote-request.md`; it does not reread the checkout or prose state.
+
+The package proof rejects absent, malformed, unknown, and ambiguous IDs; malformed index entries;
+missing, escaping, mismatched, or closed linked task paths; empty, whitespace-padded, multiline, or
+otherwise malformed bounded slices; invalid baselines; and explicitly blocked or externally active
+fixture entries. Rejected inspection writes a deterministic rejection code but no request or
+dispatch artifact. Temporary consumer copies prove repeated-run determinism, no consumer mutation,
+no live provider invocation, no Git/SSH/network tool invocation, and no status/diff/result retrieval,
+apply, commit, push, or publication.
+
+The canonical index remains unchanged and open-only. Package-owned fixtures use an optional
+`dispatch_state` solely to represent `blocked`, `external_active`, and `closed` deterministically.
+Standardizing readiness plus ownership metadata is still required before any future `--next`
+selector; prose remains non-authoritative.
+
+The installed CLI documents `codex cloud exec --env <id> --branch <branch> [query]`, but its help
+does not expose a machine-readable submission receipt or a stable task-ID response schema. Parsing
+undocumented terminal text would not be a safe resumable identity contract, so live submission
+remains unimplemented. The next bounded remote-task slice is an opt-in CLI compatibility contract
+that proves a machine-readable submission receipt before adding live dispatch or status/diff/result
+retrieval. Completion-candidate reconciliation and `ready_for_review` remain later work.
+
 ## Boundaries
 
 - Keep Codex Cloud CLI integration, backlog parsing, prompt compilation, and task artifacts inside

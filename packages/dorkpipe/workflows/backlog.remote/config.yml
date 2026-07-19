@@ -1,0 +1,48 @@
+name: backlog.remote
+namespace: dockpipeproject
+description: >-
+  Inspect one explicit open backlog task, compile one bounded remote request, and record
+  fixture-backed dispatch identity without invoking a live provider.
+
+docker_preflight: false
+platforms: [windows, deb]
+dependencies:
+  host:
+    - id: bash
+      command: bash
+      description: Runs the package-owned offline backlog adapter.
+      install:
+        windows: winget install Git.Git
+        deb: sudo apt-get update && sudo apt-get install -y bash
+
+vars:
+  DORKPIPE_BACKLOG_TASK_INDEX: docs/agents/task-index.yaml
+  DORKPIPE_BACKLOG_TASK_ID: ""
+  DORKPIPE_BACKLOG_SLICE: ""
+  DORKPIPE_BACKLOG_BASELINE: ""
+  DORKPIPE_BACKLOG_ENVIRONMENT_REF: ""
+  DORKPIPE_BACKLOG_BRANCH_REF: ""
+  DORKPIPE_BACKLOG_ALLOWED_PATHS_JSON: "[]"
+  DORKPIPE_BACKLOG_HARD_BOUNDARIES_JSON: "[]"
+  DORKPIPE_BACKLOG_REQUIRED_VALIDATION_JSON: "[]"
+  DORKPIPE_BACKLOG_ROUTED_SOURCES_JSON: "[]"
+  DORKPIPE_BACKLOG_DISPATCH_FIXTURE: ""
+
+steps:
+  - id: inspect
+    kind: host
+    cwd: repo
+    scopes: { source: repo, artifacts: artifacts }
+    run: scripts/dorkpipe/backlog-remote.sh
+
+  - id: compile
+    kind: host
+    cwd: repo
+    scopes: { source: repo, artifacts: artifacts }
+    run: scripts/dorkpipe/backlog-remote.sh
+
+  - id: dispatch
+    kind: host
+    cwd: repo
+    scopes: { source: repo, artifacts: artifacts }
+    run: scripts/dorkpipe/backlog-remote.sh
